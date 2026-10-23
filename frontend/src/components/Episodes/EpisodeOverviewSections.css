@@ -251,3 +251,33 @@ textarea.eov-input { resize: vertical; line-height: 1.5; }
    section and card titles keep their size. */
 .eov .eov-band-title { font-size: 20px !important; }
 .eov .eov-card-title, .eov-card .eov-card-title { font-size: 15px !important; }
+
+/* Evoni's Overview layout list (2026-10-22): three tiles (the checklist
+   count is in the next-step card), Suggest Scenes beside its button, the
+   allowed outcomes in the brief, and on a phone one column at a time. */
+.eov-top > .eos-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.eos-next-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.eos-next-meta { margin: 6px 0 0; font-size: 12px; font-weight: 600; color: var(--lala-lavender-soft); }
+.eos-next-btn.is-quiet { background: transparent; color: var(--text-inverse); border: 1px solid var(--lala-lavender-soft); font-size: 14px; padding: 9px 16px; }
+.eos-next-btn.is-quiet:hover:not(:disabled) { background: var(--lala-lavender-dark); }
+.eos-next-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+.eov-outcomes .eov-chips { margin: 2px 0 4px; }
+.eov-switch { display: none; }
+@media (max-width: 768px) {
+  .eov-switch {
+    display: flex; gap: 4px; margin: 0 0 14px; padding: 4px; border-radius: 999px;
+    background: var(--surface-card); border: 1px solid var(--lala-lavender-line);
+  }
+  .eov-switch-btn {
+    flex: 1; min-height: 40px; border: none; border-radius: 999px; background: transparent;
+    color: var(--lala-lavender-text); font-size: 15px; font-weight: 700; cursor: pointer;
+  }
+  .eov-switch-btn.is-on { background: var(--lala-lavender); color: var(--text-inverse); }
+  .eov-columns[data-phone-col="story"] > .eov-col[data-col="style"],
+  .eov-columns[data-phone-col="style"] > .eov-col[data-col="story"] { display: none; }
+}
+@media (max-width: 480px) {
+  .eov-top > .eos-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .eov-top > .eos-tiles > .eos-tile:last-child:nth-child(odd) { grid-column: 1 / -1; }
+  .eos-next-actions { flex-direction: column; }
+}
