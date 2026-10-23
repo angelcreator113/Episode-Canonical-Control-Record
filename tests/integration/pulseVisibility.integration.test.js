@@ -98,7 +98,7 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     const res = await get(ids.ghost);
     expect(res.status).toBe(200);
     expect(res.body.profile).toBeNull();
-    expect(res.body.reasons[0]).toMatch(/has no Feed profile/);
+    expect(res.body.reasons[0]).toMatch(/has no Pulse profile/);
   });
 
   it('is ADMIN only, and an unknown character is a 404', async () => {

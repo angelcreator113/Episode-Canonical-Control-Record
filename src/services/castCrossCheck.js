@@ -98,7 +98,7 @@ function proseFlags(cast) {
         const b = named[0];
         if (!b.facts) continue;
         const undecided = new Set(b.facts.undecided || []);
-        const where = `${leaf.source === 'feed' ? 'Feed profile' : 'Profile'}: ${labelOf(leaf.path)}`;
+        const where = `${leaf.source === 'feed' ? 'Pulse profile' : 'Profile'}: ${labelOf(leaf.path)}`;
         const base = { character_id: a.character.id, character_name: nameOf(a.character), other_id: b.character.id, other_name: nameOf(b.character), where, excerpt: clip(sentence) };
         if (b.facts.followers && !undecided.has('followers')) {
           for (const m of followerMentions(sentence)) {

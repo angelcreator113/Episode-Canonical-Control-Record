@@ -1,0 +1,22 @@
+/* Where relationships disagree, on the Pulse Relationship Map (components/RelationshipDrift); theme tokens only. */
+.rd { display: flex; flex-direction: column; gap: 8px; margin: 0 0 16px; padding: 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-card); }
+.rd-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.rd-toggle { display: inline-flex; align-items: center; gap: 6px; background: none; border: none; padding: 0; font: inherit; font-weight: 700; font-size: 15px; color: var(--text-primary); cursor: pointer; min-height: 36px; text-align: left; }
+.rd-note { margin: 0; font-size: 13px; color: var(--text-secondary); }
+.rd-note.is-error { color: var(--danger-text); }
+.rd-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.rd-row { display: grid; grid-template-columns: 1fr; gap: 8px; padding: 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-bg); min-width: 0; }
+.rd-who { font-size: 14px; color: var(--text-primary); display: flex; flex-wrap: wrap; align-items: center; gap: 6px; overflow-wrap: anywhere; }
+.rd-tag { font-size: 11px; padding: 1px 8px; border-radius: 999px; border: 1px solid var(--border); color: var(--text-secondary); }
+.rd-says { margin: 0; display: grid; grid-template-columns: 1fr; gap: 4px; }
+.rd-say { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0; min-width: 0; }
+.rd-say dt { font-size: 11px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.04em; }
+.rd-say dd { margin: 0; font-size: 13px; color: var(--text-primary); overflow-wrap: anywhere; }
+.rd-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.rd-btn { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 4px 14px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface-card); color: var(--text-primary); font: inherit; font-size: 13px; cursor: pointer; text-align: left; max-width: 100%; }
+.rd-btn.is-primary { background: var(--accent); border-color: var(--accent); color: var(--text-inverse); }
+.rd-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+@media (min-width: 720px) {
+  .rd-row { grid-template-columns: 1fr 1.6fr auto; align-items: center; }
+  .rd-says { grid-template-columns: 1fr 1fr; gap: 8px; }
+}

@@ -7,9 +7,10 @@
  * - PUT changes only its allowed fields and refuses a kind the pair has;
  * - an edit on the map changes The Pulse's closeness for the pair;
  * - DELETE removes the row; GET lists it with either side's id;
- * - migration 20261013130000 copies feed_profile_relationships rows over with
- *   their kinds, once, skipping a pair that already has the kind and a pair
- *   with itself.
+ * Migration 20261013130000's copy of feed_profile_relationships was tested
+ * here; the table is gone since migration 20261023230000 (one Pulse table,
+ * Evoni, 2026-10-23), whose test (relationshipTruth.integration) copies a
+ * row the old way before dropping it.
  */
 jest.unmock('uuid');
 
@@ -19,9 +20,8 @@ const app = require('../../src/app');
 const TokenService = require('../../src/services/tokenService');
 const models = require('../../src/models');
 const closeness = require('../../src/services/pulseCloseness');
-const migration = require('../../src/migrations/20261013130000-map-relationships-into-pulse');
 
-const { sequelize, Sequelize } = models;
+const { sequelize } = models;
 
 const shouldSkip =
   !process.env.DATABASE_URL ||
@@ -58,10 +58,7 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
 
   afterAll(async () => {
     const all = Object.values(p);
-    await run(`DELETE FROM map_relationship_copies WHERE social_relationship_id IN
-                 (SELECT id FROM social_profile_relationships WHERE source_profile_id IN (:all) OR target_profile_id IN (:all))`, { all });
     await run('DELETE FROM social_profile_relationships WHERE source_profile_id IN (:all) OR target_profile_id IN (:all)', { all });
-    await run('DELETE FROM feed_profile_relationships WHERE influencer_a_id IN (:all) OR influencer_b_id IN (:all)', { all });
     await run('DELETE FROM social_profiles WHERE id IN (:all)', { all });
     await run('DELETE FROM shows WHERE id = :show', ids);
   });
@@ -122,34 +119,5 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
 
     expect((await as(request(app).delete(`/api/v1/feed-relationships/${row.id}`))).status).toBe(200);
     expect(await kindsOf(p.bea, p.cal)).toEqual(['bestie']);
-  });
-
-  test('the migration copies the map\'s rows with their kinds, once', async () => {
-    const insert = (a, b, type, isPublic = true, notes = null) => run(
-      `INSERT INTO feed_profile_relationships (id, influencer_a_id, influencer_b_id, relationship_type, is_public, notes, created_at, updated_at)
-       VALUES (:id, :a, :b, :type, :isPublic, :notes, NOW(), NOW())`, { id: uuid(), a, b, type, isPublic, notes });
-    await insert(p.cal, p.dee, 'beef', true, 'over the brand deal');   // copied as feud
-    await insert(p.dee, p.cal, 'public_shade', false);                 // copied as shade, hidden
-    await insert(p.cal, p.bea, 'collab');                              // copied (the collab above was deleted)
-    await insert(p.bea, p.cal, 'orbit');                               // copied: the pair's orbit became bestie
-    await insert(p.ana, p.bea, 'former_friends');                      // skipped: the pair has it
-    await insert(p.dee, p.dee, 'mentor');                              // skipped: a pair with itself
-
-    await migration.up(sequelize.getQueryInterface(), Sequelize);
-    expect(await kindsOf(p.cal, p.dee)).toEqual(['feud', 'shade']);
-    expect(await kindsOf(p.bea, p.cal)).toEqual(['bestie', 'collab', 'orbit']);
-    expect(await kindsOf(p.ana, p.bea)).toEqual(['former_friends']);
-    expect(await kindsOf(p.dee, p.dee)).toEqual([]);
-    const [[shade]] = await run(`SELECT public_visibility::text AS v FROM social_profile_relationships WHERE relationship_type = 'shade' AND source_profile_id = :d`, { d: p.dee });
-    expect(shade.v).toBe('hidden');
-    const [[feud]] = await run(`SELECT description FROM social_profile_relationships WHERE relationship_type = 'feud' AND source_profile_id = :c`, { c: p.cal });
-    expect(feud.description).toBe('over the brand deal');
-
-    // Run again: nothing new.
-    await migration.up(sequelize.getQueryInterface(), Sequelize);
-    expect(await kindsOf(p.bea, p.cal)).toEqual(['bestie', 'collab', 'orbit']);
-    const [[logged]] = await run(`SELECT COUNT(*)::int AS n FROM map_relationship_copies WHERE social_relationship_id IN
-      (SELECT id FROM social_profile_relationships WHERE source_profile_id IN (:all))`, { all: Object.values(p) });
-    expect(logged.n).toBe(4);
   });
 });

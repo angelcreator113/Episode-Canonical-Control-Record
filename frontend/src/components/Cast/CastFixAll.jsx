@@ -85,7 +85,7 @@ export default function CastFixAll({ registryIds, onDone }) {
           {busy === 'run' ? 'Fixing the cast…' : 'Fix what can be fixed'}
         </button>
         <span className="cast-note">
-          Links feed people, confirms followers, fills missing facts and types, fixes findings with one right wording,
+          Links Pulse profiles, confirms followers, fills missing facts and types, fixes findings with one right wording,
           and builds voices for Active characters. Rewrites wait for you; voices wait for your approval.
           A few AI calls per character.
         </span>

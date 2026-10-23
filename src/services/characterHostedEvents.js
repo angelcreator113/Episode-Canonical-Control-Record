@@ -38,7 +38,7 @@ async function load(sequelize, characterId, eventId) {
     { replacements: { id: characterId } });
   if (!character) throw new HostedEventError('Character not found', 404, 'CHARACTER_NOT_FOUND');
   if (character.feed_profile_id == null) {
-    throw new HostedEventError(`${character.name} needs a feed profile to host events. Match them to a feed person on The cast.`, 409, 'NO_FEED_PROFILE');
+    throw new HostedEventError(`${character.name} needs a Pulse profile to host events. Match them to a Pulse profile on The cast.`, 409, 'NO_FEED_PROFILE');
   }
   // A character in no show's cast hosts nothing: the show check was skipped
   // for them, and any show's event could be taken (fifth audit).
