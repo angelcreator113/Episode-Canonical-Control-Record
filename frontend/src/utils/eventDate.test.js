@@ -42,3 +42,21 @@ describe('formatEventDate', () => {
     expect(seen).toEqual(['UTC']);
   });
 });
+
+describe('formatClockTime', () => {
+  test('local 24-hour hours and minutes', async () => {
+    const { formatClockTime } = await import('./eventDate');
+    const d = new Date(2026, 9, 23, 14, 2, 59);
+    expect(formatClockTime(d)).toBe('14:02');
+    expect(formatClockTime(d.getTime())).toBe('14:02');
+    expect(formatClockTime(String(d.getTime()))).toBe('14:02');
+    expect(formatClockTime(d.toISOString())).toBe('14:02');
+    expect(formatClockTime(new Date(2026, 0, 1, 0, 5))).toBe('00:05');
+  });
+  test('not a time: null', async () => {
+    const { formatClockTime } = await import('./eventDate');
+    expect(formatClockTime(null)).toBeNull();
+    expect(formatClockTime('')).toBeNull();
+    expect(formatClockTime('soon')).toBeNull();
+  });
+});

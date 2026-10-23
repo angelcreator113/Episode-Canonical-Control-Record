@@ -54,3 +54,16 @@ export function formatEventDate(value, { style = 'short', locale = 'en-US', fall
   if (Number.isNaN(d.getTime())) return fallback && typeof raw === 'string' ? raw : null;
   return d.toLocaleDateString(loc, opts);
 }
+
+/**
+ * A moment as the viewer's local clock time, 24-hour: "14:02" (EventLookImage's
+ * "Still running since 14:02", Evoni 2026-10-23). Accepts a Date, an ISO
+ * string or epoch milliseconds; null when it is not a time.
+ */
+export function formatClockTime(value) {
+  if (value == null || value === '') return null;
+  const d = value instanceof Date ? value : new Date(typeof value === 'string' && /^\d+$/.test(value) ? Number(value) : value);
+  if (Number.isNaN(d.getTime())) return null;
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}

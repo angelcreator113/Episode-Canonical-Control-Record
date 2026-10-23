@@ -1,15 +1,19 @@
 /**
  * EventLookRecommendations — whole outfits from the closet (Evoni,
- * 2026-10-03, episode creation step 3): Use this look saves the outfit,
- * asks first when it would replace one, and a failed page refresh after the
- * save is not reported as a failed save.
+ * 2026-10-03, episode creation step 3): Use this look saves the outfit at
+ * once with an Undo that saves the outfit it replaced back (Evoni,
+ * 2026-10-23: undo instead of confirm), asks first only when the outfit it
+ * replaces cannot be read, and a failed page refresh after the save is not
+ * reported as a failed save.
  */
-import { vi, describe, beforeEach, test, expect } from 'vitest';
+import { vi, describe, beforeEach, afterEach, test, expect } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 
 vi.mock('../../services/api', () => ({ default: { get: vi.fn(), post: vi.fn(), put: vi.fn() } }));
 import api from '../../services/api';
 import EventLookRecommendations from './EventLookRecommendations';
+import { resetUndoStore } from './useUndo';
+import { hideFloatingUndos } from './UndoNotice';
 
 const piece = (id, clothing_category, event_match) => ({ id, name: id, clothing_category, event_match, is_owned: true, coin_cost: 0 });
 const CLOSET = [piece('midi', 'dress', 92), piece('sandals', 'sandals', 90), piece('hoops', 'earrings', 88)];
@@ -23,11 +27,19 @@ const renderLooks = (props = {}) => {
   return { onSaved, onToast };
 };
 
+// The closet for wardrobe-options; the event's current outfit for GET …/outfit.
+const mockGets = (current = []) => api.get.mockImplementation(async (url) => (
+  url === OUTFIT ? { data: { success: true, pieces: current } } : { data: { items: CLOSET } }
+));
+
 beforeEach(() => {
   vi.clearAllMocks();
-  api.get.mockResolvedValue({ data: { items: CLOSET } });
+  resetUndoStore();
+  hideFloatingUndos();
+  mockGets();
   api.put.mockResolvedValue({ data: { success: true } });
 });
+afterEach(() => { resetUndoStore(); hideFloatingUndos(); });
 
 describe('EventLookRecommendations', () => {
   test('Use this look saves the outfit through PUT and refreshes the page', async () => {
@@ -39,12 +51,37 @@ describe('EventLookRecommendations', () => {
     expect(api.put).toHaveBeenCalledWith(OUTFIT, { wardrobe_ids: expect.arrayContaining(['midi']) });
   });
 
-  test('with an outfit chosen (hasOutfit), it asks before replacing it; declined, nothing is sent', async () => {
+  test('with an outfit chosen (hasOutfit), it is replaced at once; Undo saves the previous pieces back and refreshes', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm');
+    mockGets([{ id: 'old-dress' }, { id: 'old-shoes' }]);
+    const { onSaved } = renderLooks({ hasOutfit: true });
+    const [use] = await screen.findAllByTestId('look-use');
+    fireEvent.click(use);
+    await waitFor(() => expect(api.put).toHaveBeenCalledWith(OUTFIT, { wardrobe_ids: expect.arrayContaining(['midi']) }));
+    expect(confirmSpy).not.toHaveBeenCalled();
+    // The page refreshes at once (it then hides these recommendations), and
+    // the Undo floats at the foot of the screen, a live region with a button.
+    await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1));
+    const notice = await screen.findByTestId('undo-floating-notice');
+    expect(notice.textContent).toMatch(/chosen/);
+    expect(notice.closest('[role="status"]')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /Undo/ }));
+    await waitFor(() => expect(api.put).toHaveBeenLastCalledWith(OUTFIT, { wardrobe_ids: ['old-dress', 'old-shoes'] }));
+    await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.queryByTestId('undo-floating-notice')).toBeNull());
+    confirmSpy.mockRestore();
+  });
+
+  test('when the outfit it would replace cannot be read, it asks first (Undo could not restore it); declined, nothing is sent', async () => {
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    api.get.mockImplementation(async (url) => {
+      if (url === OUTFIT) throw new Error('network');
+      return { data: { items: CLOSET } };
+    });
     renderLooks({ hasOutfit: true });
     const [use] = await screen.findAllByTestId('look-use');
     fireEvent.click(use);
-    expect(confirmSpy).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(confirmSpy).toHaveBeenCalledTimes(1));
     expect(api.put).not.toHaveBeenCalled();
     confirmSpy.mockRestore();
   });

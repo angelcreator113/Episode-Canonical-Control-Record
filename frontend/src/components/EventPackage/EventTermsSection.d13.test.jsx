@@ -13,6 +13,7 @@ vi.mock('../../services/api', () => ({
 
 import api from '../../services/api';
 import EventTermsSection from './EventTermsSection';
+import { resetUndoStore } from './useUndo';
 import { bonusDraftNote, relationshipGoalsOf, relationshipGoalsDraftNote, buildRelationshipGoalRemove } from '../../utils/eventTerms';
 import { costDraftNote } from '../../utils/eventCosts';
 
@@ -46,6 +47,7 @@ function renderTerms(props = {}) {
 describe('EventTermsSection (D13)', () => {
   beforeEach(() => {
     Object.values(api).forEach((fn) => fn?.mockReset?.());
+    resetUndoStore();
     vi.mocked(api.get).mockResolvedValue({ data: { success: true, deliverables: [], costs: [], drafted: {}, deal: true, locked: false } });
   });
 
@@ -55,13 +57,31 @@ describe('EventTermsSection (D13)', () => {
     expect(within(goals).getByText("Lala's goals (not owed)")).toBeTruthy();
     expect(within(goals).getByText('Follow up with Celeste Rue after the event')).toBeTruthy();
     expect(within(goals).getByText(/Auto-drafted · from deal\. Start Episode adds these to Lala's goals/)).toBeTruthy();
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const confirmSpy = vi.spyOn(window, 'confirm');
     fireEvent.click(screen.getByTestId('terms-relationship-goal-remove-0'));
-    expect(confirmSpy).toHaveBeenCalledWith('Remove the goal "Follow up with Celeste Rue after the event"?');
+    expect(confirmSpy).not.toHaveBeenCalled();
     confirmSpy.mockRestore();
     await waitFor(() => expect(putEvent).toHaveBeenCalledWith({
       canon_consequences: { automation: { relationship_goals: [GOALS[1]] } },
     }));
+    expect((await screen.findByTestId('terms-goal-undo')).textContent).toContain("Removed 'Follow up with Celeste Rue after the event'");
+  });
+
+  test('Undo puts a removed goal back where it was, from the event as the page reloaded it', async () => {
+    const putEvent = vi.fn(async () => ({ data: { success: true } }));
+    const onSaved = vi.fn(async () => {});
+    const props = { showId: 'show-1', eventId: 'ev-1', locked: false, putEvent, onSaved, onToast: vi.fn() };
+    const { rerender } = render(<EventTermsSection {...props} event={event()} />);
+    fireEvent.click(screen.getByTestId('terms-relationship-goal-remove-0'));
+    await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1));
+    // The page reloads the event without the goal (and remounts the section).
+    const after = event({ canon_consequences: { automation: { ...event().canon_consequences.automation, relationship_goals: [GOALS[1]] } } });
+    rerender(<EventTermsSection key="reload-1" {...props} event={after} />);
+    fireEvent.click(await screen.findByTestId('terms-goal-undo-undo'));
+    await waitFor(() => expect(putEvent).toHaveBeenLastCalledWith({
+      canon_consequences: { automation: { relationship_goals: [GOALS[0], GOALS[1]] } },
+    }));
+    await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(2));
   });
 
   test('locked: the goals show with no remove', () => {

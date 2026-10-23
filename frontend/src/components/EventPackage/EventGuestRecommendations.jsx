@@ -15,11 +15,20 @@
  *
  * A Feed that fails to load says so in one line with Retry, rather than the
  * recommendations silently not appearing.
+ *
+ * Under each one's why, the facts behind it (Evoni, 2026-10-23), from the
+ * profiles already read (utils/eventGuestReasons): her tie to the
+ * organizer, the same district as the organizer, Lala following her, a
+ * high Pulse following, a rising trajectory. None when the data has none.
+ * The organizer's profile is read too (one lookup, like an invited guest
+ * missing from the Feed's page) for the district.
  */
 import { useEffect, useState } from 'react';
 import { Sparkles, AlertCircle, RotateCw } from 'lucide-react';
 import api from '../../services/api';
 import { recommendGuests } from '../../utils/recommendGuests';
+import { guestReasons } from '../../utils/eventGuestReasons';
+import './EventGuestRecommendations.css';
 
 const FEED_URL = '/api/v1/social-profiles?feed_layer=lalaverse&sort=score&limit=40';
 const MAX_LOOKUPS = 8;
@@ -30,6 +39,8 @@ export default function EventGuestRecommendations({ guests, organizerProfileId, 
   const [failed, setFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const invitedKey = (guests || []).map((g) => g.profile_id).filter((id) => id != null).join(',');
+  // The profiles read by id: the invited guests, and the organizer (for her district).
+  const lookupKey = [invitedKey, organizerProfileId == null ? '' : String(organizerProfileId)].filter(Boolean).join(',');
 
   useEffect(() => {
     let cancelled = false;
@@ -38,7 +49,7 @@ export default function EventGuestRecommendations({ guests, organizerProfileId, 
         const res = await api.get(FEED_URL);
         const list = res.data?.profiles || [];
         const have = new Set(list.map((p) => String(p.id)));
-        const missing = invitedKey ? invitedKey.split(',').filter((id) => !have.has(id)).slice(0, MAX_LOOKUPS) : [];
+        const missing = lookupKey ? [...new Set(lookupKey.split(','))].filter((id) => !have.has(id)).slice(0, MAX_LOOKUPS) : [];
         const extra = await Promise.all(missing.map((id) => api.get(`/api/v1/social-profiles/${id}`)
           .then((r) => r.data?.profile || null)
           .catch((err) => { console.error('[EventGuests] profile load failed:', id, err); return null; })));
@@ -49,7 +60,7 @@ export default function EventGuestRecommendations({ guests, organizerProfileId, 
       }
     })();
     return () => { cancelled = true; };
-  }, [invitedKey, attempt]);
+  }, [lookupKey, attempt]);
 
   if (slots <= 0) return null;
   if (failed) {
@@ -65,6 +76,14 @@ export default function EventGuestRecommendations({ guests, organizerProfileId, 
   if (profiles === null) return null;
   const recs = recommendGuests({ guests, profiles, organizerProfileId, venueLocationId, count: Math.min(3, slots) });
   if (!recs.length) return null;
+  const byId = new Map(profiles.map((p) => [String(p.id), p]));
+  const guestById = new Map((guests || []).filter((g) => g?.profile_id != null).map((g) => [String(g.profile_id), g]));
+  const organizer = organizerProfileId == null ? null : byId.get(String(organizerProfileId)) || null;
+  const reasonsOf = (rec) => guestReasons({
+    profile: byId.get(String(rec.profile_id)) || null,
+    guest: guestById.get(String(rec.profile_id)) || null,
+    organizer,
+  });
 
   return (
     <div className="epp-guest-recs" data-testid="guest-recs">
@@ -79,6 +98,14 @@ export default function EventGuestRecommendations({ guests, organizerProfileId, 
             <div className="epp-guest-rec-why" data-testid="guest-rec-why">
               {rec.reason}{rec.invited ? '' : ' · not invited yet'}
             </div>
+            {(() => {
+              const reasons = reasonsOf(rec);
+              return reasons.length > 0 && (
+                <ul className="egr-reasons" aria-label={`Why ${rec.display_name}`} data-testid="guest-rec-reasons">
+                  {reasons.map((r) => <li key={r} className="egr-reason">{r}</li>)}
+                </ul>
+              );
+            })()}
             <button
               type="button" className="epp-btn epp-btn-small epp-look-use" data-testid="guest-rec-feature"
               onClick={() => onFeature(rec)} disabled={saving}

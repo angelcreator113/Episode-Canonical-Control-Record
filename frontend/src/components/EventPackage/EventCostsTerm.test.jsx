@@ -14,6 +14,7 @@ vi.mock('../../services/api', () => ({
 import api from '../../services/api';
 import EventCostsTerm from './EventCostsTerm';
 import EventTermsSection from './EventTermsSection';
+import { resetUndoStore } from './useUndo';
 
 const COSTS = [
   { id: 'c1', kind: 'extras', label: 'Drinks', amount: 100, paid_by: 'lala' },
@@ -141,17 +142,23 @@ describe('EventCostsTerm: edit, remove, the page refresh and unpriced lines', ()
     expect(onToast).toHaveBeenCalledWith('Cost saved');
   });
 
-  test('remove asks first; declined, nothing is sent; confirmed, it is removed and the page refreshes', async () => {
+  test('remove is done at once with "Removed \'Valet\' · Undo"; the page refreshes; Undo adds the same cost back', async () => {
     vi.mocked(api.delete).mockResolvedValue({ data: { success: true } });
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true);
+    vi.mocked(api.post).mockResolvedValue({ data: { success: true } });
+    const confirmSpy = vi.spyOn(window, 'confirm');
     const { onSaved } = renderCosts();
     await screen.findByTestId('terms-cost-c2');
     fireEvent.click(screen.getByLabelText('Remove Valet'));
-    expect(confirmSpy).toHaveBeenCalledWith('Remove the cost "Valet"?');
-    expect(api.delete).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByLabelText('Remove Valet'));
+    expect(confirmSpy).not.toHaveBeenCalled();
     await waitFor(() => expect(api.delete).toHaveBeenCalledWith(`${costsUrl}/c2`));
     await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1));
+    const notice = await screen.findByTestId('terms-cost-undo');
+    expect(notice.textContent).toContain("Removed 'Valet'");
+    expect(screen.getByTestId('terms-cost-undo-region').getAttribute('role')).toBe('status');
+    fireEvent.click(screen.getByTestId('terms-cost-undo-undo'));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith(costsUrl, { kind: 'extras', label: 'Valet', amount: 70, paid_by: 'lala' }));
+    await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.queryByTestId('terms-cost-undo')).toBeNull());
     confirmSpy.mockRestore();
   });
 

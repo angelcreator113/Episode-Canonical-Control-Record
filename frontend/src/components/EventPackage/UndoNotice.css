@@ -1,0 +1,41 @@
+/* UndoNotice: "Removed ‘Story mentions’ · Undo" after a destructive one-click (Evoni, 2026-10-23). */
+/* Empty, the live region stays in the accessibility tree but out of the layout (and out of a flex row's gaps). */
+.eun-region { min-width: 0; }
+.eun-region:not(.has-notice) { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; }
+.eun-region.has-notice { margin: 8px 0; }
+.eun {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 10px;
+  padding: 7px 8px 7px 12px; border: 1px solid var(--lala-gold-line, #E8D9A8); border-left: 3px solid var(--lala-gold, #B8962E);
+  border-radius: var(--lala-radius, 8px); background: var(--lala-gold-soft, #FDF8EE);
+  font-family: var(--font-ui, 'DM Mono', monospace); font-size: 12px; color: var(--lala-ink, #2C2C2C);
+  min-width: 0; box-sizing: border-box; max-width: 100%;
+}
+.eun.is-error { border-left-color: var(--lala-danger, #B84D2E); }
+.eun-text { flex: 1 1 160px; min-width: 0; overflow-wrap: anywhere; }
+.eun-actions { display: inline-flex; align-items: center; gap: 4px; flex: none; }
+.eun-undo {
+  display: inline-flex; align-items: center; gap: 4px; min-height: 28px; padding: 3px 10px;
+  border: 1px solid var(--lala-gold, #B8962E); border-radius: 6px; background: var(--lala-surface, #fff);
+  color: var(--lala-gold-text, #7A6314); font: inherit; font-weight: 600; cursor: pointer;
+}
+.eun-undo:hover:not(:disabled) { background: var(--lala-gold, #B8962E); color: var(--lala-ink, #2C2C2C); }
+.eun-undo:focus-visible, .eun-close:focus-visible { outline: 2px solid var(--lala-gold-text, #7A6314); outline-offset: 2px; }
+.eun-undo:disabled, .eun-close:disabled { opacity: 0.6; cursor: default; }
+.eun-close {
+  display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px;
+  border: none; border-radius: 6px; background: none; color: var(--lala-ink-muted, #6B6557); cursor: pointer;
+}
+.eun-close:hover:not(:disabled) { background: var(--lala-parchment-2, #F4EFE4); }
+.eun-error { flex-basis: 100%; color: var(--lala-danger, #B84D2E); }
+.eun-spin { animation: eun-spin 1s linear infinite; }
+@keyframes eun-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .eun-spin { animation: none; } }
+
+/* Floating offers (Use this look): at the foot of the screen, above the page's toast. */
+.eun-floating {
+  position: fixed; left: 50%; bottom: calc(76px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%);
+  z-index: 1100; width: max-content; max-width: calc(100vw - 32px); display: grid; gap: 8px;
+}
+.eun-floating:empty { display: none; }
+.eun-floating .eun-region.has-notice { margin: 0; }
+.eun-floating .eun { min-width: min(340px, calc(100vw - 32px)); box-shadow: 0 6px 18px rgba(44, 44, 44, 0.18); background: var(--lala-surface, #fff); }

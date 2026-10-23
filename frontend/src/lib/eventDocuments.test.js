@@ -1,4 +1,4 @@
-import { describe, test, expect } from 'vitest';
+import { vi, describe, test, expect } from 'vitest';
 import { docState, docOverlay, lineOfPiece, shoppingLines, careerSections, documentByline } from './eventDocuments';
 
 describe('eventDocuments (Evoni, 2026-10-06)', () => {
@@ -96,5 +96,28 @@ describe('eventDocuments (Evoni, 2026-10-06)', () => {
     // Free text is kept, not dropped by new Date(); "March 15" is not read as a moment.
     expect(documentByline({ host_brand: 'Velour', event_date: 'Friday, March 15th' })).toBe('for Velour · Friday, March 15th');
     expect(documentByline({ host_brand: 'Velour', event_date: 'March 15' })).toBe('for Velour · March 15');
+  });
+});
+
+describe('look baselines (Look changed — redraft the list?)', () => {
+  test('lookPiecesKey ignores order; lookChangedSince compares within one version only', async () => {
+    const { lookPiecesKey, lookChangedSince } = await import('./eventDocuments');
+    expect(lookPiecesKey([{ id: 'b' }, { id: 'a' }, null, {}])).toBe('a,b');
+    expect(lookChangedSince({ version: 2, pieces: 'a,b' }, 2, 'a,c')).toBe(true);
+    expect(lookChangedSince({ version: 2, pieces: 'a,b' }, 2, 'a,b')).toBe(false);
+    expect(lookChangedSince({ version: 1, pieces: 'a,b' }, 2, 'a,c')).toBe(false);
+    expect(lookChangedSince(null, 2, 'a')).toBe(false);
+  });
+  test('read and write through sessionStorage; a storage that throws is logged and reads as none', async () => {
+    const { readLookBaselines, writeLookBaselines } = await import('./eventDocuments');
+    window.sessionStorage.clear();
+    writeLookBaselines('ev-7', { shopping_list: { version: 1, pieces: 'a' } });
+    expect(readLookBaselines('ev-7')).toEqual({ shopping_list: { version: 1, pieces: 'a' } });
+    const spy = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('blocked'); });
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+    expect(readLookBaselines('ev-7')).toEqual({});
+    expect(err).toHaveBeenCalled();
+    spy.mockRestore();
+    err.mockRestore();
   });
 });

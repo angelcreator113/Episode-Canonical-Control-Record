@@ -27,11 +27,23 @@
  * refresh is logged and toasted as "couldn't refresh", never as a failed
  * write. `onCostsChange(costs)` (optional) receives the rows after each
  * load, for the readiness price gate (computeEventPackageReadiness's
- * `prices.costs`). Remove asks first.
+ * `prices.costs`).
+ *
+ * Remove is done at once, with "Removed ‘Valet’ · Undo" for a few seconds
+ * (useUndo; Evoni, 2026-10-23, undo instead of confirm): Undo adds the cost
+ * back with the same kind, label, amount and payer (a new row, so a drafted
+ * row's "Auto-drafted" note does not come back).
+ *
+ * Price all (EventTermsSection's "Price N items"): `pricingId` opens that
+ * cost's form with its amount focused; a save calls `onPriced(id)` before
+ * the page refreshes, so the walk moves to the next unpriced line, and
+ * Cancel calls `onPricingCancel()`. All three optional.
  *
  * Styles live in pages/EventPackagePage.css (one CSS file per page).
  */
 import { useState, useEffect, useCallback, useRef } from 'react';
+import UndoNotice from './UndoNotice';
+import { useUndo } from './useUndo';
 import { Receipt, Pencil, Plus, Trash2, Loader2, AlertCircle, Sparkles } from 'lucide-react';
 import api from '../../services/api';
 import { saveErrorMessage as errorMessage } from '../../utils/eventSaveVersion';
@@ -50,7 +62,7 @@ export const draftExtrasApi = (showId, eventId) => api.post(`${costsUrl(showId, 
 
 export const REFRESH_FAILED_MESSAGE = "Saved — couldn't refresh the page. Reload to see the totals.";
 
-export default function EventCostsTerm({ showId, eventId, locked, refreshKey, onSaved, onToast, onCostsChange }) {
+export default function EventCostsTerm({ showId, eventId, locked, refreshKey, onSaved, onToast, onCostsChange, pricingId = null, onPriced, onPricingCancel }) {
   const toast = (msg) => { if (onToast) onToast(msg); };
   const costsChangeRef = useRef(onCostsChange);
   costsChangeRef.current = onCostsChange;
@@ -63,6 +75,7 @@ export default function EventCostsTerm({ showId, eventId, locked, refreshKey, on
   const [draft, setDraft] = useState(costDraftFrom(null));
   const [formError, setFormError] = useState(null);
   const [saving, setSaving] = useState(false);
+  const amountInput = useRef(null);
 
   const load = useCallback(async () => {
     setLoading(true); setLoadError(null);
@@ -110,7 +123,24 @@ export default function EventCostsTerm({ showId, eventId, locked, refreshKey, on
     setFormError(null);
     setForm({ id: cost ? cost.id : null });
   };
-  const closeForm = () => { if (!saving) { setForm(null); setFormError(null); } };
+  const closeForm = () => {
+    if (saving) return;
+    if (form?.id && form.id === pricingId) onPricingCancel?.();
+    setForm(null); setFormError(null);
+  };
+
+  // Price all: open the cost the walk is on, its amount focused.
+  useEffect(() => {
+    if (!pricingId || locked || loading) return;
+    const cost = costs.find((c) => c.id === pricingId);
+    if (!cost) return;
+    if (form?.id !== pricingId) openForm(cost);
+  }, [pricingId, costs, loading, locked]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!pricingId || form?.id !== pricingId) return;
+    const el = amountInput.current;
+    if (el) { el.focus(); el.scrollIntoView?.({ block: 'center', behavior: 'smooth' }); }
+  }, [pricingId, form?.id]);
 
   const save = async () => {
     if (locked || saving || !form) return;
@@ -126,15 +156,20 @@ export default function EventCostsTerm({ showId, eventId, locked, refreshKey, on
       return;
     }
     toast(form.id ? 'Cost saved' : 'Cost added');
+    const savedId = form.id;
     setForm(null);
     await load();
+    if (savedId && savedId === pricingId) onPriced?.(savedId);
     await refreshPage();
     setSaving(false);
   };
 
+  // Undo's context: the newest mounted instance's reload and refresh (the
+  // page remounts this section after the refresh a removal makes).
+  const undo = useUndo(`costs:${eventId}`, { load, refreshPage });
+
   const remove = async (cost) => {
     if (locked || saving) return;
-    if (!window.confirm(`Remove the cost "${costName(cost)}"?`)) return;
     setSaving(true);
     try {
       await deleteCostApi(showId, eventId, cost.id);
@@ -143,7 +178,15 @@ export default function EventCostsTerm({ showId, eventId, locked, refreshKey, on
       setSaving(false);
       return;
     }
-    toast('Cost removed');
+    const { kind, label, amount, paid_by: paidBy } = cost;
+    undo.offer({
+      message: `Removed '${costName(cost)}'`,
+      undo: async (ctx) => {
+        await createCostApi(showId, eventId, { kind, label: label ?? null, amount: amount ?? null, paid_by: paidBy || 'lala' });
+        await ctx.load?.();
+        await ctx.refreshPage?.();
+      },
+    });
     await load();
     await refreshPage();
     setSaving(false);
@@ -226,6 +269,8 @@ export default function EventCostsTerm({ showId, eventId, locked, refreshKey, on
         </ul>
       ) : <div className="epp-empty">None set</div>}
 
+      <UndoNotice undo={undo} testId="terms-cost-undo" />
+
       {costs.length > 0 && (
         <div className="epp-term-value" data-testid="terms-cost-totals">
           Lala pays {totals.lala.toLocaleString()} coins
@@ -248,6 +293,7 @@ export default function EventCostsTerm({ showId, eventId, locked, refreshKey, on
             <label className="epp-term-field">
               <span>Amount (coins)</span>
               <input
+                ref={amountInput}
                 type="number" min={0} step={1} inputMode="numeric" placeholder="Price required" value={draft.amount} data-testid="terms-cost-amount"
                 onChange={(e) => setDraft((d) => ({ ...d, amount: e.target.value }))}
               />
