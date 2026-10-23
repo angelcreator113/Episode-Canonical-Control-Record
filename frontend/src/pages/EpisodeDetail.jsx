@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo, lazy, Suspense } from 'react';
 import useScrolledPast from '../hooks/useScrolledPast';
+import useHeaderScrolledAway from '../hooks/useHeaderScrolledAway';
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { Compass, Sparkles, PenLine, CalendarDays, Crown, ChevronLeft, ChevronRight, ChevronDown, Clapperboard, MapPin, Calendar, Coins, MoreVertical, ArrowRight, Pencil, Trash2 } from 'lucide-react';
 import { STATUS_LABEL } from '../lib/episodePipeline';
@@ -105,6 +106,12 @@ export function formatShortDate(value) {
   const dateOnly = typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value);
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', ...(dateOnly ? { timeZone: 'UTC' } : {}) });
 }
+
+// The width at which the episode header scrolls away and the tabs stick under
+// its compact form (EpisodeDetail.css, the phone tabs block), and the compact
+// header's height until it has been measured.
+const PHONE_HEADER_QUERY = '(max-width: 768px)';
+const PHONE_COMPACT_GUESS = 112;
 
 const EpisodeDetail = () => {
   const { episodeId } = useParams();
@@ -280,12 +287,40 @@ const EpisodeDetail = () => {
   // spacer always measure the full height and nothing below them moves.
   // The spacer is sized straight on the element, with no re-render while
   // scrolling. EpisodeDetail.css turns scroll anchoring off on the page.
-  const headerCompact = useScrolledPast(120, 60);
+  //
+  // On a phone (Evoni, 2026-10-23, Android: the header "jumps" while
+  // scrolling) the full header is about half the screen, and pinning it
+  // until 120px then snapping it left a blank band where the rest of it had
+  // been. There the full header scrolls away with the page, and the compact
+  // one takes over once only its own height of the full header is showing
+  // (hooks/useHeaderScrolledAway.js), so nothing below it moves.
+  const [isPhone, setIsPhone] = useState(() => typeof window !== 'undefined' && !!window.matchMedia?.(PHONE_HEADER_QUERY).matches);
+  useEffect(() => {
+    const mq = window.matchMedia?.(PHONE_HEADER_QUERY);
+    if (!mq) return undefined;
+    const onChange = () => setIsPhone(mq.matches);
+    onChange();
+    mq.addEventListener?.('change', onChange);
+    return () => mq.removeEventListener?.('change', onChange);
+  }, []);
   const headerRef = useRef(null);
   const spacerRef = useRef(null);
+  const headerSentinelRef = useRef(null);
+  const headerFullRef = useRef(0);
+  const headerCompactHRef = useRef(PHONE_COMPACT_GUESS);
+  const headerEpisodeId = episode?.id;
+  const scrolledPast = useScrolledPast(120, 60);
+  const scrolledAway = useHeaderScrolledAway({
+    enabled: isPhone,
+    sentinelRef: headerSentinelRef,
+    fullHeight: () => headerFullRef.current,
+    compactHeight: () => headerCompactHRef.current,
+    stickTop: () => (headerRef.current ? parseFloat(getComputedStyle(headerRef.current).getPropertyValue('--app-header-h')) || 0 : 0),
+    resetKey: headerEpisodeId,
+  });
+  const headerCompact = isPhone ? scrolledAway : scrolledPast;
   const headerCompactRef = useRef(headerCompact);
   headerCompactRef.current = headerCompact;
-  const headerEpisodeId = episode?.id;
   useEffect(() => {
     const el = headerRef.current;
     const spacer = spacerRef.current;
@@ -313,7 +348,11 @@ const EpisodeDetail = () => {
       const h = el.offsetHeight;
       // The tabs stick under the header on a phone (Evoni, 2026-10-22 layout list).
       el.parentElement?.style.setProperty('--ed-head-h', `${h}px`);
-      if (!compact && performance.now() - switchedAt > SETTLE_MS) full = h;
+      const settled = performance.now() - switchedAt > SETTLE_MS;
+      if (!compact && settled) { full = h; headerFullRef.current = h; }
+      if (compact && settled) headerCompactHRef.current = h;
+      // The phone's tabs stick under the compact header, full or not.
+      el.parentElement?.style.setProperty('--ed-head-compact-h', `${headerCompactHRef.current}px`);
       spacer.style.height = `${Math.max(0, full - h)}px`;
       scroller.style.scrollPaddingTop = compact ? `${h + 12}px` : '';
     };
@@ -780,6 +819,8 @@ const EpisodeDetail = () => {
           the hero card: cover, show, title, meta, description, and the
           status, previous/next and actions at the top right. */}
       {/* S9 (b): collapses to the title and navigation while scrolling. */}
+      {/* Where the header starts in the page, even while it is stuck (useHeaderScrolledAway). */}
+      <div ref={headerSentinelRef} className="ed-header-sentinel" aria-hidden="true" />
       <div ref={headerRef} className={`ed-header-new${headerCompact ? ' is-compact' : ''}`} data-testid="ed-header">
         <nav className="eds-crumbs" aria-label="Breadcrumb">
           <ol>
