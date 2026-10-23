@@ -12,7 +12,7 @@ const mockQuery = jest.fn();
 jest.mock('../../../src/models', () => ({ sequelize: { query: (...a) => mockQuery(...a), transaction: async (fn) => fn('tx') } }));
 jest.mock('../../../src/middleware/auth', () => {
   const actual = jest.requireActual('../../../src/middleware/auth');
-  return { ...actual, requireAuth: (req, _res, next) => { req.user = { id: 'u1' }; next(); } };
+  return { ...actual, requireAuth: (req, _res, next) => { req.user = { id: 'u1' }; next(); }, authorize: () => (_req, _res, next) => next() };
 });
 jest.mock('../../../src/services/rawClipMedia', () => {
   const os = require('os');
@@ -128,6 +128,29 @@ describe('GET, PATCH and DELETE', () => {
     const res = await request(app).patch('/api/v1/episode-clips/ep-1/c1').send({ is_favorite: true });
     expect(res.status).toBe(409);
     expect(res.body).toEqual({ success: false, error: expect.stringMatching(/not switched on yet/) });
+    spy.mockRestore();
+  });
+
+  test('patch of beat_marks (Record whole episode) stores them as JSONB and returns them; a bad list is a 400', async () => {
+    mockQuery.mockResolvedValueOnce([[{ id: 'c1', beat_number: null, beat_marks: [{ beat: 1, t: 0 }, { beat: 2, t: 41.3 }], has_beat_marks: true }]]);
+    const res = await request(app).patch('/api/v1/episode-clips/ep-1/c1').send({ beat_marks: [{ beat: 2, t: 41.26 }, { beat: 1, t: 0 }] });
+    expect(res.status).toBe(200);
+    expect(res.body.data).toEqual({ id: 'c1', beat_number: null, beat_marks: [{ beat: 1, t: 0 }, { beat: 2, t: 41.3 }] });
+    const [sql, opts] = mockQuery.mock.calls[0];
+    expect(sql).toMatch(/beat_marks = CAST\(:beat_marks AS jsonb\)/);
+    expect(JSON.parse(opts.replacements.beat_marks)).toEqual([{ beat: 1, t: 0 }, { beat: 2, t: 41.3 }]);
+    const bad = await request(app).patch('/api/v1/episode-clips/ep-1/c1').send({ beat_marks: [{ beat: 15, t: 3 }] });
+    expect(bad.status).toBe(400);
+    expect(bad.body.error).toMatch(/beat_marks must be/);
+  });
+
+  test('patch of beat_marks before its migration is a logged 409 that says the database update has not run', async () => {
+    const spy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    mockQuery.mockRejectedValueOnce(Object.assign(new Error('column "beat_marks" of relation "episode_raw_clips" does not exist'), { original: { code: '42703' } }));
+    const res = await request(app).patch('/api/v1/episode-clips/ep-1/c1').send({ beat_marks: [{ beat: 1, t: 0 }] });
+    expect(res.status).toBe(409);
+    expect(res.body).toEqual({ success: false, error: expect.stringMatching(/database update .* hasn't run yet/) });
+    expect(spy).toHaveBeenCalledWith(expect.stringMatching(/beat_marks column is missing/), expect.any(String));
     spy.mockRestore();
   });
 
