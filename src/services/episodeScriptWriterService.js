@@ -289,7 +289,7 @@ async function loadScriptContext(episodeId, showId, models, { lite = false } = {
       // (ruling C3, utils/registryLink), the newest should two be. The join
       // on sp.registry_character_id compared an integer to a UUID and failed.
       const [rows] = await sequelize.query(
-        `SELECT sp.id, sp.handle, sp.display_name, sp.creator_name, sp.platform, sp.archetype,
+        `SELECT sp.id, sp.handle, sp.display_name, sp.creator_name, sp.aliases, sp.platform, sp.archetype,
                 sp.posting_voice, sp.content_persona, sp.lala_relevance_score, sp.celebrity_tier,
                 sp.follow_motivation, sp.follow_emotion, sp.lala_relationship, rc.id AS registry_character_id,
                 rc.display_name as char_name, rc.core_belief, rc.pressure_type, rc.pressure_quote,
@@ -331,6 +331,26 @@ async function loadScriptContext(episodeId, showId, models, { lite = false } = {
     context.familyLines = await familyLines(sequelize, (context.socialProfiles || []).map(p => p.registry_character_id));
   } catch (err) {
     console.error('[ScriptWriter] family lines could not be read (non-blocking):', err.message);
+  }
+
+  // 10b. The people the event's goals are about who are not above (a brand's
+  // Pulse account, a guest not featured): only their names, so the coverage
+  // check ticks a goal by them as the Script tab does (utils/scriptRuleChecks
+  // goalPerson). Not in the prompt.
+  context.goalProfiles = [];
+  try {
+    const goals = context.event?.canon_consequences?.automation?.relationship_goals;
+    const have = new Set((context.socialProfiles || []).map((p) => String(p.id)));
+    const ids = [...new Set((Array.isArray(goals) ? goals : []).map((g) => g?.profile_id).filter((id) => id != null && id !== '').map(String))].filter((id) => !have.has(id));
+    if (ids.length > 0) {
+      const [rows] = await sequelize.query(
+        'SELECT id, handle, display_name, creator_name, aliases FROM social_profiles WHERE id IN (:ids) AND deleted_at IS NULL',
+        { replacements: { ids } }
+      );
+      context.goalProfiles = rows || [];
+    }
+  } catch (err) {
+    console.error('[ScriptWriter] goal profiles lookup failed (non-blocking):', err.message);
   }
 
   // 11. Social tasks — what content Lala needs to create during the event
@@ -451,7 +471,9 @@ async function loadScriptContext(episodeId, showId, models, { lite = false } = {
  * in words, and their tie and love interest. Each null when there is none.
  */
 function lalaTieLines(p) {
-  const ties = [LALA_TIES[p?.lala_relationship], p?.lala_romance !== undefined ? `love interest${p.lala_romance ? `: ${p.lala_romance}` : ''}` : null].filter(Boolean);
+  // The story pair's line already says a romance; the romance is not said twice.
+  const romance = p?.lala_romance !== undefined && !p?.lala_story_tie ? `love interest${p.lala_romance ? `: ${p.lala_romance}` : ''}` : null;
+  const ties = [LALA_TIES[p?.lala_relationship], romance].filter(Boolean);
   return {
     story: p?.lala_story_tie ? `With Lala in the story: ${p.lala_story_tie}` : null,
     withLala: ties.length ? `With Lala: ${ties.join('; ')}` : null,
