@@ -61,10 +61,13 @@ const COGNITO_LOGIN_ERROR_MAP = {
 // Rate limiting for authentication endpoints
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5, // 5 login attempts per 15 minutes
+  max: 5, // 5 failed login attempts per 15 minutes
   message: 'Too many login attempts, please try again later',
   standardHeaders: true,
   legacyHeaders: false,
+  // Only failed attempts count (Evoni, 2026-10-23: signing out and back in a
+  // few times locked her out for 15 minutes).
+  skipSuccessfulRequests: true,
   skip: (_req) => process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test', // Skip in development and test
 });
 
