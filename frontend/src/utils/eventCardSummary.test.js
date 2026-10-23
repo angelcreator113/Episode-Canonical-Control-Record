@@ -33,10 +33,12 @@ describe('eventCardSummary (Task #2361)', () => {
     };
     const parts = eventCardMetaParts(ev);
     expect(parts.map((p) => p.key)).toEqual(['organizer', 'date', 'deal_type']);
-    expect(parts[1].text).toBe('2026-10-12');
+    expect(parts[1].text).toBe('Mon, Oct 12');
     expect(parts[2].text).toBe('Paid appearance');
 
     expect(eventCardMetaParts({})).toEqual([{ key: 'organizer', text: 'No organizer', missing: true }]);
+    // Linked by source_profile_id alone, no name stored: still an organizer.
+    expect(eventCardMetaParts({ source_profile_id: 'p-1' })[0]).toEqual({ key: 'organizer', text: 'Linked creator', missing: false });
   });
 
   test('deal-type filter: all, a type, or not set', () => {

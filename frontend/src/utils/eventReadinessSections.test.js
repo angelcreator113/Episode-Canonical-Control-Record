@@ -36,10 +36,10 @@ const missingKeys = (r, key) => section(r, key).missing.map((m) => m.key);
 const itemOf = (r, sec, key) => section(r, sec).items.find((i) => i.key === key);
 
 describe('the gate declaration (Evoni, 2026-09-24)', () => {
-  test('gates: organizer, name, category, format, date, venue, invitation', () => {
+  test('gates: organizer, name, category, format, date, venue, invitation, and a deal\'s prices', () => {
     expect(Object.entries(READINESS_ITEMS).filter(([, r]) => r.gate).map(([k]) => k).sort()).toEqual([
       'identity.category', 'identity.date', 'identity.format', 'identity.name',
-      'invitation.invitation', 'organizer.organizer', 'place.venue',
+      'invitation.invitation', 'organizer.organizer', 'place.venue', 'stakes.prices',
     ]);
   });
 
@@ -177,6 +177,41 @@ describe('money', () => {
   test('free (0) is satisfied', () => expect(m({ cost_coins: 0 })).toMatchObject({ satisfied: true }));
   test('a paid appearance is satisfied even with cost 100', () => expect(m({ cost_coins: 100, is_paid: true, payment_amount: 400 })).toMatchObject({ satisfied: true }));
   test('no cost at all (not possible on a real row) warns as missing', () => expect(m({ cost_coins: null })).toMatchObject({ satisfied: false, state: 'missing', note: 'No cost stored' }));
+});
+
+describe('deal prices: a gate, as Start Episode refuses on them', () => {
+  const deal = (over) => ({ ...full(), deal_components: ['paid_to_appear', 'paid_for_content'], appearance_fee: 300, ...over });
+  const prices = (r) => itemOf(r, 'stakes', 'prices');
+
+  test('a legacy event (no deal) has no prices item, so nothing changes for it', () => {
+    expect(itemOf(computeEventPackageReadiness(full()), 'stakes', 'prices')).toBeUndefined();
+  });
+
+  test('a missing component fee is read from the event itself and blocks', () => {
+    const r = computeEventPackageReadiness(deal({ appearance_fee: null }));
+    expect(prices(r)).toMatchObject({ satisfied: false, gate: true, state: 'missing' });
+    expect(prices(r).note).toMatch(/^Price required: /);
+    expect(r.gatesMet).toBe(false);
+    expect(computeEventState(deal({ appearance_fee: null }), r)).toBe('needs_setup');
+  });
+
+  test('without the rows, only the fees are checked (the behaviour before); with them, an unpriced deliverable or cost blocks', () => {
+    const ev = deal();
+    const bare = computeEventPackageReadiness(ev);
+    expect(prices(bare).satisfied).toBe(true);
+    expect(prices(bare).note).toBe('Fees set; deliverables and costs checked in Terms');
+    expect(bare.gatesMet).toBe(true);
+
+    const d = computeEventPackageReadiness(ev, { prices: { deliverables: [{ id: 'd1', description: 'Reel', fee: null }], costs: [] } });
+    expect(prices(d)).toMatchObject({ satisfied: false, missingPrices: ['"Reel"'] });
+    expect(computeEventState(ev, d)).toBe('needs_setup');
+
+    const c = computeEventPackageReadiness(ev, { prices: { deliverables: [], costs: [{ id: 'c1', paid_by: 'lala', amount: null, label: 'Car', kind: 'travel' }] } });
+    expect(prices(c).missingPrices).toEqual(['"Car"']);
+    const comped = computeEventPackageReadiness(ev, { prices: { deliverables: [{ id: 'd1', fee: 0 }], costs: [{ id: 'c1', paid_by: 'host', amount: null }] } });
+    expect(prices(comped)).toMatchObject({ satisfied: true, note: null });
+    expect(comped.gatesMet).toBe(true);
+  });
 });
 
 describe('suggestions never satisfy; accepted values do', () => {

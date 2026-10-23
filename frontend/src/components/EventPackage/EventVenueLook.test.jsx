@@ -168,3 +168,57 @@ describe('EventVenueLook (L1)', () => {
     expect(screen.queryByTestId('venue-look-edit')).toBeNull();
   });
 });
+
+describe('EventVenueLook: a failed load, a failed refresh, unsaved edits', () => {
+  beforeEach(() => {
+    Object.values(api).forEach((fn) => fn?.mockReset?.());
+  });
+
+  test('a failed load says so with Try again, and Write / Draft stay off so a save cannot wipe the stored look', async () => {
+    vi.mocked(api.get).mockRejectedValueOnce(new Error('network'));
+    renderLook();
+    expect(await screen.findByTestId('venue-look-load-failed')).toBeTruthy();
+    expect(screen.getByTestId('venue-look-edit').disabled).toBe(true);
+    expect(screen.getByTestId('venue-look-draft').disabled).toBe(true);
+    expect(screen.queryByText(/No venue look yet/)).toBeNull();
+
+    vi.mocked(api.get).mockResolvedValue({ data: { success: true, data: { venue_look: LOOK, editable: true } } });
+    fireEvent.click(screen.getByTestId('venue-look-retry'));
+    expect(await enabled('venue-look-edit')).toBeTruthy();
+    expect(screen.queryByTestId('venue-look-load-failed')).toBeNull();
+    expect(screen.getByTestId('venue-look-part-overall')).toBeTruthy();
+  });
+
+  test('a save that succeeds while the page refresh fails closes the editor and says "couldn\'t refresh", not a failed save', async () => {
+    vi.mocked(api.get).mockResolvedValue({ data: { success: true, data: { venue_look: LOOK, editable: true } } });
+    vi.mocked(api.put).mockResolvedValue({ data: { success: true } });
+    const onToast = vi.fn();
+    const onSaved = vi.fn().mockRejectedValue(new Error('reload failed'));
+    render(<EventVenueLook showId="show-1" eventId="ev-1" onToast={onToast} onSaved={onSaved} />);
+    fireEvent.click(await enabled('venue-look-edit'));
+    fireEvent.click(screen.getByTestId('venue-look-save'));
+    await waitFor(() => expect(screen.queryByTestId('venue-look-editor')).toBeNull());
+    expect(api.put).toHaveBeenCalledTimes(1);
+    expect(onToast).toHaveBeenCalledWith(expect.stringMatching(/^Saved — couldn't refresh/));
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  test('a backdrop click with unsaved edits asks first; declined, the editor stays', async () => {
+    vi.mocked(api.get).mockResolvedValue({ data: { success: true, data: { venue_look: LOOK, editable: true } } });
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    renderLook();
+    fireEvent.click(await enabled('venue-look-edit'));
+    const backdrop = screen.getByTestId('venue-look-editor').parentElement;
+    // Unchanged: closes with no question.
+    fireEvent.click(backdrop);
+    expect(confirmSpy).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('venue-look-editor')).toBeNull();
+
+    fireEvent.click(screen.getByTestId('venue-look-edit'));
+    fireEvent.change(screen.getByTestId('venue-look-input-overall'), { target: { value: 'Changed.' } });
+    fireEvent.click(screen.getByTestId('venue-look-editor').parentElement);
+    expect(confirmSpy).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId('venue-look-editor')).toBeTruthy();
+    confirmSpy.mockRestore();
+  });
+});

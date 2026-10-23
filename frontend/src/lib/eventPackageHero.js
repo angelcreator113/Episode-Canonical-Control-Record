@@ -9,17 +9,13 @@
  */
 
 import { computeEventState, EVENT_QUEUE_STATES } from '../utils/eventReadinessSections';
+import { formatEventDate } from '../utils/eventDate';
 
-const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 const HH_MM = /^(\d{2}):(\d{2})/;
 
-/** "2026-11-12" → "Thu, Nov 12"; anything else as stored. */
+/** "2026-11-12" → "Thu, Nov 12"; anything else as stored (formatEventDate). */
 export function shortDate(value) {
-  if (!value) return null;
-  if (!ISO_DATE.test(value)) return String(value);
-  const d = new Date(`${value}T00:00:00Z`);
-  if (Number.isNaN(d.getTime())) return String(value);
-  return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' });
+  return formatEventDate(value, { style: 'short' });
 }
 
 /** "18:30" → "6:30 PM"; anything else as stored. */
@@ -38,7 +34,9 @@ export function shortTime(value) {
 export function heroTiles({ event, venueDate, organizer, projection, dealLabel, compensation }) {
   const ev = event || {};
   const date = shortDate(venueDate?.eventDate || ev.event_date);
-  const time = shortTime(ev.event_time);
+  // The time has two homes like the date (resolveEventVenueAndDate): an
+  // event whose time survives only in the saved automation copy shows it.
+  const time = shortTime(venueDate?.eventTime || ev.event_time);
   const venue = venueDate?.venueName || ev.venue_name || null;
   const district = ev.lalaverse_district || ev.canon_consequences?.automation?.lalaverse_district || null;
   const pays = compensation?.amount > 0 ? `${compensation.isPaid ? 'Earns' : 'Agreed'} ${compensation.amount.toLocaleString()} coins` : (dealLabel ? 'Unpaid' : null);

@@ -11,14 +11,15 @@
  * whole outfit. Shown only while no outfit is chosen.
  *
  * Props: showId, eventId, onSaved(), onToast(message), onBrowse() to open
- * the full closet picker.
+ * the full closet picker, hasOutfit (optional, default false): the event
+ * already has an outfit, so Use this look would replace it and asks first.
  */
 import { useEffect, useState } from 'react';
 import { Shirt, ShoppingBag, Sparkles } from 'lucide-react';
 import api from '../../services/api';
 import { recommendLooks, isOwned } from '../../utils/recommendLooks';
 
-export default function EventLookRecommendations({ showId, eventId, onSaved, onToast, onBrowse }) {
+export default function EventLookRecommendations({ showId, eventId, onSaved, onToast, onBrowse, hasOutfit = false }) {
   const [looks, setLooks] = useState(null);
   const [failed, setFailed] = useState(false);
   const [saving, setSaving] = useState(null);
@@ -36,17 +37,25 @@ export default function EventLookRecommendations({ showId, eventId, onSaved, onT
 
   const chooseLook = async (look) => {
     if (saving) return;
+    if (hasOutfit && !window.confirm(`Replace the event's chosen outfit with ${look.label}?`)) return;
     setSaving(look.key);
     try {
       await api.put(`/api/v1/world/${showId}/events/${eventId}/outfit`, { wardrobe_ids: look.pieces.map((p) => p.id) });
-      onToast?.(`${look.label} chosen`);
-      onSaved?.();
     } catch (err) {
       console.error('[EventLooks] save failed:', err);
       onToast?.(err.response?.data?.error || err.message || 'Failed to save the look');
-    } finally {
       setSaving(null);
+      return;
     }
+    onToast?.(`${look.label} chosen`);
+    try {
+      await onSaved?.();
+    } catch (err) {
+      // The look is saved; only the page's refresh failed.
+      console.error('[EventLooks] refresh after save failed:', err);
+      onToast?.("Saved — couldn't refresh the page. Reload to see the outfit.");
+    }
+    setSaving(null);
   };
 
   if (failed) return <p className="epp-looks-note" data-testid="looks-failed">Recommended looks could not be loaded. Choose an outfit from the closet instead.</p>;

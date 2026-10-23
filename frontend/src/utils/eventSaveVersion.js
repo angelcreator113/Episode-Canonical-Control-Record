@@ -85,7 +85,7 @@ export function createEventSaveQueue(put, { getBase } = {}) {
         return res;
       };
       const p = chain.then(run, run);
-      chain = p.catch(() => {});
+      chain = p.catch(() => {}); // silent-ok: the caller gets this save's error through p; the chain only keeps order
       return p;
     },
   };

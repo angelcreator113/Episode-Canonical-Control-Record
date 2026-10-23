@@ -36,6 +36,9 @@
  * are the opportunity arriving, so an episode without one starts without
  * its trigger. Warnings state their consequence and Start Anyway is
  * offered. The gate set is READINESS_ITEMS below, one line per item.
+ * Since the deal build, a deal with a price missing is a gate as well
+ * (stakes.prices): Start Episode's server check refuses it
+ * (DEAL_PRICE_REQUIRED), so the Package and the queue say so first.
  *
  * Recorded for later, not built (Evoni's ruling, 2026-09-24): readiness is
  * not one thing. Event Ready, Script Ready, Production Ready, Evaluation
@@ -45,6 +48,8 @@
 import { resolveEventVenueAndDate, resolveEventOrganizer } from './eventReadiness';
 import { resolveEventBasics, hasValueState } from './eventBasics';
 import { resolveEventStakes, COLUMN_DEFAULTS } from './eventStakes';
+import { isDealEvent, missingPriceLabels } from './eventTerms';
+import { missingCostPriceLabels } from './eventCosts';
 
 // ── The gate declaration ──────────────────────────────────────────────
 // One entry per item, keyed "section.item". gate: true = the item must be
@@ -68,6 +73,10 @@ export const READINESS_ITEMS = {
   'look.dress_code': { gate: false, consequence: 'Lala will dress without a stated dress code, so the look cannot be judged against one.' },
   'stakes.story_stakes': { gate: false, consequence: 'The script will have no stated story stakes to build tension from.' },
   'stakes.money': { gate: false, consequence: 'Finalizing the episode charges the stored cost, which may only be the column default.' },
+  // Start Episode refuses a deal with a price missing (dealPricingService
+  // findMissingPrices, DEAL_PRICE_REQUIRED), so the badge, the headline and
+  // the queue hold on it too rather than reading Ready.
+  'stakes.prices': { gate: true, consequence: 'Start Episode refuses a deal while a price it pays or charges is missing.' },
 };
 
 const text = (v) => (typeof v === 'string' ? v.trim() : '');
@@ -116,8 +125,8 @@ export function moneyItem(stakes, event) {
   const kind = stakes.money.kind;
   const cost = Number(event.cost_coins);
   const isDefault = kind === 'cost' && cost === COLUMN_DEFAULTS.cost_coins;
-  // A deal (Task #2365) is priced under Terms, where a missing price holds
-  // Start Episode on its own; its cost_coins is difficulty only.
+  // A deal (Task #2365) is priced under Terms; a missing price there is the
+  // stakes.prices gate (pricesItem). Its cost_coins is difficulty only.
   const satisfied = kind === 'deal' || kind === 'paid' || kind === 'free' || (kind === 'cost' && !isDefault);
   return item('money', 'Money', satisfied, {
     state: kind === 'missing' ? 'missing' : 'stored',
@@ -128,9 +137,36 @@ export function moneyItem(stakes, event) {
 }
 
 /**
+ * Deal prices (ruling 6, "Missing is missing"; D13 travel): every priced
+ * component (read from the event itself), every paid deliverable with no fee
+ * and every cost line Lala pays with no amount — the list Start Episode
+ * refuses on (dealPricingService.findMissingPrices). Deliverables and costs
+ * are their own rows, not on the event: `prices.deliverables` /
+ * `prices.costs` are those lists when the caller has them loaded; without
+ * them only the components are checked, and the note says so. Only a deal
+ * event has this item (a legacy event is never refused for a price).
+ */
+export function pricesItem(event, prices = {}) {
+  const deliverables = Array.isArray(prices.deliverables) ? prices.deliverables : null;
+  const costs = Array.isArray(prices.costs) ? prices.costs : null;
+  const missing = [
+    ...missingPriceLabels(event, deliverables || []),
+    ...(costs ? missingCostPriceLabels(costs) : []),
+  ];
+  const unchecked = [!deliverables && 'deliverables', !costs && 'costs'].filter(Boolean);
+  return item('prices', 'Deal prices', missing.length === 0, {
+    state: missing.length ? 'missing' : 'stored',
+    missingPrices: missing,
+    note: missing.length
+      ? `Price required: ${missing.join(', ')}`
+      : (unchecked.length ? `Fees set; ${unchecked.join(' and ')} checked in Terms` : null),
+  });
+}
+
+/**
  * The Event Package's sections, in page order. Each entry:
  *   { key, label, items(ctx) → [{ key, label, satisfied, state, note }] }
- * ctx = { event, basics, venueDate, organizer, stakes }.
+ * ctx = { event, basics, venueDate, organizer, stakes, prices }.
  * Adding a section (Lala's deliverables, once they have a home — Task
  * #1773) is one more entry here plus one READINESS_ITEMS line per item;
  * nothing else changes.
@@ -216,11 +252,12 @@ export const EVENT_PACKAGE_SECTIONS = [
     // or creation-path derivations, eventStakes.js). Money: moneyItem.
     key: 'stakes',
     label: 'Stakes',
-    items: ({ event, stakes }) => [
+    items: ({ event, stakes, prices }) => [
       item('story_stakes', 'Story stakes', !stakes.relationship.missing, {
         state: stakes.relationship.missing ? 'missing' : 'stored',
       }),
       moneyItem(stakes, event),
+      ...(isDealEvent(event) ? [pricesItem(event, prices)] : []),
     ],
   },
 ];
@@ -246,6 +283,11 @@ export const EVENT_PACKAGE_SECTIONS = [
  * loaded: with it, a dress code can be told apart as waiting for a format
  * or suggested from the venue (Task #2148). It cannot change what is
  * satisfied either.
+ * `options.prices` = { deliverables, costs }: the event's deliverable and
+ * cost rows, when the caller has them loaded (EventTermsSection's
+ * onPriceInputsChange), so a missing deliverable fee or cost amount holds
+ * the deal-prices gate too. Without them only the deal's component fees
+ * (stored on the event) are checked: the behaviour before them.
  */
 export function computeEventPackageReadiness(event, options = {}) {
   const ev = event || {};
@@ -257,6 +299,7 @@ export function computeEventPackageReadiness(event, options = {}) {
     venueDate: resolveEventVenueAndDate(ev),
     organizer: resolveEventOrganizer(ev),
     stakes: resolveEventStakes(ev),
+    prices: options.prices || {},
   };
 
   const sections = defs.map((def) => {
@@ -348,7 +391,8 @@ export const EVENT_QUEUE_STATES = {
 // Needs Organizer (the organizer is a gate, but it keeps its own state);
 // any other gate item missing → Needs Setup; else Ready. Warning items
 // (scene set, outfit, time, dress code, featured attendees, stakes, money)
-// never move an event out of Ready.
+// never move an event out of Ready. A deal with a price missing (the
+// stakes.prices gate) is Needs Setup, as Start Episode would refuse it.
 export function computeEventState(event, readiness) {
   const ev = event || {};
 
