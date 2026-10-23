@@ -88,3 +88,19 @@ test('a failed tick says so and keeps the button', async () => {
   expect((await screen.findByRole('alert')).textContent).toContain("Couldn't tick it");
   expect(screen.getByTestId('script-cover-goal-0-tick')).toBeTruthy();
 });
+
+// Episode 1 feeds Episode 2 (Evoni, 2026-10-23): a follow-up carried from an
+// earlier episode is on the list, read even without event goals, and Tick it
+// completes its task (which settles the follow-up on the server).
+test('a carried follow-up is listed and ticked like a goal', async () => {
+  const CARRIED = { slot: 'follow_up_f1', label: 'Get to know Truthville', task_source: 'goal', follow_up_id: 'f1', profile_id: 9, completed: false };
+  social = [CARRIED];
+  vi.mocked(api.post).mockImplementation(async () => ({ data: { success: true, social_tasks: [{ ...CARRIED, completed: true }] } }));
+  renderTab();
+  await openCover();
+  await waitFor(() => expect(screen.getByTestId('script-cover-carried-f1').dataset.covered).toBe('true'));
+  expect(screen.getByTestId('script-cover-carried-f1').textContent).toContain('Follow-up');
+  fireEvent.click(await screen.findByTestId('script-cover-carried-f1-tick'));
+  await waitFor(() => expect(api.post).toHaveBeenCalledWith('/api/v1/episodes/ep-1/todo/complete/follow_up_f1', { completed: true, source: 'script', beat: 11 }));
+  expect((await screen.findByTestId('script-cover-carried-f1-ticked')).textContent).toBe('Ticked');
+});

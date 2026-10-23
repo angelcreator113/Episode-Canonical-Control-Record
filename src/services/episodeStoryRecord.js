@@ -228,7 +228,11 @@ async function goalsOf(sequelize, episode, event, profiles) {
   return goals.slice(0, MAX.goals).map((g) => {
     const own = eventGoals.find((e) => (e.slot || 'relationship') === g.slot);
     const person = goalPerson({ ...g, profile_id: g.profile_id ?? own?.profile_id ?? null }, event, profiles);
-    return { slot: g.slot, label: String(g.label).trim(), completed: !!g.completed, beat: beats.length ? goalCovered(beats, g, person)?.beat ?? null : null };
+    return {
+      slot: g.slot, label: String(g.label).trim(), completed: !!g.completed, beat: beats.length ? goalCovered(beats, g, person)?.beat ?? null : null,
+      // Carried from an earlier episode (services/storyCarryForward).
+      ...(g.follow_up_id ? { follow_up_id: g.follow_up_id } : {}),
+    };
   });
 }
 
@@ -421,7 +425,7 @@ function draftPrompt({ episode, event, cast, threads, goals = [], relationships 
   }).join('\n') || '(no characters are linked to this episode)';
   const open = threads.length ? threads.map((t) => `- [${t.id}] ${t.title}${t.description ? `: ${String(t.description).slice(0, 200)}` : ''}`).join('\n') : '(none)';
   const goalLines = goals.length
-    ? goals.map((g) => `- [${g.slot}] ${g.label}${g.completed ? ' (already ticked)' : ''}${g.beat ? ` (the script check finds it in beat ${g.beat})` : ' (the script check did not find it)'}`).join('\n')
+    ? goals.map((g) => `- [${g.slot}] ${g.label}${g.follow_up_id ? ' (owed from an earlier episode)' : ''}${g.completed ? ' (already ticked)' : ''}${g.beat ? ` (the script check finds it in beat ${g.beat})` : ' (the script check did not find it)'}`).join('\n')
     : '(none)';
   const relLines = relationships.length
     ? relationships.map((r) => `- [${r.character_id_a}] ${names.get(r.character_id_a) || '?'} and [${r.character_id_b}] ${names.get(r.character_id_b) || '?'}: ${r.relationship_type}${r.is_romantic ? ', romantic' : ''}${r.stage ? `, stage ${r.stage}` : ''}${r.tension_state ? `, ${r.tension_state}` : ''}`).join('\n')
@@ -690,6 +694,8 @@ async function tickGoals(sequelize, goals, { episode, transaction }) {
   if (ticked.length) {
     await sequelize.query('UPDATE episode_todo_lists SET social_tasks = CAST(:tasks AS jsonb), updated_at = NOW() WHERE id = :id',
       { replacements: { id: list.id, tasks: JSON.stringify(tasks) }, transaction });
+    // A follow-up carried from an earlier episode is done in this one.
+    await require('./storyCarryForward').settleFollowUps(sequelize, tasks.filter((t) => t && ticked.includes(t.slot)), { episodeId: episode.id, transaction });
   }
   return { ticked, missing: false };
 }
