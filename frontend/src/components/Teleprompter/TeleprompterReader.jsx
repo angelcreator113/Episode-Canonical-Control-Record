@@ -31,6 +31,18 @@
 // line while she reads as someone else; the silence cue counts the clip's
 // own length, and in Pace by line times and Follow my voice the scroll waits
 // for it to end. "Record voice" records the line on the reading line.
+// On-screen moments (Evoni, 2026-10-23: "when lala is reacting or talking or
+// things are being clicked on screen I need to react"): a [UI:] line shows
+// as an "On screen · … · react" cue holding 3 seconds (× the pace), counted
+// like someone else's line; "Show on-screen moments" turns them off. The
+// cutscene, beats 11-13 (lib/scriptShowRules isCutsceneBeat), opens with a
+// "Cutscene · watch & comment" banner, and only JustAWoman's lines there are
+// read; the rest is watching time.
+// "Record whole episode" (same day): in Read & record, "Whole episode" films
+// one take from beat 1 (or this beat) to the end without stopping at beat
+// ends; pause pauses the recording too. Each beat's heading reaching the
+// reading line is a marker [{ beat, t }] in take time (lib/fullEpisodeTake),
+// saved with the take as beat_marks, or downloadable until the server keeps them.
 // Keys: Space play/pause, Up/Down speed (or pace), PageUp/PageDown jump a
 // half screen (a line, pacing by line times; clickers and foot pedals send
 // these), Left/Right beat, Escape exits.
@@ -41,6 +53,7 @@ import {
   X, ChevronLeft, ChevronRight, Play, Pause, FlipHorizontal2, Timer, Video, VideoOff, Circle, Square,
   RotateCcw, Upload, Download, AlertTriangle, CheckCircle2, ALargeSmall, Gauge, Hourglass, SlidersHorizontal,
   AudioLines, Grid3x3, Clock, Film, Smartphone, Mic, Volume2,
+  Bell, MessageCircle, MousePointerClick, ArrowDownUp, Send, MonitorPlay, AppWindow, Monitor, EyeOff, Clapperboard, FileDown,
 } from 'lucide-react';
 import useVoiceFollow from '../../hooks/useVoiceFollow';
 import useMicLevel from '../../hooks/useMicLevel';
@@ -50,7 +63,7 @@ import { beatSeconds } from '../../lib/scriptRuntime';
 import { SESSION_KEY, SAVED_KEY, readTimes, writeTimes, durationText } from '../../lib/rehearsal';
 import { cameraErrorMessage } from '../../lib/teleprompterLines';
 import { MarkedText, MicMeter, FramingGrid, RehearsalPanel } from './TeleprompterParts';
-import TakesPanel from './TeleprompterTakes';
+import TakesPanel, { MarkLinks, seekVideo } from './TeleprompterTakes';
 import useDialogLayer from '../../hooks/useDialogLayer';
 import useTakeRecorder from '../../hooks/useTakeRecorder';
 import useTeleprompterRemote from '../../hooks/useTeleprompterRemote';
@@ -58,8 +71,13 @@ import useLineVoice from '../../hooks/useLineVoice';
 import TeleprompterRemotePanel from './TeleprompterRemotePanel';
 import VoiceRecordPanel from './VoiceRecord';
 import { voiceClipsApi, isNotReady as voiceNotReady, VOICE_NOT_READY, clipsByLine, lineKey, withClip, clipSeconds } from '../../lib/voiceClipsApi';
-import { teleprompterScript, pastedParagraphs, pastedScript, speakersOf, HER, takeName, takeExtension, downloadName, clock, lineChoice } from '../../lib/teleprompterLines';
+import { teleprompterScript, pastedParagraphs, pastedScript, speakersOf, HER, takeName, takeExtension, downloadName, clock, lineChoice, withoutScreen } from '../../lib/teleprompterLines';
 import { rawClipsApi, hasTakeFields, beatTakes, withFavorite } from '../../lib/rawClipsApi';
+import { isCutsceneBeat } from '../../lib/scriptShowRules';
+import {
+  FULL_BITRATE, WARN_BYTES, UPLOAD_LIMIT_MB, MARKS_NOT_KEPT, fullTakeName, fullTakes, hasMarksField, markTime, cleanMarks,
+  takeBytes, sizeText, marksText, marksFileName,
+} from '../../lib/fullEpisodeTake';
 
 export const SETTINGS_KEY = 'teleprompter.settings';
 export const SIZE_MIN = 20;
@@ -69,13 +87,15 @@ export const SPEED_MAX = 20;
 const PX_PER_STEP = 8; // speed 5 scrolls 40px a second
 export const PACE_MIN = 0.5;
 export const PACE_MAX = 2;
-export const DEFAULTS = { size: 40, speed: 5, mirror: false, countdown: true, lineMode: 'mine', readAs: HER, pacing: 'steady', pace: 1, grid: false, playVoice: true };
+export const DEFAULTS = { size: 40, speed: 5, mirror: false, countdown: true, lineMode: 'mine', readAs: HER, pacing: 'steady', pace: 1, grid: false, playVoice: true, screen: true };
 // Below this level for this long while recording: "No sound from your mic".
 const QUIET_LEVEL = 0.04;
 const QUIET_MS = 3000;
 const roundPace = (n) => Math.round(n * 10) / 10;
 
 const clamp = (n, lo, hi) => Math.min(hi, Math.max(lo, n));
+// A `//` pause holds a second more (an on-screen moment holds its own 3 seconds).
+const lineBreaks = (l) => (l?.kind === 'screen' ? 0 : pauseCount(l?.text));
 
 /** The viewer's settings on this device (localStorage), or the defaults. */
 export function readSettings() {
@@ -91,6 +111,7 @@ export function readSettings() {
       pacing: ['lines', 'voice'].includes(raw.pacing) ? raw.pacing : 'steady',
       grid: typeof raw.grid === 'boolean' ? raw.grid : DEFAULTS.grid,
       playVoice: typeof raw.playVoice === 'boolean' ? raw.playVoice : DEFAULTS.playVoice,
+      screen: typeof raw.screen === 'boolean' ? raw.screen : DEFAULTS.screen,
       pace: Number.isFinite(raw.pace) ? clamp(roundPace(raw.pace), PACE_MIN, PACE_MAX) : DEFAULTS.pace,
     };
   } catch (err) {
@@ -118,9 +139,26 @@ const reducedMotion = () => {
 // Where an element sits in the scroll box's content (works mirrored too).
 const topIn = (el, box) => el.getBoundingClientRect().top - box.getBoundingClientRect().top + box.scrollTop;
 
+// The on-screen moment's icon (lib/teleprompterScreen screenIcon).
+const SCREEN_ICONS = {
+  phone: Smartphone, notify: Bell, dm: MessageCircle, post: Send, tap: MousePointerClick,
+  scroll: ArrowDownUp, open: AppWindow, show: MonitorPlay, hide: EyeOff, other: Monitor,
+};
+
 // A line; `wordStart`/`cursor` number its words for Follow my voice.
 function Line({ l, mine, at, lineRef, index, wordStart = null, cursor = -1, from = 0 }) {
   const common = { ref: lineRef, 'data-line': index, 'data-at': at || undefined };
+  if (l.kind === 'screen') {
+    const Icon = SCREEN_ICONS[l.icon] || Monitor;
+    return (
+      <p {...common} className="stp-screen" data-testid="stp-screen">
+        <Icon size={18} aria-hidden="true" className="stp-screen-icon" />
+        <span className="stp-screen-kicker">On screen</span>
+        <span className="stp-screen-text">{l.text}</span>
+        <span className="stp-screen-react">react</span>
+      </p>
+    );
+  }
   if (l.kind === 'para') return <p {...common} className="stp-para" data-testid="stp-para"><MarkedText text={l.text} wordStart={wordStart} cursor={cursor} from={from} /></p>;
   if (l.kind === 'breath') {
     return <p {...common} className="stp-direction is-breath" data-testid="stp-breath"><MarkedText text="(breath)" /> <span className="stp-sr">breath</span></p>;
@@ -137,17 +175,20 @@ function Line({ l, mine, at, lineRef, index, wordStart = null, cursor = -1, from
 
 // "Stay quiet · react" while someone else's line is on the reading line, or
 // "Action · Ns" for a stage direction (Evoni, 2026-10-20).
+// An on-screen moment: "On screen · react" with what happens; in the
+// cutscene, someone else's line is watching time.
 function SilenceCue({ line, left, total, reduced, voice = false }) {
   const n = Math.max(0, Math.ceil(left - 0.05));
-  if (line.kind === 'direction') return <div className="stp-quiet is-action" role="status" data-testid="stp-quiet">Action · {n}s</div>;
+  if (line.kind === 'direction') return <div className="stp-quiet is-action" role="status" data-testid="stp-quiet">{line.cut ? 'Watching' : 'Action'} · {n}s</div>;
   if (line.kind === 'breath') return <div className="stp-quiet is-action" role="status" data-testid="stp-quiet">Breath · {n}s</div>;
   const frac = total > 0 ? Math.max(0, Math.min(1, left / total)) : 0;
+  const screenCue = line.kind === 'screen';
   return (
-    <div className="stp-quiet" role="status" data-testid="stp-quiet">
-      <span className="stp-quiet-label">Stay quiet · react</span>
+    <div className={`stp-quiet${screenCue ? ' is-screen' : ''}`} role="status" data-testid="stp-quiet">
+      <span className="stp-quiet-label">{screenCue ? 'On screen · react' : line.cut ? 'Cutscene · watch' : 'Stay quiet · react'}</span>
       {voice && <span className="stp-quiet-voice" data-testid="stp-quiet-voice"><Volume2 size={14} aria-hidden="true" /> voice clip</span>}
       <span className="stp-quiet-n" data-testid="stp-quiet-n">{n}s</span>
-      <span className="stp-quiet-who">{line.speaker}</span>
+      <span className="stp-quiet-who">{screenCue ? line.text : line.speaker}</span>
       {!reduced && <span className="stp-quiet-bar" data-testid="stp-quiet-bar" aria-hidden="true"><span style={{ transform: `scaleX(${frac})` }} /></span>}
     </div>
   );
@@ -186,11 +227,23 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
   const [sessionTakes, setSessionTakes] = useState(0); // pasted-text takes this visit
   const [reduced] = useState(reducedMotion);
   const [more, setMore] = useState(false);
+  // Read & record with a picked script: one beat a take, or the whole episode in one.
+  const [takeScope, setTakeScope] = useState('beat');
+  const [episodeFrom, setEpisodeFrom] = useState('first'); // 'first' | 'this'
+  // The whole-episode take's beat markers, and the beat (index) marked last.
+  const [marks, setMarks] = useState([]);
+  const marksRef = useRef([]);
+  const lastMarkedRef = useRef(-1);
+  // Markers the server could not keep yet (database update not run): she can download them.
+  const [pendingMarks, setPendingMarks] = useState(null);
 
+  const episodeId = isScript ? source.episodeId : null;
   const rec = useTakeRecorder(recordOn);
   const { take, recording } = rec;
   const busyTake = recording || count > 0 || !!take;
-  const oneBeat = isScript && recordOn && beats.length > 0;
+  const canWhole = isScript && numbered && !!episodeId && beats.length > 0;
+  const whole = canWhole && recordOn && takeScope === 'episode';
+  const oneBeat = isScript && recordOn && beats.length > 0 && !whole;
   const beat = beats[current] || null;
   // Follow my voice falls back to the steady scroll where the browser can't listen.
   const voiceSupported = !!speechRecognition();
@@ -201,30 +254,42 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
   const layout = useMemo(() => {
     const flat = [];
     const beatFirst = [];
+    const beatLines = [];
+    let intro = [];
     // Each line's beat number and place in its beat (a voice clip's line), or null.
     const where = [];
+    // On-screen moments show unless she turned them off; a voice clip's line
+    // index (`vi`) never counts them, so clips recorded before keep their lines.
+    const shownLines = (ls) => (settings.screen ? ls : withoutScreen(ls));
     if (isScript) {
-      if (!oneBeat) { flat.push(...script.intro); script.intro.forEach(() => where.push(null)); }
+      if (!oneBeat) { intro = shownLines(script.intro); flat.push(...intro); intro.forEach(() => where.push(null)); }
       beats.forEach((b, i) => {
         if (oneBeat && i !== current) return;
         beatFirst[i] = flat.length;
-        flat.push(...b.lines);
-        b.lines.forEach((_, j) => where.push(b.number != null ? { beat: Number(b.number), index: j } : null));
+        // The cutscene (beats 11-13): only JustAWoman's lines are read there.
+        const cut = isCutsceneBeat(b.number);
+        const ls = shownLines(b.lines).map((l) => (cut ? { ...l, cut: true } : l));
+        beatLines[i] = ls;
+        flat.push(...ls);
+        ls.forEach((l) => where.push(b.number != null && l.vi != null ? { beat: Number(b.number), index: l.vi } : null));
       });
     } else if (pasted) pasted.forEach((g) => flat.push(...g));
     else paragraphs.forEach((p) => flat.push({ kind: 'para', who: null, text: p, seconds: 0 }));
-    return { flat, beatFirst, where };
-  }, [isScript, oneBeat, script, beats, current, pasted, paragraphs]);
+    return { flat, beatFirst, where, beatLines, intro };
+  }, [isScript, oneBeat, script, beats, current, pasted, paragraphs, settings.screen]);
   const { flat, where } = layout;
   // Lines with speakers and times (not plain pasted prose).
   const hasLines = flat.some((l) => l.kind !== 'para');
+  // The script has on-screen moments to show or hide.
+  const hasScreen = isScript && [...script.intro, ...beats.flatMap((b) => b.lines)].some((l) => l.kind === 'screen');
 
   // "Read as": whose lines are hers; JustAWoman unless she picks another.
   const speakers = useMemo(() => speakersOf(isScript ? [...script.intro, ...beats.flatMap((b) => b.lines)] : (pasted || []).flat()), [isScript, script, beats, pasted]);
   const readAsChoices = speakers.length ? [...new Set([HER, 'Lala', ...speakers])] : [];
   // A name saved from another script that is not in this one reads as JustAWoman.
   const readAs = readAsChoices.includes(settings.readAs) ? settings.readAs : HER;
-  const isMine = (l) => l.kind === 'para' || (!!l.who && l.who === readAs);
+  // In the cutscene only JustAWoman speaks live; everyone else is the AI video.
+  const isMine = (l) => l.kind === 'para' || (!!l.who && (l.cut ? l.who === HER : l.who === readAs));
 
   // Follow my voice: her words in order, and where each of her lines starts.
   const voiceWords = useMemo(() => {
@@ -232,7 +297,7 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
     const start = [];
     const end = [];
     flat.forEach((l, i) => {
-      if (!(l.kind === 'para' || (l.who && l.who === readAs))) return;
+      if (!(l.kind === 'para' || (l.who && (l.cut ? l.who === HER : l.who === readAs)))) return;
       start[i] = words.length;
       spokenWords(l.text).forEach((w) => words.push({ w: w.w, line: i }));
       end[i] = words.length;
@@ -255,6 +320,7 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
   const posRef = useRef(0);
   const timersRef = useRef([]);
   const previewRef = useRef(null);
+  const reviewRef = useRef(null);
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
   useDialogLayer(true);
@@ -278,7 +344,6 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
   useEffect(() => clearTimers, []);
 
   // The clips already in Files: the beat's takes, and the next take is "take 3".
-  const episodeId = isScript ? source.episodeId : null;
   useEffect(() => {
     if (!episodeId) return undefined;
     let live = true;
@@ -332,9 +397,11 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
 
   // Follow my voice: a line finished, the next comes up; someone else's
   // line counts down its time, then the prompter goes on by itself.
+  // The end of the script: the prompter stops; a whole-episode take stops with it.
+  const endRef = useRef(null);
   const nextAfter = (line) => {
     const next = line + 1;
-    if (next >= flat.length) { setPlaying(false); return; }
+    if (next >= flat.length) { endRef.current?.(); return; }
     setActive(next);
     if (voiceWords.start[next] != null) {
       const c = Math.max(cursorRef.current, voiceWords.start[next]);
@@ -371,7 +438,8 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
   const clipOf = (i) => {
     const l = flat[i];
     const w = where[i];
-    if (!l || !w || !l.who || l.who === readAs || (l.kind !== 'cue' && l.kind !== 'mine')) return null;
+    // The cutscene is an AI video: its characters speak for themselves.
+    if (!l || !w || !l.who || l.who === readAs || l.cut || (l.kind !== 'cue' && l.kind !== 'mine')) return null;
     return voiceByLine.get(lineKey(w.beat, w.index)) || null;
   };
   const activeClip = settings.playVoice ? clipOf(active) : null;
@@ -388,7 +456,7 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
     if (isMine(l) && !wordless) return undefined;
     scrollToLine(active);
     if (holdForClip) return undefined; // the clip's end moves on
-    const t = window.setTimeout(() => nextAfter(active), Math.max(200, ((l.seconds || 0) + pauseCount(l.text)) * 1000));
+    const t = window.setTimeout(() => nextAfter(active), Math.max(200, ((l.seconds || 0) + lineBreaks(l)) * 1000));
     return () => window.clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [voiceOn, playing, active, flat, readAs, holdForClip]);
@@ -446,7 +514,7 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
       if (last != null) {
         posRef.current += ((t - last) / 1000) * settings.speed * PX_PER_STEP;
         box.scrollTop = posRef.current;
-        if (box.scrollHeight > box.clientHeight && box.scrollTop + box.clientHeight >= box.scrollHeight - 1) { setPlaying(false); return; }
+        if (box.scrollHeight > box.clientHeight && box.scrollTop + box.clientHeight >= box.scrollHeight - 1) { endRef.current?.(); return; }
       }
       last = t;
       id = frame(step);
@@ -463,9 +531,9 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
     scrollToLine(i);
     if (holdForClip) return undefined; // the clip's end moves on
     // A `//` pause holds a second more.
-    const ms = Math.max(200, (((flat[i].seconds || 0) + pauseCount(flat[i].text)) / pace) * 1000);
+    const ms = Math.max(200, (((flat[i].seconds || 0) + lineBreaks(flat[i])) / pace) * 1000);
     const t = window.setTimeout(() => {
-      if (i >= flat.length - 1) setPlaying(false);
+      if (i >= flat.length - 1) endRef.current?.();
       else setActive(i + 1);
     }, ms);
     return () => window.clearTimeout(t);
@@ -476,7 +544,7 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
   useEffect(() => {
     if (!playing || !holdForClip || !lineVoice.ended) return;
     if (pacing === 'voice') { nextAfter(active); return; }
-    if (active >= flat.length - 1) setPlaying(false);
+    if (active >= flat.length - 1) endRef.current?.();
     else setActive(active + 1);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lineVoice.ended, playing, holdForClip]);
@@ -487,12 +555,13 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
   // A line with a voice clip counts the clip's own length.
   const activeClipSeconds = clipSeconds(activeClip);
   const cueTotal = !atLine ? 0 : activeClipSeconds != null ? activeClipSeconds
-    : (pacing === 'lines' ? ((atLine.seconds || 0) + pauseCount(atLine.text)) / pace : (atLine.seconds || 0));
+    : (pacing === 'lines' ? ((atLine.seconds || 0) + lineBreaks(atLine)) / pace : (atLine.seconds || 0));
   const showCue = !!atLine && !isMine(atLine) && cueTotal > 0;
   const [cueLeft, setCueLeft] = useState(cueTotal);
   const cueSpentRef = useRef(0);
   useEffect(() => { cueSpentRef.current = 0; setCueLeft(cueTotal); }, [active, cueTotal]);
-  const running = playing || recording;
+  // A paused whole-episode take is not running: the cue and the times wait too.
+  const running = playing || (recording && !rec.paused);
 
   // Rehearsal: time on each beat while the prompter runs (picked scripts).
   const store = (name) => { try { return window[name]; } catch (err) { console.error('[Teleprompter] storage not reachable:', err); return null; } };
@@ -589,6 +658,11 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
 
   const togglePlay = () => {
     if (count > 0) { cancelCountdown(); return; }
+    // A whole-episode take: pause pauses the recording too, and Play carries both on.
+    if (whole && recording) {
+      if (playing) { setPlaying(false); rec.pause(); } else { rec.resume(); setPlaying(true); }
+      return;
+    }
     if (playing) { setPlaying(false); return; }
     if (voiceOn) setVoiceFrom(syncCursor(active));
     if (settings.countdown && !recording) countdown(() => setPlaying(true));
@@ -597,12 +671,40 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
 
   // A take starts with its "Start from" line on the reading line (the top: line 0).
   const fromLine = oneBeat ? clamp(startLine, 0, Math.max(0, flat.length - 1)) : 0;
+  // The line's place in the beat without on-screen moments (start_line, "from line 4").
+  const fromIndex = fromLine > 0 ? (flat[fromLine]?.vi ?? 0) : 0;
   const toStart = () => {
     if (fromLine > 0) scrollToLine(fromLine); else scrollToBox(0);
     setActive(fromLine);
   };
+
+  // Whole episode: from the first numbered beat, or the one on screen.
+  const firstBeat = Math.max(0, beats.findIndex((b) => b.number != null));
+  const wholeFrom = episodeFrom === 'this' ? current : firstBeat;
+  const toBeatStart = (i) => { setCurrent(i); toBeat(i); setActive(layout.beatFirst[i] ?? 0); };
+  const resetMarks = () => { marksRef.current = []; lastMarkedRef.current = -1; setMarks([]); };
+  const recordWhole = () => {
+    const i = wholeFrom;
+    setNotice(null);
+    setPendingMarks(null);
+    setSave({ status: 'idle', progress: 0, error: null, clip: null });
+    setPlaying(false);
+    resetMarks();
+    toBeatStart(i);
+    countdown(() => {
+      toBeatStart(i);
+      if (voiceOn) setVoiceFrom(syncCursor(layout.beatFirst[i] ?? 0));
+      if (!rec.begin({ videoBitsPerSecond: FULL_BITRATE })) return;
+      const n = beats[i]?.number;
+      marksRef.current = n != null ? [{ beat: Number(n), t: 0 }] : [];
+      lastMarkedRef.current = i;
+      setMarks(marksRef.current);
+      setPlaying(true);
+    });
+  };
   const record = () => {
     if (rec.camera.status !== 'ready' || busyTake) return;
+    if (whole) { recordWhole(); return; }
     setNotice(null);
     setSave({ status: 'idle', progress: 0, error: null, clip: null });
     setPlaying(false);
@@ -614,14 +716,65 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
     });
   };
   const stopTake = () => { setPlaying(false); rec.stop(); };
-  const retake = () => { rec.discard(); setSave({ status: 'idle', progress: 0, error: null, clip: null }); toStart(); };
+  const retake = () => {
+    rec.discard();
+    setSave({ status: 'idle', progress: 0, error: null, clip: null });
+    if (whole) { resetMarks(); toBeatStart(wholeFrom); } else toStart();
+  };
+  endRef.current = () => { setPlaying(false); if (whole && recording) stopTake(); };
+
+  // The beat on the reading line while a whole-episode take runs: its
+  // heading, as the scroll finds it, or the beat of the line on the reading line.
+  const beatOfLine = (i) => {
+    let b = 0;
+    layout.beatFirst.forEach((f, k) => { if (f != null && f <= i) b = k; });
+    return b;
+  };
+  const liveBeat = whole ? Math.max(current, beatOfLine(active)) : current;
+  // Each beat heading reaching the reading line is a marker, in take time.
+  useEffect(() => {
+    if (!whole || !recording || liveBeat <= lastMarkedRef.current) return;
+    const t = markTime(rec.takeTime());
+    const add = [];
+    for (let k = lastMarkedRef.current + 1; k <= liveBeat; k += 1) {
+      if (beats[k]?.number != null) add.push({ beat: Number(beats[k].number), t });
+    }
+    lastMarkedRef.current = liveBeat;
+    if (add.length) { marksRef.current = [...marksRef.current, ...add]; setMarks(marksRef.current); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [whole, recording, liveBeat]);
+  const liveNumber = beats[liveBeat]?.number ?? null;
+  const lastNumber = beats.reduce((m, b) => (b.number != null && Number(b.number) > m ? Number(b.number) : m), 0);
+  const takeSize = takeBytes(rec.bytes, rec.elapsed);
+
+  const downloadMarks = (what) => {
+    if (!what) return;
+    try {
+      const blob = new Blob([marksText(what.label, what.marks, source?.title || null)], { type: 'text/plain' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = marksFileName(what.label);
+      a.rel = 'noopener';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.setTimeout(() => { try { URL.revokeObjectURL(url); } catch (err) { console.error('[Teleprompter] markers URL not revoked:', err); } }, 1000);
+    } catch (err) {
+      console.error('[Teleprompter] markers not downloaded:', err);
+      setNotice('The markers could not be downloaded.');
+    }
+  };
 
   // Who is on camera in Files: JustAWoman, Lala, or a guest by name.
   const performer = readAs === HER ? 'justawoman' : readAs === 'Lala' ? 'lala' : 'guest';
   const beatNumber = beat?.number != null ? Number(beat.number) : null;
   const inFiles = clips.filter((c) => c.performer === performer && Number(c.beat_number) === beatNumber && (performer !== 'guest' || c.guest_name === readAs)).length;
-  const takeNo = isScript ? inFiles + 1 : sessionTakes + 1;
-  const label = isScript ? `${takeName(beat, takeNo, fromLine > 0 ? fromLine + 1 : null)}${readAs !== HER ? ` · as ${readAs}` : ''}` : null;
+  // Whole episode: "Full episode · take n", n from the full-episode takes in Files.
+  const fullInFiles = fullTakes(clips).filter((c) => c.performer === performer && (performer !== 'guest' || c.guest_name === readAs)).length;
+  const takeNo = whole ? fullInFiles + 1 : isScript ? inFiles + 1 : sessionTakes + 1;
+  const label = whole ? fullTakeName(takeNo, readAs !== HER ? readAs : null)
+    : isScript ? `${takeName(beat, takeNo, fromLine > 0 ? fromIndex + 1 : null)}${readAs !== HER ? ` · as ${readAs}` : ''}` : null;
   // The beat's takes in Files (every performer), for the Takes panel.
   const takes = beatTakes(clips, beatNumber);
   const canTakes = isScript && !!episodeId && beatNumber != null;
@@ -664,6 +817,7 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
       }
       return;
     }
+    if (whole) { await saveWhole(); return; }
     let clip = save.clip;
     setSave((s) => ({ ...s, status: 'saving', error: null }));
     try {
@@ -675,7 +829,7 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
       // The scene the take is for (Production plays clips by beat_number),
       // and the line it started on, once the server keeps start lines.
       if (clip?.id && beatNumber >= 1 && beatNumber <= 14 && Number(clip.beat_number) !== beatNumber) {
-        const changes = hasTakeFields(clip) ? { beat_number: beatNumber, start_line: fromLine } : { beat_number: beatNumber };
+        const changes = hasTakeFields(clip) ? { beat_number: beatNumber, start_line: fromIndex } : { beat_number: beatNumber };
         const linked = await rawClipsApi.update(source.episodeId, clip.id, changes);
         clip = { ...clip, ...(linked || changes) };
       }
@@ -694,11 +848,56 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
     }
   };
 
+  // The whole-episode take: one file, beat_number left empty, then its markers.
+  const saveWhole = async () => {
+    const kept = cleanMarks(marksRef.current);
+    let clip = save.clip;
+    setSave((s) => ({ ...s, status: 'saving', error: null }));
+    try {
+      if (!clip) {
+        const file = new File([take.blob], `full-episode-take-${takeNo}.${takeExtension(take.type)}`, { type: take.type });
+        clip = await rawClipsApi.upload(source.episodeId, file, { performer, label, guestName: performer === 'guest' ? readAs : undefined }, (p) => setSave((s) => ({ ...s, progress: p })));
+        setSave((s) => ({ ...s, clip }));
+      }
+      let stored = false;
+      if (clip?.id && hasMarksField(clip)) {
+        try {
+          const linked = await rawClipsApi.update(source.episodeId, clip.id, { beat_marks: kept });
+          clip = { ...clip, ...(linked || { beat_marks: kept }) };
+          stored = true;
+        } catch (err) {
+          // 409: the database update that keeps markers has not run.
+          if (err?.response?.status !== 409) throw err;
+          console.error('[Teleprompter] beat markers not kept yet:', err);
+        }
+      }
+      const seconds = take.seconds;
+      setClips((c) => [...c, {
+        ...clip, performer, guest_name: performer === 'guest' ? readAs : null, beat_number: null,
+        duration_seconds: clip?.duration_seconds ?? seconds, created_at: clip?.created_at || new Date().toISOString(),
+      }]);
+      if (stored) {
+        setNotice(`Saved to the episode's Files: ${label} · ${kept.length} beat ${kept.length === 1 ? 'marker' : 'markers'}`);
+        setPendingMarks(null);
+      } else {
+        setNotice(MARKS_NOT_KEPT);
+        setPendingMarks({ label, marks: kept });
+      }
+      setSave({ status: 'idle', progress: 0, error: null, clip: null });
+      rec.discard();
+      resetMarks();
+    } catch (err) {
+      console.error('[Teleprompter] full-episode take not saved:', err);
+      const base = err?.response?.status === 413 ? `The take is too big to upload (the limit is ${UPLOAD_LIMIT_MB} MB).` : (err?.response?.data?.error || 'The take was not saved.');
+      setSave((s) => ({ ...s, clip, status: 'error', error: clip ? `It is in Files, but its beat markers are not saved yet. ${base}` : base }));
+    }
+  };
+
   const toggleRecord = () => {
     if (recordOn && busyTake && !window.confirm(recording ? 'A take is recording. Stop and throw it away?' : 'This take is not saved yet. Throw it away?')) return;
     cancelCountdown();
     setPlaying(false);
-    if (recordOn) rec.discard();
+    if (recordOn) { rec.discard(); resetMarks(); }
     setRecordOn((on) => !on);
   };
 
@@ -734,7 +933,8 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
   const remoteState = {
     running: playing || count > 0, recording, recordMode: recordOn,
     canRecord: recordOn && rec.camera.status === 'ready' && !busyTake, reviewing: !!take,
-    beat: beat?.number ?? null, beatName: beat?.name || null, title: isScript ? (source.title || 'Script') : 'Your text',
+    scope: whole ? 'episode' : 'beat', paused: !!rec.paused,
+    beat: (whole ? liveNumber : beat?.number) ?? null, beatName: (whole ? beats[liveBeat]?.name : beat?.name) || null, title: isScript ? (source.title || 'Script') : 'Your text',
     pacing, speed: settings.speed, pace, size: settings.size,
   };
   const remote = useTeleprompterRemote(remoteOn, { episodeId: isScript ? source.episodeId || null : null, onCommand: onRemoteCommand, state: remoteState });
@@ -796,8 +996,13 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
   // Voice clips play through the speakers during a take; say how to keep them out of it.
   const headphones = recordOn && settings.playVoice && voiceClips.length > 0
     ? 'Voice clips play through the speakers during a take. Use headphones to keep them out of the take.' : null;
-  const shown = oneBeat ? [{ ...beat, at: current }] : beats.map((b, i) => ({ ...b, at: i }));
+  // Each beat's lines as laid out (on-screen moments as set; cutscene lines marked).
+  const shown = (oneBeat ? [{ ...beat, at: current }] : beats.map((b, i) => ({ ...b, at: i }))).map((b) => ({ ...b, shownLines: layout.beatLines[b.at] || [] }));
   const empty = isScript ? !beats.length && !script.intro.length : !flat.length;
+  // "Start from": the beat's lines (on-screen moments are not a place to start); the top is 0.
+  const startChoices = oneBeat
+    ? flat.map((l, i) => ({ l, i })).filter(({ l }) => l.kind !== 'screen').map((c, k) => (k === 0 ? { ...c, i: 0 } : c))
+    : [];
   // Lines render in layout order; each takes the next index.
   let n = 0;
   const renderLine = (l, key) => {
@@ -853,12 +1058,15 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
         <div className="stp-scroll" ref={scrollRef} onScroll={onScroll} data-testid="stp-scroll">
           <div className="stp-spacer is-top" aria-hidden="true" />
           <article className="stp-page" style={{ '--stp-size': `${settings.size}px` }} data-testid="stp-page">
-            {isScript && !oneBeat && script.intro.map((l, i) => renderLine(l, `i-${i}`))}
+            {isScript && !oneBeat && layout.intro.map((l, i) => renderLine(l, `i-${i}`))}
             {isScript && shown.map((b) => (
               <section key={`${b.number}-${b.at}`} className="stp-beat" ref={(el) => { beatRefs.current[b.at] = el; }} data-testid="stp-beat" aria-current={b.at === current ? 'true' : undefined}>
                 {b.number !== null && <h3 className="stp-beat-head">{b.number} · {b.name}</h3>}
-                {b.lines.map((l, j) => renderLine(l, j))}
-                {!b.lines.length && <p className="stp-direction">Nothing to read in this beat.</p>}
+                {isCutsceneBeat(b.number) && (
+                  <p className="stp-cutscene" data-testid="stp-cutscene"><Clapperboard size={18} aria-hidden="true" /> Cutscene · watch &amp; comment</p>
+                )}
+                {b.shownLines.map((l, j) => renderLine(l, j))}
+                {!b.shownLines.length && <p className="stp-direction">Nothing to read in this beat.</p>}
               </section>
             ))}
             {pasted && pasted.map((g, gi) => <div key={gi} className="stp-group">{g.map((l, j) => renderLine(l, j))}</div>)}
@@ -873,8 +1081,15 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
         {(recording || meterStream) && (
           <div className="stp-hud">
             {recording && (
-              <div className="stp-recdot" role="status" data-testid="stp-recording">
-                <span className="stp-dot" aria-hidden="true" /> REC {clock(rec.elapsed)}
+              <div className={`stp-recdot${rec.paused ? ' is-paused' : ''}`} role="status" data-testid="stp-recording">
+                <span className="stp-dot" aria-hidden="true" /> {rec.paused ? 'PAUSED' : 'REC'} {clock(rec.elapsed)}
+                {whole && liveNumber != null && <span data-testid="stp-rec-beat">· Beat {liveNumber} of {lastNumber}</span>}
+                {whole && <span className="stp-rec-size" data-testid="stp-rec-size">· {sizeText(takeSize)}</span>}
+              </div>
+            )}
+            {recording && whole && takeSize >= WARN_BYTES && (
+              <div className="stp-recwarn" role="alert" data-testid="stp-rec-warn">
+                <AlertTriangle size={16} aria-hidden="true" /> Nearly {UPLOAD_LIMIT_MB} MB: that is the upload limit. Stop soon so the take can be saved.
               </div>
             )}
             {meterStream && <MicMeter level={level} silent={silent} />}
@@ -887,7 +1102,7 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
           </div>
         )}
         {showTakes && canTakes && !take && (
-          <TakesPanel takes={takes} beatNumber={beatNumber} onFavorite={toggleFavorite} starring={starring} error={takesError} loading={!clipsLoaded} />
+          <TakesPanel takes={takes} beatNumber={beatNumber} onFavorite={toggleFavorite} starring={starring} error={takesError} loading={!clipsLoaded} fullTakes={fullTakes(clips)} />
         )}
         {showRemote && remoteOn && !take && <TeleprompterRemotePanel remote={remote} onClose={() => setShowRemote(false)} />}
         {voiceLine && !take && (
@@ -905,8 +1120,11 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
 
         {take && (
           <div className="stp-review" role="region" aria-label="Review the take" data-testid="stp-review">
-            <video className="stp-review-video" src={take.url} controls playsInline data-testid="stp-review-video" />
+            <video ref={reviewRef} className="stp-review-video" src={take.url} controls playsInline data-testid="stp-review-video" />
             <p className="stp-review-name">{isScript ? label : `Take ${takeNo}`} · {clock(take.seconds)}</p>
+            {whole && marks.length > 0 && (
+              <MarkLinks marks={marks} onSeek={(t) => seekVideo(reviewRef.current, t)} testId="stp-review-marks" />
+            )}
             {save.status === 'saving' && (
               <div className="stp-progress" role="progressbar" aria-valuenow={save.progress} aria-valuemin={0} aria-valuemax={100} aria-label="Uploading the take">
                 <span style={{ width: `${save.progress}%` }} />
@@ -915,6 +1133,11 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
             {save.status === 'error' && <p className="stp-error" role="alert"><AlertTriangle size={16} aria-hidden="true" /> {save.error}</p>}
             <div className="stp-review-actions">
               <button type="button" className="stp-btn" data-testid="stp-retake" disabled={save.status === 'saving' || !!save.clip} onClick={retake}><RotateCcw size={18} aria-hidden="true" /> Retake</button>
+              {whole && marks.length > 0 && (
+                <button type="button" className="stp-btn" data-testid="stp-review-download-marks" onClick={() => downloadMarks({ label, marks: cleanMarks(marks) })}>
+                  <FileDown size={18} aria-hidden="true" /> Download markers
+                </button>
+              )}
               <button type="button" className="stp-btn is-primary" data-testid="stp-save" disabled={save.status === 'saving' || (isScript && !source.episodeId)} onClick={saveTake}>
                 {isScript ? <Upload size={18} aria-hidden="true" /> : <Download size={18} aria-hidden="true" />}
                 {save.status === 'error' ? 'Retry' : save.status === 'saving' ? 'Saving…' : isScript ? "Save to the episode's Files" : 'Download the take'}
@@ -929,6 +1152,11 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
           {problem ? <AlertTriangle size={16} aria-hidden="true" /> : notice ? <CheckCircle2 size={16} aria-hidden="true" /> : <Volume2 size={16} aria-hidden="true" />}
           <span>{problem || notice || headphones}</span>
           {rec.camera.status === 'error' && <button type="button" className="stp-btn is-small" onClick={rec.retry}>Try again</button>}
+          {pendingMarks && !problem && (
+            <button type="button" className="stp-btn" data-testid="stp-download-marks" onClick={() => downloadMarks(pendingMarks)}>
+              <FileDown size={18} aria-hidden="true" /> Download markers
+            </button>
+          )}
         </p>
       )}
 
@@ -1009,6 +1237,13 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
           aria-label={remote.status === 'live' ? 'Phone remote: connected session open' : 'Phone remote'} onClick={openRemote}>
           <Smartphone size={18} aria-hidden="true" /> Phone remote{remote.status === 'live' && <span className="stp-live-dot" aria-hidden="true" />}
         </button>
+        {hasScreen && (
+          <button type="button" className="stp-btn" data-testid="stp-screen-toggle" aria-pressed={settings.screen} disabled={busyTake}
+            title="Show what happens on Lala's screen as a cue to react to"
+            onClick={() => { setPlaying(false); set('screen', !settings.screen); }}>
+            <MonitorPlay size={18} aria-hidden="true" /> Show on-screen moments
+          </button>
+        )}
         {hasLines && (
           <div className="stp-modes" role="group" aria-label="Lines">
             <button type="button" className="stp-btn" data-testid="stp-mode-mine" aria-pressed={settings.lineMode === 'mine'} onClick={() => set('lineMode', 'mine')}>My lines big</button>
@@ -1032,12 +1267,29 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
         <button type="button" className={`stp-btn${recordOn ? ' is-on' : ''}`} data-testid="stp-record-mode" aria-pressed={recordOn} onClick={toggleRecord}>
           {recordOn ? <Video size={18} aria-hidden="true" /> : <VideoOff size={18} aria-hidden="true" />} Read &amp; record
         </button>
-        {oneBeat && beat && beat.lines.length > 1 && (
+        {recordOn && canWhole && (
+          <div className="stp-scope" role="group" aria-label="What a take records">
+            <button type="button" className="stp-btn" data-testid="stp-scope-beat" aria-pressed={!whole} disabled={busyTake} onClick={() => setTakeScope('beat')}>One beat</button>
+            <button type="button" className="stp-btn" data-testid="stp-scope-episode" aria-pressed={whole} disabled={busyTake} onClick={() => setTakeScope('episode')}>
+              <Clapperboard size={18} aria-hidden="true" /> Whole episode
+            </button>
+          </div>
+        )}
+        {whole && (
+          <label className="stp-startfrom">
+            <span className="stp-startfrom-label" aria-hidden="true">From</span>
+            <select value={episodeFrom} aria-label="Record the whole episode from" disabled={busyTake} data-testid="stp-episode-from" onChange={(e) => setEpisodeFrom(e.target.value)}>
+              <option value="first">From beat {beats[firstBeat]?.number ?? 1}</option>
+              <option value="this">From this beat ({beat?.number ?? ''})</option>
+            </select>
+          </label>
+        )}
+        {oneBeat && beat && startChoices.length > 1 && (
           <label className="stp-startfrom">
             <span className="stp-startfrom-label" aria-hidden="true">Start from</span>
             <select value={String(fromLine)} aria-label="Start the take from line" disabled={busyTake} data-testid="stp-start-line"
               onChange={(e) => { const i = Number(e.target.value); setStartLine(i); if (i > 0) scrollToLine(i); else scrollToBox(0); setActive(i); }}>
-              {beat.lines.map((l, i) => <option key={i} value={String(i)}>{i === 0 ? `${lineChoice(l, i)} (the top)` : lineChoice(l, i)}</option>)}
+              {startChoices.map(({ l, i }) => <option key={i} value={String(i)}>{i === 0 ? `${lineChoice(l, l.vi ?? 0)} (the top)` : lineChoice(l, l.vi)}</option>)}
             </select>
           </label>
         )}
@@ -1047,7 +1299,7 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
           ) : (
             <button type="button" className="stp-btn is-rec" data-testid="stp-record" disabled={rec.camera.status !== 'ready' || busyTake} onClick={record}
               title={isScript && beat ? `Record ${label}` : `Record take ${takeNo}`}>
-              <Circle size={18} aria-hidden="true" /> {isScript && beatNumber != null ? `Record beat ${beatNumber} · take ${takeNo}` : `Record take ${takeNo}`}
+              <Circle size={18} aria-hidden="true" /> {whole ? `Record whole episode · take ${takeNo}` : isScript && beatNumber != null ? `Record beat ${beatNumber} · take ${takeNo}` : `Record take ${takeNo}`}
             </button>
           )
         )}

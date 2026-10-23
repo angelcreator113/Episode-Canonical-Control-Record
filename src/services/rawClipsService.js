@@ -26,10 +26,23 @@ const TAKE_COLUMNS = `to_jsonb(episode_raw_clips) -> 'is_favorite' AS is_favorit
 const TAKE_FIELDS = Object.freeze(['is_favorite', 'start_line']);
 const TAKE_FIELDS_MISSING = 'Favourites and start lines are not switched on yet: the database update that adds them (20261020090000) has not run. The take is saved; star it once the update is in.';
 
+// beat_marks ("Record whole episode"; Evoni, 2026-10-23): a full-episode
+// take's beat markers, [{ beat, t }] (t: seconds into the take), arrive with
+// 20261023235900-add-episode-raw-clips-beat-marks.js. Read the same way:
+// the key is in to_jsonb(row) only once the column exists (a NULL column is
+// JSON null, still there), so has_beat_marks says so and shapeRow leaves
+// beat_marks out until then.
+const MARKS_COLUMNS = `to_jsonb(episode_raw_clips) -> 'beat_marks' AS beat_marks,
+  (to_jsonb(episode_raw_clips) -> 'beat_marks') IS NOT NULL AS has_beat_marks`;
+const MAX_BEAT_MARKS = 30;
+const MAX_MARK_SECONDS = 36000; // ten hours
+const BEAT_MARKS_MISSING = "Beat markers can't be kept yet: the database update that adds them (20261023235900) hasn't run yet. The take itself is saved.";
+
 const COLUMNS = `id, episode_id, show_id, performer, guest_name, label, beat_number, original_filename, content_type,
   file_size_bytes, duration_seconds, width, height, url_raw, thumbnail_url,
   key_status, key_strength, url_cutout, key_error, key_started_at, key_finished_at, created_at, updated_at,
-  ${TAKE_COLUMNS}`;
+  ${TAKE_COLUMNS},
+  ${MARKS_COLUMNS}`;
 
 // A job still queued or processing this long after its last update was cut
 // off (the server restarted mid-job); list marks it failed so Retry shows.
@@ -45,13 +58,21 @@ class RawClipError extends Error {
 
 /**
  * A row as the API sends it: is_favorite (boolean) and start_line (a whole
- * number or null) only when the columns exist; has_take_fields never.
+ * number or null) only when those columns exist; beat_marks (an array, or
+ * null) only when its column exists; has_take_fields and has_beat_marks never.
  */
 function shapeRow(row) {
-  if (!row || typeof row !== 'object' || !('has_take_fields' in row)) return row;
-  const { has_take_fields: has, is_favorite: fav, start_line: line, ...rest } = row;
-  if (!has) return rest;
-  return { ...rest, is_favorite: fav === true || fav === 'true', start_line: line == null ? null : Number(line) };
+  if (!row || typeof row !== 'object') return row;
+  let out = row;
+  if ('has_take_fields' in out) {
+    const { has_take_fields: has, is_favorite: fav, start_line: line, ...rest } = out;
+    out = has ? { ...rest, is_favorite: fav === true || fav === 'true', start_line: line == null ? null : Number(line) } : rest;
+  }
+  if ('has_beat_marks' in out) {
+    const { has_beat_marks: hasMarks, beat_marks: marks, ...rest } = out;
+    out = hasMarks ? { ...rest, beat_marks: Array.isArray(marks) ? marks : null } : rest;
+  }
+  return out;
 }
 
 // Postgres 42703: undefined_column. A PATCH of is_favorite / start_line
@@ -62,15 +83,53 @@ const missingTakeColumn = (err) => {
   return (code === '42703' || /column .* does not exist/i.test(text)) && TAKE_FIELDS.some((f) => text.includes(f));
 };
 
+// The same for beat_marks before 20261023235900 has run.
+const missingMarksColumn = (err) => {
+  const code = err?.original?.code || err?.parent?.code || err?.code;
+  const text = String(err?.original?.message || err?.message || '');
+  return (code === '42703' || /column .* does not exist/i.test(text)) && text.includes('beat_marks');
+};
+
 const cleanText = (v, max) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : null);
+
+const MARKS_RULE = `beat_marks must be a list of at most ${MAX_BEAT_MARKS} { beat, t } markers: beat a whole number from 1 to 14 (each beat once), t seconds from 0 to ${MAX_MARK_SECONDS}`;
+
+/**
+ * A full-episode take's beat markers: null, or a list (or its JSON text, as
+ * a multipart form sends it) of at most 30 { beat, t }, beat 1-14 once each,
+ * t seconds from 0 to 36000. Returns them sorted by time (then beat), t to
+ * one decimal; anything else is a 400.
+ */
+function readBeatMarks(value) {
+  if (value === null || value === '') return null;
+  let list = value;
+  if (typeof list === 'string') {
+    try { list = JSON.parse(list); } catch (err) {
+      console.error('[rawClips] beat_marks is not JSON:', err.message);
+      throw new RawClipError(400, MARKS_RULE);
+    }
+  }
+  if (!Array.isArray(list) || list.length > MAX_BEAT_MARKS) throw new RawClipError(400, MARKS_RULE);
+  const seen = new Set();
+  const marks = list.map((m) => {
+    if (!m || typeof m !== 'object' || Array.isArray(m)) throw new RawClipError(400, MARKS_RULE);
+    const beat = typeof m.beat === 'string' && m.beat.trim() ? Number(m.beat) : m.beat;
+    const t = typeof m.t === 'string' && m.t.trim() ? Number(m.t) : m.t;
+    if (!Number.isInteger(beat) || beat < 1 || beat > 14 || seen.has(beat)) throw new RawClipError(400, MARKS_RULE);
+    if (typeof t !== 'number' || !Number.isFinite(t) || t < 0 || t > MAX_MARK_SECONDS) throw new RawClipError(400, MARKS_RULE);
+    seen.add(beat);
+    return { beat, t: Math.round(t * 10) / 10 };
+  });
+  return marks.sort((a, b) => a.t - b.t || a.beat - b.beat);
+}
 
 /**
  * Validates the editable fields. Returns { performer, guest_name, label,
- * beat_number, is_favorite, start_line } (only the keys given).
+ * beat_number, is_favorite, start_line, beat_marks } (only the keys given).
  * beat_number links the clip to a scene (canonical beat 1-14); null unlinks
  * it. is_favorite stars the take for its beat (a boolean); start_line is the
  * line within the beat a teleprompter take was read from (0 = the top), a
- * whole number from 0, or null.
+ * whole number from 0, or null. beat_marks: readBeatMarks.
  */
 function readFields(body = {}, { requirePerformer = false } = {}) {
   const out = {};
@@ -102,6 +161,7 @@ function readFields(body = {}, { requirePerformer = false } = {}) {
       out.start_line = line;
     }
   }
+  if (body.beat_marks !== undefined) out.beat_marks = readBeatMarks(body.beat_marks);
   if (out.performer && out.performer !== 'guest') out.guest_name = null;
   return out;
 }
@@ -178,22 +238,24 @@ async function createClip(sequelize, clip) {
 }
 
 /**
- * Updates performer, guest_name, label, beat_number, is_favorite and
- * start_line. Returns the row, or null when there is no such clip.
+ * Updates performer, guest_name, label, beat_number, is_favorite,
+ * start_line and beat_marks. Returns the row, or null when there is no such clip.
  * Starring a take un-stars the episode's other takes for the same beat, in
  * one transaction: one favourite per beat (Evoni, 2026-10-20).
  */
 async function updateClip(sequelize, episodeId, clipId, body = {}) {
   const fields = readFields(body);
   const keys = Object.keys(fields);
-  if (!keys.length) throw new RawClipError(400, 'Nothing to change: send performer, guest_name, label, beat_number, is_favorite or start_line');
-  const sets = keys.map((k) => `${k} = :${k}`).join(', ');
+  if (!keys.length) throw new RawClipError(400, 'Nothing to change: send performer, guest_name, label, beat_number, is_favorite, start_line or beat_marks');
+  // beat_marks is JSONB: sent as its JSON text and cast.
+  const sets = keys.map((k) => (k === 'beat_marks' ? 'beat_marks = CAST(:beat_marks AS jsonb)' : `${k} = :${k}`)).join(', ');
+  const values = 'beat_marks' in fields ? { ...fields, beat_marks: fields.beat_marks == null ? null : JSON.stringify(fields.beat_marks) } : fields;
   const run = async (transaction) => {
     const [rows] = await sequelize.query(
       `UPDATE episode_raw_clips SET ${sets}, updated_at = NOW()
         WHERE id = :clipId AND episode_id = :episodeId AND deleted_at IS NULL
         RETURNING ${COLUMNS}`,
-      { replacements: { ...fields, episodeId, clipId }, transaction });
+      { replacements: { ...values, episodeId, clipId }, transaction });
     const row = shapeRow((rows || [])[0]) || null;
     if (row && fields.is_favorite === true && row.beat_number != null) {
       await sequelize.query(
@@ -208,6 +270,10 @@ async function updateClip(sequelize, episodeId, clipId, body = {}) {
     if (fields.is_favorite === true) return await sequelize.transaction((t) => run(t));
     return await run(undefined);
   } catch (err) {
+    if (missingMarksColumn(err)) {
+      console.error('[rawClips] beat_marks column is missing (migration 20261023235900 not run):', err.message);
+      throw new RawClipError(409, BEAT_MARKS_MISSING);
+    }
     if (missingTakeColumn(err)) {
       console.error('[rawClips] is_favorite / start_line columns are missing (migration 20261020090000 not run):', err.message);
       throw new RawClipError(409, TAKE_FIELDS_MISSING);
@@ -335,8 +401,8 @@ function readProbe(json) {
 
 module.exports = {
   PERFORMERS, KEY_STATUSES, KEY_STRENGTHS, STALE_HOURS, STALE_MESSAGE, DEFAULT_KEY_COLOR, STRENGTH_SIMILARITY,
-  TAKE_FIELDS, TAKE_FIELDS_MISSING,
-  RawClipError, readFields, readStrength, truthy, findEpisode, shapeRow,
+  TAKE_FIELDS, TAKE_FIELDS_MISSING, BEAT_MARKS_MISSING, MAX_BEAT_MARKS, MAX_MARK_SECONDS,
+  RawClipError, readFields, readBeatMarks, readStrength, truthy, findEpisode, shapeRow,
   listClips, getClip, createClip, updateClip, setKeyState, removeClip,
   pickKeyColor, chromakeyArgs, sampleFrameArgs, thumbnailArgs, probeArgs, readProbe,
 };
