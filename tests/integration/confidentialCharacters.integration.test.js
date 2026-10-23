@@ -30,6 +30,7 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
   let token;
   const ids = { reg: uuid(), a: uuid(), b: uuid(), dr: uuid(), book: uuid() };
   const tag = ids.reg.slice(0, 8);
+  const profiles = [];
 
   beforeAll(async () => {
     token = TokenService.generateTokenPair({ id: 'test-admin-conf', email: 'evoni@conf.dev', name: 'Evoni', groups: ['ADMIN'], role: 'ADMIN' }).accessToken;
@@ -41,11 +42,21 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     await add(ids.a, `conf-a-${tag}`, `Conf Alpha ${tag}`, {});
     await add(ids.b, `conf-b-${tag}`, `Conf Beta ${tag}`, {});
     await add(ids.dr, `conf-dr-${tag}`, `Conf Doctor ${tag}`, { classification: 'confidential_professional' });
+    // The relationship generator reads the cast: characters a live LalaVerse
+    // Pulse profile names (routes/relationships loadCastIds). All three are cast;
+    // only the confidential filter keeps the doctor out.
+    for (const [who, key] of [[ids.a, 'alpha'], [ids.b, 'beta'], [ids.dr, 'doctor']]) {
+      const [[p]] = await run(`INSERT INTO social_profiles (handle, platform, vibe_sentence, feed_layer, created_at, updated_at)
+                               VALUES (:h, 'instagram', 'test', 'lalaverse', NOW(), NOW()) RETURNING id`, { h: `conf${key}${tag}` });
+      profiles.push(p.id);
+      await run('UPDATE registry_characters SET feed_profile_id = :p WHERE id = :id', { p: p.id, id: who });
+    }
     await run(`INSERT INTO storyteller_books (id, title, created_at, updated_at) VALUES (:book, 'Conf book', NOW(), NOW())`, ids).catch(() => {});
   });
 
   afterAll(async () => {
     await run('DELETE FROM registry_characters WHERE registry_id = :reg', ids);
+    if (profiles.length) await run('DELETE FROM social_profiles WHERE id IN (:profiles)', { profiles });
     await run('DELETE FROM character_registries WHERE id = :reg', ids);
     await run('DELETE FROM storyteller_books WHERE id = :book', ids).catch(() => {});
   });
