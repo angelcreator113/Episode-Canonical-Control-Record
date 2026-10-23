@@ -10,6 +10,9 @@
 //   Tiles           Episodes, Closet, Style Page, The Cast, Map, Lala's Bank, Shop, The Pulse
 //   Continue        the episode most recently worked on, at its stage (episodePipeline)
 //   Upcoming event  the next ready event (ShowOverview's nextReadyEvent)
+//   Your numbers    today's AI spend against the budget; the show's money (balance,
+//                   income, expenses, runway: shows/:id/financial-summary); storytelling
+//                   (each book's chapters and approved lines, episodes by stage)
 //   Trending        the show's live Pulse posts with the most likes
 //   Lala's journey  Prime Coins, reputation and brand trust (characters/lala/state)
 //   Today's To-Do   the daily update's "waiting for you", decided here (DailyUpdate's DECIDE);
@@ -20,7 +23,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  RefreshCw, Play, Clapperboard, Shirt, Sparkles, Users, Map as MapIcon, Coins, ShoppingBag, Radio,
+  RefreshCw, Play, Wallet, Cpu, PenLine, Clapperboard, Shirt, Sparkles, Users, Map as MapIcon, Coins, ShoppingBag, Radio,
   Heart, ChevronRight, CalendarDays, Star, Check, X, BookOpen, ArrowRight,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
@@ -67,6 +70,94 @@ export function upcomingEvent(events) {
   const dated = open.filter((ev) => !Number.isNaN(Date.parse(ev.event_date || ''))).sort((a, b) => Date.parse(a.event_date) - Date.parse(b.event_date));
   const event = dated[0] || open[0] || null;
   return event ? { event, ready: computeEventState(event) === 'ready' } : null;
+}
+
+const coins = (n) => Number(n || 0).toLocaleString();
+const pct = (part, whole) => (whole ? Math.round((part / whole) * 100) : 0);
+
+/** Storytelling totals across the books, and the episodes by stage. */
+export function storyNumbers(books, episodes) {
+  const list = books || [];
+  const sum = (k) => list.reduce((n, b) => n + (Number(b[k]) || 0), 0);
+  const eps = episodes || [];
+  const released = eps.filter((e) => stageOf(e) === 'released').length;
+  return {
+    books: list.length, chapters: sum('chapter_count'), lines: sum('line_count'),
+    approved: sum('approved_count'), pending: sum('pending_count'),
+    episodes: eps.length, released, inProgress: eps.filter((e) => stageOf(e) && stageOf(e) !== 'released').length,
+  };
+}
+
+function Numbers({ cost, money, books, episodes, characters, financesTo }) {
+  const story = storyNumbers(books, episodes);
+  const share = cost ? Math.min(1, cost.share ?? (cost.budget_usd ? cost.spent_usd / cost.budget_usd : 0)) : 0;
+  const features = [...(cost?.features || [])].sort((a, b) => (b.usd || 0) - (a.usd || 0)).slice(0, 3);
+  const t = money?.totals;
+  return (
+    <section className="hp-numbers" aria-labelledby="hp-num-h" data-testid="home-numbers">
+      <h2 id="hp-num-h" className="hp-numbers__title">Your numbers</h2>
+      <div className="hp-numbers__grid">
+        <article className="hp-card hp-num" data-testid="home-num-ai">
+          <h3 className="hp-num__head"><Cpu size={16} aria-hidden /> AI budget today</h3>
+          {cost ? (
+            <>
+              <p className="hp-num__big">{usd(cost.spent_usd)} <small>of {usd(cost.budget_usd)}</small></p>
+              <span className={`hp-meter${share >= 0.9 ? ' is-high' : share >= 0.7 ? ' is-mid' : ''}`} role="img" aria-label={`${pct(cost.spent_usd, cost.budget_usd)}% of today's AI budget used`}>
+                <span style={{ width: `${share * 100}%` }} />
+              </span>
+              <dl className="hp-num__rows">
+                <div><dt>Left today</dt><dd>{usd(cost.left_usd ?? (cost.budget_usd - cost.spent_usd))}</dd></div>
+                {cost.image_budget_usd != null && <div><dt>Pictures</dt><dd>{usd(cost.image_spent_usd)} of {usd(cost.image_budget_usd)}</dd></div>}
+                {features.map((f) => <div key={f.feature}><dt>{f.feature.replace(/[_-]/g, ' ')}</dt><dd>{usd(f.usd)}{f.calls ? <small> · {f.calls} call{f.calls === 1 ? '' : 's'}</small> : null}</dd></div>)}
+              </dl>
+              {(cost.alerts || []).length > 0 && <p className="hp-num__alert" role="status">{cost.alerts[0]?.message || cost.alerts[0]}</p>}
+            </>
+          ) : <p className="hp-empty-line">Today&apos;s AI spend shows here for an admin.</p>}
+        </article>
+
+        <article className="hp-card hp-num" data-testid="home-num-money">
+          <h3 className="hp-num__head"><Wallet size={16} aria-hidden /> The show&apos;s money</h3>
+          {t ? (
+            <>
+              <p className="hp-num__big">{coins(t.current_balance)} <small>Prime Coins on hand</small></p>
+              <dl className="hp-num__rows">
+                <div><dt>Earned, all time</dt><dd className="is-in">+{coins(t.lifetime_income)}</dd></div>
+                <div><dt>Spent, all time</dt><dd className="is-out">−{coins(t.lifetime_expenses)}</dd></div>
+                <div><dt>Net</dt><dd className={Number(t.net) < 0 ? 'is-out' : 'is-in'}>{Number(t.net) < 0 ? '−' : '+'}{coins(Math.abs(t.net))}</dd></div>
+                {money.burn_rate_per_episode > 0 && <div><dt>Burn per episode</dt><dd>{coins(money.burn_rate_per_episode)}</dd></div>}
+                <div><dt>Runway</dt><dd>{money.runway_episodes == null ? 'Not burning' : `${money.runway_episodes} episode${money.runway_episodes === 1 ? '' : 's'}`}</dd></div>
+              </dl>
+              <Link className="hp-see" to={financesTo}>Open finances</Link>
+            </>
+          ) : <p className="hp-empty-line">The show&apos;s money shows once it has a ledger.</p>}
+        </article>
+
+        <article className="hp-card hp-num" data-testid="home-num-story">
+          <h3 className="hp-num__head"><PenLine size={16} aria-hidden /> Storytelling</h3>
+          <p className="hp-num__big">{coins(story.approved)} <small>of {coins(story.lines)} lines approved{story.lines ? ` · ${pct(story.approved, story.lines)}%` : ''}</small></p>
+          <dl className="hp-num__rows">
+            <div><dt>Books · chapters</dt><dd>{story.books} · {story.chapters}</dd></div>
+            <div><dt>Lines waiting</dt><dd>{coins(story.pending)}</dd></div>
+            <div><dt>Episodes</dt><dd>{story.released} released · {story.inProgress} in progress</dd></div>
+            <div><dt>Characters</dt><dd>{characters}</dd></div>
+          </dl>
+          {(books || []).length > 0 && (
+            <ul className="hp-books">
+              {(books || []).slice(0, 3).map((b) => (
+                <li key={b.id}>
+                  <Link to="/storyteller" className="hp-book">
+                    <span className="hp-book__title">{b.title}</span>
+                    <span className="hp-book__meta">{b.chapter_count || 0} ch · {pct(b.approved_count, b.line_count)}%</span>
+                    <span className="hp-meter is-thin"><span style={{ width: `${pct(b.approved_count, b.line_count)}%` }} /></span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </article>
+      </div>
+    </section>
+  );
 }
 
 /** The show the page is about: the active one, else the one with the most episodes. */
@@ -192,7 +283,7 @@ function Home() {
     const shows = Array.isArray(ok(showsRes[0])) ? ok(showsRes[0]) : undefined;
     const show = homeShow(shows);
     const sid = show?.id;
-    const [epRes, evRes, postRes, stateRes, updRes, looksRes, regRes, booksRes] = await Promise.allSettled([
+    const [epRes, evRes, postRes, stateRes, updRes, looksRes, regRes, booksRes, moneyRes] = await Promise.allSettled([
       episodeService.getEpisodes(1, 100).then((r) => r?.data || []),
       sid ? apiClient.get(`/api/v1/world/${sid}/events`).then((r) => r.data?.events || []) : Promise.resolve([]),
       sid ? apiClient.get(`/api/v1/feed-posts?show_id=${sid}&status=live&limit=50`).then((r) => r.data?.data || []) : Promise.resolve([]),
@@ -201,6 +292,7 @@ function Home() {
       apiClient.get('/api/v1/public/looks').then((r) => r.data?.looks || []),
       listRegistriesApi().then((r) => (r.data?.registries || []).flatMap((reg) => reg.characters || [])),
       storytellerService.getBooks(),
+      sid ? apiClient.get(`/api/v1/shows/${sid}/financial-summary`).then((r) => r.data || null) : Promise.resolve(null),
     ]);
     setData((prev) => {
       // A read that failed keeps what the card showed.
@@ -216,6 +308,7 @@ function Home() {
         looks: keep(looksRes, 'looks'),
         characters: keep(regRes, 'characters'),
         books: keep(booksRes, 'books'),
+        money: keep(moneyRes, 'money'),
       };
     });
     setLoading(false);
@@ -358,6 +451,9 @@ function Home() {
             )}
           </section>
         </div>
+
+        <Numbers cost={update?.cost} money={data.money} books={books} episodes={episodes}
+          characters={characters.length} financesTo={world('finances')} />
 
         {/* ─── Trending ─── */}
         <section className="hp-card hp-trending" aria-labelledby="hp-tr-h" data-testid="home-trending">

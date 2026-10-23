@@ -17,7 +17,7 @@ import Home from './Home';
 import { POSTS, answerFor } from './Home.fixtures';
 
 const renderHome = () => render(<MemoryRouter><Home /></MemoryRouter>);
-const calls = (part) => vi.mocked(apiClient.get).mock.calls.filter(([u]) => u.includes(part)).length;
+const calls = (part) => vi.mocked(apiClient.get).mock.calls.filter(([u]) => (part === '/api/v1/shows' ? u === part : u.includes(part))).length;
 
 describe('Home Refresh', () => {
   beforeEach(() => {
@@ -31,7 +31,7 @@ describe('Home Refresh', () => {
     vi.mocked(apiClient.get).mockImplementation(answerFor({ '/api/v1/feed-posts': { data: [...POSTS, { id: 'p9', content_text: 'Brand new post', poster_handle: 'x', likes: 99999 }] } }));
     fireEvent.click(screen.getByTestId('home-refresh'));
     expect(await screen.findByText('Brand new post')).toBeTruthy();
-    for (const part of ['/api/v1/shows', '/api/v1/episodes?', '/world/show-1/events', '/api/v1/feed-posts', '/characters/lala/state', '/api/v1/daily-update', '/api/v1/public/looks', 'character-registry/registries', 'storyteller/books']) {
+    for (const part of ['/api/v1/shows', '/api/v1/episodes?', '/world/show-1/events', '/api/v1/feed-posts', '/characters/lala/state', '/api/v1/daily-update', '/api/v1/public/looks', 'character-registry/registries', 'storyteller/books', '/financial-summary']) {
       expect(calls(part)).toBe(2);
     }
   });

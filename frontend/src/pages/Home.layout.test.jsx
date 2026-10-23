@@ -12,8 +12,8 @@ vi.mock('../services/api', () => ({
 vi.mock('../contexts/AuthContext', () => ({ useAuth: () => ({ user: { name: 'Evoni' } }) }));
 
 import apiClient from '../services/api';
-import Home, { daysUntil, trending, continueEpisode, todoItems, upcomingEvent, homeShow } from './Home';
-import { EPS, EVENTS, POSTS, UPDATE, answerFor } from './Home.fixtures';
+import Home, { daysUntil, trending, continueEpisode, todoItems, upcomingEvent, homeShow, storyNumbers } from './Home';
+import { EPS, EVENTS, POSTS, UPDATE, BOOKS, answerFor } from './Home.fixtures';
 
 const renderHome = () => render(<MemoryRouter><Home /></MemoryRouter>);
 const href = (testid) => screen.getByTestId(testid).getAttribute('href');
@@ -58,6 +58,61 @@ describe('Home helpers', () => {
     expect(homeShow(shows).id).toBe('a');
     localStorage.removeItem('primeStudios.activeShowId');
     expect(homeShow([])).toBeNull();
+  });
+});
+
+describe('Your numbers', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(apiClient.get).mockImplementation(answerFor());
+  });
+
+  test('storyNumbers adds up the books and sorts episodes by stage', () => {
+    expect(storyNumbers(BOOKS, EPS.slice(0, 2))).toEqual({
+      books: 2, chapters: 17, lines: 2020, approved: 1260, pending: 432, episodes: 2, released: 1, inProgress: 1,
+    });
+    expect(storyNumbers(undefined, undefined).books).toBe(0);
+  });
+
+  test("today's AI spend against the budget, with the top features", async () => {
+    renderHome();
+    const ai = await screen.findByTestId('home-num-ai');
+    expect(within(ai).getByText('$7.42')).toBeTruthy();
+    expect(within(ai).getByText('of $10.00')).toBeTruthy();
+    expect(within(ai).getByText('$2.58')).toBeTruthy();
+    expect(within(ai).getByText('$0.80 of $3.00')).toBeTruthy();
+    expect([...ai.querySelectorAll('.hp-num__rows dt')].map((n) => n.textContent)).toEqual(['Left today', 'Pictures', 'script writer', 'pulse drafts']);
+    expect(within(ai).getByRole('img').getAttribute('aria-label')).toBe("74% of today's AI budget used");
+  });
+
+  test("the show's money: balance, income, expenses, net and runway", async () => {
+    renderHome();
+    const m = await screen.findByTestId('home-num-money');
+    expect(within(m).getByText('6,050')).toBeTruthy();
+    expect(within(m).getByText('+18,450')).toBeTruthy();
+    expect(within(m).getByText('−12,900')).toBeTruthy();
+    expect(within(m).getByText('+5,550')).toBeTruthy();
+    expect(within(m).getByText('15 episodes')).toBeTruthy();
+    expect(within(m).getByRole('link', { name: 'Open finances' }).getAttribute('href')).toBe('/shows/show-1/world?tab=finances');
+    expect(apiClient.get).toHaveBeenCalledWith('/api/v1/shows/show-1/financial-summary');
+  });
+
+  test('storytelling: approved lines, each book, episodes and characters', async () => {
+    renderHome();
+    const st = await screen.findByTestId('home-num-story');
+    expect(within(st).getByText('1,260')).toBeTruthy();
+    expect(within(st).getByText('of 2,020 lines approved · 62%')).toBeTruthy();
+    expect(within(st).getByText('2 · 17')).toBeTruthy();
+    expect(within(st).getByText('1 released · 1 in progress')).toBeTruthy();
+    expect(within(st).getByText('Before Lala')).toBeTruthy();
+    expect(within(st).getByText('14 ch · 66%')).toBeTruthy();
+  });
+
+  test('without the daily update or a ledger the cards say so', async () => {
+    vi.mocked(apiClient.get).mockImplementation(answerFor({ '/api/v1/daily-update': new Error('403'), '/financial-summary': new Error('500') }));
+    renderHome();
+    expect(within(await screen.findByTestId('home-num-ai')).getByText(/for an admin/)).toBeTruthy();
+    expect(within(screen.getByTestId('home-num-money')).getByText(/once it has a ledger/)).toBeTruthy();
   });
 });
 
@@ -121,7 +176,7 @@ describe('Home layout', () => {
   test("Today's To-Do decides an item here, and reads the rest from /today", async () => {
     renderHome();
     const todo = await screen.findByTestId('home-todo');
-    expect(within(todo).getByTestId('home-since').textContent).toBe('4 went live · 6 scheduled · 1 new · AI $1.42 of $10.00');
+    expect(within(todo).getByTestId('home-since').textContent).toBe('4 went live · 6 scheduled · 1 new · AI $7.42 of $10.00');
     expect(within(todo).getByText('3')).toBeTruthy();
     const row = within(todo).getByTestId('home-todo-drafts:d1');
     fireEvent.click(within(row).getByRole('button', { name: /Publish/ }));

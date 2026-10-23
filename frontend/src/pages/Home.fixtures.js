@@ -17,7 +17,7 @@ export const POSTS = [
 ];
 export const UPDATE = {
   since_yesterday: { went_live: { total: 4 }, scheduled: { total: 6 }, new_characters: { total: 1 } },
-  cost: { spent_usd: 1.42, budget_usd: 10 },
+  cost: { spent_usd: 7.42, budget_usd: 10, left_usd: 2.58, share: 0.742, image_spent_usd: 0.8, image_budget_usd: 3, alerts: [], features: [{ feature: 'pulse_drafts', usd: 2.2, calls: 40 }, { feature: 'script_writer', usd: 3.1, calls: 14 }] },
   waiting: [
     { key: 'drafts', label: 'Pulse drafts', total: 2, items: [{ id: 'd1', handle: 'lalaverse', text: 'Check new DMs' }] },
     { key: 'findings', label: 'Findings to fix', total: 1, read_only: true, items: [{ id: 'c3', character_id: 'c3', name: 'JustAWoman', open: 2 }] },
@@ -25,6 +25,12 @@ export const UPDATE = {
 };
 export const LOOKS = [{ key: 'abcdefghijkl', title: 'Episode 5: Rooftop Brunch', image: { url: 'https://img/look.jpg', alt: 'The look' } }];
 export const REG = { registries: [{ characters: [{ id: 'c1', character_key: 'lala', display_name: 'Lala', portrait_url: 'https://img/lala.jpg' }, { id: 'c2', display_name: 'Sable' }] }] };
+
+export const BOOKS = [
+  { id: 'b1', title: 'Before Lala', chapter_count: 14, line_count: 1820, approved_count: 1210, pending_count: 312 },
+  { id: 'b2', title: 'Book Two', chapter_count: 3, line_count: 200, approved_count: 50, pending_count: 120 },
+];
+export const MONEY = { success: true, totals: { lifetime_income: 18450, lifetime_expenses: 12900, net: 5550, current_balance: 6050 }, burn_rate_per_episode: 400, runway_episodes: 15 };
 
 /** api.get answers by URL; `over` replaces one answer (a value, or an Error to reject). */
 export function answerFor(over = {}) {
@@ -37,7 +43,8 @@ export function answerFor(over = {}) {
     ['/api/v1/daily-update', UPDATE],
     ['/api/v1/public/looks', { looks: LOOKS }],
     ['character-registry/registries', REG],
-    ['storyteller/books', { books: [{ id: 'b1', title: 'Before Lala' }] }],
+    ['storyteller/books', { books: BOOKS }],
+    ['/financial-summary', MONEY],
   ];
   return async (url) => {
     const hit = table.find(([k]) => (k === '/api/v1/shows' ? url === k : url.includes(k)));
