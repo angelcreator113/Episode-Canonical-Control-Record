@@ -77,7 +77,7 @@ async function overviewOf(db, character) {
   const { typologyLabel } = require('./characterTypology');
 
   const todo = [];
-  if (!feedProfile) todo.push('Match them to a feed person');
+  if (!feedProfile) todo.push('Match them to a Pulse profile');
   else {
     if (!showId) todo.push("Choose their registry's show");
     if (findings) todo.push(`Fix ${findings} finding${findings === 1 ? '' : 's'}`);

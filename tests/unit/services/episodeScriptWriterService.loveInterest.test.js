@@ -18,6 +18,12 @@ describe('love interest in the script prompt', () => {
     expect(blocks([guest({ lala_romance: '' })])).toContain('With Lala: love interest');
   });
 
+  test('a story pair with Lala already says the romance: it is said once', () => {
+    const text = blocks([guest({ lala_story_tie: 'love interest, now lovers', lala_romance: 'They kiss in the stairwell' })]);
+    expect(text).toContain('With Lala in the story: love interest, now lovers');
+    expect(text).not.toContain('With Lala: love interest');
+  });
+
   test('no romance: the tie alone', () => {
     const text = blocks([guest({ lala_relationship: 'direct' })]);
     expect(text).toContain(`With Lala: ${LALA_TIES.direct}`);

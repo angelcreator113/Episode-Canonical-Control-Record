@@ -83,14 +83,14 @@ async function loadPoster(db, characterId) {
   const character = await db.RegistryCharacter.findByPk(characterId);
   if (!character) throw new DraftError(`Character ${characterId} not found.`);
   character.pulsePrivateKnowledge = await require('./pulseKnowledge').privateKnowledge(db, character.id);
-  if (!character.feed_profile_id) throw new DraftError(`${character.display_name} has no Feed profile to post from.`);
+  if (!character.feed_profile_id) throw new DraftError(`${character.display_name} has no Pulse profile to post from.`);
   const [[profile]] = await db.sequelize.query(
     // The persona fields pick their post format (services/postFormatMix).
     `SELECT id, handle, display_name, platform::text AS platform, content_category, content_persona, public_persona,
             society_archetype, vibe_sentence, archetype::text AS archetype, full_profile
        FROM social_profiles WHERE id = :id AND deleted_at IS NULL`,
     { replacements: { id: character.feed_profile_id } });
-  if (!profile) throw new DraftError(`${character.display_name}'s Feed profile is gone.`);
+  if (!profile) throw new DraftError(`${character.display_name}'s Pulse profile is gone.`);
   const voice = await db.PulseVoice.findOne({ where: { registry_character_id: character.id } });
   if (!voice) throw new DraftError(`${character.display_name} has no Voice Profile yet. Build it in Admin › The Pulse › Voices.`);
   return { character, profile, voice };
