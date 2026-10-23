@@ -31,7 +31,8 @@ const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 
 const { requireAuth } = require('../middleware/auth');
-const { findTermsWriteLock, termsLockedBody } = require('../utils/eventTermsLock');
+const { findTermsWriteLock } = require('../utils/eventTermsLock');
+const { loadScopedEvent, assertTermsWritable } = require('../utils/eventScope');
 const {
   isDealEvent, listEventCosts, readCostBody, draftExtrasCosts,
 } = require('../services/eventCostsService');
@@ -52,16 +53,14 @@ function parseJson(value, fallback) {
   }
 }
 
-// The event, scoped to the show. null when absent or deleted. FOR UPDATE
-// inside a write's transaction, so two writes to one event queue.
-async function loadEvent(sequelize, showId, eventId, { transaction } = {}) {
-  const [rows] = await sequelize.query(
-    `SELECT id, show_id, deal_type, canon_consequences FROM world_events
-      WHERE id = :eventId AND show_id = :showId AND deleted_at IS NULL LIMIT 1
-      ${transaction ? 'FOR UPDATE' : ''}`,
-    { replacements: { eventId, showId }, transaction }
-  );
-  return rows?.[0] || null;
+// The event, scoped to the show (loadScopedEvent, utils/eventScope.js).
+// null when absent or deleted. FOR UPDATE inside a write's transaction, so
+// two writes to one event queue.
+function loadEvent(sequelize, showId, eventId, { transaction } = {}) {
+  return loadScopedEvent(sequelize, {
+    showId, eventId, transaction, lock: !!transaction,
+    columns: 'id, show_id, deal_type, canon_consequences',
+  });
 }
 
 // The drafted amounts (doctrine rule 14): { <cost id>: { key, amount } }.
@@ -92,8 +91,8 @@ async function withWritableEvent(req, res, label, write) {
       const event = await loadEvent(sequelize, showId, eventId, { transaction });
       if (!event) return { status: 404, body: { success: false, error: 'Event not found' } };
       if (!isDealEvent(event)) return { status: 400, body: notADealBody() };
-      const lockEpisode = await findTermsWriteLock(sequelize, eventId, { transaction });
-      if (lockEpisode) return { status: 409, body: termsLockedBody(lockEpisode, ['costs']) };
+      const refusal = await assertTermsWritable(sequelize, eventId, { transaction, fields: ['costs'] });
+      if (refusal) return { status: refusal.status, body: refusal.body };
       return write(transaction, event, sequelize);
     });
     return res.status(result.status).json(result.body);
@@ -101,6 +100,25 @@ async function withWritableEvent(req, res, label, write) {
     console.error(`${label} error:`, error);
     return res.status(500).json({ success: false, error: `Failed to ${label.toLowerCase()}`, message: error.message });
   }
+}
+
+
+/**
+ * The GET's data: { costs, drafted, deal, locked }, or null when the event
+ * is not live in this show. Shared with the Event Package's combined GET
+ * (worldEvents.js, /events/:eventId/package).
+ */
+async function loadCosts(sequelize, { showId, eventId }) {
+  const event = await loadEvent(sequelize, showId, eventId);
+  if (!event) return null;
+  const costs = await listEventCosts(sequelize, eventId);
+  const lockEpisode = await findTermsWriteLock(sequelize, eventId);
+  return {
+    costs,
+    drafted: draftedCostsOf(event),
+    deal: isDealEvent(event),
+    locked: !!lockEpisode,
+  };
 }
 
 
@@ -114,18 +132,9 @@ router.get('/world/:showId/events/:eventId/costs', requireAuth, async (req, res)
     const models = await getModels();
     if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
 
-    const event = await loadEvent(models.sequelize, showId, eventId);
-    if (!event) return res.status(404).json({ success: false, error: 'Event not found' });
-
-    const costs = await listEventCosts(models.sequelize, eventId);
-    const lockEpisode = await findTermsWriteLock(models.sequelize, eventId);
-    return res.json({
-      success: true,
-      costs,
-      drafted: draftedCostsOf(event),
-      deal: isDealEvent(event),
-      locked: !!lockEpisode,
-    });
+    const data = await loadCosts(models.sequelize, { showId, eventId });
+    if (!data) return res.status(404).json({ success: false, error: 'Event not found' });
+    return res.json({ success: true, ...data });
   } catch (error) {
     console.error('List event costs error:', error);
     return res.status(500).json({ success: false, error: 'Failed to load costs', message: error.message });
@@ -215,3 +224,4 @@ router.delete('/world/:showId/events/:eventId/costs/:costId', requireAuth, (req,
 ));
 
 module.exports = router;
+module.exports.loadCosts = loadCosts;
