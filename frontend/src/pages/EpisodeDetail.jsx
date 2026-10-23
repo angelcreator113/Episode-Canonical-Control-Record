@@ -32,14 +32,13 @@ const EpisodeScenesTab = lazy(() => import('../components/Episodes/EpisodeScenes
 const EpisodeMoneyTab = lazy(() => import('../components/Episodes/EpisodeMoneyTab'));
 const EpisodeOverlaysTab = lazy(() => import('../components/Episodes/EpisodeOverlaysTab'));
 const EpisodeResultsSummary = lazy(() => import('../components/Episodes/EpisodeResultsSummary'));
-const EpisodeResultsEvaluation = lazy(() => import('../components/Episodes/EpisodeResultsPages').then((m) => ({ default: m.EpisodeResultsEvaluation })));
 const EpisodeResultsStory = lazy(() => import('../components/Episodes/EpisodeResultsPages').then((m) => ({ default: m.EpisodeResultsStory })));
 const PhonePreviewMode = lazy(() => import('../components/PhonePreviewMode'));
 import usePhonePlayback from '../hooks/usePhonePlayback';
 import api from '../services/api';
 import { fetchAllEpisodes } from '../lib/fetchAllPages';
 import { getEpisodeEvents } from '../services/episodeEventsApi';
-import { EP_TABS, resolveEpisodeTab, withEpisodeTab } from '../utils/episodeTabs';
+import { EP_TABS, resolveEpisodeTab, withEpisodeTab, pillGroups, pillFor } from '../utils/episodeTabs';
 import { closetBeat } from '../lib/scriptMoments';
 import { checklistProgress, coinsLabel } from '../lib/episodeShell';
 import { isScreen } from '../lib/overlayUtils';
@@ -312,6 +311,8 @@ const EpisodeDetail = () => {
       const compact = headerCompactRef.current;
       if (compact !== wasCompact) { wasCompact = compact; switchedAt = performance.now(); }
       const h = el.offsetHeight;
+      // The tabs stick under the header on a phone (Evoni, 2026-10-22 layout list).
+      el.parentElement?.style.setProperty('--ed-head-h', `${h}px`);
       if (!compact && performance.now() - switchedAt > SETTLE_MS) full = h;
       spacer.style.height = `${Math.max(0, full - h)}px`;
       scroller.style.scrollPaddingTop = compact ? `${h + 12}px` : '';
@@ -795,15 +796,15 @@ const EpisodeDetail = () => {
           </ol>
         </nav>
 
-        <div className="eds-hero">
-          <div className={`eds-cover${showCover ? '' : ' is-empty'}`} data-testid="ed-cover">
-            {showCover ? (
+        {/* The slimmer header (Evoni, 2026-10-22 layout list): the episode
+            number once, in the meta line; the cover only once there is a
+            picture, and small. */}
+        <div className={`eds-hero${showCover ? ' has-cover' : ''}`}>
+          {showCover && (
+            <div className="eds-cover" data-testid="ed-cover">
               <img src={coverUrl} alt="" loading="lazy" onError={() => setFailedCover(coverUrl)} />
-            ) : (
-              episodeNumber ? <span className="eds-cover-number" aria-hidden="true">{episodeNumber}</span> : null
-            )}
-            {episodeNumber && <span className="eds-cover-badge" data-testid="ed-cover-badge">Episode {episodeNumber}</span>}
-          </div>
+            </div>
+          )}
 
           <div className="eds-hero-body">
             {episode.show?.name && (
@@ -993,19 +994,54 @@ const EpisodeDetail = () => {
                 {Icon && <Icon size={16} className="ed-tab-icon" aria-hidden="true" />}
                 <span className="ed-tab-label">{t.label}</span>
                 {t.key === 'production' && checksLeft > 0 && (
-                  <span className="ed-tab-badge" data-testid="ed-production-left">{checksLeft} left</span>
+                  <span className="ed-tab-badge" data-testid="ed-production-left" aria-label={`${checksLeft} left`}>{checksLeft}<span className="ed-tab-badge-word"> left</span></span>
                 )}
               </button>
             );
           })}
         </div>
-        {/* Production's top (Evoni's Production mock, 2026-10-17): the step
-            bar, the episode at a glance, the checklist's progress, Mark Ready. */}
+        {/* Sub-tabs */}
+        {(() => {
+          const currentTab = EP_TABS.find(t => t.key === activeTab);
+          const groups = pillGroups(currentTab);
+          // A tab with one sub-tab (Production → Checklist) needs no row.
+          if (groups.reduce((n, g) => n + g.pills.length, 0) < 2) return null;
+          const lit = pillFor(currentTab, epSubTab);
+          return (
+            // One line per label; a row wider than the screen scrolls sideways
+            // (Evoni, 2026-10-05: "Production Checklist" wrapped onto two
+            // lines at phone width and threw the row out of line).
+            // Pills (Evoni's Episode mock): raspberry when chosen; in their
+            // groups, each with a small label (Evoni, 2026-10-22 layout list).
+            <div data-testid="ed-subtabs" className={`ed-subpills${groups.some((g) => g.group) ? ' is-grouped' : ''}`}>
+              {groups.map((g) => (
+                <div key={g.group || 'all'} className="ed-subgroup" role={g.group ? 'group' : undefined} aria-label={g.group || undefined}>
+                  {g.group && <span className="ed-subgroup-label" aria-hidden="true">{g.group}</span>}
+                  {g.pills.map(s => (
+                    <button
+                      key={s.key} type="button" onClick={() => openTab(s.key)}
+                      className={`ed-subpill${lit === s.key ? ' is-active' : ''}`}
+                      aria-current={lit === s.key ? 'page' : undefined}
+                    >
+                      {s.label}
+                      {s.key === 'checklist' && checksProgress && (
+                        <span className="ed-subpill-count" data-testid="ed-checklist-count">{checksProgress.done}/{checksProgress.total}</span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              ))}
+            </div>
+          );
+        })()}
+
+        {/* Production's strip (Evoni's Production mock, 2026-10-17; work
+            first, 2026-10-22 layout list): under the pills, one thin row,
+            the steps, the checks, Open Editor and Mark Ready. */}
         {activeTab === 'production' && (
           <Suspense fallback={null}>
             <EpisodeProductionHeader
               episode={episode}
-              sourceEvent={sourceEvent}
               checks={productionChecks.checks}
               sections={productionChecks.sections}
               onOpenTab={openTab}
@@ -1014,30 +1050,6 @@ const EpisodeDetail = () => {
             />
           </Suspense>
         )}
-
-        {/* Sub-tabs */}
-        {(() => {
-          const currentTab = EP_TABS.find(t => t.key === activeTab);
-          // A tab with one sub-tab (Production → Checklist) needs no row.
-          if (!currentTab?.subs || currentTab.subs.length < 2) return null;
-          return (
-            // One line per label; a row wider than the screen scrolls sideways
-            // (Evoni, 2026-10-05: "Production Checklist" wrapped onto two
-            // lines at phone width and threw the row out of line).
-            // Pills (Evoni's Episode mock): raspberry when chosen.
-            <div data-testid="ed-subtabs" className="ed-subpills">
-              {currentTab.subs.map(s => (
-                <button
-                  key={s.key} type="button" onClick={() => openTab(s.key)}
-                  className={`ed-subpill${epSubTab === s.key ? ' is-active' : ''}`}
-                  aria-current={epSubTab === s.key ? 'page' : undefined}
-                >
-                  {s.label}
-                </button>
-              ))}
-            </div>
-          );
-        })()}
 
         {/* Content Area — Suspense catches any lazy-loaded tab body that
             hasn't been fetched yet. Fallback matches the existing tab
@@ -1078,7 +1090,18 @@ const EpisodeDetail = () => {
             camera, 2026-10-17) as tabs (Evoni, 2026-10-22) */}
         {tabKey === 'production.files' && <EpisodeFilesTab episode={episode} />}
 
-        {/* Scenes: the scene workspace (Evoni's Production mock, 2026-10-17) */}
+        {/* Scenes has two views (Evoni, 2026-10-22: Beat Plan "is the same
+            as scenes"): the Workspace and the Plan, the full plan editor. */}
+        {(tabKey === 'production.scenes' || tabKey === 'production.beatplan') && (
+          <div className="ed-viewswitch" role="group" aria-label="Scenes view" data-testid="ed-scenes-view">
+            <button type="button" className={`ed-viewswitch-btn${tabKey === 'production.scenes' ? ' is-on' : ''}`}
+              aria-pressed={tabKey === 'production.scenes'} onClick={() => openTab('scenes')}>Workspace</button>
+            <button type="button" className={`ed-viewswitch-btn${tabKey === 'production.beatplan' ? ' is-on' : ''}`}
+              aria-pressed={tabKey === 'production.beatplan'} onClick={() => openTab('beatplan')}>Plan</button>
+          </div>
+        )}
+
+        {/* Scenes › Workspace: the scene workspace (Evoni's Production mock, 2026-10-17) */}
         {tabKey === 'production.scenes' && (
           <EpisodeSceneWorkspace
             episode={episode}
@@ -1087,7 +1110,7 @@ const EpisodeDetail = () => {
           />
         )}
 
-        {/* Beat Plan: the full plan editor (the Scenes tab until 2026-10-17) */}
+        {/* Scenes › Plan: the full plan editor (the Scenes tab until 2026-10-17, then Beat Plan) */}
         {tabKey === 'production.beatplan' && (
           <EpisodeScenesTab
             episode={episode}
@@ -1182,9 +1205,11 @@ const EpisodeDetail = () => {
           <EpisodeStylePage episode={episode} onOpenTab={openTab} />
         )}
 
-        {/* Results → Summary (Evoni's Episode mock): the one page. */}
-        {tabKey === 'results.summary' && (
-          <EpisodeResultsSummary episode={episode} showId={episode?.show_id || episode?.showId} onOpenTab={openTab} />
+        {/* Results → Summary (Evoni's Episode mock): the one page, with the
+            evaluation under it since 2026-10-22; ?tab=evaluation lands there. */}
+        {(tabKey === 'results.summary' || tabKey === 'results.evaluation') && (
+          <EpisodeResultsSummary episode={episode} showId={episode?.show_id || episode?.showId} onOpenTab={openTab}
+            focus={tabKey === 'results.evaluation' ? 'evaluation' : null} />
         )}
 
         {/* Results → Story: the episode as prose (EpisodeResultsPages). */}
@@ -1194,7 +1219,7 @@ const EpisodeDetail = () => {
 
         {/* Distribution Tab */}
         {tabKey === 'results.distribution' && (
-          <EpisodeDistributionTab episode={episode} onUpdate={handleUpdateEpisode} />
+          <EpisodeDistributionTab episode={episode} onUpdate={handleUpdateEpisode} onOpenTab={openTab} />
         )}
 
         {/* Phone tab — Lala's Phone for this episode (issue #1908): the
@@ -1238,10 +1263,6 @@ const EpisodeDetail = () => {
           />
         )}
 
-        {/* Results → Evaluation: the score and what it changed (EpisodeResultsPages). */}
-        {tabKey === 'results.evaluation' && (
-          <EpisodeResultsEvaluation episode={episode} />
-        )}
         </Suspense>
       </div>
 

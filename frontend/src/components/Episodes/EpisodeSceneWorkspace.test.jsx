@@ -130,8 +130,8 @@ describe('EpisodeSceneWorkspace', () => {
     const onOpenTab = vi.fn();
     renderWs({ onOpenTab });
     fireEvent.click(await screen.findByTestId('esw-scene-3'));
-    expect(screen.getByText('This scene has no location yet. Choose one on the Beat Plan.')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: /Edit on Beat Plan/ }));
+    expect(screen.getByText('This scene has no location yet. Choose one in the Plan.')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /Edit in the Plan/ }));
     expect(onOpenTab).toHaveBeenCalledWith('beatplan');
     expect(screen.getByRole('link', { name: /Open timeline/ }).getAttribute('href')).toBe('/episodes/ep-1/timeline');
   });
@@ -140,7 +140,7 @@ describe('EpisodeSceneWorkspace', () => {
     vi.mocked(api.get).mockResolvedValue({ data: { data: [] } });
     const onOpenTab = vi.fn();
     renderWs({ onOpenTab });
-    fireEvent.click(await screen.findByRole('button', { name: 'Open the Beat Plan' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Open the Plan' }));
     expect(onOpenTab).toHaveBeenCalledWith('beatplan');
   });
 

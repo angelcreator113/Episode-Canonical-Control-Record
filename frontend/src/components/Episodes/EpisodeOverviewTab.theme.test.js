@@ -2,8 +2,9 @@
  * The Episode Overview tab wears the studio theme (audit VISUAL-01/02,
  * batch 4, eighth screen): the tab, its stylesheet, the teaser section,
  * the money card and the scene-suggestion and timeline sections it
- * renders set colors only through tokens; the Save, Script Writer,
- * teaser and accept actions are the primary; gold is never under white
+ * renders set colors only through tokens; the Save, teaser and accept
+ * actions are the primary (Script Writer left with the button bar, Evoni,
+ * 2026-10-22 layout list); gold is never under white
  * nor used as text; verdicts and reward states read text tokens on
  * their surfaces. The Overview redesign (2026-10-08) moved the tab's
  * cards, buttons and edit form into EpisodeOverviewSections.css classes;
@@ -40,10 +41,9 @@ describe('Episode Overview theme', () => {
   });
 
   test('the actions are the primary and gold is never under white nor text', () => {
-    // Save (edit details) and Script Writer are the lavender primary.
+    // Save (edit details) is the lavender primary.
     expect(sections).toMatch(/\.eov-btn-primary \{ border: none; background: var\(--lala-lavender\); color: var\(--text-inverse\);/);
     expect(tab).toMatch(/className="eov-btn-primary" onClick=\{handleSave\}>Save</);
-    expect(tab).toMatch(/className="eov-btn-primary"[^\n]*> Script Writer<\/button>/);
     expect(sections).toMatch(/\.eov-btn \{ border: 1px solid var\(--lala-lavender-line\); background: var\(--surface-card\); color: var\(--lala-lavender-text\); \}/);
     expect(files['EpisodeTeaserSection.css']).toMatch(/border-color: var\(--primary\);\s*background: var\(--primary\);\s*color: var\(--text-inverse\);/);
     expect(files['SceneSuggestionReview.jsx']).toMatch(/background: acceptedCount === 0 \? 'var\(--lala-parchment-3\)' : 'var\(--primary\)'/);

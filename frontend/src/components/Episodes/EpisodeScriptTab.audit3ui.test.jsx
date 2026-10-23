@@ -53,8 +53,10 @@ describe('Approve & lock keeps focus', () => {
   });
 });
 
+// The kinds are one "+ Add line" menu since Evoni's layout list of
+// 2026-10-22: a closed adder gives focus back to that button.
 describe('the "Add:" chips', () => {
-  test('Dialogue focuses the adder; Escape closes it and focus goes back to the chip', async () => {
+  test('Dialogue focuses the adder; Escape closes it and focus goes back to + Add line', async () => {
     renderTab();
     const chip = screen.getByTestId('script-add-line-1');
     chip.focus();
@@ -64,14 +66,14 @@ describe('the "Add:" chips', () => {
     expect(Element.prototype.scrollIntoView).toHaveBeenCalled();
     fireEvent.keyDown(within(adder).getByTestId('script-line-adder-text'), { key: 'Escape' });
     expect(screen.queryByTestId('script-line-adder')).toBeNull();
-    await waitFor(() => expect(document.activeElement).toBe(screen.getByTestId('script-add-line-1')));
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByTestId('script-add-menu-1')));
   });
 
-  test('Done also gives focus back to the chip', async () => {
+  test('Done also gives focus back to + Add line', async () => {
     renderTab();
     fireEvent.click(screen.getByTestId('script-add-action-1'));
     fireEvent.click(await screen.findByTestId('script-line-adder-done'));
-    await waitFor(() => expect(document.activeElement).toBe(screen.getByTestId('script-add-action-1')));
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByTestId('script-add-menu-1')));
   });
 
   test('after Add, focus stays in the words for the next line', async () => {
@@ -91,7 +93,7 @@ describe('the "Add:" chips', () => {
     const adder = await screen.findByTestId('script-message-adder-notify');
     fireEvent.keyDown(adder, { key: 'Escape' });
     expect(screen.queryByTestId('script-message-adder-notify')).toBeNull();
-    await waitFor(() => expect(document.activeElement).toBe(screen.getByTestId('script-add-notify-1')));
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByTestId('script-add-menu-1')));
   });
 });
 

@@ -112,3 +112,37 @@ describe('EpisodeDistributionTab — thumbnail', () => {
       .toBe('/template-studio/youtube?show=show-1&episode=ep-2');
   });
 });
+
+// Evoni, 2026-10-22 (Results layout): Share (the teaser, platform copy,
+// Pulse posts) sits at the top of Distribution; the tab is full width; Save
+// follows along the bottom while there are unsaved changes.
+describe('EpisodeDistributionTab — share and save', () => {
+  test('Share is at the top; editing a field brings up the save bar, which saves', async () => {
+    const { render, screen, fireEvent, waitFor, within } = await import('@testing-library/react');
+    const { MemoryRouter } = await import('react-router-dom');
+    const { default: Tab } = await import('./EpisodeDistributionTab');
+    vi.mocked(apiClient.get).mockResolvedValue({ data: { success: true, data: [] } });
+    vi.mocked(apiClient.put).mockResolvedValue({ data: { success: true } });
+    const onOpenTab = vi.fn();
+    render(<MemoryRouter><Tab episode={{ id: 'ep-1', show_id: 'show-1', title: 'x', distribution_metadata: { youtube: { enabled: true, title: 'x', hashtags: [] } } }} onUpdate={() => {}} onOpenTab={onOpenTab} /></MemoryRouter>);
+    const share = await screen.findByTestId('results-share');
+    fireEvent.click(within(share).getByRole('button', { name: 'Write teaser' }));
+    expect(onOpenTab).toHaveBeenCalledWith('overview');
+    expect(screen.queryByTestId('distribution-savebar')).toBeNull();
+    const title = await screen.findByDisplayValue('x');
+    fireEvent.change(title, { target: { value: 'Gala Night' } });
+    const bar = await screen.findByTestId('distribution-savebar');
+    fireEvent.click(within(bar).getByRole('button', { name: /Save Distribution/ }));
+    await waitFor(() => expect(apiClient.put).toHaveBeenCalled());
+  });
+
+  test('full width: no narrow column; clip, not hidden, so the bar can stick', async () => {
+    const { readFileSync } = await import('fs');
+    const { resolve } = await import('path');
+    const css = readFileSync(resolve(__dirname, 'EpisodeDistributionTab.css'), 'utf8');
+    const root = css.slice(css.indexOf('.episode-distribution-tab {'), css.indexOf('}', css.indexOf('.episode-distribution-tab {')));
+    expect(root).not.toMatch(/max-width/);
+    expect(root).toMatch(/overflow-x: clip/);
+    expect(css).toMatch(/\.distribution-savebar \{\s*position: sticky;/);
+  });
+});

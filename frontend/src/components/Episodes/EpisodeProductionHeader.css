@@ -1,81 +1,60 @@
-/* EpisodeProductionHeader — the top of Production: the step bar, the
-   episode at a glance and the checklist's progress (Evoni's Production
-   mock, 2026-10-17). Tokens only (EpisodeProductionHeader.theme.test.js).
-   The studio look (Evoni's episode mockup, 2026-10-19): white rounded cards
-   on the pink page, magenta marks, the studio's status badges. */
+/* EpisodeProductionHeader — Production's strip: the steps, the checks, Open
+   Editor and Mark Ready, in one thin row under the pills (Evoni's
+   Production mock, 2026-10-17; "work first", her layout list of
+   2026-10-22). Tokens
+   only (EpisodeProductionHeader.theme.test.js). The studio look (Evoni's
+   episode mockup, 2026-10-19): white rounded cards on the pink page,
+   magenta marks. */
 
-.eph { display: flex; flex-direction: column; gap: 14px; margin-bottom: 16px; }
+.eph {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin: 10px 0 16px; padding: 8px 12px;
+  border-radius: var(--studio-radius); border: 1px solid var(--studio-line); background: var(--studio-card); color: var(--studio-ink); box-shadow: var(--studio-shadow);
+}
 .eph *, .eph *::before, .eph *::after { box-sizing: border-box; }
 .eph button:focus-visible, .eph a:focus-visible { outline: 2px solid var(--studio-magenta); outline-offset: 2px; }
 
-.eph-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
-.eph-btn { display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 8px 16px; border-radius: 999px; border: 1.5px solid var(--studio-line-strong); background: var(--studio-card); color: var(--studio-purple); font: inherit; font-size: 14px; font-weight: 700; text-decoration: none; cursor: pointer; }
+.eph-now { flex: 0 1 auto; min-width: 0; margin: 0; font-size: 14px; color: var(--studio-ink-muted); }
+.eph-now strong { color: var(--studio-magenta); font-weight: 700; }
+.eph-now-detail { font-size: 13px; }
+
+/* Steps: numbered marks joined by a line; the label and stat are in each mark's tooltip and for screen readers. */
+.eph-steps { list-style: none; display: flex; align-items: center; flex: 1 1 auto; margin: 0; padding: 0; }
+.eph-step { display: flex; align-items: center; min-width: 0; }
+.eph-step + .eph-step::before { content: ''; display: block; width: 14px; height: 2px; border-radius: 1px; background: var(--studio-line-strong); }
+.eph-step.is-done + .eph-step::before { background: var(--studio-magenta); }
+.eph-step-btn { display: grid; place-items: center; min-width: 40px; min-height: 40px; padding: 0; border: none; border-radius: 50%; background: var(--studio-card); color: var(--studio-ink-muted); font: inherit; text-decoration: none; cursor: pointer; }
+.eph-step-mark { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; border: 2px solid var(--studio-line-strong); background: var(--studio-card); color: var(--studio-ink-muted); font-size: 13px; font-weight: 700; }
+.eph-step-btn:hover .eph-step-mark { border-color: var(--studio-magenta); }
+.eph-step.is-done .eph-step-mark { border-color: var(--studio-magenta); background: var(--studio-magenta); color: var(--text-inverse); }
+.eph-step.is-current .eph-step-mark { border-color: var(--studio-magenta); background: var(--studio-magenta-soft); color: var(--studio-magenta); box-shadow: 0 0 0 3px var(--studio-magenta-soft); }
+.eph-step-label, .eph-step-detail, .eph-step-stat { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+.eph-count { min-height: 36px; padding: 4px 12px; border-radius: 999px; border: 1px solid var(--studio-line); background: var(--studio-purple-soft); color: var(--studio-purple); font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; white-space: nowrap; }
+.eph-count:hover { border-color: var(--studio-purple); }
+
+.eph-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-left: auto; }
+.eph-btn { display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 8px 16px; border-radius: 999px; border: 1.5px solid var(--studio-line-strong); background: var(--studio-card); color: var(--studio-purple); font: inherit; font-size: 14px; font-weight: 700; text-decoration: none; cursor: pointer; white-space: nowrap; }
 .eph-btn.is-primary { border-color: var(--studio-magenta); background: var(--studio-magenta); color: var(--text-inverse); box-shadow: var(--studio-shadow); }
 .eph-btn.is-primary:hover { border-color: var(--studio-magenta-hover); background: var(--studio-magenta-hover); color: var(--text-inverse); }
 .eph-btn:not(.is-primary):hover { background: var(--studio-purple-soft); color: var(--studio-purple); }
 .eph-btn:disabled { opacity: 0.6; cursor: not-allowed; }
 .eph-ready { display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 8px 16px; border-radius: 999px; background: var(--studio-ok-soft); color: var(--studio-ok); font-size: 14px; font-weight: 700; }
 
-/* Steps */
-.eph-steps { list-style: none; margin: 0; padding: 12px; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; border-radius: var(--studio-radius); border: 1px solid var(--studio-line); background: var(--studio-card); box-shadow: var(--studio-shadow); }
-.eph-step { position: relative; min-width: 0; }
-.eph-step-btn { display: flex; flex-direction: column; align-items: center; gap: 6px; width: 100%; height: 100%; padding: 8px 4px; border: none; border-radius: 10px; background: var(--studio-card); color: var(--studio-ink-muted); font: inherit; text-align: center; text-decoration: none; cursor: pointer; }
-.eph-step-btn:hover { background: var(--studio-page); color: var(--studio-ink-muted); }
-.eph-step-mark { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; border: 2px solid var(--studio-line-strong); background: var(--studio-card); color: var(--studio-ink-muted); font-size: 14px; font-weight: 700; }
-.eph-step.is-done .eph-step-mark { border-color: var(--studio-magenta); background: var(--studio-magenta); color: var(--text-inverse); }
-.eph-step.is-current .eph-step-mark { border-color: var(--studio-magenta); background: var(--studio-magenta-soft); color: var(--studio-magenta); box-shadow: 0 0 0 4px var(--studio-magenta-soft); }
-.eph-step-label { display: inline-flex; align-items: center; justify-content: center; gap: 5px; font-size: 13px; font-weight: 600; color: var(--studio-ink); }
-.eph-step-label svg { color: var(--studio-purple); }
-.eph-step.is-current .eph-step-label { color: var(--studio-magenta); font-weight: 700; }
-.eph-step-detail { font-size: 11px; color: var(--studio-ink-muted); }
-/* "Takes: n of 14 beats" on Files (Teleprompter batch 2). */
-.eph-step-stat { padding: 1px 8px; border-radius: 8px; background: var(--studio-purple-soft); color: var(--studio-purple); font-size: 11px; font-weight: 600; line-height: 1.5; }
-
-/* Cards */
-.eph-cards { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 14px; }
-.eph-card { min-width: 0; padding: 16px; border-radius: var(--studio-radius); border: 1px solid var(--studio-line); background: var(--studio-card); color: var(--studio-ink); box-shadow: var(--studio-shadow); }
-.eph .eph-card-title { margin: 0; font-family: var(--font-prose); font-size: 20px; font-weight: 600; color: var(--studio-ink); }
-
-.eph-episode { display: grid; grid-template-columns: minmax(0, 150px) minmax(0, 1fr); gap: 16px; align-items: start; }
-.eph-episode:not(:has(.eph-cover)) { grid-template-columns: minmax(0, 1fr); }
-.eph-cover { width: 100%; aspect-ratio: 2 / 3; object-fit: contain; border-radius: 10px; border: 1px solid var(--studio-line); background: var(--studio-page-2); }
-.eph-episode-text { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
-.eph-episode-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
-.eph .eph-episode-title { display: flex; flex-direction: column; margin: 0; font-family: var(--font-prose); font-size: 22px; font-weight: 600; color: var(--studio-ink); }
-.eph-episode-name { font-family: var(--font-sans); font-size: 15px; font-weight: 500; color: var(--studio-ink-muted); }
-.eph-status { padding: 3px 12px; border-radius: 999px; font-size: 12px; font-weight: 700; background: var(--studio-draft-soft); color: var(--studio-draft); }
-.eph-status.is-in_review, .eph-status.is-scheduled, .eph-status.is-published { background: var(--studio-ok-soft); color: var(--studio-ok); }
-.eph-line { display: flex; align-items: center; gap: 6px; margin: 0; font-size: 14px; color: var(--studio-ink); }
-.eph-line svg { flex-shrink: 0; color: var(--studio-magenta); }
-.eph-desc { margin: 4px 0 0; font-size: 14px; line-height: 1.5; color: var(--studio-ink-muted); display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
-
-.eph-progress { display: flex; flex-direction: column; gap: 10px; }
-.eph-progress-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
-.eph-progress-count { font-size: 13px; color: var(--studio-ink-muted); }
-.eph-bar { display: block; height: 8px; border-radius: 4px; background: var(--studio-page-2); overflow: hidden; }
-.eph-bar span { display: block; height: 100%; border-radius: 4px; background: var(--studio-purple); transition: width 0.3s; }
-.eph-sections { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 14px; }
-.eph-sections li { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: 13px; color: var(--studio-ink-muted); }
-.eph-sections li svg { flex-shrink: 0; }
-.eph-sections li.is-done { color: var(--studio-ink); }
-.eph-sections li.is-done svg { color: var(--studio-ok); }
-.eph-section-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.eph-section-count { font-size: 12px; color: var(--studio-ink-muted); }
-.eph-link { align-self: flex-start; padding: 0; border: none; background: none; color: var(--studio-magenta); font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
-.eph-link:hover { text-decoration: underline; }
-
-@media (max-width: 1100px) {
-  .eph-cards { grid-template-columns: minmax(0, 1fr); }
-}
+/* A phone: what step it is on, then the marks, then the count and the buttons. */
 @media (max-width: 760px) {
-  .eph-steps { display: flex; overflow-x: auto; padding: 8px; }
-  /* Three and a bit across, so the strip shows it scrolls (Script page audit 4, 2026-10-19). */
-  .eph-step { flex: 0 0 84px; }
-  .eph-episode { grid-template-columns: minmax(0, 96px) minmax(0, 1fr); }
-  .eph-sections { grid-template-columns: minmax(0, 1fr); }
+  .eph { gap: 6px 10px; padding: 8px 10px; }
+  .eph-now { flex-basis: 100%; }
+  .eph-steps { flex-basis: 100%; justify-content: space-between; }
+  .eph-step { flex: 1 1 auto; justify-content: flex-end; }
+  .eph-step:first-child { flex: 0 0 auto; }
+  .eph-step + .eph-step::before { flex: 1 1 auto; width: auto; min-width: 4px; }
+  .eph-actions { flex-wrap: nowrap; margin-left: auto; gap: 6px; }
+  .eph-btn, .eph-ready { padding: 8px 10px; font-size: 13px; }
+  .eph-count-word { display: none; }
 }
 
 /* 44px on a touch screen of any width (Script page audit 4, 2026-10-19). */
 @media (pointer: coarse) {
-  .eph-btn, .eph-ready, .eph-link { min-height: 44px; }
+  .eph-btn, .eph-ready, .eph-count, .eph-step-btn { min-height: 44px; }
+  .eph-step-btn { min-width: 44px; }
 }

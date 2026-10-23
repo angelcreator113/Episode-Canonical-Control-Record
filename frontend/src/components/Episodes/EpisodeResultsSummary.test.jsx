@@ -9,7 +9,7 @@ import { MemoryRouter } from 'react-router-dom';
 vi.mock('../../services/api', () => ({ default: { get: vi.fn() } }));
 
 import api from '../../services/api';
-import EpisodeResultsSummary from './EpisodeResultsSummary';
+import EpisodeResultsSummary, { ResultsShare } from './EpisodeResultsSummary';
 
 const MONEY = { lines: [{ key: 'fee', label: 'Reel fee (on approval)', signed: 439, state: 'pending' }, { key: 'entry', label: 'Entry (comped by host)', signed: -50, covered: true, state: 'covered' }], projection: { projected_net: 439, posted_net: 0, conditional: [] } };
 const renderPage = (episode) => {
@@ -31,33 +31,39 @@ beforeEach(() => {
 });
 
 describe('Results summary', () => {
-  test('before Complete: designed Pass, actual ?, the money as an estimate, stats after Complete', async () => {
+  // Evoni, 2026-10-22 (Results layout): until it is completed, one card of
+  // what fills in then, and the money; no "after Complete" rows.
+  test('before Complete: one card of what fills in then (designed Pass), and the money as an estimate', async () => {
     renderPage({});
-    const how = screen.getByTestId('results-how');
-    expect(await within(how).findByText('Pass')).toBeTruthy();
-    expect(how.textContent).toContain('?');
+    const pending = screen.getByTestId('results-pending');
+    expect(await within(pending).findByText('Pass')).toBeTruthy();
+    expect(pending.textContent).toContain('Fills in at Complete');
+    expect(within(pending).getByText('Open the events').getAttribute('href')).toBe('/shows/show-1/world?tab=events');
     expect(screen.getByText('Not completed yet')).toBeTruthy();
     expect((await screen.findByTestId('results-net')).textContent).toBe('Net for the episodeestimate +439');
     expect(screen.getByText('Entry (comped by host)').closest('li').textContent).toContain('0 covered');
-    expect((await screen.findByText('1,900')).closest('li').textContent).toContain('after Complete');
-    expect(await screen.findByText('Follow up with STUDIO BY SABLE')).toBeTruthy();
+    for (const id of ['results-how', 'results-stats', 'results-goals', 'results-evaluation', 'results-share']) expect(screen.queryByTestId(id)).toBeNull();
+    expect(screen.queryByText(/after Complete/)).toBeNull();
   });
 
-  test('after Complete: the actual tier and each stat change', async () => {
-    renderPage({ evaluation_json: { tier_final: 'slay', score: 91, stat_deltas: { coins: 439, stress: -1 } } });
+  test('after Complete: the actual tier, each stat change, the goals, and the evaluation under it', async () => {
+    renderPage({ evaluation_json: { tier_final: 'slay', score: 91, stat_deltas: { coins: 439, stress: -1 }, breakdown: { outfit_match: { value: 30 } } } });
     expect(await within(screen.getByTestId('results-how')).findByText('Slay')).toBeTruthy();
     expect(screen.getByText('Completed · 91/100')).toBeTruthy();
     expect((await screen.findByTestId('results-stat-stress')).textContent).toContain('−1');
+    expect(await screen.findByText('Follow up with STUDIO BY SABLE')).toBeTruthy();
+    const evaluation = screen.getByTestId('results-evaluation');
+    expect(within(evaluation).getByText('outfit match')).toBeTruthy();
+    expect(within(evaluation).getByText('+30')).toBeTruthy();
   });
 
-  test('share: a missing teaser says so and opens the Overview; platform copy opens Distribution', async () => {
-    const { onOpenTab } = renderPage({});
+  test('share is on Distribution: a missing teaser says so and opens the Overview; Lala\'s posts link', async () => {
+    const onOpenTab = vi.fn();
+    render(<MemoryRouter><ResultsShare episode={{ id: 'ep-1', show_id: 'show-1' }} showId="show-1" onOpenTab={onOpenTab} /></MemoryRouter>);
     const teaser = screen.getByTestId('results-teaser');
     expect(teaser.textContent).toContain('Missing');
     fireEvent.click(within(teaser).getByRole('button', { name: 'Write teaser' }));
     expect(onOpenTab).toHaveBeenCalledWith('overview');
-    fireEvent.click(screen.getByRole('button', { name: 'Open Distribution' }));
-    expect(onOpenTab).toHaveBeenCalledWith('distribution');
     expect(screen.getByText("Open Lala's posts").getAttribute('href')).toBe('/shows/show-1/world?tab=feed');
   });
 });

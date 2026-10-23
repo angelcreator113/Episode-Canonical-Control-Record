@@ -92,3 +92,16 @@
   .ers-teaser { flex-direction: column; align-items: stretch; }
   .ers-btn { margin-left: 0; }
 }
+
+/* Until the episode is completed (Evoni, 2026-10-22 layout list): one card
+   of what fills in then; the evaluation's breakdown under the page once
+   there is one. */
+.ers-how.is-pending .ers-label { display: inline-flex; align-items: center; gap: 6px; }
+.ers-how.is-pending .ers-text { margin: 4px 0 8px; }
+.ers-evaluation { margin-top: 20px; }
+/* On a phone the episode's tabs and pills stay at the top: land below them. */
+@media (max-width: 768px) {
+  .ers-evaluation { scroll-margin-top: calc(var(--app-header-h, 0px) + var(--ed-head-h, 0px) + var(--ed-tabs-h, 0px) + 60px); }
+}
+.ers-evaluation > .ers-head { margin-bottom: 12px; }
+

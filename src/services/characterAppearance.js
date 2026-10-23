@@ -26,6 +26,11 @@
  *     (the newest MAX_PORTRAITS); returns { url, cost }
  *     A black image (the image service's filter flagged it) is never kept:
  *     one more try, then an AppearanceError 422 that says so.
+ *   uploadPortrait(character, file)  a photo of them uploaded from the
+ *     Appearance tab (Evoni, 2026-10-22: "I would like to be able to upload
+ *     an appearance photo"), kept in the studio's storage like a made one
+ *     and added to their portraits, marked uploaded; their profile photo
+ *     too when they have none. Free: no image is generated.
  *   usePortrait(character, url)  makes one of their portraits their profile
  *     photo (portrait_url)
  *   removePortrait(character, url)  drops one of their portraits (and
@@ -209,6 +214,16 @@ async function generatePortrait(db, character) {
   return { url, cost: cost || (generated.cost_estimate ?? null) };
 }
 
+async function uploadPortrait(character, file) {
+  if (!character) throw new AppearanceError('Character not found.', 404);
+  const { storePulseImage } = require('./pulseImageService');
+  const { url } = await storePulseImage(file, { keyPrefix: `characters/${character.id}/uploaded`, maxSide: 1200, minSide: 200, label: 'The photo' });
+  const appearance = character.appearance || {};
+  const portraits = [{ url, uploaded: true, created_at: new Date().toISOString() }, ...(appearance.portraits || [])].slice(0, MAX_PORTRAITS);
+  await character.update({ appearance: { ...appearance, portraits }, ...(character.portrait_url ? {} : { portrait_url: url }) });
+  return { url };
+}
+
 /** An image that is all (nearly) black: the image service's filter at work. */
 async function isBlank(buffer) {
   try {
@@ -241,6 +256,6 @@ async function usePortrait(character, url) {
 }
 
 module.exports = {
-  AppearanceError, normalizeAppearance, appearanceLines, suggestAppearance, portraitPrompt, generatePortrait, usePortrait, removePortrait, isBlank,
+  AppearanceError, normalizeAppearance, appearanceLines, suggestAppearance, portraitPrompt, generatePortrait, uploadPortrait, usePortrait, removePortrait, isBlank,
   TEXT_KEYS, LABELS, MAX_PORTRAITS,
 };
