@@ -26,6 +26,7 @@ import WorldMomentsTab from '../components/WorldMoments/WorldMomentsTab';
 import RateCardTab from '../components/RateCard/RateCardTab';
 import SeasonProposals from '../components/Show/SeasonProposals';
 import SeasonRevealPlan from '../components/Show/SeasonRevealPlan';
+import SeasonTwists from '../components/Show/SeasonTwists';
 import ShowOverview, { episodesInProduction, eventsNeedingAttention } from '../components/Show/ShowOverview';
 import { useLookDraft, LookBuilderPanel, RecentlyWorn } from '../components/Show/LookBuilder';
 import { LalaStatsCard, DecisionLogCard, StoryThreadsStrip, CastRow } from '../components/Show/CastContinuity';
@@ -7904,6 +7905,9 @@ function SeasonTab({ showId, api, S, episodes, events = [], setToast }) {
 
       {/* Which secret the season hints at or reveals, and when (stage E, 2026-10-18). */}
       <SeasonRevealPlan showId={showId} api={api} />
+
+      {/* Twists planted in one episode and paid off in a later one (2026-10-23). */}
+      <SeasonTwists showId={showId} api={api} />
 
       {/* Roadmap — the season's 24 slots */}
       <SeasonRoadmap roadmap={roadmap} S={S} api={api} showId={showId} onChanged={loadRoadmap} setToast={setToast} onAdvance={handleAdvance} advancing={advancing}
