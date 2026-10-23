@@ -16,7 +16,8 @@
 const { v4: uuidv4 } = require('uuid');
 const { CANONICAL_BEATS } = require('../constants/canonicalBeats');
 const { findLiveLinkedEpisode, eventEpisodeConflictError } = require('../utils/eventEpisodeLink');
-const { findMissingPrices, dealPriceRequiredError } = require('./dealPricingService');
+const { findStartBlockers, startBlockersFrom, startRefusalError } = require('./startReadinessService');
+const { findIdempotentStart, loadStartReplay, META_KEY: IDEMPOTENCY_META_KEY } = require('./startEpisodeIdempotency');
 const { takePriceSnapshot } = require('./dealPriceSnapshot');
 const { eventCreatorOrganizer } = require('../utils/eventOrganizer');
 const { listEventDeliverables, stampDeliverablesEpisode, buildTermsSnapshot } = require('./eventTermsService');
@@ -440,26 +441,26 @@ async function generateEpisodeFromEvent(event, models, options = {}) {
   // below, only once its replacement exists (§8(w) P3, Task #2210).
   const replacingEpisodeId = options.replacingEpisodeId || null;
   const eventId = typeof event.id === 'string' ? event.id : String(event.id);
-  let liveEpisode = null;
-  try {
-    liveEpisode = await findLiveLinkedEpisode(models.sequelize, eventId);
-  } catch (checkErr) {
-    // Column may not exist, skip check
-    console.warn('[EpisodeGenerator] used-event check skipped:', checkErr.message);
-  }
-  if (liveEpisode && !(replacingEpisodeId && liveEpisode.id === replacingEpisodeId)) {
-    throw eventEpisodeConflictError(liveEpisode);
+
+  // Retry protection (optional Idempotency-Key, services/
+  // startEpisodeIdempotency.js): a Start this event already completed under
+  // the same key answers with that episode, before any refusal and without
+  // creating anything. Without a key, nothing here runs.
+  const idempotencyKey = options.idempotencyKey || null;
+  if (idempotencyKey && !replacingEpisodeId) {
+    const replayId = await findIdempotentStart(models.sequelize, eventId, idempotencyKey);
+    if (replayId) return loadStartReplay(models, replayId, { beats: BEAT_TEMPLATES });
   }
 
-  // Start Episode locks the terms, so a deal's price must be complete first
-  // (Evoni's Deal PR 3 ruling, point 6, §8(cc): "Missing is missing"; Task
-  // #2341). Every priced component and paid deliverable needs a number;
-  // "Other" is never priced automatically. A regenerate replaces an episode
-  // whose terms are already locked, so it is not refused here.
-  if (!replacingEpisodeId) {
-    const missing = await findMissingPrices(models.sequelize, eventId);
-    if (missing.length) throw dealPriceRequiredError(missing);
-  }
+  // The refusals — one event, one episode (a link to a deleted episode does
+  // not block), then the deal's prices (Start Episode locks the terms, so a
+  // deal's price must be complete first: Evoni's Deal PR 3 ruling, point 6,
+  // §8(cc), "Missing is missing"; Task #2341; not asked on a regenerate,
+  // whose terms are already locked) — are the readiness check's blockers
+  // (services/startReadinessService.js), the same function GET
+  // .../start-readiness answers with, so the two never disagree.
+  const [blocker] = await findStartBlockers(models.sequelize, eventId, { replacingEpisodeId, stopAtFirst: true });
+  if (blocker) throw startRefusalError(blocker);
 
   // Get next episode number from active episodes only. Soft-deleted
   // regenerate history should not inflate visible episode numbering.
@@ -636,7 +637,7 @@ Return ONLY JSON.` }],
   // and leaves no episode and no brief behind. Everything after this block
   // is non-blocking by design, runs after the commit, and logs its own
   // failures.
-  const { episode, brief } = await models.sequelize.transaction(async (transaction) => {
+  const started = await models.sequelize.transaction(async (transaction) => {
     // Start Episode runs once per event (audit High, 2026-10-23): the event
     // row is locked first, and the one-event-one-episode guard above is
     // asked again under the lock. A second Start that raced the first waits
@@ -647,8 +648,15 @@ Return ONLY JSON.` }],
       { replacements: { eventId }, transaction }
     );
     const liveUnderLock = await findLiveLinkedEpisode(models.sequelize, eventId, { transaction });
-    if (liveUnderLock && !(replacingEpisodeId && liveUnderLock.id === replacingEpisodeId)) {
-      throw eventEpisodeConflictError(liveUnderLock);
+    const [lockedBlocker] = startBlockersFrom({ liveEpisode: liveUnderLock, replacingEpisodeId });
+    if (lockedBlocker) {
+      // A retry that raced its own first attempt (same Idempotency-Key)
+      // finds that attempt's episode here and answers with it.
+      if (idempotencyKey && !replacingEpisodeId) {
+        const replayId = await findIdempotentStart(models.sequelize, eventId, idempotencyKey, { transaction });
+        if (replayId) return { replayId };
+      }
+      throw startRefusalError(lockedBlocker);
     }
 
     const episode = await Episode.create({
@@ -731,6 +739,9 @@ Return ONLY JSON.` }],
           // requirements, deliverables, restrictions, compensation. A
           // snapshot; completion readers still read the event, not this.
           terms: termsSnapshot,
+          // The Start's Idempotency-Key, when one was sent (services/
+          // startEpisodeIdempotency.js); absent otherwise.
+          ...(idempotencyKey && !replacingEpisodeId ? { [IDEMPOTENCY_META_KEY]: idempotencyKey } : {}),
         },
         // AI-drafted beat outline from the same Claude call that generated
         // the title — gives creators something to anchor edits against and
@@ -774,6 +785,8 @@ Return ONLY JSON.` }],
     await takePriceSnapshot(models.sequelize, eventId, { transaction, reason: 'start_episode' });
     return { episode, brief };
   });
+  if (started.replayId) return loadStartReplay(models, started.replayId, { beats: BEAT_TEMPLATES });
+  const { episode, brief } = started;
 
   // Season Arc (§8(ff) Q5, A7): the episode takes the slot its event is
   // pencilled into, else the earliest open slot, and the slot locks. Logged,

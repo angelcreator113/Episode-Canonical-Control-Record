@@ -68,14 +68,18 @@ const CP3_FILES = [
 // (requireAuth) and POST .../documents/:type/draft (requireAuth +
 // aiRateLimiter, D4 pattern); the everyday and event looks (Evoni,
 // 2026-10-15) added POST .../look/upload (requireAuth, an uploaded image as
-// the event's look, no AI call); no other CP3-zone route changed.
+// the event's look, no AI call); the Event Package server enhancements
+// (Evoni, 2026-10-23) added GET .../start-readiness and GET .../package
+// (requireAuth, read-only) and POST .../suggest-basics (requireAuth +
+// aiRateLimiter, D4 pattern, writes nothing): 84; no other CP3-zone route
+// changed.
 // worldStudio.js 36: +1 for POST /world/dream-cities/:key/image (a Dream
 // City's image or story bubble, The Pulse Uploads, Task #2920, requireAuth).
 // 38: +2 for GET and POST /world/locations/studio-types (creator studios
 // typed "other", Evoni 2026-10-18; requireAuth, no AI call).
 const REQUIRE_AUTH_COUNTS = {
   'world.js': 5,
-  'worldEvents.js': 81,
+  'worldEvents.js': 84,
   'worldStudio.js': 38,
   'worldTemperatureRoutes.js': 3,
 };
@@ -237,10 +241,11 @@ describe('Step 3 CP3 — World cluster mixed Tier 1+3+4 disposition', () => {
     // 18 since the 2026-10-23 audit: generate-invitation, batch-generate-
     // invitations, animate-invitation (image/video), generate-overlay,
     // generate-distribution and generate-lists (Claude) carry it too.
-    test('all 18 AI handlers use uniform requireAuth + aiRateLimiter pattern', () => {
+    // 19 with suggest-basics (Event Package enhancements, 2026-10-23).
+    test('all 19 AI handlers use uniform requireAuth + aiRateLimiter pattern', () => {
       const aiPattern = /router\.post\([^)]*requireAuth,\s*aiRateLimiter,/g;
       const matches = src.match(aiPattern) || [];
-      expect(matches.length).toBe(18);
+      expect(matches.length).toBe(19);
     });
 
     test.each([
@@ -250,6 +255,7 @@ describe('Step 3 CP3 — World cluster mixed Tier 1+3+4 disposition', () => {
       'events/:eventId/generate-overlay/:overlayType',
       'episodes/:episodeId/generate-distribution',
       'events/:eventId/generate-lists',
+      'events/:eventId/suggest-basics',
     ])('POST /%s uses requireAuth + aiRateLimiter (audit, 2026-10-23)', (route) => {
       expect(src).toContain(`router.post('/world/:showId/${route}', requireAuth, aiRateLimiter,`);
     });
@@ -359,14 +365,15 @@ describe('Step 3 CP3 — World cluster mixed Tier 1+3+4 disposition', () => {
     // 123, not the CP3-close 105 — see REQUIRE_AUTH_COUNTS['worldEvents.js'] above;
     // 124 with worldStudio.js POST /world/dream-cities/:key/image (Task #2920);
     // 125 with worldEvents.js POST .../look/upload (2026-10-15);
-    // 127 with worldStudio.js GET + POST /world/locations/studio-types (2026-10-18).
-    test('CP3 zone contains 127 total requireAuth references across 4 files (4 imports + 123 handlers)', () => {
+    // 127 with worldStudio.js GET + POST /world/locations/studio-types (2026-10-18);
+    // 130 with worldEvents.js start-readiness, package and suggest-basics (2026-10-23).
+    test('CP3 zone contains 130 total requireAuth references across 4 files (4 imports + 126 handlers)', () => {
       const total = CP3_FILES.reduce((sum, filename) => {
         const src = readSrc(filename);
         const matches = src.match(/\brequireAuth\b/g) || [];
         return sum + matches.length;
       }, 0);
-      expect(total).toBe(127);
+      expect(total).toBe(130);
     });
 
     test('CP3 zone contains 20 total optionalAuth references (all in worldStudio.js)', () => {
