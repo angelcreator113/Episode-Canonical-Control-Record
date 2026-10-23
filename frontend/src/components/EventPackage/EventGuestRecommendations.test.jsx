@@ -55,4 +55,25 @@ describe('EventGuestRecommendations', () => {
     await waitFor(() => expect(api.get).toHaveBeenCalled());
     expect(screen.queryByTestId('guest-recs')).toBeNull();
   });
+  test('each recommendation lists the facts behind it from the profiles read; the organizer is read for her district; none when the data has none', async () => {
+    const feed = [
+      { id: 3, handle: 'dana', display_name: 'Dana', lala_relationship: 'direct', lala_relevance_score: 5, city: 'dazzle_district', follower_tier: 'mega', followers: [{ character_key: 'lala' }] },
+      { id: 4, handle: 'eve', display_name: 'Eve', lala_relationship: 'competitive', lala_relevance_score: 4, follower_tier: 'micro', current_trajectory: 'plateauing' },
+    ];
+    api.get.mockImplementation(async (url) => {
+      if (url === FEED) return { data: { profiles: feed } };
+      if (url === '/api/v1/social-profiles/9') return { data: { profile: { id: 9, display_name: 'Host', city: 'dazzle_district' } } };
+      return { data: { profile: null } };
+    });
+    renderRecs({ organizerProfileId: 9, guests: [{ profile_id: 3, relationship: 'collab' }] });
+    const dana = await screen.findByTestId('guest-rec-3');
+    await waitFor(() => expect(api.get).toHaveBeenCalledWith('/api/v1/social-profiles/9'));
+    const reasons = dana.querySelector('[data-testid="guest-rec-reasons"]');
+    expect([...reasons.querySelectorAll('li')].map((li) => li.textContent)).toEqual([
+      'Collaborated with the organizer', 'Same district as the organizer', 'Lala follows her',
+    ]);
+    expect(reasons.getAttribute('aria-label')).toBe('Why Dana');
+    // Eve: nothing in the data supports a reason, so none is shown.
+    expect(screen.getByTestId('guest-rec-4').querySelector('[data-testid="guest-rec-reasons"]')).toBeNull();
+  });
 });

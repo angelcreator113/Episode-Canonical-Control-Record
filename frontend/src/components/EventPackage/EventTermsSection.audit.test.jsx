@@ -1,5 +1,7 @@
 /**
- * EventTermsSection — audit fixes: removes ask first, a failed page refresh
+ * EventTermsSection — audit fixes: removes are undoable (Evoni, 2026-10-23:
+ * undo instead of confirm; a deliverable Undo could not put back as it was
+ * still asks first), a failed page refresh
  * after a save is not a failed save, a deliverables load failure is said
  * where the missing prices are, and the price inputs reach the page.
  */
@@ -12,6 +14,7 @@ vi.mock('../../services/api', () => ({
 
 import api from '../../services/api';
 import EventTermsSection, { REFRESH_FAILED_MESSAGE } from './EventTermsSection';
+import { resetUndoStore } from './useUndo';
 
 const LEGACY = {
   id: 'ev-1',
@@ -33,6 +36,7 @@ function renderTerms(event, props = {}) {
 
 beforeEach(() => {
   Object.values(api).forEach((fn) => fn?.mockReset?.());
+  resetUndoStore();
   vi.mocked(api.get).mockImplementation(async (url) => {
     if (url.endsWith('/costs')) return { data: { success: true, costs: COSTS, drafted: {} } };
     return { data: { success: true, deliverables: DELIVERABLES } };
@@ -40,18 +44,44 @@ beforeEach(() => {
 });
 
 describe('EventTermsSection audit fixes', () => {
-  test('removing a restriction asks first; declined, nothing is saved', async () => {
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true);
-    const { putEvent } = renderTerms(LEGACY);
+  test('removing a restriction is done at once with "Removed \'…\' · Undo"; Undo puts it back', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm');
+    const { putEvent, onSaved } = renderTerms(LEGACY);
     fireEvent.click(await screen.findByLabelText('Remove No competing brands'));
-    expect(confirmSpy).toHaveBeenCalledWith('Remove the restriction "No competing brands"?');
-    expect(putEvent).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByLabelText('Remove No competing brands'));
+    expect(confirmSpy).not.toHaveBeenCalled();
     await waitFor(() => expect(putEvent).toHaveBeenCalledWith({ restrictions: [] }));
+    const notice = await screen.findByTestId('terms-restriction-undo');
+    expect(notice.textContent).toContain("Removed 'No competing brands'");
+    expect(screen.getByTestId('terms-restriction-undo-region').getAttribute('role')).toBe('status');
+    // The test's event still holds it (no reload here): saved back as it is, not twice.
+    fireEvent.click(screen.getByRole('button', { name: /Undo/ }));
+    await waitFor(() => expect(putEvent).toHaveBeenLastCalledWith({ restrictions: [{ type: 'exclusivity', description: 'No competing brands' }] }));
+    await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.queryByTestId('terms-restriction-undo')).toBeNull());
     confirmSpy.mockRestore();
   });
 
-  test('removing a deliverable asks first', async () => {
+  test('removing a deliverable is done at once; Undo adds it back with the same fields', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm');
+    vi.mocked(api.delete).mockResolvedValue({ data: { success: true } });
+    vi.mocked(api.post).mockResolvedValue({ data: { success: true } });
+    renderTerms(DEAL);
+    fireEvent.click(await screen.findByLabelText('Remove Reel'));
+    expect(confirmSpy).not.toHaveBeenCalled();
+    await waitFor(() => expect(api.delete).toHaveBeenCalledWith('/api/v1/world/show-1/events/ev-1/deliverables/d1'));
+    expect((await screen.findByTestId('terms-deliverable-undo')).textContent).toContain("Removed 'Reel'");
+    fireEvent.click(screen.getByTestId('terms-deliverable-undo-undo'));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/api/v1/world/show-1/events/ev-1/deliverables', {
+      description: 'Reel', deliverable_type: 'pulse_video', platform: null, due_date: null, required: true, owed_to: 'host', fee: null,
+    }));
+    confirmSpy.mockRestore();
+  });
+
+  test('a deliverable Undo could not put back as it was (fulfilment recorded) still asks first', async () => {
+    vi.mocked(api.get).mockImplementation(async (url) => {
+      if (url.endsWith('/costs')) return { data: { success: true, costs: COSTS, drafted: {} } };
+      return { data: { success: true, deliverables: [{ ...DELIVERABLES[0], status: 'completed', completed_at: '2026-10-01T10:00:00Z' }] } };
+    });
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
     renderTerms(DEAL);
     fireEvent.click(await screen.findByLabelText('Remove Reel'));
@@ -61,15 +91,13 @@ describe('EventTermsSection audit fixes', () => {
   });
 
   test('a save that succeeds while the page refresh fails reads "couldn\'t refresh", not "Failed to save"', async () => {
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
     const onSaved = vi.fn().mockRejectedValue(new Error('reload failed'));
     const { onToast, putEvent } = renderTerms(LEGACY, { onSaved });
     fireEvent.click(await screen.findByLabelText('Remove No competing brands'));
     await waitFor(() => expect(onToast).toHaveBeenCalledWith(REFRESH_FAILED_MESSAGE));
     expect(putEvent).toHaveBeenCalledTimes(1);
-    expect(onToast).toHaveBeenCalledWith('Restriction removed');
+    expect(await screen.findByTestId('terms-restriction-undo')).toBeTruthy();
     expect(onToast.mock.calls.some(([m]) => /^Failed/.test(m))).toBe(false);
-    confirmSpy.mockRestore();
   });
 
   test('deliverables that fail to load are said where the missing prices are, with Try again', async () => {

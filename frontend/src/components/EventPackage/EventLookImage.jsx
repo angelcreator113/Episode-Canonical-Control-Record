@@ -34,6 +34,14 @@
  * and the section says "Still running" with Check again, which refreshes
  * again.
  *
+ * "Still running since 14:02" (Evoni, 2026-10-23): when the run started,
+ * in the viewer's local time. A look's run is the server's: while a look is
+ * generating, its row's updated_at is the moment the run claimed it (the
+ * run writes nothing else until it ends). A base's run has no start time in
+ * the response, so it is the moment this section's Confirm started it,
+ * kept in sessionStorage by event so a reload keeps it; with neither, the
+ * note names no time.
+ *
  * A write that succeeds (generate, upload) but whose page refresh
  * (onSaved) fails reads "couldn't refresh", never as a failed write: a
  * generate reported as failed invites a second paid run.
@@ -43,6 +51,7 @@ import OpenInSceneSets from '../OpenInSceneSets';
 import { Sparkles, Loader2, Upload, X } from 'lucide-react';
 import api from '../../services/api';
 import SceneBriefConfirm from '../SceneBriefConfirm';
+import { formatClockTime } from '../../utils/eventDate';
 import './EventLookImage.css';
 
 export const POLL_MS = 4000;
@@ -52,6 +61,26 @@ export const REFRESH_FAILED_MESSAGE = "Done — couldn't refresh the page. Reloa
 
 const lookGenerating = (d) => d?.look?.status === 'generating';
 const baseGenerating = (d) => d?.scene_set?.generation_status === 'generating';
+
+// When this section started a run (the base's has no start time from the server).
+const STARTED_KEY = (eventId) => `ell-run-started:${eventId}`;
+export function readRunStart(eventId) {
+  try {
+    const v = window.sessionStorage.getItem(STARTED_KEY(eventId));
+    return v ? Number(v) || null : null;
+  } catch (err) {
+    console.error('[EventLookImage] run start read failed:', err);
+    return null;
+  }
+}
+function writeRunStart(eventId, at) {
+  try {
+    if (at) window.sessionStorage.setItem(STARTED_KEY(eventId), String(at));
+    else window.sessionStorage.removeItem(STARTED_KEY(eventId));
+  } catch (err) {
+    console.error('[EventLookImage] run start write failed:', err);
+  }
+}
 
 // refreshKey: changes with the venue's base and its approval (seventh
 // audit), so a base approved, un-approved or replaced in the same panel is
@@ -67,6 +96,7 @@ export default function EventLookImage({ showId, eventId, onToast, onSaved, poll
   const [waiting, setWaiting] = useState(null); // 'look' | 'base', from Confirm until the server shows it
   const [uploading, setUploading] = useState(false);
   const [timedOut, setTimedOut] = useState(false); // the refresh cap reached while the server still says generating
+  const [runStart, setRunStart] = useState(() => readRunStart(eventId)); // this section's Confirm, ms
   const pendingFile = useRef(null); // an upload waiting for the set to be chosen
   const fileInput = useRef(null);
   const polls = useRef(0);
@@ -104,7 +134,8 @@ export default function EventLookImage({ showId, eventId, onToast, onSaved, poll
     setBrief(null);
     setWaiting(null);
     setTimedOut(false);
-  }, [base]);
+    setRunStart(readRunStart(eventId));
+  }, [base]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const load = useCallback(async () => {
     try {
@@ -135,6 +166,16 @@ export default function EventLookImage({ showId, eventId, onToast, onSaved, poll
 
   const serverGenerating = lookGenerating(state) || baseGenerating(state);
   const generating = Boolean(waiting) || serverGenerating;
+
+  // A run that is over forgets its start.
+  useEffect(() => {
+    if (state && !generating && runStart) {
+      writeRunStart(eventId, null);
+      setRunStart(null);
+    }
+  }, [state, generating, runStart, eventId]);
+  const startedAt = lookGenerating(state) && state.look.updated_at ? state.look.updated_at : runStart;
+  const startedText = formatClockTime(startedAt);
   // Past the refresh cap the spinner stops; "Still running" takes its place.
   const polling = generating && !timedOut;
 
@@ -224,12 +265,16 @@ export default function EventLookImage({ showId, eventId, onToast, onSaved, poll
     }
     // The run is started (and paid for): from here nothing reads as a failed generate.
     setTimedOut(false);
+    const now = Date.now();
     await refreshAfterWrite();
     await load();
     if (data.step === 'awaiting_approval') {
       onToast?.('The base is waiting for your approval in Scene Sets');
       return;
     }
+    // Set with waiting, so the run never reads as over before it shows.
+    writeRunStart(eventId, now);
+    setRunStart(now);
     setWaiting(step);
   };
 
@@ -297,7 +342,7 @@ export default function EventLookImage({ showId, eventId, onToast, onSaved, poll
       )}
       {generating && timedOut && (
         <p className="ell-note" data-testid="event-look-timed-out">
-          Still running: this is taking longer than usual.{' '}
+          Still running{startedText ? <> since <time dateTime={new Date(startedAt).toISOString()} data-testid="event-look-started">{startedText}</time></> : ''}: this is taking longer than usual.{' '}
           <button type="button" className="ell-link" onClick={checkAgain} data-testid="event-look-check-again">Check again</button>
         </p>
       )}

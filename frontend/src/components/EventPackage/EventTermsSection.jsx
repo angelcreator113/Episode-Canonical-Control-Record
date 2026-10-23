@@ -47,7 +47,20 @@
  *
  * Writes that succeed are never reported as failed because the page's
  * refresh after them (onSaved) failed: that reads "couldn't refresh".
- * Removing a deliverable, restriction or relationship goal asks first.
+ * Removing a deliverable, restriction or relationship goal is done at once,
+ * with "Removed ‘…’ · Undo" in its box for a few seconds (useUndo; Evoni,
+ * 2026-10-23, undo instead of confirm). Undo puts a restriction or goal back
+ * where it was (event PUT) and adds a deliverable back with the same fields
+ * (a new row: a drafted row's "Auto-drafted" note does not come back). A
+ * deliverable that cannot be put back as it was still asks first: one with
+ * fulfilment recorded (a status past pending, after the terms were
+ * reopened), since a new row starts pending, and one whose stored type is
+ * free text from before the fixed list, which the routes no longer accept.
+ *
+ * "Price N items" (Evoni, 2026-10-23): with lines reading "Price required"
+ * (deliverable fees, the deal's fee components, costs Lala pays), one
+ * button opens the first with its number focused, and each save opens the
+ * next (utils/eventPriceWalk). Cancel or Stop pricing ends the walk.
  * `onPriceInputsChange({ deliverables, costs })` (optional) receives the
  * deliverable and cost rows as they load, for the readiness price gate
  * (computeEventPackageReadiness's `prices`); a list that failed to load is
@@ -57,7 +70,7 @@
  */
 import { useState, useEffect, useCallback, useRef } from 'react';
 import {
-  KeyRound, ClipboardList, Ban, Coins, Lock, Pencil, Plus, Trash2, Loader2, AlertCircle, Check, Handshake, Calculator,
+  KeyRound, ClipboardList, Ban, Coins, Lock, Pencil, Plus, Trash2, Loader2, AlertCircle, Check, Handshake, Calculator, Tag,
 } from 'lucide-react';
 import api from '../../services/api';
 import { saveErrorMessage as errorMessage } from '../../utils/eventSaveVersion';
@@ -77,7 +90,11 @@ import {
   bonusDraftNote, relationshipGoalsOf, relationshipGoalsDraftNote, buildRelationshipGoalRemove,
 } from '../../utils/eventTerms';
 import EventCostsTerm from './EventCostsTerm';
+import UndoNotice from './UndoNotice';
+import { useUndo } from './useUndo';
+import { unpricedItems, nextUnpriced, getPriceWalk, setPriceWalk, retainPriceWalk } from '../../utils/eventPriceWalk';
 import DeliverableProgress from '../Deliverables/DeliverableProgress';
+import './EventTermsSection.css';
 
 // The deliverable formats that go out as a Pulse post (services/postMedia FORMAT_FOR_DELIVERABLE).
 const POSTED_DELIVERABLES = new Set(['pulse_post', 'carousel_post', 'pulse_stories', 'pulse_video', 'grwm_video', 'try_on_haul', 'go_live']);
@@ -92,6 +109,42 @@ export const rateCardApi = () => api.get('/api/v1/deal-rates');
 export const proposeTermsApi = (showId, eventId, body) => api.post(`/api/v1/world/${showId}/events/${eventId}/propose-terms`, body);
 
 export const REFRESH_FAILED_MESSAGE = "Saved — couldn't refresh the page. Reload to see the change.";
+
+// An item put back where it was, or at the end when the list got shorter.
+// A list that still holds it (the page's refresh after the removal failed,
+// so the event on screen is the one before it) is saved as it is.
+const insertAt = (list, index, item, same) => {
+  const next = [...(list || [])];
+  if (next.some((x) => same(x, item))) return next;
+  next.splice(Math.min(Math.max(0, index), next.length), 0, item);
+  return next;
+};
+const sameRestriction = (a, b) => a?.description === b?.description && (a?.type || 'other') === (b?.type || 'other');
+const sameGoal = (a, b) => (a?.slot ?? null) === (b?.slot ?? null) && a?.label === b?.label;
+
+// A removed deliverable Undo can add back as it was: still pending (a new
+// row starts pending, with no fulfilment dates), and of a listed type or none
+// (free text from before the fixed list is refused by the routes).
+export function deliverableRestorable(d) {
+  const status = d?.status || 'pending';
+  if (status !== 'pending' || d?.completed_at || d?.submitted_at || d?.approved_at) return false;
+  return !d?.deliverable_type || DELIVERABLE_TYPES.includes(d.deliverable_type);
+}
+
+/** The POST body that adds a removed deliverable back with the same fields. */
+export function deliverableRestoreBody(d) {
+  const body = {
+    description: d.description,
+    deliverable_type: d.deliverable_type || null,
+    platform: d.platform ?? null,
+    due_date: d.due_date ?? null,
+    required: d.required !== false,
+    owed_to: d.owed_to === 'brand' ? 'brand' : 'host',
+    fee: d.fee ?? null,
+  };
+  if (d.quantity != null) body.quantity = Number(d.quantity);
+  return body;
+}
 
 export default function EventTermsSection({ showId, eventId, event, locked, putEvent, onSaved, onToast, onPriceInputsChange }) {
   const toast = (msg) => { if (onToast) onToast(msg); };
@@ -161,7 +214,11 @@ export default function EventTermsSection({ showId, eventId, event, locked, putE
     setDelivFormError(null);
     setDelivForm({ id: d ? d.id : null });
   };
-  const closeDeliverableForm = () => { if (!delivSaving) { setDelivForm(null); setDelivFormError(null); } };
+  const closeDeliverableForm = () => {
+    if (delivSaving) return;
+    if (delivForm?.id && walkOn(`deliverable:${delivForm.id}`)) endWalk();
+    setDelivForm(null); setDelivFormError(null);
+  };
 
   const saveDeliverable = async () => {
     if (locked || delivSaving || !delivForm) return;
@@ -172,7 +229,10 @@ export default function EventTermsSection({ showId, eventId, event, locked, putE
       if (delivForm.id) await updateDeliverableApi(showId, eventId, delivForm.id, built.body);
       else await createDeliverableApi(showId, eventId, built.body);
       toast(delivForm.id ? 'Deliverable saved' : 'Deliverable added');
-      setDelivForm(null);
+      const savedId = delivForm.id;
+      if (savedId) advanceWalk(`deliverable:${savedId}`);
+      // A form the price walk opened meanwhile for another row stays open.
+      setDelivForm((f) => (f && savedId && f.id !== savedId ? f : null));
       await loadDeliverables();
     } catch (err) {
       onDeliverableWriteError(err, 'Failed to save deliverable');
@@ -215,6 +275,8 @@ export default function EventTermsSection({ showId, eventId, event, locked, putE
     try {
       await updateDeliverableApi(showId, eventId, d.id, { fee: 0 });
       toast('Set to no fee (0)');
+      advanceWalk(`deliverable:${d.id}`);
+      setDelivForm((f) => (f?.id === d.id ? null : f));
       await loadDeliverables();
     } catch (err) {
       onDeliverableWriteError(err, 'Failed to set no fee');
@@ -226,11 +288,25 @@ export default function EventTermsSection({ showId, eventId, event, locked, putE
 
   const removeDeliverable = async (d) => {
     if (locked || delivSaving) return;
-    if (!window.confirm(`Remove the deliverable "${d.description || deliverableTypeLabel(d) || 'Deliverable'}"?`)) return;
+    const name = d.description || deliverableTypeLabel(d) || 'Deliverable';
+    // Undo adds the row back; one it could not add back as it was asks first.
+    const restorable = deliverableRestorable(d);
+    if (!restorable && !window.confirm(`Remove the deliverable "${name}"?`)) return;
     setDelivSaving(true);
     try {
       await deleteDeliverableApi(showId, eventId, d.id);
-      toast('Deliverable removed');
+      if (restorable) {
+        const body = deliverableRestoreBody(d);
+        delivUndo.offer({
+          message: `Removed '${name}'`,
+          undo: async (ctx) => {
+            await createDeliverableApi(showId, eventId, body);
+            await ctx.loadDeliverables?.();
+          },
+        });
+      } else {
+        toast('Deliverable removed');
+      }
       await loadDeliverables();
     } catch (err) {
       onDeliverableWriteError(err, 'Failed to remove deliverable');
@@ -250,7 +326,10 @@ export default function EventTermsSection({ showId, eventId, event, locked, putE
   const [dealDraft, setDealDraft] = useState(null); // null, or the chosen deal type ('' = none)
   const [termSaving, setTermSaving] = useState(null); // 'requirements' | 'restrictions' | 'compensation' | 'deal type'
 
-  const saveEventTerm = async (which, body, okMessage) => {
+  // afterSave (optional) runs once the save succeeded, before the page's
+  // refresh remounts this section: an Undo offer or the price walk's next
+  // step made there is still seen by the remounted section.
+  const saveEventTerm = async (which, body, okMessage, afterSave = null) => {
     if (locked || termSaving) return false;
     setTermSaving(which);
     try {
@@ -262,7 +341,8 @@ export default function EventTermsSection({ showId, eventId, event, locked, putE
       return false;
     }
     // Saved: the refresh's own failure is said as one (refreshPage).
-    toast(okMessage);
+    if (okMessage) toast(okMessage);
+    afterSave?.();
     await refreshPage();
     setTermSaving(null);
     return true;
@@ -276,6 +356,12 @@ export default function EventTermsSection({ showId, eventId, event, locked, putE
   };
 
   const restrictions = restrictionsOf(event);
+  // Undo's context: the newest mounted Terms' event and writers (the page
+  // remounts this section after the refresh a removal makes).
+  const undoContext = { event, putEvent, loadDeliverables, refreshPage };
+  const delivUndo = useUndo(`terms-deliverables:${eventId}`, undoContext);
+  const restrictionUndo = useUndo(`terms-restrictions:${eventId}`, undoContext);
+  const goalUndo = useUndo(`terms-goals:${eventId}`, undoContext);
   const addRestriction = async () => {
     const built = buildRestrictionAdd(event, restrictionText);
     if (built.error) { setRestrictionError(built.error); return; }
@@ -284,8 +370,15 @@ export default function EventTermsSection({ showId, eventId, event, locked, putE
   };
   const removeRestriction = (index) => {
     const r = restrictions[index];
-    if (!window.confirm(`Remove the restriction "${r?.description || 'this restriction'}"?`)) return;
-    saveEventTerm('restrictions', buildRestrictionRemove(event, index).body, 'Restriction removed');
+    if (!r) return;
+    saveEventTerm('restrictions', buildRestrictionRemove(event, index).body, null, () => restrictionUndo.offer({
+      message: `Removed '${r.description}'`,
+      undo: async (ctx) => {
+        const list = restrictionsOf(ctx.event);
+        await ctx.putEvent({ restrictions: insertAt(list, index, r, sameRestriction) });
+        await ctx.refreshPage?.();
+      },
+    }));
   };
 
   // D14 (2026-09-30): the deal is the components Evoni ticks; its label is
@@ -318,11 +411,74 @@ export default function EventTermsSection({ showId, eventId, event, locked, putE
   // travel when Lala travels) as cost rows (D13).
   const [costsKey, setCostsKey] = useState(0);
 
+  // ── Price all (Evoni, 2026-10-23): "Price N items" ──
+  // The costs as EventCostsTerm loads them (null until then, or failed).
+  const [costRows, setCostRows] = useState(null);
+  const [costsLoaded, setCostsLoaded] = useState(false);
+  const [walk, setWalkState] = useState(() => getPriceWalk(eventId));
+  useEffect(() => retainPriceWalk(eventId), [eventId]);
+  const setWalk = (w) => setWalkState(setPriceWalk(eventId, w));
+  const unpriced = locked ? [] : unpricedItems({ event, deliverables: delivLoadError ? [] : deliverables, costs: costRows || [] });
+  const walkReady = !delivLoading && (!isDealEvent(event) || costsLoaded);
+  const walkOn = (key) => getPriceWalk(eventId)?.current === key;
+  const endWalk = () => setWalk(null);
+  const startWalk = () => {
+    const first = unpriced[0];
+    if (first) setWalk({ current: first.key, done: [first.key] });
+  };
+  // The next item not yet offered, or the end of the walk.
+  const walkOnFrom = (w) => {
+    const next = nextUnpriced(unpriced, w.done);
+    if (next) setWalk({ current: next.key, done: [...w.done, next.key] });
+    else { setWalk(null); toast('That was the last price to set'); }
+  };
+  // After the item the walk is on was saved.
+  const advanceWalk = (fromKey) => {
+    const w = getPriceWalk(eventId);
+    if (w && w.current === fromKey) walkOnFrom(w);
+  };
+  const walkItem = walk ? unpriced.find((i) => i.key === walk.current) || null : null;
+
+  // Opens what the walk is on (also in a section remounted mid-walk); an
+  // item priced or removed elsewhere moves the walk on.
+  useEffect(() => {
+    if (!walk || locked || !walkReady) return;
+    if (!walkItem) {
+      walkOnFrom(walk);
+      return;
+    }
+    if (walkItem.kind === 'deliverable' && delivForm?.id !== walkItem.id) {
+      const d = deliverables.find((x) => x.id === walkItem.id);
+      if (d) openDeliverableForm(d);
+    }
+    if (walkItem.kind === 'component' && feeDraft?.field !== walkItem.id) {
+      setFeeDraft({ field: walkItem.id, value: event?.[walkItem.id] == null ? '' : String(event[walkItem.id]) });
+    }
+  }, [walk, walkReady, locked, deliverables, costRows, event]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // The number to type, focused (a cost's is focused by EventCostsTerm).
+  const sectionRef = useRef(null);
+  useEffect(() => {
+    if (!walkItem || walkItem.kind === 'cost') return;
+    const selector = walkItem.kind === 'component'
+      ? `[data-testid="terms-component-input-${walkItem.id}"]`
+      : '[data-testid="terms-deliverable-fee"]';
+    const el = sectionRef.current?.querySelector(selector);
+    if (el && document.activeElement !== el) {
+      el.focus();
+      el.scrollIntoView?.({ block: 'center', behavior: 'smooth' });
+    }
+  }, [walkItem?.key, feeDraft?.field, delivForm?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const saveComponentFee = async (label) => {
     if (!feeDraft) return;
     const built = buildComponentFeeUpdate(feeDraft.field, feeDraft.value);
     if (built.error) { toast(`${label}: ${built.error}`); return; }
-    if (await saveEventTerm(label.toLowerCase(), built.body, `${label} saved`)) setFeeDraft(null);
+    const { field } = feeDraft;
+    if (await saveEventTerm(label.toLowerCase(), built.body, `${label} saved`, () => advanceWalk(`component:${field}`))) {
+      // A fee the price walk opened meanwhile stays open.
+      setFeeDraft((d) => (d?.field === field ? null : d));
+    }
   };
 
   // D13 answer 6: the relationship goals drafted with the deliverables.
@@ -330,8 +486,15 @@ export default function EventTermsSection({ showId, eventId, event, locked, putE
   const relationshipGoalsNote = relationshipGoalsDraftNote(event);
   const removeRelationshipGoal = (index) => {
     const g = relationshipGoals[index];
-    if (!window.confirm(`Remove the goal "${g?.label || 'this goal'}"?`)) return;
-    saveEventTerm('goals', buildRelationshipGoalRemove(event, index).body, 'Goal removed');
+    if (!g) return;
+    saveEventTerm('goals', buildRelationshipGoalRemove(event, index).body, null, () => goalUndo.offer({
+      message: `Removed '${g.label}'`,
+      undo: async (ctx) => {
+        const list = relationshipGoalsOf(ctx.event);
+        await ctx.putEvent({ canon_consequences: { automation: { relationship_goals: insertAt(list, index, g, sameGoal) } } });
+        await ctx.refreshPage?.();
+      },
+    }));
   };
 
   // Performance bonus (deal build PR 5): only when the deal contains one.
@@ -433,7 +596,7 @@ export default function EventTermsSection({ showId, eventId, event, locked, putE
             />
           </label>
           <div className="epp-term-actions">
-            <button type="button" className="epp-btn epp-btn-small" onClick={() => setFeeDraft(null)} disabled={!!termSaving}>Cancel</button>
+            <button type="button" className="epp-btn epp-btn-small" onClick={() => { if (walkOn(`component:${field}`)) endWalk(); setFeeDraft(null); }} disabled={!!termSaving}>Cancel</button>
             <button type="button" className="epp-btn epp-btn-small epp-btn-primary" data-testid={`terms-component-save-${field}`} onClick={() => saveComponentFee(label)} disabled={!!termSaving}>
               {termSaving ? 'Saving…' : 'Save'}
             </button>
@@ -456,7 +619,7 @@ export default function EventTermsSection({ showId, eventId, event, locked, putE
   };
 
   return (
-    <section className="epp-section epp-terms" data-testid="terms-section">
+    <section className="epp-section epp-terms" data-testid="terms-section" ref={sectionRef}>
       <div className="epp-section-header">
         <h2 className="epp-section-title">Terms</h2>
         {locked && (
@@ -468,6 +631,28 @@ export default function EventTermsSection({ showId, eventId, event, locked, putE
       <p className="epp-terms-intro">
         What Lala must have to take part, what she owes, what she agrees not to do, and what she is paid.
       </p>
+      {!locked && (walk || (walkReady && unpriced.length > 0)) && (
+        <div className={`ets-pricewalk${walk ? ' is-on' : ''}`} data-testid="terms-price-walk">
+          {walk ? (
+            <>
+              <span className="ets-pricewalk-text" data-testid="terms-price-walk-status">
+                Pricing {walkItem ? <strong>{walkItem.label}</strong> : '…'}
+                {': '}{Math.max(0, unpriced.filter((i) => !walk.done.includes(i.key)).length)} more after this. Save to go on.
+              </span>
+              <button type="button" className="epp-btn epp-btn-small" onClick={endWalk} data-testid="terms-price-stop">Stop pricing</button>
+            </>
+          ) : (
+            <>
+              <span className="ets-pricewalk-text">
+                <AlertCircle size={12} aria-hidden="true" /> {unpriced.length === 1 ? '1 line reads' : `${unpriced.length} lines read`} &ldquo;Price required&rdquo;.
+              </span>
+              <button type="button" className="epp-btn epp-btn-small ets-pricewalk-go" onClick={startWalk} data-testid="terms-price-all">
+                <Tag size={12} aria-hidden="true" /> Price {unpriced.length} {unpriced.length === 1 ? 'item' : 'items'}
+              </button>
+            </>
+          )}
+        </div>
+      )}
 
       <div className="epp-terms-grid">
         {/* Access requirements */}
@@ -605,6 +790,7 @@ export default function EventTermsSection({ showId, eventId, event, locked, putE
               })}
             </ul>
           ) : <div className="epp-empty">None set</div>}
+          <UndoNotice undo={delivUndo} testId="terms-deliverable-undo" />
           {/* Deliverables that check themselves (2026-10-19): the Pulse posts that count. */}
           {deliverables.some((d) => POSTED_DELIVERABLES.has(d.deliverable_type)) && (
             <DeliverableProgress key={deliverables.map((d) => `${d.id}:${d.quantity}`).join(',')} eventId={eventId} />
@@ -717,6 +903,7 @@ export default function EventTermsSection({ showId, eventId, event, locked, putE
               </div>
             </div>
           )}
+          <UndoNotice undo={goalUndo} testId="terms-goal-undo" />
           {relationshipGoals.length > 0 && (
             <div className="epp-term-goals" data-testid="terms-relationship-goals">
               <span className="epp-term-premium-title">Lala's goals (not owed)</span>
@@ -776,6 +963,7 @@ export default function EventTermsSection({ showId, eventId, event, locked, putE
               ))}
             </ul>
           ) : <div className="epp-empty">None set</div>}
+          <UndoNotice undo={restrictionUndo} testId="terms-restriction-undo" />
           {!locked && (restrictions.length > 0 || restrictionAddOpen) && (
             <div className="epp-term-add">
               <input
@@ -972,7 +1160,11 @@ export default function EventTermsSection({ showId, eventId, event, locked, putE
         {isDealEvent(event) && (
           <EventCostsTerm
             showId={showId} eventId={eventId} locked={locked} refreshKey={costsKey}
-            onSaved={onSaved} onToast={onToast} onCostsChange={(costs) => reportPriceInputs({ costs })}
+            onSaved={onSaved} onToast={onToast}
+            onCostsChange={(costs) => { reportPriceInputs({ costs }); setCostRows(costs); setCostsLoaded(true); }}
+            pricingId={walk && walk.current.startsWith('cost:') ? walk.current.slice(5) : null}
+            onPriced={(id) => advanceWalk(`cost:${id}`)}
+            onPricingCancel={endWalk}
           />
         )}
 

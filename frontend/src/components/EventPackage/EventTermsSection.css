@@ -1,0 +1,23 @@
+/* EventTermsSection additions (Evoni, 2026-10-23); the Terms' own styles live in pages/EventPackagePage.css. */
+
+/* "Price N items": the walk through every "Price required" line. */
+.ets-pricewalk {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 12px;
+  margin: 0 0 12px; padding: 8px 12px; min-width: 0;
+  border: 1px solid var(--lala-gold-line, #E8D9A8); border-radius: var(--lala-radius, 8px);
+  background: var(--lala-gold-soft, #FDF8EE);
+  font-family: var(--font-ui, 'DM Mono', monospace); font-size: 12px; color: var(--lala-ink, #2C2C2C);
+}
+.ets-pricewalk.is-on { border-left: 3px solid var(--lala-gold, #B8962E); }
+.ets-pricewalk-text { flex: 1 1 200px; min-width: 0; overflow-wrap: anywhere; line-height: 1.5; }
+.ets-pricewalk-text svg { display: inline-block; vertical-align: -2px; margin-right: 4px; }
+.ets-pricewalk-text strong { font-weight: 600; }
+.ets-pricewalk .epp-btn { flex: none; }
+/* Gold under ink (the token's rule: never under white). */
+.ets-pricewalk .epp-btn.ets-pricewalk-go {
+  background: var(--lala-gold, #B8962E); border-color: var(--lala-gold, #B8962E); color: var(--lala-ink, #2C2C2C); font-weight: 600;
+}
+.ets-pricewalk .epp-btn.ets-pricewalk-go:hover:not(:disabled) { background: var(--lala-gold-hover, #A68324); border-color: var(--lala-gold-hover, #A68324); }
+
+/* An Undo notice in a term that reads as one line (no rows left) takes its own line. */
+.epp-term.is-empty > .eun-region.has-notice { order: 3; flex-basis: 100%; margin: 4px 0 0; }
