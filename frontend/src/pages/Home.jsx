@@ -1,13 +1,38 @@
-// frontend/src/pages/Home.jsx — Creator Command Center
-import { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { RefreshCw } from 'lucide-react';
+// frontend/src/pages/Home.jsx — the homepage: the show's front page and today's work
+//
+// Evoni, 2026-10-23: "combine the homepage and daily update page", laid out
+// like her mockup (hero, tiles, Continue Episode + Upcoming Event, Trending in
+// LalaVerse, then Lala's journey, Today's To-Do and Shop the Look). Every card
+// is the creator's real data and opens where it is worked on:
+//
+//   Hero            the active show (utils/activeShow, else the one with the most
+//                   episodes), its cover and Lala's portrait; Continue, Refresh
+//   Tiles           Episodes, Closet, Style Page, The Cast, Map, Lala's Bank, Shop, The Pulse
+//   Continue        the episode most recently worked on, at its stage (episodePipeline)
+//   Upcoming event  the next ready event (ShowOverview's nextReadyEvent)
+//   Trending        the show's live Pulse posts with the most likes
+//   Lala's journey  Prime Coins, reputation and brand trust (characters/lala/state)
+//   Today's To-Do   the daily update's "waiting for you", decided here (DailyUpdate's DECIDE);
+//                   since yesterday and today's AI spend as one line; /today has the rest
+//   Shop the Look   the newest published look
+//
+// Each read fails on its own: a card whose read fails shows its empty line.
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { Link } from 'react-router-dom';
+import {
+  RefreshCw, Play, Clapperboard, Shirt, Sparkles, Users, Map as MapIcon, Coins, ShoppingBag, Radio,
+  Heart, ChevronRight, CalendarDays, Star, Check, X, BookOpen, ArrowRight,
+} from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { episodeService } from '../services/episodeService';
 import { showService } from '../services/showService';
-import universeService from '../services/universeService';
 import storytellerService from '../services/storytellerService';
 import apiClient from '../services/api';
+import { STAGES, stageOf, episodeCode } from '../lib/episodePipeline';
+import { nextReadyEvent } from '../components/Show/ShowOverview';
+import { computeEventState } from '../utils/eventReadinessSections';
+import { DECIDE } from './DailyUpdate';
+import { activeShowId } from '../utils/activeShow';
 import PageLayout from '../components/layout/PageLayout';
 import './Home.css';
 
@@ -16,57 +41,191 @@ import './Home.css';
 // (CP3 WriteMode.jsx + CP6 CharacterTherapy.jsx also have it).
 export const listRegistriesApi = () => apiClient.get('/api/v1/character-registry/registries');
 
-const CHIP_COLORS = ['pink', 'purple', 'blue'];
-const BOOK_ICONS = ['📖', '📕', '📗', '📘', '📙'];
+const TODO_SHOWN = 5;
+const TRENDING_SHOWN = 5;
+
+const usd = (n) => `$${Number(n || 0).toFixed(2)}`;
+const count = (n) => (n >= 1000 ? `${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}K` : String(n || 0));
+const time = (d) => (d ? new Date(d).getTime() || 0 : 0);
+
+/** Days from today to a free-text event date, or null when it doesn't read as a date. */
+export function daysUntil(text, now = new Date()) {
+  const t = Date.parse(text || '');
+  if (Number.isNaN(t)) return null;
+  const day = (d) => Date.UTC(d.getFullYear(), d.getMonth(), d.getDate());
+  return Math.round((day(new Date(t)) - day(now)) / 864e5);
+}
+
+/**
+ * The event to show: the next ready one, else the soonest dated event not yet
+ * used in an episode (still being set up), else any unused one.
+ */
+export function upcomingEvent(events) {
+  const ready = nextReadyEvent(events);
+  if (ready) return { event: ready, ready: true };
+  const open = (events || []).filter((ev) => !ev.used_in_episode_id && ev.status !== 'used' && ev.status !== 'archived');
+  const dated = open.filter((ev) => !Number.isNaN(Date.parse(ev.event_date || ''))).sort((a, b) => Date.parse(a.event_date) - Date.parse(b.event_date));
+  const event = dated[0] || open[0] || null;
+  return event ? { event, ready: computeEventState(event) === 'ready' } : null;
+}
+
+/** The show the page is about: the active one, else the one with the most episodes. */
+export function homeShow(shows) {
+  const list = shows || [];
+  const id = activeShowId({ shows: list });
+  return list.find((s) => String(s.id) === String(id))
+    || [...list].sort((a, b) => (b.episodeCount || 0) - (a.episodeCount || 0))[0] || null;
+}
+
+/** The live posts with the most likes, highest first. */
+export function trending(posts, n = TRENDING_SHOWN) {
+  return [...(posts || [])].sort((a, b) => (b.likes || 0) - (a.likes || 0) || time(b.posted_at) - time(a.posted_at)).slice(0, n);
+}
+
+/** The episode most recently worked on: in progress first, else the newest. */
+export function continueEpisode(episodes) {
+  const live = (episodes || []).filter((e) => stageOf(e) && stageOf(e) !== 'released');
+  const pool = live.length ? live : (episodes || []).filter((e) => stageOf(e));
+  return [...pool].sort((a, b) => time(b.updated_at) - time(a.updated_at))[0] || null;
+}
+
+/** The daily update's waiting items as one list, in the update's group order. */
+export function todoItems(waiting) {
+  return (waiting || []).flatMap((g) => (g.items || []).map((item) => ({ group: g.key, label: g.label, read_only: g.read_only, link: g.link, item })));
+}
+
+const pictureOf = (p) => p.image_url || p.photos?.[0]?.url || p.author_portrait_url || null;
+
+function todoText(group, it) {
+  if (group === 'drafts') return `${it.handle || it.name || 'A post'}: ${it.text || 'no words yet'}`;
+  if (group === 'voices') return `${it.name}'s voice is ready`;
+  if (group === 'secrets') return `${it.name}: ${it.text}`;
+  if (group === 'deals') return `${it.brand || it.name}${it.amount ? ` · ${usd(it.amount)}` : ''}`;
+  if (group === 'findings') return `${it.name}: ${it.open} open finding${it.open === 1 ? '' : 's'}`;
+  return it.name || it.text || '';
+}
+
+function Todo({ update, onDecided }) {
+  const [done, setDone] = useState({});
+  const [busy, setBusy] = useState(null);
+  const rows = todoItems(update?.waiting);
+  const total = (update?.waiting || []).reduce((n, g) => n + (g.total || 0), 0);
+
+  const decide = async (row, how) => {
+    const id = `${row.group}:${row.item.id}`;
+    setBusy(id);
+    try {
+      await how.call(row.item);
+      setDone((d) => ({ ...d, [id]: { text: how.done } }));
+      onDecided?.();
+    } catch (err) {
+      console.error('[Home] To-Do decision failed:', err?.response?.status || err?.message);
+      setDone((d) => ({ ...d, [id]: { text: err?.response?.data?.error || 'That didn’t go through. Try again.', error: true } }));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const since = update?.since_yesterday;
+  const cost = update?.cost;
+  return (
+    <section className="hp-card hp-todo" aria-labelledby="hp-todo-h" data-testid="home-todo">
+      <div className="hp-card__head">
+        <h2 id="hp-todo-h">Today&apos;s To-Do {total > 0 && <span className="hp-count">{total}</span>}</h2>
+        <Link className="hp-see" to="/today">See all</Link>
+      </div>
+      {since && (
+        <p className="hp-since" data-testid="home-since">
+          {since.went_live?.total || 0} went live · {since.scheduled?.total || 0} scheduled · {since.new_characters?.total || 0} new
+          {cost && <> · AI {usd(cost.spent_usd)} of {usd(cost.budget_usd)}</>}
+        </p>
+      )}
+      {rows.length === 0 ? (
+        <p className="hp-empty-line">Nothing waiting for you.</p>
+      ) : (
+        <ul className="hp-todo-list">
+          {rows.slice(0, TODO_SHOWN).map((row) => {
+            const id = `${row.group}:${row.item.id}`;
+            const how = DECIDE[row.group];
+            const d = done[id];
+            return (
+              <li key={id} className={`hp-todo-row${d && !d.error ? ' is-done' : ''}`} data-testid={`home-todo-${id}`}>
+                <span className="hp-todo-kind">{row.label}</span>
+                <span className="hp-todo-text">{todoText(row.group, row.item)}</span>
+                <span className="hp-todo-actions">
+                  {d && !d.error ? (
+                    <span className="hp-todo-done"><Check size={14} aria-hidden /> {d.text}</span>
+                  ) : row.read_only || !how ? (
+                    <Link className="hp-todo-btn" to={row.item.character_id ? `/character/${row.item.character_id}` : (row.link || '/today')}>Open</Link>
+                  ) : (
+                    <>
+                      {how.yes && <button type="button" className="hp-todo-btn is-yes" disabled={!!busy} onClick={() => decide(row, how.yes)}><Check size={14} aria-hidden /> {how.yes.label}</button>}
+                      {how.no && <button type="button" className="hp-todo-btn" disabled={!!busy} onClick={() => decide(row, how.no)}><X size={14} aria-hidden /> {how.no.label}</button>}
+                    </>
+                  )}
+                </span>
+                {d?.error && <p className="hp-todo-error" role="alert">{d.text}</p>}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      <Link className="hp-pill-btn" to="/today">Open tasks</Link>
+    </section>
+  );
+}
 
 function Home() {
-  const navigate = useNavigate();
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   // A refresh keeps the page on screen and reloads its data (Evoni, 2026-10-23:
   // pull-to-refresh is off on phones, so the page has its own Refresh).
   const [refreshing, setRefreshing] = useState(false);
-  const [universes, setUniverses] = useState([]);
-  const [series, setSeries] = useState([]);
-  const [books, setBooks] = useState([]);
-  const [shows, setShows] = useState([]);
-  const [episodes, setEpisodes] = useState([]);
-  const [characters, setCharacters] = useState([]);
+  const [data, setData] = useState({});
 
   const loadingRef = useRef(false);
+
+  const loadAll = useCallback(async ({ quiet = false } = {}) => {
+    if (!quiet) setLoading(true);
+    const ok = (r) => (r.status === 'fulfilled' ? r.value : undefined);
+    const showsRes = await Promise.allSettled([showService.getAllShows()]);
+    const shows = Array.isArray(ok(showsRes[0])) ? ok(showsRes[0]) : undefined;
+    const show = homeShow(shows);
+    const sid = show?.id;
+    const [epRes, evRes, postRes, stateRes, updRes, looksRes, regRes, booksRes] = await Promise.allSettled([
+      episodeService.getEpisodes(1, 100).then((r) => r?.data || []),
+      sid ? apiClient.get(`/api/v1/world/${sid}/events`).then((r) => r.data?.events || []) : Promise.resolve([]),
+      sid ? apiClient.get(`/api/v1/feed-posts?show_id=${sid}&status=live&limit=50`).then((r) => r.data?.data || []) : Promise.resolve([]),
+      sid ? apiClient.get(`/api/v1/characters/lala/state?show_id=${sid}`).then((r) => r.data?.state || null) : Promise.resolve(null),
+      apiClient.get('/api/v1/daily-update').then((r) => r.data),
+      apiClient.get('/api/v1/public/looks').then((r) => r.data?.looks || []),
+      listRegistriesApi().then((r) => (r.data?.registries || []).flatMap((reg) => reg.characters || [])),
+      storytellerService.getBooks(),
+    ]);
+    setData((prev) => {
+      // A read that failed keeps what the card showed.
+      const keep = (r, key) => (r.status === 'fulfilled' ? r.value : prev[key]);
+      return {
+        shows: shows ?? prev.shows,
+        show: shows ? show : prev.show,
+        episodes: keep(epRes, 'episodes'),
+        events: keep(evRes, 'events'),
+        posts: keep(postRes, 'posts'),
+        lala: keep(stateRes, 'lala'),
+        update: keep(updRes, 'update'),
+        looks: keep(looksRes, 'looks'),
+        characters: keep(regRes, 'characters'),
+        books: keep(booksRes, 'books'),
+      };
+    });
+    setLoading(false);
+  }, []);
+
   useEffect(() => {
     if (loadingRef.current) return;
     loadingRef.current = true;
     loadAll().finally(() => { loadingRef.current = false; });
-  }, []);
-
-  const loadAll = async ({ quiet = false } = {}) => {
-    if (!quiet) setLoading(true);
-    // Fire all in parallel, swallow individual errors
-    const [uniRes, seriesRes, booksRes, showsRes, epRes, charRes] = await Promise.allSettled([
-      universeService.getUniverses(),
-      universeService.getSeries(),
-      storytellerService.getBooks(),
-      showService.getAllShows(),
-      episodeService.getEpisodes(1, 50).then(r => r?.data || []),
-      listRegistriesApi().then(res => {
-        const d = res.data;
-        const allChars = [];
-        (d?.registries || []).forEach(reg => {
-          (reg.characters || []).forEach(c => allChars.push(c));
-        });
-        return allChars;
-      }),
-    ]);
-
-    if (uniRes.status === 'fulfilled') setUniverses(Array.isArray(uniRes.value) ? uniRes.value : []);
-    if (seriesRes.status === 'fulfilled') setSeries(Array.isArray(seriesRes.value) ? seriesRes.value : []);
-    if (booksRes.status === 'fulfilled') setBooks(Array.isArray(booksRes.value) ? booksRes.value : []);
-    if (showsRes.status === 'fulfilled') setShows(Array.isArray(showsRes.value) ? showsRes.value : []);
-    if (epRes.status === 'fulfilled') setEpisodes(Array.isArray(epRes.value) ? epRes.value : []);
-    if (charRes.status === 'fulfilled') setCharacters(Array.isArray(charRes.value) ? charRes.value : []);
-    setLoading(false);
-  };
+  }, [loadAll]);
 
   const refresh = () => {
     if (loadingRef.current) return;
@@ -78,36 +237,6 @@ function Home() {
     });
   };
 
-  /* ── helpers ── */
-  const userName = user?.name || user?.email?.split('@')[0] || 'Creator';
-  const today = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
-
-  const primaryUniverse = universes[0]; // show the first universe on the card
-
-  const daysSince = (d) => { if (!d) return 999; return Math.floor((Date.now() - new Date(d).getTime()) / 864e5); };
-  const relTime = (d) => {
-    const n = daysSince(d);
-    if (n === 0) return 'Today';
-    if (n === 1) return 'Yesterday';
-    if (n < 7) return `${n}d ago`;
-    if (n < 30) return `${Math.floor(n / 7)}w ago`;
-    return `${Math.floor(n / 30)}mo ago`;
-  };
-
-  const epStatusClass = (s) => {
-    if (['in_build', 'in_progress', 'editing'].includes(s)) return 'progress';
-    if (['published', 'complete', 'completed'].includes(s)) return 'complete';
-    if (s === 'review') return 'review';
-    return 'draft';
-  };
-
-  const bookApprovalPct = (b) => {
-    const total = b.line_count || 0;
-    if (!total) return 0;
-    return Math.round(((b.approved_count || 0) / total) * 100);
-  };
-
-  /* ── Loading ── */
   if (loading) {
     return (
       <div className="home-loading">
@@ -117,20 +246,56 @@ function Home() {
     );
   }
 
-  /* ══════════ RENDER ══════════ */
+  const { show, update, lala } = data;
+  const sid = show?.id;
+  const episodes = (data.episodes || []).filter((e) => !sid || !e.show_id || e.show_id === sid);
+  const characters = Array.isArray(data.characters) ? data.characters : [];
+  const books = Array.isArray(data.books) ? data.books : [];
+  const lalaChar = characters.find((c) => c.character_key === 'lala') || characters.find((c) => /^lala$/i.test(c.display_name || ''));
+  const current = continueEpisode(episodes);
+  const upcoming = upcomingEvent(data.events || []);
+  const event = upcoming?.event || null;
+  const hot = trending(data.posts);
+  const look = (data.looks || [])[0] || null;
+  const userName = user?.name || user?.email?.split('@')[0] || 'Creator';
+  const today = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+  const world = (tab) => (sid ? `/shows/${sid}/world?tab=${tab}` : '/shows');
+
+  const tiles = [
+    { key: 'episodes', label: 'Episodes', icon: Clapperboard, to: world('episodes-production') },
+    { key: 'closet', label: 'Closet', icon: Shirt, to: world('wardrobe-items') },
+    { key: 'style', label: 'Style Page', icon: Sparkles, to: current ? `/episodes/${current.id}?tab=lookbook` : world('episodes-production') },
+    { key: 'cast', label: 'The Cast', icon: Users, to: '/character-registry?view=world' },
+    { key: 'map', label: 'Map', icon: MapIcon, to: '/universe?tab=world&sub=map' },
+    { key: 'bank', label: "Lala's Bank", icon: Coins, to: world('finances') },
+    { key: 'shop', label: 'Shop', icon: ShoppingBag, to: '/shop-the-look' },
+    { key: 'pulse', label: 'The Pulse', icon: Radio, to: '/pulse' },
+  ];
+
+  const stageIdx = current ? STAGES.findIndex((s) => s.key === stageOf(current)) : -1;
+  const eventDays = event ? daysUntil(event.event_date) : null;
+  const eventPicture = event?.invitation_url || event?.sceneSet?.base_still_url || null;
+  const heroPicture = show?.coverImageUrl || show?.cover_image_url || null;
+  const portrait = lalaChar?.portrait_url || null;
+
   return (
     <div className="home-page">
       <PageLayout variant="wide" className="home-container">
 
-        {/* ─── Welcome Hero Strip ─── */}
-        <header className="home-hero">
-          <div className="home-hero__inner">
-            <div>
-              <h1>Welcome back, {userName}</h1>
-              <p className="home-hero__tagline">Your universe is waiting.</p>
-            </div>
-            <div className="home-hero__side">
-              <span className="home-hero__date">{today}</span>
+        {/* ─── Hero ─── */}
+        <header className={`hp-hero${heroPicture ? ' has-picture' : ''}`} data-testid="home-hero"
+          style={heroPicture ? { '--hp-hero-img': `url("${heroPicture}")` } : undefined}>
+          {portrait && <img className="hp-hero__portrait" src={portrait} alt="Lala" />}
+          <div className="hp-hero__body">
+            <p className="hp-hero__hello">Welcome back, {userName} · {today}</p>
+            <h1 className="hp-hero__title">{show?.name || show?.title || 'Your studio'}</h1>
+            {show?.description && <p className="hp-hero__tagline">{show.description}</p>}
+            <div className="hp-hero__actions">
+              {current && (
+                <Link className="hp-hero__play" to={`/episodes/${current.id}`} data-testid="home-continue-top">
+                  <Play size={16} aria-hidden /> Continue {episodeCode(current)}
+                </Link>
+              )}
               <button type="button" className="home-refresh" onClick={refresh} disabled={refreshing}
                 aria-busy={refreshing} data-testid="home-refresh">
                 <RefreshCw size={16} aria-hidden="true" className={refreshing ? 'is-spinning' : undefined} />
@@ -140,278 +305,144 @@ function Home() {
           </div>
         </header>
 
-        {/* ─── Universe ─── */}
-        <section className="hp-section">
-          {primaryUniverse ? (() => {
-            const desc = primaryUniverse.description || 'A vast narrative universe ready to be shaped.';
-            const shortDesc = desc.length > 120 ? desc.slice(0, 120).trimEnd() + '…' : desc;
-            return (
-            <div className="hp-universe-card" onClick={() => navigate('/universe')} style={{ cursor: 'pointer' }}>
-              <div className="hp-universe-header">
-                <div>
-                  <div className="hp-universe-label">🌌 Your Universe</div>
-                  <h3 className="hp-universe-name">{primaryUniverse.name}</h3>
-                  <p className="hp-universe-desc">{shortDesc}</p>
-                </div>
-                <button className="hp-btn-open" onClick={(e) => { e.stopPropagation(); navigate('/universe'); }}>
-                  View More →
-                </button>
-              </div>
+        {/* ─── Tiles ─── */}
+        <nav className="hp-tiles" aria-label="Go to">
+          {tiles.map(({ key, label, icon: Icon, to }) => (
+            <Link key={key} className={`hp-tile hp-tile--${key}`} to={to} data-testid={`home-tile-${key}`}>
+              <span className="hp-tile__icon"><Icon size={26} aria-hidden /></span>
+              <span className="hp-tile__label">{label}</span>
+            </Link>
+          ))}
+        </nav>
 
-              {/* Theme chips */}
-              <div className="hp-universe-themes">
-                {(primaryUniverse.core_themes || ['Identity', 'Power', 'Legacy']).slice(0, 5).map((t, i) => (
-                  <span key={i} className={`hp-theme-chip hp-theme-chip--${CHIP_COLORS[i % 3]}`}>
-                    {typeof t === 'string' ? t : t.name || t}
-                  </span>
-                ))}
-              </div>
-
-              <div className="hp-universe-stats">
-                <div className="hp-universe-stat">
-                  <span className="hp-universe-stat__val">{series.length}</span>
-                  <span className="hp-universe-stat__label">Series</span>
+        {/* ─── Continue + Upcoming event ─── */}
+        <div className="hp-pair">
+          <section className="hp-feature hp-feature--episode" aria-labelledby="hp-cont-h" data-testid="home-continue"
+            style={current?.thumbnail_url ? { '--hp-feature-img': `url("${current.thumbnail_url}")` } : undefined}>
+            <h2 id="hp-cont-h" className="hp-feature__kicker">Continue Episode</h2>
+            {current ? (
+              <>
+                <p className="hp-feature__code">{episodeCode(current)}</p>
+                <p className="hp-feature__title">{current.title || 'Untitled'}</p>
+                <div className="hp-progress" role="img" aria-label={`Stage ${stageIdx + 1} of ${STAGES.length}: ${STAGES[stageIdx]?.label}`}>
+                  <span className="hp-progress__bar"><span style={{ width: `${((stageIdx + 1) / STAGES.length) * 100}%` }} /></span>
+                  <span className="hp-progress__label">{STAGES[stageIdx]?.label} · stage {stageIdx + 1} of {STAGES.length}</span>
                 </div>
-                <div className="hp-universe-stat">
-                  <span className="hp-universe-stat__val">{books.length}</span>
-                  <span className="hp-universe-stat__label">Books</span>
-                </div>
-                <div className="hp-universe-stat">
-                  <span className="hp-universe-stat__val">{shows.length}</span>
-                  <span className="hp-universe-stat__label">Shows</span>
-                </div>
-                <div className="hp-universe-stat">
-                  <span className="hp-universe-stat__val">{episodes.length}</span>
-                  <span className="hp-universe-stat__label">Episodes</span>
-                </div>
-              </div>
-            </div>
-            );
-          })() : (
-            <div className="hp-universe-card">
-              <div className="hp-empty">
-                <div className="hp-empty__icon">🌌</div>
-                <p className="hp-empty__text">No universe created yet</p>
-                <button className="hp-empty__btn" onClick={() => navigate('/universe')}>Create Universe →</button>
-              </div>
-            </div>
-          )}
-        </section>
-
-        {/* ─── Two-Column: StoryTeller + Shows ─── */}
-        <div className="hp-two-col">
-
-          {/* — StoryTeller Books — */}
-          <section className="hp-st-card">
-            <div className="hp-section__head">
-              <h2 className="hp-section__title"><span className="s-icon">📖</span> StoryTeller</h2>
-              <button className="hp-section__link" onClick={() => navigate('/storyteller')}>View All →</button>
-            </div>
-
-            {books.length > 0 ? (
-              <ul className="hp-st-list">
-                {books.slice(0, 5).map((book, idx) => {
-                  const pct = bookApprovalPct(book);
-                  const colorKey = CHIP_COLORS[idx % 3];
-                  return (
-                    <li key={book.id} className="hp-st-item" onClick={() => navigate(`/storyteller`)}>
-                      <div className={`hp-book-icon hp-book-icon--${colorKey}`}>
-                        {BOOK_ICONS[idx % BOOK_ICONS.length]}
-                      </div>
-                      <div className="hp-st-info">
-                        <div className="hp-st-title">{book.title}</div>
-                        <div className="hp-st-meta">
-                          {book.chapter_count || 0} chapters · {book.line_count || 0} lines
-                        </div>
-                      </div>
-                      <div className="hp-st-progress">
-                        <div
-                          className={`hp-st-progress__fill hp-st-progress__fill--${pct >= 80 ? 'green' : colorKey}`}
-                          style={{ width: `${pct}%` }}
-                        />
-                      </div>
-                    </li>
-                  );
-                })}
-              </ul>
+                <Link className="hp-feature__go" to={`/episodes/${current.id}`} aria-label={`Open ${current.title || 'the episode'}`}>
+                  <Play size={22} aria-hidden />
+                </Link>
+              </>
             ) : (
-              <div className="hp-empty">
-                <div className="hp-empty__icon">📖</div>
-                <p className="hp-empty__text">No books yet</p>
-                <button className="hp-empty__btn" onClick={() => navigate('/storyteller')}>Create a Book →</button>
-              </div>
+              <p className="hp-feature__empty">No episode yet. <Link to={world('episodes-production')}>Start one</Link></p>
             )}
           </section>
 
-          {/* — Shows — */}
-          <section className="hp-shows-card">
-            <div className="hp-section__head">
-              <h2 className="hp-section__title"><span className="s-icon">📺</span> Shows</h2>
-              <button className="hp-section__link" onClick={() => navigate('/shows')}>View All →</button>
-            </div>
-
-            {shows.length > 0 ? (
-              <ul className="hp-show-list">
-                {shows.slice(0, 5).map((show) => {
-                  const epCount = episodes.filter(ep => ep.show_id === show.id).length;
-                  return (
-                    <li key={show.id} className="hp-show-item" onClick={() => navigate('/shows')}>
-                      <div className="hp-show-icon">📺</div>
-                      <div className="hp-show-info">
-                        <div className="hp-show-title">{show.name || show.title}</div>
-                        <div className="hp-show-meta">{show.genre || 'Series'}</div>
-                      </div>
-                      <span className="hp-show-count">{epCount} ep{epCount !== 1 ? 's' : ''}</span>
-                    </li>
-                  );
-                })}
-              </ul>
+          <section className="hp-feature hp-feature--event" aria-labelledby="hp-ev-h" data-testid="home-event"
+            style={eventPicture ? { '--hp-feature-img': `url("${eventPicture}")` } : undefined}>
+            <h2 id="hp-ev-h" className="hp-feature__kicker">Upcoming Event</h2>
+            {event ? (
+              <>
+                {eventDays != null && eventDays >= 0 && (
+                  <span className="hp-feature__when">{eventDays === 0 ? 'Today' : eventDays === 1 ? 'Tomorrow' : `In ${eventDays} days`}</span>
+                )}
+                {!upcoming.ready && <span className="hp-feature__setup">Still being set up</span>}
+                <p className="hp-feature__title">{event.name}</p>
+                <p className="hp-feature__sub">{[event.event_date, event.venue_name, event.host || event.host_brand].filter(Boolean).join(' · ')}</p>
+                <ul className="hp-chips">
+                  {[event.event_type?.replace(/_/g, ' '), event.dress_code, event.theme].filter(Boolean).slice(0, 3).map((t) => <li key={t}>{t}</li>)}
+                </ul>
+                <Link className="hp-pill-btn hp-feature__btn" to={`${world('events')}&event=${event.id}`}>View event</Link>
+              </>
             ) : (
-              <div className="hp-empty">
-                <div className="hp-empty__icon">📺</div>
-                <p className="hp-empty__text">No shows yet</p>
-                <button className="hp-empty__btn" onClick={() => navigate('/shows')}>Create a Show →</button>
-              </div>
+              <p className="hp-feature__empty">No event yet. <Link to={world('events')}>Open Events</Link></p>
             )}
           </section>
         </div>
 
-        {/* ─── Quick Actions ─── */}
-        <section className="hp-actions">
-          <div className="hp-action-card hp-action-card--pink" onClick={() => navigate('/storyteller')}>
-            <div className="hp-action-icon hp-action-icon--pink">📖</div>
-            <span className="hp-action-label">New Book</span>
+        {/* ─── Trending ─── */}
+        <section className="hp-card hp-trending" aria-labelledby="hp-tr-h" data-testid="home-trending">
+          <div className="hp-card__head">
+            <h2 id="hp-tr-h">Trending in LalaVerse</h2>
+            <Link className="hp-see" to="/pulse">See all</Link>
           </div>
-          <div className="hp-action-card hp-action-card--purple" onClick={() => navigate('/episodes/create')}>
-            <div className="hp-action-icon hp-action-icon--purple">📺</div>
-            <span className="hp-action-label">New Episode</span>
-          </div>
-          {/* Removed: "Scene Composer" card — opened the standalone episode picker for the scene composer; both pages no longer exist. */}
-          <div className="hp-action-card hp-action-card--gold" onClick={() => navigate('/character-registry')}>
-            <div className="hp-action-icon hp-action-icon--gold">👤</div>
-            <span className="hp-action-label">Characters</span>
-          </div>
-          <div className="hp-action-card hp-action-card--teal" onClick={() => navigate('/continuity')}>
-            <div className="hp-action-icon hp-action-icon--teal">🧠</div>
-            <span className="hp-action-label">Memory Bank</span>
-          </div>
-          <div className="hp-action-card hp-action-card--rose" onClick={() => navigate('/phone-hub')}>
-            <div className="hp-action-icon hp-action-icon--rose">📱</div>
-            <span className="hp-action-label">Lala&apos;s Phone</span>
-          </div>
-        </section>
-
-        {/* ─── Character Roster ─── */}
-        <section className="hp-section">
-          <div className="hp-section__head">
-            <h2 className="hp-section__title"><span className="s-icon">👤</span> Character Roster</h2>
-            <button className="hp-section__link" onClick={() => navigate('/character-registry')}>View All →</button>
-          </div>
-          {characters.length > 0 ? (
-            <div className="hp-char-grid">
-              {characters.slice(0, 8).map((char) => {
-                const roleColors = {
-                  lead: '#e8b4c8', support: '#c5b8e8', mirror: '#b8d4e8',
-                  pressure: '#e8d4b8', catalyst: '#c8e8b8', special: '#e8e8b8',
-                };
-                const bg = roleColors[char.role_type] || '#e0dbd5';
-                const initial = (char.display_name || '?')[0].toUpperCase();
+          {hot.length === 0 ? (
+            <p className="hp-empty-line">Nothing live on The Pulse yet.</p>
+          ) : (
+            <ul className="hp-trend-row">
+              {hot.map((p) => {
+                const pic = pictureOf(p);
                 return (
-                  <div key={char.id} className="hp-char-card" onClick={() => navigate('/character-registry')}>
-                    <div className="hp-char-avatar" style={{ background: bg }}>
-                      {initial}
-                    </div>
-                    <div className="hp-char-info">
-                      <div className="hp-char-name">{char.display_name}</div>
-                      <div className="hp-char-role">{char.role_type || 'unknown'}</div>
-                      {char.core_belief && (
-                        <div className="hp-char-belief">"{char.core_belief.length > 60 ? char.core_belief.slice(0, 60) + '…' : char.core_belief}"</div>
-                      )}
-                    </div>
-                    <span className={`hp-char-status hp-char-status--${char.status || 'draft'}`}>
-                      {char.status || 'draft'}
-                    </span>
-                  </div>
+                  <li key={p.id} className="hp-trend">
+                    <Link to="/pulse" className="hp-trend__link">
+                      <span className="hp-trend__pic">
+                        {pic ? <img src={pic} alt="" loading="lazy" /> : <span className="hp-trend__blank" aria-hidden>{(p.poster_display_name || p.poster_handle || '?')[0]}</span>}
+                        <span className="hp-trend__likes"><Heart size={13} aria-hidden /> {count(p.likes)}</span>
+                      </span>
+                      <span className="hp-trend__text">{p.content_text}</span>
+                      <span className="hp-trend__who">@{p.poster_handle || p.socialProfile?.handle || 'someone'}</span>
+                    </Link>
+                  </li>
                 );
               })}
-            </div>
-          ) : (
-            <div className="hp-empty">
-              <div className="hp-empty__icon">👤</div>
-              <p className="hp-empty__text">No characters created yet</p>
-              <button className="hp-empty__btn" onClick={() => navigate('/character-registry')}>Create Characters →</button>
-            </div>
+            </ul>
           )}
         </section>
 
-        {/* ─── In-Progress Episodes ─── */}
-        {(() => {
-          const active = episodes.filter(ep =>
-            ['in_build', 'in_progress', 'editing', 'draft'].includes(ep.status)
-          ).slice(0, 6);
-          if (!active.length) return null;
-          return (
-            <section className="hp-section">
-              <div className="hp-section__head">
-                <h2 className="hp-section__title"><span className="s-icon">🔥</span> In Progress</h2>
-                <button className="hp-section__link" onClick={() => navigate('/episodes')}>All Episodes →</button>
-              </div>
-              <div className="hp-ep-grid">
-                {active.map(ep => (
-                  <div key={ep.id} className="hp-ep-card">
-                    <div className="hp-ep-head">
-                      <div>
-                        <div className="hp-ep-num">Episode {ep.episode_number}</div>
-                        <div className="hp-ep-title">{ep.title}</div>
-                        <div className="hp-ep-show">{ep.show?.name || 'Unknown Show'}</div>
-                      </div>
-                      <span className={`hp-ep-status hp-ep-status--${epStatusClass(ep.status)}`}>
-                        {(ep.status || 'draft').replace('_', ' ')}
-                      </span>
-                    </div>
-                    <div className="hp-ep-progress">
-                      <div className="hp-ep-pbar">
-                        <div className="hp-ep-pfill" style={{ width: '55%' }} />
-                      </div>
-                    </div>
-                    <div className="hp-ep-meta">Last edited {relTime(ep.updated_at)}</div>
-                    <button className="hp-ep-btn" onClick={() => navigate(`/episodes/${ep.id}`)}>
-                      Continue Working →
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </section>
-          );
-        })()}
+        {/* ─── Lala's journey · Today's To-Do · Shop the Look ─── */}
+        <div className="hp-trio">
+          <section className="hp-card hp-journey" aria-labelledby="hp-jr-h" data-testid="home-journey">
+            <div className="hp-card__head"><h2 id="hp-jr-h">Lala&apos;s Journey</h2></div>
+            <div className="hp-journey__who">
+              {portrait ? <img src={portrait} alt="" /> : <span className="hp-journey__initial" aria-hidden>L</span>}
+              <span>{lalaChar?.display_name || 'Lala'}{current && <span className="hp-muted"> · {episodeCode(current)}</span>}</span>
+            </div>
+            {lala ? (
+              <dl className="hp-journey__stats">
+                <div><dt><Coins size={16} aria-hidden /> Prime Coins</dt><dd>{Number(lala.coins || 0).toLocaleString()}</dd></div>
+                <div><dt><Star size={16} aria-hidden /> Reputation</dt><dd>{lala.reputation ?? 0}<small>/10</small></dd></div>
+                <div><dt><Heart size={16} aria-hidden /> Brand trust</dt><dd>{lala.brand_trust ?? 0}<small>/10</small></dd></div>
+              </dl>
+            ) : (
+              <p className="hp-empty-line">Her numbers show once the show has an episode.</p>
+            )}
+            <Link className="hp-pill-btn" to={world('finances')}>View finances</Link>
+          </section>
 
-        {/* ─── Stats Summary ─── */}
-        <section className="hp-stats-row">
-          <div className="hp-stat-card">
-            <div className="hp-stat-val">{episodes.length}</div>
-            <div className="hp-stat-label">Episodes</div>
-          </div>
-          <div className="hp-stat-card">
-            <div className="hp-stat-val">{books.length}</div>
-            <div className="hp-stat-label">Books</div>
-          </div>
-          <div className="hp-stat-card">
-            <div className="hp-stat-val">
-              {books.reduce((a, b) => a + (b.chapter_count || 0), 0)}
+          {update ? <Todo update={update} onDecided={undefined} /> : (
+            <section className="hp-card hp-todo" aria-labelledby="hp-todo-h" data-testid="home-todo">
+              <div className="hp-card__head"><h2 id="hp-todo-h">Today&apos;s To-Do</h2></div>
+              <p className="hp-empty-line">The daily update isn&apos;t available right now.</p>
+              <Link className="hp-pill-btn" to="/today">Open tasks</Link>
+            </section>
+          )}
+
+          <section className="hp-card hp-shop" aria-labelledby="hp-sh-h" data-testid="home-shop">
+            <div className="hp-card__head">
+              <h2 id="hp-sh-h">Shop the Look</h2>
+              <Link className="hp-see" to="/shop-the-look">See all</Link>
             </div>
-            <div className="hp-stat-label">Chapters</div>
-          </div>
-          <div className="hp-stat-card">
-            <div className="hp-stat-val">{characters.length}</div>
-            <div className="hp-stat-label">Characters</div>
-          </div>
-          <div className="hp-stat-card">
-            <div className="hp-stat-val">
-              {books.reduce((a, b) => a + (b.approved_count || 0), 0)}
-            </div>
-            <div className="hp-stat-label">Approved Lines</div>
-          </div>
-        </section>
+            {look ? (
+              <>
+                {look.image?.url && <img className="hp-shop__img" src={look.image.url} alt={look.image.alt || look.title} loading="lazy" />}
+                <p className="hp-shop__title">{look.title}</p>
+                <Link className="hp-pill-btn" to={`/shop-the-look/${look.key}`}>Shop Lala&apos;s closet</Link>
+              </>
+            ) : (
+              <>
+                <p className="hp-empty-line">No look published yet. Send an approved style sheet to Distribution.</p>
+                <Link className="hp-pill-btn" to="/shop-the-look">Shop the Look</Link>
+              </>
+            )}
+          </section>
+        </div>
+
+        {/* ─── The rest of the universe ─── */}
+        <nav className="hp-more" aria-label="Also in your universe">
+          <Link to="/storyteller"><BookOpen size={16} aria-hidden /> {books.length} book{books.length === 1 ? '' : 's'} <ArrowRight size={14} aria-hidden /></Link>
+          <Link to="/character-registry"><Users size={16} aria-hidden /> {characters.length} character{characters.length === 1 ? '' : 's'} <ArrowRight size={14} aria-hidden /></Link>
+          <Link to="/universe"><Sparkles size={16} aria-hidden /> Universe <ArrowRight size={14} aria-hidden /></Link>
+          {(data.shows || []).length > 1 && <Link to="/shows"><CalendarDays size={16} aria-hidden /> All shows <ChevronRight size={14} aria-hidden /></Link>}
+        </nav>
 
       </PageLayout>
     </div>
