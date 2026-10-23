@@ -120,9 +120,9 @@ async function saveGap(character, gap) {
 }
 
 async function setContentType(db, { character = null, feedProfile, name, gap, reason = null, by = null, rebrand = false }) {
-  if (!feedProfile) throw new ContentTypeError(409, 'They are not on the feed yet: match them to a feed person first. The content type is kept on their feed profile.');
+  if (!feedProfile) throw new ContentTypeError(409, 'They are not on The Pulse yet: match them to a Pulse profile first. The content type is kept on their Pulse profile.');
   if (gap !== undefined && gap !== null && typeof gap !== 'string') throw new ContentTypeError(400, 'gap must be text, or null to clear it.');
-  if (gap !== undefined && !character) throw new ContentTypeError(409, 'The gap between their job and their content is kept on their character: this feed profile has none.');
+  if (gap !== undefined && !character) throw new ContentTypeError(409, 'The gap between their job and their content is kept on their character: this Pulse profile has none.');
   let next = feedProfile.society_archetype || null;
   if (name !== undefined) {
     next = null;
@@ -210,7 +210,7 @@ async function ask(prompt) {
 }
 
 async function suggestContentType(db, { character = null, feedProfile = null, list = null, counts }) {
-  if (!feedProfile) throw new ContentTypeError(409, 'They are not on the feed yet: match them to a feed person first.');
+  if (!feedProfile) throw new ContentTypeError(409, 'They are not on The Pulse yet: match them to a Pulse profile first.');
   const archetypes = list || await loadSocietyArchetypes(db);
   if (!archetypes.length) throw new ContentTypeError(409, 'The Society tab has no content types saved.');
   const { characterFilePrompt } = require('./characterFile');

@@ -178,7 +178,7 @@ async function loadCharacter(db, characterId) {
     throw new PostsError(403, `${character.display_name} is a confidential professional and does not post on The Pulse.`);
   }
   const feedProfile = character.feed_profile_id && db.SocialProfile ? await db.SocialProfile.findByPk(character.feed_profile_id) : null;
-  if (!feedProfile) throw new PostsError(409, `${character.display_name} is not on the feed yet: match them to a feed person first.`);
+  if (!feedProfile) throw new PostsError(409, `${character.display_name} is not on The Pulse yet: match them to a Pulse profile first.`);
   if (feedProfile.current_state === 'posthumous') throw new PostsError(409, `${character.display_name} has died: their account does not post.`);
   const voice = await db.PulseVoice.findOne({ where: { registry_character_id: character.id } });
   if (!voice) throw new PostsError(409, `${character.display_name} has no Voice Profile yet. Build it in Admin › The Pulse › Voices.`);
@@ -269,7 +269,7 @@ async function postIdeas(db, characterId) {
   let blocker = null;
   let next = null;
   let extra = {};
-  if (!feedProfile) blocker = `${name} is not on the feed yet: match them to a feed person first.`;
+  if (!feedProfile) blocker = `${name} is not on The Pulse yet: match them to a Pulse profile first.`;
   else if (feedProfile.current_state === 'posthumous') blocker = `${name} has died: their account does not post.`;
   else if (!(await require('./characterFacts').showIdFor(db, character, feedProfile))) {
     const [[registry]] = await db.sequelize.query(

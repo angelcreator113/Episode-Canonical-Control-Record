@@ -35,7 +35,7 @@ async function visibilityFor(db, { characterId }) {
 
   if (!character.feed_profile_id) {
     out.no_voice = true;
-    out.reasons.push(`${name} has no Feed profile, so they have no account on The Pulse to post from.`);
+    out.reasons.push(`${name} has no Pulse profile, so they have no account on The Pulse to post from.`);
     return out;
   }
   const [[profile]] = await db.sequelize.query(
@@ -43,7 +43,7 @@ async function visibilityFor(db, { characterId }) {
     { replacements: { id: character.feed_profile_id } });
   if (!profile) {
     out.no_voice = true;
-    out.reasons.push(`${name}'s Feed profile is gone, so they have no account on The Pulse.`);
+    out.reasons.push(`${name}'s Pulse profile is gone, so they have no account on The Pulse.`);
     return out;
   }
   out.profile = { id: profile.id, handle: profile.handle, display_name: profile.display_name };

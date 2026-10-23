@@ -151,7 +151,7 @@ function fakeAi({ budget = false } = {}) {
     expect(byName.Lala.left).toContain('Their voice: make them Active first.');
     // Twin and Echo are left for her.
     expect(byName.Twin.changes).toEqual([]);
-    expect(byName.Twin.left[0]).toMatch(/2 feed profiles fit/);
+    expect(byName.Twin.left[0]).toMatch(/2 Pulse profiles fit/);
     expect((await character(ids.twin)).feed_profile_id).toBeNull();
     expect(byName.Echo.left[0]).toMatch(new RegExp(`already Owner${tag}'s`));
     expect((await character(ids.echo)).feed_profile_id).toBeNull();

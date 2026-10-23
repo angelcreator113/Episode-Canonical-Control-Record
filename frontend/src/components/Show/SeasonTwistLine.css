@@ -1,0 +1,43 @@
+/* Season Plan › Season twists › the season line (2026-10-23): tokens only; a CSS grid per twist, a text list at phone width. */
+.stl { display: flex; flex-wrap: wrap; gap: 14px; padding: 12px 14px; border: 1px solid var(--lala-gold-line); border-radius: 12px; min-width: 0; }
+.stl-chart { flex: 3 1 520px; min-width: 0; }
+.stl-side { flex: 1 1 220px; min-width: 0; }
+.stl-rows { display: flex; flex-direction: column; gap: 6px; margin: 4px 0 0; padding: 0; list-style: none; }
+.stl-row { display: grid; grid-template-columns: minmax(90px, 160px) 1fr; align-items: center; gap: 10px; min-width: 0; }
+.stl-name { min-width: 0; font-size: 13px; font-weight: 700; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stl-ends { display: none; }
+.stl-track { display: grid; grid-template-columns: repeat(var(--stl-cols), minmax(0, 1fr)); align-items: center; min-height: 22px; min-width: 0; }
+.stl-axis .stl-track { min-height: 18px; }
+.stl-tick { text-align: center; font-size: 10px; color: var(--text-secondary); }
+.stl-tick.is-written, .stl-tick-key { font-weight: 700; text-decoration: underline; text-underline-offset: 2px; }
+/* Inset half a column each side, so the ends sit on the slots' centres. */
+.stl-bar { position: relative; display: block; height: 6px; margin: 0 calc(100% / var(--stl-n, 1) / 2); border-radius: 999px; background: var(--accent-dark); }
+.stl-bar.is-open { background: transparent; border-top: 2px dashed var(--accent-dark); height: 0; }
+.stl-bar.is-backwards { background: var(--danger-text); }
+.stl-bar.is-orphan { background: transparent; }
+.stl-dot { display: inline-block; width: 12px; height: 12px; border-radius: 50%; box-sizing: border-box; vertical-align: middle; }
+.stl-bar .stl-dot { position: absolute; top: 50%; transform: translate(-50%, -50%); }
+.stl-dot.is-plant { border: 3px solid var(--accent-dark); background: var(--surface-card); }
+.stl-dot.is-payoff { border-radius: 2px; transform: rotate(45deg); background: var(--accent-dark); }
+.stl-bar .stl-dot.is-plant { left: 0; }
+.stl-bar .stl-dot.is-payoff { left: 100%; transform: translate(-50%, -50%) rotate(45deg); }
+.stl-bar .stl-dot.is-plant.is-end { left: 100%; }
+.stl-bar .stl-dot.is-payoff.is-start { left: 0; }
+.stl-bar.is-backwards .stl-dot.is-plant { border-color: var(--danger-text); }
+.stl-bar.is-backwards .stl-dot.is-payoff, .stl-bar.is-orphan .stl-dot.is-payoff { background: var(--danger-text); }
+.stl-bar.is-orphan .stl-dot.is-payoff { left: 50%; }
+.stl-bar.is-open .stl-dot.is-plant { top: -1px; }
+.stl-key { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 8px 0 0; font-size: 12px; color: var(--text-secondary); }
+.stl-warns { display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.stl-warn { display: flex; align-items: flex-start; gap: 6px; font-size: 12px; line-height: 1.4; color: var(--danger-text); overflow-wrap: anywhere; }
+.stl-warn svg { flex-shrink: 0; margin-top: 2px; }
+.stl-ok { margin: 0; font-size: 12px; color: var(--success-text); }
+/* Phone width: no grid; each twist a line, its ends in words. */
+@media (max-width: 560px) {
+  .stl-row { display: flex; flex-direction: column; align-items: flex-start; gap: 0; padding: 6px 0; border-bottom: 1px solid var(--lala-gold-line); }
+  .stl-row.stl-axis, .stl-row .stl-track, .stl-key { display: none; }
+  .stl-rows { margin-top: 0; }
+  .stl-name { white-space: normal; }
+  .stl-ends { display: block; font-size: 12px; color: var(--text-secondary); }
+  .stl-row.is-warned .stl-ends { color: var(--danger-text); }
+}
