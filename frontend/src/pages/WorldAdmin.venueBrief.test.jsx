@@ -81,9 +81,15 @@ describe('WorldAdmin event editor: no scene image work here (S8)', () => {
     expect(screen.queryByText('🎬 Video')).toBeNull();
   });
 
-  test('Mark Ready with no venue opens no brief and generates nothing', async () => {
+  // Mark Ready reads the Event Package's gates (READINESS_ITEMS): the event
+  // is ready to mark — organizer, identity, a World Location and an
+  // invitation — but has no scene set, so the venue has no images.
+  test('Mark Ready with no scene set opens no brief and generates nothing', async () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true);
-    events = [{ ...BASE_EVENT }];
+    events = [{
+      ...BASE_EVENT, host_brand: 'Velour', category: 'brand_launch', format: 'launch_party',
+      venue_location_id: 'loc-1', invitation_asset_id: 'asset-1',
+    }];
     renderEditor();
     fireEvent.click(await screen.findByRole('button', { name: 'Mark Ready' }));
     await waitFor(() => expect(posted('/generate-social-checklist')).toHaveLength(1));

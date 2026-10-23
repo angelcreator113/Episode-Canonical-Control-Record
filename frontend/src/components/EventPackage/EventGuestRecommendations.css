@@ -1,0 +1,8 @@
+/* EventGuestRecommendations: the facts behind each recommended guest (Evoni, 2026-10-23); the cards' own styles are in pages/EventPackagePage.css. */
+.egr-reasons { display: flex; flex-wrap: wrap; gap: 4px; margin: 2px 0 0; padding: 0; list-style: none; min-width: 0; }
+.egr-reason {
+  padding: 1px 8px; border: 1px solid var(--lala-gold-line, #E8D9A8); border-radius: 6px;
+  background: var(--lala-gold-soft, #FDF8EE); color: var(--lala-gold-text, #7A6314);
+  font-family: var(--font-ui, 'DM Mono', monospace); font-size: 11px; line-height: 1.6;
+  max-width: 100%; overflow-wrap: anywhere;
+}

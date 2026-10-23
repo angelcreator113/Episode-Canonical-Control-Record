@@ -17,9 +17,15 @@
  *
  * Props: showId, eventId, onToast(msg), onSaved() (reloads the event, so
  * the page's save version follows the look's write).
+ *
+ * A failed load says so with Try again, and Write / Draft stay off until a
+ * load succeeds: the editor would otherwise open empty and its Save would
+ * replace the stored look with nothing. A write that succeeds but whose
+ * page refresh (onSaved) fails reads "Saved — couldn't refresh", never as
+ * a failed save.
  */
 import React, { useCallback, useEffect, useState } from 'react';
-import { Pencil, Sparkles, X, ImagePlus, Lock } from 'lucide-react';
+import { Pencil, Sparkles, X, ImagePlus, Lock, AlertCircle, RotateCw } from 'lucide-react';
 import api from '../../services/api';
 import ShowMoreToggle from '../ShowMoreToggle';
 import { visibleSlice } from '../../lib/showMore';
@@ -53,6 +59,21 @@ function SourceLabel({ source, testId }) {
   );
 }
 
+export const REFRESH_FAILED_MESSAGE = "Saved — couldn't refresh the page. Reload to see the change.";
+
+// Calls the page's refresh after a write that already succeeded. Its
+// failure is logged and reported as a refresh failure, never as the write's.
+async function refreshAfterWrite(onSaved, onToast) {
+  try {
+    await onSaved?.();
+    return true;
+  } catch (err) {
+    console.error('[EventVenueLook] refresh after save failed:', err);
+    onToast?.(REFRESH_FAILED_MESSAGE);
+    return false;
+  }
+}
+
 function toDraft(look) {
   return {
     overall: look?.overall || '',
@@ -68,6 +89,8 @@ function toDraft(look) {
 
 function LookEditor({ showId, eventId, look, onClose, onSaved, onToast }) {
   const [draft, setDraft] = useState(() => toDraft(look));
+  const [initial] = useState(() => JSON.stringify(toDraft(look)));
+  const dirty = JSON.stringify(draft) !== initial;
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState(null);
@@ -109,19 +132,28 @@ function LookEditor({ showId, eventId, look, onClose, onSaved, onToast }) {
         references: draft.references.map(({ asset_id, use_as_reference }) => ({ asset_id, use_as_reference })),
       };
       await api.put(`/api/v1/world/${showId}/events/${eventId}/venue-look`, { venue_look: body });
-      onToast?.('Venue look saved');
-      await onSaved?.();
-      onClose();
     } catch (err) {
       console.error('[EventVenueLook] save failed:', err);
       setError(err.response?.data?.error || err.message);
-    } finally {
       setSaving(false);
+      return;
     }
+    // The look is saved: a refresh failure is said as one, not as a failed save.
+    const refreshed = await refreshAfterWrite(onSaved, onToast);
+    if (refreshed) onToast?.('Venue look saved');
+    setSaving(false);
+    onClose();
+  };
+
+  // A click outside the dialog closes it; with unsaved edits it asks first.
+  const closeFromBackdrop = () => {
+    if (saving) return;
+    if (dirty && !window.confirm('Discard your unsaved changes to the venue look?')) return;
+    onClose();
   };
 
   return (
-    <div className="epp-modal-backdrop" onClick={() => { if (!saving) onClose(); }}>
+    <div className="epp-modal-backdrop" onClick={closeFromBackdrop}>
       <div className="epp-modal evl-modal" role="dialog" aria-label="Edit venue look" data-testid="venue-look-editor" onClick={(e) => e.stopPropagation()}>
         <div className="epp-modal-header">
           <h3>Venue look</h3>
@@ -187,6 +219,7 @@ export default function EventVenueLook({ showId, eventId, onToast, onSaved }) {
   const [look, setLook] = useState(null);
   const [editable, setEditable] = useState(true);
   const [loaded, setLoaded] = useState(false);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [drafting, setDrafting] = useState(false);
   const [editing, setEditing] = useState(false);
   const [open, setOpen] = useState(false);
@@ -196,8 +229,10 @@ export default function EventVenueLook({ showId, eventId, onToast, onSaved }) {
       const res = await api.get(`/api/v1/world/${showId}/events/${eventId}/venue-look`);
       setLook(res.data?.data?.venue_look || null);
       setEditable(res.data?.data?.editable !== false);
+      setLoadFailed(false);
     } catch (err) {
       console.error('[EventVenueLook] load failed:', err);
+      setLoadFailed(true);
     } finally {
       setLoaded(true);
     }
@@ -206,22 +241,30 @@ export default function EventVenueLook({ showId, eventId, onToast, onSaved }) {
   useEffect(() => { load(); }, [load]);
 
   const draftLook = async () => {
+    if (loadFailed) return;
     setDrafting(true);
+    let data;
     try {
       const res = await api.post(`/api/v1/world/${showId}/events/${eventId}/venue-look/draft`, {});
-      const data = res.data?.data || {};
-      setLook(data.venue_look || null);
-      const kept = (data.kept_edited || []).map((k) => LOOK_PARTS.find((p) => p.key === k)?.label).filter(Boolean);
-      onToast?.(kept.length ? `Venue look drafted; kept your edits to ${kept.join(', ')}` : 'Venue look drafted');
-      await onSaved?.();
+      data = res.data?.data || {};
     } catch (err) {
       console.error('[EventVenueLook] draft failed:', err);
       onToast?.(err.response?.data?.error || err.message || 'Drafting the venue look failed');
-    } finally {
       setDrafting(false);
+      return;
     }
+    setLook(data.venue_look || null);
+    const kept = (data.kept_edited || []).map((k) => LOOK_PARTS.find((p) => p.key === k)?.label).filter(Boolean);
+    if (await refreshAfterWrite(onSaved, onToast)) {
+      onToast?.(kept.length ? `Venue look drafted; kept your edits to ${kept.join(', ')}` : 'Venue look drafted');
+    }
+    setDrafting(false);
   };
 
+  // After the editor's save: re-read the look (load catches its own
+  // failure), then the page; a throw here would reach the editor as a
+  // failed save, so the page refresh is passed through as is and the
+  // editor's refreshAfterWrite reports it.
   const saved = async () => {
     await load();
     await onSaved?.();
@@ -240,10 +283,10 @@ export default function EventVenueLook({ showId, eventId, onToast, onSaved }) {
         <span className="epp-fields-label">Venue look</span>
         {editable ? (
           <div className="evl-actions">
-            <button type="button" className="epp-btn epp-btn-small" onClick={draftLook} disabled={drafting || !loaded} data-testid="venue-look-draft">
+            <button type="button" className="epp-btn epp-btn-small" onClick={draftLook} disabled={drafting || !loaded || loadFailed} data-testid="venue-look-draft">
               <Sparkles size={14} aria-hidden="true" /> {drafting ? 'Drafting…' : 'Draft from event details'}
             </button>
-            <button type="button" className="epp-btn epp-btn-small" onClick={() => setEditing(true)} disabled={!loaded} data-testid="venue-look-edit">
+            <button type="button" className="epp-btn epp-btn-small" onClick={() => setEditing(true)} disabled={!loaded || loadFailed} data-testid="venue-look-edit">
               <Pencil size={14} aria-hidden="true" /> {hasContent(look) ? 'Edit' : 'Write'}
             </button>
           </div>
@@ -251,7 +294,14 @@ export default function EventVenueLook({ showId, eventId, onToast, onSaved }) {
           <span className="evl-locked" data-testid="venue-look-locked"><Lock size={12} aria-hidden="true" /> Locked: the episode is accepted</span>
         )}
       </div>
-      {!hasContent(look) ? (
+      {loadFailed ? (
+        <p className="evl-error" role="alert" data-testid="venue-look-load-failed">
+          <AlertCircle size={12} aria-hidden="true" /> Couldn&apos;t load the venue look, so it can&apos;t be edited yet.{' '}
+          <button type="button" className="epp-inline-link" onClick={() => load()} data-testid="venue-look-retry">
+            <RotateCw size={11} aria-hidden="true" /> Try again
+          </button>
+        </p>
+      ) : !hasContent(look) ? (
         <p className="evl-empty">No venue look yet. Draft it from the event details, or write it.</p>
       ) : (
         <>
@@ -281,7 +331,7 @@ export default function EventVenueLook({ showId, eventId, onToast, onSaved }) {
         <ShowMoreToggle open={open} hidden={parts.hidden} onToggle={() => setOpen((o) => !o)} noun={parts.hidden === 1 ? 'part' : 'parts'} testId="venue-look-more" controls="evl-parts" />
         </>
       )}
-      {editing && (
+      {editing && !loadFailed && (
         <LookEditor showId={showId} eventId={eventId} look={look} onClose={() => setEditing(false)} onSaved={saved} onToast={onToast} />
       )}
     </div>

@@ -114,7 +114,8 @@ describe('EventPackagePage Basics — category and format suggestions', () => {
     renderPage();
     const time = await screen.findByTestId('basics-time');
     fireEvent.click(within(time).getByRole('button', { name: 'Time' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Start time' });
+    // The field opens in its row (2026-10-23), not in a dialog.
+    const dialog = await screen.findByRole('group', { name: 'Start time' });
     expect(within(dialog).queryByText(/Fill in suggestion/)).toBeNull();
     fireEvent.change(within(dialog).getByLabelText('Start time'), { target: { value: '19:45' } });
     fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
@@ -183,7 +184,8 @@ describe('EventPackagePage Basics — category and format suggestions', () => {
 
     const first = list.querySelector('[data-state] button').textContent;
     fireEvent.click(screen.getByTestId('basics-fill-in'));
-    const dialog = await screen.findByRole('dialog');
+    // Fill in walks the inline editors, one row at a time (2026-10-23).
+    const dialog = await screen.findByRole('group');
     const firstLabel = dialog.getAttribute('aria-label');
     expect(firstLabel).toMatch(new RegExp(first === 'Time' ? 'Start time' : first, 'i'));
     const input = dialog.querySelector('input, select, textarea');
@@ -194,12 +196,12 @@ describe('EventPackagePage Basics — category and format suggestions', () => {
     // while it reloads, so the dialog changes in place).
     await waitFor(() => expect(api.put).toHaveBeenCalledTimes(1));
     const next = await waitFor(() => {
-      const d = screen.getByRole('dialog');
+      const d = screen.getByRole('group');
       expect(d.getAttribute('aria-label')).not.toBe(firstLabel);
       return d;
     });
-    fireEvent.click(within(next).getByRole('button', { name: 'Close' }));
-    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    fireEvent.click(within(next).getByRole('button', { name: 'Cancel' }));
+    await waitFor(() => expect(screen.queryByRole('group')).toBeNull());
   });
 
   test('a set field is a plain row, not in Still to fill', async () => {
@@ -295,7 +297,7 @@ describe('EventPackagePage Basics — Auto-drafted and Edited (Task #2128)', () 
     const date = await screen.findByTestId('basics-date');
     fireEvent.click(within(date).getByText('Edit'));
     expect(screen.getByTestId('basics-dialog-draft-note').textContent).toContain('Auto-drafted · schedule');
-    const dialog = screen.getByRole('dialog', { name: 'Event date' });
+    const dialog = screen.getByRole('group', { name: 'Event date' });
     fireEvent.change(within(dialog).getByLabelText('Event date'), { target: { value: '2026-12-01' } });
     fireEvent.click(within(dialog).getByText('Save'));
 

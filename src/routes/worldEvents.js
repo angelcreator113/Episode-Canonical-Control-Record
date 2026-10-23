@@ -10,6 +10,9 @@
  * POST   /api/v1/world/:showId/events/:eventId/generate-invitation — Generate invitation card image
  * GET    /api/v1/world/:showId/events/:eventId/invitation — Check if invitation exists
  * POST   /api/v1/world/:showId/events/:eventId/suggest-names — Three AI-written name options, writes nothing
+ * POST   /api/v1/world/:showId/events/:eventId/suggest-basics — AI suggestions for date, time, description, dress code, category, format; writes nothing
+ * GET    /api/v1/world/:showId/events/:eventId/start-readiness — What would stop Start Episode (the same check Start Episode refuses with)
+ * GET    /api/v1/world/:showId/events/:eventId/package — The Event Package's parts in one request, each failing on its own
  * POST   /api/v1/world/:showId/events/ai-fix — AI suggestions to diversify event plan
  * 
  * Location: src/routes/worldEvents.js
@@ -46,6 +49,7 @@ const { syncDraftedDealType } = require('../services/dealTypeDraftService');
 const { findMissingPrices, dealPriceRequiredError, dealPriceRequiredBody, DEAL_PRICE_REQUIRED_CODE } = require('../services/dealPricingService');
 const { takePriceSnapshot } = require('../services/dealPriceSnapshot');
 const { DEAL_TYPES, CATEGORY_VALUES, FORMAT_VALUES } = require('../models/WorldEvent');
+const { loadScopedEvent } = require('../utils/eventScope');
 
 // Every status an event row carries: draft | ready | used | archived
 // (WorldEvent.js) plus the values the server's own writers set — filmed
@@ -233,6 +237,176 @@ router.get('/world/:showId/events', requireAuth, async (req, res) => {
 // instead of going through the model.
 // ═══════════════════════════════════════════
 
+/**
+ * The single-event GET's payload (everything but `success`), or null when
+ * the event is not live in this show: { event, episodeLook, placeLocked,
+ * sourceProfile, startedFromProfile, sceneSet, venueLocation,
+ * invitationAsset, usedInEpisode, termsLockedBy, termsReopen }. Shared with
+ * the Event Package's combined GET (/events/:eventId/package). `row`: the
+ * event row, when the caller has already read it.
+ */
+async function loadEventPayload(models, { showId, eventId, row = null }) {
+  const found = row || await loadScopedEvent(models.sequelize, { showId, eventId });
+  if (!found) return null;
+  // A copy: the JSON columns are parsed in place below.
+  const event = { ...found };
+
+  if (typeof event.canon_consequences === 'string') {
+    try { event.canon_consequences = JSON.parse(event.canon_consequences); } catch { event.canon_consequences = {}; }
+  }
+  if (typeof event.outfit_pieces === 'string') {
+    try { event.outfit_pieces = JSON.parse(event.outfit_pieces); } catch { event.outfit_pieces = []; }
+  }
+  if (typeof event.requirements === 'string') {
+    try { event.requirements = JSON.parse(event.requirements); } catch { event.requirements = {}; }
+  }
+  if (typeof event.restrictions === 'string') {
+    try { event.restrictions = JSON.parse(event.restrictions); } catch (e) { console.error('[WorldEvents] restrictions parse failed:', e.message); event.restrictions = []; }
+  }
+
+  // The lookups below are independent of one another, so they run
+  // together (audit Low, 2026-10-23); each keeps its own fallback.
+  const logLookup = (what) => (e) => { console.error(`[WorldEvents] ${what} lookup failed:`, e.message); return null; };
+
+  // People — host, from the durable FK (WorldEvent.js:97), shown as the
+  // linked creator. Null source_profile_id means "not linked" — the page
+  // falls back to the legacy `host` text field in that case.
+  const sourceProfileP = (event.source_profile_id && models.SocialProfile)
+    ? models.SocialProfile.findByPk(event.source_profile_id, {
+      attributes: ['id', 'handle', 'display_name', 'platform'],
+    }).catch(logLookup('source profile'))
+    : Promise.resolve(null);
+
+  // The creator this event was started from on the Feed (Task #1790):
+  // automation.started_from_profile_id. Not the organizer — the Event
+  // Package offers them as a suggestion only. Read-only.
+  const startedFromId = event.canon_consequences?.automation?.started_from_profile_id;
+  const startedFromP = (async () => {
+    if (!startedFromId || !models.SocialProfile) return null;
+    const profile = await models.SocialProfile.findByPk(startedFromId, {
+      attributes: ['id', 'handle', 'display_name', 'platform'],
+    }).catch(logLookup('started-from profile'));
+    if (!profile) return null;
+    // Its registry_character_id, read from the registry entry (ruling C3),
+    // for the Event Package's organizer choice.
+    const [linked] = await withRegistryLinks(models, [profile])
+      .catch((e) => { console.error('[WorldEvents] started-from registry link lookup failed:', e.message); return [profile.toJSON()]; });
+    return linked;
+  })();
+
+  // Place — the linked scene set's name
+  const sceneSetP = (event.scene_set_id && models.SceneSet)
+    ? models.SceneSet.findByPk(event.scene_set_id, { attributes: ['id', 'name'] }).catch(logLookup('scene set'))
+    : Promise.resolve(null);
+
+  // Place — the linked World Location's type and its own dress code, read
+  // only as inputs to the Event Package's dress-code suggestion (Task
+  // #1755). Nothing here is written.
+  // The id lives top-level or, for calendar-spawned events, only in the
+  // automation copy (the frontend's resolveEventVenueAndDate rule).
+  const venueLocationId = event.venue_location_id || event.canon_consequences?.automation?.venue_location_id || null;
+  const venueLocationP = (async () => {
+    if (!venueLocationId || !models.WorldLocation) return null;
+    const loc = await models.WorldLocation.findByPk(venueLocationId, {
+      attributes: ['id', 'name', 'venue_type', 'venue_details'],
+    }).catch(logLookup('venue location'));
+    if (!loc) return null;
+    const details = loc.venue_details && typeof loc.venue_details === 'object' ? loc.venue_details : {};
+    return {
+      id: loc.id,
+      name: loc.name,
+      venue_type: loc.venue_type || null,
+      dress_code: typeof details.dress_code === 'string' && details.dress_code.trim() ? details.dress_code.trim() : null,
+    };
+  })();
+
+  // Invitation — status + preview
+  const invitationAssetP = (event.invitation_asset_id && models.Asset)
+    ? models.Asset.findByPk(event.invitation_asset_id, {
+      attributes: ['id', 's3_url_processed', 's3_url_raw', 'approval_status'],
+    }).catch(logLookup('invitation asset'))
+    : Promise.resolve(null);
+
+  // Used events — hide Change Host / Edit details / Start Episode once set
+  const usedInEpisodeP = (event.used_in_episode_id && models.Episode)
+    ? models.Episode.findByPk(event.used_in_episode_id, {
+      // evaluation_status: the venue look locks when it is accepted (Q9).
+      attributes: ['id', 'episode_number', 'title', 'evaluation_status'],
+    }).catch(logLookup('used-in episode'))
+    : Promise.resolve(null);
+
+  // The episode whose Start Episode locked these terms (Task #2356), found
+  // the way the lock itself finds it (findTermsLockEpisode): the live brief
+  // that names this event first (§8(w) P2), else the used_in_episode_id
+  // stamp. The Event Package reads as read-only while this is set, so it
+  // never offers an edit the server would refuse.
+  const termsLockedByP = (async () => {
+    try {
+      const lockEpisode = await findTermsLockEpisode(models.sequelize, event.id);
+      if (!lockEpisode) return null;
+      return {
+        id: lockEpisode.id,
+        episode_number: lockEpisode.episode_number ?? null,
+        title: lockEpisode.title ?? null,
+      };
+    } catch (lockErr) {
+      console.error('[WorldEvents] terms lock lookup failed:', lockErr.message);
+      return null;
+    }
+  })();
+
+  // L13 (§8(hh)): the Place stays editable until the episode is accepted.
+  const placeLockedP = (async () => {
+    try {
+      return await require('../utils/placeLock').isPlaceLocked(models.sequelize, event.id);
+    } catch (placeErr) {
+      console.error('[WorldEvents] place lock lookup failed:', placeErr.message);
+      return false;
+    }
+  })();
+
+  const [sourceProfile, startedFromProfile, sceneSet, venueLocation, invitationAsset, usedInEpisode, termsLockedBy, placeLocked] =
+    await Promise.all([sourceProfileP, startedFromP, sceneSetP, venueLocationP, invitationAssetP, usedInEpisodeP, termsLockedByP, placeLockedP]);
+
+  // Reopened terms (Task #2378): who reopened them and when, or null.
+  let termsReopen = null;
+  if (termsLockedBy) {
+    try {
+      const marker = await readTermsReopen(models.sequelize, event.id);
+      if (marker) termsReopen = { at: marker.at ?? null, by: marker.by ?? null, episode_id: marker.episode_id ?? null };
+    } catch (reopenErr) {
+      console.error('[WorldEvents] terms reopen lookup failed:', reopenErr.message);
+    }
+  }
+
+  // Lala's look once the event has started an episode: it is chosen in
+  // the episode's styling game, not on the event (episodeLookCharges
+  // episodeLook, the rule Finalize charges by). null before Start Episode.
+  let episodeLook = null;
+  const lookEpisodeId = termsLockedBy?.id || event.used_in_episode_id || null;
+  if (lookEpisodeId) {
+    try {
+      episodeLook = await require('../services/episodeLookCharges').episodeLook(models.sequelize, { episodeId: lookEpisodeId, event, showId: event.show_id || showId });
+    } catch (lookErr) {
+      console.error('[WorldEvents] episode look lookup failed:', lookErr.message);
+    }
+  }
+
+  return {
+    event,
+    episodeLook,
+    placeLocked,
+    sourceProfile: sourceProfile ? sourceProfile.toJSON() : null,
+    startedFromProfile: startedFromProfile || null,
+    sceneSet: sceneSet ? sceneSet.toJSON() : null,
+    venueLocation,
+    invitationAsset: invitationAsset ? invitationAsset.toJSON() : null,
+    usedInEpisode: usedInEpisode ? usedInEpisode.toJSON() : null,
+    termsLockedBy,
+    termsReopen,
+  };
+}
+
 router.get('/world/:showId/events/:eventId', requireAuth, async (req, res, next) => {
   // Registered before /events/next-suggestions, which it would otherwise
   // swallow as an event id (Task #2273).
@@ -242,171 +416,146 @@ router.get('/world/:showId/events/:eventId', requireAuth, async (req, res, next)
     const models = await getModels();
     if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
 
-    const [rows] = await models.sequelize.query(
-      'SELECT * FROM world_events WHERE id = :eventId AND show_id = :showId AND deleted_at IS NULL LIMIT 1',
-      { replacements: { eventId, showId } }
-    );
-    const event = rows[0];
-    if (!event) return res.status(404).json({ success: false, error: 'Event not found' });
-
-    if (typeof event.canon_consequences === 'string') {
-      try { event.canon_consequences = JSON.parse(event.canon_consequences); } catch { event.canon_consequences = {}; }
-    }
-    if (typeof event.outfit_pieces === 'string') {
-      try { event.outfit_pieces = JSON.parse(event.outfit_pieces); } catch { event.outfit_pieces = []; }
-    }
-    if (typeof event.requirements === 'string') {
-      try { event.requirements = JSON.parse(event.requirements); } catch { event.requirements = {}; }
-    }
-    if (typeof event.restrictions === 'string') {
-      try { event.restrictions = JSON.parse(event.restrictions); } catch (e) { console.error('[WorldEvents] restrictions parse failed:', e.message); event.restrictions = []; }
-    }
-
-    // The lookups below are independent of one another, so they run
-    // together (audit Low, 2026-10-23); each keeps its own fallback.
-    const logLookup = (what) => (e) => { console.error(`[WorldEvents] ${what} lookup failed:`, e.message); return null; };
-
-    // People — host, from the durable FK (WorldEvent.js:97), shown as the
-    // linked creator. Null source_profile_id means "not linked" — the page
-    // falls back to the legacy `host` text field in that case.
-    const sourceProfileP = (event.source_profile_id && models.SocialProfile)
-      ? models.SocialProfile.findByPk(event.source_profile_id, {
-        attributes: ['id', 'handle', 'display_name', 'platform'],
-      }).catch(logLookup('source profile'))
-      : Promise.resolve(null);
-
-    // The creator this event was started from on the Feed (Task #1790):
-    // automation.started_from_profile_id. Not the organizer — the Event
-    // Package offers them as a suggestion only. Read-only.
-    const startedFromId = event.canon_consequences?.automation?.started_from_profile_id;
-    const startedFromP = (async () => {
-      if (!startedFromId || !models.SocialProfile) return null;
-      const profile = await models.SocialProfile.findByPk(startedFromId, {
-        attributes: ['id', 'handle', 'display_name', 'platform'],
-      }).catch(logLookup('started-from profile'));
-      if (!profile) return null;
-      // Its registry_character_id, read from the registry entry (ruling C3),
-      // for the Event Package's organizer choice.
-      const [linked] = await withRegistryLinks(models, [profile])
-        .catch((e) => { console.error('[WorldEvents] started-from registry link lookup failed:', e.message); return [profile.toJSON()]; });
-      return linked;
-    })();
-
-    // Place — the linked scene set's name
-    const sceneSetP = (event.scene_set_id && models.SceneSet)
-      ? models.SceneSet.findByPk(event.scene_set_id, { attributes: ['id', 'name'] }).catch(logLookup('scene set'))
-      : Promise.resolve(null);
-
-    // Place — the linked World Location's type and its own dress code, read
-    // only as inputs to the Event Package's dress-code suggestion (Task
-    // #1755). Nothing here is written.
-    // The id lives top-level or, for calendar-spawned events, only in the
-    // automation copy (the frontend's resolveEventVenueAndDate rule).
-    const venueLocationId = event.venue_location_id || event.canon_consequences?.automation?.venue_location_id || null;
-    const venueLocationP = (async () => {
-      if (!venueLocationId || !models.WorldLocation) return null;
-      const loc = await models.WorldLocation.findByPk(venueLocationId, {
-        attributes: ['id', 'name', 'venue_type', 'venue_details'],
-      }).catch(logLookup('venue location'));
-      if (!loc) return null;
-      const details = loc.venue_details && typeof loc.venue_details === 'object' ? loc.venue_details : {};
-      return {
-        id: loc.id,
-        name: loc.name,
-        venue_type: loc.venue_type || null,
-        dress_code: typeof details.dress_code === 'string' && details.dress_code.trim() ? details.dress_code.trim() : null,
-      };
-    })();
-
-    // Invitation — status + preview
-    const invitationAssetP = (event.invitation_asset_id && models.Asset)
-      ? models.Asset.findByPk(event.invitation_asset_id, {
-        attributes: ['id', 's3_url_processed', 's3_url_raw', 'approval_status'],
-      }).catch(logLookup('invitation asset'))
-      : Promise.resolve(null);
-
-    // Used events — hide Change Host / Edit details / Start Episode once set
-    const usedInEpisodeP = (event.used_in_episode_id && models.Episode)
-      ? models.Episode.findByPk(event.used_in_episode_id, {
-        // evaluation_status: the venue look locks when it is accepted (Q9).
-        attributes: ['id', 'episode_number', 'title', 'evaluation_status'],
-      }).catch(logLookup('used-in episode'))
-      : Promise.resolve(null);
-
-    // The episode whose Start Episode locked these terms (Task #2356), found
-    // the way the lock itself finds it (findTermsLockEpisode): the live brief
-    // that names this event first (§8(w) P2), else the used_in_episode_id
-    // stamp. The Event Package reads as read-only while this is set, so it
-    // never offers an edit the server would refuse.
-    const termsLockedByP = (async () => {
-      try {
-        const lockEpisode = await findTermsLockEpisode(models.sequelize, event.id);
-        if (!lockEpisode) return null;
-        return {
-          id: lockEpisode.id,
-          episode_number: lockEpisode.episode_number ?? null,
-          title: lockEpisode.title ?? null,
-        };
-      } catch (lockErr) {
-        console.error('[WorldEvents] terms lock lookup failed:', lockErr.message);
-        return null;
-      }
-    })();
-
-    // L13 (§8(hh)): the Place stays editable until the episode is accepted.
-    const placeLockedP = (async () => {
-      try {
-        return await require('../utils/placeLock').isPlaceLocked(models.sequelize, event.id);
-      } catch (placeErr) {
-        console.error('[WorldEvents] place lock lookup failed:', placeErr.message);
-        return false;
-      }
-    })();
-
-    const [sourceProfile, startedFromProfile, sceneSet, venueLocation, invitationAsset, usedInEpisode, termsLockedBy, placeLocked] =
-      await Promise.all([sourceProfileP, startedFromP, sceneSetP, venueLocationP, invitationAssetP, usedInEpisodeP, termsLockedByP, placeLockedP]);
-
-    // Reopened terms (Task #2378): who reopened them and when, or null.
-    let termsReopen = null;
-    if (termsLockedBy) {
-      try {
-        const marker = await readTermsReopen(models.sequelize, event.id);
-        if (marker) termsReopen = { at: marker.at ?? null, by: marker.by ?? null, episode_id: marker.episode_id ?? null };
-      } catch (reopenErr) {
-        console.error('[WorldEvents] terms reopen lookup failed:', reopenErr.message);
-      }
-    }
-
-    // Lala's look once the event has started an episode: it is chosen in
-    // the episode's styling game, not on the event (episodeLookCharges
-    // episodeLook, the rule Finalize charges by). null before Start Episode.
-    let episodeLook = null;
-    const lookEpisodeId = termsLockedBy?.id || event.used_in_episode_id || null;
-    if (lookEpisodeId) {
-      try {
-        episodeLook = await require('../services/episodeLookCharges').episodeLook(models.sequelize, { episodeId: lookEpisodeId, event, showId: event.show_id || req.params.showId });
-      } catch (lookErr) {
-        console.error('[WorldEvents] episode look lookup failed:', lookErr.message);
-      }
-    }
-
-    return res.json({
-      success: true,
-      event,
-      episodeLook,
-      placeLocked,
-      sourceProfile: sourceProfile ? sourceProfile.toJSON() : null,
-      startedFromProfile: startedFromProfile || null,
-      sceneSet: sceneSet ? sceneSet.toJSON() : null,
-      venueLocation,
-      invitationAsset: invitationAsset ? invitationAsset.toJSON() : null,
-      usedInEpisode: usedInEpisode ? usedInEpisode.toJSON() : null,
-      termsLockedBy,
-      termsReopen,
-    });
+    const payload = await loadEventPayload(models, { showId, eventId });
+    if (!payload) return res.status(404).json({ success: false, error: 'Event not found' });
+    return res.json({ success: true, ...payload });
   } catch (error) {
     console.error('Get single event error:', error);
     return res.status(500).json({ success: false, error: 'Failed to load event', message: error.message });
+  }
+});
+
+
+// ═══════════════════════════════════════════
+// GET /api/v1/world/:showId/events/:eventId/start-readiness
+//
+// What would stop Start Episode, asked of the same function Start Episode
+// refuses with (startReadiness / findStartBlockers, services/
+// startReadinessService.js), so the two never disagree. Read-only.
+//
+// 200 { success: true, data: {
+//   ready: boolean,                       // true exactly when Start Episode would not refuse
+//   blockers: [{ key, label, detail?, ... }],
+//     // key 'episode_exists' (+ episode: { id, title, episode_number, show_id })
+//     //     → Start Episode answers 409 EVENT_ALREADY_HAS_EPISODE
+//     // key 'prices_missing' (+ missing: [{ key, label, ... }])
+//     //     → Start Episode answers 409 DEAL_PRICE_REQUIRED
+//   warnings: [{ key, label, detail? }],  // not refused by the server:
+//     // 'place_venue', 'look_outfit', 'document_shopping_list', 'document_career_plan'
+// } }
+// 404 when the event is not live in this show.
+// ═══════════════════════════════════════════
+
+router.get('/world/:showId/events/:eventId/start-readiness', requireAuth, async (req, res) => {
+  try {
+    const { showId, eventId } = req.params;
+    const models = await getModels();
+    if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
+    const event = await loadScopedEvent(models.sequelize, { showId, eventId });
+    if (!event) return res.status(404).json({ success: false, error: 'Event not found' });
+    const { startReadiness } = require('../services/startReadinessService');
+    const data = await startReadiness(models.sequelize, event);
+    return res.json({ success: true, data });
+  } catch (error) {
+    console.error('Start readiness error:', error);
+    return res.status(500).json({ success: false, error: 'Failed to check Start Episode readiness', message: error.message });
+  }
+});
+
+
+// ═══════════════════════════════════════════
+// GET /api/v1/world/:showId/events/:eventId/package
+//
+// Everything the Event Package page loads, in one request, for the page
+// split (not yet used by the frontend). Same auth as the single-event GET.
+// The event row is read once (404 when it is not live in this show); then
+// every part loads in parallel through the same loader its own route uses,
+// and fails on its own: a failed part is null and its message is under
+// errors.<part>; the others still answer.
+//
+// 200 {
+//   success: true,
+//   eventPayload: { event, episodeLook, placeLocked, sourceProfile,      // GET /events/:eventId,
+//                   startedFromProfile, sceneSet, venueLocation,         // minus `success`
+//                   invitationAsset, usedInEpisode, termsLockedBy,
+//                   termsReopen } | null,
+//   moneyPreview: <GET /events/:eventId/money-preview data> | null,
+//   seasonContext: <GET /season/event/:eventId context> | null,
+//   deliverables: { deliverables: [...], locked: boolean } | null,      // GET .../deliverables, minus success
+//   costs: { costs: [...], drafted: {...}, deal: boolean, locked: boolean } | null,  // GET .../costs, minus success
+//   documents: <GET .../documents data> | null,
+//   termsLock: { locked: boolean,              // the write lock (findTermsWriteLock; false while reopened)
+//                episode: { id, episode_number, title } | null,       // the episode that locks the terms
+//                reopen: { at, by, episode_id } | null } | null,
+//   readiness: <GET .../start-readiness data> | null,
+//   errors: { <part>: message }               // present only when a part failed
+// }
+// ═══════════════════════════════════════════
+
+const EVENT_PACKAGE_PARTS = Object.freeze([
+  'eventPayload', 'moneyPreview', 'seasonContext', 'deliverables', 'costs', 'documents', 'termsLock', 'readiness',
+]);
+
+// The terms lock as the page shows it, or null when the event is gone.
+async function loadTermsLock(sequelize, eventId) {
+  const lockEpisode = await findTermsLockEpisode(sequelize, eventId);
+  if (!lockEpisode) return { locked: false, episode: null, reopen: null };
+  const marker = await readTermsReopen(sequelize, eventId);
+  return {
+    locked: !marker,
+    episode: { id: lockEpisode.id, episode_number: lockEpisode.episode_number ?? null, title: lockEpisode.title ?? null },
+    reopen: marker ? { at: marker.at ?? null, by: marker.by ?? null, episode_id: marker.episode_id ?? null } : null,
+  };
+}
+
+/**
+ * The combined GET's parts for an event row already read in this show.
+ * `loaders` replaces part loaders (tests). Returns { <part>: value | null,
+ * errors? }.
+ */
+async function loadEventPackage(models, { showId, eventId, row, loaders = {} }) {
+  const { sequelize } = models;
+  const defaults = {
+    eventPayload: () => loadEventPayload(models, { showId, eventId, row }),
+    moneyPreview: () => loadMoneyPreview(sequelize, { showId, eventId, event: row }),
+    seasonContext: () => require('../services/seasonSlotService').eventSeasonContext(sequelize, showId, eventId),
+    deliverables: () => require('./eventDeliverables').loadDeliverables(sequelize, { showId, eventId }),
+    costs: () => require('./eventCosts').loadCosts(sequelize, { showId, eventId }),
+    documents: () => require('../services/eventDocumentsService').getDocuments(models, { showId, eventId }),
+    termsLock: () => loadTermsLock(sequelize, eventId),
+    readiness: () => require('../services/startReadinessService').startReadiness(sequelize, row),
+  };
+  const settled = await Promise.all(EVENT_PACKAGE_PARTS.map(async (part) => {
+    try {
+      const value = await (loaders[part] || defaults[part])();
+      return [part, value ?? null, null];
+    } catch (err) {
+      console.error(`[EventPackage] ${part} failed:`, err.message);
+      return [part, null, err.message || 'Failed to load'];
+    }
+  }));
+  const out = {};
+  const errors = {};
+  for (const [part, value, error] of settled) {
+    out[part] = value;
+    if (error) errors[part] = error;
+  }
+  if (Object.keys(errors).length) out.errors = errors;
+  return out;
+}
+
+router.get('/world/:showId/events/:eventId/package', requireAuth, async (req, res) => {
+  try {
+    const { showId, eventId } = req.params;
+    const models = await getModels();
+    if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
+    const row = await loadScopedEvent(models.sequelize, { showId, eventId });
+    if (!row) return res.status(404).json({ success: false, error: 'Event not found' });
+    const parts = await loadEventPackage(models, { showId, eventId, row });
+    return res.json({ success: true, ...parts });
+  } catch (error) {
+    console.error('Event package error:', error);
+    return res.status(500).json({ success: false, error: 'Failed to load the Event Package', message: error.message });
   }
 });
 
@@ -432,11 +581,7 @@ router.post('/world/:showId/events/:eventId/suggest-names', requireAuth, aiRateL
     const models = await getModels();
     if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
 
-    const [rows] = await models.sequelize.query(
-      'SELECT * FROM world_events WHERE id = :eventId AND show_id = :showId AND deleted_at IS NULL LIMIT 1',
-      { replacements: { eventId, showId } }
-    );
-    const event = rows[0];
+    const event = await loadScopedEvent(models.sequelize, { showId, eventId });
     if (!event) return res.status(404).json({ success: false, error: 'Event not found' });
 
     // Host — prefer the linked SocialProfile (durable source_profile_id,
@@ -577,6 +722,128 @@ Return ONLY this JSON, no other text:
   } catch (err) {
     console.error('[SuggestEventNames] Error:', err);
     return res.status(500).json({ success: false, error: 'Name suggestions failed. Please try again.' });
+  }
+});
+
+
+// ═══════════════════════════════════════════
+// POST /api/v1/world/:showId/events/:eventId/suggest-basics
+//
+// AI suggestions for an event's basics — event_date, event_time,
+// description, dress_code, category, format — from the event's own facts.
+// Writes nothing: the page saves a chosen value through the event PUT.
+// The contract and the checks are in src/utils/suggestBasics.js:
+//   body  { fields?: string[] }   (default: every one of the six that is empty)
+//   200   { success: true, data: { suggestions: [{ field, value, reason }] } }
+//   400   fields not a list of the six
+//   404   the event is not live in this show
+//   429   the AI daily budget refused the call (aiCostTracker), with its reason
+//   502   the model failed after its retries
+//   503   ANTHROPIC_API_KEY not configured
+// Every suggestion is checked before it is returned (category/format from
+// WorldEvent's lists, a date not in the past, HH:MM, the length limits);
+// an invalid one is dropped. Nothing usable: 200 with suggestions [].
+// The call goes through the Anthropic SDK, which aiCostTracker patches:
+// logged and budget-gated like every call.
+// ═══════════════════════════════════════════
+
+const SUGGEST_BASICS_FAILED = 'Couldn\'t get suggestions right now.';
+
+router.post('/world/:showId/events/:eventId/suggest-basics', requireAuth, aiRateLimiter, async (req, res) => {
+  try {
+    const { showId, eventId } = req.params;
+
+    if (!process.env.ANTHROPIC_API_KEY) {
+      return res.status(503).json({ success: false, error: 'ANTHROPIC_API_KEY not configured' });
+    }
+
+    const models = await getModels();
+    if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
+
+    const event = await loadScopedEvent(models.sequelize, { showId, eventId });
+    if (!event) return res.status(404).json({ success: false, error: 'Event not found' });
+
+    const {
+      readRequestedFields, suggestionsFromReply, buildSuggestBasicsPrompt,
+    } = require('../utils/suggestBasics');
+    const requested = readRequestedFields(req.body, event);
+    if (requested.error) return res.status(400).json({ success: false, error: requested.error });
+    if (requested.fields.length === 0) return res.json({ success: true, data: { suggestions: [] } });
+
+    // The facts the model sees; each lookup is optional and logged.
+    const logLookup = (what) => (e) => { console.error(`[SuggestBasics] ${what} lookup failed:`, e.message); return null; };
+    const organizer = eventCreatorOrganizer(event);
+    const cc = typeof event.canon_consequences === 'string'
+      ? (() => { try { return JSON.parse(event.canon_consequences); } catch (e) { console.error('[SuggestBasics] canon_consequences parse failed:', e.message); return {}; } })()
+      : (event.canon_consequences || {});
+    const venueLocationId = event.venue_location_id || cc?.automation?.venue_location_id || null;
+    const [profile, venue, season] = await Promise.all([
+      (organizer?.profileId && models.SocialProfile)
+        ? models.SocialProfile.findByPk(organizer.profileId, { attributes: ['display_name', 'handle'] }).catch(logLookup('organizer profile'))
+        : Promise.resolve(null),
+      (venueLocationId && models.WorldLocation)
+        ? models.WorldLocation.findByPk(venueLocationId, { attributes: ['name', 'city'] }).catch(logLookup('venue location'))
+        : Promise.resolve(null),
+      require('../services/seasonSlotService').eventSeasonContext(models.sequelize, showId, eventId).catch(logLookup('season context')),
+    ]);
+    const facts = {
+      name: event.name || null,
+      event_type: event.event_type || null,
+      prestige: typeof event.prestige === 'number' ? event.prestige : null,
+      host_brand: event.host_brand || null,
+      organizer: profile?.display_name || profile?.handle || organizer?.displayName || organizer?.handle || event.host || null,
+      venue: venue ? { name: venue.name, city: venue.city || null } : (event.venue_name ? { name: event.venue_name, city: null } : null),
+      season: season ? [season.arc_title, season.label, season.phase?.title].filter(Boolean).join(' · ') || null : null,
+    };
+    const prompt = buildSuggestBasicsPrompt(event, facts, requested.fields);
+
+    // The repo's two-attempt loop: up to 2 attempts per model, a 2s backoff
+    // on 529/503. A budget refusal (aiCostTracker) is never retried.
+    const MODELS = ['claude-sonnet-4-6'];
+    const Anthropic = require('@anthropic-ai/sdk');
+    const client = new Anthropic();
+    let response = null;
+    let lastErr = null;
+    for (const model of MODELS) {
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          response = await client.messages.create({
+            model,
+            max_tokens: 1200,
+            messages: [{ role: 'user', content: prompt }],
+          });
+          break;
+        } catch (apiErr) {
+          if (isBudgetError(apiErr)) {
+            console.error('[SuggestBasics] AI budget refused the call:', apiErr.message);
+            return res.status(429).json({ success: false, error: apiErr.message, code: apiErr.code });
+          }
+          lastErr = apiErr;
+          const status = apiErr?.status || apiErr?.error?.status;
+          if ((status === 529 || status === 503) && attempt < 1) {
+            await new Promise((r) => setTimeout(r, 2000));
+            continue;
+          }
+          break;
+        }
+      }
+      if (response) break;
+    }
+    if (!response) {
+      console.error('[SuggestBasics] model call failed:', lastErr?.status || '', lastErr?.message || 'no response');
+      return res.status(502).json({ success: false, error: SUGGEST_BASICS_FAILED });
+    }
+
+    const text = response.content?.[0]?.text || '';
+    const suggestions = suggestionsFromReply(text, { fields: requested.fields });
+    if (suggestions.length === 0) {
+      // The raw reply is logged, never returned.
+      console.error('[SuggestBasics] no usable suggestions in model reply:', text.slice(0, 500));
+    }
+    return res.json({ success: true, data: { suggestions } });
+  } catch (err) {
+    console.error('[SuggestBasics] Error:', err);
+    return res.status(500).json({ success: false, error: SUGGEST_BASICS_FAILED });
   }
 });
 
@@ -855,11 +1122,9 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), req
       console.warn('[WorldEvents] PUT without expected_updated_at (last write wins) — keys:', Object.keys(updates).join(', '));
     }
     const refuseStale = async () => {
-      const [current] = await models.sequelize.query(
-        'SELECT * FROM world_events WHERE id = :eventId AND show_id = :showId AND deleted_at IS NULL', { replacements: { eventId, showId } }
-      );
-      if (!current[0]) return res.status(404).json({ success: false, error: 'Event not found' });
-      return res.status(409).json(staleSaveBody(expected, current[0]));
+      const current = await loadScopedEvent(models.sequelize, { showId, eventId });
+      if (!current) return res.status(404).json({ success: false, error: 'Event not found' });
+      return res.status(409).json(staleSaveBody(expected, current));
     };
 
     // Deal components (ruling D14, 2026-09-30; docs/DEAL_COMPONENTS_DESIGN.md
@@ -907,8 +1172,7 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), req
     // in refuseEventSet below knows which set is this event's own.
     let storedSceneSetId = null;
     if (updates.scene_set_id !== undefined) {
-      const [[stored]] = await models.sequelize.query(
-        'SELECT scene_set_id FROM world_events WHERE id = :eventId AND show_id = :showId AND deleted_at IS NULL', { replacements: { eventId, showId } });
+      const stored = await loadScopedEvent(models.sequelize, { showId, eventId, columns: 'scene_set_id' });
       storedSceneSetId = stored?.scene_set_id || null;
     }
 
@@ -1197,10 +1461,8 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), req
     // value (Task #1747), and the row is written — no other writer can land
     // between the checks and the write. A refusal throws EventPutRefusal,
     // which rolls the transaction back.
-    const LOCK_SQL = 'SELECT * FROM world_events WHERE id = :eventId AND show_id = :showId AND deleted_at IS NULL FOR UPDATE';
     const lockAndCheck = async (transaction) => {
-      const [lockedRows] = await models.sequelize.query(LOCK_SQL, { replacements: { eventId, showId }, transaction });
-      const stored = lockedRows?.[0];
+      const stored = await loadScopedEvent(models.sequelize, { showId, eventId, transaction, lock: true });
       if (!stored) throw new EventPutRefusal(404, { success: false, error: 'Event not found' });
       if (expected.present && !versionMatches(stored.updated_at, expected.ms)) {
         const stale = new Error('Stale event save refused');
@@ -1378,12 +1640,10 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), req
       if (drafted?.skipped === 'error') warnings.push('The Terms were not re-drafted for the new deal components. Reload and check the Terms.');
     }
 
-    const [updated] = await models.sequelize.query(
-      'SELECT * FROM world_events WHERE id = :eventId AND show_id = :showId AND deleted_at IS NULL', { replacements: { eventId, showId } }
-    );
-    if (!updated?.[0]) return res.status(404).json({ success: false, error: 'Event not found' });
+    const updated = await loadScopedEvent(models.sequelize, { showId, eventId });
+    if (!updated) return res.status(404).json({ success: false, error: 'Event not found' });
 
-    return res.json({ success: true, event: updated[0], ...(warnings.length > 0 ? { warnings } : {}) });
+    return res.json({ success: true, event: updated, ...(warnings.length > 0 ? { warnings } : {}) });
   } catch (error) {
     console.error('Update event error:', error);
     if (String(error.message || '').includes('does not exist')) {
@@ -1555,10 +1815,7 @@ router.post('/world/:showId/events/:eventId/scene-set-link', requireAuth, async 
     const { showId, eventId } = req.params;
     const models = await getModels();
     if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
-    const [[event]] = await models.sequelize.query(
-      'SELECT * FROM world_events WHERE id = :eventId AND show_id = :showId AND deleted_at IS NULL',
-      { replacements: { eventId, showId } }
-    );
+    const event = await loadScopedEvent(models.sequelize, { showId, eventId });
     if (!event) return res.status(404).json({ success: false, error: 'Event not found' });
     if (!event.used_in_episode_id) {
       return res.status(409).json({ success: false, code: 'EVENT_NOT_ATTACHED', error: 'This event is not attached to an episode.' });
@@ -1617,12 +1874,8 @@ router.post('/world/:showId/events/:eventId/generate-script', requireAuth, aiRat
     if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
 
     // Get event
-    const [events] = await models.sequelize.query(
-      `SELECT * FROM world_events WHERE id = :eventId AND show_id = :showId AND deleted_at IS NULL`,
-      { replacements: { eventId, showId } }
-    );
-    if (!events || events.length === 0) return res.status(404).json({ success: false, error: 'Event not found' });
-    const event = events[0];
+    const event = await loadScopedEvent(models.sequelize, { showId, eventId });
+    if (!event) return res.status(404).json({ success: false, error: 'Event not found' });
 
     // If episode_id is provided, this call will save to it below — refuse
     // before spending the generation work if it would silently replace an
@@ -2380,10 +2633,7 @@ router.post('/world/:showId/events/:eventId/animate-invitation', requireAuth, ai
     if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
 
     // Get the approved invitation image
-    const [event] = await models.sequelize.query(
-      'SELECT invitation_asset_id FROM world_events WHERE id = :eventId AND show_id = :showId AND deleted_at IS NULL LIMIT 1',
-      { replacements: { eventId, showId }, type: models.sequelize.QueryTypes.SELECT }
-    );
+    const event = await loadScopedEvent(models.sequelize, { showId, eventId, columns: 'invitation_asset_id' });
     if (!event) return res.status(404).json({ success: false, error: 'Event not found' });
     if (!event.invitation_asset_id) {
       return res.status(400).json({ success: false, error: 'No approved invitation to animate. Generate and approve one first.' });
@@ -2658,16 +2908,18 @@ router.post('/world/:showId/events/:eventId/generate-episode', requireAuth, aiRa
     // creator gets the title + beat outline only and writes the script
     // themselves later.
     const draftScript = !!(req.body && req.body.draft_script);
+    // Retry protection (services/startEpisodeIdempotency.js): an optional
+    // Idempotency-Key header. A retry with the key of a Start that already
+    // created this event's episode gets that episode back (200), not a 409.
+    const { readIdempotencyKey, INVALID_KEY_CODE } = require('../services/startEpisodeIdempotency');
+    const idem = readIdempotencyKey(req.get('Idempotency-Key'));
+    if (idem.error) return res.status(400).json({ success: false, error: idem.error, code: INVALID_KEY_CODE });
     const models = await getModels();
     if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
 
     // Load event — raw SQL, scoped to this show and to live rows. No
     // unscoped fallback (audit Medium, 2026-10-23): a failed read is a 500.
-    const [rows] = await models.sequelize.query(
-      'SELECT * FROM world_events WHERE id = :eventId AND show_id = :showId AND deleted_at IS NULL LIMIT 1',
-      { replacements: { eventId, showId } }
-    );
-    const event = rows?.[0];
+    const event = await loadScopedEvent(models.sequelize, { showId, eventId });
     if (!event) return res.status(404).json({ success: false, error: 'Event not found' });
 
     // The chosen look's pieces for the money estimate, not the whole closet (Task #1919).
@@ -2679,7 +2931,20 @@ router.post('/world/:showId/events/:eventId/generate-episode', requireAuth, aiRa
       // L3 (Evoni, 2026-10-02): the locations confirmed in the Episode
       // Locations step; absent, the show's defaults and the event's set.
       locations: req.body?.locations,
+      idempotencyKey: idem.key,
     });
+
+    // The same Start, retried: its episode, as a fresh Start answers, with
+    // 200 and nothing created or drafted again.
+    if (result?.replayed) {
+      return res.status(200).json({
+        success: true,
+        data: result,
+        script_drafted: false,
+        replayed: true,
+        message: `Episode "${result.episode?.title || ''}" was already started by this request.`,
+      });
+    }
 
     // Optional: drop in a script skeleton right after the episode lands.
     // Reuses the same skeleton generator as POST /generate-script, just
@@ -2747,9 +3012,7 @@ router.get('/world/:showId/events/:eventId/episode-locations', requireAuth, asyn
     const { showId, eventId } = req.params;
     const models = await getModels();
     if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
-    const [[event]] = await models.sequelize.query(
-      'SELECT id, show_id, scene_set_id, venue_look FROM world_events WHERE id = :eventId AND show_id = :showId AND deleted_at IS NULL',
-      { replacements: { eventId, showId } });
+    const event = await loadScopedEvent(models.sequelize, { showId, eventId, columns: 'id, show_id, scene_set_id, venue_look' });
     if (!event) return res.status(404).json({ success: false, error: 'Event not found' });
     const { proposeLocations } = require('../services/episodeLocationsService');
     const { readVenueLook } = require('../services/venueLookService');
@@ -3870,11 +4133,7 @@ router.post('/world/:showId/events/:eventId/venue-brief', requireAuth, async (re
     if (briefOverrides.error) return res.status(400).json({ success: false, error: briefOverrides.error });
     const models = await getModels();
     if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
-    const [rows] = await models.sequelize.query(
-      'SELECT * FROM world_events WHERE id = :eventId AND show_id = :showId AND deleted_at IS NULL LIMIT 1',
-      { replacements: { eventId, showId } }
-    );
-    const event = rows?.[0];
+    const event = await loadScopedEvent(models.sequelize, { showId, eventId });
     if (!event) return res.status(404).json({ success: false, error: 'Event not found' });
     const { prepareVenueBriefs, loadAttachedSet, attachedSetBaseBrief } = require('../services/venueGenerationService');
     // A scene set already attached: its image is already available, or its
@@ -4050,11 +4309,9 @@ router.get('/world/:showId/events/:eventId/outfit', requireAuth, async (req, res
     const models = await getModels();
 
     // Scoped to this show and to live rows (audit Medium, 2026-10-23).
-    const [rows] = await models.sequelize.query(
-      'SELECT outfit_pieces, outfit_score, name, prestige, event_type, host_brand, dress_code FROM world_events WHERE id = :eventId AND show_id = :showId AND deleted_at IS NULL LIMIT 1',
-      { replacements: { eventId, showId } }
-    );
-    const event = rows?.[0];
+    const event = await loadScopedEvent(models.sequelize, {
+      showId, eventId, columns: 'outfit_pieces, outfit_score, name, prestige, event_type, host_brand, dress_code',
+    });
     if (!event) return res.status(404).json({ success: false, error: 'Event not found' });
 
     const pieces = typeof event.outfit_pieces === 'string' ? JSON.parse(event.outfit_pieces) : (event.outfit_pieces || []);
@@ -4080,11 +4337,7 @@ router.put('/world/:showId/events/:eventId/outfit', requireAuth, async (req, res
 
     // Load event — scoped to this show and to live rows (audit High,
     // 2026-10-23).
-    const [eventRows] = await models.sequelize.query(
-      'SELECT * FROM world_events WHERE id = :eventId AND show_id = :showId AND deleted_at IS NULL LIMIT 1',
-      { replacements: { eventId, showId } }
-    );
-    const event = eventRows?.[0];
+    const event = await loadScopedEvent(models.sequelize, { showId, eventId });
     if (!event) return res.status(404).json({ success: false, error: 'Event not found' });
 
     // Load wardrobe items — the pieces this show can wear: its own and the
@@ -4160,11 +4413,7 @@ router.get('/world/:showId/events/:eventId/wardrobe-options', requireAuth, async
 
     // Load event — scoped to this show and to live rows (audit Medium,
     // 2026-10-23).
-    const [eventRows] = await models.sequelize.query(
-      'SELECT * FROM world_events WHERE id = :eventId AND show_id = :showId AND deleted_at IS NULL LIMIT 1',
-      { replacements: { eventId, showId } }
-    );
-    const event = eventRows?.[0];
+    const event = await loadScopedEvent(models.sequelize, { showId, eventId });
     if (!event) return res.status(404).json({ success: false, error: 'Event not found' });
 
     // Load all wardrobe items for this show
@@ -5127,6 +5376,15 @@ router.get('/world/:showId/episodes/:episodeId/money', requireAuth, async (req, 
   }
 });
 
+// The money preview's data, or null when the event is not live in this show.
+// `event`: the row, when the caller has already read it (the combined GET).
+async function loadMoneyPreview(sequelize, { showId, eventId, event = null }) {
+  const row = event || await loadScopedEvent(sequelize, { showId, eventId });
+  if (!row) return null;
+  const { eventMoneyPreview } = require('../services/episodeMoneyService');
+  return eventMoneyPreview(sequelize, { showId, event: row, episodeId: row.used_in_episode_id || null });
+}
+
 // GET /world/:showId/events/:eventId/money-preview — Episode Money Phase B,
 // MB4 (§8(gg)): before Start Episode, the event's plan as money lines, the
 // projection and the early warnings against Lala's ledger balance.
@@ -5135,15 +5393,8 @@ router.get('/world/:showId/events/:eventId/money-preview', requireAuth, async (r
   try {
     const { showId, eventId } = req.params;
     const models = req.app?.get?.('models') || require('../models');
-    const [event] = await models.sequelize.query(
-      'SELECT * FROM world_events WHERE id = :eventId AND show_id = :showId AND deleted_at IS NULL LIMIT 1',
-      { replacements: { eventId, showId }, type: models.sequelize.QueryTypes.SELECT }
-    );
-    if (!event) return res.status(404).json({ success: false, error: 'Event not found' });
-    const { eventMoneyPreview } = require('../services/episodeMoneyService');
-    const preview = await eventMoneyPreview(models.sequelize, {
-      showId, event, episodeId: event.used_in_episode_id || null,
-    });
+    const preview = await loadMoneyPreview(models.sequelize, { showId, eventId });
+    if (!preview) return res.status(404).json({ success: false, error: 'Event not found' });
     return res.json({ success: true, data: preview });
   } catch (err) {
     console.error('[Financials] Event money preview error:', err);
@@ -5196,10 +5447,7 @@ router.post('/world/:showId/events/:eventId/generate-lists', requireAuth, aiRate
     const { sequelize } = models;
 
     // Find the episode linked to this event
-    const [event] = await sequelize.query(
-      'SELECT id, name, used_in_episode_id FROM world_events WHERE id = :eventId AND show_id = :showId AND deleted_at IS NULL LIMIT 1',
-      { replacements: { eventId, showId }, type: sequelize.QueryTypes.SELECT }
-    );
+    const event = await loadScopedEvent(sequelize, { showId, eventId, columns: 'id, name, used_in_episode_id' });
     if (!event) return res.status(404).json({ error: 'Event not found' });
     if (!event.used_in_episode_id) return res.status(400).json({ error: 'Event not injected into an episode yet. Inject the event first.' });
 
@@ -5480,4 +5728,6 @@ router.get('/world/:showId/events/next-suggestions', requireAuth, async (req, re
 });
 
 module.exports = router;
+module.exports.loadEventPackage = loadEventPackage;
+module.exports.EVENT_PACKAGE_PARTS = EVENT_PACKAGE_PARTS;
 

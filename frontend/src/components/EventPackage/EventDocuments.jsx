@@ -1,7 +1,8 @@
 /**
  * EventDocuments — the Event Package's in-world documents beside the
  * invitation (Evoni, 2026-10-06; her Episode mock's "In-world documents":
- * one system, three looks). Lala's shopping list and her career plan, each
+ * one system, three looks — the invitation, shown in 1. The Event, and the
+ * two documents here). Lala's shopping list and her career plan, each
  * with the invitation's steps: Draft (written from the event), Edit (her
  * own lines), Redraft (a new draft; the old one is kept) and Approve.
  *
@@ -15,19 +16,37 @@
  * overlays"); the card shows it, or Make overlay when an approved one has
  * none. Not placed on a beat.
  *
+ * Redraft is done at once, with "Redrafted the shopping list · Undo" for a
+ * few seconds (useUndo; Evoni, 2026-10-23, undo instead of confirm). Undo
+ * saves the lines it replaced back through Edit, and approves them again
+ * when they were approved (which draws the overlay again, with Canvas, at
+ * no cost): the same lines and state, as a newer version (read "edited").
+ *
+ * "Look changed — redraft the list?" (Evoni, 2026-10-23): the shopping
+ * list records no pieces it was drafted from (its lines are slots and
+ * labels), so the comparison is with the look's pieces when this list
+ * version was first seen in this browser tab, or drafted here
+ * (lib/eventDocuments lookBaseline, sessionStorage by event). When the
+ * look's pieces differ, the card says so with Redraft and Keep (keeps the
+ * list, and takes the new look as its baseline).
+ *
  * Data: GET/POST/PUT /world/:showId/events/:eventId/documents
  * (lib/eventDocuments, src/services/eventDocumentsService.js). The
  * invitation keeps its place in 1. The Event.
  */
 import React, { useCallback, useEffect, useState } from 'react';
-import { Check, ExternalLink, Image as ImageIcon, Loader2, Pencil, Plus, RefreshCw, Trash2, Wand2, X } from 'lucide-react';
+import { Check, ExternalLink, Image as ImageIcon, Loader2, Pencil, Plus, RefreshCw, Shirt, Trash2, Wand2, X } from 'lucide-react';
 import {
   getEventDocumentsApi, draftEventDocumentApi, editEventDocumentApi, approveEventDocumentApi,
   docState, docOverlay, shoppingLines, careerSections, documentByline,
+  lookPiecesKey, readLookBaselines, writeLookBaselines, lookChangedSince,
 } from '../../lib/eventDocuments';
+import UndoNotice from './UndoNotice';
+import { useUndo } from './useUndo';
+import { saveErrorMessage } from '../../utils/eventSaveVersion';
 import './EventDocuments.css';
 
-const errorText = (err) => err?.response?.data?.error || err?.message || 'Something went wrong';
+const errorText = (err) => saveErrorMessage(err, 'Something went wrong');
 const coins = (n) => Number(n || 0).toLocaleString();
 
 const DOCS = [
@@ -183,6 +202,11 @@ export default function EventDocuments({ showId, eventId, event, outfitPieces = 
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(null); // `${type}:${action}`
   const [editing, setEditing] = useState(null);
+  // The look's piece ids: when the outfit changes (a look chosen, a piece
+  // swapped), the documents are read again, since the server's copy of the
+  // look (docs.look) is what the shopping list adds up and it wins over the
+  // pieces passed in.
+  const piecesKey = (Array.isArray(outfitPieces) ? outfitPieces : []).map((p) => p?.id ?? '').join(',');
 
   useEffect(() => {
     if (!showId || !eventId) return undefined;
@@ -194,8 +218,9 @@ export default function EventDocuments({ showId, eventId, event, outfitPieces = 
         if (!cancelled) setError(errorText(err));
       });
     return () => { cancelled = true; };
-  }, [showId, eventId]);
+  }, [showId, eventId, piecesKey]);
 
+  // Resolves to the saved document, or null when the call failed (said in the error line).
   const act = useCallback(async (type, action, fn) => {
     setBusy(`${type}:${action}`);
     setError(null);
@@ -203,13 +228,47 @@ export default function EventDocuments({ showId, eventId, event, outfitPieces = 
       const doc = await fn();
       setDocs((d) => ({ ...(d || {}), [type]: doc }));
       if (action === 'edit') setEditing(null);
+      return doc;
     } catch (err) {
       console.error(`[EventDocuments] ${action} ${type} failed:`, err);
       setError(errorText(err));
+      return null;
     } finally {
       setBusy(null);
     }
   }, []);
+
+  // The shopping list's look baseline (see lookChanged below).
+  const [baselines, setBaselines] = useState(() => readLookBaselines(eventId));
+  useEffect(() => { setBaselines(readLookBaselines(eventId)); }, [eventId]);
+  const setListBaseline = useCallback((entry) => setBaselines((prev) => {
+    const next = { ...(prev || {}), shopping_list: entry };
+    writeLookBaselines(eventId, next);
+    return next;
+  }), [eventId]);
+
+  const undo = useUndo(`docs:${eventId}`, { setDocs, setListBaseline });
+
+  // Redraft replaces the current version (kept in its history) at once;
+  // Undo puts its lines back, approved again when they were.
+  const redraft = async (type, doc) => {
+    const next = await act(type, 'draft', () => draftEventDocumentApi(showId, eventId, type));
+    if (!next || !doc) return;
+    const { items, status } = doc;
+    // The list put back was drafted from the look its baseline names.
+    const before = type === 'shopping_list' ? baselines?.shopping_list || null : null;
+    const title = (DOCS.find((d) => d.type === type)?.title || 'document').toLowerCase();
+    undo.offer({
+      message: `Redrafted the ${title}`,
+      meta: { type },
+      undo: async (ctx) => {
+        let back = await editEventDocumentApi(showId, eventId, type, items || []);
+        if (status === 'approved') back = await approveEventDocumentApi(showId, eventId, type);
+        if (before && back?.version != null) ctx.setListBaseline?.({ version: back.version, pieces: before.pieces });
+        ctx.setDocs?.((d) => ({ ...(d || {}), [type]: back }));
+      },
+    });
+  };
 
   // The look the shopping list adds up, as the server reads it with the
   // documents (the look Finalize charges, Evoni 2026-10-09); the caller's
@@ -218,10 +277,23 @@ export default function EventDocuments({ showId, eventId, event, outfitPieces = 
   const listPieces = docs?.look ? docs.look.pieces : outfitPieces;
   const listTotal = docs?.shopping_list && docs?.look ? shoppingLines(docs.shopping_list, docs.look.pieces).total : null;
 
+  // Look changed since the list was drafted (as far as this tab knows):
+  // the look's piece ids when this list version was first seen or drafted.
+  const lookKey = lookPiecesKey(listPieces);
+  const listVersion = docs?.shopping_list?.version ?? null;
+  useEffect(() => {
+    if (!docs || listVersion == null) return;
+    const b = baselines?.shopping_list;
+    if (b && b.version === listVersion) return;
+    setListBaseline({ version: listVersion, pieces: lookKey });
+  }, [docs, listVersion]); // eslint-disable-line react-hooks/exhaustive-deps
+  const lookChanged = Boolean(docs?.shopping_list) && lookChangedSince(baselines?.shopping_list, listVersion, lookKey);
+  const keepList = () => setListBaseline({ version: listVersion, pieces: lookKey });
+
   return (
     <div className={`evd${layout === 'wide' ? ' is-wide' : ''}`} data-testid="event-documents">
       {intro && <p className="evd-intro">
-        One system, three looks. Each document fills itself from the event, goes through the same steps
+        One system for the event&apos;s in-world documents: the invitation and these two. Each fills itself from the event, goes through the same steps
         (Draft, Edit, Redraft, Approve). Once approved, Start Episode puts it on the episode&apos;s lists: the
         shopping list as her wardrobe list, the career plan&apos;s &ldquo;This event&rdquo; lines as her goals.
         Approving one also draws it as an overlay for the episode.
@@ -274,7 +346,7 @@ export default function EventDocuments({ showId, eventId, event, outfitPieces = 
                       <button type="button" className="evd-link" onClick={() => setEditing(type)} disabled={!!busy || editing === type}>
                         <Pencil size={13} aria-hidden="true" /> Edit
                       </button>
-                      <button type="button" className="evd-link" onClick={() => act(type, 'draft', () => draftEventDocumentApi(showId, eventId, type))} disabled={!!busy}>
+                      <button type="button" className="evd-link" onClick={() => redraft(type, doc)} disabled={!!busy || editing === type} data-testid={`evd-redraft-${type}`}>
                         {isBusy('draft') ? <Loader2 size={13} className="evd-spin" aria-hidden="true" /> : <RefreshCw size={13} aria-hidden="true" />} Redraft
                       </button>
                       {doc.status !== 'approved' && (
@@ -285,6 +357,20 @@ export default function EventDocuments({ showId, eventId, event, outfitPieces = 
                     </>
                   )}
                 </div>
+                {type === 'shopping_list' && doc && !ro && lookChanged && editing !== type && (
+                  <div className="evd-look-changed" role="status" data-testid="evd-look-changed">
+                    <span className="evd-look-changed-text"><Shirt size={13} aria-hidden="true" /> Look changed — redraft the list?</span>
+                    <span className="evd-look-changed-actions">
+                      <button type="button" className="evd-link" onClick={() => redraft(type, doc)} disabled={!!busy} data-testid="evd-look-changed-redraft">
+                        {isBusy('draft') ? <Loader2 size={13} className="evd-spin" aria-hidden="true" /> : <RefreshCw size={13} aria-hidden="true" />} Redraft
+                      </button>
+                      <button type="button" className="evd-link" onClick={keepList} disabled={!!busy} data-testid="evd-look-changed-keep">
+                        <Check size={13} aria-hidden="true" /> Keep
+                      </button>
+                    </span>
+                  </div>
+                )}
+                {!ro && <UndoNotice undo={undo} match={(n) => n.meta?.type === type} testId={`evd-undo-${type}`} />}
                 {doc && (
                   <OverlayRow
                     type={type} doc={doc} busy={busy} readOnly={ro}

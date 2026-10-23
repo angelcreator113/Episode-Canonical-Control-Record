@@ -11,17 +11,45 @@
  * whole outfit. Shown only while no outfit is chosen.
  *
  * Props: showId, eventId, onSaved(), onToast(message), onBrowse() to open
- * the full closet picker.
+ * the full closet picker, hasOutfit (optional, default false): the event
+ * already has an outfit.
+ *
+ * Use this look is saved at once, with "‘Look A’ chosen · Undo" for a few
+ * seconds (useUndo; Evoni, 2026-10-23, undo instead of confirm): the outfit
+ * it replaces is read first (GET …/outfit) and Undo saves those pieces back
+ * through the same PUT (re-read from the closet, as any save is; none when
+ * there was none), then refreshes the page. The page shows these
+ * recommendations only while no outfit is chosen, so the refresh after the
+ * save takes this component away: the Undo floats at the foot of the
+ * screen (a floating offer, FloatingUndoHost) instead of sitting here. If
+ * the outfit it replaces cannot be read, Undo could not restore it, so
+ * with hasOutfit it asks first, as before.
  */
 import { useEffect, useState } from 'react';
 import { Shirt, ShoppingBag, Sparkles } from 'lucide-react';
 import api from '../../services/api';
 import { recommendLooks, isOwned } from '../../utils/recommendLooks';
+import { showFloatingUndos } from './UndoNotice';
+import { useUndo } from './useUndo';
 
-export default function EventLookRecommendations({ showId, eventId, onSaved, onToast, onBrowse }) {
+const REFRESH_FAILED = "Saved — couldn't refresh the page. Reload to see the outfit.";
+
+export default function EventLookRecommendations({ showId, eventId, onSaved, onToast, onBrowse, hasOutfit = false }) {
   const [looks, setLooks] = useState(null);
   const [failed, setFailed] = useState(false);
   const [saving, setSaving] = useState(null);
+  const outfitUrl = `/api/v1/world/${showId}/events/${eventId}/outfit`;
+  const undo = useUndo(`look:${eventId}`);
+
+  // The page's refresh after a save; its failure is not the save's.
+  const refreshPage = async (savedFn, toastFn) => {
+    try {
+      await savedFn?.();
+    } catch (err) {
+      console.error('[EventLooks] refresh after save failed:', err);
+      toastFn?.(REFRESH_FAILED);
+    }
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -37,16 +65,42 @@ export default function EventLookRecommendations({ showId, eventId, onSaved, onT
   const chooseLook = async (look) => {
     if (saving) return;
     setSaving(look.key);
+    // The outfit this replaces, for Undo.
+    let previous = null;
     try {
-      await api.put(`/api/v1/world/${showId}/events/${eventId}/outfit`, { wardrobe_ids: look.pieces.map((p) => p.id) });
-      onToast?.(`${look.label} chosen`);
-      onSaved?.();
+      const res = await api.get(outfitUrl);
+      previous = (Array.isArray(res.data?.pieces) ? res.data.pieces : []).map((p) => p?.id).filter(Boolean);
+    } catch (err) {
+      console.error('[EventLooks] current outfit read failed:', err);
+      if (!hasOutfit) previous = [];
+    }
+    if (previous === null && !window.confirm(`Replace the event's chosen outfit with ${look.label}?`)) {
+      setSaving(null);
+      return;
+    }
+    try {
+      await api.put(outfitUrl, { wardrobe_ids: look.pieces.map((p) => p.id) });
     } catch (err) {
       console.error('[EventLooks] save failed:', err);
       onToast?.(err.response?.data?.error || err.message || 'Failed to save the look');
-    } finally {
       setSaving(null);
+      return;
     }
+    if (previous === null) {
+      onToast?.(`${look.label} chosen`);
+    } else {
+      showFloatingUndos();
+      undo.offer({
+        floating: true,
+        message: `'${look.label}' chosen`,
+        undo: async () => {
+          await api.put(outfitUrl, { wardrobe_ids: previous });
+          await refreshPage(onSaved, onToast);
+        },
+      });
+    }
+    await refreshPage(onSaved, onToast);
+    setSaving(null);
   };
 
   if (failed) return <p className="epp-looks-note" data-testid="looks-failed">Recommended looks could not be loaded. Choose an outfit from the closet instead.</p>;

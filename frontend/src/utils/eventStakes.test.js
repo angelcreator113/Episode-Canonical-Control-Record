@@ -73,6 +73,9 @@ describe('projectEventDifficulty', () => {
 
   test('an empty object is incomplete (the formula would say 3.7)', () => {
     expect(calcEventDifficulty({})).toBe(3.7);
+    // A stored 0 and the 'none' deadline are values, not gaps (?? not ||).
+    expect(calcEventDifficulty({ prestige: 0, strictness: 0, deadline_type: 'none' })).toBe(1);
+    expect(calcEventDifficulty({ deadline_type: 'none' })).toBe(3.3);
     expect(projectEventDifficulty({}).complete).toBe(false);
   });
 

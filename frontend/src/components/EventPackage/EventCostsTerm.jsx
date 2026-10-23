@@ -22,11 +22,31 @@
  * `refreshKey` reloads the rows, for Propose terms, which drafts the entry
  * line on a deal's first proposal.
  *
+ * Every write that succeeds (add, edit, remove, Draft entry) calls
+ * `onSaved` so the page's Deal & Money tiles follow it; a failure of that
+ * refresh is logged and toasted as "couldn't refresh", never as a failed
+ * write. `onCostsChange(costs)` (optional) receives the rows after each
+ * load, for the readiness price gate (computeEventPackageReadiness's
+ * `prices.costs`).
+ *
+ * Remove is done at once, with "Removed ‘Valet’ · Undo" for a few seconds
+ * (useUndo; Evoni, 2026-10-23, undo instead of confirm): Undo adds the cost
+ * back with the same kind, label, amount and payer (a new row, so a drafted
+ * row's "Auto-drafted" note does not come back).
+ *
+ * Price all (EventTermsSection's "Price N items"): `pricingId` opens that
+ * cost's form with its amount focused; a save calls `onPriced(id)` before
+ * the page refreshes, so the walk moves to the next unpriced line, and
+ * Cancel calls `onPricingCancel()`. All three optional.
+ *
  * Styles live in pages/EventPackagePage.css (one CSS file per page).
  */
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import UndoNotice from './UndoNotice';
+import { useUndo } from './useUndo';
 import { Receipt, Pencil, Plus, Trash2, Loader2, AlertCircle, Sparkles } from 'lucide-react';
 import api from '../../services/api';
+import { saveErrorMessage as errorMessage } from '../../utils/eventSaveVersion';
 import {
   COST_KINDS, TERMS_COST_KINDS, COST_PAID_BY, COST_PAID_BY_LABELS, COST_LABEL_MAX,
   costKindLabel, costName, costDraftFrom, buildCostBody, costDraftNote, costTotals, costAmountLabel,
@@ -40,12 +60,12 @@ export const updateCostApi = (showId, eventId, id, body) => api.put(`${costsUrl(
 export const deleteCostApi = (showId, eventId, id) => api.delete(`${costsUrl(showId, eventId)}/${id}`);
 export const draftExtrasApi = (showId, eventId) => api.post(`${costsUrl(showId, eventId)}/draft-extras`, {});
 
-function errorMessage(err, fallback) {
-  return err?.response?.data?.error || err?.message || fallback;
-}
+export const REFRESH_FAILED_MESSAGE = "Saved — couldn't refresh the page. Reload to see the totals.";
 
-export default function EventCostsTerm({ showId, eventId, locked, refreshKey, onSaved, onToast }) {
+export default function EventCostsTerm({ showId, eventId, locked, refreshKey, onSaved, onToast, onCostsChange, pricingId = null, onPriced, onPricingCancel }) {
   const toast = (msg) => { if (onToast) onToast(msg); };
+  const costsChangeRef = useRef(onCostsChange);
+  costsChangeRef.current = onCostsChange;
 
   const [costs, setCosts] = useState([]);
   const [drafted, setDrafted] = useState({});
@@ -55,16 +75,20 @@ export default function EventCostsTerm({ showId, eventId, locked, refreshKey, on
   const [draft, setDraft] = useState(costDraftFrom(null));
   const [formError, setFormError] = useState(null);
   const [saving, setSaving] = useState(false);
+  const amountInput = useRef(null);
 
   const load = useCallback(async () => {
     setLoading(true); setLoadError(null);
     try {
       const res = await listCostsApi(showId, eventId);
-      setCosts(Array.isArray(res.data?.costs) ? res.data.costs : []);
+      const rows = Array.isArray(res.data?.costs) ? res.data.costs : [];
+      setCosts(rows);
       setDrafted(res.data?.drafted || {});
+      costsChangeRef.current?.(rows);
     } catch (err) {
       console.error('[EventCosts] load failed:', err);
       setLoadError(errorMessage(err, 'Failed to load costs'));
+      costsChangeRef.current?.(null);
     } finally {
       setLoading(false);
     }
@@ -81,13 +105,42 @@ export default function EventCostsTerm({ showId, eventId, locked, refreshKey, on
     if (err?.response?.status === 409 && onSaved) onSaved();
   };
 
+  // The page's refresh after a write that succeeded (its tiles read the
+  // costs through the money preview).
+  const refreshPage = async () => {
+    if (!onSaved) return;
+    try {
+      await onSaved();
+    } catch (err) {
+      console.error('[EventCosts] refresh after save failed:', err);
+      toast(REFRESH_FAILED_MESSAGE);
+    }
+  };
+
   const openForm = (cost) => {
     if (locked) return;
     setDraft(costDraftFrom(cost || null));
     setFormError(null);
     setForm({ id: cost ? cost.id : null });
   };
-  const closeForm = () => { if (!saving) { setForm(null); setFormError(null); } };
+  const closeForm = () => {
+    if (saving) return;
+    if (form?.id && form.id === pricingId) onPricingCancel?.();
+    setForm(null); setFormError(null);
+  };
+
+  // Price all: open the cost the walk is on, its amount focused.
+  useEffect(() => {
+    if (!pricingId || locked || loading) return;
+    const cost = costs.find((c) => c.id === pricingId);
+    if (!cost) return;
+    if (form?.id !== pricingId) openForm(cost);
+  }, [pricingId, costs, loading, locked]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!pricingId || form?.id !== pricingId) return;
+    const el = amountInput.current;
+    if (el) { el.focus(); el.scrollIntoView?.({ block: 'center', behavior: 'smooth' }); }
+  }, [pricingId, form?.id]);
 
   const save = async () => {
     if (locked || saving || !form) return;
@@ -97,43 +150,64 @@ export default function EventCostsTerm({ showId, eventId, locked, refreshKey, on
     try {
       if (form.id) await updateCostApi(showId, eventId, form.id, built.body);
       else await createCostApi(showId, eventId, built.body);
-      toast(form.id ? 'Cost saved' : 'Cost added');
-      setForm(null);
-      await load();
     } catch (err) {
       onWriteError(err, 'Failed to save the cost');
-    } finally {
       setSaving(false);
+      return;
     }
+    toast(form.id ? 'Cost saved' : 'Cost added');
+    const savedId = form.id;
+    setForm(null);
+    await load();
+    if (savedId && savedId === pricingId) onPriced?.(savedId);
+    await refreshPage();
+    setSaving(false);
   };
+
+  // Undo's context: the newest mounted instance's reload and refresh (the
+  // page remounts this section after the refresh a removal makes).
+  const undo = useUndo(`costs:${eventId}`, { load, refreshPage });
 
   const remove = async (cost) => {
     if (locked || saving) return;
     setSaving(true);
     try {
       await deleteCostApi(showId, eventId, cost.id);
-      toast('Cost removed');
-      await load();
     } catch (err) {
       onWriteError(err, 'Failed to remove the cost');
-    } finally {
       setSaving(false);
+      return;
     }
+    const { kind, label, amount, paid_by: paidBy } = cost;
+    undo.offer({
+      message: `Removed '${costName(cost)}'`,
+      undo: async (ctx) => {
+        await createCostApi(showId, eventId, { kind, label: label ?? null, amount: amount ?? null, paid_by: paidBy || 'lala' });
+        await ctx.load?.();
+        await ctx.refreshPage?.();
+      },
+    });
+    await load();
+    await refreshPage();
+    setSaving(false);
   };
 
   const draftExtras = async () => {
     if (locked || saving) return;
     setSaving(true);
+    let added = 0;
     try {
       const res = await draftExtrasApi(showId, eventId);
-      const added = Array.isArray(res.data?.drafted) ? res.data.drafted.length : 0;
-      toast(added ? 'Drafted the entry line' : 'Nothing to draft: the entry line is drafted, or this deal has none');
-      await load();
+      added = Array.isArray(res.data?.drafted) ? res.data.drafted.length : 0;
     } catch (err) {
       onWriteError(err, 'Failed to draft the entry line');
-    } finally {
       setSaving(false);
+      return;
     }
+    toast(added ? 'Drafted the entry line' : 'Nothing to draft: the entry line is drafted, or this deal has none');
+    await load();
+    if (added) await refreshPage();
+    setSaving(false);
   };
 
   const totals = costTotals(costs);
@@ -195,9 +269,14 @@ export default function EventCostsTerm({ showId, eventId, locked, refreshKey, on
         </ul>
       ) : <div className="epp-empty">None set</div>}
 
+      <UndoNotice undo={undo} testId="terms-cost-undo" />
+
       {costs.length > 0 && (
         <div className="epp-term-value" data-testid="terms-cost-totals">
           Lala pays {totals.lala.toLocaleString()} coins
+          {totals.unpriced > 0 && (
+            <span className="is-price-required" data-testid="terms-cost-unpriced"> +{totals.unpriced} unpriced</span>
+          )}
           {totals.comped > 0 && <span className="epp-term-state"> · comped {totals.comped.toLocaleString()}</span>}
         </div>
       )}
@@ -214,6 +293,7 @@ export default function EventCostsTerm({ showId, eventId, locked, refreshKey, on
             <label className="epp-term-field">
               <span>Amount (coins)</span>
               <input
+                ref={amountInput}
                 type="number" min={0} step={1} inputMode="numeric" placeholder="Price required" value={draft.amount} data-testid="terms-cost-amount"
                 onChange={(e) => setDraft((d) => ({ ...d, amount: e.target.value }))}
               />
@@ -244,8 +324,8 @@ export default function EventCostsTerm({ showId, eventId, locked, refreshKey, on
 
       <p className="epp-term-note">
         {locked
-          ? 'Locked at Start Episode. Complete charges each cost Lala pays; comped costs are never charged.'
-          : 'Each cost Lala pays is charged at Complete, one line each; a cost the host or brand comps is never charged. Draft entry adds a self-funded or entry-covered deal\'s entry from the event cost. Drinks, valet and other spending during the event are on the episode\'s Money tab.'}
+          ? 'Locked at Start Episode. Finalize charges each cost Lala pays; comped costs are never charged.'
+          : 'Each cost Lala pays is charged at Finalize, one line each; a cost the host or brand comps is never charged. Draft entry adds a self-funded or entry-covered deal\'s entry from the event cost. Drinks, valet and other spending during the event are on the episode\'s Money tab.'}
       </p>
     </div>
   );

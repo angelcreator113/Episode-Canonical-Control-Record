@@ -1,5 +1,5 @@
 import { describe, test, expect } from 'vitest';
-import { buildCostBody, costDraftFrom, costDraftNote, costTotals, costName, costAmountLabel } from './eventCosts';
+import { buildCostBody, costDraftFrom, costDraftNote, costTotals, missingCostPriceLabels, costName, costAmountLabel } from './eventCosts';
 
 describe('eventCosts (Task #2365)', () => {
   test('buildCostBody: a whole amount, a known kind and payer; an empty label is none', () => {
@@ -31,7 +31,7 @@ describe('eventCosts (Task #2365)', () => {
   });
 
   test('totals and names', () => {
-    expect(costTotals([{ amount: 80, paid_by: 'lala' }, { amount: 400, paid_by: 'host' }])).toEqual({ lala: 80, comped: 400 });
+    expect(costTotals([{ amount: 80, paid_by: 'lala' }, { amount: 400, paid_by: 'host' }])).toEqual({ lala: 80, comped: 400, unpriced: 0 });
     expect(costName({ kind: 'glam', label: null })).toBe('Glam');
     expect(costName({ kind: 'glam', label: 'Hair' })).toBe('Hair');
   });
@@ -43,5 +43,16 @@ describe('eventCosts (Task #2365)', () => {
     const drafted = { c1: { key: 'travel', amount: null, paid_by: 'lala', source: 'travel' } };
     expect(costDraftNote({ id: 'c1', amount: null, paid_by: 'lala' }, drafted)).toBe('Auto-drafted · Lala travels');
     expect(costDraftNote({ id: 'c1', amount: 300, paid_by: 'lala' }, drafted)).toBe('Edited');
+  });
+
+  test('an unpriced line Lala pays is counted, not added as 0; a comped one never is', () => {
+    const costs = [
+      { id: 'a', amount: 80, paid_by: 'lala', kind: 'glam' },
+      { id: 'b', amount: null, paid_by: 'lala', kind: 'travel', label: 'Car' },
+      { id: 'c', amount: null, paid_by: 'host', kind: 'entry' },
+    ];
+    expect(costTotals(costs)).toEqual({ lala: 80, comped: 0, unpriced: 1 });
+    expect(missingCostPriceLabels(costs)).toEqual(['"Car"']);
+    expect(missingCostPriceLabels(null)).toEqual([]);
   });
 });

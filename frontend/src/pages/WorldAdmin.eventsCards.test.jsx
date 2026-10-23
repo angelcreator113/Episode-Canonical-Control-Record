@@ -82,7 +82,7 @@ describe('WorldAdmin events queue — cards and the deal-type filter (Task #2361
     expect(within(card).getByRole('heading', { name: 'Atelier Launch' })).toBeTruthy();
     expect(within(card).queryAllByTestId(/^event-card-status-/)).toHaveLength(1);
     expect(card.querySelector('.wa-ev-category').textContent).toBe('launch');
-    expect(within(card).getByTestId('event-card-place-ev-brand').textContent).toBe('2026-10-12');
+    expect(within(card).getByTestId('event-card-place-ev-brand').textContent).toBe('Mon, Oct 12');
     const deal = within(card).getByTestId('event-card-deal-ev-brand');
     expect(deal.textContent).toContain('Paid appearance');
     expect(deal.textContent).toContain('Unpaid');

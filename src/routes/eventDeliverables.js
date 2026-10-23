@@ -52,6 +52,7 @@ const {
   formatOf, PLATFORMS, QUANTITY_MIN, QUANTITY_MAX,
 } = require('../utils/deliverableFormats');
 const { findTermsWriteLock } = require('../utils/eventTermsLock');
+const { loadScopedEvent, assertTermsWritable } = require('../utils/eventScope');
 
 const TERMS_LOCKED_CODE = 'EVENT_TERMS_LOCKED';
 const STATUS_NOT_EDITABLE_CODE = 'DELIVERABLE_STATUS_NOT_EDITABLE';
@@ -68,14 +69,14 @@ async function getModels() {
   try { return require('../models'); } catch (e) { console.error('Failed to load models:', e.message); return null; }
 }
 
-// The event, scoped to the show. null when absent or deleted. FOR UPDATE
-// inside a write's transaction, so two writes to one event queue.
-async function loadEvent(sequelize, showId, eventId, { transaction } = {}) {
-  const [rows] = await sequelize.query(
-    `SELECT id, show_id, used_in_episode_id, canon_consequences FROM world_events WHERE id = :eventId AND show_id = :showId AND deleted_at IS NULL LIMIT 1${transaction ? ' FOR UPDATE' : ''}`,
-    { replacements: { eventId, showId }, transaction }
-  );
-  return rows?.[0] || null;
+// The event, scoped to the show (loadScopedEvent, utils/eventScope.js).
+// null when absent or deleted. FOR UPDATE inside a write's transaction, so
+// two writes to one event queue.
+function loadEvent(sequelize, showId, eventId, { transaction } = {}) {
+  return loadScopedEvent(sequelize, {
+    showId, eventId, transaction, lock: !!transaction,
+    columns: 'id, show_id, used_in_episode_id, canon_consequences',
+  });
 }
 
 // The episode that locks this event's terms, or null: the shared lock
@@ -104,8 +105,12 @@ async function withWritableEvent(sequelize, showId, eventId, write) {
   return sequelize.transaction(async (transaction) => {
     const event = await loadEvent(sequelize, showId, eventId, { transaction });
     if (!event) return { status: 404, body: { success: false, error: 'Event not found' } };
-    const lockEpisode = await findLock(sequelize, eventId, { transaction });
-    if (lockEpisode) return { status: 409, body: lockedBody(event, lockEpisode) };
+    // The shared terms check (assertTermsWritable), answered with this
+    // route's own 409 body.
+    const refusal = await assertTermsWritable(sequelize, eventId, {
+      transaction, body: (lockEpisode) => lockedBody(event, lockEpisode),
+    });
+    if (refusal) return { status: refusal.status, body: refusal.body };
     return write(transaction, event);
   });
 }
@@ -188,6 +193,20 @@ function readDeliverableBody(body, { partial }) {
 }
 
 
+/**
+ * The GET's data: { deliverables, locked }, or null when the event is not
+ * live in this show. Shared with the Event Package's combined GET
+ * (worldEvents.js, /events/:eventId/package).
+ */
+async function loadDeliverables(sequelize, { showId, eventId }) {
+  const event = await loadEvent(sequelize, showId, eventId);
+  if (!event) return null;
+  const deliverables = await listEventDeliverables(sequelize, eventId);
+  const lockEpisode = await findLock(sequelize, eventId);
+  return { deliverables, locked: !!lockEpisode };
+}
+
+
 // ═══════════════════════════════════════════
 // GET /api/v1/world/:showId/events/:eventId/deliverables
 // ═══════════════════════════════════════════
@@ -198,12 +217,9 @@ router.get('/world/:showId/events/:eventId/deliverables', requireAuth, async (re
     const models = await getModels();
     if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
 
-    const event = await loadEvent(models.sequelize, showId, eventId);
-    if (!event) return res.status(404).json({ success: false, error: 'Event not found' });
-
-    const deliverables = await listEventDeliverables(models.sequelize, eventId);
-    const lockEpisode = await findLock(models.sequelize, eventId);
-    return res.json({ success: true, deliverables, locked: !!lockEpisode });
+    const data = await loadDeliverables(models.sequelize, { showId, eventId });
+    if (!data) return res.status(404).json({ success: false, error: 'Event not found' });
+    return res.json({ success: true, ...data });
   } catch (error) {
     console.error('List event deliverables error:', error);
     return res.status(500).json({ success: false, error: 'Failed to load deliverables', message: error.message });
@@ -430,3 +446,4 @@ module.exports.TERMS_LOCKED_CODE = TERMS_LOCKED_CODE;
 module.exports.STATUS_NOT_EDITABLE_CODE = STATUS_NOT_EDITABLE_CODE;
 module.exports.NOT_STARTED_CODE = NOT_STARTED_CODE;
 module.exports.STATUS_CONFLICT_CODE = STATUS_CONFLICT_CODE;
+module.exports.loadDeliverables = loadDeliverables;

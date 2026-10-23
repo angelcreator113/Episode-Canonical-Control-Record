@@ -146,3 +146,26 @@ describe('TermsReopenPanel (Task #2378)', () => {
     expect(screen.queryByTestId('terms-regenerate-offer')).toBeNull();
   });
 });
+
+describe('TermsReopenPanel: a failed eligibility check', () => {
+  beforeEach(() => {
+    Object.values(api).forEach((fn) => fn?.mockReset?.());
+  });
+
+  test('says so with Retry, which checks again', async () => {
+    vi.mocked(api.get).mockRejectedValueOnce(new Error('network'));
+    render(<Harness />);
+    expect((await screen.findByTestId('terms-reopen-why')).textContent).toMatch(/Could not check/);
+    eligibility({ eligible: true, reasons: [] });
+    fireEvent.click(screen.getByTestId('terms-reopen-retry'));
+    expect(await screen.findByTestId('terms-reopen-button')).toBeTruthy();
+    expect(api.get).toHaveBeenCalledTimes(2);
+  });
+
+  test('a real refusal has no Retry', async () => {
+    eligibility({ eligible: false, reasons: [{ code: 'EPISODE_ACCEPTED', message: 'The episode is accepted.' }] });
+    render(<Harness />);
+    await screen.findByTestId('terms-reopen-why');
+    expect(screen.queryByTestId('terms-reopen-retry')).toBeNull();
+  });
+});

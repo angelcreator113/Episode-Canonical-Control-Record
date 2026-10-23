@@ -7,6 +7,7 @@
  */
 import api from '../services/api';
 import { canonicalCategory } from './closetGrouping';
+import { formatEventDate } from '../utils/eventDate';
 
 const base = (showId, eventId) => `/api/v1/world/${showId}/events/${eventId}/documents`;
 
@@ -142,10 +143,50 @@ export function careerSections(doc) {
 /** "for Studio by Sable · Nov 12": who it is for, and when. */
 export function documentByline(event) {
   const who = event?.host_brand || event?.host || event?.name || '';
-  let when = '';
-  if (event?.event_date) {
-    const d = new Date(event.event_date);
-    if (!Number.isNaN(d.getTime())) when = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
-  }
+  // A stored "YYYY-MM-DD" reads as that day in every time zone; free text
+  // ("Friday, March 15th") reads as written (formatEventDate).
+  const when = formatEventDate(event?.event_date, { style: 'monthDay' }) || '';
   return [who && `for ${who}`, when].filter(Boolean).join(' · ');
+}
+
+/**
+ * "Look changed — redraft the list?" (Evoni, 2026-10-23). A drafted
+ * shopping list records no pieces it was drafted from (its items are slots
+ * and labels), so EventDocuments keeps, per event, the look's piece ids
+ * when each list version was first seen or drafted in this tab
+ * (sessionStorage; a reload keeps it, a new tab starts again):
+ * { shopping_list: { version, pieces } }.
+ */
+const BASELINE_KEY = (eventId) => `evd-look-baseline:${eventId}`;
+
+/** The look's piece ids as one comparable key: order does not matter. */
+export function lookPiecesKey(pieces) {
+  return (Array.isArray(pieces) ? pieces : []).map((p) => (p?.id == null ? '' : String(p.id))).filter(Boolean).sort().join(',');
+}
+
+export function readLookBaselines(eventId) {
+  if (!eventId) return {};
+  try {
+    const raw = window.sessionStorage.getItem(BASELINE_KEY(eventId));
+    const parsed = raw ? JSON.parse(raw) : {};
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch (err) {
+    console.error('[eventDocuments] look baseline read failed:', err);
+    return {};
+  }
+}
+
+export function writeLookBaselines(eventId, value) {
+  if (!eventId) return;
+  try {
+    window.sessionStorage.setItem(BASELINE_KEY(eventId), JSON.stringify(value || {}));
+  } catch (err) {
+    console.error('[eventDocuments] look baseline write failed:', err);
+  }
+}
+
+/** Whether the look differs from the one this list version was drafted (or first seen) with. */
+export function lookChangedSince(baseline, version, lookKey) {
+  if (!baseline || version == null || baseline.version !== version) return false;
+  return String(baseline.pieces ?? '') !== String(lookKey ?? '');
 }

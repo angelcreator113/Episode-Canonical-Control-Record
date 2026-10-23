@@ -1,4 +1,5 @@
 import { describe, test, expect } from 'vitest';
+import { computeEventPackageReadiness } from '../utils/eventReadinessSections';
 import { shortDate, shortTime, heroTiles, packageBadge, seasonLine, readinessTile, readinessHeadline, pageNav, dealTiles } from './eventPackageHero';
 
 describe('Event Package header helpers', () => {
@@ -29,6 +30,27 @@ describe('Event Package header helpers', () => {
     expect(bare.map((t) => [t.value, t.empty])).toEqual([['No date', true], ['No venue', true], ['No organizer', true], ['No deal set', true], ['Not projected', true]]);
     expect(heroTiles({ event: {}, venueDate: {}, organizer: { name: 'Velour', kind: 'brand' }, projection: {}, dealLabel: 'Gifted', compensation: { isPaid: false, amount: 0 } })
       .filter((t) => ['organizer', 'deal'].includes(t.key)).map((t) => t.sub)).toEqual(['Brand', 'Unpaid']);
+  });
+
+  test('the time from the saved copy when the column is empty', () => {
+    const when = heroTiles({ event: { event_time: null }, venueDate: { eventDate: '2026-11-12', eventTime: '19:00' }, organizer: null, projection: {}, dealLabel: null, compensation: {} })
+      .find((t) => t.key === 'when');
+    expect(when.sub).toBe('7:00 PM');
+  });
+
+  test('a deal with a price missing: the badge and the headline hold, as Start Episode would', () => {
+    const ev = {
+      name: 'Gala', category: 'brand_launch', format: 'launch_party', host_brand: 'Velour',
+      event_date: '2026-11-07', venue_location_id: 'loc-1', invitation_asset_id: 'inv-1',
+      deal_components: ['paid_for_content'],
+    };
+    const priced = computeEventPackageReadiness(ev, { prices: { deliverables: [{ id: 'd1', fee: 100 }], costs: [] } });
+    expect(packageBadge({ event: ev, readiness: priced }).state).toBe('ready');
+    const unpriced = computeEventPackageReadiness(ev, { prices: { deliverables: [{ id: 'd1', description: 'Reel', fee: null }], costs: [] } });
+    expect(packageBadge({ event: ev, readiness: unpriced })).toEqual({ state: 'needs_setup', label: 'Needs Setup' });
+    expect(readinessHeadline(unpriced)).toBe('1 item needed to start');
+    const cost = computeEventPackageReadiness(ev, { prices: { deliverables: [], costs: [{ id: 'c1', paid_by: 'lala', amount: null, kind: 'travel' }] } });
+    expect(readinessHeadline(cost)).toBe('1 item needed to start');
   });
 
   test('pay with no terms says "No terms yet", not "No deal set"', () => {

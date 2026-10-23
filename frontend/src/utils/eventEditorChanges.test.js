@@ -1,8 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import {
   sameEditorValue, changedFields, withoutOrganizerKeys, hydrateEventForModal,
-  missingForMarkReady, ORGANIZER_KEYS,
+  missingForMarkReady, ORGANIZER_KEYS, MARK_READY_REQUIRED,
 } from './eventEditorChanges';
+import { READINESS_ITEMS, computeEventPackageReadiness } from './eventReadinessSections';
 
 const NOW = new Date('2026-09-24T12:00:00Z');
 
@@ -53,7 +54,8 @@ describe('hydrateEventForModal', () => {
       canon_consequences: { automation: { venue_name: 'Club Noir', content_category: 'fashion', host_display_name: 'Mika' } },
     };
     const { values, sources } = hydrateEventForModal(ev, NOW);
-    expect(values.event_date).toBe('2026-10-08');
+    // 45 days out: the system default (Evoni's ruling, 2026-09-23, Task #1755).
+    expect(values.event_date).toBe('2026-11-08');
     expect(sources.event_date).toBe('derived');
     expect(values.event_time).toBe('20:00');
     expect(sources.event_time).toBe('derived');
@@ -82,18 +84,38 @@ describe('hydrateEventForModal', () => {
 });
 
 describe('missingForMarkReady', () => {
+  // Ready to mark by the Event Package's gates (READINESS_ITEMS).
   const base = {
-    host: 'Mika', venue_name: 'Club Noir', description: 'A night.',
-    event_date: '2026-11-07', dress_code: 'black tie', canon_consequences: {},
+    name: 'Gala', category: 'brand_launch', format: 'launch_party',
+    host_brand: 'Velour', event_date: '2026-11-07', venue_location_id: 'loc-1',
+    invitation_asset_id: 'inv-1', canon_consequences: {},
   };
-  it('passes when every required field is stored', () => {
+  it('passes when every gate item is stored', () => {
     expect(missingForMarkReady(base, NOW)).toEqual([]);
   });
-  it('counts an invented date or dress code as missing', () => {
-    expect(missingForMarkReady({ ...base, event_date: null, dress_code: '' }, NOW)).toEqual(['Event Date', 'Dress Code']);
+  it('agrees with the Package: a brand-only organizer counts, a typed venue name without a World Location does not', () => {
+    const typedVenue = { ...base, venue_location_id: null, venue_name: 'Club Noir' };
+    expect(missingForMarkReady(typedVenue, NOW)).toEqual(['Place: venue']);
+    expect(computeEventPackageReadiness(typedVenue).gatesMet).toBe(false);
+    expect(missingForMarkReady({ ...base, host: null, source_profile_id: null }, NOW)).toEqual([]);
+    expect(missingForMarkReady({ ...base, host_brand: null, host: 'Mika' }, NOW)).toEqual(['Organizer']);
+  });
+  it('counts a date the modal would invent as missing', () => {
+    expect(missingForMarkReady({ ...base, event_date: null }, NOW)).toEqual(['Event identity: date']);
   });
   it('accepts a value stored only in the saved automation copy', () => {
-    const ev = { ...base, venue_name: null, canon_consequences: { automation: { venue_name: 'Club Noir' } } };
+    const ev = { ...base, venue_location_id: null, canon_consequences: { automation: { venue_location_id: 'loc-1' } } };
     expect(missingForMarkReady(ev, NOW)).toEqual([]);
+  });
+  it('requires exactly the gate items, and passes exactly when Start Episode would', () => {
+    expect(MARK_READY_REQUIRED).toEqual(Object.keys(READINESS_ITEMS).filter((k) => READINESS_ITEMS[k].gate));
+    for (const ev of [base, { ...base, name: '' }, { ...base, invitation_asset_id: null }, {}]) {
+      expect(missingForMarkReady(ev, NOW).length === 0).toBe(computeEventPackageReadiness(ev, { suggest: false }).gatesMet);
+    }
+  });
+  it('holds a deal with a component fee missing, as Start Episode does', () => {
+    const deal = { ...base, deal_components: ['paid_to_appear'], appearance_fee: null };
+    expect(missingForMarkReady(deal, NOW)).toEqual(['Stakes: deal prices']);
+    expect(missingForMarkReady({ ...deal, appearance_fee: 0 }, NOW)).toEqual([]);
   });
 });
