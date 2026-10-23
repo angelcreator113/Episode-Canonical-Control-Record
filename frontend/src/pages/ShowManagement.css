@@ -58,12 +58,12 @@
   line-height: 1.1;
   color: #fff;
 }
-.show-mgmt-page .sm-kicker {
+/* The totals as one line under the title (Evoni's layout list, 2026-10-23). */
+.show-mgmt-page .sm-totals {
   margin: 6px 0 0;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
+  letter-spacing: 0.04em;
   color: #fbe7c4;
 }
 .show-mgmt-page .sm-btn-create {
@@ -83,28 +83,6 @@
   box-shadow: 0 6px 18px rgba(194, 64, 127, 0.35), 0 0 12px var(--sm-gold-glow);
 }
 .show-mgmt-page .sm-btn-create:hover { filter: brightness(1.05); }
-
-/* ── Stats ──────────────────────────────────────────────────────── */
-.show-mgmt-page .sm-stats {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 14px;
-  margin-top: 14px;
-}
-.show-mgmt-page .sm-stat {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 16px 18px;
-  border-radius: 16px;
-  border: 1.5px solid var(--sm-gold-soft);
-  background: rgba(255, 247, 250, 0.9);
-  box-shadow: 0 6px 18px rgba(194, 64, 127, 0.1);
-}
-.show-mgmt-page .sm-stat-icon { color: var(--sm-magenta); flex-shrink: 0; display: grid; }
-.show-mgmt-page .sm-stat-text { display: flex; flex-direction: column; min-width: 0; }
-.show-mgmt-page .sm-stat-label { font-size: 14px; color: var(--sm-muted); }
-.show-mgmt-page .sm-stat-value { font-size: 30px; font-weight: 700; line-height: 1.15; color: var(--sm-plum); }
 
 /* ── Toolbar ────────────────────────────────────────────────────── */
 .show-mgmt-page .sm-toolbar {
@@ -287,6 +265,20 @@
 .show-mgmt-page .sm-status.is-in_development { background: #fef3d8; color: #7a5a12; }
 .show-mgmt-page .sm-status.is-archived { background: #ede7f6; color: #5b3d8a; }
 .show-mgmt-page .sm-status.is-cancelled { background: #ececec; color: #4a4a4a; }
+.show-mgmt-page .sm-working {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 700;
+  background: linear-gradient(135deg, var(--sm-pink), var(--sm-magenta));
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
+}
+.show-mgmt-page .sm-card.is-working { border-color: var(--sm-magenta); box-shadow: 0 6px 18px rgba(194, 64, 127, 0.22), 0 0 0 2px rgba(194, 64, 127, 0.15); }
 
 .show-mgmt-page .sm-card-body {
   display: flex;
@@ -302,6 +294,33 @@
   color: var(--sm-ink);
   overflow-wrap: anywhere;
 }
+.show-mgmt-page .sm-card-tag {
+  margin: -4px 0 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--sm-muted);
+}
+.show-mgmt-page .sm-card-stages { margin: 0; font-size: 13px; font-weight: 600; color: var(--sm-plum); }
+.show-mgmt-page .sm-airs { color: var(--sm-magenta); }
+.show-mgmt-page .sm-continue {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 6px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--sm-gold-soft);
+  background: #fff;
+  color: var(--sm-plum);
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.show-mgmt-page .sm-continue svg { flex: none; color: var(--sm-magenta); }
+.show-mgmt-page .sm-continue-title { font-weight: 500; overflow: hidden; text-overflow: ellipsis; }
+.show-mgmt-page .sm-continue:hover { border-color: var(--sm-magenta); }
 .show-mgmt-page .sm-card-meta {
   display: flex;
   flex-wrap: wrap;
@@ -391,19 +410,32 @@
 .show-mgmt-page .sm-menu button.is-danger { color: #b42343; }
 
 /* ── Narrow screens ─────────────────────────────────────────────── */
-@media (max-width: 900px) {
-  .show-mgmt-page .sm-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-}
 @media (max-width: 600px) {
   .show-mgmt-page { padding: 8px; }
   .show-mgmt-page .sm-banner { padding: 18px 16px; }
   .show-mgmt-page .sm-title { font-size: 32px; }
   .show-mgmt-page .sm-btn-create { width: 100%; justify-content: center; }
-  .show-mgmt-page .sm-stats { gap: 10px; }
-  .show-mgmt-page .sm-stat { padding: 12px; gap: 10px; }
-  .show-mgmt-page .sm-stat-value { font-size: 24px; }
-  .show-mgmt-page .sm-stat-label { font-size: 13px; }
   .show-mgmt-page .sm-tools { flex-basis: 100%; }
   .show-mgmt-page .sm-search { max-width: none; }
-  .show-mgmt-page .sm-grid { grid-template-columns: minmax(0, 1fr); }
+  .show-mgmt-page .sm-grid { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+
+  /* A row, not a poster: a cover strip beside the name. */
+  .show-mgmt-page .sm-card { flex-direction: row; }
+  .show-mgmt-page .sm-cover {
+    flex: 0 0 104px;
+    width: 104px;
+    aspect-ratio: auto;
+    border-bottom: none;
+    border-right: 1.5px solid var(--sm-gold-soft);
+  }
+  .show-mgmt-page .sm-cover-emoji { font-size: 36px; }
+  .show-mgmt-page .sm-status,
+  .show-mgmt-page .sm-working { top: auto; bottom: 6px; left: 6px; right: 6px; padding: 2px 6px; font-size: 11px; text-align: center; }
+  .show-mgmt-page .sm-working { bottom: 30px; }
+  .show-mgmt-page .sm-card-body { padding: 10px 12px 12px; gap: 6px; min-width: 0; }
+  .show-mgmt-page .sm-card-name { font-size: 16px; }
+  .show-mgmt-page .sm-card-desc { -webkit-line-clamp: 2; font-size: 13px; }
+  .show-mgmt-page .sm-card-meta { justify-content: flex-start; font-size: 12px; }
+  .show-mgmt-page .sm-card-actions { padding-top: 2px; }
+  .show-mgmt-page .sm-btn-open { min-height: 40px; }
 }
