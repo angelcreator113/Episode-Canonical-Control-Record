@@ -3575,14 +3575,24 @@
   .ed-page { --ed-tabs-h: 58px; }
   /* clip, not hidden: hidden makes .ed-wrap a scroller, and nothing in it sticks. */
   .ed-page .ed-wrap { overflow-x: clip; }
+  /* The full header scrolls away with the page; only the compact one sticks
+     (Evoni, 2026-10-23, Android: pinning the half-screen full header and
+     snapping it left a blank band). No height animation or backdrop blur
+     while scrolling: both are slow on an older phone. */
+  .ed-page.ed-studio .ed-header-new {
+    transition: box-shadow 0.2s ease;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+  .ed-page.ed-studio .ed-header-new:not(.is-compact) { position: relative; top: auto; }
   .ed-page.ed-studio .ed-tabs-modern {
     position: sticky; z-index: 45;
-    top: calc(var(--app-header-h, 0px) + var(--ed-head-h, 0px));
+    top: calc(var(--app-header-h, 0px) + var(--ed-head-compact-h, var(--ed-head-h, 0px)));
   }
   .ed-page.ed-studio .ed-subpills.is-grouped { flex-wrap: nowrap; overflow-x: auto; }
   .ed-page.ed-studio .ed-subpills {
     position: sticky; z-index: 44;
-    top: calc(var(--app-header-h, 0px) + var(--ed-head-h, 0px) + var(--ed-tabs-h));
+    top: calc(var(--app-header-h, 0px) + var(--ed-head-compact-h, var(--ed-head-h, 0px)) + var(--ed-tabs-h));
     margin-top: 0; padding: 8px 2px 6px;
     background: var(--studio-page);
   }
