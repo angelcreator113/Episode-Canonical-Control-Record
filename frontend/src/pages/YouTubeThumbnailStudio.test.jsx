@@ -89,6 +89,18 @@ const renderPage = (entry = '/template-studio/youtube?show=show-1&episode=ep-1')
 );
 const lastDraft = () => youtubeThumbnailsApi.saveDraft.mock.calls.at(-1)[1];
 const opened = () => screen.findByTestId('yts-canvas');
+// The tools are tabs (Evoni, 2026-10-22 layout list): open one to use its controls.
+const tool = (name) => fireEvent.click(within(screen.getByTestId('yts-tool-tabs')).getByRole('tab', { name }));
+// A layer's lock, copy, forward, back and remove are behind its ⋯.
+const layerDo = (layer, action) => {
+  fireEvent.click(within(screen.getByTestId('yts-layers')).getByRole('button', { name: `More for ${layer}` }));
+  fireEvent.click(screen.getByRole(action === 'Lock' ? 'menuitemcheckbox' : 'menuitem', { name: action }));
+};
+// A version's or template's Rename, Update with this, Make default and Delete are behind its ⋯.
+const cardDo = (card, name, action) => {
+  fireEvent.click(within(card).getByRole('button', { name: `More for ${name}` }));
+  fireEvent.click(screen.getByRole('menuitem', { name: action }));
+};
 
 describe('helpers', () => {
   test('episode words', () => {
@@ -151,6 +163,7 @@ describe('YouTubeThumbnailStudio', () => {
     // Lala right: the background, the shade, Lala (the show's saved one), the words, the badge.
     expect(within(screen.getByTestId('yts-canvas')).getAllByRole('button').map((b) => b.textContent).slice(0, -1))
       .toEqual(['background', 'shade', 'lala', 'kicker', 'title', 'badge']);
+    tool('Layout');
     expect(screen.getByRole('button', { name: /Lala right/ }).getAttribute('aria-pressed')).toBe('true');
     expect(youtubeThumbnailsApi.saveDraft).not.toHaveBeenCalled(); // opening is not a change
   });
@@ -208,11 +221,14 @@ describe('YouTubeThumbnailStudio', () => {
     renderPage();
     await opened();
     fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'The Atelier' } });
+    tool('Pictures');
     const bg = screen.getByTestId('yts-backgrounds');
     // The background opens in Scene sets; the cover is in its Show folder.
     fireEvent.click(within(bg).getByTestId('yts-backgrounds-folder-scene-sets/show'));
     fireEvent.click(within(bg).getByTitle('Show cover'));
+    tool('Brand');
     fireEvent.click(screen.getByRole('button', { name: 'Accent #A46EE0' }));
+    tool('Pictures');
     fireEvent.click(within(screen.getByTestId('yts-lala')).getByRole('button', { name: /No Lala/ }));
     await waitFor(() => expect(youtubeThumbnailsApi.saveDraft).toHaveBeenCalled(), { timeout: 3000 });
     const spec = lastDraft();
@@ -229,6 +245,7 @@ describe('YouTubeThumbnailStudio', () => {
   test('a layout starts again from its arrangement, after asking on the page once something was changed', async () => {
     renderPage();
     await opened();
+    tool('Layout');
     fireEvent.click(screen.getByRole('button', { name: /Title only/ }));
     expect(screen.queryByTestId('yts-ask')).toBeNull(); // nothing changed yet
     expect(screen.queryByTestId('canvas-lala')).toBeNull();
@@ -262,19 +279,24 @@ describe('YouTubeThumbnailStudio', () => {
     });
     renderPage();
     await opened();
+    tool('Stickers');
     expect(screen.queryByTestId('yts-checklist')).toBeNull();
+    tool('Layout');
     fireEvent.click(screen.getByRole('button', { name: /Come Style Me/ }));
     // The core and what the episode has: the back pose as the full outfit, its one piece, its edition.
     expect(within(screen.getByTestId('yts-canvas')).getAllByRole('button').map((b) => b.textContent).slice(0, -1))
       .toEqual(['background', 'shade', 'outfit', 'lala', 'piece-1', 'checklist', 'headline', 'kicker', 'edition', 'badge']);
+    tool('Text');
     expect(screen.queryByLabelText('Title')).toBeNull();
     expect(screen.getByLabelText('Headline').value).toBe('Come Style Me');
     expect(screen.getByLabelText('Edition label').value).toBe('Sweater Dress Edition');
+    tool('Stickers');
     const list = screen.getByTestId('yts-checklist');
     fireEvent.change(within(list).getByLabelText('Checklist row 1'), { target: { value: 'Red sweater dress' } });
     fireEvent.click(within(list).getByLabelText('Tick Hair'));
     fireEvent.click(within(list).getByRole('button', { name: 'Remove checklist row 3' }));
     fireEvent.click(within(list).getByRole('button', { name: 'Add a row' }));
+    tool('Text');
     fireEvent.change(screen.getByLabelText('Headline'), { target: { value: 'Style Me' } });
     await waitFor(() => expect(youtubeThumbnailsApi.saveDraft).toHaveBeenCalled(), { timeout: 3000 });
     const spec = lastDraft();
@@ -316,12 +338,14 @@ describe('YouTubeThumbnailStudio', () => {
   test('lock: a locked layer\'s place and size cannot be typed; copy: a copy with no role, picked; Ctrl+D copies the picked one', async () => {
     renderPage();
     await opened();
-    const list = screen.getByTestId('yts-layers');
-    fireEvent.click(within(list).getByRole('button', { name: 'Lock Lala' }));
-    expect(within(list).getByRole('button', { name: 'Unlock Lala' }).getAttribute('aria-pressed')).toBe('true');
+    layerDo('Lala', 'Lock');
+    fireEvent.click(within(screen.getByTestId('yts-layers')).getByRole('button', { name: 'More for Lala' }));
+    expect(screen.getByRole('menuitemcheckbox', { name: 'Lock' }).getAttribute('aria-checked')).toBe('true');
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.getByTestId('yts-layer-lala').querySelector('.yts-layer-locked')).toBeTruthy();
     fireEvent.click(screen.getByTestId('canvas-lala'));
     expect(screen.getByRole('spinbutton', { name: 'Width (points)' }).disabled).toBe(true);
-    fireEvent.click(within(list).getByRole('button', { name: 'Copy Lala' }));
+    layerDo('Lala', 'Copy');
     // The copy is picked and can be moved; its size can be typed.
     const width = screen.getByRole('spinbutton', { name: 'Width (points)' });
     expect(width.disabled).toBe(false);
@@ -342,10 +366,11 @@ describe('YouTubeThumbnailStudio', () => {
     const list = screen.getByTestId('yts-layers');
     fireEvent.click(within(list).getByRole('button', { name: 'Hide Badge' }));
     expect(screen.queryByTestId('canvas-badge')).toBeNull();
-    fireEvent.click(within(list).getByRole('button', { name: 'Remove Show name' }));
+    layerDo('Show name', 'Remove');
     expect(screen.queryByTestId('canvas-kicker')).toBeNull();
-    fireEvent.click(within(list).getByRole('button', { name: 'Send Title back' }));
+    layerDo('Title', 'Send back');
     fireEvent.click(screen.getByTestId('yts-add-text'));
+    tool('Pictures');
     const add = screen.getByTestId('yts-add-picture');
     fireEvent.click(within(add).getByTestId('yts-add-picture-folder-outfit/dress'));
     fireEvent.click(within(add).getByTitle('Sweater dress'));
@@ -371,6 +396,7 @@ describe('YouTubeThumbnailStudio', () => {
     renderPage();
     await opened();
     const file = new File(['x'], 'mine.jpg', { type: 'image/jpeg' });
+    tool('Pictures');
     fireEvent.change(screen.getByTestId('yts-backgrounds-input'), { target: { files: [file] } });
     await waitFor(() => expect(youtubeThumbnailsApi.uploadPicture).toHaveBeenCalledWith('ep-1', file));
     await waitFor(() => expect(youtubeThumbnailsApi.saveDraft).toHaveBeenCalled(), { timeout: 3000 });
@@ -387,6 +413,7 @@ describe('YouTubeThumbnailStudio', () => {
     youtubeThumbnailsApi.uploadPicture.mockResolvedValue({ url: 'https://b.s3.amazonaws.com/up/new.png', label: 'New one' });
     renderPage();
     await opened();
+    tool('Pictures');
     fireEvent.change(screen.getByTestId('yts-add-picture-input'), { target: { files: [new File(['x'], 'new.png', { type: 'image/png' })] } });
     await waitFor(() => expect(youtubeThumbnailsApi.uploadPicture).toHaveBeenCalled());
     const add = screen.getByTestId('yts-add-picture');
@@ -406,6 +433,7 @@ describe('YouTubeThumbnailStudio', () => {
     fireEvent.click(screen.getByTestId('canvas-title'));
     fireEvent.click(screen.getByTestId('canvas-drag'));
     youtubeThumbnailsApi.sources.mockResolvedValueOnce({ ...SOURCES, episode: { id: 'ep-2', title: 'Gala Night', episode_number: 2 } });
+    fireEvent.click(screen.getByTestId('yts-yt-btn'));
     const select = screen.getByLabelText('Try it on another episode');
     expect([...select.options].map((o) => o.textContent)).toEqual(['Choose an episode', '2. Gala Night']);
     fireEvent.change(select, { target: { value: 'ep-2' } });
@@ -467,7 +495,7 @@ describe('YouTubeThumbnailStudio', () => {
     renderPage();
     await opened();
     const list = within(screen.getByTestId('yts-layers'));
-    fireEvent.click(list.getByRole('button', { name: 'Lock Badge' }));
+    layerDo('Badge', 'Lock');
     fireEvent.click(list.getByRole('button', { name: 'Show name' }));
     fireEvent.click(list.getByRole('button', { name: 'Badge' }), { shiftKey: true });
     fireEvent.keyDown(window, { key: 'Delete' });
@@ -507,6 +535,10 @@ describe('YouTubeThumbnailStudio', () => {
   test('where YouTube shows it: three sizes with the timestamp; words too small or under the timestamp are named, and pick their layer', async () => {
     renderPage();
     await opened();
+    // On demand (Evoni, 2026-10-22 layout list): from Preview on the toolbar.
+    expect(screen.queryByTestId('yts-yt-panel')).toBeNull();
+    fireEvent.click(screen.getByTestId('yts-yt-btn'));
+    expect(screen.getByTestId('yts-yt-btn').getAttribute('aria-pressed')).toBe('true');
     expect(screen.queryByTestId('yts-youtube')).toBeNull(); // no picture of the canvas yet
     fireEvent.click(screen.getByTestId('canvas-snapshot'));
     const yt = within(screen.getByTestId('yts-youtube'));
@@ -526,6 +558,7 @@ describe('YouTubeThumbnailStudio', () => {
     renderPage();
     await opened();
     fireEvent.click(screen.getByTestId('canvas-snapshot'));
+    fireEvent.click(screen.getByTestId('yts-yt-btn'));
     fireEvent.change(screen.getByRole('textbox', { name: 'Title' }), { target: { value: 'word '.repeat(16) } });
     await waitFor(() => expect(layerOf(lastDraft(), 'title').text).toBe('word '.repeat(16)), { timeout: 3000 });
     const before = layerOf(lastDraft(), 'title');
@@ -551,7 +584,9 @@ describe('YouTubeThumbnailStudio', () => {
     });
     renderPage();
     await opened();
+    tool('Layout');
     fireEvent.click(screen.getByRole('button', { name: /Come Style Me/ }));
+    tool('Text');
     expect(screen.getByLabelText('Edition label').value).toBe('Sweater Dress Edition');
     fireEvent.click(screen.getByRole('button', { name: 'Use the episode title' }));
     expect(screen.getByLabelText('Edition label').value).toBe('Studio by Sable');
@@ -660,16 +695,16 @@ describe('YouTubeThumbnailStudio', () => {
     // Rename, update with this (asked first), delete (asked first).
     const card = () => within(screen.getByTestId('yts-version-v-2'));
     youtubeThumbnailsApi.updateVersion.mockResolvedValue({});
-    fireEvent.click(card().getByRole('button', { name: /Rename/ }));
+    cardDo(screen.getByTestId('yts-version-v-2'), 'Version B', 'Rename');
     fireEvent.change(card().getByRole('textbox', { name: 'New name for Version B' }), { target: { value: 'Gold dress' } });
     fireEvent.click(card().getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(youtubeThumbnailsApi.updateVersion).toHaveBeenCalledWith('ep-1', 'v-2', { name: 'Gold dress' }));
-    fireEvent.click(card().getByRole('button', { name: 'Update with this' }));
+    cardDo(screen.getByTestId('yts-version-v-2'), 'Version B', 'Update with this');
     expect(card().getByText('Replace "Version B" with this arrangement?')).toBeTruthy();
     fireEvent.click(card().getByRole('button', { name: 'Yes' }));
     await waitFor(() => expect(youtubeThumbnailsApi.updateVersion).toHaveBeenCalledWith('ep-1', 'v-2', { spec: expect.objectContaining({ version: 2 }) }));
     youtubeThumbnailsApi.deleteVersion.mockResolvedValue({});
-    fireEvent.click(card().getByRole('button', { name: 'Delete Version B' }));
+    cardDo(screen.getByTestId('yts-version-v-2'), 'Version B', 'Delete');
     fireEvent.click(card().getByRole('button', { name: 'Yes' }));
     await waitFor(() => expect(youtubeThumbnailsApi.deleteVersion).toHaveBeenCalledWith('ep-1', 'v-2'));
   });
@@ -695,7 +730,7 @@ describe('YouTubeThumbnailStudio', () => {
     expect(screen.getByTestId('canvas-title')).toBeTruthy();
     // Two picked, one locked: only the other goes.
     fireEvent.click(screen.getByTestId('canvas-title'));
-    fireEvent.click(within(screen.getByTestId('yts-layers')).getByRole('button', { name: 'Lock Title' }));
+    layerDo('Title', 'Lock');
     fireEvent.click(within(screen.getByTestId('yts-layers')).getByRole('button', { name: 'Badge' }), { shiftKey: true });
     expect(bar().getByRole('button', { name: /^Remove$/ }).disabled).toBe(false);
     fireEvent.click(bar().getByRole('button', { name: /^Remove$/ }));
@@ -772,6 +807,7 @@ describe('YouTubeThumbnailStudio', () => {
   test('stickers: add each one, picked; a burst\'s words, colours, outline; a circle\'s thickness', async () => {
     renderPage();
     await opened();
+    tool('Stickers');
     const row = within(screen.getByTestId('yts-stickers'));
     fireEvent.click(row.getByRole('button', { name: 'Add burst' }));
     const settings = within(screen.getByTestId('yts-shape-settings'));
@@ -796,6 +832,7 @@ describe('YouTubeThumbnailStudio', () => {
   test('the redesign\'s new pieces: tape, paper (with its words) and shadow stickers; Playfair and Montserrat; blur on a picture and on the background', async () => {
     renderPage();
     await opened();
+    tool('Stickers');
     const row = within(screen.getByTestId('yts-stickers'));
     fireEvent.click(row.getByRole('button', { name: 'Add paper' }));
     const settings = within(screen.getByTestId('yts-shape-settings'));
@@ -813,6 +850,7 @@ describe('YouTubeThumbnailStudio', () => {
     // Blur: on the picked picture, and on the background from its card.
     fireEvent.click(screen.getByTestId('canvas-lala'));
     fireEvent.change(within(screen.getByTestId('yts-picture-effects')).getByRole('slider', { name: 'Blur' }), { target: { value: '6' } });
+    tool('Pictures');
     fireEvent.change(screen.getByRole('slider', { name: 'Blur the background' }), { target: { value: '12' } });
     await waitFor(() => expect(layerOf(lastDraft(), 'background').blur).toBe(12), { timeout: 3000 });
     expect(layerOf(lastDraft(), 'lala').blur).toBe(6);
@@ -822,6 +860,7 @@ describe('YouTubeThumbnailStudio', () => {
   test('the redesign\'s layouts: Checklist focus and Before/After', async () => {
     renderPage();
     await opened();
+    tool('Layout');
     fireEvent.click(screen.getByRole('button', { name: /Checklist focus/ }));
     await waitFor(() => expect(lastDraft().layers.map((l) => l.id)).toContain('note'), { timeout: 3000 });
     expect(layerOf(lastDraft(), 'checklist')).toBeTruthy();
@@ -838,6 +877,7 @@ describe('YouTubeThumbnailStudio', () => {
     ]);
     renderPage();
     await opened();
+    tool('AI');
     const card = () => within(screen.getByTestId('yts-ai'));
     fireEvent.click(card().getByTestId('yts-ideas-btn'));
     await waitFor(() => expect(card().getByText('The $40 Gala Gown')).toBeTruthy());
@@ -874,6 +914,7 @@ describe('YouTubeThumbnailStudio', () => {
     window.localStorage.removeItem('yts-recent-colours');
     renderPage();
     await opened();
+    tool('Brand');
     const accent = screen.getByLabelText('Any accent colour');
     fireEvent.change(accent, { target: { value: '#123abc' } });
     fireEvent.blur(accent);
@@ -926,7 +967,7 @@ describe('YouTubeThumbnailStudio', () => {
     renderPage();
     await opened();
     const card = () => screen.getByTestId('yts-template-t-2');
-    fireEvent.click(within(card()).getByRole('button', { name: 'Use' }));
+    fireEvent.click(within(card()).getByRole('button', { name: 'Use Haul' }));
     // Haul's layers, this episode's words.
     expect(screen.getByText(/Started from "Haul"/)).toBeTruthy();
     await waitFor(() => expect(youtubeThumbnailsApi.saveDraft).toHaveBeenCalled(), { timeout: 3000 });
@@ -938,23 +979,23 @@ describe('YouTubeThumbnailStudio', () => {
     await waitFor(() => expect(youtubeThumbnailsApi.saveDraft.mock.calls.length).toBeGreaterThan(kept), { timeout: 3000 });
     expect(layerOf(lastDraft(), 'title').x).toBe(layerOf(list[0].spec, 'title').x);
 
-    fireEvent.click(within(card()).getByRole('button', { name: /rename/i }));
+    cardDo(card(), 'Haul', 'Rename');
     fireEvent.change(screen.getByRole('textbox', { name: 'New name for Haul' }), { target: { value: 'Big Haul' } });
     fireEvent.click(within(card()).getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(youtubeThumbnailsApi.updateTemplate).toHaveBeenCalledWith('show-1', 't-2', { name: 'Big Haul' }));
     expect(await screen.findByText('Renamed to "Big Haul".')).toBeTruthy();
 
-    fireEvent.click(within(card()).getByRole('button', { name: /make default/i }));
+    cardDo(card(), 'Haul', 'Make default');
     await waitFor(() => expect(youtubeThumbnailsApi.updateTemplate).toHaveBeenCalledWith('show-1', 't-2', { isDefault: true }));
 
-    fireEvent.click(within(card()).getByRole('button', { name: 'Update with this' }));
+    cardDo(card(), 'Haul', 'Update with this');
     fireEvent.click(within(card()).getByRole('button', { name: 'Yes' }));
     await waitFor(() => expect(youtubeThumbnailsApi.updateTemplate).toHaveBeenCalledWith('show-1', 't-2', { spec: expect.objectContaining({ version: 2 }) }));
 
-    fireEvent.click(within(card()).getByRole('button', { name: 'Delete Haul' }));
+    cardDo(card(), 'Haul', 'Delete');
     fireEvent.click(within(card()).getByRole('button', { name: 'No' }));
     expect(youtubeThumbnailsApi.deleteTemplate).not.toHaveBeenCalled();
-    fireEvent.click(within(card()).getByRole('button', { name: 'Delete Haul' }));
+    cardDo(card(), 'Haul', 'Delete');
     fireEvent.click(within(card()).getByRole('button', { name: 'Yes' }));
     await waitFor(() => expect(youtubeThumbnailsApi.deleteTemplate).toHaveBeenCalledWith('show-1', 't-2'));
   });
@@ -1056,6 +1097,7 @@ describe('YouTubeThumbnailStudio', () => {
     });
     renderPage();
     await opened();
+    tool('Pictures');
     const lala = screen.getByTestId('yts-lala');
     expect(within(lala).getByTestId('yts-lala-crumbs').textContent).toBe('All foldersCharacter posesLala');
     fireEvent.click(within(lala).getByRole('button', { name: 'Front, 1 picture' }));
@@ -1089,6 +1131,8 @@ describe('YouTubeThumbnailStudio', () => {
 
   test('with no poses yet it points to the Files tab', async () => {
     renderPage();
+    await opened();
+    tool('Pictures');
     const note = await screen.findByTestId('yts-poses-note');
     expect(within(note).getByRole('link', { name: 'Files tab' }).getAttribute('href')).toBe('/episodes/ep-1?tab=files');
     expect(screen.getByTestId('yts-jaw')).toBeTruthy();
@@ -1269,11 +1313,13 @@ describe('YouTubeThumbnailStudio', () => {
     youtubeThumbnailsApi.saveBrand.mockImplementation((id, b) => Promise.resolve(b));
     renderPage();
     await opened();
+    tool('Brand');
     const palette = within(screen.getByRole('region', { name: 'Colour palette' }));
     const swatches = palette.getAllByRole('button', { name: /^Accent / });
     expect(swatches[0].getAttribute('aria-label')).toBe('Accent #123ABC');
     expect(swatches[0].className).toContain('is-brand');
     // Stickers: the show's first, marked.
+    tool('Stickers');
     const stickers = within(screen.getByTestId('yts-stickers')).getAllByRole('button');
     expect(stickers[0].getAttribute('aria-label')).toBe('Add tape');
     // Fonts: the show's in their own group, first.
@@ -1282,6 +1328,7 @@ describe('YouTubeThumbnailStudio', () => {
     expect([...groups].map((g) => g.label)).toEqual(["The show's fonts", 'All fonts']);
     expect([...groups[0].querySelectorAll('option')].map((o) => o.value)).toEqual(['hand']);
     // Add the accent in use; take a colour off; tick a font.
+    tool('Brand');
     const kit = within(screen.getByTestId('yts-brand'));
     fireEvent.click(kit.getByTestId('yts-brand-add'));
     await waitFor(() => expect(youtubeThumbnailsApi.saveBrand).toHaveBeenCalledWith('show-1', { colours: ['#123ABC', '#B8962E'], fonts: ['hand'], stickers: ['tape'] }));
@@ -1298,6 +1345,7 @@ describe('YouTubeThumbnailStudio', () => {
     youtubeThumbnailsApi.aiBackground.mockResolvedValue({ url: 'https://b.s3.amazonaws.com/up/ai-bg.jpg', label: 'AI background', cost: 0.04 });
     renderPage();
     await opened();
+    tool('AI');
     const card = within(screen.getByTestId('yts-ai-bg'));
     fireEvent.change(card.getByLabelText('What the AI background shows'), { target: { value: ' a rooftop at night ' } });
     fireEvent.click(card.getByTestId('yts-ai-bg-btn'));
@@ -1353,6 +1401,7 @@ describe('YouTubeThumbnailStudio', () => {
   test('assets: a tab for each folder this episode has, opening on the outfit; picking adds the picture', async () => {
     renderPage();
     await opened();
+    tool('Pictures');
     const tabs = within(screen.getByRole('tablist', { name: 'Pictures' }));
     expect(tabs.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Outfit', 'Library', 'Scene sets']);
     expect(tabs.getByRole('tab', { name: 'Outfit' }).getAttribute('aria-selected')).toBe('true');
@@ -1387,6 +1436,7 @@ describe('YouTubeThumbnailStudio', () => {
   test('the question takes the focus on No, and Esc answers No', async () => {
     renderPage();
     await opened();
+    tool('Layout');
     fireEvent.click(screen.getByRole('button', { name: /Title only/ }));
     fireEvent.click(screen.getByRole('button', { name: /Lala left/ }));
     const box = screen.getByTestId('yts-ask');
@@ -1560,27 +1610,40 @@ describe('YouTubeThumbnailStudio on a phone', () => {
     expect(document.querySelector('.yts').classList.contains('has-sheet')).toBe(false);
   });
 
-  test('the settings one section at a time, in tabs under the canvas; Layers first', async () => {
+  test('the tools one at a time, in tabs; the layers right under the canvas; Saved a tab of its own', async () => {
     renderPage();
     await opened();
-    const tabs = within(screen.getByTestId('yts-phone-tabs'));
-    expect(tabs.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Layers', 'Layout', 'Text', 'Assets', 'Characters', 'Background', 'Colours', 'Saved']);
-    expect(tabs.getByRole('tab', { name: 'Layers' }).getAttribute('aria-selected')).toBe('true');
-    expect(screen.getByTestId('yts-layers')).toBeTruthy();
-    expect(screen.queryByLabelText('Title')).toBeNull();
-    expect(screen.queryByTestId('yts-lala')).toBeNull();
-    fireEvent.click(tabs.getByRole('tab', { name: 'Text' }));
+    const tabs = within(screen.getByTestId('yts-tool-tabs'));
+    expect(tabs.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Layout', 'Text', 'Pictures', 'Stickers', 'Brand', 'AI', 'Saved']);
+    expect(tabs.getByRole('tab', { name: 'Text' }).getAttribute('aria-selected')).toBe('true');
+    // The layers are not a tab: always there, under the canvas.
+    const order = (el) => [...document.querySelectorAll('section, [data-testid="yts-tool-tabs"]')].indexOf(el);
+    expect(order(screen.getByRole('region', { name: 'Layers' }))).toBeGreaterThan(order(screen.getByRole('region', { name: 'Editor' })));
+    expect(order(screen.getByRole('region', { name: 'Layers' }))).toBeLessThan(order(screen.getByTestId('yts-tool-tabs')));
     expect(screen.getByLabelText('Title')).toBeTruthy();
-    expect(screen.getByTestId('yts-ai')).toBeTruthy();
-    expect(screen.queryByTestId('yts-layers')).toBeNull();
-    fireEvent.click(tabs.getByRole('tab', { name: 'Characters' }));
+    expect(screen.queryByTestId('yts-lala')).toBeNull();
+    fireEvent.click(tabs.getByRole('tab', { name: 'Pictures' }));
     expect(screen.getByTestId('yts-lala')).toBeTruthy();
     expect(screen.queryByLabelText('Title')).toBeNull();
-    fireEvent.click(tabs.getByRole('tab', { name: 'Colours' }));
+    fireEvent.click(tabs.getByRole('tab', { name: 'Brand' }));
     expect(screen.getByRole('button', { name: 'Accent #B8962E' })).toBeTruthy();
     expect(screen.queryByTestId('yts-strip')).toBeNull();
     fireEvent.click(tabs.getByRole('tab', { name: 'Saved' }));
     expect(within(screen.getByTestId('yts-strip')).getByTestId('yts-versions')).toBeTruthy();
+    expect(screen.getByTestId('yts-layers')).toBeTruthy();
+  });
+
+  test('the YouTube preview is in the ⋮ menu, with how many to fix', async () => {
+    renderPage();
+    await opened();
+    expect(screen.queryByTestId('yts-yt-btn')).toBeNull();
+    fireEvent.click(screen.getByTestId('yts-more-btn'));
+    const item = screen.getByTestId('yts-menu-yt');
+    expect(item.getAttribute('aria-checked')).toBe('false');
+    fireEvent.click(item);
+    expect(screen.getByTestId('yts-yt-panel')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Close the preview' }));
+    expect(screen.queryByTestId('yts-yt-panel')).toBeNull();
   });
 
   test('once the canvas has scrolled away, a small picture of the thumbnail is pinned; a tap goes back to the canvas', async () => {

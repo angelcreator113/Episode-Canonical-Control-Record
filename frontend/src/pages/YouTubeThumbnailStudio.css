@@ -22,10 +22,27 @@
 .yts-empty p { margin: 0; }
 .yts-note { display: inline-flex; align-items: center; gap: 6px; margin: 0; font-size: 13px; color: var(--text-secondary); }
 
-/* The studio (Evoni, 2026-10-21 redesign): the canvas big on the left with its
-   toolbar, Layers and Assets under it, the settings as cards on the right. */
-.yts-studio { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(320px, 1fr); gap: 16px; align-items: start; }
-.yts-main, .yts-side { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+/* The studio (Evoni, 2026-10-22 layout list): the layers beside the canvas,
+   the canvas big in the middle, the tools on the right one tab at a time.
+   Narrower, the layers go under the canvas; on a phone, everything stacks. */
+.yts-studio { display: grid; grid-template-columns: minmax(200px, 250px) minmax(0, 1fr) minmax(320px, 360px); grid-template-areas: "layers main side"; gap: 16px; align-items: start; }
+.yts-main { grid-area: main; }
+.yts-side { grid-area: side; }
+.yts-layers-col { grid-area: layers; min-width: 0; }
+.yts-main, .yts-side, .yts-tool-panel { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.yts-layers-col > .yts-card { padding: 12px; gap: 10px; }
+@media (min-width: 1280px) and (min-height: 760px) {
+  .yts-layers-col { position: sticky; top: 12px; max-height: calc(100dvh - 24px); overflow-y: auto; }
+}
+/* Narrower: the layers over the tools, beside the canvas. */
+@media (max-width: 1279px) {
+  .yts-studio { grid-template-columns: minmax(0, 1fr) minmax(300px, 340px); grid-template-areas: "main layers" "main side"; grid-template-rows: auto 1fr; }
+}
+/* The grid, safe-zone and See-it-exactly buttons say their names in a
+   tooltip only where the toolbar would wrap, so the canvas keeps its room. */
+@media (max-width: 1599px) {
+  .yts-toolbar .yts-tool-word { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+}
 .yts-card { display: flex; flex-direction: column; gap: 12px; min-width: 0; padding: 16px; border-radius: 18px; border: 1.5px solid var(--lala-gold-line); background: var(--surface-card); color: var(--text-primary); box-shadow: var(--shadow-sm); }
 .yts-card > .yts-label, .yts-card > .yts-field > .yts-label { margin: 0; }
 .yts-stage { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
@@ -36,10 +53,10 @@
 .yts-tool-btn.is-primary { border-color: var(--accent-dark); background: var(--accent-dark); color: var(--text-inverse); }
 .yts-tool-btn:disabled { opacity: 0.55; cursor: not-allowed; }
 .yts-menu { position: relative; }
-.yts-menu-list { position: absolute; top: calc(100% + 6px); right: 0; z-index: 20; display: flex; flex-direction: column; min-width: 210px; margin: 0; padding: 6px; border-radius: 12px; border: 1px solid var(--lala-parchment-3); background: var(--surface-card); box-shadow: var(--shadow-md); list-style: none; }
+.yts-menu-list { position: fixed; z-index: 80; display: flex; flex-direction: column; min-width: 210px; margin: 0; padding: 6px; border-radius: 12px; border: 1px solid var(--lala-parchment-3); background: var(--surface-card); box-shadow: var(--shadow-md); list-style: none; }
 .yts-menu-item { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 36px; padding: 6px 10px; border: none; border-radius: 8px; background: transparent; color: var(--text-primary); font: inherit; font-size: 14px; text-align: left; cursor: pointer; }
 .yts-menu-item:hover, .yts-menu-item:focus-visible { background: var(--accent-subtle); }
-.yts-bottom { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); gap: 16px; align-items: start; }
+.yts-menu-item.is-danger { color: var(--danger-text); }
 .yts-text-content { gap: 10px; }
 .yts-text-row { display: grid; grid-template-columns: 120px minmax(0, 1fr); align-items: center; gap: 4px 10px; }
 .yts-text-row > .yts-text-row { grid-column: 1 / -1; }
@@ -50,7 +67,6 @@
 .yts-note.is-block { display: block; }
 .yts-card.yts-try { align-items: stretch; }
 .yts-note.is-block svg { vertical-align: -2px; margin-right: 4px; }
-.yts-more { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(320px, 1fr); gap: 16px; align-items: start; }
 /* The editor (2026-10-21): the canvas, the exact view, the picked layer, the layers. */
 .yts-canvas { width: 100%; overflow: hidden; border-radius: 16px; border: 1.5px solid var(--lala-gold-line); background-color: var(--lala-ink); box-shadow: var(--shadow-md); touch-action: none; }
 .yts-canvas:focus-visible { outline: 2px solid var(--accent-dark); outline-offset: 2px; }
@@ -59,7 +75,7 @@
 .yts-exact figcaption { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 13px; color: var(--text-secondary); }
 .yts-layer-settings { padding: 12px; border-radius: 14px; border: 1.5px solid var(--accent-light); background: var(--surface-card); }
 .yts-color { width: 100%; min-height: 40px; padding: 2px; border-radius: 10px; border: 1px solid var(--lala-parchment-3); background: var(--surface-card); }
-.yts-layers { display: flex; flex-direction: column; gap: 4px; margin: 0; padding: 0; list-style: none; container-type: inline-size; }
+.yts-layers { display: flex; flex-direction: column; gap: 4px; margin: 0; padding: 0; list-style: none; }
 .yts-layer { display: flex; align-items: center; gap: 4px; padding: 4px; border-radius: 10px; border: 1px solid var(--lala-parchment-3); background: var(--surface-card); }
 .yts-layer.is-on { border-color: var(--accent-dark); background: var(--accent-subtle); }
 .yts-layer.is-hidden .yts-layer-name { color: var(--text-secondary); text-decoration: line-through; }
@@ -136,13 +152,14 @@
 .yts-swatch { width: 34px; height: 34px; border-radius: 50%; border: 3px solid var(--surface-card); box-shadow: 0 0 0 1px var(--lala-parchment-3); cursor: pointer; }
 .yts-swatch.is-on { box-shadow: 0 0 0 3px var(--accent-dark); }
 
+/* One column: the canvas, the layers, the tools, then the versions and templates. */
 @media (max-width: 1100px) {
-  .yts-studio, .yts-more { grid-template-columns: minmax(0, 1fr); }
-}
-/* Layers and Assets one above the other on a phone (Evoni, 2026-10-22: side
-   by side on hers, each about 260px, the layer names cut to one letter). */
-@media (max-width: 760px) {
-  .yts-bottom { grid-template-columns: minmax(0, 1fr); }
+  .yts-studio { grid-template-columns: minmax(0, 1fr); grid-template-areas: none; grid-template-rows: none; }
+  .yts-main { display: contents; }
+  .yts-layers-col, .yts-side { grid-area: auto; }
+  .yts-layers-col { order: 1; }
+  .yts-side { order: 2; }
+  .yts-strip { order: 3; }
 }
 @media (max-width: 520px) {
   .yts-pair { grid-template-columns: minmax(0, 1fr); }
@@ -289,14 +306,11 @@
 @media (max-width: 520px) {
   .yts-layer-grip { display: none; }
 }
-/* A narrow list: the picture and the whole name on one line, the buttons
-   under them, so no name is cut to a letter. */
-@container (max-width: 420px) {
-  .yts-layer { flex-wrap: wrap; }
-  .yts-layer-grip { display: none; }
-  .yts-layer-name { flex: 1 1 calc(100% - 56px); }
-  .yts-layer-name + .yts-icon-btn { margin-left: 48px; }
-}
+/* A compact row (Evoni, 2026-10-22 layout list): picture, name, eye and ⋯,
+   so the name keeps its room even in the narrow column beside the canvas. */
+.yts-layer-name { display: inline-flex; align-items: center; gap: 4px; }
+.yts-layer-locked { flex: none; color: var(--text-secondary); }
+.yts-layer .yts-menu { flex: none; }
 
 /* AI help (Evoni, 2026-10-21): title ideas. */
 .yts-ideas { display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 0; list-style: none; }
@@ -334,8 +348,12 @@
 .yts-banner.is-compact .yts-choose { flex: 1; justify-content: flex-end; align-items: center; }
 .yts-episode-nav { display: flex; align-items: center; gap: 4px; min-width: 0; }
 .yts-episode-nav .yts-select { min-width: 0; }
-.yts-phone-tabs { display: flex; gap: 6px; overflow-x: auto; padding: 2px 2px 6px; scrollbar-width: thin; }
-.yts-phone-tabs .yts-tab { flex: none; }
+/* The tools as tabs (Evoni, 2026-10-22 layout list), on every screen. */
+.yts-tool-tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+@media (max-width: 760px) {
+  .yts-tool-tabs { display: flex; overflow-x: auto; padding: 2px 2px 6px; scrollbar-width: thin; }
+  .yts-tool-tabs .yts-tab { flex: none; }
+}
 @media (max-width: 760px) {
   .yts-banner.is-compact { padding: 6px 10px; }
   .yts-banner.is-compact .yts-choose { width: 100%; flex-wrap: nowrap; gap: 6px; }
@@ -361,7 +379,23 @@
 /* Versions and saved thumbnails under the canvas, each a strip that scrolls sideways. */
 .yts-strip { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
 .yts-strip .yts-template-grid, .yts-strip .yts-history-grid { display: flex; overflow-x: auto; padding-bottom: 6px; scroll-snap-type: x proximity; scrollbar-width: thin; }
-.yts-strip .yts-template-grid > li, .yts-strip .yts-history-grid > li { flex: 0 0 200px; scroll-snap-align: start; }
+.yts-strip .yts-template-grid > li { flex: 0 0 168px; scroll-snap-align: start; }
+.yts-strip .yts-history-grid > li { flex: 0 0 200px; scroll-snap-align: start; }
+
+/* Lighter version and template cards (Evoni, 2026-10-22 layout list): the
+   picture is Use; the name and ⋯ under it; the rest in the menu. */
+.yts-strip .yts-template { gap: 4px; padding: 4px; border-width: 1.5px; }
+.yts-card-foot { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.yts-card-foot .yts-template-name { flex: 1; min-width: 0; display: block; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.yts-card-foot .yts-template-name svg { vertical-align: -2px; }
+.yts-card-foot .yts-icon-btn { width: 28px; height: 28px; border-color: transparent; background: transparent; }
+.yts-template-pic:hover:not(:disabled) { outline: 2px solid var(--accent-dark); outline-offset: -2px; }
+
+/* Where YouTube shows it, on demand (Evoni, 2026-10-22 layout list): from
+   Preview, under the canvas; the button counts what to fix. */
+.yts-yt-panel { position: relative; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.yts-yt-panel-head { position: absolute; top: 8px; right: 8px; z-index: 1; }
+.yts-warn-count { display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; background: var(--danger-bg); color: var(--danger-text); font-size: 11px; font-weight: 700; }
 
 /* On a wide screen the canvas stays in view while the page scrolls beside it. */
 @media (min-width: 1101px) and (min-height: 760px) {
@@ -400,5 +434,5 @@
   .yts-icon-btn { width: 44px; height: 44px; }
   .yts-layer-name, .yts-history-btn, .yts-crumbs button, .yts-tab, .yts-more-layers, .yts-tool-btn, .yts-swatch-any { min-height: 44px; }
   .yts-swatch { width: 44px; height: 44px; }
-  .yts-layer { flex-wrap: wrap; }
+  .yts-card-foot .yts-icon-btn { width: 44px; height: 44px; }
 }

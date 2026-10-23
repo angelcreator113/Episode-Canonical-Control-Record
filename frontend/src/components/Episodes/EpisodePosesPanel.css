@@ -81,3 +81,24 @@
   .epp-character { padding: 10px; }
   .epp-strip { grid-auto-columns: 124px; }
 }
+
+/* Lighter cards (Evoni, 2026-10-22): the photo, its star and status; the
+   rest behind "⋯". Empty poses and folders are one row of small chips. */
+.epp-card.is-light { padding: 4px; gap: 4px; }
+.epp-badge { position: absolute; left: 4px; bottom: 4px; }
+.epp-menu { position: absolute; top: 4px; left: 4px; }
+.epp-menu-btn { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; border: 1px solid var(--lala-parchment-3); background: var(--surface-card); color: var(--text-primary); cursor: pointer; }
+.epp-menu-btn[aria-expanded="true"] { border-color: var(--accent-dark); }
+.epp-menu-body { position: fixed; z-index: 50; display: flex; flex-direction: column; gap: 6px; padding: 8px; border-radius: 12px; border: 1px solid var(--lala-parchment-3); background: var(--surface-card); color: var(--text-primary); box-shadow: var(--shadow-md); }
+.epp-menu-row { display: flex; align-items: center; gap: 6px; }
+.epp-menu-item { display: flex; align-items: center; gap: 8px; min-height: 36px; padding: 4px 8px; border-radius: 8px; border: 1px solid var(--lala-parchment-3); background: var(--surface-card); color: var(--text-primary); font: inherit; font-size: 13px; cursor: pointer; text-align: left; }
+.epp-menu-item.is-danger { border-color: var(--danger-border); background: var(--surface-card); color: var(--danger-text); }
+.epp-menu-item:disabled { opacity: 0.55; cursor: not-allowed; }
+.epp-empty-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 2px; }
+.epp-empty-label { font-size: 12px; color: var(--text-secondary); }
+.epp-chip { display: inline-flex; border-radius: 999px; border: 1.5px dashed var(--accent-light); background: var(--surface-card); color: var(--accent-dark); }
+.epp-chip.is-over { background: var(--accent-subtle); color: var(--accent-dark); }
+.epp-character.is-justawoman .epp-chip { border-color: var(--lala-lavender-light); color: var(--lala-lavender-text); }
+.epp-chip-btn { display: inline-flex; align-items: center; gap: 4px; min-height: 36px; padding: 4px 12px; border: none; border-radius: 999px; background: transparent; color: inherit; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
+.epp-chip-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+.epp-menu-btn:focus-visible, .epp-menu-item:focus-visible, .epp-chip-btn:focus-visible { outline: 2px solid var(--accent-dark); outline-offset: 2px; }
