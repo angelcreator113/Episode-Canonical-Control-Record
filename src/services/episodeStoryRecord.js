@@ -19,8 +19,13 @@
  *                  romantic or not, stage before and after, the beat
  *   follow_ups     what Lala owes someone after this episode
  *   threads        each with action new | advance | close
- *   twists         [] until a later PR fills it
- * Every proposed item has a key and keep (true unless she unticks it).
+ *   twists         the season twists due here (services/seasonTwists) the
+ *                  script plants or pays off
+ * Every proposed item has a key and keep (true unless she unticks it; a
+ * goal the script does not cover starts unticked), and a quote: the line in
+ * the script that shows it, kept only when the script has it. Reading it
+ * again keeps the keys of what a Save already wrote (keepSavedKeys).
+ * Stages include flirting (Evoni, 2026-10-23).
  *
  * A record is drafted (one AI call over the whole script, outcome, cast
  * with Lala and unlinked guests, their kept secrets, the goals, the cast's
@@ -35,8 +40,9 @@
  *                  the registry is skipped and reported (not_linked)
  *   follow_ups     show_follow_ups rows, open
  *   goals          the to-do list's matching social task ticked (source 'record')
+ *   twists         season_twists planted / paid off in this episode (never moved back)
  *
- *   getRecord(sequelize, episodeId)      { record, cast, threads, goals } for the page
+ *   getRecord(sequelize, episodeId)      { record, cast, threads, goals, twists } for the page
  *   draftRecord(sequelize, episodeId)    drafts (or redrafts) it; saves a draft
  *   draftLater(sequelize, episodeId)     the same after completion, when there is
  *                                        none yet; never throws
@@ -47,7 +53,7 @@
  *                                        the show's unresolved threads (also for services/storyCanon)
  *
  * Raw SQL (episode_story_records, migrations 20261018050000 and
- * 20261023140000; show_follow_ups, 20261023140000); no model.
+ * 20261023210000; show_follow_ups, 20261023210000); no model.
  */
 
 const crypto = require('crypto');
@@ -58,15 +64,17 @@ const { EPISODE_EVENT_ID_SQL } = require('../utils/episodeEventSql');
 const { splitScriptBeats } = require('../utils/scriptBeatLocks');
 const { goalCovered } = require('../utils/scriptCoverage');
 const { goalPerson } = require('../utils/scriptRuleChecks');
+const { twistsForEpisode } = require('./seasonTwists');
 
 const MODELS = ['claude-sonnet-4-6'];
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 // The whole script (Evoni, 2026-10-23): 9,000 characters cut off beats 11-14.
 const SCRIPT_LIMIT = 40000;
 const MAX_TOKENS = 4000;
-const MAX = { what: 3000, field: 600, people: 12, secrets: 12, threads: 10, relationships: 12, follow_ups: 10, goals: 8 };
-// relationship_events.relationship_stage (models/RelationshipEvent).
-const STAGES = ['strangers', 'acquaintances', 'friends', 'close_friends', 'lovers', 'partners', 'exes', 'enemies'];
+const MAX = { what: 3000, field: 600, quote: 240, people: 12, secrets: 12, threads: 10, relationships: 12, follow_ups: 10, goals: 8, twists: 8 };
+// relationship_events.relationship_stage (models/RelationshipEvent; free text).
+// flirting (Evoni, 2026-10-23): a love interest starts somewhere before lovers.
+const STAGES = ['strangers', 'acquaintances', 'flirting', 'friends', 'close_friends', 'lovers', 'partners', 'exes', 'enemies'];
 const ACTIONS = ['new', 'advance', 'close'];
 // A romantic relationship is a love interest (relationship_type is free text;
 // worldStudio's role pairs use love_interest).
@@ -96,6 +104,28 @@ const stageOf = (v) => {
   return STAGES.includes(s) ? s : null;
 };
 const typeOf = (v) => str(v, 100).toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+// Letters and digits only, for comparing words across quotes and punctuation.
+const flat = (v) => String(v || '').toLowerCase().replace(/['’‘`]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+/**
+ * The line that shows it (Evoni, 2026-10-23: "show the line it found"). It
+ * stays only when the script says it, so the card never quotes words the
+ * model made up.
+ */
+const quoteOf = (v, scriptFlat) => {
+  const q = str(v, MAX.quote).replace(/^["“'‘]+|["”'’]+$/g, '').trim();
+  const f = flat(q);
+  return f.length >= 8 && scriptFlat && scriptFlat.includes(f) ? q : '';
+};
+const wordSet = (v) => new Set(flat(v).split(' ').filter((w) => w.length >= 3));
+/** Two follow-ups say the same thing: most of their words are shared. */
+function sameText(x, y) {
+  if (flat(x) === flat(y)) return true;
+  const a = wordSet(x);
+  const b = wordSet(y);
+  if (!a.size || !b.size) return false;
+  const shared = [...a].filter((w) => b.has(w)).length;
+  return shared / (a.size + b.size - shared) >= 0.6;
+}
 
 async function episodeOf(sequelize, episodeId) {
   if (!UUID_RE.test(String(episodeId || ''))) throw new RecordError('episodeId must be a UUID');
@@ -244,11 +274,28 @@ async function getRecord(sequelize, episodeId) {
   return {
     record: shape(await rowOf(sequelize, episode.id)), cast,
     threads: await openThreads(sequelize, episode.show_id), goals: await goalsOf(sequelize, episode, event, profiles),
+    twists: await dueTwists(sequelize, episode.id),
   };
 }
 
-/** A record's fields from a body, kept to the cast, their secrets, the threads and the goals. */
-function clean(body, { cast, threads, goals = [] }) {
+/** The season twists this episode plants or pays off (services/seasonTwists), as { id, title, description, what }. */
+async function dueTwists(sequelize, episodeId) {
+  const { plant, payoff } = await twistsForEpisode(sequelize, episodeId);
+  return [
+    ...plant.map((t) => ({ id: t.id, title: t.title, description: t.description, status: t.status, what: 'planted' })),
+    ...payoff.map((t) => ({ id: t.id, title: t.title, description: t.description, status: t.status, what: 'paid_off' })),
+  ];
+}
+
+/**
+ * A record's fields from a body, kept to the cast, their secrets, the
+ * threads, the goals and the twists due. `script` is the episode's script:
+ * a quote stays only when it is in it.
+ */
+function clean(body, { cast, threads, goals = [], twists = [], script = '' }) {
+  const scriptFlat = flat(script);
+  const quote = (v) => quoteOf(v, scriptFlat);
+  const twistById = new Map(twists.map((t) => [t.id, t]));
   const people = new Map(cast.map((c) => [c.id, c]));
   const secrets = new Map(cast.flatMap((c) => c.secrets.map((s) => [s.id, { ...s, character_id: c.id }])));
   const threadIds = new Set(threads.map((t) => t.id));
@@ -280,7 +327,7 @@ function clean(body, { cast, threads, goals = [] }) {
       let action = ACTIONS.includes(t?.action) ? t.action : (thread_id ? 'advance' : 'new');
       if (!thread_id) action = 'new';
       else if (action === 'new') action = 'advance';
-      return { key: keyOf(t?.key), thread_id, title: str(t?.title, 200), note: str(t?.note, MAX.field), action, keep: t?.keep !== false };
+      return { key: keyOf(t?.key), thread_id, title: str(t?.title, 200), note: str(t?.note, MAX.field), quote: quote(t?.quote), action, keep: t?.keep !== false };
     }).filter((t) => t.title).slice(0, MAX.threads);
   }
   if (body.relationships !== undefined) {
@@ -294,24 +341,37 @@ function clean(body, { cast, threads, goals = [] }) {
       type: typeOf(r.type) || (r.is_romantic === true ? ROMANTIC_TYPE : ''), is_romantic: r.is_romantic === true,
       stage_before: stageOf(r.stage_before), stage_after: stageOf(r.stage_after),
       tension_before: intIn(r.tension_before, 0, 10), tension_after: intIn(r.tension_after, 0, 10),
-      evidence_beat: intIn(r.evidence_beat, 1, 14), note: str(r.note, MAX.field), keep: r.keep !== false,
+      evidence_beat: intIn(r.evidence_beat, 1, 14), note: str(r.note, MAX.field), quote: quote(r.quote), keep: r.keep !== false,
     }));
   }
   if (body.follow_ups !== undefined) {
     out.follow_ups = list('follow_ups').map((f) => {
       const person = people.has(f?.person) ? f.person : null;
-      return { key: keyOf(f?.key), person, name: person ? people.get(person).name : '', text: str(f?.text, MAX.field), due_hint: str(f?.due_hint, 200), keep: f?.keep !== false };
+      return { key: keyOf(f?.key), person, name: person ? people.get(person).name : '', text: str(f?.text, MAX.field), due_hint: str(f?.due_hint, 200), quote: quote(f?.quote), keep: f?.keep !== false };
     }).filter((f) => f.text).slice(0, MAX.follow_ups);
   }
   if (body.goals !== undefined) {
     const seen = new Set();
     out.goals = list('goals').filter((g) => goalBySlot.has(g?.slot) && !seen.has(g.slot) && seen.add(g.slot)).map((g) => ({
       key: keyOf(g.key), slot: g.slot, label: goalBySlot.get(g.slot).label, covered: g.covered === true,
-      beat: intIn(g.beat, 1, 14), note: str(g.note, MAX.field), keep: g.keep !== false,
+      beat: intIn(g.beat, 1, 14), note: str(g.note, MAX.field), quote: quote(g.quote),
+      // Ticked on the card means ticked on Save, so a goal the script does
+      // not cover starts unticked (Evoni, 2026-10-23).
+      keep: g.keep === undefined ? g.covered === true : g.keep !== false,
     }));
   }
-  // Twists: a later PR fills them; until then the list stays empty.
-  if (body.twists !== undefined) out.twists = [];
+  // Twists: only the ones due in this episode, planted where it plants
+  // them and paid off where it pays them off.
+  if (body.twists !== undefined) {
+    const seen = new Set();
+    out.twists = list('twists').filter((t) => {
+      const due = twistById.get(t?.twist_id);
+      return due && t.what === due.what && !seen.has(due.id) && seen.add(due.id);
+    }).slice(0, MAX.twists).map((t) => ({
+      twist_id: t.twist_id, title: twistById.get(t.twist_id).title, what: t.what,
+      beat: intIn(t.beat, 1, 14), note: str(t.note, MAX.field), quote: quote(t.quote), keep: t.keep !== false,
+    }));
+  }
   return out;
 }
 
@@ -350,7 +410,7 @@ function getClient() {
   return client;
 }
 
-function draftPrompt({ episode, event, cast, threads, goals = [], relationships = [], followUps = [] }) {
+function draftPrompt({ episode, event, cast, threads, goals = [], relationships = [], followUps = [], twists = [] }) {
   const evaluation = parse(episode.evaluation_json, null);
   const names = new Map(cast.map((c) => [c.id, c.name]));
   const people = cast.map((c) => {
@@ -368,6 +428,9 @@ function draftPrompt({ episode, event, cast, threads, goals = [], relationships 
     : '(none recorded between these people)';
   const followLines = followUps.length
     ? followUps.map((f) => `- ${f.text}${f.due_hint ? ` (due: ${f.due_hint})` : ''}${f.episode_number ? ` (from episode ${f.episode_number})` : ''}`).join('\n')
+    : '(none)';
+  const twistLines = twists.length
+    ? twists.map((t) => `- [${t.id}] ${t.what === 'planted' ? 'PLANT' : 'PAY OFF'}: ${t.title}${t.description ? ` (${String(t.description).slice(0, 300)})` : ''}`).join('\n')
     : '(none)';
   const script = String(episode.script_content || '').trim();
   return `You keep the story record for "Styling Adventures with Lala". Read this episode and record what the audience saw, and what changed. Record only what is on the page: do not invent events, and do not reveal a secret the script only hints at.
@@ -391,6 +454,9 @@ ${followLines}
 THE SHOW'S OPEN THREADS:
 ${open}
 
+SEASON TWISTS THIS EPISODE WAS MEANT TO PLANT OR PAY OFF:
+${twistLines}
+
 THE SCRIPT:
 ${script ? script.slice(0, SCRIPT_LIMIT) : '(no script: work from the outline above)'}
 
@@ -399,12 +465,13 @@ Answer with JSON only:
   "what_happened": "one paragraph: what happened in this episode, as the audience saw it",
   "characters": [{"character_id": "an id above", "knew": "what they knew going in that mattered here", "learned": "what they found out here, or empty", "changed": "how they changed emotionally, or empty"}],
   "secrets": [{"secret_id": "an id above", "what": "hinted or revealed", "how": "the moment on the page that hints at or reveals it"}],
-  "threads": [{"thread_id": "an open thread's id above, or null for a new one", "action": "new, advance or close", "title": "the question left open", "note": "where it stands after this episode"}],
-  "relationships": [{"a": "a person's id above", "b": "another person's id above", "type": "a short label, e.g. love_interest, friend, rival, mentor, collaborator", "is_romantic": true, "stage_before": "${STAGES.join(' | ')}", "stage_after": "the same list", "tension_before": 0, "tension_after": 0, "evidence_beat": 11, "note": "what changed between them, in a sentence"}],
-  "follow_ups": [{"person": "the id of who Lala owes, or null", "text": "what she should do next, e.g. follow up about the collab", "due_hint": "when, e.g. next episode"}],
-  "goals": [{"slot": "a goal's [slot] above", "covered": true, "beat": 11, "note": "how the script covers it, or why it does not"}]
+  "threads": [{"thread_id": "an open thread's id above, or null for a new one", "action": "new, advance or close", "title": "the question left open", "note": "where it stands after this episode", "quote": "the script's words that show it"}],
+  "relationships": [{"a": "a person's id above", "b": "another person's id above", "type": "a short label, e.g. love_interest, friend, rival, mentor, collaborator", "is_romantic": true, "stage_before": "${STAGES.join(' | ')}", "stage_after": "the same list", "tension_before": 0, "tension_after": 0, "evidence_beat": 11, "note": "what changed between them, in a sentence", "quote": "the script's words that show it"}],
+  "follow_ups": [{"person": "the id of who Lala owes, or null", "text": "what she should do next, e.g. follow up about the collab", "due_hint": "when, e.g. next episode", "quote": "the script's words that show it"}],
+  "goals": [{"slot": "a goal's [slot] above", "covered": true, "beat": 11, "note": "how the script covers it, or why it does not", "quote": "the script's words that cover it, or empty"}],
+  "twists": [{"twist_id": "a twist's id above", "what": "planted for a PLANT, paid_off for a PAY OFF", "beat": 6, "note": "how the script does it", "quote": "the script's words that do it"}]
 }
-List a secret only when the script shows it; "revealed" only when the audience now knows it. A relationship only when something between two people changed on the page; tension is 0 (none) to 10. "close" a thread only when the script answers its question. A follow-up only for something left for a later episode. One entry for each goal above.`;
+List a secret only when the script shows it; "revealed" only when the audience now knows it. A relationship only when something between two people changed on the page; tension is 0 (none) to 10. "close" a thread only when the script answers its question. A follow-up only for something left for a later episode. One entry for each goal above. A twist only when the script really plants or pays it off. Each "quote" is copied word for word from the script, at most 25 words; leave it empty rather than paraphrase. "flirting" is for two people drawn to each other who are not together yet.`;
 }
 
 /** Drafts the record from the episode; saves it as a draft (a redraft replaces an earlier one). */
@@ -418,10 +485,11 @@ async function draftRecord(sequelize, episodeId) {
   const goals = await goalsOf(sequelize, episode, event, profiles);
   const relationships = await relationshipsOf(sequelize, cast);
   const followUps = await openFollowUps(sequelize, episode.show_id);
+  const twists = await dueTwists(sequelize, episode.id);
   let message;
   for (const model of MODELS) {
     try {
-      message = await getClient().messages.create({ model, max_tokens: MAX_TOKENS, messages: [{ role: 'user', content: draftPrompt({ episode, event, cast, threads, goals, relationships, followUps }) }] });
+      message = await getClient().messages.create({ model, max_tokens: MAX_TOKENS, messages: [{ role: 'user', content: draftPrompt({ episode, event, cast, threads, goals, relationships, followUps, twists }) }] });
       break;
     } catch (modelErr) {
       console.warn(`[episodeStoryRecord] drafting with ${model} failed:`, modelErr.message);
@@ -439,9 +507,37 @@ async function draftRecord(sequelize, episodeId) {
   const listOf = (v) => (Array.isArray(v) ? v : []);
   const fields = clean({
     what_happened: parsed.what_happened, characters: listOf(parsed.characters), secrets: listOf(parsed.secrets), threads: listOf(parsed.threads),
-    relationships: listOf(parsed.relationships), follow_ups: listOf(parsed.follow_ups), goals: listOf(parsed.goals), twists: [],
-  }, { cast, threads, goals });
-  return { record: await save(sequelize, episode, fields, { status: 'draft', drafted: true }), cast, threads, goals };
+    relationships: listOf(parsed.relationships), follow_ups: listOf(parsed.follow_ups), goals: listOf(parsed.goals), twists: listOf(parsed.twists),
+  }, { cast, threads, goals, twists, script: episode.script_content });
+  const saved = keepSavedKeys(fields, await rowOf(sequelize, episode.id));
+  return { record: await save(sequelize, episode, saved, { status: 'draft', drafted: true }), cast, threads, goals, twists };
+}
+
+/**
+ * Read it again (Evoni, 2026-10-23: "the card shows only what's new since
+ * the last Save"). A read gives its items new keys; an item an earlier Save
+ * already wrote takes that item's key back, so the card sees it as saved
+ * (record.applied) and Save skips it. The same thread (by id or title), the
+ * same pair of people, a follow-up saying much the same thing.
+ */
+function keepSavedKeys(fields, prev) {
+  if (!prev) return fields;
+  const applied = parse(prev.applied, {});
+  const carry = (kind, same) => {
+    const was = (parse(prev[kind], []) || []).filter((o) => o && o.key && applied[kind]?.[o.key]);
+    const used = new Set();
+    fields[kind] = (fields[kind] || []).map((x) => {
+      const old = was.find((o) => !used.has(o.key) && same(o, x));
+      if (!old) return x;
+      used.add(old.key);
+      return { ...x, key: old.key };
+    });
+  };
+  const pair = (r) => [r.a, r.b].sort().join('|');
+  carry('threads', (o, x) => (x.thread_id && (o.thread_id || applied.threads[o.key].thread_id) === x.thread_id) || flat(o.title) === flat(x.title));
+  carry('relationships', (o, x) => pair(o) === pair(x));
+  carry('follow_ups', (o, x) => sameText(o.text, x.text));
+  return fields;
 }
 
 /** After completion: drafts the record when the episode has none. Never throws. */
@@ -461,8 +557,9 @@ async function updateRecord(sequelize, episodeId, body = {}) {
   const { event, cast, profiles } = await castOf(sequelize, episode.id);
   const threads = await openThreads(sequelize, episode.show_id);
   const goals = await goalsOf(sequelize, episode, event, profiles);
-  const fields = clean(body, { cast, threads, goals });
-  return { record: await save(sequelize, episode, fields, { status: 'draft' }), cast, threads, goals };
+  const twists = await dueTwists(sequelize, episode.id);
+  const fields = clean(body, { cast, threads, goals, twists, script: episode.script_content });
+  return { record: await save(sequelize, episode, fields, { status: 'draft' }), cast, threads, goals, twists };
 }
 
 // ── Save: each kept item, written once ─────────────────────────────────────
@@ -675,6 +772,20 @@ async function approveRecord(sequelize, episodeId, { by = null } = {}) {
     }
     if (missing) skipped.push({ kind: 'goal', reason: 'no_todo_list', name: '' });
 
+    // Twists: planted, or paid off, in this episode; never moved back.
+    const twistsDone = done('twists');
+    for (const t of kept(row.twists)) {
+      if (twistsDone[t.twist_id] === t.what || twistsDone[t.twist_id] === 'paid_off') continue;
+      const sql = t.what === 'paid_off'
+        ? `UPDATE season_twists SET status = 'paid_off', paid_off_episode_id = :episodeId, updated_at = NOW()
+            WHERE id = :id AND deleted_at IS NULL AND status IN ('planned', 'planted')`
+        : `UPDATE season_twists SET status = 'planted', planted_episode_id = :episodeId, updated_at = NOW()
+            WHERE id = :id AND deleted_at IS NULL AND status = 'planned'`;
+      const [, meta] = await sequelize.query(sql, { replacements: { id: t.twist_id, episodeId: episode.id }, transaction });
+      twistsDone[t.twist_id] = t.what;
+      if (meta?.rowCount) written.push({ kind: 'twist', text: `${t.what === 'paid_off' ? 'Twist paid off' : 'Twist planted'}: ${t.title}${t.beat ? ` (beat ${t.beat})` : ''}` });
+    }
+
     await sequelize.query(
       `UPDATE episode_story_records SET status = 'approved', approved_by = :by, approved_at = NOW(), applied = CAST(:applied AS jsonb), updated_at = NOW() WHERE id = :id`,
       { replacements: { id: row.id, by, applied: JSON.stringify(applied) }, transaction });
@@ -715,5 +826,5 @@ async function recordBlock(sequelize, episodeId) {
 
 module.exports = {
   RecordError, getRecord, draftRecord, draftLater, updateRecord, approveRecord, recordBlock, draftPrompt, clean,
-  castOf, openThreads, STAGES, SCRIPT_LIMIT,
+  castOf, openThreads, keepSavedKeys, STAGES, SCRIPT_LIMIT,
 };

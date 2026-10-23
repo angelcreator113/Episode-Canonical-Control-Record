@@ -145,7 +145,7 @@ const answer = (obj) => ({ content: [{ type: 'text', text: JSON.stringify(obj) }
         { a: ids.lala, b: crypto.randomUUID(), type: 'rival' },
         { a: ids.marcus, b: ids.lala, type: 'duplicate pair' },
         { a: ids.maren, b: ids.mo, type: 'friend' },
-        { a: ids.maren, b: ids.lala, stage_before: 'flirting', stage_after: 'lovers', evidence_beat: 99 },
+        { a: ids.maren, b: ids.lala, stage_before: 'besties', stage_after: 'lovers', evidence_beat: 99 },
       ],
       follow_ups: [{ person: `profile:${studio}`, text: 'Follow up with Studio Bystable about the collab', due_hint: 'next episode' }, { person: 'nobody', text: 'Call back' }, { text: '' }],
       goals: [{ slot: 'relationship_guest', covered: true, beat: 11, note: 'They talk in beat 11' }, { slot: 'made_up', covered: true }],

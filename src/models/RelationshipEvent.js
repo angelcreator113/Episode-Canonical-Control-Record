@@ -47,7 +47,7 @@ module.exports = (sequelize) => {
     },
     relationship_stage: {
       type: DataTypes.STRING(80),
-      allowNull: true, // strangers, acquaintances, friends, close_friends, lovers, partners, exes, enemies
+      allowNull: true, // strangers, acquaintances, flirting, friends, close_friends, lovers, partners, exes, enemies
     },
     metadata: {
       type: DataTypes.JSONB,

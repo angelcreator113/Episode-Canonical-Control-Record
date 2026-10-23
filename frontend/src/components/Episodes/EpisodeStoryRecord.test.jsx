@@ -126,11 +126,73 @@ describe('What changed', () => {
     expect(api.put).not.toHaveBeenCalled();
   });
 
-  test('a saved item says Saved; twists show when there are some', async () => {
-    vi.mocked(api.get).mockResolvedValue(DATA({ ...RECORD, applied: { relationships: { 'r-key-1': { relationship_id: 'x' } } }, twists: [{ title: 'Truthville is her sister’s ex' }] }));
+  test('a saved item says Saved and folds away under Already saved; twists show when there are some', async () => {
+    vi.mocked(api.get).mockResolvedValue(DATA({
+      ...RECORD, applied: { relationships: { 'r-key-1': { relationship_id: 'x' } } },
+      twists: [{ twist_id: 'tw1', title: 'Truthville is her sister’s ex', what: 'planted', beat: 6, keep: true }],
+    }));
     renderCard();
-    expect(await within(await screen.findByTestId('wc-relationships-0')).findByText('Saved')).toBeTruthy();
-    expect(within(screen.getByTestId('wc-twists')).getByText('Truthville is her sister’s ex')).toBeTruthy();
+    const folded = await screen.findByTestId('wc-relationships-saved');
+    expect(folded.textContent).toContain('Already saved (1)');
+    expect(within(folded).getByTestId('wc-relationships-0').textContent).toContain('Saved');
+    // The other relationship is new: it stays in view.
+    expect(within(folded).queryByTestId('wc-relationships-1')).toBeNull();
+    const twist = within(screen.getByTestId('wc-twists-0'));
+    expect(twist.getByText('Truthville is her sister’s ex')).toBeTruthy();
+    expect(twist.getByText('Planted in beat 6')).toBeTruthy();
+    // Saved rows are not counted again.
+    expect(screen.getByTestId('wc-save').textContent).toContain('Save 6 ticked');
+  });
+
+  test('each row quotes the script; flirting is a stage', async () => {
+    vi.mocked(api.get).mockResolvedValue(DATA({
+      ...RECORD,
+      relationships: [{ ...RECORD.relationships[0], stage_after: 'flirting', quote: 'I came here for you, not the brand.' }],
+    }));
+    renderCard();
+    const romance = within(await screen.findByTestId('wc-relationships-0'));
+    expect(romance.getByText('“I came here for you, not the brand.”')).toBeTruthy();
+    expect(romance.getByText('Strangers → flirting')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Edit: Lala and Marcus Hale' }));
+    expect([...romance.getByLabelText('After').options].map((o) => o.value)).toContain('flirting');
+  });
+
+  test('a goal the script did not cover shows unticked; ticking it says covered', async () => {
+    vi.mocked(api.get).mockResolvedValue(DATA({
+      ...RECORD, goals: [{ key: 'g2', slot: 'relationship_host', label: 'Follow up with Studio Bystable', covered: false, beat: null, note: '', keep: true }],
+    }));
+    vi.mocked(api.put).mockImplementation((url, b) => Promise.resolve(DATA({ ...RECORD, ...b })));
+    vi.mocked(api.post).mockResolvedValue({ data: { ...DATA().data, result: { written: [], skipped: [] } } });
+    renderCard();
+    const box = await screen.findByLabelText('Keep: Follow up with Studio Bystable');
+    expect(box.checked).toBe(false);
+    expect(screen.getByTestId('wc-save').textContent).toContain('Save 5 ticked');
+    fireEvent.click(box);
+    expect(box.checked).toBe(true);
+    expect(within(screen.getByTestId('wc-goals-0')).getByText('Covered')).toBeTruthy();
+    fireEvent.click(screen.getByTestId('wc-save'));
+    await screen.findByTestId('wc-result');
+    expect(vi.mocked(api.put).mock.calls[0][1].goals).toEqual([{ key: 'g2', slot: 'relationship_host', covered: true, beat: null, note: '', keep: true }]);
+  });
+
+  test('a twist due that the read missed can be added', async () => {
+    vi.mocked(api.get).mockResolvedValue({ data: { ...DATA().data, twists: [{ id: 'tw9', title: 'The ring on the mirror', what: 'planted' }] } });
+    renderCard();
+    const section = within(await screen.findByTestId('wc-twists'));
+    expect(section.getByText('The script does not plant or pay off a twist due here.')).toBeTruthy();
+    fireEvent.change(section.getByLabelText('The script does it after all'), { target: { value: 'tw9' } });
+    expect(within(screen.getByTestId('wc-twists-0')).getByText('The ring on the mirror')).toBeTruthy();
+    expect(section.queryByLabelText('The script does it after all')).toBeNull();
+  });
+
+  test('read it again after a Save says how much is new', async () => {
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    vi.mocked(api.post).mockResolvedValue(DATA({ ...RECORD, applied: { goals: { relationship_guest: true }, secrets: { s1: 'hinted' } } }));
+    renderCard();
+    fireEvent.click(await screen.findByRole('button', { name: /Read it again/ }));
+    expect(await screen.findByText('Read it again: 4 new, 2 already saved (folded away below).')).toBeTruthy();
+    expect(screen.getByTestId('wc-goals').textContent).toContain('Nothing new since your last Save.');
+    confirm.mockRestore();
   });
 
   test('read it again asks first', async () => {

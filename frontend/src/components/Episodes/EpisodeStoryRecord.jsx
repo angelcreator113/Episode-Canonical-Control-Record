@@ -4,10 +4,12 @@
  * script to the story to the next episode", PR 2). The app reads the
  * finished script and proposes what changed: the episode's goals, the
  * relationships that moved, what Lala owes people (follow-ups), the plot
- * threads, the secrets (and twists, once a later PR fills them). She ticks,
- * edits or drops each row; Save writes the ticked ones, once
+ * threads, the secrets and the season twists it plants or pays off. She
+ * ticks, edits or drops each row; Save writes the ticked ones, once
  * (services/episodeStoryRecord approveRecord), and says what it wrote and
- * what it could not (a person not in the registry).
+ * what it could not (a person not in the registry). Each row quotes the
+ * line in the script that shows it. What an earlier Save wrote folds away
+ * under "Already saved", so reading it again shows only what is new.
  *
  * Results → Story, step 1 of the story path (EpisodeBookSteps), and the
  * Script tab's "Read the finished script" (EpisodeScriptTab), which passes
@@ -23,30 +25,43 @@ import api from '../../services/api';
 import './EpisodeStoryRecord.css';
 import './EpisodeWhatChanged.css';
 
-const STAGES = ['strangers', 'acquaintances', 'friends', 'close_friends', 'lovers', 'partners', 'exes', 'enemies'];
-const LISTS = ['characters', 'secrets', 'threads', 'relationships', 'follow_ups', 'goals'];
+const STAGES = ['strangers', 'acquaintances', 'flirting', 'friends', 'close_friends', 'lovers', 'partners', 'exes', 'enemies'];
+const LISTS = ['characters', 'secrets', 'threads', 'relationships', 'follow_ups', 'goals', 'twists'];
 const words = (s) => String(s || '').replace(/_/g, ' ');
 const Words = (s) => { const w = words(s); return w.charAt(0).toUpperCase() + w.slice(1); };
 const errorOf = (err, fallback) => err?.response?.data?.error || fallback;
 const copy = (list) => (list || []).map((x) => ({ ...x }));
 const formOf = (record) => ({ what_happened: record?.what_happened || '', ...Object.fromEntries(LISTS.map((k) => [k, copy(record?.[k])])) });
 const keep = (x) => x.keep !== false;
+// A goal is ticked on Save only when the script covers it.
+const ticked = (kind, x) => keep(x) && (kind !== 'goals' || !!x.covered);
 const body = (form) => ({
   what_happened: form.what_happened,
   characters: form.characters.map(({ character_id, knew, learned, changed }) => ({ character_id, knew, learned, changed })),
   secrets: form.secrets.map(({ secret_id, what, how, keep: k }) => ({ secret_id, what, how, keep: k !== false })),
-  threads: form.threads.map(({ key, thread_id, title, note, action, keep: k }) => ({ key, thread_id, title, note, action, keep: k !== false })),
-  relationships: form.relationships.map(({ key, a, b, type, is_romantic, stage_before, stage_after, tension_before, tension_after, evidence_beat, note, keep: k }) => ({
-    key, a, b, type, is_romantic: !!is_romantic, stage_before, stage_after, tension_before, tension_after, evidence_beat, note, keep: k !== false,
+  threads: form.threads.map(({ key, thread_id, title, note, quote, action, keep: k }) => ({ key, thread_id, title, note, quote, action, keep: k !== false })),
+  relationships: form.relationships.map(({ key, a, b, type, is_romantic, stage_before, stage_after, tension_before, tension_after, evidence_beat, note, quote, keep: k }) => ({
+    key, a, b, type, is_romantic: !!is_romantic, stage_before, stage_after, tension_before, tension_after, evidence_beat, note, quote, keep: k !== false,
   })),
-  follow_ups: form.follow_ups.map(({ key, person, text, due_hint, keep: k }) => ({ key, person, text, due_hint, keep: k !== false })),
-  goals: form.goals.map(({ key, slot, covered, beat, note, keep: k }) => ({ key, slot, covered: !!covered, beat, note, keep: k !== false })),
+  follow_ups: form.follow_ups.map(({ key, person, text, due_hint, quote, keep: k }) => ({ key, person, text, due_hint, quote, keep: k !== false })),
+  goals: form.goals.map(({ key, slot, covered, beat, note, quote, keep: k }) => ({ key, slot, covered: !!covered, beat, note, quote, keep: k !== false })),
+  twists: form.twists.map(({ twist_id, what, beat, note, quote, keep: k }) => ({ twist_id, what, beat, note, quote, keep: k !== false })),
 });
 const beatOf = (v) => {
   const n = Number(v);
   return Number.isInteger(n) && n >= 1 && n <= 14 ? n : null;
 };
 const THREAD_ACTION = { new: 'New', advance: 'Moves on', close: 'Closes' };
+/** Whether an earlier Save already wrote this item (record.applied). */
+function wasSaved(kind, x, applied) {
+  const done = applied?.[kind] || {};
+  if (kind === 'goals') return !!done[x.slot];
+  if (kind === 'secrets') return done[x.secret_id] === x.what || done[x.secret_id] === 'revealed';
+  if (kind === 'twists') return done[x.twist_id] === x.what || done[x.twist_id] === 'paid_off';
+  return !!done[x.key];
+}
+/** The script's own words for an item. */
+const Quote = ({ text }) => (text ? <blockquote className="wc-quote">“{text}”</blockquote> : null);
 
 function RegistryLink({ children }) {
   // Outside a router (a test, a preview), a plain link.
@@ -77,11 +92,20 @@ function Row({ id, label, kept, onKeep, editing, onEdit, onDrop, written, childr
   );
 }
 
-function Section({ icon: Icon, title, count, empty, children, testid }) {
+/** A kind of item: what is new, then what an earlier Save wrote, folded away. */
+function Section({ icon: Icon, title, count, empty, children, saved = [], testid, after = null }) {
   return (
     <section className="wc-section" aria-label={title} data-testid={testid}>
       <h4 className="wc-section-title"><Icon size={15} aria-hidden="true" /> {title}{count > 0 && <span className="wc-count">{count}</span>}</h4>
-      {count === 0 ? <p className="esr-note">{empty}</p> : <ul className="wc-rows">{children}</ul>}
+      {count === 0 && <p className="esr-note">{saved.length ? 'Nothing new since your last Save.' : empty}</p>}
+      {count > 0 && <ul className="wc-rows">{children}</ul>}
+      {saved.length > 0 && (
+        <details className="wc-saved" data-testid={`${testid}-saved`}>
+          <summary>Already saved ({saved.length})</summary>
+          <ul className="wc-rows">{saved}</ul>
+        </details>
+      )}
+      {after && <ul className="wc-rows">{after}</ul>}
     </section>
   );
 }
@@ -106,7 +130,7 @@ export default function EpisodeStoryRecord({ episodeId, embedded = false, onStat
   useEffect(() => { if (data) heard.current?.(data.record?.status || null); }, [data]);
 
   const take = useCallback((d) => {
-    const next = { record: d?.record || null, cast: d?.cast || [], threads: d?.threads || [], goals: d?.goals || [] };
+    const next = { record: d?.record || null, cast: d?.cast || [], threads: d?.threads || [], goals: d?.goals || [], twists: d?.twists || [] };
     setData(next);
     setForm(formOf(next.record));
     setEditing(null);
@@ -127,7 +151,16 @@ export default function EpisodeStoryRecord({ episodeId, embedded = false, onStat
   }, [take]);
   const read = useCallback(() => {
     setResult(null);
-    return run('draft', () => api.post(`${base}/draft`, {}, { timeout: 180000 }), 'The script could not be read. Try again.', 'Read the whole script. Look each row over, then Save.');
+    return run('draft', () => api.post(`${base}/draft`, {}, { timeout: 180000 }), 'The script could not be read. Try again.', 'Read the whole script. Look each row over, then Save.')
+      .then((d) => {
+        // Read again after a Save: say how much is new.
+        const rec = d?.record;
+        if (!rec?.applied || !Object.keys(rec.applied).length) return d;
+        const all = LISTS.filter((k) => k !== 'characters').flatMap((k) => (rec[k] || []).map((x) => wasSaved(k, x, rec.applied)));
+        const old = all.filter(Boolean).length;
+        setNote({ text: `Read it again: ${all.length - old} new, ${old} already saved (folded away below).` });
+        return d;
+      });
   }, [run, base]);
 
   const opened = useRef(false);
@@ -176,16 +209,157 @@ export default function EpisodeStoryRecord({ episodeId, embedded = false, onStat
   const listed = new Set(form.secrets.map((s) => s.secret_id));
   const spare = cast.flatMap((c) => (c.secrets || []).filter((s) => !listed.has(s.id)).map((s) => ({ ...s, character_id: c.id, name: c.name })));
   const locked = !!busy;
-  const kept = LISTS.filter((k) => k !== 'characters').reduce((n, k) => n + form[k].filter(keep).length, 0);
-  const row = (kind, i, item, label, children, fields, written) => {
+  const saved = (kind, x) => wasSaved(kind, x, applied);
+  const kept = LISTS.filter((k) => k !== 'characters').reduce((n, k) => n + form[k].filter((x) => ticked(k, x) && !saved(k, x)).length, 0);
+  // Ticking a goal the script did not cover says it is covered after all.
+  const onKeep = (kind, i, v) => setAt(kind, i, kind === 'goals' && v ? { keep: true, covered: true } : { keep: v });
+  const row = (kind, i, item, label, children, fields) => {
     const id = `wc-${kind.replace('_', '-')}-${i}`;
     return (
-      <Row key={item.key || item.secret_id || i} id={id} label={label} kept={keep(item)} onKeep={(v) => setAt(kind, i, { keep: v })}
-        editing={editing === id} onEdit={() => toggle(id)} onDrop={() => dropAt(kind, i)} written={written} fields={fields}>
+      <Row key={item.key || item.secret_id || item.twist_id || i} id={id} label={label} kept={ticked(kind, item)} onKeep={(v) => onKeep(kind, i, v)}
+        editing={editing === id} onEdit={() => toggle(id)} onDrop={() => dropAt(kind, i)} written={saved(kind, item)} fields={fields}>
         {children}
       </Row>
     );
   };
+  // Each kind's rows: [new, already saved].
+  const rows = (kind, render) => {
+    const all = form[kind].map((x, i) => ({ x, i, node: render(x, i) }));
+    return [all.filter((r) => !saved(kind, r.x)).map((r) => r.node), all.filter((r) => saved(kind, r.x)).map((r) => r.node)];
+  };
+  const [goalRows, goalSaved] = rows('goals', (g, i) => row('goals', i, g, g.label, (
+    <>
+      <p className="wc-line">{g.label}</p>
+      <p className="wc-meta">
+        <span className={`wc-chip${g.covered ? ' is-good' : ''}`}>{g.covered ? `Covered${g.beat ? ` in beat ${g.beat}` : ''}` : 'Not covered'}</span>
+        {g.note && <span className="wc-sub">{g.note}</span>}
+      </p>
+      <Quote text={g.quote} />
+    </>
+  ), (
+    <>
+      <Field label="Covered">
+        <select value={g.covered ? 'yes' : 'no'} onChange={(e) => setAt('goals', i, { covered: e.target.value === 'yes', keep: e.target.value === 'yes' })}>
+          <option value="yes">Covered: tick it</option>
+          <option value="no">Not covered</option>
+        </select>
+      </Field>
+      <Field label="Beat"><input type="number" min={1} max={14} value={g.beat ?? ''} onChange={(e) => setAt('goals', i, { beat: beatOf(e.target.value) })} /></Field>
+      <Field label="How" wide><input type="text" value={g.note || ''} onChange={(e) => setAt('goals', i, { note: e.target.value })} /></Field>
+    </>
+  )));
+  const [relRows, relSaved] = rows('relationships', (r, i) => {
+    const label = `${nameOf(r.a)} and ${nameOf(r.b)}`;
+    const missing = [r.a, r.b].filter(unlinked).map(nameOf);
+    return row('relationships', i, r, label, (
+      <>
+        <p className="wc-line">{nameOf(r.a)} <span aria-hidden="true">↔</span><span className="wc-sr"> and </span> {nameOf(r.b)}</p>
+        <p className="wc-meta">
+          {r.is_romantic ? <span className="wc-chip is-romance"><Heart size={12} aria-hidden="true" /> Love interest</span> : r.type && <span className="wc-chip">{Words(r.type)}</span>}
+          {(r.stage_before || r.stage_after) && <span className="wc-chip">{Words(r.stage_before) || '?'} → {words(r.stage_after) || '?'}</span>}
+          {r.evidence_beat && <span className="wc-chip">Beat {r.evidence_beat}</span>}
+        </p>
+        {r.note && <p className="wc-sub">{r.note}</p>}
+        <Quote text={r.quote} />
+        {missing.length > 0 && <p className="wc-warn"><AlertTriangle size={13} aria-hidden="true" /> {missing.join(' and ')} {missing.length > 1 ? 'are' : 'is'} not in the registry yet: Save skips this one.</p>}
+      </>
+    ), (
+      <>
+        <Field label="Kind"><input type="text" value={r.type || ''} onChange={(e) => setAt('relationships', i, { type: e.target.value })} /></Field>
+        <label className="wc-check"><input type="checkbox" checked={!!r.is_romantic} onChange={(e) => setAt('relationships', i, { is_romantic: e.target.checked })} /> Romantic</label>
+        {[['stage_before', 'Before'], ['stage_after', 'After']].map(([k, l]) => (
+          <Field key={k} label={l}>
+            <select value={r[k] || ''} onChange={(e) => setAt('relationships', i, { [k]: e.target.value || null })}>
+              <option value="">Not said</option>
+              {STAGES.map((st) => <option key={st} value={st}>{words(st)}</option>)}
+            </select>
+          </Field>
+        ))}
+        <Field label="Beat"><input type="number" min={1} max={14} value={r.evidence_beat ?? ''} onChange={(e) => setAt('relationships', i, { evidence_beat: beatOf(e.target.value) })} /></Field>
+        <Field label="What changed" wide><input type="text" value={r.note || ''} onChange={(e) => setAt('relationships', i, { note: e.target.value })} /></Field>
+      </>
+    ));
+  });
+  const [followRows, followSaved] = rows('follow_ups', (f, i) => row('follow_ups', i, f, f.text, (
+    <>
+      <p className="wc-line">{f.text}</p>
+      <p className="wc-meta">
+        {f.person && <span className="wc-chip"><Users size={12} aria-hidden="true" /> {nameOf(f.person)}</span>}
+        {f.due_hint && <span className="wc-chip">Due: {f.due_hint}</span>}
+      </p>
+      <Quote text={f.quote} />
+    </>
+  ), (
+    <>
+      <Field label="What to do" wide><input type="text" value={f.text} onChange={(e) => setAt('follow_ups', i, { text: e.target.value })} /></Field>
+      <Field label="With">
+        <select value={f.person || ''} onChange={(e) => setAt('follow_ups', i, { person: e.target.value || null })}>
+          <option value="">No one in particular</option>
+          {cast.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+        </select>
+      </Field>
+      <Field label="When"><input type="text" value={f.due_hint || ''} onChange={(e) => setAt('follow_ups', i, { due_hint: e.target.value })} /></Field>
+    </>
+  )));
+  const [threadRows, threadSaved] = rows('threads', (t, i) => row('threads', i, t, t.title || 'New thread', (
+    <>
+      <p className="wc-line">{t.title || <em>Untitled</em>}</p>
+      <p className="wc-meta">
+        <span className={`wc-chip${t.action === 'close' ? ' is-good' : ''}`}>{THREAD_ACTION[t.action] || 'New'}</span>
+        {t.note && <span className="wc-sub">{t.note}</span>}
+      </p>
+      <Quote text={t.quote} />
+    </>
+  ), (
+    <>
+      <Field label="The question" wide><input type="text" value={t.title} onChange={(e) => setAt('threads', i, { title: e.target.value })} /></Field>
+      <Field label="Where it stands" wide><input type="text" value={t.note || ''} onChange={(e) => setAt('threads', i, { note: e.target.value })} /></Field>
+      {t.thread_id && (
+        <Field label="This episode">
+          <select value={t.action} onChange={(e) => setAt('threads', i, { action: e.target.value })}>
+            <option value="advance">Moves it on</option>
+            <option value="close">Closes it</option>
+          </select>
+        </Field>
+      )}
+    </>
+  )));
+  const [secretRows, secretSaved] = rows('secrets', (s, i) => row('secrets', i, s, s.text, (
+    <>
+      <p className="wc-line">{people.has(s.character_id) ? `${nameOf(s.character_id)}: ` : ''}{s.text}</p>
+      <p className="wc-meta">
+        <span className="wc-chip">{s.what === 'revealed' ? 'Revealed' : 'Hinted at'}</span>
+        {s.how && <span className="wc-sub">{s.how}</span>}
+      </p>
+    </>
+  ), (
+    <>
+      <Field label="The audience">
+        <select value={s.what} onChange={(e) => setAt('secrets', i, { what: e.target.value })}>
+          <option value="hinted">Hinted at</option>
+          <option value="revealed">Revealed</option>
+        </select>
+      </Field>
+      <Field label="How" wide><input type="text" value={s.how || ''} onChange={(e) => setAt('secrets', i, { how: e.target.value })} /></Field>
+    </>
+  )));
+  const [twistRows, twistSaved] = rows('twists', (t, i) => row('twists', i, t, t.title, (
+    <>
+      <p className="wc-line">{t.title}</p>
+      <p className="wc-meta">
+        <span className={`wc-chip${t.what === 'paid_off' ? ' is-good' : ''}`}>{t.what === 'paid_off' ? 'Paid off' : 'Planted'}{t.beat ? ` in beat ${t.beat}` : ''}</span>
+        {t.note && <span className="wc-sub">{t.note}</span>}
+      </p>
+      <Quote text={t.quote} />
+    </>
+  ), (
+    <>
+      <Field label="Beat"><input type="number" min={1} max={14} value={t.beat ?? ''} onChange={(e) => setAt('twists', i, { beat: beatOf(e.target.value) })} /></Field>
+      <Field label="How" wide><input type="text" value={t.note || ''} onChange={(e) => setAt('twists', i, { note: e.target.value })} /></Field>
+    </>
+  )));
+  const due = data.twists || [];
+  const missedTwists = due.filter((t) => !form.twists.some((x) => x.twist_id === t.id));
 
   return (
     <section className={`esr wc${embedded ? ' is-embedded' : ''}`} {...(embedded ? { 'aria-label': 'What changed' } : { 'aria-labelledby': 'wc-title' })} data-testid="episode-story-record">
@@ -197,7 +371,7 @@ export default function EpisodeStoryRecord({ episodeId, embedded = false, onStat
             {record && <span className={`esr-badge is-${record.status}`}>{record.status === 'approved' ? 'Saved' : 'Draft'}</span>}
           </header>
           <p className="esr-note">
-            Read from the finished script: the goals it covers, the relationships that moved, what Lala owes people, the plot threads and the secrets.
+            Read from the finished script: the goals it covers, the relationships that moved, what Lala owes people, the plot threads, the secrets and the season twists.
             Tick what is right, fix or drop the rest, then Save. Nothing is written until you do.
           </p>
         </>
@@ -217,138 +391,32 @@ export default function EpisodeStoryRecord({ episodeId, embedded = false, onStat
             <textarea rows={3} value={form.what_happened} onChange={(e) => set('what_happened', e.target.value)} />
           </label>
 
-          <Section icon={Target} title="Goals" count={form.goals.length} empty="This episode had no relationship goals." testid="wc-goals">
-            {form.goals.map((g, i) => row('goals', i, g, g.label, (
-              <>
-                <p className="wc-line">{g.label}</p>
-                <p className="wc-meta">
-                  <span className={`wc-chip${g.covered ? ' is-good' : ''}`}>{g.covered ? `Covered${g.beat ? ` in beat ${g.beat}` : ''}` : 'Not covered'}</span>
-                  {g.note && <span className="wc-sub">{g.note}</span>}
-                </p>
-              </>
-            ), (
-              <>
-                <Field label="Covered">
-                  <select value={g.covered ? 'yes' : 'no'} onChange={(e) => setAt('goals', i, { covered: e.target.value === 'yes' })}>
-                    <option value="yes">Covered: tick it</option>
-                    <option value="no">Not covered</option>
-                  </select>
-                </Field>
-                <Field label="Beat"><input type="number" min={1} max={14} value={g.beat ?? ''} onChange={(e) => setAt('goals', i, { beat: beatOf(e.target.value) })} /></Field>
-                <Field label="How" wide><input type="text" value={g.note || ''} onChange={(e) => setAt('goals', i, { note: e.target.value })} /></Field>
-              </>
-            ), !!applied.goals?.[g.slot]))}
+          <Section icon={Target} title="Goals" count={goalRows.length} saved={goalSaved} empty="This episode had no relationship goals." testid="wc-goals">
+            {goalRows}
           </Section>
 
-          <Section icon={Heart} title="Relationships" count={form.relationships.length} empty="No relationship moved in this script." testid="wc-relationships">
-            {form.relationships.map((r, i) => {
-              const label = `${nameOf(r.a)} and ${nameOf(r.b)}`;
-              const missing = [r.a, r.b].filter(unlinked).map(nameOf);
-              return row('relationships', i, r, label, (
-                <>
-                  <p className="wc-line">{nameOf(r.a)} <span aria-hidden="true">↔</span><span className="wc-sr"> and </span> {nameOf(r.b)}</p>
-                  <p className="wc-meta">
-                    {r.is_romantic ? <span className="wc-chip is-romance"><Heart size={12} aria-hidden="true" /> Love interest</span> : r.type && <span className="wc-chip">{Words(r.type)}</span>}
-                    {(r.stage_before || r.stage_after) && <span className="wc-chip">{Words(r.stage_before) || '?'} → {words(r.stage_after) || '?'}</span>}
-                    {r.evidence_beat && <span className="wc-chip">Beat {r.evidence_beat}</span>}
-                  </p>
-                  {r.note && <p className="wc-sub">{r.note}</p>}
-                  {missing.length > 0 && <p className="wc-warn"><AlertTriangle size={13} aria-hidden="true" /> {missing.join(' and ')} {missing.length > 1 ? 'are' : 'is'} not in the registry yet: Save skips this one.</p>}
-                </>
-              ), (
-                <>
-                  <Field label="Kind"><input type="text" value={r.type || ''} onChange={(e) => setAt('relationships', i, { type: e.target.value })} /></Field>
-                  <label className="wc-check"><input type="checkbox" checked={!!r.is_romantic} onChange={(e) => setAt('relationships', i, { is_romantic: e.target.checked })} /> Romantic</label>
-                  {[['stage_before', 'Before'], ['stage_after', 'After']].map(([k, l]) => (
-                    <Field key={k} label={l}>
-                      <select value={r[k] || ''} onChange={(e) => setAt('relationships', i, { [k]: e.target.value || null })}>
-                        <option value="">Not said</option>
-                        {STAGES.map((s) => <option key={s} value={s}>{words(s)}</option>)}
-                      </select>
-                    </Field>
-                  ))}
-                  <Field label="Beat"><input type="number" min={1} max={14} value={r.evidence_beat ?? ''} onChange={(e) => setAt('relationships', i, { evidence_beat: beatOf(e.target.value) })} /></Field>
-                  <Field label="What changed" wide><input type="text" value={r.note || ''} onChange={(e) => setAt('relationships', i, { note: e.target.value })} /></Field>
-                </>
-              ), !!applied.relationships?.[r.key]);
-            })}
+          <Section icon={Heart} title="Relationships" count={relRows.length} saved={relSaved} empty="No relationship moved in this script." testid="wc-relationships">
+            {relRows}
           </Section>
 
-          <Section icon={MessageCircle} title="Follow-ups" count={form.follow_ups.length} empty="Nothing left for a later episode." testid="wc-follow-ups">
-            {form.follow_ups.map((f, i) => row('follow_ups', i, f, f.text, (
-              <>
-                <p className="wc-line">{f.text}</p>
-                <p className="wc-meta">
-                  {f.person && <span className="wc-chip"><Users size={12} aria-hidden="true" /> {nameOf(f.person)}</span>}
-                  {f.due_hint && <span className="wc-chip">Due: {f.due_hint}</span>}
-                </p>
-              </>
-            ), (
-              <>
-                <Field label="What to do" wide><input type="text" value={f.text} onChange={(e) => setAt('follow_ups', i, { text: e.target.value })} /></Field>
-                <Field label="With">
-                  <select value={f.person || ''} onChange={(e) => setAt('follow_ups', i, { person: e.target.value || null })}>
-                    <option value="">No one in particular</option>
-                    {cast.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                  </select>
-                </Field>
-                <Field label="When"><input type="text" value={f.due_hint || ''} onChange={(e) => setAt('follow_ups', i, { due_hint: e.target.value })} /></Field>
-              </>
-            ), !!applied.follow_ups?.[f.key]))}
+          <Section icon={MessageCircle} title="Follow-ups" count={followRows.length} saved={followSaved} empty="Nothing left for a later episode." testid="wc-follow-ups">
+            {followRows}
           </Section>
 
-          <Section icon={GitBranch} title="Plot threads" count={form.threads.length} empty="No thread opened or moved." testid="wc-threads">
-            {form.threads.map((t, i) => row('threads', i, t, t.title || 'New thread', (
-              <>
-                <p className="wc-line">{t.title || <em>Untitled</em>}</p>
-                <p className="wc-meta">
-                  <span className={`wc-chip${t.action === 'close' ? ' is-good' : ''}`}>{THREAD_ACTION[t.action] || 'New'}</span>
-                  {t.note && <span className="wc-sub">{t.note}</span>}
-                </p>
-              </>
-            ), (
-              <>
-                <Field label="The question" wide><input type="text" value={t.title} onChange={(e) => setAt('threads', i, { title: e.target.value })} /></Field>
-                <Field label="Where it stands" wide><input type="text" value={t.note || ''} onChange={(e) => setAt('threads', i, { note: e.target.value })} /></Field>
-                {t.thread_id && (
-                  <Field label="This episode">
-                    <select value={t.action} onChange={(e) => setAt('threads', i, { action: e.target.value })}>
-                      <option value="advance">Moves it on</option>
-                      <option value="close">Closes it</option>
-                    </select>
-                  </Field>
-                )}
-              </>
-            ), !!applied.threads?.[t.key]))}
-            <li className="wc-add">
-              <button type="button" className="esr-btn-soft" onClick={() => {
-                set('threads', [...form.threads, { key: `new-${Date.now()}`, thread_id: null, title: '', note: '', action: 'new', keep: true }]);
-                setEditing(`wc-threads-${form.threads.length}`);
-              }}><Plus size={14} aria-hidden="true" /> Add a thread</button>
-            </li>
+          <Section icon={GitBranch} title="Plot threads" count={threadRows.length} saved={threadSaved} empty="No thread opened or moved." testid="wc-threads"
+            after={(
+              <li className="wc-add">
+                <button type="button" className="esr-btn-soft" onClick={() => {
+                  set('threads', [...form.threads, { key: `new-${Date.now()}`, thread_id: null, title: '', note: '', action: 'new', keep: true }]);
+                  setEditing(`wc-threads-${form.threads.length}`);
+                }}><Plus size={14} aria-hidden="true" /> Add a thread</button>
+              </li>
+            )}>
+            {threadRows}
           </Section>
 
-          <Section icon={KeyRound} title="Secrets" count={form.secrets.length} empty="No secret was hinted at or revealed." testid="wc-secrets">
-            {form.secrets.map((s, i) => row('secrets', i, s, s.text, (
-              <>
-                <p className="wc-line">{people.has(s.character_id) ? `${nameOf(s.character_id)}: ` : ''}{s.text}</p>
-                <p className="wc-meta">
-                  <span className="wc-chip">{s.what === 'revealed' ? 'Revealed' : 'Hinted at'}</span>
-                  {s.how && <span className="wc-sub">{s.how}</span>}
-                </p>
-              </>
-            ), (
-              <>
-                <Field label="The audience">
-                  <select value={s.what} onChange={(e) => setAt('secrets', i, { what: e.target.value })}>
-                    <option value="hinted">Hinted at</option>
-                    <option value="revealed">Revealed</option>
-                  </select>
-                </Field>
-                <Field label="How" wide><input type="text" value={s.how || ''} onChange={(e) => setAt('secrets', i, { how: e.target.value })} /></Field>
-              </>
-            ), applied.secrets?.[s.secret_id] === s.what))}
-            {spare.length > 0 && (
+          <Section icon={KeyRound} title="Secrets" count={secretRows.length} saved={secretSaved} empty="No secret was hinted at or revealed." testid="wc-secrets"
+            after={spare.length > 0 ? (
               <li className="wc-add">
                 <Field label="Add a secret">
                   <select value="" onChange={(e) => { const x = spare.find((y) => y.id === e.target.value); if (x) set('secrets', [...form.secrets, { secret_id: x.id, character_id: x.character_id, text: x.text, what: 'hinted', how: '', keep: true }]); }}>
@@ -357,12 +425,23 @@ export default function EpisodeStoryRecord({ episodeId, embedded = false, onStat
                   </select>
                 </Field>
               </li>
-            )}
+            ) : null}>
+            {secretRows}
           </Section>
 
-          {(record.twists || []).length > 0 && (
-            <Section icon={Shuffle} title="Twists" count={record.twists.length} empty="" testid="wc-twists">
-              {record.twists.map((t, i) => <li key={i} className="wc-row"><div className="wc-row-body"><p className="wc-line">{t.title || t.text}</p></div></li>)}
+          {(due.length > 0 || form.twists.length > 0) && (
+            <Section icon={Shuffle} title="Season twists" count={twistRows.length} saved={twistSaved} empty="The script does not plant or pay off a twist due here." testid="wc-twists"
+              after={missedTwists.length > 0 ? (
+                <li className="wc-add">
+                  <Field label="The script does it after all">
+                    <select value="" onChange={(e) => { const x = missedTwists.find((y) => y.id === e.target.value); if (x) set('twists', [...form.twists, { twist_id: x.id, title: x.title, what: x.what, beat: null, note: '', quote: '', keep: true }]); }}>
+                      <option value="">Choose…</option>
+                      {missedTwists.map((x) => <option key={x.id} value={x.id}>{x.what === 'paid_off' ? 'Pays off' : 'Plants'}: {x.title}</option>)}
+                    </select>
+                  </Field>
+                </li>
+              ) : null}>
+              {twistRows}
             </Section>
           )}
 

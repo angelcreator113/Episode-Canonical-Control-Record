@@ -19,7 +19,7 @@ const { episodeCast } = require('../../../src/services/storyGenerationService');
 const { secretsFor } = require('../../../src/services/characterSecrets');
 const { lalaCharacter } = require('../../../src/services/lalaFeedProfile');
 const { createThread } = require('../../../src/services/storyThreadService');
-const { clean, draftPrompt, draftRecord, approveRecord, SCRIPT_LIMIT } = require('../../../src/services/episodeStoryRecord');
+const { clean, draftPrompt, draftRecord, approveRecord, keepSavedKeys, SCRIPT_LIMIT } = require('../../../src/services/episodeStoryRecord');
 
 const EP = '11111111-1111-4111-8111-111111111111';
 const SHOW = '22222222-2222-4222-8222-222222222222';
@@ -44,7 +44,7 @@ describe('clean()', () => {
         { a: MARCUS, b: LALA, type: 'again' },
         { a: LALA, b: LALA },
         { a: LALA, b: 'nobody' },
-        { a: LALA, b: 'profile:9', stage_before: 'flirting', evidence_beat: 99 },
+        { a: LALA, b: 'profile:9', stage_before: 'besties', evidence_beat: 99 },
       ],
       follow_ups: [{ person: 'profile:9', text: 'Follow up about the collab', due_hint: 'next episode' }, { person: 'ghost', text: 'Call back', keep: false }, { text: ' ' }],
       goals: [{ slot: 'relationship_guest', covered: true, beat: '11' }, { slot: 'relationship_guest', covered: false }, { slot: 'made_up', covered: true }],
@@ -97,7 +97,8 @@ describe('draftPrompt()', () => {
     expect(prompt).toContain('- Thank the host (due: next episode) (from episode 1)');
     expect(prompt).toContain('[profile:9] Studio Bystable (not in the character registry yet)');
     expect(prompt).toContain(`[${LALA}] Lala (Lala herself)`);
-    expect(prompt).toContain('strangers | acquaintances | friends | close_friends | lovers | partners | exes | enemies');
+    expect(prompt).toContain('strangers | acquaintances | flirting | friends | close_friends | lovers | partners | exes | enemies');
+    expect(prompt).toContain('SEASON TWISTS THIS EPISODE WAS MEANT TO PLANT OR PAY OFF:\n(none)');
   });
 });
 
@@ -131,6 +132,17 @@ function fakeDb({ row: start }) {
     if (/FROM episode_todo_lists/.test(sql)) return [[state.todo]];
     if (/UPDATE episode_todo_lists/.test(sql)) { state.todo = { ...state.todo, social_tasks: JSON.parse(r.tasks) }; return [[]]; }
     if (/FROM character_relationships/.test(sql)) return [[]];
+    if (/FROM season_slots/.test(sql)) return [state.slot ? [state.slot] : []];
+    if (/FROM season_twists/.test(sql)) return [state.twists || []];
+    if (/UPDATE season_twists/.test(sql)) {
+      const t = (state.twists || []).find((x) => x.id === r.id);
+      const paid = /'paid_off'/.test(sql.split('WHERE')[0]);
+      const from = paid ? ['planned', 'planted'] : ['planned'];
+      if (!t || !from.includes(t.status)) return [[], { rowCount: 0 }];
+      Object.assign(t, paid ? { status: 'paid_off', paid_off_episode_id: r.episodeId } : { status: 'planted', planted_episode_id: r.episodeId });
+      (state.twistUpdates = state.twistUpdates || []).push({ id: r.id, status: t.status });
+      return [[], { rowCount: 1 }];
+    }
     throw new Error(`unexpected SQL: ${sql.slice(0, 80)}`);
   });
   return { state, sequelize: { query, transaction: async (fn) => fn({ id: 'tx' }) } };
@@ -261,5 +273,152 @@ describe('draftRecord()', () => {
     expect(JSON.parse(saved.goals)[0]).toMatchObject({ slot: 'relationship_guest', covered: true, beat: 11 });
     expect(JSON.parse(saved.twists)).toEqual([]);
     expect(state.row.id).toBe('rec-1');
+  });
+});
+
+// ── Evoni, 2026-10-23: "I want them all" ───────────────────────────────────
+
+const PLANT = '77777777-7777-4777-8777-777777777777';
+const PAYOFF = '88888888-8888-4888-8888-888888888888';
+const SCRIPT = '## BEAT: 6 · Arrival\nLALA: Whose ring is that on the mirror?\n## BEAT: 11 · The Moment\nMARCUS HALE: I came here for you, not the brand.\nLALA: Then call me after the show.';
+const DUE = [
+  { id: PLANT, title: 'The ring on the mirror', what: 'planted' },
+  { id: PAYOFF, title: 'The second invitation', what: 'paid_off' },
+];
+
+describe('clean(): quotes, flirting, unticked goals, twists', () => {
+  test('a quote stays only when the script says it; flirting is a stage', () => {
+    const out = clean({
+      relationships: [{ a: LALA, b: MARCUS, is_romantic: true, stage_before: 'acquaintances', stage_after: 'Flirting', quote: '"I came here for you, not the brand."' }],
+      follow_ups: [{ person: MARCUS, text: 'Call him after the show', quote: 'He promised to send flowers' }],
+      threads: [{ title: 'Whose ring?', quote: 'whose ring is THAT on the mirror' }],
+    }, { cast: CAST, threads: [], script: SCRIPT });
+    expect(out.relationships[0]).toMatchObject({ stage_after: 'flirting', quote: 'I came here for you, not the brand.' });
+    // Not in the script: dropped rather than shown.
+    expect(out.follow_ups[0].quote).toBe('');
+    expect(out.threads[0].quote).toBe('whose ring is THAT on the mirror');
+    // Without the script nothing can be checked, so nothing is quoted.
+    expect(clean({ threads: [{ title: 'x', quote: 'Whose ring is that on the mirror?' }] }, { cast: CAST, threads: [] }).threads[0].quote).toBe('');
+  });
+
+  test('a goal the script does not cover starts unticked; her own tick stays', () => {
+    const goals = [...GOALS, { slot: 'relationship_host', label: 'Follow up with Studio Bystable', completed: false, beat: null }];
+    const out = clean({ goals: [{ slot: 'relationship_guest', covered: true }, { slot: 'relationship_host', covered: false }] }, { cast: CAST, threads: [], goals });
+    expect(out.goals.map((g) => [g.slot, g.keep])).toEqual([['relationship_guest', true], ['relationship_host', false]]);
+    const mine = clean({ goals: [{ slot: 'relationship_host', covered: true, keep: true }] }, { cast: CAST, threads: [], goals });
+    expect(mine.goals[0]).toMatchObject({ covered: true, keep: true });
+  });
+
+  test('twists: only the ones due here, planted where planted and paid off where paid off', () => {
+    const out = clean({
+      twists: [
+        { twist_id: PLANT, what: 'planted', beat: 6, quote: 'Whose ring is that on the mirror?' },
+        { twist_id: PLANT, what: 'planted' },
+        { twist_id: PAYOFF, what: 'planted' },
+        { twist_id: 'made-up', what: 'planted' },
+      ],
+    }, { cast: CAST, threads: [], twists: DUE, script: SCRIPT });
+    expect(out.twists).toEqual([{ twist_id: PLANT, title: 'The ring on the mirror', what: 'planted', beat: 6, note: '', quote: 'Whose ring is that on the mirror?', keep: true }]);
+  });
+});
+
+describe('keepSavedKeys(): reading it again', () => {
+  const prev = {
+    applied: {
+      threads: { 't-old': { thread_id: 'thread-made', action: 'new' } },
+      relationships: { 'r-old': { relationship_id: 'rel-1' } },
+      follow_ups: { 'f-old': 'fu-1' },
+    },
+    threads: [{ key: 't-old', thread_id: null, title: 'Who sent the second invitation?' }, { key: 't-unsaved', title: 'Never saved' }],
+    relationships: [{ key: 'r-old', a: LALA, b: MARCUS }],
+    follow_ups: [{ key: 'f-old', text: 'Follow up with Studio Bystable about the collab' }],
+  };
+
+  test('what a Save wrote takes its old key back; what is new keeps its own', () => {
+    const out = keepSavedKeys({
+      threads: [
+        { key: 'n1', thread_id: 'thread-made', title: 'Who sent the second invitation, really?' },
+        { key: 'n2', thread_id: null, title: 'Never saved' },
+        { key: 'n3', thread_id: null, title: 'A new question' },
+      ],
+      relationships: [{ key: 'n4', a: MARCUS, b: LALA }, { key: 'n5', a: LALA, b: 'profile:9' }],
+      follow_ups: [{ key: 'n6', text: 'Follow up with Studio Bystable about the collab soon' }, { key: 'n7', text: 'Text Marcus back' }],
+    }, prev);
+    expect(out.threads.map((t) => t.key)).toEqual(['t-old', 'n2', 'n3']);
+    expect(out.relationships.map((r) => r.key)).toEqual(['r-old', 'n5']);
+    expect(out.follow_ups.map((f) => f.key)).toEqual(['f-old', 'n7']);
+  });
+
+  test('an old key is given back once; no earlier record changes nothing', () => {
+    const out = keepSavedKeys({ relationships: [{ key: 'a1', a: LALA, b: MARCUS }, { key: 'a2', a: MARCUS, b: LALA }] }, prev);
+    expect(out.relationships.map((r) => r.key)).toEqual(['r-old', 'a2']);
+    const fields = { threads: [{ key: 'z', title: 'x' }] };
+    expect(keepSavedKeys(fields, null)).toBe(fields);
+  });
+});
+
+describe('approveRecord(): twists', () => {
+  beforeEach(() => {
+    lalaCharacter.mockResolvedValue({ id: LALA, feed_profile_id: 1 });
+    episodeCast.mockResolvedValue([]);
+  });
+
+  test('a kept twist is planted or paid off in this episode, once; an unticked one is left', async () => {
+    const { state, sequelize } = fakeDb({ row: { twists: [
+      { twist_id: PLANT, title: 'The ring on the mirror', what: 'planted', beat: 6, keep: true },
+      { twist_id: PAYOFF, title: 'The second invitation', what: 'paid_off', keep: true },
+      { twist_id: 'not-kept', title: 'Dropped', what: 'planted', keep: false },
+    ] } });
+    state.twists = [{ id: PLANT, status: 'planned' }, { id: PAYOFF, status: 'planted' }, { id: 'not-kept', status: 'planned' }];
+    const out = await approveRecord(sequelize, EP, { by: 'evoni' });
+    expect(out.result.written.filter((w) => w.kind === 'twist').map((w) => w.text)).toEqual([
+      'Twist planted: The ring on the mirror (beat 6)', 'Twist paid off: The second invitation',
+    ]);
+    expect(state.twists).toEqual([
+      { id: PLANT, status: 'planted', planted_episode_id: EP },
+      { id: PAYOFF, status: 'paid_off', paid_off_episode_id: EP },
+      { id: 'not-kept', status: 'planned' },
+    ]);
+    expect(state.row.applied.twists).toEqual({ [PLANT]: 'planted', [PAYOFF]: 'paid_off' });
+    const again = await approveRecord(sequelize, EP, { by: 'evoni' });
+    expect(again.result.written).toEqual([]);
+    expect(state.twistUpdates).toHaveLength(2);
+  });
+
+  test('a twist already paid off is not planted again', async () => {
+    const { state, sequelize } = fakeDb({ row: { twists: [{ twist_id: PLANT, title: 'The ring', what: 'planted', keep: true }] } });
+    state.twists = [{ id: PLANT, status: 'paid_off' }];
+    const out = await approveRecord(sequelize, EP, { by: 'evoni' });
+    expect(out.result.written).toEqual([]);
+    expect(state.twists[0].status).toBe('paid_off');
+  });
+});
+
+describe('draftRecord(): twists due and a second read', () => {
+  test('the prompt lists the twists due; a second read keeps the saved keys', async () => {
+    lalaCharacter.mockResolvedValue({ id: LALA, feed_profile_id: 1 });
+    episodeCast.mockResolvedValue([{ profile_id: 7, char_id: MARCUS, char_name: 'Marcus Hale' }]);
+    const { state, sequelize } = fakeDb({ row: {
+      applied: { relationships: { 'r-old': { relationship_id: 'rel-1' } } },
+      relationships: [{ key: 'r-old', a: LALA, b: MARCUS, keep: true }],
+    } });
+    state.slot = { id: 'slot-2', arc_id: 'arc-1', slot_number: 2 };
+    state.twists = [{ id: PLANT, title: 'The ring on the mirror', status: 'planned', plant_slot_id: 'slot-2', payoff_slot_id: null, character_ids: [], plant_number: 2 }];
+    let saved = null;
+    const base = sequelize.query;
+    sequelize.query = jest.fn(async (sql, opts) => {
+      if (/UPDATE episode_story_records SET status = :status/.test(sql)) { saved = opts.replacements; return [[]]; }
+      return base(sql, opts);
+    });
+    mockCreate.mockResolvedValueOnce({ content: [{ type: 'text', text: JSON.stringify({
+      what_happened: 'Again.',
+      relationships: [{ a: MARCUS, b: LALA, is_romantic: true, stage_after: 'flirting' }],
+      twists: [{ twist_id: PLANT, what: 'planted', beat: 11, quote: 'Then call me after the show.' }],
+    }) }] });
+    await draftRecord(sequelize, EP);
+    const prompt = mockCreate.mock.calls.at(-1)[0].messages[0].content;
+    expect(prompt).toContain(`- [${PLANT}] PLANT: The ring on the mirror`);
+    expect(JSON.parse(saved.relationships)[0]).toMatchObject({ key: 'r-old', stage_after: 'flirting' });
+    expect(JSON.parse(saved.twists)).toEqual([expect.objectContaining({ twist_id: PLANT, what: 'planted', beat: 11 })]);
   });
 });
