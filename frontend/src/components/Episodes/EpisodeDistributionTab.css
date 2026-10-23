@@ -1,10 +1,18 @@
 /* EpisodeDistributionTab.css */
 
+/* The width of the other tabs (Evoni, 2026-10-22 layout list); clip, not
+   hidden, so the save bar can stick. */
 .episode-distribution-tab {
-  padding: 1.25rem;
-  max-width: 960px;
-  margin: 0 auto;
-  overflow-x: hidden;
+  padding: 1.25rem 0;
+  overflow-x: clip;
+}
+.episode-distribution-tab > .ers-share { margin-bottom: 1.25rem; }
+.distribution-savebar {
+  position: sticky; bottom: calc(12px + env(safe-area-inset-bottom, 0px)); z-index: 5;
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  margin-top: 16px; padding: 10px 14px; border-radius: 12px;
+  border: 1px solid var(--studio-magenta); background: var(--studio-card); color: var(--studio-ink);
+  box-shadow: var(--shadow-lg); font-size: 13px; font-weight: 600;
 }
 
 /* Disable mobile tap highlights on all buttons inside distribution tab */
@@ -931,3 +939,55 @@
 .episode-distribution-tab .ssd-spin { animation: ssd-spin 1s linear infinite; }
 @keyframes ssd-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .episode-distribution-tab .ssd-spin { animation: none; } }
+
+/* ==================== LAYOUT (Evoni, 2026-10-22 layout list) ==================== */
+
+/* Draft for all platforms sits in Share's Platform copy box. */
+.episode-distribution-tab .ers-share-action { margin-top: auto; padding-top: 4px; }
+.episode-distribution-tab .ers-share-action .btn-generate { margin-right: 0; min-height: 40px; }
+.episode-distribution-tab .dist-note { margin: 10px 0 0; padding: 8px 12px; border-radius: 8px; background: var(--success-bg); color: var(--success-text); font-size: 14px; }
+.episode-distribution-tab .dist-note.is-error { background: var(--danger-bg); color: var(--danger-text); }
+
+/* The platforms as one list: a row opens its editor; the switch sits apart. */
+.episode-distribution-tab .dist-platforms {
+  display: flex; flex-direction: column; margin: 1.25rem 0; padding: 0; list-style: none;
+  border: 1px solid var(--lala-lavender-line); border-radius: 14px; background: var(--surface-card); overflow: clip;
+}
+.episode-distribution-tab .dist-row { display: flex; align-items: center; gap: 12px; padding-right: 16px; border-top: 1px solid var(--lala-lavender-line); }
+.episode-distribution-tab .dist-row:first-child { border-top: none; }
+.episode-distribution-tab .dist-row.is-active { background: var(--lala-lavender-soft); box-shadow: inset 3px 0 0 var(--lala-lavender); }
+.episode-distribution-tab .dist-row-pick {
+  flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 8px 16px;
+  border: none; background: none; color: var(--text-primary); font: inherit; text-align: left; cursor: pointer;
+}
+.episode-distribution-tab .dist-row-pick:focus-visible { outline: none; box-shadow: inset var(--focus-ring); }
+.episode-distribution-tab .dist-row .platform-icon { font-size: 22px; }
+.episode-distribution-tab .dist-row-name { flex: 1; min-width: 0; font-size: 15px; font-weight: 700; overflow-wrap: anywhere; }
+.episode-distribution-tab .dist-row-status { flex: none; font-size: 13px; font-weight: 600; color: var(--text-secondary); text-align: right; }
+.episode-distribution-tab .dist-row .toggle-switch { flex: none; }
+
+/* An off platform is one line. */
+.episode-distribution-tab .dist-off { margin: 0; padding: 1rem 1.25rem; font-size: 14px; color: var(--text-secondary); }
+
+/* The editor: the words left; when, where and the picture right. */
+.episode-distribution-tab .platform-editor { margin-bottom: 1.25rem; }
+.episode-distribution-tab .editor-form.is-split { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 0 24px; align-items: start; }
+.episode-distribution-tab .editor-words, .episode-distribution-tab .editor-side { min-width: 0; }
+/* The thumbnail at the platform's shape (16:9, 9:16, 1:1); a 9:16 one stays phone-sized. */
+.episode-distribution-tab .editor-side .thumbnail-upload { width: 100%; max-height: 360px; margin: 0 auto; display: flex; align-items: center; justify-content: center; }
+.episode-distribution-tab .editor-side .thumbnail-upload[style*="9 / 16"] { width: auto; height: 360px; }
+.episode-distribution-tab .editor-side .thumbnail-preview, .episode-distribution-tab .editor-side .thumbnail-preview img { width: 100%; height: 100%; object-fit: cover; }
+.episode-distribution-tab .editor-side .thumbnail-placeholder { padding: 1rem; }
+.episode-distribution-tab .editor-side .thumbnail-placeholder span { font-size: 28px; margin-bottom: 4px; }
+.episode-distribution-tab .editor-side .thumbnail-placeholder p { margin: 0; font-size: 13px; }
+
+@media (max-width: 900px) {
+  .episode-distribution-tab .editor-form.is-split { grid-template-columns: minmax(0, 1fr); }
+  .episode-distribution-tab .editor-words .form-group:last-child { margin-bottom: 1.25rem; }
+}
+@media (max-width: 480px) {
+  .episode-distribution-tab .dist-row { gap: 8px; padding-right: 12px; }
+  .episode-distribution-tab .dist-row-pick { gap: 8px; padding: 8px 12px; flex-wrap: wrap; }
+  .episode-distribution-tab .dist-row-status { flex-basis: 100%; padding-left: 30px; text-align: left; }
+  .episode-distribution-tab .editor-side .thumbnail-upload[style*="9 / 16"] { height: 300px; }
+}

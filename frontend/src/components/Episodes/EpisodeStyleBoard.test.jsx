@@ -4,7 +4,7 @@
  */
 import React from 'react';
 import { vi, describe, beforeEach, test, expect } from 'vitest';
-import { render, screen, within, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, within, fireEvent, waitFor, cleanup } from '@testing-library/react';
 
 vi.mock('../../services/api', () => ({ default: { get: vi.fn(), post: vi.fn(), put: vi.fn(), patch: vi.fn(), delete: vi.fn() } }));
 
@@ -108,5 +108,46 @@ describe('slotsFrom / styleGoals', () => {
     const slots = slotsFrom(OUTFIT, null);
     expect(slots.filter((s) => s.filled).map((s) => s.key)).toEqual(['body', 'shoes']);
     expect(styleGoals(slots, null).filter((g) => g.done).map((g) => g.key)).toEqual(['body', 'shoes']);
+  });
+});
+
+// Evoni, 2026-10-22 (Overview layout list): an empty card is one line in
+// "Still to add", and empty wardrobe slots are small chips.
+describe('EpisodeStyleBoard — empty boxes shrink', () => {
+  beforeEach(() => {
+    vi.mocked(api.get).mockReset();
+    vi.mocked(api.get).mockResolvedValue({ data: { data: { images: {} } } });
+  });
+
+  test('empty cards are lines in Still to add, each with its link; filled ones stay cards', async () => {
+    const onOpenTab = renderBoard({ source: null, linkedEvents: [], outfit: [], money: null });
+    const todo = await screen.findByTestId('esb-todo');
+    await waitFor(() => expect(within(todo).getByTestId('esb-mood')).toBeTruthy());
+    for (const id of ['esb-event', 'esb-dress', 'esb-mood', 'esb-inspo', 'esb-look', 'esb-notes']) {
+      expect(within(todo).getByTestId(id).tagName).toBe('LI');
+    }
+    expect(screen.getByTestId('esb-goals').tagName).toBe('SECTION');
+    fireEvent.click(within(within(todo).getByTestId('esb-look')).getByRole('button', { name: 'Open Wardrobe' }));
+    expect(onOpenTab).toHaveBeenCalledWith('wardrobe');
+    // No empty placeholder frames anywhere.
+    expect(screen.queryByText('No invitation yet')).toBeNull();
+    expect(screen.queryByText('No venue still yet')).toBeNull();
+  });
+
+  test('with no slot filled the slots are small chips; one filled brings the full slots back', async () => {
+    renderBoard({ outfit: [] });
+    const card = screen.getByTestId('esb-slots');
+    expect(card.querySelector('.esb-slot-chips')).toBeTruthy();
+    expect(within(card).getByRole('button', { name: 'Body: empty, required' }).textContent).toContain('Body');
+    cleanup();
+    renderBoard();
+    expect(screen.getByTestId('esb-slots').querySelector('.esb-slots')).toBeTruthy();
+  });
+
+  test('the event card shows only what it has, without an empty picture frame', () => {
+    renderBoard({ linkedEvents: [], source: { event: { id: 'ev-2', name: 'Brunch' } } });
+    const card = screen.getByTestId('esb-event');
+    expect(card.querySelector('.esb-frame')).toBeNull();
+    expect(card.querySelectorAll('.esb-field')).toHaveLength(1);
   });
 });

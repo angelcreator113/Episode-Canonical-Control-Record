@@ -4,11 +4,9 @@
 // Episode mock). What they read and call is unchanged.
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Crown, BookOpen, Smartphone, Scissors, RotateCcw, Sparkles, Library } from 'lucide-react';
+import { Crown, Smartphone, Scissors, RotateCcw, Library } from 'lucide-react';
 import api from '../../services/api';
-import EpisodeStoryRecord from './EpisodeStoryRecord';
-import EpisodeStoryCanon from './EpisodeStoryCanon';
-import EpisodeBookSteps from './EpisodeBookSteps';
+import EpisodeBookSteps, { Why } from './EpisodeBookSteps';
 import './EpisodeResultsSummary.css';
 
 const TIER_STYLES = {
@@ -37,9 +35,16 @@ function parseEvaluation(raw) {
   }
 }
 
-export function EpisodeResultsEvaluation({ episode }) {
+/**
+ * The evaluation. `embedded` (under Results › Summary since Evoni's layout
+ * list of 2026-10-22, Evaluation was its own pill): the score breakdown,
+ * the social tasks and the outfit only, as the Summary already shows the
+ * verdict, the stat changes and the money; nothing before there is one.
+ */
+export function EpisodeResultsEvaluation({ episode, embedded = false }) {
   const evalJson = parseEvaluation(episode?.evaluation_json);
 
+  if (!evalJson && embedded) return null;
   if (!evalJson) {
     return (
       <div className="ers">
@@ -68,6 +73,53 @@ export function EpisodeResultsEvaluation({ episode }) {
   const hasSocial = social.total > 0;
   const hasWardrobe = wardrobe.brands?.length > 0;
   const hasMoney = income > 0 || expenses > 0;
+
+  if (embedded) {
+    return (
+      <section className="ers-evaluation" id="results-evaluation" aria-labelledby="results-evaluation-title" data-testid="results-evaluation">
+        <div className="ers-head">
+          <h3 className="ers-card-title" id="results-evaluation-title">The evaluation</h3>
+          <span className="ers-sub">How the episode scored</span>
+        </div>
+        <div className={`ers-grid${hasSocial || hasWardrobe ? ' is-three' : ''}`}>
+          <section className="ers-card">
+            <h3 className="ers-label">Score breakdown</h3>
+            <ul className="ers-rows">
+              {Object.entries(breakdown).map(([key, entry]) => (
+                <li key={key}>
+                  <span className="ers-row-name">
+                    <span className="ers-cap">{key.replace(/_/g, ' ')}</span>
+                    {entry?.detail && <em>{entry.detail}</em>}
+                  </span>
+                  <strong className={entry?.value >= 0 ? 'is-up' : 'is-down'}>{signed(entry?.value ?? 0)}</strong>
+                </li>
+              ))}
+              <li className="ers-total"><span>Total</span><strong style={{ color: tier.color }}>{evalJson.score}</strong></li>
+            </ul>
+          </section>
+          {hasSocial && (
+            <section className="ers-card">
+              <h3 className="ers-label">Social tasks</h3>
+              <div className="ers-big">{social.completed}/{social.total}</div>
+              <p className="ers-note">
+                {social.completion_rate}% complete
+                {social.all_required_done && <span className="ers-good"> · All required done</span>}
+              </p>
+            </section>
+          )}
+          {hasWardrobe && (
+            <section className="ers-card">
+              <h3 className="ers-label">Outfit</h3>
+              <p className="ers-text">Brands: {wardrobe.brands.join(', ')}</p>
+              <p className="ers-note">
+                Tier gap: {wardrobe.tier_gap > 0 ? 'overdressed' : wardrobe.tier_gap < 0 ? 'underdressed' : 'perfect match'}
+              </p>
+            </section>
+          )}
+        </div>
+      </section>
+    );
+  }
 
   return (
     <div className="ers" data-testid="results-evaluation">
@@ -158,21 +210,26 @@ export function EpisodeResultsEvaluation({ episode }) {
   );
 }
 
+// The other ways to tell it; the short story is step 2 of the path
+// (EpisodeBookSteps), written there only (Evoni, 2026-10-22 layout list).
 const STORY_FORMATS = [
-  { format: 'short_story', Icon: BookOpen, label: 'Short story', desc: '2–3K words' },
   { format: 'social_fiction', Icon: Smartphone, label: 'Social fiction', desc: 'Posts and DMs' },
   { format: 'snippet', Icon: Scissors, label: 'Snippet', desc: '400–600 words' },
   { format: 'recap', Icon: RotateCcw, label: 'Recap', desc: 'A casual retelling' },
 ];
 
+/**
+ * Results › Story: one path from the episode to the book (EpisodeBookSteps:
+ * record, short story, canon check, beat 11 piece, chapter), the other
+ * formats as a small row under it, and "Plan the next chapters" folded at the
+ * bottom (Evoni, 2026-10-22 layout list).
+ */
 export function EpisodeResultsStory({ episode }) {
   const showId = episode?.show_id || episode?.showId;
   // format -> 'busy' | 'done' | 'failed'; one generation at a time.
   const [state, setState] = useState({});
   const [error, setError] = useState(null);
   const busy = Object.values(state).includes('busy');
-  // A new short story is read for canon on the server; the canon card reloads.
-  const [written, setWritten] = useState(0);
 
   const generate = async (format) => {
     setError(null);
@@ -180,7 +237,6 @@ export function EpisodeResultsStory({ episode }) {
     try {
       await api.post(`/api/v1/world/${showId}/episodes/${episode.id}/generate-story`, { format });
       setState((s) => ({ ...s, [format]: 'done' }));
-      if (format === 'short_story') setWritten((n) => n + 1);
     } catch (err) {
       console.error('[EpisodeResults] story generation failed:', err);
       setState((s) => ({ ...s, [format]: 'failed' }));
@@ -192,48 +248,44 @@ export function EpisodeResultsStory({ episode }) {
     <div className="ers" data-testid="results-story">
       <div className="ers-head">
         <h2 className="ers-title">Stories</h2>
-        <span className="ers-sub">This episode retold as prose</span>
+        <span className="ers-sub">From the episode to the book</span>
+        <Why id="ers-story-why" label="What the story path is">
+          The episode is what the viewer sees, the short story is the event in full, and the chapter is
+          everything the viewer does not see, in JustAWoman's point of view.
+        </Why>
         <Link className="ers-btn" to="/stories"><Library size={14} aria-hidden="true" /> Open Stories Library</Link>
       </div>
 
-      {episode?.id && <EpisodeStoryRecord episodeId={episode.id} />}
-      {episode?.id && <EpisodeStoryCanon episodeId={episode.id} refreshKey={written} />}
-
-      <section className="ers-card">
-        <p className="ers-text">
-          Each format tells the same episode differently. A finished story goes to the Stories Library.
-        </p>
-        <div className="ers-formats">
-          {STORY_FORMATS.map(({ format, Icon, label, desc }) => {
-            const s = state[format];
-            return (
-              <button
-                key={format}
-                type="button"
-                className={`ers-format${s === 'done' ? ' is-done' : s === 'failed' ? ' is-failed' : ''}`}
-                data-testid={`results-story-${format}`}
-                disabled={busy}
-                onClick={() => generate(format)}
-              >
-                <Icon size={22} aria-hidden="true" />
-                <span className="ers-format-label">{label}</span>
-                <span className="ers-format-desc">
-                  {s === 'busy' ? 'Writing…' : s === 'done' ? 'Done · in Stories' : s === 'failed' ? 'Failed · try again' : desc}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-        {error && <p className="ers-error" role="alert">{error}</p>}
-        <p className="ers-note"><Sparkles size={13} aria-hidden="true" /> Uses the episode's script and result.</p>
-      </section>
-
-      {/* What was "This week's episode" (Evoni, 2026-10-19): the short
-          story, beat 11 piece, chapter and "Plan the next chapters", for
-          this episode (EpisodeBookSteps). */}
-      {episode?.id && (
-        <EpisodeBookSteps episode={episode} refreshKey={written} onStoryWritten={() => setWritten((n) => n + 1)} />
-      )}
+      <EpisodeBookSteps episode={episode}>
+        <section className="ers-card ers-more" aria-labelledby="ers-more-title">
+          <div className="ers-more-head">
+            <h3 className="ers-label" id="ers-more-title">More ways to tell it</h3>
+            <span className="ers-sub">Each goes to the Stories Library</span>
+          </div>
+          <div className="ers-formats is-row">
+            {STORY_FORMATS.map(({ format, Icon, label, desc }) => {
+              const s = state[format];
+              return (
+                <button
+                  key={format}
+                  type="button"
+                  className={`ers-format is-chip${s === 'done' ? ' is-done' : s === 'failed' ? ' is-failed' : ''}`}
+                  data-testid={`results-story-${format}`}
+                  disabled={busy}
+                  onClick={() => generate(format)}
+                >
+                  <Icon size={16} aria-hidden="true" />
+                  <span className="ers-format-label">{label}</span>
+                  <span className="ers-format-desc">
+                    {s === 'busy' ? 'Writing…' : s === 'done' ? 'Done · in Stories' : s === 'failed' ? 'Failed · try again' : desc}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+          {error && <p className="ers-error" role="alert">{error}</p>}
+        </section>
+      </EpisodeBookSteps>
     </div>
   );
 }

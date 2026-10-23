@@ -5,12 +5,14 @@
  * secret), new facts, threads, and where it goes against the episode's
  * record. Accept makes it canon: the secret moves on, the thread opens or
  * advances, the fact is something the chapter writer may build on.
- * Dismiss keeps it out. Results → Story, under the story record
- * (services/storyCanon).
+ * Dismiss keeps it out. Results → Story, step 3 of the story path
+ * (EpisodeBookSteps; services/storyCanon).
  *
- * Props: episodeId, refreshKey (changes when a short story was just written).
+ * Props: episodeId, refreshKey (changes when a short story was just written),
+ * embedded (the step holds the title and the intro), onStatus (hears
+ * { stories, pending } each time they load).
  */
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ShieldCheck, Sparkles, Check, X, AlertTriangle } from 'lucide-react';
 import api from '../../services/api';
 import './EpisodeStoryRecord.css';
@@ -52,11 +54,14 @@ function Proposal({ p, busy, onAccept, onDismiss }) {
   );
 }
 
-export default function EpisodeStoryCanon({ episodeId, refreshKey = 0 }) {
+export default function EpisodeStoryCanon({ episodeId, refreshKey = 0, embedded = false, onStatus }) {
   const base = '/api/v1/book-from-show';
   const [data, setData] = useState(null);
   const [busy, setBusy] = useState(null);
   const [note, setNote] = useState(null);
+  const heard = useRef(onStatus);
+  heard.current = onStatus;
+  useEffect(() => { if (data) heard.current?.(data); }, [data]);
 
   const load = useCallback(async () => {
     try {
@@ -83,16 +88,20 @@ export default function EpisodeStoryCanon({ episodeId, refreshKey = 0 }) {
   if (!data.stories.length) return null;
 
   return (
-    <section className="esr" aria-labelledby="esr-canon-title" data-testid="episode-story-canon">
-      <header className="esr-head">
-        <ShieldCheck size={18} aria-hidden="true" className="esr-icon" />
-        <h3 id="esr-canon-title" className="esr-title">Short story canon</h3>
-        {data.pending > 0 && <span className="esr-badge is-draft">{data.pending} to decide</span>}
-      </header>
-      <p className="esr-note">
-        A short story may go beneath the episode, never against it. What it adds is proposed here, not canon:
-        accept what is true and the chapter writer builds on it; dismiss the rest and it is kept out.
-      </p>
+    <section className={`esr${embedded ? ' is-embedded' : ''}`} {...(embedded ? { 'aria-label': 'Short story canon' } : { 'aria-labelledby': 'esr-canon-title' })} data-testid="episode-story-canon">
+      {!embedded && (
+        <>
+          <header className="esr-head">
+            <ShieldCheck size={18} aria-hidden="true" className="esr-icon" />
+            <h3 id="esr-canon-title" className="esr-title">Short story canon</h3>
+            {data.pending > 0 && <span className="esr-badge is-draft">{data.pending} to decide</span>}
+          </header>
+          <p className="esr-note">
+            A short story may go beneath the episode, never against it. What it adds is proposed here, not canon:
+            accept what is true and the chapter writer builds on it; dismiss the rest and it is kept out.
+          </p>
+        </>
+      )}
       {note && <p className={`esr-note${note.error ? ' is-error' : ''}`} role="status">{note.text}</p>}
 
       {data.stories.map((s) => (

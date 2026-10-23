@@ -10,7 +10,12 @@ import { ArrowRight, Check, CircleDashed, Pencil, Lock } from 'lucide-react';
 import { briefState } from '../../lib/episodeOverview';
 import './EpisodeOverviewSummary.css';
 
-export function NextStepBanner({ step, onOpenTab }) {
+/**
+ * The next step. meta: a short line under it (the checklist count, which
+ * was its own tile); extra: a second action beside its button (Suggest
+ * Scenes), both since Evoni's Overview layout list of 2026-10-22.
+ */
+export function NextStepBanner({ step, onOpenTab, meta = null, extra = null }) {
   if (!step) return null;
   return (
     <section className="eos-next" data-testid="overview-next-step">
@@ -18,10 +23,14 @@ export function NextStepBanner({ step, onOpenTab }) {
         <span className="eos-next-label">Your next step</span>
         <h2 className="eos-next-title">{step.title}</h2>
         <p className="eos-next-why">{step.why}</p>
+        {meta && <p className="eos-next-meta" data-testid="overview-next-step-meta">{meta}</p>}
       </div>
-      <button type="button" className="eos-next-btn" onClick={() => onOpenTab?.(step.tab)} data-testid="overview-next-step-go">
-        {step.action} <ArrowRight size={15} aria-hidden="true" />
-      </button>
+      <div className="eos-next-actions">
+        <button type="button" className="eos-next-btn" onClick={() => onOpenTab?.(step.tab)} data-testid="overview-next-step-go">
+          {step.action} <ArrowRight size={15} aria-hidden="true" />
+        </button>
+        {extra}
+      </div>
     </section>
   );
 }
@@ -49,7 +58,7 @@ const INTENT_LABEL = { slay: 'Slay', pass: 'Pass', safe: 'Safe', fail: 'Fail' };
 const PACKAGE_SECTION = { cast: 'epp-sec-people', location: 'epp-sec-place' };
 
 export function StoryBriefCard({
-  brief, draft, setDraft, saveBriefField, saving, locked, synopsis, onEdit, archetypes, intents,
+  brief, draft, setDraft, saveBriefField, saving, locked, synopsis, onEdit, archetypes, intents, outcomes = null,
 }) {
   // The synopsis is the episode's own; the four creative fields wait for the brief.
   const state = brief ? briefState({ ...brief, ...draft }) : null;
@@ -103,6 +112,9 @@ export function StoryBriefCard({
           </div>
         </div>
       </div>
+      {/* Allowed outcomes, beside Designed intent: both are Slay / Pass /
+          Safe / Fail (Evoni, 2026-10-22 Overview layout list). */}
+      {outcomes}
       <label className="eos-field">
         <span className="eos-field-label">Narrative purpose</span>
         <textarea

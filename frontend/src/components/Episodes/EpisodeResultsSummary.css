@@ -92,3 +92,29 @@
   .ers-teaser { flex-direction: column; align-items: stretch; }
   .ers-btn { margin-left: 0; }
 }
+
+/* Until the episode is completed (Evoni, 2026-10-22 layout list): one card
+   of what fills in then; the evaluation's breakdown under the page once
+   there is one. */
+.ers-how.is-pending .ers-label { display: inline-flex; align-items: center; gap: 6px; }
+.ers-how.is-pending .ers-text { margin: 4px 0 8px; }
+.ers-evaluation { margin-top: 20px; }
+/* On a phone the episode's tabs and pills stay at the top: land below them. */
+@media (max-width: 768px) {
+  .ers-evaluation { scroll-margin-top: calc(var(--app-header-h, 0px) + var(--ed-head-h, 0px) + var(--ed-tabs-h, 0px) + 60px); }
+}
+.ers-evaluation > .ers-head { margin-bottom: 12px; }
+
+
+/* Results › Story (Evoni, 2026-10-22 layout list): the other formats as a
+   small row under the path; the "?" beside the page title. */
+.ers-head .tw-why { align-self: center; }
+.ers-more { padding: 14px 18px; }
+.ers-more-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; }
+.ers-more-head .ers-label { margin: 0; }
+.ers-formats.is-row { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 0; }
+.ers-format.is-chip { flex-direction: row; align-items: center; gap: 8px; padding: 8px 14px; min-height: 40px; border-radius: 999px; }
+.ers-format.is-chip .ers-format-label { font-size: 14px; }
+@media (max-width: 480px) {
+  .ers-format.is-chip { flex: 1 1 100%; }
+}

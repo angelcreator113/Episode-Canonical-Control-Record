@@ -57,6 +57,8 @@ describe('Script page', () => {
     // Career: the event has no deal, deliverables or goals yet (2026-10-09).
     expect(within(uses).getByTestId('script-uses-career').textContent).toBe('Career no deal, deliverables or goals on the event · Open the event');
     expect(within(uses).getByRole('link', { name: 'Open the event' }).getAttribute('href')).toBe('/shows/show-1/events/ev-1');
+    // The context panel is tabs (Evoni, 2026-10-22 layout list).
+    fireEvent.click(await screen.findByTestId('script-side-tab-voice'));
     expect(within(screen.getByTestId('script-voice')).getByText('Open Character Studio').getAttribute('href')).toBe('/character-registry?view=world');
   });
 

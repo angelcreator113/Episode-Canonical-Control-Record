@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import apiClient from '../../services/api';
 import { thumbnailStudioHref } from '../../lib/thumbnailStudioHref';
 import StyleSheetDistributionCard from './StyleSheetDistributionCard';
+import { ResultsShare } from './EpisodeResultsSummary';
 import './EpisodeDistributionTab.css';
 
 // File-local helpers (fresh — no cross-CP overlap).
@@ -26,6 +27,13 @@ export const generateEpisodeDistributionApi = (showId, episodeId, payload = {}) 
  * 
  * Platforms: YouTube, TikTok, Instagram Reels, Facebook
  * Per platform: Title, Caption, Thumbnail, Hashtags, Schedule, Status, URL, Aspect Ratio
+ *
+ * Layout (Evoni, 2026-10-22 layout list): Share, with "Draft for all
+ * platforms" in its Platform copy box; the platforms as one status list
+ * (switch, status, date; a row opens its editor); the editor in two columns
+ * on a desktop (the words; schedule, status, link and the thumbnail at the
+ * platform's shape); the style sheet last. Save follows along the bottom;
+ * what Save and Draft did shows on the page, not in a pop-up.
  */
 
 const PLATFORMS = {
@@ -71,6 +79,12 @@ const PLATFORMS = {
   }
 };
 
+// A scheduled time as the list shows it: "Nov 2, 6:00 PM".
+const whenOf = (value) => {
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? value : d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+};
+
 const STATUS_OPTIONS = [
   { value: 'draft', label: 'Draft', color: 'var(--text-secondary)' },
   { value: 'scheduled', label: 'Scheduled', color: 'var(--warning-text)' },
@@ -78,11 +92,14 @@ const STATUS_OPTIONS = [
   { value: 'unlisted', label: 'Unlisted', color: 'var(--text-secondary)' }
 ];
 
-function EpisodeDistributionTab({ episode, onUpdate }) {
+function EpisodeDistributionTab({ episode, onUpdate, onOpenTab }) {
   const [distributionData, setDistributionData] = useState({});
   const [selectedPlatform, setSelectedPlatform] = useState('youtube');
   const [hasChanges, setHasChanges] = useState(false);
   const [generating, setGenerating] = useState(false);
+  // What Draft and Save did: { error, text }, shown on the page.
+  const [draftNote, setDraftNote] = useState(null);
+  const [saveNote, setSaveNote] = useState(null);
   
   useEffect(() => {
     loadDistributionData();
@@ -147,10 +164,44 @@ function EpisodeDistributionTab({ episode, onUpdate }) {
       }
 
       setHasChanges(false);
-      alert('Distribution settings saved successfully!');
+      setSaveNote({ text: 'Saved.' });
     } catch (error) {
       console.error('Error saving distribution:', error);
-      alert('Failed to save distribution settings');
+      setSaveNote({ error: true, text: 'Distribution was not saved. Try again.' });
+    }
+  };
+
+  // Draft every platform's copy from the viewer teaser (or the episode).
+  const generate = async () => {
+    setGenerating(true);
+    setDraftNote(null);
+    try {
+      const showId = episode?.show_id || episode?.showId;
+      const data = await generateEpisodeDistributionApi(showId, episode.id, {});
+      if (data.success && data.data?.platforms) {
+        // Merge generated data into current state
+        const generated = data.data.platforms;
+        setDistributionData(prev => {
+          const merged = { ...prev };
+          for (const [platform, content] of Object.entries(generated)) {
+            merged[platform] = { ...merged[platform], ...content, enabled: true };
+          }
+          return merged;
+        });
+        setHasChanges(true);
+        setSaveNote(null);
+        // Drafted from the viewer teaser when the episode has one
+        // (P12, Task #2386); otherwise from the episode data.
+        const fromTeaser = data.data?.context_used?.source === 'teaser';
+        setDraftNote({ text: `Drafted for ${Object.keys(generated).length} platforms ${fromTeaser ? 'from the viewer teaser' : 'from the episode (it has no viewer teaser yet)'}. Look them over, then save.` });
+      } else {
+        setDraftNote({ error: true, text: data.error || 'Nothing was drafted. Try again.' });
+      }
+    } catch (err) {
+      console.error('[Distribution] generate failed:', err);
+      setDraftNote({ error: true, text: err?.response?.data?.error || 'Nothing was drafted. Try again.' });
+    } finally {
+      setGenerating(false);
     }
   };
   
@@ -163,11 +214,14 @@ function EpisodeDistributionTab({ episode, onUpdate }) {
       }
     }));
     setHasChanges(true);
+    setSaveNote(null);
   };
   
   const togglePlatform = (platformId) => {
     const newEnabled = !distributionData[platformId]?.enabled;
     updatePlatform(platformId, 'enabled', newEnabled);
+    // Switching one on opens it to fill in.
+    if (newEnabled) setSelectedPlatform(platformId);
   };
   
   const addHashtag = (platformId, hashtag) => {
@@ -191,6 +245,9 @@ function EpisodeDistributionTab({ episode, onUpdate }) {
     return `${(text || '').length} / ${maxLength}`;
   };
   
+  // The copy the Share card counts: the platforms switched on.
+  const drafted = Object.fromEntries(Object.entries(distributionData).filter(([, d]) => d?.enabled));
+
   return (
     <div className="episode-distribution-tab">
       {/* Header */}
@@ -199,293 +256,257 @@ function EpisodeDistributionTab({ episode, onUpdate }) {
           <h2>Distribution</h2>
           <p className="header-subtitle">What each platform shows: titles, descriptions, tags and schedule</p>
         </div>
-        <div className="header-actions">
-          {hasChanges && (
-            <span className="unsaved-indicator">● Unsaved changes</span>
-          )}
-          <button
-            type="button"
-            className="btn-generate"
-            disabled={generating}
-            onClick={async () => {
-              setGenerating(true);
-              try {
-                const showId = episode?.show_id || episode?.showId;
-                const data = await generateEpisodeDistributionApi(showId, episode.id, {});
-                if (data.success && data.data?.platforms) {
-                  // Merge generated data into current state
-                  const generated = data.data.platforms;
-                  setDistributionData(prev => {
-                    const merged = { ...prev };
-                    for (const [platform, content] of Object.entries(generated)) {
-                      merged[platform] = { ...merged[platform], ...content, enabled: true };
-                    }
-                    return merged;
-                  });
-                  setHasChanges(true);
-                  // Drafted from the viewer teaser when the episode has one
-                  // (P12, Task #2386); otherwise from the episode data.
-                  const fromTeaser = data.data?.context_used?.source === 'teaser';
-                  alert(`Generated for ${Object.keys(generated).length} platforms ${fromTeaser ? 'from the viewer teaser' : 'from episode data (this episode has no viewer teaser yet)'}. Review and save.`);
-                } else {
-                  alert(data.error || 'Generation failed');
-                }
-              } catch (err) {
-                console.error('[Distribution] generate failed:', err);
-                alert('Failed: ' + err.message);
-              } finally {
-                setGenerating(false);
-              }
-            }}
-          >
-            {generating ? '⏳ Generating…' : '✨ Generate from Episode'}
-          </button>
-          <button
-            className="btn-save"
-            onClick={handleSave}
-            disabled={!hasChanges}
-          >
-            💾 Save Distribution
-          </button>
-        </div>
       </div>
 
-      {/* The approved style sheet, sent from the Style Page (Task #2878) */}
-      <StyleSheetDistributionCard episodeId={episode.id} episodeNumber={episode.episode_number} />
-      
-      {/* Platform Selector */}
-      <div className="platform-selector">
+      {/* What viewers and The Pulse see: the teaser the platform copy is
+          drafted from, with Draft for all platforms beside it, and Lala's
+          posts (on Results › Summary until Evoni's layout list of 2026-10-22). */}
+      <ResultsShare
+        episode={{ ...episode, distribution_metadata: drafted }}
+        showId={episode?.show_id || episode?.showId}
+        onOpenTab={onOpenTab}
+        copyAction={(
+          <button type="button" className="btn-generate" disabled={generating} onClick={generate}>
+            {generating ? '⏳ Drafting…' : '✨ Draft for all platforms'}
+          </button>
+        )}
+      />
+      {draftNote && <p className={`dist-note${draftNote.error ? ' is-error' : ''}`} role={draftNote.error ? 'alert' : 'status'}>{draftNote.text}</p>}
+
+      {/* The platforms as one list: switch, status and date; a row opens
+          its editor below. */}
+      <ul className="dist-platforms" aria-label="Platforms">
         {Object.values(PLATFORMS).map(p => {
           const pData = distributionData[p.id] || {};
-          const enabled = pData.enabled;
-          
+          const enabled = !!pData.enabled;
+          const status = STATUS_OPTIONS.find(o => o.value === (pData.status || 'draft')) || STATUS_OPTIONS[0];
+          const active = selectedPlatform === p.id;
           return (
-            <button
-              key={p.id}
-              className={`platform-card ${selectedPlatform === p.id ? 'active' : ''} ${enabled ? 'enabled' : ''}`}
-              onClick={() => setSelectedPlatform(p.id)}
-              aria-pressed={selectedPlatform === p.id}
-            >
-              <div className="platform-icon" style={{ color: p.color }}>
-                {p.icon}
-              </div>
-              <div className="platform-info">
-                <div className="platform-name">{p.name}</div>
-                <div className="platform-status">
-                  {enabled ? (
-                    <span className="status-enabled">✓ Enabled</span>
-                  ) : (
-                    <span className="status-disabled">Not configured</span>
-                  )}
-                </div>
-              </div>
-            </button>
+            <li key={p.id} className={`dist-row${active ? ' is-active' : ''}${enabled ? ' is-on' : ''}`} data-testid={`dist-row-${p.id}`}>
+              <button type="button" className="dist-row-pick" aria-current={active ? 'true' : undefined} onClick={() => setSelectedPlatform(p.id)}>
+                <span className="platform-icon" style={{ color: p.color }} aria-hidden="true">{p.icon}</span>
+                <span className="dist-row-name">{p.name}</span>
+                <span className="dist-row-status" style={enabled ? { color: status.color } : undefined}>
+                  {enabled ? `${status.label}${pData.scheduled_time ? ` · ${whenOf(pData.scheduled_time)}` : ''}` : 'Off'}
+                </span>
+              </button>
+              <label className="toggle-switch">
+                <input type="checkbox" role="switch" checked={enabled} aria-label={`${p.name} on`} onChange={() => togglePlatform(p.id)} />
+                <span className="toggle-slider"></span>
+              </label>
+            </li>
           );
         })}
-      </div>
-      
+      </ul>
+
       {/* Platform Editor */}
-      <div className="platform-editor">
+      <section className="platform-editor" aria-labelledby="dist-editor-title">
         <div className="editor-header">
           <div className="editor-title">
-            <span className="editor-icon" style={{ color: platform.color }}>
+            <span className="editor-icon" style={{ color: platform.color }} aria-hidden="true">
               {platform.icon}
             </span>
-            <h3>{platform.name}</h3>
+            <h3 id="dist-editor-title">{platform.name}</h3>
             <span className="aspect-badge">{platform.aspectRatio}</span>
           </div>
-          
-          <label className="toggle-switch">
-            <input
-              type="checkbox"
-              checked={!!isEnabled}
-              onChange={() => togglePlatform(selectedPlatform)}
-            />
-            <span className="toggle-slider"></span>
-            <span className="toggle-label">{isEnabled ? 'Enabled' : 'Disabled'}</span>
-          </label>
         </div>
-        
+
         {!isEnabled ? (
-          <div className="editor-disabled">
-            <p>Enable this platform to configure publishing settings</p>
-            <button
-              className="btn-primary"
-              onClick={() => togglePlatform(selectedPlatform)}
-            >
-              Enable {platform.name}
-            </button>
-          </div>
+          <p className="dist-off">{platform.name} is off for this episode. Switch it on in the list to fill it in.</p>
         ) : (
-          <div className="editor-form">
-            {/* Title/Caption */}
-            {platform.features.includes('title') && (
-              <div className="form-group">
-                <label>Title</label>
-                <input
-                  type="text"
-                  className="form-input"
-                  value={platformData.title || ''}
-                  onChange={(e) => updatePlatform(selectedPlatform, 'title', e.target.value)}
-                  placeholder={`Enter ${platform.name} title...`}
-                  maxLength={platform.maxTitleLength}
-                />
-                {platform.maxTitleLength && (
-                  <small className="char-count">
-                    {getCharacterCount(platformData.title, platform.maxTitleLength)}
-                  </small>
-                )}
-              </div>
-            )}
-            
-            {platform.features.includes('caption') && (
-              <div className="form-group">
-                <label>Caption</label>
-                <textarea
-                  className="form-textarea"
-                  rows="3"
-                  value={platformData.caption || ''}
-                  onChange={(e) => updatePlatform(selectedPlatform, 'caption', e.target.value)}
-                  placeholder={`Enter ${platform.name} caption...`}
-                  maxLength={platform.maxDescriptionLength}
-                />
-                {platform.maxDescriptionLength && (
-                  <small className="char-count">
-                    {getCharacterCount(platformData.caption, platform.maxDescriptionLength)}
-                  </small>
-                )}
-              </div>
-            )}
-            
-            {/* Description */}
-            {platform.features.includes('description') && (
-              <div className="form-group">
-                <label>Description</label>
-                <textarea
-                  className="form-textarea"
-                  rows="6"
-                  value={platformData.description || ''}
-                  onChange={(e) => updatePlatform(selectedPlatform, 'description', e.target.value)}
-                  placeholder={`Enter ${platform.name} description...`}
-                  maxLength={platform.maxDescriptionLength}
-                />
-                {platform.maxDescriptionLength && (
-                  <small className="char-count">
-                    {getCharacterCount(platformData.description, platform.maxDescriptionLength)}
-                  </small>
-                )}
-              </div>
-            )}
-            
-            {/* Hashtags */}
-            {platform.features.includes('hashtags') && (
-              <div className="form-group">
-                <label>Hashtags</label>
-                <div className="hashtag-input">
+          <div className="editor-form is-split">
+            {/* The words */}
+            <div className="editor-words">
+              {/* Title/Caption */}
+              {platform.features.includes('title') && (
+                <div className="form-group">
+                  <label>Title</label>
                   <input
                     type="text"
                     className="form-input"
-                    placeholder="Type hashtag and press Enter..."
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        let value = e.target.value.trim();
-                        if (value && !value.startsWith('#')) {
-                          value = '#' + value;
-                        }
-                        if (value.length > 1) {
-                          addHashtag(selectedPlatform, value);
-                          e.target.value = '';
-                        }
-                      }
-                    }}
+                    value={platformData.title || ''}
+                    onChange={(e) => updatePlatform(selectedPlatform, 'title', e.target.value)}
+                    placeholder={`Enter ${platform.name} title...`}
+                    maxLength={platform.maxTitleLength}
                   />
+                  {platform.maxTitleLength && (
+                    <small className="char-count">
+                      {getCharacterCount(platformData.title, platform.maxTitleLength)}
+                    </small>
+                  )}
                 </div>
-                {platformData.hashtags && platformData.hashtags.length > 0 && (
-                  <div className="hashtag-list">
-                    {platformData.hashtags.map(tag => (
-                      <span key={tag} className="hashtag-chip">
-                        {tag}
-                        <button
-                          className="hashtag-remove"
-                          onClick={() => removeHashtag(selectedPlatform, tag)}
-                        >
-                          ×
-                        </button>
-                      </span>
-                    ))}
+              )}
+            
+              {platform.features.includes('caption') && (
+                <div className="form-group">
+                  <label>Caption</label>
+                  <textarea
+                    className="form-textarea"
+                    rows="3"
+                    value={platformData.caption || ''}
+                    onChange={(e) => updatePlatform(selectedPlatform, 'caption', e.target.value)}
+                    placeholder={`Enter ${platform.name} caption...`}
+                    maxLength={platform.maxDescriptionLength}
+                  />
+                  {platform.maxDescriptionLength && (
+                    <small className="char-count">
+                      {getCharacterCount(platformData.caption, platform.maxDescriptionLength)}
+                    </small>
+                  )}
+                </div>
+              )}
+            
+              {/* Description */}
+              {platform.features.includes('description') && (
+                <div className="form-group">
+                  <label>Description</label>
+                  <textarea
+                    className="form-textarea"
+                    rows="6"
+                    value={platformData.description || ''}
+                    onChange={(e) => updatePlatform(selectedPlatform, 'description', e.target.value)}
+                    placeholder={`Enter ${platform.name} description...`}
+                    maxLength={platform.maxDescriptionLength}
+                  />
+                  {platform.maxDescriptionLength && (
+                    <small className="char-count">
+                      {getCharacterCount(platformData.description, platform.maxDescriptionLength)}
+                    </small>
+                  )}
+                </div>
+              )}
+            
+              {/* Hashtags */}
+              {platform.features.includes('hashtags') && (
+                <div className="form-group">
+                  <label>Hashtags</label>
+                  <div className="hashtag-input">
+                    <input
+                      type="text"
+                      className="form-input"
+                      placeholder="Type hashtag and press Enter..."
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          let value = e.target.value.trim();
+                          if (value && !value.startsWith('#')) {
+                            value = '#' + value;
+                          }
+                          if (value.length > 1) {
+                            addHashtag(selectedPlatform, value);
+                            e.target.value = '';
+                          }
+                        }
+                      }}
+                    />
                   </div>
-                )}
-              </div>
-            )}
-            
-            {/* Schedule */}
-            {platform.features.includes('schedule') && (
-              <div className="form-row">
-                <div className="form-group">
-                  <label>Scheduled Time</label>
-                  <input
-                    type="datetime-local"
-                    className="form-input"
-                    value={platformData.scheduled_time || ''}
-                    onChange={(e) => updatePlatform(selectedPlatform, 'scheduled_time', e.target.value)}
-                  />
-                </div>
-                
-                <div className="form-group">
-                  <label>Status</label>
-                  <select
-                    className="form-select"
-                    value={platformData.status || 'draft'}
-                    onChange={(e) => updatePlatform(selectedPlatform, 'status', e.target.value)}
-                  >
-                    {STATUS_OPTIONS.map(opt => (
-                      <option key={opt.value} value={opt.value}>
-                        {opt.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-            )}
-            
-            {/* Platform URL */}
-            <div className="form-group">
-              <label>Platform URL (after publish)</label>
-              <input
-                type="url"
-                className="form-input"
-                value={platformData.platform_url || ''}
-                onChange={(e) => updatePlatform(selectedPlatform, 'platform_url', e.target.value)}
-                placeholder={`https://${platform.id}.com/...`}
-              />
-            </div>
-            
-            {/* Thumbnail: shown here, edited only in Templates › YouTube
-                thumbnails (Evoni, 2026-10-20). */}
-            {platform.features.includes('thumbnail') && (
-              <div className="form-group" data-testid="distribution-thumbnail">
-                <label>Thumbnail</label>
-                <div className="thumbnail-upload">
-                  {platformData.thumbnail_url || episode.thumbnail_url ? (
-                    <div className="thumbnail-preview">
-                      <img src={platformData.thumbnail_url || episode.thumbnail_url} alt={`Thumbnail for ${episode.title || 'the episode'}`} />
-                    </div>
-                  ) : (
-                    <div className="thumbnail-placeholder">
-                      <span>📸</span>
-                      <p>No thumbnail yet</p>
+                  {platformData.hashtags && platformData.hashtags.length > 0 && (
+                    <div className="hashtag-list">
+                      {platformData.hashtags.map(tag => (
+                        <span key={tag} className="hashtag-chip">
+                          {tag}
+                          <button
+                            type="button"
+                            className="hashtag-remove"
+                            aria-label={`Remove ${tag}`}
+                            onClick={() => removeHashtag(selectedPlatform, tag)}
+                          >
+                            ×
+                          </button>
+                        </span>
+                      ))}
                     </div>
                   )}
                 </div>
-                <Link className="btn-secondary thumbnail-edit-link" to={thumbnailStudioHref({ showId: episode.show_id || episode.showId, episodeId: episode.id })}>
-                  {platformData.thumbnail_url || episode.thumbnail_url ? 'Edit in Thumbnail Studio' : 'Make it in Thumbnail Studio'}
-                </Link>
+              )}
+            
+            </div>
+
+            {/* When, where, and the picture at the platform's shape */}
+            <div className="editor-side">
+              {platform.features.includes('schedule') && (
+                <>
+                  <div className="form-group">
+                    <label htmlFor="dist-when">Scheduled Time</label>
+                    <input
+                      id="dist-when"
+                      type="datetime-local"
+                      className="form-input"
+                      value={platformData.scheduled_time || ''}
+                      onChange={(e) => updatePlatform(selectedPlatform, 'scheduled_time', e.target.value)}
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="dist-status">Status</label>
+                    <select
+                      id="dist-status"
+                      className="form-select"
+                      value={platformData.status || 'draft'}
+                      onChange={(e) => updatePlatform(selectedPlatform, 'status', e.target.value)}
+                    >
+                      {STATUS_OPTIONS.map(opt => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </>
+              )}
+
+              {/* Platform URL */}
+              <div className="form-group">
+                <label htmlFor="dist-url">Platform URL (after publish)</label>
+                <input
+                  id="dist-url"
+                  type="url"
+                  className="form-input"
+                  value={platformData.platform_url || ''}
+                  onChange={(e) => updatePlatform(selectedPlatform, 'platform_url', e.target.value)}
+                  placeholder={`https://${platform.id}.com/...`}
+                />
               </div>
-            )}
+
+              {/* Thumbnail: shown here, edited only in Templates › YouTube
+                  thumbnails (Evoni, 2026-10-20). */}
+              {platform.features.includes('thumbnail') && (
+                <div className="form-group" data-testid="distribution-thumbnail">
+                  <label>Thumbnail</label>
+                  <div className="thumbnail-upload" style={{ aspectRatio: platform.aspectRatio.replace(':', ' / ') }}>
+                    {platformData.thumbnail_url || episode.thumbnail_url ? (
+                      <div className="thumbnail-preview">
+                        <img src={platformData.thumbnail_url || episode.thumbnail_url} alt={`Thumbnail for ${episode.title || 'the episode'}`} />
+                      </div>
+                    ) : (
+                      <div className="thumbnail-placeholder">
+                        <span>📸</span>
+                        <p>No thumbnail yet</p>
+                      </div>
+                    )}
+                  </div>
+                  <Link className="btn-secondary thumbnail-edit-link" to={thumbnailStudioHref({ showId: episode.show_id || episode.showId, episodeId: episode.id })}>
+                    {platformData.thumbnail_url || episode.thumbnail_url ? 'Edit in Thumbnail Studio' : 'Make it in Thumbnail Studio'}
+                  </Link>
+                </div>
+              )}
+            </div>
           </div>
         )}
-      </div>
+      </section>
+
+      {/* The approved style sheet, sent from the Style Page (Task #2878):
+          its own post, so after the platforms. */}
+      <StyleSheetDistributionCard episodeId={episode.id} episodeNumber={episode.episode_number} />
+
+      {/* Save follows along the bottom while there are unsaved changes, as
+          the script's Save does (Evoni, 2026-10-22 layout list). */}
+      {hasChanges && (
+        <div className="distribution-savebar" role="region" aria-label="Unsaved changes" data-testid="distribution-savebar">
+          <span>Unsaved changes</span>
+          <button type="button" className="btn-save" onClick={handleSave}>💾 Save Distribution</button>
+        </div>
+      )}
+      {saveNote && <p className={`dist-note${saveNote.error ? ' is-error' : ''}`} role={saveNote.error ? 'alert' : 'status'}>{saveNote.text}</p>}
     </div>
   );
 }

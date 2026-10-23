@@ -81,7 +81,7 @@ describe('Results → Story', () => {
     expect(screen.getByTestId('results-story-recap').textContent).toContain('Failed · try again');
   });
 
-  test('the story record sits above the formats', async () => {
+  test('the path starts with the story record', async () => {
     renderIn(<EpisodeResultsStory episode={{ id: 'ep-1', show_id: 'show-1' }} />);
     expect(await screen.findByRole('button', { name: /Draft the record/ })).toBeTruthy();
     expect(api.get).toHaveBeenCalledWith('/api/v1/book-from-show/episodes/ep-1/record');
