@@ -86,11 +86,13 @@ describe('WorldAdmin events queue — cards and the deal-type filter (Task #2361
     const deal = within(card).getByTestId('event-card-deal-ev-brand');
     expect(deal.textContent).toContain('Paid appearance');
     expect(deal.textContent).toContain('Unpaid');
-    expect(within(card).getByTestId('event-card-organizer-ev-brand').textContent).toBe('OrganizerMaison Belle');
+    // The deal and the organizer are one line (Evoni, 2026-10-22 layout list).
+    expect(within(card).getByTestId('event-card-organizer-ev-brand').textContent).toBe('Organizer: Maison Belle');
+    expect(card.querySelector('.wa-ev-facts').textContent).toMatch(/^Paid appearance · Unpaid · Organizer: Maison Belle$/);
 
     const { blocking } = computeEventPackageReadiness(BRAND_EVENT);
     const needed = within(card).getByTestId('event-card-needed-ev-brand');
-    expect([...needed.querySelectorAll('.wa-ev-needed-chip')].map((c) => c.textContent)).toEqual(describeMissing(blocking));
+    expect(needed.textContent).toBe(`Still needed: ${describeMissing(blocking).join(', ')}`);
     // One primary button besides the card's "More actions" menu.
     const buttons = within(card).getAllByRole('button').filter((b) => b.getAttribute('aria-label') !== 'More actions');
     expect(buttons).toHaveLength(1);
@@ -100,7 +102,11 @@ describe('WorldAdmin events queue — cards and the deal-type filter (Task #2361
   test('a card with no organizer, place or deal type says so', async () => {
     renderQueue();
     const card = await screen.findByTestId('event-card-ev-bare');
-    expect(within(card).getByTestId('event-card-organizer-ev-bare').textContent).toBe('OrganizerNot chosen');
+    expect(within(card).getByTestId('event-card-organizer-ev-bare').textContent).toBe('No organizer');
+    // No "No category", and the organizer its button asks for is not listed again.
+    expect(card.querySelector('.wa-ev-category')).toBeNull();
+    expect(within(card).getByTestId('event-card-primary-ev-bare').textContent).toContain('Choose Organizer');
+    expect(within(card).getByTestId('event-card-needed-ev-bare').textContent).not.toMatch(/Organizer/);
     expect(within(card).getByTestId('event-card-place-ev-bare').textContent).toBe('Venue and date not set');
     expect(within(card).getByTestId('event-card-deal-ev-bare').textContent).toContain('No deal type');
   });
@@ -152,5 +158,43 @@ describe('WorldAdmin events queue — cards and the deal-type filter (Task #2361
 
     fireEvent.change(select, { target: { value: 'not_set' } });
     await waitFor(() => expect(cardIds()).toEqual(['ev-bare']));
+  });
+
+  // Evoni, 2026-10-22 (Events layout list): state chips, one toolbar, Cards | List.
+  test('the states are chips with counts; a zero is marked', async () => {
+    renderQueue();
+    await screen.findByTestId('event-card-ev-brand');
+    expect(screen.getByTestId('events-filter-archived').hasAttribute('data-zero')).toBe(true);
+    expect(screen.getByTestId('events-filter-used').hasAttribute('data-zero')).toBe(false);
+  });
+
+  test('one toolbar: search, deal type, sort, layout, Ideas, ⋯ and New event; Auto-Fill and the draft-script switch are in ⋯', async () => {
+    renderQueue();
+    await screen.findByTestId('event-card-ev-brand');
+    const bar = screen.getByLabelText('Search events').closest('.wa-ev-head-actions');
+    expect(within(bar).getByTestId('events-deal-filter')).toBeTruthy();
+    expect(within(bar).getByRole('group', { name: 'Layout' })).toBeTruthy();
+    expect(within(bar).getByTestId('events-ideas-button')).toBeTruthy();
+    expect(within(bar).getByText('New event')).toBeTruthy();
+    expect(screen.queryByText(/Auto-Fill This Month/)).toBeNull();
+    expect(screen.queryByTestId('events-draft-script')).toBeNull();
+    fireEvent.click(within(bar).getByRole('button', { name: 'More actions' }));
+    expect(screen.getByText(/Auto-Fill This Month/)).toBeTruthy();
+    const draft = screen.getByTestId('events-draft-script').querySelector('input');
+    expect(draft.checked).toBe(false);
+    fireEvent.click(draft);
+    expect(draft.checked).toBe(true);
+  });
+
+  test('Cards | List switches the grid to one row per event', async () => {
+    renderQueue();
+    await screen.findByTestId('event-card-ev-brand');
+    const grid = screen.getByTestId('events-grid');
+    expect(grid.className).toBe('wa-ev-grid');
+    const layout = screen.getByRole('group', { name: 'Layout' });
+    fireEvent.click(within(layout).getByRole('button', { name: 'List' }));
+    expect(grid.className).toBe('wa-ev-grid is-list');
+    expect(within(layout).getByRole('button', { name: 'List' }).getAttribute('aria-pressed')).toBe('true');
+    expect(cardIds().length).toBeGreaterThan(1);
   });
 });
