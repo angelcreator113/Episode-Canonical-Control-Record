@@ -17,6 +17,10 @@ const SHOW = 'show-1';
 const mockEvents = {};
 const mockDeliverables = {};
 const mockCalls = [];
+// The shared terms lock (findTermsWriteLock): live briefs by event id, and
+// the live episodes a brief or used_in_episode_id can name.
+const mockBriefs = {};
+const mockEpisodes = { 'ep-1': { id: 'ep-1', title: 'Gala Night', episode_number: 3, show_id: SHOW } };
 let mockRaceNextUpdate = false;
 
 jest.mock('../../../src/models', () => ({
@@ -32,6 +36,25 @@ jest.mock('../../../src/models', () => ({
       if (/^SELECT id, name, deal_type, deal_components, host, host_brand, used_in_episode_id FROM world_events WHERE id = :eventId$/.test(sql)) {
         const ev = mockEvents[r.eventId];
         return [ev ? [{ ...ev, deal_type: null }] : []];
+      }
+      // findTermsLockEpisode: the live brief that names the event first.
+      if (/FROM episode_briefs b\s+JOIN episodes e/.test(sql)) {
+        const epId = mockBriefs[r.eventId];
+        return [epId && mockEpisodes[epId] ? [mockEpisodes[epId]] : []];
+      }
+      // findLiveLinkedEpisode: else used_in_episode_id, when it names a live episode.
+      if (/^SELECT used_in_episode_id FROM world_events WHERE id = :eventId LIMIT 1/.test(sql)) {
+        const ev = mockEvents[r.eventId];
+        return [ev ? [{ used_in_episode_id: ev.used_in_episode_id }] : []];
+      }
+      if (/FROM episodes WHERE id = :episodeId AND deleted_at IS NULL/.test(sql)) {
+        const ep = mockEpisodes[r.episodeId];
+        return [ep ? [ep] : []];
+      }
+      // readTermsReopen: the reopen marker in canon_consequences.
+      if (/^SELECT canon_consequences FROM world_events WHERE id = :eventId AND deleted_at IS NULL/.test(sql)) {
+        const ev = mockEvents[r.eventId];
+        return [ev ? [{ canon_consequences: ev.canon_consequences || {} }] : []];
       }
       if (/FROM world_events WHERE id = :eventId AND show_id = :showId/.test(sql)) {
         const ev = mockEvents[r.eventId];
@@ -106,6 +129,7 @@ beforeEach(() => {
   mockCalls.length = 0;
   for (const k of Object.keys(mockEvents)) delete mockEvents[k];
   for (const k of Object.keys(mockDeliverables)) delete mockDeliverables[k];
+  for (const k of Object.keys(mockBriefs)) delete mockBriefs[k];
   mockEvents['ev-open'] = { id: 'ev-open', show_id: SHOW, used_in_episode_id: null };
   mockEvents['ev-used'] = { id: 'ev-used', show_id: SHOW, used_in_episode_id: 'ep-1' };
   mockDeliverables.d1 = { id: 'd1', event_id: 'ev-open', description: 'Tagged post', deliverable_type: 'post', due_date: null, required: true, status: 'pending', episode_id: null, deleted_at: null };
@@ -410,5 +434,50 @@ describe('POST .../:deliverableId/status (fulfilment, Task #1815)', () => {
     expect(put.status).toBe(409);
     const del = await request(app).delete(`${base('ev-used')}/d2`).set(AUTH);
     expect(del.status).toBe(409);
+  });
+});
+
+// The deliverables lock is the shared terms lock (findTermsWriteLock), the
+// one the costs routes and the event PUT ask (audit, 2026-10-23): the live
+// brief that names the event, else used_in_episode_id naming a live
+// episode, lifted while the terms are reopened.
+describe('the deliverables lock agrees with the costs lock', () => {
+  const { findTermsWriteLock } = require('../../../src/utils/eventTermsLock');
+  const models = require('../../../src/models');
+  const costsLocked = async (eventId) => !!(await findTermsWriteLock(models.sequelize, eventId));
+
+  test('a live brief naming the event locks it, with no used_in_episode_id stamp', async () => {
+    mockBriefs['ev-open'] = 'ep-1';
+    expect(await costsLocked('ev-open')).toBe(true);
+    const list = await request(app).get(base('ev-open')).set(AUTH);
+    expect(list.body.locked).toBe(true);
+    const res = await request(app).post(base('ev-open')).set(AUTH).send({ description: 'Late add' });
+    expect(res.status).toBe(409);
+    expect(res.body).toMatchObject({ success: false, code: 'EVENT_TERMS_LOCKED', used_in_episode_id: 'ep-1', episode: { id: 'ep-1', episode_number: 3 } });
+    expect(writes()).toHaveLength(0);
+  });
+
+  test('a stamp naming a deleted episode does not lock, as for the costs', async () => {
+    mockEvents['ev-gone'] = { id: 'ev-gone', show_id: SHOW, used_in_episode_id: 'ep-deleted' };
+    expect(await costsLocked('ev-gone')).toBe(false);
+    const list = await request(app).get(base('ev-gone')).set(AUTH);
+    expect(list.body.locked).toBe(false);
+    const res = await request(app).post(base('ev-gone')).set(AUTH).send({ description: 'Tagged post' });
+    expect(res.status).toBe(201);
+  });
+
+  test('reopened terms lift the lock, as for the costs', async () => {
+    mockEvents['ev-used'].canon_consequences = { terms_reopen: { at: '2026-10-01T00:00:00Z', by: { id: 'u1' }, episode_id: 'ep-1' } };
+    expect(await costsLocked('ev-used')).toBe(false);
+    const res = await request(app).put(`${base('ev-used')}/d2`).set(AUTH).send({ description: 'Changed' });
+    expect(res.status).toBe(200);
+  });
+
+  test('a write reads the event FOR UPDATE inside its transaction', async () => {
+    const res = await request(app).post(base('ev-open')).set(AUTH).send({ description: 'Tagged post' });
+    expect(res.status).toBe(201);
+    const lockRead = mockCalls.find((c) => /FROM world_events WHERE id = :eventId AND show_id = :showId/.test(c.sql) && /FOR UPDATE$/.test(c.sql));
+    expect(lockRead).toBeDefined();
+    expect(models.sequelize.transaction).toHaveBeenCalled();
   });
 });

@@ -234,10 +234,24 @@ describe('Step 3 CP3 — World cluster mixed Tier 1+3+4 disposition', () => {
 
     // 12 since 2026-10-15: episodes/:episodeId/generate-story (the Stories
     // page's Generate All Formats) calls Claude and now carries the limiter.
-    test('all 12 AI handlers use uniform requireAuth + aiRateLimiter pattern', () => {
+    // 18 since the 2026-10-23 audit: generate-invitation, batch-generate-
+    // invitations, animate-invitation (image/video), generate-overlay,
+    // generate-distribution and generate-lists (Claude) carry it too.
+    test('all 18 AI handlers use uniform requireAuth + aiRateLimiter pattern', () => {
       const aiPattern = /router\.post\([^)]*requireAuth,\s*aiRateLimiter,/g;
       const matches = src.match(aiPattern) || [];
-      expect(matches.length).toBe(12);
+      expect(matches.length).toBe(18);
+    });
+
+    test.each([
+      'events/:eventId/generate-invitation',
+      'events/batch-generate-invitations',
+      'events/:eventId/animate-invitation',
+      'events/:eventId/generate-overlay/:overlayType',
+      'episodes/:episodeId/generate-distribution',
+      'events/:eventId/generate-lists',
+    ])('POST /%s uses requireAuth + aiRateLimiter (audit, 2026-10-23)', (route) => {
+      expect(src).toContain(`router.post('/world/:showId/${route}', requireAuth, aiRateLimiter,`);
     });
   });
 
