@@ -159,11 +159,11 @@ describe('apiClient response interceptor — F-Auth-4 Path 1', () => {
       expect(window.location.href).toBe('/login');
     });
 
-    test('refresh request itself rejects → wipe + redirect', async () => {
+    test('refresh token refused (401 AUTH_REFRESH_FAILED) → wipe + redirect', async () => {
       localStorage.setItem('authToken', 'old');
       localStorage.setItem('refreshToken', 'rt-1');
 
-      vi.mocked(axios.post).mockRejectedValue(new Error('network down'));
+      vi.mocked(axios.post).mockRejectedValue({ response: { status: 401, data: { code: 'AUTH_REFRESH_FAILED' } } });
 
       const err = makeAxiosError(401, 'AUTH_INVALID_TOKEN');
       err.config = { url: '/some/endpoint', method: 'get', headers: {} };
@@ -173,6 +173,85 @@ describe('apiClient response interceptor — F-Auth-4 Path 1', () => {
       expect(axios.post).toHaveBeenCalledTimes(1);
       expect(localStorage.getItem('authToken')).toBeNull();
       expect(window.location.href).toBe('/login');
+    });
+
+    // Evoni, 2026-10-23: signed out right after a deploy. A refresh that
+    // lands on the restart is waited out; it never signs her out.
+    test('refresh unreachable through the restart (network down every time) → no wipe, the request fails as a server problem', async () => {
+      vi.useFakeTimers();
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      try {
+        localStorage.setItem('authToken', 'old');
+        localStorage.setItem('refreshToken', 'rt-1');
+        const networkDown = Object.assign(new Error('Network Error'), { code: 'ERR_NETWORK' });
+        vi.mocked(axios.post).mockRejectedValue(networkDown);
+
+        const err = makeAxiosError(401, 'AUTH_INVALID_TOKEN');
+        err.config = { url: '/some/endpoint', method: 'get', headers: {} };
+
+        const pending = handler(err);
+        const settled = expect(pending).rejects.toBe(networkDown);
+        await vi.runAllTimersAsync();
+        await settled;
+
+        expect(axios.post).toHaveBeenCalledTimes(5);
+        expect(localStorage.getItem('authToken')).toBe('old');
+        expect(localStorage.getItem('refreshToken')).toBe('rt-1');
+        expect(window.location.href).toBe('');
+      } finally {
+        warn.mockRestore();
+        vi.useRealTimers();
+      }
+    });
+
+    test('refresh gets a 503 then succeeds → the original request retries; still signed in', async () => {
+      vi.useFakeTimers();
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const originalAdapter = apiClient.defaults.adapter;
+      apiClient.defaults.adapter = vi.fn().mockResolvedValue({ status: 200, data: { ok: true }, headers: {}, config: {} });
+      try {
+        localStorage.setItem('authToken', 'old');
+        localStorage.setItem('refreshToken', 'rt-1');
+        vi.mocked(axios.post)
+          .mockRejectedValueOnce({ response: { status: 503, data: { code: 'AUTH_SERVICE_UNAVAILABLE' } } })
+          .mockResolvedValueOnce({ data: { data: { accessToken: 'new-token' } } });
+
+        const err = makeAxiosError(401, 'AUTH_INVALID_TOKEN');
+        err.config = { url: '/some/endpoint', method: 'get', headers: {} };
+
+        const pending = handler(err);
+        await vi.runAllTimersAsync();
+        const result = await pending;
+
+        expect(result.status).toBe(200);
+        expect(axios.post).toHaveBeenCalledTimes(2);
+        expect(localStorage.getItem('authToken')).toBe('new-token');
+        expect(window.location.href).toBe('');
+      } finally {
+        apiClient.defaults.adapter = originalAdapter;
+        warn.mockRestore();
+        vi.useRealTimers();
+      }
+    });
+
+    test('refresh refused by its rate limit (429) → not retried, no wipe', async () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      try {
+        localStorage.setItem('authToken', 'old');
+        localStorage.setItem('refreshToken', 'rt-1');
+        const limited = { response: { status: 429, data: { code: 'AUTH_TOO_MANY_REFRESHES' } } };
+        vi.mocked(axios.post).mockRejectedValue(limited);
+
+        const err = makeAxiosError(401, 'AUTH_INVALID_TOKEN');
+        err.config = { url: '/some/endpoint', method: 'get', headers: {} };
+
+        await expect(handler(err)).rejects.toBe(limited);
+        expect(axios.post).toHaveBeenCalledTimes(1);
+        expect(localStorage.getItem('authToken')).toBe('old');
+        expect(window.location.href).toBe('');
+      } finally {
+        warn.mockRestore();
+      }
     });
   });
 

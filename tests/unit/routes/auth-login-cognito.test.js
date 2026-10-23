@@ -87,6 +87,21 @@ describe('POST /login', () => {
     expect(res.body.code).toBe(expectedCode);
   });
 
+  test("Cognito's own limit goes on the admin refusals list as 'cognito'", async () => {
+    const { recentRefusals, clearRefusals } = require('../../../src/middleware/rateLimits');
+    clearRefusals();
+    const err = new Error('Cognito says slow down');
+    err.name = 'LimitExceededException';
+    cognitoPasswordAuthService.initiatePasswordAuth.mockRejectedValue(err);
+
+    await request(app).post('/api/v1/auth/login').send({ email: 'user@example.com', password: 'whatever1' });
+
+    const { refusals, counts } = recentRefusals();
+    expect(counts).toEqual({ cognito: 1 });
+    expect(refusals[0]).toMatchObject({ limit: 'cognito', code: 'AUTH_TOO_MANY_REQUESTS', method: 'POST', path: '/api/v1/auth/login' });
+    expect(JSON.stringify(refusals)).not.toContain('user@example.com');
+  });
+
   test('an unmapped exception maps to 500 without leaking the raw Cognito error', async () => {
     const err = new Error('Some internal Cognito detail: pool arn, account id, etc');
     err.name = 'InternalErrorException';
