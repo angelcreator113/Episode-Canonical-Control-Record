@@ -229,7 +229,7 @@ async function goalsOf(sequelize, episode, event, profiles) {
     const own = eventGoals.find((e) => (e.slot || 'relationship') === g.slot);
     const person = goalPerson({ ...g, profile_id: g.profile_id ?? own?.profile_id ?? null }, event, profiles);
     return {
-      slot: g.slot, label: String(g.label).trim(), completed: !!g.completed, beat: beats.length ? goalCovered(beats, g, person) : null,
+      slot: g.slot, label: String(g.label).trim(), completed: !!g.completed, beat: beats.length ? goalCovered(beats, g, person)?.beat ?? null : null,
       // Carried from an earlier episode (services/storyCarryForward).
       ...(g.follow_up_id ? { follow_up_id: g.follow_up_id } : {}),
     };

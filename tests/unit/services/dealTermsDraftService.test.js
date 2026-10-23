@@ -3,7 +3,7 @@
  * 1-13; docs/DEAL_COMPONENTS_DESIGN.md §4, §9). Build PR 5. The pure parts.
  */
 const {
-  suggestedBonus, cashTotalOf, draftRelationshipGoals, relationshipGoalTasks, deliverableIsAutoDrafted,
+  suggestedBonus, cashTotalOf, draftRelationshipGoals, relationshipGoalTasks, deliverableIsAutoDrafted, brandProfileIdFor,
 } = require('../../../src/services/dealTermsDraftService');
 const { sizingFor, draftDeliverablesForDeal, draftedDeliverableTypes } = require('../../../src/services/dealPricingService');
 const { componentsFromDealType } = require('../../../src/utils/dealComponents');
@@ -91,6 +91,36 @@ describe('relationship goals (answer 6)', () => {
     expect(goals.map((g) => [g.slot, g.profile_id])).toEqual([['relationship_host', 5], ['relationship_brand', undefined]]);
     expect(draftRelationshipGoals({ ...event, host_brand: null })[1]).toMatchObject({ slot: 'relationship_guest', label: 'Get to know Truthville', profile_id: 9 });
     expect(draftRelationshipGoals({ host: 'Celeste Rue', canon_consequences: { automation: { host_profile_id: 7 } } })[0].profile_id).toBe(7);
+  });
+
+  // Evoni, 2026-10-23: the brand goal keeps the brand's Pulse account, so
+  // it ticks when the script names the brand (scriptRuleChecks goalPerson).
+  test("the brand goal keeps the brand's account when there is one", () => {
+    const event = { host: 'Celeste Rue', host_brand: 'Velour', canon_consequences: {} };
+    expect(draftRelationshipGoals(event, { brandProfileId: 40 })[1]).toMatchObject({ slot: 'relationship_brand', label: 'Co-style a moment with Velour', profile_id: 40 });
+    expect(draftRelationshipGoals(event, { brandProfileId: null })[1].profile_id).toBeUndefined();
+  });
+
+  test("brandProfileIdFor: the opportunity's company's account, else the company by name, else a brand account by name", async () => {
+    const calls = [];
+    const fake = (answers) => ({
+      query: async (sql, opts) => { calls.push([sql, opts.replacements]); return [answers.shift() || []]; },
+      transaction: async (opts, fn) => fn('savepoint'),
+    });
+    calls.length = 0;
+    expect(await brandProfileIdFor(fake([[{ company_id: 'b1' }], [{ id: 40 }]]), { host_brand: 'Velour', opportunity_id: 'o1' }, { transaction: 't' })).toBe(40);
+    expect(calls.map((c) => c[1])).toEqual([{ id: 'o1' }, { id: 'b1' }]);
+    calls.length = 0;
+    expect(await brandProfileIdFor(fake([[{ id: 'b2' }], [{ id: 41 }]]), { host_brand: ' Velour ' })).toBe(41);
+    expect(calls[0][1]).toEqual({ brand: 'Velour' });
+    expect(await brandProfileIdFor(fake([[], [{ id: 42 }]]), { host_brand: 'Velour' })).toBe(42);
+    expect(await brandProfileIdFor(fake([[], []]), { host_brand: 'Velour' })).toBeNull();
+    expect(await brandProfileIdFor(fake([]), { host_brand: '' })).toBeNull();
+    const err = jest.spyOn(console, 'error').mockImplementation(() => {});
+    const broken = { query: async () => { throw new Error('boom'); }, transaction: async (o, fn) => fn('sp') };
+    expect(await brandProfileIdFor(broken, { host_brand: 'Velour' }, { transaction: 't' })).toBeNull();
+    expect(err).toHaveBeenCalled();
+    err.mockRestore();
   });
 
   test('Start Episode writes them as Lala\'s goals, never required', () => {
