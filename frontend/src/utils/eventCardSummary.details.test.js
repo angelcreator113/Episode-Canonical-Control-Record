@@ -13,7 +13,7 @@ describe('eventCardDetails', () => {
       canon_consequences: { automation: {} },
     });
     expect(d.category).toBe('brand launch');
-    expect(d.place).toEqual(['Studio 9', 'Radiance Row', '2026-11-07']);
+    expect(d.place).toEqual(['Studio 9', 'Radiance Row', 'Sat, Nov 7']);
     expect(d.deal).toEqual({ label: 'Paid appearance', pays: 'Paid: 400 coins' });
     expect(d.organizer).toBe('Maison Belle');
   });
@@ -23,5 +23,11 @@ describe('eventCardDetails', () => {
     expect(saved.place).toEqual(['Echo Hall', 'Echo Park']);
     const bare = eventCardDetails({});
     expect(bare).toEqual({ category: null, place: [], deal: { label: null, pays: 'Unpaid' }, organizer: null });
+  });
+
+  test('a creator linked only by id is an organizer, not "No organizer"; a typed date shows as typed', () => {
+    const d = eventCardDetails({ source_profile_id: 'p-9', event_date: 'Friday, March 15th' });
+    expect(d.organizer).toBe('Linked creator');
+    expect(d.place).toEqual(['Friday, March 15th']);
   });
 });

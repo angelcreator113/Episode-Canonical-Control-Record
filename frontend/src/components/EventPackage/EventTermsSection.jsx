@@ -45,13 +45,22 @@
  * Deal price for a deal event: its itemised costs and who pays each
  * (EventCostsTerm), locking with the terms.
  *
+ * Writes that succeed are never reported as failed because the page's
+ * refresh after them (onSaved) failed: that reads "couldn't refresh".
+ * Removing a deliverable, restriction or relationship goal asks first.
+ * `onPriceInputsChange({ deliverables, costs })` (optional) receives the
+ * deliverable and cost rows as they load, for the readiness price gate
+ * (computeEventPackageReadiness's `prices`); a list that failed to load is
+ * passed as null.
+ *
  * Styles live in pages/EventPackagePage.css (one CSS file per page).
  */
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   KeyRound, ClipboardList, Ban, Coins, Lock, Pencil, Plus, Trash2, Loader2, AlertCircle, Check, Handshake, Calculator,
 } from 'lucide-react';
 import api from '../../services/api';
+import { saveErrorMessage as errorMessage } from '../../utils/eventSaveVersion';
 import {
   REQUIREMENT_KEYS, describeRequirements, requirementsDraftFrom, buildRequirementsUpdate,
   restrictionsOf, restrictionLabel, buildRestrictionAdd, buildRestrictionRemove,
@@ -82,12 +91,25 @@ export const advanceDeliverableApi = (showId, eventId, id, status) => api.post(`
 export const rateCardApi = () => api.get('/api/v1/deal-rates');
 export const proposeTermsApi = (showId, eventId, body) => api.post(`/api/v1/world/${showId}/events/${eventId}/propose-terms`, body);
 
-function errorMessage(err, fallback) {
-  return err?.response?.data?.error || err?.message || fallback;
-}
+export const REFRESH_FAILED_MESSAGE = "Saved — couldn't refresh the page. Reload to see the change.";
 
-export default function EventTermsSection({ showId, eventId, event, locked, putEvent, onSaved, onToast }) {
+export default function EventTermsSection({ showId, eventId, event, locked, putEvent, onSaved, onToast, onPriceInputsChange }) {
   const toast = (msg) => { if (onToast) onToast(msg); };
+
+  // The page's refresh after a write that already succeeded: a failure is
+  // logged and said as a refresh failure, never as a failed save (which
+  // would invite saving, or paying, twice).
+  const refreshPage = async () => {
+    if (!onSaved) return true;
+    try {
+      await onSaved();
+      return true;
+    } catch (err) {
+      console.error('[EventTerms] refresh after save failed:', err);
+      toast(REFRESH_FAILED_MESSAGE);
+      return false;
+    }
+  };
 
   // ── Deliverables ──
   const [deliverables, setDeliverables] = useState([]);
@@ -98,18 +120,30 @@ export default function EventTermsSection({ showId, eventId, event, locked, putE
   const [delivFormError, setDelivFormError] = useState(null);
   const [delivSaving, setDelivSaving] = useState(false);
 
+  // The price gate's inputs, reported to the page (onPriceInputsChange).
+  const priceInputs = useRef({ deliverables: null, costs: null });
+  const priceInputsRef = useRef(onPriceInputsChange);
+  priceInputsRef.current = onPriceInputsChange;
+  const reportPriceInputs = useCallback((patch) => {
+    priceInputs.current = { ...priceInputs.current, ...patch };
+    priceInputsRef.current?.(priceInputs.current);
+  }, []);
+
   const loadDeliverables = useCallback(async () => {
     setDelivLoading(true); setDelivLoadError(null);
     try {
       const res = await listDeliverablesApi(showId, eventId);
-      setDeliverables(Array.isArray(res.data?.deliverables) ? res.data.deliverables : []);
+      const rows = Array.isArray(res.data?.deliverables) ? res.data.deliverables : [];
+      setDeliverables(rows);
+      reportPriceInputs({ deliverables: rows });
     } catch (err) {
       console.error('[EventTerms] deliverables load failed:', err);
       setDelivLoadError(errorMessage(err, 'Failed to load deliverables'));
+      reportPriceInputs({ deliverables: null });
     } finally {
       setDelivLoading(false);
     }
-  }, [showId, eventId]);
+  }, [showId, eventId, reportPriceInputs]);
 
   useEffect(() => { loadDeliverables(); }, [loadDeliverables]);
 
@@ -192,6 +226,7 @@ export default function EventTermsSection({ showId, eventId, event, locked, putE
 
   const removeDeliverable = async (d) => {
     if (locked || delivSaving) return;
+    if (!window.confirm(`Remove the deliverable "${d.description || deliverableTypeLabel(d) || 'Deliverable'}"?`)) return;
     setDelivSaving(true);
     try {
       await deleteDeliverableApi(showId, eventId, d.id);
@@ -220,16 +255,17 @@ export default function EventTermsSection({ showId, eventId, event, locked, putE
     setTermSaving(which);
     try {
       await putEvent(body);
-      toast(okMessage);
-      if (onSaved) await onSaved();
-      return true;
     } catch (err) {
       console.error(`[EventTerms] ${which} save failed:`, err);
       toast(errorMessage(err, `Failed to save ${which}`));
-      return false;
-    } finally {
       setTermSaving(null);
+      return false;
     }
+    // Saved: the refresh's own failure is said as one (refreshPage).
+    toast(okMessage);
+    await refreshPage();
+    setTermSaving(null);
+    return true;
   };
 
   const requirements = describeRequirements(event);
@@ -247,6 +283,8 @@ export default function EventTermsSection({ showId, eventId, event, locked, putE
     if (await saveEventTerm('restrictions', built.body, 'Restriction added')) setRestrictionText('');
   };
   const removeRestriction = (index) => {
+    const r = restrictions[index];
+    if (!window.confirm(`Remove the restriction "${r?.description || 'this restriction'}"?`)) return;
     saveEventTerm('restrictions', buildRestrictionRemove(event, index).body, 'Restriction removed');
   };
 
@@ -291,6 +329,8 @@ export default function EventTermsSection({ showId, eventId, event, locked, putE
   const relationshipGoals = relationshipGoalsOf(event);
   const relationshipGoalsNote = relationshipGoalsDraftNote(event);
   const removeRelationshipGoal = (index) => {
+    const g = relationshipGoals[index];
+    if (!window.confirm(`Remove the goal "${g?.label || 'this goal'}"?`)) return;
     saveEventTerm('goals', buildRelationshipGoalRemove(event, index).body, 'Goal removed');
   };
 
@@ -328,21 +368,23 @@ export default function EventTermsSection({ showId, eventId, event, locked, putE
   const runProposal = async () => {
     if (locked || proposing || !pricing) return;
     setProposing(true);
+    let gaps;
     try {
       const res = await proposeTermsApi(showId, eventId, buildProposeBody(pricing.selection));
-      const gaps = res.data?.proposal?.gaps || [];
-      toast(gaps.length ? 'Terms proposed; some lines need a price' : 'Terms proposed');
-      setPricing((p) => ({ ...p, error: null, gaps }));
-      setCostsKey((k) => k + 1);
-      await loadDeliverables();
-      if (onSaved) await onSaved();
+      gaps = res.data?.proposal?.gaps || [];
     } catch (err) {
       console.error('[EventTerms] propose terms failed:', err);
       setPricing((p) => ({ ...p, error: errorMessage(err, 'Failed to propose terms') }));
-      if (err?.response?.status === 409 && onSaved) onSaved();
-    } finally {
+      if (err?.response?.status === 409) await refreshPage();
       setProposing(false);
+      return;
     }
+    toast(gaps.length ? 'Terms proposed; some lines need a price' : 'Terms proposed');
+    setPricing((p) => ({ ...p, error: null, gaps }));
+    setCostsKey((k) => k + 1);
+    await loadDeliverables();
+    await refreshPage();
+    setProposing(false);
   };
 
   const premiumChoices = premiumChoicesFrom(pricing?.card);
@@ -873,6 +915,14 @@ export default function EventTermsSection({ showId, eventId, event, locked, putE
               <AlertCircle size={12} aria-hidden="true" /> Start Episode waits on a price for: {missingPrices.join(', ')}.
             </p>
           )}
+          {/* Unpriced deliverables can't be listed when the deliverables did
+              not load: say so rather than reading as if none were missing. */}
+          {!locked && plan.cash && plan.deliverables && delivLoadError && (
+            <p className="epp-term-error" data-testid="terms-price-unchecked">
+              <AlertCircle size={12} aria-hidden="true" /> The deliverables did not load, so their prices could not be checked.{' '}
+              <button type="button" className="epp-inline-link" onClick={() => loadDeliverables()} data-testid="terms-deliverables-retry">Try again</button>
+            </p>
+          )}
           {pricing && !locked && (
             <div className="epp-term-form" data-testid="terms-propose-panel">
               {pricing.loading && <p className="epp-term-note"><Loader2 size={12} className="epp-spin-icon" aria-hidden="true" /> Loading the rate card…</p>}
@@ -922,7 +972,7 @@ export default function EventTermsSection({ showId, eventId, event, locked, putE
         {isDealEvent(event) && (
           <EventCostsTerm
             showId={showId} eventId={eventId} locked={locked} refreshKey={costsKey}
-            onSaved={onSaved} onToast={onToast}
+            onSaved={onSaved} onToast={onToast} onCostsChange={(costs) => reportPriceInputs({ costs })}
           />
         )}
 

@@ -7,6 +7,7 @@
  */
 import api from '../services/api';
 import { canonicalCategory } from './closetGrouping';
+import { formatEventDate } from '../utils/eventDate';
 
 const base = (showId, eventId) => `/api/v1/world/${showId}/events/${eventId}/documents`;
 
@@ -142,10 +143,8 @@ export function careerSections(doc) {
 /** "for Studio by Sable · Nov 12": who it is for, and when. */
 export function documentByline(event) {
   const who = event?.host_brand || event?.host || event?.name || '';
-  let when = '';
-  if (event?.event_date) {
-    const d = new Date(event.event_date);
-    if (!Number.isNaN(d.getTime())) when = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
-  }
+  // A stored "YYYY-MM-DD" reads as that day in every time zone; free text
+  // ("Friday, March 15th") reads as written (formatEventDate).
+  const when = formatEventDate(event?.event_date, { style: 'monthDay' }) || '';
   return [who && `for ${who}`, when].filter(Boolean).join(' · ');
 }

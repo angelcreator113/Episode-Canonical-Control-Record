@@ -85,10 +85,13 @@ export function resolveEventOrganizer(event) {
 
 export function calcEventDifficulty(event) {
   const ev = event || {};
-  const p = ev.prestige || 5;
-  const s = ev.strictness || 5;
+  // ?? not ||: a stored 0 prestige or strictness, and the 'none' deadline
+  // (weight 0), are values, not gaps. Numeric strings count as numbers.
+  const num = (v, fallback) => (v == null || v === '' || !Number.isFinite(Number(v)) ? fallback : Number(v));
+  const p = num(ev.prestige, 5);
+  const s = num(ev.strictness, 5);
   const dressComplexity = (ev.dress_code_keywords?.length || 0) * 0.5;
-  const deadlineWeight = { none: 0, low: 1, medium: 2, high: 3, tonight: 4, urgent: 5 }[ev.deadline_type] || 2;
+  const deadlineWeight = { none: 0, low: 1, medium: 2, high: 3, tonight: 4, urgent: 5 }[ev.deadline_type] ?? 2;
   const raw = (p * 0.35) + (s * 0.3) + (deadlineWeight * 0.2) + (dressComplexity * 0.15);
   return Math.min(10, Math.max(1, Math.round(raw * 10) / 10));
 }

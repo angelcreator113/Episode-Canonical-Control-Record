@@ -128,10 +128,10 @@ function nextVersion(prev, type, patch, now = new Date().toISOString()) {
   };
 }
 
-async function loadEvent(sequelize, showId, eventId) {
+async function loadEvent(sequelize, showId, eventId, { transaction } = {}) {
   const [rows] = await sequelize.query(
-    'SELECT * FROM world_events WHERE id = :eventId AND show_id = :showId AND deleted_at IS NULL LIMIT 1',
-    { replacements: { eventId, showId } }
+    `SELECT * FROM world_events WHERE id = :eventId AND show_id = :showId AND deleted_at IS NULL LIMIT 1${transaction ? ' FOR UPDATE' : ''}`,
+    { replacements: { eventId, showId }, ...(transaction ? { transaction } : {}) }
   );
   const event = rows && rows[0];
   if (!event) throw new EventDocumentError(404, 'Event not found');
@@ -141,7 +141,7 @@ async function loadEvent(sequelize, showId, eventId) {
 
 // One key of canon_consequences.documents, leaving every other key of the
 // event's canon_consequences as it is.
-async function writeDocument(sequelize, eventId, type, doc) {
+async function writeDocument(sequelize, eventId, type, doc, { transaction } = {}) {
   await sequelize.query(
     `UPDATE world_events
         SET canon_consequences = COALESCE(canon_consequences, '{}'::jsonb)
@@ -150,9 +150,43 @@ async function writeDocument(sequelize, eventId, type, doc) {
                || jsonb_build_object(CAST(:type AS text), CAST(:doc AS jsonb))),
             updated_at = NOW()
       WHERE id = :eventId AND deleted_at IS NULL`,
-    { replacements: { eventId, type, doc: JSON.stringify(doc) } }
+    { replacements: { eventId, type, doc: JSON.stringify(doc) }, ...(transaction ? { transaction } : {}) }
   );
   return doc;
+}
+
+/**
+ * A read-modify-write of one document, in one transaction with the event
+ * row locked (audit Low, 2026-10-23), so a draft, an edit and an approval
+ * cannot overwrite one another: each reads the version the one before it
+ * wrote. `change(prev, event)` returns the document to write, or null to
+ * write nothing; it may throw an EventDocumentError. Returns
+ * { event, doc, written }.
+ *
+ * expectedVersion (optional): the version the client last read. When sent
+ * and the stored version differs, the write is refused with 409, so an
+ * approval never approves a version its sender did not see.
+ */
+async function changeDocument(sequelize, { showId, eventId, type, expectedVersion }, change) {
+  return sequelize.transaction(async (transaction) => {
+    const event = await loadEvent(sequelize, showId, eventId, { transaction });
+    const prev = readDocuments(event)[type];
+    if (expectedVersion != null && Number(prev?.version || 0) !== Number(expectedVersion)) {
+      throw new EventDocumentError(409, `The ${DOC_TYPES[type].label.toLowerCase()} changed since you opened it (now version ${prev?.version || 0}). Reload it and try again.`);
+    }
+    const doc = await change(prev, event);
+    if (!doc) return { event, doc: prev, written: false };
+    await writeDocument(sequelize, eventId, type, doc, { transaction });
+    return { event, doc, written: true };
+  });
+}
+
+/** An expected version sent by a client: a whole number, or null when absent. */
+function readExpectedVersion(value) {
+  if (value === undefined || value === null || value === '') return null;
+  const n = Number(value);
+  if (!Number.isInteger(n) || n < 0) throw new EventDocumentError(400, 'version must be a whole number');
+  return n;
 }
 
 /** Her active career goals, highest priority first, as "Bigger goals". */
@@ -239,27 +273,36 @@ async function getDocuments(models, { showId, eventId }) {
   };
 }
 
-/** Draft, or redraft: a new draft written from the event. */
-async function draftDocument(models, { showId, eventId, type }) {
+/**
+ * Draft, or redraft: a new draft written from the event. The items are
+ * written by the AI outside the transaction (no row is held locked across
+ * a model call); the new version is then built on the document as it
+ * stands under the lock.
+ */
+async function draftDocument(models, { showId, eventId, type, version }) {
   assertType(type);
+  const expectedVersion = readExpectedVersion(version);
   const event = await loadEvent(models.sequelize, showId, eventId);
-  const prev = readDocuments(event)[type];
-  const now = new Date().toISOString();
   const items = await draftItems(models, event, type, showId);
-  const doc = nextVersion(prev, type, { items, source: 'draft', drafted_at: now, edited_at: null }, now);
-  return writeDocument(models.sequelize, eventId, type, doc);
+  const { doc } = await changeDocument(models.sequelize, { showId, eventId, type, expectedVersion }, (prev) => {
+    const now = new Date().toISOString();
+    return nextVersion(prev, type, { items, source: 'draft', drafted_at: now, edited_at: null }, now);
+  });
+  return doc;
 }
 
 /** Edit: her own items; an edited document is a draft until approved again. */
-async function editDocument(models, { showId, eventId, type, items }) {
+async function editDocument(models, { showId, eventId, type, items, version }) {
   assertType(type);
-  const event = await loadEvent(models.sequelize, showId, eventId);
-  const prev = readDocuments(event)[type];
-  if (!prev) throw new EventDocumentError(404, `No ${DOC_TYPES[type].label.toLowerCase()} yet. Draft it first.`);
-  const now = new Date().toISOString();
-  const doc = nextVersion(prev, type, { items: normalizeItems(type, items), source: 'edited', edited_at: now }, now);
-  if (doc.items.length === 0) throw new EventDocumentError(400, 'A document needs at least one item');
-  return writeDocument(models.sequelize, eventId, type, doc);
+  const expectedVersion = readExpectedVersion(version);
+  const { doc } = await changeDocument(models.sequelize, { showId, eventId, type, expectedVersion }, (prev) => {
+    if (!prev) throw new EventDocumentError(404, `No ${DOC_TYPES[type].label.toLowerCase()} yet. Draft it first.`);
+    const now = new Date().toISOString();
+    const next = nextVersion(prev, type, { items: normalizeItems(type, items), source: 'edited', edited_at: now }, now);
+    if (next.items.length === 0) throw new EventDocumentError(400, 'A document needs at least one item');
+    return next;
+  });
+  return doc;
 }
 
 /**
@@ -275,7 +318,12 @@ async function withOverlay(models, event, type, doc) {
     const deliverables = type === 'career_plan' ? await expectedOfHer(models.sequelize, event.id) : [];
     const overlay = await makeDocumentOverlay(models, { event, type, doc, deliverables });
     if (!overlay) return doc;
-    return writeDocument(models.sequelize, event.id, type, { ...doc, overlay });
+    // Recorded only on the version it was drawn from: a newer edit that
+    // landed while it was drawn is left as it is.
+    const { doc: saved } = await changeDocument(models.sequelize, { showId: event.show_id, eventId: event.id, type }, (current) => (
+      current && current.version === doc.version ? { ...current, overlay } : null
+    ));
+    return saved && saved.version === doc.version ? saved : doc;
   } catch (err) {
     console.error(`[EventDocuments] ${type} overlay failed (the approval stands):`, err.message);
     return doc;
@@ -286,24 +334,28 @@ async function withOverlay(models, event, type, doc) {
  * Approve: the current version, as it is, and draw its overlay. Approving
  * an approved document whose overlay is missing or out of date draws it again.
  */
-async function approveDocument(models, { showId, eventId, type }) {
+async function approveDocument(models, { showId, eventId, type, version }) {
   assertType(type);
+  const expectedVersion = readExpectedVersion(version);
   const { overlayState } = require('./eventDocumentOverlayService');
-  const event = await loadEvent(models.sequelize, showId, eventId);
-  const prev = readDocuments(event)[type];
-  if (!prev) throw new EventDocumentError(404, `No ${DOC_TYPES[type].label.toLowerCase()} yet. Draft it first.`);
-  if (prev.status === 'approved') {
-    let lookTotal = null;
-    if (type === 'shopping_list') {
-      const { shoppingListContext, shoppingLines } = require('./eventDocumentOverlayService');
-      const { look } = await shoppingListContext(models.sequelize, event);
-      if (look) lookTotal = shoppingLines(prev, look.pieces).total;
-    }
-    return overlayState(prev, lookTotal) === 'current' ? prev : withOverlay(models, event, type, prev);
+  // The approval is read and written under the event row lock, so it
+  // approves the version stored at that moment and never writes an older
+  // copy over a newer edit (audit Low, 2026-10-23).
+  const { event, doc: prev, written } = await changeDocument(models.sequelize, { showId, eventId, type, expectedVersion }, (current) => {
+    if (!current) throw new EventDocumentError(404, `No ${DOC_TYPES[type].label.toLowerCase()} yet. Draft it first.`);
+    if (current.status === 'approved') return null;
+    const now = new Date().toISOString();
+    return { ...current, status: 'approved', approved_at: now, updated_at: now };
+  });
+  if (written) return withOverlay(models, event, type, prev);
+  // Already approved: draw its overlay again when missing or out of date.
+  let lookTotal = null;
+  if (type === 'shopping_list') {
+    const { shoppingListContext, shoppingLines } = require('./eventDocumentOverlayService');
+    const { look } = await shoppingListContext(models.sequelize, event);
+    if (look) lookTotal = shoppingLines(prev, look.pieces).total;
   }
-  const now = new Date().toISOString();
-  const doc = await writeDocument(models.sequelize, eventId, type, { ...prev, status: 'approved', approved_at: now, updated_at: now });
-  return withOverlay(models, event, type, doc);
+  return overlayState(prev, lookTotal) === 'current' ? prev : withOverlay(models, event, type, prev);
 }
 
 // ─── Start Episode: the approved documents carried into the episode ─────────

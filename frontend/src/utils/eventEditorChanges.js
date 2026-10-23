@@ -1,8 +1,9 @@
 /**
  * Old event editor — what a save may send (Task #1786).
  *
- * The WorldAdmin Edit details modal fills blanks at render: a date two
- * weeks out, a time and cost/strictness/deadline from prestige, a dress
+ * The WorldAdmin Edit details modal fills blanks at render: a date 45
+ * days out (the system default, Evoni's ruling of 2026-09-23, Task #1755;
+ * src/utils/eventDateDefault.js), a time and cost/strictness/deadline from prestige, a dress
  * code from the host's content category (else 'chic'), and copies of the
  * canon_consequences.automation fields. Before this, its saves sent that
  * whole hydrated copy, and 💾 Save also sent the whole canon_consequences,
@@ -17,6 +18,8 @@
  *
  * Pure; no I/O.
  */
+
+import { computeEventPackageReadiness, describeMissing, READINESS_ITEMS } from './eventReadinessSections';
 
 // Dress code the modal falls back to, by the host's content category.
 export const CATEGORY_DRESS_CODES = {
@@ -69,9 +72,15 @@ export function withoutOrganizerKeys(obj) {
   return out;
 }
 
+// The system default date: 45 calendar days after `now`, in UTC (Evoni's
+// ruling of 2026-09-23, Task #1755; the server's eventDateDefault.js
+// AUTO_SCHEDULE_DAYS). It was 14 here, so the modal showed a date no create
+// path would ever store.
+export const DERIVED_DATE_DAYS = 45;
+
 function derivedDateFrom(now) {
   const d = new Date(now.getTime());
-  d.setDate(d.getDate() + 14);
+  d.setUTCDate(d.getUTCDate() + DERIVED_DATE_DAYS);
   return d.toISOString().split('T')[0];
 }
 
@@ -125,23 +134,24 @@ export function hydrateEventForModal(event, now = new Date()) {
   return { values, sources };
 }
 
-// Mark Ready's required fields, in the order it reports them.
-export const MARK_READY_REQUIRED = [
-  ['host', 'Host'],
-  ['venue_name', 'Venue Name'],
-  ['event_date', 'Event Date'],
-  ['dress_code', 'Dress Code'],
-  ['description', 'Description'],
-];
+// Mark Ready's required items: the Event Package's gate items
+// (READINESS_ITEMS, Evoni's gates of 2026-09-24), so Mark Ready, the
+// Package's Start Episode and the Events queue's Ready share one rule set.
+// Before, Mark Ready kept its own list (host, typed venue name, date, dress
+// code, description), which passed a brand-only organizer as missing and a
+// typed venue name with no World Location as set.
+export const MARK_READY_REQUIRED = Object.keys(READINESS_ITEMS).filter((key) => READINESS_ITEMS[key].gate);
 
 /**
- * Mark Ready's required-field check, read from what is stored: the row's
- * own field or its saved automation copy. A value that exists only because
- * the modal invented it at render counts as missing.
+ * Mark Ready's check: what holds the event out of Ready, as the Package
+ * names it ("Place: venue", "Organizer"), read from what is stored — the
+ * row's own fields or their saved automation copies. A value that exists
+ * only because the modal invented it at render is never stored, so it
+ * counts as missing. `options` passes through to
+ * computeEventPackageReadiness (e.g. `prices`). `now` is kept for callers
+ * that pass it; the stored row does not depend on it.
  */
-export function missingForMarkReady(storedEvent, now = new Date()) {
-  const { sources } = hydrateEventForModal(storedEvent, now);
-  return MARK_READY_REQUIRED
-    .filter(([key]) => sources[key] !== 'column' && sources[key] !== 'saved_copy')
-    .map(([, label]) => label);
+export function missingForMarkReady(storedEvent, now = new Date(), options = {}) { // eslint-disable-line no-unused-vars
+  const readiness = computeEventPackageReadiness(storedEvent || {}, { ...options, suggest: false });
+  return describeMissing(readiness.sections, 'blocking');
 }

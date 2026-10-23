@@ -39,9 +39,11 @@ describe('Task #1640 follow-up — every previously-unrestricted WorldEvent quer
     expect(WORLD_EVENTS_SRC).toMatch(/models\.WorldEvent\.findAll\(\{ where, order: \[\[sortCol, sortOrder\]\], attributes: models\.WorldEvent\.CURRENT_ATTRIBUTES \}\)/);
   });
 
-  test('worldEvents.js — both raw-SQL-fallback findByPk calls scope attributes', () => {
+  test('worldEvents.js — the raw-SQL-fallback findByPk call scopes attributes', () => {
+    // generate-episode's unscoped findByPk fallback was removed (audit,
+    // 2026-10-23): it read the event without its show. One remains.
     const matches = WORLD_EVENTS_SRC.match(/models\.WorldEvent\.findByPk\(eventId, \{ attributes: models\.WorldEvent\.CURRENT_ATTRIBUTES \}\)/g) || [];
-    expect(matches.length).toBe(2);
+    expect(matches.length).toBe(1);
   });
 
   test('worldEvents.js — the next-episode candidate scorer scopes attributes to what it reads', () => {

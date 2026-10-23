@@ -17,12 +17,9 @@
  * after a relock unmounts this panel, and local state would be lost.
  */
 import { useState, useEffect, useCallback } from 'react';
-import { Unlock, Lock, AlertTriangle, X, RefreshCw } from 'lucide-react';
+import { Unlock, Lock, AlertTriangle, X, RefreshCw, RotateCw } from 'lucide-react';
 import api from '../../services/api';
-
-function errorMessage(err, fallback) {
-  return err?.response?.data?.error || err?.message || fallback;
-}
+import { saveErrorMessage as errorMessage } from '../../utils/eventSaveVersion';
 
 function whoWhen(reopen) {
   const who = reopen?.by?.name || 'Evoni';
@@ -41,6 +38,7 @@ export default function TermsReopenPanel({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const [scriptBusy, setScriptBusy] = useState(false);
+  const [checkAttempt, setCheckAttempt] = useState(0); // bumped by Retry after a failed eligibility check
 
   useEffect(() => {
     if (!locked || reopen) return undefined;
@@ -52,7 +50,13 @@ export default function TermsReopenPanel({
         if (!cancelled) setEligibility({ eligible: false, reasons: [{ code: 'CHECK_FAILED', message: 'Could not check whether the terms can be reopened.' }] });
       });
     return () => { cancelled = true; };
-  }, [showId, eventId, locked, reopen]);
+  }, [showId, eventId, locked, reopen, checkAttempt]);
+
+  const retryCheck = () => {
+    setEligibility(null);
+    setCheckAttempt((n) => n + 1);
+  };
+  const checkFailed = (eligibility?.reasons || []).some((r) => r.code === 'CHECK_FAILED');
 
   const handleReopen = useCallback(async () => {
     setBusy(true);
@@ -153,6 +157,14 @@ export default function TermsReopenPanel({
         ) : (
           <p className="epp-reopen-why" data-testid="terms-reopen-why">
             Can&apos;t reopen the terms: {(eligibility.reasons || []).map((r) => r.message).join(' ')}
+            {checkFailed && (
+              <>
+                {' '}
+                <button type="button" className="epp-inline-link" onClick={retryCheck} data-testid="terms-reopen-retry">
+                  <RotateCw size={11} aria-hidden="true" /> Retry
+                </button>
+              </>
+            )}
           </p>
         )
       )}

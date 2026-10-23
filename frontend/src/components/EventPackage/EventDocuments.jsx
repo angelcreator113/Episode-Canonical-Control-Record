@@ -1,7 +1,8 @@
 /**
  * EventDocuments — the Event Package's in-world documents beside the
  * invitation (Evoni, 2026-10-06; her Episode mock's "In-world documents":
- * one system, three looks). Lala's shopping list and her career plan, each
+ * one system, three looks — the invitation, shown in 1. The Event, and the
+ * two documents here). Lala's shopping list and her career plan, each
  * with the invitation's steps: Draft (written from the event), Edit (her
  * own lines), Redraft (a new draft; the old one is kept) and Approve.
  *
@@ -25,9 +26,10 @@ import {
   getEventDocumentsApi, draftEventDocumentApi, editEventDocumentApi, approveEventDocumentApi,
   docState, docOverlay, shoppingLines, careerSections, documentByline,
 } from '../../lib/eventDocuments';
+import { saveErrorMessage } from '../../utils/eventSaveVersion';
 import './EventDocuments.css';
 
-const errorText = (err) => err?.response?.data?.error || err?.message || 'Something went wrong';
+const errorText = (err) => saveErrorMessage(err, 'Something went wrong');
 const coins = (n) => Number(n || 0).toLocaleString();
 
 const DOCS = [
@@ -183,6 +185,11 @@ export default function EventDocuments({ showId, eventId, event, outfitPieces = 
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(null); // `${type}:${action}`
   const [editing, setEditing] = useState(null);
+  // The look's piece ids: when the outfit changes (a look chosen, a piece
+  // swapped), the documents are read again, since the server's copy of the
+  // look (docs.look) is what the shopping list adds up and it wins over the
+  // pieces passed in.
+  const piecesKey = (Array.isArray(outfitPieces) ? outfitPieces : []).map((p) => p?.id ?? '').join(',');
 
   useEffect(() => {
     if (!showId || !eventId) return undefined;
@@ -194,7 +201,7 @@ export default function EventDocuments({ showId, eventId, event, outfitPieces = 
         if (!cancelled) setError(errorText(err));
       });
     return () => { cancelled = true; };
-  }, [showId, eventId]);
+  }, [showId, eventId, piecesKey]);
 
   const act = useCallback(async (type, action, fn) => {
     setBusy(`${type}:${action}`);
@@ -211,6 +218,17 @@ export default function EventDocuments({ showId, eventId, event, outfitPieces = 
     }
   }, []);
 
+  // Redraft replaces the current version (kept in its history): with Evoni's
+  // own edits or an approval on it, it asks first.
+  const redraft = (type, doc) => {
+    const why = doc?.status === 'approved' && doc?.source === 'edited'
+      ? 'This document is approved and has your edits.'
+      : doc?.status === 'approved' ? 'This document is approved.'
+        : doc?.source === 'edited' ? 'This document has your edits.' : null;
+    if (why && !window.confirm(`${why} Redraft it from the event? The current version is kept in its history, but the new draft replaces it${doc?.status === 'approved' ? ' and needs approving again' : ''}.`)) return;
+    act(type, 'draft', () => draftEventDocumentApi(showId, eventId, type));
+  };
+
   // The look the shopping list adds up, as the server reads it with the
   // documents (the look Finalize charges, Evoni 2026-10-09); the caller's
   // pieces only until it loads. The episode's Overlays tab passes none, so
@@ -221,7 +239,7 @@ export default function EventDocuments({ showId, eventId, event, outfitPieces = 
   return (
     <div className={`evd${layout === 'wide' ? ' is-wide' : ''}`} data-testid="event-documents">
       {intro && <p className="evd-intro">
-        One system, three looks. Each document fills itself from the event, goes through the same steps
+        One system for the event&apos;s in-world documents: the invitation and these two. Each fills itself from the event, goes through the same steps
         (Draft, Edit, Redraft, Approve). Once approved, Start Episode puts it on the episode&apos;s lists: the
         shopping list as her wardrobe list, the career plan&apos;s &ldquo;This event&rdquo; lines as her goals.
         Approving one also draws it as an overlay for the episode.
@@ -274,7 +292,7 @@ export default function EventDocuments({ showId, eventId, event, outfitPieces = 
                       <button type="button" className="evd-link" onClick={() => setEditing(type)} disabled={!!busy || editing === type}>
                         <Pencil size={13} aria-hidden="true" /> Edit
                       </button>
-                      <button type="button" className="evd-link" onClick={() => act(type, 'draft', () => draftEventDocumentApi(showId, eventId, type))} disabled={!!busy}>
+                      <button type="button" className="evd-link" onClick={() => redraft(type, doc)} disabled={!!busy || editing === type} data-testid={`evd-redraft-${type}`}>
                         {isBusy('draft') ? <Loader2 size={13} className="evd-spin" aria-hidden="true" /> : <RefreshCw size={13} aria-hidden="true" />} Redraft
                       </button>
                       {doc.status !== 'approved' && (

@@ -45,7 +45,81 @@ const {
 const { syncDraftedDealType } = require('../services/dealTypeDraftService');
 const { findMissingPrices, dealPriceRequiredError, dealPriceRequiredBody, DEAL_PRICE_REQUIRED_CODE } = require('../services/dealPricingService');
 const { takePriceSnapshot } = require('../services/dealPriceSnapshot');
-const { DEAL_TYPES } = require('../models/WorldEvent');
+const { DEAL_TYPES, CATEGORY_VALUES, FORMAT_VALUES } = require('../models/WorldEvent');
+
+// Every status an event row carries: draft | ready | used | archived
+// (WorldEvent.js) plus the values the server's own writers set — filmed
+// (episodeCompletionService) and declined (financialPressureService). The
+// event PUT accepts these and nothing else (audit Medium, 2026-10-23).
+const EVENT_STATUSES = Object.freeze(['draft', 'ready', 'used', 'archived', 'filmed', 'declined']);
+
+// The event PUT's value lists and numeric ranges (audit Medium, 2026-10-23).
+const ENUM_FIELDS = Object.freeze({ category: CATEGORY_VALUES, format: FORMAT_VALUES, status: EVENT_STATUSES });
+const NUMERIC_RANGES = Object.freeze({
+  prestige: { min: 1, max: 10 },
+  strictness: { min: 1, max: 10 },
+  cost_coins: { min: 0 },
+  payment_amount: { min: 0 },
+  deadline_minutes: { min: 0 },
+});
+
+// A refusal raised inside the event PUT's write transaction, answered with
+// its own status and body once the transaction has rolled back.
+class EventPutRefusal extends Error {
+  constructor(status, body) {
+    super(body?.error || 'Event save refused');
+    this.status = status;
+    this.body = body;
+  }
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// The event PUT's reference fields, checked only when the save changes them
+// (a stored value re-sent is not checked): each must name a live row, in
+// this show where the table has show_id. world_locations and social_profiles
+// are universe-wide (no show_id), so only their existence is checked.
+// season_id has no table to check against and is not checked. Returns a 400
+// body, or null.
+const EVENT_REFERENCES = [
+  { field: 'used_in_episode_id', table: 'episodes', scoped: true, uuid: true, label: 'episode' },
+  { field: 'parent_event_id', table: 'world_events', scoped: true, uuid: true, label: 'event' },
+  { field: 'arc_id', table: 'show_arcs', scoped: true, uuid: true, label: 'arc' },
+  { field: 'venue_location_id', table: 'world_locations', scoped: false, uuid: true, label: 'location' },
+  { field: 'source_profile_id', table: 'social_profiles', scoped: false, uuid: false, label: 'profile' },
+];
+
+async function refuseEventReferences(sequelize, { showId, eventId, values, stored, transaction }) {
+  const bad = (field, message) => ({ success: false, error: `Invalid value for ${field}`, message, code: 'INVALID_EVENT_REFERENCE', field });
+  for (const ref of EVENT_REFERENCES) {
+    const value = values[ref.field];
+    if (value === undefined || value === null) continue;
+    if (stored && String(stored[ref.field] ?? '') === String(value)) continue;
+    if (ref.uuid && (typeof value !== 'string' || !UUID_RE.test(value))) {
+      return bad(ref.field, `${ref.field} must be a UUID or null`);
+    }
+    if (ref.field === 'parent_event_id' && String(value) === String(eventId)) {
+      return bad(ref.field, 'An event cannot follow itself.');
+    }
+    const [rows] = await sequelize.query(
+      `SELECT id FROM ${ref.table} WHERE id = :id${ref.scoped ? ' AND show_id = :showId' : ''} AND deleted_at IS NULL LIMIT 1`,
+      { replacements: { id: value, showId }, transaction }
+    );
+    if (!rows?.[0]) {
+      return bad(ref.field, ref.scoped ? `That ${ref.label} does not exist in this show.` : `That ${ref.label} does not exist.`);
+    }
+  }
+  // 'used' is the status of an event linked to an episode (Start Episode or
+  // inject set both). A save may keep a stored 'used', but may not set it on
+  // an event that has no episode link after the save.
+  if (values.status === 'used' && stored && stored.status !== 'used') {
+    const link = values.used_in_episode_id !== undefined ? values.used_in_episode_id : stored.used_in_episode_id;
+    if (!link) {
+      return bad('status', "status 'used' needs an episode link: start an episode from the event, or link it to one.");
+    }
+  }
+  return null;
+}
 
 // A deal_type body value as the PUT loop reads it: '', 'null' and
 // 'undefined' are null (normalizeNullLike), anything else as sent.
@@ -188,98 +262,110 @@ router.get('/world/:showId/events/:eventId', requireAuth, async (req, res, next)
       try { event.restrictions = JSON.parse(event.restrictions); } catch (e) { console.error('[WorldEvents] restrictions parse failed:', e.message); event.restrictions = []; }
     }
 
+    // The lookups below are independent of one another, so they run
+    // together (audit Low, 2026-10-23); each keeps its own fallback.
+    const logLookup = (what) => (e) => { console.error(`[WorldEvents] ${what} lookup failed:`, e.message); return null; };
+
     // People — host, from the durable FK (WorldEvent.js:97), shown as the
     // linked creator. Null source_profile_id means "not linked" — the page
     // falls back to the legacy `host` text field in that case.
-    let sourceProfile = null;
-    if (event.source_profile_id && models.SocialProfile) {
-      sourceProfile = await models.SocialProfile.findByPk(event.source_profile_id, {
+    const sourceProfileP = (event.source_profile_id && models.SocialProfile)
+      ? models.SocialProfile.findByPk(event.source_profile_id, {
         attributes: ['id', 'handle', 'display_name', 'platform'],
-      }).catch(() => null);
-    }
+      }).catch(logLookup('source profile'))
+      : Promise.resolve(null);
 
     // The creator this event was started from on the Feed (Task #1790):
     // automation.started_from_profile_id. Not the organizer — the Event
     // Package offers them as a suggestion only. Read-only.
-    let startedFromProfile = null;
     const startedFromId = event.canon_consequences?.automation?.started_from_profile_id;
-    if (startedFromId && models.SocialProfile) {
-      startedFromProfile = await models.SocialProfile.findByPk(startedFromId, {
+    const startedFromP = (async () => {
+      if (!startedFromId || !models.SocialProfile) return null;
+      const profile = await models.SocialProfile.findByPk(startedFromId, {
         attributes: ['id', 'handle', 'display_name', 'platform'],
-      }).catch((e) => { console.error('[WorldEvents] started-from profile lookup failed:', e.message); return null; });
+      }).catch(logLookup('started-from profile'));
+      if (!profile) return null;
       // Its registry_character_id, read from the registry entry (ruling C3),
       // for the Event Package's organizer choice.
-      if (startedFromProfile) {
-        [startedFromProfile] = await withRegistryLinks(models, [startedFromProfile])
-          .catch((e) => { console.error('[WorldEvents] started-from registry link lookup failed:', e.message); return [startedFromProfile.toJSON()]; });
-      }
-    }
+      const [linked] = await withRegistryLinks(models, [profile])
+        .catch((e) => { console.error('[WorldEvents] started-from registry link lookup failed:', e.message); return [profile.toJSON()]; });
+      return linked;
+    })();
 
     // Place — the linked scene set's name
-    let sceneSet = null;
-    if (event.scene_set_id && models.SceneSet) {
-      sceneSet = await models.SceneSet.findByPk(event.scene_set_id, {
-        attributes: ['id', 'name'],
-      }).catch(() => null);
-    }
+    const sceneSetP = (event.scene_set_id && models.SceneSet)
+      ? models.SceneSet.findByPk(event.scene_set_id, { attributes: ['id', 'name'] }).catch(logLookup('scene set'))
+      : Promise.resolve(null);
 
     // Place — the linked World Location's type and its own dress code, read
     // only as inputs to the Event Package's dress-code suggestion (Task
     // #1755). Nothing here is written.
     // The id lives top-level or, for calendar-spawned events, only in the
     // automation copy (the frontend's resolveEventVenueAndDate rule).
-    let venueLocation = null;
     const venueLocationId = event.venue_location_id || event.canon_consequences?.automation?.venue_location_id || null;
-    if (venueLocationId && models.WorldLocation) {
+    const venueLocationP = (async () => {
+      if (!venueLocationId || !models.WorldLocation) return null;
       const loc = await models.WorldLocation.findByPk(venueLocationId, {
         attributes: ['id', 'name', 'venue_type', 'venue_details'],
-      }).catch((e) => { console.error('[WorldEvents] venue location lookup failed:', e.message); return null; });
-      if (loc) {
-        const details = loc.venue_details && typeof loc.venue_details === 'object' ? loc.venue_details : {};
-        venueLocation = {
-          id: loc.id,
-          name: loc.name,
-          venue_type: loc.venue_type || null,
-          dress_code: typeof details.dress_code === 'string' && details.dress_code.trim() ? details.dress_code.trim() : null,
-        };
-      }
-    }
+      }).catch(logLookup('venue location'));
+      if (!loc) return null;
+      const details = loc.venue_details && typeof loc.venue_details === 'object' ? loc.venue_details : {};
+      return {
+        id: loc.id,
+        name: loc.name,
+        venue_type: loc.venue_type || null,
+        dress_code: typeof details.dress_code === 'string' && details.dress_code.trim() ? details.dress_code.trim() : null,
+      };
+    })();
 
     // Invitation — status + preview
-    let invitationAsset = null;
-    if (event.invitation_asset_id && models.Asset) {
-      invitationAsset = await models.Asset.findByPk(event.invitation_asset_id, {
+    const invitationAssetP = (event.invitation_asset_id && models.Asset)
+      ? models.Asset.findByPk(event.invitation_asset_id, {
         attributes: ['id', 's3_url_processed', 's3_url_raw', 'approval_status'],
-      }).catch(() => null);
-    }
+      }).catch(logLookup('invitation asset'))
+      : Promise.resolve(null);
 
     // Used events — hide Change Host / Edit details / Start Episode once set
-    let usedInEpisode = null;
-    if (event.used_in_episode_id && models.Episode) {
-      usedInEpisode = await models.Episode.findByPk(event.used_in_episode_id, {
+    const usedInEpisodeP = (event.used_in_episode_id && models.Episode)
+      ? models.Episode.findByPk(event.used_in_episode_id, {
         // evaluation_status: the venue look locks when it is accepted (Q9).
         attributes: ['id', 'episode_number', 'title', 'evaluation_status'],
-      }).catch(() => null);
-    }
+      }).catch(logLookup('used-in episode'))
+      : Promise.resolve(null);
 
     // The episode whose Start Episode locked these terms (Task #2356), found
     // the way the lock itself finds it (findTermsLockEpisode): the live brief
     // that names this event first (§8(w) P2), else the used_in_episode_id
     // stamp. The Event Package reads as read-only while this is set, so it
     // never offers an edit the server would refuse.
-    let termsLockedBy = null;
-    try {
-      const lockEpisode = await findTermsLockEpisode(models.sequelize, event.id);
-      if (lockEpisode) {
-        termsLockedBy = {
+    const termsLockedByP = (async () => {
+      try {
+        const lockEpisode = await findTermsLockEpisode(models.sequelize, event.id);
+        if (!lockEpisode) return null;
+        return {
           id: lockEpisode.id,
           episode_number: lockEpisode.episode_number ?? null,
           title: lockEpisode.title ?? null,
         };
+      } catch (lockErr) {
+        console.error('[WorldEvents] terms lock lookup failed:', lockErr.message);
+        return null;
       }
-    } catch (lockErr) {
-      console.error('[WorldEvents] terms lock lookup failed:', lockErr.message);
-    }
+    })();
+
+    // L13 (§8(hh)): the Place stays editable until the episode is accepted.
+    const placeLockedP = (async () => {
+      try {
+        return await require('../utils/placeLock').isPlaceLocked(models.sequelize, event.id);
+      } catch (placeErr) {
+        console.error('[WorldEvents] place lock lookup failed:', placeErr.message);
+        return false;
+      }
+    })();
+
+    const [sourceProfile, startedFromProfile, sceneSet, venueLocation, invitationAsset, usedInEpisode, termsLockedBy, placeLocked] =
+      await Promise.all([sourceProfileP, startedFromP, sceneSetP, venueLocationP, invitationAssetP, usedInEpisodeP, termsLockedByP, placeLockedP]);
+
     // Reopened terms (Task #2378): who reopened them and when, or null.
     let termsReopen = null;
     if (termsLockedBy) {
@@ -289,14 +375,6 @@ router.get('/world/:showId/events/:eventId', requireAuth, async (req, res, next)
       } catch (reopenErr) {
         console.error('[WorldEvents] terms reopen lookup failed:', reopenErr.message);
       }
-    }
-
-    // L13 (§8(hh)): the Place stays editable until the episode is accepted.
-    let placeLocked = false;
-    try {
-      placeLocked = await require('../utils/placeLock').isPlaceLocked(models.sequelize, event.id);
-    } catch (placeErr) {
-      console.error('[WorldEvents] place lock lookup failed:', placeErr.message);
     }
 
     // Lala's look once the event has started an episode: it is chosen in
@@ -372,7 +450,7 @@ router.post('/world/:showId/events/:eventId/suggest-names', requireAuth, aiRateL
     if (event.source_profile_id && models.SocialProfile) {
       const profile = await models.SocialProfile.findByPk(event.source_profile_id, {
         attributes: ['display_name', 'handle', 'archetype', 'content_category'],
-      }).catch(() => null);
+      }).catch((e) => { console.error('[SuggestEventNames] organizer profile lookup failed:', e.message); return null; });
       if (profile) {
         organizer = profile;
         const hostName = profile.display_name || profile.handle;
@@ -464,13 +542,18 @@ Return ONLY this JSON, no other text:
 
     const text = response.content?.[0]?.text || '';
     const match = text.match(/\{[\s\S]*\}/);
-    if (!match) return res.status(500).json({ success: false, error: 'Claude returned no JSON', raw: text });
+    // The model's raw text is logged, never returned (audit Low, 2026-10-23).
+    if (!match) {
+      console.error('[SuggestEventNames] no JSON in model reply:', text.slice(0, 500));
+      return res.status(500).json({ success: false, error: 'The name suggestions could not be read. Please try again.' });
+    }
 
     let parsed;
     try {
       parsed = JSON.parse(match[0]);
-    } catch {
-      return res.status(500).json({ success: false, error: 'Claude returned invalid JSON', raw: text });
+    } catch (parseErr) {
+      console.error('[SuggestEventNames] invalid JSON in model reply:', parseErr.message, text.slice(0, 500));
+      return res.status(500).json({ success: false, error: 'The name suggestions could not be read. Please try again.' });
     }
 
     // Clean any quote marks the model included anyway, the same way the
@@ -486,13 +569,14 @@ Return ONLY this JSON, no other text:
       : [];
 
     if (names.length === 0) {
-      return res.status(500).json({ success: false, error: 'No usable names returned', raw: text });
+      console.error('[SuggestEventNames] no usable names in model reply:', text.slice(0, 500));
+      return res.status(500).json({ success: false, error: 'No usable names returned. Please try again.' });
     }
 
     return res.json({ success: true, names });
   } catch (err) {
     console.error('[SuggestEventNames] Error:', err);
-    return res.status(500).json({ success: false, error: err.message });
+    return res.status(500).json({ success: false, error: 'Name suggestions failed. Please try again.' });
   }
 });
 
@@ -748,6 +832,7 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), req
     const { showId, eventId } = req.params;
     if (!req.body || typeof req.body !== 'object') {
       return res.status(400).json({
+        success: false,
         error: 'Invalid request body',
         message: 'Request body must be valid JSON',
         code: 'INVALID_JSON_BODY',
@@ -771,7 +856,7 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), req
     }
     const refuseStale = async () => {
       const [current] = await models.sequelize.query(
-        'SELECT * FROM world_events WHERE id = :eventId AND show_id = :showId', { replacements: { eventId, showId } }
+        'SELECT * FROM world_events WHERE id = :eventId AND show_id = :showId AND deleted_at IS NULL', { replacements: { eventId, showId } }
       );
       if (!current[0]) return res.status(404).json({ success: false, error: 'Event not found' });
       return res.status(409).json(staleSaveBody(expected, current[0]));
@@ -783,17 +868,11 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), req
     // deal_components writes the derived copy; a body with only deal_type or
     // appearance_required (the pre-D14 form) writes the components through
     // the one-to-one map, so the two never disagree.
-    // D13: the components before this save, to draft the Terms when they change.
+    // D13: the components before this save, to draft the Terms when they
+    // change — read from the locked row in the write transaction below.
     let componentsBefore;
     {
-      const { readComponents, componentsFromDealType, dealTypeFromComponents, componentsOf } = require('../utils/dealComponents');
-      if (updates.deal_components !== undefined || updates.deal_type !== undefined || updates.appearance_required !== undefined) {
-        const [beforeRows] = await models.sequelize.query(
-          'SELECT deal_type, deal_components, appearance_required FROM world_events WHERE id = :eventId AND show_id = :showId',
-          { replacements: { eventId, showId } }
-        );
-        componentsBefore = beforeRows?.[0] ? componentsOf(beforeRows[0]) : undefined;
-      }
+      const { readComponents, componentsFromDealType, dealTypeFromComponents } = require('../utils/dealComponents');
       if (updates.deal_components !== undefined) {
         const read = readComponents(updates.deal_components === '' ? null : updates.deal_components);
         if (read.error) {
@@ -819,56 +898,18 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), req
       }
     }
 
-    // Terms lock (§8(x) D4, §8(w) P9; Task #2230). Once the event has
-    // started a live episode, its access requirements, compensation,
-    // restrictions and episode link cannot change here. A locked field sent
-    // with its stored value is not a change, so full-form saves still work.
-    if (Object.keys(LOCKED_EVENT_FIELDS).some((f) => updates[f] !== undefined)) {
-      const [storedRows] = await models.sequelize.query(
-        `SELECT requirements, is_paid, payment_amount, restrictions, used_in_episode_id,
-                deal_type, deal_components, appearance_fee, bonus_terms, gifted_value,
-                partnership_base_fee, performance_fee, appearance_required
-           FROM world_events WHERE id = :eventId AND show_id = :showId`,
-        { replacements: { eventId, showId } }
-      );
-      if (storedRows?.[0]) {
-        // D14: a row written with only a deal_type (before its components)
-        // is compared as the components that type maps to, so re-sending
-        // the same terms is not a change.
-        if (storedRows[0].deal_components == null && storedRows[0].deal_type != null) {
-          const { componentsOf } = require('../utils/dealComponents');
-          storedRows[0].deal_components = componentsOf({ deal_type: storedRows[0].deal_type, appearance_required: storedRows[0].appearance_required });
-        }
-        const lockEpisode = await findTermsLockEpisode(models.sequelize, eventId);
-        if (lockEpisode) {
-          // Reopened terms (Reopen ruling, §8(cc); Task #2378): every locked
-          // field but the episode link is editable until Save and relock.
-          const reopened = await readTermsReopen(models.sequelize, eventId);
-          const changed = changedLockedFields(storedRows[0], updates, lockEpisode)
-            .filter((f) => !reopened || STAYS_LOCKED_WHILE_REOPENED.has(f));
-          if (changed.length > 0) return res.status(409).json(termsLockedBody(lockEpisode, changed));
-        }
-      }
-    }
-
-    // L13 (§8(hh)): the scene set is part of the Place, editable after Start
-    // Episode while the episode is a draft, locked once it is accepted. The
-    // stored value re-sent is not a change.
-    // The event's set before this save, for the version check and so its
-    // draft episode's Event location follows a change (eighth audit).
+    // The terms lock (§8(x) D4, §8(w) P9; Task #2230) and the Place lock
+    // (L13, §8(hh)) are checked inside the write transaction below, against
+    // the locked row (audit Medium, 2026-10-23), so no other writer can land
+    // between the check and the write.
+    //
+    // The event's set as read before validation, only so the version check
+    // in refuseEventSet below knows which set is this event's own.
     let storedSceneSetId = null;
-    let sceneSetChanged = false;
     if (updates.scene_set_id !== undefined) {
       const [[stored]] = await models.sequelize.query(
-        'SELECT scene_set_id FROM world_events WHERE id = :eventId AND show_id = :showId', { replacements: { eventId, showId } });
+        'SELECT scene_set_id FROM world_events WHERE id = :eventId AND show_id = :showId AND deleted_at IS NULL', { replacements: { eventId, showId } });
       storedSceneSetId = stored?.scene_set_id || null;
-      sceneSetChanged = Boolean(stored && updates.scene_set_id && String(stored.scene_set_id || '') !== String(updates.scene_set_id));
-      if (stored && String(stored.scene_set_id || '') !== String(updates.scene_set_id || '')) {
-        const { isPlaceLocked, PLACE_LOCKED_CODE, PLACE_LOCKED_MESSAGE } = require('../utils/placeLock');
-        if (await isPlaceLocked(models.sequelize, eventId)) {
-          return res.status(409).json({ error: PLACE_LOCKED_MESSAGE, code: PLACE_LOCKED_CODE });
-        }
-      }
     }
 
     // Build dynamic SET clause
@@ -992,11 +1033,35 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), req
           const numeric = Number(val);
           if (!Number.isFinite(numeric)) {
             return res.status(400).json({
+              success: false,
               error: `Invalid value for ${field}`,
               message: `${field} must be a number or null`,
             });
           }
           val = Math.trunc(numeric);
+          // Ranges (audit Medium, 2026-10-23): WorldEvent.js documents
+          // prestige and strictness as 1-10; amounts and minutes are never
+          // negative.
+          const range = NUMERIC_RANGES[field];
+          if (range && (val < range.min || (range.max != null && val > range.max))) {
+            return res.status(400).json({
+              success: false,
+              error: `Invalid value for ${field}`,
+              message: range.max != null ? `${field} must be from ${range.min} to ${range.max}` : `${field} must be ${range.min} or more`,
+            });
+          }
+        }
+
+        if (field === 'chain_position' && val !== null) {
+          const numeric = Number(val);
+          if (typeof val === 'boolean' || !Number.isInteger(numeric) || numeric < 0) {
+            return res.status(400).json({
+              success: false,
+              error: 'Invalid value for chain_position',
+              message: 'chain_position must be a whole number, 0 or more, or null',
+            });
+          }
+          val = numeric;
         }
 
         if (field === 'canon_consequences' && val !== null) {
@@ -1045,15 +1110,33 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), req
         if (val !== null && (uuidFields.has(field) || scalarStringFields.has(field))) {
           if (typeof val !== 'string') {
             return res.status(400).json({
+              success: false,
               error: `Invalid value for ${field}`,
               message: `${field} must be a string, UUID, or null`,
             });
           }
         }
 
+        // The model's own value lists (WorldEvent.js CATEGORY_VALUES,
+        // FORMAT_VALUES; status per EVENT_STATUSES) — the raw UPDATE skips
+        // Sequelize's isIn (audit Medium, 2026-10-23).
+        // A blank category or format (Quick Episode Creator's Custom Event
+        // sends format '') clears it rather than being refused.
+        if ((field === 'category' || field === 'format') && typeof val === 'string' && !val.trim()) val = null;
+        const allowedValues = ENUM_FIELDS[field];
+        if (allowedValues && (val === null ? field === 'status' : !allowedValues.includes(val))) {
+          return res.status(400).json({
+            success: false,
+            error: `Invalid value for ${field}`,
+            message: `${field} must be one of: ${allowedValues.join(', ')}${field === 'status' ? '' : ', or null'}`,
+            allowed: allowedValues,
+          });
+        }
+
         if (field === 'scene_set_id' && val !== null) {
           if (typeof val !== 'string') {
             return res.status(400).json({
+              success: false,
               error: 'Invalid value for scene_set_id',
               message: 'scene_set_id must be a UUID string or null',
             });
@@ -1061,6 +1144,7 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), req
 
           if (!models.SceneSet) {
             return res.status(500).json({
+              success: false,
               error: 'SceneSet model not loaded',
               message: 'Unable to validate scene_set_id',
             });
@@ -1072,6 +1156,7 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), req
 
           if (!sceneSet) {
             return res.status(400).json({
+              success: false,
               error: 'Invalid scene_set_id',
               message: 'Selected scene set does not exist. Please re-select a valid scene set.',
               code: 'INVALID_SCENE_SET_ID',
@@ -1080,6 +1165,7 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), req
 
           if (sceneSet.show_id && sceneSet.show_id !== showId) {
             return res.status(400).json({
+              success: false,
               error: 'Invalid scene_set_id for this show',
               message: 'Selected scene set belongs to a different show.',
               code: 'SCENE_SET_SHOW_MISMATCH',
@@ -1088,7 +1174,7 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), req
           // Another event's version is that event's photos (eighth audit).
           const versionRefusal = await require('../services/eventPlaceSync').refuseEventSet(
             models.sequelize, { event: { id: eventId, scene_set_id: storedSceneSetId, show_id: showId }, setId: val, showId });
-          if (versionRefusal) return res.status(versionRefusal.status).json({ error: versionRefusal.error, message: versionRefusal.error, code: versionRefusal.code });
+          if (versionRefusal) return res.status(versionRefusal.status).json({ success: false, error: versionRefusal.error, message: versionRefusal.error, code: versionRefusal.code });
         }
 
         setClauses.push(`${field} = :${field}`);
@@ -1103,161 +1189,215 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), req
 
     setClauses.push('updated_at = NOW()');
 
-    // Try full update, if columns don't exist, retry without them
-    try {
-      const updateSql = `UPDATE world_events SET ${setClauses.join(', ')} WHERE id = :eventId AND show_id = :showId`;
-      if (ccIncoming !== undefined || expected.present) {
-        // Merge canon_consequences with the stored value instead of
-        // replacing it (Task #1747; depth and null-removal rules in
-        // mergeCanonConsequences). The row is locked from the read to the
-        // write so a concurrent writer can't land in between. The merged
-        // string stays in `replacements`, so the core-only retry below
-        // writes the merged value too.
-        //
-        // A versioned save (Task #1788) takes the same lock, and compares
-        // the stored updated_at with the one the client read before
-        // writing anything — the check and the write are one transaction,
-        // so no other writer can land between them.
-        await models.sequelize.transaction(async (transaction) => {
-          const [rows] = await models.sequelize.query(
-            `SELECT canon_consequences${expected.present ? ', updated_at' : ''} FROM world_events WHERE id = :eventId AND show_id = :showId FOR UPDATE`,
-            { replacements: { eventId, showId }, transaction }
-          );
-          if (expected.present && (!rows[0] || !versionMatches(rows[0].updated_at, expected.ms))) {
-            const stale = new Error('Stale event save refused');
-            stale.staleSave = true;
-            throw stale;
-          }
-          if (ccIncoming !== undefined) {
-            replacements.canon_consequences = JSON.stringify(
-              mergeCanonConsequences(rows[0]?.canon_consequences, ccIncoming)
-            );
-          }
-          await models.sequelize.query(updateSql, { replacements, transaction });
-        });
-      } else {
-        await models.sequelize.query(updateSql, { replacements });
+    // Everything that depends on the stored row runs in one transaction with
+    // that row locked (audit Medium, 2026-10-23): the event is found in this
+    // show (404 otherwise), the version is compared (Task #1788), the terms
+    // lock (§8(x) D4; Task #2230) and the Place lock (L13) are checked, the
+    // references are checked, canon_consequences is merged with the stored
+    // value (Task #1747), and the row is written — no other writer can land
+    // between the checks and the write. A refusal throws EventPutRefusal,
+    // which rolls the transaction back.
+    const LOCK_SQL = 'SELECT * FROM world_events WHERE id = :eventId AND show_id = :showId AND deleted_at IS NULL FOR UPDATE';
+    const lockAndCheck = async (transaction) => {
+      const [lockedRows] = await models.sequelize.query(LOCK_SQL, { replacements: { eventId, showId }, transaction });
+      const stored = lockedRows?.[0];
+      if (!stored) throw new EventPutRefusal(404, { success: false, error: 'Event not found' });
+      if (expected.present && !versionMatches(stored.updated_at, expected.ms)) {
+        const stale = new Error('Stale event save refused');
+        stale.staleSave = true;
+        throw stale;
       }
+
+      // Terms lock: once the event has started a live episode, its access
+      // requirements, compensation, restrictions and episode link cannot
+      // change here. A locked field sent with its stored value is not a
+      // change, so full-form saves still work.
+      if (Object.keys(LOCKED_EVENT_FIELDS).some((f) => updates[f] !== undefined)) {
+        const compared = { ...stored };
+        // D14: a row written with only a deal_type (before its components)
+        // is compared as the components that type maps to, so re-sending
+        // the same terms is not a change.
+        if (compared.deal_components == null && compared.deal_type != null) {
+          const { componentsOf } = require('../utils/dealComponents');
+          compared.deal_components = componentsOf({ deal_type: compared.deal_type, appearance_required: compared.appearance_required });
+        }
+        const lockEpisode = await findTermsLockEpisode(models.sequelize, eventId, { transaction });
+        if (lockEpisode) {
+          // Reopened terms (Reopen ruling, §8(cc); Task #2378): every locked
+          // field but the episode link is editable until Save and relock.
+          const reopened = await readTermsReopen(models.sequelize, eventId, { transaction });
+          const changed = changedLockedFields(compared, updates, lockEpisode)
+            .filter((f) => !reopened || STAYS_LOCKED_WHILE_REOPENED.has(f));
+          if (changed.length > 0) throw new EventPutRefusal(409, termsLockedBody(lockEpisode, changed));
+        }
+      }
+
+      // L13 (§8(hh)): the scene set is part of the Place, editable after
+      // Start Episode while the episode is a draft, locked once it is
+      // accepted. The stored value re-sent is not a change.
+      if (replacements.scene_set_id !== undefined && String(stored.scene_set_id || '') !== String(replacements.scene_set_id || '')) {
+        const { isPlaceLocked, PLACE_LOCKED_CODE, PLACE_LOCKED_MESSAGE } = require('../utils/placeLock');
+        if (await isPlaceLocked(models.sequelize, eventId, { transaction })) {
+          throw new EventPutRefusal(409, { success: false, error: PLACE_LOCKED_MESSAGE, code: PLACE_LOCKED_CODE });
+        }
+      }
+
+      // References that changed must name a live row (in this show, where
+      // the table has show_id); 'used' is the status of an event linked to
+      // an episode (audit Medium, 2026-10-23).
+      const referenceRefusal = await refuseEventReferences(models.sequelize, { showId, eventId, values: replacements, stored, transaction });
+      if (referenceRefusal) throw new EventPutRefusal(400, referenceRefusal);
+      return stored;
+    };
+
+    // Changes that follow the save but did not complete; the save stands
+    // and the response says what did not follow (audit Medium, 2026-10-23).
+    const warnings = [];
+    let storedBefore = null;
+    // A new place for the event: its draft episode's Event location and
+    // beats follow (eighth audit), in the same transaction as the save.
+    const followSceneSet = async (stored, transaction) => {
+      const toSetId = replacements.scene_set_id;
+      if (toSetId && String(stored.scene_set_id || '') !== String(toSetId)) {
+        await require('../services/eventPlaceSync').syncEpisodeEventLocation(models.sequelize,
+          { eventId, fromSetId: stored.scene_set_id || null, toSetId, transaction });
+      }
+    };
+
+    try {
+      const updateSql = `UPDATE world_events SET ${setClauses.join(', ')} WHERE id = :eventId AND show_id = :showId AND deleted_at IS NULL`;
+      await models.sequelize.transaction(async (transaction) => {
+        const stored = await lockAndCheck(transaction);
+        if (ccIncoming !== undefined) {
+          // Merged with the stored value instead of replacing it (Task
+          // #1747; depth and null-removal rules in mergeCanonConsequences).
+          replacements.canon_consequences = JSON.stringify(
+            mergeCanonConsequences(stored.canon_consequences, ccIncoming)
+          );
+        }
+        await models.sequelize.query(updateSql, { replacements, transaction });
+        await followSceneSet(stored, transaction);
+        storedBefore = stored;
+      });
     } catch (updateErr) {
+      if (updateErr instanceof EventPutRefusal) return res.status(updateErr.status).json(updateErr.body);
       if (updateErr.staleSave) return refuseStale();
       const errMsg = String(updateErr.message || '');
-      if (errMsg.includes('does not exist') || errMsg.includes('column')) {
-        // The retry below runs outside the transaction above, so a
-        // versioned save re-checks its version first (best effort: this
-        // path only runs when a column is missing).
-        if (expected.present) {
-          const [cur] = await models.sequelize.query(
-            'SELECT updated_at FROM world_events WHERE id = :eventId AND show_id = :showId', { replacements: { eventId, showId } }
-          );
-          if (!cur[0] || !versionMatches(cur[0].updated_at, expected.ms)) return refuseStale();
-        }
-        // Extract which column is missing from error message
-        const missingCol = errMsg.match(/column "([^"]+)"/)?.[1];
-        console.warn(`[WorldEvents] Column missing: ${missingCol || 'unknown'} — retrying without it`);
+      if (!(errMsg.includes('does not exist') || errMsg.includes('column'))) throw updateErr;
 
-        // Core fields that definitely exist on world_events (original table)
-        const coreFields = new Set([
-          'name', 'event_type', 'host', 'host_brand', 'description',
-          'prestige', 'cost_coins', 'strictness', 'deadline_type',
-          'dress_code', 'dress_code_keywords', 'location_hint',
-          'narrative_stakes', 'canon_consequences', 'status',
-          'browse_pool_bias', 'browse_pool_size', 'scene_set_id',
-          'is_paid', 'payment_amount', 'career_tier',
-          'career_milestone', 'fail_consequence', 'success_unlock',
-          'source_profile_id', 'updated_at',
-        ]);
+      // A column is missing: retry with the core fields only, in its own
+      // transaction with the same checks (the first one rolled back).
+      const missingCol = errMsg.match(/column "([^"]+)"/)?.[1];
+      console.warn(`[WorldEvents] Column missing: ${missingCol || 'unknown'} — retrying without it`);
 
-        // Stash venue/event fields into canon_consequences.automation if columns don't exist
-        const venueFields = ['venue_name', 'venue_address', 'event_date', 'event_time', 'venue_location_id'];
-        const stashedData = {};
-        for (const vf of venueFields) {
-          if (replacements[vf] !== undefined && replacements[vf] !== null) {
-            stashedData[vf] = replacements[vf];
-          }
-        }
-
-        if (Object.keys(stashedData).length > 0) {
-          // Save venue data into canon_consequences.automation
-          try {
-            const [rows] = await models.sequelize.query(
-              'SELECT canon_consequences FROM world_events WHERE id = :eventId LIMIT 1',
-              { replacements: { eventId } }
-            );
-            const cc = typeof rows[0]?.canon_consequences === 'string'
-              ? JSON.parse(rows[0].canon_consequences) : (rows[0]?.canon_consequences || {});
-            cc.automation = { ...(cc.automation || {}), ...stashedData };
-
-            await models.sequelize.query(
-              `UPDATE world_events SET canon_consequences = :cc, updated_at = NOW() WHERE id = :eventId AND show_id = :showId`,
-              { replacements: { cc: JSON.stringify(cc), eventId, showId } }
-            );
-            console.log(`[WorldEvents] Stashed ${Object.keys(stashedData).join(', ')} into canon_consequences.automation`);
-          } catch (stashErr) {
-            console.warn('[WorldEvents] Failed to stash venue data:', stashErr.message);
-          }
-        }
-
-        // Retry with only core fields
-        const coreClauses = setClauses.filter(c => {
-          const field = c.split(' = ')[0].trim();
-          return coreFields.has(field);
-        });
-        if (coreClauses.length > 1) {
-          try {
-            await models.sequelize.query(
-              `UPDATE world_events SET ${coreClauses.join(', ')} WHERE id = :eventId AND show_id = :showId`,
-              { replacements }
-            );
-          } catch (retryErr) {
-            console.warn('[WorldEvents] Core-only retry also failed:', retryErr.message);
-          }
-        }
-      } else {
-        throw updateErr;
+      // Core fields that definitely exist on world_events (original table)
+      const coreFields = new Set([
+        'name', 'event_type', 'host', 'host_brand', 'description',
+        'prestige', 'cost_coins', 'strictness', 'deadline_type',
+        'dress_code', 'dress_code_keywords', 'location_hint',
+        'narrative_stakes', 'canon_consequences', 'status',
+        'browse_pool_bias', 'browse_pool_size', 'scene_set_id',
+        'is_paid', 'payment_amount', 'career_tier',
+        'career_milestone', 'fail_consequence', 'success_unlock',
+        'source_profile_id', 'updated_at',
+      ]);
+      // Venue/event fields are stashed into canon_consequences.automation
+      // when their columns don't exist.
+      const venueFields = ['venue_name', 'venue_address', 'event_date', 'event_time', 'venue_location_id'];
+      const stashedData = {};
+      for (const vf of venueFields) {
+        if (replacements[vf] !== undefined && replacements[vf] !== null) stashedData[vf] = replacements[vf];
       }
-    }
-
-    // A new place for the event: its draft episode's Event location and
-    // beats follow (eighth audit).
-    if (sceneSetChanged) {
-      await require('../services/eventPlaceSync').syncEpisodeEventLocation(models.sequelize,
-        { eventId, fromSetId: storedSceneSetId, toSetId: updates.scene_set_id });
+      const fieldOf = (c) => c.split(' = ')[0].trim();
+      const coreClauses = setClauses.filter((c) => coreFields.has(fieldOf(c)));
+      const dropped = setClauses.map(fieldOf).filter((f) => !coreFields.has(f) && !(f in stashedData));
+      const hasStash = Object.keys(stashedData).length > 0;
+      if (hasStash && !coreClauses.some((c) => fieldOf(c) === 'canon_consequences')) {
+        coreClauses.unshift('canon_consequences = :canon_consequences');
+      }
+      if (coreClauses.length <= 1) {
+        console.error('[WorldEvents] PUT could not save: no field in this save has a column —', setClauses.map(fieldOf).join(', '));
+        return res.status(500).json({ success: false, error: 'The event could not be saved: the database is missing the columns for these fields.', fields: dropped });
+      }
+      try {
+        await models.sequelize.transaction(async (transaction) => {
+          const stored = await lockAndCheck(transaction);
+          if (ccIncoming !== undefined || hasStash) {
+            let cc;
+            if (ccIncoming !== undefined) cc = mergeCanonConsequences(stored.canon_consequences, ccIncoming);
+            else if (replacements.canon_consequences === null) cc = {};
+            else cc = typeof stored.canon_consequences === 'string' ? JSON.parse(stored.canon_consequences) : (stored.canon_consequences || {});
+            if (hasStash) {
+              cc = { ...cc, automation: { ...(cc.automation || {}), ...stashedData } };
+              console.log(`[WorldEvents] Stashing ${Object.keys(stashedData).join(', ')} into canon_consequences.automation`);
+            }
+            replacements.canon_consequences = JSON.stringify(cc);
+          }
+          await models.sequelize.query(
+            `UPDATE world_events SET ${coreClauses.join(', ')} WHERE id = :eventId AND show_id = :showId AND deleted_at IS NULL`,
+            { replacements, transaction }
+          );
+          await followSceneSet(stored, transaction);
+          storedBefore = stored;
+        });
+      } catch (retryErr) {
+        if (retryErr instanceof EventPutRefusal) return res.status(retryErr.status).json(retryErr.body);
+        if (retryErr.staleSave) return refuseStale();
+        // A failed retry is a failed save (audit Medium, 2026-10-23).
+        console.error('[WorldEvents] Core-only retry also failed:', retryErr.message);
+        return res.status(500).json({ success: false, error: 'The event could not be saved. Please try again.' });
+      }
+      if (dropped.length > 0) {
+        warnings.push(`Not saved — the database has no column for: ${dropped.join(', ')}`);
+      }
     }
 
     // Deal type (Task #2330): an Auto-drafted deal type follows the rule's
     // inputs, so a changed event type or brand re-drafts it. An Edited one,
-    // or one on a locked event, is left alone (dealTypeDraftService).
+    // or one on a locked event, is left alone (dealTypeDraftService). It runs
+    // after the commit in its own transaction; a failure is reported, not
+    // hidden.
     if (updates.event_type !== undefined || updates.host_brand !== undefined) {
-      await syncDraftedDealType(models.sequelize, eventId);
+      const drafted = await syncDraftedDealType(models.sequelize, eventId)
+        .catch((e) => { console.error('[WorldEvents] deal type re-draft failed:', e.message); return { skipped: 'error' }; });
+      if (drafted?.skipped === 'error') warnings.push('The deal type was not re-drafted for this change. Reload and check the Terms.');
     }
 
     // D13 (2026-09-30): changed components draft the whole Terms section,
     // touching only what is still Auto-drafted (dealTermsDraftService). The
     // terms lock refused a change above, so this runs only before it.
+    if (storedBefore && (updates.deal_components !== undefined || updates.deal_type !== undefined || updates.appearance_required !== undefined)) {
+      const { componentsOf } = require('../utils/dealComponents');
+      componentsBefore = componentsOf(storedBefore);
+    }
     if (updates.deal_components !== undefined && updates.deal_components !== null
       && JSON.stringify(updates.deal_components) !== JSON.stringify(componentsBefore ?? null)) {
       const { syncDraftedTerms } = require('../services/dealTermsDraftService');
-      await syncDraftedTerms(models.sequelize, eventId);
+      const drafted = await syncDraftedTerms(models.sequelize, eventId)
+        .catch((e) => { console.error('[WorldEvents] terms re-draft failed:', e.message); return { skipped: 'error' }; });
+      if (drafted?.skipped === 'error') warnings.push('The Terms were not re-drafted for the new deal components. Reload and check the Terms.');
     }
 
     const [updated] = await models.sequelize.query(
-      `SELECT * FROM world_events WHERE id = :eventId`, { replacements: { eventId } }
+      'SELECT * FROM world_events WHERE id = :eventId AND show_id = :showId AND deleted_at IS NULL', { replacements: { eventId, showId } }
     );
+    if (!updated?.[0]) return res.status(404).json({ success: false, error: 'Event not found' });
 
-    return res.json({ success: true, event: updated[0] });
+    return res.json({ success: true, event: updated[0], ...(warnings.length > 0 ? { warnings } : {}) });
   } catch (error) {
     console.error('Update event error:', error);
     if (String(error.message || '').includes('does not exist')) {
-      return res.status(400).json({ success: false, error: 'Invalid update field', message: error.message });
+      return res.status(400).json({ success: false, error: 'Invalid update field' });
     }
     if (error.name === 'SequelizeForeignKeyConstraintError') {
       return res.status(400).json({
+        success: false,
         error: 'Invalid scene_set_id',
         message: 'Selected scene set is not valid for this event.',
         code: 'INVALID_SCENE_SET_ID',
       });
     }
-    return res.status(500).json({ success: false, error: 'Failed to update event', message: error.message });
+    return res.status(500).json({ success: false, error: 'Failed to update event' });
   }
 });
 
@@ -1272,23 +1412,17 @@ router.delete('/world/:showId/events/:eventId', requireAuth, async (req, res) =>
     const models = await getModels();
     if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
 
-    // Soft-delete (paranoid mode) — try UPDATE first, hard delete as fallback
-    try {
-      await models.sequelize.query(
-        `UPDATE world_events SET deleted_at = NOW() WHERE id = :eventId AND show_id = :showId`,
-        { replacements: { showId, eventId } }
-      );
-    } catch {
-      await models.sequelize.query(
-        `DELETE FROM world_events WHERE id = :eventId AND show_id = :showId`,
-        { replacements: { showId, eventId } }
-      );
-    }
+    // Soft delete only (paranoid mode). A failure is a 500; the row is never
+    // hard-deleted as a fallback (audit Low, 2026-10-23).
+    await models.sequelize.query(
+      `UPDATE world_events SET deleted_at = NOW() WHERE id = :eventId AND show_id = :showId`,
+      { replacements: { showId, eventId } }
+    );
 
     return res.json({ success: true, deleted: eventId });
   } catch (error) {
     console.error('Delete event error:', error);
-    return res.status(500).json({ success: false, error: 'Failed to delete event', message: error.message });
+    return res.status(500).json({ success: false, error: 'Failed to delete event' });
   }
 });
 
@@ -1484,7 +1618,7 @@ router.post('/world/:showId/events/:eventId/generate-script', requireAuth, aiRat
 
     // Get event
     const [events] = await models.sequelize.query(
-      `SELECT * FROM world_events WHERE id = :eventId AND show_id = :showId`,
+      `SELECT * FROM world_events WHERE id = :eventId AND show_id = :showId AND deleted_at IS NULL`,
       { replacements: { eventId, showId } }
     );
     if (!events || events.length === 0) return res.status(404).json({ success: false, error: 'Event not found' });
@@ -1492,10 +1626,14 @@ router.post('/world/:showId/events/:eventId/generate-script', requireAuth, aiRat
 
     // If episode_id is provided, this call will save to it below — refuse
     // before spending the generation work if it would silently replace an
-    // existing script.
+    // existing script. The episode must be this show's (audit Medium,
+    // 2026-10-23): another show's episode is a 404, never written.
     let episodeForGuard = null;
     if (episode_id) {
       episodeForGuard = await models.Episode.findByPk(episode_id);
+      if (!episodeForGuard || String(episodeForGuard.show_id) !== String(showId)) {
+        return res.status(404).json({ success: false, error: 'Episode not found in this show' });
+      }
       if (scriptOverwriteBlocked(episodeForGuard?.script_content, req.body)) {
         console.warn(`[ScriptSkeleton] Refused overwrite for episode ${episode_id}: existing script_content present, no confirmOverwrite flag.`);
         return res.status(409).json(scriptOverwriteRefusalBody());
@@ -1518,7 +1656,10 @@ router.post('/world/:showId/events/:eventId/generate-script', requireAuth, aiRat
           stress: states[0].stress,
         };
       }
-    } catch (e) { /* no state yet */ }
+    } catch (e) {
+      // No state yet: the skeleton is generated without it.
+      console.error('[ScriptSkeleton] character state lookup failed:', e.message);
+    }
 
     // Generate skeleton
     const script = scriptSkeletonGenerator.generateScriptSkeleton(event, {
@@ -1529,12 +1670,9 @@ router.post('/world/:showId/events/:eventId/generate-script', requireAuth, aiRat
     });
 
     // If episode_id provided, save to episode
-    if (episode_id) {
-      const episode = episodeForGuard || await models.Episode.findByPk(episode_id);
-      if (episode) {
-        const { scriptKeepingLocks } = require('../utils/scriptBeatLocks');
-        await episode.update({ script_content: scriptKeepingLocks(episode, script).script });
-      }
+    if (episodeForGuard) {
+      const { scriptKeepingLocks } = require('../utils/scriptBeatLocks');
+      await episodeForGuard.update({ script_content: scriptKeepingLocks(episodeForGuard, script).script });
     }
 
     return res.json({
@@ -1798,7 +1936,7 @@ Guidelines:
 // INVITATION GENERATOR
 // ═══════════════════════════════════════════════════════════════════════════════
 
-router.post('/world/:showId/events/:eventId/generate-invitation', requireAuth, async (req, res) => {
+router.post('/world/:showId/events/:eventId/generate-invitation', requireAuth, aiRateLimiter, async (req, res) => {
   try {
     const { showId, eventId } = req.params;
 
@@ -1863,7 +2001,7 @@ router.post('/world/:showId/events/:eventId/documents/:type/draft', requireAuth,
     if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
     const { draftDocument } = require('../services/eventDocumentsService');
     const { showId, eventId, type } = req.params;
-    const data = await draftDocument(models, { showId, eventId, type });
+    const data = await draftDocument(models, { showId, eventId, type, version: req.body?.version });
     return res.json({ success: true, data });
   } catch (err) {
     return eventDocumentsError(res, err, 'draft');
@@ -1877,7 +2015,7 @@ router.put('/world/:showId/events/:eventId/documents/:type', requireAuth, async 
     if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
     const { editDocument } = require('../services/eventDocumentsService');
     const { showId, eventId, type } = req.params;
-    const data = await editDocument(models, { showId, eventId, type, items: req.body?.items });
+    const data = await editDocument(models, { showId, eventId, type, items: req.body?.items, version: req.body?.version });
     return res.json({ success: true, data });
   } catch (err) {
     return eventDocumentsError(res, err, 'edit');
@@ -1891,7 +2029,7 @@ router.post('/world/:showId/events/:eventId/documents/:type/approve', requireAut
     if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
     const { approveDocument } = require('../services/eventDocumentsService');
     const { showId, eventId, type } = req.params;
-    const data = await approveDocument(models, { showId, eventId, type });
+    const data = await approveDocument(models, { showId, eventId, type, version: req.body?.version });
     return res.json({ success: true, data });
   } catch (err) {
     return eventDocumentsError(res, err, 'approve');
@@ -2149,7 +2287,7 @@ router.get('/world/:showId/events/:eventId/invitation-history', requireAuth, asy
 
 // ── BATCH GENERATE INVITATIONS ───────────────────────────────────────────────
 
-router.post('/world/:showId/events/batch-generate-invitations', requireAuth, async (req, res) => {
+router.post('/world/:showId/events/batch-generate-invitations', requireAuth, aiRateLimiter, async (req, res) => {
   try {
     const { showId } = req.params;
     const { eventIds } = req.body;
@@ -2230,9 +2368,9 @@ router.get('/world/:showId/events/:eventId/invitation-pdf', requireAuth, async (
 
 // ── ANIMATED INVITATION (Runway image_to_video) ─────────────────────────────
 
-router.post('/world/:showId/events/:eventId/animate-invitation', requireAuth, async (req, res) => {
+router.post('/world/:showId/events/:eventId/animate-invitation', requireAuth, aiRateLimiter, async (req, res) => {
   try {
-    const { eventId } = req.params;
+    const { showId, eventId } = req.params;
 
     if (!process.env.RUNWAY_ML_API_KEY) {
       return res.status(503).json({ success: false, error: 'RUNWAY_ML_API_KEY not configured' });
@@ -2243,10 +2381,11 @@ router.post('/world/:showId/events/:eventId/animate-invitation', requireAuth, as
 
     // Get the approved invitation image
     const [event] = await models.sequelize.query(
-      'SELECT invitation_asset_id FROM world_events WHERE id = :eventId LIMIT 1',
-      { replacements: { eventId }, type: models.sequelize.QueryTypes.SELECT }
+      'SELECT invitation_asset_id FROM world_events WHERE id = :eventId AND show_id = :showId AND deleted_at IS NULL LIMIT 1',
+      { replacements: { eventId, showId }, type: models.sequelize.QueryTypes.SELECT }
     );
-    if (!event?.invitation_asset_id) {
+    if (!event) return res.status(404).json({ success: false, error: 'Event not found' });
+    if (!event.invitation_asset_id) {
       return res.status(400).json({ success: false, error: 'No approved invitation to animate. Generate and approve one first.' });
     }
 
@@ -2262,7 +2401,12 @@ router.post('/world/:showId/events/:eventId/animate-invitation', requireAuth, as
     const axios = require('axios');
     const RUNWAY_API_BASE = 'https://api.dev.runwayml.com/v1';
 
-    const videoResponse = await axios.post(
+    // Budget-gated and logged through imageCostService, as every Runway
+    // video call is (sceneGenerationService). Runway has no price in its rate
+    // table, so the call is logged unpriced (cost_usd NULL), never a made-up
+    // figure (audit Medium, 2026-10-23).
+    const { runImageCall } = require('../services/imageCostService');
+    const videoResponse = await runImageCall({ model: 'gen3a_turbo', provider: 'runway' }, () => axios.post(
       `${RUNWAY_API_BASE}/image_to_video`,
       {
         model: 'gen3a_turbo',
@@ -2278,7 +2422,7 @@ router.post('/world/:showId/events/:eventId/animate-invitation', requireAuth, as
         },
         timeout: 30000,
       }
-    );
+    ));
 
     const jobId = videoResponse.data.id;
 
@@ -2290,7 +2434,7 @@ router.post('/world/:showId/events/:eventId/animate-invitation', requireAuth, as
     });
   } catch (err) {
     console.error('[InviteGen] Animation error:', err.response?.data || err.message);
-    return res.status(500).json({ success: false, error: err.message });
+    return res.status(isBudgetError(err) ? 429 : 500).json({ success: false, error: err.message });
   }
 });
 
@@ -2517,21 +2661,13 @@ router.post('/world/:showId/events/:eventId/generate-episode', requireAuth, aiRa
     const models = await getModels();
     if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
 
-    // Load event — use raw SQL to avoid model column mismatch with unmigrated DB
-    let event;
-    try {
-      const [rows] = await models.sequelize.query(
-        'SELECT * FROM world_events WHERE id = :eventId AND show_id = :showId LIMIT 1',
-        { replacements: { eventId, showId } }
-      );
-      event = rows?.[0];
-    } catch {
-      // Fallback to model if raw SQL fails
-      if (models.WorldEvent) {
-        event = await models.WorldEvent.findByPk(eventId, { attributes: models.WorldEvent.CURRENT_ATTRIBUTES });
-        if (event) event = event.toJSON();
-      }
-    }
+    // Load event — raw SQL, scoped to this show and to live rows. No
+    // unscoped fallback (audit Medium, 2026-10-23): a failed read is a 500.
+    const [rows] = await models.sequelize.query(
+      'SELECT * FROM world_events WHERE id = :eventId AND show_id = :showId AND deleted_at IS NULL LIMIT 1',
+      { replacements: { eventId, showId } }
+    );
+    const event = rows?.[0];
     if (!event) return res.status(404).json({ success: false, error: 'Event not found' });
 
     // The chosen look's pieces for the money estimate, not the whole closet (Task #1919).
@@ -2596,8 +2732,9 @@ router.post('/world/:showId/events/:eventId/generate-episode', requireAuth, aiRa
       console.warn('Generate episode refused:', error.message);
       return res.status(error.status).json({ success: false, code: error.code, error: error.message });
     }
+    // The stack is logged, never sent (audit Medium, 2026-10-23).
     console.error('Generate episode error:', error.message, error.stack?.slice(0, 500));
-    return res.status(500).json({ success: false, error: error.message, stack: error.stack?.slice(0, 500) });
+    return res.status(500).json({ success: false, error: error.message });
   }
 });
 
@@ -3909,12 +4046,13 @@ router.post('/world/:showId/events/:eventId/generate-social-checklist', requireA
 // GET /world/:showId/events/:eventId/outfit — get current outfit + score
 router.get('/world/:showId/events/:eventId/outfit', requireAuth, async (req, res) => {
   try {
-    const { eventId } = req.params;
+    const { showId, eventId } = req.params;
     const models = await getModels();
 
+    // Scoped to this show and to live rows (audit Medium, 2026-10-23).
     const [rows] = await models.sequelize.query(
-      'SELECT outfit_pieces, outfit_score, name, prestige, event_type, host_brand, dress_code FROM world_events WHERE id = :eventId LIMIT 1',
-      { replacements: { eventId } }
+      'SELECT outfit_pieces, outfit_score, name, prestige, event_type, host_brand, dress_code FROM world_events WHERE id = :eventId AND show_id = :showId AND deleted_at IS NULL LIMIT 1',
+      { replacements: { eventId, showId } }
     );
     const event = rows?.[0];
     if (!event) return res.status(404).json({ success: false, error: 'Event not found' });
@@ -3924,7 +4062,8 @@ router.get('/world/:showId/events/:eventId/outfit', requireAuth, async (req, res
 
     return res.json({ success: true, pieces, score, event: { name: event.name, prestige: event.prestige, dress_code: event.dress_code } });
   } catch (err) {
-    return res.status(500).json({ success: false, error: err.message });
+    console.error('[Outfit] Load error:', err);
+    return res.status(500).json({ success: false, error: 'Failed to load the outfit' });
   }
 });
 
@@ -3939,21 +4078,23 @@ router.put('/world/:showId/events/:eventId/outfit', requireAuth, async (req, res
       return res.status(400).json({ success: false, error: 'wardrobe_ids array required' });
     }
 
-    // Load event
+    // Load event — scoped to this show and to live rows (audit High,
+    // 2026-10-23).
     const [eventRows] = await models.sequelize.query(
-      'SELECT * FROM world_events WHERE id = :eventId LIMIT 1',
-      { replacements: { eventId } }
+      'SELECT * FROM world_events WHERE id = :eventId AND show_id = :showId AND deleted_at IS NULL LIMIT 1',
+      { replacements: { eventId, showId } }
     );
     const event = eventRows?.[0];
     if (!event) return res.status(404).json({ success: false, error: 'Event not found' });
 
-    // Load wardrobe items
+    // Load wardrobe items — the pieces this show can wear: its own and the
+    // shared ones (show_id NULL), the pool wardrobe-options offers below.
     const [items] = await models.sequelize.query(
       `SELECT id, name, clothing_category, brand, tier, price, coin_cost, color, is_owned,
               acquisition_type, aesthetic_tags, event_types, occasion, season, era_alignment,
               s3_url, s3_url_processed, times_worn, last_worn_date
-       FROM wardrobe WHERE id IN (:ids) AND deleted_at IS NULL`,
-      { replacements: { ids: wardrobe_ids.length > 0 ? wardrobe_ids : ['00000000-0000-0000-0000-000000000000'] } }
+       FROM wardrobe WHERE id IN (:ids) AND (show_id = :showId OR show_id IS NULL) AND deleted_at IS NULL`,
+      { replacements: { ids: wardrobe_ids.length > 0 ? wardrobe_ids : ['00000000-0000-0000-0000-000000000000'], showId } }
     );
 
     // Build outfit pieces snapshot. coin_cost is the story price Finalize
@@ -3997,15 +4138,17 @@ router.put('/world/:showId/events/:eventId/outfit', requireAuth, async (req, res
     };
 
     // Save to event
-    await models.sequelize.query(
-      `UPDATE world_events SET outfit_pieces = :pieces, outfit_score = :score, updated_at = NOW() WHERE id = :eventId`,
-      { replacements: { pieces: JSON.stringify(outfitPieces), score: JSON.stringify(fullScore), eventId } }
+    const [saved] = await models.sequelize.query(
+      `UPDATE world_events SET outfit_pieces = :pieces, outfit_score = :score, updated_at = NOW()
+        WHERE id = :eventId AND show_id = :showId AND deleted_at IS NULL RETURNING id`,
+      { replacements: { pieces: JSON.stringify(outfitPieces), score: JSON.stringify(fullScore), eventId, showId } }
     );
+    if (!Array.isArray(saved) || saved.length === 0) return res.status(404).json({ success: false, error: 'Event not found' });
 
     return res.json({ success: true, pieces: outfitPieces, score: fullScore });
   } catch (err) {
     console.error('[Outfit] Save error:', err);
-    return res.status(500).json({ success: false, error: err.message });
+    return res.status(500).json({ success: false, error: 'Failed to save the outfit' });
   }
 });
 
@@ -4015,10 +4158,11 @@ router.get('/world/:showId/events/:eventId/wardrobe-options', requireAuth, async
     const { showId, eventId } = req.params;
     const models = await getModels();
 
-    // Load event
+    // Load event — scoped to this show and to live rows (audit Medium,
+    // 2026-10-23).
     const [eventRows] = await models.sequelize.query(
-      'SELECT * FROM world_events WHERE id = :eventId LIMIT 1',
-      { replacements: { eventId } }
+      'SELECT * FROM world_events WHERE id = :eventId AND show_id = :showId AND deleted_at IS NULL LIMIT 1',
+      { replacements: { eventId, showId } }
     );
     const event = eventRows?.[0];
     if (!event) return res.status(404).json({ success: false, error: 'Event not found' });
@@ -4065,7 +4209,8 @@ router.get('/world/:showId/events/:eventId/wardrobe-options', requireAuth, async
 
     return res.json({ success: true, items: scored, total: scored.length });
   } catch (err) {
-    return res.status(500).json({ success: false, error: err.message });
+    console.error('[Outfit] Wardrobe options error:', err);
+    return res.status(500).json({ success: false, error: 'Failed to load wardrobe options' });
   }
 });
 
@@ -4112,7 +4257,7 @@ router.get('/world/:showId/events/:eventId/feed-activity', requireAuth, async (r
 // ═══════════════════════════════════════════════════════════════════════
 
 // POST /world/:showId/events/:eventId/generate-overlay/:overlayType
-router.post('/world/:showId/events/:eventId/generate-overlay/:overlayType', requireAuth, async (req, res) => {
+router.post('/world/:showId/events/:eventId/generate-overlay/:overlayType', requireAuth, aiRateLimiter, async (req, res) => {
   try {
     const { showId, eventId, overlayType } = req.params;
     const models = req.app?.get?.('models') || require('../models');
@@ -4779,7 +4924,7 @@ router.put('/world/:showId/stories/:storyId', requireAuth, async (req, res) => {
 // ═══════════════════════════════════════════════════════════════════════
 
 // POST /world/:showId/episodes/:episodeId/generate-distribution
-router.post('/world/:showId/episodes/:episodeId/generate-distribution', requireAuth, async (req, res) => {
+router.post('/world/:showId/episodes/:episodeId/generate-distribution', requireAuth, aiRateLimiter, async (req, res) => {
   try {
     const { showId, episodeId } = req.params;
     const { platforms } = req.body; // optional: ['youtube', 'tiktok', 'instagram', 'facebook']
@@ -5043,7 +5188,7 @@ router.get('/world/:showId/balance', requireAuth, async (req, res) => {
 });
 
 // POST /world/:showId/events/:eventId/generate-lists — generate wardrobe + career lists from event
-router.post('/world/:showId/events/:eventId/generate-lists', requireAuth, async (req, res) => {
+router.post('/world/:showId/events/:eventId/generate-lists', requireAuth, aiRateLimiter, async (req, res) => {
   try {
     const { showId, eventId } = req.params;
     const { listType = 'both' } = req.body; // 'wardrobe', 'career', or 'both'

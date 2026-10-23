@@ -55,7 +55,10 @@ describe('EventTermsSection (D13)', () => {
     expect(within(goals).getByText("Lala's goals (not owed)")).toBeTruthy();
     expect(within(goals).getByText('Follow up with Celeste Rue after the event')).toBeTruthy();
     expect(within(goals).getByText(/Auto-drafted · from deal\. Start Episode adds these to Lala's goals/)).toBeTruthy();
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
     fireEvent.click(screen.getByTestId('terms-relationship-goal-remove-0'));
+    expect(confirmSpy).toHaveBeenCalledWith('Remove the goal "Follow up with Celeste Rue after the event"?');
+    confirmSpy.mockRestore();
     await waitFor(() => expect(putEvent).toHaveBeenCalledWith({
       canon_consequences: { automation: { relationship_goals: [GOALS[1]] } },
     }));

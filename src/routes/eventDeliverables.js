@@ -3,8 +3,13 @@
  *
  * What Lala owes an event (docs/EVENT_EPISODE_FLOW.md §8(t) item 1). The
  * Event Package's Terms area edits them here; they lock at Start Episode,
- * the same moment the Package stops editing (world_events.
- * used_in_episode_id set), and a write after that is refused with 409.
+ * the same moment the Package stops editing, and a write after that is
+ * refused with 409. The lock is the one every term-writing route asks,
+ * findTermsWriteLock (src/utils/eventTermsLock.js): the live brief naming
+ * the event, else used_in_episode_id, lifted while the terms are reopened —
+ * the same lock the costs routes and the event PUT use (audit Medium,
+ * 2026-10-23). Each write runs in one transaction with the event row locked
+ * (FOR UPDATE), as the costs routes' withWritableEvent does.
  *
  * GET    /api/v1/world/:showId/events/:eventId/deliverables                  — List
  * POST   /api/v1/world/:showId/events/:eventId/deliverables                  — Add
@@ -46,7 +51,7 @@ const { syncDraftedDealType } = require('../services/dealTypeDraftService');
 const {
   formatOf, PLATFORMS, QUANTITY_MIN, QUANTITY_MAX,
 } = require('../utils/deliverableFormats');
-const { reopenMarkerOf } = require('../utils/eventTermsLock');
+const { findTermsWriteLock } = require('../utils/eventTermsLock');
 
 const TERMS_LOCKED_CODE = 'EVENT_TERMS_LOCKED';
 const STATUS_NOT_EDITABLE_CODE = 'DELIVERABLE_STATUS_NOT_EDITABLE';
@@ -63,29 +68,46 @@ async function getModels() {
   try { return require('../models'); } catch (e) { console.error('Failed to load models:', e.message); return null; }
 }
 
-// The event, scoped to the show. null when absent or deleted.
-async function loadEvent(sequelize, showId, eventId) {
+// The event, scoped to the show. null when absent or deleted. FOR UPDATE
+// inside a write's transaction, so two writes to one event queue.
+async function loadEvent(sequelize, showId, eventId, { transaction } = {}) {
   const [rows] = await sequelize.query(
-    'SELECT id, show_id, used_in_episode_id, canon_consequences FROM world_events WHERE id = :eventId AND show_id = :showId AND deleted_at IS NULL LIMIT 1',
-    { replacements: { eventId, showId } }
+    `SELECT id, show_id, used_in_episode_id, canon_consequences FROM world_events WHERE id = :eventId AND show_id = :showId AND deleted_at IS NULL LIMIT 1${transaction ? ' FOR UPDATE' : ''}`,
+    { replacements: { eventId, showId }, transaction }
   );
   return rows?.[0] || null;
 }
 
-// Locked once started, unless Evoni has reopened the terms (Reopen ruling,
-// §8(cc); Task #2378): reopenMarkerOf is the same marker findTermsWriteLock
-// reads.
-function isLocked(event) {
-  return !!event.used_in_episode_id && !reopenMarkerOf(event.canon_consequences);
+// The episode that locks this event's terms, or null: the shared lock
+// (findTermsWriteLock), so the deliverables, the costs and the event PUT
+// never disagree. Reopened terms (Reopen ruling, §8(cc); Task #2378) lift it.
+function findLock(sequelize, eventId, { transaction } = {}) {
+  return findTermsWriteLock(sequelize, eventId, { transaction });
 }
 
-function lockedBody(event) {
+function lockedBody(event, lockEpisode) {
   return {
     success: false,
     code: TERMS_LOCKED_CODE,
     error: 'This event\'s terms are locked: an episode has been started from it.',
-    used_in_episode_id: event.used_in_episode_id,
+    used_in_episode_id: event.used_in_episode_id || lockEpisode?.id || null,
+    episode: lockEpisode ? { id: lockEpisode.id, episode_number: lockEpisode.episode_number ?? null, title: lockEpisode.title ?? null } : null,
   };
+}
+
+/**
+ * Runs a deliverable write in one transaction, after the checks every write
+ * shares: the event exists in this show (locked FOR UPDATE) and its terms
+ * are not locked. `write(transaction, event)` returns { status, body }.
+ */
+async function withWritableEvent(sequelize, showId, eventId, write) {
+  return sequelize.transaction(async (transaction) => {
+    const event = await loadEvent(sequelize, showId, eventId, { transaction });
+    if (!event) return { status: 404, body: { success: false, error: 'Event not found' } };
+    const lockEpisode = await findLock(sequelize, eventId, { transaction });
+    if (lockEpisode) return { status: 409, body: lockedBody(event, lockEpisode) };
+    return write(transaction, event);
+  });
 }
 
 /**
@@ -180,7 +202,8 @@ router.get('/world/:showId/events/:eventId/deliverables', requireAuth, async (re
     if (!event) return res.status(404).json({ success: false, error: 'Event not found' });
 
     const deliverables = await listEventDeliverables(models.sequelize, eventId);
-    return res.json({ success: true, deliverables, locked: isLocked(event) });
+    const lockEpisode = await findLock(models.sequelize, eventId);
+    return res.json({ success: true, deliverables, locked: !!lockEpisode });
   } catch (error) {
     console.error('List event deliverables error:', error);
     return res.status(500).json({ success: false, error: 'Failed to load deliverables', message: error.message });
@@ -201,12 +224,9 @@ router.post('/world/:showId/events/:eventId/deliverables', requireAuth, async (r
     const parsed = readDeliverableBody(req.body, { partial: false });
     if (parsed.error) return res.status(400).json({ success: false, error: parsed.error });
 
-    const event = await loadEvent(models.sequelize, showId, eventId);
-    if (!event) return res.status(404).json({ success: false, error: 'Event not found' });
-    if (isLocked(event)) return res.status(409).json(lockedBody(event));
-
     const f = parsed.fields;
-    const [rows] = await models.sequelize.query(
+    const result = await withWritableEvent(models.sequelize, showId, eventId, async (transaction) => {
+      const [rows] = await models.sequelize.query(
       `INSERT INTO event_deliverables (id, event_id, description, deliverable_type, platform, quantity, due_date, required, owed_to, fee, status, created_at, updated_at)
        VALUES (:id, :eventId, :description, :deliverable_type, :platform, :quantity, :due_date, :required, :owed_to, :fee, 'pending', NOW(), NOW())
        RETURNING id, event_id, description, deliverable_type, platform, quantity, due_date, required, status,
@@ -221,11 +241,14 @@ router.post('/world/:showId/events/:eventId/deliverables', requireAuth, async (r
         required: f.required !== false,
         owed_to: f.owed_to || 'host',
         fee: f.fee ?? null,
-      } }
-    );
-    // A brand-owed deliverable can change an Auto-drafted deal type (Task #2330).
-    await syncDraftedDealType(models.sequelize, eventId);
-    return res.status(201).json({ success: true, deliverable: rows?.[0] || null });
+      }, transaction }
+      );
+      return { status: 201, body: { success: true, deliverable: rows?.[0] || null } };
+    });
+    // A brand-owed deliverable can change an Auto-drafted deal type (Task
+    // #2330); after the commit, in its own transaction.
+    if (result.status === 201) await syncDraftedDealType(models.sequelize, eventId);
+    return res.status(result.status).json(result.body);
   } catch (error) {
     console.error('Create event deliverable error:', error);
     return res.status(500).json({ success: false, error: 'Failed to add deliverable', message: error.message });
@@ -259,21 +282,20 @@ router.put('/world/:showId/events/:eventId/deliverables/:deliverableId', require
       return res.status(400).json({ success: false, error: 'No editable fields sent (description, deliverable_type, platform, quantity, due_date, required, owed_to, fee)' });
     }
 
-    const event = await loadEvent(models.sequelize, showId, eventId);
-    if (!event) return res.status(404).json({ success: false, error: 'Event not found' });
-    if (isLocked(event)) return res.status(409).json(lockedBody(event));
-
     const setClauses = keys.map((k) => `${k} = :${k}`);
-    const [rows] = await models.sequelize.query(
-      `UPDATE event_deliverables SET ${setClauses.join(', ')}, updated_at = NOW()
-       WHERE id = :deliverableId AND event_id = :eventId AND deleted_at IS NULL
-       RETURNING id, event_id, description, deliverable_type, platform, quantity, due_date, required, status,
-                 completed_at, submitted_at, approved_at, episode_id, owed_to, fee, created_at, updated_at`,
-      { replacements: { ...parsed.fields, deliverableId, eventId } }
-    );
-    if (!rows?.[0]) return res.status(404).json({ success: false, error: 'Deliverable not found' });
-    if (parsed.fields.owed_to !== undefined) await syncDraftedDealType(models.sequelize, eventId);
-    return res.json({ success: true, deliverable: rows[0] });
+    const result = await withWritableEvent(models.sequelize, showId, eventId, async (transaction) => {
+      const [rows] = await models.sequelize.query(
+        `UPDATE event_deliverables SET ${setClauses.join(', ')}, updated_at = NOW()
+         WHERE id = :deliverableId AND event_id = :eventId AND deleted_at IS NULL
+         RETURNING id, event_id, description, deliverable_type, platform, quantity, due_date, required, status,
+                   completed_at, submitted_at, approved_at, episode_id, owed_to, fee, created_at, updated_at`,
+        { replacements: { ...parsed.fields, deliverableId, eventId }, transaction }
+      );
+      if (!rows?.[0]) return { status: 404, body: { success: false, error: 'Deliverable not found' } };
+      return { status: 200, body: { success: true, deliverable: rows[0] } };
+    });
+    if (result.status === 200 && parsed.fields.owed_to !== undefined) await syncDraftedDealType(models.sequelize, eventId);
+    return res.status(result.status).json(result.body);
   } catch (error) {
     console.error('Update event deliverable error:', error);
     return res.status(500).json({ success: false, error: 'Failed to update deliverable', message: error.message });
@@ -292,19 +314,18 @@ router.delete('/world/:showId/events/:eventId/deliverables/:deliverableId', requ
     const models = await getModels();
     if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
 
-    const event = await loadEvent(models.sequelize, showId, eventId);
-    if (!event) return res.status(404).json({ success: false, error: 'Event not found' });
-    if (isLocked(event)) return res.status(409).json(lockedBody(event));
-
-    const [rows] = await models.sequelize.query(
-      `UPDATE event_deliverables SET deleted_at = NOW(), updated_at = NOW()
-       WHERE id = :deliverableId AND event_id = :eventId AND deleted_at IS NULL
-       RETURNING id`,
-      { replacements: { deliverableId, eventId } }
-    );
-    if (!rows?.[0]) return res.status(404).json({ success: false, error: 'Deliverable not found' });
-    await syncDraftedDealType(models.sequelize, eventId);
-    return res.json({ success: true, deleted: rows[0].id });
+    const result = await withWritableEvent(models.sequelize, showId, eventId, async (transaction) => {
+      const [rows] = await models.sequelize.query(
+        `UPDATE event_deliverables SET deleted_at = NOW(), updated_at = NOW()
+         WHERE id = :deliverableId AND event_id = :eventId AND deleted_at IS NULL
+         RETURNING id`,
+        { replacements: { deliverableId, eventId }, transaction }
+      );
+      if (!rows?.[0]) return { status: 404, body: { success: false, error: 'Deliverable not found' } };
+      return { status: 200, body: { success: true, deleted: rows[0].id } };
+    });
+    if (result.status === 200) await syncDraftedDealType(models.sequelize, eventId);
+    return res.status(result.status).json(result.body);
   } catch (error) {
     console.error('Delete event deliverable error:', error);
     return res.status(500).json({ success: false, error: 'Failed to remove deliverable', message: error.message });
