@@ -349,7 +349,7 @@ function RelTimelineTab() {
     loadEvents(selectedRel);
   };
 
-  const stageColors = { strangers: '#94a3b8', acquaintances: '#64748b', friends: '#3b82f6', close_friends: '#2563eb', lovers: '#ec4899', partners: '#a855f7', exes: '#ef4444', enemies: '#dc2626' };
+  const stageColors = { strangers: '#94a3b8', acquaintances: '#64748b', flirting: '#f472b6', friends: '#3b82f6', close_friends: '#2563eb', lovers: '#ec4899', partners: '#a855f7', exes: '#ef4444', enemies: '#dc2626' };
 
   if (loading) return <div style={{ padding: 40, textAlign: 'center', color: T.slate }}>Loading...</div>;
 
@@ -392,7 +392,7 @@ function RelTimelineTab() {
                 <label style={labelStyle}>Relationship Stage</label>
                 <select value={form.relationship_stage} onChange={e => setForm({ ...form, relationship_stage: e.target.value })} style={inputStyle}>
                   <option value="">—</option>
-                  {['strangers', 'acquaintances', 'friends', 'close_friends', 'lovers', 'partners', 'exes', 'enemies'].map(s => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
+                  {['strangers', 'acquaintances', 'flirting', 'friends', 'close_friends', 'lovers', 'partners', 'exes', 'enemies'].map(s => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
                 </select>
               </div>
             </div>

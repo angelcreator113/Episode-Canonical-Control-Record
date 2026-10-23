@@ -311,6 +311,13 @@ async function loadScriptContext(episodeId, showId, models, { lite = false } = {
         if (typeof personality === 'string') try { personality = JSON.parse(personality); } catch { personality = null; }
         return { ...r, personality, story_role: storyRoleByProfileId.get(r.id) || null, secrets: withPlan(secrets.get(r.registry_character_id) || [], plan, 'episode') };
       });
+      // A confirmed romance with Lala (character_relationships, written by
+      // the "What changed" card; Evoni, 2026-10-23): the script plays them
+      // as her love interest. lala_relationship stays as it is.
+      const romances = await lalaRomances(sequelize, context.socialProfiles.map(p => p.registry_character_id));
+      for (const p of context.socialProfiles) {
+        if (romances.has(p.registry_character_id)) p.lala_romance = romances.get(p.registry_character_id);
+      }
     }
   } catch { /* non-blocking */ }
 
@@ -455,7 +462,8 @@ function storyContextBlocks(context, { withSeason = true } = {}) {
   Voice: ${p.posting_voice || 'Standard social media voice'}
   Lala follows because: ${p.follow_motivation || 'general interest'}${p.follow_emotion ? ` (feels: ${p.follow_emotion})` : ''}`;
       if (p.story_role) block += `\n  Story role: ${p.story_role}`;
-      if (LALA_TIES[p.lala_relationship]) block += `\n  With Lala: ${LALA_TIES[p.lala_relationship]}`;
+      const ties = [LALA_TIES[p.lala_relationship], p.lala_romance !== undefined ? `love interest${p.lala_romance ? `: ${p.lala_romance}` : ''}` : null].filter(Boolean);
+      if (ties.length) block += `\n  With Lala: ${ties.join('; ')}`;
 
       // Character literary depth (from registry) + therapy + life simulation
       if (p.core_belief || p.pressure_type || p.depth_level || p.core_wound || p.wound || p.want_architecture) {
@@ -625,6 +633,33 @@ function seasonPurposes(sc) {
     .map((p) => (p.text ? p : { ...p, text: `Continue the thread "${p.story_thread}"`, story_thread: null }));
   if (list.length) return [...list.filter((p) => p.primary), ...list.filter((p) => !p.primary)];
   return sc?.story_purpose ? [{ text: sc.story_purpose, primary: true, story_thread: sc.story_thread || null }] : [];
+}
+
+/**
+ * The people among `characterIds` in a confirmed romantic relationship with
+ * Lala (her registry character, character_key 'lala'): Map(id -> its note,
+ * the relationship's situation or notes, or ''). Empty when none or on a
+ * failed read.
+ */
+async function lalaRomances(sequelize, characterIds) {
+  const ids = [...new Set((characterIds || []).filter(Boolean))];
+  const out = new Map();
+  if (!ids.length) return out;
+  try {
+    const [rows] = await sequelize.query(
+      `SELECT CASE WHEN cr.character_id_a = lala.id THEN cr.character_id_b ELSE cr.character_id_a END AS other,
+              COALESCE(cr.situation, cr.notes, '') AS note
+         FROM character_relationships cr
+         JOIN registry_characters lala ON lala.character_key = 'lala' AND lala.deleted_at IS NULL
+                                     AND lala.id IN (cr.character_id_a, cr.character_id_b)
+        WHERE cr.deleted_at IS NULL AND cr.is_romantic = true AND cr.confirmed = true
+          AND (cr.character_id_a IN (:ids) OR cr.character_id_b IN (:ids))
+        ORDER BY cr.updated_at DESC`, { replacements: { ids } });
+    for (const r of rows || []) if (!out.has(r.other)) out.set(r.other, String(r.note || '').trim().slice(0, 300));
+  } catch (err) {
+    console.error('[ScriptWriter] Lala\'s romances could not be read (non-blocking):', err.message);
+  }
+  return out;
 }
 
 // A guest's tie to Lala (social_profiles.lala_relationship), as the
@@ -1159,4 +1194,4 @@ function renderScriptText(scriptJson) {
   }).join('\n\n');
 }
 
-module.exports = { generateEpisodeScript, loadScriptContext, renderScriptText, buildFullPrompt, buildSeasonPositionBlock, eventContextBlock, storyContextBlocks, financialContextText, LALA_TIES, writeScriptReply, scriptTextAfterFixes };
+module.exports = { generateEpisodeScript, loadScriptContext, renderScriptText, buildFullPrompt, buildSeasonPositionBlock, eventContextBlock, storyContextBlocks, financialContextText, LALA_TIES, lalaRomances, writeScriptReply, scriptTextAfterFixes };
