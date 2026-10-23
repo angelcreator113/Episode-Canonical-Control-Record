@@ -23,6 +23,7 @@ import { dealLabelFor, relationshipGoalsOf } from '../utils/eventTerms';
 import { describeEventOrganizer } from '../utils/eventOrganizer';
 import { beatSpeakers } from './scriptMoments';
 import { beat14Delivers, BEAT } from './beat14Invitation';
+import { goalPerson, personIn } from './scriptRuleChecks';
 
 const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
@@ -112,17 +113,56 @@ export function mentionedIn(beats = [], text) {
 }
 
 /**
+ * Where a relationship goal is covered, { beat, as } or null (Evoni,
+ * 2026-10-23: "Get to know Truthville" never ticked when the script named
+ * her by her real name; utils/scriptCoverage goalCovered, the server's
+ * copy). Covered when the goal is mentioned as written (as: null), or when
+ * the rest of its words are and the person (goalPerson) is there by any of
+ * their names or speaks; `as` is the name they go by there.
+ */
+export function goalMatch(beats = [], goal, person) {
+  const label = String(goal?.label || '').trim();
+  const literal = mentionedIn(beats, label);
+  if (literal !== null) return { beat: literal, as: null };
+  if (!person?.names?.length) return null;
+  const own = new Set(person.names.flatMap(words));
+  const rest = keyWords(label).filter((k) => !own.has(k));
+  const need = rest.length <= 2 ? rest.length : Math.ceil(rest.length * 0.75);
+  for (const b of beats) {
+    const lines = b.lines || [];
+    const have = new Set(words(lines.join(' ')));
+    if (rest.filter((k) => have.has(k)).length < need) continue;
+    const as = personIn(lines, person);
+    if (as) return { beat: b.number, as };
+  }
+  return null;
+}
+
+/**
  * [{ key, label, source, beat }] in the order: goals, beat 14's opportunity,
  * the brief's hook. beat
  * is the number of the beat that mentions it, or null. What she owes is not
  * on the list: deliverables are not always shown in the show (Evoni,
  * 2026-10-18; beat 12 is The Fashion Challenge). `deliverables` is kept in
- * the call for its callers and read no more.
+ * the call for its callers and read no more. A goal also has its slot, and
+ * when its person is there under another name, `who`: the name the goal
+ * gives them and `as`, the one the script uses ("Truthville", "Marcus
+ * Hale"). `profiles`: the event's people's social profiles, by id
+ * (goalPerson).
  */
-export function mustCover({ beats = [], event = null, brief = null, opportunity = null } = {}) {
+export function mustCover({ beats = [], event = null, brief = null, opportunity = null, profiles = [] } = {}) {
   const items = [];
   relationshipGoalsOf(event).forEach((g, n) => {
-    items.push({ key: `goal-${n}`, label: String(g.label).trim(), source: 'Goal' });
+    const label = String(g.label).trim();
+    const person = goalPerson(g, event, profiles);
+    const m = goalMatch(beats, g, person);
+    // The name the goal gives them: the one of theirs in its words.
+    const inLabel = new Set(words(label));
+    const named = person ? person.shown.find((s) => words(s).length && words(s).every((w) => inLabel.has(w))) || person.name : null;
+    items.push({
+      key: `goal-${n}`, label, source: 'Goal', slot: g.slot || 'relationship', beat: m ? m.beat : null,
+      ...(m?.as && words(m.as).join(' ') !== words(named).join(' ') ? { who: { name: named, as: m.as } } : {}),
+    });
   });
   // Beat 14's opportunity (Evoni, 2026-10-19), when one is attached and it
   // comes (the caller passes null when the episode is designed to fail or the

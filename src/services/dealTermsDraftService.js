@@ -126,16 +126,20 @@ function draftRelationshipGoals(event) {
   const host = String(event?.host || '').trim() || null;
   const brand = String(event?.host_brand || automation.host_brand || '').trim() || null;
   const guests = (Array.isArray(automation.guest_profiles) ? automation.guest_profiles : [])
-    .map((g) => g?.display_name || g?.handle).filter(Boolean);
+    .filter((g) => g?.display_name || g?.handle);
+  // Who the goal is about, when the event knows (Evoni, 2026-10-23), so the
+  // Script tab ticks it when the script names them by their real name
+  // (utils/scriptRuleChecks goalPerson). JSON only, no column.
+  const about = (id) => (id != null && id !== '' ? { profile_id: id } : {});
   const goals = [];
   if (host) {
-    goals.push({ slot: 'relationship_host', label: `Follow up with ${host} after the event`, description: 'A thank-you, and a reason to work together again' });
+    goals.push({ slot: 'relationship_host', label: `Follow up with ${host} after the event`, description: 'A thank-you, and a reason to work together again', ...about(event?.source_profile_id ?? automation.host_profile_id) });
   }
   if (brand && brand !== host) {
     goals.push({ slot: 'relationship_brand', label: `Co-style a moment with ${brand}`, description: `Something ${brand} would want to share` });
   }
   if (guests.length) {
-    goals.push({ slot: 'relationship_guest', label: `Get to know ${guests[0]}`, description: 'One real conversation, and a reason to talk again' });
+    goals.push({ slot: 'relationship_guest', label: `Get to know ${guests[0].display_name || guests[0].handle}`, description: 'One real conversation, and a reason to talk again', ...about(guests[0].profile_id ?? guests[0].id) });
   }
   return goals.slice(0, RELATIONSHIP_GOALS_MAX);
 }

@@ -80,6 +80,19 @@ describe('relationship goals (answer 6)', () => {
     expect(draftRelationshipGoals({})).toEqual([]);
   });
 
+  // Evoni, 2026-10-23: who each goal is about, so the Script tab ticks it
+  // when the script names them by their real name (scriptRuleChecks goalPerson).
+  test('each goal about a person keeps their profile_id; the brand goal has none', () => {
+    const event = {
+      host: 'Celeste Rue', host_brand: 'Velour', source_profile_id: 5,
+      canon_consequences: { automation: { guest_profiles: [{ handle: '' }, { profile_id: 9, display_name: 'Truthville' }] } },
+    };
+    const goals = draftRelationshipGoals(event);
+    expect(goals.map((g) => [g.slot, g.profile_id])).toEqual([['relationship_host', 5], ['relationship_brand', undefined]]);
+    expect(draftRelationshipGoals({ ...event, host_brand: null })[1]).toMatchObject({ slot: 'relationship_guest', label: 'Get to know Truthville', profile_id: 9 });
+    expect(draftRelationshipGoals({ host: 'Celeste Rue', canon_consequences: { automation: { host_profile_id: 7 } } })[0].profile_id).toBe(7);
+  });
+
   test('Start Episode writes them as Lala\'s goals, never required', () => {
     const tasks = relationshipGoalTasks({ canon_consequences: { automation: { relationship_goals: [
       { slot: 'relationship_host', label: 'Follow up with Celeste', description: 'x' },
