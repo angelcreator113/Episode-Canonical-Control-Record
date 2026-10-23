@@ -1,6 +1,7 @@
 // frontend/src/pages/Home.jsx — Creator Command Center
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { RefreshCw } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { episodeService } from '../services/episodeService';
 import { showService } from '../services/showService';
@@ -22,6 +23,9 @@ function Home() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
+  // A refresh keeps the page on screen and reloads its data (Evoni, 2026-10-23:
+  // pull-to-refresh is off on phones, so the page has its own Refresh).
+  const [refreshing, setRefreshing] = useState(false);
   const [universes, setUniverses] = useState([]);
   const [series, setSeries] = useState([]);
   const [books, setBooks] = useState([]);
@@ -36,8 +40,8 @@ function Home() {
     loadAll().finally(() => { loadingRef.current = false; });
   }, []);
 
-  const loadAll = async () => {
-    setLoading(true);
+  const loadAll = async ({ quiet = false } = {}) => {
+    if (!quiet) setLoading(true);
     // Fire all in parallel, swallow individual errors
     const [uniRes, seriesRes, booksRes, showsRes, epRes, charRes] = await Promise.allSettled([
       universeService.getUniverses(),
@@ -62,6 +66,16 @@ function Home() {
     if (epRes.status === 'fulfilled') setEpisodes(Array.isArray(epRes.value) ? epRes.value : []);
     if (charRes.status === 'fulfilled') setCharacters(Array.isArray(charRes.value) ? charRes.value : []);
     setLoading(false);
+  };
+
+  const refresh = () => {
+    if (loadingRef.current) return;
+    loadingRef.current = true;
+    setRefreshing(true);
+    loadAll({ quiet: true }).finally(() => {
+      loadingRef.current = false;
+      setRefreshing(false);
+    });
   };
 
   /* ── helpers ── */
@@ -115,7 +129,14 @@ function Home() {
               <h1>Welcome back, {userName}</h1>
               <p className="home-hero__tagline">Your universe is waiting.</p>
             </div>
-            <span className="home-hero__date">{today}</span>
+            <div className="home-hero__side">
+              <span className="home-hero__date">{today}</span>
+              <button type="button" className="home-refresh" onClick={refresh} disabled={refreshing}
+                aria-busy={refreshing} data-testid="home-refresh">
+                <RefreshCw size={16} aria-hidden="true" className={refreshing ? 'is-spinning' : undefined} />
+                {refreshing ? 'Refreshing…' : 'Refresh'}
+              </button>
+            </div>
           </div>
         </header>
 

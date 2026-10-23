@@ -74,6 +74,56 @@
   letter-spacing: 0.06em;
 }
 
+.home-hero__side {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+}
+
+/* Refresh (pull-to-refresh is off on phones): reloads the page's data in place. */
+.home-refresh {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 8px 16px;
+  border: 1px solid rgba(122, 109, 98, 0.35);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.7);
+  color: #2b2320;
+  font-family: 'DM Mono', monospace;
+  font-size: var(--text-sm);
+  letter-spacing: 0.04em;
+  cursor: pointer;
+}
+
+.home-refresh:hover:not(:disabled) {
+  background: #fff;
+}
+
+.home-refresh:focus-visible {
+  outline: 2px solid #B8962E;
+  outline-offset: 2px;
+}
+
+.home-refresh:disabled {
+  cursor: progress;
+  opacity: 0.75;
+}
+
+.home-refresh .is-spinning {
+  animation: home-refresh-spin 0.9s linear infinite;
+}
+
+@keyframes home-refresh-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-refresh .is-spinning { animation: none; }
+}
+
 /* ── Section Base ── */
 .hp-section {
   margin-bottom: 28px;
