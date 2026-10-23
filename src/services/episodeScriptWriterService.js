@@ -400,6 +400,15 @@ async function loadScriptContext(episodeId, showId, models, { lite = false } = {
     console.error('[ScriptWriter] season twists failed (non-blocking):', err.message);
   }
 
+  // 13d. Who knows about the relationships around the people here
+  // (services/relationshipKnowers, 2026-10-23); '' with none.
+  context.secrecyBlock = '';
+  try {
+    context.secrecyBlock = await relationshipSecrecyBlock(sequelize, (context.socialProfiles || []).map(p => p.registry_character_id));
+  } catch (err) {
+    console.error('[ScriptWriter] who knows failed (non-blocking):', err.message);
+  }
+
   // 14. Character state — exact coin balance for internal monologue
   context.characterState = null;
   try {
@@ -429,6 +438,21 @@ async function loadScriptContext(episodeId, showId, models, { lite = false } = {
 // Their family ties as one block under the cast; '' when there are none.
 function familyBlock(lines) {
   return lines?.length ? `\n\nTHEIR FAMILY (stay consistent with it):\n${lines.map(l => `- ${l}`).join('\n')}` : '';
+}
+
+/**
+ * Who may mention which relationship (Evoni, 2026-10-23: "so the writers
+ * know who can mention it and who can't"): one line per relationship of
+ * Lala (at every episode) or the people at the event, secrets first, e.g.
+ * "Lala and Marcus Hale's romance is SECRET: only Jade Monroe knows. Nobody
+ * else mentions it." '' with none.
+ */
+async function relationshipSecrecyBlock(sequelize, characterIds) {
+  const [lalas] = await sequelize.query(
+    "SELECT id FROM registry_characters WHERE LOWER(COALESCE(character_key, '')) = 'lala' AND deleted_at IS NULL");
+  const lines = await require('./relationshipKnowers').relationshipSecrecyLines(sequelize, [...lalas.map(l => l.id), ...(characterIds || [])]);
+  if (!lines.length) return '';
+  return `═══ WHO KNOWS ABOUT WHOM ═══\n${lines.map(l => `- ${l}`).join('\n')}\nSCRIPT DIRECTIVE: Only the people named as knowing may speak of a secret relationship, and never where others can hear; nobody else mentions it.\n`;
 }
 
 // The people, the content she must make, continuity and her numbers: the
@@ -530,6 +554,7 @@ function storyContextBlocks(context, { withSeason = true } = {}) {
   // both writers: the Script tab's passes withSeason false for its own
   // season block, not for these.
   const twistBlock = context.twistBlock || '';
+  const secrecyBlock = context.secrecyBlock || '';
 
   // Designed intent direction
   let intentBlock = '';
@@ -552,7 +577,7 @@ function storyContextBlocks(context, { withSeason = true } = {}) {
 
   const pulseBlock = require('./scriptPulsePosts').pulseScriptBlock(context.pulsePosts);
 
-  return [socialBlock, pulseBlock, taskBlock, prevBlock, arcBlock, twistBlock, intentBlock, charBlock].filter(Boolean).join('\n');
+  return [socialBlock, secrecyBlock, pulseBlock, taskBlock, prevBlock, arcBlock, twistBlock, intentBlock, charBlock].filter(Boolean).join('\n');
 }
 
 // Lala's money for the prompt: pressure, balance, the episode so far, and
@@ -1154,4 +1179,4 @@ function renderScriptText(scriptJson) {
   }).join('\n\n');
 }
 
-module.exports = { generateEpisodeScript, loadScriptContext, renderScriptText, buildFullPrompt, buildSeasonPositionBlock, eventContextBlock, storyContextBlocks, financialContextText, LALA_TIES, writeScriptReply, scriptTextAfterFixes, familyBlock };
+module.exports = { generateEpisodeScript, loadScriptContext, renderScriptText, buildFullPrompt, buildSeasonPositionBlock, eventContextBlock, storyContextBlocks, financialContextText, LALA_TIES, writeScriptReply, scriptTextAfterFixes, familyBlock, relationshipSecrecyBlock };

@@ -1,0 +1,80 @@
+/* WhoKnows — "Who knows" in the Relationships Inspector (2026-10-23).
+   Uses the page's --re-* / --ps-* tokens (pages/RelationshipEngine.css). */
+
+.re-know { display: flex; flex-direction: column; gap: 8px; margin: 4px 0; }
+.re-know-title {
+  margin: 0;
+  font-family: var(--re-serif, 'Lora', Georgia, serif);
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--re-plum, #6e1d4f);
+}
+
+.re-know-states { display: flex; flex-wrap: wrap; gap: 4px; }
+.re-know-state {
+  flex: 1 1 0; justify-content: center;
+  display: inline-flex; align-items: center; gap: 4px;
+  min-height: 32px; padding: 4px 6px; white-space: nowrap;
+  border: 1px solid var(--ps-border, #e3d9e6);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--ps-ink-light, #7a6e8a);
+  font: 600 11px/1 'DM Mono', ui-monospace, monospace;
+  cursor: pointer;
+}
+.re-know-state:hover:not(:disabled) { border-color: var(--re-magenta-soft, #e98bb5); }
+.re-know-state:focus-visible { outline: 2px solid var(--re-magenta, #c2407f); outline-offset: 2px; }
+.re-know-state:disabled { cursor: progress; }
+.re-know-state.is-on.is-secret   { background: #3a2140; border-color: #3a2140; color: #fff; }
+.re-know-state.is-on.is-rumoured { background: #fdf3dc; border-color: var(--re-gold, #b8962e); color: #7a5d12; }
+.re-know-state.is-on.is-known    { background: #eaf5ee; border-color: #b0d8be; color: #2f6e46; }
+
+.re-know-line,
+.re-know-none,
+.re-know-everyone,
+.re-know-error { margin: 0; font-size: 13px; line-height: 1.5; color: var(--ps-ink-light, #7a6e8a); }
+.re-know-none { list-style: none; font-style: italic; }
+.re-know-everyone { color: var(--ps-ink, #1a1625); }
+.re-know-everyone strong { font-weight: 700; }
+.re-know-everyone.is-secret strong { color: var(--re-plum, #6e1d4f); }
+.re-know-error { color: #a8336c; }
+
+.re-know-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.re-know-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  max-width: 100%;
+  padding: 3px 4px 3px 10px;
+  border: 1px solid var(--re-gold-soft, #e6c98f);
+  border-radius: 999px;
+  background: var(--re-blush, #fde9f1);
+  color: var(--ps-ink, #1a1625);
+  font-size: 13px;
+}
+.re-know-chip-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.re-know-chip-x {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px; min-width: 0; min-height: 0; padding: 0; flex-shrink: 0;
+  border: none; border-radius: 50%;
+  background: transparent; color: var(--ps-ink-light, #7a6e8a);
+  cursor: pointer;
+}
+.re-know-chip-x:hover:not(:disabled) { background: rgba(194, 64, 127, 0.12); color: var(--re-magenta, #c2407f); }
+.re-know-chip-x:focus-visible { outline: 2px solid var(--re-magenta, #c2407f); }
+
+.re-know-add { display: flex; flex-direction: column; gap: 4px; }
+.re-know-add-label { font: 600 11px/1.2 'DM Mono', ui-monospace, monospace; letter-spacing: 0.04em; text-transform: uppercase; color: var(--ps-ink-light, #7a6e8a); }
+.re-know-add select {
+  width: 100%; min-height: 36px; padding: 6px 10px;
+  border: 1px solid var(--ps-border, #e3d9e6);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--ps-ink, #1a1625);
+  font-size: 14px;
+}
+
+/* A phone: a bigger target for × without a taller chip. */
+@media (max-width: 600px) {
+  .re-know-state { min-height: 40px; font-size: 12px; }
+  .re-know-chip-x { width: 32px; height: 32px; }
+  .re-know-chip { padding: 0 2px 0 12px; }
+}
