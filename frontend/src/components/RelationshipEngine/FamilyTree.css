@@ -1,0 +1,53 @@
+/* The Family tab's tree (FamilyTree.jsx). The page's --ps-* palette, with
+   fallbacks so the tree reads the same outside it. */
+
+.re-ftree { display: flex; flex-direction: column; gap: 18px; margin-bottom: 22px; }
+.re-ftree-legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 12px; color: var(--ps-ink-light, #7a6e8a); }
+.re-ftree-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.re-ftree-key { display: inline-block; width: 26px; height: 0; border-top: 2px solid var(--ps-lavender, #a889c8); }
+.re-ftree-key.is-dashed { border-top-style: dashed; border-color: var(--ps-blue, #7ab3d4); }
+.re-ftree-key.is-ghost { width: 18px; height: 12px; border: 1px dashed var(--ps-ink-light, #7a6e8a); border-radius: 4px; }
+
+.re-ftree-family {
+  background: var(--ps-surface, #fff); border: 1px solid var(--ps-border, #ede8f5); border-radius: var(--ps-radius, 12px);
+  padding: 14px 16px; box-shadow: var(--ps-shadow, none); min-width: 0;
+}
+.re-ftree-name { margin: 0 0 8px; font-family: 'Lora', serif; font-size: 17px; font-weight: 700; color: var(--ps-ink, #1a1625); }
+.re-ftree-city { font-family: 'DM Mono', monospace; font-size: 12px; font-weight: 400; color: var(--ps-ink-light, #7a6e8a); }
+
+.re-ftree-scroll { overflow-x: auto; }
+.re-ftree-svg { display: block; margin: 0 auto; font-family: var(--ps-font, sans-serif); }
+.re-ftree-node rect { fill: var(--ps-lav-light, #ede6f7); stroke: var(--ps-lavender, #a889c8); stroke-width: 1.5; }
+.re-ftree-node.is-ghost rect { fill: var(--ps-surface, #fff); stroke: var(--ps-ink-light, #7a6e8a); }
+.re-ftree-node.is-profile rect { fill: var(--ps-blue-light, #e8f3fa); stroke: var(--ps-blue, #7ab3d4); }
+.re-ftree-node text { font-size: 12px; font-weight: 600; fill: var(--ps-ink, #1a1625); }
+.re-ftree-edge path { stroke: var(--ps-lavender, #a889c8); stroke-width: 2; }
+.re-ftree-edge.is-blood path { stroke: #b8962e; }
+.re-ftree-edge.is-step path, .re-ftree-edge.is-chosen path { stroke: var(--ps-blue, #7ab3d4); }
+.re-ftree-edge.is-unknown path { stroke: var(--ps-ink-light, #7a6e8a); }
+.re-ftree-edge.is-open { cursor: pointer; }
+.re-ftree-edge.is-open:hover path, .re-ftree-edge.is-open:focus path { stroke-width: 3.5; }
+.re-ftree-node text.re-ftree-node-role { font-size: 10px; font-weight: 400; font-family: 'DM Mono', monospace; fill: var(--ps-ink-mid, #4a3f5c); }
+
+/* The phone's indented list: shown under 600px, the drawing above it. */
+.re-ftree-list { display: none; list-style: none; margin: 0; padding: 0; }
+.re-ftree-person {
+  margin: 0 0 8px calc(var(--gen, 0) * 16px); padding: 8px 10px; border-left: 3px solid var(--ps-lavender, #a889c8);
+  border-radius: 0 8px 8px 0; background: var(--ps-surface-alt, #faf8fc); display: flex; flex-direction: column; gap: 4px; min-width: 0;
+}
+.re-ftree-person.is-ghost { border-left-style: dashed; border-left-color: var(--ps-ink-light, #7a6e8a); }
+.re-ftree-person-name { font-weight: 700; font-size: 14px; color: var(--ps-ink, #1a1625); overflow-wrap: anywhere; }
+.re-ftree-person-name a { color: inherit; }
+.re-ftree-tag { margin-left: 6px; font-size: 11px; font-weight: 400; color: var(--ps-ink-light, #7a6e8a); }
+.re-ftree-tie {
+  align-self: flex-start; min-height: 32px; padding: 2px 10px; border-radius: 999px; border: 1px solid #b8962e;
+  background: none; font: inherit; font-size: 12px; color: var(--ps-ink-mid, #4a3f5c); cursor: pointer; text-align: left;
+}
+.re-ftree-tie.is-dashed { border-style: dashed; border-color: var(--ps-blue, #7ab3d4); }
+.re-ftree-tie:disabled { cursor: default; }
+
+@media (max-width: 599px) {
+  .re-ftree-scroll { display: none; }
+  .re-ftree-list { display: block; }
+  .re-ftree-family { padding: 12px; }
+}

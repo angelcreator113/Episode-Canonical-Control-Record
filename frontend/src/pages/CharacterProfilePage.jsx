@@ -28,6 +28,7 @@ import PostingSchedule from '../components/PostingSchedule/PostingSchedule';
 import PulseTrust from '../components/PulseTrust/PulseTrust';
 import CharacterTalkTab from '../components/CharacterTalk/CharacterTalkTab';
 import CharacterGalleryTab from '../components/CharacterGallery/CharacterGalleryTab';
+import FamilySection from '../components/CharacterFamily/FamilySection';
 import { API_URL } from '../config/api';
 import InnerLifeWorkspace from '../components/InnerLife/InnerLifeWorkspace';
 import { dimensionOf as dimension, dimensionText } from '../lib/innerLifeSections';
@@ -3064,28 +3065,9 @@ function GhostsCard({ character, onSaved }) {
   );
 }
 
-function FamilyCard({ character }) {
-  const tree = objOf(character.family_tree);
-  const members = Array.isArray(tree.members) ? tree.members : [];
-  if (!members.length && !tree.generational_wound) return null;
-  return (
-    <section className="ch-card" aria-labelledby="ch-fam" data-testid="ch-family">
-      <h2 id="ch-fam" className="ch-h2"><Heart size={20} aria-hidden="true" className="ch-h2-icon" /> Family</h2>
-      {tree.generational_wound && <p className="ch-note">Generational wound: {tree.generational_wound}</p>}
-      {members.length > 0 && (
-        <ul className="ch-ft">
-          {members.map((m, i) => (
-            <li key={i} className="ch-ft-item">
-              <strong className="ch-conn-name">{m.name}</strong>
-              {m.relation && <span className="ch-ft-meta">{m.relation}</span>}
-              {m.personality_sketch && <span className="ch-conn-note">{m.personality_sketch}</span>}
-            </li>
-          ))}
-        </ul>
-      )}
-    </section>
-  );
-}
+// Their family: ties, their named family, + Add family, Make them a
+// character and Import family (components/CharacterFamily; Evoni, 2026-10-23).
+// It took the place of the read-only FamilyCard.
 
 function TabWorld({ character, feedProfile, appearances, onSaved, gen, openTab }) {
   const trail = useStoryTrail(character.id);
@@ -3098,7 +3080,7 @@ function TabWorld({ character, feedProfile, appearances, onSaved, gen, openTab }
       <div className="ch-col">
         <LalaVerseMap character={character} feedProfile={feedProfile} />
         <WorldPlaces character={character} openTab={openTab} />
-        <FamilyCard character={character} />
+        <FamilySection character={character} />
       </div>
       <div className="ch-col">
         <WorldEvents appearances={appearances} />

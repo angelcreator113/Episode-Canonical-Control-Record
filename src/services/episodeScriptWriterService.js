@@ -23,6 +23,7 @@ const { LINKED_CHARACTER_JOIN } = require('../utils/registryLink');
 const { storyBrief, BRIEF_COLUMNS } = require('./characterStoryBrief');
 const { secretsFor } = require('./characterSecrets');
 const { planForEpisode, withPlan } = require('./seasonRevealPlan');
+const { familyLines } = require('./familyTies');
 const { latestWorldSnapshotForShow } = require('./worldSnapshotForShow');
 const { loadScriptCareer, careerBlock } = require('./scriptCareerService');
 const { episodeEventId } = require('../utils/episodeEventSql');
@@ -314,6 +315,14 @@ async function loadScriptContext(episodeId, showId, models, { lite = false } = {
     }
   } catch { /* non-blocking */ }
 
+  // Their family ties, under the cast (services/familyTies familyLines).
+  context.familyLines = [];
+  try {
+    context.familyLines = await familyLines(sequelize, (context.socialProfiles || []).map(p => p.registry_character_id));
+  } catch (err) {
+    console.error('[ScriptWriter] family lines could not be read (non-blocking):', err.message);
+  }
+
   // 11. Social tasks — what content Lala needs to create during the event
   context.socialTasks = [];
   try {
@@ -417,6 +426,11 @@ async function loadScriptContext(episodeId, showId, models, { lite = false } = {
   return context;
 }
 
+// Their family ties as one block under the cast; '' when there are none.
+function familyBlock(lines) {
+  return lines?.length ? `\n\nTHEIR FAMILY (stay consistent with it):\n${lines.map(l => `- ${l}`).join('\n')}` : '';
+}
+
 // The people, the content she must make, continuity and her numbers: the
 // blocks between the wardrobe and the beat plan. Shared with the Script
 // tab's writer (groundedScriptGeneratorService; Script tab audit,
@@ -474,6 +488,7 @@ function storyContextBlocks(context, { withSeason = true } = {}) {
     if (context.unfeaturedGuestCount > 0) {
       socialBlock += `\n\n${context.unfeaturedGuestCount} more guest${context.unfeaturedGuestCount === 1 ? '' : 's'} attending — present, but not story participants.`;
     }
+    socialBlock += familyBlock(context.familyLines);
     socialBlock += '\n';
   }
 
@@ -1139,4 +1154,4 @@ function renderScriptText(scriptJson) {
   }).join('\n\n');
 }
 
-module.exports = { generateEpisodeScript, loadScriptContext, renderScriptText, buildFullPrompt, buildSeasonPositionBlock, eventContextBlock, storyContextBlocks, financialContextText, LALA_TIES, writeScriptReply, scriptTextAfterFixes };
+module.exports = { generateEpisodeScript, loadScriptContext, renderScriptText, buildFullPrompt, buildSeasonPositionBlock, eventContextBlock, storyContextBlocks, financialContextText, LALA_TIES, writeScriptReply, scriptTextAfterFixes, familyBlock };

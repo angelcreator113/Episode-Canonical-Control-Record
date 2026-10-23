@@ -113,6 +113,17 @@ async function episodeCast(sequelize, event) {
   return characters;
 }
 
+/** The cast's family ties (services/familyTies), Lala's world only; '' when none. */
+async function storyFamilyBlock(sequelize, characterIds) {
+  try {
+    const lines = await require('./familyTies').familyLines(sequelize, characterIds, { lalaverseOnly: true });
+    return lines.length ? `\nTHEIR FAMILY:\n${lines.map(l => `- ${l}`).join('\n')}\n` : '';
+  } catch (err) {
+    console.error('[StoryGeneration] family lines could not be read (non-blocking):', err.message);
+    return '';
+  }
+}
+
 async function generateEpisodeStory(episodeId, showId, sequelize, options = {}) {
   if (!process.env.ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY not configured');
 
@@ -193,6 +204,9 @@ async function generateEpisodeStory(episodeId, showId, sequelize, options = {}) 
     return block;
   }).join('\n\n') || 'No character details';
 
+  // Their family ties; JustAWoman's family stays out of Lala's world (CANON_RULES).
+  const family = await storyFamilyBlock(sequelize, characters.map(c => c.char_id));
+
   const prompt = `You are writing a ${spec.name.toLowerCase()} based on an episode of "Styling Adventures with Lala" — a luxury fashion life simulator in the LalaVerse franchise (Mary-Kate & Ashley style).
 
 FORMAT: ${spec.name}
@@ -214,6 +228,7 @@ OUTFIT: ${outfitText}
 
 CHARACTERS:
 ${charContext}
+${family}
 
 ${evalData ? `OUTCOME: ${evalData.tier_final?.toUpperCase()} (${evalData.score}/100) — ${evalData.narrative_lines?.short || ''}` : ''}
 ${net !== 0 ? `FINANCIAL: ${net >= 0 ? '+' : ''}${net} coins net` : ''}
@@ -328,4 +343,5 @@ module.exports = {
   getStories,
   FORMAT_SPECS,
   CANON_RULES,
+  storyFamilyBlock,
 };

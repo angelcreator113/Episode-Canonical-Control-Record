@@ -5,6 +5,7 @@ import {
   FEED_STATE_CONFIG, PROTAGONISTS, lalaClass, fp,
   profileName, atHandle, platformLabel,
 } from './feedConstants';
+import ProfileFamily from '../../components/CharacterFamily/ProfileFamily';
 
 // Local Spinner, as in FeedViews.jsx. It stayed behind in
 // SocialProfileGenerator.jsx when this panel was extracted (Task #1793).
@@ -131,6 +132,7 @@ function DetailPanel({ profile, fp: d, onClose, onFinalize, onCross, onEdit, onD
               {p.adult_content_present&&<span style={{fontSize:10,fontWeight:700,padding:'2px 7px',borderRadius:6,background:'#fde8e8',color:C.pink}}>18+ Content</span>}
               {p.feed_layer==='real_world'&&followers.some(f=>f.character_key==='lala')&&<span style={{fontSize:10,fontWeight:700,padding:'2px 7px',borderRadius:6,background:C.blueLight,color:C.blue}}>◈ From JustAWoman's Feed — Lala follows</span>}
             </div>
+            <ProfileFamily profileId={p.id}/>
           </div>
           <button onClick={onClose} style={{background:'none',border:'none',cursor:'pointer',fontSize:18,color:C.inkLight,lineHeight:1,flexShrink:0}}>×</button>
         </div>

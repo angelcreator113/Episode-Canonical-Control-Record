@@ -102,6 +102,8 @@ async function loadCharacterFile(db, { character = null, feedProfile } = {}) {
       const [rows] = await db.sequelize.query(
         `SELECT CASE WHEN cr.character_id_a = :id THEN rb.display_name ELSE ra.display_name END AS person,
                 cr.relationship_type AS kind, cr.status,
+                cr.character_id_a, cr.character_id_b, cr.family_role, cr.reverse_family_role, cr.is_romantic,
+                rb.gender AS b_gender,
                 CASE WHEN cr.character_id_a = :id THEN cr.source_knows ELSE cr.target_knows END AS knows
            FROM character_relationships cr
            JOIN registry_characters ra ON ra.id = cr.character_id_a AND ra.deleted_at IS NULL
@@ -109,7 +111,10 @@ async function loadCharacterFile(db, { character = null, feedProfile } = {}) {
           WHERE cr.confirmed = true AND (cr.character_id_a = :id OR cr.character_id_b = :id)
           ORDER BY cr.created_at ASC
           LIMIT ${MAX_RELATIONSHIPS}`, { replacements: { id: c.id } });
-      return rows.map((r) => ({ person: r.person || 'someone', kind: r.kind || null, status: r.status || null, knows: clip(r.knows, 200) || null }));
+      // Family reads as their role ("sister"), not the row's type (services/familyTies).
+      const { familyRoleFor } = require('./familyTies');
+      const familyKind = (r) => (r.is_romantic ? null : familyRoleFor(r, String(r.character_id_a) === String(c.id) ? r.character_id_b : r.character_id_a));
+      return rows.map((r) => ({ person: r.person || 'someone', kind: familyKind(r) || r.kind || null, status: r.status || null, knows: clip(r.knows, 200) || null }));
     }, []);
   }
   if (fp?.id) {
