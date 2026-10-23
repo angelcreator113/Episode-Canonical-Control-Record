@@ -7155,6 +7155,8 @@ function StoryThreadsCard({ threads, drafts, S, api, showId, onChanged, setToast
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [busy, setBusy] = useState(false);
+  // The add form opens from "+ New thread" (Evoni, 2026-10-22 layout list).
+  const [adding, setAdding] = useState(false);
   const field = { width: '100%', boxSizing: 'border-box', fontSize: 13, padding: '6px 8px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6 };
 
   const create = async (body, done) => {
@@ -7173,7 +7175,7 @@ function StoryThreadsCard({ threads, drafts, S, api, showId, onChanged, setToast
   };
   const add = async () => {
     if (!title.trim()) return;
-    if (await create({ title, description }, 'Story thread added')) { setTitle(''); setDescription(''); }
+    if (await create({ title, description }, 'Story thread added')) { setTitle(''); setDescription(''); setAdding(false); }
   };
   const fromDraft = async (draft) => {
     const name = window.prompt('Name this story thread', draft.seed_text.slice(0, 120));
@@ -7239,9 +7241,18 @@ function StoryThreadsCard({ threads, drafts, S, api, showId, onChanged, setToast
       })}
 
       <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--lala-parchment-3)' }}>
-        <input aria-label="New thread title" placeholder="New thread title" value={title} onChange={(e) => setTitle(e.target.value)} style={field} />
-        <textarea aria-label="New thread description" placeholder="What it is about (optional)" value={description} onChange={(e) => setDescription(e.target.value)} rows={2} style={{ ...field, marginTop: 6 }} />
-        <button onClick={add} disabled={busy || !title.trim()} style={{ ...S.primaryBtn, marginTop: 6 }}>Add thread</button>
+        {adding ? (
+          <>
+            <input aria-label="New thread title" placeholder="New thread title" value={title} onChange={(e) => setTitle(e.target.value)} style={field} autoFocus />
+            <textarea aria-label="New thread description" placeholder="What it is about (optional)" value={description} onChange={(e) => setDescription(e.target.value)} rows={2} style={{ ...field, marginTop: 6 }} />
+            <div style={{ display: 'flex', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
+              <button onClick={add} disabled={busy || !title.trim()} style={S.primaryBtn}>Add thread</button>
+              <button type="button" onClick={() => { setAdding(false); setTitle(''); setDescription(''); }} style={S.secBtn}>Cancel</button>
+            </div>
+          </>
+        ) : (
+          <button type="button" onClick={() => setAdding(true)} style={S.secBtn} data-testid="story-thread-new">+ New thread</button>
+        )}
       </div>
 
       {drafts.length > 0 && (
@@ -7426,7 +7437,7 @@ const slotSelectStyle = { width: '100%', marginTop: 6, fontSize: 11, padding: '4
 // The open slot, beside the season's grid: what it holds, its event and the
 // deal, the threads it moves, and its controls (pencil an event, the
 // intention, the episode).
-function SlotPanel({ slot, showId, available, busy, episode, event, onPencil, onIntention }) {
+function SlotPanel({ slot, showId, available, busy, episode, event, onPencil, onIntention, onClose }) {
   const title = slotTitle(slot);
   const logline = episode?.logline || episode?.description || null;
   const deal = event ? eventCardDetails(event).deal : null;
@@ -7437,6 +7448,8 @@ function SlotPanel({ slot, showId, available, busy, episode, event, onPencil, on
   return (
     <section className={`wa-arc-panel state-${slot.state}`} data-testid="season-slot-panel" aria-label={`Slot ${slot.label}`}>
       <span className="wa-arc-eyebrow">Slot {slot.label}</span>
+      {/* × closes the sheet on a phone; hidden elsewhere. */}
+      {onClose && <button type="button" className="wa-arc-sheet-close" aria-label="Close" onClick={onClose}>×</button>}
       <h3 className="wa-arc-panel-title">{title || 'Open slot'}</h3>
       <span className="wa-arc-chip">{state}{slot.locked ? ' · locked' : ''}</span>
       {logline && <p className="wa-arc-logline">{logline}</p>}
@@ -7494,7 +7507,15 @@ function SeasonRoadmap({ roadmap, S, api, showId, onChanged, setToast, onAdvance
   const [busySlot, setBusySlot] = useState(null);
   const [editingSlotId, setEditingSlotId] = useState(null);
   const [selectedId, setSelectedId] = useState(null);
+  // On a phone the panel is a sheet from the bottom, open after a tap (Evoni, 2026-10-22 layout list).
+  const [sheetOpen, setSheetOpen] = useState(false);
   const panelRef = useRef(null);
+  useEffect(() => {
+    if (!sheetOpen) return undefined;
+    const onKey = (e) => { if (e.key === 'Escape') setSheetOpen(false); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [sheetOpen]);
   if (!roadmap) return null;
   const { phases = [], unslotted_episodes: unslotted = [], available_events: available = [] } = roadmap;
   const allSlots = phases.flatMap((p) => p.slots);
@@ -7524,11 +7545,13 @@ function SeasonRoadmap({ roadmap, S, api, showId, onChanged, setToast, onAdvance
     if (!window.confirm(`Place "${episode.title || 'this episode'}" in ${slot?.label}? The slot then locks to it.`)) return;
     save(slotId, 'episode', { episode_id: episode.id }, `Placed in ${slot?.label}`);
   };
-  // Opening a slot on a phone, where the panel sits above the parts, brings the panel into view.
+  // Opening a slot: on a phone the panel opens as a sheet; between a phone
+  // and a desktop, where it sits above the parts, it scrolls into view.
   const open = (slot) => {
     setSelectedId(slot.id);
     if (editingSlotId && editingSlotId !== slot.id) setEditingSlotId(null);
-    if (typeof window !== 'undefined' && window.matchMedia?.('(max-width: 1099px)').matches) {
+    setSheetOpen(true);
+    if (typeof window !== 'undefined' && window.matchMedia?.('(min-width: 769px) and (max-width: 1099px)').matches) {
       panelRef.current?.querySelector('.wa-arc-panel')?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
     }
   };
@@ -7538,6 +7561,12 @@ function SeasonRoadmap({ roadmap, S, api, showId, onChanged, setToast, onAdvance
       <div className="wa-arc-head">
         <h3 className="wa-arc-title">Season {roadmap.season_number} arc</h3>
         <p className="wa-arc-summary" data-testid="season-arc-summary">{arcSummary(roadmap)}</p>
+        {/* The key, as one line (it was a card beside the panel). */}
+        <ul className="wa-arc-legend" aria-label="Key">
+          {SLOT_STATE_ORDER.map((state) => (
+            <li key={state} className={`state-${state}`}><span className="wa-arc-dot" aria-hidden="true" />{SLOT_STATE_KEY[state]}</li>
+          ))}
+        </ul>
       </div>
 
       {roadmap.phase_boundary && (() => {
@@ -7584,6 +7613,22 @@ function SeasonRoadmap({ roadmap, S, api, showId, onChanged, setToast, onAdvance
                 <span className="wa-arc-part-num">Part {phase.phase}</span> {phase.title}
                 <span className="wa-arc-part-range"> · E{phase.episode_start}–E{phase.episode_end}</span>
               </h4>
+              {phase.slots.every((sl) => sl.state === 'needs_event' && !slotTitle(sl)) ? (
+                // Nothing in this part yet: a row of small chips, one per slot.
+                <div className="wa-arc-chips" data-testid={`season-part-folded-${phase.phase}`}>
+                  {phase.slots.map((slot) => (
+                    <button
+                      key={slot.id}
+                      type="button"
+                      data-testid={`season-slot-${slot.slot_number}`}
+                      className={`wa-arc-chip-slot${selected?.id === slot.id ? ' selected' : ''}`}
+                      aria-pressed={selected?.id === slot.id}
+                      aria-label={`${slot.label}: Open slot, ${SLOT_STATE_LABEL.needs_event}`}
+                      onClick={() => open(slot)}
+                    >{shortSlotLabel(slot)}</button>
+                  ))}
+                </div>
+              ) : (
               <div className="wa-arc-grid">
                 {phase.slots.map((slot) => {
                   const title = slotTitle(slot);
@@ -7608,6 +7653,7 @@ function SeasonRoadmap({ roadmap, S, api, showId, onChanged, setToast, onAdvance
                   );
                 })}
               </div>
+              )}
             </section>
           ))}
           {editing && (
@@ -7616,9 +7662,11 @@ function SeasonRoadmap({ roadmap, S, api, showId, onChanged, setToast, onAdvance
           )}
         </div>
 
-        <aside className="wa-arc-side" ref={panelRef}>
+        <aside className={`wa-arc-side${sheetOpen ? ' is-sheet-open' : ''}`} ref={panelRef}>
+          <button type="button" className="wa-arc-sheet-backdrop" aria-label="Close the slot" tabIndex={-1} onClick={() => setSheetOpen(false)} />
           {selected && (
             <SlotPanel
+              onClose={() => setSheetOpen(false)}
               slot={selected} showId={showId} available={available} busy={busySlot === selected.id}
               episode={episodes.find((e) => e.id === selected.episode?.id) || null}
               event={events.find((e) => e.id === selected.event?.id) || null}
@@ -7626,14 +7674,6 @@ function SeasonRoadmap({ roadmap, S, api, showId, onChanged, setToast, onAdvance
               onIntention={() => setEditingSlotId(editingSlotId === selected.id ? null : selected.id)}
             />
           )}
-          <section className="wa-arc-key" aria-label="Key">
-            <span className="wa-arc-eyebrow">Key</span>
-            <ul>
-              {SLOT_STATE_ORDER.map((state) => (
-                <li key={state} className={`state-${state}`}><span className="wa-arc-dot" aria-hidden="true" />{SLOT_STATE_KEY[state]}</li>
-              ))}
-            </ul>
-          </section>
         </aside>
       </div>
 
@@ -7819,45 +7859,21 @@ function SeasonTab({ showId, api, S, episodes, events = [], setToast }) {
 
   return (
     <div style={S.content}>
-      {/* Season Header */}
-      <div style={S.card}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12 }}>
-          <div>
-            <h2 style={{ ...S.cardTitle, margin: '0 0 4px', fontSize: 18 }}>
-              📖 Season 1: {arc.title}
-            </h2>
-            <p style={{ ...S.muted, margin: 0 }}>{arc.tagline}</p>
-          </div>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <span style={{ padding: '4px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600, background: tempCfg.bg, color: tempCfg.color }}>
-              {tempCfg.label}
-            </span>
-            <span style={{ padding: '4px 12px', borderRadius: 8, fontSize: 12, background: 'var(--surface-bg)', color: 'var(--text-secondary)', border: '1px solid var(--lala-parchment-3)' }}>
-              Ep {arc.current_episode || 0} / {arc.episode_end}
-            </span>
-          </div>
+      {/* Season Header: one line, and the counts as a short line (Evoni,
+          2026-10-22 layout list; four stat boxes before). */}
+      <header className="wa-season-head" data-testid="season-head">
+        <div className="wa-season-head-row">
+          <h2 className="wa-season-head-title">📖 Season 1: {arc.title}</h2>
+          {arc.tagline && <span className="wa-season-head-tagline">{arc.tagline}</span>}
+          <span className="wa-season-head-chips">
+            <span className="wa-season-chip" style={{ background: tempCfg.bg, color: tempCfg.color }}>{tempCfg.label}</span>
+            <span className="wa-season-chip is-plain">Ep {arc.current_episode || 0} / {arc.episode_end}</span>
+          </span>
         </div>
-
-        {/* Quick Stats */}
-        <div style={{ display: 'flex', gap: 12, marginTop: 16, flexWrap: 'wrap' }}>
-          <div style={S.statBox}>
-            <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)' }}>{completedEpisodes}</div>
-            <div style={S.statLbl}>Episodes Done</div>
-          </div>
-          <div style={S.statBox}>
-            <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)' }}>{goals.filter(g => g.status === 'completed').length}</div>
-            <div style={S.statLbl}>Goals Hit</div>
-          </div>
-          <div style={S.statBox}>
-            <div style={{ fontSize: 22, fontWeight: 700, color: debt.length > 0 ? 'var(--danger-text)' : 'var(--text-primary)' }}>{debt.length}</div>
-            <div style={S.statLbl}>Narrative Debt</div>
-          </div>
-          <div style={S.statBox}>
-            <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--lala-gold-text)' }}>{arc.current_phase}</div>
-            <div style={S.statLbl}>Current Phase</div>
-          </div>
-        </div>
-      </div>
+        <p className="wa-season-counts" data-testid="season-counts">
+          {completedEpisodes} {completedEpisodes === 1 ? 'episode' : 'episodes'} done · {goals.filter(g => g.status === 'completed').length} goals hit · <span className={debt.length > 0 ? 'is-debt' : ''}>{debt.length} narrative debt</span> · Phase {arc.current_phase}
+        </p>
+      </header>
 
       {/* What the feed proposes for the season (2026-10-17); nothing changes until she accepts. */}
       <SeasonProposals showId={showId} api={api} onApplied={loadArc} />
@@ -7870,40 +7886,45 @@ function SeasonTab({ showId, api, S, episodes, events = [], setToast }) {
         advanceWarning={warning} onConfirmAdvance={handleConfirmAdvance} onCancelAdvance={() => setWarning(null)}
         threads={threadData.threads} episodes={episodes} events={events} />
 
-      {roadmap && (
-        <StoryThreadsCard threads={threadData.threads} drafts={threadData.drafts} S={S} api={api} showId={showId}
-          onChanged={loadRoadmap} setToast={setToast} />
+      {/* The threads, with the narrative debt beside them (Evoni, 2026-10-22
+          layout list; the debt was its own full-width card further down). */}
+      {(roadmap || debt.length > 0) && (
+        <div className={`wa-season-pair${roadmap && debt.length > 0 ? ' is-two' : ''}`}>
+          {roadmap && (
+            <StoryThreadsCard threads={threadData.threads} drafts={threadData.drafts} S={S} api={api} showId={showId}
+              onChanged={loadRoadmap} setToast={setToast} />
+          )}
+          {debt.length > 0 && (
+            <div style={S.card} data-testid="season-debt">
+              <h3 style={{ ...S.cardTitle, margin: '0 0 12px', color: 'var(--danger-text)' }}>
+                Narrative Debt ({debt.length})
+              </h3>
+              <p style={{ ...S.muted, marginBottom: 12 }}>
+                Failed goals that carry emotional weight. These feed into AI-generated scripts, Pulse posts, and event stakes.
+              </p>
+              {debt.map((d, i) => (
+                <div key={i} style={{
+                  padding: '10px 14px', background: 'var(--danger-bg)', border: '1px solid var(--danger-border)',
+                  borderRadius: 8, marginBottom: 8,
+                }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--danger-text)', marginBottom: 4 }}>
+                    {d.goal_title} <span style={{ fontWeight: 400, fontSize: 11 }}>({d.achieved}/{d.target} {d.target_metric})</span>
+                  </div>
+                  <div style={{ fontSize: 12, color: 'var(--danger-text)', fontStyle: 'italic' }}>
+                    {d.narrative_weight}
+                  </div>
+                  <div style={{ fontSize: 10, color: 'var(--danger-text)', marginTop: 4 }}>
+                    From Phase: {d.phase} &middot; Affects: {(d.affects || []).join(', ')}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       )}
 
       <PlanningInsights insights={insights} S={S} />
 
-      {/* Narrative Debt */}
-      {debt.length > 0 && (
-        <div style={S.card}>
-          <h3 style={{ ...S.cardTitle, margin: '0 0 12px', color: 'var(--danger-text)' }}>
-            Narrative Debt ({debt.length})
-          </h3>
-          <p style={{ ...S.muted, marginBottom: 12 }}>
-            Failed goals that carry emotional weight. These feed into AI-generated scripts, Pulse posts, and event stakes.
-          </p>
-          {debt.map((d, i) => (
-            <div key={i} style={{
-              padding: '10px 14px', background: 'var(--danger-bg)', border: '1px solid var(--danger-border)',
-              borderRadius: 8, marginBottom: 8,
-            }}>
-              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--danger-text)', marginBottom: 4 }}>
-                {d.goal_title} <span style={{ fontWeight: 400, fontSize: 11 }}>({d.achieved}/{d.target} {d.target_metric})</span>
-              </div>
-              <div style={{ fontSize: 12, color: 'var(--danger-text)', fontStyle: 'italic' }}>
-                {d.narrative_weight}
-              </div>
-              <div style={{ fontSize: 10, color: 'var(--danger-text)', marginTop: 4 }}>
-                From Phase: {d.phase} &middot; Affects: {(d.affects || []).join(', ')}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
 
       {/* The phases and the season's history, folded (Evoni, 2026-10-17: one
           long scroll before). Advancing a phase lives at the roadmap's phase
@@ -8050,9 +8071,7 @@ export const S = {
   // file has no shared stylesheet of its own.
   savedCopyTag: { display: 'inline-block', marginLeft: 6, padding: '1px 6px', borderRadius: 4, fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.3px', background: 'var(--lala-gold-soft)', border: '1px solid var(--lala-gold-line)', color: 'var(--lala-gold-text)', verticalAlign: 'middle' },
   statsRow: { display: 'flex', gap: 12, flexWrap: 'wrap' },
-  statBox: { flex: '1 1 90px', background: 'var(--surface-card)', border: '1px solid rgba(0,0,0,0.06)', borderRadius: 12, padding: 16, textAlign: 'center', minWidth: 90, boxShadow: '0 1px 3px rgba(0,0,0,0.04)' },
   statVal: (k, v) => ({ fontSize: 24, fontWeight: 700, color: (k === 'stress' && v >= 5) || (k === 'coins' && v < 0) ? 'var(--danger)' : 'var(--text-primary)' }),
-  statLbl: { fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.3px', marginTop: 4, fontWeight: 500 },
   qGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 12 },
   qBox: { background: 'var(--surface-card)', border: '1px solid rgba(0,0,0,0.06)', borderRadius: 12, padding: 16, textAlign: 'center', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' },
   qVal: { fontSize: 22, fontWeight: 700, color: 'var(--text-primary)' },

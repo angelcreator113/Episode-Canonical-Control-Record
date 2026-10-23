@@ -102,7 +102,10 @@ describe('Season Arc roadmap (§8(ff) PR 1)', () => {
     expect(within(second).getByText('Event pencilled')).toBeTruthy();
     expect(within(second).getByText('Rooftop Launch')).toBeTruthy();
 
-    expect(within(screen.getByTestId('season-slot-24')).getByText('Open')).toBeTruthy();
+    // Part 3 has nothing in it yet: its slots are small chips (Evoni, 2026-10-22 layout list).
+    expect(screen.getByTestId('season-part-folded-3')).toBeTruthy();
+    expect(screen.getByTestId('season-slot-24').textContent).toBe('E24');
+    expect(screen.getByTestId('season-slot-24').getAttribute('aria-label')).toBe('S1 · E24: Open slot, Open');
   });
 
   test('the slot in production opens first; a tile opens its slot in the panel, with its controls', async () => {
@@ -422,6 +425,9 @@ describe('Season Arc roadmap (§8(ff) PR 1)', () => {
       renderAt('season');
 
       const card = await screen.findByTestId('story-threads');
+      // The form opens from "+ New thread" (Evoni, 2026-10-22 layout list).
+      expect(within(card).queryByLabelText('New thread title')).toBeNull();
+      fireEvent.click(within(card).getByRole('button', { name: '+ New thread' }));
       fireEvent.change(within(card).getByLabelText('New thread title'), { target: { value: 'Her mother\'s visit' } });
       fireEvent.click(within(card).getByText('Add thread'));
       await waitFor(() => expect(api.post).toHaveBeenCalledWith('/api/v1/world/show-1/season/threads', { title: 'Her mother\'s visit', description: '' }));
@@ -509,3 +515,68 @@ describe('Season Arc roadmap (§8(ff) PR 1)', () => {
     });
   });
 });
+
+// Evoni, 2026-10-22 (Season Plan layout list): the season on one line, empty
+// parts as chips, the key as one line, the debt beside the threads, and on a
+// phone the open slot as a sheet.
+describe('Season Plan layout', () => {
+  beforeEach(() => {
+    Object.values(api).forEach((fn) => fn?.mockReset?.());
+    vi.mocked(api.get).mockImplementation(async (url) => {
+      if (url.startsWith('/api/v1/episodes?show_id=show-1')) return { data: { episodes: [{ id: 'ep-1', episode_number: 1, title: 'Gala Night', status: 'draft' }] } };
+      if (url === '/api/v1/shows/show-1') return { data: { id: 'show-1', title: 'Show' } };
+      if (url === '/api/v1/world/show-1/arc') return { data: { arc: { ...ARC, narrative_debt: [{ goal_title: 'Reach 10k', achieved: 6, target: 10, target_metric: 'k', narrative_weight: 'She promised.', phase: 1, affects: ['scripts'] }] } } };
+      if (url === '/api/v1/world/show-1/season/roadmap') return { data: { roadmap: ROADMAP } };
+      return { data: {} };
+    });
+    vi.mocked(api.post).mockResolvedValue({ data: {} });
+  });
+
+  test('the season is one line with its counts; no stat boxes', async () => {
+    renderAt('season');
+    const head = await screen.findByTestId('season-head');
+    expect(within(head).getByRole('heading', { level: 2 }).textContent).toBe('📖 Season 1: Soft Luxury Ascension');
+    expect(screen.getByTestId('season-counts').textContent).toBe('0 episodes done · 0 goals hit · 1 narrative debt · Phase 1');
+    expect(screen.queryByText('Episodes Done')).toBeNull();
+  });
+
+  test('a part with anything in it keeps its tiles; empty parts are chips that open their slot; the key is one line', async () => {
+    renderAt('season');
+    const roadmap = await screen.findByTestId('season-roadmap');
+    expect(screen.queryByTestId('season-part-folded-1')).toBeNull();
+    expect(screen.getByTestId('season-part-folded-2')).toBeTruthy();
+    fireEvent.click(screen.getByTestId('season-slot-12'));
+    expect(within(screen.getByTestId('season-slot-panel')).getByText('Slot S1 · E12')).toBeTruthy();
+    expect(screen.getByTestId('season-slot-12').getAttribute('aria-pressed')).toBe('true');
+    const key = within(roadmap).getByRole('list', { name: 'Key' });
+    expect(key.closest('.wa-arc-head')).toBeTruthy();
+    expect(roadmap.querySelector('.wa-arc-key')).toBeNull();
+  });
+
+  test('the narrative debt sits beside the threads', async () => {
+    renderAt('season');
+    const threads = await screen.findByTestId('story-threads');
+    const pair = threads.parentElement;
+    expect(pair.className).toBe('wa-season-pair is-two');
+    expect(within(pair).getByTestId('season-debt').textContent).toContain('Narrative Debt (1)');
+  });
+
+  test('on a phone a tapped slot opens as a sheet; × and Escape close it', async () => {
+    renderAt('season');
+    await screen.findByTestId('season-roadmap');
+    const side = screen.getByTestId('season-slot-panel').closest('aside');
+    expect(side.className).toBe('wa-arc-side');
+    fireEvent.click(screen.getByTestId('season-slot-2'));
+    expect(side.className).toBe('wa-arc-side is-sheet-open');
+    fireEvent.click(within(screen.getByTestId('season-slot-panel')).getByRole('button', { name: 'Close' }));
+    expect(side.className).toBe('wa-arc-side');
+    fireEvent.click(screen.getByTestId('season-slot-3'));
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(side.className).toBe('wa-arc-side');
+    const { readFileSync } = await import('fs');
+    const { resolve } = await import('path');
+    const css = readFileSync(resolve(__dirname, 'WorldAdmin.css'), 'utf8');
+    expect(css).toMatch(/@media \(max-width: 768px\) \{\s*\.wa-arc-side \{ display: none; \}\s*\.wa-arc-side\.is-sheet-open \{ display: block; position: fixed;/);
+  });
+});
+
