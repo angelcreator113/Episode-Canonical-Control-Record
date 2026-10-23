@@ -263,16 +263,22 @@ try {
 // RATE LIMITING
 // ============================================================================
 const rateLimit = require('express-rate-limit');
+const { refusedBy, markSignedIn, waitText } = require('./middleware/rateLimits');
 
-// Global API rate limiter — generous for normal use, blocks abuse
+// Global API rate limiter — generous for normal use, blocks abuse. Signed-in
+// requests (a valid token) are not counted: her own page loads reached 500
+// and then refused her sign-in (Evoni, 2026-10-23). Writes keep their own
+// limit below either way.
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 500,                  // 500 requests per window per IP
+  max: 500,                  // 500 signed-out requests per window per IP
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: 'Too many requests, please try again later' },
+  skip: (req) => !!req.rateLimitUser,
+  handler: refusedBy('site', 'API_TOO_MANY_REQUESTS', (mins) =>
+    `This device made too many requests while signed out. Try again in ${waitText(mins)}.`),
 });
-app.use('/api', apiLimiter);
+app.use('/api', markSignedIn, apiLimiter);
 
 // Stricter limiter for write operations
 const writeLimiter = rateLimit({
@@ -280,7 +286,8 @@ const writeLimiter = rateLimit({
   max: 60,                   // 60 writes per minute per IP
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: 'Too many write requests, please slow down' },
+  handler: refusedBy('writes', 'API_TOO_MANY_WRITES', (mins) =>
+    `Too many saves in the last minute from this device. Try again in ${waitText(mins)}.`),
 });
 // Apply to all mutating methods on /api
 app.use('/api', (req, res, next) => {
