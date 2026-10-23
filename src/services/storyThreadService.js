@@ -95,18 +95,23 @@ async function seedDrafts(sequelize, showId) {
 }
 
 /** Evoni creates and names a thread (Q9); from a seed draft when seed_text is given. */
-async function createThread(sequelize, showId, body = {}) {
+// `source: 'record'`: opened from an episode's "What changed" card
+// (services/episodeStoryRecord approveRecord), with that episode as where it
+// opened. `transaction`: the caller's.
+async function createThread(sequelize, showId, body = {}, { transaction } = {}) {
   const title = text(body.title, 200);
   if (!title) throw new StoryThreadError('A thread needs a title', 400, 'STORY_THREAD_INVALID');
   const seed = text(body.seed_text, 500);
+  const fromRecord = body.source === 'record';
   const [[row]] = await sequelize.query(
     `INSERT INTO show_story_threads (id, show_id, title, description, status, source, seed_text, opened_episode_id, created_at, updated_at)
      VALUES (gen_random_uuid(), :showId, :title, :description, 'open', :source, :seed, :openedEpisode, NOW(), NOW())
      RETURNING id, title, description, status, source, seed_text, opened_episode_id`,
     { replacements: {
       showId, title, description: text(body.description, 2000),
-      source: seed ? 'seed' : 'evoni', seed, openedEpisode: seed ? (body.episode_id || null) : null,
-    } });
+      source: fromRecord ? 'record' : seed ? 'seed' : 'evoni', seed,
+      openedEpisode: seed || fromRecord ? (body.episode_id || null) : null,
+    }, transaction });
   return row;
 }
 

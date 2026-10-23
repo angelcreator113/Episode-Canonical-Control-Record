@@ -6,7 +6,7 @@
  *
  * The book follows the show (Evoni, 2026-10-15; docs/CANON.md). One path, in
  * the order the work happens (Evoni, 2026-10-22 layout list):
- *   1. the story record  what the audience saw (EpisodeStoryRecord), approved
+ *   1. what changed      the story record, read from the script (EpisodeStoryRecord), saved
  *   2. the short story   the event in full (written here, read on Stories);
  *                        written in this one place only
  *   3. the canon check   what the story adds, accepted or dismissed
@@ -24,7 +24,7 @@
  * APIs: /api/v1/book-from-show (ledger, record, canon, chapter's episode),
  * the show's generate-story, and the storyteller books and chapters.
  */
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import api from '../../services/api';
 import Beat11Piece from '../Beat11Piece';
@@ -202,10 +202,13 @@ export function Why({ id, label = 'What this is', children }) {
   );
 }
 
-function Step({ n, id, title, line, help, done, next, state, children }) {
+function Step({ n, id, title, line, help, whyLabel = null, done, next, state, keepOpen = false, children }) {
   const [open, setOpen] = useState(!done);
-  // A step that becomes done folds; one that opens again unfolds.
-  useEffect(() => { setOpen(!done); }, [done]);
+  // A step that becomes done folds; one that opens again unfolds. keepOpen:
+  // it was just finished here, and shows what that did (What changed's Save).
+  const held = useRef(keepOpen);
+  held.current = keepOpen;
+  useEffect(() => { setOpen(!done || held.current); }, [done]);
   const helpId = `tw-help-${id}`;
   const bodyId = `tw-body-${id}`;
   const [why, setWhy] = useState(false);
@@ -215,7 +218,7 @@ function Step({ n, id, title, line, help, done, next, state, children }) {
         <span className="tw-step-n" aria-hidden="true">{done ? '✓' : n}</span>
         <h3 className="tw-step-title">{title}</h3>
         <span className="tw-step-state">{state || (done ? 'Done' : next ? 'Next' : 'To do')}</span>
-        {help && <button type="button" className="tw-why" aria-expanded={why} aria-controls={helpId} aria-label={`What ${title.toLowerCase()} is`} onClick={() => setWhy((o) => !o)}>?</button>}
+        {help && <button type="button" className="tw-why" aria-expanded={why} aria-controls={helpId} aria-label={whyLabel || `What ${title.toLowerCase()} is`} onClick={() => setWhy((o) => !o)}>?</button>}
         {done && (
           <button type="button" className="tw-fold" aria-expanded={open} aria-controls={bodyId} onClick={() => setOpen((o) => !o)}>{open ? 'Close' : 'Open'}</button>
         )}
@@ -243,6 +246,8 @@ export default function EpisodeBookSteps({ episode, children }) {
   const { books, bookId, setBookId, ledger, loadLedger, error, setError } = useBookLedger(showId);
   const [busy, setBusy] = useState(null);     // 'story' | 'chapter'
   const [record, setRecord] = useState(null); // null | 'draft' | 'approved'
+  // Saved on this visit: the step stays open to show what Save wrote.
+  const [savedHere, setSavedHere] = useState(false);
   const [canon, setCanon] = useState(null);   // { stories, pending }
   const [canonKey, setCanonKey] = useState(0);
 
@@ -314,12 +319,12 @@ export default function EpisodeBookSteps({ episode, children }) {
 
       <ol className="tw-steps" aria-label="From the episode to the book">
         <Step
-          n={1} id="record" title="The story record" done={done.record} next={next === 'record'}
+          n={1} id="record" title="What changed" whyLabel="About What changed" keepOpen={savedHere} done={done.record} next={next === 'record'}
           state={record === 'draft' ? 'Draft' : null}
-          line="What the audience saw. Approve it and the writers read it."
-          help="What happened, what each person knew and learned, the secrets hinted at, and what is left open. Once you approve it, the short story and the chapter writers read it, and its secrets move on with the audience."
+          line="Read from the finished script. Tick what is right, then Save, and the writers read it."
+          help="What happened, the goals the script covers, the relationships that moved, what Lala owes people, the plot threads and the secrets. Save writes the ticked ones: threads to the Season Plan, relationships to the Relationship Engine, follow-ups for later episodes, goals ticked on the to-do list. The short story and the chapter writers read it once saved, and its secrets move on with the audience."
         >
-          <EpisodeStoryRecord episodeId={episodeId} embedded onStatus={setRecord} />
+          <EpisodeStoryRecord episodeId={episodeId} embedded onStatus={setRecord} onSaving={() => setSavedHere(true)} />
         </Step>
 
         <Step
