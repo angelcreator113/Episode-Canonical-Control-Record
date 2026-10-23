@@ -22,11 +22,20 @@
  *   twistsForEpisode(sequelize, episodeId)           { plant: [...], payoff: [...] } for the episode's slot
  *   twistBlock(sequelize, episodeId)                 the episode's twists, as prompt text for the script writer; ''
  *   checkTwists(twists)                              what is wrong with the list
+ *   markTwist(sequelize, episodeId, twistId, as)     the Script tab's "Mark planted" / "Mark paid off"
+ *   suggestTwists(sequelize, showId)                 3-5 drafts from the AI; nothing saved
+ *
+ * Twists, 2nd round (Evoni, 2026-10-23): the Script tab lists the twists
+ * due in its episode and marks them done there; "Suggest twists" drafts
+ * some for her to keep, edit or drop; a slot whose episode is already
+ * written (every beat of its script approved) and has not planted or paid
+ * off its twist is a warning.
  *
  * Raw SQL (season_twists, migration 20261023200000); no model.
  */
 
 const { episodeLabel } = require('./seasonSlotService');
+const { splitScriptBeats, normalizeLockedBeats } = require('../utils/scriptBeatLocks');
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const STATUSES = ['planned', 'planted', 'paid_off', 'dropped'];
@@ -97,18 +106,39 @@ function checkTwists(twists) {
       else if (t.payoff.slot_number === t.plant.slot_number) add(`${name} is planted and paid off in the same episode, ${t.plant.label}. Pay it off later.`);
     }
     if (t.status === 'paid_off' && !t.planted_episode_id) add(`${name} is marked paid off but was never planted in an episode.`);
+    // Written is final until she reopens a beat: say so while there is still time to fix the script.
+    if (t.plant?.written && !['planted', 'paid_off'].includes(t.status)) {
+      add(`Episode ${t.plant.slot_number} is already written and doesn't plant ${name} yet.`);
+    }
+    if (t.payoff?.written && t.status !== 'paid_off' && t.plant && t.payoff.slot_number > t.plant.slot_number) {
+      add(`Episode ${t.payoff.slot_number} is already written and doesn't pay off ${name} yet.`);
+    }
   }
   return warnings;
 }
 
+/**
+ * Written: the script has beats and every one is approved (locked), what
+ * the Script tab calls Complete (utils/scriptBeatLocks numbers the beats
+ * as the tab does).
+ */
+function scriptWritten(scriptContent, lockedBeats) {
+  const { beats } = splitScriptBeats(String(scriptContent || ''));
+  if (!beats.length) return false;
+  const locked = new Set(normalizeLockedBeats(parse(lockedBeats, [])));
+  return beats.every((b) => locked.has(b.number));
+}
+
 async function seasonSlots(sequelize, arc) {
   const [rows] = await sequelize.query(
-    `SELECT s.id, s.slot_number, s.phase, s.story_purpose, s.accepted_at, ep.id AS episode_id, ep.title AS episode_title
+    `SELECT s.id, s.slot_number, s.phase, s.story_purpose, s.accepted_at, ep.id AS episode_id, ep.title AS episode_title,
+            ep.script_content, ep.script_locked_beats
        FROM season_slots s LEFT JOIN episodes ep ON ep.id = s.episode_id AND ep.deleted_at IS NULL
       WHERE s.arc_id = :arcId AND s.deleted_at IS NULL ORDER BY s.slot_number`, { replacements: { arcId: arc.id } });
   return rows.map((s) => ({
     id: s.id, slot_number: s.slot_number, phase: s.phase, label: episodeLabel(arc.season_number, s.slot_number), story_purpose: s.story_purpose,
     episode: s.episode_id ? { id: s.episode_id, title: s.episode_title } : null, done: Boolean(s.accepted_at),
+    written: Boolean(s.episode_id) && scriptWritten(s.script_content, s.script_locked_beats),
   }));
 }
 
@@ -127,7 +157,7 @@ async function getTwists(sequelize, showId) {
       ORDER BY created_at`, { replacements: { showId, arcId: arc.id } });
   const slotOf = (id) => {
     const s = id && slotById.get(id);
-    return s ? { id: s.id, slot_number: s.slot_number, label: s.label, episode: s.episode, done: s.done } : null;
+    return s ? { id: s.id, slot_number: s.slot_number, label: s.label, episode: s.episode, done: s.done, written: s.written } : null;
   };
   const twists = rows.map((r) => ({
     id: r.id, title: r.title, description: r.description, status: r.status, note: r.note,
@@ -314,7 +344,172 @@ async function twistBlock(sequelize, episodeId) {
   return renderTwistBlock(await twistsForEpisode(sequelize, episodeId));
 }
 
+/**
+ * The Script tab's "Mark planted" / "Mark paid off": the twist this
+ * episode's slot plants (or pays off) is set planted (or paid off) by this
+ * episode. Only on her click; nothing marks a twist on its own. Marking it
+ * again does nothing; a paid-off twist is not set back to planted.
+ */
+async function markTwist(sequelize, episodeId, twistId, as) {
+  if (!UUID_RE.test(String(episodeId || ''))) throw new TwistError('episodeId must be a UUID');
+  if (!UUID_RE.test(String(twistId || ''))) throw new TwistError('twistId must be a UUID');
+  if (!['planted', 'paid_off'].includes(as)) throw new TwistError('Mark a twist planted or paid off.');
+  const [[slot]] = await sequelize.query(
+    'SELECT id FROM season_slots WHERE episode_id = :episodeId AND deleted_at IS NULL LIMIT 1', { replacements: { episodeId } });
+  if (!slot) throw new TwistError('This episode is not in the season.', 404);
+  const [[twist]] = await sequelize.query(
+    `SELECT id, status, plant_slot_id, payoff_slot_id FROM season_twists
+      WHERE id = :twistId AND deleted_at IS NULL AND (plant_slot_id = :slotId OR payoff_slot_id = :slotId)`,
+    { replacements: { twistId, slotId: slot.id } });
+  if (!twist) throw new TwistError('That twist is not due in this episode.', 404);
+  if (twist.status === 'dropped') throw new TwistError('That twist is dropped; bring it back on the Season Plan first.', 409);
+  if (as === 'planted') {
+    if (twist.plant_slot_id !== slot.id) throw new TwistError('This episode pays that twist off; it is planted in an earlier one.', 409);
+    if (twist.status === 'planned') {
+      await sequelize.query(
+        `UPDATE season_twists SET status = 'planted', planted_episode_id = :episodeId, updated_at = NOW() WHERE id = :twistId`,
+        { replacements: { episodeId, twistId } });
+    }
+  } else {
+    if (twist.payoff_slot_id !== slot.id) throw new TwistError('This episode plants that twist; it is paid off in a later one.', 409);
+    if (twist.status !== 'paid_off') {
+      await sequelize.query(
+        `UPDATE season_twists SET status = 'paid_off', paid_off_episode_id = :episodeId, updated_at = NOW() WHERE id = :twistId`,
+        { replacements: { episodeId, twistId } });
+    }
+  }
+  return twistsForEpisode(sequelize, episodeId);
+}
+
+// ── Suggest twists (one AI call; drafts only, nothing saved) ──────────────
+
+const MODELS = ['claude-sonnet-4-6'];
+const MAX_DRAFTS = 5;
+let client = null;
+function getClient() {
+  if (!client) {
+    const Anthropic = require('@anthropic-ai/sdk');
+    client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  }
+  return client;
+}
+
+/** The relationships between the show's characters, both ends in the show. */
+async function showRelationships(sequelize, characters) {
+  const known = characters.map((c) => c.id);
+  if (!known.length) return [];
+  const [rows] = await sequelize.query(
+    `SELECT character_id_a, character_id_b, relationship_type, tension_state, situation, conflict_summary
+       FROM character_relationships
+      WHERE deleted_at IS NULL AND character_id_a IN (:known) AND character_id_b IN (:known)
+      ORDER BY updated_at DESC LIMIT 40`, { replacements: { known } });
+  return rows;
+}
+
+function suggestPrompt({ arc, slots, threads, characters, relationships, twists }) {
+  const nameOf = new Map(characters.map((c) => [c.id, c.name]));
+  const slotLines = slots.map((s) => `- E${s.slot_number}${s.phase ? ` (phase ${s.phase})` : ''}${s.done ? ' [DONE: do not use]' : ''}`
+    + `${s.episode?.title ? `: "${s.episode.title}"` : ''}${s.story_purpose ? ` — ${String(s.story_purpose).slice(0, 200)}` : ''}`).join('\n');
+  const threadLines = threads.length
+    ? threads.map((t) => `- [${t.id}] ${t.title}${t.description ? `: ${String(t.description).slice(0, 200)}` : ''}`).join('\n') : '(none)';
+  const people = characters.length ? characters.map((c) => `- [${c.id}] ${c.name}`).join('\n') : '(none)';
+  const ties = relationships.length
+    ? relationships.map((r) => `- ${nameOf.get(r.character_id_a)} & ${nameOf.get(r.character_id_b)}: ${r.relationship_type || 'connected'}`
+      + `${r.tension_state ? ` (${r.tension_state})` : ''}${r.situation || r.conflict_summary ? ` — ${String(r.situation || r.conflict_summary).slice(0, 200)}` : ''}`).join('\n')
+    : '(none recorded)';
+  const planned = twists.length
+    ? twists.map((t) => `- ${t.title}${t.plant ? ` (planted E${t.plant.slot_number}` : ' ('}${t.payoff ? `, paid off E${t.payoff.slot_number})` : ')'}`).join('\n') : '(none yet)';
+  return `You help plan the season of "Styling Adventures with Lala". Suggest season twists: a twist is a detail planted, unexplained, in one episode and paid off in a later one, so the audience connects it.
+
+SEASON ${arc.season_number}: "${arc.title || 'Untitled'}"${arc.tagline ? ` — ${arc.tagline}` : ''}
+
+THE SEASON'S EPISODES:
+${slotLines}
+
+THE SHOW'S OPEN THREADS:
+${threadLines}
+
+THE CHARACTERS:
+${people}
+
+THEIR RELATIONSHIPS:
+${ties}
+
+TWISTS ALREADY PLANNED (do not repeat these):
+${planned}
+
+Suggest 3 to 5 new twists that grow out of the threads and relationships above. Plant each in an episode not marked DONE and pay it off in a later one. Use only the ids above; invent no characters or threads.
+Answer with JSON only:
+{"twists": [{"title": "a short name", "description": "what is planted and how it pays off, in one or two sentences", "plant_episode": 3, "payoff_episode": 9, "thread_ids": ["a thread id above"], "character_ids": ["a character id above"]}]}`;
+}
+
+/**
+ * The AI's answer as drafts: each id checked against the season, the
+ * threads and the characters; an unknown one is dropped. A plant in a done
+ * or unknown episode becomes unchosen; so does a payoff not after its plant.
+ */
+function cleanDrafts(parsed, { slots = [], threads = [], characters = [], twists = [] } = {}) {
+  const list = Array.isArray(parsed?.twists) ? parsed.twists : Array.isArray(parsed) ? parsed : [];
+  const open = slots.filter((s) => !s.done);
+  const slotFor = (number, id) => open.find((s) => (id && s.id === id) || (number != null && Number(s.slot_number) === Number(number))) || null;
+  const threadIds = new Set(threads.map((t) => String(t.id)));
+  const characterIds = new Set(characters.map((c) => String(c.id)));
+  const taken = new Set(twists.map((t) => String(t.title || '').trim().toLowerCase()));
+  const keep = (value, known) => [...new Set((Array.isArray(value) ? value : []).map(String))].filter((id) => known.has(id)).slice(0, MAX_LINKS);
+  const drafts = [];
+  for (const d of list) {
+    const title = text(d?.title, 200);
+    if (!title || taken.has(title.toLowerCase())) continue;
+    taken.add(title.toLowerCase());
+    const plant = slotFor(d.plant_episode, d.plant_slot_id);
+    let payoff = slotFor(d.payoff_episode, d.payoff_slot_id);
+    if (payoff && (!plant || payoff.slot_number <= plant.slot_number)) payoff = null;
+    drafts.push({
+      title, description: text(d.description, 2000),
+      plant_slot_id: plant ? plant.id : null, payoff_slot_id: payoff ? payoff.id : null,
+      thread_ids: keep(d.thread_ids, threadIds), character_ids: keep(d.character_ids, characterIds),
+    });
+    if (drafts.length >= MAX_DRAFTS) break;
+  }
+  return drafts;
+}
+
+/** 3-5 drafted twists for the season; nothing is saved (Evoni keeps, edits or drops each). */
+async function suggestTwists(sequelize, showId) {
+  const season = await getTwists(sequelize, showId);
+  if (!season.arc) throw new TwistError('This show has no season yet to plan twists in.', 409);
+  if (season.slots.filter((s) => !s.done).length < 2) throw new TwistError('No two episodes are left to plant and pay off a twist in.', 409);
+  const [threads] = await sequelize.query(
+    `SELECT id, title, description FROM show_story_threads
+      WHERE show_id = :showId AND deleted_at IS NULL AND status <> 'closed' ORDER BY created_at DESC LIMIT 40`, { replacements: { showId } });
+  const relationships = await showRelationships(sequelize, season.characters);
+  const prompt = suggestPrompt({ ...season, threads, relationships });
+  let message;
+  for (const model of MODELS) {
+    try {
+      message = await getClient().messages.create({ model, max_tokens: 2000, messages: [{ role: 'user', content: prompt }] });
+      break;
+    } catch (modelErr) {
+      console.warn(`[seasonTwists] suggesting with ${model} failed:`, modelErr.message);
+      if (modelErr.code === 'AI_BUDGET_EXCEEDED') throw new TwistError(`${modelErr.message} No twists were suggested.`, 429);
+      if (model === MODELS[MODELS.length - 1]) throw new TwistError('The AI could not suggest twists right now. Try again.', 502);
+    }
+  }
+  let parsed;
+  try {
+    const raw = (message?.content?.[0]?.text || '').trim();
+    parsed = JSON.parse((raw.match(/\{[\s\S]*\}/) || [raw])[0]);
+  } catch (err) {
+    console.error('[seasonTwists] the suggestions could not be read:', err.message);
+    throw new TwistError('The suggestions came back in a form that could not be read. Try again.', 502);
+  }
+  const drafts = cleanDrafts(parsed, { slots: season.slots, threads, characters: season.characters, twists: season.twists });
+  if (!drafts.length) throw new TwistError('The AI suggested no twists that fit this season. Try again.', 502);
+  return { drafts };
+}
+
 module.exports = {
   TwistError, STATUSES, getTwists, setTwist, deleteTwist, restoreTwist,
   twistsForEpisode, twistsForSlot, twistBlock, renderTwistBlock, checkTwists,
+  markTwist, suggestTwists, cleanDrafts, scriptWritten,
 };
