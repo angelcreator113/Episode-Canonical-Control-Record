@@ -8,6 +8,7 @@ import api from '../../services/api';
 import { episodePlanning } from '../../utils/episodePlanning';
 import { scriptInputs, mustCover, scriptPeople } from '../../lib/episodeScript';
 import Beat14Opportunity from './Beat14Opportunity';
+import EpisodeTwistsDue from './EpisodeTwistsDue';
 import { beat14Outcome } from '../../lib/beat14Invitation';
 import { beatState } from '../../lib/beatState';
 import { moveBeat, moveLine, dropIndex, replaceBeat, appendLine, insertLine } from '../../lib/scriptBeatOrder';
@@ -2486,6 +2487,8 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
             ) : (
               <p className="esp-cover-empty" data-testid="script-cover-empty">Nothing to cover: the event has no goals, nothing is carried from an earlier episode, the brief has no forward hook, and beat 14 has no opportunity coming.</p>
             )}
+            {/* The Season Plan's twists due in this episode (2026-10-23; EpisodeTwistsDue). */}
+            <EpisodeTwistsDue episodeId={episodeId} beats={beats} />
             <p className="esp-uses-note">From the event package, the brief, beat 14&apos;s opportunity and what Lala still owes from an earlier episode. Ticked when the script mentions it, a goal also when its person is there by any of their names; the opportunity, when beat 14 delivers it as a DM or notification. Tick it marks the goal done on her to-do list.</p>
           </section>
         )}
