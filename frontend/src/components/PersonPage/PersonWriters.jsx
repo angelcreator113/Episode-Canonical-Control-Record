@@ -1,5 +1,5 @@
 /**
- * Person tab, section 6: what the writers know about them. The exact lines
+ * What the writers know about them, at the bottom of the Overview tab. The exact lines
  * the episode script writer reads about this person (made on the server by
  * the script writer's own functions, services/personPage writersPreview):
  * their lines about Lala in the cast block, their family block, and who

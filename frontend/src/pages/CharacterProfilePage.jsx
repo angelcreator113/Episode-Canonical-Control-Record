@@ -18,7 +18,7 @@ import {
   BarChart3, CalendarDays, Download, Link2, MapPin, Palette, Crown, Instagram,
   Quote, Star, TrendingUp, Briefcase, IdCard, Activity, FileText, CirclePlay, Flame,
   Copy, BadgeCheck, Lock, Eye, Smartphone, Plus, ExternalLink, Share2, Search,
-  Building2, BookOpen, Radio, Settings as SettingsIcon, AlertTriangle, Archive, RotateCcw, Link as LinkIcon, MessageCircle, UserRound,
+  Building2, BookOpen, Radio, Settings as SettingsIcon, AlertTriangle, Archive, RotateCcw, Link as LinkIcon, MessageCircle,
 } from 'lucide-react';
 import Pager, { usePaged } from '../components/Pager/Pager';
 import CharacterPlacesTab from '../components/CharacterPlaces/CharacterPlacesTab';
@@ -29,7 +29,13 @@ import PulseTrust from '../components/PulseTrust/PulseTrust';
 import CharacterTalkTab from '../components/CharacterTalk/CharacterTalkTab';
 import CharacterGalleryTab from '../components/CharacterGallery/CharacterGalleryTab';
 import FamilySection from '../components/CharacterFamily/FamilySection';
-import PersonPage from '../components/PersonPage/PersonPage';
+// The person read, shown in the tabs it belongs to (Evoni, 2026-10-23; components/PersonPage).
+import usePerson from '../components/PersonPage/usePerson';
+import PersonWho, { summaryOf } from '../components/PersonPage/PersonWho';
+import PersonPulse from '../components/PersonPage/PersonPulse';
+import PersonRelationship, { LoveHeart } from '../components/PersonPage/PersonRelationships';
+import PersonEpisodes from '../components/PersonPage/PersonEpisodes';
+import PersonWriters from '../components/PersonPage/PersonWriters';
 import { API_URL } from '../config/api';
 import InnerLifeWorkspace from '../components/InnerLife/InnerLifeWorkspace';
 import { dimensionOf as dimension, dimensionText } from '../lib/innerLifeSections';
@@ -169,9 +175,6 @@ export const applyInteriorApi = (id, values) =>
 // (the redesign, Evoni's mocks, 2026-10-18); Overview is the page with no tab.
 export const TABS = [
   { id: 'overview',    label: 'Overview',     icon: LayoutDashboard },
-  // Evoni, 2026-10-23: "one person page": who they are, their Pulse account,
-  // relationships, family and episodes in one place (components/PersonPage).
-  { id: 'person',      label: 'Person',       icon: UserRound },
   { id: 'inner',       label: 'Inner Life',   icon: Heart },
   // Evoni, 2026-10-17: how they look, a generator for it, and portraits.
   { id: 'appearance',  label: 'Appearance',   icon: Palette },
@@ -2109,7 +2112,10 @@ const toPerson = (r) => (r.related_id ? `/character/${r.related_id}` : null);
 export const relationshipsFor = (character, extra = '') => (character?.id ? `/relationships?char=${encodeURIComponent(character.id)}${extra}` : '/relationships');
 const sinceOf = (r) => (activityDate(r.created_at) ? activityWhen(activityDate(r.created_at)) : null);
 
-export function RelationshipOverview({ character, relationships }) {
+// truth: the person read's relationships (stage, love interest, who knows,
+// different online), shown inside each row rather than as a second list.
+export function RelationshipOverview({ character, relationships, truth = null }) {
+  const truthOf = new Map((truth || []).map((t) => [String(t.id), t]));
   const [filter, setFilter] = useState('all');
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState('closeness');
@@ -2176,16 +2182,19 @@ export function RelationshipOverview({ character, relationships }) {
                 const tension = TENSION[r.tension_state];
                 const to = toPerson(r);
                 const since = sinceOf(r);
+                const t = truthOf.get(String(r.id));
                 return (
                   <li key={r.id} className="ch-conn" data-testid="ch-conn">
                     <Avatar src={r.related_portrait} name={nameOf(r)} />
                     <span className="ch-conn-text">
                       <span className="ch-conn-top">
+                        <LoveHeart rel={t} />
                         {to ? <Link to={to} className="ch-conn-name">{nameOf(r)}</Link> : <strong className="ch-conn-name">{nameOf(r)}</strong>}
                         <span className="ch-chip">{typeLabel(r)}</span>
                         {tension && <span className={`ch-tension is-${r.tension_state}`}>{tension.label}</span>}
                       </span>
                       {noteOf(r) && <span className="ch-conn-note">{shortText(noteOf(r), 140)}</span>}
+                      <PersonRelationship rel={t} />
                     </span>
                     <span className="ch-conn-meta">
                       <span>{GROUP_LABEL[groupOf(r)]}</span>
@@ -2349,11 +2358,11 @@ function BelongingMap({ character }) {
   );
 }
 
-function TabConnections({ character, relationships, entanglements }) {
+function TabConnections({ character, relationships, entanglements, person }) {
   return (
     <div className="ch-overview ch-conn-grid">
       <div className="ch-col">
-        <RelationshipOverview character={character} relationships={relationships} />
+        <RelationshipOverview character={character} relationships={relationships} truth={person?.relationships} />
       </div>
       <div className="ch-col">
         <ConnectionMap character={character} relationships={relationships} />
@@ -3307,7 +3316,12 @@ function StoryCard({ id, title, icon: Icon, action, children, testid }) {
   );
 }
 
-export function TabStory({ character, feedProfile, appearances, openTab, now = Date.now() }) {
+export function TabStory({ character, feedProfile, appearances, openTab, now = Date.now(), person = null }) {
+  // The person read's episode history (story records, relationship events,
+  // their events) is the fuller list: with it, the counts, Latest episode and
+  // Their episodes all read from it, with what changed for them.
+  const episodes = person?.episodes || null;
+  const storyApps = episodes && appearances ? { ...appearances, episodes } : appearances;
   const [section, setSection] = useState('overview');
   const trail = useStoryTrail(character.id);
   const go = (key) => <button type="button" className="ch-pill-btn" onClick={() => setSection(key)}>View all</button>;
@@ -3333,11 +3347,11 @@ export function TabStory({ character, feedProfile, appearances, openTab, now = D
 
       {section === 'overview' && (
         <>
-          <StoryTiles appearances={appearances} trail={trail} now={now} />
+          <StoryTiles appearances={storyApps} trail={trail} now={now} />
           <div className="ch-overview">
             <div className="ch-col">
               <StoryCard id="ch-st-ep" title="Latest episode" icon={CirclePlay} testid="ch-st-latest" action={go('episodes')}>
-                <EpisodeList appearances={appearances} limit={1} />
+                {episodes ? <PersonEpisodes episodes={episodes.slice(0, 1)} bare /> : <EpisodeList appearances={appearances} limit={1} />}
               </StoryCard>
               <StoryCard id="ch-st-goals" title="Lala's goals at their events" icon={Star} testid="ch-st-goals">
                 {goals.length === 0 ? <p className="ch-note">No goals at their events yet.</p> : (
@@ -3388,7 +3402,7 @@ export function TabStory({ character, feedProfile, appearances, openTab, now = D
       )}
       {section === 'episodes' && (
         <StoryCard id="ch-st-eps" title="Their episodes" icon={CirclePlay} testid="ch-st-episodes">
-          <EpisodeList appearances={appearances} />
+          {episodes ? <PersonEpisodes episodes={episodes} bare /> : <EpisodeList appearances={appearances} />}
         </StoryCard>
       )}
       {section === 'posts' && (
@@ -3590,6 +3604,9 @@ export default function CharacterProfilePage() {
   // An archived character opened by an ADMIN: shown with "Bring back" (the profile audit, 2026-10-19).
   const [archived, setArchived]           = useState(false);
   const [restoring, setRestoring]         = useState(null);
+  // One read for what the tabs add about them: Pulse account, each
+  // relationship's stage and secrecy, episode history, what the writers know.
+  const { person } = usePerson(id);
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -3745,6 +3762,7 @@ export default function CharacterProfilePage() {
           <h1 className="ch-name">{name}</h1>
           {/* Their real name heads the page; the name they post under follows. */}
           {socialName && socialName !== name && <p className="ch-aka" data-testid="ch-aka">Online as {socialName}</p>}
+          <PersonWho aliases={aliasList(feedProfile)} summary={summaryOf(character)} name={name} />
           {(handle || city) && (
             <p className="ch-sub">
               {handle && <span className="ch-sub-item"><Instagram size={16} aria-hidden />{handle}</span>}
@@ -3800,7 +3818,7 @@ export default function CharacterProfilePage() {
 
       <div className="ch-panel">
         {activeTab === 'overview' && <TabOverview character={character} appearances={appearances} feedProfile={feedProfile} relationships={relationships} entanglements={entanglements} onSaved={onSaved} onFeedSaved={onFeedSaved} gen={gen} openTab={setActiveTab} />}
-        {activeTab === 'person' && <PersonPage key={character.id} character={character} openTab={setActiveTab} />}
+        {activeTab === 'overview' && person && <PersonWriters writers={person.writers} />}
         {activeTab === 'inner' && (
           <div className="ch-card">
             <InnerLifeWorkspace character={character} gen={gen} onSaved={onSaved}
@@ -3808,9 +3826,12 @@ export default function CharacterProfilePage() {
           </div>
         )}
         {activeTab === 'voice' && (
-          <TabVoice character={character} feedProfile={feedProfile} appearances={appearances} onSaved={onSaved} onFeedSaved={onFeedSaved} />
+          <>
+            {person && <PersonPulse pulse={person.pulse} lalaTie={person.lala_tie} isLala={person.who?.is_lala} />}
+            <TabVoice character={character} feedProfile={feedProfile} appearances={appearances} onSaved={onSaved} onFeedSaved={onFeedSaved} />
+          </>
         )}
-        {activeTab === 'connections' && <TabConnections character={character} relationships={listOf(relationships)} entanglements={listOf(entanglements)} />}
+        {activeTab === 'connections' && <TabConnections character={character} relationships={listOf(relationships)} entanglements={listOf(entanglements)} person={person} />}
         {activeTab === 'world' && <TabWorld character={character} feedProfile={feedProfile} appearances={appearances} onSaved={onSaved} gen={gen} openTab={setActiveTab} />}
         {activeTab === 'places' && (
           <>
@@ -3818,7 +3839,7 @@ export default function CharacterProfilePage() {
             <div className="ch-card"><CharacterGalleryTab key={character.id} character={character} openTab={setActiveTab} hide={['places']} /></div>
           </>
         )}
-        {activeTab === 'story' && <TabStory character={character} feedProfile={feedProfile} appearances={appearances} openTab={setActiveTab} />}
+        {activeTab === 'story' && <TabStory character={character} feedProfile={feedProfile} appearances={appearances} openTab={setActiveTab} person={person} />}
         {activeTab === 'talk' && <div className="ch-card"><CharacterTalkTab key={character.id} character={character} onSaved={onSaved} /></div>}
         {activeTab === 'settings' && <TabSettings character={character} feedProfile={feedProfile} onSaved={onSaved} onExport={exportJson} onDeleted={() => navigate('/character-registry')} />}
         {activeTab === 'appearance' && <CharacterAppearanceTab key={character.id} character={character} onPortraitChanged={(url) => onSaved({ portrait_url: url })} />}

@@ -1,5 +1,5 @@
 /**
- * Person tab, section 2: their Pulse account (registry_characters.
+ * Their Pulse account, at the top of the Voice & Pulse tab (registry_characters.
  * feed_profile_id): handle, followers, their tie to Lala and a link to the
  * profile. With none, "Not on the Pulse yet" and where to match one (The
  * cast, as the Settings tab says).

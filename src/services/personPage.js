@@ -2,9 +2,11 @@
 
 /**
  * One person page (Evoni, 2026-10-23: "one person page": story details,
- * Pulse account, relationships, family and episode history in one place).
- * The character page's Person tab reads all of it in one call
- * (GET /api/v1/person/:id, routes/person.js):
+ * Pulse account, relationships, family and episode history in one place;
+ * then "shouldn't this information be in other tabs instead of creating a
+ * new one?"). The character page reads it in one call (GET
+ * /api/v1/person/:id, routes/person.js) and shows each part in the tab it
+ * belongs to (components/PersonPage):
  *
  *   who            name, the name they post under, also-known-as names
  *                  (social_profiles.aliases, where the column exists), role,
@@ -265,7 +267,7 @@ class PersonError extends Error {
   constructor(status, message) { super(message); this.status = status; }
 }
 
-/** Everything the Person tab shows, in one read. A PersonError(404) when there is no such character. */
+/** Everything the character page's tabs add about them, in one read. A PersonError(404) when there is no such character. */
 async function personPage(sequelize, characterId) {
   if (!UUID_RE.test(String(characterId || ''))) throw new PersonError(400, 'id must be a character id (UUID)');
   const [[c]] = await sequelize.query(

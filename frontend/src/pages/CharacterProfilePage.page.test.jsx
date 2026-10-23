@@ -64,7 +64,7 @@ describe('the character page', () => {
     expect(screen.getByRole('button', { name: 'Export Profile' })).toBeTruthy();
     expect(screen.getByRole('link', { name: 'The cast' }).getAttribute('href')).toBe('/character-registry');
     const tabs = within(screen.getByRole('navigation', { name: 'Character sections' })).getAllByRole('link');
-    expect(tabs.map((t) => t.textContent)).toEqual(['Overview', 'Person', 'Inner Life', 'Appearance', 'Voice & Pulse', 'Connections', 'In the World', 'Places & Gallery', 'Story & Events', 'Talk', 'Settings']);
+    expect(tabs.map((t) => t.textContent)).toEqual(['Overview', 'Inner Life', 'Appearance', 'Voice & Pulse', 'Connections', 'In the World', 'Places & Gallery', 'Story & Events', 'Talk', 'Settings']);
     expect(tabs[0].getAttribute('aria-current')).toBe('page');
   });
 
@@ -83,11 +83,17 @@ describe('the character page', () => {
     expect(screen.getByTestId('ch-shows')).toBeTruthy();
   });
 
-  test('?tab=person opens the Person tab: their page in one read', async () => {
+  test('the person read shows in the tabs it belongs to; ?tab=person is the Overview', async () => {
     const base = vi.mocked(api.get).getMockImplementation();
     vi.mocked(api.get).mockImplementation(async (url) => {
       if (url === '/api/v1/person/c1') {
-        return { data: { person: { id: 'c1', who: { name: 'Sable', aliases: [] }, pulse: null, relationships: [], episodes: [], writers: { in_cast_block: false } } } };
+        return { data: { person: {
+          id: 'c1', who: { name: 'Sable', aliases: [] },
+          pulse: { id: 7, handle: 'studiobysable', follower_tier: 'micro', follower_count: '12K', link: '/pulse?profile=7' },
+          lala_tie: { from: 'story', tie: 'direct', words: 'friends' },
+          relationships: [], episodes: [],
+          writers: { in_cast_block: true, lala: ['With Lala in the story: friends'], family: [], family_block: null, secrecy: [] },
+        } } };
       }
       return base(url);
     });
@@ -96,9 +102,12 @@ describe('the character page', () => {
         <Routes><Route path="/character/:id" element={<CharacterProfilePage />} /></Routes>
       </MemoryRouter>,
     );
-    expect((await screen.findByRole('link', { name: 'Person' })).getAttribute('aria-current')).toBe('page');
-    expect(await screen.findByTestId('person-page')).toBeTruthy();
-    expect(screen.getByTestId('ch-family')).toBeTruthy();
+    expect((await screen.findByRole('link', { name: 'Overview' })).getAttribute('aria-current')).toBe('page');
+    expect((await screen.findByTestId('person-writers')).textContent).toContain('With Lala in the story: friends');
+    expect(screen.queryByTestId('person-pulse')).toBeNull();
+    fireEvent.click(screen.getByRole('link', { name: 'Voice & Pulse' }));
+    expect((await screen.findByTestId('person-pulse')).textContent).toContain('Micro · 12K');
+    expect(screen.queryByTestId('person-writers')).toBeNull();
   });
 
   test('an unknown ?tab opens the Overview', async () => {

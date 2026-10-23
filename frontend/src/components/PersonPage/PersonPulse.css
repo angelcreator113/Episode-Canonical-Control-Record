@@ -1,4 +1,4 @@
-/* Person tab, their Pulse account (PersonPulse.jsx). */
+/* Voice & Pulse, their Pulse account (PersonPulse.jsx). */
 .ppu-who { margin: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; min-width: 0; }
 .ppu-handle { font-size: 18px; overflow-wrap: anywhere; }
 .ppu-plat { font-family: 'DM Mono', monospace; font-size: 12px; color: var(--text-secondary); }
@@ -14,3 +14,5 @@
 @media (max-width: 600px) {
   .ppu-row { grid-template-columns: minmax(0, 1fr); gap: 2px; }
 }
+/* Above the Voice & Pulse tab's columns. */
+.ch-panel > .ppu { margin-bottom: 14px; }

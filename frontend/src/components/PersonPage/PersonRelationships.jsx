@@ -1,12 +1,13 @@
 /**
- * Person tab, section 3: every confirmed relationship of theirs. Each says
- * who with, what it is and its stage now, a heart for a love interest,
+ * One relationship's story truth, inside its row on the Connections tab
+ * (Evoni, 2026-10-23): its stage now, a heart for a love interest,
  * Secret / Rumoured / Known and who knows (known_by, public_state), and
  * "Different online" when their Pulse pair says something else
- * (services/relationshipTruth). Each opens on the Relationships page.
+ * (services/relationshipTruth), with a link to it on the Relationships
+ * page. From the person read (GET /api/v1/person/:id relationships).
  */
 import { Link } from 'react-router-dom';
-import { Users, Heart, ArrowRight } from 'lucide-react';
+import { Heart, ArrowRight } from 'lucide-react';
 import './PersonRelationships.css';
 
 const listOf = (names) => (names.length <= 1 ? names.join('')
@@ -17,50 +18,28 @@ export function knowsLine(r) {
   return `${listOf(r.known_by)} ${r.known_by.length === 1 ? 'knows' : 'know'}.`;
 }
 
-export default function PersonRelationships({ characterId, relationships }) {
-  const list = relationships || [];
+/** The heart before a love interest's name; nothing otherwise. */
+export function LoveHeart({ rel }) {
+  return rel?.love_interest ? <Heart size={15} className="prl-heart" aria-label="Love interest" role="img" fill="currentColor" /> : null;
+}
+
+export default function PersonRelationship({ rel }) {
+  if (!rel) return null;
+  const knows = knowsLine(rel);
   return (
-    <section className="ch-card prl" aria-labelledby="prl-h" data-testid="person-relationships">
-      <div className="ch-card-head">
-        <h2 id="prl-h" className="ch-h2"><Users size={20} aria-hidden="true" className="ch-h2-icon" /> Relationships</h2>
-        <Link className="ch-link" to={`/relationships?char=${characterId}`}>Open in Relationships</Link>
-      </div>
-      {list.length === 0 ? (
-        <p className="ch-note">No confirmed relationships yet.</p>
-      ) : (
-        <ul className="prl-list">
-          {list.map((r) => {
-            const knows = knowsLine(r);
-            return (
-              <li key={r.id}>
-                <Link className="prl-row" to={r.link} data-testid={`prl-${r.id}`}>
-                  <span className="prl-main">
-                    <span className="prl-name">
-                      {r.love_interest && <Heart size={15} className="prl-heart" aria-label="Love interest" role="img" fill="currentColor" />}
-                      {r.other.name}
-                    </span>
-                    <span className="prl-kind">{r.love_interest && !/love/i.test(r.kind) ? `${r.kind} · love interest` : r.kind}</span>
-                  </span>
-                  <span className="prl-tags">
-                    {r.stage && <span className="prl-tag is-stage">now {r.stage}</span>}
-                    {r.public_label && <span className={`prl-tag is-${r.public_state}`}>{r.public_label}</span>}
-                    {r.online?.differs && (
-                      <span className="prl-tag is-differs" title={`On The Pulse: ${r.online.says}`}>Different online</span>
-                    )}
-                  </span>
-                  {(knows || r.online?.differs) && (
-                    <span className="prl-sub">
-                      {knows}
-                      {r.online?.differs && <span className="prl-online"> On The Pulse: {r.online.says}.</span>}
-                    </span>
-                  )}
-                  <ArrowRight size={16} className="prl-go" aria-hidden="true" />
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
+    <span className="prl" data-testid={`prl-${rel.id}`}>
+      <span className="prl-tags">
+        {rel.stage && <span className="prl-tag is-stage">now {rel.stage}</span>}
+        {rel.public_label && <span className={`prl-tag is-${rel.public_state}`}>{rel.public_label}</span>}
+        {rel.online?.differs && <span className="prl-tag is-differs" title={`On The Pulse: ${rel.online.says}`}>Different online</span>}
+      </span>
+      {(knows || rel.online?.differs) && (
+        <span className="prl-sub">
+          {knows}
+          {rel.online?.differs && <span className="prl-online"> On The Pulse: {rel.online.says}.</span>}
+        </span>
       )}
-    </section>
+      <Link className="ch-link prl-open" to={rel.link}>Open in Relationships <ArrowRight size={13} aria-hidden="true" /></Link>
+    </span>
   );
 }

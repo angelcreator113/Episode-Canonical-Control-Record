@@ -1344,7 +1344,7 @@ try {
   console.error('✗ Failed to load Family routes:', e.message);
 }
 
-// One person page: the character page's Person tab in one read (Evoni, 2026-10-23)
+// One person page: what the character page's tabs add about them, in one read (Evoni, 2026-10-23)
 try {
   const personRoutes = require('./routes/person');
   app.use('/api/v1/person', personRoutes);

@@ -1,4 +1,4 @@
-/* Person tab, What the writers know (PersonWriters.jsx): the script
+/* Overview, What the writers know (PersonWriters.jsx): the script
    writer's lines as they are, in mono, wrapped. */
 .pwr-block { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 /* !important: the app's phone rule sizes every h3 up with !important. */
@@ -9,3 +9,5 @@
   font-family: 'DM Mono', monospace; font-size: 13px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere;
 }
 .pwr-warn { padding: 8px 12px; border-radius: 12px; background: var(--warning-bg); color: var(--warning-text); }
+/* Below the Overview's columns. */
+.ch-panel > .pwr { margin-top: 14px; }

@@ -1,46 +1,36 @@
 /**
- * Person tab, section 1: who they are. Their name, the name they post
- * under, the other names they go by (their Pulse profile's "also known as"),
- * their role and a line about them.
+ * Who they are, in the character page's header (Evoni, 2026-10-23): what
+ * the header did not already say. The header has their name, "Online as"
+ * and their role; this adds the other names they go by (their Pulse
+ * profile's aliases) and one line about them.
  */
-import { IdCard } from 'lucide-react';
-import { ROLE_LABELS } from '../../constants/characterConstants';
 import './PersonWho.css';
 
-/** Their role as the cast says it: Lala is the Protagonist; else the label or the role type. */
-export function roleOf(who) {
-  if (who?.role_label) return who.role_label;
-  if (who?.is_lala) return ROLE_LABELS.protagonist;
-  const t = who?.role_type;
-  return ROLE_LABELS[t] || (t ? t.charAt(0).toUpperCase() + t.slice(1) : null);
+const clean = (v) => (typeof v === 'string' ? v.replace(/\s+/g, ' ').trim() : '');
+
+/**
+ * One line about them: the first sentence of their prose, description or
+ * core belief, at most 200 characters (as services/personPage summaryOf).
+ */
+export function summaryOf(character) {
+  const text = clean(character?.prose_overview) || clean(character?.description) || clean(character?.core_belief);
+  if (!text) return null;
+  const first = (text.match(/^.+?[.!?](?=\s|$)/) || [text])[0];
+  return first.length > 200 ? `${first.slice(0, 199).trimEnd()}…` : first;
 }
 
-export default function PersonWho({ who, openTab }) {
-  const role = roleOf(who);
+export default function PersonWho({ aliases = [], summary = null, name = null }) {
+  const akas = [...new Set(aliases.map(clean).filter((a) => a && a !== name))];
+  if (!akas.length && !summary) return null;
   return (
-    <section className="ch-card pw" aria-labelledby="pw-h" data-testid="person-who">
-      <h2 id="pw-h" className="ch-h2"><IdCard size={20} aria-hidden="true" className="ch-h2-icon" /> Who they are</h2>
-      <dl className="pw-list">
-        <div className="pw-row"><dt>Name</dt><dd className="pw-name">{who.name}</dd></div>
-        {who.online_as && <div className="pw-row"><dt>Online as</dt><dd>{who.online_as}</dd></div>}
-        <div className="pw-row">
-          <dt>Also known as</dt>
-          <dd>
-            {who.aliases?.length
-              ? <span className="pw-akas">{who.aliases.map((a) => <span key={a} className="pw-aka">{a}</span>)}</span>
-              : <span className="ch-note">No other names recorded.</span>}
-          </dd>
-        </div>
-        <div className="pw-row"><dt>Role</dt><dd>{role || <span className="ch-note">Not set</span>}</dd></div>
-      </dl>
-      {who.summary
-        ? <p className="pw-summary">{who.summary}</p>
-        : (
-          <p className="ch-note">
-            No line about them yet.{' '}
-            {openTab && <button type="button" className="ch-link pw-inline" onClick={() => openTab('overview')}>Write who they are on Overview</button>}
-          </p>
-        )}
-    </section>
+    <div className="pw" data-testid="person-who">
+      {akas.length > 0 && (
+        <p className="pw-akas">
+          <span className="pw-label">Also known as</span>
+          {akas.map((a) => <span key={a} className="pw-aka">{a}</span>)}
+        </p>
+      )}
+      {summary && <p className="pw-summary" data-testid="person-summary">{summary}</p>}
+    </div>
   );
 }

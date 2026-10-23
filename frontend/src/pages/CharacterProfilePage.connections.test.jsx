@@ -99,3 +99,21 @@ describe('the map, key relationships, history and feed ties', () => {
     expect(screen.getByTestId('ch-feed-ties').textContent).toContain('No Pulse ties yet.');
   });
 });
+
+describe("each connection with its story truth (the person read, 2026-10-23)", () => {
+  test('inside its own row, not a second list: stage, heart, Secret, different online, its link', () => {
+    const truth = [{ id: 'r3', other: { id: 'p3', name: 'Person 3' }, kind: 'friend', stage: 'lovers', love_interest: true, public_state: 'secret', public_label: 'Secret',
+      known_by: ['Jade'], online: { differs: true, says: 'bestie' }, link: '/relationships?rel=r3' }];
+    inRouter(<RelationshipOverview character={CHARACTER} relationships={many.slice(0, 4)} truth={truth} />);
+    const rows = screen.getAllByTestId('ch-conn');
+    expect(rows).toHaveLength(4);
+    const row = rows.find((li) => li.textContent.includes('Person 3'));
+    expect(within(row).getByRole('img', { name: 'Love interest' })).toBeTruthy();
+    expect(within(row).getByText('now lovers')).toBeTruthy();
+    expect(within(row).getByText('Secret')).toBeTruthy();
+    expect(within(row).getByText('Different online')).toBeTruthy();
+    expect(within(row).getByRole('link', { name: /Open in Relationships/ }).getAttribute('href')).toBe('/relationships?rel=r3');
+    // The others have no truth row yet: nothing added.
+    expect(rows.filter((li) => li.querySelector('.prl'))).toHaveLength(1);
+  });
+});

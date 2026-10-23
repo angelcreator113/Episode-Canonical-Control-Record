@@ -1,5 +1,5 @@
 /**
- * Person tab, section 5: the episodes they are in, newest first (their row
+ * Their episodes on the Story & Events tab, newest first (their row
  * in an episode's story record, a relationship an episode moved, an event
  * they host or are a guest of). Each says what changed for them there:
  * what they knew, learned and how they changed, and what moved between
@@ -12,11 +12,14 @@ import './PersonEpisodes.css';
 const VIA = { host: 'Hosts the event', guest: 'Guest at the event', 'story record': 'In the story record', relationship: 'A relationship moved' };
 export const episodeLabel = (ep) => `Episode ${ep.episode_number ?? '?'}`;
 
-export default function PersonEpisodes({ episodes }) {
+/**
+ * `bare` is the list alone, for a card that already has its heading (the
+ * Story & Events tab's "Latest episode" and "Their episodes").
+ */
+export default function PersonEpisodes({ episodes, bare = false }) {
   const list = episodes || [];
-  return (
-    <section className="ch-card pep" aria-labelledby="pep-h" data-testid="person-episodes">
-      <h2 id="pep-h" className="ch-h2"><Clapperboard size={20} aria-hidden="true" className="ch-h2-icon" /> Episode history</h2>
+  const body = (
+    <>
       {list.length === 0 ? (
         <p className="ch-note">Not in an episode yet.</p>
       ) : (
@@ -58,6 +61,13 @@ export default function PersonEpisodes({ episodes }) {
           })}
         </ol>
       )}
+    </>
+  );
+  if (bare) return <div className="pep" data-testid="person-episodes">{body}</div>;
+  return (
+    <section className="ch-card pep" aria-labelledby="pep-h" data-testid="person-episodes">
+      <h2 id="pep-h" className="ch-h2"><Clapperboard size={20} aria-hidden="true" className="ch-h2-icon" /> Episode history</h2>
+      {body}
     </section>
   );
 }

@@ -1,4 +1,4 @@
-/* Person tab, Episode history (PersonEpisodes.jsx). */
+/* Story & Events, their episodes (PersonEpisodes.jsx). */
 .pep-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 10px; }
 .pep-item { display: flex; flex-direction: column; gap: 6px; padding: 12px 14px; border-radius: 14px; border: 1px solid var(--lala-lavender-line); min-width: 0; }
 .pep-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; min-width: 0; }

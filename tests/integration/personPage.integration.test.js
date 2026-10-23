@@ -138,7 +138,7 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
       name: `Marcus Hale ${tag}`, online_as: `Truthville ${tag}`, role_type: 'support', is_lala: false,
       summary: 'A producer who never says what he wants.',
     });
-    // No aliases column on this database yet: none, and no error.
+    // None set (or no aliases column on this database yet): none, and no error.
     expect(who.aliases).toEqual([]);
     expect(pulse).toMatchObject({ id: p.marcus, handle: `marcus${tag}`, follower_tier: 'micro', follower_count: '48K', link: `/pulse?profile=${p.marcus}` });
     // The Lala story pair decides the tie, over the profile's "aware".
@@ -151,14 +151,31 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     expect(dre.writers.in_cast_block).toBe(false);
   });
 
-  test('also-known-as names once social_profiles.aliases exists', async () => {
-    await run("ALTER TABLE social_profiles ADD COLUMN IF NOT EXISTS aliases JSONB NOT NULL DEFAULT '[]'::jsonb");
-    aliasesAdded = true;
+  test('also-known-as names from social_profiles.aliases, and none before its migration', async () => {
+    // The column is main's (migration 20261023220000); add it only for this
+    // test when this database does not have it, and take it off again after.
+    const [[had]] = await run("SELECT 1 AS ok FROM information_schema.columns WHERE table_name = 'social_profiles' AND column_name = 'aliases'");
+    if (!had) {
+      await run("ALTER TABLE social_profiles ADD COLUMN IF NOT EXISTS aliases JSONB NOT NULL DEFAULT '[]'::jsonb");
+      aliasesAdded = true;
+    }
     await run('UPDATE social_profiles SET aliases = CAST(:a AS jsonb) WHERE id = :id', { id: p.marcus, a: JSON.stringify(['Truth', ' Truth ', 'M.H.', '']) });
-    const { who } = (await get(c.marcus)).body.person;
-    expect(who.aliases).toEqual(['Truth', 'M.H.']);
-    await run('ALTER TABLE social_profiles DROP COLUMN IF EXISTS aliases');
-    aliasesAdded = false;
+    expect((await get(c.marcus)).body.person.who.aliases).toEqual(['Truth', 'M.H.']);
+    await run("UPDATE social_profiles SET aliases = '[]'::jsonb WHERE id = :id", { id: p.marcus });
+    if (aliasesAdded) {
+      await run('ALTER TABLE social_profiles DROP COLUMN IF EXISTS aliases');
+      aliasesAdded = false;
+    } else {
+      // Without the column (before the migration) the read still answers, with none.
+      await run('ALTER TABLE social_profiles RENAME COLUMN aliases TO aliases_off');
+      try {
+        const res = await get(c.marcus);
+        expect(res.status).toBe(200);
+        expect(res.body.person.who.aliases).toEqual([]);
+      } finally {
+        await run('ALTER TABLE social_profiles RENAME COLUMN aliases_off TO aliases');
+      }
+    }
   });
 
   test('every confirmed relationship: stage, love interest, who knows, different online', async () => {
@@ -203,9 +220,9 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     // Jade is his sister; he has no gender on file, so he is her sibling (familyTies reverseRole).
     expect(writers.family).toEqual([`Marcus Hale ${tag}: Jade Monroe ${tag}'s sibling`]);
     expect(writers.family_block).toMatch(/^THEIR FAMILY \(stay consistent with it\):\n- Marcus Hale/);
+    // The story pair's line says the romance; it is not said a second time.
     expect(writers.lala).toEqual([
       expect.stringMatching(/^With Lala in the story: love interest.*\(They kiss in the stairwell\)$/),
-      'With Lala: love interest: They kiss in the stairwell',
     ]);
     expect(writers.secrecy).toEqual(expect.arrayContaining([
       `Lala and Marcus Hale ${tag}'s romance is SECRET: only Jade Monroe ${tag} knows. Nobody else mentions it.`,

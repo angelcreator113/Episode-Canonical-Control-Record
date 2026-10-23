@@ -1,47 +1,39 @@
 /**
- * The Person tab's sections (Evoni, 2026-10-23, "one person page"): who
- * they are, their Pulse account, relationships, episode history and what
- * the writers know, each from the one read GET /api/v1/person/:id.
+ * The person read's pieces (Evoni, 2026-10-23, "one person page", shown in
+ * the tabs they belong to): the header's also-known-as and one line, their
+ * Pulse account, a relationship's story truth in its Connections row,
+ * episode history and what the writers know.
  */
 import React from 'react';
 import { describe, test, expect, vi } from 'vitest';
 import { render, screen, within, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import PersonWho, { roleOf } from './PersonWho';
+import PersonWho, { summaryOf } from './PersonWho';
 import PersonPulse from './PersonPulse';
-import PersonRelationships, { knowsLine } from './PersonRelationships';
+import PersonRelationship, { knowsLine, LoveHeart } from './PersonRelationships';
 import PersonEpisodes from './PersonEpisodes';
 import PersonWriters from './PersonWriters';
 
 const wrap = (ui) => render(<MemoryRouter>{ui}</MemoryRouter>);
 
-describe('Who they are', () => {
-  const WHO = { name: 'Marcus Hale', online_as: 'Truthville', aliases: ['Truth', 'M.H.'], role_type: 'support', summary: 'A producer who never says what he wants.' };
-
-  test('name, online name, also known as, role and a line about them', () => {
-    wrap(<PersonWho who={WHO} />);
-    const sec = screen.getByTestId('person-who');
-    expect(within(sec).getByText('Marcus Hale')).toBeTruthy();
-    expect(within(sec).getByText('Truthville')).toBeTruthy();
-    expect([...sec.querySelectorAll('.pw-aka')].map((e) => e.textContent)).toEqual(['Truth', 'M.H.']);
-    expect(within(sec).getByText('Supporting')).toBeTruthy();
-    expect(within(sec).getByText('A producer who never says what he wants.')).toBeTruthy();
+describe('Who they are, in the header', () => {
+  test('the other names they go by and one line about them', () => {
+    wrap(<PersonWho aliases={['Truth', ' M.H. ', 'Marcus Hale', '']} summary="A producer who never says what he wants." name="Marcus Hale" />);
+    const who = screen.getByTestId('person-who');
+    expect([...who.querySelectorAll('.pw-aka')].map((e) => e.textContent)).toEqual(['Truth', 'M.H.']);
+    expect(screen.getByTestId('person-summary').textContent).toBe('A producer who never says what he wants.');
   });
 
-  test('no other names, no line yet: says so, and Overview is one tap away', () => {
-    const openTab = vi.fn();
-    wrap(<PersonWho who={{ name: 'Dre', aliases: [], role_type: null }} openTab={openTab} />);
-    expect(screen.getByText('No other names recorded.')).toBeTruthy();
-    expect(screen.getByText('Not set')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Write who they are on Overview' }));
-    expect(openTab).toHaveBeenCalledWith('overview');
+  test('nothing to add: nothing shown', () => {
+    const { container } = wrap(<PersonWho aliases={[]} summary={null} />);
+    expect(container.textContent).toBe('');
   });
 
-  test('the role as The cast says it', () => {
-    expect(roleOf({ is_lala: true, role_type: 'special' })).toBe('Protagonist');
-    expect(roleOf({ role_label: 'The peer', role_type: 'support' })).toBe('The peer');
-    expect(roleOf({ role_type: 'villain' })).toBe('Villain');
-    expect(roleOf({})).toBeNull();
+  test('one line: the first sentence of their prose, else description, else core belief', () => {
+    expect(summaryOf({ prose_overview: 'A producer. He collects favours.' })).toBe('A producer.');
+    expect(summaryOf({ prose_overview: '  ', description: 'Quiet  and sharp' })).toBe('Quiet and sharp');
+    expect(summaryOf({ core_belief: 'x'.repeat(250) })).toHaveLength(200);
+    expect(summaryOf({})).toBeNull();
   });
 });
 
@@ -69,40 +61,39 @@ describe('Their Pulse account', () => {
   });
 });
 
-describe('Relationships', () => {
-  const RELS = [
-    { id: 'r1', other: { id: 'lala', name: 'Lala' }, kind: 'love interest', stage: 'lovers', love_interest: true, public_state: 'secret', public_label: 'Secret',
-      known_by: ['Jade Monroe'], online: { differs: true, says: 'bestie' }, link: '/relationships?rel=r1' },
-    { id: 'r2', other: { id: 'jade', name: 'Jade Monroe' }, kind: 'sister', stage: null, love_interest: false, public_state: 'rumoured', public_label: 'Rumoured',
-      known_by: [], online: { differs: false, says: 'family' }, link: '/relationships?rel=r2' },
-  ];
+describe("A relationship's story truth", () => {
+  const LM = { id: 'r1', other: { id: 'lala', name: 'Lala' }, kind: 'love interest', stage: 'lovers', love_interest: true, public_state: 'secret', public_label: 'Secret',
+    known_by: ['Jade Monroe'], online: { differs: true, says: 'bestie' }, link: '/relationships?rel=r1' };
+  const MJ = { id: 'r2', other: { id: 'jade', name: 'Jade Monroe' }, kind: 'sister', stage: null, love_interest: false, public_state: 'rumoured', public_label: 'Rumoured',
+    known_by: [], online: { differs: false, says: 'family' }, link: '/relationships?rel=r2' };
 
-  test('each with its stage, heart, who knows, different online, and a link to it', () => {
-    wrap(<PersonRelationships characterId="c1" relationships={RELS} />);
+  test('stage, Secret, who knows, different online, and a link to it', () => {
+    wrap(<><LoveHeart rel={LM} /><PersonRelationship rel={LM} /></>);
     const r1 = screen.getByTestId('prl-r1');
-    expect(r1.getAttribute('href')).toBe('/relationships?rel=r1');
-    expect(within(r1).getByRole('img', { name: 'Love interest' })).toBeTruthy();
+    expect(screen.getByRole('img', { name: 'Love interest' })).toBeTruthy();
     expect(within(r1).getByText('now lovers')).toBeTruthy();
     expect(within(r1).getByText('Secret')).toBeTruthy();
     expect(within(r1).getByText('Different online').getAttribute('title')).toBe('On The Pulse: bestie');
     expect(r1.textContent).toContain('Jade Monroe knows.');
+    expect(within(r1).getByRole('link', { name: /Open in Relationships/ }).getAttribute('href')).toBe('/relationships?rel=r1');
+  });
 
-    const r2 = screen.getByTestId('prl-r2');
-    expect(within(r2).queryByRole('img', { name: 'Love interest' })).toBeNull();
-    expect(within(r2).getByText('Rumoured')).toBeTruthy();
-    expect(within(r2).queryByText('Different online')).toBeNull();
-    expect(screen.getByRole('link', { name: 'Open in Relationships' }).getAttribute('href')).toBe('/relationships?char=c1');
+  test('no heart and no "different" when it is not', () => {
+    wrap(<><LoveHeart rel={MJ} /><PersonRelationship rel={MJ} /></>);
+    expect(screen.queryByRole('img', { name: 'Love interest' })).toBeNull();
+    expect(screen.getByText('Rumoured')).toBeTruthy();
+    expect(screen.queryByText('Different online')).toBeNull();
+  });
+
+  test('nothing without the read', () => {
+    const { container } = wrap(<><LoveHeart rel={undefined} /><PersonRelationship rel={undefined} /></>);
+    expect(container.textContent).toBe('');
   });
 
   test('who knows, in words', () => {
     expect(knowsLine({ known_by: [], public_state: 'secret' })).toBe('Only the two of them know.');
     expect(knowsLine({ known_by: [], public_state: 'known' })).toBeNull();
     expect(knowsLine({ known_by: ['Jade', 'Dre', 'Nia'] })).toBe('Jade, Dre and Nia know.');
-  });
-
-  test('none yet', () => {
-    wrap(<PersonRelationships characterId="c1" relationships={[]} />);
-    expect(screen.getByText('No confirmed relationships yet.')).toBeTruthy();
   });
 });
 
@@ -131,6 +122,12 @@ describe('Episode history', () => {
   test('none yet', () => {
     wrap(<PersonEpisodes episodes={[]} />);
     expect(screen.getByText('Not in an episode yet.')).toBeTruthy();
+  });
+
+  test('bare: the list alone, for a card with its own heading', () => {
+    wrap(<PersonEpisodes episodes={EPS.slice(0, 1)} bare />);
+    expect(screen.queryByText('Episode history')).toBeNull();
+    expect(screen.getByTestId('person-episodes').querySelectorAll('.pep-item')).toHaveLength(1);
   });
 });
 
