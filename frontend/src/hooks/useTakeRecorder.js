@@ -6,8 +6,15 @@
  * waits for review until discard(). Switching off, or leaving, stops the
  * recorder and releases every camera and microphone track.
  *
+ * "Record whole episode" (Evoni, 2026-10-23): begin({ videoBitsPerSecond })
+ * sets the bit rate; pause() and resume() pause the recording itself
+ * (MediaRecorder.pause/resume), and takeTime() is the take's time so far
+ * with paused time left out (the beat markers use it), as are `elapsed`
+ * and the take's `seconds`. `bytes` is what has been recorded so far.
+ *
  * Returns { camera: { status: 'off'|'starting'|'ready'|'error', message },
- * stream, recording, elapsed, take, error, begin, stop, discard, retry }.
+ * stream, recording, paused, elapsed, bytes, take, error, begin, stop,
+ * pause, resume, takeTime, discard, retry }.
  */
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { recordingProblem, cameraErrorMessage, pickRecordType } from '../lib/teleprompterLines';
@@ -22,7 +29,9 @@ export default function useTakeRecorder(enabled) {
   const [camera, setCamera] = useState({ status: 'off', message: null });
   const [stream, setStream] = useState(null);
   const [recording, setRecording] = useState(false);
+  const [paused, setPaused] = useState(false);
   const [elapsed, setElapsed] = useState(0);
+  const [bytes, setBytes] = useState(0);
   const [take, setTake] = useState(null);
   const [error, setError] = useState(null);
   const [attempt, setAttempt] = useState(0);
@@ -30,6 +39,10 @@ export default function useTakeRecorder(enabled) {
   const recRef = useRef(null);
   const chunksRef = useRef([]);
   const startedRef = useRef(0);
+  // Paused time so far, and when the pause now running began (0: none).
+  const pausedMsRef = useRef(0);
+  const pausedAtRef = useRef(0);
+  const bytesRef = useRef(0);
   const takeRef = useRef(null);
   takeRef.current = take;
 
@@ -41,6 +54,15 @@ export default function useTakeRecorder(enabled) {
       try { rec.stop(); } catch (err) { console.error('[useTakeRecorder] recorder did not stop:', err); }
     }
     setRecording(false);
+    setPaused(false);
+  }, []);
+
+  /** Seconds of take so far, paused time left out. */
+  const takeTime = useCallback(() => {
+    if (!startedRef.current) return 0;
+    const now = Date.now();
+    const pausedNow = pausedAtRef.current ? now - pausedAtRef.current : 0;
+    return Math.max(0, (now - startedRef.current - pausedMsRef.current - pausedNow) / 1000);
   }, []);
 
   const discard = useCallback(() => {
@@ -90,33 +112,39 @@ export default function useTakeRecorder(enabled) {
 
   useEffect(() => {
     if (!recording) return undefined;
-    const t = setInterval(() => setElapsed((Date.now() - startedRef.current) / 1000), 250);
+    const t = setInterval(() => { setElapsed(takeTime()); setBytes(bytesRef.current); }, 250);
     return () => clearInterval(t);
-  }, [recording]);
+  }, [recording, takeTime]);
 
-  /** Starts a take now; false when it could not start. */
-  const begin = useCallback(() => {
+  /** Starts a take now; false when it could not start. videoBitsPerSecond: the bit rate, if set. */
+  const begin = useCallback(({ videoBitsPerSecond } = {}) => {
     if (!streamRef.current || recRef.current) return false;
     setError(null);
     const type = pickRecordType(window.MediaRecorder);
+    const opts = { ...(type ? { mimeType: type } : {}), ...(videoBitsPerSecond ? { videoBitsPerSecond } : {}) };
     let rec;
     try {
-      rec = new window.MediaRecorder(streamRef.current, type ? { mimeType: type } : undefined);
+      rec = new window.MediaRecorder(streamRef.current, Object.keys(opts).length ? opts : undefined);
     } catch (err) {
       console.error('[useTakeRecorder] recorder did not start:', err);
       setError("This browser couldn't start recording. You can still read.");
       return false;
     }
     chunksRef.current = [];
-    rec.ondataavailable = (e) => { if (e.data && e.data.size) chunksRef.current.push(e.data); };
+    bytesRef.current = 0;
+    rec.ondataavailable = (e) => { if (e.data && e.data.size) { chunksRef.current.push(e.data); bytesRef.current += e.data.size; } };
     rec.onstop = () => {
       const kind = rec.mimeType || type || 'video/webm';
       const blob = new Blob(chunksRef.current, { type: kind });
       chunksRef.current = [];
       recRef.current = null;
+      const seconds = takeTime();
+      startedRef.current = 0;
+      pausedAtRef.current = 0;
       setRecording(false);
+      setPaused(false);
       if (!blob.size) { setError('Nothing was recorded. Try the take again.'); return; }
-      const next = { blob, url: URL.createObjectURL(blob), type: kind, seconds: (Date.now() - startedRef.current) / 1000 };
+      const next = { blob, url: URL.createObjectURL(blob), type: kind, seconds };
       takeRef.current = next;
       setTake(next);
     };
@@ -133,8 +161,40 @@ export default function useTakeRecorder(enabled) {
     }
     recRef.current = rec;
     startedRef.current = Date.now();
+    pausedMsRef.current = 0;
+    pausedAtRef.current = 0;
     setElapsed(0);
+    setBytes(0);
+    setPaused(false);
     setRecording(true);
+    return true;
+  }, [takeTime]);
+
+  /** Pauses the recording (the take's time stops too); false when it can't. */
+  const pause = useCallback(() => {
+    const rec = recRef.current;
+    if (!rec || rec.state !== 'recording' || typeof rec.pause !== 'function') return false;
+    try { rec.pause(); } catch (err) {
+      console.error('[useTakeRecorder] recorder did not pause:', err);
+      return false;
+    }
+    pausedAtRef.current = Date.now();
+    setElapsed(takeTime());
+    setPaused(true);
+    return true;
+  }, [takeTime]);
+
+  /** Carries the paused recording on. */
+  const resume = useCallback(() => {
+    const rec = recRef.current;
+    if (!rec || !pausedAtRef.current) return false;
+    try { if (rec.state === 'paused' && typeof rec.resume === 'function') rec.resume(); } catch (err) {
+      console.error('[useTakeRecorder] recorder did not resume:', err);
+      return false;
+    }
+    pausedMsRef.current += Date.now() - pausedAtRef.current;
+    pausedAtRef.current = 0;
+    setPaused(false);
     return true;
   }, []);
 
@@ -150,5 +210,5 @@ export default function useTakeRecorder(enabled) {
 
   const retry = useCallback(() => setAttempt((n) => n + 1), []);
 
-  return { camera, stream, recording, elapsed, take, error, begin, stop, discard, retry };
+  return { camera, stream, recording, paused, elapsed, bytes, take, error, begin, stop, pause, resume, takeTime, discard, retry };
 }
