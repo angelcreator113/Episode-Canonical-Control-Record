@@ -102,17 +102,27 @@
 /* Tailwind's base makes an svg a block; the header's icon buttons stay on one line. */
 .wa-ev-head button { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
 .wa-ev-head-tools { position: relative; display: flex; flex-wrap: wrap; gap: 6px; flex-basis: 100%; justify-content: flex-end; }
+/* One toolbar under the title (Evoni, 2026-10-22 layout list). */
+.wa-ev-head-actions { flex-basis: 100%; }
+.wa-ev-head-actions select { height: 40px; padding: 0 10px; border: 1px solid var(--lala-parchment-3); border-radius: 10px; background: var(--surface-card); font: inherit; font-size: 13px; max-width: 100%; }
+.wa-ev-more { position: relative; }
+.wa-ev-layout { display: inline-flex; padding: 3px; border: 1px solid var(--lala-parchment-3); border-radius: 10px; background: var(--surface-card); }
+.wa-ev-layout button { min-height: 32px; padding: 2px 12px; border: none; border-radius: 8px; background: none; color: var(--text-primary); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+.wa-ev-layout button.active { background: var(--lala-lavender); color: var(--text-inverse); }
 
-.wa-ev-states { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; margin-bottom: 10px; }
+/* The five states as one row of chips; a zero is muted. */
+.wa-ev-states { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
 .wa-ev-state {
-  display: grid; gap: 4px; text-align: left; padding: 14px 16px; border-radius: 12px; cursor: pointer;
-  border: 1px solid var(--lala-parchment-3); background: var(--lala-parchment-2); font: inherit;
+  display: inline-flex; align-items: baseline; gap: 6px; min-height: 36px; padding: 6px 14px; border-radius: 999px; cursor: pointer;
+  border: 1px solid var(--lala-parchment-3); background: var(--surface-card); font: inherit;
 }
 .wa-ev-state:hover { border-color: var(--accent-light); }
-.wa-ev-state.active { background: var(--surface-card); border: 2px solid var(--accent); padding: 13px 15px; }
+.wa-ev-state.active { border: 2px solid var(--accent); padding: 5px 13px; background: var(--accent-subtle); }
+.wa-ev-state[data-zero] { background: var(--lala-parchment-2); }
+.wa-ev-state[data-zero] .wa-ev-state-label { color: var(--text-secondary); }
 .wa-ev-state-label { font-size: 13px; font-weight: 700; }
-.wa-ev-state-count { font-family: var(--font-prose); font-size: 26px; font-weight: 600; color: var(--text-primary); line-height: 1.1; }
-.wa-ev-refine { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; margin-bottom: 16px; }
+.wa-ev-state-count { font-size: 14px; font-weight: 800; color: var(--text-primary); }
+.wa-ev-refine { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 12px; }
 .wa-ev-show-all { margin-right: auto; padding: 0; border: none; background: none; font: inherit; font-size: 13px; font-weight: 600; color: var(--lala-lavender-text); cursor: pointer; }
 .wa-ev-show-all:hover { text-decoration: underline; }
 
@@ -131,16 +141,25 @@
 .wa-ev-card-menu > button { background: none; border: none; padding: 4px; cursor: pointer; color: var(--text-secondary); border-radius: 4px; }
 .wa-ev-card-name { margin: 2px 0 0; font-family: var(--font-prose); font-size: 20px; font-weight: 600; line-height: 1.25; color: var(--text-primary); overflow-wrap: anywhere; }
 .wa-ev-card-place { font-size: 13px; color: var(--text-secondary); overflow-wrap: anywhere; }
-.wa-ev-tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-.wa-ev-tile { display: grid; align-content: start; gap: 2px; padding: 10px 12px; border-radius: 10px; background: var(--lala-parchment-2); min-width: 0; overflow-wrap: anywhere; }
-.wa-ev-tile-label { font-size: 12px; color: var(--text-secondary); }
-.wa-ev-tile strong { font-size: 13px; color: var(--text-primary); }
-.wa-ev-tile strong.missing { color: var(--lala-lavender-text); }
-.wa-ev-tile-sub { font-size: 12px; font-weight: 600; color: var(--lala-lavender-text); }
-.wa-ev-needed { display: grid; gap: 6px; }
-.wa-ev-needed .wa-ev-tile-label { font-weight: 600; color: var(--text-primary); }
-.wa-ev-needed-chips { display: flex; flex-wrap: wrap; gap: 6px; }
-.wa-ev-needed-chip { padding: 3px 10px; border-radius: 999px; background: var(--warning-bg); border: 1px solid var(--warning-border); color: var(--warning-text); font-size: 12px; font-weight: 600; }
+/* The deal and the organizer as one line; what is still needed as one line. */
+.wa-ev-facts { margin: 0; font-size: 13px; color: var(--text-primary); overflow-wrap: anywhere; }
+.wa-ev-facts .missing { color: var(--lala-lavender-text); font-weight: 600; }
+.wa-ev-needed { margin: 0; padding: 6px 10px; border-radius: 8px; background: var(--warning-bg); color: var(--warning-text); font-size: 12px; line-height: 1.45; overflow-wrap: anywhere; }
+
+/* The grid of cards, or the list: one row per event. */
+.wa-ev-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(340px, 100%), 1fr)); gap: 12px; scroll-margin-top: 16px; }
+.wa-ev-grid.is-list { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+.wa-ev-grid.is-list .wa-ev-card {
+  display: grid; grid-template-columns: 170px minmax(0, 1.4fr) minmax(0, 1.4fr) 300px;
+  grid-template-areas: "top name needed actions" "top place needed actions"; align-items: center; gap: 2px 16px; padding: 10px 14px;
+}
+.wa-ev-grid.is-list .wa-ev-card-top { grid-area: top; }
+.wa-ev-grid.is-list .wa-ev-card-name { grid-area: name; margin: 0; font-size: 16px; }
+.wa-ev-grid.is-list .wa-ev-card-place { grid-area: place; font-size: 12px; }
+.wa-ev-grid.is-list .wa-ev-needed { grid-area: needed; }
+.wa-ev-grid.is-list .wa-ev-card-actions { grid-area: actions; margin: 0; padding: 0; justify-content: flex-end; }
+.wa-ev-grid.is-list .wa-ev-facts, .wa-ev-grid.is-list .wa-ev-card-chips, .wa-ev-grid.is-list .wa-ev-category { display: none; }
+.wa-ev-grid.is-list .wa-ev-btn { padding: 6px 12px; }
 .wa-ev-card-chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .wa-ev-card-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: auto; padding-top: 4px; }
 .wa-ev-btn {
@@ -153,16 +172,17 @@
 .wa-ev-btn.filled:hover { background: var(--lala-lavender-dark); }
 .wa-ev-btn:focus-visible, .wa-ev-state:focus-visible { outline: 2px solid var(--lala-lavender); outline-offset: 2px; }
 
-@media (max-width: 900px) {
-  .wa-ev-states { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-}
 @media (max-width: 600px) {
-  .wa-ev-states { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .wa-ev-head-title h2 { font-size: 24px; }
   .wa-ev-search { min-width: 0; }
   .wa-ev-head-tools { justify-content: flex-start; }
-  .wa-ev-refine select { flex: 1 1 140px; min-width: 0; }
+  .wa-ev-search { flex-basis: 100%; }
+  .wa-ev-head-actions select { flex: 1 1 140px; min-width: 0; }
   .wa-ev-card { padding: 16px; }
+  .wa-ev-grid.is-list .wa-ev-card {
+    grid-template-columns: minmax(0, 1fr); grid-template-areas: "top" "name" "place" "needed" "actions"; gap: 4px; padding: 10px 12px;
+  }
+  .wa-ev-grid.is-list .wa-ev-card-actions { justify-content: flex-start; margin-top: 4px; }
 }
 
 /* Events pagination: under the grid, wraps at 375px. */
@@ -636,16 +656,44 @@
 .wa-arc-secondary:hover { background: var(--lala-lavender-soft); }
 .wa-arc-primary { align-self: stretch; display: block; margin-top: 4px; padding: 12px 16px; border-radius: 12px; background: var(--lala-lavender); color: var(--text-inverse); text-align: center; font-size: 15px; font-weight: 700; text-decoration: none; }
 .wa-arc-primary:hover { background: var(--lala-lavender-dark); }
-.wa-arc-key { padding: 16px 18px; border-radius: 16px; background: var(--accent-subtle); border: 1px solid var(--accent-light); }
-.wa-arc-key ul { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 8px; font-size: 13px; color: var(--text-primary); }
-.wa-arc-key li { display: flex; align-items: center; gap: 8px; }
+/* The key, as one line under the arc's title (Evoni, 2026-10-22 layout list; it was a card). */
+.wa-arc-legend { flex-basis: 100%; display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 0; padding: 0; list-style: none; font-size: 12px; color: var(--text-secondary); }
+.wa-arc-legend li { display: inline-flex; align-items: center; gap: 6px; }
+/* A part with nothing in it yet: a row of small chips, one per slot. */
+.wa-arc-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.wa-arc-chip-slot {
+  min-width: 48px; min-height: 36px; padding: 4px 10px; border: 1.5px dashed var(--lala-parchment-3); border-radius: 10px;
+  background: var(--lala-parchment); color: var(--text-primary); font-family: var(--font-ui); font-size: 12px; font-weight: 600; cursor: pointer;
+}
+.wa-arc-chip-slot:hover { border-color: var(--lala-lavender-light); }
+.wa-arc-chip-slot:focus-visible { outline: 2px solid var(--lala-lavender); outline-offset: 2px; }
+.wa-arc-chip-slot.selected { box-shadow: 0 0 0 2px var(--lala-lavender); }
+/* The sheet's × and backdrop exist for a phone only. */
+.wa-arc-sheet-close, .wa-arc-sheet-backdrop { display: none; }
 
 @media (max-width: 1099px) {
   .wa-arc { grid-template-columns: minmax(0, 1fr); }
-  /* The open slot sits above the parts; the key goes below them. */
+  /* The open slot sits above the parts. */
   .wa-arc-side { display: contents; }
   .wa-arc-panel { order: -1; }
-  .wa-arc-key { order: 1; }
+}
+/* On a phone the open slot is a sheet from the bottom, after a tap. */
+@media (max-width: 768px) {
+  .wa-arc-side { display: none; }
+  .wa-arc-side.is-sheet-open { display: block; position: fixed; inset: 0; z-index: var(--z-modal); }
+  .wa-arc-sheet-backdrop {
+    display: block; position: absolute; inset: 0; width: 100%; border: none; padding: 0;
+    background: color-mix(in srgb, var(--text-primary) 40%, transparent); cursor: pointer;
+  }
+  .wa-arc-side.is-sheet-open .wa-arc-panel {
+    position: absolute; left: 0; right: 0; bottom: 0; max-height: 80vh; overflow-y: auto;
+    padding: 18px 16px calc(18px + env(safe-area-inset-bottom, 0px)); border-radius: 18px 18px 0 0; box-shadow: var(--shadow-lg);
+  }
+  .wa-arc-sheet-close {
+    display: inline-flex; align-items: center; justify-content: center; position: absolute; top: 10px; right: 10px;
+    width: 40px; height: 40px; border: none; border-radius: 999px; background: var(--lala-parchment); color: var(--text-primary);
+    font-size: 22px; line-height: 1; cursor: pointer;
+  }
 }
 @media (max-width: 640px) {
   .wa-arc-card { padding: 14px; }
@@ -920,3 +968,72 @@
   font-family: var(--font-prose); font-size: 20px; font-weight: 700; color: var(--text-primary);
 }
 .wa-season-fold-meta { font-family: var(--font-ui); font-size: 13px; font-weight: 500; color: var(--text-secondary); }
+
+/* Episodes › Results (Evoni, 2026-10-22 layout list): one summary strip,
+   filter and sort, rows that fit a phone, and an opened episode with its
+   actions first and its stats, money and event side by side. */
+.wa-ledger-strip { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 20px; margin-bottom: 14px; padding: 12px 14px; border-radius: 14px; background: var(--surface-card); border: 1px solid var(--lala-parchment-3); }
+.wa-ledger-tiers { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.wa-ledger-tiers li { display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border: 1px solid; border-radius: 999px; font-size: 13px; color: var(--text-primary); }
+.wa-ledger-money { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 0; }
+.wa-ledger-money div { display: flex; align-items: baseline; gap: 6px; }
+.wa-ledger-money dt { font-size: 12px; color: var(--text-secondary); }
+.wa-ledger-money dd { margin: 0; font-size: 15px; font-weight: 800; color: var(--text-primary); }
+.wa-ledger-money .is-in dd { color: var(--success-text); }
+.wa-ledger-money .is-out dd { color: var(--danger-text); }
+.wa-ledger-tools { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; margin-bottom: 10px; }
+.wa-ledger-filters { display: flex; flex-wrap: wrap; gap: 6px; }
+.wa-ledger-filters button {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 4px 12px; border: 1px solid var(--lala-parchment-3); border-radius: 999px;
+  background: var(--surface-card); color: var(--text-primary); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
+}
+.wa-ledger-filters button.active { background: var(--lala-lavender); border-color: var(--lala-lavender); color: var(--text-inverse); }
+.wa-ledger-n { font-size: 12px; opacity: 0.85; }
+.wa-ledger-sort { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-secondary); }
+.wa-ledger-sort select { min-height: 36px; padding: 4px 8px; border: 1px solid var(--lala-parchment-3); border-radius: 8px; background: var(--surface-card); color: var(--text-primary); font: inherit; font-size: 13px; }
+.wa-ledger-none { margin: 8px 0; font-size: 13px; color: var(--text-secondary); }
+.wa-ledger-row { margin-bottom: 10px; border: 1px solid var(--lala-parchment-3); border-radius: 12px; background: var(--surface-card); overflow: hidden; }
+.wa-ledger-row.is-open { border: 2px solid var(--primary); }
+.wa-ledger-row-head {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; width: 100%; padding: 14px 16px; border: none; background: none;
+  color: var(--text-primary); font: inherit; text-align: left; cursor: pointer;
+}
+.wa-ledger-row-head:focus-visible { outline: 2px solid var(--lala-lavender); outline-offset: -2px; }
+.wa-ledger-num { flex: 0 0 32px; font-size: 16px; font-weight: 800; color: var(--primary-text); }
+.wa-ledger-name { flex: 1 1 180px; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.wa-ledger-title { font-size: 14px; font-weight: 700; overflow-wrap: anywhere; }
+.wa-ledger-event { font-size: 11px; color: var(--text-secondary); }
+.wa-ledger-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.wa-ledger-score { font-size: 18px; font-weight: 800; margin: 0 4px; }
+.wa-ledger-chev { font-size: 12px; color: var(--text-secondary); }
+.wa-ledger-case { padding: 0 16px 16px; border-top: 1px solid var(--lala-parchment-3); }
+.wa-ledger-actions { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px 0; }
+.wa-ledger-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; align-items: start; }
+.wa-ledger-col { min-width: 0; }
+.wa-ledger-stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 8px; }
+@media (max-width: 600px) {
+  /* The number and title on one line, the tier, score and changes under them. */
+  .wa-ledger-row-head { padding: 12px; }
+  .wa-ledger-name { flex: 1 1 0; }
+  .wa-ledger-meta { order: 3; flex-basis: 100%; padding-left: 42px; }
+  .wa-ledger-chev { order: 2; }
+  .wa-ledger-case { padding: 0 12px 12px; }
+}
+
+/* Season Plan (Evoni, 2026-10-22 layout list): the season on one line with
+   its counts under it; the threads with the narrative debt beside them. */
+.wa-season-head { margin-bottom: 16px; padding: 14px 18px; border-radius: 16px; background: var(--surface-card); border: 1px solid var(--lala-parchment-3); box-shadow: var(--shadow-xs); }
+.wa-season-head-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; }
+.wa-season-head-title { margin: 0; font-family: var(--font-prose); font-size: 20px; font-weight: 600; color: var(--text-primary); }
+.wa-season-head-tagline { font-size: 13px; color: var(--text-secondary); }
+.wa-season-head-chips { display: inline-flex; gap: 6px; margin-left: auto; }
+.wa-season-chip { padding: 3px 10px; border-radius: 8px; font-size: 12px; font-weight: 600; }
+.wa-season-chip.is-plain { background: var(--surface-bg); color: var(--text-secondary); border: 1px solid var(--lala-parchment-3); }
+.wa-season-counts { margin: 6px 0 0; font-size: 13px; color: var(--text-secondary); }
+.wa-season-counts .is-debt { color: var(--danger-text); font-weight: 600; }
+.wa-season-pair { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; }
+.wa-season-pair.is-two { grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); }
+@media (max-width: 900px) {
+  .wa-season-pair.is-two { grid-template-columns: minmax(0, 1fr); }
+  .wa-season-head-chips { margin-left: 0; }
+}

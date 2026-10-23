@@ -1,26 +1,37 @@
 /**
- * Files › Style photos (Evoni, 2026-10-22: "i dont want the uploads in the
- * style page move them to the files tab"): every photo the Style Page uses
+ * Files › Photos (Evoni, 2026-10-22: "i dont want the uploads in the style
+ * page move them to the files tab"; "Character poses and style images are
+ * basically the same thing"): To sort, then the character poses
+ * (`posesSlot`, EpisodePosesPanel), then the Style spots. Every photo the
+ * Style Page uses
  * is uploaded and kept here, one folder per spot (lib/stylePhotoFolders).
  * The Style Page only picks from Files. Photos upload to To sort, or straight
- * into a folder; each can be moved to another folder or deleted. A folder
- * that holds one photo (Hero, Front …) sends the photo it had back to
- * To sort when another is filed there.
+ * into a folder; each can be filed in another folder, filed as a character
+ * pose (Lala · Front …), or deleted. A folder that holds one photo (Hero,
+ * Front …) sends the photo it had back to To sort when another is filed there.
+ *
+ * Lighter cards (2026-10-22): the photo shows; "File as" and Delete are
+ * behind "⋯" (CardMenu). An empty folder is a small "+ Hero" chip (AddChip);
+ * To sort always shows in full.
  *
  * Data: the Lookbook routes (lib/lookbookApi); a folder is a photo's category.
+ * Filing as a pose: POST /api/v1/episode-poses/:id/from-lookbook.
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Upload, Trash2, X } from 'lucide-react';
 import { lookbookApi } from '../../lib/lookbookApi';
-import { PHOTO_ACCEPT } from '../../lib/episodePosesApi';
+import { CHARACTERS, POSES, PHOTO_ACCEPT, episodePosesApi } from '../../lib/episodePosesApi';
 import { STYLE_FOLDERS, filesIn } from '../../lib/stylePhotoFolders';
+import { AddChip, CardMenu } from './FileCardParts';
 import './EpisodePosesPanel.css';
 import './EpisodeStylePhotosPanel.css';
 
 const LOOKBOOK_TYPES = ['image/png', 'image/jpeg', 'image/webp'];
 const errorText = (err) => err?.response?.data?.error || err?.message || 'Something went wrong.';
+// "File as": a folder, or a pose ("pose:lala:front").
+const POSE_TARGETS = CHARACTERS.flatMap((c) => POSES.map((p) => ({ value: `pose:${c.key}:${p.key}`, label: `${c.label} · ${p.label}` })));
 
-function Folder({ folder, photos, busy, onFiles, onMove, onDelete }) {
+function Folder({ folder, photos, busy, onFiles, onFile, onDelete }) {
   const inputRef = useRef(null);
   const [over, setOver] = useState(false);
   const full = folder.max ? photos.length >= folder.max : false;
@@ -39,15 +50,25 @@ function Folder({ folder, photos, busy, onFiles, onMove, onDelete }) {
       </header>
       <ul className="epp-strip">
         {photos.map((p) => (
-          <li key={p.id} className="epp-card" data-testid={`esph-photo-${p.id}`}>
-            <div className="epp-frame"><img src={p.image_url} alt={p.file_name || `${folder.label} photo`} loading="lazy" /></div>
-            <div className="epp-actions">
-              <select value={folder.key} onChange={(e) => onMove(p, e.target.value)} aria-label="Which folder" disabled={busy}>
-                {STYLE_FOLDERS.map((f) => <option key={f.key} value={f.key}>{f.label}</option>)}
-              </select>
-              <button type="button" className="epp-icon-btn is-danger" onClick={() => onDelete(p)} disabled={busy} aria-label="Delete this photo" title="Delete">
-                <Trash2 size={15} aria-hidden />
-              </button>
+          <li key={p.id} className="epp-card is-light" data-testid={`esph-photo-${p.id}`}>
+            <div className="epp-frame">
+              <img src={p.image_url} alt={p.file_name || `${folder.label} photo`} loading="lazy" />
+              <CardMenu>
+                <label className="esph-file-as">
+                  <span>File as</span>
+                  <select value={folder.key} onChange={(e) => onFile(p, e.target.value)} aria-label="File as" disabled={busy}>
+                    <optgroup label="Style photos">
+                      {STYLE_FOLDERS.map((f) => <option key={f.key} value={f.key}>{f.label}</option>)}
+                    </optgroup>
+                    <optgroup label="Character poses">
+                      {POSE_TARGETS.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+                    </optgroup>
+                  </select>
+                </label>
+                <button type="button" className="epp-menu-item is-danger" onClick={() => onDelete(p)} disabled={busy} aria-label="Delete this photo">
+                  <Trash2 size={15} aria-hidden /> Delete
+                </button>
+              </CardMenu>
             </div>
           </li>
         ))}
@@ -72,12 +93,13 @@ function Folder({ folder, photos, busy, onFiles, onMove, onDelete }) {
   );
 }
 
-export default function EpisodeStylePhotosPanel({ episode }) {
+export default function EpisodeStylePhotosPanel({ episode, reloadKey = 0, onCount, onFiledAsPose, posesSlot = null }) {
   const episodeId = episode?.id;
   const [lb, setLb] = useState(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
+  const [note, setNote] = useState(null);
 
   const load = useCallback(async () => {
     if (!episodeId) return;
@@ -91,7 +113,11 @@ export default function EpisodeStylePhotosPanel({ episode }) {
       setLoading(false);
     }
   }, [episodeId]);
-  useEffect(() => { load(); }, [load]);
+  // reloadKey: the Files tab's shared drop zone asks again after an upload.
+  useEffect(() => { load(); }, [load, reloadKey]);
+
+  const total = STYLE_FOLDERS.reduce((n, f) => n + filesIn(lb, f.key).length, 0);
+  useEffect(() => { if (onCount && lb) onCount(total); }, [total, lb, onCount]);
 
   const run = async (fn) => {
     setBusy(true);
@@ -114,35 +140,73 @@ export default function EpisodeStylePhotosPanel({ episode }) {
     const category = folder.key === 'unsorted' ? undefined : folder.key;
     run(() => lookbookApi.upload(episodeId, files.slice(0, Math.max(0, room)), category));
   };
-  const onMove = (photo, key) => run(() => lookbookApi.move(episodeId, photo.id, { category: key }));
+  const onFile = (photo, target) => {
+    if (target.startsWith('pose:')) {
+      const [, characterKey, pose] = target.split(':');
+      const label = POSE_TARGETS.find((t) => t.value === target)?.label || 'a pose';
+      run(async () => {
+        await episodePosesApi.fromLookbook(episodeId, photo.id, { characterKey, pose });
+        setNote(`Filed as ${label} in Character poses. It is being processed there.`);
+        if (onFiledAsPose) onFiledAsPose();
+        return lookbookApi.get(episodeId);
+      });
+      return;
+    }
+    setNote(null);
+    run(() => lookbookApi.move(episodeId, photo.id, { category: target }));
+  };
   const onDelete = (photo) => {
     if (!window.confirm('Delete this photo? It comes off the Style Page too.')) return;
     run(() => lookbookApi.remove(episodeId, photo.id));
   };
 
-  const total = STYLE_FOLDERS.reduce((n, f) => n + filesIn(lb, f.key).length, 0);
+  const sort = STYLE_FOLDERS[0];
+  const spots = STYLE_FOLDERS.slice(1);
+  const shown = spots.filter((f) => filesIn(lb, f.key).length);
+  const empty = spots.filter((f) => !filesIn(lb, f.key).length);
   return (
-    <div className="epp esph" data-testid="esph">
-      <header className="epp-head">
-        <div>
-          <h2 className="epp-title">Style photos</h2>
-          <p className="epp-sub">The photos for the Style Page, one folder per spot. Upload them here; on the Style Page, tap a spot and choose from Files. A folder that holds one photo sends the one it had back to To sort.</p>
-        </div>
-        <span className="epp-total">{total} {total === 1 ? 'photo' : 'photos'}</span>
-      </header>
+    <div className="esph-wrap">
       {error && (
-        <div className="epp-alert" role="alert">
+        <div className="epp epp-alert" role="alert">
           <span>{error}</span>
           <button type="button" className="epp-icon-btn" onClick={() => setError(null)} aria-label="Dismiss"><X size={16} aria-hidden /></button>
         </div>
       )}
-      {loading ? <p className="epp-empty">Loading photos…</p> : (
-        <div className="esph-folders">
-          {STYLE_FOLDERS.map((f) => (
-            <Folder key={f.key} folder={f} photos={filesIn(lb, f.key)} busy={busy} onFiles={onFiles} onMove={onMove} onDelete={onDelete} />
-          ))}
+      {note && <p className="epp-note" role="status" data-testid="esph-note">{note}</p>}
+      {!loading && (
+        <div className="epp esph-sort">
+          <div className="esph-folders">
+            <Folder folder={sort} photos={filesIn(lb, sort.key)} busy={busy} onFiles={onFiles} onFile={onFile} onDelete={onDelete} />
+          </div>
         </div>
       )}
+      {posesSlot}
+      <div className="epp esph" data-testid="esph">
+      <header className="epp-head">
+        <div>
+          <h2 className="epp-title">Style spots</h2>
+          <p className="epp-sub">The Style Page's other photos, one folder per spot (its Front, Side and Back are Lala's starred poses above). On the Style Page, tap a spot and choose from Files. A folder that holds one photo sends the one it had back to To sort.</p>
+        </div>
+        <span className="epp-total">{total} {total === 1 ? 'photo' : 'photos'}</span>
+      </header>
+      {loading ? <p className="epp-empty">Loading photos…</p> : (
+        <div className="esph-folders">
+          {shown.map((f) => (
+            <Folder key={f.key} folder={f} photos={filesIn(lb, f.key)} busy={busy} onFiles={onFiles} onFile={onFile} onDelete={onDelete} />
+          ))}
+          {empty.length > 0 && (
+            <div className="epp-empty-row esph-empty" data-testid="esph-empty">
+              <span className="epp-empty-label">Empty folders:</span>
+              {empty.map((f) => (
+                <AddChip key={f.key} label={f.label} accept={PHOTO_ACCEPT} multiple={!f.single} disabled={busy}
+                  testId={`esph-${f.key}`} inputTestId={`esph-input-${f.key}`}
+                  onFiles={(files) => { const list = [...(files || [])]; const good = list.filter((x) => LOOKBOOK_TYPES.includes(x.type)); onFiles(f, good, list.length - good.length); }} />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+      </div>
     </div>
   );
 }

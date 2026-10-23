@@ -11,7 +11,9 @@
  *     scenes and the pressure test follow it.
  *   Portraits: "Make a portrait" draws one from the saved look (it costs
  *     an image; the estimate is shown), kept in the studio's storage; "Use
- *     as their profile photo" sets it.
+ *     as their profile photo" sets it. "Upload a photo" (Evoni, 2026-10-22)
+ *     adds a photo of them from the device, free; it is their profile photo
+ *     too when they have none.
  * Laid out to Evoni's mock (2026-10-18, step 7 of the character page):
  * visual identity (their photo and portraits, paged), physical details,
  * signature look, wardrobe palette, accessories and notes. The mock's hair
@@ -19,8 +21,8 @@
  * Styles: CharacterAppearanceTab.css (cap-*) with the page's ch-card; one
  * column at 375px.
  */
-import { useState, useEffect, useCallback } from 'react';
-import { Sparkles, ImagePlus, Check, Palette, Shirt, Gem, FileText } from 'lucide-react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { Sparkles, ImagePlus, Check, Palette, Shirt, Gem, FileText, Upload } from 'lucide-react';
 import Pager from '../Pager/Pager';
 import api from '../../services/api';
 import './CharacterAppearanceTab.css';
@@ -66,6 +68,7 @@ export default function CharacterAppearanceTab({ character, onPortraitChanged })
   const [busy, setBusy] = useState(null); // 'save' | 'suggest' | 'portrait' | url
   const [note, setNote] = useState(null);
   const [page, setPage] = useState(1);
+  const fileRef = useRef(null);
 
   const load = useCallback(async () => {
     try {
@@ -115,6 +118,21 @@ export default function CharacterAppearanceTab({ character, onPortraitChanged })
     setData((d) => ({ ...d, ...res.data }));
     setNote({ kind: 'ok', text: 'A new portrait is below. Use it as their profile photo, or make another.' });
   });
+  const upload = (file) => act('upload', async () => {
+    const body = new FormData();
+    body.append('image', file);
+    const hadPhoto = !!data?.portrait_url;
+    const res = await api.post(`${base(id)}/portrait/upload`, body);
+    setData((d) => ({ ...d, ...res.data }));
+    setPage(1);
+    if (!hadPhoto && res.data?.portrait_url) onPortraitChanged?.(res.data.portrait_url);
+    setNote({ kind: 'ok', text: hadPhoto ? 'Your photo is below. Use it as their profile photo if you like.' : 'Your photo is their profile photo now.' });
+  });
+  const onFile = (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (file) upload(file);
+  };
   const portraitList = data?.appearance?.portraits || [];
   const portraitPage = portraitList.slice((page - 1) * PORTRAITS_PER_PAGE, page * PORTRAITS_PER_PAGE);
   const use = (url) => act(url, async () => {
@@ -189,7 +207,7 @@ export default function CharacterAppearanceTab({ character, onPortraitChanged })
       <div className="cap-grid">
         <div className="cap-col">
           <section className="ch-card" aria-labelledby="cap-identity" data-testid="cap-identity">
-            {head('cap-identity', 'Visual identity', ImagePlus, null, `Made from their saved look${cost ? `; about ${cost} each` : ''}.`)}
+            {head('cap-identity', 'Visual identity', ImagePlus, null, `Upload a photo of them, or make a portrait from their saved look${cost ? ` (about ${cost} each)` : ''}.`)}
             <div className="cap-photo">
               {photo ? <img src={photo} alt={`${name}’s profile photo`} /> : <span className="cap-photo-empty">No profile photo yet</span>}
               <span className="cap-photo-label">Profile photo</span>
@@ -198,14 +216,19 @@ export default function CharacterAppearanceTab({ character, onPortraitChanged })
               <button type="button" className="cap-btn" disabled={!!busy || !a?.summary} onClick={portrait}>
                 <ImagePlus size={14} aria-hidden="true" /> {busy === 'portrait' ? 'Making a portrait…' : 'Make a portrait'}
               </button>
-              {!a?.summary && <span className="ch-note">Save their look first (at least “at a glance”).</span>}
+              <button type="button" className="cap-btn-soft" disabled={!!busy} onClick={() => fileRef.current?.click()} data-testid="cap-upload">
+                <Upload size={14} aria-hidden="true" /> {busy === 'upload' ? 'Uploading…' : 'Upload a photo'}
+              </button>
+              <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp" hidden onChange={onFile}
+                aria-label={`Upload a photo of ${name}`} data-testid="cap-upload-input" />
+              {!a?.summary && <span className="ch-note">To make a portrait, save their look first (at least “at a glance”).</span>}
             </span>
             {portraits.length > 0 && (
               <>
                 <ul className="cap-portraits">
                   {portraitPage.map((p) => (
                     <li key={p.url} className="cap-portrait" data-testid="cap-portrait">
-                      <img src={p.url} alt={`A portrait of ${name}`} loading="lazy" />
+                      <img src={p.url} alt={p.uploaded ? `A photo of ${name}` : `A portrait of ${name}`} loading="lazy" />
                       {data.portrait_url === p.url
                         ? <span className="cap-current"><Check size={14} aria-hidden="true" /> Their profile photo</span>
                         : (

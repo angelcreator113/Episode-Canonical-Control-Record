@@ -26,6 +26,8 @@ const PHOTOS = [
 ];
 
 const pose = (character, key) => screen.getByTestId(`epp-${character}-${key}`);
+// Lighter cards (2026-10-22): a photo's options are behind its "⋯" button.
+const options = (card) => fireEvent.click(within(card).getByRole('button', { name: 'Photo options' }));
 
 describe('pose helpers', () => {
   test('processing, the order within a pose, what processing did, and which files are photos', () => {
@@ -65,6 +67,11 @@ describe('EpisodePosesPanel', () => {
     expect(front.map((li) => li.dataset.testid)).toEqual(['epp-photo-p2', 'epp-photo-p1']);
     expect(within(pose('lala', 'front')).getByText('2 photos')).toBeTruthy();
     expect(screen.getByText('3 photos')).toBeTruthy();
+    // An empty pose is a small chip, not a tile.
+    expect(pose('lala', 'back').className).toContain('epp-chip');
+    expect(within(pose('lala', 'back')).getByRole('button', { name: 'Add Back' })).toBeTruthy();
+    expect(within(screen.getByTestId('epp-photo-p2')).queryByText('Upscaled x2')).toBeNull();
+    options(screen.getByTestId('epp-photo-p2'));
     expect(within(screen.getByTestId('epp-photo-p2')).getByText('Upscaled x2')).toBeTruthy();
   });
 
@@ -72,6 +79,7 @@ describe('EpisodePosesPanel', () => {
     render(<EpisodePosesPanel episode={{ id: 'ep-1' }} />);
     const card = await screen.findByTestId('epp-photo-p1');
     expect(within(card).getByRole('img').getAttribute('src')).toBe('https://x/p1.png');
+    options(card);
     fireEvent.click(within(card).getByRole('button', { name: 'Before' }));
     expect(within(card).getByRole('img').getAttribute('src')).toBe('https://x/p1-e.jpg');
   });
@@ -85,6 +93,7 @@ describe('EpisodePosesPanel', () => {
     expect(img.getAttribute('src')).toBe('https://x/j1-e.jpg');
     expect(img.getAttribute('alt')).toBe('jaw.jpg, enhanced');
     expect(img.parentElement.className).not.toMatch(/is-checker/);
+    options(card);
     expect(within(card).getByText('Background kept')).toBeTruthy();
     fireEvent.click(within(card).getByRole('button', { name: 'Before' }));
     expect(within(card).getByRole('img').getAttribute('src')).toBe('https://x/j1.jpg');
@@ -137,6 +146,7 @@ describe('EpisodePosesPanel', () => {
     fireEvent.click(within(card).getByRole('button', { name: 'Make this the default for this pose' }));
     await waitFor(() => expect(episodePosesApi.update).toHaveBeenCalledWith('ep-1', 'p1', { is_default: true }));
     await waitFor(() => expect(episodePosesApi.list).toHaveBeenCalledTimes(2));
+    options(screen.getByTestId('epp-photo-p1'));
     fireEvent.change(within(screen.getByTestId('epp-photo-p1')).getByLabelText('Which pose this is'), { target: { value: 'side' } });
     await waitFor(() => expect(episodePosesApi.update).toHaveBeenCalledWith('ep-1', 'p1', { pose: 'side' }));
     await waitFor(() => expect(episodePosesApi.list).toHaveBeenCalledTimes(3));
@@ -147,6 +157,7 @@ describe('EpisodePosesPanel', () => {
     const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true);
     render(<EpisodePosesPanel episode={{ id: 'ep-1' }} />);
     const card = await screen.findByTestId('epp-photo-p1');
+    options(card);
     fireEvent.click(within(card).getByRole('button', { name: 'Delete this photo' }));
     expect(episodePosesApi.remove).not.toHaveBeenCalled();
     fireEvent.click(within(card).getByRole('button', { name: 'Delete this photo' }));

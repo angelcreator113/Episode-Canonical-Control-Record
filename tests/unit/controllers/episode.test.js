@@ -93,6 +93,13 @@ describe('Episode Controller - Real Tests', () => {
       );
     });
 
+    test("lists each episode's thumbnail_url (the show board's card)", async () => {
+      models.Episode.findAndCountAll = jest.fn().mockResolvedValue({ count: 0, rows: [] });
+      mockReq.query = { page: 1, limit: 20 };
+      await episodeController.listEpisodes(mockReq, mockRes);
+      expect(models.Episode.findAndCountAll.mock.calls[0][0].attributes).toContain('thumbnail_url');
+    });
+
     test('should filter by processing status', async () => {
       models.Episode.findAndCountAll = jest.fn().mockResolvedValue({
         count: 1,
