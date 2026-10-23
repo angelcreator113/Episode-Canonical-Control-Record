@@ -145,9 +145,11 @@ describe('PUT /world/:showId/events/:eventId writes the merged canon_consequence
     writes = [];
     mockQuery.mockReset();
     mockTransaction.mockClear();
+    // Since the 2026-10-23 audit every save locks the event row
+    // (SELECT * ... FOR UPDATE) in one transaction with its write.
     mockQuery.mockImplementation(async (sql, opts = {}) => {
-      if (/^SELECT canon_consequences FROM world_events/.test(sql)) {
-        return [[{ canon_consequences: stored }]];
+      if (/^SELECT \* FROM world_events .* FOR UPDATE$/.test(sql)) {
+        return [[{ id: 'e1', show_id: 's1', canon_consequences: stored }]];
       }
       if (/^UPDATE world_events/.test(sql)) {
         writes.push({ sql, replacements: { ...opts.replacements }, transaction: opts.transaction });
@@ -176,28 +178,27 @@ describe('PUT /world/:showId/events/:eventId writes the merged canon_consequence
   test('the read is locked and in the same transaction as the write', async () => {
     await request(app).put('/api/v1/world/s1/events/e1').send({ canon_consequences: { a: 1 } });
     expect(mockTransaction).toHaveBeenCalledTimes(1);
-    const select = mockQuery.mock.calls.find(([sql]) => /^SELECT canon_consequences/.test(sql));
-    expect(select[0]).toMatch(/FOR UPDATE$/);
+    const select = mockQuery.mock.calls.find(([sql]) => /FOR UPDATE$/.test(sql));
+    expect(select[0]).toMatch(/^SELECT \* FROM world_events WHERE id = :eventId AND show_id = :showId AND deleted_at IS NULL FOR UPDATE$/);
     expect(select[1].transaction).toEqual({ id: 'tx' });
     expect(writes[0].transaction).toEqual({ id: 'tx' });
   });
 
-  test('a save that does not send canon_consequences neither reads nor writes it', async () => {
+  test('a save that does not send canon_consequences does not write it', async () => {
     await request(app).put('/api/v1/world/s1/events/e1').send({ name: 'Gala' });
-    expect(mockTransaction).not.toHaveBeenCalled();
     expect(writes[0].sql).not.toMatch(/canon_consequences/);
+    expect(writes[0].replacements).not.toHaveProperty('canon_consequences');
   });
 
   test('canon_consequences: null still clears the column (unchanged)', async () => {
     await request(app).put('/api/v1/world/s1/events/e1').send({ canon_consequences: null });
-    expect(mockTransaction).not.toHaveBeenCalled();
     expect(writes[0].replacements.canon_consequences).toBeNull();
   });
 
   test('the core-only retry after a missing-column error writes the merged value too', async () => {
     let first = true;
     mockQuery.mockImplementation(async (sql, opts = {}) => {
-      if (/^SELECT canon_consequences FROM world_events/.test(sql)) return [[{ canon_consequences: stored }]];
+      if (/^SELECT \* FROM world_events .* FOR UPDATE$/.test(sql)) return [[{ id: 'e1', show_id: 's1', canon_consequences: stored }]];
       if (/^UPDATE world_events/.test(sql)) {
         if (first) { first = false; throw new Error('column "theme" of relation "world_events" does not exist'); }
         writes.push({ sql, replacements: { ...opts.replacements } });

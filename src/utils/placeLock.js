@@ -15,17 +15,18 @@
 const PLACE_LOCKED_CODE = 'PLACE_LOCKED';
 const PLACE_LOCKED_MESSAGE = "This event's episode is accepted: its Place is locked";
 
-async function isPlaceLocked(sequelize, eventId) {
+async function isPlaceLocked(sequelize, eventId, { transaction } = {}) {
   const { findTermsLockEpisode } = require('./eventTermsLock');
-  let episodeId = (await findTermsLockEpisode(sequelize, eventId))?.id || null;
+  const tx = transaction ? { transaction } : {};
+  let episodeId = (await findTermsLockEpisode(sequelize, eventId, tx))?.id || null;
   if (!episodeId) {
     const [[row]] = await sequelize.query(
-      'SELECT used_in_episode_id FROM world_events WHERE id = :eventId', { replacements: { eventId } });
+      'SELECT used_in_episode_id FROM world_events WHERE id = :eventId', { replacements: { eventId }, ...tx });
     episodeId = row?.used_in_episode_id || null;
   }
   if (!episodeId) return false;
   const [[episode]] = await sequelize.query(
-    'SELECT evaluation_status FROM episodes WHERE id = :episodeId AND deleted_at IS NULL', { replacements: { episodeId } });
+    'SELECT evaluation_status FROM episodes WHERE id = :episodeId AND deleted_at IS NULL', { replacements: { episodeId }, ...tx });
   return episode?.evaluation_status === 'accepted';
 }
 
