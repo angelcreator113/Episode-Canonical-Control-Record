@@ -2169,7 +2169,14 @@ export default function YouTubeThumbnailStudio() {
     <div className={`yts${sheet ? ' has-sheet' : ''}`}>
       <header className={`yts-banner${compact ? ' is-compact' : ''}`}>
         {compact ? (
-          <p className="yts-kicker"><Link to="/template-studio">Templates</Link> · <Youtube size={14} aria-hidden /> YouTube</p>
+          <div className="yts-head-left">
+            {/* The way back to the episode the editor came from (Evoni, 2026-10-23: "I have no way of going back to the episode"). */}
+            <Link className="yts-back" to={`/episodes/${episodeId}`} data-testid="yts-back-episode"
+              title={`Back to ${episodes[at]?.title || 'the episode'}`}>
+              <ChevronLeft size={16} aria-hidden /> <span className="yts-back-text">{episodes[at]?.title || 'Episode'}</span>
+            </Link>
+            <p className="yts-kicker"><Link to="/template-studio">Templates</Link> · <Youtube size={14} aria-hidden /> YouTube</p>
+          </div>
         ) : (
           <div>
             <p className="yts-kicker"><Link to="/template-studio">Templates</Link> · YouTube</p>

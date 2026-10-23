@@ -1175,10 +1175,27 @@ describe('YouTubeThumbnailStudio', () => {
     await waitFor(() => expect(screen.getByTestId('yts-next-episode').disabled).toBe(true));
   });
 
+  // Evoni, 2026-10-23: "I have no way of going back to the episode once I click edit thumbnail".
+  test('an open episode has a way back to it in the header, which follows the episode switch', async () => {
+    youtubeThumbnailsApi.episodes.mockResolvedValue([
+      { id: 'ep-1', episode_number: 1, title: 'Studio by Sable' }, { id: 'ep-2', episode_number: 2, title: 'Gala' },
+    ]);
+    renderPage();
+    await opened();
+    const back = screen.getByTestId('yts-back-episode');
+    expect(back.getAttribute('href')).toBe('/episodes/ep-1');
+    await waitFor(() => expect(back.textContent).toContain('Studio by Sable'));
+    expect(back.getAttribute('title')).toBe('Back to Studio by Sable');
+    fireEvent.click(screen.getByTestId('yts-next-episode'));
+    await waitFor(() => expect(screen.getByTestId('yts-back-episode').getAttribute('href')).toBe('/episodes/ep-2'));
+    expect(screen.getByTestId('yts-back-episode').textContent).toContain('Gala');
+  });
+
   test('with no episode open the header is the full one, without arrows', async () => {
     renderPage('/template-studio/youtube?show=show-1');
     expect(await screen.findByText(/Drag, resize and turn anything/)).toBeTruthy();
     expect(screen.queryByTestId('yts-prev-episode')).toBeNull();
+    expect(screen.queryByTestId('yts-back-episode')).toBeNull();
     expect(document.querySelector('.yts-banner').classList.contains('is-compact')).toBe(false);
   });
 

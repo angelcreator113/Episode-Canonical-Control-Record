@@ -344,6 +344,10 @@
    section at a time in tabs under the canvas. */
 .yts-banner.is-compact { align-items: center; padding: 8px 14px; gap: 8px 14px; }
 .yts-banner.is-compact .yts-kicker { margin: 0; }
+.yts-head-left { display: flex; align-items: center; gap: 6px 12px; flex-wrap: wrap; min-width: 0; }
+.yts-back { display: inline-flex; align-items: center; gap: 4px; min-height: 36px; max-width: 260px; padding: 4px 12px 4px 8px; border-radius: 999px; border: 1.5px solid var(--lala-gold-line); background: var(--surface-card); color: var(--text-primary); font-weight: 600; font-size: 14px; text-decoration: none; }
+.yts-back:hover, .yts-back:focus-visible { border-color: var(--accent-dark); }
+.yts-back-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .yts-banner.is-compact .yts-select > span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .yts-banner.is-compact .yts-choose { flex: 1; justify-content: flex-end; align-items: center; }
 .yts-episode-nav { display: flex; align-items: center; gap: 4px; min-width: 0; }
@@ -363,6 +367,8 @@
   .yts-banner.is-compact .yts-select select { min-width: 0; width: 100%; }
   /* The app's breadcrumb already says Template Studio / YouTube Thumbnails. */
   .yts-banner.is-compact .yts-kicker { display: none; }
+  .yts-banner.is-compact .yts-head-left { width: 100%; }
+  .yts-back { max-width: 100%; }
 }
 
 /* Messages float at the foot of the screen (Evoni, 2026-10-22 layout list):
