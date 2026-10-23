@@ -9,6 +9,8 @@ const { authorize } = require('../middleware/auth');
 // Every write here is ADMIN only; the reads stay requireAuth (Evoni, 2026-10-19:
 // "this whole part of the site is admin only").
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');
+// The story pair is the truth; its Pulse pair follows it (services/relationshipTruth).
+const truth = require('../services/relationshipTruth');
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -505,7 +507,8 @@ router.post('/', requireAuth, authorize(['ADMIN']), async (req, res) => {
       { replacements: { id }, type: db.sequelize.QueryTypes.SELECT }
     );
 
-    res.status(201).json({ relationship: created });
+    const pulse = await truth.afterStorySave(db, id);
+    res.status(201).json({ relationship: created, pulse });
   } catch (err) {
     console.error('POST /relationships error:', err);
     res.status(500).json({ error: err.message });
@@ -749,7 +752,8 @@ router.post('/confirm/:relationshipId', requireAuth, authorize(['ADMIN']), async
     );
 
     if (!row) return res.status(404).json({ error: 'Relationship not found' });
-    res.json({ relationship: row, message: 'Candidate confirmed' });
+    const pulse = await truth.afterStorySave(db, relationshipId);
+    res.json({ relationship: row, message: 'Candidate confirmed', pulse });
   } catch (err) {
     console.error('POST /relationships/confirm/:id error:', err);
     res.status(500).json({ error: err.message });
@@ -835,7 +839,8 @@ router.put('/:relId', requireAuth, authorize(['ADMIN']), async (req, res) => {
     );
 
     if (!updated) return res.status(404).json({ error: 'Relationship not found' });
-    res.json({ relationship: updated });
+    const pulse = await truth.afterStorySave(db, relId);
+    res.json({ relationship: updated, pulse });
   } catch (err) {
     console.error('PUT /relationships/:id error:', err);
     res.status(500).json({ error: err.message });
@@ -1008,7 +1013,8 @@ router.put('/:relId/family', requireAuth, authorize(['ADMIN']), async (req, res)
     );
 
     if (!updated) return res.status(404).json({ error: 'Relationship not found' });
-    res.json({ relationship: updated });
+    const pulse = await truth.afterStorySave(db, relId);
+    res.json({ relationship: updated, pulse });
   } catch (err) {
     console.error('PUT /relationships/:relId/family error:', err);
     res.status(500).json({ error: err.message });
@@ -1171,6 +1177,32 @@ No markdown fences, no explanation.`,
     console.error('POST /relationships/generate-family error:', err);
     res.status(500).json({ error: err.message });
   }
+});
+
+// ════════════════════════════════════════════════════════════════════════
+// Where relationships disagree (services/relationshipTruth; Evoni,
+// 2026-10-23). GET lists them; fix applies an item's suggested fix, read
+// fresh on the server; keep marks it "different on purpose".
+// ════════════════════════════════════════════════════════════════════════
+const driftError = (res, err, what) => {
+  if (err instanceof truth.DriftError) return res.status(err.status).json({ error: err.message });
+  console.error(`${what} error:`, err);
+  return res.status(500).json({ error: err.message });
+};
+router.get('/drift', requireAuth, async (req, res) => {
+  try {
+    res.json({ items: await truth.driftReport(getDb(), { includeKept: req.query.include_kept === 'true' }) });
+  } catch (err) { driftError(res, err, 'GET /relationships/drift'); }
+});
+router.post('/drift/:key/fix', requireAuth, authorize(['ADMIN']), async (req, res) => {
+  try {
+    res.json(await truth.applyDriftFix(getDb(), req.params.key));
+  } catch (err) { driftError(res, err, 'POST /relationships/drift/:key/fix'); }
+});
+router.post('/drift/:key/keep', requireAuth, authorize(['ADMIN']), async (req, res) => {
+  try {
+    res.json(await truth.keepDifferent(getDb(), req.params.key, { note: req.body?.note, by: req.user?.email || req.user?.id || null }));
+  } catch (err) { driftError(res, err, 'POST /relationships/drift/:key/keep'); }
 });
 
 module.exports = router;

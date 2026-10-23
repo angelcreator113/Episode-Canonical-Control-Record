@@ -24,9 +24,13 @@
  * Since Task #3115 (Evoni, 2026-10-13: "go with (a)") the map reads and edits
  * social_profile_relationships, the table The Pulse reads for the kind of
  * relationship and its closeness: an edit here changes The Pulse.
- * feed_profile_relationships is no longer written; its rows were copied over
- * by migration 20261013130000. The responses keep the map's old field names
- * (influencer_a_id, influencerA, is_public, notes) so the pages read as before.
+ * feed_profile_relationships, the old table, was copied over by migration
+ * 20261013130000 and dropped by 20261023230000 (Evoni, 2026-10-23: "feed
+ * profiles and pulse profiles should be the same thing now"). The responses
+ * keep the map's old field names (influencer_a_id, influencerA, is_public,
+ * notes) so the pages read as before; the API path stays /feed-relationships.
+ * A Pulse pair between two people with registry characters is linked to
+ * their story pair (character_relationship_id, services/relationshipTruth).
  */
 const express = require('express');
 const router  = express.Router();

@@ -306,7 +306,19 @@ async function draftingContext(sequelize, showId, slot) {
     `SELECT title FROM show_story_threads WHERE show_id = :showId AND status <> 'closed' AND deleted_at IS NULL
       ORDER BY created_at DESC LIMIT 8`,
     { replacements: { showId } }).catch((err) => { console.error('[seasonIntention] threads load failed:', err.message); return [[]]; });
-  return { arc, phase, earlier: earlier.reverse(), goals, debt: Array.isArray(debt) ? debt : [], threads };
+  // The last approved story record before this slot, and what Lala still
+  // owes people (services/storyCarryForward; Evoni, 2026-10-23).
+  let carried = '';
+  try {
+    const [[last]] = await sequelize.query(
+      `SELECT MAX(ep.episode_number) AS n FROM season_slots s JOIN episodes ep ON ep.id = s.episode_id AND ep.deleted_at IS NULL
+        WHERE s.arc_id = :arcId AND s.slot_number < :n AND s.deleted_at IS NULL`,
+      { replacements: { arcId: slot.arc_id, n: slot.slot_number } });
+    carried = await require('./storyCarryForward').carryForShow(sequelize, showId, { before: last?.n != null ? Number(last.n) + 1 : null });
+  } catch (err) {
+    console.error('[seasonIntention] carry-forward load failed:', err.message);
+  }
+  return { arc, phase, earlier: earlier.reverse(), goals, debt: Array.isArray(debt) ? debt : [], threads, carried };
 }
 
 function buildDraftPrompt(slot, ctx) {
@@ -335,7 +347,7 @@ ${debt}
 
 Open story threads:
 ${threads}
-
+${ctx.carried ? `\n${ctx.carried}` : ''}
 Return JSON only:
 {
   "story_purpose": "One sentence: what this episode is for in Lala's story (max 200 chars).",

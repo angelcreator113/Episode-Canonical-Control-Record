@@ -554,6 +554,11 @@
 .esp-cover-tick { margin-top: 2px; }
 .esp-cover-ticked { font-size: 12px; font-weight: 600; color: var(--success-text); }
 .esp-cover-fail { font-size: 12px; color: var(--warning-text); }
+.esp-cover-all { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 8px 0 0; }
+.esp-cover-all .esp-btn { display: inline-flex; align-items: center; gap: 6px; }
+/* The line that covered a goal: quoted, the name it was matched by in bold. */
+.esp-cover-quote { font-family: var(--font-prose); font-style: italic; font-size: 12.5px; color: var(--studio-ink-muted); border-left: 2px solid var(--studio-line-strong); padding-left: 8px; overflow-wrap: anywhere; }
+.esp-cover-quote strong { font-style: normal; font-weight: 700; color: var(--studio-ink); }
 .esp-cover-empty { margin: 8px 0 0; font-size: 13px; color: var(--studio-ink-muted); }
 .esp-truth-list { display: flex; flex-direction: column; gap: 10px; margin: 8px 0 0; }
 .esp-truth-list > div { display: flex; flex-direction: column; gap: 2px; }

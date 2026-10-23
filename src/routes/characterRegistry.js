@@ -1451,7 +1451,9 @@ router.post('/characters/:id/backfill-sections', requireAuth, authorize(['ADMIN'
     if (hasData(character.aesthetic_dna))      known.aesthetic_dna = character.aesthetic_dna;
     if (hasData(character.voice_signature))    known.voice_signature = character.voice_signature;
     if (hasData(character.deep_profile))       known.deep_profile_summary = character.deep_profile;
-    if (hasData(character.relationships_map))  known.relationships_map = character.relationships_map;
+    // Its names from the story pairs (services/relationshipTruth), so a generator never reads a stale one.
+    const relationshipsMap = await require('../services/relationshipTruth').relationshipsMapOf(db, character);
+    if (hasData(relationshipsMap))  known.relationships_map = relationshipsMap;
 
     // One meaning per field, shared by every generator (utils/characterSectionSchemas).
     const sectionSchemas = SECTION_SCHEMAS;
@@ -1701,7 +1703,9 @@ router.post('/characters/:id/generate-section', requireAuth, authorize(['ADMIN']
     if (hasData(character.career_status))     known.career_status = character.career_status;
     if (hasData(character.aesthetic_dna))      known.aesthetic_dna = character.aesthetic_dna;
     if (hasData(character.voice_signature))    known.voice_signature = character.voice_signature;
-    if (hasData(character.relationships_map))  known.relationships_map = character.relationships_map;
+    // Its names from the story pairs (services/relationshipTruth).
+    const relationshipsMap = await require('../services/relationshipTruth').relationshipsMapOf(db, character);
+    if (hasData(relationshipsMap))  known.relationships_map = relationshipsMap;
     if (hasData(character.story_presence))     known.story_presence = character.story_presence;
     if (hasData(character.deep_profile))       known.deep_profile_summary = character.deep_profile;
 

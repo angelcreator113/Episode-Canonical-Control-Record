@@ -4,7 +4,7 @@
  * beat mentions it, with that beat's number.
  */
 import { describe, test, expect } from 'vitest';
-import { mustCover, mentionedIn, keyWords } from './episodeScript';
+import { mustCover, mentionedIn, keyWords, quoteParts } from './episodeScript';
 
 const beats = [
   { number: 1, lines: ['Prime: "Hi besties."'] },
@@ -100,5 +100,70 @@ describe('must cover: a goal by its person', () => {
   test('a brand goal is read as written only', () => {
     const items = mustCover({ beats: [{ number: 11, lines: ['Marcus Hale: let us co-style a moment'] }], event, profiles });
     expect(items[1]).toMatchObject({ slot: 'relationship_brand', beat: null });
+  });
+});
+
+// Episode 1 feeds Episode 2 (Evoni, 2026-10-23): what Lala owes from an
+// earlier episode is on the list, after the goals, matched like one.
+describe('carried follow-ups', () => {
+  const carried = [
+    { slot: 'follow_up_f1', label: 'Follow up with Studio Bystable about the collab', task_source: 'goal', follow_up_id: 'f1' },
+    { slot: 'follow_up_f2', label: 'Send Marcus the lookbook', task_source: 'goal', follow_up_id: 'f2' },
+    { slot: 'plain', label: 'Not carried', task_source: 'goal' },
+  ];
+  const at = (line) => [{ number: 3, lines: [line] }];
+  test('each one is listed as a follow-up with its slot; covered when the script says it', () => {
+    const items = mustCover({ beats: at('Lala: "Time to follow up with Studio Bystable about the collab."'), carried });
+    const owed = items.filter((i) => i.source === 'Follow-up');
+    expect(owed).toEqual([
+      { key: 'carried-f1', label: 'Follow up with Studio Bystable about the collab', source: 'Follow-up', slot: 'follow_up_f1', beat: 3 },
+      { key: 'carried-f2', label: 'Send Marcus the lookbook', source: 'Follow-up', slot: 'follow_up_f2', beat: null },
+    ]);
+  });
+  test('none carried, none listed', () => {
+    expect(mustCover({ beats: at('Lala: hi'), carried: [] }).some((i) => i.source === 'Follow-up')).toBe(false);
+    expect(mustCover({ beats: at('Lala: hi') }).some((i) => i.source === 'Follow-up')).toBe(false);
+  });
+});
+
+// The line that covered a goal (Evoni, 2026-10-23): returned with the beat,
+// quoted on the tab with the name it was matched by emphasised.
+describe('must cover: the line', () => {
+  const event = { host_brand: 'Studio by Sable', canon_consequences: { automation: {
+    relationship_goals: [{ slot: 'relationship_guest', label: 'Get to know Truthville', profile_id: 9 }, { slot: 'relationship_brand', label: 'Co-style a moment with Studio by Sable', profile_id: 40 }],
+    guest_profiles: [{ profile_id: 9, display_name: 'Truthville' }],
+  } } };
+  const profiles = [{ id: 9, creator_name: 'Marcus Hale', display_name: 'Truthville', aliases: ['Truth'] }, { id: 40, display_name: 'Studio by Sable', aliases: ['Sable', 'Studio'] }];
+  const cover = (...lines) => mustCover({ beats: [{ number: 11, lines }], event, profiles });
+  test('a covered goal has its line and the name to emphasise', () => {
+    const [g] = cover('Me: so loud', 'Lala: "Truth, I want to know you."');
+    expect(g).toMatchObject({ beat: 11, line: 'Lala: "Truth, I want to know you."', mark: 'Truth', who: { name: 'Truthville', as: 'Truth' } });
+    const [lit] = cover('Lala: "I want to get to know Truthville."');
+    expect(lit).toMatchObject({ beat: 11, line: 'Lala: "I want to get to know Truthville."', mark: 'Truthville' });
+    expect(cover('Me: nobody')[0].line).toBeUndefined();
+  });
+  test('the brand goal ticks by the brand, never by a common word of its name', () => {
+    expect(cover('Lala: "Sable! Co-style a moment?"')[1]).toMatchObject({ beat: 11, mark: 'Sable' });
+    expect(cover('Lala: "Let us co-style a moment in the studio."')[1].beat).toBeNull();
+    expect(cover('Studio: co-style a moment?')[1].beat).toBeNull();
+  });
+  test('quoteParts: the whole line when short, Markdown bold let go', () => {
+    expect(quoteParts('**Truth**: hi there', 'Truth')).toEqual({ before: '', mark: 'Truth', after: ': hi there' });
+    expect(quoteParts('Lala: no name here', 'Truth')).toEqual({ before: 'Lala: no name here', mark: null, after: '' });
+    expect(quoteParts('', 'x')).toBeNull();
+    expect(quoteParts(null)).toBeNull();
+  });
+  test('quoteParts: a long line is cut to about 140 characters around the name', () => {
+    const line = `${'a'.repeat(200)} Truth ${'b'.repeat(200)}`;
+    const q = quoteParts(line, 'Truth');
+    expect(q.mark).toBe('Truth');
+    expect(q.before.startsWith('…')).toBe(true);
+    expect(q.after.endsWith('…')).toBe(true);
+    expect((q.before + q.mark + q.after).length).toBeLessThanOrEqual(142);
+    const start = quoteParts(`Truth ${'b'.repeat(300)}`, 'Truth');
+    expect(start.before).toBe('');
+    expect(start.after.endsWith('…')).toBe(true);
+    const none = quoteParts('c'.repeat(300));
+    expect(none.before.length).toBe(141);
   });
 });

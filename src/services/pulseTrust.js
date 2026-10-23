@@ -74,7 +74,7 @@ async function trustOfProfile(db, profileId) {
 async function setTrust(db, profileId, level) {
   if (!LEVELS.includes(level)) throw new TrustError(400, `level must be one of ${LEVELS.join(', ')}.`);
   const profile = await db.SocialProfile.findByPk(profileId);
-  if (!profile) throw new TrustError(404, 'Feed profile not found.');
+  if (!profile) throw new TrustError(404, 'Pulse profile not found.');
   await profile.update({ pulse_trust: level === DEFAULT_LEVEL ? null : level });
   return { profile_id: profile.id, level };
 }

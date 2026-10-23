@@ -482,6 +482,16 @@ async function generateEpisodeFromEvent(event, models, options = {}) {
     nextNumber = (lastEpisode?.episode_number || 0) + 1;
   }
 
+  // Episode 1 feeds Episode 2 (Evoni, 2026-10-23; services/storyCarryForward):
+  // the last approved story record and what Lala still owes people, for the
+  // brief; '' with none.
+  let carried = '';
+  try {
+    carried = await require('./storyCarryForward').carryForShow(models.sequelize, showId, { before: nextNumber });
+  } catch (carryErr) {
+    console.error('[EpisodeGenerator] carry-forward read failed (non-blocking):', carryErr.message);
+  }
+
   // ── 1. Generate Title + Internal Synopsis + Viewer Teaser (P12, P13) ──
   const eventData = typeof event.toJSON === 'function' ? event.toJSON() : event;
   // ── 0b. Affordability guard ── (computeAffordabilityWarning)
@@ -555,7 +565,7 @@ ${outfitContext}
 Outfit mood: ${moodContext}
 ${financialContext}
 Stakes: ${eventData.narrative_stakes || 'None specified'}
-
+${carried ? `\n${carried}The beats and the forward hook carry this on.\n` : ''}
 Return JSON:
 {
   "title": "Clickable title (YouTube/TikTok style — curiosity gap, emotional hook, 60 chars max). Examples: 'I Wore a $200 Dress to a $10,000 Event', 'She Invited Me and THIS Happened', 'GRWM for the Most Important Night'",
@@ -1018,6 +1028,17 @@ Return ONLY JSON.` }],
       if (kept !== null) socialTasks = withMissingRequiredDeliverables(kept, eventDeliverables);
     } catch (keepErr) {
       console.error('[EpisodeGenerator] Replaced episode\'s task list read failed (list rebuilt from the event):', keepErr.message);
+    }
+  } else {
+    // Episode 1 feeds Episode 2: the show's open follow-ups join the new
+    // list as goals (services/storyCarryForward carriedGoalTasks, at most
+    // three, oldest first). A regenerate keeps the replaced list's.
+    try {
+      const have = new Set(socialTasks.map((t) => t && t.slot));
+      const carriedTasks = await require('./storyCarryForward').carriedGoalTasks(models.sequelize, showId, { before: nextNumber });
+      socialTasks = [...socialTasks, ...carriedTasks.filter((t) => !have.has(t.slot))];
+    } catch (carryErr) {
+      console.error('[EpisodeGenerator] carried follow-ups read failed (non-blocking):', carryErr.message);
     }
   }
 

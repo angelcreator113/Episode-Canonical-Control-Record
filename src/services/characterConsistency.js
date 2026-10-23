@@ -269,7 +269,7 @@ async function checkCharacter(db, { character, feedProfile = null }) {
   const social = feedProfile?.display_name && String(feedProfile.display_name).trim();
   if (own && social && own.toLowerCase() !== social.toLowerCase()) {
     add({ check: 'social_name', field: 'character.display_name', field_label: 'Social media name', found: own,
-      expected: `the feed profile's "${social}"`, excerpt: `Character record: "${own}" · Feed profile: "${social}"` }, { fix: social });
+      expected: `the Pulse profile's "${social}"`, excerpt: `Character record: "${own}" · Pulse profile: "${social}"` }, { fix: social });
   }
 
   // One flag per id (the same sentence copied into two places is two flags; the same match twice in one field is one).
@@ -314,7 +314,7 @@ async function applyFix(db, { character, feedProfile = null }, flagId, { text = 
   if (!flag) throw new FixError(404, 'That finding is no longer there. Check again.');
   const [source, top, ...rest] = flag.field.split('.');
   const record = source === 'feed' ? feedProfile : character;
-  if (!record) throw new FixError(409, 'They have no feed profile.');
+  if (!record) throw new FixError(409, 'They have no Pulse profile.');
   const current = rest.length ? valueAt(record[top], rest) : record[top];
   if (current === undefined || current === null) throw new FixError(409, 'That field is empty now. Check again.');
   let next;
