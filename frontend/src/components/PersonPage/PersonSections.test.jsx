@@ -9,7 +9,7 @@ import { describe, test, expect, vi } from 'vitest';
 import { render, screen, within, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import PersonWho, { summaryOf } from './PersonWho';
-import PersonPulse from './PersonPulse';
+import { PulseLalaTie, PulseProfileLink, followersWithTier } from './PersonPulse';
 import PersonRelationship, { knowsLine, LoveHeart } from './PersonRelationships';
 import PersonEpisodes from './PersonEpisodes';
 import PersonWriters from './PersonWriters';
@@ -37,27 +37,24 @@ describe('Who they are, in the header', () => {
   });
 });
 
-describe('Their Pulse account', () => {
-  const PULSE = { id: 7, handle: 'truthville', display_name: 'Truthville', platform: 'instagram', follower_tier: 'micro', follower_count: '48K', link: '/pulse?profile=7' };
+describe('Their Pulse account, inside Pulse behavior', () => {
+  const PULSE = { id: 7, handle: 'truthville', follower_tier: 'micro', follower_count: '48K', link: '/pulse?profile=7' };
 
-  test('handle, followers, their tie to Lala and a link to the profile', () => {
-    wrap(<PersonPulse pulse={PULSE} lalaTie={{ from: 'story', tie: 'direct', words: 'love interest, love interest, now lovers' }} />);
-    const sec = screen.getByTestId('person-pulse');
-    expect(within(sec).getByText('@truthville')).toBeTruthy();
-    expect(within(sec).getByText('Micro · 48K')).toBeTruthy();
-    expect(sec.textContent).toContain('love interest, love interest, now lovers (from their relationship)');
-    expect(within(sec).getByRole('link', { name: /Open their Pulse profile/ }).getAttribute('href')).toBe('/pulse?profile=7');
+  test('the tier before the count the card reads', () => {
+    expect(followersWithTier(PULSE, '50K')).toBe('Micro · 50K');
+    expect(followersWithTier(PULSE, '')).toBe('Micro · 48K');
+    expect(followersWithTier({}, '')).toBeNull();
   });
 
-  test('Lala herself has no tie to Lala', () => {
-    wrap(<PersonPulse pulse={PULSE} lalaTie={null} isLala />);
-    expect(screen.queryByText('With Lala')).toBeNull();
+  test('their tie to Lala, "from their relationship" when the story decides it, and the profile link', () => {
+    wrap(<><PulseLalaTie lalaTie={{ from: 'story', tie: 'direct', words: 'love interest, now lovers' }} /><PulseProfileLink pulse={PULSE} /></>);
+    expect(screen.getByTestId('person-lala-tie').textContent).toBe('With Lala love interest, now lovers (from their relationship)');
+    expect(screen.getByRole('link', { name: /Open their Pulse profile/ }).getAttribute('href')).toBe('/pulse?profile=7');
   });
 
-  test('none: "Not on the Pulse yet" and where to match one', () => {
-    wrap(<PersonPulse pulse={null} lalaTie={null} />);
-    expect(screen.getByText('Not on the Pulse yet.')).toBeTruthy();
-    expect(screen.getByRole('link', { name: 'Match them to a Pulse person on The cast' }).getAttribute('href')).toBe('/character-registry');
+  test('nothing for Lala herself, with no tie, or with no profile', () => {
+    const { container } = wrap(<><PulseLalaTie lalaTie={{ words: 'x' }} isLala /><PulseLalaTie lalaTie={null} /><PulseProfileLink pulse={null} /></>);
+    expect(container.textContent).toBe('');
   });
 });
 

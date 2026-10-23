@@ -104,9 +104,15 @@ describe('the character page', () => {
     );
     expect((await screen.findByRole('link', { name: 'Overview' })).getAttribute('aria-current')).toBe('page');
     expect((await screen.findByTestId('person-writers')).textContent).toContain('With Lala in the story: friends');
-    expect(screen.queryByTestId('person-pulse')).toBeNull();
+    // The header adds their other names, not a line repeating Who they are.
+    expect(screen.queryByTestId('person-summary')).toBeNull();
+    expect(screen.queryByTestId('person-lala-tie')).toBeNull();
     fireEvent.click(screen.getByRole('link', { name: 'Voice & Pulse' }));
-    expect((await screen.findByTestId('person-pulse')).textContent).toContain('Micro · 12K');
+    // One card: Pulse behavior carries the tie to Lala and the profile link; the handle once.
+    const card = await screen.findByTestId('ch-feed-behavior');
+    expect(within(card).getByTestId('person-lala-tie').textContent).toContain('friends (from their relationship)');
+    expect(within(card).getByRole('link', { name: /Open their Pulse profile/ }).getAttribute('href')).toBe('/pulse?profile=7');
+    expect(screen.getAllByText('@studiobysable', { selector: 'strong' })).toHaveLength(1);
     expect(screen.queryByTestId('person-writers')).toBeNull();
   });
 

@@ -31,8 +31,8 @@ import CharacterGalleryTab from '../components/CharacterGallery/CharacterGallery
 import FamilySection from '../components/CharacterFamily/FamilySection';
 // The person read, shown in the tabs it belongs to (Evoni, 2026-10-23; components/PersonPage).
 import usePerson from '../components/PersonPage/usePerson';
-import PersonWho, { summaryOf } from '../components/PersonPage/PersonWho';
-import PersonPulse from '../components/PersonPage/PersonPulse';
+import PersonWho from '../components/PersonPage/PersonWho';
+import { PulseLalaTie, PulseProfileLink, followersWithTier } from '../components/PersonPage/PersonPulse';
 import PersonRelationship, { LoveHeart } from '../components/PersonPage/PersonRelationships';
 import PersonEpisodes from '../components/PersonPage/PersonEpisodes';
 import PersonWriters from '../components/PersonPage/PersonWriters';
@@ -2548,7 +2548,10 @@ const FEED_EDIT = [
   ['content_persona', 'Who they perform'],
 ];
 
-export function FeedBehavior({ character, feedProfile, appearances, onFeedSaved }) {
+// person: the person read (components/PersonPage), which adds their
+// follower tier, their tie to Lala and the profile link to this one card.
+export function FeedBehavior({ character, feedProfile, appearances, onFeedSaved, person = null }) {
+  const lalaTie = <PulseLalaTie lalaTie={person?.lala_tie} isLala={person?.who?.is_lala} />;
   const [form, setForm] = useState(null);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState(null);
@@ -2587,6 +2590,7 @@ export function FeedBehavior({ character, feedProfile, appearances, onFeedSaved 
             ? 'Their Pulse profile could not be loaded. Reload the page to try again.'
             : <>Not on The Pulse yet. Match them to a Pulse person on <Link to="/character-registry">The cast</Link>.</>}
         </p>
+        {lalaTie}
       </section>
     );
   }
@@ -2607,7 +2611,7 @@ export function FeedBehavior({ character, feedProfile, appearances, onFeedSaved 
   const tags = asList(feedProfile.aesthetic_dna?.vibe_tags);
   const tiles = [
     { key: 'freq', label: 'How often', icon: CalendarDays, text: textOf(feedProfile.post_frequency) },
-    { key: 'followers', label: 'Followers', icon: Users, text: followerLabelOf(facts, feedProfile) || null },
+    { key: 'followers', label: 'Followers', icon: Users, text: person?.pulse ? followersWithTier(person.pulse, followerLabelOf(facts, feedProfile)) : followerLabelOf(facts, feedProfile) || null },
     { key: 'posts', label: 'Posts', icon: FileText, text: appearances?.feed ? String(appearances.feed.posts ?? 0) : null },
     { key: 'state', label: 'Account', icon: TrendingUp, text: feedProfile.current_state ? ACCOUNT_STATES[feedProfile.current_state]?.label || words(feedProfile.current_state) : null },
   ].filter((t) => t.text);
@@ -2620,6 +2624,8 @@ export function FeedBehavior({ character, feedProfile, appearances, onFeedSaved 
         {feedProfile.display_name && <span>{feedProfile.display_name}</span>}
         <span>{platformLabel(feedProfile.platform)}</span>
       </p>
+      {lalaTie}
+      <PulseProfileLink pulse={person?.pulse} />
       {form ? (
         <form className="ch-facts-form" onSubmit={save}>
           {FEED_EDIT.map(([k, label]) => (
@@ -2716,7 +2722,7 @@ export function PostExamples({ character, feedProfile, trail, onDraft }) {
   );
 }
 
-function TabVoice({ character, feedProfile, appearances, onSaved, onFeedSaved }) {
+function TabVoice({ character, feedProfile, appearances, onSaved, onFeedSaved, person = null }) {
   const trail = useStoryTrail(character.id);
   const draftRef = useRef(null);
   const [drafting, setDrafting] = useState(false);
@@ -2730,7 +2736,7 @@ function TabVoice({ character, feedProfile, appearances, onSaved, onFeedSaved })
         <PublicPrivateVoice character={character} feedProfile={feedProfile} />
       </div>
       <div className="ch-col">
-        <FeedBehavior character={character} feedProfile={feedProfile} appearances={appearances} onFeedSaved={onFeedSaved} />
+        <FeedBehavior character={character} feedProfile={feedProfile} appearances={appearances} onFeedSaved={onFeedSaved} person={person} />
         {character.feed_profile_id && <PostingSchedule profileId={character.feed_profile_id} />}
         {character.feed_profile_id && <PulseTrust profileId={character.feed_profile_id} />}
       </div>
@@ -3762,7 +3768,7 @@ export default function CharacterProfilePage() {
           <h1 className="ch-name">{name}</h1>
           {/* Their real name heads the page; the name they post under follows. */}
           {socialName && socialName !== name && <p className="ch-aka" data-testid="ch-aka">Online as {socialName}</p>}
-          <PersonWho aliases={aliasList(feedProfile)} summary={summaryOf(character)} name={name} />
+          <PersonWho aliases={aliasList(feedProfile)} name={name} />
           {(handle || city) && (
             <p className="ch-sub">
               {handle && <span className="ch-sub-item"><Instagram size={16} aria-hidden />{handle}</span>}
@@ -3826,10 +3832,7 @@ export default function CharacterProfilePage() {
           </div>
         )}
         {activeTab === 'voice' && (
-          <>
-            {person && <PersonPulse pulse={person.pulse} lalaTie={person.lala_tie} isLala={person.who?.is_lala} />}
-            <TabVoice character={character} feedProfile={feedProfile} appearances={appearances} onSaved={onSaved} onFeedSaved={onFeedSaved} />
-          </>
+          <TabVoice character={character} feedProfile={feedProfile} appearances={appearances} onSaved={onSaved} onFeedSaved={onFeedSaved} person={person} />
         )}
         {activeTab === 'connections' && <TabConnections character={character} relationships={listOf(relationships)} entanglements={listOf(entanglements)} person={person} />}
         {activeTab === 'world' && <TabWorld character={character} feedProfile={feedProfile} appearances={appearances} onSaved={onSaved} gen={gen} openTab={setActiveTab} />}
