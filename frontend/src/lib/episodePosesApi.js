@@ -42,6 +42,8 @@ export const episodePosesApi = {
       onUploadProgress: (e) => { if (onProgress && e.total) onProgress(Math.round((e.loaded / e.total) * 100)); },
     }).then((r) => r.data?.data);
   },
+  // A Style photo filed as a pose (Files › Style photos, Evoni 2026-10-22).
+  fromLookbook: (episodeId, imageId, { characterKey, pose }) => api.post(`${base(episodeId)}/from-lookbook`, { image_id: imageId, character_key: characterKey, pose }).then((r) => r.data?.data),
   update: (episodeId, poseId, changes) => api.patch(`${base(episodeId)}/${poseId}`, changes).then((r) => r.data?.data),
   reprocess: (episodeId, poseId) => api.post(`${base(episodeId)}/${poseId}/reprocess`).then((r) => r.data?.data),
   remove: (episodeId, poseId) => api.delete(`${base(episodeId)}/${poseId}`).then(() => true),

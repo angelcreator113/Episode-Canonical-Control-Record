@@ -62,6 +62,27 @@ router.get('/:episodeId', requireAuth, async (req, res) => {
   }
 });
 
+// Stores a photo as a new pose of this episode and starts its processing.
+async function storePose(req, episode, fields, { buffer, filename, size }) {
+  const info = await media.readUpload(buffer);
+  const id = uuidv4();
+  // The stored name and type follow what the file is, not what it is called.
+  const { ext, contentType } = media.FORMAT_FILES[info.format];
+  const originalKey = `${media.posePrefix(episode.id, id)}/original.${ext}`;
+  const originalUrl = await media.putBuffer(originalKey, buffer, contentType);
+  const row = await poses.createPose(models.sequelize, {
+    id, episode_id: episode.id, show_id: episode.show_id,
+    character_key: fields.character_key, pose: fields.pose,
+    original_filename: filename, content_type: contentType, file_size_bytes: size,
+    width: info.width, height: info.height,
+    original_key: originalKey, original_url: originalUrl, created_by: req.user?.id ? String(req.user.id) : null,
+  });
+  media.enqueue(models.sequelize, {
+    poseId: id, episodeId: episode.id, originalKey, characterKey: fields.character_key, buffer,
+  });
+  return row;
+}
+
 router.post('/:episodeId', requireAuth, aiRateLimiter, (req, res) => {
   upload.single('image')(req, res, async (uploadErr) => {
     try {
@@ -70,28 +91,47 @@ router.post('/:episodeId', requireAuth, aiRateLimiter, (req, res) => {
       if (!file) throw new poses.PoseError(400, 'No photo was sent (field "image")');
       const fields = poses.readFields(req.body, { requireAll: true });
       const episode = await poses.findEpisode(models.sequelize, req.params.episodeId);
-      const info = await media.readUpload(file.buffer);
-
-      const id = uuidv4();
-      // The stored name and type follow what the file is, not what it is called.
-      const { ext, contentType } = media.FORMAT_FILES[info.format];
-      const originalKey = `${media.posePrefix(episode.id, id)}/original.${ext}`;
-      const originalUrl = await media.putBuffer(originalKey, file.buffer, contentType);
-      const row = await poses.createPose(models.sequelize, {
-        id, episode_id: episode.id, show_id: episode.show_id,
-        character_key: fields.character_key, pose: fields.pose,
-        original_filename: file.originalname, content_type: contentType, file_size_bytes: file.size,
-        width: info.width, height: info.height,
-        original_key: originalKey, original_url: originalUrl, created_by: req.user?.id ? String(req.user.id) : null,
-      });
-      media.enqueue(models.sequelize, {
-        poseId: id, episodeId: episode.id, originalKey, characterKey: fields.character_key, buffer: file.buffer,
-      });
+      const row = await storePose(req, episode, fields, { buffer: file.buffer, filename: file.originalname, size: file.size });
       return res.status(202).json({ success: true, data: row });
     } catch (err) {
       return sendError(res, err, 'upload');
     }
   });
+});
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * POST /:episodeId/from-lookbook { image_id, character_key, pose }
+ * Files one of this episode's Style photos (Files › Style photos, usually
+ * from To sort) as a character pose (Evoni, 2026-10-22: one drop zone, then
+ * sort). The photo becomes a pose and is processed like an upload; it
+ * leaves Style photos.
+ */
+router.post('/:episodeId/from-lookbook', requireAuth, aiRateLimiter, async (req, res) => {
+  try {
+    const fields = poses.readFields(req.body || {}, { requireAll: true });
+    const episode = await poses.findEpisode(models.sequelize, req.params.episodeId);
+    const imageId = String(req.body?.image_id || '');
+    if (!UUID_RE.test(imageId)) throw new poses.PoseError(400, 'Choose a photo from Style photos (image_id)');
+    const [[img]] = await models.sequelize.query(
+      `SELECT id, image_url, s3_key, file_name, file_size_bytes FROM episode_lookbook_images
+        WHERE id = :imageId AND episode_id = :episodeId AND source = 'upload' AND deleted_at IS NULL LIMIT 1`,
+      { replacements: { imageId, episodeId: episode.id } });
+    if (!img) throw new poses.PoseError(404, "That photo is not in this episode's Style photos");
+    let buffer;
+    try {
+      buffer = img.s3_key ? await media.getBuffer(img.s3_key) : await require('../services/youtubeThumbnailService').fetchImage(img.image_url);
+    } catch (err) {
+      console.error('[Poses] Style photo could not be read:', err.message);
+      throw new poses.PoseError(502, 'That photo could not be read. Try again.');
+    }
+    const row = await storePose(req, episode, fields, { buffer, filename: img.file_name, size: img.file_size_bytes ?? buffer.length });
+    await require('../services/episodeLookbookService').deleteImage(models, episode.id, img.id);
+    return res.status(202).json({ success: true, data: row });
+  } catch (err) {
+    return sendError(res, err, 'from-lookbook');
+  }
 });
 
 router.patch('/:episodeId/:poseId', requireAuth, async (req, res) => {

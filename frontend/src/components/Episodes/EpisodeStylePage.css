@@ -156,6 +156,7 @@
 .esp2-design-num { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--text-secondary); }
 .esp2-design-name { font-family: 'Lora', Georgia, serif; font-size: 14px; font-weight: 600; white-space: nowrap; }
 .esp2-design-note { margin-top: 8px; }
+.esp2-designs-link { margin: -4px 0 8px; }
 .esp2-design-export { display: flex; flex-direction: column; gap: 8px; padding-top: 10px; border-top: 1px solid var(--lala-parchment-3); }
 .esp2-sizes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
 .esp2-size { display: flex; flex-direction: column; align-items: flex-start; min-height: 44px; padding: 6px 10px; border-radius: 10px; border: 1px solid var(--lala-parchment-3); background: var(--surface-card); color: var(--text-primary); font-size: 13px; cursor: pointer; text-align: left; }

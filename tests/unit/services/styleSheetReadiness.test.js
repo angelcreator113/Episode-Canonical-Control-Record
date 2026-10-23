@@ -14,10 +14,14 @@ const FIVE = ['#A01428', '#B8962E', '#D4AF93', '#BB6573', '#E3D4AD'].map((hex) =
 const full = () => ({
   lb: {
     hair_name: 'soft glam waves', nails_name: 'crimson almond', tagline: 'Dressed for the experiment.', palette: FIVE,
-    images: { front: [img()], side: [img()], back: [img()], hero: [img()], hair: [img()], nails: [img()], eyes: [img()], lips: [], skin: [], venue: [img()], inspo: [img()] },
+    images: { hero: [img()], hair: [img()], nails: [img()], eyes: [img()], lips: [], skin: [], venue: [img()], inspo: [img()] },
     venue_options: [],
   },
-  sheet: { wardrobe: { state: 'chosen', columns: [{ key: 'body', needed: false }] }, palette_sources: [] },
+  // Front, Side and Back are Lala's poses from Files (2026-10-22).
+  sheet: {
+    wardrobe: { state: 'chosen', columns: [{ key: 'body', needed: false }] }, palette_sources: [],
+    look_from_files: { front: { id: 'pf' }, side: { id: 'ps' }, back: { id: 'pb' } },
+  },
 });
 const chip = (r, key) => r.items.find((i) => i.key === key).ready;
 
@@ -33,13 +37,21 @@ describe('styleReadiness (server)', () => {
     expect(r).toMatchObject({ done: 0, total: 12 });
   });
 
-  test('each look photo is its own chip', () => {
+  test('each look photo is its own chip: Front, Side and Back from Lala\'s poses, Hero a Style photo', () => {
     for (const k of ['front', 'side', 'back', 'hero']) {
       const { lb, sheet } = full();
-      lb.images[k] = [];
+      if (k === 'hero') lb.images.hero = [];
+      else delete sheet.look_from_files[k];
       const r = styleReadiness(lb, sheet);
       expect({ k, ready: chip(r, k), done: r.done }).toEqual({ k, ready: false, done: 11 });
     }
+  });
+
+  test('an old Front photo in the Lookbook no longer counts; only the pose does', () => {
+    const { lb, sheet } = full();
+    lb.images.front = [img()];
+    delete sheet.look_from_files.front;
+    expect(chip(styleReadiness(lb, sheet), 'front')).toBe(false);
   });
 
   test('hair and nails need a photo AND a name', () => {
