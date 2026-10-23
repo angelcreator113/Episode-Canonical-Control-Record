@@ -3518,6 +3518,19 @@
 }
 .ed-subpill:hover { background: var(--studio-magenta-soft); }
 .ed-subpill.is-active { background: var(--studio-magenta); border-color: var(--studio-magenta); color: var(--text-inverse); font-weight: 600; }
+/* The pills in their groups (Evoni, 2026-10-22 layout list), each with a
+   small label; the Checklist pill counts what is done. */
+.ed-subpills.is-grouped { gap: 6px 18px; flex-wrap: wrap; overflow-x: visible; }
+.ed-subgroup { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.ed-subgroup-label { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--studio-ink-muted); }
+.ed-subpill-count { margin-left: 6px; padding: 0 6px; border-radius: 999px; background: var(--studio-magenta-soft); color: var(--studio-magenta); font-size: 12px; font-weight: 700; }
+.ed-subpill.is-active .ed-subpill-count { background: var(--studio-card); color: var(--studio-magenta); }
+/* Scenes' two views, Workspace and Plan (Beat Plan folded in, 2026-10-22). */
+.ed-viewswitch { display: inline-flex; gap: 2px; margin: 0 0 14px; padding: 3px; border-radius: 999px; border: 1px solid var(--studio-line); background: var(--studio-card); }
+.ed-viewswitch-btn { min-height: 36px; padding: 4px 16px; border: none; border-radius: 999px; background: var(--studio-card); color: var(--studio-ink-muted); font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; }
+.ed-viewswitch-btn.is-on { background: var(--studio-purple-soft); color: var(--studio-purple); }
+.ed-viewswitch-btn:focus-visible { outline: 2px solid var(--studio-magenta); outline-offset: 2px; }
+@media (pointer: coarse) { .ed-viewswitch-btn { min-height: 44px; } }
 
 /* Tablet: the actions go under the title, beside the cover. */
 @media (max-width: 1024px) {
@@ -3566,6 +3579,7 @@
     position: sticky; z-index: 45;
     top: calc(var(--app-header-h, 0px) + var(--ed-head-h, 0px));
   }
+  .ed-page.ed-studio .ed-subpills.is-grouped { flex-wrap: nowrap; overflow-x: auto; }
   .ed-page.ed-studio .ed-subpills {
     position: sticky; z-index: 44;
     top: calc(var(--app-header-h, 0px) + var(--ed-head-h, 0px) + var(--ed-tabs-h));

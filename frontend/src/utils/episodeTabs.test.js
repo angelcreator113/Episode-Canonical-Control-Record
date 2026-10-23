@@ -1,5 +1,5 @@
 import { describe, test, expect } from 'vitest';
-import { resolveEpisodeTab, withEpisodeTab, EP_TABS } from './episodeTabs';
+import { resolveEpisodeTab, withEpisodeTab, EP_TABS, pillsOf, pillGroups, pillFor } from './episodeTabs';
 
 describe('resolveEpisodeTab (audit LINK-04)', () => {
   test('a main tab opens its first sub-tab; a sub-tab opens under its main tab', () => {
@@ -53,7 +53,15 @@ describe('the Style Page tab (was Lookbook; Tasks #2813, #2876)', () => {
 describe('the tab layout', () => {
   test('main tabs in order, Production sub-tabs in order', () => {
     expect(EP_TABS.map((t) => t.label)).toEqual(['Overview', 'Script', 'Production', 'Results']);
-    expect(EP_TABS.find((t) => t.key === 'production').subs.map((s) => s.label))
-      .toEqual(['Scenes', 'Beat Plan', 'Files', 'Wardrobe', 'Style Page', 'Phone', 'Overlays', 'Money', 'Checklist']);
+    const production = EP_TABS.find((t) => t.key === 'production');
+    expect(production.subs.map((s) => s.label))
+      .toEqual(['Scenes', 'Plan', 'Files', 'Wardrobe', 'Style Page', 'Phone', 'Overlays', 'Money', 'Checklist']);
+    // Evoni, 2026-10-22: Beat Plan is Scenes' Plan view; the pills in four groups.
+    expect(pillsOf(production).map((s) => s.label)).toEqual(['Scenes', 'Files', 'Wardrobe', 'Style Page', 'Phone', 'Overlays', 'Money', 'Checklist']);
+    expect(pillGroups(production).map((g) => [g.group, g.pills.map((p) => p.key)])).toEqual([
+      ['Make', ['scenes', 'files']], ['Look', ['wardrobe', 'lookbook']], ['On screen', ['phone', 'overlays']], ['Track', ['money', 'checklist']],
+    ]);
+    expect(pillFor(production, 'beatplan')).toBe('scenes');
+    expect(pillFor(production, 'files')).toBe('files');
   });
 });
