@@ -26,6 +26,7 @@ import ScriptHealthPanel, { shownText } from './ScriptHealthPanel';
 import { ScriptBeatList, BeatStatusBadge, SceneContextCard, AssetsCard, BeatChecklistCard, sceneContextFields } from './ScriptBeatParts';
 import { beatStatus, beatPictures, beatChecklist, beatAssets, piecesWornIn, lineDuration } from '../../lib/scriptBeatView';
 import ScriptReadActions from './ScriptReadActions';
+import EpisodeStoryRecord from './EpisodeStoryRecord';
 import ScriptHistory from './ScriptHistory';
 import useScriptDraft from '../../hooks/useScriptDraft';
 import useDialogLayer from '../../hooks/useDialogLayer';
@@ -1365,6 +1366,11 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
   // when the episode has no to-do list. Tick it completes one from the
   // script; nothing ticks on its own (Evoni, 2026-10-23).
   const [goalTasks, setGoalTasks] = useState(null);
+  // "Read the finished script" (Evoni, 2026-10-23): once every beat is
+  // approved, the What changed card opens here and reads the saved script
+  // when there is no record yet (EpisodeStoryRecord readOnOpen). Nothing
+  // reads it on its own when beats are locked.
+  const [readingScript, setReadingScript] = useState(false);
   const [ticking, setTicking] = useState(null);
   const [tickFailed, setTickFailed] = useState(null);
   const hasGoals = (source?.event?.canon_consequences?.automation?.relationship_goals || []).length > 0;
@@ -2637,7 +2643,22 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
           {allApproved && (
             <div className="esp-done">
               <p className="esp-done-text">✦ All beats approved — script is ready</p>
-              <button type="button" className="esp-btn-primary" onClick={handleSave} disabled={saving || busy || locking}>💾 Save Final Script</button>
+              <div className="esp-done-actions">
+                <button type="button" className="esp-btn-primary" onClick={handleSave} disabled={saving || busy || locking}>💾 Save Final Script</button>
+                {!readingScript && (
+                  <button type="button" className="esp-btn" data-testid="script-read-finished" disabled={scriptText !== savedScript || saving}
+                    onClick={() => setReadingScript(true)}>
+                    <ScrollText size={15} aria-hidden="true" /> Read the finished script
+                  </button>
+                )}
+              </div>
+              {!readingScript && scriptText !== savedScript && <p className="esp-done-hint">Save the script first: the read uses the saved script.</p>}
+              {!readingScript && scriptText === savedScript && <p className="esp-done-hint">Reads the whole script and proposes what changed: goals, relationships, follow-ups, plot threads and secrets. You tick what is right before anything is saved.</p>}
+            </div>
+          )}
+          {allApproved && readingScript && (
+            <div className="esp-what-changed" data-testid="script-what-changed">
+              <EpisodeStoryRecord episodeId={episodeId} readOnOpen />
             </div>
           )}
         </div>

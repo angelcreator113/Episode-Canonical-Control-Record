@@ -1,0 +1,61 @@
+/* What changed (EpisodeStoryRecord): the sections, their rows, Save's result. Tokens only; built on EpisodeStoryRecord.css. */
+.wc-section { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.esr .wc-section-title {
+  display: flex; align-items: center; gap: 6px; margin: 0; font-size: 12px; font-weight: 700;
+  letter-spacing: 0.06em; text-transform: uppercase; color: var(--lala-gold-text);
+}
+.wc-count { padding: 0 8px; border-radius: 999px; font-size: 11px; letter-spacing: 0; background: var(--lala-gold-soft); color: var(--lala-gold-text); }
+.wc-rows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.wc-row {
+  display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border-radius: 12px; min-width: 0;
+  border: 1px solid var(--lala-gold-line); background: var(--surface-card);
+}
+.wc-row.is-off { border-style: dashed; }
+.wc-row.is-off .wc-row-body { opacity: 0.6; }
+.wc-row.is-editing { border-color: var(--accent); }
+.wc-row-main { display: flex; align-items: flex-start; gap: 10px; min-width: 0; }
+.wc-keep { display: inline-flex; align-items: center; justify-content: center; min-width: 32px; min-height: 32px; margin: -4px 0 0 -6px; cursor: pointer; }
+.wc-keep input { width: 18px; height: 18px; accent-color: var(--accent-dark); cursor: pointer; }
+.wc-row-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.wc-line { margin: 0; font-family: var(--font-prose); font-size: 15px; line-height: 1.45; color: var(--lala-ink); overflow-wrap: anywhere; }
+.wc-meta { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.wc-sub { margin: 0; font-size: 13px; line-height: 1.45; color: var(--lala-ink-muted); overflow-wrap: anywhere; }
+.wc-chip {
+  display: inline-flex; align-items: center; gap: 4px; padding: 2px 9px; border-radius: 999px;
+  font-size: 12px; font-weight: 700; background: var(--accent-subtle); color: var(--accent-dark);
+}
+.wc-chip.is-good { background: var(--lala-gold-soft); color: var(--lala-gold-text); }
+.wc-chip.is-romance { background: var(--accent-subtle); color: var(--accent-dark); }
+.wc-chip.is-written { background: var(--lala-gold-soft); color: var(--lala-gold-text); }
+.wc-warn { display: flex; align-items: flex-start; gap: 6px; margin: 0; font-size: 12px; font-weight: 700; line-height: 1.4; color: var(--danger-text); }
+.wc-row-tools { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+.wc-tool {
+  display: inline-flex; align-items: center; justify-content: center; min-width: 32px; min-height: 32px; border: none; border-radius: 999px;
+  background: var(--accent-subtle); color: var(--accent-dark); cursor: pointer;
+}
+.wc-tool[aria-pressed='true'] { background: var(--accent-dark); color: var(--text-inverse); }
+.wc-tool:focus-visible, .wc-keep input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.wc-edit { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px; padding-top: 8px; border-top: 1px solid var(--lala-gold-line); }
+.wc-edit .esr-field.is-inline { flex: 1 1 140px; }
+.wc-edit .esr-field.wc-wide { flex: 1 1 100%; }
+.wc-check { display: inline-flex; align-items: center; gap: 6px; min-height: 40px; font-size: 13px; font-weight: 700; color: var(--lala-ink); }
+.wc-add { list-style: none; }
+.wc-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.wc-people { display: flex; flex-direction: column; gap: 8px; }
+.wc-people > summary { cursor: pointer; padding: 4px 0; }
+.wc-result {
+  display: flex; flex-direction: column; gap: 6px; padding: 12px 14px; border-radius: 12px;
+  border: 1px solid var(--lala-gold-line); background: var(--lala-gold-soft);
+}
+.wc-result-title { margin: 0; font-size: 13px; font-weight: 700; color: var(--lala-ink); }
+.wc-result-list { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; font-size: 13px; line-height: 1.45; color: var(--lala-ink); }
+.wc-result-list.is-skipped { list-style: none; padding-left: 0; color: var(--lala-ink); }
+.wc-result-list.is-skipped li { display: flex; align-items: flex-start; gap: 6px; }
+.wc-result-list.is-skipped li svg { flex-shrink: 0; margin-top: 3px; color: var(--danger-text); }
+.wc-link { font-weight: 700; color: var(--accent-dark); text-decoration: underline; }
+@media (max-width: 600px) {
+  .wc-row { padding: 10px 10px; }
+  .wc-row-main { gap: 6px; }
+  .wc-edit .esr-field.is-inline { flex: 1 1 100%; }
+  .wc-actions .esr-btn, .wc-actions .esr-btn-soft { flex: 1 1 auto; justify-content: center; }
+}

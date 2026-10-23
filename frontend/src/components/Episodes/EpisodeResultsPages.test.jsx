@@ -83,7 +83,7 @@ describe('Results → Story', () => {
 
   test('the path starts with the story record', async () => {
     renderIn(<EpisodeResultsStory episode={{ id: 'ep-1', show_id: 'show-1' }} />);
-    expect(await screen.findByRole('button', { name: /Draft the record/ })).toBeTruthy();
+    expect(await screen.findByRole('button', { name: /Read the finished script/ })).toBeTruthy();
     expect(api.get).toHaveBeenCalledWith('/api/v1/book-from-show/episodes/ep-1/record');
   });
 
