@@ -53,6 +53,10 @@ module.exports = (sequelize, DataTypes) => {
     timeline_notes:     { type: DataTypes.TEXT, allowNull: true }, // when it started, key events
     narrative_function: { type: DataTypes.TEXT, allowNull: true }, // how it serves the story
     auto_generated:     { type: DataTypes.BOOLEAN, defaultValue: false },
+    // The story pair (character_relationships) this is the online side of,
+    // when both people have a registry character (services/relationshipTruth;
+    // migration 20261023230100). Its kind can differ on purpose.
+    character_relationship_id: { type: DataTypes.UUID, allowNull: true },
   }, {
     sequelize,
     modelName:  'SocialProfileRelationship',

@@ -149,11 +149,11 @@ async function loadCharacter(db, characterId) {
   if (!POSTING_STAGES.includes(character.depth_level)) {
     throw new VoiceError(409, 'Only characters at the active or alive stage post on The Pulse.');
   }
-  if (!character.feed_profile_id) throw new VoiceError(409, 'This character has no Feed profile to post from.');
+  if (!character.feed_profile_id) throw new VoiceError(409, 'This character has no Pulse profile to post from.');
   const [[profile]] = await db.sequelize.query(
     `SELECT ${['id', ...PROFILE_FIELDS].map((f) => (f === 'follower_tier' ? 'follower_tier::text AS follower_tier' : f)).join(', ')}
        FROM social_profiles WHERE id = :id AND deleted_at IS NULL`, { replacements: { id: character.feed_profile_id } });
-  if (!profile) throw new VoiceError(409, 'This character\'s Feed profile is gone.');
+  if (!profile) throw new VoiceError(409, 'This character\'s Pulse profile is gone.');
   return { character, profile };
 }
 
@@ -193,7 +193,7 @@ async function buildVoice(db, characterId, { lane = 'manual', jobId = null } = {
   // Building (or rebuilding) a voice is one request (Task #3031): manual from
   // Voices, automated when the queue builds it at Active (Task #3070).
   const showId = await require('./characterFacts').showIdFor(db, character, { id: profile.id });
-  if (!showId) throw new VoiceError(409, 'This character\'s registry belongs to no show, and their feed profile has no follower count in one yet.');
+  if (!showId) throw new VoiceError(409, 'This character\'s registry belongs to no show, and their Pulse profile has no follower count in one yet.');
   await require('./pulseRequests').take(db, { showId, lane, kind: 'voice', jobId });
   // Their character file, the public part (services/characterFile): no topic
   // invents a follower count, money or status; the voice grows from their
