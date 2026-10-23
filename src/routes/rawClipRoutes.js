@@ -8,7 +8,8 @@
  *   POST   /:episodeId                         upload one (multipart: video, performer,
  *                                              guest_name?, label?, green_screen?, strength?)
  *   PATCH  /:episodeId/:clipId                 performer, guest_name, label, beat_number (the scene),
- *                                              is_favorite (one per beat), start_line (teleprompter)
+ *                                              is_favorite (one per beat), start_line (teleprompter),
+ *                                              beat_marks (a full-episode take's [{ beat, t }])
  *   POST   /:episodeId/:clipId/remove-green    (re)run green removal { strength }
  *   DELETE /:episodeId/:clipId                 soft delete (files stay in S3)
  *
@@ -17,6 +18,7 @@
  *
  * is_favorite and start_line come with migration 20261020090000; until it
  * has run, clips list without them and a PATCH of them is a 409 that says so.
+ * beat_marks comes with migration 20261023235900, the same way.
  */
 
 const express = require('express');

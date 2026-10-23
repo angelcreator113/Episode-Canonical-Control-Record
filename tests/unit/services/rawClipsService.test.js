@@ -107,6 +107,71 @@ describe('take fields: is_favorite and start_line (Teleprompter batch 2)', () =>
   });
 });
 
+describe('beat_marks: a full-episode take\'s beat markers (Record whole episode, 2026-10-23)', () => {
+  test('readFields: a list of { beat 1-14, t 0-36000 }, sorted by time, t to one decimal; null clears', () => {
+    expect(clips.readFields({ beat_marks: [{ beat: 3, t: 90.04 }, { beat: 1, t: 0 }, { beat: 2, t: 41.26 }] }))
+      .toEqual({ beat_marks: [{ beat: 1, t: 0 }, { beat: 2, t: 41.3 }, { beat: 3, t: 90 }] });
+    expect(clips.readFields({ beat_marks: [] })).toEqual({ beat_marks: [] });
+    expect(clips.readFields({ beat_marks: null })).toEqual({ beat_marks: null });
+    // As a multipart form sends it: JSON text, numbers as strings.
+    expect(clips.readFields({ beat_marks: '[{"beat":"14","t":"36000"}]' })).toEqual({ beat_marks: [{ beat: 14, t: 36000 }] });
+  });
+
+  test('readFields: anything else is a 400', () => {
+    const bad = [
+      'not json', 5, { beat: 1, t: 0 }, [null], [[1, 0]], [{ beat: 0, t: 1 }], [{ beat: 15, t: 1 }], [{ beat: 2.5, t: 1 }],
+      [{ beat: 1 }], [{ beat: 1, t: -0.1 }], [{ beat: 1, t: 36000.1 }], [{ beat: 1, t: 'soon' }], [{ beat: 1, t: Infinity }],
+      [{ beat: 1, t: 0 }, { beat: 1, t: 5 }],
+      Array.from({ length: 31 }, (_, i) => ({ beat: (i % 14) + 1, t: i })),
+    ];
+    const spy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    bad.forEach((v) => {
+      expect(() => clips.readFields({ beat_marks: v })).toThrow(clips.RawClipError);
+      try { clips.readFields({ beat_marks: v }); } catch (err) { expect(err.status).toBe(400); }
+    });
+    spy.mockRestore();
+    expect(clips.MAX_BEAT_MARKS).toBe(30);
+  });
+
+  test('shapeRow sends beat_marks only when its column exists, never has_beat_marks', () => {
+    expect(clips.shapeRow({ id: 'c1', beat_marks: null, has_beat_marks: false })).toEqual({ id: 'c1' });
+    expect(clips.shapeRow({ id: 'c1', beat_marks: null, has_beat_marks: true })).toEqual({ id: 'c1', beat_marks: null });
+    expect(clips.shapeRow({ id: 'c1', beat_marks: [{ beat: 1, t: 0 }], has_beat_marks: true })).toEqual({ id: 'c1', beat_marks: [{ beat: 1, t: 0 }] });
+    // Both migrations' fields, each on its own.
+    expect(clips.shapeRow({ id: 'c1', is_favorite: false, start_line: null, has_take_fields: true, beat_marks: null, has_beat_marks: false }))
+      .toEqual({ id: 'c1', is_favorite: false, start_line: null });
+    expect(clips.shapeRow({ id: 'c1', is_favorite: null, start_line: null, has_take_fields: false, beat_marks: [], has_beat_marks: true }))
+      .toEqual({ id: 'c1', beat_marks: [] });
+  });
+
+  test('listing reads beat_marks through to_jsonb (key present = column exists)', async () => {
+    const s = seq([[]], [[{ id: 'c1', has_take_fields: false, has_beat_marks: false, beat_marks: null }, { id: 'c2', has_take_fields: false, has_beat_marks: true, beat_marks: [{ beat: 1, t: 0 }] }]]);
+    await expect(clips.listClips(s, 'ep')).resolves.toEqual([{ id: 'c1' }, { id: 'c2', beat_marks: [{ beat: 1, t: 0 }] }]);
+    const sql = s.query.mock.calls[1][0];
+    expect(sql).toMatch(/to_jsonb\(episode_raw_clips\) -> 'beat_marks' AS beat_marks/);
+    expect(sql).toMatch(/\(to_jsonb\(episode_raw_clips\) -> 'beat_marks'\) IS NOT NULL AS has_beat_marks/);
+  });
+
+  test('updateClip casts beat_marks to jsonb from its JSON text; null stays null', async () => {
+    const s = seq([[{ id: 'c1', has_beat_marks: true, beat_marks: [{ beat: 1, t: 0 }] }]], [[{ id: 'c1', has_beat_marks: true, beat_marks: null }]]);
+    await expect(clips.updateClip(s, 'ep', 'c1', { beat_marks: [{ beat: 1, t: 0 }] })).resolves.toEqual({ id: 'c1', beat_marks: [{ beat: 1, t: 0 }] });
+    expect(s.query.mock.calls[0][0]).toMatch(/SET beat_marks = CAST\(:beat_marks AS jsonb\), updated_at = NOW\(\)/);
+    expect(s.query.mock.calls[0][1].replacements.beat_marks).toBe('[{"beat":1,"t":0}]');
+    await clips.updateClip(s, 'ep', 'c1', { beat_marks: null });
+    expect(s.query.mock.calls[1][1].replacements.beat_marks).toBeNull();
+  });
+
+  test('before the migration, a PATCH of beat_marks is a logged 409 that says the update has not run', async () => {
+    const spy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    const pgErr = Object.assign(new Error('column "beat_marks" of relation "episode_raw_clips" does not exist'), { original: { code: '42703', message: 'column "beat_marks" of relation "episode_raw_clips" does not exist' } });
+    await expect(clips.updateClip({ query: jest.fn().mockRejectedValue(pgErr) }, 'ep', 'c1', { beat_marks: [{ beat: 1, t: 0 }] }))
+      .rejects.toMatchObject({ status: 409, message: clips.BEAT_MARKS_MISSING });
+    expect(clips.BEAT_MARKS_MISSING).toMatch(/database update .* hasn't run yet/);
+    expect(spy).toHaveBeenCalledWith(expect.stringMatching(/migration 20261023235900 not run/), expect.any(String));
+    spy.mockRestore();
+  });
+});
+
 describe('readStrength and truthy', () => {
   test('strength defaults to medium and must be low, medium or high', () => {
     expect(clips.readStrength(undefined)).toBe('medium');

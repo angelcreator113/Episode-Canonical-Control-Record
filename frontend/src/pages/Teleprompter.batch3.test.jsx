@@ -246,7 +246,8 @@ describe('Voice clips in the teleprompter', () => {
     await new Promise((r) => setTimeout(r, 300));
     expect(activeLine().textContent).toContain('Gorgeous darling');
     act(() => audios[0].emit('ended'));
-    await waitFor(() => expect(activeLine().textContent).toContain('This is the one'));
+    // Next: the on-screen moment (Evoni, 2026-10-23), then her line.
+    await waitFor(() => expect(activeLine().textContent).toContain('Notification: Mail'));
   });
 
   test('Play voice clips off: no clip plays and the estimate counts', async () => {
