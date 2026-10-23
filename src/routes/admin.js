@@ -3,6 +3,7 @@ const router = express.Router();
 const { getPool } = require('../config/database');
 const { requireAuth, authorize } = require('../middleware/auth');
 const rateLimit = require('express-rate-limit');
+const { recentRefusals } = require('../middleware/rateLimits');
 
 const queryLimiter = rateLimit({
   windowMs: 60 * 1000,
@@ -41,6 +42,22 @@ router.post('/query', requireAuth, authorize(['admin']), queryLimiter, async (re
     res.json({ success: true, count: rows.length, rows });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// ═══════════════════════════════════════════
+// GET /rate-limit-refusals — the last 200 requests a rate limit refused,
+// newest first, with a count per limit (Admin › Tools, "Recent refusals").
+// Kept in this process's memory (middleware/rateLimits recentRefusals), so it
+// starts empty after every restart.
+// ═══════════════════════════════════════════
+router.get('/rate-limit-refusals', requireAuth, authorize(['ADMIN']), (req, res) => {
+  try {
+    const { refusals, counts, kept } = recentRefusals();
+    res.json({ success: true, data: { refusals, counts, kept } });
+  } catch (err) {
+    console.error('rate-limit-refusals error:', err.message);
+    res.status(500).json({ success: false, error: 'Could not read the refusals list' });
   }
 });
 

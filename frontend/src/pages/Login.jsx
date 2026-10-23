@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import authService from '../services/authService';
+import useCountdown, { formatWait } from '../hooks/useCountdown';
 import '../styles/Login.css';
 
 export default function Login() {
@@ -14,9 +15,23 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  // A rate limit's wait (POST /auth/login 429, rateLimits.refusedBy's
+  // retry_after_seconds): Sign in stays off until it runs out, then the
+  // message clears (Evoni, 2026-10-23: locked out twice, no idea for how long).
+  const [retryAt, setRetryAt] = useState(null);
+  const waitLeft = useCountdown(retryAt);
+  const waiting = retryAt !== null && waitLeft > 0;
+
+  useEffect(() => {
+    if (retryAt !== null && waitLeft === 0) {
+      setRetryAt(null);
+      setError('');
+    }
+  }, [retryAt, waitLeft]);
 
   const handleLogin = async (e) => {
     e.preventDefault();
+    if (waiting) return;
     setLoading(true);
     setError('');
     setSuccess('');
@@ -49,6 +64,12 @@ export default function Login() {
         errorMsg = 'Login failed. Please check your credentials and try again.';
       }
       setError(errorMsg);
+      if (status === 429) {
+        const data = err.response?.data || {};
+        const seconds = Number(data.retry_after_seconds)
+          || (Number(data.retry_after_minutes) ? Number(data.retry_after_minutes) * 60 : 0);
+        if (seconds > 0) setRetryAt(Date.now() + seconds * 1000);
+      }
     } finally {
       setLoading(false);
     }
@@ -74,7 +95,16 @@ export default function Login() {
           <h1>Welcome <em>back.</em></h1>
           <p className="login-sub">The world kept every memory while you were gone.</p>
 
-          {error && <div className="alert alert-error">{error}</div>}
+          {error && (
+            <div className="alert alert-error" role="alert">
+              {error}
+              {waiting && (
+                <span className="login-countdown" role="timer" aria-live="off" data-testid="login-countdown">
+                  Try again in {formatWait(waitLeft)}
+                </span>
+              )}
+            </div>
+          )}
           {success && <div className="alert alert-success">{success}</div>}
 
           <form onSubmit={handleLogin}>
@@ -120,7 +150,7 @@ export default function Login() {
             <button
               type="submit"
               className="login-btn"
-              disabled={loading}
+              disabled={loading || waiting}
             >
               {loading ? 'ENTERING…' : 'ENTER THE STUDIO'}
             </button>

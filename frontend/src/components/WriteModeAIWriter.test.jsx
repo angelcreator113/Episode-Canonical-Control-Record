@@ -34,7 +34,7 @@ vi.mock('../utils/authSession', async (importOriginal) => ({
 }));
 
 import apiClient from '../services/api';
-import { refreshAccessTokenOnce, wipeSessionAndRedirect } from '../utils/authSession';
+import { refreshAccessTokenOnce, wipeSessionAndRedirect, RefreshFailed } from '../utils/authSession';
 import WriteModeAIWriter, {
   aiWriterRewriteOptionsApi,
   aiWriterProseCritiqueApi,
@@ -212,8 +212,8 @@ describe('WriteModeAIWriter — action stream authenticates (Task #1894)', () =>
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  test('refresh fails (Task #1902): no retry, signed out', async () => {
-    vi.mocked(refreshAccessTokenOnce).mockRejectedValue(new Error('refresh refused'));
+  test('refresh token refused (Task #1902): no retry, signed out', async () => {
+    vi.mocked(refreshAccessTokenOnce).mockRejectedValue(new RefreshFailed('refresh refused', { sessionOver: true, status: 401 }));
     fetchMock.mockResolvedValue({
       ok: false,
       status: 401,
