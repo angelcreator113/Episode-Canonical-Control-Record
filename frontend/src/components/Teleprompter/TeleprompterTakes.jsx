@@ -6,7 +6,7 @@
 // update (migration 20261020090000) has run.
 // "Full episode" (Evoni, 2026-10-23): the whole-episode takes in their own
 // group, each with its beat markers as links that play the take from that
-// beat (beat_marks, once migration 20261023220000 has run).
+// beat (beat_marks, once migration 20261023235900 has run).
 
 import { useState, useRef, useEffect } from 'react';
 import { Play, Square, Star, Film, Clapperboard } from 'lucide-react';

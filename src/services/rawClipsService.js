@@ -28,7 +28,7 @@ const TAKE_FIELDS_MISSING = 'Favourites and start lines are not switched on yet:
 
 // beat_marks ("Record whole episode"; Evoni, 2026-10-23): a full-episode
 // take's beat markers, [{ beat, t }] (t: seconds into the take), arrive with
-// 20261023220000-add-episode-raw-clips-beat-marks.js. Read the same way:
+// 20261023235900-add-episode-raw-clips-beat-marks.js. Read the same way:
 // the key is in to_jsonb(row) only once the column exists (a NULL column is
 // JSON null, still there), so has_beat_marks says so and shapeRow leaves
 // beat_marks out until then.
@@ -36,7 +36,7 @@ const MARKS_COLUMNS = `to_jsonb(episode_raw_clips) -> 'beat_marks' AS beat_marks
   (to_jsonb(episode_raw_clips) -> 'beat_marks') IS NOT NULL AS has_beat_marks`;
 const MAX_BEAT_MARKS = 30;
 const MAX_MARK_SECONDS = 36000; // ten hours
-const BEAT_MARKS_MISSING = "Beat markers can't be kept yet: the database update that adds them (20261023220000) hasn't run yet. The take itself is saved.";
+const BEAT_MARKS_MISSING = "Beat markers can't be kept yet: the database update that adds them (20261023235900) hasn't run yet. The take itself is saved.";
 
 const COLUMNS = `id, episode_id, show_id, performer, guest_name, label, beat_number, original_filename, content_type,
   file_size_bytes, duration_seconds, width, height, url_raw, thumbnail_url,
@@ -83,7 +83,7 @@ const missingTakeColumn = (err) => {
   return (code === '42703' || /column .* does not exist/i.test(text)) && TAKE_FIELDS.some((f) => text.includes(f));
 };
 
-// The same for beat_marks before 20261023220000 has run.
+// The same for beat_marks before 20261023235900 has run.
 const missingMarksColumn = (err) => {
   const code = err?.original?.code || err?.parent?.code || err?.code;
   const text = String(err?.original?.message || err?.message || '');
@@ -271,7 +271,7 @@ async function updateClip(sequelize, episodeId, clipId, body = {}) {
     return await run(undefined);
   } catch (err) {
     if (missingMarksColumn(err)) {
-      console.error('[rawClips] beat_marks column is missing (migration 20261023220000 not run):', err.message);
+      console.error('[rawClips] beat_marks column is missing (migration 20261023235900 not run):', err.message);
       throw new RawClipError(409, BEAT_MARKS_MISSING);
     }
     if (missingTakeColumn(err)) {

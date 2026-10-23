@@ -1,9 +1,9 @@
 /**
- * 20261023220000-add-episode-raw-clips-beat-marks ("Record whole episode",
+ * 20261023235900-add-episode-raw-clips-beat-marks ("Record whole episode",
  * 2026-10-23): beat_marks JSONB NULL, added once inside a transaction;
  * down removes it once.
  */
-const migration = require('../../../src/migrations/20261023220000-add-episode-raw-clips-beat-marks');
+const migration = require('../../../src/migrations/20261023235900-add-episode-raw-clips-beat-marks');
 
 function makeQI(columns = []) {
   const have = new Set(columns);

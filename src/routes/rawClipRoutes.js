@@ -18,7 +18,7 @@
  *
  * is_favorite and start_line come with migration 20261020090000; until it
  * has run, clips list without them and a PATCH of them is a 409 that says so.
- * beat_marks comes with migration 20261023220000, the same way.
+ * beat_marks comes with migration 20261023235900, the same way.
  */
 
 const express = require('express');
