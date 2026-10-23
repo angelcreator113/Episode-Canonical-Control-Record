@@ -7,7 +7,7 @@
  * POST /generate        — Generate to-do list from linked event
  * GET  /                — Get current to-do list with completion state
  * GET  /at              — The list the phone shows at a beat, and the deal checklist
- * POST /complete/:slot  — Mark a slot as complete
+ * POST /complete/:slot  — Mark a slot as complete ({ completed, source: 'script', beat })
  */
 
 const express = require('express');
@@ -134,7 +134,11 @@ router.get('/episodes/:episodeId/todo', requireAuth, async (req, res) => {
 router.post('/episodes/:episodeId/todo/complete/:slot', requireAuth, async (req, res) => {
   try {
     const { episodeId, slot } = req.params;
-    const { completed = true } = req.body;
+    const { completed = true, source = null, beat = null } = req.body || {};
+    // Ticked from the Script tab (Evoni, 2026-10-23): the goal is covered in
+    // that beat; the task keeps where it was ticked from.
+    if (source !== null && source !== 'script') return res.status(400).json({ error: 'source must be "script"' });
+    if (beat !== null && (!Number.isInteger(beat) || beat < 1 || beat > 14)) return res.status(400).json({ error: 'beat must be 1-14' });
     const { sequelize } = req.app.get('models') || require('../models');
 
     const [todoList] = await sequelize.query(
@@ -168,7 +172,13 @@ router.post('/episodes/:episodeId/todo/complete/:slot', requireAuth, async (req,
       return res.status(404).json({ error: `No task with slot "${slot}"` });
     }
 
-    const updatedSocialTasks = socialTasksRaw.map(t => t.slot === slot ? { ...t, completed } : t);
+    const tick = (t) => {
+      const { completed_source: _source, completed_beat: _beat, ...rest } = t;
+      if (!completed) return { ...rest, completed };
+      if (source) return { ...rest, completed, completed_source: source, ...(beat !== null ? { completed_beat: beat } : {}) };
+      return { ...t, completed };
+    };
+    const updatedSocialTasks = socialTasksRaw.map(t => t.slot === slot ? tick(t) : t);
     await sequelize.query(
       'UPDATE episode_todo_lists SET social_tasks = :socialTasks, updated_at = NOW() WHERE id = :id',
       { replacements: { socialTasks: JSON.stringify(updatedSocialTasks), id: todoList.id } }
@@ -187,6 +197,7 @@ router.post('/episodes/:episodeId/todo/complete/:slot', requireAuth, async (req,
 
     return res.json({ success: true, tasks, social_tasks: updatedSocialTasks, completion });
   } catch (err) {
+    console.error('[TodoList] complete slot failed:', err);
     return res.status(500).json({ error: err.message });
   }
 });
@@ -435,6 +446,7 @@ router.get('/episodes/:episodeId/todo/social', requireAuth, async (req, res) => 
 
     return res.json({ success: true, social_tasks: socialTasks || [], financial_summary: financialSummary, completion, career_asset_url: careerAssetUrl });
   } catch (err) {
+    console.error('[TodoList] GET /todo/social failed:', err);
     return res.status(500).json({ error: err.message });
   }
 });

@@ -41,7 +41,8 @@ async function loadScriptCareer(sequelize, eventId) {
   const automation = parse(row.canon_consequences, {})?.automation || {};
   const goals = (Array.isArray(automation.relationship_goals) ? automation.relationship_goals : [])
     .filter((g) => g && g.label)
-    .map((g) => ({ label: String(g.label), description: g.description ? String(g.description) : null }));
+    // slot and profile_id say who the goal is about (utils/scriptRuleChecks goalPerson).
+    .map((g) => ({ label: String(g.label), description: g.description ? String(g.description) : null, slot: g.slot || null, profile_id: g.profile_id ?? null }));
   const deliverables = (await listEventDeliverables(sequelize, eventId)).map((d) => ({
     description: d.description,
     deliverable_type: d.deliverable_type || null,

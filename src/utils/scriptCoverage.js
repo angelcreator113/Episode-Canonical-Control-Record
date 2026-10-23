@@ -26,7 +26,7 @@
 const { CANONICAL_BEATS } = require('../constants/canonicalBeats');
 const { splitScriptBeats } = require('./scriptBeatLocks');
 const { beat14Delivers } = require('./beat14Invitation');
-const { scriptRuleItems } = require('./scriptRuleChecks');
+const { scriptRuleItems, personIn } = require('./scriptRuleChecks');
 const { isClosetScreen } = require('./scriptWear');
 
 // ─── The tab's must-cover rule (frontend/src/lib/episodeScript.js) ───────────
@@ -46,6 +46,29 @@ function mentionedIn(beats, text) {
   return null;
 }
 
+/**
+ * The first beat (its number) that covers a relationship goal, else null
+ * (Evoni, 2026-10-23: "Get to know Truthville" never ticked when the
+ * script named her by her real name). Covered when the goal is mentioned
+ * as written (mentionedIn), or when the rest of its words are (the rule
+ * above, the person's own names left out) and the person is there by any
+ * of their names, or speaks (utils/scriptRuleChecks personIn). `person`:
+ * goalPerson's, or null (a brand goal: as written only).
+ */
+function goalCovered(beats, goal, person) {
+  const label = String(goal?.label || '').trim();
+  const literal = mentionedIn(beats, label);
+  if (literal !== null || !person?.names?.length) return literal;
+  const own = new Set(person.names.flatMap(words));
+  const rest = keyWords(label).filter((k) => !own.has(k));
+  const need = rest.length <= 2 ? rest.length : Math.ceil(rest.length * 0.75);
+  for (const b of beats) {
+    const lines = b.text.split('\n').slice(1);
+    const have = new Set(words(lines.join(' ')));
+    if (rest.filter((k) => have.has(k)).length >= need && personIn(lines, person)) return b.number;
+  }
+  return null;
+}
 
 const surfaceHasPhone = (surface) => (typeof surface === 'string'
   ? surface === "Lala's Phone"
@@ -64,7 +87,7 @@ const opensCloset = (line) => { const m = String(line).match(OPEN_LINE); return 
 /**
  * { items, missing } for the script. `facts`:
  *   deliverables: [{ description, platform, deliverable_type }]
- *   goals: [{ label }]
+ *   goals: [{ label, person }] (person: goalPerson's, or null)
  *   forwardHook: string
  *   opportunity: { name, from } (beat 14's when it is delivered, or null)
  *   lockedPieces: [{ id, name }]
@@ -79,7 +102,7 @@ function scriptCoverage(script, facts = {}) {
 
   for (const g of facts.goals || []) {
     const label = String(g?.label || '').trim();
-    if (label) items.push({ kind: 'goal', label, beat: mentionedIn(beats, label), target: 11 });
+    if (label) items.push({ kind: 'goal', label, beat: goalCovered(beats, g, g.person || null), target: 11 });
   }
   const hook = typeof facts.forwardHook === 'string' ? facts.forwardHook.trim() : '';
   const opp = facts.opportunity && String(facts.opportunity.name || '').trim();
@@ -158,4 +181,4 @@ function insertBeatByNumber(script, number, beatText) {
   return preamble ? `${preamble}\n\n${beats.join('\n\n')}` : beats.join('\n\n');
 }
 
-module.exports = { scriptCoverage, beatRequirements, replaceBeatByNumber, insertBeatByNumber, keyWords, mentionedIn, PHONE_BEATS };
+module.exports = { scriptCoverage, beatRequirements, replaceBeatByNumber, insertBeatByNumber, keyWords, mentionedIn, goalCovered, PHONE_BEATS };
