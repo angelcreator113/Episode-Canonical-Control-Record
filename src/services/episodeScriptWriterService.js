@@ -439,6 +439,15 @@ async function loadScriptContext(episodeId, showId, models, { lite = false } = {
     console.error('[ScriptWriter] who knows failed (non-blocking):', err.message);
   }
 
+  // 13e. The last episode's approved story record and what Lala still owes
+  // people (services/storyCarryForward, 2026-10-23: Episode 1 feeds Episode 2); '' with none.
+  context.carryBlock = '';
+  try {
+    context.carryBlock = await require('./storyCarryForward').carryForEpisode(sequelize, episodeId);
+  } catch (err) {
+    console.error('[ScriptWriter] carry-forward failed (non-blocking):', err.message);
+  }
+
   // 14. Character state — exact coin balance for internal monologue
   context.characterState = null;
   try {
@@ -602,6 +611,7 @@ function storyContextBlocks(context, { withSeason = true } = {}) {
   // season block, not for these.
   const twistBlock = context.twistBlock || '';
   const secrecyBlock = context.secrecyBlock || '';
+  const carryBlock = context.carryBlock || '';
 
   // Designed intent direction
   let intentBlock = '';
@@ -624,7 +634,7 @@ function storyContextBlocks(context, { withSeason = true } = {}) {
 
   const pulseBlock = require('./scriptPulsePosts').pulseScriptBlock(context.pulsePosts);
 
-  return [socialBlock, secrecyBlock, pulseBlock, taskBlock, prevBlock, arcBlock, twistBlock, intentBlock, charBlock].filter(Boolean).join('\n');
+  return [socialBlock, secrecyBlock, pulseBlock, taskBlock, prevBlock, carryBlock, arcBlock, twistBlock, intentBlock, charBlock].filter(Boolean).join('\n');
 }
 
 // Lala's money for the prompt: pressure, balance, the episode so far, and
