@@ -205,7 +205,7 @@ export function checklistFixTarget(itemId, { episode, showId } = {}) {
       label: 'Scene Sets',
     },
     scene_plan: { ...plan, label: 'Generate' },
-    scene_images: { href: `/episodes/${episodeId}?tab=beatplan`, label: 'Open Beat Plan' },
+    scene_images: { href: `/episodes/${episodeId}?tab=beatplan`, label: 'Open the Scenes plan' },
     wardrobe_inventory: wardrobe,
     wardrobe_ready: wardrobe,
     outfit_picked: { ...events, label: 'Pick outfit' },

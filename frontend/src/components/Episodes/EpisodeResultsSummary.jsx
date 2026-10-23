@@ -1,14 +1,18 @@
 /**
- * Results as one page (Evoni's Episode mock, 2026-10-05; her ruling: one
- * page, with Evaluation, Story and Distribution kept as its pills): how it
- * went, the money, Lala's stats, her goals, and what viewers and her feed
- * see. Helpers: lib/episodeResults.js. Reads only.
+ * Results as one page (Evoni's Episode mock, 2026-10-05): how it went, the
+ * money, Lala's stats and her goals. Since her layout list of 2026-10-22:
+ * until the episode is completed it is one short card of what fills in
+ * then, beside the money; once completed, the evaluation's breakdown sits
+ * under it (Evaluation was a pill of its own); and Share (the teaser,
+ * platform copy, Pulse posts) is on Distribution (ResultsShare).
+ * Helpers: lib/episodeResults.js. Reads only.
  */
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRight } from 'lucide-react';
+import { ArrowRight, Hourglass } from 'lucide-react';
 import api from '../../services/api';
 import { evaluationOf, howItWent, moneyRows, statRows, shareState, signedCoins } from '../../lib/episodeResults';
+import { EpisodeResultsEvaluation } from './EpisodeResultsPages';
 import './EpisodeResultsSummary.css';
 
 function useGet(url, pick) {
@@ -16,8 +20,9 @@ function useGet(url, pick) {
   useEffect(() => {
     if (!url) { setValue(null); return undefined; }
     let cancelled = false;
-    api.get(url)
-      .then((r) => { if (!cancelled) setValue(pick(r.data)); })
+    // Promise.resolve first: a read that throws at once still lands in catch.
+    Promise.resolve().then(() => api.get(url))
+      .then((r) => { if (!cancelled) setValue(pick(r?.data)); })
       .catch((err) => { console.error(`[Results] ${url} failed:`, err); if (!cancelled) setValue(null); });
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -25,29 +30,79 @@ function useGet(url, pick) {
   return value;
 }
 
-export default function EpisodeResultsSummary({ episode, showId, onOpenTab }) {
+/**
+ * What viewers and The Pulse see about the episode: the viewer teaser, the
+ * platform copy drafted from it, and Lala's posts. On Distribution, where
+ * they are used (Evoni, 2026-10-22 layout list).
+ */
+export function ResultsShare({ episode, showId, onOpenTab }) {
+  const episodeId = episode?.id;
+  const posts = useGet(episodeId ? `/api/v1/feed-posts/episode/${episodeId}` : null, (d) => d?.data || []);
+  const share = shareState(episode, posts || []);
+  return (
+    <section className="ers-card ers-share" data-testid="results-share">
+      <div className="ers-share-head"><h3 className="ers-card-title">Share</h3><span className="ers-sub">What viewers and The Pulse see about this episode</span></div>
+      <div className={`ers-teaser${share.teaser ? '' : ' is-missing'}`} data-testid="results-teaser">
+        <div>
+          <strong>Viewer teaser</strong> {!share.teaser && <span className="ers-chip is-warn">Missing</span>}
+          <p>{share.teaser || 'Mystery-driven, never reveals the outcome, hook in the first 150 characters. Platform copy is drafted from it.'}</p>
+        </div>
+        {!share.teaser && <button type="button" className="ers-primary" onClick={() => onOpenTab?.('overview')}>Write teaser</button>}
+      </div>
+      <div className="ers-share-row">
+        <div className="ers-share-box">
+          <strong>Platform copy</strong>
+          <p>{share.platforms.length ? `Drafted for ${share.platforms.join(', ')}` : (share.teaser ? 'Not drafted yet: Generate from Episode, below' : 'Drafted once the teaser exists')}</p>
+        </div>
+        <div className="ers-share-box is-pink">
+          <strong>Pulse posts</strong>
+          <p>{share.posts ? `${share.posts} post${share.posts === 1 ? '' : 's'} · ${share.live} live` : "Lala's post plus reactions that match the result"}</p>
+          {showId && <Link className="ers-link" to={`/shows/${showId}/world?tab=feed`}>Open Lala's posts</Link>}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+export default function EpisodeResultsSummary({ episode, showId, onOpenTab, focus = null }) {
   const episodeId = episode?.id;
   const brief = useGet(episodeId ? `/api/v1/episode-brief/${episodeId}` : null, (d) => d?.data || null);
   const money = useGet(showId && episodeId ? `/api/v1/world/${showId}/episodes/${episodeId}/money` : null, (d) => d?.data || null);
   const state = useGet(showId ? `/api/v1/characters/lala/state?show_id=${showId}` : null, (d) => d?.state || null);
   const goals = useGet(showId ? `/api/v1/world/${showId}/goals?status=active` : null, (d) => d?.goals || []);
-  const posts = useGet(episodeId ? `/api/v1/feed-posts/episode/${episodeId}` : null, (d) => d?.data || []);
 
   const evaluation = evaluationOf(episode);
   const how = howItWent({ brief, evaluation });
   const m = moneyRows(money);
   const stats = statRows(state, evaluation);
-  const share = shareState(episode, posts || []);
+  // ?tab=evaluation (old links) lands on the evaluation's part of this page.
+  useEffect(() => {
+    if (focus === 'evaluation' && how.done) document.getElementById('results-evaluation')?.scrollIntoView?.({ block: 'start' });
+  }, [focus, how.done]);
+  const toEvaluation = () => document.getElementById('results-evaluation')?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
 
   return (
     <div className="ers" data-testid="results-summary">
       <div className="ers-head">
         <h2 className="ers-title">Results</h2>
         <span className="ers-sub">{how.done ? `Completed${how.score != null ? ` · ${how.score}/100` : ''}` : 'Not completed yet'}</span>
-        {how.done && <button type="button" className="ers-btn" onClick={() => onOpenTab?.('evaluation')}>Open the evaluation</button>}
+        {how.done && <button type="button" className="ers-btn" onClick={toEvaluation}>The evaluation</button>}
       </div>
 
       <div className="ers-grid">
+        {/* Until it is completed: what fills in then, not five empty rows. */}
+        {!how.done && (
+          <section className="ers-card ers-how is-pending" data-testid="results-pending">
+            <h3 className="ers-label"><Hourglass size={14} aria-hidden="true" /> Fills in at Complete</h3>
+            <p className="ers-text">
+              The outcome{how.designed ? <> (designed: <strong>{how.designed}</strong>)</> : null}, its score and what it changed for
+              Lala&apos;s stats and goals, and the money settled.
+            </p>
+            <p className="ers-note">Complete the episode from its event in Producer Mode to evaluate it.</p>
+            {showId && <Link className="ers-link" to={`/shows/${showId}/world?tab=events`}>Open the events</Link>}
+          </section>
+        )}
+        {how.done && (
         <section className="ers-card ers-how" data-testid="results-how">
           <h3 className="ers-label">How it went</h3>
           <div className="ers-tiers">
@@ -55,8 +110,9 @@ export default function EpisodeResultsSummary({ episode, showId, onOpenTab }) {
             <ArrowRight size={18} className="ers-arrow" aria-hidden="true" />
             <div><span className="ers-tier-label">Actual</span><strong className={`ers-tier${how.done ? '' : ' is-open'}`}>{how.actual || '?'}</strong></div>
           </div>
-          <p className="ers-note">{how.done ? (evaluation?.narrative_lines?.short || 'See the evaluation for the score breakdown.') : 'Decided when the episode is completed. Everything on this page fills in then.'}</p>
+          <p className="ers-note">{evaluation?.narrative_lines?.short || 'The score breakdown is below.'}</p>
         </section>
+        )}
 
         <section className="ers-card" data-testid="results-money">
           <h3 className="ers-label">Money{how.done ? ' settled' : ''}</h3>
@@ -75,6 +131,7 @@ export default function EpisodeResultsSummary({ episode, showId, onOpenTab }) {
           <button type="button" className="ers-link" onClick={() => onOpenTab?.('money')}>Open Money</button>
         </section>
 
+        {how.done && (
         <section className="ers-card" data-testid="results-stats">
           <h3 className="ers-label ers-label-pink">Lala's stats</h3>
           <ul className="ers-rows ers-stats">
@@ -82,14 +139,16 @@ export default function EpisodeResultsSummary({ episode, showId, onOpenTab }) {
               <li key={s.key} data-testid={`results-stat-${s.key}`}>
                 <span>{s.label}</span>
                 <strong>
-                  {s.delta != null ? <em className={s.delta >= 0 ? 'is-up' : 'is-down'}>{signedCoins(s.delta)} </em> : (!how.done && <em>after Complete </em>)}
+                  {s.delta != null ? <em className={s.delta >= 0 ? 'is-up' : 'is-down'}>{signedCoins(s.delta)} </em> : null}
                   <b>{s.value != null ? s.value.toLocaleString() : '—'}</b>
                 </strong>
               </li>
             ))}
           </ul>
         </section>
+        )}
 
+        {how.done && (
         <section className="ers-card" data-testid="results-goals">
           <h3 className="ers-label ers-label-pink">Lala's goals</h3>
           {goals === undefined ? <p className="ers-note">Loading…</p> : !goals?.length ? <p className="ers-note">No active goals.</p> : (
@@ -101,30 +160,11 @@ export default function EpisodeResultsSummary({ episode, showId, onOpenTab }) {
           )}
           {showId && <Link className="ers-link" to={`/shows/${showId}/world?tab=overview`}>Open in Producer Mode</Link>}
         </section>
+        )}
       </div>
 
-      <section className="ers-card ers-share" data-testid="results-share">
-        <div className="ers-share-head"><h3 className="ers-card-title">Share</h3><span className="ers-sub">What viewers and The Pulse see about this episode</span></div>
-        <div className={`ers-teaser${share.teaser ? '' : ' is-missing'}`} data-testid="results-teaser">
-          <div>
-            <strong>Viewer teaser</strong> {!share.teaser && <span className="ers-chip is-warn">Missing</span>}
-            <p>{share.teaser || 'Mystery-driven, never reveals the outcome, hook in the first 150 characters. Platform copy is drafted from it.'}</p>
-          </div>
-          {!share.teaser && <button type="button" className="ers-primary" onClick={() => onOpenTab?.('overview')}>Write teaser</button>}
-        </div>
-        <div className="ers-share-row">
-          <div className="ers-share-box">
-            <strong>Platform copy</strong>
-            <p>{share.platforms.length ? `Drafted for ${share.platforms.join(', ')}` : (share.teaser ? 'Not drafted yet' : 'Drafted once the teaser exists')}</p>
-            <button type="button" className="ers-link" onClick={() => onOpenTab?.('distribution')}>Open Distribution</button>
-          </div>
-          <div className="ers-share-box is-pink">
-            <strong>Pulse posts</strong>
-            <p>{share.posts ? `${share.posts} post${share.posts === 1 ? '' : 's'} · ${share.live} live` : "Lala's post plus reactions that match the result"}</p>
-            {showId && <Link className="ers-link" to={`/shows/${showId}/world?tab=feed`}>Open Lala's posts</Link>}
-          </div>
-        </div>
-      </section>
+      {/* The evaluation, once there is one (Evaluation was its own pill). */}
+      {how.done && <EpisodeResultsEvaluation episode={episode} embedded />}
     </div>
   );
 }

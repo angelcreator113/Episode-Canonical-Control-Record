@@ -11,7 +11,8 @@
  * (GET /episode-clips/:id; a clip is linked to a scene in Files), and the
  * chosen scene's set with its angles (GET /scene-sets/:id). Writes go
  * through the plan's routes (PUT /plan/:beat, POST /plan/:beat/lock).
- * The full plan editor stays one tab over, on Beat Plan.
+ * The full plan editor is Scenes' other view, the Plan (Beat Plan until
+ * Evoni folded it into Scenes, 2026-10-22).
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
@@ -152,7 +153,7 @@ export default function EpisodeSceneWorkspace({ episode, onOpenTab, onToast }) {
       <div className="esw-empty">
         <Clapperboard size={36} aria-hidden />
         <p>This episode has no scenes yet. Its scenes come from the beat plan.</p>
-        <button type="button" className="esw-btn is-primary" onClick={() => onOpenTab?.('beatplan')}>Open the Beat Plan</button>
+        <button type="button" className="esw-btn is-primary" onClick={() => onOpenTab?.('beatplan')}>Open the Plan</button>
       </div>
     );
   }
@@ -224,13 +225,13 @@ export default function EpisodeSceneWorkspace({ episode, onOpenTab, onToast }) {
           {set?.id && showId && <Link className="esw-link" to={sceneSetPath(showId, set.id, backTo)}><Pencil size={13} aria-hidden /> Open in Scene Sets</Link>}
         </div>
         {!beat?.scene_set_id ? (
-          <p className="esw-note">This scene has no location yet. Choose one on the Beat Plan.</p>
+          <p className="esw-note">This scene has no location yet. Choose one in the Plan.</p>
         ) : !set ? (
           <p className="esw-note">Loading angles…</p>
         ) : set.failed ? (
           <p className="esw-note" role="alert" data-testid="esw-set-failed">
             {set.removed
-              ? 'This scene\'s location was removed. Choose its replacement with "Move my beats" on the Beat Plan.'
+              ? 'This scene\'s location was removed. Choose its replacement with "Move my beats" in the Plan.'
               : 'Could not read this location\'s angles.'}
           </p>
         ) : (
@@ -292,7 +293,7 @@ export default function EpisodeSceneWorkspace({ episode, onOpenTab, onToast }) {
               {beat?.locked ? 'Unlock scene' : 'Lock scene'}
             </button>
             <button type="button" className="esw-action" onClick={() => onOpenTab?.('files')}><FolderOpen size={20} aria-hidden /> Link a clip</button>
-            <button type="button" className="esw-action" onClick={() => onOpenTab?.('beatplan')}><Pencil size={20} aria-hidden /> Edit on Beat Plan</button>
+            <button type="button" className="esw-action" onClick={() => onOpenTab?.('beatplan')}><Pencil size={20} aria-hidden /> Edit in the Plan</button>
             <Link className="esw-action" to={`/episodes/${episodeId}/timeline`}><Clapperboard size={20} aria-hidden /> Open timeline</Link>
           </div>
         </section>

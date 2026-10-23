@@ -75,6 +75,8 @@ describe('Script tab: Add chips, must cover, phone check', () => {
   test('Scroll the feed opens the picker on the Feed screen with Scrolls chosen', async () => {
     renderTab();
     await waitFor(() => expect(api.get).toHaveBeenCalledWith('/api/v1/ui-overlays/show-1?episode_id=ep-1'));
+    // The context panel is tabs (Evoni, 2026-10-22 layout list).
+    fireEvent.click(await screen.findByTestId('script-side-tab-checks'));
     await waitFor(() => expect(screen.getByTestId('script-phone-check')).toBeTruthy());
     fireEvent.click(screen.getByTestId('script-add-scroll-4'));
     const picker = screen.getByTestId('script-moment-picker');
@@ -87,6 +89,8 @@ describe('Script tab: Add chips, must cover, phone check', () => {
   // not always shown in the show.
   test("must cover: the event's goals and the brief's hook, ticked when the script mentions them; not what she owes", async () => {
     renderTab();
+    // The context panel is tabs (Evoni, 2026-10-22 layout list).
+    fireEvent.click(await screen.findByTestId('script-side-tab-cover'));
     await waitFor(() => expect(screen.getByTestId('script-cover-goal-0').dataset.covered).toBe('false'));
     expect(screen.queryByTestId('script-cover-deliverable-d1')).toBeNull();
     expect(screen.getByTestId('script-cover-hook').textContent).toContain('A second invitation arrives.');
@@ -97,11 +101,15 @@ describe('Script tab: Add chips, must cover, phone check', () => {
     deliverables = [];
     brief = { event_id: null };
     renderTab();
+    // The context panel is tabs (Evoni, 2026-10-22 layout list).
+    fireEvent.click(await screen.findByTestId('script-side-tab-cover'));
     expect((await screen.findByTestId('script-cover-empty')).textContent).toMatch(/Nothing to cover/);
   });
 
   test("the phone check flags a tap on an icon that is not on the screen showing", async () => {
     renderTab();
+    // The context panel is tabs (Evoni, 2026-10-22 layout list).
+    fireEvent.click(await screen.findByTestId('script-side-tab-checks'));
     const card = await screen.findByTestId('script-phone-check');
     expect(card.textContent).toContain('Phone check · Beat 4');
     await waitFor(() => expect(within(card).getByTestId('script-phone-check-tap').dataset.ok).toBe('false'));

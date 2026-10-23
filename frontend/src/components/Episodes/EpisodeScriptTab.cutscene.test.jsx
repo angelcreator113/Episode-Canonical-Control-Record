@@ -53,7 +53,8 @@ describe('the cutscene has no phone', () => {
     expect(within(chips).queryByTestId('script-add-notify-12')).toBeNull();
     expect(within(chips).queryByTestId('script-add-post-12')).toBeNull();
     expect(within(chips).getByTestId('script-add-line-12')).toBeTruthy();
-    expect(within(chips).getByTestId('script-cutscene-note-12').textContent).toBe('Beats 11–13 are the cutscene: no phone.');
+    // Beside the "+ Add line" button (Evoni, 2026-10-22 layout list).
+    expect(screen.getByTestId('script-cutscene-note-12').textContent).toBe('Beats 11–13 are the cutscene: no phone.');
     fireEvent.click(screen.getByTestId('script-pill-4'));
     expect(within(screen.getByTestId('script-add-chips-4')).getByTestId('script-add-moment-4')).toBeTruthy();
   });

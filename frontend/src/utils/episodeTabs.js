@@ -12,32 +12,39 @@ export const EP_TABS = [
   { key: 'overview', icon: '📋', label: 'Overview' },
   { key: 'scripts', icon: '📝', label: 'Script' },
   // Evoni, 2026-10-17 (her Production mock): Production is the episode's
-  // workspace. It takes the pieces that were under Assets, after the scene
-  // workspace (Scenes) and the full plan editor (Beat Plan, the old Scenes
-  // tab, key 'beatplan'), and keeps the checklist last. ?tab=assets lands
-  // here. Sub-tab keys are unchanged, so links keep working.
+  // workspace. It takes the pieces that were under Assets and keeps the
+  // checklist last. ?tab=assets lands here. Sub-tab keys are unchanged, so
+  // links keep working.
+  // Evoni, 2026-10-22 (Production layout): the pills in four groups, and
+  // Beat Plan folded into Scenes ("it's the same as scenes"): one Scenes
+  // pill with two views, Workspace ('scenes') and Plan ('beatplan', the
+  // full plan editor). `view` marks a sub-tab that is a view of another
+  // pill, not a pill of its own.
   { key: 'production', icon: '🎬', label: 'Production', subs: [
-    { key: 'scenes', label: 'Scenes' },
-    { key: 'beatplan', label: 'Beat Plan' },
+    { key: 'scenes', label: 'Scenes', group: 'Make' },
+    { key: 'beatplan', label: 'Plan', group: 'Make', view: 'scenes' },
     // Evoni, 2026-10-17: Files is the episode's raw video clips
     // (EpisodeRawFootageTab), by who is on camera; since 2026-10-20 it
     // opens with Lala and JustAWoman pose photos (EpisodePosesPanel).
-    { key: 'files', label: 'Files' },
-    { key: 'wardrobe', label: 'Wardrobe' },
+    { key: 'files', label: 'Files', group: 'Make' },
+    { key: 'wardrobe', label: 'Wardrobe', group: 'Look' },
     // The Style Page (was Lookbook; Task #2876): the style sheet as its
     // own editor. The key stays 'lookbook' so links keep working.
-    { key: 'lookbook', label: 'Style Page' },
-    { key: 'phone', label: 'Phone' },
+    { key: 'lookbook', label: 'Style Page', group: 'Look' },
+    { key: 'phone', label: 'Phone', group: 'On screen' },
     // P15: every on-screen piece of the episode.
-    { key: 'overlays', label: 'Overlays' },
-    { key: 'money', label: 'Money' },
-    { key: 'checklist', label: 'Checklist' },
+    { key: 'overlays', label: 'Overlays', group: 'On screen' },
+    { key: 'money', label: 'Money', group: 'Track' },
+    { key: 'checklist', label: 'Checklist', group: 'Track' },
   ]},
   // Evoni's Episode mock (2026-10-05): Results is one page, its Summary;
-  // Evaluation, Story and Distribution stay (her ruling).
+  // Evaluation, Story and Distribution stay (her ruling); Evaluation became
+  // part of Summary in her layout list of 2026-10-22.
   { key: 'results', icon: '👑', label: 'Results', subs: [
     { key: 'summary', label: 'Summary' },
-    { key: 'evaluation', label: 'Evaluation' },
+    // The evaluation is part of Summary since Evoni's layout list of
+    // 2026-10-22; ?tab=evaluation still lands on it.
+    { key: 'evaluation', label: 'Evaluation', view: 'summary' },
     { key: 'story', label: 'Story' },
     { key: 'distribution', label: 'Distribution' },
   ]},
@@ -81,4 +88,21 @@ export function withEpisodeTab(params, tab) {
   const next = new URLSearchParams(params);
   next.set('tab', tab);
   return next;
+}
+
+/** A tab's pills: its sub-tabs less the ones that are a view of another. */
+export const pillsOf = (tab) => (tab?.subs || []).filter((s) => !s.view);
+
+/** The pill a sub-tab lights: its own, or the one it is a view of. */
+export const pillFor = (tab, subKey) => tab?.subs?.find((s) => s.key === subKey)?.view || subKey;
+
+/** A tab's pills in their groups, in order: [{ group, pills }]. */
+export function pillGroups(tab) {
+  const groups = [];
+  for (const p of pillsOf(tab)) {
+    const last = groups[groups.length - 1];
+    if (last && last.group === (p.group || null)) last.pills.push(p);
+    else groups.push({ group: p.group || null, pills: [p] });
+  }
+  return groups;
 }

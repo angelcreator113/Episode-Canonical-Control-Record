@@ -223,6 +223,8 @@ describe("beat 14's opportunity, unread", () => {
     renderTab('## BEAT: 13 · Wrap\nMe: bye\n\n## BEAT: 14 · Cliffhanger\nMe: and then?');
     const beat = screen.getByTestId('script-beat-14');
     if (!beat.className.includes('is-open')) fireEvent.click(beat.querySelector('.esp-beat-head'));
+    // The context panel is tabs (Evoni, 2026-10-22 layout list).
+    fireEvent.click(await screen.findByTestId('script-side-tab-checks'));
     expect((await screen.findByTestId('script-beat14-unread')).textContent).toBe("Couldn't read beat 14's opportunity.");
     expect(spy).toHaveBeenCalledWith('[EpisodeScript] beat 14 opportunity load failed:', expect.any(Error));
     spy.mockRestore();
