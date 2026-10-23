@@ -220,8 +220,8 @@ const exists = async (name) => Boolean((await one('SELECT to_regclass(:name) AS 
     const item = mine(await report()).find((i) => i.key === `lala_tie:${p.dee}`);
     expect(item).toMatchObject({
       kind: 'lala_tie',
-      says: [{ store: 'Story (Relationships)', value: 'sister' }, { store: "Pulse profile's tie to Lala", value: 'competitive' }],
-      fix: { label: 'Set their tie to Lala to "direct"' },
+      says: [{ store: 'Story (Relationships)', value: 'sister' }, { store: "Pulse profile's tie to Lala", value: "Lala's rival" }],
+      fix: { label: 'Set their tie to Lala to "knows Lala in person"' },
     });
     await as(request(app).post(`/api/v1/relationships/drift/${encodeURIComponent(item.key)}/fix`));
     expect((await one('SELECT lala_relationship::text AS t FROM social_profiles WHERE id = :id', { id: p.dee })).t).toBe('direct');

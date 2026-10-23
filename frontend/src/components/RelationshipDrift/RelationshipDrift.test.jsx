@@ -24,7 +24,7 @@ const ITEMS = [
     key: 'lala_tie:7', kind: 'lala_tie',
     who: [{ name: 'Lala', handle: null }, { name: 'Dee', handle: '@dee' }],
     says: [{ store: 'Story (Relationships)', value: 'sister' }, { store: "Pulse profile's tie to Lala", value: 'not set' }],
-    fix: { label: 'Set their tie to Lala to "direct"' },
+    fix: { label: 'Set their tie to Lala to "knows Lala in person"' },
   },
 ];
 

@@ -123,6 +123,13 @@ const LALA_TIE = Object.freeze({
   fan: { tie: 'one_sided', scriptTie: 'one_sided' }, acquaintance: { tie: 'aware', scriptTie: 'aware' },
 });
 // lala_relationship values that agree with each tie.
+// The tie values as words (the stored value means "knows Lala in person",
+// not "direct" in any other sense).
+const TIE_WORDS = {
+  direct: 'knows Lala in person', aware: 'knows of Lala, not met', one_sided: 'follows Lala, one-sided',
+  mutual_unaware: "in Lala's circles, not close", competitive: "Lala's rival", justawoman: 'JustAWoman',
+};
+const tieWords = (tie) => TIE_WORDS[tie] || String(tie || '').replace(/_/g, ' ');
 const LALA_FITS = { direct: ['direct'], competitive: ['competitive'], one_sided: ['one_sided'], aware: ['aware', 'one_sided', 'mutual_unaware'] };
 
 // ── relationships_map's name lists, from the story pairs ─────────────────
@@ -515,9 +522,9 @@ async function driftReport(db, { includeKept = false, transaction } = {}) {
           who: [person('Lala', null, lala, null), person(pr.name, pr.handle, pr.character_id, pr.profile_id)],
           says: [
             { store: 'Story (Relationships)', value: t.words },
-            { store: "Pulse profile's tie to Lala", value: pr.lala_relationship ? pr.lala_relationship.replace(/_/g, ' ') : 'not set' },
+            { store: "Pulse profile's tie to Lala", value: pr.lala_relationship ? tieWords(pr.lala_relationship) : 'not set' },
           ],
-          fix: { label: `Set their tie to Lala to "${t.tie.replace(/_/g, ' ')}"`, profile_id: pr.profile_id, tie: t.tie },
+          fix: { label: `Set their tie to Lala to "${tieWords(t.tie)}"`, profile_id: pr.profile_id, tie: t.tie },
         });
       }
     }
