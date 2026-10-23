@@ -1,0 +1,70 @@
+/* Season Plan › Season twists (2026-10-23): the reveal plan's card, tokens only. */
+.stw-card {
+  display: flex; flex-direction: column; gap: 12px; padding: 16px 18px; border: 1px solid var(--lala-gold-line);
+  border-radius: 18px; background: var(--surface-card); min-width: 0;
+}
+.stw-head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.stw-head > div { flex: 1 1 260px; min-width: 0; }
+.stw-title { display: flex; align-items: center; gap: 8px; margin: 0; font-family: var(--font-prose); font-size: 20px; font-weight: 700; color: var(--text-primary); }
+.stw-title svg { color: var(--accent-dark); }
+.stw-about { margin: 4px 0 0; font-size: 13px; line-height: 1.5; color: var(--text-secondary); }
+.stw-note { margin: 0; font-size: 13px; color: var(--text-secondary); }
+.stw-note.is-error { color: var(--danger-text); }
+.stw-note.is-done { color: var(--success-text); }
+.stw-list { display: flex; flex-direction: column; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.stw-twist { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border: 1px solid var(--lala-gold-line); border-radius: 12px; min-width: 0; }
+.stw-twist.is-dropped { opacity: 0.75; }
+.stw-twist-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.stw-twist-title { min-width: 0; font-size: 15px; font-weight: 700; line-height: 1.4; color: var(--text-primary); overflow-wrap: anywhere; }
+.stw-status { flex-shrink: 0; padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; background: var(--lala-gold-soft); color: var(--lala-gold-text); }
+.stw-status.is-planted { background: var(--accent-subtle); color: var(--accent-dark); }
+.stw-status.is-paid_off { background: var(--success-bg); color: var(--success-text); }
+.stw-status.is-dropped { background: var(--surface-card); color: var(--text-secondary); }
+.stw-desc { margin: 0; font-family: var(--font-prose); font-size: 14px; line-height: 1.5; color: var(--text-primary); overflow-wrap: anywhere; }
+.stw-path { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0; }
+.stw-slot {
+  display: inline-flex; align-items: baseline; gap: 6px; padding: 3px 10px; border-radius: 12px; max-width: 100%; box-sizing: border-box;
+  font-size: 13px; background: var(--lala-gold-soft); color: var(--text-primary); overflow-wrap: anywhere;
+}
+.stw-slot.is-open { background: var(--surface-card); color: var(--text-secondary); border: 1px dashed var(--lala-gold-line); }
+.stw-slot-role { flex-shrink: 0; white-space: nowrap; font-size: 11px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--lala-gold-text); }
+.stw-arrow { flex-shrink: 0; color: var(--accent-dark); }
+.stw-links { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; }
+.stw-tag { padding: 2px 8px; border-radius: 8px; font-size: 12px; background: var(--lala-gold-soft); color: var(--lala-gold-text); overflow-wrap: anywhere; }
+.stw-tag.is-person { background: var(--accent-subtle); color: var(--accent-dark); }
+.stw-warn { display: flex; align-items: flex-start; gap: 6px; margin: 0; font-size: 12px; font-weight: 700; line-height: 1.4; color: var(--danger-text); }
+.stw-warn svg { flex-shrink: 0; margin-top: 2px; }
+.stw-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.stw-link-btn {
+  display: inline-flex; align-items: center; gap: 4px; min-height: 32px; padding: 4px 10px; border: 1px solid var(--lala-gold-line);
+  border-radius: 10px; font: inherit; font-size: 13px; font-weight: 700; background: var(--surface-card); color: var(--accent-dark); cursor: pointer;
+}
+.stw-link-btn.is-danger { color: var(--danger-text); }
+.stw-form { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; margin: 0; padding: 12px 14px; border: 1px dashed var(--lala-gold-line); border-radius: 12px; min-width: 0; }
+.stw-legend { padding: 0 4px; font-size: 12px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--lala-gold-text); }
+.stw-field { display: flex; flex-direction: column; gap: 4px; flex: 1 1 200px; min-width: 0; font-size: 12px; font-weight: 700; color: var(--text-primary); }
+.stw-field.is-wide { flex-basis: 100%; }
+.stw-field select, .stw-field input[type='text'], .stw-field textarea {
+  width: 100%; box-sizing: border-box; min-height: 40px; padding: 6px 10px; border-radius: 10px; border: 1px solid var(--lala-gold-line);
+  font: inherit; font-size: 14px; font-weight: 400; color: var(--text-primary); background: var(--surface-card);
+}
+.stw-field textarea { resize: vertical; font-family: var(--font-prose); line-height: 1.5; }
+.stw-picks { display: flex; flex-wrap: wrap; gap: 6px; max-height: 168px; overflow-y: auto; }
+.stw-pick {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 3px 10px; border: 1px solid var(--lala-gold-line);
+  border-radius: 999px; font-size: 13px; font-weight: 400; background: var(--surface-card); color: var(--text-primary); cursor: pointer;
+}
+.stw-pick.is-on { border-color: var(--accent-dark); background: var(--accent-subtle); color: var(--text-primary); }
+.stw-pick input { margin: 0; accent-color: var(--accent-dark); }
+.stw-form-actions { display: flex; flex-wrap: wrap; gap: 8px; flex-basis: 100%; }
+.stw-btn {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 6px 16px; border: none; border-radius: 12px;
+  font: inherit; font-size: 14px; font-weight: 700; background: var(--accent-dark); color: var(--text-inverse); cursor: pointer;
+}
+.stw-btn.is-quiet { border: 1px solid var(--lala-gold-line); background: var(--surface-card); color: var(--text-primary); }
+.stw-btn:disabled, .stw-link-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+/* Phone width: plant over payoff, the arrow pointing down between them. */
+@media (max-width: 560px) {
+  .stw-path { flex-direction: column; align-items: flex-start; gap: 2px; }
+  .stw-arrow { transform: rotate(90deg); margin-left: 12px; }
+}

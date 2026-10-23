@@ -31,6 +31,14 @@
  *                                         what is wrong with the plan (services/seasonRevealPlan)
  * PUT    /world/:showId/season/reveals — { slot_id, secret_id, intent: hint|reveal, note? }: add or change one
  * DELETE /world/:showId/season/reveals/:revealId — Take it out of the plan
+ * GET    /world/:showId/season/twists — Season twists (2026-10-23): each planted in one slot and paid off in a
+ *                                        later one, the slots, threads and characters to link, and what is
+ *                                        wrong with the list (services/seasonTwists)
+ * PUT    /world/:showId/season/twists — { title, description?, plant_slot_id, payoff_slot_id?, status?,
+ *                                        thread_ids?, character_ids?, note? }: add one (or change it, with id)
+ * PUT    /world/:showId/season/twists/:twistId — Change one
+ * DELETE /world/:showId/season/twists/:twistId — Delete it (soft)
+ * POST   /world/:showId/season/twists/:twistId/restore — Undo a delete
  *
  * Extend (lengthen the current phase, pushing the season past 24) is removed:
  * "Remove Extend; phase boundaries can shift within the 24, only across slots
@@ -451,6 +459,71 @@ router.delete('/world/:showId/season/reveals/:revealId', requireAuth, async (req
     return res.json({ success: true, ...(await deleteReveal(models.sequelize, req.params.showId, req.params.revealId)) });
   } catch (err) {
     return sendPlanError(res, err, 'delete reveal');
+  }
+});
+
+// ── Season twists (2026-10-23; services/seasonTwists) ─────────────────────
+
+const sendTwistError = (res, err, label) => {
+  const { TwistError } = require('../services/seasonTwists');
+  if (err instanceof TwistError) return res.status(err.status).json({ error: err.message });
+  console.error(`[ArcRoutes] ${label} error:`, err);
+  return res.status(500).json({ error: err.message });
+};
+
+// GET /world/:showId/season/twists — the twists, the slots, threads and characters
+router.get('/world/:showId/season/twists', requireAuth, async (req, res) => {
+  try {
+    const models = require('../models');
+    const { getTwists } = require('../services/seasonTwists');
+    return res.json({ success: true, ...(await getTwists(models.sequelize, req.params.showId)) });
+  } catch (err) {
+    return sendTwistError(res, err, 'season twists');
+  }
+});
+
+// PUT /world/:showId/season/twists — add a twist (or change one, body.id)
+router.put('/world/:showId/season/twists', requireAuth, async (req, res) => {
+  try {
+    const models = require('../models');
+    const { setTwist } = require('../services/seasonTwists');
+    return res.json({ success: true, ...(await setTwist(models.sequelize, req.params.showId, req.body || {}, { by: decidedBy(req) })) });
+  } catch (err) {
+    return sendTwistError(res, err, 'set twist');
+  }
+});
+
+// PUT /world/:showId/season/twists/:twistId — change one
+router.put('/world/:showId/season/twists/:twistId', requireAuth, async (req, res) => {
+  try {
+    const models = require('../models');
+    const { setTwist } = require('../services/seasonTwists');
+    const body = { ...(req.body || {}), id: req.params.twistId };
+    return res.json({ success: true, ...(await setTwist(models.sequelize, req.params.showId, body, { by: decidedBy(req) })) });
+  } catch (err) {
+    return sendTwistError(res, err, 'change twist');
+  }
+});
+
+// DELETE /world/:showId/season/twists/:twistId — soft delete
+router.delete('/world/:showId/season/twists/:twistId', requireAuth, async (req, res) => {
+  try {
+    const models = require('../models');
+    const { deleteTwist } = require('../services/seasonTwists');
+    return res.json({ success: true, ...(await deleteTwist(models.sequelize, req.params.showId, req.params.twistId)) });
+  } catch (err) {
+    return sendTwistError(res, err, 'delete twist');
+  }
+});
+
+// POST /world/:showId/season/twists/:twistId/restore — Undo for a delete
+router.post('/world/:showId/season/twists/:twistId/restore', requireAuth, async (req, res) => {
+  try {
+    const models = require('../models');
+    const { restoreTwist } = require('../services/seasonTwists');
+    return res.json({ success: true, ...(await restoreTwist(models.sequelize, req.params.showId, req.params.twistId)) });
+  } catch (err) {
+    return sendTwistError(res, err, 'restore twist');
   }
 });
 

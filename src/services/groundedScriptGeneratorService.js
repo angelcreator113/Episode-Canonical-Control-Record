@@ -626,7 +626,9 @@ function storyContext(story, { hasSeason = false, hook = '', balanceBefore = nul
     return text.replace(/^- Beat 14: .*$/m, () => `- Beat 14: end on the forward hook, "${hook}", told through her career: ${instead}.`);
   });
   // The guests are the block most likely to hold bad data; without them the
-  // rest (her stats, the last episode, the arc) still goes in.
+  // rest (her stats, the last episode, the arc, the season twists to plant
+  // or pay off: loadScriptContext's twistBlock, services/seasonTwists) still
+  // goes in.
   let rest = block('story', () => storyContextBlocks(told, { withSeason: false }));
   if (!rest && (told.socialProfiles || []).length) rest = block('story without guests', () => storyContextBlocks({ ...told, socialProfiles: [] }, { withSeason: false }));
   const blocks = [financial, career, rest].filter(Boolean);
