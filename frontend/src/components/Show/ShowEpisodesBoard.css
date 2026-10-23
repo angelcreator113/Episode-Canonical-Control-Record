@@ -6,7 +6,7 @@
 /* ── The episode in production ─────────────────────────────────────────── */
 .seb-hero { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
 .seb-hero-card {
-  display: grid; grid-template-columns: minmax(220px, 420px) minmax(0, 1fr) minmax(220px, 260px); gap: 22px;
+  display: grid; grid-template-columns: 200px minmax(0, 1fr) minmax(220px, 280px); gap: 14px 20px; align-items: start;
   padding: 16px; border: 1px solid var(--accent-light); border-radius: 22px; background: var(--surface-card);
   box-shadow: var(--shadow-sm); min-width: 0;
 }
@@ -17,23 +17,25 @@
 }
 .seb-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .seb-thumb.is-empty { background: linear-gradient(135deg, var(--accent-dark), var(--lala-lavender)); }
-.seb-thumb-mark { padding: 12px; font-family: var(--font-prose); font-size: 26px; font-weight: 700; line-height: 1.1; text-align: center; color: var(--text-inverse); }
+.seb-thumb-mark { padding: 10px; font-family: var(--font-prose); font-size: 16px; font-weight: 700; line-height: 1.1; text-align: center; color: var(--text-inverse); }
 .seb-thumb.is-small { width: 64px; flex: 0 0 64px; align-self: flex-start; border-radius: 10px; }
 .seb-thumb.is-small .seb-thumb-mark { font-family: var(--font-ui); font-size: 12px; }
 .seb-badge {
-  position: absolute; top: 10px; left: 10px; padding: 3px 10px; border-radius: 8px;
+  padding: 2px 10px; border-radius: 8px;
   background: var(--accent-subtle); color: var(--accent-dark); font-size: 13px; font-weight: 700;
 }
-.seb-badge.is-status { left: auto; right: 10px; background: var(--lala-gold-soft); color: var(--lala-gold-text); }
+.seb-badge.is-status { background: var(--lala-gold-soft); color: var(--lala-gold-text); }
+.seb-hero-kicker { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
+.seb-kicker-label { font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent-dark); }
 .seb-thumb-edit {
-  position: absolute; left: 10px; bottom: 10px; display: inline-flex; align-items: center; gap: 6px; min-height: 34px; padding: 4px 12px;
-  border-radius: 10px; background: var(--surface-card); color: var(--text-primary); font-size: 13px; font-weight: 700; text-decoration: none;
+  margin-top: 8px; display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 4px 10px;
+  border: 1px solid var(--accent-light); border-radius: 10px; background: var(--surface-card); color: var(--text-primary); font-size: 13px; font-weight: 700; text-decoration: none;
 }
 .seb-thumb-edit:hover { background: var(--accent-subtle); }
 
-.seb-hero-main { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
-.seb-hero-title { margin: 0; font-family: var(--font-prose); font-size: 26px; font-weight: 700; line-height: 1.2; color: var(--text-primary); overflow-wrap: anywhere; }
-.seb-hero-blurb { margin: 0; font-size: 15px; line-height: 1.6; color: var(--text-secondary); }
+.seb-hero-main { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.seb-hero-title { margin: 0; font-family: var(--font-prose); font-size: 24px; font-weight: 700; line-height: 1.2; color: var(--text-primary); overflow-wrap: anywhere; }
+.seb-hero-blurb { margin: 0; font-size: 14px; line-height: 1.55; color: var(--text-secondary); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .seb-tags { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
 .seb-tags li { padding: 4px 12px; border-radius: 999px; background: var(--accent-subtle); color: var(--accent-dark); font-size: 13px; }
 .seb-tags .seb-tag-add { padding: 0; background: none; }
@@ -68,9 +70,9 @@
 .seb-event-open:hover { background: var(--accent-subtle); }
 
 /* The seven steps, then Open episode / the script / more */
+/* Along the card's foot. */
 .seb-hero-steps {
-  display: flex; align-items: center; gap: 16px; padding: 12px 16px; border: 1px solid var(--accent-light);
-  border-radius: 18px; background: var(--surface-card); min-width: 0;
+  grid-column: 1 / -1; display: flex; align-items: center; gap: 16px; padding-top: 12px; border-top: 1px solid var(--accent-light); min-width: 0;
 }
 .seb-steps { flex: 1; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); margin: 0; padding: 0; list-style: none; min-width: 0; }
 .seb-step { position: relative; }
@@ -162,21 +164,33 @@
 }
 .seb-card:hover { border-color: var(--accent); }
 .seb-card-top { display: flex; gap: 10px; min-width: 0; }
-.seb-card-text { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.seb-card-text { flex: 1; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; min-width: 0; }
 .seb-chips { display: flex; gap: 6px; flex-wrap: wrap; }
 .seb-chip { padding: 1px 8px; border-radius: 6px; background: var(--accent-subtle); color: var(--accent-dark); font-size: 12px; font-weight: 600; }
 .seb-chip.is-status { background: var(--lala-gold-soft); color: var(--lala-gold-text); }
 .seb-chip.is-open { background: var(--lala-gold-soft); color: var(--lala-gold-text); }
-.seb-card-title { font-size: 14px; font-weight: 700; line-height: 1.3; color: var(--text-primary); overflow-wrap: anywhere; }
+.seb-card { cursor: pointer; }
+.seb-card-title {
+  padding: 0; border: none; background: none; font: inherit; font-size: 14px; font-weight: 700; line-height: 1.3; text-align: left;
+  color: var(--text-primary); overflow-wrap: anywhere; cursor: pointer;
+}
+.seb-card-title:hover { text-decoration: underline; }
+.seb-card-title:focus-visible, .seb-card-menu-btn:focus-visible { outline: 2px solid var(--accent-dark); outline-offset: 2px; border-radius: 4px; }
+.seb-card-more { position: relative; flex: none; margin: -4px -4px 0 0; }
+.seb-card-menu-btn {
+  display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border: none; border-radius: 8px;
+  background: none; color: var(--accent-dark); cursor: pointer;
+}
+.seb-card-menu-btn:hover, .seb-card-menu-btn[aria-expanded="true"] { background: var(--accent-subtle); }
+.seb-card-menu { min-width: 180px; }
+.seb-card-menu button {
+  padding: 8px 12px; border: none; border-radius: 8px; background: none; color: var(--text-primary);
+  font: inherit; font-size: 14px; text-align: left; cursor: pointer;
+}
+.seb-card-menu button:hover, .seb-card-menu button:focus-visible { background: var(--accent-subtle); outline: none; }
 .seb-card-bar { display: block; height: 5px; border-radius: 999px; background: var(--accent-subtle); overflow: hidden; }
 .seb-card-bar span { display: block; height: 100%; background: var(--accent-dark); }
-.seb-card-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .seb-card-line { font-size: 12px; color: var(--text-secondary); }
-.seb-card-go {
-  min-height: 32px; padding: 4px 14px; border: none; border-radius: 10px; background: var(--lala-lavender); color: var(--text-inverse);
-  font: inherit; font-size: 13px; font-weight: 700; cursor: pointer;
-}
-.seb-card-go:hover { background: var(--accent-dark); }
 .seb-card-slot { cursor: default; border-style: dashed; }
 .seb-card-intent { margin: 0; font-size: 13px; line-height: 1.45; color: var(--text-primary); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 .seb-card-link {
@@ -202,21 +216,50 @@
 .seb-empty-icon { font-size: 34px; }
 
 @media (max-width: 1100px) {
-  .seb-hero-card { grid-template-columns: minmax(200px, 340px) minmax(0, 1fr); }
+  .seb-hero-card { grid-template-columns: 180px minmax(0, 1fr); }
   .seb-hero-event { grid-column: 1 / -1; }
 }
+/* The stage tabs are for a phone only. */
+.seb-stage-tabs { display: none; }
 @media (max-width: 900px) {
   .seb-hero-steps { flex-direction: column; align-items: stretch; }
   .seb-board { grid-template-columns: repeat(5, minmax(240px, 82vw)); overflow-x: auto; scroll-snap-type: x proximity; padding-bottom: 6px; }
   .seb-col { scroll-snap-align: start; }
 }
 @media (max-width: 600px) {
-  .seb-hero-card { grid-template-columns: minmax(0, 1fr); padding: 12px; }
+  .seb-hero-card { grid-template-columns: 96px minmax(0, 1fr); gap: 12px; padding: 12px; }
+  .seb-hero-art .seb-thumb-edit { padding: 4px 8px; font-size: 12px; }
+  /* "Edit" on a phone; its name stays "Edit Thumbnail". */
+  .seb-thumb-edit-word { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .seb-hero-art .seb-thumb.is-empty .seb-thumb-mark { font-size: 11px; padding: 6px; }
+  .seb-hero-actions { flex-wrap: nowrap; gap: 8px; }
+  .seb-hero-actions .seb-btn { flex: 1 1 auto; justify-content: center; gap: 6px; padding: 8px 10px; font-size: 14px; white-space: nowrap; }
+  /* One stage at a time, picked from tabs. */
+  .seb-stage-tabs { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; }
+  .seb-stage-tabs button {
+    flex: none; display: inline-flex; align-items: center; gap: 6px; min-height: 38px; padding: 4px 12px; border: 1px solid var(--accent-light);
+    border-radius: 999px; background: var(--surface-card); color: var(--accent-dark); font: inherit; font-size: 14px; font-weight: 600; cursor: pointer;
+  }
+  .seb-stage-tabs button.active { background: var(--accent-dark); border-color: var(--accent-dark); color: var(--text-inverse); }
+  .seb-stage-count { font-size: 12px; font-weight: 700; }
+  .seb-board { grid-template-columns: minmax(0, 1fr); overflow-x: visible; }
+  .seb-board > .seb-col { display: none; min-height: 0; }
+  .seb-board[data-phone-stage="planning"] > .seb-col[data-stage="planning"],
+  .seb-board[data-phone-stage="script"] > .seb-col[data-stage="script"],
+  .seb-board[data-phone-stage="production"] > .seb-col[data-stage="production"],
+  .seb-board[data-phone-stage="edit"] > .seb-col[data-stage="edit"],
+  .seb-board[data-phone-stage="released"] > .seb-col[data-stage="released"] { display: flex; }
+  .seb-board > .seb-col > .seb-col-head { display: none; }
+  /* The toolbar on one row: search, then the views and New as icons. */
+  .seb-actions { flex-wrap: nowrap; width: 100%; }
+  .seb-search { flex: 1 1 auto; }
+  .seb-label-text { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .seb-views button { padding: 4px 10px; }
+  .seb-new { padding: 6px 12px; }
   .seb-hero-title { font-size: 22px; }
   /* The seven steps scroll sideways inside their bar, each wide enough for its label. */
   .seb-steps { grid-template-columns: repeat(7, 76px); overflow-x: auto; padding-bottom: 4px; }
   .seb-step-label { font-size: 12px; }
   .seb-head-title h2 { font-size: 22px; }
-  .seb-search { flex-basis: 100%; }
   .seb-pipeline { padding: 12px; }
 }
