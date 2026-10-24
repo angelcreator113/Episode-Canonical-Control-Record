@@ -4,7 +4,7 @@
  * Editorial Fashion Intelligence — fully modernized
  * Palette: #d4789a rose · #7ab3d4 steel · #a889c8 orchid
  */
-import { useReducer, useEffect, useCallback, useMemo, useState } from 'react';
+import { useReducer, useEffect, useCallback, useMemo, useState, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { House, GitBranch, Users, Share2, Sprout, List, Search } from 'lucide-react';
 import apiClient from '../services/api';
@@ -167,18 +167,23 @@ export default function RelationshipEngine() {
   }, [location.state, toast]);
 
   /* ── Load the cast, their relationships and seeds ─────────────────── */
+  // The link's tab and selection arrive with the cast, in one render: a
+  // separate step after it showed the Overview first, for a moment.
+  const searchRef = useRef(location.search);
+  searchRef.current = location.search;
   const load = useCallback(async () => {
     dispatch({ type: 'SET', payload: { loading: true, error: null } });
     try {
       const { data } = await fetchCast();
+      const loaded = {
+        chars:  data?.characters || [],
+        rels:   data?.relationships || [],
+        cands:  data?.candidates || [],
+        lalaId: data?.lala_id || null,
+      };
       dispatch({
         type: 'LOADED',
-        payload: {
-          chars:  data?.characters || [],
-          rels:   data?.relationships || [],
-          cands:  data?.candidates || [],
-          lalaId: data?.lala_id || null,
-        },
+        payload: { ...loaded, ...(deepLinkState(searchRef.current, loaded) || {}) },
       });
     } catch (err) {
       console.error('[RelationshipEngine] load failed:', err);
