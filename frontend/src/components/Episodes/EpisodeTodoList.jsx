@@ -70,6 +70,37 @@ export default function EpisodeTodoList({ episodeId, showId, onAllRequiredComple
 
   useEffect(() => { fetchOneList(); }, [fetchOneList]);
 
+  // "Use career plan" (2026-10-24): the event's approved career plan's
+  // "This event" goals added to the episode's task list, within the event's
+  // goal limit; again adds nothing new. Lines that did not fit are named.
+  const [usingPlan, setUsingPlan] = useState(false);
+  const [usedPlan, setUsedPlan] = useState(null);
+  const handleUseCareerPlan = async () => {
+    setUsingPlan(true);
+    setUsedPlan(null);
+    try {
+      const res = await api.post(`/api/v1/episodes/${episodeId}/todo/use-career-plan`);
+      const d = res.data?.data || {};
+      const parts = [];
+      if (d.added) parts.push(`${d.added} goal${d.added === 1 ? '' : 's'} added`);
+      if (d.removed) parts.push(`${d.removed} from an older plan replaced`);
+      let text = parts.length ? `From the career plan: ${parts.join(', ')}.` : 'The career plan is already on the list; nothing new to add.';
+      if (d.not_added?.length) text += ` Over the event's goal limit, not added: ${d.not_added.map((l) => `"${l}"`).join(', ')}.`;
+      setUsedPlan({ ok: true, text });
+      if (Array.isArray(d.social_tasks)) setCareerList((prev) => ({ ...(prev || {}), tasks: d.social_tasks }));
+    } catch (err) {
+      console.error('[TodoList] use career plan failed:', err);
+      setUsedPlan({ ok: false, text: err.response?.data?.error || 'The career plan could not be used in the episode.' });
+    } finally {
+      setUsingPlan(false);
+    }
+  };
+  const usePlanButton = (
+    <button type="button" className="etl-btn" onClick={handleUseCareerPlan} disabled={usingPlan} data-testid="etl-use-career-plan">
+      {usingPlan ? 'Adding…' : 'Use career plan'}
+    </button>
+  );
+
   const handleGenerate = async () => {
     setGenerating(true);
     setError(null);
@@ -204,7 +235,11 @@ export default function EpisodeTodoList({ episodeId, showId, onAllRequiredComple
           <button type="button" className="etl-btn-primary" onClick={handleGenerateCareer} disabled={generatingCareer}>
             {generatingCareer ? 'Generating...' : 'Generate Career Checklist'}
           </button>
+          {usePlanButton}
         </div>
+      )}
+      {!isWardrobe && usedPlan && (
+        <p className={`etl-text${usedPlan.ok ? '' : ' is-error'}`} role="status" data-testid="etl-use-career-plan-result">{usedPlan.text}</p>
       )}
 
       {/* Header — only show for wardrobe or when career exists */}
@@ -243,9 +278,12 @@ export default function EpisodeTodoList({ episodeId, showId, onAllRequiredComple
           ) : isWardrobe ? (
             <button type="button" className="etl-btn" onClick={handleUnlock}>Unlock</button>
           ) : (
-            <button type="button" className="etl-btn" onClick={handleGenerateCareer} disabled={generatingCareer}>
-              {generatingCareer ? '...' : 'Regenerate'}
-            </button>
+            <>
+              {usePlanButton}
+              <button type="button" className="etl-btn" onClick={handleGenerateCareer} disabled={generatingCareer}>
+                {generatingCareer ? '...' : 'Regenerate'}
+              </button>
+            </>
           )}
         </div>
       </div>

@@ -164,7 +164,8 @@ describe('Pick up from a line', () => {
     ]);
     fireEvent.change(select, { target: { value: String(line) } });
     fireEvent.click(screen.getByTestId('stp-record'));
-    expect(screen.getByTestId('stp-start-line').disabled).toBe(true);
+    // Mid-take (and its 3-2-1) Start from hides; it comes back once the take ends.
+    expect(screen.queryByTestId('stp-start-line')).toBeNull();
     await screen.findByTestId('stp-recording');
   };
 

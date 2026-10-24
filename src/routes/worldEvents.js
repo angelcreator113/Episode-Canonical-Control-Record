@@ -7,7 +7,10 @@
  * DELETE /api/v1/world/:showId/events/:eventId  — Delete event
  * POST   /api/v1/world/:showId/events/:eventId/inject — Inject event into episode script
  * POST   /api/v1/world/:showId/events/:eventId/generate-script — Generate full script skeleton
- * POST   /api/v1/world/:showId/events/:eventId/generate-invitation — Generate invitation card image
+ * POST   /api/v1/world/:showId/events/:eventId/generate-invitation — Generate invitation version(s); { async: true } answers with a job
+ * POST   /api/v1/world/:showId/events/:eventId/reroll-invitation-text | reroll-invitation-background — New words / new background from a version
+ * POST   /api/v1/world/:showId/events/:eventId/invitation-estimate — Cost and look of a generate, writes nothing
+ * GET    /api/v1/world/:showId/invitation-jobs/:jobId[/stream] — An invitation job's progress (SSE on /stream)
  * GET    /api/v1/world/:showId/events/:eventId/invitation — Check if invitation exists
  * POST   /api/v1/world/:showId/events/:eventId/suggest-names — Three AI-written name options, writes nothing
  * POST   /api/v1/world/:showId/events/:eventId/suggest-basics — AI suggestions for date, time, description, dress code, category, format; writes nothing
@@ -2198,39 +2201,127 @@ Guidelines:
 // ═══════════════════════════════════════════════════════════════════════════════
 // INVITATION GENERATOR
 // ═══════════════════════════════════════════════════════════════════════════════
+//
+// Every route is scoped: the event must be live in :showId and a version
+// must be one of the event's (invitationGeneratorService). The slow ones
+// (generate, re-roll text, re-roll background, batch) answer 202 with a job
+// id when the body says { async: true } — the page follows the job on
+// GET /world/:showId/invitation-jobs/:jobId/stream — and otherwise answer
+// when the work is done.
 
-router.post('/world/:showId/events/:eventId/generate-invitation', requireAuth, aiRateLimiter, async (req, res) => {
+const invitationError = (res, err, where) => {
+  console.error(`[InviteGen] ${where} failed:`, err.message);
+  const status = err.status || err.statusCode || (isBudgetError(err) ? 429 : 500);
+  return res.status(status).json({ success: false, error: err.message });
+};
+
+const invitationService = () => require('../services/invitationGeneratorService');
+
+// One slow invitation action: a job when the body asks for one, else inline.
+async function runInvitationWork(req, res, { kind, eventId = null, where }, work) {
   try {
-    const { showId, eventId } = req.params;
-
-    if (!process.env.FAL_KEY) {
-      return res.status(503).json({
-        error: 'FAL_KEY not configured. Add it to your .env file.',
-      });
-    }
-
-    console.log(`[InviteGen] Request for event: ${eventId}, show: ${showId}`);
-
     const models = await getModels();
     if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
-
-    const { generateInvitation } = require('../services/invitationGeneratorService');
-    const result = await generateInvitation(eventId, models, showId);
-
-    return res.json({
-      success: true,
-      message: `Invitation generated for "${result.eventName}"`,
-      data: {
-        assetId: result.asset.id,
-        imageUrl: result.imageUrl,
-        theme: result.theme,
-        eventName: result.eventName,
-      },
-    });
+    if (req.body?.async) {
+      if (eventId) {
+        // Refuse a missing event now, not inside the job.
+        const event = await loadScopedEvent(models.sequelize, { showId: req.params.showId, eventId, columns: 'id' });
+        if (!event) return res.status(404).json({ success: false, error: 'Event not found in this show.' });
+      }
+      const { startJob } = require('../services/invitationJobs');
+      const job = startJob({ showId: req.params.showId, eventId, kind }, (progress) => work(models, progress));
+      return res.status(202).json({ success: true, jobId: job.id, job });
+    }
+    const data = await work(models, () => {});
+    return res.json({ success: true, data });
   } catch (err) {
-    console.error('[InviteGen] Error:', err);
-    return res.status(isBudgetError(err) ? 429 : 500).json({ success: false, error: err.message });
+    return invitationError(res, err, where);
   }
+}
+
+// POST /world/:showId/events/:eventId/generate-invitation
+//   { variants?: 1-3, style?: { theme, mood, color_palette, floral_style, border_style },
+//     useBrandStyle?: boolean, async?: boolean }
+router.post('/world/:showId/events/:eventId/generate-invitation', requireAuth, aiRateLimiter, (req, res) => {
+  const { showId, eventId } = req.params;
+  const { variants, style, useBrandStyle } = req.body || {};
+  return runInvitationWork(req, res, { kind: 'generate', eventId, where: 'generate' }, (models, onProgress) =>
+    invitationService().generateInvitation(models, { showId, eventId, variants, style, useBrandStyle, onProgress }));
+});
+
+// POST /world/:showId/events/:eventId/reroll-invitation-text — { assetId, async? }
+// New words on that version's background; no image call.
+router.post('/world/:showId/events/:eventId/reroll-invitation-text', requireAuth, aiRateLimiter, (req, res) => {
+  const { showId, eventId } = req.params;
+  const { assetId } = req.body || {};
+  return runInvitationWork(req, res, { kind: 'reroll-text', eventId, where: 'reroll text' }, (models, onProgress) =>
+    invitationService().rerollText(models, { showId, eventId, assetId, onProgress }));
+});
+
+// POST /world/:showId/events/:eventId/reroll-invitation-background
+//   { assetId, variants?, style?, useBrandStyle?, async? } — new background(s), same words.
+router.post('/world/:showId/events/:eventId/reroll-invitation-background', requireAuth, aiRateLimiter, (req, res) => {
+  const { showId, eventId } = req.params;
+  const { assetId, variants, style, useBrandStyle } = req.body || {};
+  return runInvitationWork(req, res, { kind: 'reroll-background', eventId, where: 'reroll background' }, (models, onProgress) =>
+    invitationService().rerollBackground(models, { showId, eventId, assetId, variants, style, useBrandStyle, onProgress }));
+});
+
+// POST /world/:showId/events/:eventId/invitation-estimate — { variants?, style?, useBrandStyle? }
+// The cost and look of a generate before anything is spent. Writes nothing.
+router.post('/world/:showId/events/:eventId/invitation-estimate', requireAuth, async (req, res) => {
+  try {
+    const models = await getModels();
+    if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
+    const { showId, eventId } = req.params;
+    const { variants, style, useBrandStyle } = req.body || {};
+    const data = await invitationService().estimateInvitation(models, { showId, eventId, variants, style, useBrandStyle });
+    return res.json({ success: true, data });
+  } catch (err) {
+    return invitationError(res, err, 'estimate');
+  }
+});
+
+// GET /world/:showId/invitation-jobs/:jobId — a job's state (for polling)
+router.get('/world/:showId/invitation-jobs/:jobId', requireAuth, (req, res) => {
+  const { getJob, publicJob } = require('../services/invitationJobs');
+  const job = getJob(req.params.showId, req.params.jobId);
+  if (!job) return res.status(404).json({ success: false, error: 'Job not found (it may have finished long ago, or the server restarted).' });
+  return res.json({ success: true, job: publicJob(job) });
+});
+
+// GET /world/:showId/invitation-jobs/:jobId/stream — SSE: progress, then done | failed
+router.get('/world/:showId/invitation-jobs/:jobId/stream', requireAuth, (req, res) => {
+  const { getJob, publicJob, subscribe } = require('../services/invitationJobs');
+  const job = getJob(req.params.showId, req.params.jobId);
+  if (!job) return res.status(404).json({ success: false, error: 'Job not found (it may have finished long ago, or the server restarted).' });
+
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    Connection: 'keep-alive',
+    'X-Accel-Buffering': 'no',
+  });
+  const send = (event, data) => res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+  send('status', publicJob(job));
+  if (job.status !== 'running') {
+    send(job.status === 'done' ? 'done' : 'failed', publicJob(job));
+    return res.end();
+  }
+
+  const keepAlive = setInterval(() => res.write(': keepalive\n\n'), 15000);
+  const unsubscribe = subscribe(job, (event, data) => {
+    send(event, data);
+    if (event === 'done' || event === 'failed') {
+      clearInterval(keepAlive);
+      unsubscribe();
+      res.end();
+    }
+  });
+  req.on('close', () => {
+    clearInterval(keepAlive);
+    unsubscribe();
+  });
 });
 
 // ── In-world documents beside the invitation (Evoni, 2026-10-06) ──
@@ -2257,28 +2348,29 @@ router.get('/world/:showId/events/:eventId/documents', requireAuth, async (req, 
   }
 });
 
-// POST /world/:showId/events/:eventId/documents/:type/draft — draft or redraft (one AI call)
+// POST /world/:showId/events/:eventId/documents/:type/draft — draft or redraft (one AI call);
+// { budget: true } words a shopping list's pieces to buy for her shortfall
 router.post('/world/:showId/events/:eventId/documents/:type/draft', requireAuth, aiRateLimiter, async (req, res) => {
   try {
     const models = await getModels();
     if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
     const { draftDocument } = require('../services/eventDocumentsService');
     const { showId, eventId, type } = req.params;
-    const data = await draftDocument(models, { showId, eventId, type, version: req.body?.version });
+    const data = await draftDocument(models, { showId, eventId, type, version: req.body?.version, budget: req.body?.budget === true });
     return res.json({ success: true, data });
   } catch (err) {
     return eventDocumentsError(res, err, 'draft');
   }
 });
 
-// PUT /world/:showId/events/:eventId/documents/:type — edit the items ({ items: [...] })
+// PUT /world/:showId/events/:eventId/documents/:type — edit the items ({ items: [...], note? })
 router.put('/world/:showId/events/:eventId/documents/:type', requireAuth, async (req, res) => {
   try {
     const models = await getModels();
     if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
     const { editDocument } = require('../services/eventDocumentsService');
     const { showId, eventId, type } = req.params;
-    const data = await editDocument(models, { showId, eventId, type, items: req.body?.items, version: req.body?.version });
+    const data = await editDocument(models, { showId, eventId, type, items: req.body?.items, note: req.body?.note, version: req.body?.version });
     return res.json({ success: true, data });
   } catch (err) {
     return eventDocumentsError(res, err, 'edit');
@@ -2299,223 +2391,130 @@ router.post('/world/:showId/events/:eventId/documents/:type/approve', requireAut
   }
 });
 
-// GET /world/:showId/events/:eventId/invitation-text — Get editable invitation text
+// POST /world/:showId/events/:eventId/documents/:type/restore — { fromVersion, version? }
+// An earlier version from history, as a new draft version (Undo uses it too).
+router.post('/world/:showId/events/:eventId/documents/:type/restore', requireAuth, async (req, res) => {
+  try {
+    const models = await getModels();
+    if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
+    const { restoreDocument } = require('../services/eventDocumentsService');
+    const { showId, eventId, type } = req.params;
+    const data = await restoreDocument(models, { showId, eventId, type, fromVersion: req.body?.fromVersion, version: req.body?.version });
+    return res.json({ success: true, data });
+  } catch (err) {
+    return eventDocumentsError(res, err, 'restore');
+  }
+});
+
+// POST /world/:showId/events/:eventId/documents/:type/lines/:index/redraft — { version? }
+// One line re-worded (one AI call), the rest kept; a new draft version.
+router.post('/world/:showId/events/:eventId/documents/:type/lines/:index/redraft', requireAuth, aiRateLimiter, async (req, res) => {
+  try {
+    const models = await getModels();
+    if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
+    const { redraftLine } = require('../services/eventDocumentsService');
+    const { showId, eventId, type, index } = req.params;
+    const data = await redraftLine(models, { showId, eventId, type, index, version: req.body?.version });
+    return res.json({ success: true, data });
+  } catch (err) {
+    return eventDocumentsError(res, err, 'line redraft');
+  }
+});
+
+// POST /world/:showId/events/:eventId/documents/shopping_list/keep-look — { version? }
+// Keep the list for the look as it is now ("Look changed" → Keep). No new version.
+router.post('/world/:showId/events/:eventId/documents/shopping_list/keep-look', requireAuth, async (req, res) => {
+  try {
+    const models = await getModels();
+    if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
+    const { keepListForLook } = require('../services/eventDocumentsService');
+    const { showId, eventId } = req.params;
+    const data = await keepListForLook(models, { showId, eventId, version: req.body?.version });
+    return res.json({ success: true, data });
+  } catch (err) {
+    return eventDocumentsError(res, err, 'keep look');
+  }
+});
+
+// GET /world/:showId/events/:eventId/invitation-text?assetId= — a version's words
+// (the approved version's when no assetId)
 router.get('/world/:showId/events/:eventId/invitation-text', requireAuth, async (req, res) => {
   try {
-    const { eventId } = req.params;
     const models = await getModels();
-    const [event] = await models.sequelize.query(
-      'SELECT canon_consequences FROM world_events WHERE id = :eventId LIMIT 1',
-      { replacements: { eventId }, type: models.sequelize.QueryTypes.SELECT }
-    );
-    if (!event) return res.status(404).json({ success: false, error: 'Event not found' });
-    const cc = typeof event.canon_consequences === 'string' ? JSON.parse(event.canon_consequences) : event.canon_consequences;
-    return res.json({ success: true, invitation_text: cc?.invitation_text || null });
-  } catch (err) {
-    return res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-// POST /world/:showId/events/:eventId/re-render-invitation — Re-render with edited text
-router.post('/world/:showId/events/:eventId/re-render-invitation', requireAuth, async (req, res) => {
-  try {
+    if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
     const { showId, eventId } = req.params;
-    const { invitation_text } = req.body;
-    if (!invitation_text) return res.status(400).json({ success: false, error: 'invitation_text is required' });
-
-    const models = await getModels();
-
-    // Load event
-    const [event] = await models.sequelize.query(
-      'SELECT * FROM world_events WHERE id = :eventId LIMIT 1',
-      { replacements: { eventId }, type: models.sequelize.QueryTypes.SELECT }
-    );
-    if (!event) return res.status(404).json({ success: false, error: 'Event not found' });
-
-    // Find the latest invitation asset to get the background
-    const [asset] = await models.sequelize.query(
-      `SELECT s3_url_raw FROM assets WHERE metadata->>'event_id' = :eventId AND asset_type = 'INVITATION_LETTER' ORDER BY created_at DESC LIMIT 1`,
-      { replacements: { eventId }, type: models.sequelize.QueryTypes.SELECT }
-    );
-
-    if (!asset?.s3_url_raw) return res.status(400).json({ success: false, error: 'No existing invitation to re-render. Generate one first.' });
-
-    // Download the background
-    const axios = require('axios');
-    const bgResponse = await axios.get(asset.s3_url_raw, { responseType: 'arraybuffer', timeout: 30000 });
-    const bgBuffer = Buffer.from(bgResponse.data);
-
-    // Re-composite with edited text
-    const { compositeInvitation } = require('../services/invitationCompositingService');
-    const composited = await compositeInvitation(bgBuffer, event, invitation_text);
-    if (!composited) return res.status(500).json({ success: false, error: 'Re-render failed — fonts may not be available' });
-
-    // Upload new version
-    const { uploadToS3 } = require('../services/invitationGeneratorService');
-    const s3Url = await uploadToS3(composited, eventId, 'edited');
-
-    // Create new asset
-    const { Asset } = models;
-    let newAsset = null;
-    if (Asset) {
-      try {
-        newAsset = await Asset.create({
-          id: uuidv4(),
-          name: `${event.name} — Invitation (edited)`,
-          asset_type: 'INVITATION_LETTER',
-          s3_url_raw: asset.s3_url_raw,
-          s3_url_processed: s3Url,
-          show_id: showId,
-          metadata: { source: 'invitation-text-edit', event_id: eventId, edited_at: new Date().toISOString() },
-        });
-      } catch { /* non-blocking */ }
-    }
-
-    // Save edited text to event
-    try {
-      await models.sequelize.query(
-        `UPDATE world_events SET canon_consequences = jsonb_set(
-          COALESCE(canon_consequences, '{}'), '{invitation_text}', :textJson::jsonb
-        ), updated_at = NOW() WHERE id = :eventId`,
-        { replacements: { textJson: JSON.stringify(invitation_text), eventId } }
-      );
-    } catch { /* non-blocking */ }
-
-    return res.json({ success: true, imageUrl: s3Url, assetId: newAsset?.id });
+    const text = await invitationService().getInvitationText(models, { showId, eventId, assetId: req.query.assetId || null });
+    return res.json({ success: true, invitation_text: text });
   } catch (err) {
-    console.error('[InviteGen] Re-render error:', err);
-    return res.status(500).json({ success: false, error: err.message });
+    return invitationError(res, err, 'GET invitation-text');
   }
 });
+
+// re-render-invitation was retired (2026-10-24): it duplicated
+// edit-invitation-text, picked the newest asset even when rejected or
+// deleted, and had no caller since Task #1654.
 
 router.get('/world/:showId/events/:eventId/invitation', requireAuth, async (req, res) => {
   try {
-    const { eventId } = req.params;
+    const { showId, eventId } = req.params;
     const models = await getModels();
     if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
 
-    const [event] = await models.sequelize.query(
-      `SELECT e.id, e.name, e.invitation_asset_id,
-              a.s3_url_processed as invitation_url, a.id as asset_id
-       FROM world_events e
-       LEFT JOIN assets a ON a.id = e.invitation_asset_id AND a.deleted_at IS NULL
-       WHERE e.id = :eventId LIMIT 1`,
-      { replacements: { eventId }, type: models.sequelize.QueryTypes.SELECT }
-    );
-
+    const event = await loadScopedEvent(models.sequelize, { showId, eventId, columns: 'id, name, invitation_asset_id' });
     if (!event) return res.status(404).json({ success: false, error: 'Event not found' });
+    let asset = null;
+    if (event.invitation_asset_id) {
+      [asset] = await models.sequelize.query(
+        'SELECT id, s3_url_processed FROM assets WHERE id = :id AND deleted_at IS NULL LIMIT 1',
+        { replacements: { id: event.invitation_asset_id }, type: models.sequelize.QueryTypes.SELECT }
+      );
+    }
 
     return res.json({
       data: {
-        hasInvitation: !!event.invitation_asset_id,
-        assetId: event.asset_id,
-        imageUrl: event.invitation_url,
+        hasInvitation: !!asset,
+        assetId: asset?.id || null,
+        imageUrl: asset?.s3_url_processed || null,
         eventName: event.name,
       },
     });
   } catch (err) {
-    return res.status(500).json({ success: false, error: err.message });
+    return invitationError(res, err, 'GET invitation');
   }
 });
 
-// ── APPROVE INVITATION ─────────────────────────────────────────────────────
+// ── APPROVE / REJECT ─────────────────────────────────────────────────────────
 
+// POST /world/:showId/events/:eventId/approve-invitation — { assetId }
 router.post('/world/:showId/events/:eventId/approve-invitation', requireAuth, async (req, res) => {
   try {
-    const { eventId } = req.params;
-    const { assetId } = req.body;
-    if (!assetId) return res.status(400).json({ success: false, error: 'assetId is required' });
-
     const models = await getModels();
     if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
-
-    // Look up which episode this event is linked to
-    const [event] = await models.sequelize.query(
-      'SELECT used_in_episode_id FROM world_events WHERE id = :eventId LIMIT 1',
-      { replacements: { eventId }, type: models.sequelize.QueryTypes.SELECT }
-    );
-    const episodeId = event?.used_in_episode_id || null;
-
-    // Mark asset as approved — try with optional columns, fall back to minimal
-    try {
-      await models.sequelize.query(
-        `UPDATE assets SET approval_status = 'approved', episode_id = :episodeId, updated_at = NOW() WHERE id = :assetId`,
-        { replacements: { assetId, episodeId } }
-      );
-    } catch {
-      // approval_status/episode_id columns may not exist
-      try {
-        await models.sequelize.query(
-          `UPDATE assets SET updated_at = NOW() WHERE id = :assetId`,
-          { replacements: { assetId } }
-        );
-      } catch { /* non-blocking */ }
-    }
-
-    // Link to event
-    await models.sequelize.query(
-      'UPDATE world_events SET invitation_asset_id = :assetId, updated_at = NOW() WHERE id = :eventId',
-      { replacements: { assetId, eventId } }
-    );
-
-    // P10 (Evoni, 2026-09-30; Task #2386): the approved invitation is the
-    // episode's invitation overlay — tagged, listed in that episode's
-    // overlays and placed on the invitation beat. Approving a new version
-    // replaces the old one (untagged, its placement removed). Before Start
-    // Episode there is no episode yet; Start Episode tags and places it.
-    // Idempotent; non-blocking so a failure here doesn't fail the approval.
-    let placement = null;
-    let invitationOverlay = null;
-    if (episodeId) {
-      try {
-        const { syncEpisodeInvitationOverlay } = require('../services/episodeInvitationOverlayService');
-        invitationOverlay = await syncEpisodeInvitationOverlay(models, { eventId, episodeId });
-        placement = invitationOverlay.placement;
-      } catch (placeErr) {
-        console.warn('[approve-invitation] Episode invitation overlay skipped:', placeErr.message);
-      }
-    }
-
+    const { showId, eventId } = req.params;
+    const r = await invitationService().approveInvitation(models, { showId, eventId, assetId: req.body?.assetId });
     return res.json({
       success: true,
       message: 'Invitation approved and linked to event',
-      episodeId,
-      placement_id: placement?.id || null,
-      placement_anchor: invitationOverlay?.anchor || null,
+      episodeId: r.episodeId,
+      superseded: r.superseded,
+      placement_id: r.placementId,
+      placement_anchor: r.anchor,
     });
   } catch (err) {
-    console.error('[InviteGen] Approve error:', err);
-    return res.status(500).json({ success: false, error: err.message });
+    return invitationError(res, err, 'approve');
   }
 });
 
-// ── REJECT INVITATION ──────────────────────────────────────────────────────
-
+// POST /world/:showId/events/:eventId/reject-invitation — { assetId } (a pending version)
 router.post('/world/:showId/events/:eventId/reject-invitation', requireAuth, async (req, res) => {
   try {
-    const { assetId } = req.body;
-    if (!assetId) return res.status(400).json({ success: false, error: 'assetId is required' });
-
     const models = await getModels();
     if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
-
-    // Soft-delete the rejected asset — try with approval_status, fall back
-    try {
-      await models.sequelize.query(
-        'UPDATE assets SET approval_status = :status, deleted_at = NOW(), updated_at = NOW() WHERE id = :assetId',
-        { replacements: { status: 'rejected', assetId } }
-      );
-    } catch {
-      await models.sequelize.query(
-        'UPDATE assets SET deleted_at = NOW(), updated_at = NOW() WHERE id = :assetId',
-        { replacements: { assetId } }
-      );
-    }
-
+    const { showId, eventId } = req.params;
+    await invitationService().rejectInvitation(models, { showId, eventId, assetId: req.body?.assetId });
     return res.json({ success: true, message: 'Invitation rejected' });
   } catch (err) {
-    console.error('[InviteGen] Reject error:', err);
-    return res.status(500).json({ success: false, error: err.message });
+    return invitationError(res, err, 'reject');
   }
 });
 
@@ -2523,111 +2522,47 @@ router.post('/world/:showId/events/:eventId/reject-invitation', requireAuth, asy
 
 router.get('/world/:showId/events/:eventId/invitation-history', requireAuth, async (req, res) => {
   try {
-    const { eventId } = req.params;
     const models = await getModels();
     if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
-
-    const versions = await models.sequelize.query(
-      `SELECT id, name, s3_url_processed as image_url, approval_status,
-              metadata->>'version' as version,
-              metadata->>'theme' as theme,
-              metadata->>'theme_source' as theme_source,
-              metadata->>'composited' as composited,
-              created_at
-       FROM assets
-       WHERE metadata->>'event_id' = :eventId
-         AND asset_type = 'INVITATION_LETTER'
-         AND deleted_at IS NULL
-       ORDER BY created_at DESC`,
-      { replacements: { eventId }, type: models.sequelize.QueryTypes.SELECT }
-    );
-
+    const { showId, eventId } = req.params;
+    const versions = await invitationService().listInvitationVersions(models, { showId, eventId });
     return res.json({ data: versions, count: versions.length });
   } catch (err) {
-    return res.status(500).json({ success: false, error: err.message });
+    return invitationError(res, err, 'history');
   }
 });
 
 // ── BATCH GENERATE INVITATIONS ───────────────────────────────────────────────
 
-router.post('/world/:showId/events/batch-generate-invitations', requireAuth, aiRateLimiter, async (req, res) => {
-  try {
-    const { showId } = req.params;
-    const { eventIds } = req.body;
-
-    if (!process.env.FAL_KEY) {
-      return res.status(503).json({ success: false, error: 'FAL_KEY not configured. Add it to your .env file.' });
-    }
-
-    const models = await getModels();
-    if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
-
-    // If no specific IDs, get all events without invitations
-    let targetIds = eventIds;
-    if (!targetIds || !Array.isArray(targetIds) || targetIds.length === 0) {
-      const events = await models.sequelize.query(
-        `SELECT id FROM world_events WHERE show_id = :showId AND invitation_asset_id IS NULL`,
-        { replacements: { showId }, type: models.sequelize.QueryTypes.SELECT }
-      );
-      targetIds = events.map(e => e.id);
-    }
-
-    if (targetIds.length === 0) {
-      return res.json({ success: true, message: 'No events need invitations', results: [] });
-    }
-
-    // Cap at 3 per batch to control image API costs
-    const MAX_BATCH = parseInt(process.env.IMAGE_CALLS_PER_OPERATION) || 3;
-    const capped = targetIds.slice(0, MAX_BATCH);
-
-    console.log(`[InviteGen] Batch generating ${capped.length} invitations for show ${showId}`);
-
-    // Generate sequentially (DALL-E rate limits)
-    const { generateInvitation } = require('../services/invitationGeneratorService');
-    const results = [];
-
-    for (const id of capped) {
-      try {
-        const result = await generateInvitation(id, models, showId);
-        results.push({ eventId: id, success: true, assetId: result.asset.id, imageUrl: result.imageUrl, version: result.version });
-      } catch (err) {
-        console.error(`[InviteGen] Batch failed for ${id}:`, err.message);
-        results.push({ eventId: id, success: false, error: err.message });
-      }
-    }
-
-    const succeeded = results.filter(r => r.success).length;
-    return res.json({
-      success: true,
-      message: `Generated ${succeeded}/${capped.length} invitations`,
-      results,
-      skipped: targetIds.length - capped.length,
-    });
-  } catch (err) {
-    console.error('[InviteGen] Batch error:', err);
-    return res.status(500).json({ success: false, error: err.message });
-  }
+// POST /world/:showId/events/batch-generate-invitations — { eventIds?, async? }
+// At most IMAGE_CALLS_PER_OPERATION events, one after another.
+router.post('/world/:showId/events/batch-generate-invitations', requireAuth, aiRateLimiter, (req, res) => {
+  const { showId } = req.params;
+  const { eventIds } = req.body || {};
+  return runInvitationWork(req, res, { kind: 'batch', where: 'batch' }, (models, onProgress) =>
+    invitationService().batchGenerateInvitations(models, { showId, eventIds, onProgress }));
 });
 
-// ── PDF EXPORT ───────────────────────────────────────────────────────────────
+// ── PRINT EXPORT ─────────────────────────────────────────────────────────────
 
-router.get('/world/:showId/events/:eventId/invitation-pdf', requireAuth, async (req, res) => {
+// GET /world/:showId/events/:eventId/invitation-print — the approved card,
+// full quality, with its own words (a PNG). invitation-pdf is the old path,
+// kept so saved links work; it never was a PDF.
+async function sendInvitationPrint(req, res) {
   try {
-    const { eventId } = req.params;
     const models = await getModels();
     if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
-
-    const { exportInvitationPDF } = require('../services/invitationGeneratorService');
-    const pdfBuffer = await exportInvitationPDF(eventId, models);
-
+    const { showId, eventId } = req.params;
+    const png = await invitationService().exportInvitationPrint(models, { showId, eventId });
     res.setHeader('Content-Type', 'image/png');
     res.setHeader('Content-Disposition', `attachment; filename="invitation-${eventId}.png"`);
-    return res.send(pdfBuffer);
+    return res.send(png);
   } catch (err) {
-    console.error('[InviteGen] PDF export error:', err);
-    return res.status(500).json({ success: false, error: err.message });
+    return invitationError(res, err, 'print export');
   }
-});
+}
+router.get('/world/:showId/events/:eventId/invitation-print', requireAuth, sendInvitationPrint);
+router.get('/world/:showId/events/:eventId/invitation-pdf', requireAuth, sendInvitationPrint);
 
 // ── ANIMATED INVITATION (Runway image_to_video) ─────────────────────────────
 
@@ -2731,98 +2666,29 @@ router.get('/world/:showId/events/:eventId/animate-invitation/:jobId', requireAu
   }
 });
 
-// ── EDIT INVITATION TEXT (re-render without DALL-E) ──────────────────────────
+// ── EDIT INVITATION TEXT (no AI, no image call) ──────────────────────────────
 
+// POST /world/:showId/events/:eventId/edit-invitation-text — { assetId, opening, body, closing }
+// Her words on that version's background, saved as a new pending version
+// (the source, approved or not, is never changed). The money check comes
+// back so the page can say when the words no longer state the terms.
 router.post('/world/:showId/events/:eventId/edit-invitation-text', requireAuth, async (req, res) => {
   try {
-    const { eventId } = req.params;
-    const { assetId, opening, body, closing } = req.body;
-
-    if (!assetId) return res.status(400).json({ success: false, error: 'assetId is required' });
-
     const models = await getModels();
     if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
-
-    const [asset] = await models.sequelize.query(
-      'SELECT * FROM assets WHERE id = :assetId AND deleted_at IS NULL LIMIT 1',
-      { replacements: { assetId }, type: models.sequelize.QueryTypes.SELECT }
-    );
-    if (!asset) return res.status(404).json({ success: false, error: 'Asset not found' });
-
-    const [event] = await models.sequelize.query(
-      'SELECT * FROM world_events WHERE id = :eventId LIMIT 1',
-      { replacements: { eventId }, type: models.sequelize.QueryTypes.SELECT }
-    );
-    if (!event) return res.status(404).json({ success: false, error: 'Event not found' });
-
-    // Download existing background
-    const axios = require('axios');
-    const bgResponse = await axios.get(asset.s3_url_raw || asset.s3_url_processed, {
-      responseType: 'arraybuffer',
-      timeout: 30000,
+    const { showId, eventId } = req.params;
+    const { assetId, opening, body, closing } = req.body || {};
+    const version = await invitationService().editInvitationText(models, { showId, eventId, assetId, opening, body, closing });
+    return res.json({
+      success: true,
+      imageUrl: version.imageUrl,
+      assetId: version.assetId,
+      version: version.version,
+      moneyCheck: version.moneyCheck,
+      message: 'Saved as a new version for your approval.',
     });
-    const bgBuffer = Buffer.from(bgResponse.data);
-
-    // Build custom content (skips Claude call)
-    const customContent = {
-      eventName:    event.name.split(' — ')[0].trim(),
-      eventSubtitle: event.name.includes(' — ') ? event.name.split(' — ')[1].trim() : null,
-      opening:  opening || '',
-      body:     body    || '',
-      closing:  closing || 'We look forward to your presence.',
-      hostName:  event.host       || 'The Host',
-      hostBrand: event.host_brand || '',
-      prestige:  event.prestige   || 5,
-    };
-
-    // Re-composite with custom text
-    const { compositeInvitation } = require('../services/invitationCompositingService');
-    const finalBuffer = await compositeInvitation(bgBuffer, event, customContent);
-    if (!finalBuffer) return res.status(500).json({ success: false, error: 'Compositing failed — fonts not available' });
-
-    // Upload new version to S3
-    const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
-    const { v4: uuidv4 } = require('uuid');
-    const S3_BUCKET = process.env.S3_PRIMARY_BUCKET || process.env.AWS_S3_BUCKET;
-    const AWS_REGION = process.env.AWS_REGION || 'us-east-1';
-    const s3 = new S3Client({ region: AWS_REGION });
-    const s3Key = `invitations/${eventId}/${uuidv4()}-edited.png`;
-
-    await s3.send(new PutObjectCommand({
-      Bucket: S3_BUCKET,
-      Key: s3Key,
-      Body: finalBuffer,
-      ContentType: 'image/png',
-      CacheControl: 'max-age=31536000',
-    }));
-
-    const newUrl = `https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${s3Key}`;
-
-    // Update asset record
-    const metadata = typeof asset.metadata === 'string'
-      ? JSON.parse(asset.metadata)
-      : (asset.metadata || {});
-
-    await models.sequelize.query(
-      `UPDATE assets SET s3_url_processed = :url, metadata = :metadata, updated_at = NOW() WHERE id = :assetId`,
-      {
-        replacements: {
-          url: newUrl,
-          metadata: JSON.stringify({
-            ...metadata,
-            edited: true,
-            edited_at: new Date().toISOString(),
-            custom_text: { opening, body, closing },
-          }),
-          assetId,
-        },
-      }
-    );
-
-    return res.json({ success: true, imageUrl: newUrl, message: 'Invitation text updated and re-rendered.' });
   } catch (err) {
-    console.error('[InviteEdit] Error:', err);
-    return res.status(500).json({ success: false, error: err.message });
+    return invitationError(res, err, 'edit text');
   }
 });
 
@@ -2830,78 +2696,27 @@ router.post('/world/:showId/events/:eventId/edit-invitation-text', requireAuth, 
 
 router.post('/world/:showId/events/:eventId/unlink-invitation', requireAuth, async (req, res) => {
   try {
-    const { assetId } = req.body;
-    if (!assetId) return res.status(400).json({ success: false, error: 'assetId is required' });
-
     const models = await getModels();
     if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
-
-    await models.sequelize.query(
-      'UPDATE assets SET episode_id = NULL, updated_at = NOW() WHERE id = :assetId',
-      { replacements: { assetId } }
-    );
-
+    const { showId, eventId } = req.params;
+    await invitationService().unlinkInvitation(models, { showId, eventId, assetId: req.body?.assetId });
     return res.json({ success: true, message: 'Invitation unlinked from episode. Asset remains in show library.' });
   } catch (err) {
-    console.error('[InviteUnlink] Error:', err);
-    return res.status(500).json({ success: false, error: err.message });
+    return invitationError(res, err, 'unlink');
   }
 });
 
-// ── DELETE INVITATION ASSET ──────────────────────────────────────────────────
+// ── DELETE INVITATION VERSION ────────────────────────────────────────────────
 
 router.delete('/world/:showId/events/:eventId/invitation/:assetId', requireAuth, async (req, res) => {
   try {
-    const { eventId, assetId } = req.params;
     const models = await getModels();
     if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
-
-    const [asset] = await models.sequelize.query(
-      'SELECT s3_url_processed, s3_url_raw FROM assets WHERE id = :assetId AND deleted_at IS NULL LIMIT 1',
-      { replacements: { assetId }, type: models.sequelize.QueryTypes.SELECT }
-    );
-    if (!asset) return res.status(404).json({ success: false, error: 'Asset not found' });
-
-    // Delete from S3 (best effort)
-    const s3Url = asset.s3_url_processed || asset.s3_url_raw;
-    if (s3Url) {
-      try {
-        const { S3Client, DeleteObjectCommand } = require('@aws-sdk/client-s3');
-        const s3Key = s3Url.split('.amazonaws.com/')[1];
-        if (s3Key) {
-          const s3 = new S3Client({ region: process.env.AWS_REGION || 'us-east-1' });
-          await s3.send(new DeleteObjectCommand({
-            Bucket: process.env.S3_PRIMARY_BUCKET || process.env.AWS_S3_BUCKET,
-            Key: decodeURIComponent(s3Key),
-          }));
-        }
-      } catch (s3Err) {
-        console.warn('[InviteDelete] S3 cleanup failed (non-blocking):', s3Err.message);
-      }
-    }
-
-    // Soft-delete the asset
-    await models.sequelize.query(
-      'UPDATE assets SET deleted_at = NOW(), episode_id = NULL WHERE id = :assetId',
-      { replacements: { assetId } }
-    );
-
-    // Clear invitation_asset_id on event if this was the current one
-    const [event] = await models.sequelize.query(
-      'SELECT invitation_asset_id FROM world_events WHERE id = :eventId LIMIT 1',
-      { replacements: { eventId }, type: models.sequelize.QueryTypes.SELECT }
-    );
-    if (event?.invitation_asset_id === assetId) {
-      await models.sequelize.query(
-        'UPDATE world_events SET invitation_asset_id = NULL, updated_at = NOW() WHERE id = :eventId',
-        { replacements: { eventId } }
-      );
-    }
-
-    return res.json({ success: true, message: 'Invitation deleted from system.' });
+    const { showId, eventId, assetId } = req.params;
+    const r = await invitationService().deleteInvitationVersion(models, { showId, eventId, assetId });
+    return res.json({ success: true, wasCurrent: r.wasCurrent, message: 'Invitation deleted from system.' });
   } catch (err) {
-    console.error('[InviteDelete] Error:', err);
-    return res.status(500).json({ success: false, error: err.message });
+    return invitationError(res, err, 'delete');
   }
 });
 

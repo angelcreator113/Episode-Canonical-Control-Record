@@ -43,15 +43,29 @@
 // ends; pause pauses the recording too. Each beat's heading reaching the
 // reading line is a marker [{ beat, t }] in take time (lib/fullEpisodeTake),
 // saved with the take as beat_marks, or downloadable until the server keeps them.
+// Ending and saving a take (Evoni, 2026-10-24: "On the teleprompter I have no
+// clear way of ending and saving a recording"): while a take runs the bar's
+// top row is a big red "Stop & review" with Pause beside it (Pause pauses the
+// scroll and the recording, one beat or whole episode; take time leaves the
+// paused time out), and the settings that change the layout hide until the
+// take ends. A one-beat (or pasted-text) take ends by itself 2 seconds after
+// its last line has passed the reading line ("Ending the take…"); the whole
+// episode still stops at its end. The review sheet ("Your take") has Save
+// take, Retake (throw it away and record again) and Discard (asks, then back
+// to the start, nothing saved); never saved by itself. After a save, "Next
+// beat →" moves on ready to record. A take always counts 3-2-1 before it
+// starts (3 seconds, to get into place), whatever the 3-2-1 setting, which is
+// for reading.
 // Keys: Space play/pause, Up/Down speed (or pace), PageUp/PageDown jump a
 // half screen (a line, pacing by line times; clickers and foot pedals send
-// these), Left/Right beat, Escape exits.
+// these), Left/Right beat, Enter or S stop & review a take, Escape exits
+// (asking first while a take records).
 
 import { useState, useEffect, useLayoutEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import {
   X, ChevronLeft, ChevronRight, Play, Pause, FlipHorizontal2, Timer, Video, VideoOff, Circle, Square,
-  RotateCcw, Upload, Download, AlertTriangle, CheckCircle2, ALargeSmall, Gauge, Hourglass, SlidersHorizontal,
+  RotateCcw, Upload, Download, AlertTriangle, Trash2, ArrowRight, CheckCircle2, ALargeSmall, Gauge, Hourglass, SlidersHorizontal,
   AudioLines, Grid3x3, Clock, Film, Smartphone, Mic, Volume2,
   Bell, MessageCircle, MousePointerClick, ArrowDownUp, Send, MonitorPlay, AppWindow, Monitor, EyeOff, Clapperboard, FileDown,
 } from 'lucide-react';
@@ -91,6 +105,8 @@ export const DEFAULTS = { size: 40, speed: 5, mirror: false, countdown: true, li
 // Below this level for this long while recording: "No sound from your mic".
 const QUIET_LEVEL = 0.04;
 const QUIET_MS = 3000;
+// A one-beat take's last line passed: this long, then the take stops for review.
+export const ENDING_MS = 2000;
 const roundPace = (n) => Math.round(n * 10) / 10;
 
 const clamp = (n, lo, hi) => Math.min(hi, Math.max(lo, n));
@@ -236,11 +252,23 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
   const lastMarkedRef = useRef(-1);
   // Markers the server could not keep yet (database update not run): she can download them.
   const [pendingMarks, setPendingMarks] = useState(null);
+  // A take's 3-2-1 is running (not a reading one).
+  const [arming, setArming] = useState(false);
+  // The take's last line has passed: it stops for review in ENDING_MS.
+  const [ending, setEnding] = useState(false);
+  const endTimerRef = useRef(null);
+  // After a saved one-beat take: the beat (index) "Next beat →" moves to.
+  const [savedNext, setSavedNext] = useState(null);
+  const recordBtnRef = useRef(null);
 
   const episodeId = isScript ? source.episodeId : null;
   const rec = useTakeRecorder(recordOn);
   const { take, recording } = rec;
   const busyTake = recording || count > 0 || !!take;
+  // A take is running or about to: the bar is Stop & review and Pause.
+  const takeLive = recording || arming;
+  // Mid-take or in review: the controls that make no sense then are hidden.
+  const midTake = takeLive || !!take;
   const canWhole = isScript && numbered && !!episodeId && beats.length > 0;
   const whole = canWhole && recordOn && takeScope === 'episode';
   const oneBeat = isScript && recordOn && beats.length > 0 && !whole;
@@ -341,7 +369,14 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
   }, [settings]);
 
   const clearTimers = () => { timersRef.current.forEach((t) => window.clearTimeout(t)); timersRef.current = []; };
-  useEffect(() => clearTimers, []);
+  const cancelEnding = () => {
+    if (endTimerRef.current) window.clearTimeout(endTimerRef.current);
+    endTimerRef.current = null;
+    setEnding(false);
+  };
+  useEffect(() => () => { clearTimers(); if (endTimerRef.current) window.clearTimeout(endTimerRef.current); }, []);
+  // A take that stopped any other way (an error, the remote) is not ending any more.
+  useEffect(() => { if (!recording) cancelEnding(); }, [recording]);
 
   // The clips already in Files: the beat's takes, and the next take is "take 3".
   useEffect(() => {
@@ -623,6 +658,7 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
     if (i < 0 || i >= beats.length || busyTake) return;
     setCurrent(i);
     setNotice(null);
+    setSavedNext(null);
     setStartLine(0);
     if (oneBeat) { setPlaying(false); scrollToBox(0); setActive(0); } else { toBeat(i); setActive(layout.beatFirst[i] ?? 0); }
   };
@@ -655,13 +691,17 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
     timersRef.current.push(window.setTimeout(() => setCount(1), countdownMs * 2));
     timersRef.current.push(window.setTimeout(() => { setCount(0); then(); }, countdownMs * 3));
   };
-  const cancelCountdown = () => { clearTimers(); setCount(0); };
+  const cancelCountdown = () => { clearTimers(); setCount(0); setArming(false); };
 
+  // A running take is paused: the recorder is, or the scroll stopped by hand
+  // (a browser that can't pause its recorder), not because the take is ending.
+  const takePaused = recording && (!!rec.paused || (!playing && !ending));
   const togglePlay = () => {
     if (count > 0) { cancelCountdown(); return; }
-    // A whole-episode take: pause pauses the recording too, and Play carries both on.
-    if (whole && recording) {
-      if (playing) { setPlaying(false); rec.pause(); } else { rec.resume(); setPlaying(true); }
+    // A take (one beat or whole episode): Pause pauses the recording too, and
+    // Resume carries both on. Pausing while it ends keeps the take going.
+    if (recording) {
+      if (takePaused) { if (rec.paused) rec.resume(); setPlaying(true); } else { cancelEnding(); setPlaying(false); rec.pause(); }
       return;
     }
     if (playing) { setPlaying(false); return; }
@@ -687,12 +727,15 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
   const recordWhole = () => {
     const i = wholeFrom;
     setNotice(null);
+    setSavedNext(null);
     setPendingMarks(null);
     setSave({ status: 'idle', progress: 0, error: null, clip: null });
     setPlaying(false);
     resetMarks();
     toBeatStart(i);
+    setArming(true);
     countdown(() => {
+      setArming(false);
       toBeatStart(i);
       if (voiceOn) setVoiceFrom(syncCursor(layout.beatFirst[i] ?? 0));
       if (!rec.begin({ videoBitsPerSecond: FULL_BITRATE })) return;
@@ -703,26 +746,57 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
       setPlaying(true);
     });
   };
-  const record = () => {
-    if (rec.camera.status !== 'ready' || busyTake) return;
+  // A take always counts 3-2-1 first (3 seconds to get into place); the 3-2-1
+  // setting is for reading.
+  const startTake = () => {
     if (whole) { recordWhole(); return; }
     setNotice(null);
+    setSavedNext(null);
     setSave({ status: 'idle', progress: 0, error: null, clip: null });
     setPlaying(false);
     toStart();
+    setArming(true);
     countdown(() => {
+      setArming(false);
       toStart();
       if (voiceOn) setVoiceFrom(syncCursor(fromLine));
       if (rec.begin()) setPlaying(true);
     });
   };
-  const stopTake = () => { setPlaying(false); rec.stop(); };
+  const record = () => {
+    if (rec.camera.status !== 'ready' || busyTake) return;
+    startTake();
+  };
+  const stopTake = () => { cancelEnding(); setPlaying(false); rec.stop(); };
+  // Stop & review: the take stops and its review opens; before it starts, the 3-2-1 stops.
+  const stopAndReview = () => {
+    if (!recording) { if (count > 0) cancelCountdown(); return; }
+    stopTake();
+  };
+  // Retake: this take goes and the next one counts in straight away.
   const retake = () => {
+    rec.discard();
+    setSave({ status: 'idle', progress: 0, error: null, clip: null });
+    if (rec.camera.status === 'ready') startTake();
+    else if (whole) { resetMarks(); toBeatStart(wholeFrom); } else toStart();
+  };
+  // Discard: asks, then back to the start of the beat (or the take's start line), nothing saved.
+  const discardTake = () => {
+    if (!window.confirm('Throw this take away? It has not been saved.')) return;
     rec.discard();
     setSave({ status: 'idle', progress: 0, error: null, clip: null });
     if (whole) { resetMarks(); toBeatStart(wholeFrom); } else toStart();
   };
-  endRef.current = () => { setPlaying(false); if (whole && recording) stopTake(); };
+  // The end of the text: the prompter stops. A whole-episode take stops with
+  // it; any other take ends ENDING_MS later ("Ending the take…"), then the review.
+  endRef.current = () => {
+    setPlaying(false);
+    if (!recording) return;
+    if (whole) { stopTake(); return; }
+    if (endTimerRef.current) return;
+    setEnding(true);
+    endTimerRef.current = window.setTimeout(() => { endTimerRef.current = null; setEnding(false); rec.stop(); }, ENDING_MS);
+  };
 
   // The beat on the reading line while a whole-episode take runs: its
   // heading, as the scroll finds it, or the beat of the line on the reading line.
@@ -840,6 +914,8 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
         duration_seconds: clip?.duration_seconds ?? seconds, created_at: clip?.created_at || new Date().toISOString(),
       }]);
       setNotice(`Saved to the episode's Files: ${label}`);
+      // "Next beat →": the next beat, ready to record.
+      setSavedNext(oneBeat && current < beats.length - 1 ? current + 1 : null);
       setSave({ status: 'idle', progress: 0, error: null, clip: null });
       rec.discard();
     } catch (err) {
@@ -897,7 +973,9 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
   const toggleRecord = () => {
     if (recordOn && busyTake && !window.confirm(recording ? 'A take is recording. Stop and throw it away?' : 'This take is not saved yet. Throw it away?')) return;
     cancelCountdown();
+    cancelEnding();
     setPlaying(false);
+    setSavedNext(null);
     if (recordOn) { rec.discard(); resetMarks(); }
     setRecordOn((on) => !on);
   };
@@ -906,6 +984,13 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
     if (busyTake && !window.confirm(recording || count > 0 ? 'A take is recording. Stop and leave the teleprompter?' : 'This take is not saved yet. Leave and lose it?')) return;
     cancelCountdown();
     onCloseRef.current?.();
+  };
+
+  // "Next beat →" after a save: that beat, ready to record.
+  const nextBeat = () => {
+    if (savedNext == null) return;
+    goTo(savedNext);
+    window.setTimeout(() => recordBtnRef.current?.focus(), 0);
   };
 
   const faster = (dir) => {
@@ -927,7 +1012,7 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
       case 'smaller': set('size', clamp(settings.size - 4, SIZE_MIN, SIZE_MAX)); break;
       // A take starts only in Read & record; a stopped one waits for review here, never saved by itself.
       case 'record_start': if (recordOn && !busyTake && rec.camera.status === 'ready') record(); break;
-      case 'record_stop': if (recording) stopTake(); break;
+      case 'record_stop': if (recording) stopAndReview(); break;
       default: break;
     }
   };
@@ -959,6 +1044,12 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
   const onKeyDown = (e) => {
     const own = OWN_KEYS.has(e.target?.tagName);
     if (e.key === 'Escape') { e.stopPropagation(); requestClose(); return; }
+    // Enter or S: stop the take and review it (Enter on a button does not press it too).
+    if (recording && !own && !e.ctrlKey && !e.metaKey && !e.altKey && (e.key === 'Enter' || e.key === 's' || e.key === 'S')) {
+      e.preventDefault();
+      stopAndReview();
+      return;
+    }
     if (e.key === ' ' && !own && e.target?.tagName !== 'BUTTON') { e.preventDefault(); togglePlay(); return; }
     if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && !own) {
       e.preventDefault();
@@ -1077,7 +1168,7 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
           <div className="stp-spacer is-bottom" aria-hidden="true" />
         </div>
         <div className="stp-marker" aria-hidden="true" data-testid="stp-marker" />
-        {showCue && !take && count === 0 && <SilenceCue line={atLine} left={cueLeft} total={cueTotal} reduced={reduced} voice={!!activeClip} />}
+        {showCue && !take && count === 0 && !ending && <SilenceCue line={atLine} left={cueLeft} total={cueTotal} reduced={reduced} voice={!!activeClip} />}
 
         {(recording || meterStream) && (
           <div className="stp-hud">
@@ -1086,6 +1177,15 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
                 <span className="stp-dot" aria-hidden="true" /> {rec.paused ? 'PAUSED' : 'REC'} {clock(rec.elapsed)}
                 {whole && liveNumber != null && <span data-testid="stp-rec-beat">· Beat {liveNumber} of {lastNumber}</span>}
                 {whole && <span className="stp-rec-size" data-testid="stp-rec-size">· {sizeText(takeSize)}</span>}
+                <span className="stp-rec-hint" data-testid="stp-rec-hint">
+                  <span className="is-long">· Stop &amp; review when you&apos;re done</span>
+                  <span className="is-short" aria-hidden="true">· Stop when done</span>
+                </span>
+              </div>
+            )}
+            {recording && ending && (
+              <div className="stp-ending" role="status" data-testid="stp-ending">
+                <Hourglass size={16} aria-hidden="true" /> Ending the take…
               </div>
             )}
             {recording && whole && takeSize >= WARN_BYTES && (
@@ -1120,9 +1220,12 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
         {count > 0 && <div className="stp-countdown" aria-live="assertive" data-testid="stp-countdown">{count}</div>}
 
         {take && (
-          <div className="stp-review" role="region" aria-label="Review the take" data-testid="stp-review">
+          <div className="stp-review" role="region" aria-labelledby="stp-review-title" data-testid="stp-review">
+            <div className="stp-review-head">
+              <h3 className="stp-review-title" id="stp-review-title">Your take</h3>
+              <p className="stp-review-name" data-testid="stp-review-name">{isScript ? label : `Take ${takeNo}`} · {clock(take.seconds)}</p>
+            </div>
             <video ref={reviewRef} className="stp-review-video" src={take.url} controls playsInline data-testid="stp-review-video" />
-            <p className="stp-review-name">{isScript ? label : `Take ${takeNo}`} · {clock(take.seconds)}</p>
             {whole && marks.length > 0 && (
               <MarkLinks marks={marks} onSeek={(t) => seekVideo(reviewRef.current, t)} testId="stp-review-marks" />
             )}
@@ -1133,16 +1236,19 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
             )}
             {save.status === 'error' && <p className="stp-error" role="alert"><AlertTriangle size={16} aria-hidden="true" /> {save.error}</p>}
             <div className="stp-review-actions">
+              <button type="button" className="stp-btn is-primary stp-save" data-testid="stp-save" disabled={save.status === 'saving' || (isScript && !source.episodeId)} onClick={saveTake}>
+                {isScript ? <Upload size={18} aria-hidden="true" /> : <Download size={18} aria-hidden="true" />}
+                {save.status === 'error' ? 'Retry' : save.status === 'saving' ? 'Saving…' : isScript ? (
+                  <span className="stp-save-text"><span className="stp-save-main">Save take</span><span className="stp-save-sub">to the episode&apos;s Files</span></span>
+                ) : 'Download the take'}
+              </button>
               <button type="button" className="stp-btn" data-testid="stp-retake" disabled={save.status === 'saving' || !!save.clip} onClick={retake}><RotateCcw size={18} aria-hidden="true" /> Retake</button>
               {whole && marks.length > 0 && (
                 <button type="button" className="stp-btn" data-testid="stp-review-download-marks" onClick={() => downloadMarks({ label, marks: cleanMarks(marks) })}>
                   <FileDown size={18} aria-hidden="true" /> Download markers
                 </button>
               )}
-              <button type="button" className="stp-btn is-primary" data-testid="stp-save" disabled={save.status === 'saving' || (isScript && !source.episodeId)} onClick={saveTake}>
-                {isScript ? <Upload size={18} aria-hidden="true" /> : <Download size={18} aria-hidden="true" />}
-                {save.status === 'error' ? 'Retry' : save.status === 'saving' ? 'Saving…' : isScript ? "Save to the episode's Files" : 'Download the take'}
-              </button>
+              <button type="button" className="stp-btn is-discard" data-testid="stp-discard" disabled={save.status === 'saving' || !!save.clip} onClick={discardTake}><Trash2 size={18} aria-hidden="true" /> Discard</button>
             </div>
           </div>
         )}
@@ -1153,6 +1259,12 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
           {problem ? <AlertTriangle size={16} aria-hidden="true" /> : notice ? <CheckCircle2 size={16} aria-hidden="true" /> : <Volume2 size={16} aria-hidden="true" />}
           <span>{problem || notice || headphones}</span>
           {rec.camera.status === 'error' && <button type="button" className="stp-btn is-small" onClick={rec.retry}>Try again</button>}
+          {savedNext != null && notice && !problem && (
+            <button type="button" className="stp-btn is-primary stp-nextbeat" data-testid="stp-next-beat" onClick={nextBeat}
+              aria-label={`Next beat: ${beats[savedNext]?.number ?? ''} · ${beats[savedNext]?.name ?? ''}, ready to record`}>
+              Next beat <ArrowRight size={18} aria-hidden="true" />
+            </button>
+          )}
           {pendingMarks && !problem && (
             <button type="button" className="stp-btn" data-testid="stp-download-marks" onClick={() => downloadMarks(pendingMarks)}>
               <FileDown size={18} aria-hidden="true" /> Download markers
@@ -1161,11 +1273,26 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
         </p>
       )}
 
-      <div className="stp-controls">
-        <button type="button" className="stp-btn is-primary is-play" data-testid="stp-play" aria-pressed={playing} aria-label={playing || count > 0 ? 'Pause' : 'Play'} onClick={togglePlay}>
-          {playing || count > 0 ? <Pause size={20} aria-hidden="true" /> : <Play size={20} aria-hidden="true" />}
-          <span className="stp-btn-text">{playing || count > 0 ? 'Pause' : 'Play'}</span>
-        </button>
+      <div className={`stp-controls${takeLive ? ' is-take' : ''}`} data-testid="stp-controls">
+        {takeLive ? (
+          <>
+            {/* A take: the way out is the biggest thing on the bar. */}
+            <button type="button" className="stp-btn is-stop" data-testid="stp-stop" onClick={stopAndReview}
+              title={recording ? 'Stop the take and review it (Enter or S)' : 'Stop before the take starts'}>
+              <Square size={20} aria-hidden="true" fill="currentColor" /><span>{recording ? 'Stop & review' : 'Stop'}</span>
+            </button>
+            <button type="button" className="stp-btn is-pausetake" data-testid="stp-play" aria-pressed={playing} disabled={!recording}
+              aria-label={takePaused ? 'Resume the take' : 'Pause the take'} title={takePaused ? 'Carry on scrolling and recording' : 'Pause the scroll and the recording'} onClick={togglePlay}>
+              {takePaused ? <Play size={20} aria-hidden="true" /> : <Pause size={20} aria-hidden="true" />}
+              <span>{takePaused ? 'Resume' : 'Pause'}</span>
+            </button>
+          </>
+        ) : (
+          <button type="button" className="stp-btn is-primary is-play" data-testid="stp-play" aria-pressed={playing} aria-label={playing || count > 0 ? 'Pause' : 'Play'} disabled={!!take} onClick={togglePlay}>
+            {playing || count > 0 ? <Pause size={20} aria-hidden="true" /> : <Play size={20} aria-hidden="true" />}
+            <span className="stp-btn-text">{playing || count > 0 ? 'Pause' : 'Play'}</span>
+          </button>
+        )}
         {voiceOn ? (
           <span className={`stp-listening${voice.listening ? ' is-on' : ''}`} data-testid="stp-listening" role="status">
             <AudioLines size={18} aria-hidden="true" /> {voice.listening ? 'Listening' : playing ? 'Starting…' : 'Press Play and read'}
@@ -1185,7 +1312,9 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
             <span className="stp-value" aria-hidden="true">{settings.speed}</span>
           </label>
         )}
-        {/* On a phone the settings fold away behind one button, so the words keep the screen. */}
+        {/* On a phone the settings fold away behind one button, so the words keep the screen.
+            Mid-take and in review they hide: nothing that changes the layout then. */}
+        {!midTake && (<>
         <button type="button" className="stp-btn is-icon stp-more" data-testid="stp-more" aria-expanded={more} aria-controls="stp-extras" aria-label={more ? 'Hide settings' : 'Show settings'} onClick={() => setMore((m) => !m)}>
           <SlidersHorizontal size={18} aria-hidden="true" />
         </button>
@@ -1198,7 +1327,7 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
         <button type="button" className="stp-btn" data-testid="stp-mirror" aria-pressed={settings.mirror} onClick={() => set('mirror', !settings.mirror)}>
           <FlipHorizontal2 size={18} aria-hidden="true" /> Mirror
         </button>
-        <button type="button" className="stp-btn" data-testid="stp-countdown-toggle" aria-pressed={settings.countdown} title="Count 3-2-1 before scrolling" onClick={() => set('countdown', !settings.countdown)}>
+        <button type="button" className="stp-btn" data-testid="stp-countdown-toggle" aria-pressed={settings.countdown} title="Count 3-2-1 before scrolling (a take always counts 3-2-1 first)" onClick={() => set('countdown', !settings.countdown)}>
           <Timer size={18} aria-hidden="true" /> 3-2-1
         </button>
         <div className="stp-pacing" role="group" aria-label="Pacing">
@@ -1252,7 +1381,8 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
           </div>
         )}
         </div>
-        {canTakes && (
+        </>)}
+        {canTakes && !midTake && (
           <button type="button" className="stp-btn" data-testid="stp-takes-toggle" aria-pressed={showTakes} aria-label={`Takes for beat ${beatNumber}: ${takes.length}`}
             onClick={() => { setShowTakes((v) => !v); setShowTimes(false); }}>
             <Film size={18} aria-hidden="true" /> <span className="stp-btn-text">Takes</span> <span className="stp-count">{takes.length}</span>
@@ -1265,10 +1395,12 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
             {voiceByLine.has(lineKey(recordableLine.beatNumber, recordableLine.lineIndex)) && <span className="stp-count" aria-hidden="true">✓</span>}
           </button>
         )}
-        <button type="button" className={`stp-btn${recordOn ? ' is-on' : ''}`} data-testid="stp-record-mode" aria-pressed={recordOn} onClick={toggleRecord}>
-          {recordOn ? <Video size={18} aria-hidden="true" /> : <VideoOff size={18} aria-hidden="true" />} Read &amp; record
-        </button>
-        {recordOn && canWhole && (
+        {!midTake && (
+          <button type="button" className={`stp-btn${recordOn ? ' is-on' : ''}`} data-testid="stp-record-mode" aria-pressed={recordOn} onClick={toggleRecord}>
+            {recordOn ? <Video size={18} aria-hidden="true" /> : <VideoOff size={18} aria-hidden="true" />} Read &amp; record
+          </button>
+        )}
+        {recordOn && canWhole && !midTake && (
           <div className="stp-scope" role="group" aria-label="What a take records">
             <button type="button" className="stp-btn" data-testid="stp-scope-beat" aria-pressed={!whole} disabled={busyTake} onClick={() => setTakeScope('beat')}>One beat</button>
             <button type="button" className="stp-btn" data-testid="stp-scope-episode" aria-pressed={whole} disabled={busyTake} onClick={() => setTakeScope('episode')}>
@@ -1276,7 +1408,7 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
             </button>
           </div>
         )}
-        {whole && (
+        {whole && !midTake && (
           <label className="stp-startfrom">
             <span className="stp-startfrom-label" aria-hidden="true">From</span>
             <select value={episodeFrom} aria-label="Record the whole episode from" disabled={busyTake} data-testid="stp-episode-from" onChange={(e) => setEpisodeFrom(e.target.value)}>
@@ -1285,7 +1417,7 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
             </select>
           </label>
         )}
-        {oneBeat && beat && startChoices.length > 1 && (
+        {oneBeat && beat && startChoices.length > 1 && !midTake && (
           <label className="stp-startfrom">
             <span className="stp-startfrom-label" aria-hidden="true">Start from</span>
             <select value={String(fromLine)} aria-label="Start the take from line" disabled={busyTake} data-testid="stp-start-line"
@@ -1294,15 +1426,11 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
             </select>
           </label>
         )}
-        {recordOn && (
-          recording ? (
-            <button type="button" className="stp-btn is-rec" data-testid="stp-stop" onClick={stopTake}><Square size={18} aria-hidden="true" /> Stop</button>
-          ) : (
-            <button type="button" className="stp-btn is-rec" data-testid="stp-record" disabled={rec.camera.status !== 'ready' || busyTake} onClick={record}
-              title={isScript && beat ? `Record ${label}` : `Record take ${takeNo}`}>
-              <Circle size={18} aria-hidden="true" /> {whole ? `Record whole episode · take ${takeNo}` : isScript && beatNumber != null ? `Record beat ${beatNumber} · take ${takeNo}` : `Record take ${takeNo}`}
-            </button>
-          )
+        {recordOn && !midTake && (
+          <button type="button" ref={recordBtnRef} className="stp-btn is-rec" data-testid="stp-record" disabled={rec.camera.status !== 'ready' || busyTake} onClick={record}
+            title={isScript && beat ? `Record ${label}` : `Record take ${takeNo}`}>
+            <Circle size={18} aria-hidden="true" /> {whole ? `Record whole episode · take ${takeNo}` : isScript && beatNumber != null ? `Record beat ${beatNumber} · take ${takeNo}` : `Record take ${takeNo}`}
+          </button>
         )}
       </div>
     </div>,

@@ -38,7 +38,7 @@ const { readDocuments } = require('./eventDocumentsService');
 const { overlayState } = require('./eventDocumentOverlayService');
 
 // The invitation's background is generated with these options
-// (invitationGeneratorService callDallE3); its regenerate is priced from them.
+// (invitationGeneratorService INVITATION_IMAGE_OPTIONS); its regenerate is priced from them.
 const INVITATION_OPTIONS = Object.freeze({ size: 'portrait', quality: 'hd', useCase: 'invitation' });
 
 const STATUSES = Object.freeze(['approved', 'outdated', 'not_made']);

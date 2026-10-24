@@ -99,25 +99,22 @@ describe('eventDocuments (Evoni, 2026-10-06)', () => {
   });
 });
 
-describe('look baselines (Look changed — redraft the list?)', () => {
-  test('lookPiecesKey ignores order; lookChangedSince compares within one version only', async () => {
-    const { lookPiecesKey, lookChangedSince } = await import('./eventDocuments');
-    expect(lookPiecesKey([{ id: 'b' }, { id: 'a' }, null, {}])).toBe('a,b');
-    expect(lookChangedSince({ version: 2, pieces: 'a,b' }, 2, 'a,c')).toBe(true);
-    expect(lookChangedSince({ version: 2, pieces: 'a,b' }, 2, 'a,b')).toBe(false);
-    expect(lookChangedSince({ version: 1, pieces: 'a,b' }, 2, 'a,c')).toBe(false);
-    expect(lookChangedSince(null, 2, 'a')).toBe(false);
+describe('the career plan carry preview and the amount note (2026-10-24)', () => {
+  test('planLeftOut: over the limit, optional ideas go first, then the last goals; bigger goals never count', async () => {
+    const { planLeftOut } = await import('./eventDocuments');
+    const items = [
+      { label: 'A', task_source: 'goal' }, { label: 'B', task_source: 'optional' },
+      { label: 'C', task_source: 'goal' }, { label: 'G', section: 'bigger_goals' }, { label: 'D', task_source: 'goal' },
+    ];
+    expect([...planLeftOut(items, 2)].sort()).toEqual([1, 4]);
+    expect(planLeftOut(items, 4).size).toBe(0);
+    expect(planLeftOut(items, null).size).toBe(0);
   });
-  test('read and write through sessionStorage; a storage that throws is logged and reads as none', async () => {
-    const { readLookBaselines, writeLookBaselines } = await import('./eventDocuments');
-    window.sessionStorage.clear();
-    writeLookBaselines('ev-7', { shopping_list: { version: 1, pieces: 'a' } });
-    expect(readLookBaselines('ev-7')).toEqual({ shopping_list: { version: 1, pieces: 'a' } });
-    const spy = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('blocked'); });
-    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
-    expect(readLookBaselines('ev-7')).toEqual({});
-    expect(err).toHaveBeenCalled();
-    spy.mockRestore();
-    err.mockRestore();
+
+  test('amountNote says which amounts a version names that its source does not', async () => {
+    const { amountNote } = await import('./eventDocuments');
+    expect(amountNote({ checks: { amounts: { ok: false, invented: [1500] } } }, 'career_plan')).toBe('Names 1,500 coins, which the deal does not state.');
+    expect(amountNote({ checks: { amounts: { ok: true, invented: [] } } }, 'shopping_list')).toBeNull();
+    expect(amountNote({}, 'shopping_list')).toBeNull();
   });
 });

@@ -3,15 +3,16 @@
 /**
  * Invitation Compositing Service v2
  *
- * Takes a DALL-E generated background and composites real, legible
+ * Takes a generated (Flux, via imageGenerationService) background and composites real, legible
  * invitation text on top using Canvas + Sharp.
  *
  * v2 enhancements:
  *   - Smart layout engine: measures all content first, distributes spacing
  *     proportionally, guarantees no overflow (flexbox-like in Canvas)
  *   - Theme auto-detection from dress_code_keywords when theme is blank
- *   - Font fallback: returns null when fonts missing (caller falls back to v1)
- *   - PDF export: compositeInvitationPDF() returns a Sharp-rendered PDF buffer
+ *   - Font fallback: the committed fonts, else system serif (checkFonts)
+ *   - Print export: compositeInvitationPrint() re-composites the approved
+ *     card's own words at full quality (a PNG)
  *
  * Fonts: Cormorant Garamond (headers/signature) + Libre Baskerville (body),
  * committed under src/assets/fonts/invitation (OFL 1.1); never downloaded.
@@ -30,6 +31,7 @@ const path = require('path');
 const fs = require('fs');
 const Anthropic = require('@anthropic-ai/sdk');
 const { dealPlanOf, isDealEvent } = require('../utils/dealComponents');
+const { isBudgetError } = require('./imageCostService');
 
 // ─── FONT MANAGEMENT ──────────────────────────────────────────────────────────
 
@@ -437,28 +439,185 @@ function describeInvitationMoney(event, { costs = null, deliverables = null } = 
   return { kind: 'neutral', text: 'entry details to follow', sentence: 'Entry details will follow.' };
 }
 
-// ─── CONTENT BUILDER (Claude-powered prose) ──────────────────────────────────
+// ─── INVITATION FACTS (pure) ─────────────────────────────────────────────────
+
+function parseCanon(event) {
+  const cc = event?.canon_consequences;
+  if (!cc) return {};
+  if (typeof cc === 'string') {
+    try { return JSON.parse(cc) || {}; } catch (err) {
+      console.warn('[InviteComposite] canon_consequences is not JSON:', err.message);
+      return {};
+    }
+  }
+  return cc;
+}
 
 /**
+ * The facts an invitation states, read one way for every path (the prose
+ * prompt, the no-AI body and the card's signature), so the two can never
+ * name different hosts or venues. The host reads as every other reader of
+ * the event does (automation.host_display_name, then event.host); venue,
+ * address, date and time read the event's own columns first, as Evoni edits
+ * them, and the automation snapshot taken at spawn only when a column is
+ * empty.
+ */
+function invitationFacts(event) {
+  const e = event || {};
+  const auto = parseCanon(e).automation || {};
+  const pick = (...values) => values.map((v) => (typeof v === 'string' ? v.trim() : v)).find((v) => v) || '';
+  const nameParts = String(e.name || 'Invitation').split(' — ');
+  return {
+    eventName: nameParts[0].trim() || 'Invitation',
+    eventSubtitle: nameParts[1]?.trim() || null,
+    hostName: pick(auto.host_display_name, e.host) || 'The Host',
+    hostHandle: pick(auto.host_handle),
+    hostBrand: pick(e.host_brand),
+    venueName: pick(e.venue_name, auto.venue_name),
+    venueAddress: pick(e.venue_address, auto.venue_address, e.location_hint),
+    eventDate: pick(e.event_date, auto.event_date),
+    eventTime: pick(e.event_time, auto.event_time),
+    guestNames: (Array.isArray(auto.guest_profiles) ? auto.guest_profiles : [])
+      .slice(0, 3).map((g) => g?.display_name || g?.handle).filter(Boolean),
+    prestige: e.prestige || 5,
+  };
+}
+
+// ─── MONEY CHECK (pure) ──────────────────────────────────────────────────────
+
+const COIN_AMOUNT_RE = /(\d[\d,]*)\s*(?:prime\s+)?coins?\b/gi;
+
+function coinAmounts(text) {
+  const out = new Set();
+  for (const m of String(text || '').matchAll(COIN_AMOUNT_RE)) {
+    const n = Number(m[1].replace(/,/g, ''));
+    if (Number.isFinite(n)) out.add(n);
+  }
+  return out;
+}
+
+/**
+ * Whether written invitation text states the money exactly as the terms do
+ * (invitation ruling, docs/EVENT_EPISODE_FLOW.md §8(cc): "every amount
+ * exactly as written … never invent, round, merge or drop an amount"):
+ * every coin amount in the terms appears, and no other coin amount does.
+ * Comped and gifted terms carry no amounts, so any amount is invented.
+ *
+ * @returns {{ ok: boolean, missing: number[], invented: number[] }}
+ */
+function checkInvitationMoney(content, money) {
+  const written = coinAmounts([content?.opening, content?.body, content?.closing].filter(Boolean).join(' '));
+  const terms = coinAmounts(money?.text);
+  const missing = [...terms].filter((n) => !written.has(n));
+  const invented = [...written].filter((n) => !terms.has(n));
+  return { ok: missing.length === 0 && invented.length === 0, missing, invented };
+}
+
+function moneyCheckFeedback(check) {
+  const parts = [];
+  if (check.missing.length) parts.push(`it left out ${check.missing.map(coins).join(', ')}`);
+  if (check.invented.length) parts.push(`it named ${check.invented.map(coins).join(', ')}, which is not in the terms`);
+  return `Your last draft did not state the terms exactly: ${parts.join('; ')}. Write every amount from the terms in digits, exactly as given, and no other amount.`;
+}
+
+// ─── CONTENT BUILDER (Claude-powered prose) ──────────────────────────────────
+
+// Side call (CLAUDE.md: Haiku 4.5 for side calls); the two-attempt loop
+// below, and every call is logged and budget-gated by aiCostTracker.
+const MODELS = ['claude-haiku-4-5-20251001'];
+
+const INVITATION_TOOL = Object.freeze({
+  name: 'write_invitation',
+  description: 'Return the four parts of the invitation letter.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      opening: { type: 'string', description: 'PART 1 — the opening, 1-2 sentences.' },
+      body: { type: 'string', description: 'PART 2 — the body, 3-6 sentences of flowing prose.' },
+      social: { type: 'string', description: 'PART 3 — the social call-to-action, 1 sentence.' },
+      closing: { type: 'string', description: 'PART 4 — the closing line, 1 sentence.' },
+    },
+    required: ['opening', 'body', 'closing'],
+  },
+});
+
+let anthropicClient = null;
+function getClient() {
+  if (!anthropicClient) anthropicClient = new Anthropic();
+  return anthropicClient;
+}
+
+function invitationPrompt(event, facts, money, { allowsGuest, deliverableText }) {
+  const deal = isDealEvent(event);
+  return `You are writing a luxury invitation letter for a fashion life simulator show.
+
+The invitation will be printed on a beautiful card and shown on screen. It must read like a real, elegant letter written by a person — not a form, not a template, not labeled fields.
+
+EVENT DETAILS:
+Name: ${event.name}
+Host: ${facts.hostName}${facts.hostHandle ? ` (${facts.hostHandle})` : ''}
+Brand: ${facts.hostBrand}
+Venue: ${facts.venueName || 'an exclusive venue'}
+Address: ${facts.venueAddress || 'an exclusive venue'}
+Date: ${facts.eventDate || 'TBD'}
+Time: ${facts.eventTime || 'Evening'}
+Dress Code: ${event.dress_code || 'elegant'}
+Style Keywords: ${(event.dress_code_keywords || []).join(', ')}
+${deal ? 'Terms (the host speaking, in Prime Coins)' : 'Investment'}: ${money.text}
+Guest: ${allowsGuest ? 'Plus one is welcome' : 'Lala only — no guests'}
+${deliverableText ? `Deliverable: ${deliverableText}` : ''}
+Notable Guests: ${facts.guestNames.join(', ') || 'select attendees'}
+Atmosphere/Description: ${event.description || event.narrative_stakes || ''}
+Prestige Level: ${facts.prestige}/10
+Mood: ${event.mood || 'aspirational'}
+
+Write the invitation as FOUR parts and return them with the write_invitation tool.
+
+PART 1 — OPENING (1-2 sentences, 20-35 words):
+A beautiful, evocative opening that sets the scene and makes Lala feel chosen and special. No "You are cordially invited" cliché. Make it feel personal and specific to this event's atmosphere.
+
+PART 2 — BODY (3-6 sentences, 50-110 words):
+Written as flowing prose — weave in the venue name and address, the date and time, what to expect, the dress code, the ${deal ? 'terms' : 'investment'}, and the guest policy as natural sentences. Do NOT use labels or bullet points. It should read like a person wrote it. ${deal
+    ? 'State the terms in the host\'s voice ("we"), as given under Terms: every amount exactly as written, in digits, in Prime Coins, and every item named — what Lala is paid, what she pays, what is covered and by whom, and any bonus. Never invent, round, merge or drop an amount. If the terms say she attends as a guest or gifted guest, say so and mention no price at all.'
+    : 'Mention the money terms naturally, exactly as given under Investment (what Lala earns, that she is comped, or what entry costs), amounts in digits; never invent a price.'} If a guest is allowed, mention it warmly. If there's a deliverable, hint at it elegantly. If notable guests are attending, mention 1-2 names casually.
+
+PART 3 — SOCIAL CTA (1 sentence, under 20 words):
+A social media call-to-action: what hashtag to use, tagging the host, sharing expectations. Keep it stylish. No amounts.
+
+PART 4 — CLOSING LINE (1 sentence, under 15 words):
+An elegant closing that feels warm and anticipatory. No amounts.`;
+}
+
+/** The tool call's four parts, or null when the answer carries none. */
+function readInvitationParts(response) {
+  const call = (response?.content || []).find((b) => b?.type === 'tool_use' && b.name === INVITATION_TOOL.name);
+  const input = call?.input;
+  const text = (v) => (typeof v === 'string' ? v.trim() : '');
+  if (!input || !text(input.opening) || !text(input.body)) return null;
+  return { opening: text(input.opening), body: text(input.body), social: text(input.social), closing: text(input.closing) };
+}
+
+/**
+ * The invitation's words: Claude writes them (two attempts; the second is
+ * told what the first got wrong about the money), and when neither attempt
+ * states the terms exactly — or Claude is unreachable — the no-AI body
+ * states them from describeInvitationMoney, so a card never carries a wrong
+ * amount. A budget refusal is thrown, not papered over.
+ *
  * @param {object} event  world_events row
  * @param {{ costs?: object[]|null, deliverables?: object[]|null }} [options]
  *   the event's event_costs rows (listEventCosts) and event_deliverables rows
  *   (listEventDeliverables), loaded by the caller; the builder stays pure of
  *   the DB.
+ * @returns {Promise<{ eventName, eventSubtitle, opening, body, closing,
+ *   hostName, hostBrand, prestige, source: 'claude'|'fallback',
+ *   moneyCheck: { ok, missing, invented } }>}
  */
 async function buildInvitationContent(event, { costs = null, deliverables = null } = {}) {
-  const nameParts = (event.name || 'Event').split(' — ');
-  const eventName = nameParts[0].trim();
-  const eventSubtitle = nameParts[1]?.trim() || null;
-
-  // Context for Claude
+  const facts = invitationFacts(event);
   const poolSize = event.browse_pool_size || 1;
-  const allowsGuest = poolSize >= 2 ||
-    event.browse_pool_bias === 'social' ||
-    event.browse_pool_bias === 'romantic';
-
+  const allowsGuest = poolSize >= 2 || event.browse_pool_bias === 'social' || event.browse_pool_bias === 'romantic';
   const money = describeInvitationMoney(event, { costs, deliverables });
-  const investmentText = money.text;
 
   // A deal event's deliverables are stated in its terms (invitation ruling,
   // 2026-09-30); the old hint stays for legacy events only.
@@ -467,111 +626,83 @@ async function buildInvitationContent(event, { costs = null, deliverables = null
     ? (event.success_unlock?.split(',')[0]?.trim() || 'content creation required')
     : null;
 
-  // Claude writes the invitation prose
-  // Pull automation data if available (from auto-spawn)
-  const automation = event.canon_consequences?.automation || {};
-  const hostHandle = automation.host_handle || '';
-  const hostDisplayName = automation.host_display_name || event.host || 'The Host';
-  const venueName = event.venue_name || automation.venue_name || '';
-  const venueAddress = event.venue_address || automation.venue_address || event.location_hint || 'an exclusive venue';
-  const eventDate = event.event_date || '';
-  const eventTime = event.event_time || '';
-  const guestProfiles = automation.guest_profiles || [];
-  const guestNames = guestProfiles.slice(0, 3).map(g => g.display_name || g.handle).join(', ');
+  const frame = {
+    eventName: facts.eventName,
+    eventSubtitle: facts.eventSubtitle,
+    hostName: facts.hostName,
+    hostBrand: facts.hostBrand,
+    prestige: facts.prestige,
+  };
 
-  const prompt = `You are writing a luxury invitation letter for a fashion life simulator show.
+  const prompt = invitationPrompt(event, facts, money, { allowsGuest, deliverableText });
+  let feedback = null;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const messages = [{ role: 'user', content: prompt }];
+      if (feedback) messages.push({ role: 'assistant', content: 'Understood.' }, { role: 'user', content: feedback });
+      const response = await getClient().messages.create({
+        model: MODELS[0],
+        max_tokens: 700,
+        tools: [INVITATION_TOOL],
+        tool_choice: { type: 'tool', name: INVITATION_TOOL.name },
+        messages,
+      });
+      const parts = readInvitationParts(response);
+      if (!parts) {
+        console.error(`[InviteComposite] invitation prose, try ${attempt + 1}: no write_invitation parts in the answer`);
+        continue;
+      }
+      const content = {
+        ...frame,
+        opening: parts.opening,
+        body: parts.social ? `${parts.body}\n\n${parts.social}` : parts.body,
+        closing: parts.closing || 'We look forward to your presence.',
+      };
+      const moneyCheck = checkInvitationMoney(content, money);
+      if (moneyCheck.ok) {
+        console.log(`[InviteComposite] Claude wrote invitation prose for: ${event.name}`);
+        return { ...content, source: 'claude', moneyCheck };
+      }
+      console.warn(`[InviteComposite] invitation prose, try ${attempt + 1}: terms not stated exactly (missing ${moneyCheck.missing.join(',') || '-'}, invented ${moneyCheck.invented.join(',') || '-'})`);
+      feedback = moneyCheckFeedback(moneyCheck);
+    } catch (err) {
+      if (isBudgetError(err)) throw err;
+      console.warn(`[InviteComposite] invitation prose, try ${attempt + 1} failed: ${err.message}`);
+    }
+  }
 
-The invitation will be printed on a beautiful card and shown on screen. It must read like a real, elegant letter written by a person — not a form, not a template, not labeled fields.
-
-EVENT DETAILS:
-Name: ${event.name}
-Host: ${hostDisplayName}${hostHandle ? ` (${hostHandle})` : ''}
-Brand: ${event.host_brand || ''}
-Venue: ${venueName || 'an exclusive venue'}
-Address: ${venueAddress}
-Date: ${eventDate || 'TBD'}
-Time: ${eventTime || 'Evening'}
-Dress Code: ${event.dress_code || 'elegant'}
-Style Keywords: ${(event.dress_code_keywords || []).join(', ')}
-${isDealEvent(event) ? 'Terms (the host speaking, in Prime Coins)' : 'Investment'}: ${investmentText}
-Guest: ${allowsGuest ? 'Plus one is welcome' : 'Lala only — no guests'}
-${deliverableText ? `Deliverable: ${deliverableText}` : ''}
-Notable Guests: ${guestNames || 'select attendees'}
-Atmosphere/Description: ${event.description || event.narrative_stakes || ''}
-Prestige Level: ${event.prestige || 5}/10
-Mood: ${event.mood || 'aspirational'}
-
-Write the invitation as FOUR parts. Return ONLY these parts, nothing else:
-
-PART 1 — OPENING (1-2 sentences, 20-35 words):
-A beautiful, evocative opening that sets the scene and makes Lala feel chosen and special. No "You are cordially invited" cliché. Make it feel personal and specific to this event's atmosphere.
-
-PART 2 — BODY (3-6 sentences, 50-110 words):
-Written as flowing prose — weave in the venue name and address, the date and time, what to expect, the dress code, the ${isDealEvent(event) ? 'terms' : 'investment'}, and the guest policy as natural sentences. Do NOT use labels or bullet points. It should read like a person wrote it. ${isDealEvent(event)
-  ? 'State the terms in the host\'s voice ("we"), as given under Terms: every amount exactly as written, in Prime Coins, and every item named — what Lala is paid, what she pays, what is covered and by whom, and any bonus. Never invent, round, merge or drop an amount. If the terms say she attends as a guest or gifted guest, say so and mention no price at all.'
-  : 'Mention the money terms naturally, exactly as given under Investment (what Lala earns, that she is comped, or what entry costs); never invent a price.'} If a guest is allowed, mention it warmly. If there's a deliverable, hint at it elegantly. If notable guests are attending, mention 1-2 names casually.
-
-PART 3 — SOCIAL CTA (1 sentence, under 20 words):
-A social media call-to-action: what hashtag to use, tagging the host, sharing expectations. Keep it stylish.
-
-PART 4 — CLOSING LINE (1 sentence, under 15 words):
-An elegant closing that feels warm and anticipatory.
-
-FORMAT YOUR RESPONSE EXACTLY LIKE THIS (include the labels so I can parse):
-OPENING: [your opening text]
-BODY: [your body text]
-SOCIAL: [your social CTA]
-CLOSING: [your closing line]`;
-
-  let opening = '';
-  let body = '';
-  let closing = 'We look forward to your presence.';
-
-  try {
-    const anthropic = new Anthropic();
-    const response = await anthropic.messages.create({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 500,
-      messages: [{ role: 'user', content: prompt }],
-    });
-
-    const text = response.content[0]?.text || '';
-
-    const openingMatch = text.match(/OPENING:\s*(.+?)(?=BODY:|$)/s);
-    const bodyMatch    = text.match(/BODY:\s*(.+?)(?=SOCIAL:|CLOSING:|$)/s);
-    const socialMatch  = text.match(/SOCIAL:\s*(.+?)(?=CLOSING:|$)/s);
-    const closingMatch = text.match(/CLOSING:\s*(.+?)$/s);
-
-    opening = openingMatch?.[1]?.trim() || '';
-    body    = bodyMatch?.[1]?.trim()    || '';
-    const socialCta = socialMatch?.[1]?.trim() || '';
-    if (socialCta) body = body + '\n\n' + socialCta;
-    closing = closingMatch?.[1]?.trim() || closing;
-
-    console.log(`[InviteComposite] Claude wrote invitation prose for: ${event.name}`);
-  } catch (err) {
-    console.warn(`[InviteComposite] Claude call failed, using fallback prose: ${err.message}`);
-
-    opening = 'You have been chosen.';
-    body = [
-      event.description || event.narrative_stakes ||
-        `Join us ${event.location_hint ? `at ${event.location_hint}` : 'for an exclusive gathering'}.`,
+  console.warn(`[InviteComposite] Using the no-AI invitation body for: ${event.name}`);
+  const fallback = {
+    ...frame,
+    opening: 'You have been chosen.',
+    body: [
+      event.description || event.narrative_stakes
+        || `Join us ${facts.venueName ? `at ${facts.venueName}` : (facts.venueAddress ? `at ${facts.venueAddress}` : 'for an exclusive gathering')}.`,
+      facts.eventDate ? `${facts.eventDate}${facts.eventTime ? ` · ${facts.eventTime}` : ''}.` : '',
       event.dress_code ? `Please come dressed in ${event.dress_code}.` : '',
       money.sentence,
       allowsGuest ? 'You are welcome to bring a guest.' : '',
-    ].filter(Boolean).join(' ');
-    closing = 'We look forward to your presence.';
-  }
+    ].filter(Boolean).join(' '),
+    closing: 'We look forward to your presence.',
+  };
+  return { ...fallback, source: 'fallback', moneyCheck: checkInvitationMoney(fallback, money) };
+}
 
+/**
+ * The card's words from text Evoni typed (no AI): the event's frame
+ * (name, host, brand) around her opening, body and closing.
+ */
+function contentFromText(event, { opening = '', body = '', closing = '' } = {}) {
+  const facts = invitationFacts(event);
   return {
-    eventName,
-    eventSubtitle,
-    opening,
-    body,
-    closing,
-    hostName: event.host || 'The Host',
-    hostBrand: event.host_brand || '',
-    prestige: event.prestige || 5,
+    eventName: facts.eventName,
+    eventSubtitle: facts.eventSubtitle,
+    hostName: facts.hostName,
+    hostBrand: facts.hostBrand,
+    prestige: facts.prestige,
+    opening: String(opening || '').trim(),
+    body: String(body || '').trim(),
+    closing: String(closing || '').trim() || 'We look forward to your presence.',
   };
 }
 
@@ -738,10 +869,11 @@ function renderTextLayer(content, width = 1024, height = 1792) {
 // ─── MAIN COMPOSITE ───────────────────────────────────────────────────────────
 
 /**
- * Composite the text layer onto the DALL-E background image.
- * Returns null if fonts are not available (caller should fall back to v1).
+ * Composite the invitation's words onto its text-free background.
+ * `content` is the card's words (buildInvitationContent or contentFromText);
+ * without it Claude writes them. Returns null if canvas/sharp are missing.
  */
-async function compositeInvitation(backgroundBuffer, event, customContent = null) {
+async function compositeInvitation(backgroundBuffer, event, content = null, { print = false } = {}) {
   if (!createCanvas || !sharp) return null;
   if (!(await checkFonts())) return null;
 
@@ -749,49 +881,23 @@ async function compositeInvitation(backgroundBuffer, event, customContent = null
   const width = meta.width || 1024;
   const height = meta.height || 1792;
 
-  const content = customContent || await buildInvitationContent(event);
-  const textLayer = renderTextLayer(content, width, height);
+  const words = content || await buildInvitationContent(event);
+  const textLayer = renderTextLayer(words, width, height);
 
-  const final = await sharp(backgroundBuffer)
-    .composite([{
-      input: textLayer,
-      top: 0,
-      left: 0,
-      blend: 'over',
-    }])
-    .png({ quality: 95 })
+  return sharp(backgroundBuffer)
+    .composite([{ input: textLayer, top: 0, left: 0, blend: 'over' }])
+    .png(print ? { quality: 100, compressionLevel: 6 } : { quality: 95 })
     .toBuffer();
-
-  return final;
 }
 
 /**
- * Export invitation as PDF buffer (Sharp PNG -> PDF via Sharp).
- * Returns a PNG buffer wrapped for PDF context — true PDF requires
- * additional tooling, so this produces a high-quality print-ready PNG.
+ * The print-ready PNG of an invitation: the same words as the approved card
+ * (never rewritten; the old export asked Claude again, so the printed text
+ * differed from the card), re-composited at full quality. A PNG, not a PDF.
  */
-async function compositeInvitationPDF(backgroundBuffer, event, { costs = null, deliverables = null } = {}) {
-  if (!(await checkFonts())) return null;
-
-  const meta = await sharp(backgroundBuffer).metadata();
-  const width = meta.width || 1024;
-  const height = meta.height || 1792;
-
-  const content = await buildInvitationContent(event, { costs, deliverables });
-  const textLayer = renderTextLayer(content, width, height);
-
-  // High-res composite for print
-  const final = await sharp(backgroundBuffer)
-    .composite([{
-      input: textLayer,
-      top: 0,
-      left: 0,
-      blend: 'over',
-    }])
-    .png({ quality: 100, compressionLevel: 6 })
-    .toBuffer();
-
-  return final;
+async function compositeInvitationPrint(backgroundBuffer, event, content) {
+  if (!content) throw new Error('compositeInvitationPrint needs the card\'s words');
+  return compositeInvitation(backgroundBuffer, event, content, { print: true });
 }
 
 /**
@@ -806,8 +912,12 @@ function fontFamilies() {
 
 module.exports = {
   compositeInvitation,
-  compositeInvitationPDF,
+  compositeInvitationPrint,
   buildInvitationContent,
+  contentFromText,
+  invitationFacts,
+  checkInvitationMoney,
+  coinAmounts,
   describeInvitationMoney,
   detectTheme,
   checkFonts,

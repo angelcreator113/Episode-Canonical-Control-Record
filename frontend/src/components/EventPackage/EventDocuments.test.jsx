@@ -95,7 +95,7 @@ describe('EventDocuments', () => {
     const shop = await screen.findByTestId('evd-shopping_list');
     fireEvent.click(within(shop).getByRole('button', { name: /Draft/ }));
     const paper = await screen.findByTestId('evd-shopping-paper');
-    expect(api.post).toHaveBeenCalledWith(`${BASE}/shopping_list/draft`);
+    expect(api.post).toHaveBeenCalledWith(`${BASE}/shopping_list/draft`, {});
     expect(within(paper).getByText("Lala's shopping list")).toBeTruthy();
     expect(within(paper).getByText('for Studio by Sable · Nov 12')).toBeTruthy();
     expect(screen.getByTestId('evd-line-dress').textContent).toContain('· 🪙 420');
@@ -153,7 +153,7 @@ describe('EventDocuments', () => {
     fireEvent.change(within(editor).getByLabelText('Line 1'), { target: { value: 'Gold heels' } });
     fireEvent.click(within(editor).getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(screen.getByTestId('evd-meta-shopping_list').textContent).toBe('Version 2 · edited · 1 earlier kept'));
-    expect(api.put).toHaveBeenCalledWith(`${BASE}/shopping_list`, { items: expect.arrayContaining([expect.objectContaining({ label: 'Gold heels' })]) });
+    expect(api.put).toHaveBeenCalledWith(`${BASE}/shopping_list`, { items: expect.arrayContaining([expect.objectContaining({ label: 'Gold heels' })]), note: '' });
 
     api.post.mockResolvedValueOnce({ data: { success: true, data: { ...SHOP, version: 2, status: 'approved' } } });
     fireEvent.click(within(shop).getByRole('button', { name: /Approve/ }));
@@ -167,12 +167,12 @@ describe('EventDocuments', () => {
     fireEvent.click(within(shop).getByRole('button', { name: /Redraft/ }));
     await waitFor(() => expect(screen.getByTestId('evd-state-shopping_list').textContent).toBe('Draft'));
     expect(confirmSpy).not.toHaveBeenCalled();
-    expect(api.post).toHaveBeenLastCalledWith(`${BASE}/shopping_list/draft`);
+    expect(api.post).toHaveBeenLastCalledWith(`${BASE}/shopping_list/draft`, {});
     expect(within(shop).getByTestId('evd-undo-shopping_list').textContent).toContain('Redrafted the shopping list');
     confirmSpy.mockRestore();
   });
 
-  test('Undo after a Redraft saves the replaced lines back through Edit and approves them again when they were approved', async () => {
+  test('Undo after a Redraft restores the replaced version from history and approves it again when it was approved', async () => {
     const APPROVED = { ...SHOP, version: 2, status: 'approved', source: 'edited', items: [{ slot: 'shoes', label: 'Gold heels' }] };
     api.get.mockResolvedValue({ data: { success: true, data: { shopping_list: APPROVED, career_plan: null } } });
     renderDocs();
@@ -182,11 +182,11 @@ describe('EventDocuments', () => {
     await waitFor(() => expect(screen.getByTestId('evd-state-shopping_list').textContent).toBe('Draft'));
     expect(within(shop).getByTestId('evd-undo-shopping_list-region').getAttribute('role')).toBe('status');
 
-    api.put.mockResolvedValueOnce({ data: { success: true, data: { ...APPROVED, version: 4, status: 'draft' } } });
-    api.post.mockResolvedValueOnce({ data: { success: true, data: { ...APPROVED, version: 4, status: 'approved' } } });
+    api.post.mockResolvedValueOnce({ data: { success: true, data: { ...APPROVED, version: 4, status: 'draft', source: 'restored' } } });
+    api.post.mockResolvedValueOnce({ data: { success: true, data: { ...APPROVED, version: 4, status: 'approved', source: 'restored' } } });
     fireEvent.click(within(shop).getByRole('button', { name: /Undo/ }));
     await waitFor(() => expect(screen.getByTestId('evd-state-shopping_list').textContent).toBe('Approved'));
-    expect(api.put).toHaveBeenCalledWith(`${BASE}/shopping_list`, { items: [{ slot: 'shoes', label: 'Gold heels' }] });
+    expect(api.post).toHaveBeenCalledWith(`${BASE}/shopping_list/restore`, { fromVersion: 2 });
     expect(api.post).toHaveBeenLastCalledWith(`${BASE}/shopping_list/approve`);
     expect(screen.getByTestId('evd-meta-shopping_list').textContent).toContain('Version 4');
     expect(within(shop).queryByTestId('evd-undo-shopping_list')).toBeNull();
@@ -199,7 +199,7 @@ describe('EventDocuments', () => {
     api.post.mockResolvedValueOnce({ data: { success: true, data: { ...SHOP, version: 2 } } });
     fireEvent.click(within(shop).getByTestId('evd-redraft-shopping_list'));
     await screen.findByTestId('evd-undo-shopping_list');
-    api.put.mockRejectedValueOnce(Object.assign(new Error('x'), { response: { data: { error: 'Server down' } } }));
+    api.post.mockRejectedValueOnce(Object.assign(new Error('x'), { response: { data: { error: 'Server down' } } }));
     fireEvent.click(within(shop).getByRole('button', { name: /Undo/ }));
     expect((await screen.findByTestId('evd-undo-shopping_list-error')).textContent).toContain('Server down');
     expect(within(shop).getByRole('button', { name: /Undo/ })).toBeTruthy();
@@ -212,13 +212,13 @@ describe('EventDocuments', () => {
     renderDocs();
     const shop = await screen.findByTestId('evd-shopping_list');
     fireEvent.click(within(shop).getByTestId('evd-redraft-shopping_list'));
-    await waitFor(() => expect(api.post).toHaveBeenCalledWith(`${BASE}/shopping_list/draft`));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith(`${BASE}/shopping_list/draft`, {}));
 
     api.post.mockClear();
     api.post.mockResolvedValue({ data: { success: true, data: { ...PLAN, version: 2 } } });
     const plan = screen.getByTestId('evd-career_plan');
     fireEvent.click(within(plan).getByTestId('evd-redraft-career_plan'));
-    await waitFor(() => expect(api.post).toHaveBeenCalledWith(`${BASE}/career_plan/draft`));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith(`${BASE}/career_plan/draft`, {}));
     expect(confirmSpy).not.toHaveBeenCalled();
     expect(within(plan).getByTestId('evd-undo-career_plan').textContent).toContain('Redrafted the career plan');
     expect(within(shop).queryByTestId('evd-undo-shopping_list')).toBeNull();
@@ -303,51 +303,122 @@ describe('EventDocuments', () => {
   });
 });
 
-describe('EventDocuments: "Look changed — redraft the list?"', () => {
-  const lookOf = (...ids) => ids.map((id) => ({ id, name: id, category: id === 'p1' || id === 'p2' ? 'dress' : 'shoes', coin_cost: 0, is_owned: true }));
-  const withLook = (pieces, list = SHOP) => ({ data: { success: true, data: { shopping_list: list, career_plan: null, look: { state: 'chosen', pieces, total: 0 } } } });
-  const renderWith = (pieces) => render(<EventDocuments showId="show-1" eventId="ev-1" event={EVENT} outfitPieces={pieces} />);
+describe('EventDocuments: "Look changed — redraft the list?" (the server\'s answer, 2026-10-24)', () => {
+  const withLook = (changed, list = SHOP) => ({ data: { success: true, data: { shopping_list: { ...list, look_key: 'p1' }, career_plan: null, look: { state: 'chosen', pieces: [], total: 0 }, look_changed: changed } } });
 
-  test('no notice for a list first seen with this look; the look\'s pieces change: the notice, and Keep takes the new look', async () => {
-    api.get.mockResolvedValueOnce(withLook(lookOf('p1', 's1')));
-    const { rerender } = renderWith(lookOf('p1', 's1'));
+  test('no notice while the look is the one the list was drafted from', async () => {
+    api.get.mockResolvedValue(withLook(false));
+    renderDocs();
     await screen.findByTestId('evd-shopping_list');
     expect(screen.queryByTestId('evd-look-changed')).toBeNull();
+  });
 
-    api.get.mockResolvedValueOnce(withLook(lookOf('p2', 's1')));
-    rerender(<EventDocuments showId="show-1" eventId="ev-1" event={EVENT} outfitPieces={lookOf('p2', 's1')} />);
+  test('the look changed: the notice, and Keep saves the current look as the list\'s own', async () => {
+    api.get.mockResolvedValueOnce(withLook(true));
+    renderDocs();
     const notice = await screen.findByTestId('evd-look-changed');
     expect(notice.textContent).toContain('Look changed — redraft the list?');
     expect(notice.getAttribute('role')).toBe('status');
-    // The baseline is kept for the tab (sessionStorage), with the list's version.
-    expect(JSON.parse(window.sessionStorage.getItem('evd-look-baseline:ev-1'))).toEqual({ shopping_list: { version: 1, pieces: 'p1,s1' } });
-
+    api.post.mockResolvedValueOnce({ data: { success: true, data: { ...SHOP, look_key: 'p2' } } });
+    api.get.mockResolvedValue(withLook(false));
     fireEvent.click(screen.getByTestId('evd-look-changed-keep'));
-    expect(screen.queryByTestId('evd-look-changed')).toBeNull();
-    expect(JSON.parse(window.sessionStorage.getItem('evd-look-baseline:ev-1')).shopping_list.pieces).toBe('p2,s1');
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith(`${BASE}/shopping_list/keep-look`));
+    await waitFor(() => expect(screen.queryByTestId('evd-look-changed')).toBeNull());
   });
 
-  test('Redraft from the notice drafts the list again; the new version is the baseline, and Undo brings the notice back', async () => {
-    window.sessionStorage.setItem('evd-look-baseline:ev-1', JSON.stringify({ shopping_list: { version: 1, pieces: 'p1,s1' } }));
-    api.get.mockResolvedValue(withLook(lookOf('p2', 's1')));
-    renderWith(lookOf('p2', 's1'));
+  test('Redraft from the notice drafts the list again', async () => {
+    api.get.mockResolvedValueOnce(withLook(true));
+    renderDocs();
     await screen.findByTestId('evd-look-changed');
     api.post.mockResolvedValueOnce({ data: { success: true, data: { ...SHOP, version: 2 } } });
+    api.get.mockResolvedValue(withLook(false));
     fireEvent.click(screen.getByTestId('evd-look-changed-redraft'));
-    await waitFor(() => expect(api.post).toHaveBeenCalledWith(`${BASE}/shopping_list/draft`));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith(`${BASE}/shopping_list/draft`, {}));
     await waitFor(() => expect(screen.queryByTestId('evd-look-changed')).toBeNull());
-
-    api.put.mockResolvedValueOnce({ data: { success: true, data: { ...SHOP, version: 3, source: 'edited' } } });
-    fireEvent.click(screen.getByRole('button', { name: /Undo/ }));
-    // The list put back was drafted from the old look: the notice is back.
-    expect(await screen.findByTestId('evd-look-changed')).toBeTruthy();
   });
 
   test('read-only, no notice', async () => {
-    window.sessionStorage.setItem('evd-look-baseline:ev-1', JSON.stringify({ shopping_list: { version: 1, pieces: 'p1,s1' } }));
-    api.get.mockResolvedValue(withLook(lookOf('p2', 's1')));
+    api.get.mockResolvedValue(withLook(true));
     render(<EventDocuments showId="show-1" eventId="ev-1" event={EVENT} readOnly manageHref="/x" />);
     await screen.findByTestId('evd-shopping_list');
     expect(screen.queryByTestId('evd-look-changed')).toBeNull();
+  });
+});
+
+describe('EventDocuments: the documents rework (2026-10-24)', () => {
+  test('one line re-worded on its own', async () => {
+    api.get.mockResolvedValue({ data: { success: true, data: { shopping_list: SHOP, career_plan: null } } });
+    renderDocs();
+    await screen.findByTestId('evd-shopping-paper');
+    api.post.mockResolvedValueOnce({ data: { success: true, data: { ...SHOP, version: 2, source: 'line_redraft', items: [SHOP.items[0], { slot: 'jewelry', label: 'Gold that catches the light' }, SHOP.items[2]] } } });
+    fireEvent.click(screen.getByRole('button', { name: 'New words for: Find earrings' }));
+    await waitFor(() => expect(screen.getByTestId('evd-line-jewelry').textContent).toContain('Gold that catches the light'));
+    expect(api.post).toHaveBeenCalledWith(`${BASE}/shopping_list/lines/1/redraft`, { version: 1 });
+    expect(screen.getByTestId('evd-meta-shopping_list').textContent).toContain('one line re-worded');
+  });
+
+  test('History lists the kept versions; Restore brings one back', async () => {
+    const OLD = { ...SHOP, version: 1, status: 'approved', items: [{ slot: 'dress', label: 'The old dress line' }] };
+    api.get.mockResolvedValue({ data: { success: true, data: { shopping_list: { ...SHOP, version: 2, history: [OLD] }, career_plan: null } } });
+    renderDocs();
+    fireEvent.click(await screen.findByTestId('evd-history-toggle-shopping_list'));
+    const history = screen.getByTestId('evd-history-shopping_list');
+    expect(history.textContent).toContain('Version 1 · drafted · approved · 1 line');
+    expect(history.textContent).toContain('The old dress line');
+    api.post.mockResolvedValueOnce({ data: { success: true, data: { ...OLD, version: 3, status: 'draft', source: 'restored', history: [] } } });
+    fireEvent.click(screen.getByTestId('evd-restore-shopping_list-1'));
+    await waitFor(() => expect(screen.getByTestId('evd-meta-shopping_list').textContent).toContain('Version 3 · restored'));
+    expect(api.post).toHaveBeenCalledWith(`${BASE}/shopping_list/restore`, { fromVersion: 1 });
+  });
+
+  test('short of coins: says so, and Redraft within budget', async () => {
+    api.get.mockResolvedValue({ data: { success: true, data: {
+      shopping_list: SHOP, career_plan: null, balance: 100,
+      look: { state: 'event', total: 420, pieces: [{ name: 'Sculpted Dress', category: 'dress', coin_cost: 420, charge: { amount: 420 } }] },
+    } } });
+    renderDocs();
+    const budget = await screen.findByTestId('evd-budget');
+    expect(budget.textContent).toContain('🪙 320 short');
+    api.post.mockResolvedValueOnce({ data: { success: true, data: { ...SHOP, version: 2 } } });
+    fireEvent.click(screen.getByTestId('evd-budget-redraft'));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith(`${BASE}/shopping_list/draft`, { budget: true }));
+  });
+
+  test('closet suggestions sit under the line they could fill', async () => {
+    api.get.mockResolvedValue({ data: { success: true, data: { shopping_list: SHOP, career_plan: null, closet: { purse: [{ id: 'w1', name: 'Black box clutch' }] } } } });
+    renderDocs();
+    expect((await screen.findByTestId('evd-closet-purse')).textContent).toBe('In her closet: Black box clutch');
+  });
+
+  test('the amount check is shown on the version', async () => {
+    api.get.mockResolvedValue({ data: { success: true, data: { shopping_list: { ...SHOP, checks: { amounts: { ok: false, invented: [999] } } }, career_plan: null } } });
+    renderDocs();
+    expect((await screen.findByTestId('evd-amounts-shopping_list')).textContent).toContain('Names 999 coins, which no piece of the look costs');
+  });
+
+  test('the career plan: optional ideas, goal links, and the lines over the goal limit', async () => {
+    const plan = { ...PLAN, items: [
+      { slot: 'a', label: 'Pitch the Sable team', section: 'this_event', task_source: 'goal', goal_id: 'g-1' },
+      { slot: 'b', label: 'Snap the florals', section: 'this_event', task_source: 'optional' },
+      { slot: 'goal_1', label: 'Land a brand partnership', section: 'bigger_goals', goal_id: 'g-1' },
+    ] };
+    api.get.mockResolvedValue({ data: { success: true, data: {
+      shopping_list: null, career_plan: plan,
+      career_goals: [{ id: 'g-1', title: 'Land a brand partnership' }],
+      career_carry: { limit: 1, carried: 1, dropped: ['Snap the florals'] },
+    } } });
+    renderDocs();
+    const line0 = await screen.findByTestId('evd-plan-line-0');
+    expect(line0.textContent).toContain('for: Land a brand partnership');
+    expect(screen.getByTestId('evd-plan-line-1').textContent).toContain('optional idea');
+    expect(screen.getByTestId('evd-not-carried-1')).toBeTruthy();
+    expect(screen.getByTestId('evd-carry-career_plan').textContent).toContain('carries 1 of her goals; 1 line won’t reach the episode'.replace('’', "'"));
+    // A bigger goal has no re-roll of its own.
+    expect(within(screen.getByTestId('evd-plan-line-2')).queryByRole('button')).toBeNull();
+
+    // The editor marks, as she types, what will not carry.
+    fireEvent.click(within(screen.getByTestId('evd-career_plan')).getByRole('button', { name: /Edit/ }));
+    expect(screen.getByTestId('evd-editor-limit').textContent).toContain('1 line marked below won');
+    expect(screen.getByTestId('evd-editor-career_plan').querySelectorAll('.is-left-out')).toHaveLength(1);
   });
 });

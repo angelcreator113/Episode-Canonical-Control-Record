@@ -264,7 +264,7 @@ function remainingGoalRoom(tasks, bounds) {
  * from the end, optional ideas first, and the Career Checklist's before the
  * Start Episode goals. Nothing is added.
  */
-function capCombinedGoals(tasks, bounds, where = 'goalTasks') {
+function capCombinedGoals(tasks, bounds, where = 'goalTasks', { quiet = false } = {}) {
   const list = Array.isArray(tasks) ? [...tasks] : [];
   let over = lalaGoalCount(list) - bounds.max;
   if (over <= 0) return list;
@@ -279,7 +279,9 @@ function capCombinedGoals(tasks, bounds, where = 'goalTasks') {
     drop.add(i);
     over -= 1;
   }
-  console.warn(`[${where}] Lala's combined goal list held to ${bounds.max} for a ${bounds.scale || 'this'} event; ${drop.size} item(s) dropped (T9)`);
+  // quiet: a preview of what Start Episode would keep (the career plan's
+  // carry count, eventDocumentsService.planCarry), not a list being cut.
+  if (!quiet) console.warn(`[${where}] Lala's combined goal list held to ${bounds.max} for a ${bounds.scale || 'this'} event; ${drop.size} item(s) dropped (T9)`);
   return list.filter((_, i) => !drop.has(i));
 }
 

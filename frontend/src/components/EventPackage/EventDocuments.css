@@ -303,3 +303,58 @@
 }
 .evd-look-changed-text { display: inline-flex; align-items: center; gap: 6px; flex: 1 1 180px; min-width: 0; font-weight: 600; }
 .evd-look-changed-actions { display: inline-flex; align-items: center; gap: 12px; flex: none; }
+
+/* ── The documents rework (2026-10-24) ─────────────────────────────────── */
+/* One line's re-roll: a small icon at the line's end, quiet until hovered. */
+.evd-line-redraft {
+  flex: none; margin-left: auto; display: inline-flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px; padding: 0; border: none; border-radius: 50%;
+  background: transparent; color: var(--lala-ink-muted); cursor: pointer; opacity: 0.65;
+}
+.evd-line-redraft:hover:not(:disabled), .evd-line-redraft:focus-visible { opacity: 1; background: var(--lala-parchment-2); color: var(--lala-ink); }
+.evd-line-redraft:disabled { cursor: not-allowed; opacity: 0.4; }
+.evd-career-list li .evd-line-redraft { align-self: center; }
+/* Pieces from her own closet, under a shopping line. */
+.evd-closet { display: block; font-family: var(--font-ui); font-size: 11px; line-height: 1.4; color: var(--lala-ink-muted); }
+.evd-not-carried { color: var(--danger-text); }
+/* The amount check and the goal limit, said under the document. */
+.evd-warning {
+  display: flex; align-items: flex-start; gap: 6px; margin: 6px 0 0; padding: 6px 10px;
+  border-radius: var(--lala-radius, 8px); background: var(--warning-bg); color: var(--warning-text);
+  font-family: var(--font-ui); font-size: 12px; line-height: 1.45;
+}
+.evd-warning svg { flex: none; margin-top: 2px; }
+/* What she has against what the pieces to buy cost. */
+.evd-budget {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 10px;
+  margin: 6px 0 0; padding: 8px 10px; min-width: 0;
+  border: 1px solid var(--lala-gold-line); border-radius: var(--lala-radius, 8px); background: var(--lala-gold-soft);
+  font-family: var(--font-ui); font-size: 12px; color: var(--lala-ink);
+}
+.evd-budget span { flex: 1 1 200px; min-width: 0; }
+/* The editor: the goal limit, lines that won't carry, the note. */
+.evd-editor-limit { margin: 0 0 8px; font-family: var(--font-ui); font-size: 12px; color: var(--lala-ink-muted); }
+.evd-editor-limit.is-over { color: var(--warning-text); }
+.evd-editor-row { flex-wrap: wrap; }
+.evd-editor-row.is-left-out input { border-color: var(--warning-border, var(--lala-gold)); }
+.evd-left-out { font-family: var(--font-ui); font-size: 11px; color: var(--warning-text); white-space: nowrap; }
+.evd-editor-note { display: flex; flex-direction: column; gap: 4px; margin: 8px 0 0; font-family: var(--font-ui); font-size: 12px; color: var(--lala-ink-muted); }
+.evd-editor-note textarea {
+  width: 100%; box-sizing: border-box; padding: 6px 8px; resize: vertical;
+  border: 1px solid var(--lala-parchment-3); border-radius: var(--lala-radius, 8px);
+  background: var(--surface-card); color: var(--lala-ink); font: inherit; font-size: 13px;
+}
+/* History with Restore. */
+.evd-meta-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+.evd-history-toggle { font-size: 12px; }
+.evd-history { list-style: none; margin: 6px 0 0; padding: 0; border-top: 1px solid var(--lala-parchment-3); }
+.evd-history li {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 0;
+  border-bottom: 1px solid var(--lala-parchment-3); font-family: var(--font-ui); font-size: 12px; color: var(--lala-ink);
+}
+.evd-history-text { flex: 1 1 auto; min-width: 0; }
+.evd-history-when, .evd-history-first { display: block; color: var(--lala-ink-muted); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 480px) {
+  .evd-line-redraft { width: 36px; height: 36px; }
+  .evd-history li { flex-wrap: wrap; }
+}
