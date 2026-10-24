@@ -579,6 +579,40 @@
 .esp-history-text { max-height: 50vh; overflow: auto; white-space: pre-wrap; font-size: 12px; padding: 10px; border-radius: 8px; background: var(--studio-card); color: var(--studio-ink); }
 .esp-history-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
 .esp-history-note, .esp-history-empty { font-size: 12px; color: var(--studio-ink-muted); }
+/* History audit (2026-10-24): a backdrop makes the panel modal on a desktop
+   too (a click on it closes History); a version shows what putting it back
+   changes, lines in and out of the page, in the success and danger pairs. */
+.esp-history-backdrop { position: fixed; inset: 0; z-index: 59; background: color-mix(in srgb, var(--studio-ink) 28%, transparent); }
+.esp-history-empty:empty { display: none; }
+.esp-history-error { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 10px; }
+.esp-history-error .esp-error { margin: 0; }
+.esp-history-vtitle { margin: 0 0 10px; font-size: 13px; font-weight: 600; }
+.esp-history-vtitle:focus-visible { outline: 2px solid var(--studio-magenta); outline-offset: 2px; }
+.esp-history-vtitle .esp-history-meta { font-size: 12px; color: var(--studio-ink); }
+.esp-history-same { margin: 0 0 10px; padding: 8px 10px; border-radius: 8px; font-size: 13px; background: var(--studio-ok-soft); color: var(--studio-ink); }
+.esp-history-diff, .esp-history-full { margin-bottom: 10px; }
+.esp-history-diff-sum { cursor: pointer; padding: 6px 0; font-size: 13px; font-weight: 600; color: var(--studio-ink); }
+.esp-history-diff-sum:focus-visible { outline: 2px solid var(--studio-magenta); outline-offset: 2px; }
+.esp-history-diff-list { list-style: none; margin: 6px 0 0; padding: 0; max-height: 40vh; overflow: auto; border: 1px solid var(--studio-line); border-radius: 8px; background: var(--studio-card); font-family: var(--font-mono); font-size: 12px; line-height: 1.5; }
+.esp-history-diff-line { display: flex; gap: 6px; padding: 2px 8px; color: var(--studio-ink); }
+.esp-history-diff-line.is-add { background: var(--success-bg); color: var(--success-text); }
+.esp-history-diff-line.is-del { background: var(--danger-bg); color: var(--danger-text); }
+.esp-history-diff-line.is-same { color: var(--studio-ink-muted); }
+.esp-history-diff-mark { flex: none; width: 1ch; font-weight: 700; }
+.esp-history-diff-text { min-width: 0; overflow-wrap: anywhere; white-space: pre-wrap; }
+.esp-history-diff-gap { padding: 0 8px; color: var(--studio-ink-muted); }
+
+/* A newer script saved while the page had edits (History audit, 2026-10-24). */
+.esp-newer { display: grid; gap: 8px; margin-bottom: 16px; padding: 10px 14px; border-radius: 10px; background: var(--warning-bg); border: 1px solid var(--warning-border); color: var(--warning-text); font-size: 13px; }
+.esp-newer-text { margin: 0; }
+.esp-newer-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.esp-newer-script { margin: 0; max-height: 40vh; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; padding: 10px; border-radius: 8px; background: var(--studio-card); color: var(--studio-ink); font-size: 12px; }
+.esp-newer-script:focus-visible { outline: 2px solid var(--studio-magenta); outline-offset: 2px; }
+
+/* An approved beat changed in the Raw editor (Raw editor audit, 2026-10-24). */
+.esp-beat-edited { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; background: var(--warning-bg); color: var(--warning-text); border: 1px solid var(--warning-border); }
+.esp-beat-edited-note { margin: 0 0 10px; padding: 8px 10px; border-radius: 8px; font-size: 12px; background: var(--warning-bg); color: var(--warning-text); border: 1px solid var(--warning-border); }
+.esp-raw-wait { color: var(--studio-ink); font-weight: 600; }
 .esp-draft { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 12px; padding: 10px 12px; border: 1px solid var(--studio-line-strong); border-radius: 10px; background: var(--studio-magenta-soft); font-size: 13px; color: var(--studio-ink); }
 .esp-draft-text { flex: 1 1 220px; }
 
@@ -667,7 +701,9 @@
   /* Every control on the tab is at least a 44px tap target at phone width. */
   .esp button, .esp summary, .esp-rowmenu-btn { min-height: 44px; }
   .esp-step { width: 44px; }
-  .esp-head { flex-direction: column; align-items: stretch; padding: 14px; }
+  /* nowrap: a wrapping column sizes its line to the buttons' full row, so the
+     script's card ran ~320px off a 375px screen (Raw editor audit, 2026-10-24). */
+  .esp-head { flex-direction: column; flex-wrap: nowrap; align-items: stretch; padding: 14px; }
   .esp-head > button { width: 100%; }
   /* The script's buttons in one row that scrolls sideways, Save first (Evoni, 2026-10-22). */
   .esp-head .esp-actions { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 4px; scrollbar-width: thin; }
@@ -703,6 +739,9 @@
   .esp-ask-input { min-height: 44px; font-size: 16px; /* iOS zooms into smaller inputs */ }
   /* The line editor, the adders' words and "Put it after" too (Script page audit, 2026-10-19). */
   .esp-line-input, .esp-picker-where select { font-size: 16px; }
+  /* The Raw editor too (Raw editor audit, 2026-10-24: iOS zoomed into its 13px). */
+  .esp-raw { font-size: 16px; }
+  .esp-history-diff-list, .esp-history-text, .esp-newer-script { max-height: 32vh; }
   /* Ready to film? opened on a phone scrolls in its own box, so the beat stays near. */
   .esp-health-list { max-height: 50vh; overflow-y: auto; overscroll-behavior: contain; }
   .esp-line-edit-actions { flex-wrap: wrap; }

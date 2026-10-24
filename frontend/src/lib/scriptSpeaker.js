@@ -22,6 +22,18 @@ const NARRATION = /^\p{Ll}\S*(?:\s+\S+){2,}/u;
 // `\p{Lu}`: a capital in any language (`Émile:`; re-audit 2).
 const SPEAKER_LINE = /^(Me|Prime|Lala|Kelli|Guest|\p{Lu}[\p{L}'’.-]*(?: \p{Lu}[\p{L}'’.-]*)?)\s*(\([^)]*\))?\s*:\s*(.*)$/u;
 
+// Markdown dress a pasted script can have (Raw editor audit, 2026-10-24):
+// `**Me:** words`, `**Lala**: words`, `__Me__: words` name their speaker
+// as `Me: words` does. One rule for the Script tab, Rewrite, the runtime,
+// the export and the teleprompter (it was the teleprompter's alone).
+export const unbold = (line) => String(line ?? '').replace(/^\s*(\*\*|__)\s*([^*_:]+?)\s*(?:\1\s*:|:\s*\1)\s*/, '$2: ');
+
+// A Markdown rule (`---`, `***`, `- - -`, `___`) on a line of its own
+// divides, it says nothing: not narration, not a line to read (Raw editor
+// audit, 2026-10-24). The server's scriptBeatParser skips the same lines.
+const RULE_LINE = /^(?:-[ \t]*){3,}$|^(?:\*[ \t]*){3,}$|^(?:_[ \t]*){3,}$/;
+export const isRuleLine = (line) => RULE_LINE.test(String(line ?? '').trim());
+
 /**
  * A speaker's line as { speaker, label, note, prefix, words }, or null when
  * the line has no speaker. `speaker` is the person (`Me:` and `LALA:` are
@@ -30,7 +42,9 @@ const SPEAKER_LINE = /^(Me|Prime|Lala|Kelli|Guest|\p{Lu}[\p{L}'’.-]*(?: \p{Lu}
  */
 export function speakerLine(line) {
   const t = String(line ?? '').trim();
-  const m = t.match(SPEAKER_LINE);
+  // The bold is dropped before the words only, so `prefix` is still the
+  // line as written up to them (`**Me:** `).
+  const m = unbold(t).trim().match(SPEAKER_LINE);
   if (!m || NOT_SPEAKERS.has(m[1].toLowerCase()) || NARRATION_WORDS.has(m[1].toLowerCase())) return null;
   if (!KNOWN[m[1].toLowerCase()] && !m[2] && NARRATION.test(m[3].trim())) return null;
   return {
