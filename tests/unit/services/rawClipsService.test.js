@@ -272,3 +272,48 @@ describe('green removal pieces', () => {
     expect(clips.readProbe('not json').hasVideo).toBe(false);
   });
 });
+
+describe('Teleprompter audit 8 and 14 (2026-10-24): take fields with the upload', () => {
+  const missing = (col) => Object.assign(new Error(`column "${col}" of relation "episode_raw_clips" does not exist`), { original: { code: '42703' } });
+
+  test('createClip inserts beat_number with the row', async () => {
+    const query = jest.fn(async () => [[{ id: 'c1', beat_number: 4 }]]);
+    await clips.createClip({ query }, { id: 'c1', episode_id: 'ep', performer: 'lala', s3_key_raw: 'k', beat_number: 4 });
+    const [sql, { replacements }] = query.mock.calls[0];
+    expect(sql).toMatch(/label, beat_number, original_filename/);
+    expect(replacements.beatNumber).toBe(4);
+    await clips.createClip({ query }, { id: 'c2', episode_id: 'ep', performer: 'lala', s3_key_raw: 'k' });
+    expect(query.mock.calls[1][1].replacements.beatNumber).toBeNull();
+  });
+
+  test('storeTakeExtras keeps each field in its own UPDATE and reports one whose column is missing; never throws', async () => {
+    const spy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    const query = jest.fn(async (sql) => {
+      if (/beat_marks = CAST/.test(sql)) throw missing('beat_marks');
+      return [[{ id: 'c1', start_line: 3, is_favorite: false, has_take_fields: true }]];
+    });
+    const out = await clips.storeTakeExtras({ query, transaction: async (fn) => fn() }, 'ep', 'c1', { start_line: 3, beat_marks: [{ beat: 1, t: 0 }] });
+    expect(out.stored).toEqual(['start_line']);
+    expect(out.notStored).toEqual(['beat_marks']);
+    expect(out.row).toMatchObject({ id: 'c1', start_line: 3 });
+    expect(query).toHaveBeenCalledTimes(2);
+    const boom = jest.fn(async () => { throw new Error('connection reset'); });
+    const out2 = await clips.storeTakeExtras({ query: boom }, 'ep', 'c1', { start_line: 0 });
+    expect(out2).toEqual({ row: null, stored: [], notStored: ['start_line'] });
+    expect(spy).toHaveBeenCalledWith(expect.stringMatching(/start_line not kept with the upload/), 'connection reset');
+    const none = await clips.storeTakeExtras({ query }, 'ep', 'c1', {});
+    expect(none).toEqual({ row: null, stored: [], notStored: [] });
+    spy.mockRestore();
+  });
+
+  test('readTakeSeconds: above 0 and at most ten hours, to two decimals; anything else is left out (logged)', () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    expect(clips.readTakeSeconds('63.456')).toBe(63.46);
+    expect(clips.readTakeSeconds(36000)).toBe(36000);
+    [undefined, null, ''].forEach((v) => expect(clips.readTakeSeconds(v)).toBeNull());
+    expect(warn).not.toHaveBeenCalled();
+    ['0', '-4', '36001', 'abc', 'Infinity'].forEach((v) => expect(clips.readTakeSeconds(v)).toBeNull());
+    expect(warn).toHaveBeenCalledTimes(5);
+    warn.mockRestore();
+  });
+});

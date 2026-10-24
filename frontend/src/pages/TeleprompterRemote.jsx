@@ -7,7 +7,10 @@
 // server in the address) and sent in the X-Remote-Token header. Big buttons
 // play, pause, change speed and beat and text size, and start or stop a take
 // when the desktop is in Read & record; the desktop shows its own review
-// screen after a take, and nothing is saved from here.
+// screen after a take, and nothing is saved from here. It shows what the
+// desktop is doing (Teleprompter audit 10, 2026-10-24): REC or PAUSED,
+// "Reviewing the take" while the review is open, a Start take that waits
+// until the desktop can record, and "Stop & review" for a running take.
 
 import { useState, useEffect, useCallback } from 'react';
 import { Play, Pause, Rabbit, Turtle, ChevronLeft, ChevronRight, Circle, Square, Smartphone, AlertTriangle } from 'lucide-react';
@@ -84,8 +87,12 @@ export default function TeleprompterRemote({ pollMs = STATE_POLL_MS }) {
   const running = !!state?.running;
   const recording = !!state?.recording;
   const canTake = !!state?.recordMode;
-  const btn = (command, label, Icon, extra = '') => (
-    <button type="button" className={`tpr-btn ${extra}`} data-testid={`tpr-${command}`} disabled={phase !== 'live' || !!sending} onClick={() => send(command)}>
+  const paused = recording && !!state?.paused;
+  const reviewing = !!state?.reviewing;
+  // Start waits until the desktop can record (camera ready, no take in review).
+  const startBlocked = reviewing || !state?.canRecord;
+  const btn = (command, label, Icon, extra = '', blocked = false) => (
+    <button type="button" className={`tpr-btn ${extra}`} data-testid={`tpr-${command}`} disabled={phase !== 'live' || !!sending || blocked} onClick={() => send(command)}>
       <Icon size={26} aria-hidden="true" /><span>{label}</span>
     </button>
   );
@@ -123,7 +130,10 @@ export default function TeleprompterRemote({ pollMs = STATE_POLL_MS }) {
             {phase === 'connecting' ? <p className="tpr-msg">Connecting…</p> : (
               <>
                 <p className="tpr-state" data-testid="tpr-state">
-                  {recording ? <span className="tpr-rec"><span className="tpr-dot" aria-hidden="true" /> Recording</span> : running ? 'Running' : 'Paused'}
+                  {paused ? <span className="tpr-rec" data-testid="tpr-paused">PAUSED · take paused</span>
+                    : recording ? <span className="tpr-rec"><span className="tpr-dot" aria-hidden="true" /> Recording{state?.scope === 'episode' ? ' · whole episode' : ''}</span>
+                      : reviewing ? <span data-testid="tpr-reviewing">Reviewing the take on the teleprompter</span>
+                        : running ? 'Running' : 'Paused'}
                 </p>
                 {state?.beat != null && <p className="tpr-detail" data-testid="tpr-beat">Beat {state.beat}{state.beatName ? ` · ${state.beatName}` : ''}</p>}
                 <p className="tpr-detail">
@@ -149,9 +159,10 @@ export default function TeleprompterRemote({ pollMs = STATE_POLL_MS }) {
             <button type="button" className="tpr-btn" data-testid="tpr-smaller" disabled={phase !== 'live' || !!sending} onClick={() => send('smaller')}><span className="tpr-aa" aria-hidden="true">A-</span><span>Text smaller</span></button>
             <button type="button" className="tpr-btn" data-testid="tpr-bigger" disabled={phase !== 'live' || !!sending} onClick={() => send('bigger')}><span className="tpr-aa" aria-hidden="true">A+</span><span>Text bigger</span></button>
             {canTake && (recording
-              ? btn('record_stop', 'Stop take', Square, 'is-rec is-wide')
-              : btn('record_start', 'Start take', Circle, 'is-rec is-wide'))}
+              ? btn('record_stop', 'Stop & review', Square, 'is-rec is-wide')
+              : btn('record_start', 'Start take', Circle, 'is-rec is-wide', startBlocked))}
           </div>
+          {canTake && !recording && reviewing && phase === 'live' && <p className="tpr-hint" data-testid="tpr-review-hint">Save, retake or discard the take on the teleprompter, then start the next one here.</p>}
           {!canTake && phase === 'live' && <p className="tpr-hint">Turn on Read &amp; record on the teleprompter to start and stop takes from here. A stopped take waits for review there; nothing is saved from the phone.</p>}
         </>
       )}
