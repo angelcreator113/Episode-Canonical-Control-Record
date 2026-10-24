@@ -123,8 +123,8 @@ describe('POST /refresh', () => {
   });
 
   test('an unmapped exception falls back to 401 AUTH_REFRESH_FAILED without leaking provider text', async () => {
-    const err = new Error('Some internal Cognito detail: pool arn, account id, etc');
-    err.name = 'InternalErrorException';
+    const err = new Error('Some Cognito detail: pool arn, account id, etc');
+    err.name = 'InvalidParameterException';
     cognitoPasswordAuthService.refreshWithCognito.mockRejectedValue(err);
 
     const res = await request(app)
@@ -133,6 +133,26 @@ describe('POST /refresh', () => {
 
     expect(res.status).toBe(401);
     expect(res.body.code).toBe('AUTH_REFRESH_FAILED');
+    expect(JSON.stringify(res.body)).not.toContain('pool arn');
+  });
+
+  // A fault on Cognito's side says nothing about the refresh token; a 401
+  // here signs the user out (Evoni, 2026-10-23: signed out after a deploy).
+  test.each([
+    ['InternalErrorException', {}],
+    ['TimeoutError', {}],
+    ['SomeServerFault', { $fault: 'server' }],
+    ['SomeOtherFault', { $metadata: { httpStatusCode: 502 } }],
+  ])('%s is a 503 AUTH_SERVICE_UNAVAILABLE, not a 401', async (name, extra) => {
+    const err = Object.assign(new Error('Some internal Cognito detail: pool arn'), { name }, extra);
+    cognitoPasswordAuthService.refreshWithCognito.mockRejectedValue(err);
+
+    const res = await request(app)
+      .post('/api/v1/auth/refresh')
+      .send({ refreshToken: VALID_REFRESH_TOKEN });
+
+    expect(res.status).toBe(503);
+    expect(res.body.code).toBe('AUTH_SERVICE_UNAVAILABLE');
     expect(JSON.stringify(res.body)).not.toContain('pool arn');
   });
 

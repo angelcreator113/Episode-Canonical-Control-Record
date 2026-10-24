@@ -16,11 +16,14 @@
  * readOnOpen: the card reads the script on opening when there is no record
  * yet. `embedded` leaves the title to the step; onStatus hears the
  * record's status (null, 'draft' or 'approved'); onSaving hears a Save start
- * (the step keeps itself open to show what Save wrote).
+ * (the step keeps itself open to show what Save wrote). When the Save wrote
+ * a relationship change, the Pulse drafts posts about it for Review
+ * (services/storyRipples); the result says how many are coming, with a
+ * link to Review, where she approves them.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useInRouterContext } from 'react-router-dom';
-import { ScrollText, Sparkles, Check, X, Pencil, Heart, Target, Users, MessageCircle, GitBranch, KeyRound, Shuffle, AlertTriangle, Plus } from 'lucide-react';
+import { ScrollText, Sparkles, Check, X, Pencil, Heart, Target, Users, MessageCircle, GitBranch, KeyRound, Shuffle, AlertTriangle, Plus, Megaphone } from 'lucide-react';
 import api from '../../services/api';
 import './EpisodeStoryRecord.css';
 import './EpisodeWhatChanged.css';
@@ -63,11 +66,13 @@ function wasSaved(kind, x, applied) {
 /** The script's own words for an item. */
 const Quote = ({ text }) => (text ? <blockquote className="wc-quote">“{text}”</blockquote> : null);
 
-function RegistryLink({ children }) {
+const PULSE_REVIEW = '/admin?tab=pulse&sub=review';
+
+function AppLink({ to, children }) {
   // Outside a router (a test, a preview), a plain link.
   return useInRouterContext()
-    ? <Link className="wc-link" to="/character-registry">{children}</Link>
-    : <a className="wc-link" href="/character-registry">{children}</a>;
+    ? <Link className="wc-link" to={to}>{children}</Link>
+    : <a className="wc-link" href={to}>{children}</a>;
 }
 
 /** One proposed item: keep it, edit it in place, or drop it. */
@@ -487,13 +492,22 @@ export default function EpisodeStoryRecord({ episodeId, embedded = false, onStat
                       <AlertTriangle size={13} aria-hidden="true" />
                       <span>
                         {s.reason === 'not_linked'
-                          ? <>Link {s.name} to the registry first. <RegistryLink>Open the Character Registry</RegistryLink></>
+                          ? <>Link {s.name} to the registry first. <AppLink to="/character-registry">Open the Character Registry</AppLink></>
                           : s.reason === 'no_todo_list' ? 'Goals: this episode has no to-do list yet, so none was ticked.'
                             : 'Threads and follow-ups need the episode to belong to a show.'}
                       </span>
                     </li>
                   ))}
                 </ul>
+              )}
+              {result.pulse_suggestions > 0 && (
+                <p className="wc-pulse" data-testid="wc-pulse">
+                  <Megaphone size={14} aria-hidden="true" />
+                  <span>
+                    {result.pulse_suggestions} Pulse suggestion{result.pulse_suggestions === 1 ? '' : 's'} about what changed will be waiting for you in Review. Nothing posts until you approve it.{' '}
+                    <AppLink to={PULSE_REVIEW}>Open Review</AppLink>
+                  </span>
+                </p>
               )}
             </div>
           )}

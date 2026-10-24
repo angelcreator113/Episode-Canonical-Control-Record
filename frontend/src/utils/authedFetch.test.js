@@ -82,8 +82,8 @@ describe('authedFetch — apiClient\'s auth contract for raw requests (Task #190
     expect(window.location.href).toBe('');
   });
 
-  test('refresh fails: no retry, the session is wiped and the user sent to sign in', async () => {
-    vi.mocked(axios.post).mockRejectedValue(new Error('refresh refused'));
+  test('refresh token refused (401): no retry, the session is wiped and the user sent to sign in', async () => {
+    vi.mocked(axios.post).mockRejectedValue({ response: { status: 401, data: { code: 'AUTH_REFRESH_FAILED' } } });
     const fetchImpl = vi.fn().mockResolvedValue(refused(401, 'AUTH_INVALID_TOKEN'));
     const res = await authedFetch('/x', { method: 'POST' }, { fetchImpl });
     expect(res.status).toBe(401);
@@ -91,6 +91,60 @@ describe('authedFetch — apiClient\'s auth contract for raw requests (Task #190
     expect(window.location.href).toBe('/login');
     expect(localStorage.getItem('authToken')).toBeNull();
     expect(localStorage.getItem('refreshToken')).toBeNull();
+  });
+
+  // Evoni, 2026-10-23: signed out right after a deploy. The refresh landing
+  // on the restart (502, then no response) is waited out, not a sign-out.
+  test('refresh hits the restart (502, then a network error): waited out, then one retry; still signed in', async () => {
+    vi.useFakeTimers();
+    try {
+      vi.mocked(axios.post)
+        .mockRejectedValueOnce({ response: { status: 502, data: '<html>Bad Gateway</html>' } })
+        .mockRejectedValueOnce(new Error('Network Error'))
+        .mockResolvedValueOnce({ data: { data: { accessToken: 'tok-new' } } });
+      const fetchImpl = vi.fn()
+        .mockResolvedValueOnce(refused(401, 'AUTH_INVALID_TOKEN'))
+        .mockResolvedValueOnce(ok());
+      const pending = authedFetch('/x', {}, { fetchImpl });
+      await vi.runAllTimersAsync();
+      const res = await pending;
+      expect(res.status).toBe(200);
+      expect(axios.post).toHaveBeenCalledTimes(3);
+      expect(authOf(fetchImpl, 1)).toBe('Bearer tok-new');
+      expect(window.location.href).toBe('');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test('refresh still unreachable after the waits: a 503 to the caller, and the session is kept', async () => {
+    vi.useFakeTimers();
+    try {
+      vi.mocked(axios.post).mockRejectedValue({ response: { status: 503, data: { code: 'AUTH_SERVICE_UNAVAILABLE' } } });
+      const fetchImpl = vi.fn().mockResolvedValue(refused(401, 'AUTH_INVALID_TOKEN'));
+      const pending = authedFetch('/x', {}, { fetchImpl });
+      await vi.runAllTimersAsync();
+      const res = await pending;
+      expect(res.status).toBe(503);
+      expect((await res.json()).code).toBe('AUTH_REFRESH_UNAVAILABLE');
+      expect(axios.post).toHaveBeenCalledTimes(5); // the first try and four waits
+      expect(fetchImpl).toHaveBeenCalledTimes(1);
+      expect(window.location.href).toBe('');
+      expect(localStorage.getItem('authToken')).toBe('tok-old');
+      expect(localStorage.getItem('refreshToken')).toBe('refresh-1');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test('refresh refused by a rate limit (429): not retried, not a sign-out', async () => {
+    vi.mocked(axios.post).mockRejectedValue({ response: { status: 429, data: { code: 'AUTH_TOO_MANY_REFRESHES' } } });
+    const fetchImpl = vi.fn().mockResolvedValue(refused(401, 'AUTH_INVALID_TOKEN'));
+    const res = await authedFetch('/x', {}, { fetchImpl });
+    expect(res.status).toBe(503);
+    expect(axios.post).toHaveBeenCalledTimes(1);
+    expect(window.location.href).toBe('');
+    expect(localStorage.getItem('refreshToken')).toBe('refresh-1');
   });
 
   test('the retry refused again: never a second retry, and a sign-out', async () => {

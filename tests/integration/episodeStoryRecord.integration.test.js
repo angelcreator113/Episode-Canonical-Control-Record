@@ -16,6 +16,8 @@ const mockCreate = jest.fn();
 jest.mock('@anthropic-ai/sdk', () => function Anthropic() { return { messages: { create: (...a) => mockCreate(...a) } }; });
 jest.mock('../../src/middleware/auth', () => ({ requireAuth: (req, _res, next) => { req.user = { id: 'u1', email: 'evoni@record.dev' }; next(); } }));
 jest.mock('../../src/middleware/aiRateLimiter', () => ({ aiRateLimiter: (_req, _res, next) => next() }));
+// The Pulse suggestions a Save starts (services/storyRipples) are their own test's; here they only count.
+jest.mock('../../src/services/storyRipples', () => ({ proposeLater: jest.fn((_s, { changes }) => (changes.length ? 3 : 0)) }));
 
 const express = require('express');
 const request = require('supertest');
@@ -208,6 +210,7 @@ const answer = (obj) => ({ content: [{ type: 'text', text: JSON.stringify(obj) }
     expect(ok.body.record).toMatchObject({ status: 'approved', approved_by: 'evoni@record.dev' });
     expect(ok.body.result.skipped).toEqual([{ kind: 'relationship', reason: 'not_linked', name: 'Studio Bystable', profile_id: studio }]);
     expect(ok.body.result.written.map((w) => w.kind).sort()).toEqual(['follow_up', 'goal', 'relationship', 'secret', 'thread', 'thread']);
+    expect(ok.body.result.pulse_suggestions).toBe(3);
 
     const [threads] = await run('SELECT title, status, source, opened_episode_id, last_advanced_episode_id FROM show_story_threads WHERE show_id = :show ORDER BY title', ids);
     expect(threads).toEqual([
@@ -231,6 +234,7 @@ const answer = (obj) => ({ content: [{ type: 'text', text: JSON.stringify(obj) }
     const again = await request(app).post(`${base}/approve`);
     expect(again.status).toBe(200);
     expect(again.body.result.written).toEqual([]);
+    expect(again.body.result.pulse_suggestions).toBe(0);
     const count = async (sql) => (await run(sql, ids))[0][0].n;
     expect(await count('SELECT COUNT(*)::int AS n FROM show_story_threads WHERE show_id = :show')).toBe(2);
     expect(await count('SELECT COUNT(*)::int AS n FROM character_relationships WHERE character_id_a IN (:lala, :marcus) OR character_id_b IN (:lala, :marcus)')).toBe(1);
