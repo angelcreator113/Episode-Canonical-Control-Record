@@ -7,12 +7,19 @@
  * family are dashed lines; romance is never in it (familyTree.js). Under
  * 600px the same tree is an indented list (FamilyTree.css). A tie's line
  * opens its Inspector.
+ *
+ * heritage (FamilyView's Heritage toggle, 2026-10-24): { byId, starterTags,
+ * onSaved }. Each character shows their heritage under their name, or
+ * "Heritage not set" with the inline edit; someone who is not a character
+ * (a name, a Pulse-only profile) shows "—". It only shows: real families
+ * include mixed heritage, adoption, step and chosen family.
  */
 import { useState, useEffect, useMemo } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import apiClient from '../../services/api';
 import { API } from './tokens';
 import { buildFamilyTrees, isDashed } from './familyTree';
+import { HeritageLine, HeritageEditor, heritageLabel } from '../CharacterFamily/Heritage';
 import './FamilyTree.css';
 
 export const fetchFamilies = () => apiClient.get(`${API}/families`);
@@ -36,9 +43,9 @@ export function useFamilies({ skip = false } = {}) {
 }
 
 const COL = 168;
-const ROW = 104;
 const NODE_W = 140;
-const NODE_H = 52;
+// With heritage on, each card has a third line, so rows stand further apart.
+const sizes = (on) => ({ ROW: on ? 120 : 104, NODE_H: on ? 68 : 52 });
 const PAD = 16;
 const KIND_WORD = { blood: 'blood', step: 'step', adoptive: 'adoptive', married: 'married in', chosen: 'chosen' };
 
@@ -46,7 +53,10 @@ const roleWords = (e, names) => (e.role ? `${names[e.from]} is ${names[e.to]}'s 
 const clip = (t, n) => (t.length > n ? `${t.slice(0, n - 1)}…` : t);
 const firstName = (n) => String(n || '').split(/\s+/)[0];
 
-function TreeDrawing({ tree, onRelClick }) {
+function TreeDrawing({ tree, onRelClick, heritage }) {
+  const [editing, setEditing] = useState(null);
+  const navigate = useNavigate();
+  const { ROW, NODE_H } = sizes(!!heritage);
   const width = Math.max(...tree.rows.map((r) => r.length)) * COL + PAD * 2;
   const height = tree.rows.length * ROW + PAD;
   const pos = {};
@@ -98,22 +108,44 @@ function TreeDrawing({ tree, onRelClick }) {
           // Their role, on the card: "Dre's grandmother" (the first tie they hold).
           const mine = tree.edges.filter((e) => e.from === n.key && e.role && names[e.to]);
           const sub = mine.length ? `${firstName(names[mine[0].to])}'s ${mine[0].role}${mine.length > 1 ? ` +${mine.length - 1}` : ''}` : '';
+          const person = heritage && n.kind === 'character' ? heritage.byId[String(n.id)] : null;
+          // Not a character: "—", and the way to Make them a character (on the page they were added from).
+          const her = heritage ? (n.kind !== 'character' ? (n.of ? '— Make a character' : '—') : heritageLabel(person)) : null;
+          const unset = heritage && n.kind === 'character' && !her;
+          const editMe = unset && person ? () => setEditing(n)
+            : heritage && n.kind !== 'character' && n.of ? () => navigate(`/character/${n.of}`) : undefined;
           return (
           <g key={n.key} className={`re-ftree-node is-${n.kind}`} transform={`translate(${pos[n.key].x},${pos[n.key].y})`}>
             <rect width={NODE_W} height={NODE_H} rx={12} strokeDasharray={n.kind === 'ghost' ? '4 3' : undefined} />
-            <text x={NODE_W / 2} y={sub ? 22 : NODE_H / 2 + 4} textAnchor="middle">{clip(n.name, 19)}</text>
+            <text x={NODE_W / 2} y={sub ? 22 : (heritage ? 28 : NODE_H / 2 + 4)} textAnchor="middle">{clip(n.name, 19)}</text>
             {sub && <text x={NODE_W / 2} y={39} textAnchor="middle" className="re-ftree-node-role">{clip(sub, 18)}</text>}
-            <title>{n.name}{n.kind === 'ghost' ? ' (not built yet)' : n.kind === 'profile' ? ' (on the Pulse)' : ''}</title>
+            {heritage && (
+              <text x={NODE_W / 2} y={sub ? 57 : 48} textAnchor="middle"
+                className={`re-ftree-node-heritage${unset ? ' is-unset' : ''}${editMe ? ' is-open' : ''}`}
+                onClick={editMe} role={editMe ? 'button' : undefined} tabIndex={editMe ? 0 : undefined}
+                aria-label={editMe ? (unset ? `Set heritage for ${n.name}` : `Make ${n.name} a character`) : undefined}
+                onKeyDown={editMe ? (ev) => { if (ev.key === 'Enter') editMe(); } : undefined}>
+                {clip(her || 'Heritage not set', 19)}
+              </text>
+            )}
+            <title>{n.name}{n.kind === 'ghost' ? ' (not built yet)' : n.kind === 'profile' ? ' (on the Pulse)' : ''}{heritage ? ` · heritage: ${her || 'not set'}` : ''}</title>
           </g>
           );
         })}
       </svg>
+      {heritage && editing && heritage.byId[String(editing.id)] && (
+        <div className="re-ftree-heritage-edit">
+          <strong>{editing.name}</strong>
+          <HeritageEditor person={heritage.byId[String(editing.id)]} starterTags={heritage.starterTags}
+            onCancel={() => setEditing(null)} onSaved={(p) => { setEditing(null); heritage.onSaved?.(p); }} />
+        </div>
+      )}
     </div>
   );
 }
 
 /** The same tree for a phone: each generation indented under the one above. */
-function TreeList({ tree, onRelClick }) {
+function TreeList({ tree, onRelClick, heritage }) {
   const names = Object.fromEntries(tree.rows.flat().map((n) => [n.key, n.name]));
   return (
     <ol className="re-ftree-list" aria-label={`${tree.name}, by generation`}>
@@ -126,6 +158,11 @@ function TreeList({ tree, onRelClick }) {
               {n.kind === 'ghost' && <span className="re-ftree-tag">not built yet</span>}
               {n.kind === 'profile' && <span className="re-ftree-tag">on the Pulse</span>}
             </span>
+            {heritage && (
+              <HeritageLine kind={n.kind} person={n.kind === 'character' ? heritage.byId[String(n.id)] : null} name={n.name}
+                starterTags={heritage.starterTags} onSaved={heritage.onSaved}
+                makeHref={n.kind !== 'character' && n.of ? `/character/${n.of}` : null} />
+            )}
             {mine.map((e, i) => (
               <button key={i} type="button" className={`re-ftree-tie${isDashed(e.kind) ? ' is-dashed' : ''}`}
                 disabled={!e.rel} onClick={() => e.rel && onRelClick?.(e.rel)}>
@@ -139,7 +176,7 @@ function TreeList({ tree, onRelClick }) {
   );
 }
 
-export default function FamilyTree({ rels = [], charById = {}, families: given, onRelClick }) {
+export default function FamilyTree({ rels = [], charById = {}, families: given, onRelClick, heritage = null }) {
   const loaded = useFamilies({ skip: !!given });
   const families = given || loaded;
   const trees = useMemo(() => buildFamilyTrees({ families, rels, charById }), [families, rels, charById]);
@@ -154,8 +191,8 @@ export default function FamilyTree({ rels = [], charById = {}, families: given, 
       {trees.map((t) => (
         <section key={t.key} className="re-ftree-family" aria-label={t.name}>
           <h3 className="re-ftree-name">{t.name}{t.city ? <span className="re-ftree-city"> · {t.city}</span> : null}</h3>
-          <TreeDrawing tree={t} onRelClick={onRelClick} />
-          <TreeList tree={t} onRelClick={onRelClick} />
+          <TreeDrawing tree={t} onRelClick={onRelClick} heritage={heritage} />
+          <TreeList tree={t} onRelClick={onRelClick} heritage={heritage} />
         </section>
       ))}
     </div>

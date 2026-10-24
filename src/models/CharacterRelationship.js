@@ -77,6 +77,12 @@ module.exports = (sequelize) => {
     // What Generate was aimed at: { kind, focus_character_id, episode_id, twist_id }
     seed_aim:               { type: DataTypes.JSONB, allowNull: true, defaultValue: null },
 
+    /* ── Heritage (services/familyHeritage, 2026-10-24) ── */
+    // heritage_ok: "This is intended" on a blood tie whose heritage tags share
+    //   nothing (migration 20261024210000, services/familyHeritage):
+    //   { at, by, a_tags, b_tags }; quiet until either person's tags change.
+    heritage_ok:            { type: DataTypes.JSONB, allowNull: true, defaultValue: null },
+
     /* ── Scene Brief Classification ── */
     // role_tag: ally | detractor | mentor | dependency | rival | partner | family | neutral
     role_tag:               { type: DataTypes.STRING(50), allowNull: true, defaultValue: null },

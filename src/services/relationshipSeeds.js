@@ -375,7 +375,10 @@ async function generateSeeds(db, body, { characters, lalaId = null }) {
   const ctx = await loadSeedContext(sq(db), { cast: characters, episodeId: aim.episode_id, twistId: aim.twist_id });
   if (aim.episode_id && !ctx.episode) throw new SeedError('That episode was not found.', 404);
   if (aim.twist_id && !ctx.twist) throw new SeedError('That twist was not found.', 404);
-  const prompt = seedPrompt({ characters, ctx, aim, lalaId });
+  // Family seeds also see each person's heritage and its rule (services/familyHeritage).
+  const heritage = aim.kind === 'family'
+    ? await require('./familyHeritage').proposeFamilyHeritage(sq(db), characters) : null;
+  const prompt = `${seedPrompt({ characters, ctx, aim, lalaId })}${heritage ? `\n${heritage.section}` : ''}`;
   const message = await callModel(prompt);
   let parsed;
   try {
@@ -384,6 +387,13 @@ async function generateSeeds(db, body, { characters, lalaId = null }) {
   } catch (err) {
     console.error('[relationshipSeeds] the answer could not be read:', err.message);
     throw new SeedError('Failed to parse AI response', 500);
+  }
+  if (heritage) {
+    const list = [parsed?.seeds, parsed?.candidates, parsed?.family_bonds].find(Array.isArray) || [];
+    // Any suggested heritage goes into the seed's notes as words; it is never saved to anyone.
+    for (const s of list) {
+      if (s && typeof s === 'object') s.notes = heritage.notesFor({ ...s, character_a_id: s.a ?? s.character_a_id, character_b_id: s.b ?? s.character_b_id });
+    }
   }
   const index = await skipIndex(db, castIds);
   const { seeds, skipped } = cleanSeeds(parsed, { characters, ctx, aim, index });

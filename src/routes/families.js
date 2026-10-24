@@ -26,6 +26,14 @@
  *   POST   /make-character           "Make them a character" and tie them, in one step
  *   POST   /import/:charId           "Import family": the family_tree JSON, once
  *   GET    /profile/:profileId       a Pulse profile's family
+ *   GET    /heritage?family_id=|character_id=   heritage in the family: the
+ *                                    gentle check's flags, the gaps, the starter tags
+ *   PUT    /heritage/:charId         their heritage tags (and ethnicity)
+ *   POST   /heritage/intended/:key   "This is intended" on a flag
+ *   DELETE /heritage/intended/:key   undo it
+ *   GET    /make-character/suggestion?character_id=&role=&kind=
+ *                                    the heritage a new blood relative might
+ *                                    have, from their blood parents
  *
  * Reads are requireAuth; every write is requireAuth + ADMIN, as on
  * routes/relationships.js ("this whole part of the site is admin only").
@@ -35,6 +43,8 @@ const express = require('express');
 const router = express.Router();
 const { requireAuth, authorize } = require('../middleware/auth');
 const ties = require('../services/familyTies');
+const heritage = require('../services/familyHeritage');
+const { normalizeTags, tagsOf } = require('../utils/heritageTags');
 const { LINKED_CHARACTER_JOIN } = require('../utils/registryLink');
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -65,7 +75,7 @@ const bad = (status, message) => Object.assign(new Error(message), { status });
 const MEMBER_SELECT = `
   fm.id, fm.family_id, fm.registry_character_id, fm.social_profile_id, fm.ghost_name,
   fm.role, fm.role_of_character_id, fm.generation, fm.notes,
-  ${nameSql('rc')} AS character_name, rc.portrait_url, rc.feed_profile_id,
+  ${nameSql('rc')} AS character_name, rc.portrait_url, rc.feed_profile_id, rc.ethnicity, rc.heritage_tags,
   COALESCE(NULLIF(sp.display_name, ''), sp.handle) AS profile_name, sp.handle AS profile_handle,
   ${nameSql('ro')} AS role_of_name`;
 const MEMBER_JOIN = `
@@ -84,6 +94,9 @@ function memberOut(m) {
     name: kind === 'character' ? m.character_name : kind === 'profile' ? m.profile_name : (m.ghost_name || '?'),
     handle: m.profile_handle || null,
     portrait_url: m.portrait_url || null,
+    // Their heritage (characters only: a ghost or a Pulse-only profile has none to read).
+    ethnicity: kind === 'character' ? (m.ethnicity || null) : null,
+    heritage_tags: kind === 'character' ? tagsOf(m.heritage_tags) : null,
     role: m.role || null, role_of_character_id: m.role_of_character_id || null, role_of_name: m.role_of_name || null,
     generation: m.generation, notes: m.notes || null,
   };
@@ -122,7 +135,8 @@ async function tiesOf(charId) {
             ca.gender AS a_gender, cb.gender AS b_gender,
             ${nameSql('ca')} AS a_name, ${nameSql('cb')} AS b_name,
             ca.portrait_url AS a_portrait, cb.portrait_url AS b_portrait,
-            ca.feed_profile_id AS a_profile, cb.feed_profile_id AS b_profile
+            ca.feed_profile_id AS a_profile, cb.feed_profile_id AS b_profile,
+            ca.ethnicity AS a_ethnicity, cb.ethnicity AS b_ethnicity, ca.heritage_tags AS a_tags, cb.heritage_tags AS b_tags
        FROM character_relationships cr
        JOIN registry_characters ca ON ca.id = cr.character_id_a AND ca.deleted_at IS NULL
        JOIN registry_characters cb ON cb.id = cr.character_id_b AND cb.deleted_at IS NULL
@@ -139,6 +153,8 @@ async function tiesOf(charId) {
       other_name: isA ? r.b_name : r.a_name,
       other_portrait: (isA ? r.b_portrait : r.a_portrait) || null,
       other_profile_id: (isA ? r.b_profile : r.a_profile) || null,
+      other_ethnicity: (isA ? r.b_ethnicity : r.a_ethnicity) || null,
+      other_heritage_tags: tagsOf(isA ? r.b_tags : r.a_tags),
       role: ties.familyRoleFor(r, otherId),        // what they are to this character
       my_role: ties.familyRoleFor(r, charId),     // what this character is to them
       kind: r.family_kind || (r.is_blood_relation ? 'blood' : null),
@@ -467,6 +483,19 @@ router.delete('/ties/:relId', ...ADMIN, async (req, res) => {
   } catch (err) { fail(res, 'DELETE /families/ties/:relId', err); }
 });
 
+// The heritage "Make them a character" offers for a new blood relative,
+// from their blood parents (services/familyHeritage suggestForRelative):
+// shown in the dialog, editable, never saved by itself.
+router.get('/make-character/suggestion', requireAuth, async (req, res) => {
+  try {
+    const c = await characterRow(req.query.character_id);
+    if (!c) throw bad(404, 'Character not found');
+    const role = text(req.query.role, 120);
+    const kind = req.query.kind ? String(req.query.kind) : null;
+    res.json({ suggestion: role ? await heritage.suggestForRelative(getDb().sequelize, { characterId: c.id, role, kind }) : null });
+  } catch (err) { fail(res, 'GET /families/make-character/suggestion', err); }
+});
+
 /**
  * "Make them a character": a family_tree member (tree_index) or a family
  * member who is a ghost or only a Pulse profile (member_id) becomes a
@@ -502,6 +531,10 @@ router.post('/make-character', ...ADMIN, async (req, res) => {
     if (!name) throw bad(400, 'Give them a name');
     if (!role) throw bad(400, 'Give their role (sister, aunt …)');
     if (ties.isSpouseRole(role)) throw bad(400, 'A partner or spouse is romance, not a family tie: add them as a relationship.');
+    // Their heritage, as Evoni left it in the dialog (the suggestion from
+    // their blood parents is only ever a pre-fill she can change or clear).
+    const heritageTags = normalizeTags(b.heritage_tags);
+    const ethnicity = text(b.ethnicity, 150);
 
     const out = await sequelize.transaction(async (transaction) => {
       // The key is the name's slug, numbered should their registry hold it.
@@ -514,10 +547,11 @@ router.post('/make-character', ...ADMIN, async (req, res) => {
       const g = ties.genderOfRole(role);
       const [made] = await q(
         `INSERT INTO registry_characters (id, registry_id, character_key, display_name, selected_name, role_type, status, depth_level,
-            world, gender, feed_profile_id, created_from, created_at, updated_at)
+            world, gender, feed_profile_id, ethnicity, heritage_tags, created_from, created_at, updated_at)
          VALUES (gen_random_uuid(), :reg, :key, :name, :name, 'support', 'draft', 'sparked',
-            :world, :gender, :profile, 'promote_ghost', NOW(), NOW()) RETURNING id`,
+            :world, :gender, :profile, :ethnicity, CAST(:tags AS jsonb), 'promote_ghost', NOW(), NOW()) RETURNING id`,
         { reg: c.registry_id, key, name, world: c.world || null, gender: g === 'f' ? 'female' : g === 'm' ? 'male' : null,
+          ethnicity, tags: heritageTags.length ? JSON.stringify(heritageTags) : null,
           profile: member && !member.registry_character_id && member.social_profile_id ? member.social_profile_id : null }, { transaction });
       if (member) {
         await run(`UPDATE family_members SET registry_character_id = :rc, ghost_name = NULL, updated_at = NOW() WHERE id = :id`,
@@ -631,6 +665,44 @@ router.get('/profile/:profileId', requireAuth, async (req, res) => {
     }
     res.json({ profile_id: pid, character_id: me.character_id || null, family: people });
   } catch (err) { fail(res, 'GET /families/profile/:profileId', err); }
+});
+
+/* ════════════════════════════════════════════════════════════════════
+   Heritage in the family (Evoni, 2026-10-24). Real families include
+   mixed heritage, adoption, step and chosen family: this helps her notice,
+   never enforces sameness, never blocks a save, and never changes anyone's
+   heritage on its own (services/familyHeritage).
+   ════════════════════════════════════════════════════════════════════ */
+
+router.get('/heritage', requireAuth, async (req, res) => {
+  try {
+    const familyId = UUID_RE.test(String(req.query.family_id || '')) ? req.query.family_id : null;
+    const characterId = UUID_RE.test(String(req.query.character_id || '')) ? req.query.character_id : null;
+    if (req.query.character_id && !characterId) throw bad(404, 'Character not found');
+    res.json(await heritage.heritageReport(getDb().sequelize, { familyId, characterId }));
+  } catch (err) { fail(res, 'GET /families/heritage', err); }
+});
+
+router.put('/heritage/:charId', ...ADMIN, async (req, res) => {
+  try {
+    if (!UUID_RE.test(req.params.charId)) throw bad(404, 'Character not found');
+    const person = await heritage.saveHeritage(getDb().sequelize, req.params.charId, req.body || {});
+    res.json({ person });
+  } catch (err) { fail(res, 'PUT /families/heritage/:charId', err); }
+});
+
+const byOf = (req) => String(req.user?.email || req.user?.id || 'admin').slice(0, 255);
+
+router.post('/heritage/intended/:key', ...ADMIN, async (req, res) => {
+  try {
+    res.json({ flag: await heritage.markIntended(getDb().sequelize, String(req.params.key), { by: byOf(req) }) });
+  } catch (err) { fail(res, 'POST /families/heritage/intended/:key', err); }
+});
+
+router.delete('/heritage/intended/:key', ...ADMIN, async (req, res) => {
+  try {
+    res.json({ flag: await heritage.clearIntended(getDb().sequelize, String(req.params.key)) });
+  } catch (err) { fail(res, 'DELETE /families/heritage/intended/:key', err); }
 });
 
 module.exports = router;

@@ -150,6 +150,14 @@ module.exports = (sequelize) => {
       type: DataTypes.STRING(150),
       allowNull: true,
     },
+    // Their heritage as short tags, the way they describe themselves
+    // (Evoni, 2026-10-24; migration 20261024210000, utils/heritageTags).
+    // ethnicity stays her own wording; the tags let the family views notice
+    // blood relatives who share nothing. Never enforced.
+    heritage_tags: {
+      type: DataTypes.JSONB,
+      allowNull: true,
+    },
     species: {
       type: DataTypes.STRING(150),
       allowNull: true,
