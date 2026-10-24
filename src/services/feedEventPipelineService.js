@@ -399,6 +399,17 @@ async function scheduleOpportunityAsEvent(opportunityId, showId, models, { userI
   // Check if this opportunity already has an event
   if (opp.event_id) throw new Error(`This opportunity already has an event scheduled`);
 
+  // One held for an episode's beat 14 is scheduled early (Evoni,
+  // 2026-10-23: "I can't turn it into an event"): offered first, as
+  // services/beat14Opportunity releaseHeld does, then booked, in the one
+  // UPDATE at the end, and only while it is still held. Until then it
+  // stays held: a failure on the way, or a completion that settled it
+  // meanwhile, removes the event made here and leaves the opportunity as
+  // it was.
+  const early = opp.status === 'held';
+  const beat14 = early ? require('./beat14Opportunity') : null;
+  const earlyEventId = early ? await beat14.episodeEventId(sequelize, opp.offered_in_episode_id) : null;
+
   // Check if an event with the same name already exists
   const [dupeCheck] = await sequelize.query(
     `SELECT id, name FROM world_events WHERE show_id = :showId AND name = :name AND deleted_at IS NULL LIMIT 1`,
@@ -586,6 +597,10 @@ async function scheduleOpportunityAsEvent(opportunityId, showId, models, { userI
   const extraColumns = Object.keys(draftedColumns);
   const extraCols = extraColumns.map((c) => `, ${c}`).join('');
   const extraVals = extraColumns.map((c) => (c === 'dress_code_keywords' ? `, :${c}::jsonb` : `, :${c}`)).join('');
+  if (early) {
+    return scheduleHeldEarly({ sequelize, opp, eventData, extraCols, extraVals, deliverableRows, guestProfiles, earlyEventId, beat14 });
+  }
+
   await sequelize.query(
     `INSERT INTO world_events (id, show_id, name, event_type, host, host_brand, description,
      prestige, cost_coins, strictness, deadline_type, dress_code, location_hint,
@@ -627,6 +642,64 @@ async function scheduleOpportunityAsEvent(opportunityId, showId, models, { userI
   return {
     event_id: eventId, opportunity: opp, event_data: eventData,
     guests: guestProfiles.length, deliverables: deliverablesCarried,
+  };
+}
+
+const WORLD_EVENT_INSERT = (extraCols, extraVals) => `INSERT INTO world_events (id, show_id, name, event_type, host, host_brand, description,
+     prestige, cost_coins, strictness, deadline_type, dress_code, location_hint,
+     narrative_stakes, event_date, canon_consequences, restrictions, is_paid, payment_amount, opportunity_id${extraCols},
+     status, created_at, updated_at)
+     VALUES (:id, :show_id, :name, :event_type, :host, :host_brand, :description,
+     :prestige, :cost_coins, :strictness, :deadline_type, :dress_code, :location_hint,
+     :narrative_stakes, :event_date, :canon_consequences, :restrictions, :is_paid, :payment_amount, :opportunity_id${extraVals},
+     :status, NOW(), NOW())`;
+
+/**
+ * The end of scheduleOpportunityAsEvent for one held for beat 14: the event,
+ * its deliverables and deal draft as for any other, then one UPDATE that
+ * offers and books it while it is still held. When anything after the event
+ * is made throws, or it is no longer held, the event is removed (soft
+ * delete, so the name is free again) and the opportunity stays as it was.
+ */
+async function scheduleHeldEarly({ sequelize, opp, eventData, extraCols, extraVals, deliverableRows, guestProfiles, earlyEventId, beat14 }) {
+  const eventId = eventData.id;
+  await sequelize.query(WORLD_EVENT_INSERT(extraCols, extraVals), { replacements: eventData });
+  let deliverablesCarried = 0;
+  try {
+    if (deliverableRows.length > 0) {
+      try {
+        deliverablesCarried = await insertEventDeliverables(sequelize, eventId, deliverableRows);
+      } catch (err) {
+        console.error('[FeedPipeline] Deliverable carry failed (event created without deliverables):', err.message);
+      }
+    }
+    await syncDraftedDealType(sequelize, eventId, { initial: true });
+    const entries = [
+      beat14.releasedEntry({ note: 'Scheduled before its episode was completed', eventId: earlyEventId, episodeId: opp.offered_in_episode_id }),
+      { status: 'booked', date: new Date().toISOString(), note: 'Scheduled as event' },
+    ];
+    const [updated] = await sequelize.query(
+      `UPDATE opportunities SET event_id = :eventId, status = 'booked', offer_date = :today,
+       status_history = COALESCE(status_history, '[]'::jsonb) || :historyEntry::jsonb,
+       updated_at = NOW() WHERE id = :oppId AND status = 'held' AND event_id IS NULL AND deleted_at IS NULL
+       RETURNING id`,
+      { replacements: { eventId, oppId: opp.id, today: new Date().toISOString().slice(0, 10), historyEntry: JSON.stringify(entries) } }
+    );
+    if (!updated?.length) {
+      throw new beat14.Beat14Error(409, 'It changed while it was being scheduled (its episode settled it, or it was already scheduled): read it again.');
+    }
+  } catch (err) {
+    console.error('[FeedPipeline] Early schedule of a held opportunity failed; removing its event:', err.message);
+    try {
+      await sequelize.query('UPDATE world_events SET deleted_at = NOW() WHERE id = :eventId', { replacements: { eventId } });
+    } catch (cleanupErr) {
+      console.error('[FeedPipeline] The event made for it could not be removed:', cleanupErr.message);
+    }
+    throw err;
+  }
+  return {
+    event_id: eventId, opportunity: { ...opp, status: 'booked', event_id: eventId }, event_data: eventData,
+    guests: guestProfiles.length, deliverables: deliverablesCarried, offered_early: true,
   };
 }
 

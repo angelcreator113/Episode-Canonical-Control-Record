@@ -116,7 +116,10 @@ export default function Beat14Opportunity({ showId, episodeId, data, onChange, d
             {opportunity.status === 'expired'
               ? 'The episode did not land, so the invitation never came in beat 14: it expired.'
               : opportunity.status && opportunity.status !== 'held'
-                ? 'Beat 14 ends on this invitation. It was offered when the episode was completed.'
+                // Released or scheduled early from the show tab (Evoni, 2026-10-23).
+                ? (opportunity.released
+                  ? 'Beat 14 ends on this invitation. It was offered by hand from the Opportunities tab, so the episode\'s result does not change it.'
+                  : 'Beat 14 ends on this invitation. It was offered when the episode was completed.')
                 : fail
                   ? 'This episode is designed to fail, so the invitation does not come in beat 14, and it expires when the episode is completed.'
                   : 'Beat 14 ends on this invitation. It is offered when the episode is completed, if the episode lands; if it fails, it expires.'}

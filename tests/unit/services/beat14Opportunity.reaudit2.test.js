@@ -72,13 +72,15 @@ test('a read of a completed episode with its opportunity still held leaves it fo
   expect(current.status_history[current.status_history.length - 1]).toMatchObject({ status: 'offered', tier: 'slay', source_event_id: 'ev-1' });
 });
 
-test('a failed tier expires it; with no recorded tier it stays held', async () => {
+// Evoni, 2026-10-23: one completed without a recorded tier stayed held for
+// good; it is now offered, as if the episode landed.
+test('a failed tier expires it; with no recorded tier it is offered', async () => {
   const failed = opp('held', [{ status: 'held', source: 'beat14' }]);
   await expect(resolveHeldAfterCompletion(models({ first: 'accepted', evaluation: { tier_final: 'fail' }, current: failed }), { episodeId: 'ep-1' }))
     .resolves.toMatchObject({ status: 'expired' });
   const unknown = opp('held', [{ status: 'held', source: 'beat14' }]);
-  await expect(resolveHeldAfterCompletion(models({ first: 'accepted', evaluation: null, current: unknown }), { episodeId: 'ep-1' })).resolves.toBeNull();
-  expect(unknown.update).not.toHaveBeenCalled();
+  await expect(resolveHeldAfterCompletion(models({ first: 'accepted', evaluation: null, current: unknown }), { episodeId: 'ep-1' })).resolves.toMatchObject({ status: 'offered' });
+  expect(unknown.status_history[unknown.status_history.length - 1]).toMatchObject({ status: 'offered', tier: null, source_event_id: 'ev-1', note: 'Completed without a recorded tier; offered' });
 });
 
 test('an episode not completed, or nothing held, changes nothing', async () => {

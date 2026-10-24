@@ -223,3 +223,65 @@ describe('third pass (Script page audit 3, 2026-10-19)', () => {
     expect(screen.getByTestId('opp-move-o1').getAttribute('style')).not.toMatch(/245, 158, 11|f59e0b/i);
   });
 });
+
+// Evoni, 2026-10-23: "I currently have an opportunity from episode 1 in the
+// opportunities tab but I can't turn it into an event how should that work?"
+describe('a held one says why, and can be released or scheduled now', () => {
+  const WAITING = { ...HELD, beat14_episode: { id: 'ep-1', title: 'The Gala', episode_number: 3, evaluation_status: null } };
+  const STUCK = { id: 'o4', name: 'Velour Ambassador', status: 'held', opportunity_type: 'ambassador', offered_in_episode_id: 'ep-9', beat14_episode: { id: 'ep-9', title: null, episode_number: 1, evaluation_status: 'accepted' }, status_history: history('held') };
+
+  test('a held card waiting for its episode says so, linking to its evaluation', async () => {
+    renderTab([WAITING]);
+    expect((await screen.findByTestId('opp-held-why-text-o3')).textContent).toBe('Waits for The Gala to be completed. Offered if it lands, gone if it fails.');
+    const link = screen.getByTestId('opp-held-why-o3').querySelector('a');
+    expect(link.getAttribute('href')).toBe('/episodes/ep-1/evaluate');
+  });
+
+  test('one whose episode is completed but never settled says that, naming the episode by number', async () => {
+    renderTab([STUCK]);
+    expect((await screen.findByTestId('opp-held-why-text-o4')).textContent).toBe('Episode 1 is completed but this was never settled.');
+    expect(screen.getByTestId('opp-held-o4').textContent).toBe('Beat 14 of Episode 1');
+    expect(screen.getByTestId('opp-held-why-o4').querySelector('a').getAttribute('href')).toBe('/episodes/ep-9/evaluate');
+  });
+
+  test('Release offer on the stuck one calls the endpoint without asking, and the card turns offered with Schedule as Event', async () => {
+    const confirm = vi.spyOn(window, 'confirm');
+    api.post.mockResolvedValue({ data: { success: true, opportunity: { ...STUCK, status: 'offered', status_history: [...STUCK.status_history, { status: 'offered', note: 'Released by hand', tier: null, released: true }] } } });
+    renderTab([STUCK]);
+    fireEvent.click(await screen.findByTestId('opp-release-o4'));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith(`/api/v1/opportunities/${SHOW}/o4/release`));
+    expect(confirm).not.toHaveBeenCalled();
+    expect(await screen.findByTestId('opp-schedule-o4')).toBeTruthy();
+    expect(screen.queryByTestId('opp-release-o4')).toBeNull();
+    expect(screen.queryByTestId('opp-held-why-o4')).toBeNull();
+    // Released by hand: Undo would go back to held, so it is not offered.
+    expect(screen.queryByTestId('opp-undo-o4')).toBeNull();
+    expect(toast).toHaveBeenCalledWith('Velour Ambassador is offered');
+  });
+
+  test('Release offer on one still waiting asks first; No sends nothing', async () => {
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    renderTab([WAITING]);
+    fireEvent.click(await screen.findByTestId('opp-release-o3'));
+    expect(confirm).toHaveBeenCalledWith("Offer Sable Campaign now? It is offered without waiting for The Gala's result. Beat 14 of The Gala still delivers it as the invitation.");
+    expect(api.post).not.toHaveBeenCalled();
+  });
+
+  test('Schedule as Event now shows only on held cards, and schedules after the confirm', async () => {
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    renderTab([OPEN, ACTIVE, WAITING]);
+    await screen.findByTestId('opp-schedule-now-o3');
+    expect(screen.queryByTestId('opp-schedule-now-o1')).toBeNull();
+    expect(screen.queryByTestId('opp-schedule-now-o2')).toBeNull();
+    expect(screen.queryByTestId('opp-schedule-o3')).toBeNull();
+    fireEvent.click(screen.getByTestId('opp-schedule-now-o3'));
+    expect(confirm).toHaveBeenCalledWith("Schedule Sable Campaign as an event now? It is offered and its event is created now, without waiting for The Gala's result. Beat 14 of The Gala still delivers it as the invitation.");
+    expect(api.post).not.toHaveBeenCalled();
+    confirm.mockReturnValue(true);
+    api.post.mockResolvedValue({ data: { success: true, data: { event_id: 'ev-9', guests: 0 } } });
+    fireEvent.click(screen.getByTestId('opp-schedule-now-o3'));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith(`/api/v1/feed-pipeline/${SHOW}/schedule/o3`));
+    expect(await screen.findByText('✓ Event scheduled')).toBeTruthy();
+    expect(screen.queryByTestId('opp-schedule-now-o3')).toBeNull();
+  });
+});

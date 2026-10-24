@@ -92,6 +92,17 @@ describe('Beat14Opportunity', () => {
     expect(screen.getByTestId('script-beat14-attached').textContent).toMatch(/did not land.*expired/);
   });
 
+  // Evoni, 2026-10-23: one released or scheduled early from the show tab.
+  test('one offered by hand says so, even on a design-to-fail episode', () => {
+    renderIt({ opportunity: { ...OPP, status: 'booked', released: true, completion_status: 'offered' }, people: PEOPLE, candidates: [] }, { designedIntent: 'fail' });
+    expect(screen.getByTestId('script-beat14-attached').textContent).toContain('It was offered by hand from the Opportunities tab');
+  });
+
+  test('one offered at completion says that', () => {
+    renderIt({ opportunity: { ...OPP, status: 'offered', released: false }, people: PEOPLE, candidates: [] });
+    expect(screen.getByTestId('script-beat14-attached').textContent).toContain('It was offered when the episode was completed.');
+  });
+
   // Change keeps what is attached (Script page audit, 2026-10-19).
   test('Change opens on the attached one and its sender, so only the sender changes', async () => {
     api.put.mockResolvedValue({ data: {} });
