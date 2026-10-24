@@ -13,6 +13,14 @@
  *                         tied to them, in one step
  *   Import family         once: their generated family tree becomes a
  *                         named family
+ *   Heritage              (2026-10-24) a toggle that shows each person's
+ *                         heritage under their name, with the inline edit;
+ *                         a quiet panel of the gentle check's notes and the
+ *                         people with no heritage set; Make them a character
+ *                         suggests heritage from the blood parents, to edit.
+ *                         Real families include mixed heritage, adoption,
+ *                         step and chosen family: it helps Evoni notice and
+ *                         never changes anyone's heritage on its own.
  */
 import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
@@ -20,6 +28,7 @@ import { Heart, Plus, UserPlus, Download, X } from 'lucide-react';
 import apiClient from '../../services/api';
 import { API_URL } from '../../config/api';
 import { atHandle } from '../../pages/feed/feedConstants';
+import { useHeritage, HeritagePanel, HeritageLine, HeritagePicker, getRelativeSuggestionApi } from './Heritage';
 import './FamilySection.css';
 
 export const KINDS = [
@@ -171,26 +180,79 @@ export function AddFamilyForm({ character, onDone, onCancel }) {
 
 /* ── Make them a character ──────────────────────────────────────────── */
 
-function MakeCharacter({ character, payload, label, onDone }) {
+const firstName = (n) => String(n || '').trim().split(/\s+/)[0];
+const listWords = (names) => (names.length < 2 ? names.join('') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`);
+
+/**
+ * "Make them a character", in two steps: the button opens a small dialog
+ * with their heritage, pre-filled from their blood parents when the server
+ * can tell (services/familyHeritage suggestForRelative; mixed = the union)
+ * and said so, to change or clear; nothing is filled in silently.
+ */
+export function MakeCharacter({ character, payload, label, role = null, roleOf = null, starterTags = [], onDone }) {
+  const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState(null);
+  const [suggestion, setSuggestion] = useState(null);
+  const [tags, setTags] = useState([]);
+  const [words, setWords] = useState('');
+
+  useEffect(() => {
+    if (!open || !role) return undefined;
+    let live = true;
+    // role reads "they are roleOf's <role>" (roleOf: this character unless the member says otherwise).
+    getRelativeSuggestionApi({ character_id: roleOf || character.id, role })
+      .then((res) => {
+        const s = res?.data?.suggestion || null;
+        if (!live) return;
+        setSuggestion(s);
+        if (s) { setTags(s.heritage_tags || []); setWords(s.ethnicity || ''); }
+      })
+      .catch((err) => console.error('[FamilySection] heritage suggestion failed:', err));
+    return () => { live = false; };
+  }, [open, role, roleOf, character.id]);
+
   const make = async () => {
     setBusy(true); setNote(null);
     try {
-      const res = await makeCharacterApi({ character_id: character.id, ...payload });
+      const res = await makeCharacterApi({ character_id: character.id, ...payload, heritage_tags: tags, ethnicity: words });
+      setOpen(false);
       onDone(res.data);
     } catch (err) {
       console.error('[FamilySection] make character failed:', err);
       setNote(errorOf(err, 'Could not make them a character.'));
     } finally { setBusy(false); }
   };
-  return (
-    <>
-      <button type="button" className="cf-make" disabled={busy} onClick={make} aria-label={`Make ${label} a character`}>
-        <UserPlus size={14} aria-hidden="true" /> {busy ? 'Making…' : 'Make them a character'}
+  if (!open) {
+    return (
+      <button type="button" className="cf-make" onClick={() => setOpen(true)} aria-label={`Make ${label} a character`}>
+        <UserPlus size={14} aria-hidden="true" /> Make them a character
       </button>
-      {note && <span className="ch-note is-error" role="status">{note}</span>}
-    </>
+    );
+  }
+  return (
+    <div className="cf-makebox" role="group" aria-label={`Make ${label} a character`}>
+      <strong className="cf-makebox-title">Make {label} a character</strong>
+      <span className="cf-makebox-label">Their heritage</span>
+      {suggestion ? (
+        <p className="ch-note cf-suggest" role="status">
+          Suggested from {listWords(suggestion.from.map((f) => firstName(f.name)))}, their blood family:{' '}
+          <strong>{(suggestion.heritage_tags || []).join(', ') || suggestion.ethnicity}</strong>. A starting point only: change it or clear it.
+        </p>
+      ) : (
+        <p className="ch-note">Add their heritage now, or leave it for later.</p>
+      )}
+      <HeritagePicker tags={tags} onTags={setTags} starterTags={starterTags} idPrefix={`cf-make-${label}`} />
+      <label className="cf-field">
+        <span>In their words (optional)</span>
+        <input className="ch-input" value={words} maxLength={150} onChange={(e) => setWords(e.target.value)} placeholder="e.g. Black and Korean" />
+      </label>
+      {note && <p className="ch-note is-error" role="status">{note}</p>}
+      <div className="ch-row">
+        <button type="button" className="ch-btn" disabled={busy} onClick={make}>{busy ? 'Making…' : 'Make them a character'}</button>
+        <button type="button" className="ch-btn-soft" onClick={() => setOpen(false)}>Cancel</button>
+      </div>
+    </div>
   );
 }
 
@@ -198,6 +260,8 @@ function MakeCharacter({ character, payload, label, onDone }) {
 
 export default function FamilySection({ character }) {
   const { data, setData, error } = useFamily(character?.id);
+  const { report, byId, reload: reloadHeritage } = useHeritage({ character_id: character?.id }, { skip: !character?.id });
+  const [showHeritage, setShowHeritage] = useState(false);
   const [adding, setAdding] = useState(false);
   const [made, setMade] = useState(null);
   const [busy, setBusy] = useState(null);
@@ -208,7 +272,12 @@ export default function FamilySection({ character }) {
     if (reply?.ties) setData(reply);
     if (reply?.character) setMade(reply.character);
     setAdding(false);
+    reloadHeritage();
   };
+  const starterTags = report?.starter_tags || [];
+  // A person's heritage: the report's (fresh after an edit), else what the family read carried.
+  const personOf = (id, name, tags, ethnicity) => byId[String(id)] || { id, name, heritage_tags: tags || [], ethnicity: ethnicity || null };
+  const heritageUnder = (props) => (showHeritage ? <HeritageLine starterTags={starterTags} onSaved={reloadHeritage} {...props} /> : null);
   const removeTie = async (t) => {
     setBusy(t.id); setNote(null);
     try {
@@ -241,12 +310,22 @@ export default function FamilySection({ character }) {
     <section className="ch-card cf" aria-labelledby="ch-fam" data-testid="ch-family">
       <div className="ch-card-head">
         <h2 id="ch-fam" className="ch-h2"><Heart size={20} aria-hidden="true" className="ch-h2-icon" /> Family</h2>
+        <button type="button" className="hx-toggle cf-heritage-toggle" aria-pressed={showHeritage} onClick={() => setShowHeritage((o) => !o)}>
+          Heritage
+        </button>
         {!adding && (
           <button type="button" className="ch-btn-chip cf-add" onClick={() => { setAdding(true); setMade(null); }}>
             <Plus size={14} aria-hidden="true" /> Add family
           </button>
         )}
       </div>
+      <HeritagePanel report={report} onChanged={reloadHeritage} />
+      {showHeritage && (
+        <p className="cf-own-heritage">
+          <span className="cf-own-heritage-label">{name}&rsquo;s heritage</span>
+          <HeritageLine person={personOf(character.id, name, character.heritage_tags, character.ethnicity)} name={name} starterTags={starterTags} onSaved={reloadHeritage} />
+        </p>
+      )}
       {tree.generational_wound && <p className="ch-note">Generational wound: {tree.generational_wound}</p>}
       {error && <p className="ch-note is-error" role="status">{error}</p>}
       {note && <p className="ch-note is-error" role="status">{note}</p>}
@@ -273,6 +352,7 @@ export default function FamilySection({ character }) {
                     <button type="button" className="cf-x" aria-label={`Remove ${t.other_name} from ${name}'s family`}
                       disabled={busy === t.id} onClick={() => removeTie(t)}><X size={14} aria-hidden="true" /></button>
                   </div>
+                  {heritageUnder({ person: personOf(t.other_id, t.other_name, t.other_heritage_tags, t.other_ethnicity), name: t.other_name })}
                   {(t.tension || t.my_role) && (
                     <span className="ch-ft-meta">{t.my_role ? `${name} is their ${t.my_role}` : ''}{t.tension ? `${t.my_role ? ' · ' : ''}${t.tension}` : ''}</span>
                   )}
@@ -301,9 +381,10 @@ export default function FamilySection({ character }) {
                       {m.kind === 'ghost' && <span className="ch-chip is-plain">Not built yet</span>}
                       {m.kind === 'profile' && <span className="ch-chip is-blue">On the Pulse{m.handle ? ` · ${atHandle(m.handle)}` : ''}</span>}
                     </div>
+                    {heritageUnder({ kind: m.kind, name: m.name, person: m.kind === 'character' ? personOf(m.registry_character_id, m.name, m.heritage_tags, m.ethnicity) : null })}
                     {m.notes && <span className="ch-ft-meta">{m.notes}</span>}
                     {m.kind !== 'character' && (
-                      <span className="ch-ft-chips"><MakeCharacter character={character} payload={{ member_id: m.id }} label={m.name} onDone={took} /></span>
+                      <span className="ch-ft-chips"><MakeCharacter character={character} payload={{ member_id: m.id }} label={m.name} role={m.role} roleOf={m.role_of_character_id} starterTags={starterTags} onDone={took} /></span>
                     )}
                   </li>
                 ))}
@@ -333,7 +414,7 @@ export default function FamilySection({ character }) {
                 </div>
                 {m.sketch && <span className="ch-conn-note">{m.sketch}</span>}
                 {!m.matched_character_id && m.relation && (
-                  <span className="ch-ft-chips"><MakeCharacter character={character} payload={{ tree_index: m.index }} label={m.name} onDone={took} /></span>
+                  <span className="ch-ft-chips"><MakeCharacter character={character} payload={{ tree_index: m.index }} label={m.name} role={m.relation} starterTags={starterTags} onDone={took} /></span>
                 )}
                 {m.matched_character_id && <span className="ch-ft-chips"><span className="cp-promoted-badge">In the registry</span></span>}
               </li>

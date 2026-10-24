@@ -20,6 +20,7 @@
  *   genderOf(character)           'f', 'm' or null, from gender and pronouns
  *   familyRoleFor(row, id)        the role that person holds in the tie
  *   isSpouseRole(role)            a partner role: romance, not a family tie here
+ *   roleParts(role)               the role taken apart: { pre, base, suffix } or null
  *   saveFamilyTie(sequelize, …)   add or change a tie, both directions
  *   linkPulseFamily(sequelize, id) the tie's Pulse link, when both have profiles
  *   familyLines(sequelize, ids)   the ties as lines for the writers
@@ -328,5 +329,5 @@ async function familyLines(sequelize, characterIds, { lalaverseOnly = false } = 
 
 module.exports = {
   KINDS, reverseRole, generationStep, kindOf, genderOf, genderOfRole, familyRoleFor, isSpouseRole,
-  saveFamilyTie, linkPulseFamily, familyLines, familyWords,
+  roleParts: parse, saveFamilyTie, linkPulseFamily, familyLines, familyWords,
 };

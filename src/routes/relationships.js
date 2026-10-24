@@ -951,6 +951,8 @@ router.post('/generate-family', requireAuth, authorize(['ADMIN']), aiRateLimiter
           `- ${nameById(r.character_id_a)} → ${nameById(r.character_id_b)}: ${r.family_role || r.relationship_type} ${r.is_romantic ? '(romantic)' : ''}`
         )).join('\n')}\n`
       : '';
+    // Each person's heritage and the rule blood family follows (services/familyHeritage).
+    const heritage = await require('../services/familyHeritage').proposeFamilyHeritage(db.sequelize, characters);
 
     const Anthropic = require('@anthropic-ai/sdk');
     const claude = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -966,7 +968,7 @@ router.post('/generate-family', requireAuth, authorize(['ADMIN']), aiRateLimiter
 
 Characters:
 ${charContext}
-${existingContext}
+${existingContext}${heritage.section}
 
 For each relationship, provide:
 - character_a_id: UUID of character A (from the list above)
@@ -1052,7 +1054,7 @@ No markdown fences, no explanation.`,
             is_blood: bond.is_blood_relation || false,
             is_romantic: bond.is_romantic || false,
             conflict: bond.conflict_summary || null,
-            notes: bond.notes || null,
+            notes: heritage.notesFor(bond),
             now,
           },
           type: db.sequelize.QueryTypes.INSERT,
