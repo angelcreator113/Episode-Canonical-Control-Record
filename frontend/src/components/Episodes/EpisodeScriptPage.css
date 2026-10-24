@@ -556,6 +556,7 @@
 .esp-cover-list { display: flex; flex-direction: column; gap: 6px; margin: 8px 0 0; padding: 0; list-style: none; }
 .esp-cover-list li { display: flex; align-items: flex-start; gap: 8px; font-size: 13px; line-height: 1.45; color: var(--studio-ink); overflow-wrap: anywhere; }
 .esp-cover-list li svg { flex: none; margin-top: 2px; color: var(--studio-ink-muted); }
+.esp-cover-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .esp-cover-list li.is-covered svg { color: var(--success-text); }
 .esp-cover-list li.is-gap svg { color: var(--warning-text); }
 .esp-cover-beat { color: var(--studio-purple); }

@@ -2536,6 +2536,7 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
   const truth = openBeat ? beatState(beats, beats.indexOf(openBeat), {
     balanceBefore: balance, outfit, closetAt: closetBeat(scriptText), scenePlan,
     event: source?.event || null, episodeNumber: episode?.episode_number ?? null,
+    profiles: [source?.sourceProfile, ...guestProfiles].filter(Boolean),
   }) : null;
   const people = scriptPeople({ event: source?.event || null, sourceProfile: source?.sourceProfile || null, beats });
   const onScreenWithDrafts = postDrafts ? { ...onScreen, postDrafts } : onScreen;
@@ -2620,7 +2621,7 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
   // says so (Raw editor audit, 2026-10-24, R6).
   const lockEdits = editedLockedBeats(scriptText, savedScript, lockedBeats);
   const readScript = lockEdits.size ? keepLockedBeats(scriptText, savedScript, lockedBeats).script : scriptText;
-  const readActions = <ScriptReadActions scriptText={readScript} title={episode?.title || (episode?.episode_number ? `Episode ${episode.episode_number}` : 'Script')} dirty={scriptText !== savedScript} onScreen={onScreenWithDrafts} scenePlan={scenePlan} startBeat={Math.max(0, beats.indexOf(openBeat))} episodeId={episodeId} beatNumber={openBeat?.number ?? null} />;
+  const readActions = <ScriptReadActions scriptText={readScript} title={episode?.title || (episode?.episode_number ? `Episode ${episode.episode_number}` : 'Script')} dirty={scriptText !== savedScript} onScreen={onScreenWithDrafts} scenePlan={scenePlan} startBeat={Math.max(0, beats.indexOf(openBeat))} episodeId={episodeId} beatNumber={openBeat?.number ?? null} episodeNumber={episode?.episode_number ?? null} />;
   // The beats unmount for the Raw editor: an open line or typed words wait
   // (Raw editor audit, 2026-10-24, R5). Where the editor was is kept for the
   // way back (R11).
