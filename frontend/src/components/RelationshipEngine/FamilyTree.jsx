@@ -102,7 +102,7 @@ function TreeDrawing({ tree, onRelClick }) {
           <g key={n.key} className={`re-ftree-node is-${n.kind}`} transform={`translate(${pos[n.key].x},${pos[n.key].y})`}>
             <rect width={NODE_W} height={NODE_H} rx={12} strokeDasharray={n.kind === 'ghost' ? '4 3' : undefined} />
             <text x={NODE_W / 2} y={sub ? 22 : NODE_H / 2 + 4} textAnchor="middle">{clip(n.name, 19)}</text>
-            {sub && <text x={NODE_W / 2} y={39} textAnchor="middle" className="re-ftree-node-role">{clip(sub, 24)}</text>}
+            {sub && <text x={NODE_W / 2} y={39} textAnchor="middle" className="re-ftree-node-role">{clip(sub, 18)}</text>}
             <title>{n.name}{n.kind === 'ghost' ? ' (not built yet)' : n.kind === 'profile' ? ' (on the Pulse)' : ''}</title>
           </g>
           );

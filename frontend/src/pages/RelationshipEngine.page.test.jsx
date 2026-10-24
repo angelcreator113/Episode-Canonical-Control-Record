@@ -65,9 +65,10 @@ const renderAt = (entry = '/relationships') => render(
   </MemoryRouter>,
 );
 
+// The sheet query (primitives PHONE_QUERY) covers phones and tablets, up to 900px.
 const setPhone = (phone) => {
   window.matchMedia = vi.fn().mockImplementation((q) => ({
-    matches: phone && q.includes('600px'), media: q, addEventListener: vi.fn(), removeEventListener: vi.fn(),
+    matches: phone && q.includes('900px'), media: q, addEventListener: vi.fn(), removeEventListener: vi.fn(),
   }));
 };
 
@@ -174,6 +175,8 @@ describe('loading', () => {
 describe('Family and Seeds', () => {
   test('Family lists family only; a love interest sits apart with no family edit', async () => {
     renderAt('/relationships?tab=family');
+    // The tree is the view; the ties as cards are behind the List toggle.
+    fireEvent.click(await screen.findByRole('button', { name: /^List · 1 family tie/ }));
     const list = await screen.findByRole('list', { name: 'Family ties' });
     expect(within(list).getByText('brother')).toBeTruthy();
     expect(within(list).queryByText('Marcus Hale')).toBeNull();
@@ -240,5 +243,96 @@ describe('Add', () => {
     const [url, body] = vi.mocked(apiClient.post).mock.calls[0];
     expect(url).toBe('/api/v1/relationships');
     expect(body).toMatchObject({ character_id_a: 'jade', character_id_b: 'marcus', relationship_type: 'love_interest', is_romantic: true });
+  });
+});
+
+describe('layout (2026-10-24 audit)', () => {
+  test('no empty Inspector beside Tree, Family, Seeds or List; it shows once a relationship is open', async () => {
+    const { container } = renderAt('/relationships?tab=list');
+    await screen.findAllByText('Marcus Hale');
+    for (const name of [/Tree/, /Family/, /Seeds/, /List/]) {
+      fireEvent.click(screen.getByRole('tab', { name }));
+      expect(container.querySelector('.re-inspector-panel')).toBeNull();
+    }
+    expect(screen.queryByText('Select a relationship')).toBeNull();
+    fireEvent.click(container.querySelector('.re-list-table tbody tr'));
+    expect(await screen.findByRole('complementary', { name: 'Lala and Marcus Hale' })).toBeTruthy();
+    expect(container.querySelector('.re-inspector-panel.is-sheet')).toBeNull();
+  });
+
+  test('Seeds: one Generate (no "More seeds"), and Dismiss says so', async () => {
+    renderAt('/relationships?tab=candidates');
+    await screen.findByText('Rival');
+    expect(screen.queryByRole('button', { name: /More seeds/ })).toBeNull();
+    expect(screen.getAllByRole('button', { name: /◈ Generate/ })).toHaveLength(1);
+    const dismiss = screen.getByRole('button', { name: 'Dismiss Marcus Hale ↔ Dre Coleman' });
+    expect(dismiss.textContent.trim()).toBe('Dismiss');
+  });
+
+  test('the type counts are plain words, not on Family or Seeds; the counts are in the sub-header only', async () => {
+    const { container } = renderAt('/relationships?tab=tree');
+    const counts = await waitFor(() => {
+      const el = container.querySelector('.re-type-counts');
+      if (!el) throw new Error('no counts');
+      return el;
+    });
+    expect(counts.tagName).toBe('P');
+    expect(counts.textContent).toContain('Love interest 1');
+    expect(container.querySelector('.re-type-pill')).toBeNull();
+    expect(container.querySelector('.re-sub-stats').textContent).toBe('4 people · 3 relationships');
+    // the Tree's footer no longer repeats the counts
+    expect(container.querySelector('.re-tree-status').textContent).not.toMatch(/characters|relationships/);
+    fireEvent.click(screen.getByRole('tab', { name: /Family/ }));
+    expect(container.querySelector('.re-type-counts')).toBeNull();
+    fireEvent.click(screen.getByRole('tab', { name: /Seeds/ }));
+    expect(container.querySelector('.re-type-counts')).toBeNull();
+  });
+
+  test('Family: the tree with one legend; the cards open from the List toggle', async () => {
+    const { container } = renderAt('/relationships?tab=family');
+    const toggle = await screen.findByRole('button', { name: /^List · 1 family tie/ });
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    expect(screen.queryByRole('list', { name: 'Family ties' })).toBeNull();
+    expect(container.querySelector('.re-family-legend')).toBeNull();
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByRole('list', { name: 'Family ties' })).toBeTruthy();
+    expect(toggle.textContent).toMatch(/^Hide the list/);
+  });
+
+  test('while loading: a loading line, not "No one matches", and no count of 0', async () => {
+    vi.mocked(apiClient.get).mockImplementation(() => new Promise(() => {}));
+    renderAt();
+    expect(await screen.findByText('Loading people…')).toBeTruthy();
+    expect(screen.queryByText('No one matches')).toBeNull();
+    expect(screen.getByRole('combobox', { name: 'Filter by type' }).textContent).not.toContain('(0)');
+  });
+
+  test('a failed load keeps the header and tabs, and says so in a plain sentence', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.mocked(apiClient.get).mockRejectedValueOnce(new Error('Network Error'));
+    renderAt();
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toContain("Could not load the people in Lala's world.");
+    expect(screen.queryByText(/Network Error/)).toBeNull();
+    expect(screen.getByRole('heading', { name: 'Relationship Engine' })).toBeTruthy();
+    expect(screen.getAllByRole('tab')).toHaveLength(6);
+    expect(within(alert).getByRole('button', { name: 'Retry' })).toBeTruthy();
+  });
+
+  test('Overview About: plain rows with only the facts there are; no tension, an empty meter', async () => {
+    const { container } = renderAt('/relationships?char=dre');
+    await waitFor(() => expect(container.querySelector('.rp-name')?.textContent).toBe('Dre Coleman'));
+    expect(container.querySelector('.rp-about')).toBeNull();
+    expect(screen.getByText('Nothing written about Dre Coleman yet.')).toBeTruthy();
+    expect(container.querySelector('.rp-meter.is-empty')).toBeTruthy();
+  });
+
+  test('List: Mode and Status are the columns a tablet leaves out', async () => {
+    const { container } = renderAt('/relationships?tab=list');
+    await screen.findAllByText('Marcus Hale');
+    const heads = [...container.querySelectorAll('.re-list-table th.re-col-optional')].map((th) => th.textContent);
+    expect(heads).toEqual(['Mode', 'Status']);
+    expect(container.querySelectorAll('.re-list-table tbody tr:first-child td.re-col-optional')).toHaveLength(2);
   });
 });

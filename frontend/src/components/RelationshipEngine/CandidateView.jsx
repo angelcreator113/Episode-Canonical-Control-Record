@@ -61,7 +61,7 @@ export default function CandidateView({ cands, charById = {}, onConfirm, onDismi
                 </Btn>
                 <Btn variant="ghost" onClick={() => onDismiss(c.id)} disabled={busy}
                   aria-label={`Dismiss ${nA} ↔ ${nB}`}>
-                  ✕
+                  Dismiss
                 </Btn>
               </div>
             </div>

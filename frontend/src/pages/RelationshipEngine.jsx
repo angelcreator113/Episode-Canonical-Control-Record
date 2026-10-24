@@ -2,6 +2,8 @@
  * RelationshipEngine.jsx — the Relationships page: the cast, their
  * relationships and the seeds, in six tabs.
  * Prime Studios · LalaVerse
+ * Palette: the house tokens (--lala-parchment, --lala-gold, --lala-ink; Lora
+ * headings, DM Mono labels); rose, steel and orchid only carry meaning.
  */
 import { useReducer, useEffect, useCallback, useMemo, useState, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -188,7 +190,9 @@ export default function RelationshipEngine() {
       });
     } catch (err) {
       console.error('[RelationshipEngine] load failed:', err);
-      dispatch({ type: 'ERROR', msg: errText(err, "Could not load the people in Lala's world. Check your connection and try again.") });
+      // The server's reason when it gave one; otherwise a plain sentence (the
+      // raw error, e.g. "Network Error", is in the console).
+      dispatch({ type: 'ERROR', msg: err?.response?.data?.error || err?.response?.data?.message || "Could not load the people in Lala's world. Check your connection and try again." });
     }
   }, []);
 
@@ -429,28 +433,17 @@ export default function RelationshipEngine() {
 
   // The Family tab's own rule and list (tokens' isFamily; spouses are romance).
   const familyCount = filtRels.filter(isFamily).length;
+  // The counts live here, once (the Web's own bar already counts its graph).
   const subline =
     s.tab === 'candidates' ? `${s.cands.length} pending` :
     s.tab === 'family'     ? `${familyCount} bond${familyCount === 1 ? '' : 's'}` :
+    s.tab === 'web'        ? '' :
     `${filtChars.length} people · ${filtRels.length} relationships`;
+  const failed = !!s.error && !s.loading;
 
-  /* ── Error state (retry-able) ──────────────────────────────────────── */
-  if (s.error && !s.loading) {
-    return (
-      <div className="re-shell" role="alert">
-        <div className="re-error-page">
-          <div className="re-error-icon">⚠</div>
-          <div className="re-error-title">Something went wrong</div>
-          <div className="re-error-msg">{s.error}</div>
-          <Btn variant="primary" onClick={load}>Retry</Btn>
-        </div>
-      </div>
-    );
-  }
-
-  const showPanel = isPhone
-    ? s.panel && !!s.selRel
-    : (s.tab !== 'overview' && s.tab !== 'web') || s.panel;
+  // The Inspector shows only with a relationship open: no empty placeholder
+  // panel beside the views (2026-10-24 layout audit).
+  const showPanel = s.panel && !!s.selRel;
 
   /* ── Render ────────────────────────────────────────────────────────── */
   return (
@@ -490,7 +483,7 @@ export default function RelationshipEngine() {
           </label>
           <select className="re-layer-select" value={s.lf} aria-label="Filter by type"
             onChange={e => dispatch({ type: 'SET', payload: { lf: e.target.value } })}>
-            <option value="all">All Types ({s.chars.length})</option>
+            <option value="all">{s.loaded ? `All Types (${s.chars.length})` : 'All Types'}</option>
             {roleTypes.map(([k, n]) => (
               <option key={k} value={k}>{humanize(k)} ({n})</option>
             ))}
@@ -518,16 +511,16 @@ export default function RelationshipEngine() {
               <div key={i} style={{
                 padding: '8px 12px', borderRadius: 8,
                 background: '#fff', border: `1px solid ${sug.signal === 'strong' ? '#6ec9a0' : sug.signal === 'moderate' ? '#c9a96e' : '#e0e0e0'}`,
-                fontSize: 11,
+                fontSize: 12,
               }}>
                 <div style={{ fontWeight: 600, marginBottom: 2 }}>
                   {sug.pair[0]} ↔ {sug.pair[1]}
                 </div>
-                <div style={{ color: '#887766', fontSize: 10 }}>
+                <div style={{ color: '#6B6557', fontSize: 12 }}>
                   {sug.sharedDimensions.map(d => d.replace(/_/g, ' ')).join(', ')}
                 </div>
                 <span style={{
-                  display: 'inline-block', marginTop: 4, fontSize: 9, padding: '1px 6px', borderRadius: 8,
+                  display: 'inline-block', marginTop: 4, fontSize: 12, padding: '1px 6px', borderRadius: 8,
                   background: sug.signal === 'strong' ? '#e8f5e9' : sug.signal === 'moderate' ? '#fff8e1' : '#f5f5f5',
                   color: sug.signal === 'strong' ? '#2a8a5e' : sug.signal === 'moderate' ? '#b8944e' : '#999',
                   fontWeight: 600,
@@ -551,13 +544,16 @@ export default function RelationshipEngine() {
               </button>
             ))}
           </nav>
-          {s.tab !== 'web' && (
+          {s.tab !== 'web' && !failed && (
             <>
             <div className="re-sidebar-divider" />
             <div className="re-label re-sidebar-heading">People</div>
             {/* character list: a column on a desktop, a chip strip on a phone */}
             <div className="re-sidebar-chars" role="group" aria-label="People">
-              {filtChars.length === 0 && (
+              {s.loading && !s.loaded && (
+                <div className="re-sidebar-empty" role="status">Loading people…</div>
+              )}
+              {s.loaded && filtChars.length === 0 && (
                 <div className="re-sidebar-empty">No one matches</div>
               )}
               {filtChars.map(c => {
@@ -588,25 +584,20 @@ export default function RelationshipEngine() {
         {/* CENTER CANVAS */}
         <main className="re-canvas" role="main">
           {/* sub-header */}
-          {s.tab !== 'overview' && (
+          {s.tab !== 'overview' && !failed && (
           <div className="re-sub-header">
             <div>
               <span className="re-sub-title">
                 {{ tree: 'Tree', family: 'Family', web: 'Web', candidates: 'Seeds', list: 'List' }[s.tab]}
               </span>
-              <span className="re-sub-stats">{subline}</span>
+              {subline && <span className="re-sub-stats">{subline}</span>}
             </div>
             <div className="re-sub-actions">
-              {/* relationship type pills */}
-              {s.tab !== 'candidates' && Object.keys(relStats).length > 0 && (
-                <div className="re-type-pills">
-                  {Object.entries(relStats).slice(0, 5).map(([type, count]) => (
-                    <span key={type} className="re-type-pill">{type} ({count})</span>
-                  ))}
-                </div>
-              )}
-              {s.tab === 'candidates' && s.cands.length > 0 && (
-                <Btn variant="ghost" onClick={() => dispatch({ type: 'SET', payload: { genOpen: true } })}>◈ More seeds</Btn>
+              {/* the commonest relationship types, as plain words (not filters) */}
+              {s.tab !== 'candidates' && s.tab !== 'family' && Object.keys(relStats).length > 0 && (
+                <p className="re-type-counts">
+                  {Object.entries(relStats).slice(0, 5).map(([type, count]) => `${type} ${count}`).join(' · ')}
+                </p>
               )}
               {s.tab === 'family' && (
                 <Btn variant="ghost" onClick={genFamFn} disabled={s.genFam}>
@@ -621,8 +612,14 @@ export default function RelationshipEngine() {
           )}
 
           {/* view */}
-          <div className={`re-view ${s.tab === 'overview' ? 'is-overview' : ''} is-${s.tab}`}>
-            {s.loading              ? <Spinner /> :
+          <div className={`re-view ${failed ? 'is-error' : `${s.tab === 'overview' ? 'is-overview' : ''} is-${s.tab}`}`}>
+            {failed                 ? (
+                                      <div className="re-error-page" role="alert">
+                                        <p className="re-error-msg">{s.error}</p>
+                                        <Btn variant="primary" onClick={load}>Retry</Btn>
+                                      </div>
+                                    ) :
+             s.loading              ? <Spinner /> :
              s.tab === 'web'        ? <WebView chars={filtChars} rels={filtRels} lalaId={lala?.id} selectedId={s.selChar?.id ?? null} navigate={navigate} onRelClick={openRel} /> :
              s.tab === 'overview'   ? <ProfileView char={profileChar} chars={s.chars} rels={s.rels} cands={s.cands}
                                         onSelectChar={c => dispatch({ type: 'SET', payload: { selChar: c, selRel: null, panel: false } })}
@@ -639,34 +636,15 @@ export default function RelationshipEngine() {
           </div>
         </main>
 
-        {/* RIGHT INSPECTOR (a bottom sheet on a phone) */}
+        {/* RIGHT INSPECTOR (a bottom sheet up to 900px: phones and tablets) */}
         {showPanel && isPhone && <div className="re-sheet-backdrop" onClick={closeRel} aria-hidden />}
         {showPanel && (
           <aside className={`re-inspector-panel ${isPhone ? 'is-sheet' : ''}`}>
-            {s.panel && s.selRel
-              ? <Inspector rel={s.selRel} charById={charById} sheet={isPhone}
-                  onClose={closeRel}
-                  onUpdate={u => updateRel(s.selRel.id, u)}
-                  onSaved={r => dispatch({ type: 'UPDATE_REL', id: r.id, fields: r })}
-                  onDelete={() => del(s.selRel)} />
-              : (
-                <div className="re-inspector-empty">
-                  <div className="re-inspector-empty-icon">◈</div>
-                  <div className="re-inspector-empty-title">Select a relationship</div>
-                  <div className="re-inspector-empty-desc">
-                    Click any line in the tree or any row in the list to see their story so far here
-                  </div>
-                  {s.selChar && (
-                    <div className="re-inspector-char-summary">
-                      <div className="re-inspector-char-name">{cname(s.selChar)}</div>
-                      <div className="re-inspector-char-count">
-                        {filtRels.filter(r => r.character_id_a === s.selChar.id || r.character_id_b === s.selChar.id).length} connections
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )
-            }
+            <Inspector rel={s.selRel} charById={charById} sheet={isPhone}
+              onClose={closeRel}
+              onUpdate={u => updateRel(s.selRel.id, u)}
+              onSaved={r => dispatch({ type: 'UPDATE_REL', id: r.id, fields: r })}
+              onDelete={() => del(s.selRel)} />
           </aside>
         )}
       </div>
