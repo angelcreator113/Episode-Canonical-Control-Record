@@ -5,7 +5,8 @@
  *   the three "knows" fields; an empty value clears one; a field not sent is
  *   kept;
  * - DELETE /relationships/dismiss/:id dismisses a seed (the page's method);
- *   a confirmed relationship is refused;
+ *   a confirmed relationship is refused; the seed is only marked deleted
+ *   (2026-10-24), so POST /:id/restore brings it back, a seed still;
  * - GET /relationships/character/:id names the other character on each row,
  *   with their portrait, and ?confirmed=true leaves seeds out;
  * - the CharacterRelationship model reads deleted_at: a soft-deleted row is
@@ -55,7 +56,9 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     await run('DELETE FROM character_registries WHERE id = :reg', ids);
   });
 
-  test('PUT writes the Inspector\'s family role, conflict and knows fields; empty clears, absent keeps', async () => {
+  // The family role is the Family tab's (PUT /:id/family keeps the role read
+  // the other way in step); PUT /:id leaves it as it is (2026-10-24 audit).
+  test('PUT writes the Inspector\'s conflict and knows fields, not the family role; empty clears, absent keeps', async () => {
     const res = await as(request(app).put(`/api/v1/relationships/${ids.rel}`)).send({
       relationship_type: 'sisters', notes: 'close until the wedding',
       family_role: 'older sister', conflict_summary: 'the inheritance',
@@ -63,7 +66,7 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     });
     expect(res.status).toBe(200);
     expect(res.body.relationship).toMatchObject({
-      family_role: 'older sister', conflict_summary: 'the inheritance',
+      family_role: 'sister', conflict_summary: 'the inheritance',
       source_knows: null, target_knows: 'that Ana read the will', reader_knows: 'both are lying',
       notes: 'close until the wedding',
     });
@@ -71,7 +74,7 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     // A PUT without them (the older callers) leaves them as they are.
     await as(request(app).put(`/api/v1/relationships/${ids.rel}`)).send({ tension_state: 'simmering' });
     expect(await rowOf(ids.rel)).toMatchObject({
-      tension_state: 'simmering', family_role: 'older sister', target_knows: 'that Ana read the will', reader_knows: 'both are lying',
+      tension_state: 'simmering', family_role: 'sister', target_knows: 'that Ana read the will', reader_knows: 'both are lying',
     });
     expect((await request(app).put(`/api/v1/relationships/${ids.rel}`).send({ notes: 'x' })).status).toBe(401);
   });
@@ -99,8 +102,26 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     const res = await as(request(app).delete(`/api/v1/relationships/dismiss/${ids.seed}`));
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ dismissed: true });
-    expect(await rowOf(ids.seed)).toBeUndefined();
+    // Marked deleted, not gone (2026-10-24), and off every read.
+    const gone = await rowOf(ids.seed);
+    expect(gone.deleted_at).not.toBeNull();
+    expect(gone.confirmed).toBe(false);
+    const mine = await as(request(app).get(`/api/v1/relationships/character/${ids.cal}`));
+    expect(mine.body.relationships.map((r) => r.id)).not.toContain(ids.seed);
+    expect((await as(request(app).delete(`/api/v1/relationships/dismiss/${ids.seed}`))).status).toBe(404);
     expect((await as(request(app).post(`/api/v1/relationships/dismiss/${ids.rel}`))).status).toBe(404);
+    expect((await as(request(app).delete('/api/v1/relationships/dismiss/not-a-uuid'))).status).toBe(404);
+  });
+
+  test("Undo a dismiss: restore brings the seed back, still a seed, with its fields", async () => {
+    const res = await as(request(app).post(`/api/v1/relationships/${ids.seed}/restore`));
+    expect(res.status).toBe(200);
+    expect(res.body.relationship).toMatchObject({ id: ids.seed, confirmed: false, relationship_type: 'rivals', character_a_name: 'Cal' });
+    expect((await rowOf(ids.seed)).deleted_at).toBeNull();
+    const back = await as(request(app).get(`/api/v1/relationships/character/${ids.cal}`));
+    expect(back.body.relationships.map((r) => [r.id, r.confirmed])).toEqual([[ids.seed, false]]);
+    // A second restore has nothing to undo.
+    expect((await as(request(app).post(`/api/v1/relationships/${ids.seed}/restore`))).status).toBe(404);
   });
 
   test('the model reads deleted_at: a soft-deleted row is not found', async () => {

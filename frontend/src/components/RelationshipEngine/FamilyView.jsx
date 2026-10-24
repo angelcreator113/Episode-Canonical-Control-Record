@@ -13,7 +13,7 @@
  */
 import { useState } from 'react';
 import { Heart } from 'lucide-react';
-import { T, cname, sideName, typeLabel, isLoveInterest } from './tokens';
+import { T, cname, sideName, typeLabel, isRomance } from './tokens';
 import { Btn } from './primitives';
 import FamilyTree, { useFamilies } from './FamilyTree';
 import { isFamilyTie, isDashed } from './familyTree';
@@ -25,7 +25,8 @@ export default function FamilyView({ chars = [], rels = [], charById = {}, genni
 
   const families = useFamilies();
   const family = rels.filter(isFamilyTie);
-  const romantic = rels.filter(isLoveInterest);
+  // Romance, spouses and partners included, is listed apart (tokens' isRomance).
+  const romantic = rels.filter(isRomance);
   const connIds = new Set();
   family.forEach(b => { connIds.add(b.character_id_a); connIds.add(b.character_id_b); });
   const unconn = chars.filter(c => !connIds.has(c.id));
@@ -66,7 +67,9 @@ export default function FamilyView({ chars = [], rels = [], charById = {}, genni
               return (
                 <div key={b.id} className="re-family-card" role="listitem"
                   onClick={() => onRelClick(b)}
-                  onKeyDown={ev => { if (ev.key === 'Enter') onRelClick(b); }}
+                  // Only Enter on the card itself: Enter in the role box or on
+                  // its buttons must not open the Inspector too.
+                  onKeyDown={ev => { if (ev.key === 'Enter' && ev.target === ev.currentTarget) onRelClick(b); }}
                   tabIndex={0}>
                   <div className="re-family-card-accent" style={{ background: col }} />
                   <div className="re-family-card-body">
@@ -83,6 +86,7 @@ export default function FamilyView({ chars = [], rels = [], charById = {}, genni
                             className="cg-form-input re-family-edit-input"
                             aria-label="Family role"
                             onKeyDown={e => {
+                              e.stopPropagation();
                               if (e.key === 'Enter') save(b);
                               if (e.key === 'Escape') setEditId(null);
                             }} />
@@ -118,6 +122,7 @@ export default function FamilyView({ chars = [], rels = [], charById = {}, genni
             {romantic.map(r => (
               <button key={r.id} type="button" className="re-family-unconn-chip is-romantic" onClick={() => onRelClick(r)}>
                 <Heart size={12} fill="currentColor" aria-hidden /> {sideName(r, 'a', charById)} &amp; {sideName(r, 'b', charById)}
+                {r.family_role ? ` · ${r.family_role}` : ''}
               </button>
             ))}
           </div>

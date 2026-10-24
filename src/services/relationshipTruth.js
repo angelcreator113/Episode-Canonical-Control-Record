@@ -102,10 +102,16 @@ function pulseKindFor(row) {
   return category && PULSE_FOR[category] ? { category, ...PULSE_FOR[category] } : null;
 }
 
-/** The story pair in words: its family role or kind, its stage when it moved on. */
-function storyWords(row) {
+/**
+ * The story pair in words: its family role or kind, its stage when it moved
+ * on. With forId, the family role is the one that person holds
+ * (familyTies.familyRoleFor): for Lala's tie to her mother, "mother", not
+ * the "daughter" the row's own family_role says when Lala is its A side.
+ */
+function storyWords(row, forId = null) {
   const category = storyCategory(row);
-  const own = row.family_role || row.relationship_type || CATEGORY_WORDS[category] || 'connected';
+  const role = forId != null && row.family_role ? require('./familyTies').familyRoleFor(row, forId) : row.family_role;
+  const own = role || row.relationship_type || CATEGORY_WORDS[category] || 'connected';
   const parts = [String(own).replace(/_/g, ' ')];
   if (row.is_romantic && category === 'romance' && !/love/i.test(parts[0])) parts.push('love interest');
   if (row.stage) parts.push(`now ${String(row.stage).replace(/_/g, ' ')}`);
@@ -141,9 +147,13 @@ const MAP_KEY = {
 const MAP_LISTS = ['allies', 'rivals', 'mentors', 'love_interests', 'business_partners', 'family'];
 
 // ── Reads ─────────────────────────────────────────────────────────────────
+// reverse_family_role arrives with migration 20261024000000; the migration
+// before it (20261023230100) runs linkStoryAndPulse, so it is read through
+// to_jsonb, which gives null while the column does not exist yet.
 const STORY_SQL = `
   SELECT cr.id, cr.character_id_a, cr.character_id_b, cr.relationship_type, cr.status, cr.is_romantic,
-         cr.family_role, cr.is_blood_relation, cr.role_tag, cr.situation, cr.updated_at,
+         cr.family_role, to_jsonb(cr)->>'reverse_family_role' AS reverse_family_role, cr.is_blood_relation, cr.role_tag, cr.situation, cr.updated_at,
+         cb.gender AS b_gender, cb.pronouns AS b_pronouns,
          st.relationship_stage AS stage,
          COALESCE(NULLIF(ca.selected_name, ''), ca.display_name) AS name_a,
          COALESCE(NULLIF(cb.selected_name, ''), cb.display_name) AS name_b,
@@ -176,11 +186,9 @@ const PULSE_SQL = `
 const pairKey = (a, b) => [Number(a), Number(b)].sort((x, y) => x - y).join(':');
 const at = (h) => (h ? `@${String(h).replace(/^@+/, '')}` : null);
 
-/** Lala's registry character id, the newest live one, or null. */
-async function lalaCharacterId(db, transaction) {
-  const [row] = await rowsOf(db, `SELECT id FROM registry_characters WHERE character_key = 'lala' AND deleted_at IS NULL
-                                   ORDER BY (feed_profile_id IS NULL), updated_at DESC LIMIT 1`, {}, transaction);
-  return row?.id || null;
+/** Lala's registry character id, or null: the same Lala the Relationships page shows (services/whichLala). */
+function lalaCharacterId(db, transaction) {
+  return require('./whichLala').lalaId(db, { transaction });
 }
 
 // ── The link ─────────────────────────────────────────────────────────────
@@ -308,7 +316,8 @@ async function lalaStoryTies(db, characterIds, { transaction } = {}) {
     const category = storyCategory(r);
     const t = (category && LALA_TIE[category]) || null;
     out.set(other, {
-      category, tie: t?.tie || null, scriptTie: t ? t.scriptTie : null, words: storyWords(r),
+      // Read from their side: what they are to Lala.
+      category, tie: t?.tie || null, scriptTie: t ? t.scriptTie : null, words: storyWords(r, other),
       note: String(r.situation || '').replace(/\s+/g, ' ').trim().slice(0, 300) || null,
     });
   }
@@ -414,7 +423,8 @@ const person = (name, handle, characterId, profileId) => ({ name: name || at(han
  * pulse_missing (a story pair with both profiles has no Pulse pair),
  * pulse_couple_elsewhere (on The Pulse a couple with someone the story does
  * not pair them with, while the story has a romance with someone else),
- * lala_tie (lala_relationship against the Lala story pair), relationships_map
+ * pulse_story_deleted (a Pulse pair whose story pair was deleted), lala_tie
+ * (lala_relationship against the Lala story pair), relationships_map
  * (a name listed under another kind than the story's). An item marked
  * "different on purpose" is left out while what each store says is unchanged.
  * { includeKept } puts them back, marked kept: true.
@@ -464,6 +474,39 @@ async function driftReport(db, { includeKept = false, transaction } = {}) {
       key: `pulse_kind:${target.id}`, kind: 'pulse_kind', who,
       says: [story, { store: 'The Pulse', value: online.map((p) => `${p.relationship_type.replace(/_/g, ' ')}${p.public_visibility && p.public_visibility !== 'public' ? ` (${p.public_visibility})` : ''}`).join(', ') }],
       fix: { label: `Make it ${pulse.kind.replace(/_/g, ' ')} on The Pulse`, pulse_id: target.id, story_id: s.id, kind: pulse.kind },
+    });
+  }
+
+  // 2b: a Pulse pair whose story pair was deleted (DELETE /relationships/:id
+  // and the Family tab's remove keep the Pulse pair and its link, so Undo
+  // finds it), while the two have no other live story pair.
+  const orphans = await rowsOf(db,
+    `${PULSE_SQL}
+       JOIN character_relationships cr ON cr.id = spr.character_relationship_id AND cr.deleted_at IS NOT NULL
+       JOIN registry_characters ca ON ca.id = cr.character_id_a AND ca.deleted_at IS NULL
+       JOIN registry_characters cb ON cb.id = cr.character_id_b AND cb.deleted_at IS NULL
+     ORDER BY cr.deleted_at DESC`, {}, transaction);
+  // PULSE_SQL's own columns come first; the story's are read by name.
+  const orphanStories = orphans.length ? await rowsOf(db,
+    `SELECT cr.id, cr.character_id_a, cr.character_id_b, cr.relationship_type, cr.family_role, cr.is_romantic, cr.status,
+            COALESCE(NULLIF(ca.selected_name, ''), ca.display_name) AS name_a, COALESCE(NULLIF(cb.selected_name, ''), cb.display_name) AS name_b
+       FROM character_relationships cr
+       JOIN registry_characters ca ON ca.id = cr.character_id_a
+       JOIN registry_characters cb ON cb.id = cr.character_id_b
+      WHERE cr.id IN (:ids)`, { ids: [...new Set(orphans.map((o) => o.character_relationship_id))] }, transaction) : [];
+  for (const p of orphans) {
+    if (storyPairs.has(pairKey(p.source_profile_id, p.target_profile_id))) continue;
+    const s = orphanStories.find((x) => x.id === p.character_relationship_id);
+    if (!s) continue;
+    const kind = p.relationship_type.replace(/_/g, ' ');
+    items.push({
+      key: `pulse_story_deleted:${p.id}`, kind: 'pulse_story_deleted',
+      who: [person(s.name_a, p.source_handle, s.character_id_a, p.source_profile_id), person(s.name_b, p.target_handle, s.character_id_b, p.target_profile_id)],
+      says: [
+        { store: 'Story (Relationships)', value: `deleted (was ${storyWords(s)})` },
+        { store: 'The Pulse', value: `${kind}${p.public_visibility && p.public_visibility !== 'public' ? ` (${p.public_visibility})` : ''}` },
+      ],
+      fix: { label: `Take ${at(p.source_handle)} and ${at(p.target_handle)}'s ${kind} off The Pulse`, pulse_id: p.id, story_id: s.id },
     });
   }
 
@@ -601,6 +644,13 @@ async function applyDriftFix(db, key) {
     await sq(db).query(
       `UPDATE social_profile_relationships SET relationship_type = :kind, updated_at = NOW()${f.story_id ? ', character_relationship_id = :story' : ''} WHERE id = :id`,
       { replacements: { kind: f.kind, id: f.pulse_id, story: f.story_id || null } });
+  } else if (item.kind === 'pulse_story_deleted') {
+    // Only while its story pair is still deleted (an Undo since then keeps it).
+    const [, meta] = await sq(db).query(
+      `DELETE FROM social_profile_relationships spr USING character_relationships cr
+        WHERE spr.id = :id AND cr.id = spr.character_relationship_id AND cr.id = :story AND cr.deleted_at IS NOT NULL`,
+      { replacements: { id: f.pulse_id, story: f.story_id } });
+    if (!(meta?.rowCount)) throw new DriftError(409, 'That Pulse pair is not there, or its story pair is back. Reload the list.');
   } else if (item.kind === 'lala_tie') {
     await sq(db).query('UPDATE social_profiles SET lala_relationship = :tie, updated_at = NOW() WHERE id = :id',
       { replacements: { tie: f.tie, id: f.profile_id } });

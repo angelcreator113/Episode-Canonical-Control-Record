@@ -11,6 +11,8 @@ const { authorize } = require('../middleware/auth');
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 // The story pair is the truth; its Pulse pair follows it (services/relationshipTruth).
 const truth = require('../services/relationshipTruth');
+// Which Lala, the same one the writers use (services/whichLala).
+const whichLala = require('../services/whichLala');
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -19,32 +21,6 @@ let _db = null;
 function getDb() {
   if (!_db) _db = require('../models');
   return _db;
-}
-
-// ── Layer mapping: role_type → narrative layer ────────────────────────
-const LAYER_MAP = {
-  protagonist: 'real-world',
-  pressure:    'real-world',
-  support:     'real-world',
-  mirror:      'lalaverse',
-  shadow:      'lalaverse',
-  special:     'series-2',
-};
-
-function getLayer(roleType) {
-  return LAYER_MAP[roleType] || 'unknown';
-}
-
-/**
- * Cross-layer rule (relaxed):
- *  - role_type is a narrative archetype, NOT a world-layer indicator
- *  - A "shadow" or "mirror" can exist in the real world alongside protagonists
- *  - Only block truly impossible combos (none currently — all are valid)
- *  - When a dedicated world_layer column exists, tighten this back up
- */
-function isLayerCompatible(_layerA, _layerB) {
-  // All narrative-role layers are compatible with each other
-  return true;
 }
 
 // ── Column SELECT helpers ──────────────────────────────────────────────
@@ -91,15 +67,41 @@ const CHAR_SELECT_B = `
   cb.appearance_mode AS character_b_appearance, cb.icon AS character_b_icon,
   cb.portrait_url AS character_b_portrait`;
 
-// What PUT /:relId writes, each with the value an empty field becomes.
 const SPOUSE_ROLES = new Set(['wife', 'husband', 'spouse', 'partner', 'ex-wife', 'ex-husband', 'ex-partner', 'fiancé', 'fiancée', 'fiance', 'fiancee']);
 
+// What PUT /:relId writes, each with the value an empty field becomes. The
+// family role is not here: it is written with the role read the other way
+// and its kind, only by PUT /:relId/family and services/familyTies (an
+// Inspector Save sent the whole form and put back a role the Family tab had
+// just changed, 2026-10-24 audit).
 const EDITABLE = {
   relationship_type: null, connection_mode: 'IRL', lala_connection: 'none', status: 'Active',
   notes: null, situation: null, tension_state: null, pain_point_category: null,
   lala_mirror: null, career_echo_potential: null,
-  family_role: null, conflict_summary: null, source_knows: null, target_knows: null, reader_knows: null,
+  conflict_summary: null, source_knows: null, target_knows: null, reader_knows: null,
 };
+
+// A family role that is not a partner's: the pair is family, so not a romance.
+const isFamilyOnlyRole = (role) => Boolean(role && String(role).trim() && !SPOUSE_ROLES.has(String(role).trim().toLowerCase()));
+const FAMILY_NOT_ROMANCE = (role) => `They are family (${role}), so this cannot be a romance. Change the family role on the Family tab first.`;
+
+// Why an AI call failed, in words for the page's toast: the day's AI budget
+// (services/aiCostTracker), the account's credit, the rate limit, or the
+// service itself. Both generators answer the same way.
+function aiFailure(res, aiErr, what) {
+  const errMsg = aiErr?.message || String(aiErr);
+  console.error(`Claude API error (${what}):`, errMsg);
+  if (aiErr?.code === 'AI_BUDGET_EXCEEDED') {
+    return res.status(429).json({ error: `Today's AI budget is used up, so ${what} cannot run until tomorrow. ${errMsg}`, code: 'AI_BUDGET_EXCEEDED' });
+  }
+  if (errMsg.includes('credit balance') || errMsg.includes('billing') || aiErr?.status === 402) {
+    return res.status(402).json({ error: `AI credits exhausted. Please top up your Anthropic account to use ${what}.` });
+  }
+  if (errMsg.includes('rate') || aiErr?.status === 429) {
+    return res.status(429).json({ error: 'AI rate limit reached. Please wait a moment and try again.' });
+  }
+  return res.status(502).json({ error: 'AI service unavailable. ' + errMsg.slice(0, 200) });
+}
 
 /**
  * The cast this page works with (Evoni, 2026-10-16: "only use the 6 cast
@@ -109,25 +111,10 @@ const EDITABLE = {
  * generators read the same list, across every registry.
  */
 async function loadCastIds(db) {
-  const linked = await db.sequelize.query(
-    `SELECT DISTINCT ON (sp.id) rc.id, rc.registry_id
-       FROM social_profiles sp
-       JOIN registry_characters rc ON rc.feed_profile_id = sp.id AND rc.deleted_at IS NULL
-      WHERE sp.feed_layer::text = 'lalaverse' AND sp.deleted_at IS NULL AND COALESCE(sp.status::text, '') <> 'archived'
-      ORDER BY sp.id, rc.updated_at DESC`,
-    { type: db.sequelize.QueryTypes.SELECT }
-  );
-  const ids = new Set(linked.map((r) => String(r.id)));
-  const held = {};
-  linked.forEach((r) => { held[r.registry_id] = (held[r.registry_id] || 0) + 1; });
-  // Each registry can hold its own Lala; one is enough (her key, else her name).
-  const lalas = await db.sequelize.query(
-    `SELECT id, registry_id, (LOWER(COALESCE(character_key, '')) = 'lala') AS by_key
-       FROM registry_characters
-      WHERE deleted_at IS NULL AND (LOWER(COALESCE(character_key, '')) = 'lala' OR LOWER(COALESCE(display_name, '')) = 'lala')`,
-    { type: db.sequelize.QueryTypes.SELECT }
-  );
-  const lala = lalas.sort((a, b) => ((held[b.registry_id] || 0) - (held[a.registry_id] || 0)) || (b.by_key - a.by_key))[0];
+  const links = await whichLala.castLinks(db);
+  const ids = new Set(links.map((r) => String(r.id)));
+  // Each registry can hold its own Lala; one is enough (services/whichLala's rule).
+  const lala = await whichLala.findLala(db, { links });
   if (lala) ids.add(String(lala.id));
   return { ids: [...ids], lalaId: lala ? String(lala.id) : null };
 }
@@ -184,28 +171,6 @@ router.get('/', requireAuth, async (req, res) => {
 });
 
 // ════════════════════════════════════════════════════════════════════════
-// GET /api/v1/relationships/pending
-// Unconfirmed AI-generated candidates
-// ════════════════════════════════════════════════════════════════════════
-router.get('/pending', requireAuth, async (req, res) => {
-  try {
-    const db = getDb();
-    const rows = await db.sequelize.query(
-      `SELECT ${REL_SELECT}, ${CHAR_SELECT_A}, ${CHAR_SELECT_B}
-       FROM character_relationships cr ${CHAR_JOIN}
-       WHERE cr.confirmed = false AND ${LIVE}
-       ORDER BY cr.created_at DESC`,
-      { type: db.sequelize.QueryTypes.SELECT }
-    );
-
-    res.json({ candidates: rows, count: rows.length });
-  } catch (err) {
-    console.error('GET /relationships/pending error:', err);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// ════════════════════════════════════════════════════════════════════════
 // GET /api/v1/relationships/character/:charId
 // All relationships (confirmed + pending) for a single character;
 // ?confirmed=true for confirmed ones only (the Character Profile, Task #3119).
@@ -240,71 +205,6 @@ router.get('/character/:charId', requireAuth, async (req, res) => {
     res.json({ relationships: withOther, count: withOther.length });
   } catch (err) {
     console.error('GET /relationships/character/:charId error:', err);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// ════════════════════════════════════════════════════════════════════════
-// GET /api/v1/relationships/tree/:registryId
-// Full tree payload for the SVG three-layer visualization
-// Returns characters grouped by role_type + all relationships
-// ════════════════════════════════════════════════════════════════════════
-router.get('/tree/:registryId', requireAuth, async (req, res) => {
-  try {
-    const db = getDb();
-    const { registryId } = req.params;
-
-    // All characters in this registry
-    const characters = await db.sequelize.query(
-      `SELECT id, display_name, selected_name, character_key, icon,
-              role_type, role_label, appearance_mode, status,
-              core_belief, pressure_type, description,
-              belief_pressured, emotional_function, personality,
-              portrait_url, sort_order
-       FROM registry_characters
-       WHERE registry_id = :registry_id AND deleted_at IS NULL
-       ORDER BY sort_order ASC, display_name ASC`,
-      { replacements: { registry_id: registryId }, type: db.sequelize.QueryTypes.SELECT }
-    );
-
-    const charIds = characters.map(c => c.id);
-
-    // The confirmed relationships between characters in this registry; an
-    // unconfirmed seed shows only on the Seeds tab (GET /pending).
-    let relationships = [];
-    if (charIds.length > 0) {
-      relationships = await db.sequelize.query(
-        `SELECT ${REL_SELECT}, ${CHAR_SELECT_A}, ${CHAR_SELECT_B}
-         FROM character_relationships cr ${CHAR_JOIN}
-         WHERE cr.character_id_a IN (:ids) AND cr.character_id_b IN (:ids)
-           AND cr.confirmed = true AND ${LIVE}
-         ORDER BY cr.created_at DESC`,
-        { replacements: { ids: charIds }, type: db.sequelize.QueryTypes.SELECT }
-      );
-    }
-
-    // Group characters into layers by role_type
-    const layers = {
-      'real-world': characters.filter(c =>
-        ['protagonist', 'pressure', 'support'].includes(c.role_type)
-      ),
-      'lalaverse': characters.filter(c =>
-        ['mirror', 'shadow'].includes(c.role_type)
-      ),
-      'series-2': characters.filter(c =>
-        ['special'].includes(c.role_type)
-      ),
-    };
-
-    res.json({
-      characters,
-      relationships,
-      layers,
-      characterCount: characters.length,
-      relationshipCount: relationships.length,
-    });
-  } catch (err) {
-    console.error('GET /relationships/tree/:registryId error:', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -422,24 +322,54 @@ router.post('/', requireAuth, authorize(['ADMIN']), async (req, res) => {
       return res.status(400).json({ error: 'A character cannot have a relationship with themselves' });
     }
 
-    // ── Cross-layer validation ───────────────────────────────────────
     const [charA] = await db.sequelize.query(
-      'SELECT id, role_type, display_name FROM registry_characters WHERE id = :id',
+      'SELECT id FROM registry_characters WHERE id = :id',
       { replacements: { id: character_id_a }, type: db.sequelize.QueryTypes.SELECT }
     );
     const [charB] = await db.sequelize.query(
-      'SELECT id, role_type, display_name FROM registry_characters WHERE id = :id',
+      'SELECT id FROM registry_characters WHERE id = :id',
       { replacements: { id: character_id_b }, type: db.sequelize.QueryTypes.SELECT }
     );
     if (!charA || !charB) {
       return res.status(404).json({ error: 'One or both characters not found' });
     }
-    const layerA = getLayer(charA.role_type);
-    const layerB = getLayer(charB.role_type);
-    if (!isLayerCompatible(layerA, layerB)) {
-      return res.status(400).json({
-        error: `Cross-layer relationships not allowed: ${charA.display_name} (${layerA}) cannot have a relationship with ${charB.display_name} (${layerB}). Real-world characters relate only to real-world; LalaVerse characters relate only to LalaVerse.`,
-      });
+
+    // A family type (Add's Mother, Sister …, or one typed) reads "A is B's
+    // <type>" and is saved as the Family tab saves a tie (services/
+    // familyTies): both directions, its kind, and the Pulse family link, so
+    // it shows on the Family tab and tree, the character page's family and
+    // the writers' family lines. It made a plain row before (2026-10-24 audit).
+    const familyTies = require('../services/familyTies');
+    const asRole = String(relationship_type).trim();
+    if (!familyTies.isSpouseRole(asRole) && familyTies.reverseRole(asRole) !== null) {
+      if (is_romantic === true) return res.status(409).json({ error: FAMILY_NOT_ROMANCE(asRole) });
+      const given = (v) => (typeof v === 'string' && v.trim() ? v.trim() : undefined);
+      let saved;
+      try {
+        saved = await familyTies.saveFamilyTie(db.sequelize, {
+          fromId: character_id_a, toId: character_id_b, role: asRole, notes: given(notes), tension: given(tension_state),
+        });
+      } catch (tieErr) {
+        if (tieErr.status) return res.status(tieErr.status).json({ error: tieErr.message });
+        throw tieErr;
+      }
+      // The rest of what Add sent, where it says something (a tie reused
+      // from the Family tab keeps what it had for anything left empty).
+      const extra = { connection_mode, lala_connection, status, situation, pain_point_category, lala_mirror, career_echo_potential };
+      const sent = Object.keys(extra).filter((k) => req.body[k] !== undefined && given(extra[k]) !== undefined);
+      if (sent.length) {
+        await db.sequelize.query(
+          `UPDATE character_relationships SET ${sent.map((k) => `${k} = :${k}`).join(', ')}, updated_at = NOW() WHERE id = :id`,
+          { replacements: { id: saved.id, ...Object.fromEntries(sent.map((k) => [k, given(extra[k])])) } });
+      }
+      const [tie] = await db.sequelize.query(
+        `SELECT ${REL_SELECT}, ${CHAR_SELECT_A}, ${CHAR_SELECT_B}
+         FROM character_relationships cr ${CHAR_JOIN}
+         WHERE cr.id = :id`,
+        { replacements: { id: saved.id }, type: db.sequelize.QueryTypes.SELECT }
+      );
+      const pulse = await truth.afterStorySave(db, saved.id);
+      return res.status(201).json({ relationship: tie, family: true, created: saved.created, pulse });
     }
 
     // ── Duplicate check (bidirectional; a deleted one does not count) ──
@@ -609,17 +539,7 @@ No markdown fences, no explanation.`,
         }],
       });
     } catch (aiErr) {
-      const errMsg = aiErr?.message || String(aiErr);
-      const isCredits = errMsg.includes('credit balance') || errMsg.includes('billing') || aiErr?.status === 402;
-      const isRate = errMsg.includes('rate') || aiErr?.status === 429;
-      console.error('Claude API error:', errMsg);
-      if (isCredits) {
-        return res.status(402).json({ error: 'AI credits exhausted. Please top up your Anthropic account to generate relationships.' });
-      }
-      if (isRate) {
-        return res.status(429).json({ error: 'AI rate limit reached. Please wait a moment and try again.' });
-      }
-      return res.status(502).json({ error: 'AI service unavailable. ' + errMsg.slice(0, 200) });
+      return aiFailure(res, aiErr, 'Generate');
     }
 
     let candidates = [];
@@ -639,11 +559,6 @@ No markdown fences, no explanation.`,
       const bExists = characters.find(ch => ch.id === c.character_b_id);
       if (!aExists || !bExists) continue;
       if (c.character_a_id === c.character_b_id) continue;
-
-      // Cross-layer filter: skip incompatible layer pairs
-      const layA = getLayer(aExists.role_type);
-      const layB = getLayer(bExists.role_type);
-      if (!isLayerCompatible(layA, layB)) continue;
 
       const pairKey = `${c.character_a_id}|${c.character_b_id}`;
       const pairKeyRev = `${c.character_b_id}|${c.character_a_id}`;
@@ -718,26 +633,11 @@ router.post('/confirm/:relationshipId', requireAuth, authorize(['ADMIN']), async
     const db = getDb();
     const { relationshipId } = req.params;
 
-    // Fetch the candidate with character role_types for layer check
     const [candidate] = await db.sequelize.query(
-      `SELECT cr.id, cr.confirmed, ca.role_type AS role_a, cb.role_type AS role_b,
-              ca.display_name AS name_a, cb.display_name AS name_b
-       FROM character_relationships cr
-       LEFT JOIN registry_characters ca ON ca.id = cr.character_id_a
-       LEFT JOIN registry_characters cb ON cb.id = cr.character_id_b
-       WHERE cr.id = :id AND ${LIVE}`,
+      `SELECT cr.id, cr.confirmed FROM character_relationships cr WHERE cr.id = :id AND ${LIVE}`,
       { replacements: { id: relationshipId }, type: db.sequelize.QueryTypes.SELECT }
     );
     if (!candidate) return res.status(404).json({ error: 'Relationship not found' });
-
-    // Cross-layer validation on confirm
-    const layA = getLayer(candidate.role_a);
-    const layB = getLayer(candidate.role_b);
-    if (!isLayerCompatible(layA, layB)) {
-      return res.status(400).json({
-        error: `Cannot confirm: ${candidate.name_a} (${layA}) and ${candidate.name_b} (${layB}) are in incompatible layers.`,
-      });
-    }
 
     await db.sequelize.query(
       `UPDATE character_relationships
@@ -764,12 +664,16 @@ router.post('/confirm/:relationshipId', requireAuth, authorize(['ADMIN']), async
 
 // ════════════════════════════════════════════════════════════════════════
 // DELETE /api/v1/relationships/dismiss/:relationshipId
-// Dismiss (delete) an unconfirmed candidate
+// Dismiss an unconfirmed seed. Like Delete it only marks the row deleted,
+// so POST /:relId/restore is its Undo. A dismissed pair stays out of the
+// next Generate: the unique index (a, b, type) still counts the row, and
+// Generate skips every pair already there, deleted ones too.
 // ════════════════════════════════════════════════════════════════════════
 router.delete('/dismiss/:relationshipId', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const db = getDb();
     const { relationshipId } = req.params;
+    if (!UUID_RE.test(relationshipId)) return res.status(404).json({ error: 'Relationship not found' });
 
     const [row] = await db.sequelize.query(
       `SELECT id, confirmed FROM character_relationships WHERE id = :id AND deleted_at IS NULL`,
@@ -782,8 +686,8 @@ router.delete('/dismiss/:relationshipId', requireAuth, authorize(['ADMIN']), asy
     }
 
     await db.sequelize.query(
-      'DELETE FROM character_relationships WHERE id = :id',
-      { replacements: { id: relationshipId }, type: db.sequelize.QueryTypes.DELETE }
+      'UPDATE character_relationships SET deleted_at = NOW(), updated_at = NOW() WHERE id = :id AND deleted_at IS NULL AND confirmed = false',
+      { replacements: { id: relationshipId } }
     );
 
     res.json({ dismissed: true });
@@ -822,6 +726,18 @@ router.put('/:relId', requireAuth, authorize(['ADMIN']), async (req, res) => {
     }
     if (body.is_romantic !== undefined) {
       replacements.is_romantic = body.is_romantic === true || body.is_romantic === 'true';
+      // The rule PUT /:relId/family keeps, the other way: family (a mother,
+      // a sister) does not become a romance. One already romantic is left
+      // to the drift report, so its other fields can still be saved.
+      if (replacements.is_romantic) {
+        const [current] = await db.sequelize.query(
+          'SELECT is_romantic, family_role FROM character_relationships WHERE id = :id AND deleted_at IS NULL',
+          { replacements: { id: relId }, type: db.sequelize.QueryTypes.SELECT });
+        if (!current) return res.status(404).json({ error: 'Relationship not found' });
+        if (!current.is_romantic && isFamilyOnlyRole(current.family_role)) {
+          return res.status(409).json({ error: FAMILY_NOT_ROMANCE(current.family_role) });
+        }
+      }
       sets.push('is_romantic = :is_romantic');
     }
     // Who knows about it and where everyone else stands (services/relationshipKnowers).
@@ -858,6 +774,11 @@ router.put('/:relId', requireAuth, authorize(['ADMIN']), async (req, res) => {
 // DELETE /api/v1/relationships/:relId
 // Remove a relationship: it is marked deleted, so its relationship_events
 // (the story so far) stay, and POST /:relId/restore brings it back.
+// Its Pulse pair stays, still linked (pulse_kept names it): it is The
+// Pulse's own record (its kind, who sees it, its description, often older
+// than the story pair), the table has no deleted_at, so taking it off could
+// not be undone, and Undo finds the link where it was. The drift report
+// lists it ("Story pair deleted") with "take them off The Pulse" as its fix.
 // ════════════════════════════════════════════════════════════════════════
 router.delete('/:relId', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
@@ -868,7 +789,11 @@ router.delete('/:relId', requireAuth, authorize(['ADMIN']), async (req, res) => 
       { replacements: { id: req.params.relId } }
     );
     if (!(meta?.rowCount)) return res.status(404).json({ error: 'Relationship not found' });
-    res.json({ deleted: true, id: req.params.relId });
+    const kept = await db.sequelize.query(
+      'SELECT id FROM social_profile_relationships WHERE character_relationship_id = :id ORDER BY id',
+      { replacements: { id: req.params.relId }, type: db.sequelize.QueryTypes.SELECT }
+    );
+    res.json({ deleted: true, id: req.params.relId, pulse_kept: kept.map((r) => r.id) });
   } catch (err) {
     console.error('DELETE /relationships/:id error:', err);
     res.status(500).json({ error: err.message });
@@ -877,7 +802,7 @@ router.delete('/:relId', requireAuth, authorize(['ADMIN']), async (req, res) => 
 
 // ════════════════════════════════════════════════════════════════════════
 // POST /api/v1/relationships/:relId/restore
-// Undo a delete.
+// Undo a delete, or a seed's dismiss (it comes back a seed).
 // ════════════════════════════════════════════════════════════════════════
 router.post('/:relId/restore', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
@@ -895,71 +820,11 @@ router.post('/:relId/restore', requireAuth, authorize(['ADMIN']), async (req, re
        WHERE cr.id = :id AND ${LIVE}`,
       { replacements: { id: relId }, type: db.sequelize.QueryTypes.SELECT }
     );
-    res.json({ relationship: row || null });
+    // Its Pulse pair is linked still (DELETE keeps it); one it never had is made now.
+    const pulse = row?.confirmed ? await truth.afterStorySave(db, relId) : null;
+    res.json({ relationship: row || null, pulse });
   } catch (err) {
     console.error('POST /relationships/:id/restore error:', err);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// ════════════════════════════════════════════════════════════════════════
-// GET /api/v1/relationships/family-tree/:registryId
-// Family tree — returns only family + romantic relationships with
-// character nodes laid out for a tree visualization
-// ════════════════════════════════════════════════════════════════════════
-router.get('/family-tree/:registryId', requireAuth, async (req, res) => {
-  try {
-    const db = getDb();
-    const { registryId } = req.params;
-
-    // All characters in this registry
-    const characters = await db.sequelize.query(
-      `SELECT id, display_name, selected_name, character_key, icon,
-              role_type, role_label, appearance_mode, status,
-              portrait_url, sort_order
-       FROM registry_characters
-       WHERE registry_id = :registry_id AND deleted_at IS NULL
-       ORDER BY sort_order ASC, display_name ASC`,
-      { replacements: { registry_id: registryId }, type: db.sequelize.QueryTypes.SELECT }
-    );
-
-    const charIds = characters.map(c => c.id);
-    if (charIds.length === 0) {
-      return res.json({ characters: [], family_bonds: [], romantic_bonds: [] });
-    }
-
-    // Family relationships (family_role set OR is_blood_relation)
-    const familyBonds = await db.sequelize.query(
-      `SELECT ${REL_SELECT}, ${CHAR_SELECT_A}, ${CHAR_SELECT_B}
-       FROM character_relationships cr ${CHAR_JOIN}
-       WHERE (cr.character_id_a IN (:ids) OR cr.character_id_b IN (:ids))
-         AND (cr.family_role IS NOT NULL OR cr.is_blood_relation = true)
-         AND cr.is_romantic = false
-         AND cr.confirmed = true AND ${LIVE}
-       ORDER BY cr.created_at ASC`,
-      { replacements: { ids: charIds }, type: db.sequelize.QueryTypes.SELECT }
-    );
-
-    // Romantic relationships
-    const romanticBonds = await db.sequelize.query(
-      `SELECT ${REL_SELECT}, ${CHAR_SELECT_A}, ${CHAR_SELECT_B}
-       FROM character_relationships cr ${CHAR_JOIN}
-       WHERE (cr.character_id_a IN (:ids) OR cr.character_id_b IN (:ids))
-         AND cr.is_romantic = true
-         AND cr.confirmed = true AND ${LIVE}
-       ORDER BY cr.created_at ASC`,
-      { replacements: { ids: charIds }, type: db.sequelize.QueryTypes.SELECT }
-    );
-
-    res.json({
-      characters,
-      family_bonds: familyBonds,
-      romantic_bonds: romanticBonds,
-      total_family: familyBonds.length,
-      total_romantic: romanticBonds.length,
-    });
-  } catch (err) {
-    console.error('GET /relationships/family-tree/:registryId error:', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -1090,7 +955,9 @@ router.post('/generate-family', requireAuth, authorize(['ADMIN']), aiRateLimiter
     const Anthropic = require('@anthropic-ai/sdk');
     const claude = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-    const message = await claude.messages.create({
+    let message;
+    try {
+      message = await claude.messages.create({
       model: 'claude-sonnet-4-6',
       max_tokens: 2000,
       messages: [{
@@ -1121,7 +988,10 @@ Rules:
 Return ONLY valid JSON: { "family_bonds": [ ... ] }
 No markdown fences, no explanation.`,
       }],
-    });
+      });
+    } catch (aiErr) {
+      return aiFailure(res, aiErr, 'Propose Family');
+    }
 
     let familyBonds = [];
     try {
@@ -1240,6 +1110,67 @@ router.post('/drift/:key/keep', requireAuth, authorize(['ADMIN']), async (req, r
   try {
     res.json(await truth.keepDifferent(getDb(), req.params.key, { note: req.body?.note, by: req.user?.email || req.user?.id || null }));
   } catch (err) { driftError(res, err, 'POST /relationships/drift/:key/keep'); }
+});
+
+// ════════════════════════════════════════════════════════════════════════
+// GET /api/v1/relationships/person/:charId and GET /api/v1/relationships/:relId
+// For a link from the character page (?char=, ?rel=) to someone outside the
+// cast (GET /cast): the person with their confirmed relationships and the
+// people in them, or the relationship with its two people, so the page can
+// add them and open the Inspector. Live rows only; a seed only with
+// ?seeds=true. Registered last, so /drift and the others match first.
+// ════════════════════════════════════════════════════════════════════════
+const PERSON_COLUMNS = `id, registry_id, display_name, selected_name, character_key, icon,
+  role_type, role_label, appearance_mode, status, core_belief, pressure_type, description,
+  belief_pressured, emotional_function, personality, portrait_url, sort_order, feed_profile_id`;
+
+router.get('/person/:charId', requireAuth, async (req, res) => {
+  try {
+    const db = getDb();
+    const { charId } = req.params;
+    if (!UUID_RE.test(charId)) return res.status(404).json({ error: 'Character not found' });
+    const [character] = await db.sequelize.query(
+      `SELECT ${PERSON_COLUMNS} FROM registry_characters WHERE id = :id AND deleted_at IS NULL`,
+      { replacements: { id: charId }, type: db.sequelize.QueryTypes.SELECT });
+    if (!character) return res.status(404).json({ error: 'Character not found' });
+    const relationships = await db.sequelize.query(
+      `SELECT ${REL_SELECT}, ${CHAR_SELECT_A}, ${CHAR_SELECT_B}
+       FROM character_relationships cr ${CHAR_JOIN}
+       WHERE (cr.character_id_a = :id OR cr.character_id_b = :id) AND cr.confirmed = true AND ${LIVE}
+       ORDER BY cr.updated_at DESC`,
+      { replacements: { id: charId }, type: db.sequelize.QueryTypes.SELECT });
+    const others = [...new Set(relationships.flatMap((r) => [r.character_id_a, r.character_id_b]).filter((x) => x !== charId))];
+    const people = others.length ? await db.sequelize.query(
+      `SELECT ${PERSON_COLUMNS} FROM registry_characters WHERE id IN (:ids) AND deleted_at IS NULL`,
+      { replacements: { ids: others }, type: db.sequelize.QueryTypes.SELECT }) : [];
+    res.json({ character, characters: [character, ...people], relationships });
+  } catch (err) {
+    console.error('GET /relationships/person/:charId error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/:relId', requireAuth, async (req, res) => {
+  try {
+    const db = getDb();
+    const { relId } = req.params;
+    const missing = "That relationship was deleted or isn't confirmed";
+    if (!UUID_RE.test(relId)) return res.status(404).json({ error: missing });
+    const seeds = req.query.seeds === 'true';
+    const [relationship] = await db.sequelize.query(
+      `SELECT ${REL_SELECT}, ${CHAR_SELECT_A}, ${CHAR_SELECT_B}
+       FROM character_relationships cr ${CHAR_JOIN}
+       WHERE cr.id = :id AND ${LIVE} ${seeds ? '' : 'AND cr.confirmed = true'}`,
+      { replacements: { id: relId }, type: db.sequelize.QueryTypes.SELECT });
+    if (!relationship) return res.status(404).json({ error: missing });
+    const characters = await db.sequelize.query(
+      `SELECT ${PERSON_COLUMNS} FROM registry_characters WHERE id IN (:ids) AND deleted_at IS NULL`,
+      { replacements: { ids: [relationship.character_id_a, relationship.character_id_b] }, type: db.sequelize.QueryTypes.SELECT });
+    res.json({ relationship, characters });
+  } catch (err) {
+    console.error('GET /relationships/:relId error:', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 module.exports = router;

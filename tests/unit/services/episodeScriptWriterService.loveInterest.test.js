@@ -31,11 +31,19 @@ describe('love interest in the script prompt', () => {
   });
 
   test('lalaRomances reads confirmed romantic rows with Lala; a failed read is empty and logged', async () => {
-    const query = jest.fn(async () => [[{ other: 'c1', note: 'Flirting' }, { other: 'c1', note: 'older' }]]);
+    // The first read is which Lala (services/whichLala); then her romances.
+    const query = jest.fn(async (sql) => (/FROM registry_characters/.test(sql)
+      ? [[{ id: 'lala1', registry_id: 'reg1', by_key: true, has_profile: true }]]
+      : [[{ other: 'c1', note: 'Flirting' }, { other: 'c1', note: 'older' }]]));
     const out = await lalaRomances({ query }, ['c1', 'c1', null]);
     expect([...out]).toEqual([['c1', 'Flirting']]);
-    expect(query.mock.calls[0][0]).toMatch(/is_romantic = true AND cr\.confirmed = true/);
-    expect(query.mock.calls[0][1].replacements.ids).toEqual(['c1']);
+    const romance = query.mock.calls.find((c) => /is_romantic/.test(c[0]));
+    expect(romance[0]).toMatch(/is_romantic = true AND cr\.confirmed = true/);
+    // Only that one Lala's romances, not any registry's Lala.
+    expect(romance[1].replacements).toEqual({ ids: ['c1'], lala: 'lala1' });
+    const noLala = jest.fn(async () => [[]]);
+    expect((await lalaRomances({ query: noLala }, ['c1'])).size).toBe(0);
+    expect(noLala).toHaveBeenCalledTimes(1);
     expect((await lalaRomances({ query }, [])).size).toBe(0);
     const spy = jest.spyOn(console, 'error').mockImplementation(() => {});
     expect((await lalaRomances({ query: async () => { throw new Error('down'); } }, ['c1'])).size).toBe(0);
