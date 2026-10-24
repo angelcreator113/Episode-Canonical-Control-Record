@@ -1031,6 +1031,25 @@
 .wa-season-chip.is-plain { background: var(--surface-bg); color: var(--text-secondary); border: 1px solid var(--lala-parchment-3); }
 .wa-season-counts { margin: 6px 0 0; font-size: 13px; color: var(--text-secondary); }
 .wa-season-counts .is-debt { color: var(--danger-text); font-weight: 600; }
+/* Setting up a season (2026-10-24): the header's setup actions, the empty
+   and completed states, and the line a setup step leaves. */
+.wa-season-head-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.wa-season-head-btn {
+  min-height: 44px; padding: 6px 14px; border: 1px solid var(--lala-gold-line); border-radius: 12px; font: inherit; font-size: 13px;
+  font-weight: 700; background: var(--surface-card); color: var(--accent-dark); cursor: pointer;
+}
+.wa-season-head-btn[aria-pressed='true'] { border-color: var(--accent-dark); background: var(--accent-subtle); color: var(--text-primary); }
+.wa-season-note { margin: 0; padding: 10px 14px; border-radius: 12px; font-size: 13px; background: var(--success-bg); color: var(--success-text); }
+.wa-season-empty { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 18px 20px; border-radius: 16px; background: var(--lala-gold-soft); border: 1px solid var(--lala-gold-line); }
+.wa-season-empty-title { margin: 0; font-family: var(--font-prose); font-size: 22px; font-weight: 700; color: var(--text-primary); }
+.wa-season-empty-about { margin: 0; max-width: 70ch; font-size: 14px; line-height: 1.5; color: var(--text-secondary); }
+.wa-season-start {
+  min-height: 44px; margin-top: 6px; padding: 8px 18px; border: none; border-radius: 12px; font: inherit; font-size: 14px; font-weight: 700;
+  background: var(--accent-dark); color: var(--text-inverse); cursor: pointer;
+}
+@media (max-width: 560px) {
+  .wa-season-head-btn { flex: 1 1 auto; }
+}
 .wa-season-pair { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; }
 .wa-season-pair.is-two { grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); }
 @media (max-width: 900px) {

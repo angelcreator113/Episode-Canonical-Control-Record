@@ -4,8 +4,15 @@
  * Arc Routes
  * Mount at: /api/v1
  *
- * GET    /world/:showId/arc              — Get active arc with phases, debt, temperature
- * POST   /world/:showId/arc/seed         — Seed Arc 1 with 3 phases
+ * GET    /world/:showId/arc              — Get the active arc (else the latest) with phases, debt, temperature,
+ *                                           and next_season_number for "Start Season N"
+ * POST   /world/:showId/arc/seed         — Seed the next season from the "Set up the season" form
+ *                                           ({ title, tagline, phases: [{ title, tagline }] x3, split: [n, n, n] })
+ * PUT    /world/:showId/arc/setup        — "Edit season": the same form; re-phases slots not started
+ * GET    /world/:showId/season/placement — Preview: existing episodes and unused events into open slots
+ * POST   /world/:showId/season/placement — Save the preview ({ items: [{ slot_id, episode_id | event_id }] }), one transaction
+ * POST   /world/:showId/season/draft     — Draft the season, or one part ({ phase }), in one AI call; nothing saved
+ * POST   /world/:showId/season/draft/accept — Save accepted drafts ({ drafts: [...] }) as Auto-drafted intentions
  * POST   /world/:showId/arc/advance      — Manual phase advance (with warning)
  * POST   /world/:showId/arc/advance/confirm — Force advance after warning acknowledged
  * GET    /world/:showId/arc/context      — Get arc context for AI prompt injection
@@ -51,7 +58,7 @@
 const express = require('express');
 const router = express.Router();
 
-const { requireAuth } = require('../middleware/auth');
+const { requireAuth, authorize } = require('../middleware/auth');
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 
 // GET /world/:showId/arc — active arc
@@ -67,16 +74,19 @@ router.get('/world/:showId/arc', requireAuth, async (req, res) => {
     );
 
     if (!arcs?.length) {
-      return res.json({ success: true, arc: null, message: 'No arc found. Seed one first.' });
+      return res.json({ success: true, arc: null, next_season_number: 1, message: 'No arc found. Seed one first.' });
     }
 
-    const arc = arcs.find(a => a.status === 'active') || arcs[0];
+    // The season in progress; else the latest, so a completed season shows "Start Season N".
+    const arc = arcs.find(a => a.status === 'active') || arcs[arcs.length - 1];
     const phases = typeof arc.phases === 'string' ? JSON.parse(arc.phases) : arc.phases;
     const debt = typeof arc.narrative_debt === 'string' ? JSON.parse(arc.narrative_debt) : arc.narrative_debt;
     const log = typeof arc.progression_log === 'string' ? JSON.parse(arc.progression_log) : arc.progression_log;
 
+    const nextSeason = Math.max(0, ...arcs.map((a) => Number(a.season_number) || 0)) + 1;
     return res.json({
       success: true,
+      next_season_number: nextSeason,
       arc: {
         ...arc,
         phases,
@@ -93,25 +103,94 @@ router.get('/world/:showId/arc', requireAuth, async (req, res) => {
   }
 });
 
-// POST /world/:showId/arc/seed — seed Arc 1
-router.post('/world/:showId/arc/seed', requireAuth, async (req, res) => {
+// POST /world/:showId/arc/seed — seed the next season from the setup form
+// (Evoni, 2026-10-24). An empty body seeds the defaults, as before.
+router.post('/world/:showId/arc/seed', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const models = require('../models');
     const { seedArc } = require('../services/arcProgressionService');
-    const result = await seedArc(req.params.showId, models);
+    const { normaliseSetup } = require('../services/seasonSetupService');
+    const body = req.body || {};
+    const setup = Object.keys(body).length ? normaliseSetup(body) : null;
+    const result = await seedArc(req.params.showId, models, { setup });
 
     if (result.exists) {
-      return res.json({ success: true, message: 'Arc 1 already exists.', arc_id: result.arc_id });
+      return res.status(409).json({
+        error: `Season ${result.season_number} is still in progress; finish it before starting the next.`,
+        code: 'SEASON_IN_PROGRESS', arc_id: result.arc_id,
+      });
     }
 
-    return res.json({
+    return res.status(201).json({
       success: true,
-      message: 'Arc 1 seeded with 3 phases: Foundation, Ascension, Legacy.',
+      message: `Season ${result.season_number} set up with 3 parts.`,
       arc_id: result.arc_id,
+      season_number: result.season_number,
       phases: result.phases,
+      slots: result.slots,
     });
   } catch (err) {
-    return res.status(500).json({ error: err.message });
+    return sendSlotError(res, err, 'seed season');
+  }
+});
+
+// PUT /world/:showId/arc/setup — "Edit season": the setup form again. The split
+// re-phases the slots that have not started; a started slot keeps its part.
+router.put('/world/:showId/arc/setup', requireAuth, authorize(['ADMIN']), async (req, res) => {
+  try {
+    const models = require('../models');
+    const { updateSetup } = require('../services/seasonSetupService');
+    const result = await updateSetup(models.sequelize, req.params.showId, req.body || {});
+    return res.json({ success: true, ...result });
+  } catch (err) {
+    return sendSlotError(res, err, 'edit season');
+  }
+});
+
+// GET /world/:showId/season/placement — the preview of "Use your events and
+// episodes"; read-only, nothing is placed until the POST.
+router.get('/world/:showId/season/placement', requireAuth, async (req, res) => {
+  try {
+    const models = require('../models');
+    const { previewPlacement } = require('../services/seasonSetupService');
+    return res.json({ success: true, ...(await previewPlacement(models.sequelize, req.params.showId)) });
+  } catch (err) {
+    return sendSlotError(res, err, 'placement preview');
+  }
+});
+
+// POST /world/:showId/season/placement — Save: { items: [{ slot_id, episode_id | event_id }] }
+router.post('/world/:showId/season/placement', requireAuth, authorize(['ADMIN']), async (req, res) => {
+  try {
+    const models = require('../models');
+    const { applyPlacement } = require('../services/seasonSetupService');
+    return res.json({ success: true, ...(await applyPlacement(models.sequelize, req.params.showId, req.body?.items)) });
+  } catch (err) {
+    return sendSlotError(res, err, 'apply placement');
+  }
+});
+
+// POST /world/:showId/season/draft — { phase? }: one AI call drafts the open
+// slots; nothing is saved until Evoni accepts.
+router.post('/world/:showId/season/draft', requireAuth, authorize(['ADMIN']), aiRateLimiter, async (req, res) => {
+  try {
+    const models = require('../models');
+    const { draftSeason } = require('../services/seasonSetupService');
+    const result = await draftSeason(models.sequelize, req.params.showId, { phase: req.body?.phase ?? null });
+    return res.json({ success: true, ...result });
+  } catch (err) {
+    return sendSlotError(res, err, 'draft season');
+  }
+});
+
+// POST /world/:showId/season/draft/accept — { drafts: [{ slot_id, story_purpose, desired_pressure, story_thread_id }] }
+router.post('/world/:showId/season/draft/accept', requireAuth, authorize(['ADMIN']), async (req, res) => {
+  try {
+    const models = require('../models');
+    const { acceptDrafts } = require('../services/seasonIntentionService');
+    return res.json({ success: true, ...(await acceptDrafts(models.sequelize, req.params.showId, req.body?.drafts)) });
+  } catch (err) {
+    return sendSlotError(res, err, 'accept season drafts');
   }
 });
 

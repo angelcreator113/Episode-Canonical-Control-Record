@@ -469,36 +469,39 @@ function assertFuture(slot) {
  * of the season. An event already in this slot is replaced and returned.
  */
 async function pencilEvent(sequelize, showId, slotId, eventId) {
-  return sequelize.transaction(async (transaction) => {
-    const slot = await lockSlot(sequelize, showId, slotId, transaction);
-    assertFuture(slot);
-    const replaced = slot.event_id && slot.event_id !== eventId ? slot.event_id : null;
-    let movedFrom = null;
+  return sequelize.transaction((transaction) => pencilEventIn(sequelize, showId, slotId, eventId, transaction));
+}
 
-    if (eventId) {
-      const [[event]] = await sequelize.query(
-        `SELECT id, name, status, used_in_episode_id FROM world_events
-          WHERE id = :eventId AND show_id = :showId AND deleted_at IS NULL`,
-        { replacements: { eventId, showId }, transaction });
-      if (!event) throw new SeasonSlotError('Event not found for this show', 404, 'SEASON_EVENT_NOT_FOUND');
-      if (event.used_in_episode_id || !['draft', 'ready'].includes(event.status || 'draft')) {
-        throw new SeasonSlotError(`"${event.name}" has started an episode or is archived; only a draft or ready event can be pencilled`, 409, 'SEASON_EVENT_NOT_AVAILABLE');
-      }
-      const [[other]] = await sequelize.query(
-        `SELECT id, slot_number FROM season_slots
-          WHERE arc_id = :arcId AND event_id = :eventId AND id <> :slotId AND deleted_at IS NULL FOR UPDATE`,
-        { replacements: { arcId: slot.arc_id, eventId, slotId }, transaction });
-      if (other) {
-        await sequelize.query('UPDATE season_slots SET event_id = NULL, updated_at = NOW() WHERE id = :id',
-          { replacements: { id: other.id }, transaction });
-        movedFrom = other.slot_number;
-      }
+/** pencilEvent inside a caller's transaction (the season setup's Save applies many at once). */
+async function pencilEventIn(sequelize, showId, slotId, eventId, transaction) {
+  const slot = await lockSlot(sequelize, showId, slotId, transaction);
+  assertFuture(slot);
+  const replaced = slot.event_id && slot.event_id !== eventId ? slot.event_id : null;
+  let movedFrom = null;
+
+  if (eventId) {
+    const [[event]] = await sequelize.query(
+      `SELECT id, name, status, used_in_episode_id FROM world_events
+        WHERE id = :eventId AND show_id = :showId AND deleted_at IS NULL`,
+      { replacements: { eventId, showId }, transaction });
+    if (!event) throw new SeasonSlotError('Event not found for this show', 404, 'SEASON_EVENT_NOT_FOUND');
+    if (event.used_in_episode_id || !['draft', 'ready'].includes(event.status || 'draft')) {
+      throw new SeasonSlotError(`"${event.name}" has started an episode or is archived; only a draft or ready event can be pencilled`, 409, 'SEASON_EVENT_NOT_AVAILABLE');
     }
+    const [[other]] = await sequelize.query(
+      `SELECT id, slot_number FROM season_slots
+        WHERE arc_id = :arcId AND event_id = :eventId AND id <> :slotId AND deleted_at IS NULL FOR UPDATE`,
+      { replacements: { arcId: slot.arc_id, eventId, slotId }, transaction });
+    if (other) {
+      await sequelize.query('UPDATE season_slots SET event_id = NULL, updated_at = NOW() WHERE id = :id',
+        { replacements: { id: other.id }, transaction });
+      movedFrom = other.slot_number;
+    }
+  }
 
-    await sequelize.query('UPDATE season_slots SET event_id = :eventId, updated_at = NOW() WHERE id = :slotId',
-      { replacements: { eventId: eventId || null, slotId }, transaction });
-    return { slot_number: slot.slot_number, event_id: eventId || null, moved_from: movedFrom, replaced_event_id: replaced };
-  });
+  await sequelize.query('UPDATE season_slots SET event_id = :eventId, updated_at = NOW() WHERE id = :slotId',
+    { replacements: { eventId: eventId || null, slotId }, transaction });
+  return { slot_number: slot.slot_number, event_id: eventId || null, moved_from: movedFrom, replaced_event_id: replaced };
 }
 
 /**
@@ -506,35 +509,38 @@ async function pencilEvent(sequelize, showId, slotId, eventId) {
  * the slot to it (Q4, A7). The slot keeps the episode's own event, if any.
  */
 async function placeEpisode(sequelize, showId, slotId, episodeId) {
-  return sequelize.transaction(async (transaction) => {
-    const slot = await lockSlot(sequelize, showId, slotId, transaction);
-    assertFuture(slot);
-    const [[episode]] = await sequelize.query(
-      'SELECT id, title FROM episodes WHERE id = :episodeId AND show_id = :showId AND deleted_at IS NULL',
-      { replacements: { episodeId, showId }, transaction });
-    if (!episode) throw new SeasonSlotError('Episode not found for this show', 404, 'SEASON_EPISODE_NOT_FOUND');
-    const [[placed]] = await sequelize.query(
-      'SELECT slot_number FROM season_slots WHERE episode_id = :episodeId AND deleted_at IS NULL',
-      { replacements: { episodeId }, transaction });
-    if (placed) throw new SeasonSlotError(`"${episode.title}" is already in E${placed.slot_number}`, 409, 'SEASON_EPISODE_PLACED');
+  return sequelize.transaction((transaction) => placeEpisodeIn(sequelize, showId, slotId, episodeId, transaction));
+}
 
-    const [[event]] = await sequelize.query(
-      `SELECT ${require('../utils/episodeEventSql').EPISODE_EVENT_ID_SQL} AS id`,
-      { replacements: { episodeId }, transaction });
-    const eventId = event?.id || null;
-    if (eventId) {
-      await sequelize.query(
-        `UPDATE season_slots SET event_id = NULL, updated_at = NOW()
-          WHERE arc_id = :arcId AND event_id = :eventId AND id <> :slotId AND deleted_at IS NULL`,
-        { replacements: { arcId: slot.arc_id, eventId, slotId }, transaction });
-    }
+/** placeEpisode inside a caller's transaction (the season setup's Save). */
+async function placeEpisodeIn(sequelize, showId, slotId, episodeId, transaction) {
+  const slot = await lockSlot(sequelize, showId, slotId, transaction);
+  assertFuture(slot);
+  const [[episode]] = await sequelize.query(
+    'SELECT id, title FROM episodes WHERE id = :episodeId AND show_id = :showId AND deleted_at IS NULL',
+    { replacements: { episodeId, showId }, transaction });
+  if (!episode) throw new SeasonSlotError('Episode not found for this show', 404, 'SEASON_EPISODE_NOT_FOUND');
+  const [[placed]] = await sequelize.query(
+    'SELECT slot_number FROM season_slots WHERE episode_id = :episodeId AND deleted_at IS NULL',
+    { replacements: { episodeId }, transaction });
+  if (placed) throw new SeasonSlotError(`"${episode.title}" is already in E${placed.slot_number}`, 409, 'SEASON_EPISODE_PLACED');
+
+  const [[event]] = await sequelize.query(
+    `SELECT ${require('../utils/episodeEventSql').EPISODE_EVENT_ID_SQL} AS id`,
+    { replacements: { episodeId }, transaction });
+  const eventId = event?.id || null;
+  if (eventId) {
     await sequelize.query(
-      `UPDATE season_slots SET episode_id = :episodeId, event_id = :eventId, locked_at = NOW(), updated_at = NOW()
-        WHERE id = :slotId`,
-      { replacements: { episodeId, eventId, slotId }, transaction });
-    await snapshotEpisode(sequelize, { slotId, episodeId, transaction });
-    return { slot_number: slot.slot_number, episode_id: episodeId, event_id: eventId };
-  });
+      `UPDATE season_slots SET event_id = NULL, updated_at = NOW()
+        WHERE arc_id = :arcId AND event_id = :eventId AND id <> :slotId AND deleted_at IS NULL`,
+      { replacements: { arcId: slot.arc_id, eventId, slotId }, transaction });
+  }
+  await sequelize.query(
+    `UPDATE season_slots SET episode_id = :episodeId, event_id = :eventId, locked_at = NOW(), updated_at = NOW()
+      WHERE id = :slotId`,
+    { replacements: { episodeId, eventId, slotId }, transaction });
+  await snapshotEpisode(sequelize, { slotId, episodeId, transaction });
+  return { slot_number: slot.slot_number, episode_id: episodeId, event_id: eventId };
 }
 
 /**
@@ -589,7 +595,11 @@ module.exports = {
   getRoadmap,
   eventSeasonContext,
   pencilEvent,
+  pencilEventIn,
   placeEpisode,
+  placeEpisodeIn,
+  arcPhases,
+  phaseFor,
   assignOnStart,
   snapshotEpisode,
   PRESSURE_LEVELS,
