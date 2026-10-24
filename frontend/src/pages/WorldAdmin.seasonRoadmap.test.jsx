@@ -536,7 +536,7 @@ describe('Season Plan layout', () => {
     renderAt('season');
     const head = await screen.findByTestId('season-head');
     expect(within(head).getByRole('heading', { level: 2 }).textContent).toBe('📖 Season 1: Soft Luxury Ascension');
-    expect(screen.getByTestId('season-counts').textContent).toBe('0 episodes done · 0 goals hit · 1 narrative debt · Phase 1');
+    expect(screen.getByTestId('season-counts').textContent).toBe('0 episodes done this season · 0 goals hit · 1 narrative debt · Phase 1');
     expect(screen.queryByText('Episodes Done')).toBeNull();
   });
 

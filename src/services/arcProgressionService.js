@@ -35,104 +35,67 @@ function computeEmotionalTemperature(arc) {
   return 'anxious';
 }
 
-// ── SEED ARC 1 ──────────────────────────────────────────────────────────────
+// ── SEED A SEASON ───────────────────────────────────────────────────────────
 
 /**
- * Create Arc 1 for a show with 3 phases.
+ * Seeds the show's next season: an arc with 3 phases and its 24 slots, in one
+ * transaction. `setup` is the "Set up the season" form, already checked
+ * (seasonSetupService.normaliseSetup); without it the defaults are used
+ * (Season 1's original wording, or "Season N"). The arc and season numbers
+ * follow the show's last (Season 2 after Season 1 is complete). Returns
+ * { exists: true } when a season is still in progress.
  */
-async function seedArc(showId, models) {
+async function seedArc(showId, models, { setup = null } = {}) {
   const { sequelize } = models;
+  const { nextNumbers, defaultSetup, buildPhases } = require('./seasonSetupService');
 
-  // Check if arc already exists
-  const [existing] = await sequelize.query(
-    'SELECT id FROM show_arcs WHERE show_id = :showId AND arc_number = 1 AND deleted_at IS NULL',
-    { replacements: { showId } }
-  );
-  if (existing?.length > 0) return { exists: true, arc_id: existing[0].id };
+  return sequelize.transaction(async (transaction) => {
+    // One seed at a time per show, so two clicks cannot make two seasons.
+    await sequelize.query('SELECT pg_advisory_xact_lock(hashtext(:key))', { replacements: { key: `season-seed:${showId}` }, transaction });
+    const [existing] = await sequelize.query(
+      `SELECT id, season_number FROM show_arcs WHERE show_id = :showId AND status = 'active' AND deleted_at IS NULL
+        ORDER BY arc_number ASC LIMIT 1`,
+      { replacements: { showId }, transaction }
+    );
+    if (existing?.length > 0) return { exists: true, arc_id: existing[0].id, season_number: existing[0].season_number || 1 };
 
-  const arcId = uuidv4();
-  const phases = [
-    {
-      phase: 1,
-      title: 'Foundation',
-      tagline: 'Prove you belong',
-      episode_start: 1,
-      episode_end: 8,
-      status: 'active',
-      activated_at: new Date().toISOString(),
-      activated_by: 'auto',
-      emotional_arc: 'curiosity → first stumble → finding her footing',
-      feed_behavior: {
-        follow_bias: 'aspiration',
-        event_prestige_max: 6,
-        follow_emotions: ['excitement', 'anxiety', 'admiration'],
-        feed_tone: 'Lala watches from the outside. Everything feels aspirational and slightly out of reach.',
-      },
-      goal_summary: { total: 0, completed: 0, failed: 0, carried: 0 },
-    },
-    {
-      phase: 2,
-      title: 'Ascension',
-      tagline: 'Climb the ladder',
-      episode_start: 9,
-      episode_end: 16,
-      status: 'upcoming',
-      emotional_arc: 'ambition → competition → first real loss → determination',
-      feed_behavior: {
-        follow_bias: 'competition',
-        event_prestige_max: 8,
-        follow_emotions: ['competition', 'jealousy', 'motivation'],
-        feed_tone: 'Lala is in the mix now. People know her name. The shade gets personal.',
-      },
-      goal_summary: { total: 0, completed: 0, failed: 0, carried: 0 },
-    },
-    {
-      phase: 3,
-      title: 'Legacy',
-      tagline: 'Become uncopyable',
-      episode_start: 17,
-      episode_end: 24,
-      status: 'upcoming',
-      emotional_arc: 'confidence → crisis of identity → building her own room → transcendence',
-      feed_behavior: {
-        follow_bias: 'study',
-        event_prestige_max: 10,
-        follow_emotions: ['admiration', 'obsession', 'motivation'],
-        feed_tone: 'Lala stops watching and starts being watched. The feed follows her.',
-      },
-      goal_summary: { total: 0, completed: 0, failed: 0, carried: 0 },
-    },
-  ];
+    const { arc_number: arcNumber, season_number: seasonNumber } = await nextNumbers(sequelize, showId, transaction);
+    const chosen = setup || defaultSetup(seasonNumber);
+    const phases = buildPhases(chosen);
+    const arcId = uuidv4();
 
-  await sequelize.query(
-    `INSERT INTO show_arcs (id, show_id, arc_number, title, tagline, description,
-     season_number, episode_start, episode_end, phases, current_phase, status,
-     narrative_debt, progression_log, emotional_temperature, icon, color,
-     created_at, updated_at)
-     VALUES (:id, :showId, 1, :title, :tagline, :description,
-     1, 1, 24, :phases, 1, 'active',
-     '[]', :log, 'rising', '📖', '#B8962E',
-     NOW(), NOW())`,
-    { replacements: {
-      id: arcId,
-      showId,
-      title: 'Soft Luxury Ascension',
-      tagline: 'Lala earns her place in the luxury tier',
-      description: 'The full 24-episode journey from nobody to uncopyable. Fashion is strategy. Reputation is currency. Legacy is built episode by episode.',
-      phases: JSON.stringify(phases),
-      log: JSON.stringify([{
-        from_phase: null, to_phase: 1,
-        triggered_by: 'auto', trigger_reason: 'Arc seeded — Phase 1 activated',
-        timestamp: new Date().toISOString(),
-      }]),
-    } }
-  );
+    await sequelize.query(
+      `INSERT INTO show_arcs (id, show_id, arc_number, title, tagline, description,
+       season_number, episode_start, episode_end, phases, current_phase, status,
+       narrative_debt, progression_log, emotional_temperature, icon, color,
+       created_at, updated_at)
+       VALUES (:id, :showId, :arcNumber, :title, :tagline, :description,
+       :seasonNumber, 1, 24, :phases, 1, 'active',
+       '[]', :log, 'rising', '📖', '#B8962E',
+       NOW(), NOW())`,
+      { replacements: {
+        id: arcId,
+        showId,
+        arcNumber,
+        seasonNumber,
+        title: chosen.title,
+        tagline: chosen.tagline || null,
+        description: chosen.description || null,
+        phases: JSON.stringify(phases),
+        log: JSON.stringify([{
+          from_phase: null, to_phase: 1,
+          triggered_by: 'auto', trigger_reason: `Season ${seasonNumber} seeded — Phase 1 activated`,
+          timestamp: new Date().toISOString(),
+        }]),
+      }, transaction }
+    );
 
-  // The season's 24 empty slots (Season Arc, §8(ff) A2).
-  const { ensureSeasonSlots } = require('./seasonSlotService');
-  const slots = await ensureSeasonSlots(sequelize, { id: arcId, show_id: showId, season_number: 1, phases });
+    // The season's 24 empty slots (Season Arc, §8(ff) A2).
+    const { ensureSeasonSlots } = require('./seasonSlotService');
+    const slots = await ensureSeasonSlots(sequelize, { id: arcId, show_id: showId, season_number: seasonNumber, phases }, { transaction });
 
-  return { exists: false, arc_id: arcId, phases: phases.length, slots };
+    return { exists: false, arc_id: arcId, arc_number: arcNumber, season_number: seasonNumber, phases: phases.length, slots };
+  });
 }
 
 // ── CHECK PHASE TRANSITION ──────────────────────────────────────────────────

@@ -27,6 +27,7 @@ import RateCardTab from '../components/RateCard/RateCardTab';
 import SeasonProposals from '../components/Show/SeasonProposals';
 import SeasonRevealPlan from '../components/Show/SeasonRevealPlan';
 import SeasonTwists from '../components/Show/SeasonTwists';
+import { SeasonSetupForm, SeasonPlacement, SeasonDraft, SeasonChecklist, setupSteps, formFromArc } from '../components/Show/SeasonSetup';
 import ShowOverview, { episodesInProduction, eventsNeedingAttention } from '../components/Show/ShowOverview';
 import { useLookDraft, LookBuilderPanel, RecentlyWorn } from '../components/Show/LookBuilder';
 import { LalaStatsCard, DecisionLogCard, StoryThreadsStrip, CastRow } from '../components/Show/CastContinuity';
@@ -1890,7 +1891,7 @@ The revised event should feel like a completely different experience from the si
       )}
 
       {activeTab === 'episodes' && subTab === 'season' && (
-        <SeasonTab showId={showId} api={api} S={S} episodes={episodes} events={worldEvents} setToast={setToast} />
+        <SeasonTab showId={showId} api={api} S={S} episodes={episodes} events={worldEvents} setToast={setToast} onGoalsChanged={() => api.get(`/api/v1/world/${showId}/goals`).then((r) => setGoals(r.data?.goals || [])).catch((err) => console.error('Career goals reload failed:', err))} />
       )}
 
       {/* ════════════════════════ EPISODE LEDGER ════════════════════════ */}
@@ -7732,10 +7733,16 @@ function SeasonRoadmap({ roadmap, S, api, showId, onChanged, setToast, onAdvance
   );
 }
 
-function SeasonTab({ showId, api, S, episodes, events = [], setToast }) {
+function SeasonTab({ showId, api, S, episodes, events = [], setToast, onGoalsChanged }) {
   const [arc, setArc] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [seeding, setSeeding] = useState(false);
+  // Setting up a season (Evoni, 2026-10-24): the next season's number, and
+  // which setup panel is open: 'new' (the form for the next season), 'edit',
+  // 'place' (use your events and episodes) or 'draft'.
+  const [nextSeason, setNextSeason] = useState(1);
+  const [panel, setPanel] = useState(null);
+  const [seedingGoals, setSeedingGoals] = useState(false);
+  const [setupNote, setSetupNote] = useState(null);
   const [advancing, setAdvancing] = useState(false);
   const [warning, setWarning] = useState(null);
   const [goals, setGoals] = useState([]);
@@ -7776,12 +7783,15 @@ function SeasonTab({ showId, api, S, episodes, events = [], setToast }) {
     try {
       const r = await api.get(`/api/v1/world/${showId}/arc`);
       setArc(r.data.arc);
-    } catch { setArc(null); }
+      setNextSeason(r.data.next_season_number || 1);
+    } catch (err) { console.error('Season arc load failed:', err); setArc(null); }
 
+    // Every goal, so the phases show what was hit and missed and the
+    // checklist knows whether any is live.
     try {
-      const r = await api.get(`/api/v1/world/${showId}/goals?status=active`);
+      const r = await api.get(`/api/v1/world/${showId}/goals`);
       setGoals(r.data.goals || []);
-    } catch { /* skip */ }
+    } catch (err) { console.error('Season goals load failed:', err); }
 
     await loadRoadmap();
 
@@ -7790,16 +7800,40 @@ function SeasonTab({ showId, api, S, episodes, events = [], setToast }) {
 
   useEffect(() => { loadArc(); }, [loadArc]);
 
-  const handleSeed = async () => {
-    setSeeding(true);
+  // The form's Save: a new season, or Edit season. A refusal is thrown back
+  // to the form, which shows it in place.
+  const handleSeed = async (body) => {
+    const r = await api.post(`/api/v1/world/${showId}/arc/seed`, body);
+    setPanel(null);
+    setSetupNote(`Season ${r.data.season_number} is set up. Next: place your episodes and events.`);
+    await loadArc();
+  };
+  const handleEdit = async (body) => {
+    const r = await api.put(`/api/v1/world/${showId}/arc/setup`, body);
+    setPanel(null);
+    setSetupNote(r.data.moved ? `Season saved; ${r.data.moved} ${r.data.moved === 1 ? 'slot moved' : 'slots moved'} to a new part.` : 'Season saved.');
+    await loadArc();
+  };
+  const seedGoals = async () => {
+    setSeedingGoals(true); setSetupNote(null);
     try {
-      await api.post(`/api/v1/world/${showId}/arc/seed`);
+      const r = await api.post(`/api/v1/world/${showId}/goals/seed`, { activate_tier: 1 });
+      setSetupNote(r.data.created ? `Seeded ${r.data.created} goals.` : 'No new goals: the show already has these. Open Career Goals to add your own.');
       await loadArc();
-      if (setToast) setToast('Season seeded');
+      if (onGoalsChanged) onGoalsChanged();
     } catch (err) {
-      alert(err.response?.data?.error || err.message);
+      console.error('Seed goals failed:', err);
+      setSetupNote(err.response?.data?.error || 'The goals were not seeded.');
     }
-    setSeeding(false);
+    setSeedingGoals(false);
+  };
+  // The Career Goals and the threads live further down the page; the
+  // checklist opens and scrolls to them.
+  const reveal = (testId) => {
+    const el = typeof document !== 'undefined' ? document.querySelector(`[data-testid="${testId}"]`) : null;
+    if (!el) return;
+    if (el.tagName === 'DETAILS') el.open = true;
+    el.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
   };
 
   const handleAdvance = async () => {
@@ -7835,20 +7869,34 @@ function SeasonTab({ showId, api, S, episodes, events = [], setToast }) {
 
   if (loading) return <div style={S.center}>Loading season data...</div>;
 
-  // No arc seeded yet
+  // No season yet: the setup form, open (Evoni, 2026-10-24).
   if (!arc) return (
     <div style={S.content}>
-      <div style={{ ...S.card, textAlign: 'center', padding: 40 }}>
-        <div style={{ fontSize: 48, marginBottom: 12 }}>📖</div>
-        <h2 style={{ ...S.cardTitle, margin: '0 0 8px' }}>No Season Set Up Yet</h2>
-        <p style={S.muted}>Seed Season 1 to set up the arc structure, phases, and career goal activation.</p>
-        <p style={{ ...S.muted, marginBottom: 20 }}>
-          Season 1: <strong>Soft Luxury Ascension</strong> — 24 episodes, 3 phases
-        </p>
-        <button onClick={handleSeed} disabled={seeding} style={S.primaryBtn}>
-          {seeding ? 'Seeding...' : 'Seed Season 1'}
-        </button>
+      <div className="wa-season-empty" data-testid="season-empty">
+        <h2 className="wa-season-empty-title">📖 No season set up yet</h2>
+        <p className="wa-season-empty-about">Name the season and its three parts. Then place the episodes and events you already have, and draft the rest.</p>
       </div>
+      <SeasonSetupForm mode="create" seasonNumber={nextSeason} onSubmit={handleSeed} />
+    </div>
+  );
+
+  // A completed season: what it was, and the next one's form behind "Start Season N".
+  if (arc.status === 'completed') return (
+    <div style={S.content}>
+      <div className="wa-season-empty" data-testid="season-complete">
+        <h2 className="wa-season-empty-title">📖 Season {arc.season_number || 1}: {arc.title} is complete</h2>
+        <p className="wa-season-empty-about">
+          {(arc.narrative_debt || []).length > 0
+            ? `Lala carries ${(arc.narrative_debt || []).length} narrative debt into the next season.`
+            : 'Lala starts the next season with no narrative debt.'}
+        </p>
+        {panel !== 'new' && (
+          <button type="button" className="wa-season-start" onClick={() => setPanel('new')} data-testid="season-start-next">
+            Start Season {nextSeason}
+          </button>
+        )}
+      </div>
+      {panel === 'new' && <SeasonSetupForm mode="create" seasonNumber={nextSeason} onSubmit={handleSeed} onCancel={() => setPanel(null)} />}
     </div>
   );
 
@@ -7880,7 +7928,19 @@ function SeasonTab({ showId, api, S, episodes, events = [], setToast }) {
     return range[0] >= phase.episode_start && range[0] <= phase.episode_end;
   });
 
-  const completedEpisodes = episodes.filter(e => e.status === 'accepted' || e.status === 'published').length;
+  // Episodes done in THIS season: its accepted slots, not the show's whole count.
+  const completedEpisodes = roadmap?.counts?.done || 0;
+  const seasonNumber = arc.season_number || 1;
+  const steps = setupSteps({ roadmap, goals, threads: threadData.threads });
+  const stepActions = {
+    setup: { label: 'Edit season', icon: 'edit', onClick: () => setPanel('edit') },
+    place: { label: 'Place them', onClick: () => setPanel('place') },
+    goals: goals.length === 0
+      ? { label: 'Seed 24 goals', onClick: seedGoals, busy: seedingGoals }
+      : { label: 'Open Career Goals', onClick: () => reveal('career-goals-fold') },
+    threads: { label: 'Add a thread', onClick: () => reveal('story-threads') },
+    draft: { label: 'Draft the season', onClick: () => setPanel('draft') },
+  };
 
   return (
     <div style={S.content}>
@@ -7888,7 +7948,7 @@ function SeasonTab({ showId, api, S, episodes, events = [], setToast }) {
           2026-10-22 layout list; four stat boxes before). */}
       <header className="wa-season-head" data-testid="season-head">
         <div className="wa-season-head-row">
-          <h2 className="wa-season-head-title">📖 Season 1: {arc.title}</h2>
+          <h2 className="wa-season-head-title">📖 Season {seasonNumber}: {arc.title}</h2>
           {arc.tagline && <span className="wa-season-head-tagline">{arc.tagline}</span>}
           <span className="wa-season-head-chips">
             <span className="wa-season-chip" style={{ background: tempCfg.bg, color: tempCfg.color }}>{tempCfg.label}</span>
@@ -7896,9 +7956,28 @@ function SeasonTab({ showId, api, S, episodes, events = [], setToast }) {
           </span>
         </div>
         <p className="wa-season-counts" data-testid="season-counts">
-          {completedEpisodes} {completedEpisodes === 1 ? 'episode' : 'episodes'} done · {goals.filter(g => g.status === 'completed').length} goals hit · <span className={debt.length > 0 ? 'is-debt' : ''}>{debt.length} narrative debt</span> · Phase {arc.current_phase}
+          {completedEpisodes} {completedEpisodes === 1 ? 'episode' : 'episodes'} done this season · {goals.filter(g => g.status === 'completed').length} goals hit · <span className={debt.length > 0 ? 'is-debt' : ''}>{debt.length} narrative debt</span> · Phase {arc.current_phase}
         </p>
+        <div className="wa-season-head-actions">
+          <button type="button" className="wa-season-head-btn" onClick={() => setPanel(panel === 'edit' ? null : 'edit')} aria-pressed={panel === 'edit'} data-testid="season-edit">Edit season</button>
+          <button type="button" className="wa-season-head-btn" onClick={() => setPanel(panel === 'place' ? null : 'place')} aria-pressed={panel === 'place'} data-testid="season-place">Use events and episodes</button>
+          <button type="button" className="wa-season-head-btn" onClick={() => setPanel(panel === 'draft' ? null : 'draft')} aria-pressed={panel === 'draft'} data-testid="season-draft-open">Draft with AI</button>
+        </div>
       </header>
+
+      {setupNote && <p className="wa-season-note" role="status" data-testid="season-setup-note">{setupNote}</p>}
+      {/* One checklist for a season still being set up; it folds away once every step is done. */}
+      <SeasonChecklist steps={steps} actions={stepActions} />
+      {panel === 'edit' && (
+        <SeasonSetupForm key={`edit-${arc.id}`} mode="edit" seasonNumber={seasonNumber} initial={formFromArc(arc)} onSubmit={handleEdit} onCancel={() => setPanel(null)} />
+      )}
+      {panel === 'place' && (
+        <SeasonPlacement showId={showId} api={api} onClose={() => setPanel(null)}
+          onSaved={async (text) => { setPanel(null); setSetupNote(text); await loadArc(); }} />
+      )}
+      {panel === 'draft' && (
+        <SeasonDraft showId={showId} api={api} phases={roadmap?.phases || phases} onClose={() => setPanel(null)} onSaved={loadRoadmap} />
+      )}
 
       {/* What the feed proposes for the season (2026-10-17); nothing changes until she accepts. */}
       <SeasonProposals showId={showId} api={api} onApplied={loadArc} />
