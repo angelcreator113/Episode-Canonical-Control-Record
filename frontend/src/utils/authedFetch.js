@@ -14,7 +14,11 @@
  *    is safe only because requireAuth rejects the request before any handler
  *    runs: no Claude call has started, nothing was billed or written. A
  *    request is never retried more than once.
- *  - The refresh fails, the retry is refused again, or a 401 with
+ *  - The refresh is unavailable (the server restarting: 502/503/504 or a
+ *    network error, retried for ~15 s; or a 429/500): a 503 response with
+ *    code AUTH_REFRESH_UNAVAILABLE, and the session is kept.
+ *  - The refresh token is refused (401/400, none stored), the retry is
+ *    refused again, or a 401 with
  *    AUTH_REQUIRED, AUTH_MISSING_TOKEN, no code or an unknown code: the
  *    session is over. wipeSessionAndRedirect (the interceptor's own; it does
  *    nothing in DEV) sends the user to sign in.
@@ -26,7 +30,7 @@
  */
 import { readAuthToken } from './authToken';
 import {
-  refreshAccessTokenOnce, wipeSessionAndRedirect, PASS_THROUGH_CODES,
+  refreshAccessTokenOnce, refreshEndsSession, wipeSessionAndRedirect, PASS_THROUGH_CODES,
 } from './authSession';
 
 const withToken = (init, token) => ({
@@ -63,9 +67,19 @@ export async function authedFetch(url, init = {}, { fetchImpl } = {}) {
     try {
       token = await refreshAccessTokenOnce();
     } catch (refreshErr) {
-      console.error('authedFetch: token refresh failed; signing out', refreshErr);
-      wipeSessionAndRedirect();
-      return res;
+      if (refreshEndsSession(refreshErr)) {
+        console.error('authedFetch: token refresh refused; signing out', refreshErr);
+        wipeSessionAndRedirect();
+        return res;
+      }
+      // The server is restarting or busy: keep the session and answer as the
+      // server problem it is, not as a 401 the caller would read as signed out.
+      console.warn('authedFetch: session refresh unavailable; staying signed in', refreshErr.status);
+      return new Response(JSON.stringify({
+        error: 'Service Unavailable',
+        code: 'AUTH_REFRESH_UNAVAILABLE',
+        message: 'The server is busy or restarting. Try again in a moment.',
+      }), { status: 503, headers: { 'Content-Type': 'application/json' } });
     }
     // The one retry. requireAuth refused the first request before any
     // handler ran, so repeating a POST starts its work only once.

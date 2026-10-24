@@ -14,6 +14,7 @@ vi.mock('../contexts/AuthContext', () => {
   const auth = { user: { name: 'Evoni', email: 'e@x.dev', groups: ['admin'] }, isAuthenticated: true, loading: false };
   return { useAuth: () => auth };
 });
+vi.mock('../components/Admin/RateLimitRefusals', () => ({ default: () => <div data-testid="rate-limit-refusals" /> }));
 vi.mock('./WebsiteAdmin', () => ({ default: () => <div data-testid="website-admin">Website page</div> }));
 vi.mock('./ShowSettings', () => ({
   default: ({ showId, tabParam }) => <div data-testid="show-settings">settings for {showId} by {tabParam}</div>,
@@ -56,6 +57,7 @@ describe('Admin tabs', () => {
     renderAt('/admin?tab=tools');
     expect(screen.getByText('Admin tools')).toBeTruthy();
     expect(screen.getByText('AI Costs')).toBeTruthy();
+    expect(screen.getByTestId('rate-limit-refusals')).toBeTruthy();
     expect(screen.getByRole('table')).toBeTruthy();
   });
 
