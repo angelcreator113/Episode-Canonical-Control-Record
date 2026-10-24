@@ -20,6 +20,7 @@
  *   deleteTwist(sequelize, showId, twistId)          soft delete
  *   restoreTwist(sequelize, showId, twistId)         undoes a delete
  *   twistsForEpisode(sequelize, episodeId)           { plant: [...], payoff: [...] } for the episode's slot
+ *   twistsAtSlot(sequelize, slot)                    the same for a slot { id, arc_id, slot_number }
  *   twistBlock(sequelize, episodeId)                 the episode's twists, as prompt text for the script writer; ''
  *   checkTwists(twists)                              what is wrong with the list
  *   markTwist(sequelize, episodeId, twistId, as, { undo })  the Script tab's "Mark planted" / "Mark paid off" (and Undo)
@@ -69,7 +70,7 @@ async function activeArc(sequelize, showId) {
 
 async function showThreads(sequelize, showId) {
   const [rows] = await sequelize.query(
-    `SELECT id, title, status FROM show_story_threads WHERE show_id = :showId AND deleted_at IS NULL
+    `SELECT id, title, description, status FROM show_story_threads WHERE show_id = :showId AND deleted_at IS NULL
       ORDER BY (status = 'closed') ASC, created_at DESC`, { replacements: { showId } });
   return rows;
 }
@@ -294,34 +295,43 @@ async function twistsForEpisode(sequelize, episodeId) {
       'SELECT id, arc_id, slot_number FROM season_slots WHERE episode_id = :episodeId AND deleted_at IS NULL LIMIT 1',
       { replacements: { episodeId } });
     if (!slot) return none;
-    const [rows] = await sequelize.query(
-      `SELECT t.id, t.title, t.description, t.status, t.note, t.plant_slot_id, t.payoff_slot_id, t.character_ids,
-              p.slot_number AS plant_number, pe.title AS plant_episode_title
-         FROM season_twists t
-         LEFT JOIN season_slots p ON p.id = t.plant_slot_id AND p.deleted_at IS NULL AND p.arc_id = :arcId
-         LEFT JOIN episodes pe ON pe.id = p.episode_id AND pe.deleted_at IS NULL
-        WHERE t.deleted_at IS NULL AND (t.plant_slot_id = :slotId OR t.payoff_slot_id = :slotId)
-        ORDER BY t.created_at`, { replacements: { slotId: slot.id, arcId: slot.arc_id } });
-    const found = twistsForSlot(rows, slot);
-    const wanted = [...new Set([...found.plant, ...found.payoff].flatMap((r) => ids(r.character_ids)))].filter((id) => UUID_RE.test(id));
-    const names = new Map();
-    if (wanted.length) {
-      const [people] = await sequelize.query(
-        'SELECT id, COALESCE(selected_name, display_name) AS name FROM registry_characters WHERE id IN (:wanted) AND deleted_at IS NULL',
-        { replacements: { wanted } });
-      for (const p of people) names.set(p.id, p.name);
-    }
-    const shape = (r) => ({
-      id: r.id, title: r.title, description: r.description || null, note: r.note || null, status: r.status,
-      characters: ids(r.character_ids).map((id) => names.get(id)).filter(Boolean),
-      planted_in: r.plant_number != null ? { episode_number: Number(r.plant_number), title: r.plant_episode_title || null } : null,
-    });
-    return { plant: found.plant.map(shape), payoff: found.payoff.map(shape) };
+    return await twistsAtSlot(sequelize, slot);
   } catch (err) {
     // Before the migration has run the table is not there: the writers go without twists.
     console.error('[seasonTwists] the twists could not be read:', err.message);
     return none;
   }
+}
+
+/**
+ * What a slot ({ id, arc_id, slot_number }) plants and pays off, with the
+ * people's names: the script writer's list, the slot drafter's and the
+ * Season Plan's slot panel read the same one.
+ */
+async function twistsAtSlot(sequelize, slot) {
+  const [rows] = await sequelize.query(
+    `SELECT t.id, t.title, t.description, t.status, t.note, t.plant_slot_id, t.payoff_slot_id, t.character_ids,
+            p.slot_number AS plant_number, pe.title AS plant_episode_title
+       FROM season_twists t
+       LEFT JOIN season_slots p ON p.id = t.plant_slot_id AND p.deleted_at IS NULL AND p.arc_id = :arcId
+       LEFT JOIN episodes pe ON pe.id = p.episode_id AND pe.deleted_at IS NULL
+      WHERE t.deleted_at IS NULL AND (t.plant_slot_id = :slotId OR t.payoff_slot_id = :slotId)
+      ORDER BY t.created_at`, { replacements: { slotId: slot.id, arcId: slot.arc_id } });
+  const found = twistsForSlot(rows, slot);
+  const wanted = [...new Set([...found.plant, ...found.payoff].flatMap((r) => ids(r.character_ids)))].filter((id) => UUID_RE.test(id));
+  const names = new Map();
+  if (wanted.length) {
+    const [people] = await sequelize.query(
+      'SELECT id, COALESCE(selected_name, display_name) AS name FROM registry_characters WHERE id IN (:wanted) AND deleted_at IS NULL',
+      { replacements: { wanted } });
+    for (const p of people) names.set(p.id, p.name);
+  }
+  const shape = (r) => ({
+    id: r.id, title: r.title, description: r.description || null, note: r.note || null, status: r.status,
+    characters: ids(r.character_ids).map((id) => names.get(id)).filter(Boolean),
+    planted_in: r.plant_number != null ? { episode_number: Number(r.plant_number), title: r.plant_episode_title || null } : null,
+  });
+  return { plant: found.plant.map(shape), payoff: found.payoff.map(shape) };
 }
 
 /** The episode's twists as the script writer reads them; '' with none. */
@@ -423,16 +433,14 @@ function getClient() {
   return client;
 }
 
-/** The relationships between the show's characters, both ends in the show. */
-async function showRelationships(sequelize, characters) {
-  const known = characters.map((c) => c.id);
-  if (!known.length) return [];
-  const [rows] = await sequelize.query(
-    `SELECT character_id_a, character_id_b, relationship_type, tension_state, situation, conflict_summary
-       FROM character_relationships
-      WHERE deleted_at IS NULL AND character_id_a IN (:known) AND character_id_b IN (:known)
-      ORDER BY updated_at DESC LIMIT 40`, { replacements: { known } });
-  return rows;
+/**
+ * The confirmed relationships between the show's characters, both ends in
+ * the show (relationshipTruth's one read). Seeds, kept ideas and Later are
+ * not facts, so Suggest twists never builds on them (Evoni's review,
+ * 2026-10-24, item 7).
+ */
+function showRelationships(sequelize, characters) {
+  return require('./relationshipTruth').confirmedBetween(sequelize, characters.map((c) => c.id), { limit: 40 });
 }
 
 function suggestPrompt({ arc, slots, threads, characters, relationships, twists }) {
@@ -539,6 +547,6 @@ async function suggestTwists(sequelize, showId) {
 
 module.exports = {
   TwistError, STATUSES, getTwists, setTwist, deleteTwist, restoreTwist,
-  twistsForEpisode, twistsForSlot, twistBlock, renderTwistBlock, checkTwists,
+  twistsForEpisode, twistsForSlot, twistsAtSlot, showCharacters, showRelationships, twistBlock, renderTwistBlock, checkTwists,
   markTwist, suggestTwists, cleanDrafts, scriptWritten,
 };

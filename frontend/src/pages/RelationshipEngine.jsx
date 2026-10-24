@@ -121,6 +121,7 @@ export function sceneSeeds(suggestions, chars, fromScene = 'Scene') {
  * The deep link (?char=<registry character id> selects that person;
  * ?rel=<relationship id> opens that relationship's Inspector; ?tab= picks a
  * tab), as a state change, or null when it names nothing loaded.
+ * (?gen_slot= is read once, by genSlotLink, and then taken off the address.)
  */
 const TAB_KEYS = ['overview', 'tree', 'family', 'web', 'candidates', 'list'];
 export function deepLinkState(search, { chars, rels }) {
@@ -139,6 +140,21 @@ export function deepLinkState(search, { chars, rels }) {
   }
   if (tab && TAB_KEYS.includes(tab)) out.tab = tab;
   return Object.keys(out).length ? out : null;
+}
+
+/**
+ * The Season Plan's "Generate for this" (?gen_slot=<season slot id>,
+ * planner PR 3): the slot to open Generate aimed at, and the address
+ * without it (so a reload or a refresh does not open it again); null when
+ * the link names no slot.
+ */
+export function genSlotLink(search) {
+  const q = new URLSearchParams(search || '');
+  const slot = q.get('gen_slot');
+  if (!slot || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(slot)) return null;
+  q.delete('gen_slot');
+  const rest = q.toString();
+  return { slot, search: rest ? `?${rest}` : '' };
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -160,6 +176,7 @@ const initial = {
   seedMode: false,      // the Inspector shows a seed, to confirm with edits
   addOpen:  false,
   genOpen:  false,
+  genSlot:  null,       // the season slot Generate opens aimed at (?gen_slot=)
   genning:  false,
   genFam:   false,
   busy:     null,       // id of in-flight per-action operation
@@ -328,6 +345,15 @@ export default function RelationshipEngine() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [s.loaded, location.search]);
 
+  // "Generate for this" from the Season Plan: Generate opens aimed at the slot, once.
+  useEffect(() => {
+    if (!s.loaded) return;
+    const link = genSlotLink(location.search);
+    if (!link) return;
+    dispatch({ type: 'SET', payload: { genOpen: true, genSlot: link.slot } });
+    navigate({ pathname: location.pathname, search: link.search }, { replace: true });
+  }, [s.loaded, location.search, location.pathname, navigate]);
+
   const charById = useMemo(() => Object.fromEntries(s.chars.map(c => [c.id, c])), [s.chars]);
   const lala = useMemo(() => s.chars.find(c => String(c.id) === String(s.lalaId)) || findLala(s.chars), [s.chars, s.lalaId]);
 
@@ -472,7 +498,7 @@ export default function RelationshipEngine() {
       const r = await generateRelationships(body);
       const d = r.data;
       const fresh = d.candidates || [];
-      dispatch({ type: 'MERGE_SEEDS', fresh, payload: { genning: false, genOpen: false, tab: 'candidates', panel: false, selRel: null } });
+      dispatch({ type: 'MERGE_SEEDS', fresh, payload: { genning: false, genOpen: false, genSlot: null, tab: 'candidates', panel: false, selRel: null } });
       toast(fresh.length ? `${fresh.length} new seed${fresh.length === 1 ? '' : 's'} added` : 'No new seeds this time', 'success');
     } catch (err) {
       dispatch({ type: 'SET', payload: { genning: false } });
@@ -827,7 +853,7 @@ export default function RelationshipEngine() {
                 </Btn>
               )}
               <Btn variant="ghost" onClick={exportRelationships} title="Export relationships as JSON">↓ Export</Btn>
-              <Btn variant="outline" onClick={() => dispatch({ type: 'SET', payload: { genOpen: true } })}>◈ Generate</Btn>
+              <Btn variant="outline" onClick={() => dispatch({ type: 'SET', payload: { genOpen: true, genSlot: null } })}>◈ Generate</Btn>
               <Btn variant="primary" onClick={() => dispatch({ type: 'SET', payload: { addOpen: true } })}>+ Add</Btn>
             </div>
           </div>
@@ -890,7 +916,7 @@ export default function RelationshipEngine() {
         <TypeTidyDialog items={tidy.items} refused={tidy.refused} saving={tidy.saving}
           onSave={saveTidy} onClose={() => setTidy(t => ({ ...t, open: false, refused: [] }))} />
       )}
-      {s.genOpen && <GenModal chars={s.chars} genning={s.genning} onGenerate={generate} onClose={() => dispatch({ type: 'SET', payload: { genOpen: false } })} />}
+      {s.genOpen && <GenModal chars={s.chars} genning={s.genning} onGenerate={generate} initialSlot={s.genSlot} onClose={() => dispatch({ type: 'SET', payload: { genOpen: false, genSlot: null } })} />}
     </div>
   );
 }

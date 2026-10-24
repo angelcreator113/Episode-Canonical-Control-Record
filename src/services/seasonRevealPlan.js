@@ -21,6 +21,7 @@
  *   setReveal(sequelize, showId, body, { by })    adds or changes one (slot + secret)
  *   deleteReveal(sequelize, showId, revealId)
  *   planForEpisode(sequelize, episodeId)          Map secret_id -> { intent, note }
+ *   revealsAtSlot(sequelize, slotId)              [{ id, intent, note, text, character_name }] planned in one slot
  *   withPlan(secrets, plan, layer)                the secrets with this episode's plan applied
  *   seasonBlock(sequelize, episodeId)             the season, as prompt text for the chapter writer; ''
  *
@@ -173,6 +174,28 @@ async function planForEpisode(sequelize, episodeId) {
   return out;
 }
 
+/**
+ * What one slot hints at or reveals, with whose secret it is: the slot
+ * drafter and the Season Plan's slot panel read it. Empty with none or no
+ * table yet.
+ */
+async function revealsAtSlot(sequelize, slotId) {
+  if (!UUID_RE.test(String(slotId || ''))) return [];
+  try {
+    const [rows] = await sequelize.query(
+      `SELECT r.id, r.intent, r.note, cs.text, COALESCE(rc.selected_name, rc.display_name) AS character_name
+         FROM season_reveals r
+         JOIN character_secrets cs ON cs.id = r.secret_id AND cs.deleted_at IS NULL
+         JOIN registry_characters rc ON rc.id = cs.registry_character_id
+        WHERE r.slot_id = :slotId AND r.deleted_at IS NULL
+        ORDER BY (r.intent = 'reveal') DESC, r.created_at`, { replacements: { slotId } });
+    return rows;
+  } catch (err) {
+    console.error('[seasonRevealPlan] the slot\'s reveals could not be read:', err.message);
+    return [];
+  }
+}
+
 /** The secrets with this episode's plan as their permission for the layer, marked planned. */
 function withPlan(secrets, plan, layer) {
   if (!plan || !plan.size) return secrets || [];
@@ -216,4 +239,4 @@ async function seasonBlock(sequelize, episodeId) {
   }
 }
 
-module.exports = { RevealPlanError, INTENTS, getPlan, setReveal, deleteReveal, planForEpisode, withPlan, seasonBlock, checkPlan };
+module.exports = { RevealPlanError, INTENTS, getPlan, setReveal, deleteReveal, planForEpisode, revealsAtSlot, withPlan, seasonBlock, checkPlan };

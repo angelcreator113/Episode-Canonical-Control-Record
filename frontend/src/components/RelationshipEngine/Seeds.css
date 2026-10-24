@@ -21,6 +21,15 @@
 .re-seed-source.is-scene { color: var(--re-secret); background: #ECE6F7; border-color: #D4C8EA; }
 .re-seed-source.is-family { color: #2F7A5A; background: #EAF5EE; border-color: #B7DCC6; }
 
+/* When it is needed (planner PR 3): "Needed by E12", and "Back: E12 is next" for one back from Later. */
+.re-seed-timing { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 6px; }
+.re-seed-needed, .re-seed-back {
+  display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px;
+  font-family: var(--re-mono); font-size: 12px; letter-spacing: 0.02em;
+}
+.re-seed-needed { color: var(--accent-dark, #9E4E68); background: var(--accent-subtle, #FBEFF3); border: 1px solid var(--accent-light, #E8A0B4); }
+.re-seed-back { color: var(--success-text, #166534); background: var(--success-bg, #d1fae5); border: 1px solid var(--success-border, #6ee7b7); }
+
 .re-seed-why { margin: 2px 0 8px; font-size: 13px; line-height: 1.5; color: var(--ps-ink); }
 .re-seed-why-key { font-family: var(--re-mono); font-size: 12px; color: var(--re-magenta); }
 

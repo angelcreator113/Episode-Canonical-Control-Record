@@ -57,8 +57,11 @@ const say = (obj) => ({ content: [{ type: 'text', text: JSON.stringify(obj) }], 
     await run(`INSERT INTO registry_characters (id, registry_id, character_key, display_name, selected_name, role_type, status, created_at, updated_at)
                VALUES (:maren, :reg, :k1, 'Maren', 'Maren', 'support', 'accepted', NOW(), NOW()),
                       (:mo, :reg, :k2, 'Mo', 'Mo', 'support', 'accepted', NOW(), NOW())`, { ...ids, k1: `twp-${TAG}-1`, k2: `twp-${TAG}-2` });
-    await run(`INSERT INTO character_relationships (id, character_id_a, character_id_b, relationship_type, situation)
-               VALUES (:id, :maren, :mo, 'sisters', 'Maren owes Mo the rent')`, { ...ids, id: crypto.randomUUID() });
+    await run(`INSERT INTO character_relationships (id, character_id_a, character_id_b, relationship_type, situation, confirmed)
+               VALUES (:id, :maren, :mo, 'sisters', 'Maren owes Mo the rent', true)`, { ...ids, id: crypto.randomUUID() });
+    // A seed (unconfirmed, kept as an idea) is not a fact: Suggest twists never reads it (Evoni's review item 7).
+    await run(`INSERT INTO character_relationships (id, character_id_a, character_id_b, relationship_type, situation, confirmed, seed_state)
+               VALUES (:id, :maren, :mo, 'rival', 'SEED-ONLY they fight over the flat', false, 'kept')`, { ...ids, id: crypto.randomUUID() });
     await run(`INSERT INTO show_story_threads (id, show_id, title, status, source, created_at, updated_at)
                VALUES (:thread, :show, 'The money', 'open', 'evoni', NOW(), NOW()), (:closed, :show, 'The old flat', 'closed', 'evoni', NOW(), NOW())`, ids);
     const res = await auth(request(app).put(base)).send({ title: 'The ring', description: 'Maren is not wearing it', plant_slot_id: slot[1], payoff_slot_id: slot[4] });
@@ -152,6 +155,7 @@ const say = (obj) => ({ content: [{ type: 'text', text: JSON.stringify(obj) }], 
     expect(prompt).toContain(`[${ids.thread}] The money`);
     expect(prompt).not.toContain('The old flat');
     expect(prompt).toContain('Maren & Mo: sisters — Maren owes Mo the rent');
+    expect(prompt).not.toContain('SEED-ONLY');
     expect(prompt).toContain('- The ring (planted E1, paid off E4)');
     const [[{ n: after }]] = await run('SELECT COUNT(*)::int AS n FROM season_twists WHERE show_id = :show AND deleted_at IS NULL', ids);
     expect(after).toBe(before);

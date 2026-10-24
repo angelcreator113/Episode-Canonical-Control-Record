@@ -47,6 +47,13 @@
  * DELETE /world/:showId/season/twists/:twistId — Delete it (soft)
  * POST   /world/:showId/season/twists/:twistId/restore — Undo a delete
  * POST   /world/:showId/season/twists/suggest — 3-5 drafted twists from the AI (one call); nothing saved
+ * GET    /world/:showId/season/needs — The relationships the season needs (planner PR 3, 2026-10-24): each
+ *                                       twist's, thread's and slot purpose's pairs, the slot each is needed by,
+ *                                       and whether it is there, a seed only, or missing (services/seasonNeeds)
+ * GET    /world/:showId/season/knows — What the season's AI reads of the story so far: the latest approved
+ *                                       What changed record and the open follow-ups
+ * GET    /world/:showId/season/slots/:slotId/notes — The slot's twists (plant, payoff) and reveals, for its panel
+ * GET    /world/:showId/season/slots/:slotId/event-fit — Events that can be pencilled into the slot, best fit first
  * GET    /episodes/:episodeId/season-twists — The twists this episode plants and pays off (the Script tab)
  * POST   /episodes/:episodeId/season-twists/:twistId/mark — { as: planted|paid_off, undo? }: Evoni marks it done here, or takes the mark back
  *
@@ -391,6 +398,65 @@ router.get('/world/:showId/season/event/:eventId', requireAuth, async (req, res)
   } catch (err) {
     console.error('[ArcRoutes] event season context error:', err);
     return res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── What the season needs and knows (planner PR 3; Evoni, 2026-10-24) ─────
+
+const SHOW_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const badShow = (req, res) => {
+  if (SHOW_UUID.test(String(req.params.showId || ''))) return false;
+  res.status(400).json({ error: 'showId must be a UUID' });
+  return true;
+};
+
+// GET /world/:showId/season/needs — the relationships the season needs, read-only
+router.get('/world/:showId/season/needs', requireAuth, async (req, res) => {
+  if (badShow(req, res)) return undefined;
+  try {
+    const models = require('../models');
+    const { getNeeds } = require('../services/seasonNeeds');
+    return res.json({ success: true, ...(await getNeeds(models.sequelize, req.params.showId)) });
+  } catch (err) {
+    return sendSlotError(res, err, 'season needs');
+  }
+});
+
+// GET /world/:showId/season/knows — the latest approved What changed record and the open follow-ups
+router.get('/world/:showId/season/knows', requireAuth, async (req, res) => {
+  if (badShow(req, res)) return undefined;
+  try {
+    const models = require('../models');
+    const { seasonKnows } = require('../services/seasonNeeds');
+    return res.json({ success: true, ...(await seasonKnows(models.sequelize, req.params.showId)) });
+  } catch (err) {
+    return sendSlotError(res, err, 'season knows');
+  }
+});
+
+// GET /world/:showId/season/slots/:slotId/notes — the slot's twists and reveals, read-only
+router.get('/world/:showId/season/slots/:slotId/notes', requireAuth, async (req, res) => {
+  if (badShow(req, res)) return undefined;
+  try {
+    const models = require('../models');
+    const { slotNotes } = require('../services/seasonNeeds');
+    const notes = await slotNotes(models.sequelize, req.params.showId, req.params.slotId);
+    if (!notes) return res.status(404).json({ error: 'That slot is not in this show\'s season.' });
+    return res.json({ success: true, ...notes });
+  } catch (err) {
+    return sendSlotError(res, err, 'slot notes');
+  }
+});
+
+// GET /world/:showId/season/slots/:slotId/event-fit — "Pencil an event", best fit first, each with a reason
+router.get('/world/:showId/season/slots/:slotId/event-fit', requireAuth, async (req, res) => {
+  if (badShow(req, res)) return undefined;
+  try {
+    const models = require('../models');
+    const { rankEventsForSlot } = require('../services/seasonSetupService');
+    return res.json({ success: true, ...(await rankEventsForSlot(models.sequelize, req.params.showId, req.params.slotId)) });
+  } catch (err) {
+    return sendSlotError(res, err, 'event fit');
   }
 });
 

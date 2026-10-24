@@ -138,3 +138,63 @@ describe('Generate seeds: aims', () => {
     expect(generateBody({ kind: 'family', count: '3', focus: '', episode: 'e', twist: '' })).toEqual({ kind: 'family', count: 3, episode_id: 'e' });
   });
 });
+
+/*
+ * Generate aimed at the season (planner PR 3, 2026-10-24): a slot of the
+ * active season or one of its parts, one at a time; "Generate for this"
+ * opens it aimed at a slot.
+ */
+describe('Generate seeds: a season slot or part', () => {
+  const S1 = 'aaaaaaaa-0000-4000-8000-000000000001';
+  const S5 = 'aaaaaaaa-0000-4000-8000-000000000005';
+  beforeEach(() => {
+    Object.values(apiClient).forEach((fn) => fn.mockReset());
+    try { window.localStorage.clear(); } catch (err) { console.error(err); }
+    vi.mocked(apiClient.get).mockImplementation(async (url) => {
+      if (url === '/api/v1/shows') return { data: { data: [{ id: 'show-1', name: 'Styling Adventures' }] } };
+      if (url === '/api/v1/world/show-1/season/roadmap') return { data: { roadmap: { phases: [
+        { phase: 1, title: 'Foundation', slots: [
+          { id: S1, slot_number: 1, state: 'done', intention: { story_purpose: 'Made' } },
+          { id: S5, slot_number: 5, state: 'event_ready', intention: { story_purpose: 'Jade betrays Lala at the launch' } },
+        ] },
+        { phase: 2, title: 'Ascension', slots: [] },
+      ] } } };
+      return { data: {} };
+    });
+  });
+  const go = () => fireEvent.click(screen.getByRole('button', { name: /◈ Generate/ }));
+
+  test('the open slots of the active season and its parts; a slot sends slot_id', async () => {
+    const onGenerate = vi.fn();
+    render(<GenModal chars={chars} genning={false} onGenerate={onGenerate} onClose={vi.fn()} />);
+    const slot = await screen.findByLabelText('For a season slot (optional)');
+    expect([...slot.options].map((o) => o.textContent)).toEqual(['No slot', 'E5 · Jade betrays Lala at the launch']);
+    expect([...screen.getByLabelText('For a part of the season (optional)').options].map((o) => o.textContent))
+      .toEqual(['No part', 'Part 1: Foundation', 'Part 2: Ascension']);
+    fireEvent.change(slot, { target: { value: S5 } });
+    expect(screen.getByTestId('gen-slot-note').textContent).toMatch(/Needed by E5/);
+    go();
+    expect(onGenerate).toHaveBeenCalledWith({ kind: 'any', count: 5, slot_id: S5 });
+  });
+
+  test('a part sends phase and the show; choosing one clears the other', async () => {
+    const onGenerate = vi.fn();
+    render(<GenModal chars={chars} genning={false} onGenerate={onGenerate} onClose={vi.fn()} initialSlot={S5} />);
+    const slot = await screen.findByLabelText('For a season slot (optional)');
+    expect(slot.value).toBe(S5);
+    fireEvent.change(screen.getByLabelText('For a part of the season (optional)'), { target: { value: '2' } });
+    expect(slot.value).toBe('');
+    go();
+    expect(onGenerate).toHaveBeenCalledWith({ kind: 'any', count: 5, phase: 2, show_id: 'show-1' });
+  });
+
+  test('no active season: no slot or part pickers', async () => {
+    vi.mocked(apiClient.get).mockImplementation(async (url) => (url === '/api/v1/shows'
+      ? { data: { data: [{ id: 'show-1' }] } } : { data: { roadmap: null } }));
+    render(<GenModal chars={chars} genning={false} onGenerate={vi.fn()} onClose={vi.fn()} />);
+    await screen.findByLabelText("Among an episode's guests (optional)");
+    expect(screen.queryByLabelText('For a season slot (optional)')).toBeNull();
+    expect(generateBody({ slot: 's', phase: '2', showId: 'x' })).toEqual({ kind: 'any', count: 5, slot_id: 's' });
+    expect(generateBody({ phase: '2' })).toEqual({ kind: 'any', count: 5 });
+  });
+});

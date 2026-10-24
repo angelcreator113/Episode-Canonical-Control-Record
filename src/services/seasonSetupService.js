@@ -337,6 +337,60 @@ async function activeGoals(sequelize, showId) {
   }
 }
 
+/**
+ * The events that can be pencilled (getRoadmap's rule: live, unused, draft
+ * or ready, in no slot of this season), with what scoreForSeason reads.
+ */
+async function availableEvents(sequelize, showId, arcId) {
+  const [events] = await sequelize.query(
+    `SELECT ev.id, ev.name, ev.status, ev.event_type, ev.event_date, ev.prestige, ev.strictness, ev.is_paid,
+            ev.payment_amount, ev.cost_coins, ev.host, ev.host_brand, ev.venue_name, ev.venue_location_id, ev.format
+       FROM world_events ev
+      WHERE ev.show_id = :showId AND ev.deleted_at IS NULL AND ev.used_in_episode_id IS NULL
+        AND COALESCE(ev.status, 'draft') IN ('draft', 'ready')
+        AND NOT EXISTS (SELECT 1 FROM season_slots s WHERE s.event_id = ev.id AND s.arc_id = :arcId AND s.deleted_at IS NULL)
+      ORDER BY ev.name ASC`,
+    { replacements: { showId, arcId } });
+  return events;
+}
+
+/**
+ * "Pencil an event" for one slot, best fit first (Evoni's review,
+ * 2026-10-24, item 18): each event that can be pencilled, scored by
+ * seasonSuggestionService.scoreForSeason against this slot's planned
+ * pressure and career focus, Lala's state and goals, and the last three
+ * episodes' events (a repeat fits less well). Each with a short reason.
+ * Ties keep the name order. A SeasonSetupError 404 for a slot not in the
+ * show's active season.
+ */
+async function rankEventsForSlot(sequelize, showId, slotId) {
+  const roadmap = await getRoadmap(sequelize, showId);
+  const slot = roadmap ? roadmap.phases.flatMap((p) => p.slots).find((s) => String(s.id) === String(slotId)) : null;
+  if (!slot) throw new SeasonSetupError('That slot is not in this show\'s season.', 404, 'SEASON_SLOT_NOT_FOUND');
+  const events = await availableEvents(sequelize, showId, roadmap.arc.id);
+  if (!events.length) return { slot_id: slot.id, label: slot.label, events: [] };
+  const { scoreForSeason, loadSeasonInputs } = require('./seasonSuggestionService');
+  const state = await lalaState(sequelize, showId);
+  const season = await loadSeasonInputs(sequelize, showId);
+  const inputs = {
+    slot: { desired_pressure: slot.intention?.desired_pressure || null, career_focus: slot.intention?.career_focus || null },
+    goals: season.goals,
+    recent: season.recent,
+  };
+  const ranked = events.map((ev, i) => {
+    const fit = scoreForSeason(ev, state, inputs);
+    const boost = fit.reasons.find((r) => r.kind === 'boost');
+    const warn = fit.reasons.find((r) => r.kind === 'warn');
+    return {
+      id: ev.id, name: ev.name, status: ev.status || 'draft', score: fit.score,
+      estimated_pressure: fit.estimated_pressure,
+      reason: (boost || warn)?.text || 'No strong fit either way', reason_kind: boost ? 'boost' : warn ? 'warn' : 'none',
+      order: i,
+    };
+  }).sort((a, b) => b.score - a.score || a.order - b.order).map(({ order: _order, ...ev }) => ev);
+  return { slot_id: slot.id, label: slot.label, events: ranked };
+}
+
 const eventCard = (ev) => (ev ? {
   id: ev.id, name: ev.name, status: ev.status || 'draft', event_type: ev.event_type || null,
   event_date: eventDay(ev.event_date), date_text: ev.event_date || null,
@@ -387,15 +441,7 @@ async function previewPlacement(sequelize, showId) {
   // The unused draft and ready events not yet in this season (getRoadmap's
   // rule), less those that come with an episode above.
   const withEpisodes = new Set([...episodeEvents.values()].map((r) => String(r.id)));
-  const [events] = await sequelize.query(
-    `SELECT ev.id, ev.name, ev.status, ev.event_type, ev.event_date, ev.prestige, ev.strictness, ev.is_paid,
-            ev.payment_amount, ev.cost_coins, ev.host, ev.host_brand, ev.venue_name, ev.venue_location_id
-       FROM world_events ev
-      WHERE ev.show_id = :showId AND ev.deleted_at IS NULL AND ev.used_in_episode_id IS NULL
-        AND COALESCE(ev.status, 'draft') IN ('draft', 'ready')
-        AND NOT EXISTS (SELECT 1 FROM season_slots s WHERE s.event_id = ev.id AND s.arc_id = :arcId AND s.deleted_at IS NULL)
-      ORDER BY ev.name ASC`,
-    { replacements: { showId, arcId: roadmap.arc.id } });
+  const events = await availableEvents(sequelize, showId, roadmap.arc.id);
   const candidates = events.filter((e) => !withEpisodes.has(String(e.id)));
   const dated = candidates.filter((e) => eventDay(e.event_date))
     .sort((a, b) => eventDay(a.event_date).localeCompare(eventDay(b.event_date)) || String(a.name).localeCompare(String(b.name)));
@@ -508,7 +554,7 @@ async function applyPlacement(sequelize, showId, items) {
 
 // ─── Draft the season, or one part ───────────────────────────────────────
 
-function draftPrompt({ arc, phases, slots, targets, threads, goals, debt, carried, partNumber }) {
+function draftPrompt({ arc, phases, slots, targets, threads, goals, debt, carried, relationships = '', partNumber }) {
   const partLine = (p) => `Part ${p.phase}: ${p.title}${p.tagline ? ` ("${p.tagline}")` : ''}, E${p.episode_start}–E${p.episode_end}${p.emotional_arc ? `; emotional arc: ${p.emotional_arc}` : ''}`;
   const slotLine = (s) => {
     const what = s.episode
@@ -545,7 +591,7 @@ ${goalText}
 
 Narrative debt she carries:
 ${debtText}
-${carried ? `\n${carried}\n` : ''}
+${carried ? `\n${carried}\n` : ''}${relationships ? `\n${relationships}` : ''}
 Draft ${partNumber ? `the open slots of Part ${partNumber}` : 'every open slot of the season'} marked [DRAFT THIS]. Build each part toward its name and tagline; let a slot with an event grow from that event; respect the slots already made or planned.
 Return JSON only:
 {
@@ -645,8 +691,10 @@ async function draftSeason(sequelize, showId, { phase = null, anthropic = null }
     console.error('[seasonSetup] carry-forward load failed:', err.message);
   }
 
+  // The confirmed relationships between the season's people (never a seed).
+  const relationships = await require('./seasonNeeds').seasonRelationshipBlock(sequelize, showId);
   const prompt = draftPrompt({
-    arc, phases, slots: withDetail, targets, threads, goals, debt: Array.isArray(debt) ? debt : [], carried, partNumber,
+    arc, phases, slots: withDetail, targets, threads, goals, debt: Array.isArray(debt) ? debt : [], carried, relationships, partNumber,
   });
   const api = anthropic || getClient();
   let message = null;
@@ -691,6 +739,8 @@ module.exports = {
   eventDay,
   previewPlacement,
   applyPlacement,
+  availableEvents,
+  rankEventsForSlot,
   draftPrompt,
   cleanSeasonDraft,
   draftSeason,
