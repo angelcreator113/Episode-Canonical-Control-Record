@@ -259,12 +259,15 @@ describe('4 · pacing and on-screen moments stop the 3-2-1', () => {
 });
 
 describe('5 · header labels are not speakers', () => {
-  test('Logline, Host, Forward Hook and the rest are labels', () => {
-    for (const l of ['Logline: x', 'Host: Lala', 'Forward Hook: the gala', 'Episode: 1', 'Goal: win', 'Wardrobe: p1', 'Venue: Studio', 'Cast: Lala']) {
+  test('Logline, Forward Hook and the rest are labels; HOST stays a speaker', () => {
+    for (const l of ['Logline: x', 'Forward Hook: the gala', 'Episode: 1', 'Goal: win', 'Wardrobe: p1', 'Venue: Studio', 'Cast: Lala']) {
       expect(speakerLine(l)).toBeNull();
     }
     expect(NOT_SPEAKERS.has('synopsis')).toBe(true);
     expect(speakerLine('Lala: "Hi."')).toMatchObject({ speaker: 'Lala' });
+    // The script writers give the event's host lines as HOST: (episodeScriptWriterService).
+    expect(NOT_SPEAKERS.has('host')).toBe(false);
+    expect(speakerLine('HOST: "Welcome, everyone."')).not.toBeNull();
   });
 
   test("Read as lists the script's people only; a header name that never speaks in a beat reads as a direction", () => {

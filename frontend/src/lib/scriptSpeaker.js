@@ -10,7 +10,7 @@
 export const NOT_SPEAKERS = new Set([
   'location', 'scene', 'setting', 'time', 'note', 'notes', 'transition', 'cut', 'int', 'ext', 'beat', 'act', 'sfx', 'music', 'caption',
   'logline', 'episode', 'title', 'goal', 'goals', 'summary', 'synopsis', 'theme', 'hook', 'forward hook', 'date', 'cast',
-  'wardrobe', 'outfit', 'event', 'venue', 'host',
+  'wardrobe', 'outfit', 'event', 'venue',
 ]);
 
 const KNOWN = { me: 'Prime', prime: 'Prime', lala: 'Lala', kelli: 'Kelli', guest: 'Guest' };
