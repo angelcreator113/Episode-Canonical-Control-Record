@@ -1,0 +1,46 @@
+/* TypeTidy (2026-10-24): the quiet banner and the Review dialog. The page's
+   tokens (pages/RelationshipEngine.css); 12px text at the least, 44px targets
+   on a phone. */
+.re-tidy-banner {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px;
+  margin: 12px 20px 0; padding: 6px 14px;
+  border: 1px solid var(--re-gold-soft); border-radius: 10px;
+  background: var(--re-glass);
+  font-size: 13px; color: var(--ps-ink-mid);
+}
+.re-tidy-banner .re-tidy-review { color: var(--re-magenta); font-weight: 600; }
+
+.re-tidy-modal { max-width: 640px; }
+.re-tidy-body { overflow-y: auto; }
+.re-tidy-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.re-tidy-row { padding: 10px 12px; border-radius: 10px; border: 1px solid var(--re-gold-soft); background: var(--re-glass); }
+.re-tidy-row.is-skipped { background: var(--lala-parchment, #FAF7F0); }
+.re-tidy-pair { font-weight: 700; font-size: 14px; color: var(--ps-ink); overflow-wrap: anywhere; margin-bottom: 6px; }
+.re-tidy-change { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin-bottom: 6px; }
+.re-tidy-old { font-family: var(--re-serif); font-style: italic; font-size: 14px; color: var(--ps-ink-mid); overflow-wrap: anywhere; }
+.re-tidy-arrow { color: var(--re-magenta); }
+.re-tidy-select { flex: 1 1 180px; min-width: 0; width: auto; }
+.re-tidy-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.re-tidy-hint { margin: 0 0 6px; font-size: 12px; color: var(--re-romance); }
+.re-tidy-choice { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 8px; }
+.re-tidy-choice button:disabled { opacity: 0.5; cursor: not-allowed; }
+.re-tidy-will { font-size: 12px; color: var(--ps-ink-light); }
+.re-tidy-refused {
+  margin-bottom: 10px; padding: 10px 12px; border-radius: 10px;
+  border: 1px solid var(--re-romance-line); background: var(--re-romance-bg);
+  font-size: 13px; color: var(--ps-ink);
+}
+.re-tidy-refused ul { margin: 4px 0 0; padding-left: 18px; }
+.re-tidy-refused li { overflow-wrap: anywhere; }
+.re-tidy-done { font-size: 14px; color: var(--ps-ink-mid); }
+.re-tidy-footer { flex-wrap: wrap; gap: 8px; }
+.re-tidy-spacer { flex: 1; }
+
+@media (max-width: 600px) {
+  .re-tidy-banner { margin: 10px 12px 0; }
+  .re-tidy-banner .re-tidy-review { min-height: 44px; }
+  .re-tidy-select { flex-basis: 100%; }
+  .re-tidy-footer > .cg-btn-secondary { flex: 1 1 100%; }
+  .re-tidy-spacer { display: none; }
+  .re-tidy-footer > .cg-btn-ghost, .re-tidy-footer > .cg-btn-primary { flex: 1 1 40%; }
+}

@@ -98,7 +98,10 @@ describe('polish', () => {
     vi.mocked(apiClient.post).mockResolvedValue({ data: { relationship: seeds[0] } });
     renderAt('/relationships?tab=candidates');
     fireEvent.click(await screen.findByRole('button', { name: 'Dismiss Marcus Hale ↔ Dre Coleman' }));
-    await waitFor(() => expect(apiClient.delete).toHaveBeenCalledWith('/api/v1/relationships/dismiss/seed-1'));
+    // Dismiss asks why first (2026-10-24 seeds); the reason rides in the body.
+    fireEvent.click(screen.getByRole('radio', { name: 'Wrong for them' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }));
+    await waitFor(() => expect(apiClient.delete).toHaveBeenCalledWith('/api/v1/relationships/dismiss/seed-1', { data: { reason: 'wrong_for_them' } }));
     await screen.findByText('No Proposed Seeds');
     expect(screen.getByText(/Dismissed Marcus Hale and Dre Coleman/)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Undo' }));
