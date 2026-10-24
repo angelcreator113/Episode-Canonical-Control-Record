@@ -4019,7 +4019,8 @@ all five in §8(ff)." So these are no longer INFERRED:
    accepted episodes without a range are counted separately.
 5. **The old season-health route** (`GET
    /api/v1/season-rhythm/season-health/:showId`, the 1/4/2/1 grade) stays
-   on the backend; the page no longer calls it.
+   on the backend; the page no longer calls it. (Removed with the rest of
+   `/api/v1/season-rhythm` in planner PR 4, 2026-10-24: nothing called it.)
 
 **Season Arc rulings A9 and A10 (Evoni, 2026-10-01)**, recorded verbatim;
 built as one PR after Episode Money Phase B PR 4. They refine A3 (the

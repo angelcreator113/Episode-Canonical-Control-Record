@@ -15,8 +15,6 @@
  * POST   /world/:showId/season/draft/accept — Save accepted drafts ({ drafts: [...] }) as Auto-drafted intentions
  * POST   /world/:showId/arc/advance      — Manual phase advance (with warning)
  * POST   /world/:showId/arc/advance/confirm — Force advance after warning acknowledged
- * GET    /world/:showId/arc/context      — Get arc context for AI prompt injection
- * PUT    /world/:showId/arc/phase/:phase — Update phase settings (override feed behavior, etc.)
  * GET    /world/:showId/season/roadmap — The active season's 24 slots and their states (Season Arc A2)
  * PUT    /world/:showId/season/slots/:slotId/event   — Pencil an event into a future slot, or clear it (Q5)
  * PUT    /world/:showId/season/slots/:slotId/episode — Place an existing episode in an open slot (Q4)
@@ -56,6 +54,10 @@
  * GET    /world/:showId/season/slots/:slotId/event-fit — Events that can be pencilled into the slot, best fit first
  * GET    /episodes/:episodeId/season-twists — The twists this episode plants and pays off (the Script tab)
  * POST   /episodes/:episodeId/season-twists/:twistId/mark — { as: planted|paid_off, undo? }: Evoni marks it done here, or takes the mark back
+ *
+ * Removed with no caller (planner PR 4, 2026-10-24): GET /world/:showId/arc/context
+ * (getArcContext stays: the feed and the script writer call it directly) and
+ * PUT /world/:showId/arc/phase/:phase.
  *
  * Extend (lengthen the current phase, pushing the season past 24) is removed:
  * "Remove Extend; phase boundaries can shift within the 24, only across slots
@@ -238,56 +240,6 @@ router.post('/world/:showId/arc/advance/confirm', requireAuth, async (req, res) 
     return res.json({ success: true, data: result });
   } catch (err) {
     console.error('[ArcRoutes] confirm advance error:', err);
-    return res.status(500).json({ error: err.message });
-  }
-});
-
-// GET /world/:showId/arc/context — for AI prompt injection
-router.get('/world/:showId/arc/context', requireAuth, async (req, res) => {
-  try {
-    const models = require('../models');
-    const { getArcContext } = require('../services/arcProgressionService');
-    const context = await getArcContext(req.params.showId, models);
-    return res.json({ success: true, data: context });
-  } catch (err) {
-    console.error('[ArcRoutes] arc context error:', err);
-    return res.status(500).json({ error: err.message });
-  }
-});
-
-// PUT /world/:showId/arc/phase/:phase — override phase settings
-router.put('/world/:showId/arc/phase/:phase', requireAuth, async (req, res) => {
-  try {
-    const models = require('../models');
-    const { showId } = req.params;
-    const phaseNum = parseInt(req.params.phase);
-    const updates = req.body; // { tagline, feed_behavior, emotional_arc, etc. }
-
-    const [arcRows] = await models.sequelize.query(
-      `SELECT id, phases FROM show_arcs WHERE show_id = :showId AND status = 'active' AND deleted_at IS NULL LIMIT 1`,
-      { replacements: { showId } }
-    );
-    if (!arcRows?.length) return res.status(404).json({ error: 'No active arc' });
-
-    const arc = arcRows[0];
-    const phases = typeof arc.phases === 'string' ? JSON.parse(arc.phases) : [...arc.phases];
-    const phaseIdx = phases.findIndex(p => p.phase === phaseNum);
-    if (phaseIdx === -1) return res.status(404).json({ error: `Phase ${phaseNum} not found` });
-
-    // Apply updates (only allowed fields)
-    const allowed = ['tagline', 'emotional_arc', 'feed_behavior'];
-    for (const key of allowed) {
-      if (updates[key] !== undefined) phases[phaseIdx][key] = updates[key];
-    }
-
-    await models.sequelize.query(
-      'UPDATE show_arcs SET phases = :phases, updated_at = NOW() WHERE id = :id',
-      { replacements: { phases: JSON.stringify(phases), id: arc.id } }
-    );
-
-    return res.json({ success: true, phase: phases[phaseIdx] });
-  } catch (err) {
-    console.error('[ArcRoutes] phase override error:', err);
     return res.status(500).json({ error: err.message });
   }
 });

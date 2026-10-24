@@ -143,6 +143,29 @@ const DRAFT = { story_purpose: 'Lala is tested by her first paid invite', career
     expect(messages[0].content).toContain('E1: result fail, pressure High; purpose: Lala arrives uninvited');
   });
 
+  // The house retry (planner PR 4): a budget refusal is final; a 529 is asked again after a pause.
+  test('a budget refusal is not retried and answers 429; an overloaded model is asked twice', async () => {
+    const ai = require('../../src/services/seasonAiContext');
+    const { show, arcId } = await seedSeason();
+    const id = await slotId(arcId, 3);
+    const refused = jest.fn(async () => { throw Object.assign(new Error('AI daily budget exceeded.'), { status: 429, code: 'AI_BUDGET_EXCEEDED' }); });
+    await expect(intentions.draftIntention(sequelize, show, id, { anthropic: { messages: { create: refused } } }))
+      .rejects.toMatchObject({ status: 429, code: 'AI_BUDGET_EXCEEDED' });
+    expect(refused).toHaveBeenCalledTimes(1);
+
+    ai.setRetryPause(0);
+    try {
+      const busy = jest.fn()
+        .mockRejectedValueOnce(Object.assign(new Error('Overloaded'), { status: 529 }))
+        .mockResolvedValueOnce({ content: [{ text: JSON.stringify(DRAFT) }] });
+      const result = await intentions.draftIntention(sequelize, show, id, { anthropic: { messages: { create: busy } } });
+      expect(busy).toHaveBeenCalledTimes(2);
+      expect(result.intention).toEqual({ ...DRAFT, source: 'auto-drafted' });
+    } finally {
+      ai.setRetryPause(ai.RETRY_PAUSE_MS);
+    }
+  });
+
   test('a draft never replaces an edit unless Evoni confirms (force)', async () => {
     const { show, arcId } = await seedSeason();
     const id = await slotId(arcId, 5);

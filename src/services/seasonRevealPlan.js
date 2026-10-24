@@ -29,6 +29,7 @@
  */
 
 const { episodeLabel } = require('./seasonSlotService');
+const { loadSeason } = require('./seasonLoader');
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const INTENTS = ['hint', 'reveal'];
@@ -45,14 +46,6 @@ const parse = (v, fallback) => {
     return fallback;
   }
 };
-
-async function activeArc(sequelize, showId) {
-  const [[arc]] = await sequelize.query(
-    `SELECT id, title, tagline, season_number, phases, current_phase FROM show_arcs
-      WHERE show_id = :showId AND deleted_at IS NULL ORDER BY (status = 'active') DESC, arc_number ASC LIMIT 1`,
-    { replacements: { showId } });
-  return arc || null;
-}
 
 /** The show's kept secrets (every character in a registry of the show), with whose they are. */
 async function showSecrets(sequelize, showId) {
@@ -95,16 +88,14 @@ function checkPlan(reveals, secrets) {
 /** The season's slots, the show's kept secrets, the plan and what is wrong with it. */
 async function getPlan(sequelize, showId) {
   if (!UUID_RE.test(String(showId || ''))) throw new RevealPlanError('showId must be a UUID');
-  const arc = await activeArc(sequelize, showId);
-  if (!arc) return { arc: null, slots: [], secrets: [], reveals: [], warnings: [] };
-  const [slotRows] = await sequelize.query(
-    `SELECT s.id, s.slot_number, s.phase, s.story_purpose, s.accepted_at, ep.id AS episode_id, ep.title AS episode_title
-       FROM season_slots s LEFT JOIN episodes ep ON ep.id = s.episode_id AND ep.deleted_at IS NULL
-      WHERE s.arc_id = :arcId AND s.deleted_at IS NULL ORDER BY s.slot_number`, { replacements: { arcId: arc.id } });
+  // The active season, else the show's first (a finished season's plan still reads).
+  const season = await loadSeason(sequelize, showId, { anyStatus: true });
+  if (!season) return { arc: null, slots: [], secrets: [], reveals: [], warnings: [] };
+  const { arc } = season;
   const label = (n) => episodeLabel(arc.season_number, n);
-  const slots = slotRows.map((s) => ({
+  const slots = season.slots.map((s) => ({
     id: s.id, slot_number: s.slot_number, phase: s.phase, label: label(s.slot_number), story_purpose: s.story_purpose,
-    episode: s.episode_id ? { id: s.episode_id, title: s.episode_title } : null, done: Boolean(s.accepted_at),
+    episode: s.live_episode_id ? { id: s.live_episode_id, title: s.episode_title } : null, done: Boolean(s.accepted_at),
   }));
   const secrets = await showSecrets(sequelize, showId);
   const [rows] = await sequelize.query(

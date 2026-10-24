@@ -12,6 +12,11 @@
 // case-insensitive matching. Two instruments, same source, opposite answers.
 //
 // Promoted at 8ba2b95c. Static source assertions; diff-lock only.
+//
+// seasonRhythmRoutes.js and its service were removed in planner PR 4
+// (2026-10-24): no client called /api/v1/season-rhythm. luxuryFilterRoutes
+// keeps the shape and stays pinned; the last test pins that the removed
+// router is gone and not mounted.
 const fs = require('fs');
 const path = require('path');
 
@@ -20,12 +25,10 @@ const read = (f) =>
 
 const SRC = {
   luxuryFilterRoutes: read('luxuryFilterRoutes.js'),
-  seasonRhythmRoutes: read('seasonRhythmRoutes.js'),
 };
 
 const VAR = {
   luxuryFilterRoutes: 'luxuryFilterRouter',
-  seasonRhythmRoutes: 'seasonRhythmRouter',
 };
 
 describe('F-AUTH-1 FD-63 Shape 4 — non-`router` variable names', () => {
@@ -62,7 +65,6 @@ describe('F-AUTH-1 FD-63 Shape 4 — non-`router` variable names', () => {
 
   test.each([
     ['luxuryFilterRoutes', 4],
-    ['seasonRhythmRoutes', 4],
   ])('%s.js carries %i requireAuth occurrences', (name, expected) => {
     const hits = SRC[name].match(/requireAuth/g) || [];
     expect(hits).toHaveLength(expected);
@@ -78,12 +80,6 @@ describe('F-AUTH-1 FD-63 Shape 4 — non-`router` variable names', () => {
     test.each([
       ["luxuryFilterRouter.post('/validate', requireAuth,", 'luxuryFilterRoutes'],
       ["luxuryFilterRouter.post('/quick-check', requireAuth,", 'luxuryFilterRoutes'],
-      ["seasonRhythmRouter.post('/validate', requireAuth,", 'seasonRhythmRoutes'],
-      [
-        "seasonRhythmRouter.get('/arc-health/:showId/:episodeNumber', requireAuth,",
-        'seasonRhythmRoutes',
-      ],
-      ["seasonRhythmRouter.get('/season-health/:showId', requireAuth,", 'seasonRhythmRoutes'],
     ])('%s', (decl, file) => {
       expect(SRC[file]).toContain(decl);
     });
@@ -99,5 +95,12 @@ describe('F-AUTH-1 FD-63 Shape 4 — non-`router` variable names', () => {
         src.match(/router\.(post|put|patch|delete)[^\n]*requireAuth/g) || [];
       expect(caseSensitiveG1).toEqual([]);
     });
+  });
+
+  test('seasonRhythmRoutes.js is removed and not mounted (planner PR 4)', () => {
+    const routes = path.join(__dirname, '..', '..', '..', 'src', 'routes');
+    expect(fs.existsSync(path.join(routes, 'seasonRhythmRoutes.js'))).toBe(false);
+    const app = fs.readFileSync(path.join(routes, '..', 'app.js'), 'utf8');
+    expect(app).not.toMatch(/season-rhythm|seasonRhythmRoutes/);
   });
 });

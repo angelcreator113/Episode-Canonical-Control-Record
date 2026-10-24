@@ -154,7 +154,7 @@ const say = (obj) => ({ content: [{ type: 'text', text: JSON.stringify(obj) }], 
     const prompt = mockCreate.mock.calls[0][0].messages[0].content;
     expect(prompt).toContain(`[${ids.thread}] The money`);
     expect(prompt).not.toContain('The old flat');
-    expect(prompt).toContain('Maren & Mo: sisters — Maren owes Mo the rent');
+    expect(prompt).toContain('- Maren and Mo: sisters — Maren owes Mo the rent');
     expect(prompt).not.toContain('SEED-ONLY');
     expect(prompt).toContain('- The ring (planted E1, paid off E4)');
     const [[{ n: after }]] = await run('SELECT COUNT(*)::int AS n FROM season_twists WHERE show_id = :show AND deleted_at IS NULL', ids);
@@ -163,15 +163,27 @@ const say = (obj) => ({ content: [{ type: 'text', text: JSON.stringify(obj) }], 
   });
 
   it('says why when the AI fails or the budget is spent', async () => {
-    mockCreate.mockRejectedValue(new Error('overloaded'));
-    let res = await auth(request(app).post(`${base}/suggest`));
+    // The house retry (planner PR 4): a failure is asked twice, a budget refusal once.
+    const ai = require('../../src/services/seasonAiContext');
+    ai.setRetryPause(0);
+    mockCreate.mockReset();
+    mockCreate.mockRejectedValue(Object.assign(new Error('Overloaded'), { status: 529 }));
+    let res;
+    try {
+      res = await auth(request(app).post(`${base}/suggest`));
+    } finally {
+      ai.setRetryPause(ai.RETRY_PAUSE_MS);
+    }
     expect(res.status).toBe(502);
     expect(res.body.error).toBe('The AI could not suggest twists right now. Try again.');
+    expect(mockCreate).toHaveBeenCalledTimes(2);
 
+    mockCreate.mockReset();
     mockCreate.mockRejectedValue(Object.assign(new Error('AI daily budget exceeded.'), { status: 429, code: 'AI_BUDGET_EXCEEDED' }));
     res = await auth(request(app).post(`${base}/suggest`));
     expect(res.status).toBe(429);
     expect(res.body.error).toMatch(/budget exceeded\. No twists were suggested/);
+    expect(mockCreate).toHaveBeenCalledTimes(1);
 
     mockCreate.mockResolvedValue({ content: [{ type: 'text', text: 'not json' }] });
     res = await auth(request(app).post(`${base}/suggest`));
