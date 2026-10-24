@@ -96,6 +96,7 @@ router.get('/world/:showId/arc', requireAuth, async (req, res) => {
       },
     });
   } catch (err) {
+    console.error('[ArcRoutes] season arc load error:', err);
     if (err.message?.includes('show_arcs') || err.message?.includes('does not exist')) {
       return res.json({ success: true, arc: null, message: 'Table not created yet. Run migrations.' });
     }
@@ -209,6 +210,7 @@ router.post('/world/:showId/arc/advance', requireAuth, async (req, res) => {
 
     return res.json({ success: true, data: result });
   } catch (err) {
+    console.error('[ArcRoutes] advance phase error:', err);
     return res.status(500).json({ error: err.message });
   }
 });
@@ -228,6 +230,7 @@ router.post('/world/:showId/arc/advance/confirm', requireAuth, async (req, res) 
 
     return res.json({ success: true, data: result });
   } catch (err) {
+    console.error('[ArcRoutes] confirm advance error:', err);
     return res.status(500).json({ error: err.message });
   }
 });
@@ -240,6 +243,7 @@ router.get('/world/:showId/arc/context', requireAuth, async (req, res) => {
     const context = await getArcContext(req.params.showId, models);
     return res.json({ success: true, data: context });
   } catch (err) {
+    console.error('[ArcRoutes] arc context error:', err);
     return res.status(500).json({ error: err.message });
   }
 });
@@ -276,6 +280,7 @@ router.put('/world/:showId/arc/phase/:phase', requireAuth, async (req, res) => {
 
     return res.json({ success: true, phase: phases[phaseIdx] });
   } catch (err) {
+    console.error('[ArcRoutes] phase override error:', err);
     return res.status(500).json({ error: err.message });
   }
 });
@@ -309,7 +314,11 @@ router.get('/world/:showId/season/insights', requireAuth, async (req, res) => {
 });
 
 function sendSlotError(res, err, label) {
-  if (err.status && err.code) return res.status(err.status).json({ error: err.message, code: err.code });
+  // A refusal (409, 400 …) is expected; it is logged as a warning, never dropped.
+  if (err.status && err.code) {
+    console.warn(`[ArcRoutes] ${label} refused (${err.code}):`, err.message);
+    return res.status(err.status).json({ error: err.message, code: err.code });
+  }
   console.error(`[ArcRoutes] ${label} error:`, err);
   return res.status(500).json({ error: err.message });
 }
@@ -506,7 +515,10 @@ router.post('/world/:showId/season/proposals/:proposalId/dismiss', requireAuth, 
 
 const sendPlanError = (res, err, label) => {
   const { RevealPlanError } = require('../services/seasonRevealPlan');
-  if (err instanceof RevealPlanError) return res.status(err.status).json({ error: err.message });
+  if (err instanceof RevealPlanError) {
+    console.warn(`[ArcRoutes] ${label} refused:`, err.message);
+    return res.status(err.status).json({ error: err.message });
+  }
   console.error(`[ArcRoutes] ${label} error:`, err);
   return res.status(500).json({ error: err.message });
 };
@@ -548,7 +560,10 @@ router.delete('/world/:showId/season/reveals/:revealId', requireAuth, async (req
 
 const sendTwistError = (res, err, label) => {
   const { TwistError } = require('../services/seasonTwists');
-  if (err instanceof TwistError) return res.status(err.status).json({ error: err.message });
+  if (err instanceof TwistError) {
+    console.warn(`[ArcRoutes] ${label} refused:`, err.message);
+    return res.status(err.status).json({ error: err.message });
+  }
   console.error(`[ArcRoutes] ${label} error:`, err);
   return res.status(500).json({ error: err.message });
 };

@@ -7183,17 +7183,25 @@ function StoryThreadsCard({ threads, drafts, S, api, showId, onChanged, setToast
   const [busy, setBusy] = useState(false);
   // The add form opens from "+ New thread" (Evoni, 2026-10-22 layout list).
   const [adding, setAdding] = useState(false);
+  // "Make a thread" from a seed opens a small form on its row, the name
+  // filled from the seed (it was a browser prompt; Evoni's review, 2026-10-24).
+  const [naming, setNaming] = useState(null);
+  const [error, setError] = useState(null);
   const field = { width: '100%', boxSizing: 'border-box', fontSize: 13, padding: '6px 8px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6 };
 
+  const failedWith = (what, err) => {
+    console.error(`[StoryThreadsCard] ${what} failed:`, err);
+    setError(err.response?.data?.error || err.message || `Could not ${what}.`);
+  };
   const create = async (body, done) => {
-    setBusy(true);
+    setBusy(true); setError(null);
     try {
       await api.post(`/api/v1/world/${showId}/season/threads`, body);
       if (setToast) setToast(done);
       if (onChanged) await onChanged();
       return true;
     } catch (err) {
-      alert(err.response?.data?.error || err.message);
+      failedWith('add the thread', err);
       return false;
     } finally {
       setBusy(false);
@@ -7203,20 +7211,21 @@ function StoryThreadsCard({ threads, drafts, S, api, showId, onChanged, setToast
     if (!title.trim()) return;
     if (await create({ title, description }, 'Story thread added')) { setTitle(''); setDescription(''); setAdding(false); }
   };
+  const startNaming = (draft) => { setError(null); setNaming({ seed: draft.seed_text, name: draft.seed_text.slice(0, 120) }); };
   const fromDraft = async (draft) => {
-    const name = window.prompt('Name this story thread', draft.seed_text.slice(0, 120));
-    if (!name || !name.trim()) return;
-    await create({ title: name, seed_text: draft.seed_text, episode_id: draft.episode_id }, 'Story thread added');
+    const name = naming?.seed === draft.seed_text ? naming.name : '';
+    if (!name.trim()) return;
+    if (await create({ title: name.trim(), seed_text: draft.seed_text, episode_id: draft.episode_id }, 'Story thread added')) setNaming(null);
   };
   const close = async (thread) => {
     if (!window.confirm(`Close "${thread.title}"? A closed thread can no longer be chosen for a slot.`)) return;
-    setBusy(true);
+    setBusy(true); setError(null);
     try {
       await api.post(`/api/v1/world/${showId}/season/threads/${thread.id}/close`);
       if (setToast) setToast('Story thread closed');
       if (onChanged) await onChanged();
     } catch (err) {
-      alert(err.response?.data?.error || err.message);
+      failedWith('close the thread', err);
     }
     setBusy(false);
   };
@@ -7225,13 +7234,13 @@ function StoryThreadsCard({ threads, drafts, S, api, showId, onChanged, setToast
   // a confirm; it keeps its history.
   const reopen = async (thread) => {
     if (!window.confirm(`Reopen "${thread.title}"? It keeps its history and can be chosen for a slot again.`)) return;
-    setBusy(true);
+    setBusy(true); setError(null);
     try {
       await api.post(`/api/v1/world/${showId}/season/threads/${thread.id}/reopen`);
       if (setToast) setToast('Story thread reopened');
       if (onChanged) await onChanged();
     } catch (err) {
-      alert(err.response?.data?.error || err.message);
+      failedWith('reopen the thread', err);
     }
     setBusy(false);
   };
@@ -7242,6 +7251,7 @@ function StoryThreadsCard({ threads, drafts, S, api, showId, onChanged, setToast
       <p style={{ ...S.muted, margin: '0 0 12px', fontSize: 12 }}>
         You create and name them; a slot's intention says which one it continues, and accepting its episode marks the thread advanced. Only you close one, and you can reopen it.
       </p>
+      {error && <p className="wa-season-inline-error" role="alert" data-testid="story-threads-error">{error}</p>}
       {threads.length === 0 && <p style={{ ...S.muted, fontSize: 12 }}>No story threads yet.</p>}
       {threads.map((t) => {
         const st = THREAD_STATUS[t.status] || THREAD_STATUS.open;
@@ -7284,14 +7294,30 @@ function StoryThreadsCard({ threads, drafts, S, api, showId, onChanged, setToast
       {drafts.length > 0 && (
         <div data-testid="story-thread-drafts" style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--lala-parchment-3)' }}>
           <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>Drafts from your episodes' seeds</div>
-          {drafts.map((d) => (
-            <div key={d.seed_text} style={{ display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'space-between', padding: '4px 0', flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 12, color: 'var(--text-primary)', flex: '1 1 200px', minWidth: 0 }}>
-                {d.seed_text}{d.episode_title && <span style={{ color: 'var(--text-secondary)' }}> · {d.episode_title}</span>}
-              </span>
-              <button onClick={() => fromDraft(d)} disabled={busy} style={{ ...S.secBtn, padding: '4px 10px', fontSize: 12 }}>Make a thread</button>
-            </div>
-          ))}
+          {drafts.map((d) => {
+            const open = naming?.seed === d.seed_text;
+            return (
+              <div key={d.seed_text} style={{ padding: '4px 0' }}>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: 12, color: 'var(--text-primary)', flex: '1 1 200px', minWidth: 0 }}>
+                    {d.seed_text}{d.episode_title && <span style={{ color: 'var(--text-secondary)' }}> · {d.episode_title}</span>}
+                  </span>
+                  {!open && <button onClick={() => startNaming(d)} disabled={busy} className="wa-season-small-btn" data-testid="story-thread-make">Make a thread</button>}
+                </div>
+                {open && (
+                  <form className="wa-season-name-form" data-testid="story-thread-name-form" onSubmit={(e) => { e.preventDefault(); fromDraft(d); }}>
+                    <label className="wa-season-name-label">Name this story thread
+                      <input aria-label="Thread name" value={naming.name} onChange={(e) => setNaming({ ...naming, name: e.target.value })} style={field} autoFocus maxLength={200} />
+                    </label>
+                    <div className="wa-season-name-actions">
+                      <button type="submit" disabled={busy || !naming.name.trim()} style={S.primaryBtn} data-testid="story-thread-name-save">{busy ? 'Adding…' : 'Add thread'}</button>
+                      <button type="button" onClick={() => setNaming(null)} disabled={busy} style={S.secBtn}>Cancel</button>
+                    </div>
+                  </form>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
@@ -7348,12 +7374,17 @@ function SlotIntentionEditor({ slot, S, api, showId, onSaved, onClose, setToast,
     return next.length ? next : [{ text: '', primary: true, story_thread_id: '' }];
   });
   const [busy, setBusy] = useState(null);
+  const [error, setError] = useState(null);
+  const failedWith = (what, err) => {
+    console.error(`[SlotIntentionEditor] ${what} failed:`, err);
+    setError(err.response?.data?.error || err.message || `Could not ${what}.`);
+  };
   const field = { width: '100%', boxSizing: 'border-box', fontSize: 13, padding: '6px 8px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, marginTop: 4 };
-  const label = { fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', marginTop: 10, display: 'block' };
+  const label = { fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginTop: 10, display: 'block' };
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
   const save = async () => {
-    setBusy('save');
+    setBusy('save'); setError(null);
     try {
       await api.put(`/api/v1/world/${showId}/season/slots/${slot.id}/intention`, {
         story_purposes: purposes.map((p) => ({ text: p.text, primary: p.primary, story_thread_id: p.story_thread_id || null })),
@@ -7365,7 +7396,7 @@ function SlotIntentionEditor({ slot, S, api, showId, onSaved, onClose, setToast,
       if (onSaved) await onSaved();
       onClose();
     } catch (err) {
-      alert(err.response?.data?.error || err.message);
+      failedWith('save the intention', err);
     }
     setBusy(null);
   };
@@ -7374,7 +7405,7 @@ function SlotIntentionEditor({ slot, S, api, showId, onSaved, onClose, setToast,
   const draft = async () => {
     const edited = init.source === 'edited';
     if (!started && edited && !window.confirm(`${slot.label}'s intention was edited. Replace it with an AI draft?`)) return;
-    setBusy('draft');
+    setBusy('draft'); setError(null);
     try {
       const res = await api.post(`/api/v1/world/${showId}/season/slots/${slot.id}/intention/draft`, !started && edited ? { force: true } : {});
       const d = res?.data?.data || res?.data || {};
@@ -7387,19 +7418,21 @@ function SlotIntentionEditor({ slot, S, api, showId, onSaved, onClose, setToast,
       if (onSaved) await onSaved();
       onClose();
     } catch (err) {
-      alert(err.response?.data?.error || err.message);
+      failedWith('draft the intention', err);
     }
     setBusy(null);
   };
 
+  // Inside the slot's panel (on a phone, its sheet), under Edit intention
+  // (Evoni's review, 2026-10-24: it was under the whole grid, behind the sheet).
   return (
-    <div data-testid="season-intention-editor" style={{ marginTop: 4, marginBottom: 16, padding: '12px 14px', border: '1px solid var(--lala-gold-line)', borderRadius: 10, background: 'var(--lala-gold-soft)' }}>
+    <div className="wa-arc-intention" data-testid="season-intention-editor" style={{ alignSelf: 'stretch', boxSizing: 'border-box', marginTop: 4, padding: '12px 14px', border: '1px solid var(--lala-gold-line)', borderRadius: 10, background: 'var(--lala-gold-soft)' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
         <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{slot.label} intention</div>
-        {init.source && <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-secondary)' }}>{init.source === 'edited' ? 'Edited' : 'Auto-drafted'}</span>}
+        {init.source && <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>{init.source === 'edited' ? 'Edited' : 'Auto-drafted'}</span>}
       </div>
       {started && (
-        <div data-testid="season-intention-started" style={{ fontSize: 11, color: 'var(--warning-text)', marginTop: 6 }}>
+        <div data-testid="season-intention-started" style={{ fontSize: 12, color: 'var(--warning-text)', marginTop: 6 }}>
           Started: editable while its episode is a draft. Saving updates the episode's season position; it locks once the episode is accepted. Draft with AI reads its event and script and keeps the purposes you edited.
         </div>
       )}
@@ -7408,7 +7441,7 @@ function SlotIntentionEditor({ slot, S, api, showId, onSaved, onClose, setToast,
         <div key={i} data-testid={`season-purpose-${i}`} style={{ marginTop: 6, padding: 8, border: '1px solid var(--lala-parchment-3)', borderRadius: 8, background: 'var(--surface-card)' }}>
           <textarea aria-label={`Story purpose ${i + 1}`} value={p.text} onChange={(e) => setPurpose(i, { text: e.target.value })} rows={2} style={{ ...field, marginTop: 0 }} />
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginTop: 6 }}>
-            <label style={{ fontSize: 11, color: 'var(--text-primary)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+            <label style={{ fontSize: 12, color: 'var(--text-primary)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
               <input type="radio" name={`primary-${slot.id}`} aria-label={`Primary purpose ${i + 1}`} checked={p.primary} onChange={() => makePrimary(i)} /> Primary
             </label>
             <select aria-label={`Story thread ${i + 1}`} value={p.story_thread_id} onChange={(e) => setPurpose(i, { story_thread_id: e.target.value })} style={{ ...field, marginTop: 0, flex: '1 1 140px', width: 'auto' }}>
@@ -7418,13 +7451,13 @@ function SlotIntentionEditor({ slot, S, api, showId, onSaved, onClose, setToast,
               ))}
             </select>
             {purposes.length > 1 && (
-              <button type="button" onClick={() => removePurpose(i)} style={{ fontSize: 11, border: 'none', background: 'none', color: 'var(--danger-text)', cursor: 'pointer' }}>Remove</button>
+              <button type="button" onClick={() => removePurpose(i)} style={{ fontSize: 12, border: 'none', background: 'none', color: 'var(--danger-text)', cursor: 'pointer' }}>Remove</button>
             )}
           </div>
         </div>
       ))}
       {purposes.length < MAX_PURPOSES && (
-        <button type="button" data-testid="season-purpose-add" onClick={addPurpose} style={{ marginTop: 6, fontSize: 11, padding: '3px 8px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, background: 'var(--surface-card)', color: 'var(--lala-gold-text)', cursor: 'pointer' }}>
+        <button type="button" data-testid="season-purpose-add" onClick={addPurpose} style={{ marginTop: 6, fontSize: 12, padding: '3px 8px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, background: 'var(--surface-card)', color: 'var(--lala-gold-text)', cursor: 'pointer' }}>
           + Add a purpose
         </button>
       )}
@@ -7449,6 +7482,7 @@ function SlotIntentionEditor({ slot, S, api, showId, onSaved, onClose, setToast,
           {OUTCOME_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
         </select>
       </div>
+      {error && <p className="wa-season-inline-error" role="alert" data-testid="season-intention-error">{error}</p>}
       <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
         <button onClick={save} disabled={!!busy} style={S.primaryBtn}>{busy === 'save' ? 'Saving...' : 'Save'}</button>
         <button onClick={draft} disabled={!!busy} style={S.secBtn}>{busy === 'draft' ? 'Drafting...' : 'Draft with AI'}</button>
@@ -7463,7 +7497,7 @@ const slotSelectStyle = { width: '100%', marginTop: 6, fontSize: 11, padding: '4
 // The open slot, beside the season's grid: what it holds, its event and the
 // deal, the threads it moves, and its controls (pencil an event, the
 // intention, the episode).
-function SlotPanel({ slot, showId, available, busy, episode, event, onPencil, onIntention, onClose }) {
+function SlotPanel({ slot, showId, available, busy, episode, event, onPencil, onIntention, onClose, editing = false, error = null, children = null }) {
   const title = slotTitle(slot);
   const logline = episode?.logline || episode?.description || null;
   const deal = event ? eventCardDetails(event).deal : null;
@@ -7514,10 +7548,12 @@ function SlotPanel({ slot, showId, available, busy, episode, event, onPencil, on
         </select>
       )}
       {(slot.intention_editable ?? !slot.locked) && (
-        <button type="button" className="wa-arc-secondary" data-testid={`season-intention-${slot.slot_number}`} onClick={onIntention}>
+        <button type="button" className="wa-arc-secondary" data-testid={`season-intention-${slot.slot_number}`} onClick={onIntention} aria-expanded={editing}>
           {primary ? 'Edit intention' : 'Add intention'}
         </button>
       )}
+      {children}
+      {error && <p className="wa-season-inline-error" role="alert" data-testid="season-slot-error">{error}</p>}
       {slot.episode ? (
         <Link className="wa-arc-primary" to={`/episodes/${slot.episode.id}`}>
           {slot.state === 'done' ? 'Open episode' : 'Continue episode'}
@@ -7529,8 +7565,54 @@ function SlotPanel({ slot, showId, available, busy, episode, event, onPencil, on
   );
 }
 
-function SeasonRoadmap({ roadmap, S, api, showId, onChanged, setToast, onAdvance, advancing, advanceWarning, onConfirmAdvance, onCancelAdvance, threads = [], episodes = [], events = [] }) {
+// The confirm step before an advance, in the page (Evoni's review,
+// 2026-10-24): which slots stay open, which goals are unmet and what happens
+// to them, and whether advancing completes the season.
+function AdvanceConfirm({ warning, advancing, onConfirm, onCancel, S }) {
+  const open = warning.open_slots || [];
+  const unmet = warning.unmet_goals || [];
+  const final = Boolean(warning.is_final);
+  const them = unmet.length === 1 ? 'it' : 'them';
+  const debtWord = final ? `Completing the season leaves ${them} unmet.` : `Advancing carries ${them} as narrative debt.`;
+  const confirmLabel = final
+    ? 'Confirm: complete the season'
+    : unmet.length || (warning.warning && !open.length) ? 'Confirm: advance and carry the debt' : 'Confirm: advance with open slots';
+  return (
+    <div className="wa-arc-confirm" data-testid="season-phase-confirm" role="group" aria-label={final ? 'Complete the season?' : 'Advance the phase?'}>
+      <div className="wa-arc-confirm-title">
+        {final ? 'Complete the season?' : `Advance to Phase ${warning.next_phase?.phase}${warning.next_phase?.title ? `: ${warning.next_phase.title}` : ''}?`}
+      </div>
+      {open.length > 0 && (
+        <p className="wa-arc-confirm-line" data-testid="season-confirm-open-slots">
+          {open.length} {open.length === 1 ? 'slot stays' : 'slots stay'} open: {open.map((sl) => `E${sl.slot_number}`).join(', ')}.
+          {' '}{final ? 'The season completes with them unfilled.' : `They stay in Part ${warning.current_phase?.phase ?? ''} and can still be filled.`}
+        </p>
+      )}
+      {unmet.length > 0 && (
+        <div data-testid="season-confirm-unmet">
+          <p className="wa-arc-confirm-line">{unmet.length} {unmet.length === 1 ? 'goal is' : 'goals are'} unmet. {debtWord}</p>
+          <ul className="wa-arc-confirm-goals">
+            {unmet.map((g) => (
+              <li key={g.id}>{g.title}{g.target_value != null && <span> ({g.current_value ?? 0}/{g.target_value}{g.target_metric ? ` ${String(g.target_metric).replace(/_/g, ' ')}` : ''})</span>}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {warning.warning && unmet.length === 0 && <p className="wa-arc-confirm-line">{warning.warning}</p>}
+      <div className="wa-arc-confirm-actions">
+        <button type="button" onClick={onConfirm} disabled={advancing} style={{ ...S.primaryBtn, background: 'var(--warning-text)' }} data-testid="season-confirm-advance">
+          {advancing ? (final ? 'Completing...' : 'Advancing...') : confirmLabel}
+        </button>
+        <button type="button" onClick={onCancel} disabled={advancing} style={S.secBtn}>Cancel</button>
+      </div>
+    </div>
+  );
+}
+
+function SeasonRoadmap({ roadmap, S, api, showId, onChanged, setToast, onAdvance, advancing, advanceWarning, onConfirmAdvance, onCancelAdvance, advanceError = null, threads = [], episodes = [], events = [] }) {
   const [busySlot, setBusySlot] = useState(null);
+  // A pencil or placement that failed: said in the page, where it was done.
+  const [slotError, setSlotError] = useState(null);
   const [editingSlotId, setEditingSlotId] = useState(null);
   const [selectedId, setSelectedId] = useState(null);
   // On a phone the panel is a sheet from the bottom, open after a tap (Evoni, 2026-10-22 layout list).
@@ -7548,15 +7630,19 @@ function SeasonRoadmap({ roadmap, S, api, showId, onChanged, setToast, onAdvance
   const openSlots = allSlots.filter((sl) => !sl.locked);
   const selected = allSlots.find((sl) => sl.id === selectedId) || allSlots.find((sl) => sl.id === defaultSlotId(roadmap)) || null;
   const editing = allSlots.find((sl) => sl.id === editingSlotId) || null;
+  const currentPart = phases.find((p) => p.phase === Number(roadmap.arc?.current_phase)) || null;
+  const openInPart = currentPart ? currentPart.slots.filter((sl) => sl.state !== 'done') : [];
+  const isLastPart = Boolean(currentPart) && currentPart.phase === Math.max(...phases.map((p) => p.phase));
 
   const save = async (slotId, path, body, done) => {
-    setBusySlot(slotId);
+    setBusySlot(slotId); setSlotError(null);
     try {
       await api.put(`/api/v1/world/${showId}/season/slots/${slotId}/${path}`, body);
       if (setToast) setToast(done);
       if (onChanged) await onChanged();
     } catch (err) {
-      alert(err.response?.data?.error || err.message);
+      console.error(`[SeasonRoadmap] ${path} save failed:`, err);
+      setSlotError({ where: path, slotId, text: err.response?.data?.error || err.message || 'That was not saved.' });
     }
     setBusySlot(null);
   };
@@ -7575,6 +7661,7 @@ function SeasonRoadmap({ roadmap, S, api, showId, onChanged, setToast, onAdvance
   // and a desktop, where it sits above the parts, it scrolls into view.
   const open = (slot) => {
     setSelectedId(slot.id);
+    if (slotError?.slotId !== slot.id) setSlotError(null);
     if (editingSlotId && editingSlotId !== slot.id) setEditingSlotId(null);
     setSheetOpen(true);
     if (typeof window !== 'undefined' && window.matchMedia?.('(min-width: 769px) and (max-width: 1099px)').matches) {
@@ -7604,7 +7691,7 @@ function SeasonRoadmap({ roadmap, S, api, showId, onChanged, setToast, onAdvance
             {outcomeText && <div style={{ fontSize: 12, color: 'var(--text-primary)', marginTop: 4 }}>Results: {outcomeText}</div>}
             {pb.goals && (
               <div style={{ fontSize: 12, color: 'var(--text-primary)', marginTop: 4 }}>
-                Goals: {pb.goals.completed} of {pb.goals.total} complete{pb.goals.unmet > 0 ? `; ${pb.goals.unmet} unmet will be carried as narrative debt` : ''}
+                Goals: {pb.goals.completed} of {pb.goals.total} complete{pb.goals.unmet > 0 ? `; ${pb.goals.unmet} unmet${pb.next_phase ? ' will be carried as narrative debt' : ', left unmet when the season completes'}` : ''}
               </div>
             )}
             <div style={{ fontSize: 12, color: 'var(--text-primary)', marginTop: 4 }}>
@@ -7613,23 +7700,35 @@ function SeasonRoadmap({ roadmap, S, api, showId, onChanged, setToast, onAdvance
                 : 'Advancing completes the season.'}
             </div>
             {advanceWarning ? (
-              <div data-testid="season-phase-confirm" style={{ marginTop: 10, padding: '8px 10px', background: 'var(--warning-bg)', border: '1px solid var(--warning-border)', borderRadius: 8 }}>
-                <div style={{ fontSize: 12, color: 'var(--warning-text)', lineHeight: 1.5 }}>{advanceWarning.warning}</div>
-                <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
-                  <button onClick={onConfirmAdvance} disabled={advancing} style={{ ...S.primaryBtn, background: 'var(--warning-text)' }}>
-                    {advancing ? 'Advancing...' : 'Confirm: advance and carry the debt'}
-                  </button>
-                  <button onClick={onCancelAdvance} style={S.secBtn}>Cancel</button>
-                </div>
-              </div>
+              <AdvanceConfirm warning={advanceWarning} advancing={advancing} onConfirm={onConfirmAdvance} onCancel={onCancelAdvance} S={S} />
             ) : onAdvance && (
-              <button onClick={onAdvance} disabled={advancing} style={{ ...S.primaryBtn, marginTop: 10 }}>
+              <button onClick={onAdvance} disabled={advancing} style={{ ...S.primaryBtn, marginTop: 10 }} data-testid="season-advance">
                 {advancing ? 'Advancing...' : pb.next_phase ? `Advance to Phase ${pb.next_phase.phase}` : 'Complete the season'}
               </button>
             )}
+            {advanceError && <p className="wa-season-inline-error" role="alert" data-testid="season-advance-error">{advanceError}</p>}
           </div>
         );
       })()}
+
+      {/* The phase is not done yet: she can still advance, leaving its open
+          slots open (Evoni's review, 2026-10-24: Advance lived only in the
+          boundary box, which needs every slot done). */}
+      {!roadmap.phase_boundary && currentPart && openInPart.length > 0 && onAdvance && (
+        <div className="wa-arc-open-advance" data-testid="season-advance-open">
+          <p className="wa-arc-open-advance-text">
+            Part {currentPart.phase}: {currentPart.title} · {currentPart.slots.length - openInPart.length} of {currentPart.slots.length} slots done
+          </p>
+          {advanceWarning ? (
+            <AdvanceConfirm warning={advanceWarning} advancing={advancing} onConfirm={onConfirmAdvance} onCancel={onCancelAdvance} S={S} />
+          ) : (
+            <button type="button" className="wa-arc-open-advance-btn" onClick={onAdvance} disabled={advancing} data-testid="season-advance-open-btn">
+              {advancing ? 'Checking...' : `${isLastPart ? 'Complete the season' : 'Advance'} with ${openInPart.length} open ${openInPart.length === 1 ? 'slot' : 'slots'}`}
+            </button>
+          )}
+          {advanceError && <p className="wa-season-inline-error" role="alert" data-testid="season-advance-error">{advanceError}</p>}
+        </div>
+      )}
 
       <div className="wa-arc">
         <div className="wa-arc-parts">
@@ -7682,10 +7781,6 @@ function SeasonRoadmap({ roadmap, S, api, showId, onChanged, setToast, onAdvance
               )}
             </section>
           ))}
-          {editing && (
-            <SlotIntentionEditor key={editing.id} slot={editing} S={S} api={api} showId={showId}
-              onSaved={onChanged} onClose={() => setEditingSlotId(null)} setToast={setToast} threads={threads} />
-          )}
         </div>
 
         <aside className={`wa-arc-side${sheetOpen ? ' is-sheet-open' : ''}`} ref={panelRef}>
@@ -7698,7 +7793,14 @@ function SeasonRoadmap({ roadmap, S, api, showId, onChanged, setToast, onAdvance
               event={events.find((e) => e.id === selected.event?.id) || null}
               onPencil={(value) => pencil(selected, value)}
               onIntention={() => setEditingSlotId(editingSlotId === selected.id ? null : selected.id)}
-            />
+              editing={editing?.id === selected.id}
+              error={slotError && slotError.slotId === selected.id && slotError.where === 'event' ? slotError.text : null}
+            >
+              {editing && editing.id === selected.id && (
+                <SlotIntentionEditor key={editing.id} slot={editing} S={S} api={api} showId={showId}
+                  onSaved={onChanged} onClose={() => setEditingSlotId(null)} setToast={setToast} threads={threads} />
+              )}
+            </SlotPanel>
           )}
         </aside>
       </div>
@@ -7708,9 +7810,10 @@ function SeasonRoadmap({ roadmap, S, api, showId, onChanged, setToast, onAdvance
           <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--warning-text)', marginBottom: 6 }}>
             Not in a slot ({unslotted.length})
           </div>
-          <p style={{ fontSize: 11, color: 'var(--warning-text)', margin: '0 0 6px' }}>
+          <p style={{ fontSize: 12, color: 'var(--warning-text)', margin: '0 0 6px' }}>
             These episodes are not placed on the roadmap yet. Place one, or leave it unslotted.
           </p>
+          {slotError?.where === 'episode' && <p className="wa-season-inline-error" role="alert" data-testid="season-place-error">{slotError.text}</p>}
           {unslotted.map((ep) => (
             <div key={ep.id} style={{ fontSize: 12, color: 'var(--text-primary)', padding: '4px 0' }}>
               {ep.title || 'Untitled episode'}
@@ -7733,6 +7836,8 @@ function SeasonRoadmap({ roadmap, S, api, showId, onChanged, setToast, onAdvance
   );
 }
 
+const SEASON_PART_LABEL = { season: 'the season', goals: 'the goals', roadmap: 'the roadmap', threads: 'the story threads', insights: 'Planning Insights' };
+
 function SeasonTab({ showId, api, S, episodes, events = [], setToast, onGoalsChanged }) {
   const [arc, setArc] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -7749,56 +7854,79 @@ function SeasonTab({ showId, api, S, episodes, events = [], setToast, onGoalsCha
   const [roadmap, setRoadmap] = useState(null);
   const [insights, setInsights] = useState(null);
   const [threadData, setThreadData] = useState({ threads: [], drafts: [] });
+  // What did not load, by part, so the tab says so with a Retry instead of
+  // reading as "No season set up yet" (Evoni's review, 2026-10-24).
+  const [failed, setFailed] = useState({});
+  const markFailed = useCallback((part, err) => setFailed((f) => ({ ...f, [part]: err ? (err.response?.data?.error || err.message || 'failed') : null })), []);
+  // An advance that failed: said in the page, by the advance controls.
+  const [advanceError, setAdvanceError] = useState(null);
 
   // The season's 24 slots (Season Arc §8(ff) A2); reloaded alone after a
-  // pencil or placement so the tab does not blank.
+  // pencil or placement so the tab does not blank. A failed reload keeps
+  // what is on screen.
   const loadRoadmap = useCallback(async () => {
     try {
       const r = await api.get(`/api/v1/world/${showId}/season/roadmap`);
       setRoadmap(r.data.roadmap || null);
+      markFailed('roadmap', null);
     } catch (err) {
       console.error('Season roadmap load failed:', err);
-      setRoadmap(null);
+      markFailed('roadmap', err);
     }
     // Story threads (§8(ff) Q9)
     try {
       const r = await api.get(`/api/v1/world/${showId}/season/threads`);
       setThreadData({ threads: r.data.threads || [], drafts: r.data.drafts || [] });
+      markFailed('threads', null);
     } catch (err) {
       console.error('Story threads load failed:', err);
+      markFailed('threads', err);
     }
     // Planning Insights (§8(ff) A8). The season-health score is one line in
     // it, from the slot outcome ranges (Q15); the old 1/4/2/1 grade is not read.
     try {
       const r = await api.get(`/api/v1/world/${showId}/season/insights`);
       setInsights(r.data.insights || null);
+      markFailed('insights', null);
     } catch (err) {
       console.error('Planning Insights load failed:', err);
-      setInsights(null);
+      markFailed('insights', err);
     }
-  }, [showId]);
+  }, [showId, markFailed]);
 
-  const loadArc = useCallback(async () => {
-    setLoading(true);
+  // The first load shows "Loading"; every later one (after an accept, an
+  // advance, a setup save) reloads in place, so the parts below keep what
+  // she typed and the forms she has open (Evoni's review, 2026-10-24).
+  const loadArc = useCallback(async ({ initial = false } = {}) => {
+    if (initial) setLoading(true);
     try {
       const r = await api.get(`/api/v1/world/${showId}/arc`);
       setArc(r.data.arc);
       setNextSeason(r.data.next_season_number || 1);
-    } catch (err) { console.error('Season arc load failed:', err); setArc(null); }
+      markFailed('season', null);
+    } catch (err) {
+      console.error('Season arc load failed:', err);
+      markFailed('season', err);
+    }
 
     // Every goal, so the phases show what was hit and missed and the
     // checklist knows whether any is live.
     try {
       const r = await api.get(`/api/v1/world/${showId}/goals`);
       setGoals(r.data.goals || []);
-    } catch (err) { console.error('Season goals load failed:', err); }
+      markFailed('goals', null);
+    } catch (err) {
+      console.error('Season goals load failed:', err);
+      markFailed('goals', err);
+    }
 
     await loadRoadmap();
 
-    setLoading(false);
-  }, [showId, loadRoadmap]);
+    if (initial) setLoading(false);
+  }, [showId, loadRoadmap, markFailed]);
 
-  useEffect(() => { loadArc(); }, [loadArc]);
+  useEffect(() => { loadArc({ initial: true }); }, [loadArc]);
+  const retry = () => loadArc({ initial: !arc });
 
   // The form's Save: a new season, or Edit season. A refusal is thrown back
   // to the form, which shows it in place.
@@ -7836,8 +7964,12 @@ function SeasonTab({ showId, api, S, episodes, events = [], setToast, onGoalsCha
     el.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
   };
 
+  // Advance (at the phase boundary, or "Advance with N open slots"): the
+  // server asks first when goals are unmet or slots are not done, and the
+  // confirm step in the roadmap lists them; at the last phase it says the
+  // season completes.
   const handleAdvance = async () => {
-    setAdvancing(true);
+    setAdvancing(true); setAdvanceError(null);
     try {
       const r = await api.post(`/api/v1/world/${showId}/arc/advance`);
       if (r.data.data?.needs_confirmation) {
@@ -7847,27 +7979,44 @@ function SeasonTab({ showId, api, S, episodes, events = [], setToast, onGoalsCha
       }
       setWarning(null);
       await loadArc();
-      if (setToast) setToast('Phase advanced');
+      if (setToast) setToast(r.data.data?.arc_completed ? 'Season complete' : 'Phase advanced');
     } catch (err) {
-      alert(err.response?.data?.error || err.message);
+      console.error('Phase advance failed:', err);
+      setAdvanceError(err.response?.data?.error || err.message || 'The phase did not advance.');
     }
     setAdvancing(false);
   };
 
   const handleConfirmAdvance = async () => {
-    setAdvancing(true);
+    setAdvancing(true); setAdvanceError(null);
     try {
-      await api.post(`/api/v1/world/${showId}/arc/advance/confirm`);
+      const r = await api.post(`/api/v1/world/${showId}/arc/advance/confirm`);
       setWarning(null);
       await loadArc();
-      if (setToast) setToast('Phase advanced (with narrative debt)');
+      if (setToast) setToast(r.data?.data?.arc_completed ? 'Season complete' : 'Phase advanced');
     } catch (err) {
-      alert(err.response?.data?.error || err.message);
+      console.error('Phase advance (confirmed) failed:', err);
+      setAdvanceError(err.response?.data?.error || err.message || 'The phase did not advance.');
     }
     setAdvancing(false);
   };
 
+  const failedParts = Object.entries(failed).filter(([, v]) => v).map(([k]) => k);
+  const loadErrorBox = failedParts.length > 0 && (
+    <div className="wa-season-error" role="alert" data-testid="season-load-error">
+      <span>
+        {failed.season && !arc
+          ? `The season could not be loaded (${failed.season}).`
+          : `Some of the season did not load: ${failedParts.map((k) => SEASON_PART_LABEL[k] || k).join(', ')}.`}
+      </span>
+      <button type="button" className="wa-season-error-retry" onClick={retry} data-testid="season-load-retry">Retry</button>
+    </div>
+  );
+
   if (loading) return <div style={S.center}>Loading season data...</div>;
+
+  // The season could not be read: say so, never "No season set up yet".
+  if (!arc && failed.season) return <div style={S.content}>{loadErrorBox}</div>;
 
   // No season yet: the setup form, open (Evoni, 2026-10-24).
   if (!arc) return (
@@ -7965,6 +8114,7 @@ function SeasonTab({ showId, api, S, episodes, events = [], setToast, onGoalsCha
         </div>
       </header>
 
+      {loadErrorBox}
       {setupNote && <p className="wa-season-note" role="status" data-testid="season-setup-note">{setupNote}</p>}
       {/* One checklist for a season still being set up; it folds away once every step is done. */}
       <SeasonChecklist steps={steps} actions={stepActions} />
@@ -7979,19 +8129,19 @@ function SeasonTab({ showId, api, S, episodes, events = [], setToast, onGoalsCha
         <SeasonDraft showId={showId} api={api} phases={roadmap?.phases || phases} onClose={() => setPanel(null)} onSaved={loadRoadmap} />
       )}
 
+      {/* Roadmap — the season's 24 slots, first under the header (Evoni's review, 2026-10-24; it was fourth). */}
+      <SeasonRoadmap roadmap={roadmap} S={S} api={api} showId={showId} onChanged={loadRoadmap} setToast={setToast} onAdvance={handleAdvance} advancing={advancing}
+        advanceWarning={warning} onConfirmAdvance={handleConfirmAdvance} onCancelAdvance={() => setWarning(null)} advanceError={advanceError}
+        threads={threadData.threads} episodes={episodes} events={events} />
+
       {/* What the feed proposes for the season (2026-10-17); nothing changes until she accepts. */}
-      <SeasonProposals showId={showId} api={api} onApplied={loadArc} />
+      <SeasonProposals showId={showId} api={api} onApplied={() => loadArc()} />
 
       {/* Which secret the season hints at or reveals, and when (stage E, 2026-10-18). */}
       <SeasonRevealPlan showId={showId} api={api} />
 
       {/* Twists planted in one episode and paid off in a later one (2026-10-23). */}
       <SeasonTwists showId={showId} api={api} />
-
-      {/* Roadmap — the season's 24 slots */}
-      <SeasonRoadmap roadmap={roadmap} S={S} api={api} showId={showId} onChanged={loadRoadmap} setToast={setToast} onAdvance={handleAdvance} advancing={advancing}
-        advanceWarning={warning} onConfirmAdvance={handleConfirmAdvance} onCancelAdvance={() => setWarning(null)}
-        threads={threadData.threads} episodes={episodes} events={events} />
 
       {/* The threads, with the narrative debt beside them (Evoni, 2026-10-22
           layout list; the debt was its own full-width card further down). */}

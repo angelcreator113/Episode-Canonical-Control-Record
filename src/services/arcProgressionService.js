@@ -145,18 +145,20 @@ async function checkPhaseTransition(showId, episodeNumber, models) {
 }
 
 /**
- * Get goal completion status for a phase.
+ * Get goal completion status for a phase. Inside a transaction a failed
+ * read is thrown, so the advance rolls back; outside one (the roadmap's
+ * phase summary) it is logged and reads as no goals.
  */
-async function getPhaseGoalStatus(showId, phase, models) {
+async function getPhaseGoalStatus(showId, phase, models, { transaction = null } = {}) {
   const { sequelize } = models;
   try {
     const [goals] = await sequelize.query(
       `SELECT id, title, type, target_metric, target_value, current_value, status, priority
-       FROM career_goals WHERE show_id = :showId
+       FROM career_goals WHERE show_id = :showId AND deleted_at IS NULL
        AND episode_range IS NOT NULL
        AND (episode_range->>0)::int >= :start AND (episode_range->>0)::int <= :end
        ORDER BY priority ASC`,
-      { replacements: { showId, start: phase.episode_start, end: phase.episode_end } }
+      { replacements: { showId, start: phase.episode_start, end: phase.episode_end }, transaction }
     );
 
     const completed = goals.filter(g => g.status === 'completed');
@@ -180,15 +182,50 @@ async function getPhaseGoalStatus(showId, phase, models) {
           ? `Phase "${phase.title}" has ${active.length} active goal(s) that haven't been completed or failed yet.`
           : null,
     };
-  } catch {
+  } catch (err) {
+    if (transaction) throw err;
+    console.error('[arcProgressionService] phase goal status failed:', err.message);
     return { total: 0, completed: 0, failed: 0, active_remaining: 0, primary_total: 0, primary_incomplete: 0, goals: [], has_warning: false };
   }
+}
+
+/** A goal advancing leaves unmet: still active, or a primary not completed. */
+const isUnmet = (g) => g.status === 'active' || (g.status !== 'completed' && g.type === 'primary');
+
+/**
+ * The current phase's slots that are not done (no accepted episode), so an
+ * advance can say which stay open. They keep their part and stay editable.
+ */
+async function openSlotsOf(sequelize, arc, phase, transaction) {
+  const { episodeLabel, slotState } = require('./seasonSlotService');
+  const [rows] = await sequelize.query(
+    `SELECT s.slot_number, ep.id AS episode_id, ep.evaluation_status, ev.id AS event_id
+       FROM season_slots s
+       LEFT JOIN episodes ep ON ep.id = s.episode_id AND ep.deleted_at IS NULL
+       LEFT JOIN world_events ev ON ev.id = s.event_id AND ev.deleted_at IS NULL
+      WHERE s.arc_id = :arcId AND s.phase = :phase AND s.deleted_at IS NULL
+        AND (ep.id IS NULL OR ep.evaluation_status IS DISTINCT FROM 'accepted')
+      ORDER BY s.slot_number ASC`,
+    { replacements: { arcId: arc.id, phase: phase.phase }, transaction }
+  );
+  return rows.map((r) => ({
+    slot_number: r.slot_number,
+    label: episodeLabel(arc.season_number, r.slot_number),
+    state: slotState({ episode: r.episode_id ? { evaluation_status: r.evaluation_status } : null, event: r.event_id ? { id: r.event_id } : null }),
+  }));
 }
 
 // ── ADVANCE PHASE ───────────────────────────────────────────────────────────
 
 /**
- * Advance to the next phase. Handles both auto and manual triggers.
+ * Advance to the next phase, or complete the season from the last one. One
+ * transaction, the arc row locked: the goals marked failed, the next
+ * phase's goals activated and the arc (phases, debt, log) are written
+ * together or not at all.
+ *
+ * A manual advance asks first (needs_confirmation) when the phase has
+ * unmet goals or slots not done; the answer lists both, and says when
+ * advancing completes the season. Confirming sends force.
  *
  * @param {string} showId
  * @param {object} models
@@ -198,50 +235,55 @@ async function advancePhase(showId, models, options = {}) {
   const { triggered_by = 'auto', force = false, episode_number = null } = options;
   const { sequelize } = models;
 
-  const [arcRows] = await sequelize.query(
-    `SELECT * FROM show_arcs WHERE show_id = :showId AND status = 'active' AND deleted_at IS NULL LIMIT 1`,
-    { replacements: { showId } }
-  );
-  if (!arcRows?.length) throw new Error('No active arc found');
+  return sequelize.transaction(async (transaction) => {
+    const [arcRows] = await sequelize.query(
+      `SELECT * FROM show_arcs WHERE show_id = :showId AND status = 'active' AND deleted_at IS NULL
+        ORDER BY arc_number ASC LIMIT 1 FOR UPDATE`,
+      { replacements: { showId }, transaction }
+    );
+    if (!arcRows?.length) throw new Error('No active arc found');
 
-  const arc = arcRows[0];
-  const phases = typeof arc.phases === 'string' ? JSON.parse(arc.phases) : [...arc.phases];
-  const currentIdx = phases.findIndex(p => p.phase === arc.current_phase);
-  const currentPhase = phases[currentIdx];
-  const nextPhase = phases[currentIdx + 1];
+    const arc = arcRows[0];
+    const phases = typeof arc.phases === 'string' ? JSON.parse(arc.phases) : [...arc.phases];
+    const currentIdx = phases.findIndex(p => p.phase === arc.current_phase);
+    const currentPhase = phases[currentIdx];
+    const nextPhase = phases[currentIdx + 1];
+    if (!currentPhase) throw new Error(`Phase ${arc.current_phase} not found in the season`);
 
-  if (!nextPhase && !force) {
-    // Final phase — complete the arc
-    return completeArc(showId, arc, phases, models, options);
-  }
+    const goalStatus = await getPhaseGoalStatus(showId, currentPhase, models, { transaction });
+    const openSlots = await openSlotsOf(sequelize, arc, currentPhase, transaction);
+    const unmetGoals = goalStatus.goals.filter(isUnmet);
 
-  // Get goal status for warning
-  const goalStatus = await getPhaseGoalStatus(showId, currentPhase, models);
+    if (!force && triggered_by === 'manual' && (goalStatus.has_warning || openSlots.length > 0)) {
+      return {
+        needs_confirmation: true,
+        is_final: !nextPhase,
+        warning: goalStatus.warning_message || null,
+        open_slots: openSlots,
+        unmet_goals: unmetGoals.map(g => ({
+          id: g.id, title: g.title, type: g.type, target_metric: g.target_metric,
+          current_value: g.current_value, target_value: g.target_value,
+        })),
+        goal_status: goalStatus,
+        current_phase: currentPhase,
+        next_phase: nextPhase || null,
+      };
+    }
 
-  // If not forced and there are warnings, return the warning
-  if (!force && goalStatus.has_warning && triggered_by === 'manual') {
-    return {
-      needs_confirmation: true,
-      warning: goalStatus.warning_message,
-      goal_status: goalStatus,
-      current_phase: currentPhase,
-      next_phase: nextPhase,
-    };
-  }
+    if (!nextPhase) {
+      // Final phase — complete the arc
+      return completeArc(arc, phases, goalStatus, sequelize, { ...options, transaction, open_slots: openSlots.length });
+    }
 
-  // Mark incomplete goals as carried_forward and build narrative debt
-  const newDebt = [];
-  const existingDebt = typeof arc.narrative_debt === 'string' ? JSON.parse(arc.narrative_debt) : [...(arc.narrative_debt || [])];
+    // Mark incomplete goals as failed and build narrative debt
+    const newDebt = [];
+    const existingDebt = typeof arc.narrative_debt === 'string' ? JSON.parse(arc.narrative_debt) : [...(arc.narrative_debt || [])];
 
-  for (const goal of goalStatus.goals) {
-    if (goal.status === 'active' || (goal.status !== 'completed' && goal.type === 'primary')) {
-      // Mark as carried_forward in the database
-      try {
-        await sequelize.query(
-          "UPDATE career_goals SET status = 'failed', updated_at = NOW() WHERE id = :id AND status = 'active'",
-          { replacements: { id: goal.id } }
-        );
-      } catch { /* non-critical */ }
+    for (const goal of unmetGoals) {
+      await sequelize.query(
+        "UPDATE career_goals SET status = 'failed', updated_at = NOW() WHERE id = :id AND status = 'active'",
+        { replacements: { id: goal.id }, transaction }
+      );
 
       newDebt.push({
         goal_id: goal.id,
@@ -256,85 +298,81 @@ async function advancePhase(showId, models, options = {}) {
         carried_at: new Date().toISOString(),
       });
     }
-  }
 
-  // Update current phase status
-  currentPhase.status = 'completed';
-  currentPhase.completed_at = new Date().toISOString();
-  currentPhase.goal_summary = {
-    total: goalStatus.total,
-    completed: goalStatus.completed,
-    failed: goalStatus.failed + newDebt.length,
-    carried: newDebt.length,
-  };
+    // Update current phase status
+    currentPhase.status = 'completed';
+    currentPhase.completed_at = new Date().toISOString();
+    currentPhase.goal_summary = {
+      total: goalStatus.total,
+      completed: goalStatus.completed,
+      failed: goalStatus.failed + newDebt.length,
+      carried: newDebt.length,
+    };
+    if (openSlots.length) currentPhase.left_open = openSlots.map(s => s.slot_number);
 
-  // Activate next phase
-  if (nextPhase) {
+    // Activate next phase, and its career goals
     nextPhase.status = 'active';
     nextPhase.activated_at = new Date().toISOString();
     nextPhase.activated_by = triggered_by;
-  }
+    await sequelize.query(
+      `UPDATE career_goals SET status = 'active', updated_at = NOW()
+       WHERE show_id = :showId AND status = 'paused' AND deleted_at IS NULL
+       AND episode_range IS NOT NULL
+       AND (episode_range->>0)::int >= :start AND (episode_range->>0)::int <= :end`,
+      { replacements: { showId, start: nextPhase.episode_start, end: nextPhase.episode_end }, transaction }
+    );
 
-  // Activate next phase's career goals
-  if (nextPhase) {
-    try {
-      await sequelize.query(
-        `UPDATE career_goals SET status = 'active', updated_at = NOW()
-         WHERE show_id = :showId AND status = 'paused'
-         AND episode_range IS NOT NULL
-         AND (episode_range->>0)::int >= :start AND (episode_range->>0)::int <= :end`,
-        { replacements: { showId, start: nextPhase.episode_start, end: nextPhase.episode_end } }
-      );
-    } catch { /* non-critical */ }
-  }
+    // Build progression log entry
+    const existingLog = typeof arc.progression_log === 'string' ? JSON.parse(arc.progression_log) : [...(arc.progression_log || [])];
+    existingLog.push({
+      from_phase: currentPhase.phase,
+      to_phase: nextPhase.phase,
+      triggered_by,
+      trigger_reason: triggered_by === 'auto'
+        ? `Episode ${episode_number || currentPhase.episode_end} completed — phase boundary reached`
+        : openSlots.length
+          ? `Showrunner advanced with ${openSlots.length} open ${openSlots.length === 1 ? 'slot' : 'slots'} (${openSlots.map(s => `E${s.slot_number}`).join(', ')})`
+          : 'Showrunner manual override',
+      episode_number: episode_number || currentPhase.episode_end,
+      timestamp: new Date().toISOString(),
+      goals_completed: goalStatus.completed,
+      goals_carried: newDebt.length,
+      slots_left_open: openSlots.length,
+      warning_acknowledged: goalStatus.has_warning || openSlots.length > 0,
+    });
 
-  // Build progression log entry
-  const existingLog = typeof arc.progression_log === 'string' ? JSON.parse(arc.progression_log) : [...(arc.progression_log || [])];
-  existingLog.push({
-    from_phase: currentPhase.phase,
-    to_phase: nextPhase?.phase || null,
-    triggered_by,
-    trigger_reason: triggered_by === 'auto'
-      ? `Episode ${episode_number || currentPhase.episode_end} completed — phase boundary reached`
-      : 'Showrunner manual override',
-    episode_number: episode_number || currentPhase.episode_end,
-    timestamp: new Date().toISOString(),
-    goals_completed: goalStatus.completed,
-    goals_carried: newDebt.length,
-    warning_acknowledged: goalStatus.has_warning,
+    const allDebt = [...existingDebt, ...newDebt];
+    const temp = computeEmotionalTemperature({ ...arc, narrative_debt: allDebt, phases, current_phase: nextPhase.phase });
+
+    await sequelize.query(
+      `UPDATE show_arcs SET
+       phases = :phases, current_phase = :nextPhase, current_episode = :ep,
+       narrative_debt = :debt, progression_log = :log,
+       emotional_temperature = :temp, updated_at = NOW()
+       WHERE id = :id`,
+      { replacements: {
+        phases: JSON.stringify(phases),
+        nextPhase: nextPhase.phase,
+        ep: episode_number || currentPhase.episode_end,
+        debt: JSON.stringify(allDebt),
+        log: JSON.stringify(existingLog),
+        temp,
+        id: arc.id,
+      }, transaction }
+    );
+
+    return {
+      success: true,
+      advanced_from: currentPhase.title,
+      advanced_to: nextPhase.title,
+      triggered_by,
+      narrative_debt_added: newDebt.length,
+      total_narrative_debt: allDebt.length,
+      emotional_temperature: temp,
+      slots_left_open: openSlots.length,
+      goals_carried: newDebt.map(d => ({ title: d.goal_title, weight: d.narrative_weight })),
+    };
   });
-
-  const allDebt = [...existingDebt, ...newDebt];
-  const temp = computeEmotionalTemperature({ ...arc, narrative_debt: allDebt, phases, current_phase: nextPhase?.phase || arc.current_phase });
-
-  // Save
-  await sequelize.query(
-    `UPDATE show_arcs SET
-     phases = :phases, current_phase = :nextPhase, current_episode = :ep,
-     narrative_debt = :debt, progression_log = :log,
-     emotional_temperature = :temp, updated_at = NOW()
-     WHERE id = :id`,
-    { replacements: {
-      phases: JSON.stringify(phases),
-      nextPhase: nextPhase?.phase || arc.current_phase,
-      ep: episode_number || currentPhase.episode_end,
-      debt: JSON.stringify(allDebt),
-      log: JSON.stringify(existingLog),
-      temp,
-      id: arc.id,
-    } }
-  );
-
-  return {
-    success: true,
-    advanced_from: currentPhase.title,
-    advanced_to: nextPhase?.title || 'Arc Complete',
-    triggered_by,
-    narrative_debt_added: newDebt.length,
-    total_narrative_debt: allDebt.length,
-    emotional_temperature: temp,
-    goals_carried: newDebt.map(d => ({ title: d.goal_title, weight: d.narrative_weight })),
-  };
 }
 
 function buildNarrativeWeight(goal, phase) {
@@ -352,13 +390,11 @@ function buildNarrativeWeight(goal, phase) {
 
 // ── COMPLETE ARC ────────────────────────────────────────────────────────────
 
-async function completeArc(showId, arc, phases, models, options) {
-  const { sequelize } = models;
-  const { episode_number, triggered_by = 'auto' } = options;
+async function completeArc(arc, phases, goalStatus, sequelize, options) {
+  const { episode_number, triggered_by = 'auto', transaction, open_slots: openSlots = 0 } = options;
 
-  // Final phase goal check
+  // The final phase is the current one; its goals were read in the same transaction.
   const finalPhase = phases[phases.length - 1];
-  const goalStatus = await getPhaseGoalStatus(showId, finalPhase, models);
 
   finalPhase.status = 'completed';
   finalPhase.completed_at = new Date().toISOString();
@@ -377,9 +413,12 @@ async function completeArc(showId, arc, phases, models, options) {
     episode_number: episode_number || finalPhase.episode_end,
     timestamp: new Date().toISOString(),
     goals_completed: goalStatus.completed,
+    goals_unmet: goalStatus.goals.filter(isUnmet).length,
     goals_carried: 0,
+    slots_left_open: openSlots,
   });
 
+  const temp = goalStatus.completed >= goalStatus.total * 0.7 ? 'unstoppable' : 'rising';
   await sequelize.query(
     `UPDATE show_arcs SET status = 'completed', phases = :phases,
      progression_log = :log, emotional_temperature = :temp,
@@ -387,19 +426,20 @@ async function completeArc(showId, arc, phases, models, options) {
     { replacements: {
       phases: JSON.stringify(phases),
       log: JSON.stringify(existingLog),
-      temp: goalStatus.completed >= goalStatus.total * 0.7 ? 'unstoppable' : 'rising',
+      temp,
       ep: episode_number || finalPhase.episode_end,
       id: arc.id,
-    } }
+    }, transaction }
   );
 
+  const debt = typeof arc.narrative_debt === 'string' ? JSON.parse(arc.narrative_debt) : (arc.narrative_debt || []);
   return {
     success: true,
     arc_completed: true,
     arc_title: arc.title,
     total_goals_completed: phases.reduce((sum, p) => sum + (p.goal_summary?.completed || 0), 0),
-    total_narrative_debt: (arc.narrative_debt || []).length,
-    emotional_temperature: goalStatus.completed >= goalStatus.total * 0.7 ? 'unstoppable' : 'rising',
+    total_narrative_debt: debt.length,
+    emotional_temperature: temp,
   };
 }
 

@@ -634,9 +634,9 @@
 
 .wa-arc-side { display: grid; gap: 16px; position: sticky; top: 16px; min-width: 0; }
 .wa-arc-panel { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; padding: 18px; scroll-margin-top: 130px; border-radius: 16px; background: var(--surface-card); border: 1px solid var(--lala-lavender-line); }
-.wa-arc-eyebrow { font-family: var(--font-ui); font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent-dark); }
+.wa-arc-eyebrow { font-family: var(--font-ui); font-size: 12px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent-dark); }
 .wa-arc-panel-title { margin: 0; font-family: var(--font-prose); font-size: 21px; font-weight: 600; line-height: 1.25; color: var(--text-primary); overflow-wrap: anywhere; }
-.wa-arc-chip { padding: 3px 10px; border-radius: 999px; font-size: 11px; font-weight: 600; background: var(--lala-parchment); color: var(--text-secondary); }
+.wa-arc-chip { padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; background: var(--lala-parchment); color: var(--text-secondary); }
 .wa-arc-panel.state-done .wa-arc-chip { background: var(--lala-lavender-soft); color: var(--lala-lavender-text); }
 .wa-arc-panel.state-in_production .wa-arc-chip { background: var(--accent-subtle); color: var(--accent-dark); }
 .wa-arc-panel.state-event_ready .wa-arc-chip { background: var(--warning-bg); color: var(--warning-text); }
@@ -1055,4 +1055,48 @@
 @media (max-width: 900px) {
   .wa-season-pair.is-two { grid-template-columns: minmax(0, 1fr); }
   .wa-season-head-chips { margin-left: 0; }
+}
+
+/* Season Plan fixes (Evoni's review, 2026-10-24): a load that failed, with
+   Retry; messages in the page where browser alerts were; the advance
+   confirm step; advancing with open slots; "Make a thread" as a small form. */
+.wa-season-error {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px;
+  padding: 12px 14px; border-radius: 12px; font-size: 13px; line-height: 1.5;
+  background: var(--danger-bg); border: 1px solid var(--danger-border); color: var(--danger-text);
+}
+.wa-season-error-retry {
+  min-height: 44px; padding: 6px 18px; border: 1px solid var(--danger-border); border-radius: 12px; font: inherit; font-size: 13px; font-weight: 700;
+  background: var(--surface-card); color: var(--danger-text); cursor: pointer;
+}
+.wa-season-inline-error { margin: 8px 0 0; padding: 8px 10px; border-radius: 8px; font-size: 12px; line-height: 1.5; background: var(--danger-bg); color: var(--danger-text); }
+.wa-season-small-btn {
+  min-height: 36px; padding: 4px 12px; border: 1px solid var(--primary-subtle); border-radius: 8px; font: inherit; font-size: 12px; font-weight: 500;
+  background: var(--surface-bg); color: var(--primary-text); cursor: pointer;
+}
+.wa-season-name-form { margin-top: 6px; padding: 10px; border-radius: 10px; border: 1px solid var(--lala-gold-line); background: var(--lala-gold-soft); }
+.wa-season-name-label { display: block; font-size: 12px; font-weight: 600; color: var(--text-secondary); }
+.wa-season-name-label input { margin-top: 4px; }
+.wa-season-name-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+
+.wa-arc-confirm { margin-top: 10px; padding: 10px 12px; border-radius: 10px; background: var(--warning-bg); border: 1px solid var(--warning-border); color: var(--warning-text); }
+.wa-arc-confirm-title { font-size: 13px; font-weight: 700; color: var(--text-primary); }
+.wa-arc-confirm-line { margin: 6px 0 0; font-size: 12px; line-height: 1.5; }
+.wa-arc-confirm-goals { margin: 4px 0 0; padding-left: 18px; font-size: 12px; line-height: 1.5; }
+.wa-arc-confirm-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.wa-arc-open-advance {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; margin-bottom: 16px;
+  padding: 10px 14px; border-radius: 12px; border: 1px dashed var(--lala-gold-line); background: var(--lala-parchment);
+}
+.wa-arc-open-advance > .wa-arc-confirm, .wa-arc-open-advance > .wa-season-inline-error { flex-basis: 100%; }
+.wa-arc-open-advance-text { margin: 0; font-size: 13px; color: var(--text-secondary); }
+.wa-arc-open-advance-btn {
+  min-height: 40px; padding: 6px 14px; border: 1px solid var(--lala-gold-line); border-radius: 10px; font: inherit; font-size: 13px; font-weight: 700;
+  background: var(--surface-card); color: var(--lala-gold-text); cursor: pointer;
+}
+@media (max-width: 768px) {
+  /* A phone: every control in the slot's sheet, its intention editor and the advance step is a 44px target. */
+  .wa-arc-panel button, .wa-arc-panel select, .wa-arc-panel .wa-arc-primary,
+  .wa-arc-confirm button, .wa-arc-open-advance-btn, .wa-season-small-btn, .wa-season-name-actions button { min-height: 44px; }
+  .wa-arc-open-advance-btn { flex: 1 1 100%; }
 }

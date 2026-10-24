@@ -97,7 +97,6 @@
 1	src/routes/worldStudio.js	const exists = await WorldLocation.findOne({ where: { slug } }).catch(() => null);
 1	src/routes/worldStudio.js	} catch (_) { /* registry lookup failed, non-critical */ }
 3	src/routes/worldStudio.js	} catch { /* association may not exist */ }
-2	src/services/arcProgressionService.js	} catch { /* non-critical */ }
 1	src/services/careerPipelineService.js	} catch { /* no event */ }
 2	src/services/distributionService.js	).catch(() => []);
 4	src/services/episodeCompletionService.js	).catch(() => []);
