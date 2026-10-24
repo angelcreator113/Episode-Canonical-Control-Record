@@ -35,3 +35,13 @@
 .sp-quiet { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; }
 .sp-quiet .sp-title { margin: 0; font-size: 16px; }
 .sp-quiet .sp-empty { flex: 1 1 200px; margin: 0; }
+
+/* The decided proposals, folded (Evoni's review, 2026-10-24). */
+.sp-decided { border-top: 1px solid var(--lala-gold-line); padding-top: 8px; }
+.sp-decided-summary { min-height: 44px; display: flex; align-items: center; font-size: 13px; font-weight: 700; color: var(--lala-gold-text); cursor: pointer; }
+.sp-decided-list { display: flex; flex-direction: column; gap: 6px; margin: 4px 0 0; padding: 0; list-style: none; }
+.sp-decided-item { padding: 8px 10px; border-radius: 10px; background: var(--surface-card); font-size: 12px; color: var(--text-secondary); }
+.sp-decided-status { font-weight: 700; }
+.sp-decided-item.is-accepted .sp-decided-status { color: var(--success-text); }
+.sp-decided-item.is-dismissed .sp-decided-status { color: var(--text-secondary); }
+.sp-decided-text { margin: 4px 0 0; font-size: 13px; line-height: 1.5; color: var(--text-primary); overflow-wrap: anywhere; }

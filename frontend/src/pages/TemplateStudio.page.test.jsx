@@ -50,6 +50,16 @@ describe('TemplateStudio page', () => {
     await waitFor(() => expect(apiClient.get).toHaveBeenCalledTimes(2));
   });
 
+  test('Rename stays open until a different template is picked', async () => {
+    await show([template(), template({ id: 't-9', name: 'Haul Night' })]);
+    fireEvent.click(screen.getByRole('button', { name: /rename/i }));
+    expect(await screen.findByRole('textbox', { name: 'Template name' })).toBeTruthy();
+    // Picking another template drops the half-typed rename of the first.
+    fireEvent.click(screen.getAllByText('Haul Night')[0]);
+    await screen.findByRole('heading', { level: 2, name: 'Haul Night' });
+    expect(screen.queryByRole('textbox', { name: 'Template name' })).toBeNull();
+  });
+
   test('Rename: Escape cancels; a taken name shows the server\'s reason', async () => {
     await show([template()]);
     fireEvent.doubleClick(screen.getByRole('heading', { level: 2, name: 'Glam Look' }));
