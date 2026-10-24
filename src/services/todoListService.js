@@ -110,106 +110,234 @@ function taskFilled(slot, filled, { legacyAccessories = false } = {}) {
 }
 
 // ─── CLAUDE TASK GENERATOR ────────────────────────────────────────────────────
+//
+// The shopping list (2026-10-24 rework). The lines are decided here, not by
+// the model: from the look when there is one (a line per piece, the main
+// outfit as a dress or a top and a bottom, outerwear when the look has it),
+// else the standard lines (the main-outfit line means a dress, or a top and
+// a bottom — listSlotsFilled — so there are no separate Top and Bottom
+// lines). The model only words them, as a forced tool call; two attempts;
+// a budget refusal is thrown; otherwise the fallback words each line from
+// the piece and the event, never one generic list.
 
-async function generateTasks(event) {
+const SHOPPING_MODELS = ['claude-haiku-4-5-20251001'];
+const SHOPPING_ATTEMPTS = 2;
+
+// The standard lines, in order, when there is no look.
+const DEFAULT_SHOPPING_SLOTS = ['dress', 'shoes', 'purse', 'accessories', 'jewelry', 'perfume', 'hair'];
+// The order lines take on the list.
+const SLOT_ORDER = ['dress', 'top', 'bottom', 'outerwear', 'shoes', 'purse', 'accessories', 'jewelry', 'perfume', 'hair'];
+const REQUIRED_SLOTS = new Set(['dress', 'shoes']);
+// Lines kept even when the look has no piece for them: the essentials, and
+// the two that are rarely a wardrobe piece.
+const ALWAYS_SLOTS = ['shoes', 'perfume', 'hair'];
+
+const slotLabel = (slot) => SLOTS.find((s) => s.slot === slot)?.label || (slot === 'outerwear' ? 'Outerwear' : slot);
+
+/** Whether a look piece is one Lala already has (owned, bought, gifted, borrowed). */
+function pieceIsHers(p) {
+  if (p && 'charge' in p) return !p.charge;
+  return p?.is_owned === true;
+}
+
+function pieceCharge(p) {
+  if (p && 'charge' in p) return p.charge ? Number(p.charge.amount) || 0 : 0;
+  return p?.is_owned === true ? 0 : Number(p?.coin_cost) || 0;
+}
+
+/**
+ * The list's lines: [{ slot, piece|null, pieces? }]. With a look, each
+ * piece's line (a second piece on the same line gets a line of its own),
+ * the main outfit as a dress or a top and a bottom, then the essentials it
+ * lacks; without one, DEFAULT_SHOPPING_SLOTS.
+ */
+function shoppingPlan(look) {
+  const pieces = Array.isArray(look?.pieces) ? look.pieces.filter(Boolean) : [];
+  if (pieces.length === 0) return DEFAULT_SHOPPING_SLOTS.map((slot) => ({ slot, piece: null }));
+  const lines = [];
+  for (const p of pieces) {
+    // A piece of no known line is left to the list's own "another piece"
+    // line (shoppingLines), so it is neither lost nor counted twice.
+    const slot = listSlotOf(p.category || p.clothing_category);
+    if (slot) lines.push({ slot, piece: p });
+  }
+  const has = (slot) => lines.some((l) => l.slot === slot);
+  // The main outfit: a dress, or a top and a bottom; with neither, a line to find one.
+  if (!has('dress') && !(has('top') && has('bottom'))) lines.push({ slot: 'dress', piece: null });
+  for (const slot of ALWAYS_SLOTS) if (!has(slot)) lines.push({ slot, piece: null });
+  const rank = (slot) => { const i = SLOT_ORDER.indexOf(slot); return i === -1 ? SLOT_ORDER.length : i; };
+  return lines.map((l, i) => ({ ...l, i })).sort((a, b) => rank(a.slot) - rank(b.slot) || a.i - b.i).map(({ i, ...l }) => l); // eslint-disable-line no-unused-vars
+}
+
+/** One line's facts for the prompt. */
+function planLineFacts(line, n) {
+  const p = line.piece;
+  if (!p) return `${n + 1}. ${line.slot} — nothing chosen yet: she still has to find one`;
+  const hers = pieceIsHers(p);
+  const why = p.free_because && p.free_because !== 'free' ? ` (${p.free_because})` : '';
+  return `${n + 1}. ${line.slot} — "${p.name || slotLabel(line.slot)}": ${hers ? `already hers${why}, she pulls it from her closet` : `to buy, ${pieceCharge(p)} coins`}`;
+}
+
+/** The words for a line when the model gives none: from its piece and the event. */
+function fallbackLine(line, event) {
+  const p = line.piece;
+  const dress = event?.dress_code ? ` for ${event.dress_code}` : '';
+  if (p?.name) {
+    return pieceIsHers(p)
+      ? { label: `Pull my ${p.name} from the closet`, description: `Already mine, and right${dress || ` for ${event?.name || 'tonight'}`}.` }
+      : { label: `Pick up the ${p.name}`, description: `The piece that finishes the look${dress}.` };
+  }
+  const VIBE = {
+    dress: ['Find a look that says everything without a word', 'The outfit sets the tone for the whole night'],
+    shoes: ['Find heels that make every step count', 'Confidence starts from the ground up'],
+    purse: ['Find a clutch that holds secrets and lipstick', 'The finishing touch that ties it together'],
+    accessories: ['Find a silk scarf that finishes the story', 'The little extra that makes it hers'],
+    jewelry: ['Find something gold that catches the light', 'A little sparkle goes a long way'],
+    perfume: ['Find a scent that makes someone lean in close', 'The invisible accessory they remember most'],
+    top: ['Find a top that turns heads on its own', 'Sometimes the top half does all the talking'],
+    bottom: ['Find a bottom that moves like it was made for tonight', 'Pair it right and the outfit writes itself'],
+    hair: ['Find a hairstyle that frames the whole look', 'The crown of the outfit, and the first thing they see'],
+    outerwear: ['Find a jacket worth arriving in', 'The first thing they see at the door'],
+  };
+  const [label, description] = VIBE[line.slot] || [`Find the ${slotLabel(line.slot).toLowerCase()}`, `Something right for ${event?.name || 'tonight'}`];
+  return { label, description: event?.dress_code && line.slot === 'dress' ? `Dress code: ${event.dress_code}. ${description}` : description };
+}
+
+function shoppingTask(line, words, i) {
+  return {
+    slot: line.slot,
+    label: words.label,
+    description: words.description || '',
+    required: REQUIRED_SLOTS.has(line.slot),
+    completed: false,
+    order: i + 1,
+    ...(line.piece?.id != null ? { piece_id: String(line.piece.id) } : {}),
+  };
+}
+
+/**
+ * The list with no AI call: every line worded from its piece and the event.
+ * Start Episode uses it when the event has no approved list, so an episode
+ * gets the same lines a draft would have.
+ */
+function defaultShoppingTasks(event, look = null) {
+  return shoppingPlan(look).map((line, i) => shoppingTask(line, fallbackLine(line, event), i));
+}
+
+const SHOPPING_TOOL = Object.freeze({
+  name: 'write_shopping_list',
+  description: 'Return the wording for each line of the shopping list, in order.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      lines: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            slot: { type: 'string' },
+            label: { type: 'string', description: 'The line, 7-15 words, vivid and specific.' },
+            description: { type: 'string', description: 'One whispered sentence about why it matters tonight.' },
+          },
+          required: ['slot', 'label'],
+        },
+      },
+    },
+    required: ['lines'],
+  },
+});
+
+/**
+ * A model reply's JSON: the named tool call's input, else JSON written as
+ * text (an older reply shape: a bare array or object, fenced or not).
+ * Throws when there is neither.
+ */
+function readJsonReply(response, toolName) {
+  const call = (response?.content || []).find((b) => b?.type === 'tool_use' && b.name === toolName);
+  if (call?.input) return call.input;
+  const text = (response?.content || []).filter((b) => typeof b?.text === 'string').map((b) => b.text).join('');
+  const clean = text.replace(/```json|```/g, '').trim();
+  const start = clean.search(/[[{]/);
+  if (start === -1) throw new Error('reply holds no JSON');
+  return JSON.parse(clean.slice(start));
+}
+
+const isBudgetRefusal = (err) => err?.code === 'AI_BUDGET_EXCEEDED';
+
+/**
+ * Lala's shopping list for an event.
+ *
+ * @param {object} event
+ * @param {object} [opts]
+ * @param {object|null} [opts.look]   episodeLook's { pieces, total }: the lines come from it
+ * @param {{ balance: number, total: number }|null} [opts.budget]
+ *        when set and the look costs more than she has, the lines for
+ *        pieces to buy suggest renting, borrowing or a cheaper swap
+ */
+async function generateTasks(event, { look = null, budget = null } = {}) {
+  const plan = shoppingPlan(look);
   const prestige = event.prestige || 5;
-  const dressCode = event.dress_code || 'chic';
-  const mood = event.mood || 'aspirational';
   const stakes = event.narrative_stakes ? event.narrative_stakes.slice(0, 200) : '';
+  const short = budget && Number.isFinite(Number(budget.balance)) && Number(budget.total) > Number(budget.balance)
+    ? Number(budget.total) - Number(budget.balance) : 0;
 
   const prompt = `You are writing Lala's wardrobe shopping list — a dreamy, specific to-do list she makes while getting ready for an event.
 
-This is NOT a boring checklist. Each item should have a cute, evocative name that captures the VIBE of what she's hunting for. Think of how a fashion-obsessed girl would describe what she wants to find:
-
-EXAMPLES of the tone we want:
+This is NOT a boring checklist. Each line has a cute, evocative name that captures the VIBE of what she's hunting for, the way a fashion-obsessed girl would write it:
 - Instead of "Find your dress" → "Find a showstopper that makes the room go quiet"
 - Instead of "Find shoes" → "Find heels that say 'I belong at the front row'"
-- Instead of "Find perfume" → "Find a floral scent that makes someone lean in close"
-- Instead of "Find a purse" → "Find a clutch that holds secrets and lipstick"
-- Instead of "Find accessories" → "Find a silk scarf that finishes the story"
-- Instead of "Find jewelry" → "Find gold that catches the chandelier light"
+- Instead of "Wear my black dress" → "Pull the black slip dress that never misses"
 
 EVENT:
 Name: ${event.name}
 Theme: ${event.theme || 'not set'}
-Mood: ${mood}
-Dress Code: ${dressCode}
+Mood: ${event.mood || 'aspirational'}
+Dress Code: ${event.dress_code || 'chic'}
 Style Keywords: ${(event.dress_code_keywords || []).join(', ')}
-Location: ${event.location_hint || 'exclusive venue'}
+Location: ${event.venue_name || event.location_hint || 'exclusive venue'}
 Prestige: ${prestige}/10
 ${stakes ? `Stakes: ${stakes}` : ''}
 
-Write exactly 9 tasks — one for each wardrobe slot below.
-The "label" must be a CUTE, VIVID, VIBE-BASED name (7-15 words max) — never generic.
-The "description" is one whispered sentence about why this piece matters for tonight.
-Mark required: true for dress and shoes. Everything else required: false.
+THE LINES (word exactly these, in this order, one each — do not add, drop or merge any):
+${plan.map(planLineFacts).join('\n')}
 
-Slots (in order):
-1. dress — the main outfit (dress, or top + bottom combination)
-2. shoes — footwear
-3. purse — bag, purse, clutch, handbag, tote
-4. accessories — belt, scarf, hat, sunglasses, hair bow or clip (not a bag)
-5. jewelry — earrings, necklace, rings, bracelet
-6. perfume — fragrance, scent
-7. top — alternative to dress (top half only)
-8. bottom — alternative to dress (skirt, pants, bottom half)
-9. hair — the hairstyle or wig
+Rules:
+- A piece that is already hers is a "pull it from my closet" line, never "find" or "buy".
+- A piece to buy names the piece (its name, or what it is) so the line reads as that piece.
+- A line with nothing chosen is something she still has to find.
+- Never write a price or a coin amount: the list shows each price itself.
+${short > 0 ? `- She is ${short} coins short of what this look costs. For each piece to buy, the description suggests renting, borrowing, or a cheaper swap, in her voice.\n` : ''}- "label": 7-15 words, vivid and specific. "description": one whispered sentence about why it matters tonight.
 
-Respond ONLY with a JSON array. No preamble. No explanation.
+Return the lines with the write_shopping_list tool, each with its slot.`;
 
-[
-  {
-    "slot": "dress",
-    "label": "Find a showstopper that makes the room go quiet",
-    "description": "Tonight is ${prestige >= 8 ? 'the biggest stage yet' : prestige >= 5 ? 'about making an impression' : 'a chance to be seen'}",
-    "required": true,
-    "completed": false,
-    "order": 1
-  },
-  ...9 total
-]`;
-
-  const response = await getAnthropic().messages.create({
-    model: 'claude-haiku-4-5-20251001',
-    max_tokens: 800,
-    messages: [{ role: 'user', content: prompt }],
-  });
-
-  const raw = response.content[0]?.text || '[]';
-  const clean = raw.replace(/```json|```/g, '').trim();
-
-  try {
-    const tasks = JSON.parse(clean);
-    return tasks.map((t, i) => ({
-      slot:        t.slot        || SLOTS[i]?.slot || 'dress',
-      label:       t.label       || SLOTS[i]?.label || 'Task',
-      description: t.description || '',
-      required:    t.required    ?? SLOTS[i]?.required ?? false,
-      completed:   false,
-      order:       i + 1,
-    }));
-  } catch {
-    // Fallback — cute vibe-based defaults
-    const VIBE_FALLBACKS = {
-      dress:       { label: 'Find a look that says everything without a word',       desc: 'The outfit sets the tone for the whole night' },
-      shoes:       { label: 'Find heels that make every step count',                 desc: 'Confidence starts from the ground up' },
-      purse:       { label: 'Find a clutch that holds secrets and lipstick',          desc: 'The finishing touch that ties it together' },
-      accessories: { label: 'Find a silk scarf that finishes the story',              desc: 'The little extra that makes it hers' },
-      jewelry:     { label: 'Find something gold that catches the light',             desc: 'A little sparkle goes a long way' },
-      perfume:     { label: 'Find a scent that makes someone lean in close',          desc: 'The invisible accessory they remember most' },
-      top:         { label: 'Find a top that turns heads on its own',                 desc: 'Sometimes the top half does all the talking' },
-      bottom:      { label: 'Find a bottom that moves like it was made for tonight',  desc: 'Pair it right and the outfit writes itself' },
-      hair:        { label: 'Find a hairstyle that frames the whole look',           desc: 'The crown of the outfit, and the first thing they see' },
-    };
-    return SLOTS.map((s, i) => ({
-      slot:        s.slot,
-      label:       VIBE_FALLBACKS[s.slot]?.label || `Find your ${s.label.toLowerCase()}`,
-      description: VIBE_FALLBACKS[s.slot]?.desc || `Choose something perfect for ${event.name}`,
-      required:    s.required,
-      completed:   false,
-      order:       i + 1,
-    }));
+  let lastErr = null;
+  for (let attempt = 0; attempt < SHOPPING_ATTEMPTS; attempt += 1) {
+    try {
+      const response = await getAnthropic().messages.create({
+        model: SHOPPING_MODELS[0],
+        max_tokens: 1000,
+        tools: [SHOPPING_TOOL],
+        tool_choice: { type: 'tool', name: SHOPPING_TOOL.name },
+        messages: [{ role: 'user', content: prompt }],
+      });
+      const reply = readJsonReply(response, SHOPPING_TOOL.name);
+      const written = Array.isArray(reply) ? reply : reply?.lines;
+      if (!Array.isArray(written) || written.length === 0) throw new Error('reply has no lines');
+      // Matched by position, then by slot; a line it left out keeps its fallback words.
+      return plan.map((line, i) => {
+        const byPos = written[i] && String(written[i].slot || line.slot).toLowerCase() === line.slot ? written[i] : null;
+        const w = byPos || written.find((x) => String(x?.slot || '').toLowerCase() === line.slot) || null;
+        const label = typeof w?.label === 'string' ? w.label.trim().slice(0, 200) : '';
+        return shoppingTask(line, label ? { label, description: String(w.description || '').trim().slice(0, 300) } : fallbackLine(line, event), i);
+      });
+    } catch (err) {
+      if (isBudgetRefusal(err)) throw err;
+      lastErr = err;
+      console.error(`[TodoList] Shopping list attempt ${attempt + 1} of ${SHOPPING_ATTEMPTS} failed:`, err.message);
+    }
   }
+  console.error(`[TodoList] Shopping list written from the look and the event without AI: ${lastErr?.message}`);
+  return defaultShoppingTasks(event, look);
 }
 
 // ─── FONT SETUP ───────────────────────────────────────────────────────────────
@@ -763,15 +891,53 @@ async function getTodoList(episodeId, models, { beat = null, line = null } = {})
 const CAREER_MODELS = ['claude-haiku-4-5-20251001'];
 const CAREER_ATTEMPTS = 2;
 
+const CAREER_TOOL = Object.freeze({
+  name: 'write_career_tasks',
+  description: 'Return Lala\'s career tasks for this event.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      tasks: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            slot: { type: 'string' },
+            label: { type: 'string' },
+            description: { type: 'string' },
+            goal: { type: 'boolean', description: 'true for what she means to do, false for an optional idea' },
+            goal_id: { type: 'string', description: 'the id of the career goal it serves, if any' },
+          },
+          required: ['slot', 'label'],
+        },
+      },
+    },
+    required: ['tasks'],
+  },
+});
+
 /**
  * Generate a career task list for an event — the tasks Lala must complete
  * during the event itself (deliverables, social posts, networking goals).
  *
  * This is To-Do List #2 (UI.OVERLAY.CAREER_LIST) — separate from the
  * wardrobe shopping list (UI.OVERLAY.WARDROBE_LIST).
+ *
+ * 2026-10-24: the money line is the deal's own statement
+ * (describeInvitationMoney, the invitation's; `money` when the caller loaded
+ * the terms rows), not the legacy is_paid/payment_amount pair that read
+ * "Unpaid event" for every deal; the host is read as the invitation reads
+ * it; `goals` (her active CareerGoal rows, { id, title }) let each task name
+ * the career goal it serves (goal_id, kept only when it is one of them);
+ * the reply is a forced tool call; a budget refusal is thrown.
  */
-async function generateCareerTasks(event, { room = null, need = null, excludeSlots = [] } = {}) {
+async function generateCareerTasks(event, { room = null, need = null, excludeSlots = [], money = null, goals = [] } = {}) {
   const scale = goalTaskScale(event);
+  const { invitationFacts, describeInvitationMoney } = require('./invitationCompositingService');
+  const facts = invitationFacts(event);
+  const moneyText = money || describeInvitationMoney(event).text;
+  const goalList = (Array.isArray(goals) ? goals : []).filter((g) => g && g.id && g.title).slice(0, 8);
+  const goalIds = new Set(goalList.map((g) => String(g.id)));
   // T9 follow-up (Evoni, 2026-09-30): the limit is for Lala's combined goal
   // list, so the Career Checklist writes only the room the Start Episode
   // goals leave (room) and at least what the minimum still needs (need).
@@ -793,12 +959,16 @@ content to create, people to network with, social media moments, career position
 EVENT:
 Name: ${event.name}
 Type: ${event.event_type || 'invite'}
-${event.format ? `Format: ${String(event.format).replace(/_/g, ' ')}\n` : ''}Host: ${event.host || 'unknown'}
+${event.format ? `Format: ${String(event.format).replace(/_/g, ' ')}\n` : ''}Host: ${facts.hostName}
 Brand: ${event.host_brand || 'none'}
 ${event.venue_name ? `Venue: ${event.venue_name}\n` : ''}Prestige: ${bounds.prestige}/10 (${sizeLine})
 Dress Code: ${event.dress_code || 'chic'}
 ${event.description ? `Description: ${String(event.description).slice(0, 300)}\n` : ''}${event.narrative_stakes ? `Stakes: ${event.narrative_stakes.slice(0, 200)}` : ''}
-${event.is_paid ? `Payment: ${event.payment_amount} coins` : 'Unpaid event'}
+Money (the deal, in the host's words): ${moneyText}
+${goalList.length ? `
+HER CAREER GOALS (link a task to the one it moves forward, by id; leave goal_id empty when none fits):
+${goalList.map((g) => `- ${g.id}: ${g.title}`).join('\n')}
+` : ''}
 
 Write ${count} career tasks — no more, no fewer. This is ${sizeLine}, so the list is that size.
 Each must be specific to THIS event: name its host, brand, venue, format or
@@ -813,31 +983,26 @@ These are Lala's own goals and ideas. Do not invent brand or host obligations:
 the event's accepted deliverables are added to the list separately. Mark
 "goal": true for what she means to do, false for an optional idea.
 
-Respond ONLY with a JSON array:
-[
-  {
-    "slot": "content_main",
-    "label": "Film a 30-second venue walkthrough for Stories",
-    "description": "The algorithm rewards early-event content",
-    "goal": true,
-    "completed": false,
-    "order": 1
-  }
-]`;
+Never write a coin amount the money line above does not hold.
+
+Return the tasks with the write_career_tasks tool: each with a short
+snake_case slot (e.g. "content_main"), a label (e.g. "Film a 30-second venue
+walkthrough for Stories"), a one-sentence description, goal true or false${goalList.length ? ', and goal_id when it serves one of her career goals' : ''}.`;
 
   let lastErr = null;
   for (let attempt = 0; attempt < CAREER_ATTEMPTS; attempt += 1) {
     try {
       const response = await getAnthropic().messages.create({
         model: CAREER_MODELS[0],
-        max_tokens: 800,
+        max_tokens: 900,
+        tools: [CAREER_TOOL],
+        tool_choice: { type: 'tool', name: CAREER_TOOL.name },
         messages: [{ role: 'user', content: prompt }],
       });
 
-      const raw = response.content[0]?.text || '[]';
-      const clean = raw.replace(/```json|```/g, '').trim();
-      const parsed = JSON.parse(clean);
-      if (!Array.isArray(parsed)) throw new Error('reply is not a JSON array');
+      const reply = readJsonReply(response, CAREER_TOOL.name);
+      const parsed = Array.isArray(reply) ? reply : reply?.tasks;
+      if (!Array.isArray(parsed)) throw new Error('reply is not a list of tasks');
       const tasks = parsed.map((t, i) => ({
         slot:        t?.slot        || `career_${i + 1}`,
         label:       t?.label       || '',
@@ -847,11 +1012,13 @@ Respond ONLY with a JSON array:
         task_source: (t?.goal ?? t?.required ?? (i < 2)) ? 'goal' : 'optional',
         completed:   false,
         order:       i + 1,
-      }));
+        ...(t?.goal_id && goalIds.has(String(t.goal_id)) ? { goal_id: String(t.goal_id) } : {}),
+      })).filter((t) => String(t.label).trim());
       // T9: trimmed to the event's maximum; a short reply is kept, not padded.
       return enforceGoalTaskBounds(tasks, bounds, 'CareerList')
         .map((t, i) => ({ ...t, order: i + 1 }));
     } catch (err) {
+      if (isBudgetRefusal(err)) throw err;
       lastErr = err;
       console.error(`[CareerList] Generation attempt ${attempt + 1} of ${CAREER_ATTEMPTS} failed:`, err.message);
     }
@@ -863,6 +1030,89 @@ Respond ONLY with a JSON array:
   console.error('[CareerList] Generation failed; writing the event\'s minimum goals from its fields:', lastErr?.message);
   return composeGoalTasks(goalFields(event), bounds, { upTo: bounds.min, where: 'CareerList', excludeSlots })
     .map((t, i) => ({ ...t, order: i + 1 }));
+}
+
+const LINE_TOOL = Object.freeze({
+  name: 'write_line',
+  description: 'Return one new line for the list.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      label: { type: 'string' },
+      description: { type: 'string' },
+      goal: { type: 'boolean' },
+      goal_id: { type: 'string' },
+    },
+    required: ['label'],
+  },
+});
+
+/**
+ * One new wording for one line of a document (2026-10-24: re-roll one line
+ * instead of the whole list). The rest of the list is shown so the new line
+ * repeats none of it. Shopping: the same slot and piece; career: a new
+ * "This event" goal (its section kept by the caller). Two attempts; a
+ * budget refusal is thrown; with no answer it throws, and the document is
+ * left as it is.
+ *
+ * @returns {{ label, description, task_source?, goal_id? }}
+ */
+async function redraftDocumentLine(event, { type, items, index, look = null, money = null, goals = [] }) {
+  const line = items[index];
+  if (!line) throw Object.assign(new Error('No such line'), { status: 404 });
+  const others = items.filter((_, i) => i !== index).map((i) => `- ${i.label}`).join('\n') || '- (none)';
+  let task;
+  if (type === 'shopping_list') {
+    const plan = shoppingPlan(look);
+    const planned = plan.find((l) => line.piece_id && String(l.piece?.id) === String(line.piece_id)) || plan.find((l) => l.slot === listSlotOf(line.slot)) || { slot: line.slot, piece: null };
+    task = `Rewrite ONE line of Lala's wardrobe shopping list, the "${line.slot}" line.
+It is: ${planLineFacts(planned, 0).replace(/^1\. /, '')}.
+Now it reads: "${line.label}". Write a different, vivid, specific line (7-15 words) and one whispered sentence about why it matters tonight.
+A piece already hers is a "pull it from my closet" line. Never write a price.`;
+  } else {
+    const { describeInvitationMoney } = require('./invitationCompositingService');
+    const goalList = (Array.isArray(goals) ? goals : []).filter((g) => g && g.id && g.title).slice(0, 8);
+    task = `Rewrite ONE of Lala's career goals for this event.
+Now it reads: "${line.label}". Write a different goal, specific to this event (its host, brand, venue, format or dress code), with one sentence on why.
+Money (the deal): ${money || describeInvitationMoney(event).text}. Never write a coin amount that line does not hold, and never invent a brand or host obligation.
+${goalList.length ? `Her career goals (give goal_id when it serves one):\n${goalList.map((g) => `- ${g.id}: ${g.title}`).join('\n')}` : ''}`;
+  }
+  const prompt = `EVENT: ${event.name} · ${event.dress_code || 'chic'} · prestige ${event.prestige || 5}/10${event.host_brand ? ` · ${event.host_brand}` : ''}
+
+${task}
+
+The rest of the list (repeat none of it):
+${others}
+
+Return it with the write_line tool.`;
+
+  let lastErr = null;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const response = await getAnthropic().messages.create({
+        model: SHOPPING_MODELS[0],
+        max_tokens: 300,
+        tools: [LINE_TOOL],
+        tool_choice: { type: 'tool', name: LINE_TOOL.name },
+        messages: [{ role: 'user', content: prompt }],
+      });
+      const r = readJsonReply(response, LINE_TOOL.name);
+      const label = typeof r?.label === 'string' ? r.label.trim().slice(0, 200) : '';
+      if (!label) throw new Error('reply has no label');
+      const out = { label, description: String(r.description || '').trim().slice(0, 300) };
+      if (type === 'career_plan') {
+        out.task_source = r.goal === false ? 'optional' : 'goal';
+        const ids = new Set((goals || []).map((g) => String(g.id)));
+        if (r.goal_id && ids.has(String(r.goal_id))) out.goal_id = String(r.goal_id);
+      }
+      return out;
+    } catch (err) {
+      if (isBudgetRefusal(err)) throw err;
+      lastErr = err;
+      console.error(`[TodoList] Line redraft attempt ${attempt + 1} failed:`, err.message);
+    }
+  }
+  throw Object.assign(new Error(`No new line this time (${lastErr?.message || 'no answer'}). Try again.`), { status: 502 });
 }
 
 /**
@@ -915,7 +1165,7 @@ async function generateCareerList(episodeId, showId, models) {
   // A career item that repeats a goal already on the list (the fallback
   // writes from the same event fields as Start Episode) is dropped.
   const onListLabels = new Set(baseList.map((t) => String(t?.label || '').trim().toLowerCase()));
-  const careerTasks = (room > 0 ? await generateCareerTasks(event, { room, need, excludeSlots: baseList.map((t) => t?.slot).filter(Boolean) }) : [])
+  const careerTasks = (room > 0 ? await generateCareerTasks(event, { room, need, excludeSlots: baseList.map((t) => t?.slot).filter(Boolean), money: require('./invitationCompositingService').describeInvitationMoney(event, { deliverables }).text }) : [])
     .filter((t) => !onListLabels.has(String(t.label || '').trim().toLowerCase()));
   if (room === 0) console.log(`[CareerList] ${event.name}: the list already holds ${bounds.max} of Lala's goals; no career items added (T9)`);
   const tasks = capCombinedGoals(withCareerTasks([...stored, ...missing], careerTasks), bounds, 'CareerList');
@@ -996,6 +1246,10 @@ module.exports = {
   getTodoList,
   generateTasks,
   generateCareerTasks,
+  redraftDocumentLine,
+  defaultShoppingTasks,
+  shoppingPlan,
+  readJsonReply,
   renderTodoAsset,
   listSlotOf,
   listSlotsFilled,

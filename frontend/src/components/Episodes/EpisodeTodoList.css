@@ -11,6 +11,7 @@
 .etl-empty-icon { font-size: 30px; }
 .etl-empty-title { margin: 6px 0 4px; font-family: var(--font-prose); font-size: 18px; font-weight: 600; color: var(--lala-ink); }
 .etl-text { margin: 0 0 14px; font-size: 14px; line-height: 1.5; color: var(--lala-ink-muted); }
+.etl-text.is-error { color: var(--danger-text); }
 .etl-tabs { display: flex; gap: 6px; padding: 10px 12px; border-bottom: 1px solid var(--lala-lavender-line); }
 .etl-tab { flex: 1; padding: 8px 12px; border: 1px solid transparent; border-radius: 999px; background: transparent; color: var(--lala-ink-muted); font-size: 14px; font-weight: 600; cursor: pointer; }
 .etl-tab:hover { background: var(--lala-parchment-2); }

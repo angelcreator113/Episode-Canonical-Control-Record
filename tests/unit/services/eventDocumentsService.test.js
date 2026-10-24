@@ -6,6 +6,18 @@
 jest.mock('../../../src/services/todoListService', () => ({
   generateTasks: jest.fn(),
   generateCareerTasks: jest.fn(),
+  redraftDocumentLine: jest.fn(),
+  listSlotOf: jest.requireActual('../../../src/services/todoListService').listSlotOf,
+}));
+
+// The look and her balance (episodeLook, the ledger) are read by the
+// overlay service; here there is no look unless a test sets one.
+const mockLook = { current: null };
+jest.mock('../../../src/services/eventDocumentOverlayService', () => ({
+  shoppingListContext: jest.fn(async () => ({ look: mockLook.current, balance: 500 })),
+  overlayState: jest.fn(() => 'current'),
+  makeDocumentOverlay: jest.fn(async () => null),
+  shoppingLines: jest.fn(() => ({ lines: [], total: 0 })),
 }));
 
 const todo = require('../../../src/services/todoListService');
@@ -61,7 +73,7 @@ describe('eventDocumentsService', () => {
   test('a shopping list drafts from the episode list writer, as a draft, version 1', async () => {
     const { models, row } = fakeModels(EVENT);
     const doc = await svc.draftDocument(models, { ...ids, type: 'shopping_list' });
-    expect(todo.generateTasks).toHaveBeenCalledWith(expect.objectContaining({ id: 'ev-1' }));
+    expect(todo.generateTasks).toHaveBeenCalledWith(expect.objectContaining({ id: 'ev-1' }), { look: null, budget: null });
     expect(doc).toMatchObject({ type: 'shopping_list', status: 'draft', version: 1, source: 'draft', history: [] });
     expect(doc.items.map((i) => i.label)).toEqual(['Find a showstopper', 'Find a clutch']); // the blank label is dropped
     expect(doc.items[0]).toEqual({ slot: 'dress', label: 'Find a showstopper', description: 'Tonight matters', required: true });
@@ -74,7 +86,7 @@ describe('eventDocumentsService', () => {
     const { models } = fakeModels(EVENT);
     const doc = await svc.draftDocument(models, { ...ids, type: 'career_plan' });
     expect(doc.items).toEqual([
-      { slot: 'net_1', label: 'Follow up with STUDIO BY SABLE', description: 'A warm intro', required: false, section: 'this_event' },
+      { slot: 'net_1', label: 'Follow up with STUDIO BY SABLE', description: 'A warm intro', required: false, section: 'this_event', task_source: 'goal' },
       { slot: 'goal_1', label: 'Land a brand partnership', description: '', required: false, section: 'bigger_goals', goal_id: 'g-1' },
     ]);
     expect(models.CareerGoal.findAll).toHaveBeenCalledWith(expect.objectContaining({ where: { show_id: 'show-1', status: 'active' } }));

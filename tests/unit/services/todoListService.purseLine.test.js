@@ -75,10 +75,14 @@ describe('getTodoList ticks lines from the outfit', () => {
 
 describe('generateTasks falls back with a Purse line', () => {
   it('the fallback list has Purse and Accessories as separate lines', async () => {
+    jest.spyOn(console, 'error').mockImplementation(() => {});
     Anthropic.mockImplementation(() => ({ messages: { create: jest.fn().mockResolvedValue({ content: [{ text: 'not json' }] }) } }));
     const tasks = await generateTasks({ name: 'Gala', prestige: 8 });
-    // Hair is the last line (Task #3167), so the others keep their places.
-    expect(tasks.map((t) => t.slot)).toEqual(['dress', 'shoes', 'purse', 'accessories', 'jewelry', 'perfume', 'top', 'bottom', 'hair']);
+    // Hair is the last line (Task #3167). No separate Top and Bottom lines
+    // since 2026-10-24: the main-outfit line is a dress, or a top and a
+    // bottom (listSlotsFilled), so a list without a look does not ask for both.
+    expect(tasks.map((t) => t.slot)).toEqual(['dress', 'shoes', 'purse', 'accessories', 'jewelry', 'perfume', 'hair']);
     expect(tasks.find((t) => t.slot === 'purse').label).toBe('Find a clutch that holds secrets and lipstick');
+    console.error.mockRestore();
   });
 });

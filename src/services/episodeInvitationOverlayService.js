@@ -103,6 +103,32 @@ async function placeInvitationOnBeat(models, { episodeId, assetId }) {
 }
 
 /**
+ * Every other version of the event's invitation: untag it, and mark
+ * superseded any that was tagged or approved. approval_status is left as-is
+ * so the version history still shows what was approved. Run by approve
+ * (inside its transaction, so an approval never leaves two current
+ * invitations, before or after Start Episode) and by
+ * syncEpisodeInvitationOverlay. Returns how many rows it marked.
+ */
+async function supersedeOtherInvitationVersions(sequelize, { eventId, assetId, transaction } = {}) {
+  const [rows] = await sequelize.query(
+    `UPDATE assets
+        SET metadata = (COALESCE(metadata, '{}'::jsonb) - 'overlay_type' - 'episode_invitation' - 'invitation_episode_id')
+                       || jsonb_build_object('superseded_by', CAST(:assetId AS text), 'superseded_at', NOW()),
+            updated_at = NOW()
+      WHERE metadata->>'event_id' = :eventId
+        AND asset_type = 'INVITATION_LETTER'
+        AND id <> :assetId
+        AND (metadata->>'overlay_type' IS NOT NULL
+             OR metadata->>'episode_invitation' IS NOT NULL
+             OR approval_status = 'approved')
+      RETURNING id`,
+    { replacements: { eventId: String(eventId), assetId }, ...(transaction ? { transaction } : {}) }
+  );
+  return Array.isArray(rows) ? rows.length : 0;
+}
+
+/**
  * Make the event's current approved invitation the episode's invitation
  * overlay: tag it, untag and supersede every other version, and (unless
  * place is false) remove other versions' placements on the episode and
@@ -141,27 +167,11 @@ async function syncEpisodeInvitationOverlay(models, { eventId, episodeId = null,
     { replacements: { episodeId: targetEpisodeId, overlayType, assetId } }
   );
 
-  // Every other version of this event's invitation: untag, and mark
-  // superseded any that was tagged or approved. approval_status is left
-  // as-is so the version history still shows what was approved.
-  const [supersededRows] = await sequelize.query(
-    `UPDATE assets
-        SET metadata = (COALESCE(metadata, '{}'::jsonb) - 'overlay_type' - 'episode_invitation' - 'invitation_episode_id')
-                       || jsonb_build_object('superseded_by', CAST(:assetId AS text), 'superseded_at', NOW()),
-            updated_at = NOW()
-      WHERE metadata->>'event_id' = :eventId
-        AND asset_type = 'INVITATION_LETTER'
-        AND id <> :assetId
-        AND (metadata->>'overlay_type' IS NOT NULL
-             OR metadata->>'episode_invitation' IS NOT NULL
-             OR approval_status = 'approved')
-      RETURNING id`,
-    { replacements: { eventId: String(eventId), assetId } }
-  );
+  const superseded = await supersedeOtherInvitationVersions(sequelize, { eventId, assetId });
 
   Object.assign(result, {
     tagged: true, assetId, episodeId: targetEpisodeId, overlayType,
-    superseded: Array.isArray(supersededRows) ? supersededRows.length : 0,
+    superseded,
   });
   if (!place || !models.TimelinePlacement) return result;
 
@@ -285,6 +295,7 @@ module.exports = {
   findInvitationBeat,
   placeInvitationOnBeat,
   syncEpisodeInvitationOverlay,
+  supersedeOtherInvitationVersions,
   loadEpisodeInvitationOverlay,
   mergeInvitationIntoOverlayStatus,
 };

@@ -111,4 +111,12 @@ describe('deriveEventVisualDirection', () => {
     expect(d.richness).toMatch(/^Understated/);
     expect(d.palette).toEqual([]);
   });
+
+  it('honours the Invitation Style floral and border choices over the preset (saved but unread until 2026-10-24)', () => {
+    const d = deriveEventVisualDirection({ theme: 'honey luxe', floral_style: 'none', border_style: 'minimal' });
+    expect(d.florals).toMatch(/no florals/);
+    expect(d.border).toMatch(/thin hairline/);
+    const preset = deriveEventVisualDirection({ theme: 'honey luxe', floral_style: 'unknown' });
+    expect(preset.florals).toMatch(/peonies/);
+  });
 });
