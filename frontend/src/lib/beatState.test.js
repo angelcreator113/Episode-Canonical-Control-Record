@@ -3,7 +3,7 @@
  * honest empty state.
  */
 import { describe, test, expect } from 'vitest';
-import { beatState, beatCoins } from './beatState';
+import { beatState, beatCoins, beatCoinParts } from './beatState';
 
 const BEATS = [
   { number: 1, lines: ['Prime: "Hi besties."'] },
@@ -22,10 +22,14 @@ describe('beatState', () => {
     expect(beatCoins(['[STAT: stress +1]', 'Lala: "coins +5"'])).toBe(0);
   });
 
-  test('coins: the balance before the episode plus the script so far', () => {
+  // A + coin line is owed, paid next episode: not in the balance, and said
+  // so (Script tab audit 6, 2026-10-24: +50 was counted).
+  test('coins: the balance before the episode plus what the script spends so far; + lines are owed, not counted', () => {
+    expect(beatCoinParts(BEATS[1].lines)).toEqual({ spent: -20, owed: 50 });
     expect(beatState(BEATS, 0, opts).coins).toEqual({ value: 420, text: '420 coins', detail: '420 before the episode; no coin changes in the script yet' });
-    expect(beatState(BEATS, 1, opts).coins).toMatchObject({ value: 450, detail: '420 before the episode, +30 in the script so far (+30 here)' });
-    expect(beatState(BEATS, 3, opts).coins).toMatchObject({ value: 350, detail: '420 before the episode, −70 in the script so far (−100 here)' });
+    expect(beatState(BEATS, 1, opts).coins).toMatchObject({ value: 400, owed: 50, detail: '420 before the episode, −20 in the script so far (−20 here); +50 in + coin lines not counted (what she is owed is paid next episode)' });
+    expect(beatState(BEATS, 3, opts).coins).toMatchObject({ value: 300, detail: '420 before the episode, −120 in the script so far (−100 here); +50 in + coin lines not counted (what she is owed is paid next episode)' });
+    expect(beatState([{ number: 4, lines: ['[STAT: coins +50]'] }], 0, opts).coins.detail).toBe('420 before the episode; no coin changes in the script yet; +50 in + coin lines not counted (what she is owed is paid next episode)');
     expect(beatState(BEATS, 3, { ...opts, balanceBefore: null }).coins).toEqual({ value: null, text: 'Coins not read', detail: null });
   });
 
@@ -44,6 +48,14 @@ describe('beatState', () => {
     expect(s.cast).toBe('Marcus');
     expect(s.storyTime).toBe('During Ep 1 · Thu, Nov 12, 2026 · 6:30 PM');
     expect(beatState(BEATS, 2, opts).where).toBe('No scene set');
+  });
+
+  // Script tab audit 6 (2026-10-24): the writer's cast, creator_name first.
+  test("the cast is the writer's: the host and featured guests, by their real names when read", () => {
+    const event = { source_profile_id: 5, canon_consequences: { automation: { guest_profiles: [{ profile_id: 9, display_name: 'Truthville', featured: true }] } } };
+    const profiles = [{ id: 5, creator_name: 'Celeste Rue', display_name: 'Celeste Studio' }, { id: 9, creator_name: 'Marcus Hale', display_name: 'Truthville' }];
+    expect(beatState(BEATS, 0, { event, profiles }).cast).toBe('Celeste Rue, Marcus Hale');
+    expect(beatState(BEATS, 0, { event }).cast).toBe('Truthville');
   });
 
   test('nothing in the data says so', () => {

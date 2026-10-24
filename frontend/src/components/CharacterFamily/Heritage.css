@@ -1,0 +1,82 @@
+/* Heritage in the family (Heritage.jsx): used on the Family tab and on the
+   character page's Family section, so the house --lala-* tokens with
+   fallbacks that read the same on either page. */
+
+.hx-line {
+  display: inline-flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; min-width: 0;
+  font-family: 'DM Mono', monospace; font-size: 12px; color: var(--lala-ink-muted, #5b5348); overflow-wrap: anywhere;
+}
+.hx-line.is-unset { color: var(--lala-ink-faint, #8a8070); font-style: italic; }
+.hx-line.is-none { color: var(--lala-ink-faint, #8a8070); }
+.hx-edit, .hx-link {
+  min-height: 32px; padding: 2px 10px; border-radius: 999px; border: 1px solid var(--lala-gold, #B8962E);
+  background: none; font: inherit; font-style: normal; font-size: 12px; color: var(--lala-gold-text, #7a5f17); cursor: pointer;
+  display: inline-flex; align-items: center; text-decoration: none;
+}
+.hx-edit:hover, .hx-link:hover { background: var(--lala-gold-soft, #f6eed6); }
+
+.hx-editor {
+  display: flex; flex-direction: column; gap: 10px; width: 100%; box-sizing: border-box; margin-top: 4px;
+  padding: 12px; border-radius: 12px; background: var(--lala-parchment, #FAF7F0); border: 1px solid var(--lala-gold-line, #e6d9b3);
+}
+.hx-picker { display: flex; flex-direction: column; gap: 8px; }
+.hx-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.hx-chip {
+  min-height: 32px; padding: 2px 10px; border-radius: 999px; border: 1px solid var(--lala-gold-line, #e6d9b3);
+  background: var(--lala-surface, #fff); font: inherit; font-size: 12px; color: var(--lala-ink, #2C2C2C); cursor: pointer;
+  display: inline-flex; align-items: center; gap: 4px;
+}
+.hx-chip.is-on { background: var(--lala-gold, #B8962E); border-color: var(--lala-gold, #B8962E); color: #fff; font-weight: 700; }
+.hx-own { display: flex; gap: 6px; flex-wrap: wrap; }
+.hx-input {
+  flex: 1 1 160px; min-width: 0; min-height: 36px; padding: 6px 10px; box-sizing: border-box; border-radius: 10px;
+  border: 1px solid var(--lala-gold-line, #e6d9b3); background: var(--lala-surface, #fff); font: inherit; font-size: 13px; color: var(--lala-ink, #2C2C2C);
+}
+.hx-field { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 600; color: var(--lala-ink-muted, #5b5348); }
+.hx-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.hx-btn, .hx-btn-soft {
+  min-height: 36px; padding: 6px 14px; border-radius: 999px; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 6px; text-decoration: none;
+}
+.hx-btn { border: none; background: var(--lala-gold, #B8962E); color: #fff; }
+.hx-btn-soft { border: 1px solid var(--lala-gold-line, #e6d9b3); background: var(--lala-surface, #fff); color: var(--lala-ink, #2C2C2C); }
+.hx-btn:disabled, .hx-btn-soft:disabled { opacity: 0.6; cursor: not-allowed; }
+.hx-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.hx-note { margin: 0; font-size: 13px; line-height: 1.5; color: var(--lala-ink-muted, #5b5348); }
+.hx-note.is-error { color: var(--lala-danger, #a33a2b); }
+
+/* The quiet panel: one line until opened. */
+.hx-panel {
+  border: 1px solid var(--lala-gold-line, #e6d9b3); border-radius: 12px; background: var(--lala-parchment, #FAF7F0);
+  min-width: 0; margin-bottom: 14px;
+}
+.hx-panel-head {
+  width: 100%; min-height: 44px; padding: 8px 14px; border: none; background: none; text-align: left; cursor: pointer;
+  font: inherit; font-family: 'DM Mono', monospace; font-size: 13px; color: var(--lala-ink, #2C2C2C);
+}
+.hx-panel.has-flags .hx-panel-head strong { color: var(--lala-gold-text, #7a5f17); }
+.hx-scope { color: var(--lala-ink-faint, #8a8070); }
+.hx-panel-body { display: flex; flex-direction: column; gap: 12px; padding: 0 14px 14px; }
+.hx-block { display: flex; flex-direction: column; gap: 6px; }
+.hx-h4 { margin: 0; font-family: 'Lora', serif; font-size: 15px; font-weight: 700; color: var(--lala-ink, #2C2C2C); }
+.hx-flags, .hx-gaps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.hx-flag { padding: 10px 12px; border-radius: 10px; background: var(--lala-surface, #fff); border-left: 3px solid var(--lala-gold, #B8962E); display: flex; flex-direction: column; gap: 8px; }
+.hx-flag.is-intended { border-left-style: dashed; opacity: 0.85; flex-direction: row; flex-wrap: wrap; align-items: center; }
+.hx-flag.is-intended .hx-flag-text { flex: 1 1 220px; }
+.hx-flag-text { margin: 0; font-family: 'Lora', serif; font-size: 14px; line-height: 1.5; color: var(--lala-ink, #2C2C2C); overflow-wrap: anywhere; }
+.hx-gap { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; padding: 8px 10px; border-radius: 10px; background: var(--lala-surface, #fff); }
+.hx-gap-name { font-weight: 700; color: var(--lala-ink, #2C2C2C); }
+.hx-gap .hx-editor { flex: 1 1 100%; }
+
+/* The Heritage toggle (Family tab and character page). */
+.hx-toggle {
+  min-height: 36px; padding: 6px 14px; border-radius: 999px; border: 1.5px solid var(--lala-gold-line, #e6d9b3);
+  background: var(--lala-surface, #fff); font: inherit; font-size: 13px; font-weight: 700; color: var(--lala-ink, #2C2C2C); cursor: pointer;
+}
+.hx-toggle[aria-pressed="true"] { background: var(--lala-gold, #B8962E); border-color: var(--lala-gold, #B8962E); color: #fff; }
+
+@media (max-width: 600px) {
+  .hx-edit, .hx-link, .hx-chip, .hx-btn, .hx-btn-soft, .hx-toggle, .hx-input { min-height: 44px; }
+}
+/* In a column the input keeps its own height (flex-basis would make it 160px tall). */
+.hx-field .hx-input { flex: none; width: 100%; }

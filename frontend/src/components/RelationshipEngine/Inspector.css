@@ -30,3 +30,13 @@
 /* primitives' Label is a <label> now (tied to its field): it keeps the
    block layout the old <div> had, in the Inspector and both dialogs. */
 label.re-label { display: block; }
+
+/* a seed's Confirm (seedMode): its why under the situation, and a note
+   on what is edited after confirming */
+.re-inspector-why {
+  margin: 8px 0 0;
+  font-size: 13px; line-height: 1.5;
+  color: var(--ps-ink-mid, #4A4538);
+}
+.re-inspector-why-key { font-family: var(--re-mono, 'DM Mono', monospace); font-size: 12px; color: var(--re-magenta, #7A6314); }
+.re-inspector-seed-note { margin: 10px 0 0; font-size: 12px; line-height: 1.5; color: var(--ps-ink-light, #6B6557); }

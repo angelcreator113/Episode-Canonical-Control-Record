@@ -68,6 +68,6 @@ describe('Runtime', () => {
     // "Hi besties." is 2 words at 150 a minute: under a second, ~1s.
     expect(screen.getByTestId('script-beat-runtime-1').textContent).toBe('~1s');
     expect(screen.getByTestId('script-runtime').textContent).toBe('~2s');
-    expect(screen.getByTestId('script-head').textContent).toContain('2 beats · ~2s · 0 approved');
+    expect(screen.getByTestId('script-head').textContent).toContain('2 beats · ~2s · 0 of 14 approved');
   });
 });

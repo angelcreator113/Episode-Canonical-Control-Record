@@ -487,6 +487,9 @@ function coverageFacts(inputs) {
     // Each goal with its person, so one named by her real name is covered (utils/scriptCoverage goalCovered).
     goals: (career?.goals || []).map((g) => ({ ...g, person: require('../utils/scriptRuleChecks').goalPerson(g, inputs?.eventData || null, [...(inputs?.story?.socialProfiles || []), ...(inputs?.story?.goalProfiles || [])]) })),
     forwardHook: inputs?.brief?.forward_hook || '',
+    // Her manual marks on the Script tab's must-cover list (Script tab audit
+    // 6, 2026-10-24): one she marked covered is not a gap to fix.
+    marks: inputs?.brief?.event_metadata?.cover_marks || null,
     lockedPieces: (inputs?.outfitScore?.items || []).filter((p) => p?.id).map((p) => ({ id: p.id, name: p.name })),
     // Beat 14's opportunity, when it comes (Evoni, 2026-10-19): it must
     // arrive in the script. Not when the episode is designed to fail, nor once

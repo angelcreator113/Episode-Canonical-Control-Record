@@ -5,13 +5,17 @@
  * 2026-10-11):
  *
  *   Coins     - Lala's balance before the episode (the ledger less this
- *               episode's own rows), plus the script's [STAT: coins ±n] tags
- *               up to and including this beat.
+ *               episode's own rows), plus the script's [STAT: coins -n] tags
+ *               up to and including this beat. A + coin line is not counted:
+ *               what she is owed is paid next episode, and the rules flag
+ *               it (Script tab audit 6, 2026-10-24); the detail says so.
  *   Wearing   - before the closet beat she is getting dressed; from it on,
  *               the look locked on the Wardrobe tab.
  *   Where     - the beat's scene plan row.
- *   In the room - who speaks in the beat; the event's featured guests as an
- *               episode-wide "Cast" line.
+ *   In the room - who speaks in the beat; the event's host and featured
+ *               guests as an episode-wide "Cast" line, named as the writer
+ *               names them (lib/scriptRuleChecks eventCast, creator_name
+ *               first; Script tab audit 6, 2026-10-24).
  *   Story time - "During Ep n" (every beat of an episode is the same story
  *               time, services/storyClock) with the event's own date and time.
  *
@@ -21,6 +25,7 @@
 import { beatSpeakers } from './scriptMoments';
 import { resolveEventVenueAndDate } from '../utils/eventReadiness';
 import { coinChange } from './scriptStats';
+import { eventCast } from './scriptRuleChecks';
 
 // A coin line in any form the writer uses, read by the one reader every
 // check shares (lib/scriptStats; Script page re-audit, 2026-10-19: the card,
@@ -30,6 +35,21 @@ export { coinChange };
 /** The sum of a beat's [STAT: coins ±n] tags. */
 export function beatCoins(lines = []) {
   return (lines || []).reduce((sum, line) => sum + (coinChange(line) ?? 0), 0);
+}
+
+/**
+ * A beat's coins as True now counts them: { spent, owed }. `spent` is the
+ * sum of its - coin lines; `owed` of its + coin lines, which are not paid in
+ * this episode (lib/scriptRuleChecks flags them), so not in the balance.
+ */
+export function beatCoinParts(lines = []) {
+  let spent = 0;
+  let owed = 0;
+  for (const line of lines || []) {
+    const n = coinChange(line) ?? 0;
+    if (n > 0) owed += n; else spent += n;
+  }
+  return { spent, owed };
 }
 
 const ISO_DATE = /^(\d{4})-(\d{2})-(\d{2})/;
@@ -51,18 +71,23 @@ const signed = (n) => `${n > 0 ? '+' : n < 0 ? '−' : ''}${Math.abs(n).toLocale
  * locked pieces, or null when they could not be read. closetAt: the closet
  * beat's number (closetBeat), or null.
  */
-export function beatState(beats = [], index = 0, { balanceBefore = null, outfit = [], closetAt = null, scenePlan = [], event = null, episodeNumber = null } = {}) {
+export function beatState(beats = [], index = 0, { balanceBefore = null, outfit = [], closetAt = null, scenePlan = [], event = null, episodeNumber = null, profiles = [] } = {}) {
   const beat = beats[index];
   if (!beat) return null;
 
-  // Coins: the balance before the episode, and the script's changes so far.
-  const fromScript = beats.slice(0, index + 1).reduce((sum, b) => sum + beatCoins(b.lines), 0);
-  const here = beatCoins(beat.lines);
+  // Coins: the balance before the episode, and the script's changes so far;
+  // a + coin line is owed, paid next episode, and left out of the balance.
+  const parts = beats.slice(0, index + 1).map((b) => beatCoinParts(b.lines));
+  const fromScript = parts.reduce((sum, p) => sum + p.spent, 0);
+  const owedSoFar = parts.reduce((sum, p) => sum + p.owed, 0);
+  const here = beatCoinParts(beat.lines).spent;
+  const owedNote = owedSoFar ? `; ${signed(owedSoFar)} in + coin lines not counted (what she is owed is paid next episode)` : '';
   const coins = Number.isFinite(balanceBefore)
     ? {
       value: balanceBefore + fromScript,
       text: `${(balanceBefore + fromScript).toLocaleString()} coins`,
-      detail: fromScript ? `${balanceBefore.toLocaleString()} before the episode, ${signed(fromScript)} in the script so far${here ? ` (${signed(here)} here)` : ''}` : `${balanceBefore.toLocaleString()} before the episode; no coin changes in the script yet`,
+      detail: `${fromScript ? `${balanceBefore.toLocaleString()} before the episode, ${signed(fromScript)} in the script so far${here ? ` (${signed(here)} here)` : ''}` : `${balanceBefore.toLocaleString()} before the episode; no coin changes in the script yet`}${owedNote}`,
+      ...(owedSoFar ? { owed: owedSoFar } : {}),
     }
     : { value: null, text: 'Coins not read', detail: null };
 
@@ -84,8 +109,9 @@ export function beatState(beats = [], index = 0, { balanceBefore = null, outfit 
 
   // In the room: who speaks here; the featured guests across the episode.
   const speaking = beatSpeakers(beat.lines);
-  const guests = (event?.canon_consequences?.automation?.guest_profiles || []).filter((g) => g && g.featured);
-  const cast = [...new Set(guests.map((g) => g.display_name || g.handle).filter(Boolean))];
+  // The writer's cast (lib/scriptRuleChecks eventCast): the host and the
+  // featured guests, creator_name first when their profiles are read.
+  const cast = event ? [...new Set(eventCast(event, (profiles || []).filter(Boolean)).map((c) => c.name).filter(Boolean))] : [];
 
   // Story time: the episode, with the event's own date and time.
   const { eventDate, eventTime } = event ? resolveEventVenueAndDate(event) : {};

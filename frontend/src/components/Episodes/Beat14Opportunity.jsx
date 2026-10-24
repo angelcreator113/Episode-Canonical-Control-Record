@@ -124,10 +124,14 @@ export default function Beat14Opportunity({ showId, episodeId, data, onChange, d
                   ? 'This episode is designed to fail, so the invitation does not come in beat 14, and it expires when the episode is completed.'
                   : 'Beat 14 ends on this invitation. It is offered when the episode is completed, if the episode lands; if it fails, it expires.'}
           </p>
-          <div className="esp-beat14-actions">
-            <button type="button" className="esp-btn is-small" disabled={busy} onClick={startChange} data-testid="script-beat14-change">Change</button>
-            <button type="button" className="esp-btn is-small" disabled={busy} onClick={remove} data-testid="script-beat14-remove">Remove</button>
-          </div>
+          {/* Only a held one can still change (Script tab audit 6, 2026-10-24):
+              once offered or expired the server answers 409 to both. */}
+          {opportunity.status === 'held' && (
+            <div className="esp-beat14-actions">
+              <button type="button" className="esp-btn is-small" disabled={busy} onClick={startChange} data-testid="script-beat14-change">Change</button>
+              <button type="button" className="esp-btn is-small" disabled={busy} onClick={remove} data-testid="script-beat14-remove">Remove</button>
+            </div>
+          )}
         </div>
       )}
       {showForm && (people.length === 0 ? (

@@ -67,7 +67,7 @@ describe('Rewrite line keeps what was done meanwhile', () => {
     const reply = deferred();
     vi.mocked(api.post).mockReturnValue(reply.promise);
     renderTab();
-    fireEvent.click(within(screen.getByTestId('script-beat-1')).getByRole('button', { name: '✦ Rewrite' }));
+    fireEvent.click(within(screen.getByTestId('script-beat-1')).getByRole('button', { name: /^Rewrite line:/ }));
 
     fireEvent.click(screen.getByTestId('script-beat-2').querySelector('.esp-beat-head'));
     fireEvent.click(within(screen.getByTestId('script-beat-2')).getByText(/Logging in\./));
@@ -89,7 +89,7 @@ describe('Rewrite line keeps what was done meanwhile', () => {
     const reply = deferred();
     vi.mocked(api.post).mockReturnValue(reply.promise);
     renderTab();
-    fireEvent.click(within(screen.getByTestId('script-beat-1')).getByRole('button', { name: '✦ Rewrite' }));
+    fireEvent.click(within(screen.getByTestId('script-beat-1')).getByRole('button', { name: /^Rewrite line:/ }));
     fireEvent.click(within(screen.getByTestId('script-beat-1')).getByText(/Hi besties\./));
     const box = screen.getByRole('textbox', { name: 'Edit line' });
     fireEvent.change(box, { target: { value: 'Lala: My own words.' } });

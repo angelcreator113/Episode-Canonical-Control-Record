@@ -151,55 +151,68 @@ router.get('/episodes/:episodeId/todo', requireAuth, async (req, res) => {
 router.post('/episodes/:episodeId/todo/complete/:slot', requireAuth, async (req, res) => {
   try {
     const { episodeId, slot } = req.params;
-    const { completed = true, source = null, beat = null } = req.body || {};
+    const { completed: asked = true, source = null, beat = null } = req.body || {};
+    // Untick posts completed: false (Script tab audit 6, 2026-10-24).
+    const completed = !(asked === false || asked === 'false' || asked === 0);
     // Ticked from the Script tab (Evoni, 2026-10-23): the goal is covered in
     // that beat; the task keeps where it was ticked from.
     if (source !== null && source !== 'script') return res.status(400).json({ error: 'source must be "script"' });
     if (beat !== null && (!Number.isInteger(beat) || beat < 1 || beat > 14)) return res.status(400).json({ error: 'beat must be 1-14' });
     const { sequelize } = req.app.get('models') || require('../models');
 
-    const [todoList] = await sequelize.query(
-      'SELECT id, tasks, social_tasks FROM episode_todo_lists WHERE episode_id = :episodeId AND deleted_at IS NULL LIMIT 1',
-      { replacements: { episodeId }, type: sequelize.QueryTypes.SELECT }
-    );
+    // Read, change and write the list in one transaction with the row locked
+    // (Script tab audit 6, 2026-10-24): two ticks at once each read the same
+    // list, and the second write dropped the first tick.
+    const outcome = await sequelize.transaction(async (transaction) => {
+      const [todoList] = await sequelize.query(
+        'SELECT id, tasks, social_tasks FROM episode_todo_lists WHERE episode_id = :episodeId AND deleted_at IS NULL LIMIT 1 FOR UPDATE',
+        { replacements: { episodeId }, type: sequelize.QueryTypes.SELECT, transaction }
+      );
 
-    if (!todoList) return res.status(404).json({ error: 'No to-do list found' });
+      if (!todoList) return { status: 404, body: { error: 'No to-do list found' } };
 
-    const tasks = typeof todoList.tasks === 'string'
-      ? JSON.parse(todoList.tasks)
-      : todoList.tasks || [];
+      const tasks = typeof todoList.tasks === 'string'
+        ? JSON.parse(todoList.tasks)
+        : todoList.tasks || [];
 
-    const socialTasksRaw = typeof todoList.social_tasks === 'string'
-      ? JSON.parse(todoList.social_tasks || '[]')
-      : (todoList.social_tasks || []);
-    const slotInSocial = socialTasksRaw.some(t => t.slot === slot);
+      const socialTasksRaw = typeof todoList.social_tasks === 'string'
+        ? JSON.parse(todoList.social_tasks || '[]')
+        : (todoList.social_tasks || []);
+      const slotInSocial = socialTasksRaw.some(t => t.slot === slot);
 
-    // T7 (§8(bb); Task #2307): a wardrobe task's completion comes from Lala's
-    // outfit (getTodoList derives it from episode_wardrobe on every read),
-    // so it has no manual toggle; one written here was silently replaced.
-    // A slot on the social list is still completed here.
-    if (!slotInSocial) {
-      if (tasks.some(t => t.slot === slot)) {
-        return res.status(409).json({
-          success: false,
-          code: WARDROBE_COMPLETION_DERIVED,
-          error: 'A wardrobe task is complete when Lala\'s outfit fills its slot. Choose the piece in the episode\'s wardrobe instead.',
-        });
+      // T7 (§8(bb); Task #2307): a wardrobe task's completion comes from Lala's
+      // outfit (getTodoList derives it from episode_wardrobe on every read),
+      // so it has no manual toggle; one written here was silently replaced.
+      // A slot on the social list is still completed here.
+      if (!slotInSocial) {
+        if (tasks.some(t => t.slot === slot)) {
+          return {
+            status: 409,
+            body: {
+              success: false,
+              code: WARDROBE_COMPLETION_DERIVED,
+              error: 'A wardrobe task is complete when Lala\'s outfit fills its slot. Choose the piece in the episode\'s wardrobe instead.',
+            },
+          };
+        }
+        return { status: 404, body: { error: `No task with slot "${slot}"` } };
       }
-      return res.status(404).json({ error: `No task with slot "${slot}"` });
-    }
 
-    const tick = (t) => {
-      const { completed_source: _source, completed_beat: _beat, ...rest } = t;
-      if (!completed) return { ...rest, completed };
-      if (source) return { ...rest, completed, completed_source: source, ...(beat !== null ? { completed_beat: beat } : {}) };
-      return { ...t, completed };
-    };
-    const updatedSocialTasks = socialTasksRaw.map(t => t.slot === slot ? tick(t) : t);
-    await sequelize.query(
-      'UPDATE episode_todo_lists SET social_tasks = :socialTasks, updated_at = NOW() WHERE id = :id',
-      { replacements: { socialTasks: JSON.stringify(updatedSocialTasks), id: todoList.id } }
-    );
+      const tick = (t) => {
+        const { completed_source: _source, completed_beat: _beat, ...rest } = t;
+        if (!completed) return { ...rest, completed };
+        if (source) return { ...rest, completed, completed_source: source, ...(beat !== null ? { completed_beat: beat } : {}) };
+        return { ...t, completed };
+      };
+      const updated = socialTasksRaw.map(t => t.slot === slot ? tick(t) : t);
+      await sequelize.query(
+        'UPDATE episode_todo_lists SET social_tasks = :socialTasks, updated_at = NOW() WHERE id = :id',
+        { replacements: { socialTasks: JSON.stringify(updated), id: todoList.id }, transaction }
+      );
+      return { tasks, updatedSocialTasks: updated };
+    });
+    if (outcome.status) return res.status(outcome.status).json(outcome.body);
+    const { tasks, updatedSocialTasks } = outcome;
     // A follow-up carried from an earlier episode is done here, or open again.
     await require('../services/storyCarryForward').settleFollowUps(sequelize, updatedSocialTasks.filter(t => t.slot === slot), { episodeId });
 

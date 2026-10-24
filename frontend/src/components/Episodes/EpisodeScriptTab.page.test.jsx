@@ -59,7 +59,7 @@ describe('Script page', () => {
     expect(within(uses).getByRole('link', { name: 'Open the event' }).getAttribute('href')).toBe('/shows/show-1/events/ev-1');
     // The context panel is tabs (Evoni, 2026-10-22 layout list).
     fireEvent.click(await screen.findByTestId('script-side-tab-voice'));
-    expect(within(screen.getByTestId('script-voice')).getByText('Open Character Studio').getAttribute('href')).toBe('/character-registry?view=world');
+    expect(within(screen.getByTestId('script-voice')).getByText('Open Character Registry').getAttribute('href')).toBe('/character-registry');
   });
 
   test("Career reads the event's deal and the deliverables Lala owes", async () => {
@@ -76,7 +76,7 @@ describe('Script page', () => {
 
   test('with a script: its beats and approvals, and Raw editor, Regenerate and Save', () => {
     renderTab('## BEAT: 1 · Opening Ritual\nLala: Hi besties.\n\n## BEAT: 2 · Login Sequence\nLala: Logging in.\n');
-    expect(screen.getByTestId('script-head').textContent).toMatch(/2 beats · ~\d+s · 0 approved/);
+    expect(screen.getByTestId('script-head').textContent).toMatch(/2 beats · ~\d+s · 0 of 14 approved/);
     for (const name of ['Raw editor', 'Regenerate', 'Save']) expect(screen.getByRole('button', { name })).toBeTruthy();
     expect(screen.queryByTestId('script-empty')).toBeNull();
   });
@@ -97,12 +97,12 @@ describe('Script page', () => {
     const SCRIPT = '## BEAT: 1 · Opening Ritual\nPrime: "Hey besties. its been a minute."\nPrime: "Lets go ahead and login."\n';
     vi.mocked(api.post).mockResolvedValueOnce({ data: { rewrittenLine: 'Hey besties, welcome back!' } });
     renderTab(SCRIPT);
-    fireEvent.click(screen.getAllByRole('button', { name: '✦ Rewrite' })[0]);
+    fireEvent.click(screen.getAllByRole('button', { name: /^Rewrite line:/ })[0]);
     // A suggestion until "Use it" (Script tab audit, 2026-10-15).
     fireEvent.click(await screen.findByTestId('script-proposal-accept'));
     await waitFor(() => expect(screen.getAllByTestId('script-line')[0].textContent).toContain('"Hey besties, welcome back!"'));
     expect(screen.getAllByTestId('script-line')[0].textContent).toContain('Prime');
-    expect(screen.getAllByRole('button', { name: '✦ Rewrite' })).toHaveLength(2);
+    expect(screen.getAllByRole('button', { name: /^Rewrite line:/ })).toHaveLength(2);
     const [url, body] = vi.mocked(api.post).mock.calls.at(-1);
     expect(url).toBe('/api/v1/episode-brief/ep-1/rewrite-line');
     expect(body).toMatchObject({ speaker: 'Prime', beatName: 'Opening Ritual', beatLines: ['Prime: "Hey besties. its been a minute."', 'Prime: "Lets go ahead and login."'] });
@@ -111,7 +111,7 @@ describe('Script page', () => {
 
     vi.mocked(api.post).mockRejectedValueOnce(Object.assign(new Error('x'), { response: { data: { error: 'Daily AI budget reached' } } }));
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    fireEvent.click(screen.getAllByRole('button', { name: '✦ Rewrite' })[1]);
+    fireEvent.click(screen.getAllByRole('button', { name: /^Rewrite line:/ })[1]);
     await waitFor(() => expect(screen.getByRole('status').textContent).toBe('Rewrite failed: Daily AI budget reached'));
     spy.mockRestore();
   });
