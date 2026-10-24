@@ -229,7 +229,8 @@ describe('Add', () => {
     vi.mocked(apiClient.post).mockResolvedValue({ data: { relationship: R('rel-new', 'jade', 'marcus', { relationship_type: 'love_interest', is_romantic: true }) } });
     renderAt('/relationships?tab=list');
     await screen.findAllByText('Marcus Hale');
-    fireEvent.click(screen.getByRole('button', { name: '+ Add' }));
+    // The toolbar shows once the list tab is applied; on a busy runner that can come after the names.
+    fireEvent.click(await screen.findByRole('button', { name: '+ Add' }));
     const dialog = await screen.findByRole('dialog', { name: 'Add relationship' });
     const [a, b] = within(dialog).getAllByRole('combobox');
     fireEvent.change(a, { target: { value: 'jade' } });
