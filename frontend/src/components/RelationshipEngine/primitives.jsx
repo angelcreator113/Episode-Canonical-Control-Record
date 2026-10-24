@@ -24,17 +24,6 @@ export function Btn({ variant = 'ghost', onClick, disabled, children, className 
   );
 }
 
-/* ── Layer filter button ───────────────────────────────────────────── */
-export function LFBtn({ active, onClick, count, dot, children }) {
-  return (
-    <button className={`re-lf-btn ${active ? 'is-active' : ''}`} onClick={onClick}>
-      {dot && <span className="re-lf-dot" style={{ background: dot }} />}
-      <span className="re-lf-label">{children}</span>
-      <span className="re-lf-count">{count}</span>
-    </button>
-  );
-}
-
 /* ── Spinner ───────────────────────────────────────────────────────── */
 export function Spinner() {
   return (
@@ -57,7 +46,10 @@ export function Field({ label, value }) {
 }
 
 /* ── Label ─────────────────────────────────────────────────────────── */
-export function Label({ children }) {
+// A field's name, tied to its control (htmlFor = the control's id) so a
+// screen reader reads it; without htmlFor it is only a heading.
+export function Label({ children, htmlFor }) {
+  if (htmlFor) return <label className="re-label" htmlFor={htmlFor}>{children}</label>;
   return <div className="re-label">{children}</div>;
 }
 

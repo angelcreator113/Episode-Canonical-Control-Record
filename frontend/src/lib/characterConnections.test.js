@@ -1,7 +1,7 @@
 import { describe, test, expect } from 'vitest';
 import {
   groupOf, closenessOf, isClose, typeLabel, noteOf, connectionStats, filterConnections,
-  keyRelationships, connectionHistory, mapPoints,
+  keyRelationships, mapPoints, connectionSummary, isCurrentRomance, GROUPS,
 } from './characterConnections';
 
 const REL = [
@@ -56,15 +56,13 @@ describe('the list', () => {
   });
 });
 
-describe('key relationships, history and the map', () => {
+describe('key relationships and the map', () => {
   test('Lala first, then the closest', () => {
     expect(keyRelationships(REL).map((r) => r.id)).toEqual(['r1', 'r2', 'r3']);
     expect(keyRelationships(null)).toEqual([]);
   });
 
-  test('history: the dated ones, newest first', () => {
-    expect(connectionHistory(REL).map((r) => r.id)).toEqual(['r1', 'r2', 'r5']);
-  });
+  // The Relationship history list is gone (2026-10-24): each row says "Since …".
 
   test('the map spaces up to six around the centre, the first at the top', () => {
     const pts = mapPoints(REL, 6, 300);
@@ -73,5 +71,34 @@ describe('key relationships, history and the map', () => {
     expect(pts[0].r.id).toBe('r1');
     expect(new Set(pts.map((p) => `${p.x},${p.y}`)).size).toBe(6);
     expect(mapPoints([], 6)).toEqual([]);
+  });
+});
+
+describe('romance (2026-10-24: one rule with the Relationships page)', () => {
+  const LOVE = { id: 'l1', related_name: 'Lala', relationship_type: 'love_interest', tension_state: 'volatile' };
+  const WIFE = { id: 'w1', related_name: 'Dana', relationship_type: 'married couple', family_role: 'wife', is_romantic: true };
+  const WIFE_ONLY_ROLE = { id: 'w2', related_name: 'Rhea', relationship_type: 'family', family_role: 'Wife' };
+  const TASHA = { id: 't1', related_name: 'Tasha', relationship_type: 'collaborator', tension_state: 'simmering' };
+  const DRE = { id: 'd1', related_name: 'Dre', relationship_type: 'rival', tension_state: 'volatile' };
+
+  test('a love interest is Romance, not Other; a spouse is Romance, not Family, labelled by role', () => {
+    expect(groupOf(LOVE)).toBe('romantic');
+    expect(groupOf(WIFE)).toBe('romantic');
+    expect(groupOf(WIFE_ONLY_ROLE)).toBe('romantic');
+    expect(typeLabel(WIFE_ONLY_ROLE)).toBe('Wife');
+    expect(groupOf({ relationship_type: 'family', family_role: 'sister' })).toBe('family');
+    expect(GROUPS[0]).toEqual({ key: 'romantic', label: 'Romance' });
+  });
+
+  test('closest first: a romance now ranks at the top whatever its tension; an ex does not', () => {
+    expect(filterConnections([TASHA, DRE, LOVE]).map((r) => r.related_name)).toEqual(['Lala', 'Tasha', 'Dre']);
+    expect(isCurrentRomance({ relationship_type: 'ex' })).toBe(false);
+    expect(isCurrentRomance({ relationship_type: 'love_interest', status: 'Past' })).toBe(false);
+    expect(keyRelationships([TASHA, DRE, WIFE], 1)[0].id).toBe('w1');
+  });
+
+  test('the summary line: romance now, then the closest other', () => {
+    expect(connectionSummary([TASHA, DRE, LOVE])).toEqual({ romance: ['Lala'], closest: 'Tasha' });
+    expect(connectionSummary([])).toEqual({ romance: [], closest: null });
   });
 });

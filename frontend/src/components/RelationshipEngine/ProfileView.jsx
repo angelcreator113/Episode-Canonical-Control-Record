@@ -11,7 +11,7 @@ import {
   Users, Flame, HeartHandshake, Sprout, Link2, BookOpen, Activity,
 } from 'lucide-react';
 import {
-  TENSION, LALA_CONN, STAGE_TONE, cname, initials, roleColor, sideName,
+  TENSION, LALA_CONN, STAGE_TONE, cname, initials, roleColor, roleLabel, sideName,
   typeLabel, stageLabel, humanize, isLoveInterest, isFamily,
 } from './tokens';
 import { Pill } from './primitives';
@@ -144,7 +144,8 @@ export default function ProfileView({
           <div className="rp-hero-body">
             <h2 className="rp-name">{cname(char)}</h2>
             <div className="rp-chips">
-              {roleType && <span className="rp-chip">{roleType}</span>}
+              {/* the same role words as the sidebar and the Web (tokens' roleLabel) */}
+              {roleType && <span className="rp-chip">{roleLabel(char)}</span>}
               {char.role_label && <span className="rp-chip">{char.role_label}</span>}
               {char.display_name && char.display_name !== cname(char) && <span className="rp-chip rp-chip-handle">{char.display_name}</span>}
               {char.status && <span className="rp-chip">{char.status}</span>}

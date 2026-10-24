@@ -3,6 +3,8 @@
  * Prime Studios · LalaVerse
  */
 
+import { findLala } from '../../lib/theCast';
+
 export const API = '/api/v1';
 
 /* ─── tokens ─────────────────────────────────────────────────────────── */
@@ -51,12 +53,6 @@ export const TENSION = {
   volatile:  { color: '#a02020', bg: '#fdeaea', border: '#e8a8a8' },
   fractured: { color: '#6a30a0', bg: '#f3eafa', border: '#c8a8e8' },
   healing:   { color: '#1a5080', bg: '#e8f3fa', border: '#a0c8e8' },
-};
-
-export const LAYER = {
-  'real-world': { label: 'Real World', short: 'RW', color: T.steel  },
-  'lalaverse':  { label: 'LalaVerse',  short: 'LV', color: T.orchid },
-  'series-2':   { label: 'Series 2',   short: 'S2', color: T.rose   },
 };
 
 /*
@@ -140,11 +136,22 @@ export const humanize = v => {
 export const typeLabel  = r => humanize(typeof r === 'string' ? r : r?.relationship_type) || 'Connected';
 export const stageLabel = s => humanize(s);
 export const isLoveInterest = r => !!r && (r.is_romantic === true || r.relationship_type === 'love_interest');
-export const isFamily = r => !!r && !isLoveInterest(r) && !!(r.family_role || r.is_blood_relation);
-export const clayer   = c => {
-  if (c.universe === 'lalaverse' || c.layer === 'lalaverse') return 'lalaverse';
-  if (c.universe === 'series-2'  || c.layer === 'series-2')  return 'series-2';
-  return 'real-world';
-};
+/*
+ * One rule for romance and family, here and on the character page
+ * (lib/characterConnections): romance is never family. A spouse or partner
+ * (family_role wife, husband, partner, ex-…) is romance, shown with its
+ * role; family is everyone else with a family role, a blood tie or a kind.
+ */
+const PARTNER_ROLE = /^(ex-)?(wife|husband|spouse|partner|fianc[ée]e?|girlfriend|boyfriend)$/;
+export const isPartnerRole = role => PARTNER_ROLE.test(String(role || '').trim().toLowerCase());
+export const isRomance = r => isLoveInterest(r) || (!!r && isPartnerRole(r.family_role));
+export const isFamily = r => !!r && !isRomance(r) && !!(r.family_role || r.is_blood_relation || r.family_kind);
 export const initials   = s => s.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
-export const compatible = (a, b) => clayer(a) === clayer(b);
+/** Is this person Lala: the page's Lala id when known, else her key or name (lib/theCast). */
+export const isLalaChar = (c, lalaId = null) => !!c && (lalaId ? String(c.id) === String(lalaId) : !!findLala([c]));
+/**
+ * A person's role in words, the same everywhere on the page: Lala is the
+ * Protagonist whatever her stored role ('special'; Task #3199), the rest
+ * their role type.
+ */
+export const roleLabel = (c, lalaId = null) => (isLalaChar(c, lalaId) ? 'Protagonist' : (humanize(c?.role_type) || '—'));

@@ -117,3 +117,41 @@ describe('the Family tab', () => {
     expect(screen.queryByText('No Family Bonds Yet')).toBeNull();
   });
 });
+
+describe('the Family tab, small things (2026-10-24)', () => {
+  const renderTab = (props = {}) => render(<MemoryRouter><FamilyView chars={Object.values(charById)} rels={rels} charById={charById}
+    onGenerate={vi.fn()} onUpdateRole={vi.fn()} onRelClick={vi.fn()} {...props} /></MemoryRouter>);
+
+  test('GET /families is read once, for the tree and the ties both', async () => {
+    renderTab();
+    expect(await screen.findByTestId('re-family-tree')).toBeTruthy();
+    expect(vi.mocked(apiClient.get).mock.calls.filter(([u]) => u === '/api/v1/families')).toHaveLength(1);
+  });
+
+  test('Enter in the role box saves the role; it does not open the Inspector', async () => {
+    const onRelClick = vi.fn();
+    const onUpdateRole = vi.fn();
+    renderTab({ onRelClick, onUpdateRole });
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit role for Kim Ash and Dre Coleman' }));
+    const box = screen.getByLabelText('Family role');
+    fireEvent.change(box, { target: { value: 'half-sister' } });
+    fireEvent.keyDown(box, { key: 'Enter' });
+    expect(onUpdateRole).toHaveBeenCalledWith('t-step', { family_role: 'half-sister' });
+    expect(onRelClick).not.toHaveBeenCalled();
+    // Enter on the edit button does not open it either; Enter on the card does.
+    const edit = screen.getByRole('button', { name: 'Edit role for Jade Monroe and Dre Coleman' });
+    fireEvent.keyDown(edit, { key: 'Enter' });
+    expect(onRelClick).not.toHaveBeenCalled();
+    fireEvent.keyDown(edit.closest('.re-family-card'), { key: 'Enter' });
+    expect(onRelClick).toHaveBeenCalledWith(rels[0]);
+  });
+
+  test('a spouse is romance with their role, not a family tie', async () => {
+    const wife = R('t-wife', 'jade', 'kim', { relationship_type: 'married', family_role: 'wife' });
+    renderTab({ rels: [...rels, wife] });
+    const ties = await screen.findByRole('list', { name: 'Family ties' });
+    expect(within(ties).getAllByRole('listitem')).toHaveLength(2);
+    const romance = screen.getByLabelText('Love interests and partners');
+    expect(romance.textContent).toContain('Jade Monroe & Kim Ash · wife');
+  });
+});

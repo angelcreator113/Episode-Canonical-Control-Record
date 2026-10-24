@@ -1,8 +1,7 @@
 /**
- * RelationshipEngine.jsx
+ * RelationshipEngine.jsx — the Relationships page: the cast, their
+ * relationships and the seeds, in six tabs.
  * Prime Studios · LalaVerse
- * Editorial Fashion Intelligence — fully modernized
- * Palette: #d4789a rose · #7ab3d4 steel · #a889c8 orchid
  */
 import { useReducer, useEffect, useCallback, useMemo, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -15,7 +14,7 @@ import {
   WebView, TreeView, FamilyView, CandidateView, ListView, ProfileView,
   Inspector, AddModal, GenModal,
   Btn, Spinner, useToast, useIsPhone,
-  API, T, cname, initials, roleColor, sideName, typeLabel, humanize, isFamily,
+  API, T, cname, initials, roleColor, roleLabel, sideName, typeLabel, humanize, isFamily,
 } from '../components/RelationshipEngine';
 
 /* ── API helpers ─────────────────────────────────────────────────────── */
@@ -107,6 +106,8 @@ function reducer(state, action) {
     case 'SET':          return { ...state, ...action.payload };
     case 'LOADED':       return { ...state, ...action.payload, loading: false, loaded: true, error: null };
     case 'REMOVE_CAND':  return { ...state, cands: state.cands.filter(c => c.id !== action.id), busy: null };
+    // An undone dismiss: the seed back at the top, once.
+    case 'ADD_CAND':     return { ...state, cands: [action.cand, ...state.cands.filter(c => c.id !== action.cand.id)] };
     case 'ADD_REL':      return { ...state, rels: [action.rel, ...state.rels.filter(r => r.id !== action.rel.id)].sort(byNewest), addOpen: false };
     case 'UPDATE_REL': {
       const updated = state.rels.map(r => r.id === action.id ? { ...r, ...action.fields } : r);
@@ -191,12 +192,26 @@ export default function RelationshipEngine() {
     }
   };
 
+  // A seed's dismiss only marks it deleted (like Delete), so it can come back.
+  const undoDismiss = async seed => {
+    try {
+      const r = await restoreRelationship(seed.id);
+      dispatch({ type: 'ADD_CAND', cand: r.data?.relationship || seed });
+      toast('Seed restored', 'success');
+    } catch (err) {
+      console.error('[RelationshipEngine] seed restore failed:', err);
+      toast(err.message || 'Undo failed', 'error');
+    }
+  };
+
   const dismiss = async id => {
+    const seed = s.cands.find(c => c.id === id);
     dispatch({ type: 'SET', payload: { busy: id } });
     try {
       await dismissRelationship(id);
       dispatch({ type: 'REMOVE_CAND', id });
-      toast('Seed dismissed', 'info');
+      toast(seed ? `Dismissed ${sideName(seed, 'a', charById)} and ${sideName(seed, 'b', charById)}` : 'Seed dismissed', 'info',
+        seed ? { label: 'Undo', run: () => undoDismiss(seed) } : null);
     } catch (err) {
       dispatch({ type: 'SET', payload: { busy: null } });
       toast(err.message || 'Dismiss failed', 'error');
@@ -360,7 +375,8 @@ export default function RelationshipEngine() {
     || s.chars[0]
     || null;
 
-  const familyCount = s.rels.filter(isFamily).length;
+  // The Family tab's own rule and list (tokens' isFamily; spouses are romance).
+  const familyCount = filtRels.filter(isFamily).length;
   const subline =
     s.tab === 'candidates' ? `${s.cands.length} pending` :
     s.tab === 'family'     ? `${familyCount} bond${familyCount === 1 ? '' : 's'}` :
@@ -495,19 +511,19 @@ export default function RelationshipEngine() {
               {filtChars.map(c => {
                 const rc = roleColor(c.role_type);
                 const act = (s.tab === 'overview' ? profileChar?.id : s.selChar?.id) === c.id;
-                const isLala = lala && c.id === lala.id;
+                const role = roleLabel(c, lala?.id);
                 return (
                   <button key={c.id}
                     className={`cg-world-card ${act ? 'is-active' : ''}`}
                     onClick={() => pickChar(c)}
                     aria-pressed={act}
-                    aria-label={`${cname(c)}, ${isLala ? 'protagonist' : (c.role_type || 'unknown role')}`}>
+                    aria-label={`${cname(c)}, ${role === '—' ? 'unknown role' : role.toLowerCase()}`}>
                     <div className="re-char-avatar" style={{ borderColor: act ? rc : undefined, color: rc, background: act ? rc + '18' : undefined }}>
                       {initials(cname(c))}
                     </div>
                     <div className="re-char-info">
                       <div className="re-char-name">{cname(c)}</div>
-                      <div className="re-char-role">{isLala ? 'Protagonist' : (humanize(c.role_type) || '—')}</div>
+                      <div className="re-char-role">{role}</div>
                     </div>
                   </button>
                 );
@@ -555,7 +571,7 @@ export default function RelationshipEngine() {
           {/* view */}
           <div className={`re-view ${s.tab === 'overview' ? 'is-overview' : ''} is-${s.tab}`}>
             {s.loading              ? <Spinner /> :
-             s.tab === 'web'        ? <WebView chars={filtChars} rels={filtRels} lalaId={lala?.id} navigate={navigate} onRelClick={openRel} /> :
+             s.tab === 'web'        ? <WebView chars={filtChars} rels={filtRels} lalaId={lala?.id} selectedId={s.selChar?.id ?? null} navigate={navigate} onRelClick={openRel} /> :
              s.tab === 'overview'   ? <ProfileView char={profileChar} chars={s.chars} rels={s.rels} cands={s.cands}
                                         onSelectChar={c => dispatch({ type: 'SET', payload: { selChar: c, selRel: null, panel: false } })}
                                         onRelClick={openRel}

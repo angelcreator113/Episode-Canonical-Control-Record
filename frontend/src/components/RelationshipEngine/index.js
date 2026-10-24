@@ -7,7 +7,7 @@ export { default as Inspector } from './Inspector';
 export { default as AddModal } from './AddModal';
 export { default as GenModal } from './GenModal';
 export { default as ProfileView } from './ProfileView';
-export { Btn, LFBtn, Spinner, Pill, useToast, useIsPhone, useFocusTrap, PHONE_QUERY } from './primitives';
+export { Btn, Spinner, Pill, useToast, useIsPhone, useFocusTrap, PHONE_QUERY } from './primitives';
 export { default as StoryTimeline, fetchRelationshipEvents } from './StoryTimeline';
 export { default as WhoKnows } from './WhoKnows';
 export * from './tokens';

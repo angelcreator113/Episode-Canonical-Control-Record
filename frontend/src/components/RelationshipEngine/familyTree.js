@@ -11,7 +11,7 @@
  *       node  { key, name, kind: 'character'|'profile'|'ghost', id, gen }
  *       edge  { from, to, role, kind, relId, rel }   ("from is to's role")
  */
-import { cname, isFamily, isLoveInterest } from './tokens';
+import { cname, isFamily } from './tokens';
 
 // As services/familyTies on the server: a base role's step, and the
 // prefixes that ride along ("great-" adds a generation).
@@ -23,7 +23,6 @@ const STEP = {
   grandmother: -2, grandfather: -2, grandparent: -2, granddaughter: 2, grandson: 2, grandchild: 2,
 };
 const PREFIX = /^(great-|great |step-|step|half-|half |adoptive |adopted |foster |chosen |god)/;
-const SPOUSE = /^(ex-)?(wife|husband|spouse|partner|fianc[ée]e?|girlfriend|boyfriend)$/;
 
 export function generationStep(role) {
   let r = String(role || '').trim().toLowerCase().replace(/\s+/g, ' ').replace(/(-| )in(-| )law$/, '');
@@ -38,9 +37,8 @@ export function generationStep(role) {
   return STEP[r] === 0 ? 0 : STEP[r] + Math.sign(STEP[r]) * greats;
 }
 
-/** A family tie on the page: family, not romance, not a partner role. */
-export const isFamilyTie = (r) => !!r && !isLoveInterest(r) && !SPOUSE.test(String(r.family_role || '').toLowerCase())
-  && (isFamily(r) || !!r.family_kind);
+/** A family tie on the page: tokens' isFamily (not romance, not a partner role), the one rule the header count uses too. */
+export const isFamilyTie = isFamily;
 const kindOfRel = (r) => r.family_kind || (r.is_blood_relation ? 'blood' : null);
 export const isDashed = (kind) => kind === 'step' || kind === 'chosen';
 

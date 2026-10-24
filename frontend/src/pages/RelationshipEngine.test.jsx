@@ -23,11 +23,11 @@ vi.mock('../components/RelationshipEngine', () => ({
   WebView: () => null, TreeView: () => null, FamilyView: () => null,
   CandidateView: () => null, ListView: () => null,
   Inspector: () => null, AddModal: () => null, GenModal: () => null,
-  Btn: () => null, LFBtn: () => null, Spinner: () => null,
+  Btn: () => null, Spinner: () => null,
   useToast: () => ({ toasts: [], show: () => {} }),
   API: '/api/v1',
-  T: {}, LAYER: {}, TENSION: {},
-  cname: () => '', clayer: () => '', initials: () => '', roleColor: () => '',
+  T: {}, TENSION: {},
+  cname: () => '', initials: () => '', roleColor: () => '', roleLabel: () => '',
 }));
 
 import apiClient from '../services/api';

@@ -176,11 +176,9 @@ const PULSE_SQL = `
 const pairKey = (a, b) => [Number(a), Number(b)].sort((x, y) => x - y).join(':');
 const at = (h) => (h ? `@${String(h).replace(/^@+/, '')}` : null);
 
-/** Lala's registry character id, the newest live one, or null. */
-async function lalaCharacterId(db, transaction) {
-  const [row] = await rowsOf(db, `SELECT id FROM registry_characters WHERE character_key = 'lala' AND deleted_at IS NULL
-                                   ORDER BY (feed_profile_id IS NULL), updated_at DESC LIMIT 1`, {}, transaction);
-  return row?.id || null;
+/** Lala's registry character id, or null: the same Lala the Relationships page shows (services/whichLala). */
+function lalaCharacterId(db, transaction) {
+  return require('./whichLala').lalaId(db, { transaction });
 }
 
 // ── The link ─────────────────────────────────────────────────────────────
