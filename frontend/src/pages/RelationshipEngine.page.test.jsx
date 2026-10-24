@@ -195,7 +195,8 @@ describe('Family and Seeds', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: /◈ Generate/ }));
     await screen.findByText('Mentor');
     expect(screen.getByText('Rival')).toBeTruthy();
-    expect(apiClient.post).toHaveBeenCalledWith('/api/v1/relationships/generate', { focus_character_id: null });
+    // The dialog's aim (2026-10-24): kind and count always, the rest when chosen.
+    expect(apiClient.post).toHaveBeenCalledWith('/api/v1/relationships/generate', { kind: 'any', count: 5 });
   });
 });
 

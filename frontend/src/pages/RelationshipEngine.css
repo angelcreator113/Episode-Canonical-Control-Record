@@ -2355,3 +2355,40 @@
   .re-check { min-height: 44px; }
   .re-check input { width: 20px; height: 20px; }
 }
+
+/* A scene's suggestions (Story Evaluation → here; 2026-10-24): the banner in
+   the house palette, with "Add all to Seeds" so they stay. */
+.re-scene-banner {
+  padding: 12px 20px;
+  background: #F6F2FB;
+  border-bottom: 1px solid #D4C8EA;
+  display: flex; flex-direction: column; gap: 10px;
+}
+.re-scene-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.re-scene-title { font-family: var(--re-serif); font-size: 15px; font-weight: 700; color: var(--ps-ink); overflow-wrap: anywhere; }
+.re-scene-tools { display: flex; align-items: center; gap: 6px; }
+.re-scene-list { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.re-scene-sug {
+  padding: 8px 12px; border-radius: 8px;
+  background: var(--re-glass); border: 1px solid var(--re-gold-soft);
+  font-size: 13px; min-width: 0; max-width: 100%;
+}
+.re-scene-sug.is-strong { border-color: #8FC4A8; }
+.re-scene-sug.is-moderate { border-color: var(--re-gold); }
+.re-scene-pair { font-weight: 600; color: var(--ps-ink); margin-bottom: 2px; overflow-wrap: anywhere; }
+.re-scene-dims { font-size: 12px; color: var(--ps-ink-mid); }
+.re-scene-signal {
+  display: inline-block; margin-top: 4px; padding: 1px 6px; border-radius: 8px;
+  font-family: var(--re-mono); font-size: 12px; color: var(--ps-ink-mid); background: var(--lala-parchment, #FAF7F0);
+}
+.re-scene-sug.is-strong .re-scene-signal { color: #2F7A5A; background: #EAF5EE; }
+.re-scene-sug.is-moderate .re-scene-signal { color: var(--re-magenta); background: var(--re-blush); }
+@media (max-width: 600px) {
+  .re-scene-banner { padding: 12px; }
+  .re-scene-tools { width: 100%; justify-content: space-between; }
+  .re-scene-sug { flex: 1 1 100%; }
+}
+@media (max-width: 600px) {
+  /* a toast's Undo / Open Seeds is a finger's 44px too */
+  .re-toast-action { min-height: 44px; }
+}

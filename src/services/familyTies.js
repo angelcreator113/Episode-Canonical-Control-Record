@@ -163,9 +163,11 @@ const SELECT = (sequelize) => sequelize.QueryTypes.SELECT;
  * Add or change the family tie "from is to's <role>" (both are registry
  * characters). The pair's live family row is reused (whichever way round it
  * was written); otherwise a confirmed 'family' row is made. The reverse role
- * is written from to's gender. Returns { id, created, pulse }.
+ * is written from to's gender. Returns { id, created, pulse }. With
+ * `transaction`, every read and write runs in it (a seed's Confirm, routes/
+ * relationships, holds the seed's row locked while it does this).
  */
-async function saveFamilyTie(sequelize, { fromId, toId, role, kind = null, notes, tension } = {}) {
+async function saveFamilyTie(sequelize, { fromId, toId, role, kind = null, notes, tension, transaction } = {}) {
   const words = String(role || '').trim();
   if (!fromId || !toId || !words) throw Object.assign(new Error('Two people and a role are needed'), { status: 400 });
   if (String(fromId) === String(toId)) throw Object.assign(new Error('Someone cannot be their own family'), { status: 400 });
@@ -177,7 +179,7 @@ async function saveFamilyTie(sequelize, { fromId, toId, role, kind = null, notes
 
   const people = await sequelize.query(
     `SELECT id, gender, pronouns FROM registry_characters WHERE id IN (:ids) AND deleted_at IS NULL`,
-    { replacements: { ids: [fromId, toId] }, type: SELECT(sequelize) });
+    { replacements: { ids: [fromId, toId] }, type: SELECT(sequelize), transaction });
   const from = people.find((p) => String(p.id) === String(fromId));
   const to = people.find((p) => String(p.id) === String(toId));
   if (!from || !to) throw Object.assign(new Error('Character not found'), { status: 404 });
@@ -189,7 +191,7 @@ async function saveFamilyTie(sequelize, { fromId, toId, role, kind = null, notes
         AND ((character_id_a = :from AND character_id_b = :to) OR (character_id_a = :to AND character_id_b = :from))
         AND (family_role IS NOT NULL OR family_kind IS NOT NULL OR is_blood_relation = true OR relationship_type = 'family')
       ORDER BY (relationship_type = 'family') DESC, updated_at DESC LIMIT 1`,
-    { replacements: { from: fromId, to: toId }, type: SELECT(sequelize) });
+    { replacements: { from: fromId, to: toId }, type: SELECT(sequelize), transaction });
 
   const fields = {
     kind: theKind, blood: theKind === 'blood',
@@ -214,7 +216,7 @@ async function saveFamilyTie(sequelize, { fromId, toId, role, kind = null, notes
           tension_state = CASE WHEN :tension_sent THEN :tension ELSE tension_state END,
           updated_at = NOW()
         WHERE id = :id`,
-      { replacements: { id, ...fields, role: forward || flip ? words : reverse, reverse: forward || flip ? reverse : words } });
+      { replacements: { id, ...fields, role: forward || flip ? words : reverse, reverse: forward || flip ? reverse : words }, transaction });
   } else {
     const [row] = await sequelize.query(
       `INSERT INTO character_relationships
@@ -228,14 +230,14 @@ async function saveFamilyTie(sequelize, { fromId, toId, role, kind = null, notes
           family_kind = EXCLUDED.family_kind, is_blood_relation = EXCLUDED.is_blood_relation,
           confirmed = true, is_romantic = false, deleted_at = NULL, updated_at = NOW()
        RETURNING id`,
-      { replacements: { id: uuidv4(), from: fromId, to: toId, role: words, reverse, ...fields }, type: SELECT(sequelize) });
+      { replacements: { id: uuidv4(), from: fromId, to: toId, role: words, reverse, ...fields }, type: SELECT(sequelize), transaction });
     id = row.id;
     created = true;
   }
 
   let pulse = null;
   try {
-    pulse = await linkPulseFamily(sequelize, id);
+    pulse = await linkPulseFamily(sequelize, id, { transaction });
   } catch (err) {
     console.error('[familyTies] the Pulse family link was not made:', err.message);
   }
@@ -255,7 +257,7 @@ const familyWords = (t) => (t.family_role ? `${t.a_name} is ${t.b_name}'s ${t.fa
  * { id, created } or null when either has no profile. Kept apart from
  * saveFamilyTie so the one-relationship-truth work can call or merge it.
  */
-async function linkPulseFamily(sequelize, relId) {
+async function linkPulseFamily(sequelize, relId, { transaction } = {}) {
   const [t] = await sequelize.query(
     `SELECT cr.id, cr.family_role, ca.feed_profile_id AS a_profile, cb.feed_profile_id AS b_profile,
             ${nameSql('ca')} AS a_name, ${nameSql('cb')} AS b_name
@@ -263,7 +265,7 @@ async function linkPulseFamily(sequelize, relId) {
        JOIN registry_characters ca ON ca.id = cr.character_id_a AND ca.deleted_at IS NULL
        JOIN registry_characters cb ON cb.id = cr.character_id_b AND cb.deleted_at IS NULL
       WHERE cr.id = :id AND cr.deleted_at IS NULL`,
-    { replacements: { id: relId }, type: SELECT(sequelize) });
+    { replacements: { id: relId }, type: SELECT(sequelize), transaction });
   if (!t || t.a_profile == null || t.b_profile == null || Number(t.a_profile) === Number(t.b_profile)) return null;
   const description = familyWords(t);
   const [found] = await sequelize.query(
@@ -271,14 +273,14 @@ async function linkPulseFamily(sequelize, relId) {
       WHERE relationship_type = 'family'
         AND ((source_profile_id = :a AND target_profile_id = :b) OR (source_profile_id = :b AND target_profile_id = :a))
       LIMIT 1`,
-    { replacements: { a: t.a_profile, b: t.b_profile }, type: SELECT(sequelize) });
+    { replacements: { a: t.a_profile, b: t.b_profile }, type: SELECT(sequelize), transaction });
   if (found) {
     await sequelize.query(
       `UPDATE social_profile_relationships SET
           description = CASE WHEN description IS NULL OR BTRIM(description) = '' THEN :description ELSE description END,
           character_relationship_id = COALESCE(character_relationship_id, :rel), updated_at = NOW()
         WHERE id = :id`,
-      { replacements: { id: found.id, description, rel: t.id } });
+      { replacements: { id: found.id, description, rel: t.id }, transaction });
     return { id: found.id, created: false };
   }
   const [row] = await sequelize.query(
@@ -287,7 +289,7 @@ async function linkPulseFamily(sequelize, relId) {
      VALUES (:a, :b, 'family', 'mutual', :description, false, :rel, NOW(), NOW())
      ON CONFLICT (source_profile_id, target_profile_id, relationship_type) DO UPDATE SET updated_at = NOW()
      RETURNING id`,
-    { replacements: { a: t.a_profile, b: t.b_profile, description, rel: t.id }, type: SELECT(sequelize) });
+    { replacements: { a: t.a_profile, b: t.b_profile, description, rel: t.id }, type: SELECT(sequelize), transaction });
   return { id: row.id, created: true };
 }
 
