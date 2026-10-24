@@ -149,7 +149,13 @@ describe('the skip rule', () => {
 
 describe('the aim', () => {
   it('checks kind, focus and ids, and keeps count to 3..8', () => {
-    expect(aimOf({}, [A])).toEqual({ kind: 'any', focus_character_id: null, episode_id: null, twist_id: null, count: 5 });
+    expect(aimOf({}, [A])).toEqual({ kind: 'any', focus_character_id: null, episode_id: null, twist_id: null, slot_id: null, phase: null, show_id: null, count: 5 });
+    // A season slot, or a part of the active season with its show (planner PR 3).
+    expect(aimOf({ slot_id: EP }, [A])).toMatchObject({ slot_id: EP, phase: null });
+    expect(aimOf({ phase: '2', show_id: TH }, [A])).toMatchObject({ phase: 2, show_id: TH });
+    expect(() => aimOf({ phase: 2 }, [A])).toThrow(/needs its show_id/);
+    expect(() => aimOf({ phase: 12, show_id: TH }, [A])).toThrow(/part number/);
+    expect(() => aimOf({ slot_id: 'nope' }, [A])).toThrow(/not a valid id/);
     expect(aimOf({ kind: 'romance', focus_character_id: A, count: 20 }, [A]).count).toBe(8);
     expect(aimOf({ count: 1 }, [A]).count).toBe(3);
     expect(() => aimOf({ kind: 'enemies' }, [A])).toThrow(SeedError);

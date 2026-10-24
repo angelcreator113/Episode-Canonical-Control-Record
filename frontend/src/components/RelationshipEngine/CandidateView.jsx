@@ -8,6 +8,11 @@
  * a "too soon" dismiss move it to a fold below, with Bring back; any other
  * reason dismisses it, with Undo. Confirm all confirms the pending ones
  * after one confirm step and lists any the server refused.
+ *
+ * Timing (planner PR 3, 2026-10-24): a seed made for a season slot says
+ * "Needed by E12"; one put off for Later is back with the pending ones,
+ * marked "Back: E12 is next", once its slot is the next to make (the
+ * server decides, GET /relationships/cast).
  */
 import { useState, useId } from 'react';
 import { Link } from 'react-router-dom';
@@ -117,6 +122,12 @@ function SeedCard({ c, charById, busy, onConfirm, onQuickConfirm, onKeep, onDism
           </div>
           {source && <span className={`re-seed-source is-${c.seed_source}`}>{source}</span>}
         </div>
+        {(c.needed_by || c.back_note) && (
+          <div className="re-seed-timing">
+            {c.needed_by && <span className="re-seed-needed" data-testid={`seed-needed-${c.id}`}>Needed by {c.needed_by.label || `E${c.needed_by.slot_number}`}</span>}
+            {c.back_note && <span className="re-seed-back" data-testid={`seed-back-${c.id}`}><Clock size={14} aria-hidden /> {c.back_note}</span>}
+          </div>
+        )}
         <div className="re-candidate-type">{typeLabel(c)}{c.family_role && c.family_role !== c.relationship_type ? ` · ${c.family_role}` : ''}{c.is_romantic ? ' · romance' : ''}</div>
         {c.seed_why && <p className="re-seed-why"><span className="re-seed-why-key">Why · </span>{c.seed_why}</p>}
         <Basis seed={c} />
@@ -184,7 +195,7 @@ function Fold({ title, hint, Icon, seeds, charById, busy, onBringBack, label }) 
               return (
                 <li key={c.id} className="re-seed-fold-row">
                   <div className="re-seed-fold-text">
-                    <div className="re-seed-fold-pair">{pair} <span className="re-seed-fold-type">· {typeLabel(c)}</span></div>
+                    <div className="re-seed-fold-pair">{pair} <span className="re-seed-fold-type">· {typeLabel(c)}</span>{c.needed_by && <span className="re-seed-fold-type"> · Needed by {c.needed_by.label || `E${c.needed_by.slot_number}`}</span>}</div>
                     {(c.seed_why || c.situation) && <div className="re-seed-fold-why">{c.seed_why || c.situation}</div>}
                     {c.dismiss_note && <div className="re-seed-fold-why">Your note: {c.dismiss_note}</div>}
                   </div>

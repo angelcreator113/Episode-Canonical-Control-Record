@@ -232,11 +232,13 @@ router.get('/cast', requireAuth, async (req, res) => {
         { replacements: { ids }, type: db.sequelize.QueryTypes.SELECT }
       );
     }
+    // Each seed with the slot it is needed by; a Later one whose slot is next comes back (services/relationshipSeeds).
+    const candidates = await require('../services/relationshipSeeds').withNeededBy(db, rows.filter((r) => !r.confirmed));
     res.json({
       characters,
       lala_id: lalaId,
       relationships: rows.filter((r) => r.confirmed),
-      candidates: rows.filter((r) => !r.confirmed),
+      candidates,
     });
   } catch (err) {
     console.error('GET /relationships/cast error:', err);
@@ -465,7 +467,7 @@ async function seedRows(db, ids) {
      WHERE cr.id IN (:ids)`,
     { replacements: { ids }, type: db.sequelize.QueryTypes.SELECT }
   );
-  const byId = new Map(rows.map((r) => [String(r.id), r]));
+  const byId = new Map((await seeds.withNeededBy(db, rows)).map((r) => [String(r.id), r]));
   return ids.map((id) => byId.get(String(id))).filter(Boolean);
 }
 
@@ -501,7 +503,10 @@ async function generateAndRespond(req, res, { body, what, shape }) {
 }
 
 // POST /api/v1/relationships/generate
-// Body { focus_character_id?, kind?, episode_id?, twist_id?, count?: 3..8 }.
+// Body { focus_character_id?, kind?, episode_id?, twist_id?, slot_id?, phase?, show_id?, count?: 3..8 }.
+// slot_id aims it at a season slot (its purposes, pressure, part and its
+// event's guests; the seeds are needed by it); phase (with show_id) at a
+// part of the active season. An unknown slot or part is a 404.
 router.post('/generate', requireAuth, authorize(['ADMIN']), aiRateLimiter, async (req, res) => {
   try {
     await generateAndRespond(req, res, {
@@ -560,8 +565,9 @@ router.post('/:relId/seed-state', requireAuth, authorize(['ADMIN']), async (req,
 // POST /api/v1/relationships/seeds
 // Body { source: 'scene'|'pulse'|'manual', seeds: [{ character_id_a,
 // character_id_b, relationship_type, situation?, is_romantic?, seed_why?,
-// seed_basis? }] } (at most 20): the scene banner's and the Pulse's
-// suggestions land in Seeds. A pair already there is skipped, as Generate
+// seed_basis?, needed_by_slot_id? }] } (at most 20): the scene banner's,
+// the Pulse's and the Season Plan's needs ("Add a seed") suggestions
+// land in Seeds. A pair already there is skipped, as Generate
 // skips it. 201 { candidates, skipped: [{ index, code, why }] }.
 router.post('/seeds', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {

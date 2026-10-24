@@ -473,9 +473,18 @@ function TemplateStudio() {
     ? templates.filter(t => t.name === selected.name).sort((a, b) => (a.version || 0) - (b.version || 0))
     : []), [templates, selected]);
 
-  // A rename or a question belongs to the template it was started on.
+  // A rename or a question belongs to the template it was started on, so
+  // moving to a different template clears them. The first template shown
+  // (after the list loads) clears nothing: that run can land just after a
+  // Rename clicked as the page appears, and would undo it.
   const selectedKey = selected?.id;
-  useEffect(() => { setRenaming(null); setAsking(null); }, [selectedKey]);
+  const shownKey = React.useRef(selectedKey);
+  useEffect(() => {
+    const before = shownKey.current;
+    shownKey.current = selectedKey;
+    if (before == null || before === selectedKey) return;
+    setRenaming(null); setAsking(null);
+  }, [selectedKey]);
 
   const selIndex = selected ? sortedTemplates.indexOf(selected) : -1;
   const step = (d) => {

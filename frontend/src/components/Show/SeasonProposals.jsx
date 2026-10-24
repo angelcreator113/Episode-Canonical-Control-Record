@@ -7,6 +7,14 @@
  * A proposal is asked for when an episode is accepted, a Pulse storyline
  * pays off or followers jump, and with Check the feed now.
  *
+ * The last proposals she decided sit in a small fold, "Decided · N", each
+ * accepted or dismissed with its date (Evoni's review, 2026-10-24: they
+ * were read and never shown).
+ *
+ * On a new season, with nothing ever proposed, the quiet line says when
+ * proposals start: once The Pulse has activity (an unprompted check skips
+ * a feed with no signals; Check The Pulse now asks anyway).
+ *
  * Props: showId, api (the page's client), onApplied (reload the season).
  */
 import { useCallback, useEffect, useState } from 'react';
@@ -39,6 +47,42 @@ export function signalLines(signals) {
   for (const s of signals.storylines || []) if (s.status === 'paid_off') out.push({ key: `p-${s.title}`, text: `“${s.title}” paid off` });
   for (const m of (signals.met || []).slice(0, 3)) out.push({ key: `m-${m.handle}`, text: `${atHandle(m.handle)} met Lala in E${m.episode_number}` });
   return out;
+}
+
+const DECIDED_LABEL = { accepted: 'Accepted', dismissed: 'Dismissed' };
+
+/** "24 Oct 2026", or '' for no date. */
+export function decidedDate(value) {
+  const d = value ? new Date(value) : null;
+  return d && !Number.isNaN(d.getTime()) ? d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
+}
+
+/** The decided proposals (accepted or dismissed), newest first, as the server sends them. */
+export function decidedProposals(recent) {
+  return (recent || []).filter((p) => DECIDED_LABEL[p.status]);
+}
+
+function DecidedFold({ recent }) {
+  const decided = decidedProposals(recent);
+  if (!decided.length) return null;
+  return (
+    <details className="sp-decided" data-testid="season-proposals-decided">
+      <summary className="sp-decided-summary">Decided · {decided.length}</summary>
+      <ul className="sp-decided-list">
+        {decided.map((p) => {
+          const applied = Array.isArray(p.applied) ? p.applied.filter((a) => a.ok).length : null;
+          return (
+            <li key={p.id} className={`sp-decided-item is-${p.status}`} data-testid={`season-proposal-decided-${p.id}`}>
+              <span className="sp-decided-status">{DECIDED_LABEL[p.status]}</span>
+              {p.status === 'accepted' && applied !== null && <span className="sp-decided-meta"> · {applied} {applied === 1 ? 'change' : 'changes'} applied</span>}
+              {decidedDate(p.decided_at || p.created_at) && <span className="sp-decided-meta"> · {decidedDate(p.decided_at || p.created_at)}</span>}
+              {p.summary && <p className="sp-decided-text">{p.summary}</p>}
+            </li>
+          );
+        })}
+      </ul>
+    </details>
+  );
 }
 
 export default function SeasonProposals({ showId, api, onApplied }) {
@@ -111,7 +155,15 @@ export default function SeasonProposals({ showId, api, onApplied }) {
           <p className="sp-empty" title="The season is checked against the feed when an episode is accepted, a Pulse storyline pays off, or a character’s followers jump.">Nothing proposed right now.</p>
           <button type="button" className="sp-btn-soft" onClick={check} disabled={!!busy}>{busy === 'check' ? 'Reading The Pulse…' : 'Check The Pulse now'}</button>
         </div>
+        {/* A new season: nothing has ever been proposed (Evoni's review, 2026-10-24, item 20). */}
+        {!state.recent.length && (
+          <p className="sp-start" data-testid="season-proposals-start">
+            Proposals start once The Pulse has activity: followers moving, a storyline running or paid off, someone meeting Lala.
+            Until then nothing is proposed on its own; Check The Pulse now asks anyway.
+          </p>
+        )}
         {note && <p className="sp-note" role="status">{note}</p>}
+        <DecidedFold recent={state.recent} />
       </section>
     );
   }
@@ -161,6 +213,7 @@ export default function SeasonProposals({ showId, api, onApplied }) {
         </div>
       )}
       {note && <p className="sp-note" role="status">{note}</p>}
+      <DecidedFold recent={state.recent} />
     </section>
   );
 }

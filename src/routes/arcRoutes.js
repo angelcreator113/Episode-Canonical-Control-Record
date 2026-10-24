@@ -47,6 +47,13 @@
  * DELETE /world/:showId/season/twists/:twistId — Delete it (soft)
  * POST   /world/:showId/season/twists/:twistId/restore — Undo a delete
  * POST   /world/:showId/season/twists/suggest — 3-5 drafted twists from the AI (one call); nothing saved
+ * GET    /world/:showId/season/needs — The relationships the season needs (planner PR 3, 2026-10-24): each
+ *                                       twist's, thread's and slot purpose's pairs, the slot each is needed by,
+ *                                       and whether it is there, a seed only, or missing (services/seasonNeeds)
+ * GET    /world/:showId/season/knows — What the season's AI reads of the story so far: the latest approved
+ *                                       What changed record and the open follow-ups
+ * GET    /world/:showId/season/slots/:slotId/notes — The slot's twists (plant, payoff) and reveals, for its panel
+ * GET    /world/:showId/season/slots/:slotId/event-fit — Events that can be pencilled into the slot, best fit first
  * GET    /episodes/:episodeId/season-twists — The twists this episode plants and pays off (the Script tab)
  * POST   /episodes/:episodeId/season-twists/:twistId/mark — { as: planted|paid_off, undo? }: Evoni marks it done here, or takes the mark back
  *
@@ -96,6 +103,7 @@ router.get('/world/:showId/arc', requireAuth, async (req, res) => {
       },
     });
   } catch (err) {
+    console.error('[ArcRoutes] season arc load error:', err);
     if (err.message?.includes('show_arcs') || err.message?.includes('does not exist')) {
       return res.json({ success: true, arc: null, message: 'Table not created yet. Run migrations.' });
     }
@@ -209,6 +217,7 @@ router.post('/world/:showId/arc/advance', requireAuth, async (req, res) => {
 
     return res.json({ success: true, data: result });
   } catch (err) {
+    console.error('[ArcRoutes] advance phase error:', err);
     return res.status(500).json({ error: err.message });
   }
 });
@@ -228,6 +237,7 @@ router.post('/world/:showId/arc/advance/confirm', requireAuth, async (req, res) 
 
     return res.json({ success: true, data: result });
   } catch (err) {
+    console.error('[ArcRoutes] confirm advance error:', err);
     return res.status(500).json({ error: err.message });
   }
 });
@@ -240,6 +250,7 @@ router.get('/world/:showId/arc/context', requireAuth, async (req, res) => {
     const context = await getArcContext(req.params.showId, models);
     return res.json({ success: true, data: context });
   } catch (err) {
+    console.error('[ArcRoutes] arc context error:', err);
     return res.status(500).json({ error: err.message });
   }
 });
@@ -276,6 +287,7 @@ router.put('/world/:showId/arc/phase/:phase', requireAuth, async (req, res) => {
 
     return res.json({ success: true, phase: phases[phaseIdx] });
   } catch (err) {
+    console.error('[ArcRoutes] phase override error:', err);
     return res.status(500).json({ error: err.message });
   }
 });
@@ -309,7 +321,11 @@ router.get('/world/:showId/season/insights', requireAuth, async (req, res) => {
 });
 
 function sendSlotError(res, err, label) {
-  if (err.status && err.code) return res.status(err.status).json({ error: err.message, code: err.code });
+  // A refusal (409, 400 …) is expected; it is logged as a warning, never dropped.
+  if (err.status && err.code) {
+    console.warn(`[ArcRoutes] ${label} refused (${err.code}):`, err.message);
+    return res.status(err.status).json({ error: err.message, code: err.code });
+  }
   console.error(`[ArcRoutes] ${label} error:`, err);
   return res.status(500).json({ error: err.message });
 }
@@ -382,6 +398,65 @@ router.get('/world/:showId/season/event/:eventId', requireAuth, async (req, res)
   } catch (err) {
     console.error('[ArcRoutes] event season context error:', err);
     return res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── What the season needs and knows (planner PR 3; Evoni, 2026-10-24) ─────
+
+const SHOW_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const badShow = (req, res) => {
+  if (SHOW_UUID.test(String(req.params.showId || ''))) return false;
+  res.status(400).json({ error: 'showId must be a UUID' });
+  return true;
+};
+
+// GET /world/:showId/season/needs — the relationships the season needs, read-only
+router.get('/world/:showId/season/needs', requireAuth, async (req, res) => {
+  if (badShow(req, res)) return undefined;
+  try {
+    const models = require('../models');
+    const { getNeeds } = require('../services/seasonNeeds');
+    return res.json({ success: true, ...(await getNeeds(models.sequelize, req.params.showId)) });
+  } catch (err) {
+    return sendSlotError(res, err, 'season needs');
+  }
+});
+
+// GET /world/:showId/season/knows — the latest approved What changed record and the open follow-ups
+router.get('/world/:showId/season/knows', requireAuth, async (req, res) => {
+  if (badShow(req, res)) return undefined;
+  try {
+    const models = require('../models');
+    const { seasonKnows } = require('../services/seasonNeeds');
+    return res.json({ success: true, ...(await seasonKnows(models.sequelize, req.params.showId)) });
+  } catch (err) {
+    return sendSlotError(res, err, 'season knows');
+  }
+});
+
+// GET /world/:showId/season/slots/:slotId/notes — the slot's twists and reveals, read-only
+router.get('/world/:showId/season/slots/:slotId/notes', requireAuth, async (req, res) => {
+  if (badShow(req, res)) return undefined;
+  try {
+    const models = require('../models');
+    const { slotNotes } = require('../services/seasonNeeds');
+    const notes = await slotNotes(models.sequelize, req.params.showId, req.params.slotId);
+    if (!notes) return res.status(404).json({ error: 'That slot is not in this show\'s season.' });
+    return res.json({ success: true, ...notes });
+  } catch (err) {
+    return sendSlotError(res, err, 'slot notes');
+  }
+});
+
+// GET /world/:showId/season/slots/:slotId/event-fit — "Pencil an event", best fit first, each with a reason
+router.get('/world/:showId/season/slots/:slotId/event-fit', requireAuth, async (req, res) => {
+  if (badShow(req, res)) return undefined;
+  try {
+    const models = require('../models');
+    const { rankEventsForSlot } = require('../services/seasonSetupService');
+    return res.json({ success: true, ...(await rankEventsForSlot(models.sequelize, req.params.showId, req.params.slotId)) });
+  } catch (err) {
+    return sendSlotError(res, err, 'event fit');
   }
 });
 
@@ -506,7 +581,10 @@ router.post('/world/:showId/season/proposals/:proposalId/dismiss', requireAuth, 
 
 const sendPlanError = (res, err, label) => {
   const { RevealPlanError } = require('../services/seasonRevealPlan');
-  if (err instanceof RevealPlanError) return res.status(err.status).json({ error: err.message });
+  if (err instanceof RevealPlanError) {
+    console.warn(`[ArcRoutes] ${label} refused:`, err.message);
+    return res.status(err.status).json({ error: err.message });
+  }
   console.error(`[ArcRoutes] ${label} error:`, err);
   return res.status(500).json({ error: err.message });
 };
@@ -548,7 +626,10 @@ router.delete('/world/:showId/season/reveals/:revealId', requireAuth, async (req
 
 const sendTwistError = (res, err, label) => {
   const { TwistError } = require('../services/seasonTwists');
-  if (err instanceof TwistError) return res.status(err.status).json({ error: err.message });
+  if (err instanceof TwistError) {
+    console.warn(`[ArcRoutes] ${label} refused:`, err.message);
+    return res.status(err.status).json({ error: err.message });
+  }
   console.error(`[ArcRoutes] ${label} error:`, err);
   return res.status(500).json({ error: err.message });
 };

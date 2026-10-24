@@ -149,9 +149,12 @@ async function seasonOf(db, showId) {
   } catch (err) {
     console.error('[seasonArcProposals] carry-forward load failed:', err.message);
   }
+  // The confirmed relationships between the season's people (never a seed).
+  const relationships = await require('./seasonNeeds').seasonRelationshipBlock(sequelize, showId);
   return {
     arc,
     carried,
+    relationships,
     phases: Array.isArray(phases) ? phases : [],
     debt: parse(arc.narrative_debt, []) || [],
     openSlots: slots.filter((s) => s.intention_source !== 'edited'),
@@ -175,7 +178,7 @@ LALA'S GOALS:
 ${lines(season.goals, (g) => `- ${g.title}: ${g.current_value}/${g.target_value} ${g.target_metric}`)}
 NARRATIVE DEBT:
 ${lines(season.debt, (d) => `- ${d.goal_title || d.title || ''}: ${d.narrative_weight || ''}`)}
-${season.carried ? `\n${season.carried}` : ''}
+${season.carried ? `\n${season.carried}` : ''}${season.relationships ? `\n${season.relationships}` : ''}
 WHAT MOVED ON THE FEED:
 Followers (accepted changes): ${lines(signals.followers, (f) => `@${f.handle} ${f.change > 0 ? '+' : ''}${f.change} (now ${f.now ?? '?'})`)}
 Profiles whose state changed: ${lines(signals.states, (s) => `@${s.handle}: ${s.from || '?'} → ${s.to}`)}

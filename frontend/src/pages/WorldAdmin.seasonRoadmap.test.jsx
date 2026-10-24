@@ -421,7 +421,7 @@ describe('Season Arc roadmap (§8(ff) PR 1)', () => {
     });
 
     test('Evoni creates and names a thread, by hand or from a seed draft', async () => {
-      const prompt = vi.spyOn(window, 'prompt').mockReturnValue('Maison Belle returns');
+      const prompt = vi.spyOn(window, 'prompt').mockImplementation(() => null);
       renderAt('season');
 
       const card = await screen.findByTestId('story-threads');
@@ -432,9 +432,16 @@ describe('Season Arc roadmap (§8(ff) PR 1)', () => {
       fireEvent.click(within(card).getByText('Add thread'));
       await waitFor(() => expect(api.post).toHaveBeenCalledWith('/api/v1/world/show-1/season/threads', { title: 'Her mother\'s visit', description: '' }));
 
-      fireEvent.click(within(screen.getByTestId('story-thread-drafts')).getByText('Make a thread'));
+      // "Make a thread" opens a small form on the seed's row, named from the seed (no browser prompt).
+      const drafts = screen.getByTestId('story-thread-drafts');
+      fireEvent.click(within(drafts).getByText('Make a thread'));
+      const form = within(drafts).getByTestId('story-thread-name-form');
+      expect(within(form).getByLabelText('Thread name').value).toBe('Maison Belle calls back');
+      fireEvent.change(within(form).getByLabelText('Thread name'), { target: { value: 'Maison Belle returns' } });
+      fireEvent.click(within(form).getByTestId('story-thread-name-save'));
       await waitFor(() => expect(api.post).toHaveBeenCalledWith('/api/v1/world/show-1/season/threads',
         { title: 'Maison Belle returns', seed_text: 'Maison Belle calls back', episode_id: 'ep-1' }));
+      expect(prompt).not.toHaveBeenCalled();
       prompt.mockRestore();
     });
 
