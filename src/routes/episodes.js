@@ -785,7 +785,9 @@ router.put(
 
 // SCRIPT VERSION HISTORY (services/scriptVersions.js; Script tab audit,
 // 2026-10-15): the scripts the Script tab replaced, newest first, and one
-// with its text. Read-only; a restore on the Script tab is a save.
+// with its text. Read-only; a restore on the Script tab is a save that
+// names the version (PUT /episodes/:id { script_content, restored_from }),
+// and the script it replaced is listed with source 'restore'.
 router.get('/:id/script-versions', validateUUIDParam('id'), requireAuth, async (req, res) => {
   try {
     const models = require('../models');
@@ -1477,6 +1479,11 @@ router.post('/:id/generate-beats', requireAuth, aiRateLimiter, asyncHandler(asyn
   // Save to episode, keeping its locked beats (utils/scriptBeatLocks.js)
   const { scriptKeepingLocks } = require('../utils/scriptBeatLocks');
   script = scriptKeepingLocks(episode, script).script;
+  // Version history (services/scriptVersions.js; History audit H2,
+  // 2026-10-24): the script this replaces is kept first; a failure to keep
+  // it never stops the save.
+  const { snapshotScript } = require('../services/scriptVersions');
+  await snapshotScript(require('../models'), episode, { source: 'generate', userId: req.user?.id, next: script });
   await episode.update({ script_content: script });
 
   return res.json({

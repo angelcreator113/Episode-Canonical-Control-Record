@@ -88,11 +88,12 @@ async function writeMetadata(models, episodeId, metadata) {
  * update): what they save, with the style sheet entry carried over from the
  * stored record. The entry is only ever written by this service.
  */
-async function keepStyleSheet(sequelize, episodeId, incoming) {
+async function keepStyleSheet(sequelize, episodeId, incoming, { transaction = null } = {}) {
   const next = { ...parseMetadata(incoming) };
   delete next[KEY];
+  // Read in the caller's transaction when it has one (the episode save locks the row).
   const [[row]] = await sequelize.query(
-    'SELECT distribution_metadata FROM episodes WHERE id = :id', { replacements: { id: episodeId } });
+    'SELECT distribution_metadata FROM episodes WHERE id = :id', { replacements: { id: episodeId }, transaction });
   const stored = row ? parseMetadata(row.distribution_metadata)[KEY] : null;
   if (stored) next[KEY] = stored;
   return next;
