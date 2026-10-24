@@ -135,7 +135,8 @@ describe('the Inspector', () => {
     await screen.findByLabelText('Story so far');
     fireEvent.click(screen.getByRole('button', { name: 'Delete this relationship' }));
     expect(apiClient.delete).not.toHaveBeenCalled();
-    expect(screen.getByText(/Their story so far is kept/)).toBeTruthy();
+    // The confirm shows after the click; on a busy runner that can take a moment.
+    expect(await screen.findByText(/Their story so far is kept/)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Yes, delete' }));
     await waitFor(() => expect(apiClient.delete).toHaveBeenCalledWith('/api/v1/relationships/rel-lm'));
     const undo = await screen.findByRole('button', { name: 'Undo' });
