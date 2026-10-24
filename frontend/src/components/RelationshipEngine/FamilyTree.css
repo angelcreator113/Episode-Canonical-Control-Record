@@ -54,3 +54,14 @@
   .re-ftree-tie { min-height: 44px; }
   .re-ftree-person-name a { display: inline-flex; align-items: center; min-height: 44px; min-width: 44px; }
 }
+
+/* Heritage on the tree (the Family tab's Heritage toggle, 2026-10-24). */
+.re-ftree-node text.re-ftree-node-heritage { font-size: 12px; font-weight: 400; font-family: 'DM Mono', monospace; fill: var(--lala-ink-muted, #5b5348); }
+.re-ftree-node text.re-ftree-node-heritage.is-unset { font-style: italic; fill: var(--lala-gold-text, #7a5f17); }
+.re-ftree-node text.re-ftree-node-heritage.is-open { cursor: pointer; text-decoration: underline; }
+.re-ftree-heritage-edit { display: flex; flex-direction: column; gap: 6px; max-width: 560px; margin: 8px auto 0; }
+.re-ftree-person .hx-line { font-size: 12px; }
+/* FamilyView's Heritage toggle and quiet panel, above the tree. */
+.re-family-heritage { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; min-width: 0; }
+.re-family-heritage .hx-toggle { align-self: flex-start; }
+.re-family-heritage .hx-panel { margin-bottom: 0; }

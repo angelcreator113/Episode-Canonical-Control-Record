@@ -10,21 +10,30 @@
  * ties, generations top to bottom; Evoni, 2026-10-23). The tree is the view;
  * the same ties as cards (with the role edit) sit behind a "List" toggle,
  * and the tree's legend is the only one (2026-10-24 layout audit).
+ * Heritage (Evoni, 2026-10-24): a quiet panel ("Heritage: 2 to look at")
+ * and a Heritage toggle that shows each person's heritage on the tree.
+ * Real families include mixed heritage, adoption, step and chosen family:
+ * it helps her notice, never enforces sameness or blocks a save.
  */
 import { useState } from 'react';
 import { Heart } from 'lucide-react';
 import { T, cname, sideName, typeLabel, isRomance } from './tokens';
 import { Btn } from './primitives';
 import FamilyTree, { useFamilies } from './FamilyTree';
+import { useHeritage, HeritagePanel } from '../CharacterFamily/Heritage';
 import { isFamilyTie, isDashed } from './familyTree';
 
 export default function FamilyView({ chars = [], rels = [], charById = {}, genning, onGenerate, onUpdateRole, onRelClick }) {
   const [editId, setEditId]     = useState(null);
   const [editRole, setEditRole] = useState('');
   const [listOpen, setListOpen] = useState(false);
+  const [showHeritage, setShowHeritage] = useState(false);
 
   const families = useFamilies();
   const family = rels.filter(isFamilyTie);
+  const hasFamily = family.length > 0 || families.length > 0;
+  const { report, byId, reload } = useHeritage({}, { skip: !hasFamily });
+  const heritage = showHeritage && report ? { byId, starterTags: report.starter_tags, onSaved: reload } : null;
   // Romance, spouses and partners included, is listed apart (tokens' isRomance).
   const romantic = rels.filter(isRomance);
   const connIds = new Set();
@@ -40,7 +49,15 @@ export default function FamilyView({ chars = [], rels = [], charById = {}, genni
 
   return (
     <div className="re-family" aria-label="Family bonds">
-      <FamilyTree rels={family} charById={charById} families={families} onRelClick={onRelClick} />
+      {hasFamily && (
+        <div className="re-family-heritage">
+          <button type="button" className="hx-toggle" aria-pressed={showHeritage} onClick={() => setShowHeritage((o) => !o)}>
+            Heritage
+          </button>
+          <HeritagePanel report={report} onChanged={reload} />
+        </div>
+      )}
+      <FamilyTree rels={family} charById={charById} families={families} onRelClick={onRelClick} heritage={heritage} />
       {family.length === 0 && families.length === 0 ? (
         <div className="re-empty" role="status">
           <div className="re-empty-icon">⬡</div>

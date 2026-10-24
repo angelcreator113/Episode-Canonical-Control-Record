@@ -55,3 +55,18 @@
   .cf-import { margin-left: 0; }
   .cf-seg-btn { flex: 1 1 auto; }
 }
+
+/* Heritage (2026-10-24): the toggle, their own line, Make them a character's dialog. */
+.cf .ch-card-head .cf-heritage-toggle { margin-left: auto; }
+.cf .ch-card-head .cf-heritage-toggle + .cf-add { margin-left: 0; }
+.cf-own-heritage { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
+.cf-own-heritage-label { font-size: 13px; font-weight: 700; color: var(--text-primary); }
+.cf-tie .hx-line, .ch-ft-item .hx-line { margin-top: 2px; }
+.cf-makebox {
+  display: flex; flex-direction: column; gap: 8px; width: 100%; box-sizing: border-box; padding: 12px; border-radius: 14px;
+  background: var(--lala-parchment, #FAF7F0); border: 1px solid var(--lala-gold-line, #e6d9b3);
+}
+.cf-makebox-title { font-family: 'Lora', serif; font-size: 15px; color: var(--text-primary); }
+.cf-makebox-label { font-size: 12px; font-weight: 700; color: var(--text-secondary); }
+.cf-suggest strong { color: var(--text-primary); }
+.cf-makebox .cf-field { flex: none; }
