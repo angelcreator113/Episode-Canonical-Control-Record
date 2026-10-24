@@ -221,7 +221,7 @@ describe('the review sheet', () => {
     expect(review.querySelector('.stp-review-actions').firstElementChild).toBe(save);
     fireEvent.click(save);
     await waitFor(() => expect(screen.getByTestId('stp-status').textContent).toContain("Saved to the episode's Files: Beat 2 · Login Sequence · take 1"));
-    expect(api.patch).toHaveBeenCalledWith('/api/v1/episode-clips/ep-1/clip-new', { beat_number: 2, start_line: 0 });
+    expect(api.patch).toHaveBeenCalledWith('/api/v1/episode-clips/ep-1/clip-new', { beat_number: 2, start_line: 0 }, { keepSession: true });
     expect(screen.queryByTestId('stp-review')).toBeNull();
     const next = screen.getByTestId('stp-next-beat');
     expect(next.textContent).toBe('Next beat ');

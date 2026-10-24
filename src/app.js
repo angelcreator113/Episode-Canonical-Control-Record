@@ -1646,15 +1646,6 @@ try {
   console.error('✗ Failed to load Texture Layer routes:', e.message);
 }
 
-// Season Rhythm Validator — 8-episode arc rhythm enforcement
-try {
-  const seasonRhythmRoutes = require('./routes/seasonRhythmRoutes');
-  app.use('/api/v1/season-rhythm', seasonRhythmRoutes);
-  console.log('✓ Season Rhythm Validator loaded at /api/v1/season-rhythm');
-} catch (e) {
-  console.error('✗ Failed to load Season Rhythm routes:', e.message);
-}
-
 // World Temperature — tension aggregation across universe scope
 try {
   const worldTemperatureRoutes = require('./routes/worldTemperatureRoutes');

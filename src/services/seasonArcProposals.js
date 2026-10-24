@@ -32,6 +32,10 @@
 
 const crypto = require('crypto');
 const Anthropic = require('@anthropic-ai/sdk');
+const { loadSeason } = require('./seasonLoader');
+const {
+  seasonAiContext, askModel, isBudgetRefusal, bullets, phaseLine, threadLine, goalLine, debtLines,
+} = require('./seasonAiContext');
 
 const MODELS = ['claude-sonnet-4-6'];
 const COOLDOWN_MS = 30 * 60 * 1000;
@@ -125,59 +129,51 @@ const isEmpty = (s) => !s.followers.length && !s.states.length && !s.storylines.
 
 async function seasonOf(db, showId) {
   const { sequelize } = db;
-  const [arc] = await rows(sequelize, 'the arc',
-    `SELECT id, title, tagline, phases, current_phase, narrative_debt FROM show_arcs
-      WHERE show_id = :showId AND status = 'active' AND deleted_at IS NULL LIMIT 1`, { showId });
-  if (!arc) return null;
-  const phases = parse(arc.phases, []);
-  // Offered only: no episode, not locked, not edited by Evoni.
-  const slots = await rows(sequelize, 'open slots',
-    `SELECT slot_number, phase, story_purpose, intention_source FROM season_slots
-      WHERE arc_id = :arcId AND deleted_at IS NULL AND episode_id IS NULL AND locked_at IS NULL
-      ORDER BY slot_number ASC`, { arcId: arc.id });
-  const threads = await rows(sequelize, 'threads',
-    `SELECT id, title, status FROM show_story_threads WHERE show_id = :showId AND status <> 'closed' AND deleted_at IS NULL
-      ORDER BY created_at ASC LIMIT 20`, { showId });
-  const goals = await rows(sequelize, 'goals',
-    `SELECT title, target_metric, current_value, target_value FROM career_goals
-      WHERE show_id = :showId AND status = 'active' AND deleted_at IS NULL ORDER BY priority ASC LIMIT 8`, { showId });
-  // The last approved story record and what Lala still owes people
-  // (services/storyCarryForward; Evoni, 2026-10-23).
-  let carried = '';
+  let season = null;
   try {
-    carried = await require('./storyCarryForward').carryForShow(sequelize, showId);
+    season = await loadSeason(sequelize, showId);
   } catch (err) {
-    console.error('[seasonArcProposals] carry-forward load failed:', err.message);
+    console.error('[seasonArcProposals] the season could not be read:', err.message);
   }
-  // The confirmed relationships between the season's people (never a seed).
-  const relationships = await require('./seasonNeeds').seasonRelationshipBlock(sequelize, showId);
+  if (!season) return null;
+  const { arc } = season;
+  // Offered only: no episode, not locked, not edited by Evoni.
+  const openSlots = season.slots
+    .filter((s) => !s.episode_id && !s.locked_at && s.intention_source !== 'edited')
+    .map((s) => ({ slot_number: s.slot_number, phase: s.phase, story_purpose: s.story_purpose, intention_source: s.intention_source }));
+  // The last approved story record and what Lala still owes people
+  // (services/storyCarryForward; Evoni, 2026-10-23), and the confirmed
+  // relationships between the season's people (never a seed).
+  const { threads, goals, carried, relationships } = await seasonAiContext(sequelize, showId, {
+    threads: { limit: 20, order: 'asc' }, goals: { limit: 8 }, carried: true, relationships: true,
+  });
   return {
     arc,
     carried,
     relationships,
-    phases: Array.isArray(phases) ? phases : [],
+    phases: arc.phases,
     debt: parse(arc.narrative_debt, []) || [],
-    openSlots: slots.filter((s) => s.intention_source !== 'edited'),
+    openSlots,
     threads,
     goals,
   };
 }
 
 function buildPrompt(season, signals) {
-  const lines = (list, fn) => (list.length ? list.map(fn).join('\n') : '(none)');
+  const lines = (list, fn) => bullets(list || [], fn, '(none)');
   return `You plan the season of "Styling Adventures with Lala". The show's feed (The Pulse) has moved since the plan was written. Propose changes to the season plan so the story grows with the feed characters. Only what the signals justify; no change is a fine answer.
 
 THE SEASON: ${season.arc.title}${season.arc.tagline ? ` ("${season.arc.tagline}")` : ''}; current phase ${season.arc.current_phase}.
 PHASES:
-${lines(season.phases, (p) => `- Phase ${p.phase} (${p.status || 'upcoming'}): ${p.title}. Tagline: ${p.tagline || '-'}. Emotional arc: ${p.emotional_arc || '-'}`)}
-OPEN THREADS (id: title):
-${lines(season.threads, (t) => `- ${t.id}: ${t.title} (${t.status})`)}
+${lines(season.phases, (p) => `- ${phaseLine(p, { status: true })}`)}
+OPEN THREADS ([id] title):
+${lines(season.threads, (t) => threadLine(t, { status: true }))}
 OPEN SLOTS YOU MAY PROPOSE A PURPOSE FOR (slot: phase, current purpose):
 ${lines(season.openSlots.slice(0, 12), (s) => `- E${s.slot_number}: phase ${s.phase}, ${s.story_purpose || 'no purpose yet'}`)}
 LALA'S GOALS:
-${lines(season.goals, (g) => `- ${g.title}: ${g.current_value}/${g.target_value} ${g.target_metric}`)}
+${lines(season.goals, (g) => goalLine(g))}
 NARRATIVE DEBT:
-${lines(season.debt, (d) => `- ${d.goal_title || d.title || ''}: ${d.narrative_weight || ''}`)}
+${season.debt && season.debt.length ? debtLines(season.debt) : '(none)'}
 ${season.carried ? `\n${season.carried}` : ''}${season.relationships ? `\n${season.relationships}` : ''}
 WHAT MOVED ON THE FEED:
 Followers (accepted changes): ${lines(signals.followers, (f) => `@${f.handle} ${f.change > 0 ? '+' : ''}${f.change} (now ${f.now ?? '?'})`)}
@@ -256,19 +252,17 @@ async function propose(db, showId, { trigger = 'manual', force = false, anthropi
   }
 
   const prompt = buildPrompt(season, signals);
-  const api = anthropic || getClient();
-  let result = null;
-  let lastErr = null;
-  for (let attempt = 0; attempt < 2 && !result; attempt += 1) {
-    try {
-      const response = await api.messages.create({ model: MODELS[0], max_tokens: 1500, messages: [{ role: 'user', content: prompt }] });
-      result = parseProposal(response?.content?.[0]?.text, season);
-    } catch (err) {
-      lastErr = err;
-      console.error(`[seasonArcProposals] proposal attempt ${attempt + 1} failed:`, err.message);
-    }
+  let result;
+  try {
+    result = await askModel({
+      api: anthropic || getClient(), models: MODELS, maxTokens: 1500, prompt, label: 'seasonArcProposals proposal',
+      read: (response) => parseProposal(response?.content?.[0]?.text, season),
+    });
+  } catch (err) {
+    console.error('[seasonArcProposals] the proposal failed:', err.message);
+    if (isBudgetRefusal(err)) throw new SeasonProposalError(`${err.message} Nothing was proposed.`, 429, 'AI_BUDGET_EXCEEDED');
+    throw new SeasonProposalError(`The proposal failed: ${err.message || 'unknown error'}`, 502, 'SEASON_PROPOSAL_FAILED');
   }
-  if (!result) throw new SeasonProposalError(`The proposal failed: ${lastErr?.message || 'unknown error'}`, 502, 'SEASON_PROPOSAL_FAILED');
 
   // A newer proposal replaces any still open.
   await sequelize.query(

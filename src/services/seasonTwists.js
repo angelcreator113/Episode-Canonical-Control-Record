@@ -36,6 +36,8 @@
  */
 
 const { episodeLabel } = require('./seasonSlotService');
+const { loadSeason } = require('./seasonLoader');
+const { seasonAiContext, askModel, isBudgetRefusal, bullets, threadLine } = require('./seasonAiContext');
 const { splitScriptBeats, normalizeLockedBeats } = require('../utils/scriptBeatLocks');
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -59,14 +61,6 @@ const ids = (v) => {
   return Array.isArray(list) ? list.filter((x) => typeof x === 'string') : [];
 };
 const text = (v, max) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : null);
-
-async function activeArc(sequelize, showId) {
-  const [[arc]] = await sequelize.query(
-    `SELECT id, title, tagline, season_number FROM show_arcs
-      WHERE show_id = :showId AND deleted_at IS NULL ORDER BY (status = 'active') DESC, arc_number ASC LIMIT 1`,
-    { replacements: { showId } });
-  return arc || null;
-}
 
 async function showThreads(sequelize, showId) {
   const [rows] = await sequelize.query(
@@ -130,25 +124,22 @@ function scriptWritten(scriptContent, lockedBeats) {
   return beats.every((b) => locked.has(b.number));
 }
 
-async function seasonSlots(sequelize, arc) {
-  const [rows] = await sequelize.query(
-    `SELECT s.id, s.slot_number, s.phase, s.story_purpose, s.accepted_at, ep.id AS episode_id, ep.title AS episode_title,
-            ep.script_content, ep.script_locked_beats
-       FROM season_slots s LEFT JOIN episodes ep ON ep.id = s.episode_id AND ep.deleted_at IS NULL
-      WHERE s.arc_id = :arcId AND s.deleted_at IS NULL ORDER BY s.slot_number`, { replacements: { arcId: arc.id } });
-  return rows.map((s) => ({
+function seasonSlots({ arc, slots }) {
+  return slots.map((s) => ({
     id: s.id, slot_number: s.slot_number, phase: s.phase, label: episodeLabel(arc.season_number, s.slot_number), story_purpose: s.story_purpose,
-    episode: s.episode_id ? { id: s.episode_id, title: s.episode_title } : null, done: Boolean(s.accepted_at),
-    written: Boolean(s.episode_id) && scriptWritten(s.script_content, s.script_locked_beats),
+    episode: s.live_episode_id ? { id: s.live_episode_id, title: s.episode_title } : null, done: Boolean(s.accepted_at),
+    written: Boolean(s.live_episode_id) && scriptWritten(s.script_content, s.script_locked_beats),
   }));
 }
 
 /** The season's slots, the show's threads and characters, the twists and what is wrong with them. */
 async function getTwists(sequelize, showId) {
   if (!UUID_RE.test(String(showId || ''))) throw new TwistError('showId must be a UUID');
-  const arc = await activeArc(sequelize, showId);
-  if (!arc) return { arc: null, slots: [], threads: [], characters: [], twists: [], warnings: [] };
-  const slots = await seasonSlots(sequelize, arc);
+  // The active season, else the show's first (a finished season's twists still read).
+  const season = await loadSeason(sequelize, showId, { anyStatus: true, scripts: true });
+  if (!season) return { arc: null, slots: [], threads: [], characters: [], twists: [], warnings: [] };
+  const { arc } = season;
+  const slots = seasonSlots(season);
   const slotById = new Map(slots.map((s) => [s.id, s]));
   const [rows] = await sequelize.query(
     `SELECT id, arc_id, title, description, plant_slot_id, payoff_slot_id, status, thread_ids, character_ids,
@@ -433,27 +424,19 @@ function getClient() {
   return client;
 }
 
-/**
- * The confirmed relationships between the show's characters, both ends in
- * the show (relationshipTruth's one read). Seeds, kept ideas and Later are
- * not facts, so Suggest twists never builds on them (Evoni's review,
- * 2026-10-24, item 7).
- */
-function showRelationships(sequelize, characters) {
-  return require('./relationshipTruth').confirmedBetween(sequelize, characters.map((c) => c.id), { limit: 40 });
-}
+// The confirmed relationships the prompt reads: between the show's own
+// characters (the ids it may use), each with its situation. Seeds, kept
+// ideas and Later are not facts, so Suggest twists never builds on them
+// (Evoni's review, 2026-10-24, item 7).
+const RELATIONSHIP_CAP = 40;
+const RELATIONSHIP_DETAIL = 200;
 
 function suggestPrompt({ arc, slots, threads, characters, relationships, twists }) {
-  const nameOf = new Map(characters.map((c) => [c.id, c.name]));
   const slotLines = slots.map((s) => `- E${s.slot_number}${s.phase ? ` (phase ${s.phase})` : ''}${s.done ? ' [DONE: do not use]' : ''}`
     + `${s.episode?.title ? `: "${s.episode.title}"` : ''}${s.story_purpose ? ` — ${String(s.story_purpose).slice(0, 200)}` : ''}`).join('\n');
-  const threadLines = threads.length
-    ? threads.map((t) => `- [${t.id}] ${t.title}${t.description ? `: ${String(t.description).slice(0, 200)}` : ''}`).join('\n') : '(none)';
-  const people = characters.length ? characters.map((c) => `- [${c.id}] ${c.name}`).join('\n') : '(none)';
-  const ties = relationships.length
-    ? relationships.map((r) => `- ${nameOf.get(r.character_id_a)} & ${nameOf.get(r.character_id_b)}: ${r.relationship_type || 'connected'}`
-      + `${r.tension_state ? ` (${r.tension_state})` : ''}${r.situation || r.conflict_summary ? ` — ${String(r.situation || r.conflict_summary).slice(0, 200)}` : ''}`).join('\n')
-    : '(none recorded)';
+  const threadLines = bullets(threads, (t) => threadLine(t, { description: 200 }), '(none)');
+  const people = bullets(characters, (c) => `- [${c.id}] ${c.name}`, '(none)');
+  const ties = relationships ? relationships.trim() : 'THEIR RELATIONSHIPS:\n(none recorded)';
   const planned = twists.length
     ? twists.map((t) => `- ${t.title}${t.plant ? ` (planted E${t.plant.slot_number}` : ' ('}${t.payoff ? `, paid off E${t.payoff.slot_number})` : ')'}`).join('\n') : '(none yet)';
   return `You help plan the season of "Styling Adventures with Lala". Suggest season twists: a twist is a detail planted, unexplained, in one episode and paid off in a later one, so the audience connects it.
@@ -469,7 +452,6 @@ ${threadLines}
 THE CHARACTERS:
 ${people}
 
-THEIR RELATIONSHIPS:
 ${ties}
 
 TWISTS ALREADY PLANNED (do not repeat these):
@@ -516,21 +498,18 @@ async function suggestTwists(sequelize, showId) {
   const season = await getTwists(sequelize, showId);
   if (!season.arc) throw new TwistError('This show has no season yet to plan twists in.', 409);
   if (season.slots.filter((s) => !s.done).length < 2) throw new TwistError('No two episodes are left to plant and pay off a twist in.', 409);
-  const [threads] = await sequelize.query(
-    `SELECT id, title, description FROM show_story_threads
-      WHERE show_id = :showId AND deleted_at IS NULL AND status <> 'closed' ORDER BY created_at DESC LIMIT 40`, { replacements: { showId } });
-  const relationships = await showRelationships(sequelize, season.characters);
+  const { threads, relationships } = await seasonAiContext(sequelize, showId, {
+    threads: { limit: 40, order: 'desc' },
+    relationships: { cap: RELATIONSHIP_CAP, characters: season.characters, detail: RELATIONSHIP_DETAIL },
+  });
   const prompt = suggestPrompt({ ...season, threads, relationships });
   let message;
-  for (const model of MODELS) {
-    try {
-      message = await getClient().messages.create({ model, max_tokens: 2000, messages: [{ role: 'user', content: prompt }] });
-      break;
-    } catch (modelErr) {
-      console.warn(`[seasonTwists] suggesting with ${model} failed:`, modelErr.message);
-      if (modelErr.code === 'AI_BUDGET_EXCEEDED') throw new TwistError(`${modelErr.message} No twists were suggested.`, 429);
-      if (model === MODELS[MODELS.length - 1]) throw new TwistError('The AI could not suggest twists right now. Try again.', 502);
-    }
+  try {
+    message = await askModel({ api: getClient(), models: MODELS, maxTokens: 2000, prompt, label: 'seasonTwists suggest' });
+  } catch (modelErr) {
+    console.error('[seasonTwists] suggesting failed:', modelErr.message);
+    if (isBudgetRefusal(modelErr)) throw new TwistError(`${modelErr.message} No twists were suggested.`, 429);
+    throw new TwistError('The AI could not suggest twists right now. Try again.', 502);
   }
   let parsed;
   try {
@@ -547,6 +526,6 @@ async function suggestTwists(sequelize, showId) {
 
 module.exports = {
   TwistError, STATUSES, getTwists, setTwist, deleteTwist, restoreTwist,
-  twistsForEpisode, twistsForSlot, twistsAtSlot, showCharacters, showRelationships, twistBlock, renderTwistBlock, checkTwists,
+  twistsForEpisode, twistsForSlot, twistsAtSlot, showCharacters, twistBlock, renderTwistBlock, checkTwists,
   markTwist, suggestTwists, cleanDrafts, scriptWritten,
 };

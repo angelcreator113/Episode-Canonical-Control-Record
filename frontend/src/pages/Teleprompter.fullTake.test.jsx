@@ -325,7 +325,7 @@ describe('Record whole episode', () => {
     expect(form.get('performer')).toBe('justawoman');
     expect(form.get('video').name).toBe('full-episode-take-1.webm');
     expect(api.patch).toHaveBeenCalledTimes(1);
-    expect(api.patch).toHaveBeenCalledWith('/api/v1/episode-clips/ep-1/clip-full', { beat_marks: [{ beat: 1, t: 0 }, { beat: 2, t: 5 }] });
+    expect(api.patch).toHaveBeenCalledWith('/api/v1/episode-clips/ep-1/clip-full', { beat_marks: [{ beat: 1, t: 0 }, { beat: 2, t: 5 }] }, { keepSession: true });
     expect(screen.queryByTestId('stp-download-marks')).toBeNull();
     expect(screen.getByTestId('stp-record').textContent).toContain('take 2');
     // The takes panel: a Full episode group; a marker plays the take from there.

@@ -7,7 +7,9 @@ describe('teleprompterLines', () => {
     const out = teleprompterLines(['Me: "Hi."', '**JustAWoman:** Bold one.', 'JAWIHP (softly): Quiet.', 'Prime: Yes.', 'Lala: "Okay."', '(beat)', 'Suddenly: the lights go out.', '[UI:OPEN closet]', '[STAT: coins 5]', '[WEAR: p1]', '[TRANSITION: cut to]', '']);
     expect(out.map((l) => l.kind)).toEqual(['mine', 'mine', 'mine', 'mine', 'cue', 'direction', 'direction']);
     expect(out[1]).toMatchObject({ speaker: 'JustAWoman', text: 'Bold one.' });
-    expect(out[2]).toMatchObject({ speaker: 'JAWIHP', text: 'Quiet.' });
+    // Her line is labelled JustAWoman whatever she typed (reader audit, 2026-10-24).
+    expect(out[2]).toMatchObject({ speaker: 'JustAWoman', text: 'Quiet.' });
+    expect(out[0]).toMatchObject({ speaker: 'JustAWoman', who: 'JustAWoman' });
   });
   test('a script is beats with canonical names; pasted text keeps its paragraphs', () => {
     const s = teleprompterScript('## BEAT: 8 · Old\nMe: hi');
@@ -16,8 +18,8 @@ describe('teleprompterLines', () => {
   });
   test('names, types and messages', () => {
     expect(takeName({ number: 8, name: 'Transformation Loop' }, 2)).toBe('Beat 8 · Transformation Loop · take 2');
-    expect(pickRecordType({ isTypeSupported: (t) => t !== 'video/mp4' })).toBe('video/webm;codecs=vp9,opus');
-    expect(pickRecordType({ isTypeSupported: () => true })).toBe('video/mp4');
+    expect(pickRecordType({ isTypeSupported: (t) => !t.startsWith('video/mp4') })).toBe('video/webm;codecs=vp9,opus');
+    expect(pickRecordType({ isTypeSupported: () => true })).toBe('video/mp4;codecs=avc1.42E01E,mp4a.40.2');
     expect(pickRecordType(undefined)).toBe('');
     expect(recordingProblem({ isSecureContext: false })).toMatch(/secure/);
     expect(recordingProblem({ isSecureContext: true, navigator: {} })).toMatch(/camera/);

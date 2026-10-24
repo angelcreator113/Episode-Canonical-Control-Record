@@ -24,6 +24,12 @@ below; this read is not rewritten, so read it as the starting point.
   pressure, sets career goals from what they measure (no more +1), and
   calls `checkPhaseTransition`; at a phase boundary the roadmap asks
   before advancing.
+- **Planner PR 4** (2026-10-24, clean-up): the routes with no caller are
+  removed: the whole `/api/v1/season-rhythm` router with
+  `seasonRhythmValidator` (the 1/4/2/1 grade and show-wide episode
+  numbers), `GET /world/:showId/arc/context` and
+  `PUT /world/:showId/arc/phase/:phase`. `getArcContext` stays; the feed
+  services and the script writer call it directly.
 
 ## Short answer
 

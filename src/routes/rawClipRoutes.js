@@ -6,7 +6,9 @@
  *
  *   GET    /:episodeId                         the episode's clips
  *   POST   /:episodeId                         upload one (multipart: video, performer,
- *                                              guest_name?, label?, green_screen?, strength?)
+ *                                              guest_name?, label?, green_screen?, strength?,
+ *                                              and for a teleprompter take beat_number?,
+ *                                              start_line?, beat_marks? (JSON), seconds?)
  *   PATCH  /:episodeId/:clipId                 performer, guest_name, label, beat_number (the scene),
  *                                              is_favorite (one per beat), start_line (teleprompter),
  *                                              beat_marks (a full-episode take's [{ beat, t }])
@@ -19,6 +21,14 @@
  * is_favorite and start_line come with migration 20261020090000; until it
  * has run, clips list without them and a PATCH of them is a 409 that says so.
  * beat_marks comes with migration 20261023235900, the same way.
+ *
+ * A teleprompter take sends its beat, start line and beat markers with the
+ * upload (Teleprompter audit 8, 2026-10-24: one request, not an upload and
+ * then a PATCH). They are read by the same rules as a PATCH. The answer says
+ * which were kept: `stored` and `not_stored` list start_line / beat_marks; a
+ * field whose column is not there yet is not_stored, the clip is saved
+ * anyway. seconds is the take's length the browser measured, used when
+ * ffprobe can't time the file (a browser's WebM).
  */
 
 const express = require('express');
@@ -53,9 +63,14 @@ const upload = multer({
 const sendError = (res, err, what) => {
   if (err instanceof multer.MulterError) {
     const message = err.code === 'LIMIT_FILE_SIZE' ? `That clip is over ${MAX_MB} MB` : err.message;
+    console.warn(`[RawClips] ${what} refused (${err.code}):`, message);
     return res.status(err.code === 'LIMIT_FILE_SIZE' ? 413 : 400).json({ success: false, error: message });
   }
-  if (err.status) return res.status(err.status).json({ success: false, error: err.message });
+  if (err.status) {
+    // A refused request is logged too (Teleprompter audit 9): a 4xx is not silent.
+    if (err.status < 500) console.warn(`[RawClips] ${what} refused (${err.status}):`, err.message);
+    return res.status(err.status).json({ success: false, error: err.message });
+  }
   console.error(`[RawClips] ${what} failed:`, err.message);
   return res.status(500).json({ success: false, error: err.message });
 };
@@ -80,6 +95,10 @@ router.post('/:episodeId', requireAuth, (req, res) => {
       const fields = clips.readFields(req.body, { requirePerformer: true });
       const greenScreen = clips.truthy(req.body.green_screen);
       const strength = clips.readStrength(req.body.strength);
+      const seconds = clips.readTakeSeconds(req.body.seconds);
+      const extras = {};
+      if (fields.start_line !== undefined) extras.start_line = fields.start_line;
+      if (fields.beat_marks !== undefined) extras.beat_marks = fields.beat_marks;
       const episode = await clips.findEpisode(models.sequelize, req.params.episodeId);
 
       const info = await media.inspect(file.path);
@@ -96,18 +115,26 @@ router.post('/:episodeId', requireAuth, (req, res) => {
         thumbUrl = await media.uploadFile(thumbPath, thumbKey, 'image/jpeg');
       }
 
-      const row = await clips.createClip(models.sequelize, {
+      let row = await clips.createClip(models.sequelize, {
         id, episode_id: episode.id, show_id: episode.show_id,
         performer: fields.performer, guest_name: fields.guest_name, label: fields.label ?? clips.readFields({ label: file.originalname }).label,
         original_filename: file.originalname, content_type: file.mimetype, file_size_bytes: file.size,
-        duration_seconds: info.duration_seconds, width: info.width, height: info.height,
+        beat_number: fields.beat_number ?? null,
+        duration_seconds: info.duration_seconds ?? seconds, width: info.width, height: info.height,
         s3_key_raw: s3KeyRaw, url_raw: urlRaw, thumbnail_key: thumbKey, thumbnail_url: thumbUrl,
         key_status: greenScreen ? 'queued' : 'none', key_strength: strength,
       });
       if (greenScreen) {
         handedToJob = media.enqueueKey(models.sequelize, { clipId: id, episodeId: episode.id, s3KeyRaw, strength, localPath: file.path });
       }
-      return res.status(201).json({ success: true, data: row });
+      let stored = [];
+      let notStored = [];
+      if (Object.keys(extras).length) {
+        const kept = await clips.storeTakeExtras(models.sequelize, episode.id, id, extras);
+        if (kept.row) row = { ...row, ...kept.row };
+        ({ stored, notStored } = kept);
+      }
+      return res.status(201).json({ success: true, data: row, stored, not_stored: notStored });
     } catch (err) {
       return sendError(res, err, 'upload');
     } finally {

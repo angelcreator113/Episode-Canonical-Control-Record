@@ -66,7 +66,7 @@ describe('buildPrompt', () => {
   test('carries the season and what moved on the feed, and only the offered slots', () => {
     const prompt = buildPrompt(SEASON, SIGNALS);
     expect(prompt).toContain('Phase 2 (active): Ascension');
-    expect(prompt).toContain('t-1: The rival studio');
+    expect(prompt).toContain('[t-1] The rival studio (open)');
     expect(prompt).toContain('E9: phase 2, no purpose yet');
     expect(prompt).toContain('@slowsift +12000 (now 48000)');
     expect(prompt).toContain('@slowsift: rising → peaking');
