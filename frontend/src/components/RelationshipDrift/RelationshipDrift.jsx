@@ -22,6 +22,7 @@ const KIND_LABEL = {
   pulse_couple_elsewhere: 'A couple with someone else',
   lala_tie: 'Tie to Lala',
   relationships_map: 'Relationships map',
+  pulse_story_deleted: 'Story pair deleted',
 };
 
 const whoOf = (item) => (item.who || []).map((p) => (p.handle && p.name !== p.handle ? `${p.name} (${p.handle})` : p.name)).join(' and ');

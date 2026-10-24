@@ -67,15 +67,41 @@ const CHAR_SELECT_B = `
   cb.appearance_mode AS character_b_appearance, cb.icon AS character_b_icon,
   cb.portrait_url AS character_b_portrait`;
 
-// What PUT /:relId writes, each with the value an empty field becomes.
 const SPOUSE_ROLES = new Set(['wife', 'husband', 'spouse', 'partner', 'ex-wife', 'ex-husband', 'ex-partner', 'fiancé', 'fiancée', 'fiance', 'fiancee']);
 
+// What PUT /:relId writes, each with the value an empty field becomes. The
+// family role is not here: it is written with the role read the other way
+// and its kind, only by PUT /:relId/family and services/familyTies (an
+// Inspector Save sent the whole form and put back a role the Family tab had
+// just changed, 2026-10-24 audit).
 const EDITABLE = {
   relationship_type: null, connection_mode: 'IRL', lala_connection: 'none', status: 'Active',
   notes: null, situation: null, tension_state: null, pain_point_category: null,
   lala_mirror: null, career_echo_potential: null,
-  family_role: null, conflict_summary: null, source_knows: null, target_knows: null, reader_knows: null,
+  conflict_summary: null, source_knows: null, target_knows: null, reader_knows: null,
 };
+
+// A family role that is not a partner's: the pair is family, so not a romance.
+const isFamilyOnlyRole = (role) => Boolean(role && String(role).trim() && !SPOUSE_ROLES.has(String(role).trim().toLowerCase()));
+const FAMILY_NOT_ROMANCE = (role) => `They are family (${role}), so this cannot be a romance. Change the family role on the Family tab first.`;
+
+// Why an AI call failed, in words for the page's toast: the day's AI budget
+// (services/aiCostTracker), the account's credit, the rate limit, or the
+// service itself. Both generators answer the same way.
+function aiFailure(res, aiErr, what) {
+  const errMsg = aiErr?.message || String(aiErr);
+  console.error(`Claude API error (${what}):`, errMsg);
+  if (aiErr?.code === 'AI_BUDGET_EXCEEDED') {
+    return res.status(429).json({ error: `Today's AI budget is used up, so ${what} cannot run until tomorrow. ${errMsg}`, code: 'AI_BUDGET_EXCEEDED' });
+  }
+  if (errMsg.includes('credit balance') || errMsg.includes('billing') || aiErr?.status === 402) {
+    return res.status(402).json({ error: `AI credits exhausted. Please top up your Anthropic account to use ${what}.` });
+  }
+  if (errMsg.includes('rate') || aiErr?.status === 429) {
+    return res.status(429).json({ error: 'AI rate limit reached. Please wait a moment and try again.' });
+  }
+  return res.status(502).json({ error: 'AI service unavailable. ' + errMsg.slice(0, 200) });
+}
 
 /**
  * The cast this page works with (Evoni, 2026-10-16: "only use the 6 cast
@@ -308,6 +334,44 @@ router.post('/', requireAuth, authorize(['ADMIN']), async (req, res) => {
       return res.status(404).json({ error: 'One or both characters not found' });
     }
 
+    // A family type (Add's Mother, Sister …, or one typed) reads "A is B's
+    // <type>" and is saved as the Family tab saves a tie (services/
+    // familyTies): both directions, its kind, and the Pulse family link, so
+    // it shows on the Family tab and tree, the character page's family and
+    // the writers' family lines. It made a plain row before (2026-10-24 audit).
+    const familyTies = require('../services/familyTies');
+    const asRole = String(relationship_type).trim();
+    if (!familyTies.isSpouseRole(asRole) && familyTies.reverseRole(asRole) !== null) {
+      if (is_romantic === true) return res.status(409).json({ error: FAMILY_NOT_ROMANCE(asRole) });
+      const given = (v) => (typeof v === 'string' && v.trim() ? v.trim() : undefined);
+      let saved;
+      try {
+        saved = await familyTies.saveFamilyTie(db.sequelize, {
+          fromId: character_id_a, toId: character_id_b, role: asRole, notes: given(notes), tension: given(tension_state),
+        });
+      } catch (tieErr) {
+        if (tieErr.status) return res.status(tieErr.status).json({ error: tieErr.message });
+        throw tieErr;
+      }
+      // The rest of what Add sent, where it says something (a tie reused
+      // from the Family tab keeps what it had for anything left empty).
+      const extra = { connection_mode, lala_connection, status, situation, pain_point_category, lala_mirror, career_echo_potential };
+      const sent = Object.keys(extra).filter((k) => req.body[k] !== undefined && given(extra[k]) !== undefined);
+      if (sent.length) {
+        await db.sequelize.query(
+          `UPDATE character_relationships SET ${sent.map((k) => `${k} = :${k}`).join(', ')}, updated_at = NOW() WHERE id = :id`,
+          { replacements: { id: saved.id, ...Object.fromEntries(sent.map((k) => [k, given(extra[k])])) } });
+      }
+      const [tie] = await db.sequelize.query(
+        `SELECT ${REL_SELECT}, ${CHAR_SELECT_A}, ${CHAR_SELECT_B}
+         FROM character_relationships cr ${CHAR_JOIN}
+         WHERE cr.id = :id`,
+        { replacements: { id: saved.id }, type: db.sequelize.QueryTypes.SELECT }
+      );
+      const pulse = await truth.afterStorySave(db, saved.id);
+      return res.status(201).json({ relationship: tie, family: true, created: saved.created, pulse });
+    }
+
     // ── Duplicate check (bidirectional; a deleted one does not count) ──
     const [existing] = await db.sequelize.query(
       `SELECT id FROM character_relationships
@@ -475,17 +539,7 @@ No markdown fences, no explanation.`,
         }],
       });
     } catch (aiErr) {
-      const errMsg = aiErr?.message || String(aiErr);
-      const isCredits = errMsg.includes('credit balance') || errMsg.includes('billing') || aiErr?.status === 402;
-      const isRate = errMsg.includes('rate') || aiErr?.status === 429;
-      console.error('Claude API error:', errMsg);
-      if (isCredits) {
-        return res.status(402).json({ error: 'AI credits exhausted. Please top up your Anthropic account to generate relationships.' });
-      }
-      if (isRate) {
-        return res.status(429).json({ error: 'AI rate limit reached. Please wait a moment and try again.' });
-      }
-      return res.status(502).json({ error: 'AI service unavailable. ' + errMsg.slice(0, 200) });
+      return aiFailure(res, aiErr, 'Generate');
     }
 
     let candidates = [];
@@ -672,6 +726,18 @@ router.put('/:relId', requireAuth, authorize(['ADMIN']), async (req, res) => {
     }
     if (body.is_romantic !== undefined) {
       replacements.is_romantic = body.is_romantic === true || body.is_romantic === 'true';
+      // The rule PUT /:relId/family keeps, the other way: family (a mother,
+      // a sister) does not become a romance. One already romantic is left
+      // to the drift report, so its other fields can still be saved.
+      if (replacements.is_romantic) {
+        const [current] = await db.sequelize.query(
+          'SELECT is_romantic, family_role FROM character_relationships WHERE id = :id AND deleted_at IS NULL',
+          { replacements: { id: relId }, type: db.sequelize.QueryTypes.SELECT });
+        if (!current) return res.status(404).json({ error: 'Relationship not found' });
+        if (!current.is_romantic && isFamilyOnlyRole(current.family_role)) {
+          return res.status(409).json({ error: FAMILY_NOT_ROMANCE(current.family_role) });
+        }
+      }
       sets.push('is_romantic = :is_romantic');
     }
     // Who knows about it and where everyone else stands (services/relationshipKnowers).
@@ -708,6 +774,11 @@ router.put('/:relId', requireAuth, authorize(['ADMIN']), async (req, res) => {
 // DELETE /api/v1/relationships/:relId
 // Remove a relationship: it is marked deleted, so its relationship_events
 // (the story so far) stay, and POST /:relId/restore brings it back.
+// Its Pulse pair stays, still linked (pulse_kept names it): it is The
+// Pulse's own record (its kind, who sees it, its description, often older
+// than the story pair), the table has no deleted_at, so taking it off could
+// not be undone, and Undo finds the link where it was. The drift report
+// lists it ("Story pair deleted") with "take them off The Pulse" as its fix.
 // ════════════════════════════════════════════════════════════════════════
 router.delete('/:relId', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
@@ -718,7 +789,11 @@ router.delete('/:relId', requireAuth, authorize(['ADMIN']), async (req, res) => 
       { replacements: { id: req.params.relId } }
     );
     if (!(meta?.rowCount)) return res.status(404).json({ error: 'Relationship not found' });
-    res.json({ deleted: true, id: req.params.relId });
+    const kept = await db.sequelize.query(
+      'SELECT id FROM social_profile_relationships WHERE character_relationship_id = :id ORDER BY id',
+      { replacements: { id: req.params.relId }, type: db.sequelize.QueryTypes.SELECT }
+    );
+    res.json({ deleted: true, id: req.params.relId, pulse_kept: kept.map((r) => r.id) });
   } catch (err) {
     console.error('DELETE /relationships/:id error:', err);
     res.status(500).json({ error: err.message });
@@ -745,7 +820,9 @@ router.post('/:relId/restore', requireAuth, authorize(['ADMIN']), async (req, re
        WHERE cr.id = :id AND ${LIVE}`,
       { replacements: { id: relId }, type: db.sequelize.QueryTypes.SELECT }
     );
-    res.json({ relationship: row || null });
+    // Its Pulse pair is linked still (DELETE keeps it); one it never had is made now.
+    const pulse = row?.confirmed ? await truth.afterStorySave(db, relId) : null;
+    res.json({ relationship: row || null, pulse });
   } catch (err) {
     console.error('POST /relationships/:id/restore error:', err);
     res.status(500).json({ error: err.message });
@@ -878,7 +955,9 @@ router.post('/generate-family', requireAuth, authorize(['ADMIN']), aiRateLimiter
     const Anthropic = require('@anthropic-ai/sdk');
     const claude = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-    const message = await claude.messages.create({
+    let message;
+    try {
+      message = await claude.messages.create({
       model: 'claude-sonnet-4-6',
       max_tokens: 2000,
       messages: [{
@@ -909,7 +988,10 @@ Rules:
 Return ONLY valid JSON: { "family_bonds": [ ... ] }
 No markdown fences, no explanation.`,
       }],
-    });
+      });
+    } catch (aiErr) {
+      return aiFailure(res, aiErr, 'Propose Family');
+    }
 
     let familyBonds = [];
     try {
@@ -1028,6 +1110,67 @@ router.post('/drift/:key/keep', requireAuth, authorize(['ADMIN']), async (req, r
   try {
     res.json(await truth.keepDifferent(getDb(), req.params.key, { note: req.body?.note, by: req.user?.email || req.user?.id || null }));
   } catch (err) { driftError(res, err, 'POST /relationships/drift/:key/keep'); }
+});
+
+// ════════════════════════════════════════════════════════════════════════
+// GET /api/v1/relationships/person/:charId and GET /api/v1/relationships/:relId
+// For a link from the character page (?char=, ?rel=) to someone outside the
+// cast (GET /cast): the person with their confirmed relationships and the
+// people in them, or the relationship with its two people, so the page can
+// add them and open the Inspector. Live rows only; a seed only with
+// ?seeds=true. Registered last, so /drift and the others match first.
+// ════════════════════════════════════════════════════════════════════════
+const PERSON_COLUMNS = `id, registry_id, display_name, selected_name, character_key, icon,
+  role_type, role_label, appearance_mode, status, core_belief, pressure_type, description,
+  belief_pressured, emotional_function, personality, portrait_url, sort_order, feed_profile_id`;
+
+router.get('/person/:charId', requireAuth, async (req, res) => {
+  try {
+    const db = getDb();
+    const { charId } = req.params;
+    if (!UUID_RE.test(charId)) return res.status(404).json({ error: 'Character not found' });
+    const [character] = await db.sequelize.query(
+      `SELECT ${PERSON_COLUMNS} FROM registry_characters WHERE id = :id AND deleted_at IS NULL`,
+      { replacements: { id: charId }, type: db.sequelize.QueryTypes.SELECT });
+    if (!character) return res.status(404).json({ error: 'Character not found' });
+    const relationships = await db.sequelize.query(
+      `SELECT ${REL_SELECT}, ${CHAR_SELECT_A}, ${CHAR_SELECT_B}
+       FROM character_relationships cr ${CHAR_JOIN}
+       WHERE (cr.character_id_a = :id OR cr.character_id_b = :id) AND cr.confirmed = true AND ${LIVE}
+       ORDER BY cr.updated_at DESC`,
+      { replacements: { id: charId }, type: db.sequelize.QueryTypes.SELECT });
+    const others = [...new Set(relationships.flatMap((r) => [r.character_id_a, r.character_id_b]).filter((x) => x !== charId))];
+    const people = others.length ? await db.sequelize.query(
+      `SELECT ${PERSON_COLUMNS} FROM registry_characters WHERE id IN (:ids) AND deleted_at IS NULL`,
+      { replacements: { ids: others }, type: db.sequelize.QueryTypes.SELECT }) : [];
+    res.json({ character, characters: [character, ...people], relationships });
+  } catch (err) {
+    console.error('GET /relationships/person/:charId error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/:relId', requireAuth, async (req, res) => {
+  try {
+    const db = getDb();
+    const { relId } = req.params;
+    const missing = "That relationship was deleted or isn't confirmed";
+    if (!UUID_RE.test(relId)) return res.status(404).json({ error: missing });
+    const seeds = req.query.seeds === 'true';
+    const [relationship] = await db.sequelize.query(
+      `SELECT ${REL_SELECT}, ${CHAR_SELECT_A}, ${CHAR_SELECT_B}
+       FROM character_relationships cr ${CHAR_JOIN}
+       WHERE cr.id = :id AND ${LIVE} ${seeds ? '' : 'AND cr.confirmed = true'}`,
+      { replacements: { id: relId }, type: db.sequelize.QueryTypes.SELECT });
+    if (!relationship) return res.status(404).json({ error: missing });
+    const characters = await db.sequelize.query(
+      `SELECT ${PERSON_COLUMNS} FROM registry_characters WHERE id IN (:ids) AND deleted_at IS NULL`,
+      { replacements: { ids: [relationship.character_id_a, relationship.character_id_b] }, type: db.sequelize.QueryTypes.SELECT });
+    res.json({ relationship, characters });
+  } catch (err) {
+    console.error('GET /relationships/:relId error:', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 module.exports = router;
