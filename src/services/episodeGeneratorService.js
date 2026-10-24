@@ -26,7 +26,7 @@ const { withDeliverableTasks, withMissingRequiredDeliverables } = require('../ut
 const { readEpisodeSocialTasks } = require('./episodeTaskCopyService');
 const { goalTaskScale, goalFields, composeGoalTasks, capCombinedGoals } = require('../utils/goalTasks');
 const { relationshipGoalTasks } = require('./dealTermsDraftService');
-const { approvedDocument, shoppingListTasks, careerPlanGoals } = require('./eventDocumentsService');
+const { approvedDocument, shoppingListTasks, careerPlanGoals, planGoalsForEpisode } = require('./eventDocumentsService');
 const { normalizeTeaser, TEASER_INSTRUCTION, SYNOPSIS_INSTRUCTION } = require('../utils/episodeTeaser');
 
 // ─── LALA'S GOAL TASKS (T9) ──────────────────────────────────────────────────
@@ -1001,13 +1001,13 @@ Return ONLY JSON.` }],
   // Lala's goals for the episode, in place of the goals written above. The
   // event's relationship goals join them (D13 answer 6) unless the plan
   // already says the same; T9's combined limit still holds the list.
+  // The rule lives in eventDocumentsService.planGoalsForEpisode, which the
+  // Event Package also reads to say which lines will not carry.
   const approvedPlan = approvedDocument(event, 'career_plan');
-  const planGoals = approvedPlan ? careerPlanGoals(approvedPlan) : [];
-  if (planGoals.length) {
-    const said = new Set(planGoals.map((g) => g.label.trim().toLowerCase()));
-    const relationship = relationshipGoalTasks(event).filter((g) => !said.has(g.label.trim().toLowerCase()));
-    socialTasks = capCombinedGoals([...planGoals, ...relationship], goalTaskScale(event), 'CareerPlan');
-    console.log(`[EpisodeGenerator] ${event.name}: Lala's goals from the approved career plan (version ${approvedPlan.version})`);
+  if (approvedPlan && careerPlanGoals(approvedPlan).length) {
+    socialTasks = planGoalsForEpisode(event, approvedPlan);
+    const dropped = careerPlanGoals(approvedPlan).filter((g) => !socialTasks.some((t) => t.label === g.label));
+    console.log(`[EpisodeGenerator] ${event.name}: Lala's goals from the approved career plan (version ${approvedPlan.version})${dropped.length ? `; over the goal limit, not carried: ${dropped.map((g) => `"${g.label}"`).join(', ')}` : ''}`);
   }
   // T1 (§8(bb); Task #2292): the saved list may predate T1 and carry
   // required: true on generated tasks. Required comes only from the event's
@@ -1046,13 +1046,14 @@ Return ONLY JSON.` }],
   // 3), else the standard slots.
   const approvedList = approvedDocument(event, 'shopping_list');
   if (approvedList) console.log(`[EpisodeGenerator] ${event.name}: wardrobe list from the approved shopping list (version ${approvedList.version})`);
-  const wardrobeTasks = approvedList ? shoppingListTasks(approvedList) : [
-    { slot: 'dress', label: `Outfit for ${event.name}`, description: event.dress_code ? `Dress code: ${event.dress_code}` : 'Choose an outfit that matches the event', required: true, completed: false },
-    { slot: 'shoes', label: 'Shoes', description: 'Matching footwear', required: true, completed: false },
-    { slot: 'accessories', label: 'Accessories', description: 'Bag, belt, or statement piece', required: false, completed: false },
-    { slot: 'jewelry', label: 'Jewelry', description: 'Earrings, necklace, rings', required: false, completed: false },
-    { slot: 'perfume', label: 'Fragrance', description: 'Signature scent for the event', required: false, completed: false },
-  ];
+  // Without one, the same lines a draft would have (todoListService
+  // defaultShoppingTasks, from the event's outfit when it has one), worded
+  // without an AI call; it used to be five fixed lines a draft never had.
+  const wardrobeTasks = approvedList ? shoppingListTasks(approvedList) : (() => {
+    const { defaultShoppingTasks } = require('./todoListService');
+    const pieces = typeof event.outfit_pieces === 'string' ? (() => { try { return JSON.parse(event.outfit_pieces); } catch (err) { console.error('[EpisodeGenerator] outfit_pieces did not parse:', err.message); return []; } })() : event.outfit_pieces;
+    return defaultShoppingTasks(event, Array.isArray(pieces) && pieces.length ? { pieces } : null);
+  })();
 
   // Financial summary
   const financials = calculateFinancials(event, options.wardrobeItems ?? null);

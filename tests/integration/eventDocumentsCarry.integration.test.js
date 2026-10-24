@@ -119,7 +119,9 @@ const documents = (status) => ({
 
   it('draft: nothing is carried; the standard wardrobe slots and the goals written from the event are used', async () => {
     const { wardrobe, social } = await startEpisode(await seedEvent(documents('draft')));
-    expect(wardrobe.map((t) => t.slot)).toEqual(['dress', 'shoes', 'accessories', 'jewelry', 'perfume']);
+    // The standard lines a draft has with no look (todoListService
+    // defaultShoppingTasks, 2026-10-24), not the old five fixed lines.
+    expect(wardrobe.map((t) => t.slot)).toEqual(['dress', 'shoes', 'purse', 'accessories', 'jewelry', 'perfume', 'hair']);
     expect(wardrobe.some((t) => t.from_event_document)).toBe(false);
     const labels = social.map((t) => t.label);
     expect(labels).not.toContain('Meet the Maison Rue buyer');

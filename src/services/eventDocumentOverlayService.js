@@ -194,7 +194,10 @@ function drawShoppingList(ctx, H, { doc, event, pieces }) {
   // piece still to buy keeps its coins. The note is the list's own, if any.
   const { lines, total } = shoppingLines(doc, pieces || event?.outfit_pieces);
   let y = 182 + ROW;
-  for (const l of lines.slice(0, 16)) {
+  // At most SHOPPING_ROWS lines; the rest are counted on a last line, never
+  // dropped without a word (2026-10-24).
+  const shown = lines.length > SHOPPING_ROWS ? lines.slice(0, SHOPPING_ROWS - 1) : lines;
+  for (const l of shown) {
     ctx.strokeStyle = COLORS.ink; ctx.lineWidth = 3;
     ctx.strokeRect(110, y - 30, 30, 30);
     ctx.font = '40px Caveat';
@@ -202,6 +205,12 @@ function drawShoppingList(ctx, H, { doc, event, pieces }) {
     const cost = l.piece && !l.owned && l.cost > 0 ? ` · ${coins(l.cost)} coins` : '';
     const [first] = wrap(ctx, `${l.label}${cost}`, WIDTH - 180, 1);
     ctx.fillText(first, 160, y);
+    y += ROW;
+  }
+  if (shown.length < lines.length) {
+    ctx.font = '36px Caveat';
+    ctx.fillStyle = COLORS.pinkInk;
+    ctx.fillText(`+ ${lines.length - shown.length} more on her list`, 160, y);
     y += ROW;
   }
   ctx.font = 'bold 46px Caveat';
@@ -245,8 +254,11 @@ function drawCareerPlan(ctx, H, { doc, deliverables = [] }) {
       ctx.fillText(empty, 80, y); y += 70;
       continue;
     }
-    for (const r of rows.slice(0, 6)) {
-      if (y > H - 160) break;
+    // At most CAREER_ROWS a section, and none past the card's foot; what is
+    // left out is counted, never dropped without a word (2026-10-24).
+    let drawn = 0;
+    for (const r of rows.slice(0, CAREER_ROWS)) {
+      if (y > H - 200) break;
       ctx.strokeStyle = COLORS.lavenderText; ctx.lineWidth = 3;
       ctx.strokeRect(80, y - 26, 28, 28);
       ctx.fillStyle = COLORS.ink; ctx.font = 'normal 28px LibreBaskerville';
@@ -254,8 +266,21 @@ function drawCareerPlan(ctx, H, { doc, deliverables = [] }) {
       const lines = wrap(ctx, text, WIDTH - 220, 2);
       lines.forEach((line, n) => ctx.fillText(line, 128, y + n * 38));
       y += 38 * lines.length + 22;
+      drawn += 1;
+    }
+    if (drawn < rows.length) {
+      ctx.fillStyle = COLORS.muted; ctx.font = 'italic 26px LibreBaskerville';
+      ctx.fillText(`+ ${rows.length - drawn} more`, 128, y);
+      y += 50;
     }
     y += 30;
+  }
+  const note = typeof doc?.note === 'string' ? doc.note.trim() : '';
+  if (note) {
+    ctx.fillStyle = COLORS.pinkInk; ctx.font = '36px Caveat';
+    const noteLines = wrap(ctx, note, WIDTH - 160, 2);
+    noteLines.forEach((line, n) => ctx.fillText(line, 80, y + n * 42));
+    y += 42 * noteLines.length + 20;
   }
   ctx.fillStyle = COLORS.pinkInk;
   ctx.font = '40px Caveat';
@@ -264,6 +289,8 @@ function drawCareerPlan(ctx, H, { doc, deliverables = [] }) {
   return y + 60; // the sign sits below the writing
 }
 
+const SHOPPING_ROWS = 16;
+const CAREER_ROWS = 6;
 const DRAW = { shopping_list: drawShoppingList, career_plan: drawCareerPlan };
 
 /**
