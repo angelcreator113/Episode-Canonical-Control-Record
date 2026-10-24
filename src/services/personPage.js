@@ -31,7 +31,7 @@
 
 const { lalaStoryTies, lalaTieFields, pulseKindFor, storyCategory, storyWords, tieWords } = require('./relationshipTruth');
 const { whoKnows, relationshipSecrecyLines } = require('./relationshipKnowers');
-const { familyLines } = require('./familyTies');
+const { familyLines, familyRoleFor } = require('./familyTies');
 const { eventsForProfile } = require('./characterEvents');
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -73,7 +73,8 @@ const STATE_LABEL = { secret: 'Secret', rumoured: 'Rumoured', known: 'Known' };
 async function relationshipsOf(sequelize, characterId) {
   const [rows] = await sequelize.query(
     `SELECT cr.id, cr.character_id_a, cr.character_id_b, cr.relationship_type, cr.status, cr.is_romantic,
-            cr.family_role, cr.is_blood_relation, cr.role_tag, cr.situation, cr.updated_at,
+            cr.family_role, cr.reverse_family_role, cr.is_blood_relation, cr.role_tag, cr.situation, cr.updated_at,
+            cb.gender AS b_gender, cb.pronouns AS b_pronouns,
             st.relationship_stage AS stage,
             CASE WHEN cr.character_id_a = :id THEN cr.character_id_b ELSE cr.character_id_a END AS other_id,
             CASE WHEN cr.character_id_a = :id THEN ${nameSql('cb')} ELSE ${nameSql('ca')} END AS other_name,
@@ -124,9 +125,10 @@ async function relationshipsOf(sequelize, characterId) {
     return {
       id: r.id,
       other: { id: r.other_id, name: r.other_name || 'someone' },
-      kind: words(r.family_role || r.relationship_type) || words(category) || 'connected',
+      // Their family role read from the other's side: what they are to this person.
+      kind: words((r.family_role && familyRoleFor(r, r.other_id)) || r.relationship_type) || words(category) || 'connected',
       category,
-      words: storyWords(r),
+      words: storyWords(r, r.other_id),
       stage: words(r.stage),
       status: r.status || null,
       love_interest: Boolean(r.is_romantic) || category === 'romance',

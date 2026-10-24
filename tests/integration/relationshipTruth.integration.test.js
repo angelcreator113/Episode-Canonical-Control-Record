@@ -216,6 +216,9 @@ const exists = async (name) => Boolean((await one('SELECT to_regclass(:name) AS 
 
   test("lala_relationship against Lala's story pair; Fix sets it", async () => {
     await run(`UPDATE social_profiles SET lala_relationship = 'competitive' WHERE id = :id`, { id: p.dee });
+    // "Lala is Dee's sister"; Dee is a woman, so read from Dee's side she is
+    // Lala's sister too (Lala's tie words read from the other's side, familyTies.familyRoleFor).
+    await run(`UPDATE registry_characters SET gender = 'female' WHERE id = :id`, { id: c.dee });
     await story('lala', 'dee', 'sister', { family: 'sister' });
     const item = mine(await report()).find((i) => i.key === `lala_tie:${p.dee}`);
     expect(item).toMatchObject({

@@ -800,7 +800,14 @@ async function approveRecord(sequelize, episodeId, { by = null } = {}) {
       `UPDATE episode_story_records SET status = 'approved', approved_by = :by, approved_at = NOW(), applied = CAST(:applied AS jsonb), updated_at = NOW() WHERE id = :id`,
       { replacements: { id: row.id, by, applied: JSON.stringify(applied) }, transaction });
   });
-  // Committed: the Pulse suggests posts about the changes, for Review (services/storyRipples). Never blocks or fails the Save.
+  // Committed: each relationship written gets its Pulse pair as any saved
+  // story pair does (services/relationshipTruth; afterStorySave logs and
+  // never throws), before the Pulse suggestions read the pairs.
+  const truth = require('./relationshipTruth');
+  for (const id of [...new Set(ripples.map((r) => r.relationship_id))]) {
+    await truth.afterStorySave(sequelize, id);
+  }
+  // The Pulse suggests posts about the changes, for Review (services/storyRipples). Never blocks or fails the Save.
   let pulseSuggestions = 0;
   try { pulseSuggestions = require('./storyRipples').proposeLater(sequelize, { episode, changes: ripples, people }); } catch (err) { console.error('[episodeStoryRecord] Pulse suggestions not started (the Save stands):', err.message); }
   return { ...(await getRecord(sequelize, episode.id)), result: { written, skipped, pulse_suggestions: pulseSuggestions } };
