@@ -419,7 +419,7 @@ export function PostCard({ post, onChange, showId }) {
   );
 }
 
-const REVIEW_LABELS = { lala: "Lala's post", about_lala: 'About Lala', reveals_story: 'Reveals story', gate: 'Flagged by the gate', dm: 'DM', storyline_payoff: "A storyline's payoff", on_request: "Asked for on their page", event_draft: "Its episode isn't complete yet", brand_deal: 'A brand deal announcement', schedule: 'No release time could be found' };
+const REVIEW_LABELS = { lala: "Lala's post", about_lala: 'About Lala', reveals_story: 'Reveals story', gate: 'Flagged by the gate', dm: 'DM', storyline_payoff: "A storyline's payoff", on_request: "Asked for on their page", event_draft: "Its episode isn't complete yet", brand_deal: 'A brand deal announcement', schedule: 'No release time could be found', story_change: 'Suggested from the story' };
 const FLAG_LABELS = {
   banned_phrase: 'AI-sounding phrase', private_state: 'Quotes private feelings', unrevealed_character: 'Names someone Lala has not met',
   unrevealed_event: 'Names a hidden event', future_event: 'Names a later event', voice: 'Off voice',
@@ -468,10 +468,25 @@ export function GateResult({ gate }) {
 }
 
 /**
+ * Why a suggestion from the story exists (services/storyRipples; Evoni,
+ * 2026-10-23): "From Episode 4: Lala and Marcus Hale, now flirting", and a
+ * secret or rumoured pair's note that it only hints.
+ */
+export function StoryWhy({ story }) {
+  if (story?.source !== 'story' || !story.line) return null;
+  return (
+    <p className="prv-story" data-testid="prv-story-why">
+      <b>{story.episode_number != null ? `From Episode ${story.episode_number}` : 'From the story'}:</b> {story.line}
+      {story.secrecy && story.secrecy !== 'public' && <span className="prv-muted"> · {story.secrecy === 'secret' ? 'a secret: hints only, from people who know' : 'a rumour: nothing confirmed'}</span>}
+    </p>
+  );
+}
+
+/**
  * A post an episode drafted, waiting for approval in Requests (Evoni,
  * 2026-10-11: nothing reaches the Wall until approved): who, the words and
  * the episode, with Approve (it goes live), Edit and Discard (kept under
- * Deleted).
+ * Deleted). A suggestion from the story says why it exists (StoryWhy).
  */
 export function RequestPost({ post, onChange }) {
   const who = posterOf(post);
@@ -488,6 +503,7 @@ export function RequestPost({ post, onChange }) {
   const episodeNumber = post.episode?.episode_number;
   return (
     <div className="prv-request" data-testid="sm-request-post">
+      <StoryWhy story={post.gate_json?.story} />
       <p className="prv-request-text"><b>{who.name}</b> {editing ? null : post.content_text}</p>
       {editing && <textarea aria-label="Edit the post" rows={3} value={text} onChange={(e) => setText(e.target.value)} />}
       <GateResult gate={post.gate_json} />

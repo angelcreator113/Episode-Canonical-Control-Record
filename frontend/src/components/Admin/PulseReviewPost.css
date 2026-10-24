@@ -106,6 +106,8 @@ button.prv-tag:hover, a.prv-tag:hover { border-color: var(--accent-light); color
 /* An episode's post waiting for approval */
 .prv-request { padding: 10px 0; border-top: 1px solid var(--lala-parchment-3); font-size: 14px; }
 .prv-request-text { margin: 0; overflow-wrap: anywhere; }
+/* Why a suggestion from the story exists (StoryWhy). */
+.prv-story { margin: 0 0 6px; padding: 6px 10px; border-left: 3px solid var(--lala-gold); background: var(--lala-gold-soft); border-radius: 0 8px 8px 0; font-size: 13px; line-height: 1.45; color: var(--lala-ink); overflow-wrap: anywhere; }
 
 /* Admin › The Pulse › Review sections */
 .prv-review { display: flex; flex-direction: column; gap: 1.25rem; }

@@ -1,6 +1,6 @@
 import axios from 'axios';
 import {
-  refreshAccessTokenOnce, wipeSessionAndRedirect, PASS_THROUGH_CODES, SESSION_FAIL_CODES,
+  refreshAccessTokenOnce, refreshEndsSession, wipeSessionAndRedirect, PASS_THROUGH_CODES, SESSION_FAIL_CODES,
 } from '../utils/authSession';
 
 // Create axios instance with environment-aware base URL
@@ -48,7 +48,10 @@ apiClient.interceptors.request.use(
 //    so the caller can show "you don't have access" rather than redirecting to /login.
 //  - AUTH_INVALID_TOKEN — header present, verifier rejected. Attempt refresh ONCE
 //    via the existing /api/v1/auth/refresh path; on success retry the original
-//    request, on failure redirect to /login. Single-retry-then-redirect — never loop.
+//    request. Redirect to /login only when the refresh token itself is refused
+//    (401/400, or none stored); a refresh that hits a restart (502/503/504,
+//    network error) is retried for ~15 s, then this request fails and the
+//    session is kept (utils/authSession; Evoni, 2026-10-23). Single-retry — never loop.
 //  - AUTH_REQUIRED, AUTH_MISSING_TOKEN — no session present. Wipe creds, redirect.
 //  - 401 with no code / unknown code — treated as session failure for safety.
 //  - All other errors — pass through unchanged.
@@ -84,13 +87,20 @@ apiClient.interceptors.response.use(
       }
       try {
         await refreshAccessTokenOnce();
-        originalConfig._retried = true;
-        // Request interceptor re-reads localStorage and re-attaches the new token.
-        return apiClient(originalConfig);
-      } catch (_refreshError) {
-        wipeSessionAndRedirect();
-        return Promise.reject(error);
+      } catch (refreshError) {
+        // Signed out only when the refresh token itself was refused. A
+        // restart (502/503/network) or a 429 keeps the session; the caller
+        // gets the refresh's own error, a server problem, not a 401.
+        if (refreshEndsSession(refreshError)) {
+          wipeSessionAndRedirect();
+          return Promise.reject(error);
+        }
+        console.warn('apiClient: session refresh unavailable; staying signed in', refreshError.status);
+        return Promise.reject(refreshError.cause || refreshError);
       }
+      originalConfig._retried = true;
+      // Request interceptor re-reads localStorage and re-attaches the new token.
+      return apiClient(originalConfig);
     }
 
     if (status === 401 && (!code || SESSION_FAIL_CODES.has(code))) {

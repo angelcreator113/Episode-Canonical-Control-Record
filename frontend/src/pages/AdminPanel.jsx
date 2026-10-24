@@ -5,7 +5,8 @@
  * site's images and video, formerly its own sidebar row at /website), Show
  * settings (the active show's settings, formerly /shows/:id/settings; Task
  * #2914) and Tools (the admin tools index — the doorway to the admin and diagnostic
- * pages, docs/SIDEBAR_PROPOSAL.md §5 — and the user roles table; Evoni,
+ * pages, docs/SIDEBAR_PROPOSAL.md §5 — the recent rate-limit refusals
+ * (RateLimitRefusals; 2026-10-23) and the user roles table; Evoni,
  * 2026-10-11). ?tab= selects one; the default is The Pulse. The header,
  * pill tabs and date follow Evoni's Admin mock (2026-10-17; AdminPulse.css).
  */
@@ -21,6 +22,7 @@ import WebsiteAdmin from './WebsiteAdmin';
 import ShowSettings from './ShowSettings';
 import AdminShowGate from '../components/Admin/AdminShowGate';
 import PulseDirector from './AdminPulse';
+import RateLimitRefusals from '../components/Admin/RateLimitRefusals';
 import '../styles/AdminPanel.css';
 import './AdminPulse.css';
 
@@ -200,6 +202,8 @@ const AdminPanel = () => {
             ))}
           </ul>
         </section>
+
+        <RateLimitRefusals />
 
         {loading ? (
           <LoadingSpinner />
