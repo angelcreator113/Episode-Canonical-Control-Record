@@ -10,8 +10,9 @@
  * reviews every change before anything is saved.
  *
  *   proposals(db)              { items: [{ id, a_name, b_name, current_type, proposed_type,
- *                                proposed_is_romantic, flavour, situation_now, situation_after }] }
- *                              deterministic, no AI; proposed_type null when it cannot decide
+ *                                proposed_is_romantic, proposed_from, flavour, situation_now, situation_after }] }
+ *                              deterministic, no AI; read from the type, else guessed from the
+ *                              situation (proposed_from 'situation'); proposed_type null when neither decides
  *   applyTidy(db, changes)     her accepted changes, in one transaction; each item alone
  *                              (a savepoint), so one refused leaves the rest; the Pulse pair
  *                              follows each after commit. { updated, refused, skipped }
@@ -24,7 +25,7 @@
 
 const familyTies = require('./familyTies');
 const truth = require('./relationshipTruth');
-const { normalizeType, canonicalType, isKnownType, familyRoleOf, roleWords } = require('./relationshipTypes');
+const { normalizeType, canonicalType, isKnownType, familyRoleOf, roleWords, words, capital } = require('./relationshipTypes');
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_CHANGES = 200;
@@ -45,14 +46,23 @@ function situationAfter(flavour, situation) {
 
 /** One row's proposal. Pure, for the tests. */
 function proposalFor(row) {
-  const n = normalizeType(row.relationship_type, { romantic: row.is_romantic === true });
+  const romantic = row.is_romantic === true;
+  let n = normalizeType(row.relationship_type, { romantic });
+  let from = n ? 'type' : null;
+  // Words the type alone cannot place ("mirror_image") are read from the
+  // situation as a second guess; the page marks it so she checks it.
+  if (!n && typeof row.situation === 'string' && row.situation.trim()) {
+    const guess = normalizeType(row.situation.slice(0, 400), { romantic });
+    if (guess) { n = { ...guess, flavour: capital(words(row.relationship_type)) || null }; from = 'situation'; }
+  }
   // A list type spelt another way keeps no flavour: "Rival" is just rival.
   const flavour = n && !canonicalType(row.relationship_type) ? n.flavour : null;
   return {
     id: row.id, a_name: row.a_name, b_name: row.b_name, confirmed: row.confirmed,
     current_type: row.relationship_type,
     proposed_type: n ? n.type : null,
-    proposed_is_romantic: n ? n.is_romantic : row.is_romantic === true,
+    proposed_is_romantic: n ? n.is_romantic : romantic,
+    proposed_from: from,
     flavour,
     situation_now: row.situation || null,
     situation_after: situationAfter(flavour, row.situation),

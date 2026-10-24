@@ -33,11 +33,14 @@ export function TypeTidyBanner({ count, onReview }) {
   );
 }
 
+// A type guessed from the situation, not read from the type's own words.
+const isGuess = it => it.proposed_from === 'situation';
+
 const rowOf = it => ({
   type: it.proposed_type || '',
   situation: it.situation_after ?? it.situation_now ?? '',
-  // a row with no suggestion waits until a type is picked
-  accept: !!it.proposed_type,
+  // a row with no suggestion waits until a type is picked; a guess waits for her Accept
+  accept: !!it.proposed_type && !isGuess(it),
   romantic: it.proposed_type ? !!it.proposed_is_romantic : false,
 });
 
@@ -67,9 +70,11 @@ export default function TypeTidyDialog({ items, refused = [], saving, onSave, on
   };
   const all = Object.fromEntries(items.map(it => [it.id, rowFor(it)]));
   const changes = tidyChanges(items, all);
+  // Accept all takes the types read from the type's own words. A guess from
+  // the situation stays as she left it: only her own Accept or pick takes it.
   const acceptAll = () => setRows(Object.fromEntries(items.map(it => {
     const r = rowFor(it);
-    return [it.id, { ...r, accept: !!r.type }];
+    return [it.id, { ...r, accept: isGuess(it) ? r.accept : !!r.type }];
   })));
   const nameOf = id => {
     const it = items.find(x => x.id === id);
@@ -119,6 +124,9 @@ export default function TypeTidyDialog({ items, refused = [], saving, onSave, on
                       </select>
                     </div>
                     {!it.proposed_type && !r.type && <p className="re-tidy-hint">No suggestion: pick a type, or it is skipped.</p>}
+                    {isGuess(it) && r.type === it.proposed_type && (
+                      <p className="re-tidy-hint is-guess">Guessed from the situation: check it, then Accept.</p>
+                    )}
                     <label className="re-label" htmlFor={sit}>Situation after</label>
                     <textarea id={sit} className="cg-form-input is-multiline" rows={2} value={r.situation}
                       onChange={e => set(it.id, { situation: e.target.value })} />

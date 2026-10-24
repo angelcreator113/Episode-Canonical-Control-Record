@@ -40,13 +40,19 @@ const PULSE_TYPE = {
 };
 // Words the older generator invented, read before the story kinds
 // (relationshipTruth's patterns do not know them).
+// Whole words only where a short stem could sit inside another word
+// ("kin" in "making", "ex" in "next").
 const INVENTED = [
-  [/temptation|fidelity|affair|the one who (stayed|left|got away)|flirt|crush|forbidden/, 'love_interest'],
-  [/best ?friend|bestie|\bbff\b/, 'best friend'],
+  [/temptation|fidelity|affair|the one who (stayed|left|got away)|flirt|crush|forbidden|lover|\bflame\b|romanc|\bex\b|situationship|\blove\b|sweetheart|soulmate|courtship|seduc/, 'love_interest'],
+  [/best ?friend|bestie|\bbff\b|ride or die/, 'best friend'],
   [/stylist/, 'stylist'],
-  [/critic|hater|detractor|antagonist|competit|frenem|grudge|saboteur/, 'rival'],
-  [/confidant|ally|supporter|sounding board|protector/, 'friend'],
-  [/admirer|follower|superfan/, 'fan'],
+  [/\bkin\b|kinship|kinfolk|bloodline|\bblood\b|famil|sibling|\bcousins?\b|\brelatives?\b|lineage|\bheirs?\b|inherit|ancestr/, 'family'],
+  [/critic|hater|detractor|antagonist|competit|frenem|grudge|saboteur|nemesis|enem|opponent|adversar|threat|feud|betray|usurp|copycat|imitat/, 'rival'],
+  [/mentor|mentee|protege|protégé|teacher|tutor|guide|apprentic|elder|guru|coach/, 'mentor'],
+  [/manag|\bagent\b|\bboss\b|employer|handler|publicist/, 'manager'],
+  [/transaction|symbio|patron|client|commission|sponsor|business|\bdeal\b|contract|brand|collab|co-?creat|partnership|vendor|supplier|investor|alliance/, 'collaborator'],
+  [/confidant|\ball(y|ies)\b|supporter|sounding board|protector|companion|kindred|comrade|buddy|\bpal\b|neighbo|classmate|roommate|friend/, 'friend'],
+  [/admirer|follower|superfan|devotee|\bstans?\b|groupie/, 'fan'],
 ];
 
 const words = (v) => String(v || '').trim().toLowerCase().replace(/[_-]+/g, ' ').replace(/\s+/g, ' ');
