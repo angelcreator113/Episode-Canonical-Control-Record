@@ -1,0 +1,13 @@
+/* GenModal's aims (2026-10-24): the kind as a row of choices, and the note
+   when no show is open. Uses the page's tokens (pages/RelationshipEngine.css). */
+.re-gen-kinds { margin: 4px 0 12px; }
+.re-gen-kinds .cg-preset-btn { min-height: 36px; font-size: 13px; }
+.re-gen-kinds .cg-preset-btn.is-active {
+  border-color: var(--re-gold, #B8962E);
+  background: var(--re-blush, #FDF8EE);
+  color: var(--ps-ink, #2C2C2C);
+}
+.re-gen-note { margin: 10px 0; font-size: 12px; line-height: 1.5; color: var(--ps-ink-light, #6B6557); }
+@media (max-width: 600px) {
+  .re-gen-kinds .cg-preset-btn { min-height: 44px; }
+}
