@@ -1,7 +1,11 @@
 /**
  * TreeView — banded SVG relationship tree: Lala in her own band, then each
- * person by role (tokens BANDS). Drag (mouse or finger) pans, the buttons
- * and the wheel zoom.
+ * person by role (tokens BANDS). A band with more people than fit across
+ * the screen wraps onto more rows (Evoni's phone, 2026-10-24: twelve
+ * people in one band were squeezed into 375px and their names ran
+ * together), so the drawing is drawn at the screen's width and its text
+ * stays its own size. Drag (mouse or finger) pans, the buttons and the
+ * wheel zoom.
  * Prime Studios · LalaVerse
  */
 import { useState, useEffect, useMemo, useRef } from 'react';
@@ -36,21 +40,41 @@ export default function TreeView({ chars, rels, lalaId, selChar, onRelClick, onC
   }, [chars, lalaId]);
   const bands = BANDS.filter(b => (layers[b.key] || []).length);
   const lks  = bands.map(b => b.key);
-  const maxC = Math.max(1, ...lks.map(k => (layers[k] || []).length));
-  const svgW = Math.max(dims.w, maxC * 110 + 60);
-  const bH   = Math.max(150, dims.h / (Math.max(1, lks.length) + 0.25));
-  const svgH = bH * lks.length + 60;
+  // One person needs about MIN_SPACE across (circle, badge, a name); a band
+  // holds as many per row as fit and wraps the rest onto further rows.
+  const MIN_SPACE = 96, ROW_H = 96, HEAD = 40;
+  const wide = dims.w >= 900;
+  const svgW = dims.w;
+  const perRow = Math.max(2, Math.floor((svgW - 24) / MIN_SPACE));
+  const bandRows = lks.map(k => Math.max(1, Math.ceil((layers[k] || []).length / perRow)));
+  const needH = bandRows.map(r => HEAD + r * ROW_H + 12);
+  const needSum = needH.reduce((a, b) => a + b, 0) + 24;
+  // On a wide screen a tree that fits stretches its bands to fill the box,
+  // as before; a taller one, or any tree on a phone, sets its own height
+  // (decided by a fixed size, not the box's, so the two never chase).
+  const fill = wide && needSum <= 600;
+  const grow = fill ? Math.max(1, (dims.h - 24) / (needSum - 24)) : 1;
+  const bandH = needH.map(h => h * grow);
+  const bandY = bandH.map((_, i) => bandH.slice(0, i).reduce((a, b) => a + b, 0));
+  const svgH = bandH.reduce((a, b) => a + b, 0) + 24;
+  const drawH = fill ? Math.max(svgH, dims.h) : Math.max(svgH, wide ? 600 : 440);
+  const ownHeight = !fill;
 
   const npos = useMemo(() => {
     const p = {};
     lks.forEach((lk, li) => {
       const cs = layers[lk] || [];
-      const by = bH * li + bH * .55;
-      const sp = svgW / (cs.length + 1);
-      cs.forEach((c, ci) => { p[c.id] = { x: sp * (ci + 1), y: by, c, lk }; });
+      cs.forEach((c, ci) => {
+        const row = Math.floor(ci / perRow);
+        const inRow = Math.min(perRow, cs.length - row * perRow);
+        const sp = svgW / (inRow + 1);
+        // Rows sit in the middle of a stretched band.
+        const top = bandY[li] + (bandH[li] - needH[li]) / 2;
+        p[c.id] = { x: sp * ((ci % perRow) + 1), y: top + HEAD + row * ROW_H + ROW_H * 0.38, c, lk };
+      });
     });
     return p;
-  }, [layers, lks.join('|'), svgW, bH]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [layers, lks.join('|'), svgW, perRow, bandY.join('|'), bandH.join('|')]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const edgesD = useMemo(() =>
     rels.filter(r => npos[r.character_id_a] && npos[r.character_id_b])
@@ -80,11 +104,11 @@ export default function TreeView({ chars, rels, lalaId, selChar, onRelClick, onC
   }, [rels]);
 
   const zoom = dir => setVb(p => {
-    const v = p || { x: 0, y: 0, w: svgW, h: svgH };
+    const v = p || { x: 0, y: 0, w: svgW, h: drawH };
     const cx = v.x + v.w / 2, cy = v.y + v.h / 2;
     const f = dir > 0 ? .78 : 1.28;
     const nw = Math.min(svgW * 3, Math.max(300, v.w * f));
-    const nh = Math.min(svgH * 3, Math.max(200, v.h * f));
+    const nh = Math.min(drawH * 3, Math.max(200, v.h * f));
     return { x: cx - nw / 2, y: cy - nh / 2, w: nw, h: nh };
   });
 
@@ -105,16 +129,19 @@ export default function TreeView({ chars, rels, lalaId, selChar, onRelClick, onC
     return `M${from.x},${from.y} Q${(from.x + to.x) / 2},${from.y - arc} ${to.x},${to.y}`;
   };
 
-  const VIEW = vb || { x: 0, y: 0, w: svgW, h: svgH };
-  // The drawing shrinks to fit a narrow screen; its text grows by the same
-  // factor so it still reads at 12px or more, and a long name shortens to
-  // the first name when the drawing is squeezed (a phone).
-  const k = Math.max(1, VIEW.w / dims.w, VIEW.h / dims.h);
+  const VIEW = vb || { x: 0, y: 0, w: svgW, h: drawH };
+  // Drawn at the screen's width, the text is its own size; zoomed out, it
+  // grows by the zoom so it still reads at 12px or more.
+  const k = Math.max(1, VIEW.w / dims.w, VIEW.h / drawH);
   const fs = n => n * k;
+  // A name fits the space each person has in a row (about 7px a letter);
+  // a long one shortens to the first name, then to an ellipsis.
+  const fitChars = Math.max(6, Math.floor((svgW / (Math.min(perRow, 12) + 1)) / 7.5 / k));
   const nodeName = c => {
     const n = cname(c);
-    if (k > 1.15) { const f = n.split(/\s+/)[0]; return f.length > 10 ? f.slice(0, 9) + '…' : f; }
-    return n.length > 16 ? n.slice(0, 14) + '…' : n;
+    if (n.length <= fitChars) return n;
+    const f = n.split(/\s+/)[0];
+    return f.length <= fitChars ? f : f.slice(0, fitChars - 1) + '…';
   };
 
   const handleWheel = e => { e.preventDefault(); zoom(e.deltaY > 0 ? -1 : 1); };
@@ -131,19 +158,19 @@ export default function TreeView({ chars, rels, lalaId, selChar, onRelClick, onC
   const handlePointerDown = e => {
     if (e.target.closest('.ni')) return;
     setPan(true);
-    ps.current = { x: e.clientX, y: e.clientY, vb: vb || { x: 0, y: 0, w: svgW, h: svgH } };
+    ps.current = { x: e.clientX, y: e.clientY, vb: vb || { x: 0, y: 0, w: svgW, h: drawH } };
     e.currentTarget.setPointerCapture?.(e.pointerId);
   };
   const handlePointerMove = e => {
     if (!pan || !ps.current) return;
     const dx = (e.clientX - ps.current.x) * (ps.current.vb.w / dims.w);
-    const dy = (e.clientY - ps.current.y) * (ps.current.vb.h / dims.h);
+    const dy = (e.clientY - ps.current.y) * (ps.current.vb.h / drawH);
     setVb({ x: ps.current.vb.x - dx, y: ps.current.vb.y - dy, w: ps.current.vb.w, h: ps.current.vb.h });
   };
   const endPan = () => { setPan(false); ps.current = null; };
 
   return (
-    <div ref={ref} className="re-tree-wrap" role="region" aria-label="Relationship tree">
+    <div ref={ref} className="re-tree-wrap" role="region" aria-label="Relationship tree" style={ownHeight ? { minHeight: drawH } : undefined}>
       {/* zoom controls */}
       <div className="re-tree-zoom" role="toolbar" aria-label="Zoom controls">
         {[['＋', 1, 'Zoom in'], ['－', -1, 'Zoom out'], ['⟲', 0, 'Reset zoom']].map(([l, d, label]) => (
@@ -153,10 +180,11 @@ export default function TreeView({ chars, rels, lalaId, selChar, onRelClick, onC
         ))}
       </div>
 
-      <svg width={dims.w} height={dims.h}
+      <svg width={dims.w} height={drawH}
         viewBox={`${VIEW.x} ${VIEW.y} ${VIEW.w} ${VIEW.h}`}
+        preserveAspectRatio="xMidYMin meet"
         className="re-tree-svg"
-        style={{ cursor: pan ? 'grabbing' : 'grab', touchAction: 'none' }}
+        style={{ cursor: pan ? 'grabbing' : 'grab', touchAction: 'none', ...(ownHeight ? { height: drawH } : {}) }}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={endPan}
@@ -176,12 +204,12 @@ export default function TreeView({ chars, rels, lalaId, selChar, onRelClick, onC
           const lk = cfg.key;
           return (
             <g key={lk}>
-              <rect x={VIEW.x - 60} y={bH * li} width={svgW + 120} height={bH} fill={cfg.color} opacity={.04} />
-              <text x={VIEW.x + 14} y={bH * li + 22} fill={cfg.color} opacity={.8}
+              <rect x={VIEW.x - 60} y={bandY[li]} width={svgW + 120} height={bandH[li]} fill={cfg.color} opacity={.04} />
+              <text x={VIEW.x + 14} y={bandY[li] + 22} fill={cfg.color} opacity={.8}
                 style={{ fontSize: fs(12), fontFamily: T.font, fontWeight: 600, letterSpacing: '0.08em' }}>
                 {cfg.label.toUpperCase()}
               </text>
-              {li > 0 && <line x1={VIEW.x - 60} y1={bH * li} x2={svgW + 60} y2={bH * li} stroke={cfg.color} strokeOpacity={.12} strokeDasharray="6,5" />}
+              {li > 0 && <line x1={VIEW.x - 60} y1={bandY[li]} x2={svgW + 60} y2={bandY[li]} stroke={cfg.color} strokeOpacity={.12} strokeDasharray="6,5" />}
             </g>
           );
         })}
@@ -252,7 +280,7 @@ export default function TreeView({ chars, rels, lalaId, selChar, onRelClick, onC
                 {nodeName(pos.c)}
               </text>
               {!isDim && relCnt > 0 && (
-                <g transform={`translate(${nr - 3 + fs(3)},${-nr + 3 - fs(3)})`}>
+                <g transform={`translate(${nr + fs(2)},${-nr - fs(2)})`}>
                   <circle r={fs(8)} fill={rc} stroke={T.white} strokeWidth={1.5} />
                   <text textAnchor="middle" dominantBaseline="central" fill={T.white} style={{ fontSize: fs(12), fontWeight: 700 }}>{relCnt}</text>
                 </g>
