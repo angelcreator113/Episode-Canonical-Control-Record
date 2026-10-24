@@ -201,10 +201,10 @@ async function loadEditableSlot(sequelize, showId, slotId, transaction) {
  * story_purpose (a draft, or an older client) replaces the primary's text,
  * and its thread when one is given, keeping the other purposes.
  */
-async function purposesToWrite(sequelize, slotId, intention, source) {
+async function purposesToWrite(sequelize, slotId, intention, source, transaction) {
   const [[slot]] = await sequelize.query(
     'SELECT story_purpose, story_purposes, story_thread_id, intention_source FROM season_slots WHERE id = :slotId',
-    { replacements: { slotId } });
+    { replacements: { slotId }, transaction });
   const current = purposesOf(slot);
   if (intention.story_purposes !== undefined) {
     return source === SOURCES.EDITED
@@ -220,8 +220,8 @@ async function purposesToWrite(sequelize, slotId, intention, source) {
   return [{ text: intention.story_purpose, primary: true, story_thread_id: thread || null, source }, ...others];
 }
 
-async function writeIntention(sequelize, slotId, intention, source) {
-  const purposes = await purposesToWrite(sequelize, slotId, intention, source);
+async function writeIntention(sequelize, slotId, intention, source, transaction) {
+  const purposes = await purposesToWrite(sequelize, slotId, intention, source, transaction);
   const primary = purposes[0] || null;
   await sequelize.query(
     `UPDATE season_slots SET story_purpose = :story_purpose, story_purposes = CAST(:story_purposes AS jsonb),
@@ -237,7 +237,7 @@ async function writeIntention(sequelize, slotId, intention, source) {
       desired_pressure: intention.desired_pressure,
       outcome_range: intention.outcome_range ? JSON.stringify(intention.outcome_range) : null,
       source, slotId,
-    } });
+    }, transaction });
   return purposes;
 }
 
@@ -532,6 +532,54 @@ async function draftNextSlot(sequelize, showId, { anthropic = null } = {}) {
   return result.slot_number;
 }
 
+/**
+ * Accepting drafts from "Draft the season" (seasonSetupService.draftSeason;
+ * Evoni, 2026-10-24): each accepted draft { slot_id, story_purpose,
+ * desired_pressure, story_thread_id } is written through this service's own
+ * path (normaliseIntention, the thread check, writeIntention), labelled
+ * Auto-drafted: it is the AI's wording until she edits it. The slot's career
+ * focus and outcome range are kept, and its thread unless the draft names
+ * one. A slot she edited, or that started, since the draft is skipped, not
+ * overwritten. All in one transaction. Returns { saved, skipped }.
+ */
+async function acceptDrafts(sequelize, showId, drafts) {
+  if (!Array.isArray(drafts) || !drafts.length) {
+    throw new SeasonIntentionError('There are no drafts to accept', 400, 'SEASON_INTENTION_INVALID');
+  }
+  const { assertThreadChoosable } = require('./storyThreadService');
+  return sequelize.transaction(async (transaction) => {
+    const saved = [];
+    const skipped = [];
+    for (const d of drafts) {
+      if (!d?.slot_id) throw new SeasonIntentionError('Each draft names its slot', 400, 'SEASON_INTENTION_INVALID');
+      let slot;
+      try {
+        slot = await loadEditableSlot(sequelize, showId, d.slot_id, transaction);
+      } catch (err) {
+        if (err.code !== 'SEASON_SLOT_LOCKED' && err.code !== 'SEASON_SLOT_ACCEPTED') throw err;
+        console.error('[seasonIntention] accept draft skipped a started slot:', err.message);
+        skipped.push({ slot_id: d.slot_id, reason: 'started' });
+        continue;
+      }
+      if (slot.started || slot.locked_at) { skipped.push({ slot_id: d.slot_id, slot_number: slot.slot_number, reason: 'started' }); continue; }
+      if (slot.intention_source === SOURCES.EDITED) { skipped.push({ slot_id: d.slot_id, slot_number: slot.slot_number, reason: 'edited' }); continue; }
+      const body = {
+        story_purpose: d.story_purpose,
+        desired_pressure: d.desired_pressure || null,
+        career_focus: slot.career_focus,
+        outcome_range: typeof slot.outcome_range === 'string' ? JSON.parse(slot.outcome_range) : slot.outcome_range,
+      };
+      if (d.story_thread_id) body.story_thread_id = d.story_thread_id;
+      const intention = normaliseIntention(body);
+      if (!intention.story_purpose) throw new SeasonIntentionError(`E${slot.slot_number}'s draft has no story purpose`, 400, 'SEASON_INTENTION_INVALID');
+      if (intention.story_thread_id) await assertThreadChoosable(sequelize, showId, intention.story_thread_id);
+      await writeIntention(sequelize, slot.id, intention, SOURCES.DRAFTED, transaction);
+      saved.push(slot.slot_number);
+    }
+    return { saved, skipped };
+  });
+}
+
 module.exports = {
   OUTCOME_TIERS,
   MAX_PURPOSES,
@@ -544,5 +592,6 @@ module.exports = {
   saveIntention,
   draftIntention,
   draftNextSlot,
+  acceptDrafts,
   buildDraftPrompt,
 };
