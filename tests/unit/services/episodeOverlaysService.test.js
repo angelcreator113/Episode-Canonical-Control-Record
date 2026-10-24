@@ -32,9 +32,10 @@ describe('episodeOverlaysService (P15)', () => {
       estimates: { invitation: est(0.08) },
     });
     // The AI task-list overlay is retired (Evoni, 2026-10-07); the shopping list took its place.
+    // No deal on this event: no offer letter piece (Evoni, 2026-10-24: deal events only).
     expect(pieces.map((p) => [p.key, p.status])).toEqual([
       ['title_overlay', 'not_made'], ['framed_card', 'not_made'], ['invitation', 'not_made'],
-      ['shopping_list_doc', 'not_made'], ['career_plan_doc', 'not_made'],
+      ['shopping_list_doc', 'not_made'],
     ]);
     const [overlay, card, invitation] = pieces;
     expect(overlay.needs_title_approval).toBe(true);
@@ -94,16 +95,19 @@ describe('episodeOverlaysService (P15)', () => {
 });
 
 // Evoni, 2026-10-07: "add the document overlays to the episode's list".
-describe('documentPieces: the event\'s shopping list and career plan as pieces', () => {
+describe('documentPieces: the event\'s shopping list and offer letter as pieces', () => {
   const { documentPieces } = require('../../../src/services/episodeOverlaysService');
-  const event = (documents) => ({ id: 'ev', show_id: 'sh', name: 'Velour Launch', canon_consequences: { documents } });
+  const event = (documents, deal = {}) => ({ id: 'ev', show_id: 'sh', name: 'Velour Launch', canon_consequences: { documents }, ...deal });
   const overlay = { asset_id: 'a1', url: 'https://img/shop.png', version: 2 };
 
-  test('none without an event; not made until drafted and approved', () => {
+  test('none without an event; not made until drafted and approved; the offer letter on a deal event only, on beat 6', () => {
     expect(documentPieces(null)).toEqual([]);
-    const [shop, plan] = documentPieces(event({}));
+    expect(documentPieces(event({})).map((p) => p.key)).toEqual(['shopping_list_doc']);
+    const [shop, offer] = documentPieces(event({}, { deal_type: 'paid_appearance' }));
     expect([shop.key, shop.label, shop.status, shop.image_url]).toEqual(['shopping_list_doc', 'Shopping list', 'not_made', null]);
-    expect([plan.key, plan.label, plan.status]).toEqual(['career_plan_doc', 'Career plan', 'not_made']);
+    expect([offer.key, offer.label, offer.status]).toEqual(['offer_letter_doc', 'Offer letter', 'not_made']);
+    expect(offer.expected_beat).toEqual({ number: 6, name: 'Strategic Reaction' });
+    expect(shop.expected_beat).toBeUndefined();
     expect(shop.cost).toEqual({ free: 'Drawn when the document is approved; costs nothing.' });
     expect(shop.beat).toBeNull();
     expect(shop.event).toEqual({ id: 'ev', show_id: 'sh', name: 'Velour Launch' });

@@ -1085,7 +1085,7 @@ describe('EpisodeWardrobeGameplay — the look and its shopping list', () => {
     mockApi();
     const base = api.get.getMockImplementation();
     api.get.mockImplementation((url) => {
-      if (url === '/api/v1/world/show-1/events/ev-1/documents') return Promise.resolve({ data: { success: true, data: { shopping_list: SHOP, career_plan: null } } });
+      if (url === '/api/v1/world/show-1/events/ev-1/documents') return Promise.resolve({ data: { success: true, data: { shopping_list: SHOP, offer_letter: null } } });
       if (url === '/api/v1/world/show-1/events/ev-1/financial-forecast') return Promise.resolve({ data: { success: true, data: { income: { total: 250 } } } });
       return base(url);
     });
@@ -1098,7 +1098,7 @@ describe('EpisodeWardrobeGameplay — the look and its shopping list', () => {
     renderPlain();
     const right = await screen.findByTestId('wardrobe-right');
     const shop = await within(right).findByTestId('evd-shopping_list');
-    expect(within(right).queryByTestId('evd-career_plan')).toBeNull();
+    expect(within(right).queryByTestId('evd-offer_letter')).toBeNull();
     // Read-only: no Draft, Edit, Redraft or Approve; only "Use in episode" (Task #2883).
     expect(within(shop).queryAllByRole('button').map((b) => b.textContent)).toEqual(['Use in episode']);
     expect(within(shop).getByTestId('evd-manage-shopping_list').getAttribute('href')).toBe('/shows/show-1/events/ev-1#epp-sec-documents');
@@ -1150,7 +1150,7 @@ describe('EpisodeWardrobeGameplay — the look and its shopping list', () => {
   test('"Use in episode" on an approved list adds its tasks, says so, and reloads the list', async () => {
     const base = api.get.getMockImplementation();
     api.get.mockImplementation((url) => (url === '/api/v1/world/show-1/events/ev-1/documents'
-      ? Promise.resolve({ data: { success: true, data: { shopping_list: { ...SHOP, status: 'approved' }, career_plan: null } } })
+      ? Promise.resolve({ data: { success: true, data: { shopping_list: { ...SHOP, status: 'approved' }, offer_letter: null } } })
       : base(url)));
     const basePost = api.post.getMockImplementation();
     api.post.mockImplementation((url, ...rest) => (url === '/api/v1/episodes/ep-1/todo/use-shopping-list'
@@ -1170,7 +1170,7 @@ describe('EpisodeWardrobeGameplay — the look and its shopping list', () => {
   test('"Use in episode" twice: nothing new, and a refusal shows its reason', async () => {
     const base = api.get.getMockImplementation();
     api.get.mockImplementation((url) => (url === '/api/v1/world/show-1/events/ev-1/documents'
-      ? Promise.resolve({ data: { success: true, data: { shopping_list: { ...SHOP, status: 'approved' }, career_plan: null } } })
+      ? Promise.resolve({ data: { success: true, data: { shopping_list: { ...SHOP, status: 'approved' }, offer_letter: null } } })
       : base(url)));
     const basePost = api.post.getMockImplementation();
     let n = 0;

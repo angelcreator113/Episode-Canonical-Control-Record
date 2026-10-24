@@ -40,8 +40,8 @@ const PIECES = [
     cost: { free: 'Drawn when the document is approved; costs nothing.' },
   },
   {
-    key: 'career_plan_doc', label: 'Career plan', status: 'not_made', image_url: null, asset_id: null,
-    beat: null, document: { type: 'career_plan', status: null, version: null },
+    key: 'offer_letter_doc', label: 'Offer letter', status: 'not_made', image_url: null, asset_id: null,
+    beat: null, document: { type: 'offer_letter', status: null, version: null },
     cost: { free: 'Drawn when the document is approved; costs nothing.' },
   },
 ];
@@ -67,7 +67,7 @@ const SHOW_WIDE = [
 function routeGet(url) {
   if (url === '/api/v1/episodes/ep-1/overlays') return ok(OVERLAYS);
   if (url.startsWith('/api/v1/ui-overlays/sh-1')) return ok([...SHOW_WIDE.map((o) => ({ ...o, category: 'phone' })), ...SHOW_LIBRARY]);
-  if (url === '/api/v1/world/sh-1/events/ev-1/documents') return ok({ shopping_list: null, career_plan: null });
+  if (url === '/api/v1/world/sh-1/events/ev-1/documents') return ok({ shopping_list: null, offer_letter: null, offer_eligible: true, offer_terms: [] });
   if (url === '/api/v1/episodes/ep-1/title-card') {
     return ok({ title: 'Gala Night', approved: true, card: { asset_id: 'card', outdated: true, designed_for: 'Old Title', image_url: 'https://img/card.png' },
       offer: { offered: true, kind: 'redesign', requires_approval: false, estimate: EST(0.04) },
@@ -142,9 +142,9 @@ describe('EpisodeOverlaysTab (P15)', () => {
     renderTab();
     const docs = await screen.findByTestId('eot-docs');
     expect(await within(docs).findByTestId('evd-shopping_list')).toBeTruthy();
-    expect(within(docs).getByTestId('evd-career_plan')).toBeTruthy();
+    expect(within(docs).getByTestId('evd-offer_letter')).toBeTruthy();
     const cards = [...docs.querySelectorAll('article')].map((a) => a.getAttribute('data-testid'));
-    expect(cards).toEqual(['eot-doc-invitation', 'evd-shopping_list', 'evd-career_plan']);
+    expect(cards).toEqual(['eot-doc-invitation', 'evd-shopping_list', 'evd-offer_letter']);
   });
 
   test('without an event: no documents, the invitation says so', async () => {
@@ -200,15 +200,15 @@ describe('EpisodeOverlaysTab — one card per overlay', () => {
     api.get.mockImplementation(routeGet);
   });
 
-  test('a card per overlay, in order: title, framed card, invitation, shopping list, career plan; no beat', async () => {
+  test('a card per overlay, in order: title, framed card, invitation, shopping list, offer letter; no beat', async () => {
     renderTab();
     const section = await screen.findByTestId('eot-bybeat');
     expect(within(section).getByRole('heading', { name: "This episode's overlays" })).toBeTruthy();
-    await within(section).findByTestId('evd-career_plan');
-    const order = [...section.querySelectorAll('[data-testid^="eot-piece-"], [data-testid="eot-doc-invitation"], [data-testid^="evd-shopping_list"], [data-testid^="evd-career_plan"]')]
+    await within(section).findByTestId('evd-offer_letter');
+    const order = [...section.querySelectorAll('[data-testid^="eot-piece-"], [data-testid="eot-doc-invitation"], [data-testid^="evd-shopping_list"], [data-testid^="evd-offer_letter"]')]
       .map((el) => el.getAttribute('data-testid'))
-      .filter((t) => !t.startsWith('evd-') || t === 'evd-shopping_list' || t === 'evd-career_plan');
-    expect(order).toEqual(['eot-piece-title_overlay', 'eot-piece-framed_card', 'eot-doc-invitation', 'evd-shopping_list', 'evd-career_plan']);
+      .filter((t) => !t.startsWith('evd-') || t === 'evd-shopping_list' || t === 'evd-offer_letter');
+    expect(order).toEqual(['eot-piece-title_overlay', 'eot-piece-framed_card', 'eot-doc-invitation', 'evd-shopping_list', 'evd-offer_letter']);
     expect(within(section).queryByText(/Beat \d/)).toBeNull();
     expect(screen.getByTestId('event-documents').className).toContain('is-wide');
     expect(screen.getByTestId('eot-still-needed').textContent).toBe('2 still needed');

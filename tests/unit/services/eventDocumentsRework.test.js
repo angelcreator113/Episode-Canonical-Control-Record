@@ -4,16 +4,35 @@
  *     "look changed" is the same on every device; Keep takes the new look;
  *   - Redraft within budget; amount checks on each version;
  *   - restore an earlier version; re-roll one line;
- *   - the career plan keeps goal / optional and its goal links into the
- *     episode, and says which lines the goal limit will not carry;
- *   - "Use in episode" for the career plan.
+ *   - the offer letter (Evoni, 2026-10-24; it replaced the career plan):
+ *     deal events only, a letter plus the deal's terms, "terms changed",
+ *     edits of its words, and its overlay on beat 6 after approval.
  */
 const mockLook = { current: null };
+const mockOverlay = { current: null };
 jest.mock('../../../src/services/eventDocumentOverlayService', () => ({
   shoppingListContext: jest.fn(async () => ({ look: mockLook.current, balance: 300 })),
   overlayState: jest.fn(() => 'current'),
-  makeDocumentOverlay: jest.fn(async () => null),
+  makeDocumentOverlay: jest.fn(async () => mockOverlay.current),
   shoppingLines: jest.fn(() => ({ lines: [], total: 0 })),
+}));
+// The deal's terms rows: one deliverable, and the host covering entry.
+const mockTerms = { deliverables: [{ id: 'd-1', description: 'One reel in the coat', deliverable_type: 'reel', required: true, owed_to: 'brand', fee: 0 }], costs: [{ kind: 'entry', paid_by: 'host', amount: 0 }] };
+jest.mock('../../../src/services/eventTermsService', () => ({ listEventDeliverables: jest.fn(async () => mockTerms.deliverables) }));
+jest.mock('../../../src/services/eventCostsService', () => ({
+  ...jest.requireActual('../../../src/services/eventCostsService'),
+  listEventCosts: jest.fn(async () => mockTerms.costs),
+}));
+jest.mock('../../../src/services/offerLetterService', () => ({
+  ...jest.requireActual('../../../src/services/offerLetterService'),
+  writeOfferLetter: jest.fn(async () => ({
+    letter: { greeting: 'Dear Lala,', opening: 'Following our invitation, Maison Rue is pleased to offer you a partnership.', opportunity: 'We would love you to front our launch.', next_steps: 'Reply to accept.', closing: 'Warm regards,', sender_name: 'Celeste Rue', sender_title: 'Founder, Maison Rue' },
+    source: 'claude',
+    checks: { amounts: { ok: true, invented: [] } },
+  })),
+}));
+jest.mock('../../../src/services/episodeBeatPlacement', () => ({
+  placeOverlayOnBeat: jest.fn(async () => ({ placement: null, anchor: null, beat: null })),
 }));
 jest.mock('../../../src/services/todoListService', () => ({
   generateTasks: jest.fn(),
@@ -26,6 +45,7 @@ jest.mock('../../../src/services/episodeEventsService', () => ({
 }));
 
 const todo = require('../../../src/services/todoListService');
+const beats = require('../../../src/services/episodeBeatPlacement');
 const svc = require('../../../src/services/eventDocumentsService');
 
 const flat = (sql) => sql.replace(/\s+/g, ' ').trim();
@@ -76,6 +96,7 @@ const LOOK = { state: 'event', total: 640, pieces: [{ id: 'p-heels', name: 'Gold
 beforeEach(() => {
   jest.clearAllMocks();
   mockLook.current = null;
+  mockOverlay.current = null;
   jest.spyOn(console, 'error').mockImplementation(() => {});
   jest.spyOn(console, 'warn').mockImplementation(() => {});
   todo.generateTasks.mockResolvedValue([
@@ -129,9 +150,10 @@ describe('amount checks', () => {
     expect(edited.note).toBe('wear them twice');
   });
 
-  test('a career line naming an amount the deal does not state is flagged', () => {
-    const checks = svc.documentChecks('career_plan', [{ label: 'Ask for 2,000 coins' }], { money: { text: 'We will pay you an appearance fee of 500 Prime Coins.' } });
-    expect(checks.amounts).toEqual({ ok: false, invented: [2000] });
+  test('an offer letter naming an amount its terms do not state is flagged', () => {
+    const terms = [{ key: 'fees', title: 'Compensation', lines: [{ label: 'Appearance fee', detail: '', amount: 500 }] }];
+    expect(svc.documentChecks('offer_letter', [], { terms, letter: { opening: 'We offer 2,000 coins.' } }).amounts).toEqual({ ok: false, invented: [2000] });
+    expect(svc.documentChecks('offer_letter', [], { terms, letter: { opening: 'A fee of 500 Prime Coins.' } }).amounts.ok).toBe(true);
   });
 });
 
@@ -157,61 +179,66 @@ describe('restore and re-roll one line', () => {
     expect(doc.items[1].piece_id).toBe('p-heels');
   });
 
-  test('a bigger goal is not re-rolled here', async () => {
+  test('only a shopping list re-words one line', async () => {
     const { models } = fakeModels(EVENT);
-    const plan = await svc.draftDocument(models, { ...ids, type: 'career_plan' });
-    const goalIndex = plan.items.findIndex((i) => i.section === 'bigger_goals');
-    await expect(svc.redraftLine(models, { ...ids, type: 'career_plan', index: goalIndex })).rejects.toMatchObject({ status: 409 });
+    await expect(svc.redraftLine(models, { ...ids, type: 'offer_letter', index: 0 })).rejects.toMatchObject({ status: 400 });
   });
 });
 
-describe('the career plan into the episode', () => {
-  test('goal / optional and goal links carry; the limit says which lines will not', async () => {
-    const { models } = fakeModels(EVENT);
-    const plan = await svc.draftDocument(models, { ...ids, type: 'career_plan' });
-    const goals = svc.careerPlanGoals(plan);
-    expect(goals.map((g) => [g.label, g.task_source, g.career_goal_id || null])).toEqual([
-      ['Pitch the Sable team', 'goal', 'g-1'],
-      ['Snap the florals', 'optional', null],
-      ['Thank the host', 'goal', null],
-      ['Post a story', 'goal', null],
-    ]);
-    // Prestige 3: a small event carries 3 of her goals; the optional idea goes first.
-    const carry = svc.planCarry(EVENT, plan);
-    expect(carry).toEqual({ limit: 3, carried: 3, dropped: ['Snap the florals'] });
-    expect((await svc.getDocuments(models, ids)).career_carry).toEqual(carry);
+describe('the offer letter (Evoni, 2026-10-24)', () => {
+  const DEAL = { ...EVENT, name: 'Maison Rue Launch', host_brand: 'Maison Rue', deal_type: 'paid_appearance', appearance_fee: 500, is_paid: true };
+
+  test('a deal event drafts a letter with the terms it was written with; the terms section comes live from the deal', async () => {
+    const { models } = fakeModels(DEAL);
+    const doc = await svc.draftDocument(models, { ...ids, type: 'offer_letter' });
+    expect(doc).toMatchObject({ type: 'offer_letter', status: 'draft', version: 1, items: [], letter_source: 'claude' });
+    expect(doc.letter.sender_title).toBe('Founder, Maison Rue');
+    expect(typeof doc.terms_key).toBe('string');
+    const got = await svc.getDocuments(models, ids);
+    expect(got.offer_eligible).toBe(true);
+    expect(got.offer_terms_changed).toBe(false);
+    const titles = got.offer_terms.map((t) => t.title);
+    expect(titles).toEqual(['Compensation', 'Deliverables', 'Covered']);
+    expect(got.offer_terms[0].lines).toEqual([{ label: 'Appearance fee', detail: '', amount: 500 }]);
   });
 
-  test('Use in episode adds the plan\'s lines within the limit, keeps what is there, names what does not fit', async () => {
-    const event = { ...EVENT, prestige: 3 };
-    const { models, state } = fakeModels(event, {
-      todoRow: { id: 't-1', deleted_at: null, social_tasks: [
-        { slot: 'del', label: 'Post the reel', deliverable_id: 'd-1', required: true },
-        { slot: 'own', label: 'Wear the pearls', task_source: 'goal' },
-        { slot: 'plan_x', label: 'An old plan line', task_source: 'goal', from_event_document: { type: 'career_plan', version: 1 } },
-      ] },
-    });
-    await svc.draftDocument(models, { ...ids, type: 'career_plan' });
-    await svc.approveDocument(models, { ...ids, type: 'career_plan' });
-    const out = await svc.useCareerPlanInEpisode(models, 'ep-1');
-
-    const labels = state.todo.social_tasks.map((t) => t.label);
-    expect(labels).toContain('Post the reel');
-    expect(labels).toContain('Wear the pearls');
-    expect(labels).not.toContain('An old plan line');
-    // Room: limit 3, her own goal uses one → two plan lines fit.
-    expect(out).toMatchObject({ added: 2, removed: 1 });
-    expect(out.not_added).toEqual(['Thank the host', 'Post a story']);
-    expect(state.todo.social_tasks.find((t) => t.label === 'Pitch the Sable team').career_goal_id).toBe('g-1');
-
-    const again = await svc.useCareerPlanInEpisode(models, 'ep-1');
-    expect(again).toMatchObject({ added: 0, removed: 0 });
+  test('a deal changed after drafting reads "terms changed"', async () => {
+    const { models, state } = fakeModels(DEAL);
+    await svc.draftDocument(models, { ...ids, type: 'offer_letter' });
+    state.row.appearance_fee = 750;
+    expect((await svc.getDocuments(models, ids)).offer_terms_changed).toBe(true);
   });
 
-  test('a draft plan is refused', async () => {
-    const { models } = fakeModels(EVENT, { todoRow: { id: 't-1', deleted_at: null, social_tasks: [] } });
-    await svc.draftDocument(models, { ...ids, type: 'career_plan' });
-    await expect(svc.useCareerPlanInEpisode(models, 'ep-1')).rejects.toMatchObject({ status: 409 });
+  test('her own words are a new version, checked against the terms; an empty letter is refused', async () => {
+    const { models } = fakeModels(DEAL);
+    await svc.draftDocument(models, { ...ids, type: 'offer_letter' });
+    const edited = await svc.editDocument(models, { ...ids, type: 'offer_letter', letter: { opening: 'We offer you 999 coins.', opportunity: 'Front the launch.' } });
+    expect(edited).toMatchObject({ version: 2, source: 'edited', letter_source: 'edited' });
+    expect(edited.checks.amounts).toEqual({ ok: false, invented: [999] });
+    expect(edited.letter.greeting).toBe('');
+    await expect(svc.editDocument(models, { ...ids, type: 'offer_letter', letter: { opening: ' ' } })).rejects.toMatchObject({ status: 400 });
+    await expect(svc.editDocument(models, { ...ids, type: 'offer_letter', items: [] })).rejects.toMatchObject({ status: 400 });
+    const back = await svc.restoreDocument(models, { ...ids, type: 'offer_letter', fromVersion: 1 });
+    expect(back.letter.opening).toMatch(/pleased to offer/);
+  });
+
+  test('approving draws its overlay and, once the event has an episode, places it on beat 6', async () => {
+    mockOverlay.current = { asset_id: 'ov-1', url: 'https://x/offer.png', version: 1, terms_key: 'k' };
+    const { models } = fakeModels({ ...DEAL, used_in_episode_id: 'ep-1' });
+    await svc.draftDocument(models, { ...ids, type: 'offer_letter' });
+    const approved = await svc.approveDocument(models, { ...ids, type: 'offer_letter' });
+    expect(approved.overlay.asset_id).toBe('ov-1');
+    expect(beats.placeOverlayOnBeat).toHaveBeenCalledWith(models, expect.objectContaining({
+      episodeId: 'ep-1', assetId: 'ov-1', label: 'Offer letter', canonicalBeat: expect.objectContaining({ number: 6 }),
+    }));
+  });
+
+  test('before Start Episode the approval places nothing', async () => {
+    mockOverlay.current = { asset_id: 'ov-1', url: 'https://x/offer.png', version: 1 };
+    const { models } = fakeModels(DEAL);
+    await svc.draftDocument(models, { ...ids, type: 'offer_letter' });
+    await svc.approveDocument(models, { ...ids, type: 'offer_letter' });
+    expect(beats.placeOverlayOnBeat).not.toHaveBeenCalled();
   });
 });
 

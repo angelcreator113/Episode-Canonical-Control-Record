@@ -1,7 +1,8 @@
 /**
  * The Event Package's in-world documents beside the invitation (Evoni,
- * 2026-10-06): Lala's shopping list and her career plan, each Draft, Edit,
- * Redraft and Approve like the invitation. The server keeps them in the
+ * 2026-10-06): Lala's shopping list and the offer letter (2026-10-24, in
+ * place of the career plan; deal events only), each Draft, Edit, Redraft
+ * and Approve like the invitation. The server keeps them in the
  * event's canon_consequences.documents (src/services/eventDocumentsService.js);
  * these are its four routes and the pure helpers the cards draw from.
  */
@@ -12,7 +13,7 @@ import { formatEventDate } from '../utils/eventDate';
 const base = (showId, eventId) => `/api/v1/world/${showId}/events/${eventId}/documents`;
 
 export const getEventDocumentsApi = async (showId, eventId) =>
-  (await api.get(base(showId, eventId))).data?.data || { shopping_list: null, career_plan: null };
+  (await api.get(base(showId, eventId))).data?.data || { shopping_list: null, offer_letter: null };
 // budget: a shopping list redrafted for her shortfall (rent, borrow, swap).
 export const draftEventDocumentApi = async (showId, eventId, type, { budget = false } = {}) =>
   (await api.post(`${base(showId, eventId)}/${type}/draft`, budget ? { budget: true } : {})).data?.data;
@@ -27,6 +28,9 @@ export const restoreEventDocumentApi = async (showId, eventId, type, fromVersion
 // One line re-worded by its index, the rest kept (2026-10-24).
 export const redraftEventDocumentLineApi = async (showId, eventId, type, index, version) =>
   (await api.post(`${base(showId, eventId)}/${type}/lines/${index}/redraft`, version == null ? {} : { version })).data?.data;
+// The offer letter's own words (the terms come from the deal).
+export const editOfferLetterApi = async (showId, eventId, letter) =>
+  (await api.put(`${base(showId, eventId)}/offer_letter`, { letter })).data?.data;
 // Keep the shopping list for the look as it is now ("Look changed" → Keep).
 export const keepShoppingListLookApi = async (showId, eventId) =>
   (await api.post(`${base(showId, eventId)}/shopping_list/keep-look`)).data?.data;
@@ -43,10 +47,12 @@ export function docState(doc) {
  * drawn on approval (eventDocumentOverlayService): current when drawn from
  * the approved version as it stands, outdated once edited or redrafted.
  */
-export function docOverlay(doc, lookTotal = null) {
+export function docOverlay(doc, lookTotal = null, termsChanged = false) {
   if (!doc) return null;
   const url = doc.overlay?.url || null;
   if (url && doc.status === 'approved' && doc.overlay.version === doc.version) {
+    // An offer letter drawn before the deal's terms changed.
+    if (termsChanged) return { key: 'outdated', url, label: 'Overlay out of date: the terms changed' };
     // A shopping list drawn with another total: the look changed since.
     const drawn = doc.overlay.look_total;
     if (lookTotal != null && drawn != null && Number(drawn) !== Number(lookTotal)) {
@@ -142,15 +148,6 @@ export function shoppingLines(doc, outfitPieces = []) {
   return { lines, total: lines.reduce((n, l) => n + l.cost, 0) };
 }
 
-/** The career plan's two sections, This event and Bigger goals. */
-export function careerSections(doc) {
-  const items = doc?.items || [];
-  return {
-    thisEvent: items.filter((i) => (i.section || 'this_event') === 'this_event'),
-    biggerGoals: items.filter((i) => i.section === 'bigger_goals'),
-  };
-}
-
 /** "for Studio by Sable · Nov 12": who it is for, and when. */
 export function documentByline(event) {
   const who = event?.host_brand || event?.host || event?.name || '';
@@ -161,27 +158,18 @@ export function documentByline(event) {
 }
 
 /**
- * Which "This event" lines Start Episode will not carry, as the editor
- * shows it while she types: the event's goal limit, optional ideas given up
- * first, then the last goals (the server's capCombinedGoals rule,
- * eventDocumentsService.planCarry; the server's answer, docs.career_carry,
- * is the one shown once saved). Returns the set of item indexes left out.
+ * The offer letter's words, field by field, as the editor shows them (the
+ * server's offerLetterService.LETTER_FIELDS caps).
  */
-export function planLeftOut(items, limit) {
-  const rows = (items || []).map((it, i) => ({ it, i }))
-    .filter(({ it }) => (it.section || 'this_event') === 'this_event' && String(it.label || '').trim());
-  let over = rows.length - (Number(limit) || 0);
-  if (!Number.isFinite(over) || over <= 0 || limit == null) return new Set();
-  const rank = (it) => (it.task_source === 'optional' ? 0 : 1);
-  const order = [...rows].sort((a, b) => rank(a.it) - rank(b.it) || b.i - a.i);
-  const out = new Set();
-  for (const { i } of order) {
-    if (over <= 0) break;
-    out.add(i);
-    over -= 1;
-  }
-  return out;
-}
+export const LETTER_FIELDS = Object.freeze([
+  { key: 'greeting', label: 'Greeting', max: 80, rows: 1 },
+  { key: 'opening', label: 'Opening', max: 600, rows: 3 },
+  { key: 'opportunity', label: 'The opportunity', max: 1400, rows: 6 },
+  { key: 'next_steps', label: 'What happens next', max: 600, rows: 3 },
+  { key: 'closing', label: 'Closing', max: 200, rows: 1 },
+  { key: 'sender_name', label: 'Signed by', max: 120, rows: 1 },
+  { key: 'sender_title', label: 'Their title', max: 120, rows: 1 },
+]);
 
 /** What a version's amount check found, in a sentence, or null. */
 export function amountNote(doc, type) {
@@ -190,5 +178,5 @@ export function amountNote(doc, type) {
   const list = a.invented.map((n) => `${Number(n).toLocaleString('en-US')} coins`).join(', ');
   return type === 'shopping_list'
     ? `Names ${list}, which no piece of the look costs. The list shows each price itself.`
-    : `Names ${list}, which the deal does not state.`;
+    : `Names ${list}, which the terms do not state. The terms section carries every amount.`;
 }

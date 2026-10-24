@@ -1040,46 +1040,31 @@ const LINE_TOOL = Object.freeze({
     properties: {
       label: { type: 'string' },
       description: { type: 'string' },
-      goal: { type: 'boolean' },
-      goal_id: { type: 'string' },
     },
     required: ['label'],
   },
 });
 
 /**
- * One new wording for one line of a document (2026-10-24: re-roll one line
- * instead of the whole list). The rest of the list is shown so the new line
- * repeats none of it. Shopping: the same slot and piece; career: a new
- * "This event" goal (its section kept by the caller). Two attempts; a
- * budget refusal is thrown; with no answer it throws, and the document is
- * left as it is.
+ * One new wording for one shopping-list line (2026-10-24: re-roll one line
+ * instead of the whole list): the same slot and piece; the rest of the list
+ * is shown so the new line repeats none of it. Two attempts; a budget
+ * refusal is thrown; with no answer it throws, and the list is left as it is.
  *
- * @returns {{ label, description, task_source?, goal_id? }}
+ * @returns {{ label, description }}
  */
-async function redraftDocumentLine(event, { type, items, index, look = null, money = null, goals = [] }) {
+async function redraftDocumentLine(event, { items, index, look = null }) {
   const line = items[index];
   if (!line) throw Object.assign(new Error('No such line'), { status: 404 });
   const others = items.filter((_, i) => i !== index).map((i) => `- ${i.label}`).join('\n') || '- (none)';
-  let task;
-  if (type === 'shopping_list') {
-    const plan = shoppingPlan(look);
-    const planned = plan.find((l) => line.piece_id && String(l.piece?.id) === String(line.piece_id)) || plan.find((l) => l.slot === listSlotOf(line.slot)) || { slot: line.slot, piece: null };
-    task = `Rewrite ONE line of Lala's wardrobe shopping list, the "${line.slot}" line.
-It is: ${planLineFacts(planned, 0).replace(/^1\. /, '')}.
-Now it reads: "${line.label}". Write a different, vivid, specific line (7-15 words) and one whispered sentence about why it matters tonight.
-A piece already hers is a "pull it from my closet" line. Never write a price.`;
-  } else {
-    const { describeInvitationMoney } = require('./invitationCompositingService');
-    const goalList = (Array.isArray(goals) ? goals : []).filter((g) => g && g.id && g.title).slice(0, 8);
-    task = `Rewrite ONE of Lala's career goals for this event.
-Now it reads: "${line.label}". Write a different goal, specific to this event (its host, brand, venue, format or dress code), with one sentence on why.
-Money (the deal): ${money || describeInvitationMoney(event).text}. Never write a coin amount that line does not hold, and never invent a brand or host obligation.
-${goalList.length ? `Her career goals (give goal_id when it serves one):\n${goalList.map((g) => `- ${g.id}: ${g.title}`).join('\n')}` : ''}`;
-  }
+  const plan = shoppingPlan(look);
+  const planned = plan.find((l) => line.piece_id && String(l.piece?.id) === String(line.piece_id)) || plan.find((l) => l.slot === listSlotOf(line.slot)) || { slot: line.slot, piece: null };
   const prompt = `EVENT: ${event.name} · ${event.dress_code || 'chic'} · prestige ${event.prestige || 5}/10${event.host_brand ? ` · ${event.host_brand}` : ''}
 
-${task}
+Rewrite ONE line of Lala's wardrobe shopping list, the "${line.slot}" line.
+It is: ${planLineFacts(planned, 0).replace(/^1\. /, '')}.
+Now it reads: "${line.label}". Write a different, vivid, specific line (7-15 words) and one whispered sentence about why it matters tonight.
+A piece already hers is a "pull it from my closet" line. Never write a price.
 
 The rest of the list (repeat none of it):
 ${others}
@@ -1099,13 +1084,7 @@ Return it with the write_line tool.`;
       const r = readJsonReply(response, LINE_TOOL.name);
       const label = typeof r?.label === 'string' ? r.label.trim().slice(0, 200) : '';
       if (!label) throw new Error('reply has no label');
-      const out = { label, description: String(r.description || '').trim().slice(0, 300) };
-      if (type === 'career_plan') {
-        out.task_source = r.goal === false ? 'optional' : 'goal';
-        const ids = new Set((goals || []).map((g) => String(g.id)));
-        if (r.goal_id && ids.has(String(r.goal_id))) out.goal_id = String(r.goal_id);
-      }
-      return out;
+      return { label, description: String(r.description || '').trim().slice(0, 300) };
     } catch (err) {
       if (isBudgetRefusal(err)) throw err;
       lastErr = err;

@@ -1,5 +1,5 @@
 import { vi, describe, test, expect } from 'vitest';
-import { docState, docOverlay, lineOfPiece, shoppingLines, careerSections, documentByline } from './eventDocuments';
+import { docState, docOverlay, lineOfPiece, shoppingLines, documentByline } from './eventDocuments';
 
 describe('eventDocuments (Evoni, 2026-10-06)', () => {
   test('the status chip', () => {
@@ -83,10 +83,10 @@ describe('eventDocuments (Evoni, 2026-10-06)', () => {
     expect(docOverlay({ ...doc, overlay: { url: 'u', version: 2 } }, 630).key).toBe('current'); // drawn before totals were kept
   });
 
-  test('the career plan\'s sections', () => {
-    const s = careerSections({ items: [{ label: 'a' }, { label: 'b', section: 'bigger_goals' }, { label: 'c', section: 'this_event' }] });
-    expect(s.thisEvent.map((i) => i.label)).toEqual(['a', 'c']);
-    expect(s.biggerGoals.map((i) => i.label)).toEqual(['b']);
+  test('an offer letter overlay drawn before the terms changed reads out of date', () => {
+    const doc = { status: 'approved', version: 1, overlay: { url: 'https://x/o.png', version: 1 } };
+    expect(docOverlay(doc).key).toBe('current');
+    expect(docOverlay(doc, null, true)).toEqual({ key: 'outdated', url: 'https://x/o.png', label: 'Overlay out of date: the terms changed' });
   });
 
   test('the byline names the host and the date', () => {
@@ -99,21 +99,11 @@ describe('eventDocuments (Evoni, 2026-10-06)', () => {
   });
 });
 
-describe('the career plan carry preview and the amount note (2026-10-24)', () => {
-  test('planLeftOut: over the limit, optional ideas go first, then the last goals; bigger goals never count', async () => {
-    const { planLeftOut } = await import('./eventDocuments');
-    const items = [
-      { label: 'A', task_source: 'goal' }, { label: 'B', task_source: 'optional' },
-      { label: 'C', task_source: 'goal' }, { label: 'G', section: 'bigger_goals' }, { label: 'D', task_source: 'goal' },
-    ];
-    expect([...planLeftOut(items, 2)].sort()).toEqual([1, 4]);
-    expect(planLeftOut(items, 4).size).toBe(0);
-    expect(planLeftOut(items, null).size).toBe(0);
-  });
+describe('the amount note (2026-10-24)', () => {
 
   test('amountNote says which amounts a version names that its source does not', async () => {
     const { amountNote } = await import('./eventDocuments');
-    expect(amountNote({ checks: { amounts: { ok: false, invented: [1500] } } }, 'career_plan')).toBe('Names 1,500 coins, which the deal does not state.');
+    expect(amountNote({ checks: { amounts: { ok: false, invented: [1500] } } }, 'offer_letter')).toBe('Names 1,500 coins, which the terms do not state. The terms section carries every amount.');
     expect(amountNote({ checks: { amounts: { ok: true, invented: [] } } }, 'shopping_list')).toBeNull();
     expect(amountNote({}, 'shopping_list')).toBeNull();
   });

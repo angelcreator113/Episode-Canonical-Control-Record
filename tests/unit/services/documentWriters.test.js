@@ -8,7 +8,7 @@
  *   - the career writer states the deal's money (never "Unpaid event" on a
  *     deal), keeps goal / optional, keeps a goal link only to one of her
  *     goals, and throws a budget refusal;
- *   - one line can be re-worded on its own.
+ *   - one shopping line can be re-worded on its own.
  * The AI client is mocked.
  */
 jest.mock('@aws-sdk/client-s3', () => ({
@@ -156,19 +156,13 @@ describe('redraftDocumentLine', () => {
     expect(out).toEqual({ label: 'Find heels that outshine the chandelier', description: 'Gold, always' });
   });
 
-  test('a career line: goal / optional and a valid goal link', async () => {
-    mockCreate.mockResolvedValueOnce(tool('write_line', { label: 'Book coffee with the Maison Rue PR lead', goal: false, goal_id: 'g-1' }));
-    const out = await redraftDocumentLine(EVENT, { type: 'career_plan', items: [{ slot: 'a', label: 'Old' }], index: 0, goals: [{ id: 'g-1', title: 'Partnership' }] });
-    expect(out).toMatchObject({ task_source: 'optional', goal_id: 'g-1' });
-  });
-
   test('no answer on both tries: a 502, the document is left as it is', async () => {
     mockCreate.mockResolvedValue({ content: [] });
-    await expect(redraftDocumentLine(EVENT, { type: 'career_plan', items: [{ label: 'Old' }], index: 0 })).rejects.toMatchObject({ status: 502 });
+    await expect(redraftDocumentLine(EVENT, { items: [{ slot: 'shoes', label: 'Old' }], index: 0 })).rejects.toMatchObject({ status: 502 });
   });
 
   test('a missing line is a 404', async () => {
-    await expect(redraftDocumentLine(EVENT, { type: 'career_plan', items: [], index: 3 })).rejects.toMatchObject({ status: 404 });
+    await expect(redraftDocumentLine(EVENT, { items: [], index: 3 })).rejects.toMatchObject({ status: 404 });
   });
 });
 

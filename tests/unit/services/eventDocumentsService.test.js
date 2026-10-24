@@ -64,7 +64,7 @@ describe('eventDocumentsService', () => {
   test('nothing is drafted yet: both documents are null', async () => {
     const { models } = fakeModels(EVENT);
     const docs = await svc.getDocuments(models, ids);
-    expect(docs).toMatchObject({ shopping_list: null, career_plan: null, deliverables: [] });
+    expect(docs).toMatchObject({ shopping_list: null, offer_letter: null, offer_eligible: false, offer_terms: [] });
     // The look the shopping list adds up comes with the documents (Task #2787).
     expect(docs).toHaveProperty('look');
     expect(docs).toHaveProperty('balance');
@@ -82,14 +82,10 @@ describe('eventDocumentsService', () => {
     expect(row.canon_consequences.documents.shopping_list.version).toBe(1);
   });
 
-  test('a career plan holds this event\'s goals and her active career goals', async () => {
+  test('an offer letter is for deal events only (Evoni, 2026-10-24)', async () => {
     const { models } = fakeModels(EVENT);
-    const doc = await svc.draftDocument(models, { ...ids, type: 'career_plan' });
-    expect(doc.items).toEqual([
-      { slot: 'net_1', label: 'Follow up with STUDIO BY SABLE', description: 'A warm intro', required: false, section: 'this_event', task_source: 'goal' },
-      { slot: 'goal_1', label: 'Land a brand partnership', description: '', required: false, section: 'bigger_goals', goal_id: 'g-1' },
-    ]);
-    expect(models.CareerGoal.findAll).toHaveBeenCalledWith(expect.objectContaining({ where: { show_id: 'show-1', status: 'active' } }));
+    await expect(svc.draftDocument(models, { ...ids, type: 'offer_letter' })).rejects.toMatchObject({ status: 409 });
+    await expect(svc.draftDocument(models, { ...ids, type: 'career_plan' })).rejects.toMatchObject({ status: 400 });
   });
 
   test('edit, approve, redraft: each a version, the replaced one kept in history', async () => {
@@ -148,20 +144,20 @@ describe('eventDocumentsService', () => {
   test('refusals: an unknown document, editing or approving before a draft, an empty edit, a missing event', async () => {
     const { models } = fakeModels(EVENT);
     await expect(svc.draftDocument(models, { ...ids, type: 'invoice' })).rejects.toMatchObject({ status: 400 });
-    await expect(svc.editDocument(models, { ...ids, type: 'career_plan', items: [{ label: 'x' }] })).rejects.toMatchObject({ status: 404 });
-    await expect(svc.approveDocument(models, { ...ids, type: 'career_plan' })).rejects.toMatchObject({ status: 404 });
-    await svc.draftDocument(models, { ...ids, type: 'career_plan' });
-    await expect(svc.editDocument(models, { ...ids, type: 'career_plan', items: [{ label: ' ' }] })).rejects.toMatchObject({ status: 400 });
-    await expect(svc.editDocument(models, { ...ids, type: 'career_plan', items: 'nope' })).rejects.toMatchObject({ status: 400 });
+    await expect(svc.editDocument(models, { ...ids, type: 'shopping_list', items: [{ label: 'x' }] })).rejects.toMatchObject({ status: 404 });
+    await expect(svc.approveDocument(models, { ...ids, type: 'shopping_list' })).rejects.toMatchObject({ status: 404 });
+    await svc.draftDocument(models, { ...ids, type: 'shopping_list' });
+    await expect(svc.editDocument(models, { ...ids, type: 'shopping_list', items: [{ label: ' ' }] })).rejects.toMatchObject({ status: 400 });
+    await expect(svc.editDocument(models, { ...ids, type: 'shopping_list', items: 'nope' })).rejects.toMatchObject({ status: 400 });
     await expect(svc.getDocuments(models, { showId: 'show-1', eventId: 'other' })).rejects.toMatchObject({ status: 404 });
   });
 
-  test('normalizeItems trims, caps at 20 and keeps a career item\'s section', () => {
-    const many = Array.from({ length: 25 }, (_, i) => ({ label: `Item ${i}`, section: i === 0 ? 'bigger_goals' : 'other' }));
-    const out = svc.normalizeItems('career_plan', many);
+  test('normalizeItems trims, caps at 20 and keeps the piece a line names', () => {
+    const many = Array.from({ length: 25 }, (_, i) => ({ label: `Item ${i}`, piece_id: i === 0 ? 'p-1' : '' }));
+    const out = svc.normalizeItems('shopping_list', many);
     expect(out).toHaveLength(20);
-    expect(out[0].section).toBe('bigger_goals');
-    expect(out[1].section).toBe('this_event');
+    expect(out[0].piece_id).toBe('p-1');
+    expect(out[1]).not.toHaveProperty('piece_id');
     expect(svc.normalizeItems('shopping_list', [{ label: 'x'.repeat(300) }])[0].label).toHaveLength(200);
   });
 

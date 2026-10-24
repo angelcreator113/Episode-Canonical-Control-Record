@@ -109,23 +109,6 @@ router.post('/episodes/:episodeId/todo/use-shopping-list', requireAuth, async (r
   }
 });
 
-// POST /episodes/:episodeId/todo/use-career-plan (2026-10-24): the event's
-// approved career plan's "This event" goals applied to this episode's task
-// list, within the event's goal limit; lines that do not fit are named.
-// Refused while the plan is a Draft; again adds nothing new
-// (eventDocumentsService.useCareerPlanInEpisode).
-router.post('/episodes/:episodeId/todo/use-career-plan', requireAuth, async (req, res) => {
-  try {
-    const models = req.app.get('models') || require('../models');
-    const { useCareerPlanInEpisode } = require('../services/eventDocumentsService');
-    const data = await useCareerPlanInEpisode(models, req.params.episodeId);
-    return res.json({ success: true, data });
-  } catch (err) {
-    console.error('[TodoList] use career plan failed:', err.message);
-    return res.status(err.status || 500).json({ success: false, error: err.message });
-  }
-});
-
 router.get('/episodes/:episodeId/todo', requireAuth, async (req, res) => {
   try {
     const { episodeId } = req.params;
