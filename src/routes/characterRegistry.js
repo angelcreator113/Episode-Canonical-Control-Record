@@ -696,6 +696,8 @@ router.put('/characters/:id', requireAuth, authorize(['ADMIN']), express.json(),
       'is_alive', 'death_date', 'death_cause', 'death_impact',
       // Demographics
       'gender', 'pronouns', 'sexuality', 'age', 'birth_year', 'ethnicity', 'species',
+      // Heritage tags (utils/heritageTags; normalized below): ethnicity stays her wording.
+      'heritage_tags',
       'cultural_background', 'nationality', 'first_language',
       'hometown', 'current_city', 'city_migration_history',
       'class_origin', 'current_class', 'class_mobility_direction',
@@ -758,6 +760,10 @@ router.put('/characters/:id', requireAuth, authorize(['ADMIN']), express.json(),
     const current = typeof character.toJSON === 'function' ? character.toJSON() : character;
     for (const [f, v] of Object.entries(require('../services/characterDepthFields').withTwinsHome(current, given))) character[f] = v;
     if (req.body.current_city !== undefined) character.current_city = currentCity;
+    if (req.body.heritage_tags !== undefined) {
+      const tags = require('../utils/heritageTags').normalizeTags(req.body.heritage_tags);
+      character.heritage_tags = tags.length ? tags : null;
+    }
     await character.save();
     if (req.body.selected_name !== undefined) await syncRealNameToFeed(getModels(), character);
 

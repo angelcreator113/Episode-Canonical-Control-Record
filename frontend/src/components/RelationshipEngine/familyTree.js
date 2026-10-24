@@ -8,7 +8,7 @@
  *   generationStep(role)            how far below the other the role's holder sits
  *   buildFamilyTrees({ families, rels, charById })
  *     → [{ key, name, rows: [[node…]…], edges: [edge…] }]
- *       node  { key, name, kind: 'character'|'profile'|'ghost', id, gen }
+ *       node  { key, name, kind: 'character'|'profile'|'ghost', id, gen, of }
  *       edge  { from, to, role, kind, relId, rel }   ("from is to's role")
  */
 import { cname, isFamily } from './tokens';
@@ -55,7 +55,8 @@ export function buildFamilyTrees({ families = [], rels = [], charById = {} } = {
     for (const m of f.members || []) {
       const key = m.kind === 'character' && m.registry_character_id ? charKey(m.registry_character_id)
         : m.kind === 'profile' && m.social_profile_id ? `p:${m.social_profile_id}` : `g:${m.id}`;
-      const n = node(key, { name: m.name, kind: m.kind, id: m.registry_character_id || m.social_profile_id || m.id });
+      // of: whose family they were added to (where "Make them a character" is).
+      const n = node(key, { name: m.name, kind: m.kind, id: m.registry_character_id || m.social_profile_id || m.id, of: m.role_of_character_id || null });
       n.families.push(f.id);
       if (m.generation != null && n.gen == null) n.gen = m.generation;
       if (m.role && m.role_of_character_id) {
