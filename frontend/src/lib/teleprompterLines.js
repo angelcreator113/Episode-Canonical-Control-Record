@@ -133,8 +133,15 @@ export function lineChoice(line, i, max = 48) {
   return `${i + 1} · ${text.length > max ? `${text.slice(0, max - 1).trimEnd()}…` : text}`;
 }
 
-/** The first type this browser records (MP4 first: Safari and iPhone play it back). */
-export const RECORD_TYPES = ['video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm'];
+/**
+ * The first type this browser records: H.264 MP4 first, so the take plays on
+ * an iPhone and in Safari (Chrome's plain 'video/mp4' can be VP9 inside an
+ * MP4, which iPhone may not play; Teleprompter audit 7), then any MP4, then WebM.
+ */
+export const RECORD_TYPES = [
+  'video/mp4;codecs=avc1.42E01E,mp4a.40.2', 'video/mp4;codecs=avc1,mp4a.40.2', 'video/mp4;codecs=avc1,opus',
+  'video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm',
+];
 export function pickRecordType(Recorder = typeof window !== 'undefined' ? window.MediaRecorder : undefined) {
   if (!Recorder || typeof Recorder.isTypeSupported !== 'function') return '';
   return RECORD_TYPES.find((t) => {

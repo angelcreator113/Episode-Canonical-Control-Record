@@ -432,3 +432,6 @@ body.stp-open { overflow: hidden; }
 }
 /* The status text keeps its icon beside it and wraps on its own; a button goes under. */
 .stp-status > span { flex: 1 1 12em; min-width: 0; }
+
+/* Teleprompter audit 13: a note under the status text (the headphones note after a save). */
+.stp-status > .stp-status-note { flex: 1 1 100%; color: var(--studio-prompter-cue); }
