@@ -55,6 +55,8 @@ body.stp-open { overflow: hidden; }
 .stp-bar {
   display: flex; align-items: center; justify-content: space-between; gap: 8px 12px; flex-wrap: wrap;
   padding: 8px 16px; border-bottom: 1px solid var(--studio-prompter-line);
+  /* Clear of an iPhone's notch and rounded corners (viewport-fit=cover). */
+  padding: max(8px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) 8px max(16px, env(safe-area-inset-left, 0px));
 }
 .stp-title { display: flex; flex-direction: column; gap: 2px; min-width: 0; margin: 0; font-weight: 400; }
 .stp-kicker { font-family: 'DM Mono', var(--font-mono); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--studio-prompter-mark); }
@@ -62,7 +64,7 @@ body.stp-open { overflow: hidden; }
 .stp-bar-controls { display: flex; align-items: center; gap: 8px; margin-left: auto; min-width: 0; }
 .stp-beatnav { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .stp-jump select {
-  max-width: 260px; min-height: 44px; padding: 4px 10px; border: 1px solid var(--studio-prompter-line); border-radius: 10px;
+  max-width: 260px; text-overflow: ellipsis; min-height: 44px; padding: 4px 10px; border: 1px solid var(--studio-prompter-line); border-radius: 10px;
   background: var(--studio-prompter-bg); color: var(--studio-prompter-ink); font: inherit; font-size: 16px;
 }
 
@@ -81,7 +83,7 @@ body.stp-open { overflow: hidden; }
 .stp-btn.is-rec { border-color: var(--studio-prompter-rec); color: var(--studio-prompter-rec); font-weight: 600; }
 .stp-btn:focus-visible, .stp-jump select:focus-visible, .stp-slider input:focus-visible { outline: 2px solid var(--studio-prompter-mark); outline-offset: 2px; }
 
-.stp-stage { position: relative; flex: 1; min-height: 0; overflow: hidden; }
+.stp-stage { position: relative; flex: 1; min-height: 0; overflow: hidden; container: stp-stage / size; }
 .stp-scroll { position: relative; height: 100%; overflow-y: auto; -webkit-overflow-scrolling: touch; scrollbar-width: thin; }
 .stp-spacer.is-top { height: 33%; }
 .stp-spacer.is-bottom { height: 67%; }
@@ -95,6 +97,7 @@ body.stp-open { overflow: hidden; }
 
 .stp-page {
   box-sizing: border-box; max-width: 34em; margin: 0 auto; padding: 0 24px;
+  padding: 0 max(24px, env(safe-area-inset-right, 0px)) 0 max(24px, env(safe-area-inset-left, 0px));
   font-family: var(--font-prose); font-size: var(--stp-size, 40px); line-height: 1.45;
 }
 .stp-root.is-mirrored .stp-page { transform: scaleX(-1); }
@@ -140,6 +143,8 @@ body.stp-open { overflow: hidden; }
   position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: none;
   background: var(--studio-prompter-scrim); color: var(--studio-prompter-ink); font-family: 'DM Mono', var(--font-mono); font-size: 160px; font-weight: 700;
 }
+/* Mirrored for the glass, the 3-2-1 and the silence cue too, not only the words. */
+.stp-root.is-mirrored .stp-countdown, .stp-root.is-mirrored .stp-quiet { transform: scaleX(-1); }
 
 .stp-review {
   position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); box-sizing: border-box; width: min(560px, calc(100% - 32px));
@@ -155,12 +160,14 @@ body.stp-open { overflow: hidden; }
 
 .stp-status {
   display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0; padding: 8px 16px;
+  padding: 8px max(16px, env(safe-area-inset-right, 0px)) 8px max(16px, env(safe-area-inset-left, 0px));
   border-top: 1px solid var(--studio-prompter-line); background: var(--studio-prompter-bar); color: var(--studio-prompter-rec); font-size: 14px;
 }
 .stp-status.is-ok { color: var(--studio-prompter-ok); }
 
 .stp-controls {
   display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 8px 16px calc(8px + env(safe-area-inset-bottom, 0px));
+  padding: 8px max(16px, env(safe-area-inset-right, 0px)) calc(8px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px));
   border-top: 1px solid var(--studio-prompter-line);
 }
 .stp-slider { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; color: var(--studio-prompter-cue); }
@@ -175,13 +182,16 @@ body.stp-open { overflow: hidden; }
 .stp-readas { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
 .stp-readas-label { font-family: 'DM Mono', var(--font-mono); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--studio-prompter-cue); white-space: nowrap; }
 .stp-readas select {
-  max-width: 180px; min-height: 44px; padding: 4px 10px; border: 1px solid var(--studio-prompter-line); border-radius: 10px;
+  max-width: 180px; text-overflow: ellipsis; min-height: 44px; padding: 4px 10px; border: 1px solid var(--studio-prompter-line); border-radius: 10px;
   background: var(--studio-prompter-bg); color: var(--studio-prompter-ink); font: inherit; font-size: 16px;
 }
 .stp-readas select:focus-visible { outline: 2px solid var(--studio-prompter-mark); outline-offset: 2px; }
 .stp-group { margin-bottom: 1em; }
+/* Just above the reading line, over the words already read, so it never
+   covers the line being read; on the left when mirrored (the line starts on
+   the right) or when the camera preview is on the right. */
 .stp-quiet {
-  position: absolute; right: 12px; top: calc(33% + 10px); display: grid; grid-template-columns: auto auto; align-items: baseline; gap: 2px 12px;
+  position: absolute; right: 12px; bottom: calc(67% + 10px); display: grid; grid-template-columns: auto auto; align-items: baseline; gap: 2px 12px;
   min-width: 170px; padding: 10px 14px; border: 1px solid var(--studio-prompter-line); border-radius: 12px;
   background: var(--studio-prompter-scrim); color: var(--studio-prompter-cue); pointer-events: none;
 }
@@ -190,6 +200,7 @@ body.stp-open { overflow: hidden; }
 .stp-quiet-who { grid-column: 1 / -1; font-size: 13px; }
 .stp-quiet-bar { grid-column: 1 / -1; display: block; height: 6px; margin-top: 4px; border-radius: 3px; background: var(--studio-prompter-line); overflow: hidden; }
 .stp-quiet-bar span { display: block; height: 100%; background: var(--studio-prompter-mark); transform-origin: left center; transition: transform 0.1s linear; }
+.stp-root.is-mirrored .stp-quiet, .stp-root.has-cam .stp-quiet { right: auto; left: 12px; }
 .stp-quiet.is-action { display: block; min-width: 0; font-family: 'DM Mono', var(--font-mono); font-size: 14px; font-style: italic; color: var(--studio-prompter-dim); }
 .stp-root.is-paced .stp-scroll { scroll-behavior: smooth; }
 @media (prefers-reduced-motion: reduce) {
@@ -265,30 +276,37 @@ body.stp-open { overflow: hidden; }
 .stp-startfrom select:focus-visible { outline: 2px solid var(--studio-prompter-mark); outline-offset: 2px; }
 
 @media (max-width: 600px) {
-  .stp-bar { padding: 6px 12px; gap: 6px 8px; }
+  .stp-bar { padding: max(6px, env(safe-area-inset-top, 0px)) max(12px, env(safe-area-inset-right, 0px)) 6px max(12px, env(safe-area-inset-left, 0px)); gap: 6px 8px; }
   .stp-kicker { display: none; }
-  .stp-title { flex: 1; order: 1; }
-  .stp-close { order: 2; }
-  .stp-bar-controls { order: 3; width: 100%; margin-left: 0; }
-  .stp-beatnav { flex: 1; min-width: 0; }
+  .stp-title { flex: 1 1 0; order: 1; }
+  .stp-close { order: 3; }
+  /* Read as beside the title, so the beat list has the whole second row
+     and neither is cut to a few letters. */
+  .stp-bar-controls { display: contents; }
+  .stp-readas { order: 2; flex: none; }
+  .stp-beatnav { order: 4; flex: 1 1 100%; min-width: 0; }
   .stp-jump { flex: 1; min-width: 0; }
   .stp-jump select { width: 100%; max-width: none; }
   .stp-readas-label { display: none; }
-  .stp-readas select { max-width: 112px; }
-  .stp-page { padding: 0 16px; }
-  .stp-controls { padding: 6px 12px calc(6px + env(safe-area-inset-bottom, 0px)); gap: 6px; }
+  .stp-readas select { max-width: 150px; padding: 4px 4px 4px 8px; }
+  .stp-page { padding: 0 max(16px, env(safe-area-inset-right, 0px)) 0 max(16px, env(safe-area-inset-left, 0px)); }
+  .stp-controls { padding: 6px max(12px, env(safe-area-inset-right, 0px)) calc(6px + env(safe-area-inset-bottom, 0px)) max(12px, env(safe-area-inset-left, 0px)); gap: 6px; }
   .stp-btn-text { display: none; }
   .stp-slider { flex: 1; min-width: 96px; }
   .stp-slider input { flex: 1; width: auto; min-width: 0; }
   .stp-more { display: inline-flex; }
   .stp-extras { display: none; }
-  .stp-extras.is-open { display: flex; flex-wrap: wrap; gap: 6px; width: 100%; }
+  /* The open settings keep the words on screen on a short phone: they scroll. */
+  .stp-extras.is-open {
+    display: flex; flex-wrap: wrap; align-content: flex-start; gap: 6px; width: 100%; box-sizing: border-box;
+    max-height: 34vh; max-height: 34dvh; overflow-y: auto; padding: 2px; overscroll-behavior: contain;
+  }
   .stp-modes { width: 100%; }
   .stp-modes .stp-btn { flex: 1; }
   .stp-cam { width: 104px; right: 8px; top: 8px; }
   .stp-rehearsal { left: 8px; bottom: 8px; width: calc(100% - 16px); }
   .stp-pacing { width: 100%; }
-  .stp-pacing .stp-btn { flex: 1; }
+  .stp-pacing .stp-btn { flex: 1 1 0; min-width: 0; padding: 4px 6px; white-space: normal; line-height: 1.2; text-align: center; }
   .stp-countdown { font-size: 120px; }
   .stp-review { bottom: 8px; width: calc(100% - 16px); }
   .stp-takes { right: 8px; bottom: 8px; width: calc(100% - 16px); }
@@ -297,7 +315,14 @@ body.stp-open { overflow: hidden; }
   .stp-startfrom select { flex: 1; width: 100%; max-width: none; }
   /* Under the text, clear of the reading line, on a narrow screen. */
   .stp-quiet { top: auto; bottom: 8px; right: 8px; min-width: 140px; padding: 8px 10px; }
+  .stp-root.is-mirrored .stp-quiet, .stp-root.has-cam .stp-quiet { right: auto; left: 8px; }
   .stp-quiet-n { font-size: 24px; }
+}
+/* A phone's reading area with room above the reading line (settings
+   closed): the cue goes there too, over words already read, so the lines
+   coming up stay clear. */
+@container stp-stage (max-width: 600px) and (min-height: 380px) {
+  .stp-quiet { bottom: calc(67% + 8px); }
 }
 
 /* ── Batch 3: phone remote and voice clips ─────────────────── */

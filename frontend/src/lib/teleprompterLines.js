@@ -41,7 +41,9 @@ export function teleprompterLines(lines = [], { screen = false } = {}) {
     const seconds = lineSeconds(String(plain).trim());
     if (r.type === 'dialogue') {
       const hers = isHerSpeaker(r.speaker);
-      out.push({ kind: hers ? 'mine' : 'cue', who: hers ? HER : r.speaker, speaker: r.written || r.speaker, paren: r.paren || null, text: r.text, seconds });
+      // Her line is labelled JustAWoman whatever she typed (`Me:` showed
+      // "PRIME"; Teleprompter reader audit, 2026-10-24); anyone else as written.
+      out.push({ kind: hers ? 'mine' : 'cue', who: hers ? HER : r.speaker, speaker: hers ? HER : r.written || r.speaker, paren: r.paren || null, text: r.text, seconds });
     } else if (r.type === 'action' || r.type === 'narration') {
       // `(breath)` / `[breath]` on its own line is a breath mark (Evoni, 2026-10-20).
       out.push({ kind: isBreath(r.text) ? 'breath' : 'direction', who: null, text: r.text, seconds });
@@ -72,9 +74,16 @@ export function teleprompterScript(scriptText) {
       return { ...l, vi };
     });
   };
+  const beatLines = beats.map((b) => teleprompterLines(b.lines, { screen: true }));
+  // A header label before the first beat ("Host: Lala", "Dress Code: …") is
+  // not someone speaking unless that name speaks in a beat (or is hers or
+  // Lala's): it reads as a direction and is not a "Read as" choice.
+  const cast = new Set([HER, 'Lala', ...beatLines.flat().map((l) => l.who).filter(Boolean)]);
+  const intro = teleprompterLines(preamble, { screen: true }).map((l) => (
+    l.who && !cast.has(l.who) ? { kind: 'direction', who: null, text: `${l.speaker}: ${l.text}`, seconds: l.seconds } : l));
   return {
-    intro: indexed(teleprompterLines(preamble, { screen: true })),
-    beats: beats.map((b) => ({ number: b.number, name: b.name, raw: b.lines, lines: indexed(teleprompterLines(b.lines, { screen: true })) })),
+    intro: indexed(intro),
+    beats: beats.map((b, i) => ({ number: b.number, name: b.name, raw: b.lines, lines: indexed(beatLines[i]) })),
   };
 }
 
@@ -95,7 +104,9 @@ export function speakersOf(lines = []) {
  * reads as written).
  */
 export function pastedScript(text) {
-  const groups = pastedParagraphs(text).map((p) => teleprompterLines(p.split('\n')));
+  // On-screen moments ([UI:…]) are kept, as a picked script's are; the
+  // reader hides them when "Show on-screen moments" is off.
+  const groups = pastedParagraphs(text).map((p) => teleprompterLines(p.split('\n'), { screen: true }));
   return groups.some((g) => g.some((l) => l.who)) ? groups.filter((g) => g.length) : null;
 }
 

@@ -7,7 +7,9 @@ describe('teleprompterLines', () => {
     const out = teleprompterLines(['Me: "Hi."', '**JustAWoman:** Bold one.', 'JAWIHP (softly): Quiet.', 'Prime: Yes.', 'Lala: "Okay."', '(beat)', 'Suddenly: the lights go out.', '[UI:OPEN closet]', '[STAT: coins 5]', '[WEAR: p1]', '[TRANSITION: cut to]', '']);
     expect(out.map((l) => l.kind)).toEqual(['mine', 'mine', 'mine', 'mine', 'cue', 'direction', 'direction']);
     expect(out[1]).toMatchObject({ speaker: 'JustAWoman', text: 'Bold one.' });
-    expect(out[2]).toMatchObject({ speaker: 'JAWIHP', text: 'Quiet.' });
+    // Her line is labelled JustAWoman whatever she typed (reader audit, 2026-10-24).
+    expect(out[2]).toMatchObject({ speaker: 'JustAWoman', text: 'Quiet.' });
+    expect(out[0]).toMatchObject({ speaker: 'JustAWoman', who: 'JustAWoman' });
   });
   test('a script is beats with canonical names; pasted text keeps its paragraphs', () => {
     const s = teleprompterScript('## BEAT: 8 · Old\nMe: hi');
