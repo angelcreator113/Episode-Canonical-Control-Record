@@ -26,6 +26,9 @@ const BEAT_TYPES = [
   'event_outcome', 'deliverable_creation', 'payoff_cta', 'cliffhanger'
 ];
 
+// A Markdown rule: three or more dashes, stars or underscores, spaced or not.
+const RULE_LINE = /^(?:-[ \t]*){3,}$|^(?:\*[ \t]*){3,}$|^(?:_[ \t]*){3,}$/;
+
 const SPEAKER_MAP = {
   'lala': 'lala',
   'prime': 'prime',
@@ -236,10 +239,13 @@ function parseScript(scriptContent, options = {}) {
     for (const { text, lineNumber } of raw.lines) {
       const trimmed = text.trim();
       if (!trimmed) continue;
+      // A rule line (`---`) is a divider, not words (History / Raw editor
+      // audit R9, 2026-10-24: it was counted as narration).
+      if (RULE_LINE.test(trimmed)) continue;
 
-      // ── Dialogue ──
-      const dialogueMatch = trimmed.match(/^(Lala|Prime|Me|You|Guest|System|Message)\s*(?:\(.*?\))?\s*:\s*$/i) ||
-                            trimmed.match(/^(Lala|Prime|Me|You|Guest|System|Message)\s*(?:\(.*?\))?\s*:\s*["\u201C]?(.*?)["\u201D]?\s*$/i);
+      // ── Dialogue ── (`**Me:** text` and `**Lala**: text` are lines too, R9)
+      const dialogueMatch = trimmed.match(/^(?:\*\*|__)?\s*(Lala|Prime|Me|You|Guest|System|Message)\s*(?:\(.*?\))?\s*(?:\*\*|__)?\s*:\s*(?:\*\*|__)?\s*$/i) ||
+                            trimmed.match(/^(?:\*\*|__)?\s*(Lala|Prime|Me|You|Guest|System|Message)\s*(?:\(.*?\))?\s*(?:\*\*|__)?\s*:\s*(?:\*\*|__)?\s*["\u201C]?(.*?)["\u201D]?\s*$/i);
       if (dialogueMatch) {
         const speaker = SPEAKER_MAP[dialogueMatch[1].toLowerCase()] || 'system';
         const dialogue = dialogueMatch[2] || '';
