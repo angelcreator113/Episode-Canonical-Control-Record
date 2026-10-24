@@ -70,3 +70,31 @@ test('the blob URL is revoked a second after the click', () => {
   expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:x');
   click.mockRestore();
 });
+
+// Copy script (Evoni, 2026-10-24: "I have no way to copy the full script").
+test('Copy script puts the script as written on the clipboard and says so', async () => {
+  const writeText = vi.fn(() => Promise.resolve());
+  Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+  renderIt({ dirty: true });
+  const details = openMenu();
+  fireEvent.click(screen.getByTestId('script-export-copy'));
+  expect(writeText).toHaveBeenCalledWith(SCRIPT);
+  expect((await screen.findByTestId('script-export-copied')).textContent).toBe('Script copied');
+  expect(details.open).toBe(false);
+});
+
+test('without the Clipboard API it falls back to execCommand, and says when it cannot', async () => {
+  Object.defineProperty(navigator, 'clipboard', { value: undefined, configurable: true });
+  document.execCommand = vi.fn(() => true);
+  renderIt();
+  openMenu();
+  fireEvent.click(screen.getByTestId('script-export-copy'));
+  expect(await screen.findByTestId('script-export-copied')).toBeTruthy();
+  expect(document.execCommand).toHaveBeenCalledWith('copy');
+
+  document.execCommand = vi.fn(() => false);
+  const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+  fireEvent.click(screen.getByTestId('script-export-copy'));
+  expect((await screen.findByRole('alert')).textContent).toContain('could not be copied');
+  err.mockRestore();
+});
