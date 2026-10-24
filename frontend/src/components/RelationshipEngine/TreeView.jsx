@@ -106,6 +106,16 @@ export default function TreeView({ chars, rels, lalaId, selChar, onRelClick, onC
   };
 
   const VIEW = vb || { x: 0, y: 0, w: svgW, h: svgH };
+  // The drawing shrinks to fit a narrow screen; its text grows by the same
+  // factor so it still reads at 12px or more, and a long name shortens to
+  // the first name when the drawing is squeezed (a phone).
+  const k = Math.max(1, VIEW.w / dims.w, VIEW.h / dims.h);
+  const fs = n => n * k;
+  const nodeName = c => {
+    const n = cname(c);
+    if (k > 1.15) { const f = n.split(/\s+/)[0]; return f.length > 10 ? f.slice(0, 9) + '…' : f; }
+    return n.length > 16 ? n.slice(0, 14) + '…' : n;
+  };
 
   const handleWheel = e => { e.preventDefault(); zoom(e.deltaY > 0 ? -1 : 1); };
 
@@ -168,7 +178,7 @@ export default function TreeView({ chars, rels, lalaId, selChar, onRelClick, onC
             <g key={lk}>
               <rect x={VIEW.x - 60} y={bH * li} width={svgW + 120} height={bH} fill={cfg.color} opacity={.04} />
               <text x={VIEW.x + 14} y={bH * li + 22} fill={cfg.color} opacity={.8}
-                style={{ fontSize: 12, fontFamily: T.font, fontWeight: 800, letterSpacing: '0.08em' }}>
+                style={{ fontSize: fs(12), fontFamily: T.font, fontWeight: 600, letterSpacing: '0.08em' }}>
                 {cfg.label.toUpperCase()}
               </text>
               {li > 0 && <line x1={VIEW.x - 60} y1={bH * li} x2={svgW + 60} y2={bH * li} stroke={cfg.color} strokeOpacity={.12} strokeDasharray="6,5" />}
@@ -203,7 +213,7 @@ export default function TreeView({ chars, rels, lalaId, selChar, onRelClick, onC
                     ? (e.from.y + e.to.y) / 2 - 8
                     : e.from.y - Math.min(55, Math.abs(e.to.x - e.from.x) * .22) - 5}
                   textAnchor="middle" fill={tc}
-                  style={{ fontSize: 12, fontFamily: T.fontMono, fontWeight: 500, letterSpacing: '0.02em' }}>
+                  style={{ fontSize: fs(12), fontFamily: T.fontMono, fontWeight: 500, letterSpacing: '0.02em' }}>
                   {typeLabel(e.r)}{e.r.stage ? ` · ${humanize(e.r.stage)}` : e.r.tension_state ? ` · ${humanize(e.r.tension_state)}` : ''}
                 </text>
               )}
@@ -234,17 +244,17 @@ export default function TreeView({ chars, rels, lalaId, selChar, onRelClick, onC
               <circle r={nr} fill={isDim ? T.paper : T.white} stroke={rc} strokeWidth={isSel ? 2 : 1.5} opacity={isDim ? .15 : 1} filter="url(#ns)" />
               <circle r={nr - 3} fill={isDim ? 'none' : rb} opacity={isDim ? 0 : .35} />
               <text textAnchor="middle" dominantBaseline="central" fill={isDim ? T.inkFaint : rc}
-                opacity={isDim ? .15 : 1} style={{ fontSize: 12, fontFamily: T.font, fontWeight: 700, letterSpacing: '0.04em' }}>
+                opacity={isDim ? .15 : 1} style={{ fontSize: fs(12), fontFamily: T.font, fontWeight: 600, letterSpacing: '0.04em' }}>
                 {initials(cname(pos.c))}
               </text>
-              <text y={nr + 15} textAnchor="middle" fill={isDim ? T.inkFaint : T.inkMid}
-                opacity={isDim ? .1 : 1} style={{ fontSize: 12, fontFamily: T.fontBody, fontWeight: 600 }}>
-                {cname(pos.c).length > 16 ? cname(pos.c).slice(0, 14) + '…' : cname(pos.c)}
+              <text y={nr + fs(15)} textAnchor="middle" fill={isDim ? T.inkFaint : T.inkMid}
+                opacity={isDim ? .1 : 1} style={{ fontSize: fs(12), fontFamily: T.fontBody, fontWeight: 600 }}>
+                {nodeName(pos.c)}
               </text>
               {!isDim && relCnt > 0 && (
-                <g transform={`translate(${nr - 3},${-nr + 3})`}>
-                  <circle r={7} fill={rc} />
-                  <text textAnchor="middle" dominantBaseline="central" fill={T.white} style={{ fontSize: 10, fontWeight: 700 }}>{relCnt}</text>
+                <g transform={`translate(${nr - 3 + fs(3)},${-nr + 3 - fs(3)})`}>
+                  <circle r={fs(8)} fill={rc} stroke={T.white} strokeWidth={1.5} />
+                  <text textAnchor="middle" dominantBaseline="central" fill={T.white} style={{ fontSize: fs(12), fontWeight: 700 }}>{relCnt}</text>
                 </g>
               )}
             </g>
@@ -252,12 +262,8 @@ export default function TreeView({ chars, rels, lalaId, selChar, onRelClick, onC
         })}
       </svg>
 
-      {/* status bar */}
-      <div className="re-tree-status">
-        <span>{chars.length} characters</span><span>·</span>
-        <span>{rels.length} relationships</span><span>·</span>
-        <span>Zoom with the buttons · drag to pan</span>
-      </div>
+      {/* how to move it (the counts are in the page's sub-header) */}
+      <div className="re-tree-status">Zoom with the buttons · drag to pan</div>
     </div>
   );
 }

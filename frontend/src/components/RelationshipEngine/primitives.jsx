@@ -110,8 +110,11 @@ export function useToast() {
   return { toasts, show, dismiss };
 }
 
-/* ── Phone width (the Inspector becomes a bottom sheet) ─────────────── */
-export const PHONE_QUERY = '(max-width: 600px)';
+/* ── Phone or tablet width (the Inspector becomes a bottom sheet) ───── */
+// Up to 900px: beside a 768px tablet's stacked layout the panel landed a
+// page below the row that opened it. RelationshipEngine.css uses the same
+// 900px for the sheet.
+export const PHONE_QUERY = '(max-width: 900px)';
 export function useIsPhone() {
   const get = () => typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia(PHONE_QUERY).matches;
   const [phone, setPhone] = useState(get);

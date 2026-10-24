@@ -6,31 +6,40 @@
 export const API = '/api/v1';
 
 /* ─── tokens ─────────────────────────────────────────────────────────── */
+// The house palette (--lala-* in styles/design-tokens.css): parchment, gold,
+// ink; Lora for headings, DM Mono for labels. Rose, steel and orchid stay as
+// tones that carry meaning (romance and pressure, step/chosen and support,
+// secrets and mirrors), darkened so text in them reads at 4.5:1 or more
+// (2026-10-24 layout audit; the old #d4789a / #7ab3d4 / #a889c8 read ~2.9:1).
 export const T = {
-  rose:       '#d4789a',
-  roseDeep:   '#b85a7c',
-  roseFog:    '#fdf2f6',
-  steel:      '#7ab3d4',
-  steelFog:   '#eef6fb',
-  orchid:     '#a889c8',
-  orchidDeep: '#8a66b0',
-  orchidFog:  '#f3effa',
-  ink:        '#0f0c14',
-  inkMid:     '#3d3548',
-  inkDim:     '#7a7088',
-  inkFaint:   '#b8b0c8',
+  rose:       '#A8336C',
+  roseDeep:   '#8F1F55',
+  roseFog:    '#FDEAF3',
+  steel:      '#3D6E8F',
+  steelFog:   '#EAF2F7',
+  orchid:     '#6A4C93',
+  orchidDeep: '#4A3B7A',
+  orchidFog:  '#ECE6F7',
+  gold:       '#B8962E',
+  goldText:   '#7A6314',
+  goldFog:    '#FDF8EE',
+  ink:        '#2C2C2C',
+  inkMid:     '#4A4538',
+  inkDim:     '#6B6557',
+  inkFaint:   '#A09889',
   white:      '#ffffff',
-  paper:      '#faf9fc',
-  rule:       '#e8e4f0',
-  ruleLight:  '#f0edf8',
-  shadow:     '0 1px 3px rgba(15,12,20,.06), 0 4px 16px rgba(15,12,20,.08)',
-  shadowUp:   '0 -1px 3px rgba(15,12,20,.04), 0 8px 32px rgba(15,12,20,.12)',
+  paper:      '#FAF7F0',
+  rule:       '#E8E0D0',
+  ruleLight:  '#F4EFE4',
+  shadow:     '0 1px 3px rgba(44,44,44,.06), 0 4px 16px rgba(44,44,44,.08)',
+  shadowUp:   '0 -1px 3px rgba(44,44,44,.04), 0 8px 32px rgba(44,44,44,.12)',
   r:          '3px',
   rMd:        '8px',
   rLg:        '14px',
-  font:       "'Syne', 'Helvetica Neue', sans-serif",
-  fontBody:   "'DM Sans', 'Segoe UI', sans-serif",
-  fontMono:   "'JetBrains Mono', 'Fira Code', monospace",
+  font:       "'DM Mono', 'SF Mono', Monaco, Consolas, monospace",
+  fontBody:   "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif",
+  fontMono:   "'DM Mono', 'SF Mono', Monaco, Consolas, monospace",
+  fontProse:  "'Lora', Georgia, 'Times New Roman', serif",
 };
 
 /* ─── role palette ───────────────────────────────────────────────────── */
@@ -38,9 +47,9 @@ export const ROLE = {
   protagonist: { color: T.steel,    bg: T.steelFog  },
   pressure:    { color: T.rose,     bg: T.roseFog   },
   mirror:      { color: T.orchid,   bg: T.orchidFog },
-  support:     { color: '#6bba9a',  bg: '#edf7f2'   },
-  shadow:      { color: '#b89060',  bg: '#f7f0e8'   },
-  special:     { color: '#c9a84c',  bg: '#fdf7e6'   },
+  support:     { color: '#2F7A5A',  bg: '#EAF5EE'   },
+  shadow:      { color: '#8A6630',  bg: '#F7F0E8'   },
+  special:     { color: T.goldText, bg: T.goldFog   },
 };
 export const roleColor = r => (ROLE[r] || ROLE.shadow).color;
 export const roleBg    = r => (ROLE[r] || ROLE.shadow).bg;
@@ -67,7 +76,7 @@ export const LAYER = {
  */
 export const BANDS = [
   { key: 'lala',     label: 'Lala',               color: T.rose,    roles: [] },
-  { key: 'support',  label: 'Friends & support',  color: '#6bba9a', roles: ['support', 'protagonist'] },
+  { key: 'support',  label: 'Friends & support',  color: '#2F7A5A', roles: ['support', 'protagonist'] },
   { key: 'pressure', label: 'Pressure & rivals',  color: T.steel,   roles: ['pressure'] },
   { key: 'mirror',   label: 'Mirrors & shadows',  color: T.orchid,  roles: null }, // everyone else
 ];
@@ -79,11 +88,11 @@ export function bandOf(c, lalaId) {
 
 export const EDGE_COLOR = {
   romantic:      T.rose,
-  familial:      '#6bba9a',
+  familial:      '#2F7A5A',
   mirror:        T.orchid,
-  support:       '#6bba9a',
+  support:       '#2F7A5A',
   shadow:        '#94a3b8',
-  transactional: '#c9a84c',
+  transactional: T.gold,
   creation:      T.orchid,
   pressure:      T.rose,
 };

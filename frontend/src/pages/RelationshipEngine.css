@@ -2,10 +2,12 @@
  * RelationshipEngine.css — Prime Studios · LalaVerse
  * Full stylesheet for RefactoredRelationshipEngine
  *
- * Design tokens:
- *   --ps-pink:     #d4789a
- *   --ps-blue:     #7ab3d4
- *   --ps-lavender: #a889c8
+ * The page draws in the house tokens (2026-10-24 layout audit): .re-shell
+ * maps its own --ps-* / --re-* names onto --lala-parchment, --lala-gold,
+ * --lala-ink, Lora (--font-prose) and DM Mono (--font-ui). The :root block
+ * below stays as it was, because the app's Sidebar reads some of those
+ * names. Rose, steel and orchid remain only as tones with a meaning
+ * (romance, step/chosen, secrets), dark enough to read.
  */
 
 /* ── CSS Variables ─────────────────────────────────────────────────── */
@@ -32,29 +34,54 @@
 
 /* ── Base resets scoped to the engine ─────────────────────────────── */
 .re-shell {
-  /* Pink-and-gold glass theme (Relationship Engine redesign) */
-  --re-plum:        #6e1d4f;
-  --re-magenta:     #c2407f;
-  --re-magenta-soft:#e98bb5;
-  --re-blush:       #fde9f1;
-  --re-glass:       rgba(255, 246, 250, 0.86);
-  --re-gold:        #b8962e;
-  --re-gold-soft:   #e6c98f;
-  --re-gold-glow:   rgba(230, 201, 143, 0.55);
-  --re-card-shadow: 0 0 0 3px rgba(255, 255, 255, 0.55) inset, 0 10px 30px rgba(194, 64, 127, 0.14);
-  --re-radius:      18px;
-  --re-serif:       'Lora', Georgia, serif;
+  /* The page's names for the house tokens */
+  --re-plum:        var(--lala-ink, #2C2C2C);          /* headings */
+  --re-magenta:     var(--lala-gold-text, #7A6314);    /* icons, accents */
+  --re-magenta-soft:var(--lala-gold-line, #E8D9A8);
+  --re-blush:       var(--lala-gold-soft, #FDF8EE);    /* selected / hover */
+  --re-glass:       var(--lala-surface, #FFFFFF);      /* cards */
+  --re-gold:        var(--lala-gold, #B8962E);
+  --re-gold-soft:   var(--lala-gold-line, #E8D9A8);    /* card borders */
+  --re-gold-glow:   rgba(184, 150, 46, 0.22);
+  --re-card-shadow: 0 1px 3px rgba(44, 44, 44, 0.06);
+  --re-radius:      14px;
+  --re-serif:       var(--font-prose, 'Lora', Georgia, serif);
+  --re-mono:        var(--font-ui, 'DM Mono', monospace);
+  /* tones that carry meaning, readable as text (tokens.js T) */
+  --re-romance:     #A8336C;
+  --re-romance-bg:  #FDEAF3;
+  --re-romance-line:#F2B9D2;
+  --re-secret:      #6A4C93;
+  --re-steel:       #3D6E8F;
+
+  --ps-pink:        var(--re-romance);
+  --ps-pink-light:  var(--re-romance-bg);
+  --ps-pink-mid:    var(--re-romance-line);
+  --ps-blue:        var(--re-steel);
+  --ps-blue-light:  #EAF2F7;
+  --ps-lavender:    var(--lala-gold-text, #7A6314);    /* the page accent */
+  --ps-lav-light:   var(--lala-gold-soft, #FDF8EE);
+  --ps-ink:         var(--lala-ink, #2C2C2C);
+  --ps-ink-mid:     #4A4538;
+  --ps-ink-light:   var(--lala-ink-muted, #6B6557);
+  --ps-surface:     var(--lala-surface, #FFFFFF);
+  --ps-surface-alt: var(--lala-parchment, #FAF7F0);
+  --ps-border:      var(--lala-parchment-3, #E8E0D0);
+  --ps-shadow:      0 1px 3px rgba(44, 44, 44, 0.06), 0 2px 10px rgba(44, 44, 44, 0.05);
+  --ps-shadow-md:   0 6px 24px rgba(44, 44, 44, 0.12);
+  --ps-font:        var(--font-sans, system-ui, sans-serif);
+  /* nothing on this page is set under 12px (2026-10-24 layout audit) */
+  --text-xs:        0.75rem;
 
   display: flex;
   flex-direction: column;
   height: 100%;
-  background:
-    radial-gradient(1200px 500px at 85% -10%, rgba(233, 139, 181, 0.35), transparent 60%),
-    radial-gradient(900px 500px at -10% 110%, rgba(230, 201, 143, 0.30), transparent 60%),
-    linear-gradient(165deg, #fbe4ef 0%, #f7e6f3 45%, #fdf4f7 100%);
+  background: var(--lala-parchment, #FAF7F0);
   font-family: var(--ps-font);
   color: var(--ps-ink);
-  overflow-x: hidden;
+  /* clip, not hidden: hidden makes the shell a scroll box, and the sticky
+     Inspector would stick to it instead of the page */
+  overflow-x: clip;
 }
 
 /* ── Scrollbars ────────────────────────────────────────────────────── */
@@ -95,7 +122,7 @@
 }
 
 .rw-node-g:hover circle:first-of-type {
-  filter: drop-shadow(0 0 6px rgba(168, 137, 200, 0.4));
+  filter: drop-shadow(0 0 6px rgba(184, 150, 46, 0.35));
 }
 
 /* Node labels */
@@ -153,7 +180,8 @@
 .cg-table thead th {
   padding: 8px 12px;
   text-align: left;
-  font-size: var(--text-xs);
+  font-family: var(--re-mono);
+  font-size: 12px;
   font-weight: 700;
   color: var(--ps-ink-light);
   text-transform: uppercase;
@@ -219,7 +247,7 @@
 .cg-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(26, 22, 37, 0.5);
+  background: rgba(44, 44, 44, 0.45);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -275,7 +303,7 @@
 .re-spinner {
   width: 18px;
   height: 18px;
-  border: 2px solid rgba(168, 137, 200, 0.25);
+  border: 2px solid var(--lala-gold-line, #E8D9A8);
   border-top-color: var(--ps-lavender);
   border-radius: 50%;
   display: inline-block;
@@ -287,7 +315,7 @@
 .cg-preset-btn {
   padding: 4px 10px;
   border-radius: 12px;
-  font-size: var(--text-xs);
+  font-size: 12px;
   font-weight: 600;
   cursor: pointer;
   border: 1.5px solid var(--ps-border);
@@ -365,7 +393,7 @@
 }
 
 .cg-tab-count {
-  background: var(--ps-pink);
+  background: var(--lala-ink, #2C2C2C);
   color: #fff;
   border-radius: 10px;
   font-size: var(--text-xs);
@@ -379,15 +407,16 @@
   border-radius: var(--ps-radius-sm);
   font-size: var(--text-md);
   font-weight: 700;
-  background: var(--ps-lavender);
-  color: #fff;
-  border: none;
+  /* gold under ink text, 4.95:1 (white on the old orchid was ~2.9:1) */
+  background: var(--lala-gold, #B8962E);
+  color: var(--lala-ink, #2C2C2C);
+  border: 1px solid var(--lala-gold, #B8962E);
   cursor: pointer;
   font-family: var(--ps-font);
-  transition: opacity 0.15s ease;
+  transition: background 0.15s ease;
 }
 
-.cg-btn-primary:hover { opacity: 0.88; }
+.cg-btn-primary:hover { background: #C9A845; }
 .cg-btn-primary:disabled { background: var(--ps-border); color: var(--ps-ink-light); cursor: not-allowed; opacity: 1; }
 
 .cg-btn-secondary {
@@ -460,13 +489,12 @@
   align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
-  padding: 18px 24px;
+  padding: 16px 24px;
   margin: 12px 12px 0;
   border-radius: var(--re-radius);
   border: 1.5px solid var(--re-gold-soft);
-  background:
-    linear-gradient(115deg, rgba(74, 22, 64, 0.94) 0%, rgba(150, 46, 110, 0.9) 55%, rgba(233, 139, 181, 0.85) 100%);
-  box-shadow: 0 8px 28px rgba(110, 29, 79, 0.25);
+  background: var(--re-glass);
+  box-shadow: var(--re-card-shadow);
   gap: 16px;
   flex-shrink: 0;
 }
@@ -480,28 +508,28 @@
   font-family: var(--re-serif);
   font-style: italic;
   font-weight: 700;
-  font-size: 30px;
-  color: #ffd9e8;
-  text-shadow: 0 0 12px rgba(255, 150, 200, 0.7), 0 1px 0 var(--re-gold);
+  font-size: 26px;
+  color: var(--lala-gold-text, #7A6314);
   white-space: nowrap;
 }
 .re-title-block { min-width: 0; }
 .re-wordmark {
   margin: 0;
   font-family: var(--re-serif);
-  font-size: 34px;
+  font-size: 30px;
   line-height: 1.1;
   font-weight: 700;
   letter-spacing: -0.01em;
-  color: #fff;
+  color: var(--re-plum);
 }
 .re-tagline {
   margin-top: 4px;
+  font-family: var(--re-mono);
   font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.22em;
+  font-weight: 500;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: #fbe3ee;
+  color: var(--ps-ink-light);
 }
 .re-header-tools {
   display: flex;
@@ -516,9 +544,9 @@
   padding: 9px 14px;
   min-width: 240px;
   border-radius: 999px;
-  border: 1.5px solid var(--re-gold-soft);
-  background: rgba(255, 238, 246, 0.95);
-  color: var(--re-plum);
+  border: 1.5px solid var(--ps-border);
+  background: var(--ps-surface);
+  color: var(--ps-ink-light);
 }
 .re-search input {
   flex: 1;
@@ -530,12 +558,13 @@
   font-size: 14px;
   color: var(--re-plum);
 }
-.re-search input::placeholder { color: #b0688f; }
+.re-search input::placeholder { color: var(--ps-ink-light); }
+.re-search:focus-within { border-color: var(--re-gold); }
 .re-layer-select {
   padding: 9px 14px;
   border-radius: 999px;
-  border: 1.5px solid var(--re-gold-soft);
-  background: rgba(255, 238, 246, 0.95);
+  border: 1.5px solid var(--ps-border);
+  background: var(--ps-surface);
   color: var(--re-plum);
   font: inherit;
   font-size: 14px;
@@ -564,7 +593,7 @@
   display: flex;
   flex: 1;
   min-height: 0;
-  overflow: hidden;
+  overflow: clip; /* not hidden: see .re-shell */
   gap: 12px;
   padding: 12px;
 }
@@ -605,14 +634,13 @@
 .re-nav-btn svg { color: var(--re-magenta); flex-shrink: 0; }
 .re-nav-btn:hover { background: var(--re-blush); }
 .re-nav-btn.is-active {
-  color: #fff;
-  border-color: var(--re-gold-soft);
-  background: linear-gradient(135deg, #e0689f, #c2407f);
-  box-shadow: 0 4px 14px rgba(194, 64, 127, 0.35), 0 0 0 3px rgba(255, 255, 255, 0.4) inset;
+  color: var(--lala-ink, #2C2C2C);
+  border-color: var(--re-gold);
+  background: var(--re-gold);
 }
-.re-nav-btn.is-active svg { color: #fff; }
+.re-nav-btn.is-active svg { color: var(--lala-ink, #2C2C2C); }
 .re-nav-label { flex: 1; }
-.re-nav-btn.is-active .cg-tab-count { background: #fff; color: var(--re-magenta); }
+.re-nav-btn.is-active .cg-tab-count { background: #fff; color: var(--lala-ink, #2C2C2C); }
 .re-sidebar-heading { padding: 6px 20px 0; }
 .re-sidebar-section {
   padding: 12px 10px 8px;
@@ -633,7 +661,7 @@
 .re-sidebar-empty {
   padding: 24px 12px;
   text-align: center;
-  color: var(--ink-faint, #aaa);
+  color: var(--ps-ink-light);
   font-size: var(--text-sm);
 }
 .re-canvas {
@@ -655,7 +683,7 @@
   gap: 8px;
   padding: 12px 20px;
   border-bottom: 1px solid var(--re-gold-soft);
-  background: rgba(253, 233, 241, 0.7);
+  background: var(--lala-parchment-2, #F4EFE4);
   flex-shrink: 0;
 }
 .re-sub-title {
@@ -666,7 +694,8 @@
   margin-right: 10px;
 }
 .re-sub-stats {
-  font-size: var(--text-sm);
+  font-family: var(--re-mono);
+  font-size: 12px;
   color: var(--ps-ink-light);
 }
 .re-sub-actions {
@@ -680,15 +709,25 @@
   overflow: auto;
   position: relative;
 }
+/* The Inspector stays in view while the page scrolls: its header (who)
+   and footer (Edit, Delete, the delete confirm) hold still and only the
+   body scrolls (2026-10-24: it was ~1950px tall, Delete a page away). */
 .re-inspector-panel {
   width: 300px;
   min-width: 300px;
+  position: sticky;
+  top: 12px;
+  align-self: flex-start;
+  max-height: calc(100vh - 24px);
+  display: flex;
+  flex-direction: column;
   border: 1.5px solid var(--re-gold-soft);
   border-radius: var(--re-radius);
   background: var(--re-glass);
   box-shadow: var(--re-card-shadow);
-  overflow-y: auto;
+  overflow: hidden;
 }
+.re-inspector-panel > .re-inspector { flex: 1 1 auto; min-height: 0; height: auto; }
 /* Overview: the canvas becomes a transparent frame for the profile cards */
 .re-canvas:has(.re-view.is-overview) {
   border: none;
@@ -722,7 +761,8 @@
   text-overflow: ellipsis;
 }
 .re-char-role {
-  font-size: var(--text-xs);
+  font-family: var(--re-mono);
+  font-size: 12px;
   color: var(--ps-ink-light);
 }
 .re-char-layer-dot {
@@ -750,32 +790,26 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  height: 100%;
-  gap: 12px;
-  padding: 40px;
+  gap: 14px;
+  padding: 48px 20px;
   text-align: center;
 }
-.re-error-icon {
-  font-size: var(--text-5xl);
-  color: var(--ps-pink);
-}
-.re-error-title {
-  font-size: var(--text-xl);
-  font-weight: 700;
-  color: var(--ps-ink);
-}
 .re-error-msg {
-  font-size: var(--text-md);
-  color: var(--ps-ink-light);
-  max-width: 400px;
+  margin: 0;
+  font-family: var(--re-serif);
+  font-size: 16px;
+  line-height: 1.5;
+  color: var(--ps-ink);
+  max-width: 420px;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
    PRIMITIVES
    ═══════════════════════════════════════════════════════════════════════ */
 .re-label {
-  font-size: var(--text-xs);
-  font-weight: 700;
+  font-family: var(--re-mono);
+  font-size: 12px;
+  font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--ps-ink-light);
@@ -789,8 +823,9 @@
   padding: 4px 0;
 }
 .re-field-label {
-  font-size: var(--text-xs);
-  font-weight: 700;
+  font-family: var(--re-mono);
+  font-size: 12px;
+  font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--ps-ink-light);
@@ -803,7 +838,7 @@
   display: inline-block;
   padding: 2px 8px;
   border-radius: 10px;
-  font-size: var(--text-xs);
+  font-size: 12px;
   font-weight: 600;
 }
 .re-lf-btn {
@@ -867,10 +902,11 @@
 }
 .re-empty-icon {
   font-size: var(--text-5xl);
-  color: var(--ps-lavender);
-  opacity: 0.5;
+  color: var(--re-gold);
+  opacity: 0.6;
 }
 .re-empty-title {
+  font-family: var(--re-serif);
   font-size: var(--text-lg);
   font-weight: 700;
   color: var(--ps-ink);
@@ -1072,9 +1108,10 @@
   position: absolute;
   bottom: 10px;
   left: 10px;
-  font-size: var(--text-xs);
+  font-family: var(--re-mono);
+  font-size: 12px;
   color: var(--ps-ink-light);
-  background: rgba(255, 255, 255, 0.85);
+  background: rgba(255, 255, 255, 0.9);
   padding: 3px 8px;
   border-radius: 4px;
 }
@@ -1230,8 +1267,9 @@
   font-size: var(--text-md);
 }
 .re-candidate-type {
-  font-size: var(--text-xs);
-  font-weight: 600;
+  font-family: var(--re-mono);
+  font-size: 12px;
+  font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--ps-lavender);
@@ -1294,6 +1332,7 @@
 .re-inspector-header {
   padding: 14px;
   border-bottom: 1px solid var(--ps-border);
+  flex-shrink: 0;
 }
 .re-inspector-header-top {
   display: flex;
@@ -1302,8 +1341,9 @@
   margin-bottom: 10px;
 }
 .re-inspector-title {
+  font-family: var(--re-mono);
   font-size: var(--text-md);
-  font-weight: 700;
+  font-weight: 500;
   color: var(--ps-ink);
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -1349,7 +1389,9 @@
 }
 .re-inspector-body {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 12px 14px;
 }
 .re-inspector-footer {
@@ -1357,6 +1399,8 @@
   border-top: 1px solid var(--ps-border);
   display: flex;
   gap: 8px;
+  flex-shrink: 0;
+  background: var(--re-glass);
 }
 .re-inspector-divider {
   border: none;
@@ -1376,51 +1420,15 @@
   flex: 1;
 }
 
-/* Inspector empty state (right panel placeholder) */
-.re-inspector-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  padding: 20px;
-  text-align: center;
-  gap: 8px;
-}
-.re-inspector-empty-icon {
-  font-size: var(--text-5xl);
-  color: var(--ps-lavender);
-  opacity: 0.35;
-}
-.re-inspector-empty-title {
-  font-size: var(--text-md);
-  font-weight: 700;
-  color: var(--ps-ink);
-}
-.re-inspector-empty-desc {
-  font-size: var(--text-xs);
-  color: var(--ps-ink-light);
-  max-width: 180px;
-}
-.re-inspector-char-summary {
-  margin-top: 12px;
-  padding-top: 10px;
-  border-top: 1px solid var(--ps-border);
-}
-.re-inspector-char-count {
-  font-size: var(--text-xs);
-  color: var(--ps-ink-light);
-}
-
 /* ═══════════════════════════════════════════════════════════════════════
    MODALS — shared parts
    ═══════════════════════════════════════════════════════════════════════ */
 .re-accent-bar {
   height: 3px;
-  background: linear-gradient(90deg, var(--ps-pink), var(--ps-lavender), var(--ps-blue));
+  background: var(--re-gold);
 }
 .re-accent-reverse {
-  background: linear-gradient(90deg, var(--ps-blue), var(--ps-lavender), var(--ps-pink));
+  background: var(--re-gold);
 }
 .re-close-btn {
   background: none;
@@ -1443,6 +1451,7 @@
   padding: 14px 18px 10px;
 }
 .re-modal-title {
+  font-family: var(--re-serif);
   font-size: var(--text-lg);
   font-weight: 700;
   color: var(--ps-ink);
@@ -1516,10 +1525,9 @@
   align-items: center;
   gap: 10px;
   margin: 0;
-  font-size: 15px;
+  font-family: var(--re-serif);
+  font-size: 17px;
   font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
   color: var(--re-plum);
 }
 .rp-card-title svg { color: var(--re-magenta); }
@@ -1527,7 +1535,7 @@
   padding: 5px 14px;
   border-radius: 999px;
   border: 1.5px solid var(--re-gold-soft);
-  background: #fff6fa;
+  background: var(--re-glass);
   color: var(--re-plum);
   font: inherit;
   font-size: 13px;
@@ -1535,7 +1543,7 @@
   cursor: pointer;
 }
 .rp-viewall:hover { background: var(--re-blush); }
-.rp-muted { color: #a5708e; }
+.rp-muted { color: var(--ps-ink-light); }
 .rp-pad { margin: 4px 0; font-size: 14px; }
 
 /* hero */
@@ -1555,9 +1563,9 @@
   height: 40px;
   border-radius: 50%;
   color: #fff;
-  background: linear-gradient(135deg, #f07aac, #c2407f);
-  border: 2px solid var(--re-gold-soft);
-  box-shadow: 0 4px 12px rgba(194, 64, 127, 0.4);
+  background: var(--re-romance);
+  border: 2px solid var(--re-glass);
+  box-shadow: 0 2px 6px rgba(44, 44, 44, 0.18);
 }
 .rp-hero-body { flex: 1; min-width: 0; }
 .rp-name {
@@ -1576,10 +1584,11 @@
   padding: 5px 12px;
   border-radius: 999px;
   border: 1.5px solid var(--re-gold-soft);
-  background: #fff6fa;
+  background: var(--re-glass);
   color: var(--re-plum);
-  font-size: 13px;
-  font-weight: 600;
+  font-family: var(--re-mono);
+  font-size: 12px;
+  font-weight: 500;
   text-transform: capitalize;
 }
 .rp-chip-handle { text-transform: none; }
@@ -1587,7 +1596,7 @@
   margin: 0;
   padding: 12px 14px;
   border-radius: 12px;
-  background: rgba(252, 225, 237, 0.7);
+  background: var(--lala-parchment, #FAF7F0);
   font-family: var(--re-serif);
   font-size: 15px;
   line-height: 1.55;
@@ -1602,7 +1611,7 @@
   flex-shrink: 0;
   font-weight: 700;
   color: var(--re-magenta);
-  background: linear-gradient(160deg, #fff3f8, #fbd9e8);
+  background: var(--lala-parchment-2, #F4EFE4);
   border: 1.5px solid var(--re-gold-soft);
 }
 .rp-avatar img { width: 100%; height: 100%; object-fit: cover; }
@@ -1611,26 +1620,28 @@
 .rp-avatar-xl {
   width: 168px; height: 168px; border-radius: 22px; font-size: 44px;
   border-width: 3px;
-  box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.6), 0 0 18px var(--re-gold-glow);
+  box-shadow: 0 0 0 4px var(--re-glass), 0 0 0 5px var(--re-gold-soft);
 }
 
 /* about */
 .rp-about { margin: 0; display: flex; flex-direction: column; gap: 8px; }
+/* read-only facts: plain text rows (no input-look boxes) */
+.rp-about { gap: 0; }
 .rp-about-row {
   display: grid;
   grid-template-columns: 170px minmax(0, 1fr);
   gap: 12px;
-  align-items: center;
+  align-items: baseline;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--ps-border);
 }
-.rp-about-row dt { font-size: 14px; font-weight: 600; color: var(--re-plum); }
+.rp-about-row:last-child { border-bottom: none; }
+.rp-about-row dt { font-family: var(--re-mono); font-size: 12px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: var(--ps-ink-light); }
 .rp-about-row dd {
   margin: 0;
-  padding: 7px 12px;
-  border-radius: 10px;
-  border: 1px solid #f3cfe0;
-  background: rgba(252, 225, 237, 0.55);
-  font-size: 14px;
-  color: var(--ps-ink-mid);
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--ps-ink);
   overflow-wrap: anywhere;
 }
 
@@ -1643,8 +1654,8 @@
   width: 100%;
   padding: 8px 12px;
   border-radius: 12px;
-  border: 1px solid #f3cfe0;
-  background: rgba(252, 225, 237, 0.55);
+  border: 1px solid var(--ps-border);
+  background: var(--re-glass);
   font: inherit;
   text-align: left;
   cursor: pointer;
@@ -1656,7 +1667,7 @@
 .rp-row-title { font-weight: 600; color: var(--re-plum); font-size: 14px; }
 .rp-row-sub {
   font-size: 12px;
-  color: #9b6a86;
+  color: var(--ps-ink-light);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1667,34 +1678,36 @@
   width: 32px; height: 32px; border-radius: 10px;
   color: var(--re-gold);
   border: 1.5px solid var(--re-gold-soft);
-  background: #fffaf0;
+  background: var(--re-blush);
 }
 
 /* relationship status meter */
+/* a light track; the fill is the closeness (an empty meter is just the track) */
 .rp-meter {
   position: relative;
-  height: 18px;
+  height: 14px;
   border-radius: 999px;
-  background: linear-gradient(90deg, #5a2a3a, #3d1d28);
-  border: 2px solid var(--re-gold-soft);
+  background: var(--lala-parchment-2, #F4EFE4);
+  border: 1px solid var(--ps-border);
   overflow: hidden;
 }
 .rp-meter-fill {
   display: block;
   height: 100%;
   border-radius: 999px;
-  background: linear-gradient(90deg, #ff4f9a, #ff9cc6 85%, #ffe3f0);
-  box-shadow: 0 0 10px rgba(255, 110, 170, 0.7);
+  background: var(--re-gold);
   transition: width 0.4s ease;
 }
+.rp-meter.is-empty .rp-meter-fill { display: none; }
 .rp-meter-scale {
   display: flex;
   justify-content: space-between;
   margin-top: 6px;
-  font-size: 13px;
-  color: #8c5a76;
+  font-family: var(--re-mono);
+  font-size: 12px;
+  color: var(--ps-ink-light);
 }
-.rp-meter-note { margin: 6px 0 12px; font-size: 12px; color: #a5708e; }
+.rp-meter-note { margin: 6px 0 12px; font-size: 13px; color: var(--ps-ink-light); }
 .rp-tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
 .rp-tile {
   display: flex;
@@ -1703,8 +1716,8 @@
   gap: 4px;
   padding: 10px 6px;
   border-radius: 12px;
-  border: 1.5px solid var(--re-gold-soft);
-  background: #fff6fa;
+  border: 1.5px solid var(--ps-border);
+  background: var(--re-glass);
   text-align: center;
 }
 .rp-tile svg { color: var(--tile); }
@@ -1714,14 +1727,14 @@
   width: 100%;
   height: 8px;
   border-radius: 999px;
-  background: #5a2a3a;
+  background: var(--lala-parchment-2, #F4EFE4);
   overflow: hidden;
 }
 .rp-tile-bar > span { display: block; height: 100%; border-radius: 999px; background: var(--tile); }
-.rp-tile.is-rose   { --tile: #ec5b98; }
-.rp-tile.is-orchid { --tile: #a46ee0; }
-.rp-tile.is-teal   { --tile: #2bb5ad; }
-.rp-tile.is-gold   { --tile: #e9a81c; }
+.rp-tile.is-rose   { --tile: #2F7A5A; }   /* calm */
+.rp-tile.is-orchid { --tile: var(--re-secret); } /* family */
+.rp-tile.is-teal   { --tile: var(--re-romance); } /* romantic */
+.rp-tile.is-gold   { --tile: var(--lala-danger, #B84D2E); } /* tension */
 
 /* connections */
 .rp-conn-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
@@ -1732,13 +1745,13 @@
   gap: 4px;
   padding: 8px 4px;
   border-radius: 14px;
-  border: 1.5px solid var(--re-gold-soft);
-  background: rgba(252, 225, 237, 0.6);
+  border: 1.5px solid var(--ps-border);
+  background: var(--re-glass);
   font: inherit;
   cursor: pointer;
   min-width: 0;
 }
-.rp-conn:hover { background: var(--re-blush); box-shadow: 0 0 12px var(--re-gold-glow); }
+.rp-conn:hover { background: var(--re-blush); border-color: var(--re-gold-soft); }
 .rp-conn-name, .rp-conn-type {
   max-width: 100%;
   white-space: nowrap;
@@ -1746,7 +1759,7 @@
   text-overflow: ellipsis;
 }
 .rp-conn-name { font-size: 12px; font-weight: 600; color: var(--re-plum); }
-.rp-conn-type { font-size: 11px; color: #9b6a86; text-transform: capitalize; }
+.rp-conn-type { font-size: 12px; color: var(--ps-ink-light); text-transform: capitalize; }
 
 /* actions */
 .rp-actions { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
@@ -1758,7 +1771,7 @@
   padding: 12px 4px;
   border-radius: 14px;
   border: 1.5px solid var(--re-gold-soft);
-  background: linear-gradient(180deg, #fff6fa, #fbe0ec);
+  background: var(--re-blush);
   color: var(--re-plum);
   font: inherit;
   font-size: 12px;
@@ -1767,7 +1780,7 @@
   text-align: center;
 }
 .rp-action svg { color: var(--re-magenta); }
-.rp-action:hover { box-shadow: 0 0 14px var(--re-gold-glow); }
+.rp-action:hover { border-color: var(--re-gold); }
 
 @media (max-width: 1200px) {
   .rp-grid { grid-template-columns: minmax(0, 1fr); }
@@ -1799,8 +1812,8 @@
    ═══════════════════════════════════════════════════════════════════════ */
 @media (max-width: 1024px) {
   .re-inspector-panel {
-    width: 220px;
-    min-width: 220px;
+    width: 260px;
+    min-width: 260px;
   }
   .re-sidebar {
     width: 200px;
@@ -1846,17 +1859,30 @@
     gap: 8px;
   }
   .re-sidebar-heading { display: none; }
-  .re-sidebar-chars {
-    max-height: 160px;
-    overflow-y: auto;
-  }
+  /* people: one row of chips that scrolls sideways (was a 160px box of
+     wrapped names on a tablet) */
   .re-sidebar-chars {
     display: flex;
     flex: none;
-    flex-wrap: wrap;
-    gap: 4px;
-    padding: 6px 10px;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    max-height: none;
+    -webkit-overflow-scrolling: touch;
+    scroll-snap-type: x proximity;
+    gap: 6px;
+    padding: 6px 8px 10px;
   }
+  .re-sidebar-chars .cg-world-card {
+    flex: 0 0 auto;
+    width: auto;
+    min-height: 44px;
+    padding: 6px 12px 6px 6px;
+    border-radius: 999px;
+    scroll-snap-align: start;
+  }
+  .re-sidebar-chars .re-char-role { display: none; }
+  .re-sidebar-chars .re-char-name { max-width: 9em; }
   .re-canvas {
     flex: none;
     min-height: 250px;
@@ -1866,17 +1892,6 @@
     flex: none;
     overflow: visible;
   }
-  .re-inspector-panel {
-    width: 100%;
-    flex: none;
-    min-width: 0;
-    max-height: none;
-    overflow-y: visible;
-  }
-  .re-inspector-body {
-    flex: none;
-    overflow-y: visible;
-  }
   .re-header {
     flex-wrap: wrap;
     padding: 14px 16px;
@@ -1884,7 +1899,7 @@
   }
   .re-brand { display: none; }
   .re-wordmark { font-size: 26px; }
-  .re-tagline { font-size: 10px; letter-spacing: 0.14em; }
+  .re-tagline { font-size: 12px; letter-spacing: 0.1em; }
   .re-header-tools { width: 100%; }
   .re-search { flex: 1; min-width: 0; }
   .rp-hero { flex-direction: column; align-items: center; text-align: center; }
@@ -1944,7 +1959,7 @@
   }
   .cg-tab-btn {
     padding: 5px 8px;
-    font-size: var(--text-xs);
+    font-size: 12px;
   }
   .re-header-actions {
     gap: 4px;
@@ -1954,10 +1969,7 @@
   .re-header-actions .re-btn-ghost,
   .re-header-actions .re-btn-outline {
     padding: 4px 8px;
-    font-size: var(--text-xs);
-  }
-  .re-sidebar-chars {
-    max-height: 120px;
+    font-size: 12px;
   }
   .re-sidebar-section {
     padding: 6px 8px 4px;
@@ -1965,23 +1977,19 @@
   .re-canvas {
     min-height: 200px;
   }
-  .re-inspector-panel {
-    max-height: none;
-    overflow-y: visible;
-  }
   .re-sub-header {
-    padding: 4px 8px;
+    padding: 8px;
     gap: 6px;
   }
   .re-sub-title {
     font-size: var(--text-md);
   }
   .cg-table {
-    font-size: var(--text-xs);
+    font-size: var(--text-sm);
   }
   .cg-table thead th {
     padding: 6px 8px;
-    font-size: var(--text-xs);
+    font-size: 12px;
   }
   .cg-table td {
     padding: 8px;
@@ -2012,16 +2020,12 @@
   cursor: pointer;
 }
 
-/* type pills in the sub-header */
-.re-type-pills { display: flex; gap: 4px; flex-wrap: wrap; margin-right: 8px; }
-.re-type-pill {
-  font-size: 11px;
-  padding: 2px 8px;
-  border-radius: 10px;
-  background: rgba(168, 137, 200, 0.12);
-  color: var(--ps-lavender);
-  font-weight: 600;
-  white-space: nowrap;
+/* the commonest types in the sub-header: plain words, not buttons */
+.re-type-counts {
+  margin: 0 8px 0 0;
+  font-family: var(--re-mono);
+  font-size: 12px;
+  color: var(--ps-ink-light);
 }
 
 /* a stage on the timeline: strangers, acquaintances, flirting … */
@@ -2030,8 +2034,9 @@
   align-items: center;
   padding: 2px 8px;
   border-radius: 999px;
-  font-size: 11px;
-  font-weight: 700;
+  font-family: var(--re-mono);
+  font-size: 12px;
+  font-weight: 500;
   letter-spacing: 0.02em;
   white-space: nowrap;
   border: 1px solid #e3d6ec;
@@ -2042,7 +2047,7 @@
 .re-stage.is-hot  { background: #fbe0ea; border-color: #e98bb5; color: #8f1f55; }
 .re-stage.is-calm { background: #eaf5ee; border-color: #b0d8be; color: #2f6e46; }
 .re-stage.is-sore { background: #f3eafa; border-color: #c8a8e8; color: #5d2d8a; }
-.re-stage.is-current { box-shadow: 0 0 0 2px rgba(194, 64, 127, 0.18); }
+.re-stage.is-current { box-shadow: 0 0 0 2px var(--re-gold-glow); }
 
 /* Inspector: story so far */
 .re-story { display: flex; flex-direction: column; gap: 8px; margin-bottom: 4px; }
@@ -2077,8 +2082,8 @@
 .re-story-quote {
   margin: 0;
   padding: 6px 10px;
-  border-left: 3px solid var(--re-magenta-soft);
-  background: rgba(253, 233, 241, 0.7);
+  border-left: 3px solid var(--re-gold);
+  background: var(--lala-parchment, #FAF7F0);
   border-radius: 0 8px 8px 0;
   font-family: var(--re-serif);
   font-style: italic;
@@ -2099,7 +2104,7 @@
 .re-story-ep:hover { text-decoration: underline; }
 
 .re-check { display: flex; align-items: center; gap: 8px; margin: 8px 0; font-size: 13px; color: var(--ps-ink-mid); cursor: pointer; }
-.re-check input { width: 16px; height: 16px; accent-color: var(--re-magenta); }
+.re-check input { width: 16px; height: 16px; accent-color: var(--re-gold); }
 
 .re-inspector-title { display: inline-flex; align-items: center; gap: 6px; }
 .re-inspector-link-icon { display: flex; flex-direction: column; align-items: center; gap: 4px; }
@@ -2127,7 +2132,7 @@
 .re-list-card-note { font-size: 13px; color: var(--ps-ink-mid); line-height: 1.45; }
 
 /* Overview: love interests */
-.rp-love .rp-card-title svg { color: var(--re-magenta); fill: var(--re-magenta); }
+.rp-love .rp-card-title svg { color: var(--re-romance); fill: var(--re-romance); }
 .rp-love-heart {
   display: inline-flex;
   align-items: center;
@@ -2136,8 +2141,8 @@
   height: 36px;
   flex-shrink: 0;
   border-radius: 50%;
-  background: var(--re-blush);
-  color: var(--re-magenta);
+  background: var(--re-romance-bg);
+  color: var(--re-romance);
 }
 .rp-conn .re-stage { margin-top: 2px; }
 
@@ -2192,6 +2197,47 @@
   .rw-svg { height: 440px; }
 }
 
+/* ── Phone and tablet (≤ 900px): the Inspector is a bottom sheet ──────
+   (primitives PHONE_QUERY is the same 900px; header and footer hold
+   still, the body scrolls, as on a desktop) */
+@media (max-width: 900px) {
+  /* Inspector: a bottom sheet */
+  .re-sheet-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 900;
+    background: rgba(44, 44, 44, 0.4);
+  }
+  .re-inspector-panel.is-sheet {
+    position: fixed;
+    top: auto;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 901;
+    width: 100%;
+    min-width: 0;
+    max-height: 85vh;
+    overflow: hidden;
+    border-radius: 20px 20px 0 0;
+    border-bottom: none;
+    background: var(--re-glass);
+    box-shadow: 0 -10px 30px rgba(44, 44, 44, 0.2);
+  }
+  .re-inspector.is-sheet .re-sheet-grip {
+    display: block;
+    width: 44px;
+    height: 5px;
+    margin: 8px auto 0;
+    border-radius: 999px;
+    background: var(--re-gold-soft);
+  }
+  .re-inspector.is-sheet .re-close-btn { min-width: 44px; min-height: 44px; font-size: 24px; }
+  .re-inspector.is-sheet .re-inspector-footer { background: var(--re-glass); }
+
+}
+
 /* ── Phone (≤ 600px) ───────────────────────────────────────────────── */
 @media (max-width: 600px) {
   .re-header-left { display: flex; }
@@ -2217,70 +2263,9 @@
   }
   .re-nav-label { flex: none; }
 
-  /* people: one row of chips that scrolls sideways */
-  .re-sidebar-chars {
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    overflow-y: hidden;
-    max-height: none;
-    -webkit-overflow-scrolling: touch;
-    scroll-snap-type: x proximity;
-    gap: 6px;
-    padding: 6px 8px 10px;
-  }
-  .re-sidebar-chars .cg-world-card {
-    flex: 0 0 auto;
-    width: auto;
-    min-height: 44px;
-    padding: 6px 12px 6px 6px;
-    border-radius: 999px;
-    scroll-snap-align: start;
-  }
-  .re-sidebar-chars .re-char-role { display: none; }
-  .re-sidebar-chars .re-char-name { max-width: 9em; }
-
   /* List: cards, not a wide table */
   .re-list-table { display: none; }
   .re-list-cards { display: flex; }
-
-  /* Inspector: a bottom sheet */
-  .re-sheet-backdrop {
-    display: block;
-    position: fixed;
-    inset: 0;
-    z-index: 900;
-    background: rgba(44, 20, 40, 0.38);
-  }
-  .re-inspector-panel.is-sheet {
-    position: fixed;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    z-index: 901;
-    width: 100%;
-    min-width: 0;
-    max-height: 85vh;
-    overflow-y: auto;
-    border-radius: 20px 20px 0 0;
-    border-bottom: none;
-    background: #fff9fb;
-    box-shadow: 0 -10px 30px rgba(110, 29, 79, 0.25);
-    overscroll-behavior: contain;
-  }
-  .re-inspector.is-sheet .re-sheet-grip {
-    display: block;
-    width: 44px;
-    height: 5px;
-    margin: 8px auto 0;
-    border-radius: 999px;
-    background: var(--re-gold-soft);
-  }
-  .re-inspector.is-sheet .re-close-btn { min-width: 44px; min-height: 44px; font-size: 24px; }
-  .re-inspector.is-sheet .re-inspector-footer {
-    position: sticky;
-    bottom: 0;
-    background: #fff9fb;
-  }
 
   /* Web: the person panel as a card across the bottom of the graph */
   .re-webview-info {
@@ -2294,6 +2279,31 @@
     overflow-y: auto;
   }
   .re-webview-tooltip { display: none; }
+
+  /* a finger's 44px for every control (2026-10-24 layout audit) */
+  .re-tree-zoom-btn { width: 44px; height: 44px; }
+  .re-close-btn {
+    min-width: 44px;
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .re-webview-info-body .re-close-btn { position: absolute; top: 4px; right: 4px; }
+  .re-webview-info-name { padding-right: 44px; }
+  .re-story-ep { min-height: 44px; }
+  .cg-preset-btn { min-height: 44px; padding: 8px 14px; }
+  .cg-btn-primary, .cg-btn-secondary, .cg-btn-ghost, .cg-btn-danger { min-height: 44px; }
+  .re-search { padding: 0 14px; }
+  .re-search input { min-height: 44px; }
+  .re-layer-select { min-height: 44px; }
+  .re-webview-info-link { min-height: 44px; }
+  .re-webview-info-rels button { min-height: 44px; }
+
+  /* Seeds: a long name stacks over the other, no wrap around the arrow */
+  .re-candidate-pair { flex-direction: column; align-items: flex-start; gap: 2px; }
+  .re-candidate-name { overflow-wrap: anywhere; }
+  .re-candidate-arrow { transform: rotate(90deg); line-height: 1; }
 }
 .re-pill { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
 .re-pill svg, .re-story-quote svg { display: inline-block; flex-shrink: 0; }
@@ -2303,4 +2313,45 @@
   .rp-row { flex-wrap: wrap; row-gap: 6px; }
   .rp-row-text { flex: 1 1 calc(100% - 90px); min-width: 0; }
   .rp-row > .re-stage:first-of-type { margin-left: 48px; }
+}
+
+/* ── 2026-10-24 layout audit ────────────────────────────────────────── */
+/* List: a tablet's table leaves out Mode and Status (in the Inspector) */
+@media (max-width: 1100px) {
+  .re-list-table .re-col-optional { display: none; }
+  .re-list-table td, .re-list-table thead th { padding-left: 6px; padding-right: 6px; }
+}
+/* long names wrap inside their cell instead of pushing the table wide */
+.re-list-table td { white-space: normal; }
+.re-list-table .re-list-name { overflow-wrap: anywhere; }
+
+/* Family: the ties as cards sit behind a List toggle under the tree */
+.re-family-list-toggle {
+  align-self: flex-start;
+  min-height: 36px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: 1.5px solid var(--re-gold-soft);
+  background: var(--re-glass);
+  color: var(--ps-ink);
+  font-family: var(--re-mono);
+  font-size: 13px;
+  cursor: pointer;
+}
+.re-family-list-toggle:hover { border-color: var(--re-gold); }
+.re-family-list-toggle[aria-expanded="true"] { background: var(--re-blush); border-color: var(--re-gold); }
+
+/* the Web's "nobody yet" note: a plain line, not a pink band */
+.re-webview-error { background: var(--lala-parchment, #FAF7F0); color: var(--ps-ink-light); font-weight: 400; }
+
+/* a phone: the rest of the 44px targets (after the base rules above) */
+@media (max-width: 600px) {
+  .re-family-list-toggle { min-height: 44px; }
+  .re-family-card-edit-btn { min-width: 44px; min-height: 44px; }
+  button.re-family-unconn-chip { min-height: 44px; }
+  .rp-viewall { min-height: 44px; }
+  .cg-form-input, .cg-form-select { min-height: 44px; }
+  .cg-form-input.is-multiline { min-height: 88px; }
+  .re-check { min-height: 44px; }
+  .re-check input { width: 20px; height: 20px; }
 }

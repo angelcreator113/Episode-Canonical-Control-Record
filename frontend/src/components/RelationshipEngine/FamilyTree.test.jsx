@@ -106,6 +106,9 @@ describe('the Family tab', () => {
   test('the tree sits above the ties; a named family alone still shows', async () => {
     render(<MemoryRouter><FamilyView chars={Object.values(charById)} rels={rels} charById={charById} onGenerate={vi.fn()} onUpdateRole={vi.fn()} onRelClick={vi.fn()} /></MemoryRouter>);
     expect(await screen.findByTestId('re-family-tree')).toBeTruthy();
+    // The ties as cards are behind the List toggle (2026-10-24), closed at first.
+    expect(screen.queryByRole('list', { name: 'Family ties' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /^List · 2 family ties/ }));
     const ties = screen.getByRole('list', { name: 'Family ties' });
     expect(within(ties).getAllByRole('listitem')).toHaveLength(2);
     expect(within(ties).getByText(/stepsister · step/)).toBeTruthy();

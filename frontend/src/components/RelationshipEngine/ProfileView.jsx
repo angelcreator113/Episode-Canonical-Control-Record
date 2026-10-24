@@ -153,15 +153,18 @@ export default function ProfileView({
           </div>
         </section>
 
+        {/* Read-only facts as plain rows; an empty fact is left out. */}
         <Card icon={BookOpen} title="About">
-          <dl className="rp-about">
-            {about.map(f => (
-              <div key={f.label} className="rp-about-row">
-                <dt>{f.label}</dt>
-                <dd>{f.value || <span className="rp-muted">—</span>}</dd>
-              </div>
-            ))}
-          </dl>
+          {about.some(f => f.value) ? (
+            <dl className="rp-about">
+              {about.filter(f => f.value).map(f => (
+                <div key={f.label} className="rp-about-row">
+                  <dt>{f.label}</dt>
+                  <dd>{f.value}</dd>
+                </div>
+              ))}
+            </dl>
+          ) : <p className="rp-muted rp-pad">Nothing written about {cname(char)} yet.</p>}
         </Card>
 
         <Card icon={Activity} title="Recent Relationships"
@@ -221,7 +224,7 @@ export default function ProfileView({
         </Card>
 
         <Card icon={Heart} title="Relationship Status">
-          <div className="rp-meter" role="meter" aria-valuemin={0} aria-valuemax={100}
+          <div className={`rp-meter${stats.closeness == null ? ' is-empty' : ''}`} role="meter" aria-valuemin={0} aria-valuemax={100}
             aria-valuenow={stats.closeness ?? undefined} aria-label={`Overall: ${statusWord}`}>
             <span className="rp-meter-fill" style={{ width: `${stats.closeness ?? 0}%` }} />
           </div>

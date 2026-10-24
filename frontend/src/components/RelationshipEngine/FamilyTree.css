@@ -12,7 +12,7 @@
   background: var(--ps-surface, #fff); border: 1px solid var(--ps-border, #ede8f5); border-radius: var(--ps-radius, 12px);
   padding: 14px 16px; box-shadow: var(--ps-shadow, none); min-width: 0;
 }
-.re-ftree-name { margin: 0 0 8px; font-family: 'Lora', serif; font-size: 17px; font-weight: 700; color: var(--ps-ink, #1a1625); }
+.re-ftree-name { margin: 0 0 8px; font-family: var(--font-prose, 'Lora', serif); font-size: 17px; font-weight: 700; color: var(--ps-ink, #1a1625); }
 .re-ftree-city { font-family: 'DM Mono', monospace; font-size: 12px; font-weight: 400; color: var(--ps-ink-light, #7a6e8a); }
 
 .re-ftree-scroll { overflow-x: auto; }
@@ -27,7 +27,7 @@
 .re-ftree-edge.is-unknown path { stroke: var(--ps-ink-light, #7a6e8a); }
 .re-ftree-edge.is-open { cursor: pointer; }
 .re-ftree-edge.is-open:hover path, .re-ftree-edge.is-open:focus path { stroke-width: 3.5; }
-.re-ftree-node text.re-ftree-node-role { font-size: 10px; font-weight: 400; font-family: 'DM Mono', monospace; fill: var(--ps-ink-mid, #4a3f5c); }
+.re-ftree-node text.re-ftree-node-role { font-size: 12px; font-weight: 400; font-family: 'DM Mono', monospace; fill: var(--ps-ink-mid, #4a3f5c); }
 
 /* The phone's indented list: shown under 600px, the drawing above it. */
 .re-ftree-list { display: none; list-style: none; margin: 0; padding: 0; }
@@ -38,7 +38,7 @@
 .re-ftree-person.is-ghost { border-left-style: dashed; border-left-color: var(--ps-ink-light, #7a6e8a); }
 .re-ftree-person-name { font-weight: 700; font-size: 14px; color: var(--ps-ink, #1a1625); overflow-wrap: anywhere; }
 .re-ftree-person-name a { color: inherit; }
-.re-ftree-tag { margin-left: 6px; font-size: 11px; font-weight: 400; color: var(--ps-ink-light, #7a6e8a); }
+.re-ftree-tag { margin-left: 6px; font-size: 12px; font-weight: 400; color: var(--ps-ink-light, #7a6e8a); }
 .re-ftree-tie {
   align-self: flex-start; min-height: 32px; padding: 2px 10px; border-radius: 999px; border: 1px solid #b8962e;
   background: none; font: inherit; font-size: 12px; color: var(--ps-ink-mid, #4a3f5c); cursor: pointer; text-align: left;
@@ -50,4 +50,7 @@
   .re-ftree-scroll { display: none; }
   .re-ftree-list { display: block; }
   .re-ftree-family { padding: 12px; }
+  /* a finger's 44px (2026-10-24 layout audit) */
+  .re-ftree-tie { min-height: 44px; }
+  .re-ftree-person-name a { display: inline-flex; align-items: center; min-height: 44px; min-width: 44px; }
 }

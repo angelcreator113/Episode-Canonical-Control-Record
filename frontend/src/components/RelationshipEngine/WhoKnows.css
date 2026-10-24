@@ -19,13 +19,13 @@
   border-radius: 999px;
   background: #fff;
   color: var(--ps-ink-light, #7a6e8a);
-  font: 600 11px/1 'DM Mono', ui-monospace, monospace;
+  font: 500 12px/1 'DM Mono', ui-monospace, monospace;
   cursor: pointer;
 }
 .re-know-state:hover:not(:disabled) { border-color: var(--re-magenta-soft, #e98bb5); }
 .re-know-state:focus-visible { outline: 2px solid var(--re-magenta, #c2407f); outline-offset: 2px; }
 .re-know-state:disabled { cursor: progress; }
-.re-know-state.is-on.is-secret   { background: #3a2140; border-color: #3a2140; color: #fff; }
+.re-know-state.is-on.is-secret   { background: #6A4C93; border-color: #6A4C93; color: #fff; }
 .re-know-state.is-on.is-rumoured { background: #fdf3dc; border-color: var(--re-gold, #b8962e); color: #7a5d12; }
 .re-know-state.is-on.is-known    { background: #eaf5ee; border-color: #b0d8be; color: #2f6e46; }
 
@@ -58,11 +58,11 @@
   background: transparent; color: var(--ps-ink-light, #7a6e8a);
   cursor: pointer;
 }
-.re-know-chip-x:hover:not(:disabled) { background: rgba(194, 64, 127, 0.12); color: var(--re-magenta, #c2407f); }
+.re-know-chip-x:hover:not(:disabled) { background: rgba(184, 150, 46, 0.14); color: var(--re-magenta, #c2407f); }
 .re-know-chip-x:focus-visible { outline: 2px solid var(--re-magenta, #c2407f); }
 
 .re-know-add { display: flex; flex-direction: column; gap: 4px; }
-.re-know-add-label { font: 600 11px/1.2 'DM Mono', ui-monospace, monospace; letter-spacing: 0.04em; text-transform: uppercase; color: var(--ps-ink-light, #7a6e8a); }
+.re-know-add-label { font: 500 12px/1.2 'DM Mono', ui-monospace, monospace; letter-spacing: 0.04em; text-transform: uppercase; color: var(--ps-ink-light, #7a6e8a); }
 .re-know-add select {
   width: 100%; min-height: 36px; padding: 6px 10px;
   border: 1px solid var(--ps-border, #e3d9e6);
@@ -75,6 +75,8 @@
 /* A phone: a bigger target for × without a taller chip. */
 @media (max-width: 600px) {
   .re-know-state { min-height: 40px; font-size: 12px; }
-  .re-know-chip-x { width: 32px; height: 32px; }
+  .re-know-chip-x { width: 44px; height: 44px; }
+  .re-know-state { min-height: 44px; }
+  .re-know-add select { min-height: 44px; }
   .re-know-chip { padding: 0 2px 0 12px; }
 }
