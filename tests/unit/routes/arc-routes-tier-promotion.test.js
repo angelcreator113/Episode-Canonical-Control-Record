@@ -1,7 +1,7 @@
 // ============================================================================
 // UNIT TESTS — arcRoutes.js (Step 3 CP7 — PROMOTE, no AI)
 // ============================================================================
-// 25 handlers; 23 pinned here (the two AI routes, the intention draft and the season proposal, below). Lazy-noop fallback at L19-25 removed.
+// 23 handlers pinned here (two retired in planner PR 4, 2026-10-24) (the two AI routes, the intention draft and the season proposal, below). Lazy-noop fallback at L19-25 removed.
 
 const fs = require('fs');
 const path = require('path');
@@ -18,8 +18,6 @@ describe('Step 3 CP7 — arcRoutes.js PROMOTE shape', () => {
       ['get', '/world/:showId/arc'],
       ['post', '/world/:showId/arc/advance'],
       ['post', '/world/:showId/arc/advance/confirm'],
-      ['get', '/world/:showId/arc/context'],
-      ['put', '/world/:showId/arc/phase/:phase'],
       ['get', '/world/:showId/season/roadmap'],
       ['put', '/world/:showId/season/slots/:slotId/event'],
       ['put', '/world/:showId/season/slots/:slotId/episode'],
@@ -66,6 +64,12 @@ describe('Step 3 CP7 — arcRoutes.js PROMOTE shape', () => {
     test('drafting the season is requireAuth + ADMIN + aiRateLimiter (it calls Claude)', () => {
       expect(SRC).toMatch(/router\.post\('\/world\/:showId\/season\/draft',\s*requireAuth,\s*authorize\(\['ADMIN'\]\),\s*aiRateLimiter,\s*async/);
     });
+  });
+
+  // Retired with no caller (planner PR 4, 2026-10-24); getArcContext itself stays for the feed and the script writer.
+  test('no arc-context or phase-override route', () => {
+    expect(SRC).not.toMatch(/router\.get\('\/world\/:showId\/arc\/context'/);
+    expect(SRC).not.toMatch(/router\.put\('\/world\/:showId\/arc\/phase\/:phase'/);
   });
 
   test('no Extend route: the season stays 24 slots (§8(ff) Q2)', () => {

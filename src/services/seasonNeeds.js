@@ -243,17 +243,24 @@ async function getNeeds(sequelize, showId) {
 }
 
 /**
- * The confirmed relationships between the season's people, as the season
- * planners read them (the slot drafter, Draft the season, the proposals):
- * at most `cap` lines, never a seed. '' with none or when it cannot be read.
+ * The confirmed relationships between the season's people, as the season's
+ * AI calls read them (the slot drafter, Draft the season, the proposals,
+ * Suggest twists; services/seasonAiContext): at most `cap` lines, never a
+ * seed. `characters` ({ id, name }) narrows the people (Suggest twists: the
+ * show's own, the ids it may use); `detail` adds each pair's situation, up
+ * to that many characters. '' with none or when it cannot be read.
  */
-async function seasonRelationshipBlock(sequelize, showId, { cap = PLANNER_CAP } = {}) {
+async function seasonRelationshipBlock(sequelize, showId, { cap = PLANNER_CAP, characters = null, detail = 0 } = {}) {
   try {
-    const characters = await seasonCharacters(sequelize, showId);
-    const names = new Map(characters.map((c) => [c.id, c.name]));
-    const rows = await truth.confirmedBetween(sequelize, characters.map((c) => c.id), { limit: cap });
+    const people = (characters || await seasonCharacters(sequelize, showId)).map((c) => ({ id: String(c.id), name: c.name }));
+    const names = new Map(people.map((c) => [c.id, c.name]));
+    const rows = await truth.confirmedBetween(sequelize, people.map((c) => c.id), { limit: cap });
     if (!rows.length) return '';
-    const lines = rows.slice(0, cap).map((r) => truth.relationshipLine(r, (id) => names.get(String(id))));
+    const situation = (r) => {
+      const t = detail ? String(r.situation || r.conflict_summary || '').replace(/\s+/g, ' ').trim().slice(0, detail) : '';
+      return t ? ` — ${t}` : '';
+    };
+    const lines = rows.slice(0, cap).map((r) => `${truth.relationshipLine(r, (id) => names.get(String(id)))}${situation(r)}`);
     return `RELATIONSHIPS BETWEEN THE SEASON'S PEOPLE (confirmed; build on them, never contradict them):\n${lines.join('\n')}\n`;
   } catch (err) {
     console.error('[seasonNeeds] the season\'s relationships could not be read:', err.message);

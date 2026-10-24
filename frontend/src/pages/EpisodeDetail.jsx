@@ -436,14 +436,14 @@ const EpisodeDetail = () => {
   // archived, per src/services/FilterService.js:47). `evaluation_status`
   // is a separate field with exactly two literal values in use codebase-
   // wide (src/routes/evaluation.js:382, src/services/episodeCompletionService.js:440,
-  // src/services/seasonRhythmValidator.js:61/309, src/routes/seasonRhythmRoutes.js:76):
+  // and the season-rhythm validator, since removed):
   // 'computed' — POST .../evaluate scores the episode but does NOT wrap it,
   // it's a preview the creator can still send through POST .../override
   // before accepting — and 'accepted', set only once stat deltas are
   // applied and financials are finalized (episodeCompletionService.js's
   // completeEpisode, which POST .../accept itself proxies to and which
   // guards on `evaluation_status === 'accepted'` to refuse re-accepting).
-  // seasonRhythmValidator.js:6/57 independently documents the same
+  // The season-rhythm validator independently documented the same
   // reading: "evaluation_status = 'accepted' means stat changes have been
   // applied." `evaluation_json` going non-null is NOT the same signal — it
   // is set at the 'computed' stage too, before any accept — so watching it

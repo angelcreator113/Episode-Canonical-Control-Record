@@ -31,6 +31,8 @@
  *   or leave unslotted".
  */
 
+const { loadSeason } = require('./seasonLoader');
+
 const SLOTS_PER_SEASON = 24;
 const DEFAULT_PHASES = [
   { phase: 1, title: 'Foundation', episode_start: 1, episode_end: 8 },
@@ -146,11 +148,9 @@ async function recordSlotOutcome(sequelize, { showId, episodeId, tier, moneyNet,
  * next open slot is named. Null when the show has no active season.
  */
 async function eventSeasonContext(sequelize, showId, eventId) {
-  const [[arc]] = await sequelize.query(
-    `SELECT id, title, phases, season_number FROM show_arcs
-      WHERE show_id = :showId AND status = 'active' AND deleted_at IS NULL ORDER BY arc_number ASC LIMIT 1`,
-    { replacements: { showId } });
-  if (!arc) return null;
+  const season = await loadSeason(sequelize, showId, { slots: false });
+  if (!season) return null;
+  const { arc } = season;
   const [[slot]] = await sequelize.query(
     `SELECT s.slot_number, s.season_number, s.phase, s.story_purpose, s.desired_pressure, s.episode_id,
             CASE WHEN s.event_id = :eventId THEN 'pencilled' ELSE 'episode' END AS via
@@ -213,37 +213,22 @@ async function ensureSeasonSlots(sequelize, arc, { transaction } = {}) {
  * Evoni to place or leave unslotted). Null when the show has no active arc.
  */
 async function getRoadmap(sequelize, showId) {
-  const [arcs] = await sequelize.query(
-    `SELECT id, show_id, title, tagline, season_number, phases, current_phase
-       FROM show_arcs WHERE show_id = :showId AND status = 'active' AND deleted_at IS NULL
-      ORDER BY arc_number ASC LIMIT 1`,
-    { replacements: { showId } });
-  const arc = arcs[0];
-  if (!arc) return null;
+  return roadmapOf(sequelize, await loadSeason(sequelize, showId));
+}
 
-  const [rows] = await sequelize.query(
-    `SELECT s.id, s.slot_number, s.phase, s.season_number, s.locked_at,
-            s.story_purpose, s.story_purposes, s.career_focus, s.desired_pressure, s.outcome_range, s.intention_source,
-            st.id AS thread_id, st.title AS thread_title, st.status AS thread_status,
-            s.actual_outcome, s.actual_pressure, s.accepted_at,
-            ep.id AS episode_id, ep.title AS episode_title, ep.status AS episode_status,
-            ep.evaluation_status AS episode_evaluation_status,
-            ev.id AS event_id, ev.name AS event_name, ev.status AS event_status
-       FROM season_slots s
-       LEFT JOIN episodes ep ON ep.id = s.episode_id AND ep.deleted_at IS NULL
-       LEFT JOIN world_events ev ON ev.id = s.event_id AND ev.deleted_at IS NULL
-       LEFT JOIN show_story_threads st ON st.id = s.story_thread_id AND st.deleted_at IS NULL
-      WHERE s.arc_id = :arcId AND s.deleted_at IS NULL
-      ORDER BY s.slot_number ASC`,
-    { replacements: { arcId: arc.id } });
+/** The roadmap from a season already read (loadSeason), so a caller that has it does not read it twice. */
+async function roadmapOf(sequelize, season) {
+  if (!season) return null;
+  const { arc, slots: rows } = season;
+  const showId = arc.show_id;
 
   const seasonNumber = arc.season_number || 1;
   const threadById = await threadTitles(sequelize, arc.show_id);
   const slots = rows.map((r) => {
-    const episode = r.episode_id
-      ? { id: r.episode_id, title: r.episode_title, status: r.episode_status, evaluation_status: r.episode_evaluation_status }
+    const episode = r.live_episode_id
+      ? { id: r.live_episode_id, title: r.episode_title, status: r.episode_status, evaluation_status: r.episode_evaluation_status }
       : null;
-    const event = r.event_id ? { id: r.event_id, name: r.event_name, status: r.event_status } : null;
+    const event = r.live_event_id ? { id: r.live_event_id, name: r.event_name, status: r.event_status } : null;
     return {
       id: r.id,
       slot_number: r.slot_number,
@@ -564,11 +549,9 @@ async function assignOnStart(sequelize, { showId, eventId, episodeId, replacingE
       return rows[0].slot_number;
     }
   }
-  const [[arc]] = await sequelize.query(
-    `SELECT id FROM show_arcs WHERE show_id = :showId AND status = 'active' AND deleted_at IS NULL
-      ORDER BY arc_number ASC LIMIT 1`,
-    { replacements: { showId }, transaction });
-  if (!arc) return null;
+  const season = await loadSeason(sequelize, showId, { slots: false, transaction });
+  if (!season) return null;
+  const { arc } = season;
   const [[slot]] = await sequelize.query(
     `SELECT id, slot_number FROM season_slots
       WHERE arc_id = :arcId AND deleted_at IS NULL AND episode_id IS NULL AND locked_at IS NULL
@@ -593,6 +576,7 @@ module.exports = {
   SeasonSlotError,
   ensureSeasonSlots,
   getRoadmap,
+  roadmapOf,
   eventSeasonContext,
   pencilEvent,
   pencilEventIn,

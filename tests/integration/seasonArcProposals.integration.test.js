@@ -138,6 +138,28 @@ const ANSWER = {
     expect((await slot(arcId, 3)).story_purpose).toBe('Edited meanwhile');
   });
 
+  // The house retry (planner PR 4): a budget refusal is final; a 529 is asked again after a pause.
+  test('a budget refusal is not retried and answers 429; an overloaded model is asked twice', async () => {
+    const ai = require('../../src/services/seasonAiContext');
+    const { show } = await seedSeason();
+    const refused = jest.fn(async () => { throw Object.assign(new Error('AI daily budget exceeded.'), { status: 429, code: 'AI_BUDGET_EXCEEDED' }); });
+    await expect(proposals.propose(models, show, { force: true, anthropic: { messages: { create: refused } } }))
+      .rejects.toMatchObject({ status: 429, code: 'AI_BUDGET_EXCEEDED' });
+    expect(refused).toHaveBeenCalledTimes(1);
+
+    ai.setRetryPause(0);
+    try {
+      const busy = jest.fn()
+        .mockRejectedValueOnce(Object.assign(new Error('Overloaded'), { status: 529 }))
+        .mockResolvedValueOnce({ content: [{ text: JSON.stringify(ANSWER) }] });
+      const { proposal } = await proposals.propose(models, show, { force: true, anthropic: { messages: { create: busy } } });
+      expect(busy).toHaveBeenCalledTimes(2);
+      expect(proposal.status).toBe('proposed');
+    } finally {
+      ai.setRetryPause(ai.RETRY_PAUSE_MS);
+    }
+  });
+
   test('dismissing closes it; a newer proposal replaces an open one', async () => {
     const { show } = await seedSeason();
     const first = (await proposals.propose(models, show, { anthropic: fakeClient(ANSWER).client })).proposal;
