@@ -109,3 +109,29 @@ describe('Story & Events', () => {
     expect(screen.getByRole('link', { name: 'Story & Events' }).getAttribute('aria-current')).toBe('page');
   });
 });
+
+describe('with the person read (2026-10-23)', () => {
+  const PERSON = { episodes: [
+    { id: 'ep3', episode_number: 3, title: 'Rooftop', via: ['story record'], record: { status: 'approved', knew: null, learned: 'it was him', changed: null }, changes: [], events: [], link: '/episodes/ep3' },
+    { id: 'ep2', episode_number: 2, title: 'The Gala', via: ['guest'], record: null, changes: [{ relationship_id: 'r1', with: 'Lala', stage: 'friends → lovers', note: null }], events: [], link: '/episodes/ep2' },
+    { id: 'ep1', episode_number: 1, title: 'I Designed My Outfit', via: ['host'], record: null, changes: [], events: [], link: '/episodes/ep1' },
+  ] };
+  const renderWith = () => render(
+    <MemoryRouter><TabStory character={CHARACTER} feedProfile={{ id: 7 }} appearances={APPEARANCES} openTab={vi.fn()} now={NOW} person={PERSON} /></MemoryRouter>,
+  );
+
+  test('counts, Latest episode and Their episodes read the episode history, with what changed', async () => {
+    renderWith();
+    const tiles = screen.getByTestId('ch-story-tiles');
+    expect(within(tiles).getAllByRole('listitem')[0].textContent).toContain('3');
+    const latest = screen.getByTestId('ch-st-latest');
+    expect(latest.textContent).toContain('Episode 3');
+    expect(latest.textContent).toContain('it was him');
+    fireEvent.click(screen.getByRole('button', { name: /Episodes/ }));
+    const all = await screen.findByTestId('ch-st-episodes');
+    expect([...all.querySelectorAll('.pep-num')].map((e) => e.textContent)).toEqual(['Episode 3', 'Episode 2', 'Episode 1']);
+    expect(all.textContent).toContain('With Lala: friends → lovers');
+    // One list: the old episode rows are not shown beside it.
+    expect(all.querySelectorAll('.ch-we-item')).toHaveLength(0);
+  });
+});

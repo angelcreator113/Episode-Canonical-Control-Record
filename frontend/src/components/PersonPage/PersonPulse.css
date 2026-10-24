@@ -1,0 +1,5 @@
+/* Voice & Pulse, their Pulse account inside "Pulse behavior" (PersonPulse.jsx). */
+.ppu-tie { margin: 0; font-size: 14px; line-height: 1.45; overflow-wrap: anywhere; }
+.ppu-label { font-family: 'DM Mono', monospace; font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-secondary); }
+.ppu-from { font-size: 12px; color: var(--text-secondary); }
+.ppu-open { display: inline-flex; align-items: center; gap: 5px; }

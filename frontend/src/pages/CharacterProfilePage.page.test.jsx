@@ -83,6 +83,39 @@ describe('the character page', () => {
     expect(screen.getByTestId('ch-shows')).toBeTruthy();
   });
 
+  test('the person read shows in the tabs it belongs to; ?tab=person is the Overview', async () => {
+    const base = vi.mocked(api.get).getMockImplementation();
+    vi.mocked(api.get).mockImplementation(async (url) => {
+      if (url === '/api/v1/person/c1') {
+        return { data: { person: {
+          id: 'c1', who: { name: 'Sable', aliases: [] },
+          pulse: { id: 7, handle: 'studiobysable', follower_tier: 'micro', follower_count: '12K', link: '/pulse?profile=7' },
+          lala_tie: { from: 'story', tie: 'direct', words: 'friends' },
+          relationships: [], episodes: [],
+          writers: { in_cast_block: true, lala: ['With Lala in the story: friends'], family: [], family_block: null, secrecy: [] },
+        } } };
+      }
+      return base(url);
+    });
+    render(
+      <MemoryRouter initialEntries={['/character/c1?tab=person']}>
+        <Routes><Route path="/character/:id" element={<CharacterProfilePage />} /></Routes>
+      </MemoryRouter>,
+    );
+    expect((await screen.findByRole('link', { name: 'Overview' })).getAttribute('aria-current')).toBe('page');
+    expect((await screen.findByTestId('person-writers')).textContent).toContain('With Lala in the story: friends');
+    // The header adds their other names, not a line repeating Who they are.
+    expect(screen.queryByTestId('person-summary')).toBeNull();
+    expect(screen.queryByTestId('person-lala-tie')).toBeNull();
+    fireEvent.click(screen.getByRole('link', { name: 'Voice & Pulse' }));
+    // One card: Pulse behavior carries the tie to Lala and the profile link; the handle once.
+    const card = await screen.findByTestId('ch-feed-behavior');
+    expect(within(card).getByTestId('person-lala-tie').textContent).toContain('friends (from their relationship)');
+    expect(within(card).getByRole('link', { name: /Open their Pulse profile/ }).getAttribute('href')).toBe('/pulse?profile=7');
+    expect(screen.getAllByText('@studiobysable', { selector: 'strong' })).toHaveLength(1);
+    expect(screen.queryByTestId('person-writers')).toBeNull();
+  });
+
   test('an unknown ?tab opens the Overview', async () => {
     render(
       <MemoryRouter initialEntries={['/character/c1?tab=nope']}>

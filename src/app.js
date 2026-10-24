@@ -1344,6 +1344,15 @@ try {
   console.error('✗ Failed to load Family routes:', e.message);
 }
 
+// One person page: what the character page's tabs add about them, in one read (Evoni, 2026-10-23)
+try {
+  const personRoutes = require('./routes/person');
+  app.use('/api/v1/person', personRoutes);
+  console.log('✓ Person routes loaded at /api/v1/person');
+} catch (e) {
+  console.error('✗ Failed to load Person routes:', e.message);
+}
+
 // Character Generator routes (batch seed → generate → commit)
 try {
   const characterGeneratorRoutes = require('./routes/characterGenerator');

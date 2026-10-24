@@ -1,0 +1,11 @@
+/* A relationship's story truth inside its Connections row (PersonRelationships.jsx). */
+.prl { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.prl-heart { color: var(--accent); flex: none; }
+.prl-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.prl-tag { padding: 2px 9px; border-radius: 999px; font-family: 'DM Mono', monospace; font-size: 11px; font-weight: 600; background: var(--lala-lavender-soft); color: var(--lala-lavender-text); }
+.prl-tag.is-secret { background: var(--danger-bg, var(--warning-bg)); color: var(--danger-text, var(--warning-text)); }
+.prl-tag.is-rumoured { background: var(--warning-bg); color: var(--warning-text); }
+.prl-tag.is-known { background: var(--success-bg); color: var(--success-text); }
+.prl-tag.is-differs { background: none; border: 1px dashed var(--warning-text); color: var(--warning-text); }
+.prl-sub { font-size: 13px; line-height: 1.45; color: var(--text-secondary); overflow-wrap: anywhere; }
+.prl-open { display: inline-flex; align-items: center; gap: 4px; min-height: 28px; font-size: 12px; }
