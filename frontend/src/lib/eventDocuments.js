@@ -13,12 +13,23 @@ const base = (showId, eventId) => `/api/v1/world/${showId}/events/${eventId}/doc
 
 export const getEventDocumentsApi = async (showId, eventId) =>
   (await api.get(base(showId, eventId))).data?.data || { shopping_list: null, career_plan: null };
-export const draftEventDocumentApi = async (showId, eventId, type) =>
-  (await api.post(`${base(showId, eventId)}/${type}/draft`)).data?.data;
-export const editEventDocumentApi = async (showId, eventId, type, items) =>
-  (await api.put(`${base(showId, eventId)}/${type}`, { items })).data?.data;
+// budget: a shopping list redrafted for her shortfall (rent, borrow, swap).
+export const draftEventDocumentApi = async (showId, eventId, type, { budget = false } = {}) =>
+  (await api.post(`${base(showId, eventId)}/${type}/draft`, budget ? { budget: true } : {})).data?.data;
+// note: undefined leaves the document's note as it is.
+export const editEventDocumentApi = async (showId, eventId, type, items, note) =>
+  (await api.put(`${base(showId, eventId)}/${type}`, note === undefined ? { items } : { items, note })).data?.data;
 export const approveEventDocumentApi = async (showId, eventId, type) =>
   (await api.post(`${base(showId, eventId)}/${type}/approve`)).data?.data;
+// An earlier version from history, as a new draft version (2026-10-24).
+export const restoreEventDocumentApi = async (showId, eventId, type, fromVersion) =>
+  (await api.post(`${base(showId, eventId)}/${type}/restore`, { fromVersion })).data?.data;
+// One line re-worded by its index, the rest kept (2026-10-24).
+export const redraftEventDocumentLineApi = async (showId, eventId, type, index, version) =>
+  (await api.post(`${base(showId, eventId)}/${type}/lines/${index}/redraft`, version == null ? {} : { version })).data?.data;
+// Keep the shopping list for the look as it is now ("Look changed" → Keep).
+export const keepShoppingListLookApi = async (showId, eventId) =>
+  (await api.post(`${base(showId, eventId)}/shopping_list/keep-look`)).data?.data;
 
 /** The status chip: Not drafted, Draft, or Approved. */
 export function docState(doc) {
@@ -150,43 +161,34 @@ export function documentByline(event) {
 }
 
 /**
- * "Look changed — redraft the list?" (Evoni, 2026-10-23). A drafted
- * shopping list records no pieces it was drafted from (its items are slots
- * and labels), so EventDocuments keeps, per event, the look's piece ids
- * when each list version was first seen or drafted in this tab
- * (sessionStorage; a reload keeps it, a new tab starts again):
- * { shopping_list: { version, pieces } }.
+ * Which "This event" lines Start Episode will not carry, as the editor
+ * shows it while she types: the event's goal limit, optional ideas given up
+ * first, then the last goals (the server's capCombinedGoals rule,
+ * eventDocumentsService.planCarry; the server's answer, docs.career_carry,
+ * is the one shown once saved). Returns the set of item indexes left out.
  */
-const BASELINE_KEY = (eventId) => `evd-look-baseline:${eventId}`;
-
-/** The look's piece ids as one comparable key: order does not matter. */
-export function lookPiecesKey(pieces) {
-  return (Array.isArray(pieces) ? pieces : []).map((p) => (p?.id == null ? '' : String(p.id))).filter(Boolean).sort().join(',');
-}
-
-export function readLookBaselines(eventId) {
-  if (!eventId) return {};
-  try {
-    const raw = window.sessionStorage.getItem(BASELINE_KEY(eventId));
-    const parsed = raw ? JSON.parse(raw) : {};
-    return parsed && typeof parsed === 'object' ? parsed : {};
-  } catch (err) {
-    console.error('[eventDocuments] look baseline read failed:', err);
-    return {};
+export function planLeftOut(items, limit) {
+  const rows = (items || []).map((it, i) => ({ it, i }))
+    .filter(({ it }) => (it.section || 'this_event') === 'this_event' && String(it.label || '').trim());
+  let over = rows.length - (Number(limit) || 0);
+  if (!Number.isFinite(over) || over <= 0 || limit == null) return new Set();
+  const rank = (it) => (it.task_source === 'optional' ? 0 : 1);
+  const order = [...rows].sort((a, b) => rank(a.it) - rank(b.it) || b.i - a.i);
+  const out = new Set();
+  for (const { i } of order) {
+    if (over <= 0) break;
+    out.add(i);
+    over -= 1;
   }
+  return out;
 }
 
-export function writeLookBaselines(eventId, value) {
-  if (!eventId) return;
-  try {
-    window.sessionStorage.setItem(BASELINE_KEY(eventId), JSON.stringify(value || {}));
-  } catch (err) {
-    console.error('[eventDocuments] look baseline write failed:', err);
-  }
-}
-
-/** Whether the look differs from the one this list version was drafted (or first seen) with. */
-export function lookChangedSince(baseline, version, lookKey) {
-  if (!baseline || version == null || baseline.version !== version) return false;
-  return String(baseline.pieces ?? '') !== String(lookKey ?? '');
+/** What a version's amount check found, in a sentence, or null. */
+export function amountNote(doc, type) {
+  const a = doc?.checks?.amounts;
+  if (!a || a.ok || !a.invented?.length) return null;
+  const list = a.invented.map((n) => `${Number(n).toLocaleString('en-US')} coins`).join(', ');
+  return type === 'shopping_list'
+    ? `Names ${list}, which no piece of the look costs. The list shows each price itself.`
+    : `Names ${list}, which the deal does not state.`;
 }

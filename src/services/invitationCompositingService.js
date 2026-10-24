@@ -917,6 +917,7 @@ module.exports = {
   contentFromText,
   invitationFacts,
   checkInvitationMoney,
+  coinAmounts,
   describeInvitationMoney,
   detectTheme,
   checkFonts,

@@ -122,11 +122,22 @@ function startWarnings(event) {
     warnings.push({ key: 'look_outfit', label: 'No outfit chosen', detail: 'Beat 8 needs an outfit; it will have to be chosen before then.' });
   }
 
-  const { approvedDocument, DOC_TYPES } = require('./eventDocumentsService');
+  const { approvedDocument, DOC_TYPES, planCarry } = require('./eventDocumentsService');
   for (const [type, { label }] of Object.entries(DOC_TYPES || {})) {
     if (!approvedDocument(event, type)) {
       warnings.push({ key: `document_${type}`, label: `${label} not approved`, detail: `Start Episode puts only an approved ${label.toLowerCase()} on the episode's lists.` });
     }
+  }
+  // Approved plan lines past the event's goal limit (T9) do not reach the
+  // episode; said here rather than lost without a word (2026-10-24).
+  const plan = approvedDocument(event, 'career_plan');
+  const carry = plan && typeof planCarry === 'function' ? planCarry(event, plan) : null;
+  if (carry?.dropped?.length) {
+    warnings.push({
+      key: 'document_career_plan_limit',
+      label: `${carry.dropped.length} career plan line${carry.dropped.length === 1 ? '' : 's'} over the goal limit`,
+      detail: `This event carries ${carry.limit} of Lala's goals; not carried: ${carry.dropped.map((l) => `"${l}"`).join(', ')}. Mark lines optional or remove some in the Event Package.`,
+    });
   }
   return warnings;
 }

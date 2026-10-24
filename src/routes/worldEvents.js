@@ -2348,28 +2348,29 @@ router.get('/world/:showId/events/:eventId/documents', requireAuth, async (req, 
   }
 });
 
-// POST /world/:showId/events/:eventId/documents/:type/draft — draft or redraft (one AI call)
+// POST /world/:showId/events/:eventId/documents/:type/draft — draft or redraft (one AI call);
+// { budget: true } words a shopping list's pieces to buy for her shortfall
 router.post('/world/:showId/events/:eventId/documents/:type/draft', requireAuth, aiRateLimiter, async (req, res) => {
   try {
     const models = await getModels();
     if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
     const { draftDocument } = require('../services/eventDocumentsService');
     const { showId, eventId, type } = req.params;
-    const data = await draftDocument(models, { showId, eventId, type, version: req.body?.version });
+    const data = await draftDocument(models, { showId, eventId, type, version: req.body?.version, budget: req.body?.budget === true });
     return res.json({ success: true, data });
   } catch (err) {
     return eventDocumentsError(res, err, 'draft');
   }
 });
 
-// PUT /world/:showId/events/:eventId/documents/:type — edit the items ({ items: [...] })
+// PUT /world/:showId/events/:eventId/documents/:type — edit the items ({ items: [...], note? })
 router.put('/world/:showId/events/:eventId/documents/:type', requireAuth, async (req, res) => {
   try {
     const models = await getModels();
     if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
     const { editDocument } = require('../services/eventDocumentsService');
     const { showId, eventId, type } = req.params;
-    const data = await editDocument(models, { showId, eventId, type, items: req.body?.items, version: req.body?.version });
+    const data = await editDocument(models, { showId, eventId, type, items: req.body?.items, note: req.body?.note, version: req.body?.version });
     return res.json({ success: true, data });
   } catch (err) {
     return eventDocumentsError(res, err, 'edit');
@@ -2387,6 +2388,51 @@ router.post('/world/:showId/events/:eventId/documents/:type/approve', requireAut
     return res.json({ success: true, data });
   } catch (err) {
     return eventDocumentsError(res, err, 'approve');
+  }
+});
+
+// POST /world/:showId/events/:eventId/documents/:type/restore — { fromVersion, version? }
+// An earlier version from history, as a new draft version (Undo uses it too).
+router.post('/world/:showId/events/:eventId/documents/:type/restore', requireAuth, async (req, res) => {
+  try {
+    const models = await getModels();
+    if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
+    const { restoreDocument } = require('../services/eventDocumentsService');
+    const { showId, eventId, type } = req.params;
+    const data = await restoreDocument(models, { showId, eventId, type, fromVersion: req.body?.fromVersion, version: req.body?.version });
+    return res.json({ success: true, data });
+  } catch (err) {
+    return eventDocumentsError(res, err, 'restore');
+  }
+});
+
+// POST /world/:showId/events/:eventId/documents/:type/lines/:index/redraft — { version? }
+// One line re-worded (one AI call), the rest kept; a new draft version.
+router.post('/world/:showId/events/:eventId/documents/:type/lines/:index/redraft', requireAuth, aiRateLimiter, async (req, res) => {
+  try {
+    const models = await getModels();
+    if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
+    const { redraftLine } = require('../services/eventDocumentsService');
+    const { showId, eventId, type, index } = req.params;
+    const data = await redraftLine(models, { showId, eventId, type, index, version: req.body?.version });
+    return res.json({ success: true, data });
+  } catch (err) {
+    return eventDocumentsError(res, err, 'line redraft');
+  }
+});
+
+// POST /world/:showId/events/:eventId/documents/shopping_list/keep-look — { version? }
+// Keep the list for the look as it is now ("Look changed" → Keep). No new version.
+router.post('/world/:showId/events/:eventId/documents/shopping_list/keep-look', requireAuth, async (req, res) => {
+  try {
+    const models = await getModels();
+    if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
+    const { keepListForLook } = require('../services/eventDocumentsService');
+    const { showId, eventId } = req.params;
+    const data = await keepListForLook(models, { showId, eventId, version: req.body?.version });
+    return res.json({ success: true, data });
+  } catch (err) {
+    return eventDocumentsError(res, err, 'keep look');
   }
 });
 
