@@ -69,6 +69,10 @@ describe('the Script step', () => {
     expect(step({})).toMatchObject({ done: false, detail: null });
     expect(step({ status: 'scripted' }).done).toBe(true);
   });
+  // Script tab audit 6 (2026-10-24): a done step says no "n of 14".
+  test('past Draft with beats still open: done, and no count beside the tick', () => {
+    expect(step({ status: 'scripted', script_content: 'x', script_locked_beats: [1, 2, 3] })).toMatchObject({ done: true, detail: null });
+  });
 });
 
 describe('sectionSummary and canMarkReady', () => {
@@ -94,5 +98,12 @@ describe('takesStat (Teleprompter batch 2)', () => {
     const steps = productionSteps({ episode: { id: 'ep-1' }, clips: [{ beat_number: 4 }] });
     expect(steps.find((s) => s.key === 'files').stat).toBe('Takes: 1 of 14 beats');
     expect(steps.filter((s) => s.stat).map((s) => s.key)).toEqual(['files']);
+  });
+  // Script tab audit 6 (2026-10-24): a full-episode take's beat markers are takes of those beats.
+  test("a full take's marked beats count, each once, with the linked ones", () => {
+    const full = { beat_number: null, label: 'Full episode · take 1', beat_marks: [{ beat: 1, t: 0 }, { beat: 2, t: 30 }, { beat: 2, t: 40 }, { beat: 20, t: 50 }] };
+    expect(takesStat([full])).toBe('Takes: 2 of 14 beats');
+    expect(takesStat([full, { beat_number: 2 }, { beat_number: 9 }])).toBe('Takes: 3 of 14 beats');
+    expect(takesStat([{ ...full, beat_marks: JSON.stringify([{ beat: 5, t: 1 }]) }])).toBe('Takes: 1 of 14 beats');
   });
 });

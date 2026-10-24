@@ -6,10 +6,13 @@
  *
  * What each script line becomes:
  *   `Lala: "words"`        dialogue, the speaker's words without their quotes
- *                          ("Me" is Prime, as the tab shows it); a leading
+ *                          (her names, Me, Prime, JustAWoman and JAWIHP, are
+ *                          JustAWoman: Evoni, 2026-10-24); a leading
  *                          `(softly)` is the line's parenthetical
  *   `(She sits.)`          an action
- *   `[UI:VERB Target]`     a moment on screen, in words ("Lala opens the Closet")
+ *   `[UI:VERB Target]`     a moment on screen, in words ("Lala opens the Closet");
+ *                          a tag whose first word is no verb the show writes
+ *                          (`[UI: Lala opens closet]`) is printed as written
  *   `[TRANSITION: cut to]` a transition (`> CUT TO:` in Fountain)
  *   any other `[TAG: …]`   not spoken: a Fountain note `[[TAG: …]]`, so nothing
  *                          is lost from the export; left out of the table read
@@ -19,9 +22,9 @@
  * `**Lala:** words` is Lala's line, as `Lala: words` (lib/scriptSpeaker unbold).
  */
 import { beatName } from './canonicalBeats';
-import { parseMoment, resolveMoment, messageOf, verbLabel, deviceLabel } from './scriptMoments';
+import { parseMoment, resolveMoment, messageOf, verbLabel, deviceLabel, isKnownVerb } from './scriptMoments';
 import { headerNumber, normalizeBeatHeaders } from './beatLabelNumber';
-import { speakerLine, unquote, isRuleLine } from './scriptSpeaker';
+import { speakerLine, unquote, isRuleLine, shownSpeaker, scriptCast } from './scriptSpeaker';
 
 const BEAT_HEADER = /^\s*##\s*BEAT:\s*(.*)$/i;
 const TAG_LINE = /^\s*\[\s*([A-Za-z_]+)\s*:\s*([^\]]*)\]?\s*$/;
@@ -64,16 +67,20 @@ export function momentWords(moment, shown = null) {
 
 /**
  * One script line as a readable element, or null for a blank line:
- * { type: 'dialogue', speaker, paren, text } | { type: 'action', text }
+ * { type: 'dialogue', speaker, written, paren, text } | { type: 'action', text }
  * | { type: 'moment', text } | { type: 'transition', text }
  * | { type: 'tag', tag, value, raw } | { type: 'narration', text }.
  */
-export function readLine(line, on = null) {
+export function readLine(line, on = null, { cast = null } = {}) {
   const t = String(line ?? '').trim();
   // A `---` rule is read as nothing, as the Script tab shows it (lib/scriptSpeaker isRuleLine).
   if (!t || isRuleLine(t)) return null;
   const moment = parseMoment(t);
-  if (moment) return { type: 'moment', text: momentWords(moment, on ? resolveMoment(moment, on) : null) };
+  if (moment) {
+    const written = t.replace(/^\s*\[UI:\s*/i, '').replace(/\s*\]\s*$/, '');
+    if (!isKnownVerb(moment.verb)) return { type: 'moment', text: written };
+    return { type: 'moment', text: momentWords(moment, on ? resolveMoment(moment, on) : null) };
+  }
   const tag = t.match(TAG_LINE);
   if (tag && t.startsWith('[')) {
     const name = tag[1].toUpperCase();
@@ -84,13 +91,16 @@ export function readLine(line, on = null) {
   if (/^\(.*\)$/.test(t)) return { type: 'action', text: t.slice(1, -1).trim() };
   // The Script tab's speaker rule (lib/scriptSpeaker.js): `Lala (V.O.):`
   // is Lala, with (V.O.) after her name; `Note:` is not a person.
-  const d = speakerLine(t);
+  // `lala:` and `me:` in lower case are speakers too, and the cast's names
+  // (lib/scriptSpeaker). Her names read as JustAWoman (Evoni, 2026-10-24).
+  const d = speakerLine(t, { cast });
   if (d && d.words) {
     let words = d.words;
     let paren = null;
     const p = words.match(/^(\([^)]*\))\s*(.*)$/);
     if (p && p[2]) { paren = p[1]; words = p[2]; }
-    return { type: 'dialogue', speaker: d.speaker, ext: d.note, paren, text: unquote(words) };
+    // `written`: the speaker as the Script tab reads it (`JAWIHP`, `Prime`).
+    return { type: 'dialogue', speaker: shownSpeaker(d.speaker), written: d.speaker, ext: d.note, paren, text: unquote(words) };
   }
   return { type: 'narration', text: t };
 }
@@ -126,6 +136,17 @@ export function scriptSections(scriptText) {
   }
   if (!beats.length && preamble.length) return { preamble: [], beats: [{ number: null, name: null, label: '', lines: preamble }] };
   return { preamble, beats };
+}
+
+/**
+ * Who is in the script's cast, for a name written in lower case: everyone
+ * it names as a speaker with a capital, and `extra` (the episode's own
+ * people, when the caller has them).
+ */
+export function castOf(preamble = [], beats = [], extra = null) {
+  const out = scriptCast([...preamble, ...beats.flatMap((b) => b.lines)]);
+  for (const n of extra || []) if (typeof n === 'string' && n.trim()) out.add(n.trim());
+  return out;
 }
 
 // A scene name the beat gives itself, when the scene plan has none.
@@ -166,12 +187,13 @@ function fountainElement(r) {
  * `scenes`: { [beatNumber]: name } from the scene plan, else the beat's own
  * [SCENE:] or [LOCATION_HINT:] tag), then its elements, a blank line apart.
  */
-export function toFountain(scriptText, { title = '', scenes = null } = {}) {
+export function toFountain(scriptText, { title = '', scenes = null, cast = null } = {}) {
   const { preamble, beats } = scriptSections(scriptText);
+  const people = castOf(preamble, beats, cast);
   // Always a title page: without one, a first line like "On screen: Mail"
   // would be read as a title-page key.
   const out = [`Title: ${String(title || '').replace(/\s+/g, ' ').trim() || 'Untitled script'}`];
-  const body = (lines) => lines.map((l) => readLine(l)).filter(Boolean).map(fountainElement).filter(Boolean);
+  const body = (lines) => lines.map((l) => readLine(l, null, { cast: people })).filter(Boolean).map(fountainElement).filter(Boolean);
   out.push(...body(preamble));
   for (const beat of beats) {
     if (beat.number !== null) out.push(`# ${beat.number} · ${beat.name}`);
@@ -187,12 +209,13 @@ export function toFountain(scriptText, { title = '', scenes = null } = {}) {
  * name over the words, actions in parentheses, moments in brackets, and no
  * other tags.
  */
-export function toPlainText(scriptText, { title = '' } = {}) {
+export function toPlainText(scriptText, { title = '', cast = null } = {}) {
   const { preamble, beats } = scriptSections(scriptText);
+  const people = castOf(preamble, beats, cast);
   const out = [];
   const name = String(title || '').replace(/\s+/g, ' ').trim();
   if (name) out.push(`${name}\n${'='.repeat(name.length)}`);
-  const body = (lines) => lines.map((l) => readLine(l)).filter(Boolean).map((r) => {
+  const body = (lines) => lines.map((l) => readLine(l, null, { cast: people })).filter(Boolean).map((r) => {
     switch (r.type) {
       case 'dialogue': return `${r.speaker.toUpperCase()}${r.ext ? ` ${r.ext.toUpperCase()}` : ''}\n${r.paren ? `  ${r.paren}\n` : ''}  ${r.text}`;
       case 'action': return `(${r.text})`;
@@ -218,4 +241,18 @@ export function scriptFileSlug(title) {
   const slug = String(title || '').normalize('NFKD').replace(/[̀-ͯ]/g, '')
     .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60);
   return slug || 'script';
+}
+
+/**
+ * The export's file name, without its extension (Script tab audit 6,
+ * 2026-10-24): `ep-<n>-<title>`, `ep-<n>-script` when untitled (or titled
+ * only "Episode <n>"); the title's slug alone with no number.
+ */
+export function scriptFileName(title, episodeNumber = null) {
+  const slug = scriptFileSlug(title);
+  const fromTitle = String(title || '').match(/^\s*(?:ep|episode)\.?\s*(\d{1,4})\b/i);
+  const n = Number.isInteger(Number(episodeNumber)) && Number(episodeNumber) > 0 ? Number(episodeNumber) : (fromTitle ? Number(fromTitle[1]) : null);
+  if (n === null) return slug;
+  const rest = slug.replace(new RegExp(`^(?:ep|episode)-${n}(?:-|$)`), '');
+  return `ep-${n}-${rest || 'script'}`;
 }

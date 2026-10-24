@@ -7,9 +7,9 @@
  * checklist showed the rest to Evoni after the fact. This reads the script
  * the same way the tab does, so the writer can fix a gap before saving:
  *
- *   - each goal she has at the event and the brief's forward hook is
- *     mentioned in some beat (the key-word rule of
- *     frontend/src/lib/episodeScript.js mustCover, ported as is). What she
+ *   - each goal she has at the event is covered, and the brief's forward
+ *     hook told in beat 14 (utils/coverMatch, the Script tab's own code;
+ *     her manual marks, facts.marks, win). What she
  *     owes is not: deliverables are not always shown in the show (Evoni,
  *     2026-10-18; beat 12 is The Fashion Challenge);
  *   - each piece of the locked look has its `[WEAR: id]` line in the closet
@@ -26,78 +26,43 @@
 const { CANONICAL_BEATS } = require('../constants/canonicalBeats');
 const { splitScriptBeats } = require('./scriptBeatLocks');
 const { beat14Delivers } = require('./beat14Invitation');
-const { scriptRuleItems, personLine } = require('./scriptRuleChecks');
+const { scriptRuleItems } = require('./scriptRuleChecks');
 const { isClosetScreen } = require('./scriptWear');
 
-// ─── The tab's must-cover rule (frontend/src/lib/episodeScript.js) ───────────
-const STOP = new Set(['the', 'and', 'for', 'with', 'from', 'that', 'this', 'into', 'her', 'his', 'their', 'your', 'about', 'post', 'piece', 'content', 'make', 'made', 'lala', 'episode', 'event']);
-const words = (s) => String(s || '').toLowerCase().normalize('NFKD').replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(Boolean);
-const keyWords = (s) => [...new Set(words(s).filter((w) => w.length >= 4 && !STOP.has(w)))];
+// ─── The tab's must-cover rule (utils/coverMatch.js, the Script tab's own) ───
+// Script tab audit 6 (2026-10-24): one matcher for the tab, this check and
+// the story record. A goal by its verb phrase and its person, outside the
+// to-do list, in the latest beat that does it; the hook in beat 14 only.
+const coverMatch = require('./coverMatch');
+const { keyWords } = coverMatch;
+
+// The parsed beats ({ number, text }) as the matcher reads them: { number, lines }.
+const lined = (beats) => (beats || []).map((b) => ({ number: b.number, lines: String(b.text || '').split('\n').slice(1) }));
 
 /** The first beat (its number) whose lines mention the text, else null. */
 function mentionedIn(beats, text) {
-  const keys = keyWords(text);
-  if (!keys.length) return null;
-  const need = keys.length <= 2 ? keys.length : Math.ceil(keys.length * 0.75);
-  for (const b of beats) {
-    const have = new Set(words(b.text.split('\n').slice(1).join(' ')));
-    if (keys.filter((k) => have.has(k)).length >= need) return b.number;
-  }
-  return null;
-}
-
-// How many of the key words a line has.
-const hits = (line, keys) => { const have = new Set(words(line)); return keys.filter((k) => have.has(k)).length; };
-
-/**
- * The line that shows a covered goal, { line, as }: the one with most of
- * the goal's key words, the person's (personLine) first when two have as
- * many; `mustName`, only lines where the person is. The first such.
- */
-function coveringLine(lines, keys, person, { mustName = false } = {}) {
-  let best = null;
-  for (const l of lines) {
-    const named = personLine([l], person);
-    if (mustName && !named) continue;
-    const score = hits(l, keys) + (named ? 0.5 : 0);
-    if ((score > 0 || mustName) && (!best || score > best.score)) best = { score, line: l, as: named?.as || null };
-  }
-  return best ? { line: best.line, as: best.as } : null;
+  return coverMatch.mentionedIn(lined(beats), text);
 }
 
 /**
  * Where a relationship goal is covered, { beat, line, as } or null (Evoni,
  * 2026-10-23: "Get to know Truthville" never ticked when the script named
- * her by her real name). Covered when the goal is mentioned as written
- * (mentionedIn), or when the rest of its words are (the rule above, the
- * person's own names left out) and the person is there by any of their
- * names, or speaks (utils/scriptRuleChecks personLine). `line` is the
- * beat's line that shows it (coveringLine), `as` the name the person goes
- * by in it, or null. `person`: goalPerson's, or null (as written only).
+ * her by her real name; utils/coverMatch goalMatch). `person`: goalPerson's,
+ * or null (as written only).
  */
 function goalCovered(beats, goal, person) {
-  const label = String(goal?.label || '').trim();
-  const keys = keyWords(label);
-  const linesOf = (b) => b.text.split('\n').slice(1);
-  // A brand's goal as written needs the brand named in that beat: "studio"
-  // with the rest of the goal is not Studio by Sable.
-  const first = mentionedIn(beats, label);
-  const literal = first !== null && (!person?.whole || personLine(linesOf(beats.find((b) => b.number === first)), person)) ? first : null;
-  if (literal !== null) {
-    const shown = coveringLine(linesOf(beats.find((b) => b.number === literal)), keys, person);
-    return { beat: literal, line: shown?.line || null, as: shown?.as || null };
-  }
-  if (!person?.names?.length) return null;
-  const own = new Set(person.names.flatMap(words));
-  const rest = keys.filter((k) => !own.has(k));
-  const need = rest.length <= 2 ? rest.length : Math.ceil(rest.length * 0.75);
-  for (const b of beats) {
-    const lines = linesOf(b);
-    if (hits(lines.join(' '), rest) < need || !personLine(lines, person)) continue;
-    const shown = coveringLine(lines, keys, person, { mustName: true });
-    return { beat: b.number, line: shown.line, as: shown.as };
-  }
-  return null;
+  const m = coverMatch.goalMatch(lined(beats), goal, person || null);
+  return m ? { beat: m.beat, line: m.line, as: m.as } : null;
+}
+
+// A manual mark (episode_briefs.event_metadata.cover_marks; Evoni,
+// 2026-10-24): one she marked covered is not a gap, one she marked not
+// covered is, whatever the words say. A covered mark with no beat counts in
+// the item's own beat.
+function marked(item, key, marks) {
+  const m = coverMatch.withMark({ ...item, markKey: key }, marks);
+  const { markKey: _k, covered, matched: _m, ...rest } = m;
+  return { ...rest, beat: covered ? (m.beat ?? item.target) : null };
 }
 
 const surfaceHasPhone = (surface) => (typeof surface === 'string'
@@ -122,6 +87,7 @@ const opensCloset = (line) => { const m = String(line).match(OPEN_LINE); return 
  *   forwardHook: string
  *   opportunity: { name, from } (beat 14's when it is delivered, or null)
  *   lockedPieces: [{ id, name }]
+ *   marks: episode_briefs.event_metadata.cover_marks, or null
  * Each item: { kind, label, beat (where it is, or null), target (where it
  * belongs) }. missing is the items with no beat, plus every canonical beat
  * that did not come back ({ kind: 'beat', target }).
@@ -131,24 +97,31 @@ function scriptCoverage(script, facts = {}) {
   const numbers = new Set(beats.map((b) => b.number));
   const items = [];
 
+  const marks = facts.marks && typeof facts.marks === 'object' ? facts.marks : null;
   for (const g of facts.goals || []) {
     const label = String(g?.label || '').trim();
     if (!label) continue;
     const m = goalCovered(beats, g, g.person || null);
-    items.push({ kind: 'goal', label, beat: m ? m.beat : null, ...(m?.line ? { line: m.line } : {}), target: 11 });
+    const item = { kind: 'goal', label, beat: m ? m.beat : null, ...(m?.line ? { line: m.line } : {}), target: 11 };
+    items.push(marked(item, coverMatch.coverKey('goal', { slot: g.slot || 'relationship', label }), marks));
   }
   const hook = typeof facts.forwardHook === 'string' ? facts.forwardHook.trim() : '';
   const opp = facts.opportunity && String(facts.opportunity.name || '').trim();
+  const asLines = lined(beats);
   // With an invitation to deliver, beat 14 ends on it and the hook is told
-  // through it: one ending, not two (Script page audit, 2026-10-19).
-  if (hook) items.push({ kind: 'hook', label: hook, beat: mentionedIn(beats, hook), target: 14, ...(opp ? { via: 'invitation' } : {}) });
+  // through it: one ending, not two (Script page audit, 2026-10-19). Only
+  // beat 14 tells it (utils/coverMatch hookCovered).
+  if (hook) {
+    const item = { kind: 'hook', label: hook, beat: coverMatch.hookCovered(asLines, hook, opp || null), target: 14, ...(opp ? { via: 'invitation' } : {}) };
+    items.push(marked(item, coverMatch.coverKey('hook'), marks));
+  }
   // Beat 14's opportunity (Evoni, 2026-10-19): there only when beat 14 has a
   // [UI:DM …] or [UI:NOTIFY …] line naming it (utils/beat14Invitation); a
   // mention in another beat is not the invitation (Script page audit,
   // 2026-10-19).
   if (opp) {
-    const lined = beats.map((b) => ({ number: b.number, lines: b.text.split('\n').slice(1) }));
-    items.push({ kind: 'opportunity', label: opp, from: facts.opportunity.from || null, beat: beat14Delivers(lined, opp) ? 14 : null, target: 14 });
+    const item = { kind: 'opportunity', label: opp, from: facts.opportunity.from || null, beat: beat14Delivers(asLines, opp) ? 14 : null, target: 14 };
+    items.push(marked(item, coverMatch.coverKey('opportunity'), marks));
   }
 
   // The closet beat: the one that opens the closet, else the canonical one.

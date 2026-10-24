@@ -34,7 +34,7 @@ describe('reading marks', () => {
   test("the Script tab reads a marked line as before: same speaker, same words, the marks plain text", () => {
     const line = 'Me: "Wait // for *it* (breath) now."';
     expect(speakerLine(line)).toMatchObject({ speaker: 'Prime', words: '"Wait // for *it* (breath) now."' });
-    expect(readLine(line)).toMatchObject({ type: 'dialogue', speaker: 'Prime', text: 'Wait // for *it* (breath) now.' });
+    expect(readLine(line)).toMatchObject({ type: 'dialogue', speaker: 'JustAWoman', written: 'Prime', text: 'Wait // for *it* (breath) now.' });
     expect(lineSeconds(line)).toBe(lineSeconds('Me: "Wait for *it* now."'));
     const beats = parseScriptIntoBeats(`## BEAT: 1 · Opening Ritual\n${line}\n[breath]`);
     expect(beats[0].lines).toEqual([line, '[breath]']);

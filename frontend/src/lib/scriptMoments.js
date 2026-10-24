@@ -55,6 +55,15 @@ const VERB_LABELS = {
   CLOSE: 'Closes', HIDE: 'Hides', REMOVE: 'Hides', TYPE: 'Types', CHECK: 'Checks', CHECK_ITEM: 'Checks', NOTIFY: 'Notifies', SWIPE: 'Swipes',
   NOTIFICATION: 'Notification:', SELECT: 'Selects', HOVER: 'Hovers on', PULSE: 'Pulses', VOICE_ACTIVATE: 'Voice-activates',
 };
+/**
+ * Whether the verb is one the show writes (Script tab audit 6, 2026-10-24):
+ * `[UI: Lala opens closet]` reads as verb LALA, which is not a verb, so the
+ * export prints that tag's words as written instead of "Lala lala the …".
+ */
+export const isKnownVerb = (verb) => {
+  const v = String(verb || '').toUpperCase();
+  return Object.prototype.hasOwnProperty.call(VERB_LABELS, v) || Object.prototype.hasOwnProperty.call(MESSAGE_VERBS, v) || v === 'VOICEACTIVATE';
+};
 export const verbLabel = (verb) => VERB_LABELS[String(verb || '').toUpperCase()]
   || String(verb || '').toLowerCase().replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase());
 
@@ -344,10 +353,11 @@ export const EXPECTED_ON_SCREEN = {
   11: { action: 'ARRIVAL', what: 'Arriving', where: "Lala's Environment" },
   12: { action: 'FASHION_CHALLENGE', what: 'The fashion challenge', where: "Lala's Environment" },
   13: { action: 'STATS_UPDATE', what: 'The stats update', where: 'Full Screen' },
-  // Back to gameplay after the cutscene: her phone, and the invitation
-  // someone at the event sends (Script page re-audit, 2026-10-19). The
-  // action key stays the canonical beat's.
-  14: { action: 'FADE_OUT', what: 'Back to gameplay: the invitation on her phone', where: 'Full Screen' },
+  // Back to gameplay after the cutscene (Script page re-audit, 2026-10-19).
+  // Neutral (Script tab audit 6, 2026-10-24): the phone is optional here,
+  // and the invitation may be withheld, or come in person. The action key
+  // stays the canonical beat's.
+  14: { action: 'FADE_OUT', what: 'Back to gameplay: how the episode ends', where: 'Full Screen' },
 };
 
 /**

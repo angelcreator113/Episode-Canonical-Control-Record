@@ -16,7 +16,7 @@ import api from '../../services/api';
 import EpisodeScriptTab from './EpisodeScriptTab';
 
 const SCRIPT = [
-  '## BEAT: 11 · Event Outcome', 'Marcus Hale: So you are the Lala everyone wants to know.', 'Lala: "And you are the one I came to meet."',
+  '## BEAT: 11 · Event Outcome', 'Marcus Hale: So you are the Lala everyone wants to get to know.', 'Lala: "And you are the one I came to meet."',
 ].join('\n');
 const GOAL = { slot: 'relationship_guest', label: 'Get to know Truthville', profile_id: 9 };
 const EVENT = { id: 'ev-1', show_id: 'show-1', name: 'Velour Night', canon_consequences: { automation: {

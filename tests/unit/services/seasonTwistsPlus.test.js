@@ -111,3 +111,28 @@ describe('markTwist refuses', () => {
     await expect(markTwist(db([[{ id: U(101) }]], row({ status: 'dropped' })), U(1), U(2), 'planted')).rejects.toMatchObject({ status: 409 });
   });
 });
+
+// Undo for Mark planted / Mark paid off (Script tab audit 6, 2026-10-24).
+describe('markTwist undo', () => {
+  const calls = [];
+  const db = (...answers) => ({ query: jest.fn(async (sql) => { calls.push(sql); return answers.shift() || [[]]; }) });
+  const row = (more) => [[{ id: U(2), status: 'planted', plant_slot_id: U(101), payoff_slot_id: U(104), ...more }]];
+  beforeEach(() => { calls.length = 0; });
+
+  test('planted goes back to planned, clearing the episode that planted it', async () => {
+    await markTwist(db([[{ id: U(101) }]], row()), U(1), U(2), 'planted', { undo: true });
+    expect(calls.some((q) => /SET status = 'planned', planted_episode_id = NULL/.test(q))).toBe(true);
+  });
+  test('a paid-off twist is not unplanted: undo the payoff first', async () => {
+    await expect(markTwist(db([[{ id: U(101) }]], row({ status: 'paid_off' })), U(1), U(2), 'planted', { undo: true }))
+      .rejects.toMatchObject({ status: 409, message: 'That twist is paid off: undo the payoff first.' });
+  });
+  test('paid off goes back to planted (or planned when never planted)', async () => {
+    await markTwist(db([[{ id: U(104) }]], row({ status: 'paid_off' })), U(1), U(2), 'paid_off', { undo: true });
+    expect(calls.some((q) => /CASE WHEN planted_episode_id IS NULL THEN 'planned' ELSE 'planted' END/.test(q) && /paid_off_episode_id = NULL/.test(q))).toBe(true);
+  });
+  test('taking back a mark that is not there writes nothing', async () => {
+    await markTwist(db([[{ id: U(101) }]], row({ status: 'planned' })), U(1), U(2), 'planted', { undo: true });
+    expect(calls.some((q) => /UPDATE season_twists/.test(q))).toBe(false);
+  });
+});

@@ -17,7 +17,7 @@ import EpisodeScriptTab from './EpisodeScriptTab';
 
 const SCRIPT = [
   '## BEAT: 3 · Getting Ready', 'Lala: "Tonight is the night."',
-  '## BEAT: 11 · Event Outcome', 'Truth: So you are the Lala everyone wants to know.', 'Lala: "Sable, let us co-style a moment."',
+  '## BEAT: 11 · Event Outcome', 'Truth: So you are the Lala everyone wants to get to know.', 'Lala: "Sable, let us co-style a moment."',
 ].join('\n');
 const EVENT = { id: 'ev-1', show_id: 'show-1', name: 'Velour Night', host_brand: 'Studio by Sable', canon_consequences: { automation: {
   relationship_goals: [
@@ -68,7 +68,7 @@ test('the line that covered it is quoted, the name it was matched by in bold', a
   await openCover();
   await waitFor(() => expect(screen.getByTestId('script-cover-goal-0').dataset.covered).toBe('true'));
   const quote = screen.getByTestId('script-cover-goal-0-quote');
-  expect(quote.textContent).toBe('“Truth: So you are the Lala everyone wants to know.”');
+  expect(quote.textContent).toBe('“Truth: So you are the Lala everyone wants to get to know.”');
   expect(quote.querySelector('strong').textContent).toBe('Truth');
   expect(screen.getByTestId('script-cover-goal-0-where').textContent).toBe('Covered in beat 11 · Truthville, as Truth');
   // The brand goal, by the brand's other name.

@@ -89,6 +89,53 @@ router.put('/:episodeId', requireAuth, async (req, res) => {
   }
 });
 
+// ── MUST COVER: HER MARKS ─────────────────────────────────────────────────────
+// PUT /:episodeId/cover-marks { key, covered: true | false | null, beat? }
+// The Script tab's "Mark covered" / "Not covered" on a must-cover item
+// (Evoni, 2026-10-24: "smarter matching + manual override"). Kept on the
+// brief as event_metadata.cover_marks[key] = { covered, beat?, at, by }
+// (utils/coverMatch coverKey, withMark); covered: null takes the mark back.
+// Only that key of event_metadata is written, in a transaction with the row
+// locked; no migration: event_metadata is an existing JSONB column. A locked
+// brief still takes marks: they say what the script does, not the brief.
+const COVER_KEY = /^(?:goal:[a-z0-9_]{1,80}:[a-z0-9-]{0,200}|carried:[A-Za-z0-9-]{1,64}|hook|opportunity)$/;
+router.put('/:episodeId/cover-marks', requireAuth, async (req, res) => {
+  try {
+    const { episodeId } = req.params;
+    const { key, covered = null, beat = null } = req.body || {};
+    if (!SHOW_ID_RE.test(String(episodeId))) return res.status(400).json({ error: 'episodeId must be a UUID' });
+    if (typeof key !== 'string' || !COVER_KEY.test(key)) return res.status(400).json({ error: 'key must be a must-cover item key (goal:…, carried:…, hook or opportunity)' });
+    if (covered !== null && typeof covered !== 'boolean') return res.status(400).json({ error: 'covered must be true, false or null' });
+    if (beat !== null && (!Number.isInteger(beat) || beat < 1 || beat > 14)) return res.status(400).json({ error: 'beat must be 1-14' });
+    const { sequelize } = models;
+    const marks = await sequelize.transaction(async (transaction) => {
+      const [brief] = await sequelize.query(
+        'SELECT id, event_metadata FROM episode_briefs WHERE episode_id = :episodeId AND deleted_at IS NULL LIMIT 1 FOR UPDATE',
+        { replacements: { episodeId }, type: sequelize.QueryTypes.SELECT, transaction });
+      if (!brief) return null;
+      let meta = brief.event_metadata;
+      if (typeof meta === 'string') {
+        try { meta = JSON.parse(meta); } catch (err) { console.error('[EpisodeBrief] event_metadata unreadable:', err.message); meta = {}; }
+      }
+      const current = meta && typeof meta.cover_marks === 'object' && meta.cover_marks && !Array.isArray(meta.cover_marks) ? meta.cover_marks : {};
+      const next = { ...current };
+      if (covered === null) delete next[key];
+      else next[key] = { covered, ...(covered && beat !== null ? { beat } : {}), at: new Date().toISOString(), by: req.user?.id ?? req.user?.sub ?? null };
+      await sequelize.query(
+        `UPDATE episode_briefs
+            SET event_metadata = jsonb_set(COALESCE(event_metadata, '{}'::jsonb), '{cover_marks}', CAST(:marks AS jsonb)), updated_at = NOW()
+          WHERE id = :id`,
+        { replacements: { marks: JSON.stringify(next), id: brief.id }, transaction });
+      return next;
+    });
+    if (!marks) return res.status(404).json({ error: 'Brief not found. GET first to auto-create.' });
+    return res.json({ data: { cover_marks: marks } });
+  } catch (err) {
+    console.error('[EpisodeBrief] cover marks PUT error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 // ── LOCK BRIEF ────────────────────────────────────────────────────────────────
 
 router.post('/:episodeId/lock', requireAuth, async (req, res) => {

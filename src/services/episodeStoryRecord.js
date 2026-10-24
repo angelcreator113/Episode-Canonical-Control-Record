@@ -65,6 +65,7 @@ const { lalaCharacter } = require('./lalaFeedProfile');
 const { EPISODE_EVENT_ID_SQL } = require('../utils/episodeEventSql');
 const { splitScriptBeats } = require('../utils/scriptBeatLocks');
 const { goalCovered } = require('../utils/scriptCoverage');
+const { coverKey, withMark } = require('../utils/coverMatch');
 const { goalPerson } = require('../utils/scriptRuleChecks');
 const { twistsForEpisode } = require('./seasonTwists');
 
@@ -227,11 +228,25 @@ async function goalsOf(sequelize, episode, event, profiles) {
     ? tasks.filter((t) => t && t.task_source === 'goal' && t.slot && t.label)
     : eventGoals.map((g) => ({ slot: g.slot || 'relationship', label: g.label, completed: false }));
   const { beats } = splitScriptBeats(String(episode.script_content || ''));
+  // Her manual marks on the Script tab (episode_briefs.event_metadata.
+  // cover_marks; Script tab audit 6, 2026-10-24) win over the words.
+  let marks = null;
+  try {
+    const [[brief]] = await sequelize.query(
+      'SELECT event_metadata FROM episode_briefs WHERE episode_id = :episodeId AND deleted_at IS NULL LIMIT 1',
+      { replacements: { episodeId: episode.id } });
+    marks = parse(brief?.event_metadata, {})?.cover_marks || null;
+  } catch (err) {
+    console.error('[episodeStoryRecord] the cover marks could not be read:', err.message);
+  }
   return goals.slice(0, MAX.goals).map((g) => {
     const own = eventGoals.find((e) => (e.slot || 'relationship') === g.slot);
     const person = goalPerson({ ...g, profile_id: g.profile_id ?? own?.profile_id ?? null }, event, profiles);
+    const found = beats.length ? goalCovered(beats, g, person)?.beat ?? null : null;
+    const key = g.follow_up_id ? coverKey('carried', g) : coverKey('goal', { slot: g.slot, label: String(g.label).trim() });
+    const beat = withMark({ beat: found, markKey: key }, marks).beat;
     return {
-      slot: g.slot, label: String(g.label).trim(), completed: !!g.completed, beat: beats.length ? goalCovered(beats, g, person)?.beat ?? null : null,
+      slot: g.slot, label: String(g.label).trim(), completed: !!g.completed, beat,
       // Carried from an earlier episode (services/storyCarryForward).
       ...(g.follow_up_id ? { follow_up_id: g.follow_up_id } : {}),
     };
