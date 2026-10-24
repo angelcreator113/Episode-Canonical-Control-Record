@@ -147,9 +147,12 @@ const MAP_KEY = {
 const MAP_LISTS = ['allies', 'rivals', 'mentors', 'love_interests', 'business_partners', 'family'];
 
 // ── Reads ─────────────────────────────────────────────────────────────────
+// reverse_family_role arrives with migration 20261024000000; the migration
+// before it (20261023230100) runs linkStoryAndPulse, so it is read through
+// to_jsonb, which gives null while the column does not exist yet.
 const STORY_SQL = `
   SELECT cr.id, cr.character_id_a, cr.character_id_b, cr.relationship_type, cr.status, cr.is_romantic,
-         cr.family_role, cr.reverse_family_role, cr.is_blood_relation, cr.role_tag, cr.situation, cr.updated_at,
+         cr.family_role, to_jsonb(cr)->>'reverse_family_role' AS reverse_family_role, cr.is_blood_relation, cr.role_tag, cr.situation, cr.updated_at,
          cb.gender AS b_gender, cb.pronouns AS b_pronouns,
          st.relationship_stage AS stage,
          COALESCE(NULLIF(ca.selected_name, ''), ca.display_name) AS name_a,
