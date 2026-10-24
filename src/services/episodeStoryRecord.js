@@ -47,7 +47,9 @@
  *   draftLater(sequelize, episodeId)     the same after completion, when there is
  *                                        none yet; never throws
  *   updateRecord(sequelize, episodeId, body)  edits; an approved record goes back to draft
- *   approveRecord(sequelize, episodeId, { by })  Save: { ...getRecord, result: { written, skipped } }
+ *   approveRecord(sequelize, episodeId, { by })  Save: { ...getRecord, result: { written, skipped, pulse_suggestions } }
+ *                                        (pulse_suggestions: how many Pulse posts and comments
+ *                                        services/storyRipples drafts for Review after it)
  *   recordBlock(sequelize, episodeId)    the approved record as prompt text; ''
  *   castOf / openThreads                 the episode's cast with their kept secrets, and
  *                                        the show's unresolved threads (also for services/storyCanon)
@@ -715,6 +717,7 @@ async function approveRecord(sequelize, episodeId, { by = null } = {}) {
   const where = `Episode ${episode.episode_number ?? ''}${episode.title ? `: ${episode.title}` : ''}`.trim();
   const written = [];
   const skipped = [];
+  const ripples = [];   // the relationship changes this Save wrote, for the Pulse
   await sequelize.transaction(async (transaction) => {
     // Read inside the transaction, locked: two Saves at once write once.
     const [[row]] = await sequelize.query(
@@ -757,6 +760,7 @@ async function approveRecord(sequelize, episodeId, { by = null } = {}) {
       if (out.skipped) { skipped.push(...out.skipped); continue; }
       relDone[r.key] = { relationship_id: out.relationship_id, event_id: out.event_id };
       written.push({ kind: 'relationship', text: out.text });
+      ripples.push({ ...r, relationship_id: out.relationship_id, event_id: out.event_id });
     }
 
     if (episode.show_id) {
@@ -796,7 +800,10 @@ async function approveRecord(sequelize, episodeId, { by = null } = {}) {
       `UPDATE episode_story_records SET status = 'approved', approved_by = :by, approved_at = NOW(), applied = CAST(:applied AS jsonb), updated_at = NOW() WHERE id = :id`,
       { replacements: { id: row.id, by, applied: JSON.stringify(applied) }, transaction });
   });
-  return { ...(await getRecord(sequelize, episode.id)), result: { written, skipped } };
+  // Committed: the Pulse suggests posts about the changes, for Review (services/storyRipples). Never blocks or fails the Save.
+  let pulseSuggestions = 0;
+  try { pulseSuggestions = require('./storyRipples').proposeLater(sequelize, { episode, changes: ripples, people }); } catch (err) { console.error('[episodeStoryRecord] Pulse suggestions not started (the Save stands):', err.message); }
+  return { ...(await getRecord(sequelize, episode.id)), result: { written, skipped, pulse_suggestions: pulseSuggestions } };
 }
 
 /** The approved record as prompt text for the short story and chapter writers; '' when none. */

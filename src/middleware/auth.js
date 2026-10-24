@@ -174,6 +174,17 @@ const maybeAuthDebug = (req, source, alg, sub) => {
 
 // F-AUTH-X1: Cognito (RS256) verifier path. Preserves the existing id-token-
 // then-access-token fallback so token_use:'access' tokens still verify.
+//
+// The app signs in with Cognito *access* tokens (cognitoPasswordAuthService
+// initiatePasswordAuth returns AccessToken), so for nearly every request the
+// id verifier fails on token_use and the access verifier decides. Each
+// verifier keeps its own JWKS cache, empty after every restart. When the
+// access verifier could not fetch its JWKS (Cognito slow or unreachable just
+// after a deploy), that infra error used to be dropped for the id verifier's
+// "wrong token_use" error: a good token answered 401 AUTH_INVALID_TOKEN
+// instead of 503, and the frontend refreshed, retried and, on a second miss,
+// signed out (Evoni, 2026-10-23). An infra failure from either verifier is
+// now the error that is thrown.
 const verifyViaCognito = async (token) => {
   try {
     try {
@@ -183,7 +194,8 @@ const verifyViaCognito = async (token) => {
       try {
         const payload = await getAccessTokenVerifier().verify(token);
         return { payload, source: 'cognito', alg: 'RS256' };
-      } catch (_accessError) {
+      } catch (accessError) {
+        if (!findCognitoInfraCause(idError) && findCognitoInfraCause(accessError)) throw accessError;
         throw idError;
       }
     }

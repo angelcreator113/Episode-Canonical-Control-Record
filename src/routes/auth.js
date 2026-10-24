@@ -5,7 +5,7 @@
 
 const express = require('express');
 const rateLimit = require('express-rate-limit');
-const { refusedBy, waitText } = require('../middleware/rateLimits');
+const { refusedBy, waitText, recordRefusal } = require('../middleware/rateLimits');
 const router = express.Router();
 const TokenService = require('../services/tokenService');
 const cognitoPasswordAuthService = require('../services/cognitoPasswordAuthService');
@@ -118,6 +118,14 @@ const REFRESH_NETWORK_ERROR_CODES = new Set([
   'ENETUNREACH',
 ]);
 
+// Cognito's server-side and time-out failures, by exception name.
+const REFRESH_TRANSIENT_ERROR_NAMES = new Set([
+  'InternalErrorException',
+  'TimeoutError',
+  'RequestTimeout',
+  'ServiceUnavailable',
+]);
+
 /**
  * POST /api/v1/auth/login
  * Exchanges email/password for Cognito tokens via InitiateAuth
@@ -160,6 +168,11 @@ router.post('/login', optionalAuth, loginLimiter, validateLoginRequest, async (r
     // raw Cognito error object — only the exception name.
     console.error('Login error:', error.name || 'UnknownError');
     if (mapped) {
+      // Cognito's own limits go on the admin refusals list beside this
+      // server's, so the list answers "which limit was it?" in full.
+      if (mapped.limit) {
+        recordRefusal({ limit: mapped.limit, code: mapped.code, method: req.method, url: req.originalUrl, ip: req.ip });
+      }
       return res.status(mapped.status).json({
         error: mapped.error,
         message: mapped.message,
@@ -232,8 +245,17 @@ router.post('/refresh', optionalAuth, refreshLimiter, validateRefreshRequest, as
       });
     }
 
+    // A fault on Cognito's side or on the way to it (its 5xx, an SDK
+    // time-out, a dropped connection) says nothing about the refresh token,
+    // so it is a 503, not the 401 below. The app treats a 401 from here as
+    // "the session is over" and signs out; a 503 keeps the session
+    // (utils/authSession refreshAccessTokenOnce). Evoni, 2026-10-23: signed
+    // out right after a deploy.
     const networkCode = error.code || error.cause?.code;
-    if (REFRESH_NETWORK_ERROR_CODES.has(networkCode)) {
+    const cognitoFault = error.$fault === 'server'
+      || (error.$metadata && error.$metadata.httpStatusCode >= 500)
+      || REFRESH_TRANSIENT_ERROR_NAMES.has(error.name);
+    if (REFRESH_NETWORK_ERROR_CODES.has(networkCode) || cognitoFault) {
       return res.status(503).json({
         error: 'Service Unavailable',
         message: 'Authentication service is temporarily unavailable.',
