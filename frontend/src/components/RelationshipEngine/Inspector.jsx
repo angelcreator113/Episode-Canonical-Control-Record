@@ -5,7 +5,7 @@
  * On a phone (sheet) it is a bottom sheet: focus stays inside, Escape or
  * the close button closes it.
  */
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Heart } from 'lucide-react';
 import {
   TENSION, CONN_MODES, STATUSES, TENSIONS, LALA_CONN, initials,
@@ -41,11 +41,16 @@ export default function Inspector({ rel, charById = {}, onClose, onUpdate, onDel
   const set = k => e => setF(p => ({ ...p, [k]: e.target.value }));
   const trapRef = useFocusTrap(sheet, onClose);
 
+  // A new relationship resets the form; edits to this one do not. Only a
+  // change of relationship does: on mount the state is already fresh, and a
+  // reset there could land after a first click and undo it (Edit, Delete).
+  const shownId = useRef(rel.id);
   useEffect(() => {
+    if (shownId.current === rel.id) return;
+    shownId.current = rel.id;
     setF(formOf(rel));
     setEdit(false);
     setConfirming(false);
-    // A new relationship resets the form; edits to this one do not.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rel.id]);
 
