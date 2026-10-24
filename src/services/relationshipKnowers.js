@@ -22,8 +22,10 @@
  *
  *   knowersPatch(sequelize, relId, body)       the SET parts PUT /relationships/:id adds
  *                                              for known_by / public_state; a KnowerError when wrong
- *   whoKnows(sequelize, relationshipIds)       Map id -> { public_state, kind, pair, knowers }, for writers;
- *                                              an empty Map before the migration has run
+ *   whoKnows(sequelize, relationshipIds, { forWriters })
+ *                                              Map id -> { public_state, kind, pair, knowers }; forWriters
+ *                                              leaves confidential characters out (either of the two, or
+ *                                              a knower); an empty Map before the migration has run
  *   addKnower(sequelize, relId, who, opts)     add one person (the "What changed" card's "Jade now knows")
  *   relationshipSecrecyLines(sequelize, ids)   one line per relationship around these characters
  *   secrecyLine(entry)                         the line for one whoKnows entry
@@ -143,8 +145,13 @@ async function knowersPatch(sequelize, relId, body = {}) {
  *     knowers: [{ ...entry, name, since_episode_number }] }
  * An empty Map with no ids, or before the migration has run.
  */
-async function whoKnows(sequelize, relationshipIds) {
+async function whoKnows(sequelize, relationshipIds, { forWriters = false } = {}) {
   const ids = [...new Set((relationshipIds || []).filter((id) => UUID_RE.test(String(id || ''))))];
+  // A writer never hears of a confidential character (utils/confidentialCharacters),
+  // as one of the two or as someone who knows; the page's own list shows them.
+  const { notConfidentialSql } = require('../utils/confidentialCharacters');
+  const pairOk = forWriters ? `AND ${notConfidentialSql('ca')} AND ${notConfidentialSql('cb')}` : '';
+  const knowerOk = forWriters ? `AND ${notConfidentialSql('k')}` : '';
   const out = new Map();
   if (!ids.length) return out;
   let rows;
@@ -155,7 +162,7 @@ async function whoKnows(sequelize, relationshipIds) {
          FROM character_relationships cr
          JOIN registry_characters ca ON ca.id = cr.character_id_a AND ca.deleted_at IS NULL
          JOIN registry_characters cb ON cb.id = cr.character_id_b AND cb.deleted_at IS NULL
-        WHERE cr.id IN (:ids) AND cr.deleted_at IS NULL`, { replacements: { ids } });
+        WHERE cr.id IN (:ids) AND cr.deleted_at IS NULL ${pairOk}`, { replacements: { ids } });
   } catch (err) {
     // Before the migration has run the columns are not there: the writers go without.
     console.error('[relationshipKnowers] could not read who knows:', err.message);
@@ -171,7 +178,7 @@ async function whoKnows(sequelize, relationshipIds) {
   const episodeNumber = new Map();
   if (chars.length) {
     const [found] = await sequelize.query(
-      `SELECT k.id, ${nameSql('k')} AS name FROM registry_characters k WHERE k.id IN (:chars) AND k.deleted_at IS NULL`, { replacements: { chars } });
+      `SELECT k.id, ${nameSql('k')} AS name FROM registry_characters k WHERE k.id IN (:chars) AND k.deleted_at IS NULL ${knowerOk}`, { replacements: { chars } });
     found.forEach((f) => charName.set(String(f.id), f.name));
   }
   if (profiles.length) {
@@ -179,7 +186,8 @@ async function whoKnows(sequelize, relationshipIds) {
     const [found] = await sequelize.query(
       `SELECT sp.id, COALESCE((SELECT ${nameSql('k')} FROM registry_characters k WHERE k.feed_profile_id = sp.id AND k.deleted_at IS NULL
                                 ORDER BY k.updated_at DESC LIMIT 1), sp.display_name, sp.handle) AS name
-         FROM social_profiles sp WHERE sp.id IN (:profiles) AND sp.deleted_at IS NULL`, { replacements: { profiles } });
+         FROM social_profiles sp WHERE sp.id IN (:profiles) AND sp.deleted_at IS NULL
+         ${forWriters ? `AND NOT EXISTS (SELECT 1 FROM registry_characters k WHERE k.feed_profile_id = sp.id AND k.deleted_at IS NULL AND NOT ${notConfidentialSql('k')})` : ''}`, { replacements: { profiles } });
     found.forEach((f) => profileName.set(Number(f.id), f.name));
   }
   if (episodes.length) {
@@ -265,7 +273,7 @@ async function relationshipSecrecyLines(sequelize, characterIds, { max = MAX_LIN
     console.error('[relationshipKnowers] could not read the relationships:', err.message);
     return [];
   }
-  const map = await whoKnows(sequelize, rows.map((r) => r.id));
+  const map = await whoKnows(sequelize, rows.map((r) => r.id), { forWriters: true });
   const rank = { secret: 0, rumoured: 1, known: 2 };
   return [...map.values()]
     .sort((x, y) => rank[x.public_state] - rank[y.public_state])
@@ -296,7 +304,7 @@ async function secretsKnownBy(sequelize, characterId, { max = 4 } = {}) {
     console.error('[relationshipKnowers] could not read the secrets they know:', err.message);
     return [];
   }
-  const map = await whoKnows(sequelize, rows.map((r) => r.id));
+  const map = await whoKnows(sequelize, rows.map((r) => r.id), { forWriters: true });
   return rows.map((r) => map.get(String(r.id))).filter(Boolean).map((e) => ({
     person: e.pair.map((p) => p.name).join(' and '),
     knows: e.public_state === 'secret'

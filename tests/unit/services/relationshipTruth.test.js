@@ -52,3 +52,24 @@ describe('relationshipTruth: reading a story pair', () => {
     expect(truth.withStoryMap([{ target: 'x' }], story)).toEqual([{ target: 'x' }]);
   });
 });
+
+describe('relationshipTruth: storyWords reads a family role from one side (2026-10-24 audit)', () => {
+  // "Lala is Mom's daughter": Lala is A, Mom is B.
+  const row = { character_id_a: 'lala', character_id_b: 'mom', relationship_type: 'family', family_role: 'daughter', reverse_family_role: 'mother', status: 'Active' };
+
+  test('with an id, the role that person holds; without one, the row as written', () => {
+    expect(truth.storyWords(row, 'mom')).toBe('mother');
+    expect(truth.storyWords(row, 'lala')).toBe('daughter');
+    expect(truth.storyWords(row)).toBe('daughter');
+  });
+
+  test('a row written before reverse_family_role works the reverse out from B\'s gender', () => {
+    const old = { character_id_a: 'auntie', character_id_b: 'lala', family_role: 'aunt', b_gender: 'female', status: 'Active' };
+    expect(truth.storyWords(old, 'auntie')).toBe('aunt');
+    expect(truth.storyWords(old, 'lala')).toBe('niece');
+  });
+
+  test('a pair with no family role reads its type whichever side asks', () => {
+    expect(truth.storyWords({ character_id_a: 'a', character_id_b: 'b', relationship_type: 'best_friend' }, 'b')).toBe('best friend');
+  });
+});

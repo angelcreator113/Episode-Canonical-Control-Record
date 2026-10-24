@@ -4,7 +4,7 @@
  * Editorial Fashion Intelligence — fully modernized
  * Palette: #d4789a rose · #7ab3d4 steel · #a889c8 orchid
  */
-import { useReducer, useEffect, useCallback, useMemo, useState } from 'react';
+import { useReducer, useEffect, useCallback, useMemo, useState, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { House, GitBranch, Users, Share2, Sprout, List, Search } from 'lucide-react';
 import apiClient from '../services/api';
@@ -46,6 +46,16 @@ export const updateRelationshipFamilyRole = (id, fields) =>
   apiClient.put(`${API}/relationships/${id}/family`, fields);
 export const updateRelationshipFields = (id, fields) =>
   apiClient.put(`${API}/relationships/${id}`, fields);
+// For a deep link to someone outside the cast: the relationship with its two
+// people, or the person with their relationships.
+export const fetchRelationship = (id) =>
+  apiClient.get(`${API}/relationships/${id}`);
+export const fetchPerson = (id) =>
+  apiClient.get(`${API}/relationships/person/${id}`);
+
+/** The server's reason for a failed call ({ error } or { message }), else the client's, else the fallback. */
+export const errText = (err, fallback) =>
+  err?.response?.data?.error || err?.response?.data?.message || err?.message || fallback;
 
 /** New seeds join the pending list (newest first), each once. */
 export function mergeSeeds(current, fresh) {
@@ -106,6 +116,19 @@ function reducer(state, action) {
   switch (action.type) {
     case 'SET':          return { ...state, ...action.payload };
     case 'LOADED':       return { ...state, ...action.payload, loading: false, loaded: true, error: null };
+    // Seeds merge into the list as it is now: one dismissed or confirmed
+    // while a generator ran stays gone.
+    case 'MERGE_SEEDS':  return { ...state, ...action.payload, cands: mergeSeeds(state.cands, action.fresh) };
+    // People from a deep link outside the cast, and their relationships, join the page.
+    case 'ADD_PEOPLE': {
+      const known = new Set(state.chars.map(c => c.id));
+      const relIds = new Set((action.rels || []).map(r => r.id));
+      return {
+        ...state, ...action.payload,
+        chars: [...state.chars, ...(action.chars || []).filter(c => c && !known.has(c.id))],
+        rels: [...(action.rels || []), ...state.rels.filter(r => !relIds.has(r.id))].sort(byNewest),
+      };
+    }
     case 'REMOVE_CAND':  return { ...state, cands: state.cands.filter(c => c.id !== action.id), busy: null };
     case 'ADD_REL':      return { ...state, rels: [action.rel, ...state.rels.filter(r => r.id !== action.rel.id)].sort(byNewest), addOpen: false };
     case 'UPDATE_REL': {
@@ -144,22 +167,27 @@ export default function RelationshipEngine() {
   }, [location.state, toast]);
 
   /* ── Load the cast, their relationships and seeds ─────────────────── */
+  // The link's tab and selection arrive with the cast, in one render: a
+  // separate step after it showed the Overview first, for a moment.
+  const searchRef = useRef(location.search);
+  searchRef.current = location.search;
   const load = useCallback(async () => {
     dispatch({ type: 'SET', payload: { loading: true, error: null } });
     try {
       const { data } = await fetchCast();
+      const loaded = {
+        chars:  data?.characters || [],
+        rels:   data?.relationships || [],
+        cands:  data?.candidates || [],
+        lalaId: data?.lala_id || null,
+      };
       dispatch({
         type: 'LOADED',
-        payload: {
-          chars:  data?.characters || [],
-          rels:   data?.relationships || [],
-          cands:  data?.candidates || [],
-          lalaId: data?.lala_id || null,
-        },
+        payload: { ...loaded, ...(deepLinkState(searchRef.current, loaded) || {}) },
       });
     } catch (err) {
       console.error('[RelationshipEngine] load failed:', err);
-      dispatch({ type: 'ERROR', msg: err.message || "Could not load the people in Lala's world. Check your connection and try again." });
+      dispatch({ type: 'ERROR', msg: errText(err, "Could not load the people in Lala's world. Check your connection and try again.") });
     }
   }, []);
 
@@ -170,6 +198,26 @@ export default function RelationshipEngine() {
     if (!s.loaded) return;
     const next = deepLinkState(location.search, { chars: s.chars, rels: s.rels });
     if (next) dispatch({ type: 'SET', payload: next });
+    // The character page links to anyone; someone outside the cast is
+    // fetched and added, so the link opens them instead of nothing.
+    const q = new URLSearchParams(location.search || '');
+    const relId = q.get('rel');
+    const charId = q.get('char');
+    if (relId && !s.rels.some(r => String(r.id) === relId)) {
+      fetchRelationship(relId)
+        .then(({ data }) => dispatch({ type: 'ADD_PEOPLE', chars: data?.characters, rels: [data.relationship], payload: { selRel: data.relationship, panel: true } }))
+        .catch(err => {
+          console.error('[RelationshipEngine] deep-linked relationship not loaded:', err);
+          toast(err?.response?.status === 404 ? "That relationship was deleted or isn't confirmed" : errText(err, 'Could not open that relationship'), 'error');
+        });
+    } else if (charId && !s.chars.some(c => String(c.id) === charId)) {
+      fetchPerson(charId)
+        .then(({ data }) => dispatch({ type: 'ADD_PEOPLE', chars: data?.characters, rels: data?.relationships, payload: { selChar: data.character } }))
+        .catch(err => {
+          console.error('[RelationshipEngine] deep-linked person not loaded:', err);
+          toast(err?.response?.status === 404 ? "That person was deleted or isn't a character" : errText(err, 'Could not open that person'), 'error');
+        });
+    }
     // Only when the page loads or the link changes, not on every edit.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [s.loaded, location.search]);
@@ -187,7 +235,7 @@ export default function RelationshipEngine() {
       load();
     } catch (err) {
       dispatch({ type: 'SET', payload: { busy: null } });
-      toast(err.message || 'Confirm failed', 'error');
+      toast(errText(err, 'Confirm failed'), 'error');
     }
   };
 
@@ -199,7 +247,7 @@ export default function RelationshipEngine() {
       toast('Seed dismissed', 'info');
     } catch (err) {
       dispatch({ type: 'SET', payload: { busy: null } });
-      toast(err.message || 'Dismiss failed', 'error');
+      toast(errText(err, 'Dismiss failed'), 'error');
     }
   };
 
@@ -209,7 +257,7 @@ export default function RelationshipEngine() {
       dispatch({ type: 'ADD_REL', rel: r.data?.relationship || rel });
       toast('Relationship restored', 'success');
     } catch (err) {
-      toast(err.message || 'Undo failed', 'error');
+      toast(errText(err, 'Undo failed'), 'error');
     }
   };
 
@@ -217,12 +265,14 @@ export default function RelationshipEngine() {
   const del = async rel => {
     dispatch({ type: 'SET', payload: { busy: rel.id } });
     try {
-      await deleteRelationship(rel.id);
+      const r = await deleteRelationship(rel.id);
       dispatch({ type: 'DELETE_REL', id: rel.id });
-      toast(`Deleted ${sideName(rel, 'a', charById)} and ${sideName(rel, 'b', charById)}`, 'info', { label: 'Undo', run: () => undoDelete(rel) });
+      // Their Pulse pair stays (the drift list offers to take it off).
+      const kept = r?.data?.pulse_kept?.length ? ' Their Pulse pair stays: "Where relationships disagree" on the Pulse map can take it off.' : '';
+      toast(`Deleted ${sideName(rel, 'a', charById)} and ${sideName(rel, 'b', charById)}.${kept}`, 'info', { label: 'Undo', run: () => undoDelete(rel) });
     } catch (err) {
       dispatch({ type: 'SET', payload: { busy: null } });
-      toast(err.message || 'Delete failed', 'error');
+      toast(errText(err, 'Delete failed'), 'error');
     }
   };
 
@@ -232,11 +282,11 @@ export default function RelationshipEngine() {
       const r = await generateRelationships({ focus_character_id: focusId });
       const d = r.data;
       const fresh = d.candidates || [];
-      dispatch({ type: 'SET', payload: { cands: mergeSeeds(s.cands, fresh), genning: false, genOpen: false, tab: 'candidates', panel: false, selRel: null } });
+      dispatch({ type: 'MERGE_SEEDS', fresh, payload: { genning: false, genOpen: false, tab: 'candidates', panel: false, selRel: null } });
       toast(fresh.length ? `${fresh.length} new seed${fresh.length === 1 ? '' : 's'} added` : 'No new seeds this time', 'success');
     } catch (err) {
       dispatch({ type: 'SET', payload: { genning: false } });
-      toast(err.message || 'Generation failed', 'error');
+      toast(errText(err, 'Generation failed'), 'error');
     }
   };
 
@@ -245,9 +295,11 @@ export default function RelationshipEngine() {
       const r = await createRelationship(f);
       const d = r.data;
       dispatch({ type: 'ADD_REL', rel: d.relationship || d });
-      toast('Relationship added', 'success');
+      // A family type is saved as a family tie (it is on the Family tab).
+      toast(d.family ? 'Family tie added' : 'Relationship added', 'success',
+        d.family ? { label: 'Open Family', run: () => dispatch({ type: 'TAB', tab: 'family' }) } : null);
     } catch (err) {
-      toast(err.message || 'Add failed', 'error');
+      toast(errText(err, 'Add failed'), 'error');
     }
   };
 
@@ -257,12 +309,12 @@ export default function RelationshipEngine() {
     try {
       const r = await generateFamilyRelationships({});
       const fresh = r.data?.family_bonds || [];
-      dispatch({ type: 'SET', payload: { cands: mergeSeeds(s.cands, fresh), genFam: false } });
+      dispatch({ type: 'MERGE_SEEDS', fresh, payload: { genFam: false } });
       toast(fresh.length ? `${fresh.length} family seed${fresh.length === 1 ? '' : 's'} to confirm` : 'No new family proposed', 'success',
         fresh.length ? { label: 'Open Seeds', run: () => dispatch({ type: 'TAB', tab: 'candidates' }) } : null);
     } catch (err) {
       dispatch({ type: 'SET', payload: { genFam: false } });
-      toast(err.message || 'Family generation failed', 'error');
+      toast(errText(err, 'Family generation failed'), 'error');
     }
   };
 
@@ -271,7 +323,7 @@ export default function RelationshipEngine() {
       const r = await updateRelationshipFamilyRole(id, fields);
       dispatch({ type: 'UPDATE_REL', id, fields: r.data?.relationship || fields });
     } catch (err) {
-      toast(err.response?.data?.error || err.message || 'Update failed', 'error');
+      toast(errText(err, 'Update failed'), 'error');
     }
   };
 
@@ -281,7 +333,7 @@ export default function RelationshipEngine() {
       dispatch({ type: 'UPDATE_REL', id, fields: r.data?.relationship || fields });
       toast('Updated', 'success');
     } catch (err) {
-      toast(err.response?.data?.error || err.message || 'Update failed', 'error');
+      toast(errText(err, 'Update failed'), 'error');
     }
   };
 

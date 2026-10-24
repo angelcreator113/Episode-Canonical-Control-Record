@@ -25,6 +25,7 @@ const crypto = require('crypto');
 const { sequelize } = require('../../src/models');
 const router = require('../../src/routes/bookFromShowRoutes');
 const { recordBlock } = require('../../src/services/episodeStoryRecord');
+const relationshipTruth = require('../../src/services/relationshipTruth');
 
 const shouldSkip =
   !process.env.DATABASE_URL ||
@@ -205,6 +206,7 @@ const answer = (obj) => ({ content: [{ type: 'text', text: JSON.stringify(obj) }
     });
     expect(unticked.status).toBe(200);
 
+    const sync = jest.spyOn(relationshipTruth, 'afterStorySave');
     const ok = await request(app).post(`${base}/approve`);
     expect(ok.status).toBe(200);
     expect(ok.body.record).toMatchObject({ status: 'approved', approved_by: 'evoni@record.dev' });
@@ -223,6 +225,11 @@ const answer = (obj) => ({ content: [{ type: 'text', text: JSON.stringify(obj) }
       character_id_a: ids.lala, character_id_b: ids.marcus, relationship_type: 'love_interest', is_romantic: true, confirmed: true,
       lala_connection: 'knows_lala', situation: 'Flirting at the gala',
     })]);
+    // Each relationship the Save wrote is kept in step with The Pulse, after
+    // the commit (it reads the saved pair; Lala has no Pulse profile here).
+    expect(sync.mock.calls.map(([, id]) => id)).toEqual([rels[0].id]);
+    await expect(sync.mock.results[0].value).resolves.toEqual({ skipped: 'one of them has no Pulse profile' });
+    sync.mockRestore();
     const [events] = await run('SELECT relationship_stage, event_type, metadata FROM relationship_events WHERE relationship_id = :id', { id: rels[0].id });
     expect(events).toEqual([{ relationship_stage: 'acquaintances', event_type: 'first_meeting', metadata: { episode_id: ids.ep, beat: 11, stage_before: 'strangers', source: 'record' } }]);
     const [follows] = await run('SELECT text, due_hint, status, profile_id, registry_character_id, created_by FROM show_follow_ups WHERE show_id = :show', ids);
