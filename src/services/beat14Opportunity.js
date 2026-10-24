@@ -24,6 +24,12 @@
  * attached opportunity is no longer held, and attach answers 409 for a
  * completed episode (episodes.evaluation_status 'accepted', as
  * episodeCompletionService records it).
+ *
+ * A held one is never stuck (Evoni, 2026-10-23): completion without a
+ * recorded tier offers it, and the show tab can release it by hand
+ * (releaseHeld) or schedule it as an event before its episode is completed
+ * (feedEventPipelineService.scheduleOpportunityAsEvent), both offering it
+ * first. Beat 14 is then final for it, as after completion.
  */
 
 const HELD = 'held';
@@ -36,6 +42,7 @@ class Beat14Error extends Error {
 }
 
 const now = () => new Date().toISOString();
+const today = () => new Date().toISOString().slice(0, 10);
 const history = (opp) => (Array.isArray(opp?.status_history) ? opp.status_history : []);
 
 async function episodeAndEvent(models, { showId, episodeId }) {
@@ -78,6 +85,8 @@ const slim = (o) => (o ? {
   narrative_stakes: o.narrative_stakes || null, payment_amount: o.payment_amount != null ? Number(o.payment_amount) : null,
   response_deadline: o.response_deadline || null,
   completion_status: require('../utils/beat14Invitation').beat14Decided(o),
+  // Offered by hand from the show tab (releaseHeld, or scheduled early), not by completion.
+  released: wasReleased(o),
 } : null);
 
 const isCompleted = (episode) => episode?.evaluation_status === 'accepted';
@@ -89,6 +98,9 @@ const isCompleted = (episode) => episode?.evaluation_status === 'accepted';
 // it said "The episode is completed" of an episode that was not).
 function assertStillHeld(opp, episode = null) {
   if (opp && opp.status !== HELD) {
+    if (wasReleased(opp)) {
+      throw new Beat14Error(409, "Its beat 14 opportunity was already offered by hand (released, or scheduled before the episode was completed), so it can't be changed or removed here.");
+    }
     const what = opp.status === 'expired' ? 'expired' : 'offered';
     throw new Beat14Error(409, episode && !isCompleted(episode)
       ? `Its beat 14 opportunity was already ${what} when the episode was completed (its evaluation has been reset since), so it can't be changed or removed here.`
@@ -265,15 +277,18 @@ async function resolveAtCompletion(models, { episodeId, event, tierFinal }) {
   if (!models?.Opportunity) return null;
   const opp = await models.Opportunity.findOne({ where: { offered_in_episode_id: episodeId } });
   if (!opp || opp.status !== HELD) return opp ? { id: opp.id, name: opp.name, status: opp.status } : null;
+  // No recorded tier counts as landed (Evoni, 2026-10-23: one completed
+  // without its tier stayed held for good, and nothing could free it).
   const landed = tierFinal !== 'fail';
   const status = landed ? 'offered' : 'expired';
-  const today = new Date().toISOString().slice(0, 10);
+  const note = !landed ? 'The episode did not land; the offer never came'
+    : tierFinal ? `From event: ${event?.name || 'the event'} (beat 14)`
+      : 'Completed without a recorded tier; offered';
   await opp.update({
     status,
-    ...(landed ? { offer_date: today } : {}),
+    ...(landed ? { offer_date: today() } : {}),
     status_history: [...history(opp), {
-      status, date: now(), tier: tierFinal || null, source_event_id: event?.id || null,
-      note: landed ? `From event: ${event?.name || 'the event'} (beat 14)` : 'The episode did not land; the offer never came',
+      status, date: now(), tier: tierFinal || null, source_event_id: event?.id || null, note,
     }],
   });
   return { id: opp.id, name: opp.name, status };
@@ -282,7 +297,8 @@ async function resolveAtCompletion(models, { episodeId, event, tierFinal }) {
 /**
  * After completion, for one whose resolve failed (Script page re-audit,
  * 2026-10-19): an episode completed with its beat 14 opportunity still held
- * gets it offered or expired by the tier completion recorded. Returns what
+ * gets it offered or expired by the tier completion recorded (offered
+ * when none was recorded). Returns what
  * resolveAtCompletion returns, or null when there is nothing to do.
  * Completion calls it when it finds the episode already completed.
  */
@@ -295,11 +311,54 @@ async function resolveHeldAfterCompletion(models, { episodeId }) {
     'SELECT id, evaluation_status, evaluation_json FROM episodes WHERE id = :episodeId AND deleted_at IS NULL',
     { replacements: { episodeId }, type: sequelize.QueryTypes.SELECT }
   );
-  // Without the recorded tier there is nothing to decide by; it stays held.
-  if (!isCompleted(episode) || !completedTier(episode)) return null;
+  // Without a recorded tier it is offered, as if the episode landed
+  // (resolveAtCompletion; Evoni, 2026-10-23: it stayed held for good).
+  if (!isCompleted(episode)) return null;
   const { findSourceEvent } = require('./episodeMoneyService');
   const event = await findSourceEvent(sequelize, episodeId);
   return resolveAtCompletion(models, { episodeId, event, tierFinal: completedTier(episode) });
+}
+
+/**
+ * Released by hand (Evoni, 2026-10-23: "I currently have an opportunity
+ * from episode 1 in the opportunities tab but I can't turn it into an
+ * event"): a held one is offered now, without waiting for its episode's
+ * result. It keeps offered_in_episode_id, so that episode's beat 14 still
+ * delivers it as the invitation. The history entry carries `tier` (null),
+ * so utils/beat14Invitation beat14Decided reads it as offered whatever its
+ * status becomes later, and source_event_id, the post-event marker
+ * (characterSyncService.postEventOpportunitiesExist). A later completion
+ * finds it no longer held and leaves it as it is, and makes no random
+ * post-event offer beside it (resolveAtCompletion returns it).
+ */
+function releasedEntry({ note, eventId = null, episodeId = null }) {
+  return { status: 'offered', date: now(), note, tier: null, released: true, source_event_id: eventId, source_episode_id: episodeId };
+}
+const wasReleased = (opp) => history(opp).some((h) => h?.released === true);
+
+async function episodeEventId(sequelize, episodeId) {
+  if (!episodeId) return null;
+  const { findSourceEvent } = require('./episodeMoneyService');
+  return (await findSourceEvent(sequelize, episodeId))?.id || null;
+}
+
+/** POST …/:id/release: held → offered. 409 when it is not held. */
+async function releaseHeld(models, { showId, id }) {
+  const { sequelize } = models;
+  return sequelize.transaction(async (transaction) => {
+    // Under the opportunity's lock, so two releases, or a release and a
+    // schedule, write it once.
+    const opp = await models.Opportunity.findOne({ where: { id, show_id: showId }, transaction, lock: transaction.LOCK?.UPDATE ?? true });
+    if (!opp) throw new Beat14Error(404, 'Opportunity not found.');
+    if (opp.status !== HELD) throw new Beat14Error(409, `Only one held for beat 14 can be released; this one is ${opp.status}.`);
+    const eventId = await episodeEventId(sequelize, opp.offered_in_episode_id);
+    await opp.update({
+      status: 'offered',
+      offer_date: today(),
+      status_history: [...history(opp), releasedEntry({ note: 'Released by hand', eventId, episodeId: opp.offered_in_episode_id })],
+    }, { transaction });
+    return opp;
+  });
 }
 
 /** What the writer reads: the attached opportunity and its sender's name, or null. */
@@ -309,7 +368,7 @@ async function loadForScript(models, { episodeId }) {
   return slim(opp);
 }
 
-module.exports = { getBeat14, attachBeat14, detachBeat14, resolveAtCompletion, resolveHeldAfterCompletion, loadForScript, eventPeople, Beat14Error, HELD, TYPES };
+module.exports = { getBeat14, attachBeat14, detachBeat14, resolveAtCompletion, resolveHeldAfterCompletion, releaseHeld, releasedEntry, episodeEventId, loadForScript, eventPeople, Beat14Error, HELD, TYPES };
 
 const { beat14Outcome, beat14Decided } = require('../utils/beat14Invitation');
 

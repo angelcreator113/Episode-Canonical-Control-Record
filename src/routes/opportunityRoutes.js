@@ -9,6 +9,7 @@
  * DELETE /api/v1/opportunities/:showId/:id        — Delete opportunity
  * POST   /api/v1/opportunities/:showId/:id/advance — Advance pipeline status
  * POST   /api/v1/opportunities/:showId/:id/to-event — Convert to world event
+ * POST   /api/v1/opportunities/:showId/:id/release — Offer one held for beat 14 now
  * GET    /api/v1/opportunities/:showId/stats       — Pipeline stats
  *
  * Every write here is ADMIN only; the reads stay requireAuth (Evoni,
@@ -80,21 +81,26 @@ async function linkDealOr400(res, models, body) {
 // ═══════════════════════════════════════════
 
 // Each opportunity attached to an episode's beat 14 carries that episode
-// ({ id, title }) as beat14_episode, so the show tab can say "Beat 14 of
-// ‹title›" (Evoni, 2026-10-19). One query for all of them; a failed read
-// leaves the titles out.
+// ({ id, title, episode_number, evaluation_status }) as beat14_episode, so
+// the show tab can say "Beat 14 of ‹title›" (Evoni, 2026-10-19) and, on a
+// held one, whether it still waits for that episode or the episode was
+// completed without settling it (Evoni, 2026-10-23). One query for all of
+// them; a failed read leaves them out.
 async function withBeat14Episodes(models, opps) {
   const ids = [...new Set(opps.map((o) => o.offered_in_episode_id).filter(Boolean))];
   if (!ids.length || !models.sequelize) return opps;
   try {
     const rows = await models.sequelize.query(
-      'SELECT id, title FROM episodes WHERE id IN (:ids) AND deleted_at IS NULL',
+      'SELECT id, title, episode_number, evaluation_status FROM episodes WHERE id IN (:ids) AND deleted_at IS NULL',
       { replacements: { ids }, type: models.sequelize.QueryTypes.SELECT }
     );
     const byId = new Map(rows.map((r) => [String(r.id), r]));
     return opps.map((o) => {
       const ep = o.offered_in_episode_id ? byId.get(String(o.offered_in_episode_id)) : null;
-      return ep ? { ...o, beat14_episode: { id: ep.id, title: ep.title || null } } : o;
+      return ep ? {
+        ...o,
+        beat14_episode: { id: ep.id, title: ep.title || null, episode_number: ep.episode_number ?? null, evaluation_status: ep.evaluation_status || null },
+      } : o;
     });
   } catch (err) {
     console.error('[Opportunities] beat 14 episode titles read failed (non-blocking):', err.message);
@@ -321,7 +327,7 @@ router.post('/opportunities/:showId/:id/undo', requireAuth, authorize(['ADMIN'])
     const back = statusBeforeLastStep(history, opp.status);
     if (!back) return res.status(409).json({ success: false, error: `There is no earlier status to go back to from "${opp.status}".` });
     // Held is beat 14's to set, at attach (services/beat14Opportunity).
-    if (back === 'held') return res.status(409).json({ success: false, error: 'Its last step came from beat 14 (attached, let go or decided at completion); that is not undone here.' });
+    if (back === 'held') return res.status(409).json({ success: false, error: 'Its last step came from beat 14 (attached, let go, released or decided at completion); that is not undone here.' });
     const from = opp.status;
     await opp.update({
       status: back,
@@ -335,7 +341,33 @@ router.post('/opportunities/:showId/:id/undo', requireAuth, authorize(['ADMIN'])
 });
 
 // ═══════════════════════════════════════════
+// POST /opportunities/:showId/:id/release — Release offer (Evoni,
+// 2026-10-23: one held for episode 1's beat 14 could not be turned into an
+// event). Held → offered now, still that episode's beat 14 invitation
+// (services/beat14Opportunity releaseHeld). 409 when it is not held.
+// ═══════════════════════════════════════════
+
+router.post('/opportunities/:showId/:id/release', requireAuth, authorize(['ADMIN']), async (req, res) => {
+  const { showId, id } = req.params;
+  if (!UUID_RE.test(String(showId)) || !UUID_RE.test(String(id))) {
+    return res.status(400).json({ success: false, error: `${UUID_RE.test(String(showId)) ? 'id' : 'showId'} must be an id (UUID).` });
+  }
+  try {
+    const { releaseHeld } = require('../services/beat14Opportunity');
+    const opp = await releaseHeld(await getModels(req), { showId, id });
+    return res.json({ success: true, opportunity: opp.toJSON() });
+  } catch (err) {
+    console.error('[Opportunities] release failed:', err.message);
+    return res.status(err.status || 500).json({ success: false, error: err.message });
+  }
+});
+
+// ═══════════════════════════════════════════
 // POST /opportunities/:showId/:id/to-event — Convert to world event
+// Nothing on the site calls it; the show tab's Schedule as Event is
+// feed-pipeline/:showId/schedule. One held for beat 14 is refused here: that
+// path offers it first (Evoni, 2026-10-23), this one would leave it held
+// with an event.
 // ═══════════════════════════════════════════
 
 router.post('/opportunities/:showId/:id/to-event', requireAuth, authorize(['ADMIN']), async (req, res) => {
@@ -344,6 +376,10 @@ router.post('/opportunities/:showId/:id/to-event', requireAuth, authorize(['ADMI
     const models = await getModels(req);
 
     if (!models.Opportunity) return res.status(500).json({ success: false, error: 'Model not loaded' });
+    const current = await models.Opportunity.findOne({ where: { id, show_id: showId } });
+    if (current?.status === 'held') {
+      return res.status(409).json({ success: false, error: "This one is held for an episode's beat 14: use Schedule as Event now on its card, which offers it first." });
+    }
 
     const { convertOpportunityToEvent } = require('../services/careerPipelineService');
     const result = await convertOpportunityToEvent(id, showId, models);
