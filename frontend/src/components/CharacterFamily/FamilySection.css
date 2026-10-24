@@ -1,0 +1,57 @@
+/* The character page's Family section (FamilySection.jsx). It sits in a
+   .ch-card and uses the page's ch-* pieces; these are its own. */
+
+.cf .ch-card-head .cf-add { margin-left: auto; }
+.cf-block { display: flex; flex-direction: column; gap: 8px; padding-top: 4px; }
+.cf-h3 { margin: 0; font-family: 'Lora', serif; font-size: 16px; font-weight: 700; color: var(--text-primary); }
+.cf-city { font-family: 'DM Mono', monospace; font-size: 12px; font-weight: 400; color: var(--text-secondary); }
+
+.cf-line { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 8px; min-width: 0; }
+.cf-role { font-size: 13px; font-weight: 600; color: var(--lala-gold-text, #8a6d1f); }
+.cf-kind {
+  padding: 2px 8px; border-radius: 999px; font-family: 'DM Mono', monospace; font-size: 11px;
+  background: var(--lala-lavender-soft); color: var(--lala-lavender-text);
+}
+.cf-kind.is-blood { background: var(--lala-gold-soft, #f6eed6); color: var(--lala-gold-text, #8a6d1f); }
+/* Step and chosen family read as dashed, as on the Family tree. */
+.cf-kind.is-step, .cf-kind.is-chosen { background: none; border: 1px dashed currentColor; }
+.cf-tie.is-step, .cf-tie.is-chosen { border-bottom-style: dashed; }
+
+.cf-x {
+  margin-left: auto; display: inline-flex; align-items: center; justify-content: center;
+  width: 32px; height: 32px; border: none; border-radius: 999px; background: none; cursor: pointer; color: var(--text-secondary);
+}
+.cf-x:hover { background: var(--lala-lavender-soft); color: var(--text-primary); }
+.cf-x:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.cf-make {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 4px 12px;
+  border-radius: 999px; border: 1px solid var(--lala-lavender-line); background: var(--surface-card);
+  cursor: pointer; font: inherit; font-size: 12px; font-weight: 700; color: var(--lala-lavender-text);
+}
+.cf-make:hover { background: var(--lala-lavender-soft); }
+.cf-make:disabled { opacity: 0.6; cursor: not-allowed; }
+.cf-made a { font-weight: 700; }
+
+.cf-tree-head { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.cf-import { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; }
+
+/* + Add family */
+.cf-form {
+  display: flex; flex-direction: column; gap: 10px; padding: 14px; border-radius: 16px;
+  background: var(--lala-lavender-soft); border: 1px solid var(--lala-lavender-line);
+}
+.cf-seg { display: flex; flex-wrap: wrap; gap: 4px; }
+.cf-seg-btn {
+  min-height: 36px; padding: 4px 12px; border-radius: 999px; border: 1px solid var(--lala-lavender-line);
+  background: var(--surface-card); cursor: pointer; font: inherit; font-size: 13px; font-weight: 600; color: var(--lala-lavender-text);
+}
+.cf-seg-btn.is-on { background: var(--lala-lavender); border-color: var(--lala-lavender); color: var(--text-inverse); }
+.cf-field { display: flex; flex-direction: column; gap: 4px; flex: 1 1 180px; min-width: 0; font-size: 12px; font-weight: 600; color: var(--text-secondary); }
+.cf-field .ch-input { flex: none; width: 100%; box-sizing: border-box; background: var(--surface-card); color: var(--text-primary); }
+.cf-form-row { display: flex; flex-wrap: wrap; gap: 10px; }
+
+@media (max-width: 600px) {
+  .cf-import { margin-left: 0; }
+  .cf-seg-btn { flex: 1 1 auto; }
+}

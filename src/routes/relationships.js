@@ -61,6 +61,7 @@ const REL_SELECT = `
   cr.pain_point_category, cr.lala_mirror, cr.career_echo_potential,
   cr.confirmed, cr.role_tag,
   cr.family_role, cr.is_blood_relation, cr.is_romantic,
+  cr.family_kind, cr.reverse_family_role,
   cr.conflict_summary, cr.knows_about_connection,
   cr.source_knows, cr.target_knows, cr.reader_knows,
   cr.known_by, cr.public_state,
@@ -971,11 +972,13 @@ router.put('/:relId/family', requireAuth, authorize(['ADMIN']), async (req, res)
   try {
     const db = getDb();
     const { relId } = req.params;
-    const { family_role, is_blood_relation, is_romantic, conflict_summary } = req.body;
+    const { family_role, is_blood_relation, is_romantic, conflict_summary, family_kind } = req.body;
     if (!UUID_RE.test(relId)) return res.status(404).json({ error: 'Relationship not found' });
 
     const [current] = await db.sequelize.query(
-      `SELECT id, is_romantic FROM character_relationships cr WHERE cr.id = :id AND ${LIVE}`,
+      `SELECT cr.id, cr.is_romantic, cb.gender AS b_gender, cb.pronouns AS b_pronouns FROM character_relationships cr
+         LEFT JOIN registry_characters cb ON cb.id = cr.character_id_b
+        WHERE cr.id = :id AND ${LIVE}`,
       { replacements: { id: relId }, type: db.sequelize.QueryTypes.SELECT }
     );
     if (!current) return res.status(404).json({ error: 'Relationship not found' });
@@ -988,10 +991,23 @@ router.put('/:relId/family', requireAuth, authorize(['ADMIN']), async (req, res)
       return res.status(400).json({ error: 'This is a romantic relationship, not family. Give the family role to a family relationship.' });
     }
 
+    // A kind keeps is_blood_relation in step (blood ⇔ true); a new role
+    // rewrites the role read the other way (services/familyTies).
+    const familyTies = require('../services/familyTies');
+    if (family_kind != null && family_kind !== '' && !familyTies.KINDS.includes(family_kind)) {
+      return res.status(400).json({ error: `Kind must be one of ${familyTies.KINDS.join(', ')}` });
+    }
+    const kindSent = family_kind !== undefined;
+    const kind = kindSent && family_kind ? family_kind : null;
+    const blood = kindSent ? kind === 'blood' : (is_blood_relation != null ? is_blood_relation : null);
+    const reverse = role ? familyTies.reverseRole(role, familyTies.genderOf({ gender: current.b_gender, pronouns: current.b_pronouns })) : null;
+
     // Sent fields are written (an empty family role clears it); others stay.
     await db.sequelize.query(
       `UPDATE character_relationships
        SET family_role       = CASE WHEN :role_sent THEN :family_role ELSE family_role END,
+           reverse_family_role = CASE WHEN :role_sent THEN :reverse ELSE reverse_family_role END,
+           family_kind       = CASE WHEN :kind_sent THEN :kind ELSE family_kind END,
            is_blood_relation = COALESCE(:is_blood, is_blood_relation),
            is_romantic       = COALESCE(:is_romantic, is_romantic),
            conflict_summary  = CASE WHEN :conflict_sent THEN :conflict ELSE conflict_summary END,
@@ -1002,7 +1018,10 @@ router.put('/:relId/family', requireAuth, authorize(['ADMIN']), async (req, res)
           id: relId,
           role_sent: family_role !== undefined,
           family_role: role || null,
-          is_blood: is_blood_relation != null ? is_blood_relation : null,
+          reverse,
+          kind_sent: kindSent,
+          kind,
+          is_blood: blood,
           is_romantic: is_romantic != null ? is_romantic : null,
           conflict_sent: conflict_summary !== undefined,
           conflict: typeof conflict_summary === 'string' && conflict_summary.trim() ? conflict_summary.trim() : null,
@@ -1116,6 +1135,15 @@ No markdown fences, no explanation.`,
 
     // Insert as seeds (unconfirmed)
     const inserted = [];
+    const familyTies = require('../services/familyTies');
+    // A step, adoptive, chosen or in-law role says its kind; otherwise blood
+    // when the generator says so, else not known yet.
+    const seedKind = (bond) => {
+      if (!bond.family_role || bond.is_romantic) return null;
+      const k = familyTies.kindOf(bond.family_role);
+      if (k !== 'blood') return k;
+      return bond.is_blood_relation ? 'blood' : null;
+    };
     for (const bond of familyBonds) {
       const aExists = characters.find(ch => ch.id === bond.character_a_id);
       const bExists = characters.find(ch => ch.id === bond.character_b_id);
@@ -1132,13 +1160,13 @@ No markdown fences, no explanation.`,
       await db.sequelize.query(
         `INSERT INTO character_relationships
            (id, character_id_a, character_id_b, relationship_type,
-            family_role, is_blood_relation, is_romantic,
+            family_role, reverse_family_role, family_kind, is_blood_relation, is_romantic,
             conflict_summary, notes, connection_mode,
             lala_connection, status, confirmed,
             created_at, updated_at)
          VALUES
            (:id, :char_a, :char_b, :rel_type,
-            :family_role, :is_blood, :is_romantic,
+            :family_role, :reverse_role, :family_kind, :is_blood, :is_romantic,
             :conflict, :notes, 'IRL',
             'none', 'Active', false,
             :now, :now)
@@ -1148,6 +1176,9 @@ No markdown fences, no explanation.`,
             id, char_a: bond.character_a_id, char_b: bond.character_b_id,
             rel_type: bond.relationship_type || 'family',
             family_role: bond.family_role || null,
+            // The seed's kind and the role read the other way (services/familyTies).
+            reverse_role: bond.family_role && !bond.is_romantic ? familyTies.reverseRole(bond.family_role) : null,
+            family_kind: seedKind(bond),
             is_blood: bond.is_blood_relation || false,
             is_romantic: bond.is_romantic || false,
             conflict: bond.conflict_summary || null,

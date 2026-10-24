@@ -23,6 +23,7 @@ const { LINKED_CHARACTER_JOIN } = require('../utils/registryLink');
 const { storyBrief, BRIEF_COLUMNS } = require('./characterStoryBrief');
 const { secretsFor } = require('./characterSecrets');
 const { planForEpisode, withPlan } = require('./seasonRevealPlan');
+const { familyLines } = require('./familyTies');
 const { lalaStoryTies, lalaTieFields } = require('./relationshipTruth');
 const { latestWorldSnapshotForShow } = require('./worldSnapshotForShow');
 const { loadScriptCareer, careerBlock } = require('./scriptCareerService');
@@ -324,6 +325,14 @@ async function loadScriptContext(episodeId, showId, models, { lite = false } = {
     }
   } catch { /* non-blocking */ }
 
+  // Their family ties, under the cast (services/familyTies familyLines).
+  context.familyLines = [];
+  try {
+    context.familyLines = await familyLines(sequelize, (context.socialProfiles || []).map(p => p.registry_character_id));
+  } catch (err) {
+    console.error('[ScriptWriter] family lines could not be read (non-blocking):', err.message);
+  }
+
   // 10b. The people the event's goals are about who are not above (a brand's
   // Pulse account, a guest not featured): only their names, so the coverage
   // check ticks a goal by them as the Script tab does (utils/scriptRuleChecks
@@ -465,6 +474,11 @@ async function loadScriptContext(episodeId, showId, models, { lite = false } = {
   return context;
 }
 
+// Their family ties as one block under the cast; '' when there are none.
+function familyBlock(lines) {
+  return lines?.length ? `\n\nTHEIR FAMILY (stay consistent with it):\n${lines.map(l => `- ${l}`).join('\n')}` : '';
+}
+
 /**
  * Who may mention which relationship (Evoni, 2026-10-23: "so the writers
  * know who can mention it and who can't"): one line per relationship of
@@ -541,6 +555,7 @@ function storyContextBlocks(context, { withSeason = true } = {}) {
     if (context.unfeaturedGuestCount > 0) {
       socialBlock += `\n\n${context.unfeaturedGuestCount} more guest${context.unfeaturedGuestCount === 1 ? '' : 's'} attending — present, but not story participants.`;
     }
+    socialBlock += familyBlock(context.familyLines);
     socialBlock += '\n';
   }
 
@@ -1235,4 +1250,4 @@ function renderScriptText(scriptJson) {
   }).join('\n\n');
 }
 
-module.exports = { generateEpisodeScript, loadScriptContext, renderScriptText, buildFullPrompt, buildSeasonPositionBlock, eventContextBlock, storyContextBlocks, financialContextText, LALA_TIES, lalaRomances, writeScriptReply, scriptTextAfterFixes, relationshipSecrecyBlock };
+module.exports = { generateEpisodeScript, loadScriptContext, renderScriptText, buildFullPrompt, buildSeasonPositionBlock, eventContextBlock, storyContextBlocks, financialContextText, LALA_TIES, lalaRomances, writeScriptReply, scriptTextAfterFixes, familyBlock, relationshipSecrecyBlock };

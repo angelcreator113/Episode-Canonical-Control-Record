@@ -1,0 +1,5 @@
+/* A Pulse profile's family line (ProfileFamily.jsx), under its name. */
+.pf-family { margin: 6px 0 0; font-size: 12px; line-height: 1.5; color: var(--lala-lavender-text, #6b4f8a); overflow-wrap: anywhere; }
+.pf-label { font-weight: 700; }
+.pf-family a { color: inherit; font-weight: 600; }
+.pf-dot { color: var(--text-secondary, #7a6e8a); }
