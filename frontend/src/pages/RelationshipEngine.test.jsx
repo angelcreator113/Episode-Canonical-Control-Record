@@ -44,6 +44,10 @@ import {
   generateFamilyRelationships,
   updateRelationshipFamilyRole,
   updateRelationshipFields,
+  confirmAllSeeds,
+  setSeedState,
+  addSeeds,
+  fetchPulseSuggestions,
 } from './RelationshipEngine';
 
 describe('RelationshipEngine — Track 3 helpers', () => {
@@ -128,6 +132,43 @@ describe('RelationshipEngine — Track 3 helpers', () => {
       '/api/v1/relationships/rel-7',
       { weight: 0.8 }
     );
+  });
+
+  // The seeds contract (2026-10-24): confirm with edits, confirm all,
+  // Keep as idea / Bring back, dismiss with a reason, seeds from elsewhere.
+  test('confirmRelationship with fields POSTs them as the body', async () => {
+    vi.mocked(apiClient.post).mockResolvedValue({ data: {} });
+    await confirmRelationship('cand-1', { relationship_type: 'rival' });
+    expect(apiClient.post).toHaveBeenCalledWith('/api/v1/relationships/confirm/cand-1', { relationship_type: 'rival' });
+  });
+
+  test('confirmAllSeeds POST on /relationships/confirm-all with the ids', async () => {
+    vi.mocked(apiClient.post).mockResolvedValue({ data: {} });
+    await confirmAllSeeds(['a', 'b']);
+    expect(apiClient.post).toHaveBeenCalledWith('/api/v1/relationships/confirm-all', { ids: ['a', 'b'] });
+  });
+
+  test('setSeedState POST on /relationships/:id/seed-state', async () => {
+    vi.mocked(apiClient.post).mockResolvedValue({ data: {} });
+    await setSeedState('cand-3', 'kept');
+    await setSeedState('cand-3', null);
+    expect(apiClient.post).toHaveBeenNthCalledWith(1, '/api/v1/relationships/cand-3/seed-state', { state: 'kept' });
+    expect(apiClient.post).toHaveBeenNthCalledWith(2, '/api/v1/relationships/cand-3/seed-state', { state: null });
+  });
+
+  test('dismissRelationship with a reason sends it as the DELETE body', async () => {
+    vi.mocked(apiClient.delete).mockResolvedValue({ data: {} });
+    await dismissRelationship('cand-2', { reason: 'too_soon', note: 'after ep 5' });
+    expect(apiClient.delete).toHaveBeenCalledWith('/api/v1/relationships/dismiss/cand-2', { data: { reason: 'too_soon', note: 'after ep 5' } });
+  });
+
+  test('addSeeds POST on /relationships/seeds; fetchPulseSuggestions GET on the Pulse suggestions', async () => {
+    vi.mocked(apiClient.post).mockResolvedValue({ data: {} });
+    vi.mocked(apiClient.get).mockResolvedValue({ data: {} });
+    await addSeeds('pulse', [{ character_id_a: 'a', character_id_b: 'b', relationship_type: 'rival' }]);
+    expect(apiClient.post).toHaveBeenCalledWith('/api/v1/relationships/seeds', { source: 'pulse', seeds: [{ character_id_a: 'a', character_id_b: 'b', relationship_type: 'rival' }] });
+    await fetchPulseSuggestions();
+    expect(apiClient.get).toHaveBeenCalledWith('/api/v1/feed-relationships/suggestions');
   });
 
   test('error path — confirmRelationship rejection propagates', async () => {

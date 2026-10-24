@@ -140,7 +140,10 @@ describe('seeds', () => {
     fireEvent.click(screen.getByRole('button', { name: /◈ Generate/ }));
     const dialog = await screen.findByRole('dialog', { name: 'Generate relationship seeds' });
     fireEvent.click(within(dialog).getByRole('button', { name: /◈ Generate/ }));
+    // Dismiss asks why first (2026-10-24 seeds): any reason but "too soon" dismisses.
     fireEvent.click(screen.getByRole('button', { name: 'Dismiss Jade Monroe ↔ Dre Coleman' }));
+    fireEvent.click(screen.getByRole('radio', { name: 'Wrong for them' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }));
     await waitFor(() => expect(screen.queryByText('Rival')).toBeNull());
     await act(async () => { finish({ data: { candidates: [R('seed-2', 'lala', 'dre', { relationship_type: 'mentor', confirmed: false })] } }); });
     await screen.findByText('Mentor');

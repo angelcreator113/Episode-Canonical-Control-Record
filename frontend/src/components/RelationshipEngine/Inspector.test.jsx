@@ -126,3 +126,67 @@ describe('Inspector header (2026-10-24)', () => {
     expect(screen.queryByLabelText('Family Role')).toBeNull();
   });
 });
+
+/*
+ * seedMode (2026-10-24 seeds): a seed's Confirm opens the editor straight
+ * away, with Confirm and Cancel; it sends the contract's fields. The family
+ * role is editable only for a family type; a confirmed pair keeps it
+ * read-only (the Family tab edits it).
+ */
+describe('Inspector seedMode', () => {
+  const seed = (fields = {}) => rel('s1', 'marcus', { confirmed: false, relationship_type: 'rival', seed_why: 'Built on Episode 3', ...fields });
+
+  test('opens on the editor, pre-filled, with Confirm and Cancel only', () => {
+    const onConfirm = vi.fn();
+    const onClose = vi.fn();
+    render(<Inspector rel={seed()} {...props} seedMode onConfirm={onConfirm} onClose={onClose} />);
+    expect(screen.getByLabelText('Relationship Type').value).toBe('rival');
+    expect(screen.getByLabelText('Situation').value).toBe('Situation s1');
+    expect(screen.getByText('Built on Episode 3')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Save' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull();
+    expect(screen.queryByLabelText('Lala Mirror')).toBeNull();
+    expect(screen.queryByLabelText('Family Role (Lala is Marcus Hale\'s …)')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(onClose).toHaveBeenCalled();
+    fireEvent.change(screen.getByLabelText('Relationship Type'), { target: { value: 'nemesis' } });
+    fireEvent.click(screen.getByRole('checkbox'));
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
+    expect(onConfirm).toHaveBeenCalledWith({
+      relationship_type: 'nemesis', connection_mode: 'IRL', status: 'Active', tension_state: '', situation: 'Situation s1',
+      pain_point_category: '', lala_connection: 'none', notes: '', is_romantic: true,
+    });
+  });
+
+  test('a family type: the family role is editable and sent', () => {
+    const onConfirm = vi.fn();
+    render(<Inspector rel={seed({ relationship_type: 'family', family_role: 'aunt' })} {...props} seedMode onConfirm={onConfirm} />);
+    const role = screen.getByLabelText("Family Role (Lala is Marcus Hale's …)");
+    expect(role.value).toBe('aunt');
+    fireEvent.change(role, { target: { value: 'grandmother' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
+    expect(onConfirm.mock.calls[0][0]).toMatchObject({ relationship_type: 'family', family_role: 'grandmother' });
+  });
+
+  test('typing a family type opens the family role; a plain type closes it', () => {
+    render(<Inspector rel={seed()} {...props} seedMode onConfirm={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText('Relationship Type'), { target: { value: 'stepsister' } });
+    expect(screen.getByLabelText("Family Role (Lala is Marcus Hale's …)")).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('Relationship Type'), { target: { value: 'rival' } });
+    expect(screen.queryByLabelText("Family Role (Lala is Marcus Hale's …)")).toBeNull();
+  });
+
+  test('confirmBusy disables Confirm', () => {
+    render(<Inspector rel={seed()} {...props} seedMode confirmBusy onConfirm={vi.fn()} />);
+    expect(screen.getByRole('button', { name: 'Confirming…' }).disabled).toBe(true);
+  });
+
+  test('a confirmed pair: Save sends no family role, which stays read-only', () => {
+    const onUpdate = vi.fn();
+    render(<Inspector rel={rel('r9', 'jade', { relationship_type: 'family', family_role: 'sister' })} {...props} onUpdate={onUpdate} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    expect(screen.getByText(/change it on the Family tab/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect(onUpdate.mock.calls[0][0]).not.toHaveProperty('family_role');
+  });
+});
