@@ -61,23 +61,23 @@ describe('goalPerson', () => {
 
 describe('goalCovered', () => {
   test('her real name, her first name, her handle or her display name, with the rest of the goal', () => {
-    expect(covered('Lala: "I have wanted to know you forever, Marcus Hale."')).toBe(11);
-    expect(covered('Lala: "Marcus, I want to know everything."')).toBe(11);
-    expect(covered('Lala: "So you are @mhale_styles! I want to know you."')).toBe(11);
+    expect(covered('Lala: "I have wanted to get to know you forever, Marcus Hale."')).toBe(11);
+    expect(covered('Lala: "Marcus, I want to get to know everything."')).toBe(11);
+    expect(covered('Lala: "So you are @mhale_styles! I want to get to know you."')).toBe(11);
     const stylist = { slot: 'relationship_guest', label: 'Get to know the stylist', profile_id: 9 };
-    expect(at([beat(11, 'Lala: "Truthville, I want to know the stylist."')], stylist, goalPerson(stylist, EVENT, PROFILES))).toBe(11);
+    expect(at([beat(11, 'Lala: "Truthville, I want to get to know the stylist."')], stylist, goalPerson(stylist, EVENT, PROFILES))).toBe(11);
   });
   test('speaking is being there', () => {
-    expect(covered('Marcus Hale: You must be Lala.', 'Lala: I have wanted to know you.')).toBe(11);
-    expect(covered('**Marcus** (smiling): So you know my work?')).toBe(11);
+    expect(covered('Marcus Hale: You must be Lala.', 'Lala: I have wanted to get to know you.')).toBe(11);
+    expect(covered('**Marcus** (smiling): So you want to get to know my work?')).toBe(11);
   });
   test('the goal as written still covers it, with or without a person', () => {
     expect(at([beat(11, 'Lala: "I want to get to know Truthville."')], GUEST, null)).toBe(11);
     expect(covered('Lala: "I want to get to know Truthville."')).toBe(11);
   });
   test('a shared surname alone, or the person without the rest of the goal, is not covered', () => {
-    expect(covered('Lala: "Hale, I want to know you."')).toBeNull();
-    expect(covered('Me: the Hale family is here', 'Lala: I want to know them')).toBeNull();
+    expect(covered('Lala: "Hale, I want to get to know you."')).toBeNull();
+    expect(covered('Me: the Hale family is here', 'Lala: I want to get to know them')).toBeNull();
     expect(covered('Marcus Hale: Hello.')).toBeNull();
   });
   test('a brand goal with no brand known is read as written only', () => {
@@ -87,7 +87,7 @@ describe('goalCovered', () => {
     expect(at([beat(11, 'Celeste Rue: Co-style with me?')], brand, null)).toBeNull();
   });
   test('scriptCoverage ticks a goal by its person', () => {
-    const script = '## BEAT: 11 · Event Outcome\nMarcus Hale: I want to know you, Lala.';
+    const script = '## BEAT: 11 · Event Outcome\nMarcus Hale: I want to get to know you, Lala.';
     const { items } = scriptCoverage(script, { goals: [{ ...GUEST, person: truthville() }, { label: 'Get to know Truthville' }] });
     expect(items.filter((i) => i.kind === 'goal').map((i) => i.beat)).toEqual([11, null]);
   });

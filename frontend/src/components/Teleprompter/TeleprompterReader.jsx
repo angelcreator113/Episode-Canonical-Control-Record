@@ -70,7 +70,7 @@ import useTeleprompterRemote from '../../hooks/useTeleprompterRemote';
 import useLineVoice from '../../hooks/useLineVoice';
 import TeleprompterRemotePanel from './TeleprompterRemotePanel';
 import VoiceRecordPanel from './VoiceRecord';
-import { voiceClipsApi, isNotReady as voiceNotReady, VOICE_NOT_READY, clipsByLine, lineKey, withClip, clipSeconds } from '../../lib/voiceClipsApi';
+import { voiceClipsApi, isNotReady as voiceNotReady, VOICE_NOT_READY, clipsByLine, lineKey, withClip, clipSeconds, clipForLine } from '../../lib/voiceClipsApi';
 import { teleprompterScript, pastedParagraphs, pastedScript, speakersOf, HER, takeName, takeExtension, downloadName, clock, lineChoice, withoutScreen } from '../../lib/teleprompterLines';
 import { rawClipsApi, hasTakeFields, beatTakes, withFavorite } from '../../lib/rawClipsApi';
 import { isCutsceneBeat } from '../../lib/scriptShowRules';
@@ -440,7 +440,8 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
     const w = where[i];
     // The cutscene is an AI video: its characters speak for themselves.
     if (!l || !w || !l.who || l.who === readAs || l.cut || (l.kind !== 'cue' && l.kind !== 'mine')) return null;
-    return voiceByLine.get(lineKey(w.beat, w.index)) || null;
+    // Not a recording of other words (Script tab audit 6, 2026-10-24).
+    return clipForLine(voiceByLine, w.beat, w.index, l.text);
   };
   const activeClip = settings.playVoice ? clipOf(active) : null;
   // In Pace by line times and Follow my voice the scroll waits for the clip.

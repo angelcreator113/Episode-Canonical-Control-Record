@@ -16,7 +16,9 @@
  *   appearanceLines(appearance)  the look as "- label: value" lines ('' with none)
  *   suggestAppearance(db, { character, feedProfile })  one Sonnet call that
  *     reads their whole character file (facts, money, type, mask, city,
- *     what they already have written about their look) and proposes their
+ *     what they already have written about their look, and their heritage
+ *     with their blood relatives' heritage and saved look, so relatives can
+ *     look related: services/familyHeritage) and proposes their
  *     appearance, with why; saves nothing
  *   portraitPrompt(appearance, name)  the image prompt: an original
  *     fictional person, no text, no logos, no real brands
@@ -110,10 +112,18 @@ async function suggestAppearance(db, { character, feedProfile } = {}) {
     throw new AppearanceError('There is nothing written about them yet to read their look from.', 409);
   }
   const name = c.selected_name || c.display_name || 'this character';
+  // Their blood family's heritage and look, read in the same call (no new
+  // AI call); a failure here leaves the block out, never the suggestion.
+  let family = '';
+  try {
+    if (db?.sequelize && c.id) family = await require('./familyHeritage').appearanceFamilyBlock(db.sequelize, c.id);
+  } catch (err) {
+    console.error('[characterAppearance] the family block could not be read:', err.message);
+  }
   const prompt = `Write how ${name} looks: their appearance, the one source every scene, post and portrait will follow.
 
 ${block}
-${Object.keys(already).length ? `\nWHAT IS ALREADY WRITTEN ABOUT THEIR LOOK (keep to it where it is specific):\n${JSON.stringify(already, null, 2)}\n` : ''}
+${Object.keys(already).length ? `\nWHAT IS ALREADY WRITTEN ABOUT THEIR LOOK (keep to it where it is specific):\n${JSON.stringify(already, null, 2)}\n` : ''}${family}
 Rules:
 - Their look follows from who they are: what they can afford (their facts), how they want to be seen (their mask and type), where they live and what they do.
 - They live in the LalaVerse: no real brands, designers, stores or celebrities. Describe the clothes, not the label.

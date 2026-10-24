@@ -61,6 +61,28 @@ module.exports = (sequelize) => {
     // Everyone else: secret | rumoured | known
     public_state:           { type: DataTypes.STRING(20), allowNull: false, defaultValue: 'known' },
 
+    /* ── Seeds (services/relationshipSeeds, migration 20261024200000) ── */
+    // Where an unconfirmed row came from, why, and what Evoni did with it.
+    seed_source:            { type: DataTypes.STRING(20), allowNull: true, defaultValue: null,
+      validate: { isIn: [['generate', 'family', 'scene', 'pulse', 'manual']] } },
+    seed_why:               { type: DataTypes.TEXT, allowNull: true, defaultValue: null },
+    // { episodes:[{id,number,title}], threads:[{id,title}], twists:[{id,title}], facts:[string] }
+    seed_basis:             { type: DataTypes.JSONB, allowNull: true, defaultValue: null },
+    // null (pending) | kept ("Keep as idea") | later (dismissed as "too soon")
+    seed_state:             { type: DataTypes.STRING(20), allowNull: true, defaultValue: null,
+      validate: { isIn: [['kept', 'later']] } },
+    dismiss_reason:         { type: DataTypes.STRING(30), allowNull: true, defaultValue: null,
+      validate: { isIn: [['wrong_for_them', 'too_soon', 'already_covered', 'not_this_type', 'other']] } },
+    dismiss_note:           { type: DataTypes.TEXT, allowNull: true, defaultValue: null },
+    // What Generate was aimed at: { kind, focus_character_id, episode_id, twist_id }
+    seed_aim:               { type: DataTypes.JSONB, allowNull: true, defaultValue: null },
+
+    /* ── Heritage (services/familyHeritage, 2026-10-24) ── */
+    // heritage_ok: "This is intended" on a blood tie whose heritage tags share
+    //   nothing (migration 20261024210000, services/familyHeritage):
+    //   { at, by, a_tags, b_tags }; quiet until either person's tags change.
+    heritage_ok:            { type: DataTypes.JSONB, allowNull: true, defaultValue: null },
+
     /* ── Scene Brief Classification ── */
     // role_tag: ally | detractor | mentor | dependency | rival | partner | family | neutral
     role_tag:               { type: DataTypes.STRING(50), allowNull: true, defaultValue: null },

@@ -40,7 +40,7 @@ describe('TemplateStudio page', () => {
     await show([template(), template({ id: 't-2', version: 2 })]);
     fireEvent.click(screen.getByRole('button', { name: /rename/i }));
     // The box shows after the click; on a busy runner that can take a moment.
-    const box = await screen.findByRole('textbox', { name: 'Template name' });
+    const box = await screen.findByRole('textbox', { name: 'Template name' }, { timeout: 3000 });
     expect(screen.getByText('All 2 versions take the new name.')).toBeTruthy();
     fireEvent.change(box, { target: { value: '  Cozy Glam  ' } });
     vi.mocked(apiClient.patch).mockResolvedValue({ data: { data: { name: 'Cozy Glam' } } });
@@ -53,10 +53,10 @@ describe('TemplateStudio page', () => {
   test('Rename: Escape cancels; a taken name shows the server\'s reason', async () => {
     await show([template()]);
     fireEvent.doubleClick(screen.getByRole('heading', { level: 2, name: 'Glam Look' }));
-    fireEvent.keyDown(await screen.findByRole('textbox', { name: 'Template name' }), { key: 'Escape' });
+    fireEvent.keyDown(await screen.findByRole('textbox', { name: 'Template name' }, { timeout: 3000 }), { key: 'Escape' });
     expect(screen.queryByRole('textbox', { name: 'Template name' })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: /rename/i }));
-    fireEvent.change(await screen.findByRole('textbox', { name: 'Template name' }), { target: { value: 'Haul' } });
+    fireEvent.change(await screen.findByRole('textbox', { name: 'Template name' }, { timeout: 3000 }), { target: { value: 'Haul' } });
     vi.mocked(apiClient.patch).mockRejectedValue({ response: { status: 409, data: { message: 'That name is taken' } } });
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
     expect((await screen.findByRole('alert')).textContent).toContain('That name is taken');

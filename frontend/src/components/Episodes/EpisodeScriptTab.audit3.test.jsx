@@ -137,12 +137,12 @@ describe('a rewrite keeps to its own line', () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true);
     renderTab(DUP);
     const beat = screen.getByTestId('script-beat-1');
-    fireEvent.click(within(beat).getAllByRole('button', { name: '✦ Rewrite' })[2]);
+    fireEvent.click(within(beat).getAllByRole('button', { name: /^Rewrite line:/ })[2]);
     fireEvent.click(within(beat).getByText(/Middle/));
     fireEvent.click(screen.getByTestId('script-line-delete'));
     // The spinner stays on the line being rewritten, now the second row.
     const rewrites = within(screen.getByTestId('script-beat-1')).getAllByRole('button', { name: /Rewrit/ });
-    expect(rewrites.map((b) => b.disabled)).toEqual([false, true]);
+    expect(rewrites.map((b) => b.getAttribute('aria-label') === 'Rewriting…')).toEqual([false, true]);
     await act(async () => { reply.resolve({ data: { rewrittenLine: 'Fine then.' } }); });
     fireEvent.click(await screen.findByTestId('script-proposal-accept'));
     expect(raw()).toBe('## BEAT: 1 · Opening Ritual\nLala: Okay.\nLala: Fine then.');

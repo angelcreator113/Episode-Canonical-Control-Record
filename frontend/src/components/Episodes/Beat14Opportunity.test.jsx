@@ -21,7 +21,7 @@ const PEOPLE = [
   { profile_id: 7, handle: 'sable', name: 'Sable Reyes', role: 'host' },
   { profile_id: 9, handle: 'noor', name: 'Noor', role: 'guest' },
 ];
-const OPP = { id: 'o1', name: 'Studio by Sable campaign', contact_name: 'Sable Reyes', connector_profile_id: 7 };
+const OPP = { id: 'o1', name: 'Studio by Sable campaign', status: 'held', contact_name: 'Sable Reyes', connector_profile_id: 7 };
 
 const renderIt = (data, extra = {}) => {
   const onChange = vi.fn().mockResolvedValue();
@@ -90,6 +90,9 @@ describe('Beat14Opportunity', () => {
   test('after completion the card says what happened', () => {
     renderIt({ opportunity: { ...OPP, status: 'expired' }, people: PEOPLE, candidates: [] }, { designedIntent: 'pass' });
     expect(screen.getByTestId('script-beat14-attached').textContent).toMatch(/did not land.*expired/);
+    // Final once offered or expired (Script tab audit 6, 2026-10-24).
+    expect(screen.queryByTestId('script-beat14-change')).toBeNull();
+    expect(screen.queryByTestId('script-beat14-remove')).toBeNull();
   });
 
   // Evoni, 2026-10-23: one released or scheduled early from the show tab.
@@ -101,6 +104,7 @@ describe('Beat14Opportunity', () => {
   test('one offered at completion says that', () => {
     renderIt({ opportunity: { ...OPP, status: 'offered', released: false }, people: PEOPLE, candidates: [] });
     expect(screen.getByTestId('script-beat14-attached').textContent).toContain('It was offered when the episode was completed.');
+    expect(screen.queryByTestId('script-beat14-change')).toBeNull();
   });
 
   // Change keeps what is attached (Script page audit, 2026-10-19).

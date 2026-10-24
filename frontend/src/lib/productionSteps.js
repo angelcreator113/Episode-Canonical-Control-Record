@@ -9,12 +9,14 @@
  *   3 Scenes          the checklist's scene section                  → Production › Scenes
  *   4 Files           at least one raw clip uploaded                 → Production › Files
  *                     its stat: "Takes: n of 14 beats", the beats with at least
- *                     one take (a raw clip linked to beat 1-14; Teleprompter batch 2)
+ *                     one take (a raw clip linked to beat 1-14, or a beat marked
+ *                     in a full-episode take; Teleprompter batch 2)
  *   5 Edit & Assemble every scene has a clip linked to it            → the timeline editor
  *   6 Thumbnail       the episode has a primary thumbnail            → Templates › YouTube thumbnails
  *   7 Review & Publish status In review, Scheduled or Published      → Results › Distribution
  */
 import { thumbnailStudioHref } from './thumbnailStudioHref';
+import { cleanMarks } from './fullEpisodeTake';
 
 export const SCENE_COUNT = 14;
 
@@ -49,8 +51,25 @@ export function linkedScenes(clips) {
   return new Set((clips || []).map((c) => Number(c.beat_number)).filter((n) => n >= 1 && n <= SCENE_COUNT));
 }
 
-/** "Takes: 5 of 14 beats": the beats with at least one take (any raw clip linked to beat 1-14). */
-export const takesStat = (clips) => `Takes: ${linkedScenes(clips).size} of ${SCENE_COUNT} beats`;
+/**
+ * The beats with at least one take: a raw clip linked to beat 1-14, or a beat
+ * marked in a full-episode take's beat_marks (Script tab audit 6, 2026-10-24:
+ * a whole episode recorded in one go counted no beat).
+ */
+export function takeBeats(clips) {
+  const beats = linkedScenes(clips);
+  for (const c of clips || []) {
+    let marks = c?.beat_marks;
+    if (typeof marks === 'string') {
+      try { marks = JSON.parse(marks); } catch (err) { console.error('[productionSteps] beat_marks unreadable:', err); marks = null; }
+    }
+    cleanMarks(marks).forEach((m) => beats.add(m.beat));
+  }
+  return beats;
+}
+
+/** "Takes: 5 of 14 beats": the beats with at least one take (takeBeats). */
+export const takesStat = (clips) => `Takes: ${takeBeats(clips).size} of ${SCENE_COUNT} beats`;
 
 /**
  * The seven steps: { key, label, done, detail, stat?, open } where open is
@@ -62,9 +81,13 @@ export function productionSteps({ episode = {}, checks = null, sections = null, 
   const id = episode.id;
   const written = Boolean(String(episode.script_content || '').trim());
   const approved = approvedBeats(episode).size;
+  const scriptDone = (written && approved >= SCENE_COUNT) || PAST_DRAFT.includes(status);
   const steps = [
     { key: 'brief', label: 'Event & Brief', done: sectionDone(sections, checks, 'brief') && sectionDone(sections, checks, 'world'), open: { tab: 'overview' } },
-    { key: 'script', label: 'Script', done: (written && approved >= SCENE_COUNT) || PAST_DRAFT.includes(status), detail: written && approved < SCENE_COUNT ? `${approved} of ${SCENE_COUNT} beats approved` : null, open: { tab: 'scripts' } },
+    // "n of 14 approved" only while the step is open: an episode past Draft
+    // is done, and said "3 of 14 beats approved" beside its tick (Script tab
+    // audit 6, 2026-10-24).
+    { key: 'script', label: 'Script', done: scriptDone, detail: !scriptDone && written && approved < SCENE_COUNT ? `${approved} of ${SCENE_COUNT} beats approved` : null, open: { tab: 'scripts' } },
     { key: 'scenes', label: 'Scenes', done: sectionDone(sections, checks, 'scene'), open: { tab: 'scenes' } },
     { key: 'files', label: 'Files', done: (clips || []).length > 0, detail: (clips || []).length ? `${clips.length} ${clips.length === 1 ? 'clip' : 'clips'}` : null, stat: takesStat(clips), open: { tab: 'files' } },
     { key: 'edit', label: 'Edit & Assemble', done: linked >= SCENE_COUNT, detail: linked ? `${linked} of ${SCENE_COUNT} scenes have a clip` : null, open: { href: `/episodes/${id}/timeline` } },

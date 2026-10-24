@@ -37,17 +37,17 @@ describe('also known as', () => {
   });
   test('a goal ticks when the script calls them by an alias, speaking or named', () => {
     const p = goalPerson(GUEST, EVENT, PROFILES);
-    expect(goalCovered([beat(11, 'Lala: "Truth! I want to know you."')], GUEST, p)).toMatchObject({ beat: 11, as: 'Truth' });
-    expect(goalCovered([beat(11, 'Truth: You must be Lala.', 'Lala: I want to know you.')], GUEST, p)?.beat).toBe(11);
+    expect(goalCovered([beat(11, 'Lala: "Truth! I want to get to know you."')], GUEST, p)).toMatchObject({ beat: 11, as: 'Truth' });
+    expect(goalCovered([beat(11, 'Truth: You must be Lala.', 'Lala: I want to get to know you.')], GUEST, p)?.beat).toBe(11);
     // An alias is a name like any other: the word, whole, is them.
-    expect(goalCovered([beat(11, 'Lala: "The truth is I want to know you."')], GUEST, p)).toMatchObject({ beat: 11, as: 'Truth' });
+    expect(goalCovered([beat(11, 'Lala: "The truth is I want to get to know you."')], GUEST, p)).toMatchObject({ beat: 11, as: 'Truth' });
   });
   test('an alias another of the event\'s people has, whole or as a first name, never counts', () => {
     const profiles = PROFILES.map((x) => (x.id === 11 ? { ...x, aliases: ['Truth'] } : x));
     const p = goalPerson(GUEST, EVENT, profiles);
     expect(p.names).not.toContain('truth');
     expect(p.shared).toContain('truth');
-    expect(goalCovered([beat(11, 'Truth: I want to know you.')], GUEST, p)).toBeNull();
+    expect(goalCovered([beat(11, 'Truth: I want to get to know you.')], GUEST, p)).toBeNull();
     const marcus = PROFILES.map((x) => (x.id === 11 ? { ...x, creator_name: 'Truth Okafor' } : x));
     expect(goalPerson(GUEST, EVENT, marcus).names).not.toContain('truth');
   });
@@ -97,8 +97,8 @@ describe('the brand goal', () => {
 describe('the line that covered it', () => {
   const p = () => goalPerson(GUEST, EVENT, PROFILES);
   test("the person's line, the one with most of the goal's words", () => {
-    const m = goalCovered([beat(11, 'Me: the gala is loud', 'Marcus Hale: You must be Lala.', 'Lala: "Marcus, I want to know you."')], GUEST, p());
-    expect(m).toEqual({ beat: 11, line: 'Lala: "Marcus, I want to know you."', as: 'Marcus' });
+    const m = goalCovered([beat(11, 'Me: the gala is loud', 'Marcus Hale: You must be Lala.', 'Lala: "Marcus, I want to get to know you."')], GUEST, p());
+    expect(m).toEqual({ beat: 11, line: 'Lala: "Marcus, I want to get to know you."', as: 'Marcus' });
   });
   test('as written: the line with the goal, and the name in it', () => {
     const m = goalCovered([beat(11, 'Me: hello', 'Lala: "I want to get to know Truthville."')], GUEST, p());
@@ -106,10 +106,10 @@ describe('the line that covered it', () => {
     expect(goalCovered([beat(11, 'Lala: "I want to get to know Truthville."')], GUEST, null)).toEqual({ beat: 11, line: 'Lala: "I want to get to know Truthville."', as: null });
   });
   test("scriptCoverage's goal item carries the line", () => {
-    const script = '## BEAT: 11 · Event Outcome\nMe: so loud\nTruth: I want to know you, Lala.';
+    const script = '## BEAT: 11 · Event Outcome\nMe: so loud\nTruth: I want to get to know you, Lala.';
     const { items } = scriptCoverage(script, { goals: [{ ...GUEST, person: p() }, { label: 'Get to know Dana' }] });
     const goals = items.filter((i) => i.kind === 'goal');
-    expect(goals[0]).toMatchObject({ beat: 11, line: 'Truth: I want to know you, Lala.' });
+    expect(goals[0]).toMatchObject({ beat: 11, line: 'Truth: I want to get to know you, Lala.' });
     expect(goals[1]).toMatchObject({ beat: null });
     expect(goals[1].line).toBeUndefined();
   });

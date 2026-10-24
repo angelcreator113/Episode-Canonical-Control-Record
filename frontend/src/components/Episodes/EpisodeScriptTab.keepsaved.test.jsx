@@ -207,7 +207,7 @@ describe('after the tab opened', () => {
     vi.mocked(api.post).mockImplementation((url) => (url.endsWith('/rewrite-line') ? rewrite.promise : new Promise(() => {})));
     vi.spyOn(window, 'confirm').mockReturnValue(true);
     renderTab();
-    fireEvent.click(within(screen.getByTestId('script-beat-1')).getByRole('button', { name: '✦ Rewrite' }));
+    fireEvent.click(within(screen.getByTestId('script-beat-1')).getByRole('button', { name: /^Rewrite line:/ }));
     fireEvent.click(screen.getByTestId('script-regenerate'));
     await act(async () => { rewrite.resolve({ data: { rewrittenLine: 'Hey, gorgeous.' } }); });
     expect(await screen.findByText(/A new script was written while the line was being rewritten/)).toBeTruthy();

@@ -101,16 +101,21 @@ describe('the Family section', () => {
     expect(api.post).toHaveBeenCalledWith('/api/v1/families/ties', expect.objectContaining({ ghost_name: 'Ruth', role: 'wife' }));
   });
 
-  test('Make them a character: one step, then a link to them', async () => {
+  test('Make them a character: the dialog (heritage to add or leave), then a link to them', async () => {
     vi.mocked(api.post).mockResolvedValue({ data: { ...READOUT, character: { id: 'bee', name: 'Aunt Bee' } } });
     show();
     fireEvent.click(await screen.findByRole('button', { name: 'Make Aunt Bee a character' }));
-    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/api/v1/families/make-character', { character_id: 'dre', member_id: 'm1' }));
+    const box = screen.getByRole('group', { name: 'Make Aunt Bee a character' });
+    // An aunt is not someone whose heritage follows from Dre's parents: no suggestion, nothing filled in.
+    expect(box.textContent).toContain('Add their heritage now, or leave it for later.');
+    fireEvent.click(within(box).getByRole('button', { name: 'Make them a character' }));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/api/v1/families/make-character', { character_id: 'dre', member_id: 'm1', heritage_tags: [], ethnicity: '' }));
     const done = await screen.findByText(/is a character now/);
     expect(within(done.closest('p')).getByRole('link', { name: 'Aunt Bee' }).getAttribute('href')).toBe('/character/bee');
 
     fireEvent.click(screen.getByRole('button', { name: 'Make Omar Coleman a character' }));
-    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/api/v1/families/make-character', { character_id: 'dre', tree_index: 0 }));
+    fireEvent.click(within(screen.getByRole('group', { name: 'Make Omar Coleman a character' })).getByRole('button', { name: 'Make them a character' }));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/api/v1/families/make-character', { character_id: 'dre', tree_index: 0, heritage_tags: [], ethnicity: '' }));
   });
 
   test('Import family, then the generated tree is gone', async () => {

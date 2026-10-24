@@ -43,7 +43,9 @@ test('Download .fountain saves the Fountain text under the episode title', async
   expect(text).toContain('# 1 · Opening Ritual\n\nLALA\nHi.');
   expect(text).toContain('Lala opens the Closet');
   expect(clicks).toEqual(['the-gala-part-1.fountain']);
-  await waitFor(() => expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:script'));
+  // Revoked a second later, for Safari (Script tab audit 6, 2026-10-24).
+  expect(URL.revokeObjectURL).not.toHaveBeenCalled();
+  await waitFor(() => expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:script'), { timeout: 3000 });
   click.mockRestore();
 });
 

@@ -22,7 +22,7 @@
  *   twistsForEpisode(sequelize, episodeId)           { plant: [...], payoff: [...] } for the episode's slot
  *   twistBlock(sequelize, episodeId)                 the episode's twists, as prompt text for the script writer; ''
  *   checkTwists(twists)                              what is wrong with the list
- *   markTwist(sequelize, episodeId, twistId, as)     the Script tab's "Mark planted" / "Mark paid off"
+ *   markTwist(sequelize, episodeId, twistId, as, { undo })  the Script tab's "Mark planted" / "Mark paid off" (and Undo)
  *   suggestTwists(sequelize, showId)                 3-5 drafts from the AI; nothing saved
  *
  * Twists, 2nd round (Evoni, 2026-10-23): the Script tab lists the twists
@@ -350,7 +350,7 @@ async function twistBlock(sequelize, episodeId) {
  * episode. Only on her click; nothing marks a twist on its own. Marking it
  * again does nothing; a paid-off twist is not set back to planted.
  */
-async function markTwist(sequelize, episodeId, twistId, as) {
+async function markTwist(sequelize, episodeId, twistId, as, { undo = false } = {}) {
   if (!UUID_RE.test(String(episodeId || ''))) throw new TwistError('episodeId must be a UUID');
   if (!UUID_RE.test(String(twistId || ''))) throw new TwistError('twistId must be a UUID');
   if (!['planted', 'paid_off'].includes(as)) throw new TwistError('Mark a twist planted or paid off.');
@@ -363,6 +363,7 @@ async function markTwist(sequelize, episodeId, twistId, as) {
     { replacements: { twistId, slotId: slot.id } });
   if (!twist) throw new TwistError('That twist is not due in this episode.', 404);
   if (twist.status === 'dropped') throw new TwistError('That twist is dropped; bring it back on the Season Plan first.', 409);
+  if (undo) return unmarkTwist(sequelize, episodeId, twist, slot, as);
   if (as === 'planted') {
     if (twist.plant_slot_id !== slot.id) throw new TwistError('This episode pays that twist off; it is planted in an earlier one.', 409);
     if (twist.status === 'planned') {
@@ -376,6 +377,34 @@ async function markTwist(sequelize, episodeId, twistId, as) {
       await sequelize.query(
         `UPDATE season_twists SET status = 'paid_off', paid_off_episode_id = :episodeId, updated_at = NOW() WHERE id = :twistId`,
         { replacements: { episodeId, twistId } });
+    }
+  }
+  return twistsForEpisode(sequelize, episodeId);
+}
+
+/**
+ * Undo for Mark planted / Mark paid off (Script tab audit 6, 2026-10-24): a
+ * mark made by mistake is taken back here. Planted goes back to planned (not
+ * while it is paid off: undo the payoff first); paid off goes back to
+ * planted when an episode planted it, else planned. Taking back a mark that
+ * is not there does nothing.
+ */
+async function unmarkTwist(sequelize, episodeId, twist, slot, as) {
+  if (as === 'planted') {
+    if (twist.plant_slot_id !== slot.id) throw new TwistError('This episode pays that twist off; it is planted in an earlier one.', 409);
+    if (twist.status === 'paid_off') throw new TwistError('That twist is paid off: undo the payoff first.', 409);
+    if (twist.status === 'planted') {
+      await sequelize.query(
+        `UPDATE season_twists SET status = 'planned', planted_episode_id = NULL, updated_at = NOW() WHERE id = :twistId`,
+        { replacements: { twistId: twist.id } });
+    }
+  } else {
+    if (twist.payoff_slot_id !== slot.id) throw new TwistError('This episode plants that twist; it is paid off in a later one.', 409);
+    if (twist.status === 'paid_off') {
+      await sequelize.query(
+        `UPDATE season_twists SET status = CASE WHEN planted_episode_id IS NULL THEN 'planned' ELSE 'planted' END,
+                paid_off_episode_id = NULL, updated_at = NOW() WHERE id = :twistId`,
+        { replacements: { twistId: twist.id } });
     }
   }
   return twistsForEpisode(sequelize, episodeId);

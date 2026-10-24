@@ -4,6 +4,11 @@
  *
  * On a phone (sheet) it is a bottom sheet: focus stays inside, Escape or
  * the close button closes it.
+ *
+ * seedMode (a seed's Confirm, 2026-10-24): the same editor, open from the
+ * start, with Confirm and Cancel in place of Save and Cancel; onConfirm gets
+ * the fields POST /confirm/:id takes. A seed has no story yet, so the parts
+ * only a confirmed pair has (who knows, mirror, echo) are edited after.
  */
 import { useState, useEffect, useRef, useId } from 'react';
 import { Heart } from 'lucide-react';
@@ -12,13 +17,15 @@ import {
   sideName, typeLabel, humanize, stageLabel, STAGE_TONE, isLoveInterest,
 } from './tokens';
 import { Btn, Field, Label, Input, Select, Pill, useFocusTrap } from './primitives';
+import { generationStep } from './familyTree';
 import StoryTimeline from './StoryTimeline';
 import WhoKnows from './WhoKnows';
 import './Inspector.css';
 
-// The family role is not in the form: it is edited on the Family tab (PUT
-// /:id/family), which keeps the role read the other way in step; the
-// Inspector shows it read-only.
+// A confirmed pair's family role is not saved from the form: it is edited
+// on the Family tab (PUT /:id/family), which keeps the role read the other
+// way in step; the Inspector shows it read-only. Only a seed's Confirm
+// sends it (seedMode).
 const formOf = rel => ({
   relationship_type:    rel.relationship_type || '',
   connection_mode:      rel.connection_mode || 'IRL',
@@ -35,10 +42,21 @@ const formOf = rel => ({
   target_knows:         rel.target_knows || '',
   reader_knows:         rel.reader_knows || '',
   is_romantic:          !!rel.is_romantic,
+  family_role:          rel.family_role || '',
 });
 
-export default function Inspector({ rel, charById = {}, onClose, onUpdate, onDelete, onSaved, sheet = false }) {
-  const [edit, setEdit] = useState(false);
+// What POST /confirm/:id takes (the seeds contract): the rest of the form
+// stays as the seed has it.
+export const SEED_FIELDS = ['relationship_type', 'connection_mode', 'status', 'tension_state', 'situation',
+  'pain_point_category', 'lala_connection', 'notes', 'is_romantic', 'family_role'];
+/**
+ * A family type: a role the server reads as "A is B's <type>" (familyTies;
+ * the tree's generationStep knows the same words), or "family" itself.
+ */
+export const isFamilyType = t => /^family$/i.test(String(t || '').trim()) || generationStep(t) !== null;
+
+export default function Inspector({ rel, charById = {}, onClose, onUpdate, onDelete, onSaved, sheet = false, seedMode = false, onConfirm, confirmBusy = false }) {
+  const [edit, setEdit] = useState(seedMode);
   const [confirming, setConfirming] = useState(false);
   const [f, setF] = useState(() => formOf(rel));
   const set = k => e => setF(p => ({ ...p, [k]: e.target.value }));
@@ -55,7 +73,7 @@ export default function Inspector({ rel, charById = {}, onClose, onUpdate, onDel
     if (shownId.current === rel.id) return;
     shownId.current = rel.id;
     setF(formOf(rel));
-    setEdit(false);
+    setEdit(seedMode);
     setConfirming(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rel.id]);
@@ -75,6 +93,15 @@ export default function Inspector({ rel, charById = {}, onClose, onUpdate, onDel
   // A value not in the list (written elsewhere) stays selectable as itself.
   const lalaOptions = LALA_CONN.some(o => o.v === f.lala_connection)
     ? LALA_CONN : [...LALA_CONN, { v: f.lala_connection, l: humanize(f.lala_connection) }];
+  // A seed's family role is its own to set while the type is a family type
+  // (the server saves it as a family tie); a confirmed pair's is edited on
+  // the Family tab, as before.
+  const seedFamily = seedMode && (isFamilyType(f.relationship_type) || (!!rel.family_role && isFamilyType(rel.relationship_type)));
+  const confirmFields = () => {
+    const out = Object.fromEntries(SEED_FIELDS.map(k => [k, f[k]]));
+    if (!seedFamily) delete out.family_role;
+    return out;
+  };
 
   return (
     <div ref={trapRef} className={`re-inspector ${sheet ? 'is-sheet' : ''}`}
@@ -100,6 +127,7 @@ export default function Inspector({ rel, charById = {}, onClose, onUpdate, onDel
           {secrecy && <Pill color={T.orchidDeep} bg={T.orchidFog}>{secrecy}</Pill>}
         </div>
         {rel.situation && <p className="re-inspector-situation">{rel.situation}</p>}
+        {seedMode && rel.seed_why && <p className="re-inspector-why"><span className="re-inspector-why-key">Why · </span>{rel.seed_why}</p>}
       </div>
 
       {/* body */}
@@ -129,9 +157,26 @@ export default function Inspector({ rel, charById = {}, onClose, onUpdate, onDel
             <Input id={idOf('pain_point_category')} value={f.pain_point_category} onChange={set('pain_point_category')} placeholder="identity, loyalty, trust…" />
             <Label htmlFor={idOf('situation')}>Situation</Label>
             <Input id={idOf('situation')} value={f.situation} onChange={set('situation')} multiline />
-            {familyWords && (
-              <Field label="Family Role" value={`${familyWords} (change it on the Family tab)`} />
+            {seedFamily ? (
+              <>
+                <Label htmlFor={idOf('family_role')}>Family Role ({nameA} is {nameB}&apos;s …)</Label>
+                <Input id={idOf('family_role')} value={f.family_role} onChange={set('family_role')} placeholder="aunt, sister, grandmother…" />
+              </>
+            ) : familyWords && (
+              <Field label="Family Role" value={seedMode ? familyWords : `${familyWords} (change it on the Family tab)`} />
             )}
+            {seedMode ? (
+              <>
+                <Label htmlFor={idOf('lala_connection')}>Lala Connection</Label>
+                <Select id={idOf('lala_connection')} value={f.lala_connection} onChange={set('lala_connection')}>
+                  {lalaOptions.map(o => <option key={o.v} value={o.v}>{o.l}</option>)}
+                </Select>
+                <Label htmlFor={idOf('notes')}>Notes</Label>
+                <Input id={idOf('notes')} value={f.notes} onChange={set('notes')} multiline />
+                <p className="re-inspector-seed-note">Who knows, the Lala mirror and the career echo can be edited once it is confirmed.</p>
+              </>
+            ) : (
+            <>
             <Label htmlFor={idOf('conflict_summary')}>Conflict Summary</Label>
             <Input id={idOf('conflict_summary')} value={f.conflict_summary} onChange={set('conflict_summary')} multiline />
             <hr className="re-inspector-divider" />
@@ -152,6 +197,8 @@ export default function Inspector({ rel, charById = {}, onClose, onUpdate, onDel
             </Select>
             <Label htmlFor={idOf('notes')}>Notes</Label>
             <Input id={idOf('notes')} value={f.notes} onChange={set('notes')} multiline />
+            </>
+            )}
           </>
         ) : (
           <>
@@ -180,10 +227,17 @@ export default function Inspector({ rel, charById = {}, onClose, onUpdate, onDel
 
       {/* footer */}
       <div className="re-inspector-footer">
-        {edit ? (
+        {seedMode ? (
+          <>
+            <Btn variant="primary" disabled={!f.relationship_type.trim() || confirmBusy}
+              onClick={() => onConfirm?.(confirmFields())}
+              className="re-inspector-save">{confirmBusy ? 'Confirming…' : 'Confirm'}</Btn>
+            <Btn variant="ghost" onClick={onClose}>Cancel</Btn>
+          </>
+        ) : edit ? (
           <>
             <Btn variant="primary" disabled={!f.relationship_type.trim()}
-              onClick={() => { onUpdate({ ...f }); setEdit(false); }}
+              onClick={() => { const { family_role: _role, ...fields } = f; onUpdate(fields); setEdit(false); }}
               className="re-inspector-save">Save</Btn>
             <Btn variant="ghost" onClick={() => setEdit(false)}>Cancel</Btn>
           </>

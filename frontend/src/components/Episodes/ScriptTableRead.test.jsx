@@ -46,7 +46,9 @@ describe('ScriptTableRead', () => {
     const text = dialog.textContent;
     expect(text).toContain('Okay besties.');
     expect(text).not.toContain('"Okay');
-    expect(text).toContain('Prime');
+    // Her line is JustAWoman's (Evoni, 2026-10-24).
+    expect(text).toContain('JustAWoman');
+    expect(text).not.toContain('Prime');
     expect(text).toContain('She smiles.');
     expect(within(dialog).getByTestId('table-read-moment').textContent).toContain('Lala opens the Closet');
     expect(text).not.toMatch(/STAT|WEAR|EVENT:|velour|TRANSITION|cut to|CUT TO|\[UI:/);
@@ -59,6 +61,15 @@ describe('ScriptTableRead', () => {
     render(<ScriptTableRead scriptText={SCRIPT} onClose={() => {}} />);
     const lala = screen.getAllByText('Lala')[0];
     expect(lala.style.getPropertyValue('--str-speaker')).toBe('var(--accent-dark)');
+  });
+
+  // Evoni, 2026-10-24: Me, Prime, JustAWoman and JAWIHP are JustAWoman, in one colour.
+  test('all her names read as JustAWoman, in one colour; lower-case labels are speakers', () => {
+    expect(new Set(['Me', 'Prime', 'JustAWoman', 'jawihp', 'JAWIHP'].map(speakerColor)).size).toBe(1);
+    render(<ScriptTableRead scriptText={['## BEAT: 1 · Opening Ritual', 'Me: one', 'prime: two', 'JAWIHP: three', 'lala: four', 'Marcus: five', 'marcus: six', 'then: the lights go out'].join('\n')} onClose={() => {}} />);
+    const names = screen.getAllByTestId('table-read-dialogue').map((d) => d.querySelector('.str-speaker').textContent);
+    expect(names).toEqual(['JustAWoman', 'JustAWoman', 'JustAWoman', 'Lala', 'Marcus', 'Marcus']);
+    expect(screen.getByRole('dialog').textContent).toContain('then: the lights go out');
   });
 
   test('focus moves in on open, Escape closes, and focus goes back to the opener', () => {

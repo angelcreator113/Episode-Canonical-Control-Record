@@ -48,7 +48,7 @@
  * POST   /world/:showId/season/twists/:twistId/restore — Undo a delete
  * POST   /world/:showId/season/twists/suggest — 3-5 drafted twists from the AI (one call); nothing saved
  * GET    /episodes/:episodeId/season-twists — The twists this episode plants and pays off (the Script tab)
- * POST   /episodes/:episodeId/season-twists/:twistId/mark — { as: planted|paid_off }: Evoni marks it done here
+ * POST   /episodes/:episodeId/season-twists/:twistId/mark — { as: planted|paid_off, undo? }: Evoni marks it done here, or takes the mark back
  *
  * Extend (lengthen the current phase, pushing the season past 24) is removed:
  * "Remove Extend; phase boundaries can shift within the 24, only across slots
@@ -625,7 +625,8 @@ router.post('/episodes/:episodeId/season-twists/:twistId/mark', requireAuth, asy
   try {
     const models = require('../models');
     const { markTwist } = require('../services/seasonTwists');
-    const result = await markTwist(models.sequelize, req.params.episodeId, req.params.twistId, req.body?.as);
+    // { undo: true } takes the mark back (Script tab audit 6, 2026-10-24).
+    const result = await markTwist(models.sequelize, req.params.episodeId, req.params.twistId, req.body?.as, { undo: req.body?.undo === true });
     return res.json({ success: true, ...result });
   } catch (err) {
     return sendTwistError(res, err, 'mark twist');
