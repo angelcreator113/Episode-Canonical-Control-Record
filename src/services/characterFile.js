@@ -101,7 +101,9 @@ async function loadCharacterFile(db, { character = null, feedProfile } = {}) {
     file.relationships = await part('the relationships', async () => {
       const [rows] = await db.sequelize.query(
         `SELECT CASE WHEN cr.character_id_a = :id THEN rb.display_name ELSE ra.display_name END AS person,
-                cr.relationship_type AS kind, cr.status, cr.family_role, cr.is_romantic, st.relationship_stage AS stage,
+                cr.relationship_type AS kind, cr.status,
+                cr.character_id_a, cr.character_id_b, cr.family_role, cr.reverse_family_role, cr.is_romantic,
+                rb.gender AS b_gender, st.relationship_stage AS stage,
                 CASE WHEN cr.character_id_a = :id THEN cr.source_knows ELSE cr.target_knows END AS knows
            FROM character_relationships cr
            JOIN registry_characters ra ON ra.id = cr.character_id_a AND ra.deleted_at IS NULL
@@ -114,11 +116,14 @@ async function loadCharacterFile(db, { character = null, feedProfile } = {}) {
           WHERE cr.confirmed = true AND cr.deleted_at IS NULL AND (cr.character_id_a = :id OR cr.character_id_b = :id)
           ORDER BY cr.created_at ASC
           LIMIT ${MAX_RELATIONSHIPS}`, { replacements: { id: c.id } });
-      // The story pair is the truth (services/relationshipTruth): its family
-      // role over its kind, "love interest" when it is a romance, and the
-      // stage its newest event left it at.
+      // The story pair is the truth (services/relationshipTruth): family
+      // reads as their role ("sister", services/familyTies) over the row's
+      // kind, "love interest" when it is a romance, and the stage its newest
+      // event left it at.
+      const { familyRoleFor } = require('./familyTies');
+      const familyKind = (r) => (r.is_romantic ? null : familyRoleFor(r, String(r.character_id_a) === String(c.id) ? r.character_id_b : r.character_id_a));
       return rows.map((r) => ({
-        person: r.person || 'someone', kind: r.family_role || r.kind || null, status: r.status || null,
+        person: r.person || 'someone', kind: familyKind(r) || r.kind || null, status: r.status || null,
         love_interest: Boolean(r.is_romantic), stage: r.stage || null, knows: clip(r.knows, 200) || null,
       }));
     }, []);

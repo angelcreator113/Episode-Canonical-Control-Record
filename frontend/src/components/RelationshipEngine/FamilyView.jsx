@@ -6,17 +6,22 @@
  * it shows the same people as every other tab. A romantic relationship is
  * never family: it is listed apart, and its "edit" is not offered (the
  * 2026-10-23 audit found the edit writing "mother" onto a love interest).
+ * Above the ties, the family tree (FamilyTree: the named families and the
+ * ties, generations top to bottom; Evoni, 2026-10-23).
  */
 import { useState } from 'react';
 import { Heart } from 'lucide-react';
-import { T, cname, sideName, typeLabel, isFamily, isLoveInterest } from './tokens';
+import { T, cname, sideName, typeLabel, isLoveInterest } from './tokens';
 import { Btn } from './primitives';
+import FamilyTree, { useFamilies } from './FamilyTree';
+import { isFamilyTie, isDashed } from './familyTree';
 
 export default function FamilyView({ chars = [], rels = [], charById = {}, genning, onGenerate, onUpdateRole, onRelClick }) {
   const [editId, setEditId]     = useState(null);
   const [editRole, setEditRole] = useState('');
 
-  const family = rels.filter(isFamily);
+  const families = useFamilies();
+  const family = rels.filter(isFamilyTie);
   const romantic = rels.filter(isLoveInterest);
   const connIds = new Set();
   family.forEach(b => { connIds.add(b.character_id_a); connIds.add(b.character_id_b); });
@@ -27,11 +32,12 @@ export default function FamilyView({ chars = [], rels = [], charById = {}, genni
     setEditId(null);
   };
 
-  const bondColor = b => (b.is_blood_relation ? T.orchid : T.steel);
+  const bondColor = b => (isDashed(b.family_kind) || (!b.family_kind && !b.is_blood_relation) ? T.steel : T.orchid);
 
   return (
     <div className="re-family" aria-label="Family bonds">
-      {family.length === 0 ? (
+      <FamilyTree rels={family} charById={charById} families={families} onRelClick={onRelClick} />
+      {family.length === 0 && families.length === 0 ? (
         <div className="re-empty" role="status">
           <div className="re-empty-icon">⬡</div>
           <div className="re-empty-title">No Family Bonds Yet</div>
@@ -42,17 +48,18 @@ export default function FamilyView({ chars = [], rels = [], charById = {}, genni
             {genning ? 'Generating…' : '⬡ Propose Family'}
           </Btn>
         </div>
-      ) : (
+      ) : family.length === 0 ? null : (
         <>
+          <div className="re-label">Family ties · {family.length}</div>
           <div className="re-family-legend">
-            {[[T.orchid, 'Blood'], [T.steel, 'Step/Other']].map(([c, l]) => (
+            {[[T.orchid, 'Blood, adoptive, married in'], [T.steel, 'Step, chosen, not known']].map(([c, l]) => (
               <span key={l} className="re-family-legend-item">
                 <span className="re-family-legend-dot" style={{ background: c }} />
                 {l}
               </span>
             ))}
           </div>
-          <div className="re-family-list" role="list">
+          <div className="re-family-list" role="list" aria-label="Family ties">
             {family.map(b => {
               const col = bondColor(b);
               const nA = sideName(b, 'a', charById);
@@ -85,7 +92,7 @@ export default function FamilyView({ chars = [], rels = [], charById = {}, genni
                       ) : (
                         <>
                           <span className="re-family-card-role" style={{ color: col }}>
-                            {b.family_role || typeLabel(b)}
+                            {b.family_role || typeLabel(b)}{b.family_kind ? ` · ${b.family_kind}` : ''}
                           </span>
                           <button className="re-family-card-edit-btn"
                             aria-label={`Edit role for ${nA} and ${nB}`}

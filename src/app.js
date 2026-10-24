@@ -1335,6 +1335,15 @@ try {
   console.error('✗ Failed to load Relationship Map routes:', e.message);
 }
 
+// Family: named families and family ties (Evoni, 2026-10-23)
+try {
+  const familyRoutes = require('./routes/families');
+  app.use('/api/v1/families', familyRoutes);
+  console.log('✓ Family routes loaded at /api/v1/families');
+} catch (e) {
+  console.error('✗ Failed to load Family routes:', e.message);
+}
+
 // Character Generator routes (batch seed → generate → commit)
 try {
   const characterGeneratorRoutes = require('./routes/characterGenerator');

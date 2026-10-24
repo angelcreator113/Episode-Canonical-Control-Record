@@ -174,7 +174,7 @@ describe('loading', () => {
 describe('Family and Seeds', () => {
   test('Family lists family only; a love interest sits apart with no family edit', async () => {
     renderAt('/relationships?tab=family');
-    const list = await screen.findByRole('list');
+    const list = await screen.findByRole('list', { name: 'Family ties' });
     expect(within(list).getByText('brother')).toBeTruthy();
     expect(within(list).queryByText('Marcus Hale')).toBeNull();
     const romance = screen.getByLabelText('Love interests and partners');

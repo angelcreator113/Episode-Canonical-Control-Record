@@ -36,6 +36,12 @@ module.exports = (sequelize) => {
     family_role:            { type: DataTypes.STRING(120), allowNull: true, defaultValue: null },
     // is_blood_relation: true = biological family. false = found family, step, or chosen.
     is_blood_relation:      { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
+    // family_kind: blood | step | adoptive | married | chosen (migration 20261024000000);
+    //   written with is_blood_relation (blood ⇔ true). reverse_family_role reads
+    //   "B is A's <role>" as family_role reads "A is B's" (services/familyTies).
+    family_kind:            { type: DataTypes.STRING(20), allowNull: true, defaultValue: null,
+      validate: { isIn: [['blood', 'step', 'adoptive', 'married', 'chosen']] } },
+    reverse_family_role:    { type: DataTypes.STRING(120), allowNull: true, defaultValue: null },
     // is_romantic: Explicit romantic flag — enables filtering independent of relationship_type label.
     is_romantic:            { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
     // conflict_summary: The conflict between character A and character B — independent of Lala.
