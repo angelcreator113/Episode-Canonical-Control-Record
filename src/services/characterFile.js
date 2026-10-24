@@ -100,10 +100,12 @@ async function loadCharacterFile(db, { character = null, feedProfile } = {}) {
   if (c?.id) {
     file.relationships = await part('the relationships', async () => {
       const [rows] = await db.sequelize.query(
-        `SELECT CASE WHEN cr.character_id_a = :id THEN rb.display_name ELSE ra.display_name END AS person,
+        // Their chosen name, as everywhere else; display_name is often the feed handle.
+        `SELECT CASE WHEN cr.character_id_a = :id THEN COALESCE(NULLIF(rb.selected_name, ''), rb.display_name)
+                     ELSE COALESCE(NULLIF(ra.selected_name, ''), ra.display_name) END AS person,
                 cr.relationship_type AS kind, cr.status,
                 cr.character_id_a, cr.character_id_b, cr.family_role, cr.reverse_family_role, cr.is_romantic,
-                rb.gender AS b_gender, st.relationship_stage AS stage,
+                rb.gender AS b_gender, rb.pronouns AS b_pronouns, st.relationship_stage AS stage,
                 CASE WHEN cr.character_id_a = :id THEN cr.source_knows ELSE cr.target_knows END AS knows
            FROM character_relationships cr
            JOIN registry_characters ra ON ra.id = cr.character_id_a AND ra.deleted_at IS NULL

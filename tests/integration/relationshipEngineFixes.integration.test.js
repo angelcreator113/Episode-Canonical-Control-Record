@@ -55,7 +55,9 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     await run('DELETE FROM character_registries WHERE id = :reg', ids);
   });
 
-  test('PUT writes the Inspector\'s family role, conflict and knows fields; empty clears, absent keeps', async () => {
+  // The family role is the Family tab's (PUT /:id/family keeps the role read
+  // the other way in step); PUT /:id leaves it as it is (2026-10-24 audit).
+  test('PUT writes the Inspector\'s conflict and knows fields, not the family role; empty clears, absent keeps', async () => {
     const res = await as(request(app).put(`/api/v1/relationships/${ids.rel}`)).send({
       relationship_type: 'sisters', notes: 'close until the wedding',
       family_role: 'older sister', conflict_summary: 'the inheritance',
@@ -63,7 +65,7 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     });
     expect(res.status).toBe(200);
     expect(res.body.relationship).toMatchObject({
-      family_role: 'older sister', conflict_summary: 'the inheritance',
+      family_role: 'sister', conflict_summary: 'the inheritance',
       source_knows: null, target_knows: 'that Ana read the will', reader_knows: 'both are lying',
       notes: 'close until the wedding',
     });
@@ -71,7 +73,7 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     // A PUT without them (the older callers) leaves them as they are.
     await as(request(app).put(`/api/v1/relationships/${ids.rel}`)).send({ tension_state: 'simmering' });
     expect(await rowOf(ids.rel)).toMatchObject({
-      tension_state: 'simmering', family_role: 'older sister', target_knows: 'that Ana read the will', reader_knows: 'both are lying',
+      tension_state: 'simmering', family_role: 'sister', target_knows: 'that Ana read the will', reader_knows: 'both are lying',
     });
     expect((await request(app).put(`/api/v1/relationships/${ids.rel}`).send({ notes: 'x' })).status).toBe(401);
   });

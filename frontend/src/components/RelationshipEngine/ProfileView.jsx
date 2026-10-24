@@ -54,7 +54,7 @@ function Card({ icon: Icon, title, action, onAction, children, className = '' })
 }
 
 export default function ProfileView({
-  char, chars, rels, cands,
+  char, chars, rels, cands, lalaId = null,
   onSelectChar, onRelClick, onAdd, onGenerate, onExport, onTab,
 }) {
   const charById = useMemo(() => {
@@ -119,7 +119,12 @@ export default function ProfileView({
   // Lala is the show's Protagonist whatever her stored role (lib/theCast.js).
   const isLala = findLala([char]) === char;
   const roleType = isLala ? 'protagonist' : char.role_type;
-  const lalaRel = mine.find(r => r.lala_connection && r.lala_connection !== 'none');
+  // Their pair with Lala says how they stand with her; a pair with anyone
+  // else says nothing about it (it used to take the first one it found).
+  const lalaChar = lalaId ? charById[lalaId] || { id: lalaId } : findLala(chars);
+  const lalaRel = lalaChar
+    ? mine.find(r => (r.character_id_a === lalaChar.id || r.character_id_b === lalaChar.id) && r.lala_connection && r.lala_connection !== 'none')
+    : null;
   const lalaLabel = lalaRel ? LALA_CONN.find(l => l.v === lalaRel.lala_connection)?.l : null;
   const statusWord = stats.closeness == null ? 'No tension recorded'
     : stats.closeness >= 67 ? 'Close' : stats.closeness >= 34 ? 'Neutral' : 'Strained';

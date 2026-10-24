@@ -52,4 +52,30 @@ describe('Inspector', () => {
     expect(screen.queryByDisplayValue('Situation r2')).toBeNull();
     expect(screen.getByRole('button', { name: 'Edit' })).toBeTruthy();
   });
+
+  // 2026-10-24 audit: the form kept what it had when the Inspector opened,
+  // and Save put back a family role the Family tab had changed since.
+  test('Edit starts from the relationship as it is now', () => {
+    const { rerender } = render(<Inspector rel={rel('r1', 'jade', { family_role: 'mother' })} {...props} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    // The Family tab changed it; the same relationship comes back changed.
+    rerender(<Inspector rel={rel('r1', 'jade', { family_role: 'aunt', situation: 'Changed on the Family tab' })} {...props} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    expect(screen.getByDisplayValue('Changed on the Family tab')).toBeTruthy();
+  });
+
+  test('the family role is read-only here and never sent with Save', () => {
+    const onUpdate = vi.fn();
+    render(<Inspector rel={rel('r1', 'jade', { family_role: 'aunt' })} {...props} onUpdate={onUpdate} />);
+    expect(screen.getByText('Lala is Jade Monroe\'s aunt')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    expect(screen.queryByDisplayValue('aunt')).toBeNull();
+    expect(screen.queryByPlaceholderText('mother, brother…')).toBeNull();
+    expect(screen.getByText('Lala is Jade Monroe\'s aunt (change it on the Family tab)')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect(onUpdate).toHaveBeenCalledTimes(1);
+    expect(onUpdate.mock.calls[0][0]).not.toHaveProperty('family_role');
+    expect(onUpdate.mock.calls[0][0]).toMatchObject({ situation: 'Situation r1', is_romantic: false });
+  });
 });

@@ -15,6 +15,9 @@ import { Btn, Field, Label, Input, Select, Pill, useFocusTrap } from './primitiv
 import StoryTimeline from './StoryTimeline';
 import WhoKnows from './WhoKnows';
 
+// The family role is not in the form: it is edited on the Family tab (PUT
+// /:id/family), which keeps the role read the other way in step; the
+// Inspector shows it read-only.
 const formOf = rel => ({
   relationship_type:    rel.relationship_type || '',
   connection_mode:      rel.connection_mode || 'IRL',
@@ -26,7 +29,6 @@ const formOf = rel => ({
   lala_mirror:          rel.lala_mirror || '',
   career_echo_potential: rel.career_echo_potential || '',
   notes:                rel.notes || '',
-  family_role:          rel.family_role || '',
   conflict_summary:     rel.conflict_summary || '',
   source_knows:         rel.source_knows || '',
   target_knows:         rel.target_knows || '',
@@ -58,6 +60,11 @@ export default function Inspector({ rel, charById = {}, onClose, onUpdate, onDel
   const nameB = sideName(rel, 'b', charById);
   const lalaConn = LALA_CONN.find(o => o.v === rel.lala_connection);
   const tc = rel.tension_state && TENSION[rel.tension_state];
+  // "Jade Monroe is Dre Coleman's aunt": family_role reads from A's side.
+  const familyWords = rel.family_role ? `${nameA} is ${nameB}'s ${rel.family_role}` : null;
+  // Edit starts from the relationship as it is now (the Family tab or a
+  // save may have changed it since the Inspector opened).
+  const startEdit = () => { setF(formOf(rel)); setEdit(true); };
   const romantic = isLoveInterest(rel);
   // A value not in the list (written elsewhere) stays selectable as itself.
   const lalaOptions = LALA_CONN.some(o => o.v === f.lala_connection)
@@ -116,11 +123,8 @@ export default function Inspector({ rel, charById = {}, onClose, onUpdate, onDel
             <Input value={f.pain_point_category} onChange={set('pain_point_category')} placeholder="identity, loyalty, trust…" />
             <Label>Situation</Label>
             <Input value={f.situation} onChange={set('situation')} multiline />
-            {!f.is_romantic && (
-              <>
-                <Label>Family Role</Label>
-                <Input value={f.family_role} onChange={set('family_role')} placeholder="mother, brother…" />
-              </>
+            {familyWords && (
+              <Field label="Family Role" value={`${familyWords} (change it on the Family tab)`} />
             )}
             <Label>Conflict Summary</Label>
             <Input value={f.conflict_summary} onChange={set('conflict_summary')} multiline />
@@ -155,7 +159,7 @@ export default function Inspector({ rel, charById = {}, onClose, onUpdate, onDel
             <Field label="With Lala" value={rel.lala_connection && rel.lala_connection !== 'none' ? (lalaConn?.l || humanize(rel.lala_connection)) : null} />
             <Field label="Pain Point" value={rel.pain_point_category} />
             <Field label="Situation" value={rel.situation} />
-            <Field label="Family Role" value={rel.family_role} />
+            <Field label="Family Role" value={familyWords} />
             <Field label="Conflict" value={rel.conflict_summary} />
             {(rel.source_knows || rel.target_knows || rel.reader_knows) && <hr className="re-inspector-divider-light" />}
             <Field label={`${nameA} knows`} value={rel.source_knows} />
@@ -174,7 +178,7 @@ export default function Inspector({ rel, charById = {}, onClose, onUpdate, onDel
         {edit ? (
           <>
             <Btn variant="primary" disabled={!f.relationship_type.trim()}
-              onClick={() => { onUpdate({ ...f, family_role: f.is_romantic ? rel.family_role || '' : f.family_role }); setEdit(false); }}
+              onClick={() => { onUpdate({ ...f }); setEdit(false); }}
               className="re-inspector-save">Save</Btn>
             <Btn variant="ghost" onClick={() => setEdit(false)}>Cancel</Btn>
           </>
@@ -188,7 +192,7 @@ export default function Inspector({ rel, charById = {}, onClose, onUpdate, onDel
           </div>
         ) : (
           <>
-            <Btn variant="outline" onClick={() => setEdit(true)} className="re-inspector-edit">Edit</Btn>
+            <Btn variant="outline" onClick={startEdit} className="re-inspector-edit">Edit</Btn>
             <Btn variant="rose" onClick={() => setConfirming(true)} aria-label="Delete this relationship">Delete</Btn>
           </>
         )}

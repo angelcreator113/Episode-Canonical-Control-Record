@@ -249,7 +249,9 @@ const familyWords = (t) => (t.family_role ? `${t.a_name} is ${t.b_name}'s ${t.fa
  * The tie's link on The Pulse: when both people have Pulse profiles
  * (registry_characters.feed_profile_id), their social_profile_relationships
  * row of kind 'family' is found (either way round) or made, its description
- * the tie in words (kept when someone already wrote one). Returns
+ * the tie in words (kept when someone already wrote one), and linked to the
+ * tie (character_relationship_id, when it is not linked to another story
+ * pair) so the drift report knows whose it is. Returns
  * { id, created } or null when either has no profile. Kept apart from
  * saveFamilyTie so the one-relationship-truth work can call or merge it.
  */
@@ -271,18 +273,21 @@ async function linkPulseFamily(sequelize, relId) {
       LIMIT 1`,
     { replacements: { a: t.a_profile, b: t.b_profile }, type: SELECT(sequelize) });
   if (found) {
-    if (!found.description || !String(found.description).trim()) {
-      await sequelize.query('UPDATE social_profile_relationships SET description = :description, updated_at = NOW() WHERE id = :id',
-        { replacements: { id: found.id, description } });
-    }
+    await sequelize.query(
+      `UPDATE social_profile_relationships SET
+          description = CASE WHEN description IS NULL OR BTRIM(description) = '' THEN :description ELSE description END,
+          character_relationship_id = COALESCE(character_relationship_id, :rel), updated_at = NOW()
+        WHERE id = :id`,
+      { replacements: { id: found.id, description, rel: t.id } });
     return { id: found.id, created: false };
   }
   const [row] = await sequelize.query(
-    `INSERT INTO social_profile_relationships (source_profile_id, target_profile_id, relationship_type, direction, description, auto_generated, created_at, updated_at)
-     VALUES (:a, :b, 'family', 'mutual', :description, false, NOW(), NOW())
+    `INSERT INTO social_profile_relationships (source_profile_id, target_profile_id, relationship_type, direction, description, auto_generated,
+        character_relationship_id, created_at, updated_at)
+     VALUES (:a, :b, 'family', 'mutual', :description, false, :rel, NOW(), NOW())
      ON CONFLICT (source_profile_id, target_profile_id, relationship_type) DO UPDATE SET updated_at = NOW()
      RETURNING id`,
-    { replacements: { a: t.a_profile, b: t.b_profile, description }, type: SELECT(sequelize) });
+    { replacements: { a: t.a_profile, b: t.b_profile, description, rel: t.id }, type: SELECT(sequelize) });
   return { id: row.id, created: true };
 }
 
