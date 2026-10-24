@@ -255,7 +255,7 @@ describe('Teleprompter reader: read & record', () => {
     expect(screen.getByTestId('stp-review-video').getAttribute('src')).toBe('blob:take');
     expect(review.textContent).toContain('Beat 8 · Transformation Loop · take 2');
     fireEvent.click(screen.getByTestId('stp-save'));
-    await waitFor(() => expect(api.patch).toHaveBeenCalledWith('/api/v1/episode-clips/ep-1/clip-new', { beat_number: 8 }));
+    await waitFor(() => expect(api.patch).toHaveBeenCalledWith('/api/v1/episode-clips/ep-1/clip-new', { beat_number: 8 }, { keepSession: true }));
     const [url, form] = vi.mocked(api.post).mock.calls[0];
     expect(url).toBe('/api/v1/episode-clips/ep-1');
     expect(form.get('performer')).toBe('justawoman');

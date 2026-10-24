@@ -88,6 +88,67 @@ describe('POST /:episodeId (upload)', () => {
   });
 });
 
+describe('POST /:episodeId with a teleprompter take\'s fields (Teleprompter audit 8, 9, 14)', () => {
+  test('beat_number goes in the INSERT; start_line and beat_marks are kept and reported as stored', async () => {
+    const base = mockQuery.getMockImplementation();
+    mockQuery.mockImplementation(async (sql, opts) => {
+      if (/^\s*UPDATE episode_raw_clips SET (start_line|beat_marks)/.test(sql)) return [[{ id: opts.replacements.clipId, beat_number: 3, start_line: 2, is_favorite: false, has_take_fields: true }]];
+      return base(sql, opts);
+    });
+    const res = await request(app).post('/api/v1/episode-clips/ep-1')
+      .field('performer', 'justawoman').field('label', 'Beat 3 · take 1').field('beat_number', '3').field('start_line', '2')
+      .field('beat_marks', JSON.stringify([{ beat: 3, t: 0 }])).field('seconds', '41.2')
+      .attach('video', VIDEO, { filename: 'beat-3-take-1.mp4', contentType: 'video/mp4' });
+    expect(res.status).toBe(201);
+    expect(res.body.stored).toEqual(['start_line', 'beat_marks']);
+    expect(res.body.not_stored).toEqual([]);
+    const insert = mockQuery.mock.calls.find(([sql]) => /INSERT INTO episode_raw_clips/.test(sql))[1].replacements;
+    expect(insert).toMatchObject({ beatNumber: 3, duration: 12.5 });
+    const updates = mockQuery.mock.calls.filter(([sql]) => /^\s*UPDATE episode_raw_clips SET (start_line|beat_marks)/.test(sql));
+    expect(updates).toHaveLength(2);
+    expect(res.body.data).toMatchObject({ performer: 'justawoman', start_line: 2, beat_number: 3 });
+  });
+
+  test('before the migrations the clip is still saved and the fields are reported not_stored', async () => {
+    const spy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    const base = mockQuery.getMockImplementation();
+    mockQuery.mockImplementation(async (sql, opts) => {
+      if (/^\s*UPDATE episode_raw_clips SET start_line/.test(sql)) throw Object.assign(new Error('column "start_line" of relation "episode_raw_clips" does not exist'), { original: { code: '42703' } });
+      if (/^\s*UPDATE episode_raw_clips SET beat_marks/.test(sql)) throw Object.assign(new Error('column "beat_marks" of relation "episode_raw_clips" does not exist'), { original: { code: '42703' } });
+      return base(sql, opts);
+    });
+    const res = await request(app).post('/api/v1/episode-clips/ep-1')
+      .field('performer', 'justawoman').field('start_line', '0').field('beat_marks', '[{"beat":1,"t":0}]')
+      .attach('video', VIDEO, { filename: 'full.webm', contentType: 'video/webm' });
+    expect(res.status).toBe(201);
+    expect(res.body).toMatchObject({ success: true, stored: [], not_stored: ['start_line', 'beat_marks'] });
+    spy.mockRestore();
+  });
+
+  test('a bad beat field is a 400 by the PATCH rules, and the refusal is logged at warn', async () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    const res = await request(app).post('/api/v1/episode-clips/ep-1')
+      .field('performer', 'lala').field('beat_number', '15')
+      .attach('video', VIDEO, { filename: 'a.mp4', contentType: 'video/mp4' });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/beat_number must be/);
+    expect(warn).toHaveBeenCalledWith(expect.stringMatching(/upload refused \(400\)/), expect.stringMatching(/beat_number/));
+    expect(mockQuery.mock.calls.some(([sql]) => /INSERT INTO episode_raw_clips/.test(sql))).toBe(false);
+    warn.mockRestore();
+  });
+
+  test('when ffprobe has no length, the take\'s own seconds are kept', async () => {
+    media.inspect.mockResolvedValueOnce({ duration_seconds: null, width: 1280, height: 720, thumbPath: null });
+    const res = await request(app).post('/api/v1/episode-clips/ep-1')
+      .field('performer', 'justawoman').field('seconds', '63.5')
+      .attach('video', VIDEO, { filename: 'take.webm', contentType: 'video/webm' });
+    expect(res.status).toBe(201);
+    const insert = mockQuery.mock.calls.find(([sql]) => /INSERT INTO episode_raw_clips/.test(sql))[1].replacements;
+    expect(insert.duration).toBe(63.5);
+    expect(res.body).toMatchObject({ stored: [], not_stored: [] });
+  });
+});
+
 describe('POST /:episodeId/:clipId/remove-green', () => {
   test('queues green removal at the strength asked', async () => {
     const res = await request(app).post('/api/v1/episode-clips/ep-1/c1/remove-green').send({ strength: 'high' });

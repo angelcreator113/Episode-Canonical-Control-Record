@@ -61,6 +61,37 @@ apiClient.interceptors.request.use(
 // contract (Task #1902). Re-exported here for callers of this module.
 export { refreshAccessTokenOnce, wipeSessionAndRedirect };
 
+// keepSession (a request's own opt-out; Teleprompter audit 5, 2026-10-24):
+// a caller holding something that exists only in this tab (an unsaved
+// teleprompter take) sends `keepSession: true` in the request config. Its
+// 401s never wipe the session or leave for /login: an AUTH_INVALID_TOKEN
+// still tries the one refresh, and a request with a file in it is not sent
+// again by itself (a 500 MB take is not uploaded twice); the error comes back
+// marked `sessionExpired` (the sign-in is over: sign in in another tab, then
+// retry) or `authRefreshed` (it was renewed: retry now). Every other request
+// keeps the contract above unchanged.
+const keepsSession = (config) => !!config?.keepSession;
+const hasFile = (config) => typeof FormData !== 'undefined' && config?.data instanceof FormData;
+const markAuth = (error, flags) => Object.assign(error, flags);
+
+async function keepSessionOn401(error, code) {
+  const originalConfig = error.config;
+  console.warn('apiClient: sign-in refused on a keepSession request; staying on this page', code || 'no code');
+  if (code !== 'AUTH_INVALID_TOKEN' || originalConfig._retried || String(originalConfig.url || '').includes('/api/v1/auth/refresh')) {
+    return Promise.reject(markAuth(error, { sessionExpired: true }));
+  }
+  try {
+    await refreshAccessTokenOnce();
+  } catch (refreshError) {
+    console.warn('apiClient: refresh failed on a keepSession request', refreshError?.status ?? null);
+    if (refreshEndsSession(refreshError)) return Promise.reject(markAuth(error, { sessionExpired: true }));
+    return Promise.reject(refreshError.cause || refreshError);
+  }
+  if (hasFile(originalConfig)) return Promise.reject(markAuth(error, { authRefreshed: true }));
+  originalConfig._retried = true;
+  return apiClient(originalConfig);
+}
+
 apiClient.interceptors.response.use(
   (response) => response,
   async (error) => {
@@ -71,6 +102,10 @@ apiClient.interceptors.response.use(
     // LOCKED pass-through — permission/format failures never trigger session-redirect.
     if (code && PASS_THROUGH_CODES.has(code)) {
       return Promise.reject(error);
+    }
+
+    if (status === 401 && keepsSession(originalConfig)) {
+      return keepSessionOn401(error, code);
     }
 
     if (status === 401 && code === 'AUTH_INVALID_TOKEN') {

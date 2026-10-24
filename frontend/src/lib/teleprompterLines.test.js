@@ -18,8 +18,8 @@ describe('teleprompterLines', () => {
   });
   test('names, types and messages', () => {
     expect(takeName({ number: 8, name: 'Transformation Loop' }, 2)).toBe('Beat 8 · Transformation Loop · take 2');
-    expect(pickRecordType({ isTypeSupported: (t) => t !== 'video/mp4' })).toBe('video/webm;codecs=vp9,opus');
-    expect(pickRecordType({ isTypeSupported: () => true })).toBe('video/mp4');
+    expect(pickRecordType({ isTypeSupported: (t) => !t.startsWith('video/mp4') })).toBe('video/webm;codecs=vp9,opus');
+    expect(pickRecordType({ isTypeSupported: () => true })).toBe('video/mp4;codecs=avc1.42E01E,mp4a.40.2');
     expect(pickRecordType(undefined)).toBe('');
     expect(recordingProblem({ isSecureContext: false })).toMatch(/secure/);
     expect(recordingProblem({ isSecureContext: true, navigator: {} })).toMatch(/camera/);

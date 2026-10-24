@@ -177,7 +177,7 @@ describe('Pick up from a line', () => {
     // Two takes of beat 8 by her already, so this is take 3.
     expect(review.textContent).toContain('Beat 8 · Transformation Loop · take 3 · from line 4');
     fireEvent.click(screen.getByTestId('stp-save'));
-    await waitFor(() => expect(api.patch).toHaveBeenCalledWith('/api/v1/episode-clips/ep-1/clip-new', { beat_number: 8, start_line: 3 }));
+    await waitFor(() => expect(api.patch).toHaveBeenCalledWith('/api/v1/episode-clips/ep-1/clip-new', { beat_number: 8, start_line: 3 }, { keepSession: true }));
     expect(vi.mocked(api.post).mock.calls[0][1].get('label')).toBe('Beat 8 · Transformation Loop · take 3 · from line 4');
     await waitFor(() => expect(screen.queryByTestId('stp-review')).toBeNull());
     // The new take shows in the list without a reload.
@@ -194,7 +194,7 @@ describe('Pick up from a line', () => {
     const review = await screen.findByTestId('stp-review');
     expect(review.textContent).not.toContain('from line');
     fireEvent.click(screen.getByTestId('stp-save'));
-    await waitFor(() => expect(api.patch).toHaveBeenCalledWith('/api/v1/episode-clips/ep-1/clip-new', { beat_number: 8, start_line: 0 }));
+    await waitFor(() => expect(api.patch).toHaveBeenCalledWith('/api/v1/episode-clips/ep-1/clip-new', { beat_number: 8, start_line: 0 }, { keepSession: true }));
   });
 
   test('before the migration the save links the beat only (no start_line), and still works', async () => {
@@ -203,7 +203,7 @@ describe('Pick up from a line', () => {
     fireEvent.click(screen.getByTestId('stp-stop'));
     await screen.findByTestId('stp-review');
     fireEvent.click(screen.getByTestId('stp-save'));
-    await waitFor(() => expect(api.patch).toHaveBeenCalledWith('/api/v1/episode-clips/ep-1/clip-new', { beat_number: 8 }));
+    await waitFor(() => expect(api.patch).toHaveBeenCalledWith('/api/v1/episode-clips/ep-1/clip-new', { beat_number: 8 }, { keepSession: true }));
     expect((await screen.findByTestId('stp-status')).textContent).toContain('from line 2');
   });
 

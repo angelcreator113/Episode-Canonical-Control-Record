@@ -56,6 +56,16 @@
 // beat →" moves on ready to record. A take always counts 3-2-1 before it
 // starts (3 seconds, to get into place), whatever the 3-2-1 setting, which is
 // for reading.
+// Teleprompter audit, recording and saving (Evoni, 2026-10-24: "fix all of
+// them"): a take stops by itself just under the 500 MB upload limit; any take
+// can be downloaded (or, on a phone, shared to Photos or Files) from the
+// review, which stays open until she is done with it; the take's pieces are
+// kept on the device as they are recorded (lib/takeStore), so Back (asked
+// first), a reload or a crash never loses it: next time "You have an unsaved
+// take" offers it back. The screen is kept on while recording, and the take
+// pauses when the phone looks away or the camera is taken. The upload carries
+// the beat, start line, markers and length in one request, and an expired
+// sign-in never leaves the page with a take unsaved.
 // Keys: Space play/pause, Up/Down speed (or pace), PageUp/PageDown jump a
 // half screen (a line, pacing by line times; clickers and foot pedals send
 // these), Left/Right beat, Enter or S stop & review a take, Escape closes
@@ -74,7 +84,7 @@ import {
   X, ChevronLeft, ChevronRight, Play, Pause, FlipHorizontal2, Timer, Video, VideoOff, Circle, Square,
   RotateCcw, Upload, Download, AlertTriangle, Trash2, ArrowRight, CheckCircle2, ALargeSmall, Gauge, Hourglass, SlidersHorizontal,
   AudioLines, Grid3x3, Clock, Film, Smartphone, Mic, Volume2,
-  Bell, MessageCircle, MousePointerClick, ArrowDownUp, Send, MonitorPlay, AppWindow, Monitor, EyeOff, Clapperboard, FileDown,
+  Bell, MessageCircle, MousePointerClick, ArrowDownUp, Send, MonitorPlay, AppWindow, Monitor, EyeOff, Clapperboard, FileDown, Share2, History,
 } from 'lucide-react';
 import useVoiceFollow from '../../hooks/useVoiceFollow';
 import useMicLevel from '../../hooks/useMicLevel';
@@ -87,17 +97,21 @@ import { MarkedText, MicMeter, FramingGrid, RehearsalPanel } from './Teleprompte
 import TakesPanel, { MarkLinks, seekVideo } from './TeleprompterTakes';
 import useDialogLayer from '../../hooks/useDialogLayer';
 import useTakeRecorder from '../../hooks/useTakeRecorder';
+import useWakeLock from '../../hooks/useWakeLock';
+import useBackGuard from '../../hooks/useBackGuard';
+import { takeStore, takeKey, takeWhen } from '../../lib/takeStore';
+import { takeAsFile, canShareTake, downloadBlob, shareTake, takeFileName } from '../../lib/takeFile';
 import useTeleprompterRemote from '../../hooks/useTeleprompterRemote';
 import useLineVoice from '../../hooks/useLineVoice';
 import TeleprompterRemotePanel from './TeleprompterRemotePanel';
 import VoiceRecordPanel from './VoiceRecord';
 import { voiceClipsApi, isNotReady as voiceNotReady, VOICE_NOT_READY, clipsByLine, lineKey, withClip, clipSeconds, clipForLine } from '../../lib/voiceClipsApi';
 import { teleprompterScript, pastedParagraphs, pastedScript, speakersOf, HER, takeName, takeExtension, downloadName, clock, lineChoice, withoutScreen } from '../../lib/teleprompterLines';
-import { rawClipsApi, hasTakeFields, beatTakes, withFavorite } from '../../lib/rawClipsApi';
+import { rawClipsApi, hasTakeFields, beatTakes, withFavorite, signInMessage } from '../../lib/rawClipsApi';
 import { isCutsceneBeat } from '../../lib/scriptShowRules';
 import {
   FULL_BITRATE, WARN_BYTES, UPLOAD_LIMIT_MB, MARKS_NOT_KEPT, fullTakeName, fullTakes, hasMarksField, markTime, cleanMarks,
-  takeBytes, sizeText, marksText, marksFileName,
+  takeBytes, sizeText, marksText, marksFileName, STOP_BYTES, LIMIT_NOTE, interruptNote,
 } from '../../lib/fullEpisodeTake';
 
 export const SETTINGS_KEY = 'teleprompter.settings';
@@ -284,9 +298,17 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
   const noteTimerRef = useRef(null);
 
   const episodeId = isScript ? source.episodeId : null;
-  const rec = useTakeRecorder(recordOn);
+  const rec = useTakeRecorder(recordOn, { storeKey: takeKey(episodeId) });
   const { take, recording } = rec;
-  const busyTake = recording || count > 0 || !!take;
+  // A voice clip recording or waiting to be saved counts as unsaved work too.
+  const [voiceBusy, setVoiceBusy] = useState(false);
+  const busyTake = recording || count > 0 || !!take || rec.finishing || voiceBusy;
+  // The screen stays on while Read & record is on (a locked phone stops a take).
+  useWakeLock(recordOn);
+  // The take was downloaded (or shared) to this device: its review says Done.
+  const [downloaded, setDownloaded] = useState(null);
+  // A take kept on this device but never saved, offered back on opening.
+  const [offer, setOffer] = useState(null);
   // A take is running or about to: the bar is Stop & review and Pause.
   const takeLive = recording || arming;
   // Mid-take or in review: the controls that make no sense then are hidden.
@@ -447,6 +469,16 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
     window.addEventListener('beforeunload', warn);
     return () => window.removeEventListener('beforeunload', warn);
   }, [busyTake]);
+
+  // A take kept on this device and never saved (Back, a reload, a crash):
+  // offered back once, on opening.
+  useEffect(() => {
+    let live = true;
+    takeStore().unsaved(takeKey(episodeId))
+      .then((list) => { if (live && list.length) setOffer(list[0]); })
+      .catch((err) => console.error('[Teleprompter] unsaved takes not looked for:', err));
+    return () => { live = false; };
+  }, [episodeId]);
 
   const scrollToBox = (top) => {
     const box = scrollRef.current;
@@ -820,7 +852,8 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
     // A take (one beat or whole episode): Pause pauses the recording too, and
     // Resume carries both on. Pausing while it ends keeps the take going.
     if (recording) {
-      if (takePaused) { if (rec.paused) rec.resume(); setPlaying(true); } else { cancelEnding(); setPlaying(false); rec.pause(); }
+      // A camera that ended can't carry on: Resume does nothing, Stop & review keeps the take.
+      if (takePaused) { if (rec.paused && !rec.resume()) return; setPlaying(true); } else { cancelEnding(); setPlaying(false); rec.pause(); }
       return;
     }
     if (playing) { setPlaying(false); return; }
@@ -866,14 +899,19 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
       setArming(false);
       toBeatStart(i);
       if (voiceOn) setVoiceFrom(syncCursor(layout.beatFirst[i] ?? 0));
-      if (!rec.begin({ videoBitsPerSecond: FULL_BITRATE })) return;
+      if (!rec.begin({ videoBitsPerSecond: FULL_BITRATE, maxBytes: STOP_BYTES, meta: takeMeta('episode', i) })) return;
       const n = beats[i]?.number;
       marksRef.current = n != null ? [{ beat: Number(n), t: 0 }] : [];
       lastMarkedRef.current = i;
       setMarks(marksRef.current);
+      rec.note({ marks: marksRef.current });
       setPlaying(true);
     });
   };
+  // What the device keeps with a take, to review and save it after a reload.
+  const takeMeta = (scope, at) => ({
+    scope, beatIndex: at, beatNumber: beats[at]?.number ?? null, startLine: scope === 'beat' ? fromLine : 0, readAs, label,
+  });
   // A take always counts 3-2-1 first (3 seconds to get into place); the 3-2-1
   // setting is for reading.
   const startTake = () => {
@@ -888,7 +926,7 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
       setArming(false);
       toStart();
       if (voiceOn) setVoiceFrom(syncCursor(fromLine));
-      if (rec.begin()) setPlaying(true);
+      if (rec.begin({ maxBytes: STOP_BYTES, meta: takeMeta('beat', current) })) setPlaying(true);
     });
   };
   const record = () => {
@@ -896,22 +934,43 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
     startTake();
   };
   const stopTake = () => { cancelEnding(); setPlaying(false); rec.stop(); };
+  // The take paused itself (the phone looked away, the camera was taken): the scroll waits too.
+  useEffect(() => {
+    if (rec.interrupted && recording) { cancelEnding(); setPlaying(false); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rec.interrupted]);
+  // The take stopped itself just under the upload limit: say so; the scroll stops.
+  useEffect(() => {
+    if (!rec.limited) return;
+    cancelEnding();
+    setPlaying(false);
+    setNotice(LIMIT_NOTE);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rec.limited]);
   // Stop & review: the take stops and its review opens; before it starts, the 3-2-1 stops.
   const stopAndReview = () => {
     if (!recording) { if (count > 0) cancelCountdown(); return; }
     stopTake();
   };
+  // A downloaded pasted-text take counts once it is done with.
+  const doneWithTake = () => {
+    if (downloaded && !isScript) setSessionTakes((k) => k + 1);
+    setDownloaded(null);
+    rec.discard();
+  };
   // Retake: this take goes and the next one counts in straight away.
   const retake = () => {
-    rec.discard();
+    doneWithTake();
     setSave({ status: 'idle', progress: 0, error: null, clip: null });
     if (rec.camera.status === 'ready') startTake();
     else if (whole) { resetMarks(); toBeatStart(wholeFrom); } else toStart();
   };
   // Discard: asks, then back to the start of the beat (or the take's start line), nothing saved.
   const discardTake = () => {
-    if (!window.confirm('Throw this take away? It has not been saved.')) return;
-    rec.discard();
+    // A pasted-text take already downloaded: Done, nothing to ask.
+    const kept = downloaded && !isScript;
+    if (!kept && !window.confirm(downloaded ? "Throw this take away? It is downloaded, but not saved to the episode's Files." : 'Throw this take away? It has not been saved.')) return;
+    doneWithTake();
     setSave({ status: 'idle', progress: 0, error: null, clip: null });
     if (whole) { resetMarks(); toBeatStart(wholeFrom); } else toStart();
   };
@@ -943,7 +1002,7 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
       if (beats[k]?.number != null) add.push({ beat: Number(beats[k].number), t });
     }
     lastMarkedRef.current = liveBeat;
-    if (add.length) { marksRef.current = [...marksRef.current, ...add]; setMarks(marksRef.current); }
+    if (add.length) { marksRef.current = [...marksRef.current, ...add]; setMarks(marksRef.current); rec.note({ marks: marksRef.current }); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [whole, recording, liveBeat]);
   const liveNumber = beats[liveBeat]?.number ?? null;
@@ -997,43 +1056,58 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
     }
   };
 
+  // The take to this device: a download (the review stays open; the take is
+  // kept until she is done with it), or the phone's share sheet.
+  const takeFile = isScript ? takeFileName(label, take ? takeExtension(take.type) : 'mp4') : (take ? downloadName(take.type) : null);
+  const shareFile = useMemo(() => (take ? takeAsFile(take.blob, takeFile, take.type) : null), [take, takeFile]);
+  const canShare = canShareTake(shareFile);
+  const downloadTake = () => {
+    if (!take) return;
+    if (downloadBlob(take.blob, takeFile)) {
+      setNotice(`Downloaded ${takeFile}`);
+      setDownloaded(take.url);
+    } else setSave((s) => ({ ...s, status: 'error', progress: 0, error: 'The take could not be downloaded.' }));
+  };
+  const shareThisTake = async () => {
+    if (!shareFile) return;
+    const how = await shareTake(shareFile, isScript ? label : 'Teleprompter take');
+    if (how === 'shared') { setNotice(`Shared ${takeFile}`); setDownloaded(take?.url || true); } else if (how === 'failed') downloadTake();
+  };
+
+  // Before a big upload: a quick signed-in request, so the sign-in is fresh
+  // (renewed here if it had run out). One that is over stops the save with
+  // a plain message, the take kept; anything else goes on to the upload.
+  const freshSignIn = async () => {
+    try { await rawClipsApi.checkSession(source.episodeId); } catch (err) {
+      if (err?.sessionExpired) throw err;
+      console.error('[Teleprompter] sign-in check before the upload failed; uploading anyway:', err);
+    }
+  };
+
   const saveTake = async () => {
     if (!take) return;
-    if (!isScript) {
-      try {
-        const a = document.createElement('a');
-        a.href = take.url;
-        a.download = downloadName(take.type);
-        a.rel = 'noopener';
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        setNotice(`Downloaded ${a.download}`);
-        setSessionTakes((n) => n + 1);
-        // The URL goes after the download has started.
-        const blobUrl = take.url;
-        window.setTimeout(() => { try { URL.revokeObjectURL(blobUrl); } catch (err) { console.error('[Teleprompter] take URL not revoked:', err); } }, 1000);
-        rec.discard();
-      } catch (err) {
-        console.error('[Teleprompter] download failed:', err);
-        setSave({ status: 'error', progress: 0, error: 'The take could not be downloaded.', clip: null });
-      }
-      return;
-    }
+    if (!isScript) { downloadTake(); return; }
     if (whole) { await saveWhole(); return; }
     let clip = save.clip;
+    let stored = null;
     setSave((s) => ({ ...s, status: 'saving', error: null }));
     try {
       if (!clip) {
+        await freshSignIn();
         const file = new File([take.blob], `beat-${beatNumber ?? 'x'}-take-${takeNo}.${takeExtension(take.type)}`, { type: take.type });
-        clip = await rawClipsApi.upload(source.episodeId, file, { performer, label, guestName: performer === 'guest' ? readAs : undefined }, (p) => setSave((s) => ({ ...s, progress: p })));
+        // The beat, the start line and the length go with the upload (one request).
+        ({ clip, stored } = await rawClipsApi.uploadTake(source.episodeId, file, {
+          performer, label, guestName: performer === 'guest' ? readAs : undefined,
+          beatNumber, startLine: fromIndex, seconds: take.seconds,
+        }, (p) => setSave((s) => ({ ...s, progress: p }))));
         setSave((s) => ({ ...s, clip }));
       }
       // The scene the take is for (Production plays clips by beat_number),
-      // and the line it started on, once the server keeps start lines.
+      // and the line it started on, once the server keeps start lines. A
+      // server that took them with the upload has linked it already.
       if (clip?.id && beatNumber >= 1 && beatNumber <= 14 && Number(clip.beat_number) !== beatNumber) {
-        const changes = hasTakeFields(clip) ? { beat_number: beatNumber, start_line: fromIndex } : { beat_number: beatNumber };
-        const linked = await rawClipsApi.update(source.episodeId, clip.id, changes);
+        const changes = hasTakeFields(clip) && !stored ? { beat_number: beatNumber, start_line: fromIndex } : { beat_number: beatNumber };
+        const linked = await rawClipsApi.update(source.episodeId, clip.id, changes, { keepSession: true });
         clip = { ...clip, ...(linked || changes) };
       }
       const seconds = take.seconds;
@@ -1045,10 +1119,10 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
       // "Next beat →": the next beat, ready to record.
       setSavedNext(oneBeat && current < beats.length - 1 ? current + 1 : null);
       setSave({ status: 'idle', progress: 0, error: null, clip: null });
-      rec.discard();
+      doneWithTake();
     } catch (err) {
       console.error('[Teleprompter] take not saved:', err);
-      const base = err?.response?.status === 413 ? 'The take is too big to upload.' : (err?.response?.data?.error || 'The take was not saved.');
+      const base = signInMessage(err) || (err?.response?.status === 413 ? 'The take is too big to upload.' : (err?.response?.data?.error || 'The take was not saved.'));
       setSave((s) => ({ ...s, clip, status: 'error', error: clip ? `It is in Files, but not linked to Beat ${beatNumber} yet. ${base}` : base }));
     }
   };
@@ -1057,17 +1131,23 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
   const saveWhole = async () => {
     const kept = cleanMarks(marksRef.current);
     let clip = save.clip;
+    let keptSet = null;
     setSave((s) => ({ ...s, status: 'saving', error: null }));
     try {
       if (!clip) {
+        await freshSignIn();
         const file = new File([take.blob], `full-episode-take-${takeNo}.${takeExtension(take.type)}`, { type: take.type });
-        clip = await rawClipsApi.upload(source.episodeId, file, { performer, label, guestName: performer === 'guest' ? readAs : undefined }, (p) => setSave((s) => ({ ...s, progress: p })));
+        // The markers and the length go with the upload (one request).
+        ({ clip, stored: keptSet } = await rawClipsApi.uploadTake(source.episodeId, file, {
+          performer, label, guestName: performer === 'guest' ? readAs : undefined, beatMarks: kept, seconds: take.seconds,
+        }, (p) => setSave((s) => ({ ...s, progress: p }))));
         setSave((s) => ({ ...s, clip }));
       }
-      let stored = false;
-      if (clip?.id && hasMarksField(clip)) {
+      // A server that took the markers with the upload says whether it kept them.
+      let stored = !!keptSet?.has('beat_marks');
+      if (!keptSet && clip?.id && hasMarksField(clip)) {
         try {
-          const linked = await rawClipsApi.update(source.episodeId, clip.id, { beat_marks: kept });
+          const linked = await rawClipsApi.update(source.episodeId, clip.id, { beat_marks: kept }, { keepSession: true });
           clip = { ...clip, ...(linked || { beat_marks: kept }) };
           stored = true;
         } catch (err) {
@@ -1089,11 +1169,11 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
         setPendingMarks({ label, marks: kept });
       }
       setSave({ status: 'idle', progress: 0, error: null, clip: null });
-      rec.discard();
+      doneWithTake();
       resetMarks();
     } catch (err) {
       console.error('[Teleprompter] full-episode take not saved:', err);
-      const base = err?.response?.status === 413 ? `The take is too big to upload (the limit is ${UPLOAD_LIMIT_MB} MB).` : (err?.response?.data?.error || 'The take was not saved.');
+      const base = signInMessage(err) || (err?.response?.status === 413 ? `The take is too big to upload (the limit is ${UPLOAD_LIMIT_MB} MB).` : (err?.response?.data?.error || 'The take was not saved.'));
       setSave((s) => ({ ...s, clip, status: 'error', error: clip ? `It is in Files, but its beat markers are not saved yet. ${base}` : base }));
     }
   };
@@ -1104,14 +1184,53 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
     cancelEnding();
     setPlaying(false);
     setSavedNext(null);
-    if (recordOn) { rec.discard(); resetMarks(); }
+    if (recordOn) { doneWithTake(); resetMarks(); }
     setRecordOn((on) => !on);
   };
 
+  // Leaving (the X, Escape, or the phone's Back): an unsaved take or voice
+  // clip asks first; once she says so, its copy on this device goes too.
   const requestClose = () => {
-    if (busyTake && !window.confirm(recording || count > 0 ? 'A take is recording. Stop and leave the teleprompter?' : 'This take is not saved yet. Leave and lose it?')) return;
+    const ask = recording || count > 0 ? 'A take is recording. Stop and leave the teleprompter?'
+      : (take || rec.finishing) ? 'This take is not saved yet. Leave and lose it?' : 'Your voice clip is not saved yet. Leave and lose it?';
+    if (busyTake && !window.confirm(ask)) return false;
     cancelCountdown();
+    if (busyTake) rec.discard();
     onCloseRef.current?.();
+    return true;
+  };
+  useBackGuard(true, () => requestClose());
+
+  // "You have an unsaved take": Review it opens it as she left it (Read &
+  // record on, its beat, scope and markers); Throw it away forgets it.
+  const reviewOffer = async () => {
+    const o = offer;
+    if (!o) return;
+    setOffer(null);
+    const m = o.meta || {};
+    const got = await rec.restore(o);
+    if (!got) { setNotice('That take could not be opened.'); return; }
+    setNotice(null);
+    setSavedNext(null);
+    setSave({ status: 'idle', progress: 0, error: null, clip: null });
+    if (isScript) {
+      const at = Number.isInteger(m.beatIndex) && m.beatIndex >= 0 && m.beatIndex < beats.length ? m.beatIndex : current;
+      setCurrent(at);
+      setTakeScope(m.scope === 'episode' && canWhole ? 'episode' : 'beat');
+      setStartLine(m.scope === 'beat' && Number.isInteger(m.startLine) ? m.startLine : 0);
+      marksRef.current = cleanMarks(m.marks);
+      lastMarkedRef.current = -1;
+      setMarks(marksRef.current);
+    }
+    if (typeof m.readAs === 'string' && m.readAs) set('readAs', m.readAs);
+    setRecordOn(true);
+  };
+  const dropOffer = async () => {
+    const o = offer;
+    if (!o || !window.confirm(`Throw away the take from ${takeWhen(o.startedAt)}? It can't be brought back.`)) return;
+    setOffer(null);
+    const gone = await takeStore().remove(o.id);
+    if (!gone) console.error('[Teleprompter] unsaved take not thrown away:', o.id);
   };
 
   // "Next beat →" after a save: that beat, ready to record.
@@ -1167,6 +1286,11 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
   };
   const recordableLine = voiceEpisode && voiceReady ? voiceLineAt(active) : null;
   const voiceLine = voiceFor != null ? voiceLineAt(voiceFor) : null;
+  // Closing the voice recorder with a clip not saved asks first.
+  const closeVoice = () => {
+    if (voiceBusy && !window.confirm('Your voice clip is not saved yet. Close and lose it?')) return;
+    setVoiceFor(null);
+  };
   const openVoice = () => { if (!recordableLine) return; setPlaying(false); cancelCountdown(); setVoiceFor(active); setShowTakes(false); setShowTimes(false); setShowRemote(false); };
 
   // Escape closes the open panel first; the reader only when none is open.
@@ -1348,6 +1472,11 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
                 </span>
               </div>
             )}
+            {recording && interruptNote(rec.interrupted) && (
+              <div className="stp-recwarn" role="alert" data-testid="stp-interrupted">
+                <AlertTriangle size={16} aria-hidden="true" /> {interruptNote(rec.interrupted)}
+              </div>
+            )}
             {recording && ending && (
               <div className="stp-ending" role="status" data-testid="stp-ending">
                 <Hourglass size={16} aria-hidden="true" /> Ending the take…
@@ -1376,7 +1505,7 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
             <VoiceRecordPanel key={voiceFor} episodeId={voiceEpisode} line={voiceLine} clip={voiceByLine.get(lineKey(voiceLine.beatNumber, voiceLine.lineIndex)) || null}
               onSaved={(clip) => setVoiceClips((cs) => withClip(cs, clip))}
               onRemoved={(id) => setVoiceClips((cs) => cs.filter((c) => c.id !== id))}
-              onNotReady={() => setVoiceReady(false)} onClose={() => setVoiceFor(null)} testId="stp-voice-panel" />
+              onNotReady={() => setVoiceReady(false)} onClose={() => setVoiceFor(null)} onBusy={setVoiceBusy} testId="stp-voice-panel" />
           </div>
         )}
         {showTimes && rehearsalKey && !take && (
@@ -1405,15 +1534,30 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
                 {isScript ? <Upload size={18} aria-hidden="true" /> : <Download size={18} aria-hidden="true" />}
                 {save.status === 'error' ? 'Retry' : save.status === 'saving' ? 'Saving…' : isScript ? (
                   <span className="stp-save-text"><span className="stp-save-main">Save take</span><span className="stp-save-sub">to the episode&apos;s Files</span></span>
-                ) : 'Download the take'}
+                ) : downloaded ? 'Download again' : 'Download the take'}
               </button>
+              {/* A script take can go to this device too (one too big for Files, or a copy). */}
+              {isScript && (
+                <button type="button" className="stp-btn" data-testid="stp-download-take" disabled={save.status === 'saving'} onClick={downloadTake}
+                  aria-label="Download the take" title="Download the take to this device">
+                  <Download size={18} aria-hidden="true" /> Download
+                </button>
+              )}
+              {canShare && (
+                <button type="button" className="stp-btn" data-testid="stp-share-take" disabled={save.status === 'saving'} onClick={shareThisTake}
+                  aria-label="Save to Photos or Files" title="Save to Photos or Files (share)">
+                  <Share2 size={18} aria-hidden="true" /> Share
+                </button>
+              )}
               <button type="button" className="stp-btn" data-testid="stp-retake" disabled={save.status === 'saving' || !!save.clip} onClick={retake}><RotateCcw size={18} aria-hidden="true" /> Retake</button>
               {whole && marks.length > 0 && (
                 <button type="button" className="stp-btn" data-testid="stp-review-download-marks" onClick={() => downloadMarks({ label, marks: cleanMarks(marks) })}>
                   <FileDown size={18} aria-hidden="true" /> Download markers
                 </button>
               )}
-              <button type="button" className="stp-btn is-discard" data-testid="stp-discard" disabled={save.status === 'saving' || !!save.clip} onClick={discardTake}><Trash2 size={18} aria-hidden="true" /> Discard</button>
+              <button type="button" className={`stp-btn${downloaded && !isScript ? '' : ' is-discard'}`} data-testid="stp-discard" disabled={save.status === 'saving' || !!save.clip} onClick={discardTake}>
+                {downloaded && !isScript ? <><CheckCircle2 size={18} aria-hidden="true" /> Done</> : <><Trash2 size={18} aria-hidden="true" /> Discard</>}
+              </button>
             </div>
           </div>
         )}
@@ -1423,6 +1567,8 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
         <p className={`stp-status${!problem ? ' is-ok' : ''}${!problem && !notice ? ' is-note' : ''}`} role={problem ? 'alert' : 'status'} data-testid="stp-status">
           {problem ? <AlertTriangle size={16} aria-hidden="true" /> : notice ? <CheckCircle2 size={16} aria-hidden="true" /> : <Volume2 size={16} aria-hidden="true" />}
           <span>{problem || notice || headphones}</span>
+          {/* After a save the headphones note stays, on a line of its own. */}
+          {!problem && notice && headphones && <span className="stp-status-note" data-testid="stp-headphones">{headphones}</span>}
           {rec.camera.status === 'error' && <button type="button" className="stp-btn is-small" onClick={rec.retry}>Try again</button>}
           {savedNext != null && notice && !problem && (
             <button type="button" className="stp-btn is-primary stp-nextbeat" data-testid="stp-next-beat" onClick={nextBeat}
@@ -1435,6 +1581,15 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
               <FileDown size={18} aria-hidden="true" /> Download markers
             </button>
           )}
+        </p>
+      )}
+
+      {offer && !take && !recording && (
+        <p className="stp-status is-ok" role="status" data-testid="stp-recover">
+          <History size={16} aria-hidden="true" />
+          <span>You have an unsaved take from {takeWhen(offer.startedAt)}{offer.meta?.label ? ` (${offer.meta.label})` : ''}.</span>
+          <button type="button" className="stp-btn is-primary" data-testid="stp-recover-review" onClick={reviewOffer}>Review it</button>
+          <button type="button" className="stp-btn" data-testid="stp-recover-drop" onClick={dropOffer}><Trash2 size={18} aria-hidden="true" /> Throw it away</button>
         </p>
       )}
 
@@ -1555,7 +1710,7 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
         )}
         {recordableLine && !recordOn && !take && (
           <button type="button" className="stp-btn" data-testid="stp-voice-record" aria-pressed={voiceFor != null}
-            aria-label={`Record voice for this ${recordableLine.speaker} line`} onClick={voiceFor != null ? () => setVoiceFor(null) : openVoice}>
+            aria-label={`Record voice for this ${recordableLine.speaker} line`} onClick={voiceFor != null ? closeVoice : openVoice}>
             <Mic size={18} aria-hidden="true" /> <span className="stp-btn-text">Record voice</span>
             {voiceByLine.has(lineKey(recordableLine.beatNumber, recordableLine.lineIndex)) && <span className="stp-count" aria-hidden="true">✓</span>}
           </button>
