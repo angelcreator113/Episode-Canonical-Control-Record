@@ -152,6 +152,21 @@ describe('Phone remote on the desktop', () => {
     expect(screen.getByTestId('stp-size').textContent).toContain('48');
   });
 
+  test("the phone's record_stop does what Stop & review does: the take stops and its review opens, never saved by itself", async () => {
+    render(<TeleprompterReader source={source} startBeat={8} countdownMs={1} onClose={() => {}} />);
+    fireEvent.click(screen.getByTestId('stp-record-mode'));
+    await waitFor(() => expect(screen.getByTestId('stp-record').disabled).toBe(false));
+    fireEvent.click(screen.getByTestId('stp-remote-toggle'));
+    await waitFor(() => expect(screen.getByTestId('stp-remote-qr')).toBeTruthy());
+    pending = [{ seq: 1, command: 'record_start' }];
+    await screen.findByTestId('stp-recording', {}, { timeout: 3000 });
+    expect(screen.getByTestId('stp-stop').textContent).toBe('Stop & review');
+    pending = [...pending, { seq: 2, command: 'record_stop' }];
+    await screen.findByTestId('stp-review', {}, { timeout: 3000 });
+    expect(recorders[0].state).toBe('inactive');
+    expect(vi.mocked(api.post).mock.calls.some(([u]) => u.startsWith('/api/v1/episode-clips'))).toBe(false);
+  });
+
   test('End ends the session; leaving the reader ends it too', async () => {
     const { unmount } = render(<TeleprompterReader source={source} startBeat={8} onClose={() => {}} />);
     fireEvent.click(screen.getByTestId('stp-remote-toggle'));

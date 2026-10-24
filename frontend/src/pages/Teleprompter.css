@@ -385,3 +385,50 @@ body.stp-open { overflow: hidden; }
   .stp-scope { flex: 1 1 100%; order: 9; }
   .stp-scope .stp-btn { flex: 1; }
 }
+
+/* ── Ending and saving a take (Evoni, 2026-10-24: "no clear way of ending
+   and saving a recording") ── */
+/* Mid-take the bar is a big red Stop & review with Pause beside it. */
+.stp-controls.is-take { gap: 8px; }
+.stp-btn.is-stop {
+  flex: 1 1 260px; min-height: 56px; padding: 0 20px; gap: 10px;
+  border-color: var(--studio-prompter-rec); background: var(--studio-prompter-rec); color: var(--studio-prompter-bg);
+  font-size: 18px; font-weight: 700;
+}
+.stp-btn.is-stop:hover:not(:disabled) { border-color: var(--studio-prompter-ink); }
+.stp-btn.is-pausetake { flex: 0 0 auto; min-width: 112px; min-height: 56px; padding: 0 16px; font-size: 16px; font-weight: 600; }
+.stp-btn.is-pausetake[aria-pressed='true'] { border-color: var(--studio-prompter-line); color: var(--studio-prompter-ink); }
+.stp-controls.is-take .stp-slider, .stp-controls.is-take .stp-listening { flex: 1 1 200px; }
+.stp-rec-hint { display: inline-flex; font-weight: 400; color: var(--studio-prompter-cue); }
+.stp-rec-hint .is-short { display: none; }
+.stp-ending {
+  display: flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 12px;
+  background: var(--studio-prompter-scrim); color: var(--studio-prompter-mark); font-size: 14px; font-weight: 700;
+}
+
+/* The review sheet: "Your take", then Save take first. */
+.stp-review-head { display: flex; flex-direction: column; gap: 2px; }
+.stp-review-title { margin: 0; font-family: 'DM Mono', var(--font-mono); font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--studio-prompter-mark); }
+.stp-review-actions { justify-content: flex-start; }
+.stp-btn.stp-save { flex: 1 1 100%; min-height: 56px; font-size: 16px; }
+.stp-save-text { display: inline-flex; flex-direction: column; align-items: flex-start; line-height: 1.2; }
+.stp-save-main { font-size: 17px; font-weight: 700; }
+.stp-save-sub { font-size: 12px; font-weight: 400; }
+.stp-review-actions .stp-btn:not(.stp-save) { flex: 1 1 0; }
+.stp-btn.is-discard { color: var(--studio-prompter-cue); }
+.stp-btn.stp-nextbeat { margin-left: auto; }
+
+@media (max-width: 760px) {
+  .stp-controls.is-take .stp-btn.is-stop { flex: 1 1 0; min-width: 0; }
+  .stp-controls.is-take .stp-slider, .stp-controls.is-take .stp-listening { flex: 1 1 100%; }
+  /* The video gives way so Save take, Retake and Discard stay on screen. */
+  .stp-review { gap: 8px; padding: 12px; }
+  .stp-review-video { max-height: 26vh; max-height: 26dvh; }
+}
+@media (max-width: 600px) {
+  .stp-rec-hint .is-long { display: none; }
+  .stp-rec-hint .is-short { display: inline; }
+  .stp-btn.stp-nextbeat { margin-left: 0; }
+}
+/* The status text keeps its icon beside it and wraps on its own; a button goes under. */
+.stp-status > span { flex: 1 1 12em; min-width: 0; }
