@@ -15,6 +15,18 @@ export const FULL_BITRATE = 2_500_000;
 const AUDIO_BITRATE = 128_000;
 export const UPLOAD_LIMIT_MB = 500;
 export const WARN_BYTES = 450 * 1024 * 1024;
+// Teleprompter audit 1 (2026-10-24): a take stops by itself here, so it can
+// still be saved (the server and nginx refuse 500 MB and over).
+export const STOP_BYTES = 490 * 1024 * 1024;
+export const LIMIT_NOTE = 'Stopped at the 500 MB limit — saved takes must be under 500 MB.';
+
+/** What the take's pause is about (useTakeRecorder `interrupted`), or null. */
+export function interruptNote(why) {
+  if (why === 'away') return 'The take paused while the phone was away — Resume or Stop & review.';
+  if (why === 'muted') return 'The phone paused the camera or microphone — Resume or Stop & review.';
+  if (why === 'ended') return 'The camera or microphone stopped — Stop & review to keep what was recorded.';
+  return null;
+}
 export const MAX_MARKS = 30;
 export const MARKS_NOT_KEPT = 'Saved. Beat markers will be kept once the database update runs.';
 

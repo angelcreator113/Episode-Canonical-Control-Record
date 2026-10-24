@@ -37,7 +37,36 @@ export const rawClipsApi = {
       onUploadProgress: (e) => { if (onProgress && e.total) onProgress(Math.round((e.loaded / e.total) * 100)); },
     }).then((r) => r.data?.data);
   },
-  update: (episodeId, clipId, changes) => api.patch(`${base(episodeId)}/${clipId}`, changes).then((r) => r.data?.data),
+  /**
+   * A teleprompter take (Teleprompter audit 5, 8, 14; 2026-10-24): the beat,
+   * start line, beat markers and the take's own length go with the upload,
+   * one request. keepSession: an expired sign-in never leaves the page (the
+   * take exists only here) and the file is never sent twice by itself.
+   * Resolves { clip, stored }: stored is the set of start_line / beat_marks
+   * the server kept, or null from a server that does not take them yet (then
+   * the caller links them with update(), as before).
+   */
+  uploadTake: (episodeId, file, { performer, guestName, label, beatNumber, startLine, beatMarks, seconds } = {}, onProgress) => {
+    const form = new FormData();
+    form.append('video', file);
+    form.append('performer', performer);
+    form.append('green_screen', 'false');
+    if (guestName) form.append('guest_name', guestName);
+    if (label) form.append('label', label);
+    if (Number.isInteger(beatNumber) && beatNumber >= 1 && beatNumber <= 14) form.append('beat_number', String(beatNumber));
+    if (Number.isInteger(startLine) && startLine >= 0) form.append('start_line', String(startLine));
+    if (Array.isArray(beatMarks)) form.append('beat_marks', JSON.stringify(beatMarks));
+    if (Number(seconds) > 0 && Number(seconds) <= 36000) form.append('seconds', String(Math.round(Number(seconds) * 100) / 100));
+    return api.post(base(episodeId), form, {
+      timeout: 0,
+      keepSession: true,
+      onUploadProgress: (e) => { if (onProgress && e.total) onProgress(Math.round((e.loaded / e.total) * 100)); },
+    }).then((r) => ({ clip: r.data?.data, stored: Array.isArray(r.data?.stored) ? new Set(r.data.stored) : null }));
+  },
+  // A cheap signed-in request before a big upload, so the sign-in is fresh
+  // (refreshed here if it had expired) and never wiped while a take is unsaved.
+  checkSession: (episodeId) => api.get(base(episodeId), { keepSession: true }).then((r) => (Array.isArray(r.data?.data) ? r.data.data : [])),
+  update: (episodeId, clipId, changes, { keepSession = false } = {}) => api.patch(`${base(episodeId)}/${clipId}`, changes, keepSession ? { keepSession: true } : undefined).then((r) => r.data?.data),
   // Stars a take for its beat; the server un-stars the beat's other takes.
   favorite: (episodeId, clipId, on) => api.patch(`${base(episodeId)}/${clipId}`, { is_favorite: !!on }).then((r) => r.data?.data),
   removeGreen: (episodeId, clipId, strength) => api.post(`${base(episodeId)}/${clipId}/remove-green`, { strength }).then((r) => r.data?.data),
@@ -85,6 +114,16 @@ export const anyKeying = (clips) => clips.some((c) => c.key_status === 'queued' 
  * until then.
  */
 export const hasTakeFields = (clip) => !!clip && typeof clip === 'object' && 'is_favorite' in clip;
+
+/**
+ * A failed upload or link in plain words, the take kept (Teleprompter audit 5).
+ * Null when the error is not about the sign-in.
+ */
+export function signInMessage(err) {
+  if (err?.authRefreshed) return 'Your sign-in had expired and is renewed now. Press Retry to upload the take.';
+  if (err?.sessionExpired) return 'Your sign-in expired. Sign in in another tab, then press Retry here. The take is kept.';
+  return null;
+}
 
 /** The episode's takes for one beat (any raw clip linked to it), oldest first. */
 export const beatTakes = (clips, beatNumber) => (beatNumber == null ? [] : (clips || []).filter((c) => Number(c.beat_number) === Number(beatNumber)));

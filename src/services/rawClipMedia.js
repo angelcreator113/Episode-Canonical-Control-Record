@@ -126,6 +126,8 @@ async function inspect(localPath) {
       console.error('[rawClips] ffprobe missing; keeping the clip without its length:', err.message);
       return { duration_seconds: null, width: null, height: null, thumbPath: null };
     }
+    // Logged before the 400 (Teleprompter audit 9): why ffprobe refused it.
+    console.error('[rawClips] ffprobe could not read the upload:', err.message);
     throw new clips.RawClipError(400, 'That file is not a video we can read');
   }
   if (!probe.hasVideo) throw new clips.RawClipError(400, 'That file has no video in it');
