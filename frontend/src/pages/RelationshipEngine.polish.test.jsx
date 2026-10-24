@@ -82,10 +82,14 @@ afterEach(() => { vi.useRealTimers(); });
 describe('polish', () => {
   test('Family: the header count and the list agree (a husband is romance, not family)', async () => {
     const { container } = renderAt('/relationships?tab=family');
+    // The ties as cards are behind the List toggle (2026-10-24), closed at first.
+    // Its count agrees with the header too.
+    fireEvent.click(await screen.findByRole('button', { name: /^List · 1 family tie/ }));
     const list = await screen.findByRole('list', { name: 'Family ties' });
     expect(within(list).getAllByRole('listitem')).toHaveLength(1);
     expect(container.querySelector('.re-sub-stats').textContent).toBe('1 bond');
-    expect(screen.getByText('Family ties · 1')).toBeTruthy();
+    // The List toggle carries the count (2026-10-24); open, it reads "Hide the list".
+    expect(screen.getByRole('button', { name: /Hide the list/ }).getAttribute('aria-expanded')).toBe('true');
     expect(screen.getByLabelText('Love interests and partners').textContent).toContain('husband');
   });
 

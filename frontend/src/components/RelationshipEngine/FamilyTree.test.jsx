@@ -106,6 +106,9 @@ describe('the Family tab', () => {
   test('the tree sits above the ties; a named family alone still shows', async () => {
     render(<MemoryRouter><FamilyView chars={Object.values(charById)} rels={rels} charById={charById} onGenerate={vi.fn()} onUpdateRole={vi.fn()} onRelClick={vi.fn()} /></MemoryRouter>);
     expect(await screen.findByTestId('re-family-tree')).toBeTruthy();
+    // The ties as cards are behind the List toggle (2026-10-24), closed at first.
+    expect(screen.queryByRole('list', { name: 'Family ties' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /^List · 2 family ties/ }));
     const ties = screen.getByRole('list', { name: 'Family ties' });
     expect(within(ties).getAllByRole('listitem')).toHaveLength(2);
     expect(within(ties).getByText(/stepsister · step/)).toBeTruthy();
@@ -132,6 +135,8 @@ describe('the Family tab, small things (2026-10-24)', () => {
     const onRelClick = vi.fn();
     const onUpdateRole = vi.fn();
     renderTab({ onRelClick, onUpdateRole });
+    // The ties as cards are behind the List toggle (2026-10-24), closed at first.
+    fireEvent.click(await screen.findByRole('button', { name: /^List · \d+ family ti/ }));
     fireEvent.click(await screen.findByRole('button', { name: 'Edit role for Kim Ash and Dre Coleman' }));
     const box = screen.getByLabelText('Family role');
     fireEvent.change(box, { target: { value: 'half-sister' } });
@@ -149,6 +154,8 @@ describe('the Family tab, small things (2026-10-24)', () => {
   test('a spouse is romance with their role, not a family tie', async () => {
     const wife = R('t-wife', 'jade', 'kim', { relationship_type: 'married', family_role: 'wife' });
     renderTab({ rels: [...rels, wife] });
+    // The ties as cards are behind the List toggle (2026-10-24), closed at first.
+    fireEvent.click(await screen.findByRole('button', { name: /^List · \d+ family ti/ }));
     const ties = await screen.findByRole('list', { name: 'Family ties' });
     expect(within(ties).getAllByRole('listitem')).toHaveLength(2);
     const romance = screen.getByLabelText('Love interests and partners');

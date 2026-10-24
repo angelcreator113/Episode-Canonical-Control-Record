@@ -7,7 +7,9 @@
  * never family: it is listed apart, and its "edit" is not offered (the
  * 2026-10-23 audit found the edit writing "mother" onto a love interest).
  * Above the ties, the family tree (FamilyTree: the named families and the
- * ties, generations top to bottom; Evoni, 2026-10-23).
+ * ties, generations top to bottom; Evoni, 2026-10-23). The tree is the view;
+ * the same ties as cards (with the role edit) sit behind a "List" toggle,
+ * and the tree's legend is the only one (2026-10-24 layout audit).
  */
 import { useState } from 'react';
 import { Heart } from 'lucide-react';
@@ -19,6 +21,7 @@ import { isFamilyTie, isDashed } from './familyTree';
 export default function FamilyView({ chars = [], rels = [], charById = {}, genning, onGenerate, onUpdateRole, onRelClick }) {
   const [editId, setEditId]     = useState(null);
   const [editRole, setEditRole] = useState('');
+  const [listOpen, setListOpen] = useState(false);
 
   const families = useFamilies();
   const family = rels.filter(isFamilyTie);
@@ -51,16 +54,12 @@ export default function FamilyView({ chars = [], rels = [], charById = {}, genni
         </div>
       ) : family.length === 0 ? null : (
         <>
-          <div className="re-label">Family ties · {family.length}</div>
-          <div className="re-family-legend">
-            {[[T.orchid, 'Blood, adoptive, married in'], [T.steel, 'Step, chosen, not known']].map(([c, l]) => (
-              <span key={l} className="re-family-legend-item">
-                <span className="re-family-legend-dot" style={{ background: c }} />
-                {l}
-              </span>
-            ))}
-          </div>
-          <div className="re-family-list" role="list" aria-label="Family ties">
+          <button type="button" className="re-family-list-toggle" aria-expanded={listOpen}
+            aria-controls="re-family-list" onClick={() => setListOpen(o => !o)}>
+            {listOpen ? 'Hide the list' : 'List'} · {family.length} famil{family.length === 1 ? 'y tie' : 'y ties'}
+          </button>
+          {listOpen && (
+          <div className="re-family-list" id="re-family-list" role="list" aria-label="Family ties">
             {family.map(b => {
               const col = bondColor(b);
               const nA = sideName(b, 'a', charById);
@@ -112,6 +111,7 @@ export default function FamilyView({ chars = [], rels = [], charById = {}, genni
               );
             })}
           </div>
+          )}
         </>
       )}
 
