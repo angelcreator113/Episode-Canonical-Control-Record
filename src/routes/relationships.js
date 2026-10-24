@@ -41,6 +41,8 @@ const REL_SELECT = `
   cr.conflict_summary, cr.knows_about_connection,
   cr.source_knows, cr.target_knows, cr.reader_knows,
   cr.known_by, cr.public_state,
+  cr.seed_source, cr.seed_why, cr.seed_basis, cr.seed_state,
+  cr.dismiss_reason, cr.dismiss_note, cr.seed_aim,
   cr.created_at, cr.updated_at,
   (SELECT re.relationship_stage FROM relationship_events re
     WHERE re.relationship_id = cr.id AND re.deleted_at IS NULL AND re.relationship_stage IS NOT NULL
@@ -53,7 +55,6 @@ const CHAR_JOIN = `
 // One name per person everywhere: the chosen name, else the display name
 // (which is often the feed handle, e.g. "Truthville" for Marcus Hale).
 const nameSql = (alias) => `COALESCE(NULLIF(${alias}.selected_name, ''), ${alias}.display_name)`;
-const nameOf = (c) => (c && (c.selected_name || c.display_name)) || '?';
 
 const CHAR_SELECT_A = `
   ${nameSql('ca')} AS character_a_name, ca.display_name AS character_a_display, ca.selected_name AS character_a_selected,
@@ -448,175 +449,64 @@ router.post('/', requireAuth, authorize(['ADMIN']), async (req, res) => {
 });
 
 // ════════════════════════════════════════════════════════════════════════
-// POST /api/v1/relationships/generate
-// Use Claude AI to generate 3-5 candidate relationships between the cast
-// (loadCastIds; registry_id is no longer needed). They land as seeds.
+// Seeds (services/relationshipSeeds; Evoni, 2026-10-24: "How can we
+// improve relationship seeds", then "I want them all"). A seed is an
+// unconfirmed row; it says where it came from (seed_source), why
+// (seed_why, seed_basis) and what Generate was aimed at (seed_aim).
 // ════════════════════════════════════════════════════════════════════════
+const seeds = require('../services/relationshipSeeds');
+
+/** The seed rows by id, in that order, as every read returns them. */
+async function seedRows(db, ids) {
+  if (!ids.length) return [];
+  const rows = await db.sequelize.query(
+    `SELECT ${REL_SELECT}, ${CHAR_SELECT_A}, ${CHAR_SELECT_B}
+     FROM character_relationships cr ${CHAR_JOIN}
+     WHERE cr.id IN (:ids)`,
+    { replacements: { ids }, type: db.sequelize.QueryTypes.SELECT }
+  );
+  const byId = new Map(rows.map((r) => [String(r.id), r]));
+  return ids.map((id) => byId.get(String(id))).filter(Boolean);
+}
+
+const seedError = (res, err, what) => {
+  if (err instanceof seeds.SeedError) return res.status(err.status).json({ error: err.message });
+  console.error(`${what} error:`, err);
+  return res.status(500).json({ error: err.message });
+};
+
+/**
+ * Generate, grounded on the story (services/seedContext): the approved
+ * episode records, open threads, season twists, who knows, family, the
+ * confirmed pairs, the Pulse, and what Evoni turned down. Aimed by kind, a
+ * focus person, an episode (its guests) or a twist to pay off. The answer's
+ * error, if the AI fails, is aiFailure's; `what` names the button.
+ */
+async function generateAndRespond(req, res, { body, what, shape }) {
+  const db = getDb();
+  const { characters, lalaId } = await loadCastCharacters(db, { forAI: true });
+  if (characters.length < 2) {
+    return res.status(400).json({ error: `Need at least 2 people in the cast to ${what === 'Propose Family' ? 'generate family' : 'generate relationships'}` });
+  }
+  let made;
+  try {
+    made = await seeds.generateSeeds(db, body, { characters, lalaId });
+  } catch (err) {
+    if (err instanceof seeds.SeedError) return res.status(err.status).json({ error: err.message });
+    if (!err?.fromAI) throw err;
+    return aiFailure(res, err, what);
+  }
+  const rows = await seedRows(db, made.ids);
+  return res.status(201).json(shape(rows, made.skipped));
+}
+
+// POST /api/v1/relationships/generate
+// Body { focus_character_id?, kind?, episode_id?, twist_id?, count?: 3..8 }.
 router.post('/generate', requireAuth, authorize(['ADMIN']), aiRateLimiter, async (req, res) => {
   try {
-    const db   = getDb();
-    const { focus_character_id } = req.body;
-
-    const { characters } = await loadCastCharacters(db, { forAI: true });
-
-    if (characters.length < 2) {
-      return res.status(400).json({ error: 'Need at least 2 people in the cast to generate relationships' });
-    }
-
-    // Every pair already there (seeds too, and deleted ones, which the
-    // unique index still counts) is skipped; the prompt lists the live ones.
-    const charIds = characters.map(c => c.id);
-    const existing = await db.sequelize.query(
-      `SELECT character_id_a, character_id_b, relationship_type, deleted_at
-       FROM character_relationships
-       WHERE character_id_a IN (:ids) AND character_id_b IN (:ids)`,
-      { replacements: { ids: charIds }, type: db.sequelize.QueryTypes.SELECT }
-    );
-
-    const existingPairs = new Set(
-      existing.map(r => `${r.character_id_a}|${r.character_id_b}`)
-    );
-    const live = existing.filter(r => !r.deleted_at);
-    const nameById = (id) => nameOf(characters.find(c => c.id === id));
-
-    // Build character context for Claude
-    const charContext = characters.map(c => (
-      `- ${nameOf(c)} [id=${c.id}] (${c.role_type}): ${c.core_belief || 'no core belief'}, ` +
-      `pressure: ${c.pressure_type || 'none'}, personality: ${(c.personality || '').slice(0, 120)}`
-    )).join('\n');
-
-    const existingContext = live.length > 0
-      ? `\nExisting relationships (do NOT duplicate):\n${live.map(r => (
-          `- ${nameById(r.character_id_a)} ↔ ${nameById(r.character_id_b)}: ${r.relationship_type}`
-        )).join('\n')}\n`
-      : '';
-
-    const focusNote = focus_character_id
-      ? `\nFocus on generating relationships involving the character with ID: ${focus_character_id} (${nameById(focus_character_id)})`
-      : '';
-
-    const Anthropic = require('@anthropic-ai/sdk');
-    const claude = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-
-    let message;
-    try {
-      message = await claude.messages.create({
-        model: 'claude-sonnet-4-6',
-        max_tokens: 2000,
-        messages: [{
-          role: 'user',
-          content: `You are a literary relationship analyst for a creative writing universe called the LalaVerse.
-
-Everyone below lives in Lala's world, so any two of them can be connected; role_type is a narrative archetype, not a world.
-
-MORAL DEPTH RULE: Relationships should reflect real human complexity:
-- Marriages and partnerships CAN be tested by temptation, jealousy, or emotional affairs.
-- Characters can be faithful (choosing loyalty despite being tempted), unfaithful (acting on desire despite commitment), or somewhere in between.
-- Arguments, betrayals, reconciliations, and moral choices should be reflected in the situation and tension_state.
-- "Fidelity Test" is a valid relationship_type: one character tests another's commitment just by existing.
-- "Emotional Affair" is a valid relationship_type: an intimate bond that never becomes physical but is still a betrayal.
-- A character can be a "temptation" — someone who pulls a committed person toward a choice they'll have to live with.
-
-The cast:
-${charContext}
-${existingContext}${focusNote}
-
-Generate 3 to 5 NEW relationship suggestions that don't already exist.
-For each, provide:
-- character_a_id (exact UUID from the list above)
-- character_b_id (exact UUID from the list above)
-- relationship_type (string like "sister", "rival", "mentor", "therapist", "ex-partner", "spouse", "fidelity_test", "temptation", "emotional_affair", "the_one_who_stayed", "the_one_who_left", etc.)
-- connection_mode (one of: IRL, Online Only, Passing, Professional, One-sided)
-- situation (1-2 sentences describing the dynamic — include moral tension if relevant: who's tempted, who's faithful, who's lied, who's choosing)
-- tension_state (one of: calm, simmering, volatile, fractured, healing)
-- lala_connection (one of: none, knows_lala, knows_protagonist, through_justwoman, interacts_content, independent, unaware)
-- pain_point_category (like "identity", "trust", "ambition", "loyalty", "family", "self-worth", "fidelity", "betrayal", "guilt", "temptation")
-- lala_mirror (1 sentence: how this relationship mirrors in the LalaVerse)
-- career_echo_potential (1 sentence: career/professional echo)
-
-Return ONLY valid JSON: { "candidates": [ ... ] }
-No markdown fences, no explanation.`,
-        }],
-      });
-    } catch (aiErr) {
-      return aiFailure(res, aiErr, 'Generate');
-    }
-
-    let candidates = [];
-    try {
-      const raw = message.content[0].text.trim();
-      const parsed = JSON.parse(raw);
-      candidates = parsed.candidates || [];
-    } catch (parseErr) {
-      console.error('Claude JSON parse error:', parseErr);
-      return res.status(500).json({ error: 'Failed to parse AI response' });
-    }
-
-    // Insert candidates as unconfirmed
-    const inserted = [];
-    for (const c of candidates) {
-      const aExists = characters.find(ch => ch.id === c.character_a_id);
-      const bExists = characters.find(ch => ch.id === c.character_b_id);
-      if (!aExists || !bExists) continue;
-      if (c.character_a_id === c.character_b_id) continue;
-
-      const pairKey = `${c.character_a_id}|${c.character_b_id}`;
-      const pairKeyRev = `${c.character_b_id}|${c.character_a_id}`;
-      if (existingPairs.has(pairKey) || existingPairs.has(pairKeyRev)) continue;
-
-      const id  = uuidv4();
-      const now = new Date();
-
-      await db.sequelize.query(
-        `INSERT INTO character_relationships
-           (id, character_id_a, character_id_b, relationship_type,
-            connection_mode, lala_connection, status, situation,
-            tension_state, pain_point_category, lala_mirror,
-            career_echo_potential, confirmed, created_at, updated_at)
-         VALUES
-           (:id, :char_a, :char_b, :rel_type,
-            :conn_mode, :lala_conn, :status, :situation,
-            :tension_state, :pain_cat, :lala_mirror,
-            :career_echo, false, :now, :now)
-         ON CONFLICT (character_id_a, character_id_b, relationship_type) DO NOTHING`,
-        {
-          replacements: {
-            id, char_a: c.character_a_id, char_b: c.character_b_id,
-            rel_type: c.relationship_type || 'unknown',
-            conn_mode: c.connection_mode || 'IRL',
-            lala_conn: c.lala_connection || 'none',
-            status: 'Active',
-            situation: c.situation || null,
-            tension_state: c.tension_state || null,
-            pain_cat: c.pain_point_category || null,
-            lala_mirror: c.lala_mirror || null,
-            career_echo: c.career_echo_potential || null,
-            now,
-          },
-          type: db.sequelize.QueryTypes.INSERT,
-        }
-      );
-
-      existingPairs.add(pairKey);
-      inserted.push({ id, ...c });
-    }
-
-    // Return the full inserted rows
-    const insertedIds = inserted.map(i => i.id);
-    let results = [];
-    if (insertedIds.length > 0) {
-      results = await db.sequelize.query(
-        `SELECT ${REL_SELECT}, ${CHAR_SELECT_A}, ${CHAR_SELECT_B}
-         FROM character_relationships cr ${CHAR_JOIN}
-         WHERE cr.id IN (:ids)`,
-        { replacements: { ids: insertedIds }, type: db.sequelize.QueryTypes.SELECT }
-      );
-    }
-
-    res.status(201).json({
-      candidates: results,
-      count: results.length,
-      message: `Generated ${results.length} candidate relationship(s)`,
+    await generateAndRespond(req, res, {
+      body: req.body || {}, what: 'Generate',
+      shape: (rows, skipped) => ({ candidates: rows, count: rows.length, skipped, message: `Generated ${rows.length} candidate relationship(s)` }),
     });
   } catch (err) {
     console.error('POST /relationships/generate error:', err);
@@ -624,79 +514,111 @@ No markdown fences, no explanation.`,
   }
 });
 
-// ════════════════════════════════════════════════════════════════════════
+// POST /api/v1/relationships/confirm-all
+// Body { ids: [uuid…] } (at most 50): each confirmed as it is, by the rules
+// Confirm keeps. One refused leaves the others: { confirmed, refused }.
+router.post('/confirm-all', requireAuth, authorize(['ADMIN']), async (req, res) => {
+  try {
+    const db = getDb();
+    const { confirmed, refused } = await seeds.confirmMany(db, req.body?.ids);
+    const rows = await seedRows(db, confirmed.map((c) => c.id));
+    res.json({ confirmed: rows, refused });
+  } catch (err) { seedError(res, err, 'POST /relationships/confirm-all'); }
+});
+
 // POST /api/v1/relationships/confirm/:relationshipId
-// Approve an AI-generated candidate → confirmed = true
-// ════════════════════════════════════════════════════════════════════════
+// Confirm a seed, with the Inspector's edits when sent (relationship_type,
+// connection_mode, status, tension_state, situation, pain_point_category,
+// lala_connection, notes, is_romantic, family_role), in one transaction: a
+// romance with a family role that is not a partner's is refused (409); a
+// family type becomes a family tie, both directions (services/familyTies).
+// Its Pulse pair follows. { relationship, pulse }.
 router.post('/confirm/:relationshipId', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const db = getDb();
-    const { relationshipId } = req.params;
-
-    const [candidate] = await db.sequelize.query(
-      `SELECT cr.id, cr.confirmed FROM character_relationships cr WHERE cr.id = :id AND ${LIVE}`,
-      { replacements: { id: relationshipId }, type: db.sequelize.QueryTypes.SELECT }
-    );
-    if (!candidate) return res.status(404).json({ error: 'Relationship not found' });
-
-    await db.sequelize.query(
-      `UPDATE character_relationships
-       SET confirmed = true, updated_at = NOW()
-       WHERE id = :id AND confirmed = false AND deleted_at IS NULL`,
-      { replacements: { id: relationshipId }, type: db.sequelize.QueryTypes.UPDATE }
-    );
-
-    const [row] = await db.sequelize.query(
-      `SELECT ${REL_SELECT}, ${CHAR_SELECT_A}, ${CHAR_SELECT_B}
-       FROM character_relationships cr ${CHAR_JOIN}
-       WHERE cr.id = :id`,
-      { replacements: { id: relationshipId }, type: db.sequelize.QueryTypes.SELECT }
-    );
-
+    const done = await seeds.confirmSeed(db, req.params.relationshipId, req.body || {});
+    const [row] = await seedRows(db, [done.id]);
     if (!row) return res.status(404).json({ error: 'Relationship not found' });
-    const pulse = await truth.afterStorySave(db, relationshipId);
-    res.json({ relationship: row, message: 'Candidate confirmed', pulse });
+    res.json({ relationship: row, message: 'Candidate confirmed', pulse: done.pulse, ...(done.family ? { family: true } : {}) });
+  } catch (err) { seedError(res, err, 'POST /relationships/confirm/:id'); }
+});
+
+// POST /api/v1/relationships/:relId/seed-state
+// Body { state: 'kept' | null }: "Keep as idea", or "Bring back" (from kept
+// or later). Unconfirmed live rows only; otherwise 409.
+router.post('/:relId/seed-state', requireAuth, authorize(['ADMIN']), async (req, res) => {
+  try {
+    const db = getDb();
+    const state = req.body?.state === undefined ? undefined : req.body.state;
+    if (state === undefined) return res.status(400).json({ error: "state must be 'kept' or null" });
+    await seeds.setSeedState(db, req.params.relId, state);
+    const [row] = await seedRows(db, [req.params.relId]);
+    res.json({ relationship: row || null });
+  } catch (err) { seedError(res, err, 'POST /relationships/:id/seed-state'); }
+});
+
+// POST /api/v1/relationships/seeds
+// Body { source: 'scene'|'pulse'|'manual', seeds: [{ character_id_a,
+// character_id_b, relationship_type, situation?, is_romantic?, seed_why?,
+// seed_basis? }] } (at most 20): the scene banner's and the Pulse's
+// suggestions land in Seeds. A pair already there is skipped, as Generate
+// skips it. 201 { candidates, skipped: [{ index, code, why }] }.
+router.post('/seeds', requireAuth, authorize(['ADMIN']), async (req, res) => {
+  try {
+    const db = getDb();
+    const made = await seeds.createSeeds(db, req.body || {});
+    res.status(201).json({ candidates: await seedRows(db, made.ids), skipped: made.skipped });
+  } catch (err) { seedError(res, err, 'POST /relationships/seeds'); }
+});
+
+// ════════════════════════════════════════════════════════════════════════
+// Tidy up the types (services/relationshipTypeTidy; Evoni, 2026-10-24:
+// "Yes tidy up existing relationships"). GET proposes a list type for each
+// live relationship or seed whose type the app does not know (no AI); POST
+// saves the changes she accepted, in one transaction, by PUT's rules.
+// Registered before GET /:relId, which would take the path otherwise.
+// ════════════════════════════════════════════════════════════════════════
+const typeTidy = require('../services/relationshipTypeTidy');
+
+router.get('/type-tidy', requireAuth, async (req, res) => {
+  try {
+    res.json(await typeTidy.proposals(getDb()));
   } catch (err) {
-    console.error('POST /relationships/confirm/:id error:', err);
+    console.error('GET /relationships/type-tidy error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/type-tidy', requireAuth, authorize(['ADMIN']), async (req, res) => {
+  try {
+    res.json(await typeTidy.applyTidy(getDb(), req.body?.changes));
+  } catch (err) {
+    if (err instanceof typeTidy.TidyError) return res.status(err.status).json({ error: err.message });
+    console.error('POST /relationships/type-tidy error:', err);
     res.status(500).json({ error: err.message });
   }
 });
 
 // ════════════════════════════════════════════════════════════════════════
 // DELETE /api/v1/relationships/dismiss/:relationshipId
-// Dismiss an unconfirmed seed. Like Delete it only marks the row deleted,
-// so POST /:relId/restore is its Undo. A dismissed pair stays out of the
-// next Generate: the unique index (a, b, type) still counts the row, and
-// Generate skips every pair already there, deleted ones too.
+// Dismiss an unconfirmed seed, with Evoni's reason (body { reason, note },
+// both optional). "Too soon" does not delete it: it is put off for later
+// (seed_state 'later') → { later: true, relationship }. Any other reason, or
+// none, marks it deleted with the reason, as before → { dismissed: true };
+// POST /:relId/restore is its Undo. Generate's skip rule reads the reason
+// (services/relationshipSeeds).
 // ════════════════════════════════════════════════════════════════════════
 router.delete('/dismiss/:relationshipId', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const db = getDb();
-    const { relationshipId } = req.params;
-    if (!UUID_RE.test(relationshipId)) return res.status(404).json({ error: 'Relationship not found' });
-
-    const [row] = await db.sequelize.query(
-      `SELECT id, confirmed FROM character_relationships WHERE id = :id AND deleted_at IS NULL`,
-      { replacements: { id: relationshipId }, type: db.sequelize.QueryTypes.SELECT }
-    );
-
-    if (!row) return res.status(404).json({ error: 'Relationship not found' });
-    if (row.confirmed) {
-      return res.status(400).json({ error: 'Cannot dismiss a confirmed relationship. Use DELETE /:id instead.' });
+    const done = await seeds.dismissSeed(db, req.params.relationshipId, req.body || {});
+    if (done.later) {
+      const [row] = await seedRows(db, [req.params.relationshipId]);
+      return res.json({ later: true, relationship: row || null });
     }
-
-    await db.sequelize.query(
-      'UPDATE character_relationships SET deleted_at = NOW(), updated_at = NOW() WHERE id = :id AND deleted_at IS NULL AND confirmed = false',
-      { replacements: { id: relationshipId } }
-    );
-
     res.json({ dismissed: true });
-  } catch (err) {
-    console.error('DELETE /relationships/dismiss/:id error:', err);
-    res.status(500).json({ error: err.message });
-  }
+  } catch (err) { seedError(res, err, 'DELETE /relationships/dismiss/:id'); }
 });
-
 // ════════════════════════════════════════════════════════════════════════
 // PUT /api/v1/relationships/:relId
 // Update mutable fields on a relationship
@@ -802,7 +724,9 @@ router.delete('/:relId', requireAuth, authorize(['ADMIN']), async (req, res) => 
 
 // ════════════════════════════════════════════════════════════════════════
 // POST /api/v1/relationships/:relId/restore
-// Undo a delete, or a seed's dismiss (it comes back a seed).
+// Undo a delete, or a seed's dismiss (it comes back a seed), or bring back
+// a seed put off as "too soon": either way its seed state and dismiss
+// reason are cleared, so it is pending again.
 // ════════════════════════════════════════════════════════════════════════
 router.post('/:relId/restore', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
@@ -810,7 +734,9 @@ router.post('/:relId/restore', requireAuth, authorize(['ADMIN']), async (req, re
     const { relId } = req.params;
     if (!UUID_RE.test(relId)) return res.status(404).json({ error: 'Relationship not found' });
     const [, meta] = await db.sequelize.query(
-      'UPDATE character_relationships SET deleted_at = NULL, updated_at = NOW() WHERE id = :id AND deleted_at IS NOT NULL',
+      `UPDATE character_relationships
+          SET deleted_at = NULL, seed_state = NULL, dismiss_reason = NULL, dismiss_note = NULL, updated_at = NOW()
+        WHERE id = :id AND (deleted_at IS NOT NULL OR (confirmed = false AND seed_state = 'later'))`,
       { replacements: { id: relId } }
     );
     if (!(meta?.rowCount)) return res.status(404).json({ error: 'No deleted relationship to restore' });
@@ -913,172 +839,15 @@ router.put('/:relId/family', requireAuth, authorize(['ADMIN']), async (req, res)
 
 // ════════════════════════════════════════════════════════════════════════
 // POST /api/v1/relationships/generate-family
-// Use AI to propose family relationships between the cast (loadCastIds).
-// They land as seeds (confirmed = false) for Evoni to confirm on the Seeds
-// tab, like every other generated relationship.
+// Propose Family: Generate aimed at family (kind 'family'), with the same
+// grounding. Family roles are saved as before (the role both ways, its
+// kind). They land as seeds for Evoni to confirm on the Seeds tab.
 // ════════════════════════════════════════════════════════════════════════
 router.post('/generate-family', requireAuth, authorize(['ADMIN']), aiRateLimiter, async (req, res) => {
   try {
-    const db = getDb();
-
-    const { characters } = await loadCastCharacters(db, { forAI: true });
-
-    if (characters.length < 2) {
-      return res.status(400).json({ error: 'Need at least 2 people in the cast to generate family' });
-    }
-
-    // Get existing family/romantic relationships to avoid duplicates
-    const charIds = characters.map(c => c.id);
-    const existing = await db.sequelize.query(
-      `SELECT character_id_a, character_id_b, family_role, is_romantic, relationship_type
-       FROM character_relationships
-       WHERE character_id_a IN (:ids) AND character_id_b IN (:ids) AND deleted_at IS NULL
-         AND (family_role IS NOT NULL OR is_blood_relation = true OR is_romantic = true)`,
-      { replacements: { ids: charIds }, type: db.sequelize.QueryTypes.SELECT }
-    );
-
-    const existingPairs = new Set(
-      existing.map(r => `${r.character_id_a}|${r.character_id_b}`)
-    );
-    const nameById = (id) => nameOf(characters.find(c => c.id === id));
-
-    const charContext = characters.map(c => (
-      `- ${nameOf(c)} [id=${c.id}] (${c.role_type}): ${c.description?.slice(0, 150) || c.personality?.slice(0, 150) || 'no description'}`
-    )).join('\n');
-
-    const existingContext = existing.length > 0
-      ? `\nExisting family/romantic bonds (do NOT duplicate):\n${existing.map(r => (
-          `- ${nameById(r.character_id_a)} → ${nameById(r.character_id_b)}: ${r.family_role || r.relationship_type} ${r.is_romantic ? '(romantic)' : ''}`
-        )).join('\n')}\n`
-      : '';
-
-    const Anthropic = require('@anthropic-ai/sdk');
-    const claude = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-
-    let message;
-    try {
-      message = await claude.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 2000,
-      messages: [{
-        role: 'user',
-        content: `You are building a family tree for a fiction universe. Analyze the characters below and generate family and romantic relationships that make narrative sense.
-
-Characters:
-${charContext}
-${existingContext}
-
-For each relationship, provide:
-- character_a_id: UUID of character A (from the list above)
-- character_b_id: UUID of character B (from the list above)
-- family_role: The role A plays relative to B. Use standard roles: mother, father, sister, brother, daughter, son, aunt, uncle, cousin, grandmother, grandfather, stepmother, stepfather, stepsister, stepbrother, niece, nephew, wife, husband, partner, ex-wife, ex-husband
-- is_blood_relation: true if biological family, false if step/chosen/married-into
-- is_romantic: true for spouse/partner/ex relationships
-- relationship_type: A descriptive label like "married couple", "estranged siblings", "protective mother", "rival sisters"
-- conflict_summary: 1-2 sentences on the core tension between them
-- notes: Brief context for why this family bond makes sense for the narrative
-
-Rules:
-- Family bonds must be consistent (if A is B's mother, don't also make B's parent someone else unless it's a step-parent)
-- Generate 3-8 relationships
-- Think about what family structures create the most dramatic tension for the story
-- A married couple raising children should both be connected to their children
-- Consider generational depth — parents, children, siblings, extended family
-
-Return ONLY valid JSON: { "family_bonds": [ ... ] }
-No markdown fences, no explanation.`,
-      }],
-      });
-    } catch (aiErr) {
-      return aiFailure(res, aiErr, 'Propose Family');
-    }
-
-    let familyBonds = [];
-    try {
-      const raw = message.content[0].text.trim();
-      const parsed = JSON.parse(raw);
-      familyBonds = parsed.family_bonds || [];
-    } catch (parseErr) {
-      console.error('Family tree JSON parse error:', parseErr);
-      return res.status(500).json({ error: 'Failed to parse AI response' });
-    }
-
-    // Insert as seeds (unconfirmed)
-    const inserted = [];
-    const familyTies = require('../services/familyTies');
-    // A step, adoptive, chosen or in-law role says its kind; otherwise blood
-    // when the generator says so, else not known yet.
-    const seedKind = (bond) => {
-      if (!bond.family_role || bond.is_romantic) return null;
-      const k = familyTies.kindOf(bond.family_role);
-      if (k !== 'blood') return k;
-      return bond.is_blood_relation ? 'blood' : null;
-    };
-    for (const bond of familyBonds) {
-      const aExists = characters.find(ch => ch.id === bond.character_a_id);
-      const bExists = characters.find(ch => ch.id === bond.character_b_id);
-      if (!aExists || !bExists) continue;
-      if (bond.character_a_id === bond.character_b_id) continue;
-
-      const pairKey = `${bond.character_a_id}|${bond.character_b_id}`;
-      const pairKeyRev = `${bond.character_b_id}|${bond.character_a_id}`;
-      if (existingPairs.has(pairKey) || existingPairs.has(pairKeyRev)) continue;
-
-      const id = uuidv4();
-      const now = new Date();
-
-      await db.sequelize.query(
-        `INSERT INTO character_relationships
-           (id, character_id_a, character_id_b, relationship_type,
-            family_role, reverse_family_role, family_kind, is_blood_relation, is_romantic,
-            conflict_summary, notes, connection_mode,
-            lala_connection, status, confirmed,
-            created_at, updated_at)
-         VALUES
-           (:id, :char_a, :char_b, :rel_type,
-            :family_role, :reverse_role, :family_kind, :is_blood, :is_romantic,
-            :conflict, :notes, 'IRL',
-            'none', 'Active', false,
-            :now, :now)
-         ON CONFLICT (character_id_a, character_id_b, relationship_type) DO NOTHING`,
-        {
-          replacements: {
-            id, char_a: bond.character_a_id, char_b: bond.character_b_id,
-            rel_type: bond.relationship_type || 'family',
-            family_role: bond.family_role || null,
-            // The seed's kind and the role read the other way (services/familyTies).
-            reverse_role: bond.family_role && !bond.is_romantic ? familyTies.reverseRole(bond.family_role) : null,
-            family_kind: seedKind(bond),
-            is_blood: bond.is_blood_relation || false,
-            is_romantic: bond.is_romantic || false,
-            conflict: bond.conflict_summary || null,
-            notes: bond.notes || null,
-            now,
-          },
-          type: db.sequelize.QueryTypes.INSERT,
-        }
-      );
-
-      existingPairs.add(pairKey);
-      inserted.push({ id, ...bond });
-    }
-
-    // Return full rows
-    const insertedIds = inserted.map(i => i.id);
-    let results = [];
-    if (insertedIds.length > 0) {
-      results = await db.sequelize.query(
-        `SELECT ${REL_SELECT}, ${CHAR_SELECT_A}, ${CHAR_SELECT_B}
-         FROM character_relationships cr ${CHAR_JOIN}
-         WHERE cr.id IN (:ids)`,
-        { replacements: { ids: insertedIds }, type: db.sequelize.QueryTypes.SELECT }
-      );
-    }
-
-    res.status(201).json({
-      family_bonds: results,
-      count: results.length,
-      message: `Proposed ${results.length} family seed(s)`,
+    await generateAndRespond(req, res, {
+      body: { ...(req.body || {}), kind: 'family' }, what: 'Propose Family',
+      shape: (rows, skipped) => ({ family_bonds: rows, count: rows.length, skipped, message: `Proposed ${rows.length} family seed(s)` }),
     });
   } catch (err) {
     console.error('POST /relationships/generate-family error:', err);
