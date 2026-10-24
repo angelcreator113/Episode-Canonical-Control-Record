@@ -489,96 +489,124 @@ module.exports = {
    */
   async updateEpisode(req, res, _next) {
     const { id } = req.params;
-    const updates = req.body;
+    const updates = req.body || {};
 
-    const episode = await Episode.findByPk(id);
-    if (!episode) {
-      throw new NotFoundError('Episode', id);
-    }
-
-    const oldValues = episode.toJSON();
-
-    // Whitelist updatable fields
-    const allowedFields = {
-      title: true,
-      episode_number: true,
-      season_number: true,
-      description: true,
-      air_date: true,
-      status: true,
-      categories: true,
-      script_content: true,
-      thumbnail_url: true,
-      distribution_metadata: true,
-      // Viewer teaser (P12, Task #2386). teaser_drafted is the Start Episode
-      // draft's saved copy and is never client-writable.
-      teaser: true,
-    };
-
-    const updateData = {};
-
-    // Process each field in the updates
-    Object.keys(updates).forEach((field) => {
-      if (allowedFields[field]) {
-        // Handle type conversions
-        if (field === 'episode_number' || field === 'season_number') {
-          updateData[field] = parseInt(updates[field]);
-        } else if (field === 'air_date') {
-          updateData.air_date = updates[field] ? new Date(updates[field]) : null;
-        } else if (field === 'teaser') {
-          // Trimmed and capped like the draft; empty clears it. The event
-          // description is not compared here: an edit is Evoni's call.
-          updateData.teaser = normalizeTeaser(updates.teaser);
-        } else {
-          updateData[field] = updates[field];
-        }
+    // History audit H11 (2026-10-24): two tabs saving at once each read the
+    // script, kept it and wrote theirs, so one version was lost. The read,
+    // the kept version and the update are one transaction, the episode row
+    // locked (SELECT ... FOR UPDATE), so the second save waits and keeps
+    // the first one's script.
+    const result = await Episode.sequelize.transaction(async (transaction) => {
+      const episode = await Episode.findByPk(id, { transaction, lock: transaction.LOCK.UPDATE });
+      if (!episode) {
+        throw new NotFoundError('Episode', id);
       }
+
+      const oldValues = episode.toJSON();
+
+      // Whitelist updatable fields
+      const allowedFields = {
+        title: true,
+        episode_number: true,
+        season_number: true,
+        description: true,
+        air_date: true,
+        status: true,
+        categories: true,
+        script_content: true,
+        thumbnail_url: true,
+        distribution_metadata: true,
+        // Viewer teaser (P12, Task #2386). teaser_drafted is the Start Episode
+        // draft's saved copy and is never client-writable.
+        teaser: true,
+      };
+
+      const updateData = {};
+
+      // Process each field in the updates
+      Object.keys(updates).forEach((field) => {
+        if (allowedFields[field]) {
+          // Handle type conversions
+          if (field === 'episode_number' || field === 'season_number') {
+            updateData[field] = parseInt(updates[field]);
+          } else if (field === 'air_date') {
+            updateData.air_date = updates[field] ? new Date(updates[field]) : null;
+          } else if (field === 'teaser') {
+            // Trimmed and capped like the draft; empty clears it. The event
+            // description is not compared here: an edit is Evoni's call.
+            updateData.teaser = normalizeTeaser(updates.teaser);
+          } else {
+            updateData[field] = updates[field];
+          }
+        }
+      });
+
+      // A changed title is no longer the approved one (Task #2386, ruling P11):
+      // the approval is cleared so the new title is approved again, and a card
+      // designed for the old title reads as outdated (title_card_title no longer
+      // matches), which offers a redesign. title_approved_value keeps the last
+      // approved title.
+      if ('title' in updateData && updateData.title !== oldValues.title && oldValues.title_approved_at) {
+        updateData.title_approved_at = null;
+      }
+
+      // Locked script beats (utils/scriptBeatLocks.js): a save can't change a
+      // locked beat. It is put back as it was, and the response names it so
+      // the Script tab shows what was kept.
+      let lockedKept = [];
+      let lockedMoved = [];
+      // Script tab re-audit (2026-10-15): clearing the script (null) goes
+      // through the same lock-keeping and version history as any save; any
+      // other non-text value is refused.
+      if (updateData.script_content === null && String(oldValues.script_content || '').trim()) {
+        updateData.script_content = '';
+      }
+      if (updateData.script_content !== undefined && updateData.script_content !== null && typeof updateData.script_content !== 'string') {
+        return { refused: 'script_content must be text' };
+      }
+      if (typeof updateData.script_content === 'string') {
+        const { scriptKeepingLocks } = require('../utils/scriptBeatLocks');
+        // A save is the page's own edits: a new beat under an approved
+        // beat's number is kept, renumbered, and named (locked_beats_moved).
+        const locks = scriptKeepingLocks(oldValues, updateData.script_content, { keepExtras: true });
+        updateData.script_content = locks.script;
+        lockedKept = locks.changed;
+        lockedMoved = locks.moved;
+      }
+
+      // The style sheet entry in Distribution (Task #2878) is written only by
+      // its own routes; a save of the platform copy carries it over.
+      if (updateData.distribution_metadata !== undefined) {
+        const { keepStyleSheet } = require('../services/styleSheetDistributionService');
+        updateData.distribution_metadata = await keepStyleSheet(Episode.sequelize, episode.id, updateData.distribution_metadata, { transaction });
+      }
+
+      // Version history (services/scriptVersions.js): the script this save
+      // replaces is kept first; a failure to keep it never stops the save.
+      // A save that puts back a version from History names it (restored_from,
+      // a version of this episode; any other value is ignored), and the
+      // script it replaces is kept as source 'restore' (History audit H7).
+      if (typeof updateData.script_content === 'string') {
+        const models = require('../models');
+        const { snapshotScript, isEpisodeVersion } = require('../services/scriptVersions');
+        let source = 'save';
+        if (updates.restored_from != null) {
+          try {
+            // In a savepoint: a failed check never aborts the save.
+            const known = await Episode.sequelize.transaction({ transaction }, (sp) => isEpisodeVersion(models, episode.id, updates.restored_from, sp));
+            if (known) source = 'restore';
+          } catch (err) {
+            console.error('[episodeController] restored_from could not be checked (kept as a save):', err.message);
+          }
+        }
+        await snapshotScript(models, episode, { source, userId: req.user?.id, next: updateData.script_content, transaction });
+      }
+
+      await episode.update(updateData, { transaction });
+      return { episode, oldValues, updateData, lockedKept, lockedMoved };
     });
-
-    // A changed title is no longer the approved one (Task #2386, ruling P11):
-    // the approval is cleared so the new title is approved again, and a card
-    // designed for the old title reads as outdated (title_card_title no longer
-    // matches), which offers a redesign. title_approved_value keeps the last
-    // approved title.
-    if ('title' in updateData && updateData.title !== oldValues.title && oldValues.title_approved_at) {
-      updateData.title_approved_at = null;
-    }
-
-    // Locked script beats (utils/scriptBeatLocks.js): a save can't change a
-    // locked beat. It is put back as it was, and the response names it so
-    // the Script tab shows what was kept.
-    let lockedKept = [];
-    // Script tab re-audit (2026-10-15): clearing the script (null) goes
-    // through the same lock-keeping and version history as any save; any
-    // other non-text value is refused.
-    if (updateData.script_content === null && String(oldValues.script_content || '').trim()) {
-      updateData.script_content = '';
-    }
-    if (updateData.script_content !== undefined && updateData.script_content !== null && typeof updateData.script_content !== 'string') {
-      return res.status(400).json({ error: 'script_content must be text' });
-    }
-    if (typeof updateData.script_content === 'string') {
-      const { scriptKeepingLocks } = require('../utils/scriptBeatLocks');
-      const locks = scriptKeepingLocks(oldValues, updateData.script_content);
-      updateData.script_content = locks.script;
-      lockedKept = locks.changed;
-    }
-
-    // The style sheet entry in Distribution (Task #2878) is written only by
-    // its own routes; a save of the platform copy carries it over.
-    if (updateData.distribution_metadata !== undefined) {
-      const { keepStyleSheet } = require('../services/styleSheetDistributionService');
-      updateData.distribution_metadata = await keepStyleSheet(Episode.sequelize, episode.id, updateData.distribution_metadata);
-    }
-
-    // Version history (services/scriptVersions.js): the script this save
-    // replaces is kept first; a failure to keep it never stops the save.
-    if (typeof updateData.script_content === 'string') {
-      const { snapshotScript } = require('../services/scriptVersions');
-      await snapshotScript(require('../models'), episode, { source: 'save', userId: req.user?.id, next: updateData.script_content });
-    }
-
-    await episode.update(updateData);
+    if (result.refused) return res.status(400).json({ error: result.refused });
+    const { episode, oldValues, updateData, lockedKept, lockedMoved } = result;
 
     // A moved air date moves the episode's scheduled Pulse posts with it
     // (services/postRelease shiftForAirDate); one that would land in the
@@ -654,6 +682,7 @@ module.exports = {
       data: episode,
       message: 'Episode updated successfully',
       ...(lockedKept.length ? { locked_beats_kept: lockedKept } : {}),
+      ...(lockedMoved.length ? { locked_beats_moved: lockedMoved } : {}),
       ...(releaseShift && (releaseShift.shifted.length || releaseShift.held.length) ? { release_shift: releaseShift } : {}),
     });
   },
@@ -682,26 +711,35 @@ module.exports = {
       return res.status(400).json({ error: 'locked_beats must be beat numbers from 1 to 14, each once' });
     }
 
-    const episode = await Episode.findByPk(id);
-    if (!episode) {
-      throw new NotFoundError('Episode', id);
-    }
-    const before = normalizeLockedBeats(episode.script_locked_beats);
-    const update = { script_locked_beats: next };
-    let lockedKept = [];
-    if (typeof scriptContent === 'string') {
-      const stillLocked = before.filter((n) => next.includes(n));
-      const locks = keepLockedBeats(scriptContent, episode.script_content, stillLocked);
-      update.script_content = locks.script;
-      lockedKept = locks.changed;
-      const { snapshotScript } = require('../services/scriptVersions');
-      await snapshotScript(require('../models'), episode, { source: 'lock', userId: req.user?.id, next: update.script_content });
-    }
-    await episode.update(update);
+    // One transaction with the row locked, as the episode save (History
+    // audit H11): a lock and a save at once can't lose a version.
+    const { episode, lockedKept, lockedMoved } = await Episode.sequelize.transaction(async (transaction) => {
+      const row = await Episode.findByPk(id, { transaction, lock: transaction.LOCK.UPDATE });
+      if (!row) {
+        throw new NotFoundError('Episode', id);
+      }
+      const before = normalizeLockedBeats(row.script_locked_beats);
+      const update = { script_locked_beats: next };
+      let kept = [];
+      let moved = [];
+      if (typeof scriptContent === 'string') {
+        const stillLocked = before.filter((n) => next.includes(n));
+        // The page's own edits: a new beat under an approved beat's number is kept, renumbered.
+        const locks = keepLockedBeats(scriptContent, row.script_content, stillLocked, { keepExtras: true });
+        update.script_content = locks.script;
+        kept = locks.changed;
+        moved = locks.moved;
+        const { snapshotScript } = require('../services/scriptVersions');
+        await snapshotScript(require('../models'), row, { source: 'lock', userId: req.user?.id, next: update.script_content, transaction });
+      }
+      await row.update(update, { transaction });
+      return { episode: row, lockedKept: kept, lockedMoved: moved };
+    });
 
     res.json({
       data: { id: episode.id, script_locked_beats: episode.script_locked_beats, script_content: episode.script_content },
       ...(lockedKept.length ? { locked_beats_kept: lockedKept } : {}),
+      ...(lockedMoved.length ? { locked_beats_moved: lockedMoved } : {}),
     });
   },
 

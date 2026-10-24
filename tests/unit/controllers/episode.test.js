@@ -281,6 +281,11 @@ describe('Episode Controller - Real Tests', () => {
   });
 
   describe('updateEpisode()', () => {
+    // The save runs in a transaction with the row locked (History audit H11).
+    beforeEach(() => {
+      models.Episode.sequelize = { transaction: jest.fn(async (fn) => fn({ LOCK: { UPDATE: 'UPDATE' } })) };
+    });
+
     test('should update episode fields', async () => {
       const mockEpisode = {
         id: 1,

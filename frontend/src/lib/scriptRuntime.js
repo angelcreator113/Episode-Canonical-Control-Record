@@ -5,7 +5,7 @@
  * beat by, not a timeline; the edit decides the real length.
  */
 
-import { speakerLine } from './scriptSpeaker';
+import { speakerLine, isRuleLine } from './scriptSpeaker';
 
 const WORDS_PER_MINUTE = 150;
 const ACTION_SECONDS = 3;
@@ -30,7 +30,8 @@ const spokenWords = (text) => String(text || '')
 /** Seconds one line takes on screen. */
 export function lineSeconds(line) {
   const t = (typeof line === 'string' ? line : '').trim();
-  if (!t) return 0;
+  // A `---` rule takes no screen time (lib/scriptSpeaker isRuleLine).
+  if (!t || isRuleLine(t)) return 0;
   if (TRANSITION_TAG.test(t)) return TRANSITION_SECONDS;
   if (HIDDEN_TAG.test(t)) return 0;
   if (UI_TAG.test(t)) return MOMENT_SECONDS;

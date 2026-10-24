@@ -95,6 +95,11 @@ describe('no edits while a lock is on its way', () => {
     expect(screen.getByTestId('script-lock-1').textContent).toBe('Unlock');
     // Still open with the words; the locked beat is as it was sent.
     expect(editor().value).toBe('Lala: Changed while locking.');
+    // The Raw editor waits for the open line (Raw editor audit, 2026-10-24: the toggle lost its words).
+    fireEvent.click(screen.getByRole('button', { name: 'Raw editor' }));
+    expect(screen.queryByRole('textbox', { name: 'Raw script' })).toBeNull();
+    expect(editor().value).toBe('Lala: Changed while locking.');
+    fireEvent.click(within(editor().closest('.esp-line-edit')).getByRole('button', { name: 'Cancel' }));
     expect(beat1Lines()).toEqual(['Lala: Hi besties.', 'Lala: Second line.']);
   });
 

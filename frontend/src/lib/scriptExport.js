@@ -14,12 +14,14 @@
  *   any other `[TAG: …]`   not spoken: a Fountain note `[[TAG: …]]`, so nothing
  *                          is lost from the export; left out of the table read
  *                          and the plain-text printout
+ *   `---` on its own       nothing (a Markdown rule)
  *   anything else          narration, read as action
+ * `**Lala:** words` is Lala's line, as `Lala: words` (lib/scriptSpeaker unbold).
  */
 import { beatName } from './canonicalBeats';
 import { parseMoment, resolveMoment, messageOf, verbLabel, deviceLabel } from './scriptMoments';
 import { headerNumber, normalizeBeatHeaders } from './beatLabelNumber';
-import { speakerLine, unquote } from './scriptSpeaker';
+import { speakerLine, unquote, isRuleLine } from './scriptSpeaker';
 
 const BEAT_HEADER = /^\s*##\s*BEAT:\s*(.*)$/i;
 const TAG_LINE = /^\s*\[\s*([A-Za-z_]+)\s*:\s*([^\]]*)\]?\s*$/;
@@ -68,7 +70,8 @@ export function momentWords(moment, shown = null) {
  */
 export function readLine(line, on = null) {
   const t = String(line ?? '').trim();
-  if (!t) return null;
+  // A `---` rule is read as nothing, as the Script tab shows it (lib/scriptSpeaker isRuleLine).
+  if (!t || isRuleLine(t)) return null;
   const moment = parseMoment(t);
   if (moment) return { type: 'moment', text: momentWords(moment, on ? resolveMoment(moment, on) : null) };
   const tag = t.match(TAG_LINE);

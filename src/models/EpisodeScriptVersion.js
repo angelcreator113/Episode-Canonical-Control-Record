@@ -1,8 +1,10 @@
 // ─── EpisodeScriptVersion.js ─────────────────────────────────────────────────
 // A script the Script tab replaced (migration 20261015100000; Script tab
 // audit, 2026-10-15): the episode, the text and locked beats as they were,
-// what replaced it (save | lock | generate) and who. The newest 50 per
-// episode are kept (services/scriptVersions.js). A restore is a save.
+// what replaced it (save | lock | restore | generate) and who. Kept per
+// episode (services/scriptVersions.js): the newest 50 of save, lock and
+// restore, and the newest 10 generated. 'restore' is the script a save
+// putting back a version from History replaced (History audit, 2026-10-24).
 'use strict';
 const { Model } = require('sequelize');
 module.exports = (sequelize, DataTypes) => {

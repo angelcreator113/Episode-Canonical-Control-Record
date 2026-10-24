@@ -68,6 +68,11 @@ test('the shopping list is read again after a save, not on a keystroke', async (
   fireEvent.change(screen.getByRole('textbox', { name: 'Raw script' }), { target: { value: `${SCRIPT}\nLala: More.` } });
   expect(todoCalls()).toBe(1);
   fireEvent.click(screen.getByTestId('script-savebar-save'));
+  await waitFor(() => expect(api.put).toHaveBeenCalledTimes(1));
+  // Not in the Raw editor, where True now is hidden (Raw editor audit,
+  // 2026-10-24): read once Beat view is back.
+  expect(todoCalls()).toBe(1);
+  fireEvent.click(screen.getByRole('button', { name: 'Beat view' }));
   await waitFor(() => expect(todoCalls()).toBe(2));
 });
 

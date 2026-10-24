@@ -23,6 +23,7 @@ import { readLine, scriptSections } from './scriptExport';
 import { lineSeconds } from './scriptRuntime';
 import { isBreath, markTokens } from './teleprompterMarks';
 import { screenLine } from './teleprompterScreen';
+import { unbold } from './scriptSpeaker';
 
 // Her names as the script writes them (lib/scriptRuleChecks JAW_SAYS; `Me:`
 // reads as Prime in lib/scriptSpeaker).
@@ -31,8 +32,8 @@ const HERS = new Set(['prime', 'me', 'justawoman', 'jawihp']);
 export const isHerSpeaker = (speaker) => HERS.has(String(speaker || '').trim().toLowerCase());
 export const HER = 'JustAWoman';
 
-// `**Me:** words` and `__Me__: words`, as a pasted script can have them.
-const unbold = (line) => String(line ?? '').replace(/^\s*(\*\*|__)\s*([^*_:]+?)\s*(?:\1\s*:|:\s*\1)\s*/, '$2: ');
+// `**Me:** words` and `__Me__: words`, as a pasted script can have them:
+// lib/scriptSpeaker's rule, shared with the Script tab and the export.
 
 export function teleprompterLines(lines = [], { screen = false } = {}) {
   const out = [];
