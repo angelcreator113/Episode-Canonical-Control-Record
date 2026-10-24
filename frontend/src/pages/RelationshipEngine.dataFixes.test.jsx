@@ -171,6 +171,8 @@ describe('Add', () => {
     expect(vi.mocked(apiClient.post).mock.calls[0][1]).toMatchObject({ relationship_type: 'mother', is_romantic: false });
     expect(await screen.findByText('Family tie added')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Open Family' }));
+    // The ties as cards are behind the List toggle (2026-10-24), closed at first.
+    fireEvent.click(await screen.findByRole('button', { name: /^List · \d+ family ti/ }));
     const list = await screen.findByRole('list', { name: 'Family ties' });
     expect(within(list).getByText('mother')).toBeTruthy();
   });
