@@ -19,6 +19,10 @@ const crypto = require('crypto');
 
 const TABLE = 'teleprompter_remote_sessions';
 const TTL_HOURS = 2;
+// A session in use stays open (Teleprompter audit 12): each state the desktop
+// sends moves expires_at to TTL_HOURS from then, never past MAX_HOURS from
+// when it was opened.
+const MAX_HOURS = 8;
 const RECENT = 10; // commands kept in last_command.recent
 const COMMANDS = Object.freeze(['toggle', 'faster', 'slower', 'next_beat', 'prev_beat', 'bigger', 'smaller', 'record_start', 'record_stop']);
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -80,14 +84,17 @@ const text = (v, max) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, 
 
 /**
  * The desktop's state as kept: only these fields, bounded. running,
- * recording, recordMode, canRecord, reviewing (booleans); beat (number), beatName, pacing, title
- * (short text); speed, pace, size (numbers).
+ * recording, paused, recordMode, canRecord, reviewing (booleans); beat
+ * (number), beatName, pacing, title (short text); scope ('beat' or
+ * 'episode', else null); speed, pace, size (numbers). paused and scope are
+ * kept so the phone can show PAUSED and "Stop & review" (Teleprompter audit 10).
  */
 function readState(body = {}) {
   const s = body && typeof body === 'object' ? body : {};
   return {
     running: s.running === true,
     recording: s.recording === true,
+    paused: s.paused === true,
     recordMode: s.recordMode === true,
     canRecord: s.canRecord === true,
     reviewing: s.reviewing === true,
@@ -95,6 +102,7 @@ function readState(body = {}) {
     beatName: text(s.beatName, 120),
     title: text(s.title, 160),
     pacing: ['steady', 'lines', 'voice'].includes(s.pacing) ? s.pacing : null,
+    scope: ['beat', 'episode'].includes(s.scope) ? s.scope : null,
     speed: num(s.speed, 0, 100),
     pace: num(s.pace, 0, 10),
     size: num(s.size, 0, 400),
@@ -143,13 +151,18 @@ async function commandsAfter(sequelize, { id, userId, after = 0 }) {
   });
 }
 
-/** Keeps the desktop's state on the owner's live session. Null when there is none. */
+/**
+ * Keeps the desktop's state on the owner's live session, and keeps the
+ * session open: expires_at moves to TTL_HOURS from now (never earlier than
+ * it was), at most MAX_HOURS after it was opened. Null when there is none.
+ */
 async function putState(sequelize, { id, userId, state }) {
   if (!UUID_RE.test(String(id || ''))) return null;
   const clean = readState(state);
   return guarded('state', async () => {
     const [rows] = await sequelize.query(
-      `UPDATE ${TABLE} SET state = CAST(:state AS JSONB), updated_at = NOW()
+      `UPDATE ${TABLE} SET state = CAST(:state AS JSONB), updated_at = NOW(),
+          expires_at = GREATEST(expires_at, LEAST(NOW() + INTERVAL '${TTL_HOURS} hours', created_at + INTERVAL '${MAX_HOURS} hours'))
         WHERE ${liveOwned} AND expires_at > NOW()
         RETURNING ${PUBLIC_COLUMNS}`,
       { replacements: { id, userId: String(userId), state: JSON.stringify(clean) } });
@@ -216,7 +229,7 @@ async function stateByToken(sequelize, { token }) {
 }
 
 module.exports = {
-  TABLE, TTL_HOURS, RECENT, COMMANDS, NOT_READY, GONE,
+  TABLE, TTL_HOURS, MAX_HOURS, RECENT, COMMANDS, NOT_READY, GONE,
   RemoteError, missingTable, hashToken, newToken, readToken, readCommand, readState,
   createSession, commandsAfter, putState, endSession, addCommand, stateByToken,
 };
