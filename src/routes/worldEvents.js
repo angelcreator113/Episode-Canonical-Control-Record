@@ -1773,6 +1773,11 @@ router.post('/world/:showId/events/:eventId/inject', requireAuth, async (req, re
     // reconnecting, with POST .../scene-set-link to retry.
     const { linkEventSceneSet, STATUS } = require('../services/eventSceneSetLinkService');
     const sceneSet = await models.sequelize.transaction(async (t) => {
+      // Version history (services/scriptVersions.js; History audit H2,
+      // 2026-10-24): the script before the event went in is kept first, in
+      // a savepoint, so a failure to keep it never stops the injection.
+      const { snapshotScript } = require('../services/scriptVersions');
+      await snapshotScript(models, episode, { source: 'generate', userId: req.user?.id, next: script.trim(), transaction: t });
       await episode.update({ script_content: script.trim() }, { transaction: t });
       await models.sequelize.query(
         `UPDATE world_events SET used_in_episode_id = :episodeId, times_used = COALESCE(times_used, 0) + 1, status = 'used', updated_at = NOW() WHERE id = :eventId`,
@@ -1925,7 +1930,12 @@ router.post('/world/:showId/events/:eventId/generate-script', requireAuth, aiRat
     // If episode_id provided, save to episode
     if (episodeForGuard) {
       const { scriptKeepingLocks } = require('../utils/scriptBeatLocks');
-      await episodeForGuard.update({ script_content: scriptKeepingLocks(episodeForGuard, script).script });
+      const nextScript = scriptKeepingLocks(episodeForGuard, script).script;
+      // Version history (History audit H2, 2026-10-24): the script this
+      // replaces is kept first; a failure to keep it never stops the save.
+      const { snapshotScript } = require('../services/scriptVersions');
+      await snapshotScript(models, episodeForGuard, { source: 'generate', userId: req.user?.id, next: nextScript });
+      await episodeForGuard.update({ script_content: nextScript });
     }
 
     return res.json({
@@ -2965,8 +2975,12 @@ router.post('/world/:showId/events/:eventId/generate-episode', requireAuth, aiRa
               console.warn(`[GenerateEpisode] Skipped script draft for episode ${result.episode.id}: existing script_content present, no confirmOverwrite flag.`);
             } else {
               const { scriptKeepingLocks } = require('../utils/scriptBeatLocks');
+              const nextScript = scriptKeepingLocks(freshEpisode, skeleton).script;
+              // Version history (History audit H2): the replaced script is kept first.
+              const { snapshotScript } = require('../services/scriptVersions');
+              await snapshotScript(models, freshEpisode, { source: 'generate', userId: req.user?.id, next: nextScript });
               await models.Episode.update(
-                { script_content: scriptKeepingLocks(freshEpisode, skeleton).script },
+                { script_content: nextScript },
                 { where: { id: result.episode.id } }
               );
               scriptDrafted = true;
@@ -3294,7 +3308,11 @@ router.post('/world/:showId/events/generate-episode-from-many', requireAuth, aiR
               console.warn(`[generate-from-many] Skipped script draft for episode ${newEpisodeId}: existing script_content present, no confirmOverwrite flag.`);
             } else {
               const { scriptKeepingLocks } = require('../utils/scriptBeatLocks');
-              await models.Episode.update({ script_content: scriptKeepingLocks(freshEpisode, skeleton).script }, { where: { id: newEpisodeId } });
+              const nextScript = scriptKeepingLocks(freshEpisode, skeleton).script;
+              // Version history (History audit H2): the replaced script is kept first.
+              const { snapshotScript } = require('../services/scriptVersions');
+              await snapshotScript(models, freshEpisode, { source: 'generate', userId: req.user?.id, next: nextScript });
+              await models.Episode.update({ script_content: nextScript }, { where: { id: newEpisodeId } });
               scriptDrafted = true;
             }
           }

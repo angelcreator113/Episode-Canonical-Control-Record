@@ -152,11 +152,17 @@ router.post('/:scriptId/lock', requireAuth, async (req, res) => {
 
     // Save locked script to episode
     try {
-      const { Episode } = require('../models');
+      const models = require('../models');
+      const { Episode } = models;
       const { scriptKeepingLocks } = require('../utils/scriptBeatLocks');
       const current = await Episode.findByPk(script.episode_id, { attributes: ['id', 'script_content', 'script_locked_beats'] });
+      const nextScript = scriptKeepingLocks(current, script.script_text).script;
+      // Version history (services/scriptVersions.js; History audit H2,
+      // 2026-10-24): the episode's script this replaces is kept first.
+      const { snapshotScript } = require('../services/scriptVersions');
+      await snapshotScript(models, current, { source: 'generate', userId: req.user?.id, next: nextScript });
       await Episode.update(
-        { script_content: scriptKeepingLocks(current, script.script_text).script },
+        { script_content: nextScript },
         { where: { id: script.episode_id } }
       );
     } catch (err) { console.error('[ScriptWriter] Could not copy the locked script to the episode (non-blocking):', err.message); }

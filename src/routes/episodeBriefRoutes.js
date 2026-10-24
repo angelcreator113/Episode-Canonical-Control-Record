@@ -569,8 +569,8 @@ router.post('/:episodeId/generate-script', requireAuth, aiRateLimiter, async (re
       console.error('[ScriptGen] Could not re-read the episode before saving:', readErr.message);
       return null;
     })) || episodeForGuard;
-    const locks = scriptKeepingLocks(current, generated);
-    const script = locks.script;
+    let locks = scriptKeepingLocks(current, generated);
+    let script = locks.script;
 
     // Audit GATE-03 (2026-10-03): saving is part of success. A script that
     // was generated but not saved comes back saying so (success false,
@@ -579,14 +579,22 @@ router.post('/:episodeId/generate-script', requireAuth, aiRateLimiter, async (re
     let saved = false;
     let saveError = null;
     try {
-      const episode = current;
-      if (!episode) {
+      if (!current) {
         saveError = 'Episode not found';
       } else {
-        // Version history: the script Regenerate replaces is kept first.
-        const { snapshotScript } = require('../services/scriptVersions');
-        await snapshotScript(models, episode, { source: 'generate', userId: req.user?.id, next: script });
-        await episode.update({ script_content: script });
+        // History audit H11 (2026-10-24): the row is read again locked
+        // (SELECT ... FOR UPDATE) with the kept version and the update in one
+        // transaction, so a save or lock landing now can't lose a version;
+        // the locks kept are the episode's as it is at this moment.
+        await models.sequelize.transaction(async (transaction) => {
+          const episode = (await Episode.findByPk(episodeId, { transaction, lock: transaction.LOCK.UPDATE })) || current;
+          locks = scriptKeepingLocks(episode, generated);
+          script = locks.script;
+          // Version history: the script Regenerate replaces is kept first.
+          const { snapshotScript } = require('../services/scriptVersions');
+          await snapshotScript(models, episode, { source: 'generate', userId: req.user?.id, next: script, transaction });
+          await episode.update({ script_content: script }, { transaction });
+        });
         saved = true;
       }
     } catch (saveErr) {

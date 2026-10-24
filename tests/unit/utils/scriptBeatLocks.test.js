@@ -52,7 +52,7 @@ describe('scriptBeatLocks', () => {
   test('an unchanged locked beat leaves the new script exactly as it is', () => {
     const prev = script(beat(1, 'Opening Ritual', 'same'));
     const next = `${script(beat(1, 'Opening Ritual', 'same'))}\n\n\n`;
-    expect(keepLockedBeats(next, prev, [1])).toEqual({ script: next, kept: [1], changed: [] });
+    expect(keepLockedBeats(next, prev, [1])).toEqual({ script: next, kept: [1], changed: [], moved: [] });
   });
 
   test('scriptKeepingLocks reads the episode row', () => {
@@ -65,7 +65,7 @@ describe('scriptBeatLocks', () => {
   test('a number held by two beats keeps both approved copies', () => {
     const prev = '## BEAT: 3 · Welcome\nA1\n\n## BEAT: 3 · Welcome\nB1\n\n## BEAT: 4\nC1';
     const next = '## BEAT: 3 · Welcome\nA2\n\n## BEAT: 3 · Welcome\nNEW-B\n\n## BEAT: 4\nC2';
-    expect(keepLockedBeats(next, prev, [3])).toEqual({ script: '## BEAT: 3 · Welcome\nA1\n\n## BEAT: 3 · Welcome\nB1\n\n## BEAT: 4\nC2', kept: [3], changed: [3] });
+    expect(keepLockedBeats(next, prev, [3])).toEqual({ script: '## BEAT: 3 · Welcome\nA1\n\n## BEAT: 3 · Welcome\nB1\n\n## BEAT: 4\nC2', kept: [3], changed: [3], moved: [] });
     // A copy the new script dropped goes back after the first.
     expect(keepLockedBeats('## BEAT: 3 · Welcome\nA2\n\n## BEAT: 4\nC2', prev, [3]).script).toBe(prev.replace('C1', 'C2'));
   });
@@ -73,7 +73,7 @@ describe('scriptBeatLocks', () => {
   test('an approved beat numbered by its place goes back with its number written in', () => {
     const prev = '## BEAT: 1 · Opening Ritual\nA\n\n## BEAT: Bonus Scene\nBONUS\n\n## BEAT: Extra\nEXTRA';
     const moved = '## BEAT: 1 · Opening Ritual\nA\n\n## BEAT: 3 · Extra\nEXTRA\n\n## BEAT: 2 · Bonus Scene\nBONUS';
-    expect(keepLockedBeats(moved, prev, [2])).toEqual({ script: moved, kept: [2], changed: [] });
+    expect(keepLockedBeats(moved, prev, [2])).toEqual({ script: moved, kept: [2], changed: [], moved: [] });
     const written = '## BEAT: 1 · Opening Ritual\nA2\n\n## BEAT: 2 · Login Sequence\nNEW\n\n## BEAT: 3 · Welcome\nC2';
     expect(keepLockedBeats(written, prev, [2]).script).toBe('## BEAT: 1 · Opening Ritual\nA2\n\n## BEAT: 2 · Bonus Scene\nBONUS\n\n## BEAT: 3 · Welcome\nC2');
   });
@@ -127,5 +127,138 @@ describe('scriptBeatLocks', () => {
     expect(withoutExtraCopies(text, new Map([[2, 1]]))).toBe(text);
     const placed = '## BEAT: 1\nA\n\n## BEAT: Bonus\nB\n\n## BEAT: 2\nC';
     expect(withoutExtraCopies(placed, new Map([[2, 1]]))).toBe(placed);
+  });
+
+  // History / Raw editor audit (2026-10-24).
+  describe('R1: a locked beat whose header line was deleted', () => {
+    const B1 = beat(1, 'Opening Ritual', 'Prime: "open"');
+    const B2 = beat(2, 'Login Sequence', 'Lala: "locked one"\n[UI:CLICK Login]');
+    const B3 = beat(3, 'Welcome', 'Prime: "welcome"');
+    const prev = script(B1, B2, B3);
+
+    test('its lines, merged into the beat above, are taken out there and the beat goes back once', () => {
+      const merged = script(`${B1}\n\nLala: "locked one"\n[UI:CLICK Login]`, B3);
+      const out = keepLockedBeats(merged, prev, [2]);
+      expect(out.script).toBe(prev);
+      expect(out.script.match(/locked one/g)).toHaveLength(1);
+      expect(out.changed).toEqual([2]);
+    });
+
+    test('the beat above keeps its own edits', () => {
+      const merged = script(beat(1, 'Opening Ritual', 'Prime: "open, edited"\nLala: "locked one"\n[UI:CLICK Login]'), B3);
+      expect(keepLockedBeats(merged, prev, [2]).script).toBe(script(beat(1, 'Opening Ritual', 'Prime: "open, edited"'), B2, B3));
+    });
+
+    test('the first beat, its header deleted, comes out of the lines before the first header', () => {
+      const prevFirst = script(B1, B3);
+      const merged = `[EVENT: gala]\n\nPrime: "open"\n\n${B3}`;
+      const out = keepLockedBeats(merged, prevFirst, [1]);
+      expect(out.script).toBe(prevFirst);
+      expect(out.script.match(/Prime: "open"/g)).toHaveLength(1);
+    });
+
+    test('its lines edited as well stay where they are (nothing matches word for word)', () => {
+      const merged = script(`${B1}\n\nLala: "locked one, changed"\n[UI:CLICK Login]`, B3);
+      const out = keepLockedBeats(merged, prev, [2]);
+      expect(out.script).toBe(script(`${B1}\n\nLala: "locked one, changed"\n[UI:CLICK Login]`, B2, B3));
+    });
+
+    test('the same lines elsewhere, or not at the end of the beat above, are left alone', () => {
+      const prevOne = script(B1, beat(2, 'Login Sequence', 'Lala: "yes"'), B3);
+      const shared = script(beat(1, 'Opening Ritual', 'Lala: "yes"\nPrime: "open"'), beat(3, 'Welcome', 'Lala: "yes"'));
+      expect(keepLockedBeats(shared, prevOne, [2]).script).toBe(script(beat(1, 'Opening Ritual', 'Lala: "yes"\nPrime: "open"'), beat(2, 'Login Sequence', 'Lala: "yes"'), beat(3, 'Welcome', 'Lala: "yes"')));
+    });
+
+    test('a locked beat simply dropped still goes back after the beat it followed', () => {
+      expect(keepLockedBeats(script(B1, B3), prev, [2]).script).toBe(prev);
+    });
+  });
+
+  describe('R2: a new beat under a locked beat\'s number', () => {
+    const B1 = beat(1, 'Opening Ritual', 'A');
+    const B2 = beat(2, 'Login Sequence', 'APPROVED');
+    const B3 = beat(3, 'Welcome', 'C');
+    const prev = script(B1, B2, B3);
+
+    test('a save keeps it, with the first free number past 14, and names it in moved', () => {
+      const next = script(B1, B2, beat(2, 'New scene', 'Lala: "brand new"'), B3);
+      const out = keepLockedBeats(next, prev, [2], { keepExtras: true });
+      expect(out.script).toBe(script(B1, B2, beat(15, 'New scene', 'Lala: "brand new"'), B3));
+      expect(out.moved).toEqual([{ from: 2, to: 15, header: '## BEAT: 15 · New scene' }]);
+      expect(out.changed).toEqual([]);
+    });
+
+    test('it may stand before the approved copy, which is found word for word', () => {
+      const next = script(B1, beat(2, 'New scene', 'NEW'), B2, B3);
+      const out = keepLockedBeats(next, prev, [2], { keepExtras: true });
+      expect(out.script).toBe(script(B1, beat(15, 'New scene', 'NEW'), B2, B3));
+      expect(out.moved.map((m) => m.to)).toEqual([15]);
+    });
+
+    test('an edited approved beat and a new one: the first is the copy, put back; the second moves', () => {
+      const next = script(B1, beat(2, 'Login Sequence', 'EDITED'), beat(2, 'Login Sequence', 'NEW'), B3);
+      const out = keepLockedBeats(next, prev, [2], { keepExtras: true });
+      expect(out.script).toBe(script(B1, B2, beat(15, 'Login Sequence', 'NEW'), B3));
+      expect(out.changed).toEqual([2]);
+      expect(out.moved).toEqual([{ from: 2, to: 15, header: '## BEAT: 15 · Login Sequence' }]);
+    });
+
+    test('a header by name (`## BEAT: LOGIN_SEQUENCE`) and numbers already past 14 are skipped', () => {
+      const next = script(B1, B2, '## BEAT: LOGIN_SEQUENCE\nNEW', beat(15, 'Extra', 'E'), B3);
+      const out = keepLockedBeats(next, prev, [2], { keepExtras: true });
+      expect(out.script).toBe(script(B1, B2, '## BEAT: 16 · LOGIN_SEQUENCE\nNEW', beat(15, 'Extra', 'E'), B3));
+      expect(out.moved).toEqual([{ from: 2, to: 16, header: '## BEAT: 16 · LOGIN_SEQUENCE' }]);
+    });
+
+    test('a writer\'s reply (no keepExtras) still drops it', () => {
+      const next = script(B1, B2, beat(2, 'New scene', 'NEW'), B3);
+      const out = keepLockedBeats(next, prev, [2]);
+      expect(out.script).toBe(prev);
+      expect(out.moved).toEqual([]);
+    });
+  });
+
+  describe('R3: a locked beat with its header renamed or renumbered', () => {
+    const B1 = beat(1, 'Opening Ritual', 'A');
+    const B2 = beat(2, 'Login Sequence', 'Lala: "approved"\n[UI:CLICK Login]');
+    const B3 = beat(3, 'Welcome', 'C');
+    const prev = script(B1, B2, B3);
+
+    test('renumbered: its header is put back in place, no second copy', () => {
+      const next = script(B1, beat(3, 'Login Sequence', 'Lala: "approved"\n[UI:CLICK Login]'), B3);
+      const out = keepLockedBeats(next, prev, [2]);
+      expect(out.script).toBe(prev);
+      expect(out.script.match(/approved/g)).toHaveLength(1);
+      expect(out.changed).toEqual([2]);
+    });
+
+    test('renamed to a header that names no beat: put back in place', () => {
+      const next = script(B1, '## BEAT: Logging in\nLala: "approved"\n[UI:CLICK Login]', B3);
+      expect(keepLockedBeats(next, prev, [2]).script).toBe(prev);
+    });
+
+    test('moved and renumbered: put back where it now stands', () => {
+      const next = script(B1, B3, beat(9, 'Later', 'Lala: "approved"\n[UI:CLICK Login]'));
+      expect(keepLockedBeats(next, prev, [2]).script).toBe(script(B1, B3, B2));
+    });
+
+    test('renumbered onto another locked beat: each is found by its own lines', () => {
+      const next = script(B1, beat(3, 'Login Sequence', 'Lala: "approved"\n[UI:CLICK Login]'), B3);
+      const out = keepLockedBeats(next, prev, [2, 3], { keepExtras: true });
+      expect(out.script).toBe(prev);
+      expect(out.moved).toEqual([]);
+    });
+
+    test('an empty locked beat is not matched by its (empty) lines', () => {
+      const prevEmpty = script(B1, '## BEAT: 2 · Login Sequence', B3);
+      const next = script(B1, '## BEAT: 7 · Other', B3);
+      expect(keepLockedBeats(next, prevEmpty, [2]).script).toBe(script(B1, '## BEAT: 2 · Login Sequence', '## BEAT: 7 · Other', B3));
+    });
+
+    test('scriptKeepingLocks passes keepExtras on', () => {
+      const episode = { script_content: prev, script_locked_beats: [2] };
+      const out = scriptKeepingLocks(episode, script(B1, B2, beat(2, 'New', 'N'), B3), { keepExtras: true });
+      expect(out.moved).toHaveLength(1);
+    });
   });
 });

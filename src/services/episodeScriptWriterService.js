@@ -1145,8 +1145,13 @@ async function generateEpisodeScript(episodeId, showId, models) {
   try {
     const { scriptKeepingLocks } = require('../utils/scriptBeatLocks');
     const current = await models.Episode.findByPk(episodeId, { attributes: ['id', 'script_content', 'script_locked_beats'] });
+    const nextScript = scriptKeepingLocks(current, scriptText).script;
+    // Version history (services/scriptVersions.js; History audit H2,
+    // 2026-10-24): the episode's script this replaces is kept first.
+    const { snapshotScript } = require('./scriptVersions');
+    await snapshotScript(models, current, { source: 'generate', next: nextScript });
     await models.Episode.update(
-      { script_content: scriptKeepingLocks(current, scriptText).script },
+      { script_content: nextScript },
       { where: { id: episodeId } }
     );
   } catch (err) { console.error('[ScriptWriter] Could not copy the script to the episode (non-blocking):', err.message); }
