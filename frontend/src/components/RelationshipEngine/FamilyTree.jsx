@@ -17,16 +17,21 @@ import './FamilyTree.css';
 
 export const fetchFamilies = () => apiClient.get(`${API}/families`);
 
-/** The named families, [] until they load (or when they cannot). */
-export function useFamilies() {
+/**
+ * The named families, [] until they load (or when they cannot). skip: the
+ * caller already has them (the Family tab reads them once and hands them
+ * down), so no second GET /families.
+ */
+export function useFamilies({ skip = false } = {}) {
   const [families, setFamilies] = useState([]);
   useEffect(() => {
+    if (skip) return undefined;
     let live = true;
     Promise.resolve(fetchFamilies())
       .then((res) => { if (live) setFamilies(res?.data?.families || []); })
       .catch((err) => console.error('[FamilyTree] families load failed:', err));
     return () => { live = false; };
-  }, []);
+  }, [skip]);
   return families;
 }
 
@@ -135,7 +140,7 @@ function TreeList({ tree, onRelClick }) {
 }
 
 export default function FamilyTree({ rels = [], charById = {}, families: given, onRelClick }) {
-  const loaded = useFamilies();
+  const loaded = useFamilies({ skip: !!given });
   const families = given || loaded;
   const trees = useMemo(() => buildFamilyTrees({ families, rels, charById }), [families, rels, charById]);
   if (!trees.length) return null;

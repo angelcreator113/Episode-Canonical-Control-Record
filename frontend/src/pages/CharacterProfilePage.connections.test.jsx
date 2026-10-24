@@ -1,7 +1,9 @@
 /**
  * Connections to Evoni's mock (2026-10-18, step 4 of the character page):
- * the overview with counts, filters, search and pages; the map; key
- * relationships; history; feed ties; where they belong.
+ * the overview with counts, filters, search and pages; the map; feed ties;
+ * where they belong. Each person is listed once (2026-10-24): the Key
+ * relationships and Relationship history lists are gone, a summary line and
+ * each row's "Since …" say the same.
  */
 import React from 'react';
 import { vi, describe, test, expect } from 'vitest';
@@ -11,7 +13,7 @@ import { MemoryRouter } from 'react-router-dom';
 vi.mock('../services/api', () => ({ default: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() } }));
 vi.mock('../config/api', () => ({ API_URL: '/api/v1' }));
 
-import { RelationshipOverview, ConnectionMap, KeyRelationships, RelationshipHistory, FeedTies } from './CharacterProfilePage';
+import { RelationshipOverview, ConnectionMap, FeedTies } from './CharacterProfilePage';
 
 const inRouter = (ui) => render(<MemoryRouter>{ui}</MemoryRouter>);
 const CHARACTER = { id: 'c1', display_name: 'STUDIO BY SABLE', selected_name: 'Sable Okonkwo-Reyes', portrait_url: '/p.jpg' };
@@ -62,7 +64,7 @@ describe('Relationship overview', () => {
   });
 });
 
-describe('the map, key relationships, history and feed ties', () => {
+describe('the map and feed ties', () => {
   test('the map: six of eight around them, with a legend', () => {
     inRouter(<ConnectionMap character={CHARACTER} relationships={many} />);
     const card = screen.getByTestId('ch-conn-map');
@@ -71,21 +73,10 @@ describe('the map, key relationships, history and feed ties', () => {
     expect(card.textContent).toContain('The 6 closest of 8.');
   });
 
-  test('key relationships: three, with a way to their page', () => {
-    inRouter(<KeyRelationships relationships={many} />);
-    const card = screen.getByTestId('ch-key-rels');
-    expect(within(card).getAllByRole('link', { name: /View/ })).toHaveLength(3);
-    // The closest (calm) first; no portrait, so their initial.
-    expect(within(card).getAllByRole('listitem').map((li) => li.textContent.slice(0, 9))).toEqual(['PPerson 1', 'PPerson 3', 'PPerson 5']);
-    expect(card.querySelector('img')).toBeNull();
-  });
-
-  test('history: four to a page, newest first', () => {
-    inRouter(<RelationshipHistory relationships={many} />);
-    const card = screen.getByTestId('ch-rel-history');
-    const items = within(card).getAllByRole('listitem');
-    expect(items).toHaveLength(4);
-    expect(items[0].textContent).toBe('Oct 8, 2026Connected with Person 7Friend');
+  test('the centre is them by their chosen name, not their feed handle', () => {
+    inRouter(<ConnectionMap character={{ id: 'm', display_name: 'Truthville', selected_name: 'Marcus Hale' }} relationships={many} />);
+    const centre = screen.getByTestId('ch-conn-map').querySelector('.ch-cm-node.is-centre');
+    expect(centre.textContent).toBe('MMarcus Hale');
   });
 
   test('feed ties, and none', () => {
@@ -115,5 +106,33 @@ describe("each connection with its story truth (the person read, 2026-10-23)", (
     expect(within(row).getByRole('link', { name: /Open in Relationships/ }).getAttribute('href')).toBe('/relationships?rel=r3');
     // The others have no truth row yet: nothing added.
     expect(rows.filter((li) => li.querySelector('.prl'))).toHaveLength(1);
+  });
+});
+
+describe('the character page Connections (2026-10-24 audit)', () => {
+  // As the before shots: Marcus Hale (online as Truthville), three people.
+  const MARCUS = { id: 'marcus', display_name: 'Truthville', selected_name: 'Marcus Hale' };
+  const conns = [
+    { id: 'rel-lm', related_id: 'lala', related_name: 'Lala', relationship_type: 'love_interest', tension_state: 'volatile', created_at: '2026-10-02T10:00:00Z' },
+    { id: 'rel-mt', related_id: 'tasha', related_name: 'Tasha Vaughn', relationship_type: 'collaborator', tension_state: 'simmering', created_at: '2026-09-12T10:00:00Z' },
+    { id: 'rel-md', related_id: 'dre', related_name: 'Dre Coleman', relationship_type: 'rival', tension_state: 'volatile', created_at: '2026-10-10T10:00:00Z' },
+  ];
+
+  test('the love interest is filed under Romance and comes first in Closest first; a summary line, no second list', () => {
+    inRouter(<RelationshipOverview character={MARCUS} relationships={conns} />);
+    const card = screen.getByTestId('ch-rel-overview');
+    const rows = within(card).getAllByTestId('ch-conn');
+    expect(rows.map((li) => li.querySelector('.ch-conn-name').textContent)).toEqual(['Lala', 'Tasha Vaughn', 'Dre Coleman']);
+    expect(rows[0].querySelector('.ch-conn-meta').textContent).toBe('RomanceSince Oct 2, 2026');
+    expect(within(card).getByRole('group', { name: 'Show connections' }).textContent).toBe('All (3)Close (0)Romance (1)Working (1)Rivals (1)');
+    expect(within(card).getByTestId('ch-ro-summary').textContent).toBe('Romance: Lala · Closest: Tasha Vaughn');
+    expect(card.textContent).toContain('The people in Marcus’s world');
+  });
+
+  test('a spouse is Romance with their role, not Family', () => {
+    inRouter(<RelationshipOverview character={MARCUS} relationships={[{ id: 's', related_name: 'Dana', relationship_type: 'family', family_role: 'wife', is_romantic: true }]} />);
+    const row = screen.getByTestId('ch-conn');
+    expect(row.querySelector('.ch-chip').textContent).toBe('Wife');
+    expect(row.querySelector('.ch-conn-meta').textContent).toBe('Romance');
   });
 });

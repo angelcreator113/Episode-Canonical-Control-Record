@@ -9,28 +9,42 @@
  * each in one group for the filters, says how close it is, and sorts.
  */
 
+import { isRomance } from '../components/RelationshipEngine/tokens';
+
+// Romance first: a love interest is one of the people who matter most.
 export const GROUPS = [
+  { key: 'romantic', label: 'Romance' },
   { key: 'friend', label: 'Friends' },
   { key: 'working', label: 'Working' },
   { key: 'rival', label: 'Rivals' },
   { key: 'family', label: 'Family' },
-  { key: 'romantic', label: 'Romantic' },
   { key: 'other', label: 'Other' },
 ];
 
 const has = (text, re) => re.test(String(text || '').toLowerCase());
+const ROMANCE_WORDS = /romant|love.?interest|lover|dating|girlfriend|boyfriend|spouse|wife|husband|fianc|\bex\b|crush/;
+const EX_WORDS = /\bex\b|\bex-|former|past/;
 
-/** One group per relationship: family, romantic, rival, working, friend, else other. */
+/**
+ * One group per relationship: romance, family, rival, working, friend, else
+ * other. The Relationships page's rule (tokens' isRomance): romance is never
+ * family, so a spouse or partner (family_role wife, husband, partner…) is
+ * Romance, with their role as its label.
+ */
 export function groupOf(r) {
   const type = r?.relationship_type;
   const tag = String(r?.role_tag || '').toLowerCase();
+  if (isRomance(r) || has(type, ROMANCE_WORDS)) return 'romantic';
   if (r?.family_role || r?.is_blood_relation || tag === 'family' || has(type, /family|mother|father|sister|brother|aunt|uncle|cousin|daughter|son\b|parent|grand/)) return 'family';
-  if (r?.is_romantic || has(type, /romant|lover|dating|girlfriend|boyfriend|spouse|wife|husband|\bex\b|crush/)) return 'romantic';
   if (tag === 'rival' || tag === 'detractor' || has(type, /rival|enem|detract|competit|nemesis/)) return 'rival';
   if (['mentor', 'partner', 'dependency'].includes(tag) || has(type, /business|work|collab|colleague|client|mentor|brand|manager|agent|boss|employ|partner|stylist|assistant|crew/)) return 'working';
   if (tag === 'ally' || has(type, /friend|bestie|ally|confidant/)) return 'friend';
   return 'other';
 }
+
+/** A romance now (not an ex): it ranks above the rest in "Closest first", whatever its tension. */
+export const isCurrentRomance = (r) => groupOf(r) === 'romantic'
+  && !has(r?.relationship_type, EX_WORDS) && !has(r?.family_role, EX_WORDS) && !has(r?.status, /past/);
 
 // How close, from the tension state (the Overview's tie meter uses the same scale).
 export const TENSION = {
@@ -48,7 +62,9 @@ const words = (s) => {
   const t = String(s || '').replace(/_/g, ' ').trim();
   return t ? t.charAt(0).toUpperCase() + t.slice(1) : null;
 };
-export const typeLabel = (r) => words(r?.relationship_type) || words(r?.role_tag) || words(r?.family_role) || 'Connected';
+// A spouse's label is their role ("Wife"), not the row's general type.
+export const typeLabel = (r) => (isRomance(r) && r?.family_role ? words(r.family_role) : null)
+  || words(r?.relationship_type) || words(r?.role_tag) || words(r?.family_role) || 'Connected';
 export const noteOf = (r) => [r?.situation, r?.notes, r?.conflict_summary].find((x) => typeof x === 'string' && x.trim())?.trim() || null;
 
 /** Counts for the tiles and the filters. */
@@ -81,7 +97,8 @@ export function filterConnections(list, { filter = 'all', query = '', sort = 'cl
     return [nameOf(r), typeLabel(r), noteOf(r)].some((x) => x && x.toLowerCase().includes(q));
   });
   const by = {
-    closeness: (a, b) => (closenessOf(b) ?? -1) - (closenessOf(a) ?? -1) || nameOf(a).localeCompare(nameOf(b)),
+    closeness: (a, b) => (isCurrentRomance(b) - isCurrentRomance(a))
+      || (closenessOf(b) ?? -1) - (closenessOf(a) ?? -1) || nameOf(a).localeCompare(nameOf(b)),
     name: (a, b) => nameOf(a).localeCompare(nameOf(b)),
     type: (a, b) => typeLabel(a).localeCompare(typeLabel(b)) || nameOf(a).localeCompare(nameOf(b)),
     newest: (a, b) => time(b) - time(a),
@@ -89,18 +106,27 @@ export function filterConnections(list, { filter = 'all', query = '', sort = 'cl
   return [...rows].sort(by[sort] || by.closeness);
 }
 
-/** Their key relationships: Lala first, then the closest, then the rest with something written. */
+/** Their key relationships: Lala first, then a romance now, then the closest, then the rest with something written. */
 export function keyRelationships(list, n = 3) {
   const rows = Array.isArray(list) ? list : [];
   const lala = (r) => /^lala\b/i.test(nameOf(r));
   return [...rows].sort((a, b) => (lala(b) - lala(a))
+    || (isCurrentRomance(b) - isCurrentRomance(a))
     || ((closenessOf(b) ?? -1) - (closenessOf(a) ?? -1))
     || (Boolean(noteOf(b)) - Boolean(noteOf(a)))).slice(0, n);
 }
 
-/** When each connection began, newest first: the ones with a date. */
-export function connectionHistory(list) {
-  return (Array.isArray(list) ? list : []).filter((r) => time(r) > 0).sort((a, b) => time(b) - time(a));
+/**
+ * The one-line summary over the list (it replaced the second "Key
+ * relationships" list, 2026-10-24): who they are in a romance with now, and
+ * the closest other person. { romance: [names], closest: name | null }.
+ */
+export function connectionSummary(list) {
+  const rows = Array.isArray(list) ? list : [];
+  const romance = rows.filter(isCurrentRomance).map(nameOf);
+  const rest = rows.filter((r) => !isCurrentRomance(r) && closenessOf(r) !== null)
+    .sort((a, b) => closenessOf(b) - closenessOf(a) || nameOf(a).localeCompare(nameOf(b)));
+  return { romance: [...new Set(romance)], closest: rest.length ? nameOf(rest[0]) : null };
 }
 
 /**

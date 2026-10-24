@@ -2,12 +2,13 @@
  * GenModal — AI relationship generator dialog
  * Prime Studios · LalaVerse
  */
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useId } from 'react';
 import { cname } from './tokens';
 import { Btn, Label, Select } from './primitives';
 
 export default function GenModal({ chars, genning, onGenerate, onClose }) {
   const [focus, setFocus] = useState('');
+  const focusId = useId();
 
   /* focus trap */
   const overlayRef = useRef(null);
@@ -44,8 +45,8 @@ export default function GenModal({ chars, genning, onGenerate, onClose }) {
           <p className="re-gen-desc">
             Claude will look at the cast and propose <strong>3–5 relationship candidates</strong> with tension states, LalaVerse mirrors, and career echoes. They join the seeds already waiting.
           </p>
-          <Label>Focus Character (optional)</Label>
-          <Select value={focus} onChange={e => setFocus(e.target.value)}>
+          <Label htmlFor={focusId}>Focus Character (optional)</Label>
+          <Select id={focusId} value={focus} onChange={e => setFocus(e.target.value)}>
             <option value="">Any character</option>
             {chars.map(c => <option key={c.id} value={c.id}>{cname(c)}</option>)}
           </Select>

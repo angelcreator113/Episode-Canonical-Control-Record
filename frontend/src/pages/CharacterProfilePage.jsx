@@ -47,7 +47,7 @@ import { setPageTitle, clearPageTitle } from '../lib/pageTitle';
 import { DEPTH_STEPS, depthOf, depthStageOf, cityOf, archetypeOf, showUpRows, withLala, voiceOf, DREAM_CITIES, dreamCityOf, eventPurpose } from '../lib/characterPage';
 import {
   GROUPS, TENSION, groupOf, closenessOf, nameOf, typeLabel, noteOf, connectionStats, SORTS,
-  filterConnections, keyRelationships, connectionHistory, mapPoints,
+  filterConnections, mapPoints, connectionSummary,
 } from '../lib/characterConnections';
 import './CharacterProfilePage.css';
 
@@ -2094,10 +2094,11 @@ export function archivedDepth(character) {
 }
 
 /* ── Connections (Evoni's mock, 2026-10-18, step 4) ───────────────────────────
-   Their relationships with counts, filters, search, sort and pages; a map of
-   the closest; their key relationships; when each began; their feed ties
-   (entanglements) and where they belong. The groups and closeness are
-   lib/characterConnections. */
+   Their relationships with counts, a one-line summary, filters, search, sort
+   and pages (each row says since when); a map of the closest; their feed
+   ties (entanglements) and where they belong. The same people are listed
+   once (2026-10-24: the separate Key relationships and Relationship history
+   lists repeated them). The groups and closeness are lib/characterConnections. */
 
 const GROUP_LABEL = Object.fromEntries(GROUPS.map((g) => [g.key, g.label]));
 
@@ -2123,6 +2124,11 @@ export function RelationshipOverview({ character, relationships, truth = null })
   const rows = filterConnections(relationships, { filter, query, sort });
   const { pageItems, pager } = usePaged(rows);
   const name = (character.selected_name || character.display_name || 'they').split(' ')[0];
+  const summary = connectionSummary(relationships);
+  const summaryLine = [
+    summary.romance.length ? `Romance: ${summary.romance.join(', ')}` : null,
+    summary.closest ? `Closest: ${summary.closest}` : null,
+  ].filter(Boolean).join(' · ');
   const filters = [
     { key: 'all', label: 'All', n: stats.total },
     { key: 'close', label: 'Close', n: stats.close },
@@ -2153,6 +2159,7 @@ export function RelationshipOverview({ character, relationships, truth = null })
           </li>
         ))}
       </ul>
+      {summaryLine && <p className="ch-note ch-ro-summary" data-testid="ch-ro-summary">{summaryLine}</p>}
       {stats.total === 0 ? (
         <p className="ch-note">No relationships yet. Add them in the <Link to={relationshipsFor(character)}>Relationship Engine</Link>.</p>
       ) : (
@@ -2217,6 +2224,7 @@ export function ConnectionMap({ character, relationships }) {
   const points = mapPoints(relationships, 6, size);
   const c = size / 2;
   const used = GROUPS.map((g) => g.key).filter((k) => points.some((p) => groupOf(p.r) === k));
+  const centreName = character.selected_name || character.display_name || '?';
   return (
     <section className="ch-card" aria-labelledby="ch-cm" data-testid="ch-conn-map">
       <div className="ch-card-head">
@@ -2229,8 +2237,10 @@ export function ConnectionMap({ character, relationships }) {
             <svg viewBox={`0 0 ${size} ${size}`} className="ch-cm-lines" aria-hidden="true">
               {points.map((p) => <line key={p.r.id} x1={c} y1={c} x2={p.x} y2={p.y} className={`ch-cm-line is-${groupOf(p.r)}`} />)}
             </svg>
+            {/* Their chosen name, not the feed handle (display_name, e.g. "Truthville"). */}
             <span className="ch-cm-node is-centre" style={{ left: '50%', top: '50%' }}>
-              <Avatar src={character.portrait_url} name={character.display_name} size={64} />
+              <Avatar src={character.portrait_url} name={centreName} size={64} />
+              <span className="ch-cm-name">{centreName}</span>
             </span>
             {points.map((p) => (
               <span key={p.r.id} className="ch-cm-node" style={{ left: `${(p.x / size) * 100}%`, top: `${(p.y / size) * 100}%` }}>
@@ -2246,57 +2256,6 @@ export function ConnectionMap({ character, relationships }) {
           {listOf(relationships).length > points.length && <p className="ch-note">The {points.length} closest of {listOf(relationships).length}.</p>}
         </>
       )}
-    </section>
-  );
-}
-
-export function KeyRelationships({ relationships }) {
-  const rows = keyRelationships(relationships);
-  return (
-    <section className="ch-card" aria-labelledby="ch-kr" data-testid="ch-key-rels">
-      <h2 id="ch-kr" className="ch-h2"><Heart size={20} aria-hidden="true" className="ch-h2-icon" /> Key relationships</h2>
-      {rows.length === 0 ? <p className="ch-note">No relationships yet.</p> : (
-        <ul className="ch-kr">
-          {rows.map((r) => {
-            const score = closenessOf(r);
-            const to = toPerson(r);
-            return (
-              <li key={r.id} className="ch-kr-item">
-                <Avatar src={r.related_portrait} name={nameOf(r)} size={56} />
-                <span className="ch-kr-text">
-                  <span className="ch-conn-top"><strong>{nameOf(r)}</strong><span className="ch-chip">{typeLabel(r)}</span></span>
-                  {score !== null && (
-                    <span className="ch-tie-meter" role="img" aria-label={`${TENSION[r.tension_state].label}`}><span style={{ width: `${score}%` }} /></span>
-                  )}
-                  {noteOf(r) && <span className="ch-conn-note">{shortText(noteOf(r), 120)}</span>}
-                  {to && <Link className="ch-link ch-more" to={to}>View <ArrowRight size={14} aria-hidden="true" /></Link>}
-                </span>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-    </section>
-  );
-}
-
-export function RelationshipHistory({ relationships }) {
-  const rows = connectionHistory(relationships);
-  const { pageItems, pager } = usePaged(rows, 4);
-  return (
-    <section className="ch-card" aria-labelledby="ch-rh" data-testid="ch-rel-history">
-      <h2 id="ch-rh" className="ch-h2"><CalendarDays size={20} aria-hidden="true" className="ch-h2-icon" /> Relationship history</h2>
-      {rows.length === 0 ? <p className="ch-note">No dates yet.</p> : (
-        <ol className="ch-rh">
-          {pageItems.map((r) => (
-            <li key={r.id} className={`ch-rh-item is-${groupOf(r)}`}>
-              <span className="ch-rh-when">{sinceOf(r)}</span>
-              <span className="ch-rh-text"><strong>Connected with {nameOf(r)}</strong><span>{typeLabel(r)}</span></span>
-            </li>
-          ))}
-        </ol>
-      )}
-      <Pager {...pager} label="Relationship history" />
     </section>
   );
 }
@@ -2366,10 +2325,6 @@ function TabConnections({ character, relationships, entanglements, person }) {
       </div>
       <div className="ch-col">
         <ConnectionMap character={character} relationships={relationships} />
-        <RelationshipHistory relationships={relationships} />
-      </div>
-      <div className="ch-col">
-        <KeyRelationships relationships={relationships} />
         <FeedTies entanglements={entanglements} />
         <BelongingMap character={character} />
       </div>
