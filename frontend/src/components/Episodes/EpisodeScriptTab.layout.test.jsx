@@ -100,15 +100,16 @@ describe('Script tab layout', () => {
     renderTab(['## BEAT: 1 · Opening Ritual', 'Prime: "Hi."', '[STAT: coins +50]', '## BEAT: 8 · Transformation Loop', '[UI:OPEN Closet]', '## BEAT: 11 · Event Outcome', 'Lala: "We did."', '[STAT: coins -120]'].join('\n'));
     const card = await screen.findByTestId('script-beat-state');
     expect(card.textContent).toContain('True at Beat 1');
-    await waitFor(() => expect(within(card).getByTestId('script-truth-coins').textContent).toContain('470 coins'));
-    expect(within(card).getByTestId('script-truth-coins').textContent).toContain('420 before the episode, +50 in the script so far');
+    // A + coin line is owed, paid next episode: not counted (Script tab audit 6, 2026-10-24).
+    await waitFor(() => expect(within(card).getByTestId('script-truth-coins').textContent).toContain('420 coins'));
+    expect(within(card).getByTestId('script-truth-coins').textContent).toContain('+50 in + coin lines not counted');
     await waitFor(() => expect(within(card).getByTestId('script-truth-wearing').textContent.trim()).toBe('WearingGetting dressed at Beat 8'));
     expect(screen.getByTestId('script-chip-look').textContent).toBe('Getting dressed at Beat 8');
     expect(within(card).getByTestId('script-truth-room').textContent.trim()).toBe('In the roomSpeaking: Prime');
     expect(within(card).getByTestId('script-truth-time').textContent.trim()).toBe('Story timeStory time not set');
     fireEvent.click(screen.getByTestId('script-pill-11'));
-    await waitFor(() => expect(within(screen.getByTestId('script-beat-state')).getByTestId('script-truth-coins').textContent).toContain('350 coins'));
-    expect(screen.getByTestId('script-chip-coins').textContent).toBe('Lala has 350 coins');
+    await waitFor(() => expect(within(screen.getByTestId('script-beat-state')).getByTestId('script-truth-coins').textContent).toContain('300 coins'));
+    expect(screen.getByTestId('script-chip-coins').textContent).toBe('Lala has 300 coins');
     expect(within(screen.getByTestId('script-beat-state')).getByTestId('script-truth-wearing').textContent.trim()).toBe('Wearing1 piece: Crimson Satin Ballerina Pump');
     expect(within(screen.getByTestId('script-beat-state')).getByTestId('script-truth-where').textContent.trim()).toBe("WhereSTUDIO BY SABLE's Studio");
     expect(screen.getByTestId('script-beat-state').textContent).not.toMatch(/stress/i);

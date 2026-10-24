@@ -212,14 +212,24 @@ async function attachBeat14(models, { showId, episodeId, opportunity_id = null, 
       if (!opp) throw new Beat14Error(404, 'Opportunity not found.');
       if (opp.offered_in_episode_id && String(opp.offered_in_episode_id) !== String(episodeId)) throw new Beat14Error(409, 'That opportunity is already beat 14 of another episode.');
       if (!OPEN_STATUSES.includes(opp.status)) throw new Beat14Error(409, `Only an opportunity that is offered, considering or negotiating can be offered in beat 14; this one is ${opp.status}.`);
+      // The invitation is from the person picked (Script tab audit 6,
+      // 2026-10-24: contact_name kept the one it had, so the writer named
+      // someone else). What it had before is kept in the history entry, and
+      // release() gives it back.
+      const previous = {
+        connector_profile_id: opp.connector_profile_id ?? null,
+        connector_handle: opp.connector_handle ?? null,
+        contact_name: opp.contact_name ?? null,
+        connection_story: opp.connection_story ?? null,
+      };
       await opp.update({
         status: HELD,
         offered_in_episode_id: episodeId,
         connector_profile_id: person.profile_id,
         connector_handle: person.handle,
-        contact_name: opp.contact_name || person.name,
+        contact_name: person.name,
         connection_story: opp.connection_story || `Met at ${event.name}.`,
-        status_history: [...history(opp), { status: HELD, date: now(), note, previous_status: opp.status, source_episode_id: episodeId }],
+        status_history: [...history(opp), { status: HELD, date: now(), note, previous_status: opp.status, previous, source_episode_id: episodeId }],
       }, { transaction });
     }
     return slim(opp);
@@ -237,9 +247,17 @@ async function release(opp, transaction) {
   }
   const held = [...history(opp)].reverse().find((h) => h?.status === HELD && h.previous_status);
   const back = held?.previous_status || 'offered';
+  // Who it was from before beat 14 (attachBeat14 keeps it in the entry).
+  const prev = held?.previous && typeof held.previous === 'object' ? held.previous : null;
   await opp.update({
     status: back,
     offered_in_episode_id: null,
+    ...(prev ? {
+      connector_profile_id: prev.connector_profile_id ?? null,
+      connector_handle: prev.connector_handle ?? null,
+      contact_name: prev.contact_name ?? null,
+      connection_story: prev.connection_story ?? null,
+    } : {}),
     status_history: [...history(opp), { status: back, date: now(), note: 'No longer beat 14 of the episode' }],
   }, { transaction });
 }

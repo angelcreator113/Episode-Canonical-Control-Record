@@ -73,7 +73,7 @@ describe('R5: the toggle waits for typed words', () => {
     fireEvent.change(screen.getByTestId('script-ask-input-1'), { target: { value: 'punchier' } });
     fireEvent.click(toggle());
     expect(screen.queryByRole('textbox', { name: 'Raw script' })).toBeNull();
-    expect(screen.getByRole('status').textContent).toContain('Add or clear the words typed in the beat first');
+    expect(screen.getByRole('status').textContent).toContain('Add or clear the words typed in beat 1 first');
     expect(screen.getByTestId('script-ask-input-1').value).toBe('punchier');
     fireEvent.change(screen.getByTestId('script-ask-input-1'), { target: { value: '' } });
     fireEvent.click(toggle());

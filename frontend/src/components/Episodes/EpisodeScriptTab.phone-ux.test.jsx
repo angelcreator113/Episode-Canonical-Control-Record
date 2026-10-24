@@ -216,7 +216,7 @@ describe('words and names', () => {
     let answer;
     vi.mocked(api.post).mockImplementation(() => new Promise((r) => { answer = r; }));
     renderTab();
-    fireEvent.click(within(screen.getByTestId('script-beat-1')).getByRole('button', { name: '✦ Rewrite' }));
+    fireEvent.click(within(screen.getByTestId('script-beat-1')).getByRole('button', { name: /^Rewrite line:/ }));
     expect(await screen.findByRole('button', { name: 'Rewriting…' })).toBeTruthy();
     answer({ data: { rewrittenLine: 'Hello besties.' } });
     const pills = screen.getByTestId('script-pills');

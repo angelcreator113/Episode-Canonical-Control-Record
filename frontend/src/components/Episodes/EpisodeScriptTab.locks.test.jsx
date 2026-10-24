@@ -50,7 +50,7 @@ describe('Script beat locks', () => {
   test('a beat locked on the episode shows approved after a reload', () => {
     renderTab([1]);
     // The rough length sits between them (Script tab audit, 2026-10-15).
-    expect(screen.getByTestId('script-head').textContent).toMatch(/2 beats · ~\d+s · 1 approved/);
+    expect(screen.getByTestId('script-head').textContent).toMatch(/2 beats · ~\d+s · 1 of 14 approved/);
     expect(screen.getByTestId('script-beat-1').getAttribute('data-locked')).toBe('true');
   });
 

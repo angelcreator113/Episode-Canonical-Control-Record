@@ -77,6 +77,21 @@ const words = (t) => String(t || '').replace(/\s+/g, ' ').trim();
 /** Whether the line's words changed since the clip was recorded. */
 export const isStale = (clip, text) => !!clip && words(clip.line_text) !== words(text);
 
+/**
+ * The clip to play for a line (Script tab audit 6, 2026-10-24): the one
+ * recorded at its place when its words are still the line's; else one in
+ * the same beat recorded with these words (the line moved); else null, so a
+ * changed line never plays the old recording. `byLine`: clipsByLine's map.
+ */
+export function clipForLine(byLine, beatNumber, lineIndex, text) {
+  const at = byLine?.get?.(lineKey(beatNumber, lineIndex)) || null;
+  if (at && !isStale(at, text)) return at;
+  for (const c of byLine?.values?.() || []) {
+    if (Number(c.beat_number) === Number(beatNumber) && !isStale(c, text)) return c;
+  }
+  return null;
+}
+
 /** The clip's length in seconds, or null when unknown. */
 export const clipSeconds = (clip) => {
   const s = Number(clip?.duration_seconds);
