@@ -55,7 +55,8 @@ export function scriptHealth({
   // row here (Script page re-audit, 2026-10-19: one miss, two rows).
   const covers = beat14 ? cover.filter((c) => c.key !== 'opportunity') : cover;
   if (covers.length) {
-    const open = covers.filter((c) => !c.beat);
+    // `covered` when mustCover says (her manual mark wins; lib/coverMatch withMark), else the beat.
+    const open = covers.filter((c) => !(typeof c.covered === 'boolean' ? c.covered : c.beat));
     if (!open.length) rows.push({ key: 'cover', ok: true, beatId: null, text: 'Everything the episode must cover is in the script.' });
     for (const c of open) rows.push({ key: `cover-${c.key}`, ok: false, beatId: null, text: `${c.source} not in the script yet: ${c.label}` });
   }

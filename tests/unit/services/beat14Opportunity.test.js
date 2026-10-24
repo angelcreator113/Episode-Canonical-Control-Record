@@ -185,6 +185,20 @@ describe('open statuses: offered, considering, negotiating', () => {
     expect(o.status_history[o.status_history.length - 1]).toMatchObject({ status: 'held', previous_status: 'negotiating' });
   });
 
+  // Script tab audit 6 (2026-10-24): the invitation is from the person
+  // picked, and removing it gives back who it was from before.
+  test('the picked person is the contact; release gives back the earlier connector and contact', async () => {
+    const { attachBeat14, detachBeat14 } = load();
+    const o = Object.assign(opp('considering'), { connector_profile_id: 3, connector_handle: 'old', contact_name: 'Old Contact', connection_story: 'Met long ago.' });
+    await attachBeat14(models(o), { showId: SHOW, episodeId: 'ep1', opportunity_id: 'o1', connector_profile_id: 7 });
+    expect(o).toMatchObject({ contact_name: 'Sable Reyes', connector_profile_id: 7, connector_handle: 'sable', connection_story: 'Met long ago.' });
+    expect(o.status_history[o.status_history.length - 1].previous).toEqual({ connector_profile_id: 3, connector_handle: 'old', contact_name: 'Old Contact', connection_story: 'Met long ago.' });
+    const m = models(o);
+    m.Opportunity.findOne = jest.fn(async () => o);
+    await detachBeat14(m, { showId: SHOW, episodeId: 'ep1' });
+    expect(o).toMatchObject({ status: 'considering', offered_in_episode_id: null, connector_profile_id: 3, connector_handle: 'old', contact_name: 'Old Contact', connection_story: 'Met long ago.' });
+  });
+
   test('booked or held is refused, naming the open statuses', async () => {
     const { attachBeat14 } = load();
     await expect(attachBeat14(models(opp('booked')), { showId: SHOW, episodeId: 'ep1', opportunity_id: 'o1', connector_profile_id: 7 }))

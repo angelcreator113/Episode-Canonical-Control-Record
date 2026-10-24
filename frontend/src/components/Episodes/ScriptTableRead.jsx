@@ -8,7 +8,8 @@ import { useState, useEffect, useLayoutEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
 import { X, ChevronLeft, ChevronRight, Smartphone, ScrollText } from 'lucide-react';
-import { scriptSections, readLine } from '../../lib/scriptExport';
+import { scriptSections, readLine, castOf } from '../../lib/scriptExport';
+import { isHerSpeaker } from '../../lib/scriptSpeaker';
 import useDialogLayer from '../../hooks/useDialogLayer';
 import './ScriptTableRead.css';
 
@@ -17,6 +18,8 @@ import './ScriptTableRead.css';
 const SPEAKER_COLORS = { Prime: 'var(--primary-text)', Lala: 'var(--accent-dark)', Kelli: 'var(--info-text)', Guest: 'var(--success-text)' };
 const OTHER_COLORS = ['var(--lala-gold-text)', 'var(--lala-teal-dark)', 'var(--lala-pink-dark)', 'var(--lala-lavender-text)', 'var(--warning-text)', 'var(--danger-text)'];
 export function speakerColor(name) {
+  // Her names are JustAWoman, in one colour (Evoni, 2026-10-24).
+  if (isHerSpeaker(name)) return SPEAKER_COLORS.Prime;
   if (SPEAKER_COLORS[name]) return SPEAKER_COLORS[name];
   let h = 0;
   for (const c of String(name || '')) h = (h * 31 + c.charCodeAt(0)) >>> 0;
@@ -56,9 +59,11 @@ function Element({ r }) {
   }
 }
 
-export default function ScriptTableRead({ scriptText, title = '', onScreen = null, startBeat = 0, printMode = false, onClose, episodeId = null }) {
+export default function ScriptTableRead({ scriptText, title = '', onScreen = null, startBeat = 0, printMode = false, onClose, episodeId = null, cast = null }) {
   const { preamble, beats } = useMemo(() => scriptSections(scriptText), [scriptText]);
-  const read = (lines) => lines.map((l) => readLine(l, onScreen)).filter((r) => r && ['dialogue', 'action', 'narration', 'moment'].includes(r.type));
+  // `marcus:` in lower case is Marcus when the script or the episode names him (lib/scriptSpeaker).
+  const people = useMemo(() => castOf(preamble, beats, cast), [preamble, beats, cast]);
+  const read = (lines) => lines.map((l) => readLine(l, onScreen, { cast: people })).filter((r) => r && ['dialogue', 'action', 'narration', 'moment'].includes(r.type));
   const [current, setCurrent] = useState(() => Math.min(Math.max(0, startBeat), Math.max(0, beats.length - 1)));
   const [size, setSize] = useState(readSize);
   const dialogRef = useRef(null);

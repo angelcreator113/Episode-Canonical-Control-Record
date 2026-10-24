@@ -22,9 +22,27 @@ const SCRIPT = [
 ].join('\n');
 
 describe('readLine', () => {
-  test('dialogue loses its straight and curly quotes; Me is Prime', () => {
-    expect(readLine('Lala: "Hi there"')).toEqual({ type: 'dialogue', speaker: 'Lala', ext: null, paren: null, text: 'Hi there' });
-    expect(readLine('Me: “Curly”')).toMatchObject({ speaker: 'Prime', text: 'Curly' });
+  // Evoni, 2026-10-24: her names (Me, Prime, JustAWoman, JAWIHP) read as JustAWoman.
+  test('dialogue loses its straight and curly quotes; Me is JustAWoman', () => {
+    expect(readLine('Lala: "Hi there"')).toEqual({ type: 'dialogue', speaker: 'Lala', written: 'Lala', ext: null, paren: null, text: 'Hi there' });
+    expect(readLine('Me: “Curly”')).toMatchObject({ speaker: 'JustAWoman', written: 'Prime', text: 'Curly' });
+    for (const l of ['Prime: x', 'JAWIHP: x', 'justawoman: x', 'me: x']) expect(readLine(l).speaker).toBe('JustAWoman');
+  });
+  // Lower-case labels (Script tab audit 6, 2026-10-24): known names and the cast only.
+  test('a lower-case label is a speaker only when it is one of the show\'s people or the cast', () => {
+    expect(readLine('lala: hi')).toMatchObject({ type: 'dialogue', speaker: 'Lala' });
+    expect(readLine('marcus: hi')).toMatchObject({ type: 'narration' });
+    expect(readLine('marcus: hi', null, { cast: ['Marcus'] })).toMatchObject({ type: 'dialogue', speaker: 'Marcus' });
+    expect(readLine('then: the lights go out')).toMatchObject({ type: 'narration' });
+    expect(readLine('suddenly: she runs')).toMatchObject({ type: 'narration' });
+    const f = toPlainText('## BEAT: 1 · Opening Ritual\nMarcus: Hello.\nmarcus: Again.\nlater: we leave');
+    expect(f).toContain('MARCUS\n  Again.');
+    expect(f).toContain('later: we leave');
+  });
+  // Script tab audit 6 (2026-10-24): a tag with no verb the show writes is printed as written.
+  test('[UI: Lala opens closet] prints as written', () => {
+    expect(readLine('[UI: Lala opens closet]')).toEqual({ type: 'moment', text: 'Lala opens closet' });
+    expect(readLine('[UI:OPEN closet]').text).toBe('Lala opens the Closet');
   });
   test('a leading parenthetical is kept apart from the words', () => {
     expect(readLine('Kelli: (softly) "Go"')).toMatchObject({ paren: '(softly)', text: 'Go' });
@@ -79,7 +97,7 @@ describe('toFountain', () => {
   });
   test('dialogue: speaker in capitals over the words, quotes gone, parenthetical kept', () => {
     expect(f).toContain('\n\nLALA\nOkay besties, we are LIVE.\n\n');
-    expect(f).toContain('\n\nPRIME\nYou look ready.\n\n');
+    expect(f).toContain('\n\nJUSTAWOMAN\nYou look ready.\n\n');
     expect(f).toContain('\n\nKELLI\n(whispering)\nDid you see it?\n\n');
   });
   test('actions without parentheses, moments in words, tags as notes, transitions', () => {

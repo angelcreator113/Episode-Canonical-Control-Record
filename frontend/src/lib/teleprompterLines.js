@@ -23,14 +23,11 @@ import { readLine, scriptSections } from './scriptExport';
 import { lineSeconds } from './scriptRuntime';
 import { isBreath, markTokens } from './teleprompterMarks';
 import { screenLine } from './teleprompterScreen';
-import { unbold } from './scriptSpeaker';
+import { unbold, isHerSpeaker, HER } from './scriptSpeaker';
 
-// Her names as the script writes them (lib/scriptRuleChecks JAW_SAYS; `Me:`
-// reads as Prime in lib/scriptSpeaker).
-const HERS = new Set(['prime', 'me', 'justawoman', 'jawihp']);
-
-export const isHerSpeaker = (speaker) => HERS.has(String(speaker || '').trim().toLowerCase());
-export const HER = 'JustAWoman';
+// Her names as the script writes them: lib/scriptSpeaker's, one list for the
+// teleprompter, the Table read and the export (Evoni, 2026-10-24).
+export { isHerSpeaker, HER };
 
 // `**Me:** words` and `__Me__: words`, as a pasted script can have them:
 // lib/scriptSpeaker's rule, shared with the Script tab and the export.
@@ -44,7 +41,7 @@ export function teleprompterLines(lines = [], { screen = false } = {}) {
     const seconds = lineSeconds(String(plain).trim());
     if (r.type === 'dialogue') {
       const hers = isHerSpeaker(r.speaker);
-      out.push({ kind: hers ? 'mine' : 'cue', who: hers ? HER : r.speaker, speaker: r.speaker, paren: r.paren || null, text: r.text, seconds });
+      out.push({ kind: hers ? 'mine' : 'cue', who: hers ? HER : r.speaker, speaker: r.written || r.speaker, paren: r.paren || null, text: r.text, seconds });
     } else if (r.type === 'action' || r.type === 'narration') {
       // `(breath)` / `[breath]` on its own line is a breath mark (Evoni, 2026-10-20).
       out.push({ kind: isBreath(r.text) ? 'breath' : 'direction', who: null, text: r.text, seconds });

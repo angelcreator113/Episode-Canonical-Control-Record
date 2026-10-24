@@ -23,7 +23,8 @@ import { dealLabelFor, relationshipGoalsOf } from '../utils/eventTerms';
 import { describeEventOrganizer } from '../utils/eventOrganizer';
 import { beatSpeakers } from './scriptMoments';
 import { beat14Delivers, BEAT } from './beat14Invitation';
-import { goalPerson, personLine } from './scriptRuleChecks';
+import { goalPerson } from './scriptRuleChecks';
+import { words, goalMatch, hookCovered, coverKey, withMark } from './coverMatch';
 
 const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
@@ -85,87 +86,16 @@ export function scriptInputs({ brief = null, plan = null, outfit = [], event = n
 
 // ─── "THIS EPISODE MUST COVER" (Task #2884) ─────────────────────────────────
 //
-// Only what the episode's data holds: the event package's deliverables
-// (what Lala owes for the deal) and goals (canon_consequences.automation.
-// relationship_goals), and the brief's forward hook. Nothing is written in.
-// An item is ticked when the script mentions it: its key words (all of one
-// or two, three quarters of more) appear in one beat; the first such beat
-// is named. The script writer is told which beats to put them in
-// (services/scriptCareerService) but writes no tag, so the words are the
-// only trace.
+// Only what the episode's data holds: the event package's goals
+// (canon_consequences.automation.relationship_goals), follow-ups carried
+// from an earlier episode, beat 14's opportunity and the brief's forward
+// hook. Nothing is written in. The matching is lib/coverMatch's, the same
+// code as the writer's coverage check (src/utils/coverMatch.js): a goal by
+// its verb phrase and its person, outside the to-do list, in the latest
+// beat that does it; the hook in beat 14 only; and Evoni's own mark wins
+// (Script tab audit 6, 2026-10-24: "smarter matching + manual override").
 
-const STOP = new Set(['the', 'and', 'for', 'with', 'from', 'that', 'this', 'into', 'her', 'his', 'their', 'your', 'about', 'post', 'piece', 'content', 'make', 'made', 'lala', 'episode', 'event']);
-const words = (s) => String(s || '').toLowerCase().normalize('NFKD').replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(Boolean);
-export const keyWords = (s) => [...new Set(words(s).filter((w) => w.length >= 4 && !STOP.has(w)))];
-
-/** The first beat (its number) whose lines mention the text, else null. */
-export function mentionedIn(beats = [], text) {
-  const keys = keyWords(text);
-  if (!keys.length) return null;
-  // One or two key words: all of them; more: three quarters, so a shared
-  // name alone (the host's) does not tick a deliverable.
-  const need = keys.length <= 2 ? keys.length : Math.ceil(keys.length * 0.75);
-  for (const b of beats) {
-    const have = new Set(words((b.lines || []).join(' ')));
-    if (keys.filter((k) => have.has(k)).length >= need) return b.number;
-  }
-  return null;
-}
-
-// How many of the key words a line has.
-const hits = (line, keys) => { const have = new Set(words(line)); return keys.filter((k) => have.has(k)).length; };
-
-/**
- * The line that shows a covered goal, { line, as }: the one with most of
- * the goal's key words, the person's (personLine) first when two have as
- * many; `mustName`, only lines where the person is. The first such
- * (utils/scriptCoverage coveringLine, the server's copy).
- */
-function coveringLine(lines, keys, person, { mustName = false } = {}) {
-  let best = null;
-  for (const l of lines) {
-    const named = personLine([l], person);
-    if (mustName && !named) continue;
-    const score = hits(l, keys) + (named ? 0.5 : 0);
-    if ((score > 0 || mustName) && (!best || score > best.score)) best = { score, line: l, as: named?.as || null };
-  }
-  return best ? { line: best.line, as: best.as } : null;
-}
-
-/**
- * Where a relationship goal is covered, { beat, as, line } or null (Evoni,
- * 2026-10-23: "Get to know Truthville" never ticked when the script named
- * her by her real name; utils/scriptCoverage goalCovered, the server's
- * copy). Covered when the goal is mentioned as written, or when the rest
- * of its words are and the person (goalPerson) is there by any of their
- * names or speaks. `line` is the beat's line that shows it, `as` the name
- * the person goes by in it (null when the goal is there as written and
- * they are not named in that line).
- */
-export function goalMatch(beats = [], goal, person) {
-  const label = String(goal?.label || '').trim();
-  const keys = keyWords(label);
-  // A brand's goal as written needs the brand named in that beat: "studio"
-  // with the rest of the goal is not Studio by Sable.
-  const linesAt = (n) => beats.find((b) => b.number === n)?.lines || [];
-  const first = mentionedIn(beats, label);
-  const literal = first !== null && (!person?.whole || personLine(linesAt(first), person)) ? first : null;
-  if (literal !== null) {
-    const shown = coveringLine(linesAt(literal), keys, person);
-    return { beat: literal, as: shown?.as || null, line: shown?.line || null };
-  }
-  if (!person?.names?.length) return null;
-  const own = new Set(person.names.flatMap(words));
-  const rest = keys.filter((k) => !own.has(k));
-  const need = rest.length <= 2 ? rest.length : Math.ceil(rest.length * 0.75);
-  for (const b of beats) {
-    const lines = b.lines || [];
-    if (hits(lines.join(' '), rest) < need || !personLine(lines, person)) continue;
-    const shown = coveringLine(lines, keys, person, { mustName: true });
-    return { beat: b.number, as: shown.as, line: shown.line };
-  }
-  return null;
-}
+export { keyWords, mentionedIn, goalMatch, coverKey } from './coverMatch';
 
 /**
  * A covered goal's line as the tab quotes it (Evoni, 2026-10-23): { before,
@@ -192,20 +122,24 @@ export function quoteParts(line, mark = null, max = 140) {
 }
 
 /**
- * [{ key, label, source, beat }] in the order: goals, follow-ups carried
- * from an earlier episode (`carried`: the to-do list's goal tasks with a
- * follow_up_id), beat 14's opportunity, the brief's hook. beat
- * is the number of the beat that mentions it, or null. What she owes is not
- * on the list: deliverables are not always shown in the show (Evoni,
- * 2026-10-18; beat 12 is The Fashion Challenge). `deliverables` is kept in
- * the call for its callers and read no more. A goal also has its slot, and
- * when its person is there under another name, `who`: the name the goal
- * gives them and `as`, the one the script uses ("Truthville", "Marcus
- * Hale"). A covered goal has `line`, the beat's line that covers it, and
- * `mark`, the name in it to emphasise (quoteParts). `profiles`: the
- * event's people's social profiles, by id (goalPerson).
+ * [{ key, markKey, label, source, beat, covered }] in the order: goals,
+ * follow-ups carried from an earlier episode (`carried`: the to-do list's
+ * goal tasks with a follow_up_id), beat 14's opportunity, the brief's hook.
+ * beat is the number of the beat that covers it (lib/coverMatch goalMatch:
+ * the latest beat that does it), or null. What she owes is not on the list:
+ * deliverables are not always shown in the show (Evoni, 2026-10-18; beat 12
+ * is The Fashion Challenge). `deliverables` is kept in the call for its
+ * callers and read no more. A goal also has its slot, and when its person
+ * is there under another name, `who`: the name the goal gives them and
+ * `as`, the one the script uses ("Truthville", "Marcus Hale"). A covered
+ * goal has `line`, the beat's line that covers it, and `mark`, the name in
+ * it to emphasise (quoteParts). `profiles`: the event's people's social
+ * profiles, by id (goalPerson). `marks`: her manual marks
+ * (episode_briefs.event_metadata.cover_marks, by markKey, lib/coverMatch
+ * withMark): one marked covered or not covered is so whatever the words
+ * say, with `marked` set.
  */
-export function mustCover({ beats = [], event = null, brief = null, opportunity = null, profiles = [], carried = [] } = {}) {
+export function mustCover({ beats = [], event = null, brief = null, opportunity = null, profiles = [], carried = [], marks = null } = {}) {
   const items = [];
   relationshipGoalsOf(event).forEach((g, n) => {
     const label = String(g.label).trim();
@@ -214,8 +148,9 @@ export function mustCover({ beats = [], event = null, brief = null, opportunity 
     // The name the goal gives them: the one of theirs in its words.
     const inLabel = new Set(words(label));
     const named = person ? person.shown.find((s) => words(s).length && words(s).every((w) => inLabel.has(w))) || person.name : null;
+    const slot = g.slot || 'relationship';
     items.push({
-      key: `goal-${n}`, label, source: 'Goal', slot: g.slot || 'relationship', beat: m ? m.beat : null,
+      key: `goal-${n}`, markKey: coverKey('goal', { slot, label }), label, source: 'Goal', slot, beat: m ? m.beat : null,
       // The line that covers it, and the name to emphasise in it: the one
       // the person goes by there, else the goal's own name for them.
       ...(m?.line ? { line: m.line, mark: m.as || named || null } : {}),
@@ -229,7 +164,7 @@ export function mustCover({ beats = [], event = null, brief = null, opportunity 
     const label = String(t?.label || '').trim();
     if (!label || !t.follow_up_id) return;
     const m = goalMatch(beats, t, goalPerson(t, event, profiles));
-    items.push({ key: `carried-${t.follow_up_id}`, label, source: 'Follow-up', slot: t.slot, beat: m ? m.beat : null });
+    items.push({ key: `carried-${t.follow_up_id}`, markKey: coverKey('carried', t), label, source: 'Follow-up', slot: t.slot, beat: m ? m.beat : null });
   });
   // Beat 14's opportunity (Evoni, 2026-10-19), when one is attached and it
   // comes (the caller passes null when the episode is designed to fail or the
@@ -237,10 +172,28 @@ export function mustCover({ beats = [], event = null, brief = null, opportunity 
   // line naming it; a mention in another beat is not the invitation (Script
   // page audit, 2026-10-19; lib/beat14Invitation).
   const opp = typeof opportunity?.name === 'string' ? opportunity.name.trim() : '';
-  if (opp) items.push({ key: 'opportunity', label: opp, source: 'Opportunity', beat: beat14Delivers(beats, opp) ? BEAT : null });
+  if (opp) items.push({ key: 'opportunity', markKey: coverKey('opportunity'), label: opp, source: 'Opportunity', beat: beat14Delivers(beats, opp) ? BEAT : null });
+  // The hook: told in beat 14, or through the invitation beat 14 delivers.
   const hook = typeof brief?.forward_hook === 'string' ? brief.forward_hook.trim() : '';
-  if (hook) items.push({ key: 'hook', label: hook, source: 'Forward hook' });
-  return items.map((i) => ('beat' in i ? i : { ...i, beat: mentionedIn(beats, i.label) }));
+  if (hook) items.push({ key: 'hook', markKey: coverKey('hook'), label: hook, source: 'Forward hook', beat: hookCovered(beats, hook, opp || null) });
+  return items.map((i) => withMark(i, marks));
+}
+
+/**
+ * The to-do list's task for a covered goal (Script tab audit 6, 2026-10-24:
+ * it matched on the exact label, so a label tidied since lost its task):
+ * by slot and the label's words, else the only task in that slot, else the
+ * follow-up's own id. Null when there is none.
+ */
+export function goalTaskFor(tasks, item) {
+  const list = (Array.isArray(tasks) ? tasks : []).filter(Boolean);
+  if (!item) return null;
+  const slot = item.slot || 'relationship';
+  const said = words(item.label).join(' ');
+  const inSlot = list.filter((t) => (t.slot || 'relationship') === slot);
+  return inSlot.find((t) => words(t.label).join(' ') === said)
+    || (inSlot.length === 1 ? inSlot[0] : null)
+    || (item.key?.startsWith('carried-') ? list.find((t) => `carried-${t.follow_up_id}` === item.key) || null : null);
 }
 
 /**

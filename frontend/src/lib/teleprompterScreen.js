@@ -10,8 +10,11 @@
  * stay hidden. Pure: no React, no network.
  */
 import { parseMoment, messageOf } from './scriptMoments';
+import { MOMENT_SECONDS } from './scriptRuntime';
 
-export const SCREEN_SECONDS = 3;
+// One length for a [UI:] moment, the runtime's and the teleprompter's
+// (Script tab audit 6, 2026-10-24: 2s in the runtime, 3s here).
+export const SCREEN_SECONDS = MOMENT_SECONDS;
 
 // The phone itself, as lib/scriptMoments names it.
 const PHONE_NAMES = new Set(['phone', 'thephone', 'lalasphone', 'lalaphone', 'phonedevice']);

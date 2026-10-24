@@ -9,7 +9,10 @@ import { speakerLine, isRuleLine } from './scriptSpeaker';
 
 const WORDS_PER_MINUTE = 150;
 const ACTION_SECONDS = 3;
-const MOMENT_SECONDS = 2;
+// A [UI:] moment on screen: three seconds, as the teleprompter gives her to
+// react (lib/teleprompterScreen SCREEN_SECONDS is this one; Script tab audit
+// 6, 2026-10-24: the runtime said 2).
+export const MOMENT_SECONDS = 3;
 const TRANSITION_SECONDS = 1;
 
 // Tags that are read by the show, not seen (stats, mail, wardrobe and deal

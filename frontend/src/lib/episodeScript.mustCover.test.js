@@ -80,12 +80,12 @@ describe('must cover: a goal by its person', () => {
   const profiles = [{ id: 9, creator_name: 'Marcus Hale', display_name: 'Truthville', handle: 'mhale_styles' }];
   const goal = (...lines) => mustCover({ beats: [{ number: 11, lines }], event, profiles })[0];
   test('her real name, first name or handle ticks it, and says who', () => {
-    expect(goal('Lala: "I want to know you, Marcus Hale."')).toMatchObject({ beat: 11, slot: 'relationship_guest', who: { name: 'Truthville', as: 'Marcus Hale' } });
-    expect(goal('Lala: "Marcus! I want to know you."').who).toEqual({ name: 'Truthville', as: 'Marcus' });
-    expect(goal('Lala: "@mhale_styles, I want to know you."').beat).toBe(11);
+    expect(goal('Lala: "I want to get to know you, Marcus Hale."')).toMatchObject({ beat: 11, slot: 'relationship_guest', who: { name: 'Truthville', as: 'Marcus Hale' } });
+    expect(goal('Lala: "Marcus! I want to get to know you."').who).toEqual({ name: 'Truthville', as: 'Marcus' });
+    expect(goal('Lala: "@mhale_styles, I want to get to know you."').beat).toBe(11);
   });
   test('speaking is being there', () => {
-    expect(goal('Marcus Hale: You must be Lala.', 'Lala: I want to know you.')).toMatchObject({ beat: 11, who: { as: 'Marcus Hale' } });
+    expect(goal('Marcus Hale: You must be Lala.', 'Lala: I want to get to know you.')).toMatchObject({ beat: 11, who: { as: 'Marcus Hale' } });
   });
   test('the goal as written still ticks it, with no who', () => {
     const g = goal('Lala: "I want to get to know Truthville."');
@@ -93,9 +93,9 @@ describe('must cover: a goal by its person', () => {
     expect(g.who).toBeUndefined();
   });
   test('a shared surname, the person without the rest, or no profile read, does not', () => {
-    expect(goal('Lala: "Hale, I want to know you."').beat).toBeNull();
+    expect(goal('Lala: "Hale, I want to get to know you."').beat).toBeNull();
     expect(goal('Marcus Hale: Hello.').beat).toBeNull();
-    expect(mustCover({ beats: [{ number: 11, lines: ['Marcus Hale: I want to know you.'] }], event })[0].beat).toBeNull();
+    expect(mustCover({ beats: [{ number: 11, lines: ['Marcus Hale: I want to get to know you.'] }], event })[0].beat).toBeNull();
   });
   test('a brand goal is read as written only', () => {
     const items = mustCover({ beats: [{ number: 11, lines: ['Marcus Hale: let us co-style a moment'] }], event, profiles });
@@ -116,8 +116,8 @@ describe('carried follow-ups', () => {
     const items = mustCover({ beats: at('Lala: "Time to follow up with Studio Bystable about the collab."'), carried });
     const owed = items.filter((i) => i.source === 'Follow-up');
     expect(owed).toEqual([
-      { key: 'carried-f1', label: 'Follow up with Studio Bystable about the collab', source: 'Follow-up', slot: 'follow_up_f1', beat: 3 },
-      { key: 'carried-f2', label: 'Send Marcus the lookbook', source: 'Follow-up', slot: 'follow_up_f2', beat: null },
+      { key: 'carried-f1', markKey: 'carried:f1', label: 'Follow up with Studio Bystable about the collab', source: 'Follow-up', slot: 'follow_up_f1', beat: 3, covered: true },
+      { key: 'carried-f2', markKey: 'carried:f2', label: 'Send Marcus the lookbook', source: 'Follow-up', slot: 'follow_up_f2', beat: null, covered: false },
     ]);
   });
   test('none carried, none listed', () => {
@@ -136,8 +136,8 @@ describe('must cover: the line', () => {
   const profiles = [{ id: 9, creator_name: 'Marcus Hale', display_name: 'Truthville', aliases: ['Truth'] }, { id: 40, display_name: 'Studio by Sable', aliases: ['Sable', 'Studio'] }];
   const cover = (...lines) => mustCover({ beats: [{ number: 11, lines }], event, profiles });
   test('a covered goal has its line and the name to emphasise', () => {
-    const [g] = cover('Me: so loud', 'Lala: "Truth, I want to know you."');
-    expect(g).toMatchObject({ beat: 11, line: 'Lala: "Truth, I want to know you."', mark: 'Truth', who: { name: 'Truthville', as: 'Truth' } });
+    const [g] = cover('Me: so loud', 'Lala: "Truth, I want to get to know you."');
+    expect(g).toMatchObject({ beat: 11, line: 'Lala: "Truth, I want to get to know you."', mark: 'Truth', who: { name: 'Truthville', as: 'Truth' } });
     const [lit] = cover('Lala: "I want to get to know Truthville."');
     expect(lit).toMatchObject({ beat: 11, line: 'Lala: "I want to get to know Truthville."', mark: 'Truthville' });
     expect(cover('Me: nobody')[0].line).toBeUndefined();

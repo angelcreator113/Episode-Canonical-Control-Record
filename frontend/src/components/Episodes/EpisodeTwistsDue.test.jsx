@@ -70,17 +70,46 @@ describe('EpisodeTwistsDue', () => {
     expect(screen.getByTestId('script-twist-plant-t2-mark')).toBeTruthy();
   });
 
-  test('nothing when none are due, or when they cannot be read', async () => {
+  test('nothing when none are due', async () => {
     api.get.mockResolvedValue({ data: { plant: [], payoff: [] } });
     const { container, unmount } = render(<EpisodeTwistsDue episodeId="ep-4" beats={BEATS} />);
     await waitFor(() => expect(api.get).toHaveBeenCalled());
     expect(container.innerHTML).toBe('');
     unmount();
-    api.get.mockRejectedValue(new Error('down'));
+  });
+
+  // Script tab audit 6 (2026-10-24): a failed read says so, with Retry.
+  test("a failed read says Couldn't read twists, and Retry reads again", async () => {
+    api.get.mockRejectedValueOnce(new Error('down')).mockResolvedValue({ data: { plant: [KEY], payoff: [] } });
     vi.spyOn(console, 'error').mockImplementation(() => {});
-    const again = render(<EpisodeTwistsDue episodeId="ep-4" beats={BEATS} />);
-    await waitFor(() => expect(console.error).toHaveBeenCalled());
-    expect(again.container.innerHTML).toBe('');
+    render(<EpisodeTwistsDue episodeId="ep-4" beats={BEATS} />);
+    expect((await screen.findByTestId('script-twists-unread')).textContent).toContain("Couldn't read twists.");
+    fireEvent.click(screen.getByTestId('script-twists-retry'));
+    expect(await screen.findByTestId('script-twist-plant-t2')).toBeTruthy();
+    expect(api.get).toHaveBeenCalledTimes(2);
+  });
+
+  test('Undo takes a mark back', async () => {
+    api.get.mockResolvedValue({ data: { plant: [{ ...KEY, status: 'planted' }], payoff: [{ ...RING, status: 'paid_off' }] } });
+    api.post.mockResolvedValue({ data: { plant: [KEY], payoff: [{ ...RING, status: 'paid_off' }] } });
+    render(<EpisodeTwistsDue episodeId="ep-4" beats={BEATS} />);
+    expect(await screen.findByTestId('script-twist-payoff-t1-undo')).toBeTruthy();
+    fireEvent.click(screen.getByTestId('script-twist-plant-t2-undo'));
+    expect(api.post).toHaveBeenCalledWith(`${URL}/t2/mark`, { as: 'planted', undo: true });
+    expect(await screen.findByTestId('script-twist-plant-t2-mark')).toBeTruthy();
+  });
+
+  test('paying off a twist not planted yet asks first', async () => {
+    api.get.mockResolvedValue({ data: { plant: [], payoff: [KEY] } });
+    api.post.mockResolvedValue({ data: { plant: [], payoff: [{ ...KEY, status: 'paid_off' }] } });
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true);
+    render(<EpisodeTwistsDue episodeId="ep-4" beats={BEATS} />);
+    fireEvent.click(await screen.findByTestId('script-twist-payoff-t2-mark'));
+    expect(confirm.mock.calls[0][0]).toBe('"The spare key" has not been planted yet. Mark it paid off anyway?');
+    expect(api.post).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByTestId('script-twist-payoff-t2-mark'));
+    expect(api.post).toHaveBeenCalledWith(`${URL}/t2/mark`, { as: 'paid_off' });
+    confirm.mockRestore();
   });
 
   test('the hint: the title\'s key words, else the description\'s', () => {

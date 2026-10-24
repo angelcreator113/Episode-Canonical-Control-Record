@@ -1,5 +1,6 @@
 import { describe, test, expect } from 'vitest';
-import { lineSeconds, beatSeconds, scriptSeconds, formatRuntime } from './scriptRuntime';
+import { lineSeconds, beatSeconds, scriptSeconds, formatRuntime, MOMENT_SECONDS } from './scriptRuntime';
+import { SCREEN_SECONDS } from './teleprompterScreen';
 
 describe('lineSeconds', () => {
   test('dialogue is its spoken words at 150 a minute; the label and quotes are not words', () => {
@@ -10,10 +11,12 @@ describe('lineSeconds', () => {
     expect(lineSeconds('Lala: (softly) "one two three four five"')).toBeCloseTo(2);
   });
 
-  test('an action or narration line is 3s, a moment on screen 2s', () => {
+  // One moment length, the teleprompter's 3s (Script tab audit 6, 2026-10-24).
+  test('an action or narration line is 3s, a moment on screen 3s', () => {
     expect(lineSeconds('(She opens the closet)')).toBe(3);
     expect(lineSeconds('The room goes quiet.')).toBe(3);
-    expect(lineSeconds('[UI:OPEN closet]')).toBe(2);
+    expect(lineSeconds('[UI:OPEN closet]')).toBe(3);
+    expect(MOMENT_SECONDS).toBe(SCREEN_SECONDS);
   });
 
   test('hidden tags are 0, a transition 1s', () => {
@@ -29,12 +32,12 @@ describe('lineSeconds', () => {
 describe('beatSeconds and scriptSeconds', () => {
   const lines = ['Lala: one two three four five', '(She twirls)', '[UI:OPEN closet]', '[STAT: coins +5]', '[TRANSITION: cut]'];
   test('a beat adds its lines, to whole seconds', () => {
-    expect(beatSeconds(lines)).toBe(2 + 3 + 2 + 0 + 1);
+    expect(beatSeconds(lines)).toBe(2 + 3 + 3 + 0 + 1);
     expect(beatSeconds([])).toBe(0);
     expect(beatSeconds(undefined)).toBe(0);
   });
   test('the script adds its beats', () => {
-    expect(scriptSeconds([{ lines }, { lines: ['(Beat)'] }])).toBe(11);
+    expect(scriptSeconds([{ lines }, { lines: ['(Beat)'] }])).toBe(12);
     expect(scriptSeconds([])).toBe(0);
   });
 });

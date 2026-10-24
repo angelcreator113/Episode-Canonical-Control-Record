@@ -19,9 +19,20 @@ const HELD = 'held';
 
 const STOP = new Set(['the', 'and', 'for', 'with', 'from', 'that', 'this', 'into', 'her', 'his', 'their', 'your', 'about', 'post', 'piece', 'content', 'make', 'made', 'lala', 'episode', 'event']);
 const words = (s) => String(s || '').toLowerCase().normalize('NFKD').replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(Boolean);
-// A trailing plural "s" is let go on both sides ("VIPs" names "VIP"); short
-// words keep theirs ("bus", "gas").
-const stem = (w) => (w.length > 3 && w.endsWith('s') ? w.slice(0, -1) : w);
+// One stem for every matcher (Script tab audit 6, 2026-10-24): a trailing
+// plural "s" is let go on both sides ("VIPs" names "VIP"; "campaigns" is
+// "campaign"), and "-ed" and "-ing" ("followed", "following" are "follow"),
+// then a final "e" and a doubled last letter, so "style", "styled" and
+// "styling" meet. Short words keep theirs ("bus", "gas", "met", "need").
+const stem = (w) => {
+  let s = String(w || '');
+  if (s.length > 5 && s.endsWith('ing')) s = s.slice(0, -3);
+  else if (s.length > 4 && s.endsWith('ed')) s = s.slice(0, -2);
+  else if (s.length > 3 && s.endsWith('s') && !s.endsWith('ss')) s = s.slice(0, -1);
+  if (s.length > 3 && s.endsWith('e')) s = s.slice(0, -1);
+  if (s.length > 3 && /([b-df-hj-np-tv-z])\1$/.test(s)) s = s.slice(0, -1);
+  return s;
+};
 const keyWords = (s) => [...new Set(words(s).filter((w) => w.length >= 4 && !STOP.has(w)))];
 
 /**
@@ -99,4 +110,4 @@ function beat14Outcome(opp, designedIntent = null) {
 
 // END SHARED
 
-module.exports = { namesIt, invitationLine, beat14Delivers, beat14Outcome, beat14Decided, BEAT };
+module.exports = { namesIt, invitationLine, beat14Delivers, beat14Outcome, beat14Decided, BEAT, stem };

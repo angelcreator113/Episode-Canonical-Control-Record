@@ -14,12 +14,13 @@ const TASKS = [
   { slot: 'post_reel', label: 'Post the reel', task_source: 'deliverable', deliverable_id: 'd1', completed: false },
 ];
 
+const TXN = { id: 'txn' };
 function app(query) {
   jest.resetModules();
   jest.doMock('../../../src/middleware/auth', () => ({ requireAuth: (req, res, next) => next(), authorize: () => (req, res, next) => next() }));
   const a = express();
   a.use(express.json());
-  a.set('models', { sequelize: { query, QueryTypes: { SELECT: 'SELECT' } } });
+  a.set('models', { sequelize: { query, QueryTypes: { SELECT: 'SELECT' }, transaction: async (fn) => fn(TXN) } });
   a.use('/api/v1', require('../../../src/routes/todoListRoutes'));
   return a;
 }
@@ -60,4 +61,23 @@ test('a failure is a 500, and logged', async () => {
   const res = await request(app(jest.fn(async () => { throw new Error('db down'); }))).post(`/api/v1/episodes/${EP}/todo/complete/relationship_guest`).send({ source: 'script', beat: 11 });
   expect(res.status).toBe(500);
   expect(console.error).toHaveBeenCalledWith('[TodoList] complete slot failed:', expect.any(Error));
+});
+
+// Script tab audit 6 (2026-10-24): two ticks at once each read the list and
+// the second write dropped the first. The read locks the row, in the same
+// transaction as the write.
+test('the list is read FOR UPDATE and written in the same transaction', async () => {
+  const query = listQuery();
+  const res = await request(app(query)).post(`/api/v1/episodes/${EP}/todo/complete/relationship_guest`).send({ completed: true, source: 'script', beat: 11 });
+  expect(res.status).toBe(200);
+  const [selectSql, selectOpts] = query.mock.calls.find(([sql]) => /^SELECT/.test(sql));
+  expect(selectSql).toMatch(/FOR UPDATE$/);
+  expect(selectOpts.transaction).toBe(TXN);
+  expect(query.mock.calls.find(([sql]) => /^UPDATE episode_todo_lists/.test(sql))[1].transaction).toBe(TXN);
+});
+
+test('Untick: completed false, as a boolean or the text "false"', async () => {
+  const query = listQuery([{ ...TASKS[0], completed: true, completed_source: 'script', completed_beat: 11 }]);
+  const res = await request(app(query)).post(`/api/v1/episodes/${EP}/todo/complete/relationship_guest`).send({ completed: 'false', source: 'script' });
+  expect(res.body.social_tasks[0]).toEqual({ ...TASKS[0], completed: false });
 });

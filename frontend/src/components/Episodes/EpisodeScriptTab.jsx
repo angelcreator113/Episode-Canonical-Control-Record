@@ -6,7 +6,7 @@ import { Link } from 'react-router-dom';
 import { PenLine, GripVertical, ChevronDown, ArrowUp, ArrowDown, Smartphone, Image as ImageIcon, X, Plus, Coins, Shirt, MapPin, Users, ListChecks, Check, Circle, AlertTriangle, Bell, MessageCircle, Send, Clock, Trash2, ChevronLeft, ChevronRight, AudioLines, ScrollText, Images, Sparkles, Camera, Home } from 'lucide-react';
 import api from '../../services/api';
 import { episodePlanning } from '../../utils/episodePlanning';
-import { scriptInputs, mustCover, scriptPeople, quoteParts } from '../../lib/episodeScript';
+import { scriptInputs, mustCover, scriptPeople, quoteParts, goalTaskFor } from '../../lib/episodeScript';
 import Beat14Opportunity from './Beat14Opportunity';
 import EpisodeTwistsDue from './EpisodeTwistsDue';
 import { beat14Outcome } from '../../lib/beat14Invitation';
@@ -1499,10 +1499,19 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
   // when there is no record yet (EpisodeStoryRecord readOnOpen). Nothing
   // reads it on its own when beats are locked.
   const [readingScript, setReadingScript] = useState(false);
+  // One tick at a time (Script tab audit 6, 2026-10-24): every Tick button
+  // waits while one is in flight. `tickFailed`: the keys whose last tick or
+  // untick failed.
   const [ticking, setTicking] = useState(null);
-  const [tickFailed, setTickFailed] = useState(null);
+  const [tickFailed, setTickFailed] = useState(() => new Set());
   // How many Tick all covered ticked, once it has run (null before).
   const [tickedAll, setTickedAll] = useState(null);
+  // Her marks on the list (Evoni, 2026-10-24: "smarter matching + manual
+  // override"): episode_briefs.event_metadata.cover_marks, as the brief was
+  // read, then as PUT /episode-brief/:id/cover-marks answers.
+  const [coverMarks, setCoverMarks] = useState(null);
+  const [marking, setMarking] = useState(null);
+  const [markFailed, setMarkFailed] = useState(null);
   // Read for every episode: a follow-up carried from an earlier one is a
   // goal task too (services/storyCarryForward), with or without event goals.
   useEffect(() => {
@@ -1513,45 +1522,75 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
       .catch((err) => { console.error('[EpisodeScript] goal tasks load failed:', err); if (live) setGoalTasks(null); });
     return () => { live = false; };
   }, [episodeId]);
-  // The goal's task: the one Start Episode wrote from it, by slot and label.
-  const goalTaskOf = (c) => (goalTasks || []).find((t) => (t.slot || 'relationship') === c.slot && String(t.label || '').trim() === c.label) || null;
-  const tickGoal = async (c) => {
+  // The goal's task: the one Start Episode wrote from it, by slot and its
+  // label's words, else the slot's only task (lib/episodeScript goalTaskFor).
+  const goalTaskOf = (c) => goalTaskFor(goalTasks, c);
+  const setFailed = (key, failed) => setTickFailed((prev) => {
+    const next = new Set(prev);
+    if (failed) next.add(key); else next.delete(key);
+    return next;
+  });
+  // Tick it, or Untick (completed: false). The task goes in by its own slot.
+  const tickGoal = async (c, completed = true) => {
+    if (ticking) return;
+    const task = goalTaskOf(c);
     setTicking(c.key);
-    setTickFailed(null);
+    setFailed(c.key, false);
     setTickedAll(null);
     try {
-      const res = await api.post(`/api/v1/episodes/${episodeId}/todo/complete/${encodeURIComponent(c.slot)}`, { completed: true, source: 'script', beat: c.beat });
+      const res = await api.post(`/api/v1/episodes/${episodeId}/todo/complete/${encodeURIComponent(task?.slot || c.slot)}`, completed ? { completed: true, source: 'script', beat: c.beat ?? null } : { completed: false, source: 'script' });
       const next = res?.data?.social_tasks;
       if (Array.isArray(next)) setGoalTasks(next.filter((t) => t?.task_source === 'goal'));
     } catch (err) {
       console.error('[EpisodeScript] tick goal failed:', err);
-      setTickFailed(c.key);
+      setFailed(c.key, true);
     } finally {
       setTicking(null);
     }
   };
-  // Tick all covered (Evoni, 2026-10-23): each covered goal whose task is
-  // not done, one after another (each call writes the same to-do list),
-  // each with its own beat; then how many it ticked. One that fails says so
-  // on its row and the rest still go.
+  // Tick all covered (Evoni, 2026-10-23): each covered goal and follow-up
+  // whose task is not done, one after another (each call writes the same
+  // to-do list), each with its own beat; then how many it ticked. Each one
+  // that fails says so on its row and the rest still go.
   const tickAllCovered = async (list) => {
+    if (ticking) return;
     setTicking('all');
-    setTickFailed(null);
+    setTickFailed(new Set());
     setTickedAll(null);
     let done = 0;
+    const failed = new Set();
     for (const c of list) {
       try {
-        const res = await api.post(`/api/v1/episodes/${episodeId}/todo/complete/${encodeURIComponent(c.slot)}`, { completed: true, source: 'script', beat: c.beat });
+        const task = goalTaskOf(c);
+        const res = await api.post(`/api/v1/episodes/${episodeId}/todo/complete/${encodeURIComponent(task?.slot || c.slot)}`, { completed: true, source: 'script', beat: c.beat ?? null });
         const next = res?.data?.social_tasks;
         if (Array.isArray(next)) setGoalTasks(next.filter((t) => t?.task_source === 'goal'));
         done += 1;
       } catch (err) {
         console.error('[EpisodeScript] tick all covered: one goal failed:', err);
-        setTickFailed(c.key);
+        failed.add(c.key);
       }
     }
+    setTickFailed(failed);
     setTicking(null);
     setTickedAll(done);
+  };
+  // Mark covered / Not covered / Undo mark: covered true, false, or null (the
+  // mark taken back). The beat she means is the item's own when it has one.
+  const markCover = async (c, covered) => {
+    if (marking) return;
+    setMarking(c.key);
+    setMarkFailed(null);
+    try {
+      const res = await api.put(`/api/v1/episode-brief/${episodeId}/cover-marks`, { key: c.markKey, covered, ...(covered && c.beat ? { beat: c.beat } : {}) });
+      const marks = res?.data?.data?.cover_marks;
+      if (marks && typeof marks === 'object') setCoverMarks(marks);
+    } catch (err) {
+      console.error('[EpisodeScript] cover mark failed:', err);
+      setMarkFailed(c.key);
+    } finally {
+      setMarking(null);
+    }
   };
   // Beat 14's opportunity (Evoni, 2026-10-19; Beat14Opportunity): null until
   // read; a read that fails or answers in another shape leaves it null, so
@@ -2527,7 +2566,10 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
   // Beat 14's opportunity is on the list only when it comes: not when the
   // episode is designed to fail, nor once it expired (Script page audit,
   // 2026-10-19; lib/beat14Invitation beat14Outcome).
-  const cover = mustCover({ beats, event: source?.event || null, brief, opportunity: beat14Outcome(beat14?.opportunity, brief?.designed_intent || null) === 'invitation' ? beat14.opportunity : null, profiles: [source?.sourceProfile, ...guestProfiles].filter(Boolean), carried: (goalTasks || []).filter((t) => t.follow_up_id) });
+  // Her marks win (Evoni, 2026-10-24): as saved here, else as the brief was read.
+  const cover = mustCover({ beats, event: source?.event || null, brief, opportunity: beat14Outcome(beat14?.opportunity, brief?.designed_intent || null) === 'invitation' ? beat14.opportunity : null, profiles: [source?.sourceProfile, ...guestProfiles].filter(Boolean), carried: (goalTasks || []).filter((t) => t.follow_up_id), marks: coverMarks ?? brief?.event_metadata?.cover_marks ?? null });
+  // Tick it ticks from the saved script only (Script tab audit 6, 2026-10-24).
+  const tickUnsaved = scriptText !== savedScript;
   // The phone starts each beat where the beat before left it, not on the
   // home screen (Script tab audit, 2026-10-15); at home when it was put
   // away (from beat 11; Script page audit, 2026-10-19).
@@ -2801,14 +2843,15 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
           <section className="esp-cover" data-testid="script-cover">
             <h3 className="esp-side-title">This episode must cover</h3>
             {(() => {
-              // Tick all covered: hidden when no covered goal is left to tick.
-              const toTick = cover.filter((c) => c.source === 'Goal' && c.beat && goalTaskOf(c) && !goalTaskOf(c).completed);
+              // Tick all covered: every covered goal and follow-up whose task
+              // is not done; hidden when none is left to tick.
+              const toTick = cover.filter((c) => (c.source === 'Goal' || c.source === 'Follow-up') && c.covered && goalTaskOf(c) && !goalTaskOf(c).completed);
               if (!toTick.length && tickedAll === null) return null;
               return (
                 <div className="esp-cover-all">
                   {toTick.length > 0 && (
-                    <button type="button" className="esp-btn is-small" data-testid="script-cover-tick-all" disabled={!!ticking} onClick={() => tickAllCovered(toTick)}>
-                      <ListChecks size={14} aria-hidden="true" /> {ticking === 'all' ? 'Ticking…' : `Tick all covered (${toTick.length})`}
+                    <button type="button" className="esp-btn is-small" data-testid="script-cover-tick-all" disabled={!!ticking || tickUnsaved} title={tickUnsaved ? 'Save first: Tick it reads the saved script' : undefined} onClick={() => tickAllCovered(toTick)}>
+                      <ListChecks size={14} aria-hidden="true" /> {ticking === 'all' ? 'Ticking…' : tickUnsaved ? 'Save first' : `Tick all covered (${toTick.length})`}
                     </button>
                   )}
                   {tickedAll !== null && <span className="esp-cover-ticked" role="status" data-testid="script-cover-tick-all-done">Ticked {tickedAll} {tickedAll === 1 ? 'goal' : 'goals'}.</span>}
@@ -2820,28 +2863,58 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
                 {cover.map((c) => {
                   // A covered goal (Evoni, 2026-10-23): the beat, who it is
                   // when the script names them otherwise, and Tick it when
-                  // its task is not done yet.
-                  const goal = (c.source === 'Goal' || c.source === 'Follow-up') && c.beat;
+                  // its task is not done yet; Untick when it is.
+                  const goal = (c.source === 'Goal' || c.source === 'Follow-up') && c.covered;
                   const task = goal ? goalTaskOf(c) : null;
+                  // Her mark (Evoni, 2026-10-24): Mark covered on an open
+                  // item, Not covered on one the words ticked, Undo on hers.
+                  const markButton = (
+                    <button type="button" className="esp-btn is-small esp-cover-mark" data-testid={`script-cover-${c.key}-mark`} disabled={!!marking}
+                      onClick={() => markCover(c, c.marked ? null : !c.covered)}>
+                      {marking === c.key ? 'Saving…' : c.marked ? 'Undo mark' : c.covered ? 'Not covered' : 'Mark covered'}
+                    </button>
+                  );
+                  const byYou = c.marked && <span className="esp-cover-beat" data-testid={`script-cover-${c.key}-marked`}>Marked by you{c.marked.covered ? '' : ': not covered'}</span>;
                   return (
-                    <li key={c.key} className={c.beat ? 'is-covered' : ''} data-testid={`script-cover-${c.key}`} data-covered={c.beat ? 'true' : 'false'}>
-                      {c.beat ? <Check size={14} aria-label="In the script" /> : <Circle size={14} aria-label="Not in the script yet" />}
+                    <li key={c.key} className={c.covered ? 'is-covered' : ''} data-testid={`script-cover-${c.key}`} data-covered={c.covered ? 'true' : 'false'}>
+                      {c.covered ? <Check size={14} aria-label="In the script" /> : <Circle size={14} aria-label="Not in the script yet" />}
                       {goal ? (
                         <span className="esp-cover-goal">
                           <span><strong>{c.source}</strong> {c.label}</span>
-                          <span className="esp-cover-beat" data-testid={`script-cover-${c.key}-where`}>Covered in beat {c.beat}{c.who ? ` · ${c.who.name}, as ${c.who.as}` : ''}</span>
+                          {c.beat
+                            ? <span className="esp-cover-beat" data-testid={`script-cover-${c.key}-where`}>Covered in beat {c.beat}{c.who ? ` · ${c.who.name}, as ${c.who.as}` : ''}</span>
+                            : null}
+                          {byYou}
                           {(() => {
                             // The line that covered it, the name emphasised (Evoni, 2026-10-23).
                             const q = quoteParts(c.line, c.mark);
                             return q && <span className="esp-cover-quote" data-testid={`script-cover-${c.key}-quote`}>“{q.before}{q.mark && <strong>{q.mark}</strong>}{q.after}”</span>;
                           })()}
-                          {task && (task.completed
-                            ? <span className="esp-cover-ticked" data-testid={`script-cover-${c.key}-ticked`}>Ticked</span>
-                            : <button type="button" className="esp-btn is-small esp-cover-tick" data-testid={`script-cover-${c.key}-tick`} disabled={ticking === c.key || ticking === 'all'} onClick={() => tickGoal(c)}>{ticking === c.key ? 'Ticking…' : 'Tick it'}</button>)}
-                          {tickFailed === c.key && <span className="esp-cover-fail" role="alert">Couldn&apos;t tick it. Try again.</span>}
+                          <span className="esp-cover-actions">
+                            {task && (task.completed
+                              ? (
+                                <>
+                                  <span className="esp-cover-ticked" data-testid={`script-cover-${c.key}-ticked`}>Ticked</span>
+                                  <button type="button" className="esp-btn is-small esp-cover-tick" data-testid={`script-cover-${c.key}-untick`} disabled={!!ticking} onClick={() => tickGoal(c, false)}>{ticking === c.key ? 'Unticking…' : 'Untick'}</button>
+                                </>
+                              )
+                              : (
+                                <button type="button" className="esp-btn is-small esp-cover-tick" data-testid={`script-cover-${c.key}-tick`} disabled={!!ticking || tickUnsaved} title={tickUnsaved ? 'Save first: Tick it reads the saved script' : undefined} onClick={() => tickGoal(c)}>
+                                  {ticking === c.key ? 'Ticking…' : tickUnsaved ? 'Save first' : 'Tick it'}
+                                </button>
+                              ))}
+                            {markButton}
+                          </span>
+                          {tickFailed.has(c.key) && <span className="esp-cover-fail" role="alert">Couldn&apos;t tick it. Try again.</span>}
+                          {markFailed === c.key && <span className="esp-cover-fail" role="alert">Couldn&apos;t save your mark. Try again.</span>}
                         </span>
                       ) : (
-                        <span><strong>{c.source}</strong> {c.label}{c.beat ? <span className="esp-cover-beat"> · Beat {c.beat}</span> : null}</span>
+                        <span className="esp-cover-goal">
+                          <span><strong>{c.source}</strong> {c.label}{c.beat ? <span className="esp-cover-beat"> · Beat {c.beat}</span> : null}</span>
+                          {byYou}
+                          <span className="esp-cover-actions">{markButton}</span>
+                          {markFailed === c.key && <span className="esp-cover-fail" role="alert">Couldn&apos;t save your mark. Try again.</span>}
+                        </span>
                       )}
                     </li>
                   );
@@ -2852,7 +2925,7 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
             )}
             {/* The Season Plan's twists due in this episode (2026-10-23; EpisodeTwistsDue). */}
             <EpisodeTwistsDue episodeId={episodeId} beats={beats} />
-            <p className="esp-uses-note">From the event package, the brief, beat 14&apos;s opportunity and what Lala still owes from an earlier episode. Ticked when the script mentions it, a goal also when its person is there by any of their names; the opportunity, when beat 14 delivers it as a DM or notification. Tick it marks the goal done on her to-do list; Tick all covered does it for every covered goal.</p>
+            <p className="esp-uses-note">From the event package, the brief, beat 14&apos;s opportunity and what Lala still owes from an earlier episode. A goal is ticked when a beat after the to-do list does it, in its own words (&ldquo;get to know&rdquo;), with its person there by any of their names; the hook, when beat 14 tells it; the opportunity, when beat 14 delivers it as a DM or notification. Mark covered or Not covered when the script says otherwise; your mark wins. Tick it marks the goal done on her to-do list from the saved script; Tick all covered does it for every covered goal and follow-up.</p>
           </section>
         )}
         {sideOn === 'truth' && hasScript && truth && (
