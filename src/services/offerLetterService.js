@@ -4,8 +4,9 @@
  * offerLetterService — the offer letter (Evoni, 2026-10-24: "this should be
  * more of an offer letter talking about the brand deal opportunity etc. it
  * comes after the invitation"). Her answers the same day: it replaces the
- * career plan; deal events only; a formal letter plus a terms section; on
- * beat 6, after the invitation's beat 5.
+ * career plan; deal events only; a formal letter plus a terms section; and
+ * "have it directly after the invitation": on the invitation's beat 5,
+ * right after it.
  *
  * The letter is the brand's (or host's) formal offer to Lala: a greeting,
  * the opportunity, then THE TERMS (read live from the deal, never written by

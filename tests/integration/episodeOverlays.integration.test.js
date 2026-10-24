@@ -188,7 +188,7 @@ afterAll(() => setOverlaysOnBeats(false));
   });
 
   // Evoni, 2026-10-07: "add the document overlays to the episode's list".
-  it("the event's shopping list and offer letter are listed: approved with their drawn overlay, outdated once edited; the letter on beat 6", async () => {
+  it("the event's shopping list and offer letter are listed: approved with their drawn overlay, outdated once edited; the letter on beat 5 with the invitation", async () => {
     const ids = await seed();
     const overlay = { asset_id: uuid(), url: 'data:image/png;base64,AAAA', version: 2, made_at: new Date().toISOString() };
     const docs = {
@@ -204,7 +204,7 @@ afterAll(() => setOverlaysOnBeats(false));
       event: { id: ids.event, name: 'Velvet Gala' },
     });
     expect(pieces.offer_letter_doc).toMatchObject({
-      label: 'Offer letter', status: 'outdated', image_url: overlay.url, expected_beat: { number: 6, name: 'Strategic Reaction' },
+      label: 'Offer letter', status: 'outdated', image_url: overlay.url, expected_beat: { number: 5, name: 'Reveal' },
     });
   });
 

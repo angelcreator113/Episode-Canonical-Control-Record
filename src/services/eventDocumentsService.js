@@ -6,7 +6,8 @@
  * offer letter (Evoni, 2026-10-24; it replaces the career plan: "this
  * should be more of an offer letter talking about the brand deal
  * opportunity etc. it comes after the invitation"; deal events only; a
- * formal letter plus a terms section; on beat 6, after the invitation).
+ * formal letter plus a terms section; then "have it directly after the
+ * invitation": on beat 5, right after the invitation).
  *
  * Each document goes through the invitation's steps: Draft (written from
  * the event), Edit (Evoni's own words), Redraft (a new draft, the old one
@@ -589,18 +590,19 @@ async function approveDocument(models, { showId, eventId, type, version }) {
   return overlayState(prev, lookTotal, currentTermsKey) === 'current' ? prev : withOverlay(models, event, type, prev);
 }
 
-// ─── The offer letter on beat 6 (Evoni, 2026-10-24) ─────────────────────────
+// ─── The offer letter on beat 5, directly after the invitation ──────────────
 //
-// "It comes after the invitation": the approved letter's overlay is the
-// episode's, assigned to beat 6 (Strategic Reaction), after the
-// invitation's beat 5 (Reveal). Placing it goes through
-// episodeBeatPlacement.placeOverlayOnBeat, which honours Evoni's switch of
-// 2026-10-07 ("none of the overlays should be beats for now"): while it is
-// off the letter is linked to the episode and listed on beat 6 in the
-// Overlays tab, and placed once placing is turned back on, as the
+// Evoni, 2026-10-24: "have it directly after the invitation". The approved
+// letter's overlay is the episode's, on the invitation's own beat 5
+// (Reveal), starting when the invitation's seconds end
+// (INVITATION_DURATION), so nothing comes between them. Placing it goes
+// through episodeBeatPlacement.placeOverlayOnBeat, which honours Evoni's
+// switch of 2026-10-07 ("none of the overlays should be beats for now"):
+// while it is off the letter is linked to the episode and listed on beat 5
+// in the Overlays tab, and placed once placing is turned back on, as the
 // invitation is.
 
-const OFFER_LETTER_BEAT_NUMBER = 6;
+const OFFER_LETTER_BEAT_NUMBER = 5;
 
 function offerLetterBeat() {
   const { CANONICAL_BEATS } = require('../constants/canonicalBeats');
@@ -609,7 +611,7 @@ function offerLetterBeat() {
 
 /**
  * Link the event's approved offer letter overlay to the episode and place
- * it on beat 6; earlier offer letter overlays of the event lose their
+ * it on beat 5, directly after the invitation; earlier offer letter overlays of the event lose their
  * placement on the episode. Idempotent; a failure is logged and leaves the
  * approval as it is. overlay: the drawn overlay, else the stored one.
  */
@@ -639,6 +641,7 @@ async function syncOfferLetterPlacement(models, { event, episodeId, overlay = nu
       if (ids.length) await models.TimelinePlacement.destroy({ where: { episode_id: episodeId, asset_id: ids } });
     }
     const { placeOverlayOnBeat } = require('./episodeBeatPlacement');
+    const { INVITATION_DURATION } = require('./episodeInvitationOverlayService');
     const placed = await placeOverlayOnBeat(models, {
       episodeId,
       assetId: drawn.asset_id,
@@ -648,6 +651,7 @@ async function syncOfferLetterPlacement(models, { event, episodeId, overlay = nu
       source: 'event-document-offer-letter',
       duration: 6,
       zIndex: 20,
+      offsetSeconds: INVITATION_DURATION,
       logTag: '[EventDocuments]',
     });
     return { placement: placed.placement, anchor: placed.anchor };
@@ -664,7 +668,8 @@ async function syncOfferLetterPlacement(models, { event, episodeId, overlay = nu
 // event's documents once, and only an approved one is used:
 //   - an approved shopping list becomes the episode's wardrobe list
 //     (episode_todo_lists.tasks), in place of the standard lines;
-//   - an approved offer letter's overlay is linked to the episode on beat 6
+//   - an approved offer letter's overlay is linked to the episode on beat 5,
+//     directly after the invitation
 //     (syncOfferLetterPlacement). Lala's goals are written from the event's
 //     fields: the offer letter is the brand's offer, not her goals (it
 //     replaced the career plan, whose lines were carried, 2026-10-24).

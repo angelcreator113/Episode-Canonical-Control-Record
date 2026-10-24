@@ -6,7 +6,8 @@
  *   - restore an earlier version; re-roll one line;
  *   - the offer letter (Evoni, 2026-10-24; it replaced the career plan):
  *     deal events only, a letter plus the deal's terms, "terms changed",
- *     edits of its words, and its overlay on beat 6 after approval.
+ *     edits of its words, and its overlay on beat 5, directly after the
+ *     invitation, after approval.
  */
 const mockLook = { current: null };
 const mockOverlay = { current: null };
@@ -222,14 +223,14 @@ describe('the offer letter (Evoni, 2026-10-24)', () => {
     expect(back.letter.opening).toMatch(/pleased to offer/);
   });
 
-  test('approving draws its overlay and, once the event has an episode, places it on beat 6', async () => {
+  test('approving draws its overlay and, once the event has an episode, places it on beat 5, directly after the invitation', async () => {
     mockOverlay.current = { asset_id: 'ov-1', url: 'https://x/offer.png', version: 1, terms_key: 'k' };
     const { models } = fakeModels({ ...DEAL, used_in_episode_id: 'ep-1' });
     await svc.draftDocument(models, { ...ids, type: 'offer_letter' });
     const approved = await svc.approveDocument(models, { ...ids, type: 'offer_letter' });
     expect(approved.overlay.asset_id).toBe('ov-1');
     expect(beats.placeOverlayOnBeat).toHaveBeenCalledWith(models, expect.objectContaining({
-      episodeId: 'ep-1', assetId: 'ov-1', label: 'Offer letter', canonicalBeat: expect.objectContaining({ number: 6 }),
+      episodeId: 'ep-1', assetId: 'ov-1', label: 'Offer letter', canonicalBeat: expect.objectContaining({ number: 5 }), offsetSeconds: 5,
     }));
   });
 

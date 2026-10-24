@@ -5,6 +5,7 @@
 // placed on the invitation beat; approving a new one replaces it.
 const {
   INVITATION_BEAT,
+  INVITATION_DURATION,
   isInvitationOverlayType,
   mergeInvitationIntoOverlayStatus,
   syncEpisodeInvitationOverlay,
@@ -163,6 +164,27 @@ describe('placeInvitationOnBeat', () => {
     const out = await placeInvitationOnBeat(models, { episodeId: 'ep-1', assetId: 'inv-2' });
     expect(out.anchor).toBe('first-scene');
     expect(created[0]).toMatchObject({ scene_id: 'scene-1', properties: expect.objectContaining({ anchor: 'first-scene' }) });
+  });
+});
+
+describe('an overlay directly after the invitation on its beat (the offer letter, Evoni 2026-10-24)', () => {
+  const { placeOverlayOnBeat } = require('../../../src/services/episodeBeatPlacement');
+  const opts = (models) => ({ episodeId: 'ep-1', assetId: 'offer-1', canonicalBeat: INVITATION_BEAT, label: 'Offer letter', kind: 'offer_letter', offsetSeconds: INVITATION_DURATION });
+
+  test('starts on beat 5 when the invitation\'s seconds end', async () => {
+    const { models, created } = buildModels({ event: approvedEvent });
+    await placeOverlayOnBeat(models, opts(models));
+    expect(INVITATION_DURATION).toBe(5);
+    expect(created[0]).toMatchObject({ scene_id: null, offset_seconds: 5, properties: expect.objectContaining({ anchor: 'beat', beat_number: 5 }) });
+  });
+
+  test('a placement already on the beat at its start is moved to after the invitation', async () => {
+    const existing = { id: 'pl-1', scene_id: null, offset_seconds: 0, properties: { anchor: 'beat', beat_number: 5, scene_plan_id: 'plan-5' } };
+    existing.update = jest.fn(async (patch) => Object.assign(existing, patch));
+    const { models } = buildModels({ event: approvedEvent, existingPlacement: existing });
+    const out = await placeOverlayOnBeat(models, opts(models));
+    expect(existing.update).toHaveBeenCalledWith(expect.objectContaining({ offset_seconds: 5 }));
+    expect(out.placement.offset_seconds).toBe(5);
   });
 });
 

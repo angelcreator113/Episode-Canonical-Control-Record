@@ -886,8 +886,8 @@ Return ONLY JSON.` }],
     console.warn('[EpisodeGenerator] Invitation overlay placement failed (non-blocking):', invErr.message);
   }
 
-  // The offer letter, approved before Start, is the episode's on beat 6,
-  // after the invitation (Evoni, 2026-10-24). No-op without an approved
+  // The offer letter, approved before Start, is the episode's on beat 5,
+  // directly after the invitation (Evoni, 2026-10-24). No-op without an approved
   // letter; never blocks Start Episode.
   try {
     const { syncOfferLetterPlacement } = require('./eventDocumentsService');

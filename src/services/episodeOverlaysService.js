@@ -132,12 +132,12 @@ function overlayPieces({ title, invitation, event, placements = {}, estimates = 
   return [titleOverlay, framedCard, invitationPiece, ...documentPieces(event, lookTotals, beatOf)];
 }
 
-// The offer letter is assigned beat 6, after the invitation (Evoni,
+// The offer letter is on beat 5, directly after the invitation (Evoni,
 // 2026-10-24; eventDocumentsService.syncOfferLetterPlacement); the
 // shopping list has no beat.
 const DOCUMENT_PIECES = Object.freeze([
   { type: 'shopping_list', key: 'shopping_list_doc', label: 'Shopping list', beatNumber: null },
-  { type: 'offer_letter', key: 'offer_letter_doc', label: 'Offer letter', beatNumber: 6 },
+  { type: 'offer_letter', key: 'offer_letter_doc', label: 'Offer letter', beatNumber: 5 },
 ]);
 const DOC_STATUS = Object.freeze({ current: 'approved', outdated: 'outdated', not_made: 'not_made' });
 

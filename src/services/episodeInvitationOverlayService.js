@@ -88,6 +88,10 @@ async function findInvitationBeat(sequelize, episodeId) {
  * episodeBeatPlacement.placeOverlayOnBeat's, shared with the task-list
  * overlay (P14, Task #2395).
  */
+// Seconds the invitation holds at the start of beat 5; the offer letter
+// follows it on the same beat (eventDocumentsService.syncOfferLetterPlacement).
+const INVITATION_DURATION = 5;
+
 async function placeInvitationOnBeat(models, { episodeId, assetId }) {
   return placeOverlayOnBeat(models, {
     episodeId,
@@ -96,7 +100,7 @@ async function placeInvitationOnBeat(models, { episodeId, assetId }) {
     label: 'Invitation',
     kind: 'invitation',
     source: 'episode-invitation-overlay',
-    duration: 5,
+    duration: INVITATION_DURATION,
     zIndex: 20,
     logTag: '[episodeInvitationOverlay]',
   });
@@ -288,6 +292,7 @@ function mergeInvitationIntoOverlayStatus(status, invitation) {
 
 module.exports = {
   INVITATION_BEAT,
+  INVITATION_DURATION,
   INVITATION_SCREEN_ACTION,
   DEFAULT_INVITATION_OVERLAY_KEY,
   isInvitationOverlayType,

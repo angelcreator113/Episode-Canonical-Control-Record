@@ -16,7 +16,7 @@
  * the deal, never edited here), what happens next, closing and signature.
  * Deal events only; the card says so otherwise. When the deal's terms change
  * after the letter was written, the card says so with Redraft. Approved, it
- * is the episode's overlay on beat 6, after the invitation.
+ * is the episode's overlay on beat 5, directly after the invitation.
  *
  * Approving one also draws it as an overlay image (Evoni, 2026-10-07); the
  * card shows it, or Make overlay when an approved one has none.
@@ -409,8 +409,8 @@ export default function EventDocuments({ showId, eventId, event, outfitPieces = 
       {intro && <p className="evd-intro">
         One system for the event&apos;s in-world documents: the invitation and these two. Each fills itself from the event, goes through the same steps
         (Draft, Edit, Redraft, Approve). Once approved, Start Episode carries it into the episode: the
-        shopping list as her wardrobe list, the offer letter (deal events only) as its overlay on beat 6,
-        after the invitation. Approving one also draws it as an overlay for the episode.
+        shopping list as her wardrobe list, the offer letter (deal events only) as its overlay on beat 5,
+        directly after the invitation. Approving one also draws it as an overlay for the episode.
         The invitation is in <a href="#epp-sec-invitation">1. The Event</a>.
       </p>}
       {error && <p className="evd-error" role="alert">{error}</p>}

@@ -100,13 +100,13 @@ describe('documentPieces: the event\'s shopping list and offer letter as pieces'
   const event = (documents, deal = {}) => ({ id: 'ev', show_id: 'sh', name: 'Velour Launch', canon_consequences: { documents }, ...deal });
   const overlay = { asset_id: 'a1', url: 'https://img/shop.png', version: 2 };
 
-  test('none without an event; not made until drafted and approved; the offer letter on a deal event only, on beat 6', () => {
+  test('none without an event; not made until drafted and approved; the offer letter on a deal event only, on beat 5 with the invitation', () => {
     expect(documentPieces(null)).toEqual([]);
     expect(documentPieces(event({})).map((p) => p.key)).toEqual(['shopping_list_doc']);
     const [shop, offer] = documentPieces(event({}, { deal_type: 'paid_appearance' }));
     expect([shop.key, shop.label, shop.status, shop.image_url]).toEqual(['shopping_list_doc', 'Shopping list', 'not_made', null]);
     expect([offer.key, offer.label, offer.status]).toEqual(['offer_letter_doc', 'Offer letter', 'not_made']);
-    expect(offer.expected_beat).toEqual({ number: 6, name: 'Strategic Reaction' });
+    expect(offer.expected_beat).toEqual({ number: 5, name: 'Reveal' });
     expect(shop.expected_beat).toBeUndefined();
     expect(shop.cost).toEqual({ free: 'Drawn when the document is approved; costs nothing.' });
     expect(shop.beat).toBeNull();

@@ -1,8 +1,8 @@
 /**
  * Event documents PR 3: Start Episode (generateEpisodeFromEvent) carries the
  * event's approved shopping list into the episode's wardrobe list, and links
- * the approved offer letter's overlay to the episode (beat 6; Evoni,
- * 2026-10-24). A career plan saved before the offer letter replaced it is
+ * the approved offer letter's overlay to the episode (beat 5, directly
+ * after the invitation; Evoni, 2026-10-24). A career plan saved before the offer letter replaced it is
  * no longer carried: Lala's goals are written from the event. A draft is
  * not carried; deliverables stay required. S3 and the AI client are mocked,
  * as in goalTasksScaleWithEvent.integration.test.js.

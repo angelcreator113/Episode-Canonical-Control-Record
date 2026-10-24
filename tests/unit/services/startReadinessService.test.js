@@ -133,7 +133,7 @@ describe('warnings: what the server does not refuse for', () => {
     const deal = { id: 'ev-1', venue_location_id: 'loc-1', outfit_set_id: 'os-1', deal_type: 'paid_appearance' };
     const without = startWarnings({ ...deal, canon_consequences: { documents: { shopping_list: READY_EVENT.canon_consequences.documents.shopping_list } } });
     expect(without.map((x) => x.key)).toEqual(['document_offer_letter']);
-    expect(without[0].detail).toMatch(/beat 6/);
+    expect(without[0].detail).toMatch(/beat 5, directly after the invitation/);
     expect(startWarnings({ ...deal, canon_consequences: READY_EVENT.canon_consequences })).toEqual([]);
   });
 

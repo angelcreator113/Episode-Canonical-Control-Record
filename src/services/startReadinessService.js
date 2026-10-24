@@ -132,7 +132,7 @@ function startWarnings(event) {
         key: `document_${type}`,
         label: `${label} not approved`,
         detail: type === 'offer_letter'
-          ? 'Start Episode places only an approved offer letter on the episode (beat 6, after the invitation).'
+          ? 'Start Episode places only an approved offer letter on the episode (beat 5, directly after the invitation).'
           : `Start Episode puts only an approved ${label.toLowerCase()} on the episode's lists.`,
       });
     }
