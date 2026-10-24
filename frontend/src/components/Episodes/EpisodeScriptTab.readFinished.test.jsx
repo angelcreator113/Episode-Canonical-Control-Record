@@ -15,7 +15,11 @@ vi.mock('../../services/api', () => ({
 import api from '../../services/api';
 import EpisodeScriptTab from './EpisodeScriptTab';
 
-const SCRIPT = ['## BEAT: 11 · Event Outcome', 'Marcus Hale: So you are the Lala everyone wants to know.', 'Lala: "And you are the one I came to meet."'].join('\n');
+// All 14 beats: the script is finished only when each is approved (Script tab audit 6, 2026-10-24).
+const ALL = Array.from({ length: 14 }, (_, i) => i + 1);
+const SCRIPT = ALL.map((n) => (n === 11
+  ? ['## BEAT: 11 · Event Outcome', 'Marcus Hale: So you are the Lala everyone wants to know.', 'Lala: "And you are the one I came to meet."'].join('\n')
+  : `## BEAT: ${n}\nLala: Beat ${n}.`)).join('\n\n');
 const RECORD_URL = '/api/v1/book-from-show/episodes/ep-1/record';
 const RECORD = { id: 'r1', status: 'draft', what_happened: 'Lala met Truthville.', characters: [], secrets: [], relationships: [], follow_ups: [], goals: [], twists: [], applied: {},
   threads: [{ key: 'k-thread-1', thread_id: null, title: 'Who sent the second invitation?', note: '', action: 'new', keep: true }] };
@@ -32,7 +36,7 @@ beforeEach(() => {
 });
 
 test('every beat approved: the button opens What changed, which reads the script', async () => {
-  renderTab([11]);
+  renderTab(ALL);
   const read = await screen.findByTestId('script-read-finished');
   expect(read.textContent).toContain('Read the finished script');
   // Nothing reads it on its own.
@@ -46,7 +50,7 @@ test('every beat approved: the button opens What changed, which reads the script
 
 test('a record already there is shown, not read again', async () => {
   vi.mocked(api.get).mockImplementation(async (url) => (url === RECORD_URL ? { data: { record: RECORD, cast: [], threads: [], goals: [] } } : { data: { data: [] } }));
-  renderTab([11]);
+  renderTab(ALL);
   fireEvent.click(await screen.findByTestId('script-read-finished'));
   expect(await screen.findByTestId('wc-threads-0')).toBeTruthy();
   expect(api.post).not.toHaveBeenCalledWith(`${RECORD_URL}/draft`, expect.anything(), expect.anything());
@@ -54,6 +58,6 @@ test('a record already there is shown, not read again', async () => {
 
 test('not every beat approved: no button', async () => {
   renderTab([]);
-  await screen.findByText(/1 beats/);
+  await screen.findByTestId("script-approved");
   expect(screen.queryByTestId('script-read-finished')).toBeNull();
 });

@@ -24,9 +24,12 @@ function BeatIcon({ number }) {
   return <Icon size={22} aria-hidden="true" />;
 }
 
+// Beats 1–14 can be approved (the server's lock takes no other number).
+export const canApprove = (beat) => Number.isInteger(beat?.number) && beat.number >= 1 && beat.number <= 14;
+
 // A beat row's ⋮: the beat's own actions (move, approve), as the open
 // beat's buttons do them. Escape or a click elsewhere closes it.
-function BeatRowMenu({ beat, index, count, onMoveBeat, onApprove, locking }) {
+function BeatRowMenu({ beat, index, count, onMoveBeat, onApprove, locking, saving = false }) {
   const ref = useRef(null);
   const [open, setOpen] = useState(false);
   useEffect(() => {
@@ -53,10 +56,15 @@ function BeatRowMenu({ beat, index, count, onMoveBeat, onApprove, locking }) {
       {open && <div className="esp-rowmenu-list" role="group" aria-label={`Beat ${beat.number}`}>
         {!beat.approved && <button type="button" className="esp-rowmenu-item" disabled={index === 0 || locking} onClick={act(() => onMoveBeat(index, index - 1))}>Move up</button>}
         {!beat.approved && <button type="button" className="esp-rowmenu-item" disabled={index >= count - 1 || locking} onClick={act(() => onMoveBeat(index, index + 1))}>Move down</button>}
-        {/* aria-disabled while a lock saves, as the beat's own button (Script page audit 3, 2026-10-19). */}
-        <button type="button" className="esp-rowmenu-item" aria-disabled={locking || undefined} onClick={() => { if (locking) return; close(); onApprove(beat.id); back(); }}>
-          {beat.approved ? 'Unlock' : 'Approve & lock'}
-        </button>
+        {/* aria-disabled while a lock or a Save is on its way, as the beat's
+            own button (Script page audit 3, 2026-10-19; audit 6, 2026-10-24). */}
+        {(beat.approved || canApprove(beat)) && (
+          <button type="button" className="esp-rowmenu-item" aria-disabled={locking || saving || undefined} title={saving ? 'Wait for the save to finish' : undefined} onClick={() => { if (locking || saving) return; close(); onApprove(beat.id); back(); }}>
+            {beat.approved ? 'Unlock' : 'Approve & lock'}
+          </button>
+        )}
+        {/* A beat past 14 can't be approved: the server takes beats 1–14 (Script tab audit 6, 2026-10-24). */}
+        {!beat.approved && !canApprove(beat) && <p className="esp-rowmenu-note" data-testid={`script-row-canon-note-${beat.number}`}>Only beats 1–14 can be approved.</p>}
       </div>}
     </details>
   );
@@ -65,7 +73,7 @@ function BeatRowMenu({ beat, index, count, onMoveBeat, onApprove, locking }) {
 // The Episode Beats card (the mockup's left column): one row per beat, its
 // scene picture, status, name, location and length. Choosing a row opens the
 // beat in the centre. A beat is dragged by its handle onto another row.
-export function ScriptBeatList({ beats, openId, onChoose, statuses = {}, scenePlan = [], phoneBeats = new Set(), runtimes = {}, totalRuntime = '', drag, onMoveBeat, onApprove, locking = false }) {
+export function ScriptBeatList({ beats, openId, onChoose, statuses = {}, scenePlan = [], phoneBeats = new Set(), runtimes = {}, totalRuntime = '', drag, onMoveBeat, onApprove, locking = false, saving = false }) {
   const [dropAt, setDropAt] = useState(null);
   const rowRefs = useRef({});
   return (
@@ -114,7 +122,7 @@ export function ScriptBeatList({ beats, openId, onChoose, statuses = {}, scenePl
                   </span>
                 </span>
               </button>
-              <BeatRowMenu beat={b} index={i} count={beats.length} onMoveBeat={onMoveBeat} onApprove={onApprove} locking={locking} />
+              <BeatRowMenu beat={b} index={i} count={beats.length} onMoveBeat={onMoveBeat} onApprove={onApprove} locking={locking} saving={saving} />
             </li>
           );
         })}

@@ -335,7 +335,28 @@ export function rewrittenLine(original, words) {
   return next.trim() === String(original || '').trim() ? null : next;
 }
 
-function ScriptLine({ voice = null, look = [], line, number = null, beatId, lineId = null, onOpenEdit = null, onFocusLater = null, beatNumber = null, lineIndex, onEdit, onDelete, onRewrite, rewriting, locked, prevLine = null, nextLine = null, onMoveLine, drag, onScreen, withOnScreen, phoneDown = false }) {
+// A line's first few words, for a control's name.
+export function firstWords(text, n = 6) {
+  const words = String(text || '').trim().split(/\s+/).filter(Boolean);
+  return words.length > n ? `${words.slice(0, n).join(' ')}…` : words.join(' ');
+}
+
+// A line edit is one line (Script tab audit 6, 2026-10-24: a newline typed
+// in the editor, then `## BEAT:`, made a new beat). Line breaks become spaces.
+export function oneLine(text) {
+  return String(text ?? '').replace(/[ \t]*(?:\r\n|[\n\r\u2028\u2029\u0085])+[ \t]*/g, ' ').trim();
+}
+// Read as the parser reads headers, Markdown dress included (`**## BEAT: 3**`, `### BEAT:`).
+const STARTS_BEAT = (text) => HAS_BEAT_HEADER.test(normalizeBeatHeaders(text));
+const NO_BEAT_IN_LINE = "A line can't start a new beat. To add a beat, type its `## BEAT:` header in the Raw editor.";
+
+// Why Rewrite line, Regenerate beat and Ask wait: one AI suggestion at a time.
+export const SUGGESTION_PENDING = 'Use or dismiss the suggestion first';
+export const SUGGESTION_WRITING = 'Wait for the suggestion being written';
+// Only the 14 canonical beats can be approved or regenerated (the server refuses others).
+export const CANON_ONLY = 'Only beats 1–14 can be approved or regenerated.';
+
+function ScriptLine({ voice = null, look = [], line, number = null, beatId, lineId = null, onOpenEdit = null, onFocusLater = null, beatNumber = null, lineIndex, onEdit, onDelete, onRewrite, rewriting, aiHold = null, locked, prevLine = null, nextLine = null, onMoveLine, drag, onScreen, withOnScreen, phoneDown = false }) {
   const [editing, setEditing] = useState(false);
   const [dropAt, setDropAt] = useState(null);
   const [editText, setEditText] = useState('');
@@ -397,8 +418,8 @@ function ScriptLine({ voice = null, look = [], line, number = null, beatId, line
         <span className="esp-move esp-move--end">
           {/* Past the next line shown, not a hidden [STAT:] line (Script tab re-audit, 2026-10-15). */}
           {/* Typed words go in with Save first (re-audit 2: a move threw them away). */}
-          <button type="button" className="esp-move-btn" aria-label="Move line up" title={editText !== lineStr ? 'Save the line first' : undefined} disabled={prevLine === null || editText !== lineStr} onClick={() => { if (onMoveLine(beatId, lineIndex, prevLine) !== false) closeEditor(prevLine, true); }}><ArrowUp size={14} aria-hidden="true" /></button>
-          <button type="button" className="esp-move-btn" aria-label="Move line down" title={editText !== lineStr ? 'Save the line first' : undefined} disabled={nextLine === null || editText !== lineStr} onClick={() => { if (onMoveLine(beatId, lineIndex, nextLine) !== false) closeEditor(nextLine, true); }}><ArrowDown size={14} aria-hidden="true" /></button>
+          <button type="button" className="esp-move-btn is-icon" aria-label="Move line up" title={editText !== lineStr ? 'Save the line first' : undefined} disabled={prevLine === null || editText !== lineStr} onClick={() => { if (onMoveLine(beatId, lineIndex, prevLine) !== false) closeEditor(prevLine, true); }}><ArrowUp size={14} aria-hidden="true" /></button>
+          <button type="button" className="esp-move-btn is-icon" aria-label="Move line down" title={editText !== lineStr ? 'Save the line first' : undefined} disabled={nextLine === null || editText !== lineStr} onClick={() => { if (onMoveLine(beatId, lineIndex, nextLine) !== false) closeEditor(nextLine, true); }}><ArrowDown size={14} aria-hidden="true" /></button>
         </span>
       </div>
     </div>
@@ -457,7 +478,12 @@ function ScriptLine({ voice = null, look = [], line, number = null, beatId, line
         {duration && <span className="esp-line-dur">{duration}</span>}
       </span>
     )}
-    {parsed.type === 'dialogue' && !locked && <button type="button" className="esp-rewrite" onClick={() => onRewrite(beatId, lineIndex, lineStr, lineId)} disabled={rewriting} aria-label={rewriting ? 'Rewriting…' : undefined}>{rewriting ? '⏳' : '✦ Rewrite'}</button>}
+    {/* Named by its line, so a screen reader's list of buttons tells them
+        apart; one suggestion at a time (`aiHold`: why not now; Script tab
+        audit 6, 2026-10-24: a second rewrite replaced the first unseen). */}
+    {parsed.type === 'dialogue' && !locked && <button type="button" className={`esp-rewrite${rewriting ? ' is-rewriting' : ''}`} data-testid="script-line-rewrite" onClick={() => onRewrite(beatId, lineIndex, lineStr, lineId)} disabled={rewriting || !!aiHold}
+      title={!rewriting && aiHold ? aiHold : undefined}
+      aria-label={rewriting ? 'Rewriting…' : `Rewrite line: ${firstWords(`${parsed.speaker}: ${parsed.text}`)}`}>{rewriting ? '⏳' : '✦ Rewrite'}</button>}
     {canVoice && <VoiceMicButton clip={voice.clip} open={voiceOpen} speaker={voice.line.speaker} testId="script-voice-mic" onClick={() => setVoiceOpen((o) => !o)} />}
     </div>
     {canVoice && voiceOpen && (
@@ -673,7 +699,7 @@ const LINE_KINDS = [
 // Add a line anywhere in a beat (Evoni, 2026-10-09; Task #2795): who it is
 // for, the words, and where it goes. It stays open for the next line, which
 // goes after this one; Save keeps them.
-function LineAdder({ lines = [], onScreen, onAdd, onClose, initialKind = 'Lala', draft = null, onDraft, onTyped = null, beatId = null }) {
+function LineAdder({ lines = [], onScreen, onAdd, onClose, initialKind = 'Lala', draft = null, onDraft }) {
   const [kind, setKind] = useState(initialKind);
   // What was typed outlives switching to another adder (Evoni, 2026-10-19):
   // it starts from the beat's draft and keeps it current.
@@ -683,9 +709,9 @@ function LineAdder({ lines = [], onScreen, onAdd, onClose, initialKind = 'Lala',
   const [added, setAdded] = useState(0);
   const textRef = useRef(null);
   const words = text.trim().replace(/\s+/g, ' ');
-  // Typed words are known to the tab, so the Raw editor toggle doesn't drop them (Raw editor audit, 2026-10-24).
-  const typed = !!words;
-  useEffect(() => (typed && onTyped ? onTyped(beatId, 'line') : undefined), [typed, onTyped, beatId]);
+  // Typed words are known to the tab through the draft (onDraft; the tab
+  // keeps it and counts it as unsaved work: Raw editor audit, 2026-10-24;
+  // Script tab audit 6, 2026-10-24: it outlives the beat closing and Raw).
   const add = () => {
     if (!words) return;
     const at = after === 'end' ? null : Number(after);
@@ -739,7 +765,7 @@ const MESSAGE_KINDS = {
   dm: { title: 'Add a DM', who: 'With', placeholder: 'What the message says' },
   post: { title: 'Add a post', who: null, placeholder: 'What Lala posts' },
 };
-function MessageAdder({ kind, people = [], lines = [], onScreen, onAdd, onClose, draft = null, onDraft, onTyped = null, beatId = null }) {
+function MessageAdder({ kind, people = [], lines = [], onScreen, onAdd, onClose, draft = null, onDraft }) {
   const info = MESSAGE_KINDS[kind];
   // As the line adder's: the draft outlives switching adders.
   const [who, setWhoState] = useState(draft?.who || '');
@@ -751,9 +777,7 @@ function MessageAdder({ kind, people = [], lines = [], onScreen, onAdd, onClose,
   const line = messageLine(kind, info.who ? who : null, text);
   const listId = `esp-people-${kind}`;
   const textRef = useRef(null);
-  // As the line adder's (Raw editor audit, 2026-10-24).
-  const typed = !!(text.trim() || who.trim());
-  useEffect(() => (typed && onTyped ? onTyped(beatId, `msg-${kind}`) : undefined), [typed, onTyped, beatId, kind]);
+  // Typed words are known to the tab through the draft, as the line adder's.
   const add = () => {
     if (!line) return;
     const at = after === 'end' ? null : Number(after);
@@ -828,8 +852,18 @@ function ProposalCard({ proposal, onAccept, onDiscard }) {
   const lines = proposal.kind === 'beat'
     ? proposal.text.split('\n').slice(1).map(shown).filter(Boolean)
     : [shown(proposal.text) || proposal.text];
+  // A new suggestion takes focus, so it is seen and heard where it landed
+  // (Script tab audit 6, 2026-10-24); the tab's live region announces it too.
+  const boxRef = useRef(null);
+  // Never from words being typed elsewhere meanwhile (a line editor, an
+  // adder); from Ask, which asked for it, it goes.
+  useEffect(() => {
+    const at = document.activeElement;
+    const typing = at && (at.tagName === 'TEXTAREA' || at.isContentEditable || (at.tagName === 'INPUT' && !at.closest?.('.esp-ask')));
+    if (!typing) boxRef.current?.focus?.();
+  }, [proposal]);
   return (
-    <div className="esp-proposal" role="region" aria-label={proposal.kind === 'beat' ? `New version of beat ${proposal.number}` : 'Rewritten line'} data-testid="script-proposal">
+    <div className="esp-proposal" ref={boxRef} tabIndex={-1} role="region" aria-label={proposal.kind === 'beat' ? `New version of beat ${proposal.number}` : 'Rewritten line'} data-testid="script-proposal">
       <p className="esp-proposal-title">{proposal.kind === 'beat' ? `↻ New version of beat ${proposal.number}` : '✦ Rewritten line'}</p>
       {proposal.kind === 'line' && <p className="esp-proposal-was">Was: {shown(proposal.originalLine) || proposal.originalLine}</p>}
       <ul className="esp-proposal-lines">{lines.map((l, i) => <li key={i}>{l}</li>)}</ul>
@@ -905,7 +939,7 @@ function useLineIds(beatId, lines, opRef) {
   return held.current.ids;
 }
 
-function BeatSection({ voice = null, beat, index, beatCount, scenePlan, expanded, onToggle, onApprove, proposal = null, onAcceptProposal, onDiscardProposal, onEdit, onDeleteLine, onRewrite, rewritingLine, locking, onOpenMap, onMoveBeat, onMoveLine, drag, onRegenerate, regenerating, writing = false, onScreen, onAddMoment, phoneUpAtStart = false, request = null, onRequestDone, people = [], lalaSlots = [], dressCode = '', lineOpRef = null, lineIdsRef = null, onOpenEdit = null, onFocusLater = null, status = 'draft', healthRows = [], hasPhone = false, worn = [], look = [], storyTime = null, onStep = null, prevBeatId = null, nextBeatId = null, onTyped = null, lockEdited = false }) {
+function BeatSection({ voice = null, beat, index, beatCount, scenePlan, expanded, onToggle, onApprove, proposal = null, onAcceptProposal, onDiscardProposal, onEdit, onDeleteLine, onRewrite, rewritingLine, locking, onOpenMap, onMoveBeat, onMoveLine, drag, onRegenerate, regenerating, writing = false, onScreen, onAddMoment, phoneUpAtStart = false, request = null, onRequestDone, people = [], lalaSlots = [], dressCode = '', lineOpRef = null, lineIdsRef = null, onOpenEdit = null, onFocusLater = null, status = 'draft', healthRows = [], hasPhone = false, worn = [], look = [], storyTime = null, onStep = null, prevBeatId = null, nextBeatId = null, onTyped = null, lockEdited = false, drafts = null, aiHold = null, saving = false, duplicate = false }) {
   const scene = scenePlan?.find(p => p.beat_number === beat.number);
   const cardRef = useRef(null);
   const [picking, setPicking] = useState(false);
@@ -913,9 +947,17 @@ function BeatSection({ voice = null, beat, index, beatCount, scenePlan, expanded
   const [messaging, setMessaging] = useState(null);
   // Words typed in an adder, by adder (the line adder, or one per message
   // kind): opening another adder keeps them; closing one lets them go
-  // (Evoni, 2026-10-19: Line over a half-typed DM lost it).
-  const drafts = useRef({});
-  const draftProps = (key) => ({ draft: drafts.current[key] || null, onDraft: (d) => { drafts.current[key] = d; } });
+  // (Evoni, 2026-10-19: Line over a half-typed DM lost it). The tab keeps
+  // them (`drafts`), by beat and adder, so they outlive this beat closing
+  // and the Raw editor, and counts them as unsaved work (Script tab audit 6,
+  // 2026-10-24: they went with the beat).
+  const localDrafts = useRef({});
+  const draftStore = drafts || {
+    get: (_id, key) => localDrafts.current[key] || null,
+    set: (_id, key, d) => { localDrafts.current[key] = d; },
+    drop: (_id, key) => { delete localDrafts.current[key]; },
+  };
+  const draftProps = (key) => ({ draft: draftStore.get(beat.id, key), onDraft: (d) => draftStore.set(beat.id, key, d) });
   const [zoomed, setZoomed] = useState(false);
   // Each bottom-bar tap acts once: collapsing and reopening the beat no
   // longer opens the adder again (Script tab audit, 2026-10-15).
@@ -956,12 +998,15 @@ function BeatSection({ voice = null, beat, index, beatCount, scenePlan, expanded
   // sent nothing).
   const cantWrite = regenerating || writing || locking;
   const cutsceneBeat = isCutsceneBeat(beat.number);
+  // A beat numbered past 14 is the script's own: the server approves and
+  // regenerates beats 1–14 only (Script tab audit 6, 2026-10-24).
+  const canon = Number.isInteger(beat.number) && beat.number >= 1 && beat.number <= 14;
   // The words are cleared only once a new version came back, and only if they
   // weren't changed meanwhile (Script page audit, 2026-10-19: a failed
   // request lost them).
   const askChange = async () => {
     const words = ask.trim();
-    if (!words || cantWrite) return;
+    if (!words || cantWrite || aiHold || !canon) return;
     if (await onRegenerate(beat.id, words)) setAsk((now) => (now.trim() === words ? '' : now));
   };
   useEffect(() => {
@@ -1086,6 +1131,8 @@ function BeatSection({ voice = null, beat, index, beatCount, scenePlan, expanded
               {/* An approved beat changed in the Raw editor (Raw editor audit,
                   2026-10-24: it showed as approved): Save puts the approved words back. */}
               {lockEdited && <span className="esp-beat-edited" data-testid={`script-beat-lock-edited-${beat.number}`}>Edited · will be put back on save</span>}
+              {/* A second beat with the same number counts once (Script tab audit 6, 2026-10-24). */}
+              {duplicate && <span className="esp-beat-edited" data-testid={`script-beat-duplicate-${beat.number}`}>Second beat {beat.number} · counts once</span>}
             </div>
           </div>
           {picture && <span className="esp-beat-thumb" aria-hidden="true"><img src={picture} alt="" loading="lazy" /></span>}
@@ -1138,19 +1185,19 @@ function BeatSection({ voice = null, beat, index, beatCount, scenePlan, expanded
               const at = shownLines.indexOf(i);
               return (
                 <Fragment key={lineKeys[i]}>
-                  <ScriptLine voice={voiceFor(i)} look={look} line={line} number={at >= 0 ? at + 1 : null} beatId={beat.id} lineId={lineKeys[i]} onOpenEdit={onOpenEdit} onFocusLater={onFocusLater} lineIndex={i} prevLine={at > 0 ? shownLines[at - 1] : null} nextLine={at >= 0 && at < shownLines.length - 1 ? shownLines[at + 1] : null} onEdit={onEdit} onDelete={onDeleteLine} onRewrite={onRewrite} rewriting={rewritingLine === `${beat.id}-${lineKeys[i]}`} locked={beat.approved} onMoveLine={onMoveLine} drag={drag} onScreen={onScreen} withOnScreen={withByLine[i]} phoneDown={phoneDownAt.includes(i)} beatNumber={beat.number} />
+                  <ScriptLine voice={voiceFor(i)} look={look} line={line} number={at >= 0 ? at + 1 : null} beatId={beat.id} lineId={lineKeys[i]} onOpenEdit={onOpenEdit} onFocusLater={onFocusLater} lineIndex={i} prevLine={at > 0 ? shownLines[at - 1] : null} nextLine={at >= 0 && at < shownLines.length - 1 ? shownLines[at + 1] : null} onEdit={onEdit} onDelete={onDeleteLine} onRewrite={onRewrite} rewriting={rewritingLine === `${beat.id}-${lineKeys[i]}`} aiHold={aiHold} locked={beat.approved} onMoveLine={onMoveLine} drag={drag} onScreen={onScreen} withOnScreen={withByLine[i]} phoneDown={phoneDownAt.includes(i)} beatNumber={beat.number} />
                   {slot && <LalaLineSlot piece={slot.piece} dressCode={dressCode} onInsert={(text) => onAddMoment(beat.id, text, i)} />}
                 </Fragment>
               );
             })}</div>
             {adding && !beat.approved && (
-              <LineAdder key={`adder-${adding}`} initialKind={typeof adding === 'string' ? adding : 'Lala'} lines={beat.lines} onScreen={onScreen} {...draftProps('line')} onTyped={onTyped} beatId={beat.id}
-                onClose={() => { delete drafts.current.line; closeAdder(() => setAdding(false)); }}
+              <LineAdder key={`adder-${adding}`} initialKind={typeof adding === 'string' ? adding : 'Lala'} lines={beat.lines} onScreen={onScreen} {...draftProps('line')}
+                onClose={() => { draftStore.drop(beat.id, 'line'); closeAdder(() => setAdding(false)); }}
                 onAdd={(line, after) => onAddMoment(beat.id, line, after)} />
             )}
             {messaging && !beat.approved && (
-              <MessageAdder key={`message-${messaging}`} kind={messaging} people={people} lines={beat.lines} onScreen={onScreen} {...draftProps(`msg-${messaging}`)} onTyped={onTyped} beatId={beat.id}
-                onClose={() => { delete drafts.current[`msg-${messaging}`]; closeAdder(() => setMessaging(null)); }} onAdd={(line, after) => onAddMoment(beat.id, line, after)} />
+              <MessageAdder key={`message-${messaging}`} kind={messaging} people={people} lines={beat.lines} onScreen={onScreen} {...draftProps(`msg-${messaging}`)}
+                onClose={() => { draftStore.drop(beat.id, `msg-${messaging}`); closeAdder(() => setMessaging(null)); }} onAdd={(line, after) => onAddMoment(beat.id, line, after)} />
             )}
             {picking && !beat.approved && (
               <MomentPicker key={`picker-${picking?.verb || 'open'}`} preset={picking?.verb ? picking : null} screens={onScreen.screens} icons={onScreen.icons} overlays={onScreen.overlays} look={onScreen.look} production={onScreen.production} lines={beat.lines} onScreen={onScreen} phoneFrame={onScreen.phoneFrame}
@@ -1206,18 +1253,20 @@ function BeatSection({ voice = null, beat, index, beatCount, scenePlan, expanded
                   </p>
                   </details>
                 )}
-            {!beat.approved && <button type="button" className="esp-regen-btn" data-testid={`script-regen-beat-${beat.number}`} disabled={cantWrite} onClick={e => { e.stopPropagation(); onRegenerate(beat.id); }}>{regenerating ? '⏳ Writing…' : '↻ Regenerate beat'}</button>}
+            {!beat.approved && canon && <button type="button" className="esp-regen-btn" data-testid={`script-regen-beat-${beat.number}`} disabled={cantWrite || (!!aiHold && !regenerating)} title={!regenerating && aiHold ? aiHold : undefined} onClick={e => { e.stopPropagation(); onRegenerate(beat.id); }}>{regenerating ? '⏳ Writing…' : '↻ Regenerate beat'}</button>}
+            {!beat.approved && !canon && <span className="esp-beat-locked-note" data-testid={`script-beat-canon-note-${beat.number}`}>{CANON_ONLY} Renumber it in the Raw editor to approve it.</span>}
             {/* Ask and Approve stay at the foot of the screen on a phone (Evoni, 2026-10-22). */}
             <div className="esp-beat-commit" data-testid={`script-commit-${beat.number}`}>
-            {!beat.approved && (
+            {!beat.approved && canon && (
               <span className="esp-ask" data-testid={`script-ask-${beat.number}`}>
                 <input type="text" className="esp-ask-input" data-testid={`script-ask-input-${beat.number}`} value={ask} maxLength={300}
                   placeholder="Ask for a change: punchier, more Lala, add a closet moment…" aria-label={`Ask for a change to beat ${beat.number}`}
                   onChange={(e) => setAsk(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); askChange(); } }} />
-                <button type="button" className="esp-regen-btn" data-testid={`script-ask-send-${beat.number}`} disabled={cantWrite || !ask.trim()} onClick={(e) => { e.stopPropagation(); askChange(); }}>Ask</button>
+                <button type="button" className="esp-regen-btn" data-testid={`script-ask-send-${beat.number}`} disabled={cantWrite || !!aiHold || !ask.trim()} title={aiHold || undefined} onClick={(e) => { e.stopPropagation(); askChange(); }}>Ask</button>
               </span>
             )}
-            <button type="button" className={`esp-lock-btn${beat.approved ? ' is-locked' : ''}`} data-testid={`script-lock-${beat.number}`} aria-disabled={locking || undefined} onClick={e => { e.stopPropagation(); if (locking) return; onApprove(beat.id); }}>{beat.approved ? 'Unlock' : '✓ Approve & lock'}</button>
+            {/* Not while a Save is on its way either (Script tab audit 6, 2026-10-24). */}
+            {(beat.approved || canon) && <button type="button" className={`esp-lock-btn${beat.approved ? ' is-locked' : ''}`} data-testid={`script-lock-${beat.number}`} aria-disabled={locking || saving || undefined} title={saving ? 'Wait for the save to finish' : undefined} onClick={e => { e.stopPropagation(); if (locking || saving) return; onApprove(beat.id); }}>{beat.approved ? 'Unlock' : '✓ Approve & lock'}</button>}
             </div>
           </div>
           {/* Details (Evoni, 2026-10-22 layout list: "the lines come first"):
@@ -1655,12 +1704,20 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
   // A beat chosen in the beat list or the pills (Task #2881) opens; the page
   // scrolls to it only when its card is off screen, never otherwise.
   const chosenRef = useRef(null);
-  const chooseBeat = (id) => { chosenRef.current = id; setExpandedBeat(id); };
+  // An open line editor's words would go with its beat: switching waits
+  // (Script tab audit 6, 2026-10-24: pills, the list and the arrows lost them).
+  const chooseBeat = (id) => {
+    if (id !== openId && refuseOpenEdit()) return;
+    chosenRef.current = id; setExpandedBeat(id);
+  };
   // The previous / next arrows keep focus: on the new beat's same arrow, or
   // its head where that arrow is off at the end (Script page audit 4,
   // 2026-10-19: the arrow pressed went away with the beat it was on).
   const stepRef = useRef(null);
-  const stepBeat = (id, which) => { stepRef.current = { id, which }; chooseBeat(id); };
+  const stepBeat = (id, which) => {
+    if (id !== openId && refuseOpenEdit()) return;
+    stepRef.current = { id, which }; chooseBeat(id);
+  };
   useLayoutEffect(() => {
     const step = stepRef.current;
     if (!step) return;
@@ -1846,6 +1903,7 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
     const at = beats.findIndex(b => b.id === beatId);
     if (busy) { flash('Wait for the new script before adding to it.', 'error'); return false; }
     if (refuseWhileLocking()) return false;
+    if (String(line ?? '').split('\n').some(STARTS_BEAT)) { flash(NO_BEAT_IN_LINE, 'error', 6000); return false; }
     if (at < 0 || beats[at].approved) return false;
     const base = withBeatHeaders(scriptText, lockedBeats);
     const next = after === null ? appendLine(base, at, line) : insertLine(base, at, after, line);
@@ -1875,11 +1933,16 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
   // refused, never confirmed, so typed words are never lost.
   const openEditsRef = useRef(new Set());
   const lineIdsRef = useRef({});
+  // Open editors and typed words count as unsaved work for leaving the page
+  // (Script tab audit 6, 2026-10-24): each change draws the tab again.
+  const [, setPendingTick] = useState(0);
+  const bumpPending = useCallback(() => setPendingTick((n) => n + 1), []);
   const trackOpenEdit = useCallback((beatId, lineId) => {
     const key = `${beatId}\n${lineId}`;
     openEditsRef.current.add(key);
-    return () => { openEditsRef.current.delete(key); };
-  }, []);
+    bumpPending();
+    return () => { openEditsRef.current.delete(key); bumpPending(); };
+  }, [bumpPending]);
   // A line's row to focus once the script it changed is parsed into beats
   // and drawn (ScriptLine closeEditor; Script page audit 3, 2026-10-19).
   const focusLineRef = useRef(null);
@@ -1927,11 +1990,40 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
   const trackTyped = useCallback((beatId, box) => {
     const key = `${beatId}\n${box}`;
     typedRef.current.add(key);
-    return () => { typedRef.current.delete(key); };
-  }, []);
+    bumpPending();
+    return () => { typedRef.current.delete(key); bumpPending(); };
+  }, [bumpPending]);
+  // Half-typed adder words, by beat and adder (Script tab audit 6,
+  // 2026-10-24): kept here, so a beat closing or the Raw editor doesn't drop
+  // them, and counted as typed words while there are any.
+  const draftsRef = useRef({});
+  const draftStore = useMemo(() => {
+    const mark = (k, has) => {
+      if (has === typedRef.current.has(k)) return;
+      if (has) typedRef.current.add(k); else typedRef.current.delete(k);
+      bumpPending();
+    };
+    return {
+      get: (beatId, key) => draftsRef.current[`${beatId}\n${key}`] || null,
+      set: (beatId, key, d) => {
+        const k = `${beatId}\n${key}`;
+        draftsRef.current[k] = d;
+        mark(k, !!(String(d?.text || '').trim() || String(d?.who || '').trim()));
+      },
+      drop: (beatId, key) => {
+        const k = `${beatId}\n${key}`;
+        delete draftsRef.current[k];
+        mark(k, false);
+      },
+    };
+  }, [bumpPending]);
   const refuseTyped = () => {
     const open = typedRef.current.size > 0;
-    if (open) flash('Add or clear the words typed in the beat first (Add line, a message or Ask for a change).', 'error', 6000);
+    if (open) {
+      const ids = [...typedRef.current].map((k) => k.split('\n')[0]);
+      const nums = [...new Set(beats.filter((b) => ids.includes(b.id)).map((b) => b.number))];
+      flash(`Add or clear the words typed in ${nums.length ? `beat ${nums.join(', ')}` : 'the beat'} first (Add line, a message or Ask for a change).`, 'error', 6000);
+    }
     return open;
   };
 
@@ -2009,14 +2101,18 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
   // Unsaved edits: the episode page asks before another tab is opened, the
   // browser asks before the page is closed or reloaded, and Ctrl/Cmd+S saves.
   const dirty = scriptText !== savedScript;
-  useEffect(() => { onDirtyChange?.(dirty); }, [dirty, onDirtyChange]);
+  // Leaving also loses an open line editor's words and words typed in an
+  // adder or Ask (Script tab audit 6, 2026-10-24: they left with no word);
+  // the Save bar still reads the script itself.
+  const leaveDirty = dirty || openEditsRef.current.size > 0 || typedRef.current.size > 0;
+  useEffect(() => { onDirtyChange?.(leaveDirty); }, [leaveDirty, onDirtyChange]);
   useEffect(() => () => onDirtyChange?.(false), [onDirtyChange]);
   // A link out of the tab (Open Scenes, the wardrobe, the sidebar) asks
   // first while there are unsaved changes, as the episode's tabs do (Script
   // tab re-audit, 2026-10-15: they left with no word). Caught before the
   // router sees the click; a cancelled click goes nowhere.
   useEffect(() => {
-    if (!dirty) return undefined;
+    if (!leaveDirty) return undefined;
     const onClick = (e) => {
       if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
       const a = e.target?.closest?.('a[href]');
@@ -2027,13 +2123,13 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
     };
     document.addEventListener('click', onClick, true);
     return () => document.removeEventListener('click', onClick, true);
-  }, [dirty]);
+  }, [leaveDirty]);
   useEffect(() => {
-    if (!dirty) return undefined;
+    if (!leaveDirty) return undefined;
     const warn = (e) => { e.preventDefault(); e.returnValue = ''; };
     window.addEventListener('beforeunload', warn);
     return () => window.removeEventListener('beforeunload', warn);
-  }, [dirty]);
+  }, [leaveDirty]);
   useEffect(() => {
     const onKey = (e) => {
       if (!(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== 's') return;
@@ -2047,9 +2143,12 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
   }, [dirty, saving, busy, locking, handleSave]);
 
   const [saveAfterEdit, setSaveAfterEdit] = useState(false);
-  const handleEditLine = (beatId, lineIndex, newText, { thenSave = false } = {}) => {
+  const handleEditLine = (beatId, lineIndex, typedText, { thenSave = false } = {}) => {
     if (busy) { flash('Wait for the new script before editing it.', 'error'); return false; }
     if (refuseWhileLocking()) return false;
+    // One line stays one line; a beat header is not a line (Script tab audit 6, 2026-10-24).
+    const newText = oneLine(typedText);
+    if (STARTS_BEAT(newText)) { flash(NO_BEAT_IN_LINE, 'error', 6000); return false; }
     if (thenSave) setSaveAfterEdit(true);
     // A line saved as it was leaves the script as it was.
     if (beats.find(b => b.id === beatId)?.lines[lineIndex] === newText) return true;
@@ -2100,6 +2199,8 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
   const handleRewriteLine = async (beatId, lineIndex, originalLine, lineId = null) => {
     const beat = beats.find(b => b.id === beatId);
     if (busy || beat?.approved) return;
+    // One suggestion at a time (Script tab audit 6, 2026-10-24).
+    if (proposal || rewritingLine || regeneratingBeat) { flash(`${proposal ? SUGGESTION_PENDING : SUGGESTION_WRITING}.`, 'error'); return; }
     const key = `${beatId}-${lineId ?? lineIndex}`;
     setRewritingLine(key);
     const seq = genSeqRef.current;
@@ -2113,8 +2214,10 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
       });
       if (!mountedRef.current) return;
       if (seq !== genSeqRef.current) { flash('A new script was written while the line was being rewritten, so the rewrite was not kept.', 'error', 6000); return; }
-      const next = rewrittenLine(originalLine, res.data?.rewrittenLine);
-      if (!next) { flash('The rewrite came back the same; try again.', 'error'); return; }
+      const back = rewrittenLine(originalLine, res.data?.rewrittenLine);
+      const next = back === null ? null : oneLine(back);
+      if (!next || next === String(originalLine || '').trim()) { flash('The rewrite came back the same; try again.', 'error'); return; }
+      if (STARTS_BEAT(next)) { flash('The rewrite came back as a beat header, so it was not kept; try again.', 'error', 6000); return; }
       if (parseScriptIntoBeats(scriptRef.current, lockedRef.current).find(b => b.id === beatId)?.approved !== false) { flash('The line changed or was approved while it was being rewritten, so the rewrite was not put in.', 'error', 6000); return; }
       // Shown in its beat first; "Use it" puts it in (acceptProposal).
       setProposal({ kind: 'line', beatId, lineIndex, lineId, originalLine, text: next });
@@ -2133,6 +2236,8 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
   const handleRegenerateBeat = async (beatId, instruction = '') => {
     const beat = beats.find(b => b.id === beatId);
     if (busy || !beat || beat.approved || regeneratingBeat) return false;
+    if (proposal || rewritingLine) { flash(`${proposal ? SUGGESTION_PENDING : SUGGESTION_WRITING}.`, 'error'); return false; }
+    if (!(beat.number >= 1 && beat.number <= 14)) { flash(CANON_ONLY, 'error', 6000); return false; }
     setRegeneratingBeat(beatId);
     const requested = parseScriptIntoBeats(withBeatHeaders(scriptText, lockedBeats), lockedBeats).find(b => b.id === beatId);
     const seq = genSeqRef.current;
@@ -2210,6 +2315,9 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
   const handleApprove = async (beatId) => {
     const beat = beats.find(b => b.id === beatId);
     if (busy || !beat || locking) return;
+    // Not while a Save is on its way (Script tab audit 6, 2026-10-24).
+    if (saving) { flash('Wait for the save to finish.', 'error'); return; }
+    if (!beat.approved && !(beat.number >= 1 && beat.number <= 14)) { flash(CANON_ONLY, 'error', 6000); return; }
     const next = beat.approved ? lockedBeats.filter(n => n !== beat.number) : [...lockedBeats, beat.number].sort((a, b) => a - b);
     // A lock holds a headed beat on the server, so a script without headers
     // is saved with them, as the page shows its beats.
@@ -2272,6 +2380,8 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
   };
 
   const handleGenerate = async (keepsLocked = false) => {
+    // An open line's words would be written over (Script tab audit 6, 2026-10-24).
+    if (refuseOpenEdit()) return;
     // A pending "Use it" was written against the script being replaced.
     genSeqRef.current += 1;
     setGenerating(true); setGenError(null); setGuardResult(null); setCoverage(null); setProposal(null); setRestoredFrom(null);
@@ -2390,8 +2500,20 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
   }) : null;
   const people = scriptPeople({ event: source?.event || null, sourceProfile: source?.sourceProfile || null, beats });
   const onScreenWithDrafts = postDrafts ? { ...onScreen, postDrafts } : onScreen;
-  const approvedCount = beats.filter(b => b.approved).length;
-  const allApproved = beats.length > 0 && approvedCount === beats.length;
+  // Approved as Production reads it (lib/productionSteps approvedBeats): the
+  // 14 canonical beats, each once. A second beat with the same number, or a
+  // beat past 14, never makes the script complete (Script tab audit 6,
+  // 2026-10-24: one approved beat read "Complete").
+  const lockedCount = beats.filter(b => b.approved).length;
+  const firstCopies = beats.filter((b) => b.id === `beat-${b.number}`);
+  const approvedNums = new Set(firstCopies.filter((b) => b.approved && b.number >= 1 && b.number <= BEAT_NAMES.length).map((b) => b.number));
+  const approvedCount = approvedNums.size;
+  const presentNums = new Set(firstCopies.map((b) => b.number));
+  const toApprove = BEAT_NAMES.map((b) => b.number).filter((n) => presentNums.has(n) && !approvedNums.has(n));
+  const notInScript = BEAT_NAMES.map((b) => b.number).filter((n) => !presentNums.has(n));
+  const allApproved = approvedCount === BEAT_NAMES.length;
+  // One AI suggestion at a time (Script tab audit 6, 2026-10-24).
+  const aiHold = proposal ? SUGGESTION_PENDING : (rewritingLine || regeneratingBeat) ? SUGGESTION_WRITING : null;
   const hasScript = !!scriptText?.trim();
   // A script cleared in the raw editor keeps Save, History and the view
   // toggle (Script tab re-audit, 2026-10-15: only Generate was left).
@@ -2503,6 +2625,8 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
     <div className={`esp${showBeatList ? ' has-beatlist' : ''}${contextOpen ? ' is-context-open' : ''}`}>
     <div className="esp-top">
       {toast && <div className={`esp-toast is-${toast.type === 'error' ? 'error' : 'success'}`} role="status">{toast.msg}</div>}
+      {/* A new suggestion is announced where it lands (Script tab audit 6, 2026-10-24). */}
+      <div className="esp-sr" aria-live="polite" data-testid="script-proposal-live">{proposal ? (proposal.kind === 'beat' ? `New version of beat ${proposal.number} is ready: Use it or Keep mine.` : 'The rewritten line is ready: Use it or Keep mine.') : ''}</div>
 
       {unsaved && (
         <div className="esp-unsaved-banner" data-testid="script-unsaved" role="alert">
@@ -2532,7 +2656,9 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
         <div className="esp-head-text">
           <h2 className="esp-title">Script</h2>
           <p className="esp-sub">
-            {hasScript ? <>{beats.length} beats · <span data-testid="script-runtime">{formatRuntime(scriptSeconds(beats))}</span> · {approvedCount} approved{allApproved && <span className="esp-complete"> · Complete</span>}{scriptText !== savedScript ? <span className="esp-unsaved" data-testid="script-dirty"> · Unsaved changes</span> : <span className="esp-saved-state" data-testid="script-saved"> · Saved</span>}</> : 'Not generated yet'}
+            {hasScript ? <>{beats.length} beats · <span data-testid="script-runtime">{formatRuntime(scriptSeconds(beats))}</span> · <span data-testid="script-approved">{approvedCount} of {BEAT_NAMES.length} approved</span>{allApproved && <span className="esp-complete"> · Complete</span>}
+              {!allApproved && approvedCount > 0 && toApprove.length > 0 && <span className="esp-approve-left" data-testid="script-approve-left"> · to approve: {toApprove.join(', ')}</span>}
+              {!allApproved && approvedCount > 0 && notInScript.length > 0 && <span className="esp-approve-left" data-testid="script-beats-missing"> · not in the script: {notInScript.join(', ')}</span>}{scriptText !== savedScript ? <span className="esp-unsaved" data-testid="script-dirty"> · Unsaved changes</span> : <span className="esp-saved-state" data-testid="script-saved"> · Saved</span>}</> : 'Not generated yet'}
           </p>
         </div>
         {hasWork ? (
@@ -2544,13 +2670,17 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
             {/* Not while a lock or a save is on its way (Script page audit,
                 2026-10-19: the new script landed over the lock's or save's answer). */}
             <button type="button" className="esp-btn" data-testid="script-regenerate" onClick={() => {
-              const ask = approvedCount > 0
-                ? `Regenerate the unlocked beats? The ${approvedCount} approved beat${approvedCount === 1 ? '' : 's'} stay${approvedCount === 1 ? 's' : ''} exactly as ${approvedCount === 1 ? 'it is' : 'they are'}; the rest of the script is replaced.`
+              // An open line's words would be written over: it waits; unsaved
+              // edits are named in the ask (Script tab audit 6, 2026-10-24).
+              if (refuseOpenEdit()) return;
+              const ask = lockedCount > 0
+                ? `Regenerate the unlocked beats? The ${lockedCount} approved beat${lockedCount === 1 ? '' : 's'} stay${lockedCount === 1 ? 's' : ''} exactly as ${lockedCount === 1 ? 'it is' : 'they are'}; the rest of the script is replaced.`
                 : 'Regenerate the entire script? Your current script will be replaced.';
-              if (!window.confirm(ask)) return;
+              const lost = scriptText !== savedScript ? ' Your unsaved changes will be lost (History keeps the saved script, not these edits).' : '';
+              if (!window.confirm(`${ask}${lost}`)) return;
               // Already confirmed here, so the server's own "replace it?" is answered.
               handleGenerate(true);
-            }} disabled={busy || !!regeneratingBeat || locking || saving}>{waitingForScript ? 'Still writing…' : generating ? 'Generating…' : approvedCount > 0 ? 'Regenerate unlocked' : 'Regenerate'}</button>
+            }} disabled={busy || !!regeneratingBeat || locking || saving}>{waitingForScript ? 'Still writing…' : generating ? 'Generating…' : lockedCount > 0 ? 'Regenerate unlocked' : 'Regenerate'}</button>
             <button type="button" className={`esp-btn-primary${saved ? ' is-saved' : ''}`} onClick={handleSave} disabled={saving || busy || locking}>{saving ? 'Saving…' : saved ? '✓ Saved' : 'Save'}</button>
           </div>
         ) : (
@@ -2620,7 +2750,7 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
     <div className="esp-rail" data-testid="script-rail">
     {showBeatList && (
       <ScriptBeatList beats={beats} openId={openId} onChoose={chooseBeat} statuses={statuses} scenePlan={scenePlan} phoneBeats={phoneBeats}
-        runtimes={runtimes} totalRuntime={formatRuntime(scriptSeconds(beats))} drag={drag} onMoveBeat={handleMoveBeat} onApprove={handleApprove} locking={locking || busy} />
+        runtimes={runtimes} totalRuntime={formatRuntime(scriptSeconds(beats))} drag={drag} onMoveBeat={handleMoveBeat} onApprove={handleApprove} locking={locking || busy} saving={saving} />
     )}
       {/* What generation reads, and where the voices come from (Evoni's Episode mock). */}
       {/* On a phone, open, it is a modal sheet (Script page audit 3, 2026-10-19). */}
@@ -2631,8 +2761,19 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
         )}
         <div className="esp-side-card">
         <div className="esp-side-tabs" role="tablist" aria-label="Context" data-testid="script-side-tabs">
-          {sideTabs.map(([k, label]) => (
+          {/* Arrow keys, Home and End move between the tabs; only the open
+              one is in the Tab order (Script tab audit 6, 2026-10-24). */}
+          {sideTabs.map(([k, label], ti) => (
             <button key={k} type="button" role="tab" id={`script-side-tab-${k}`} aria-selected={sideOn === k} aria-controls="script-side-panel"
+              tabIndex={sideOn === k ? 0 : -1}
+              onKeyDown={(e) => {
+                const to = { ArrowRight: ti + 1, ArrowDown: ti + 1, ArrowLeft: ti - 1, ArrowUp: ti - 1, Home: 0, End: sideTabs.length - 1 }[e.key];
+                if (to === undefined) return;
+                e.preventDefault();
+                const next = sideTabs[(to + sideTabs.length) % sideTabs.length][0];
+                setSideTab(next);
+                e.currentTarget.parentElement?.querySelector(`#script-side-tab-${next}`)?.focus();
+              }}
               className={`esp-side-tab${sideOn === k ? ' is-on' : ''}`} data-testid={`script-side-tab-${k}`} onClick={() => setSideTab(k)}>
               {label}{k === 'checks' && checkGaps > 0 && <span className="esp-side-tab-count" aria-label={`${checkGaps} to look at`}>{checkGaps}</span>}
             </button>
@@ -2800,7 +2941,8 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
         <section className="esp-voice" data-testid="script-voice">
           <h3 className="esp-side-title">Voice</h3>
           <p>Lala's voice signature and the cast's voices come from their profiles.</p>
-          <Link className="esp-link" to="/character-registry?view=world">Open Character Studio</Link>
+          {/* The Character Registry reads no `view` (Script tab audit 6, 2026-10-24). */}
+          <Link className="esp-link" to="/character-registry">Open Character Registry</Link>
         </section>
         )}
         </div>
@@ -2851,11 +2993,12 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
           {beats.map((beat, index) => {
             const open = openId === beat.id;
             const phoneUp = phoneUpAtStart[index] || false;
-            return <BeatSection key={beat.id} voice={voice} request={open && barRequest?.beatId === beat.id ? barRequest : null} beat={beat} index={index} beatCount={beats.length} scenePlan={scenePlan} expanded={open} onToggle={() => setExpandedBeat(open && !isPhoneWidth() && !showBeatList ? null : beat.id)} onApprove={handleApprove} proposal={proposal?.beatId === beat.id ? proposal : null} onAcceptProposal={acceptProposal} onDiscardProposal={() => setProposal(null)} onEdit={handleEditLine} onDeleteLine={handleDeleteLine} onRewrite={handleRewriteLine} rewritingLine={rewritingLine} locking={locking || busy} onOpenMap={() => setShowMap(true)} onMoveBeat={handleMoveBeat} onMoveLine={handleMoveLine} drag={drag} onRegenerate={handleRegenerateBeat} regenerating={regeneratingBeat === beat.id} writing={!!regeneratingBeat || busy} onRequestDone={clearBarRequest} onScreen={onScreenWithDrafts} onAddMoment={handleAddMoment} lineOpRef={lineOpRef} lineIdsRef={lineIdsRef} onOpenEdit={trackOpenEdit} onFocusLater={focusLineLater} phoneUpAtStart={phoneUp} people={people} lalaSlots={lineSlots.filter((s) => s.beatIndex === index)} dressCode={source?.event?.dress_code || ''}
+            return <BeatSection key={beat.id} voice={voice} request={open && barRequest?.beatId === beat.id ? barRequest : null} beat={beat} index={index} beatCount={beats.length} scenePlan={scenePlan} expanded={open} onToggle={() => { const to = open && !isPhoneWidth() && !showBeatList ? null : beat.id; if (to !== openId && refuseOpenEdit()) return; setExpandedBeat(to); }} onApprove={handleApprove} proposal={proposal?.beatId === beat.id ? proposal : null} onAcceptProposal={acceptProposal} onDiscardProposal={() => setProposal(null)} onEdit={handleEditLine} onDeleteLine={handleDeleteLine} onRewrite={handleRewriteLine} rewritingLine={rewritingLine} locking={locking || busy} onOpenMap={() => setShowMap(true)} onMoveBeat={handleMoveBeat} onMoveLine={handleMoveLine} drag={drag} onRegenerate={handleRegenerateBeat} regenerating={regeneratingBeat === beat.id} writing={!!regeneratingBeat || busy} onRequestDone={clearBarRequest} onScreen={onScreenWithDrafts} onAddMoment={handleAddMoment} lineOpRef={lineOpRef} lineIdsRef={lineIdsRef} onOpenEdit={trackOpenEdit} onFocusLater={focusLineLater} phoneUpAtStart={phoneUp} people={people} lalaSlots={lineSlots.filter((s) => s.beatIndex === index)} dressCode={source?.event?.dress_code || ''}
               status={statuses[beat.id]} healthRows={open ? healthRows : []} hasPhone={phoneBeats.has(beat.id)} worn={open ? wornInOpen : []} look={outfit || []}
               storyTime={open && truth?.eventTimed ? truth.storyTime : null}
               onStep={stepBeat} prevBeatId={index > 0 ? beats[index - 1].id : null} nextBeatId={index < beats.length - 1 ? beats[index + 1].id : null}
-              onTyped={trackTyped} lockEdited={beat.approved && lockEdits.has(beat.id)} />;
+              onTyped={trackTyped} lockEdited={beat.approved && lockEdits.has(beat.id)}
+              drafts={draftStore} aiHold={aiHold} saving={saving} duplicate={beat.id !== `beat-${beat.number}`} />;
           })}
           {/* Franchise Guard Results */}
           {guardResult && (
