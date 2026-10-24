@@ -46,6 +46,8 @@ const ties = require('../services/familyTies');
 const heritage = require('../services/familyHeritage');
 const { normalizeTags, tagsOf } = require('../utils/heritageTags');
 const { LINKED_CHARACTER_JOIN } = require('../utils/registryLink');
+// A registry character marked as a company has no family (services/companyCharacters).
+const { companySql } = require('../services/companyCharacters');
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ADMIN = [requireAuth, authorize(['ADMIN'])];
@@ -177,11 +179,18 @@ async function characterRow(charId) {
   if (!UUID_RE.test(String(charId || ''))) return null;
   const [c] = await q(
     `SELECT rc.id, rc.registry_id, rc.world, rc.gender, rc.pronouns, rc.family_tree, rc.feed_profile_id,
-            rc.selected_name, rc.display_name, ${nameSql('rc')} AS name, reg.show_id
+            rc.selected_name, rc.display_name, ${nameSql('rc')} AS name, reg.show_id, ${companySql('rc')} AS company
        FROM registry_characters rc
        LEFT JOIN character_registries reg ON reg.id = rc.registry_id
       WHERE rc.id = :id AND rc.deleted_at IS NULL`, { id: charId });
   return c || null;
+}
+
+/** A company is not family: 409 when this character is one. */
+function notACompany(c) {
+  if (!c?.company) return c;
+  const same = String(c.company.name || '').trim().toLowerCase() === String(c.name || '').trim().toLowerCase();
+  throw bad(409, `${c.name} is a company${same ? '' : ` (${c.company.name})`}. A company has no family.`);
 }
 
 /** Their family_tree JSON (generator-made) as the page reads it, matched to existing characters. */
@@ -215,7 +224,7 @@ async function readout(charId) {
   const c = await characterRow(charId);
   if (!c) throw bad(404, 'Character not found');
   const [familyTies, ids] = await Promise.all([tiesOf(charId), familyIdsOf(charId)]);
-  return { character_id: c.id, name: c.name, ties: familyTies, families: await loadFamilies(ids), family_tree: await treeOf(c) };
+  return { character_id: c.id, name: c.name, company: c.company || null, ties: familyTies, families: await loadFamilies(ids), family_tree: await treeOf(c) };
 }
 
 /* ── named-family writes ────────────────────────────────────────────── */
@@ -344,7 +353,11 @@ router.post('/:id/members', ...ADMIN, async (req, res) => {
     const sp = intOrNull(b.social_profile_id);
     const ghost = text(b.ghost_name, 200);
     if (!rc && !sp && !ghost) throw bad(400, 'Name a character, a Pulse profile or a person');
-    if (rc && !(await characterRow(rc))) throw bad(404, 'Character not found');
+    if (rc) {
+      const member = await characterRow(rc);
+      if (!member) throw bad(404, 'Character not found');
+      notACompany(member);
+    }
     if (sp) {
       const [p] = await q('SELECT id FROM social_profiles WHERE id = :id AND deleted_at IS NULL', { id: sp });
       if (!p) throw bad(404, 'Pulse profile not found');
@@ -401,6 +414,7 @@ router.get('/people', requireAuth, async (req, res) => {
     const characters = await q(
       `SELECT rc.id, ${nameSql('rc')} AS name, rc.feed_profile_id, rc.portrait_url FROM registry_characters rc
         WHERE rc.deleted_at IS NULL AND (rc.feed_profile_id IS NOT NULL ${c ? 'OR rc.registry_id = :reg' : ''})
+          AND ${companySql('rc')} IS NULL
           ${c ? 'AND rc.id <> :id' : ''}
         ORDER BY 2 ASC LIMIT 400`, { reg: c?.registry_id, id: c?.id });
     const profiles = await q(
@@ -408,6 +422,7 @@ router.get('/people', requireAuth, async (req, res) => {
          FROM social_profiles sp
          ${LINKED_CHARACTER_JOIN}
         WHERE sp.deleted_at IS NULL AND sp.feed_layer::text = 'lalaverse' AND COALESCE(sp.status::text, '') <> 'archived'
+          AND sp.full_profile->>'lalaverse_brand_id' IS NULL AND (rc.id IS NULL OR ${companySql('rc')} IS NULL)
         ORDER BY 2 ASC LIMIT 400`);
     res.json({ characters, profiles });
   } catch (err) { fail(res, 'GET /families/people', err); }
@@ -431,6 +446,7 @@ router.post('/ties', ...ADMIN, async (req, res) => {
     const b = req.body || {};
     const c = await characterRow(b.character_id);
     if (!c) throw bad(404, 'Character not found');
+    notACompany(c);
     const role = text(b.role, 120);
     if (!role) throw bad(400, 'Give their role (sister, aunt, chosen family …)');
     if (ties.isSpouseRole(role)) throw bad(400, 'A partner or spouse is romance, not a family tie: add them as a relationship.');
@@ -492,6 +508,8 @@ router.get('/make-character/suggestion', requireAuth, async (req, res) => {
     if (!c) throw bad(404, 'Character not found');
     const role = text(req.query.role, 120);
     const kind = req.query.kind ? String(req.query.kind) : null;
+    // A company has no relatives to make: no suggestion.
+    if (c.company) return res.json({ suggestion: null });
     res.json({ suggestion: role ? await heritage.suggestForRelative(getDb().sequelize, { characterId: c.id, role, kind }) : null });
   } catch (err) { fail(res, 'GET /families/make-character/suggestion', err); }
 });
@@ -509,6 +527,7 @@ router.post('/make-character', ...ADMIN, async (req, res) => {
     const b = req.body || {};
     const c = await characterRow(b.character_id);
     if (!c) throw bad(404, 'Character not found');
+    notACompany(c);
     let name = text(b.name, 200);
     let role = text(b.role, 120);
     let member = null;
@@ -588,6 +607,7 @@ router.post('/import/:charId', ...ADMIN, async (req, res) => {
   try {
     const c = await characterRow(req.params.charId);
     if (!c) throw bad(404, 'Character not found');
+    notACompany(c);
     const tree = await treeOf(c);
     if (tree.imported_at) throw bad(409, 'Their family tree was imported already');
     if (!tree.members.length) throw bad(400, 'Their family tree has no one in it');

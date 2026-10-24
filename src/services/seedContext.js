@@ -330,7 +330,9 @@ function phaseAim(sequelize, showId, phase, cast) {
  */
 async function loadSeedContext(sequelize, { cast = [], showId = null, episodeId = null, twistId = null, slotId = null, phase = null } = {}) {
   const castIds = cast.map((c) => String(c.id));
-  const names = new Map(cast.map((c) => [String(c.id), nameOf(c)]));
+  // A company (services/companyCharacters) reads "(company)" in every line, so
+  // the generator never takes it for a person.
+  const names = new Map(cast.map((c) => [String(c.id), `${nameOf(c)}${c.company ? ' (company)' : ''}`]));
   const { episode, guests } = await episodeAim(sequelize, episodeId, cast);
   const twist = await twistAim(sequelize, twistId);
   const slot = await slotAim(sequelize, slotId, cast);

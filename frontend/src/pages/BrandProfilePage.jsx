@@ -372,6 +372,43 @@ function Relationships({ list }) {
   );
 }
 
+/**
+ * The registry character marked as this company (2026-10-24), if any: a
+ * link to it, and for an admin "Unlink" with a confirm step. Linking is
+ * done from the Brands list's "Registry characters that look like companies".
+ */
+function RegistryCharacter({ company, character, admin, onChanged }) {
+  const [asking, setAsking] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  if (!character) return null;
+  const unlink = async () => {
+    setBusy(true); setError(null);
+    try {
+      await api.put(`/api/v1/companies/${encodeURIComponent(company.slug)}/registry-character`, { character_id: null });
+      setAsking(false);
+      onChanged();
+    } catch (err) {
+      console.error('[BrandProfilePage] the character could not be unlinked:', err);
+      setError(errorOf(err, 'That did not unlink. Try again.'));
+    } finally { setBusy(false); }
+  };
+  return (
+    <div className="bp-muted bp-registry" data-testid="bp-registry-character">
+      <span>As a registry character: <Link to={`/character/${character.id}`}>{character.name}</Link></span>
+      {admin && !asking && <button type="button" className="bp-btn" onClick={() => setAsking(true)}>Unlink</button>}
+      {asking && (
+        <span className="bp-registry-ask" role="group" aria-label="Unlink the character">
+          <span>Unlink {character.name}? It is then read as a person again.</span>
+          <button type="button" className="bp-btn is-primary" onClick={unlink} disabled={busy}>{busy ? 'Unlinking…' : 'Yes, unlink'}</button>
+          <button type="button" className="bp-btn" onClick={() => setAsking(false)} disabled={busy}>Keep it</button>
+        </span>
+      )}
+      {error && <span className="bp-error" role="alert">{error}</span>}
+    </div>
+  );
+}
+
 export default function BrandProfilePage() {
   const { slug } = useParams();
   const [params, setParams] = useSearchParams();
@@ -407,6 +444,7 @@ export default function BrandProfilePage() {
         <h1 className="bp-title">{company.name}</h1>
         {company.defining_principle && <p className="bp-principle">{company.defining_principle}</p>}
         {data.pulse?.account && <p className="bp-muted">{atHandle(data.pulse.account.handle)} on The Pulse</p>}
+        <RegistryCharacter company={company} character={data.registry_character} admin={admin} onChanged={load} />
       </header>
       <nav className="bp-tabs" role="tablist" aria-label={`${company.name} profile`}>
         {sections.map((s) => {

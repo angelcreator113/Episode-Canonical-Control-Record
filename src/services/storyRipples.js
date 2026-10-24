@@ -258,7 +258,9 @@ Answer with JSON only:
 /** A reveal of a secret or rumoured pair: both named, or one of them naming the other. */
 function isReveal(text, { a, b, posterRole, posterId }) {
   const { mentions } = require('./pulseGate');
-  const named = (p) => [p.name, p.handle, String(p.name || '').split(/\s+/)[0]].some((n) => n && String(n).length >= 3 && mentions(text, n));
+  // A first name never an article or title ("The" of "The Column"; utils/firstNames).
+  const { usableFirstName } = require('../utils/firstNames');
+  const named = (p) => [p.name, p.handle, usableFirstName(p.name)].some((n) => n && String(n).length >= 3 && mentions(text, n));
   const namesA = named(a);
   const namesB = named(b);
   if (namesA && namesB) return true;

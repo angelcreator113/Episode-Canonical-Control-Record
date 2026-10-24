@@ -1,0 +1,26 @@
+/* "This is a company: …" — one line, the house tokens; a 44px target on a phone. */
+.co-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 6px 0 0;
+  font-family: var(--font-ui);
+  font-size: 12px;
+  color: var(--lala-ink-muted);
+}
+.co-line svg { color: var(--lala-gold); flex: none; }
+.co-line-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 44px;
+  color: var(--lala-gold-text);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.co-line-link:focus-visible { outline: 2px solid var(--lala-gold); outline-offset: 2px; }
+@media (min-width: 768px) {
+  .co-line-link { min-height: 0; }
+}

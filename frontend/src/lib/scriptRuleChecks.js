@@ -222,12 +222,22 @@ function goalPerson(goal, event, profiles = []) {
   if (!brand) {
     for (const n of mine) {
       const f = firstOf(norm(n));
-      if (f !== norm(n)) add(f, firstOf(n));
+      if (f !== norm(n) && !NOT_FIRST_NAMES.has(f.replace(/\.$/, ''))) add(f, firstOf(n));
     }
   }
   if (!names.length) return null;
   return { id: id || null, name: mine[0], names, shown, shared, ...(brand ? { whole: true } : {}) };
 }
+
+// Words that are never a first name alone: articles, titles, connectors
+// ("The" of "The Column" named every "the"; Evoni, 2026-10-24). The same
+// list as the server's utils/firstNames NOT_FIRST_NAMES (a unit test checks).
+const NOT_FIRST_NAMES = new Set([
+  'the', 'a', 'an', 'mr', 'mrs', 'ms', 'miss', 'mx', 'dr', 'prof', 'sir', 'dame', 'lady', 'lord', 'madam', 'madame',
+  'mademoiselle', 'monsieur', 'señor', 'senor', 'señora', 'senora', 'mister', 'aunt', 'auntie', 'uncle',
+  'de', 'del', 'della', 'di', 'da', 'du', 'des', 'la', 'le', 'les', 'lo', 'los', 'las', 'van', 'von', 'der', 'den',
+  'ten', 'ter', 'el', 'al', 'st', 'ste', 'saint', 'san', 'santa', 'mac', 'mc', 'o', 'of', 'and', 'by', 'for',
+]);
 
 // Words a brand's name may hold that name no one alone: "Studio" is not
 // Studio by Sable, "The House" no house.

@@ -66,6 +66,18 @@ describe('BrandProfilePage', () => {
     expect(screen.getByText('@velouratelier on The Pulse')).toBeTruthy();
   });
 
+  test('its registry character (2026-10-24): a link, and Unlink only after a yes', async () => {
+    vi.mocked(api.get).mockImplementation(async () => ({ data: { ...velour(), registry_character: { id: 'rc-v', name: 'Velour Atelier' } } }));
+    vi.mocked(api.put).mockResolvedValueOnce({ data: { success: true, character: null } });
+    renderAt();
+    const line = await screen.findByTestId('bp-registry-character');
+    expect(within(line).getByRole('link', { name: 'Velour Atelier' }).getAttribute('href')).toBe('/character/rc-v');
+    fireEvent.click(within(line).getByRole('button', { name: 'Unlink' }));
+    expect(api.put).not.toHaveBeenCalled();
+    fireEvent.click(within(line).getByRole('button', { name: 'Yes, unlink' }));
+    await waitFor(() => expect(api.put).toHaveBeenCalledWith('/api/v1/companies/velour_atelier/registry-character', { character_id: null }));
+  });
+
   test('its way back is the LalaVerse hub\'s Brands tab (Evoni, 2026-10-19)', async () => {
     renderAt();
     await screen.findByRole('heading', { name: 'Velour Atelier' });

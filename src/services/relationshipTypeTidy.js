@@ -21,11 +21,20 @@
  * is not a partner's is refused; a family type is written as a family tie
  * through services/familyTies (the role both ways). An item already a type
  * the app writes is skipped, so a second Save changes nothing.
+ *
+ * A pair with a company in it (services/companyCharacters) is read with the
+ * company types (normalizeCompanyType): any other type is proposed one, the
+ * item says company (and brand_pair for two companies), and Save takes only
+ * a company type there, never a romance or family (409).
  */
 
 const familyTies = require('./familyTies');
 const truth = require('./relationshipTruth');
-const { normalizeType, canonicalType, isKnownType, familyRoleOf, roleWords, words, capital } = require('./relationshipTypes');
+const {
+  normalizeType, canonicalType, isKnownType, familyRoleOf, roleWords, words, capital,
+  COMPANY_TYPES, BRAND_PAIR_TYPES, normalizeCompanyType, companyRefusal,
+} = require('./relationshipTypes');
+const { companySql } = require('./companyCharacters');
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_CHANGES = 200;
@@ -44,8 +53,40 @@ function situationAfter(flavour, situation) {
   return now ? `${flavour}: ${now}` : flavour;
 }
 
+/** The type is one this pair keeps: a company type for a company's pair, else any the app writes. */
+function knownFor(row) {
+  if (row.a_company || row.b_company) {
+    return (row.a_company && row.b_company ? BRAND_PAIR_TYPES : COMPANY_TYPES).includes(String(row.relationship_type || ''));
+  }
+  return isKnownType(row.relationship_type);
+}
+
+/** A company pair's proposal: a company type from the type, else from the situation. */
+function companyProposal(row) {
+  const brandPair = Boolean(row.a_company && row.b_company);
+  let n = normalizeCompanyType(row.relationship_type, { brandPair });
+  let from = n ? 'type' : null;
+  if (!n && typeof row.situation === 'string' && row.situation.trim()) {
+    const guess = normalizeCompanyType(row.situation.slice(0, 400), { brandPair });
+    if (guess) { n = { ...guess, flavour: capital(words(row.relationship_type)) || null }; from = 'situation'; }
+  }
+  const flavour = n && !COMPANY_TYPES.includes(words(row.relationship_type).replace(/ /g, '_')) && !canonicalType(row.relationship_type) ? n.flavour : null;
+  return {
+    id: row.id, a_name: row.a_name, b_name: row.b_name, confirmed: row.confirmed,
+    current_type: row.relationship_type,
+    proposed_type: n ? n.type : null,
+    proposed_is_romantic: false,
+    proposed_from: from,
+    flavour,
+    situation_now: row.situation || null,
+    situation_after: situationAfter(flavour, row.situation),
+    company: true, brand_pair: brandPair,
+  };
+}
+
 /** One row's proposal. Pure, for the tests. */
 function proposalFor(row) {
+  if (row.a_company || row.b_company) return companyProposal(row);
   const romantic = row.is_romantic === true;
   let n = normalizeType(row.relationship_type, { romantic });
   let from = n ? 'type' : null;
@@ -72,13 +113,14 @@ function proposalFor(row) {
 async function proposals(db) {
   const [rows] = await sq(db).query(
     `SELECT cr.id, cr.relationship_type, cr.is_romantic, cr.situation, cr.confirmed,
-            ${nameSql('ca')} AS a_name, ${nameSql('cb')} AS b_name
+            ${nameSql('ca')} AS a_name, ${nameSql('cb')} AS b_name,
+            ${companySql('ca')} IS NOT NULL AS a_company, ${companySql('cb')} IS NOT NULL AS b_company
        FROM character_relationships cr
        JOIN registry_characters ca ON ca.id = cr.character_id_a AND ca.deleted_at IS NULL
        JOIN registry_characters cb ON cb.id = cr.character_id_b AND cb.deleted_at IS NULL
       WHERE cr.deleted_at IS NULL
       ORDER BY cr.confirmed DESC, cr.updated_at DESC`);
-  return { items: rows.filter((r) => !isKnownType(r.relationship_type)).map(proposalFor) };
+  return { items: rows.filter((r) => !knownFor(r)).map(proposalFor) };
 }
 
 /** The type she picked, as the app writes it, or null when it is not one. */
@@ -96,12 +138,15 @@ async function applyOne(sequelize, change, transaction) {
   if (!UUID_RE.test(id)) throw new TidyError('Relationship not found', 404);
   const [[row]] = await sequelize.query(
     `SELECT cr.id, cr.character_id_a, cr.character_id_b, cr.relationship_type, cr.is_romantic, cr.family_role,
-            cr.family_kind, cr.confirmed, cb.gender AS b_gender, cb.pronouns AS b_pronouns
+            cr.family_kind, cr.confirmed, cb.gender AS b_gender, cb.pronouns AS b_pronouns,
+            ${companySql('ca')} IS NOT NULL AS a_company, ${companySql('cb')} IS NOT NULL AS b_company
        FROM character_relationships cr
+       LEFT JOIN registry_characters ca ON ca.id = cr.character_id_a
        LEFT JOIN registry_characters cb ON cb.id = cr.character_id_b
       WHERE cr.id = :id AND cr.deleted_at IS NULL FOR UPDATE OF cr`, { replacements: { id }, transaction });
   if (!row) throw new TidyError('Relationship not found', 404);
-  if (isKnownType(row.relationship_type)) return 'skipped';
+  if (knownFor(row)) return 'skipped';
+  if (row.a_company || row.b_company) return applyCompany(sequelize, row, change, transaction);
   const type = pickedType(change.relationship_type);
   if (!type) throw new TidyError(`"${String(change.relationship_type || '').slice(0, 60)}" is not a type the app knows`);
   const romantic = change.is_romantic !== undefined ? change.is_romantic === true : row.is_romantic === true;
@@ -131,6 +176,23 @@ async function applyOne(sequelize, change, transaction) {
         WHERE id = :id`,
       { replacements: { id, role: familyRole, reverse: familyTies.reverseRole(familyRole, familyTies.genderOf({ gender: row.b_gender, pronouns: row.b_pronouns })), kind, blood: kind === 'blood' }, transaction });
   }
+  return 'updated';
+}
+
+/** A company pair's change: a company type only (two companies: partner or rival brand), never romantic. */
+async function applyCompany(sequelize, row, change, transaction) {
+  const why = companyRefusal(change.relationship_type, change.is_romantic === true);
+  if (why) throw new TidyError(`One of them is a company. ${why}`, 409);
+  const allowed = row.a_company && row.b_company ? BRAND_PAIR_TYPES : COMPANY_TYPES;
+  const type = String(change.relationship_type || '').trim();
+  if (!allowed.includes(type)) throw new TidyError(`"${type.slice(0, 60)}" is not a type for a company: pick one of ${allowed.join(', ')}`);
+  const sets = ['relationship_type = :type', 'is_romantic = false'];
+  const replacements = { id: row.id, type };
+  if (change.situation !== undefined) {
+    sets.push('situation = :situation');
+    replacements.situation = typeof change.situation === 'string' && change.situation.trim() ? change.situation.trim() : null;
+  }
+  await sequelize.query(`UPDATE character_relationships SET ${sets.join(', ')}, updated_at = NOW() WHERE id = :id`, { replacements, transaction });
   return 'updated';
 }
 
@@ -167,4 +229,4 @@ async function applyTidy(db, changes) {
   return { updated, refused, skipped };
 }
 
-module.exports = { proposals, proposalFor, situationAfter, applyTidy, TidyError, MAX_CHANGES };
+module.exports = { knownFor, proposals, proposalFor, situationAfter, applyTidy, TidyError, MAX_CHANGES };

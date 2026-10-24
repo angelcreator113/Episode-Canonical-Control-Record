@@ -6,7 +6,7 @@
 import { vi, describe, test, expect } from 'vitest';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import SeasonNeeds, { guessType, needsSummary, stateDetail, pairLink } from './SeasonNeeds';
+import SeasonNeeds, { guessType, guessCompanyType, dealLink, needsSummary, stateDetail, pairLink } from './SeasonNeeds';
 
 const A = { id: 'c-lala', name: 'Lala' };
 const M = { id: 'c-marcus', name: 'Marcus' };
@@ -93,5 +93,65 @@ describe('Relationships the season needs', () => {
     expect(needsSummary({ there: 0, seed: 2, missing: 0 })).toBe('2 seed only');
     expect(stateDetail({ state: 'missing' })).toBe('No relationship between them yet');
     expect(pairLink({ state: 'missing', a: { id: 'x' } })).toBe('/relationships?char=x');
+  });
+});
+
+// A need with a company in it (2026-10-24: "Lala ↔ The Column").
+describe('a need with a company in it', () => {
+  const C = { id: 'c-col', name: 'The Column' };
+  const company = { id: 'co1', slug: 'the_column', name: 'The Column', kind: 'outlet', side: 'b', both: false };
+  const DATA = {
+    show_id: 'show-1',
+    counts: { there: 1, seed: 0, missing: 1 },
+    needs: [
+      { key: 'purpose:s2:c-col|c-lala', kind: 'purpose', title: 'Lala pitches The Column at the launch', a: A, b: C, slot: { id: 'slot-2', slot_number: 2, label: 'S1 · E2' },
+        state: 'missing', relationship: null, seed_why: 'Needed by E2: Lala pitches The Column at the launch', company, there_by: null, deal: null },
+      { key: 'purpose:s6:c-col|c-marcus', kind: 'purpose', title: 'Marcus and The Column plan the cover', a: M, b: C, slot: { id: 'slot-6', slot_number: 6, label: 'S1 · E6' },
+        state: 'there', relationship: null, seed_why: 'x', company, there_by: 'deal', deal: { id: 'd1', name: 'Cover story' } },
+    ],
+  };
+
+  test('a Company chip; missing, it offers Add a deal (the show\'s Opportunities for that company) and Add a company link', () => {
+    render(<MemoryRouter><SeasonNeeds data={DATA} api={{ post: vi.fn() }} /></MemoryRouter>);
+    const row = screen.getByTestId('need-purpose:s2:c-col|c-lala');
+    expect(within(row).getByText('Company')).toBeTruthy();
+    expect(within(row).getByRole('link', { name: 'Add a deal' }).getAttribute('href'))
+      .toBe('/shows/show-1/world?tab=opportunities&deal_with=The%20Column');
+    expect(within(row).getByRole('button', { name: 'Add a company link' })).toBeTruthy();
+    expect(within(row).queryByRole('button', { name: 'Add a seed' })).toBeNull();
+  });
+
+  test('there by a deal says so, with no Add a deal', () => {
+    render(<MemoryRouter><SeasonNeeds data={DATA} api={{ post: vi.fn() }} /></MemoryRouter>);
+    const row = screen.getByTestId('need-purpose:s6:c-col|c-marcus');
+    expect(within(row).getByText('There')).toBeTruthy();
+    expect(within(row).getByText('A deal with The Column: Cover story')).toBeTruthy();
+    expect(within(row).queryByRole('link', { name: 'Add a deal' })).toBeNull();
+  });
+
+  test('Add a company link offers the company types only and posts one, never romantic', async () => {
+    const api = { post: vi.fn(async () => ({ data: { candidates: [{ id: 'new' }], skipped: [] } })) };
+    render(<MemoryRouter><SeasonNeeds data={DATA} api={api} /></MemoryRouter>);
+    const row = screen.getByTestId('need-purpose:s2:c-col|c-lala');
+    fireEvent.click(within(row).getByRole('button', { name: 'Add a company link' }));
+    const type = within(row).getByLabelText('Type');
+    expect([...type.options].map((o) => o.textContent)).toEqual(['Client or partner', 'Sponsor', 'Works for / represents', 'Press or critic', 'Rival brand', 'Fan']);
+    expect(type.value).toBe('client_partner');
+    fireEvent.change(type, { target: { value: 'press' } });
+    fireEvent.click(within(row).getByRole('button', { name: 'Add' }));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/api/v1/relationships/seeds', {
+      source: 'manual',
+      seeds: [{ character_id_a: 'c-lala', character_id_b: 'c-col', relationship_type: 'press', is_romantic: false, seed_why: DATA.needs[0].seed_why, needed_by_slot_id: 'slot-2' }],
+    }));
+  });
+
+  test('the helpers', () => {
+    expect(guessCompanyType('The Column reviews her look')).toBe('press');
+    expect(guessCompanyType('A rival label copies her')).toBe('rival_brand');
+    expect(guessCompanyType('Velour sponsors the show')).toBe('sponsor');
+    expect(guessCompanyType('Lunch with them')).toBe('client_partner');
+    expect(dealLink({ company }, null)).toBe('/brands/the_column');
+    expect(dealLink({}, 'show-1')).toBeNull();
+    expect(stateDetail({ state: 'there', there_by: 'representative', company, a: { name: 'Reyna' }, b: C })).toBe('Reyna represents The Column');
   });
 });

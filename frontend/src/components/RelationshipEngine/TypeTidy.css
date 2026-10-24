@@ -45,3 +45,17 @@
   .re-tidy-spacer { display: none; }
   .re-tidy-footer > .cg-btn-ghost, .re-tidy-footer > .cg-btn-primary { flex: 1 1 40%; }
 }
+
+/* A pair with a company in it: a small chip after the names. */
+.re-tidy-company {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 8px;
+  border: 1px solid var(--lala-gold-line);
+  border-radius: 999px;
+  background: var(--lala-gold-soft);
+  color: var(--lala-gold-text);
+  font-size: 12px;
+  font-weight: 600;
+  vertical-align: middle;
+}

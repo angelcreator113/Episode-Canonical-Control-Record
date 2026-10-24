@@ -8388,7 +8388,14 @@ export const S = {
 export function OpportunitiesTab({ showId, api, S, setToast, loadData, episodes = [] }) {
   const [opps, setOpps] = useState([]);
   const [oppLoading, setOppLoading] = useState(true);
-  const [oppForm, setOppForm] = useState(null);
+  // ?deal_with=<company> (the Season Plan's "Add a deal" on a need with a
+  // company in it, Evoni 2026-10-24) opens the form with that company typed;
+  // the server links the name to the company (services/brandProfile.linkDeal).
+  const [dealParams] = useSearchParams();
+  const [oppForm, setOppForm] = useState(() => {
+    const dealWith = (dealParams.get('deal_with') || '').trim();
+    return dealWith ? { name: '', opportunity_type: 'brand_deal', category: 'fashion', prestige: 5, payment_amount: 0, brand_or_company: dealWith.slice(0, 200) } : null;
+  });
   // The card whose "Attach to beat 14…" form is open (Evoni, 2026-10-19).
   const [attachingId, setAttachingId] = useState(null);
   const OPP_TYPES = ['modeling', 'runway', 'editorial', 'campaign', 'ambassador', 'brand_deal', 'podcast', 'interview', 'award_show'];

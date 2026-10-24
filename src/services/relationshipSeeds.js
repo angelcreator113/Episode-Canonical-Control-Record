@@ -32,7 +32,12 @@ const familyTies = require('./familyTies');
 const truth = require('./relationshipTruth');
 const { loadSeedContext, contextBlock, basisCatalog, episodeLabel } = require('./seedContext');
 // One reading of a type everywhere (services/relationshipTypes; the type tidy-up uses it too).
-const { APP_TYPES, normalizeType, familyRoleOf, words, roleWords, capital } = require('./relationshipTypes');
+const {
+  APP_TYPES, COMPANY_TYPES, BRAND_PAIR_TYPES, normalizeType, normalizeCompanyType, companyRefusal, familyRoleOf, words, roleWords, capital,
+} = require('./relationshipTypes');
+// A registry character marked as a company: never a romance or family; its
+// seeds take the company types (services/companyCharacters).
+const companies = require('./companyCharacters');
 
 const MODELS = ['claude-sonnet-4-6'];
 const MAX_TOKENS = 3000;
@@ -100,6 +105,7 @@ const SKIP_WORDS = {
   family_romance: 'They would be family, so this cannot be a romance.',
   not_this_kind: 'It is not the kind asked for.',
   conflict: 'A row for this pair and type is already there.',
+  company_type: 'One of them is a company: it takes a company type, never a romance or family.',
 };
 const skip = (code, extra = {}) => ({ code, why: SKIP_WORDS[code], ...extra });
 
@@ -158,8 +164,12 @@ function seedPrompt({ characters, ctx, aim, lalaId = null }) {
     const bits = [c.role_type, c.core_belief && `believes: ${String(c.core_belief).slice(0, 160)}`,
       c.pressure_type && `pressure: ${c.pressure_type}`, c.personality && `personality: ${String(c.personality).slice(0, 160)}`]
       .filter(Boolean).join('; ');
-    return `- [${c.id}] ${nameOf(c)}${String(c.id) === String(lalaId) ? ' (Lala, the protagonist)' : ''}${bits ? `: ${bits}` : ''}`;
+    const company = c.company ? ' (company: a business, not a person)' : '';
+    return `- [${c.id}] ${nameOf(c)}${String(c.id) === String(lalaId) ? ' (Lala, the protagonist)' : ''}${company}${bits ? `: ${bits}` : ''}`;
   }).join('\n');
+  const companyRule = characters.some((c) => c.company)
+    ? `\n- Anyone marked (company) is a company: never a romance and never family. A seed with a company uses only these relationship_type values: ${COMPANY_TYPES.join(', ')}; between two companies only ${BRAND_PAIR_TYPES.join(' or ')}.`
+    : '';
 
   const aimLines = [`Kind: ${KIND_WORDS[aim.kind]}.`];
   if (aim.focus_character_id) aimLines.push(`Every seed involves ${names.get(aim.focus_character_id) || '?'} [${aim.focus_character_id}].`);
@@ -215,7 +225,7 @@ NEVER BREAK THESE:
 - Only the cast above; nobody else, and never anyone left out of it.
 - Never repeat a pair Evoni turned down as "wrong for them" or "already covered".
 - A pair she turned down as "not this type" may come back only as a different type.
-- A pair that already has a confirmed relationship is not a seed.
+- A pair that already has a confirmed relationship is not a seed.${companyRule}
 
 Suggest ${aim.count} NEW seeds. Answer with JSON only, no markdown:
 { "seeds": [
@@ -273,6 +283,7 @@ function slotWhy(why, slot) {
  */
 function cleanSeeds(parsed, { characters, ctx, aim, index }) {
   const castIds = new Set(characters.map((c) => String(c.id)));
+  const companyIds = new Set(characters.filter((c) => c.company).map((c) => String(c.id)));
   const familyPairs = new Set((ctx.confirmed || []).filter((r) => familyRoleOf(r.family_role) && !r.is_romantic).map((r) => pairKey(r.character_id_a, r.character_id_b)));
   const catalog = basisCatalog(ctx);
   const list = Array.isArray(parsed?.seeds) ? parsed.seeds
@@ -294,7 +305,16 @@ function cleanSeeds(parsed, { characters, ctx, aim, index }) {
     let romantic = s.is_romantic === true;
     let familyRole = null;
     let flavour = capital(text(s.flavour, 60));
-    if (family) {
+    if (companyIds.has(a) || companyIds.has(b)) {
+      // A company: a company type, never a romance or family.
+      if (family || romantic) return out('company_type');
+      const n = normalizeCompanyType(s.relationship_type, { brandPair: companyIds.has(a) && companyIds.has(b) });
+      if (!n) return out('company_type');
+      type = n.type;
+      if (!flavour && n.flavour) flavour = n.flavour;
+      const category = truth.storyCategory({ relationship_type: type });
+      if (KIND_FITS[aim.kind] && !KIND_FITS[aim.kind].includes(category)) return out('not_this_kind');
+    } else if (family) {
       const role = roleWords(s.family_role);
       if (familyTies.isSpouseRole(role)) {
         romantic = true;
@@ -415,9 +435,17 @@ async function callModel(prompt) {
  * left out) and the story so far. Throws the AI's own error (the route maps
  * it, aiFailure), or a SeedError. Returns { ids, skipped, prompt }.
  */
-async function generateSeeds(db, body, { characters, lalaId = null }) {
+async function generateSeeds(db, body, { characters: everyone, lalaId = null }) {
+  const aim = aimOf(body, everyone.map((c) => String(c.id)));
+  // Family and romance never pair a company (services/companyCharacters):
+  // companies are left out of the cast for those kinds.
+  let characters = everyone;
+  if (aim.kind === 'family' || aim.kind === 'romance') {
+    const focus = everyone.find((c) => String(c.id) === aim.focus_character_id);
+    if (focus?.company) throw new SeedError(`${nameOf(focus)} is a company: a company has no ${aim.kind === 'family' ? 'family' : 'romance'}.`);
+    characters = everyone.filter((c) => !c.company);
+  }
   const castIds = characters.map((c) => String(c.id));
-  const aim = aimOf(body, castIds);
   const ctx = await loadSeedContext(sq(db), {
     cast: characters, episodeId: aim.episode_id, twistId: aim.twist_id, slotId: aim.slot_id, phase: aim.phase, showId: aim.show_id,
   });
@@ -475,6 +503,7 @@ async function createSeeds(db, { source, seeds } = {}) {
   const people = ids.length ? await sq(db).query(
     'SELECT id FROM registry_characters WHERE id IN (:ids) AND deleted_at IS NULL', { replacements: { ids }, ...SELECT(db) }) : [];
   const known = new Set(people.map((p) => String(p.id)));
+  const companyOf = await companies.companyIdsAmong(db, [...known]);
   const index = await skipIndex(db, [...known]);
   // The slot a seed is needed by (a need's "Add a seed"): kept only when it is a live slot.
   const slotIds = [...new Set(seeds.map((s) => s?.needed_by_slot_id).filter((v) => UUID_RE.test(String(v || ''))).map(String))];
@@ -490,8 +519,15 @@ async function createSeeds(db, { source, seeds } = {}) {
     const note = (code) => skipped.push(skip(code, { index: i }));
     if (!known.has(a) || !known.has(b)) { note('not_found'); continue; }
     if (a === b) { note('same_person'); continue; }
-    const n = normalizeType(s.relationship_type, { romantic: s.is_romantic === true, keepUnknown: true });
+    const isCompany = companyOf.has(a) || companyOf.has(b);
+    if (isCompany && companyRefusal(s.relationship_type, s.is_romantic === true)) { note('company_type'); continue; }
+    // A company pair reads its type as a company type (kept as written when there is none).
+    const n = isCompany
+      ? (normalizeCompanyType(s.relationship_type, { brandPair: companyOf.has(a) && companyOf.has(b) })
+        || normalizeType(s.relationship_type, { keepUnknown: true }))
+      : normalizeType(s.relationship_type, { romantic: s.is_romantic === true, keepUnknown: true });
     if (!n) { note('unknown_type'); continue; }
+    if (isCompany && (n.is_romantic || n.type === 'family' || familyRoleOf(n.type))) { note('company_type'); continue; }
     const familyRole = n.type === 'family' ? null : familyRoleOf(n.type);
     if (familyRole && n.is_romantic) { note('family_romance'); continue; }
     const k = pairKey(a, b);
@@ -618,6 +654,12 @@ async function confirmSeed(db, id, edits = {}) {
       const familyRole = familyRoleOf(role) || (familyTies.isSpouseRole(role) ? null : familyRoleOf(type));
       if (romantic && familyRole) {
         throw new SeedError(`They are family (${familyRole}), so this cannot be a romance. Change the family role first.`, 409);
+      }
+      // A company: never a romance or family (services/companyCharacters).
+      const pair = await companies.pairOf(sequelize, row.character_id_a, row.character_id_b, { transaction });
+      if (pair.any) {
+        const why = companyRefusal(type, romantic) || (familyRole ? companyRefusal('family') : null);
+        if (why) throw new SeedError(`${(pair.a || pair.b).name} is a company. ${why}`, 409);
       }
       sets.push('is_romantic = :is_romantic');
       replacements.is_romantic = romantic;
