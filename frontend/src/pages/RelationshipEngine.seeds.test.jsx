@@ -350,3 +350,23 @@ describe('One inbox', () => {
     expect(out).toEqual([expect.objectContaining({ character_id_a: 'jade', character_id_b: 'marcus', seed_basis: { facts: ['Scene: S', 'strong signal'] } })]);
   });
 });
+
+describe('Seeds: "Generate for this" from the Season Plan (planner PR 3)', () => {
+  test('?gen_slot= opens Generate aimed at that slot, and the address drops it', async () => {
+    const SLOT = 'aaaaaaaa-0000-4000-8000-000000000005';
+    vi.mocked(apiClient.get).mockImplementation(async (url) => {
+      if (url === '/api/v1/relationships/cast') return { data: { characters: chars, lala_id: 'lala', relationships: rels, candidates: cands } };
+      if (url === '/api/v1/shows') return { data: { data: [{ id: 'show-1' }] } };
+      if (url === '/api/v1/world/show-1/season/roadmap') return { data: { roadmap: { phases: [
+        { phase: 1, title: 'Foundation', slots: [{ id: SLOT, slot_number: 5, state: 'needs_event', intention: { story_purpose: 'The betrayal lands' } }] },
+      ] } } };
+      return { data: {} };
+    });
+    posts([[/\/relationships\/generate$/, async () => ({ data: { candidates: [] } })]]);
+    renderAt(`/relationships?tab=candidates&gen_slot=${SLOT}`);
+    const dialog = await screen.findByRole('dialog', { name: 'Generate relationship seeds' });
+    await waitFor(() => expect(within(dialog).getByLabelText('For a season slot (optional)').value).toBe(SLOT));
+    fireEvent.click(within(dialog).getByRole('button', { name: /◈ Generate/ }));
+    await waitFor(() => expect(apiClient.post).toHaveBeenCalledWith('/api/v1/relationships/generate', { kind: 'any', count: 5, slot_id: SLOT }));
+  });
+});

@@ -67,3 +67,20 @@ describe('From the feed', () => {
     expect(signalLines({ followers: [{ handle: 'a', change: -300 }] })[0]).toMatchObject({ up: false, text: '@a -300 followers' });
   });
 });
+
+describe('From The Pulse on a new season (Evoni review item 20)', () => {
+  test('nothing ever proposed: says proposals start once The Pulse has activity', async () => {
+    const api = { get: vi.fn(async () => ({ data: { open: null, recent: [] } })), post: vi.fn() };
+    render(<SeasonProposals showId="s1" api={api} />);
+    const start = await screen.findByTestId('season-proposals-start');
+    expect(start.textContent).toMatch(/Proposals start once The Pulse has activity/);
+    expect(start.textContent).toMatch(/Check The Pulse now asks anyway/);
+  });
+
+  test('once something was proposed and decided, the line is gone', async () => {
+    const api = { get: vi.fn(async () => ({ data: { open: null, recent: [{ id: 'd1', status: 'dismissed', summary: 'Old', decided_at: '2026-10-20' }] } })), post: vi.fn() };
+    render(<SeasonProposals showId="s1" api={api} />);
+    expect(await screen.findByText('Nothing proposed right now.')).toBeTruthy();
+    expect(screen.queryByTestId('season-proposals-start')).toBeNull();
+  });
+});

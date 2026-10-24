@@ -11,9 +11,9 @@
  * nothing, or when its table or column is not there yet (before its
  * migration has run), so Generate still works on a younger database.
  *
- *   loadSeedContext(sequelize, { cast, lalaId, showId, episodeId, twistId })
+ *   loadSeedContext(sequelize, { cast, lalaId, showId, episodeId, twistId, slotId, phase })
  *     { records, threads, twists, secrecy, families, confirmed, pulse,
- *       dismissals, episode, guests, twist, show_id }
+ *       dismissals, episode, guests, twist, slot, phase, show_id }
  *   contextBlock(ctx)       the parts as prompt text, each capped
  *   basisCatalog(ctx)       the episodes, threads and twists a seed may cite, by id
  *
@@ -30,6 +30,12 @@
  *   dismissals  seeds Evoni turned down, with her reason and note
  *   episode / guests   Generate aimed at an episode: it and its guests in the cast
  *   twist       Generate aimed at a twist to pay off
+ *   slot        Generate aimed at a season slot (planner PR 3, 2026-10-24): its
+ *               purposes, planned pressure, part name and tagline, and the
+ *               guests of its event who are in the cast
+ *   phase       Generate aimed at a part of the active season: its name,
+ *               tagline and emotional arc, its open slots' purposes and
+ *               pressure, and their events' guests in the cast
  */
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -138,19 +144,10 @@ function twists(sequelize, showId, castIds) {
   });
 }
 
-/** The cast's confirmed relationships with each other, each with its stage. */
+/** The cast's confirmed relationships with each other, each with its stage (relationshipTruth's one read). */
 function confirmed(sequelize, castIds) {
   if (castIds.length < 2) return [];
-  return part('the confirmed relationships', [], () => rows(sequelize,
-    `SELECT cr.id, cr.character_id_a, cr.character_id_b, cr.relationship_type, cr.is_romantic, cr.family_role,
-            cr.tension_state, cr.status, cr.situation,
-            (SELECT re.relationship_stage FROM relationship_events re
-              WHERE re.relationship_id = cr.id AND re.deleted_at IS NULL AND re.relationship_stage IS NOT NULL
-              ORDER BY re.created_at DESC LIMIT 1) AS stage
-       FROM character_relationships cr
-      WHERE cr.deleted_at IS NULL AND cr.confirmed = true
-        AND cr.character_id_a IN (:ids) AND cr.character_id_b IN (:ids)
-      ORDER BY cr.updated_at DESC LIMIT ${CAP.confirmed.rows}`, { ids: castIds }));
+  return part('the confirmed relationships', [], () => require('./relationshipTruth').confirmedBetween(sequelize, castIds, { limit: CAP.confirmed.rows }));
 }
 
 /** The cast's family ties with each other (both in the cast), as lines. */
@@ -252,16 +249,93 @@ function twistAim(sequelize, twistId) {
   });
 }
 
+const SLOT_CAP = { purposes: 3, slots: 8, purpose: 220 };
+
+/** The cast's ids among an event's attendees (utils/eventAttendees). */
+function guestsOf(event, cast) {
+  if (!event) return [];
+  const { eventAttendees } = require('../utils/eventAttendees');
+  const attending = eventAttendees(event);
+  return cast.filter((c) => c.feed_profile_id != null && attending.has(Number(c.feed_profile_id))).map((c) => String(c.id));
+}
+
+/** A slot's purposes as text, primary first (seasonIntentionService purposesOf). */
+function purposeTexts(slot) {
+  const { purposesOf } = require('./seasonIntentionService');
+  return purposesOf(slot).map((p) => clip(p.text, SLOT_CAP.purpose)).filter(Boolean).slice(0, SLOT_CAP.purposes);
+}
+
+/** The part of the arc a phase number names: { number, title, tagline, emotional_arc }. */
+function phaseInfo(phases, n) {
+  const { arcPhases } = require('./seasonSlotService');
+  const p = arcPhases({ phases }).find((x) => Number(x.phase) === Number(n));
+  return p ? { number: Number(p.phase), title: p.title || null, tagline: p.tagline || null, emotional_arc: p.emotional_arc || null } : null;
+}
+
+/** The aimed slot, with its part, purposes, pressure and its event's guests in the cast. Null when not found. */
+function slotAim(sequelize, slotId, cast) {
+  if (!slotId || !UUID_RE.test(String(slotId))) return null;
+  return part('the aimed slot', null, async () => {
+    const { EPISODE_EVENT_ID_SQL } = require('../utils/episodeEventSql');
+    const [s] = await rows(sequelize,
+      `SELECT s.id, s.show_id, s.arc_id, s.slot_number, s.season_number, s.phase, s.story_purpose, s.story_purposes,
+              s.story_thread_id, s.intention_source, s.desired_pressure, s.event_id, s.episode_id, a.phases
+         FROM season_slots s JOIN show_arcs a ON a.id = s.arc_id AND a.deleted_at IS NULL
+        WHERE s.id = :slotId AND s.deleted_at IS NULL`, { slotId });
+    if (!s) return null;
+    let event = null;
+    if (s.event_id) {
+      [event] = await rows(sequelize,
+        'SELECT id, name, canon_consequences, source_profile_id FROM world_events WHERE id = :id AND deleted_at IS NULL', { id: s.event_id });
+    } else if (s.episode_id) {
+      [event] = await rows(sequelize,
+        `SELECT id, name, canon_consequences, source_profile_id FROM world_events WHERE id = ${EPISODE_EVENT_ID_SQL}`, { episodeId: s.episode_id });
+    }
+    return {
+      id: String(s.id), show_id: s.show_id ? String(s.show_id) : null, slot_number: Number(s.slot_number),
+      season_number: s.season_number || 1, part: phaseInfo(s.phases, s.phase),
+      purposes: purposeTexts(s), desired_pressure: s.desired_pressure || null,
+      event: event?.name || null, guests: guestsOf(event, cast),
+    };
+  });
+}
+
+/** The aimed part of the show's active season: its words, its open slots and their events' guests. Null when not found. */
+function phaseAim(sequelize, showId, phase, cast) {
+  if (phase == null || !UUID_RE.test(String(showId || ''))) return null;
+  return part('the aimed part', null, async () => {
+    const [arc] = await rows(sequelize,
+      `SELECT id, phases FROM show_arcs WHERE show_id = :showId AND status = 'active' AND deleted_at IS NULL
+        ORDER BY arc_number ASC LIMIT 1`, { showId });
+    const info = arc ? phaseInfo(arc.phases, phase) : null;
+    if (!info) return null;
+    const slotRows = await rows(sequelize,
+      `SELECT s.slot_number, s.story_purpose, s.story_purposes, s.story_thread_id, s.intention_source, s.desired_pressure,
+              ev.name AS event_name, ev.canon_consequences, ev.source_profile_id
+         FROM season_slots s LEFT JOIN world_events ev ON ev.id = s.event_id AND ev.deleted_at IS NULL
+        WHERE s.arc_id = :arcId AND s.phase = :phase AND s.deleted_at IS NULL AND s.accepted_at IS NULL
+        ORDER BY s.slot_number ASC LIMIT ${SLOT_CAP.slots}`, { arcId: arc.id, phase: info.number });
+    const guests = new Set();
+    const slots = slotRows.map((r) => {
+      for (const id of guestsOf(r.event_name ? r : null, cast)) guests.add(id);
+      return { slot_number: Number(r.slot_number), purposes: purposeTexts(r), desired_pressure: r.desired_pressure || null, event: r.event_name || null };
+    });
+    return { show_id: String(showId), ...info, slots, guests: [...guests] };
+  });
+}
+
 /**
  * Everything the generator is told, for the cast (rows with id, names,
  * feed_profile_id). Never throws for a missing table: that part is empty.
  */
-async function loadSeedContext(sequelize, { cast = [], showId = null, episodeId = null, twistId = null } = {}) {
+async function loadSeedContext(sequelize, { cast = [], showId = null, episodeId = null, twistId = null, slotId = null, phase = null } = {}) {
   const castIds = cast.map((c) => String(c.id));
   const names = new Map(cast.map((c) => [String(c.id), nameOf(c)]));
   const { episode, guests } = await episodeAim(sequelize, episodeId, cast);
   const twist = await twistAim(sequelize, twistId);
-  const show = await showOf(sequelize, { showId: showId || twist?.show_id, episode });
+  const slot = await slotAim(sequelize, slotId, cast);
+  const phaseAimed = await phaseAim(sequelize, showId || slot?.show_id, phase, cast);
+  const show = await showOf(sequelize, { showId: showId || slot?.show_id || twist?.show_id, episode });
   const confirmedRows = await confirmed(sequelize, castIds);
   return {
     show_id: show,
@@ -277,6 +351,8 @@ async function loadSeedContext(sequelize, { cast = [], showId = null, episodeId 
     episode,
     guests,
     twist,
+    slot,
+    phase: phaseAimed,
   };
 }
 

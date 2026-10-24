@@ -177,7 +177,7 @@ function outcomeRangeToBrief(range) {
  */
 async function loadEditableSlot(sequelize, showId, slotId, transaction) {
   const [[slot]] = await sequelize.query(
-    `SELECT s.id, s.arc_id, s.slot_number, s.phase, s.season_number, s.episode_id, s.locked_at, s.accepted_at,
+    `SELECT s.id, s.arc_id, s.slot_number, s.phase, s.season_number, s.episode_id, s.event_id, s.locked_at, s.accepted_at,
             s.intention_source, s.story_purpose, s.story_purposes, s.story_thread_id,
             s.career_focus, s.desired_pressure, s.outcome_range,
             ep.id AS live_episode_id, ep.evaluation_status
@@ -318,7 +318,72 @@ async function draftingContext(sequelize, showId, slot) {
   } catch (err) {
     console.error('[seasonIntention] carry-forward load failed:', err.message);
   }
-  return { arc, phase, earlier: earlier.reverse(), goals, debt: Array.isArray(debt) ? debt : [], threads, carried };
+  const planned = await plannedAround(sequelize, showId, slot);
+  return { arc, phase, earlier: earlier.reverse(), goals, debt: Array.isArray(debt) ? debt : [], threads, carried, ...planned };
+}
+
+// What the draft reads of the plan around the slot, each part capped.
+const AROUND = { later: 6, twists: 6, reveals: 6, chars: 200 };
+const clipText = (v, n = AROUND.chars) => {
+  const t = String(v || '').replace(/\s+/g, ' ').trim();
+  return t.length > n ? `${t.slice(0, n - 1).trimEnd()}…` : t;
+};
+
+/**
+ * The plan around a slot (Evoni's review, 2026-10-24, items 16 and D): its
+ * pencilled event, the twists it plants or pays off, the secrets it hints
+ * at or reveals, the purposes of the slots already planned after it, and
+ * the confirmed relationships between the season's people. Each part is
+ * empty when there is none or it cannot be read.
+ */
+async function plannedAround(sequelize, showId, slot) {
+  const safe = async (what, empty, read) => {
+    try { return await read(); } catch (err) {
+      console.error(`[seasonIntention] ${what} could not be read (the draft goes without it):`, err.message);
+      return empty;
+    }
+  };
+  const event = slot.event_id ? await safe('the pencilled event', null, async () => {
+    const [[ev]] = await sequelize.query(
+      `SELECT name, event_type, host, venue_name, dress_code, description FROM world_events
+        WHERE id = :id AND deleted_at IS NULL`, { replacements: { id: slot.event_id } });
+    return ev || null;
+  }) : null;
+  const twists = await safe('the twists', { plant: [], payoff: [] },
+    () => require('./seasonTwists').twistsAtSlot(sequelize, slot));
+  const reveals = await safe('the reveals', [], () => require('./seasonRevealPlan').revealsAtSlot(sequelize, slot.id));
+  const later = await safe('the later purposes', [], async () => {
+    const [rows] = await sequelize.query(
+      `SELECT slot_number, story_purpose FROM season_slots
+        WHERE arc_id = :arcId AND slot_number > :n AND deleted_at IS NULL AND story_purpose IS NOT NULL
+        ORDER BY slot_number ASC LIMIT ${AROUND.later}`,
+      { replacements: { arcId: slot.arc_id, n: slot.slot_number } });
+    return rows;
+  });
+  const relationships = await require('./seasonNeeds').seasonRelationshipBlock(sequelize, showId);
+  return { event, twists, reveals, later, relationships };
+}
+
+/** The plan around the slot as prompt text; '' with none of it. */
+function aroundBlock(ctx) {
+  const out = [];
+  const ev = ctx.event;
+  if (ev) {
+    out.push(`The event pencilled into this slot: ${ev.name}${ev.event_type ? ` (${ev.event_type})` : ''}${ev.host ? `, hosted by ${ev.host}` : ''}${ev.venue_name ? ` at ${ev.venue_name}` : ''}${ev.dress_code ? `; dress code: ${ev.dress_code}` : ''}${ev.description ? `. ${clipText(ev.description)}` : ''}`);
+  }
+  const who = (t) => (t.characters?.length ? ` (with ${t.characters.join(', ')})` : '');
+  const twists = [
+    ...(ctx.twists?.plant || []).map((t) => `- PLANT: ${t.title}${t.description ? ` — ${clipText(t.description)}` : ''}${who(t)}`),
+    ...(ctx.twists?.payoff || []).map((t) => `- PAY OFF: ${t.title}${t.description ? ` — ${clipText(t.description)}` : ''}${t.planted_in ? ` (planted in E${t.planted_in.episode_number})` : ''}${who(t)}`),
+  ].slice(0, AROUND.twists);
+  if (twists.length) out.push(`Season twists due in this slot:\n${twists.join('\n')}`);
+  const reveals = (ctx.reveals || []).slice(0, AROUND.reveals)
+    .map((r) => `- ${r.intent === 'reveal' ? 'Reveal' : 'Hint at'} ${r.character_name}'s secret: ${clipText(r.text)}${r.note ? ` (${clipText(r.note, 120)})` : ''}`);
+  if (reveals.length) out.push(`Secrets this slot hints at or reveals:\n${reveals.join('\n')}`);
+  const later = (ctx.later || []).map((l) => `- E${l.slot_number}: ${clipText(l.story_purpose)}`);
+  if (later.length) out.push(`Already planned after this slot (lead toward these; do not do them early):\n${later.join('\n')}`);
+  if (ctx.relationships) out.push(ctx.relationships.trim());
+  return out.length ? `\n${out.join('\n\n')}\n` : '';
 }
 
 function buildDraftPrompt(slot, ctx) {
@@ -347,7 +412,7 @@ ${debt}
 
 Open story threads:
 ${threads}
-${ctx.carried ? `\n${ctx.carried}` : ''}
+${ctx.carried ? `\n${ctx.carried}` : ''}${aroundBlock(ctx)}
 Return JSON only:
 {
   "story_purpose": "One sentence: what this episode is for in Lala's story (max 200 chars).",
@@ -594,4 +659,5 @@ module.exports = {
   draftNextSlot,
   acceptDrafts,
   buildDraftPrompt,
+  aroundBlock,
 };

@@ -29,6 +29,9 @@
  *   lalaStoryTies(sequelize, ids)      Map(character id → Lala's story tie to them)
  *   tieWords(tie)                      a lala_relationship value in words ("knows Lala in person")
  *   storyRelationshipsMap(sequelize, characterId) / withStoryMap(stored, computed)
+ *   relationshipsBetween(sequelize, ids, { confirmedOnly, limit })   the live pairs with both people among ids, with stage
+ *   confirmedBetween(sequelize, ids, { limit })   the same, confirmed only: what the planners and Suggest twists read
+ *   relationshipLine(row, nameOf)      one pair as a prompt line ("- A and B: rival, romantic, now flirting, simmering")
  *
  * Raw SQL only, so the migration that backfills the link can run it.
  */
@@ -683,7 +686,48 @@ async function keepDifferent(db, key, { note = null, by = null } = {}) {
   return { kept: key };
 }
 
+// ── The pairs between some people ────────────────────────────────────────
+// One read for "the relationships between these characters" (Evoni's
+// review, 2026-10-24: Suggest twists counted seeds, kept ideas and Later as
+// fact). The season planners, Suggest twists, the seed generator and the
+// season's needs all read it; only the needs ask for seeds as well.
+
+const PAIR_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** The live pairs with both people among `ids`, newest first, each with its latest stage. */
+async function relationshipsBetween(db, characterIds, { confirmedOnly = true, limit = 30 } = {}) {
+  const ids = [...new Set((characterIds || []).map(String))].filter((id) => PAIR_UUID.test(id));
+  if (ids.length < 2) return [];
+  const n = Math.max(1, Math.min(500, Number(limit) || 30));
+  return rowsOf(db,
+    `SELECT cr.id, cr.character_id_a, cr.character_id_b, cr.relationship_type, cr.is_romantic, cr.family_role,
+            cr.tension_state, cr.status, cr.situation, cr.conflict_summary, cr.confirmed,
+            to_jsonb(cr)->>'seed_state' AS seed_state,
+            (SELECT re.relationship_stage FROM relationship_events re
+              WHERE re.relationship_id = cr.id AND re.deleted_at IS NULL AND re.relationship_stage IS NOT NULL
+              ORDER BY re.created_at DESC LIMIT 1) AS stage
+       FROM character_relationships cr
+      WHERE cr.deleted_at IS NULL ${confirmedOnly ? 'AND cr.confirmed = true' : ''}
+        AND cr.character_id_a IN (:ids) AND cr.character_id_b IN (:ids)
+      ORDER BY cr.updated_at DESC LIMIT ${n}`, { ids });
+}
+
+/** The confirmed live pairs between these people: never a seed, a kept idea or one put off for later. */
+function confirmedBetween(db, characterIds, { limit = 30 } = {}) {
+  return relationshipsBetween(db, characterIds, { confirmedOnly: true, limit });
+}
+
+/** One pair as a prompt line: its type, romance, stage and tension. */
+function relationshipLine(r, nameOf) {
+  const bits = [String(r.relationship_type || 'connected').replace(/_/g, ' ')];
+  if (r.is_romantic) bits.push('romantic');
+  if (r.stage) bits.push(`now ${String(r.stage).replace(/_/g, ' ')}`);
+  if (r.tension_state) bits.push(r.tension_state);
+  return `- ${nameOf(r.character_id_a) || '?'} and ${nameOf(r.character_id_b) || '?'}: ${bits.join(', ')}`;
+}
+
 module.exports = {
+  relationshipsBetween, confirmedBetween, relationshipLine,
   storyCategory, pulseKindFor, storyWords, tieWords, PULSE_FOR, LALA_TIE,
   linkStoryAndPulse, syncStoryPair, afterStorySave,
   lalaStoryTies, lalaTieFields, storyRelationshipsMap, withStoryMap, relationshipsMapOf,

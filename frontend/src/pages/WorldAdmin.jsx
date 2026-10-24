@@ -27,6 +27,9 @@ import RateCardTab from '../components/RateCard/RateCardTab';
 import SeasonProposals from '../components/Show/SeasonProposals';
 import SeasonRevealPlan from '../components/Show/SeasonRevealPlan';
 import SeasonTwists from '../components/Show/SeasonTwists';
+import SeasonNeeds from '../components/Show/SeasonNeeds';
+import SeasonKnows from '../components/Show/SeasonKnows';
+import SlotNotes, { useEventFit, rankedOptions } from '../components/Show/SlotNotes';
 import { SeasonSetupForm, SeasonPlacement, SeasonDraft, SeasonChecklist, setupSteps, formFromArc } from '../components/Show/SeasonSetup';
 import ShowOverview, { episodesInProduction, eventsNeedingAttention } from '../components/Show/ShowOverview';
 import { useLookDraft, LookBuilderPanel, RecentlyWorn } from '../components/Show/LookBuilder';
@@ -7497,7 +7500,12 @@ const slotSelectStyle = { width: '100%', marginTop: 6, fontSize: 11, padding: '4
 // The open slot, beside the season's grid: what it holds, its event and the
 // deal, the threads it moves, and its controls (pencil an event, the
 // intention, the episode).
-function SlotPanel({ slot, showId, available, busy, episode, event, onPencil, onIntention, onClose, editing = false, error = null, children = null }) {
+// Planner PR 3 (2026-10-24): the panel also lists what is planned there
+// (its twists, secrets and the relationships it needs, SlotNotes), and the
+// pencil list is ranked by fit for this slot, each event with a reason.
+function SlotPanel({ slot, showId, available, busy, episode, event, onPencil, onIntention, onClose, editing = false, error = null, children = null, api = null, needs = [], onNeedsChanged }) {
+  const fit = useEventFit(api, showId, slot.id, !slot.locked && available.length > 0);
+  const options = rankedOptions(available, fit);
   const title = slotTitle(slot);
   const logline = episode?.logline || episode?.description || null;
   const deal = event ? eventCardDetails(event).deal : null;
@@ -7533,6 +7541,8 @@ function SlotPanel({ slot, showId, available, busy, episode, event, onPencil, on
         </div>
       )}
 
+      {api && <SlotNotes api={api} showId={showId} slot={slot} needs={needs} onNeedsChanged={onNeedsChanged} />}
+
       {!slot.locked && (
         <select
           className="wa-arc-select"
@@ -7542,8 +7552,8 @@ function SlotPanel({ slot, showId, available, busy, episode, event, onPencil, on
           disabled={busy}
           onChange={(e) => onPencil(e.target.value)}
         >
-          <option value="">{slot.event ? 'Change event…' : 'Pencil an event…'}</option>
-          {available.map((ev) => <option key={ev.id} value={ev.id}>{ev.name}</option>)}
+          <option value="">{slot.event ? 'Change event…' : fit?.length ? 'Pencil an event (best fit first)…' : 'Pencil an event…'}</option>
+          {options.map((ev) => <option key={ev.id} value={ev.id}>{ev.label}</option>)}
           {slot.event && <option value="__clear__">Clear this slot</option>}
         </select>
       )}
@@ -7609,7 +7619,7 @@ function AdvanceConfirm({ warning, advancing, onConfirm, onCancel, S }) {
   );
 }
 
-function SeasonRoadmap({ roadmap, S, api, showId, onChanged, setToast, onAdvance, advancing, advanceWarning, onConfirmAdvance, onCancelAdvance, advanceError = null, threads = [], episodes = [], events = [] }) {
+function SeasonRoadmap({ roadmap, S, api, showId, onChanged, setToast, onAdvance, advancing, advanceWarning, onConfirmAdvance, onCancelAdvance, advanceError = null, threads = [], episodes = [], events = [], needs = [], onNeedsChanged }) {
   const [busySlot, setBusySlot] = useState(null);
   // A pencil or placement that failed: said in the page, where it was done.
   const [slotError, setSlotError] = useState(null);
@@ -7795,6 +7805,7 @@ function SeasonRoadmap({ roadmap, S, api, showId, onChanged, setToast, onAdvance
               onIntention={() => setEditingSlotId(editingSlotId === selected.id ? null : selected.id)}
               editing={editing?.id === selected.id}
               error={slotError && slotError.slotId === selected.id && slotError.where === 'event' ? slotError.text : null}
+              api={api} needs={needs} onNeedsChanged={onNeedsChanged}
             >
               {editing && editing.id === selected.id && (
                 <SlotIntentionEditor key={editing.id} slot={editing} S={S} api={api} showId={showId}
@@ -7854,6 +7865,17 @@ function SeasonTab({ showId, api, S, episodes, events = [], setToast, onGoalsCha
   const [roadmap, setRoadmap] = useState(null);
   const [insights, setInsights] = useState(null);
   const [threadData, setThreadData] = useState({ threads: [], drafts: [] });
+  // The relationships the season needs (planner PR 3); its own error, shown in its fold.
+  const [needs, setNeeds] = useState({ data: null, error: null });
+  const loadNeeds = useCallback(async () => {
+    try {
+      const r = await api.get(`/api/v1/world/${showId}/season/needs`);
+      setNeeds({ data: { needs: r.data?.needs || [], counts: r.data?.counts || {} }, error: null });
+    } catch (err) {
+      console.error('Season needs load failed:', err);
+      setNeeds((n) => ({ ...n, error: err.response?.data?.error || err.message || 'failed' }));
+    }
+  }, [showId]);
   // What did not load, by part, so the tab says so with a Retry instead of
   // reading as "No season set up yet" (Evoni's review, 2026-10-24).
   const [failed, setFailed] = useState({});
@@ -7892,7 +7914,9 @@ function SeasonTab({ showId, api, S, episodes, events = [], setToast, onGoalsCha
       console.error('Planning Insights load failed:', err);
       markFailed('insights', err);
     }
-  }, [showId, markFailed]);
+    // A purpose, a pencil or a placement can change what the season needs.
+    await loadNeeds();
+  }, [showId, markFailed, loadNeeds]);
 
   // The first load shows "Loading"; every later one (after an accept, an
   // advance, a setup save) reloads in place, so the parts below keep what
@@ -8132,7 +8156,13 @@ function SeasonTab({ showId, api, S, episodes, events = [], setToast, onGoalsCha
       {/* Roadmap — the season's 24 slots, first under the header (Evoni's review, 2026-10-24; it was fourth). */}
       <SeasonRoadmap roadmap={roadmap} S={S} api={api} showId={showId} onChanged={loadRoadmap} setToast={setToast} onAdvance={handleAdvance} advancing={advancing}
         advanceWarning={warning} onConfirmAdvance={handleConfirmAdvance} onCancelAdvance={() => setWarning(null)} advanceError={advanceError}
-        threads={threadData.threads} episodes={episodes} events={events} />
+        threads={threadData.threads} episodes={episodes} events={events} needs={needs.data?.needs || []} onNeedsChanged={loadNeeds} />
+
+      {/* The relationships each twist, thread and purpose depends on, and when (planner PR 3, 2026-10-24). */}
+      {roadmap && <SeasonNeeds data={needs.data} api={api} onChanged={loadNeeds} error={needs.error} onRetry={loadNeeds} />}
+
+      {/* What the season's AI reads of the story so far: the last approved record and the open follow-ups. */}
+      {roadmap && <SeasonKnows showId={showId} api={api} />}
 
       {/* What the feed proposes for the season (2026-10-17); nothing changes until she accepts. */}
       <SeasonProposals showId={showId} api={api} onApplied={() => loadArc()} />

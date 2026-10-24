@@ -35,6 +35,7 @@
 .sp-quiet { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; }
 .sp-quiet .sp-title { margin: 0; font-size: 16px; }
 .sp-quiet .sp-empty { flex: 1 1 200px; margin: 0; }
+.sp-start { margin: 0; font-size: 12px; line-height: 1.5; color: var(--text-secondary); }
 
 /* The decided proposals, folded (Evoni's review, 2026-10-24). */
 .sp-decided { border-top: 1px solid var(--lala-gold-line); padding-top: 8px; }
@@ -45,3 +46,6 @@
 .sp-decided-item.is-accepted .sp-decided-status { color: var(--success-text); }
 .sp-decided-item.is-dismissed .sp-decided-status { color: var(--text-secondary); }
 .sp-decided-text { margin: 4px 0 0; font-size: 13px; line-height: 1.5; color: var(--text-primary); overflow-wrap: anywhere; }
+@media (max-width: 480px) {
+  .sp-btn, .sp-btn-soft { min-height: 44px; }
+}

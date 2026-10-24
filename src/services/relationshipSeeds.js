@@ -14,6 +14,8 @@
  *                                               transaction; { id, family, pulse }
  *   setSeedState(db, id, state)                 'kept' (Keep as idea) or null (Bring back)
  *   dismissSeed(db, id, { reason, note })       too_soon → later; else soft-deleted with the reason
+ *   withNeededBy(db, rows)                      each seed's needed-by slot; a Later seed whose slot
+ *                                               is next (or started) reads as pending again
  *   seedPrompt(...) / cleanSeeds(...) / skipIndex(...)   pure, for the tests
  *   (types are read by services/relationshipTypes normalizeType)
  *
@@ -111,7 +113,11 @@ function skipWhy(index, a, b, type) {
   return null;
 }
 
-/** A body's aim, checked against the cast: { kind, focus_character_id, episode_id, twist_id, count }. */
+/**
+ * A body's aim, checked against the cast: { kind, focus_character_id,
+ * episode_id, twist_id, slot_id, phase, show_id, count }. A phase (a part of
+ * the active season, 1-9) needs the show it is in.
+ */
 function aimOf(body = {}, castIds = []) {
   const kind = body.kind == null || body.kind === '' ? 'any' : String(body.kind);
   if (!KINDS.includes(kind)) throw new SeedError(`Kind must be one of ${KINDS.join(', ')}`);
@@ -124,8 +130,21 @@ function aimOf(body = {}, castIds = []) {
   if (focus && !castIds.includes(focus)) throw new SeedError('That person is not in the cast.');
   const n = body.count == null || body.count === '' ? 5 : Number(body.count);
   const count = Number.isFinite(n) ? Math.min(8, Math.max(3, Math.round(n))) : 5;
-  return { kind, focus_character_id: focus, episode_id: idOrNull(body.episode_id, 'episode_id'), twist_id: idOrNull(body.twist_id, 'twist_id'), count };
+  let phase = null;
+  if (body.phase != null && body.phase !== '') {
+    phase = Number(body.phase);
+    if (!Number.isInteger(phase) || phase < 1 || phase > 9) throw new SeedError('phase must be a part number of the season (1 to 9)');
+  }
+  const showId = idOrNull(body.show_id, 'show_id');
+  if (phase != null && !showId) throw new SeedError('Aiming at a part of the season needs its show_id');
+  return {
+    kind, focus_character_id: focus, episode_id: idOrNull(body.episode_id, 'episode_id'), twist_id: idOrNull(body.twist_id, 'twist_id'),
+    slot_id: idOrNull(body.slot_id, 'slot_id'), phase, show_id: showId, count,
+  };
 }
+
+/** "Needed by E12: " — how a seed made for a slot starts its why. */
+const neededByPrefix = (slot) => `Needed by E${slot.slot_number}: `;
 
 const KIND_WORDS = {
   any: 'any kind of relationship', romance: 'romances (love interests, temptations, exes)', rivals: 'rivalries',
@@ -150,6 +169,25 @@ function seedPrompt({ characters, ctx, aim, lalaId = null }) {
   }
   if (ctx.twist) {
     aimLines.push(`Built to pay off [twist ${ctx.twist.id}] "${ctx.twist.title}"${ctx.twist.description ? `: ${ctx.twist.description}` : ''}${ctx.twist.character_ids.length ? `; it involves ${ctx.twist.character_ids.map((id) => names.get(id)).filter(Boolean).join(', ')}` : ''}.`);
+  }
+  if (ctx.slot) {
+    const sl = ctx.slot;
+    const guests = (sl.guests || []).map((id) => `${names.get(id) || '?'} [${id}]`);
+    const partWords = sl.part ? ` (Part ${sl.part.number}${sl.part.title ? `: ${sl.part.title}` : ''}${sl.part.tagline ? `, "${sl.part.tagline}"` : ''})` : '';
+    aimLines.push(`Needed by season slot E${sl.slot_number}${partWords}: the relationships this episode depends on.`);
+    if (sl.purposes.length) aimLines.push(`What E${sl.slot_number} is for: ${sl.purposes.join(' / ')}.`);
+    if (sl.desired_pressure) aimLines.push(`Planned pressure on Lala: ${sl.desired_pressure}.`);
+    if (sl.event) aimLines.push(`Its event: ${sl.event}${guests.length ? `; its guests in the cast: ${guests.join(', ')}` : ''}.`);
+    aimLines.push(`Begin every seed_why with "${neededByPrefix(sl)}" and then what in E${sl.slot_number} the pair serves.`);
+  }
+  if (ctx.phase) {
+    const ph = ctx.phase;
+    const guests = (ph.guests || []).map((id) => `${names.get(id) || '?'} [${id}]`);
+    aimLines.push(`Built for Part ${ph.number}${ph.title ? `: ${ph.title}` : ''} of the season${ph.tagline ? ` ("${ph.tagline}")` : ''}${ph.emotional_arc ? `; its emotional arc: ${ph.emotional_arc}` : ''}.`);
+    const slotLines = (ph.slots || []).filter((x) => x.purposes.length || x.desired_pressure || x.event)
+      .map((x) => `  - E${x.slot_number}: ${x.purposes.join(' / ') || 'no purpose yet'}${x.desired_pressure ? ` (pressure ${x.desired_pressure})` : ''}${x.event ? `; event: ${x.event}` : ''}`);
+    if (slotLines.length) aimLines.push(`Its episodes still to come:\n${slotLines.join('\n')}`);
+    if (guests.length) aimLines.push(`Guests of its events in the cast: ${guests.join(', ')}.`);
   }
   const family = aim.kind === 'family';
   const typeField = family
@@ -219,6 +257,14 @@ function whyOf(raw, basis) {
   if (given) return given.length > WHY_MAX ? `${given.slice(0, WHY_MAX - 1).trimEnd()}…` : given;
   const on = [...basis.episodes.map((e) => episodeLabel(e)), ...basis.threads.map((t) => `the thread "${t.title}"`), ...basis.twists.map((t) => `the twist "${t.title}"`)];
   return on.length ? `Builds on ${on.join(', ')}`.slice(0, WHY_MAX) : null;
+}
+
+/** A slot seed's why, always starting "Needed by E12: ", at most WHY_MAX characters. */
+function slotWhy(why, slot) {
+  const prefix = neededByPrefix(slot);
+  const body = String(why || '').replace(/^needed by e\d+\s*[:\-–]?\s*/i, '').trim() || 'the relationship this episode depends on';
+  const full = `${prefix}${body}`;
+  return full.length > WHY_MAX ? `${full.slice(0, WHY_MAX - 1).trimEnd()}…` : full;
 }
 
 /**
@@ -299,7 +345,7 @@ function cleanSeeds(parsed, { characters, ctx, aim, index }) {
       conflict_summary: text(s.conflict_summary, 600),
       notes: text(s.notes, 600),
       seed_source: family ? 'family' : 'generate',
-      seed_why: whyOf(s.seed_why, basis),
+      seed_why: ctx.slot ? slotWhy(whyOf(s.seed_why, basis), ctx.slot) : whyOf(s.seed_why, basis),
       seed_basis: basis,
     });
   });
@@ -372,9 +418,13 @@ async function callModel(prompt) {
 async function generateSeeds(db, body, { characters, lalaId = null }) {
   const castIds = characters.map((c) => String(c.id));
   const aim = aimOf(body, castIds);
-  const ctx = await loadSeedContext(sq(db), { cast: characters, episodeId: aim.episode_id, twistId: aim.twist_id });
+  const ctx = await loadSeedContext(sq(db), {
+    cast: characters, episodeId: aim.episode_id, twistId: aim.twist_id, slotId: aim.slot_id, phase: aim.phase, showId: aim.show_id,
+  });
   if (aim.episode_id && !ctx.episode) throw new SeedError('That episode was not found.', 404);
   if (aim.twist_id && !ctx.twist) throw new SeedError('That twist was not found.', 404);
+  if (aim.slot_id && !ctx.slot) throw new SeedError('That season slot was not found.', 404);
+  if (aim.phase != null && !ctx.phase) throw new SeedError('That part of the season was not found.', 404);
   // Family seeds also see each person's heritage and its rule (services/familyHeritage).
   const heritage = aim.kind === 'family'
     ? await require('./familyHeritage').proposeFamilyHeritage(sq(db), characters) : null;
@@ -397,7 +447,12 @@ async function generateSeeds(db, body, { characters, lalaId = null }) {
   }
   const index = await skipIndex(db, castIds);
   const { seeds, skipped } = cleanSeeds(parsed, { characters, ctx, aim, index });
-  const storedAim = { kind: aim.kind, focus_character_id: aim.focus_character_id, episode_id: aim.episode_id, twist_id: aim.twist_id };
+  // A seed made for a slot is needed by it (C: "Needed by E12" on its card; back from Later when E12 is next).
+  const storedAim = {
+    kind: aim.kind, focus_character_id: aim.focus_character_id, episode_id: aim.episode_id, twist_id: aim.twist_id,
+    ...(aim.slot_id ? { slot_id: aim.slot_id, needed_by_slot_id: aim.slot_id } : {}),
+    ...(aim.phase != null ? { phase: aim.phase, show_id: aim.show_id } : {}),
+  };
   const ids = [];
   for (const s of seeds) {
     const id = await insertSeed(db, s, { aim: storedAim });
@@ -421,6 +476,11 @@ async function createSeeds(db, { source, seeds } = {}) {
     'SELECT id FROM registry_characters WHERE id IN (:ids) AND deleted_at IS NULL', { replacements: { ids }, ...SELECT(db) }) : [];
   const known = new Set(people.map((p) => String(p.id)));
   const index = await skipIndex(db, [...known]);
+  // The slot a seed is needed by (a need's "Add a seed"): kept only when it is a live slot.
+  const slotIds = [...new Set(seeds.map((s) => s?.needed_by_slot_id).filter((v) => UUID_RE.test(String(v || ''))).map(String))];
+  const slots = slotIds.length ? await sq(db).query(
+    'SELECT id FROM season_slots WHERE id IN (:slotIds) AND deleted_at IS NULL', { replacements: { slotIds }, ...SELECT(db) }) : [];
+  const liveSlots = new Set(slots.map((r) => String(r.id)));
   const out = [];
   const skipped = [];
   const seen = new Set();
@@ -454,11 +514,56 @@ async function createSeeds(db, { source, seeds } = {}) {
         twists: listOf(basisIn.twists, (t) => ({ id: String(t.id), title: text(t.title, 200) })),
         facts: (Array.isArray(basisIn.facts) ? basisIn.facts : []).map((f) => text(f, 140)).filter(Boolean).slice(0, 3),
       },
-    });
+    }, { aim: liveSlots.has(String(s.needed_by_slot_id || '')) ? { needed_by_slot_id: String(s.needed_by_slot_id) } : null });
     if (id) out.push(id);
     else skipped.push(skip('conflict', { index: i }));
   }
   return { ids: out, skipped };
+}
+
+/**
+ * The slot each seed is needed by (seed_aim.needed_by_slot_id), on read:
+ * needed_by { slot_id, slot_number, label, season_number } for the card's
+ * "Needed by E12". A Later seed whose slot is now the next open one, or has
+ * started, comes back to pending, with back_note "Back: E12 is next" (or
+ * "has started"). Nothing is written: it is due now, so it reads as
+ * pending; Confirm, Keep as idea and Dismiss act on it as on any seed.
+ */
+async function withNeededBy(db, rows) {
+  const aimOf_ = (r) => (typeof r.seed_aim === 'string' ? (() => {
+    try { return JSON.parse(r.seed_aim); } catch (err) { console.error('[relationshipSeeds] unreadable seed_aim:', err.message); return null; }
+  })() : r.seed_aim);
+  const wanted = [...new Set(rows.map((r) => aimOf_(r)?.needed_by_slot_id).filter((v) => UUID_RE.test(String(v || ''))).map(String))];
+  if (!wanted.length) return rows;
+  let slots = [];
+  try {
+    slots = await sq(db).query(
+      `SELECT s.id, s.slot_number, s.season_number, s.episode_id, s.locked_at,
+              (SELECT MIN(n.slot_number) FROM season_slots n
+                WHERE n.arc_id = s.arc_id AND n.deleted_at IS NULL AND n.episode_id IS NULL AND n.locked_at IS NULL) AS next_open
+         FROM season_slots s WHERE s.id IN (:wanted) AND s.deleted_at IS NULL`,
+      { replacements: { wanted }, ...SELECT(db) });
+  } catch (err) {
+    console.error('[relationshipSeeds] the needed-by slots could not be read:', err.message);
+    return rows;
+  }
+  const byId = new Map(slots.map((s) => [String(s.id), s]));
+  return rows.map((r) => {
+    const slot = byId.get(String(aimOf_(r)?.needed_by_slot_id || ''));
+    if (!slot) return r;
+    const out = {
+      ...r,
+      needed_by: { slot_id: slot.id, slot_number: Number(slot.slot_number), season_number: slot.season_number || 1, label: `E${slot.slot_number}` },
+    };
+    const started = Boolean(slot.episode_id || slot.locked_at);
+    const next = slot.next_open != null && Number(slot.next_open) >= Number(slot.slot_number);
+    if (!r.confirmed && r.seed_state === 'later' && (started || next)) {
+      out.seed_state = null;
+      out.back_from = 'later';
+      out.back_note = started ? `Back: E${slot.slot_number} has started` : `Back: E${slot.slot_number} is next`;
+    }
+    return out;
+  });
 }
 
 // What Confirm may change first (the Inspector's form, in edit mode). Each
@@ -626,4 +731,5 @@ module.exports = {
   APP_TYPES, KINDS, SOURCES, REASONS, MODELS, SeedError,
   skipIndex, skipWhy, aimOf, seedPrompt, basisOf, whyOf, cleanSeeds,
   insertSeed, generateSeeds, createSeeds, confirmSeed, confirmMany, setSeedState, dismissSeed,
+  withNeededBy, slotWhy,
 };

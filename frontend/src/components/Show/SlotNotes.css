@@ -1,0 +1,11 @@
+/* Season Plan › a slot's panel: the twists, secrets and relationships planned there (planner PR 3): tokens only. */
+.sln { display: flex; flex-direction: column; gap: 10px; width: 100%; min-width: 0; }
+.sln-part { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.sln-label { font-size: 12px; font-weight: 700; color: var(--text-secondary); }
+.sln-list { display: flex; flex-direction: column; gap: 4px; margin: 0; padding: 0; list-style: none; font-size: 13px; line-height: 1.5; color: var(--text-primary); }
+.sln-list li { overflow-wrap: anywhere; }
+.sln-tag { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 700; background: var(--lala-gold-soft); color: var(--lala-gold-text); }
+.sln-tag.is-payoff { background: var(--accent-subtle); color: var(--accent-dark); }
+.sln-tag.is-reveal { background: var(--danger-bg); color: var(--danger-text); }
+.sln-who { color: var(--text-secondary); }
+.sln-note { margin: 0; font-size: 12px; color: var(--text-secondary); }
