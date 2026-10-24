@@ -20,6 +20,9 @@ jest.mock('@anthropic-ai/sdk', () => jest.fn().mockImplementation(() => ({
 const {
   describeInvitationMoney,
   buildInvitationContent,
+  checkInvitationMoney,
+  invitationFacts,
+  contentFromText,
 } = require('../../../src/services/invitationCompositingService');
 
 // No amount: D15's quantities ("7 days", "3 Pulse stories") are
@@ -158,11 +161,15 @@ describe('describeInvitationMoney — legacy events (deal_type null)', () => {
   });
 });
 
+// The write_invitation tool call the builder asks for (2026-10-24: tool
+// use replaced labelled text parsed with regex).
+const toolAnswer = (input) => ({ content: [{ type: 'tool_use', name: 'write_invitation', input }] });
+
 describe('buildInvitationContent states the deal', () => {
   beforeEach(() => mockCreate.mockReset());
 
   it('hands the terms to the prose prompt, in the host\'s voice and Prime Coins', async () => {
-    mockCreate.mockResolvedValue({ content: [{ text: 'OPENING: Hi.\nBODY: Body.\nCLOSING: Bye.' }] });
+    mockCreate.mockResolvedValue(toolAnswer({ opening: 'Hi.', body: 'Body.', closing: 'Bye.' }));
     await buildInvitationContent(
       { name: 'Gala', deal_type: 'paid_appearance', appearance_fee: 500, is_paid: true, event_type: 'brand_deal', success_unlock: 'post a reel' },
       { costs: [], deliverables: [] },
@@ -175,7 +182,7 @@ describe('buildInvitationContent states the deal', () => {
   });
 
   it('a legacy event keeps the Investment line', async () => {
-    mockCreate.mockResolvedValue({ content: [{ text: 'OPENING: Hi.\nBODY: Body.\nCLOSING: Bye.' }] });
+    mockCreate.mockResolvedValue(toolAnswer({ opening: 'Hi.', body: 'Body.', closing: 'Bye.' }));
     await buildInvitationContent({ name: 'Gala', is_paid: true, payment_amount: 750 });
     const prompt = mockCreate.mock.calls[0][0].messages[0].content;
     expect(prompt).toContain('Investment: Lala will earn 750 coins for attending');
@@ -215,5 +222,80 @@ describe('describeInvitationMoney — D14 components (2026-09-30)', () => {
   test('gifted with entry covered reads as a gifted guest, with no price talk', () => {
     const m = describeInvitationMoney({ deal_components: ['gifted_items', 'entry_covered'] }, { costs: [], deliverables: [] });
     expect(m).toMatchObject({ kind: 'comped', text: 'You attend as our gifted guest, with our compliments.' });
+  });
+});
+
+describe('buildInvitationContent — structured answer and the money check (2026-10-24)', () => {
+  beforeEach(() => mockCreate.mockReset());
+  const paid = { name: 'Gala — Night One', deal_type: 'paid_appearance', appearance_fee: 500, is_paid: true };
+
+  it('asks for the write_invitation tool and keeps an answer that states the terms exactly', async () => {
+    mockCreate.mockResolvedValue(toolAnswer({ opening: 'Hi.', body: 'We will pay you 500 Prime Coins.', social: 'Tag us.', closing: 'Bye.' }));
+    const c = await buildInvitationContent(paid, { costs: [], deliverables: [] });
+    const req = mockCreate.mock.calls[0][0];
+    expect(req.tool_choice).toEqual({ type: 'tool', name: 'write_invitation' });
+    expect(c).toMatchObject({ source: 'claude', eventName: 'Gala', eventSubtitle: 'Night One', body: 'We will pay you 500 Prime Coins.\n\nTag us.' });
+    expect(c.moneyCheck.ok).toBe(true);
+    expect(mockCreate).toHaveBeenCalledTimes(1);
+  });
+
+  it('retries once, telling Claude what it got wrong, when an amount is dropped or invented', async () => {
+    mockCreate
+      .mockResolvedValueOnce(toolAnswer({ opening: 'Hi.', body: 'We will pay you 450 Prime Coins.', closing: 'Bye.' }))
+      .mockResolvedValueOnce(toolAnswer({ opening: 'Hi.', body: 'We will pay you 500 Prime Coins.', closing: 'Bye.' }));
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    const c = await buildInvitationContent(paid, { costs: [], deliverables: [] });
+    warn.mockRestore();
+    expect(mockCreate).toHaveBeenCalledTimes(2);
+    const retry = mockCreate.mock.calls[1][0].messages;
+    expect(retry[retry.length - 1].content).toMatch(/left out 500 Prime Coins.*named 450 Prime Coins/);
+    expect(c.source).toBe('claude');
+  });
+
+  it('falls back to the no-AI body when both tries misstate the terms, so no card carries a wrong amount', async () => {
+    mockCreate.mockResolvedValue(toolAnswer({ opening: 'Hi.', body: 'A fee of five hundred.', closing: 'Bye.' }));
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    const c = await buildInvitationContent(paid, { costs: [], deliverables: [] });
+    warn.mockRestore();
+    expect(c.source).toBe('fallback');
+    expect(c.body).toContain('500 Prime Coins');
+    expect(c.moneyCheck.ok).toBe(true);
+  });
+
+  it('throws a budget refusal instead of papering over it', async () => {
+    const err = Object.assign(new Error('AI daily budget exceeded'), { code: 'AI_BUDGET_EXCEEDED', status: 429 });
+    mockCreate.mockRejectedValue(err);
+    await expect(buildInvitationContent(paid, { costs: [], deliverables: [] })).rejects.toBe(err);
+  });
+
+  it('a comped event: any coin amount in the words is invented', () => {
+    const money = describeInvitationMoney({ deal_type: 'invited_comped' }, { costs: [], deliverables: [] });
+    expect(checkInvitationMoney({ body: 'You are our guest.' }, money).ok).toBe(true);
+    expect(checkInvitationMoney({ body: 'Entry is 200 coins.' }, money)).toMatchObject({ ok: false, invented: [200] });
+  });
+
+  it('reads thousands separators', () => {
+    const money = { text: 'We will pay you an appearance fee of 1,500 Prime Coins.' };
+    expect(checkInvitationMoney({ body: 'a fee of 1,500 Prime Coins' }, money).ok).toBe(true);
+    expect(checkInvitationMoney({ body: 'a fee of 1500 coins' }, money).ok).toBe(true);
+  });
+});
+
+describe('invitationFacts — one source for the prompt, the fallback and the signature', () => {
+  it('host from the automation display name, then event.host; venue and date from the event columns first', () => {
+    const f = invitationFacts({
+      name: 'Gala', host: 'host_handle', venue_name: 'Club Noir', event_date: '2026-11-01',
+      canon_consequences: { automation: { host_display_name: 'Maison Lumi', venue_name: 'Old Venue', event_date: '2026-10-01', event_time: '9pm' } },
+    });
+    expect(f).toMatchObject({ hostName: 'Maison Lumi', venueName: 'Club Noir', eventDate: '2026-11-01', eventTime: '9pm' });
+  });
+
+  it('reads canon_consequences stored as a string', () => {
+    expect(invitationFacts({ name: 'G', canon_consequences: JSON.stringify({ automation: { venue_name: 'Atelier' } }) }).venueName).toBe('Atelier');
+  });
+
+  it('contentFromText frames her words with the same facts', () => {
+    const c = contentFromText({ name: 'Gala — Night One', host: 'Maison Lumi', host_brand: 'Lumi' }, { opening: ' Hi ', body: 'B' });
+    expect(c).toMatchObject({ eventName: 'Gala', eventSubtitle: 'Night One', hostName: 'Maison Lumi', hostBrand: 'Lumi', opening: 'Hi', closing: 'We look forward to your presence.' });
   });
 });

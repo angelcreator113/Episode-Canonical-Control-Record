@@ -12,7 +12,10 @@
  *                dress_code_keywords / mood keyword vote), mapped to
  *                THEME_PRESETS; no match uses DEFAULT_THEME;
  *   - richness:  from event.prestige (default 5);
- *   - palette:   event.color_palette.
+ *   - palette:   event.color_palette;
+ *   - florals / border: event.floral_style / event.border_style when set
+ *                (the Invitation Style fields; until 2026-10-24 they were
+ *                saved but never read), else the theme preset's.
  *
  * Pure: no database, no network.
  */
@@ -77,6 +80,23 @@ const DEFAULT_THEME = {
   atmosphere: 'warm golden light from center, luxurious and aspirational',
 };
 
+// The Invitation Style panel's Floral and Border choices
+// (frontend InvitationGenerator FLORAL_OPTIONS / BORDER_OPTIONS).
+const FLORAL_STYLES = Object.freeze({
+  roses: 'soft garden roses in corners and along the edges',
+  peonies: 'lush peonies, delicately placed in corners',
+  tropical: 'tropical leaves and orchids framing the edges',
+  minimal: 'a single fine botanical line drawing, one corner only',
+  none: 'no florals at all — ornament comes from the border and texture only',
+});
+
+const BORDER_STYLES = Object.freeze({
+  gold_foil: 'elegant gold foil border with fine detailing',
+  ornate: 'ornate classical filigree border with corner medallions',
+  minimal: 'a single thin hairline border, architectural precision',
+  none: 'no border — the card surface runs clean to the edges',
+});
+
 function richnessFor(prestige) {
   if (prestige >= 8) return 'Maximum luxury — gold accents are rich and opulent';
   if (prestige >= 5) return 'Refined elegance — gold accents are tasteful and considered';
@@ -96,12 +116,12 @@ function deriveEventVisualDirection(event) {
   return {
     theme: (themeName && THEME_PRESETS[themeName]) ? themeName : 'default',
     background: preset.background,
-    border: preset.border,
-    florals: preset.florals,
+    florals: FLORAL_STYLES[ev.floral_style] || preset.florals,
+    border: BORDER_STYLES[ev.border_style] || preset.border,
     atmosphere: preset.atmosphere,
     richness: richnessFor(ev.prestige || 5),
     palette,
   };
 }
 
-module.exports = { deriveEventVisualDirection, THEME_PRESETS, DEFAULT_THEME };
+module.exports = { deriveEventVisualDirection, THEME_PRESETS, DEFAULT_THEME, FLORAL_STYLES, BORDER_STYLES };
