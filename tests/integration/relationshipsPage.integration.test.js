@@ -127,21 +127,11 @@ const reply = (obj) => ({ content: [{ type: 'text', text: JSON.stringify(obj) }]
     expect(lm.stage).toBe('flirting');
   });
 
-  test('GET /tree and /family-tree: only confirmed, live rows; a romantic row is never family', async () => {
-    const tree = await auth(request(app).get(`/api/v1/relationships/tree/${ids.r1}`));
-    expect(tree.status).toBe(200);
-    const treeIds = tree.body.relationships.map((r) => r.id);
-    expect(treeIds).toEqual(expect.arrayContaining([rel.lm, rel.lj, rel.old, rel.fam]));
-    expect(treeIds).not.toContain(rel.seed);
-    expect(tree.body.relationships.every((r) => r.confirmed)).toBe(true);
-
-    const fam = await auth(request(app).get(`/api/v1/relationships/family-tree/${ids.r1}`));
-    expect(fam.body.family_bonds.map((r) => r.id)).toEqual([rel.fam]);
-    expect(fam.body.romantic_bonds.map((r) => r.id)).toEqual(expect.arrayContaining([rel.lm, rel.badfam]));
-
-    const fam2 = await auth(request(app).get(`/api/v1/relationships/family-tree/${ids.r2}`));
-    expect(fam2.body.family_bonds.map((r) => r.id)).not.toContain(rel.dead);
-
+  test('GET /character/:id leaves deleted rows out; the unused /tree, /family-tree and /pending reads are gone', async () => {
+    // Nothing called them (2026-10-24): the page reads GET /cast, the Family tab GET /families.
+    for (const url of [`/api/v1/relationships/tree/${ids.r1}`, `/api/v1/relationships/family-tree/${ids.r1}`, '/api/v1/relationships/pending']) {
+      expect((await auth(request(app).get(url))).status).toBe(404);
+    }
     const mine = await auth(request(app).get(`/api/v1/relationships/character/${c.jade}`));
     expect(mine.body.relationships.map((r) => r.id)).not.toContain(rel.dead);
     expect(mine.body.relationships.find((r) => r.id === rel.badfam).related_name).toBe(`Marcus Hale ${tag}`);

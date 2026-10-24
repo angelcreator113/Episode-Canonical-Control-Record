@@ -706,24 +706,26 @@ function seasonPurposes(sc) {
 
 /**
  * The people among `characterIds` in a confirmed romantic relationship with
- * Lala (her registry character, character_key 'lala'): Map(id -> its note,
- * the relationship's situation or notes, or ''). Empty when none or on a
- * failed read.
+ * Lala (her registry character, the one services/whichLala names, which the
+ * Relationships page shows; it used to match any registry's Lala):
+ * Map(id -> its note, the relationship's situation or notes, or ''). Empty
+ * when none or on a failed read.
  */
 async function lalaRomances(sequelize, characterIds) {
   const ids = [...new Set((characterIds || []).filter(Boolean))];
   const out = new Map();
   if (!ids.length) return out;
   try {
+    const lala = await require('./whichLala').lalaId(sequelize);
+    if (!lala) return out;
     const [rows] = await sequelize.query(
-      `SELECT CASE WHEN cr.character_id_a = lala.id THEN cr.character_id_b ELSE cr.character_id_a END AS other,
+      `SELECT CASE WHEN cr.character_id_a = :lala THEN cr.character_id_b ELSE cr.character_id_a END AS other,
               COALESCE(cr.situation, cr.notes, '') AS note
          FROM character_relationships cr
-         JOIN registry_characters lala ON lala.character_key = 'lala' AND lala.deleted_at IS NULL
-                                     AND lala.id IN (cr.character_id_a, cr.character_id_b)
         WHERE cr.deleted_at IS NULL AND cr.is_romantic = true AND cr.confirmed = true
+          AND :lala IN (cr.character_id_a, cr.character_id_b)
           AND (cr.character_id_a IN (:ids) OR cr.character_id_b IN (:ids))
-        ORDER BY cr.updated_at DESC`, { replacements: { ids } });
+        ORDER BY cr.updated_at DESC`, { replacements: { ids, lala } });
     for (const r of rows || []) if (!out.has(r.other)) out.set(r.other, String(r.note || '').trim().slice(0, 300));
   } catch (err) {
     console.error('[ScriptWriter] Lala\'s romances could not be read (non-blocking):', err.message);

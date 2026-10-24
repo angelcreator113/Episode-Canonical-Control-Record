@@ -188,7 +188,8 @@ const reply = (obj) => ({ content: [{ type: 'text', text: JSON.stringify(obj) }]
     expect((await request(app).get(`${api}/${rel.aunt}`)).status).toBe(401);
     // The routes before it still answer.
     expect((await auth(request(app).get(`${api}/drift`))).status).toBe(200);
-    expect((await auth(request(app).get(`${api}/pending`))).status).toBe(200);
+    // (/pending is gone: nothing called it, 2026-10-24 polish.)
+    expect((await auth(request(app).get(`${api}/cast`))).status).toBe(200);
 
     const who = await auth(request(app).get(`${api}/person/${c.nia}`));
     expect(who.status).toBe(200);

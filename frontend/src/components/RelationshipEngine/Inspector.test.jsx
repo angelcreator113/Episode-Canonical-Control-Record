@@ -5,7 +5,7 @@
  */
 import React from 'react';
 import { vi, describe, beforeEach, test, expect } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, within } from '@testing-library/react';
 
 vi.mock('../../services/api', () => ({
   default: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn(), patch: vi.fn(), request: vi.fn() },
@@ -77,5 +77,52 @@ describe('Inspector', () => {
     expect(onUpdate).toHaveBeenCalledTimes(1);
     expect(onUpdate.mock.calls[0][0]).not.toHaveProperty('family_role');
     expect(onUpdate.mock.calls[0][0]).toMatchObject({ situation: 'Situation r1', is_romantic: false });
+  });
+});
+
+describe('Inspector header (2026-10-24)', () => {
+  const romance = rel('r9', 'marcus', {
+    relationship_type: 'love_interest', is_romantic: true, stage: 'lovers', tension_state: 'volatile',
+    public_state: 'secret', situation: 'They kissed in the stairwell; Jade saw.',
+  });
+
+  test('"Lala ↔ Marcus Hale" on one line, then what it is, then the situation, then Story so far', async () => {
+    const { container } = render(<Inspector rel={romance} {...props} />);
+    const pair = screen.getByRole('heading', { name: 'Lala and Marcus Hale' });
+    expect(pair.textContent).toBe('Lala↔Marcus Hale');
+    const pills = screen.getByRole('group', { name: 'What it is' });
+    expect([...pills.children].map((n) => n.textContent)).toEqual(['Love interest', 'Lovers', 'Romance', 'Volatile', 'Secret']);
+    const situation = container.querySelector('.re-inspector-situation');
+    expect(situation.textContent).toBe('They kissed in the stairwell; Jade saw.');
+    // Order on the page: names, pills, situation, then the body (Story so far, Who knows, fields).
+    const header = container.querySelector('.re-inspector-header');
+    expect([...header.children].map((n) => n.className)).toEqual(['re-inspector-header-top', 're-inspector-pills', 're-inspector-situation']);
+    const body = container.querySelector('.re-inspector-body');
+    expect(header.compareDocumentPosition(body) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // The situation is not repeated as a field below.
+    expect(within(body).queryByText('They kissed in the stairwell; Jade saw.')).toBeNull();
+    await screen.findByLabelText('Story so far');
+  });
+
+  test('Rumoured shows at the top; Known shows nothing there', () => {
+    const { rerender } = render(<Inspector rel={rel('r1', 'marcus', { public_state: 'rumoured' })} {...props} />);
+    expect(within(screen.getByRole('group', { name: 'What it is' })).getByText('Rumoured')).toBeTruthy();
+    rerender(<Inspector rel={rel('r2', 'marcus', { public_state: 'known' })} {...props} />);
+    expect(screen.getByRole('group', { name: 'What it is' }).textContent).toBe('Friend');
+  });
+
+  test('every edit field is named by its label', () => {
+    render(<Inspector rel={rel('r1', 'marcus')} {...props} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    // The family role is not an edit field: it is changed on the Family tab.
+    const fields = ['Relationship Type', 'Connection Mode', 'Status', 'Tension State', 'Pain Point', 'Situation',
+      'Conflict Summary', 'Lala knows', 'Marcus Hale knows', 'Reader knows', 'Lala Mirror', 'Career Echo', 'Lala Connection', 'Notes'];
+    for (const name of fields) {
+      const el = screen.getByLabelText(name);
+      expect(['INPUT', 'SELECT', 'TEXTAREA']).toContain(el.tagName);
+    }
+    expect(screen.getByLabelText('Situation').value).toBe('Situation r1');
+    expect(screen.getByLabelText('Connection Mode').value).toBe('IRL');
+    expect(screen.queryByLabelText('Family Role')).toBeNull();
   });
 });
