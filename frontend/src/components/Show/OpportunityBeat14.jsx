@@ -8,7 +8,7 @@
 // a link to its Script tab.
 import { useState, useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Gift } from 'lucide-react';
+import { Gift, ClipboardCheck } from 'lucide-react';
 import './OpportunityBeat14.css';
 
 /** The statuses beat 14 can take (services/beat14Opportunity OPEN_STATUSES). */
@@ -43,17 +43,58 @@ export const canUndo = (opp) => {
 /** Completed episodes (evaluation_status 'accepted', services/beat14Opportunity isCompleted) take no new beat 14 opportunity. */
 export const isCompletedEpisode = (ep) => ep?.evaluation_status === 'accepted';
 
-/** "Beat 14 of ‹title›", linking to that episode's Script tab. */
+/** "Beat 14 of ‹title›" (or "Episode N"), linking to that episode's Script tab. */
 export function HeldForBeat14({ opp }) {
   const ep = opp?.beat14_episode || (opp?.offered_in_episode_id ? { id: opp.offered_in_episode_id, title: null } : null);
   if (!ep) return null;
   return (
     <span className="ob14-held" data-testid={`opp-held-${opp.id}`}>
       <Gift size={12} aria-hidden="true" />
-      <Link to={`/episodes/${ep.id}?tab=scripts`}>Beat 14 of {ep.title || 'its episode'}</Link>
+      <Link to={`/episodes/${ep.id}?tab=scripts`}>Beat 14 of {heldEpisodeName(opp)}</Link>
     </span>
   );
 }
+
+/** The episode a held one waits for, by title or number. */
+export const heldEpisodeName = (opp) => {
+  const ep = opp?.beat14_episode;
+  if (ep?.title) return ep.title;
+  if (ep?.episode_number != null) return `Episode ${ep.episode_number}`;
+  return 'its episode';
+};
+
+/**
+ * Why a held one has no Schedule as Event (Evoni, 2026-10-23: "I can't turn
+ * it into an event, how should that work?"): it waits for its episode, or
+ * that episode was completed without settling it. Links to the episode's
+ * evaluation, where it is completed.
+ */
+export function heldWhyText(opp) {
+  const name = heldEpisodeName(opp);
+  return isCompletedEpisode(opp?.beat14_episode)
+    ? `${name} is completed but this was never settled.`
+    : `Waits for ${name} to be completed. Offered if it lands, gone if it fails.`;
+}
+
+export function HeldWhy({ opp }) {
+  const ep = opp?.beat14_episode || (opp?.offered_in_episode_id ? { id: opp.offered_in_episode_id } : null);
+  if (!ep) return null;
+  return (
+    <p className="ob14-why" data-testid={`opp-held-why-${opp.id}`}>
+      <span data-testid={`opp-held-why-text-${opp.id}`}>{heldWhyText(opp)}</span>{' '}
+      <Link to={`/episodes/${ep.id}/evaluate`} className="ob14-why-link">
+        <ClipboardCheck size={12} aria-hidden="true" />
+        {isCompletedEpisode(opp.beat14_episode) ? 'See its evaluation' : 'Go to its evaluation'}
+      </Link>
+    </p>
+  );
+}
+
+/** The confirm for Schedule as Event now on a held one. */
+export const scheduleEarlyText = (opp) => `Schedule ${opp.name} as an event now? It is offered and its event is created now, without waiting for ${heldEpisodeName(opp)}'s result. Beat 14 of ${heldEpisodeName(opp)} still delivers it as the invitation.`;
+
+/** The confirm for Release offer on a held one whose episode is not completed (none is asked for a completed one). */
+export const releaseText = (opp) => `Offer ${opp.name} now? It is offered without waiting for ${heldEpisodeName(opp)}'s result. Beat 14 of ${heldEpisodeName(opp)} still delivers it as the invitation.`;
 
 // The GET payload does not say whether the attached one was made for beat 14
 // (then removed when replaced) or brought from the list (then put back).

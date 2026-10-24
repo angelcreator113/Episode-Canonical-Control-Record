@@ -17,7 +17,7 @@ import { createPortal } from 'react-dom';
 import { useParams, Link, useSearchParams, useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import DeliverableProgress from '../components/Deliverables/DeliverableProgress';
-import { Beat14AttachForm, HeldForBeat14, canAttachToBeat14, canUndo } from '../components/Show/OpportunityBeat14';
+import { Beat14AttachForm, HeldForBeat14, HeldWhy, canAttachToBeat14, canUndo, isCompletedEpisode, releaseText, scheduleEarlyText } from '../components/Show/OpportunityBeat14';
 import { getEpisodeAnchorEvent } from '../services/episodeEventsApi';
 import showService from '../services/showService';
 import { rememberShow } from '../utils/activeShow';
@@ -53,7 +53,7 @@ import {
 import {
   createEventSaveQueue, putEventVersioned, isStaleSaveError, saveErrorMessage,
 } from '../utils/eventSaveVersion';
-import { MoreHorizontal, ArrowRight, ArrowLeft, Plus, Calendar, CalendarDays, Sparkles, Lightbulb, AlertTriangle, Loader2, RotateCw, X, Mail, Gem, Crown, Heart, ChevronDown, Search, MessageSquare, FileUp, Briefcase, Globe2, Coins } from 'lucide-react';
+import { MoreHorizontal, ArrowRight, ArrowLeft, Plus, Calendar, CalendarDays, Sparkles, Lightbulb, AlertTriangle, Loader2, RotateCw, X, Mail, Gem, Crown, Heart, ChevronDown, Search, MessageSquare, FileUp, Briefcase, Globe2, Coins, Send } from 'lucide-react';
 import useWardrobeProcessing from '../hooks/useWardrobeProcessing';
 import { backgroundRemovalStarted, PROCESSING_STATES } from '../utils/wardrobeProcessingState';
 import AddPieceDialog from '../components/Wardrobe/AddPieceDialog';
@@ -8193,8 +8193,20 @@ export function OpportunitiesTab({ showId, api, S, setToast, loadData, episodes 
     } catch (err) { console.error('[OpportunitiesTab] undo failed:', err); setToast(err.response?.data?.error || 'Could not undo'); }
   };
 
+  // Release offer on a held one (POST …/release; Evoni, 2026-10-23): it is
+  // offered now and stays its episode's beat 14 invitation. Asks first only
+  // while the episode is not completed, as it skips waiting for the result.
+  const releaseOpp = async (opp) => {
+    if (!isCompletedEpisode(opp.beat14_episode) && !window.confirm(releaseText(opp))) return;
+    try {
+      const res = await api.post(`/api/v1/opportunities/${showId}/${opp.id}/release`);
+      if (res.data.success) { setOpps(prev => prev.map(o => o.id === opp.id ? { ...o, ...res.data.opportunity } : o)); setToast(`${opp.name} is offered`); }
+    } catch (err) { console.error('[OpportunitiesTab] release failed:', err); setToast(err.response?.data?.error || 'Could not release it'); }
+  };
+
   const toEvent = async (opp) => {
-    if (!window.confirm(`Schedule ${opp.name} as an event? This creates a world event for it and marks it booked.`)) return;
+    const early = opp.status === 'held';
+    if (!window.confirm(early ? scheduleEarlyText(opp) : `Schedule ${opp.name} as an event? This creates a world event for it and marks it booked.`)) return;
     try {
       setToast(`Scheduling "${opp.name}" as event...`);
       const res = await api.post(`/api/v1/feed-pipeline/${showId}/schedule/${opp.id}`);
@@ -8275,6 +8287,7 @@ export function OpportunitiesTab({ showId, api, S, setToast, loadData, episodes 
                   {parseFloat(opp.payment_amount) > 0 && <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--success-text)' }} data-testid={`opp-payment-${opp.id}`}>{coinsText(parseFloat(opp.payment_amount))}</div>}
                 </div>
                 {opp.narrative_stakes && <div style={{ fontSize: 11, color: '#666', marginBottom: 6 }}>{opp.narrative_stakes}</div>}
+                {held && <HeldWhy opp={opp} />}
                 <div className="ob14-card-actions" style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
                   {NEXT[opp.status] && <button onClick={() => advanceOpp(opp, NEXT[opp.status])} data-testid={`opp-move-${opp.id}`} style={{ padding: '3px 10px', borderRadius: 4, border: `1px solid ${sc}`, background: 'transparent', color: sc, fontWeight: 600, fontSize: 10, cursor: 'pointer' }}>Move to {NEXT[opp.status]}</button>}
                   {canAttachToBeat14(opp) && attachingId !== opp.id && (
@@ -8286,6 +8299,12 @@ export function OpportunitiesTab({ showId, api, S, setToast, loadData, episodes 
                   {opp.status === 'offered' && <button onClick={() => advanceOpp(opp, 'declined')} style={{ padding: '3px 10px', borderRadius: 4, border: '1px solid #dc2626', background: 'transparent', color: '#dc2626', fontWeight: 600, fontSize: 10, cursor: 'pointer' }}>Decline</button>}
                   {!opp.event_id && ['offered','considering','negotiating','booked','preparing','active'].includes(opp.status) && (
                     <button type="button" className="ob14-btn-gold" onClick={() => toEvent(opp)} data-testid={`opp-schedule-${opp.id}`}>📅 Schedule as Event</button>
+                  )}
+                  {held && !opp.event_id && (
+                    <>
+                      <button type="button" className="ob14-btn ob14-btn-icon" onClick={() => releaseOpp(opp)} data-testid={`opp-release-${opp.id}`}><Send size={12} aria-hidden="true" />Release offer</button>
+                      <button type="button" className="ob14-btn-gold" onClick={() => toEvent(opp)} data-testid={`opp-schedule-now-${opp.id}`}>📅 Schedule as Event now</button>
+                    </>
                   )}
                   {opp.event_id && <span style={{ fontSize: 9, color: '#16a34a', padding: '3px 8px', background: '#f0fdf4', borderRadius: 4, fontWeight: 600 }}>✓ Event scheduled</span>}
                 </div>

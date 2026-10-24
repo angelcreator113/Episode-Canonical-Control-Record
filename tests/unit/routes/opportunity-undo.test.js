@@ -85,13 +85,15 @@ describe('POST /opportunities/:showId/:id/undo', () => {
 });
 
 describe('GET /opportunities/:showId', () => {
+  // With its number and whether it is completed, so a held card can say
+  // why it waits (Evoni, 2026-10-23).
   test('one held for beat 14 carries its episode', async () => {
     const opps = [row({ id: ID, status: 'held', offered_in_episode_id: EP }), row({ id: 'o2', status: 'offered', offered_in_episode_id: null })];
-    const query = jest.fn(async () => [{ id: EP, title: 'The Gala' }]);
+    const query = jest.fn(async () => [{ id: EP, title: 'The Gala', episode_number: 1, evaluation_status: 'accepted' }]);
     const a = app({ Opportunity: { findAll: jest.fn(async () => opps) }, sequelize: { query, QueryTypes: { SELECT: 'SELECT' } } });
     const res = await request(a).get(`/api/v1/opportunities/${SHOW}`);
     expect(res.status).toBe(200);
-    expect(res.body.opportunities[0].beat14_episode).toEqual({ id: EP, title: 'The Gala' });
+    expect(res.body.opportunities[0].beat14_episode).toEqual({ id: EP, title: 'The Gala', episode_number: 1, evaluation_status: 'accepted' });
     expect(res.body.opportunities[1].beat14_episode).toBeUndefined();
     expect(query).toHaveBeenCalledTimes(1);
     expect(query.mock.calls[0][1].replacements).toEqual({ ids: [EP] });
