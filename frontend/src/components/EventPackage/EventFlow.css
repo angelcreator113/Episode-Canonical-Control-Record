@@ -165,6 +165,7 @@
 }
 .eff-fill-text { font-size: 14px; color: var(--lala-ink); overflow-wrap: anywhere; }
 .eff-fill-why { font-family: var(--font-sans); font-size: 11px; color: var(--lala-ink-muted); }
+.eff-fill-now { font-family: var(--font-sans); font-size: 12px; color: var(--lala-ink-muted); overflow-wrap: anywhere; }
 .eff-fill-value input, .eff-fill-value select, .eff-fill-value textarea {
   width: 100%;
   box-sizing: border-box;

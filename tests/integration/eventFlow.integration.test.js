@@ -40,8 +40,8 @@ const reply = (obj) => ({ content: [{ type: 'text', text: JSON.stringify(obj) }]
     const r = request(app).get(`/api/v1/world/${ids.show}/events/${eventId}/flow`);
     return t ? r.set('Authorization', `Bearer ${t}`) : r;
   };
-  const fill = (eventId = ids.ev, t = token) => {
-    const r = request(app).post(`/api/v1/world/${ids.show}/events/${eventId}/fill-missing`).send({});
+  const fill = (eventId = ids.ev, t = token, body = {}) => {
+    const r = request(app).post(`/api/v1/world/${ids.show}/events/${eventId}/fill-missing`).send(body);
     return t ? r.set('Authorization', `Bearer ${t}`) : r;
   };
 
@@ -189,6 +189,34 @@ const reply = (obj) => ({ content: [{ type: 'text', text: JSON.stringify(obj) }]
       for (const fact of ['Velour Night', brand, 'Ama Velour', 'The Glasshouse, Lalaville (rooftop bar)']) expect(prompt).toContain(fact);
       const [[row]] = await run('SELECT category, dress_code, theme, status FROM world_events WHERE id = :ev', ids);
       expect(row).toEqual({ category: null, dress_code: null, theme: null, status: 'draft' });
+    });
+
+    it('a mode it does not know: 400, no AI call', async () => {
+      const res = await fill(ids.ev, token, { mode: 'everything' });
+      expect(res.status).toBe(400);
+      expect(res.body.error).toBe('mode must be one of missing, ideas');
+      expect(mockCreate).not.toHaveBeenCalled();
+    });
+
+    it("mode 'ideas': the six basics, set ones included, each draft with what it replaces; saves nothing", async () => {
+      mockCreate.mockResolvedValue(reply({ drafts: [
+        { field: 'event_date', value: '2099-11-08', reason: 'A Sunday close to the season finale.' },
+        { field: 'event_time', value: '20:00', reason: 'A later start.' },
+        { field: 'theme', value: 'Midnight velvet', reason: 'Not one of the six.' },
+      ] }));
+      const res = await fill(ids.ev, token, { mode: 'ideas' });
+      expect(res.status).toBe(200);
+      expect(res.body.data.asked).toEqual(['category', 'format', 'event_date', 'event_time', 'description', 'dress_code']);
+      expect(res.body.data.drafts).toEqual([
+        { field: 'event_date', label: 'Date', value: '2099-11-08', source: 'ai', reason: 'A Sunday close to the season finale.', current: '2026-11-01' },
+        { field: 'event_time', label: 'Time', value: '20:00', source: 'ai', reason: 'A later start.' },
+      ]);
+      const prompt = mockCreate.mock.calls[0][0].messages[0].content;
+      expect(prompt).toContain('event_date: 2026-11-01');
+      expect(prompt).toContain('different from its current value');
+      const [[row]] = await run('SELECT event_date, event_time FROM world_events WHERE id = :ev', ids);
+      expect(row.event_time).toBeNull();
+      expect(String(row.event_date).slice(0, 10) === '2026-11-01' || new Date(row.event_date).toISOString().startsWith('2026-11-01')).toBe(true);
     });
 
     it('an unreadable answer: 200 with no drafts', async () => {

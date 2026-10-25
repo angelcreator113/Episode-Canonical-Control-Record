@@ -148,7 +148,7 @@ export function followUpBody(event, { organizer = null, venueLocation = null } =
 }
 
 export const FIELD_LABELS = {
-  category: 'Category', format: 'Format', event_time: 'Time', description: 'Description', dress_code: 'Dress code',
+  category: 'Category', format: 'Format', event_date: 'Date', event_time: 'Time', description: 'Description', dress_code: 'Dress code',
   theme: 'Invitation theme', mood: 'Invitation mood', narrative_stakes: "What's at stake", fail_consequence: 'If it goes wrong',
   success_unlock: 'If it goes well', career_milestone: 'Career milestone', prestige: 'Prestige', deal_type: 'Deal type',
   appearance_fee: 'Appearance fee', partnership_base_fee: 'Partnership base', performance_fee: 'Performance fee',
@@ -161,6 +161,7 @@ export function fieldValueText(field, value) {
   if (field === 'deal_type') return DEAL_TYPE_LABELS[value] || human(value);
   if (field === 'prestige') return `Prestige ${value}`;
   if (field === 'event_time') return formatTime(value) || String(value);
+  if (field === 'event_date') return formatDay(value) || String(value);
   if (/_fee$/.test(field)) return `${Number(value).toLocaleString('en-US')} coins`;
   return String(value);
 }

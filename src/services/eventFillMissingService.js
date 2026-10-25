@@ -8,7 +8,7 @@
  * all), and saves the accepted ones through the event PUT.
  *
  * Two kinds of draft:
- *   ai         category, format, time, description, dress code, the
+ *   ai         category, format, date, time, description, dress code, the
  *              invitation's theme and mood (what the invitation is written
  *              from), and the four story stakes; one model call, from the
  *              host, the venue, the slot's story purposes and the season line.
@@ -16,6 +16,15 @@
  *              performance) from the rate card at Lala's tier, as Propose
  *              terms prices them. Never the AI: the deal decides money
  *              (dealTypeDraftService, "Rates are baselines").
+ *
+ * Two modes (Evoni, 2026-10-25: "Merge the Suggest with AI button into
+ * Fill what's missing"):
+ *   missing    (the default) the empty fields above.
+ *   ideas      when nothing is empty: fresh alternatives for the six basics
+ *              (date, time, description, dress code, category, format), as
+ *              Suggest with AI offered; each says what it would replace
+ *              (`current`), and one that repeats the current value is
+ *              dropped. A deal's missing fees are still priced.
  *
  * Every draft is checked before it is returned: its field is one asked for
  * and on the event PUT's allowlist (update.js allowedFields), its value
@@ -28,12 +37,13 @@
  */
 
 const { CATEGORY_VALUES, FORMAT_VALUES } = require('../models/WorldEvent');
-const { currentValue } = require('../utils/suggestBasics');
+const { currentValue, todayIso, SUGGEST_BASICS_FIELDS } = require('../utils/suggestBasics');
 
 // The fields the AI drafts, in the page's order. max: the column's limit.
 const AI_FIELDS = Object.freeze([
   { field: 'category', label: 'Category', kind: 'list', values: CATEGORY_VALUES },
   { field: 'format', label: 'Format', kind: 'list', values: FORMAT_VALUES },
+  { field: 'event_date', label: 'Date', kind: 'date' },
   { field: 'event_time', label: 'Time', kind: 'time' },
   { field: 'description', label: 'Description', kind: 'text', max: 1200, rule: 'guest-facing copy for attendees' },
   { field: 'dress_code', label: 'Dress code', kind: 'text', max: 200, rule: 'a short dress code' },
@@ -48,6 +58,10 @@ const AI_FIELD_NAMES = Object.freeze(AI_FIELDS.map((f) => f.field));
 const SPEC = Object.fromEntries(AI_FIELDS.map((f) => [f.field, f]));
 const REASON_MAX = 140;
 const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+// "Suggest fresh ideas": the basics Suggest with AI covered.
+const IDEA_FIELDS = Object.freeze(AI_FIELD_NAMES.filter((f) => SUGGEST_BASICS_FIELDS.includes(f)));
+const MODES = Object.freeze(['missing', 'ideas']);
 
 // The deal's fee fields, priced from the rate card (dealPricingService
 // EVENT_COMPONENTS: field and anchor).
@@ -83,23 +97,32 @@ function rateCardDrafts(event, card, tier) {
   return out;
 }
 
-/** A model value, cleaned, or null when it does not pass its field's rule. */
-function cleanValue(field, raw) {
+const isRealDate = (s) => {
+  if (!DATE_RE.test(s)) return false;
+  const d = new Date(`${s}T00:00:00Z`);
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s;
+};
+
+/** A model value, cleaned, or null when it does not pass its field's rule (a date: real, today or later). */
+function cleanValue(field, raw, { now = new Date() } = {}) {
   const spec = SPEC[field];
   if (!spec || typeof raw !== 'string') return null;
   const v = raw.trim();
   if (!v) return null;
   if (spec.kind === 'list') return spec.values.includes(v) ? v : null;
   if (spec.kind === 'time') return TIME_RE.test(v) ? v : null;
+  if (spec.kind === 'date') return isRealDate(v) && v >= todayIso(now) ? v : null;
   return v.length <= spec.max ? v : null;
 }
 
 /**
  * The model's reply → its drafts that pass, one per field at most, in
  * AI_FIELDS order: [{ field, label, value, source: 'ai', reason }].
- * `fields`: the ones asked for; `allowed`: the PUT's allowlist.
+ * `fields`: the ones asked for; `allowed`: the PUT's allowlist. With
+ * `event` (ideas), a draft carries the value it would replace as
+ * `current`, and one equal to it is dropped.
  */
-function draftsFromReply(text, { fields, allowed }) {
+function draftsFromReply(text, { fields, allowed, event = null, now }) {
   const match = String(text || '').match(/\{[\s\S]*\}/);
   if (!match) return [];
   let parsed;
@@ -114,10 +137,12 @@ function draftsFromReply(text, { fields, allowed }) {
     if (!d || typeof d !== 'object') continue;
     const { field } = d;
     if (!fields.includes(field) || !allow.has(field) || byField.has(field)) continue;
-    const value = cleanValue(field, d.value);
+    const value = cleanValue(field, d.value, { now });
     const reason = typeof d.reason === 'string' ? d.reason.trim() : '';
     if (value === null || !reason || reason.length > REASON_MAX) continue;
-    byField.set(field, { field, label: SPEC[field].label, value, source: 'ai', reason });
+    const current = event ? currentValue(event, field) : null;
+    if (current !== null && current === value) continue;
+    byField.set(field, { field, label: SPEC[field].label, value, source: 'ai', reason, ...(current !== null ? { current } : {}) });
   }
   return AI_FIELD_NAMES.filter((f) => byField.has(f)).map((f) => byField.get(f));
 }
@@ -127,7 +152,8 @@ function draftsFromReply(text, { fields, allowed }) {
  * venue: { name, city, venue_type } | null, season: string | null,
  * purposes: string[], pressure: string | null, deal_type }.
  */
-function buildPrompt(event, facts, fields) {
+function buildPrompt(event, facts, fields, { mode = 'missing', now = new Date() } = {}) {
+  const ideas = mode === 'ideas';
   const lines = [
     facts.name ? `Name: ${facts.name}` : null,
     facts.event_type ? `Event type: ${String(facts.event_type).replace(/_/g, ' ')}` : null,
@@ -147,14 +173,21 @@ function buildPrompt(event, facts, fields) {
     const s = SPEC[f];
     if (s.kind === 'list') return `${f}: exactly one of ${s.values.join(', ')}`;
     if (s.kind === 'time') return `${f}: a start time, 24-hour HH:MM`;
+    if (s.kind === 'date') return `${f}: a date on or after ${todayIso(now)}, as YYYY-MM-DD`;
     return `${f}: ${s.rule}, at most ${s.max} characters`;
   };
-  return `You are drafting the missing details of an event in Lala's world, a fashion and lifestyle show.
+  const currentLines = fields
+    .filter((f) => currentValue(event, f) !== null)
+    .map((f) => `${f}: ${String(currentValue(event, f)).slice(0, 300)}`);
+  const ask = ideas
+    ? `${currentLines.length ? `Their current values:\n${currentLines.join('\n')}\n\n` : ''}Suggest a fresh alternative for each of these fields, different from its current value:`
+    : 'Draft a value for each of these empty fields:';
+  return `You are ${ideas ? 'suggesting fresh ideas for' : 'drafting the missing details of'} an event in Lala's world, a fashion and lifestyle show.
 
 What is known about the event:
 ${lines.length ? lines.join('\n') : 'Very little beyond its existence; do not invent specifics.'}
 ${known.length ? `\nAlready decided (keep the drafts consistent with these):\n${known.join('\n')}\n` : ''}
-Draft a value for each of these empty fields:
+${ask}
 ${fields.map((f) => `- ${rule(f)}`).join('\n')}
 
 Rules:
@@ -231,12 +264,14 @@ async function callModel(client, prompt, { wait = (ms) => new Promise((r) => set
 const FAILED = 'Couldn\'t draft the missing fields right now.';
 
 /**
- * Draft every missing field. Returns { status: 200, drafts, asked } or
- * { status, error, code? } (429 budget, 502 the model failed, 503 no key).
- * `client`/`wait`: the SDK client and the back-off wait (tests).
+ * Draft every missing field (mode 'missing'), or fresh ideas for the basics
+ * (mode 'ideas'). Returns { status: 200, drafts, asked } or { status,
+ * error, code? } (429 budget, 502 the model failed, 503 no key).
+ * `client`/`wait`/`now`: the SDK client, the back-off wait and today (tests).
  */
-async function draftMissing(models, { showId, event, allowed, client = null, wait } = {}) {
-  const asked = emptyAiFields(event);
+async function draftMissing(models, { showId, event, allowed, mode = 'missing', client = null, wait, now = new Date() } = {}) {
+  const ideas = mode === 'ideas';
+  const asked = ideas ? [...IDEA_FIELDS] : emptyAiFields(event);
   let feeDrafts = [];
   try {
     const { loadRateCard, lalaPricingTier } = require('./dealPricingService');
@@ -251,7 +286,7 @@ async function draftMissing(models, { showId, event, allowed, client = null, wai
   if (!client && !process.env.ANTHROPIC_API_KEY) return { status: 503, error: 'ANTHROPIC_API_KEY not configured' };
 
   const facts = await loadFacts(models, { showId, event });
-  const prompt = buildPrompt(event, facts, asked);
+  const prompt = buildPrompt(event, facts, asked, { mode, now });
   const Anthropic = client ? null : require('@anthropic-ai/sdk');
   const sdk = client || new Anthropic();
   let response;
@@ -267,12 +302,12 @@ async function draftMissing(models, { showId, event, allowed, client = null, wai
     return { status: 502, error: FAILED };
   }
   const text = response?.content?.[0]?.text || '';
-  const aiDrafts = draftsFromReply(text, { fields: asked, allowed });
+  const aiDrafts = draftsFromReply(text, { fields: asked, allowed, now, event: ideas ? event : null });
   if (!aiDrafts.length) console.error('[FillMissing] no usable drafts in model reply:', text.slice(0, 500));
   return { status: 200, drafts: [...aiDrafts, ...feeDrafts], asked };
 }
 
 module.exports = {
-  AI_FIELDS, AI_FIELD_NAMES, MODELS, REASON_MAX,
+  AI_FIELDS, AI_FIELD_NAMES, IDEA_FIELDS, MODES, MODELS, REASON_MAX,
   emptyAiFields, rateCardDrafts, cleanValue, draftsFromReply, buildPrompt, loadFacts, callModel, draftMissing,
 };

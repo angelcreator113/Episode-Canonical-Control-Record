@@ -56,10 +56,14 @@ router.get('/world/:showId/events/:eventId/flow', requireAuth, async (req, res) 
 // POST /api/v1/world/:showId/events/:eventId/fill-missing
 //
 // Fill what's missing (services/eventFillMissingService): every empty field
-// the page can fill, drafted at once. Writes nothing; the page saves the
+// the page can fill, drafted at once; with body { mode: 'ideas' } (the page
+// sends it when nothing is empty), fresh alternatives for the six basics
+// instead, each with the `current` value it would replace. It took over
+// Suggest with AI on the Event Package (Evoni, 2026-10-25). Writes nothing; the page saves the
 // accepted drafts through the event PUT, so every draft is on that PUT's
 // allowlist (update.js allowedFields) or dropped.
-// 200 { success: true, data: { drafts: [{ field, label, value, source: 'ai'|'rate_card', reason }], asked: [field] } }
+// body { mode?: 'missing' | 'ideas' }   (default 'missing'; anything else is a 400)
+// 200 { success: true, data: { drafts: [{ field, label, value, source: 'ai'|'rate_card', reason, current? }], asked: [field] } }
 // 404 the event is not live in this show; 409 it has started its episode
 // 429 the AI daily budget refused the call (aiCostTracker), with its reason
 // 502 the model failed after its retries; 503 ANTHROPIC_API_KEY not configured
@@ -76,8 +80,10 @@ router.post('/world/:showId/events/:eventId/fill-missing', requireAuth, aiRateLi
       return res.status(409).json({ success: false, error: 'This event has started its episode, so its package is read-only.' });
     }
     const { EVENT_PUT_FIELDS } = require('./update');
-    const { draftMissing } = require('../../services/eventFillMissingService');
-    const result = await draftMissing(models, { showId, event, allowed: EVENT_PUT_FIELDS });
+    const { draftMissing, MODES } = require('../../services/eventFillMissingService');
+    const mode = req.body?.mode ?? 'missing';
+    if (!MODES.includes(mode)) return res.status(400).json({ success: false, error: `mode must be one of ${MODES.join(', ')}` });
+    const result = await draftMissing(models, { showId, event, allowed: EVENT_PUT_FIELDS, mode });
     if (result.status !== 200) {
       return res.status(result.status).json({ success: false, error: result.error, ...(result.code ? { code: result.code } : {}) });
     }
