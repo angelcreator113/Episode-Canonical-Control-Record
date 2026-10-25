@@ -5,8 +5,9 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { BookOpen, Download, Printer, FileText, ScrollText, Copy } from 'lucide-react';
+import { BookOpen, Download, Printer, FileText, ScrollText, Copy, ListChecks } from 'lucide-react';
 import ScriptTableRead from './ScriptTableRead';
+import CueSheetDialog from './CueSheetDialog';
 import { toFountain, toPlainText, scriptFileName } from '../../lib/scriptExport';
 import './ScriptTableRead.css';
 
@@ -69,6 +70,7 @@ export default function ScriptReadActions({ scriptText, title = '', dirty = fals
   const [mode, setMode] = useState(null);
   const [error, setError] = useState(null);
   const [copied, setCopied] = useState(false);
+  const [cues, setCues] = useState(false);
   const [place, setPlace] = useState(null);
   const menuRef = useRef(null);
   const summaryRef = useRef(null);
@@ -144,6 +146,9 @@ export default function ScriptReadActions({ scriptText, title = '', dirty = fals
           <button type="button" className="str-export-item" data-testid="script-export-copy" title={`Copy the whole script as written, tags and all${unsavedNote}`} onClick={copy}>
             <Copy size={14} aria-hidden="true" /> Copy script
           </button>
+          <button type="button" className="str-export-item" data-testid="script-export-cues" title={`The editor's list of sound, music, camera, video and transition notes, beat by beat${unsavedNote}`} onClick={() => { closeMenu(); setCues(true); }}>
+            <ListChecks size={14} aria-hidden="true" /> Cue sheet
+          </button>
           <button type="button" className="str-export-item" data-testid="script-export-fountain" title={`Fountain screenplay file${unsavedNote}`} onClick={() => download('fountain')}>
             <Download size={14} aria-hidden="true" /> Download .fountain
           </button>
@@ -158,6 +163,7 @@ export default function ScriptReadActions({ scriptText, title = '', dirty = fals
       </details>
       {copied && <span className="str-export-note" role="status" data-testid="script-export-copied">Script copied</span>}
       {error && <span className="str-export-note" role="alert">{error}</span>}
+      {cues && <CueSheetDialog scriptText={String(scriptText ?? '')} title={title} episodeId={episodeId} episodeNumber={episodeNumber} onClose={() => setCues(false)} />}
       {mode && (
         <ScriptTableRead scriptText={scriptText} title={title} onScreen={onScreen} startBeat={mode === 'read' ? startBeat : 0}
           printMode={mode === 'print'} onClose={() => setMode(null)} episodeId={episodeId} cast={cast} />
