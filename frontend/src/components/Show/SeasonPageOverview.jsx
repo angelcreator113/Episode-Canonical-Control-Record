@@ -19,7 +19,6 @@
  *              what happened, and the season's money).
  */
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
 import { ChevronRight, Plus, Pencil } from 'lucide-react';
 import SeasonProposals from './SeasonProposals';
 import SeasonKnows from './SeasonKnows';
