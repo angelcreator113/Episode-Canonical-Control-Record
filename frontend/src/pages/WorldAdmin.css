@@ -374,6 +374,7 @@
 .wa-arc-threads li { padding: 3px 10px; border-radius: 999px; border: 1px solid var(--accent-light); background: var(--accent-subtle); color: var(--accent-dark); font-weight: 600; }
 .wa-arc-select { width: 100%; padding: 8px 10px; font: inherit; font-size: 13px; border: 1px solid var(--lala-parchment-3); border-radius: 10px; background: var(--surface-card); color: var(--text-primary); }
 .wa-arc-secondary { padding: 8px 14px; font: inherit; font-size: 13px; font-weight: 600; border: 1px solid var(--lala-lavender-line); border-radius: 10px; background: var(--surface-card); color: var(--lala-lavender-text); cursor: pointer; }
+.wa-arc-readonly { margin: 8px 0; padding: 8px 12px; border-radius: 10px; font-size: 13px; background: var(--lala-parchment-2); color: var(--text-secondary); }
 .wa-arc-secondary:hover { background: var(--lala-lavender-soft); }
 .wa-arc-primary { align-self: stretch; display: block; margin-top: 4px; padding: 12px 16px; border-radius: 12px; background: var(--lala-lavender); color: var(--text-inverse); text-align: center; font-size: 15px; font-weight: 700; text-decoration: none; }
 .wa-arc-primary:hover { background: var(--lala-lavender-dark); }

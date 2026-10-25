@@ -3,6 +3,10 @@
  * 10:00 AM", when releasing starts, and a pause that keeps it. Every field
  * stays editable. Before a change is saved it shows what moves ("E3 moves
  * from Sun, Nov 15 to Sat, Nov 14"); dates set by hand never move.
+ * With two or more seasons each season has its own "Starts releasing"
+ * (Evoni, 2026-10-25, before Season 2): the first season's is the schedule's
+ * own date, a later one's is release_schedule.seasons[N]; a later season
+ * left empty is not releasing yet. Episode numbers restart each season.
  * Props: rs (useReleaseSchedule's result).
  */
 import { useEffect, useState } from 'react';
@@ -13,8 +17,14 @@ import {
 import './ReleaseSchedule.css';
 
 const MAX_MOVES = 8;
-const FIELDS = ['day', 'time', 'cadence', 'first_release', 'paused', 'platforms'];
-const pick = (s) => Object.fromEntries(FIELDS.map((k) => [k, k === 'platforms' ? [...(s?.platforms?.length ? s.platforms : DEFAULT_SCHEDULE.platforms)] : s?.[k] ?? DEFAULT_SCHEDULE[k]]));
+const FIELDS = ['day', 'time', 'cadence', 'first_release', 'paused', 'platforms', 'seasons'];
+const pickOne = (s, k) => {
+  if (k === 'platforms') return [...(s?.platforms?.length ? s.platforms : DEFAULT_SCHEDULE.platforms)];
+  // Only the seasons with a date of their own ({ "2": { first_release } }).
+  if (k === 'seasons') return Object.fromEntries(Object.entries(s?.seasons || {}).filter(([, v]) => v?.first_release).map(([n, v]) => [n, { first_release: v.first_release }]));
+  return s?.[k] ?? DEFAULT_SCHEDULE[k];
+};
+const pick = (s) => Object.fromEntries(FIELDS.map((k) => [k, pickOne(s, k)]));
 const same = (a, b) => FIELDS.every((k) => JSON.stringify(a?.[k] ?? null) === JSON.stringify(b?.[k] ?? null));
 
 /** What the draft would change, fetched while it differs from the saved schedule. */
@@ -45,6 +55,15 @@ export default function ReleaseScheduleEditor({ rs }) {
 
   const start = () => { setDraft(pick(view?.schedule || view?.suggestion || DEFAULT_SCHEDULE)); setError(null); setOpen(true); };
   const set = (patch) => setDraft((d) => ({ ...d, ...patch }));
+  // The show's seasons in order; the first one's start is the schedule's own date.
+  const seasons = [...(view?.seasons || [])].sort((a, b) => a.season_number - b.season_number);
+  const perSeason = seasons.length >= 2;
+  const later = perSeason ? seasons.slice(1) : [];
+  const setSeasonStart = (n, day) => setDraft((d) => {
+    const next = { ...(d.seasons || {}) };
+    if (day) next[n] = { first_release: day }; else delete next[n];
+    return { ...d, seasons: next };
+  });
   const save = async (next = draft) => {
     setSaving(true);
     setError(null);
@@ -72,7 +91,15 @@ export default function ReleaseScheduleEditor({ rs }) {
           {saved ? (
             <>
               <h3 data-testid="release-schedule-sentence">{scheduleSentence(saved)}</h3>
-              <p data-testid="release-schedule-start">{startLine(view)}</p>
+              {/* With seasons, each season's start is its own line below. */}
+              {(!perSeason || saved.paused) && <p data-testid="release-schedule-start">{startLine(view)}</p>}
+              {perSeason && !saved.paused && (
+                <ul className="rsch-seasons" data-testid="release-schedule-seasons">
+                  {seasons.map((x) => (
+                    <li key={x.season_number}>Season {x.season_number}: {x.first_release ? `starts ${formatDay(x.first_release)}` : 'not releasing yet'}</li>
+                  ))}
+                </ul>
+              )}
             </>
           ) : (
             <>
@@ -114,11 +141,23 @@ export default function ReleaseScheduleEditor({ rs }) {
               </select>
             </label>
             <label>
-              <span>Starts releasing</span>
+              <span>{perSeason ? `Season ${seasons[0].season_number} starts releasing` : 'Starts releasing'}</span>
               <input type="date" value={draft.first_release || ''} onChange={(e) => set({ first_release: e.target.value || null })} data-testid="release-schedule-first" />
               <small>{draft.first_release ? `The first one goes out on the first ${DAY_OPTIONS.find((d) => d.key === draft.day)?.label} from ${formatDay(draft.first_release)}.` : 'Not releasing yet: dates are previews and nothing warns.'}</small>
             </label>
+            {later.map((x) => {
+              const day = draft.seasons?.[String(x.season_number)]?.first_release || '';
+              return (
+                <label key={x.season_number} data-testid={`release-schedule-season-${x.season_number}`}>
+                  <span>Season {x.season_number} starts releasing</span>
+                  <input type="date" value={day} onChange={(e) => setSeasonStart(String(x.season_number), e.target.value || null)}
+                    data-testid={`release-schedule-season-first-${x.season_number}`} />
+                  <small>{day ? `Its Episode 1 goes out on the first ${DAY_OPTIONS.find((d) => d.key === draft.day)?.label} from ${formatDay(day)}.` : 'Not releasing yet: its dates are previews and nothing warns.'}</small>
+                </label>
+              );
+            })}
           </div>
+          {perSeason && <p className="rsch-note" data-testid="release-schedule-season-note">Each season counts its own episodes: Season 2 starts again at Episode 1.</p>}
           <fieldset className="rsch-platforms" data-testid="release-schedule-platforms">
             <legend>On the schedule</legend>
             {PLATFORM_OPTIONS.map((p) => {

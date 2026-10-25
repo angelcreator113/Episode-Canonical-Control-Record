@@ -38,6 +38,15 @@ console.log('\n1. Checking for unregistered route files...');
 
 const appSource = fs.readFileSync(APP_FILE, 'utf8');
 const routeFiles = fs.readdirSync(ROUTES_DIR).filter(f => f.endsWith('.js'));
+// A route folder (src/routes/<name>/index.js, e.g. memories/, worldEvents/)
+// is mounted as './routes/<name>'; its files are checked like top-level ones.
+const routeDirs = fs.readdirSync(ROUTES_DIR, { withFileTypes: true })
+  .filter(d => d.isDirectory() && fs.existsSync(path.join(ROUTES_DIR, d.name, 'index.js')))
+  .map(d => d.name);
+const subRouteFiles = routeDirs.flatMap(dir =>
+  fs.readdirSync(path.join(ROUTES_DIR, dir)).filter(f => f.endsWith('.js')).map(f => `${dir}/${f}`));
+const checkedRouteFiles = [...routeFiles, ...subRouteFiles];
+let asyncHandlersChecked = 0;
 
 for (const file of routeFiles) {
   const basename = file.replace('.js', '');
@@ -53,11 +62,16 @@ for (const file of routeFiles) {
     warn(`${file} exists in src/routes/ but is not registered in app.js`);
   }
 }
+for (const dir of routeDirs) {
+  if (!appSource.includes(`'./routes/${dir}'`) && !appSource.includes(`"./routes/${dir}"`)) {
+    warn(`${dir}/ exists in src/routes/ but is not registered in app.js`);
+  }
+}
 
 // ── 2. Check route handlers for missing error handling ───────────────────────
 console.log('\n2. Checking route handlers for missing error handling...');
 
-for (const file of routeFiles) {
+for (const file of checkedRouteFiles) {
   const filePath = path.join(ROUTES_DIR, file);
   const source = fs.readFileSync(filePath, 'utf8');
   const lines = source.split('\n');
@@ -79,6 +93,7 @@ for (const file of routeFiles) {
     }
   }
 
+  asyncHandlersChecked += asyncHandlerCount;
   if (asyncHandlerCount > 0 && handlerWithTryCatch < asyncHandlerCount) {
     const missing = asyncHandlerCount - handlerWithTryCatch;
     warn(`${file}: ${missing} of ${asyncHandlerCount} async handlers may be missing try/catch`);
@@ -148,7 +163,7 @@ const modelFiles = fs.readdirSync(modelsDir).filter(f => f.endsWith('.js') && f 
 const knownModels = new Set(modelFiles.map(f => f.replace('.js', '')));
 
 // Check route files for model destructuring without guards
-for (const file of routeFiles) {
+for (const file of checkedRouteFiles) {
   const filePath = path.join(ROUTES_DIR, file);
   const source = fs.readFileSync(filePath, 'utf8');
 
@@ -167,7 +182,8 @@ for (const file of routeFiles) {
 
 // ── Summary ──────────────────────────────────────────────────────────────────
 console.log('\n─────────────────────────────────────────');
-console.log(`Route files scanned: ${routeFiles.length}`);
+console.log(`Route files scanned: ${routeFiles.length} (+${subRouteFiles.length} in ${routeDirs.map(d => `${d}/`).join(', ') || 'no folders'})`);
+console.log(`Async route handlers checked: ${asyncHandlersChecked}`);
 console.log(`Source files scanned: ${allSrcFiles.length}`);
 if (errors > 0) console.error(`Errors: ${errors}`);
 if (warnings > 0) console.warn(`Warnings: ${warnings}`);

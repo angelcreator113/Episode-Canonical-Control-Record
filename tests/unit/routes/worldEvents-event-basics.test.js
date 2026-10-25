@@ -109,7 +109,7 @@ describe('GET /world/:showId/events/:eventId — venueLocation', () => {
 
 describe('PUT allowlist covers the Basics columns', () => {
   test('event_date, event_time, description, dress_code, canon_consequences', () => {
-    const src = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'src', 'routes', 'worldEvents.js'), 'utf8');
+    const src = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'src', 'routes', 'worldEvents', 'update.js'), 'utf8');
     const allowed = src.match(/const allowedFields = \[[\s\S]*?\];/)[0];
     for (const f of ['event_date', 'event_time', 'description', 'dress_code', 'canon_consequences']) {
       expect(allowed).toContain(`'${f}'`);

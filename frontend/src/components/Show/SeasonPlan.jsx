@@ -469,8 +469,9 @@ const slotSelectStyle = { width: '100%', marginTop: 6, fontSize: 12, padding: '4
 // Planner PR 3 (2026-10-24): the panel also lists what is planned there
 // (its twists, secrets and the relationships it needs, SlotNotes), and the
 // pencil list is ranked by fit for this slot, each event with a reason.
-export function SlotPanel({ slot, showId, available, busy, episode, event, onPencil, onIntention, onClose, editing = false, error = null, children = null, api = null, needs = [], onNeedsChanged }) {
-  const fit = useEventFit(api, showId, slot.id, !slot.locked && available.length > 0);
+// readOnly: a past season (the Season page's switcher, 2026-10-25): read, never pencilled or re-planned.
+export function SlotPanel({ slot, showId, available, busy, episode, event, onPencil, onIntention, onClose, editing = false, error = null, children = null, api = null, needs = [], onNeedsChanged, readOnly = false }) {
+  const fit = useEventFit(api, showId, slot.id, !readOnly && !slot.locked && available.length > 0);
   const options = rankedOptions(available, fit);
   const title = slotTitle(slot);
   const logline = episode?.logline || episode?.description || null;
@@ -509,7 +510,8 @@ export function SlotPanel({ slot, showId, available, busy, episode, event, onPen
 
       {api && <SlotNotes api={api} showId={showId} slot={slot} needs={needs} onNeedsChanged={onNeedsChanged} />}
 
-      {!slot.locked && (
+      {readOnly && <p className="wa-arc-readonly" data-testid="season-slot-readonly">A past season: this slot is read here, not changed.</p>}
+      {!readOnly && !slot.locked && (
         <select
           className="wa-arc-select"
           aria-label={`Pencil an event into ${slot.label}`}
@@ -523,7 +525,7 @@ export function SlotPanel({ slot, showId, available, busy, episode, event, onPen
           {slot.event && <option value="__clear__">Clear this slot</option>}
         </select>
       )}
-      {(slot.intention_editable ?? !slot.locked) && (
+      {!readOnly && (slot.intention_editable ?? !slot.locked) && (
         <button type="button" className="wa-arc-secondary" data-testid={`season-intention-${slot.slot_number}`} onClick={onIntention} aria-expanded={editing}>
           {primary ? 'Edit intention' : 'Add intention'}
         </button>
@@ -720,7 +722,7 @@ export function AdvanceBar({ roadmap, S, onAdvance, advancing, advanceWarning, o
 }
 
 /** The open slot's panel beside the grid (a sheet on a phone), with its intention editor. */
-export function SlotSide({ controls, roadmap, S, api, showId, onChanged, setToast, threads = [], episodes = [], events = [], needs = [], onNeedsChanged }) {
+export function SlotSide({ controls, roadmap, S, api, showId, onChanged, setToast, threads = [], episodes = [], events = [], needs = [], onNeedsChanged, readOnly = false }) {
   const { selected, editing, editingSlotId, setEditingSlotId, sheetOpen, setSheetOpen, panelRef, busySlot, slotError, pencil } = controls;
   const available = roadmap?.available_events || [];
   return (
@@ -736,9 +738,9 @@ export function SlotSide({ controls, roadmap, S, api, showId, onChanged, setToas
           onIntention={() => setEditingSlotId(editingSlotId === selected.id ? null : selected.id)}
           editing={editing?.id === selected.id}
           error={slotError && slotError.slotId === selected.id && slotError.where === 'event' ? slotError.text : null}
-          api={api} needs={needs} onNeedsChanged={onNeedsChanged}
+          api={api} needs={needs} onNeedsChanged={onNeedsChanged} readOnly={readOnly}
         >
-          {editing && editing.id === selected.id && (
+          {!readOnly && editing && editing.id === selected.id && (
             <SlotIntentionEditor key={editing.id} slot={editing} S={S} api={api} showId={showId}
               onSaved={onChanged} onClose={() => setEditingSlotId(null)} setToast={setToast} threads={threads} />
           )}
@@ -802,8 +804,14 @@ export const TEMP_CONFIG = {
  * alone, after the Goals tab changes one, so the stat card and the
  * Overview's Season Goals count them at once.
  */
-export function useSeasonPlan({ showId, api, setToast }) {
+export function useSeasonPlan({ showId, api, setToast, season = null }) {
+  // season: another season's number (the Season page's switcher, ?season=N);
+  // the arc, roadmap and Planning Insights read it, the rest read the show.
+  const seasonQuery = season ? `?season=${encodeURIComponent(season)}` : '';
   const [arc, setArc] = useState(null);
+  // Every season of the show, and the one in progress (else the latest).
+  const [seasons, setSeasons] = useState([]);
+  const [currentArcId, setCurrentArcId] = useState(null);
   const [loading, setLoading] = useState(true);
   // Setting up a season (Evoni, 2026-10-24): the next season's number, and
   // which setup panel is open: 'new' (the form for the next season), 'edit',
@@ -841,7 +849,7 @@ export function useSeasonPlan({ showId, api, setToast }) {
   // what is on screen.
   const loadRoadmap = useCallback(async () => {
     try {
-      const r = await api.get(`/api/v1/world/${showId}/season/roadmap`);
+      const r = await api.get(`/api/v1/world/${showId}/season/roadmap${seasonQuery}`);
       setRoadmap(r.data.roadmap || null);
       markFailed('roadmap', null);
     } catch (err) {
@@ -860,7 +868,7 @@ export function useSeasonPlan({ showId, api, setToast }) {
     // Planning Insights (§8(ff) A8). The season-health score is one line in
     // it, from the slot outcome ranges (Q15); the old 1/4/2/1 grade is not read.
     try {
-      const r = await api.get(`/api/v1/world/${showId}/season/insights`);
+      const r = await api.get(`/api/v1/world/${showId}/season/insights${seasonQuery}`);
       setInsights(r.data.insights || null);
       markFailed('insights', null);
     } catch (err) {
@@ -869,7 +877,7 @@ export function useSeasonPlan({ showId, api, setToast }) {
     }
     // A purpose, a pencil or a placement can change what the season needs.
     await loadNeeds();
-  }, [showId, markFailed, loadNeeds]);
+  }, [showId, markFailed, loadNeeds, seasonQuery]);
 
   // Every goal, so the phases show what was hit and missed, the checklist
   // knows whether any is live, and the Goals tab lists them.
@@ -890,9 +898,11 @@ export function useSeasonPlan({ showId, api, setToast }) {
   const loadArc = useCallback(async ({ initial = false } = {}) => {
     if (initial) setLoading(true);
     try {
-      const r = await api.get(`/api/v1/world/${showId}/arc`);
+      const r = await api.get(`/api/v1/world/${showId}/arc${seasonQuery}`);
       setArc(r.data.arc);
       setNextSeason(r.data.next_season_number || 1);
+      setSeasons(r.data.seasons || []);
+      setCurrentArcId(r.data.current_arc_id || r.data.arc?.id || null);
       markFailed('season', null);
     } catch (err) {
       console.error('Season arc load failed:', err);
@@ -903,7 +913,7 @@ export function useSeasonPlan({ showId, api, setToast }) {
     await loadRoadmap();
 
     if (initial) setLoading(false);
-  }, [showId, loadRoadmap, loadGoals, markFailed]);
+  }, [showId, loadRoadmap, loadGoals, markFailed, seasonQuery]);
 
   useEffect(() => { loadArc({ initial: true }); }, [loadArc]);
   const retry = () => loadArc({ initial: !arc });
@@ -973,7 +983,9 @@ export function useSeasonPlan({ showId, api, setToast }) {
   };
 
   return {
-    arc, loading, nextSeason, panel, setPanel, seedingGoals, setupNote, setSetupNote,
+    arc, loading, nextSeason, panel, setPanel, seedingGoals, setupNote, setSetupNote, seasons, currentArcId,
+    // Whether the season shown is the one in progress (a past one, from the switcher, is read-only here).
+    isCurrent: !arc || !currentArcId || arc.id === currentArcId,
     advancing, warning, setWarning, advanceError, goals, roadmap, insights, threadData, needs, failed,
     loadNeeds, loadRoadmap, loadArc, loadGoals, retry, handleSeed, handleEdit, seedGoals, handleAdvance, handleConfirmAdvance,
   };

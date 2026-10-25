@@ -6,7 +6,7 @@
  * page's episodes. Without a date anywhere, the next slots in order stand in.
  */
 import { allSlots } from './seasonPage';
-import { formatDay, formatRelease } from './releaseSchedule';
+import { formatDay, formatRelease, seasonOf } from './releaseSchedule';
 
 export const WEEK_LIMIT = 3;
 
@@ -25,12 +25,14 @@ const done = (slot, ep) => slot.state === 'done' || ep?.status === 'published' |
  */
 export function weekAhead({ roadmap, view = null, episodes = [], today = todayIso(), limit = WEEK_LIMIT }) {
   const byId = new Map((episodes || []).map((e) => [e.id, e]));
+  // An empty slot's date is its own season's (numbers restart each season).
+  const slotDates = (roadmap?.season_number != null && seasonOf(view, roadmap.season_number)?.slots) || view?.slots;
   const items = allSlots(roadmap).map((slot) => {
     const episode = slot.episode ? { ...slot.episode, ...(byId.get(slot.episode.id) || {}) } : null;
     if (done(slot, episode)) return null;
     const row = !view ? null : episode
       ? (view.episodes || []).find((r) => r.episode_id === episode.id) || null
-      : view.slots?.[slot.slot_number] || null;
+      : slotDates?.[slot.slot_number] || null;
     let date = row?.date ? String(row.date).slice(0, 10) : null;
     let source = date ? row.source : null;
     // An episode's own air_date counts even when the schedule has not loaded or has no row for it.
