@@ -8,6 +8,11 @@
  * Season (Evoni, 2026-10-25): the banner's Season entry opens the Season
  * page; the Season Plan sub-tab is gone from Episodes, and its old links
  * (?tab=season, ?tab=goals) open the Season page, goals on its Goals tab.
+ *
+ * Six tabs (Evoni, 2026-10-25): Overview · Season · Assets · Cast &
+ * Continuity · World · Release. Episodes, Opportunities and the Results
+ * ledger moved to the Season page, and their old links open its tabs;
+ * World holds Lala's posts, World moments and the Rate card.
  */
 import { vi, describe, beforeEach, test, expect } from 'vitest';
 import { render, screen, waitFor, within, fireEvent } from '@testing-library/react';
@@ -18,7 +23,8 @@ vi.mock('../services/api', () => ({
 }));
 
 import api from '../services/api';
-import WorldAdmin from './WorldAdmin';
+import WorldAdmin, { SEASON_PAGE_KEYS } from './WorldAdmin';
+import { SEASON_TABS } from '../lib/seasonPage';
 
 function Where() {
   const loc = useLocation();
@@ -52,24 +58,6 @@ describe('WorldAdmin ?tab=<main tab> opens a sub-tab (#2289)', () => {
     vi.mocked(api.post).mockResolvedValue({ data: {} });
   });
 
-  // One show workspace (2026-10-03): Episodes opens on Production, its first view.
-  test('?tab=episodes opens Production', async () => {
-    renderAt('episodes');
-
-    // Now producing and its board card both name it.
-    await waitFor(() => expect(screen.getAllByText('Gala Night').length).toBeGreaterThan(0));
-    expect(isActive('Production')).toBe(true);
-    expect(isActive('Results')).toBe(false);
-    expect(screen.getByTestId('show-episodes-board')).toBeTruthy();
-  });
-
-  test('?tab=episodes-ledger opens Results', async () => {
-    renderAt('episodes-ledger');
-
-    await waitFor(() => expect(screen.getByText('Gala Night')).toBeTruthy());
-    expect(isActive('Results')).toBe(true);
-  });
-
   test("?tab=characters opens Lala's State & Continuity", async () => {
     renderAt('characters');
 
@@ -84,22 +72,6 @@ describe('WorldAdmin ?tab=<main tab> opens a sub-tab (#2289)', () => {
     expect(isActive('Scene Sets')).toBe(true);
   });
 
-  test('a sub-tab deep link still lands on that sub-tab', async () => {
-    renderAt('episodes-ledger');
-
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Results' })).toBeTruthy());
-    expect(isActive('Results')).toBe(true);
-    expect(isActive('Production')).toBe(false);
-  });
-
-  test('Episodes has Production and Results; the Season Plan sub-tab is gone', async () => {
-    renderAt('episodes');
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Production' })).toBeTruthy());
-    const subs = document.querySelector('.wa-subtabs');
-    expect([...subs.querySelectorAll('button')].map((b) => b.textContent)).toEqual(['Production', 'Results']);
-    expect(screen.queryByRole('button', { name: 'Season Plan' })).toBeNull();
-  });
-
   test('the old Season Plan link, ?tab=season, opens the Season page', async () => {
     renderAt('season');
     await waitFor(() => expect(screen.getByTestId('where').textContent).toBe('/shows/show-1/season'));
@@ -110,7 +82,7 @@ describe('WorldAdmin ?tab=<main tab> opens a sub-tab (#2289)', () => {
     await waitFor(() => expect(screen.getByTestId('where').textContent).toBe('/shows/show-1/season?tab=goals'));
   });
 
-  test('the banner has Season beside Episodes and Events; it opens the Season page', async () => {
+  test('the banner has Season second; it opens the Season page', async () => {
     renderAt('overview');
     const season = await screen.findByTestId('wa-tab-season');
     expect(season.tagName).toBe('A');
@@ -118,12 +90,6 @@ describe('WorldAdmin ?tab=<main tab> opens a sub-tab (#2289)', () => {
     expect(within(season).getByText('Season')).toBeTruthy();
     fireEvent.click(season);
     await waitFor(() => expect(screen.getByTestId('where').textContent).toBe('/shows/show-1/season'));
-  });
-
-  test("?tab=feed opens Lala's posts here, not the standalone page", async () => {
-    renderAt('feed');
-    expect(await screen.findByTestId('lala-feed')).toBeTruthy();
-    expect(isActive("Lala's posts")).toBe(true);
   });
 
   test('Release opens on Next release', async () => {
@@ -140,7 +106,8 @@ describe('WorldAdmin ?tab=<main tab> opens a sub-tab (#2289)', () => {
     expect(isActive('Distribution')).toBe(false);
   });
 
-  test('the main tabs are Overview · Episodes · Season · Events · Assets · Cast & Continuity · Lala\'s Feed · Release', async () => {
+  // Evoni, 2026-10-25 ("Producer Mode is confusing"): eleven top tabs became six.
+  test('the banner has exactly six tabs: Overview · Season · Assets · Cast & Continuity · World · Release', async () => {
     renderAt('overview');
     const bar = await waitFor(() => {
       const el = document.querySelector('.wa-tab-bar');
@@ -148,8 +115,80 @@ describe('WorldAdmin ?tab=<main tab> opens a sub-tab (#2289)', () => {
       return el;
     });
     expect([...bar.querySelectorAll('.wa-tab .wa-tab-label')].map((b) => b.textContent)).toEqual(
-      ['Overview', 'Episodes', 'Season', 'Events', 'Opportunities', 'Rate card', 'World moments', 'Assets', 'Cast & Continuity', "Lala's posts", 'Release'],
+      ['Overview', 'Season', 'Assets', 'Cast & Continuity', 'World', 'Release'],
     );
+    expect(bar.querySelectorAll('.wa-tab')).toHaveLength(6);
+  });
+});
+
+// World gathers Lala's posts, the world's moments and her rate card; their old links open there.
+const MOMENTS = {
+  success: true,
+  settings: { auto_enabled: false, cities: { dazzle_district: [], radiance_row: [], echo_park: [], ascent_tower: [], maverick_harbor: [] }, press: {}, trends: { on: false, weekday: 2 }, award_shows: { on: false } },
+  plan: { from: '2026-10-19', to: '2026-10-25', moments: [] }, recent: [], server: { world_moments_enabled: false, pulse_engine_enabled: false },
+};
+describe('World', () => {
+  beforeEach(() => {
+    Object.values(api).forEach((fn) => fn?.mockReset?.());
+    vi.mocked(api.get).mockImplementation(async (url) => (url.startsWith('/api/v1/world-moments') ? { data: MOMENTS } : { data: {} }));
+    vi.mocked(api.post).mockResolvedValue({ data: {} });
+  });
+
+  test("World's sub-tabs are Lala's posts, World moments and Rate card; it opens on Lala's posts", async () => {
+    renderAt('overview');
+    fireEvent.click(await screen.findByRole('button', { name: 'World' }));
+    await waitFor(() => expect(screen.getByTestId('where').textContent).toBe('/shows/show-1/world?tab=feed'));
+    const subs = document.querySelector('.wa-subtabs');
+    expect([...subs.querySelectorAll('button')].map((b) => b.textContent)).toEqual(["Lala's posts", 'World moments', 'Rate card']);
+    expect(isActive("Lala's posts")).toBe(true);
+    expect(isActive('World')).toBe(true);
+    expect(await screen.findByTestId('lala-feed')).toBeTruthy();
+  });
+
+  test.each([['feed', "Lala's posts"], ['moments', 'World moments'], ['rate-card', 'Rate card']])(
+    '?tab=%s still opens it, under World', async (tab, name) => {
+      renderAt(tab);
+      await waitFor(() => expect(screen.getByRole('button', { name })).toBeTruthy());
+      expect(isActive(name)).toBe(true);
+      expect(isActive('World')).toBe(true);
+      expect(screen.getByTestId('where').textContent).toBe(`/shows/show-1/world?tab=${tab}`);
+    });
+});
+
+// Every old link to what moved lands on the Season page's tab for it.
+describe('Old Producer Mode links to what moved to the Season page', () => {
+  beforeEach(() => {
+    Object.values(api).forEach((fn) => fn?.mockReset?.());
+    vi.mocked(api.get).mockResolvedValue({ data: {} });
+    vi.mocked(api.post).mockResolvedValue({ data: {} });
+  });
+
+  test.each([
+    ['episodes', '/shows/show-1/season?tab=episodes'],
+    ['episodes-production', '/shows/show-1/season?tab=episodes'],
+    ['episodes-ledger', '/shows/show-1/season?tab=results'],
+    ['opportunities', '/shows/show-1/season?tab=opportunities'],
+    ['season-page', '/shows/show-1/season'],
+    ['opportunities&deal_with=Maison%20Velour', '/shows/show-1/season?tab=opportunities&deal_with=Maison+Velour'],
+  ])('?tab=%s opens %s', async (tab, to) => {
+    renderAt(tab);
+    await waitFor(() => expect(screen.getByTestId('where').textContent).toBe(to));
+  });
+
+  test('every old key in SEASON_PAGE_KEYS names a real Season page tab', () => {
+    const keys = new Set(SEASON_TABS.map((t) => t.key));
+    for (const tab of Object.values(SEASON_PAGE_KEYS)) if (tab) expect(keys.has(tab)).toBe(true);
+    expect(Object.keys(SEASON_PAGE_KEYS)).toEqual(expect.arrayContaining(['episodes', 'episodes-production', 'episodes-ledger', 'opportunities', 'season', 'goals']));
+  });
+
+  // The event library stays reachable at its old address (it moves onto the Season page in step 2), out of the banner.
+  test('?tab=events still opens the event library here, with Season lit and a line pointing to the Season page', async () => {
+    renderAt('events');
+    const note = await screen.findByTestId('events-season-note');
+    expect(note.querySelector('a').getAttribute('href')).toBe('/shows/show-1/season?tab=events');
+    expect(screen.getByTestId('where').textContent).toBe('/shows/show-1/world?tab=events');
+    expect(screen.getByTestId('wa-tab-season').className).toContain('active');
+    expect(screen.queryByRole('button', { name: 'Events' })).toBeNull();
   });
 });
 

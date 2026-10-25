@@ -1,29 +1,29 @@
 /**
- * Producer Mode → Episodes → Episode Ledger reads each episode's P&L and the
+ * The Episode Ledger (the Season page's Results tab; Producer Mode's
+ * Episodes → Results until 2026-10-25) reads each episode's P&L and the
  * totals from the ledger (§8(aa) M4; Episode Money Phase A, Task #2278):
  * /financial-summary's by_episode, not episodes.total_income/total_expenses.
  * Its event reference shows no cost_coins tag (§8(ff) Q14, Season Arc PR 8).
  */
 import { vi, describe, beforeEach, test, expect } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { MemoryRouter } from 'react-router-dom';
 
-vi.mock('../services/api', () => ({
+vi.mock('../../services/api', () => ({
   default: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn(), patch: vi.fn(), request: vi.fn() },
 }));
 
-import api from '../services/api';
-import WorldAdmin from './WorldAdmin';
+import api from '../../services/api';
+import EpisodeLedger from './EpisodeLedger';
 
 // The columns disagree with the ledger on purpose: 999 / 1640 are stale.
 const EPISODE = { id: 'ep-1', episode_number: 1, title: 'Gala Night', status: 'draft', total_income: 999, total_expenses: 1640 };
 
-function renderLedger() {
+// The page hands the ledger its episodes and events.
+function renderLedger(episodes = [EPISODE], events = []) {
   return render(
-    <MemoryRouter initialEntries={['/shows/show-1/world?tab=episodes-ledger']}>
-      <Routes>
-        <Route path="/shows/:id/world" element={<WorldAdmin />} />
-      </Routes>
+    <MemoryRouter>
+      <EpisodeLedger showId="show-1" api={api} episodes={episodes} events={events} />
     </MemoryRouter>
   );
 }
@@ -70,14 +70,10 @@ describe('Episode Ledger reads the ledger (#2278)', () => {
   test('the event reference carries no 🪙 cost_coins tag (§8(ff) Q14)', async () => {
     const withScript = { ...EPISODE, script_content: 'Lala arrives at the Rose Gala. Then the Press Day pitch.' };
     vi.mocked(api.get).mockImplementation(async (url) => {
-      if (url.startsWith('/api/v1/episodes?show_id=show-1')) return { data: { episodes: [withScript] } };
-      if (url === '/api/v1/world/show-1/events') {
-        return { data: { events: [{ id: 'ev-1', name: 'Rose Gala', prestige: 7, cost_coins: 4321, strictness: 5, used_in_episode_id: 'ep-1' }] } };
-      }
       if (url === '/api/v1/shows/show-1/financial-summary') return { data: { by_episode: [] } };
       return { data: {} };
     });
-    renderLedger();
+    renderLedger([withScript], [{ id: 'ev-1', name: 'Rose Gala', prestige: 7, cost_coins: 4321, strictness: 5, used_in_episode_id: 'ep-1' }]);
     fireEvent.click(await screen.findByText('Gala Night'));
 
     const reference = (await screen.findByText('💌 Event')).parentElement;
@@ -91,17 +87,13 @@ describe('Episode Ledger reads the ledger (#2278)', () => {
   test('the event is the one linked to the episode, not one whose name the script mentions', async () => {
     const withScript = { ...EPISODE, script_content: 'Lala arrives at the Rose Gala.' };
     vi.mocked(api.get).mockImplementation(async (url) => {
-      if (url.startsWith('/api/v1/episodes?show_id=show-1')) return { data: { episodes: [withScript] } };
-      if (url === '/api/v1/world/show-1/events') {
-        return { data: { events: [
-          { id: 'ev-1', name: 'Rose Gala', prestige: 7 }, // named in the script, linked elsewhere
-          { id: 'ev-2', name: 'Press Day', prestige: 4, used_in_episode_id: 'ep-1' },
-        ] } };
-      }
       if (url === '/api/v1/shows/show-1/financial-summary') return { data: { by_episode: [] } };
       return { data: {} };
     });
-    renderLedger();
+    renderLedger([withScript], [
+      { id: 'ev-1', name: 'Rose Gala', prestige: 7 }, // named in the script, linked elsewhere
+      { id: 'ev-2', name: 'Press Day', prestige: 4, used_in_episode_id: 'ep-1' },
+    ]);
     fireEvent.click(await screen.findByText('Gala Night'));
     const reference = (await screen.findByText('💌 Event')).parentElement;
     expect(reference.textContent).toContain('Press Day');

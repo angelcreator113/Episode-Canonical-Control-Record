@@ -7,23 +7,47 @@
  */
 import { slotTitle } from './seasonArc';
 
-/** The page's tabs, in order; `?tab=` holds the key. */
+/**
+ * The page's tabs, in order; `?tab=` holds the key. Each has a one-line
+ * note shown at the top of the tab, saying what it is for (Evoni,
+ * 2026-10-25: Producer Mode's episodes, opportunities and results moved
+ * here, so the Season page is where the season is run).
+ */
 export const SEASON_TABS = [
-  { key: 'overview', label: 'Overview' },
-  { key: 'roadmap', label: 'Episode Roadmap' },
-  { key: 'events', label: 'Events' },
+  { key: 'overview', label: 'Overview', note: 'The season at a glance: its parts, key events, story threads, secrets and goals.' },
+  { key: 'roadmap', label: 'Roadmap', note: "The season's episode slots, part by part: what each one is for and what fills it." },
+  // The production board (components/Show/ShowEpisodesBoard), from Producer Mode's Episodes tab.
+  { key: 'episodes', label: 'Episodes', note: 'Every episode this season and where it is in production.' },
+  { key: 'events', label: 'Events', note: "The events in this season's slots, and the slots still waiting for one." },
+  // Brand offers and bookings (components/Show/OpportunitiesTab), from Producer Mode's Opportunities tab.
+  { key: 'opportunities', label: 'Opportunities', note: 'Offers and bookings from brands, from the first offer to paid.' },
+  { key: 'story', label: 'Story', note: 'The threads, twists and reveals the season is building, and what the story still needs.' },
   // Lala's career goals and the brands she has worked with (Evoni, 2026-10-25:
   // moved here from Producer Mode's Season Plan, which this page replaced).
-  { key: 'goals', label: 'Goals' },
-  { key: 'story', label: 'Story Development' },
-  { key: 'production', label: 'Production Plan' },
-  { key: 'results', label: 'Results & Analytics' },
+  { key: 'goals', label: 'Goals', note: "Lala's career goals for the season and the brands she has worked with." },
+  // The Episode Ledger (components/Show/EpisodeLedger, Producer Mode's old
+  // Episodes › Results), then Planning Insights.
+  { key: 'results', label: 'Results', note: "How each episode turned out, then each slot's plan beside what happened." },
 ];
-export const tabFrom = (value) => (SEASON_TABS.some((t) => t.key === value) ? value : 'overview');
+// Old keys: the Production Plan tab became Episodes, the board it linked to.
+const TAB_ALIASES = { production: 'episodes' };
+export const tabFrom = (value) => {
+  const key = TAB_ALIASES[value] || value;
+  return SEASON_TABS.some((t) => t.key === key) ? key : 'overview';
+};
 
-/** The Season page, on one of its tabs: every in-app link to the season goes through here. */
-export const seasonPageHref = (showId, tab = null) =>
-  `/shows/${encodeURIComponent(showId)}/season${tab && tab !== 'overview' ? `?tab=${encodeURIComponent(tab)}` : ''}`;
+/**
+ * The Season page, on one of its tabs: every in-app link to the season goes
+ * through here. `extra` adds query values after the tab (e.g. deal_with
+ * for the Opportunities tab's new-deal form).
+ */
+export function seasonPageHref(showId, tab = null, extra = null) {
+  const q = new URLSearchParams();
+  if (tab && tab !== 'overview') q.set('tab', tab);
+  for (const [k, v] of Object.entries(extra || {})) if (v != null && v !== '') q.set(k, String(v));
+  const qs = q.toString();
+  return `/shows/${encodeURIComponent(showId)}/season${qs ? `?${qs}` : ''}`;
+}
 
 /** A slot's state in the mockup's words (seasonSlotService.slotState). */
 export const SLOT_STATUS = {

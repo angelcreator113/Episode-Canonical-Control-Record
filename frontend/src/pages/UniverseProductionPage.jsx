@@ -9,10 +9,12 @@
  * show page does (useActiveShow); with none it goes to the shows list.
  */
 import { Navigate } from 'react-router-dom';
+import { seasonPageHref } from '../lib/seasonPage';
 import useActiveShow from '../hooks/useActiveShow';
 import ShowChooser from '../components/ShowChooser';
 
-export const showProductionPath = (showId) => `/shows/${encodeURIComponent(showId)}/world?tab=episodes-production`;
+// The production board is the Season page's Episodes tab (2026-10-25).
+export const showProductionPath = (showId) => seasonPageHref(showId, 'episodes');
 
 export default function UniverseProductionPage() {
   const { shows, showId, loaded, failed, needsChoice, choose } = useActiveShow();

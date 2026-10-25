@@ -18,7 +18,8 @@ const HEX = /#[0-9a-f]{3,8}\b/i;
 const editorStart = jsx.indexOf('{editingEvent && (', jsx.indexOf('{/* Event editor */}'));
 const editor = jsx.slice(editorStart, jsx.indexOf('{/* Generate-options toolbar', editorStart));
 const modalStart = jsx.indexOf('{eventDetailModal && (() => {');
-const modal = jsx.slice(modalStart, jsx.indexOf("{activeTab === 'opportunities' && (", modalStart));
+// It ends where the Rate card begins (the Opportunities tab moved to the Season page, 2026-10-25).
+const modal = jsx.slice(modalStart, jsx.indexOf("{activeTab === 'world' && subTab === 'rate-card' && (", modalStart));
 
 describe('Events tab editors theme', () => {
   test('the slices are the editors', () => {

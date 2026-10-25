@@ -513,8 +513,9 @@
   font-size: 13px; font-weight: 600; line-height: 1.3; text-decoration: none; overflow-wrap: anywhere;
 }
 .wa-chip-show { background: var(--lala-lavender); color: var(--text-inverse); }
-.wa-chip-season { background: var(--lala-parchment-2); border: 1px solid var(--lala-parchment-3); color: var(--text-primary); }
-.wa-chip-producing { background: var(--surface-card); border: 1px solid var(--lala-lavender); color: var(--lala-lavender-text); }
+.wa-chip-season { background: var(--lala-parchment-2); border: 1px solid var(--lala-parchment-3); color: var(--text-primary); gap: 4px; }
+.wa-chip-season:hover { border-color: var(--lala-gold-line); background: var(--lala-gold-soft); }
+.wa-chip-producing { background: var(--surface-card); border: 1px solid var(--lala-lavender); color: var(--lala-lavender-text); gap: 4px; }
 .wa-chip-producing:hover { background: var(--lala-lavender-soft); }
 .wa-hero-links { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 6px 18px; margin-top: 12px; }
 .wa-hero-link { font-size: 13px; color: var(--lala-lavender-text); text-decoration: none; }
@@ -564,9 +565,10 @@
   .wa-hero { padding: 18px 16px 14px; }
   .wa-hero-refresh { top: 10px; right: 10px; width: 32px; height: 32px; }
   .wa-hero-title { font-size: 26px; margin-top: 4px; }
-  .wa-tab-bar { padding: 8px; gap: 8px; border-radius: 14px; }
-  .wa-tab { padding: 8px 14px; font-size: 13px; }
-  .wa-tab.active { padding: 7px 13px; }
+  /* Six tabs (2026-10-25) fit a phone as two columns, so none hides off the edge. */
+  .wa-tab-bar { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 8px; gap: 8px; border-radius: 14px; overflow-x: visible; }
+  .wa-tab { justify-content: center; min-width: 0; padding: 8px 10px; font-size: 13px; white-space: normal; text-align: center; }
+  .wa-tab.active { padding: 7px 9px; }
 }
 
 /* A section that failed to load says so, with Retry, instead of looking empty. */
@@ -579,13 +581,8 @@
 .wa-load-failed.wa-load-partial { border-color: var(--warning-border); background: var(--warning-bg); color: var(--warning-text); }
 .wa-load-partial button { border-color: var(--warning-border); background: var(--surface-card); color: var(--warning-text); }
 
-/* Episodes → Production: components/Show/ShowEpisodesBoard.css (2026-10-17). */
+/* The production board and the Episode Ledger have their own CSS (components/Show/ShowEpisodesBoard.css, EpisodeLedger.css). */
 
-/* Episodes → Results heading (2026-10-07). */
-.wa-results-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
-.wa-results-title { margin: 0; font-family: var(--font-prose); font-size: 28px; font-weight: 600; color: var(--text-primary); }
-.wa-results-line { margin: 4px 0 0; font-size: 14px; color: var(--text-secondary); }
-.wa-results-count { font-size: 13px; color: var(--text-secondary); }
 /* Producer Mode → Overview: its styles are components/Show/ShowOverview.css (Evoni's mock, 2026-10-17). */
 
 /* A season slot's panel (Evoni's redesign, 2026-10-05; the Season page's
@@ -797,7 +794,7 @@
 .wa-rel-date small { font-family: var(--font-ui); font-size: 10px; font-weight: 600; margin-bottom: 3px; }
 .wa-rel-date.none { background: var(--lala-parchment-2); color: var(--text-secondary); font-size: 16px; }
 .wa-rel-cal-text { display: grid; gap: 2px; min-width: 0; }
-.wa-rel-cal-text a { font-size: 14px; font-weight: 700; color: var(--text-primary); text-decoration: none; }
+.wa-rel-cal-text a { font-size: 14px; font-weight: 700; color: var(--text-primary); gap: 4px; }
 .wa-rel-cal-text a:hover, .wa-rel-result-text a:hover { text-decoration: underline; }
 .wa-rel-cal-text span { font-size: 12px; color: var(--text-secondary); }
 
@@ -900,57 +897,6 @@
 /* The queue's true counts under the cards: "Showing 10–18 of 214 matching · 250 events". */
 .wa-ev-range { margin: 12px 0 0; font-size: 12px; color: var(--lala-ink-muted); }
 
-/* Episodes › Results (Evoni, 2026-10-22 layout list): one summary strip,
-   filter and sort, rows that fit a phone, and an opened episode with its
-   actions first and its stats, money and event side by side. */
-.wa-ledger-strip { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 20px; margin-bottom: 14px; padding: 12px 14px; border-radius: 14px; background: var(--surface-card); border: 1px solid var(--lala-parchment-3); }
-.wa-ledger-tiers { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
-.wa-ledger-tiers li { display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border: 1px solid; border-radius: 999px; font-size: 13px; color: var(--text-primary); }
-.wa-ledger-money { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 0; }
-.wa-ledger-money div { display: flex; align-items: baseline; gap: 6px; }
-.wa-ledger-money dt { font-size: 12px; color: var(--text-secondary); }
-.wa-ledger-money dd { margin: 0; font-size: 15px; font-weight: 800; color: var(--text-primary); }
-.wa-ledger-money .is-in dd { color: var(--success-text); }
-.wa-ledger-money .is-out dd { color: var(--danger-text); }
-.wa-ledger-tools { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; margin-bottom: 10px; }
-.wa-ledger-filters { display: flex; flex-wrap: wrap; gap: 6px; }
-.wa-ledger-filters button {
-  display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 4px 12px; border: 1px solid var(--lala-parchment-3); border-radius: 999px;
-  background: var(--surface-card); color: var(--text-primary); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
-}
-.wa-ledger-filters button.active { background: var(--lala-lavender); border-color: var(--lala-lavender); color: var(--text-inverse); }
-.wa-ledger-n { font-size: 12px; opacity: 0.85; }
-.wa-ledger-sort { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-secondary); }
-.wa-ledger-sort select { min-height: 36px; padding: 4px 8px; border: 1px solid var(--lala-parchment-3); border-radius: 8px; background: var(--surface-card); color: var(--text-primary); font: inherit; font-size: 13px; }
-.wa-ledger-none { margin: 8px 0; font-size: 13px; color: var(--text-secondary); }
-.wa-ledger-row { margin-bottom: 10px; border: 1px solid var(--lala-parchment-3); border-radius: 12px; background: var(--surface-card); overflow: hidden; }
-.wa-ledger-row.is-open { border: 2px solid var(--primary); }
-.wa-ledger-row-head {
-  display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; width: 100%; padding: 14px 16px; border: none; background: none;
-  color: var(--text-primary); font: inherit; text-align: left; cursor: pointer;
-}
-.wa-ledger-row-head:focus-visible { outline: 2px solid var(--lala-lavender); outline-offset: -2px; }
-.wa-ledger-num { flex: 0 0 32px; font-size: 16px; font-weight: 800; color: var(--primary-text); }
-.wa-ledger-name { flex: 1 1 180px; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.wa-ledger-title { font-size: 14px; font-weight: 700; overflow-wrap: anywhere; }
-.wa-ledger-event { font-size: 11px; color: var(--text-secondary); }
-.wa-ledger-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
-.wa-ledger-score { font-size: 18px; font-weight: 800; margin: 0 4px; }
-.wa-ledger-chev { font-size: 12px; color: var(--text-secondary); }
-.wa-ledger-case { padding: 0 16px 16px; border-top: 1px solid var(--lala-parchment-3); }
-.wa-ledger-actions { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px 0; }
-.wa-ledger-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; align-items: start; }
-.wa-ledger-col { min-width: 0; }
-.wa-ledger-stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 8px; }
-@media (max-width: 600px) {
-  /* The number and title on one line, the tier, score and changes under them. */
-  .wa-ledger-row-head { padding: 12px; }
-  .wa-ledger-name { flex: 1 1 0; }
-  .wa-ledger-meta { order: 3; flex-basis: 100%; padding-left: 42px; }
-  .wa-ledger-chev { order: 2; }
-  .wa-ledger-case { padding: 0 12px 12px; }
-}
-
 /* Season Plan fixes (Evoni's review, 2026-10-24): a load that failed, with
    Retry; messages in the page where browser alerts were; the advance
    confirm step; advancing with open slots; "Make a thread" as a small form. */
@@ -994,3 +940,8 @@
   .wa-arc-confirm button, .wa-arc-open-advance-btn, .wa-season-small-btn, .wa-season-name-actions button { min-height: 44px; }
   .wa-arc-open-advance-btn { flex: 1 1 100%; }
 }
+
+/* The event library's line above its queue (2026-10-25): it is out of the
+   banner, and the season's events are on the Season page. */
+.wa-ev-home { margin: 0; font-size: 13px; color: var(--text-secondary); }
+.wa-ev-home a { color: var(--primary-text); font-weight: 600; }

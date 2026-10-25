@@ -111,12 +111,12 @@ describe('a need with a company in it', () => {
     ],
   };
 
-  test('a Company chip; missing, it offers Add a deal (the show\'s Opportunities for that company) and Add a company link', () => {
+  test('a Company chip; missing, it offers Add a deal (the Season page\'s Opportunities tab, for that company) and Add a company link', () => {
     render(<MemoryRouter><SeasonNeeds data={DATA} api={{ post: vi.fn() }} /></MemoryRouter>);
     const row = screen.getByTestId('need-purpose:s2:c-col|c-lala');
     expect(within(row).getByText('Company')).toBeTruthy();
     expect(within(row).getByRole('link', { name: 'Add a deal' }).getAttribute('href'))
-      .toBe('/shows/show-1/world?tab=opportunities&deal_with=The%20Column');
+      .toBe('/shows/show-1/season?tab=opportunities&deal_with=The+Column');
     expect(within(row).getByRole('button', { name: 'Add a company link' })).toBeTruthy();
     expect(within(row).queryByRole('button', { name: 'Add a seed' })).toBeNull();
   });

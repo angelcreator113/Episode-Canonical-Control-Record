@@ -14,6 +14,7 @@ vi.mock('../services/api', () => ({
 
 import api from '../services/api';
 import WorldAdmin from './WorldAdmin';
+import EpisodeLedger from '../components/Show/EpisodeLedger';
 
 const CONFIG = { starting_balance: 1900, current_balance: 2450, goals: [{ id: 'g1', threshold: 5000, reward_coins: 200, label: '🌟 Rising Star' }] };
 let where;
@@ -72,10 +73,19 @@ describe("Lala's Finances: one home", () => {
     expect(await screen.findByTestId('lala-finances')).toBeTruthy();
   });
 
-  test('an episode\'s P&L in Results links to it', async () => {
-    renderAt('episodes-ledger');
+  // Results is the Season page's now (2026-10-25); its link opens the section here.
+  test('an episode\'s P&L in Results (the Season page\'s Episode Ledger) links to it', async () => {
+    render(
+      <MemoryRouter initialEntries={['/shows/show-1/season?tab=results']}>
+        <Routes>
+          <Route path="/shows/:showId/season" element={<EpisodeLedger showId="show-1" episodes={[{ id: 'ep-1', episode_number: 1, title: 'Gala Night', status: 'draft' }]} />} />
+          <Route path="/shows/:id/world" element={<><WorldAdmin /><Where /></>} />
+        </Routes>
+      </MemoryRouter>,
+    );
     fireEvent.click(await screen.findByText('Gala Night'));
     fireEvent.click(await screen.findByTestId('ledger-finances-link-ep-1'));
     await waitFor(() => expect(where).toBe('/shows/show-1/world?tab=finances'));
+    expect(await screen.findByTestId('lala-finances')).toBeTruthy();
   });
 });
