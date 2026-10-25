@@ -35,6 +35,7 @@ import useDialogLayer from '../../hooks/useDialogLayer';
 import VoiceRecordPanel, { VoiceBadge, VoiceMicButton } from '../Teleprompter/VoiceRecord';
 import { voiceClipsApi, isNotReady as voiceNotReady, VOICE_NOT_READY, clipsByLine, lineKey, withClip } from '../../lib/voiceClipsApi';
 import { teleprompterLines, teleprompterIndexMap, HER } from '../../lib/teleprompterLines';
+import { voiceApi } from '../../lib/characterVoice';
 import './EpisodeScriptPage.css';
 
 // Track 6 CP15 partial-migration extension (5th instance) — file already
@@ -286,6 +287,26 @@ function cueLabel(text) {
 const CUTSCENE_NO_PHONE = 'Beats 11–13 are the cutscene: no phone.';
 
 const COVERAGE_KINDS = { deliverable: 'Deliverable', goal: 'Goal', hook: 'Forward hook', opportunity: 'Opportunity', wear: 'Wear cue', phone: 'Phone moment', beat: 'Beat missing', rule: 'Show rule' };
+
+/**
+ * Tells the voice that learns (POST /api/v1/voice/signals) which rewrite she
+ * kept: the speaker, her line before and the line she chose. Fire-and-forget.
+ */
+export function sendRewriteSignal(episodeId, beatNumber, originalLine, chosenLine) {
+  const before = speakerLine(String(originalLine || ''));
+  const after = speakerLine(String(chosenLine || ''));
+  const speaker = before?.speaker || after?.speaker || null;
+  const original = before?.words ? unquote(before.words) : String(originalLine || '').trim();
+  const edited = after?.words ? unquote(after.words) : String(chosenLine || '').trim();
+  if (!episodeId || !speaker || !edited || original === edited) return null;
+  try {
+    return Promise.resolve(voiceApi.signal({ episodeId, beatNumber: beatNumber ?? null, speaker, original, edited }))
+      .catch((err) => { console.error('[EpisodeScript] voice signal failed:', err); });
+  } catch (err) {
+    console.error('[EpisodeScript] voice signal failed:', err);
+    return null;
+  }
+}
 
 function parseLine(line) {
   const t = (typeof line === 'string' ? line : '').trim();
@@ -1471,6 +1492,24 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
     return () => { live = false; };
   }, [episodeId]);
   const voiceByLine = useMemo(() => clipsByLine(voiceClips), [voiceClips]);
+  // Voice drift (Evoni, 2026-10-25, voices that learn): the episode's
+  // checkable learned rules and who its speaker labels are, read once per
+  // episode for "Ready to film?". Missing (the update not run yet, or any
+  // failure): no voice rows, nothing else changes.
+  const [voiceRules, setVoiceRules] = useState(null);
+  const [voiceSpeakers, setVoiceSpeakers] = useState([]);
+  useEffect(() => {
+    setVoiceRules(null); setVoiceSpeakers([]);
+    if (!episodeId) return undefined;
+    let live = true;
+    Promise.resolve().then(() => voiceApi.episodeRules(episodeId))
+      .then((rows) => { if (live) setVoiceRules(rows); })
+      .catch((err) => { console.error('[EpisodeScriptTab] voice rules not loaded:', err); });
+    Promise.resolve().then(() => voiceApi.speakers(episodeId))
+      .then((rows) => { if (live) setVoiceSpeakers(rows); })
+      .catch((err) => { console.error('[EpisodeScriptTab] voice speakers not loaded:', err); });
+    return () => { live = false; };
+  }, [episodeId]);
   const voice = useMemo(() => (episodeId ? {
     episodeId, ready: voiceReady, byLine: voiceByLine,
     onSaved: (clip) => setVoiceClips((cs) => withClip(cs, clip)),
@@ -2473,6 +2512,10 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
       noteLineOp(p.beatId, { kind: 'splice', at, removed: 1 });
       setScriptText(written);
       flash('Line rewritten ✦ Save to keep it.', 'success');
+      // Character voices that learn (Evoni, 2026-10-25): the line she had and
+      // the one she chose teach the speaker's voice. Fire-and-forget: a
+      // failure is logged, never shown, and never holds the script.
+      sendRewriteSignal(episodeId, nowBeat?.number, p.originalLine, chosen);
       return;
     }
     const current = withBeatHeaders(scriptRef.current, lockedRef.current);
@@ -2755,6 +2798,7 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
     rules: { money: scriptMoney, shoppingApproved: shoppingListApproved(source?.event || null), cast: source?.event ? eventCast(source.event, [source.sourceProfile, ...guestProfiles]) : [] },
     closetNumber: closetBeat(scriptText), dirty: scriptText !== savedScript, unsaved,
     beat14, designedIntent: brief?.designed_intent || null,
+    voice: { rules: voiceRules, speakers: voiceSpeakers },
   }) : [];
   // The studio layout (Evoni's mockup, 2026-10-19): each beat's status from
   // its lock and its "Ready to film?" rows, its rough length, and the open

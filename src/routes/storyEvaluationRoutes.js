@@ -749,8 +749,36 @@ async function loadWorldLocationContext(sceneBrief, characterKeys, registryId) {
 }
 
 // ── Helper: load voice rules (prose-level style patterns) ─────────────────
+// The book reads the same learned voices as the show (Evoni, 2026-10-25;
+// services/characterVoice): each character's live rules by character_key,
+// the book's prose (narration) and its dialogue (gameplay, cutscene) each
+// labelled, beside the older rules by character_name. Before the voice
+// migration, the older rules alone.
+async function learnedBookRules(characterKeys) {
+  const keys = [...new Set((characterKeys || []).map((k) => String(k || '').trim().toLowerCase()).filter(Boolean))];
+  if (!keys.length) return [];
+  try {
+    return await db.sequelize.query(
+      `SELECT character_key, rule_text, rule_type, context, example_edited FROM voice_rules
+        WHERE character_key IN (:keys) AND status = 'active' AND deleted_at IS NULL
+          AND (context IS NULL OR context IN ('all', 'narration', 'gameplay', 'cutscene'))
+        ORDER BY created_at DESC, id DESC LIMIT 20`,
+      { replacements: { keys }, type: db.sequelize.QueryTypes.SELECT });
+  } catch (err) {
+    if (!require('../services/characterVoice').isSchemaMissing(err)) console.error('[loadVoiceRules] learned rules error:', err?.message);
+    return [];
+  }
+}
+
 async function loadVoiceRules(characterKeys) {
   try {
+    const learned = await learnedBookRules(characterKeys);
+    const where = learned.length ? ` (${learned.length} learned from her approved lines and edits; where they conflict with older rules or voice notes, the learned rule wins)` : '';
+    const learnedLines = learned.map((r) => {
+      const ctx = r.context && r.context !== 'all' ? ` · ${r.context === 'narration' ? 'narration (prose)' : `${r.context} (dialogue)`}` : '';
+      const example = r.example_edited ? ` (e.g. "${r.example_edited}")` : '';
+      return `  [${r.character_key}${ctx}] ${r.rule_type}: ${r.rule_text}${example}`;
+    });
     const rules = await db.VoiceRule.findAll({
       where: {
         status: 'active',
@@ -763,15 +791,17 @@ async function loadVoiceRules(characterKeys) {
       order: [['signal_count', 'DESC']],
       limit: 15,
     });
-    if (!rules.length) return '';
+    const seen = new Set(learned.map((r) => r.rule_text));
+    const older = rules.filter((r) => !seen.has(r.rule_text));
+    if (!older.length && !learnedLines.length) return '';
 
-    const lines = rules.map(r => {
+    const lines = older.map(r => {
       const who = r.character_name || 'ALL';
       const example = r.example_edited ? ` (e.g. "${r.example_edited}")` : '';
       return `  [${who}] ${r.rule_type}: ${r.rule_text}${example}`;
     });
 
-    return `\n\nVOICE RULES (prose-level patterns the author has established — maintain these):\n${lines.join('\n')}`;
+    return `\n\nVOICE RULES (prose-level patterns the author has established — maintain these)${where}:\n${[...learnedLines, ...lines].join('\n')}`;
   } catch (err) {
     console.error('[loadVoiceRules] error:', err?.message);
     return '';
@@ -1797,3 +1827,4 @@ module.exports.buildDynamicDeepHints = buildDynamicDeepHints;
 // the blind spot only on request).
 module.exports.buildCharacterBlock = buildCharacterBlock;
 module.exports.buildGenerationPrompt = buildGenerationPrompt;
+module.exports.loadVoiceRules = loadVoiceRules;
