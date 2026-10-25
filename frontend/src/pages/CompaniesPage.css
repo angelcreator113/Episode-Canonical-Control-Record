@@ -33,3 +33,22 @@
   .co .co-title { font-size: 24px; }
   .co-cards { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* Registry characters that look like companies (2026-10-24): admin only. */
+.co-look { display: flex; flex-direction: column; gap: 8px; padding: 16px; border-radius: 18px; border: 1.5px dashed var(--lala-gold-line); background: var(--lala-gold-soft); color: var(--text-primary); }
+.co .co-look-title { display: inline-flex; align-items: center; gap: 8px; margin: 0; font-family: var(--font-prose); font-size: 18px; font-weight: 700; color: var(--text-primary); }
+.co-look-title svg { color: var(--lala-gold-text); }
+.co-look-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.co-look-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--lala-gold-line); background: var(--surface-card); min-width: 0; }
+.co-look-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1 1 200px; }
+.co-look-name { font-weight: 700; color: var(--accent-dark); overflow-wrap: anywhere; }
+.co-look-text a { color: var(--accent-dark); }
+.co-look-confirm { display: flex; flex-direction: column; gap: 8px; flex: 1 1 100%; }
+.co-look-ask { margin: 0; font-size: 13px; line-height: 1.5; }
+.co-look-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.co-look-done { margin: 0; padding: 8px 12px; border-radius: 12px; font-size: 13px; background: var(--success-bg); color: var(--success-text); }
+.co-look-done a { color: inherit; font-weight: 700; }
+@media (max-width: 640px) {
+  .co-look .co-btn, .co-look .co-input, .co-look-name, .co-look-text a { min-height: 44px; }
+  .co-look .co-btn, .co-look-name, .co-look-text a { display: inline-flex; align-items: center; }
+}

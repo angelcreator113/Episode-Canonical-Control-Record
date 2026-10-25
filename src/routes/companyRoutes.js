@@ -13,6 +13,13 @@
  *   POST /api/v1/companies              { name, kind, description?, ... }
  *                                        a new company (ADMIN)
  *   PUT  /api/v1/companies/:slug        her edits to its identity (ADMIN)
+ *   GET  /api/v1/companies/look-alikes  registry characters that look like
+ *                                        companies, each with the company of
+ *                                        that name, if any (services/
+ *                                        companyCharacters); nothing linked
+ *   PUT  /api/v1/companies/:slug/registry-character  { character_id | null }
+ *                                        mark a registry character as this
+ *                                        company, or unmark it (ADMIN)
  */
 
 const express = require('express');
@@ -28,7 +35,8 @@ const getModels = () => {
 
 function sendError(res, err, label) {
   const { CompanyError } = require('../services/brandProfile');
-  if (err instanceof CompanyError) return res.status(err.status).json({ success: false, error: err.message });
+  const { CompanyLinkError } = require('../services/companyCharacters');
+  if (err instanceof CompanyError || err instanceof CompanyLinkError) return res.status(err.status).json({ success: false, error: err.message });
   console.error(`[Companies] ${label} error:`, err);
   return res.status(500).json({ success: false, error: err.message });
 }
@@ -40,6 +48,15 @@ router.get('/', requireAuth, async (req, res) => {
     return res.json({ success: true, kinds: COMPANY_KINDS, companies });
   } catch (err) {
     return sendError(res, err, 'GET /');
+  }
+});
+
+// Registered before /:slug, which would take the path otherwise.
+router.get('/look-alikes', requireAuth, async (req, res) => {
+  try {
+    return res.json({ success: true, characters: await require('../services/companyCharacters').lookAlikes(getModels()) });
+  } catch (err) {
+    return sendError(res, err, 'GET /look-alikes');
   }
 });
 
@@ -64,6 +81,17 @@ router.put('/:slug', requireAuth, authorize(['ADMIN']), async (req, res) => {
     return res.json({ success: true, ...(await require('../services/brandProfile').updateCompany(getModels(), req.params.slug, req.body || {})) });
   } catch (err) {
     return sendError(res, err, 'PUT /:slug');
+  }
+});
+
+router.put('/:slug/registry-character', requireAuth, authorize(['ADMIN']), async (req, res) => {
+  try {
+    const body = req.body || {};
+    if (!('character_id' in body)) return res.status(400).json({ success: false, error: 'Send character_id (or null to unlink).' });
+    const done = await require('../services/companyCharacters').linkCharacter(getModels(), req.params.slug, body.character_id);
+    return res.json({ success: true, ...done });
+  } catch (err) {
+    return sendError(res, err, 'PUT /:slug/registry-character');
   }
 });
 

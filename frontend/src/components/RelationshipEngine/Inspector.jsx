@@ -9,13 +9,19 @@
  * start, with Confirm and Cancel in place of Save and Cancel; onConfirm gets
  * the fields POST /confirm/:id takes. A seed has no story yet, so the parts
  * only a confirmed pair has (who knows, mirror, echo) are edited after.
+ *
+ * A company's pair (either side a registry character marked as a company;
+ * Evoni, 2026-10-24): "This is a company: <name> →" under the header, and
+ * the type is picked from the company types only (tokens COMPANY_PRESETS),
+ * never romantic, never family.
  */
 import { useState, useEffect, useRef, useId } from 'react';
 import { Heart } from 'lucide-react';
 import {
   T, TENSION, CONN_MODES, STATUSES, TENSIONS, LALA_CONN,
-  sideName, typeLabel, humanize, stageLabel, STAGE_TONE, isLoveInterest,
+  sideName, typeLabel, humanize, stageLabel, STAGE_TONE, isLoveInterest, pairCompanies, presetsFor,
 } from './tokens';
+import { CompanyLine } from '../Companies/CompanyLine';
 import { Btn, Field, Label, Input, Select, Pill, useFocusTrap } from './primitives';
 import { generationStep } from './familyTree';
 import StoryTimeline from './StoryTimeline';
@@ -78,6 +84,8 @@ export default function Inspector({ rel, charById = {}, onClose, onUpdate, onDel
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rel.id]);
 
+  const companies = pairCompanies(rel, charById);
+  const companyTypes = companies.any ? presetsFor(companies) : null;
   const nameA = sideName(rel, 'a', charById);
   const nameB = sideName(rel, 'b', charById);
   const lalaConn = LALA_CONN.find(o => o.v === rel.lala_connection);
@@ -96,12 +104,15 @@ export default function Inspector({ rel, charById = {}, onClose, onUpdate, onDel
   // A seed's family role is its own to set while the type is a family type
   // (the server saves it as a family tie); a confirmed pair's is edited on
   // the Family tab, as before.
-  const seedFamily = seedMode && (isFamilyType(f.relationship_type) || (!!rel.family_role && isFamilyType(rel.relationship_type)));
+  const seedFamily = !companies.any && seedMode && (isFamilyType(f.relationship_type) || (!!rel.family_role && isFamilyType(rel.relationship_type)));
   const confirmFields = () => {
     const out = Object.fromEntries(SEED_FIELDS.map(k => [k, f[k]]));
     if (!seedFamily) delete out.family_role;
+    if (companies.any) out.is_romantic = false;
     return out;
   };
+  // A company pair saves only a company type: the picker starts empty when its type is not one.
+  const typeOk = companyTypes ? companyTypes.some(p => p.type === f.relationship_type) : !!f.relationship_type.trim();
 
   return (
     <div ref={trapRef} className={`re-inspector ${sheet ? 'is-sheet' : ''}`}
@@ -126,6 +137,8 @@ export default function Inspector({ rel, charById = {}, onClose, onUpdate, onDel
           {tc && <Pill color={tc.color} bg={tc.bg}>{humanize(rel.tension_state)}</Pill>}
           {secrecy && <Pill color={T.orchidDeep} bg={T.orchidFog}>{secrecy}</Pill>}
         </div>
+        {companies.a && <CompanyLine company={companies.a} />}
+        {companies.b && companies.b.id !== companies.a?.id && <CompanyLine company={companies.b} />}
         {rel.situation && <p className="re-inspector-situation">{rel.situation}</p>}
         {seedMode && rel.seed_why && <p className="re-inspector-why"><span className="re-inspector-why-key">Why · </span>{rel.seed_why}</p>}
       </div>
@@ -135,11 +148,24 @@ export default function Inspector({ rel, charById = {}, onClose, onUpdate, onDel
         {edit ? (
           <>
             <Label htmlFor={idOf('relationship_type')}>Relationship Type</Label>
-            <Input id={idOf('relationship_type')} value={f.relationship_type} onChange={set('relationship_type')} placeholder="love_interest, rival, mentor…" />
-            <label className="re-check">
-              <input type="checkbox" checked={f.is_romantic} onChange={e => setF(p => ({ ...p, is_romantic: e.target.checked }))} />
-              Romantic (a love interest)
-            </label>
+            {companyTypes ? (
+              <>
+                <Select id={idOf('relationship_type')} value={companyTypes.some(p => p.type === f.relationship_type) ? f.relationship_type : ''}
+                  onChange={e => setF(p => ({ ...p, relationship_type: e.target.value, is_romantic: false }))}>
+                  <option value="">Choose a company type…</option>
+                  {companyTypes.map(p => <option key={p.type} value={p.type}>{p.label}</option>)}
+                </Select>
+                <p className="re-inspector-seed-note">A company is never a romance or family.</p>
+              </>
+            ) : (
+              <>
+                <Input id={idOf('relationship_type')} value={f.relationship_type} onChange={set('relationship_type')} placeholder="love_interest, rival, mentor…" />
+                <label className="re-check">
+                  <input type="checkbox" checked={f.is_romantic} onChange={e => setF(p => ({ ...p, is_romantic: e.target.checked }))} />
+                  Romantic (a love interest)
+                </label>
+              </>
+            )}
             <Label htmlFor={idOf('connection_mode')}>Connection Mode</Label>
             <Select id={idOf('connection_mode')} value={f.connection_mode} onChange={set('connection_mode')}>
               {CONN_MODES.map(m => <option key={m} value={m}>{m}</option>)}
@@ -229,15 +255,15 @@ export default function Inspector({ rel, charById = {}, onClose, onUpdate, onDel
       <div className="re-inspector-footer">
         {seedMode ? (
           <>
-            <Btn variant="primary" disabled={!f.relationship_type.trim() || confirmBusy}
+            <Btn variant="primary" disabled={!typeOk || confirmBusy}
               onClick={() => onConfirm?.(confirmFields())}
               className="re-inspector-save">{confirmBusy ? 'Confirming…' : 'Confirm'}</Btn>
             <Btn variant="ghost" onClick={onClose}>Cancel</Btn>
           </>
         ) : edit ? (
           <>
-            <Btn variant="primary" disabled={!f.relationship_type.trim()}
-              onClick={() => { const { family_role: _role, ...fields } = f; onUpdate(fields); setEdit(false); }}
+            <Btn variant="primary" disabled={!typeOk}
+              onClick={() => { const { family_role: _role, ...fields } = f; onUpdate(companies.any ? { ...fields, is_romantic: false } : fields); setEdit(false); }}
               className="re-inspector-save">Save</Btn>
             <Btn variant="ghost" onClick={() => setEdit(false)}>Cancel</Btn>
           </>

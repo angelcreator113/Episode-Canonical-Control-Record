@@ -287,7 +287,9 @@ describe('dates', () => {
     renderTab();
     fireEvent.click(screen.getByTestId('script-history'));
     const item = await screen.findByTestId('script-history-item');
-    const time = within(item).getByText('2 hours ago');
+    // Two hours ago is "yesterday" between midnight and 2am, so read the
+    // wording versionTime gives for it rather than a fixed phrase.
+    const time = within(item).getByText(versionTime(versions[0].created_at).text);
     expect(time.tagName).toBe('TIME');
     expect(time.getAttribute('title')).toMatch(/2026/);
     expect(item.textContent).toContain('2 beats');

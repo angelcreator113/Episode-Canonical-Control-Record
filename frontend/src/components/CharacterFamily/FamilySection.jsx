@@ -300,6 +300,17 @@ export default function FamilySection({ character }) {
   };
 
   if (!character) return null;
+  // A company (marked as one, extra_fields.company_id; 2026-10-24) has no family.
+  if (character.extra_fields?.company_id || data?.company) {
+    return (
+      <section className="ch-card cf" aria-labelledby="ch-fam" data-testid="ch-family">
+        <div className="ch-card-head">
+          <h2 id="ch-fam" className="ch-h2"><Heart size={20} aria-hidden="true" className="ch-h2-icon" /> Family</h2>
+        </div>
+        <p className="ch-note" data-testid="ch-family-company">{name} is a company, so it has no family. Its people and deals are on its company profile.</p>
+      </section>
+    );
+  }
   const ties = data?.ties || [];
   const families = data?.families || [];
   const tree = data?.family_tree || { members: [] };

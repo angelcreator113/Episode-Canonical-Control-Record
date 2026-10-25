@@ -82,6 +82,65 @@ describe('CompaniesPage', () => {
     expect(screen.getByTestId('companies').className).toContain('is-embedded');
   });
 
+  // Registry characters that look like companies (2026-10-24).
+  const lookAlikes = [
+    { character_id: 'rc-col', name: 'The Column', reason: 'same_name', company: { id: 'b-3', slug: 'the_column', name: 'The Column', kind: 'outlet' }, guessed_kind: 'outlet', taken_by: null },
+    { character_id: 'rc-weekly', name: 'The Weekly', reason: 'looks_like', company: null, guessed_kind: 'outlet', taken_by: null },
+  ];
+  const withLookAlikes = () => vi.mocked(api.get).mockImplementation(async (url) => (url === '/api/v1/companies/look-alikes'
+    ? { data: { success: true, characters: lookAlikes } } : { data: { success: true, companies } }));
+
+  test('the look-alike panel: each one with its company; Link asks first, then links', async () => {
+    withLookAlikes();
+    vi.mocked(api.put).mockResolvedValueOnce({ data: { success: true, character: { id: 'rc-col' }, conflicts: [{ id: 'r9', with: 'Marcus', type: 'love_interest', is_romantic: true }] } });
+    renderPage();
+    const panel = await screen.findByTestId('co-look-alikes');
+    expect(within(panel).getByRole('heading', { name: 'Registry characters that look like companies' })).toBeTruthy();
+    const row = within(panel).getByTestId('co-look-rc-col');
+    expect(row.textContent).toContain('Same name as the company The Column');
+    fireEvent.click(within(row).getByRole('button', { name: 'Link' }));
+    // Nothing is linked until she says yes.
+    expect(api.put).not.toHaveBeenCalled();
+    expect(row.textContent).toContain('Mark The Column as the company The Column?');
+    fireEvent.click(within(row).getByRole('button', { name: 'Yes, link' }));
+    await waitFor(() => expect(api.put).toHaveBeenCalledWith('/api/v1/companies/the_column/registry-character', { character_id: 'rc-col' }));
+    const done = await within(panel).findByRole('status');
+    expect(done.textContent).toContain('The Column is now The Column.');
+    expect(done.textContent).toContain('1 of its relationships is a romance or family (Marcus)');
+    expect(within(panel).queryByTestId('co-look-rc-col')).toBeNull();
+  });
+
+  test('Make a company: the kind guessed, made, then linked; Cancel does nothing', async () => {
+    withLookAlikes();
+    vi.mocked(api.post).mockResolvedValueOnce({ data: { success: true, company: { slug: 'the_weekly', name: 'The Weekly' } } });
+    vi.mocked(api.put).mockResolvedValueOnce({ data: { success: true, conflicts: [] } });
+    renderPage();
+    const row = await screen.findByTestId('co-look-rc-weekly');
+    fireEvent.click(within(row).getByRole('button', { name: 'Make a company' }));
+    fireEvent.click(within(row).getByRole('button', { name: 'Cancel' }));
+    expect(api.post).not.toHaveBeenCalled();
+    fireEvent.click(within(row).getByRole('button', { name: 'Make a company' }));
+    expect(within(row).getByLabelText('Kind').value).toBe('outlet');
+    fireEvent.click(within(row).getByRole('button', { name: 'Make it and link' }));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/api/v1/companies', { name: 'The Weekly', kind: 'outlet' }));
+    await waitFor(() => expect(api.put).toHaveBeenCalledWith('/api/v1/companies/the_weekly/registry-character', { character_id: 'rc-weekly' }));
+  });
+
+  test('no panel for someone who is not ADMIN, or when nothing looks like a company', async () => {
+    auth.user = { groups: ['viewer'] };
+    withLookAlikes();
+    const { unmount } = renderPage();
+    await screen.findByTestId('co-velour_atelier');
+    expect(screen.queryByTestId('co-look-alikes')).toBeNull();
+    expect(api.get).not.toHaveBeenCalledWith('/api/v1/companies/look-alikes');
+    unmount();
+    auth.user = { groups: ['admin'] };
+    vi.mocked(api.get).mockResolvedValue({ data: { success: true, companies, characters: [] } });
+    renderPage();
+    await screen.findByTestId('co-velour_atelier');
+    expect(screen.queryByTestId('co-look-alikes')).toBeNull();
+  });
+
   test('/brands opens the LalaVerse hub\'s Brands tab; profiles keep their own page (Evoni, 2026-10-19)', () => {
     const app = readFileSync(resolve(process.cwd(), 'src/App.jsx'), 'utf8');
     expect(app).toMatch(/<Route path="\/brands" element=\{<Navigate to="\/universe\?tab=brands" replace \/>\} \/>/);
