@@ -1,5 +1,5 @@
 import { describe, test, expect } from 'vitest';
-import { EVENTS_PER_PAGE, parseEventPage, paginateEvents, eventPageNumbers, readEventQuery, nextEventParams, eventRangeText } from './eventPagination';
+import { EVENTS_PER_PAGE, parseEventPage, paginateEvents, eventPageNumbers, readEventQuery, nextEventParams, eventRangeText, readEventSort, nextEventSortParams } from './eventPagination';
 
 const list = (n) => Array.from({ length: n }, (_, i) => i + 1);
 
@@ -56,3 +56,20 @@ describe('the queue in the URL', () => {
   });
 });
 
+
+// The Season page's In this season view sorts by slot by default (2026-10-25).
+describe('readEventSort / nextEventSortParams (slot-ordered views)', () => {
+  const p = (s) => new URLSearchParams(s);
+  test('slot is the default and an option only where the view is slot-ordered', () => {
+    expect(readEventSort(p(''), { slotOrdered: true })).toBe('slot');
+    expect(readEventSort(p('evsort=slot'), { slotOrdered: false })).toBe('name');
+    expect(readEventSort(p('evsort=prestige'), { slotOrdered: true })).toBe('prestige');
+    expect(readEventSort(p('evsort=bogus'), { slotOrdered: true })).toBe('slot');
+    expect(readEventSort(p(''))).toBe('name');
+  });
+  test('the view\'s default leaves the URL; Name is written where slot is the default; the page resets', () => {
+    expect(nextEventSortParams(p('evpage=3&evsort=name'), 'slot', { slotOrdered: true }).toString()).toBe('');
+    expect(nextEventSortParams(p('evpage=3'), 'name', { slotOrdered: true }).toString()).toBe('evsort=name');
+    expect(nextEventSortParams(p('evsort=prestige'), 'name').toString()).toBe('');
+  });
+});

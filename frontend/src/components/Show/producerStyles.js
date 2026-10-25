@@ -76,3 +76,10 @@ export const S = {
   sel: { width: '100%', padding: '8px 12px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, fontSize: 13, color: 'var(--text-primary)', background: 'var(--surface-card)', transition: 'border-color 0.15s' },
   tArea: { width: '100%', padding: '8px 12px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, fontSize: 13, color: 'var(--text-primary)', resize: 'vertical', fontFamily: 'inherit', boxSizing: 'border-box' },
 };
+
+// A toast reporting a failure: shown in red (F1). Producer Mode's and the
+// event library's toasts both read it.
+const FAILURE_TOAST = /\b(fail(ed|ure)?|error|could not|couldn't|can't|refused|not configured)\b/i;
+export function isFailureToast(text) {
+  return FAILURE_TOAST.test(String(text || ''));
+}

@@ -14,12 +14,12 @@ import { vi, describe, beforeEach, test, expect } from 'vitest';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 
-vi.mock('../services/api', () => ({
+vi.mock('../../services/api', () => ({
   default: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn(), patch: vi.fn(), request: vi.fn() },
 }));
 
-import api from '../services/api';
-import WorldAdmin from './WorldAdmin';
+import api from '../../services/api';
+import EventLibrary from './EventLibrary';
 
 const pad = (n) => String(n).padStart(2, '0');
 
@@ -52,9 +52,9 @@ function SearchProbe() {
 
 function renderQueue(search = '?tab=events') {
   return render(
-    <MemoryRouter initialEntries={[`/shows/show-1/world${search}`]}>
+    <MemoryRouter initialEntries={[`/shows/show-1/season${search}`]}>
       <Routes>
-        <Route path="/shows/:id/world" element={<><WorldAdmin /><SearchProbe /></>} />
+        <Route path="/shows/:showId/season" element={<><EventLibrary showId="show-1" /><SearchProbe /></>} />
       </Routes>
     </MemoryRouter>
   );
@@ -63,7 +63,7 @@ function renderQueue(search = '?tab=events') {
 const cardIds = () => screen.queryAllByTestId(/^event-card-ev-\d+$/).map((el) => el.dataset.testid.replace('event-card-', ''));
 const pageStatus = () => screen.getByTestId('events-page-status').textContent;
 
-describe('WorldAdmin events queue — cleanup and pagination (Task #2360)', () => {
+describe('EventLibrary queue — cleanup and pagination (Task #2360)', () => {
   beforeEach(() => {
     Object.values(api).forEach((fn) => fn?.mockReset?.());
     vi.mocked(api.get).mockImplementation(async (url) => {

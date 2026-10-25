@@ -447,10 +447,10 @@ function Home() {
                 <ul className="hp-chips">
                   {[event.event_type?.replace(/_/g, ' '), event.dress_code, event.theme].filter(Boolean).slice(0, 3).map((t) => <li key={t}>{t}</li>)}
                 </ul>
-                <Link className="hp-pill-btn hp-feature__btn" to={`${world('events')}&event=${event.id}`}>View event</Link>
+                <Link className="hp-pill-btn hp-feature__btn" to={sid ? seasonPageHref(sid, 'events', { event: event.id }) : '/shows'}>View event</Link>
               </>
             ) : (
-              <p className="hp-feature__empty">No event yet. <Link to={world('events')}>Open Events</Link></p>
+              <p className="hp-feature__empty">No event yet. <Link to={sid ? seasonPageHref(sid, 'events') : '/shows'}>Open Events</Link></p>
             )}
           </section>
         </div>

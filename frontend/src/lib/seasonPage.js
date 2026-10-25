@@ -18,7 +18,8 @@ export const SEASON_TABS = [
   { key: 'roadmap', label: 'Roadmap', note: "The season's episode slots, part by part: what each one is for and what fills it." },
   // The production board (components/Show/ShowEpisodesBoard), from Producer Mode's Episodes tab.
   { key: 'episodes', label: 'Episodes', note: 'Every episode this season and where it is in production.' },
-  { key: 'events', label: 'Events', note: "The events in this season's slots, and the slots still waiting for one." },
+  // The event library (components/Show/EventLibrary), from Producer Mode's ?tab=events (2026-10-25).
+  { key: 'events', label: 'Events', note: "Every event: the ones in this season's slots, the ones not placed yet, or the whole library, to edit and pencil in." },
   // Brand offers and bookings (components/Show/OpportunitiesTab), from Producer Mode's Opportunities tab.
   { key: 'opportunities', label: 'Opportunities', note: 'Offers and bookings from brands, from the first offer to paid.' },
   { key: 'story', label: 'Story', note: 'The threads, twists and reveals the season is building, and what the story still needs.' },

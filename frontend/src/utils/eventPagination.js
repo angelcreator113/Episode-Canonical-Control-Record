@@ -83,6 +83,31 @@ export function nextEventParams(prev, patch) {
   return next;
 }
 
+/**
+ * The sort, where a view can also sort by slot (the Season page's "In this
+ * season", whose events come in slot order): 'slot' is that view's default
+ * and its own option; anywhere else it reads as the usual default, Name.
+ */
+export function readEventSort(params, { slotOrdered = false } = {}) {
+  const raw = params?.get?.(EVENT_QUERY_PARAMS.sort) ?? null;
+  if (raw === 'slot') return slotOrdered ? 'slot' : EVENT_QUERY_DEFAULTS.sort;
+  if (EVENT_SORTS.includes(raw)) return raw;
+  return slotOrdered ? 'slot' : EVENT_QUERY_DEFAULTS.sort;
+}
+
+/**
+ * The next URL params after a sort change in such a view: the view's own
+ * default leaves the URL, anything else is written (Name too, since Name is
+ * not the default there); the queue goes back to page 1.
+ */
+export function nextEventSortParams(prev, sort, { slotOrdered = false } = {}) {
+  const next = nextEventParams(prev, {});
+  const fallback = slotOrdered ? 'slot' : EVENT_QUERY_DEFAULTS.sort;
+  if (!sort || sort === fallback) next.delete(EVENT_QUERY_PARAMS.sort);
+  else next.set(EVENT_QUERY_PARAMS.sort, String(sort));
+  return next;
+}
+
 /** "Showing 10–18 of 214 matching · 250 events", or the whole-list form. */
 export function eventRangeText({ page, perPage = EVENTS_PER_PAGE, matching, total }) {
   const all = `${total.toLocaleString()} event${total === 1 ? '' : 's'}`;

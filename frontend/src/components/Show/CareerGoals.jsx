@@ -25,6 +25,7 @@ import { Plus, RefreshCw, Lightbulb, Sprout, Pencil, Trash2 } from 'lucide-react
 import { GoalMovers, GoalPartWarnings } from './GoalCoverage';
 import { useGoalCoverage } from '../../lib/goalCoverage';
 import './CareerGoals.css';
+import { seasonPageHref } from '../../lib/seasonPage';
 
 const TYPES = [
   { key: 'primary', label: 'Primary Goal', option: 'Primary (1 max)', limit: '1 max' },
@@ -146,7 +147,7 @@ function Suggestions({ suggestions, showId }) {
             {s.id && (
               <div className="cg-sug-links">
                 {/* Its editor in Producer Mode's Events; the package is where its episode starts. */}
-                <Link className="szn-link" to={`/shows/${showId}/world?tab=events&event=${encodeURIComponent(s.id)}`}>View in Events</Link>
+                <Link className="szn-link" to={seasonPageHref(showId, 'events', { event: s.id })}>View in Events</Link>
                 <Link className="szn-link" to={`/shows/${showId}/events/${s.id}`}>Open the event package</Link>
               </div>
             )}

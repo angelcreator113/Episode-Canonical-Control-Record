@@ -14,12 +14,12 @@ import { vi, describe, beforeEach, afterEach, test, expect } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 
-vi.mock('../services/api', () => ({
+vi.mock('../../services/api', () => ({
   default: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn(), patch: vi.fn(), request: vi.fn() },
 }));
 
-import api from '../services/api';
-import WorldAdmin from './WorldAdmin';
+import api from '../../services/api';
+import EventLibrary from './EventLibrary';
 
 const BASE_EVENT = {
   id: 'ev-1', show_id: 'show-1', name: 'Velour Launch', status: 'draft', prestige: 5, cost_coins: 10,
@@ -31,16 +31,16 @@ const SET_NO_IMAGE = { id: 'set-9', name: 'The Glasshouse', scene_type: 'EVENT_L
 let events;
 function renderEditor() {
   return render(
-    <MemoryRouter initialEntries={['/shows/show-1/world?tab=events&event=ev-1']}>
+    <MemoryRouter initialEntries={['/shows/show-1/season?tab=events&event=ev-1']}>
       <Routes>
-        <Route path="/shows/:id/world" element={<WorldAdmin />} />
+        <Route path="/shows/:showId/season" element={<EventLibrary showId="show-1" />} />
       </Routes>
     </MemoryRouter>
   );
 }
 const posted = (suffix) => vi.mocked(api.post).mock.calls.filter(([u]) => u.endsWith(suffix));
 
-describe('WorldAdmin event editor: no scene image work here (S8)', () => {
+describe('EventLibrary event editor: no scene image work here (S8)', () => {
   beforeEach(() => {
     Object.values(api).forEach((fn) => fn?.mockReset?.());
     events = [{ ...BASE_EVENT, venue_location_id: 'loc-1' }];
@@ -76,7 +76,7 @@ describe('WorldAdmin event editor: no scene image work here (S8)', () => {
     events = [{ ...BASE_EVENT, scene_set_id: 'set-9' }];
     renderEditor();
     const link = await screen.findByTestId('event-editor-open-scene-sets');
-    expect(link.getAttribute('href')).toBe(`/shows/show-1/world?tab=scene-sets&set=set-9&from=${encodeURIComponent('/shows/show-1/world?tab=events&event=ev-1')}&fromLabel=the%20event`);
+    expect(link.getAttribute('href')).toBe(`/shows/show-1/world?tab=scene-sets&set=set-9&from=${encodeURIComponent('/shows/show-1/season?tab=events&event=ev-1')}&fromLabel=the%20event`);
     expect(screen.queryByRole('button', { name: 'Generate Venue Images' })).toBeNull();
     expect(screen.queryByText('🎬 Video')).toBeNull();
   });

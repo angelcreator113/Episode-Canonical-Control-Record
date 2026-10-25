@@ -205,7 +205,7 @@ function Overview() {
   const counts = data?.counts || {};
   const tiles = [
     { key: 'episodes', label: 'Episodes', value: counts.episodes, link: 'Open the Season page', to: show ? seasonPageHref(show.id) : '/universe', tone: 'overview' },
-    { key: 'events', label: 'Events', value: counts.events, link: 'Open Events library', to: producer('events'), tone: 'culture' },
+    { key: 'events', label: 'Events', value: counts.events, link: 'Open Events library', to: show ? seasonPageHref(show.id, 'events', { show: 'all' }) : '/universe', tone: 'culture' },
     { key: 'characters', label: 'Characters', value: counts.characters, note: 'in Lala’s world',
       extra: counts.oldToReview > 0 ? `${counts.oldToReview.toLocaleString()} from the old system to review` : null,
       link: 'Open The cast', to: '/character-registry', tone: 'society' },

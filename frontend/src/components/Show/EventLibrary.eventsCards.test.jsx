@@ -11,13 +11,13 @@ import { vi, describe, beforeEach, test, expect } from 'vitest';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 
-vi.mock('../services/api', () => ({
+vi.mock('../../services/api', () => ({
   default: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn(), patch: vi.fn(), request: vi.fn() },
 }));
 
-import api from '../services/api';
-import WorldAdmin from './WorldAdmin';
-import { computeEventPackageReadiness, describeMissing } from '../utils/eventReadinessSections';
+import api from '../../services/api';
+import EventLibrary from './EventLibrary';
+import { computeEventPackageReadiness, describeMissing } from '../../utils/eventReadinessSections';
 
 const pad = (n) => String(n).padStart(2, '0');
 
@@ -50,9 +50,9 @@ function Probe() {
 
 function renderQueue(search = '?tab=events') {
   return render(
-    <MemoryRouter initialEntries={[`/shows/show-1/world${search}`]}>
+    <MemoryRouter initialEntries={[`/shows/show-1/season${search}`]}>
       <Routes>
-        <Route path="/shows/:id/world" element={<><WorldAdmin /><Probe /></>} />
+        <Route path="/shows/:showId/season" element={<><EventLibrary showId="show-1" /><Probe /></>} />
         <Route path="/shows/:showId/events/:eventId" element={<Probe />} />
       </Routes>
     </MemoryRouter>
@@ -61,7 +61,7 @@ function renderQueue(search = '?tab=events') {
 
 const cardIds = () => screen.queryAllByTestId(/^event-card-ev-[\w-]+$/).map((el) => el.dataset.testid.replace('event-card-', ''));
 
-describe('WorldAdmin events queue — cards and the deal-type filter (Task #2361)', () => {
+describe('EventLibrary queue — cards and the deal-type filter (Task #2361)', () => {
   beforeEach(() => {
     Object.values(api).forEach((fn) => fn?.mockReset?.());
     vi.mocked(api.get).mockImplementation(async (url) => {

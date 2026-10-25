@@ -9,12 +9,12 @@ import { vi, describe, beforeEach, test, expect } from 'vitest';
 import { render, screen, fireEvent, waitFor, within, cleanup } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 
-vi.mock('../services/api', () => ({
+vi.mock('../../services/api', () => ({
   default: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn(), patch: vi.fn(), request: vi.fn() },
 }));
 
-import api from '../services/api';
-import WorldAdmin from './WorldAdmin';
+import api from '../../services/api';
+import EventLibrary from './EventLibrary';
 
 const pad = (n) => String(n).padStart(3, '0');
 // 260 events: 120 gifted ("Gift 001"…), 140 with no deal type ("Plain 001"…).
@@ -35,7 +35,7 @@ function Probe() {
 const renderAt = (entries, index) => render(
   <MemoryRouter initialEntries={entries} initialIndex={index ?? entries.length - 1}>
     <Routes>
-      <Route path="/shows/:id/world" element={<><WorldAdmin /><Probe /></>} />
+      <Route path="/shows/:showId/season" element={<><EventLibrary showId="show-1" /><Probe /></>} />
       <Route path="/shows/:showId/events/:eventId" element={<Probe />} />
     </Routes>
   </MemoryRouter>,
@@ -62,7 +62,7 @@ describe('Events queue: filters in the URL, true counts, a page that exists', ()
   });
 
   test("the audit's test: filter, last page, delete its last event, go back, refresh", async () => {
-    renderAt(['/shows/show-1/world?tab=events']);
+    renderAt(['/shows/show-1/season?tab=events']);
     await waitFor(() => expect(cardIds()).toHaveLength(9));
     expect(screen.getByTestId('events-range').textContent).toBe('Showing 1–9 of 260 events');
 
@@ -93,7 +93,7 @@ describe('Events queue: filters in the URL, true counts, a page that exists', ()
     // Open an event, then go back: the queue is where it was.
     fireEvent.click(screen.getByTestId('event-card-ev-g117'));
     await waitFor(() => expect(location.pathname).toBe('/shows/show-1/events/ev-g117'));
-    const queueUrl = '/shows/show-1/world?tab=events&evdeal=gifted&evq=Gift&evpage=13';
+    const queueUrl = '/shows/show-1/season?tab=events&evdeal=gifted&evq=Gift&evpage=13';
     fireEvent.click(screen.getByTestId('back'));
     await waitFor(() => expect(screen.getByTestId('events-page-status').textContent).toBe('Page 13 of 13'));
     expect(params().get('evdeal')).toBe('gifted');
@@ -110,14 +110,14 @@ describe('Events queue: filters in the URL, true counts, a page that exists', ()
   });
 
   test('a stale page in the URL is put right once the events load, keeping the filters', async () => {
-    renderAt(['/shows/show-1/world?tab=events&evdeal=gifted&evpage=40']);
+    renderAt(['/shows/show-1/season?tab=events&evdeal=gifted&evpage=40']);
     await waitFor(() => expect(params().get('evpage')).toBe('14'));
     expect(params().get('evdeal')).toBe('gifted');
     expect(screen.getByTestId('events-page-status').textContent).toBe('Page 14 of 14');
   });
 
   test('changing the sort or a filter goes back to page 1; an unknown sort reads as name', async () => {
-    renderAt(['/shows/show-1/world?tab=events&evpage=5&evsort=bogus']);
+    renderAt(['/shows/show-1/season?tab=events&evpage=5&evsort=bogus']);
     await waitFor(() => expect(screen.getByTestId('events-page-status').textContent).toBe('Page 5 of 29'));
     expect(cardIds()[0]).toBe('ev-g037'); // name order: Gift 037 opens page 5
     fireEvent.change(screen.getByDisplayValue('Sort: Name'), { target: { value: 'prestige' } });
