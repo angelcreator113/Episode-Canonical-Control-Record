@@ -6,7 +6,7 @@
 // button, as Evoni's mockup has the beats at the top (Script page audit 4,
 // 2026-10-19); open or closed is not remembered.
 import { useState } from 'react';
-import { Check, AlertTriangle, ChevronDown } from 'lucide-react';
+import { Check, AlertTriangle, ChevronDown, Info } from 'lucide-react';
 
 // A stat's key reads as words ("brand trust"); a [STAT: …] tag keeps it as
 // the script writes it (Script page audit 3, 2026-10-19).
@@ -14,7 +14,8 @@ export const shownText = (text) => String(text ?? '').replace(/(\[STAT:[^\]]*\])
 
 export default function ScriptHealthPanel({ rows = [], beatNumbers = {}, onOpenBeat, onFix, busy = false }) {
   const [collapsed, setCollapsed] = useState(true);
-  const toCheck = rows.filter((r) => !r.ok).length;
+  // A `low` row is a note (a voice habit not heard lately): shown, not counted.
+  const toCheck = rows.filter((r) => !r.ok && !r.low).length;
   const fixable = rows.filter((r) => !r.ok && r.fix);
   const toggle = () => setCollapsed((c) => !c);
   return (
@@ -36,8 +37,8 @@ export default function ScriptHealthPanel({ rows = [], beatNumbers = {}, onOpenB
           names an element (Script page audit, 2026-10-19). */}
       <ul className="esp-health-list" id="esp-health-list" hidden={collapsed}>
         {!collapsed && rows.map((r) => (
-          <li key={r.key} className={r.ok ? 'is-ok' : 'is-gap'} data-testid={`script-health-${r.key}`} data-ok={r.ok ? 'true' : 'false'}>
-            {r.ok ? <Check size={14} aria-label="OK" /> : <AlertTriangle size={14} aria-label="To check" />}
+          <li key={r.key} className={r.ok ? 'is-ok' : r.low ? 'is-low' : 'is-gap'} data-testid={`script-health-${r.key}`} data-ok={r.ok ? 'true' : 'false'}>
+            {r.ok ? <Check size={14} aria-label="OK" /> : r.low ? <Info size={14} aria-label="Note" /> : <AlertTriangle size={14} aria-label="To check" />}
             <span className="esp-health-text">{shownText(r.text)}</span>
             {r.fix && onFix && (
               <button type="button" className="esp-health-open esp-health-fix" data-testid={`script-health-fix-${r.key}`} disabled={busy} onClick={() => onFix(r.fix)}>

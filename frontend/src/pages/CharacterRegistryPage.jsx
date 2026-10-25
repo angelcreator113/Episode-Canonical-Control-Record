@@ -21,7 +21,7 @@ import api from '../services/api';
 import useActiveShow from '../hooks/useActiveShow';
 import { useAuth } from '../contexts/AuthContext';
 import { isAdmin } from '../utils/authGroups';
-import { Crown, Plus, Sparkles, UserPlus, Users, ChevronRight, Radio } from 'lucide-react';
+import { Crown, Plus, Sparkles, UserPlus, Users, ChevronRight, Radio, Mic } from 'lucide-react';
 import { chooseRegistry, findLala, feedPeople, oldSystem, otherProtagonists } from '../lib/theCast';
 import CastFacts from '../components/Cast/CastFacts';
 import CastFlagLog from '../components/Cast/CastFlagLog';
@@ -265,6 +265,20 @@ export default function CharacterRegistryPage() {
           </button>
         </section>
       )}
+
+      {/* Her voice (Evoni, 2026-10-25, voices that learn): JustAWoman is the
+          narrator, not a registry character, so her learned voice has its
+          own page, reached from here and from the show's cast. */}
+      <section className="cast-you" aria-label="Your voice" data-testid="cast-your-voice">
+        <span className="cast-you-icon" aria-hidden="true"><Mic size={20} /></span>
+        <div className="cast-you-text">
+          <div className="cast-kicker">You · JustAWoman</div>
+          <p className="cast-note">How you really sound, learned from the lines you approve and the edits you make. One voice for the book and the show.</p>
+        </div>
+        <Link className="cast-btn-soft" to="/your-voice" data-testid="cast-your-voice-open">
+          Your voice <ChevronRight size={16} aria-hidden />
+        </Link>
+      </section>
 
       {!lala && (
         <p className="cast-note cast-empty" data-testid="cast-lala-missing">

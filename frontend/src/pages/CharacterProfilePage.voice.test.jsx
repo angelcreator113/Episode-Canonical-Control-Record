@@ -147,4 +147,25 @@ describe('the Voice & Pulse tab', () => {
     fireEvent.click(screen.getByRole('button', { name: /Draft new posts/ }));
     expect(await screen.findByTestId('ch-gen')).toBeTruthy();
   });
+
+  // Character voices that learn (Evoni, 2026-10-25): under the profile, by the character's slug.
+  test('shows the learned voice for the character, by its registry slug', async () => {
+    vi.mocked(api.get).mockImplementation(async (url) => {
+      if (url === '/api/v1/character-registry/characters/c1') return { data: { character: { ...CHARACTER, character_key: 'studio_by_sable' } } };
+      if (url === '/api/v1/social-profiles/7') return { data: { profile: PROFILE } };
+      if (url === '/api/v1/voice/characters/studio_by_sable') {
+        return { data: { characterKey: 'studio_by_sable', name: 'STUDIO BY SABLE', rules: [{ id: 1, rule_text: 'Talks in fabrics', status: 'proposed', context: 'gameplay', created_at: '2026-10-20' }], lines: [{ id: 'l1', text: 'Silk first.', context: 'gameplay', episode_number: 3, beat_number: 2, source: 'approved', created_at: '2026-10-21' }] } };
+      }
+      return { data: {} };
+    });
+    render(
+      <MemoryRouter initialEntries={['/character/c1?tab=voice']}>
+        <Routes><Route path="/character/:id" element={<CharacterProfilePage />} /></Routes>
+      </MemoryRouter>,
+    );
+    expect((await screen.findByTestId('lv-lines')).textContent).toContain('Silk first.');
+    expect(screen.getByTestId('lv-lines').textContent).toContain('Episode 3 · beat 2');
+    expect(screen.getByTestId('lv-waiting').textContent).toContain('Talks in fabrics');
+    expect(screen.getByRole('heading', { name: 'How STUDIO BY SABLE really sounds' })).toBeTruthy();
+  });
 });

@@ -715,7 +715,7 @@ module.exports = {
 
     // One transaction with the row locked, as the episode save (History
     // audit H11): a lock and a save at once can't lose a version.
-    const { episode, lockedKept, lockedMoved } = await Episode.sequelize.transaction(async (transaction) => {
+    const { episode, lockedKept, lockedMoved, newlyLocked } = await Episode.sequelize.transaction(async (transaction) => {
       const row = await Episode.findByPk(id, { transaction, lock: transaction.LOCK.UPDATE });
       if (!row) {
         throw new NotFoundError('Episode', id);
@@ -735,8 +735,21 @@ module.exports = {
         await snapshotScript(require('../models'), row, { source: 'lock', userId: req.user?.id, next: update.script_content, transaction });
       }
       await row.update(update, { transaction });
-      return { episode: row, lockedKept: kept, lockedMoved: moved };
+      return { episode: row, lockedKept: kept, lockedMoved: moved, newlyLocked: next.filter((n) => !before.includes(n)) };
     });
+
+    // Character voices that learn (Evoni, 2026-10-25; services/characterVoice):
+    // the newly locked beats' lines are approved lines, and each line she
+    // changed from what the AI wrote is a signal. After the lock is saved,
+    // fire and forget: a failure is logged and never fails the lock.
+    if (newlyLocked.length) {
+      try {
+        const characterVoice = require('../services/characterVoice');
+        characterVoice.background('lock capture', () => characterVoice.captureOnLock(require('../models'), { episodeId: episode.id, newlyLocked }));
+      } catch (err) {
+        console.error('[updateScriptLocks] voice capture could not start (the lock is saved):', err.message);
+      }
+    }
 
     res.json({
       data: { id: episode.id, script_locked_beats: episode.script_locked_beats, script_content: episode.script_content },

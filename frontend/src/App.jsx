@@ -134,6 +134,8 @@ const StoryThreadTracker = lazy(() => import('./pages/StoryThreadTracker'));
 const StoryCalendar = lazy(() => import('./pages/StoryCalendar'));
 const StoryHealthDashboard = lazy(() => import('./pages/StoryHealthDashboard'));
 const CharacterProfile = lazy(() => import('./pages/CharacterProfilePage'));
+// Her learned voice (JustAWoman is no registry character; 2026-10-25).
+const YourVoicePage = lazy(() => import('./pages/YourVoicePage'));
 // Brands and companies (Evoni, 2026-10-18): each profile. The list is the
 // LalaVerse hub's Brands tab (Evoni, 2026-10-19); /brands redirects there.
 const BrandProfilePage = lazy(() => import('./pages/BrandProfilePage'));
@@ -463,6 +465,7 @@ function AppContent() {
           {/* PNOS Character Registry */}
           <Route path="/character-registry" element={<CharacterRegistryPage />} />
           <Route path="/character/:id" element={<CharacterProfile />} />
+          <Route path="/your-voice" element={<YourVoicePage />} />
           <Route path="/brands" element={<Navigate to="/universe?tab=brands" replace />} />
           <Route path="/brands/:slug" element={<BrandProfilePage />} />
           <Route path="/setup" element={<SetupWizard />} />
@@ -623,6 +626,7 @@ function AppContent() {
             '/intelligence/show-brain': 'Show Brain',
             '/universe/writing-rhythm': 'Writing Rhythm',
             '/character-registry': 'Character Registry',
+            '/your-voice': 'Your voice',
             '/relationships': 'Relationship Engine',
             '/continuity': 'Continuity Engine',
             '/story-engine': 'Story Engine',
