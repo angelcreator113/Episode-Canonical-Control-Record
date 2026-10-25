@@ -19,6 +19,10 @@
  * it is charged its entry cost and extras as before, so the section is not
  * shown for it (EventTermsSection renders this only for a deal).
  *
+ * `initial` (optional): the page's combined GET's costs part (Task #54),
+ * { data } or { error }; the first read is skipped and its rows, or "Failed
+ * to load costs", are shown.
+ *
  * `refreshKey` reloads the rows, for Propose terms, which drafts the entry
  * line on a deal's first proposal.
  *
@@ -62,15 +66,19 @@ export const draftExtrasApi = (showId, eventId) => api.post(`${costsUrl(showId, 
 
 export const REFRESH_FAILED_MESSAGE = "Saved — couldn't refresh the page. Reload to see the totals.";
 
-export default function EventCostsTerm({ showId, eventId, locked, refreshKey, onSaved, onToast, onCostsChange, pricingId = null, onPriced, onPricingCancel }) {
+const seededCosts = (seed) => (Array.isArray(seed?.data?.costs) ? seed.data.costs : []);
+
+export default function EventCostsTerm({ showId, eventId, locked, refreshKey, initial, onSaved, onToast, onCostsChange, pricingId = null, onPriced, onPricingCancel }) {
   const toast = (msg) => { if (onToast) onToast(msg); };
   const costsChangeRef = useRef(onCostsChange);
   costsChangeRef.current = onCostsChange;
 
-  const [costs, setCosts] = useState([]);
-  const [drafted, setDrafted] = useState({});
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState(null);
+  const [costs, setCosts] = useState(() => seededCosts(initial));
+  const [drafted, setDrafted] = useState(() => initial?.data?.drafted || {});
+  const [loading, setLoading] = useState(initial === undefined);
+  const [loadError, setLoadError] = useState(initial?.error ? 'Failed to load costs' : null);
+  // The read the page's combined GET already made (until refreshKey moves).
+  const seededFor = useRef(initial !== undefined ? `${showId}|${eventId}|${refreshKey}` : null);
   const [form, setForm] = useState(null); // null | { id: null } (add) | { id } (edit)
   const [draft, setDraft] = useState(costDraftFrom(null));
   const [formError, setFormError] = useState(null);
@@ -94,7 +102,14 @@ export default function EventCostsTerm({ showId, eventId, locked, refreshKey, on
     }
   }, [showId, eventId]);
 
-  useEffect(() => { load(); }, [load, refreshKey]);
+  useEffect(() => {
+    if (seededFor.current === `${showId}|${eventId}|${refreshKey}`) {
+      costsChangeRef.current?.(initial.error ? null : seededCosts(initial));
+      return;
+    }
+    seededFor.current = null;
+    load();
+  }, [load, refreshKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // A refusal because the terms locked elsewhere reloads the page, which
   // then shows the event as used.
