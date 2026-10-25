@@ -10,6 +10,8 @@
  * POST   /api/v1/opportunities/:showId/:id/advance — Advance pipeline status
  * POST   /api/v1/opportunities/:showId/:id/to-event — Convert to world event
  * POST   /api/v1/opportunities/:showId/:id/release — Offer one held for beat 14 now
+ * GET    /api/v1/opportunities/:showId/episode/:episodeId/beat14         — Beat 14's opportunity, ranked candidates
+ * GET    /api/v1/opportunities/:showId/episode/:episodeId/beat14/suggest — Draft one for beat 14 (saves nothing)
  * GET    /api/v1/opportunities/:showId/stats       — Pipeline stats
  *
  * Every write here is ADMIN only; the reads stay requireAuth (Evoni,
@@ -91,7 +93,7 @@ async function withBeat14Episodes(models, opps) {
   if (!ids.length || !models.sequelize) return opps;
   try {
     const rows = await models.sequelize.query(
-      'SELECT id, title, episode_number, evaluation_status FROM episodes WHERE id IN (:ids) AND deleted_at IS NULL',
+      'SELECT id, title, episode_number, season_number, season_context, evaluation_status FROM episodes WHERE id IN (:ids) AND deleted_at IS NULL',
       { replacements: { ids }, type: models.sequelize.QueryTypes.SELECT }
     );
     const byId = new Map(rows.map((r) => [String(r.id), r]));
@@ -99,7 +101,12 @@ async function withBeat14Episodes(models, opps) {
       const ep = o.offered_in_episode_id ? byId.get(String(o.offered_in_episode_id)) : null;
       return ep ? {
         ...o,
-        beat14_episode: { id: ep.id, title: ep.title || null, episode_number: ep.episode_number ?? null, evaluation_status: ep.evaluation_status || null },
+        // season_number and season_context give its code ("Offered in S1 E5",
+        // frontend lib/episodePipeline episodeCode; Evoni, 2026-10-25).
+        beat14_episode: {
+          id: ep.id, title: ep.title || null, episode_number: ep.episode_number ?? null, evaluation_status: ep.evaluation_status || null,
+          season_number: ep.season_number ?? null, season_context: ep.season_context ?? null,
+        },
       } : o;
     });
   } catch (err) {
@@ -431,6 +438,19 @@ router.get('/opportunities/:showId/episode/:episodeId/beat14', requireAuth, asyn
     return res.json({ success: true, data: await getBeat14(await getModels(req), req.params) });
   } catch (err) {
     return beat14Error(res, err, 'read');
+  }
+});
+
+// "Suggest one" (Evoni, 2026-10-25): a new opportunity drafted from the
+// event's host, or ?from=<profile id>, for beat 14's create form. A read: it
+// saves nothing, and no AI is called (services/beat14Opportunity suggestBeat14).
+router.get('/opportunities/:showId/episode/:episodeId/beat14/suggest', requireAuth, async (req, res) => {
+  if (beat14BadIds(req, res)) return undefined;
+  try {
+    const { suggestBeat14 } = require('../services/beat14Opportunity');
+    return res.json({ success: true, data: await suggestBeat14(await getModels(req), { ...req.params, from: req.query.from ?? null }) });
+  } catch (err) {
+    return beat14Error(res, err, 'suggest');
   }
 });
 
