@@ -129,7 +129,7 @@ describe('both callers keep their contract: shape and count', () => {
 
   test('the callers still pass what they passed: from-profile 6, the calendar path maxGuests (default 8)', () => {
     const root = path.join(__dirname, '../../..');
-    const route = fs.readFileSync(path.join(root, 'src/routes/worldEvents.js'), 'utf8');
+    const route = fs.readFileSync(path.join(root, 'src/routes/worldEvents/fromProfile.js'), 'utf8');
     const svc = fs.readFileSync(path.join(root, 'src/services/eventAutomationService.js'), 'utf8');
     expect(route).toMatch(/assembleGuestList\(profile, fakeCalEvent, models, 6\)/);
     // Task #2154 added userId (the draft's rate-limit key); the defaults are unchanged.
