@@ -49,6 +49,32 @@ describe('EventPackagePage Season Context (§8(ff) A4)', () => {
     expect(within(block).queryByRole('textbox')).toBeNull();
   });
 
+  test('every purpose shows, primary first, with its thread, and the desired pressure (2026-10-25)', async () => {
+    renderWith({
+      in_slot: true, via: 'pencilled', label: 'S1 · E3', season_number: 1, phase: { number: 1, title: 'Foundation' },
+      story_purpose: 'Win the room', desired_pressure: 'High',
+      story_purposes: [
+        { text: 'Win the room', primary: true, story_thread: null },
+        { text: 'The rival notices her', primary: false, story_thread: 'The rival' },
+        { text: '', primary: false, story_thread: 'Old debt' },
+      ],
+    });
+
+    const block = await screen.findByTestId('season-context');
+    const items = within(within(block).getByTestId('season-purposes')).getAllByRole('listitem');
+    expect(items.map((li) => li.textContent)).toEqual(['PrimaryWin the room', 'AlsoThe rival notices her · The rival', 'AlsoContinues Old debt']);
+    expect(items[0].className).toBe('is-primary');
+    expect(within(block).getByTestId('season-pressure').textContent).toBe('Desired pressure: High');
+  });
+
+  test('one purpose has no Primary tag; no pressure, no pressure line', async () => {
+    renderWith({ in_slot: true, via: 'episode', label: 'S1 · E1', season_number: 1, phase: { number: 1, title: 'Foundation' },
+      story_purposes: [{ text: 'Her first gala', primary: true, story_thread: null }] });
+    const block = await screen.findByTestId('season-context');
+    expect(within(block).getByTestId('season-purposes').textContent).toBe('Her first gala');
+    expect(within(block).queryByTestId('season-pressure')).toBeNull();
+  });
+
   test('an event in no slot names the next open slot and links to the roadmap', async () => {
     renderWith({ in_slot: false, season_number: 1, next_open: { label: 'S1 · E2', phase: { number: 1, title: 'Foundation' } } });
 

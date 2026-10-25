@@ -5,6 +5,7 @@ import { CalendarHeart, Tv, Globe, Link2, Briefcase, Zap, Trophy, RefreshCw, X, 
 import api from '../../services/api';
 import { getEpisodeEvents } from '../../services/episodeEventsApi';
 import { seasonPageHref } from '../../lib/seasonPage';
+import { purposeLines } from '../../lib/seasonArc';
 import SceneSuggestionReview from '../episode/SceneSuggestionReview';
 import EpisodeTeaserSection from './EpisodeTeaserSection';
 import EpisodeMoneyCard from './EpisodeMoneyCard';
@@ -668,7 +669,9 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
 
         {/* Season Position — the season context snapshotted at Start Episode
             (Season Arc §8(ff) A5), shown "S1 · E7" (Q3); the show-wide
-            episode count stays internal. */}
+            episode count stays internal. Every purpose, primary first (A10),
+            and the desired pressure (Evoni, 2026-10-25: it showed the first
+            purpose only). */}
         <div className="eov-card" data-testid="season-position">
           <CardTitle icon={Tv}>Season position</CardTitle>
           {seasonContext?.label ? (
@@ -682,9 +685,24 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
                 {seasonContext.label}
                 {seasonContext.phase?.title && <span className="eov-season-phase"> · Phase {seasonContext.phase.number}: {seasonContext.phase.title}</span>}
               </div>
-              <p className={seasonContext.story_purpose ? 'eov-text' : 'eov-empty'}>
-                {seasonContext.story_purpose || 'No story purpose set for this slot yet.'}
-              </p>
+              {(() => {
+                const lines = purposeLines(seasonContext);
+                if (!lines.length) return <p className="eov-empty">No story purpose set for this slot yet.</p>;
+                return (
+                  <ul className="eov-season-purposes" data-testid="season-purposes" aria-label="Story purposes">
+                    {lines.map((p, i) => (
+                      <li key={i} className={p.primary ? 'is-primary' : ''}>
+                        {lines.length > 1 && <span className="eov-season-tag">{p.primary ? 'Primary' : 'Also'}</span>}
+                        <span className="eov-season-purpose">{p.text || `Continues ${p.thread}`}</span>
+                        {p.text && p.thread && <span className="eov-season-thread">Thread: {p.thread}</span>}
+                      </li>
+                    ))}
+                  </ul>
+                );
+              })()}
+              {seasonContext.desired_pressure && (
+                <p className="eov-season-pressure" data-testid="season-pressure">Desired pressure: <strong>{seasonContext.desired_pressure}</strong></p>
+              )}
             </>
           ) : (
             <p className="eov-empty">

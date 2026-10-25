@@ -254,4 +254,32 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
 
     expect(threads.find((t) => t.id === rival.id).slot_numbers).toEqual([4, 6]);
   });
+
+  test('the Event Package\'s season context sends every purpose, primary first, with its thread and the desired pressure', async () => {
+    const { show, arcId } = await seedSeason();
+    const rival = await thread(show, 'The rival');
+    const id = await slotId(arcId, 5);
+    expect((await save(show, id, {
+      story_purposes: [
+        { text: 'The rival notices', primary: false, story_thread_id: rival.id },
+        { text: 'Lala bluffs her way in', primary: true },
+      ],
+      desired_pressure: 'Peak',
+    })).status).toBe(200);
+    const event = uuid();
+    await run(`INSERT INTO world_events (id, show_id, name, event_type, status, created_at, updated_at)
+               VALUES (:event, :show, 'Rooftop Launch', 'invite', 'draft', NOW(), NOW())`, { event, show });
+    expect((await auth(request(app).put(`/api/v1/world/${show}/season/slots/${id}/event`)).send({ event_id: event })).status).toBe(200);
+
+    const res = await auth(request(app).get(`/api/v1/world/${show}/season/event/${event}`));
+
+    expect(res.status).toBe(200);
+    expect(res.body.context).toEqual(expect.objectContaining({
+      in_slot: true, via: 'pencilled', label: 'S1 · E5', story_purpose: 'Lala bluffs her way in', desired_pressure: 'Peak',
+      story_purposes: [
+        { text: 'Lala bluffs her way in', primary: true, story_thread: null },
+        { text: 'The rival notices', primary: false, story_thread: 'The rival' },
+      ],
+    }));
+  });
 });

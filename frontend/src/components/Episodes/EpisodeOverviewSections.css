@@ -192,6 +192,15 @@ textarea.eov-input { resize: vertical; line-height: 1.5; }
 .eov-season-bar span.is-here { background: var(--lala-gold); }
 .eov-season-label { margin-top: 10px; font-size: 15px; font-weight: 700; color: var(--lala-gold-text); }
 .eov-season-phase { font-weight: 500; color: var(--lala-ink-muted); }
+.eov-season-purposes { display: grid; gap: 6px; margin: 8px 0 0; padding: 0; list-style: none; }
+.eov-season-purposes li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; font-size: 14px; line-height: 1.5; color: var(--lala-ink); }
+.eov-season-purposes li.is-primary .eov-season-purpose { font-weight: 600; }
+.eov-season-purpose { min-width: 0; overflow-wrap: anywhere; }
+.eov-season-tag { flex: none; padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; background: var(--lala-gold-soft); color: var(--lala-gold-text); }
+.eov-season-purposes li:not(.is-primary) .eov-season-tag { background: var(--lala-parchment-2); color: var(--lala-ink-muted); }
+.eov-season-thread { flex-basis: 100%; font-size: 12px; color: var(--lala-ink-muted); }
+.eov-season-pressure { margin: 8px 0 0; font-size: 13px; color: var(--lala-ink-muted); }
+.eov-season-pressure strong { color: var(--lala-ink); }
 
 /* Locations. */
 .eov-places { display: flex; flex-wrap: wrap; gap: 10px; }

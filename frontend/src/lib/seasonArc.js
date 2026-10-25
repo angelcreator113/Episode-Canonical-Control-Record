@@ -43,3 +43,23 @@ export function arcSummary(roadmap) {
   parts.push(`${roadmap?.slot_count ?? 0} slots`);
   return parts.join(' · ');
 }
+
+/**
+ * Every story purpose a season context or slot intention holds, primary
+ * first (A10): { text, primary, thread } with the thread's title or null. A
+ * snapshot or slot from before A10 has only story_purpose, read as the one
+ * primary. A purpose with no words but a thread keeps its thread. Used by
+ * the episode's season card and the event package's season line.
+ */
+export function purposeLines(ctx) {
+  const list = Array.isArray(ctx?.story_purposes) ? ctx.story_purposes : [];
+  const lines = list
+    .map((p) => ({
+      text: String(p?.text || '').trim(),
+      primary: Boolean(p?.primary),
+      thread: (typeof p?.story_thread === 'string' ? p.story_thread : p?.story_thread?.title) || null,
+    }))
+    .filter((p) => p.text || p.thread);
+  if (!lines.length && ctx?.story_purpose) return [{ text: ctx.story_purpose, primary: true, thread: ctx.story_thread || null }];
+  return [...lines.filter((p) => p.primary), ...lines.filter((p) => !p.primary)];
+}
