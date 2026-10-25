@@ -146,7 +146,13 @@ export function deliverableRestoreBody(d) {
   return body;
 }
 
-export default function EventTermsSection({ showId, eventId, event, locked, putEvent, onSaved, onToast, onPriceInputsChange }) {
+// The page's combined GET (Task #54) hands the deliverables and costs in as
+// `initialDeliverables` / `initialCosts`: { data } (that route's answer,
+// minus success) or { error }. Given, the first read is skipped and its
+// answer, or "Failed to load …", is shown; left out, each reads its own.
+const seededRows = (seed) => (Array.isArray(seed?.data?.deliverables) ? seed.data.deliverables : []);
+
+export default function EventTermsSection({ showId, eventId, event, locked, putEvent, onSaved, onToast, onPriceInputsChange, initialDeliverables, initialCosts }) {
   const toast = (msg) => { if (onToast) onToast(msg); };
 
   // The page's refresh after a write that already succeeded: a failure is
@@ -165,9 +171,11 @@ export default function EventTermsSection({ showId, eventId, event, locked, putE
   };
 
   // ── Deliverables ──
-  const [deliverables, setDeliverables] = useState([]);
-  const [delivLoading, setDelivLoading] = useState(true);
-  const [delivLoadError, setDelivLoadError] = useState(null);
+  const [deliverables, setDeliverables] = useState(() => seededRows(initialDeliverables));
+  const [delivLoading, setDelivLoading] = useState(initialDeliverables === undefined);
+  const [delivLoadError, setDelivLoadError] = useState(initialDeliverables?.error ? 'Failed to load deliverables' : null);
+  // The page's combined GET answered this event's deliverables (Task #54).
+  const delivSeededFor = useRef(initialDeliverables !== undefined ? `${showId}|${eventId}` : null);
   const [delivForm, setDelivForm] = useState(null); // null | { id: null } (add) | { id } (edit)
   const [delivDraft, setDelivDraft] = useState(deliverableDraftFrom(null));
   const [delivFormError, setDelivFormError] = useState(null);
@@ -198,7 +206,13 @@ export default function EventTermsSection({ showId, eventId, event, locked, putE
     }
   }, [showId, eventId, reportPriceInputs]);
 
-  useEffect(() => { loadDeliverables(); }, [loadDeliverables]);
+  useEffect(() => {
+    if (delivSeededFor.current === `${showId}|${eventId}`) {
+      reportPriceInputs({ deliverables: initialDeliverables.error ? null : seededRows(initialDeliverables) });
+      return;
+    }
+    loadDeliverables();
+  }, [loadDeliverables]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // A refusal because the terms locked elsewhere reloads the page, which
   // then shows the event as used.
@@ -1159,7 +1173,7 @@ export default function EventTermsSection({ showId, eventId, event, locked, putE
         {/* Costs (deal build PR 4, Task #2365): a deal event's itemised costs */}
         {isDealEvent(event) && (
           <EventCostsTerm
-            showId={showId} eventId={eventId} locked={locked} refreshKey={costsKey}
+            showId={showId} eventId={eventId} locked={locked} refreshKey={costsKey} initial={initialCosts}
             onSaved={onSaved} onToast={onToast}
             onCostsChange={(costs) => { reportPriceInputs({ costs }); setCostRows(costs); setCostsLoaded(true); }}
             pricingId={walk && walk.current.startsWith('cost:') ? walk.current.slice(5) : null}
