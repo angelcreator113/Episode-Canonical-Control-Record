@@ -5,6 +5,7 @@ import apiClient from '../../services/api';
 import { thumbnailStudioHref } from '../../lib/thumbnailStudioHref';
 import StyleSheetDistributionCard from './StyleSheetDistributionCard';
 import { ResultsShare } from './EpisodeResultsSummary';
+import { useReleaseSchedule, datetimeLocal, whenText, onSchedule } from '../../lib/releaseSchedule';
 import './EpisodeDistributionTab.css';
 
 // File-local helpers (fresh — no cross-CP overlap).
@@ -100,6 +101,12 @@ function EpisodeDistributionTab({ episode, onUpdate, onOpenTab }) {
   // What Draft and Save did: { error, text }, shown on the page.
   const [draftNote, setDraftNote] = useState(null);
   const [saveNote, setSaveNote] = useState(null);
+  // The show's release schedule: a platform on it (YouTube alone for now)
+  // with no time of its own is offered the episode's release day and time,
+  // never written until Save. Platforms not on it are never offered one.
+  const release = useReleaseSchedule({ api: apiClient, showId: episode?.show_id || episode?.showId });
+  const releaseRow = release.rowsById[episode?.id] || null;
+  const suggestedTime = releaseRow && releaseRow.source !== 'preview' ? datetimeLocal(releaseRow) : null;
   
   useEffect(() => {
     loadDistributionData();
@@ -435,6 +442,14 @@ function EpisodeDistributionTab({ episode, onUpdate, onOpenTab }) {
                       value={platformData.scheduled_time || ''}
                       onChange={(e) => updatePlatform(selectedPlatform, 'scheduled_time', e.target.value)}
                     />
+                    {!platformData.scheduled_time && suggestedTime && onSchedule(release.view?.schedule, selectedPlatform) && (
+                      <p className="form-hint dist-when-suggest" data-testid="dist-when-suggest">
+                        This episode releases {whenText(releaseRow)}.{' '}
+                        <button type="button" className="dist-when-use" onClick={() => updatePlatform(selectedPlatform, 'scheduled_time', suggestedTime)}>
+                          Use it
+                        </button>
+                      </p>
+                    )}
                   </div>
                   <div className="form-group">
                     <label htmlFor="dist-status">Status</label>

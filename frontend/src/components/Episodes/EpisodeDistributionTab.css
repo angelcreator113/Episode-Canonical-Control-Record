@@ -991,3 +991,7 @@
   .episode-distribution-tab .dist-row-status { flex-basis: 100%; padding-left: 30px; text-align: left; }
   .episode-distribution-tab .editor-side .thumbnail-upload[style*="9 / 16"] { height: 300px; }
 }
+
+/* A platform with no time of its own is offered the episode's release day and time (the show's release schedule). */
+.episode-distribution-tab .dist-when-suggest { margin: 6px 0 0; }
+.episode-distribution-tab .dist-when-use { padding: 0; border: none; background: none; color: var(--lala-lavender-text); font: inherit; font-weight: 600; text-decoration: underline; cursor: pointer; }
