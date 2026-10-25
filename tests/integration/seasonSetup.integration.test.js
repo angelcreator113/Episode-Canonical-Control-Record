@@ -377,7 +377,7 @@ const FORM = {
     expect(prompt).toContain('Part 2: Rooms ("Hold the room"), E9–E16');
     expect(prompt).toContain('event "Velour Gala" (invite) on 2026-11-20');
     expect(prompt).toContain('episode "The Brunch"');
-    expect(prompt).toContain(`id ${t.thread}: Who sent the invitation?`);
+    expect(prompt).toContain(`[${t.thread}] Who sent the invitation?`);
     expect(prompt).not.toContain('The old rent');
     expect(prompt).toMatch(/E2 \(Part 1\): open \[DRAFT THIS\]/);
     expect(prompt).not.toMatch(/E1 \(Part 1\).*\[DRAFT THIS\]/);

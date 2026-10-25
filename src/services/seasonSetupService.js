@@ -30,10 +30,14 @@
 
 const Anthropic = require('@anthropic-ai/sdk');
 const {
-  SLOTS_PER_SEASON, PRESSURE_LEVELS, getRoadmap, arcPhases, snapshotEpisode,
+  SLOTS_PER_SEASON, PRESSURE_LEVELS, getRoadmap, roadmapOf, arcPhases, snapshotEpisode,
   placeEpisodeIn, pencilEventIn,
 } = require('./seasonSlotService');
 const { episodeEventIdSql } = require('../utils/episodeEventSql');
+const { loadSeason } = require('./seasonLoader');
+const {
+  seasonAiContext, careerGoals, askModel, isBudgetRefusal, bullets, phaseLine, threadLine, goalLine, debtLines,
+} = require('./seasonAiContext');
 
 const MODELS = ['claude-sonnet-4-6'];
 const PART_COUNT = 3;
@@ -211,16 +215,6 @@ async function nextNumbers(sequelize, showId, transaction) {
   return { arc_number: all.n + 1, season_number: live.n + 1 };
 }
 
-/** The season in progress, locked for the edit; null when there is none. */
-async function activeArc(sequelize, showId, transaction) {
-  const [[arc]] = await sequelize.query(
-    `SELECT id, show_id, title, tagline, season_number, phases, current_phase FROM show_arcs
-      WHERE show_id = :showId AND status = 'active' AND deleted_at IS NULL
-      ORDER BY arc_number ASC LIMIT 1 FOR UPDATE`,
-    { replacements: { showId }, transaction });
-  return arc || null;
-}
-
 const started = (slot) => Boolean(slot.episode_id || slot.locked_at || slot.accepted_at);
 
 /**
@@ -233,8 +227,10 @@ async function updateSetup(sequelize, showId, body) {
   const setup = normaliseSetup(body);
   const ranges = rangesOf(setup.split);
   return sequelize.transaction(async (transaction) => {
-    const arc = await activeArc(sequelize, showId, transaction);
-    if (!arc) throw new SeasonSetupError('This show has no season in progress to edit.', 404, 'SEASON_NOT_FOUND');
+    // The season in progress and its slots, locked for the edit.
+    const season = await loadSeason(sequelize, showId, { transaction, lock: true });
+    if (!season) throw new SeasonSetupError('This show has no season in progress to edit.', 404, 'SEASON_NOT_FOUND');
+    const { arc } = season;
     const phases = arcPhases(arc);
     if (phases.length !== PART_COUNT) throw new SeasonSetupError(`This season does not have ${PART_COUNT} parts; it cannot be edited here.`, 409, 'SEASON_SPLIT_REFUSED');
 
@@ -245,13 +241,7 @@ async function updateSetup(sequelize, showId, body) {
       }
     });
 
-    const [slots] = await sequelize.query(
-      `SELECT s.id, s.slot_number, s.phase, s.episode_id, s.locked_at, s.accepted_at, ep.title AS episode_title,
-              ep.evaluation_status
-         FROM season_slots s LEFT JOIN episodes ep ON ep.id = s.episode_id AND ep.deleted_at IS NULL
-        WHERE s.arc_id = :arcId AND s.deleted_at IS NULL
-        ORDER BY s.slot_number ASC FOR UPDATE OF s`,
-      { replacements: { arcId: arc.id }, transaction });
+    const slots = season.slots.map((sl) => ({ ...sl, evaluation_status: sl.episode_evaluation_status }));
 
     const blocked = slots.filter((sl) => started(sl) && partOf(sl.slot_number, ranges) !== Number(sl.phase));
     if (blocked.length) {
@@ -323,18 +313,8 @@ async function lalaState(sequelize, showId) {
   return state;
 }
 
-async function activeGoals(sequelize, showId) {
-  try {
-    const [rows] = await sequelize.query(
-      `SELECT title, target_metric, current_value, target_value, episode_range, status FROM career_goals
-        WHERE show_id = :showId AND status IN ('active', 'paused') AND deleted_at IS NULL
-        ORDER BY priority ASC, created_at ASC LIMIT 24`,
-      { replacements: { showId } });
-    return rows;
-  } catch (err) {
-    console.error('[seasonSetup] goals load failed:', err.message);
-    return [];
-  }
+function activeGoals(sequelize, showId) {
+  return careerGoals(sequelize, showId, { limit: 24, statuses: ['active', 'paused'] });
 }
 
 /**
@@ -555,7 +535,7 @@ async function applyPlacement(sequelize, showId, items) {
 // ─── Draft the season, or one part ───────────────────────────────────────
 
 function draftPrompt({ arc, phases, slots, targets, threads, goals, debt, carried, relationships = '', partNumber }) {
-  const partLine = (p) => `Part ${p.phase}: ${p.title}${p.tagline ? ` ("${p.tagline}")` : ''}, E${p.episode_start}–E${p.episode_end}${p.emotional_arc ? `; emotional arc: ${p.emotional_arc}` : ''}`;
+  const partLine = (p) => phaseLine(p, { word: 'Part', range: true });
   const slotLine = (s) => {
     const what = s.episode
       ? `episode "${s.episode.title || 'untitled'}"${s.state === 'done' ? ' (made and accepted)' : ' (in production)'}`
@@ -566,14 +546,9 @@ function draftPrompt({ arc, phases, slots, targets, threads, goals, debt, carrie
     const mark = targets.has(s.slot_number) ? ' [DRAFT THIS]' : '';
     return `- E${s.slot_number} (Part ${s.phase}): ${what}${evText}${purpose}${mark}`;
   };
-  const threadText = threads.length ? threads.map((t) => `- id ${t.id}: ${t.title}${t.description ? ` — ${t.description}` : ''}`).join('\n') : '- None yet.';
-  const goalText = goals.length
-    ? goals.map((g) => {
-      const range = parseJson(g.episode_range, null);
-      return `- ${g.title} (${g.target_metric} ${g.current_value}/${g.target_value}${Array.isArray(range) ? `, episodes ${range[0]}–${range[1]}` : ''}, ${g.status})`;
-    }).join('\n')
-    : '- None set.';
-  const debtText = debt.length ? debt.map((d) => `- ${d.narrative_weight || d.goal_title}`).join('\n') : '- None.';
+  const threadText = bullets(threads, (t) => threadLine(t, { description: true }), '- None yet.');
+  const goalText = bullets(goals, (g) => goalLine(g, { status: true, range: true }), '- None set.');
+  const debtText = debtLines(debt);
   return `You plan the season of "Styling Adventures with Lala", a luxury life-simulator show about Lala's fashion career.
 
 The season: "${arc.title}"${arc.tagline ? ` — ${arc.tagline}` : ''}
@@ -583,7 +558,7 @@ ${phases.map(partLine).join('\n')}
 Every episode slot, in order:
 ${slots.map(slotLine).join('\n')}
 
-Open story threads (use only these ids):
+Open story threads (use only these [ids]):
 ${threadText}
 
 Lala's career goals:
@@ -650,11 +625,11 @@ async function draftSeason(sequelize, showId, { phase = null, anthropic = null }
   if (partNumber != null && !(Number.isInteger(partNumber) && partNumber >= 1 && partNumber <= PART_COUNT)) {
     throw new SeasonSetupError(`The part is 1 to ${PART_COUNT}.`);
   }
-  const roadmap = await getRoadmap(sequelize, showId);
+  // One read of the season: its arc (title, phases, debt) and the roadmap built from it.
+  const season = await loadSeason(sequelize, showId);
+  const roadmap = await roadmapOf(sequelize, season);
   if (!roadmap) throw new SeasonSetupError('Set up the season first.', 409, 'SEASON_NOT_FOUND');
-  const [[arc]] = await sequelize.query(
-    'SELECT title, tagline, phases, narrative_debt FROM show_arcs WHERE id = :arcId',
-    { replacements: { arcId: roadmap.arc.id } });
+  const { arc } = season;
   const phases = arcPhases(arc);
   const slots = roadmap.phases.flatMap((p) => p.slots);
   const inScope = slots.filter((s) => partNumber == null || Number(s.phase) === partNumber);
@@ -677,37 +652,24 @@ async function draftSeason(sequelize, showId, { phase = null, anthropic = null }
   const detailBySlot = new Map(details.map((d) => [d.slot_number, d]));
   const withDetail = slots.map((s) => ({ ...s, event_detail: detailBySlot.get(s.slot_number) || null }));
 
-  const [threads] = await sequelize.query(
-    `SELECT id, title, description FROM show_story_threads
-      WHERE show_id = :showId AND deleted_at IS NULL AND status <> 'closed' ORDER BY created_at ASC LIMIT 40`,
-    { replacements: { showId } });
+  // The last approved What changed record, what Lala still owes people, and
+  // the confirmed relationships between the season's people (never a seed).
+  const { threads, carried, relationships } = await seasonAiContext(sequelize, showId, {
+    threads: { limit: 40, order: 'asc' }, carried: true, relationships: true,
+  });
   const goals = await activeGoals(sequelize, showId);
   const debt = parseJson(arc?.narrative_debt, []);
-  // The last approved What changed record, and what Lala still owes people.
-  let carried = '';
-  try {
-    carried = await require('./storyCarryForward').carryForShow(sequelize, showId);
-  } catch (err) {
-    console.error('[seasonSetup] carry-forward load failed:', err.message);
-  }
-
-  // The confirmed relationships between the season's people (never a seed).
-  const relationships = await require('./seasonNeeds').seasonRelationshipBlock(sequelize, showId);
   const prompt = draftPrompt({
     arc, phases, slots: withDetail, targets, threads, goals, debt: Array.isArray(debt) ? debt : [], carried, relationships, partNumber,
   });
-  const api = anthropic || getClient();
-  let message = null;
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    try {
-      message = await api.messages.create({ model: MODELS[0], max_tokens: MAX_TOKENS, messages: [{ role: 'user', content: prompt }] });
-      break;
-    } catch (err) {
-      console.error(`[seasonSetup] season draft attempt ${attempt + 1} failed:`, err.message);
-      // A budget refusal is final: retrying would be refused the same way.
-      if (err.code === 'AI_BUDGET_EXCEEDED') throw new SeasonSetupError(`${err.message} Nothing was drafted.`, 429, 'AI_BUDGET_EXCEEDED');
-      if (attempt === 1) throw new SeasonSetupError('The AI could not draft the season right now. Try again.', 502, 'SEASON_DRAFT_FAILED');
-    }
+  let message;
+  try {
+    message = await askModel({ api: anthropic || getClient(), models: MODELS, maxTokens: MAX_TOKENS, prompt, label: 'seasonSetup season draft' });
+  } catch (err) {
+    console.error('[seasonSetup] the season draft failed:', err.message);
+    // A budget refusal is final: retrying would be refused the same way.
+    if (isBudgetRefusal(err)) throw new SeasonSetupError(`${err.message} Nothing was drafted.`, 429, 'AI_BUDGET_EXCEEDED');
+    throw new SeasonSetupError('The AI could not draft the season right now. Try again.', 502, 'SEASON_DRAFT_FAILED');
   }
   let parsed;
   try {

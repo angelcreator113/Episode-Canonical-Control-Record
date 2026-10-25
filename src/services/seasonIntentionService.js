@@ -35,6 +35,10 @@
 
 const Anthropic = require('@anthropic-ai/sdk');
 const { PRESSURE_LEVELS } = require('./seasonSlotService');
+const { loadSeason } = require('./seasonLoader');
+const {
+  seasonAiContext, askModel, isBudgetRefusal, bullets, phaseLine, threadLine, goalLine, debtLines,
+} = require('./seasonAiContext');
 
 // Lowest to highest.
 const OUTCOME_TIERS = ['fail', 'safe', 'pass', 'slay'];
@@ -280,46 +284,32 @@ async function saveIntention(sequelize, showId, slotId, body) {
 
 /** What the draft is made from: the phase and the season so far (A3). */
 async function draftingContext(sequelize, showId, slot) {
-  const [[arc]] = await sequelize.query(
-    'SELECT title, tagline, phases, narrative_debt FROM show_arcs WHERE id = :arcId',
-    { replacements: { arcId: slot.arc_id } });
-  const parse = (v, d) => {
-    if (v == null) return d;
-    if (typeof v !== 'string') return v;
-    try { return JSON.parse(v); } catch (err) { console.error('[seasonIntention] JSON parse failed:', err.message); return d; }
-  };
-  const phases = parse(arc?.phases, []);
-  const phase = (Array.isArray(phases) ? phases : []).find((p) => Number(p.phase) === Number(slot.phase)) || {};
-  const [earlier] = await sequelize.query(
-    `SELECT s.slot_number, s.story_purpose, s.actual_outcome, s.actual_pressure, ep.title
-       FROM season_slots s LEFT JOIN episodes ep ON ep.id = s.episode_id AND ep.deleted_at IS NULL
-      WHERE s.arc_id = :arcId AND s.slot_number < :n AND s.deleted_at IS NULL
-        AND (s.story_purpose IS NOT NULL OR s.actual_outcome IS NOT NULL)
-      ORDER BY s.slot_number DESC LIMIT 8`,
-    { replacements: { arcId: slot.arc_id, n: slot.slot_number } });
-  const [goals] = await sequelize.query(
-    `SELECT title, target_metric, current_value, target_value FROM career_goals
-      WHERE show_id = :showId AND status = 'active' AND deleted_at IS NULL ORDER BY priority ASC LIMIT 8`,
-    { replacements: { showId } }).catch((err) => { console.error('[seasonIntention] goals load failed:', err.message); return [[]]; });
-  const debt = parse(arc?.narrative_debt, []);
-  const [threads] = await sequelize.query(
-    `SELECT title FROM show_story_threads WHERE show_id = :showId AND status <> 'closed' AND deleted_at IS NULL
-      ORDER BY created_at DESC LIMIT 8`,
-    { replacements: { showId } }).catch((err) => { console.error('[seasonIntention] threads load failed:', err.message); return [[]]; });
+  // The slot's own arc and its slots (services/seasonLoader).
+  const season = await loadSeason(sequelize, showId, { arcId: slot.arc_id });
+  const arc = season?.arc || null;
+  const slots = season?.slots || [];
+  const phase = (arc?.phases || []).find((p) => Number(p.phase) === Number(slot.phase)) || {};
+  // The eight slots before this one with a purpose or a result, oldest first.
+  const earlier = slots
+    .filter((s) => s.slot_number < slot.slot_number && (s.story_purpose != null || s.actual_outcome != null))
+    .slice(-8)
+    .map((s) => ({
+      slot_number: s.slot_number, story_purpose: s.story_purpose, actual_outcome: s.actual_outcome,
+      actual_pressure: s.actual_pressure, title: s.episode_title || null,
+    }));
+  let debt = arc?.narrative_debt ?? [];
+  if (typeof debt === 'string') {
+    try { debt = JSON.parse(debt); } catch (err) { console.error('[seasonIntention] JSON parse failed:', err.message); debt = []; }
+  }
   // The last approved story record before this slot, and what Lala still
   // owes people (services/storyCarryForward; Evoni, 2026-10-23).
-  let carried = '';
-  try {
-    const [[last]] = await sequelize.query(
-      `SELECT MAX(ep.episode_number) AS n FROM season_slots s JOIN episodes ep ON ep.id = s.episode_id AND ep.deleted_at IS NULL
-        WHERE s.arc_id = :arcId AND s.slot_number < :n AND s.deleted_at IS NULL`,
-      { replacements: { arcId: slot.arc_id, n: slot.slot_number } });
-    carried = await require('./storyCarryForward').carryForShow(sequelize, showId, { before: last?.n != null ? Number(last.n) + 1 : null });
-  } catch (err) {
-    console.error('[seasonIntention] carry-forward load failed:', err.message);
-  }
-  const planned = await plannedAround(sequelize, showId, slot);
-  return { arc, phase, earlier: earlier.reverse(), goals, debt: Array.isArray(debt) ? debt : [], threads, carried, ...planned };
+  const before = slots.filter((s) => s.slot_number < slot.slot_number && s.live_episode_id && s.episode_number != null);
+  const last = before.length ? Math.max(...before.map((s) => Number(s.episode_number))) : null;
+  const { goals, threads, carried } = await seasonAiContext(sequelize, showId, {
+    goals: { limit: 8 }, threads: { limit: 8, order: 'desc' }, carried: { before: last != null ? last + 1 : null },
+  });
+  const planned = await plannedAround(sequelize, showId, slot, slots);
+  return { arc, phase, earlier, goals, debt: Array.isArray(debt) ? debt : [], threads, carried, ...planned };
 }
 
 // What the draft reads of the plan around the slot, each part capped.
@@ -336,7 +326,7 @@ const clipText = (v, n = AROUND.chars) => {
  * the confirmed relationships between the season's people. Each part is
  * empty when there is none or it cannot be read.
  */
-async function plannedAround(sequelize, showId, slot) {
+async function plannedAround(sequelize, showId, slot, slots = []) {
   const safe = async (what, empty, read) => {
     try { return await read(); } catch (err) {
       console.error(`[seasonIntention] ${what} could not be read (the draft goes without it):`, err.message);
@@ -352,15 +342,11 @@ async function plannedAround(sequelize, showId, slot) {
   const twists = await safe('the twists', { plant: [], payoff: [] },
     () => require('./seasonTwists').twistsAtSlot(sequelize, slot));
   const reveals = await safe('the reveals', [], () => require('./seasonRevealPlan').revealsAtSlot(sequelize, slot.id));
-  const later = await safe('the later purposes', [], async () => {
-    const [rows] = await sequelize.query(
-      `SELECT slot_number, story_purpose FROM season_slots
-        WHERE arc_id = :arcId AND slot_number > :n AND deleted_at IS NULL AND story_purpose IS NOT NULL
-        ORDER BY slot_number ASC LIMIT ${AROUND.later}`,
-      { replacements: { arcId: slot.arc_id, n: slot.slot_number } });
-    return rows;
-  });
-  const relationships = await require('./seasonNeeds').seasonRelationshipBlock(sequelize, showId);
+  const later = slots
+    .filter((s) => s.slot_number > slot.slot_number && s.story_purpose != null)
+    .slice(0, AROUND.later)
+    .map((s) => ({ slot_number: s.slot_number, story_purpose: s.story_purpose }));
+  const { relationships } = await seasonAiContext(sequelize, showId, { relationships: true });
   return { event, twists, reveals, later, relationships };
 }
 
@@ -391,11 +377,9 @@ function buildDraftPrompt(slot, ctx) {
   const earlier = ctx.earlier.length
     ? ctx.earlier.map((e) => `- E${e.slot_number}${e.title ? ` "${e.title}"` : ''}: ${e.actual_outcome ? `result ${e.actual_outcome}, pressure ${e.actual_pressure || '?'}` : 'not yet made'}${e.story_purpose ? `; purpose: ${e.story_purpose}` : ''}`).join('\n')
     : '- Nothing yet: this is the start of the season.';
-  const goals = ctx.goals.length
-    ? ctx.goals.map((g) => `- ${g.title} (${g.target_metric} ${g.current_value}/${g.target_value})`).join('\n')
-    : '- None active.';
-  const debt = ctx.debt.length ? ctx.debt.map((d) => `- ${d.narrative_weight || d.goal_title}`).join('\n') : '- None.';
-  const threads = (ctx.threads || []).length ? ctx.threads.map((t) => `- ${t.title}`).join('\n') : '- None.';
+  const goals = bullets(ctx.goals, (g) => goalLine(g), '- None active.');
+  const debt = debtLines(ctx.debt);
+  const threads = bullets(ctx.threads || [], (t) => threadLine(t, { id: false }), '- None.');
   return `You plan the season of "Styling Adventures with Lala", a luxury life-simulator show about Lala's fashion career.
 
 Draft the intention for episode slot ${label} of the season "${ctx.arc?.title || 'Season 1'}".
@@ -424,7 +408,7 @@ Vary the pressure across the season; follow a hard episode with room to recover;
 
   function phase(p) {
     if (!p || !p.title) return 'unknown';
-    return `Phase ${p.phase}: ${p.title}${p.tagline ? ` ("${p.tagline}")` : ''}${p.emotional_arc ? `; emotional arc: ${p.emotional_arc}` : ''}`;
+    return phaseLine(p);
   }
 }
 
@@ -540,44 +524,39 @@ async function draftIntention(sequelize, showId, slotId, { force = false, anthro
   const ctx = await draftingContext(sequelize, showId, slot);
   let prompt = buildDraftPrompt(slot, ctx);
   if (slot.started) prompt += startedEpisodeBlock(await startedEpisodeContext(sequelize, slot.live_episode_id));
-  const api = anthropic || getClient();
-  let lastErr = null;
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    try {
-      const response = await api.messages.create({
-        model: MODELS[0],
-        max_tokens: 400,
-        messages: [{ role: 'user', content: prompt }],
-      });
-      const intention = parseDraft(response?.content?.[0]?.text);
-      if (slot.started) {
-        const merged = await writeStartedDraft(sequelize, slot, intention);
-        const { snapshotEpisode } = require('./seasonSlotService');
-        const seasonContext = await snapshotEpisode(sequelize, { slotId, episodeId: slot.live_episode_id });
-        return {
-          slot_number: slot.slot_number,
-          started: true,
-          placed: merged.placed,
-          kept_edited: merged.kept_edited,
-          season_context: seasonContext,
-          intention: {
-            story_purposes: merged.purposes,
-            story_purpose: merged.purposes[0]?.text || null,
-            career_focus: merged.career_focus || null,
-            desired_pressure: merged.desired_pressure || null,
-            outcome_range: merged.outcome_range || null,
-            source: merged.source,
-          },
-        };
-      }
-      await writeIntention(sequelize, slotId, intention, SOURCES.DRAFTED);
-      return { slot_number: slot.slot_number, intention: { ...intention, source: SOURCES.DRAFTED } };
-    } catch (err) {
-      lastErr = err;
-      console.error(`[seasonIntention] draft attempt ${attempt + 1} failed:`, err.message);
-    }
+  let intention;
+  try {
+    intention = await askModel({
+      api: anthropic || getClient(), models: MODELS, maxTokens: 400, prompt, label: 'seasonIntention draft',
+      read: (response) => parseDraft(response?.content?.[0]?.text),
+    });
+  } catch (err) {
+    console.error('[seasonIntention] drafting failed:', err.message);
+    if (isBudgetRefusal(err)) throw new SeasonIntentionError(`${err.message} Nothing was drafted.`, 429, 'AI_BUDGET_EXCEEDED');
+    throw new SeasonIntentionError(`Drafting failed: ${err.message || 'unknown error'}`, 502, 'SEASON_INTENTION_DRAFT_FAILED');
   }
-  throw new SeasonIntentionError(`Drafting failed: ${lastErr?.message || 'unknown error'}`, 502, 'SEASON_INTENTION_DRAFT_FAILED');
+  if (slot.started) {
+    const merged = await writeStartedDraft(sequelize, slot, intention);
+    const { snapshotEpisode } = require('./seasonSlotService');
+    const seasonContext = await snapshotEpisode(sequelize, { slotId, episodeId: slot.live_episode_id });
+    return {
+      slot_number: slot.slot_number,
+      started: true,
+      placed: merged.placed,
+      kept_edited: merged.kept_edited,
+      season_context: seasonContext,
+      intention: {
+        story_purposes: merged.purposes,
+        story_purpose: merged.purposes[0]?.text || null,
+        career_focus: merged.career_focus || null,
+        desired_pressure: merged.desired_pressure || null,
+        outcome_range: merged.outcome_range || null,
+        source: merged.source,
+      },
+    };
+  }
+  await writeIntention(sequelize, slotId, intention, SOURCES.DRAFTED);
+  return { slot_number: slot.slot_number, intention: { ...intention, source: SOURCES.DRAFTED } };
 }
 
 /**

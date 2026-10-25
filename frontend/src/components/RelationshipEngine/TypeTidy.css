@@ -22,6 +22,7 @@
 .re-tidy-select { flex: 1 1 180px; min-width: 0; width: auto; }
 .re-tidy-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .re-tidy-hint { margin: 0 0 6px; font-size: 12px; color: var(--re-romance); }
+.re-tidy-hint.is-guess { color: var(--lala-gold-text); }
 .re-tidy-choice { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 8px; }
 .re-tidy-choice button:disabled { opacity: 0.5; cursor: not-allowed; }
 .re-tidy-will { font-size: 12px; color: var(--ps-ink-light); }

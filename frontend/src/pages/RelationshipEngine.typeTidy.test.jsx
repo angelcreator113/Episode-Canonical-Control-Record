@@ -126,6 +126,34 @@ describe('type tidy-up', () => {
     expect(changes[1]).toMatchObject({ relationship_type: 'love_interest', is_romantic: true, situation: 'Fidelity test' });
   });
 
+  test('a type guessed from the situation is filled in but waits for Accept; Accept all leaves it', async () => {
+    items = [...items0(), { id: 'r4', a_name: 'Sable Okonkwo-Reyes', b_name: 'Velour Atelier', current_type: 'mirror_image',
+      proposed_type: 'collaborator', proposed_is_romantic: false, proposed_from: 'situation', flavour: 'Mirror image',
+      situation_now: 'Velour commissions Sable.', situation_after: 'Mirror image: Velour commissions Sable.' }];
+    renderPage();
+    expect(await screen.findByText("4 relationships use types the app doesn't know")).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Tidy up relationship types' });
+    const guess = row(dialog, 'Sable Okonkwo-Reyes ↔ Velour Atelier');
+    expect(within(guess).getByText('Guessed from the situation: check it, then Accept.')).toBeTruthy();
+    expect(within(guess).getByRole('combobox').value).toBe('collaborator');
+    expect(within(guess).getByRole('button', { name: 'Skip' }).getAttribute('aria-pressed')).toBe('true');
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Accept all suggested' }));
+    expect(within(guess).getByRole('button', { name: 'Skip' }).getAttribute('aria-pressed')).toBe('true');
+    // a Skip she pressed herself also survives Accept all
+    fireEvent.click(within(guess).getByRole('button', { name: 'Skip' }));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Accept all suggested' }));
+    expect(within(guess).getByRole('button', { name: 'Skip' }).getAttribute('aria-pressed')).toBe('true');
+    // her own Accept takes it
+    fireEvent.click(within(guess).getByRole('button', { name: 'Accept' }));
+    vi.mocked(apiClient.post).mockResolvedValue({ data: { updated: ['r1', 'r2', 'r4'], refused: [] } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save 3 changes' }));
+    await waitFor(() => expect(apiClient.post).toHaveBeenCalled());
+    const { changes } = vi.mocked(apiClient.post).mock.calls[0][1];
+    expect(changes.map((c) => c.id)).toEqual(['r1', 'r2', 'r4']);
+    expect(changes[2]).toMatchObject({ relationship_type: 'collaborator', situation: 'Mirror image: Velour commissions Sable.' });
+  });
+
   test('a refused one is shown with its reason, and stays to fix', async () => {
     const dialog = await openReview();
     vi.mocked(apiClient.post).mockImplementation(async () => {
