@@ -9,7 +9,7 @@
 // mark, counted apart from the things to check; the timing row lists each
 // beat's rough length (ScriptPacingList).
 import { useState } from 'react';
-import { Check, AlertTriangle, ChevronDown, Lightbulb } from 'lucide-react';
+import { Check, AlertTriangle, ChevronDown, Lightbulb, Info } from 'lucide-react';
 import ScriptPacingList from './ScriptPacingList';
 
 // A stat's key reads as words ("brand trust"); a [STAT: …] tag keeps it as
@@ -18,7 +18,9 @@ export const shownText = (text) => String(text ?? '').replace(/(\[STAT:[^\]]*\])
 
 export default function ScriptHealthPanel({ rows = [], beatNumbers = {}, onOpenBeat, onFix, busy = false }) {
   const [collapsed, setCollapsed] = useState(true);
-  const toCheck = rows.filter((r) => !r.ok && !r.advice).length;
+  // A `low` row is a note (a voice habit not heard lately) and an `advice`
+  // row a tip: shown, not counted as things to check.
+  const toCheck = rows.filter((r) => !r.ok && !r.advice && !r.low).length;
   const tips = rows.filter((r) => !r.ok && r.advice).length;
   const tipNote = tips ? ` · ${tips} tip${tips === 1 ? '' : 's'}` : '';
   const fixable = rows.filter((r) => !r.ok && r.fix);
@@ -42,8 +44,8 @@ export default function ScriptHealthPanel({ rows = [], beatNumbers = {}, onOpenB
           names an element (Script page audit, 2026-10-19). */}
       <ul className="esp-health-list" id="esp-health-list" hidden={collapsed}>
         {!collapsed && rows.map((r) => (
-          <li key={r.key} className={r.advice && !r.ok ? 'is-tip' : r.ok ? 'is-ok' : 'is-gap'} data-testid={`script-health-${r.key}`} data-ok={r.ok ? 'true' : 'false'}>
-            {r.advice && !r.ok ? <Lightbulb size={14} aria-label="Tip" /> : r.ok ? <Check size={14} aria-label="OK" /> : <AlertTriangle size={14} aria-label="To check" />}
+          <li key={r.key} className={r.advice && !r.ok ? 'is-tip' : r.ok ? 'is-ok' : r.low ? 'is-low' : 'is-gap'} data-testid={`script-health-${r.key}`} data-ok={r.ok ? 'true' : 'false'}>
+            {r.advice && !r.ok ? <Lightbulb size={14} aria-label="Tip" /> : r.ok ? <Check size={14} aria-label="OK" /> : r.low ? <Info size={14} aria-label="Note" /> : <AlertTriangle size={14} aria-label="To check" />}
             <span className="esp-health-text">{shownText(r.text)}{r.timings && <ScriptPacingList timings={r.timings} />}</span>
             {r.fix && onFix && (
               <button type="button" className="esp-health-open esp-health-fix" data-testid={`script-health-fix-${r.key}`} disabled={busy} onClick={() => onFix(r.fix)}>
