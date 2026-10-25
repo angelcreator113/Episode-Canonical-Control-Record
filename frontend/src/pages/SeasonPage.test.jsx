@@ -82,6 +82,7 @@ function mockGets() {
     if (url === '/api/v1/world/show-1/season/twists') return { data: { arc: { id: 'arc-1' }, slots: [], threads: [], characters: [], twists: [], warnings: [] } };
     if (url === '/api/v1/world/show-1/season/proposals') return { data: { open: null, recent: [] } };
     if (url === '/api/v1/shows/show-1/career-list') return { data: { data: state.careerList } };
+    if (url === '/api/v1/opportunities/show-1') return { data: { opportunities: state.opps || [] } };
     if (url.startsWith('/api/v1/world/show-1/suggest-events')) return { data: { success: true, suggestions: state.suggestions } };
     if (url.startsWith('/api/v1/assets')) return { data: { data: [{ id: 'a1', name: 'Rooftop dusk', media_type: 'image', s3_url_processed: 'https://cdn.example.com/rooftop.jpg' }] } };
     return { data: {} };
@@ -135,7 +136,8 @@ describe('The tabs', () => {
     renderPage();
     expect(await screen.findByTestId('szn-panel-overview')).toBeTruthy();
     const tabs = screen.getAllByRole('tab');
-    expect(tabs.map((t) => t.textContent)).toEqual(['Overview', 'Episode Roadmap', 'Events', 'Goals', 'Story Development', 'Production Plan', 'Results & Analytics']);
+    // Evoni, 2026-10-25: Producer Mode's episodes, opportunities and results moved here.
+    expect(tabs.map((t) => t.textContent)).toEqual(['Overview', 'Roadmap', 'Episodes', 'Events', 'Opportunities', 'Story', 'Goals', 'Results']);
     expect(screen.getByTestId('szn-tab-overview').getAttribute('aria-selected')).toBe('true');
     fireEvent.click(screen.getByTestId('szn-tab-story'));
     expect(await screen.findByTestId('szn-panel-story')).toBeTruthy();
@@ -143,11 +145,31 @@ describe('The tabs', () => {
     expect(await screen.findByTestId('story-threads')).toBeTruthy();
   });
 
-  test.each([['roadmap', 'szn-roadmap'], ['events', 'szn-events'], ['goals', 'career-goals'], ['production', 'szn-production'], ['results', 'szn-results'], ['nonsense', 'szn-overview-card']])(
+  test.each([
+    ['roadmap', 'szn-roadmap'], ['episodes', 'show-episodes-board'], ['events', 'szn-events'], ['opportunities', 'opp-tab'],
+    ['goals', 'career-goals'], ['results', 'szn-ledger'], ['nonsense', 'szn-overview-card'],
+    // The old Production Plan tab's address opens Episodes, the board it linked to.
+    ['production', 'show-episodes-board'],
+  ])(
     '?tab=%s opens its tab', async (tab, testId) => {
       renderPage(`?tab=${tab}`);
       expect(await screen.findByTestId(testId)).toBeTruthy();
     });
+
+  test('every tab opens on a one-line note of what it is for', async () => {
+    renderPage();
+    await screen.findByTestId('szn-panel-overview');
+    const notes = {};
+    for (const t of screen.getAllByRole('tab')) {
+      fireEvent.click(t);
+      const key = t.getAttribute('data-testid').replace('szn-tab-', '');
+      const note = await within(await screen.findByTestId(`szn-panel-${key}`)).findByTestId('szn-tab-note');
+      notes[key] = note.textContent;
+    }
+    expect(Object.keys(notes)).toEqual(['overview', 'roadmap', 'episodes', 'events', 'opportunities', 'story', 'goals', 'results']);
+    expect(notes.episodes).toBe('Every episode this season and where it is in production.');
+    for (const text of Object.values(notes)) expect(text.length).toBeGreaterThan(20);
+  });
 });
 
 describe('The hero', () => {
@@ -383,7 +405,7 @@ describe('The Overview', () => {
   });
 });
 
-describe('Events, Production, Results', () => {
+describe('Events, Episodes, Opportunities, Results', () => {
   test('Events: the slots\' events and the free ones, pencilled through the slot rules', async () => {
     renderPage('?tab=events');
     expect(await screen.findByTestId('szn-event-slot-2')).toBeTruthy();
@@ -392,18 +414,49 @@ describe('Events, Production, Results', () => {
     await waitFor(() => expect(api.put).toHaveBeenCalledWith('/api/v1/world/show-1/season/slots/slot-5/event', { event_id: 'ev-free' }));
   });
 
-  test('Production: each placed episode with its stage and steps', async () => {
-    renderPage('?tab=production');
-    const row = await screen.findByTestId('szn-prod-1');
-    expect(row.textContent).toContain('E1 · I Designed My Outfit');
-    expect(within(row).getAllByRole('link').map((a) => a.textContent.replace(/ \((done|to do)\)$/, ''))).toEqual(['Planning', 'Script', 'Production', 'Edit', 'Thumbnail', 'Review', 'Release']);
-    expect(await within(row).findByTestId('szn-prod-checks-1')).toBeTruthy();
+  // The production board, moved from Producer Mode's Episodes › Production (2026-10-25).
+  test('Episodes: the production board with the show\'s episodes', async () => {
+    renderPage('?tab=episodes');
+    const board = await screen.findByTestId('show-episodes-board');
+    await waitFor(() => expect(within(board).getAllByText('I Designed My Outfit').length).toBeGreaterThan(0));
+    expect(within(board).getByTestId('seb-count').textContent).toContain('1 episode');
   });
 
-  test('Results: Planning Insights and the way to Producer Results', async () => {
+  // Moved from Producer Mode's Opportunities tab; a need's "Add a deal" opens its form with the company.
+  test('Opportunities: the offers and bookings, and ?deal_with= opens the form for that company', async () => {
+    state.opps = [{ id: 'o1', name: 'Velour Cover', status: 'negotiating', opportunity_type: 'editorial', status_history: [] }];
+    renderPage('?tab=opportunities&deal_with=Maison%20Velour');
+    const tab = await screen.findByTestId('opp-tab');
+    expect(await within(tab).findByText('Velour Cover')).toBeTruthy();
+    expect(within(tab).getByDisplayValue('Maison Velour')).toBeTruthy();
+    expect(api.get).toHaveBeenCalledWith('/api/v1/opportunities/show-1');
+  });
+
+  // One Results tab: the Episode Ledger (Producer Mode's Episodes › Results), then Planning Insights.
+  test('Results: the Episode Ledger first, then Planning Insights', async () => {
+    state.episodes = [{ id: 'ep-1', episode_number: 1, title: 'I Designed My Outfit', status: 'published', evaluation_status: 'accepted', evaluation_json: { tier_final: 'slay', score: 91 } }];
     renderPage('?tab=results');
-    expect(await screen.findByTestId('planning-insights')).toBeTruthy();
-    expect(screen.getByTestId('szn-open-results').getAttribute('href')).toBe('/shows/show-1/world?tab=episodes-ledger');
+    const ledger = await screen.findByTestId('szn-ledger');
+    expect(within(ledger).getByRole('heading', { name: 'Episode results' })).toBeTruthy();
+    expect(await within(ledger).findByText('I Designed My Outfit')).toBeTruthy();
+    expect(await within(ledger).findByTestId('ledger-summary')).toBeTruthy();
+    const insights = await screen.findByTestId('planning-insights');
+    expect(ledger.compareDocumentPosition(insights) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(api.get).toHaveBeenCalledWith('/api/v1/shows/show-1/financial-summary');
+    expect(screen.queryByTestId('szn-open-results')).toBeNull();
+  });
+
+  // A show with no season keeps its board, opportunities and ledger (the old Producer Mode links land here).
+  test('with no season: the setup, and the Episodes, Opportunities and Results tabs', async () => {
+    state.arc = null;
+    renderPage('?tab=episodes');
+    expect(await screen.findByTestId('show-episodes-board')).toBeTruthy();
+    expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Set up the season', 'Episodes', 'Opportunities', 'Results']);
+    fireEvent.click(screen.getByTestId('szn-tab-overview'));
+    expect(await screen.findByTestId('szn-empty')).toBeTruthy();
+    fireEvent.click(screen.getByTestId('szn-tab-results'));
+    expect(await screen.findByTestId('szn-ledger')).toBeTruthy();
+    expect(screen.queryByText('Planning Insights did not load.')).toBeNull();
   });
 });
 

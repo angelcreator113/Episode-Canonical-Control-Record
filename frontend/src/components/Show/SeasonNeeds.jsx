@@ -24,6 +24,7 @@ import { useId, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { HeartHandshake } from 'lucide-react';
 import { REL_PRESETS, COMPANY_PRESETS, BRAND_PAIR_PRESETS } from '../RelationshipEngine/tokens';
+import { seasonPageHref } from '../../lib/seasonPage';
 import './SeasonNeeds.css';
 
 export const NEED_STATE = {
@@ -58,10 +59,10 @@ export function guessCompanyType(text) {
   return 'client_partner';
 }
 
-/** "Add a deal": the show's Opportunities, its form opened for this company; else the company's profile. */
+/** "Add a deal": the Season page's Opportunities tab, its form opened for this company; else the company's profile. */
 export function dealLink(need, showId) {
   if (!need.company) return null;
-  if (showId) return `/shows/${encodeURIComponent(showId)}/world?tab=opportunities&deal_with=${encodeURIComponent(need.company.name)}`;
+  if (showId) return seasonPageHref(showId, 'opportunities', { deal_with: need.company.name });
   return `/brands/${encodeURIComponent(need.company.slug)}`;
 }
 

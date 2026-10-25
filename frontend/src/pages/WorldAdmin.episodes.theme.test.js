@@ -9,25 +9,24 @@
  * which a token cannot carry); Generate Script is the primary (it was a
  * green gradient under white); the ledger's teal, pink, gold and family
  * chips read text twins. The Season Plan sub-tab migrates next.
+ *
+ * Since 2026-10-25 both live on the Season page (its Episodes and Results
+ * tabs): the ledger is components/Show/EpisodeLedger (+ .css) and the tier
+ * palette and `S` are components/Show/producerStyles; the same rules hold.
  */
 import { describe, test, expect } from 'vitest';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
 import { contrast, readToken, stripTaskRefs } from '../styles/contrast';
 
-const jsx = readFileSync(resolve(__dirname, 'WorldAdmin.jsx'), 'utf8');
+const jsx = readFileSync(resolve(__dirname, '../components/Show/producerStyles.js'), 'utf8');
+const ledgerSource = readFileSync(resolve(__dirname, '../components/Show/EpisodeLedger.jsx'), 'utf8');
 const board = readFileSync(resolve(__dirname, '../components/Show/ShowEpisodesBoard.jsx'), 'utf8');
-const css = readFileSync(resolve(__dirname, 'WorldAdmin.css'), 'utf8');
+const css = readFileSync(resolve(__dirname, '../components/Show/EpisodeLedger.css'), 'utf8');
 const tokens = readFileSync(resolve(__dirname, '../styles/design-tokens.css'), 'utf8');
 const HEX = /#[0-9a-f]{3,8}\b/i;
 
-const slice = (text, start, end) => {
-  const a = text.indexOf(start);
-  const b = text.indexOf(end, a);
-  if (a < 0 || b < 0) throw new Error(`marker missing: ${start} / ${end}`);
-  return text.slice(a, b);
-};
-const ledger = slice(jsx, 'EPISODE LEDGER', "{activeTab === 'events' && (");
+const ledger = ledgerSource.slice(ledgerSource.indexOf('export default function EpisodeLedger'));
 
 describe('Episodes tab theme', () => {
   test('the Results ledger slice and the Production board set colors only through tokens', () => {
@@ -37,11 +36,12 @@ describe('Episodes tab theme', () => {
   });
 
   test('the tier palette is a fill, a surface, a border and a text twin per tier, never a hex alpha tint', () => {
-    expect(jsx).toMatch(/const TIER_COLORS = \{ slay: 'var\(--lala-gold\)', pass: 'var\(--success\)', safe: 'var\(--warning\)', fail: 'var\(--danger\)' \};/);
-    expect(jsx).toMatch(/const TIER_BG = \{ slay: 'var\(--lala-gold-soft\)', pass: 'var\(--success-bg\)', safe: 'var\(--warning-bg\)', fail: 'var\(--danger-bg\)' \};/);
-    expect(jsx).toMatch(/const TIER_BORDER = \{ slay: 'var\(--lala-gold-line\)', pass: 'var\(--success-border\)', safe: 'var\(--warning-border\)', fail: 'var\(--danger-border\)' \};/);
-    expect(jsx).toMatch(/const TIER_TEXT = \{ slay: 'var\(--lala-gold-text\)', pass: 'var\(--success-text\)', safe: 'var\(--warning-text\)', fail: 'var\(--danger-text\)' \};/);
-    expect(jsx).not.toMatch(/TIER_COLORS\[[a-z]+\] \+ '/);
+    expect(jsx).toMatch(/export const TIER_COLORS = \{ slay: 'var\(--lala-gold\)', pass: 'var\(--success\)', safe: 'var\(--warning\)', fail: 'var\(--danger\)' \};/);
+    expect(jsx).toMatch(/export const TIER_BG = \{ slay: 'var\(--lala-gold-soft\)', pass: 'var\(--success-bg\)', safe: 'var\(--warning-bg\)', fail: 'var\(--danger-bg\)' \};/);
+    expect(jsx).toMatch(/export const TIER_BORDER = \{ slay: 'var\(--lala-gold-line\)', pass: 'var\(--success-border\)', safe: 'var\(--warning-border\)', fail: 'var\(--danger-border\)' \};/);
+    expect(jsx).toMatch(/export const TIER_TEXT = \{ slay: 'var\(--lala-gold-text\)', pass: 'var\(--success-text\)', safe: 'var\(--warning-text\)', fail: 'var\(--danger-text\)' \};/);
+    expect(ledger).toMatch(/TIER_BG\[tier\]/);
+    expect(ledger).not.toMatch(/TIER_COLORS\[[a-z]+\] \+ '/);
     expect(jsx).not.toMatch(/\$\{TIER_COLORS\[[a-z]+\]\}[0-9a-f]{2}\b/);
     // The tiers are chips in the summary strip (Evoni, 2026-10-22 layout list).
     expect(ledger).toMatch(/background: TIER_BG\[tier\], borderColor: TIER_BORDER\[tier\]/);

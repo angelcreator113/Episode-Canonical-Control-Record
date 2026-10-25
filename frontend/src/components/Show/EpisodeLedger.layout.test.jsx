@@ -1,5 +1,6 @@
 /**
- * Producer Mode → Episodes → Results, laid out to Evoni's list of
+ * The Episode Ledger (the Season page's Results tab; Producer Mode's
+ * Episodes → Results until 2026-10-25), laid out to Evoni's list of
  * 2026-10-22 ("how can we improve the results tab in production layout"):
  * one summary strip for the tiers and the season's money, filter and sort
  * chips, rows whose header is a button, and an opened episode with its
@@ -7,14 +8,14 @@
  */
 import { vi, describe, beforeEach, test, expect } from 'vitest';
 import { render, screen, fireEvent, within } from '@testing-library/react';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { MemoryRouter } from 'react-router-dom';
 
-vi.mock('../services/api', () => ({
+vi.mock('../../services/api', () => ({
   default: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn(), patch: vi.fn(), request: vi.fn() },
 }));
 
-import api from '../services/api';
-import WorldAdmin from './WorldAdmin';
+import api from '../../services/api';
+import EpisodeLedger from './EpisodeLedger';
 
 const EPISODES = [
   { id: 'ep-1', episode_number: 1, title: 'Studio by Sable', status: 'published', evaluation_status: 'accepted', evaluation_json: { tier_final: 'slay', score: 92, outfit_match: 22 } },
@@ -24,10 +25,8 @@ const EPISODES = [
 
 function renderLedger() {
   return render(
-    <MemoryRouter initialEntries={['/shows/show-1/world?tab=episodes-ledger']}>
-      <Routes>
-        <Route path="/shows/:id/world" element={<WorldAdmin />} />
-      </Routes>
+    <MemoryRouter>
+      <EpisodeLedger showId="show-1" api={api} episodes={EPISODES} events={[]} />
     </MemoryRouter>
   );
 }

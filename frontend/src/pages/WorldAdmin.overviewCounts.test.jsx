@@ -17,6 +17,7 @@ vi.mock('../services/api', () => ({
 
 import api from '../services/api';
 import WorldAdmin from './WorldAdmin';
+import SeasonPage from './SeasonPage';
 
 const READY = {
   name: 'Velvet Hour', category: 'social', format: 'gala', event_date: '2026-11-07', event_time: '20:00',
@@ -70,10 +71,11 @@ describe('WorldAdmin Overview: four questions, true counts', () => {
     expect(screen.queryByTestId('wa-load-failed')).toBeNull();
   });
 
+  // The production board is the Season page's Episodes tab (2026-10-25); it still counts by the list's total.
   test('Production counts the show\'s episodes by the list\'s total', async () => {
     render(
-      <MemoryRouter initialEntries={['/shows/show-1/world?tab=episodes']}>
-        <Routes><Route path="/shows/:id/world" element={<WorldAdmin />} /></Routes>
+      <MemoryRouter initialEntries={['/shows/show-1/season?tab=episodes']}>
+        <Routes><Route path="/shows/:showId/season" element={<SeasonPage />} /></Routes>
       </MemoryRouter>,
     );
     await waitFor(() => expect(screen.getByTestId('seb-count').textContent).toContain('137 episodes'));

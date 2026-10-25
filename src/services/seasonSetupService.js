@@ -439,13 +439,33 @@ function activeGoals(sequelize, showId) {
 }
 
 /**
+ * The goals no event placed in each part moves yet, { [phase]: [goal] }
+ * (seasonGoalCoverage; Evoni, 2026-10-25): the pencil ranking and the
+ * placement prefer an event that covers one. {} when it cannot be read, so
+ * placing still works.
+ */
+async function goalGaps(sequelize, showId) {
+  try {
+    const { loadCoverageInputs, computeCoverage, uncoveredByPhase } = require('./seasonGoalCoverage');
+    const inputs = await loadCoverageInputs(sequelize, showId);
+    if (!inputs) return {};
+    return uncoveredByPhase(computeCoverage(inputs), inputs.goals);
+  } catch (err) {
+    console.error('[seasonSetup] the goal gaps could not be read; none used:', err.message);
+    return {};
+  }
+}
+
+/**
  * The events that can be pencilled (getRoadmap's rule: live, unused, draft
  * or ready, in no slot of this season), with what scoreForSeason reads.
  */
 async function availableEvents(sequelize, showId, arcId) {
   const [events] = await sequelize.query(
     `SELECT ev.id, ev.name, ev.status, ev.event_type, ev.event_date, ev.prestige, ev.strictness, ev.is_paid,
-            ev.payment_amount, ev.cost_coins, ev.host, ev.host_brand, ev.venue_name, ev.venue_location_id, ev.format
+            ev.payment_amount, ev.cost_coins, ev.host, ev.host_brand, ev.venue_name, ev.venue_location_id, ev.format,
+            ev.rewards, ev.appearance_fee, ev.partnership_base_fee, ev.performance_fee,
+            ev.canon_consequences -> 'pinned_goal_ids' AS pinned_goal_ids
        FROM world_events ev
       WHERE ev.show_id = :showId AND ev.deleted_at IS NULL AND ev.used_in_episode_id IS NULL
         AND COALESCE(ev.status, 'draft') IN ('draft', 'ready')
@@ -460,7 +480,8 @@ async function availableEvents(sequelize, showId, arcId) {
  * 2026-10-24, item 18): each event that can be pencilled, scored by
  * seasonSuggestionService.scoreForSeason against this slot's planned
  * pressure and career focus, Lala's state and goals, and the last three
- * episodes' events (a repeat fits less well). Each with a short reason.
+ * episodes' events (a repeat fits less well), and covering a goal no event
+ * in the slot's part moves yet. Each with a short reason.
  * Ties keep the name order. A SeasonSetupError 404 for a slot not in the
  * show's active season.
  */
@@ -473,10 +494,12 @@ async function rankEventsForSlot(sequelize, showId, slotId) {
   const { scoreForSeason, loadSeasonInputs } = require('./seasonSuggestionService');
   const state = await lalaState(sequelize, showId);
   const season = await loadSeasonInputs(sequelize, showId);
+  const gaps = await goalGaps(sequelize, showId);
   const inputs = {
     slot: { desired_pressure: slot.intention?.desired_pressure || null, career_focus: slot.intention?.career_focus || null },
     goals: season.goals,
     recent: season.recent,
+    uncovered: gaps[slot.phase] || [],
   };
   const ranked = events.map((ev, i) => {
     const fit = scoreForSeason(ev, state, inputs);
@@ -556,16 +579,25 @@ async function previewPlacement(sequelize, showId) {
     recent.length = Math.min(recent.length, 3);
   };
 
+  // The goals no event in each part moves yet; each event placed below
+  // covers what it moves in its slot's part, so the next pick prefers the
+  // goals still uncovered (Evoni, 2026-10-25).
+  const { scoreForSeason, goalMove } = require('./seasonSuggestionService');
+  const gaps = candidates.length ? await goalGaps(sequelize, showId) : {};
+  const state = candidates.length ? await lalaState(sequelize, showId) : {};
+  const cover = (slot, ev) => {
+    if (gaps[slot.phase]) gaps[slot.phase] = gaps[slot.phase].filter((g) => !goalMove(ev, g, state));
+  };
+
   for (const ev of dated) {
     const slot = take();
     if (!slot) { leftOver.push({ kind: 'event', episode: null, event: eventCard(ev) }); continue; }
     items.push(itemFor(slot, { kind: 'event', event: eventCard(ev), why: `Dated ${eventDay(ev.event_date)}, in date order` }));
     remember(slot, ev);
+    cover(slot, ev);
   }
 
   if (undated.length) {
-    const { scoreForSeason } = require('./seasonSuggestionService');
-    const state = await lalaState(sequelize, showId);
     const goals = await activeGoals(sequelize, showId);
     const pool = [...undated];
     while (pool.length) {
@@ -575,6 +607,7 @@ async function previewPlacement(sequelize, showId) {
         slot: { desired_pressure: slot.intention?.desired_pressure || null, career_focus: slot.intention?.career_focus || null },
         goals: goals.filter((g) => g.status === 'active'),
         recent,
+        uncovered: gaps[slot.phase] || [],
       };
       let best = 0;
       let bestFit = null;
@@ -589,6 +622,7 @@ async function previewPlacement(sequelize, showId) {
         why: boosts.length ? `Undated; ${boosts[0]}` : 'Undated; the best fit left for this slot',
       }));
       remember(slot, ev);
+      cover(slot, ev);
     }
     for (const ev of pool) leftOver.push({ kind: 'event', episode: null, event: eventCard(ev) });
   }
@@ -655,7 +689,7 @@ async function applyPlacement(sequelize, showId, items) {
 
 // ─── Draft the season, or one part ───────────────────────────────────────
 
-function draftPrompt({ arc, phases, slots, targets, threads, goals, debt, carried, relationships = '', partNumber }) {
+function draftPrompt({ arc, phases, slots, targets, threads, goals, debt, carried, relationships = '', partNumber, gaps = {} }) {
   const partLine = (p) => phaseLine(p, { word: 'Part', range: true });
   const slotLine = (s) => {
     const what = s.episode
@@ -670,6 +704,12 @@ function draftPrompt({ arc, phases, slots, targets, threads, goals, debt, carrie
   const threadText = bullets(threads, (t) => threadLine(t, { description: true }), '- None yet.');
   const goalText = bullets(goals, (g) => goalLine(g, { status: true, range: true }), '- None set.');
   const debtText = debtLines(debt);
+  // The goals no event in a part moves yet (seasonGoalCoverage): a drafted
+  // purpose can serve one.
+  const gapText = phases.map((p) => {
+    const list = gaps[Number(p.phase)] || [];
+    return list.length ? `- Part ${p.phase}: ${list.map((g) => g.title).join('; ')}` : null;
+  }).filter(Boolean).join('\n');
   return `You plan the season of "Styling Adventures with Lala", a luxury life-simulator show about Lala's fashion career.
 
 The season: "${arc.title}"${arc.tagline ? ` — ${arc.tagline}` : ''}
@@ -684,7 +724,7 @@ ${threadText}
 
 Lala's career goals:
 ${goalText}
-
+${gapText ? `\nGoals no event in that part moves yet (where it fits, let an open slot's purpose serve one):\n${gapText}\n` : ''}
 Narrative debt she carries:
 ${debtText}
 ${carried ? `\n${carried}\n` : ''}${relationships ? `\n${relationships}` : ''}
@@ -780,8 +820,9 @@ async function draftSeason(sequelize, showId, { phase = null, anthropic = null }
   });
   const goals = await activeGoals(sequelize, showId);
   const debt = parseJson(arc?.narrative_debt, []);
+  const gaps = await goalGaps(sequelize, showId);
   const prompt = draftPrompt({
-    arc, phases, slots: withDetail, targets, threads, goals, debt: Array.isArray(debt) ? debt : [], carried, relationships, partNumber,
+    arc, phases, slots: withDetail, targets, threads, goals, debt: Array.isArray(debt) ? debt : [], carried, relationships, partNumber, gaps,
   });
   let message;
   try {
@@ -830,6 +871,8 @@ module.exports = {
   previewPlacement,
   applyPlacement,
   availableEvents,
+  lalaState,
+  goalGaps,
   rankEventsForSlot,
   draftPrompt,
   cleanSeasonDraft,

@@ -1,5 +1,5 @@
 /**
- * The Season page's Episode Roadmap, Events and Production Plan tabs
+ * The Season page's Roadmap and Events tabs
  * (Evoni's mockup, 2026-10-25). They draw the Season Plan's own pieces
  * (SeasonPlan.jsx): the roadmap controls, the advance bar, the slot panel
  * (a sheet on a phone, a drawer beside the page otherwise) with its ranked
@@ -12,19 +12,19 @@
  *               No Calendar: the slots carry no dates (only the season does).
  *   Events      the slots' events in slot order, and the events in no slot,
  *               each pencilled from here; the placement preview.
- *   Production  each placed episode's stage, the seven pipeline steps, and
- *               the checklist count ("22 of 24 checks") from the episode's
- *               production checks, as Producer Mode's Production board.
+ *   Each slot card and event row with an event says which goals it moves
+ *   ("Moves: <goal>", GoalCoverage's MovesChips; Evoni, 2026-10-25).
+ * The Production Plan tab (each placed episode's steps and checklist count)
+ * gave way to the Episodes tab, the production board itself (2026-10-25).
  */
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { LayoutGrid, ListOrdered, Plus, MoreHorizontal, CalendarDays, Check } from 'lucide-react';
+import { LayoutGrid, ListOrdered, Plus, MoreHorizontal, CalendarDays } from 'lucide-react';
 import { useRoadmapControls, AdvanceBar, SlotSide, UnslottedEpisodes } from './SeasonPlan';
 import { SeasonPlacement } from './SeasonSetup';
-import { SeasonBar, StatusChip } from './SeasonPageParts';
-import { checklistSummary } from './ShowOverview';
-import { loadProductionChecks, CHECKLIST_SECTIONS } from '../Episodes/EpisodeProductionChecklist';
-import { STATUS_LABEL, pipelineSteps } from '../../lib/episodePipeline';
+import { StatusChip } from './SeasonPageParts';
+import { MovesChips } from './GoalCoverage';
+import { useGoalCoverage, slotGoalsMap } from '../../lib/goalCoverage';
 import {
   SLOT_STATUS, SLOT_STATUS_ORDER, allSlots, filterSlots, slotPicture, slotCardTitle, arcPart, partProgress, dayLabel,
 } from '../../lib/seasonPage';
@@ -74,8 +74,8 @@ function CardMenu({ slot, showId, onOpen, onIntention }) {
   );
 }
 
-/** One slot as a card: picture, E#, title, status chip, ⋯. Clicking opens its panel. */
-export function SlotCard({ slot, picture, showId, selected, onOpen, onIntention, nextSlot }) {
+/** One slot as a card: picture, E#, title, status chip, the goals its event moves, ⋯. Clicking opens its panel. */
+export function SlotCard({ slot, picture, showId, selected, onOpen, onIntention, nextSlot, moves = [] }) {
   return (
     <div className={`szn-slot is-${slot.state}${selected ? ' is-selected' : ''}`} data-testid={`szn-slot-${slot.slot_number}`}>
       <button type="button" className="szn-slot-open" onClick={onOpen} aria-pressed={selected}
@@ -87,6 +87,7 @@ export function SlotCard({ slot, picture, showId, selected, onOpen, onIntention,
           <span className="szn-slot-num">E{slot.slot_number}{nextSlot && <span className="szn-slot-next">Next</span>}</span>
           <span className={`szn-slot-title${slot.episode || slot.event || slot.intention?.story_purpose ? '' : ' is-empty'}`}>{slotCardTitle(slot)}</span>
           <StatusChip state={slot.state} />
+          <MovesChips goals={moves} testId={`szn-slot-moves-${slot.slot_number}`} />
         </span>
       </button>
       <CardMenu slot={slot} showId={showId} onOpen={onOpen} onIntention={onIntention} />
@@ -98,6 +99,8 @@ export function SeasonRoadmapTab({ plan, S, api, showId, setToast, episodes, eve
   const navigate = useNavigate();
   const controls = useSlotDrawer({ plan, api, showId, setToast });
   const { roadmap } = plan;
+  const coverage = useGoalCoverage({ api, showId, reloadKey: roadmap });
+  const movesBySlot = slotGoalsMap(coverage.data);
   const view = params.get('view') === 'timeline' ? 'timeline' : 'grid';
   const part = params.get('part') || 'all';
   const status = params.get('status') || 'all';
@@ -110,7 +113,7 @@ export function SeasonRoadmapTab({ plan, S, api, showId, setToast, episodes, eve
   const card = (slot) => (
     <SlotCard key={slot.id} slot={slot} showId={showId} picture={slotPicture(slot, { episodes, events, arc })}
       selected={controls.sheetOpen && controls.selected?.id === slot.id} nextSlot={!slot.locked && slot.slot_number === roadmap.next_slot_number}
-      onOpen={() => openSlot(slot)} onIntention={() => editIntention(slot)} />
+      onOpen={() => openSlot(slot)} onIntention={() => editIntention(slot)} moves={movesBySlot[slot.id] || []} />
   );
   const shownPhases = phases.filter((p) => part === 'all' || Number(p.phase) === Number(part));
   const timeline = filterSlots(allSlots(roadmap), { part, status });
@@ -196,7 +199,9 @@ export function SeasonEventsTab({ plan, S, api, showId, setToast, episodes, even
   const controls = useSlotDrawer({ plan, api, showId, setToast });
   const [placing, setPlacing] = useState(false);
   const { roadmap } = plan;
+  const coverage = useGoalCoverage({ api, showId, reloadKey: roadmap });
   if (!roadmap) return <p className="szn-muted">The roadmap did not load.</p>;
+  const movesBySlot = slotGoalsMap(coverage.data);
   const slots = allSlots(roadmap);
   const withEvents = slots.filter((s) => s.event);
   const open = controls.openSlots.filter((s) => !s.event);
@@ -220,6 +225,7 @@ export function SeasonEventsTab({ plan, S, api, showId, setToast, episodes, even
                 <span className="szn-list-main">
                   <span className="szn-list-title">E{slot.slot_number} · {slot.event.name}</span>
                   <span className="szn-list-sub">{[ev?.event_type, dayLabel(ev?.event_date) || ev?.event_date].filter(Boolean).join(' · ') || 'No date yet'}</span>
+                  <MovesChips goals={movesBySlot[slot.id] || []} max={3} testId={`szn-event-moves-${slot.slot_number}`} />
                 </span>
                 <StatusChip state={slot.state} />
                 <button type="button" className="szn-btn is-quiet" onClick={() => controls.open(slot)}>Open</button>
@@ -262,65 +268,5 @@ export function SeasonEventsTab({ plan, S, api, showId, setToast, episodes, even
       </section>
       <SlotDrawer controls={controls} plan={plan} S={S} api={api} showId={showId} setToast={setToast} episodes={episodes} events={events} />
     </div>
-  );
-}
-
-/** One placed episode's production: its stage, the pipeline steps, the checklist count. */
-function ProductionRow({ slot, episode, showId }) {
-  const [summary, setSummary] = useState(null);
-  const done = slot.state === 'done';
-  useEffect(() => {
-    if (done || !episode) return undefined;
-    let cancelled = false;
-    loadProductionChecks(episode, showId)
-      .then(({ checks }) => { if (!cancelled) setSummary(checklistSummary(checks || {})); })
-      .catch((err) => console.error('[SeasonPage] production checks failed:', err));
-    return () => { cancelled = true; };
-  }, [done, episode, showId]);
-  const ep = episode || { id: slot.episode.id, status: slot.episode.status, evaluation_status: slot.episode.evaluation_status };
-  const steps = pipelineSteps({ episode: ep, checks: null, sections: CHECKLIST_SECTIONS });
-  return (
-    <li className="szn-prod-row" data-testid={`szn-prod-${slot.slot_number}`}>
-      <div className="szn-prod-main">
-        <span className="szn-list-title">E{slot.slot_number} · {slot.episode.title || 'Untitled episode'}</span>
-        <span className="szn-list-sub">{done ? 'Accepted' : STATUS_LABEL[ep.status] || ep.status || 'Draft'}</span>
-      </div>
-      <ol className="szn-steps" aria-label="Pipeline steps">
-        {steps.map((st) => (
-          <li key={st.key} className={st.done ? 'is-done' : ''}>
-            <Link to={st.href}>{st.done && <Check size={12} aria-hidden="true" />}{st.label}<span className="szn-sr">{st.done ? ' (done)' : ' (to do)'}</span></Link>
-          </li>
-        ))}
-      </ol>
-      <div className="szn-prod-checks">
-        {done ? <span className="szn-chip is-done">Done</span> : summary ? (
-          <>
-            <span className="szn-list-sub" data-testid={`szn-prod-checks-${slot.slot_number}`}>{summary.done} of {summary.total} checks</span>
-            <SeasonBar done={summary.done} total={summary.total} label="Production checklist" />
-          </>
-        ) : <span className="szn-list-sub">Reading the checklist…</span>}
-      </div>
-    </li>
-  );
-}
-
-export function SeasonProductionTab({ plan, showId, episodes }) {
-  const placed = allSlots(plan.roadmap).filter((s) => s.episode);
-  return (
-    <section className="szn-card" data-testid="szn-production">
-      <header className="szn-card-head">
-        <h2 className="szn-card-title">Production Plan</h2>
-        <Link className="szn-link" to={`/shows/${showId}/world?tab=episodes-production`}>Open the Production board</Link>
-      </header>
-      {placed.length === 0 ? (
-        <p className="szn-muted">No episode is placed in a slot yet. Place one from the roadmap, or start one with Add Episode.</p>
-      ) : (
-        <ul className="szn-prod-list">
-          {placed.map((slot) => (
-            <ProductionRow key={slot.id} slot={slot} showId={showId} episode={episodes.find((e) => e.id === slot.episode.id) || null} />
-          ))}
-        </ul>
-      )}
-    </section>
   );
 }

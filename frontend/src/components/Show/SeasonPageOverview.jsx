@@ -1,6 +1,5 @@
 /**
- * The Season page's Overview, Story Development and Results & Analytics
- * tabs (Evoni's mockup, 2026-10-25). The pieces are the Season Plan's
+ * The Season page's Overview, Story and Results tabs (Evoni's mockup, 2026-10-25). The pieces are the Season Plan's
  * (SeasonPlan.jsx, SeasonSetup's checklist, SeasonProposals, SeasonKnows,
  * SeasonTwists, SeasonRevealPlan, SeasonNeeds, the threads card, Planning
  * Insights); only the summary cards are the page's own, and they read the
@@ -14,10 +13,12 @@
  *              Goals, each with See all and an add button (Season Goals'
  *              open the Goals tab).
  *   Story      threads, twists, the reveal plan, the relationships needed.
- *   Results    Planning Insights, and the way to Producer Mode's Results.
+ *   Results    the Episode Ledger (how each episode turned out: tier, score,
+ *              money, what it changed; Producer Mode's old Episodes ›
+ *              Results), then Planning Insights (each slot's plan beside
+ *              what happened, and the season's money).
  */
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
 import { ChevronRight, Plus, Pencil } from 'lucide-react';
 import SeasonProposals from './SeasonProposals';
 import SeasonKnows from './SeasonKnows';
@@ -27,6 +28,7 @@ import SeasonNeeds from './SeasonNeeds';
 import { SeasonChecklist, setupSteps } from './SeasonSetup';
 import { StoryThreadsCard, PlanningInsights, TEMP_CONFIG, THREAD_STATUS } from './SeasonPlan';
 import { SeasonBar, SummaryCard } from './SeasonPageParts';
+import EpisodeLedger from './EpisodeLedger';
 import { dateRange, dayLabel, arcPart, partProgress, revealMatrix, slotEvents } from '../../lib/seasonPage';
 
 const GOAL_STATUS = { active: 'Active', paused: 'Paused', completed: 'Complete', failed: 'Missed', upcoming: 'Planned' };
@@ -264,15 +266,14 @@ export function SeasonStoryTab({ plan, S, api, showId, setToast }) {
   );
 }
 
-export function SeasonResultsTab({ plan, S, showId }) {
+export function SeasonResultsTab({ plan, S, showId, api, episodes, events, setToast, arc }) {
   return (
     <div className="szn-results" data-testid="szn-results">
-      <section className="szn-card szn-results-link">
-        <h2 className="szn-card-title">Results & Analytics</h2>
-        <p className="szn-muted">Each slot's plan beside what happened, and the season's money from the ledger. Every episode's results, scores and money are in Producer Mode.</p>
-        <Link className="szn-btn" to={`/shows/${showId}/world?tab=episodes-ledger`} data-testid="szn-open-results">Open Producer Results</Link>
+      <section className="szn-card szn-ledger" aria-label="Episode results" data-testid="szn-ledger">
+        <EpisodeLedger showId={showId} api={api} episodes={episodes} events={events} setToast={setToast} title="Episode results" />
       </section>
-      {plan.insights ? <PlanningInsights insights={plan.insights} S={S} /> : <p className="szn-muted">Planning Insights did not load.</p>}
+      {/* With no season there is no plan to set beside the results. */}
+      {plan.insights ? <PlanningInsights insights={plan.insights} S={S} /> : arc ? <p className="szn-muted">Planning Insights did not load.</p> : null}
     </div>
   );
 }

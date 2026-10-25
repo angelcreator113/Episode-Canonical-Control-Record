@@ -61,13 +61,84 @@ function focusFit(event, focus, state) {
   return null;
 }
 
-/** Score and reasons for active goals the event moves: coins goals by paid events, reputation goals by prestige above her reputation. */
+function parseMaybe(value, fallback) {
+  if (typeof value !== 'string') return value == null ? fallback : value;
+  try { return JSON.parse(value); } catch (err) {
+    console.error('[seasonSuggestion] a JSON field could not be read:', err.message);
+    return fallback;
+  }
+}
+
+/**
+ * The goal ids Evoni pinned the event to (Evoni, 2026-10-25: goals line up
+ * with the events that move them, "with pinning"). Stored in
+ * canon_consequences.pinned_goal_ids (server-owned: only the pin route
+ * writes it); a query may select it as pinned_goal_ids.
+ */
+function pinnedGoalIds(event) {
+  let ids = event?.pinned_goal_ids;
+  if (ids === undefined) ids = parseMaybe(event?.canon_consequences, {})?.pinned_goal_ids;
+  ids = parseMaybe(ids, []);
+  return Array.isArray(ids) ? ids.filter((id) => id != null && id !== '').map(String) : [];
+}
+
+// The stats an event's rewards can name (episodeCompletionService grants
+// reputation, brand trust and influence on a pass or slay).
+const REWARD_METRICS = ['reputation', 'brand_trust', 'influence', 'followers', 'engagement_rate', 'portfolio_strength'];
+const num = (v) => Number(v) || 0;
+
+/**
+ * What the event is expected to add to one of Lala's stats when it goes
+ * well. Coins: a paid event's payment, else its deal fees (money only comes
+ * from accepted terms). Other stats: the event's rewards for that stat.
+ * 0 when it names nothing.
+ */
+function expectedGain(event, metric) {
+  if (!event) return 0;
+  if (metric === 'coins') {
+    if (event.is_paid && num(event.payment_amount) > 0) return num(event.payment_amount);
+    return num(event.appearance_fee) + num(event.partnership_base_fee) + num(event.performance_fee);
+  }
+  if (!REWARD_METRICS.includes(metric)) return 0;
+  const rewards = parseMaybe(event.rewards, {});
+  const v = parseInt(rewards && typeof rewards === 'object' ? rewards[metric] : 0, 10);
+  return Number.isFinite(v) && v > 0 ? v : 0;
+}
+
+/**
+ * Whether the event moves one goal, and why: 'pinned' (Evoni pinned it; a
+ * pin always counts), 'fit' (a coins goal by an event that pays, a
+ * reputation goal by prestige above her reputation, any goal by a reward for
+ * its stat), else null. A goal to reduce stress is moved only by a pin.
+ */
+function goalMove(event, goal, state = {}) {
+  if (goal?.id != null && pinnedGoalIds(event).includes(String(goal.id))) return 'pinned';
+  const metric = goal?.target_metric;
+  if (!metric || metric === 'stress') return null;
+  if (metric === 'reputation' && num(event.prestige) > num(state.reputation)) return 'fit';
+  return expectedGain(event, metric) > 0 ? 'fit' : null;
+}
+
+/** Score and reasons for active goals the event moves (goalMove); a pinned goal is named first. */
 function goalFit(event, goals, state) {
-  const paid = !!event.is_paid && (Number(event.payment_amount) || 0) > 0;
-  const moved = (goals || []).filter((g) => (g.target_metric === 'coins' && paid)
-    || (g.target_metric === 'reputation' && (Number(event.prestige) || 0) > (Number(state.reputation) || 0)));
+  const moved = (goals || []).map((g) => ({ g, via: goalMove(event, g, state) })).filter((m) => m.via);
   if (!moved.length) return null;
-  return { score: 5, reason: { kind: 'boost', text: `Moves a goal: ${moved[0].title}` } };
+  const first = moved.find((m) => m.via === 'pinned') || moved[0];
+  return { score: 5, reason: { kind: 'boost', text: `Moves a goal: ${first.g.title}` } };
+}
+
+// The bonus for covering a goal nothing in the slot's part moves yet
+// (Evoni, 2026-10-25): larger than a plain goal fit so the gap wins a tie.
+const GOAL_GAP_BONUS = 8;
+
+/**
+ * Score and reason when the event moves a goal that no event placed in the
+ * slot's part moves (inputs.uncovered, from seasonGoalCoverage).
+ */
+function goalGapFit(event, uncovered, state) {
+  const hit = (uncovered || []).find((g) => goalMove(event, g, state));
+  if (!hit) return null;
+  return { score: GOAL_GAP_BONUS, reason: { kind: 'boost', text: `Covers a goal nothing in this part moves yet: ${hit.title}` } };
 }
 
 function venueKey(e) {
@@ -116,7 +187,7 @@ async function loadSeasonInputs(sequelize, showId) {
     return [[]];
   });
   const [goals] = await sequelize.query(
-    `SELECT title, target_metric FROM career_goals
+    `SELECT id, title, target_metric FROM career_goals
       WHERE show_id = :showId AND status = 'active' AND deleted_at IS NULL`,
     { replacements: { showId } }).catch((err) => {
     console.error('[seasonSuggestion] goals load failed:', err.message);
@@ -166,12 +237,17 @@ async function loadSeasonInputs(sequelize, showId) {
   };
 }
 
-/** Applies the season's signals to one candidate: returns { score, reasons, estimated_pressure, repeats }. */
+/**
+ * Applies the season's signals to one candidate: returns { score, reasons,
+ * estimated_pressure, repeats }. inputs.uncovered (optional) is the goals no
+ * event in the slot's part moves; covering one comes first.
+ */
 function scoreForSeason(event, state, inputs) {
   let score = 0;
   const reasons = [];
   const estimated = estimatePressure(event, state);
   for (const fit of [
+    goalGapFit(event, inputs.uncovered, state),
     pressureFit(estimated, inputs.slot?.desired_pressure),
     focusFit(event, inputs.slot?.career_focus, state),
     goalFit(event, inputs.goals, state),
@@ -192,6 +268,11 @@ module.exports = {
   pressureFit,
   focusFit,
   goalFit,
+  GOAL_GAP_BONUS,
+  goalGapFit,
+  pinnedGoalIds,
+  expectedGain,
+  goalMove,
   repeatsOf,
   loadSeasonInputs,
   scoreForSeason,

@@ -88,6 +88,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate, Link, useLocation } from 'react-router-dom';
 import { seasonPageHref } from '../lib/seasonPage';
+import EventGoalPins from '../components/EventPackage/EventGoalPins';
 import { purposeLines } from '../lib/seasonArc';
 import {
   ArrowLeft, User, UserPlus, Pencil, PlayCircle, Lock, AlertCircle,
@@ -1678,6 +1679,8 @@ function EventPackageView() {
           <span className={`epp-status-badge epp-status-${badge.state}`} data-testid="package-status">{badge.label}</span>
         </div>
         <HeroTitle context={seasonContext} showId={showId} name={event.name} />
+        {/* The goals this event moves, and pinning it to one (Evoni, 2026-10-25). */}
+        <EventGoalPins api={api} showId={showId} eventId={eventId} />
         {/* On a phone the hero is one line: name, date, status (the tiles
             below hide; the readiness list is behind the bar's count). */}
         <span className="epp-hero-date" data-testid="hero-date">{shortDate(venueDate.eventDate || event.event_date) || 'No date'}</span>

@@ -136,7 +136,7 @@ describe('Home layout', () => {
   test('the tiles open real pages, the missing ones swapped for real ones', async () => {
     renderHome();
     await screen.findByTestId('home-hero');
-    expect(href('home-tile-episodes')).toBe('/shows/show-1/world?tab=episodes-production');
+    expect(href('home-tile-episodes')).toBe('/shows/show-1/season?tab=episodes');
     expect(href('home-tile-closet')).toBe('/shows/show-1/world?tab=wardrobe-items');
     expect(href('home-tile-style')).toBe('/episodes/ep-6?tab=lookbook');
     expect(href('home-tile-cast')).toBe('/character-registry?view=world');

@@ -44,7 +44,8 @@ const ROUTE_LABELS = {
   'edit': 'Edit',
   'create': 'Create',
   'review': 'Review',
-  'world': 'World',
+  // /shows/:id/world is Producer Mode (/world alone redirects to the Universe).
+  'world': 'Producer Mode',
   'library': 'Library',
   'compositions': 'Compositions',
   'thumbnails': 'Thumbnails',
@@ -66,8 +67,17 @@ function Breadcrumbs({ items }) {
     { label: titled || 'Character', path: location.pathname },
   ] : null;
 
+  // The Season page sits under Producer Mode, which opens it (2026-10-25).
+  const seasonMatch = location.pathname.match(/^\/shows\/([^/]+)\/season\/?$/);
+  const seasonCrumbs = seasonMatch ? [
+    { label: 'Home', path: '/' },
+    { label: 'Shows', path: '/shows' },
+    { label: 'Producer Mode', path: `/shows/${seasonMatch[1]}/world` },
+    { label: 'Season', path: location.pathname },
+  ] : null;
+
   // Auto-generate breadcrumbs from URL path if no manual items
-  const crumbs = items || characterCrumbs || (() => {
+  const crumbs = items || characterCrumbs || seasonCrumbs || (() => {
     const segments = location.pathname.split('/').filter(Boolean);
     const result = [{ label: 'Home', path: '/' }];
     let currentPath = '';

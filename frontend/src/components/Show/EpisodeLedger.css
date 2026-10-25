@@ -1,0 +1,60 @@
+/* The Episode Ledger (components/Show/EpisodeLedger.jsx): the Season page's
+   Results tab, before it Producer Mode's Episodes › Results. Moved from
+   WorldAdmin.css with the component (2026-10-25). */
+
+/* The heading (2026-10-07). */
+.wa-results-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+.wa-results-title { margin: 0; font-family: var(--font-prose); font-size: 28px; font-weight: 600; color: var(--text-primary); }
+.wa-results-line { margin: 4px 0 0; font-size: 14px; color: var(--text-secondary); }
+.wa-results-count { font-size: 13px; color: var(--text-secondary); }
+
+/* Episodes › Results (Evoni, 2026-10-22 layout list): one summary strip,
+   filter and sort, rows that fit a phone, and an opened episode with its
+   actions first and its stats, money and event side by side. */
+.wa-ledger-strip { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 20px; margin-bottom: 14px; padding: 12px 14px; border-radius: 14px; background: var(--surface-card); border: 1px solid var(--lala-parchment-3); }
+.wa-ledger-tiers { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.wa-ledger-tiers li { display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border: 1px solid; border-radius: 999px; font-size: 13px; color: var(--text-primary); }
+.wa-ledger-money { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 0; }
+.wa-ledger-money div { display: flex; align-items: baseline; gap: 6px; }
+.wa-ledger-money dt { font-size: 12px; color: var(--text-secondary); }
+.wa-ledger-money dd { margin: 0; font-size: 15px; font-weight: 800; color: var(--text-primary); }
+.wa-ledger-money .is-in dd { color: var(--success-text); }
+.wa-ledger-money .is-out dd { color: var(--danger-text); }
+.wa-ledger-tools { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; margin-bottom: 10px; }
+.wa-ledger-filters { display: flex; flex-wrap: wrap; gap: 6px; }
+.wa-ledger-filters button {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 4px 12px; border: 1px solid var(--lala-parchment-3); border-radius: 999px;
+  background: var(--surface-card); color: var(--text-primary); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
+}
+.wa-ledger-filters button.active { background: var(--lala-lavender); border-color: var(--lala-lavender); color: var(--text-inverse); }
+.wa-ledger-n { font-size: 12px; opacity: 0.85; }
+.wa-ledger-sort { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-secondary); }
+.wa-ledger-sort select { min-height: 36px; padding: 4px 8px; border: 1px solid var(--lala-parchment-3); border-radius: 8px; background: var(--surface-card); color: var(--text-primary); font: inherit; font-size: 13px; }
+.wa-ledger-none { margin: 8px 0; font-size: 13px; color: var(--text-secondary); }
+.wa-ledger-row { margin-bottom: 10px; border: 1px solid var(--lala-parchment-3); border-radius: 12px; background: var(--surface-card); overflow: hidden; }
+.wa-ledger-row.is-open { border: 2px solid var(--primary); }
+.wa-ledger-row-head {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; width: 100%; padding: 14px 16px; border: none; background: none;
+  color: var(--text-primary); font: inherit; text-align: left; cursor: pointer;
+}
+.wa-ledger-row-head:focus-visible { outline: 2px solid var(--lala-lavender); outline-offset: -2px; }
+.wa-ledger-num { flex: 0 0 32px; font-size: 16px; font-weight: 800; color: var(--primary-text); }
+.wa-ledger-name { flex: 1 1 180px; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.wa-ledger-title { font-size: 14px; font-weight: 700; overflow-wrap: anywhere; }
+.wa-ledger-event { font-size: 11px; color: var(--text-secondary); }
+.wa-ledger-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.wa-ledger-score { font-size: 18px; font-weight: 800; margin: 0 4px; }
+.wa-ledger-chev { font-size: 12px; color: var(--text-secondary); }
+.wa-ledger-case { padding: 0 16px 16px; border-top: 1px solid var(--lala-parchment-3); }
+.wa-ledger-actions { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px 0; }
+.wa-ledger-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; align-items: start; }
+.wa-ledger-col { min-width: 0; }
+.wa-ledger-stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 8px; }
+@media (max-width: 600px) {
+  /* The number and title on one line, the tier, score and changes under them. */
+  .wa-ledger-row-head { padding: 12px; }
+  .wa-ledger-name { flex: 1 1 0; }
+  .wa-ledger-meta { order: 3; flex-basis: 100%; padding-left: 42px; }
+  .wa-ledger-chev { order: 2; }
+  .wa-ledger-case { padding: 0 12px 12px; }
+}

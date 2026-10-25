@@ -1,7 +1,7 @@
 /** Breadcrumbs: a character's page sits under The Cast, named for them (the profile audit, 2026-10-19). */
 import React from 'react';
 import { describe, test, expect, afterEach } from 'vitest';
-import { render, screen, act } from '@testing-library/react';
+import { render, screen, act, cleanup } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import Breadcrumbs from './Breadcrumbs';
 import { setPageTitle, clearPageTitle } from '../lib/pageTitle';
@@ -22,6 +22,16 @@ describe('Breadcrumbs', () => {
   test('before the name is known it says Character', () => {
     at('/character/c1');
     expect(screen.getByRole('navigation', { name: 'Breadcrumb' }).textContent).toContain('Character');
+  });
+
+  // Evoni, 2026-10-25: Producer Mode, not "World".
+  test('Producer Mode is named so, and the Season page sits under it', () => {
+    at('/shows/0b6f4c2e-1111-4222-8333-444455556666/world');
+    expect(screen.getByRole('navigation', { name: 'Breadcrumb' }).textContent.replace(/\s+/g, ' ')).toBe('Home/Shows/Producer Mode');
+    cleanup();
+    at('/shows/0b6f4c2e-1111-4222-8333-444455556666/season');
+    expect(screen.getByRole('navigation', { name: 'Breadcrumb' }).textContent.replace(/\s+/g, ' ')).toBe('Home/Shows/Producer Mode/Season');
+    expect(screen.getByRole('button', { name: 'Producer Mode' })).toBeTruthy();
   });
 
   test('another page is unchanged', () => {
