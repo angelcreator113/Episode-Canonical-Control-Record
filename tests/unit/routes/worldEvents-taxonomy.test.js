@@ -8,7 +8,8 @@ const fs = require('fs');
 const path = require('path');
 
 const MODEL_SRC = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'src', 'models', 'WorldEvent.js'), 'utf8');
-const ROUTE_SRC = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'src', 'routes', 'worldEvents.js'), 'utf8');
+// The worldEvents router's parts, joined (src/routes/worldEvents/, Task #54).
+const ROUTE_SRC = require('../helpers/worldEventsSource').worldEventsSource();
 const QEC_SRC = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'frontend', 'src', 'components', 'QuickEpisodeCreator.jsx'), 'utf8');
 
 const CATEGORIES = ['fashion', 'social', 'brunch_dining', 'beauty_wellness', 'creator_brand', 'arts_entertainment', 'luxury_prestige', 'community_local', 'travel_destination', 'personal_relationship', 'fitness'];

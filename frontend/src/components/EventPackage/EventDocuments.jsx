@@ -37,7 +37,7 @@
  * (lib/eventDocuments, src/services/eventDocumentsService.js). The
  * invitation keeps its place in 1. The Event.
  */
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { AlertTriangle, Check, ExternalLink, History, Image as ImageIcon, Loader2, Pencil, Plus, RefreshCw, RotateCcw, Shirt, Trash2, Wand2, X } from 'lucide-react';
 import {
   getEventDocumentsApi, draftEventDocumentApi, editEventDocumentApi, approveEventDocumentApi,
@@ -288,9 +288,12 @@ function HistoryList({ type, doc, onRestore, busy }) {
 // 2026-10-11: the shopping list is approved in one place, the Event Package).
 // footerExtra(type, doc): more for a document's footer (the Wardrobe tab's
 // "Use in episode", 2026-10-11).
-export default function EventDocuments({ showId, eventId, event, outfitPieces = [], lead = null, intro = true, layout = 'grid', only = null, readOnly = false, manageHref = null, footerExtra = null }) {
-  const [docs, setDocs] = useState(null);
-  const [error, setError] = useState(null);
+// initialDocs: the Event Package's combined GET's documents part (Task #54),
+// { data } or { error }; the first read is skipped and its answer, or
+// "Couldn't load the documents", is shown.
+export default function EventDocuments({ showId, eventId, event, outfitPieces = [], lead = null, intro = true, layout = 'grid', only = null, readOnly = false, manageHref = null, footerExtra = null, initialDocs }) {
+  const [docs, setDocs] = useState(() => (initialDocs && !initialDocs.error ? (initialDocs.data || { shopping_list: null, offer_letter: null }) : null));
+  const [error, setError] = useState(initialDocs?.error ? 'Couldn\u2019t load the documents' : null);
   const [busy, setBusy] = useState(null); // `${type}:${action}`
   const [editing, setEditing] = useState(null);
   const [historyOpen, setHistoryOpen] = useState(null); // type
@@ -302,9 +305,13 @@ export default function EventDocuments({ showId, eventId, event, outfitPieces = 
   const piecesKey = (Array.isArray(outfitPieces) ? outfitPieces : []).map((p) => p?.id ?? '').join(',');
 
   const load = useCallback(() => getEventDocumentsApi(showId, eventId), [showId, eventId]);
+  // The read the combined GET already made, for this look (initialDocs).
+  const seededFor = useRef(initialDocs !== undefined ? `${showId}|${eventId}|${piecesKey}` : null);
 
   useEffect(() => {
     if (!showId || !eventId) return undefined;
+    if (seededFor.current === `${showId}|${eventId}|${piecesKey}`) return undefined;
+    seededFor.current = null;
     let cancelled = false;
     load()
       .then((d) => { if (!cancelled) { setDocs(d); setError(null); } })

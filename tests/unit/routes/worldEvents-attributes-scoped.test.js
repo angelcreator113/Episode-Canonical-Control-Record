@@ -8,10 +8,13 @@
 const fs = require('fs');
 const path = require('path');
 
+const { worldEventsSource } = require('../helpers/worldEventsSource');
+
 const read = (...p) => fs.readFileSync(path.join(__dirname, '..', '..', '..', ...p), 'utf8');
 
 const MODEL_SRC = read('src', 'models', 'WorldEvent.js');
-const WORLD_EVENTS_SRC = read('src', 'routes', 'worldEvents.js');
+// The worldEvents router's parts, joined (src/routes/worldEvents/, Task #54).
+const WORLD_EVENTS_SRC = worldEventsSource();
 const CALENDAR_SRC = read('src', 'routes', 'calendarRoutes.js');
 const WARDROBE_EVENT_SRC = read('src', 'routes', 'wardrobeEventRoutes.js');
 const CAREER_PIPELINE_SRC = read('src', 'services', 'careerPipelineService.js');

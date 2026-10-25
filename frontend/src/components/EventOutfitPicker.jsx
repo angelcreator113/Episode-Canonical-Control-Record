@@ -7,7 +7,7 @@
  * reachable from the event card's ⋯ menu or the old Edit details modal;
  * the Package showed "Not chosen" with no way to choose.
  *
- * Endpoints (src/routes/worldEvents.js, unchanged):
+ * Endpoints (src/routes/worldEvents/, unchanged):
  *   GET /world/:showId/events/:eventId/wardrobe-options — closet with match info
  *   GET /world/:showId/events/:eventId/outfit           — saved pieces + score
  *   PUT /world/:showId/events/:eventId/outfit           — save wardrobe_ids, re-score
