@@ -101,6 +101,10 @@ describe('the type list', () => {
     ['couple', 'love_interest', true], ['mentee', 'mentor', false], ['ex-partner', 'love_interest', true],
     ['Fidelity test', 'love_interest', true], ['The one who stayed', 'love_interest', true], ['Subject turned critic', 'rival', false],
     ['Rival', 'rival', false], ['best_friend', 'best friend', false],
+    // Words seen on Evoni's live page (2026-10-24) and their like.
+    ['transactional_symbiosis', 'collaborator', false], ['estranged_kin', 'family', false],
+    ['old flame', 'love_interest', true], ['protégé', 'mentor', false], ['reluctant_ally', 'friend', false],
+    ['shared bloodline', 'family', false], ['brand patron', 'collaborator', false], ['sworn enemy', 'rival', false],
   ])('%s reads as %s', (raw, type, romantic) => {
     expect(normalizeType(raw)).toMatchObject({ type, is_romantic: romantic });
   });
@@ -110,6 +114,9 @@ describe('the type list', () => {
     expect(normalizeType('Subject turned critic').flavour).toBe('Subject turned critic');
     expect(normalizeType('Rival').flavour).toBeNull();
     expect(normalizeType('keeper of keys')).toBeNull();
+    // Short stems match whole words only.
+    expect(normalizeType('making waves')).toBeNull();
+    expect(normalizeType('next door')).toBeNull();
     expect(normalizeType('keeper of keys', { keepUnknown: true })).toMatchObject({ type: 'keeper of keys' });
     expect(normalizeType('', { romantic: true })).toMatchObject({ type: 'love_interest', is_romantic: true });
   });
@@ -263,5 +270,28 @@ describe('what is kept of the answer', () => {
     const { seeds } = cleanSeeds({ candidates: [{ character_a_id: B, character_b_id: C, relationship_type: 'mentor' }] },
       { characters, ctx: ctx(), aim: aim(), index: emptyIndex() });
     expect(seeds.map((s) => s.relationship_type)).toEqual(['mentor']);
+  });
+});
+
+describe('type tidy-up proposals', () => {
+  const { proposalFor } = require('../../../src/services/relationshipTypeTidy');
+  const row = (over) => ({ id: 'r', a_name: 'A', b_name: 'B', confirmed: true, is_romantic: false, ...over });
+
+  it('reads the type first, and says so', () => {
+    const p = proposalFor(row({ relationship_type: 'estranged_kin', situation: 'They share a bloodline.' }));
+    expect(p).toMatchObject({ proposed_type: 'family', proposed_from: 'type', flavour: 'Estranged kin' });
+    expect(p.situation_after).toBe('Estranged kin: They share a bloodline.');
+  });
+
+  it('guesses from the situation when the type says nothing it knows, keeping the old words', () => {
+    const p = proposalFor(row({ relationship_type: 'mirror_image', situation: 'Velour Atelier commissions Sable to document their process.' }));
+    expect(p).toMatchObject({ proposed_type: 'collaborator', proposed_from: 'situation', flavour: 'Mirror image' });
+    expect(p.situation_after).toBe('Mirror image: Velour Atelier commissions Sable to document their process.');
+  });
+
+  it('leaves it to her when neither the type nor the situation decides', () => {
+    expect(proposalFor(row({ relationship_type: 'keeper of keys', situation: 'They meet at noon.' })))
+      .toMatchObject({ proposed_type: null, proposed_from: null });
+    expect(proposalFor(row({ relationship_type: 'keeper of keys', situation: null })).proposed_type).toBeNull();
   });
 });
