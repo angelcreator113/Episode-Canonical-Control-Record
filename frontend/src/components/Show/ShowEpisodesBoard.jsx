@@ -21,8 +21,10 @@
  * clicked, and has a ⋯ "Move to" menu so the stage changes without dragging;
  * on a phone the board is one stage at a time, picked from tabs.
  * Props: showId, episodes, total (the show's true count, when known),
- * onChanged (reload after a status change or delete). Its open slots link
- * to the Season page's roadmap.
+ * onChanged (reload after a status change or delete), roadmap (the season
+ * the page shows, so a past season's open slots are its own; without it the
+ * board reads the season in progress). Its open slots link to the Season
+ * page's roadmap.
  */
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
@@ -61,17 +63,17 @@ function evaluation(ep) {
 }
 
 /** The season roadmap (its open slots), or null when there is no season. */
-function useRoadmap(showId) {
+function useRoadmap(showId, given = undefined) {
   const [roadmap, setRoadmap] = useState(null);
   useEffect(() => {
-    if (!showId) return undefined;
+    if (!showId || given !== undefined) return undefined;
     let cancelled = false;
     api.get(`/api/v1/world/${showId}/season/roadmap`)
       .then((r) => { if (!cancelled) setRoadmap(r.data?.roadmap || null); })
       .catch((err) => { console.error('[ShowEpisodesBoard] season roadmap load failed:', err); });
     return () => { cancelled = true; };
-  }, [showId]);
-  return roadmap;
+  }, [showId, given]);
+  return given !== undefined ? given : roadmap;
 }
 
 /** The episode's checklist and its linked event (the Overview's loader). */
@@ -394,10 +396,10 @@ function PipelineBoard({ columns, heroId, heroSummary, seasonNumber, searching, 
 }
 
 // total: the show's true episode count (the list stops at 100), when known.
-export default function ShowEpisodesBoard({ showId, episodes = [], total = null, onChanged }) {
+export default function ShowEpisodesBoard({ showId, episodes = [], total = null, onChanged, roadmap: givenRoadmap = undefined }) {
   const navigate = useNavigate();
   const [view, setView] = useState('board');
-  const roadmap = useRoadmap(showId);
+  const roadmap = useRoadmap(showId, givenRoadmap);
   const hero = useMemo(() => episodesInProduction(episodes)[0] || null, [episodes]);
   const checks = useChecks(hero, showId);
   const ev = checks.linkedEvent;
