@@ -406,12 +406,89 @@ describe('The Overview', () => {
 });
 
 describe('Events, Episodes, Opportunities, Results', () => {
-  test('Events: the slots\' events and the free ones, pencilled through the slot rules', async () => {
+  // The event library moved here from Producer Mode (step 2, 2026-10-25),
+  // under one filter: In this season · Not placed yet · All.
+  const libraryEvents = () => {
+    const ev = (id, name, extra = {}) => ({ id, show_id: 'show-1', name, status: 'ready', prestige: 5, canon_consequences: { automation: {} }, ...extra });
+    return [
+      ev('ev-10', EVENT_NAMES[10]), ev('ev-4', EVENT_NAMES[4]), ev('ev-2', EVENT_NAMES[2], { event_type: 'invite', event_date: '2026-01-19' }), ev('ev-3', EVENT_NAMES[3]),
+      ev('ev-free', 'Midnight Atelier: Dark Couture Preview', { status: 'draft' }),
+      ev('ev-declined', 'Declined Gala', { status: 'declined' }),
+      // Used by this season's episode 1 (in slot 1, which holds no event of its own).
+      ev('ev-used', 'Opening Night', { status: 'used', used_in_episode_id: 'ep-1' }),
+      // Used by an episode of an earlier season: in neither view but All.
+      ev('ev-old', 'Last Season Finale', { status: 'used', used_in_episode_id: 'ep-old' }),
+    ];
+  };
+  const cardIds = () => screen.queryAllByTestId(/^event-card-ev-[\w-]+$/).map((el) => el.dataset.testid.replace('event-card-', ''));
+  const showButton = (key) => screen.getByTestId(`szn-events-show-${key}`);
+
+  test('Events opens on In this season: the slots\' events in slot order, each with its slot and Open slot, then the episodes\' events', async () => {
+    window.localStorage.clear();
+    state.events = libraryEvents();
+    state.roadmap = roadmapFor({ doneUpto: 0 });
     renderPage('?tab=events');
-    expect(await screen.findByTestId('szn-event-slot-2')).toBeTruthy();
-    const free = screen.getByTestId('szn-event-free-ev-free');
-    fireEvent.change(within(free).getByRole('combobox'), { target: { value: 'slot-5' } });
+    await waitFor(() => expect(cardIds()).toEqual(['ev-used', 'ev-2', 'ev-3', 'ev-4', 'ev-10']));
+    expect(showButton('in-season').getAttribute('aria-pressed')).toBe('true');
+    expect(showButton('in-season').textContent).toBe('In this season 5');
+    expect(showButton('unplaced').textContent).toBe('Not placed yet 2');
+    expect(showButton('all').textContent).toBe('All 8');
+    // Slot order is this view's sort; each card names its slot.
+    expect(screen.getByDisplayValue('Sort: Slot')).toBeTruthy();
+    const card = screen.getByTestId('event-card-ev-2');
+    expect(within(card).getByTestId('szn-event-slot-2').textContent).toBe('E2');
+    expect(within(screen.getByTestId('event-card-ev-used')).getByTestId('szn-event-slot-1').textContent).toBe('E1');
+    expect(screen.getByTestId('szn-events-slots').textContent).toBe('4 of 24 slots have an event');
+    // Open slot opens the slot's panel, as the old list's Open did, without opening the event package.
+    fireEvent.click(within(card).getByTestId('szn-event-open-2'));
+    expect(screen.getByTestId('where').textContent).toBe('/shows/show-1/season?tab=events');
+    expect(screen.getByTestId('szn-events-place')).toBeTruthy();
+  });
+
+  test('Not placed yet: the events in no slot and no episode, each pencilled into an open slot through the slot rules', async () => {
+    window.localStorage.clear();
+    state.events = libraryEvents();
+    renderPage('?tab=events');
+    await screen.findByTestId('event-card-ev-2');
+    fireEvent.click(showButton('unplaced'));
+    await waitFor(() => expect(screen.getByTestId('where').textContent).toBe('/shows/show-1/season?tab=events&show=unplaced'));
+    await waitFor(() => expect(cardIds()).toEqual(['ev-declined', 'ev-free']));
+    expect(showButton('unplaced').getAttribute('aria-pressed')).toBe('true');
+    // Only an event a slot takes (live, unused, draft or ready) gets a pencil.
+    expect(screen.getByTestId('szn-event-nopencil-ev-declined').textContent).toContain('declined');
+    fireEvent.change(screen.getByTestId('szn-event-pencil-ev-free'), { target: { value: 'slot-5' } });
     await waitFor(() => expect(api.put).toHaveBeenCalledWith('/api/v1/world/show-1/season/slots/slot-5/event', { event_id: 'ev-free' }));
+  });
+
+  test('All: the whole library; the filter is in the URL and remembered for the next visit', async () => {
+    window.localStorage.clear();
+    state.events = libraryEvents();
+    const first = renderPage('?tab=events&show=all');
+    await waitFor(() => expect(cardIds()).toHaveLength(8));
+    expect(showButton('all').getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByTestId('events-range').textContent).toBe('Showing 1–8 of 8 events');
+    // An in-season event still shows its slot here; a free one its pencil.
+    expect(within(screen.getByTestId('event-card-ev-4')).getByTestId('szn-event-slot-4')).toBeTruthy();
+    expect(screen.getByTestId('szn-event-pencil-ev-free')).toBeTruthy();
+    first.unmount();
+    // Back with no ?show=: the remembered filter.
+    renderPage('?tab=events');
+    await waitFor(() => expect(cardIds()).toHaveLength(8));
+    expect(showButton('all').getAttribute('aria-pressed')).toBe('true');
+    window.localStorage.clear();
+  });
+
+  test('an unknown ?show= falls back to In this season; with no season the tab is the whole library', async () => {
+    window.localStorage.clear();
+    state.events = libraryEvents();
+    const page = renderPage('?tab=events&show=bogus');
+    await waitFor(() => expect(cardIds()).toHaveLength(5));
+    expect(showButton('in-season').getAttribute('aria-pressed')).toBe('true');
+    page.unmount();
+    state.arc = null; state.roadmap = null;
+    renderPage('?tab=events');
+    await waitFor(() => expect(cardIds()).toHaveLength(8));
+    expect(screen.queryByTestId('szn-events-show')).toBeNull();
   });
 
   // The production board, moved from Producer Mode's Episodes › Production (2026-10-25).
@@ -447,11 +524,11 @@ describe('Events, Episodes, Opportunities, Results', () => {
   });
 
   // A show with no season keeps its board, opportunities and ledger (the old Producer Mode links land here).
-  test('with no season: the setup, and the Episodes, Opportunities and Results tabs', async () => {
+  test('with no season: the setup, and the Episodes, Events, Opportunities and Results tabs', async () => {
     state.arc = null;
     renderPage('?tab=episodes');
     expect(await screen.findByTestId('show-episodes-board')).toBeTruthy();
-    expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Set up the season', 'Episodes', 'Opportunities', 'Results']);
+    expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Set up the season', 'Episodes', 'Events', 'Opportunities', 'Results']);
     fireEvent.click(screen.getByTestId('szn-tab-overview'));
     expect(await screen.findByTestId('szn-empty')).toBeTruthy();
     fireEvent.click(screen.getByTestId('szn-tab-results'));
@@ -593,7 +670,7 @@ describe('The Goals tab', () => {
     expect(first.textContent).toContain('Velour Garden Soirée');
     expect(first.textContent).toContain('Her first luxury room.');
     expect(first.textContent).toContain('Moves reputation · Chain continues');
-    expect(within(first).getByRole('link', { name: 'View in Events' }).getAttribute('href')).toBe('/shows/show-1/world?tab=events&event=ev-7');
+    expect(within(first).getByRole('link', { name: 'View in Events' }).getAttribute('href')).toBe('/shows/show-1/season?tab=events&event=ev-7');
     expect(within(first).getByRole('link', { name: 'Open the event package' }).getAttribute('href')).toBe('/shows/show-1/events/ev-7');
     expect(within(second).getByText('Requirements not met')).toBeTruthy();
   });

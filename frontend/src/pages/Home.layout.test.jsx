@@ -154,7 +154,7 @@ describe('Home layout', () => {
     const ev = screen.getByTestId('home-event');
     expect(within(ev).getByText('The Honey Table')).toBeTruthy();
     expect(within(ev).getByText('Still being set up')).toBeTruthy();
-    expect(within(ev).getByRole('link', { name: 'View event' }).getAttribute('href')).toBe('/shows/show-1/world?tab=events&event=ev-2');
+    expect(within(ev).getByRole('link', { name: 'View event' }).getAttribute('href')).toBe('/shows/show-1/season?tab=events&event=ev-2');
   });
 
   test('Trending is the most liked posts first', async () => {

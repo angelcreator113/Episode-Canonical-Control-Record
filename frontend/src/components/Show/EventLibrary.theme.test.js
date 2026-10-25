@@ -4,17 +4,20 @@
  * bar, templates panel, generate-options toolbar, cards, empty state,
  * pager and the Ideas drawer, plus the .wa-ev-* stylesheet and the five
  * queue states' colors. The inline event editor and the "Edit details"
- * modal are the Event Package's and migrate with it.
+ * modal are the Event Package's and migrate with it. The queue moved from
+ * Producer Mode (WorldAdmin) into EventLibrary with its stylesheet
+ * (2026-10-25); the Ideas drawer is its own file.
  */
 import { describe, test, expect } from 'vitest';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
-import { EVENT_QUEUE_STATES } from '../utils/eventReadinessSections';
-import { contrast, readToken, stripTaskRefs } from '../styles/contrast';
+import { EVENT_QUEUE_STATES } from '../../utils/eventReadinessSections';
+import { contrast, readToken, stripTaskRefs } from '../../styles/contrast';
 
-const jsx = readFileSync(resolve(__dirname, 'WorldAdmin.jsx'), 'utf8');
-const css = readFileSync(resolve(__dirname, 'WorldAdmin.css'), 'utf8');
-const tokens = readFileSync(resolve(__dirname, '../styles/design-tokens.css'), 'utf8');
+const jsx = readFileSync(resolve(__dirname, 'EventLibrary.jsx'), 'utf8');
+const ideas = readFileSync(resolve(__dirname, 'EventIdeasDrawer.jsx'), 'utf8');
+const css = readFileSync(resolve(__dirname, 'EventLibrary.css'), 'utf8');
+const tokens = readFileSync(resolve(__dirname, '../../styles/design-tokens.css'), 'utf8');
 // Task references ("Task #2361") are not colors.
 const HEX = /#[0-9a-f]{3,8}\b/i;
 
@@ -28,12 +31,16 @@ const slice = (text, start, end) => {
 const QUEUE = [
   ['{/* Header — a queue, not an editor', '{/* Event editor */}'],
   ['{/* Generate-options toolbar', '{/* Nothing sits below the queue now.'],
-  ['{eventsIdeasOpen && (', '{eventDetailModal && (() => {'],
 ];
 
 describe('Events queue theme', () => {
   test.each(QUEUE)('the queue JSX from "%s" sets colors only through tokens', (start, end) => {
     expect(stripTaskRefs(slice(jsx, start, end))).not.toMatch(HEX);
+  });
+
+  test('the Ideas drawer sets colors only through tokens', () => {
+    expect(ideas).toMatch(/data-testid="events-ideas"/);
+    expect(stripTaskRefs(ideas)).not.toMatch(HEX);
   });
 
   test('the Generate action is lavender, not gold or green; the state cards and New event follow the redesign', () => {

@@ -3,23 +3,28 @@
  * batch 4, sixth screen): the inline event editor, the "Edit details"
  * modal and the compare modal in Producer Mode set colors only through
  * tokens, the AI revise action is the primary (no indigo gradient), and
- * the financial preview's text sits on its surfaces at 4.5:1.
+ * the financial preview's text sits on its surfaces at 4.5:1. They moved
+ * with the event library (2026-10-25): EventLibraryEditor, EventDetailsModal,
+ * and the compare modal in EventLibrary.
  */
 import { describe, test, expect } from 'vitest';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
-import { contrast, readToken, stripTaskRefs } from '../styles/contrast';
+import { contrast, readToken, stripTaskRefs } from '../../styles/contrast';
 
-const jsx = readFileSync(resolve(__dirname, 'WorldAdmin.jsx'), 'utf8');
-const tokens = readFileSync(resolve(__dirname, '../styles/design-tokens.css'), 'utf8');
+const editorJsx = readFileSync(resolve(__dirname, 'EventLibraryEditor.jsx'), 'utf8');
+const modalJsx = readFileSync(resolve(__dirname, 'EventDetailsModal.jsx'), 'utf8');
+const libraryJsx = readFileSync(resolve(__dirname, 'EventLibrary.jsx'), 'utf8');
+const tokens = readFileSync(resolve(__dirname, '../../styles/design-tokens.css'), 'utf8');
 const HEX = /#[0-9a-f]{3,8}\b/i;
 // Task references ("Task #1786") are not colors.
 
-const editorStart = jsx.indexOf('{editingEvent && (', jsx.indexOf('{/* Event editor */}'));
-const editor = jsx.slice(editorStart, jsx.indexOf('{/* Generate-options toolbar', editorStart));
-const modalStart = jsx.indexOf('{eventDetailModal && (() => {');
-// It ends where the Rate card begins (the Opportunities tab moved to the Season page, 2026-10-25).
-const modal = jsx.slice(modalStart, jsx.indexOf("{activeTab === 'world' && subTab === 'rate-card' && (", modalStart));
+// The editor's form, up to the Form Group helper below it.
+const editor = editorJsx.slice(editorJsx.indexOf('export default function EventLibraryEditor'), editorJsx.indexOf('// ─── Form Group helper ───'));
+// The Edit details modal, then the compare modal (EventLibrary's).
+const compareStart = libraryJsx.indexOf('{/* ── Event Comparison Modal ── */}');
+const modal = modalJsx.slice(modalJsx.indexOf('export default function EventDetailsModal'))
+  + libraryJsx.slice(compareStart, libraryJsx.indexOf('{/* ════════════════════════ OUTFIT PICKER MODAL', compareStart));
 
 describe('Events tab editors theme', () => {
   test('the slices are the editors', () => {

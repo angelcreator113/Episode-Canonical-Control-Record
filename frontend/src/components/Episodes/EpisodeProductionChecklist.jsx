@@ -8,6 +8,7 @@ import { ProductionSummary, EpisodeTimeline, SectionCard, CheckBox } from './Che
 import { SECTION_GUIDE, sectionCount, sectionGuideText } from '../../lib/checklistHub';
 import { closetBeat } from '../../lib/scriptMoments';
 import { styleReadiness } from '../../lib/styleReadiness';
+import { seasonPageHref } from '../../lib/seasonPage';
 
 /**
  * EpisodeProductionChecklist
@@ -192,7 +193,7 @@ const STATE_STYLES = {
 export function checklistFixTarget(itemId, { episode, showId } = {}) {
   const episodeId = episode?.id;
   const plan = { href: `/episodes/${episodeId}/plan`, label: 'Set up' };
-  const events = { href: `/shows/${showId}/world?tab=events` };
+  const events = { href: seasonPageHref(showId, 'events') };
   const wardrobe = { href: `/shows/${showId}/world?tab=wardrobe-items`, label: 'Upload' };
   const targets = {
     arc_position: plan,

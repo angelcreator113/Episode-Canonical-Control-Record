@@ -11,14 +11,16 @@
  *               new-episode flow). `?view=`, `?part=`, `?status=` hold them.
  *               No Calendar view; each card shows its release day from the
  *               show's release schedule (Evoni, 2026-10-25) when there is one.
- *   Events      the slots' events in slot order, and the events in no slot,
- *               each pencilled from here; the placement preview.
+ *   Events      the event library (EventLibrary, from Producer Mode, 2026-10-25)
+ *               under In this season · Not placed yet · All (`?show=`):
+ *               the slots' events in slot order, the events in no slot, each
+ *               pencilled from here, or every event; the placement preview.
  *   Each slot card and event row with an event says which goals it moves
  *   ("Moves: <goal>", GoalCoverage's MovesChips; Evoni, 2026-10-25).
  * The Production Plan tab (each placed episode's steps and checklist count)
  * gave way to the Episodes tab, the production board itself (2026-10-25).
  */
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { LayoutGrid, ListOrdered, Plus, MoreHorizontal, CalendarDays } from 'lucide-react';
 import { useRoadmapControls, AdvanceBar, SlotSide, UnslottedEpisodes } from './SeasonPlan';
@@ -30,6 +32,8 @@ import { useReleaseSchedule, slotWhen } from '../../lib/releaseSchedule';
 import {
   SLOT_STATUS, SLOT_STATUS_ORDER, allSlots, filterSlots, slotPicture, slotCardTitle, arcPart, partProgress, dayLabel,
 } from '../../lib/seasonPage';
+import { EVENT_SHOWS, EVENT_SHOW_STORAGE_KEY, eventShowFrom, isEventShow, seasonEventViews } from '../../lib/eventLibrary';
+import EventLibrary from './EventLibrary';
 
 /** The roadmap's controls and its slot drawer, wired the way the Season Plan wires them. */
 function useSlotDrawer({ plan, api, showId, setToast }) {
@@ -204,77 +208,118 @@ export function SeasonRoadmapTab({ plan, S, api, showId, setToast, episodes, eve
   );
 }
 
-export function SeasonEventsTab({ plan, S, api, showId, setToast, episodes, events, arc }) {
+/** The remembered Events filter: per browser, never required (storage can be blocked). */
+function rememberedShow() {
+  try { return window.localStorage.getItem(EVENT_SHOW_STORAGE_KEY); } catch (err) { console.warn('[SeasonEvents] filter not read:', err?.message); return null; }
+}
+function rememberShow(value) {
+  try { window.localStorage.setItem(EVENT_SHOW_STORAGE_KEY, value); } catch (err) { console.warn('[SeasonEvents] filter not saved:', err?.message); }
+}
+
+/**
+ * Events: the event library (EventLibrary, from Producer Mode's ?tab=events,
+ * Evoni's restructure step 2, 2026-10-25) under one filter, In this season ·
+ * Not placed yet · All (`?show=in-season|unplaced|all`, remembered). In this
+ * season: the slots' events in slot order, each card with its slot, the
+ * goals it moves and Open slot; then the events this season's other
+ * episodes use. Not placed yet: the events in no slot and in no episode,
+ * each with a pencil into an open slot. All: the whole library. Without a
+ * season (or its roadmap) the library is shown whole.
+ */
+export function SeasonEventsTab({ plan, S, api, showId, setToast, episodes, events, arc, params, setParams, reloadShowData }) {
   const controls = useSlotDrawer({ plan, api, showId, setToast });
   const [placing, setPlacing] = useState(false);
   const { roadmap } = plan;
   const coverage = useGoalCoverage({ api, showId, reloadKey: roadmap });
-  if (!roadmap) return <p className="szn-muted">The roadmap did not load.</p>;
   const movesBySlot = slotGoalsMap(coverage.data);
-  const slots = allSlots(roadmap);
-  const withEvents = slots.filter((s) => s.event);
+  const urlShow = params?.get('show') || null;
+  const show = eventShowFrom(urlShow, rememberedShow());
+  useEffect(() => { if (isEventShow(urlShow)) rememberShow(urlShow); }, [urlShow]);
+  const views = useMemo(
+    () => seasonEventViews({ roadmap, events: events || [], episodes: episodes || [], seasonNumber: arc?.season_number ?? null }),
+    [roadmap, events, episodes, arc?.season_number],
+  );
+  // A change in the library reloads the page's events and the roadmap, so the views follow it.
+  const onChanged = useCallback(() => { reloadShowData?.(); plan.loadRoadmap?.(); }, [reloadShowData, plan]);
+  const counts = { 'in-season': views.inSeason.length, unplaced: views.unplaced.length, all: views.all.length };
+  const slotOf = useMemo(() => new Map(views.inSeason.map((v) => [v.id, v.slot])), [views]);
+  const scope = useMemo(() => {
+    if (!roadmap) return null;
+    if (show === 'in-season') return { ids: views.inSeason.map((v) => v.id), ordered: true, empty: 'No event is pencilled into this season yet. Pencil one from Not placed yet, or open a slot.' };
+    if (show === 'unplaced') return { ids: views.unplaced, ordered: false, empty: 'Every event is in a slot or an episode.' };
+    return null;
+  }, [roadmap, show, views]);
   const open = controls.openSlots.filter((s) => !s.event);
-  const unplaced = roadmap.available_events || [];
-  const eventRow = (id) => events.find((e) => e.id === id) || null;
+  const pick = (key) => {
+    rememberShow(key);
+    setParams?.((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set('tab', 'events');
+      next.set('show', key);
+      next.delete('evpage');
+      return next;
+    }, { replace: true });
+  };
+
+  // What each card adds in this view: its slot, the goals it moves, Open slot; or a pencil.
+  const cardExtra = (ev) => {
+    if (!roadmap) return null;
+    if (show === 'unplaced' || (show === 'all' && !slotOf.has(ev.id) && views.pencillable.has(ev.id))) {
+      if (!views.pencillable.has(ev.id)) return <span className="szn-muted" data-testid={`szn-event-nopencil-${ev.id}`}>{ev.status || 'draft'}: not one a slot takes</span>;
+      return (
+        <select className="szn-select szn-event-pencil" aria-label={`Pencil ${ev.name} into a slot`} value="" disabled={!open.length}
+          data-testid={`szn-event-pencil-${ev.id}`}
+          onChange={(e) => { const slot = open.find((s) => s.id === e.target.value); if (slot) controls.pencil(slot, ev.id); }}>
+          <option value="">{open.length ? 'Pencil into…' : 'No open slot'}</option>
+          {open.map((s) => <option key={s.id} value={s.id}>E{s.slot_number}{s.intention?.story_purpose ? ` · ${s.intention.story_purpose.slice(0, 40)}` : ''}</option>)}
+        </select>
+      );
+    }
+    const slot = slotOf.get(ev.id);
+    if (!slotOf.has(ev.id)) return null;
+    if (!slot) return <span className="szn-muted" data-testid={`szn-event-episode-${ev.id}`}>In an episode this season, not in a slot</span>;
+    return (
+      <>
+        <span className="szn-event-code" data-testid={`szn-event-slot-${slot.slot_number}`}>E{slot.slot_number}</span>
+        <StatusChip state={slot.state} />
+        <MovesChips goals={movesBySlot[slot.id] || []} max={3} testId={`szn-event-moves-${slot.slot_number}`} />
+        <button type="button" className="szn-btn is-quiet" onClick={() => controls.open(slot)} data-testid={`szn-event-open-${slot.slot_number}`}>Open slot</button>
+      </>
+    );
+  };
+
+  if (!roadmap) {
+    return (
+      <div className="szn-events" data-testid="szn-events">
+        {arc && <p className="szn-muted">The roadmap did not load, so the events cannot be sorted by slot: here is the whole library.</p>}
+        <EventLibrary showId={showId} onChanged={onChanged} />
+      </div>
+    );
+  }
+  const slots = allSlots(roadmap);
   return (
     <div className="szn-events" data-testid="szn-events">
-      <section className="szn-card">
-        <header className="szn-card-head">
-          <h2 className="szn-card-title">Events in the season</h2>
-          <span className="szn-muted">{withEvents.length} of {slots.length} slots</span>
-        </header>
-        {withEvents.length === 0 && <p className="szn-muted">No event is pencilled in yet.</p>}
-        <ul className="szn-list">
-          {withEvents.map((slot) => {
-            const ev = eventRow(slot.event.id);
-            const pic = slotPicture({ ...slot, episode: null }, { events, arc });
-            return (
-              <li key={slot.id} className="szn-list-row" data-testid={`szn-event-slot-${slot.slot_number}`}>
-                <span className={`szn-list-pic is-part-${slot.phase}`} aria-hidden="true">{pic && <img src={pic} alt="" loading="lazy" />}</span>
-                <span className="szn-list-main">
-                  <span className="szn-list-title">E{slot.slot_number} · {slot.event.name}</span>
-                  <span className="szn-list-sub">{[ev?.event_type, dayLabel(ev?.event_date) || ev?.event_date].filter(Boolean).join(' · ') || 'No date yet'}</span>
-                  <MovesChips goals={movesBySlot[slot.id] || []} max={3} testId={`szn-event-moves-${slot.slot_number}`} />
-                </span>
-                <StatusChip state={slot.state} />
-                <button type="button" className="szn-btn is-quiet" onClick={() => controls.open(slot)}>Open</button>
-              </li>
-            );
-          })}
-        </ul>
-      </section>
-
-      <section className="szn-card">
-        <header className="szn-card-head">
-          <h2 className="szn-card-title">Not in a slot yet</h2>
-          <button type="button" className="szn-btn" onClick={() => setPlacing((p) => !p)} aria-expanded={placing} data-testid="szn-events-place">
-            Use events and episodes
-          </button>
-        </header>
-        {placing && (
-          <SeasonPlacement showId={showId} api={api} onClose={() => setPlacing(false)}
-            onSaved={async (text) => { setPlacing(false); if (setToast) setToast(text); await plan.loadArc(); }} />
-        )}
-        {unplaced.length === 0 && <p className="szn-muted">Every draft or ready event is pencilled in.</p>}
-        <ul className="szn-list">
-          {unplaced.map((ev) => (
-            <li key={ev.id} className="szn-list-row" data-testid={`szn-event-free-${ev.id}`}>
-              <span className="szn-list-main">
-                <span className="szn-list-title">{ev.name}</span>
-                <span className="szn-list-sub">{ev.status || 'draft'}</span>
-              </span>
-              {/* Pencilled through the slot rules; a slot's panel ranks every event by fit. */}
-              <select className="szn-select" aria-label={`Pencil ${ev.name} into a slot`} value="" disabled={!open.length}
-                onChange={(e) => { const slot = open.find((s) => s.id === e.target.value); if (slot) controls.pencil(slot, ev.id); }}>
-                <option value="">{open.length ? 'Pencil into…' : 'No open slot'}</option>
-                {open.map((s) => <option key={s.id} value={s.id}>E{s.slot_number}{s.intention?.story_purpose ? ` · ${s.intention.story_purpose.slice(0, 40)}` : ''}</option>)}
-              </select>
-            </li>
+      <div className="szn-events-bar">
+        <div className="szn-seg" role="group" aria-label="Show events" data-testid="szn-events-show">
+          {EVENT_SHOWS.map((o) => (
+            <button key={o.key} type="button" aria-pressed={show === o.key} className={show === o.key ? 'is-on' : ''}
+              onClick={() => pick(o.key)} data-testid={`szn-events-show-${o.key}`}>
+              {o.label} <span className="szn-events-count">{counts[o.key]}</span>
+            </button>
           ))}
-        </ul>
-        {controls.slotError?.where === 'event' && <p className="szn-error" role="alert">{controls.slotError.text}</p>}
-        <p className="szn-muted">Open a slot to see the events ranked by how well they fit it.</p>
-      </section>
+        </div>
+        <span className="szn-muted" data-testid="szn-events-slots">{slots.filter((s) => s.event).length} of {slots.length} slots have an event</span>
+        <button type="button" className="szn-btn" onClick={() => setPlacing((p) => !p)} aria-expanded={placing} data-testid="szn-events-place">
+          Use events and episodes
+        </button>
+      </div>
+      {placing && (
+        <SeasonPlacement showId={showId} api={api} onClose={() => setPlacing(false)}
+          onSaved={async (text) => { setPlacing(false); if (setToast) setToast(text); await plan.loadArc(); }} />
+      )}
+      {controls.slotError?.where === 'event' && <p className="szn-error" role="alert">{controls.slotError.text}</p>}
+      {show === 'unplaced' && <p className="szn-muted">Open a slot to see the events ranked by how well they fit it.</p>}
+      <EventLibrary showId={showId} scope={scope} cardExtra={cardExtra} onChanged={onChanged} />
       <SlotDrawer controls={controls} plan={plan} S={S} api={api} showId={showId} setToast={setToast} episodes={episodes} events={events} />
     </div>
   );

@@ -86,6 +86,6 @@ describe('WorldMomentsTab', () => {
   test('lately: a drafted event links to Events', async () => {
     renderIt();
     const row = await screen.findByTestId('wm-recent-city_event:dazzle_district:runway_thursday:2026-10-22');
-    expect(within(row).getByRole('link', { name: 'Open Events' }).getAttribute('href')).toBe('/shows/s-1/world?tab=events');
+    expect(within(row).getByRole('link', { name: 'Open Events' }).getAttribute('href')).toBe('/shows/s-1/season?tab=events&show=all');
   });
 });

@@ -87,12 +87,13 @@ describe('WorldAdmin Overview: four questions, true counts', () => {
     const note = await screen.findByTestId('wa-load-partial');
     expect(note.textContent).toContain('episodes: Showing 1 of 137');
     expect(note.textContent).toContain('wardrobe: Showing 1 of 412');
-    expect(note.textContent).not.toContain('scene sets'); // no total and a short page: complete
+    // Scene sets are the event library's now (Season page, 2026-10-25): Producer Mode no longer loads them.
+    expect(note.textContent).not.toContain('scene sets');
     // Every page was asked for: the episodes from page 1 at 100 a page, the closet at 200.
     const urls = vi.mocked(api.get).mock.calls.map((c) => c[0]);
     expect(urls).toContain('/api/v1/episodes?show_id=show-1&limit=100&page=1');
     expect(urls).toContain('/api/v1/wardrobe?show_id=show-1&limit=200&page=1');
-    expect(urls).toContain('/api/v1/scene-sets?show_id=show-1&limit=200&offset=0');
+    expect(urls.some((u) => u.startsWith('/api/v1/scene-sets'))).toBe(false);
   });
 
   test('a failed load says what could not load, and Retry loads again', async () => {

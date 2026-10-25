@@ -38,7 +38,7 @@ describe('Results summary', () => {
     const pending = screen.getByTestId('results-pending');
     expect(await within(pending).findByText('Pass')).toBeTruthy();
     expect(pending.textContent).toContain('Fills in at Complete');
-    expect(within(pending).getByText('Open the events').getAttribute('href')).toBe('/shows/show-1/world?tab=events');
+    expect(within(pending).getByText('Open the events').getAttribute('href')).toBe('/shows/show-1/season?tab=events');
     expect(screen.getByText('Not completed yet')).toBeTruthy();
     expect((await screen.findByTestId('results-net')).textContent).toBe('Net for the episodeestimate +439');
     expect(screen.getByText('Entry (comped by host)').closest('li').textContent).toContain('0 covered');

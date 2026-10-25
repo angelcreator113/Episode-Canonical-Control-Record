@@ -34,8 +34,8 @@ const slice = (text, start, end, from = 0) => {
 // Career Goals moved to the Season page's Goals tab (2026-10-25).
 const goals = readFileSync(resolve(__dirname, '../components/Show/CareerGoals.jsx'), 'utf8');
 const goalsCss = readFileSync(resolve(__dirname, '../components/Show/CareerGoals.css'), 'utf8');
-// The episode blueprint modal stays in Producer Mode.
-const blueprint = slice(jsx, 'EPISODE BLUEPRINT MODAL', "{activeTab === 'wardrobe' && subTab === 'scene-sets' && (");
+// The episode blueprint modal moved with the event library (2026-10-25).
+const blueprint = readFileSync(resolve(__dirname, '../components/Show/EpisodeBlueprintModal.jsx'), 'utf8');
 // The Season Plan's helpers live in components/Show/SeasonPlan.jsx (2026-10-25).
 const plan = readFileSync(resolve(__dirname, '../components/Show/SeasonPlan.jsx'), 'utf8');
 const season = plan.slice(plan.indexOf('export function BalanceTrend'));

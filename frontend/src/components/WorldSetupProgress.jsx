@@ -26,6 +26,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import apiClient from '../services/api';
 import './WorldSetupProgress.css';
+import { seasonPageHref } from '../lib/seasonPage';
 
 const API = import.meta.env.VITE_API_URL || '/api/v1';
 
@@ -69,7 +70,7 @@ const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
  * spawned from.
  */
 export function stepRoute(step, showId) {
-  if (step?.key === 'events' && showId) return `/shows/${encodeURIComponent(showId)}/world?tab=events`;
+  if (step?.key === 'events' && showId) return seasonPageHref(showId, 'events', { show: 'all' });
   return step?.route;
 }
 
