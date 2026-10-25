@@ -112,3 +112,27 @@ body.str-open { overflow: hidden; }
    menuPlace), so the header's scrolling row does not clip it at 760px and
    under (Script tab audit 6, 2026-10-24). */
 .str-export-menu.is-fixed { position: fixed; z-index: 60; min-width: 200px; max-width: calc(100vw - 16px); }
+
+/* Export → Cue sheet (CueSheetDialog, lib/cueSheet): the editor's notes, beat by beat. */
+.str-cue { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 16px; background: color-mix(in srgb, var(--lala-ink) 72%, transparent); }
+.str-cue-card {
+  display: flex; flex-direction: column; gap: 10px; width: min(720px, 100%); max-height: calc(100vh - 32px); padding: 14px 16px;
+  border: 1px solid var(--lala-gold-line); border-radius: 14px; background: var(--lala-surface); color: var(--lala-ink);
+  box-sizing: border-box; overflow: hidden;
+}
+.str-cue-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.str-cue-title { margin: 0; font-family: var(--font-prose); font-size: 18px; font-weight: 600; color: var(--lala-ink); }
+.str-cue-sub { margin: 0; font-size: 13px; line-height: 1.5; color: var(--lala-ink-muted); }
+.str-cue-take { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-family: 'DM Mono', var(--font-mono); font-size: 12px; color: var(--lala-ink); }
+.str-cue-take select {
+  max-width: 100%; min-height: 36px; padding: 4px 8px; border: 1px solid var(--lala-gold-line); border-radius: 8px;
+  background: var(--lala-surface); color: var(--lala-ink); font-family: 'DM Mono', var(--font-mono); font-size: 12px;
+}
+.str-cue-text {
+  flex: 1; min-height: 120px; margin: 0; padding: 10px 12px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere;
+  border: 1px solid var(--lala-gold-line); border-radius: 10px; background: var(--lala-parchment); color: var(--lala-ink);
+  font-family: 'DM Mono', var(--font-mono); font-size: 12px; line-height: 1.6;
+}
+.str-cue-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.str-cue-said { font-family: 'DM Mono', var(--font-mono); font-size: 12px; color: var(--lala-ink-muted); }
+.str-cue-take select:focus-visible { outline: 2px solid var(--lala-gold); outline-offset: 2px; }
