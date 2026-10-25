@@ -785,12 +785,28 @@ router.post('/:episodeId/rewrite-line', requireAuth, aiRateLimiter, async (req, 
       }
     } catch (err) { console.warn('[RewriteLine] Failed to load voice laws:', err?.message); }
 
+    // The speaker's learned voice (Evoni, 2026-10-25; services/characterVoice):
+    // their rules and the lines she approved, of the beat's context
+    // (beats 11-13 are the cutscene); '' for a speaker no one answers to.
+    let learnedVoice = '';
+    try {
+      const characterVoice = require('../services/characterVoice');
+      const { headerNumber } = require('../utils/beatLabelNumber');
+      const beatNumber = Number.isInteger(Number(req.body.beatNumber)) && Number(req.body.beatNumber) >= 1 ? Number(req.body.beatNumber) : headerNumber(String(beatName || ''));
+      const who = await (await characterVoice.makeResolver(models, { showId, episodeId: req.params.episodeId })).resolve(speaker);
+      if (who) {
+        learnedVoice = await characterVoice.voicePromptBlock(models, {
+          characterKeys: [who.characterKey], context: beatNumber ? characterVoice.contextForBeat(beatNumber) : 'show', showId,
+        });
+      }
+    } catch (err) { console.error('[RewriteLine] learned voice failed (non-blocking):', err?.message); }
+
     const isLala = speaker === 'Lala';
     const isPrime = speaker === 'Prime' || speaker === 'Me';
 
     const prompt = `You are rewriting a single line of dialogue for "Styling Adventures with Lala."
 
-${voiceLaws ? `SHOW BRAIN VOICE RULES:\n${voiceLaws}\n\n` : ''}
+${voiceLaws ? `SHOW BRAIN VOICE RULES:\n${voiceLaws}\n\n` : ''}${learnedVoice ? `${learnedVoice}\n` : ''}
 SPEAKER: ${speaker}
 BEAT: ${beatName || 'Unknown'}
 ${beatContext ? `EMOTIONAL CONTEXT: ${beatContext}\n` : ''}
