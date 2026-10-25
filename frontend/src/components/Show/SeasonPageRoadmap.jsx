@@ -107,12 +107,21 @@ export function SlotCard({ slot, picture, showId, selected, onOpen, onIntention,
   );
 }
 
-export function SeasonRoadmapTab({ plan, S, api, showId, setToast, episodes, events, arc, params, goTab }) {
+export function SeasonRoadmapTab({ plan, S, api, showId, setToast, episodes, events, arc, params, goTab, setParams }) {
   const navigate = useNavigate();
   const controls = useSlotDrawer({ plan, api, showId, setToast });
   const { roadmap } = plan;
   const coverage = useGoalCoverage({ api, showId, reloadKey: roadmap });
   const release = useReleaseSchedule({ api, showId, reloadKey: roadmap });
+  // ?slot=N (a "Needs attention" row, 2026-10-25) opens that slot's panel once, then leaves the address.
+  const slotParam = params.get('slot');
+  useEffect(() => {
+    if (!slotParam || !roadmap) return;
+    const target = allSlots(roadmap).find((sl) => String(sl.slot_number) === String(slotParam));
+    if (target) controls.open(target);
+    setParams?.((prev) => { const next = new URLSearchParams(prev); next.delete('slot'); return next; }, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slotParam, roadmap]);
   const movesBySlot = slotGoalsMap(coverage.data);
   const view = params.get('view') === 'timeline' ? 'timeline' : 'grid';
   const part = params.get('part') || 'all';
@@ -126,7 +135,7 @@ export function SeasonRoadmapTab({ plan, S, api, showId, setToast, episodes, eve
   const card = (slot) => (
     <SlotCard key={slot.id} slot={slot} showId={showId} picture={slotPicture(slot, { episodes, events, arc })}
       selected={controls.sheetOpen && controls.selected?.id === slot.id} nextSlot={!slot.locked && slot.slot_number === roadmap.next_slot_number}
-      onOpen={() => openSlot(slot)} onIntention={() => editIntention(slot)} moves={movesBySlot[slot.id] || []} when={slotWhen(release.view, slot)} />
+      onOpen={() => openSlot(slot)} onIntention={() => editIntention(slot)} moves={movesBySlot[slot.id] || []} when={slotWhen(release.view, slot, roadmap.season_number)} />
   );
   const shownPhases = phases.filter((p) => part === 'all' || Number(p.phase) === Number(part));
   const timeline = filterSlots(allSlots(roadmap), { part, status });

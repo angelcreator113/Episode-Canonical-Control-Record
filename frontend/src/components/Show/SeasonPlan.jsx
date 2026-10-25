@@ -802,8 +802,14 @@ export const TEMP_CONFIG = {
  * alone, after the Goals tab changes one, so the stat card and the
  * Overview's Season Goals count them at once.
  */
-export function useSeasonPlan({ showId, api, setToast }) {
+export function useSeasonPlan({ showId, api, setToast, season = null }) {
+  // season: another season's number (the Season page's switcher, ?season=N);
+  // the arc, roadmap and Planning Insights read it, the rest read the show.
+  const seasonQuery = season ? `?season=${encodeURIComponent(season)}` : '';
   const [arc, setArc] = useState(null);
+  // Every season of the show, and the one in progress (else the latest).
+  const [seasons, setSeasons] = useState([]);
+  const [currentArcId, setCurrentArcId] = useState(null);
   const [loading, setLoading] = useState(true);
   // Setting up a season (Evoni, 2026-10-24): the next season's number, and
   // which setup panel is open: 'new' (the form for the next season), 'edit',
@@ -841,7 +847,7 @@ export function useSeasonPlan({ showId, api, setToast }) {
   // what is on screen.
   const loadRoadmap = useCallback(async () => {
     try {
-      const r = await api.get(`/api/v1/world/${showId}/season/roadmap`);
+      const r = await api.get(`/api/v1/world/${showId}/season/roadmap${seasonQuery}`);
       setRoadmap(r.data.roadmap || null);
       markFailed('roadmap', null);
     } catch (err) {
@@ -860,7 +866,7 @@ export function useSeasonPlan({ showId, api, setToast }) {
     // Planning Insights (§8(ff) A8). The season-health score is one line in
     // it, from the slot outcome ranges (Q15); the old 1/4/2/1 grade is not read.
     try {
-      const r = await api.get(`/api/v1/world/${showId}/season/insights`);
+      const r = await api.get(`/api/v1/world/${showId}/season/insights${seasonQuery}`);
       setInsights(r.data.insights || null);
       markFailed('insights', null);
     } catch (err) {
@@ -869,7 +875,7 @@ export function useSeasonPlan({ showId, api, setToast }) {
     }
     // A purpose, a pencil or a placement can change what the season needs.
     await loadNeeds();
-  }, [showId, markFailed, loadNeeds]);
+  }, [showId, markFailed, loadNeeds, seasonQuery]);
 
   // Every goal, so the phases show what was hit and missed, the checklist
   // knows whether any is live, and the Goals tab lists them.
@@ -890,9 +896,11 @@ export function useSeasonPlan({ showId, api, setToast }) {
   const loadArc = useCallback(async ({ initial = false } = {}) => {
     if (initial) setLoading(true);
     try {
-      const r = await api.get(`/api/v1/world/${showId}/arc`);
+      const r = await api.get(`/api/v1/world/${showId}/arc${seasonQuery}`);
       setArc(r.data.arc);
       setNextSeason(r.data.next_season_number || 1);
+      setSeasons(r.data.seasons || []);
+      setCurrentArcId(r.data.current_arc_id || r.data.arc?.id || null);
       markFailed('season', null);
     } catch (err) {
       console.error('Season arc load failed:', err);
@@ -903,7 +911,7 @@ export function useSeasonPlan({ showId, api, setToast }) {
     await loadRoadmap();
 
     if (initial) setLoading(false);
-  }, [showId, loadRoadmap, loadGoals, markFailed]);
+  }, [showId, loadRoadmap, loadGoals, markFailed, seasonQuery]);
 
   useEffect(() => { loadArc({ initial: true }); }, [loadArc]);
   const retry = () => loadArc({ initial: !arc });
@@ -973,7 +981,9 @@ export function useSeasonPlan({ showId, api, setToast }) {
   };
 
   return {
-    arc, loading, nextSeason, panel, setPanel, seedingGoals, setupNote, setSetupNote,
+    arc, loading, nextSeason, panel, setPanel, seedingGoals, setupNote, setSetupNote, seasons, currentArcId,
+    // Whether the season shown is the one in progress (a past one, from the switcher, is read-only here).
+    isCurrent: !arc || !currentArcId || arc.id === currentArcId,
     advancing, warning, setWarning, advanceError, goals, roadmap, insights, threadData, needs, failed,
     loadNeeds, loadRoadmap, loadArc, loadGoals, retry, handleSeed, handleEdit, seedGoals, handleAdvance, handleConfirmAdvance,
   };

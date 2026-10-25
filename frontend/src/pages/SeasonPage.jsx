@@ -23,12 +23,24 @@
  * the threads card, Planning Insights; SeasonSetup's form, placement, draft
  * and checklist).
  *
+ * What is waiting (Evoni, 2026-10-25, "I want them all"): the Overview
+ * opens on "Needs attention" (components/Show/SeasonAttention, ranked by
+ * lib/seasonAttention), the tabs carry small counts of the same things
+ * (Events "17 need setup", Goals "2 gaps", Episodes "1 due Sunday",
+ * Opportunities "1 held"), the stat cards open their tab and a fifth says
+ * the next release; Episodes and Results show this season's episodes
+ * (`?seasons=all` shows every season's); a show with two or more seasons
+ * gets a season switcher in the hero (`?season=N`), and a past season reads
+ * as it was, without the setup actions that write the season in progress.
+ * The page reads the goal coverage, the release schedule and the
+ * opportunities once, for the list, the counts and the card together.
+ *
  * Colours: the mockup's pinks and purples, page-scoped (--sp-* in
  * SeasonPage.css). Text is plum or ink; pink is for fills and accents.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
-import { Clapperboard, Target, CalendarHeart, Coins as CoinsIcon, MoreHorizontal, Pencil, ArrowLeft } from 'lucide-react';
+import { Clapperboard, Target, CalendarHeart, Coins as CoinsIcon, MoreHorizontal, Pencil, ArrowLeft, CalendarClock, ChevronRight } from 'lucide-react';
 import api from '../services/api';
 import { fetchAllEpisodes } from '../lib/fetchAllPages';
 import { useSeasonPlan, SeasonLoadError, BalanceTrend, coins, signedCoins } from '../components/Show/SeasonPlan';
@@ -42,7 +54,10 @@ import OpportunitiesTab from '../components/Show/OpportunitiesTab';
 import { S as PRODUCER_S } from '../components/Show/producerStyles';
 import CareerGoals, { NarrativeDebt, SeasonPhasesHistory } from '../components/Show/CareerGoals';
 import CareerBrands from '../components/Career/CareerBrands';
-import { SEASON_TABS, tabFrom, seasonStats, heroChips, slotsLine, goalsLine, eventsLine } from '../lib/seasonPage';
+import { SEASON_TABS, tabFrom, seasonStats, heroChips, slotsLine, goalsLine, eventsLine, seasonPageHref } from '../lib/seasonPage';
+import { useReleaseSchedule, nextReleaseOf } from '../lib/releaseSchedule';
+import { useGoalCoverage } from '../lib/goalCoverage';
+import { attentionItems, tabBadges, seasonEpisodes, showsAllSeasons, ALL_SEASONS_PARAM } from '../lib/seasonAttention';
 import './SeasonPage.css';
 
 const S = PLAN_S;
@@ -51,12 +66,44 @@ const S = PLAN_S;
 const SEASONLESS_TABS = ['episodes', 'events', 'opportunities', 'results'];
 
 
-/** The four stat cards (the mockup's row under the hero). */
-export function SeasonStats({ stats }) {
+/** The release card's lines: "Sun, Nov 1 · E3", or "Not releasing yet". */
+function NextReleaseCard({ next, href }) {
+  return (
+    <Link className="szn-stat is-link is-release" to={href} data-testid="szn-stat-release">
+      <span className="szn-stat-icon is-purple" aria-hidden="true"><CalendarClock size={22} /></span>
+      <div className="szn-stat-body">
+        <span className="szn-stat-label is-top">Next release</span>
+        {!next ? <span className="szn-stat-line">Reading the schedule…</span>
+          : next.state === 'next' ? (
+            <span className="szn-stat-num is-release" data-testid="szn-next-release">
+              {next.text}{next.code && <small> · {next.code}</small>}
+            </span>
+          ) : <span className="szn-stat-num is-release is-none" data-testid="szn-next-release-none">{next.text}</span>}
+      </div>
+      <span className="szn-stat-line">{next?.overdue ? <span className="is-neg">Overdue</span> : 'Release schedule'}<ChevronRight size={14} aria-hidden="true" /></span>
+      <span className="szn-sr">: open the Release tab</span>
+    </Link>
+  );
+}
+
+/** One stat card: a link to its tab, or (without hrefFor, an older caller) plain, as before. */
+function StatCard({ hrefFor, tab, className, testId, label, children }) {
+  return hrefFor
+    ? <Link className={`${className} is-link`} to={hrefFor(tab)} data-testid={testId}>{children}<span className="szn-sr">{label}</span></Link>
+    : <article className={className} data-testid={testId}>{children}</article>;
+}
+
+/**
+ * The stat cards (the mockup's row under the hero), each opening its tab:
+ * Episode Slots → Roadmap, Season Goals → Goals, Major Events → Events, the
+ * budget → Results (Planning Insights' money); then Next release → Producer
+ * Mode's Release tab. hrefFor(tab) is the tab's address on this page.
+ */
+export function SeasonStats({ stats, hrefFor = null, nextRelease = undefined, releaseHref = null }) {
   const b = stats.budget;
   return (
-    <section className="szn-stats" aria-label="The season at a glance" data-testid="szn-stats">
-      <article className="szn-stat" data-testid="szn-stat-slots">
+    <section className={`szn-stats${nextRelease !== undefined ? ' has-five' : ''}`} aria-label="The season at a glance" data-testid="szn-stats">
+      <StatCard hrefFor={hrefFor} tab="roadmap" className="szn-stat" testId="szn-stat-slots" label=": open the Roadmap">
         <span className="szn-stat-icon" aria-hidden="true"><Clapperboard size={22} /></span>
         <div className="szn-stat-body">
           <span className="szn-stat-num">{stats.slots.total}</span>
@@ -64,8 +111,8 @@ export function SeasonStats({ stats }) {
         </div>
         <Bar done={stats.slots.done} total={stats.slots.total} label="Episode slots done" />
         <span className="szn-stat-line">{slotsLine(stats)}</span>
-      </article>
-      <article className="szn-stat" data-testid="szn-stat-goals">
+      </StatCard>
+      <StatCard hrefFor={hrefFor} tab="goals" className="szn-stat" testId="szn-stat-goals" label=": open Goals">
         <span className="szn-stat-icon is-gold" aria-hidden="true"><Target size={22} /></span>
         <div className="szn-stat-body">
           <span className="szn-stat-num">{stats.goals.total}</span>
@@ -73,8 +120,8 @@ export function SeasonStats({ stats }) {
         </div>
         <Bar done={stats.goals.done} total={stats.goals.total} label="Season goals complete" />
         <span className="szn-stat-line">{goalsLine(stats)}</span>
-      </article>
-      <article className="szn-stat" data-testid="szn-stat-events">
+      </StatCard>
+      <StatCard hrefFor={hrefFor} tab="events" className="szn-stat" testId="szn-stat-events" label=": open Events">
         <span className="szn-stat-icon is-purple" aria-hidden="true"><CalendarHeart size={22} /></span>
         <div className="szn-stat-body">
           <span className="szn-stat-num">{stats.events.scheduled}</span>
@@ -82,9 +129,9 @@ export function SeasonStats({ stats }) {
         </div>
         <Bar done={stats.events.scheduled} total={stats.slots.total} label="Slots with an event or episode" />
         <span className="szn-stat-line">{eventsLine(stats)}</span>
-      </article>
+      </StatCard>
       {/* Prime Budget: Lala's coins from the ledger, never cost_coins (Planning Insights' money). */}
-      <article className="szn-stat is-budget" data-testid="szn-stat-budget">
+      <StatCard hrefFor={hrefFor} tab="results" className="szn-stat is-budget" testId="szn-stat-budget" label=": open Results">
         <span className="szn-stat-icon is-gold" aria-hidden="true"><CoinsIcon size={22} /></span>
         <div className="szn-stat-body">
           <span className="szn-stat-label is-top">Prime Budget</span>
@@ -104,8 +151,50 @@ export function SeasonStats({ stats }) {
             This season: {coins(b.spend)} spend · {coins(b.income)} income · <span className={b.net < 0 ? 'is-neg' : ''}>{signedCoins(b.net)} net</span>
           </span>
         )}
-      </article>
+      </StatCard>
+      {nextRelease !== undefined && <NextReleaseCard next={nextRelease} href={releaseHref} />}
     </section>
+  );
+}
+
+/**
+ * The season switcher (2026-10-25, before Season 2): one pill per season
+ * when the show has two or more, the one shown pressed, the one in progress
+ * marked. Picking one changes `?season=` (the one in progress clears it).
+ */
+export function SeasonSwitcher({ seasons = [], arc, currentArcId, onPick }) {
+  if ((seasons || []).length < 2) return null;
+  const sorted = [...seasons].sort((a, b) => a.season_number - b.season_number);
+  return (
+    <nav className="szn-switch" aria-label="Seasons" data-testid="szn-season-switcher">
+      {sorted.map((x) => {
+        const on = x.id === arc?.id;
+        const current = x.id === currentArcId;
+        return (
+          <button key={x.id} type="button" className={`szn-switch-btn${on ? ' is-on' : ''}`} aria-pressed={on}
+            onClick={() => onPick(current ? null : x.season_number)} data-testid={`szn-season-${x.season_number}`}
+            title={x.title || undefined}>
+            Season {x.season_number}
+            {current ? <span className="szn-switch-tag">Now</span> : x.status === 'completed' ? <span className="szn-switch-tag is-done">Done</span> : null}
+          </button>
+        );
+      })}
+    </nav>
+  );
+}
+
+/** "This season" or "All seasons" on the Episodes and Results tabs (`?seasons=all`). */
+export function SeasonScopeToggle({ all, seasonNumber, shown, total, onChange }) {
+  return (
+    <div className="szn-scope" data-testid="szn-scope">
+      <span className="szn-scope-line" data-testid="szn-scope-line">
+        {all ? `Every season: ${total} ${total === 1 ? 'episode' : 'episodes'}` : `Season ${seasonNumber}: ${shown} of ${total} ${total === 1 ? 'episode' : 'episodes'}`}
+      </span>
+      <label className="szn-scope-toggle">
+        <input type="checkbox" checked={all} onChange={(e) => onChange(e.target.checked)} data-testid="szn-scope-all" />
+        <span>Show all seasons</span>
+      </label>
+    </div>
   );
 }
 
@@ -126,9 +215,18 @@ export function SeasonGoalsTab({ plan, api, showId, arc }) {
   );
 }
 
-/** Episodes: the production board, as Producer Mode had it (its Episodes › Production). */
-export function SeasonEpisodesTab({ showId, episodes, episodesTotal, reloadShowData }) {
-  return <ShowEpisodesBoard showId={showId} episodes={episodes} total={episodesTotal} onChanged={reloadShowData} />;
+/**
+ * Episodes: the production board, as Producer Mode had it (its Episodes ›
+ * Production), with this season's episodes unless `?seasons=all`; the
+ * board's open slots are this season's (the page's roadmap).
+ */
+export function SeasonEpisodesTab({ showId, episodes, episodesTotal, reloadShowData, scope, roadmap }) {
+  return (
+    <>
+      {scope}
+      <ShowEpisodesBoard showId={showId} episodes={episodes} total={episodesTotal} onChanged={reloadShowData} roadmap={roadmap} />
+    </>
+  );
 }
 
 /** Opportunities: a brand's offers and bookings (Producer Mode's old Opportunities tab). */
@@ -170,7 +268,7 @@ function HeroMenu({ arc, nextSeason, onPick }) {
   );
 }
 
-export function SeasonHero({ arc, roadmap, showName, nextSeason, onEdit, onPick }) {
+export function SeasonHero({ arc, roadmap, showName, nextSeason, onEdit, onPick, readOnly = false, switcher = null }) {
   const cover = arc?.cover_url || null;
   return (
     <header className={`szn-hero${cover ? ' has-cover' : ''}`} data-testid="szn-hero"
@@ -184,12 +282,16 @@ export function SeasonHero({ arc, roadmap, showName, nextSeason, onEdit, onPick 
           {heroChips({ roadmap, arc }).map((c) => <li key={c}>{c}</li>)}
           {arc?.status === 'completed' && <li className="is-done">Complete</li>}
         </ul>
-        <div className="szn-hero-actions">
-          <button type="button" className="szn-btn" onClick={onEdit} data-testid="szn-edit-season">
-            <Pencil size={16} aria-hidden="true" /> Edit Season
-          </button>
-          <HeroMenu arc={arc} nextSeason={nextSeason} onPick={onPick} />
-        </div>
+        {switcher}
+        {/* A past season is read here; its setup actions would write the season in progress. */}
+        {!readOnly && (
+          <div className="szn-hero-actions">
+            <button type="button" className="szn-btn" onClick={onEdit} data-testid="szn-edit-season">
+              <Pencil size={16} aria-hidden="true" /> Edit Season
+            </button>
+            <HeroMenu arc={arc} nextSeason={nextSeason} onPick={onPick} />
+          </div>
+        )}
       </div>
     </header>
   );
@@ -199,13 +301,17 @@ export default function SeasonPage() {
   const { showId } = useParams();
   const [params, setParams] = useSearchParams();
   const tab = tabFrom(params.get('tab'));
+  // ?season=N: another season of the show (the switcher); absent is the one in progress.
+  const season = /^[1-9]\d{0,2}$/.test(params.get('season') || '') ? params.get('season') : null;
   const [toast, setToast] = useState(null);
-  const plan = useSeasonPlan({ showId, api, setToast });
-  const { arc, roadmap, goals, insights, panel, setPanel, setupNote, setSetupNote, loading, nextSeason } = plan;
+  const plan = useSeasonPlan({ showId, api, setToast, season });
+  const { arc, roadmap, goals, insights, panel, setPanel, setupNote, setSetupNote, loading, nextSeason, isCurrent } = plan;
   const [showName, setShowName] = useState(null);
   const [episodes, setEpisodes] = useState([]);
   const [episodesTotal, setEpisodesTotal] = useState(null);
   const [events, setEvents] = useState([]);
+  // The opportunities, once, for "Needs attention" and the tab's count (the tab reads its own).
+  const [opps, setOpps] = useState([]);
   const panelRef = useRef(null);
   const tabsRef = useRef(null);
 
@@ -220,9 +326,16 @@ export default function SeasonPage() {
         .catch((err) => console.error('[SeasonPage] episodes load failed:', err)),
       api.get(`/api/v1/world/${showId}/events`).then((r) => setEvents(r.data?.events || []))
         .catch((err) => console.error('[SeasonPage] events load failed:', err)),
+      api.get(`/api/v1/opportunities/${showId}`).then((r) => setOpps(r.data?.opportunities || []))
+        .catch((err) => console.error('[SeasonPage] opportunities load failed:', err)),
     ]);
   }, [showId]);
   useEffect(() => { loadShowData(); }, [loadShowData]);
+  // The release schedule and the goal coverage, read once for the list, the
+  // counts, the Next release card and the Overview's Releases line; a slot
+  // change (the roadmap) reloads them.
+  const release = useReleaseSchedule({ api, showId, reloadKey: roadmap });
+  const coverage = useGoalCoverage({ api, showId, reloadKey: roadmap });
 
   useEffect(() => {
     if (!toast) return undefined;
@@ -262,6 +375,43 @@ export default function SeasonPage() {
   }, [tab, loading, arc]);
 
   const stats = useMemo(() => seasonStats({ roadmap, goals, insights }), [roadmap, goals, insights]);
+  const seasonNumber = roadmap?.season_number ?? arc?.season_number ?? null;
+  const sources = { showId, arc, roadmap, events, episodes, coverage: coverage.data, release: release.view, opps, isCurrent };
+  const attention = useMemo(() => (arc ? attentionItems(sources) : []),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [showId, arc, roadmap, events, episodes, coverage.data, release.view, opps, isCurrent]);
+  const badges = useMemo(() => (arc ? tabBadges(sources) : {}),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [arc, roadmap, events, episodes, coverage.data, release.view, opps, isCurrent]);
+  const nextRelease = useMemo(() => nextReleaseOf(release.view, seasonNumber), [release.view, seasonNumber]);
+
+  // Episodes and Results: this season's episodes unless "Show all seasons".
+  const allSeasons = showsAllSeasons(params);
+  const inSeason = useMemo(() => seasonEpisodes(episodes, { arc, roadmap }), [episodes, arc, roadmap]);
+  const scopedEpisodes = arc && !allSeasons ? inSeason : episodes;
+
+  // A tab's address, keeping the season shown.
+  const hrefFor = useCallback((link) => {
+    if (link?.href) return link.href;
+    return seasonPageHref(showId, link?.tab || link, { ...(link?.extra || {}), season });
+  }, [showId, season]);
+  const pickSeason = useCallback((n) => {
+    setParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (n == null) next.delete('season'); else next.set('season', String(n));
+      // A slot or event from the other season means nothing here.
+      next.delete('slot');
+      next.delete('event');
+      return next;
+    });
+  }, [setParams]);
+  const setAllSeasons = useCallback((on) => {
+    setParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (on) next.set(ALL_SEASONS_PARAM, 'all'); else next.delete(ALL_SEASONS_PARAM);
+      return next;
+    });
+  }, [setParams]);
 
   if (loading) return <div className="szn-page"><p className="szn-loading" role="status">Loading the season…</p></div>;
 
@@ -275,16 +425,32 @@ export default function SeasonPage() {
     plan, S, api, showId, setToast, episodes, episodesTotal, events, arc, roadmap, stats, goTab, params, setParams,
     reloadShowData: loadShowData,
     onEdit: () => openPanel('edit'), onPanel: openPanel,
+    release, attention, hrefFor, readOnly: !isCurrent,
   };
+  // The Episodes and Results tabs read this season's episodes (or every season's).
+  const scope = arc ? (
+    <SeasonScopeToggle all={allSeasons} seasonNumber={seasonNumber || 1} shown={inSeason.length} total={episodes.length} onChange={setAllSeasons} />
+  ) : null;
+  const scopedProps = arc ? { ...tabProps, episodes: scopedEpisodes, episodesTotal: allSeasons ? episodesTotal : null, scope } : tabProps;
 
-  const tabBar = (tabs) => (
+  const tabBar = (tabs, counts = {}) => (
     <nav className="szn-tabs" role="tablist" aria-label="Season sections" ref={tabsRef}>
-      {tabs.map((t) => (
-        <button key={t.key} type="button" role="tab" id={`szn-tab-${t.key}`} aria-selected={tab === t.key} aria-controls="szn-tabpanel"
-          className={`szn-tab${tab === t.key ? ' is-on' : ''}`} onClick={() => goTab(t.key)} data-testid={`szn-tab-${t.key}`}>
-          {t.label}
-        </button>
-      ))}
+      {tabs.map((t) => {
+        const badge = counts[t.key];
+        return (
+          <button key={t.key} type="button" role="tab" id={`szn-tab-${t.key}`} aria-selected={tab === t.key} aria-controls="szn-tabpanel"
+            className={`szn-tab${tab === t.key ? ' is-on' : ''}`} onClick={() => goTab(t.key)} data-testid={`szn-tab-${t.key}`}>
+            <span className="szn-tab-label">{t.label}</span>
+            {/* What is waiting there; on a phone the number alone. */}
+            {badge && (
+              <span className={`szn-tab-badge is-${badge.tone}`} data-testid={`szn-tab-badge-${t.key}`} aria-label={`(${badge.text})`}>
+                <span aria-hidden="true">{badge.count}</span>
+                <span className="szn-tab-badge-text" aria-hidden="true">{badge.text.replace(/^\d+\s*/, '')}</span>
+              </span>
+            )}
+          </button>
+        );
+      })}
     </nav>
   );
   const note = <p className="szn-tab-note" data-testid="szn-tab-note">{SEASON_TABS.find((t) => t.key === tab)?.note}</p>;
@@ -324,7 +490,14 @@ export default function SeasonPage() {
     <div className="szn-page" data-testid="season-page">
       {back}
       <SeasonHero arc={arc} roadmap={roadmap} showName={showName} nextSeason={nextSeason}
-        onEdit={() => openPanel(panel === 'edit' ? null : 'edit')} onPick={openPanel} />
+        onEdit={() => openPanel(panel === 'edit' ? null : 'edit')} onPick={openPanel} readOnly={!isCurrent}
+        switcher={<SeasonSwitcher seasons={plan.seasons} arc={arc} currentArcId={plan.currentArcId} onPick={pickSeason} />} />
+      {!isCurrent && (
+        <p className="szn-note is-past" role="status" data-testid="szn-past-season">
+          You are looking at Season {arc.season_number || 1}{arc.status === 'completed' ? ', which is complete' : ''}. Its roadmap, episodes and results are its own; Story and Goals follow the season in progress.
+          {' '}<button type="button" className="szn-link-btn" onClick={() => pickSeason(null)} data-testid="szn-past-season-back">Back to the season in progress</button>
+        </p>
+      )}
 
       <SeasonLoadError plan={plan} />
       {setupNote && <p className="szn-note" role="status" data-testid="szn-setup-note">{setupNote}</p>}
@@ -347,21 +520,21 @@ export default function SeasonPage() {
         )}
       </div>
 
-      <SeasonStats stats={stats} />
+      <SeasonStats stats={stats} hrefFor={hrefFor} nextRelease={nextRelease} releaseHref={`/shows/${encodeURIComponent(showId)}/world?tab=release`} />
 
-      {tabBar(SEASON_TABS)}
+      {tabBar(SEASON_TABS, badges)}
 
       <section id="szn-tabpanel" role="tabpanel" aria-labelledby={`szn-tab-${tab}`} className="szn-tabpanel" data-testid={`szn-panel-${tab}`}>
         {/* What the tab is for, in a line (Evoni, 2026-10-25). */}
         {note}
         {tab === 'overview' && <SeasonOverviewTab {...tabProps} />}
         {tab === 'roadmap' && <SeasonRoadmapTab {...tabProps} />}
-        {tab === 'episodes' && <SeasonEpisodesTab {...tabProps} />}
+        {tab === 'episodes' && <SeasonEpisodesTab {...scopedProps} />}
         {tab === 'events' && <SeasonEventsTab {...tabProps} />}
         {tab === 'opportunities' && <SeasonOpportunitiesTab {...tabProps} />}
         {tab === 'story' && <SeasonStoryTab {...tabProps} />}
         {tab === 'goals' && <SeasonGoalsTab {...tabProps} />}
-        {tab === 'results' && <SeasonResultsTab {...tabProps} />}
+        {tab === 'results' && <SeasonResultsTab {...scopedProps} />}
       </section>
     </div>
   );
