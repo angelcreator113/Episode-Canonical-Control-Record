@@ -58,8 +58,10 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
   const arcOf = async (show) => (await rows(
     `SELECT id, status, current_phase, phases, narrative_debt, progression_log FROM show_arcs WHERE show_id = :show AND deleted_at IS NULL`, { show }))[0];
   const goalStatus = async (id) => (await rows('SELECT status FROM career_goals WHERE id = :id', { id }))[0].status;
-  const advance = (show) => auth(request(app).post(`/api/v1/world/${show}/arc/advance`)).send({});
-  const confirm = (show) => auth(request(app).post(`/api/v1/world/${show}/arc/advance/confirm`)).send({});
+  // No body, as the page's Advance and Confirm buttons send (Evoni's live page, 2026-10-25:
+  // "Cannot destructure property 'episode_number' of 'req.body' as it is undefined").
+  const advance = (show) => auth(request(app).post(`/api/v1/world/${show}/arc/advance`));
+  const confirm = (show) => auth(request(app).post(`/api/v1/world/${show}/arc/advance/confirm`));
 
   beforeAll(() => {
     admin = TokenService.generateTokenPair({ id: 'test-season-advance', email: 'evoni@season-advance.dev', name: 'Evoni', groups: ['ADMIN'], role: 'ADMIN' }).accessToken;
@@ -170,8 +172,8 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
     const show = await newSeason();
     await finish(show, 24);
     // Phases 1 and 2 done.
-    await auth(request(app).post(`/api/v1/world/${show}/arc/advance`)).send({});
-    await auth(request(app).post(`/api/v1/world/${show}/arc/advance`)).send({});
+    await advance(show);
+    await advance(show);
     expect((await arcOf(show)).current_phase).toBe(3);
     const unmet = await addGoal(show, { title: 'Land a cover', range: [17, 24], metric: 'portfolio_strength', current: 0, target: 1 });
 

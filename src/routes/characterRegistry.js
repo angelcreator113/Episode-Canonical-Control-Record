@@ -653,7 +653,8 @@ router.delete('/characters/:id/plot-threads/:threadId', requireAuth, authorize([
 // ADMIN only (Evoni, 2026-10-19: this whole part of the site is admin only; the profile audit).
 router.put('/characters/:id', requireAuth, authorize(['ADMIN']), express.json(), async (req, res) => {
   try {
-    if (!req.body || typeof req.body !== 'object') {
+    // An empty body counts as none (app.js turns a missing body into {}).
+    if (!req.body || typeof req.body !== 'object' || !Object.keys(req.body).length) {
       return res.status(400).json({ success: false, error: 'Request body is required' });
     }
     const { RegistryCharacter } = getModels();
