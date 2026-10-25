@@ -1,0 +1,63 @@
+/* Under the Event Package's header (EventFlowHeader.jsx): the stage row,
+   then what is left to set up. Design tokens only, the header's lavender. */
+.efh {
+  display: grid; gap: 12px; margin: -6px 0 16px; padding: 12px 16px; border-radius: 14px;
+  background: var(--lala-surface); border: 1px solid var(--lala-parchment-3);
+  font-family: var(--font-sans);
+}
+
+/* Stages */
+.eft-steps { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 4px; margin: 0; padding: 0; list-style: none; }
+.eft-step { position: relative; min-width: 0; }
+/* The line between steps, lit up to the current one. */
+.eft-step + .eft-step::before {
+  content: ''; position: absolute; top: 21px; left: calc(-50% + 12px); right: calc(50% + 12px); height: 2px;
+  background: var(--lala-parchment-3);
+}
+.eft-step.is-done + .eft-step::before, .eft-step.is-done + .eft-step.is-current::before { background: var(--lala-lavender); }
+.eft-step-btn {
+  display: flex; flex-direction: column; align-items: center; gap: 4px; width: 100%; min-height: 44px; padding: 4px 2px;
+  border: none; border-radius: 10px; background: transparent; cursor: pointer; font: inherit; color: var(--lala-ink-muted);
+}
+.eft-step-btn:hover { background: var(--lala-lavender-soft); }
+.eft-step-btn:focus-visible { outline: 2px solid var(--lala-lavender); outline-offset: 1px; }
+.eft-step-icon { position: relative; z-index: 1; background: var(--lala-surface); border-radius: 50%; }
+.eft-step-label { font-size: 12px; line-height: 1.2; text-align: center; overflow-wrap: anywhere; }
+.eft-step.is-done .eft-step-btn { color: var(--lala-lavender-text); }
+.eft-step.is-current .eft-step-btn { color: var(--lala-ink); }
+.eft-step.is-current .eft-step-icon { color: var(--lala-lavender-text); }
+.eft-step.is-current .eft-step-label { font-weight: 700; }
+.eft-step.is-shown .eft-step-btn { background: var(--lala-lavender-soft); }
+.eft-step.is-todo .eft-step-icon { color: var(--lala-parchment-3); }
+.eft-hint { margin: 6px 0 0; font-size: 13px; color: var(--lala-ink-muted); }
+.eft-hint strong { color: var(--lala-ink); }
+
+/* What is left to set up */
+.efs { border-top: 1px solid var(--lala-parchment-3); padding-top: 10px; }
+.efs-head { font-size: 13px; color: var(--lala-ink-muted); }
+.efs-count { color: var(--lala-ink); font-size: 14px; }
+.efs-reason { margin-top: 2px; }
+.efs-list { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 0; padding: 0; list-style: none; }
+.efs-item {
+  display: inline-flex; align-items: center; gap: 6px; max-width: 100%; min-height: 36px; padding: 4px 12px;
+  border-radius: 999px; border: 1px solid var(--lala-lavender-line); background: var(--surface-card);
+  font: inherit; font-size: 13px; font-weight: 600; color: var(--lala-lavender-text); cursor: pointer; text-align: left;
+}
+.efs-item:hover { background: var(--lala-lavender-soft); }
+.efs-item:focus-visible { outline: 2px solid var(--lala-lavender); outline-offset: 1px; }
+.efs-item svg { flex: none; }
+.efs-item-label { min-width: 0; overflow-wrap: anywhere; }
+.efs-item.is-done { border-color: var(--lala-parchment-3); background: var(--lala-parchment); color: var(--lala-ink-muted); font-weight: 500; }
+.efs-item.is-done .efs-item-label { text-decoration: line-through; }
+.efs-item.is-done svg { color: var(--success, var(--lala-lavender-text)); }
+
+@media (max-width: 900px) {
+  .efs-item { min-height: 44px; }
+}
+@media (max-width: 600px) {
+  .efh { margin: -8px 0 12px; padding: 10px 10px; gap: 10px; }
+  .eft-step-label { font-size: 11px; }
+  .eft-step-btn { padding: 4px 0; }
+  .efs-list { flex-direction: column; }
+  .efs-item { width: 100%; border-radius: 12px; }
+}

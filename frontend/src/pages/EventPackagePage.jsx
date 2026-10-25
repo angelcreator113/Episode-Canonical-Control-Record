@@ -143,6 +143,8 @@ import usePlacePickers from './eventPackage/usePlacePickers';
 import useStartEpisode from './eventPackage/useStartEpisode';
 import usePackageNavigation from './eventPackage/usePackageNavigation';
 import useDialogFocus from './eventPackage/useDialogFocus';
+import useEventFlow from './eventPackage/useEventFlow';
+import EventFlowHeader from '../components/EventPackage/EventFlowHeader';
 import './EventPackagePage.css';
 
 // The scene-set helpers moved to lib/eventPackageFields and utils/sceneSets;
@@ -359,6 +361,13 @@ function EventPackageBody({ pkg }) {
     }
   };
 
+  // The header and navigation (Evoni, 2026-10-25): the season panel, the
+  // stage, what is left to set up, the slot order and the way back.
+  const flow = useEventFlow({
+    showId, eventId, event, seasonContext, readiness, used, usedInEpisode, hasOrganizer: organizer.hasOrganizer,
+    hasInvitation: !!invitationAsset, moneyPending, continueTo, jumpToSection, openOrganizerPicker: picker.openOrganizerPicker,
+  });
+
   // The open dialog: Escape, Tab and focus (useDialogFocus).
   const closeTopDialogRef = useRef(null);
   const { stakesDraft, stakesSaving } = stakesEditor;
@@ -450,7 +459,9 @@ function EventPackageBody({ pkg }) {
       <PackageHero
         showId={showId} eventId={eventId} event={event} seasonContext={seasonContext} badge={badge} venueDate={venueDate}
         organizer={organizer} projection={projection} used={used} lockEpisode={lockEpisode} termsReopen={termsReopen}
+        back={flow.back} neighbours={flow.neighbours} place={flow.place}
       />
+      <EventFlowHeader flow={flow} used={used} />
 
       {/* One sticky readiness bar (Evoni, 2026-10-23): it replaces the
           strip's tiles, the next-step bar and the footer action bar. The
@@ -480,7 +491,7 @@ function EventPackageBody({ pkg }) {
             showId={showId} event={event} basics={basics} used={used} organizer={organizer} invitationAsset={invitationAsset}
             nameDraft={nameDraft} reloadTick={reloadTick} fold={fold} editor={editor} names={names} ai={ai}
             invitationApprovalInfo={invitationApprovalInfo} setInvitationApprovalInfo={setInvitationApprovalInfo}
-            invitationRegenSignal={invitationRegenSignal} load={load}
+            invitationRegenSignal={invitationRegenSignal} load={load} openOrganizerPicker={picker.openOrganizerPicker}
           />
           <EventPeopleSection
             event={event} used={used} castLocked={castLocked} organizer={organizer} sourceProfile={sourceProfile}

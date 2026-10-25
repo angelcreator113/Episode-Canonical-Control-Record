@@ -10,10 +10,12 @@ import { InvitationButton } from '../../pages/InvitationGenerator';
 import SuggestReview from '../../pages/eventPackage/SuggestReview';
 import EventBasicsRow from './EventBasicsRow';
 import { BASICS_FIELDS, BASICS_ORDER, basicsStateLabel, basicsStateIcon } from '../../lib/eventPackageFields';
+import BlockedReason from './BlockedReason';
+import { blockedReasons } from '../../lib/eventFlow';
 
 export default function EventIdentitySection({
   showId, event, basics, used, organizer, invitationAsset, nameDraft, reloadTick, fold, editor, names, ai,
-  invitationApprovalInfo, setInvitationApprovalInfo, invitationRegenSignal, load,
+  invitationApprovalInfo, setInvitationApprovalInfo, invitationRegenSignal, load, openOrganizerPicker = null,
 }) {
   const { toFillShown, openBasicsEditor, basicsSaving, startFillIn } = editor;
   const {
@@ -172,7 +174,11 @@ export default function EventIdentitySection({
             it would read "A Special Host", so it waits for one. */}
         {!organizer.hasOrganizer && !invitationAsset ? (
           <div className="epp-empty" data-testid="invitation-needs-organizer">
-            Choose an organizer first — the invitation names them.
+            {/* Why it can't be made yet, and the step that unblocks it (2026-10-25). */}
+            <BlockedReason
+              reason={blockedReasons({ hasOrganizer: false, hasInvitation: false }).invitation}
+              onAction={openOrganizerPicker && !used ? () => openOrganizerPicker() : null} testId="blocked-invitation"
+            />
           </div>
         ) : (
           <InvitationButton key={`invitation-${reloadTick}`}
