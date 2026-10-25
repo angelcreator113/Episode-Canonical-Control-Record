@@ -10,8 +10,12 @@ import { resolve } from 'path';
 import { contrast, readToken } from '../styles/contrast';
 
 const css = readFileSync(resolve(__dirname, 'SeasonPage.css'), 'utf8');
-const jsx = ['SeasonPage.jsx', '../components/Show/SeasonPageRoadmap.jsx', '../components/Show/SeasonPageOverview.jsx', '../components/Show/SeasonPageParts.jsx']
+const jsx = ['SeasonPage.jsx', '../components/Show/SeasonPageRoadmap.jsx', '../components/Show/SeasonPageOverview.jsx', '../components/Show/SeasonPageParts.jsx',
+  '../components/Show/CareerGoals.jsx']
   .map((f) => readFileSync(resolve(__dirname, f), 'utf8')).join('\n');
+// The Goals tab's own styles (2026-10-25): Career Goals and the brands she has worked with.
+const goalsCss = readFileSync(resolve(__dirname, '../components/Show/CareerGoals.css'), 'utf8');
+const brandsCss = readFileSync(resolve(__dirname, '../components/Career/CareerBrands.css'), 'utf8');
 
 describe('Season page theme', () => {
   test('the colours are --sp-* tokens declared on .szn-page; the rules read them, and the JSX sets none', () => {
@@ -51,6 +55,19 @@ describe('Season page theme', () => {
     expect(css).toMatch(/\.szn-tab \{[^}]*min-height: 44px;/);
     expect(css).toMatch(/\.szn-btn \{[^}]*min-height: 44px;/);
     const sizes = [...css.matchAll(/font-size: (\d+)px/g)].map((m) => Number(m[1]));
+    expect(Math.min(...sizes)).toBeGreaterThanOrEqual(12);
+  });
+
+  test('the Goals tab: --sp-* colours only, 44px targets, 12px text, one column on a phone', () => {
+    const strip = (t) => t.replace(/\/\*[\s\S]*?\*\//g, '');
+    expect(strip(goalsCss)).not.toMatch(/#[0-9a-f]{3,8}\b/i);
+    expect(strip(brandsCss)).not.toMatch(/#[0-9a-f]{3,8}\b/i);
+    // The brands read the page's colours first (the app's only outside it).
+    expect(brandsCss).toMatch(/\.cb \{[^}]*background: var\(--sp-card, var\(--surface-card\)\);/);
+    expect(brandsCss).toMatch(/\.cb-btn, \.cb-chip \{[^}]*min-height: 44px;/);
+    expect(goalsCss).toMatch(/\.cg-field input, \.cg-field select, \.cg-field textarea \{[^}]*min-height: 44px;/);
+    expect(goalsCss).toMatch(/@media \(max-width: 640px\) \{[\s\S]*\.cg-fields, \.cg-goals \{ grid-template-columns: minmax\(0, 1fr\); \}/);
+    const sizes = [...`${goalsCss}${brandsCss}`.matchAll(/font-size: (\d+)px/g)].map((m) => Number(m[1]));
     expect(Math.min(...sizes)).toBeGreaterThanOrEqual(12);
   });
 });

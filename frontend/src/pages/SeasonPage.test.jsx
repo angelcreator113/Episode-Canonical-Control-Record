@@ -3,7 +3,9 @@
  * hero with and without a cover, the stat cards (the budget from the ledger,
  * or saying there is none), the roadmap's views and filters, a card opening
  * the Season Plan's slot panel, the advance bar's rule, the Edit season
- * form's new fields, and the summary cards.
+ * form's new fields, the summary cards, the way back to Producer Mode, and
+ * the Goals tab (Career Goals and the brands, moved here from Producer
+ * Mode's retired Season Plan tab, 2026-10-25).
  */
 import { vi, describe, beforeEach, test, expect } from 'vitest';
 import { render, screen, waitFor, within, fireEvent } from '@testing-library/react';
@@ -79,6 +81,8 @@ function mockGets() {
     if (url === '/api/v1/world/show-1/season/reveals') return { data: state.reveals };
     if (url === '/api/v1/world/show-1/season/twists') return { data: { arc: { id: 'arc-1' }, slots: [], threads: [], characters: [], twists: [], warnings: [] } };
     if (url === '/api/v1/world/show-1/season/proposals') return { data: { open: null, recent: [] } };
+    if (url === '/api/v1/shows/show-1/career-list') return { data: { data: state.careerList } };
+    if (url.startsWith('/api/v1/world/show-1/suggest-events')) return { data: { success: true, suggestions: state.suggestions } };
     if (url.startsWith('/api/v1/assets')) return { data: { data: [{ id: 'a1', name: 'Rooftop dusk', media_type: 'image', s3_url_processed: 'https://cdn.example.com/rooftop.jpg' }] } };
     return { data: {} };
   });
@@ -112,6 +116,8 @@ beforeEach(() => {
       { id: 'g3', title: 'Be featured in a magazine', status: 'paused' }, { id: 'g4', title: 'Missed one', status: 'failed' },
     ],
     threads: [{ id: 't1', title: "Lala's Confidence Journey", status: 'open', slot_numbers: [1, 2, 3, 4, 5, 6] }],
+    careerList: { brands: [{ name: 'Maison Velour', episodes: [{ number: 3 }] }], hidden_brands: [] },
+    suggestions: [],
     reveals: {
       arc: { id: 'arc-1' }, slots: [], warnings: [],
       secrets: [{ id: 's1', text: 'Identity Change', state: 'hidden', character_name: 'Lala' }, { id: 's2', text: 'Unplanned', state: 'hidden', character_name: 'Lala' }],
@@ -129,7 +135,7 @@ describe('The tabs', () => {
     renderPage();
     expect(await screen.findByTestId('szn-panel-overview')).toBeTruthy();
     const tabs = screen.getAllByRole('tab');
-    expect(tabs.map((t) => t.textContent)).toEqual(['Overview', 'Episode Roadmap', 'Events', 'Story Development', 'Production Plan', 'Results & Analytics']);
+    expect(tabs.map((t) => t.textContent)).toEqual(['Overview', 'Episode Roadmap', 'Events', 'Goals', 'Story Development', 'Production Plan', 'Results & Analytics']);
     expect(screen.getByTestId('szn-tab-overview').getAttribute('aria-selected')).toBe('true');
     fireEvent.click(screen.getByTestId('szn-tab-story'));
     expect(await screen.findByTestId('szn-panel-story')).toBeTruthy();
@@ -137,7 +143,7 @@ describe('The tabs', () => {
     expect(await screen.findByTestId('story-threads')).toBeTruthy();
   });
 
-  test.each([['roadmap', 'szn-roadmap'], ['events', 'szn-events'], ['production', 'szn-production'], ['results', 'szn-results'], ['nonsense', 'szn-overview-card']])(
+  test.each([['roadmap', 'szn-roadmap'], ['events', 'szn-events'], ['goals', 'career-goals'], ['production', 'szn-production'], ['results', 'szn-results'], ['nonsense', 'szn-overview-card']])(
     '?tab=%s opens its tab', async (tab, testId) => {
       renderPage(`?tab=${tab}`);
       expect(await screen.findByTestId(testId)).toBeTruthy();
@@ -359,9 +365,21 @@ describe('The Overview', () => {
     // A secret with nothing planned is not a row.
     expect(within(matrix).queryByText('Unplanned')).toBeNull();
     expect(within(screen.getByTestId('szn-sum-goals')).getByText('Grow audience to 100K')).toBeTruthy();
-    expect(screen.getByTestId('szn-add-goal').getAttribute('href')).toBe('/shows/show-1/world?tab=season');
     fireEvent.click(within(events).getByText('See all'));
     expect(await screen.findByTestId('szn-events')).toBeTruthy();
+  });
+
+  test('Season Goals: See all and Add Goal open the Goals tab (no longer Producer Mode)', async () => {
+    renderPage();
+    const goals = await screen.findByTestId('szn-sum-goals');
+    expect(within(goals).queryByRole('link')).toBeNull();
+    fireEvent.click(within(goals).getByRole('button', { name: 'See all' }));
+    expect(await screen.findByTestId('career-goals')).toBeTruthy();
+    expect(screen.getByTestId('where').textContent).toBe('/shows/show-1/season?tab=goals');
+    fireEvent.click(screen.getByTestId('szn-tab-overview'));
+    fireEvent.click(await screen.findByTestId('szn-add-goal'));
+    expect(await screen.findByTestId('career-goals')).toBeTruthy();
+    expect(screen.getByTestId('where').textContent).toBe('/shows/show-1/season?tab=goals');
   });
 });
 
@@ -386,6 +404,178 @@ describe('Events, Production, Results', () => {
     renderPage('?tab=results');
     expect(await screen.findByTestId('planning-insights')).toBeTruthy();
     expect(screen.getByTestId('szn-open-results').getAttribute('href')).toBe('/shows/show-1/world?tab=episodes-ledger');
+  });
+});
+
+describe('The way back', () => {
+  test('"Producer Mode" goes to its Overview, not the retired Season Plan tab', async () => {
+    renderPage();
+    const back = await screen.findByTestId('szn-back');
+    expect(back.textContent.trim()).toBe('Producer Mode');
+    expect(back.getAttribute('href')).toBe('/shows/show-1/world?tab=overview');
+  });
+});
+
+describe('The Goals tab', () => {
+  const GOALS = [
+    { id: 'g1', title: 'Break Into Luxury Fashion', type: 'primary', status: 'active', target_metric: 'reputation', current_value: 4, target_value: 10, starting_value: 0, icon: '🌟', color: '' },
+    { id: 'g2', title: 'Land 3 brand deals', type: 'secondary', status: 'active', target_metric: 'coins', current_value: 500, target_value: 1000, icon: '🤝' },
+    { id: 'g3', title: 'First runway', type: 'secondary', status: 'completed', completed_at: '2026-01-20T12:00:00Z', icon: '👠' },
+  ];
+  beforeEach(() => { state.goals = GOALS.map((g) => ({ ...g })); });
+
+  test('the goals by type with their progress, the completed ones, and the brands she has worked with', async () => {
+    renderPage('?tab=goals');
+    const tab = await screen.findByTestId('szn-goals');
+    expect(within(tab).getByTestId('cg-counts').textContent).toBe('2 active · 1 complete');
+    const primary = within(tab).getByTestId('cg-type-primary');
+    expect(within(primary).getByText('Break Into Luxury Fashion')).toBeTruthy();
+    expect(within(primary).getByRole('progressbar', { name: 'Break Into Luxury Fashion progress' }).getAttribute('aria-valuenow')).toBe('40');
+    expect(within(primary).getByText('40% · 6 to go')).toBeTruthy();
+    expect(within(within(tab).getByTestId('cg-type-secondary')).getByText('Land 3 brand deals')).toBeTruthy();
+    // No passive goal: no empty passive section.
+    expect(within(tab).queryByTestId('cg-type-passive')).toBeNull();
+    expect(within(within(tab).getByTestId('cg-completed')).getByText('First runway')).toBeTruthy();
+    // Seed 24 goals only before there are any.
+    expect(within(tab).queryByTestId('cg-seed')).toBeNull();
+    const brands = await within(tab).findByTestId('career-brands');
+    expect(within(brands).getByText('Maison Velour')).toBeTruthy();
+    expect(within(brands).getByText('Episode 3')).toBeTruthy();
+  });
+
+  test('a brand can be hidden from her Career list, from the Goals tab', async () => {
+    vi.mocked(api.put).mockResolvedValue({ data: { success: true } });
+    renderPage('?tab=goals');
+    const brands = await screen.findByTestId('career-brands');
+    fireEvent.click(await within(brands).findByRole('button', { name: 'Hide Maison Velour' }));
+    await waitFor(() => expect(api.put).toHaveBeenCalledWith('/api/v1/shows/show-1/career-list/hidden-brands', { brands: ['Maison Velour'] }));
+  });
+
+  test('New Goal creates one; the list, the counts and the stat card reload', async () => {
+    vi.mocked(api.post).mockImplementation(async (url, body) => {
+      if (url === '/api/v1/world/show-1/goals') {
+        state.goals = [...state.goals, { id: 'g9', status: 'active', current_value: 0, ...body }];
+        return { data: { success: true, goal: { id: 'g9', ...body } } };
+      }
+      return { data: {} };
+    });
+    renderPage('?tab=goals');
+    expect((await screen.findByTestId('szn-stat-goals')).textContent).toContain('1 complete · 2 remaining');
+    fireEvent.click(await screen.findByTestId('cg-new'));
+    const editor = screen.getByTestId('cg-editor');
+    expect(within(editor).getByTestId('cg-save').disabled).toBe(true);
+    fireEvent.change(within(editor).getByTestId('cg-title'), { target: { value: 'Front row at Fashion Week' } });
+    fireEvent.change(within(editor).getByTestId('cg-type'), { target: { value: 'passive' } });
+    fireEvent.change(within(editor).getByTestId('cg-metric'), { target: { value: 'influence' } });
+    fireEvent.change(within(editor).getByTestId('cg-target'), { target: { value: '25' } });
+    fireEvent.click(within(editor).getByTestId('cg-save'));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/api/v1/world/show-1/goals', {
+      title: 'Front row at Fashion Week', type: 'passive', target_metric: 'influence', target_value: 25, icon: '🎯', color: '', description: '',
+    }));
+    expect(await screen.findByTestId('cg-type-passive')).toBeTruthy();
+    expect(screen.getByTestId('cg-note').textContent).toBe('Goal created.');
+    expect(screen.queryByTestId('cg-editor')).toBeNull();
+    expect(screen.getByTestId('cg-counts').textContent).toBe('3 active · 1 complete');
+    expect(screen.getByTestId('szn-stat-goals').textContent).toContain('1 complete · 3 remaining');
+  });
+
+  test('a goal edits in place through PUT; a refusal says so in the page', async () => {
+    vi.mocked(api.put).mockResolvedValueOnce({ data: { success: true, goal: {} } })
+      .mockRejectedValueOnce(Object.assign(new Error('x'), { response: { data: { error: 'Only 1 primary goal' } } }));
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    renderPage('?tab=goals');
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit Land 3 brand deals' }));
+    const editor = screen.getByTestId('cg-editor');
+    expect(within(editor).getByTestId('cg-title').value).toBe('Land 3 brand deals');
+    fireEvent.change(within(editor).getByTestId('cg-target'), { target: { value: '1500' } });
+    fireEvent.click(within(editor).getByTestId('cg-save'));
+    await waitFor(() => expect(api.put).toHaveBeenCalledWith('/api/v1/world/show-1/goals/g2', expect.objectContaining({ title: 'Land 3 brand deals', target_value: 1500 })));
+    expect((await screen.findByTestId('cg-note')).textContent).toBe('Goal saved.');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Land 3 brand deals' }));
+    fireEvent.change(within(screen.getByTestId('cg-editor')).getByTestId('cg-type'), { target: { value: 'primary' } });
+    fireEvent.click(within(screen.getByTestId('cg-editor')).getByTestId('cg-save'));
+    expect((await screen.findByRole('alert')).textContent).toBe('Only 1 primary goal');
+    expect(screen.getByTestId('cg-editor')).toBeTruthy();
+  });
+
+  test('a goal is deleted only after a confirm', async () => {
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true);
+    vi.mocked(api.delete).mockResolvedValue({ data: { success: true } });
+    renderPage('?tab=goals');
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete Land 3 brand deals' }));
+    expect(api.delete).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Land 3 brand deals' }));
+    await waitFor(() => expect(api.delete).toHaveBeenCalledWith('/api/v1/world/show-1/goals/g2'));
+    expect(confirm).toHaveBeenCalledWith('Delete "Land 3 brand deals"?');
+    confirm.mockRestore();
+  });
+
+  test('Sync from stats syncs, names what it completed, and reloads the goals', async () => {
+    vi.mocked(api.post).mockImplementation(async (url) => {
+      if (url === '/api/v1/world/show-1/goals/sync') {
+        state.goals = state.goals.map((g) => (g.id === 'g2' ? { ...g, status: 'completed' } : g));
+        return { data: { success: true, synced: 2, completed: [{ title: 'Land 3 brand deals' }] } };
+      }
+      return { data: {} };
+    });
+    renderPage('?tab=goals');
+    fireEvent.click(await screen.findByTestId('cg-sync'));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/api/v1/world/show-1/goals/sync'));
+    expect((await screen.findByTestId('cg-note')).textContent).toBe('Synced 2 goals from her stats. Completed: Land 3 brand deals.');
+    await waitFor(() => expect(screen.getByTestId('cg-counts').textContent).toBe('1 active · 2 complete'));
+  });
+
+  test('Suggest events lists suggestions from the active goals, each with its way to the event', async () => {
+    state.suggestions = [
+      { id: 'ev-7', name: 'Velour Garden Soirée', event_type: 'invite', prestige: 7, cost_coins: 150, is_paid: true, requirements_met: true,
+        narrative_stakes: 'Her first luxury room.', suggestion_reasons: ['Moves reputation', 'Chain continues'] },
+      { id: 'ev-8', name: 'Atelier Closing', prestige: 9, cost_coins: 400, requirements_met: false, suggestion_reasons: [] },
+    ];
+    renderPage('?tab=goals');
+    fireEvent.click(await screen.findByTestId('cg-suggest'));
+    const list = await screen.findByTestId('cg-suggestions');
+    await waitFor(() => expect(vi.mocked(api.get).mock.calls.some(([u]) => u === '/api/v1/world/show-1/suggest-events?limit=3')).toBe(true));
+    const [first, second] = within(list).getAllByTestId('cg-suggestion');
+    expect(first.textContent).toContain('Velour Garden Soirée');
+    expect(first.textContent).toContain('Her first luxury room.');
+    expect(first.textContent).toContain('Moves reputation · Chain continues');
+    expect(within(first).getByRole('link', { name: 'View in Events' }).getAttribute('href')).toBe('/shows/show-1/world?tab=events&event=ev-7');
+    expect(within(first).getByRole('link', { name: 'Open the event package' }).getAttribute('href')).toBe('/shows/show-1/events/ev-7');
+    expect(within(second).getByText('Requirements not met')).toBeTruthy();
+  });
+
+  test('with no goals yet: Seed 24 goals runs the seed and the list fills', async () => {
+    state.goals = [];
+    vi.mocked(api.post).mockImplementation(async (url, body) => {
+      if (url === '/api/v1/world/show-1/goals/seed') {
+        expect(body).toEqual({ activate_tier: 1 });
+        state.goals = GOALS.map((g) => ({ ...g }));
+        return { data: { success: true, created: 24, skipped: 0 } };
+      }
+      return { data: {} };
+    });
+    renderPage('?tab=goals');
+    expect(await screen.findByText('No active primary goal. New Goal adds one.')).toBeTruthy();
+    fireEvent.click(screen.getByTestId('cg-seed'));
+    expect((await screen.findByTestId('cg-note')).textContent).toBe('Seeded 24 goals.');
+    expect(await screen.findByText('Break Into Luxury Fashion')).toBeTruthy();
+    expect(screen.queryByTestId('cg-seed')).toBeNull();
+  });
+
+  test('the phases with their goals and the progression log, folded', async () => {
+    state.arc = { ...ARC, progression_log: [{ triggered_by: 'manual', trigger_reason: 'Advanced by Evoni', timestamp: '2026-02-01T10:00:00Z', goals_carried: 1 }] };
+    state.goals = GOALS.map((g) => ({ ...g, episode_range: g.id === 'g1' ? '[2, 6]' : [10, 12] }));
+    renderPage('?tab=goals');
+    const fold = await screen.findByTestId('season-phases-fold');
+    expect(fold.tagName).toBe('DETAILS');
+    const one = within(fold).getByTestId('cg-phase-1');
+    expect(one.textContent).toContain('Phase 1: Foundation');
+    expect(one.textContent).toContain('Goals (0/1 complete)');
+    expect(within(one).getByText('🌟 Break Into Luxury Fashion')).toBeTruthy();
+    expect(within(within(fold).getByTestId('cg-phase-2')).getByText('👠 First runway')).toBeTruthy();
+    expect(within(fold).getByTestId('cg-log').textContent).toContain('Advanced by Evoni');
+    expect(within(fold).getByTestId('cg-log').textContent).toContain('1 goals carried');
   });
 });
 

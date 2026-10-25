@@ -11,12 +11,13 @@
  *              roadmap), the setup checklist, the proposals and what the
  *              season knows (folded), then Key Events, Story Threads, Secrets
  *              & Reveals (the hint and reveal slots per secret) and Season
- *              Goals, each with See all and an add button.
+ *              Goals, each with See all and an add button (Season Goals'
+ *              open the Goals tab).
  *   Story      threads, twists, the reveal plan, the relationships needed.
  *   Results    Planning Insights, and the way to Producer Mode's Results.
  */
 import { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { ChevronRight, Plus, Pencil } from 'lucide-react';
 import SeasonProposals from './SeasonProposals';
 import SeasonKnows from './SeasonKnows';
@@ -91,16 +92,14 @@ function SeasonPartsCard({ arc, roadmap, goTab }) {
   );
 }
 
-function ChecklistCard({ plan, onPanel, goTab, showId }) {
-  const navigate = useNavigate();
+function ChecklistCard({ plan, onPanel, goTab }) {
   const steps = setupSteps({ roadmap: plan.roadmap, goals: plan.goals, threads: plan.threadData.threads });
   const actions = {
     setup: { label: 'Edit season', icon: 'edit', onClick: () => onPanel('edit') },
     place: { label: 'Place them', onClick: () => onPanel('place') },
     goals: plan.goals.length === 0
       ? { label: 'Seed 24 goals', onClick: plan.seedGoals, busy: plan.seedingGoals }
-      // Goals are written in Producer Mode's Career Goals.
-      : { label: 'Open Goals', onClick: () => navigate(`/shows/${showId}/world?tab=season`) },
+      : { label: 'Open Goals', onClick: () => goTab('goals') },
     threads: { label: 'Add a thread', onClick: () => goTab('story') },
     draft: { label: 'Draft with AI', onClick: () => onPanel('draft') },
   };
@@ -200,13 +199,13 @@ function SecretsSummary({ api, showId, goTab }) {
   );
 }
 
-function GoalsSummary({ goals, showId }) {
+function GoalsSummary({ goals, goTab }) {
   const rows = goals.filter((g) => g.status !== 'archived').slice(0, 5);
-  // Goals are written in Producer Mode's Career Goals (Season Plan tab).
-  const goalsHref = `/shows/${showId}/world?tab=season`;
+  // Goals are written on this page's Goals tab.
+  const toGoals = () => goTab('goals');
   return (
-    <SummaryCard title="Season Goals" testId="szn-sum-goals"
-      add={<Link className="szn-add-row" to={goalsHref} data-testid="szn-add-goal"><Plus size={16} aria-hidden="true" /> Add Goal</Link>}>
+    <SummaryCard title="Season Goals" testId="szn-sum-goals" onSeeAll={toGoals}
+      add={<button type="button" className="szn-add-row" onClick={toGoals} data-testid="szn-add-goal"><Plus size={16} aria-hidden="true" /> Add Goal</button>}>
       {rows.length === 0 ? <p className="szn-muted">No goals yet.</p> : (
         <ul className="szn-mini-list">
           {rows.map((g) => (
@@ -220,7 +219,6 @@ function GoalsSummary({ goals, showId }) {
           ))}
         </ul>
       )}
-      <Link className="szn-link" to={goalsHref}>See all in Career Goals</Link>
     </SummaryCard>
   );
 }
@@ -231,7 +229,7 @@ export function SeasonOverviewTab({ plan, api, showId, arc, roadmap, events, goT
       <div className="szn-overview-row">
         <SeasonOverviewCard arc={arc} roadmap={roadmap} onEdit={onEdit} />
         <SeasonPartsCard arc={arc} roadmap={roadmap} goTab={goTab} />
-        <ChecklistCard plan={plan} onPanel={onPanel} goTab={goTab} showId={showId} />
+        <ChecklistCard plan={plan} onPanel={onPanel} goTab={goTab} />
       </div>
 
       <details className="szn-fold" data-testid="szn-fold-proposals">
@@ -246,7 +244,7 @@ export function SeasonOverviewTab({ plan, api, showId, arc, roadmap, events, goT
         <KeyEventsCard roadmap={roadmap} events={events} goTab={goTab} />
         <ThreadsSummary threads={plan.threadData.threads} goTab={goTab} />
         <SecretsSummary api={api} showId={showId} goTab={goTab} />
-        <GoalsSummary goals={plan.goals} showId={showId} />
+        <GoalsSummary goals={plan.goals} goTab={goTab} />
       </div>
     </div>
   );

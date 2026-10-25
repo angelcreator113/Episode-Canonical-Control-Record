@@ -78,7 +78,7 @@ const EpisodeReview = lazy(() => import('./pages/EpisodeReview'));
 const EvaluateEpisode = lazy(() => import('./pages/EvaluateEpisode'));
 const EpisodeTodoPage = lazy(() => import('./pages/EpisodeTodoPage'));
 const WorldAdmin = lazy(() => import('./pages/WorldAdmin'));
-// The Season page (2026-10-25), reached from Producer Mode's Season Plan.
+// The Season page (2026-10-25), reached from Producer Mode's banner (Season); it replaced the Season Plan tab.
 const SeasonPage = lazy(() => import('./pages/SeasonPage'));
 const EventPackagePage = lazy(() => import('./pages/EventPackagePage'));
 const WorldStudio = lazy(() => import('./pages/WorldStudio'));

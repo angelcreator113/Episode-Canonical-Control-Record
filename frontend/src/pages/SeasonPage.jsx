@@ -1,18 +1,21 @@
 /**
  * The Season page (Evoni's mockup, 2026-10-25). Route: /shows/:showId/season,
- * reached from Producer Mode › Episodes › Season Plan ("Open the Season
- * page →").
+ * reached from Producer Mode's banner (its Season entry) and every in-app
+ * link to the season (lib/seasonPage seasonPageHref); Producer Mode's old
+ * Season Plan tab, ?tab=season and ?tab=goals, redirect here.
  *
- * The same season as the Season Plan tab, laid out to read: the hero (the
+ * The season, laid out to read: the hero (the
  * cover from Files, "SEASON N", the title, tagline and chips; Edit season and
  * a ⋯ menu), four stat cards (episode slots, goals, events, Lala's budget
- * from the ledger), and six tabs addressed by `?tab=`: Overview, Episode
- * Roadmap, Events, Story Development, Production Plan, Results & Analytics.
+ * from the ledger), and seven tabs addressed by `?tab=`: Overview, Episode
+ * Roadmap, Events, Goals (Lala's career goals and the brands she has worked
+ * with, moved here from the Season Plan), Story Development, Production
+ * Plan, Results & Analytics.
  *
  * Everything is read and written through the Season Plan's own pieces
  * (components/Show/SeasonPlan: useSeasonPlan, the roadmap controls, SlotPanel,
  * the threads card, Planning Insights; SeasonSetup's form, placement, draft
- * and checklist), so this page and the tab cannot drift apart.
+ * and checklist).
  *
  * Colours: the mockup's pinks and purples, page-scoped (--sp-* in
  * SeasonPage.css). Text is plum or ink; pink is for fills and accents.
@@ -28,6 +31,8 @@ import { PLAN_S } from '../components/Show/planStyles';
 import { SeasonBar as Bar } from '../components/Show/SeasonPageParts';
 import { SeasonOverviewTab, SeasonStoryTab, SeasonResultsTab } from '../components/Show/SeasonPageOverview';
 import { SeasonRoadmapTab, SeasonEventsTab, SeasonProductionTab } from '../components/Show/SeasonPageRoadmap';
+import CareerGoals, { NarrativeDebt, SeasonPhasesHistory } from '../components/Show/CareerGoals';
+import CareerBrands from '../components/Career/CareerBrands';
 import { SEASON_TABS, tabFrom, seasonStats, heroChips, slotsLine, goalsLine, eventsLine } from '../lib/seasonPage';
 import './SeasonPage.css';
 
@@ -89,6 +94,23 @@ export function SeasonStats({ stats }) {
         )}
       </article>
     </section>
+  );
+}
+
+/**
+ * Goals: Lala's career goals (their own editor, sync, suggestions and seed),
+ * the brands she has worked with, the narrative debt and the phases with
+ * their goals and history. A goal change reloads the page's goals, so the
+ * stat card and the Overview count it at once.
+ */
+export function SeasonGoalsTab({ plan, api, showId, arc }) {
+  return (
+    <div className="szn-goals" data-testid="szn-goals">
+      <CareerGoals showId={showId} api={api} goals={plan.goals} onChanged={plan.loadGoals} loadError={plan.failed.goals || null} />
+      <CareerBrands showId={showId} />
+      <NarrativeDebt debt={arc?.narrative_debt || []} />
+      <SeasonPhasesHistory arc={arc} goals={plan.goals} />
+    </div>
   );
 }
 
@@ -208,8 +230,8 @@ export default function SeasonPage() {
   if (loading) return <div className="szn-page"><p className="szn-loading" role="status">Loading the season…</p></div>;
 
   const back = (
-    <Link className="szn-back" to={`/shows/${showId}/world?tab=season`}>
-      <ArrowLeft size={16} aria-hidden="true" /> Producer Mode · Season Plan
+    <Link className="szn-back" to={`/shows/${showId}/world?tab=overview`} data-testid="szn-back">
+      <ArrowLeft size={16} aria-hidden="true" /> Producer Mode
     </Link>
   );
 
@@ -278,6 +300,7 @@ export default function SeasonPage() {
         {tab === 'overview' && <SeasonOverviewTab {...tabProps} />}
         {tab === 'roadmap' && <SeasonRoadmapTab {...tabProps} />}
         {tab === 'events' && <SeasonEventsTab {...tabProps} />}
+        {tab === 'goals' && <SeasonGoalsTab {...tabProps} />}
         {tab === 'story' && <SeasonStoryTab {...tabProps} />}
         {tab === 'production' && <SeasonProductionTab {...tabProps} />}
         {tab === 'results' && <SeasonResultsTab {...tabProps} />}

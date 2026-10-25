@@ -372,6 +372,13 @@ function aroundBlock(ctx) {
   return out.length ? `\n${out.join('\n\n')}\n` : '';
 }
 
+/** The season as the prompt names it: its title, else its own number, never a fixed "Season 1". */
+function seasonName(arc, slot) {
+  if (arc?.title) return `the season "${arc.title}"`;
+  const n = arc?.season_number || slot?.season_number;
+  return n ? `Season ${n}` : 'the season';
+}
+
 function buildDraftPrompt(slot, ctx) {
   const label = `S${slot.season_number || 1} · E${slot.slot_number}`;
   const earlier = ctx.earlier.length
@@ -382,7 +389,7 @@ function buildDraftPrompt(slot, ctx) {
   const threads = bullets(ctx.threads || [], (t) => threadLine(t, { id: false }), '- None.');
   return `You plan the season of "Styling Adventures with Lala", a luxury life-simulator show about Lala's fashion career.
 
-Draft the intention for episode slot ${label} of the season "${ctx.arc?.title || 'Season 1'}".
+Draft the intention for episode slot ${label} of ${seasonName(ctx.arc, slot)}.
 Its phase: ${phase(ctx.phase)}
 
 The season so far (most recent last):
@@ -639,4 +646,5 @@ module.exports = {
   acceptDrafts,
   buildDraftPrompt,
   aroundBlock,
+  seasonName,
 };

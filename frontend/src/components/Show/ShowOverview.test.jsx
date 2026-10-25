@@ -85,19 +85,26 @@ describe('ShowOverview helpers', () => {
 describe('ShowOverview', () => {
   beforeEach(() => { vi.mocked(api.get).mockReset(); });
 
-  test('names the season\'s next slot and opens the Season Plan', async () => {
+  test('names the season\'s next slot and links to the Season page (the Season Plan tab is retired)', async () => {
     vi.mocked(api.get).mockResolvedValue({ data: { roadmap: ROADMAP } });
     const goTo = renderIt({ episodes: [], events: [{ id: 'x', status: 'used', used_in_episode_id: 'e' }] });
     const slot = await screen.findByTestId('sov-next-slot');
     await waitFor(() => expect(slot.textContent).toContain('Next slot: S1 · E7'));
     expect(slot.textContent).toContain('Her first real setback');
-    fireEvent.click(within(slot).getByRole('button'));
-    expect(goTo).toHaveBeenCalledWith('season');
-    fireEvent.click(within(screen.getByTestId('sov-next')).getByRole('button', { name: 'View Plan' }));
-    expect(goTo).toHaveBeenCalledTimes(2);
+    expect(within(slot).getByRole('link').getAttribute('href')).toBe('/shows/show-1/season?tab=roadmap');
+    expect(within(screen.getByTestId('sov-next')).getByRole('link', { name: 'View Plan' }).getAttribute('href')).toBe('/shows/show-1/season');
+    expect(goTo).not.toHaveBeenCalled();
     expect(screen.getByTestId('sov-producing').textContent).toContain('Nothing in production');
     expect(screen.getByTestId('sov-attention').textContent).toContain('Nothing needs attention.');
     expect(screen.queryByTestId('sov-first-steps')).toBeNull();
+  });
+
+  test('no season yet: "Set up the season" opens the Season page', async () => {
+    vi.mocked(api.get).mockResolvedValue({ data: { roadmap: null } });
+    renderIt({ episodes: [], events: [] });
+    const slot = await screen.findByTestId('sov-next-slot');
+    await waitFor(() => expect(slot.textContent).toContain('No season planned yet.'));
+    expect(within(slot).getByRole('link', { name: 'Set up the season' }).getAttribute('href')).toBe('/shows/show-1/season');
   });
 
   test('a season that fails to load says so, with Retry', async () => {

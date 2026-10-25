@@ -9,6 +9,7 @@
  */
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { seasonPageHref } from '../../lib/seasonPage';
 import { ArrowRight, Hourglass } from 'lucide-react';
 import api from '../../services/api';
 import { evaluationOf, howItWent, moneyRows, statRows, shareState, signedCoins } from '../../lib/episodeResults';
@@ -160,7 +161,7 @@ export default function EpisodeResultsSummary({ episode, showId, onOpenTab, focu
               ))}
             </ul>
           )}
-          {showId && <Link className="ers-link" to={`/shows/${showId}/world?tab=overview`}>Open in Producer Mode</Link>}
+          {showId && <Link className="ers-link" to={seasonPageHref(showId, 'goals')}>Open Lala's goals</Link>}
         </section>
         )}
       </div>

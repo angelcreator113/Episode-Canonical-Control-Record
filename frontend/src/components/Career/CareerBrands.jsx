@@ -1,5 +1,5 @@
 /**
- * Brands worked with, in the Season Plan beside Career Goals (Task #3181;
+ * Brands worked with, on the Season page's Goals tab beside Career Goals (Task #3181;
  * Evoni, 2026-10-14: derived from executed agreements and past deals, with
  * a per-brand hide, no separate list). Each brand Lala has worked with, and
  * the episodes she worked with it; Hide leaves it off her Career list,
