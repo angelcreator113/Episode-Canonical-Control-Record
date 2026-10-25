@@ -40,6 +40,8 @@ import PersonEpisodes from '../components/PersonPage/PersonEpisodes';
 import PersonWriters from '../components/PersonPage/PersonWriters';
 import { API_URL } from '../config/api';
 import InnerLifeWorkspace from '../components/InnerLife/InnerLifeWorkspace';
+import LearnedVoice from '../components/LearnedVoice/LearnedVoice';
+import { voiceKeyOf, HER_KEY } from '../lib/characterVoice';
 import { dimensionOf as dimension, dimensionText } from '../lib/innerLifeSections';
 import { platformLabel, atHandle, followersOf, aliasList } from './feed/feedConstants';
 import apiClient from '../services/api';
@@ -2686,7 +2688,11 @@ function TabVoice({ character, feedProfile, appearances, onSaved, onFeedSaved, p
   useEffect(() => {
     if (drafting) draftRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
   }, [drafting]);
+  // Character voices that learn (Evoni, 2026-10-25): how they really sound
+  // and the voice learned from her approvals and edits, under the profile.
+  const voiceKey = voiceKeyOf(character);
   return (
+    <div className="ch-voice-tab">
     <div className="ch-overview ch-voice-grid">
       <div className="ch-col">
         <VoiceProfile character={character} feedProfile={feedProfile} onSaved={onSaved} />
@@ -2705,6 +2711,8 @@ function TabVoice({ character, feedProfile, appearances, onSaved, onFeedSaved, p
           <div className="ch-card" ref={draftRef}><GeneratePosts characterId={character.id} /></div>
         )}
       </div>
+    </div>
+    {voiceKey && <LearnedVoice key={voiceKey} characterKey={voiceKey} name={character.display_name || character.selected_name} you={voiceKey === HER_KEY} />}
     </div>
   );
 }

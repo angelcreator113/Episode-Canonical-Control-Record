@@ -103,8 +103,12 @@ describe('Script page', () => {
     await waitFor(() => expect(screen.getAllByTestId('script-line')[0].textContent).toContain('"Hey besties, welcome back!"'));
     expect(screen.getAllByTestId('script-line')[0].textContent).toContain('Prime');
     expect(screen.getAllByRole('button', { name: /^Rewrite line:/ })).toHaveLength(2);
-    const [url, body] = vi.mocked(api.post).mock.calls.at(-1);
+    // "Use it" also tells the learning voice (POST /voice/signals, after the rewrite).
+    const [url, body] = vi.mocked(api.post).mock.calls.find(([u]) => u === '/api/v1/episode-brief/ep-1/rewrite-line');
     expect(url).toBe('/api/v1/episode-brief/ep-1/rewrite-line');
+    expect(vi.mocked(api.post).mock.calls.at(-1)).toEqual(['/api/v1/voice/signals', {
+      episodeId: 'ep-1', beatNumber: 1, speaker: 'Prime', original: 'Hey besties. its been a minute.', edited: 'Hey besties, welcome back!',
+    }]);
     expect(body).toMatchObject({ speaker: 'Prime', beatName: 'Opening Ritual', beatLines: ['Prime: "Hey besties. its been a minute."', 'Prime: "Lets go ahead and login."'] });
     expect(screen.getByRole('status').textContent).toContain('Save to keep it');
     expect(screen.getByTestId('script-dirty')).toBeTruthy();

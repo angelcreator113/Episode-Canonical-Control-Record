@@ -1699,3 +1699,6 @@ a.ch-tl-body:hover { background: var(--lala-gold-soft); }
   display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-bottom: 12px; padding: 12px 16px;
   border-radius: 14px; border: 1.5px solid var(--lala-gold-line); background: var(--lala-gold-soft); color: var(--text-primary);
 }
+
+/* Voice & Pulse: the profile's grid, then the learned voice full width (2026-10-25). */
+.ch-voice-tab { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
