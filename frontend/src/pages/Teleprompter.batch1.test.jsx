@@ -153,10 +153,8 @@ describe('Mic meter and framing grid', () => {
     expect(Number(meter.getAttribute('data-level'))).toBeGreaterThan(0);
   });
 
-  test('recording with no sound for 3 seconds warns; sound clears it', async () => {
-    window.AudioContext = FakeAudioContext;
-    sample = 128;
-    vi.useFakeTimers();
+  // Evoni, 2026-10-25: it warned 3 seconds into a take, before she had spoken.
+  const startTake = async () => {
     render(<TeleprompterReader source={voiceSource} countdownMs={1} onClose={() => {}} />);
     fireEvent.click(screen.getByTestId('stp-record-mode'));
     await act(async () => {}); // the camera promise
@@ -164,14 +162,42 @@ describe('Mic meter and framing grid', () => {
     fireEvent.click(screen.getByTestId('stp-record'));
     act(() => { vi.advanceTimersByTime(10); });
     expect(screen.getByTestId('stp-recording')).toBeTruthy();
-    act(() => { vi.advanceTimersByTime(2500); });
-    expect(screen.queryByTestId('stp-silent')).toBeNull();
-    act(() => { vi.advanceTimersByTime(1000); });
-    expect(screen.getByTestId('stp-silent').textContent).toBe('No sound from your mic');
+  };
+  // A render between ticks, as in the browser.
+  const run = (ms) => { for (let t = 0; t < ms; t += 250) act(() => { vi.advanceTimersByTime(250); }); };
+
+  test('a mic silent from the start: nothing for 8 seconds, then "yet — check it\'s on"; sound clears it', async () => {
+    window.AudioContext = FakeAudioContext;
+    sample = 128;
+    vi.useFakeTimers();
+    await startTake();
+    run(7500);
+    expect(screen.queryByTestId('stp-silent')).toBeNull(); // the old rule warned at 3 seconds
+    run(1000);
+    expect(screen.getByTestId('stp-silent').textContent).toBe("No sound from your mic yet — check it's on");
+    expect(screen.getByTestId('stp-silent').getAttribute('data-silent')).toBe('never');
     sample = 220;
-    // A render between ticks, as in the browser.
-    for (let i = 0; i < 5; i += 1) act(() => { vi.advanceTimersByTime(100); });
+    run(500);
     expect(Number(screen.getByTestId('stp-meter').getAttribute('data-level'))).toBe(100);
+    expect(screen.queryByTestId('stp-silent')).toBeNull();
+  });
+
+  test('sound, then quiet: a pause to think is fine; 15 seconds quiet warns; sound clears it', async () => {
+    window.AudioContext = FakeAudioContext;
+    sample = 220;
+    vi.useFakeTimers();
+    await startTake();
+    run(4000);
+    sample = 128;
+    run(6000); // past 8 seconds, but she spoke: no "yet"
+    expect(screen.queryByTestId('stp-silent')).toBeNull();
+    run(8000); // 14 seconds quiet
+    expect(screen.queryByTestId('stp-silent')).toBeNull();
+    run(1500);
+    expect(screen.getByTestId('stp-silent').textContent).toBe('No sound from your mic');
+    expect(screen.getByTestId('stp-silent').getAttribute('data-silent')).toBe('lost');
+    sample = 220;
+    run(500);
     expect(screen.queryByTestId('stp-silent')).toBeNull();
   });
 
