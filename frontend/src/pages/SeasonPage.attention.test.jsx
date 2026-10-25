@@ -240,6 +240,46 @@ describe('The season switcher', () => {
     expect((await screen.findByTestId('szn-scope-line')).textContent).toBe('Season 1: 2 of 4 episodes');
   });
 
+  test('a past season: the Goals card says it shows the goals now', async () => {
+    renderPage('?season=1');
+    await screen.findByTestId('szn-past-season');
+    const goals = screen.getByTestId('szn-stat-goals');
+    expect(goals.textContent).toContain('Goals now');
+    expect(screen.getByTestId('szn-stat-goals-line').textContent).toMatch(/^The season in progress: /);
+  });
+
+  test("a past season's Roadmap is read-only: no advance, no new episode, a slot panel with no pencil or intention", async () => {
+    state.arcs[1] = arcFor(1, { status: 'completed' });
+    renderPage('?tab=roadmap&season=1&view=grid');
+    expect(await screen.findByTestId('szn-roadmap-readonly')).toBeTruthy();
+    expect(screen.queryByTestId('szn-add-episode')).toBeNull();
+    expect(screen.queryByTestId('szn-add-episode-part-1')).toBeNull();
+    fireEvent.click(within(await screen.findByTestId('szn-slot-1')).getByRole('button', { name: /^E1:/ }));
+    const panel = await screen.findByTestId('season-slot-panel');
+    expect(within(panel).getByTestId('season-slot-readonly')).toBeTruthy();
+    expect(within(panel).queryByTestId('season-pencil-1')).toBeNull();
+    expect(within(panel).queryByTestId('season-intention-1')).toBeNull();
+  });
+
+  test('the season in progress keeps its pencil and Add Episode', async () => {
+    renderPage('?tab=roadmap&view=grid');
+    expect(await screen.findByTestId('szn-add-episode')).toBeTruthy();
+    expect(screen.queryByTestId('szn-roadmap-readonly')).toBeNull();
+    fireEvent.click(within(await screen.findByTestId('szn-slot-3')).getByRole('button', { name: /^E3:/ }));
+    expect(await screen.findByTestId('season-pencil-3')).toBeTruthy();
+  });
+
+  test("a past season's Events tab: one events read and one episodes read, and no pencil or placement", async () => {
+    renderPage('?tab=events&show=all&season=1');
+    expect(await screen.findByTestId('szn-events')).toBeTruthy();
+    await waitFor(() => expect(screen.getByTestId('event-card-ev-2')).toBeTruthy());
+    const count = (f) => vi.mocked(api.get).mock.calls.filter(([u]) => f(u)).length;
+    expect(count((u) => u === '/api/v1/world/show-1/events')).toBe(1);
+    expect(count((u) => u.startsWith('/api/v1/episodes?show_id=show-1'))).toBe(1);
+    expect(screen.queryByTestId('szn-events-place')).toBeNull();
+    expect(screen.queryByTestId('szn-event-pencil-ev-2')).toBeNull();
+  });
+
   test('one season: no switcher', async () => {
     state.seasons = [state.seasons[1]];
     renderPage();

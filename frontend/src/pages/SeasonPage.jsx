@@ -99,7 +99,7 @@ function StatCard({ hrefFor, tab, className, testId, label, children }) {
  * budget → Results (Planning Insights' money); then Next release → Producer
  * Mode's Release tab. hrefFor(tab) is the tab's address on this page.
  */
-export function SeasonStats({ stats, hrefFor = null, nextRelease = undefined, releaseHref = null }) {
+export function SeasonStats({ stats, hrefFor = null, nextRelease = undefined, releaseHref = null, goalsAreCurrent = false }) {
   const b = stats.budget;
   return (
     <section className={`szn-stats${nextRelease !== undefined ? ' has-five' : ''}`} aria-label="The season at a glance" data-testid="szn-stats">
@@ -116,10 +116,11 @@ export function SeasonStats({ stats, hrefFor = null, nextRelease = undefined, re
         <span className="szn-stat-icon is-gold" aria-hidden="true"><Target size={22} /></span>
         <div className="szn-stat-body">
           <span className="szn-stat-num">{stats.goals.total}</span>
-          <span className="szn-stat-label">Season Goals</span>
+          {/* Goals are the show's, not kept per season: a past season says so rather than claim them. */}
+          <span className="szn-stat-label">{goalsAreCurrent ? 'Goals now' : 'Season Goals'}</span>
         </div>
         <Bar done={stats.goals.done} total={stats.goals.total} label="Season goals complete" />
-        <span className="szn-stat-line">{goalsLine(stats)}</span>
+        <span className="szn-stat-line" data-testid="szn-stat-goals-line">{goalsAreCurrent ? `The season in progress: ${goalsLine(stats)}` : goalsLine(stats)}</span>
       </StatCard>
       <StatCard hrefFor={hrefFor} tab="events" className="szn-stat" testId="szn-stat-events" label=": open Events">
         <span className="szn-stat-icon is-purple" aria-hidden="true"><CalendarHeart size={22} /></span>
@@ -312,6 +313,9 @@ export default function SeasonPage() {
   const [events, setEvents] = useState([]);
   // The opportunities, once, for "Needs attention" and the tab's count (the tab reads its own).
   const [opps, setOpps] = useState([]);
+  // Whether the events and episodes have been read, and which reads failed:
+  // the Events tab's library uses these instead of fetching its own.
+  const [showData, setShowData] = useState({ loaded: false, failed: [] });
   const panelRef = useRef(null);
   const tabsRef = useRef(null);
 
@@ -319,16 +323,18 @@ export default function SeasonPage() {
   // pictures, the slot panel, the production board and the ledger (the same
   // reads as Producer Mode); the board and Opportunities reload them.
   const loadShowData = useCallback(async () => {
+    const failed = [];
     await Promise.all([
       api.get(`/api/v1/shows/${showId}`).then((r) => setShowName(r.data?.data?.name || r.data?.name || null))
         .catch((err) => console.error('[SeasonPage] show load failed:', err)),
       fetchAllEpisodes(api, showId).then((list) => { setEpisodes(list.items || []); setEpisodesTotal(list.total ?? (list.items || []).length); })
-        .catch((err) => console.error('[SeasonPage] episodes load failed:', err)),
+        .catch((err) => { console.error('[SeasonPage] episodes load failed:', err); failed.push('episodes'); }),
       api.get(`/api/v1/world/${showId}/events`).then((r) => setEvents(r.data?.events || []))
-        .catch((err) => console.error('[SeasonPage] events load failed:', err)),
+        .catch((err) => { console.error('[SeasonPage] events load failed:', err); failed.push('events'); }),
       api.get(`/api/v1/opportunities/${showId}`).then((r) => setOpps(r.data?.opportunities || []))
         .catch((err) => console.error('[SeasonPage] opportunities load failed:', err)),
     ]);
+    setShowData({ loaded: true, failed: failed.sort().reverse() });
   }, [showId]);
   useEffect(() => { loadShowData(); }, [loadShowData]);
   // The release schedule and the goal coverage, read once for the list, the
@@ -422,7 +428,7 @@ export default function SeasonPage() {
   );
 
   const tabProps = {
-    plan, S, api, showId, setToast, episodes, episodesTotal, events, arc, roadmap, stats, goTab, params, setParams,
+    plan, S, api, showId, setToast, episodes, episodesTotal, events, arc, roadmap, stats, goTab, params, setParams, showData,
     reloadShowData: loadShowData,
     onEdit: () => openPanel('edit'), onPanel: openPanel,
     release, attention, hrefFor, readOnly: !isCurrent,
@@ -520,7 +526,7 @@ export default function SeasonPage() {
         )}
       </div>
 
-      <SeasonStats stats={stats} hrefFor={hrefFor} nextRelease={nextRelease} releaseHref={`/shows/${encodeURIComponent(showId)}/world?tab=release`} />
+      <SeasonStats stats={stats} hrefFor={hrefFor} nextRelease={nextRelease} goalsAreCurrent={!isCurrent} releaseHref={`/shows/${encodeURIComponent(showId)}/world?tab=release`} />
 
       {tabBar(SEASON_TABS, badges)}
 

@@ -6,9 +6,12 @@
  * pencil and intention editor, and the episodes in no slot. Only the cards
  * and their layout are the page's.
  *
- *   Roadmap     Grid (three part columns of cards) or Timeline (every slot in
- *               order); All Parts / All Statuses; + Add Episode (the
- *               new-episode flow). `?view=`, `?part=`, `?status=` hold them.
+ *   Roadmap     Grid (three part columns of cards), Timeline (every slot in
+ *               order) or This week (the next two or three releases, each
+ *               with its stage, what it still needs, its event and Moves;
+ *               SeasonWeek, 2026-10-25); All Parts / All Statuses; + Add
+ *               Episode (the new-episode flow). `?view=`, `?part=`, `?status=`
+ *               hold them; the view is also remembered per browser.
  *               No Calendar view; each card shows its release day from the
  *               show's release schedule (Evoni, 2026-10-25) when there is one.
  *   Events      the event library (EventLibrary, from Producer Mode, 2026-10-25)
@@ -22,7 +25,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { LayoutGrid, ListOrdered, Plus, MoreHorizontal, CalendarDays } from 'lucide-react';
+import { LayoutGrid, ListOrdered, Plus, MoreHorizontal, CalendarDays, CalendarClock } from 'lucide-react';
 import { useRoadmapControls, AdvanceBar, SlotSide, UnslottedEpisodes } from './SeasonPlan';
 import { SeasonPlacement } from './SeasonSetup';
 import { StatusChip } from './SeasonPageParts';
@@ -34,23 +37,37 @@ import {
 } from '../../lib/seasonPage';
 import { EVENT_SHOWS, EVENT_SHOW_STORAGE_KEY, eventShowFrom, isEventShow, seasonEventViews } from '../../lib/eventLibrary';
 import EventLibrary from './EventLibrary';
+import SeasonWeek from './SeasonWeek';
+
+// The roadmap's view, remembered per browser (the URL's ?view= wins); storage can be blocked.
+export const ROADMAP_VIEW_STORAGE_KEY = 'szn-roadmap-view';
+const ROADMAP_VIEWS = ['grid', 'timeline', 'week'];
+function rememberedView() {
+  try { return window.localStorage.getItem(ROADMAP_VIEW_STORAGE_KEY); } catch (err) { console.warn('[SeasonRoadmap] view not read:', err?.message); return null; }
+}
+function rememberView(value) {
+  try { window.localStorage.setItem(ROADMAP_VIEW_STORAGE_KEY, value); } catch (err) { console.warn('[SeasonRoadmap] view not saved:', err?.message); }
+}
+/** The view to show: the URL's, else the remembered one, else Grid. */
+export const roadmapViewFrom = (urlView, remembered) => (ROADMAP_VIEWS.includes(urlView) ? urlView : ROADMAP_VIEWS.includes(remembered) ? remembered : 'grid');
 
 /** The roadmap's controls and its slot drawer, wired the way the Season Plan wires them. */
 function useSlotDrawer({ plan, api, showId, setToast }) {
   return useRoadmapControls({ roadmap: plan.roadmap, api, showId, onChanged: plan.loadRoadmap, setToast });
 }
 
-function SlotDrawer({ controls, plan, S, api, showId, setToast, episodes, events }) {
+function SlotDrawer({ controls, plan, S, api, showId, setToast, episodes, events, readOnly = false }) {
   return (
     <div className="szn-drawer">
       <SlotSide controls={controls} roadmap={plan.roadmap} S={S} api={api} showId={showId} onChanged={plan.loadRoadmap} setToast={setToast}
-        threads={plan.threadData.threads} episodes={episodes} events={events} needs={plan.needs.data?.needs || []} onNeedsChanged={plan.loadNeeds} />
+        threads={plan.threadData.threads} episodes={episodes} events={events} needs={plan.needs.data?.needs || []} onNeedsChanged={plan.loadNeeds}
+        readOnly={readOnly} />
     </div>
   );
 }
 
 /** A slot card's ⋯ menu: its panel, its episode or event package, its intention. */
-function CardMenu({ slot, showId, onOpen, onIntention }) {
+function CardMenu({ slot, showId, onOpen, onIntention, readOnly = false }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
   useEffect(() => {
@@ -61,7 +78,7 @@ function CardMenu({ slot, showId, onOpen, onIntention }) {
     document.addEventListener('mousedown', onDown);
     return () => { document.removeEventListener('keydown', onKey); document.removeEventListener('mousedown', onDown); };
   }, [open]);
-  const editable = slot.intention_editable ?? !slot.locked;
+  const editable = !readOnly && (slot.intention_editable ?? !slot.locked);
   return (
     <div className="szn-menu-wrap szn-card-menu" ref={ref}>
       <button type="button" className="szn-icon-btn" aria-label={`More for E${slot.slot_number}`} aria-haspopup="menu" aria-expanded={open}
@@ -85,7 +102,7 @@ function CardMenu({ slot, showId, onOpen, onIntention }) {
  * schedule, or a hand-set date), title, status chip, the goals its event
  * moves, ⋯. Clicking opens its panel.
  */
-export function SlotCard({ slot, picture, showId, selected, onOpen, onIntention, nextSlot, moves = [], when = null }) {
+export function SlotCard({ slot, picture, showId, selected, onOpen, onIntention, nextSlot, moves = [], when = null, readOnly = false }) {
   return (
     <div className={`szn-slot is-${slot.state}${selected ? ' is-selected' : ''}`} data-testid={`szn-slot-${slot.slot_number}`}>
       <button type="button" className="szn-slot-open" onClick={onOpen} aria-pressed={selected}
@@ -102,12 +119,12 @@ export function SlotCard({ slot, picture, showId, selected, onOpen, onIntention,
           <MovesChips goals={moves} testId={`szn-slot-moves-${slot.slot_number}`} />
         </span>
       </button>
-      <CardMenu slot={slot} showId={showId} onOpen={onOpen} onIntention={onIntention} />
+      <CardMenu slot={slot} showId={showId} onOpen={onOpen} onIntention={onIntention} readOnly={readOnly} />
     </div>
   );
 }
 
-export function SeasonRoadmapTab({ plan, S, api, showId, setToast, episodes, events, arc, params, goTab, setParams }) {
+export function SeasonRoadmapTab({ plan, S, api, showId, setToast, episodes, events, arc, params, goTab, setParams, readOnly = false }) {
   const navigate = useNavigate();
   const controls = useSlotDrawer({ plan, api, showId, setToast });
   const { roadmap } = plan;
@@ -123,7 +140,9 @@ export function SeasonRoadmapTab({ plan, S, api, showId, setToast, episodes, eve
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slotParam, roadmap]);
   const movesBySlot = slotGoalsMap(coverage.data);
-  const view = params.get('view') === 'timeline' ? 'timeline' : 'grid';
+  const urlView = params.get('view');
+  const view = roadmapViewFrom(urlView, rememberedView());
+  useEffect(() => { if (ROADMAP_VIEWS.includes(urlView)) rememberView(urlView); }, [urlView]);
   const part = params.get('part') || 'all';
   const status = params.get('status') || 'all';
   if (!roadmap) return <p className="szn-muted">The roadmap did not load.</p>;
@@ -135,7 +154,7 @@ export function SeasonRoadmapTab({ plan, S, api, showId, setToast, episodes, eve
   const card = (slot) => (
     <SlotCard key={slot.id} slot={slot} showId={showId} picture={slotPicture(slot, { episodes, events, arc })}
       selected={controls.sheetOpen && controls.selected?.id === slot.id} nextSlot={!slot.locked && slot.slot_number === roadmap.next_slot_number}
-      onOpen={() => openSlot(slot)} onIntention={() => editIntention(slot)} moves={movesBySlot[slot.id] || []} when={slotWhen(release.view, slot, roadmap.season_number)} />
+      onOpen={() => openSlot(slot)} onIntention={() => editIntention(slot)} moves={movesBySlot[slot.id] || []} when={slotWhen(release.view, slot, roadmap.season_number)} readOnly={readOnly} />
   );
   const shownPhases = phases.filter((p) => part === 'all' || Number(p.phase) === Number(part));
   const timeline = filterSlots(allSlots(roadmap), { part, status });
@@ -153,7 +172,12 @@ export function SeasonRoadmapTab({ plan, S, api, showId, setToast, episodes, eve
               <button type="button" aria-pressed={view === 'timeline'} className={view === 'timeline' ? 'is-on' : ''} onClick={() => setFilter({ view: 'timeline' })} data-testid="szn-view-timeline">
                 <ListOrdered size={16} aria-hidden="true" /> Timeline
               </button>
+              <button type="button" aria-pressed={view === 'week'} className={view === 'week' ? 'is-on' : ''} onClick={() => setFilter({ view: 'week' })} data-testid="szn-view-week">
+                <CalendarClock size={16} aria-hidden="true" /> This week
+              </button>
             </div>
+            {/* This week picks its own slots: the part and status filters are the grid's and the timeline's. */}
+            {view !== 'week' && (<>
             <select className="szn-select" aria-label="Part" value={part} onChange={(e) => setFilter({ part: e.target.value })} data-testid="szn-filter-part">
               <option value="all">All Parts</option>
               {phases.map((p) => <option key={p.phase} value={String(p.phase)}>Part {p.phase}: {p.title}</option>)}
@@ -162,15 +186,24 @@ export function SeasonRoadmapTab({ plan, S, api, showId, setToast, episodes, eve
               <option value="all">All Statuses</option>
               {SLOT_STATUS_ORDER.map((k) => <option key={k} value={k}>{SLOT_STATUS[k]}</option>)}
             </select>
-            <button type="button" className="szn-btn" onClick={newEpisode} data-testid="szn-add-episode"><Plus size={16} aria-hidden="true" /> Add Episode</button>
+            </>)}
+            {!readOnly && <button type="button" className="szn-btn" onClick={newEpisode} data-testid="szn-add-episode"><Plus size={16} aria-hidden="true" /> Add Episode</button>}
           </div>
         </header>
 
-        {/* Advancing stays with the roadmap (the Season Plan's own bar and confirm step). */}
-        <AdvanceBar roadmap={roadmap} S={S} onAdvance={plan.handleAdvance} advancing={plan.advancing} advanceWarning={plan.warning}
-          onConfirmAdvance={plan.handleConfirmAdvance} onCancelAdvance={() => plan.setWarning(null)} advanceError={plan.advanceError} />
+        {/* A past season (the switcher) is read here: no advance, pencil, placement or new episode. */}
+        {readOnly ? (
+          <p className="szn-note is-past" data-testid="szn-roadmap-readonly">A past season: its slots are shown as they were. Pencilling, placing and advancing happen in the season in progress.</p>
+        ) : (
+          /* Advancing stays with the roadmap (the Season Plan's own bar and confirm step). */
+          <AdvanceBar roadmap={roadmap} S={S} onAdvance={plan.handleAdvance} advancing={plan.advancing} advanceWarning={plan.warning}
+            onConfirmAdvance={plan.handleConfirmAdvance} onCancelAdvance={() => plan.setWarning(null)} advanceError={plan.advanceError} />
+        )}
 
-        {view === 'grid' ? (
+        {view === 'week' ? (
+          <SeasonWeek roadmap={roadmap} release={release} episodes={episodes} events={events} api={api} showId={showId}
+            movesBySlot={movesBySlot} onOpen={openSlot} />
+        ) : view === 'grid' ? (
           <div className={`szn-parts is-${shownPhases.length}`} data-testid="szn-roadmap-grid">
             {shownPhases.map((phase) => {
               const slots = filterSlots(phase.slots, { status });
@@ -185,9 +218,11 @@ export function SeasonRoadmapTab({ plan, S, api, showId, setToast, episodes, eve
                   <div className="szn-slot-list">
                     {slots.length ? slots.map(card) : <p className="szn-muted">No slot here is {SLOT_STATUS[status]?.toLowerCase()}.</p>}
                   </div>
-                  <button type="button" className="szn-add-row" onClick={newEpisode} data-testid={`szn-add-episode-part-${phase.phase}`}>
-                    <Plus size={16} aria-hidden="true" /> Add Episode to Part {phase.phase}
-                  </button>
+                  {!readOnly && (
+                    <button type="button" className="szn-add-row" onClick={newEpisode} data-testid={`szn-add-episode-part-${phase.phase}`}>
+                      <Plus size={16} aria-hidden="true" /> Add Episode to Part {phase.phase}
+                    </button>
+                  )}
                 </section>
               );
             })}
@@ -210,9 +245,9 @@ export function SeasonRoadmapTab({ plan, S, api, showId, setToast, episodes, eve
           </ol>
         )}
 
-        <UnslottedEpisodes roadmap={roadmap} controls={controls} />
+        {!readOnly && <UnslottedEpisodes roadmap={roadmap} controls={controls} />}
       </div>
-      <SlotDrawer controls={controls} plan={plan} S={S} api={api} showId={showId} setToast={setToast} episodes={episodes} events={events} />
+      <SlotDrawer controls={controls} plan={plan} S={S} api={api} showId={showId} setToast={setToast} episodes={episodes} events={events} readOnly={readOnly} />
     </div>
   );
 }
@@ -235,7 +270,7 @@ function rememberShow(value) {
  * each with a pencil into an open slot. All: the whole library. Without a
  * season (or its roadmap) the library is shown whole.
  */
-export function SeasonEventsTab({ plan, S, api, showId, setToast, episodes, events, arc, params, setParams, reloadShowData }) {
+export function SeasonEventsTab({ plan, S, api, showId, setToast, episodes, events, arc, params, setParams, reloadShowData, showData = null, readOnly = false }) {
   const controls = useSlotDrawer({ plan, api, showId, setToast });
   const [placing, setPlacing] = useState(false);
   const { roadmap } = plan;
@@ -249,7 +284,13 @@ export function SeasonEventsTab({ plan, S, api, showId, setToast, episodes, even
     [roadmap, events, episodes, arc?.season_number],
   );
   // A change in the library reloads the page's events and the roadmap, so the views follow it.
-  const onChanged = useCallback(() => { reloadShowData?.(); plan.loadRoadmap?.(); }, [reloadShowData, plan]);
+  const onChanged = useCallback(() => Promise.all([reloadShowData?.(), plan.loadRoadmap?.()]), [reloadShowData, plan]);
+  // The library draws the page's own events and episodes (read once, by the
+  // page) instead of fetching them again; without the page's state it fetches its own.
+  const libraryData = useMemo(
+    () => (showData ? { events: events || [], episodes: episodes || [], loaded: showData.loaded, failed: showData.failed } : null),
+    [showData, events, episodes],
+  );
   const counts = { 'in-season': views.inSeason.length, unplaced: views.unplaced.length, all: views.all.length };
   const slotOf = useMemo(() => new Map(views.inSeason.map((v) => [v.id, v.slot])), [views]);
   const scope = useMemo(() => {
@@ -274,6 +315,8 @@ export function SeasonEventsTab({ plan, S, api, showId, setToast, episodes, even
   const cardExtra = (ev) => {
     if (!roadmap) return null;
     if (show === 'unplaced' || (show === 'all' && !slotOf.has(ev.id) && views.pencillable.has(ev.id))) {
+      // A past season's slots take no new event.
+      if (readOnly) return null;
       if (!views.pencillable.has(ev.id)) return <span className="szn-muted" data-testid={`szn-event-nopencil-${ev.id}`}>{ev.status || 'draft'}: not one a slot takes</span>;
       return (
         <select className="szn-select szn-event-pencil" aria-label={`Pencil ${ev.name} into a slot`} value="" disabled={!open.length}
@@ -301,7 +344,7 @@ export function SeasonEventsTab({ plan, S, api, showId, setToast, episodes, even
     return (
       <div className="szn-events" data-testid="szn-events">
         {arc && <p className="szn-muted">The roadmap did not load, so the events cannot be sorted by slot: here is the whole library.</p>}
-        <EventLibrary showId={showId} onChanged={onChanged} />
+        <EventLibrary showId={showId} onChanged={onChanged} data={libraryData} />
       </div>
     );
   }
@@ -318,18 +361,20 @@ export function SeasonEventsTab({ plan, S, api, showId, setToast, episodes, even
           ))}
         </div>
         <span className="szn-muted" data-testid="szn-events-slots">{slots.filter((s) => s.event).length} of {slots.length} slots have an event</span>
-        <button type="button" className="szn-btn" onClick={() => setPlacing((p) => !p)} aria-expanded={placing} data-testid="szn-events-place">
-          Use events and episodes
-        </button>
+        {!readOnly && (
+          <button type="button" className="szn-btn" onClick={() => setPlacing((p) => !p)} aria-expanded={placing} data-testid="szn-events-place">
+            Use events and episodes
+          </button>
+        )}
       </div>
-      {placing && (
+      {!readOnly && placing && (
         <SeasonPlacement showId={showId} api={api} onClose={() => setPlacing(false)}
           onSaved={async (text) => { setPlacing(false); if (setToast) setToast(text); await plan.loadArc(); }} />
       )}
       {controls.slotError?.where === 'event' && <p className="szn-error" role="alert">{controls.slotError.text}</p>}
       {show === 'unplaced' && <p className="szn-muted">Open a slot to see the events ranked by how well they fit it.</p>}
-      <EventLibrary showId={showId} scope={scope} cardExtra={cardExtra} onChanged={onChanged} />
-      <SlotDrawer controls={controls} plan={plan} S={S} api={api} showId={showId} setToast={setToast} episodes={episodes} events={events} />
+      <EventLibrary showId={showId} scope={scope} cardExtra={cardExtra} onChanged={onChanged} data={libraryData} />
+      <SlotDrawer controls={controls} plan={plan} S={S} api={api} showId={showId} setToast={setToast} episodes={episodes} events={events} readOnly={readOnly} />
     </div>
   );
 }

@@ -469,8 +469,9 @@ const slotSelectStyle = { width: '100%', marginTop: 6, fontSize: 12, padding: '4
 // Planner PR 3 (2026-10-24): the panel also lists what is planned there
 // (its twists, secrets and the relationships it needs, SlotNotes), and the
 // pencil list is ranked by fit for this slot, each event with a reason.
-export function SlotPanel({ slot, showId, available, busy, episode, event, onPencil, onIntention, onClose, editing = false, error = null, children = null, api = null, needs = [], onNeedsChanged }) {
-  const fit = useEventFit(api, showId, slot.id, !slot.locked && available.length > 0);
+// readOnly: a past season (the Season page's switcher, 2026-10-25): read, never pencilled or re-planned.
+export function SlotPanel({ slot, showId, available, busy, episode, event, onPencil, onIntention, onClose, editing = false, error = null, children = null, api = null, needs = [], onNeedsChanged, readOnly = false }) {
+  const fit = useEventFit(api, showId, slot.id, !readOnly && !slot.locked && available.length > 0);
   const options = rankedOptions(available, fit);
   const title = slotTitle(slot);
   const logline = episode?.logline || episode?.description || null;
@@ -509,7 +510,8 @@ export function SlotPanel({ slot, showId, available, busy, episode, event, onPen
 
       {api && <SlotNotes api={api} showId={showId} slot={slot} needs={needs} onNeedsChanged={onNeedsChanged} />}
 
-      {!slot.locked && (
+      {readOnly && <p className="wa-arc-readonly" data-testid="season-slot-readonly">A past season: this slot is read here, not changed.</p>}
+      {!readOnly && !slot.locked && (
         <select
           className="wa-arc-select"
           aria-label={`Pencil an event into ${slot.label}`}
@@ -523,7 +525,7 @@ export function SlotPanel({ slot, showId, available, busy, episode, event, onPen
           {slot.event && <option value="__clear__">Clear this slot</option>}
         </select>
       )}
-      {(slot.intention_editable ?? !slot.locked) && (
+      {!readOnly && (slot.intention_editable ?? !slot.locked) && (
         <button type="button" className="wa-arc-secondary" data-testid={`season-intention-${slot.slot_number}`} onClick={onIntention} aria-expanded={editing}>
           {primary ? 'Edit intention' : 'Add intention'}
         </button>
@@ -720,7 +722,7 @@ export function AdvanceBar({ roadmap, S, onAdvance, advancing, advanceWarning, o
 }
 
 /** The open slot's panel beside the grid (a sheet on a phone), with its intention editor. */
-export function SlotSide({ controls, roadmap, S, api, showId, onChanged, setToast, threads = [], episodes = [], events = [], needs = [], onNeedsChanged }) {
+export function SlotSide({ controls, roadmap, S, api, showId, onChanged, setToast, threads = [], episodes = [], events = [], needs = [], onNeedsChanged, readOnly = false }) {
   const { selected, editing, editingSlotId, setEditingSlotId, sheetOpen, setSheetOpen, panelRef, busySlot, slotError, pencil } = controls;
   const available = roadmap?.available_events || [];
   return (
@@ -736,9 +738,9 @@ export function SlotSide({ controls, roadmap, S, api, showId, onChanged, setToas
           onIntention={() => setEditingSlotId(editingSlotId === selected.id ? null : selected.id)}
           editing={editing?.id === selected.id}
           error={slotError && slotError.slotId === selected.id && slotError.where === 'event' ? slotError.text : null}
-          api={api} needs={needs} onNeedsChanged={onNeedsChanged}
+          api={api} needs={needs} onNeedsChanged={onNeedsChanged} readOnly={readOnly}
         >
-          {editing && editing.id === selected.id && (
+          {!readOnly && editing && editing.id === selected.id && (
             <SlotIntentionEditor key={editing.id} slot={editing} S={S} api={api} showId={showId}
               onSaved={onChanged} onClose={() => setEditingSlotId(null)} setToast={setToast} threads={threads} />
           )}
