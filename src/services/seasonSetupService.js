@@ -35,6 +35,7 @@ const {
 } = require('./seasonSlotService');
 const { episodeEventIdSql } = require('../utils/episodeEventSql');
 const { loadSeason } = require('./seasonLoader');
+const { fromArc, seasonLines } = require('./seasonLine');
 const {
   seasonAiContext, careerGoals, askModel, isBudgetRefusal, bullets, phaseLine, threadLine, goalLine, debtLines,
 } = require('./seasonAiContext');
@@ -641,7 +642,7 @@ function draftPrompt({ arc, phases, slots, targets, threads, goals, debt, carrie
   return `You plan the season of "Styling Adventures with Lala", a luxury life-simulator show about Lala's fashion career.
 
 The season: "${arc.title}"${arc.tagline ? ` — ${arc.tagline}` : ''}
-Its three parts:
+${seasonLines(fromArc(arc), { title: false, part: false }).map((l) => `${l}\n`).join('')}Its three parts:
 ${phases.map(partLine).join('\n')}
 
 Every episode slot, in order:

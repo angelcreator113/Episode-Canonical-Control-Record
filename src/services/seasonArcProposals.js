@@ -36,6 +36,7 @@ const { loadSeason } = require('./seasonLoader');
 const {
   seasonAiContext, askModel, isBudgetRefusal, bullets, phaseLine, threadLine, goalLine, debtLines,
 } = require('./seasonAiContext');
+const { fromArc, seasonLines } = require('./seasonLine');
 
 const MODELS = ['claude-sonnet-4-6'];
 const COOLDOWN_MS = 30 * 60 * 1000;
@@ -159,12 +160,18 @@ async function seasonOf(db, showId) {
   };
 }
 
+// The season's logline and description (seasonLine), a line each; '' with neither.
+function aboutSeason(arc) {
+  const lines = seasonLines(fromArc(arc), { title: false, part: false });
+  return lines.length ? `${lines.join('\n')}\n` : '';
+}
+
 function buildPrompt(season, signals) {
   const lines = (list, fn) => bullets(list || [], fn, '(none)');
   return `You plan the season of "Styling Adventures with Lala". The show's feed (The Pulse) has moved since the plan was written. Propose changes to the season plan so the story grows with the feed characters. Only what the signals justify; no change is a fine answer.
 
 THE SEASON: ${season.arc.title}${season.arc.tagline ? ` ("${season.arc.tagline}")` : ''}; current phase ${season.arc.current_phase}.
-PHASES:
+${aboutSeason(season.arc)}PHASES:
 ${lines(season.phases, (p) => `- ${phaseLine(p, { status: true })}`)}
 OPEN THREADS ([id] title):
 ${lines(season.threads, (t) => threadLine(t, { status: true }))}

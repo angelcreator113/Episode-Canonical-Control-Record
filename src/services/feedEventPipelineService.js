@@ -183,10 +183,14 @@ async function generateUniqueVenue(eventName, eventType, host, prestige, showId)
       const { getArcContext } = require('./arcProgressionService');
       const arc = await getArcContext(showId, { sequelize: require('../models').sequelize });
       if (arc) {
-        phaseContext = `\nSeason Phase: ${arc.current_phase.title} — ${arc.current_phase.tagline}
+        // The season and its current part as every prompt names them (seasonLine).
+        const { seasonLine, fromArcContext } = require('./seasonLine');
+        phaseContext = `\n${seasonLine(fromArcContext(arc), { about: false })}
 Emotional Temperature: ${arc.emotional_temperature}`;
       }
-    } catch { /* skip */ }
+    } catch (err) {
+      console.error('[FeedEventPipeline] the season could not be read (the venue goes without it):', err.message);
+    }
     // A venue is canon too: the Show Bible's top rules (2026-10-06).
     const venueModels = require('../models');
     const brain = await loadBrainContext(venueModels, { showId, limit: 10, label: 'FeedEventVenue' });

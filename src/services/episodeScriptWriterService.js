@@ -401,6 +401,8 @@ async function loadScriptContext(episodeId, showId, models, { lite = false } = {
         emotional_arc: arc.current_phase.emotional_arc,
         emotional_temperature: arc.emotional_temperature,
         narrative_debt_summary: arc.narrative_debt.length > 0 ? arc.narrative_debt_summary : null,
+        // The season's logline and description for the block (seasonLine).
+        season: require('./seasonLine').fromArcContext(arc),
       };
     }
   } catch (err) {
@@ -599,6 +601,7 @@ function storyContextBlocks(context, { withSeason = true } = {}) {
     const a = context.arcPhase;
     const phase = a.phase_title ? `Phase ${a.current_phase}: ${a.phase_title}` : `Phase ${a.current_phase}`;
     arcBlock = `═══ SEASON ARC ═══\n${a.name || 'Current Arc'} — ${phase}\n`;
+    for (const line of require('./seasonLine').seasonLines(a.season, { title: false, part: false })) arcBlock += `${line}\n`;
     if (a.emotional_arc) arcBlock += `Phase emotional arc: ${a.emotional_arc}\n`;
     arcBlock += `Emotional Temperature: ${a.emotional_temperature || 'neutral'}\n`;
     if (a.narrative_debt_summary) arcBlock += `${a.narrative_debt_summary}\n`;

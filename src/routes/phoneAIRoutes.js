@@ -111,6 +111,7 @@ router.post('/add-zones', requireAuth, aiRateLimiter, async (req, res) => {
       context.characters.length
         ? `Main characters: ${context.characters.map(c => `${c.name} (${c.role})${c.personality ? ` — ${c.personality.slice(0, 80)}` : ''}`).join('; ')}`
         : null,
+      context.season ? `Season:\n${context.season}` : null,
       context.episode ? `Current episode: "${context.episode.title}"${context.episode.description ? ` — ${context.episode.description.slice(0, 200)}` : ''}` : null,
       context.recent_beats.length
         ? `Recent story beats: ${context.recent_beats.slice(0, 4).map(b => `${b.type}${b.label ? ` "${b.label}"` : ''}${b.line ? `: ${b.line.slice(0, 60)}` : ''}`).join(' / ')}`
@@ -234,6 +235,7 @@ router.post('/fill-content-zone', requireAuth, aiRateLimiter, async (req, res) =
       context.characters.length
         ? `Characters available: ${context.characters.map(c => `${c.name} (${c.role})`).join(', ')}`
         : null,
+      context.season ? `Season:\n${context.season}` : null,
       context.episode ? `Current episode: "${context.episode.title}"` : null,
       context.recent_beats.length
         ? `Recent beats: ${context.recent_beats.slice(0, 3).map(b => `${b.label || b.type}${b.line ? `: ${b.line.slice(0, 50)}` : ''}`).join(' / ')}`

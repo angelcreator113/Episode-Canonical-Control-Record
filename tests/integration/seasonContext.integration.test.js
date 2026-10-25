@@ -155,7 +155,7 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
       brief: await briefOf(episode), scenePlan: [], franchiseLaws: [], eventData: null, wardrobeItems: [],
       lalaStats: null, outfitScore: null, seasonContext: context.seasonPosition,
     });
-    expect(grounded).toContain('Season position: S1 · E3, Phase 1: Foundation');
+    expect(grounded).toContain('Season position: S1 · E3, Part 1: Foundation');
     expect(grounded).toContain('Season story purpose: Lala proves she belongs in the room');
   });
 

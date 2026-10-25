@@ -36,6 +36,7 @@
 const Anthropic = require('@anthropic-ai/sdk');
 const { PRESSURE_LEVELS } = require('./seasonSlotService');
 const { loadSeason } = require('./seasonLoader');
+const { fromArc, seasonLines } = require('./seasonLine');
 const {
   seasonAiContext, askModel, isBudgetRefusal, bullets, phaseLine, threadLine, goalLine, debtLines,
 } = require('./seasonAiContext');
@@ -385,7 +386,7 @@ function buildDraftPrompt(slot, ctx) {
 Draft the intention for episode slot ${label} of the season "${ctx.arc?.title || 'Season 1'}".
 Its phase: ${phase(ctx.phase)}
 
-The season so far (most recent last):
+${seasonLines(fromArc(ctx.arc), { title: false, part: false }).map((l) => `${l}\n`).join('')}The season so far (most recent last):
 ${earlier}
 
 Lala's active career goals:
