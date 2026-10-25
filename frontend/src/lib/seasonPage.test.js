@@ -1,6 +1,6 @@
 /** The Season page's pure helpers (lib/seasonPage, 2026-10-25). */
 import { describe, test, expect } from 'vitest';
-import { tabFrom, dateRange, dayLabel, seasonStats, slotPicture, filterSlots, revealMatrix, heroChips } from './seasonPage';
+import { SEASON_TABS, seasonPageHref, tabFrom, dateRange, dayLabel, seasonStats, slotPicture, filterSlots, revealMatrix, heroChips } from './seasonPage';
 
 const slot = (n, state, extra = {}) => ({ id: `s${n}`, slot_number: n, phase: n <= 8 ? 1 : n <= 16 ? 2 : 3, state, ...extra });
 
@@ -9,6 +9,20 @@ describe('seasonPage helpers', () => {
     expect(tabFrom('story')).toBe('story');
     expect(tabFrom('calendar')).toBe('overview');
     expect(tabFrom(null)).toBe('overview');
+    // The Production Plan's old address opens Episodes (2026-10-25).
+    expect(tabFrom('production')).toBe('episodes');
+  });
+
+  test('the eight tabs, in order, each with its note', () => {
+    expect(SEASON_TABS.map((t) => t.key)).toEqual(['overview', 'roadmap', 'episodes', 'events', 'opportunities', 'story', 'goals', 'results']);
+    for (const t of SEASON_TABS) expect(t.note).toMatch(/\.$/);
+  });
+
+  test('seasonPageHref: the tab, then any extra values; Overview has no ?tab=', () => {
+    expect(seasonPageHref('show-1')).toBe('/shows/show-1/season');
+    expect(seasonPageHref('show-1', 'overview')).toBe('/shows/show-1/season');
+    expect(seasonPageHref('show-1', 'results')).toBe('/shows/show-1/season?tab=results');
+    expect(seasonPageHref('show 1', 'opportunities', { deal_with: 'The Column', empty: '' })).toBe('/shows/show%201/season?tab=opportunities&deal_with=The+Column');
   });
 
   test('dates are calendar days, never shifted', () => {

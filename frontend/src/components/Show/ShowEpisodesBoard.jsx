@@ -1,5 +1,6 @@
 /**
- * Producer Mode → Episodes → Production, to Evoni's Episode Pipeline mock
+ * The production board: the Season page's Episodes tab (Producer Mode →
+ * Episodes → Production until 2026-10-25), to Evoni's Episode Pipeline mock
  * (2026-10-17; first built to her 2026-10-07 mock):
  *   - the episode in production (as the Overview picks it): its thumbnail
  *     (Edit Thumbnail), code and status, title, logline and tags (Add Tag

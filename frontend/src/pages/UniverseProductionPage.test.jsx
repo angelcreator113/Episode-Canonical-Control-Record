@@ -1,6 +1,6 @@
 /**
  * /universe/production opens the active show's Producer Mode (audit IA-01,
- * 2026-10-03): Episodes → Production for the remembered or only show, a
+ * 2026-10-03): the production board (the Season page's Episodes tab since 2026-10-25) for the remembered or only show, a
  * choice with several and none active, the shows list with none, and a
  * failed read says so. It renders no dashboard of its own.
  */
@@ -21,6 +21,7 @@ const renderIt = () => render(
     <Routes>
       <Route path="/universe/production" element={<UniverseProductionPage />} />
       <Route path="/shows/:id/world" element={<Where />} />
+      <Route path="/shows/:id/season" element={<Where />} />
       <Route path="/shows" element={<Where />} />
     </Routes>
   </MemoryRouter>,
@@ -33,18 +34,18 @@ beforeEach(() => {
 });
 
 describe('/universe/production', () => {
-  test('the remembered show opens on Episodes → Production', async () => {
+  test("the remembered show opens on the production board (the Season page's Episodes)", async () => {
     rememberShow('show-b');
     renderIt();
-    expect((await screen.findByTestId('where')).textContent).toBe('/shows/show-b/world?tab=episodes-production');
-    expect(showProductionPath('show-b')).toBe('/shows/show-b/world?tab=episodes-production');
+    expect((await screen.findByTestId('where')).textContent).toBe('/shows/show-b/season?tab=episodes');
+    expect(showProductionPath('show-b')).toBe('/shows/show-b/season?tab=episodes');
   });
 
   test('several shows and none active: asks which, then opens it', async () => {
     renderIt();
     await screen.findByTestId('show-chooser');
     fireEvent.click(screen.getByTestId('show-chooser-show-a'));
-    expect((await screen.findByTestId('where')).textContent).toBe('/shows/show-a/world?tab=episodes-production');
+    expect((await screen.findByTestId('where')).textContent).toBe('/shows/show-a/season?tab=episodes');
   });
 
   test('no shows: the shows list', async () => {

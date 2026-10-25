@@ -1,5 +1,5 @@
 /**
- * Producer Mode → Episodes → Episode Ledger → an episode's Tasks & Details
+ * The Episode Ledger (the Season page's Results tab) → an episode's Tasks & Details
  * shows no false "required" (T1, §8(bb); Task #2292). An episode generated
  * before T1 keeps its stored tasks, with required: true on generated ones;
  * only a task backed by a deliverable shows "required", and every task shows
@@ -7,14 +7,14 @@
  */
 import { vi, describe, beforeEach, test, expect } from 'vitest';
 import { render, screen, fireEvent, within } from '@testing-library/react';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { MemoryRouter } from 'react-router-dom';
 
-vi.mock('../services/api', () => ({
+vi.mock('../../services/api', () => ({
   default: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn(), patch: vi.fn(), request: vi.fn() },
 }));
 
-import api from '../services/api';
-import WorldAdmin from './WorldAdmin';
+import api from '../../services/api';
+import EpisodeLedger from './EpisodeLedger';
 
 const EPISODE = { id: 'ep-1', episode_number: 1, title: 'Gala Night', status: 'draft' };
 const STORED_TASKS = [
@@ -26,10 +26,8 @@ const STORED_TASKS = [
 
 function renderLedger() {
   return render(
-    <MemoryRouter initialEntries={['/shows/show-1/world?tab=episodes-ledger']}>
-      <Routes>
-        <Route path="/shows/:id/world" element={<WorldAdmin />} />
-      </Routes>
+    <MemoryRouter>
+      <EpisodeLedger showId="show-1" api={api} episodes={[EPISODE]} events={[]} />
     </MemoryRouter>
   );
 }
