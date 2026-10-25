@@ -201,7 +201,7 @@ async function seasonBlock(sequelize, episodeId) {
   if (!UUID_RE.test(String(episodeId || ''))) return '';
   try {
     const [[slot]] = await sequelize.query(
-      `SELECT s.id, s.show_id, s.arc_id, s.slot_number, s.phase, s.story_purpose, a.title, a.tagline, a.season_number, a.phases
+      `SELECT s.id, s.show_id, s.arc_id, s.slot_number, s.phase, s.story_purpose, a.title, a.tagline, a.logline, a.description, a.season_number, a.phases
          FROM season_slots s JOIN show_arcs a ON a.id = s.arc_id AND a.deleted_at IS NULL
         WHERE s.episode_id = :episodeId AND s.deleted_at IS NULL LIMIT 1`, { replacements: { episodeId } });
     if (!slot) return '';
@@ -216,6 +216,9 @@ async function seasonBlock(sequelize, episodeId) {
     const label = (n) => episodeLabel(slot.season_number, n);
     const line = (r) => `- ${label(r.slot_number)}: ${r.intent === 'reveal' ? 'reveal' : 'hint at'} ${r.name}'s secret: ${r.text}${r.note ? ` (${r.note})` : ''}`;
     const out = [`THE SEASON (${slot.title || 'this season'}${slot.tagline ? `: ${slot.tagline}` : ''}). This is ${label(slot.slot_number)}${phase?.name || phase?.title ? `, in the phase "${phase.name || phase.title}"` : ''}.`];
+    // The season's logline and description and this part's mood (seasonLine).
+    const { fromArc, seasonLines } = require('./seasonLine');
+    out.push(...seasonLines(fromArc(slot, { phase: slot.phase }), { title: false, partLabel: "This episode's part" }));
     if (slot.story_purpose) out.push(`What this episode is for in the season: ${slot.story_purpose}`);
     const before = rows.filter((r) => r.slot_number < slot.slot_number);
     const now = rows.filter((r) => r.slot_number === slot.slot_number);

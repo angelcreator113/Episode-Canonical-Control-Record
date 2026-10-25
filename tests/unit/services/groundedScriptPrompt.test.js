@@ -71,7 +71,7 @@ describe("the Script tab's writer prompt", () => {
 
   test('one season: the arc block is left out when the episode has its season position', async () => {
     const prompt = await promptFor(story(), { season: SEASON });
-    expect(prompt).toContain('Season position: Episode 3 of 10, Phase 2: The Climb');
+    expect(prompt).toContain('Season position: Episode 3 of 10, Part 2: The Climb');
     expect(prompt).not.toContain('═══ SEASON ARC ═══');
   });
 

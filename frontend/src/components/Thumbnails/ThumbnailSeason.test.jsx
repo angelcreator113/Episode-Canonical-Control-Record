@@ -85,6 +85,16 @@ describe('ThumbnailSeason', () => {
     expect(screen.getByTestId('yts-season-save').textContent).toContain('Save 2 picked');
   });
 
+  test('an episode in the season\'s slots is named by its slot label (2026-10-25)', async () => {
+    youtubeThumbnailsApi.season.mockResolvedValue([
+      { id: 'ep-3', title: 'Gala Night', episode_number: 25, slot_number: 1, label: 'S2 · E1', thumbnailUrl: null, hasDraft: false },
+    ]);
+    renderSeason();
+    const card = within(await screen.findByTestId('yts-season-ep-3'));
+    expect(card.getByText('S2 · E1. Gala Night')).toBeTruthy();
+    expect(screen.queryByText(/^25\. /)).toBeNull();
+  });
+
   test('saves the ticked ones as each episode\'s thumbnail; a template one is kept as its arrangement too', async () => {
     renderSeason();
     fireEvent.click(await screen.findByTestId('yts-season-draw'));

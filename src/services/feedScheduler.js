@@ -363,7 +363,9 @@ She posts for women. Men show up with their wallets and something in her respond
           const bias = arc.feed_behavior?.follow_bias || 'balanced';
           const tone = arc.feed_behavior?.feed_tone || '';
           const emotions = arc.feed_behavior?.follow_emotions || [];
-          arcDirective = `\nCURRENT SEASON PHASE: "${arc.current_phase.title}" — "${arc.current_phase.tagline}"
+          // The season itself (seasonLine): its title, logline and description.
+          const season = require('./seasonLine').seasonLine(require('./seasonLine').fromArcContext(arc), { part: false });
+          arcDirective = `\n${season ? `${season}\n` : ''}CURRENT SEASON PHASE: "${arc.current_phase.title}" — "${arc.current_phase.tagline}"
 FEED DIRECTION: ${tone}
 FOLLOW BIAS: ${bias} — weight new profiles toward this energy
 ${emotions.length > 0 ? `DOMINANT EMOTIONS: ${emotions.join(', ')} — creators should trigger these feelings in the protagonist` : ''}
@@ -372,7 +374,9 @@ ${arc.narrative_debt?.length > 0 ? `NARRATIVE WEIGHT: ${arc.narrative_debt.map(d
         }
       }
     }
-  } catch { /* arc system not available */ }
+  } catch (err) {
+    console.error('[FeedScheduler] the season could not be read (the sparks go without it):', err.message);
+  }
 
   // LalaVerse creators follow the Show Bible (2026-10-06). JustAWoman's Feed
   // (Book 1) is the real world, so it gets none of the LalaVerse's rules.

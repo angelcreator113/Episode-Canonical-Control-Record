@@ -39,10 +39,35 @@ export function stageOf(ep) {
   return 'planning';
 }
 
-/** "S1 E2" from the episode's season and number. */
+/**
+ * The episode's season snapshot (season_context, written at Start Episode),
+ * read whether it came as an object or as JSON text; null when it has none.
+ */
+export function seasonContextOf(ep) {
+  let sc = ep?.season_context;
+  if (typeof sc === 'string') {
+    try { sc = JSON.parse(sc); } catch (err) { console.error('[episodePipeline] season_context could not be read:', err); sc = null; }
+  }
+  return sc && typeof sc === 'object' ? sc : null;
+}
+
+/**
+ * The episode's code: its slot label ("S2 · E1") when it is in a season's
+ * slot, so a Season 2 episode does not read as the show-wide 25th; else
+ * "S1 E2" from its season and number.
+ */
 export function episodeCode(ep) {
+  const sc = seasonContextOf(ep);
+  if (sc?.label) return sc.label;
   if (!ep?.episode_number) return ep?.season_number ? `S${ep.season_number}` : 'Episode';
   return `S${ep.season_number || 1} E${ep.episode_number}`;
+}
+
+/** "Episode 1": the episode's number within its season (its slot), else its number. */
+export function episodeName(ep) {
+  const sc = seasonContextOf(ep);
+  if (sc?.slot_number) return `Episode ${sc.slot_number}`;
+  return ep?.episode_number ? `Episode ${ep.episode_number}` : null;
 }
 
 /** The episode's tags: its categories, as a clean list. */

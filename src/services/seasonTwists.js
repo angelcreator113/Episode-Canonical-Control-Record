@@ -38,6 +38,7 @@
 const { episodeLabel } = require('./seasonSlotService');
 const { loadSeason } = require('./seasonLoader');
 const { seasonAiContext, askModel, isBudgetRefusal, bullets, threadLine } = require('./seasonAiContext');
+const { fromArc, seasonLines } = require('./seasonLine');
 const { splitScriptBeats, normalizeLockedBeats } = require('../utils/scriptBeatLocks');
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -159,7 +160,7 @@ async function getTwists(sequelize, showId) {
     planted_episode_id: r.planted_episode_id || null, paid_off_episode_id: r.paid_off_episode_id || null,
   })).sort((a, b) => (a.plant?.slot_number ?? Infinity) - (b.plant?.slot_number ?? Infinity));
   return {
-    arc: { id: arc.id, title: arc.title, tagline: arc.tagline, season_number: arc.season_number || 1 },
+    arc: { id: arc.id, title: arc.title, tagline: arc.tagline, logline: arc.logline || null, description: arc.description || null, season_number: arc.season_number || 1 },
     slots,
     threads: await showThreads(sequelize, showId),
     characters: await showCharacters(sequelize, showId),
@@ -442,7 +443,7 @@ function suggestPrompt({ arc, slots, threads, characters, relationships, twists 
   return `You help plan the season of "Styling Adventures with Lala". Suggest season twists: a twist is a detail planted, unexplained, in one episode and paid off in a later one, so the audience connects it.
 
 SEASON ${arc.season_number}: "${arc.title || 'Untitled'}"${arc.tagline ? ` — ${arc.tagline}` : ''}
-
+${seasonLines(fromArc(arc), { title: false, part: false }).map((l) => `${l}\n`).join('')}
 THE SEASON'S EPISODES:
 ${slotLines}
 
@@ -527,5 +528,5 @@ async function suggestTwists(sequelize, showId) {
 module.exports = {
   TwistError, STATUSES, getTwists, setTwist, deleteTwist, restoreTwist,
   twistsForEpisode, twistsForSlot, twistsAtSlot, showCharacters, twistBlock, renderTwistBlock, checkTwists,
-  markTwist, suggestTwists, cleanDrafts, scriptWritten,
+  markTwist, suggestTwists, cleanDrafts, scriptWritten, suggestPrompt,
 };

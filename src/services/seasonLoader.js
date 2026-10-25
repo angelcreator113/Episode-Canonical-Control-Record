@@ -23,8 +23,9 @@
  *   transaction   run inside the caller's transaction
  *   lock          FOR UPDATE on the arc and the slots (an edit)
  *   arcId         this arc rather than the show's active one (a slot's own arc)
- *   anyStatus     the active arc, else the show's first by arc_number (the
- *                 twists and the reveal plan read a finished season too)
+ *   anyStatus     the active arc, else the show's latest by arc_number (the
+ *                 twists and the reveal plan read a finished season too;
+ *                 after Season 2 it read Season 1, 2026-10-25)
  *   slots: false  the arc only
  *   scripts       the slot episode's script_content and script_locked_beats too
  */
@@ -47,7 +48,7 @@ async function loadArc(sequelize, showId, { transaction, lock = false, arcId = n
     sql = 'SELECT * FROM show_arcs WHERE id = :arcId';
   } else if (anyStatus) {
     sql = `SELECT * FROM show_arcs WHERE show_id = :showId AND deleted_at IS NULL
-            ORDER BY (status = 'active') DESC, arc_number ASC LIMIT 1`;
+            ORDER BY (status = 'active') DESC, arc_number DESC LIMIT 1`;
   } else {
     sql = `SELECT * FROM show_arcs WHERE show_id = :showId AND status = 'active' AND deleted_at IS NULL
             ORDER BY arc_number ASC LIMIT 1`;

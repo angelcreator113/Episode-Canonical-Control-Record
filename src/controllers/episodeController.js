@@ -90,6 +90,8 @@ module.exports = {
             'script_locked_beats',
             // The board's card shows the saved thumbnail (2026-10-22).
             'thumbnail_url',
+            // The slot label ("S2 · E1") the board and lists show (2026-10-25).
+            'season_context',
             'created_at',
             'updated_at',
           ],
@@ -112,7 +114,7 @@ module.exports = {
           attributes: [
             'id', 'episode_number', 'season_number', 'title', 'description',
             'air_date', 'status', 'categories', 'show_id',
-            'evaluation_json', 'evaluation_status', 'script_content', 'script_locked_beats', 'thumbnail_url',
+            'evaluation_json', 'evaluation_status', 'script_content', 'script_locked_beats', 'thumbnail_url', 'season_context',
             'created_at', 'updated_at',
           ],
         }));

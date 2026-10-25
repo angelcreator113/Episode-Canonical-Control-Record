@@ -181,6 +181,11 @@ async function buildPhoneContext({ showId, episodeId, assetId }) {
     }
   } catch { /* noop */ }
 
+  // ── The season (seasonLine) ───────────────────────────────────────────────
+  // The episode's own season and part, else the show's current one; '' with
+  // none (loadSeasonLine logs a failed read and never throws).
+  const season = await require('./seasonLine').loadSeasonLine(sequelize, { showId, episodeId: episodeId || null }, { about: false });
+
   return {
     show: show ? {
       id: show.id,
@@ -196,6 +201,7 @@ async function buildPhoneContext({ showId, episodeId, assetId }) {
     recent_beats: beats,
     missions,
     state_keys_in_use: Array.from(knownKeys).sort(),
+    season,
   };
 }
 

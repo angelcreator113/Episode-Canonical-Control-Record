@@ -147,7 +147,8 @@ router.post('/render/zip', requireAuth, async (req, res) => {
 
 router.get('/shows/:showId/season', requireAuth, async (req, res) => {
   try {
-    return res.json({ success: true, data: await yt.seasonEpisodes(models.sequelize, req.params.showId) });
+    // ?arc_id= picks a season; without it, the show's active season, else its latest.
+    return res.json({ success: true, data: await yt.seasonEpisodes(models.sequelize, req.params.showId, { arcId: req.query?.arc_id || null }) });
   } catch (err) {
     return sendError(res, err, 'season');
   }
