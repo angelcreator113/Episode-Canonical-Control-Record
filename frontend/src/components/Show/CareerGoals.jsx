@@ -13,10 +13,17 @@
  * Overview's Season Goals count the same goals; every change calls
  * onChanged, which reloads them. The goal APIs are the ones Producer Mode
  * used. Styled by CareerGoals.css with the page's --sp-* colours.
+ *
+ * Each active goal also shows what moves it this season (Evoni, 2026-10-25):
+ * the placed events that move it, its on-track line, Find events and the
+ * pins (GoalCoverage.jsx), and one line per part a goal has no event in,
+ * from GET .../season/goal-coverage (lib/goalCoverage).
  */
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Plus, RefreshCw, Lightbulb, Sprout, Pencil, Trash2 } from 'lucide-react';
+import { GoalMovers, GoalPartWarnings } from './GoalCoverage';
+import { useGoalCoverage } from '../../lib/goalCoverage';
 import './CareerGoals.css';
 
 const TYPES = [
@@ -91,7 +98,7 @@ function GoalEditor({ editing, form, setForm, saving, onSave, onCancel }) {
   );
 }
 
-function GoalCard({ goal, primary, onEdit, onDelete }) {
+function GoalCard({ goal, primary, onEdit, onDelete, coverage, showId, api, onCoverageChanged }) {
   const pct = goalProgress(goal);
   const done = pct >= 100;
   return (
@@ -115,6 +122,7 @@ function GoalCard({ goal, primary, onEdit, onDelete }) {
       <p className={`cg-goal-left${done ? ' is-done' : ''}`}>
         {done ? 'Complete' : `${pct}% · ${Math.max(0, goal.target_value - (goal.current_value ?? 0))} to go`}
       </p>
+      <GoalMovers goal={goal} coverage={coverage} showId={showId} api={api} onChanged={onCoverageChanged} />
     </article>
   );
 }
@@ -156,6 +164,10 @@ export default function CareerGoals({ showId, api, goals = [], onChanged, loadEr
   const [busy, setBusy] = useState(null); // 'sync' | 'suggest' | 'seed'
   const [note, setNote] = useState(null); // { kind: 'ok' | 'error', text }
   const [suggestions, setSuggestions] = useState([]);
+  // What moves each goal this season; reloaded with the goals and after a pin.
+  const goalsKey = goals.map((g) => `${g.id}:${g.status}:${g.target_metric}:${g.current_value}:${g.target_value}`).join('|');
+  const coverage = useGoalCoverage({ api, showId, reloadKey: goalsKey });
+  const coverageById = Object.fromEntries((coverage.data?.goals || []).map((c) => [c.id, c]));
   const reload = async () => { if (onChanged) await onChanged(); };
 
   const run = async (what, fn) => {
@@ -250,6 +262,9 @@ export default function CareerGoals({ showId, api, goals = [], onChanged, loadEr
       {loadError && <p className="szn-error" role="alert">The goals did not load ({loadError}).</p>}
       {note && <p className={note.kind === 'error' ? 'szn-error' : 'szn-note'} role={note.kind === 'error' ? 'alert' : 'status'} data-testid="cg-note">{note.text}</p>}
 
+      <GoalPartWarnings parts={coverage.data?.parts || []} />
+      {coverage.error && <p className="szn-muted" data-testid="cg-coverage-error">What moves each goal did not load ({coverage.error}).</p>}
+
       {editing && <GoalEditor editing={editing} form={form} setForm={setForm} saving={saving} onSave={save} onCancel={() => setEditing(null)} />}
 
       {TYPES.map((t) => {
@@ -259,7 +274,10 @@ export default function CareerGoals({ showId, api, goals = [], onChanged, loadEr
           <section key={t.key} className="cg-type" aria-label={t.label} data-testid={`cg-type-${t.key}`}>
             <h3 className="cg-type-title">{t.label}{t.limit && <span className="szn-muted"> ({t.limit})</span>}</h3>
             <div className={`cg-goals${t.key === 'primary' ? ' is-one' : ''}`}>
-              {list.map((g) => <GoalCard key={g.id} goal={g} primary={t.key === 'primary'} onEdit={() => openEdit(g)} onDelete={() => remove(g)} />)}
+              {list.map((g) => (
+                <GoalCard key={g.id} goal={g} primary={t.key === 'primary'} onEdit={() => openEdit(g)} onDelete={() => remove(g)}
+                  coverage={coverageById[g.id]} showId={showId} api={api} onCoverageChanged={coverage.reload} />
+              ))}
               {!list.length && <p className="cg-empty">No active {t.key} goal. New Goal adds one.</p>}
             </div>
           </section>
