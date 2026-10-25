@@ -98,6 +98,8 @@ describe('Script page', () => {
     vi.mocked(api.post).mockResolvedValueOnce({ data: { rewrittenLine: 'Hey besties, welcome back!' } });
     renderTab(SCRIPT);
     fireEvent.click(screen.getAllByRole('button', { name: /^Rewrite line:/ })[0]);
+    // The line's panel opens; its Rewrite asks (2026-10-25).
+    fireEvent.click(screen.getByTestId('script-rewrite-go'));
     // A suggestion until "Use it" (Script tab audit, 2026-10-15).
     fireEvent.click(await screen.findByTestId('script-proposal-accept'));
     await waitFor(() => expect(screen.getAllByTestId('script-line')[0].textContent).toContain('"Hey besties, welcome back!"'));
@@ -116,6 +118,8 @@ describe('Script page', () => {
     vi.mocked(api.post).mockRejectedValueOnce(Object.assign(new Error('x'), { response: { data: { error: 'Daily AI budget reached' } } }));
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
     fireEvent.click(screen.getAllByRole('button', { name: /^Rewrite line:/ })[1]);
+    // The line's panel opens; its Rewrite asks (2026-10-25).
+    fireEvent.click(screen.getByTestId('script-rewrite-go'));
     await waitFor(() => expect(screen.getByRole('status').textContent).toBe('Rewrite failed: Daily AI budget reached'));
     spy.mockRestore();
   });

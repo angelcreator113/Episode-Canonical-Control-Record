@@ -114,6 +114,8 @@ describe('3: one suggestion at a time', () => {
     renderTab();
     const beat = () => screen.getByTestId('script-beat-1');
     fireEvent.click(within(beat()).getAllByRole('button', { name: /^Rewrite line:/ })[0]);
+    // The line's panel opens; its Rewrite asks (2026-10-25).
+    fireEvent.click(screen.getByTestId('script-rewrite-go'));
     expect(await screen.findByTestId('script-proposal')).toBeTruthy();
     const rewrites = within(beat()).getAllByRole('button', { name: /^Rewrite line:/ });
     expect(rewrites.every((b) => b.disabled && b.title === 'Use or dismiss the suggestion first')).toBe(true);
@@ -131,6 +133,8 @@ describe('3: one suggestion at a time', () => {
     vi.mocked(api.post).mockReturnValue(reply.promise);
     renderTab();
     fireEvent.click(within(screen.getByTestId('script-beat-1')).getAllByRole('button', { name: /^Rewrite line:/ })[0]);
+    // The line's panel opens; its Rewrite asks (2026-10-25).
+    fireEvent.click(screen.getByTestId('script-rewrite-go'));
     const other = within(screen.getByTestId('script-beat-1')).getByRole('button', { name: /^Rewrite line: Lala: Second/ });
     expect(other.disabled).toBe(true);
     expect(other.title).toBe('Wait for the suggestion being written');
@@ -278,6 +282,7 @@ describe('9: touch targets and names', () => {
     renderTab();
     const btn = screen.getByRole('button', { name: 'Rewrite line: Lala: Hi besties.' });
     fireEvent.click(btn);
+    fireEvent.click(screen.getByTestId('script-rewrite-go'));
     const card = await screen.findByTestId('script-proposal');
     await waitFor(() => expect(document.activeElement).toBe(card));
     expect(screen.getByTestId('script-proposal-live').getAttribute('aria-live')).toBe('polite');
@@ -289,6 +294,8 @@ describe('9: touch targets and names', () => {
     vi.mocked(api.post).mockReturnValue(reply.promise);
     renderTab();
     fireEvent.click(screen.getByRole('button', { name: 'Rewrite line: Lala: Hi besties.' }));
+    // The line's panel opens; its Rewrite asks (2026-10-25).
+    fireEvent.click(screen.getByTestId('script-rewrite-go'));
     expect(screen.getByRole('button', { name: 'Rewriting…' }).className).toContain('is-rewriting');
     await act(async () => { reply.resolve({ data: { rewrittenLine: 'x' } }); });
   });

@@ -28,7 +28,7 @@ export const voiceApi = {
   learn: (characterKey) => api.post(`${BASE}/learn/${encodeURIComponent(characterKey)}`).then((r) => r.data),
   signal: (body) => api.post(`${BASE}/signals`, body).then((r) => r.data),
   speakers: (episodeId) => api.get(`${BASE}/speakers`, { params: { episodeId } }).then((r) => (Array.isArray(r.data) ? r.data : Array.isArray(r.data?.data) ? r.data.data : [])),
-  episodeRules: (episodeId) => api.get(`${BASE}/episode/${episodeId}/rules`).then((r) => (Array.isArray(r.data) ? r.data : Array.isArray(r.data?.data) ? r.data.data : [])),
+  episodeRules: (episodeId) => api.get(`${BASE}/episode/${episodeId}/rules`).then((r) => (Array.isArray(r.data) ? r.data : Array.isArray(r.data?.rules) ? r.data.rules : Array.isArray(r.data?.data) ? r.data.data : [])),
 };
 
 export const VOICE_CONTEXTS = [

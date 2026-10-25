@@ -16,7 +16,7 @@ import { wearOf, parseMoment, resolveMoment, momentLine, verbLabel, beatOnScreen
 import { isScreen, isIcon, isProduction } from '../../lib/overlayUtils';
 import { draftLine, lalaLine, lalaLineSlots } from '../../lib/lalaLineDraft';
 import { headerNumber, BEAT_SPLIT, HAS_BEAT_HEADER, normalizeBeatHeaders } from '../../lib/beatLabelNumber';
-import { speakerLine, unquote, isRuleLine } from '../../lib/scriptSpeaker';
+import { speakerLine, unquote, isRuleLine, isHerSpeaker } from '../../lib/scriptSpeaker';
 import { keepLockedBeats, editedLockedBeats } from '../../lib/scriptLocks';
 import { beatImage, beatImageLabel, SHOT_LABELS, fmtType } from '../BeatPlan/BeatPlanParts';
 import { beatSeconds, scriptSeconds, formatRuntime } from '../../lib/scriptRuntime';
@@ -377,12 +377,89 @@ export const SUGGESTION_WRITING = 'Wait for the suggestion being written';
 // Only the 14 canonical beats can be approved or regenerated (the server refuses others).
 export const CANON_ONLY = 'Only beats 1–14 can be approved or regenerated.';
 
+// Rewrite line's direction chips (Evoni, 2026-10-25), the keys the route
+// takes (src/utils/rewriteLineVersions.js DIRECTIONS), and her note's limit.
+export const REWRITE_DIRECTIONS = [
+  { key: 'shorter', label: 'Shorter' },
+  { key: 'punchier', label: 'Punchier' },
+  { key: 'funnier', label: 'Funnier' },
+  { key: 'emotional', label: 'More emotional' },
+  { key: 'lala', label: 'More Lala' },
+  { key: 'surprise', label: 'Surprise me' },
+];
+export const REWRITE_NOTE_MAX = 300;
+export const TOO_SIMILAR_NOTE = 'These are close to your line — try a direction.';
+
+/**
+ * Up to 8 of the speaker's other lines in the episode, as the voice a
+ * rewrite writes in: hers (Me, Prime, JustAWoman, JAWIHP) for hers, Lala's
+ * for Lala's, the speaker's own otherwise. The line's own beat first; never
+ * the line being rewritten; the words only, at most 300 characters each.
+ */
+export function rewriteVoiceSamples(beats, beatId, originalLine, speaker) {
+  const same = (who) => (speaker === 'Lala' ? who === 'Lala' : isHerSpeaker(speaker) ? isHerSpeaker(who) : who === speaker);
+  const own = String(originalLine || '').trim();
+  const ownWords = parseLine(own)?.text;
+  const ordered = [...(beats || []).filter((b) => b.id === beatId), ...(beats || []).filter((b) => b.id !== beatId)];
+  const out = [];
+  const seen = new Set();
+  for (const b of ordered) {
+    for (const l of b.lines || []) {
+      if (typeof l !== 'string' || l.trim() === own) continue;
+      const p = parseLine(l);
+      if (!p || p.hidden || p.type !== 'dialogue' || !same(p.speaker)) continue;
+      const words = oneLine(p.text).slice(0, 300);
+      if (!words || words === ownWords || seen.has(words)) continue;
+      seen.add(words);
+      out.push(words);
+      if (out.length >= 8) return out;
+    }
+  }
+  return out;
+}
+
+// How to rewrite a line (Evoni, 2026-10-25): a direction chip, her own
+// words, then Rewrite. One chip at a time; a second tap clears it.
+function RewritePanel({ id, label, aiHold = null, onGo, onCancel }) {
+  const [direction, setDirection] = useState(null);
+  const [note, setNote] = useState('');
+  const firstRef = useRef(null);
+  useEffect(() => { firstRef.current?.focus?.(); }, []);
+  const go = () => { if (!aiHold) onGo({ direction, instruction: note.trim() }); };
+  return (
+    <div className="esp-rewrite-panel" id={id} role="group" aria-label={`How to rewrite ${label}`} data-testid="script-rewrite-panel"
+      onKeyDown={(e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); onCancel(); } }}>
+      <p className="esp-rewrite-panel-title">Rewrite it how? <span>Pick one, add a note, or just Rewrite.</span></p>
+      <div className="esp-rw-chips">
+        {REWRITE_DIRECTIONS.map((d, i) => (
+          <button key={d.key} ref={i === 0 ? firstRef : undefined} type="button" className={`esp-rw-chip${direction === d.key ? ' is-on' : ''}`} aria-pressed={direction === d.key}
+            data-testid={`script-rewrite-dir-${d.key}`} onClick={() => setDirection((cur) => (cur === d.key ? null : d.key))}>{d.label}</button>
+        ))}
+      </div>
+      <label className="esp-rewrite-note">
+        <span>How?</span>
+        <input type="text" value={note} maxLength={REWRITE_NOTE_MAX} placeholder="e.g. make her tease the chat" data-testid="script-rewrite-note"
+          onChange={(e) => setNote(e.target.value.slice(0, REWRITE_NOTE_MAX))}
+          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); go(); } }} />
+      </label>
+      {note.length > REWRITE_NOTE_MAX - 40 && <span className="esp-rewrite-count" aria-live="polite">{REWRITE_NOTE_MAX - note.length} characters left</span>}
+      <div className="esp-proposal-actions">
+        <button type="button" className="esp-btn-primary is-small" data-testid="script-rewrite-go" disabled={!!aiHold} title={aiHold || undefined} onClick={go}>✦ Rewrite</button>
+        <button type="button" className="esp-btn is-small" data-testid="script-rewrite-cancel" onClick={onCancel}>Cancel</button>
+      </div>
+    </div>
+  );
+}
+
 function ScriptLine({ voice = null, look = [], line, number = null, beatId, lineId = null, onOpenEdit = null, onFocusLater = null, beatNumber = null, lineIndex, onEdit, onDelete, onRewrite, rewriting, aiHold = null, locked, prevLine = null, nextLine = null, onMoveLine, drag, onScreen, withOnScreen, phoneDown = false }) {
   const [editing, setEditing] = useState(false);
   const [dropAt, setDropAt] = useState(null);
   const [editText, setEditText] = useState('');
   // The line's voice recorder (Teleprompter batch 3); it never changes the script.
   const [voiceOpen, setVoiceOpen] = useState(false);
+  // The rewrite's direction panel (Evoni, 2026-10-25).
+  const [rewriteOpen, setRewriteOpen] = useState(false);
+  const rewriteBtnRef = useRef(null);
   const lineStr = typeof line === 'string' ? line : '';
   // An open editor with changed words is known to the tab, so nothing that
   // replaces the beat or the script throws them away (Script page audit 3,
@@ -502,11 +579,17 @@ function ScriptLine({ voice = null, look = [], line, number = null, beatId, line
     {/* Named by its line, so a screen reader's list of buttons tells them
         apart; one suggestion at a time (`aiHold`: why not now; Script tab
         audit 6, 2026-10-24: a second rewrite replaced the first unseen). */}
-    {parsed.type === 'dialogue' && !locked && <button type="button" className={`esp-rewrite${rewriting ? ' is-rewriting' : ''}`} data-testid="script-line-rewrite" onClick={() => onRewrite(beatId, lineIndex, lineStr, lineId)} disabled={rewriting || !!aiHold}
-      title={!rewriting && aiHold ? aiHold : undefined}
+    {/* It opens the direction panel; the panel's Rewrite asks (Evoni, 2026-10-25). */}
+    {parsed.type === 'dialogue' && !locked && <button type="button" ref={rewriteBtnRef} className={`esp-rewrite${rewriting ? ' is-rewriting' : ''}${rewriteOpen ? ' is-open' : ''}`} data-testid="script-line-rewrite" onClick={() => setRewriteOpen((o) => !o)} disabled={rewriting || !!aiHold}
+      title={!rewriting && aiHold ? aiHold : undefined} aria-expanded={rewriting ? undefined : rewriteOpen} aria-controls={rewriteOpen ? `esp-rw-${beatId}-${lineId ?? lineIndex}` : undefined}
       aria-label={rewriting ? 'Rewriting…' : `Rewrite line: ${firstWords(`${parsed.speaker}: ${parsed.text}`)}`}>{rewriting ? '⏳' : '✦ Rewrite'}</button>}
     {canVoice && <VoiceMicButton clip={voice.clip} open={voiceOpen} speaker={voice.line.speaker} testId="script-voice-mic" onClick={() => setVoiceOpen((o) => !o)} />}
     </div>
+    {parsed.type === 'dialogue' && !locked && rewriteOpen && !rewriting && (
+      <RewritePanel id={`esp-rw-${beatId}-${lineId ?? lineIndex}`} label={firstWords(`${parsed.speaker}: ${parsed.text}`)} aiHold={aiHold}
+        onCancel={() => { setRewriteOpen(false); setTimeout(() => rewriteBtnRef.current?.focus?.(), 0); }}
+        onGo={(how) => { setRewriteOpen(false); onRewrite(beatId, lineIndex, lineStr, lineId, how); }} />
+    )}
     {canVoice && voiceOpen && (
       <VoiceRecordPanel episodeId={voice.episodeId} line={voice.line} clip={voice.clip} testId="script-voice-panel"
         onSaved={voice.onSaved} onRemoved={voice.onRemoved} onNotReady={voice.onNotReady} onClose={() => setVoiceOpen(false)} />
@@ -868,11 +951,17 @@ function LalaLineSlot({ piece, dressCode = '', onInsert, onAiDraft = null }) {
 
 // A rewrite or a regenerated beat before it goes in (Script tab audit,
 // 2026-10-15): the new words beside what they replace, "Use it" or "Keep mine".
-function ProposalCard({ proposal, onAccept, onDiscard }) {
+// A line rewrite comes as up to three versions, each from its own angle
+// (Evoni, 2026-10-25): one is chosen (radio cards), "Use this" puts it in,
+// and "Try again with…" asks again with a direction.
+function ProposalCard({ proposal, onAccept, onDiscard, onRetry = null }) {
   const shown = (line) => { const p = parseLine(line); return !p || p.hidden ? null : p.type === 'dialogue' ? `${p.speaker}: ${p.text}` : p.text; };
-  const lines = proposal.kind === 'beat'
-    ? proposal.text.split('\n').slice(1).map(shown).filter(Boolean)
-    : [shown(proposal.text) || proposal.text];
+  const isLine = proposal.kind === 'line';
+  const versions = isLine ? (proposal.versions?.length ? proposal.versions : [{ angle: 'Rewrite', text: proposal.text }]) : [];
+  const lines = isLine ? [] : proposal.text.split('\n').slice(1).map(shown).filter(Boolean);
+  const [choice, setChoice] = useState(0);
+  useEffect(() => { setChoice(0); }, [proposal]);
+  const groupName = `esp-rw-choice-${String(proposal.beatId)}-${String(proposal.lineId ?? proposal.lineIndex ?? '')}`;
   // A new suggestion takes focus, so it is seen and heard where it landed
   // (Script tab audit 6, 2026-10-24); the tab's live region announces it too.
   const boxRef = useRef(null);
@@ -880,18 +969,42 @@ function ProposalCard({ proposal, onAccept, onDiscard }) {
   // adder); from Ask, which asked for it, it goes.
   useEffect(() => {
     const at = document.activeElement;
-    const typing = at && (at.tagName === 'TEXTAREA' || at.isContentEditable || (at.tagName === 'INPUT' && !at.closest?.('.esp-ask')));
+    const typing = at && (at.tagName === 'TEXTAREA' || at.isContentEditable || (at.tagName === 'INPUT' && !at.closest?.('.esp-ask') && !at.closest?.('.esp-rewrite-panel')));
     if (!typing) boxRef.current?.focus?.();
   }, [proposal]);
   return (
-    <div className="esp-proposal" ref={boxRef} tabIndex={-1} role="region" aria-label={proposal.kind === 'beat' ? `New version of beat ${proposal.number}` : 'Rewritten line'} data-testid="script-proposal">
-      <p className="esp-proposal-title">{proposal.kind === 'beat' ? `↻ New version of beat ${proposal.number}` : '✦ Rewritten line'}</p>
-      {proposal.kind === 'line' && <p className="esp-proposal-was">Was: {shown(proposal.originalLine) || proposal.originalLine}</p>}
-      <ul className="esp-proposal-lines">{lines.map((l, i) => <li key={i}>{l}</li>)}</ul>
+    <div className="esp-proposal" ref={boxRef} tabIndex={-1} role="region" aria-label={isLine ? 'Rewritten line' : `New version of beat ${proposal.number}`} data-testid="script-proposal">
+      <p className="esp-proposal-title">{isLine ? `✦ Rewritten line${versions.length > 1 ? `: ${versions.length} versions` : ''}${proposal.direction ? ` · ${REWRITE_DIRECTIONS.find((d) => d.key === proposal.direction)?.label || ''}` : ''}` : `↻ New version of beat ${proposal.number}`}</p>
+      {isLine && <p className="esp-proposal-was">Was: {shown(proposal.originalLine) || proposal.originalLine}</p>}
+      {isLine && proposal.tooSimilar && <p className="esp-proposal-close" role="note" data-testid="script-proposal-too-similar">{TOO_SIMILAR_NOTE}</p>}
+      {isLine ? (
+        <fieldset className="esp-options" data-testid="script-proposal-options" onClick={(e) => e.stopPropagation()}>
+          <legend className="esp-sr">Choose a version</legend>
+          {versions.map((v, i) => (
+            <label key={i} className={`esp-option${choice === i ? ' is-chosen' : ''}`} data-testid="script-proposal-option">
+              <input type="radio" name={groupName} value={i} checked={choice === i} onChange={() => setChoice(i)} />
+              <span className="esp-option-body">
+                <span className="esp-option-angle">{v.angle}</span>
+                <span className="esp-option-text">{shown(v.text) || v.text}</span>
+              </span>
+            </label>
+          ))}
+        </fieldset>
+      ) : <ul className="esp-proposal-lines">{lines.map((l, i) => <li key={i}>{l}</li>)}</ul>}
       <div className="esp-proposal-actions">
-        <button type="button" className="esp-btn-primary is-small" data-testid="script-proposal-accept" onClick={(e) => { e.stopPropagation(); onAccept(); }}>Use it</button>
+        <button type="button" className="esp-btn-primary is-small" data-testid="script-proposal-accept" onClick={(e) => { e.stopPropagation(); onAccept(isLine ? choice : undefined); }}>{isLine ? 'Use this' : 'Use it'}</button>
         <button type="button" className="esp-btn is-small" data-testid="script-proposal-discard" onClick={(e) => { e.stopPropagation(); onDiscard(); }}>Keep mine</button>
       </div>
+      {isLine && onRetry && (
+        <div className="esp-retry" role="group" aria-label="Try again with a direction">
+          <span className="esp-retry-label">Try again with…</span>
+          <div className="esp-rw-chips">
+            {REWRITE_DIRECTIONS.map((d) => (
+              <button key={d.key} type="button" className="esp-rw-chip" data-testid={`script-proposal-retry-${d.key}`} onClick={(e) => { e.stopPropagation(); onRetry(d.key); }}>{d.label}</button>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -960,7 +1073,7 @@ function useLineIds(beatId, lines, opRef) {
   return held.current.ids;
 }
 
-function BeatSection({ voice = null, beat, index, beatCount, scenePlan, expanded, onToggle, onApprove, proposal = null, onAcceptProposal, onDiscardProposal, onEdit, onDeleteLine, onRewrite, rewritingLine, locking, onOpenMap, onMoveBeat, onMoveLine, drag, onRegenerate, regenerating, writing = false, onScreen, onAddMoment, phoneUpAtStart = false, request = null, onRequestDone, people = [], lalaSlots = [], dressCode = '', lineOpRef = null, lineIdsRef = null, onOpenEdit = null, onFocusLater = null, status = 'draft', healthRows = [], hasPhone = false, worn = [], look = [], storyTime = null, onStep = null, prevBeatId = null, nextBeatId = null, onTyped = null, lockEdited = false, drafts = null, aiHold = null, saving = false, duplicate = false }) {
+function BeatSection({ voice = null, beat, index, beatCount, scenePlan, expanded, onToggle, onApprove, proposal = null, onAcceptProposal, onDiscardProposal, onRetryProposal = null, onEdit, onDeleteLine, onRewrite, rewritingLine, locking, onOpenMap, onMoveBeat, onMoveLine, drag, onRegenerate, regenerating, writing = false, onScreen, onAddMoment, phoneUpAtStart = false, request = null, onRequestDone, people = [], lalaSlots = [], dressCode = '', lineOpRef = null, lineIdsRef = null, onOpenEdit = null, onFocusLater = null, status = 'draft', healthRows = [], hasPhone = false, worn = [], look = [], storyTime = null, onStep = null, prevBeatId = null, nextBeatId = null, onTyped = null, lockEdited = false, drafts = null, aiHold = null, saving = false, duplicate = false }) {
   const scene = scenePlan?.find(p => p.beat_number === beat.number);
   const cardRef = useRef(null);
   const [picking, setPicking] = useState(false);
@@ -1186,7 +1299,7 @@ function BeatSection({ voice = null, beat, index, beatCount, scenePlan, expanded
       {expanded && (
         <div className="esp-beat-body">
           {lockEdited && <p className="esp-beat-edited-note" role="note" data-testid={`script-beat-lock-edited-note-${beat.number}`}>This beat is approved, and its words were changed in the Raw editor. Save puts back the approved words; Table read and Export read them too. Unlock the beat to keep the change.</p>}
-          {proposal && <ProposalCard proposal={proposal} onAccept={onAcceptProposal} onDiscard={onDiscardProposal} />}
+          {proposal && <ProposalCard proposal={proposal} onAccept={onAcceptProposal} onDiscard={onDiscardProposal} onRetry={onRetryProposal} />}
           {/* What the beat puts on screen, by its lines (the picture is a
               small thumbnail on the head; the rest is under Details). */}
           {expects && (
@@ -2274,31 +2387,56 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
   // Rewrite button. A failure says why.
   // `lineId`: the line's id in its beat, so the spinner and "Use it" stay
   // with it when lines above it change (Script page audit 3, 2026-10-19).
-  const handleRewriteLine = async (beatId, lineIndex, originalLine, lineId = null) => {
+  // `how`: the panel's direction chip and her note (Evoni, 2026-10-25);
+  // `replacing`: "Try again with…" on the card, whose suggestion this replaces.
+  // Three versions come back, each from its own angle; her other lines in
+  // the episode go with the request as the voice to write in.
+  const handleRewriteLine = async (beatId, lineIndex, originalLine, lineId = null, how = {}) => {
     const beat = beats.find(b => b.id === beatId);
     if (busy || beat?.approved) return;
     // One suggestion at a time (Script tab audit 6, 2026-10-24).
-    if (proposal || rewritingLine || regeneratingBeat) { flash(`${proposal ? SUGGESTION_PENDING : SUGGESTION_WRITING}.`, 'error'); return; }
+    if ((proposal && !how?.replacing) || rewritingLine || regeneratingBeat) { flash(`${proposal ? SUGGESTION_PENDING : SUGGESTION_WRITING}.`, 'error'); return; }
+    const direction = REWRITE_DIRECTIONS.some((d) => d.key === how?.direction) ? how.direction : null;
+    const instruction = typeof how?.instruction === 'string' ? oneLine(how.instruction).slice(0, REWRITE_NOTE_MAX) : '';
     const key = `${beatId}-${lineId ?? lineIndex}`;
     setRewritingLine(key);
     const seq = genSeqRef.current;
     try {
       const parsed = parseLine(originalLine);
+      const speaker = parsed?.speaker || 'Prime';
+      const voiceSamples = rewriteVoiceSamples(beats, beatId, originalLine, speaker);
       const res = await api.post(`/api/v1/episode-brief/${episodeId}/rewrite-line`, {
-        line: originalLine, speaker: parsed?.speaker || 'Prime', beatName: beat?.name,
+        line: originalLine, speaker, beatName: beat?.name,
         beatContext: scenePlan.find(p => p.beat_number === beat?.number)?.emotional_intent,
         beatLines: (beat?.lines || []).filter((l) => typeof l === 'string' && l.trim() && !parseLine(l)?.hidden),
         showId,
+        ...(voiceSamples.length ? { voiceSamples } : {}),
+        ...(direction ? { direction } : {}),
+        ...(instruction ? { instruction } : {}),
       });
       if (!mountedRef.current) return;
       if (seq !== genSeqRef.current) { flash('A new script was written while the line was being rewritten, so the rewrite was not kept.', 'error', 6000); return; }
-      const back = rewrittenLine(originalLine, res.data?.rewrittenLine);
-      const next = back === null ? null : oneLine(back);
-      if (!next || next === String(originalLine || '').trim()) { flash('The rewrite came back the same; try again.', 'error'); return; }
-      if (STARTS_BEAT(next)) { flash('The rewrite came back as a beat header, so it was not kept; try again.', 'error', 6000); return; }
+      // The versions, each in the line's own shape; one older reply's single
+      // `rewrittenLine` is one version.
+      const sent = Array.isArray(res.data?.versions) && res.data.versions.length ? res.data.versions : [{ angle: 'Rewrite', text: res.data?.rewrittenLine }];
+      const own = String(originalLine || '').trim();
+      let headers = 0;
+      const versions = [];
+      for (const v of sent) {
+        const back = rewrittenLine(originalLine, typeof v?.text === 'string' ? v.text : '');
+        const next = back === null ? null : oneLine(back);
+        if (!next || next === own || versions.some((x) => x.text === next)) continue;
+        if (STARTS_BEAT(next)) { headers += 1; continue; }
+        versions.push({ angle: typeof v?.angle === 'string' && v.angle.trim() ? v.angle.trim().slice(0, 40) : 'Rewrite', text: next });
+      }
+      if (!versions.length) {
+        if (headers) flash('The rewrite came back as a beat header, so it was not kept; try again.', 'error', 6000);
+        else flash('The rewrite came back the same; try again.', 'error');
+        return;
+      }
       if (parseScriptIntoBeats(scriptRef.current, lockedRef.current).find(b => b.id === beatId)?.approved !== false) { flash('The line changed or was approved while it was being rewritten, so the rewrite was not put in.', 'error', 6000); return; }
-      // Shown in its beat first; "Use it" puts it in (acceptProposal).
-      setProposal({ kind: 'line', beatId, lineIndex, lineId, originalLine, text: next });
+      // Shown in its beat first; "Use this" puts the chosen one in (acceptProposal).
+      setProposal({ kind: 'line', beatId, lineIndex, lineId, originalLine, text: versions[0].text, versions, tooSimilar: res.data?.tooSimilar === true, direction });
     } catch (err) {
       console.error('[EpisodeScript] rewrite failed:', err);
       flash(`Rewrite failed: ${err.response?.data?.error || err.message || 'no answer'}`, 'error', 6000);
@@ -2346,7 +2484,8 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
   // into the script as it is then: edits made meanwhile stay, a line is
   // found again by its words if it moved, a beat by its id, and one
   // approved meanwhile is left as approved.
-  const acceptProposal = () => {
+  // `choice`: which of a line's versions (0 when there is one).
+  const acceptProposal = (choice = 0) => {
     const p = proposal;
     if (!p || busy) return;
     // Kept for "Use it" once the lock is done (Script page re-audit, 2026-10-19).
@@ -2367,7 +2506,8 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
       } else {
         at = nowBeat?.lines[p.lineIndex] === p.originalLine ? p.lineIndex : (nowBeat?.lines.indexOf(p.originalLine) ?? -1);
       }
-      const written = at < 0 ? null : scriptWithLine(current, lockedRef.current, p.beatId, at, p.text);
+      const chosen = (Number.isInteger(choice) && p.versions?.[choice]?.text) || p.text;
+      const written = at < 0 ? null : scriptWithLine(current, lockedRef.current, p.beatId, at, chosen);
       if (written === null) { flash('The line changed or was approved while it was being rewritten, so the rewrite was not put in.', 'error', 6000); return; }
       noteLineOp(p.beatId, { kind: 'splice', at, removed: 1 });
       setScriptText(written);
@@ -2375,7 +2515,7 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
       // Character voices that learn (Evoni, 2026-10-25): the line she had and
       // the one she chose teach the speaker's voice. Fire-and-forget: a
       // failure is logged, never shown, and never holds the script.
-      sendRewriteSignal(episodeId, nowBeat?.number, p.originalLine, p.text);
+      sendRewriteSignal(episodeId, nowBeat?.number, p.originalLine, chosen);
       return;
     }
     const current = withBeatHeaders(scriptRef.current, lockedRef.current);
@@ -2389,6 +2529,15 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
     if (next === current) { flash('The beat came back the same; try again.', 'error'); return; }
     setScriptText(next);
     flash(`Beat ${p.number} rewritten ✦ Save to keep it.`, 'success');
+  };
+
+  // "Try again with…" on a line's card: the suggestion goes, and the line is
+  // asked for again with that direction (Evoni, 2026-10-25).
+  const retryProposal = (direction) => {
+    const p = proposal;
+    if (!p || p.kind !== 'line' || busy) return;
+    setProposal(null);
+    handleRewriteLine(p.beatId, p.lineIndex, p.originalLine, p.lineId, { direction, replacing: true });
   };
 
   // Approve = lock (Evoni, 2026-10-08). The lock is kept on the episode, so
@@ -2713,7 +2862,7 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
     <div className="esp-top">
       {toast && <div className={`esp-toast is-${toast.type === 'error' ? 'error' : 'success'}`} role="status">{toast.msg}</div>}
       {/* A new suggestion is announced where it lands (Script tab audit 6, 2026-10-24). */}
-      <div className="esp-sr" aria-live="polite" data-testid="script-proposal-live">{proposal ? (proposal.kind === 'beat' ? `New version of beat ${proposal.number} is ready: Use it or Keep mine.` : 'The rewritten line is ready: Use it or Keep mine.') : ''}</div>
+      <div className="esp-sr" aria-live="polite" data-testid="script-proposal-live">{proposal ? (proposal.kind === 'beat' ? `New version of beat ${proposal.number} is ready: Use it or Keep mine.` : `The rewritten line is ready: ${proposal.versions?.length > 1 ? `${proposal.versions.length} versions; choose one, then Use this` : 'Use this'} or Keep mine.${proposal.tooSimilar ? ` ${TOO_SIMILAR_NOTE}` : ''}`) : ''}</div>
 
       {unsaved && (
         <div className="esp-unsaved-banner" data-testid="script-unsaved" role="alert">
@@ -3111,7 +3260,7 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
           {beats.map((beat, index) => {
             const open = openId === beat.id;
             const phoneUp = phoneUpAtStart[index] || false;
-            return <BeatSection key={beat.id} voice={voice} request={open && barRequest?.beatId === beat.id ? barRequest : null} beat={beat} index={index} beatCount={beats.length} scenePlan={scenePlan} expanded={open} onToggle={() => { const to = open && !isPhoneWidth() && !showBeatList ? null : beat.id; if (to !== openId && refuseOpenEdit()) return; setExpandedBeat(to); }} onApprove={handleApprove} proposal={proposal?.beatId === beat.id ? proposal : null} onAcceptProposal={acceptProposal} onDiscardProposal={() => setProposal(null)} onEdit={handleEditLine} onDeleteLine={handleDeleteLine} onRewrite={handleRewriteLine} rewritingLine={rewritingLine} locking={locking || busy} onOpenMap={() => setShowMap(true)} onMoveBeat={handleMoveBeat} onMoveLine={handleMoveLine} drag={drag} onRegenerate={handleRegenerateBeat} regenerating={regeneratingBeat === beat.id} writing={!!regeneratingBeat || busy} onRequestDone={clearBarRequest} onScreen={onScreenWithDrafts} onAddMoment={handleAddMoment} lineOpRef={lineOpRef} lineIdsRef={lineIdsRef} onOpenEdit={trackOpenEdit} onFocusLater={focusLineLater} phoneUpAtStart={phoneUp} people={people} lalaSlots={lineSlots.filter((s) => s.beatIndex === index)} dressCode={source?.event?.dress_code || ''}
+            return <BeatSection key={beat.id} voice={voice} request={open && barRequest?.beatId === beat.id ? barRequest : null} beat={beat} index={index} beatCount={beats.length} scenePlan={scenePlan} expanded={open} onToggle={() => { const to = open && !isPhoneWidth() && !showBeatList ? null : beat.id; if (to !== openId && refuseOpenEdit()) return; setExpandedBeat(to); }} onApprove={handleApprove} proposal={proposal?.beatId === beat.id ? proposal : null} onAcceptProposal={acceptProposal} onDiscardProposal={() => setProposal(null)} onRetryProposal={retryProposal} onEdit={handleEditLine} onDeleteLine={handleDeleteLine} onRewrite={handleRewriteLine} rewritingLine={rewritingLine} locking={locking || busy} onOpenMap={() => setShowMap(true)} onMoveBeat={handleMoveBeat} onMoveLine={handleMoveLine} drag={drag} onRegenerate={handleRegenerateBeat} regenerating={regeneratingBeat === beat.id} writing={!!regeneratingBeat || busy} onRequestDone={clearBarRequest} onScreen={onScreenWithDrafts} onAddMoment={handleAddMoment} lineOpRef={lineOpRef} lineIdsRef={lineIdsRef} onOpenEdit={trackOpenEdit} onFocusLater={focusLineLater} phoneUpAtStart={phoneUp} people={people} lalaSlots={lineSlots.filter((s) => s.beatIndex === index)} dressCode={source?.event?.dress_code || ''}
               status={statuses[beat.id]} healthRows={open ? healthRows : []} hasPhone={phoneBeats.has(beat.id)} worn={open ? wornInOpen : []} look={outfit || []}
               storyTime={open && truth?.eventTimed ? truth.storyTime : null}
               onStep={stepBeat} prevBeatId={index > 0 ? beats[index - 1].id : null} nextBeatId={index < beats.length - 1 ? beats[index + 1].id : null}

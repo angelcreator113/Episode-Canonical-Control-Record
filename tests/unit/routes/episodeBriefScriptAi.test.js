@@ -1,7 +1,7 @@
 // ============================================================================
 // The Script tab's AI routes (Script page audit, 2026-10-19): a refused
 // budget is a 429 with its code, not a 500, as the scene plan route answers
-// it; Rewrite line tries twice, and not again after a refused budget; the
+// it; Rewrite line tries twice (on Sonnet since 2026-10-25), and not again after a refused budget; the
 // script-context route logs what failed. Mocked: no database, no network.
 // ============================================================================
 
@@ -88,7 +88,8 @@ test('rewrite-line tries a second time after a failed call', async () => {
   expect(res.status).toBe(200);
   expect(res.body.rewrittenLine).toBe('Bestie, hi.');
   expect(mockCreate).toHaveBeenCalledTimes(2);
-  expect(mockCreate.mock.calls[0][0].model).toBe('claude-haiku-4-5-20251001');
+  expect(mockCreate.mock.calls[0][0].model).toBe('claude-sonnet-4-6');
+  expect(mockCreate.mock.calls[0][0].max_tokens).toBe(700);
 });
 
 test('rewrite-line gives up after two failed calls with a 500', async () => {
