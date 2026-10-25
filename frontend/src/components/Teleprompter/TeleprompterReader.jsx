@@ -84,7 +84,7 @@ import {
   X, ChevronLeft, ChevronRight, Play, Pause, FlipHorizontal2, Timer, Video, VideoOff, Circle, Square,
   RotateCcw, Upload, Download, AlertTriangle, Trash2, ArrowRight, CheckCircle2, ALargeSmall, Gauge, Hourglass, SlidersHorizontal,
   AudioLines, Grid3x3, Clock, Film, Smartphone, Mic, Volume2,
-  Bell, MessageCircle, MousePointerClick, ArrowDownUp, Send, MonitorPlay, AppWindow, Monitor, EyeOff, Clapperboard, FileDown, Share2, History,
+  Bell, MessageCircle, MousePointerClick, ArrowDownUp, Send, MonitorPlay, AppWindow, Monitor, EyeOff, Clapperboard, Smile, FileDown, Share2, History,
 } from 'lucide-react';
 import useVoiceFollow from '../../hooks/useVoiceFollow';
 import useMicLevel from '../../hooks/useMicLevel';
@@ -183,6 +183,8 @@ const topIn = (el, box) => el.getBoundingClientRect().top - box.getBoundingClien
 const SCREEN_ICONS = {
   phone: Smartphone, notify: Bell, dm: MessageCircle, post: Send, tap: MousePointerClick,
   scroll: ArrowDownUp, open: AppWindow, show: MonitorPlay, hide: EyeOff, other: Monitor,
+  // Lala's automatic reaction (lib/teleprompterLines autoReactionCue).
+  react: Smile,
 };
 
 // A line; `wordStart`/`cursor` number its words for Follow my voice.

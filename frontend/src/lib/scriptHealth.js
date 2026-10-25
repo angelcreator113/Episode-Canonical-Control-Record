@@ -1,7 +1,8 @@
 /**
  * "Ready to film?" (Script tab audit, 2026-10-15): the script-wide checks the
  * Script tab already makes, in one list. Each row is { key, ok, text, beatId }
- * where beatId (or null) is the beat that fixes it. Nothing here is a new
+ * where beatId (or null) is the beat that fixes it. A row with `advice: true`
+ * (pacing) is a tip: it is shown, never counted as a thing to fix. Nothing here is a new
  * rule: the rows read mustCover, phoneCheck, uncuedPieces, wearFlags and
  * dealCueFlags as the side panel does, only over every beat instead of the
  * open one.
@@ -11,6 +12,8 @@ import { REVEAL_BEAT, voiceOffLines, revealCheck, isCutsceneBeat } from './scrip
 import { invitationLine, beat14Outcome, BEAT } from './beat14Invitation';
 import { atHandle } from '../pages/feed/feedConstants';
 import { scriptRuleRows } from './scriptRuleChecks';
+import { writerNoteRows } from './scriptWriterNotes';
+import { pacingRows } from './scriptPacing';
 
 const list = (items) => (items.length <= 2 ? items.join(' and ') : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`);
 const plural = (n, one, many) => (n === 1 ? one : many);
@@ -164,6 +167,10 @@ export function scriptHealth({
 
   // The show's rules, beat by beat (lib/scriptRuleChecks; Evoni, 2026-10-17 to 2026-10-19).
   rows.push(...scriptRuleRows(beats, rules, { closetNumber }));
+  // Notes to the writer left in the lines (lib/scriptWriterNotes; Evoni, 2026-10-25).
+  rows.push(...writerNoteRows(beats));
+  // Pacing tips (lib/scriptPacing): `advice: true`, never a blocker.
+  rows.push(...pacingRows(beats));
   const approved = beats.filter((b) => b.approved).length;
   rows.push({ key: 'approved', ok: beats.length > 0 && approved === beats.length, beatId: null, text: `${approved} of ${beats.length} ${plural(beats.length, 'beat', 'beats')} approved.` });
 

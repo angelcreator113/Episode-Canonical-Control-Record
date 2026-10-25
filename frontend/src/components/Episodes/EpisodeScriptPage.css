@@ -823,3 +823,40 @@
   .esp-beat-head { min-height: 44px; }
   .esp-link { display: inline-flex; align-items: center; min-height: 44px; }
 }
+
+/* "Ready to film?" tips and the time per beat (lib/scriptPacing, ScriptPacingList; 2026-10-25). */
+.esp-health-list li.is-tip svg { color: var(--info-text); }
+.esp-pacing { margin-top: 6px; }
+.esp-pacing-sum { min-height: 32px; cursor: pointer; color: var(--studio-purple); font-size: 12px; font-weight: 600; }
+.esp-pacing-list { display: flex; flex-direction: column; gap: 4px; margin: 6px 0 0; padding: 0; list-style: none; }
+.esp-pacing-row { display: grid; grid-template-columns: minmax(0, 1fr) 72px auto; align-items: center; gap: 8px; font-size: 12px; }
+.esp-pacing-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.esp-pacing-bar { display: block; height: 6px; border-radius: 3px; background: var(--studio-line-strong); overflow: hidden; }
+.esp-pacing-bar > span { display: block; height: 100%; background: var(--info-text); }
+.esp-pacing-time { font-family: 'DM Mono', var(--font-mono); color: var(--studio-ink-muted); }
+@media (max-width: 420px) {
+  .esp-pacing-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .esp-pacing-bar { display: none; }
+}
+
+/* Import a script (ScriptImport; Evoni, 2026-10-25): a sheet on the right, full width on a phone. */
+.esp-import { position: fixed; inset: 0 0 0 auto; width: min(560px, 100vw); z-index: 60; box-sizing: border-box; overflow-y: auto; padding: 16px; background: var(--studio-page); border-left: 1px solid var(--studio-line-strong); box-shadow: -8px 0 24px color-mix(in srgb, var(--studio-ink) 12%, transparent); color: var(--studio-ink); }
+.esp-import-backdrop { position: fixed; inset: 0; z-index: 59; background: color-mix(in srgb, var(--studio-ink) 28%, transparent); }
+.esp-import-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.esp-import-title { margin: 0; font-family: var(--font-prose); font-size: 18px; color: var(--studio-ink); }
+.esp-import-label { display: block; margin: 12px 0 4px; font-size: 13px; font-weight: 600; }
+.esp-import-hint { margin: 4px 0 8px; font-size: 12px; line-height: 1.45; color: var(--studio-ink-muted); }
+.esp-import-paste { display: block; width: 100%; box-sizing: border-box; min-height: 160px; padding: 10px; border: 1px solid var(--studio-line-strong); border-radius: 8px; background: var(--studio-card); color: var(--studio-ink); font-family: var(--font-mono); font-size: 13px; resize: vertical; }
+.esp-import-paste:focus-visible { outline: 2px solid var(--studio-magenta); outline-offset: 1px; }
+.esp-import-sum { margin: 10px 0 0; font-family: 'DM Mono', var(--font-mono); font-size: 11px; color: var(--studio-ink-muted); }
+.esp-import-notes { margin-top: 10px; padding: 10px 12px; border: 1px solid var(--warning-text); border-radius: 8px; background: var(--studio-card); }
+.esp-import-notes-head { display: flex; align-items: center; gap: 6px; margin: 0 0 6px; font-size: 13px; font-weight: 600; color: var(--warning-text); }
+.esp-import-notes-list { display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 0; list-style: none; font-size: 12px; line-height: 1.45; overflow-wrap: anywhere; }
+.esp-import-note-at { font-weight: 600; }
+.esp-import-note-text { font-family: var(--font-mono); }
+.esp-import-preview { max-height: 45vh; overflow: auto; margin: 0; padding: 10px; border: 1px solid var(--studio-line); border-radius: 8px; background: var(--studio-card); color: var(--studio-ink); font-family: var(--font-mono); font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.esp-import-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+@media (max-width: 760px) {
+  .esp-import { border-left: none; }
+  .esp-import-actions button { flex: 1 1 auto; min-height: 44px; }
+}
