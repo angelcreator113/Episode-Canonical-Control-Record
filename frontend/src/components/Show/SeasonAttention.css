@@ -1,0 +1,50 @@
+/* "Needs attention" on the Season page's Overview (2026-10-25). It sits
+   inside .szn-page and reads its --sp-* tokens: plum text on white, pink as
+   the accent, gold for a deadline that is close, pink-deep for overdue. Rows
+   are 44px targets; one column at every width. */
+.satt {
+  margin-bottom: 16px; padding: 16px 18px; border-radius: 18px;
+  background: var(--sp-card); border: 1px solid var(--sp-line); min-width: 0;
+}
+.satt-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.satt-title {
+  display: inline-flex; align-items: center; gap: 8px; margin: 0;
+  font-family: var(--font-prose); font-size: 20px; font-weight: 700; color: var(--sp-ink);
+}
+.satt-title svg { color: var(--sp-pink-deep); }
+.satt-count {
+  display: inline-flex; align-items: center; justify-content: center; min-width: 24px; height: 24px; padding: 0 8px;
+  border-radius: 999px; font-size: 12px; font-weight: 700; background: var(--sp-pink-soft); color: var(--sp-pink-deep);
+}
+.satt-none { display: flex; align-items: center; gap: 8px; margin: 0; padding: 6px 0; font-size: 14px; color: var(--sp-green); }
+.satt-list { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.satt-row {
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px;
+  min-height: 44px; padding: 8px 12px; border-radius: 12px; text-decoration: none;
+  background: var(--sp-bg); color: var(--sp-ink); border-left: 4px solid var(--sp-line);
+}
+.satt-row:hover { background: var(--sp-pink-soft); }
+.satt-row:focus-visible, .satt-more:focus-visible { outline: 3px solid var(--sp-purple); outline-offset: 2px; }
+.satt-row.is-overdue { border-left-color: var(--sp-pink-deep); }
+.satt-row.is-soon { border-left-color: var(--sp-gold); }
+.satt-icon {
+  display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 10px;
+  background: var(--sp-purple-soft); color: var(--sp-purple);
+}
+.satt-row.is-overdue .satt-icon { background: var(--sp-pink-soft); color: var(--sp-pink-deep); }
+.satt-row.is-soon .satt-icon { background: var(--sp-gold-soft); color: var(--sp-gold-text); }
+.satt-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.satt-row-title { font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
+.satt-row-detail { font-size: 12px; color: var(--sp-muted); overflow-wrap: anywhere; }
+.satt-go { color: var(--sp-muted); }
+.satt-more {
+  min-height: 44px; margin-top: 6px; padding: 6px 4px; border: none; background: none; cursor: pointer;
+  font: inherit; font-size: 13px; font-weight: 700; color: var(--sp-pink-deep);
+}
+.satt-more:hover { text-decoration: underline; }
+
+@media (max-width: 640px) {
+  .satt { padding: 14px; }
+  .satt-title { font-size: 18px; }
+  .satt-row { padding: 8px 10px; gap: 8px; }
+}

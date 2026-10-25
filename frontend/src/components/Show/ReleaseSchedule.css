@@ -24,6 +24,8 @@
 .rsch-preview ul { margin: 6px 0 0; padding-left: 18px; display: grid; gap: 3px; }
 .rsch-preview p { margin: 6px 0 0; }
 .rsch-note { color: var(--text-secondary); font-size: 12px; }
+/* Each season's start, under the schedule line (2026-10-25). */
+.rsch-seasons { margin: 4px 0 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--text-secondary); }
 .rsch-error { margin: 0; color: var(--danger-text); font-size: 13px; }
 
 /* "Episode 3 releases in 2 days and still needs: thumbnail" */

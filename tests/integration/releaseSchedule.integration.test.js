@@ -44,6 +44,8 @@ const SCHEDULE = { day: 'sun', time: '10:00', cadence: 'weekly', first_release: 
   afterEach(() => jest.restoreAllMocks());
   afterAll(async () => {
     for (const show of shows) {
+      await run('DELETE FROM season_slots WHERE show_id = :show', { show });
+      await run('DELETE FROM show_arcs WHERE show_id = :show', { show });
       await run('DELETE FROM episodes WHERE show_id = :show', { show });
       await run('DELETE FROM shows WHERE id = :show', { show });
     }
@@ -182,5 +184,84 @@ const SCHEDULE = { day: 'sun', time: '10:00', cadence: 'weekly', first_release: 
     const saved = await defaultsOf(show);
     expect(saved.tiktok).toEqual({ enabled: true });
     expect(saved.release_schedule).toMatchObject({ day: 'sun', time: '10:00' });
+  });
+  // Two seasons (Evoni, 2026-10-25, before Season 2): Season 1 complete with
+  // episodes 1-3 in its slots 1-3; Season 2 active with show-wide episodes
+  // 4 and 5 in its slots 1 and 2, and episode 6 in no slot but season_number 2.
+  async function seedTwoSeasons() {
+    const { show, eps } = await seedShow();
+    const arcs = {};
+    for (const [n, status, startsOn] of [[1, 'completed', null], [2, 'active', '2027-02-01']]) {
+      arcs[n] = uuid();
+      await run(`INSERT INTO show_arcs (id, show_id, arc_number, title, season_number, episode_start, episode_end,
+                   phases, current_phase, status, narrative_debt, progression_log, emotional_temperature, starts_on, created_at, updated_at)
+                 VALUES (:id, :show, :n, :title, :n, 1, 3, '[]', 1, :status, '[]', '[]', 'rising', :startsOn, NOW() + (:n || ' seconds')::interval, NOW())`,
+        { id: arcs[n], show, n, title: `Season ${n}`, status, startsOn });
+    }
+    for (const n of [5, 6]) {
+      const id = uuid();
+      eps[n] = id;
+      await run(`INSERT INTO episodes (id, show_id, title, episode_number, status, season_number, created_at, updated_at)
+                 VALUES (:id, :show, :title, :n, 'draft', 2, NOW(), NOW())`, { id, show, title: `Episode ${n}`, n });
+    }
+    await run('UPDATE episodes SET air_date = NULL WHERE id = :id', { id: eps[2] });
+    const slot = (arc, season, n, episode) => run(`INSERT INTO season_slots (id, show_id, arc_id, season_number, slot_number, phase, episode_id, created_at, updated_at)
+      VALUES (gen_random_uuid(), :show, :arc, :season, :n, 1, :episode, NOW(), NOW())`, { show, arc, season, n, episode });
+    for (const n of [1, 2, 3]) await slot(arcs[1], 1, n, eps[n]);
+    await slot(arcs[2], 2, 1, eps[4]);
+    await slot(arcs[2], 2, 2, eps[5]);
+    await slot(arcs[2], 2, 3, null);
+    return { show, eps, arcs };
+  }
+
+  it('two seasons: each counts its own episodes, Season 1 keeps the top-level start, Season 2 starts on its own date', async () => {
+    const { show, eps } = await seedTwoSeasons();
+    const res = await auth(request(app).put(`/api/v1/world/${show}/release-schedule`))
+      .send({ release_schedule: { ...SCHEDULE, seasons: { 2: { first_release: '2027-03-01' } } } });
+    expect(res.status).toBe(200);
+    expect((await defaultsOf(show)).release_schedule.seasons).toEqual({ 2: { first_release: '2027-03-01' } });
+    const byId = Object.fromEntries(res.body.data.episodes.map((e) => [e.episode_id, e]));
+    expect(byId[eps[1]]).toMatchObject({ season_number: 1, number: 1, date: '2026-11-01', source: 'schedule' });
+    expect(byId[eps[3]]).toMatchObject({ season_number: 1, number: 3, date: '2026-11-15' });
+    expect(byId[eps[4]]).toMatchObject({ season_number: 2, number: 1, date: '2027-03-07', source: 'schedule' });
+    expect(byId[eps[5]]).toMatchObject({ season_number: 2, number: 2, date: '2027-03-14' });
+    // In no slot: the next free number of Season 2.
+    expect(byId[eps[6]]).toMatchObject({ season_number: 2, number: 3, date: '2027-03-21' });
+    expect(res.body.data.current_season).toBe(2);
+    expect(res.body.data.seasons.map((x) => [x.season_number, x.state, x.first_release, x.own_start, x.title]))
+      .toEqual([[1, 'active', '2026-11-01', false, 'Season 1'], [2, 'active', '2027-03-01', true, 'Season 2']]);
+  });
+
+  it('two seasons with no Season 2 start: Season 2 previews from its own start date and never warns', async () => {
+    const { show, eps } = await seedTwoSeasons();
+    const res = await auth(request(app).put(`/api/v1/world/${show}/release-schedule`)).send({ release_schedule: SCHEDULE });
+    const byId = Object.fromEntries(res.body.data.episodes.map((e) => [e.episode_id, e]));
+    expect(byId[eps[4]]).toMatchObject({ number: 1, date: '2027-02-07', source: 'preview', due: null });
+    expect(res.body.data.slots[3]).toMatchObject({ date: '2027-02-21', source: 'preview' });
+  });
+
+  it("a hand-set date in Season 2 wins; a season's own start is refused when it is not a date", async () => {
+    const { show, eps } = await seedTwoSeasons();
+    await auth(request(app).put(`/api/v1/world/${show}/episodes/${eps[4]}/release-date`)).send({ air_date: '2027-03-14' });
+    const res = await auth(request(app).put(`/api/v1/world/${show}/release-schedule`))
+      .send({ release_schedule: { ...SCHEDULE, seasons: { 2: { first_release: '2027-03-01' } } } });
+    const byId = Object.fromEntries(res.body.data.episodes.map((e) => [e.episode_id, e]));
+    expect(byId[eps[4]]).toMatchObject({ date: '2027-03-14', source: 'hand' });
+    expect(byId[eps[5]]).toMatchObject({ date: '2027-03-21', source: 'schedule' });
+    jest.spyOn(console, 'error').mockImplementation(() => {});
+    const bad = await auth(request(app).put(`/api/v1/world/${show}/release-schedule`))
+      .send({ release_schedule: { ...SCHEDULE, seasons: { 2: { first_release: 'spring' } } } });
+    expect(bad.status).toBe(400);
+  });
+
+  it('a schedule stored before seasons existed reads as it always did', async () => {
+    const { show, eps } = await seedShow();
+    const old = { day: 'sun', time: '10:00', cadence: 'weekly', first_release: '2026-11-01', paused: false, platforms: ['youtube'], tz_offset: 240, tz: 'America/New_York' };
+    await run(`UPDATE shows SET distribution_defaults = distribution_defaults || jsonb_build_object('release_schedule', CAST(:s AS jsonb)) WHERE id = :show`,
+      { s: JSON.stringify(old), show });
+    const res = await auth(request(app).get(`/api/v1/world/${show}/release-schedule`));
+    const byId = Object.fromEntries(res.body.data.episodes.map((e) => [e.episode_id, e]));
+    expect(byId[eps[1]]).toMatchObject({ date: '2026-11-01', number: 1, season_number: 1 });
+    expect(byId[eps[3]]).toMatchObject({ date: '2026-11-29', number: 3 });
   });
 });

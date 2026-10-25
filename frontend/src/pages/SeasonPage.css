@@ -151,6 +151,53 @@
 .szn-spark { grid-area: spark; display: block; min-width: 0; }
 .szn-spark svg path { stroke: var(--sp-pink); }
 
+/* Each card opens its tab (2026-10-25); the fifth is the next release. */
+.szn-stats.has-five { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.szn-stat.is-link { position: relative; color: inherit; text-decoration: none; cursor: pointer; transition: border-color 0.15s, box-shadow 0.15s; }
+.szn-stat.is-link:hover { border-color: var(--sp-pink); box-shadow: 0 4px 16px rgba(58, 18, 54, 0.08); }
+.szn-stat.is-link:focus-visible { outline: 3px solid var(--sp-purple); outline-offset: 2px; }
+.szn-stat.is-release { grid-template-areas: 'icon body' 'line line'; }
+.szn-stat-num.is-release { font-size: 22px; }
+.szn-stat-num.is-release.is-none { font-size: 18px; color: var(--sp-muted); }
+.szn-stat-line .is-neg { color: var(--sp-pink-deep); font-weight: 700; }
+.szn-stat.is-release .szn-stat-line { display: inline-flex; align-items: center; gap: 2px; }
+
+/* The tabs' counts (2026-10-25): a small pill; on a phone the number alone. */
+.szn-tab { display: inline-flex; align-items: center; gap: 6px; }
+.szn-tab-badge {
+  display: inline-flex; align-items: center; gap: 0.3em; min-height: 20px; padding: 1px 8px; border-radius: 999px;
+  font-size: 12px; font-weight: 700; line-height: 1.3; background: var(--sp-purple-soft); color: var(--sp-purple);
+}
+.szn-tab-badge.is-soon { background: var(--sp-gold-soft); color: var(--sp-gold-text); }
+.szn-tab-badge.is-overdue { background: var(--sp-pink-soft); color: var(--sp-pink-deep); }
+.szn-tab.is-on .szn-tab-badge { background: var(--sp-white); color: var(--sp-ink); }
+
+/* The season switcher, in the hero (2026-10-25). */
+.szn-switch { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+.szn-switch-btn {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 6px 14px; border-radius: 999px; cursor: pointer;
+  border: 1px solid rgba(255, 255, 255, 0.55); background: rgba(42, 14, 42, 0.55); color: var(--sp-white); font: inherit; font-size: 13px; font-weight: 700;
+}
+.szn-switch-btn:hover { background: rgba(42, 14, 42, 0.8); }
+.szn-switch-btn.is-on { background: var(--sp-white); color: var(--sp-ink); border-color: var(--sp-white); }
+.szn-switch-btn:focus-visible { outline: 3px solid var(--sp-gold); outline-offset: 2px; }
+.szn-switch-tag { padding: 0 6px; border-radius: 999px; font-size: 12px; background: var(--sp-pink); color: var(--sp-white); }
+.szn-switch-tag.is-done { background: var(--sp-green); }
+/* A past season: a calm line under the hero. */
+.szn-note.is-past { background: var(--sp-purple-soft); color: var(--sp-purple); }
+.szn-link-btn {
+  min-height: 44px; padding: 0 4px; border: none; background: none; cursor: pointer;
+  font: inherit; font-weight: 700; color: var(--sp-purple); text-decoration: underline;
+}
+.szn-overview-row.is-two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.szn-overview-row.is-two > :last-child { grid-column: auto; }
+
+/* Episodes and Results: this season, or every season. */
+.szn-scope { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 14px; margin-bottom: 12px; }
+.szn-scope-line { font-size: 13px; font-weight: 600; color: var(--sp-muted); }
+.szn-scope-toggle { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; font-size: 14px; font-weight: 600; color: var(--sp-ink); cursor: pointer; }
+.szn-scope-toggle input { width: 18px; height: 18px; accent-color: var(--sp-pink); }
+
 /* A progress bar: pink on a soft ground. */
 .szn-bar { position: relative; display: block; height: 8px; border-radius: 999px; overflow: hidden; background: var(--sp-pink-soft); min-width: 40px; }
 .szn-bar > span { display: block; height: 100%; border-radius: 999px; background: var(--sp-pink); }
@@ -346,6 +393,9 @@
   .szn-overview-row > :last-child { grid-column: 1 / -1; }
   .szn-summary-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .szn-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .szn-stats.has-five { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  /* Five cards in two columns: the next release takes the last row. */
+  .szn-stats.has-five > .szn-stat.is-release { grid-column: 1 / -1; }
   .szn-parts { grid-template-columns: minmax(0, 1fr); }
 }
 
@@ -378,4 +428,9 @@
   .szn-slot-open { grid-template-columns: 76px minmax(0, 1fr); }
   .szn-slot-pic { width: 76px; height: 64px; }
   .szn-facts > div { grid-template-columns: 70px minmax(0, 1fr); }
+  .szn-stat.is-release { grid-template-columns: auto minmax(0, 1fr); grid-template-areas: 'icon body' 'line line'; }
+  .szn-tab-badge-text { display: none; }
+  .szn-tab-badge { padding: 1px 7px; }
+  .szn-overview-row.is-two { grid-template-columns: minmax(0, 1fr); }
+  .szn-switch { margin-top: 10px; }
 }
