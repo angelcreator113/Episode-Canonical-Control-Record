@@ -1,0 +1,67 @@
+/* Goals and the events that move them (GoalCoverage.jsx), on the Season
+   page: it sits inside .szn-page, so it reads the page's --sp-* colours
+   (SeasonPage.css). Quiet: one line per part, small chips. 12px smallest
+   text; buttons 36px+ (44px on a phone). */
+
+/* "Moves: <goal>" on a slot card or an event row. */
+.gc-moves {
+  display: inline-flex; align-items: center; gap: 4px; max-width: 100%;
+  padding: 1px 8px; border-radius: 10px; font-size: 12px; font-weight: 600; line-height: 1.5;
+  background: var(--sp-purple-soft); color: var(--sp-purple);
+}
+/* A long name wraps to a second line on a narrow card, then is cut. */
+.gc-moves-names { min-width: 0; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow-wrap: anywhere; }
+.gc-moves-more { flex: none; font-weight: 800; }
+.gc-moves svg { flex: none; }
+
+/* One line per part with a goal nothing moves. */
+.gc-gaps {
+  display: flex; align-items: flex-start; gap: 8px; padding: 8px 12px;
+  border: 1px solid var(--sp-line); border-left: 3px solid var(--sp-gold); border-radius: 12px;
+  background: var(--sp-gold-soft); color: var(--sp-gold-text); font-size: 13px;
+}
+.gc-gaps-icon { flex: none; margin-top: 2px; }
+.gc-gaps ul { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; min-width: 0; }
+.gc-gaps li { overflow-wrap: anywhere; }
+
+/* Inside a goal card. */
+.gc-goal { display: grid; gap: 6px; margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--sp-line); }
+.gc-goal p { margin: 0; }
+.gc-moved { font-size: 13px; line-height: 1.6; color: var(--sp-ink); overflow-wrap: anywhere; }
+.gc-moved-label { font-weight: 700; color: var(--sp-muted); }
+.gc-mover-link { color: var(--sp-pink-deep); font-weight: 600; text-decoration: none; }
+.gc-mover-link:hover { text-decoration: underline; }
+.gc-code { display: inline-block; margin-right: 4px; padding: 0 6px; border-radius: 6px; font-size: 12px; font-weight: 800; background: var(--sp-pink-soft); color: var(--sp-pink-deep); }
+.gc-unpin {
+  display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; margin-left: 2px; vertical-align: middle;
+  border: none; border-radius: 999px; background: var(--sp-purple-soft); color: var(--sp-purple); cursor: pointer;
+}
+.gc-unpin:hover { background: var(--sp-pink-soft); color: var(--sp-pink-deep); }
+.gc-unpin:focus-visible, .gc-pin:focus-visible { outline: 3px solid var(--sp-purple); outline-offset: 1px; }
+.gc-none { font-size: 13px; font-weight: 700; color: var(--sp-gold-text); }
+.gc-proj { font-size: 13px; color: var(--sp-muted); }
+.gc-proj.is-ok .gc-verdict { font-weight: 700; color: var(--sp-green); }
+.gc-verdict { font-weight: 700; color: var(--sp-ink); }
+.gc-find-btn { justify-self: start; min-height: 36px; padding: 6px 12px; font-size: 13px; }
+
+/* Find events. */
+.gc-find { display: grid; gap: 8px; padding: 10px 12px; border-radius: 12px; background: var(--sp-bg); }
+.gc-find-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.gc-find-title { font-size: 13px; font-weight: 700; color: var(--sp-ink); }
+.gc-find-list { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.gc-find-row {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 10px;
+  padding: 8px 10px; border: 1px solid var(--sp-line); border-radius: 10px; background: var(--sp-card);
+}
+.gc-find-main { display: grid; gap: 2px; min-width: 0; flex: 1 1 180px; }
+.gc-find-name { font-size: 14px; font-weight: 700; color: var(--sp-ink); overflow-wrap: anywhere; }
+.gc-find-why { font-size: 12px; color: var(--sp-purple); }
+.gc-find-row.is-none .gc-find-why { color: var(--sp-muted); }
+.gc-find-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; }
+.gc-pin { min-height: 36px; padding: 4px 12px; font-size: 13px; }
+.gc-pin.is-on { background: var(--sp-purple-soft); color: var(--sp-purple); }
+
+@media (max-width: 640px) {
+  .gc-find-btn, .gc-pin { min-height: 44px; }
+  .gc-unpin { width: 32px; height: 32px; }
+}

@@ -1,0 +1,33 @@
+/* The goals this event moves, in the Event Package's header
+   (EventGoalPins.jsx). Design tokens only, the header's lavender. */
+.egp {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin: 8px 0 0;
+  font-family: var(--font-sans); font-size: 13px; color: var(--lala-ink-muted);
+}
+.egp-label { display: inline-flex; align-items: center; gap: 4px; font-weight: 600; color: var(--lala-ink); }
+.egp-none { font-style: italic; }
+.egp-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; min-width: 0; }
+.egp-chip {
+  display: inline-flex; align-items: center; gap: 4px; max-width: 100%; padding: 2px 10px; border-radius: 999px;
+  font-size: 12px; font-weight: 600; background: var(--lala-lavender-soft); color: var(--lala-lavender-text);
+}
+.egp-chip span { overflow-wrap: anywhere; }
+.egp-chip.is-pinned { padding-right: 4px; border: 1px solid var(--lala-lavender-line); }
+.egp-unpin {
+  display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; padding: 0;
+  border: none; border-radius: 999px; background: transparent; color: var(--lala-lavender-text); cursor: pointer;
+}
+.egp-unpin:hover { background: var(--surface-card); }
+.egp-unpin:focus-visible, .egp-select:focus-visible { outline: 2px solid var(--lala-lavender); outline-offset: 1px; }
+.egp-select {
+  min-height: 32px; max-width: 100%; padding: 4px 8px; border: 1px solid var(--lala-lavender-line); border-radius: 8px;
+  background: var(--surface-card); color: var(--lala-lavender-text); font: inherit; font-size: 13px;
+}
+.egp-error { flex-basis: 100%; margin: 0; font-weight: 600; color: var(--accent-dark); }
+
+@media (max-width: 600px) {
+  /* The phone hero is a grid; this row spans it. */
+  .epp-hero .egp { grid-column: 1 / -1; }
+  .egp-select { min-height: 44px; flex: 1 1 100%; }
+  .egp-unpin { width: 32px; height: 32px; }
+}

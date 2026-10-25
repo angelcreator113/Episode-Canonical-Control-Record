@@ -125,7 +125,7 @@ function openThreads(sequelize, showId, { limit = 20, order = 'asc' } = {}) {
 function careerGoals(sequelize, showId, { limit = 8, statuses = ['active'] } = {}) {
   return safely('the goals', [], async () => {
     const [rows] = await sequelize.query(
-      `SELECT title, target_metric, current_value, target_value, episode_range, status FROM career_goals
+      `SELECT id, title, target_metric, current_value, target_value, episode_range, status FROM career_goals
         WHERE show_id = :showId AND status IN (:statuses) AND deleted_at IS NULL
         ORDER BY priority ASC, created_at ASC LIMIT ${Number(limit) || 8}`,
       { replacements: { showId, statuses } });

@@ -54,6 +54,12 @@
  *                                       What changed record and the open follow-ups
  * GET    /world/:showId/season/slots/:slotId/notes — The slot's twists (plant, payoff) and reveals, for its panel
  * GET    /world/:showId/season/slots/:slotId/event-fit — Events that can be pencilled into the slot, best fit first
+ * GET    /world/:showId/season/goal-coverage — Each active goal's movers (placed events that move it, by fit or pin),
+ *                                             its projection, the parts nothing moves it in, the slots' chips;
+ *                                             ?event_id= adds what that event moves (services/seasonGoalCoverage)
+ * GET    /world/:showId/season/goals/:goalId/events — "Find events": the events that move the goal first, placed or not
+ * PUT    /world/:showId/season/events/:eventId/goals/:goalId/pin — Pin the goal to the event (a pin always counts)
+ * DELETE /world/:showId/season/events/:eventId/goals/:goalId/pin — Unpin it
  * GET    /episodes/:episodeId/season-twists — The twists this episode plants and pays off (the Script tab)
  * POST   /episodes/:episodeId/season-twists/:twistId/mark — { as: planted|paid_off, undo? }: Evoni marks it done here, or takes the mark back
  *
@@ -419,6 +425,55 @@ router.get('/world/:showId/season/slots/:slotId/event-fit', requireAuth, async (
     return sendSlotError(res, err, 'event fit');
   }
 });
+
+// ─── Goals and the events that move them (Evoni, 2026-10-25) ──────────────
+
+const badIds = (req, res, names) => {
+  const bad = names.find((n) => !SHOW_UUID.test(String(req.params[n] || '')));
+  if (!bad) return false;
+  res.status(400).json({ error: `${bad} must be a UUID` });
+  return true;
+};
+
+// GET /world/:showId/season/goal-coverage — movers, projection, part gaps and slot chips, read-only
+router.get('/world/:showId/season/goal-coverage', requireAuth, async (req, res) => {
+  if (badShow(req, res)) return undefined;
+  const eventId = req.query.event_id ? String(req.query.event_id) : null;
+  if (eventId && !SHOW_UUID.test(eventId)) return res.status(400).json({ error: 'event_id must be a UUID' });
+  try {
+    const models = require('../models');
+    const { goalCoverage } = require('../services/seasonGoalCoverage');
+    return res.json({ success: true, ...(await goalCoverage(models.sequelize, req.params.showId, { eventId })) });
+  } catch (err) {
+    return sendSlotError(res, err, 'goal coverage');
+  }
+});
+
+// GET /world/:showId/season/goals/:goalId/events — "Find events" for one goal, read-only
+router.get('/world/:showId/season/goals/:goalId/events', requireAuth, async (req, res) => {
+  if (badIds(req, res, ['showId', 'goalId'])) return undefined;
+  try {
+    const models = require('../models');
+    const { goalEvents } = require('../services/seasonGoalCoverage');
+    return res.json({ success: true, ...(await goalEvents(models.sequelize, req.params.showId, req.params.goalId)) });
+  } catch (err) {
+    return sendSlotError(res, err, 'goal events');
+  }
+});
+
+// PUT and DELETE /world/:showId/season/events/:eventId/goals/:goalId/pin — pin or unpin; other keys kept
+const pinRoute = (on) => async (req, res) => {
+  if (badIds(req, res, ['showId', 'eventId', 'goalId'])) return undefined;
+  try {
+    const models = require('../models');
+    const { setPin } = require('../services/seasonGoalCoverage');
+    return res.json({ success: true, ...(await setPin(models.sequelize, req.params.showId, req.params.eventId, req.params.goalId, on)) });
+  } catch (err) {
+    return sendSlotError(res, err, on ? 'pin goal' : 'unpin goal');
+  }
+};
+router.put('/world/:showId/season/events/:eventId/goals/:goalId/pin', requireAuth, pinRoute(true));
+router.delete('/world/:showId/season/events/:eventId/goals/:goalId/pin', requireAuth, pinRoute(false));
 
 // ─── Story threads (§8(ff) A3, A6, Q9) ─────────────────────────────────────
 

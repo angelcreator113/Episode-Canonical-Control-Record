@@ -61,11 +61,14 @@ const LOCKED_EVENT_FIELDS = {
 
 // canon_consequences keys only the server writes: the reopen service's,
 // and the in-world documents (eventDocumentsService, Evoni 2026-10-06),
-// so an Event Package save carrying an older copy cannot overwrite them.
+// and the goals Evoni pinned the event to (the pin route in arcRoutes,
+// services/seasonGoalCoverage, 2026-10-25), so an Event Package save
+// carrying an older copy cannot overwrite them.
 const TERMS_REOPEN_KEY = 'terms_reopen';
 const TERMS_HISTORY_KEY = 'terms_history';
 const DOCUMENTS_KEY = 'documents';
-const SERVER_OWNED_CC_KEYS = [TERMS_REOPEN_KEY, TERMS_HISTORY_KEY, DOCUMENTS_KEY];
+const PINNED_GOALS_KEY = 'pinned_goal_ids';
+const SERVER_OWNED_CC_KEYS = [TERMS_REOPEN_KEY, TERMS_HISTORY_KEY, DOCUMENTS_KEY, PINNED_GOALS_KEY];
 
 // The episode link is not a term Evoni reopens: the event stays with its
 // episode while its terms are open.
