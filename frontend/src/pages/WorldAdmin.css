@@ -702,3 +702,5 @@
   .wa-arc-confirm button, .wa-arc-open-advance-btn, .wa-season-small-btn, .wa-season-name-actions button { min-height: 44px; }
   .wa-arc-open-advance-btn { flex: 1 1 100%; }
 }
+/* Her voice link in the cast's Voice details: a 44px target (2026-10-25). */
+.wa-cc-rules .wa-cc-link { display: inline-flex; align-items: center; min-height: 44px; }

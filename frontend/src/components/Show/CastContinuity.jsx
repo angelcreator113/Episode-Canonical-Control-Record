@@ -207,6 +207,7 @@ export function CastRow() {
                 ['CTA style', 'Confident, community-focused'],
               ].map(([l, v]) => <div key={l}><dt>{l}</dt><dd>{v}</dd></div>)}
             </dl>
+            <Link className="wa-cc-link" to="/your-voice" data-testid="cc-your-voice">How you really sound</Link>
           </details>
         </li>
       </ul>

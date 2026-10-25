@@ -546,6 +546,8 @@
 .esp-health-list li svg { flex: none; margin-top: 2px; }
 .esp-health-list li.is-ok svg { color: var(--success-text); }
 .esp-health-list li.is-gap svg { color: var(--warning-text); }
+.esp-health-list li.is-low svg { color: var(--info-text); }
+.esp-health-list li.is-low { color: var(--studio-ink-muted); }
 .esp-health-text { flex: 1; min-width: 0; }
 .esp-health-open { flex: none; padding: 2px 10px; border: 1px solid var(--studio-line-strong); border-radius: 8px; background: var(--studio-card); color: var(--studio-purple); font-size: 12px; font-weight: 600; cursor: pointer; }
 /* Phone paths (2026-10-16): a row that can fix itself, and Fix all. */
