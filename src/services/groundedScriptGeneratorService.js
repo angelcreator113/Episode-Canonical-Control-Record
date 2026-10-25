@@ -203,10 +203,17 @@ async function groundedScriptInputs(episodeId, showId, models) {
 
   // What can be on screen (Script tab audit, 2026-10-15): the show's phone
   // screens, icons and overlays by name, so the script's [UI:] lines name
-  // things the Script tab can find. getAllOverlayTypes logs and returns []
-  // on a failed read.
+  // things the Script tab can find. A failed read is logged and leaves the
+  // list empty: the script is written without it.
   const { getAllOverlayTypes } = require('./uiOverlayService');
-  const onScreen = showId ? await getAllOverlayTypes(showId, models) : [];
+  let onScreen = [];
+  if (showId) {
+    try {
+      onScreen = await getAllOverlayTypes(showId, models);
+    } catch (err) {
+      console.error('[ScriptGen] on-screen read failed (non-blocking):', err.message);
+    }
+  }
   // The phone's map (script phone paths, 2026-10-16): each screen's icons and
   // what they open, as the Script tab's phone check reads it, for the prompt
   // and for the steps added after writing. A failed read leaves both out.
