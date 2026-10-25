@@ -77,6 +77,9 @@ const FORM = {
     const block = buildContextBlock(ctx);
     expect(block).toContain(`Season 1: "Velvet Ladder" — Up is the only way. Logline: ${FORM.logline}`);
     expect(block).toContain('Current part: Part 1 of 3, "Arrival" (E1–E6, 6 episodes)');
+    // The show is read by its name (shows has no title column), not the fallback name.
+    expect(ctx.show.title).toBe(`Season AI ${show.slice(0, 8)}`);
+    expect(block).toContain(`SHOW: "Season AI ${show.slice(0, 8)}"`);
   });
 
   test("a slotted episode's distribution reads its own part", async () => {
@@ -94,7 +97,8 @@ const FORM = {
     const episode = await seedEpisode(show);
     const ctx = await gatherEpisodeContext(episode, show, sequelize);
     expect(ctx.arc).toBeNull();
-    expect(buildContextBlock(ctx)).not.toContain('Season');
+    // No season line (the show's own name may contain the word).
+    expect(buildContextBlock(ctx)).not.toMatch(/Season \d+:|Current part:/);
   });
 
   test("the Start Episode snapshot carries the season's tagline, logline, description and the part's range; Edit season re-saves it", async () => {

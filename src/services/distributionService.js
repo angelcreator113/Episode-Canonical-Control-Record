@@ -77,9 +77,11 @@ async function gatherEpisodeContext(episodeId, showId, sequelize) {
 
   // Show
   const [show] = await sequelize.query(
-    `SELECT id, title, description, genre, distribution_defaults FROM shows WHERE id = :showId AND deleted_at IS NULL LIMIT 1`,
+    // shows has `name`, not `title`: the old query failed, so every copy fell back to the
+    // default show name and the show's distribution_defaults were never read.
+    `SELECT id, name AS title, description, genre, distribution_defaults FROM shows WHERE id = :showId AND deleted_at IS NULL LIMIT 1`,
     { replacements: { showId }, type: sequelize.QueryTypes.SELECT }
-  ).catch(() => []);
+  ).catch((err) => { console.error('[distribution] show read failed:', err.message); return []; });
   ctx.show = show || {};
   ctx.showDefaults = show?.distribution_defaults ? (typeof show.distribution_defaults === 'string' ? JSON.parse(show.distribution_defaults) : show.distribution_defaults) : {};
 
