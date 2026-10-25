@@ -257,8 +257,8 @@ describe('readers behind S3/canvas — take the creator from eventCreatorOrganiz
     expect(block).toMatch(/eventCreatorOrganizer\(event\)/);
     expect(block).not.toMatch(/host_profile_id/);
   });
-  test('worldEvents.js generate-overlay — social overlay', () => {
-    const block = between(read('src/routes/worldEvents.js'), "overlayType === 'social'", 'renderSocialChecklist');
+  test('worldEvents/overlays.js generate-overlay — social overlay', () => {
+    const block = between(read('src/routes/worldEvents/overlays.js'), "overlayType === 'social'", 'renderSocialChecklist');
     expect(block).toMatch(/eventCreatorOrganizer\(event\)/);
     expect(block).not.toMatch(/host_profile_id/);
   });

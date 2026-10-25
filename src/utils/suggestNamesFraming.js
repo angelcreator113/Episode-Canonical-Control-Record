@@ -2,7 +2,7 @@
 
 /**
  * The framing sentence for the event suggest-names prompt
- * (POST /world/:showId/events/:eventId/suggest-names, src/routes/worldEvents.js).
+ * (POST /world/:showId/events/:eventId/suggest-names, src/routes/worldEvents/suggest.js).
  *
  * docs/EVENT_EPISODE_FLOW.md §8(u) R9: the prompt names the organizer's niche
  * and the event's concept, never "a fashion/lifestyle content-creator show",

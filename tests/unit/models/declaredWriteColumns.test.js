@@ -48,7 +48,7 @@ const PG_TYPE = {
 
 // [call site, model, columns]
 const SITES = [
-  ['src/routes/worldEvents.js (POST /events/from-profile)', 'WorldEvent', ['theme', 'mood', 'color_palette', 'floral_style', 'border_style']],
+  ['src/routes/worldEvents/fromProfile.js (POST /events/from-profile)', 'WorldEvent', ['theme', 'mood', 'color_palette', 'floral_style', 'border_style']],
   ['src/routes/sceneProposeRoute.js (POST /arc-stage)', 'StorytellerBook', ['current_arc_stage', 'arc_stage_scores']],
   // createComposition was retired by Task #1884; the columns stay declared (canon has them).
   ['src/services/CompositionService.js (createComposition, retired #1884)', 'ThumbnailComposition', ['include_justawomaninherprime', 'justawomaninherprime_position', 'approval_status']],

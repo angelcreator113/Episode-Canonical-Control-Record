@@ -12,7 +12,7 @@ const ROUTES = {
   'memories/stories.js': ['/character-dilemma', '/attribute-voices', '/ai-writer-action'],
   'memories/engine.js': ['/pipeline-generate', '/pipeline-generate-background', '/batch-generate', '/batch-generate-background'],
   'storyteller.js': ['/chapters/:id/emotional-impact'],
-  'worldEvents.js': ['/world/:showId/episodes/:episodeId/generate-story'],
+  'worldEvents/stories.js': ['/world/:showId/episodes/:episodeId/generate-story'],
 };
 
 const escape = (s) => s.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&');

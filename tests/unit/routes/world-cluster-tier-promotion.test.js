@@ -29,7 +29,13 @@ const fs = require('fs');
 const path = require('path');
 
 const ROUTES_DIR = path.join(__dirname, '..', '..', '..', 'src', 'routes');
-const readSrc = (name) => fs.readFileSync(path.join(ROUTES_DIR, name), 'utf8');
+const { worldEventsSource } = require('../helpers/worldEventsSource');
+
+// worldEvents.js is the folder src/routes/worldEvents/ since Task #54 split
+// it; it is read as its parts joined in mount order.
+const readSrc = (name) => (name === 'worldEvents.js'
+  ? worldEventsSource()
+  : fs.readFileSync(path.join(ROUTES_DIR, name), 'utf8'));
 
 const CP3_FILES = [
   'world.js',
@@ -80,14 +86,16 @@ const CP3_FILES = [
 // (2026-10-24) added POST .../documents/:type/restore and
 // .../documents/shopping_list/keep-look (requireAuth) and POST
 // .../documents/:type/lines/:index/redraft (requireAuth + aiRateLimiter,
-// D4 pattern): 92; no other CP3-zone route changed.
+// D4 pattern): 92; no other CP3-zone route changed. 112 since Task #54
+// split the file into src/routes/worldEvents/: the same 91 handlers, and
+// each of the 21 route parts imports requireAuth itself (21 imports, not 1).
 // worldStudio.js 36: +1 for POST /world/dream-cities/:key/image (a Dream
 // City's image or story bubble, The Pulse Uploads, Task #2920, requireAuth).
 // 38: +2 for GET and POST /world/locations/studio-types (creator studios
 // typed "other", Evoni 2026-10-18; requireAuth, no AI call).
 const REQUIRE_AUTH_COUNTS = {
   'world.js': 5,
-  'worldEvents.js': 92,
+  'worldEvents.js': 112,
   'worldStudio.js': 38,
   'worldTemperatureRoutes.js': 3,
 };
@@ -147,12 +155,14 @@ describe('Step 3 CP3 — World cluster mixed Tier 1+3+4 disposition', () => {
       // After CP3 sweep, optionalAuth is no longer referenced in worldEvents.js
       // (all 59 plain optionalAuth handlers promoted to requireAuth + 2 partial AI POSTs
       // promoted from optionalAuth+aiRateLimiter to requireAuth+aiRateLimiter per D4 lock).
+      // Since Task #54 every route part in src/routes/worldEvents/ imports
+      // requireAuth itself, and every part with an AI route aiRateLimiter.
       const src = readSrc('worldEvents.js');
+      expect(src.match(
+        /const\s*\{\s*requireAuth\s*\}\s*=\s*require\(['"]\.\.\/\.\.\/middleware\/auth['"]\)/g,
+      )).toHaveLength(21);
       expect(src).toMatch(
-        /const\s*\{\s*requireAuth\s*\}\s*=\s*require\(['"]\.\.\/middleware\/auth['"]\)/,
-      );
-      expect(src).toMatch(
-        /const\s*\{\s*aiRateLimiter\s*\}\s*=\s*require\(['"]\.\.\/middleware\/aiRateLimiter['"]\)/,
+        /const\s*\{\s*aiRateLimiter\s*\}\s*=\s*require\(['"]\.\.\/\.\.\/middleware\/aiRateLimiter['"]\)/,
       );
     });
 
@@ -381,14 +391,15 @@ describe('Step 3 CP3 — World cluster mixed Tier 1+3+4 disposition', () => {
     // 127 with worldStudio.js GET + POST /world/locations/studio-types (2026-10-18);
     // 130 with worldEvents.js start-readiness, package and suggest-basics (2026-10-23);
     // 135 with the invitation versions rework (+6 routes, -1 re-render-invitation; 2026-10-24);
-    // 138 with the documents rework (restore, keep-look, line redraft; 2026-10-24).
-    test('CP3 zone contains 138 total requireAuth references across 4 files (4 imports + 134 handlers)', () => {
+    // 138 with the documents rework (restore, keep-look, line redraft; 2026-10-24);
+    // 158 since Task #54 split worldEvents.js into 21 parts, each with its own import.
+    test('CP3 zone contains 158 total requireAuth references (24 imports + 134 handlers)', () => {
       const total = CP3_FILES.reduce((sum, filename) => {
         const src = readSrc(filename);
         const matches = src.match(/\brequireAuth\b/g) || [];
         return sum + matches.length;
       }, 0);
-      expect(total).toBe(138);
+      expect(total).toBe(158);
     });
 
     test('CP3 zone contains 20 total optionalAuth references (all in worldStudio.js)', () => {
