@@ -678,6 +678,26 @@
 /* A visible field, as the ask box (Script page audit, 2026-10-19). */
 .esp-beat14-field textarea { width: 100%; box-sizing: border-box; font: inherit; padding: 6px 8px; border: 1px solid var(--studio-line-strong); border-radius: 8px; background: var(--studio-card); color: var(--studio-ink); }
 .esp-beat14-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
+/* The open ones ranked by fit with the event, each with why (Evoni, 2026-10-25). */
+.esp-beat14-picklist { display: flex; flex-direction: column; gap: 6px; }
+.esp-beat14-group { margin: 2px 0 0; font-size: 11px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--studio-ink-muted); }
+.esp-beat14-choice { display: flex; align-items: flex-start; gap: 8px; padding: 8px 10px; border: 1px solid var(--studio-line-strong); border-radius: 8px; background: var(--studio-card); cursor: pointer; }
+.esp-beat14-choice.is-on { border-color: var(--studio-magenta); background: var(--studio-magenta-soft); }
+.esp-beat14-choice input { margin: 3px 0 0; flex: none; accent-color: var(--studio-magenta); }
+.esp-beat14-choice-body { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.esp-beat14-choice-name { font-size: 13px; font-weight: 600; color: var(--studio-ink); overflow-wrap: anywhere; }
+.esp-beat14-best { display: inline-flex; align-items: center; gap: 3px; margin-left: 6px; padding: 1px 7px; border-radius: 999px; background: var(--lala-gold-soft); color: var(--lala-gold-text); font-size: 11px; font-weight: 700; vertical-align: 1px; white-space: nowrap; }
+.esp-beat14-reasons { display: flex; flex-wrap: wrap; gap: 4px; }
+.esp-beat14-reason { padding: 2px 8px; border-radius: 999px; background: var(--studio-purple-soft); color: var(--studio-purple); font-size: 11px; font-weight: 600; overflow-wrap: anywhere; }
+.esp-beat14-reason.is-goal { background: var(--success-bg, var(--studio-purple-soft)); color: var(--success-text, var(--studio-purple)); }
+.esp-beat14-more { align-self: flex-start; padding: 4px 0; border: 0; background: none; color: var(--studio-magenta); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
+.esp-beat14-nofit { margin: 0; padding: 6px 8px; border-radius: 8px; background: var(--lala-gold-soft); color: var(--lala-gold-text); font-size: 12px; overflow-wrap: anywhere; }
+.esp-beat14-suggest { display: inline-flex; align-items: center; gap: 4px; }
+.esp-beat14-suggest.is-up { border-color: var(--lala-gold-line, var(--studio-line-strong)); color: var(--lala-gold-text); font-weight: 700; }
+@media (max-width: 760px) {
+  .esp-beat14-choice { min-height: 44px; }
+  .esp-beat14-more, .esp-beat14-suggest { min-height: 44px; }
+}
 
 /* ── Pills, context chips, the bottom bar and the Context sheet (Task #2881) ── */
 .esp-pills, .esp-chips, .esp-mobilebar, .esp-side-close { display: none; }

@@ -9,6 +9,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Gift, ClipboardCheck } from 'lucide-react';
+import { episodeCode, seasonContextOf } from '../../lib/episodePipeline';
 import './OpportunityBeat14.css';
 
 /** The statuses beat 14 can take (services/beat14Opportunity OPEN_STATUSES). */
@@ -43,15 +44,40 @@ export const canUndo = (opp) => {
 /** Completed episodes (evaluation_status 'accepted', services/beat14Opportunity isCompleted) take no new beat 14 opportunity. */
 export const isCompletedEpisode = (ep) => ep?.evaluation_status === 'accepted';
 
-/** "Beat 14 of ‹title›" (or "Episode N"), linking to that episode's Script tab. */
+/**
+ * A held one's status chip. Which episode it waits for, and its link, are
+ * on the card's "Offered in" line (OfferedInEpisode; Evoni, 2026-10-25),
+ * so the chip no longer repeats the episode's title.
+ */
 export function HeldForBeat14({ opp }) {
-  const ep = opp?.beat14_episode || (opp?.offered_in_episode_id ? { id: opp.offered_in_episode_id, title: null } : null);
+  if (!opp?.beat14_episode && !opp?.offered_in_episode_id) return null;
+  return <span className="ob14-held" data-testid={`opp-held-${opp.id}`}><Gift size={12} aria-hidden="true" />held for beat 14</span>;
+}
+
+/**
+ * Where it stands in its episode's beat 14 (Evoni, 2026-10-25): held until
+ * the episode is done, offered, or expired. Offered once completion (or a
+ * release by hand) offered it, whatever step it took after.
+ */
+export function offeredInState(opp) {
+  if (opp?.status === 'held') return "held until it's done";
+  if (opp?.status === 'expired') return 'expired';
+  return 'offered';
+}
+
+/** "Offered in S1 E5 · held until it's done", linking to that episode's Script tab. */
+export function OfferedInEpisode({ opp }) {
+  const ep = opp?.beat14_episode || (opp?.offered_in_episode_id ? { id: opp.offered_in_episode_id } : null);
   if (!ep) return null;
+  // Its code ("S1 E5", or the slot's "S2 · E1"); without a number, its title.
+  const b = opp.beat14_episode;
+  const code = b && (b.episode_number || seasonContextOf(b)?.label) ? episodeCode(b) : (b?.title || 'its episode');
   return (
-    <span className="ob14-held" data-testid={`opp-held-${opp.id}`}>
+    <p className="ob14-offered" data-testid={`opp-offered-in-${opp.id}`}>
       <Gift size={12} aria-hidden="true" />
-      <Link to={`/episodes/${ep.id}?tab=scripts`}>Beat 14 of {heldEpisodeName(opp)}</Link>
-    </span>
+      <Link to={`/episodes/${ep.id}?tab=scripts`} title={ep.title ? `Beat 14 of ${ep.title}` : undefined}>Offered in {code}</Link>
+      <span className={`ob14-offered-state is-${opp.status === 'held' ? 'held' : opp.status === 'expired' ? 'expired' : 'offered'}`}> · {offeredInState(opp)}</span>
+    </p>
   );
 }
 

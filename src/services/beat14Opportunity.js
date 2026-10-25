@@ -121,7 +121,70 @@ async function attached(models, episodeId) {
   return models.Opportunity.findOne({ where: { offered_in_episode_id: episodeId } });
 }
 
-/** GET: the attached opportunity, who at the event can offer, and the show's open opportunities to attach. */
+const plain = (o) => (o && typeof o.get === 'function' ? o.get({ plain: true }) : o);
+
+/**
+ * What beat14Fit scores against (Evoni, 2026-10-25): the brands of the
+ * event's host and guests, the active goals nothing in the season moves yet,
+ * and Lala's stats. The host's brand is the event's opportunity's company,
+ * else the company named host_brand, else host_brand as a name
+ * (dealTermsDraftService brandProfileIdFor reads it the same way); a
+ * person's is the company their Pulse account belongs to
+ * (full_profile.lalaverse_brand_id). A failed read leaves that part out:
+ * the candidates are then listed with fewer reasons, never refused.
+ */
+async function fitContext(models, { showId, event, people }) {
+  const { sequelize } = models;
+  const ctx = { event, brands: [], goals: [], state: {} };
+  if (!event) return ctx;
+  const select = (sql, replacements) => sequelize.query(sql, { replacements, type: sequelize.QueryTypes.SELECT });
+  try {
+    let cc = event.canon_consequences;
+    if (typeof cc === 'string') {
+      try { cc = JSON.parse(cc); } catch (err) { console.error('[Beat14] canon_consequences is not valid JSON:', err.message); cc = null; }
+    }
+    const hostBrand = String(event.host_brand || cc?.automation?.host_brand || '').trim();
+    let hostCompany = null;
+    if (event.opportunity_id) {
+      hostCompany = (await select('SELECT company_id FROM opportunities WHERE id = :id AND deleted_at IS NULL', { id: event.opportunity_id }))?.[0]?.company_id || null;
+    }
+    if (!hostCompany && hostBrand) {
+      hostCompany = (await select('SELECT id FROM lalaverse_brands WHERE deleted_at IS NULL AND LOWER(TRIM(name)) = LOWER(:brand) ORDER BY created_at ASC LIMIT 1', { brand: hostBrand }))?.[0]?.id || null;
+    }
+    const host = people.find((p) => p.role === 'host');
+    if (hostCompany || hostBrand) ctx.brands.push({ company_id: hostCompany, name: hostBrand || null, role: 'host', person: host?.name || null });
+    const ids = people.map((p) => p.profile_id);
+    if (ids.length) {
+      const rows = await select(
+        `SELECT sp.id, b.id AS company_id, b.name FROM social_profiles sp
+           JOIN lalaverse_brands b ON b.id::text = sp.full_profile->>'lalaverse_brand_id' AND b.deleted_at IS NULL
+          WHERE sp.id IN (:ids) AND sp.deleted_at IS NULL`, { ids });
+      for (const r of Array.isArray(rows) ? rows : []) {
+        const person = people.find((p) => p.profile_id === Number(r.id));
+        if (person) ctx.brands.push({ company_id: r.company_id, name: r.name, role: person.role, person: person.name });
+      }
+    }
+    // The host's own brand first, so "Same brand as the host" wins a tie.
+    ctx.brands.sort((a, b) => (a.role === b.role ? 0 : a.role === 'host' ? -1 : 1));
+  } catch (err) {
+    console.error('[Beat14] the event\'s brands could not be read (ranked without them):', err.message);
+  }
+  try {
+    const { loadCoverageInputs, computeCoverage } = require('./seasonGoalCoverage');
+    const inputs = await loadCoverageInputs(sequelize, showId);
+    if (inputs) {
+      const coverage = computeCoverage(inputs);
+      const uncovered = new Set(coverage.goals.filter((g) => !g.movers.length).map((g) => String(g.id)));
+      ctx.goals = inputs.goals.filter((g) => uncovered.has(String(g.id)));
+      ctx.state = inputs.state || {};
+    }
+  } catch (err) {
+    console.error('[Beat14] the season\'s goals could not be read (ranked without them):', err.message);
+  }
+  return ctx;
+}
+
+/** GET: the attached opportunity, who at the event can offer, and the show's open opportunities to attach, best fits first (beat14Fit). */
 async function getBeat14(models, { showId, episodeId }) {
   const { event } = await episodeAndEvent(models, { showId, episodeId });
   // A read writes nothing (Script page audit 3, 2026-10-19: it resolved a
@@ -136,12 +199,44 @@ async function getBeat14(models, { showId, episodeId }) {
     order: [['created_at', 'DESC']],
     limit: 50,
   });
+  const people = await eventPeople(models.sequelize, event);
+  const { rankCandidates, scoreCandidate } = require('./beat14Fit');
+  const ctx = await fitContext(models, { showId, event, people });
   return {
-    opportunity: slim(opp),
-    people: await eventPeople(models.sequelize, event),
-    candidates: open.map(slim),
+    opportunity: opp ? { ...slim(opp), fit: scoreCandidate(plain(opp), ctx) } : null,
+    people,
+    candidates: rankCandidates(open.map(plain), ctx).map((c) => ({ ...slim(c), fit: c.fit })),
     event: event ? { id: event.id, name: event.name } : null,
   };
+}
+
+/**
+ * GET …/beat14/suggest (Evoni, 2026-10-25): a new opportunity drafted from
+ * someone at the event — `from` (a profile id) when given, else the host,
+ * else the first guest — moving the first goal nothing in the season moves
+ * yet. Deterministic, no AI. Nothing is saved: the draft fills beat 14's
+ * create form, and only its Attach saves it (attachBeat14 with `create`).
+ * Returns { draft, people }; draft is null when nobody at the event can
+ * offer it.
+ */
+async function suggestBeat14(models, { showId, episodeId, from = null }) {
+  const { event } = await episodeAndEvent(models, { showId, episodeId });
+  if (!event) throw new Beat14Error(400, 'This episode has no event, so nobody at an event can offer the opportunity.');
+  const people = await eventPeople(models.sequelize, event);
+  let person = people[0] || null;
+  if (from != null && from !== '') {
+    person = people.find((p) => p.profile_id === Number(from)) || null;
+    if (!person) throw new Beat14Error(400, 'The invitation comes from someone at the event: choose its host or one of its guests.');
+  }
+  if (!person) return { draft: null, people };
+  const ctx = await fitContext(models, { showId, event, people });
+  const brand = ctx.brands.find((b) => b.person === person.name && (b.role === person.role))?.name
+    || (person.role === 'host' ? ctx.brands.find((b) => b.role === 'host')?.name : null)
+    || null;
+  const goal = ctx.goals.find((g) => g.target_metric !== 'stress') || null;
+  const { draftSuggestion } = require('./beat14Fit');
+  const draft = draftSuggestion({ event, person, brand, goal });
+  return { draft: draft ? { ...draft, goal: goal ? { id: goal.id, title: goal.title } : null } : null, people };
 }
 
 async function sender(models, event, profileId) {
@@ -386,7 +481,7 @@ async function loadForScript(models, { episodeId }) {
   return slim(opp);
 }
 
-module.exports = { getBeat14, attachBeat14, detachBeat14, resolveAtCompletion, resolveHeldAfterCompletion, releaseHeld, releasedEntry, episodeEventId, loadForScript, eventPeople, Beat14Error, HELD, TYPES };
+module.exports = { getBeat14, suggestBeat14, fitContext, attachBeat14, detachBeat14, resolveAtCompletion, resolveHeldAfterCompletion, releaseHeld, releasedEntry, episodeEventId, loadForScript, eventPeople, Beat14Error, HELD, TYPES };
 
 const { beat14Outcome, beat14Decided } = require('../utils/beat14Invitation');
 

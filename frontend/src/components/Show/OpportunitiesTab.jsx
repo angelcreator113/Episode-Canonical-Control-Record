@@ -9,7 +9,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Send } from 'lucide-react';
 import DeliverableProgress from '../Deliverables/DeliverableProgress';
-import { Beat14AttachForm, HeldForBeat14, HeldWhy, canAttachToBeat14, canUndo, isCompletedEpisode, releaseText, scheduleEarlyText } from './OpportunityBeat14';
+import { Beat14AttachForm, HeldForBeat14, HeldWhy, OfferedInEpisode, canAttachToBeat14, canUndo, isCompletedEpisode, releaseText, scheduleEarlyText } from './OpportunityBeat14';
 
 // ─── OPPORTUNITIES TAB COMPONENT ─────────────────────────────────────────────
 export default function OpportunitiesTab({ showId, api, S, setToast, loadData, episodes = [] }) {
@@ -179,6 +179,8 @@ export default function OpportunitiesTab({ showId, api, S, setToast, loadData, e
                   </div>
                   {parseFloat(opp.payment_amount) > 0 && <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--success-text)' }} data-testid={`opp-payment-${opp.id}`}>{coinsText(parseFloat(opp.payment_amount))}</div>}
                 </div>
+                {/* Which episode's beat 14 offers it, and where that stands (Evoni, 2026-10-25). */}
+                <OfferedInEpisode opp={opp} />
                 {opp.narrative_stakes && <div style={{ fontSize: 11, color: '#666', marginBottom: 6 }}>{opp.narrative_stakes}</div>}
                 {held && <HeldWhy opp={opp} />}
                 <div className="ob14-card-actions" style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
