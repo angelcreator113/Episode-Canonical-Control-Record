@@ -10,9 +10,13 @@
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  Upload, Film, Trash2, Play, WandSparkles, X, Loader, CircleCheck, CircleAlert, Clock, RefreshCw, UserRound,
+  Upload, Film, Trash2, Play, WandSparkles, X, Loader, CircleCheck, CircleAlert, Clock, RefreshCw, UserRound, ListOrdered, Copy,
 } from 'lucide-react';
 import { rawClipsApi, PERFORMERS, STRENGTHS, clipLength, clipSize, anyKeying, sceneChoices } from '../../lib/rawClipsApi';
+import { isFullTake } from '../../lib/fullEpisodeTake';
+import { clipMarks } from '../../lib/assembleTakes';
+import { youtubeChapters, draftDescription } from '../../lib/youtubeChapters';
+import { copyText } from './ScriptReadActions';
 import './EpisodeRawFootageTab.css';
 
 const POLL_MS = 5000;
@@ -54,11 +58,64 @@ function ClipPlayer({ clip, onClose }) {
   );
 }
 
-function ClipCard({ clip, scenes, onPlay, onRemoveGreen, onMove, onLink, onDelete, busy }) {
+// A copyable block: its text in a read-only box and a Copy button.
+function CopyBlock({ label, text, testId }) {
+  const [said, setSaid] = useState(null);
+  const copy = async () => {
+    const ok = await copyText(text);
+    setSaid(ok ? 'Copied' : 'Could not copy. Select the text and copy it instead.');
+    setTimeout(() => setSaid(null), 2500);
+  };
+  return (
+    <div className="erf-copy" data-testid={testId}>
+      <div className="erf-copy-head">
+        <h4 className="erf-copy-title">{label}</h4>
+        <button type="button" className="erf-btn" onClick={copy} disabled={!text} data-testid={`${testId}-copy`}><Copy size={14} aria-hidden /> Copy</button>
+      </div>
+      <textarea className="erf-copy-text" readOnly value={text} rows={Math.min(14, Math.max(3, text.split('\n').length))} aria-label={label} onFocus={(e) => e.target.select()} />
+      {said && <p className="erf-copy-said" role="status">{said}</p>}
+    </div>
+  );
+}
+
+// YouTube chapters for a whole-episode take, from its beat markers, and a
+// draft description to paste under the video (lib/youtubeChapters).
+function ChaptersSheet({ clip, episode, names, onClose }) {
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onClose]);
+  const ch = youtubeChapters(clipMarks(clip), { names, duration: clip.duration_seconds });
+  const description = draftDescription({ title: episode?.title, synopsis: episode?.description || episode?.logline, chapters: ch });
+  return (
+    <div className="erf-modal" role="dialog" aria-modal="true" aria-label="YouTube chapters" onClick={onClose}>
+      <div className="erf-modal-card erf-chapters" onClick={(e) => e.stopPropagation()} data-testid="erf-chapters">
+        <div className="erf-modal-head">
+          <h3 className="erf-modal-title">YouTube chapters · {clip.label || 'Full episode'}</h3>
+          <button type="button" className="erf-icon-btn" onClick={onClose} aria-label="Close"><X size={18} aria-hidden /></button>
+        </div>
+        <p className="erf-sub">Made from where each beat started in this take. Paste them into the video’s description on YouTube; the times only line up if the video is this take, uncut.</p>
+        {ch.notes.length > 0 && (
+          <ul className={`erf-chapter-notes${ch.ok ? '' : ' is-warn'}`} data-testid="erf-chapter-notes">
+            {ch.notes.map((n) => <li key={n}>{n}</li>)}
+          </ul>
+        )}
+        <div className="erf-copies">
+          <CopyBlock label="Chapters" text={ch.text} testId="erf-chapters-list" />
+          <CopyBlock label="Draft description" text={description} testId="erf-chapters-description" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ClipCard({ clip, scenes, onPlay, onChapters, onRemoveGreen, onMove, onLink, onDelete, busy }) {
   const [strength, setStrength] = useState(clip.key_strength || 'medium');
   const st = STATUS[clip.key_status] || STATUS.none;
   const meta = [clipLength(clip.duration_seconds), clipSize(clip.file_size_bytes), clip.width && clip.height ? `${clip.width}×${clip.height}` : null].filter(Boolean);
   const working = clip.key_status === 'queued' || clip.key_status === 'processing';
+  const hasMarks = isFullTake(clip) && clipMarks(clip).length > 0;
   return (
     <li className="erf-clip" data-testid="erf-clip">
       <button type="button" className="erf-thumb" onClick={() => onPlay(clip)} aria-label={`Play ${clip.label || 'clip'}`}>
@@ -75,6 +132,11 @@ function ClipCard({ clip, scenes, onPlay, onRemoveGreen, onMove, onLink, onDelet
         </span>
         {clip.key_status === 'failed' && clip.key_error && <p className="erf-error">{clip.key_error}</p>}
         <div className="erf-clip-actions">
+          {hasMarks && (
+            <button type="button" className="erf-btn" onClick={() => onChapters(clip)} data-testid="erf-chapters-open" title="Chapters and a draft description for YouTube, from this take's beat markers">
+              <ListOrdered size={14} aria-hidden /> YouTube chapters
+            </button>
+          )}
           {!working && (
             <span className="erf-green">
               <select value={strength} onChange={(e) => setStrength(e.target.value)} aria-label="How much green to remove" disabled={busy}>
@@ -169,6 +231,7 @@ export default function EpisodeRawFootageTab({ episode, onCount }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [playing, setPlaying] = useState(null);
+  const [chapters, setChapters] = useState(null);
   const [busyId, setBusyId] = useState(null);
   const [beats, setBeats] = useState([]);
 
@@ -239,6 +302,7 @@ export default function EpisodeRawFootageTab({ episode, onCount }) {
 
   const handlers = {
     onPlay: setPlaying,
+    onChapters: setChapters,
     onRemoveGreen: (clip, strength) => act(clip, () => rawClipsApi.removeGreen(episodeId, clip.id, strength), 'Could not start removing the green.'),
     onMove: (clip, performer) => act(clip, () => rawClipsApi.update(episodeId, clip.id, { performer }), 'Could not move the clip.'),
     onLink: (clip, beatNumber) => act(clip, () => rawClipsApi.update(episodeId, clip.id, { beat_number: beatNumber }), 'Could not link the clip to the scene.'),
@@ -283,6 +347,10 @@ export default function EpisodeRawFootageTab({ episode, onCount }) {
         </div>
       )}
       {playing && <ClipPlayer clip={playing} onClose={() => setPlaying(null)} />}
+      {chapters && (
+        <ChaptersSheet clip={chapters} episode={episode} onClose={() => setChapters(null)}
+          names={Object.fromEntries(beats.filter((b) => b.beat_name).map((b) => [Number(b.beat_number), b.beat_name]))} />
+      )}
     </div>
   );
 }

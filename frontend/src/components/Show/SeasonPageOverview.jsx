@@ -295,14 +295,14 @@ export function SeasonOverviewTab({ plan, api, showId, arc, roadmap, events, goT
   );
 }
 
-export function SeasonStoryTab({ plan, S, api, showId, setToast }) {
+export function SeasonStoryTab({ plan, S, api, showId, setToast, goTab }) {
   return (
     <div className="szn-story" data-testid="szn-story">
       {plan.roadmap && (
         <StoryThreadsCard threads={plan.threadData.threads} drafts={plan.threadData.drafts} S={S} api={api} showId={showId}
           onChanged={plan.loadRoadmap} setToast={setToast} />
       )}
-      <SeasonTwists showId={showId} api={api} />
+      <SeasonTwists showId={showId} api={api} onSeeAll={goTab ? () => goTab('plants') : null} />
       <SeasonRevealPlan showId={showId} api={api} />
       {plan.roadmap && <SeasonNeeds data={plan.needs.data} api={api} onChanged={plan.loadNeeds} error={plan.needs.error} onRetry={plan.loadNeeds} />}
     </div>

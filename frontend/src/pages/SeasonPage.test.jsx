@@ -137,7 +137,7 @@ describe('The tabs', () => {
     expect(await screen.findByTestId('szn-panel-overview')).toBeTruthy();
     const tabs = screen.getAllByRole('tab');
     // Evoni, 2026-10-25: Producer Mode's episodes, opportunities and results moved here.
-    expect(tabs.map((t) => t.querySelector('.szn-tab-label').textContent)).toEqual(['Overview', 'Roadmap', 'Episodes', 'Events', 'Opportunities', 'Story', 'Goals', 'Results']);
+    expect(tabs.map((t) => t.querySelector('.szn-tab-label').textContent)).toEqual(['Overview', 'Roadmap', 'Episodes', 'Events', 'Opportunities', 'Story', 'Plants', 'Goals', 'Results']);
     expect(screen.getByTestId('szn-tab-overview').getAttribute('aria-selected')).toBe('true');
     fireEvent.click(screen.getByTestId('szn-tab-story'));
     expect(await screen.findByTestId('szn-panel-story')).toBeTruthy();
@@ -166,7 +166,7 @@ describe('The tabs', () => {
       const note = await within(await screen.findByTestId(`szn-panel-${key}`)).findByTestId('szn-tab-note');
       notes[key] = note.textContent;
     }
-    expect(Object.keys(notes)).toEqual(['overview', 'roadmap', 'episodes', 'events', 'opportunities', 'story', 'goals', 'results']);
+    expect(Object.keys(notes)).toEqual(['overview', 'roadmap', 'episodes', 'events', 'opportunities', 'story', 'plants', 'goals', 'results']);
     expect(notes.episodes).toBe('Every episode this season and where it is in production.');
     for (const text of Object.values(notes)) expect(text.length).toBeGreaterThan(20);
   });

@@ -15,7 +15,8 @@
  * (Evoni, 2026-10-23) a [UI:…] line is kept as an on-screen moment,
  *   { kind: 'screen', verb, target, text, icon, seconds: 3 }
  * (lib/teleprompterScreen), a cue for her to react to; the other tags stay
- * hidden. Without it the lines are exactly as before, so teleprompterIndexMap
+ * hidden, except `[SFX: …]`, kept as the same kind of cue (lib/teleprompterSound).
+ * Without it the lines are exactly as before, so teleprompterIndexMap
  * (a voice clip's line index) never counts a screen moment.
  * Pure: no React, no network.
  */
@@ -23,6 +24,7 @@ import { readLine, scriptSections } from './scriptExport';
 import { lineSeconds } from './scriptRuntime';
 import { isBreath, markTokens } from './teleprompterMarks';
 import { screenLine } from './teleprompterScreen';
+import { soundLine } from './teleprompterSound';
 import { unbold, isHerSpeaker, HER } from './scriptSpeaker';
 
 // Her names as the script writes them: lib/scriptSpeaker's, one list for the
@@ -50,8 +52,12 @@ export function teleprompterLines(lines = [], { screen = false } = {}) {
     } else if (r.type === 'moment' && screen) {
       const cue = screenLine(plain);
       if (cue) out.push(cue);
+    } else if (r.type === 'tag' && screen) {
+      // `[SFX: …]`: a sound to react to, cued like an on-screen moment (lib/teleprompterSound).
+      const cue = soundLine(plain);
+      if (cue) out.push(cue);
     }
-    // moment (unless screen), transition, tag: hidden.
+    // moment (unless screen), transition, other tags: hidden.
   }
   return out;
 }

@@ -1,0 +1,22 @@
+/* Script tab › Must cover › Plants for later (2026-10-25): the Script page's --studio-* tokens only, as EpisodeTwistsDue. */
+.eps { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--studio-line); min-width: 0; }
+.eps-title { display: flex; align-items: center; gap: 6px; margin: 0; font-size: 12px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--studio-purple); }
+.eps-about, .eps-note { margin: 0; font-size: 12px; color: var(--studio-ink-muted); }
+.eps-note.is-error { color: var(--danger-text); }
+.eps-note.is-done { color: var(--studio-ok); }
+.eps-note.is-ai { font-weight: 700; color: var(--studio-purple); }
+.eps-list { display: flex; flex-direction: column; gap: 8px; width: 100%; margin: 0; padding: 0; list-style: none; }
+.eps-item {
+  display: flex; flex-wrap: wrap; gap: 8px; padding: 8px 10px; border: 1px solid var(--studio-line); border-radius: 10px;
+  font-size: 13px; line-height: 1.45; color: var(--studio-ink); min-width: 0; box-sizing: border-box;
+}
+.eps-field { display: flex; flex-direction: column; gap: 3px; flex: 1 1 110px; min-width: 0; font-size: 11px; font-weight: 700; color: var(--studio-ink-muted); }
+.eps-field.is-wide { flex-basis: 100%; }
+.eps-field input, .eps-field select {
+  width: 100%; box-sizing: border-box; min-height: 36px; padding: 4px 8px; border: 1px solid var(--studio-line); border-radius: 8px;
+  font: inherit; font-size: 13px; font-weight: 400; color: var(--studio-ink);
+}
+.eps-desc { flex-basis: 100%; font-size: 12px; color: var(--studio-ink-muted); overflow-wrap: anywhere; }
+.eps-quote { flex-basis: 100%; font-size: 12px; font-style: italic; color: var(--studio-draft); overflow-wrap: anywhere; }
+.eps-actions { display: flex; flex-wrap: wrap; gap: 8px; flex-basis: 100%; }
+.eps-link { font-size: 12px; }
