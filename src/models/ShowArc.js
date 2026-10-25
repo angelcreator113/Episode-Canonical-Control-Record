@@ -24,6 +24,13 @@ module.exports = (sequelize) => {
     description: { type: DataTypes.TEXT, allowNull: true },
     season_number: { type: DataTypes.INTEGER, allowNull: true, defaultValue: 1 },
 
+    // The Season page (2026-10-25): its cover from Files, its dates (end not
+    // before start) and a logline. A part's picture is phases[i].picture_url.
+    cover_url: { type: DataTypes.TEXT, allowNull: true },
+    starts_on: { type: DataTypes.DATEONLY, allowNull: true },
+    ends_on: { type: DataTypes.DATEONLY, allowNull: true },
+    logline: { type: DataTypes.TEXT, allowNull: true },
+
     // Episode range for the entire arc
     episode_start: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 1 },
     episode_end: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 24 },

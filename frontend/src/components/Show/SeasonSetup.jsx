@@ -5,7 +5,10 @@
  * current events?" — yes).
  *
  *   SeasonSetupForm   the form: title, tagline, the three parts' names and
- *                     taglines, and how the 24 episodes split between them.
+ *                     taglines, and how the 24 episodes split between them;
+ *                     and the Season page's fields (2026-10-25): logline,
+ *                     description, start and end dates, a cover and a
+ *                     picture per part, chosen from Files.
  *                     Seeds a season (POST .../arc/seed) or edits it (PUT
  *                     .../arc/setup); the page passes onSubmit.
  *   SeasonPlacement   "Use your events and episodes": the preview from GET
@@ -23,6 +26,7 @@
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { BookOpen, Check, X, Sparkles, ListChecks, CalendarDays, Film, Pencil, RotateCcw, Circle, CheckCircle2 } from 'lucide-react';
+import SeasonPicturePicker from './SeasonPicturePicker';
 import './SeasonSetup.css';
 
 export const SEASON_SLOTS = 24;
@@ -33,13 +37,17 @@ const PART_DEFAULTS = [
 ];
 const errorOf = (err, fallback) => err?.response?.data?.error || fallback;
 
+// The Season page's fields, empty (2026-10-25).
+const PAGE_FIELDS_EMPTY = { logline: '', description: '', starts_on: '', ends_on: '', cover_url: null };
+
 /** The form's defaults: Season 1's original wording, or "Season N" after it. */
 export function defaultForm(seasonNumber = 1) {
   const first = Number(seasonNumber) <= 1;
   return {
     title: first ? 'Soft Luxury Ascension' : `Season ${seasonNumber}`,
     tagline: first ? 'Lala earns her place in the luxury tier' : '',
-    phases: PART_DEFAULTS.map((p) => ({ ...p })),
+    ...PAGE_FIELDS_EMPTY,
+    phases: PART_DEFAULTS.map((p) => ({ ...p, picture_url: null })),
     split: [8, 8, 8],
   };
 }
@@ -50,9 +58,20 @@ export function formFromArc(arc) {
   return {
     title: arc?.title || '',
     tagline: arc?.tagline || '',
-    phases: [0, 1, 2].map((i) => ({ title: phases[i]?.title || '', tagline: phases[i]?.tagline || '' })),
+    logline: arc?.logline || '',
+    description: arc?.description || '',
+    starts_on: arc?.starts_on ? String(arc.starts_on).slice(0, 10) : '',
+    ends_on: arc?.ends_on ? String(arc.ends_on).slice(0, 10) : '',
+    cover_url: arc?.cover_url || null,
+    phases: [0, 1, 2].map((i) => ({ title: phases[i]?.title || '', tagline: phases[i]?.tagline || '', picture_url: phases[i]?.picture_url || null })),
     split: [0, 1, 2].map((i) => (phases[i] ? Number(phases[i].episode_end) - Number(phases[i].episode_start) + 1 : 8)),
   };
+}
+
+/** The dates' problem, in words (the server's rule): the end is not before the start. */
+export function datesProblem(startsOn, endsOn) {
+  if (startsOn && endsOn && endsOn < startsOn) return 'The season cannot end before it starts.';
+  return null;
 }
 
 /** What is wrong with a split, in words; null when it is three whole numbers ≥ 1 adding up to 24 (the server's rule). */
@@ -75,13 +94,15 @@ export function splitRanges(split) {
   });
 }
 
-export function SeasonSetupForm({ mode = 'create', seasonNumber = 1, initial = null, onSubmit, onCancel }) {
-  const [form, setForm] = useState(() => initial || defaultForm(seasonNumber));
+export function SeasonSetupForm({ mode = 'create', seasonNumber = 1, initial = null, onSubmit, onCancel, showId = null }) {
+  const [form, setForm] = useState(() => ({ ...defaultForm(seasonNumber), ...(initial || {}) }));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const problem = splitProblem(form.split);
   const missing = !form.title.trim() ? 'The season needs a title.'
-    : form.phases.findIndex((p) => !p.title.trim()) >= 0 ? `Part ${form.phases.findIndex((p) => !p.title.trim()) + 1} needs a name.` : null;
+    : form.phases.findIndex((p) => !p.title.trim()) >= 0 ? `Part ${form.phases.findIndex((p) => !p.title.trim()) + 1} needs a name.`
+      : datesProblem(form.starts_on, form.ends_on);
+  const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }));
   const ranges = problem ? null : splitRanges(form.split);
   const total = form.split.reduce((a, n) => a + (Number(n) || 0), 0);
 
@@ -96,7 +117,12 @@ export function SeasonSetupForm({ mode = 'create', seasonNumber = 1, initial = n
       await onSubmit({
         title: form.title.trim(),
         tagline: form.tagline.trim(),
-        phases: form.phases.map((p) => ({ title: p.title.trim(), tagline: p.tagline.trim() })),
+        logline: (form.logline || '').trim(),
+        description: (form.description || '').trim(),
+        starts_on: form.starts_on || null,
+        ends_on: form.ends_on || null,
+        cover_url: form.cover_url || null,
+        phases: form.phases.map((p) => ({ title: p.title.trim(), tagline: p.tagline.trim(), picture_url: p.picture_url || null })),
         split: form.split.map(Number),
       });
     } catch (err) {
@@ -129,6 +155,34 @@ export function SeasonSetupForm({ mode = 'create', seasonNumber = 1, initial = n
         </label>
       </div>
 
+      {/* The Season page's fields (Evoni's mockup, 2026-10-25). */}
+      <fieldset className="sst-page-fields" data-testid="sst-page-fields">
+        <legend className="sst-legend">On the Season page</legend>
+        <div className="sst-fields">
+          <label className="sst-field is-wide">
+            <span>Logline <em>(optional)</em></span>
+            <input type="text" value={form.logline} maxLength={500} placeholder="The season in a sentence" onChange={set('logline')} data-testid="sst-logline" />
+          </label>
+          <label className="sst-field is-wide">
+            <span>Description <em>(optional)</em></span>
+            <textarea rows={3} value={form.description} maxLength={4000} onChange={set('description')} data-testid="sst-description" />
+          </label>
+          <label className="sst-field">
+            <span>Starts <em>(optional)</em></span>
+            <input type="date" value={form.starts_on} onChange={set('starts_on')} data-testid="sst-starts-on" />
+          </label>
+          <label className="sst-field">
+            <span>Ends <em>(optional)</em></span>
+            <input type="date" value={form.ends_on} min={form.starts_on || undefined} onChange={set('ends_on')} data-testid="sst-ends-on" />
+          </label>
+          <div className="sst-field is-wide">
+            <span>Cover picture <em>(optional)</em></span>
+            <SeasonPicturePicker showId={showId} label="Cover" value={form.cover_url} disabled={busy}
+              onChange={(url) => setForm((f) => ({ ...f, cover_url: url }))} />
+          </div>
+        </div>
+      </fieldset>
+
       <div className="sst-parts" role="group" aria-label="The three parts">
         {form.phases.map((p, i) => (
           <fieldset key={i} className="sst-part" data-testid={`sst-part-${i + 1}`}>
@@ -146,6 +200,11 @@ export function SeasonSetupForm({ mode = 'create', seasonNumber = 1, initial = n
               <input type="number" inputMode="numeric" min={1} max={22} step={1} value={form.split[i]}
                 onChange={(e) => setSplit(i, e.target.value)} data-testid={`sst-split-${i + 1}`} />
             </label>
+            <div className="sst-field">
+              <span>Picture <em>(optional)</em></span>
+              <SeasonPicturePicker showId={showId} label={`Part ${i + 1} picture`} value={p.picture_url || null} disabled={busy}
+                onChange={(url) => setPart(i, 'picture_url', url)} />
+            </div>
           </fieldset>
         ))}
       </div>

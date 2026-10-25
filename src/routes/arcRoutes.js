@@ -8,7 +8,9 @@
  *                                           and next_season_number for "Start Season N"
  * POST   /world/:showId/arc/seed         — Seed the next season from the "Set up the season" form
  *                                           ({ title, tagline, phases: [{ title, tagline }] x3, split: [n, n, n] })
- * PUT    /world/:showId/arc/setup        — "Edit season": the same form; re-phases slots not started
+ * PUT    /world/:showId/arc/setup        — "Edit season": the same form; re-phases slots not started. Also the
+ *                                           Season page's fields it sends (cover_url, starts_on, ends_on, logline,
+ *                                           description, phases[i].picture_url); one left out keeps what is saved
  * GET    /world/:showId/season/placement — Preview: existing episodes and unused events into open slots
  * POST   /world/:showId/season/placement — Save the preview ({ items: [{ slot_id, episode_id | event_id }] }), one transaction
  * POST   /world/:showId/season/draft     — Draft the season, or one part ({ phase }), in one AI call; nothing saved
@@ -93,11 +95,15 @@ router.get('/world/:showId/arc', requireAuth, async (req, res) => {
     const log = typeof arc.progression_log === 'string' ? JSON.parse(arc.progression_log) : arc.progression_log;
 
     const nextSeason = Math.max(0, ...arcs.map((a) => Number(a.season_number) || 0)) + 1;
+    const { savedDay } = require('../services/seasonSetupService');
     return res.json({
       success: true,
       next_season_number: nextSeason,
       arc: {
         ...arc,
+        // The Season page's dates as YYYY-MM-DD, never shifted by a time zone.
+        starts_on: savedDay(arc.starts_on),
+        ends_on: savedDay(arc.ends_on),
         phases,
         narrative_debt: debt,
         progression_log: log,

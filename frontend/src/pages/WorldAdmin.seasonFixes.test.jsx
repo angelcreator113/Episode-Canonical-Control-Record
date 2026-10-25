@@ -175,6 +175,23 @@ describe('Advancing', () => {
     expect(callsTo(api.post, '/api/v1/world/show-1/arc/advance/confirm')).toBe(0);
   });
 
+  // "Only show it once a slot is done" (Evoni, 2026-10-25).
+  test('with no slot of the current part done there is no advance bar', async () => {
+    state.roadmap = roadmapFor({ doneUpto: 0 });
+    renderSeason();
+    await screen.findByTestId('season-roadmap');
+    expect(screen.queryByTestId('season-advance-open')).toBeNull();
+    expect(screen.queryByTestId('season-advance-open-btn')).toBeNull();
+  });
+
+  test('one slot of the current part done: "Advance with 7 open slots"', async () => {
+    state.roadmap = roadmapFor({ doneUpto: 1 });
+    renderSeason();
+    const bar = await screen.findByTestId('season-advance-open');
+    expect(bar.textContent).toMatch(/Part 1: Doors · 1 of 8 slots done/);
+    expect(within(bar).getByTestId('season-advance-open-btn').textContent).toBe('Advance with 7 open slots');
+  });
+
   test('the final phase lists the unmet goals before completing the season', async () => {
     state.arc = { ...ARC, current_phase: 3 };
     state.roadmap = roadmapFor({ currentPhase: 3, doneUpto: 24, boundary: { phase: 3, title: 'Keys', next_phase: null, outcomes: { pass: 8 }, goals: { total: 3, completed: 1, unmet: 2 } } });
@@ -338,16 +355,28 @@ describe('In-page messages, no browser alert or prompt', () => {
   });
 
   test('the Season tab\'s source has no alert() or window.prompt() left', () => {
-    const jsx = readFileSync(resolve(__dirname, 'WorldAdmin.jsx'), 'utf8');
-    const season = jsx.slice(jsx.indexOf('function StoryThreadsCard'), jsx.indexOf('export const S = {'));
+    // The Season tab and its helpers moved to components/Show/SeasonPlan.jsx (the Season page, 2026-10-25).
+    const plan = readFileSync(resolve(__dirname, '../components/Show/SeasonPlan.jsx'), 'utf8');
+    const season = plan.slice(plan.indexOf('export function StoryThreadsCard'));
     expect(season.length).toBeGreaterThan(1000);
     expect(season).not.toMatch(/\balert\(/);
     expect(season).not.toMatch(/\bprompt\(/);
-    for (const file of ['SeasonProposals.jsx', 'SeasonRevealPlan.jsx', 'SeasonTwists.jsx', 'SeasonSetup.jsx', 'SeasonTwistLine.jsx']) {
+    for (const file of ['SeasonProposals.jsx', 'SeasonRevealPlan.jsx', 'SeasonTwists.jsx', 'SeasonSetup.jsx', 'SeasonTwistLine.jsx', 'SeasonPicturePicker.jsx']) {
       const src = readFileSync(resolve(__dirname, '../components/Show', file), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
       expect(src, file).not.toMatch(/\balert\(/);
       expect(src, file).not.toMatch(/\bprompt\(/);
     }
+  });
+});
+
+describe('The Season page link (2026-10-25)', () => {
+  test('the Season Plan header links to the Season page, prominently', async () => {
+    renderSeason();
+    const link = await screen.findByTestId('season-page-link');
+    expect(link.getAttribute('href')).toBe('/shows/show-1/season');
+    expect(link.textContent).toBe('Open the Season page →');
+    expect(link.className).toBe('wa-season-page-link');
+    expect(within(screen.getByTestId('season-head')).getByTestId('season-page-link')).toBe(link);
   });
 });
 

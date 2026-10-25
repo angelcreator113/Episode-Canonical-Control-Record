@@ -165,9 +165,78 @@ function partOf(slotNumber, ranges) {
   return i + 1;
 }
 
+// The Season page's fields (Evoni, 2026-10-25): a cover and a picture per
+// part (chosen from Files, so a web address), the dates and a logline.
+const SEASON_PAGE_FIELDS = ['cover_url', 'starts_on', 'ends_on', 'logline', 'description'];
+const has = (obj, key) => Boolean(obj) && Object.prototype.hasOwnProperty.call(obj, key);
+
+/**
+ * A picture's address: an http(s) URL (what Files gives), or null to clear.
+ * Anything else is refused, so a typed path or a data: blob never lands.
+ */
+function pictureUrl(value, label) {
+  const s = text(value, 2000);
+  if (!s) return null;
+  let url;
+  try { url = new URL(s); } catch (err) {
+    console.warn(`[seasonSetup] ${label} is not a web address:`, err.message);
+    throw new SeasonSetupError(`${label} must be a picture chosen from Files (a web address).`);
+  }
+  if (url.protocol !== 'https:' && url.protocol !== 'http:') {
+    throw new SeasonSetupError(`${label} must be a picture chosen from Files (a web address).`);
+  }
+  return s;
+}
+
+/** A calendar day as YYYY-MM-DD, or null to clear. Refuses a day that does not exist. */
+function seasonDay(value, label) {
+  if (value == null || String(value).trim() === '') return null;
+  const m = String(value).trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const d = m ? new Date(`${m[1]}-${m[2]}-${m[3]}T00:00:00Z`) : null;
+  if (!m || Number.isNaN(d.getTime()) || d.getUTCMonth() + 1 !== Number(m[2]) || d.getUTCDate() !== Number(m[3])) {
+    throw new SeasonSetupError(`${label} must be a date (YYYY-MM-DD).`);
+  }
+  return `${m[1]}-${m[2]}-${m[3]}`;
+}
+
+/** A saved DATE as YYYY-MM-DD: pg reads it as local midnight, so the local parts are the day. */
+function savedDay(value) {
+  if (value == null) return null;
+  if (value instanceof Date) {
+    if (Number.isNaN(value.getTime())) return null;
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}`;
+  }
+  return String(value).slice(0, 10);
+}
+
+/** The end is not before the start (when both are set). */
+function checkDateOrder(startsOn, endsOn) {
+  if (startsOn && endsOn && endsOn < startsOn) {
+    throw new SeasonSetupError('The season cannot end before it starts.');
+  }
+}
+
+/**
+ * The Season page's fields that the body sends, checked. A field the body
+ * leaves out is left out here too, so Edit season keeps what is saved.
+ */
+function normalisePageFields(body = {}) {
+  const out = {};
+  if (has(body, 'cover_url')) out.cover_url = pictureUrl(body.cover_url, 'The cover');
+  if (has(body, 'starts_on')) out.starts_on = seasonDay(body.starts_on, 'The start date');
+  if (has(body, 'ends_on')) out.ends_on = seasonDay(body.ends_on, 'The end date');
+  if (has(body, 'logline')) out.logline = text(body.logline, 500);
+  if (has(body, 'description')) out.description = text(body.description, 4000);
+  checkDateOrder(out.starts_on, out.ends_on);
+  return out;
+}
+
 /**
  * The form, checked: a title, three parts each with a name (a tagline is
- * optional), and the split. Throws a 400 SeasonSetupError on what is missing.
+ * optional), and the split; and the Season page's fields it sends (a cover,
+ * dates, a logline, a description, a picture per part). Throws a 400
+ * SeasonSetupError on what is missing or wrong.
  */
 function normaliseSetup(body = {}) {
   const title = text(body.title, 200);
@@ -177,9 +246,16 @@ function normaliseSetup(body = {}) {
   const phases = parts.map((p, i) => {
     const name = text(p?.title, 100);
     if (!name) throw new SeasonSetupError(`Part ${i + 1} needs a name.`);
-    return { title: name, tagline: text(p?.tagline, 300) };
+    const part = { title: name, tagline: text(p?.tagline, 300) };
+    if (has(p, 'picture_url')) part.picture_url = pictureUrl(p.picture_url, `Part ${i + 1}'s picture`);
+    return part;
   });
-  return { title, tagline: text(body.tagline, 300), description: null, phases, split: normaliseSplit(body.split) };
+  const page = normalisePageFields(body);
+  return {
+    title, tagline: text(body.tagline, 300), description: null, phases, split: normaliseSplit(body.split),
+    ...page,
+    page_fields: Object.keys(page),
+  };
 }
 
 /** The arc's phases from a setup: names, ranges, and each position's arc and feed. */
@@ -190,6 +266,7 @@ function buildPhases(setup) {
     phase: i + 1,
     title: p.title,
     tagline: p.tagline || null,
+    ...(p.picture_url ? { picture_url: p.picture_url } : {}),
     episode_start: ranges[i][0],
     episode_end: ranges[i][1],
     status: i === 0 ? 'active' : 'upcoming',
@@ -259,13 +336,25 @@ async function updateSetup(sequelize, showId, body) {
       ...p,
       title: setup.phases[i].title,
       tagline: setup.phases[i].tagline,
+      // A part's picture changes only when the form sends it.
+      ...(has(setup.phases[i], 'picture_url') ? { picture_url: setup.phases[i].picture_url } : {}),
       episode_start: ranges[i][0],
       episode_end: ranges[i][1],
     }));
+    // The Season page's fields the form sent; the rest keep what is saved.
+    // The dates are checked together with the saved one the form left out.
+    const sent = setup.page_fields || [];
+    checkDateOrder(
+      sent.includes('starts_on') ? setup.starts_on : savedDay(arc.starts_on),
+      sent.includes('ends_on') ? setup.ends_on : savedDay(arc.ends_on));
+    const sets = sent.map((k) => `${k} = :${k}`).join(', ');
     await sequelize.query(
-      `UPDATE show_arcs SET title = :title, tagline = :tagline, phases = CAST(:phases AS jsonb), updated_at = NOW()
+      `UPDATE show_arcs SET title = :title, tagline = :tagline, phases = CAST(:phases AS jsonb),${sets ? ` ${sets},` : ''} updated_at = NOW()
         WHERE id = :id`,
-      { replacements: { title: setup.title, tagline: setup.tagline, phases: JSON.stringify(nextPhases), id: arc.id }, transaction });
+      { replacements: {
+        title: setup.title, tagline: setup.tagline, phases: JSON.stringify(nextPhases), id: arc.id,
+        ...Object.fromEntries(sent.map((k) => [k, setup[k] ?? null])),
+      }, transaction });
 
     let moved = 0;
     for (const sl of slots) {
@@ -693,6 +782,11 @@ module.exports = {
   defaultSetup,
   normaliseSplit,
   normaliseSetup,
+  normalisePageFields,
+  pictureUrl,
+  seasonDay,
+  savedDay,
+  SEASON_PAGE_FIELDS,
   rangesOf,
   partOf,
   buildPhases,
