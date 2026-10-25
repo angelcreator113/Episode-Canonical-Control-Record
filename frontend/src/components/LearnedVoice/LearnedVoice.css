@@ -1,0 +1,62 @@
+/* Learned voice (character voices that learn, 2026-10-25). Tokens only. */
+.lv { background: var(--surface-card); border: 1px solid var(--lala-lavender-line); border-radius: 20px; padding: 20px 22px; min-width: 0; display: flex; flex-direction: column; gap: 14px; }
+.lv-head { display: flex; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+.lv-head-text { display: flex; flex-direction: column; gap: 4px; flex: 1 1 260px; min-width: 0; }
+.lv-h2 { margin: 0; font-family: var(--font-prose); font-size: 22px; font-weight: 700; color: var(--text-primary); }
+.lv-h3 { margin: 0; display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 700; color: var(--text-primary); }
+.lv-note { margin: 0; font-size: 13px; line-height: 1.5; color: var(--text-secondary); }
+.lv-note.is-error { color: var(--danger-text); }
+.lv-note.is-done { color: var(--success-text); font-weight: 600; }
+.lv-count { display: inline-flex; align-items: center; justify-content: center; min-width: 22px; height: 22px; padding: 0 6px; border-radius: 999px; font-size: 12px; background: var(--lala-lavender-soft); color: var(--lala-lavender-text); }
+.lv-block { display: flex; flex-direction: column; gap: 8px; }
+
+.lv-btn, .lv-btn-soft { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; padding: 8px 18px; border-radius: 999px; border: none; cursor: pointer; font: inherit; font-size: 14px; font-weight: 700; }
+.lv-btn { background: var(--lala-lavender); color: var(--text-inverse); }
+.lv-btn-soft { background: var(--lala-lavender-soft); color: var(--lala-lavender-text); }
+.lv-btn:disabled, .lv-btn-soft:disabled { opacity: 0.6; cursor: not-allowed; }
+.lv-btn:focus-visible, .lv-btn-soft:focus-visible, .lv-filter-btn:focus-visible, .lv-fold:focus-visible { outline: 2px solid var(--lala-lavender); outline-offset: 2px; }
+
+.lv-filter { display: flex; flex-wrap: wrap; gap: 6px; }
+.lv-filter-btn { min-height: 44px; padding: 6px 14px; border-radius: 999px; border: 1px solid var(--lala-lavender-line); background: var(--surface-card); color: var(--lala-lavender-text); cursor: pointer; font: inherit; font-size: 13px; font-weight: 700; }
+.lv-filter-btn.is-on { background: var(--lala-lavender); border-color: var(--lala-lavender); color: var(--text-inverse); }
+
+.lv-chip { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 12px; font-weight: 700; background: var(--lala-lavender-soft); color: var(--lala-lavender-text); }
+.lv-chip.is-gameplay { background: var(--info-bg); color: var(--info-text); }
+.lv-chip.is-cutscene { background: var(--lala-gold-soft); color: var(--lala-gold-text); border: 1px solid var(--lala-gold-line); }
+.lv-chip.is-narration { background: var(--success-bg); color: var(--success-text); }
+.lv-chip.is-any { background: var(--lala-parchment); color: var(--text-secondary); }
+.lv-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; font-size: 12px; color: var(--text-secondary); }
+
+.lv-lines, .lv-rules, .lv-timeline { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.lv-line { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 8px; padding: 10px 12px; border-radius: 14px; background: var(--lala-gold-soft); border: 1px solid var(--lala-gold-line); }
+.lv-quote-mark { color: var(--lala-gold-text); padding-top: 2px; }
+.lv-line-text { font-family: var(--font-prose); font-size: 15px; line-height: 1.5; color: var(--text-primary); overflow-wrap: anywhere; }
+.lv-line .lv-meta { grid-column: 2; }
+
+.lv-rule { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border-radius: 14px; border: 1px solid var(--lala-lavender-line); background: var(--surface-card); }
+.lv-rule.is-waiting { border-color: var(--lala-gold-line); background: var(--lala-gold-soft); }
+.lv-rule.is-active { background: var(--lala-lavender-soft); }
+.lv-rule-text { margin: 0; font-size: 14px; line-height: 1.5; font-weight: 600; color: var(--text-primary); overflow-wrap: anywhere; }
+.lv-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.lv-example { display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; border-radius: 10px; background: var(--surface-card); border: 1px dashed var(--lala-lavender-line); }
+.lv-example p { margin: 0; font-size: 13px; line-height: 1.5; color: var(--text-primary); overflow-wrap: anywhere; }
+.lv-was { color: var(--text-secondary); }
+.lv-was, .lv-now { display: flex; flex-direction: column; gap: 2px; }
+.lv-tag { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--lala-lavender-text); }
+
+.lv-fold { align-self: flex-start; display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 6px 4px; border: none; background: none; cursor: pointer; font: inherit; font-size: 15px; font-weight: 700; color: var(--text-primary); }
+.lv-fold svg { transition: transform 0.15s ease; transform: rotate(-90deg); }
+.lv-fold svg.is-open { transform: none; }
+.lv-timeline { border-left: 2px solid var(--lala-lavender-line); padding-left: 14px; margin-left: 8px; }
+.lv-step { position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; font-size: 13px; color: var(--text-secondary); }
+.lv-step::before { content: ''; position: absolute; left: -20px; top: 6px; width: 10px; height: 10px; border-radius: 50%; background: var(--lala-lavender-line); }
+.lv-step-ep { font-weight: 700; color: var(--lala-lavender-text); }
+.lv-step-text { flex: 1 1 200px; min-width: 0; text-decoration: line-through; text-decoration-color: var(--lala-lavender-line); overflow-wrap: anywhere; }
+
+@media (max-width: 560px) {
+  .lv { padding: 16px; border-radius: 16px; }
+  .lv-head .lv-btn { width: 100%; }
+  .lv-actions .lv-btn, .lv-actions .lv-btn-soft { flex: 1 1 auto; }
+}
+@media (prefers-reduced-motion: reduce) { .lv-fold svg { transition: none; } }

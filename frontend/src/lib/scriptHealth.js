@@ -11,6 +11,7 @@ import { REVEAL_BEAT, voiceOffLines, revealCheck, isCutsceneBeat } from './scrip
 import { invitationLine, beat14Outcome, BEAT } from './beat14Invitation';
 import { atHandle } from '../pages/feed/feedConstants';
 import { scriptRuleRows } from './scriptRuleChecks';
+import { voiceHealthRows } from './voiceChecks';
 
 const list = (items) => (items.length <= 2 ? items.join(' and ') : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`);
 const plural = (n, one, many) => (n === 1 ? one : many);
@@ -38,7 +39,7 @@ function perBeat(flags, beats, keyPrefix, homeName = null) {
 
 export function scriptHealth({
   beats = [], canonical = [], cover = [], onScreen = {}, outfit = [], dealItems = [],
-  rules = null,
+  rules = null, voice = null,
   closetNumber = null, dirty = false, unsaved = null, beat14 = null, designedIntent = null,
 } = {}) {
   const rows = [];
@@ -164,6 +165,9 @@ export function scriptHealth({
 
   // The show's rules, beat by beat (lib/scriptRuleChecks; Evoni, 2026-10-17 to 2026-10-19).
   rows.push(...scriptRuleRows(beats, rules, { closetNumber }));
+  // Each character's learned voice (lib/voiceChecks; Evoni, 2026-10-25):
+  // lines that break a rule a script can check. None loaded: no rows.
+  rows.push(...voiceHealthRows({ beats, rules: voice?.rules || null, speakers: voice?.speakers || [] }));
   const approved = beats.filter((b) => b.approved).length;
   rows.push({ key: 'approved', ok: beats.length > 0 && approved === beats.length, beatId: null, text: `${approved} of ${beats.length} ${plural(beats.length, 'beat', 'beats')} approved.` });
 

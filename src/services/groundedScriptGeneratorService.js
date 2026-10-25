@@ -242,8 +242,17 @@ async function groundedScriptInputs(episodeId, showId, models) {
     console.error('[ScriptGen] beat 14 opportunity read failed (non-blocking):', err.message);
   }
 
+  // The learned voices (Evoni, 2026-10-25; services/characterVoice), read
+  // with the story context; read here when that read failed. A beat's own
+  // (gameplay or cutscene) are read again by generateGroundedBeat.
+  const voiceKeys = story?.voiceKeys || ['justawoman', 'lala'];
+  let voices = story ? (story.voices || '') : '';
+  if (!story) {
+    voices = await require('./characterVoice').voicePromptBlock(models, { characterKeys: voiceKeys, context: 'show', showId });
+  }
+
   console.log(`[ScriptGen] Prompt for episode ${episodeId} with ${scenePlan.length} planned beats`);
-  return { brief, scenePlan, franchiseLaws, eventData, wardrobeItems, lalaStats, outfitScore, seasonContext, onScreen, story, phone, worldNow, money, beat14 };
+  return { brief, scenePlan, franchiseLaws, eventData, wardrobeItems, lalaStats, outfitScore, seasonContext, onScreen, story, phone, worldNow, money, beat14, voiceKeys, voices };
 }
 
 const MODELS = ['claude-sonnet-4-6'];
@@ -533,6 +542,9 @@ async function generateGroundedBeat(episodeId, showId, models, { beatNumber, cur
   if (!canon) throw new Error(`No canonical beat ${beatNumber}`);
   const direction = typeof instruction === 'string' ? instruction.trim().slice(0, 300) : '';
   const inputs = await groundedScriptInputs(episodeId, showId, models);
+  // The beat's own learned voices: a cutscene beat's (11-13) or gameplay's.
+  const characterVoice = require('./characterVoice');
+  inputs.voices = await characterVoice.voicePromptBlock(models, { characterKeys: inputs.voiceKeys, context: characterVoice.contextForBeat(beatNumber), showId });
   const prompt = buildScriptPrompt(inputs, {
     only: { beat: canon, currentScript: String(currentScript || ''), instruction: direction },
   });
@@ -799,7 +811,7 @@ function showRulesBlock({ eventData = null, phone = null, onScreen = [] } = {}) 
 - Beat 12 (Fashion Challenge): still the cutscene. The challenge is a surprise runway walk at the event: stage it (a model doesn't show, and Lala is asked to walk), in the characters' own lines and (actions); no phone, no closet, no coin line. Anything the brand hands her to wear is named in an action line and costs her nothing. She may film the brand's reel here too, but it need not be shown. The room's verdict moves her standing with [STAT: reputation ±n], [STAT: brand_trust ±n], [STAT: influence ±n] and [STAT: stress ±n] lines, never coins.`;
 }
 
-function buildScriptPrompt({ brief, scenePlan, franchiseLaws, eventData, wardrobeItems, lalaStats, outfitScore, seasonContext = null, onScreen = [], story = null, phone = null, worldNow = '', money = null, beat14 = null }, { only = null, lockedBeats = [] } = {}) {
+function buildScriptPrompt({ brief, scenePlan, franchiseLaws, eventData, wardrobeItems, lalaStats, outfitScore, seasonContext = null, onScreen = [], story = null, phone = null, worldNow = '', money = null, beat14 = null, voices = '' }, { only = null, lockedBeats = [] } = {}) {
   // Every canonical beat, in order, whether or not the plan has its row
   // (§8(j): Generate Script instantiates all 14; it never invents its own).
   const planByBeat = new Map(scenePlan.map((b) => [Number(b.beat_number), b]));
@@ -915,6 +927,7 @@ function buildScriptPrompt({ brief, scenePlan, franchiseLaws, eventData, wardrob
   return `You are writing a script for "Styling Adventures with Lala" — Episode ${brief?.position_in_arc || '?'} of Part ${brief?.arc_number || '?'}.
 
 ${JAWIHP_VOICE_DNA}
+${voices ? `\n${voices}` : ''}
 
 ═══ SHOW BRAIN ═══
 ${voiceLaws}
