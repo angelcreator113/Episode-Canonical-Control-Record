@@ -7,10 +7,14 @@
  * The season, laid out to read: the hero (the
  * cover from Files, "SEASON N", the title, tagline and chips; Edit season and
  * a ⋯ menu), four stat cards (episode slots, goals, events, Lala's budget
- * from the ledger), and seven tabs addressed by `?tab=`: Overview, Episode
- * Roadmap, Events, Goals (Lala's career goals and the brands she has worked
- * with, moved here from the Season Plan), Story Development, Production
- * Plan, Results & Analytics.
+ * from the ledger), and eight tabs addressed by `?tab=` (lib/seasonPage
+ * SEASON_TABS), each opening on a one-line note of what it is for:
+ * Overview, Roadmap, Episodes (the production board, from Producer Mode),
+ * Events, Opportunities (from Producer Mode), Story, Goals (Lala's career
+ * goals and the brands she has worked with, from the Season Plan) and
+ * Results (the Episode Ledger, from Producer Mode, then Planning Insights).
+ * Producer Mode's old ?tab=episodes, episodes-production, episodes-ledger
+ * and opportunities links open these tabs (WorldAdmin SEASON_PAGE_KEYS).
  *
  * Everything is read and written through the Season Plan's own pieces
  * (components/Show/SeasonPlan: useSeasonPlan, the roadmap controls, SlotPanel,
@@ -30,13 +34,18 @@ import { SeasonSetupForm, SeasonPlacement, SeasonDraft, formFromArc } from '../c
 import { PLAN_S } from '../components/Show/planStyles';
 import { SeasonBar as Bar } from '../components/Show/SeasonPageParts';
 import { SeasonOverviewTab, SeasonStoryTab, SeasonResultsTab } from '../components/Show/SeasonPageOverview';
-import { SeasonRoadmapTab, SeasonEventsTab, SeasonProductionTab } from '../components/Show/SeasonPageRoadmap';
+import { SeasonRoadmapTab, SeasonEventsTab } from '../components/Show/SeasonPageRoadmap';
+import ShowEpisodesBoard from '../components/Show/ShowEpisodesBoard';
+import OpportunitiesTab from '../components/Show/OpportunitiesTab';
+import { S as PRODUCER_S } from '../components/Show/producerStyles';
 import CareerGoals, { NarrativeDebt, SeasonPhasesHistory } from '../components/Show/CareerGoals';
 import CareerBrands from '../components/Career/CareerBrands';
 import { SEASON_TABS, tabFrom, seasonStats, heroChips, slotsLine, goalsLine, eventsLine } from '../lib/seasonPage';
 import './SeasonPage.css';
 
 const S = PLAN_S;
+// The tabs a show without a season still has (they read the show, not the season).
+const SEASONLESS_TABS = ['episodes', 'opportunities', 'results'];
 
 
 /** The four stat cards (the mockup's row under the hero). */
@@ -114,6 +123,16 @@ export function SeasonGoalsTab({ plan, api, showId, arc }) {
   );
 }
 
+/** Episodes: the production board, as Producer Mode had it (its Episodes › Production). */
+export function SeasonEpisodesTab({ showId, episodes, episodesTotal, reloadShowData }) {
+  return <ShowEpisodesBoard showId={showId} episodes={episodes} total={episodesTotal} onChanged={reloadShowData} />;
+}
+
+/** Opportunities: a brand's offers and bookings (Producer Mode's old Opportunities tab). */
+export function SeasonOpportunitiesTab({ showId, api, setToast, episodes, reloadShowData }) {
+  return <OpportunitiesTab showId={showId} api={api} S={PRODUCER_S} setToast={setToast} loadData={reloadShowData} episodes={episodes} />;
+}
+
 /** The hero's ⋯ menu: the season's other actions. */
 function HeroMenu({ arc, nextSeason, onPick }) {
   const [open, setOpen] = useState(false);
@@ -182,16 +201,19 @@ export default function SeasonPage() {
   const { arc, roadmap, goals, insights, panel, setPanel, setupNote, setSetupNote, loading, nextSeason } = plan;
   const [showName, setShowName] = useState(null);
   const [episodes, setEpisodes] = useState([]);
+  const [episodesTotal, setEpisodesTotal] = useState(null);
   const [events, setEvents] = useState([]);
   const panelRef = useRef(null);
+  const tabsRef = useRef(null);
 
   // The show's name for the hero, and its episodes and events for the cards'
-  // pictures and the slot panel (the same reads as Producer Mode).
+  // pictures, the slot panel, the production board and the ledger (the same
+  // reads as Producer Mode); the board and Opportunities reload them.
   const loadShowData = useCallback(async () => {
     await Promise.all([
       api.get(`/api/v1/shows/${showId}`).then((r) => setShowName(r.data?.data?.name || r.data?.name || null))
         .catch((err) => console.error('[SeasonPage] show load failed:', err)),
-      fetchAllEpisodes(api, showId).then((list) => setEpisodes(list.items || []))
+      fetchAllEpisodes(api, showId).then((list) => { setEpisodes(list.items || []); setEpisodesTotal(list.total ?? (list.items || []).length); })
         .catch((err) => console.error('[SeasonPage] episodes load failed:', err)),
       api.get(`/api/v1/world/${showId}/events`).then((r) => setEvents(r.data?.events || []))
         .catch((err) => console.error('[SeasonPage] events load failed:', err)),
@@ -209,6 +231,8 @@ export default function SeasonPage() {
     setParams((prev) => {
       const next = new URLSearchParams(prev);
       next.set('tab', key);
+      // A need's "Add a deal" company opens the Opportunities form once, not on every return.
+      if (key !== 'opportunities') next.delete('deal_with');
       for (const [k, v] of Object.entries(extra)) {
         if (v == null || v === 'all') next.delete(k); else next.set(k, String(v));
       }
@@ -225,6 +249,15 @@ export default function SeasonPage() {
     if (panel) panelRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
   }, [panel]);
 
+  // On a phone the tab row scrolls sideways: keep the open tab in sight
+  // (an old link to Results otherwise opens with its tab off the edge).
+  useEffect(() => {
+    const nav = tabsRef.current;
+    const on = nav?.querySelector('.szn-tab.is-on');
+    if (!nav || !on || nav.scrollWidth <= nav.clientWidth) return;
+    nav.scrollLeft = Math.max(0, on.offsetLeft - (nav.clientWidth - on.offsetWidth) / 2);
+  }, [tab, loading, arc]);
+
   const stats = useMemo(() => seasonStats({ roadmap, goals, insights }), [roadmap, goals, insights]);
 
   if (loading) return <div className="szn-page"><p className="szn-loading" role="status">Loading the season…</p></div>;
@@ -235,28 +268,53 @@ export default function SeasonPage() {
     </Link>
   );
 
+  const tabProps = {
+    plan, S, api, showId, setToast, episodes, episodesTotal, events, arc, roadmap, stats, goTab, params,
+    reloadShowData: loadShowData,
+    onEdit: () => openPanel('edit'), onPanel: openPanel,
+  };
+
+  const tabBar = (tabs) => (
+    <nav className="szn-tabs" role="tablist" aria-label="Season sections" ref={tabsRef}>
+      {tabs.map((t) => (
+        <button key={t.key} type="button" role="tab" id={`szn-tab-${t.key}`} aria-selected={tab === t.key} aria-controls="szn-tabpanel"
+          className={`szn-tab${tab === t.key ? ' is-on' : ''}`} onClick={() => goTab(t.key)} data-testid={`szn-tab-${t.key}`}>
+          {t.label}
+        </button>
+      ))}
+    </nav>
+  );
+  const note = <p className="szn-tab-note" data-testid="szn-tab-note">{SEASON_TABS.find((t) => t.key === tab)?.note}</p>;
+
+  // No season yet: the setup, and the tabs that need no season (the
+  // production board, opportunities, the ledger), so Producer Mode's old
+  // Episodes, Opportunities and Results links still land somewhere useful.
   if (!arc) {
+    const open = SEASONLESS_TABS.includes(tab) ? tab : 'overview';
     return (
       <div className="szn-page" data-testid="season-page">
         {back}
         <SeasonLoadError plan={plan} />
-        {!plan.failed.season && (
-          <>
-            <section className="szn-empty" data-testid="szn-empty">
-              <h1 className="szn-empty-title">No season set up yet</h1>
-              <p>Name the season and its three parts, then place the episodes and events you already have.</p>
-            </section>
-            <SeasonSetupForm mode="create" showId={showId} seasonNumber={nextSeason} onSubmit={plan.handleSeed} />
-          </>
-        )}
+        {toast && <p className="szn-note" role="status" data-testid="szn-toast">{toast}</p>}
+        {!plan.failed.season && tabBar([{ key: 'overview', label: 'Set up the season' }, ...SEASON_TABS.filter((t) => SEASONLESS_TABS.includes(t.key))])}
+        <section id="szn-tabpanel" role="tabpanel" aria-labelledby={`szn-tab-${open}`} className="szn-tabpanel" data-testid={`szn-panel-${open}`}>
+          {open !== 'overview' && note}
+          {open === 'episodes' && <SeasonEpisodesTab {...tabProps} />}
+          {open === 'opportunities' && <SeasonOpportunitiesTab {...tabProps} />}
+          {open === 'results' && <SeasonResultsTab {...tabProps} />}
+          {open === 'overview' && !plan.failed.season && (
+            <>
+              <section className="szn-empty" data-testid="szn-empty">
+                <h1 className="szn-empty-title">No season set up yet</h1>
+                <p>Name the season and its three parts, then place the episodes and events you already have.</p>
+              </section>
+              <SeasonSetupForm mode="create" showId={showId} seasonNumber={nextSeason} onSubmit={plan.handleSeed} />
+            </>
+          )}
+        </section>
       </div>
     );
   }
-
-  const tabProps = {
-    plan, S, api, showId, setToast, episodes, events, arc, roadmap, stats, goTab, params,
-    onEdit: () => openPanel('edit'), onPanel: openPanel,
-  };
 
   return (
     <div className="szn-page" data-testid="season-page">
@@ -287,22 +345,18 @@ export default function SeasonPage() {
 
       <SeasonStats stats={stats} />
 
-      <nav className="szn-tabs" role="tablist" aria-label="Season sections">
-        {SEASON_TABS.map((t) => (
-          <button key={t.key} type="button" role="tab" id={`szn-tab-${t.key}`} aria-selected={tab === t.key} aria-controls="szn-tabpanel"
-            className={`szn-tab${tab === t.key ? ' is-on' : ''}`} onClick={() => goTab(t.key)} data-testid={`szn-tab-${t.key}`}>
-            {t.label}
-          </button>
-        ))}
-      </nav>
+      {tabBar(SEASON_TABS)}
 
       <section id="szn-tabpanel" role="tabpanel" aria-labelledby={`szn-tab-${tab}`} className="szn-tabpanel" data-testid={`szn-panel-${tab}`}>
+        {/* What the tab is for, in a line (Evoni, 2026-10-25). */}
+        {note}
         {tab === 'overview' && <SeasonOverviewTab {...tabProps} />}
         {tab === 'roadmap' && <SeasonRoadmapTab {...tabProps} />}
+        {tab === 'episodes' && <SeasonEpisodesTab {...tabProps} />}
         {tab === 'events' && <SeasonEventsTab {...tabProps} />}
-        {tab === 'goals' && <SeasonGoalsTab {...tabProps} />}
+        {tab === 'opportunities' && <SeasonOpportunitiesTab {...tabProps} />}
         {tab === 'story' && <SeasonStoryTab {...tabProps} />}
-        {tab === 'production' && <SeasonProductionTab {...tabProps} />}
+        {tab === 'goals' && <SeasonGoalsTab {...tabProps} />}
         {tab === 'results' && <SeasonResultsTab {...tabProps} />}
       </section>
     </div>

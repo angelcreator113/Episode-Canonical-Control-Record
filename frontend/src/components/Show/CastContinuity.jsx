@@ -148,7 +148,7 @@ export function StoryThreadsStrip({ showId, episodes = [] }) {
         <Link className="wa-cc-link" to={seasonPageHref(showId, 'story')}>All threads</Link>
       </div>
       {threads == null ? <p className="wa-cc-empty">Loading threads…</p> : threads.length === 0 ? (
-        <p className="wa-cc-empty">No story threads yet. Create them on the Season page, under Story Development.</p>
+        <p className="wa-cc-empty">No story threads yet. Create them on the Season page, on its Story tab.</p>
       ) : (
         <>
           <ul className="wa-cc-thread-list">

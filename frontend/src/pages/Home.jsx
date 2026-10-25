@@ -36,6 +36,7 @@ import { nextReadyEvent } from '../components/Show/ShowOverview';
 import { computeEventState } from '../utils/eventReadinessSections';
 import { DECIDE } from './DailyUpdate';
 import { activeShowId } from '../utils/activeShow';
+import { seasonPageHref } from '../lib/seasonPage';
 import PageLayout from '../components/layout/PageLayout';
 import './Home.css';
 
@@ -353,11 +354,13 @@ function Home() {
   const userName = user?.name || user?.email?.split('@')[0] || 'Creator';
   const today = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
   const world = (tab) => (sid ? `/shows/${sid}/world?tab=${tab}` : '/shows');
+  // The production board is the Season page's Episodes tab (2026-10-25).
+  const board = sid ? seasonPageHref(sid, 'episodes') : '/shows';
 
   const tiles = [
-    { key: 'episodes', label: 'Episodes', icon: Clapperboard, to: world('episodes-production') },
+    { key: 'episodes', label: 'Episodes', icon: Clapperboard, to: board },
     { key: 'closet', label: 'Closet', icon: Shirt, to: world('wardrobe-items') },
-    { key: 'style', label: 'Style Page', icon: Sparkles, to: current ? `/episodes/${current.id}?tab=lookbook` : world('episodes-production') },
+    { key: 'style', label: 'Style Page', icon: Sparkles, to: current ? `/episodes/${current.id}?tab=lookbook` : board },
     { key: 'cast', label: 'The Cast', icon: Users, to: '/character-registry?view=world' },
     { key: 'map', label: 'Map', icon: MapIcon, to: '/universe?tab=world&sub=map' },
     { key: 'bank', label: "Lala's Bank", icon: Coins, to: world('finances') },
@@ -426,7 +429,7 @@ function Home() {
                 </Link>
               </>
             ) : (
-              <p className="hp-feature__empty">No episode yet. <Link to={world('episodes-production')}>Start one</Link></p>
+              <p className="hp-feature__empty">No episode yet. <Link to={board}>Start one</Link></p>
             )}
           </section>
 
