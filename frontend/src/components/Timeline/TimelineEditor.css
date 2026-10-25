@@ -462,3 +462,47 @@
   background: rgba(102, 126, 234, 0.7);
   width: 64px;
 }
+
+/* Takes to use (AssembleTakesSheet, lib/assembleTakes): each beat's ★
+   favourite take first and picked; "Use favourites" lines them up in beat
+   order. A light sheet over the editor, tokens only. */
+.ats { position: fixed; inset: 0; z-index: 1100; display: grid; place-items: center; padding: 16px; background: color-mix(in srgb, var(--lala-ink) 72%, transparent); }
+.ats-card {
+  display: flex; flex-direction: column; gap: 12px; width: min(760px, 100%); max-height: calc(100vh - 32px); padding: 16px;
+  box-sizing: border-box; overflow-y: auto; border: 1px solid var(--lala-gold-line); border-radius: 16px;
+  background: var(--lala-parchment); color: var(--lala-ink); font-family: var(--font-prose);
+}
+.ats-card button:focus-visible, .ats-card input:focus-visible { outline: 2px solid var(--lala-gold); outline-offset: 2px; }
+.ats-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.ats-title { margin: 0; font-size: 22px; font-weight: 600; color: var(--lala-ink); }
+.ats-sub { margin: 4px 0 0; font-size: 14px; line-height: 1.5; color: var(--lala-ink-muted); }
+.ats-icon-btn { display: grid; place-items: center; flex: none; width: 36px; height: 36px; border: 1px solid var(--lala-gold-line); border-radius: 10px; background: var(--lala-surface); color: var(--lala-ink); cursor: pointer; }
+.ats-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+.ats-btn {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 38px; padding: 6px 14px; border: 1px solid var(--lala-gold-line); border-radius: 999px;
+  background: var(--lala-surface); color: var(--lala-ink); font-family: 'DM Mono', var(--font-mono); font-size: 13px; font-weight: 700; cursor: pointer;
+}
+.ats-btn.is-primary { border-color: var(--lala-gold); background: var(--lala-gold-soft); color: var(--lala-gold-text); }
+.ats-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+.ats-stat { font-family: 'DM Mono', var(--font-mono); font-size: 12px; color: var(--lala-ink-muted); }
+.ats-error { margin: 0; padding: 8px 12px; border-radius: 10px; background: var(--danger-bg); color: var(--danger-text); font-size: 14px; }
+.ats-lined { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; padding: 10px 12px; border: 1px solid var(--lala-gold-line); border-radius: 12px; background: var(--lala-surface); color: var(--lala-ink); }
+.ats-lined-head { display: inline-flex; align-items: center; gap: 6px; margin: 0; font-family: 'DM Mono', var(--font-mono); font-size: 12px; font-weight: 700; color: var(--lala-gold-text); }
+.ats-order { width: 100%; margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-family: 'DM Mono', var(--font-mono); font-size: 12px; line-height: 1.6; color: var(--lala-ink); }
+.ats-said { font-family: 'DM Mono', var(--font-mono); font-size: 12px; color: var(--lala-ink-muted); }
+.ats-beats { display: flex; flex-direction: column; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.ats-beat { padding: 10px 12px; border: 1px solid var(--lala-gold-line); border-radius: 12px; background: var(--lala-surface); color: var(--lala-ink); }
+.ats-beat-name { margin: 0 0 6px; font-family: 'DM Mono', var(--font-mono); font-size: 13px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--lala-gold-text); }
+.ats-none { margin: 0; font-size: 14px; color: var(--lala-ink-muted); }
+.ats-options { display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.ats-option { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; column-gap: 8px; padding: 6px 8px; border-radius: 8px; cursor: pointer; font-size: 14px; }
+.ats-option.is-on { background: var(--lala-gold-soft); color: var(--lala-ink); }
+.ats-option input { width: 18px; height: 18px; margin: 0; accent-color: var(--lala-gold); }
+.ats-option-name { overflow-wrap: anywhere; font-weight: 600; }
+.ats-option-note { grid-column: 2; font-family: 'DM Mono', var(--font-mono); font-size: 12px; color: var(--lala-ink-muted); }
+.ats-star { vertical-align: -2px; color: var(--lala-gold-text); fill: currentColor; }
+@media (max-width: 480px) {
+  .ats { padding: 8px; }
+  .ats-card { padding: 12px; max-height: calc(100vh - 16px); }
+  .ats-title { font-size: 19px; }
+}
