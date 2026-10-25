@@ -23,6 +23,8 @@ export const SEASON_TABS = [
   // Brand offers and bookings (components/Show/OpportunitiesTab), from Producer Mode's Opportunities tab.
   { key: 'opportunities', label: 'Opportunities', note: 'Offers and bookings from brands, from the first offer to paid.' },
   { key: 'story', label: 'Story', note: 'The threads, twists and reveals the season is building, and what the story still needs.' },
+  // The plant tracker (components/Show/SeasonPlants, 2026-10-25).
+  { key: 'plants', label: 'Plants', note: 'Every detail a script plants for later: where each one pays off, and the ones that never do.' },
   // Lala's career goals and the brands she has worked with (Evoni, 2026-10-25:
   // moved here from Producer Mode's Season Plan, which this page replaced).
   { key: 'goals', label: 'Goals', note: "Lala's career goals for the season and the brands she has worked with." },

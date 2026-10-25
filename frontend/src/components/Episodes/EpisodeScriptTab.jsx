@@ -9,6 +9,7 @@ import { episodePlanning } from '../../utils/episodePlanning';
 import { scriptInputs, mustCover, scriptPeople, quoteParts, goalTaskFor } from '../../lib/episodeScript';
 import Beat14Opportunity from './Beat14Opportunity';
 import EpisodeTwistsDue from './EpisodeTwistsDue';
+import EpisodePlantSuggest from './EpisodePlantSuggest';
 import { beat14Outcome } from '../../lib/beat14Invitation';
 import { beatState } from '../../lib/beatState';
 import { moveBeat, moveLine, dropIndex, replaceBeat, appendLine, insertLine } from '../../lib/scriptBeatOrder';
@@ -1473,6 +1474,8 @@ function BeatSection({ voice = null, beat, index, beatCount, scenePlan, expanded
 }
 
 export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange }) {
+  // Bumped when a suggested plant is kept, so the twists due here re-read (EpisodePlantSuggest).
+  const [plantsKept, setPlantsKept] = useState(0);
   const episodeId = episode?.id;
   // Voice clips (Teleprompter batch 3): lines Evoni recorded in another
   // speaker's voice. Kept apart from the script, so recording one never
@@ -3118,7 +3121,9 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
               <p className="esp-cover-empty" data-testid="script-cover-empty">Nothing to cover: the event has no goals, nothing is carried from an earlier episode, the brief has no forward hook, and beat 14 has no opportunity coming.</p>
             )}
             {/* The Season Plan's twists due in this episode (2026-10-23; EpisodeTwistsDue). */}
-            <EpisodeTwistsDue episodeId={episodeId} beats={beats} />
+            <EpisodeTwistsDue key={`twists-${plantsKept}`} episodeId={episodeId} beats={beats} />
+            {/* Suggest plants from this script (plant tracker, 2026-10-25; EpisodePlantSuggest): a kept one shows above as planted. */}
+            <EpisodePlantSuggest episodeId={episodeId} hasScript={hasScript} onSaved={() => setPlantsKept((n) => n + 1)} />
             <p className="esp-uses-note">From the event package, the brief, beat 14&apos;s opportunity and what Lala still owes from an earlier episode. A goal is ticked when a beat after the to-do list does it, in its own words (&ldquo;get to know&rdquo;), with its person there by any of their names; the hook, when beat 14 tells it; the opportunity, when beat 14 delivers it as a DM or notification. Mark covered or Not covered when the script says otherwise; your mark wins. Tick it marks the goal done on her to-do list from the saved script; Tick all covered does it for every covered goal and follow-up.</p>
           </section>
         )}
