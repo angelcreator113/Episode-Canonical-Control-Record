@@ -35,6 +35,10 @@ const SHOWS = new Set(['DISPLAY', 'OPEN', 'SHOW']);
 // `Lala (V.O.):` is her thoughts; "(nervously)" and "(devoted)" are not
 // (Script page audit, 2026-10-19: an unanchored v.o. matched inside them).
 const VOICE_OVER = /^\s*v\.?\s*o\.?\s*(?:[,;].*)?$/i;
+// `Lala (auto):` and `Lala (automatic reaction):` are her automatic in-game
+// reactions (Evoni, 2026-10-25; lib/scriptSpeaker AUTO_REACTION): the game
+// plays them, so they need no voice click.
+const AUTO_REACTION = /^\s*auto(?:matic)?(?:[\s-]*reaction)?\s*$/i;
 // The server's parser reads [UI:VOICE_ACTIVATE Lala] as her voice coming on
 // (src/utils/scriptBeatParser.js normalizeUiAction).
 const isVoiceOn = (m) => (TAPS.has(m.verb) && VOICE.test(m.target)) || m.verb.replace(/_/g, '') === 'VOICEACTIVATE';
@@ -102,7 +106,7 @@ function voiceOffLines(lines = []) {
     if (m) { if (isVoiceOn(m) || MESSAGES.has(m.verb)) on = true; return; }
     if (MAIL.test(line)) { on = true; return; }
     const lala = String(line || '').match(LALA);
-    if (!lala || VOICE_OVER.test(lala[1] || '')) return;
+    if (!lala || VOICE_OVER.test(lala[1] || '') || AUTO_REACTION.test(lala[1] || '')) return;
     if (dressed.has(i)) { on = false; return; }
     // Each line she says needs its own click (Evoni, 2026-10-17: per line,
     // not per beat); a notification or message covers the line answering it.
