@@ -123,9 +123,12 @@ const PX_PER_STEP = 8; // speed 5 scrolls 40px a second
 export const PACE_MIN = 0.5;
 export const PACE_MAX = 2;
 export const DEFAULTS = { size: 40, speed: 5, mirror: false, countdown: true, lineMode: 'mine', readAs: HER, pacing: 'steady', pace: 1, grid: false, playVoice: true, screen: true };
-// Below this level for this long while recording: "No sound from your mic".
+// The mic warning (Evoni, 2026-10-25: it warned 3 seconds in, before she had
+// spoken). Nothing in the first 8 seconds of a take; then "yet" while the mic
+// has never gone above this level, or, after sound, 15 seconds below it.
 const QUIET_LEVEL = 0.04;
-const QUIET_MS = 3000;
+export const QUIET_GRACE_MS = 8000;
+export const QUIET_LOST_MS = 15000;
 // A one-beat take's last line passed: this long, then the take stops for review.
 export const ENDING_MS = 2000;
 const roundPace = (n) => Math.round(n * 10) / 10;
@@ -313,6 +316,12 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
   const takeLive = recording || arming;
   // Mid-take or in review: the controls that make no sense then are hidden.
   const midTake = takeLive || !!take;
+  // Read & record, no take yet: ● Record leads the bar and Play is Practice
+  // (Evoni, 2026-10-25: she read 9 minutes on Play thinking it recorded).
+  const recordLead = recordOn && !midTake;
+  // She pressed Practice (or Space) in Read & record: a banner says it is not
+  // recording until a take starts or Read & record goes off.
+  const [practicing, setPracticing] = useState(false);
   const canWhole = isScript && numbered && !!episodeId && beats.length > 0;
   const whole = canWhole && recordOn && takeScope === 'episode';
   const oneBeat = isScript && recordOn && beats.length > 0 && !whole;
@@ -603,15 +612,27 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
   const level = useMicLevel(meterStream);
   const levelRef = useRef(0);
   levelRef.current = level;
-  // Recording and nothing heard for 3 seconds: say so.
-  const [silent, setSilent] = useState(false);
+  // The mic warning: 'never' (no sound yet since the take started) or 'lost'
+  // (sound earlier, then quiet for QUIET_LOST_MS); sound clears it at once.
+  // Time paused does not count.
+  const recPausedRef = useRef(false);
+  recPausedRef.current = !!rec.paused;
+  const [silent, setSilent] = useState(null);
   useEffect(() => {
-    if (!recording) { setSilent(false); return undefined; }
-    let loud = Date.now();
+    if (!recording) { setSilent(null); return undefined; }
+    let ran = 0; // running time since the take started
+    let loudAt = null; // running time of the last sound
+    let last = Date.now();
     const t = window.setInterval(() => {
       const now = Date.now();
-      if (levelRef.current > QUIET_LEVEL) loud = now;
-      setSilent(now - loud > QUIET_MS);
+      const step = now - last;
+      last = now;
+      if (recPausedRef.current) { setSilent(null); return; }
+      ran += step;
+      if (levelRef.current > QUIET_LEVEL) { loudAt = ran; setSilent(null); return; }
+      if (ran < QUIET_GRACE_MS) setSilent(null);
+      else if (loudAt == null) setSilent('never');
+      else setSilent(ran - loudAt >= QUIET_LOST_MS ? 'lost' : null);
     }, 250);
     return () => window.clearInterval(t);
   }, [recording]);
@@ -857,6 +878,7 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
       return;
     }
     if (playing) { setPlaying(false); return; }
+    if (recordOn) setPracticing(true);
     // At the end Play did nothing (reader audit): back to the top, and play.
     let from = active;
     if (atTheEnd()) {
@@ -887,6 +909,7 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
   const resetMarks = () => { marksRef.current = []; lastMarkedRef.current = -1; setMarks([]); };
   const recordWhole = () => {
     const i = wholeFrom;
+    setPracticing(false);
     setNotice(null);
     setSavedNext(null);
     setPendingMarks(null);
@@ -916,6 +939,7 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
   // setting is for reading.
   const startTake = () => {
     if (whole) { recordWhole(); return; }
+    setPracticing(false);
     setNotice(null);
     setSavedNext(null);
     setSave({ status: 'idle', progress: 0, error: null, clip: null });
@@ -1185,6 +1209,7 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
     setPlaying(false);
     setSavedNext(null);
     if (recordOn) { doneWithTake(); resetMarks(); }
+    setPracticing(false);
     setRecordOn((on) => !on);
   };
 
@@ -1459,8 +1484,13 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
         {cueOn && <SilenceCue line={atLine} left={cueLeft} total={cueTotal} reduced={reduced} voice={!!activeClip} />}
         <p className="stp-sr" role="status" data-testid="stp-quiet-live">{cueOn ? cueSays(atLine) : ''}</p>
 
-        {(recording || meterStream) && (
+        {(recording || meterStream || (practicing && recordLead)) && (
           <div className="stp-hud">
+            {practicing && recordLead && (
+              <div className="stp-practice" role="status" data-testid="stp-practicing">
+                <Play size={14} aria-hidden="true" /> Practicing — not recording. Tap ● Record to record.
+              </div>
+            )}
             {recording && (
               <div className={`stp-recdot${rec.paused ? ' is-paused' : ''}`} role="status" data-testid="stp-recording">
                 <span className="stp-dot" aria-hidden="true" /> {rec.paused ? 'PAUSED' : 'REC'} {clock(rec.elapsed)}
@@ -1607,6 +1637,19 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
               <span>{takePaused ? 'Resume' : 'Pause'}</span>
             </button>
           </>
+        ) : recordLead ? (
+          <>
+            <button type="button" ref={recordBtnRef} className="stp-btn is-rec is-lead" data-testid="stp-record" disabled={rec.camera.status !== 'ready' || busyTake} onClick={record}
+              title={isScript && beat ? `Record ${label}` : `Record take ${takeNo}`}>
+              <Circle size={18} aria-hidden="true" fill="currentColor" /> {whole ? `Record whole episode · take ${takeNo}` : isScript && beatNumber != null ? `Record beat ${beatNumber} · take ${takeNo}` : `Record take ${takeNo}`}
+            </button>
+            {/* Play only scrolls: in Read & record it says so. */}
+            <button type="button" className="stp-btn stp-practice-btn" data-testid="stp-play" aria-pressed={playing}
+              aria-label={playing || count > 0 ? 'Pause practice' : 'Practice — scroll without recording'} title="Scroll the words without recording" onClick={togglePlay}>
+              {playing || count > 0 ? <Pause size={18} aria-hidden="true" /> : <Play size={18} aria-hidden="true" />}
+              <span>{playing || count > 0 ? 'Pause' : 'Practice'}</span>
+            </button>
+          </>
         ) : (
           <button type="button" className="stp-btn is-primary is-play" data-testid="stp-play" aria-pressed={playing} aria-label={playing || count > 0 ? 'Pause' : 'Play'} disabled={!!take} onClick={togglePlay}>
             {playing || count > 0 ? <Pause size={20} aria-hidden="true" /> : <Play size={20} aria-hidden="true" />}
@@ -1745,12 +1788,6 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
               {startChoices.map(({ l, i }) => <option key={i} value={String(i)}>{i === 0 ? `${lineChoice(l, l.vi ?? 0)} (the top)` : lineChoice(l, l.vi)}</option>)}
             </select>
           </label>
-        )}
-        {recordOn && !midTake && (
-          <button type="button" ref={recordBtnRef} className="stp-btn is-rec" data-testid="stp-record" disabled={rec.camera.status !== 'ready' || busyTake} onClick={record}
-            title={isScript && beat ? `Record ${label}` : `Record take ${takeNo}`}>
-            <Circle size={18} aria-hidden="true" /> {whole ? `Record whole episode · take ${takeNo}` : isScript && beatNumber != null ? `Record beat ${beatNumber} · take ${takeNo}` : `Record take ${takeNo}`}
-          </button>
         )}
       </div>
     </div>,
