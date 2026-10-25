@@ -9,7 +9,7 @@
 // /teleprompter?episode=<id>&beat=<n> (the Script tab's Teleprompter button)
 // opens that episode's script on that beat.
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { ScrollText, ClipboardPaste, BookOpen, Play } from 'lucide-react';
 import api from '../services/api';
@@ -122,6 +122,19 @@ export default function Teleprompter() {
     ? { kind: 'text', text: pasted }
     : { kind: 'script', scriptText: episode?.script_content || '', episodeId: episode?.id || null, title };
   const numberedBeats = script.beats.filter((b) => b.number != null);
+  // The source tabs: arrow keys, Home and End move between them (one tab stop).
+  const tabRefs = useRef({});
+  const KINDS = ['paste', 'script'];
+  const onTabKey = (e) => {
+    const at = KINDS.indexOf(sourceKind);
+    const to = e.key === 'ArrowRight' || e.key === 'ArrowDown' ? (at + 1) % KINDS.length
+      : e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? (at + KINDS.length - 1) % KINDS.length
+        : e.key === 'Home' ? 0 : e.key === 'End' ? KINDS.length - 1 : null;
+    if (to == null) return;
+    e.preventDefault();
+    setSourceKind(KINDS[to]);
+    tabRefs.current[KINDS[to]]?.focus();
+  };
 
   return (
     <div className="stp-pagewrap">
@@ -131,24 +144,26 @@ export default function Teleprompter() {
       </header>
 
       <section className="stp-card" aria-label="What to read">
-        <div className="stp-tabs" role="tablist" aria-label="Source">
-          <button type="button" role="tab" className="stp-tab" aria-selected={sourceKind === 'paste'} data-testid="stp-source-paste" onClick={() => setSourceKind('paste')}>
+        <div className="stp-tabs" role="tablist" aria-label="Source" onKeyDown={onTabKey}>
+          <button type="button" role="tab" className="stp-tab" id="stp-tab-paste" aria-controls={sourceKind === 'paste' ? 'stp-panel-paste' : undefined} aria-selected={sourceKind === 'paste'} tabIndex={sourceKind === 'paste' ? 0 : -1}
+            ref={(el) => { tabRefs.current.paste = el; }} data-testid="stp-source-paste" onClick={() => setSourceKind('paste')}>
             <ClipboardPaste size={18} aria-hidden="true" /> Paste text
           </button>
-          <button type="button" role="tab" className="stp-tab" aria-selected={sourceKind === 'script'} data-testid="stp-source-script" onClick={() => setSourceKind('script')}>
+          <button type="button" role="tab" className="stp-tab" id="stp-tab-script" aria-controls={sourceKind === 'script' ? 'stp-panel-script' : undefined} aria-selected={sourceKind === 'script'} tabIndex={sourceKind === 'script' ? 0 : -1}
+            ref={(el) => { tabRefs.current.script = el; }} data-testid="stp-source-script" onClick={() => setSourceKind('script')}>
             <BookOpen size={18} aria-hidden="true" /> Pick a script
           </button>
         </div>
 
         {sourceKind === 'paste' ? (
-          <div className="stp-field" role="tabpanel">
+          <div className="stp-field" role="tabpanel" id="stp-panel-paste" aria-labelledby="stp-tab-paste">
             <label htmlFor="stp-paste" className="stp-label">Your text</label>
             <textarea id="stp-paste" className="stp-textarea" value={pasted} onChange={(e) => setPasted(e.target.value)} rows={12}
               placeholder="Paste or type what you want to read. A blank line starts a new paragraph." data-testid="stp-paste" />
             <p className="stp-hint">Kept on this device, so it is here next time. A take you record from pasted text downloads to this device.</p>
           </div>
         ) : (
-          <div className="stp-field" role="tabpanel">
+          <div className="stp-field" role="tabpanel" id="stp-panel-script" aria-labelledby="stp-tab-script">
             <div className="stp-pickers">
               <label className="stp-label">Show
                 <select className="stp-select" value={showId} onChange={(e) => { setShowId(e.target.value); pickEpisode(''); }} data-testid="stp-show">

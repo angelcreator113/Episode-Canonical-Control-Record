@@ -4,8 +4,14 @@
 // did not, so a rewrite dropped the speaker and the export printed the line
 // as action; `Note:` was a speaker everywhere but the tab. One rule for all.
 
-// A label before a colon that names a thing, not a person.
-export const NOT_SPEAKERS = new Set(['location', 'scene', 'setting', 'time', 'note', 'notes', 'transition', 'cut', 'int', 'ext', 'beat', 'act', 'sfx', 'music', 'caption']);
+// A label before a colon that names a thing, not a person. The episode's
+// header lines (Teleprompter reader audit, 2026-10-24: "Logline: …" was a
+// speaker under "Read as") are labels too.
+export const NOT_SPEAKERS = new Set([
+  'location', 'scene', 'setting', 'time', 'note', 'notes', 'transition', 'cut', 'int', 'ext', 'beat', 'act', 'sfx', 'music', 'caption',
+  'logline', 'episode', 'title', 'goal', 'goals', 'summary', 'synopsis', 'theme', 'hook', 'forward hook', 'date', 'cast',
+  'wardrobe', 'outfit', 'event', 'venue',
+]);
 
 const KNOWN = { me: 'Prime', prime: 'Prime', lala: 'Lala', kelli: 'Kelli', guest: 'Guest' };
 

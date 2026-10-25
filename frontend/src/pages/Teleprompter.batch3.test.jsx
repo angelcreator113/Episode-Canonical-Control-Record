@@ -219,7 +219,7 @@ describe('Phone remote page', () => {
     window.location.hash = `#${TOKEN}`;
     let gone = false;
     vi.stubGlobal('fetch', vi.fn(async () => (gone ? reply(410, { success: false, error: 'ended', code: 'SESSION_GONE' })
-      : reply(200, { success: true, data: { state: { running: false, recordMode: true, recording: false }, expires_at: null, seq: 0 } }))));
+      : reply(200, { success: true, data: { state: { running: false, recordMode: true, recording: false, canRecord: true }, expires_at: null, seq: 0 } }))));
     render(<TeleprompterRemote pollMs={60000} />);
     await waitFor(() => expect(screen.getByTestId('tpr-record_start')).toBeTruthy());
     gone = true;

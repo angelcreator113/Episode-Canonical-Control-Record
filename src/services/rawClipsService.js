@@ -217,6 +217,7 @@ async function createClip(sequelize, clip) {
   const replacements = {
     id: clip.id, episodeId: clip.episode_id, showId: clip.show_id || null,
     performer: clip.performer, guestName: clip.guest_name || null, label: clip.label || null,
+    beatNumber: clip.beat_number ?? null,
     originalFilename: clip.original_filename || null, contentType: clip.content_type || null,
     size: clip.file_size_bytes ?? null, duration: clip.duration_seconds ?? null,
     width: clip.width ?? null, height: clip.height ?? null,
@@ -226,10 +227,10 @@ async function createClip(sequelize, clip) {
   };
   const [[row]] = await sequelize.query(
     `INSERT INTO episode_raw_clips
-       (id, episode_id, show_id, performer, guest_name, label, original_filename, content_type,
+       (id, episode_id, show_id, performer, guest_name, label, beat_number, original_filename, content_type,
         file_size_bytes, duration_seconds, width, height, s3_key_raw, url_raw, thumbnail_key, thumbnail_url,
         key_status, key_strength, created_at, updated_at)
-     VALUES (:id, :episodeId, :showId, :performer, :guestName, :label, :originalFilename, :contentType,
+     VALUES (:id, :episodeId, :showId, :performer, :guestName, :label, :beatNumber, :originalFilename, :contentType,
         :size, :duration, :width, :height, :keyRaw, :urlRaw, :thumbKey, :thumbUrl,
         :keyStatus, :keyStrength, NOW(), NOW())
      RETURNING ${COLUMNS}`,
@@ -281,6 +282,51 @@ async function updateClip(sequelize, episodeId, clipId, body = {}) {
     console.error('[rawClips] update failed:', err.message);
     throw err;
   }
+}
+
+// The take fields an upload may carry whose columns come with a migration
+// (Teleprompter audit 8, 2026-10-24): start_line (20261020090000) and
+// beat_marks (20261023235900). beat_number has always been a column.
+const UPLOAD_EXTRAS = Object.freeze(['start_line', 'beat_marks']);
+
+/**
+ * Keeps an uploaded take's start_line and beat_marks (extras: readFields
+ * output), each in its own UPDATE so a column that is not there yet costs
+ * only that field. Never throws: the clip is already saved, so a field the
+ * database can't keep is reported, not a failed upload. Returns { row,
+ * stored, notStored } (row: the clip as updated, or null when nothing was).
+ */
+async function storeTakeExtras(sequelize, episodeId, clipId, extras = {}) {
+  const stored = [];
+  const notStored = [];
+  let row = null;
+  for (const key of UPLOAD_EXTRAS) {
+    if (extras[key] === undefined) continue;
+    try {
+      const next = await updateClip(sequelize, episodeId, clipId, { [key]: extras[key] });
+      if (next) { row = next; stored.push(key); } else notStored.push(key);
+    } catch (err) {
+      if (err?.status !== 409) console.error(`[rawClips] ${key} not kept with the upload:`, err.message);
+      notStored.push(key);
+    }
+  }
+  return { row, stored, notStored };
+}
+
+/**
+ * The take's length the browser measured (seconds, a multipart field), for a
+ * file ffprobe can't time (a browser's WebM has no duration in its header).
+ * A number above 0 and at most 36000 (ten hours), to two decimals; anything
+ * else is left out (null).
+ */
+function readTakeSeconds(value) {
+  if (value === undefined || value === null || value === '') return null;
+  const s = Number(value);
+  if (!Number.isFinite(s) || s <= 0 || s > MAX_MARK_SECONDS) {
+    console.warn('[rawClips] take seconds left out (not 0 < s <= 36000):', String(value).slice(0, 40));
+    return null;
+  }
+  return Math.round(s * 100) / 100;
 }
 
 /** Sets the green-removal state. extra: { strength, cutoutKey, cutoutUrl, error }. */
@@ -402,7 +448,7 @@ function readProbe(json) {
 module.exports = {
   PERFORMERS, KEY_STATUSES, KEY_STRENGTHS, STALE_HOURS, STALE_MESSAGE, DEFAULT_KEY_COLOR, STRENGTH_SIMILARITY,
   TAKE_FIELDS, TAKE_FIELDS_MISSING, BEAT_MARKS_MISSING, MAX_BEAT_MARKS, MAX_MARK_SECONDS,
-  RawClipError, readFields, readBeatMarks, readStrength, truthy, findEpisode, shapeRow,
-  listClips, getClip, createClip, updateClip, setKeyState, removeClip,
+  UPLOAD_EXTRAS, RawClipError, readFields, readBeatMarks, readStrength, readTakeSeconds, truthy, findEpisode, shapeRow,
+  listClips, getClip, createClip, updateClip, storeTakeExtras, setKeyState, removeClip,
   pickKeyColor, chromakeyArgs, sampleFrameArgs, thumbnailArgs, probeArgs, readProbe,
 };

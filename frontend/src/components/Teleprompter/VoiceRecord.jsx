@@ -7,7 +7,7 @@
 // vr-* classes, styled by each page's own stylesheet (EpisodeScriptPage.css,
 // Teleprompter.css).
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Mic, Square, RotateCcw, Check, Trash2, X, AlertTriangle } from 'lucide-react';
 import useVoiceRecorder from '../../hooks/useVoiceRecorder';
 import { voiceClipsApi, isStale, isNotReady, VOICE_NOT_READY, clipSeconds } from '../../lib/voiceClipsApi';
@@ -37,10 +37,18 @@ export function VoiceMicButton({ clip, open, onClick, speaker, disabled = false,
  * The recorder for one line. line: { beatNumber, lineIndex, speaker, text }.
  * clip: the line's saved clip, or null. onSaved(clip), onRemoved(clipId),
  * onNotReady() (the database update has not run), onClose(). note: a line
- * under the buttons (the teleprompter's headphones note).
+ * under the buttons (the teleprompter's headphones note). onBusy(busy): told
+ * whenever a clip starts recording or waits unsaved, and when it no longer
+ * does (and on closing), so the teleprompter can ask before it is lost
+ * (Teleprompter audit 11).
  */
-export default function VoiceRecordPanel({ episodeId, line, clip = null, onSaved, onRemoved, onNotReady, onClose, note = null, testId = 'vr-panel' }) {
+export default function VoiceRecordPanel({ episodeId, line, clip = null, onSaved, onRemoved, onNotReady, onClose, onBusy, note = null, testId = 'vr-panel' }) {
   const rec = useVoiceRecorder();
+  const busy = rec.status === 'starting' || rec.status === 'recording' || (rec.status === 'review' && !!rec.take);
+  const onBusyRef = useRef(onBusy);
+  onBusyRef.current = onBusy;
+  useEffect(() => { onBusyRef.current?.(busy); }, [busy]);
+  useEffect(() => () => onBusyRef.current?.(false), []);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
   const stale = isStale(clip, line.text);

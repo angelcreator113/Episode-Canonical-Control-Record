@@ -35,6 +35,24 @@ describe('pure pieces', () => {
   });
 });
 
+describe('Teleprompter audit 10 and 12 (2026-10-24)', () => {
+  test('readState keeps paused and scope (validated) so the phone can show them', () => {
+    expect(remote.readState({ paused: true, scope: 'episode', reviewing: true })).toMatchObject({ paused: true, scope: 'episode', reviewing: true });
+    expect(remote.readState({ paused: 'yes', scope: '<b>' })).toMatchObject({ paused: false, scope: null });
+    expect(remote.readState({}).scope).toBeNull();
+  });
+  test('putState slides expires_at to two hours from now, capped at eight hours from creation, never earlier', async () => {
+    const query = jest.fn(async () => [[{ id: ID, command_seq: 1, expires_at: 'later' }]]);
+    const row = await remote.putState({ query }, { id: ID, userId: 'u1', state: { running: true, paused: true } });
+    expect(row).toMatchObject({ id: ID });
+    const [sql, { replacements }] = query.mock.calls[0];
+    expect(sql).toMatch(/expires_at = GREATEST\(expires_at, LEAST\(NOW\(\) \+ INTERVAL '2 hours', created_at \+ INTERVAL '8 hours'\)\)/);
+    expect(sql).toMatch(/AND expires_at > NOW\(\)/);
+    expect(JSON.parse(replacements.state)).toMatchObject({ running: true, paused: true });
+    expect(remote.MAX_HOURS).toBe(8);
+  });
+});
+
 describe('queries', () => {
   test('createSession stores the hash, never the token, and expires in two hours', async () => {
     const query = jest.fn(async () => [[{ id: ID, expires_at: 'later', command_seq: 0 }]]);
