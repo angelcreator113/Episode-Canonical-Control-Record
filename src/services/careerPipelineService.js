@@ -99,8 +99,8 @@ async function onOpportunityAdvanced(opportunityId, newStatus, models) {
 
     result.goals_updated.push({ id: g.id, title: g.title, metric: g.target_metric, added: increment, new_value: newValue });
 
-    // Check if goal is now complete
-    if (newValue >= g.target_value) {
+    // Check if goal is now complete (direction-aware: stress completes at or below its target)
+    if (require('../utils/goalLadders').goalReached(g, newValue)) {
       if (CareerGoal && goal.update) {
         await goal.update({ status: 'completed', completed_at: new Date() });
       } else {

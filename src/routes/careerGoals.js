@@ -18,6 +18,25 @@ const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 
 const { requireAuth } = require('../middleware/auth');
+const { goalReached, completesByReading, activatedAfter } = require('../utils/goalLadders');
+
+/**
+ * The show's one active primary goal other than `exceptId`, or null
+ * (Evoni, 2026-10-25: "Primary Goal (1 max)" showed five). A second
+ * primary is refused with 409; { swap_primary: true } on an update makes
+ * the others secondary first.
+ */
+async function otherPrimary(models, showId, exceptId = null) {
+  const { Op } = require('sequelize');
+  const where = { show_id: showId, type: 'primary', status: 'active' };
+  if (exceptId) where.id = { [Op.ne]: exceptId };
+  return models.CareerGoal.findOne({ where, order: [['priority', 'ASC'], ['created_at', 'ASC']] });
+}
+const primaryTaken = (res, other) => res.status(409).json({
+  error: `"${other.title}" is already the primary goal. Make it secondary first, or use Make primary to swap.`,
+  code: 'PRIMARY_TAKEN',
+  primary_goal: { id: other.id, title: other.title },
+});
 
 async function getModels() {
   try { return require('../models'); } catch (e) { console.error('Failed to load models:', e.message); return null; }
@@ -363,8 +382,12 @@ router.post('/world/:showId/goals', requireAuth, async (req, res) => {
     const models = await getModels();
     if (!models) return res.status(500).json({ error: 'Models not loaded' });
 
-    // Enforce limits: 1 primary, 2 secondary active at a time
-    if (type === 'primary' || type === 'secondary') {
+    // Enforce limits: 1 primary (409, naming it), 2 secondary active at a time
+    if (type === 'primary') {
+      const other = await otherPrimary(models, showId);
+      if (other) return primaryTaken(res, other);
+    }
+    if (type === 'secondary') {
       const count = await models.CareerGoal.count({
         where: { show_id: showId, type, status: 'active' },
       });
@@ -450,6 +473,18 @@ router.put('/world/:showId/goals/:goalId', requireAuth, async (req, res) => {
       }
     }
 
+    // One active primary: becoming (or staying, when reactivated) the primary
+    // while another is active is refused unless swap_primary makes the
+    // others secondary in the same transaction.
+    const existing = await models.CareerGoal.findOne({ where: { id: goalId, show_id: showId } });
+    if (!existing) return res.status(404).json({ error: 'Goal not found' });
+    const willBePrimary = (attrs.type ?? existing.type) === 'primary' && (attrs.status ?? existing.status) === 'active';
+    const becomesPrimary = willBePrimary && (existing.type !== 'primary' || existing.status !== 'active');
+    if (becomesPrimary && !updates.swap_primary) {
+      const other = await otherPrimary(models, showId, goalId);
+      if (other) return primaryTaken(res, other);
+    }
+
     // Auto-set completed_at
     if (updates.status === 'completed') {
       attrs.completed_at = new Date();
@@ -457,8 +492,14 @@ router.put('/world/:showId/goals/:goalId', requireAuth, async (req, res) => {
 
     if (Object.keys(attrs).length === 0) return res.status(400).json({ error: 'No fields to update' });
 
-    await models.CareerGoal.update(attrs, {
-      where: { id: goalId, show_id: showId },
+    await models.sequelize.transaction(async (transaction) => {
+      if (becomesPrimary && updates.swap_primary) {
+        const { Op } = require('sequelize');
+        await models.CareerGoal.update({ type: 'secondary' }, {
+          where: { show_id: showId, type: 'primary', status: 'active', id: { [Op.ne]: goalId } }, transaction,
+        });
+      }
+      await models.CareerGoal.update(attrs, { where: { id: goalId, show_id: showId }, transaction });
     });
 
     const updated = await models.CareerGoal.findAll({
@@ -515,6 +556,8 @@ router.post('/world/:showId/goals/sync', requireAuth, async (req, res) => {
     const goals = await models.CareerGoal.findAll({
       where: { show_id: showId, status: 'active' },
     });
+    // Copied: get({ plain }) can hand back the live dataValues, which the updates below change.
+    const before = goals.map((g) => ({ ...g.get({ plain: true }) }));
 
     let synced = 0;
     const completed = [];
@@ -530,8 +573,10 @@ router.post('/world/:showId/goals/sync', requireAuth, async (req, res) => {
       await goal.update({ current_value: newValue });
       synced++;
 
-      // Check if goal is now complete
-      if (newValue >= goal.target_value && goal.status === 'active') {
+      // Check if goal is now complete: direction-aware (stress completes at or
+      // below its target), and, as on episode completion, a passive or custom
+      // goal is only measured, never completed by a reading.
+      if (completesByReading(goal) && goalReached(goal, newValue) && goal.status === 'active') {
         await goal.update({ status: 'completed', completed_at: new Date() });
         completed.push({ id: goal.id, title: goal.title, metric: goal.target_metric });
 
@@ -548,7 +593,10 @@ router.post('/world/:showId/goals/sync', requireAuth, async (req, res) => {
       }
     }
 
-    return res.json({ success: true, synced, completed });
+    // The next rung of each ladder a completion cleared is now the one worked
+    // on (derived on read; nothing to write, so a second sync adds nothing).
+    const activated = activatedAfter(before, completed.map((c) => c.id));
+    return res.json({ success: true, synced, completed, activated });
   } catch (error) {
     console.error('Sync goals error:', error);
     return res.status(500).json({ error: 'Failed to sync goals', message: error.message });

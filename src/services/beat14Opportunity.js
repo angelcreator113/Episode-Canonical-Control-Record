@@ -174,7 +174,8 @@ async function fitContext(models, { showId, event, people }) {
     const inputs = await loadCoverageInputs(sequelize, showId);
     if (inputs) {
       const coverage = computeCoverage(inputs);
-      const uncovered = new Set(coverage.goals.filter((g) => !g.movers.length).map((g) => String(g.id)));
+      // Only the goals being worked on of a stat events move (not the rungs up next).
+      const uncovered = new Set(coverage.goals.filter((g) => g.covered !== false && !g.movers.length).map((g) => String(g.id)));
       ctx.goals = inputs.goals.filter((g) => uncovered.has(String(g.id)));
       ctx.state = inputs.state || {};
     }

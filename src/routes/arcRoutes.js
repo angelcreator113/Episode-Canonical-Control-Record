@@ -60,7 +60,8 @@
  *                                             its projection, the parts nothing moves it in, the slots' chips;
  *                                             ?event_id= adds what that event moves (services/seasonGoalCoverage)
  * GET    /world/:showId/season/goals/:goalId/events — "Find events": the events that move the goal first, placed or not
- * PUT    /world/:showId/season/events/:eventId/goals/:goalId/pin — Pin the goal to the event (a pin always counts)
+ * PUT    /world/:showId/season/events/:eventId/goals/:goalId/pin — Pin the goal to the event (a pin always counts);
+ *                                             409 MAIN_GOAL_TAKEN when the event is another goal's main event, ?move=1 moves it
  * DELETE /world/:showId/season/events/:eventId/goals/:goalId/pin — Unpin it
  * GET    /episodes/:episodeId/season-twists — The twists this episode plants and pays off (the Script tab)
  * POST   /episodes/:episodeId/season-twists/:twistId/mark — { as: planted|paid_off, undo? }: Evoni marks it done here, or takes the mark back
@@ -331,7 +332,7 @@ function sendSlotError(res, err, label) {
   // A refusal (409, 400 …) is expected; it is logged as a warning, never dropped.
   if (err.status && err.code) {
     console.warn(`[ArcRoutes] ${label} refused (${err.code}):`, err.message);
-    return res.status(err.status).json({ error: err.message, code: err.code });
+    return res.status(err.status).json({ error: err.message, code: err.code, ...(err.details || {}) });
   }
   console.error(`[ArcRoutes] ${label} error:`, err);
   return res.status(500).json({ error: err.message });
@@ -508,7 +509,9 @@ const pinRoute = (on) => async (req, res) => {
   try {
     const models = require('../models');
     const { setPin } = require('../services/seasonGoalCoverage');
-    return res.json({ success: true, ...(await setPin(models.sequelize, req.params.showId, req.params.eventId, req.params.goalId, on)) });
+    // ?move=1 (or { move: true }) moves the event from the goal it is already the main event for.
+    const move = ['1', 'true'].includes(String(req.query.move ?? '')) || req.body?.move === true;
+    return res.json({ success: true, ...(await setPin(models.sequelize, req.params.showId, req.params.eventId, req.params.goalId, on, { move })) });
   } catch (err) {
     return sendSlotError(res, err, on ? 'pin goal' : 'unpin goal');
   }

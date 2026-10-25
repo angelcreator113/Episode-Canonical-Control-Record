@@ -128,13 +128,30 @@ describe('attentionItems', () => {
 });
 
 describe('tabBadges', () => {
+  test('the Goals badge counts only goals being worked on of a stat events move (goal ladders)', () => {
+    // Evoni's case: 21 goals, most of them rungs up next or performance goals.
+    const coverage = {
+      goals: [
+        { id: 'starter', covered: true }, { id: 'money', covered: false, rung: 'up_next' },
+        { id: 'k5', covered: false, kind: 'performance' }, { id: 'stress', covered: false, kind: 'background' },
+      ],
+      parts: [
+        { phase: 1, title: 'Foundation', gaps: [{ goal_id: 'starter', title: 'Starter Fund' }, { goal_id: 'money', title: 'The Money Talk' }, { goal_id: 'k5', title: 'First 5K' }] },
+        { phase: 2, title: 'Ascension', gaps: [{ goal_id: 'starter', title: 'Starter Fund' }, { goal_id: 'stress', title: 'Manage Stress' }] },
+      ],
+    };
+    expect(tabBadges(base({ events: [], roadmap: roadmap([]), coverage })).goals).toEqual({ count: 1, text: '1 gap', tone: 'calm' });
+    expect(goalGaps(coverage, { arc: ARC }).map((p) => p.gaps.map((g) => g.goal_id))).toEqual([['starter'], ['starter']]);
+  });
+
   test('only the tabs with something waiting, with their wide wording', () => {
     const release = { ...RELEASE, episodes: [row({ due: 'soon', days_until: 3, date: '2026-11-01' })] };
     const opps = [{ id: 'o1', name: 'Velour', status: 'held' }];
     const b = tabBadges(base({ release, opps, coverage: COVERAGE }));
     expect(b).toEqual({
       events: { count: 2, text: '2 need setup', tone: 'calm' },
-      goals: { count: 3, text: '3 gaps', tone: 'calm' },
+      // Each goal once: Save coins misses two parts, Earn trust one.
+      goals: { count: 2, text: '2 gaps', tone: 'calm' },
       opportunities: { count: 1, text: '1 held', tone: 'calm' },
       episodes: { count: 1, text: '1 due Sunday', tone: 'soon' },
     });
