@@ -7,7 +7,7 @@
  */
 import { Link } from 'react-router-dom';
 import { Gift } from 'lucide-react';
-import { beat14Line } from '../../lib/eventFlow';
+import { beat14Line } from '../../lib/eventActions';
 import './EventFlow.css';
 
 export default function Beat14Preview({ beat14, episodeId = null }) {

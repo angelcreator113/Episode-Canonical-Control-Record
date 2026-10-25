@@ -11,7 +11,7 @@ import { Link } from 'react-router-dom';
 import { Clapperboard } from 'lucide-react';
 import api from '../../services/api';
 import { useReleaseSchedule } from '../../lib/releaseSchedule';
-import { episodeStatus } from '../../lib/eventFlow';
+import { episodeStatus } from '../../lib/eventActions';
 import './EventFlow.css';
 
 export default function EpisodeStatusCard({ showId, episodeId, fallback = null }) {

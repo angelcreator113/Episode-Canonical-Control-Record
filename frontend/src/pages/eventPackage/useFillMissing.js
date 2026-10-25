@@ -11,7 +11,7 @@
  */
 import { useState } from 'react';
 import api from '../../services/api';
-import { NUMBER_FIELDS } from '../../lib/eventFlow';
+import { NUMBER_FIELDS } from '../../lib/eventActions';
 
 const valueFor = (row) => {
   const raw = String(row.draft ?? '').trim();

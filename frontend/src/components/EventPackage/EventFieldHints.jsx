@@ -8,7 +8,7 @@
  */
 import { useState } from 'react';
 import { AlertTriangle, Wand } from 'lucide-react';
-import { FIELD_LABELS, fieldValueText } from '../../lib/eventFlow';
+import { FIELD_LABELS, fieldValueText } from '../../lib/eventActions';
 import './EventFlow.css';
 
 export default function EventFieldHints({ flow, fields, used, putEvent, load, setToast }) {

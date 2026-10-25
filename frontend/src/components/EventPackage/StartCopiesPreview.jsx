@@ -6,7 +6,7 @@
  * step, before anything is created.
  */
 import { Copy } from 'lucide-react';
-import { startCopies } from '../../lib/eventFlow';
+import { startCopies } from '../../lib/eventActions';
 import './EventFlow.css';
 
 export default function StartCopiesPreview({ event, seeds, invitationAsset, venueDate, seasonContext }) {

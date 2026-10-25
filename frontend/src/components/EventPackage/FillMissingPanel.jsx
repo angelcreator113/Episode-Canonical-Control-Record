@@ -7,7 +7,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Check, Pencil, SkipForward, Sparkles, X, Loader2 } from 'lucide-react';
 import { EVENT_CATEGORIES, EVENT_FORMATS, taxonomyLabel } from '../../utils/eventTaxonomy';
-import { fieldValueText, NUMBER_FIELDS } from '../../lib/eventFlow';
+import { fieldValueText, NUMBER_FIELDS } from '../../lib/eventActions';
 
 const OPTIONS = { category: EVENT_CATEGORIES, format: EVENT_FORMATS };
 const LONG = new Set(['description', 'narrative_stakes', 'fail_consequence', 'success_unlock']);

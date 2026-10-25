@@ -8,7 +8,7 @@
 import { useState } from 'react';
 import api from '../../services/api';
 import { seasonPageHref } from '../../lib/seasonPage';
-import { followUpBody } from '../../lib/eventFlow';
+import { followUpBody } from '../../lib/eventActions';
 
 export default function useFollowUpEvent({ showId, event, organizer, venueLocation, navigate, setToast }) {
   const [creating, setCreating] = useState(false);

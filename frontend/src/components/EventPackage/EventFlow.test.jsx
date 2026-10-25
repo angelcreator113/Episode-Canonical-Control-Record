@@ -15,7 +15,7 @@ import EventFlowStrip from './EventFlowStrip';
 import EventFieldHints from './EventFieldHints';
 import StartCopiesPreview from './StartCopiesPreview';
 import StartConfirmDialog from './StartConfirmDialog';
-import useEventFlow from '../../pages/eventPackage/useEventFlow';
+import useEventActions from '../../pages/eventPackage/useEventActions';
 import useFillMissing from '../../pages/eventPackage/useFillMissing';
 import useFollowUpEvent from '../../pages/eventPackage/useFollowUpEvent';
 
@@ -44,7 +44,7 @@ const DRAFTS = [
 ];
 
 function Harness({ used = false, episodeId = null, putEvent, load = vi.fn(), setToast = vi.fn(), navigate = vi.fn() }) {
-  const flow = useEventFlow({ showId: 'show-1', eventId: 'ev-1', reloadTick: 0 });
+  const flow = useEventActions({ showId: 'show-1', eventId: 'ev-1', reloadTick: 0 });
   const fill = useFillMissing({ showId: 'show-1', eventId: 'ev-1', used, putEvent, load, setToast });
   const followUp = useFollowUpEvent({ showId: 'show-1', event: EVENT, organizer: { name: 'Maison Velour' }, venueLocation: { venue_type: 'rooftop_bar' }, navigate, setToast });
   return (

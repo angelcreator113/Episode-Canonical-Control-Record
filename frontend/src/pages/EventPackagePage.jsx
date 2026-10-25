@@ -147,7 +147,7 @@ import useDialogFocus from './eventPackage/useDialogFocus';
 import EventFlowStrip from '../components/EventPackage/EventFlowStrip';
 import EventFieldHints from '../components/EventPackage/EventFieldHints';
 import StartCopiesPreview from '../components/EventPackage/StartCopiesPreview';
-import useEventFlow from './eventPackage/useEventFlow';
+import useEventActions from './eventPackage/useEventActions';
 import useFillMissing from './eventPackage/useFillMissing';
 import useFollowUpEvent from './eventPackage/useFollowUpEvent';
 import './EventPackagePage.css';
@@ -321,7 +321,7 @@ function EventPackageBody({ pkg }) {
   const guests = useGuests({ event, guestList, putEvent, load, setToast, undoChange, loadedEventRef });
   const place = usePlacePickers({ showId, event, putEvent, load, setToast });
   const start = useStartEpisode({ showId, eventId, gatesMet, used, moneyPending, readiness, moneyWarnings, setToast, navigate });
-  const flow = useEventFlow({ showId, eventId, reloadTick });
+  const flow = useEventActions({ showId, eventId, reloadTick });
   const fill = useFillMissing({ showId, eventId, used, putEvent, load, setToast });
   const followUp = useFollowUpEvent({ showId, event, organizer, venueLocation, navigate, setToast });
   const hints = (fields) => <EventFieldHints flow={flow.flow} fields={fields} used={used} putEvent={putEvent} load={load} setToast={setToast} />;

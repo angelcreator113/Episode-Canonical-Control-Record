@@ -3,7 +3,7 @@
  * Start Episode copies, and the follow-up's create body.
  */
 import { describe, test, expect } from 'vitest';
-import { beat14Line, episodeStatus, startCopies, followUpBody, fieldValueText } from './eventFlow';
+import { beat14Line, episodeStatus, startCopies, followUpBody, fieldValueText } from './eventActions';
 
 const opp = (over = {}) => ({ id: 'o1', name: 'Maison Velour SS27 campaign', status: 'offered', ...over });
 

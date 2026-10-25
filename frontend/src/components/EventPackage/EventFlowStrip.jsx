@@ -4,7 +4,7 @@
  * and how it flows?" … "I want them all"): one line of clashes when there
  * are any, beat 14's preview, the episode's status once it exists, and two
  * actions, Fill what's missing (AI drafts, reviewed in FillMissingPanel)
- * and Make a follow-up event. The page owns the hooks (useEventFlow,
+ * and Make a follow-up event. The page owns the hooks (useEventActions,
  * useFillMissing, useFollowUpEvent) and hands them in.
  */
 import { AlertTriangle, AlertCircle, Loader2, Sparkles, CopyPlus } from 'lucide-react';

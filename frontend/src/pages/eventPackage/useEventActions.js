@@ -8,7 +8,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import api from '../../services/api';
 
-export default function useEventFlow({ showId, eventId, reloadTick = 0 }) {
+export default function useEventActions({ showId, eventId, reloadTick = 0 }) {
   const [flow, setFlow] = useState(null);
   const [error, setError] = useState(null);
   const seqRef = useRef(0);
