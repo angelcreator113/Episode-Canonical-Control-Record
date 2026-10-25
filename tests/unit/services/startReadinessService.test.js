@@ -52,7 +52,7 @@ const READY_EVENT = {
   id: 'ev-1', venue_location_id: 'loc-1', outfit_set_id: 'os-1',
   canon_consequences: { documents: {
     shopping_list: { status: 'approved', items: [{ label: 'Shoes' }] },
-    career_plan: { status: 'approved', items: [{ label: 'Meet the editor' }] },
+    offer_letter: { status: 'approved', items: [], letter: { opening: 'We are pleased to offer you a partnership.' } },
   } },
 };
 
@@ -124,8 +124,17 @@ describe('blockers: exactly the server refusals', () => {
 describe('warnings: what the server does not refuse for', () => {
   test('no venue, no outfit, documents not approved', () => {
     const w = startWarnings({ id: 'ev-1', venue_name: 'Club Noir', outfit_pieces: '[]', canon_consequences: '{}' });
-    expect(w.map((x) => x.key)).toEqual(['place_venue', 'look_outfit', 'document_shopping_list', 'document_career_plan']);
+    // No deal terms: no offer letter is expected (Evoni, 2026-10-24: deal events only).
+    expect(w.map((x) => x.key)).toEqual(['place_venue', 'look_outfit', 'document_shopping_list']);
     expect(w[0].detail).toMatch(/Club Noir/);
+  });
+
+  test('a deal event without an approved offer letter is warned; with one it is not', () => {
+    const deal = { id: 'ev-1', venue_location_id: 'loc-1', outfit_set_id: 'os-1', deal_type: 'paid_appearance' };
+    const without = startWarnings({ ...deal, canon_consequences: { documents: { shopping_list: READY_EVENT.canon_consequences.documents.shopping_list } } });
+    expect(without.map((x) => x.key)).toEqual(['document_offer_letter']);
+    expect(without[0].detail).toMatch(/beat 5, directly after the invitation/);
+    expect(startWarnings({ ...deal, canon_consequences: READY_EVENT.canon_consequences })).toEqual([]);
   });
 
   test('the venue may be linked in the automation copy; outfit pieces count as a look', () => {

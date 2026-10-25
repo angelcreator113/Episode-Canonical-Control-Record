@@ -111,9 +111,10 @@ afterAll(() => setOverlaysOnBeats(false));
     const ids = await seed();
     const res = await overlays(ids);
     expect(res.status).toBe(200);
+    // No deal on this event: no offer letter piece (Evoni, 2026-10-24: deal events only).
     expect(res.body.data.pieces.map((p) => [p.key, p.status])).toEqual([
       ['title_overlay', 'not_made'], ['framed_card', 'not_made'], ['invitation', 'not_made'],
-      ['shopping_list_doc', 'not_made'], ['career_plan_doc', 'not_made'],
+      ['shopping_list_doc', 'not_made'],
     ]);
     const pieces = byKey(res);
     expect(pieces.invitation.event).toEqual({ id: ids.event, show_id: ids.show, name: 'Velvet Gala' });
@@ -187,21 +188,24 @@ afterAll(() => setOverlaysOnBeats(false));
   });
 
   // Evoni, 2026-10-07: "add the document overlays to the episode's list".
-  it("the event's shopping list and career plan are listed: approved with their drawn overlay, outdated once edited", async () => {
+  it("the event's shopping list and offer letter are listed: approved with their drawn overlay, outdated once edited; the letter on beat 5 with the invitation", async () => {
     const ids = await seed();
     const overlay = { asset_id: uuid(), url: 'data:image/png;base64,AAAA', version: 2, made_at: new Date().toISOString() };
     const docs = {
       shopping_list: { type: 'shopping_list', status: 'approved', version: 2, items: [{ slot: 'dress', label: 'A dress' }], overlay },
-      career_plan: { type: 'career_plan', status: 'draft', version: 3, items: [{ slot: 'g', label: 'Meet the team' }], overlay: { ...overlay, version: 1 } },
+      offer_letter: { type: 'offer_letter', status: 'draft', version: 3, items: [], letter: { opening: 'We are pleased to offer you a partnership.' }, overlay: { ...overlay, version: 1 } },
     };
-    await run(`UPDATE world_events SET canon_consequences = :cc WHERE id = :event`, { ...ids, cc: JSON.stringify({ documents: docs }) });
+    await run(`UPDATE world_events SET canon_consequences = :cc, deal_type = 'paid_appearance', appearance_fee = 500, is_paid = true WHERE id = :event`,
+      { ...ids, cc: JSON.stringify({ documents: docs }) });
     const pieces = byKey(await overlays(ids));
     expect(pieces.shopping_list_doc).toMatchObject({
       label: 'Shopping list', status: 'approved', image_url: overlay.url, asset_id: overlay.asset_id, beat: null,
       document: { type: 'shopping_list', status: 'approved', version: 2 },
       event: { id: ids.event, name: 'Velvet Gala' },
     });
-    expect(pieces.career_plan_doc).toMatchObject({ label: 'Career plan', status: 'outdated', image_url: overlay.url });
+    expect(pieces.offer_letter_doc).toMatchObject({
+      label: 'Offer letter', status: 'outdated', image_url: overlay.url, expected_beat: { number: 5, name: 'Reveal' },
+    });
   });
 
   // Evoni, 2026-10-07: "retire the ai made task list overlay".

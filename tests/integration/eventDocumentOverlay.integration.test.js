@@ -1,11 +1,12 @@
 /**
  * The event's documents as overlays (Evoni, 2026-10-07: "i want both the
  * shopping list and career list and invitations as overlays"; "none of the
- * overlays should be beats for now"): approving a shopping list or a career
- * plan draws it as a PNG, recorded as a DOCUMENT_OVERLAY asset and on the
- * document as overlay { asset_id, url, version }. An edit makes it outdated;
- * approving again draws a new one and retires the old. Nothing is placed on
- * a beat. Real Postgres; the image is a data URL (no bucket in tests).
+ * overlays should be beats for now"): approving a shopping list or an offer
+ * letter (2026-10-24, in place of the career plan) draws it as a PNG,
+ * recorded as a DOCUMENT_OVERLAY asset and on the document as overlay
+ * { asset_id, url, version }. An edit makes it outdated; approving again
+ * draws a new one and retires the old. Before Start Episode nothing is
+ * placed on a beat. Real Postgres; the image is a data URL (no bucket in tests).
  */
 jest.unmock('uuid');
 jest.mock('../../src/services/todoListService', () => ({
@@ -13,9 +14,14 @@ jest.mock('../../src/services/todoListService', () => ({
   generateTasks: jest.fn(async () => [
     { slot: 'dress', label: 'Find a showstopper', description: '', required: true },
   ]),
-  generateCareerTasks: jest.fn(async () => [
-    { slot: 'net_1', label: 'Follow up with STUDIO BY SABLE', description: '', required: false },
-  ]),
+}));
+jest.mock('../../src/services/offerLetterService', () => ({
+  ...jest.requireActual('../../src/services/offerLetterService'),
+  writeOfferLetter: jest.fn(async () => ({
+    letter: { greeting: 'Dear Lala,', opening: 'Studio by Sable is pleased to offer you a partnership.', opportunity: 'Front the session.', next_steps: 'Reply to accept.', closing: 'Warm regards,', sender_name: 'Sable', sender_title: 'Founder' },
+    source: 'claude',
+    checks: { amounts: { ok: true, invented: [] } },
+  })),
 }));
 
 const request = require('supertest');
@@ -61,7 +67,7 @@ const PNG = 'data:image/png;base64,iVBORw0KGgo';
     }
   });
 
-  async function seed() {
+  async function seed({ deal = false } = {}) {
     const ids = { show: uuid(), event: uuid() };
     shows.push(ids.show);
     await run(`INSERT INTO shows (id, name, slug, created_at, updated_at) VALUES (:show, :name, :slug, NOW(), NOW())`,
@@ -69,6 +75,8 @@ const PNG = 'data:image/png;base64,iVBORw0KGgo';
     await run(`INSERT INTO world_events (id, show_id, name, event_type, host_brand, event_date, outfit_pieces, status, created_at, updated_at)
                VALUES (:event, :show, 'Studio Session', 'invite', 'Studio by Sable', '2026-11-12', :pieces, 'ready', NOW(), NOW())`,
       { ...ids, pieces: JSON.stringify([{ name: 'Sculpted Dress', category: 'dress', coin_cost: 420, is_owned: false }]) });
+    // The offer letter is for deal events only (Evoni, 2026-10-24).
+    if (deal) await run(`UPDATE world_events SET deal_type = 'paid_appearance', appearance_fee = 500, is_paid = true WHERE id = :event`, ids);
     return ids;
   }
 
@@ -79,8 +87,13 @@ const PNG = 'data:image/png;base64,iVBORw0KGgo';
       WHERE show_id = :show AND metadata->>'document_type' = :type ORDER BY created_at`,
     { ...ids, type });
 
-  it.each(['shopping_list', 'career_plan'])('approving the %s draws its overlay; an edit outdates it; approving again redraws it', async (type) => {
-    const ids = await seed();
+  const EDITS = {
+    shopping_list: { items: [{ slot: 'shoes', label: 'Gold heels' }] },
+    offer_letter: { letter: { opening: 'We would be delighted to work with you.', opportunity: 'Front the session.' } },
+  };
+
+  it.each(['shopping_list', 'offer_letter'])('approving the %s draws its overlay; an edit outdates it; approving again redraws it', async (type) => {
+    const ids = await seed({ deal: type === 'offer_letter' });
     expect((await auth(request(app).post(`${base(ids)}/${type}/draft`))).status).toBe(200);
 
     const approved = await auth(request(app).post(`${base(ids)}/${type}/approve`));
@@ -106,7 +119,7 @@ const PNG = 'data:image/png;base64,iVBORw0KGgo';
     expect(got.body.data[type].overlay.asset_id).toBe(asset.id);
 
     // An edit keeps the old image, now outdated.
-    const edited = await auth(request(app).put(`${base(ids)}/${type}`)).send({ items: [{ slot: 'shoes', label: 'Gold heels' }] });
+    const edited = await auth(request(app).put(`${base(ids)}/${type}`)).send(EDITS[type]);
     expect(edited.body.data).toMatchObject({ status: 'draft', version: 2, overlay: { asset_id: asset.id, version: 1 } });
     expect(overlayState(edited.body.data)).toBe('outdated');
 

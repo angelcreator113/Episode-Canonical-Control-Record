@@ -444,7 +444,7 @@ router.get('/world/:showId/events/:eventId', requireAuth, async (req, res, next)
 //     // key 'prices_missing' (+ missing: [{ key, label, ... }])
 //     //     → Start Episode answers 409 DEAL_PRICE_REQUIRED
 //   warnings: [{ key, label, detail? }],  // not refused by the server:
-//     // 'place_venue', 'look_outfit', 'document_shopping_list', 'document_career_plan'
+//     // 'place_venue', 'look_outfit', 'document_shopping_list', 'document_offer_letter'
 // } }
 // 404 when the event is not live in this show.
 // ═══════════════════════════════════════════
@@ -2363,14 +2363,15 @@ router.post('/world/:showId/events/:eventId/documents/:type/draft', requireAuth,
   }
 });
 
-// PUT /world/:showId/events/:eventId/documents/:type — edit the items ({ items: [...], note? })
+// PUT /world/:showId/events/:eventId/documents/:type — edit the items ({ items: [...], note? }),
+// or an offer letter's words ({ letter: { greeting, opening, opportunity, next_steps, closing, sender_name, sender_title } })
 router.put('/world/:showId/events/:eventId/documents/:type', requireAuth, async (req, res) => {
   try {
     const models = await getModels();
     if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
     const { editDocument } = require('../services/eventDocumentsService');
     const { showId, eventId, type } = req.params;
-    const data = await editDocument(models, { showId, eventId, type, items: req.body?.items, note: req.body?.note, version: req.body?.version });
+    const data = await editDocument(models, { showId, eventId, type, items: req.body?.items, note: req.body?.note, letter: req.body?.letter, version: req.body?.version });
     return res.json({ success: true, data });
   } catch (err) {
     return eventDocumentsError(res, err, 'edit');

@@ -129,12 +129,15 @@ function overlayPieces({ title, invitation, event, placements = {}, estimates = 
     },
   };
 
-  return [titleOverlay, framedCard, invitationPiece, ...documentPieces(event, lookTotals)];
+  return [titleOverlay, framedCard, invitationPiece, ...documentPieces(event, lookTotals, beatOf)];
 }
 
+// The offer letter is on beat 5, directly after the invitation (Evoni,
+// 2026-10-24; eventDocumentsService.syncOfferLetterPlacement); the
+// shopping list has no beat.
 const DOCUMENT_PIECES = Object.freeze([
-  { type: 'shopping_list', key: 'shopping_list_doc', label: 'Shopping list' },
-  { type: 'career_plan', key: 'career_plan_doc', label: 'Career plan' },
+  { type: 'shopping_list', key: 'shopping_list_doc', label: 'Shopping list', beatNumber: null },
+  { type: 'offer_letter', key: 'offer_letter_doc', label: 'Offer letter', beatNumber: 5 },
 ]);
 const DOC_STATUS = Object.freeze({ current: 'approved', outdated: 'outdated', not_made: 'not_made' });
 
@@ -143,18 +146,22 @@ const DOC_STATUS = Object.freeze({ current: 'approved', outdated: 'outdated', no
  * Package. lookTotals.shopping_list: the list's total with the look as it is
  * now; a shopping list drawn with another total reads outdated. Pure.
  */
-function documentPieces(event, lookTotals = {}) {
+function documentPieces(event, lookTotals = {}, beatOf = () => null) {
   if (!event?.id) return [];
   const docs = readDocuments(event);
-  return DOCUMENT_PIECES.map(({ type, key, label }) => {
+  const { CANONICAL_BEATS } = require('../constants/canonicalBeats');
+  const { isOfferEvent } = require('./offerLetterService');
+  return DOCUMENT_PIECES.filter(({ type }) => type !== 'offer_letter' || isOfferEvent(event)).map(({ type, key, label, beatNumber }) => {
     const doc = docs[type];
+    const expected = beatNumber ? CANONICAL_BEATS.find((b) => b.number === beatNumber) : null;
     return {
       key,
       label,
       status: DOC_STATUS[overlayState(doc, lookTotals[type] ?? null)],
       image_url: doc?.overlay?.url || null,
       asset_id: doc?.overlay?.asset_id || null,
-      beat: null,
+      beat: beatOf(doc?.overlay?.asset_id),
+      ...(expected ? { expected_beat: { number: expected.number, name: expected.name } } : {}),
       document: { type, status: doc?.status || null, version: doc?.version || null },
       event: { id: event.id, show_id: event.show_id, name: event.name },
       cost: { free: 'Drawn when the document is approved; costs nothing.' },
@@ -183,7 +190,7 @@ async function loadEpisodeRow(sequelize, episodeId) {
 
 async function loadAnchorEvent(sequelize, episodeId) {
   const [event] = await sequelize.query(
-    `SELECT id, show_id, name, canon_consequences, outfit_pieces, used_in_episode_id FROM world_events
+    `SELECT id, show_id, name, canon_consequences, outfit_pieces, used_in_episode_id, deal_type, deal_components, appearance_required FROM world_events
       WHERE id = ${require('../utils/episodeEventSql').EPISODE_EVENT_ID_SQL}`,
     { replacements: { episodeId }, type: sequelize.QueryTypes.SELECT }
   );
@@ -300,6 +307,7 @@ async function getEpisodeOverlays(models, episodeId) {
   ]);
   const placements = await loadPlacements(sequelize, episodeId, [
     title?.overlay?.asset_id, title?.card?.asset_id, invitation?.id,
+    event ? readDocuments(event).offer_letter?.overlay?.asset_id : null,
   ]);
   const pieces = overlayPieces({
     title, invitation, event, placements,

@@ -1,5 +1,5 @@
 /**
- * EventDocuments — the Event Package's shopping list and career plan beside
+ * EventDocuments — the Event Package's shopping list and offer letter beside
  * the invitation (Evoni, 2026-10-06): Draft, Edit, Redraft, Approve, in the
  * mock's two looks.
  */
@@ -22,13 +22,20 @@ const SHOP = {
     { slot: 'purse', label: 'Find a bag' },
   ],
 };
-const PLAN = {
-  type: 'career_plan', status: 'draft', version: 1, source: 'draft', history: [],
-  items: [
-    { slot: 'net_1', label: 'Follow up with STUDIO BY SABLE', section: 'this_event' },
-    { slot: 'goal_1', label: 'Land a brand partnership', section: 'bigger_goals' },
-  ],
+// The offer letter (Evoni, 2026-10-24; it replaced the career plan).
+const OFFER = {
+  type: 'offer_letter', status: 'draft', version: 1, source: 'draft', history: [], items: [],
+  letter: {
+    greeting: 'Dear Lala,', opening: 'Following our invitation, Studio by Sable is pleased to offer you a partnership.',
+    opportunity: 'We would love you to front the session.', next_steps: 'Reply to accept.', closing: 'Warm regards,',
+    sender_name: 'Sable Moreau', sender_title: 'Founder, Studio by Sable',
+  },
 };
+const TERMS = [
+  { key: 'fees', title: 'Compensation', lines: [{ label: 'Appearance fee', detail: '', amount: 500 }] },
+  { key: 'deliverables', title: 'Deliverables', lines: [{ label: 'Wearable art reel', detail: '1 Instagram Reel · for the brand · required', amount: null }] },
+];
+const DEAL = { offer_eligible: true, offer_terms: TERMS, offer_terms_changed: false };
 const EVENT = { id: 'ev-1', name: 'Studio Session', host_brand: 'Studio by Sable', event_date: '2026-11-12', dress_code: 'Smart-casual' };
 const PIECES = [
   { name: 'Sculpted Dress', category: 'dress', coin_cost: 420, is_owned: false },
@@ -44,26 +51,26 @@ beforeEach(() => {
   vi.clearAllMocks();
   resetUndoStore();
   window.sessionStorage.clear();
-  api.get.mockResolvedValue({ data: { success: true, data: { shopping_list: null, career_plan: null } } });
+  api.get.mockResolvedValue({ data: { success: true, data: { shopping_list: null, offer_letter: null } } });
 });
 
 describe('EventDocuments', () => {
   test('readOnly for one type: that document has no buttons, the other keeps its own', async () => {
-    api.get.mockResolvedValue({ data: { success: true, data: { shopping_list: { ...SHOP, status: 'approved' }, career_plan: PLAN } } });
+    api.get.mockResolvedValue({ data: { success: true, data: { shopping_list: { ...SHOP, status: 'approved' }, offer_letter: OFFER, ...DEAL } } });
     render(<EventDocuments showId="show-1" eventId="ev-1" event={EVENT} readOnly={['shopping_list']} manageHref="/x" />);
     const shop = await screen.findByTestId('evd-shopping_list');
     expect(within(shop).queryAllByRole('button')).toHaveLength(0);
-    expect(within(screen.getByTestId('evd-career_plan')).getByRole('button', { name: /Approve/ })).toBeTruthy();
+    expect(within(screen.getByTestId('evd-offer_letter')).getByRole('button', { name: /Approve/ })).toBeTruthy();
   });
 
   // The episode's Wardrobe tab shows the shopping list on its own, read-only:
   // it is approved in the Event Package only (Evoni, 2026-10-11); no note is
   // written in for her (Task #2880).
   test('only="shopping_list" readOnly: the list alone, its state and where to change it, its own note or none', async () => {
-    api.get.mockResolvedValue({ data: { success: true, data: { shopping_list: SHOP, career_plan: PLAN } } });
+    api.get.mockResolvedValue({ data: { success: true, data: { shopping_list: SHOP, offer_letter: OFFER, ...DEAL } } });
     const { unmount } = render(<EventDocuments showId="show-1" eventId="ev-1" event={EVENT} intro={false} only="shopping_list" readOnly manageHref="/shows/show-1/events/ev-1#epp-sec-documents" />);
     const shop = await screen.findByTestId('evd-shopping_list');
-    expect(screen.queryByTestId('evd-career_plan')).toBeNull();
+    expect(screen.queryByTestId('evd-offer_letter')).toBeNull();
     expect(within(shop).queryAllByRole('button')).toHaveLength(0);
     expect(screen.getByTestId('evd-state-shopping_list').textContent).toBe('Draft');
     expect(screen.getByTestId('evd-manage-shopping_list').getAttribute('href')).toBe('/shows/show-1/events/ev-1#epp-sec-documents');
@@ -71,7 +78,7 @@ describe('EventDocuments', () => {
     expect(screen.queryByTestId('evd-paper-note')).toBeNull();
     expect(screen.getByTestId('evd-shopping-paper').textContent).not.toMatch(/comfy enough/);
     unmount();
-    api.get.mockResolvedValue({ data: { success: true, data: { shopping_list: { ...SHOP, note: ' Her own note. ' }, career_plan: null } } });
+    api.get.mockResolvedValue({ data: { success: true, data: { shopping_list: { ...SHOP, note: ' Her own note. ' }, offer_letter: null } } });
     render(<EventDocuments showId="show-1" eventId="ev-1" event={EVENT} intro={false} only="shopping_list" />);
     expect((await screen.findByTestId('evd-paper-note')).textContent).toBe('Her own note.');
   });
@@ -82,7 +89,7 @@ describe('EventDocuments', () => {
     // Not drafted: one line, no blank paper (Evoni's review, item 6).
     expect(shop.className).toContain('is-blank');
     expect(screen.getByTestId('evd-state-shopping_list').textContent).toBe('Not drafted');
-    expect(screen.getByTestId('evd-state-career_plan').textContent).toBe('Not drafted');
+    expect(screen.getByTestId('evd-state-offer_letter').textContent).toBe('Not drafted');
     expect(within(shop).getByRole('button', { name: /Draft/ })).toBeTruthy();
     expect(api.get).toHaveBeenCalledWith(BASE);
   });
@@ -108,43 +115,51 @@ describe('EventDocuments', () => {
     expect(within(shop).getByRole('button', { name: /Redraft/ })).toBeTruthy();
   });
 
-  test('the career plan shows This event and Bigger goals', async () => {
-    api.get.mockResolvedValue({ data: { success: true, data: { shopping_list: null, career_plan: PLAN } } });
+  test('the offer letter: letterhead, the letter, THE TERMS from the deal, the signature', async () => {
+    api.get.mockResolvedValue({ data: { success: true, data: { shopping_list: null, offer_letter: OFFER, ...DEAL } } });
     renderDocs();
-    const card = await screen.findByTestId('evd-career-card');
-    expect(within(card).getByText('Follow up with STUDIO BY SABLE')).toBeTruthy();
-    expect(within(card).getByText('Land a brand partnership')).toBeTruthy();
-    expect(within(card).getByText('one step at a time, L.')).toBeTruthy();
+    const letter = await screen.findByTestId('evd-offer-letter');
+    expect(letter.textContent).toContain('Studio by Sable');
+    expect(letter.textContent).toContain('Following our invitation');
+    const terms = within(letter).getByTestId('evd-offer-terms');
+    expect(within(terms).getByTestId('evd-offer-section-fees').textContent).toContain('Appearance fee500 Prime Coins');
+    expect(within(terms).getByTestId('evd-offer-section-deliverables').textContent).toContain('1 Instagram Reel · for the brand · required');
+    expect(letter.textContent).toContain('Sable Moreau · Founder, Studio by Sable');
   });
 
-  test("the deal's deliverables come first, as Expected of her, required or optional, with who they are owed to", async () => {
-    const deliverables = [
-      { id: 'd-1', label: 'Wearable art reel', detail: '1 Instagram Reel · due 2026-11-14', required: true, owed_to: 'brand' },
-      { id: 'd-2', label: 'Story shout-out', detail: '3 Instagram Stories', required: false, owed_to: 'host' },
-    ];
-    api.get.mockResolvedValue({ data: { success: true, data: { shopping_list: null, career_plan: PLAN, deliverables } } });
+  test('an event with no deal gets no offer letter: the card says so and offers no Draft', async () => {
+    api.get.mockResolvedValue({ data: { success: true, data: { shopping_list: null, offer_letter: null, offer_eligible: false, offer_terms: [] } } });
     renderDocs();
-    const list = await screen.findByTestId('evd-career-deliverables');
-    const reel = within(list).getByTestId('evd-deliverable-d-1');
-    expect(reel.textContent).toContain('Wearable art reel');
-    expect(reel.textContent).toContain('1 Instagram Reel · due 2026-11-14 · for the brand');
-    expect(reel.textContent).toContain('Required');
-    expect(within(list).getByTestId('evd-deliverable-d-2').textContent).toContain('3 Instagram Stories · for the host');
-    expect(within(list).getByTestId('evd-deliverable-d-2').textContent).toContain('Optional');
-    // Expected of her, then This event, then Bigger goals.
-    const labels = [...screen.getByTestId('evd-career-card').querySelectorAll('.evd-career-label')].map((el) => el.textContent);
-    expect(labels).toEqual(['Expected of her', 'This event', 'Bigger goals']);
+    expect((await screen.findByTestId('evd-offer-not-eligible')).textContent).toContain('Only a deal event gets an offer letter');
+    expect(screen.queryByTestId('evd-draft-offer_letter')).toBeNull();
   });
 
-  test('with no deliverables in the deal, the section is left out', async () => {
-    api.get.mockResolvedValue({ data: { success: true, data: { shopping_list: null, career_plan: PLAN, deliverables: [] } } });
+  test('the deal changed since the letter was written: says so, with Redraft', async () => {
+    api.get.mockResolvedValue({ data: { success: true, data: { shopping_list: null, offer_letter: OFFER, ...DEAL, offer_terms_changed: true } } });
     renderDocs();
-    await screen.findByTestId('evd-career-card');
-    expect(screen.queryByTestId('evd-career-deliverables')).toBeNull();
+    expect((await screen.findByTestId('evd-terms-changed')).textContent).toContain('terms changed');
+    api.post.mockResolvedValueOnce({ data: { success: true, data: { ...OFFER, version: 2 } } });
+    fireEvent.click(screen.getByTestId('evd-terms-changed-redraft'));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith(`${BASE}/offer_letter/draft`, {}));
+  });
+
+  test('Edit on the letter edits its words, field by field, through PUT { letter }; the terms are not editable here', async () => {
+    api.get.mockResolvedValue({ data: { success: true, data: { shopping_list: null, offer_letter: OFFER, ...DEAL } } });
+    api.put.mockResolvedValue({ data: { success: true, data: { ...OFFER, version: 2, source: 'edited', letter: { ...OFFER.letter, opening: 'We would be delighted.' } } } });
+    renderDocs();
+    const card = await screen.findByTestId('evd-offer_letter');
+    fireEvent.click(within(card).getByRole('button', { name: /Edit/ }));
+    const editor = screen.getByTestId('evd-editor-offer_letter');
+    expect(editor.textContent).toContain('change it in Terms');
+    fireEvent.change(within(editor).getByLabelText('Opening'), { target: { value: 'We would be delighted.' } });
+    fireEvent.click(within(editor).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(screen.getByTestId('evd-meta-offer_letter').textContent).toContain('Version 2 · edited'));
+    expect(api.put).toHaveBeenCalledWith(`${BASE}/offer_letter`, { letter: expect.objectContaining({ opening: 'We would be delighted.', greeting: 'Dear Lala,' }) });
+    expect(screen.getByTestId('evd-offer-letter').textContent).toContain('We would be delighted.');
   });
 
   test('Edit saves her lines through PUT; Approve approves; Redraft writes a new draft', async () => {
-    api.get.mockResolvedValue({ data: { success: true, data: { shopping_list: SHOP, career_plan: null } } });
+    api.get.mockResolvedValue({ data: { success: true, data: { shopping_list: SHOP, offer_letter: null } } });
     api.put.mockResolvedValue({ data: { success: true, data: { ...SHOP, version: 2, source: 'edited', items: [{ slot: 'shoes', label: 'Gold heels' }], history: [SHOP] } } });
     renderDocs();
     const shop = await screen.findByTestId('evd-shopping_list');
@@ -174,7 +189,7 @@ describe('EventDocuments', () => {
 
   test('Undo after a Redraft restores the replaced version from history and approves it again when it was approved', async () => {
     const APPROVED = { ...SHOP, version: 2, status: 'approved', source: 'edited', items: [{ slot: 'shoes', label: 'Gold heels' }] };
-    api.get.mockResolvedValue({ data: { success: true, data: { shopping_list: APPROVED, career_plan: null } } });
+    api.get.mockResolvedValue({ data: { success: true, data: { shopping_list: APPROVED, offer_letter: null } } });
     renderDocs();
     const shop = await screen.findByTestId('evd-shopping_list');
     api.post.mockResolvedValueOnce({ data: { success: true, data: { ...SHOP, version: 3 } } });
@@ -193,7 +208,7 @@ describe('EventDocuments', () => {
   });
 
   test('a failed Undo says so in the notice and keeps Undo', async () => {
-    api.get.mockResolvedValue({ data: { success: true, data: { shopping_list: SHOP, career_plan: null } } });
+    api.get.mockResolvedValue({ data: { success: true, data: { shopping_list: SHOP, offer_letter: null } } });
     renderDocs();
     const shop = await screen.findByTestId('evd-shopping_list');
     api.post.mockResolvedValueOnce({ data: { success: true, data: { ...SHOP, version: 2 } } });
@@ -207,7 +222,7 @@ describe('EventDocuments', () => {
 
   test('Redraft: no confirm, untouched or edited; each card shows its own Undo; off while editing', async () => {
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
-    api.get.mockResolvedValue({ data: { success: true, data: { shopping_list: SHOP, career_plan: { ...PLAN, source: 'edited' } } } });
+    api.get.mockResolvedValue({ data: { success: true, data: { shopping_list: SHOP, offer_letter: { ...OFFER, source: 'edited' }, ...DEAL } } });
     api.post.mockResolvedValue({ data: { success: true, data: { ...SHOP, version: 2 } } });
     renderDocs();
     const shop = await screen.findByTestId('evd-shopping_list');
@@ -215,21 +230,21 @@ describe('EventDocuments', () => {
     await waitFor(() => expect(api.post).toHaveBeenCalledWith(`${BASE}/shopping_list/draft`, {}));
 
     api.post.mockClear();
-    api.post.mockResolvedValue({ data: { success: true, data: { ...PLAN, version: 2 } } });
-    const plan = screen.getByTestId('evd-career_plan');
-    fireEvent.click(within(plan).getByTestId('evd-redraft-career_plan'));
-    await waitFor(() => expect(api.post).toHaveBeenCalledWith(`${BASE}/career_plan/draft`, {}));
+    api.post.mockResolvedValue({ data: { success: true, data: { ...OFFER, version: 2 } } });
+    const plan = screen.getByTestId('evd-offer_letter');
+    fireEvent.click(within(plan).getByTestId('evd-redraft-offer_letter'));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith(`${BASE}/offer_letter/draft`, {}));
     expect(confirmSpy).not.toHaveBeenCalled();
-    expect(within(plan).getByTestId('evd-undo-career_plan').textContent).toContain('Redrafted the career plan');
+    expect(within(plan).getByTestId('evd-undo-offer_letter').textContent).toContain('Redrafted the offer letter');
     expect(within(shop).queryByTestId('evd-undo-shopping_list')).toBeNull();
 
     fireEvent.click(within(plan).getByRole('button', { name: /Edit/ }));
-    expect(within(plan).getByTestId('evd-redraft-career_plan').disabled).toBe(true);
+    expect(within(plan).getByTestId('evd-redraft-offer_letter').disabled).toBe(true);
     confirmSpy.mockRestore();
   });
 
   test('the documents are read again when the outfit\'s pieces change', async () => {
-    api.get.mockResolvedValue({ data: { success: true, data: { shopping_list: SHOP, career_plan: null } } });
+    api.get.mockResolvedValue({ data: { success: true, data: { shopping_list: SHOP, offer_letter: null } } });
     const { rerender } = render(<EventDocuments showId="show-1" eventId="ev-1" event={EVENT} outfitPieces={[{ id: 'p1', name: 'A', category: 'dress' }]} />);
     await screen.findByTestId('evd-shopping_list');
     expect(api.get).toHaveBeenCalledTimes(1);
@@ -242,8 +257,8 @@ describe('EventDocuments', () => {
   test('a failed step says why', async () => {
     api.post.mockRejectedValue({ response: { data: { error: 'Budget reached' } } });
     renderDocs();
-    const plan = await screen.findByTestId('evd-career_plan');
-    fireEvent.click(within(plan).getByRole('button', { name: /Draft/ }));
+    const shop = await screen.findByTestId('evd-shopping_list');
+    fireEvent.click(within(shop).getByRole('button', { name: /Draft/ }));
     expect((await screen.findByRole('alert')).textContent).toBe('Budget reached');
   });
 
@@ -258,7 +273,8 @@ describe('EventDocuments', () => {
     const overlay = { asset_id: 'a-1', url: 'https://cdn/shop.png', version: 1 };
     api.get.mockResolvedValue({ data: { success: true, data: {
       shopping_list: { ...SHOP, status: 'approved', overlay },
-      career_plan: { ...PLAN, status: 'approved' },
+      offer_letter: { ...OFFER, status: 'approved' },
+      ...DEAL,
     } } });
     renderDocs();
     const shopOverlay = await screen.findByTestId('evd-overlay-shopping_list');
@@ -266,17 +282,17 @@ describe('EventDocuments', () => {
     expect(shopOverlay.querySelector('img').getAttribute('src')).toBe(overlay.url);
     expect(screen.queryByTestId('evd-make-overlay-shopping_list')).toBeNull();
 
-    expect(screen.getByTestId('evd-overlay-career_plan').textContent).toContain('No overlay yet');
-    api.post.mockResolvedValueOnce({ data: { success: true, data: { ...PLAN, status: 'approved', overlay: { asset_id: 'a-2', url: 'https://cdn/plan.png', version: 1 } } } });
-    fireEvent.click(screen.getByTestId('evd-make-overlay-career_plan'));
-    await waitFor(() => expect(screen.getByTestId('evd-overlay-career_plan').textContent).toContain('Overlay ready'));
-    expect(api.post).toHaveBeenCalledWith(`${BASE}/career_plan/approve`);
+    expect(screen.getByTestId('evd-overlay-offer_letter').textContent).toContain('No overlay yet');
+    api.post.mockResolvedValueOnce({ data: { success: true, data: { ...OFFER, status: 'approved', overlay: { asset_id: 'a-2', url: 'https://cdn/offer.png', version: 1 } } } });
+    fireEvent.click(screen.getByTestId('evd-make-overlay-offer_letter'));
+    await waitFor(() => expect(screen.getByTestId('evd-overlay-offer_letter').textContent).toContain('Overlay ready'));
+    expect(api.post).toHaveBeenCalledWith(`${BASE}/offer_letter/approve`);
   });
 
   test('a draft edited after its overlay was drawn says the overlay is out of date', async () => {
     api.get.mockResolvedValue({ data: { success: true, data: {
       shopping_list: { ...SHOP, version: 2, overlay: { asset_id: 'a-1', url: 'https://cdn/shop.png', version: 1 } },
-      career_plan: null,
+      offer_letter: null,
     } } });
     renderDocs();
     const row = await screen.findByTestId('evd-overlay-shopping_list');
@@ -288,7 +304,7 @@ describe('EventDocuments', () => {
   test('with no pieces passed (the episode\'s Overlays tab), the list adds up the look the server reads (Task #2787)', async () => {
     const approved = { ...SHOP, status: 'approved', overlay: { url: 'https://x/list.png', version: 1, look_total: 420 } };
     api.get.mockResolvedValue({ data: { success: true, data: {
-      shopping_list: approved, career_plan: null, balance: 1500,
+      shopping_list: approved, offer_letter: null, balance: 1500,
       look: { state: 'locked', total: 570, pieces: [
         { name: 'Sculpted Dress', category: 'dress', coin_cost: 420, charge: { category: 'wardrobe_purchase', amount: 420 }, free_because: null },
         { name: 'Pearl Choker', category: 'jewelry', coin_cost: 150, charge: { category: 'wardrobe_purchase', amount: 150 }, free_because: null },
@@ -304,7 +320,7 @@ describe('EventDocuments', () => {
 });
 
 describe('EventDocuments: "Look changed — redraft the list?" (the server\'s answer, 2026-10-24)', () => {
-  const withLook = (changed, list = SHOP) => ({ data: { success: true, data: { shopping_list: { ...list, look_key: 'p1' }, career_plan: null, look: { state: 'chosen', pieces: [], total: 0 }, look_changed: changed } } });
+  const withLook = (changed, list = SHOP) => ({ data: { success: true, data: { shopping_list: { ...list, look_key: 'p1' }, offer_letter: null, look: { state: 'chosen', pieces: [], total: 0 }, look_changed: changed } } });
 
   test('no notice while the look is the one the list was drafted from', async () => {
     api.get.mockResolvedValue(withLook(false));
@@ -347,7 +363,7 @@ describe('EventDocuments: "Look changed — redraft the list?" (the server\'s an
 
 describe('EventDocuments: the documents rework (2026-10-24)', () => {
   test('one line re-worded on its own', async () => {
-    api.get.mockResolvedValue({ data: { success: true, data: { shopping_list: SHOP, career_plan: null } } });
+    api.get.mockResolvedValue({ data: { success: true, data: { shopping_list: SHOP, offer_letter: null } } });
     renderDocs();
     await screen.findByTestId('evd-shopping-paper');
     api.post.mockResolvedValueOnce({ data: { success: true, data: { ...SHOP, version: 2, source: 'line_redraft', items: [SHOP.items[0], { slot: 'jewelry', label: 'Gold that catches the light' }, SHOP.items[2]] } } });
@@ -359,7 +375,7 @@ describe('EventDocuments: the documents rework (2026-10-24)', () => {
 
   test('History lists the kept versions; Restore brings one back', async () => {
     const OLD = { ...SHOP, version: 1, status: 'approved', items: [{ slot: 'dress', label: 'The old dress line' }] };
-    api.get.mockResolvedValue({ data: { success: true, data: { shopping_list: { ...SHOP, version: 2, history: [OLD] }, career_plan: null } } });
+    api.get.mockResolvedValue({ data: { success: true, data: { shopping_list: { ...SHOP, version: 2, history: [OLD] }, offer_letter: null } } });
     renderDocs();
     fireEvent.click(await screen.findByTestId('evd-history-toggle-shopping_list'));
     const history = screen.getByTestId('evd-history-shopping_list');
@@ -373,7 +389,7 @@ describe('EventDocuments: the documents rework (2026-10-24)', () => {
 
   test('short of coins: says so, and Redraft within budget', async () => {
     api.get.mockResolvedValue({ data: { success: true, data: {
-      shopping_list: SHOP, career_plan: null, balance: 100,
+      shopping_list: SHOP, offer_letter: null, balance: 100,
       look: { state: 'event', total: 420, pieces: [{ name: 'Sculpted Dress', category: 'dress', coin_cost: 420, charge: { amount: 420 } }] },
     } } });
     renderDocs();
@@ -385,40 +401,24 @@ describe('EventDocuments: the documents rework (2026-10-24)', () => {
   });
 
   test('closet suggestions sit under the line they could fill', async () => {
-    api.get.mockResolvedValue({ data: { success: true, data: { shopping_list: SHOP, career_plan: null, closet: { purse: [{ id: 'w1', name: 'Black box clutch' }] } } } });
+    api.get.mockResolvedValue({ data: { success: true, data: { shopping_list: SHOP, offer_letter: null, closet: { purse: [{ id: 'w1', name: 'Black box clutch' }] } } } });
     renderDocs();
     expect((await screen.findByTestId('evd-closet-purse')).textContent).toBe('In her closet: Black box clutch');
   });
 
   test('the amount check is shown on the version', async () => {
-    api.get.mockResolvedValue({ data: { success: true, data: { shopping_list: { ...SHOP, checks: { amounts: { ok: false, invented: [999] } } }, career_plan: null } } });
+    api.get.mockResolvedValue({ data: { success: true, data: { shopping_list: { ...SHOP, checks: { amounts: { ok: false, invented: [999] } } }, offer_letter: null } } });
     renderDocs();
     expect((await screen.findByTestId('evd-amounts-shopping_list')).textContent).toContain('Names 999 coins, which no piece of the look costs');
   });
 
-  test('the career plan: optional ideas, goal links, and the lines over the goal limit', async () => {
-    const plan = { ...PLAN, items: [
-      { slot: 'a', label: 'Pitch the Sable team', section: 'this_event', task_source: 'goal', goal_id: 'g-1' },
-      { slot: 'b', label: 'Snap the florals', section: 'this_event', task_source: 'optional' },
-      { slot: 'goal_1', label: 'Land a brand partnership', section: 'bigger_goals', goal_id: 'g-1' },
-    ] };
+  test('an offer letter approved before the deal changed: its overlay reads out of date', async () => {
     api.get.mockResolvedValue({ data: { success: true, data: {
-      shopping_list: null, career_plan: plan,
-      career_goals: [{ id: 'g-1', title: 'Land a brand partnership' }],
-      career_carry: { limit: 1, carried: 1, dropped: ['Snap the florals'] },
+      shopping_list: null, offer_letter: { ...OFFER, status: 'approved', overlay: { asset_id: 'a-2', url: 'https://cdn/offer.png', version: 1 } },
+      ...DEAL, offer_terms_changed: true,
     } } });
     renderDocs();
-    const line0 = await screen.findByTestId('evd-plan-line-0');
-    expect(line0.textContent).toContain('for: Land a brand partnership');
-    expect(screen.getByTestId('evd-plan-line-1').textContent).toContain('optional idea');
-    expect(screen.getByTestId('evd-not-carried-1')).toBeTruthy();
-    expect(screen.getByTestId('evd-carry-career_plan').textContent).toContain('carries 1 of her goals; 1 line won’t reach the episode'.replace('’', "'"));
-    // A bigger goal has no re-roll of its own.
-    expect(within(screen.getByTestId('evd-plan-line-2')).queryByRole('button')).toBeNull();
-
-    // The editor marks, as she types, what will not carry.
-    fireEvent.click(within(screen.getByTestId('evd-career_plan')).getByRole('button', { name: /Edit/ }));
-    expect(screen.getByTestId('evd-editor-limit').textContent).toContain('1 line marked below won');
-    expect(screen.getByTestId('evd-editor-career_plan').querySelectorAll('.is-left-out')).toHaveLength(1);
+    expect((await screen.findByTestId('evd-overlay-offer_letter')).textContent).toContain('Overlay out of date: the terms changed');
+    expect(screen.getByTestId('evd-make-overlay-offer_letter')).toBeTruthy();
   });
 });

@@ -26,7 +26,7 @@ const { withDeliverableTasks, withMissingRequiredDeliverables } = require('../ut
 const { readEpisodeSocialTasks } = require('./episodeTaskCopyService');
 const { goalTaskScale, goalFields, composeGoalTasks, capCombinedGoals } = require('../utils/goalTasks');
 const { relationshipGoalTasks } = require('./dealTermsDraftService');
-const { approvedDocument, shoppingListTasks, careerPlanGoals, planGoalsForEpisode } = require('./eventDocumentsService');
+const { approvedDocument, shoppingListTasks } = require('./eventDocumentsService');
 const { normalizeTeaser, TEASER_INSTRUCTION, SYNOPSIS_INSTRUCTION } = require('../utils/episodeTeaser');
 
 // ─── LALA'S GOAL TASKS (T9) ──────────────────────────────────────────────────
@@ -886,6 +886,16 @@ Return ONLY JSON.` }],
     console.warn('[EpisodeGenerator] Invitation overlay placement failed (non-blocking):', invErr.message);
   }
 
+  // The offer letter, approved before Start, is the episode's on beat 5,
+  // directly after the invitation (Evoni, 2026-10-24). No-op without an approved
+  // letter; never blocks Start Episode.
+  try {
+    const { syncOfferLetterPlacement } = require('./eventDocumentsService');
+    await syncOfferLetterPlacement(models, { event: { id: eventId }, episodeId: episode.id });
+  } catch (offerErr) {
+    console.warn('[EpisodeGenerator] Offer letter placement failed (non-blocking):', offerErr.message);
+  }
+
   // ── Link the episode's locations (L3, L6) ──
   // Every location chosen in the step, with its role, in one transaction
   // (event, home, closet, extras). It never fails the episode: a failure is
@@ -997,18 +1007,10 @@ Return ONLY JSON.` }],
         : [],
     });
   }
-  // Event documents PR 3: an approved career plan's "This event" lines are
-  // Lala's goals for the episode, in place of the goals written above. The
-  // event's relationship goals join them (D13 answer 6) unless the plan
-  // already says the same; T9's combined limit still holds the list.
-  // The rule lives in eventDocumentsService.planGoalsForEpisode, which the
-  // Event Package also reads to say which lines will not carry.
-  const approvedPlan = approvedDocument(event, 'career_plan');
-  if (approvedPlan && careerPlanGoals(approvedPlan).length) {
-    socialTasks = planGoalsForEpisode(event, approvedPlan);
-    const dropped = careerPlanGoals(approvedPlan).filter((g) => !socialTasks.some((t) => t.label === g.label));
-    console.log(`[EpisodeGenerator] ${event.name}: Lala's goals from the approved career plan (version ${approvedPlan.version})${dropped.length ? `; over the goal limit, not carried: ${dropped.map((g) => `"${g.label}"`).join(', ')}` : ''}`);
-  }
+  // The career plan's "This event" lines used to replace the goals above
+  // (event documents PR 3). The offer letter replaced the career plan
+  // (Evoni, 2026-10-24): it is the brand's offer, not Lala's goals, so her
+  // goals are the ones written from the event's fields.
   // T1 (§8(bb); Task #2292): the saved list may predate T1 and carry
   // required: true on generated tasks. Required comes only from the event's
   // deliverables (read above for the terms snapshot): generated tasks become

@@ -109,35 +109,34 @@
 /* A deal item ticked at its cue, until it is approved in Money (Task 3191). */
 .evd-line-note { margin-left: auto; white-space: nowrap; font-size: 0.75em; font-style: italic; opacity: 0.8; }
 
-/* The career plan: a lavender card, two sections of checkboxes, a signature. */
-.evd-career {
+/* The offer letter (2026-10-24): cream letterhead from the brand or host,
+   the letter's words, THE TERMS from the deal, a signature. */
+.evd-offer {
   width: 100%;
-  max-width: 300px;
-  padding: 18px 20px;
-  border: 1px solid var(--lala-lavender-line);
-  border-radius: 12px;
-  background: linear-gradient(160deg, var(--surface-card), var(--lala-lavender-soft));
+  max-width: 340px;
+  padding: 20px 22px;
+  border: 1px solid var(--lala-gold-line);
+  border-radius: 6px;
+  background: var(--lala-parchment);
   color: var(--lala-ink);
+  font-family: var(--font-prose);
+  font-size: 13px;
+  line-height: 1.55;
 }
-.evd-career-head { display: flex; align-items: baseline; justify-content: space-between; padding-bottom: 8px; border-bottom: 1px solid var(--lala-lavender-line); }
-.evd-career-title { font-family: var(--font-prose); font-size: 22px; font-weight: 600; color: var(--lala-lavender-text); }
-.evd-career-label {
-  margin: 12px 0 6px;
-  font-family: var(--font-sans);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--lala-ink-muted);
-}
-.evd-career-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: 14px; }
-.evd-career-list li { display: flex; align-items: flex-start; gap: 8px; }
-.evd-check { flex: 0 0 auto; width: 14px; height: 14px; margin-top: 3px; border: 1.5px solid var(--lala-lavender-text); border-radius: 3px; }
-/* The deal's deliverables, first on the career plan. */
-.evd-deliverable-detail { display: block; font-size: 12px; color: var(--lala-ink-muted); }
-.evd-deliverable-tag { flex: 0 0 auto; margin-left: auto; padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; color: var(--lala-ink-muted); background: var(--surface-card); border: 1px solid var(--lala-lavender-line); }
-.evd-deliverable-tag.is-required { color: var(--accent-dark); border-color: var(--accent-light); background: var(--accent-subtle); }
-.evd-career-sign { margin-top: 18px; text-align: right; font-family: 'Caveat', 'Segoe Print', cursive; font-size: 19px; color: var(--accent-dark); }
+.evd-offer-org { font-family: var(--font-prose); font-size: 20px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--lala-lavender-text); padding-bottom: 6px; border-bottom: 1px solid var(--lala-gold); }
+.evd-offer-by { margin: 6px 0 12px; font-family: var(--font-ui); font-size: 11px; color: var(--lala-ink-muted); }
+.evd-offer-p { margin: 0 0 10px; }
+.evd-offer-terms { margin: 12px 0; padding: 10px 0; border-top: 1px solid var(--lala-gold-line); border-bottom: 1px solid var(--lala-gold-line); }
+.evd-offer-terms-title { margin-bottom: 6px; font-family: var(--font-ui); font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--lala-lavender-text); }
+.evd-offer-section + .evd-offer-section { margin-top: 8px; }
+.evd-offer-section-title { font-style: italic; font-size: 12px; color: var(--lala-ink-muted); }
+.evd-offer-section ul { list-style: none; margin: 2px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.evd-offer-section li { display: flex; align-items: baseline; gap: 10px; }
+.evd-offer-line { flex: 1 1 auto; min-width: 0; }
+.evd-offer-detail { display: block; font-family: var(--font-ui); font-size: 11px; color: var(--lala-ink-muted); }
+.evd-offer-amount { flex: none; font-family: var(--font-ui); font-size: 12px; font-weight: 600; white-space: nowrap; }
+.evd-offer-sign { margin-top: 6px; font-family: 'Caveat', 'Segoe Print', cursive; font-size: 22px; color: var(--lala-lavender-text); }
+.evd-offer-sender { font-family: var(--font-ui); font-size: 11px; color: var(--lala-ink-muted); }
 
 /* The steps under each document. */
 .evd-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
@@ -313,10 +312,8 @@
 }
 .evd-line-redraft:hover:not(:disabled), .evd-line-redraft:focus-visible { opacity: 1; background: var(--lala-parchment-2); color: var(--lala-ink); }
 .evd-line-redraft:disabled { cursor: not-allowed; opacity: 0.4; }
-.evd-career-list li .evd-line-redraft { align-self: center; }
 /* Pieces from her own closet, under a shopping line. */
 .evd-closet { display: block; font-family: var(--font-ui); font-size: 11px; line-height: 1.4; color: var(--lala-ink-muted); }
-.evd-not-carried { color: var(--danger-text); }
 /* The amount check and the goal limit, said under the document. */
 .evd-warning {
   display: flex; align-items: flex-start; gap: 6px; margin: 6px 0 0; padding: 6px 10px;
@@ -332,12 +329,9 @@
   font-family: var(--font-ui); font-size: 12px; color: var(--lala-ink);
 }
 .evd-budget span { flex: 1 1 200px; min-width: 0; }
-/* The editor: the goal limit, lines that won't carry, the note. */
+/* The editor: a note line under the list; the letter's fields. */
 .evd-editor-limit { margin: 0 0 8px; font-family: var(--font-ui); font-size: 12px; color: var(--lala-ink-muted); }
-.evd-editor-limit.is-over { color: var(--warning-text); }
 .evd-editor-row { flex-wrap: wrap; }
-.evd-editor-row.is-left-out input { border-color: var(--warning-border, var(--lala-gold)); }
-.evd-left-out { font-family: var(--font-ui); font-size: 11px; color: var(--warning-text); white-space: nowrap; }
 .evd-editor-note { display: flex; flex-direction: column; gap: 4px; margin: 8px 0 0; font-family: var(--font-ui); font-size: 12px; color: var(--lala-ink-muted); }
 .evd-editor-note textarea {
   width: 100%; box-sizing: border-box; padding: 6px 8px; resize: vertical;

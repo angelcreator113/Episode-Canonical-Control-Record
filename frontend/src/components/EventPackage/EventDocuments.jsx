@@ -2,36 +2,36 @@
  * EventDocuments — the Event Package's in-world documents beside the
  * invitation (Evoni, 2026-10-06; her Episode mock's "In-world documents":
  * one system, three looks — the invitation, shown in 1. The Event, and the
- * two documents here). Lala's shopping list and her career plan, each
- * with the invitation's steps: Draft (written from the event), Edit (her
- * own lines), Redraft (a new draft; the old one is kept) and Approve.
+ * two documents here). Lala's shopping list and the offer letter, each with
+ * the invitation's steps: Draft (written from the event), Edit (her own
+ * words), Redraft (a new draft; the old one is kept) and Approve.
  *
  * The shopping list is a handwritten note on lined pink paper: each line
- * the piece the look holds for it, ticked when Lala owns it, else its
- * coins, and the total against her balance. The career plan is a lavender
- * card: this event's goals, then her bigger career goals.
+ * the piece the look holds for it, with its coins, and the total.
  *
- * Approving one also draws it as an overlay image (Evoni, 2026-10-07:
- * "i want both the shopping list and career list and invitations as
- * overlays"); the card shows it, or Make overlay when an approved one has
- * none. Not placed on a beat.
+ * The offer letter (Evoni, 2026-10-24; it replaced the career plan: "this
+ * should be more of an offer letter talking about the brand deal
+ * opportunity etc. it comes after the invitation") is the brand's formal
+ * offer on letterhead: greeting, the opportunity, THE TERMS (read live from
+ * the deal, never edited here), what happens next, closing and signature.
+ * Deal events only; the card says so otherwise. When the deal's terms change
+ * after the letter was written, the card says so with Redraft. Approved, it
+ * is the episode's overlay on beat 5, directly after the invitation.
+ *
+ * Approving one also draws it as an overlay image (Evoni, 2026-10-07); the
+ * card shows it, or Make overlay when an approved one has none.
  *
  * Redraft is done at once, with "Redrafted the shopping list · Undo" for a
- * few seconds (useUndo; Evoni, 2026-10-23, undo instead of confirm). Undo
- * restores the version it replaced from history (2026-10-24; it used to
- * re-save its lines through Edit), and approves it again when it was
- * approved (which draws the overlay again, with Canvas, at no cost).
+ * few seconds (useUndo; Evoni, 2026-10-23). Undo restores the version it
+ * replaced from history, and approves it again when it was approved.
  *
- * "Look changed — redraft the list?" (Evoni, 2026-10-23): since 2026-10-24
- * the list records the look it was drafted from (look_key) and the server
- * answers look_changed, so every device agrees (it was kept per browser
- * tab). Keep saves the current look as the list's own.
+ * "Look changed — redraft the list?" (Evoni, 2026-10-23): the list records
+ * the look it was drafted from (look_key) and the server answers
+ * look_changed; Keep saves the current look as the list's own.
  *
- * Also (2026-10-24): re-roll one line; History with Restore; a note; the
- * amount check on each version; Redraft within budget when the look costs
- * more than she has; pieces from her own closet under a line; the career
- * plan's goal / optional, goal links and the lines the event's goal limit
- * will not carry into the episode.
+ * Also: re-roll one shopping line; History with Restore; a note on the
+ * list; the amount check on each version; Redraft within budget when the
+ * look costs more than she has; pieces from her own closet under a line.
  *
  * Data: GET/POST/PUT /world/:showId/events/:eventId/documents
  * (lib/eventDocuments, src/services/eventDocumentsService.js). The
@@ -41,8 +41,8 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { AlertTriangle, Check, ExternalLink, History, Image as ImageIcon, Loader2, Pencil, Plus, RefreshCw, RotateCcw, Shirt, Trash2, Wand2, X } from 'lucide-react';
 import {
   getEventDocumentsApi, draftEventDocumentApi, editEventDocumentApi, approveEventDocumentApi,
-  restoreEventDocumentApi, redraftEventDocumentLineApi, keepShoppingListLookApi,
-  docState, docOverlay, shoppingLines, careerSections, documentByline, planLeftOut, amountNote, lineOfSlot,
+  restoreEventDocumentApi, redraftEventDocumentLineApi, keepShoppingListLookApi, editOfferLetterApi,
+  docState, docOverlay, shoppingLines, documentByline, amountNote, lineOfSlot, LETTER_FIELDS,
 } from '../../lib/eventDocuments';
 import UndoNotice from './UndoNotice';
 import { useUndo } from './useUndo';
@@ -54,7 +54,7 @@ const coins = (n) => Number(n || 0).toLocaleString();
 
 const DOCS = [
   { type: 'shopping_list', title: 'Shopping list', from: 'From the look: the pieces to find, and what the ones still to buy cost' },
-  { type: 'career_plan', title: 'Career plan', from: 'From the deal, this event and her active career goals' },
+  { type: 'offer_letter', title: 'Offer letter', from: 'The brand\'s formal offer after the invitation: the opportunity, then the terms from the deal' },
 ];
 
 // A to-do list (Evoni, 2026-10-11): she crosses lines off in the show, so the
@@ -111,71 +111,57 @@ function ShoppingPaper({ doc, event, outfitPieces, closet = {}, onRedraftLine = 
   );
 }
 
-// What the deal expects of her at this event, from its terms (live, never
-// part of the plan's own lines): a deliverable's format, due date and who
-// it is owed to, and whether it is required.
-const owedText = (d) => (d.owed_to === 'brand' ? 'for the brand' : 'for the host');
+// A terms line's amount, as the letter states it.
+const primeCoins = (n) => `${Number(n).toLocaleString('en-US')} Prime Coins`;
 
-function CareerCard({ doc, deliverables = [], goals = [], dropped = [], onRedraftLine = null, lineBusy = null }) {
-  const { thisEvent, biggerGoals } = careerSections(doc);
-  const items = doc?.items || [];
-  const goalName = new Map((goals || []).map((g) => [String(g.id), g.title]));
-  const notCarried = new Set(dropped || []);
-  const row = (i, n) => {
-    const index = items.indexOf(i);
-    const linked = i.section !== 'bigger_goals' && i.goal_id ? goalName.get(String(i.goal_id)) : null;
-    return (
-      <li key={`${i.slot}-${n}`} data-testid={`evd-plan-line-${index}`}>
-        <span className="evd-check" aria-hidden="true" />
-        <span>
-          {i.label}
-          {(i.task_source === 'optional' || linked || notCarried.has(i.label)) && (
-            <span className="evd-deliverable-detail">
-              {[i.task_source === 'optional' && 'optional idea', linked && `for: ${linked}`].filter(Boolean).join(' · ')}
-              {notCarried.has(i.label) && <span className="evd-not-carried" data-testid={`evd-not-carried-${index}`}> · over the goal limit, won&apos;t reach the episode</span>}
-            </span>
-          )}
-        </span>
-        {i.section !== 'bigger_goals' && <LineRedraft onRedraft={onRedraftLine ? () => onRedraftLine(index) : null} busy={lineBusy === index} label={i.label} />}
-      </li>
-    );
-  };
+// The offer letter on letterhead: from the brand (or host), the date, the
+// letter's words, THE TERMS from the deal (live), then what happens next,
+// the closing and the signature.
+function OfferLetter({ doc, event, terms = [] }) {
+  const L = doc?.letter || {};
+  const org = (event?.host_brand || event?.host || 'The host').trim();
+  const byline = documentByline(event).replace(/^for [^·]*·?\s*/, '');
   return (
-    <div className="evd-career" data-testid="evd-career-card">
-      <div className="evd-career-head">
-        <span className="evd-career-title">Career Plan</span>
+    <div className="evd-offer" data-testid="evd-offer-letter">
+      <div className="evd-offer-org">{org}</div>
+      <div className="evd-offer-by">Offer of partnership{byline ? ` · ${byline}` : ''}</div>
+      {L.greeting && <p className="evd-offer-p">{L.greeting}</p>}
+      {L.opening && <p className="evd-offer-p">{L.opening}</p>}
+      {L.opportunity && <p className="evd-offer-p">{L.opportunity}</p>}
+      <div className="evd-offer-terms" data-testid="evd-offer-terms">
+        <div className="evd-offer-terms-title">The terms</div>
+        {terms.length === 0 && <p className="evd-muted">No terms set yet. Set the deal in Terms.</p>}
+        {terms.map((sec) => (
+          <div key={sec.key} className="evd-offer-section" data-testid={`evd-offer-section-${sec.key}`}>
+            <div className="evd-offer-section-title">{sec.title}</div>
+            <ul>
+              {sec.lines.map((l, i) => (
+                <li key={`${sec.key}-${i}`}>
+                  <span className="evd-offer-line">
+                    {l.label}
+                    {l.detail && <span className="evd-offer-detail">{l.detail}</span>}
+                  </span>
+                  {l.amount != null && <span className="evd-offer-amount">{primeCoins(l.amount)}</span>}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
       </div>
-      {deliverables.length > 0 && (
-        <>
-          <div className="evd-career-label">Expected of her</div>
-          <ul className="evd-career-list" data-testid="evd-career-deliverables">
-            {deliverables.map((d) => (
-              <li key={d.id} data-testid={`evd-deliverable-${d.id}`}>
-                <span className="evd-check" aria-hidden="true" />
-                <span>
-                  {d.label}
-                  <span className="evd-deliverable-detail">{[d.detail, owedText(d)].filter(Boolean).join(' · ')}</span>
-                </span>
-                <span className={`evd-deliverable-tag${d.required ? ' is-required' : ''}`}>{d.required ? 'Required' : 'Optional'}</span>
-              </li>
-            ))}
-          </ul>
-        </>
+      {L.next_steps && <p className="evd-offer-p">{L.next_steps}</p>}
+      {L.closing && <p className="evd-offer-p">{L.closing}</p>}
+      {L.sender_name && <div className="evd-offer-sign">{L.sender_name}</div>}
+      {(L.sender_name || L.sender_title) && (
+        <div className="evd-offer-sender">{[L.sender_name, L.sender_title].filter(Boolean).join(' · ')}</div>
       )}
-      <div className="evd-career-label">This event</div>
-      <ul className="evd-career-list">{thisEvent.length ? thisEvent.map(row) : <li className="evd-muted">No goals for this event</li>}</ul>
-      <div className="evd-career-label">Bigger goals</div>
-      <ul className="evd-career-list">{biggerGoals.length ? biggerGoals.map(row) : <li className="evd-muted">No active career goals yet</li>}</ul>
-      {typeof doc?.note === 'string' && doc.note.trim() && <div className="evd-paper-note" data-testid="evd-career-note">{doc.note.trim()}</div>}
-      <div className="evd-career-sign">one step at a time, L.</div>
     </div>
   );
 }
 
 // The document's overlay: its image, whether it matches the document, and
 // Make overlay (the approve call draws it again) when an approved one has none.
-function OverlayRow({ type, doc, busy, onMake, lookTotal = null, readOnly = false }) {
-  const o = docOverlay(doc, lookTotal);
+function OverlayRow({ type, doc, busy, onMake, lookTotal = null, termsChanged = false, readOnly = false }) {
+  const o = docOverlay(doc, lookTotal, termsChanged);
   if (!o) return null;
   const canMake = !readOnly && doc.status === 'approved' && o.key !== 'current';
   return (
@@ -199,42 +185,15 @@ function OverlayRow({ type, doc, busy, onMake, lookTotal = null, readOnly = fals
   );
 }
 
-function Editor({ type, doc, onCancel, onSave, saving, goals = [], limit = null }) {
+function Editor({ type, doc, onCancel, onSave, saving }) {
   const [rows, setRows] = useState(() => (doc?.items || []).map((i) => ({ ...i })));
   const [note, setNote] = useState(doc?.note || '');
   const set = (n, patch) => setRows((r) => r.map((x, i) => (i === n ? { ...x, ...patch } : x)));
-  // The lines the event's goal limit would leave off the episode, as she types.
-  const leftOut = type === 'career_plan' ? planLeftOut(rows, limit) : new Set();
-  const thisEventCount = rows.filter((r) => (r.section || 'this_event') === 'this_event' && (r.label || '').trim()).length;
   return (
     <div className="evd-editor" data-testid={`evd-editor-${type}`}>
-      {type === 'career_plan' && limit != null && (
-        <p className={`evd-editor-limit${thisEventCount > limit ? ' is-over' : ''}`} data-testid="evd-editor-limit">
-          This event carries {limit} of her goals into the episode{thisEventCount > limit ? `; ${thisEventCount - limit} line${thisEventCount - limit === 1 ? '' : 's'} marked below won't (optional ideas go first)` : ''}.
-        </p>
-      )}
       {rows.map((r, n) => (
-        <div key={n} className={`evd-editor-row${leftOut.has(n) ? ' is-left-out' : ''}`}>
-          {type === 'career_plan' && (
-            <select value={r.section || 'this_event'} onChange={(e) => set(n, { section: e.target.value })} aria-label="Section">
-              <option value="this_event">This event</option>
-              <option value="bigger_goals">Bigger goal</option>
-            </select>
-          )}
-          {type === 'career_plan' && (r.section || 'this_event') === 'this_event' && (
-            <select value={r.task_source === 'optional' ? 'optional' : 'goal'} onChange={(e) => set(n, { task_source: e.target.value })} aria-label="Goal or idea">
-              <option value="goal">Goal</option>
-              <option value="optional">Optional idea</option>
-            </select>
-          )}
+        <div key={n} className="evd-editor-row">
           <input value={r.label || ''} onChange={(e) => set(n, { label: e.target.value })} maxLength={200} aria-label={`Line ${n + 1}`} />
-          {type === 'career_plan' && (r.section || 'this_event') === 'this_event' && goals.length > 0 && (
-            <select value={r.goal_id || ''} onChange={(e) => set(n, { goal_id: e.target.value || undefined })} aria-label="Career goal it serves">
-              <option value="">No career goal</option>
-              {goals.map((g) => <option key={g.id} value={g.id}>{g.title}</option>)}
-            </select>
-          )}
-          {leftOut.has(n) && <span className="evd-left-out" title="Over the event's goal limit">won&apos;t carry</span>}
           <button type="button" className="evd-icon" onClick={() => setRows((x) => x.filter((_, i) => i !== n))} title="Remove line">
             <Trash2 size={13} aria-hidden="true" />
           </button>
@@ -245,7 +204,7 @@ function Editor({ type, doc, onCancel, onSave, saving, goals = [], limit = null 
         <textarea value={note} onChange={(e) => setNote(e.target.value)} maxLength={300} rows={2} aria-label="Note" />
       </label>
       <div className="evd-editor-actions">
-        <button type="button" className="evd-link" onClick={() => setRows((x) => [...x, { label: '', slot: '', section: 'this_event' }])}>
+        <button type="button" className="evd-link" onClick={() => setRows((x) => [...x, { label: '', slot: '' }])}>
           <Plus size={13} aria-hidden="true" /> Add a line
         </button>
         <span className="evd-grow" />
@@ -258,8 +217,35 @@ function Editor({ type, doc, onCancel, onSave, saving, goals = [], limit = null 
   );
 }
 
+// The offer letter's own words, field by field. The terms come from the
+// deal and are changed in Terms, never here.
+function LetterEditor({ doc, onCancel, onSave, saving }) {
+  const [letter, setLetter] = useState(() => ({ ...(doc?.letter || {}) }));
+  const set = (key, value) => setLetter((l) => ({ ...l, [key]: value }));
+  return (
+    <div className="evd-editor" data-testid="evd-editor-offer_letter">
+      <p className="evd-editor-limit">The terms section comes from the deal; change it in Terms.</p>
+      {LETTER_FIELDS.map((f) => (
+        <label key={f.key} className="evd-editor-note">
+          <span>{f.label}</span>
+          {f.rows > 1
+            ? <textarea value={letter[f.key] || ''} onChange={(e) => set(f.key, e.target.value)} maxLength={f.max} rows={f.rows} aria-label={f.label} />
+            : <input value={letter[f.key] || ''} onChange={(e) => set(f.key, e.target.value)} maxLength={f.max} aria-label={f.label} />}
+        </label>
+      ))}
+      <div className="evd-editor-actions">
+        <span className="evd-grow" />
+        <button type="button" className="evd-link" onClick={onCancel} disabled={saving}><X size={13} aria-hidden="true" /> Cancel</button>
+        <button type="button" className="evd-save" onClick={() => onSave(letter)} disabled={saving || !((letter.opening || '').trim() || (letter.opportunity || '').trim())}>
+          {saving ? 'Saving…' : 'Save'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // What GET answers beside the documents, read again after a change.
-const DERIVED_KEYS = ['look_changed', 'career_carry', 'career_goals', 'closet', 'look', 'balance', 'deliverables'];
+const DERIVED_KEYS = ['look_changed', 'closet', 'look', 'balance', 'offer_eligible', 'offer_terms', 'offer_terms_changed'];
 
 const SOURCE_LABELS = { draft: 'drafted', edited: 'edited', restored: 'restored', line_redraft: 'one line re-worded' };
 const when = (v) => {
@@ -422,9 +408,9 @@ export default function EventDocuments({ showId, eventId, event, outfitPieces = 
     <div className={`evd${layout === 'wide' ? ' is-wide' : ''}`} data-testid="event-documents">
       {intro && <p className="evd-intro">
         One system for the event&apos;s in-world documents: the invitation and these two. Each fills itself from the event, goes through the same steps
-        (Draft, Edit, Redraft, Approve). Once approved, Start Episode puts it on the episode&apos;s lists: the
-        shopping list as her wardrobe list, the career plan&apos;s &ldquo;This event&rdquo; lines as her goals.
-        Approving one also draws it as an overlay for the episode.
+        (Draft, Edit, Redraft, Approve). Once approved, Start Episode carries it into the episode: the
+        shopping list as her wardrobe list, the offer letter (deal events only) as its overlay on beat 5,
+        directly after the invitation. Approving one also draws it as an overlay for the episode.
         The invitation is in <a href="#epp-sec-invitation">1. The Event</a>.
       </p>}
       {error && <p className="evd-error" role="alert">{error}</p>}
@@ -441,7 +427,9 @@ export default function EventDocuments({ showId, eventId, event, outfitPieces = 
             const onLine = canLine ? (index) => redraftLine(type, index, doc) : null;
             const busyLine = lineBusy?.type === type ? lineBusy.index : null;
             const note = amountNote(doc, type);
-            const carry = type === 'career_plan' ? docs.career_carry : null;
+            // The offer letter is for deal events only (Evoni, 2026-10-24).
+            const notEligible = type === 'offer_letter' && docs.offer_eligible === false;
+            const termsChanged = type === 'offer_letter' && Boolean(doc) && docs.offer_terms_changed === true;
             return (
               // Not drafted yet: one line, its title, what it comes from and
               // Draft (Evoni's review, item 6); the paper appears once drafted.
@@ -449,28 +437,46 @@ export default function EventDocuments({ showId, eventId, event, outfitPieces = 
                 <h3 className="evd-title">{title}</h3>
                 <p className="evd-from">{from}</p>
                 <div className="evd-stage">
-                  {doc && !ro && editing === type && (
+                  {notEligible && !doc && (
+                    <p className="evd-muted" data-testid="evd-offer-not-eligible">
+                      Only a deal event gets an offer letter. This event has no deal terms yet; set them in Terms.
+                    </p>
+                  )}
+                  {doc && !ro && editing === type && type === 'shopping_list' && (
                     <Editor
                       type={type} doc={doc} saving={isBusy('edit')}
-                      goals={docs.career_goals || []} limit={carry?.limit ?? null}
                       onCancel={() => setEditing(null)}
                       onSave={(rows, n) => act(type, 'edit', () => editEventDocumentApi(showId, eventId, type, rows, n))}
+                    />
+                  )}
+                  {doc && !ro && editing === type && type === 'offer_letter' && (
+                    <LetterEditor
+                      doc={doc} saving={isBusy('edit')}
+                      onCancel={() => setEditing(null)}
+                      onSave={(letter) => act(type, 'edit', () => editOfferLetterApi(showId, eventId, letter))}
                     />
                   )}
                   {doc && editing !== type && type === 'shopping_list' && (
                     <ShoppingPaper doc={doc} event={event} outfitPieces={listPieces} closet={ro ? {} : (docs.closet || {})} onRedraftLine={onLine} lineBusy={busyLine} />
                   )}
-                  {doc && editing !== type && type === 'career_plan' && (
-                    <CareerCard doc={doc} deliverables={docs.deliverables || []} goals={docs.career_goals || []} dropped={carry?.dropped || []} onRedraftLine={onLine} lineBusy={busyLine} />
+                  {doc && editing !== type && type === 'offer_letter' && (
+                    <OfferLetter doc={doc} event={event} terms={docs.offer_terms || []} />
                   )}
                 </div>
                 {doc && note && (
                   <p className="evd-warning" role="status" data-testid={`evd-amounts-${type}`}><AlertTriangle size={13} aria-hidden="true" /> {note}</p>
                 )}
-                {type === 'career_plan' && doc && carry?.dropped?.length > 0 && editing !== type && (
-                  <p className="evd-warning" role="status" data-testid="evd-carry-career_plan">
-                    <AlertTriangle size={13} aria-hidden="true" /> This event carries {carry.limit} of her goals; {carry.dropped.length} line{carry.dropped.length === 1 ? '' : 's'} won&apos;t reach the episode. Mark some optional or remove them.
-                  </p>
+                {termsChanged && editing !== type && (
+                  <div className="evd-look-changed" role="status" data-testid="evd-terms-changed">
+                    <span className="evd-look-changed-text"><AlertTriangle size={13} aria-hidden="true" /> The deal&apos;s terms changed since this letter was written.</span>
+                    {!ro && (
+                      <span className="evd-look-changed-actions">
+                        <button type="button" className="evd-link" onClick={() => redraft(type, doc)} disabled={!!busy} data-testid="evd-terms-changed-redraft">
+                          {isBusy('draft') ? <Loader2 size={13} className="evd-spin" aria-hidden="true" /> : <RefreshCw size={13} aria-hidden="true" />} Redraft
+                        </button>
+                      </span>
+                    )}
+                  </div>
                 )}
                 {type === 'shopping_list' && doc && short > 0 && editing !== type && (
                   <div className="evd-budget" role="status" data-testid="evd-budget">
@@ -492,7 +498,7 @@ export default function EventDocuments({ showId, eventId, event, outfitPieces = 
                       </a>
                     )
                   ) : !doc ? (
-                    <button type="button" className="evd-link" onClick={() => act(type, 'draft', () => draftEventDocumentApi(showId, eventId, type))} disabled={!!busy}>
+                    !notEligible && <button type="button" className="evd-link" onClick={() => act(type, 'draft', () => draftEventDocumentApi(showId, eventId, type))} disabled={!!busy} data-testid={`evd-draft-${type}`}>
                       {isBusy('draft') ? <Loader2 size={13} className="evd-spin" aria-hidden="true" /> : <Wand2 size={13} aria-hidden="true" />} Draft
                     </button>
                   ) : (
@@ -529,6 +535,7 @@ export default function EventDocuments({ showId, eventId, event, outfitPieces = 
                   <OverlayRow
                     type={type} doc={doc} busy={busy} readOnly={ro}
                     lookTotal={type === 'shopping_list' ? listTotal : null}
+                    termsChanged={termsChanged}
                     onMake={() => act(type, 'overlay', () => approveEventDocumentApi(showId, eventId, type))}
                   />
                 )}

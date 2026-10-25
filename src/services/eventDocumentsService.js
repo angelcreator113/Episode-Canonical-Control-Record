@@ -2,46 +2,51 @@
 
 /**
  * eventDocumentsService — the Event Package's in-world documents beside the
- * invitation: Lala's wardrobe shopping list and her career plan (Evoni,
- * 2026-10-06: "add wardrobe shopping list and career list to event package
- * so I can do exactly what invitations does"; they live on the event, and
- * episodes keep the lists they already have).
+ * invitation: Lala's wardrobe shopping list (Evoni, 2026-10-06) and the
+ * offer letter (Evoni, 2026-10-24; it replaces the career plan: "this
+ * should be more of an offer letter talking about the brand deal
+ * opportunity etc. it comes after the invitation"; deal events only; a
+ * formal letter plus a terms section; then "have it directly after the
+ * invitation": on beat 5, right after the invitation).
  *
  * Each document goes through the invitation's steps: Draft (written from
  * the event), Edit (Evoni's own words), Redraft (a new draft, the old one
- * kept in history) and Approve. It is stored as the invitation's editable
- * text is, in the event's canon_consequences JSON (invitation_text there,
- * documents.<type> here), so no schema change:
+ * kept in history) and Approve. It is stored in the event's
+ * canon_consequences JSON (documents.<type>), so no schema change:
  *
  *   canon_consequences.documents.shopping_list = {
  *     type, status: 'draft' | 'approved', version,
  *     source: 'draft' | 'edited' | 'restored' | 'line_redraft',
- *     items: [{ slot, label, description, required, piece_id?,      (shopping)
- *               section?, task_source?, goal_id? }],                (career)
+ *     items: [{ slot, label, description, required, piece_id? }],
  *     note?, look_key? (the look's piece ids it was drafted from),
  *     checks? { amounts: { ok, invented } }, restored_from?,
  *     drafted_at, edited_at, approved_at,
  *     history: [ the earlier versions, newest first, at most HISTORY_MAX ]
  *   }
+ *   canon_consequences.documents.offer_letter = { the same, with
+ *     letter: { greeting, opening, opportunity, next_steps, closing,
+ *               sender_name, sender_title } in place of items, and
+ *     terms_key: the fingerprint of the deal's terms it was written with;
+ *     the terms section itself is read live from the deal (offerLetterService) }
  *
- * The drafts reuse the episode lists' own writers (todoListService):
- * generateTasks for the shopping list's slots, generateCareerTasks for the
- * career plan's "This event" goals, plus her active career goals as
- * "Bigger goals". Both writers are Haiku calls, logged and budget-gated by
- * aiCostTracker, and both fall back to the event's own fields on failure.
+ * A career plan saved before 2026-10-24 stays in the JSON, unread: it is
+ * neither shown nor carried into an episode.
+ *
+ * The shopping list's draft reuses the episode list's writer
+ * (todoListService.generateTasks); the offer letter's is
+ * offerLetterService.writeOfferLetter. Both are Haiku calls, logged and
+ * budget-gated by aiCostTracker, with a no-AI fallback.
  */
 
 const DOC_TYPES = Object.freeze({
   shopping_list: { label: 'Shopping list' },
-  career_plan: { label: 'Career plan' },
+  offer_letter: { label: 'Offer letter' },
 });
 
 const HISTORY_MAX = 10;
 const ITEMS_MAX = 20;
 const LABEL_MAX = 200;
 const DESCRIPTION_MAX = 300;
-const CAREER_SECTIONS = new Set(['this_event', 'bigger_goals']);
-const BIGGER_GOALS_MAX = 5;
 const NOTE_MAX = 300;
 const CLOSET_PER_LINE = 3;
 
@@ -75,14 +80,14 @@ function readDocuments(event) {
   const docs = cc.documents && typeof cc.documents === 'object' ? cc.documents : {};
   return {
     shopping_list: docs.shopping_list || null,
-    career_plan: docs.career_plan || null,
+    offer_letter: docs.offer_letter || null,
   };
 }
 
 /**
  * A document's items as stored: a label each (items without one are
- * dropped), trimmed, at most ITEMS_MAX. Career items keep their section
- * ("this_event" or "bigger_goals", this_event by default).
+ * dropped), trimmed, at most ITEMS_MAX, each keeping the look piece it
+ * names (piece_id).
  */
 function normalizeItems(type, items) {
   if (!Array.isArray(items)) throw new EventDocumentError(400, 'items must be an array');
@@ -97,13 +102,7 @@ function normalizeItems(type, items) {
       description: text(raw.description, DESCRIPTION_MAX),
       required: raw.required === true,
     };
-    if (type === 'career_plan') {
-      item.section = CAREER_SECTIONS.has(raw.section) ? raw.section : 'this_event';
-      if (raw.goal_id) item.goal_id = String(raw.goal_id);
-      // A goal she means to do, or an optional idea (the writer's own
-      // flag, dropped here until 2026-10-24, so every idea became a goal).
-      if (item.section === 'this_event') item.task_source = raw.task_source === 'optional' ? 'optional' : 'goal';
-    } else if (raw.piece_id != null && raw.piece_id !== '') {
+    if (raw.piece_id != null && raw.piece_id !== '') {
       item.piece_id = String(raw.piece_id).slice(0, 60);
     }
     out.push(item);
@@ -200,57 +199,9 @@ function readExpectedVersion(value) {
   return n;
 }
 
-/** Her active career goals, highest priority first: [{ id, title, description }]. */
-async function activeGoals(models, showId) {
-  if (!models.CareerGoal) return [];
-  try {
-    const goals = await models.CareerGoal.findAll({
-      attributes: ['id', 'title', 'description', 'priority'],
-      where: { show_id: showId, status: 'active' },
-      order: [['priority', 'ASC'], ['created_at', 'ASC']],
-      limit: BIGGER_GOALS_MAX,
-      raw: true,
-    });
-    return (goals || []).map((g) => ({ id: String(g.id), title: g.title, description: g.description || '' }));
-  } catch (err) {
-    console.error('[EventDocuments] career goals read failed (the plan keeps its event goals):', err.message);
-    return [];
-  }
-}
-
-/** Her active career goals as the plan's "Bigger goals". */
-function biggerGoalItems(goals) {
-  return goals.map((g, i) => ({
-    slot: `goal_${i + 1}`,
-    label: g.title,
-    description: g.description || '',
-    required: false,
-    section: 'bigger_goals',
-    goal_id: g.id,
-  }));
-}
-
 /** The look's piece ids as one comparable key (order does not matter). */
 function lookKeyOf(pieces) {
   return (Array.isArray(pieces) ? pieces : []).map((p) => (p?.id == null ? '' : String(p.id))).filter(Boolean).sort().join(',');
-}
-
-/** The deal's money statement, with its terms rows (the invitation's own). */
-async function moneyOf(sequelize, event) {
-  const { describeInvitationMoney } = require('./invitationCompositingService');
-  const { isDealEvent, listEventCosts } = require('./eventCostsService');
-  const { listEventDeliverables } = require('./eventTermsService');
-  let costs = null;
-  let deliverables = null;
-  if (isDealEvent(event)) {
-    try { costs = await listEventCosts(sequelize, event.id); } catch (err) {
-      console.error('[EventDocuments] event_costs read failed (money from the event fields):', err.message);
-    }
-    try { deliverables = await listEventDeliverables(sequelize, event.id); } catch (err) {
-      console.error('[EventDocuments] event_deliverables read failed (money names no deliverables):', err.message);
-    }
-  }
-  return describeInvitationMoney(event, { costs, deliverables });
 }
 
 /** Every coin amount a piece of the look can cost: its charge and its price. */
@@ -266,99 +217,80 @@ function lookAmounts(look) {
 }
 
 /**
- * Coin amounts the lines name that the source does not hold (the
- * invitation's money check, 2026-10-24): for the shopping list, any amount
- * no look piece costs (the list shows each price itself); for the career
- * plan, any amount the deal's money statement does not state. Reported on
+ * Coin amounts a version names that its source does not hold (the
+ * invitation's money check, 2026-10-24): a shopping line naming an amount
+ * no look piece costs (the list shows each price itself), or an offer
+ * letter's words naming one its terms section does not state. Reported on
  * the version, never enforced: her edits stand.
  */
-function documentChecks(type, items, { look = null, money = null } = {}) {
+function documentChecks(type, items, { look = null, terms = null, letter = null } = {}) {
+  if (type === 'offer_letter') return require('./offerLetterService').checkLetter(letter, terms || []);
   const { coinAmounts } = require('./invitationCompositingService');
-  const allowed = type === 'shopping_list' ? lookAmounts(look) : coinAmounts(money?.text);
-  const written = coinAmounts(items.map((i) => `${i.label} ${i.description || ''}`).join(' '));
+  const allowed = lookAmounts(look);
+  const written = coinAmounts((items || []).map((i) => `${i.label} ${i.description || ''}`).join(' '));
   const invented = [...written].filter((n) => !allowed.has(n));
   return { amounts: { ok: invented.length === 0, invented } };
 }
 
+/** The deal's terms rows (event_costs, event_deliverables); null for a part not loaded. */
+async function termsRows(sequelize, event) {
+  const { isDealEvent, listEventCosts } = require('./eventCostsService');
+  const { listEventDeliverables } = require('./eventTermsService');
+  let costs = null;
+  let deliverables = null;
+  if (isDealEvent(event)) {
+    try { costs = await listEventCosts(sequelize, event.id); } catch (err) {
+      console.error('[EventDocuments] event_costs read failed (the terms name no costs):', err.message);
+    }
+    try { deliverables = await listEventDeliverables(sequelize, event.id); } catch (err) {
+      console.error('[EventDocuments] event_deliverables read failed (the terms name no deliverables):', err.message);
+    }
+  }
+  return { costs, deliverables };
+}
+
+/** The offer letter's terms section, read live from the deal. */
+async function offerTermsOf(sequelize, event) {
+  const { offerTerms } = require('./offerLetterService');
+  return offerTerms(event, await termsRows(sequelize, event));
+}
+
 /**
  * What a draft, an edit or a line re-roll is written against: the look and
- * her balance (shopping list), the deal's money and her career goals
- * (career plan).
+ * her balance (shopping list); the deal's terms and money (offer letter).
  */
-async function draftContext(models, event, type, showId) {
+async function draftContext(models, event, type) {
   if (type === 'shopping_list') {
     const { shoppingListContext } = require('./eventDocumentOverlayService');
     const { look, balance } = await shoppingListContext(models.sequelize, event);
     return { look, balance };
   }
-  const [money, goals] = await Promise.all([moneyOf(models.sequelize, event), activeGoals(models, showId)]);
-  return { money, goals };
+  const rows = await termsRows(models.sequelize, event);
+  const { offerTerms } = require('./offerLetterService');
+  const { describeInvitationMoney } = require('./invitationCompositingService');
+  return { terms: offerTerms(event, rows), money: describeInvitationMoney(event, rows) };
 }
 
-/** The items a fresh draft starts from. budget: word the pieces to buy for a shortfall. */
-async function draftItems(models, event, type, showId, { budget = false, ctx = null } = {}) {
-  const { generateTasks, generateCareerTasks } = require('./todoListService');
-  const c = ctx || await draftContext(models, event, type, showId);
-  if (type === 'shopping_list') {
-    const tasks = await generateTasks(event, {
-      look: c.look,
-      budget: budget && c.look ? { balance: c.balance, total: c.look.total } : null,
-    });
-    return normalizeItems(type, tasks);
+/** A fresh shopping list's lines. budget: word the pieces to buy for a shortfall. */
+async function draftItems(models, event, type, { budget = false, ctx = null } = {}) {
+  const { generateTasks } = require('./todoListService');
+  const c = ctx || await draftContext(models, event, type);
+  const tasks = await generateTasks(event, {
+    look: c.look,
+    budget: budget && c.look ? { balance: c.balance, total: c.look.total } : null,
+  });
+  return normalizeItems(type, tasks);
+}
+
+/** An offer letter is for deal events only (Evoni, 2026-10-24). */
+function assertOfferEvent(event) {
+  if (!require('./offerLetterService').isOfferEvent(event)) {
+    throw new EventDocumentError(409, 'This event has no deal terms. An offer letter states a deal: set the deal in Terms first.');
   }
-  const tasks = await generateCareerTasks(event, { money: c.money?.text || null, goals: c.goals });
-  const thisEvent = (tasks || []).map((t) => ({ ...t, section: 'this_event' }));
-  return normalizeItems(type, [...thisEvent, ...biggerGoalItems(c.goals)]);
 }
 
 function assertType(type) {
   if (!isDocType(type)) throw new EventDocumentError(400, `Unknown document: ${type}`);
-}
-
-/**
- * What the deal expects of her at this event (Evoni, 2026-10-06: "add
- * deliverables to career goals list whichever ones are expected of her for
- * that event"): each of the event's deliverables, as the episode's task list
- * shows it (socialTaskSource.deliverableTask). Read live from the terms,
- * never stored in the career plan, so an Edit or Redraft cannot drop one and
- * the list always matches the deal. Start Episode already puts them on the
- * episode's task list, required.
- */
-async function expectedOfHer(sequelize, eventId) {
-  const { listEventDeliverables } = require('./eventTermsService');
-  const { withDeliverableTasks } = require('../utils/socialTaskSource');
-  try {
-    const rows = await listEventDeliverables(sequelize, eventId);
-    return withDeliverableTasks([], rows).map((t) => ({
-      id: t.deliverable_id,
-      label: t.label,
-      detail: t.description,
-      required: t.required,
-      owed_to: t.owed_to,
-    }));
-  } catch (err) {
-    console.error('[EventDocuments] deliverables read failed (the career plan shows none):', err.message);
-    return [];
-  }
-}
-
-/**
- * What Start Episode will keep of the plan's "This event" lines: its goals
- * and the event's relationship goals held to the event's goal limit
- * (capCombinedGoals, T9), optional ideas given up first. The same rule
- * Start Episode runs (planGoalsForEpisode), so the page can say before
- * approval which lines will not carry. { limit, carried, dropped: [labels] }.
- */
-function planCarry(event, doc) {
-  const planned = careerPlanGoals(doc);
-  const kept = planGoalsForEpisode(event, doc, { quiet: true });
-  const keptLabels = new Set(kept.map((t) => t.label));
-  const { goalTaskScale } = require('../utils/goalTasks');
-  return {
-    limit: goalTaskScale(event).max,
-    carried: planned.filter((g) => keptLabels.has(g.label)).length,
-    dropped: planned.filter((g) => !keptLabels.has(g.label)).map((g) => g.label),
-  };
 }
 
 /**
@@ -404,10 +336,9 @@ async function closetSuggestions(sequelize, event, doc, look) {
 }
 
 /**
- * GET: both documents, the deliverables expected of her, the look and her
- * balance, and (2026-10-24) whether the look changed since the shopping
- * list was drafted, what of the plan carries into the episode, her career
- * goals (for the plan's goal links) and pieces from her closet for the list.
+ * GET: both documents, the look and her balance, whether the look changed
+ * since the shopping list was drafted, pieces from her closet for the
+ * list, and the offer letter's state (offerState).
  */
 async function getDocuments(models, { showId, eventId }) {
   const event = await loadEvent(models.sequelize, showId, eventId);
@@ -421,15 +352,29 @@ async function getDocuments(models, { showId, eventId }) {
   const list = docs.shopping_list;
   return {
     ...docs,
-    deliverables: await expectedOfHer(models.sequelize, event.id),
     look: look ? { state: look.state, pieces: look.pieces, total: look.total } : null,
     balance,
     // Saved with the list's version, so every device sees the same answer
     // (it was kept per browser tab before).
     look_changed: Boolean(list && typeof list.look_key === 'string' && list.look_key !== lookKey),
-    career_carry: docs.career_plan ? planCarry(event, docs.career_plan) : null,
-    career_goals: await activeGoals(models, showId),
     closet: list ? await closetSuggestions(models.sequelize, event, list, look) : {},
+    ...(await offerState(models.sequelize, event, docs.offer_letter)),
+  };
+}
+
+/**
+ * The offer letter's live state: whether the event gets one (deal events
+ * only), its terms section from the deal, and whether those terms changed
+ * since the letter was written.
+ */
+async function offerState(sequelize, event, doc) {
+  const { isOfferEvent, termsKey } = require('./offerLetterService');
+  if (!isOfferEvent(event)) return { offer_eligible: false, offer_terms: [], offer_terms_changed: false };
+  const terms = await offerTermsOf(sequelize, event);
+  return {
+    offer_eligible: true,
+    offer_terms: terms,
+    offer_terms_changed: Boolean(doc && typeof doc.terms_key === 'string' && doc.terms_key !== termsKey(terms)),
   };
 }
 
@@ -438,18 +383,25 @@ async function getDocuments(models, { showId, eventId }) {
  * written by the AI outside the transaction (no row is held locked across
  * a model call); the new version is then built on the document as it
  * stands under the lock. budget (shopping list): the pieces to buy are
- * worded for her shortfall (rent, borrow, a cheaper swap).
+ * worded for her shortfall (rent, borrow, a cheaper swap). An offer letter
+ * records the terms it was written with (terms_key).
  */
 async function draftDocument(models, { showId, eventId, type, version, budget = false }) {
   assertType(type);
   const expectedVersion = readExpectedVersion(version);
   const event = await loadEvent(models.sequelize, showId, eventId);
-  const ctx = await draftContext(models, event, type, showId);
-  const items = await draftItems(models, event, type, showId, { budget: budget === true, ctx });
-  const extra = {
-    checks: documentChecks(type, items, ctx),
-    ...(type === 'shopping_list' ? { look_key: ctx.look ? lookKeyOf(ctx.look.pieces) : '' } : {}),
-  };
+  if (type === 'offer_letter') assertOfferEvent(event);
+  const ctx = await draftContext(models, event, type);
+  let items = [];
+  let extra;
+  if (type === 'offer_letter') {
+    const { writeOfferLetter, termsKey } = require('./offerLetterService');
+    const written = await writeOfferLetter(event, { sections: ctx.terms, money: ctx.money });
+    extra = { letter: written.letter, letter_source: written.source, terms_key: termsKey(ctx.terms), checks: written.checks };
+  } else {
+    items = await draftItems(models, event, type, { budget: budget === true, ctx });
+    extra = { checks: documentChecks(type, items, ctx), look_key: ctx.look ? lookKeyOf(ctx.look.pieces) : '' };
+  }
   const { doc } = await changeDocument(models.sequelize, { showId, eventId, type, expectedVersion }, (prev) => {
     const now = new Date().toISOString();
     return nextVersion(prev, type, { items, source: 'draft', drafted_at: now, edited_at: null, note: prev?.note || null, ...extra }, now);
@@ -464,14 +416,18 @@ function readNote(note, prev) {
   return note.trim().slice(0, NOTE_MAX) || null;
 }
 
-/** Edit: her own items (and note); an edited document is a draft until approved again. */
-async function editDocument(models, { showId, eventId, type, items, note, version }) {
+/**
+ * Edit: her own items (and note), or for an offer letter her own words
+ * (letter: { greeting, opening, opportunity, next_steps, closing,
+ * sender_name, sender_title }; the terms section comes from the deal and is
+ * changed in Terms). An edited document is a draft until approved again.
+ */
+async function editDocument(models, { showId, eventId, type, items, note, letter, version }) {
   assertType(type);
   const expectedVersion = readExpectedVersion(version);
   const event = await loadEvent(models.sequelize, showId, eventId);
-  const ctx = type === 'shopping_list'
-    ? { look: (await require('./eventDocumentOverlayService').shoppingListContext(models.sequelize, event)).look }
-    : { money: await moneyOf(models.sequelize, event) };
+  if (type === 'offer_letter') return editOfferLetter(models, { showId, eventId, event, letter, expectedVersion });
+  const ctx = { look: (await require('./eventDocumentOverlayService').shoppingListContext(models.sequelize, event)).look };
   const { doc } = await changeDocument(models.sequelize, { showId, eventId, type, expectedVersion }, (prev) => {
     if (!prev) throw new EventDocumentError(404, `No ${DOC_TYPES[type].label.toLowerCase()} yet. Draft it first.`);
     const now = new Date().toISOString();
@@ -485,9 +441,29 @@ async function editDocument(models, { showId, eventId, type, items, note, versio
   return doc;
 }
 
+async function editOfferLetter(models, { showId, eventId, event, letter, expectedVersion }) {
+  const { normalizeLetter } = require('./offerLetterService');
+  if (!letter || typeof letter !== 'object') throw new EventDocumentError(400, 'letter must be an object');
+  const clean = normalizeLetter(letter);
+  if (!clean.opening && !clean.opportunity) throw new EventDocumentError(400, 'The letter needs an opening or a paragraph about the opportunity');
+  const terms = await offerTermsOf(models.sequelize, event);
+  const { doc } = await changeDocument(models.sequelize, { showId, eventId, type: 'offer_letter', expectedVersion }, (prev) => {
+    if (!prev) throw new EventDocumentError(404, 'No offer letter yet. Draft it first.');
+    const now = new Date().toISOString();
+    return nextVersion(prev, 'offer_letter', {
+      letter: clean, letter_source: 'edited', source: 'edited', edited_at: now,
+      // Her words are checked against the terms as they are now; the
+      // letter keeps the terms_key it was written with.
+      checks: documentChecks('offer_letter', [], { terms, letter: clean }),
+    }, now);
+  });
+  return doc;
+}
+
 /**
  * Restore an earlier version from history as a new draft version (its
- * lines, note and the look it was drafted from); the one it replaces goes
+ * lines, note and the look it was drafted from; a letter's words and the
+ * terms they were written with); the one it replaces goes
  * into history like any other. Undo after Redraft uses it too.
  */
 async function restoreDocument(models, { showId, eventId, type, fromVersion, version }) {
@@ -501,9 +477,10 @@ async function restoreDocument(models, { showId, eventId, type, fromVersion, ver
     if (!old) throw new EventDocumentError(404, `Version ${from} is not in the kept history.`);
     const now = new Date().toISOString();
     return nextVersion(prev, type, {
-      items: normalizeItems(type, old.items || []),
+      items: type === 'offer_letter' ? [] : normalizeItems(type, old.items || []),
       note: old.note || null,
       ...(old.look_key !== undefined ? { look_key: old.look_key } : {}),
+      ...(type === 'offer_letter' ? { letter: old.letter || null, terms_key: old.terms_key ?? null } : {}),
       checks: old.checks || null,
       source: 'restored',
       restored_from: from,
@@ -514,12 +491,12 @@ async function restoreDocument(models, { showId, eventId, type, fromVersion, ver
 }
 
 /**
- * Re-roll one line (by its index): a new wording from the writer, saved as
- * a new draft version; the other lines are kept as they are. A career
- * line keeps its section and, unless the writer links another, its goal.
+ * Re-roll one shopping line (by its index): a new wording from the writer,
+ * saved as a new draft version; the other lines are kept as they are.
  */
 async function redraftLine(models, { showId, eventId, type, index, version }) {
   assertType(type);
+  if (type !== 'shopping_list') throw new EventDocumentError(400, 'Only a shopping list re-words one line; redraft the letter instead.');
   const expectedVersion = readExpectedVersion(version);
   const n = Number(index);
   if (!Number.isInteger(n) || n < 0) throw new EventDocumentError(400, 'index must be a whole number');
@@ -528,14 +505,9 @@ async function redraftLine(models, { showId, eventId, type, index, version }) {
   if (!current) throw new EventDocumentError(404, `No ${DOC_TYPES[type].label.toLowerCase()} yet. Draft it first.`);
   const line = current.items?.[n];
   if (!line) throw new EventDocumentError(404, 'That line is not on the document.');
-  if (type === 'career_plan' && line.section === 'bigger_goals') {
-    throw new EventDocumentError(409, 'Bigger goals are her career goals; change them on the Career page.');
-  }
-  const ctx = await draftContext(models, event, type, showId);
+  const ctx = await draftContext(models, event, type);
   const { redraftDocumentLine } = require('./todoListService');
-  const words = await redraftDocumentLine(event, {
-    type, items: current.items, index: n, look: ctx.look || null, money: ctx.money?.text || null, goals: ctx.goals || [],
-  });
+  const words = await redraftDocumentLine(event, { type, items: current.items, index: n, look: ctx.look || null });
   const { doc } = await changeDocument(models.sequelize, { showId, eventId, type, expectedVersion: expectedVersion ?? current.version }, (prev) => {
     const items = (prev.items || []).map((it, i) => (i === n ? { ...it, ...words } : it));
     const clean = normalizeItems(type, items);
@@ -568,14 +540,17 @@ async function keepListForLook(models, { showId, eventId, version }) {
 async function withOverlay(models, event, type, doc) {
   const { makeDocumentOverlay } = require('./eventDocumentOverlayService');
   try {
-    const deliverables = type === 'career_plan' ? await expectedOfHer(models.sequelize, event.id) : [];
-    const overlay = await makeDocumentOverlay(models, { event, type, doc, deliverables });
+    const terms = type === 'offer_letter' ? await offerTermsOf(models.sequelize, event) : null;
+    const overlay = await makeDocumentOverlay(models, { event, type, doc, terms });
     if (!overlay) return doc;
     // Recorded only on the version it was drawn from: a newer edit that
     // landed while it was drawn is left as it is.
     const { doc: saved } = await changeDocument(models.sequelize, { showId: event.show_id, eventId: event.id, type }, (current) => (
       current && current.version === doc.version ? { ...current, overlay } : null
     ));
+    if (type === 'offer_letter' && event.used_in_episode_id) {
+      await syncOfferLetterPlacement(models, { event: { ...event, canon_consequences: null }, episodeId: event.used_in_episode_id, overlay });
+    }
     return saved && saved.version === doc.version ? saved : doc;
   } catch (err) {
     console.error(`[EventDocuments] ${type} overlay failed (the approval stands):`, err.message);
@@ -601,14 +576,89 @@ async function approveDocument(models, { showId, eventId, type, version }) {
     return { ...current, status: 'approved', approved_at: now, updated_at: now };
   });
   if (written) return withOverlay(models, event, type, prev);
-  // Already approved: draw its overlay again when missing or out of date.
+  // Already approved: draw its overlay again when missing or out of date
+  // (a shopping list's look total, or an offer letter's terms, changed).
   let lookTotal = null;
+  let currentTermsKey = null;
   if (type === 'shopping_list') {
     const { shoppingListContext, shoppingLines } = require('./eventDocumentOverlayService');
     const { look } = await shoppingListContext(models.sequelize, event);
     if (look) lookTotal = shoppingLines(prev, look.pieces).total;
+  } else if (type === 'offer_letter') {
+    currentTermsKey = require('./offerLetterService').termsKey(await offerTermsOf(models.sequelize, event));
   }
-  return overlayState(prev, lookTotal) === 'current' ? prev : withOverlay(models, event, type, prev);
+  return overlayState(prev, lookTotal, currentTermsKey) === 'current' ? prev : withOverlay(models, event, type, prev);
+}
+
+// ─── The offer letter on beat 5, directly after the invitation ──────────────
+//
+// Evoni, 2026-10-24: "have it directly after the invitation". The approved
+// letter's overlay is the episode's, on the invitation's own beat 5
+// (Reveal), starting when the invitation's seconds end
+// (INVITATION_DURATION), so nothing comes between them. Placing it goes
+// through episodeBeatPlacement.placeOverlayOnBeat, which honours Evoni's
+// switch of 2026-10-07 ("none of the overlays should be beats for now"):
+// while it is off the letter is linked to the episode and listed on beat 5
+// in the Overlays tab, and placed once placing is turned back on, as the
+// invitation is.
+
+const OFFER_LETTER_BEAT_NUMBER = 5;
+
+function offerLetterBeat() {
+  const { CANONICAL_BEATS } = require('../constants/canonicalBeats');
+  return CANONICAL_BEATS.find((b) => b.number === OFFER_LETTER_BEAT_NUMBER) || null;
+}
+
+/**
+ * Link the event's approved offer letter overlay to the episode and place
+ * it on beat 5, directly after the invitation; earlier offer letter overlays of the event lose their
+ * placement on the episode. Idempotent; a failure is logged and leaves the
+ * approval as it is. overlay: the drawn overlay, else the stored one.
+ */
+async function syncOfferLetterPlacement(models, { event, episodeId, overlay = null }) {
+  const { sequelize } = models;
+  if (!episodeId || !event?.id) return { placement: null, anchor: null };
+  try {
+    let drawn = overlay;
+    if (!drawn) {
+      const [[row]] = await sequelize.query('SELECT canon_consequences FROM world_events WHERE id = :id', { replacements: { id: event.id } });
+      const doc = readDocuments(row || {}).offer_letter;
+      drawn = doc && doc.status === 'approved' ? doc.overlay : null;
+    }
+    if (!drawn?.asset_id) return { placement: null, anchor: null };
+    await sequelize.query(
+      'UPDATE assets SET episode_id = :episodeId, updated_at = NOW() WHERE id = :assetId',
+      { replacements: { episodeId, assetId: drawn.asset_id } }
+    );
+    if (models.TimelinePlacement) {
+      const [others] = await sequelize.query(
+        `SELECT id FROM assets
+          WHERE asset_type = 'DOCUMENT_OVERLAY' AND id <> :assetId
+            AND metadata->>'event_id' = :eventId AND metadata->>'document_type' = 'offer_letter'`,
+        { replacements: { assetId: drawn.asset_id, eventId: String(event.id) } }
+      );
+      const ids = (others || []).map((r) => r.id);
+      if (ids.length) await models.TimelinePlacement.destroy({ where: { episode_id: episodeId, asset_id: ids } });
+    }
+    const { placeOverlayOnBeat } = require('./episodeBeatPlacement');
+    const { INVITATION_DURATION } = require('./episodeInvitationOverlayService');
+    const placed = await placeOverlayOnBeat(models, {
+      episodeId,
+      assetId: drawn.asset_id,
+      canonicalBeat: offerLetterBeat(),
+      label: 'Offer letter',
+      kind: 'offer_letter',
+      source: 'event-document-offer-letter',
+      duration: 6,
+      zIndex: 20,
+      offsetSeconds: INVITATION_DURATION,
+      logTag: '[EventDocuments]',
+    });
+    return { placement: placed.placement, anchor: placed.anchor };
+  } catch (err) {
+    console.error('[EventDocuments] offer letter placement failed (the approval stands):', err.message);
+    return { placement: null, anchor: null };
+  }
 }
 
 // ─── Start Episode: the approved documents carried into the episode ─────────
@@ -617,17 +667,20 @@ async function approveDocument(models, { showId, eventId, type, version }) {
 // event; episodes keep the lists they already have). Start Episode reads the
 // event's documents once, and only an approved one is used:
 //   - an approved shopping list becomes the episode's wardrobe list
-//     (episode_todo_lists.tasks), in place of the standard slots;
-//   - an approved career plan's "This event" lines become Lala's goals on
-//     the episode's task list (social_tasks), in place of the goals written
-//     from the event's fields. Its "Bigger goals" stay on the event: they are
-//     her career goals, tracked as CareerGoal rows, not this episode's tasks.
+//     (episode_todo_lists.tasks), in place of the standard lines;
+//   - an approved offer letter's overlay is linked to the episode on beat 5,
+//     directly after the invitation
+//     (syncOfferLetterPlacement). Lala's goals are written from the event's
+//     fields: the offer letter is the brand's offer, not her goals (it
+//     replaced the career plan, whose lines were carried, 2026-10-24).
 // A draft is never carried. An episode already started keeps its lists.
 
 /** The event's document of this type, when it is approved; else null. */
 function approvedDocument(event, type) {
   const doc = readDocuments(event)[type];
-  return doc && doc.status === 'approved' && Array.isArray(doc.items) && doc.items.length ? doc : null;
+  if (!doc || doc.status !== 'approved') return null;
+  if (type === 'offer_letter') return doc.letter && (doc.letter.opening || doc.letter.opportunity) ? doc : null;
+  return Array.isArray(doc.items) && doc.items.length ? doc : null;
 }
 
 const docTag = (doc) => ({ type: doc.type, version: doc.version });
@@ -643,44 +696,6 @@ function shoppingListTasks(doc) {
     order: n + 1,
     from_event_document: docTag(doc),
   }));
-}
-
-/**
- * An approved career plan's "This event" lines as Lala's goal tasks: a goal
- * or an optional idea as the plan says (2026-10-24; all were goals), with
- * the career goal it serves (career_goal_id) when the line names one.
- */
-function careerPlanGoals(doc) {
-  return (doc?.items || [])
-    .filter((i) => (i.section || 'this_event') === 'this_event')
-    .map((i) => ({
-      slot: `plan_${i.slot}`,
-      label: i.label,
-      description: i.description || '',
-      timing: 'during',
-      platform: null,
-      task_source: i.task_source === 'optional' ? 'optional' : 'goal',
-      required: false,
-      completed: false,
-      ...(i.goal_id ? { career_goal_id: String(i.goal_id) } : {}),
-      from_event_document: docTag(doc),
-    }));
-}
-
-/**
- * The plan's goals as Start Episode puts them on the episode: with the
- * event's relationship goals (D13 answer 6) unless the plan already says
- * the same, held to the event's goal limit (T9). Start Episode and
- * planCarry both read it, so the page's "won't carry" is what happens.
- */
-function planGoalsForEpisode(event, doc, { quiet = false } = {}) {
-  const { goalTaskScale, capCombinedGoals } = require('../utils/goalTasks');
-  const { relationshipGoalTasks } = require('./dealTermsDraftService');
-  const planGoals = careerPlanGoals(doc);
-  if (!planGoals.length) return [];
-  const said = new Set(planGoals.map((g) => g.label.trim().toLowerCase()));
-  const relationship = relationshipGoalTasks(event).filter((g) => !said.has(g.label.trim().toLowerCase()));
-  return capCombinedGoals([...planGoals, ...relationship], goalTaskScale(event), 'CareerPlan', { quiet });
 }
 
 // ─── "Use in episode": the approved list applied to an episode (Task #2883) ──
@@ -759,72 +774,6 @@ async function useShoppingListInEpisode(models, episodeId) {
   return { added, removed, kept_done: keptDone.length, version: doc.version, tasks: next };
 }
 
-// ─── "Use in episode" for the career plan (2026-10-24) ──────────────────────
-//
-// The approved plan's "This event" goals applied to an episode already
-// started, as the shopping list's Use in episode does for the wardrobe list.
-// On the episode's task list (episode_todo_lists.social_tasks):
-//   - a plan line already on the list (same label) keeps its task, ticked
-//     or not, and takes the plan's version tag;
-//   - an open line an earlier plan version put there, which this one does
-//     not hold, gives way;
-//   - a new plan line is added while the event's goal limit has room (T9);
-//     the lines that do not fit are named, never squeezed in;
-//   - everything else (deliverables, follow-ups, her own and ticked goals)
-//     is kept.
-
-const labelKey = (t) => String(t?.label || '').trim().toLowerCase();
-
-async function useCareerPlanInEpisode(models, episodeId) {
-  const { sequelize } = models;
-  const { episode, event } = await episodeAndEvent(models, episodeId, 'career plan');
-  const doc = readDocuments(event).career_plan;
-  if (!doc) throw new EventDocumentError(404, 'The event has no career plan yet. Draft and approve it in the Event Package.');
-  if (doc.status !== 'approved') throw new EventDocumentError(409, 'Approve the career plan in the Event Package before using it in the episode.');
-  const planTasks = careerPlanGoals(doc);
-  if (!planTasks.length) throw new EventDocumentError(409, 'The approved career plan has no "This event" lines.');
-
-  const [[row]] = await sequelize.query(
-    'SELECT id, social_tasks, deleted_at FROM episode_todo_lists WHERE episode_id = :episodeId',
-    { replacements: { episodeId } });
-  const live = row && !row.deleted_at;
-  const existing = live ? (parseJSON(row.social_tasks, []) || []) : [];
-  const planKeys = new Set(planTasks.map(labelKey));
-  const fromPlan = (t) => t?.from_event_document?.type === 'career_plan';
-
-  // Earlier plan lines no longer in the plan give way unless ticked.
-  const removedTasks = existing.filter((t) => fromPlan(t) && t.completed !== true && !planKeys.has(labelKey(t)));
-  let next = existing
-    .filter((t) => !removedTasks.includes(t))
-    .map((t) => (planKeys.has(labelKey(t)) && fromPlan(t) ? { ...t, from_event_document: docTag(doc) } : t));
-  const onList = new Set(next.map(labelKey));
-  const { goalTaskScale, remainingGoalRoom } = require('../utils/goalTasks');
-  let { room } = remainingGoalRoom(next, goalTaskScale(event));
-  const added = [];
-  const notAdded = [];
-  for (const t of planTasks) {
-    if (onList.has(labelKey(t))) continue;
-    if (room > 0) { added.push(t); room -= 1; } else notAdded.push(t.label);
-  }
-  next = [...next, ...added];
-
-  if (added.length || removedTasks.length || !live
-    || JSON.stringify(next) !== JSON.stringify(existing)) {
-    if (row) {
-      await sequelize.query(
-        `UPDATE episode_todo_lists SET social_tasks = CAST(:tasks AS jsonb), event_id = :eventId, deleted_at = NULL, updated_at = NOW()
-          WHERE id = :id AND episode_id = :episodeId`,
-        { replacements: { tasks: JSON.stringify(next), eventId: event.id, id: row.id, episodeId } });
-    } else {
-      await sequelize.query(
-        `INSERT INTO episode_todo_lists (id, episode_id, show_id, event_id, tasks, social_tasks, status, created_at, updated_at)
-         VALUES (:id, :episodeId, :showId, :eventId, '[]'::jsonb, CAST(:tasks AS jsonb), 'generated', NOW(), NOW())`,
-        { replacements: { id: require('crypto').randomUUID(), episodeId, showId: episode.show_id || null, eventId: event.id, tasks: JSON.stringify(next) } });
-    }
-  }
-  return { added: added.length, removed: removedTasks.length, not_added: notAdded, version: doc.version, social_tasks: next };
-}
-
 module.exports = {
   DOC_TYPES,
   HISTORY_MAX,
@@ -839,14 +788,13 @@ module.exports = {
   approveDocument,
   approvedDocument,
   shoppingListTasks,
-  careerPlanGoals,
-  planGoalsForEpisode,
-  planCarry,
   restoreDocument,
   redraftLine,
   keepListForLook,
   documentChecks,
   lookKeyOf,
   useShoppingListInEpisode,
-  useCareerPlanInEpisode,
+  syncOfferLetterPlacement,
+  OFFER_LETTER_BEAT_NUMBER,
+  offerState,
 };

@@ -5,13 +5,13 @@
  * both the shopping list and career list and invitations as overlays";
  * "none of the overlays should be beats for now").
  *
- * When a shopping list or a career plan is approved, it is drawn as an image
+ * When a shopping list or an offer letter is approved, it is drawn as an image
  * the way the Event Package shows it (EventDocuments' ShoppingPaper and
- * CareerCard): the shopping list on lined pink paper in Lala's handwriting,
+ * OfferLetter): the shopping list on lined pink paper in Lala's handwriting,
  * a to-do list (no line ticked for an owned piece, no balance; Evoni,
  * 2026-10-11), each piece still to buy with its coins and the total; the
- * career plan on a lavender card, This event, Bigger goals and
- * what the deal expects of her. Drawn with Canvas (the invitation's
+ * offer letter (2026-10-24) on cream letterhead from the brand or host,
+ * with THE TERMS from the deal. Drawn with Canvas (the invitation's
  * approach: fonts from src/assets/fonts), no image model and no cost.
  *
  * The image is an assets row (asset_type DOCUMENT_OVERLAY, so the show's
@@ -19,7 +19,8 @@
  * event's show_id and, once Start Episode has run, its episode_id; the
  * document records it as overlay { asset_id, url, version, made_at }. A
  * document edited or redrafted after it is outdated (overlay.version is not
- * the document's). Nothing is placed on a beat.
+ * the document's). Only the offer letter is assigned a beat (6, after the
+ * invitation; eventDocumentsService.syncOfferLetterPlacement).
  *
  * canvas is an optional native dependency; without it nothing is drawn and
  * the approval stands.
@@ -37,9 +38,11 @@ try {
 }
 
 const WIDTH = 900;
-// Portrait, as tall as the document needs: MIN_HEIGHT to MAX_HEIGHT.
+// Portrait, as tall as the document needs: MIN_HEIGHT to its MAX_HEIGHT
+// (an offer letter, with its terms, runs longer than a list).
 const MIN_HEIGHT = 760;
 const MAX_HEIGHT = 1200;
+const MAX_HEIGHTS = Object.freeze({ offer_letter: 1700 });
 const COLORS = Object.freeze({
   pinkPaper: '#FBEFF3', // --accent-subtle
   pinkLine: '#E8A0B4', // --accent-light
@@ -223,75 +226,108 @@ function drawShoppingList(ctx, H, { doc, event, pieces }) {
 }
 
 /** Draws the plan at height H; returns where its writing ends. */
-function drawCareerPlan(ctx, H, { doc, deliverables = [] }) {
-  ctx.fillStyle = COLORS.lavenderSoft;
+// The offer letter (Evoni, 2026-10-24): a formal letter on cream
+// letterhead from the brand or host, then THE TERMS from the deal, then
+// what happens next, the closing and a signature.
+const OFFER = Object.freeze({
+  paper: '#FAF7F0', // --lala-parchment
+  rule: '#B8962E', // --lala-gold
+  ink: '#2C2C2C', // --lala-ink
+  muted: '#6B6B6B',
+  head: '#4A3B7A', // --lala-lavender-text
+});
+const offerAmount = (n) => `${coins(n)} Prime Coins`;
+
+/** Draws the letter at height H; returns where its writing ends. */
+function drawOfferLetter(ctx, H, { doc, event, terms = [] }) {
+  const L = doc?.letter || {};
+  const left = 80;
+  const width = WIDTH - 160;
+  ctx.fillStyle = OFFER.paper;
   ctx.fillRect(0, 0, WIDTH, H);
-  ctx.strokeStyle = COLORS.lavenderLine; ctx.lineWidth = 4;
-  ctx.strokeRect(24, 24, WIDTH - 48, H - 48);
+  ctx.strokeStyle = OFFER.rule; ctx.lineWidth = 3;
+  ctx.strokeRect(28, 28, WIDTH - 56, H - 56);
 
+  // Letterhead: who it is from, a rule, the date and the event.
+  const org = (event?.host_brand || event?.host || 'The Host').trim();
   ctx.textBaseline = 'alphabetic';
-  ctx.fillStyle = COLORS.lavenderText;
-  ctx.font = 'bold 64px CormorantGaramond';
-  ctx.fillText('Career Plan', 80, 140);
-  ctx.strokeStyle = COLORS.lavenderLine; ctx.lineWidth = 2;
-  ctx.beginPath(); ctx.moveTo(80, 170); ctx.lineTo(WIDTH - 80, 170); ctx.stroke();
+  ctx.fillStyle = OFFER.head;
+  ctx.font = 'bold 54px CormorantGaramond';
+  ctx.fillText(org.toUpperCase(), left, 122);
+  ctx.strokeStyle = OFFER.rule; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(left, 146); ctx.lineTo(WIDTH - left, 146); ctx.stroke();
+  ctx.fillStyle = OFFER.muted;
+  ctx.font = 'normal 22px LibreBaskerville';
+  ctx.fillText(`Offer of partnership · ${documentByline(event).replace(/^for [^·]*·?\s*/, '') || (event?.name || '')}`.trim(), left, 182);
 
-  const items = doc?.items || [];
-  const sections = [
-    ['EXPECTED OF HER', deliverables.map((d) => ({ label: d.label, note: d.required ? 'required' : 'optional' })), null],
-    ['THIS EVENT', items.filter((i) => (i.section || 'this_event') === 'this_event'), 'No goals for this event'],
-    ['BIGGER GOALS', items.filter((i) => i.section === 'bigger_goals'), 'No active career goals yet'],
-  ];
-  let y = 230;
-  for (const [title, rows, empty] of sections) {
-    if (!rows.length && empty === null) continue;
-    ctx.fillStyle = COLORS.pinkInk;
-    ctx.font = 'normal 24px LibreBaskerville';
-    ctx.fillText(title, 80, y);
-    y += 50;
-    if (!rows.length) {
-      ctx.fillStyle = COLORS.muted; ctx.font = 'normal 28px LibreBaskerville';
-      ctx.fillText(empty, 80, y); y += 70;
-      continue;
+  let y = 240;
+  const para = (text, size = 25, lineH = 36, maxLines = 6) => {
+    if (!text) return;
+    ctx.fillStyle = OFFER.ink; ctx.font = `normal ${size}px LibreBaskerville`;
+    const lines = wrap(ctx, text, width, maxLines);
+    lines.forEach((line, n) => ctx.fillText(line, left, y + n * lineH));
+    y += lineH * lines.length + 18;
+  };
+  para(L.greeting, 25, 36, 1);
+  para(L.opening, 25, 36, 3);
+  para(L.opportunity, 25, 36, 7);
+
+  // THE TERMS, from the deal.
+  if (terms.length) {
+    ctx.fillStyle = OFFER.head; ctx.font = 'bold 22px LibreBaskerville';
+    ctx.fillText('THE TERMS', left, y + 10);
+    y += 46;
+    let shown = 0;
+    const total = terms.reduce((n, sec) => n + sec.lines.length, 0);
+    // The terms stop where the room the closing and signature need begins
+    // (FOOT), and what is left out is counted, never dropped without a word.
+    const FOOT = 330;
+    for (const sec of terms) {
+      if (y + 32 + 30 > H - FOOT) break;
+      ctx.fillStyle = OFFER.muted; ctx.font = 'italic 21px LibreBaskerville';
+      ctx.fillText(sec.title, left, y);
+      y += 32;
+      for (const line of sec.lines) {
+        if (y + 30 > H - FOOT) break;
+        ctx.fillStyle = OFFER.ink; ctx.font = 'normal 23px LibreBaskerville';
+        const amount = line.amount != null ? offerAmount(line.amount) : '';
+        const amountW = amount ? ctx.measureText(amount).width + 20 : 0;
+        const [first] = wrap(ctx, line.label, width - amountW - 24, 1);
+        ctx.fillText(`· ${first}`, left + 8, y);
+        if (amount) ctx.fillText(amount, WIDTH - left - ctx.measureText(amount).width, y);
+        y += 30;
+        if (line.detail) {
+          ctx.fillStyle = OFFER.muted; ctx.font = 'normal 18px LibreBaskerville';
+          const [d] = wrap(ctx, line.detail, width - 24, 1);
+          ctx.fillText(d, left + 28, y);
+          y += 28;
+        }
+        shown += 1;
+      }
+      y += 10;
     }
-    // At most CAREER_ROWS a section, and none past the card's foot; what is
-    // left out is counted, never dropped without a word (2026-10-24).
-    let drawn = 0;
-    for (const r of rows.slice(0, CAREER_ROWS)) {
-      if (y > H - 200) break;
-      ctx.strokeStyle = COLORS.lavenderText; ctx.lineWidth = 3;
-      ctx.strokeRect(80, y - 26, 28, 28);
-      ctx.fillStyle = COLORS.ink; ctx.font = 'normal 28px LibreBaskerville';
-      const text = r.note ? `${r.label} (${r.note})` : r.label;
-      const lines = wrap(ctx, text, WIDTH - 220, 2);
-      lines.forEach((line, n) => ctx.fillText(line, 128, y + n * 38));
-      y += 38 * lines.length + 22;
-      drawn += 1;
+    if (shown < total) {
+      ctx.fillStyle = OFFER.muted; ctx.font = 'italic 20px LibreBaskerville';
+      ctx.fillText(`+ ${total - shown} more in the terms`, left + 8, y);
+      y += 32;
     }
-    if (drawn < rows.length) {
-      ctx.fillStyle = COLORS.muted; ctx.font = 'italic 26px LibreBaskerville';
-      ctx.fillText(`+ ${rows.length - drawn} more`, 128, y);
-      y += 50;
-    }
-    y += 30;
+    y += 12;
   }
-  const note = typeof doc?.note === 'string' ? doc.note.trim() : '';
-  if (note) {
-    ctx.fillStyle = COLORS.pinkInk; ctx.font = '36px Caveat';
-    const noteLines = wrap(ctx, note, WIDTH - 160, 2);
-    noteLines.forEach((line, n) => ctx.fillText(line, 80, y + n * 42));
-    y += 42 * noteLines.length + 20;
-  }
-  ctx.fillStyle = COLORS.pinkInk;
-  ctx.font = '40px Caveat';
-  const sign = 'one step at a time, L.';
-  ctx.fillText(sign, WIDTH - 80 - ctx.measureText(sign).width, H - 80);
-  return y + 60; // the sign sits below the writing
+
+  para(L.next_steps, 24, 34, 3);
+  para(L.closing, 24, 34, 1);
+  // The signature in her hand's font; the name and title under it.
+  ctx.fillStyle = OFFER.head; ctx.font = '46px Caveat';
+  ctx.fillText(L.sender_name || '', left, y + 34);
+  y += 60;
+  ctx.fillStyle = OFFER.muted; ctx.font = 'normal 20px LibreBaskerville';
+  if (L.sender_name) { ctx.fillText(L.sender_name, left, y); y += 28; }
+  if (L.sender_title) { ctx.fillText(L.sender_title, left, y); y += 28; }
+  return y + 20;
 }
 
 const SHOPPING_ROWS = 16;
-const CAREER_ROWS = 6;
-const DRAW = { shopping_list: drawShoppingList, career_plan: drawCareerPlan };
+const DRAW = { shopping_list: drawShoppingList, offer_letter: drawOfferLetter };
 
 /**
  * The document as a PNG buffer, or null when drawing is unavailable. Drawn
@@ -300,8 +336,9 @@ const DRAW = { shopping_list: drawShoppingList, career_plan: drawCareerPlan };
 function renderDocument(type, data) {
   const draw = DRAW[type];
   if (!draw || !drawingAvailable()) return null;
-  const end = draw(createCanvas(WIDTH, MAX_HEIGHT).getContext('2d'), MAX_HEIGHT, data);
-  const height = Math.round(Math.min(MAX_HEIGHT, Math.max(MIN_HEIGHT, end + 120)));
+  const max = MAX_HEIGHTS[type] || MAX_HEIGHT;
+  const end = draw(createCanvas(WIDTH, max).getContext('2d'), max, data);
+  const height = Math.round(Math.min(max, Math.max(MIN_HEIGHT, end + 120)));
   const canvas = createCanvas(WIDTH, height);
   draw(canvas.getContext('2d'), height, data);
   return canvas.toBuffer('image/png');
@@ -324,14 +361,14 @@ async function storePng(buffer, eventId, type) {
   return `https://${bucket}.s3.${region}.amazonaws.com/${key}`;
 }
 
-const LABELS = { shopping_list: 'Shopping list', career_plan: 'Career plan' };
+const LABELS = { shopping_list: 'Shopping list', offer_letter: 'Offer letter' };
 
 /**
  * Draw an approved document as its overlay and record it on the document.
  * Returns the overlay { asset_id, url, version, made_at }, or null when it
  * could not be drawn (the approval stands either way).
  */
-async function makeDocumentOverlay(models, { event, type, doc, deliverables = [] }) {
+async function makeDocumentOverlay(models, { event, type, doc, terms = null }) {
   const { sequelize } = models;
   if (!doc || doc.status !== 'approved') return null;
   let balance = null;
@@ -340,7 +377,7 @@ async function makeDocumentOverlay(models, { event, type, doc, deliverables = []
     ({ look, balance } = await shoppingListContext(sequelize, event));
   }
   const pieces = look ? look.pieces : null;
-  const buffer = renderDocument(type, { doc, event, balance, deliverables, pieces });
+  const buffer = renderDocument(type, { doc, event, balance, pieces, terms: terms || [] });
   if (!buffer) return null;
   const url = await storePng(buffer, event.id, type);
   const assetId = crypto.randomUUID();
@@ -367,6 +404,9 @@ async function makeDocumentOverlay(models, { event, type, doc, deliverables = []
   // The total it was drawn with: a look that changes after approval leaves
   // the image out of date (overlayState), and Approve draws it again.
   if (type === 'shopping_list') drawn.look_total = shoppingLines(doc, pieces || event?.outfit_pieces).total;
+  // The terms it was drawn with: a deal changed after approval leaves the
+  // image out of date (overlayState), and Approve draws it again.
+  if (type === 'offer_letter') drawn.terms_key = require('./offerLetterService').termsKey(terms || []);
   return drawn;
 }
 
@@ -399,10 +439,11 @@ async function shoppingListContext(sequelize, event) {
  * (approved, same version) and, for a shopping list given the look's total
  * now, with that total.
  */
-function overlayState(doc, lookTotal = null) {
+function overlayState(doc, lookTotal = null, termsKey = null) {
   if (!doc?.overlay?.url) return 'not_made';
   if (doc.status !== 'approved' || doc.overlay.version !== doc.version) return 'outdated';
   if (lookTotal != null && doc.overlay.look_total != null && Number(doc.overlay.look_total) !== Number(lookTotal)) return 'outdated';
+  if (termsKey != null && doc.overlay.terms_key != null && doc.overlay.terms_key !== termsKey) return 'outdated';
   return 'current';
 }
 

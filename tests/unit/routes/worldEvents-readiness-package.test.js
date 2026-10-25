@@ -32,7 +32,7 @@ jest.mock('../../../src/services/episodeMoneyService', () => ({
 }));
 jest.mock('../../../src/services/eventDocumentsService', () => {
   const actual = jest.requireActual('../../../src/services/eventDocumentsService');
-  return { ...actual, getDocuments: jest.fn(async () => ({ shopping_list: null, career_plan: null, deliverables: [], look: null, balance: 0 })) };
+  return { ...actual, getDocuments: jest.fn(async () => ({ shopping_list: null, offer_letter: null, look: null, balance: 0 })) };
 });
 jest.mock('../../../src/services/episodeGeneratorService', () => ({
   loadFinancialWardrobeItems: jest.fn(async () => []),
@@ -107,7 +107,7 @@ describe('GET /events/:eventId/start-readiness', () => {
     mockState.events['ev-1'] = { ...EVENT, venue_location_id: null, outfit_set_id: null };
     const res = await get();
     expect(res.body.data.ready).toBe(true);
-    expect(res.body.data.warnings.map((w) => w.key)).toEqual(['place_venue', 'look_outfit', 'document_shopping_list', 'document_career_plan']);
+    expect(res.body.data.warnings.map((w) => w.key)).toEqual(['place_venue', 'look_outfit', 'document_shopping_list']);
   });
 
   test('another show\'s event is 404', async () => {

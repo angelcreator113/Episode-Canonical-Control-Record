@@ -55,13 +55,14 @@ async function findEpisodeBeat(sequelize, episodeId, canonicalBeat, logTag = '[e
  * when the episode has no such beat.
  * @param {object} opts
  *   episodeId, assetId, canonicalBeat (a CANONICAL_BEATS entry),
- *   label ('Invitation'), kind, source, duration, zIndex, logTag
+ *   label ('Invitation'), kind, source, duration, zIndex, logTag,
+ *   offsetSeconds (seconds into the beat; 0, its start)
  * @returns {{ placement, anchor: 'beat'|'first-scene'|null, beat }} — all
  *   null while overlays are kept off beats (setOverlaysOnBeats).
  */
 async function placeOverlayOnBeat(models, {
   episodeId, assetId, canonicalBeat, label, kind, source,
-  duration = 5, zIndex = 20, logTag = '[episodeBeatPlacement]',
+  duration = 5, zIndex = 20, offsetSeconds = 0, logTag = '[episodeBeatPlacement]',
 } = {}) {
   if (!overlaysOnBeats || !models?.TimelinePlacement || !episodeId || !assetId) return { placement: null, anchor: null, beat: null };
   const beat = await findEpisodeBeat(models.sequelize, episodeId, canonicalBeat, logTag);
@@ -73,6 +74,7 @@ async function placeOverlayOnBeat(models, {
       sceneId: null,
       duration,
       zIndex,
+      offsetSeconds,
       label: `${label} — Beat ${beat.beat_number}: ${beatName}`,
       properties: {
         ...base,
@@ -90,10 +92,12 @@ async function placeOverlayOnBeat(models, {
   let placement = await placeOverlayOnFirstScene(models, { episodeId, assetId, defaults });
   if (placement && beat) {
     const props = placement.properties || {};
-    if (props.anchor !== 'beat' || props.beat_number !== beat.beat_number || props.scene_plan_id !== beat.id) {
+    const offsetMoved = (placement.offset_seconds ?? 0) !== offsetSeconds;
+    if (props.anchor !== 'beat' || props.beat_number !== beat.beat_number || props.scene_plan_id !== beat.id || offsetMoved) {
       try {
         placement = await placement.update({
           scene_id: null,
+          offset_seconds: offsetSeconds,
           label: defaults.label,
           properties: { ...props, ...defaults.properties },
         });

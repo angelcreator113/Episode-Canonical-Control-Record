@@ -1,7 +1,9 @@
 /**
  * Event documents PR 3: Start Episode (generateEpisodeFromEvent) carries the
- * event's approved shopping list into the episode's wardrobe list and its
- * approved career plan's "This event" lines into Lala's goals. A draft is
+ * event's approved shopping list into the episode's wardrobe list, and links
+ * the approved offer letter's overlay to the episode (beat 5, directly
+ * after the invitation; Evoni, 2026-10-24). A career plan saved before the offer letter replaced it is
+ * no longer carried: Lala's goals are written from the event. A draft is
  * not carried; deliverables stay required. S3 and the AI client are mocked,
  * as in goalTasksScaleWithEvent.integration.test.js.
  */
@@ -36,7 +38,7 @@ const q = (sql, replacements = {}) => sequelize.query(sql, { replacements, type:
 const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
 const parse = (v) => (typeof v === 'string' ? JSON.parse(v) : v);
 
-const documents = (status) => ({
+const documents = (status, offerAssetId = null) => ({
   shopping_list: {
     type: 'shopping_list', status, version: 2, source: 'edited',
     items: [
@@ -53,6 +55,14 @@ const documents = (status) => ({
     ],
     history: [],
   },
+  ...(offerAssetId ? {
+    offer_letter: {
+      type: 'offer_letter', status, version: 1, source: 'draft', items: [],
+      letter: { greeting: 'Dear Lala,', opening: 'Maison Rue is pleased to offer you a partnership.', opportunity: 'Front our launch.' },
+      overlay: { asset_id: offerAssetId, url: 'https://x/offer.png', version: 1 },
+      history: [],
+    },
+  } : {}),
 });
 
 (shouldSkip ? describe.skip : describe)("Start Episode carries the event's approved documents", () => {
@@ -80,7 +90,7 @@ const documents = (status) => ({
     }
   });
 
-  async function seedEvent(docs) {
+  async function seedEvent(docs, offerAssetId = null) {
     const ids = { show: uuid(), event: uuid(), cc: JSON.stringify({ documents: docs }) };
     shows.push(ids.show);
     await run(`INSERT INTO shows (id, name, slug, created_at, updated_at) VALUES (:show, :name, :slug, NOW(), NOW())`,
@@ -90,6 +100,12 @@ const documents = (status) => ({
                VALUES (:event, :show, 'Maison Rue Launch', 'brand_deal', 3,
                  'The spring collection unveiled on the rooftop.', 'Black tie florals', 'The Glasshouse',
                  'Celeste Rue', 'Maison Rue', 'ready', CAST(:cc AS jsonb), NOW(), NOW())`, ids);
+    if (offerAssetId) {
+      await run(`INSERT INTO assets (id, name, asset_type, show_id, s3_url_processed, metadata, created_at, updated_at)
+                 VALUES (:id, 'Offer letter: Maison Rue Launch', 'DOCUMENT_OVERLAY', :show, 'https://x/offer.png',
+                         CAST(:meta AS jsonb), NOW(), NOW())`,
+      { id: offerAssetId, show: ids.show, meta: JSON.stringify({ source: 'event_document', event_id: ids.event, document_type: 'offer_letter', document_version: 1 }) });
+    }
     return ids;
   }
 
@@ -97,24 +113,29 @@ const documents = (status) => ({
     const [event] = await q(`SELECT * FROM world_events WHERE id = :event`, ids);
     const result = await generateEpisodeFromEvent(event, models, { showId: ids.show });
     const [todo] = await q(`SELECT tasks, social_tasks FROM episode_todo_lists WHERE episode_id = :ep`, { ep: result.episode.id });
-    return { wardrobe: parse(todo.tasks), social: parse(todo.social_tasks) };
+    return { wardrobe: parse(todo.tasks), social: parse(todo.social_tasks), episodeId: result.episode.id };
   }
 
-  it('approved: the shopping list is the wardrobe list; the plan\'s "This event" lines are her goals; deliverables stay required', async () => {
-    const ids = await seedEvent(documents('approved'));
+  it('approved: the shopping list is the wardrobe list; the offer letter is linked to the episode; an old career plan is not carried; deliverables stay required', async () => {
+    const offerAssetId = uuid();
+    const ids = await seedEvent(documents('approved', offerAssetId), offerAssetId);
     await insertEventDeliverables(sequelize, ids.event, [
       { description: 'One reel in the Maison Rue coat', deliverable_type: 'reel', required: true, owed_to: 'brand' },
     ]);
-    const { wardrobe, social } = await startEpisode(ids);
+    const { wardrobe, social, episodeId } = await startEpisode(ids);
     expect(wardrobe.map((t) => [t.slot, t.label, t.required])).toEqual([
       ['dress', 'The pink satin gown', true],
       ['purse', 'A crystal clutch', false],
     ]);
     expect(wardrobe[0].from_event_document).toEqual({ type: 'shopping_list', version: 2 });
+    // Lala's goals are written from the event, not from the old career plan.
     const goals = social.filter((t) => !t.deliverable_id);
-    expect(goals.map((t) => t.label)).toEqual(['Meet the Maison Rue buyer']);
-    expect(goals[0]).toMatchObject({ slot: 'plan_net_1', task_source: 'goal', required: false });
+    expect(goals.map((t) => t.label)).not.toContain('Meet the Maison Rue buyer');
+    expect(goals.some((t) => t.from_event_document)).toBe(false);
     expect(social.filter((t) => t.required).map((t) => t.label)).toEqual(['One reel in the Maison Rue coat']);
+    // The approved offer letter's overlay is the episode's.
+    const [offer] = await q('SELECT episode_id FROM assets WHERE id = :id', { id: offerAssetId });
+    expect(offer.episode_id).toBe(episodeId);
   });
 
   it('draft: nothing is carried; the standard wardrobe slots and the goals written from the event are used', async () => {
