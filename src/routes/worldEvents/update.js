@@ -106,6 +106,66 @@ function normalizeDealTypeValue(value) {
   return value;
 }
 
+// The fields the event PUT writes (its allowlist). Exported so a route that
+// drafts values for the PUT (Fill what's missing, eventFillMissingService)
+// can drop anything this PUT would not accept.
+const allowedFields = [
+  'name', 'event_type', 'category', 'format', 'host', 'host_brand', 'description',
+  'prestige', 'cost_coins', 'strictness',
+  'deadline_type', 'deadline_minutes',
+  'dress_code', 'dress_code_keywords',
+  'location_hint', 'narrative_stakes', 'canon_consequences',
+  'seeds_future_events', 'overlay_template', 'required_ui_overlays',
+  'browse_pool_bias', 'browse_pool_size', 'rewards', 'status',
+  'season_id', 'arc_id',
+  'is_paid', 'payment_amount', 'requirements', 'career_tier',
+  'career_milestone', 'fail_consequence', 'success_unlock',
+  // Restrictions (Task #1814) — what Lala agrees not to do. Its own
+  // column, never folded into requirements (access requirements):
+  // docs/EVENT_EPISODE_FLOW.md §8(t) item 1.
+  'restrictions',
+  'scene_set_id', 'source_calendar_event_id',
+  'venue_location_id', 'venue_name', 'venue_address', 'event_date', 'event_time',
+  'guest_list', 'invitation_details',
+  'theme', 'color_palette', 'mood', 'floral_style', 'border_style',
+  // Episode linking — set/clear from the episode's event picker so
+  // creators can link events to an episode without going through
+  // the inject flow. Null clears the link.
+  'used_in_episode_id',
+  // Wardrobe — outfit picked at event creation flows through to any
+  // episode the event is linked to.
+  'outfit_set_id', 'outfit_pieces',
+  // Narrative chain — parent_event_id sequences this after another,
+  // chain_position numbers the spot in the chain, chain_reason
+  // explains why this follows. Read by the next-event suggester
+  // (chain_continuation +30, seed match +18) and snapshotted into
+  // the brief. Settable from the WorldAdmin event form's Narrative
+  // Chain section.
+  'parent_event_id', 'chain_position', 'chain_reason',
+  // Host (Event Package page, Change Host — Task #1642). Durable FK to
+  // social_profiles, integer PK (not a UUID) — see WorldEvent.js:97.
+  'source_profile_id',
+  // Deal type (deal build PR 2, Task #2330): the Event Package's Terms
+  // area. One of WorldEvent.DEAL_TYPES, or null; locked with the terms.
+  'deal_type',
+  // D14 (2026-09-30): the ticked components, a JSON array of keys
+  // (src/utils/dealComponents.js), or null; locked with the terms.
+  'deal_components',
+  // Deal components (deal build PR 3, Task #2341; Evoni's Deal PR 3
+  // ruling, §8(cc)): Propose terms drafts the fees from the rate card;
+  // Evoni edits them here until the terms lock. appearance_required says a
+  // brand partnership also requires an appearance; gifted_value records a
+  // gifted deal's non-cash value.
+  'appearance_fee', 'partnership_base_fee', 'performance_fee',
+  'appearance_required', 'gifted_value',
+  // A contractual performance bonus, only when the accepted deal
+  // contains one (Q12; deal build PR 5): { slay?, pass?, safe? } coins
+  // by evaluation tier, paid at Complete (dealPayoutService). Locks with
+  // the terms.
+  'bonus_terms',
+];
+Object.freeze(allowedFields);
+
 // ═══════════════════════════════════════════
 // PUT /api/v1/world/:showId/events/:eventId
 // ═══════════════════════════════════════════
@@ -193,62 +253,7 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), req
       storedSceneSetId = stored?.scene_set_id || null;
     }
 
-    // Build dynamic SET clause
-    const allowedFields = [
-      'name', 'event_type', 'category', 'format', 'host', 'host_brand', 'description',
-      'prestige', 'cost_coins', 'strictness',
-      'deadline_type', 'deadline_minutes',
-      'dress_code', 'dress_code_keywords',
-      'location_hint', 'narrative_stakes', 'canon_consequences',
-      'seeds_future_events', 'overlay_template', 'required_ui_overlays',
-      'browse_pool_bias', 'browse_pool_size', 'rewards', 'status',
-      'season_id', 'arc_id',
-      'is_paid', 'payment_amount', 'requirements', 'career_tier',
-      'career_milestone', 'fail_consequence', 'success_unlock',
-      // Restrictions (Task #1814) — what Lala agrees not to do. Its own
-      // column, never folded into requirements (access requirements):
-      // docs/EVENT_EPISODE_FLOW.md §8(t) item 1.
-      'restrictions',
-      'scene_set_id', 'source_calendar_event_id',
-      'venue_location_id', 'venue_name', 'venue_address', 'event_date', 'event_time',
-      'guest_list', 'invitation_details',
-      'theme', 'color_palette', 'mood', 'floral_style', 'border_style',
-      // Episode linking — set/clear from the episode's event picker so
-      // creators can link events to an episode without going through
-      // the inject flow. Null clears the link.
-      'used_in_episode_id',
-      // Wardrobe — outfit picked at event creation flows through to any
-      // episode the event is linked to.
-      'outfit_set_id', 'outfit_pieces',
-      // Narrative chain — parent_event_id sequences this after another,
-      // chain_position numbers the spot in the chain, chain_reason
-      // explains why this follows. Read by the next-event suggester
-      // (chain_continuation +30, seed match +18) and snapshotted into
-      // the brief. Settable from the WorldAdmin event form's Narrative
-      // Chain section.
-      'parent_event_id', 'chain_position', 'chain_reason',
-      // Host (Event Package page, Change Host — Task #1642). Durable FK to
-      // social_profiles, integer PK (not a UUID) — see WorldEvent.js:97.
-      'source_profile_id',
-      // Deal type (deal build PR 2, Task #2330): the Event Package's Terms
-      // area. One of WorldEvent.DEAL_TYPES, or null; locked with the terms.
-      'deal_type',
-      // D14 (2026-09-30): the ticked components, a JSON array of keys
-      // (src/utils/dealComponents.js), or null; locked with the terms.
-      'deal_components',
-      // Deal components (deal build PR 3, Task #2341; Evoni's Deal PR 3
-      // ruling, §8(cc)): Propose terms drafts the fees from the rate card;
-      // Evoni edits them here until the terms lock. appearance_required says a
-      // brand partnership also requires an appearance; gifted_value records a
-      // gifted deal's non-cash value.
-      'appearance_fee', 'partnership_base_fee', 'performance_fee',
-      'appearance_required', 'gifted_value',
-      // A contractual performance bonus, only when the accepted deal
-      // contains one (Q12; deal build PR 5): { slay?, pass?, safe? } coins
-      // by evaluation tier, paid at Complete (dealPayoutService). Locks with
-      // the terms.
-      'bonus_terms',
-    ];
+    // Build dynamic SET clause (allowedFields, above)
     const _requiredStringFields = new Set(['name', 'event_type', 'status']);
 
     const setClauses = [];
@@ -704,3 +709,4 @@ router.delete('/world/:showId/events/:eventId', requireAuth, async (req, res) =>
 });
 
 module.exports = router;
+module.exports.EVENT_PUT_FIELDS = allowedFields;

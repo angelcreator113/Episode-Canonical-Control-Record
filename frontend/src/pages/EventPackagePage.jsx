@@ -143,6 +143,13 @@ import usePlacePickers from './eventPackage/usePlacePickers';
 import useStartEpisode from './eventPackage/useStartEpisode';
 import usePackageNavigation from './eventPackage/usePackageNavigation';
 import useDialogFocus from './eventPackage/useDialogFocus';
+// Where the event goes next (Evoni, 2026-10-25): beat 14, the episode, Fill what's missing, the follow-up, defaults and clashes.
+import EventFlowStrip from '../components/EventPackage/EventFlowStrip';
+import EventFieldHints from '../components/EventPackage/EventFieldHints';
+import StartCopiesPreview from '../components/EventPackage/StartCopiesPreview';
+import useEventFlow from './eventPackage/useEventFlow';
+import useFillMissing from './eventPackage/useFillMissing';
+import useFollowUpEvent from './eventPackage/useFollowUpEvent';
 import './EventPackagePage.css';
 
 // The scene-set helpers moved to lib/eventPackageFields and utils/sceneSets;
@@ -314,6 +321,11 @@ function EventPackageBody({ pkg }) {
   const guests = useGuests({ event, guestList, putEvent, load, setToast, undoChange, loadedEventRef });
   const place = usePlacePickers({ showId, event, putEvent, load, setToast });
   const start = useStartEpisode({ showId, eventId, gatesMet, used, moneyPending, readiness, moneyWarnings, setToast, navigate });
+  const flow = useEventFlow({ showId, eventId, reloadTick });
+  const fill = useFillMissing({ showId, eventId, used, putEvent, load, setToast });
+  const followUp = useFollowUpEvent({ showId, event, organizer, venueLocation, navigate, setToast });
+  const hints = (fields) => <EventFieldHints flow={flow.flow} fields={fields} used={used} putEvent={putEvent} load={load} setToast={setToast} />;
+  const copies = <StartCopiesPreview event={event} seeds={seeds} invitationAsset={invitationAsset} venueDate={venueDate} seasonContext={seasonContext} />;
   const { activeAnchor, tocListRef } = usePackageNavigation({ pageRef, setFoldOpen, setBarOpen, setFullGuestListOpen: guests.setFullGuestListOpen });
 
   // Started-from suggestions (Task #1790): one click each.
@@ -451,6 +463,10 @@ function EventPackageBody({ pkg }) {
         showId={showId} eventId={eventId} event={event} seasonContext={seasonContext} badge={badge} venueDate={venueDate}
         organizer={organizer} projection={projection} used={used} lockEpisode={lockEpisode} termsReopen={termsReopen}
       />
+      <EventFlowStrip
+        showId={showId} used={used} lockEpisode={lockEpisode} episodeId={lockEpisode?.id || event.used_in_episode_id || null}
+        flow={flow.flow} fill={fill} followUp={followUp}
+      />
 
       {/* One sticky readiness bar (Evoni, 2026-10-23): it replaces the
           strip's tiles, the next-step bar and the footer action bar. The
@@ -480,7 +496,7 @@ function EventPackageBody({ pkg }) {
             showId={showId} event={event} basics={basics} used={used} organizer={organizer} invitationAsset={invitationAsset}
             nameDraft={nameDraft} reloadTick={reloadTick} fold={fold} editor={editor} names={names} ai={ai}
             invitationApprovalInfo={invitationApprovalInfo} setInvitationApprovalInfo={setInvitationApprovalInfo}
-            invitationRegenSignal={invitationRegenSignal} load={load}
+            invitationRegenSignal={invitationRegenSignal} load={load} hints={hints(['dress_code', 'date'])}
           />
           <EventPeopleSection
             event={event} used={used} castLocked={castLocked} organizer={organizer} sourceProfile={sourceProfile}
@@ -488,6 +504,7 @@ function EventPackageBody({ pkg }) {
             lockEpisode={lockEpisode} reloadTick={reloadTick} fold={fold} guests={guests}
             openOrganizerPicker={picker.openOrganizerPicker} organizerSaving={picker.organizerSaving}
             acceptStartedFromOrganizer={acceptStartedFromOrganizer} acceptStartedFromAttendee={acceptStartedFromAttendee}
+            hints={hints(['guests'])}
           />
           <EventPlaceSection
             showId={showId} eventId={eventId} used={used} placeLocked={placeLocked} venueDate={venueDate} sceneSet={sceneSet}
@@ -523,9 +540,9 @@ function EventPackageBody({ pkg }) {
             showId={showId} eventId={eventId} event={event} used={used} termsReopen={termsReopen} lockEpisode={lockEpisode}
             stakes={stakes} moneyPreview={moneyPreview} seeds={seeds} reloadTick={reloadTick}
             termsOffer={termsOffer} setTermsOffer={setTermsOffer} setInvitationRegenSignal={setInvitationRegenSignal}
-            setPriceInputs={setPriceInputs} putEvent={putEvent} setToast={setToast} load={load}
+            setPriceInputs={setPriceInputs} putEvent={putEvent} setToast={setToast} load={load} hints={hints(['deal_type', 'money'])}
           />
-          <EventStakesSection used={used} stakes={stakes} projection={projection} fold={fold} openStakesEditor={stakesEditor.openStakesEditor} />
+          <EventStakesSection used={used} stakes={stakes} projection={projection} fold={fold} openStakesEditor={stakesEditor.openStakesEditor} hints={hints(['prestige'])} />
 
           {/* 7. In-world documents (Evoni, 2026-10-06): the shopping list and
               the career plan beside the invitation, each Draft, Edit, Redraft
@@ -549,7 +566,7 @@ function EventPackageBody({ pkg }) {
       </div>
 
       {start.startConfirmOpen && gatesMet && !used && (
-        <StartConfirmDialog readiness={readiness} moneyWarnings={moneyWarnings} confirmCount={confirmCount} start={start} />
+        <StartConfirmDialog readiness={readiness} moneyWarnings={moneyWarnings} confirmCount={confirmCount} start={start} copies={copies} />
       )}
 
       {start.locationsStep && gatesMet && !used && (
@@ -562,7 +579,7 @@ function EventPackageBody({ pkg }) {
           removed={start.locationsStep.removed || []}
           eventLook={start.locationsStep.event_look}
           angleGaps={start.locationsStep.angle_gaps}
-          busy={start.starting}
+          busy={start.starting} intro={copies}
           onConfirm={start.confirmStartEpisode}
           onCancel={() => start.setLocationsStep(null)}
         />
