@@ -5,7 +5,8 @@
  * date (services/releaseSchedule, GET /world/:showId/release-schedule); this
  * file words them and loads them.
  *
- * A row is { episode_id, episode_number, date, time, source, due, days_until }:
+ * A row is { episode_id, episode_number, season_number, number, date, time, source, due, days_until }
+ * (number: the episode's number in its season, which restarts each season):
  *   source 'hand'      the episode's own air_date, set by hand; it never moves
  *          'schedule'  from the schedule; moves when the schedule changes
  *          'preview'   not releasing yet: what the schedule would give
@@ -100,20 +101,68 @@ export function deadlineWarning(row, ready = []) {
   // ready null: the checklist is not loaded here, so the line leaves it out.
   const missing = ready ? ready.filter((r) => r.state !== 'ready' && r.key !== 'schedule').map((r) => r.label.toLowerCase()) : null;
   const needs = !missing ? null : missing.length ? `still needs: ${missing.join(', ')}` : 'has everything it needs';
-  const who = `Episode ${row.episode_number ?? '?'}`;
+  const who = `Episode ${episodeNumberOf(row) ?? '?'}`;
   if (row.due === 'overdue') {
     return { tone: 'overdue', text: `${who} was due ${formatRelease(row)} and is not released yet.${needs ? ` It ${needs}.` : ''}` };
   }
   return { tone: 'soon', text: `${who} releases ${inDays(row.days_until)}${needs ? ` and ${needs}` : ''}.` };
 }
 
-/** The first episode with a deadline warning (soon or overdue), in number order, or null. */
-export const firstDue = (view) => (view?.episodes || []).find((r) => r.due === 'soon' || r.due === 'overdue') || null;
+/** The episode's number in its season (the server's `number`), else its stored number. */
+export const episodeNumberOf = (row) => row?.number ?? row?.episode_number ?? null;
 
-/** A roadmap slot's release day: its episode's row, else the slot number's date; "Sun, Nov 1" or "Would be Sun, Nov 1". */
-export function slotWhen(view, slot) {
+/** The rows of one season (every row when the view has no seasons, or no season is named). */
+export function seasonRows(view, seasonNumber = null) {
+  const rows = view?.episodes || [];
+  if (seasonNumber == null || !(view?.seasons || []).length) return rows;
+  return rows.filter((r) => Number(r.season_number) === Number(seasonNumber));
+}
+
+/** One season's entry in the view ({ season_number, state, first_release, own_start, slots }), or null. */
+export const seasonOf = (view, seasonNumber) => (view?.seasons || []).find((x) => Number(x.season_number) === Number(seasonNumber)) || null;
+
+/** The first episode with a deadline warning (soon or overdue), in number order, or null; seasonNumber keeps it to that season. */
+export const firstDue = (view, seasonNumber = null) => seasonRows(view, seasonNumber).find((r) => r.due === 'soon' || r.due === 'overdue') || null;
+
+/** Every episode with a deadline warning (soon or overdue) in the season, in number order. */
+export const dueRows = (view, seasonNumber = null) => seasonRows(view, seasonNumber).filter((r) => r.due === 'soon' || r.due === 'overdue');
+
+/** Today as YYYY-MM-DD in the viewer's own calendar. */
+export function todayIso(now = new Date()) {
+  const d = new Date(now);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+/**
+ * The season's next release for the stat card: { state: 'next', row, text,
+ * code } with the earliest not-yet-released dated row (overdue ones first:
+ * they are still to go out), or { state: 'none', text } when the season is
+ * not releasing yet (no schedule start, paused, nothing dated) or every
+ * episode of it is out, or null
+ * while the schedule has not loaded.
+ */
+export function nextReleaseOf(view, seasonNumber = null, today = todayIso()) {
+  if (!view) return null;
+  const mine = seasonRows(view, seasonNumber);
+  const live = mine.filter((r) => r.date && r.source !== 'preview' && r.status !== 'published' && r.due !== 'released');
+  // An overdue one is still the next out the door; a past hand-set date with no warning (no schedule) is not.
+  const ahead = live.filter((r) => r.due === 'overdue' || String(r.date) >= today)
+    .sort((a, b) => String(a.date).localeCompare(String(b.date)));
+  const row = ahead[0] || null;
+  if (!row) {
+    // A finished season: every episode is out.
+    const done = mine.length > 0 && mine.every((r) => r.status === 'published' || r.due === 'released');
+    return { state: 'none', text: view.state === 'paused' ? 'Paused' : done ? 'Every episode is out' : 'Not releasing yet' };
+  }
+  const n = episodeNumberOf(row);
+  return { state: 'next', row, text: formatDay(row.date), code: n != null ? `E${n}` : null, overdue: row.due === 'overdue' };
+}
+
+/** A roadmap slot's release day: its episode's row, else the slot number's date in its season; "Sun, Nov 1" or "Would be Sun, Nov 1". */
+export function slotWhen(view, slot, seasonNumber = null) {
   if (!view || !slot) return null;
-  const row = slot.episode ? (view.episodes || []).find((r) => r.episode_id === slot.episode.id) : view.slots?.[slot.slot_number];
+  const slots = (seasonNumber != null && seasonOf(view, seasonNumber)?.slots) || view.slots;
+  const row = slot.episode ? (view.episodes || []).find((r) => r.episode_id === slot.episode.id) : slots?.[slot.slot_number];
   const day = formatDay(row?.date);
   if (!day) return null;
   return { text: row.source === 'preview' ? `Would be ${day}` : day, source: row.source };
@@ -134,7 +183,7 @@ export function browserZone() {
 
 /** A move from the preview in words: "E3 moves from Sun, Nov 15 to Sat, Nov 14". */
 export function moveText(m) {
-  const who = `E${m.episode_number ?? '?'}`;
+  const who = `E${episodeNumberOf(m) ?? '?'}`;
   if (m.from && m.to) return `${who} moves from ${formatRelease(m.from)} to ${formatRelease(m.to)}`;
   if (m.to) return `${who} gets ${formatRelease(m.to)}`;
   return `${who} loses its schedule date (${formatRelease(m.from)})`;

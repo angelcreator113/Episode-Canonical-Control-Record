@@ -181,3 +181,80 @@ describe('buildView: deadlines', () => {
     expect(none.episodes[0]).toMatchObject({ date: null, due: null });
   });
 });
+
+describe('seasons (Evoni, 2026-10-25: each season counts its own episodes and can start on its own date)', () => {
+  const SEASONS = [
+    { season_number: 1, slot_count: 3, starts_on: null, arc_id: 'a1', title: 'One' },
+    { season_number: 2, slot_count: 3, starts_on: '2027-02-01', arc_id: 'a2', title: 'Two' },
+  ];
+  // Season 1: episodes 1-3 in slots 1-3; Season 2: show-wide 4-5 in slots 1-2.
+  const two = () => [
+    ep(1, { season_number: 1, slot_number: 1 }), ep(2, { season_number: 1, slot_number: 2 }), ep(3, { season_number: 1, slot_number: 3 }),
+    ep(4, { season_number: 2, slot_number: 1 }), ep(5, { season_number: 2, slot_number: 2 }),
+  ];
+
+  test('normalize keeps a season start, drops an empty one, and refuses a bad key or date', () => {
+    expect(rs.normalize({ day: 'sun', time: '10:00', seasons: { 2: { first_release: '2027-03-07' }, 3: { first_release: '' } } }).seasons)
+      .toEqual({ 2: { first_release: '2027-03-07' } });
+    expect(rs.normalize({ day: 'sun', time: '10:00' }).seasons).toEqual({});
+    jest.spyOn(console, 'error').mockImplementation(() => {});
+    expect(() => rs.normalize({ day: 'sun', time: '10:00', seasons: { two: { first_release: '2027-03-07' } } })).toThrow(/season number/);
+    expect(() => rs.normalize({ day: 'sun', time: '10:00', seasons: { 2: { first_release: 'March' } } })).toThrow(/seasons.2.first_release/);
+    expect(() => rs.normalize({ day: 'sun', time: '10:00', seasons: [] })).toThrow(/seasons/);
+    console.error.mockRestore();
+  });
+
+  test('two seasons: each Episode 1 gets its own first Sunday', () => {
+    const c = rs.computeDates({ schedule: sched({ seasons: { 2: { first_release: '2027-03-01' } } }), episodes: two(), seasons: SEASONS, currentSeason: 2, now: NOW });
+    expect(dates(c)).toEqual({
+      e1: '2026-11-01 schedule', e2: '2026-11-08 schedule', e3: '2026-11-15 schedule',
+      e4: '2027-03-07 schedule', e5: '2027-03-14 schedule',
+    });
+    expect(c.byEpisode.e4).toMatchObject({ number: 1, season_number: 2 });
+    expect(c.seasons[2]).toMatchObject({ state: 'active', first_release: '2027-03-01', own_start: true });
+    expect(c.seasons[1]).toMatchObject({ state: 'active', first_release: '2026-11-01', own_start: false });
+    // The current season's slot dates: slot 3 of Season 2 is empty and still dated.
+    expect(c.numbers[3]).toMatchObject({ date: '2027-03-21', episode_id: null });
+  });
+
+  test('a later season with no start of its own is "not releasing yet": previews from its start, never warns', () => {
+    const v = rs.buildView({ schedule: sched(), episodes: two(), seasons: SEASONS, currentSeason: 2, now: new Date('2027-02-05T12:00:00Z') });
+    const byId = Object.fromEntries(v.episodes.map((r) => [r.episode_id, r]));
+    expect(byId.e4).toMatchObject({ date: '2027-02-07', source: 'preview', due: null, number: 1, season_number: 2 });
+    expect(byId.e3).toMatchObject({ source: 'schedule', due: 'overdue', number: 3 });
+    expect(v.seasons.map((x) => [x.season_number, x.state, x.title])).toEqual([[1, 'active', 'One'], [2, 'preview', 'Two']]);
+    expect(v.current_season).toBe(2);
+    expect(v.slots[1]).toMatchObject({ date: '2027-02-07', source: 'preview' });
+  });
+
+  test('a later season with no start date previews from the day after the season before', () => {
+    const c = rs.computeDates({ schedule: sched(), episodes: two(), seasons: SEASONS.map((x) => ({ ...x, starts_on: null })), now: NOW });
+    expect(c.byEpisode.e4.date).toBe('2026-11-22');
+  });
+
+  test('a hand-set date in Season 2 wins and the season follows it', () => {
+    const eps = two();
+    eps[3].air_date = '2027-03-14';
+    const c = rs.computeDates({ schedule: sched({ seasons: { 2: { first_release: '2027-03-01' } } }), episodes: eps, seasons: SEASONS, now: NOW });
+    expect(dates(c)).toMatchObject({ e4: '2027-03-14 hand', e5: '2027-03-21 schedule' });
+  });
+
+  test('a later-season episode with no slot takes the next free number, in episode order', () => {
+    const eps = [ep(1, { season_number: 1 }), ep(30, { season_number: 2 }), ep(26, { season_number: 2, slot_number: 1 }), ep(28, { season_number: 2 })];
+    const c = rs.computeDates({ schedule: sched({ seasons: { 2: { first_release: '2027-03-01' } } }), episodes: eps, seasons: SEASONS, now: NOW });
+    expect([c.byEpisode.e26.number, c.byEpisode.e28.number, c.byEpisode.e30.number]).toEqual([1, 2, 3]);
+    expect(c.byEpisode.e28.date).toBe('2027-03-14');
+  });
+
+  test("the old stored shape (no seasons) reads as before: one season numbered by episode_number", () => {
+    const stored = { day: 'sun', time: '10:00', cadence: 'weekly', first_release: '2026-11-01', paused: false, platforms: ['youtube'], tz_offset: 240, tz: NY };
+    const c = rs.computeDates({ schedule: rs.readStored(stored), episodes: [ep(1), ep(2)], now: NOW });
+    expect(dates(c)).toEqual({ e1: '2026-11-01 schedule', e2: '2026-11-08 schedule' });
+    expect(c.byEpisode.e2).toMatchObject({ number: 2, season_number: 1 });
+  });
+
+  test('a season of its own sets Season 1 too, over the top-level date', () => {
+    const c = rs.computeDates({ schedule: sched({ seasons: { 1: { first_release: '2026-11-15' } } }), episodes: [ep(1)], now: NOW });
+    expect(c.byEpisode.e1.date).toBe('2026-11-15');
+  });
+});

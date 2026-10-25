@@ -5,7 +5,9 @@
  * Insights); only the summary cards are the page's own, and they read the
  * same data.
  *
- *   Overview   Season Overview (title, logline, dates, status, Ep x of 24,
+ *   Overview   Needs attention (SeasonAttention: what is waiting, most urgent
+ *              first, each row a link to its fix; 2026-10-25), then
+ *              Season Overview (title, logline, dates, status, Ep x of 24,
  *              description, Edit), Season Parts (each opens its part in the
  *              roadmap), the setup checklist, the proposals and what the
  *              season knows (folded), then Key Events, Story Threads, Secrets
@@ -13,7 +15,8 @@
  *              Goals, each with See all and an add button (Season Goals'
  *              open the Goals tab).
  *   Story      threads, twists, the reveal plan, the relationships needed.
- *   Results    the Episode Ledger (how each episode turned out: tier, score,
+ *   Results    this season's episodes (or every season's, `?seasons=all`) in
+ *              the Episode Ledger (how each episode turned out: tier, score,
  *              money, what it changed; Producer Mode's old Episodes ›
  *              Results), then Planning Insights (each slot's plan beside
  *              what happened, and the season's money).
@@ -30,21 +33,35 @@ import { SeasonChecklist, setupSteps } from './SeasonSetup';
 import { StoryThreadsCard, PlanningInsights, TEMP_CONFIG, THREAD_STATUS } from './SeasonPlan';
 import { SeasonBar, SummaryCard } from './SeasonPageParts';
 import EpisodeLedger from './EpisodeLedger';
+import SeasonAttention from './SeasonAttention';
 import { dateRange, dayLabel, arcPart, partProgress, revealMatrix, slotEvents } from '../../lib/seasonPage';
-import { useReleaseSchedule, scheduleSentence, startLine, firstDue, deadlineWarning } from '../../lib/releaseSchedule';
+import { useReleaseSchedule, scheduleSentence, startLine, firstDue, deadlineWarning, seasonOf, formatDay } from '../../lib/releaseSchedule';
 
 const GOAL_STATUS = { active: 'Active', paused: 'Paused', completed: 'Complete', failed: 'Missed', upcoming: 'Planned' };
 
-/** The show's release schedule in a line, and the next deadline (Evoni, 2026-10-25); set on Producer Mode's Release tab. */
-function ReleasesFact({ api, showId }) {
-  const { view } = useReleaseSchedule({ api, showId });
+/** "Starts releasing Sun, Nov 1" for the season shown, when the show has more than one season; else the schedule's own line. */
+function seasonStartLine(view, seasonNumber) {
+  const mine = (view?.seasons || []).length >= 2 ? seasonOf(view, seasonNumber) : null;
+  if (!mine || view.state === 'paused') return startLine(view);
+  return mine.first_release ? `Season ${seasonNumber} starts releasing ${formatDay(mine.first_release)}` : `Season ${seasonNumber} is not releasing yet`;
+}
+
+/**
+ * The show's release schedule in a line, and the season's next deadline
+ * (Evoni, 2026-10-25); set on Producer Mode's Release tab. `release` is the
+ * page's useReleaseSchedule (read once there); without it the line reads
+ * its own.
+ */
+function ReleasesFact({ api, showId, release = null, seasonNumber = null }) {
+  const own = useReleaseSchedule({ api: release ? null : api, showId });
+  const view = release ? release.view : own.view;
   if (!view) return null;
-  const due = deadlineWarning(firstDue(view), null);
+  const due = deadlineWarning(firstDue(view, seasonNumber), null);
   return (
     <div data-testid="szn-releases">
       <dt>Releases</dt>
       <dd>
-        {view.schedule ? `${scheduleSentence(view.schedule)} · ${startLine(view)}` : <span className="szn-muted">No release schedule yet</span>}
+        {view.schedule ? `${scheduleSentence(view.schedule)} · ${seasonStartLine(view, seasonNumber)}` : <span className="szn-muted">No release schedule yet</span>}
         {' '}<Link to={`/shows/${encodeURIComponent(showId)}/world?tab=release`} className="szn-link">Release tab</Link>
         {due && <span className={`szn-release-due is-${due.tone}`} data-testid="szn-release-due">{due.text}</span>}
       </dd>
@@ -52,7 +69,7 @@ function ReleasesFact({ api, showId }) {
   );
 }
 
-function SeasonOverviewCard({ arc, roadmap, onEdit, api, showId }) {
+function SeasonOverviewCard({ arc, roadmap, onEdit, api, showId, release }) {
   const temp = TEMP_CONFIG[arc.emotional_temperature] || TEMP_CONFIG.rising;
   const current = arcPart(arc, arc.current_phase);
   const total = arc.episode_end || roadmap?.slot_count || 24;
@@ -62,13 +79,13 @@ function SeasonOverviewCard({ arc, roadmap, onEdit, api, showId }) {
     <section className="szn-card szn-overview" data-testid="szn-overview-card" aria-label="Season Overview">
       <header className="szn-card-head">
         <h2 className="szn-card-title">Season Overview</h2>
-        <button type="button" className="szn-btn is-quiet is-small" onClick={onEdit} data-testid="szn-overview-edit"><Pencil size={14} aria-hidden="true" /> Edit</button>
+        {onEdit && <button type="button" className="szn-btn is-quiet is-small" onClick={onEdit} data-testid="szn-overview-edit"><Pencil size={14} aria-hidden="true" /> Edit</button>}
       </header>
       <dl className="szn-facts">
         <div><dt>Title</dt><dd>Season {arc.season_number || 1}: {arc.title}</dd></div>
         <div><dt>Logline</dt><dd>{arc.logline || <span className="szn-muted">No logline yet</span>}</dd></div>
         <div><dt>Dates</dt><dd>{dates || <span className="szn-muted">No dates yet</span>}</dd></div>
-        <ReleasesFact api={api} showId={showId} />
+        <ReleasesFact api={api} showId={showId} release={release} seasonNumber={roadmap?.season_number ?? arc.season_number ?? null} />
         <div>
           <dt>Status</dt>
           <dd className="szn-status">
@@ -245,22 +262,28 @@ function GoalsSummary({ goals, goTab }) {
   );
 }
 
-export function SeasonOverviewTab({ plan, api, showId, arc, roadmap, events, goTab, onEdit, onPanel }) {
+export function SeasonOverviewTab({ plan, api, showId, arc, roadmap, events, goTab, onEdit, onPanel, attention = null, hrefFor = null, release = null, readOnly = false }) {
   return (
     <div className="szn-overview-tab">
-      <div className="szn-overview-row">
-        <SeasonOverviewCard arc={arc} roadmap={roadmap} onEdit={onEdit} api={api} showId={showId} />
+      {attention && hrefFor && (
+        <SeasonAttention items={attention} hrefFor={hrefFor} loading={Boolean(release && !release.view && !release.error)} />
+      )}
+      <div className={`szn-overview-row${readOnly ? ' is-two' : ''}`}>
+        <SeasonOverviewCard arc={arc} roadmap={roadmap} onEdit={readOnly ? null : onEdit} api={api} showId={showId} release={release} />
         <SeasonPartsCard arc={arc} roadmap={roadmap} goTab={goTab} />
-        <ChecklistCard plan={plan} onPanel={onPanel} goTab={goTab} />
+        {/* The checklist, the proposals and what the season knows act on the season in progress. */}
+        {!readOnly && <ChecklistCard plan={plan} onPanel={onPanel} goTab={goTab} />}
       </div>
 
-      <details className="szn-fold" data-testid="szn-fold-proposals">
-        <summary>Proposals from the feed, and what the season knows</summary>
-        <div className="szn-fold-body">
-          <SeasonProposals showId={showId} api={api} onApplied={() => plan.loadArc()} />
-          {roadmap && <SeasonKnows showId={showId} api={api} />}
-        </div>
-      </details>
+      {!readOnly && (
+        <details className="szn-fold" data-testid="szn-fold-proposals">
+          <summary>Proposals from the feed, and what the season knows</summary>
+          <div className="szn-fold-body">
+            <SeasonProposals showId={showId} api={api} onApplied={() => plan.loadArc()} />
+            {roadmap && <SeasonKnows showId={showId} api={api} />}
+          </div>
+        </details>
+      )}
 
       <div className="szn-summary-row">
         <KeyEventsCard roadmap={roadmap} events={events} goTab={goTab} />
@@ -286,9 +309,10 @@ export function SeasonStoryTab({ plan, S, api, showId, setToast, goTab }) {
   );
 }
 
-export function SeasonResultsTab({ plan, S, showId, api, episodes, events, setToast, arc }) {
+export function SeasonResultsTab({ plan, S, showId, api, episodes, events, setToast, arc, scope = null }) {
   return (
     <div className="szn-results" data-testid="szn-results">
+      {scope}
       <section className="szn-card szn-ledger" aria-label="Episode results" data-testid="szn-ledger">
         <EpisodeLedger showId={showId} api={api} episodes={episodes} events={events} setToast={setToast} title="Episode results" />
       </section>

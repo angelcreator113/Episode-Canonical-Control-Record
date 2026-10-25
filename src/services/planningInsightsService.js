@@ -99,8 +99,8 @@ async function balanceTrend(sequelize, showId, labelByEpisode) {
  * money; per phase, money totals; the balance trend; and the season-health
  * line (Q15). Null when the show has no active season.
  */
-async function getInsights(sequelize, showId) {
-  const roadmap = await getRoadmap(sequelize, showId);
+async function getInsights(sequelize, showId, { arcId = null } = {}) {
+  const roadmap = await getRoadmap(sequelize, showId, { arcId });
   if (!roadmap) return null;
 
   const allSlots = roadmap.phases.flatMap((p) => p.slots);

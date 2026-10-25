@@ -137,7 +137,7 @@ describe('The tabs', () => {
     expect(await screen.findByTestId('szn-panel-overview')).toBeTruthy();
     const tabs = screen.getAllByRole('tab');
     // Evoni, 2026-10-25: Producer Mode's episodes, opportunities and results moved here.
-    expect(tabs.map((t) => t.textContent)).toEqual(['Overview', 'Roadmap', 'Episodes', 'Events', 'Opportunities', 'Story', 'Plants', 'Goals', 'Results']);
+    expect(tabs.map((t) => t.querySelector('.szn-tab-label').textContent)).toEqual(['Overview', 'Roadmap', 'Episodes', 'Events', 'Opportunities', 'Story', 'Plants', 'Goals', 'Results']);
     expect(screen.getByTestId('szn-tab-overview').getAttribute('aria-selected')).toBe('true');
     fireEvent.click(screen.getByTestId('szn-tab-story'));
     expect(await screen.findByTestId('szn-panel-story')).toBeTruthy();

@@ -615,7 +615,7 @@ async function sampleExistingHandles(db, layer) {
   return (rows || []).map((r) => r.handle).filter((h) => typeof h === 'string' && h);
 }
 
-// Model + retry copied from src/routes/worldEvents.js (the event-name
+// Model + retry copied from src/routes/worldEvents/suggest.js (the event-name
 // suggester's MODELS loop): Haiku 4.5, up to 2 attempts per model with a
 // 2s backoff on 529/503, next model on repeated overload or 404. Called
 // through the SDK client so aiCostTracker logs and budget-gates it.

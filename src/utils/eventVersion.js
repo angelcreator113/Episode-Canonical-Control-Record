@@ -5,7 +5,7 @@
  *
  * A client that composed a save from an earlier read of an event sends the
  * row's updated_at as it read it, under EXPECTED_VERSION_KEY. The event
- * PUT (src/routes/worldEvents.js) compares it with the stored row inside
+ * PUT (src/routes/worldEvents/update.js) compares it with the stored row inside
  * the same transaction as the write, with the row locked (SELECT … FOR
  * UPDATE), and refuses with 409 when the stored row is newer.
  *

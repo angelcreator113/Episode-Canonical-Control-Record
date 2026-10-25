@@ -72,8 +72,9 @@ describe('Release tab with the weekly schedule', () => {
     const after = { ...ACTIVE, episodes: [ACTIVE.episodes[0], ACTIVE.episodes[1], row('e3', 3, '2026-11-08', 'schedule')] };
     vi.mocked(api.put).mockResolvedValue({ data: { success: true, data: after } });
     wrap();
-    const e3 = await screen.findByTestId('release-cal-e3');
-    expect(e3.textContent).toContain('Scheduled · Sat, Nov 14 · 10:00 AM (set by hand)');
+    // The calendar draws its plain dates first and the schedule's once that read lands.
+    await waitFor(() => expect(screen.getByTestId('release-cal-e3').textContent).toContain('Scheduled · Sat, Nov 14 · 10:00 AM (set by hand)'));
+    const e3 = screen.getByTestId('release-cal-e3');
     expect(within(e3).getByText('Set by hand')).toBeTruthy();
     expect(screen.getByTestId('release-cal-e2').textContent).toContain('Scheduled · Sun, Nov 1 · 10:00 AM (from the weekly schedule)');
 

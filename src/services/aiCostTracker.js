@@ -64,6 +64,10 @@ function inferRouteName() {
   return routeNameFromStack(new Error().stack || '');
 }
 
+// Route folders logged under the one name they had as a single file
+// (routes/worldEvents.js until Task #54 split it into routes/worldEvents/).
+const ONE_NAME_ROUTE_FOLDERS = new Set(['worldEvents']);
+
 /** The route (or service, or worker) a call stack came from; pure, for tests. */
 function routeNameFromStack(stack) {
   const lines = String(stack || '').split('\n');
@@ -77,10 +81,13 @@ function routeNameFromStack(stack) {
   for (const line of lines) {
     // Look for route files (highest priority). A route in a sub-folder keeps
     // its folder (routes/memories/engine.js -> 'memories/engine'), so the AI
-    // writing hub's calls are named instead of logged as 'unknown'.
+    // writing hub's calls are named instead of logged as 'unknown'. The
+    // folders in ONE_NAME_ROUTE_FOLDERS were one file before they were split
+    // and keep that file's name, so their logged route names do not change.
     const routeMatch = line.match(/\broutes[\\/](?:([a-zA-Z0-9_-]+)[\\/])?([a-zA-Z0-9_-]+)\.js/);
     if (routeMatch && !foundRoute) {
-      foundRoute = routeMatch[1] ? `${routeMatch[1]}/${routeMatch[2]}` : routeMatch[2];
+      if (!routeMatch[1]) foundRoute = routeMatch[2];
+      else foundRoute = ONE_NAME_ROUTE_FOLDERS.has(routeMatch[1]) ? routeMatch[1] : `${routeMatch[1]}/${routeMatch[2]}`;
     }
     
     // Look for service files (lower priority, skip wrapper services)

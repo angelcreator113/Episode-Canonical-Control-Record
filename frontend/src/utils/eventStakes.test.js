@@ -18,7 +18,7 @@ const full = (extra = {}) => ({
 // The PUT route's own lists, read from the source so a rename there fails here.
 const nodeRequire = createRequire(import.meta.url);
 const routeSrc = nodeRequire('fs').readFileSync(
-  nodeRequire('path').resolve(nodeRequire('path').dirname(new URL(import.meta.url).pathname), '../../../src/routes/worldEvents.js'),
+  nodeRequire('path').resolve(nodeRequire('path').dirname(new URL(import.meta.url).pathname), '../../../src/routes/worldEvents/update.js'),
   'utf8'
 );
 const putBlock = routeSrc.slice(routeSrc.indexOf("router.put('/world/:showId/events/:eventId'"));
