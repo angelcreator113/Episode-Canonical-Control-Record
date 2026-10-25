@@ -17,6 +17,11 @@ describe('routeNameFromStack', () => {
     expect(routeNameFromStack(stack('services/aiCostTracker.js', 'routes/memories/engine.js'))).toBe('memories/engine');
   });
 
+  test('the worldEvents parts log as worldEvents, the name they had as one file (Task #54)', () => {
+    expect(routeNameFromStack(stack('services/aiCostTracker.js', 'routes/worldEvents/suggest.js'))).toBe('worldEvents');
+    expect(routeNameFromStack(stack('services/invitationGeneratorService.js', 'routes/worldEvents/helpers.js'))).toBe('worldEvents');
+  });
+
   test('a route wins over a service; a service is named with svc:', () => {
     expect(routeNameFromStack(stack('services/cameraRoll.js', 'routes/cameraRollRoutes.js'))).toBe('cameraRollRoutes');
     expect(routeNameFromStack(stack('services/aiCostTracker.js', 'services/cameraRoll.js'))).toBe('svc:cameraRoll');

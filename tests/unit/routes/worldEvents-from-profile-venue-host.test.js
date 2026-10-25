@@ -15,7 +15,7 @@ const path = require('path');
 
 const read = (...p) => fs.readFileSync(path.join(__dirname, '..', '..', '..', ...p), 'utf8');
 
-const WORLD_EVENTS_SRC = read('src', 'routes', 'worldEvents.js');
+const WORLD_EVENTS_SRC = read('src', 'routes', 'worldEvents', 'fromProfile.js');
 
 describe('worldEvents.js — POST /world/:showId/events/from-profile passes the chosen host into findVenue', () => {
   const routeBlock = WORLD_EVENTS_SRC.match(

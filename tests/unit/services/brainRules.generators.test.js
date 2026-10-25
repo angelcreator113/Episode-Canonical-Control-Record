@@ -133,6 +133,6 @@ describe('every Feed and event generator loads and counts the Bible', () => {
   test('every caller of the concept draft passes the models and the show', () => {
     expect(src('services/eventAutomationService.js')).toMatch(/draftEventConcept\(host, \{[^}]*models, showId \}\)/);
     expect(src('services/feedEventPipelineService.js')).toMatch(/draftEventConcept\(creatorProfile, \{[\s\S]{0,200}models,\s*showId,/);
-    expect(src('routes/worldEvents.js')).toMatch(/draftEventConcept\(p, \{[^}]*models: req\.app\.locals\.db \|\| require\('\.\.\/models'\), showId: req\.params\.showId \}\)/);
+    expect(src('routes/worldEvents/fromProfile.js')).toMatch(/draftEventConcept\(p, \{[^}]*models: req\.app\.locals\.db \|\| require\('\.\.\/\.\.\/models'\), showId: req\.params\.showId \}\)/);
   });
 });

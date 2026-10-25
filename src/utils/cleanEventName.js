@@ -4,7 +4,7 @@
  * cleanEventName — the one quotation-mark cleanup for AI-written event names,
  * shared by the creation draft (eventConceptDraftService.parseName, Task
  * #2135) and the suggest-names handler (POST /world/:showId/events/:eventId/
- * suggest-names, src/routes/worldEvents.js). Task #2139.
+ * suggest-names, src/routes/worldEvents/suggest.js). Task #2139.
  *
  * Double quotes, straight and curly, are stripped anywhere; single quotes
  * only when they wrap the whole name, so an apostrophe (' or ’) inside it is
