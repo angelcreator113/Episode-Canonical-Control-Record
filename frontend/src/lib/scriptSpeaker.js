@@ -54,9 +54,19 @@ export const unbold = (line) => String(line ?? '').replace(/^\s*(\*\*|__)\s*([^*
 const RULE_LINE = /^(?:-[ \t]*){3,}$|^(?:\*[ \t]*){3,}$|^(?:_[ \t]*){3,}$/;
 export const isRuleLine = (line) => RULE_LINE.test(String(line ?? '').trim());
 
+// Lala's automatic in-game reaction (Evoni, 2026-10-25): `Lala (automatic
+// reaction): …`, `Lala (auto): …`, `Lala (auto-reaction): …`. The game plays
+// it on its own: it is no voice click, needs no voice clip, and the
+// teleprompter shows it as an on-screen cue to react to, not a line to read.
+// src/utils/scriptShowRules.js and src/utils/scriptBeatParser.js read the
+// same notes (AUTO_REACTION there).
+export const AUTO_REACTION = /^\(\s*auto(?:matic)?(?:[\s-]*reaction)?\s*\)$/i;
+/** Whether a speaker's note, `(auto)` or `(automatic reaction)`, marks an automatic reaction. */
+export const isAutoNote = (note) => AUTO_REACTION.test(String(note ?? '').trim());
+
 /**
- * A speaker's line as { speaker, label, note, prefix, words }, or null when
- * the line has no speaker. `speaker` is the person (`Me:` and `LALA:` are
+ * A speaker's line as { speaker, label, note, prefix, words, auto }, or null when
+ * the line has no speaker. `auto` is true on Lala's automatic reaction. `speaker` is the person (`Me:` and `LALA:` are
  * Prime and Lala); `label` is the name as written; `note` is `(V.O.)` or
  * null; `prefix` is everything before the words, as written.
  */
@@ -76,12 +86,14 @@ export function speakerLine(line, { cast = null } = {}) {
   }
   if (!m || NOT_SPEAKERS.has(m[1].toLowerCase()) || NARRATION_WORDS.has(m[1].toLowerCase())) return null;
   if (!KNOWN[m[1].toLowerCase()] && !HERS.has(m[1].toLowerCase()) && !castName && !m[2] && NARRATION.test(m[3].trim())) return null;
+  const speaker = KNOWN[m[1].toLowerCase()] || castName || m[1];
   return {
-    speaker: KNOWN[m[1].toLowerCase()] || castName || m[1],
+    speaker,
     label: m[1],
     note: m[2] || null,
     prefix: t.slice(0, t.length - m[3].length),
     words: m[3].trim(),
+    auto: speaker === 'Lala' && isAutoNote(m[2]),
   };
 }
 

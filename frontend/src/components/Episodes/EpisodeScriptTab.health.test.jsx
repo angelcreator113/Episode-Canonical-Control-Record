@@ -91,7 +91,8 @@ describe('scriptHealth', () => {
   test('every check clear reads ok', () => {
     const rows = scriptHealth({ beats: beats.slice(0, 1), canonical: canonical.slice(0, 1), cover: [{ key: 'hook', label: 'x', source: 'Forward hook', beat: 1 }] });
     expect(rows.every((r) => r.ok)).toBe(true);
-    expect(rows.map((r) => r.key)).toEqual(['beats', 'cover', 'voice', 'approved', 'saved']);
+    // Writer notes and the pacing tip (lib/scriptWriterNotes, lib/scriptPacing; 2026-10-25).
+    expect(rows.map((r) => r.key)).toEqual(['beats', 'cover', 'voice', 'writer-notes', 'pacing', 'approved', 'saved']);
   });
 
   test('cover gaps, deal cues and an unsaved draft are flagged', () => {

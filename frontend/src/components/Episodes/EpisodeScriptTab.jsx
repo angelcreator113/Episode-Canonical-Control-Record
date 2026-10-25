@@ -29,6 +29,7 @@ import ScriptHealthPanel, { shownText } from './ScriptHealthPanel';
 import { ScriptBeatList, BeatStatusBadge, SceneContextCard, AssetsCard, BeatChecklistCard, sceneContextFields } from './ScriptBeatParts';
 import { beatStatus, beatPictures, beatChecklist, beatAssets, piecesWornIn, lineDuration } from '../../lib/scriptBeatView';
 import ScriptReadActions from './ScriptReadActions';
+import ScriptImport from './ScriptImport';
 import EpisodeStoryRecord from './EpisodeStoryRecord';
 import ScriptHistory from './ScriptHistory';
 import useScriptDraft from '../../hooks/useScriptDraft';
@@ -2828,6 +2829,10 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
     rawRefocusRef.current = true;
     setDeveloperMode((d) => !d);
   };
+  // Import a script (Evoni, 2026-10-25; ScriptImport, lib/scriptImport): the
+  // converted script lands as unsaved changes, and Save keeps it.
+  const importAction = <ScriptImport scriptText={scriptText} look={outfit || []} onScreen={onScreen} approvedCount={lockedCount} disabled={busy || locking || saving}
+    onImport={(next) => { if (refuseOpenEdit() || refuseTyped()) return; setScriptText(next); flash('Script imported ✦ Save to keep it.', 'success', 5000); }} />;
   const rawToggle = <button type="button" ref={rawToggleRef} className={`esp-btn${developerMode ? ' is-on' : ''}`} aria-pressed={developerMode} data-testid="script-raw-toggle" onClick={toggleRaw}>{developerMode ? 'Beat view' : 'Raw editor'}</button>;
   // The context panel's tabs: what generation reads, what must be covered,
   // what is true at the open beat, the open beat's checks, and the voices.
@@ -2905,7 +2910,7 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
             {/* Table read and Export (Script tab audit, 2026-10-15): the script as on the page. */}
             {/* false: refused, so History stays open on the version (Script page audit, 2026-10-19). */}
             {history}
-            <span className="esp-tools" role="group" aria-label="Script tools" data-testid="script-tools">{readActions}{rawToggle}</span>
+            <span className="esp-tools" role="group" aria-label="Script tools" data-testid="script-tools">{readActions}{importAction}{rawToggle}</span>
             {/* Not while a lock or a save is on its way (Script page audit,
                 2026-10-19: the new script landed over the lock's or save's answer). */}
             <button type="button" className="esp-btn" data-testid="script-regenerate" onClick={() => {
@@ -2928,6 +2933,7 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
           <div className="esp-actions esp-actions--empty">
             {episodeId && history}
             {developerMode && <span className="esp-tools" role="group" aria-label="Script tools" data-testid="script-tools">{rawToggle}</span>}
+            {importAction}
             <button type="button" className="esp-btn-primary is-large" onClick={() => handleGenerate()} disabled={generating}>
               {waitingForScript ? 'Still writing the 14 beats…' : generating ? 'Generating the 14 beats…' : 'Generate Script'}
             </button>
