@@ -19,6 +19,7 @@
  *              what happened, and the season's money).
  */
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { ChevronRight, Plus, Pencil } from 'lucide-react';
 import SeasonProposals from './SeasonProposals';
 import SeasonKnows from './SeasonKnows';
@@ -30,10 +31,28 @@ import { StoryThreadsCard, PlanningInsights, TEMP_CONFIG, THREAD_STATUS } from '
 import { SeasonBar, SummaryCard } from './SeasonPageParts';
 import EpisodeLedger from './EpisodeLedger';
 import { dateRange, dayLabel, arcPart, partProgress, revealMatrix, slotEvents } from '../../lib/seasonPage';
+import { useReleaseSchedule, scheduleSentence, startLine, firstDue, deadlineWarning } from '../../lib/releaseSchedule';
 
 const GOAL_STATUS = { active: 'Active', paused: 'Paused', completed: 'Complete', failed: 'Missed', upcoming: 'Planned' };
 
-function SeasonOverviewCard({ arc, roadmap, onEdit }) {
+/** The show's release schedule in a line, and the next deadline (Evoni, 2026-10-25); set on Producer Mode's Release tab. */
+function ReleasesFact({ api, showId }) {
+  const { view } = useReleaseSchedule({ api, showId });
+  if (!view) return null;
+  const due = deadlineWarning(firstDue(view), null);
+  return (
+    <div data-testid="szn-releases">
+      <dt>Releases</dt>
+      <dd>
+        {view.schedule ? `${scheduleSentence(view.schedule)} · ${startLine(view)}` : <span className="szn-muted">No release schedule yet</span>}
+        {' '}<Link to={`/shows/${encodeURIComponent(showId)}/world?tab=release`} className="szn-link">Release tab</Link>
+        {due && <span className={`szn-release-due is-${due.tone}`} data-testid="szn-release-due">{due.text}</span>}
+      </dd>
+    </div>
+  );
+}
+
+function SeasonOverviewCard({ arc, roadmap, onEdit, api, showId }) {
   const temp = TEMP_CONFIG[arc.emotional_temperature] || TEMP_CONFIG.rising;
   const current = arcPart(arc, arc.current_phase);
   const total = arc.episode_end || roadmap?.slot_count || 24;
@@ -49,6 +68,7 @@ function SeasonOverviewCard({ arc, roadmap, onEdit }) {
         <div><dt>Title</dt><dd>Season {arc.season_number || 1}: {arc.title}</dd></div>
         <div><dt>Logline</dt><dd>{arc.logline || <span className="szn-muted">No logline yet</span>}</dd></div>
         <div><dt>Dates</dt><dd>{dates || <span className="szn-muted">No dates yet</span>}</dd></div>
+        <ReleasesFact api={api} showId={showId} />
         <div>
           <dt>Status</dt>
           <dd className="szn-status">
@@ -229,7 +249,7 @@ export function SeasonOverviewTab({ plan, api, showId, arc, roadmap, events, goT
   return (
     <div className="szn-overview-tab">
       <div className="szn-overview-row">
-        <SeasonOverviewCard arc={arc} roadmap={roadmap} onEdit={onEdit} />
+        <SeasonOverviewCard arc={arc} roadmap={roadmap} onEdit={onEdit} api={api} showId={showId} />
         <SeasonPartsCard arc={arc} roadmap={roadmap} goTab={goTab} />
         <ChecklistCard plan={plan} onPanel={onPanel} goTab={goTab} />
       </div>
