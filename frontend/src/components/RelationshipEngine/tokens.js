@@ -117,6 +117,41 @@ export const REL_PRESETS = [
 ];
 
 /*
+ * A company's types (Evoni, 2026-10-24: "how should we handle relationships
+ * between brands?"): a registry character marked as a company (the server's
+ * services/companyCharacters; a row's character_a_company / _b_company, a
+ * cast member's company) is never a romance or family, so every type picker
+ * offers only these when either side is one; two companies, only partner or
+ * rival brand. The server's list is services/relationshipTypes COMPANY_TYPES.
+ */
+export const COMPANY_PRESETS = [
+  { label: 'Client or partner', type: 'client_partner', romantic: false },
+  { label: 'Sponsor', type: 'sponsor', romantic: false },
+  { label: 'Works for / represents', type: 'represents', romantic: false },
+  { label: 'Press or critic', type: 'press', romantic: false },
+  { label: 'Rival brand', type: 'rival_brand', romantic: false },
+  { label: 'Fan', type: 'fan', romantic: false },
+];
+export const BRAND_PAIR_PRESETS = COMPANY_PRESETS.filter(p => ['client_partner', 'rival_brand'].includes(p.type));
+const COMPANY_LABEL = Object.fromEntries(COMPANY_PRESETS.map(p => [p.type, p.label]));
+/** A side's company ({ id, slug, name, kind }) or null: the row's, else the loaded person's. */
+export const sideCompany = (r, side, charById = {}) => {
+  if (!r) return null;
+  const own = side === 'a' ? r.character_a_company : r.character_b_company;
+  if (own) return own;
+  const c = charById[side === 'a' ? r.character_id_a : r.character_id_b];
+  return c?.company || null;
+};
+/** { a, b, any, both } for a relationship row: which side is a company. */
+export const pairCompanies = (r, charById = {}) => {
+  const a = sideCompany(r, 'a', charById);
+  const b = sideCompany(r, 'b', charById);
+  return { a, b, any: !!(a || b), both: !!(a && b) };
+};
+/** The type picker's list for a pair: company types when either side is a company. */
+export const presetsFor = ({ any = false, both = false } = {}) => (both ? BRAND_PAIR_PRESETS : any ? COMPANY_PRESETS : REL_PRESETS);
+
+/*
  * Where two people are on their timeline (relationship_events.relationship_stage),
  * in story order; the episode story record writes these.
  */
@@ -142,7 +177,10 @@ export const humanize = v => {
   const w = String(v || '').replace(/_+/g, ' ').replace(/\s+/g, ' ').trim();
   return w ? w.charAt(0).toUpperCase() + w.slice(1) : '';
 };
-export const typeLabel  = r => humanize(typeof r === 'string' ? r : r?.relationship_type) || 'Connected';
+export const typeLabel  = r => {
+  const t = typeof r === 'string' ? r : r?.relationship_type;
+  return COMPANY_LABEL[t] || humanize(t) || 'Connected';
+};
 export const stageLabel = s => humanize(s);
 export const isLoveInterest = r => !!r && (r.is_romantic === true || r.relationship_type === 'love_interest');
 /*

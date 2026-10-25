@@ -69,3 +69,8 @@
   .bp-fact { grid-template-columns: minmax(0, 1fr); gap: 2px; }
   .bp-row { flex-direction: column; }
 }
+
+/* Its registry character (2026-10-24): a link, and Unlink with a confirm. */
+.bp-registry { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.bp-registry a { color: var(--accent-dark); font-weight: 700; }
+.bp-registry-ask { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 8px; }

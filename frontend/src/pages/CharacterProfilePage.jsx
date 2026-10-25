@@ -29,6 +29,8 @@ import PulseTrust from '../components/PulseTrust/PulseTrust';
 import CharacterTalkTab from '../components/CharacterTalk/CharacterTalkTab';
 import CharacterGalleryTab from '../components/CharacterGallery/CharacterGalleryTab';
 import FamilySection from '../components/CharacterFamily/FamilySection';
+// "This is a company: <name> →" when the character is marked as a company (2026-10-24).
+import { CharacterCompanyLine } from '../components/Companies/CompanyLine';
 // The person read, shown in the tabs it belongs to (Evoni, 2026-10-23; components/PersonPage).
 import usePerson from '../components/PersonPage/usePerson';
 import PersonWho from '../components/PersonPage/PersonWho';
@@ -3724,6 +3726,7 @@ export default function CharacterProfilePage() {
           {/* Their real name heads the page; the name they post under follows. */}
           {socialName && socialName !== name && <p className="ch-aka" data-testid="ch-aka">Online as {socialName}</p>}
           <PersonWho aliases={aliasList(feedProfile)} name={name} />
+          <CharacterCompanyLine character={character} />
           {(handle || city) && (
             <p className="ch-sub">
               {handle && <span className="ch-sub-item"><Instagram size={16} aria-hidden />{handle}</span>}

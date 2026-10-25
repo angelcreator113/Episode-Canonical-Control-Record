@@ -13,6 +13,9 @@ const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 const truth = require('../services/relationshipTruth');
 // Which Lala, the same one the writers use (services/whichLala).
 const whichLala = require('../services/whichLala');
+// A registry character marked as a company (services/companyCharacters):
+// never a romance or a family; its pairs take the company types.
+const companies = require('../services/companyCharacters');
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -60,13 +63,13 @@ const CHAR_SELECT_A = `
   ${nameSql('ca')} AS character_a_name, ca.display_name AS character_a_display, ca.selected_name AS character_a_selected,
   ca.role_type AS character_a_type, ca.role_label AS character_a_role_label,
   ca.appearance_mode AS character_a_appearance, ca.icon AS character_a_icon,
-  ca.portrait_url AS character_a_portrait`;
+  ca.portrait_url AS character_a_portrait, ${companies.companySql('ca')} AS character_a_company`;
 
 const CHAR_SELECT_B = `
   ${nameSql('cb')} AS character_b_name, cb.display_name AS character_b_display, cb.selected_name AS character_b_selected,
   cb.role_type AS character_b_type, cb.role_label AS character_b_role_label,
   cb.appearance_mode AS character_b_appearance, cb.icon AS character_b_icon,
-  cb.portrait_url AS character_b_portrait`;
+  cb.portrait_url AS character_b_portrait, ${companies.companySql('cb')} AS character_b_company`;
 
 const SPOUSE_ROLES = new Set(['wife', 'husband', 'spouse', 'partner', 'ex-wife', 'ex-husband', 'ex-partner', 'fiancé', 'fiancée', 'fiance', 'fiancee']);
 
@@ -129,7 +132,7 @@ async function loadCastCharacters(db, { forAI = false } = {}) {
             role_type, role_label, appearance_mode, status,
             core_belief, pressure_type, description,
             belief_pressured, emotional_function, personality,
-            portrait_url, sort_order, feed_profile_id
+            portrait_url, sort_order, feed_profile_id, ${companies.companySql('registry_characters')} AS company
        FROM registry_characters
       WHERE id IN (:ids) AND deleted_at IS NULL
         ${forAI ? `AND ${require('../utils/confidentialCharacters').notConfidentialSql('')}` : ''}
@@ -336,6 +339,14 @@ router.post('/', requireAuth, authorize(['ADMIN']), async (req, res) => {
     if (!charA || !charB) {
       return res.status(404).json({ error: 'One or both characters not found' });
     }
+    // A company is never a romance or family (409); its pair is never romantic.
+    let companyPair;
+    try {
+      companyPair = await companies.refusePair(db, character_id_a, character_id_b, { type: relationship_type, is_romantic });
+    } catch (pairErr) {
+      if (pairErr instanceof companies.CompanyLinkError) return res.status(pairErr.status).json({ error: pairErr.message });
+      throw pairErr;
+    }
 
     // A family type (Add's Mother, Sister …, or one typed) reads "A is B's
     // <type>" and is saved as the Family tab saves a tie (services/
@@ -428,7 +439,7 @@ router.post('/', requireAuth, authorize(['ADMIN']), async (req, res) => {
           lala_conn: lala_connection || 'none', status: status || 'Active', notes,
           situation: situation || null, tension_state: tension_state || null, pain_cat: pain_point_category || null,
           lala_mirror, career_echo: career_echo_potential,
-          confirmed, is_romantic: is_romantic === true, now,
+          confirmed, is_romantic: is_romantic === true && !companyPair.any, now,
         },
         type: db.sequelize.QueryTypes.SELECT,
       }
@@ -643,6 +654,23 @@ router.put('/:relId', requireAuth, authorize(['ADMIN']), async (req, res) => {
     if (body.relationship_type !== undefined && !String(body.relationship_type || '').trim()) {
       return res.status(400).json({ error: 'A relationship needs a type' });
     }
+    if (body.relationship_type !== undefined || body.is_romantic === true || body.is_romantic === 'true') {
+      // A company's pair takes no romance and no family type (409).
+      const [pairRow] = await db.sequelize.query(
+        'SELECT character_id_a, character_id_b, relationship_type, is_romantic FROM character_relationships WHERE id = :id AND deleted_at IS NULL',
+        { replacements: { id: relId }, type: db.sequelize.QueryTypes.SELECT });
+      if (!pairRow) return res.status(404).json({ error: 'Relationship not found' });
+      const romanticNow = body.is_romantic !== undefined ? (body.is_romantic === true || body.is_romantic === 'true') : false;
+      try {
+        const pair = await companies.refusePair(db, pairRow.character_id_a, pairRow.character_id_b, {
+          type: body.relationship_type !== undefined ? body.relationship_type : pairRow.relationship_type, is_romantic: romanticNow,
+        });
+        if (pair.any) body.is_romantic = false;
+      } catch (pairErr) {
+        if (pairErr instanceof companies.CompanyLinkError) return res.status(pairErr.status).json({ error: pairErr.message });
+        throw pairErr;
+      }
+    }
     const sets = [];
     const replacements = { id: relId };
     for (const k of Object.keys(EDITABLE)) {
@@ -773,12 +801,19 @@ router.put('/:relId/family', requireAuth, authorize(['ADMIN']), async (req, res)
     if (!UUID_RE.test(relId)) return res.status(404).json({ error: 'Relationship not found' });
 
     const [current] = await db.sequelize.query(
-      `SELECT cr.id, cr.is_romantic, cb.gender AS b_gender, cb.pronouns AS b_pronouns FROM character_relationships cr
+      `SELECT cr.id, cr.is_romantic, cr.character_id_a, cr.character_id_b, cb.gender AS b_gender, cb.pronouns AS b_pronouns FROM character_relationships cr
          LEFT JOIN registry_characters cb ON cb.id = cr.character_id_b
         WHERE cr.id = :id AND ${LIVE}`,
       { replacements: { id: relId }, type: db.sequelize.QueryTypes.SELECT }
     );
     if (!current) return res.status(404).json({ error: 'Relationship not found' });
+    // A company has no family (and no romance): 409.
+    if ((typeof family_role === 'string' && family_role.trim()) || is_romantic === true || (family_kind != null && family_kind !== '')) {
+      const pair = await companies.pairOf(db, current.character_id_a, current.character_id_b);
+      if (pair.any) {
+        return res.status(409).json({ error: `${(pair.a || pair.b).name} is a company. A company has no family and no romance.` });
+      }
+    }
     // A love interest is not family: the Family tab's edit wrote "mother"
     // onto Lala and Marcus (2026-10-23 audit). A spouse or partner role is
     // the one family role a romantic relationship can carry.
@@ -897,7 +932,8 @@ router.post('/drift/:key/keep', requireAuth, authorize(['ADMIN']), async (req, r
 // ════════════════════════════════════════════════════════════════════════
 const PERSON_COLUMNS = `id, registry_id, display_name, selected_name, character_key, icon,
   role_type, role_label, appearance_mode, status, core_belief, pressure_type, description,
-  belief_pressured, emotional_function, personality, portrait_url, sort_order, feed_profile_id`;
+  belief_pressured, emotional_function, personality, portrait_url, sort_order, feed_profile_id,
+  ${companies.companySql('registry_characters')} AS company`;
 
 router.get('/person/:charId', requireAuth, async (req, res) => {
   try {

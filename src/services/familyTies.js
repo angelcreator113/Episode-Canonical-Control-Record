@@ -21,7 +21,7 @@
  *   familyRoleFor(row, id)        the role that person holds in the tie
  *   isSpouseRole(role)            a partner role: romance, not a family tie here
  *   roleParts(role)               the role taken apart: { pre, base, suffix } or null
- *   saveFamilyTie(sequelize, …)   add or change a tie, both directions
+ *   saveFamilyTie(sequelize, …)   add or change a tie, both directions (never with a company: 409)
  *   linkPulseFamily(sequelize, id) the tie's Pulse link, when both have profiles
  *   familyLines(sequelize, ids)   the ties as lines for the writers
  */
@@ -184,6 +184,11 @@ async function saveFamilyTie(sequelize, { fromId, toId, role, kind = null, notes
   const from = people.find((p) => String(p.id) === String(fromId));
   const to = people.find((p) => String(p.id) === String(toId));
   if (!from || !to) throw Object.assign(new Error('Character not found'), { status: 404 });
+  // A registry character marked as a company has no family (services/companyCharacters).
+  const companyIn = await require('./companyCharacters').companyIdsAmong(sequelize, [fromId, toId], { transaction });
+  if (companyIn.size) {
+    throw Object.assign(new Error(`${[...companyIn.values()][0].name} is a company. A company has no family.`), { status: 409 });
+  }
   const reverse = reverseRole(words, genderOf(to));
 
   const [existing] = await sequelize.query(

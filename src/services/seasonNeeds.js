@@ -28,11 +28,20 @@
  * cost nothing and give the same answer twice, and a pair the matcher
  * misses ("her mentor") is still found from a twist's own people.
  *
+ * A need with a company in it (a registry character marked as a company,
+ * services/companyCharacters; Evoni, 2026-10-24) is there when the show has
+ * a deal with the company (opportunities.company_id; a deal names no
+ * character, so any of the show's deals with it), when the other side is
+ * one of its representatives (extra_fields.brand_id or representative_of,
+ * as services/brandProfile reads them), or when a confirmed relationship
+ * joins them. Its row says company, and how it is there (there_by).
+ *
  * Reads only. The Season Plan's arc and slots come from the slot service
  * (getRoadmap) and the twists' own read (seasonTwists.getTwists).
  */
 
 const truth = require('./relationshipTruth');
+const { usableFirstName } = require('../utils/firstNames');
 
 const WHY_MAX = 140;
 const MAX_NEEDS = 80;
@@ -47,9 +56,13 @@ const clip = (v, n) => {
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 /**
- * Who a text names: each character's full name, and their first name when
- * it is at least three letters and nobody else has it. Whole words only,
- * any case ("Marcus's" names Marcus). Returns ids in the order first named.
+ * Who a text names: each character's full name, any case, and their first
+ * name when it is at least three letters, nobody else has it, and it is not
+ * an article, title or connector ("The" of "The Column", "Dr", "de";
+ * utils/firstNames). A first name alone counts only written as in the name,
+ * capitalised: "Marcus's" names Marcus, "marcus" and "the" name nobody
+ * (Evoni, 2026-10-24: every "the" in her purposes named The Column).
+ * Whole words only. Returns ids in the order first named.
  */
 function nameMatcher(characters) {
   const people = (characters || []).filter((c) => c && c.id && String(c.name || '').trim());
@@ -58,18 +71,22 @@ function nameMatcher(characters) {
     const first = String(c.name).trim().split(/\s+/)[0].toLowerCase();
     firstCount.set(first, (firstCount.get(first) || 0) + 1);
   }
+  const wordRe = (names, flags) => new RegExp(`(^|[^\\p{L}\\p{N}])(${names.map(escapeRe).join('|')})(?=$|[^\\p{L}\\p{N}])`, flags);
   const patterns = people.map((c) => {
     const full = String(c.name).trim();
-    const first = full.split(/\s+/)[0];
-    const names = [full];
-    if (first !== full && first.length >= 3 && firstCount.get(first.toLowerCase()) === 1) names.push(first);
-    return { id: String(c.id), re: new RegExp(`(^|[^\\p{L}\\p{N}])(${names.map(escapeRe).join('|')})(?=$|[^\\p{L}\\p{N}])`, 'iu') };
+    const first = usableFirstName(full);
+    const res = [wordRe([full], 'iu')];
+    if (first && firstCount.get(first.toLowerCase()) === 1) res.push(wordRe([first], 'u'));
+    return { id: String(c.id), res };
   });
   return (text) => {
     const s = String(text || '');
     if (!s.trim()) return [];
     return patterns
-      .map((p) => { const m = p.re.exec(s); return m ? { id: p.id, at: m.index } : null; })
+      .map((p) => {
+        const at = p.res.map((re) => re.exec(s)).filter(Boolean).map((m) => m.index);
+        return at.length ? { id: p.id, at: Math.min(...at) } : null;
+      })
       .filter(Boolean)
       .sort((a, b) => a.at - b.at)
       .map((m) => m.id)
@@ -147,9 +164,12 @@ const STATE_ORDER = { missing: 0, seed: 1, there: 2 };
 /**
  * Each need marked there, seed or missing from the live rows between the
  * people (relationshipsBetween, seeds included), sorted by the slot it is
- * needed by (none last), then missing first. Pure.
+ * needed by (none last), then missing first. `companies` (optional):
+ * { byCharacter: Map(character id → company), deals: Map(company id →
+ * { id, name }), reps: Set('<company id>|<character id>') } for the needs
+ * with a company in them. Pure.
  */
-function classify(needs, rows, names) {
+function classify(needs, rows, names, companies = null) {
   const byPair = new Map();
   for (const r of rows || []) {
     const k = pairKey(r.character_id_a, r.character_id_b);
@@ -168,11 +188,31 @@ function classify(needs, rows, names) {
         id: there.id, type: there.relationship_type, is_romantic: Boolean(there.is_romantic),
         stage: there.stage || null, tension_state: there.tension_state || null,
       };
-    } else if (seed) {
+    }
+    const company = companies && (companies.byCharacter.get(String(n.a)) || companies.byCharacter.get(String(n.b)));
+    let companyOut = null;
+    let thereBy = there ? 'relationship' : null;
+    let deal = null;
+    if (company) {
+      const side = companies.byCharacter.get(String(n.a))?.id === company.id ? 'a' : 'b';
+      const other = side === 'a' ? n.b : n.a;
+      const both = Boolean(companies.byCharacter.get(String(n.a)) && companies.byCharacter.get(String(n.b)));
+      companyOut = { id: company.id, slug: company.slug, name: company.name, kind: company.kind || 'brand', side, both };
+      if (!there) {
+        deal = companies.deals.get(String(company.id)) || null;
+        if (deal) thereBy = 'deal';
+        else if (companies.reps.has(`${company.id}|${other}`)) thereBy = 'representative';
+        if (thereBy) state = 'there';
+      }
+    }
+    if (state !== 'there' && seed) {
       state = 'seed';
       relationship = { id: seed.id, type: seed.relationship_type, seed_state: seed.seed_state || null };
     }
-    return { ...n, a: person(n.a), b: person(n.b), state, relationship };
+    return {
+      ...n, a: person(n.a), b: person(n.b), state, relationship,
+      ...(companyOut ? { company: companyOut, there_by: thereBy, deal } : {}),
+    };
   });
   list.sort((x, y) => (x.slot?.slot_number ?? Infinity) - (y.slot?.slot_number ?? Infinity)
     || STATE_ORDER[x.state] - STATE_ORDER[y.state]);
@@ -239,7 +279,40 @@ async function getNeeds(sequelize, showId) {
     for (const r of rows) names.set(String(r.id), r.name);
   }
   const rows = await truth.relationshipsBetween(sequelize, people, { confirmedOnly: false, limit: 500 });
-  return { arc: roadmap.arc, season_number: roadmap.season_number, ...classify(specs, rows, names) };
+  const companies = await companyFacts(sequelize, showId, people);
+  return { arc: roadmap.arc, season_number: roadmap.season_number, show_id: String(showId), ...classify(specs, rows, names, companies) };
+}
+
+/**
+ * What classify needs for the needs with a company in them: which of the
+ * people are companies, the show's newest deal with each, and who among the
+ * people represents each. null when none of them is a company.
+ */
+async function companyFacts(sequelize, showId, people) {
+  const byCharacter = await require('./companyCharacters').companyIdsAmong(sequelize, people);
+  if (!byCharacter.size) return null;
+  const ids = [...new Set([...byCharacter.values()].map((c) => String(c.id)))];
+  const deals = new Map();
+  const reps = new Set();
+  try {
+    const [found] = await sequelize.query(
+      `SELECT DISTINCT ON (company_id) company_id, id, name FROM opportunities
+        WHERE deleted_at IS NULL AND show_id = :showId AND company_id IN (:ids)
+        ORDER BY company_id, created_at DESC`, { replacements: { showId, ids } });
+    for (const d of found) deals.set(String(d.company_id), { id: d.id, name: d.name });
+    const [linked] = await sequelize.query(
+      `SELECT id, extra_fields->>'brand_id' AS brand_id, extra_fields->>'representative_of' AS rep_of
+         FROM registry_characters WHERE id IN (:people) AND deleted_at IS NULL`, { replacements: { people } });
+    const companies = [...byCharacter.values()];
+    for (const r of linked) {
+      for (const c of companies) {
+        if (String(r.brand_id || '') === String(c.id) || (r.rep_of && r.rep_of === c.slug)) reps.add(`${c.id}|${r.id}`);
+      }
+    }
+  } catch (err) {
+    console.error('[seasonNeeds] the companies\' deals and people could not be read:', err.message);
+  }
+  return { byCharacter, deals, reps };
 }
 
 /**

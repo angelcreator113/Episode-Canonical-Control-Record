@@ -47,3 +47,15 @@
   .sn-body { padding: 0 12px 12px; }
   .sn-actions > .sn-link, .sn-actions > .sn-btn { flex: 1 1 auto; justify-content: center; }
 }
+
+/* A need with a company in it (need.company). */
+.sn-company {
+  display: inline-block;
+  padding: 1px 8px;
+  border: 1px solid var(--lala-gold-line);
+  border-radius: 999px;
+  background: var(--lala-gold-soft);
+  color: var(--lala-gold-text);
+  font-size: 12px;
+  font-weight: 600;
+}

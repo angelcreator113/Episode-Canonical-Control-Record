@@ -61,6 +61,12 @@ const TYPE_PATTERNS = [
   ['fan', /\bfan\b|follower|admirer|\bstan\b/i],
 ];
 
+// A company's types (services/relationshipTypes COMPANY_TYPES) as story kinds:
+// never a romance or family.
+const COMPANY_CATEGORY = {
+  client_partner: 'collab', sponsor: 'collab', represents: 'collab', press: 'acquaintance', rival_brand: 'rival', fan: 'fan',
+};
+
 const ROLE_TAG_CATEGORY = { ally: 'friend', detractor: 'rival', mentor: 'mentor', rival: 'rival', family: 'family', partner: 'collab' };
 
 function storyCategory(row) {
@@ -68,6 +74,7 @@ function storyCategory(row) {
   const stage = row.stage && String(row.stage).toLowerCase();
   if (stage && Object.prototype.hasOwnProperty.call(STAGE_CATEGORY, stage) && STAGE_CATEGORY[stage]) return STAGE_CATEGORY[stage];
   const type = String(row.relationship_type || '');
+  if (COMPANY_CATEGORY[type]) return COMPANY_CATEGORY[type];
   const past = /^past$/i.test(String(row.status || ''));
   if (row.is_romantic) return past ? 'ex' : 'romance';
   if (row.family_role) return 'family';
@@ -162,7 +169,8 @@ const STORY_SQL = `
          COALESCE(NULLIF(cb.selected_name, ''), cb.display_name) AS name_b,
          ca.display_name AS display_a, cb.display_name AS display_b,
          ca.character_key AS key_a, cb.character_key AS key_b,
-         pa.id AS profile_a, pb.id AS profile_b, pa.handle AS handle_a, pb.handle AS handle_b
+         pa.id AS profile_a, pb.id AS profile_b, pa.handle AS handle_a, pb.handle AS handle_b,
+         ((to_jsonb(ca)->'extra_fields'->>'company_id') IS NOT NULL OR (to_jsonb(cb)->'extra_fields'->>'company_id') IS NOT NULL) AS company_pair
     FROM character_relationships cr
     JOIN registry_characters ca ON ca.id = cr.character_id_a AND ca.deleted_at IS NULL
     JOIN registry_characters cb ON cb.id = cr.character_id_b AND cb.deleted_at IS NULL
@@ -211,7 +219,8 @@ function storyFor(pulse, stories) {
  * already linked are left alone, so it can run again. Returns { linked }.
  */
 async function linkStoryAndPulse(db, { transaction } = {}) {
-  const stories = (await storyRows(db, 'AND pa.id IS NOT NULL AND pb.id IS NOT NULL AND pa.id <> pb.id', {}, transaction));
+  // A company's pair is not a personal Pulse tie (services/companyCharacters): never linked.
+  const stories = (await storyRows(db, 'AND pa.id IS NOT NULL AND pb.id IS NOT NULL AND pa.id <> pb.id', {}, transaction)).filter((s) => !s.company_pair);
   if (!stories.length) return { linked: 0 };
   const byPair = new Map();
   for (const s of stories) {
@@ -245,6 +254,9 @@ async function linkStoryAndPulse(db, { transaction } = {}) {
 async function syncStoryPair(db, storyId, { transaction } = {}) {
   const [story] = await storyRows(db, 'AND cr.id = :id', { id: storyId }, transaction);
   if (!story) return { skipped: 'not a confirmed story pair' };
+  // A company's pair (one side marked as a company) is the brand's business,
+  // not a personal Pulse tie: none is made or linked.
+  if (story.company_pair) return { skipped: 'a company: its Pulse ties are its own account\'s' };
   if (!story.profile_a || !story.profile_b) return { skipped: 'one of them has no Pulse profile' };
   if (Number(story.profile_a) === Number(story.profile_b)) return { skipped: 'both share one Pulse profile' };
   const pulse = pulseKindFor(story);

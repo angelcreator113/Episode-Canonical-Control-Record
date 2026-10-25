@@ -5,20 +5,29 @@
  * "Subject turned critic"), each with a proposed type and the situation
  * kept in words. A quiet banner offers Review; the dialog lets Evoni
  * accept, change or skip each one before anything is saved (POST).
+ * A pair with a company in it (it.company; two companies, it.brand_pair)
+ * offers only the company types (tokens COMPANY_PRESETS), never a romance.
  * Prime Studios · LalaVerse
  */
 import { useState, useId } from 'react';
-import { REL_PRESETS, typeLabel } from './tokens';
+import { REL_PRESETS, COMPANY_PRESETS, BRAND_PAIR_PRESETS, typeLabel } from './tokens';
 import { Btn, useFocusTrap } from './primitives';
 import './TypeTidy.css';
 
 // The app's types, in the Add dialog's order (the server's list is the same).
 export const REL_TYPES = REL_PRESETS.map(p => ({ v: p.type, l: p.label, romantic: p.romantic }));
+const asOptions = list => list.map(p => ({ v: p.type, l: p.label, romantic: false }));
+const COMPANY_TYPES = asOptions(COMPANY_PRESETS);
+const BRAND_PAIR_TYPES = asOptions(BRAND_PAIR_PRESETS);
 
-// A proposed type spelled another way stays selectable as itself.
-const typeOptions = it => (it.proposed_type && !REL_TYPES.some(t => t.v === it.proposed_type)
-  ? [...REL_TYPES, { v: it.proposed_type, l: typeLabel(it.proposed_type), romantic: !!it.proposed_is_romantic }]
-  : REL_TYPES);
+// A company's pair: the company types only. A proposed type spelled another
+// way stays selectable as itself.
+export const typeOptions = it => {
+  if (it.company) return it.brand_pair ? BRAND_PAIR_TYPES : COMPANY_TYPES;
+  return it.proposed_type && !REL_TYPES.some(t => t.v === it.proposed_type)
+    ? [...REL_TYPES, { v: it.proposed_type, l: typeLabel(it.proposed_type), romantic: !!it.proposed_is_romantic }]
+    : REL_TYPES;
+};
 
 /** The quiet banner: shown only when something needs a look. */
 export function TypeTidyBanner({ count, onReview }) {
@@ -41,7 +50,7 @@ const rowOf = it => ({
   situation: it.situation_after ?? it.situation_now ?? '',
   // a row with no suggestion waits until a type is picked; a guess waits for her Accept
   accept: !!it.proposed_type && !isGuess(it),
-  romantic: it.proposed_type ? !!it.proposed_is_romantic : false,
+  romantic: it.proposed_type && !it.company ? !!it.proposed_is_romantic : false,
 });
 
 /** The changes POST /type-tidy takes: the accepted rows that have a type. */
@@ -113,7 +122,7 @@ export default function TypeTidyDialog({ items, refused = [], saving, onSave, on
                 const sit = `${uid}-${it.id}-sit`;
                 return (
                   <li key={it.id} className={`re-tidy-row ${r.accept ? 'is-accepted' : 'is-skipped'}`} aria-label={pair}>
-                    <div className="re-tidy-pair">{pair}</div>
+                    <div className="re-tidy-pair">{pair}{it.company && <span className="re-tidy-company">Company</span>}</div>
                     <div className="re-tidy-change">
                       <span className="re-tidy-old">&lsquo;{it.current_type}&rsquo;</span>
                       <span className="re-tidy-arrow" aria-hidden>→</span>

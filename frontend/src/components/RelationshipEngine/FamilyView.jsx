@@ -14,6 +14,8 @@
  * and a Heritage toggle that shows each person's heritage on the tree.
  * Real families include mixed heritage, adoption, step and chosen family:
  * it helps her notice, never enforces sameness or blocks a save.
+ * A company (a cast member marked as one, c.company; 2026-10-24) is never
+ * family: it is not offered as "Not in family tree", only named apart.
  */
 import { useState } from 'react';
 import { Heart } from 'lucide-react';
@@ -38,7 +40,8 @@ export default function FamilyView({ chars = [], rels = [], charById = {}, genni
   const romantic = rels.filter(isRomance);
   const connIds = new Set();
   family.forEach(b => { connIds.add(b.character_id_a); connIds.add(b.character_id_b); });
-  const unconn = chars.filter(c => !connIds.has(c.id));
+  const unconn = chars.filter(c => !connIds.has(c.id) && !c.company);
+  const companyChars = chars.filter(c => c.company);
 
   const save = b => {
     onUpdateRole(b.id, { family_role: editRole.trim() });
@@ -144,6 +147,12 @@ export default function FamilyView({ chars = [], rels = [], charById = {}, genni
             ))}
           </div>
         </div>
+      )}
+
+      {companyChars.length > 0 && (
+        <p className="re-family-companies" data-testid="family-companies">
+          Companies are not family: {companyChars.map(cname).join(', ')}.
+        </p>
       )}
 
       {unconn.length > 0 && (

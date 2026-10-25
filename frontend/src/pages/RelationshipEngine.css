@@ -1224,6 +1224,12 @@
 .re-family-unconn {
   padding: 8px 0;
 }
+/* Companies in the cast are named apart: never family (FamilyView). */
+.re-family-companies {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--lala-ink-muted);
+}
 .re-family-unconn-list {
   display: flex;
   flex-wrap: wrap;

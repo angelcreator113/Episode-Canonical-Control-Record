@@ -86,7 +86,7 @@ export default function SlotNotes({ api, showId, slot, needs = [], onNeedsChange
       {mine.length > 0 && (
         <div className="sln-part" data-testid="slot-notes-needs">
           <span className="sln-label">Relationships it needs</span>
-          <NeedList needs={mine} api={api} onChanged={onNeedsChanged} showSlot={false} label={`Relationships ${slot.label} needs`} />
+          <NeedList needs={mine} api={api} onChanged={onNeedsChanged} showSlot={false} label={`Relationships ${slot.label} needs`} showId={showId} />
         </div>
       )}
       {notes?.failed && <p className="sln-note" role="status">The twists and secrets planned here did not load.</p>}

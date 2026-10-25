@@ -23,6 +23,8 @@
  *       grandparent a grandparent and grandchild by blood, both with tags,
  *                   sharing none, when no parent between them is known
  *     Anyone missing tags is never flagged: they are in gaps instead.
+ *     A registry character marked as a company (services/companyCharacters)
+ *     is in neither: a company has no heritage.
  *     "This is intended" (markIntended) keeps a flag quiet until either
  *     person's tags change.
  *   saveHeritage(sequelize, id, body)   their tags (and ethnicity, when sent)
@@ -111,10 +113,12 @@ async function loadPeople(sequelize, ids) {
   const list = [...new Set((ids || []).filter(Boolean).map(String))];
   if (!list.length) return new Map();
   const rows = await sequelize.query(
-    `SELECT rc.id, ${nameSql('rc')} AS name, rc.ethnicity, rc.heritage_tags, rc.portrait_url
+    `SELECT rc.id, ${nameSql('rc')} AS name, rc.ethnicity, rc.heritage_tags, rc.portrait_url,
+            ${require('./companyCharacters').companySql('rc')} IS NOT NULL AS is_company
        FROM registry_characters rc WHERE rc.id::text IN (:ids) AND rc.deleted_at IS NULL`,
     { replacements: { ids: list }, type: SELECT(sequelize) });
-  return new Map(rows.map((r) => [String(r.id), { id: r.id, name: r.name, ethnicity: r.ethnicity || null, heritage_tags: tagsOf(r.heritage_tags), portrait_url: r.portrait_url || null }]));
+  // A company (services/companyCharacters) has no heritage: it is left out of the check and the gaps.
+  return new Map(rows.filter((r) => !r.is_company).map((r) => [String(r.id), { id: r.id, name: r.name, ethnicity: r.ethnicity || null, heritage_tags: tagsOf(r.heritage_tags), portrait_url: r.portrait_url || null }]));
 }
 
 /** The blood graph from tie rows: parents of each child, sibling rows, grandparent rows. */
@@ -235,7 +239,8 @@ async function heritageReport(sequelize, { familyId = null, characterId = null }
   // people outside the scope); the report keeps what touches the scope.
   const graphIds = rows.flatMap((r) => [String(r.character_id_a), String(r.character_id_b)]);
   const people = await loadPeople(sequelize, [...scope, ...graphIds]);
-  const all = computeFlags(rows, people);
+  // A tie with a company in it (made before it was marked one) is not read.
+  const all = computeFlags(rows.filter((r) => people.has(String(r.character_id_a)) && people.has(String(r.character_id_b))), people);
   const touches = characterId
     ? (f) => f.people.includes(String(characterId))
     : (f) => f.people.some((id) => scope.has(String(id)));
@@ -311,6 +316,8 @@ async function suggestForRelative(sequelize, { characterId, role, kind } = {}) {
   const p = ties.roleParts(role);
   if (!p || p.pre.length || p.suffix) return null;
   const id = String(characterId);
+  // A company has no relatives to suggest for.
+  if (!(await loadPeople(sequelize, [id])).has(id)) return null;
   const rows = await loadTies(sequelize);
   const { parentsOf } = bloodGraph(rows);
   let from = [];

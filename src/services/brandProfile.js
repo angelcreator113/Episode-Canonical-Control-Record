@@ -312,6 +312,8 @@ async function profileOf(db, slugOrId) {
     wardrobe: has.has('wardrobe') ? await wardrobeOf(db, company) : null,
     press: has.has('press') ? await pressOf(db, company, people.people) : null,
     relationships: has.has('relationships') ? await relationshipsOf(db, company) : null,
+    // The registry character marked as this company, if any (services/companyCharacters).
+    registry_character: await require('./companyCharacters').characterOf(db, company.id),
   };
 }
 
