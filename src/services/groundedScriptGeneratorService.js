@@ -693,6 +693,27 @@ function moneyText(money) {
   try { return require('../utils/scriptMoney').moneyContext(money); } catch (err) { console.error('[ScriptGen] money block failed (non-blocking):', err.message); return ''; }
 }
 
+// The episode's place in its season, from its snapshot (season-AI audit,
+// 2026-10-25): the slot and the part's real length, the season line
+// (seasonLine: title, logline, description, the part's tagline and
+// emotional arc), the slot's purposes, career focus, desired pressure and
+// hoped-for outcome, and from the season read (story.arcPhase, which
+// storyContext leaves out here) her emotional temperature and narrative
+// debt. It printed only the label, the phase and the purposes.
+function seasonEpisodeLines(sc, arcPhase = null) {
+  const { fromSnapshot, seasonLines, slotLines, partLength, clip } = require('./seasonLine');
+  const part = sc.phase || {};
+  const size = partLength(part);
+  const where = sc.position_in_phase ? `, episode ${sc.position_in_phase}${size ? ` of ${size}` : ' of the part'}` : '';
+  const lines = [`Season position: ${sc.label}${part.title ? `, Part ${part.number}: ${part.title}` : ''}${where}`];
+  lines.push(...seasonLines(fromSnapshot(sc), { partLabel: "This episode's part" }));
+  lines.push(seasonPurposeLines(sc));
+  lines.push(...slotLines(sc, { purposes: 0 }));
+  if (arcPhase?.emotional_temperature) lines.push(`Emotional temperature: ${arcPhase.emotional_temperature}`);
+  if (arcPhase?.narrative_debt_summary) lines.push(`Narrative debt: ${clip(arcPhase.narrative_debt_summary)}`);
+  return lines.join('\n');
+}
+
 function seasonPurposeLines(sc) {
   // A purpose may name only a thread; it then reads as continuing that thread.
   const list = (Array.isArray(sc?.story_purposes) ? sc.story_purposes : [])
@@ -888,7 +909,10 @@ function buildScriptPrompt({ brief, scenePlan, franchiseLaws, eventData, wardrob
     `[${cat.replace(/_/g, ' ').toUpperCase()}]\n${rules.join('\n')}`
   ).join('\n\n') || 'No Show Brain laws loaded';
 
-  return `You are writing a script for "Styling Adventures with Lala" — Episode ${brief?.position_in_arc || '?'} of Arc ${brief?.arc_number || '?'}.
+  // The part's real length (its episode range in the snapshot), not 8.
+  const partSize = require('./seasonLine').partLength(seasonContext?.phase);
+
+  return `You are writing a script for "Styling Adventures with Lala" — Episode ${brief?.position_in_arc || '?'} of Part ${brief?.arc_number || '?'}.
 
 ${JAWIHP_VOICE_DNA}
 
@@ -898,13 +922,12 @@ ${voiceLaws}
 CORE LAW: The show must NEVER feel like a dashboard. It must feel like a luxury life simulator.
 
 ═══ EPISODE CONTEXT ═══
-Arc: ${brief?.arc_number || '?'}, Position: ${brief?.position_in_arc || '?'}/8
+Part: ${brief?.arc_number || '?'}, Position: ${brief?.position_in_arc || '?'}${partSize ? `/${partSize}` : ''}
 Archetype: ${brief?.episode_archetype || 'Rising'}
 Designed intent: ${brief?.designed_intent || 'pass'}
 Narrative purpose: ${brief?.narrative_purpose || 'Not set'}
 Forward hook: ${brief?.forward_hook || 'Not set'}
-${seasonContext?.label ? `Season position: ${seasonContext.label}${seasonContext.phase?.title ? `, Phase ${seasonContext.phase.number}: ${seasonContext.phase.title}` : ''}
-${seasonPurposeLines(seasonContext)}
+${seasonContext?.label ? `${seasonEpisodeLines(seasonContext, story?.arcPhase)}
 ` : ''}
 ═══ EVENT ═══
 ${eventContext}

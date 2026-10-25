@@ -455,25 +455,42 @@ async function completeArc(arc, phases, goalStatus, sequelize, options) {
 /**
  * Returns arc context that can be injected into AI generation prompts.
  * Used by script writer, feed generator, and event pipeline.
+ *
+ * The show's active arc, or `arcId`'s when it is the show's (an episode of
+ * an earlier season reads its own season, not the one in progress). The
+ * season's logline and description (capped, seasonLine.CAP) and its part
+ * count come with it, so seasonLine.fromArcContext can name the season.
  */
-async function getArcContext(showId, models) {
+async function getArcContext(showId, models, { arcId = null } = {}) {
   const { sequelize } = models;
+  const { loadSeason } = require('./seasonLoader');
 
-  const [arcRows] = await sequelize.query(
-    `SELECT * FROM show_arcs WHERE show_id = :showId AND status = 'active' AND deleted_at IS NULL LIMIT 1`,
-    { replacements: { showId } }
-  );
-  if (!arcRows?.length) return null;
+  let season = arcId ? await loadSeason(sequelize, showId, { arcId, slots: false }) : null;
+  if (season && (String(season.arc.show_id) !== String(showId) || season.arc.deleted_at)) season = null;
+  if (!season) season = await loadSeason(sequelize, showId, { slots: false });
+  if (!season) return null;
 
-  const arc = arcRows[0];
-  const phases = typeof arc.phases === 'string' ? JSON.parse(arc.phases) : arc.phases;
-  const currentPhase = phases.find(p => p.phase === arc.current_phase);
-  const debt = typeof arc.narrative_debt === 'string' ? JSON.parse(arc.narrative_debt) : (arc.narrative_debt || []);
+  const { arc } = season;
+  const phases = arc.phases;
+  const currentPhase = phases.find(p => Number(p.phase) === Number(arc.current_phase));
+  let debt = arc.narrative_debt || [];
+  if (typeof debt === 'string') {
+    try { debt = JSON.parse(debt); } catch (err) {
+      console.error('[arcProgressionService] the narrative debt could not be read; none used:', err.message);
+      debt = [];
+    }
+  }
+  if (!Array.isArray(debt)) debt = [];
+  const { clip } = require('./seasonLine');
 
   return {
+    arc_id: arc.id,
     arc_title: arc.title,
     arc_tagline: arc.tagline,
+    arc_logline: arc.logline ? clip(arc.logline) : null,
+    arc_description: arc.description ? clip(arc.description) : null,
     season: arc.season_number,
+    phase_count: phases.length,
     current_phase: {
       number: currentPhase?.phase,
       title: currentPhase?.title,

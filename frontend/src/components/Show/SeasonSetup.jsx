@@ -8,7 +8,9 @@
  *                     taglines, and how the 24 episodes split between them;
  *                     and the Season page's fields (2026-10-25): logline,
  *                     description, start and end dates, a cover and a
- *                     picture per part, chosen from Files.
+ *                     picture per part, chosen from Files; and each part's
+ *                     moods (2026-10-25): its emotional arc and the feed's
+ *                     tone, empty for the part's default.
  *                     Seeds a season (POST .../arc/seed) or edits it (PUT
  *                     .../arc/setup); the page passes onSubmit.
  *   SeasonPlacement   "Use your events and episodes": the preview from GET
@@ -35,6 +37,14 @@ const PART_DEFAULTS = [
   { title: 'Ascension', tagline: 'Climb the ladder' },
   { title: 'Legacy', tagline: 'Become uncopyable' },
 ];
+// What a part's moods are when left empty (the server's PART_DEFAULTS), shown as the placeholder.
+export const MOOD_DEFAULTS = [
+  { emotional_arc: 'curiosity → first stumble → finding her footing', feed_tone: 'Lala watches from the outside. Everything feels aspirational and slightly out of reach.' },
+  { emotional_arc: 'ambition → competition → first real loss → determination', feed_tone: 'Lala is in the mix now. People know her name. The shade gets personal.' },
+  { emotional_arc: 'confidence → crisis of identity → building her own room → transcendence', feed_tone: 'Lala stops watching and starts being watched. The feed follows her.' },
+];
+// The longest moods the server takes (seasonSetupService.MOOD_MAX).
+export const MOOD_MAX = { emotional_arc: 300, feed_tone: 500 };
 const errorOf = (err, fallback) => err?.response?.data?.error || fallback;
 
 // The Season page's fields, empty (2026-10-25).
@@ -47,7 +57,7 @@ export function defaultForm(seasonNumber = 1) {
     title: first ? 'Soft Luxury Ascension' : `Season ${seasonNumber}`,
     tagline: first ? 'Lala earns her place in the luxury tier' : '',
     ...PAGE_FIELDS_EMPTY,
-    phases: PART_DEFAULTS.map((p) => ({ ...p, picture_url: null })),
+    phases: PART_DEFAULTS.map((p) => ({ ...p, picture_url: null, emotional_arc: '', feed_tone: '' })),
     split: [8, 8, 8],
   };
 }
@@ -63,9 +73,21 @@ export function formFromArc(arc) {
     starts_on: arc?.starts_on ? String(arc.starts_on).slice(0, 10) : '',
     ends_on: arc?.ends_on ? String(arc.ends_on).slice(0, 10) : '',
     cover_url: arc?.cover_url || null,
-    phases: [0, 1, 2].map((i) => ({ title: phases[i]?.title || '', tagline: phases[i]?.tagline || '', picture_url: phases[i]?.picture_url || null })),
+    phases: [0, 1, 2].map((i) => ({
+      title: phases[i]?.title || '', tagline: phases[i]?.tagline || '', picture_url: phases[i]?.picture_url || null,
+      emotional_arc: phases[i]?.emotional_arc || '', feed_tone: phases[i]?.feed_behavior?.feed_tone || '',
+    })),
     split: [0, 1, 2].map((i) => (phases[i] ? Number(phases[i].episode_end) - Number(phases[i].episode_start) + 1 : 8)),
   };
+}
+
+/** A part's mood that is too long, in words (the server's rule); null when every mood fits. */
+export function moodProblem(phases) {
+  for (const [i, p] of (phases || []).entries()) {
+    if ((p.emotional_arc || '').trim().length > MOOD_MAX.emotional_arc) return `Part ${i + 1}'s emotional arc is longer than ${MOOD_MAX.emotional_arc} characters.`;
+    if ((p.feed_tone || '').trim().length > MOOD_MAX.feed_tone) return `Part ${i + 1}'s feed tone is longer than ${MOOD_MAX.feed_tone} characters.`;
+  }
+  return null;
 }
 
 /** The dates' problem, in words (the server's rule): the end is not before the start. */
@@ -101,7 +123,7 @@ export function SeasonSetupForm({ mode = 'create', seasonNumber = 1, initial = n
   const problem = splitProblem(form.split);
   const missing = !form.title.trim() ? 'The season needs a title.'
     : form.phases.findIndex((p) => !p.title.trim()) >= 0 ? `Part ${form.phases.findIndex((p) => !p.title.trim()) + 1} needs a name.`
-      : datesProblem(form.starts_on, form.ends_on);
+      : datesProblem(form.starts_on, form.ends_on) || moodProblem(form.phases);
   const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }));
   const ranges = problem ? null : splitRanges(form.split);
   const total = form.split.reduce((a, n) => a + (Number(n) || 0), 0);
@@ -122,7 +144,10 @@ export function SeasonSetupForm({ mode = 'create', seasonNumber = 1, initial = n
         starts_on: form.starts_on || null,
         ends_on: form.ends_on || null,
         cover_url: form.cover_url || null,
-        phases: form.phases.map((p) => ({ title: p.title.trim(), tagline: p.tagline.trim(), picture_url: p.picture_url || null })),
+        phases: form.phases.map((p) => ({
+          title: p.title.trim(), tagline: p.tagline.trim(), picture_url: p.picture_url || null,
+          emotional_arc: (p.emotional_arc || '').trim(), feed_tone: (p.feed_tone || '').trim(),
+        })),
         split: form.split.map(Number),
       });
     } catch (err) {
@@ -205,6 +230,16 @@ export function SeasonSetupForm({ mode = 'create', seasonNumber = 1, initial = n
               <SeasonPicturePicker showId={showId} label={`Part ${i + 1} picture`} value={p.picture_url || null} disabled={busy}
                 onChange={(url) => setPart(i, 'picture_url', url)} />
             </div>
+            <label className="sst-field">
+              <span>Emotional arc <em>(empty: the default)</em></span>
+              <textarea rows={2} value={p.emotional_arc || ''} maxLength={MOOD_MAX.emotional_arc} placeholder={MOOD_DEFAULTS[i]?.emotional_arc}
+                onChange={(e) => setPart(i, 'emotional_arc', e.target.value)} data-testid={`sst-part-arc-${i + 1}`} />
+            </label>
+            <label className="sst-field">
+              <span>Feed tone <em>(empty: the default)</em></span>
+              <textarea rows={2} value={p.feed_tone || ''} maxLength={MOOD_MAX.feed_tone} placeholder={MOOD_DEFAULTS[i]?.feed_tone}
+                onChange={(e) => setPart(i, 'feed_tone', e.target.value)} data-testid={`sst-part-tone-${i + 1}`} />
+            </label>
           </fieldset>
         ))}
       </div>

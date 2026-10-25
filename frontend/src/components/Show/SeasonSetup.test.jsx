@@ -15,6 +15,7 @@ vi.mock('../../services/api', () => ({
 import api from '../../services/api';
 import {
   SeasonSetupForm, SeasonPlacement, SeasonDraft, SeasonChecklist, setupSteps, splitProblem, splitRanges, defaultForm, formFromArc, datesProblem,
+  moodProblem, MOOD_DEFAULTS, MOOD_MAX,
 } from './SeasonSetup';
 
 describe('the split', () => {
@@ -35,7 +36,11 @@ describe('the split', () => {
       { title: 'C', episode_start: 17, episode_end: 24 },
     ] })).toEqual({
       title: 'T', tagline: '', logline: '', description: '', starts_on: '', ends_on: '', cover_url: null,
-      phases: [{ title: 'A', tagline: 'a', picture_url: null }, { title: 'B', tagline: '', picture_url: null }, { title: 'C', tagline: '', picture_url: null }],
+      phases: [
+        { title: 'A', tagline: 'a', picture_url: null, emotional_arc: '', feed_tone: '' },
+        { title: 'B', tagline: '', picture_url: null, emotional_arc: '', feed_tone: '' },
+        { title: 'C', tagline: '', picture_url: null, emotional_arc: '', feed_tone: '' },
+      ],
       split: [6, 10, 8],
     });
   });
@@ -49,6 +54,49 @@ describe('the split', () => {
     expect(datesProblem('2026-02-01', '2026-01-31')).toBe('The season cannot end before it starts.');
     expect(datesProblem('2026-02-01', '2026-02-01')).toBeNull();
     expect(datesProblem('', '2026-02-01')).toBeNull();
+  });
+});
+
+describe("each part's moods (2026-10-25)", () => {
+  const ARC = {
+    title: 'Velvet Ladder', phases: [
+      { title: 'Arrival', emotional_arc: 'wonder → doubt', feed_behavior: { feed_tone: 'Loud and new.' }, episode_start: 1, episode_end: 6 },
+      { title: 'The Climb', episode_start: 7, episode_end: 16 },
+      { title: 'Crown', episode_start: 17, episode_end: 24 },
+    ],
+  };
+
+  test('read back for Edit; a too-long mood is named', () => {
+    const form = formFromArc(ARC);
+    expect(form.phases.map((p) => [p.emotional_arc, p.feed_tone])).toEqual([['wonder → doubt', 'Loud and new.'], ['', ''], ['', '']]);
+    expect(moodProblem(form.phases)).toBeNull();
+    expect(moodProblem([{ emotional_arc: 'x'.repeat(MOOD_MAX.emotional_arc + 1) }])).toBe("Part 1's emotional arc is longer than 300 characters.");
+    expect(moodProblem([{}, { feed_tone: 'y'.repeat(MOOD_MAX.feed_tone + 1) }])).toBe("Part 2's feed tone is longer than 500 characters.");
+  });
+
+  test('Edit season shows each part\'s moods, the default as the hint, and sends what she writes (empty for the default)', async () => {
+    const onSubmit = vi.fn().mockResolvedValue({});
+    render(<SeasonSetupForm mode="edit" seasonNumber={2} initial={formFromArc(ARC)} onSubmit={onSubmit} />);
+    expect(screen.getByTestId('sst-part-arc-1').value).toBe('wonder → doubt');
+    expect(screen.getByTestId('sst-part-tone-1').value).toBe('Loud and new.');
+    expect(screen.getByTestId('sst-part-arc-2').value).toBe('');
+    expect(screen.getByTestId('sst-part-arc-2').getAttribute('placeholder')).toBe(MOOD_DEFAULTS[1].emotional_arc);
+    expect(screen.getByTestId('sst-part-tone-3').getAttribute('placeholder')).toBe(MOOD_DEFAULTS[2].feed_tone);
+    expect(screen.getByTestId('sst-part-arc-1').getAttribute('maxlength')).toBe('300');
+    expect(screen.getByTestId('sst-part-tone-1').getAttribute('maxlength')).toBe('500');
+    fireEvent.change(screen.getByTestId('sst-part-arc-2'), { target: { value: '  hunger → rivalry ' } });
+    fireEvent.change(screen.getByTestId('sst-part-tone-1'), { target: { value: '' } });
+    fireEvent.click(screen.getByTestId('sst-submit'));
+    await waitFor(() => expect(onSubmit).toHaveBeenCalled());
+    const sent = onSubmit.mock.calls[0][0].phases;
+    expect(sent.map((p) => [p.emotional_arc, p.feed_tone])).toEqual([['wonder → doubt', ''], ['hunger → rivalry', ''], ['', '']]);
+  });
+
+  test('a mood too long to save blocks Save and says why', () => {
+    const arc = { ...ARC, phases: [{ ...ARC.phases[0], emotional_arc: 'x'.repeat(301) }, ARC.phases[1], ARC.phases[2]] };
+    render(<SeasonSetupForm mode="edit" seasonNumber={2} initial={formFromArc(arc)} onSubmit={vi.fn()} />);
+    expect(screen.getByTestId('sst-missing').textContent).toBe("Part 1's emotional arc is longer than 300 characters.");
+    expect(screen.getByTestId('sst-submit').disabled).toBe(true);
   });
 });
 
@@ -70,9 +118,9 @@ describe('Set up the season form', () => {
       title: 'Velvet Season', tagline: 'Her own room',
       logline: '', description: '', starts_on: null, ends_on: null, cover_url: null,
       phases: [
-        { title: 'Foundation', tagline: 'Prove you belong', picture_url: null },
-        { title: 'Rooms', tagline: 'Climb the ladder', picture_url: null },
-        { title: 'Legacy', tagline: 'Become uncopyable', picture_url: null },
+        { title: 'Foundation', tagline: 'Prove you belong', picture_url: null, emotional_arc: '', feed_tone: '' },
+        { title: 'Rooms', tagline: 'Climb the ladder', picture_url: null, emotional_arc: '', feed_tone: '' },
+        { title: 'Legacy', tagline: 'Become uncopyable', picture_url: null, emotional_arc: '', feed_tone: '' },
       ],
       split: [6, 10, 8],
     }));

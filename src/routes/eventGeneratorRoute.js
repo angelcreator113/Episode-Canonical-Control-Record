@@ -179,8 +179,12 @@ async function buildEventPrompt(db, show_id) {
     }
   } catch (e) { /* world_locations may not exist */ }
 
+  // The season the events are for (seasonLine; '' with none or on a failed read).
+  const seasonLine = await require('../services/seasonLine').loadSeasonLine(db.sequelize, { showId: show_id });
+  const seasonContext = seasonLine ? `\nTHE SEASON THESE EVENTS ARE FOR (let them fit it; never name a season or a part in an event):\n${seasonLine}\n` : '';
+
   const prompt = `Generate exactly 24 LalaVerse game events for the Styling Adventures fashion show.
-${brainContext}${locationContext}
+${brainContext}${locationContext}${seasonContext}
 CATEGORY SPLIT (non-negotiable):
 - industry: 12 events (primary — this is a fashion show first)
 - dating: 4 events

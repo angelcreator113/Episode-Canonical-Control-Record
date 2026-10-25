@@ -77,9 +77,11 @@ async function gatherEpisodeContext(episodeId, showId, sequelize) {
 
   // Show
   const [show] = await sequelize.query(
-    `SELECT id, title, description, genre, distribution_defaults FROM shows WHERE id = :showId AND deleted_at IS NULL LIMIT 1`,
+    // shows has `name`, not `title`: the old query failed, so every copy fell back to the
+    // default show name and the show's distribution_defaults were never read.
+    `SELECT id, name AS title, description, genre, distribution_defaults FROM shows WHERE id = :showId AND deleted_at IS NULL LIMIT 1`,
     { replacements: { showId }, type: sequelize.QueryTypes.SELECT }
-  ).catch(() => []);
+  ).catch((err) => { console.error('[distribution] show read failed:', err.message); return []; });
   ctx.show = show || {};
   ctx.showDefaults = show?.distribution_defaults ? (typeof show.distribution_defaults === 'string' ? JSON.parse(show.distribution_defaults) : show.distribution_defaults) : {};
 
@@ -108,14 +110,30 @@ async function gatherEpisodeContext(episodeId, showId, sequelize) {
     ctx.financials = todoList?.financial_summary ? (typeof todoList.financial_summary === 'string' ? JSON.parse(todoList.financial_summary) : todoList.financial_summary) : null;
   } catch { ctx.socialTasks = []; ctx.financials = null; }
 
-  // Arc context
+  // The season (seasonLine): the episode's own, snapshotted at Start
+  // Episode, else the show's active season and its current part. It read
+  // name / phase_title columns show_arcs does not have, and the error was
+  // swallowed, so no copy ever had it. ctx.arc is a seasonLine season
+  // (from_episode when it is the episode's own), or null; a failed read is
+  // logged and leaves it out.
+  ctx.arc = null;
   try {
-    const [arc] = await sequelize.query(
-      `SELECT name, current_phase, phase_title FROM show_arcs WHERE show_id = :showId AND deleted_at IS NULL ORDER BY created_at DESC LIMIT 1`,
-      { replacements: { showId }, type: sequelize.QueryTypes.SELECT }
+    const { fromSnapshot, fromArcContext } = require('./seasonLine');
+    const [row] = await sequelize.query(
+      'SELECT season_context FROM episodes WHERE id = :episodeId AND deleted_at IS NULL LIMIT 1',
+      { replacements: { episodeId }, type: sequelize.QueryTypes.SELECT }
     );
-    ctx.arc = arc || null;
-  } catch { ctx.arc = null; }
+    const sc = typeof row?.season_context === 'string' ? JSON.parse(row.season_context) : row?.season_context;
+    const own = fromSnapshot(sc);
+    ctx.arc = own ? { ...own, from_episode: true } : null;
+    if (!ctx.arc) {
+      const { getArcContext } = require('./arcProgressionService');
+      ctx.arc = fromArcContext(await getArcContext(showId, { sequelize }));
+    }
+  } catch (err) {
+    console.error('[distribution] the season could not be read (the copy goes without it):', err.message);
+    ctx.arc = null;
+  }
 
   return ctx;
 }
@@ -136,7 +154,7 @@ function buildContextBlock(ctx) {
 
   let block = `SHOW: "${ctx.show?.title || 'Styling Adventures with Lala'}"
 Genre: ${ctx.show?.genre || 'reality/fashion'}
-${ctx.arc ? `Season Arc: ${ctx.arc.name} — Phase: ${ctx.arc.phase_title || ctx.arc.current_phase}` : ''}
+${ctx.arc ? require('./seasonLine').seasonLine(ctx.arc, { about: false, partLabel: ctx.arc.from_episode ? "This episode's part" : 'Current part' }) : ''}
 
 EPISODE: ${ep.title} (Episode ${ep.episode_number})
 ${teaserOf(ep) ? `VIEWER TEASER (the viewer-facing copy; draft every platform's copy from this): ${teaserOf(ep)}` : 'VIEWER TEASER: none written for this episode yet.'}

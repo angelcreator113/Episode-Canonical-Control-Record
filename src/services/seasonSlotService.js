@@ -353,26 +353,38 @@ async function snapshotEpisode(sequelize, { slotId, episodeId, transaction }) {
   const [[slot]] = await sequelize.query(
     `SELECT s.slot_number, s.season_number, s.phase, s.story_purpose, s.story_purposes, s.story_thread_id,
             s.career_focus, s.desired_pressure, s.show_id,
-            s.outcome_range, a.id AS arc_id, a.title AS arc_title, a.phases, st.title AS thread_title
+            s.outcome_range, a.id AS arc_id, a.title AS arc_title, a.tagline AS arc_tagline, a.logline AS arc_logline,
+            a.description AS arc_description, a.phases, st.title AS thread_title
        FROM season_slots s JOIN show_arcs a ON a.id = s.arc_id
        LEFT JOIN show_story_threads st ON st.id = s.story_thread_id AND st.deleted_at IS NULL
       WHERE s.id = :slotId`,
     { replacements: { slotId }, transaction });
   if (!slot) return null;
-  const phase = arcPhases(slot).find((p) => Number(p.phase) === Number(slot.phase)) || {};
+  const phases = arcPhases(slot);
+  const phase = phases.find((p) => Number(p.phase) === Number(slot.phase)) || {};
   const start = Number(phase.episode_start) || ((slot.phase - 1) * 8 + 1);
   const season = slot.season_number || 1;
+  // The season's tagline, logline and description (capped) and the part's
+  // range ride along, so every prompt reading the snapshot names the
+  // season and the part's real length (seasonLine; season-AI audit, 2026-10-25).
+  const { clip } = require('./seasonLine');
   const context = {
     season_number: season,
     label: episodeLabel(season, slot.slot_number),
     slot_number: slot.slot_number,
     arc_id: slot.arc_id,
     arc_title: slot.arc_title,
+    arc_tagline: slot.arc_tagline || null,
+    arc_logline: slot.arc_logline ? clip(slot.arc_logline) : null,
+    arc_description: slot.arc_description ? clip(slot.arc_description) : null,
+    phase_count: phases.length,
     phase: {
       number: slot.phase,
       title: phase.title || null,
       tagline: phase.tagline || null,
       emotional_arc: phase.emotional_arc || null,
+      episode_start: Number(phase.episode_start) || start,
+      episode_end: Number(phase.episode_end) || null,
     },
     position_in_phase: slot.slot_number - start + 1,
     story_purpose: slot.story_purpose || null,

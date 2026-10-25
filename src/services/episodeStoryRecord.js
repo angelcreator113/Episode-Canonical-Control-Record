@@ -133,7 +133,7 @@ function sameText(x, y) {
 async function episodeOf(sequelize, episodeId) {
   if (!UUID_RE.test(String(episodeId || ''))) throw new RecordError('episodeId must be a UUID');
   const [[episode]] = await sequelize.query(
-    `SELECT id, show_id, episode_number, title, description, script_content, evaluation_json
+    `SELECT id, show_id, episode_number, title, description, script_content, evaluation_json, season_context
        FROM episodes WHERE id = :episodeId AND deleted_at IS NULL`, { replacements: { episodeId } });
   if (!episode) throw new RecordError('Episode not found', 404);
   return episode;
@@ -431,6 +431,21 @@ function getClient() {
   return client;
 }
 
+/**
+ * The season slot the episode fills, from its Start Episode snapshot: its
+ * purposes, career focus, desired pressure and hoped-for outcome
+ * (seasonLine.slotLines, capped), so What changed can say how the episode
+ * met its slot. '' for an episode in no slot.
+ */
+function slotBlock(seasonContext) {
+  const sc = parse(seasonContext, null);
+  if (!sc || !sc.label) return '';
+  const lines = require('./seasonLine').slotLines(sc, { cap: 200, purposes: 3 });
+  if (!lines.length) return '';
+  const part = sc.phase?.title ? `, Part ${sc.phase.number}: ${sc.phase.title}` : '';
+  return `\nTHE SEASON SLOT THIS EPISODE FILLS (${sc.label}${part}):\n${lines.join('\n')}\nIn "what_happened", end with a sentence on how the episode met its slot: its purpose, the pressure it put on Lala, and where the outcome fell against the hoped-for range.\n`;
+}
+
 function draftPrompt({ episode, event, cast, threads, goals = [], relationships = [], followUps = [], twists = [] }) {
   const evaluation = parse(episode.evaluation_json, null);
   const names = new Map(cast.map((c) => [c.id, c.name]));
@@ -458,7 +473,7 @@ function draftPrompt({ episode, event, cast, threads, goals = [], relationships 
 
 EPISODE ${episode.episode_number ?? '?'}: "${episode.title || 'Untitled'}"${episode.description ? `\n${String(episode.description).slice(0, 1000)}` : ''}
 ${event ? `EVENT: ${event.name || ''}${event.venue_name ? ` at ${event.venue_name}` : ''}${event.narrative_stakes ? `\nSTAKES: ${event.narrative_stakes}` : ''}` : ''}
-${evaluation ? `OUTCOME: ${String(evaluation.tier_final || '').toUpperCase()} (${evaluation.score ?? '?'}/100) ${evaluation.narrative_lines?.short || ''}` : ''}
+${evaluation ? `OUTCOME: ${String(evaluation.tier_final || '').toUpperCase()} (${evaluation.score ?? '?'}/100) ${evaluation.narrative_lines?.short || ''}` : ''}${slotBlock(episode.season_context)}
 
 THE PEOPLE IN IT, WITH THE SECRETS THEY KEEP:
 ${people}

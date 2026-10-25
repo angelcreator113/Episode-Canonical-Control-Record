@@ -1156,27 +1156,45 @@ const SEASON_MAX = 200;
 const SMALL_WIDTH = 640;
 
 /**
- * The show's episodes in order, each with its current thumbnail (the
+ * The season's episodes in order, each with its current thumbnail (the
  * primary one, else episodes.thumbnail_url; null when it has none) and
  * whether it has its own arrangement (a draft).
+ *
+ * The season is `arcId` (one of the show's), else the active one, else its
+ * latest (2026-10-25: it listed every episode of the show, so Season 2's
+ * grid began with Season 1). Its slots' episodes come first, in slot order,
+ * each with its slot label ("S2 · E1"); then the episodes in no slot of any
+ * season, by number. A show with no season lists every episode, as before.
  */
-async function seasonEpisodes(sequelize, showId) {
+async function seasonEpisodes(sequelize, showId, { arcId = null } = {}) {
   const show = await findShow(sequelize, showId);
   const drafts = await draftsReady(sequelize);
   const saved = await savedReady(sequelize);
+  const { loadSeason } = require('./seasonLoader');
+  let season = UUID.test(String(arcId || '')) ? await loadSeason(sequelize, show.id, { arcId, slots: false }) : null;
+  if (season && (String(season.arc.show_id) !== String(show.id) || season.arc.deleted_at)) season = null;
+  if (arcId && !season) throw new ThumbnailError(404, 'Season not found');
+  if (!season) season = await loadSeason(sequelize, show.id, { anyStatus: true, slots: false });
+  const arc = season ? season.arc : null;
   const [rows] = await sequelize.query(
-    `SELECT e.id, e.title, e.episode_number, e.thumbnail_url,
+    `SELECT e.id, e.title, e.episode_number, e.thumbnail_url, ${arc ? 'sl.slot_number, sl.season_number' : 'NULL AS slot_number, NULL AS season_number'},
             ${saved ? '(SELECT s.url FROM episode_saved_thumbnails s WHERE s.episode_id = e.id AND s.is_current AND s.deleted_at IS NULL LIMIT 1)' : 'NULL'} AS current_url,
             ${drafts ? 'EXISTS (SELECT 1 FROM episode_thumbnail_drafts d WHERE d.episode_id = e.id AND d.deleted_at IS NULL)' : 'false'} AS has_draft
        FROM episodes e
+       ${arc ? 'LEFT JOIN season_slots sl ON sl.episode_id = e.id AND sl.arc_id = :arcId AND sl.deleted_at IS NULL' : ''}
       WHERE e.show_id = :showId AND e.deleted_at IS NULL
-      ORDER BY e.episode_number ASC NULLS LAST, e.created_at ASC
+        ${arc ? `AND (sl.id IS NOT NULL OR NOT EXISTS (
+              SELECT 1 FROM season_slots x WHERE x.episode_id = e.id AND x.deleted_at IS NULL))` : ''}
+      ORDER BY ${arc ? 'sl.slot_number ASC NULLS LAST, ' : ''}e.episode_number ASC NULLS LAST, e.created_at ASC
       LIMIT ${SEASON_MAX}`,
-    { replacements: { showId: show.id } });
+    { replacements: { showId: show.id, arcId: arc ? arc.id : null } });
+  const { episodeLabel } = require('./seasonSlotService');
   return (rows || []).map((r) => ({
     id: r.id,
     title: r.title,
     episode_number: r.episode_number,
+    slot_number: r.slot_number ?? null,
+    label: r.slot_number != null ? episodeLabel(r.season_number || arc?.season_number, r.slot_number) : null,
     thumbnailUrl: r.current_url || r.thumbnail_url || null,
     hasDraft: Boolean(r.has_draft),
   }));

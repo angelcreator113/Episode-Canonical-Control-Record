@@ -386,28 +386,7 @@ async function loadScriptContext(episodeId, showId, models, { lite = false } = {
     }
   } catch { /* non-blocking */ }
 
-  // 13. Arc / season phase — the active arc, read through the shared
-  // getArcContext (show_arcs has no name or phase_title column; the phase
-  // title lives in its phases JSON).
-  context.arcPhase = null;
-  try {
-    const { getArcContext } = require('./arcProgressionService');
-    const arc = await getArcContext(showId, { sequelize });
-    if (arc) {
-      context.arcPhase = {
-        name: arc.arc_title,
-        current_phase: arc.current_phase.number,
-        phase_title: arc.current_phase.title,
-        emotional_arc: arc.current_phase.emotional_arc,
-        emotional_temperature: arc.emotional_temperature,
-        narrative_debt_summary: arc.narrative_debt.length > 0 ? arc.narrative_debt_summary : null,
-      };
-    }
-  } catch (err) {
-    console.error('[ScriptWriter] season arc context failed (non-blocking):', err.message);
-  }
-
-  // 13b. This episode's season position (§8(ff) A5): the slot's context,
+  // 13. This episode's season position (§8(ff) A5): the slot's context,
   // snapshotted onto the episode at Start Episode.
   context.seasonPosition = null;
   try {
@@ -419,6 +398,31 @@ async function loadScriptContext(episodeId, showId, models, { lite = false } = {
     context.seasonPosition = (typeof sc === 'string' ? JSON.parse(sc) : sc) || null;
   } catch (err) {
     console.error('[ScriptWriter] season position failed (non-blocking):', err.message);
+  }
+
+  // 13b. Arc / season phase, read through the shared getArcContext
+  // (show_arcs has no name or phase_title column; the phase title lives in
+  // its phases JSON): the episode's own season when its snapshot names one
+  // (a Season 1 episode written while Season 2 is active reads Season 1),
+  // else the active arc.
+  context.arcPhase = null;
+  try {
+    const { getArcContext } = require('./arcProgressionService');
+    const arc = await getArcContext(showId, { sequelize }, { arcId: context.seasonPosition?.arc_id || null });
+    if (arc) {
+      context.arcPhase = {
+        name: arc.arc_title,
+        current_phase: arc.current_phase.number,
+        phase_title: arc.current_phase.title,
+        emotional_arc: arc.current_phase.emotional_arc,
+        emotional_temperature: arc.emotional_temperature,
+        narrative_debt_summary: arc.narrative_debt.length > 0 ? arc.narrative_debt_summary : null,
+        // The season's logline and description for the block (seasonLine).
+        season: require('./seasonLine').fromArcContext(arc),
+      };
+    }
+  } catch (err) {
+    console.error('[ScriptWriter] season arc context failed (non-blocking):', err.message);
   }
 
   // 13c. The season twists this episode's slot plants or pays off
@@ -599,6 +603,7 @@ function storyContextBlocks(context, { withSeason = true } = {}) {
     const a = context.arcPhase;
     const phase = a.phase_title ? `Phase ${a.current_phase}: ${a.phase_title}` : `Phase ${a.current_phase}`;
     arcBlock = `═══ SEASON ARC ═══\n${a.name || 'Current Arc'} — ${phase}\n`;
+    for (const line of require('./seasonLine').seasonLines(a.season, { title: false, part: false })) arcBlock += `${line}\n`;
     if (a.emotional_arc) arcBlock += `Phase emotional arc: ${a.emotional_arc}\n`;
     arcBlock += `Emotional Temperature: ${a.emotional_temperature || 'neutral'}\n`;
     if (a.narrative_debt_summary) arcBlock += `${a.narrative_debt_summary}\n`;

@@ -155,6 +155,12 @@ ${lines.join('\n')}
 // is 'host' with a context and 'started_from' without, as before.
 const CREATOR_ROLES = ['host', 'started_from'];
 
+// The show's season and its current part (seasonLine), as background for
+// the event's tone; '' with none, so a call without one is unchanged.
+function seasonBackground(line) {
+  return line ? `Where Lala's story is now (background for the tone only; never name a season, a part or an episode):\n${line}\n\n` : '';
+}
+
 function buildDraftPrompt(profile, context = {}) {
   const p = profile || {};
   const ctxBlock = contextBlock(context.context);
@@ -178,7 +184,7 @@ function buildDraftPrompt(profile, context = {}) {
 
 ${facts.length > 0 ? facts.join('\n') : 'No details beyond the event existing — keep it simple and do not invent specifics.'}
 
-${ctxBlock}${context.brainBlock ? `${context.brainBlock}\n` : ''}Write these:
+${ctxBlock}${context.brainBlock ? `${context.brainBlock}\n` : ''}${seasonBackground(context.seasonLine)}Write these:
 - concept: one sentence saying what the event is and why it exists.
 - activity: one sentence saying what attendees will actually do there.
 - description: the public event description, two to four sentences. ${R8_CONTRACT}
@@ -382,7 +388,11 @@ async function draftEventConcept(profile, context = {}) {
     const brain = context.models
       ? await loadBrainContext(context.models, { showId: context.showId || null, limit: 15, label: 'eventConceptDraft' })
       : { block: null, ids: [] };
-    const prompt = buildDraftPrompt(profile, { ...context, brainBlock: brain.block });
+    // The season it falls in (seasonLine; '' with none or on a failed read).
+    const seasonLine = context.models && context.showId
+      ? await require('./seasonLine').loadSeasonLine(context.models.sequelize, { showId: context.showId }, { about: false })
+      : '';
+    const prompt = buildDraftPrompt(profile, { ...context, brainBlock: brain.block, seasonLine });
     const Anthropic = require('@anthropic-ai/sdk');
     // One attempt (Evoni, Task #2122 review): 10s timeout, no retry, SDK
     // retries off. Any error, overload included, falls to the catch below.

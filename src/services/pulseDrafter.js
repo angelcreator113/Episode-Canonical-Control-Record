@@ -139,7 +139,21 @@ async function mediaBlock(db) {
   return gossipMediaBlock(await loadCultureList(db, 'GOSSIP_MEDIA')) + trendsBlock(await loadTrends(db));
 }
 
-function buildPrompt({ character, profile, voice, label, context, known = null, hosting = '', mix = null, world = '', bible = null, media = '', format = null }) {
+/**
+ * The show's season and the part it is in (seasonLine), as background for
+ * the mood of the moment; '' with none. A post stays in the world, so the
+ * prompt says never to name it.
+ */
+const seasonMood = (season) => (season
+  ? `Where Lala's story is now (background for the mood only; never name a season, a part, an episode or a show):\n${season}\n`
+  : '');
+
+/** The season line for a draft: the episode's own season when it has one, else the show's. */
+function draftSeason(db, showId, episodeId) {
+  return require('./seasonLine').loadSeasonLine(db.sequelize, { showId, episodeId: episodeId || null }, { about: false });
+}
+
+function buildPrompt({ character, profile, voice, label, context, known = null, hosting = '', mix = null, world = '', bible = null, media = '', format = null, season = '' }) {
   const { BANNED_PHRASES } = require('./pulseVoices');
   const examples = (voice.examples_json || []).slice(0, 8).map((e) => `- ${e.text}`).join('\n') || '(none yet)';
   return `You write one post on The Pulse, LalaVerse's social network, as ${profile.display_name || character.display_name} (@${profile.handle}).
@@ -152,7 +166,7 @@ ${mix?.line ? `${mix.line}\n` : ''}${world}
 When: ${label || 'now'}.
 What happened: ${context.about || 'an ordinary day; post about whatever they would.'}
 ${knowsLine(known)}
-${hostingLine(hosting)}
+${hostingLine(hosting)}${seasonMood(season)}
 ${PRIVATE_RULE}
 ${JSON.stringify(privateOf(character))}
 ${media}${bible || ''}
@@ -207,6 +221,7 @@ async function draftPost(db, { showId, characterId, moment, context = {}, reques
   const world = await posterWorldLine(db, profile.id);
   const bible = await showBible(db, showId);
   const media = await mediaBlock(db);
+  const season = await draftSeason(db, showId, context.episode_id);
   // One automated request per drafting call (Task #3031); the caller names the kind and its job.
   await require('./pulseRequests').take(db, { showId, lane: 'automated', kind: request.kind || 'post', jobId: request.jobId || null });
   let message;
@@ -214,7 +229,7 @@ async function draftPost(db, { showId, characterId, moment, context = {}, reques
     try {
       message = await getClient().messages.create({
         model, max_tokens: 600,
-        messages: [{ role: 'user', content: buildPrompt({ character, profile, voice, label: clock.label(at), context, known, hosting, mix, world, bible: bible.block, media, format }) }],
+        messages: [{ role: 'user', content: buildPrompt({ character, profile, voice, label: clock.label(at), context, known, hosting, mix, world, bible: bible.block, media, format, season }) }],
       });
       break;
     } catch (modelErr) {
@@ -359,13 +374,13 @@ ${JSON.stringify(privateOf(character))}`;
 }
 
 /** The prompt for several posts about one moment, one per poster. */
-function buildPostBatchPrompt(entries, { label, about, bible = null, media = '' }) {
+function buildPostBatchPrompt(entries, { label, about, bible = null, media = '', season = '' }) {
   const { BANNED_PHRASES } = require('./pulseVoices');
   return `You write ${entries.length} separate posts on The Pulse, LalaVerse's social network: one by each person below, each exactly in that person's own voice. They post on their own; nobody has seen the others' posts.
 
 When: ${label || 'now'}.
 What happened: ${about || 'an ordinary day; each posts about whatever they would.'}
-
+${seasonMood(season)}
 ${entries.map((e, i) => itemBlock(i + 1, e, 8)).join('\n\n')}
 ${media}${bible || ''}
 Rules for every post:
@@ -478,7 +493,7 @@ async function draftPostBatch(db, { showId, items, moment, context = {}, request
   if (!entries.length) return { drafted: [], failed };
   const bible = await require('./posterWorld').showBible(db, showId);
   await require('./pulseRequests').take(db, { showId, lane: 'automated', kind: request.kind || 'posts', jobId: request.jobId || null });
-  const parsed = parseBatch(await askBatch(buildPostBatchPrompt(entries, { label: clock.label(at), about: context.about, bible: bible.block, media: await mediaBlock(db) }), 500 * entries.length), entries.length);
+  const parsed = parseBatch(await askBatch(buildPostBatchPrompt(entries, { label: clock.label(at), about: context.about, bible: bible.block, media: await mediaBlock(db), season: await draftSeason(db, showId, context.episode_id) }), 500 * entries.length), entries.length);
   await require('./brainRules').recordRuleUse(db.sequelize, bible.ids, 'PulseDrafter');
   const drafted = [];
   for (const [i, e] of entries.entries()) {
@@ -600,6 +615,6 @@ async function draftCommentsAndRoute(db, args) {
 }
 
 module.exports = {
-  MODELS, BATCH_MAX, knowsLine, mediaBlock, hostingLine, privateOf, PRIVATE_RULE, draftPost, draftAndRoute, draftComment, draftCommentAndRoute, release, DraftError,
+  MODELS, BATCH_MAX, knowsLine, mediaBlock, hostingLine, privateOf, PRIVATE_RULE, buildPrompt, seasonMood, draftPost, draftAndRoute, draftComment, draftCommentAndRoute, release, DraftError,
   buildPostBatchPrompt, buildCommentBatchPrompt, posterMix, parseBatch, askBatch, hostedEventLines, draftBatch, draftPostBatch, draftCommentBatch, draftPostsAndRoute, draftCommentsAndRoute,
 };

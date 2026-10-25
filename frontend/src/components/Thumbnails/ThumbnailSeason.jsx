@@ -17,7 +17,8 @@ import { fillTemplate, presetLayers, youtubeWarnings, measurer, loadThumbnailFon
 const AT_ONCE = 2;
 const LAYOUT = 'layout';
 
-const label = (e) => `${e.episode_number || e.episode_number === 0 ? `${e.episode_number}. ` : ''}${e.title || 'Untitled'}`;
+// "S2 · E1. Title" for an episode in the season's slots; "3. Title" for one in no slot.
+const label = (e) => `${e.label ? `${e.label}. ` : e.episode_number || e.episode_number === 0 ? `${e.episode_number}. ` : ''}${e.title || 'Untitled'}`;
 const reason = (err, fallback) => err?.response?.data?.error || fallback;
 
 /** Runs work(item) for each item, AT_ONCE at a time; stops early when live() is false. */
