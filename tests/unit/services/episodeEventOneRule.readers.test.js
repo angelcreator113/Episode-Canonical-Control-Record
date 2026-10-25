@@ -26,7 +26,10 @@ const STAMP_READ = [
 const ALLOWED = {
   'src/services/episodeEventsService.js': 'listEpisodeEvents itself: the rule for the tabs, lists every stamped event',
   'src/services/episodeGeneratorService.js': 'the Start Episode write of the stamp',
-  'src/routes/worldEvents.js': 'the inject and generate-from-many writes, and the stale-link cleanup of a deleted episode',
+  // worldEvents.js until Task #54 split it into src/routes/worldEvents/.
+  'src/routes/worldEvents/inject.js': 'the inject write',
+  'src/routes/worldEvents/episodeBatch.js': 'the generate-from-many write',
+  'src/routes/worldEvents/overlays.js': 'the stale-link cleanup of a deleted episode',
   'src/services/sceneSetUsesService.js': 'scene-set uses: every linked event\'s scene set, not the episode\'s one event',
   'src/utils/eventTermsLock.js': 'the reopen guard: any stamped or brief event of the episode with reopened terms',
   'src/utils/episodeEventSql.js': 'the rule itself, and its doc comment',
@@ -60,7 +63,7 @@ describe('the episode\'s event, one rule for every service (Task #1917)', () => 
 
   test.each([
     // The services named in #1913's report, plus the readers found since.
-    'src/routes/episodes.js', 'src/routes/evaluation.js', 'src/routes/wardrobe.js', 'src/routes/worldEvents.js',
+    'src/routes/episodes.js', 'src/routes/evaluation.js', 'src/routes/wardrobe.js', 'src/routes/worldEvents/nextSuggestions.js',
     'src/services/episodeScriptWriterService.js', 'src/services/groundedScriptGeneratorService.js',
     'src/services/financialTransactionService.js', 'src/services/scenePlannerService.js',
     'src/services/distributionService.js', 'src/services/todoListService.js',
