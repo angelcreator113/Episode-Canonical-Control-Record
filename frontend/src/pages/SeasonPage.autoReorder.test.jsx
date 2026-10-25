@@ -3,7 +3,9 @@
  * started events by re-injecting them into other episodes
  * (POST /api/v1/world/:showId/events/:id/inject); the server's terms lock
  * (§8(x) D4) refuses to change the episode link of an event that has
- * started an episode, and reordering belongs to future slots only.
+ * started an episode, and reordering belongs to future slots only. The
+ * Season page (which replaced Producer Mode's Season Plan tab, 2026-10-25)
+ * keeps it that way.
  */
 import { vi, describe, beforeEach, test, expect } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
@@ -14,7 +16,7 @@ vi.mock('../services/api', () => ({
 }));
 
 import api from '../services/api';
-import WorldAdmin from './WorldAdmin';
+import SeasonPage from './SeasonPage';
 
 const ARC = {
   title: 'Soft Luxury Ascension',
@@ -27,12 +29,20 @@ const ARC = {
   progression_log: [],
   phases: [{ phase: 1, title: 'Foundation', status: 'active', episode_start: 1, episode_end: 8 }],
 };
+const ROADMAP = {
+  arc: { id: 'arc-1', title: ARC.title, current_phase: 1 }, season_number: 1, slot_count: 8,
+  counts: { done: 0, in_production: 0, event_ready: 0, needs_event: 8 },
+  phases: [{ ...ARC.phases[0], slots: Array.from({ length: 8 }, (_, i) => ({
+    id: `slot-${i + 1}`, slot_number: i + 1, phase: 1, label: `S1 · E${i + 1}`, state: 'needs_event', locked: false, episode: null, event: null, intention: {}, result: {},
+  })) }],
+  unslotted_episodes: [], available_events: [],
+};
 
 function renderAt(tab) {
   return render(
-    <MemoryRouter initialEntries={[`/shows/show-1/world?tab=${tab}`]}>
+    <MemoryRouter initialEntries={[`/shows/show-1/season?tab=${tab}`]}>
       <Routes>
-        <Route path="/shows/:id/world" element={<WorldAdmin />} />
+        <Route path="/shows/:showId/season" element={<SeasonPage />} />
       </Routes>
     </MemoryRouter>
   );
@@ -47,23 +57,23 @@ describe('Season Arc without Auto-Reorder (#2363)', () => {
       }
       if (url === '/api/v1/shows/show-1') return { data: { id: 'show-1', title: 'Show' } };
       if (url === '/api/v1/world/show-1/arc') return { data: { arc: ARC } };
+      if (url === '/api/v1/world/show-1/season/roadmap') return { data: { roadmap: ROADMAP } };
       return { data: {} };
     });
     vi.mocked(api.post).mockResolvedValue({ data: {} });
   });
 
-  test('the Season tab renders its arc with no Auto-Reorder control', async () => {
-    renderAt('season');
+  test.each(['overview', 'roadmap', 'events'])('the Season page (%s) renders its arc with no Auto-Reorder control', async (tab) => {
+    renderAt(tab);
 
-    await waitFor(() => expect(screen.getByText(/Season 1: Soft Luxury Ascension/)).toBeTruthy());
-    // The counts are one line now (Evoni, 2026-10-22 layout list).
-    expect(screen.getByTestId('season-counts').textContent).toMatch(/episodes? done/);
+    await waitFor(() => expect(screen.getByRole('heading', { level: 1, name: 'Soft Luxury Ascension' })).toBeTruthy());
+    expect(screen.getByTestId('szn-hero').textContent).toContain('Season 1');
 
     expect(screen.queryByText(/Auto-Reorder/i)).toBeNull();
     expect(screen.queryByRole('button', { name: /reorder/i })).toBeNull();
     expect(screen.queryByText('Episode Order')).toBeNull();
 
-    // Nothing on the Season tab re-injects events into episodes.
+    // Nothing on the Season page re-injects events into episodes.
     const injects = vi.mocked(api.post).mock.calls.filter(([url]) => /\/inject$/.test(url));
     expect(injects).toEqual([]);
   });

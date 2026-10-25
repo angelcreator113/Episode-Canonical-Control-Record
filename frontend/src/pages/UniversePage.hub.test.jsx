@@ -184,7 +184,8 @@ describe('UniversePage: the LalaVerse hub', () => {
     expect(screen.getByTestId('lalaverse-banner').textContent).toContain('The show.');
     const tile = (k) => screen.getByTestId(`lalaverse-tile-${k}`);
     expect(tile('episodes').textContent).toContain('1');
-    expect(tile('episodes').getAttribute('href')).toBe('/shows/show-b/world?tab=season');
+    expect(tile('episodes').getAttribute('href')).toBe('/shows/show-b/season');
+    expect(tile('episodes').textContent).toContain('Open the Season page');
     expect(tile('events').getAttribute('href')).toBe('/shows/show-b/world?tab=events');
     // Counted as The cast counts it (Evoni, 2026-10-08): the feed people in
     // Lala's world, and the show's registry's old-system characters still to

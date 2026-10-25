@@ -87,6 +87,7 @@
  */
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate, Link, useLocation } from 'react-router-dom';
+import { seasonPageHref } from '../lib/seasonPage';
 import {
   ArrowLeft, User, UserPlus, Pencil, PlayCircle, Lock, AlertCircle,
   Search, X, CheckCircle2, Sparkles, RefreshCw, Loader2, MapPin, Plus,
@@ -285,7 +286,7 @@ export { sceneSetThumb, sceneSetPath };
 function HeroTitle({ context, showId, name }) {
   const title = <h1 className="epp-title">{name}</h1>;
   if (!context) return <div className="epp-hero-title">{title}</div>;
-  const roadmapLink = <Link className="epp-season-link" to={`/shows/${showId}/world?tab=season`}>Season Plan</Link>;
+  const roadmapLink = <Link className="epp-season-link" to={seasonPageHref(showId, 'roadmap')}>the Season page</Link>;
   if (!context.in_slot) {
     return (
       <div className="epp-hero-title" data-testid="season-context" role="group" aria-label="Season">

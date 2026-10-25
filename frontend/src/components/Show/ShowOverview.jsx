@@ -23,6 +23,7 @@
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { seasonPageHref } from '../../lib/seasonPage';
 import {
   Play, FileText, Smartphone, FolderOpen, MoreHorizontal, ClipboardList, MapPin, Clapperboard, Shirt, Sparkles, Layers, Hash, Brain,
   CircleCheck, Image as ImageIcon, Music, Film, ChevronRight, AlertTriangle, Coins, Star, Heart, BarChart3, Zap, UserRound, ImageOff, Pencil,
@@ -562,7 +563,7 @@ export default function ShowOverview({ showId, episodes = [], events = [], charS
           <section className="pov-card" data-testid="sov-next">
             <div className="pov-card-head">
               <h3 className="pov-h3"><Sparkles size={18} aria-hidden /> Up Next</h3>
-              <button type="button" className="pov-link" onClick={() => goTo('season')}>View Plan</button>
+              <Link className="pov-link" to={seasonPageHref(showId)} data-testid="sov-view-plan">View Plan</Link>
             </div>
             <ul className="pov-next">
               <li data-testid="sov-next-slot">
@@ -570,14 +571,14 @@ export default function ShowOverview({ showId, episodes = [], events = [], charS
                   : next.failed ? (
                     <span className="pov-empty">Couldn't load the season. <button type="button" className="pov-link" onClick={next.reload}>Retry</button></span>
                   ) : next.slot ? (
-                    <button type="button" className="pov-next-row" onClick={() => goTo('season')}>
+                    <Link className="pov-next-row" to={seasonPageHref(showId, 'roadmap')} data-testid="sov-next-slot-link">
                       <span className="pov-next-text">
                         <strong>Next slot: {next.slot.label}</strong>
                         {next.slot.intention?.story_purpose && <span>{next.slot.intention.story_purpose}</span>}
                       </span>
                       <ChevronRight size={20} aria-hidden />
-                    </button>
-                  ) : <span className="pov-empty">{next.hasSeason ? 'Every slot this season is filled.' : 'No season planned yet.'} <button type="button" className="pov-link" onClick={() => goTo('season')}>Season Plan</button></span>}
+                    </Link>
+                  ) : <span className="pov-empty">{next.hasSeason ? 'Every slot this season is filled.' : 'No season planned yet.'} <Link className="pov-link" to={seasonPageHref(showId)} data-testid="sov-season-link">{next.hasSeason ? 'Season page' : 'Set up the season'}</Link></span>}
               </li>
               <li data-testid="sov-next-event">
                 {nextEvent ? (

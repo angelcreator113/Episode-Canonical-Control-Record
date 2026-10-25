@@ -4,6 +4,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { CalendarHeart, Tv, Globe, Link2, Briefcase, Zap, Trophy, RefreshCw, X, Sparkles, ArrowRight, ListOrdered, Package } from 'lucide-react';
 import api from '../../services/api';
 import { getEpisodeEvents } from '../../services/episodeEventsApi';
+import { seasonPageHref } from '../../lib/seasonPage';
 import SceneSuggestionReview from '../episode/SceneSuggestionReview';
 import EpisodeTeaserSection from './EpisodeTeaserSection';
 import EpisodeMoneyCard from './EpisodeMoneyCard';
@@ -687,7 +688,8 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
             </>
           ) : (
             <p className="eov-empty">
-              Not in a season slot yet. Place it on Producer Mode → Episodes → Season Plan.
+              Not in a season slot yet.{' '}
+              {showId ? <Link to={seasonPageHref(showId, 'roadmap')} data-testid="season-position-link">Place it on the Season page</Link> : 'Place it on the Season page.'}
             </p>
           )}
         </div>

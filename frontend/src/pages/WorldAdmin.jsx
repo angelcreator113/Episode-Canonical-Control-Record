@@ -4,8 +4,8 @@
  * Route: /shows/:id/world
  * 
  * Tabs (TABS below; audit IA-01/IA-02, 2026-10-03):
- *   Overview · Episodes (Production, Season Plan with Career Goals, Results)
- *   · Events · Assets (Scene Sets, Wardrobe, Lala's Phone, Audience
+ *   Overview · Episodes (Production, Results) · Season (a link: the Season
+ *   page, /shows/:id/season, with the roadmap and Career Goals) · Events · Assets (Scene Sets, Wardrobe, Lala's Phone, Audience
  *   Overlays) · Cast & Continuity (Lala's State & Continuity, Lala's
  *   Finances, Activity & Decisions) · Release (Distribution, Insights)
  * 
@@ -15,6 +15,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef, lazy, Suspense } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, Link, useSearchParams, useNavigate } from 'react-router-dom';
+import { seasonPageHref } from '../lib/seasonPage';
 import api from '../services/api';
 import DeliverableProgress from '../components/Deliverables/DeliverableProgress';
 import { Beat14AttachForm, HeldForBeat14, HeldWhy, canAttachToBeat14, canUndo, isCompletedEpisode, releaseText, scheduleEarlyText } from '../components/Show/OpportunityBeat14';
@@ -24,7 +25,6 @@ import { rememberShow } from '../utils/activeShow';
 import ShowEpisodesBoard from '../components/Show/ShowEpisodesBoard';
 import WorldMomentsTab from '../components/WorldMoments/WorldMomentsTab';
 import RateCardTab from '../components/RateCard/RateCardTab';
-import { SeasonTab } from '../components/Show/SeasonPlan';
 import { PLAN_S } from '../components/Show/planStyles';
 import ShowOverview, { episodesInProduction, eventsNeedingAttention } from '../components/Show/ShowOverview';
 import { useLookDraft, LookBuilderPanel, RecentlyWorn } from '../components/Show/LookBuilder';
@@ -51,7 +51,7 @@ import {
 import {
   createEventSaveQueue, putEventVersioned, isStaleSaveError, saveErrorMessage,
 } from '../utils/eventSaveVersion';
-import { MoreHorizontal, ArrowRight, ArrowLeft, Plus, Calendar, CalendarDays, Sparkles, Lightbulb, AlertTriangle, Loader2, RotateCw, X, Mail, Gem, Crown, Heart, ChevronDown, Search, MessageSquare, FileUp, Briefcase, Globe2, Coins, Send } from 'lucide-react';
+import { MoreHorizontal, ArrowRight, ArrowLeft, Plus, Calendar, CalendarDays, Sparkles, Lightbulb, AlertTriangle, Loader2, RotateCw, X, Mail, Gem, Crown, Heart, ChevronDown, Search, MessageSquare, FileUp, Briefcase, Globe2, Coins, Send, CalendarRange } from 'lucide-react';
 import useWardrobeProcessing from '../hooks/useWardrobeProcessing';
 import { backgroundRemovalStarted, PROCESSING_STATES } from '../utils/wardrobeProcessingState';
 import AddPieceDialog from '../components/Wardrobe/AddPieceDialog';
@@ -62,7 +62,6 @@ import { EVENT_PAGE_PARAM, parseEventPage, paginateEvents, eventPageNumbers, rea
 import { eventCardDetails, matchesDealTypeFilter, dealTypeFilterOptions } from '../utils/eventCardSummary';
 import { completeMoneyWarning } from '../utils/moneyWarnings';
 import { fetchAllEpisodes, fetchAllSceneSets, partialNote } from '../lib/fetchAllPages';
-import CareerBrands from '../components/Career/CareerBrands';
 import './WorldAdmin.css';
 import '../styles/wardrobe-backdrop.css';
 import { atHandle, platformLabel } from './feed/feedConstants';
@@ -244,9 +243,10 @@ const EVENT_STATUS_CONFIG = {
 // One show workspace (Evoni, 2026-10-03: the consolidation as proposed):
 // Overview · Episodes · Events · Assets · Cast & Continuity · Release. The
 // show page's tabs moved here (its Episodes became Production, Distribution
-// and Insights became Release); Career Goals moved into the Season Plan and
-// the Decision Log into Activity & Decisions. Keys stay as they were so
-// existing ?tab= links keep working.
+// and Insights became Release); the Decision Log moved into Activity &
+// Decisions. Keys stay as they were so existing ?tab= links keep working.
+// Season (Evoni, 2026-10-25) is a link, not a tab: it opens the Season page,
+// which replaced the Season Plan sub-tab and took Career Goals with it.
 // Results: an episode's evaluation in words (evaluation_status is 'computed' once scored, 'accepted' once kept).
 const EVALUATION_LABEL = { accepted: 'Evaluated', computed: 'Scored, not accepted' };
 
@@ -254,9 +254,9 @@ const TABS = [
   { key: 'overview', Icon: Sparkles, label: 'Overview' },
   { key: 'episodes', Icon: CalendarDays, label: 'Episodes', subs: [
     { key: 'episodes-production', label: 'Production' },
-    { key: 'season', label: 'Season Plan' },
     { key: 'episodes-ledger', label: 'Results' },
   ]},
+  { key: 'season-page', Icon: CalendarRange, label: 'Season', page: 'season' },
   { key: 'events', Icon: Mail, label: 'Events' },
   // Its page was there with no tab (the quick wins, 2026-10-18): a brand's offers and bookings.
   { key: 'opportunities', Icon: Briefcase, label: 'Opportunities' },
@@ -285,6 +285,11 @@ const TABS = [
     { key: 'insights', label: 'Insights' },
   ]},
 ];
+
+// The Season Plan and its Career Goals moved to the Season page (Evoni,
+// 2026-10-25): their old ?tab= keys, and goTo with them, open it; goals on
+// its Goals tab.
+const SEASON_PAGE_KEYS = { season: null, goals: 'goals' };
 
 function WorldAdmin() {
   const { id: showId } = useParams();
@@ -317,7 +322,6 @@ function WorldAdmin() {
   // (nothing answered: a connection failure, not an empty show).
   const [loadFailureKind, setLoadFailureKind] = useState('initial');
   const loadedOnceRef = useRef(false);
-  const [goals, setGoals] = useState([]);
   const [wardrobeItems, setWardrobeItems] = useState([]);
   // Upload processing state (Task #1769): cards for items this session
   // uploaded show "Extracting item…" until the background-removed image
@@ -407,7 +411,6 @@ function WorldAdmin() {
     // Legacy aliases for renamed tabs or top-level keys that should default
     // to a specific sub-tab when deep-linked.
     const oldToNew = {
-      'season': ['episodes', 'season'],
       'episodes': ['episodes', 'episodes-production'],
       'episodes-production': ['episodes', 'episodes-production'],
       'episodes-ledger': ['episodes', 'episodes-ledger'],
@@ -420,8 +423,6 @@ function WorldAdmin() {
       'overlays': ['wardrobe', 'overlays-tab'],
       'overlays-tab': ['wardrobe', 'overlays-tab'],
       'production-overlays': ['wardrobe', 'production-overlays'],
-      // Career Goals live in the Season Plan.
-      'goals': ['episodes', 'season'],
       'wardrobe': ['wardrobe', 'scene-sets'],
       'characters': ['characters', 'characters-list'],
       'decisions': ['characters', 'decisions'],
@@ -441,6 +442,10 @@ function WorldAdmin() {
       navigate('/pulse?layer=lalaverse', { replace: true });
       return;
     }
+    if (initialTab in SEASON_PAGE_KEYS) {
+      navigate(seasonPageHref(showId, SEASON_PAGE_KEYS[initialTab]), { replace: true });
+      return;
+    }
     const [main, sub] = resolveTab(initialTab);
     if (main !== initialTab) setActiveTab(main);
     // A main tab with sub-tabs always opens one (Task #2289): ?tab=episodes
@@ -453,6 +458,7 @@ function WorldAdmin() {
 
   // Open a section by its tab or sub-tab key (the Overview's links).
   const goTo = (key) => {
+    if (key in SEASON_PAGE_KEYS) { navigate(seasonPageHref(showId, SEASON_PAGE_KEYS[key])); return; }
     const [main, sub] = resolveTab(key);
     setActiveTab(main);
     const landing = sub || TABS.find((t) => t.key === main)?.subs?.[0]?.key || null;
@@ -675,12 +681,6 @@ function WorldAdmin() {
   const [statForm, setStatForm] = useState({});
   const [savingStats, setSavingStats] = useState(false);
 
-  // Goal editor state
-  const [editingGoal, setEditingGoal] = useState(null);
-  const [goalForm, setGoalForm] = useState({ title: '', type: 'secondary', target_metric: 'reputation', target_value: 10, icon: '🎯', color: '#6366f1', description: '' });
-  const [savingGoal, setSavingGoal] = useState(false);
-  const [suggestions, setSuggestions] = useState([]);
-
   const [error, setError] = useState(null);
   const [successMsg, setSuccessMsg] = useState(null);
 
@@ -845,7 +845,6 @@ function WorldAdmin() {
         // this show's.
         fetchAllSceneSets(api, showId).then((list) => { setSceneSets(list.items); partial('scene sets', list); }).catch(miss('scene sets', () => setSceneSets([]))),
         api.get(`/api/v1/ui-overlays/${showId}`).then(r => setOverlayData(r.data?.data || [])).catch(miss('overlays', () => setOverlayData([]))),
-        api.get(`/api/v1/world/${showId}/goals`).then(r => setGoals(r.data?.goals || [])).catch(miss('career goals', () => setGoals([]))),
         fetchClosetWithTotal(api, showId).then((list) => {
           setWardrobeItems(list.items);
           setWardrobeTotal(list.total ?? list.items.length);
@@ -1613,44 +1612,6 @@ The revised event should feel like a completely different experience from the si
     finally { setGenerating(false); }
   };
 
-  // ─── GOAL CRUD ───
-  const saveGoal = async () => {
-    setSavingGoal(true); setError(null);
-    try {
-      if (editingGoal === 'new') {
-        const res = await api.post(`/api/v1/world/${showId}/goals`, goalForm);
-        if (res.data.success) { setGoals(p => [res.data.goal, ...p]); setEditingGoal(null); setSuccessMsg('Goal created!'); }
-        else setError(res.data.error);
-      } else {
-        const res = await api.put(`/api/v1/world/${showId}/goals/${editingGoal}`, goalForm);
-        if (res.data.success) { setGoals(p => p.map(g => g.id === editingGoal ? res.data.goal : g)); setEditingGoal(null); setSuccessMsg('Goal updated!'); }
-      }
-    } catch (err) { setError(err.response?.data?.error || err.message); }
-    finally { setSavingGoal(false); }
-  };
-
-  const deleteGoal = async (goalId) => {
-    if (!window.confirm('Delete this goal?')) return;
-    try { await api.delete(`/api/v1/world/${showId}/goals/${goalId}`); setGoals(p => p.filter(g => g.id !== goalId)); setSuccessMsg('Deleted'); }
-    catch (err) { setError(err.response?.data?.error || err.message); }
-  };
-
-  const syncGoals = async () => {
-    try {
-      const res = await api.post(`/api/v1/world/${showId}/goals/sync`);
-      if (res.data.success) {
-        setSuccessMsg(`Synced ${res.data.synced} goals.${res.data.completed?.length ? ` 🎉 Completed: ${res.data.completed.map(c => c.title).join(', ')}` : ''}`);
-        loadData();
-      }
-    } catch (err) { setError(err.response?.data?.error || err.message); }
-  };
-
-  const loadSuggestions = async () => {
-    try {
-      const res = await api.get(`/api/v1/world/${showId}/suggest-events?limit=3`);
-      if (res.data.success) setSuggestions(res.data.suggestions || []);
-    } catch (e) { setSuggestions([]); }
-  };
   const openStatEditor = () => { setStatForm({ ...charState?.state }); setEditingStats(true); };
   const saveStats = async () => {
     setSavingStats(true); setError(null);
@@ -1838,6 +1799,15 @@ The revised event should feel like a completely different experience from the si
           <nav className="wa-tab-bar" aria-label="Producer Mode">
             {TABS.map(t => {
               const n = counts[t.key] || 0;
+              // Season is a page of its own, so its entry is a link (it is never the active tab here).
+              if (t.page === 'season') {
+                return (
+                  <Link key={t.key} to={seasonPageHref(showId)} className="wa-tab" data-testid="wa-tab-season">
+                    <t.Icon size={15} aria-hidden="true" />
+                    <span className="wa-tab-label">{t.label}</span>
+                  </Link>
+                );
+              }
               return (
                 <button key={t.key} type="button" onClick={() => switchTab(t.key)} className={`wa-tab${activeTab === t.key ? ' active' : ''}`} aria-current={activeTab === t.key ? 'page' : undefined}>
                   <t.Icon size={15} aria-hidden="true" />
@@ -1883,12 +1853,8 @@ The revised event should feel like a completely different experience from the si
 
       {activeTab === 'episodes' && subTab === 'episodes-production' && (
         <div style={S.content}>
-          <ShowEpisodesBoard showId={showId} episodes={episodes} total={episodesTotal} onChanged={loadData} goTo={goTo} />
+          <ShowEpisodesBoard showId={showId} episodes={episodes} total={episodesTotal} onChanged={loadData} />
         </div>
-      )}
-
-      {activeTab === 'episodes' && subTab === 'season' && (
-        <SeasonTab showId={showId} api={api} S={S} episodes={episodes} events={worldEvents} setToast={setToast} onGoalsChanged={() => api.get(`/api/v1/world/${showId}/goals`).then((r) => setGoals(r.data?.goals || [])).catch((err) => console.error('Career goals reload failed:', err))} />
       )}
 
       {/* ════════════════════════ EPISODE LEDGER ════════════════════════ */}
@@ -4533,171 +4499,6 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
       )}
 
 
-      {/* ════════════════════════ CAREER GOALS ════════════════════════ */}
-      {/* Career Goals: part of the Season Plan, below the arc. */}
-      {activeTab === 'episodes' && subTab === 'season' && (
-        <div style={S.content}>
-          {/* Folded under the season (Evoni, 2026-10-17); Seed 24 goals only before there are any. */}
-          <details className="wa-season-fold" data-testid="career-goals-fold">
-          <summary className="wa-season-fold-summary">Career Goals <span className="wa-season-fold-meta">{goals.filter((g) => g.status === 'active').length} active · {goals.filter((g) => g.status === 'completed').length} complete</span></summary>
-          <div className="wa-goals-head">
-            <div>
-              <p className="wa-results-line">What Lala is working toward this season. Each goal tracks one of her stats to a target.</p>
-            </div>
-            <div className="wa-goals-tools">
-              <button onClick={syncGoals} className="wa-goal-btn">Sync from stats</button>
-              <button onClick={loadSuggestions} className="wa-goal-btn">Suggest events</button>
-              {goals.length === 0 && <button onClick={async () => {
-                try {
-                  const res = await api.post(`/api/v1/world/${showId}/goals/seed`, { activate_tier: 1 });
-                  if (res.data.success) { setSuccessMsg(`Seeded ${res.data.created} goals! (${res.data.skipped} already existed)`); loadData(); }
-                } catch (err) { setError(err.response?.data?.error || err.message); }
-              }} className="wa-goal-btn">Seed 24 goals</button>}
-              <button onClick={() => { setGoalForm({ title: '', type: 'secondary', target_metric: 'reputation', target_value: 10, icon: '🎯', color: '', description: '' }); setEditingGoal('new'); }} style={S.primaryBtn}>+ New Goal</button>
-            </div>
-          </div>
-
-          {/* Goal editor */}
-          {editingGoal && (
-            <div style={{ background: 'var(--surface-card)', border: '2px solid var(--primary)', borderRadius: 12, padding: 20, marginBottom: 16 }}>
-              <h3 style={{ fontSize: 16, fontWeight: 700, margin: '0 0 16px' }}>{editingGoal === 'new' ? '✨ New Goal' : '✏️ Edit Goal'}</h3>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 12 }} className="wa-grid wa-grid-3col">
-                <FG label="Goal Title *" value={goalForm.title} onChange={v => setGoalForm(p => ({ ...p, title: v }))} placeholder="Break Into Luxury Fashion" />
-                <div>
-                  <label style={S.fLabel}>Type</label>
-                  <select value={goalForm.type} onChange={e => setGoalForm(p => ({ ...p, type: e.target.value }))} style={S.sel}>
-                    <option value="primary">🌟 Primary (1 max)</option>
-                    <option value="secondary">🎯 Secondary (2 max)</option>
-                    <option value="passive">🌿 Passive (unlimited)</option>
-                  </select>
-                </div>
-                <div>
-                  <label style={S.fLabel}>Metric</label>
-                  <select value={goalForm.target_metric} onChange={e => setGoalForm(p => ({ ...p, target_metric: e.target.value }))} style={S.sel}>
-                    <option value="coins">🪙 Coins</option>
-                    <option value="reputation">⭐ Reputation</option>
-                    <option value="brand_trust">🤝 Brand Trust</option>
-                    <option value="influence">📣 Influence</option>
-                    <option value="stress">😰 Stress (reduce to)</option>
-                    <option value="followers">👥 Followers</option>
-                    <option value="engagement_rate">📈 Engagement Rate</option>
-                    <option value="portfolio_strength">📁 Portfolio Strength</option>
-                  </select>
-                </div>
-                <FG label="Target Value" value={goalForm.target_value} onChange={v => setGoalForm(p => ({ ...p, target_value: parseFloat(v) || 0 }))} type="number" />
-                <FG label="Icon" value={goalForm.icon} onChange={v => setGoalForm(p => ({ ...p, icon: v }))} placeholder="🎯" />
-                <FG label="Color" value={goalForm.color} onChange={v => setGoalForm(p => ({ ...p, color: v }))} placeholder="#RRGGBB" />
-              </div>
-              <FG label="Description" value={goalForm.description} onChange={v => setGoalForm(p => ({ ...p, description: v }))} textarea full placeholder="What does achieving this goal mean for Lala's journey?" />
-              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 12 }}>
-                <button onClick={() => setEditingGoal(null)} style={S.secBtn}>Cancel</button>
-                <button onClick={saveGoal} disabled={savingGoal || !goalForm.title} style={S.primaryBtn}>
-                  {savingGoal ? '⏳' : editingGoal === 'new' ? '✨ Create' : '💾 Save'}
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Active goals by type */}
-          {['primary', 'secondary', 'passive'].map(goalType => {
-            const typeGoals = goals.filter(g => g.type === goalType && g.status === 'active');
-            if (typeGoals.length === 0 && goalType === 'passive') return null;
-            const typeLabel = goalType === 'primary' ? '🌟 Primary Goal' : goalType === 'secondary' ? '🎯 Secondary Goals' : '🌿 Passive Goals';
-            const typeLimit = goalType === 'primary' ? '(1 max)' : goalType === 'secondary' ? '(2 max)' : '';
-            return (
-              <div key={goalType}>
-                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 8 }}>{typeLabel} {typeLimit}</div>
-                <div style={{ display: 'grid', gridTemplateColumns: goalType === 'primary' ? '1fr' : '1fr 1fr', gap: 12, marginBottom: 16 }}>
-                  {typeGoals.map(g => {
-                    const pct = g.progress || Math.min(100, Math.round(((g.current_value - (g.starting_value || 0)) / Math.max(1, (g.target_value - (g.starting_value || 0)))) * 100));
-                    return (
-                      <div key={g.id} style={{ background: 'var(--surface-card)', border: goalType === 'primary' ? `2px solid ${g.color || 'var(--primary)'}` : '1px solid var(--lala-parchment-3)', borderRadius: 12, padding: goalType === 'primary' ? 20 : 16 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                          <span style={{ fontSize: goalType === 'primary' ? 28 : 20 }}>{g.icon || '🎯'}</span>
-                          <div style={{ flex: 1 }}>
-                            <div style={{ fontSize: goalType === 'primary' ? 16 : 14, fontWeight: 700, color: 'var(--text-primary)' }}>{g.title}</div>
-                            {g.description && <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>{g.description}</div>}
-                          </div>
-                          <div style={{ display: 'flex', gap: 4 }}>
-                            <button onClick={() => { setGoalForm({ ...g }); setEditingGoal(g.id); }} style={S.smBtn}>✏️</button>
-                            <button onClick={() => deleteGoal(g.id)} style={S.smBtnDanger}>🗑️</button>
-                          </div>
-                        </div>
-                        <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 6 }}>
-                          {STAT_ICONS[g.target_metric] || '📊'} {g.target_metric?.replace(/_/g, ' ')}: <strong>{g.current_value}</strong> / {g.target_value}
-                        </div>
-                        <div style={{ height: 8, background: 'var(--lala-parchment-2)', borderRadius: 4, overflow: 'hidden', marginBottom: 4 }}>
-                          <div style={{ height: '100%', width: `${pct}%`, background: pct >= 100 ? 'var(--success)' : (g.color || 'var(--primary)'), borderRadius: 4, transition: 'width 0.3s' }} />
-                        </div>
-                        <div style={{ fontSize: 11, color: pct >= 100 ? 'var(--success-text)' : 'var(--text-secondary)', fontWeight: pct >= 100 ? 700 : 400 }}>
-                          {pct >= 100 ? '✅ COMPLETE' : `${pct}% — ${Math.max(0, g.target_value - g.current_value)} remaining`}
-                        </div>
-                      </div>
-                    );
-                  })}
-                  {typeGoals.length === 0 && (
-                    <div style={{ padding: 20, background: 'var(--surface-bg)', borderRadius: 8, textAlign: 'center', color: 'var(--text-secondary)', fontSize: 13, border: '1px dashed var(--lala-parchment-3)' }}>
-                      No active {goalType} goal. Click "+ New Goal" to create one.
-                    </div>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-
-          {/* Completed goals */}
-          {goals.filter(g => g.status === 'completed').length > 0 && (
-            <div style={S.card}>
-              <h3 style={{ fontSize: 14, fontWeight: 600, margin: '0 0 10px', color: 'var(--success-text)' }}>✅ Completed Goals</h3>
-              {goals.filter(g => g.status === 'completed').map(g => (
-                <div key={g.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderBottom: '1px solid var(--lala-parchment-3)' }}>
-                  <span>{g.icon}</span>
-                  <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--success-text)' }}>{g.title}</span>
-                  <span style={{ fontSize: 11, color: 'var(--text-secondary)', marginLeft: 'auto' }}>{g.completed_at ? new Date(g.completed_at).toLocaleDateString() : ''}</span>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Event suggestions */}
-          {suggestions.length > 0 && (
-            <div style={S.card}>
-              <h3 style={{ fontSize: 14, fontWeight: 600, margin: '0 0 10px' }}>💡 Suggested Events (Based on Active Goals)</h3>
-              {suggestions.map((s, i) => (
-                <div key={i} style={{ padding: 14, background: 'var(--surface-bg)', borderRadius: 10, marginBottom: 10, border: s.requirements_met === false ? '1px solid var(--danger-border)' : '1px solid var(--success-border)' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                    <span style={{ fontSize: 18 }}>{EVENT_TYPE_ICONS[s.event_type] || '📌'}</span>
-                    <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', flex: 1 }}>{s.name}</span>
-                    <span style={S.eTag}>⭐ {s.prestige}</span>
-                    <span style={S.eTag}>🪙 {s.cost_coins}</span>
-                    {s.is_paid && <span style={{ padding: '2px 8px', background: 'var(--success-bg)', borderRadius: 4, fontSize: 10, fontWeight: 600, color: 'var(--success-text)' }}>💰 Paid</span>}
-                    {!s.requirements_met && <span style={{ padding: '2px 8px', background: 'var(--danger-bg)', borderRadius: 4, fontSize: 10, fontWeight: 600, color: 'var(--danger-text)' }}>⚠️ Reqs not met</span>}
-                  </div>
-                  {s.narrative_stakes && <div style={{ fontSize: 12, color: 'var(--text-secondary)', fontStyle: 'italic', marginBottom: 6 }}>{s.narrative_stakes}</div>}
-                  <div style={{ fontSize: 11, color: 'var(--primary-text)', marginBottom: 8, lineHeight: 1.5 }}>
-                    {(s.suggestion_reasons || []).slice(0, 4).join(' · ')}
-                  </div>
-                  <div style={{ display: 'flex', gap: 6 }}>
-                    <button onClick={() => { setActiveTab('events'); }} style={S.smBtn}>📋 View in Events</button>
-                    <button onClick={() => {
-                      setActiveTab('events');
-                      setInjectTarget(s.id);
-                    }} style={S.smBtn}>💉 Inject into Episode</button>
-                    <button onClick={() => {
-                      setActiveTab('events');
-                      setGenerateTarget(s.id);
-                    }} style={{ ...S.smBtn, background: 'var(--success-bg)', borderColor: 'var(--success-border)', color: 'var(--success-text)' }}>📝 Generate Script</button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-          {/* Brands worked with, with a per-brand hide (Task #3181). */}
-          <CareerBrands showId={showId} />
-          </details>
-        </div>
-      )}
-
       {/* ════════════════════════ OUTFIT PICKER MODAL ════════════════════════ */}
       {/* EventOutfitPicker (Task #2376): the same picker the Event Package's
           Style area opens. */}
@@ -7098,7 +6899,7 @@ export const S = {
 export function OpportunitiesTab({ showId, api, S, setToast, loadData, episodes = [] }) {
   const [opps, setOpps] = useState([]);
   const [oppLoading, setOppLoading] = useState(true);
-  // ?deal_with=<company> (the Season Plan's "Add a deal" on a need with a
+  // ?deal_with=<company> (the Season page's "Add a deal" on a need with a
   // company in it, Evoni 2026-10-24) opens the form with that company typed;
   // the server links the name to the company (services/brandProfile.linkDeal).
   const [dealParams] = useSearchParams();

@@ -4,10 +4,14 @@
  * but the mount effect set the sub-tab only when the main tab differed from
  * the one asked for, so Episodes opened with no sub-tab and an empty body.
  * The same held for ?tab=wardrobe and ?tab=characters.
+ *
+ * Season (Evoni, 2026-10-25): the banner's Season entry opens the Season
+ * page; the Season Plan sub-tab is gone from Episodes, and its old links
+ * (?tab=season, ?tab=goals) open the Season page, goals on its Goals tab.
  */
 import { vi, describe, beforeEach, test, expect } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { render, screen, waitFor, within, fireEvent } from '@testing-library/react';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 
 vi.mock('../services/api', () => ({
   default: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn(), patch: vi.fn(), request: vi.fn() },
@@ -16,11 +20,16 @@ vi.mock('../services/api', () => ({
 import api from '../services/api';
 import WorldAdmin from './WorldAdmin';
 
+function Where() {
+  const loc = useLocation();
+  return <span data-testid="where">{loc.pathname}{loc.search}</span>;
+}
 function renderAt(tab) {
   return render(
     <MemoryRouter initialEntries={[`/shows/show-1/world?tab=${tab}`]}>
       <Routes>
-        <Route path="/shows/:id/world" element={<WorldAdmin />} />
+        <Route path="/shows/:id/world" element={<><WorldAdmin /><Where /></>} />
+        <Route path="/shows/:showId/season" element={<Where />} />
       </Routes>
     </MemoryRouter>
   );
@@ -76,17 +85,39 @@ describe('WorldAdmin ?tab=<main tab> opens a sub-tab (#2289)', () => {
   });
 
   test('a sub-tab deep link still lands on that sub-tab', async () => {
-    renderAt('season');
+    renderAt('episodes-ledger');
 
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Season Plan' })).toBeTruthy());
-    expect(isActive('Season Plan')).toBe(true);
-    expect(isActive('Results')).toBe(false);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Results' })).toBeTruthy());
+    expect(isActive('Results')).toBe(true);
+    expect(isActive('Production')).toBe(false);
   });
 
-  test('Career Goals open in the Season Plan', async () => {
+  test('Episodes has Production and Results; the Season Plan sub-tab is gone', async () => {
+    renderAt('episodes');
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Production' })).toBeTruthy());
+    const subs = document.querySelector('.wa-subtabs');
+    expect([...subs.querySelectorAll('button')].map((b) => b.textContent)).toEqual(['Production', 'Results']);
+    expect(screen.queryByRole('button', { name: 'Season Plan' })).toBeNull();
+  });
+
+  test('the old Season Plan link, ?tab=season, opens the Season page', async () => {
+    renderAt('season');
+    await waitFor(() => expect(screen.getByTestId('where').textContent).toBe('/shows/show-1/season'));
+  });
+
+  test('the old Career Goals link, ?tab=goals, opens the Season page on its Goals tab', async () => {
     renderAt('goals');
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Season Plan' })).toBeTruthy());
-    expect(isActive('Season Plan')).toBe(true);
+    await waitFor(() => expect(screen.getByTestId('where').textContent).toBe('/shows/show-1/season?tab=goals'));
+  });
+
+  test('the banner has Season beside Episodes and Events; it opens the Season page', async () => {
+    renderAt('overview');
+    const season = await screen.findByTestId('wa-tab-season');
+    expect(season.tagName).toBe('A');
+    expect(season.getAttribute('href')).toBe('/shows/show-1/season');
+    expect(within(season).getByText('Season')).toBeTruthy();
+    fireEvent.click(season);
+    await waitFor(() => expect(screen.getByTestId('where').textContent).toBe('/shows/show-1/season'));
   });
 
   test("?tab=feed opens Lala's posts here, not the standalone page", async () => {
@@ -109,15 +140,15 @@ describe('WorldAdmin ?tab=<main tab> opens a sub-tab (#2289)', () => {
     expect(isActive('Distribution')).toBe(false);
   });
 
-  test('the main tabs are Overview · Episodes · Events · Assets · Cast & Continuity · Lala\'s Feed · Release', async () => {
+  test('the main tabs are Overview · Episodes · Season · Events · Assets · Cast & Continuity · Lala\'s Feed · Release', async () => {
     renderAt('overview');
     const bar = await waitFor(() => {
       const el = document.querySelector('.wa-tab-bar');
       if (!el) throw new Error('no tab bar');
       return el;
     });
-    expect([...bar.querySelectorAll('button .wa-tab-label')].map((b) => b.textContent)).toEqual(
-      ['Overview', 'Episodes', 'Events', 'Opportunities', 'Rate card', 'World moments', 'Assets', 'Cast & Continuity', "Lala's posts", 'Release'],
+    expect([...bar.querySelectorAll('.wa-tab .wa-tab-label')].map((b) => b.textContent)).toEqual(
+      ['Overview', 'Episodes', 'Season', 'Events', 'Opportunities', 'Rate card', 'World moments', 'Assets', 'Cast & Continuity', "Lala's posts", 'Release'],
     );
   });
 });

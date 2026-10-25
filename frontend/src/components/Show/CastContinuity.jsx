@@ -7,6 +7,7 @@
  */
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { seasonPageHref } from '../../lib/seasonPage';
 import api from '../../services/api';
 import {
   STAT_ROWS, lastChange, describeChange, afterEpisode, decisionEntries,
@@ -144,10 +145,10 @@ export function StoryThreadsStrip({ showId, episodes = [] }) {
     <section className="wa-cc-card wa-cc-threads" data-testid="cc-threads">
       <div className="wa-cc-card-head">
         <h2>Story threads <span className="wa-cc-sub">What the season is carrying, and when it last came up</span></h2>
-        <Link className="wa-cc-link" to={`/shows/${showId}/world?tab=season`}>All threads</Link>
+        <Link className="wa-cc-link" to={seasonPageHref(showId, 'story')}>All threads</Link>
       </div>
       {threads == null ? <p className="wa-cc-empty">Loading threads…</p> : threads.length === 0 ? (
-        <p className="wa-cc-empty">No story threads yet. Create them in Episodes → Season Plan.</p>
+        <p className="wa-cc-empty">No story threads yet. Create them on the Season page, under Story Development.</p>
       ) : (
         <>
           <ul className="wa-cc-thread-list">

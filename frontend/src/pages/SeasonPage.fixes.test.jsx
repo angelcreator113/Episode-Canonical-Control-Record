@@ -1,11 +1,12 @@
 /**
- * Season Plan PR 2, bugs, phone and layout (Evoni's review, 2026-10-24):
- * a reload after an accept or an advance keeps the tab mounted (a typed
- * draft survives); "Advance with N open slots" and the final phase's
- * unmet goals ask in the page first; a failed load says so with Retry,
- * never "No season set up yet"; the intention editor sits inside the
- * slot's panel (the phone's sheet); the roadmap is first under the
- * header; no browser alert or prompt is left in the Season tab.
+ * Season Plan PR 2, bugs, phone and layout (Evoni's review, 2026-10-24), on
+ * the Season page (which replaced Producer Mode's Season Plan tab,
+ * 2026-10-25): a reload after an accept or an advance keeps the page
+ * mounted (an open fold and a typed draft survive); "Advance with N open
+ * slots" and the final phase's unmet goals ask in the page first; a failed
+ * load says so with Retry, never "No season set up yet"; the intention
+ * editor sits inside the slot's panel (the phone's sheet); Story
+ * Development keeps its order; no browser alert or prompt is left.
  */
 import { vi, describe, beforeEach, afterEach, test, expect } from 'vitest';
 import { render, screen, waitFor, within, fireEvent } from '@testing-library/react';
@@ -18,7 +19,7 @@ vi.mock('../services/api', () => ({
 }));
 
 import api from '../services/api';
-import WorldAdmin from './WorldAdmin';
+import SeasonPage from './SeasonPage';
 
 const PHASES = [
   { phase: 1, title: 'Doors', tagline: 'Get in', status: 'active', episode_start: 1, episode_end: 8 },
@@ -70,13 +71,15 @@ function mockGets() {
 }
 const callsTo = (fn, url) => vi.mocked(fn).mock.calls.filter(([u]) => u === url).length;
 
-function renderSeason() {
+function renderSeason(tab = 'roadmap') {
   return render(
-    <MemoryRouter initialEntries={['/shows/show-1/world?tab=season']}>
-      <Routes><Route path="/shows/:id/world" element={<WorldAdmin />} /></Routes>
+    <MemoryRouter initialEntries={[`/shows/show-1/season?tab=${tab}`]}>
+      <Routes><Route path="/shows/:showId/season" element={<SeasonPage />} /></Routes>
     </MemoryRouter>
   );
 }
+const card = (n) => screen.getByTestId(`szn-slot-${n}`).querySelector('.szn-slot-open');
+const openSlot = async (n) => { await screen.findByTestId(`szn-slot-${n}`); fireEvent.click(card(n)); };
 
 let alertSpy;
 let promptSpy;
@@ -96,40 +99,42 @@ afterEach(() => {
 });
 
 describe('Reloading in place', () => {
-  test('accepting a proposal reloads the season without unmounting: a typed thread title and the twists stay', async () => {
+  test('accepting a proposal reloads the season without unmounting: the open fold and what the season knows stay', async () => {
     state.proposal = PROPOSAL;
     vi.mocked(api.post).mockImplementation(async (url) => {
       if (url.endsWith('/proposals/p1/accept')) { state.proposal = null; return { data: { applied: [{ index: 0, ok: true }] } }; }
       return { data: {} };
     });
-    renderSeason();
-    const threads = await screen.findByTestId('story-threads');
-    fireEvent.click(within(threads).getByTestId('story-thread-new'));
-    fireEvent.change(within(threads).getByLabelText('New thread title'), { target: { value: 'Her mother\'s visit' } });
-    await screen.findByTestId('season-twists');
+    renderSeason('overview');
+    const fold = await screen.findByTestId('szn-fold-proposals');
+    fold.open = true;
+    await screen.findByTestId('season-knows');
     expect(callsTo(api.get, '/api/v1/world/show-1/arc')).toBe(1);
+    const knowsReads = callsTo(api.get, '/api/v1/world/show-1/season/knows');
 
     fireEvent.click(await screen.findByRole('button', { name: 'Accept 1 of 1' }));
     await waitFor(() => expect(callsTo(api.get, '/api/v1/world/show-1/arc')).toBe(2));
     await waitFor(() => expect(callsTo(api.get, '/api/v1/world/show-1/season/roadmap')).toBe(2));
-    // Still the same tab: never "Loading", the draft is there, the note too, the twists not fetched again.
-    expect(screen.queryByText('Loading season data...')).toBeNull();
-    expect(within(screen.getByTestId('story-threads')).getByLabelText('New thread title').value).toBe('Her mother\'s visit');
+    // Still the same page: never "Loading", the fold still open, the note there, what the season knows not fetched again.
+    expect(screen.queryByText('Loading the season…')).toBeNull();
+    expect(screen.getByTestId('szn-fold-proposals')).toBe(fold);
+    expect(fold.open).toBe(true);
     expect(await screen.findByText('Applied 1 change to the season.')).toBeTruthy();
-    expect(callsTo(api.get, '/api/v1/world/show-1/season/twists')).toBe(1);
+    expect(callsTo(api.get, '/api/v1/world/show-1/season/knows')).toBe(knowsReads);
   });
 
-  test('advancing a phase reloads in place too: the typed title survives', async () => {
+  test('advancing a phase reloads in place too: a typed intention survives', async () => {
     state.roadmap = roadmapFor({ doneUpto: 8, boundary: { phase: 1, title: 'Doors', next_phase: { phase: 2, title: 'Rooms' }, outcomes: { pass: 8 }, goals: null } });
     vi.mocked(api.post).mockImplementation(async (url) => (url.endsWith('/arc/advance') ? { data: { data: { success: true } } } : { data: {} }));
     renderSeason();
-    const threads = await screen.findByTestId('story-threads');
-    fireEvent.click(within(threads).getByTestId('story-thread-new'));
-    fireEvent.change(within(threads).getByLabelText('New thread title'), { target: { value: 'Keep me' } });
+    await openSlot(10);
+    fireEvent.click(screen.getByTestId('season-intention-10'));
+    const editor = await screen.findByTestId('season-intention-editor');
+    fireEvent.change(within(editor).getByLabelText('Story purpose 1'), { target: { value: 'Keep me' } });
     fireEvent.click(screen.getByTestId('season-advance'));
     await waitFor(() => expect(callsTo(api.get, '/api/v1/world/show-1/arc')).toBe(2));
     await waitFor(() => expect(callsTo(api.get, '/api/v1/world/show-1/season/insights')).toBe(2));
-    expect(within(screen.getByTestId('story-threads')).getByLabelText('New thread title').value).toBe('Keep me');
+    expect(within(screen.getByTestId('season-intention-editor')).getByLabelText('Story purpose 1').value).toBe('Keep me');
   });
 });
 
@@ -179,7 +184,7 @@ describe('Advancing', () => {
   test('with no slot of the current part done there is no advance bar', async () => {
     state.roadmap = roadmapFor({ doneUpto: 0 });
     renderSeason();
-    await screen.findByTestId('season-roadmap');
+    await screen.findByTestId('szn-roadmap');
     expect(screen.queryByTestId('season-advance-open')).toBeNull();
     expect(screen.queryByTestId('season-advance-open-btn')).toBeNull();
   });
@@ -238,10 +243,10 @@ describe('A load that fails', () => {
     renderSeason();
     const err = await screen.findByTestId('season-load-error');
     expect(err.textContent).toMatch(/The season could not be loaded \(The server did not answer\)\./);
-    expect(screen.queryByTestId('season-empty')).toBeNull();
+    expect(screen.queryByTestId('szn-empty')).toBeNull();
     expect(screen.queryByText(/No season set up yet/)).toBeNull();
     fireEvent.click(within(err).getByTestId('season-load-retry'));
-    expect(await screen.findByTestId('season-head')).toBeTruthy();
+    expect(await screen.findByTestId('szn-hero')).toBeTruthy();
     expect(screen.queryByTestId('season-load-error')).toBeNull();
   });
 
@@ -255,26 +260,24 @@ describe('A load that fails', () => {
     renderSeason();
     const err = await screen.findByTestId('season-load-error');
     expect(err.textContent).toMatch(/Some of the season did not load: the roadmap\./);
-    expect(screen.getByTestId('season-head')).toBeTruthy();
+    expect(screen.getByTestId('szn-hero')).toBeTruthy();
     fireEvent.click(within(err).getByTestId('season-load-retry'));
-    expect(await screen.findByTestId('season-roadmap')).toBeTruthy();
+    expect(await screen.findByTestId('szn-roadmap')).toBeTruthy();
     await waitFor(() => expect(screen.queryByTestId('season-load-error')).toBeNull());
   });
 });
 
 describe('Layout', () => {
-  test('the roadmap is first under the header and checklist: before From The Pulse, the reveal plan and the twists', async () => {
-    renderSeason();
-    const roadmap = await screen.findByTestId('season-roadmap');
-    const proposals = await screen.findByTestId('season-proposals');
-    const reveals = await screen.findByTestId('season-reveal-plan');
+  test('Story Development: the threads, then the twists, the reveal plan and the relationships needed', async () => {
+    renderSeason('story');
+    const threads = await screen.findByTestId('story-threads');
     const twists = await screen.findByTestId('season-twists');
-    const head = screen.getByTestId('season-head');
+    const reveals = await screen.findByTestId('season-reveal-plan');
+    const needs = await screen.findByTestId('season-needs');
     const after = (a, b) => Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
-    expect(after(head, roadmap)).toBe(true);
-    expect(after(roadmap, proposals)).toBe(true);
-    expect(after(proposals, reveals)).toBe(true);
-    expect(after(reveals, twists)).toBe(true);
+    expect(after(threads, twists)).toBe(true);
+    expect(after(twists, reveals)).toBe(true);
+    expect(after(reveals, needs)).toBe(true);
   });
 
   describe('at phone width (375px)', () => {
@@ -284,7 +287,7 @@ describe('Layout', () => {
 
     test('Edit intention opens the editor inside the slot\'s sheet, under its button', async () => {
       renderSeason();
-      fireEvent.click(await screen.findByTestId('season-slot-7'));
+      await openSlot(7);
       const side = document.querySelector('.wa-arc-side');
       expect(side.classList.contains('is-sheet-open')).toBe(true);
       const panel = within(side).getByTestId('season-slot-panel');
@@ -293,16 +296,16 @@ describe('Layout', () => {
       expect(editor.textContent).toMatch(/S2 · E7 intention/);
       expect(within(panel).getByTestId('season-intention-7').getAttribute('aria-expanded')).toBe('true');
       // Not under the grid any more.
-      expect(document.querySelector('.wa-arc-parts [data-testid="season-intention-editor"]')).toBeNull();
+      expect(document.querySelector('.szn-parts [data-testid="season-intention-editor"]')).toBeNull();
       // Another slot closes it.
-      fireEvent.click(screen.getByTestId('season-slot-8'));
+      fireEvent.click(card(8));
       expect(screen.queryByTestId('season-intention-editor')).toBeNull();
     });
 
     test('a failed save shows in the editor, inside the sheet', async () => {
       vi.mocked(api.put).mockRejectedValue(Object.assign(new Error('x'), { response: { data: { error: 'S2 · E7 is locked' } } }));
       renderSeason();
-      fireEvent.click(await screen.findByTestId('season-slot-7'));
+      await openSlot(7);
       fireEvent.click(screen.getByTestId('season-intention-7'));
       const editor = screen.getByTestId('season-intention-editor');
       fireEvent.click(within(editor).getByText('Save'));
@@ -315,7 +318,7 @@ describe('In-page messages, no browser alert or prompt', () => {
   test('a pencil that fails says so in the slot\'s panel', async () => {
     vi.mocked(api.put).mockRejectedValue(Object.assign(new Error('x'), { response: { data: { error: 'That event is in S2 · E9' } } }));
     renderSeason();
-    fireEvent.click(await screen.findByTestId('season-slot-7'));
+    await openSlot(7);
     fireEvent.change(screen.getByTestId('season-pencil-7'), { target: { value: 'ev-1' } });
     const panel = screen.getByTestId('season-slot-panel');
     expect((await within(panel).findByTestId('season-slot-error')).textContent).toBe('That event is in S2 · E9');
@@ -330,17 +333,17 @@ describe('In-page messages, no browser alert or prompt', () => {
     });
     vi.mocked(api.post).mockRejectedValue(Object.assign(new Error('x'), { response: { data: { error: 'Thread not found' } } }));
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
-    renderSeason();
-    const card = await screen.findByTestId('story-threads');
-    fireEvent.click(await within(card).findByText('Close'));
-    expect((await within(card).findByTestId('story-threads-error')).textContent).toBe('Thread not found');
+    renderSeason('story');
+    const threadsCard = await screen.findByTestId('story-threads');
+    fireEvent.click(await within(threadsCard).findByText('Close'));
+    expect((await within(threadsCard).findByTestId('story-threads-error')).textContent).toBe('Thread not found');
     confirm.mockRestore();
   });
 
   test('"Make a thread" is a small inline form; Cancel closes it; a failure shows in the card', async () => {
     state.drafts = [{ seed_text: 'Maison Belle calls back', episode_id: 'ep-1', episode_title: 'Gala' }];
     vi.mocked(api.post).mockRejectedValue(Object.assign(new Error('x'), { response: { data: { error: 'A thread with that title exists' } } }));
-    renderSeason();
+    renderSeason('story');
     const drafts = await screen.findByTestId('story-thread-drafts');
     fireEvent.click(within(drafts).getByTestId('story-thread-make'));
     const form = within(drafts).getByTestId('story-thread-name-form');
@@ -354,14 +357,15 @@ describe('In-page messages, no browser alert or prompt', () => {
     expect(within(drafts).getByTestId('story-thread-name-form')).toBeTruthy();
   });
 
-  test('the Season tab\'s source has no alert() or window.prompt() left', () => {
-    // The Season tab and its helpers moved to components/Show/SeasonPlan.jsx (the Season page, 2026-10-25).
+  test('the Season page\'s source has no alert() or window.prompt() left', () => {
+    // The Season Plan's pieces live in components/Show/SeasonPlan.jsx (the Season page, 2026-10-25).
     const plan = readFileSync(resolve(__dirname, '../components/Show/SeasonPlan.jsx'), 'utf8');
     const season = plan.slice(plan.indexOf('export function StoryThreadsCard'));
     expect(season.length).toBeGreaterThan(1000);
     expect(season).not.toMatch(/\balert\(/);
     expect(season).not.toMatch(/\bprompt\(/);
-    for (const file of ['SeasonProposals.jsx', 'SeasonRevealPlan.jsx', 'SeasonTwists.jsx', 'SeasonSetup.jsx', 'SeasonTwistLine.jsx', 'SeasonPicturePicker.jsx']) {
+    for (const file of ['SeasonProposals.jsx', 'SeasonRevealPlan.jsx', 'SeasonTwists.jsx', 'SeasonSetup.jsx', 'SeasonTwistLine.jsx', 'SeasonPicturePicker.jsx',
+      'CareerGoals.jsx', 'SeasonPageOverview.jsx', 'SeasonPageRoadmap.jsx']) {
       const src = readFileSync(resolve(__dirname, '../components/Show', file), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
       expect(src, file).not.toMatch(/\balert\(/);
       expect(src, file).not.toMatch(/\bprompt\(/);
@@ -369,26 +373,18 @@ describe('In-page messages, no browser alert or prompt', () => {
   });
 });
 
-describe('The Season page link (2026-10-25)', () => {
-  test('the Season Plan header links to the Season page, prominently', async () => {
-    renderSeason();
-    const link = await screen.findByTestId('season-page-link');
-    expect(link.getAttribute('href')).toBe('/shows/show-1/season');
-    expect(link.textContent).toBe('Open the Season page →');
-    expect(link.className).toBe('wa-season-page-link');
-    expect(within(screen.getByTestId('season-head')).getByTestId('season-page-link')).toBe(link);
-  });
-});
-
-describe('The header counts', () => {
-  test('"goals hit" counts the completed goals (item 6, fixed in PR 1)', async () => {
+describe('The goals count', () => {
+  test('the Season Goals card counts the completed goals; a missed one is not remaining (item 6, fixed in PR 1)', async () => {
     state.goals = [
       { id: 'g1', status: 'completed', title: 'A' }, { id: 'g2', status: 'completed', title: 'B' },
       { id: 'g3', status: 'active', title: 'C' }, { id: 'g4', status: 'failed', title: 'D' },
     ];
-    renderSeason();
-    expect((await screen.findByTestId('season-counts')).textContent).toMatch(/^5 episodes done this season · 2 goals hit · 0 narrative debt · Phase 1$/);
-    expect(within(screen.getByTestId('season-head')).getByRole('heading', { level: 2 }).textContent).toBe('📖 Season 2: Velvet Season');
+    renderSeason('overview');
+    expect((await screen.findByTestId('szn-stat-goals')).textContent).toContain('2 complete · 1 remaining');
+    expect(screen.getByTestId('szn-stat-slots').textContent).toContain('5 completed · 19 remaining');
+    const hero = screen.getByTestId('szn-hero');
+    expect(within(hero).getByText('Season 2')).toBeTruthy();
+    expect(within(hero).getByRole('heading', { level: 1 }).textContent).toBe('Velvet Season');
   });
 });
 

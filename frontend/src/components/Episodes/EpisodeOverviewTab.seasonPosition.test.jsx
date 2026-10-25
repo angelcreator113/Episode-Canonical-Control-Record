@@ -55,9 +55,10 @@ describe('EpisodeOverviewTab season position (§8(ff) A5)', () => {
     expect(within(screen.getByTestId('season-position')).getByText('No story purpose set for this slot yet.')).toBeTruthy();
   });
 
-  test('an episode with no season context points to the roadmap', () => {
+  test('an episode with no season context points to the roadmap, on the Season page', () => {
     renderWith(BASE);
     expect(screen.getByTestId('season-position').textContent).toMatch(/Not in a season slot yet/);
+    expect(screen.getByTestId('season-position-link').getAttribute('href')).toBe('/shows/show-1/season?tab=roadmap');
   });
 
   test('no longer loads the show episode list just to count it', () => {
