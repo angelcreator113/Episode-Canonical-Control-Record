@@ -23,6 +23,24 @@ function sha256(text) {
 
 // Build voice rule injection string for a series
 async function getVoiceRules(seriesId) {
+  // The learned voices (Evoni, 2026-10-25; services/characterVoice): a small
+  // rule that applied by itself counts as hers, and the book reads the
+  // rules of its prose (narration) or of every context, never the show's
+  // gameplay or cutscene alone. Before the voice migration, the older read.
+  try {
+    const rows = await db.sequelize.query(
+      `SELECT rule_type, character_name, character_key, rule_text FROM voice_rules
+        WHERE status = 'active' AND deleted_at IS NULL AND (confirmed_by_author = true OR auto_applied = true)
+          AND (context IS NULL OR context IN ('narration', 'all'))
+          ${seriesId ? 'AND (series_id = :seriesId OR series_id IS NULL)' : ''}
+        ORDER BY signal_count DESC NULLS LAST, created_at DESC LIMIT 30`,
+      { replacements: { seriesId: Number.isInteger(Number(seriesId)) ? Number(seriesId) : -1 }, type: db.sequelize.QueryTypes.SELECT });
+    if (!rows.length) return '';
+    return '\n\nAUTHOR VOICE RULES (learned from edits — always apply):\n' +
+      rows.map(r => `• [${r.rule_type}] ${r.character_name || r.character_key ? `${r.character_name || r.character_key}: ` : ''}${r.rule_text}`).join('\n');
+  } catch (err) {
+    if (!require('../services/characterVoice').isSchemaMissing(err)) console.error('[getVoiceRules] learned read failed, using the older read:', err.message);
+  }
   const where = {
     status: 'active',
     confirmed_by_author: true,

@@ -496,18 +496,29 @@ Analyze what the author changed and why. Respond ONLY in JSON:
         parsed = { diff_summary: 'Edit captured', pattern_tag: 'general', pattern_confidence: 0.3 };
       }
 
-      await db.VoiceSignal.create({
-        series_id:          book?.series_id || null,
-        book_id:            book?.id || null,
-        chapter_id:         chapterId,
-        line_id:            lineId,
+      // voice_signals keeps integer book, chapter and line ids, and the
+      // storyteller's are UUIDs: an id that is not a whole number is left
+      // out (it failed every insert), and the scene fits its 100 characters.
+      const intId = (v) => (Number.isInteger(Number(v)) && String(v).trim() !== '' ? Number(v) : null);
+      const signal = await db.VoiceSignal.create({
+        series_id:          intId(book?.series_id),
+        book_id:            intId(book?.id),
+        chapter_id:         intId(chapterId),
+        line_id:            intId(lineId),
         original_text:      originalText,
         edited_text:        editedText,
         diff_summary:       parsed.diff_summary,
         pattern_tag:        parsed.pattern_tag,
         pattern_confidence: parsed.pattern_confidence,
-        scene_context:      sceneWindow.slice(0, 500),
+        scene_context:      sceneWindow.slice(0, 100),
         status:             'analyzed',
+      });
+
+      // Character voices that learn (Evoni, 2026-10-25; services/characterVoice):
+      // the signal is the narrator's (or the character the edit is about),
+      // with where it was said: the book's prose is narration. Logged, never thrown.
+      await require('../services/characterVoice').captureBookEdit(db, {
+        signalId: signal.id, book, chapter, line, originalText, editedText, characterName: parsed.character_name || null,
       });
 
       // Check if pattern count crossed the threshold to propose a rule
@@ -515,24 +526,28 @@ Analyze what the author changed and why. Respond ONLY in JSON:
       const patternCount = await db.VoiceSignal.count({
         where: {
           pattern_tag: parsed.pattern_tag,
-          status: { [Op.in]: ['analyzed', 'grouped'] },
-          series_id: book?.series_id || null,
+          status: { [Op.in]: ['raw', 'analyzed', 'grouped'] },
+          series_id: intId(book?.series_id),
         },
       });
 
       if (patternCount >= 3 && parsed.pattern_confidence >= 0.6 && db.VoiceRule) {
+        // The rule kind the tag maps to: rule_type is an enum, and the tag
+        // itself (any snake_case label) is not one of its values.
+        const tag = String(parsed.pattern_tag || '');
+        const ruleType = tag.includes('opening') ? 'scene_opening'
+          : tag.includes('closing') ? 'scene_closing'
+          : tag.includes('address') ? 'address_pattern'
+          : 'dialogue_pattern';
         const existing = await db.VoiceRule.findOne({
-          where: { series_id: book?.series_id || null, rule_type: parsed.pattern_tag, status: 'proposed' },
+          where: { series_id: intId(book?.series_id), rule_type: ruleType, status: 'proposed' },
         });
         if (!existing) {
           await db.VoiceRule.create({
-            series_id:      book?.series_id || null,
+            series_id:      intId(book?.series_id),
             character_name: parsed.character_name || null,
             rule_text:      parsed.rule_hypothesis,
-            rule_type:      parsed.pattern_tag.includes('opening') ? 'scene_opening'
-                          : parsed.pattern_tag.includes('closing') ? 'scene_closing'
-                          : parsed.pattern_tag.includes('address') ? 'address_pattern'
-                          : 'dialogue_pattern',
+            rule_type:      ruleType,
             example_original: originalText,
             example_edited:   editedText,
             signal_count:     patternCount,
@@ -810,6 +825,17 @@ router.put('/lines/:id', requireAuth, async (req, res) => {
       }
     }
 
+    // ── Character voices that learn: an approved line is one of the narrator's lines ──
+    if (updates.status === 'approved' || updates.status === 'edited') {
+      const characterVoice = require('../services/characterVoice');
+      characterVoice.background('book line capture', async () => {
+        const chapter = await models.StorytellerChapter.findByPk(line.chapter_id, {
+          include: [{ model: models.StorytellerBook, as: 'book' }],
+        });
+        return characterVoice.captureBookLine(require('../models'), { book: chapter?.book || null, chapter, line: line.toJSON() });
+      });
+    }
+
     // ── Threshold Detection hook — check wound thresholds after approval ──
     if (thresholdDetection && (updates.status === 'approved' || updates.status === 'edited')) {
       thresholdDetection.checkAllThresholds(models).catch(e =>
@@ -933,13 +959,25 @@ router.post('/books/:id/approve-all', requireAuth, async (req, res) => {
     if (!book) return res.status(404).json({ error: 'Book not found' });
 
     let approvedCount = 0;
+    const approvedLines = [];
     for (const chapter of book.chapters) {
       for (const line of chapter.lines) {
         if (line.status === 'pending') {
           await line.update({ status: 'approved' });
           approvedCount++;
+          approvedLines.push({ chapter, line: line.toJSON() });
         }
       }
+    }
+
+    // ── Character voices that learn: every approved line is one of the narrator's lines ──
+    if (approvedLines.length) {
+      const characterVoice = require('../services/characterVoice');
+      characterVoice.background('book bulk line capture', async () => {
+        for (const { chapter, line } of approvedLines) {
+          await characterVoice.captureBookLine(require('../models'), { book, chapter, line });
+        }
+      });
     }
 
     // ── Registry Sync: fire once for bulk approval ──

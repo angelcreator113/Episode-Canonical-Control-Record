@@ -175,12 +175,14 @@ function speakerVoice(speaker) {
  * The prompt. `retry`: the angles to write again, with the versions that
  * came back too close.
  */
-function buildPrompt({ line, speaker, beatName, beatContext, beatLines = [], voiceRules = [], voiceSamples = [], direction = null, instruction = '', retry = null }) {
+function buildPrompt({ line, speaker, beatName, beatContext, beatLines = [], voiceRules = [], voiceSamples = [], direction = null, instruction = '', retry = null, learnedVoice = '' }) {
   const angles = retry ? ANGLES.filter((a) => retry.angles.includes(a.label)) : ANGLES;
   const whose = speaker === 'Lala' ? "Lala's other lines in this episode" : isHer(speaker) ? 'her other lines in this episode' : `${speaker}'s other lines in this episode`;
   const parts = [];
   parts.push(`You are rewriting one line of dialogue for "Styling Adventures with Lala." Write ${angles.length === 1 ? 'one new version' : `${angles.length === 3 ? 'THREE' : angles.length} new versions`} of it${angles.length > 1 ? ', each from a different angle' : ''}.`);
   if (voiceRules.length) parts.push(`SHOW BRAIN VOICE RULES (the most relevant):\n${voiceRules.join('\n')}`);
+  // The speaker's learned voice (services/characterVoice.voicePromptBlock).
+  if (typeof learnedVoice === 'string' && learnedVoice.trim()) parts.push(learnedVoice.trim());
   parts.push([`SPEAKER: ${speaker}`, `BEAT: ${beatName || 'Unknown'}`, beatContext ? `EMOTIONAL CONTEXT: ${beatContext}` : null].filter(Boolean).join('\n'));
   if (beatLines.length) {
     parts.push(`THE BEAT AS IT STANDS (keep the rewrite consistent with it; do not repeat what other lines already say):\n${beatLines.map((l) => (l === line ? `>> ${l}   <- the line to rewrite` : `   ${l}`)).join('\n')}`);

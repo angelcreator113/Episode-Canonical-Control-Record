@@ -1,0 +1,12 @@
+/* Your voice (2026-10-25). Tokens only. */
+.yv-page { max-width: 860px; margin: 0 auto; padding: 20px 24px 40px; display: flex; flex-direction: column; gap: 16px; background: var(--lala-parchment); min-width: 0; }
+.yv-back { align-self: flex-start; display: inline-flex; align-items: center; gap: 4px; min-height: 44px; font-size: 14px; font-weight: 700; color: var(--lala-lavender-text); text-decoration: none; }
+.yv-back:focus-visible { outline: 2px solid var(--lala-lavender); outline-offset: 2px; }
+.yv-head { display: flex; flex-direction: column; gap: 4px; }
+.yv-kicker { margin: 0; font-size: 12px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent-dark); }
+.yv-title { margin: 0; font-family: var(--font-prose); font-size: 30px; font-weight: 700; color: var(--text-primary); }
+.yv-note { margin: 0; font-size: 14px; line-height: 1.55; color: var(--text-secondary); }
+@media (max-width: 560px) {
+  .yv-page { padding: 12px 16px 32px; }
+  .yv-title { font-size: 26px; }
+}

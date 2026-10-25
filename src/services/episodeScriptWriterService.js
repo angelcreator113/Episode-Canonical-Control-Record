@@ -485,6 +485,19 @@ async function loadScriptContext(episodeId, showId, models, { lite = false } = {
     console.error('[ScriptWriter] Pulse posts failed (non-blocking):', err.message);
   }
 
+  // 17. The learned voices (Evoni, 2026-10-25; services/characterVoice): her,
+  // Lala and the cast, from the lines she approved and how she edits, for
+  // the whole show (gameplay and cutscene); '' when nothing is known.
+  context.voiceKeys = ['justawoman', 'lala'];
+  context.voices = '';
+  try {
+    const characterVoice = require('./characterVoice');
+    context.voiceKeys = await characterVoice.episodeVoiceKeys(models, { registryCharacterIds: (context.socialProfiles || []).map((p) => p.registry_character_id) });
+    context.voices = await characterVoice.voicePromptBlock(models, { characterKeys: context.voiceKeys, context: 'show', showId });
+  } catch (err) {
+    console.error('[ScriptWriter] learned voices failed (non-blocking):', err.message);
+  }
+
   return context;
 }
 
@@ -941,6 +954,7 @@ function buildFullPrompt(context) {
 This is Episode ${brief?.position_in_arc || '?'} of Arc ${brief?.arc_number || '?'}.
 
 ${JAWIHP_VOICE_DNA}
+${context.voices ? `\n${context.voices}` : ''}
 
 ═══ SHOW BRAIN ═══
 ${voiceLaws}

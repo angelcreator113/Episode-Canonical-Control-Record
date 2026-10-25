@@ -920,6 +920,9 @@ app.use('/api/v1/pulse-calendar', pulseCalendarRoutes);
 // Voice Profiles (Task #2967): reads requireAuth; builds and edits requireAuth + ADMIN.
 const pulseVoiceRoutes = trackRouteLoad('pulseVoices', () => require('./routes/pulseVoices'));
 app.use('/api/v1/pulse-voices', pulseVoiceRoutes);
+// Character voices that learn (Evoni, 2026-10-25): reads and signals requireAuth; learning and decisions requireAuth + ADMIN; learn + aiRateLimiter.
+const characterVoiceRoutes = trackRouteLoad('characterVoice', () => require('./routes/characterVoiceRoutes'));
+app.use('/api/v1/voice', characterVoiceRoutes);
 // DMs on The Pulse (Task #2984): reads requireAuth; drafting (enqueue only) and decisions requireAuth + ADMIN.
 const pulseDmRoutes = trackRouteLoad('pulseDms', () => require('./routes/pulseDms'));
 app.use('/api/v1/pulse-dms', pulseDmRoutes);
