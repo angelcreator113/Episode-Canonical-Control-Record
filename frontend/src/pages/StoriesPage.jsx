@@ -11,6 +11,7 @@ import api from '../services/api';
 import useActiveShow from '../hooks/useActiveShow';
 import ShowChooser from '../components/ShowChooser';
 import Beat11Piece from '../components/Beat11Piece';
+import { seasonPageHref } from '../lib/seasonPage';
 
 const FORMAT_CONFIG = {
   short_story: { icon: '📖', label: 'Short Story', color: '#6366f1' },
@@ -268,7 +269,7 @@ export default function StoriesPage() {
             Complete an episode to auto-generate stories, or create an original story.
           </p>
           {showId && (
-            <button onClick={() => navigate(`/shows/${showId}/world?tab=events`)} style={{ padding: '8px 20px', borderRadius: 8, border: 'none', background: '#B8962E', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+            <button onClick={() => navigate(seasonPageHref(showId, 'events'))} style={{ padding: '8px 20px', borderRadius: 8, border: 'none', background: '#B8962E', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
               🎭 Go to Producer Mode
             </button>
           )}

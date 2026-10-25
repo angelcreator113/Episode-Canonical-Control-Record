@@ -13,6 +13,10 @@
  * Continuity · World · Release. Episodes, Opportunities and the Results
  * ledger moved to the Season page, and their old links open its tabs;
  * World holds Lala's posts, World moments and the Rate card.
+ *
+ * Events (step 2, 2026-10-25): the event library is the Season page's
+ * Events tab; ?tab=events (and ?tab=events&event=<id>) open it there, and
+ * Producer Mode no longer draws it.
  */
 import { vi, describe, beforeEach, test, expect } from 'vitest';
 import { render, screen, waitFor, within, fireEvent } from '@testing-library/react';
@@ -25,6 +29,8 @@ vi.mock('../services/api', () => ({
 import api from '../services/api';
 import WorldAdmin, { SEASON_PAGE_KEYS } from './WorldAdmin';
 import { SEASON_TABS } from '../lib/seasonPage';
+import { readFileSync } from 'fs';
+import { resolve } from 'path';
 
 function Where() {
   const loc = useLocation();
@@ -170,6 +176,9 @@ describe('Old Producer Mode links to what moved to the Season page', () => {
     ['opportunities', '/shows/show-1/season?tab=opportunities'],
     ['season-page', '/shows/show-1/season'],
     ['opportunities&deal_with=Maison%20Velour', '/shows/show-1/season?tab=opportunities&deal_with=Maison+Velour'],
+    ['events', '/shows/show-1/season?tab=events'],
+    ['feed-events', '/shows/show-1/season?tab=events'],
+    ['events&event=ev-7', '/shows/show-1/season?tab=events&event=ev-7'],
   ])('?tab=%s opens %s', async (tab, to) => {
     renderAt(tab);
     await waitFor(() => expect(screen.getByTestId('where').textContent).toBe(to));
@@ -178,17 +187,27 @@ describe('Old Producer Mode links to what moved to the Season page', () => {
   test('every old key in SEASON_PAGE_KEYS names a real Season page tab', () => {
     const keys = new Set(SEASON_TABS.map((t) => t.key));
     for (const tab of Object.values(SEASON_PAGE_KEYS)) if (tab) expect(keys.has(tab)).toBe(true);
-    expect(Object.keys(SEASON_PAGE_KEYS)).toEqual(expect.arrayContaining(['episodes', 'episodes-production', 'episodes-ledger', 'opportunities', 'season', 'goals']));
+    expect(Object.keys(SEASON_PAGE_KEYS)).toEqual(expect.arrayContaining(['episodes', 'episodes-production', 'episodes-ledger', 'opportunities', 'season', 'goals', 'events', 'feed-events']));
   });
 
-  // The event library stays reachable at its old address (it moves onto the Season page in step 2), out of the banner.
-  test('?tab=events still opens the event library here, with Season lit and a line pointing to the Season page', async () => {
+  // The event library left Producer Mode (step 2): its old address redirects, and nothing here draws it.
+  test('?tab=events leaves Producer Mode for the Season page; no library, note or Events tab is drawn here', async () => {
     renderAt('events');
-    const note = await screen.findByTestId('events-season-note');
-    expect(note.querySelector('a').getAttribute('href')).toBe('/shows/show-1/season?tab=events');
-    expect(screen.getByTestId('where').textContent).toBe('/shows/show-1/world?tab=events');
-    expect(screen.getByTestId('wa-tab-season').className).toContain('active');
-    expect(screen.queryByRole('button', { name: 'Events' })).toBeNull();
+    await waitFor(() => expect(screen.getByTestId('where').textContent).toBe('/shows/show-1/season?tab=events'));
+    expect(screen.queryByTestId('events-season-note')).toBeNull();
+    expect(screen.queryByTestId('event-library')).toBeNull();
+    expect(screen.queryByTestId('events-grid')).toBeNull();
+  });
+
+  test('Producer Mode draws no event library on any tab: its source holds no events tab or library', async () => {
+    renderAt('overview');
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Overview' })).toBeTruthy());
+    expect(screen.queryByTestId('event-library')).toBeNull();
+    expect(screen.queryByTestId('events-grid')).toBeNull();
+    expect(screen.queryByTestId('event-editor')).toBeNull();
+    const src = readFileSync(resolve(__dirname, 'WorldAdmin.jsx'), 'utf8');
+    expect(src).not.toMatch(/activeTab === 'events'/);
+    expect(src).not.toMatch(/import [^;]*EventLibrary|eventDetailModal|events-season-note/);
   });
 });
 

@@ -10,11 +10,13 @@
  * from the ledger), and eight tabs addressed by `?tab=` (lib/seasonPage
  * SEASON_TABS), each opening on a one-line note of what it is for:
  * Overview, Roadmap, Episodes (the production board, from Producer Mode),
- * Events, Opportunities (from Producer Mode), Story, Goals (Lala's career
+ * Events (the event library, from Producer Mode's ?tab=events: In this
+ * season · Not placed yet · All), Opportunities (from Producer Mode), Story, Goals (Lala's career
  * goals and the brands she has worked with, from the Season Plan) and
  * Results (the Episode Ledger, from Producer Mode, then Planning Insights).
- * Producer Mode's old ?tab=episodes, episodes-production, episodes-ledger
- * and opportunities links open these tabs (WorldAdmin SEASON_PAGE_KEYS).
+ * Producer Mode's old ?tab=episodes, episodes-production, episodes-ledger,
+ * opportunities and events (with &event=<id>, which opens that event's
+ * editor here) links open these tabs (WorldAdmin SEASON_PAGE_KEYS).
  *
  * Everything is read and written through the Season Plan's own pieces
  * (components/Show/SeasonPlan: useSeasonPlan, the roadmap controls, SlotPanel,
@@ -44,8 +46,9 @@ import { SEASON_TABS, tabFrom, seasonStats, heroChips, slotsLine, goalsLine, eve
 import './SeasonPage.css';
 
 const S = PLAN_S;
-// The tabs a show without a season still has (they read the show, not the season).
-const SEASONLESS_TABS = ['episodes', 'opportunities', 'results'];
+// The tabs a show without a season still has (they read the show, not the
+// season); Events is the whole event library there.
+const SEASONLESS_TABS = ['episodes', 'events', 'opportunities', 'results'];
 
 
 /** The four stat cards (the mockup's row under the hero). */
@@ -269,7 +272,7 @@ export default function SeasonPage() {
   );
 
   const tabProps = {
-    plan, S, api, showId, setToast, episodes, episodesTotal, events, arc, roadmap, stats, goTab, params,
+    plan, S, api, showId, setToast, episodes, episodesTotal, events, arc, roadmap, stats, goTab, params, setParams,
     reloadShowData: loadShowData,
     onEdit: () => openPanel('edit'), onPanel: openPanel,
   };
@@ -300,6 +303,7 @@ export default function SeasonPage() {
         <section id="szn-tabpanel" role="tabpanel" aria-labelledby={`szn-tab-${open}`} className="szn-tabpanel" data-testid={`szn-panel-${open}`}>
           {open !== 'overview' && note}
           {open === 'episodes' && <SeasonEpisodesTab {...tabProps} />}
+          {open === 'events' && <SeasonEventsTab {...tabProps} />}
           {open === 'opportunities' && <SeasonOpportunitiesTab {...tabProps} />}
           {open === 'results' && <SeasonResultsTab {...tabProps} />}
           {open === 'overview' && !plan.failed.season && (

@@ -317,6 +317,20 @@
 
 /* Events lists */
 .szn-events, .szn-goals, .szn-story, .szn-results { display: grid; gap: 16px; }
+/* Events: the library's filter (In this season · Not placed yet · All), the
+   slot count and the placement preview; each card's slot line. */
+.szn-events { min-width: 0; grid-template-columns: minmax(0, 1fr); }
+.szn-events-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; }
+.szn-events-bar .szn-seg { max-width: 100%; }
+.szn-events-count { min-width: 22px; padding: 1px 7px; border-radius: 999px; background: var(--sp-bg); color: var(--sp-ink); font-size: 12px; font-weight: 700; text-align: center; }
+.szn-seg button.is-on .szn-events-count { background: var(--sp-white); color: var(--sp-ink); }
+.szn-event-code { padding: 2px 8px; border-radius: 6px; background: var(--sp-ink); color: var(--sp-white); font-size: 12px; font-weight: 700; font-family: var(--font-mono, 'DM Mono', monospace); }
+.szn-event-pencil { max-width: 100%; }
+@media (max-width: 600px) {
+  .szn-events-bar .szn-seg { display: flex; width: 100%; }
+  .szn-events-bar .szn-seg { border-radius: 16px; }
+  .szn-events-bar .szn-seg button { flex: 1 1 0; flex-direction: column; justify-content: center; gap: 2px; padding: 6px 4px; border-radius: 13px; font-size: 13px; line-height: 1.2; text-align: center; }
+}
 .szn-list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
 .szn-list-row {
   display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 8px; border-radius: 14px; border: 1px solid var(--sp-line); min-width: 0;

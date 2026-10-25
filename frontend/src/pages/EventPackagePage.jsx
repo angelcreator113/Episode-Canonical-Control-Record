@@ -32,7 +32,9 @@
  * Summary sections (Basics, People, Place, Invitation, Style, Terms,
  * Stakes & Money, Review) plus a readiness count, and three actions:
  * Change Organizer (Change Host until Task #1761), Edit details (opens
- * the existing WorldAdmin editor via the same ?tab=events&event=<id> deep link Task #1628/#1630 already use),
+ * the event library's editor on the Season page's Events tab, via
+ * seasonPageHref(showId, 'events', { event }) — the old ?tab=events&event=<id>
+ * deep link of Task #1628/#1630 now redirects there),
  * and Start Episode (the existing generate-episode action, gated on
  * readiness). Editing itself still happens in the existing editor —
  * later pieces replace these sections one at a time.
@@ -773,7 +775,7 @@ function EventPackageView() {
         <AlertCircle size={28} color="var(--lala-danger)" />
         <p className="epp-error" role="alert">{loadError || 'Event not found'}</p>
         {loadError && <button type="button" className="epp-btn epp-btn-primary" onClick={load}>Try again</button>}
-        <button className="epp-btn epp-btn-secondary" onClick={() => navigate(`/shows/${showId}/world?tab=events`)}>
+        <button className="epp-btn epp-btn-secondary" onClick={() => navigate(seasonPageHref(showId, 'events'))}>
           <ArrowLeft size={16} /> Back to Events
         </button>
       </div>
@@ -842,7 +844,7 @@ function EventPackageView() {
   // What going without featured attendees means, from the readiness rules.
   const featuredConsequence = readiness.sections.find((sec) => sec.key === 'people')?.missing?.find((m) => m.key === 'featured')?.consequence || null;
 
-  const openEditor = () => navigate(`/shows/${showId}/world?tab=events&event=${eventId}`);
+  const openEditor = () => navigate(seasonPageHref(showId, 'events', { event: eventId }));
 
   // Folded sections (Evoni, 2026-10-23): a section whose readiness items are
   // all complete starts as one line with Edit; the person's own open/closed
@@ -1673,7 +1675,7 @@ function EventPackageView() {
 
       <header className="epp-hero" data-testid="package-hero">
         <div className="epp-hero-top">
-          <button className="epp-back" onClick={() => navigate(`/shows/${showId}/world?tab=events`)}>
+          <button className="epp-back" onClick={() => navigate(seasonPageHref(showId, 'events'))}>
             <ArrowLeft size={16} /> Events
           </button>
           <span className={`epp-status-badge epp-status-${badge.state}`} data-testid="package-status">{badge.label}</span>

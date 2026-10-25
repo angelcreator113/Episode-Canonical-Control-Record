@@ -21,6 +21,7 @@ import { Link } from 'react-router-dom';
 import { Globe2, CalendarDays, Newspaper, TrendingUp, Award, Sparkles, Save, Plus, Trash2 } from 'lucide-react';
 import api from '../../services/api';
 import './WorldMomentsTab.css';
+import { seasonPageHref } from '../../lib/seasonPage';
 
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const CITIES = {
@@ -243,7 +244,7 @@ export default function WorldMomentsTab({ showId }) {
             <li key={r.key} className="wm-item" data-testid={`wm-recent-${r.key}`}>
               <span className="wm-tag">{STATUS[r.status] || r.status}</span>
               <span className="wm-item-body"><strong>{r.label}</strong><span className="wm-muted"> {r.date}{r.why ? ` · ${r.why}` : ''}</span></span>
-              {r.ref?.type === 'world_event' && <Link className="wm-link" to={`/shows/${showId}/world?tab=events`}>Open Events</Link>}
+              {r.ref?.type === 'world_event' && <Link className="wm-link" to={seasonPageHref(showId, 'events', { show: 'all' })}>Open Events</Link>}
               {(r.status === 'in_review' || r.post_id) && <Link className="wm-link" to={REVIEW}>Open Review</Link>}
             </li>
           ))}

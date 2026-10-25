@@ -9,12 +9,12 @@ import { vi, describe, beforeEach, test, expect } from 'vitest';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 
-vi.mock('../services/api', () => ({
+vi.mock('../../services/api', () => ({
   default: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn(), patch: vi.fn(), request: vi.fn() },
 }));
 
-import api from '../services/api';
-import WorldAdmin from './WorldAdmin';
+import api from '../../services/api';
+import EventLibrary from './EventLibrary';
 
 const USED_EVENT = {
   id: 'ev-used',
@@ -33,9 +33,9 @@ function LocationProbe() {
 
 function renderQueue() {
   return render(
-    <MemoryRouter initialEntries={['/shows/show-1/world?tab=events']}>
+    <MemoryRouter initialEntries={['/shows/show-1/season?tab=events']}>
       <Routes>
-        <Route path="/shows/:id/world" element={<WorldAdmin />} />
+        <Route path="/shows/:showId/season" element={<EventLibrary showId="show-1" />} />
         <Route path="/episodes/:episodeId" element={<LocationProbe />} />
         <Route path="/shows/:showId/events/:eventId" element={<LocationProbe />} />
       </Routes>
@@ -43,7 +43,7 @@ function renderQueue() {
   );
 }
 
-describe('WorldAdmin events queue — Open Episode lands on Overview', () => {
+describe('EventLibrary queue — Open Episode lands on Overview', () => {
   beforeEach(() => {
     Object.values(api).forEach((fn) => fn?.mockReset?.());
     vi.mocked(api.get).mockImplementation(async (url) => {

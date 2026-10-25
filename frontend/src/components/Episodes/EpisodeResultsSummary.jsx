@@ -102,7 +102,7 @@ export default function EpisodeResultsSummary({ episode, showId, onOpenTab, focu
               Lala&apos;s stats and goals, and the money settled.
             </p>
             <p className="ers-note">Complete the episode from its event in Producer Mode to evaluate it.</p>
-            {showId && <Link className="ers-link" to={`/shows/${showId}/world?tab=events`}>Open the events</Link>}
+            {showId && <Link className="ers-link" to={seasonPageHref(showId, 'events')}>Open the events</Link>}
           </section>
         )}
         {how.done && (

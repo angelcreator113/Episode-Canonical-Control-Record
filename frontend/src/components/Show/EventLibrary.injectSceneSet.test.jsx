@@ -8,12 +8,12 @@ import { vi, describe, beforeEach, afterEach, test, expect } from 'vitest';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 
-vi.mock('../services/api', () => ({
+vi.mock('../../services/api', () => ({
   default: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn(), patch: vi.fn(), request: vi.fn() },
 }));
 
-import api from '../services/api';
-import WorldAdmin from './WorldAdmin';
+import api from '../../services/api';
+import EventLibrary from './EventLibrary';
 
 const EVENT = {
   id: 'ev-1', show_id: 'show-1', name: 'Velour Launch', status: 'ready', prestige: 5, cost_coins: 10, scene_set_id: 'set-9',
@@ -23,16 +23,16 @@ const EPISODES = [{ id: 'ep-1', episode_number: 1, title: 'Gala Night', status: 
 
 function renderEditor() {
   return render(
-    <MemoryRouter initialEntries={['/shows/show-1/world?tab=events&event=ev-1']}>
+    <MemoryRouter initialEntries={['/shows/show-1/season?tab=events&event=ev-1']}>
       <Routes>
-        <Route path="/shows/:id/world" element={<WorldAdmin />} />
+        <Route path="/shows/:showId/season" element={<EventLibrary showId="show-1" />} />
       </Routes>
     </MemoryRouter>
   );
 }
 const posted = (suffix) => vi.mocked(api.post).mock.calls.filter(([u]) => u.endsWith(suffix));
 
-describe('WorldAdmin: attaching an event whose scene set can\'t be linked (F2)', () => {
+describe('EventLibrary: attaching an event whose scene set can\'t be linked (F2)', () => {
   let retryResult;
   beforeEach(() => {
     Object.values(api).forEach((fn) => fn?.mockReset?.());

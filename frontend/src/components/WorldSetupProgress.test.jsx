@@ -28,6 +28,7 @@ const renderIt = (showId) => render(
       <Route path="/overview" element={<WorldSetupProgress showId={showId} />} />
       <Route path="/universe" element={<Where />} />
       <Route path="/shows/:id/world" element={<Where />} />
+      <Route path="/shows/:id/season" element={<Where />} />
     </Routes>
   </MemoryRouter>,
 );
@@ -99,7 +100,7 @@ describe('WorldSetupProgress', () => {
   test("Create World Events opens the active show's Events library, where its draft events are", async () => {
     renderIt('show-b');
     fireEvent.click(await screen.findByRole('button', { name: 'Step 7: Create World Events (done)' }));
-    expect(screen.getByTestId('where').textContent).toBe('/shows/show-b/world?tab=events');
+    expect(screen.getByTestId('where').textContent).toBe('/shows/show-b/season?tab=events&show=all');
     // With no show yet, it keeps the calendar, where world events are spawned from.
     const events = SETUP_STEPS.find((s) => s.key === 'events');
     expect(stepRoute(events, undefined)).toBe('/universe?tab=culture&sub=events');
