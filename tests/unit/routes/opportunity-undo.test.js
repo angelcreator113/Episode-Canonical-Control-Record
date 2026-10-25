@@ -93,7 +93,7 @@ describe('GET /opportunities/:showId', () => {
     const a = app({ Opportunity: { findAll: jest.fn(async () => opps) }, sequelize: { query, QueryTypes: { SELECT: 'SELECT' } } });
     const res = await request(a).get(`/api/v1/opportunities/${SHOW}`);
     expect(res.status).toBe(200);
-    expect(res.body.opportunities[0].beat14_episode).toEqual({ id: EP, title: 'The Gala', episode_number: 1, evaluation_status: 'accepted' });
+    expect(res.body.opportunities[0].beat14_episode).toEqual({ id: EP, title: 'The Gala', episode_number: 1, evaluation_status: 'accepted', season_number: null, season_context: null });
     expect(res.body.opportunities[1].beat14_episode).toBeUndefined();
     expect(query).toHaveBeenCalledTimes(1);
     expect(query.mock.calls[0][1].replacements).toEqual({ ids: [EP] });

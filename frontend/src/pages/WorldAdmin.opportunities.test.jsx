@@ -73,9 +73,12 @@ describe('attach to beat 14', () => {
 
   test('a held one says which episode, linking to its Script tab, and offers no move or undo', async () => {
     renderTab();
-    const label = await screen.findByTestId('opp-held-o3');
-    expect(label.textContent).toBe('Beat 14 of The Gala');
-    expect(label.querySelector('a').getAttribute('href')).toBe('/episodes/ep-1?tab=scripts');
+    expect((await screen.findByTestId('opp-held-o3')).textContent).toBe('held for beat 14');
+    // The episode and its link are on the "Offered in" line (Evoni, 2026-10-25).
+    const line = screen.getByTestId('opp-offered-in-o3');
+    expect(line.textContent).toBe("Offered in The Gala · held until it's done");
+    expect(line.querySelector('a').getAttribute('href')).toBe('/episodes/ep-1?tab=scripts');
+    expect(line.querySelector('a').getAttribute('title')).toBe('Beat 14 of The Gala');
     expect(screen.queryByTestId('opp-move-o3')).toBeNull();
     expect(screen.queryByTestId('opp-undo-o3')).toBeNull();
     expect(screen.queryByTestId('opp-beat14-open-o3')).toBeNull();
@@ -240,7 +243,7 @@ describe('a held one says why, and can be released or scheduled now', () => {
   test('one whose episode is completed but never settled says that, naming the episode by number', async () => {
     renderTab([STUCK]);
     expect((await screen.findByTestId('opp-held-why-text-o4')).textContent).toBe('Episode 1 is completed but this was never settled.');
-    expect(screen.getByTestId('opp-held-o4').textContent).toBe('Beat 14 of Episode 1');
+    expect(screen.getByTestId('opp-offered-in-o4').textContent).toBe("Offered in S1 E1 · held until it's done");
     expect(screen.getByTestId('opp-held-why-o4').querySelector('a').getAttribute('href')).toBe('/episodes/ep-9/evaluate');
   });
 
@@ -283,5 +286,27 @@ describe('a held one says why, and can be released or scheduled now', () => {
     await waitFor(() => expect(api.post).toHaveBeenCalledWith(`/api/v1/feed-pipeline/${SHOW}/schedule/o3`));
     expect(await screen.findByText('✓ Event scheduled')).toBeTruthy();
     expect(screen.queryByTestId('opp-schedule-now-o3')).toBeNull();
+  });
+});
+
+// Each one attached to an episode's beat 14 says which episode, by its code,
+// and where it stands (Evoni, 2026-10-25).
+describe('Offered in', () => {
+  test('held, offered and expired, each linking to its episode; one never attached has no line', async () => {
+    const ep5 = { id: 'ep-5', title: 'The Runway', episode_number: 5, season_number: 1 };
+    const slotted = { id: 'ep-7', title: 'Second Act', episode_number: 25, season_number: 2, season_context: { label: 'S2 · E1' } };
+    renderTab([
+      { ...HELD, beat14_episode: ep5 },
+      { id: 'o5', name: 'Velour Gifting', status: 'offered', opportunity_type: 'pr_gifting', offered_in_episode_id: 'ep-7', beat14_episode: slotted, status_history: history('held', 'offered') },
+      { id: 'o6', name: 'Lost Panel', status: 'expired', opportunity_type: 'panel', offered_in_episode_id: 'ep-5', beat14_episode: ep5, status_history: history('held', 'expired') },
+      OPEN,
+    ]);
+    const held = await screen.findByTestId('opp-offered-in-o3');
+    expect(held.textContent).toBe("Offered in S1 E5 · held until it's done");
+    expect(held.querySelector('a').getAttribute('href')).toBe('/episodes/ep-5?tab=scripts');
+    expect(screen.getByTestId('opp-offered-in-o5').textContent).toBe('Offered in S2 · E1 · offered');
+    expect(screen.getByTestId('opp-offered-in-o5').querySelector('a').getAttribute('href')).toBe('/episodes/ep-7?tab=scripts');
+    expect(screen.getByTestId('opp-offered-in-o6').textContent).toBe('Offered in S1 E5 · expired');
+    expect(screen.queryByTestId('opp-offered-in-o1')).toBeNull();
   });
 });

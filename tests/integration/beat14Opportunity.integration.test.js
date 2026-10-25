@@ -198,7 +198,7 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
     expect(put.body.data.opportunity).toMatchObject({ id, status: 'held' });
 
     const list = await auth(request(app).get(`/api/v1/opportunities/${show}`));
-    expect(list.body.opportunities.find((o) => o.id === id).beat14_episode).toEqual({ id: ep, title: 'The Studio', episode_number: 7, evaluation_status: null });
+    expect(list.body.opportunities.find((o) => o.id === id).beat14_episode).toEqual({ id: ep, title: 'The Studio', episode_number: 7, evaluation_status: null, season_number: null, season_context: null });
 
     const held = await auth(request(app).post(`/api/v1/opportunities/${show}/${id}/undo`));
     expect(held.status).toBe(409);
@@ -260,7 +260,7 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
       const id = await holdOne('Sable Look');
       await run("UPDATE episodes SET evaluation_status = 'accepted' WHERE id = :ep3", { ep3 });
       const list = await auth(request(app).get(oppsUrl));
-      expect(list.body.opportunities.find((o) => o.id === id).beat14_episode).toEqual({ id: ep3, title: 'Episode One', episode_number: 1, evaluation_status: 'accepted' });
+      expect(list.body.opportunities.find((o) => o.id === id).beat14_episode).toEqual({ id: ep3, title: 'Episode One', episode_number: 1, evaluation_status: 'accepted', season_number: null, season_context: null });
     });
 
     test('Release offer: held → offered today, still beat 14 of its episode; 409 when not held; ADMIN only', async () => {
