@@ -1,9 +1,10 @@
 // frontend/src/components/Episodes/EpisodeLalasPhoneTab.jsx
 import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { Play, MessageCircle, ListChecks } from 'lucide-react';
+import { Play, MessageCircle } from 'lucide-react';
 import api from '../../services/api';
 import EpisodePhoneMissionsTab from './EpisodePhoneMissionsTab';
+import EpisodePhoneNeeds from './EpisodePhoneNeeds';
 import PhonePreviewMode from '../PhonePreviewMode';
 import { isIcon, isScreen } from '../../lib/overlayUtils';
 import { BEAT_PHASES, beatOrder, pinnedBeatOrder, storyLabel } from '../../lib/storyClock';
@@ -14,11 +15,14 @@ import './EpisodeLalasPhoneTab.css';
  *
  * Presents Lala's phone for one episode: the Preview Phone action, what is
  * on the phone today (screens and icons from the Phone Hub, feed moments
- * persisted for this episode), a deferred notice where beat-derived
- * requirements will go, and the episode's missions as one section.
+ * persisted for this episode), what the episode's script needs from the
+ * phone (EpisodePhoneNeeds: phone round step 2, 2026-10-25), and the
+ * episode's missions as one section.
  *
  * Read-only apart from the missions section, which is the unchanged
- * EpisodePhoneMissionsTab (is_active toggles + MissionEditor).
+ * EpisodePhoneMissionsTab (is_active toggles + MissionEditor), and the
+ * needs card's Make it / Build all, each through the Phone Hub's own routes
+ * and listed for review with Undo.
  *
  * Deliberately NOT fetched here: GET /api/v1/episodes/:id/phone-state.
  * That route's loadOrCreateState creates a playthrough row on read, so a
@@ -99,21 +103,40 @@ export function splitPhoneOverlays(overlays) {
   };
 }
 
-// The content zone that draws a feed moment of each phone_screen_type
-// (ScreenContentRenderer: DMThreadRenderer keeps 'dm', NotificationsRenderer
-// keeps 'notification'). No zone draws the other types (post, story, live,
-// ui_interaction), so those moments belong to no screen yet (#2855).
-export const MOMENT_ZONE_TYPES = { dm: 'dm_thread', notification: 'notifications' };
+// The content zones that draw a feed moment of each phone_screen_type, best
+// first (ScreenContentRenderer: DMThreadRenderer keeps 'dm',
+// NotificationsRenderer 'notification'). #2855 placed only those two because
+// no zone drew the others then; since, One Post (feed_post) draws one Pulse
+// post, The Pulse (pulse_feed) and Pulse posts (feed_posts) the feed, and
+// Story Avatars (story_ring) the stories (phone round step 2, 2026-10-25).
+// A post moment is placed only when it is linked to its post (feed_post_id):
+// on the One Post screen showing that post, else a Pulse feed. Live and
+// ui_interaction moments still belong to no screen.
+export const MOMENT_ZONE_TYPES = {
+  dm: ['dm_thread'],
+  notification: ['notifications'],
+  post: ['feed_post', 'pulse_feed', 'feed_posts'],
+  story: ['story_ring'],
+};
 
 // The playable screen a feed moment belongs to: the first one with a content
-// zone that draws its type (the home screen first, as the phone opens there),
-// or null when no screen on this phone draws it.
+// zone that draws its type, by the order above (the home screen first among
+// equals, as the phone opens there), or null when no screen draws it.
 export function screenForMoment(moment, screens) {
-  const zoneType = MOMENT_ZONE_TYPES[moment?.phone_screen_type];
-  if (!zoneType) return null;
-  const draws = s => Array.isArray(s?.content_zones) && s.content_zones.some(z => z?.content_type === zoneType);
+  const type = moment?.phone_screen_type;
+  const zoneTypes = MOMENT_ZONE_TYPES[type];
+  if (!zoneTypes) return null;
+  if (type === 'post' && !moment.feed_post_id) return null;
   const list = screens || [];
-  return list.find(s => s.is_home && draws(s)) || list.find(draws) || null;
+  for (const zoneType of zoneTypes) {
+    // One Post shows one post: only the screen showing this moment's.
+    const fits = z => z?.content_type === zoneType
+      && (zoneType !== 'feed_post' || String(z?.content_config?.post_id || '') === String(moment.feed_post_id));
+    const draws = s => Array.isArray(s?.content_zones) && s.content_zones.some(fits);
+    const found = list.find(s => s.is_home && draws(s)) || list.find(draws);
+    if (found) return found;
+  }
+  return null;
 }
 
 function countBy(items, key) {
@@ -190,6 +213,13 @@ function EpisodeLalasPhoneTab({ episode, onPreview, previewError = null }) {
   }, [showId, episodeId]);
 
   useEffect(() => { load(); }, [load]);
+
+  // The needs card reads the phone again after it makes something.
+  const reloadOverlays = useCallback(async () => {
+    const list = await listEpisodePhoneOverlaysApi(showId, episodeId);
+    setOverlays(list);
+    return list;
+  }, [showId, episodeId]);
 
   const { screens, missingScreens, icons, missingIcons } = splitPhoneOverlays(overlays);
   const homeScreen = screens.find(s => s.is_home) || null;
@@ -374,7 +404,13 @@ function EpisodeLalasPhoneTab({ episode, onPreview, previewError = null }) {
               </>
             )}
             <div className="lalas-phone-card-links">
-              {studioPath && <Link to={studioPath} className="lalas-phone-link">Edit tap zones</Link>}
+              {/* The Hub opens at the screen the phone shows (#2867: ?screen=). */}
+              {studioPath && (
+                <Link to={shown ? `${studioPath}&screen=${encodeURIComponent(shown.id)}` : studioPath} className="lalas-phone-link"
+                  title={shown ? `Edit ${shown.name}'s tap zones in the Phone Hub` : undefined}>
+                  Edit tap zones
+                </Link>
+              )}
               <button
                 type="button"
                 className="lalas-phone-link"
@@ -427,7 +463,9 @@ function EpisodeLalasPhoneTab({ episode, onPreview, previewError = null }) {
                           {body}
                           <MomentPicker moment={m} onPin={pin} />
                           <span className="lalas-phone-moment-note">
-                            No screen on this phone shows {type} moments yet.{' '}
+                            {type === 'post' && !m.feed_post_id
+                              ? 'This post is not linked to a Pulse post yet, so no screen shows it.'
+                              : `No screen on this phone shows ${type} moments yet.`}{' '}
                             {studioPath && <Link to={studioPath}>Build one in Producer Mode → Lala&apos;s Phone</Link>}
                           </span>
                         </li>
@@ -457,16 +495,16 @@ function EpisodeLalasPhoneTab({ episode, onPreview, previewError = null }) {
             )}
           </section>
 
-          {/* ── Requirements: deferred until beats exist ── */}
-          <section className="lalas-phone-card" aria-labelledby="lalas-phone-reqs">
-            <h3 id="lalas-phone-reqs" className="lalas-phone-section-title">
-              <ListChecks size={14} aria-hidden="true" /> What this episode needs from the phone
-            </h3>
-            <div className="lalas-phone-deferred" role="note" data-testid="lalas-phone-deferred">
-              Requirements appear once beats exist. Scripts don&apos;t instantiate the episode&apos;s
-              beats yet, so nothing is listed here, and no screen is placed on a beat.
-            </div>
-          </section>
+          {/* ── What the script needs from the phone (phone round step 2) ── */}
+          <EpisodePhoneNeeds
+            episode={episode}
+            showId={showId}
+            episodeId={episodeId}
+            overlays={overlays}
+            overlaysReady={!overlaysLoading && !overlaysError}
+            reloadOverlays={reloadOverlays}
+            studioPath={studioPath}
+          />
 
           {/* ── Missions: a section, not the whole tab ── */}
           <section className="lalas-phone-card" aria-label="Missions">

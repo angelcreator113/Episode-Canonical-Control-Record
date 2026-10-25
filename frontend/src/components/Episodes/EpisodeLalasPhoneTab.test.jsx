@@ -2,8 +2,8 @@
  * EpisodeLalasPhoneTab — Production → Phone is Lala's Phone (issue #1908).
  *
  * Covers: the tab leads with Preview Phone and the phone's current content;
- * the deferred requirements notice renders (no beat-derived requirements
- * are invented); missions are a section and their is_active toggle still
+ * with no script, the needs card says so (phone round step 2; the card
+ * itself is EpisodePhoneNeeds.test.jsx); missions are a section and their is_active toggle still
  * PUTs to the unchanged missions API; the MissionEditor jump still opens.
  */
 
@@ -81,6 +81,8 @@ function mockGets({ overlays = OVERLAYS, moments = MOMENTS, missions = MISSIONS 
     if (url.startsWith('/api/v1/feed-enhanced/s-1/moments/ep-1')) {
       return Promise.resolve({ data: { success: true, data: moments } });
     }
+    // The needs card reads the saved script (EpisodePhoneNeeds); none here.
+    if (url === '/api/v1/episodes/ep-1') return Promise.resolve({ data: { data: { id: 'ep-1' } } });
     return Promise.reject(new Error(`unexpected GET ${url}`));
   });
 }
@@ -169,13 +171,16 @@ describe('EpisodeLalasPhoneTab — render', () => {
     expect(vi.mocked(api.get).mock.calls.some(([u]) => u.includes('/phone-state'))).toBe(false);
   });
 
-  test('renders the deferred requirements notice and no invented requirements', async () => {
+  test('with no script, the needs card says so and lists nothing', async () => {
     mockGets();
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
     render(<EpisodeLalasPhoneTab episode={EPISODE} onPreview={() => {}} />);
-    const notice = screen.getByTestId('lalas-phone-deferred');
-    expect(notice.textContent).toMatch(/Requirements appear once beats exist/);
-    expect(within(notice).queryAllByRole('listitem')).toHaveLength(0);
+    const notice = await screen.findByTestId('phone-needs-none');
+    expect(notice.textContent).toMatch(/no script yet/);
+    expect(screen.getByRole('heading', { name: /What this episode needs from the phone/ })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Build all/ })).toBeNull();
     await screen.findByText('Find the invite');
+    spy.mockRestore();
   });
 
   test('empty states render when nothing is on the phone yet', async () => {
@@ -184,7 +189,7 @@ describe('EpisodeLalasPhoneTab — render', () => {
     expect(await screen.findByText(/No phone screens are generated/)).toBeTruthy();
     expect(await screen.findByText(/No Pulse moments are saved/)).toBeTruthy();
     expect(await screen.findByText('No missions yet.')).toBeTruthy();
-    expect(screen.getByTestId('lalas-phone-deferred')).toBeTruthy();
+    expect(await screen.findByTestId('phone-needs-none')).toBeTruthy();
   });
 
   test('a failed overlay load shows an error but the rest of the tab still renders', async () => {
@@ -197,7 +202,7 @@ describe('EpisodeLalasPhoneTab — render', () => {
     render(<EpisodeLalasPhoneTab episode={EPISODE} onPreview={() => {}} />);
     expect(await screen.findByText('Error: boom')).toBeTruthy();
     expect(await screen.findByText('Find the invite')).toBeTruthy();
-    expect(screen.getByTestId('lalas-phone-deferred')).toBeTruthy();
+    expect(await screen.findByTestId('phone-needs-none')).toBeTruthy();
     spy.mockRestore();
   });
 });
@@ -422,5 +427,53 @@ describe('EpisodeLalasPhoneTab — beat pinning (Task 3111)', () => {
     await waitFor(() => expect(api.put).toHaveBeenLastCalledWith('/api/v1/feed-enhanced/s-1/moments/m1/phase', { story_phase: null }));
     expect((await screen.findByTestId('lalas-phone-pin-error')).textContent).toMatch(/earlier in story time/);
     expect(screen.getAllByLabelText('Story moment for this beat')[0].value).toBe('lala_arrives');
+  });
+});
+
+// Phone round step 2 (2026-10-25): post and story moments find their screen.
+// #2855 placed only dm and notification because no zone drew the others then.
+describe('EpisodeLalasPhoneTab — post and story moments find their screen', () => {
+  const SCREENS = [
+    { id: 'home', name: 'Home', category: 'phone', is_home: true, generated: true, url: 'https://x/home.png', asset_id: 'a-home', content_zones: [] },
+    { id: 'post', name: 'Gala Post', category: 'phone', generated: true, url: 'https://x/post.png', asset_id: 'a-post', content_zones: [{ id: 'p1', content_type: 'feed_post', content_config: { post_id: 'fp-1' } }] },
+    { id: 'other', name: 'Old Post', category: 'phone', generated: true, url: 'https://x/old.png', asset_id: 'a-old', content_zones: [{ id: 'p2', content_type: 'feed_post', content_config: { post_id: 'fp-9' } }] },
+    { id: 'pulse', name: 'The Pulse', category: 'phone', generated: true, url: 'https://x/pulse.png', asset_id: 'a-pulse', content_zones: [{ id: 'f1', content_type: 'pulse_feed' }] },
+    { id: 'stories', name: 'Stories', category: 'phone', generated: true, url: 'https://x/st.png', asset_id: 'a-st', content_zones: [{ id: 's1', content_type: 'story_ring' }] },
+  ];
+
+  beforeEach(() => {
+    Object.values(api).forEach((fn) => fn?.mockReset?.());
+  });
+
+  test('a linked post goes to the One Post screen showing it, else a Pulse feed; a story to Story Avatars', () => {
+    expect(screenForMoment({ phone_screen_type: 'post', feed_post_id: 'fp-1' }, SCREENS).id).toBe('post');
+    // A One Post screen showing another post is not this post's.
+    expect(screenForMoment({ phone_screen_type: 'post', feed_post_id: 'fp-2' }, SCREENS).id).toBe('pulse');
+    expect(screenForMoment({ phone_screen_type: 'post', feed_post_id: 'fp-2' }, [SCREENS[2]])).toBeNull();
+    expect(screenForMoment({ phone_screen_type: 'post', feed_post_id: 'fp-2' }, [{ ...SCREENS[3], content_zones: [{ content_type: 'feed_posts' }] }]).id).toBe('pulse');
+    // Not linked to a post: no screen.
+    expect(screenForMoment({ phone_screen_type: 'post' }, SCREENS)).toBeNull();
+    expect(screenForMoment({ phone_screen_type: 'story' }, SCREENS).id).toBe('stories');
+    expect(screenForMoment({ phone_screen_type: 'live' }, SCREENS)).toBeNull();
+  });
+
+  test('the post row opens its screen; an unlinked post says why it has none', async () => {
+    mockGets({ overlays: SCREENS, moments: [
+      { id: 'm1', phone_screen_type: 'post', feed_post_id: 'fp-1', screen_content: 'Gala look is up' },
+      { id: 'm2', phone_screen_type: 'post', screen_content: 'An unlinked post' },
+      { id: 'm3', phone_screen_type: 'story', screen_content: 'Lala posted a story' },
+    ] });
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    render(<EpisodeLalasPhoneTab episode={EPISODE} onPreview={() => {}} />);
+    const post = (await screen.findByText('Gala look is up')).closest('button');
+    expect(within(post).getByText('on Gala Post')).toBeTruthy();
+    fireEvent.click(post);
+    expect(screen.getByTestId('lalas-phone-showing').textContent).toBe('Showing: Gala Post');
+    // Edit tap zones follows the screen shown.
+    expect(screen.getByRole('link', { name: 'Edit tap zones' }).getAttribute('href')).toBe('/shows/s-1/world?tab=overlays-tab&screen=post');
+    expect(within(screen.getByText('Lala posted a story').closest('button')).getByText('on Stories')).toBeTruthy();
+    const unlinked = screen.getByText('An unlinked post').closest('li');
+    expect(unlinked.className).toContain('is-unplaced');
+    expect(within(unlinked).getByText(/not linked to a Pulse post yet/)).toBeTruthy();
   });
 });
