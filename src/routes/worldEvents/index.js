@@ -16,6 +16,8 @@
  * POST   /api/v1/world/:showId/events/:eventId/suggest-basics — AI suggestions for date, time, description, dress code, category, format; writes nothing
  * GET    /api/v1/world/:showId/events/:eventId/start-readiness — What would stop Start Episode (the same check Start Episode refuses with)
  * GET    /api/v1/world/:showId/events/:eventId/package — The Event Package's parts in one request, each failing on its own
+ * GET    /api/v1/world/:showId/events/:eventId/flow — Beat 14's best fit, the host's usual choices, clashes (no AI)
+ * POST   /api/v1/world/:showId/events/:eventId/fill-missing — AI drafts for every empty field; writes nothing
  * POST   /api/v1/world/:showId/events/ai-fix — AI suggestions to diversify event plan
  * 
  * Location: src/routes/worldEvents/ — this file mounts the parts below, in
@@ -32,6 +34,7 @@ const router = express.Router();
 
 router.use(require('./read'));                      // list, one event, start readiness, the combined package
 router.use(require('./suggest'));                   // suggest names / basics, episode pitches (AI, writes nothing)
+router.use(require('./flow'));                      // what comes next: beat 14, defaults, clashes; fill what's missing (AI)
 router.use(require('./create'));                    // create an event
 router.use(require('./update'));                    // the event PUT (and its checks) and DELETE
 router.use(require('./inject'));                    // inject into an episode, scene set link

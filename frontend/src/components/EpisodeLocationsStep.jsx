@@ -132,7 +132,7 @@ function SetPicker({ showId, sets, role, onPick, onClose, setSets, currentId = n
 
 export default function EpisodeLocationsStep({
   showId, title = 'Episode locations', confirmLabel = 'Confirm', initial = [], missing = [], removed = [], eventLook = null, angleGaps = [],
-  onConfirm, onCancel, busy = false,
+  onConfirm, onCancel, busy = false, intro = null,
 }) {
   const [{ byRole, extras }, setRows] = useState(() => initialRows(initial));
   const [sets, setSets] = useState([]);
@@ -248,6 +248,8 @@ export default function EpisodeLocationsStep({
       <div className="els-panel" data-testid="episode-locations-step">
         <h2 id="els-title" className="els-title" tabIndex={-1} ref={titleRef}>{title}</h2>
         <p className="els-sub">Where this episode happens. Each can be changed; images can come later.</p>
+        {/* What the caller adds before the roles (the Event Package: what Start copies). */}
+        {intro}
 
         {FIXED_ROLES.map((r) => row(r, fixedLabel(r), byRole[r], { onPick: (set) => setFixed(r, set) }))}
 

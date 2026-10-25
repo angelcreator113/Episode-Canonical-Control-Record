@@ -1,0 +1,6 @@
+/* The header's way back and its top row (PackageHero.jsx; the rest of the
+   hero is in EventPackagePage.css). Design tokens only. */
+.epp-hero-top a.epp-back { text-decoration: none; min-height: 32px; }
+.epp-hero-top a.epp-back:focus-visible { outline: 2px solid var(--lala-lavender); outline-offset: 2px; border-radius: 6px; }
+/* Nothing left to set up: "Done · back to …" reads as the way on. */
+.epp-hero-top a.epp-back.is-done { font-weight: 700; }

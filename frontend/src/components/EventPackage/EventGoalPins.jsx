@@ -10,14 +10,21 @@
  * change only canon_consequences.pinned_goal_ids and not the event's save
  * version. Hidden when the show has no active season or no goals. Never
  * blocks the page.
+ *
+ * In the header's season panel (SeasonPlacePanel, 2026-10-25) the page
+ * reads the coverage once and hands it in as `coverage` ({ data, reload }),
+ * and `gains` ({ [goalId]: { text } }, lib/eventFlow goalGains) puts what
+ * the event adds on each chip: "Earn 3,000 Prime Coins +600 coins".
  */
 import { useState } from 'react';
 import { Target, Pin, X } from 'lucide-react';
 import { useGoalCoverage, pinGoal, errorText } from '../../lib/goalCoverage';
 import './EventGoalPins.css';
 
-export default function EventGoalPins({ api, showId, eventId }) {
-  const { data, reload } = useGoalCoverage({ api, showId, eventId });
+export default function EventGoalPins({ api, showId, eventId, coverage = null, gains = null }) {
+  // Handed in, the coverage is not read again here.
+  const own = useGoalCoverage({ api: coverage ? null : api, showId, eventId });
+  const { data, reload } = coverage || own;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const ev = data?.event;
@@ -45,6 +52,7 @@ export default function EventGoalPins({ api, showId, eventId }) {
           <li key={g.goal_id} className={`egp-chip${g.pinned ? ' is-pinned' : ''}`} data-testid={`egp-chip-${g.goal_id}`}>
             {g.pinned && <Pin size={12} aria-hidden="true" />}
             <span>{g.title}</span>
+            {gains?.[g.goal_id] && <span className="egp-gain" data-testid={`egp-gain-${g.goal_id}`}>{gains[g.goal_id].text}</span>}
             {g.pinned && (
               <button type="button" className="egp-unpin" onClick={() => change(g.goal_id, false)} disabled={busy}
                 aria-label={`Unpin ${g.title}`} data-testid={`egp-unpin-${g.goal_id}`}>

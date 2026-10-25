@@ -8,6 +8,16 @@
 import { useState, useEffect, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 
+// How far down the screen the sticky readiness bar, and the chip row when it
+// is one (1000px and under), reach.
+function stickyBottom() {
+  const bar = document.querySelector('#epp-readiness > .epp-next')?.getBoundingClientRect().bottom || 0;
+  const row = typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 1000px)').matches
+    ? document.querySelector('.epp-toc')?.getBoundingClientRect().bottom || 0
+    : 0;
+  return Math.max(bar, row);
+}
+
 export default function usePackageNavigation({ pageRef, setFoldOpen, setBarOpen, setFullGuestListOpen }) {
   // A link to a section (#epp-sec-deal from Money's "Open terms in the
   // event") lands on it once the page has loaded; it used to stay at the top
@@ -40,7 +50,13 @@ export default function usePackageNavigation({ pageRef, setFoldOpen, setBarOpen,
     const sections = [...document.querySelectorAll('.epp-sections > section[id^="epp-sec-"]')];
     if (!sections.length) return undefined;
     const observer = new IntersectionObserver((entries) => {
-      const hit = entries.filter((e) => e.isIntersecting)
+      // The section under a line a quarter down the screen, or just under the
+      // sticky bar and chip row when they reach lower (a phone), so the last
+      // lines of the section above don't keep it lit (2026-10-25); else the
+      // topmost one the observer reports.
+      const line = Math.max(window.innerHeight * 0.25, stickyBottom() + 24);
+      const under = sections.find((sec) => { const r = sec.getBoundingClientRect(); return r.top <= line && r.bottom > line; });
+      const hit = under ? { target: under } : entries.filter((e) => e.isIntersecting)
         .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)[0];
       if (hit) setActiveAnchor(hit.target.id.replace('epp-sec-', ''));
     }, { rootMargin: '-20% 0px -70% 0px' });

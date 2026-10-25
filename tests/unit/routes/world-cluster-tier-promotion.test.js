@@ -89,13 +89,15 @@ const CP3_FILES = [
 // D4 pattern): 92; no other CP3-zone route changed. 112 since Task #54
 // split the file into src/routes/worldEvents/: the same 91 handlers, and
 // each of the 21 route parts imports requireAuth itself (21 imports, not 1).
+// 115 with flow.js (Evoni, 2026-10-25): its import, GET .../flow and POST
+// .../fill-missing (requireAuth + aiRateLimiter, D4 pattern).
 // worldStudio.js 36: +1 for POST /world/dream-cities/:key/image (a Dream
 // City's image or story bubble, The Pulse Uploads, Task #2920, requireAuth).
 // 38: +2 for GET and POST /world/locations/studio-types (creator studios
 // typed "other", Evoni 2026-10-18; requireAuth, no AI call).
 const REQUIRE_AUTH_COUNTS = {
   'world.js': 5,
-  'worldEvents.js': 112,
+  'worldEvents.js': 115,
   'worldStudio.js': 38,
   'worldTemperatureRoutes.js': 3,
 };
@@ -160,7 +162,7 @@ describe('Step 3 CP3 — World cluster mixed Tier 1+3+4 disposition', () => {
       const src = readSrc('worldEvents.js');
       expect(src.match(
         /const\s*\{\s*requireAuth\s*\}\s*=\s*require\(['"]\.\.\/\.\.\/middleware\/auth['"]\)/g,
-      )).toHaveLength(21);
+      )).toHaveLength(22);
       expect(src).toMatch(
         /const\s*\{\s*aiRateLimiter\s*\}\s*=\s*require\(['"]\.\.\/\.\.\/middleware\/aiRateLimiter['"]\)/,
       );
@@ -262,10 +264,11 @@ describe('Step 3 CP3 — World cluster mixed Tier 1+3+4 disposition', () => {
     // 19 with suggest-basics (Event Package enhancements, 2026-10-23).
     // 21 with reroll-invitation-text and reroll-invitation-background (2026-10-24).
     // 22 with documents/:type/lines/:index/redraft (2026-10-24).
-    test('all 22 AI handlers use uniform requireAuth + aiRateLimiter pattern', () => {
+    // 23 with fill-missing (flow.js, 2026-10-25).
+    test('all 23 AI handlers use uniform requireAuth + aiRateLimiter pattern', () => {
       const aiPattern = /router\.post\([^)]*requireAuth,\s*aiRateLimiter,/g;
       const matches = src.match(aiPattern) || [];
-      expect(matches.length).toBe(22);
+      expect(matches.length).toBe(23);
     });
 
     test.each([
@@ -279,6 +282,7 @@ describe('Step 3 CP3 — World cluster mixed Tier 1+3+4 disposition', () => {
       'events/:eventId/reroll-invitation-text',
       'events/:eventId/reroll-invitation-background',
       'events/:eventId/documents/:type/lines/:index/redraft',
+      'events/:eventId/fill-missing',
     ])('POST /%s uses requireAuth + aiRateLimiter (audit, 2026-10-23)', (route) => {
       expect(src).toContain(`router.post('/world/:showId/${route}', requireAuth, aiRateLimiter,`);
     });
@@ -393,13 +397,14 @@ describe('Step 3 CP3 — World cluster mixed Tier 1+3+4 disposition', () => {
     // 135 with the invitation versions rework (+6 routes, -1 re-render-invitation; 2026-10-24);
     // 138 with the documents rework (restore, keep-look, line redraft; 2026-10-24);
     // 158 since Task #54 split worldEvents.js into 21 parts, each with its own import.
-    test('CP3 zone contains 158 total requireAuth references (24 imports + 134 handlers)', () => {
+    // 161 with flow.js (its import, GET .../flow, POST .../fill-missing; 2026-10-25).
+    test('CP3 zone contains 161 total requireAuth references (25 imports + 136 handlers)', () => {
       const total = CP3_FILES.reduce((sum, filename) => {
         const src = readSrc(filename);
         const matches = src.match(/\brequireAuth\b/g) || [];
         return sum + matches.length;
       }, 0);
-      expect(total).toBe(158);
+      expect(total).toBe(161);
     });
 
     test('CP3 zone contains 20 total optionalAuth references (all in worldStudio.js)', () => {

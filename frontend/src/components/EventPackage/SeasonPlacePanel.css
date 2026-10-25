@@ -1,0 +1,16 @@
+/* "Its place in the season" (SeasonPlacePanel.jsx), inside the Event
+   Package's header under the slot line. Design tokens only. */
+.esp { margin: 10px 0 0; padding: 10px 12px; border-radius: 12px; background: var(--lala-parchment); border: 1px solid var(--lala-parchment-3); min-width: 0; }
+.esp-title { margin: 0; font-family: var(--font-sans); font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--lala-ink-muted); }
+.esp .epp-hero-purposes { margin-top: 4px; }
+.esp-release { display: flex; align-items: center; gap: 6px; margin: 8px 0 0; font-family: var(--font-sans); font-size: 13px; font-weight: 600; color: var(--lala-ink); }
+.esp-release svg { flex: none; color: var(--accent-dark); }
+.esp.is-unplaced { background: transparent; border-style: dashed; padding: 8px 12px; }
+.esp-unplaced { margin: 0; font-family: var(--font-sans); font-size: 13px; color: var(--lala-ink-muted); }
+.esp-place-link { display: inline-flex; align-items: center; min-height: 32px; font-weight: 600; color: var(--lala-lavender-text); }
+
+@media (max-width: 600px) {
+  /* The phone hero is a grid; the panel spans it. */
+  .epp-hero .esp { grid-column: 1 / -1; padding: 8px 10px; }
+  .esp-place-link { min-height: 44px; }
+}

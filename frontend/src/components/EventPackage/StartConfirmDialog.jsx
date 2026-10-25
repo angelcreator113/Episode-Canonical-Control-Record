@@ -7,7 +7,7 @@
  */
 import { AlertTriangle, X, ArrowLeft, PlayCircle } from 'lucide-react';
 
-export default function StartConfirmDialog({ readiness, moneyWarnings, confirmCount, start }) {
+export default function StartConfirmDialog({ readiness, moneyWarnings, confirmCount, start, copies = null }) {
   const { starting, setStartConfirmOpen, handleStartEpisode } = start;
   return (
     <div className="epp-modal-backdrop" onClick={() => { if (!starting) setStartConfirmOpen(false); }}>
@@ -18,6 +18,8 @@ export default function StartConfirmDialog({ readiness, moneyWarnings, confirmCo
             <X size={16} />
           </button>
         </div>
+        {/* What the start copies from the event (StartCopiesPreview). */}
+        {copies}
         <ul className="epp-start-warnings">
           {readiness.warningItems.map((w) => (
             <li key={`${w.section}.${w.key}`} data-testid={`start-warning-${w.section}-${w.key}`}>
