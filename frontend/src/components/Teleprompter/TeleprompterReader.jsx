@@ -182,7 +182,7 @@ const topIn = (el, box) => el.getBoundingClientRect().top - box.getBoundingClien
 // The on-screen moment's icon (lib/teleprompterScreen screenIcon).
 const SCREEN_ICONS = {
   phone: Smartphone, notify: Bell, dm: MessageCircle, post: Send, tap: MousePointerClick,
-  scroll: ArrowDownUp, open: AppWindow, show: MonitorPlay, hide: EyeOff, other: Monitor,
+  scroll: ArrowDownUp, open: AppWindow, show: MonitorPlay, hide: EyeOff, other: Monitor, sound: Volume2,
   // Lala's automatic reaction (lib/teleprompterLines autoReactionCue).
   react: Smile,
 };
@@ -195,7 +195,7 @@ function Line({ l, mine, at, lineRef, index, wordStart = null, cursor = -1, from
     return (
       <p {...common} className="stp-screen" data-testid="stp-screen">
         <Icon size={18} aria-hidden="true" className="stp-screen-icon" />
-        <span className="stp-screen-kicker">On screen</span>
+        <span className="stp-screen-kicker">{l.kicker || 'On screen'}</span>
         <span className="stp-screen-text">{l.text}</span>
         <span className="stp-screen-react">react</span>
       </p>
@@ -229,7 +229,7 @@ function SilenceCue({ line, left, total, reduced, voice = false }) {
   const screenCue = line.kind === 'screen';
   return (
     <div className={`stp-quiet${screenCue ? ' is-screen' : ''}`} data-testid="stp-quiet">
-      <span className="stp-quiet-label">{screenCue ? 'On screen · react' : line.cut ? 'Cutscene · watch' : 'Stay quiet · react'}</span>
+      <span className="stp-quiet-label">{screenCue ? `${line.kicker || 'On screen'} · react` : line.cut ? 'Cutscene · watch' : 'Stay quiet · react'}</span>
       {voice && <span className="stp-quiet-voice" data-testid="stp-quiet-voice"><Volume2 size={14} aria-hidden="true" /> voice clip</span>}
       <span className="stp-quiet-n" data-testid="stp-quiet-n">{n}s</span>
       <span className="stp-quiet-who">{screenCue ? line.text : line.speaker}</span>
@@ -243,7 +243,7 @@ export function cueSays(line) {
   if (!line) return '';
   if (line.kind === 'direction') return line.cut ? 'Watching' : 'Action';
   if (line.kind === 'breath') return 'Breath';
-  if (line.kind === 'screen') return `On screen · react · ${line.text}`;
+  if (line.kind === 'screen') return `${line.kicker || 'On screen'} · react · ${line.text}`;
   return `${line.cut ? 'Cutscene · watch' : 'Stay quiet · react'} · ${line.speaker}`;
 }
 

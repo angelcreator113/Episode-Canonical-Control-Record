@@ -9,6 +9,7 @@ import ExportDropdown from '../components/ExportDropdown/ExportDropdown';
 import useSaveManager from '../hooks/useSaveManager';
 import { adoptSceneIds } from '../utils/sceneIds';
 import LandscapeRequired from '../components/LandscapeRequired';
+import AssembleTakesSheet from '../components/Timeline/AssembleTakesSheet';
 import { episodeAPI, platformAPI, sceneAPI, timelineDataAPI } from '../services/api';
 import { API_URL } from '../config/api';
 import '../components/Timeline/TimelineEditor.css';
@@ -38,6 +39,8 @@ function TimelineEditor() {
   const [playbackSpeed, setPlaybackSpeed] = useState(1.0);
   const [loopMode, setLoopMode] = useState(false);
   const [selectedScene, setSelectedScene] = useState(null);
+  // "Takes to use": each beat's ★ favourite take from Files (AssembleTakesSheet).
+  const [showTakes, setShowTakes] = useState(false);
   const timelineWrapperRef = useRef(null);
   const previewSectionRef = useRef(null);
   const [splitRatio, setSplitRatio] = useState(() => {
@@ -847,6 +850,10 @@ function TimelineEditor() {
             <span className="hint-icon">⌨️</span>
             <span className="hint-text">Space: Play · J/K/L: Shuttle · ,/.: Frame Step · ←→: Seek · R: Loop</span>
           </div>
+          <button type="button" className="back-btn" onClick={() => setShowTakes(true)} data-testid="timeline-takes"
+            title="Each beat's favourite take, ready to use">
+            ★ Takes to use
+          </button>
           <ExportDropdown episodeId={episodeId} />
         </div>
       </header>
@@ -995,6 +1002,7 @@ function TimelineEditor() {
             </div>
           </div>
     </div>
+      {showTakes && <AssembleTakesSheet episodeId={episodeId} onClose={() => setShowTakes(false)} />}
       {showScenePicker && (
         <ScenePicker
           episodeId={episodeId}
