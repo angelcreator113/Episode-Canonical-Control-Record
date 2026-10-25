@@ -349,8 +349,8 @@ router.get('/world/:showId/events/:eventId/start-readiness', requireAuth, async 
 // ═══════════════════════════════════════════
 // GET /api/v1/world/:showId/events/:eventId/package
 //
-// Everything the Event Package page loads, in one request, for the page
-// split (not yet used by the frontend). Same auth as the single-event GET.
+// Everything the Event Package page loads, in one request (the page's first
+// load, useEventPackage; Task #54). Same auth as the single-event GET.
 // The event row is read once (404 when it is not live in this show); then
 // every part loads in parallel through the same loader its own route uses,
 // and fails on its own: a failed part is null and its message is under
