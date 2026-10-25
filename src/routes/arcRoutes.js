@@ -5,7 +5,9 @@
  * Mount at: /api/v1
  *
  * GET    /world/:showId/arc              — Get the active arc (else the latest) with phases, debt, temperature,
- *                                           and next_season_number for "Start Season N"
+ *                                           and next_season_number for "Start Season N"; `seasons` lists every
+ *                                           season (id, number, title, status) for the Season page's switcher,
+ *                                           and ?season=N reads that season instead (404 when the show has none)
  * POST   /world/:showId/arc/seed         — Seed the next season from the "Set up the season" form
  *                                           ({ title, tagline, phases: [{ title, tagline }] x3, split: [n, n, n] })
  * PUT    /world/:showId/arc/setup        — "Edit season": the same form; re-phases slots not started. Also the
@@ -17,7 +19,7 @@
  * POST   /world/:showId/season/draft/accept — Save accepted drafts ({ drafts: [...] }) as Auto-drafted intentions
  * POST   /world/:showId/arc/advance      — Manual phase advance (with warning)
  * POST   /world/:showId/arc/advance/confirm — Force advance after warning acknowledged
- * GET    /world/:showId/season/roadmap — The active season's 24 slots and their states (Season Arc A2)
+ * GET    /world/:showId/season/roadmap — The active season's 24 slots and their states (Season Arc A2); ?season=N another season's
  * PUT    /world/:showId/season/slots/:slotId/event   — Pencil an event into a future slot, or clear it (Q5)
  * PUT    /world/:showId/season/slots/:slotId/episode — Place an existing episode in an open slot (Q4)
  * PUT    /world/:showId/season/slots/:slotId/intention       — Edit a future slot's intention (A3)
@@ -28,7 +30,7 @@
  * PUT    /world/:showId/season/threads/:threadId — Rename or re-describe it
  * POST   /world/:showId/season/threads/:threadId/close — Close it (only Evoni closes, Q9)
  * POST   /world/:showId/season/threads/:threadId/reopen — Reopen a closed one, keeping its history
- * GET    /world/:showId/season/insights — Planning Insights: plan beside result, money from the ledger (A8, Q13, Q15)
+ * GET    /world/:showId/season/insights — Planning Insights: plan beside result, money from the ledger (A8, Q13, Q15); ?season=N another season's
  * GET    /world/:showId/season/proposals — The open season-arc proposal from the feed, and the last decided (Evoni, 2026-10-17)
  * POST   /world/:showId/season/proposals — Ask for one now (one AI call), even if the feed has not moved
  * POST   /world/:showId/season/proposals/:proposalId/accept  — Apply the chosen changes ({ changes: [indexes] }; all when absent)
@@ -82,11 +84,37 @@ const router = express.Router();
 const { requireAuth, authorize } = require('../middleware/auth');
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 
-// GET /world/:showId/arc — active arc
+/**
+ * ?season=N (the Season page's season switcher, 2026-10-25): that season's
+ * arc id, of this show only; null when absent. Sends 400 for a value that is
+ * not a season number and 404 when the show has no such season, returning
+ * undefined so the route stops.
+ */
+async function seasonArcId(models, req, res) {
+  const raw = req.query.season;
+  if (raw == null || raw === '') return null;
+  if (!/^[1-9]\d{0,2}$/.test(String(raw))) {
+    res.status(400).json({ error: 'season must be a season number' });
+    return undefined;
+  }
+  const [rows] = await models.sequelize.query(
+    `SELECT id FROM show_arcs WHERE show_id = :showId AND deleted_at IS NULL AND COALESCE(season_number, 1) = :season
+      ORDER BY (status = 'active') DESC, arc_number DESC LIMIT 1`,
+    { replacements: { showId: req.params.showId, season: Number(raw) } });
+  if (!rows[0]) {
+    res.status(404).json({ error: `This show has no Season ${raw}.` });
+    return undefined;
+  }
+  return rows[0].id;
+}
+
+// GET /world/:showId/arc — active arc (or ?season=N)
 router.get('/world/:showId/arc', requireAuth, async (req, res) => {
   try {
     const models = require('../models');
     const { showId } = req.params;
+    const wanted = req.query.season != null && req.query.season !== '' ? String(req.query.season) : null;
+    if (wanted && !/^[1-9]\d{0,2}$/.test(wanted)) return res.status(400).json({ error: 'season must be a season number' });
 
     const [arcs] = await models.sequelize.query(
       `SELECT * FROM show_arcs WHERE show_id = :showId AND deleted_at IS NULL
@@ -99,7 +127,13 @@ router.get('/world/:showId/arc', requireAuth, async (req, res) => {
     }
 
     // The season in progress; else the latest, so a completed season shows "Start Season N".
-    const arc = arcs.find(a => a.status === 'active') || arcs[arcs.length - 1];
+    const current = arcs.find(a => a.status === 'active') || arcs[arcs.length - 1];
+    let arc = current;
+    if (wanted) {
+      const same = arcs.filter((a) => Number(a.season_number || 1) === Number(wanted));
+      arc = same.find((a) => a.status === 'active') || same[same.length - 1];
+      if (!arc) return res.status(404).json({ error: `This show has no Season ${wanted}.` });
+    }
     const phases = typeof arc.phases === 'string' ? JSON.parse(arc.phases) : arc.phases;
     const debt = typeof arc.narrative_debt === 'string' ? JSON.parse(arc.narrative_debt) : arc.narrative_debt;
     const log = typeof arc.progression_log === 'string' ? JSON.parse(arc.progression_log) : arc.progression_log;
@@ -109,6 +143,9 @@ router.get('/world/:showId/arc', requireAuth, async (req, res) => {
     return res.json({
       success: true,
       next_season_number: nextSeason,
+      // Every season, for the switcher; current_arc_id is the one in progress (else the latest).
+      seasons: arcs.map((a) => ({ id: a.id, season_number: Number(a.season_number || 1), title: a.title, status: a.status })),
+      current_arc_id: current.id,
       arc: {
         ...arc,
         // The Season page's dates as YYYY-MM-DD, never shifted by a time zone.
@@ -267,7 +304,9 @@ router.get('/world/:showId/season/roadmap', requireAuth, async (req, res) => {
   try {
     const models = require('../models');
     const { getRoadmap } = require('../services/seasonSlotService');
-    const roadmap = await getRoadmap(models.sequelize, req.params.showId);
+    const arcId = await seasonArcId(models, req, res);
+    if (arcId === undefined) return undefined;
+    const roadmap = await getRoadmap(models.sequelize, req.params.showId, { arcId });
     return res.json({ success: true, roadmap });
   } catch (err) {
     console.error('[ArcRoutes] season roadmap error:', err);
@@ -282,7 +321,9 @@ router.get('/world/:showId/season/insights', requireAuth, async (req, res) => {
   try {
     const models = require('../models');
     const { getInsights } = require('../services/planningInsightsService');
-    const insights = await getInsights(models.sequelize, req.params.showId);
+    const arcId = await seasonArcId(models, req, res);
+    if (arcId === undefined) return undefined;
+    const insights = await getInsights(models.sequelize, req.params.showId, { arcId });
     return res.json({ success: true, insights });
   } catch (err) {
     console.error('[ArcRoutes] season insights error:', err);

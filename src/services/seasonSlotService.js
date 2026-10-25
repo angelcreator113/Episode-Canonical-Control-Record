@@ -218,8 +218,9 @@ async function ensureSeasonSlots(sequelize, arc, { transaction } = {}) {
  * states, plus the show's live episodes that are in no slot (Q4: listed for
  * Evoni to place or leave unslotted). Null when the show has no active arc.
  */
-async function getRoadmap(sequelize, showId) {
-  return roadmapOf(sequelize, await loadSeason(sequelize, showId));
+async function getRoadmap(sequelize, showId, { arcId = null } = {}) {
+  // arcId: another season of the show's (the Season page's switcher); the caller checks it is this show's.
+  return roadmapOf(sequelize, await loadSeason(sequelize, showId, arcId ? { arcId } : {}));
 }
 
 /** The roadmap from a season already read (loadSeason), so a caller that has it does not read it twice. */

@@ -36,7 +36,7 @@ describe('ReleaseScheduleEditor', () => {
     await waitFor(() => expect(screen.getByTestId('release-schedule-preview').textContent).toContain('E1 gets Sun, Oct 25 · 10:00 AM'));
     fireEvent.change(screen.getByTestId('release-schedule-first'), { target: { value: '2026-11-01' } });
     fireEvent.click(screen.getByTestId('release-schedule-save'));
-    await waitFor(() => expect(rs.save).toHaveBeenCalledWith({ day: 'sun', time: '10:00', cadence: 'weekly', first_release: '2026-11-01', paused: false, platforms: ['youtube'] }));
+    await waitFor(() => expect(rs.save).toHaveBeenCalledWith({ day: 'sun', time: '10:00', cadence: 'weekly', first_release: '2026-11-01', paused: false, platforms: ['youtube'], seasons: {} }));
     await waitFor(() => expect(screen.queryByTestId('release-schedule-form')).toBeNull());
   });
 
@@ -74,7 +74,7 @@ describe('ReleaseScheduleEditor', () => {
     const rs = makeRs({ schedule: SCHEDULE, state: 'active', episodes: [] });
     const { rerender } = render(<ReleaseScheduleEditor rs={rs} />);
     fireEvent.click(screen.getByTestId('release-schedule-pause'));
-    await waitFor(() => expect(rs.save).toHaveBeenCalledWith({ day: 'sun', time: '10:00', cadence: 'weekly', first_release: '2026-11-01', paused: true, platforms: ['youtube'] }));
+    await waitFor(() => expect(rs.save).toHaveBeenCalledWith({ day: 'sun', time: '10:00', cadence: 'weekly', first_release: '2026-11-01', paused: true, platforms: ['youtube'], seasons: {} }));
 
     const paused = makeRs({ schedule: { ...SCHEDULE, paused: true }, state: 'paused', episodes: [] });
     rerender(<ReleaseScheduleEditor rs={paused} />);
@@ -96,5 +96,42 @@ describe('ReleaseScheduleEditor', () => {
     expect(await screen.findByRole('alert')).toBeTruthy();
     expect(screen.getByRole('alert').textContent).toBe('time: "HH:MM", 24-hour.');
     expect(screen.getByTestId('release-schedule-form')).toBeTruthy();
+  });
+  // Two seasons (Evoni, 2026-10-25, before Season 2): each its own start.
+  const TWO = [
+    { season_number: 1, state: 'active', first_release: '2026-11-01', own_start: false, slots: {} },
+    { season_number: 2, state: 'preview', first_release: null, own_start: false, slots: {} },
+  ];
+  test('two seasons: a start per season, saved under seasons; one season shows none', async () => {
+    const rs = makeRs({ schedule: { ...SCHEDULE, seasons: {} }, state: 'active', seasons: TWO, episodes: [] });
+    render(<ReleaseScheduleEditor rs={rs} />);
+    expect(screen.getByTestId('release-schedule-seasons').textContent).toBe('Season 1: starts Sun, Nov 1Season 2: not releasing yet');
+    fireEvent.click(screen.getByTestId('release-schedule-edit'));
+    expect(screen.getByText('Season 1 starts releasing')).toBeTruthy();
+    expect(screen.getByTestId('release-schedule-season-2').textContent).toContain('Not releasing yet: its dates are previews');
+    expect(screen.getByTestId('release-schedule-season-note').textContent).toMatch(/Season 2 starts again at Episode 1/);
+    fireEvent.change(screen.getByTestId('release-schedule-season-first-2'), { target: { value: '2027-03-01' } });
+    expect(screen.getByTestId('release-schedule-season-2').textContent).toContain('Its Episode 1 goes out on the first Sunday from Mon, Mar 1.');
+    fireEvent.click(screen.getByTestId('release-schedule-save'));
+    await waitFor(() => expect(rs.save).toHaveBeenCalledWith(expect.objectContaining({ first_release: '2026-11-01', seasons: { 2: { first_release: '2027-03-01' } } })));
+  });
+
+  test("clearing a later season's start drops it (not releasing yet)", async () => {
+    const rs = makeRs({ schedule: { ...SCHEDULE, seasons: { 2: { first_release: '2027-03-01' } } }, state: 'active', seasons: TWO, episodes: [] });
+    render(<ReleaseScheduleEditor rs={rs} />);
+    fireEvent.click(screen.getByTestId('release-schedule-edit'));
+    expect(screen.getByTestId('release-schedule-season-first-2').value).toBe('2027-03-01');
+    fireEvent.change(screen.getByTestId('release-schedule-season-first-2'), { target: { value: '' } });
+    fireEvent.click(screen.getByTestId('release-schedule-save'));
+    await waitFor(() => expect(rs.save).toHaveBeenCalledWith(expect.objectContaining({ seasons: {} })));
+  });
+
+  test('one season: no per-season field', () => {
+    const rs = makeRs({ schedule: SCHEDULE, state: 'active', seasons: [TWO[0]], episodes: [] });
+    render(<ReleaseScheduleEditor rs={rs} />);
+    fireEvent.click(screen.getByTestId('release-schedule-edit'));
+    expect(screen.getByText('Starts releasing')).toBeTruthy();
+    expect(screen.queryByTestId('release-schedule-season-2')).toBeNull();
+    expect(screen.queryByTestId('release-schedule-seasons')).toBeNull();
   });
 });
