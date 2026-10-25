@@ -1,0 +1,29 @@
+/* The Roadmap's This week view (Evoni, 2026-10-25). The Season page's own
+   colours (--sp-* on .szn-page, SeasonPage.css); 44px targets, 12px smallest
+   text, one column on a phone. */
+.szw { display: flex; flex-direction: column; gap: 12px; }
+.szw-note { margin: 0; }
+.szw-list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; align-items: start; }
+.szw-item {
+  display: flex; flex-direction: column; gap: 10px; min-width: 0; padding: 16px; border-radius: 16px;
+  background: var(--sp-card); border: 1px solid var(--sp-line); border-top: 4px solid var(--sp-purple-fill);
+}
+.szw-item.is-in_production { border-top-color: var(--sp-pink); }
+.szw-item.is-event_ready { border-top-color: var(--sp-gold); }
+.szw-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.szw-when { font-size: 14px; font-weight: 700; color: var(--sp-purple); }
+.szw-when.is-preview { color: var(--sp-muted); font-style: italic; }
+.szw-title { margin: 0; font-family: var(--font-prose); font-size: 20px; font-weight: 600; line-height: 1.25; color: var(--sp-ink); overflow-wrap: anywhere; }
+.szw-num { color: var(--sp-pink-deep); }
+.szw-warn { margin: 0; padding: 8px 10px; border-radius: 10px; font-size: 13px; line-height: 1.4; background: var(--sp-gold-soft); color: var(--sp-gold-text); }
+.szw-warn.is-overdue { background: var(--sp-pink-soft); color: var(--sp-pink-deep); }
+.szw-facts { margin: 0; display: flex; flex-direction: column; gap: 6px; }
+.szw-facts div { display: grid; grid-template-columns: 88px minmax(0, 1fr); gap: 8px; }
+.szw-facts dt { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--sp-muted); }
+.szw-facts dd { margin: 0; font-size: 14px; line-height: 1.4; color: var(--sp-ink); overflow-wrap: anywhere; }
+.szw-link { color: var(--sp-pink-deep); font-weight: 600; }
+.szw-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: auto; }
+.szw-actions .szw-link { display: inline-flex; align-items: center; min-height: 44px; font-size: 14px; }
+@media (max-width: 900px) {
+  .szw-list { grid-template-columns: minmax(0, 1fr); }
+}

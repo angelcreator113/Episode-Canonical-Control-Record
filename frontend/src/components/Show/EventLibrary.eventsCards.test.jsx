@@ -4,7 +4,7 @@
  *
  * Since Evoni's Producer Mode redesign (2026-10-05) a card shows its status
  * and category; its name; the place; a Deal tile and an Organizer tile; the
- * gate items still needed, as chips; and one primary button (plus View
+ * gate items still needed, as one "N to set up" chip that lists them; and one primary button (plus View
  * Event Package on a used event). The five queue states are count cards.
  */
 import { vi, describe, beforeEach, test, expect } from 'vitest';
@@ -91,10 +91,14 @@ describe('EventLibrary queue — cards and the deal-type filter (Task #2361)', (
     expect(card.querySelector('.wa-ev-facts').textContent).toMatch(/^Paid appearance · Unpaid · Organizer: Maison Belle$/);
 
     const { blocking } = computeEventPackageReadiness(BRAND_EVENT);
-    const needed = within(card).getByTestId('event-card-needed-ev-brand');
-    expect(needed.textContent).toBe(`Still needed: ${describeMissing(blocking).join(', ')}`);
-    // One primary button besides the card's "More actions" menu.
-    const buttons = within(card).getAllByRole('button').filter((b) => b.getAttribute('aria-label') !== 'More actions');
+    // What is still needed is a quiet chip with its count; tapped, it lists them (Evoni, 2026-10-25).
+    const chip = within(card).getByTestId('event-card-needed-chip-ev-brand');
+    expect(chip.textContent).toBe(`${describeMissing(blocking).length} to set up`);
+    fireEvent.click(chip);
+    expect([...within(card).getByTestId('event-card-needed-list-ev-brand').querySelectorAll('li')].map((li) => li.textContent))
+      .toEqual(describeMissing(blocking));
+    // One primary button besides the card's "More actions" menu and the chip.
+    const buttons = within(card).getAllByRole('button').filter((b) => b.getAttribute('aria-label') !== 'More actions' && b !== chip);
     expect(buttons).toHaveLength(1);
     expect(within(card).queryByTestId('event-card-view-package-ev-brand')).toBeNull();
   });
@@ -106,7 +110,8 @@ describe('EventLibrary queue — cards and the deal-type filter (Task #2361)', (
     // No "No category", and the organizer its button asks for is not listed again.
     expect(card.querySelector('.wa-ev-category')).toBeNull();
     expect(within(card).getByTestId('event-card-primary-ev-bare').textContent).toContain('Choose Organizer');
-    expect(within(card).getByTestId('event-card-needed-ev-bare').textContent).not.toMatch(/Organizer/);
+    fireEvent.click(within(card).getByTestId('event-card-needed-chip-ev-bare'));
+    expect(within(card).getByTestId('event-card-needed-list-ev-bare').textContent).not.toMatch(/Organizer/);
     expect(within(card).getByTestId('event-card-place-ev-bare').textContent).toBe('Venue and date not set');
     expect(within(card).getByTestId('event-card-deal-ev-bare').textContent).toContain('No deal type');
   });

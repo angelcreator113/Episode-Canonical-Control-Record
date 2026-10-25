@@ -14,7 +14,10 @@
  * It loads what it draws (the events, episodes, scene sets, closet,
  * opportunities, world locations, overlay types and finance config, as
  * Producer Mode did) and reports every change through onChanged, so the
- * page around it can reload.
+ * page around it can reload. A page that already holds the events and
+ * episodes passes them as `data` ({ events, episodes, loaded, failed }):
+ * the library then reads those and never fetches them itself, and a change
+ * reloads them once, through onChanged (Evoni, 2026-10-25: load events once).
  *
  * The Season page narrows it with `scope` ({ ids, ordered }: the events to
  * show, and whether `ids` is slot order, which adds "Sort: Slot") and adds
@@ -23,7 +26,7 @@
  */
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { MoreHorizontal, ArrowRight, Plus, Lightbulb, AlertTriangle, Search } from 'lucide-react';
+import { MoreHorizontal, ArrowRight, Plus, Lightbulb, AlertTriangle, Search, ChevronDown } from 'lucide-react';
 import api from '../../services/api';
 import { S, isFailureToast } from './producerStyles';
 import { InvitationButton } from '../../pages/InvitationGenerator';
@@ -42,7 +45,7 @@ import EventIdeasDrawer from './EventIdeasDrawer';
 import EpisodeBlueprintModal from './EpisodeBlueprintModal';
 import './EventLibrary.css';
 
-export default function EventLibrary({ showId, scope = null, cardExtra = null, onChanged = null }) {
+export default function EventLibrary({ showId, scope = null, cardExtra = null, onChanged = null, data = null }) {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -63,6 +66,15 @@ export default function EventLibrary({ showId, scope = null, cardExtra = null, o
   const [successMsg, setSuccessMsg] = useState(null);
   const onChangedRef = useRef(onChanged);
   onChangedRef.current = onChanged;
+  // The page's events and episodes, when it passes them: they replace the
+  // library's own copies whenever the page reloads them (local edits show
+  // at once and are overwritten by the page's next read).
+  const given = Boolean(data);
+  const givenRef = useRef(given);
+  givenRef.current = given;
+  useEffect(() => { if (data?.events) setWorldEvents(data.events); }, [data?.events]);
+  useEffect(() => { if (data?.episodes) setEpisodes(data.episodes); }, [data?.episodes]);
+  const pageFailed = given ? (data.failed || []) : [];
 
   const [episodeBlueprint, setEpisodeBlueprint] = useState(null); // holds generated episode data for modal
 
@@ -213,6 +225,14 @@ export default function EventLibrary({ showId, scope = null, cardExtra = null, o
     });
   }, [editingEvent]);
   const [openEventMenuId, setOpenEventMenuId] = useState(null);
+  // Which cards have their "N to set up" list open (Evoni, 2026-10-25: a
+  // small chip in place of the yellow Still needed box).
+  const [neededOpen, setNeededOpen] = useState(() => new Set());
+  const toggleNeeded = (id) => setNeededOpen((prev) => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
   // Which open card menu is showing the "Change status" sub-list (null =
   // none; the menu's normal item list otherwise).
   const [statusMenuEventId, setStatusMenuEventId] = useState(null);
@@ -237,8 +257,11 @@ export default function EventLibrary({ showId, scope = null, cardExtra = null, o
     };
     try {
       const requests = [
-        api.get(`/api/v1/world/${showId}/events`).then(r => setWorldEvents(r.data?.events || [])).catch(miss('events', () => setWorldEvents([]))),
-        fetchAllEpisodes(api, showId).then((list) => setEpisodes(list.items || [])).catch(miss('episodes', () => setEpisodes([]))),
+        // The page's own read of the events and episodes stands in for these when it passes them.
+        ...(givenRef.current ? [] : [
+          api.get(`/api/v1/world/${showId}/events`).then(r => setWorldEvents(r.data?.events || [])).catch(miss('events', () => setWorldEvents([]))),
+          fetchAllEpisodes(api, showId).then((list) => setEpisodes(list.items || [])).catch(miss('episodes', () => setEpisodes([]))),
+        ]),
         fetchAllSceneSets(api, showId).then((list) => setSceneSets(list.items || [])).catch(miss('scene sets', () => setSceneSets([]))),
         fetchClosetWithTotal(api, showId).then((list) => setWardrobeItems(list.items || [])).catch(miss('wardrobe', () => setWardrobeItems([]))),
         api.get(`/api/v1/opportunities/${showId}`).then(r => setOpportunities(r.data?.opportunities || [])).catch(miss('opportunities', () => setOpportunities([]))),
@@ -249,10 +272,10 @@ export default function EventLibrary({ showId, scope = null, cardExtra = null, o
       if (failed.length < requests.length) loadedOnceRef.current = true;
     } finally { setLoading(false); }
   };
-  // After a change: reload, and tell the page around the library.
+  // After a change: reload, and tell the page around the library (which
+  // reloads the events and episodes it passed, once).
   const loadData = async () => {
-    await fetchAll();
-    onChangedRef.current?.();
+    await Promise.all([fetchAll(), onChangedRef.current?.()]);
   };
   useEffect(() => { fetchAll(); }, [showId]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -647,9 +670,9 @@ The revised event should feel like a completely different experience from the si
   return (
     <div className="evl" data-testid="event-library">
       {error && <div style={S.errorBanner}>{error}<button onClick={() => setError(null)} style={S.xBtn}>✕</button></div>}
-      {loadFailures.length > 0 && (
+      {(pageFailed.length > 0 || loadFailures.length > 0) && (
         <div className="evl-load-failed" role="alert" data-testid="evl-load-failed">
-          {`Couldn't load ${loadFailures.join(', ')}. Those parts may look empty until they load.`}
+          {`Couldn't load ${[...pageFailed, ...loadFailures].join(', ')}. Those parts may look empty until they load.`}
           <button type="button" onClick={loadData}>Retry</button>
         </div>
       )}
@@ -658,7 +681,7 @@ The revised event should feel like a completely different experience from the si
           {successMsg}
         </div>
       )}
-      {loading && !loadedOnceRef.current ? (
+      {(loading && !loadedOnceRef.current) || (given && !data.loaded) ? (
         <p className="evl-loading" role="status">Loading the events…</p>
       ) : (
         <>
@@ -1007,11 +1030,24 @@ The revised event should feel like a completely different experience from the si
                   <span className="wa-ev-facts-dot" aria-hidden="true"> · </span>
                   <span data-testid={`event-card-organizer-${ev.id}`} className={details.organizer ? undefined : 'missing'}>{details.organizer ? `Organizer: ${details.organizer}` : 'No organizer'}</span>
                 </p>
-                {/* A used or archived event is done: nothing is still needed. */}
+                {/* What is still needed, as a quiet chip ("4 to set up") that
+                    opens the list (Evoni, 2026-10-25); a used or archived
+                    event is done, and a complete one shows nothing. */}
                 {missing.length > 0 && state !== 'used' && state !== 'archived' && (
-                  <p className="wa-ev-needed" data-testid={`event-card-needed-${ev.id}`}>
-                    <strong>Still needed:</strong> {missing.join(', ')}
-                  </p>
+                  <div className="wa-ev-needed" data-testid={`event-card-needed-${ev.id}`} onClick={e => e.stopPropagation()}>
+                    <button type="button" className="wa-ev-needed-chip" aria-expanded={neededOpen.has(ev.id)}
+                      aria-controls={`event-card-needed-list-${ev.id}`} onClick={() => toggleNeeded(ev.id)}
+                      data-testid={`event-card-needed-chip-${ev.id}`}>
+                      {missing.length} to set up
+                      <ChevronDown size={12} aria-hidden="true" className="wa-ev-needed-caret" />
+                    </button>
+                    {neededOpen.has(ev.id) && (
+                      <ul className="wa-ev-needed-list" id={`event-card-needed-list-${ev.id}`} aria-label={`Still needed for ${ev.name}`}
+                        data-testid={`event-card-needed-list-${ev.id}`}>
+                        {missing.map((m) => <li key={m}>{m}</li>)}
+                      </ul>
+                    )}
+                  </div>
                 )}
                 {conflictsByEvent.has(ev.id) && (() => {
                   const c = conflictsByEvent.get(ev.id);
