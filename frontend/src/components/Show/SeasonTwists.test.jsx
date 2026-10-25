@@ -78,7 +78,7 @@ describe('Season twists', () => {
     fireEvent.click(form.getByRole('button', { name: 'Add twist' }));
     expect(await screen.findByText('Twist added.')).toBeTruthy();
     expect(api.put).toHaveBeenCalledWith(BASE, {
-      title: 'The letter', description: 'Mo keeps a letter', plant_slot_id: 'sl4', payoff_slot_id: 'sl6', status: 'planned',
+      title: 'The letter', description: 'Mo keeps a letter', kind: 'twist', plant_beat: null, plant_slot_id: 'sl4', payoff_slot_id: 'sl6', status: 'planned',
       thread_ids: ['th1'], character_ids: ['c2'], note: '',
     });
     expect(screen.queryByTestId('stw-form')).toBeNull();

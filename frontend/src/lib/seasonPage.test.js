@@ -14,7 +14,7 @@ describe('seasonPage helpers', () => {
   });
 
   test('the eight tabs, in order, each with its note', () => {
-    expect(SEASON_TABS.map((t) => t.key)).toEqual(['overview', 'roadmap', 'episodes', 'events', 'opportunities', 'story', 'goals', 'results']);
+    expect(SEASON_TABS.map((t) => t.key)).toEqual(['overview', 'roadmap', 'episodes', 'events', 'opportunities', 'story', 'plants', 'goals', 'results']);
     for (const t of SEASON_TABS) expect(t.note).toMatch(/\.$/);
   });
 
