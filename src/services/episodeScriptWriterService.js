@@ -434,6 +434,16 @@ async function loadScriptContext(episodeId, showId, models, { lite = false } = {
     console.error('[ScriptWriter] season twists failed (non-blocking):', err.message);
   }
 
+  // 13c'. Earlier plants still open, for this later episode to consider
+  // paying off (plant tracker, 2026-10-25; services/seasonTwists
+  // openPlantsBlock); null with none, and then left out.
+  context.openPlantsBlock = null;
+  try {
+    context.openPlantsBlock = await require('./seasonTwists').openPlantsBlock(sequelize, episodeId);
+  } catch (err) {
+    console.error('[ScriptWriter] open plants failed (non-blocking):', err.message);
+  }
+
   // 13d. Who knows about the relationships around the people here
   // (services/relationshipKnowers, 2026-10-23); '' with none.
   context.secrecyBlock = '';
@@ -615,6 +625,7 @@ function storyContextBlocks(context, { withSeason = true } = {}) {
   // both writers: the Script tab's passes withSeason false for its own
   // season block, not for these.
   const twistBlock = context.twistBlock || '';
+  const openPlantsBlock = context.openPlantsBlock || null;
   const secrecyBlock = context.secrecyBlock || '';
   const carryBlock = context.carryBlock || '';
 
@@ -639,7 +650,9 @@ function storyContextBlocks(context, { withSeason = true } = {}) {
 
   const pulseBlock = require('./scriptPulsePosts').pulseScriptBlock(context.pulsePosts);
 
-  return [socialBlock, secrecyBlock, pulseBlock, taskBlock, prevBlock, carryBlock, arcBlock, twistBlock, intentBlock, charBlock].filter(Boolean).join('\n');
+  const blocks = [socialBlock, secrecyBlock, pulseBlock, taskBlock, prevBlock, carryBlock, arcBlock, twistBlock];
+  if (openPlantsBlock) blocks.push(openPlantsBlock);
+  return [...blocks, intentBlock, charBlock].filter(Boolean).join('\n');
 }
 
 // Lala's money for the prompt: pressure, balance, the episode so far, and

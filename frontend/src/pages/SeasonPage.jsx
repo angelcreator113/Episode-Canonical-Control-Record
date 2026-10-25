@@ -7,11 +7,12 @@
  * The season, laid out to read: the hero (the
  * cover from Files, "SEASON N", the title, tagline and chips; Edit season and
  * a ⋯ menu), four stat cards (episode slots, goals, events, Lala's budget
- * from the ledger), and eight tabs addressed by `?tab=` (lib/seasonPage
+ * from the ledger), and nine tabs addressed by `?tab=` (lib/seasonPage
  * SEASON_TABS), each opening on a one-line note of what it is for:
  * Overview, Roadmap, Episodes (the production board, from Producer Mode),
  * Events (the event library, from Producer Mode's ?tab=events: In this
- * season · Not placed yet · All), Opportunities (from Producer Mode), Story, Goals (Lala's career
+ * season · Not placed yet · All), Opportunities (from Producer Mode), Story, Plants (every plant
+ * in the season, by episode, with Mark paid off; components/Show/SeasonPlants), Goals (Lala's career
  * goals and the brands she has worked with, from the Season Plan) and
  * Results (the Episode Ledger, from Producer Mode, then Planning Insights).
  * Producer Mode's old ?tab=episodes, episodes-production, episodes-ledger,
@@ -38,6 +39,7 @@ import { SeasonBar as Bar } from '../components/Show/SeasonPageParts';
 import { SeasonOverviewTab, SeasonStoryTab, SeasonResultsTab } from '../components/Show/SeasonPageOverview';
 import { SeasonRoadmapTab, SeasonEventsTab } from '../components/Show/SeasonPageRoadmap';
 import ShowEpisodesBoard from '../components/Show/ShowEpisodesBoard';
+import SeasonPlants from '../components/Show/SeasonPlants';
 import OpportunitiesTab from '../components/Show/OpportunitiesTab';
 import { S as PRODUCER_S } from '../components/Show/producerStyles';
 import CareerGoals, { NarrativeDebt, SeasonPhasesHistory } from '../components/Show/CareerGoals';
@@ -365,6 +367,7 @@ export default function SeasonPage() {
         {tab === 'events' && <SeasonEventsTab {...tabProps} />}
         {tab === 'opportunities' && <SeasonOpportunitiesTab {...tabProps} />}
         {tab === 'story' && <SeasonStoryTab {...tabProps} />}
+        {tab === 'plants' && <SeasonPlants showId={showId} api={api} onAddPlants={() => goTab('story')} />}
         {tab === 'goals' && <SeasonGoalsTab {...tabProps} />}
         {tab === 'results' && <SeasonResultsTab {...tabProps} />}
       </section>

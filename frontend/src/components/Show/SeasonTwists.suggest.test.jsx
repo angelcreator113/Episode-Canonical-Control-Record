@@ -68,7 +68,7 @@ describe('Suggest twists', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Keep The spare key' }));
     expect(await screen.findByText('Kept “The spare key”.')).toBeTruthy();
     expect(api.put).toHaveBeenCalledWith(BASE, {
-      title: 'The spare key', description: 'A key on Maren’s chain', plant_slot_id: 'sl2', payoff_slot_id: 'sl6', status: 'planned',
+      title: 'The spare key', description: 'A key on Maren’s chain', kind: 'twist', plant_beat: null, plant_slot_id: 'sl2', payoff_slot_id: 'sl6', status: 'planned',
       thread_ids: ['th1'], character_ids: ['c1', 'c2'], note: '',
     });
     expect(screen.getByTestId('stw-twist-t9')).toBeTruthy();
