@@ -1100,7 +1100,8 @@ router.post('/world/:showId/events', requireAuth, async (req, res) => {
 router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), requireAuth, async (req, res) => {
   try {
     const { showId, eventId } = req.params;
-    if (!req.body || typeof req.body !== 'object') {
+    // An empty body counts as none (app.js turns a missing body into {}).
+    if (!req.body || typeof req.body !== 'object' || !Object.keys(req.body).length) {
       return res.status(400).json({
         success: false,
         error: 'Invalid request body',

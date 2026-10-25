@@ -215,7 +215,8 @@ router.post('/world/:showId/arc/advance', requireAuth, async (req, res) => {
   try {
     const models = require('../models');
     const { advancePhase } = require('../services/arcProgressionService');
-    const { episode_number } = req.body;
+    // The page's Advance buttons send no body (Express 5 leaves req.body undefined).
+    const { episode_number } = req.body || {};
 
     const result = await advancePhase(req.params.showId, models, {
       triggered_by: 'manual',
@@ -235,7 +236,8 @@ router.post('/world/:showId/arc/advance/confirm', requireAuth, async (req, res) 
   try {
     const models = require('../models');
     const { advancePhase } = require('../services/arcProgressionService');
-    const { episode_number } = req.body;
+    // The page's Advance buttons send no body (Express 5 leaves req.body undefined).
+    const { episode_number } = req.body || {};
 
     const result = await advancePhase(req.params.showId, models, {
       triggered_by: 'manual',

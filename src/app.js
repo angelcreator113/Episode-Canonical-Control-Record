@@ -223,6 +223,15 @@ app.use(
 // Important: express.json() should only parse request bodies, not affect response content-type
 app.use(express.json({ limit: '10mb', type: 'application/json' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
+// A request with no body leaves req.body undefined under Express 5, and a
+// route that reads `const { x } = req.body` then throws (Evoni's Season Plan,
+// 2026-10-25: "Cannot destructure property 'episode_number' of 'req.body'").
+// Every route sees an empty object instead; a route that needs a body still
+// checks for the fields it needs.
+app.use((req, res, next) => {
+  if (req.body === undefined) req.body = {};
+  next();
+});
 
 // ============================================================================
 // AUTHENTICATION & AUTHORIZATION MIDDLEWARE
