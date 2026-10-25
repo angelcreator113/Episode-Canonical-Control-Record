@@ -60,12 +60,6 @@ export const signedCoins = (n) => `${n > 0 ? '+' : n < 0 ? '−' : ''}${coins(Ma
 // complete (Evoni, 2026-10-23). Deal & Money and the documents carry no
 // readiness item of their own, so they always stay open.
 export const FOLDABLE = new Set(['identity', 'people', 'place', 'look', 'stakes']);
-// "Suggest with AI" (Evoni, 2026-10-23): the server's column names ↔ the
-// page's Basics keys.
-export const AI_FIELD_TO_BASICS = {
-  event_date: 'date', event_time: 'time', description: 'description',
-  dress_code: 'dressCode', category: 'category', format: 'format',
-};
 // How long the toast keeps its Undo (the page's own one-tap changes).
 export const UNDO_MS = 8000;
 export const TOAST_MS = 4000;

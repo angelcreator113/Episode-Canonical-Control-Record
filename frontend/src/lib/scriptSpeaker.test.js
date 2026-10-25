@@ -5,7 +5,7 @@ import { speakerLine, unquote, scriptCast, shownSpeaker, isHerSpeaker, HER } fro
 
 describe('speakerLine', () => {
   test('names with a note, two words or inner capitals; LALA is Lala', () => {
-    expect(speakerLine('Lala (V.O.): "Hi there"')).toEqual({ speaker: 'Lala', label: 'Lala', note: '(V.O.)', prefix: 'Lala (V.O.): ', words: '"Hi there"' });
+    expect(speakerLine('Lala (V.O.): "Hi there"')).toEqual({ speaker: 'Lala', label: 'Lala', note: '(V.O.)', prefix: 'Lala (V.O.): ', words: '"Hi there"', auto: false });
     expect(speakerLine('Mary Jane: Hi')?.speaker).toBe('Mary Jane');
     expect(speakerLine('JustAWoman: Hi')?.speaker).toBe('JustAWoman');
     expect(speakerLine('LALA: Hi')?.speaker).toBe('Lala');

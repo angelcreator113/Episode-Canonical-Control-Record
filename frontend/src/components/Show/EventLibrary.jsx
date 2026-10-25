@@ -44,8 +44,9 @@ import EventDetailsModal from './EventDetailsModal';
 import EventIdeasDrawer from './EventIdeasDrawer';
 import EpisodeBlueprintModal from './EpisodeBlueprintModal';
 import './EventLibrary.css';
+import { packageHref } from '../../lib/eventFlow';
 
-export default function EventLibrary({ showId, scope = null, cardExtra = null, onChanged = null, data = null }) {
+export default function EventLibrary({ showId, scope = null, cardExtra = null, onChanged = null, data = null, packageFrom = null }) {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -945,7 +946,8 @@ The revised event should feel like a completely different experience from the si
               // What is still needed, without what the card's button already asks for (Evoni, 2026-10-22 layout list).
               const missing = describeMissing(readiness.blocking).filter((m) => !(state === 'needs_organizer' && m === 'Organizer'));
               const menuOpen = openEventMenuId === ev.id;
-              const openPackage = () => navigate(`/shows/${showId}/events/${ev.id}`);
+              // packageFrom (?from=): the Event Package's way back to this view (2026-10-25).
+              const openPackage = () => navigate(packageHref(showId, ev.id, packageFrom));
               const primaryAction = () => {
                 // Open Episode (a Used event) lands on Overview: it orients
                 // (Evoni's ruling, 2026-09-25, Task #1905; scoped reversal

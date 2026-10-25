@@ -15,7 +15,7 @@ import { STORY_ROLES, MAX_FEATURED_GUESTS, GUESTS_SHOWN, fmtLabel } from '../../
 
 export default function EventPeopleSection({
   event, used, castLocked, organizer, sourceProfile, startedFrom, guestList, featuredGuests, featuredConsequence,
-  lockEpisode, reloadTick, fold, guests, openOrganizerPicker, organizerSaving, acceptStartedFromOrganizer, acceptStartedFromAttendee,
+  lockEpisode, reloadTick, fold, guests, openOrganizerPicker, organizerSaving, acceptStartedFromOrganizer, acceptStartedFromAttendee, hints = null,
 }) {
   const { guestSaving, setGuestFeedPickerOpen, fullGuestListOpen, setFullGuestListOpen, toggleFeatured, setGuestStoryRole, featureRecommended } = guests;
   // The Full Guest List shows ten at a time; the rest fold behind Show more.
@@ -34,6 +34,8 @@ export default function EventPeopleSection({
       </div>
       {fold.line('people')}
       <div id="epp-body-people" className="epp-section-body" hidden={!fold.isOpen('people')}>
+      {/* A guest double-booked that day (EventFieldHints). */}
+      {hints}
       <div className="epp-split even">
       <div className="epp-people-card">
       <div className="epp-organizer-line" data-testid="organizer-line" data-kind={organizer.kind || 'none'}>

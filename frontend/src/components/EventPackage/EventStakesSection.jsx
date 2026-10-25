@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import { COST_READ_ONLY_REASON, STORED_ORIGIN_NOTE } from '../../utils/eventStakes';
 
-export default function EventStakesSection({ used, stakes, projection, fold, openStakesEditor }) {
+export default function EventStakesSection({ used, stakes, projection, fold, openStakesEditor, hints = null }) {
   const [stakesDetailsOpen, setStakesDetailsOpen] = useState(false);
   return (
     <section id="epp-sec-stakes" className={fold.cls('stakes', 'epp-stakes')} data-testid="stakes-section">
@@ -26,6 +26,8 @@ export default function EventStakesSection({ used, stakes, projection, fold, ope
       </div>
       {fold.line('stakes')}
       <div id="epp-body-stakes" className="epp-section-body" hidden={!fold.isOpen('stakes')}>
+      {/* The host's usual prestige (EventFieldHints). */}
+      {hints}
       <div className="epp-stakes-summary" data-testid="stakes-summary">
         <div className="epp-stake">
           <div className="epp-stake-head"><TrendingUp size={14} aria-hidden="true" /> Career opportunity</div>

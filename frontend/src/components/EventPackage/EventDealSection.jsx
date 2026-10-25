@@ -15,7 +15,7 @@ import { coins, signedCoins } from '../../lib/eventPackageFields';
 
 export default function EventDealSection({
   showId, eventId, event, used, termsReopen, lockEpisode, stakes, moneyPreview, seeds, reloadTick,
-  termsOffer, setTermsOffer, setInvitationRegenSignal, setPriceInputs, putEvent, setToast, load,
+  termsOffer, setTermsOffer, setInvitationRegenSignal, setPriceInputs, putEvent, setToast, load, hints = null,
 }) {
   const dealTilesNow = dealTiles(moneyPreview);
   return (
@@ -27,6 +27,8 @@ export default function EventDealSection({
       </div>
       {used && !termsReopen && <span className="epp-chip" data-testid="deal-locked"><Lock size={11} aria-hidden="true" /> Locked at Start Episode</span>}
     </div>
+    {/* The host's usual deal type and the money warning (EventFieldHints). */}
+    {hints}
     {dealTilesNow && (
       <ul className="epp-deal-tiles" data-testid="deal-tiles">
         {dealTilesNow.map((t) => (

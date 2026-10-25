@@ -35,6 +35,7 @@ import { episodeName } from '../../lib/episodePipeline';
 import { computeEventPackageReadiness, computeEventState, describeMissing } from '../../utils/eventReadinessSections';
 import { CHECKLIST_SECTIONS, computeSectionState, checklistFixTarget, loadProductionChecks } from '../Episodes/EpisodeProductionChecklist';
 import './ShowOverview.css';
+import { packageHref } from '../../lib/eventFlow';
 
 export const IN_PRODUCTION = ['draft', 'scripted', 'in_build', 'in_review'];
 const STATUS_LABEL = { draft: 'Draft', scripted: 'Scripted', in_build: 'In build', in_review: 'In review', scheduled: 'Scheduled', published: 'Published', archived: 'Archived' };
@@ -526,7 +527,7 @@ export default function ShowOverview({ showId, episodes = [], events = [], charS
                       <strong>{event.name || 'Untitled event'}</strong>
                       <span>Missing: {missing.join(', ')}</span>
                     </span>
-                    <Link className="pov-btn is-small" to={`/shows/${showId}/events/${event.id}`}>Finish setup</Link>
+                    <Link className="pov-btn is-small" to={packageHref(showId, event.id, 'producer')}>Finish setup</Link>
                   </li>
                 ))}
               </ul>
@@ -588,7 +589,7 @@ export default function ShowOverview({ showId, episodes = [], events = [], charS
                       <strong>{nextEvent.name}</strong>
                       <span>Ready{nextEvent.event_date ? ` · ${new Date(nextEvent.event_date).toLocaleDateString()}` : ''}</span>
                     </span>
-                    <Link className="pov-btn is-small" to={`/shows/${showId}/events/${nextEvent.id}`}>Start Episode</Link>
+                    <Link className="pov-btn is-small" to={packageHref(showId, nextEvent.id, 'producer')}>Start Episode</Link>
                   </div>
                 ) : (
                   <span className="pov-empty">No event is ready yet. <button type="button" className="pov-link" onClick={() => goTo('events')}>Pick an event</button></span>

@@ -14,8 +14,9 @@
  * they are for production, not for reading aloud. With { screen: true }
  * (Evoni, 2026-10-23) a [UI:…] line is kept as an on-screen moment,
  *   { kind: 'screen', verb, target, text, icon, seconds: 3 }
- * (lib/teleprompterScreen), a cue for her to react to; the other tags stay
- * hidden, except `[SFX: …]`, kept as the same kind of cue (lib/teleprompterSound).
+ * (lib/teleprompterScreen), a cue for her to react to; Lala's automatic
+ * reaction (`Lala (auto): …`) is such a cue too (autoReactionCue), and so is
+ * `[SFX: …]` (lib/teleprompterSound); the other tags stay hidden.
  * Without it the lines are exactly as before, so teleprompterIndexMap
  * (a voice clip's line index) never counts a screen moment.
  * Pure: no React, no network.
@@ -23,13 +24,19 @@
 import { readLine, scriptSections } from './scriptExport';
 import { lineSeconds } from './scriptRuntime';
 import { isBreath, markTokens } from './teleprompterMarks';
-import { screenLine } from './teleprompterScreen';
+import { screenLine, SCREEN_SECONDS } from './teleprompterScreen';
 import { soundLine } from './teleprompterSound';
 import { unbold, isHerSpeaker, HER } from './scriptSpeaker';
 
 // Her names as the script writes them: lib/scriptSpeaker's, one list for the
 // teleprompter, the Table read and the export (Evoni, 2026-10-24).
 export { isHerSpeaker, HER };
+
+/** Lala's automatic reaction as an on-screen cue: { kind: 'screen', verb: 'REACT', … }. */
+export const autoReactionCue = (text) => ({
+  kind: 'screen', who: null, verb: 'REACT', target: 'Lala', auto: true,
+  text: text ? `Lala reacts on her own: “${text}”` : 'Lala reacts on her own', icon: 'react', seconds: SCREEN_SECONDS,
+});
 
 // `**Me:** words` and `__Me__: words`, as a pasted script can have them:
 // lib/scriptSpeaker's rule, shared with the Script tab and the export.
@@ -41,7 +48,13 @@ export function teleprompterLines(lines = [], { screen = false } = {}) {
     const r = readLine(plain);
     if (!r) continue;
     const seconds = lineSeconds(String(plain).trim());
-    if (r.type === 'dialogue') {
+    if (r.type === 'dialogue' && r.auto) {
+      // Lala's automatic reaction (Evoni, 2026-10-25): the game plays it, so
+      // it is an on-screen cue to react to, never a line to read or record.
+      // Hidden like a [UI:] moment without { screen: true }, so
+      // teleprompterIndexMap never gives it a voice clip.
+      if (screen) out.push(autoReactionCue(r.text));
+    } else if (r.type === 'dialogue') {
       const hers = isHerSpeaker(r.speaker);
       // Her line is labelled JustAWoman whatever she typed (`Me:` showed
       // "PRIME"; Teleprompter reader audit, 2026-10-24); anyone else as written.

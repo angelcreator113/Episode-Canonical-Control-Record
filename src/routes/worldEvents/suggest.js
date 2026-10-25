@@ -208,6 +208,10 @@ Return ONLY this JSON, no other text:
 // an invalid one is dropped. Nothing usable: 200 with suggestions [].
 // The call goes through the Anthropic SDK, which aiCostTracker patches:
 // logged and budget-gated like every call.
+// Since 2026-10-25 the Event Package asks POST …/fill-missing instead
+// (flow.js; Evoni: "Merge the Suggest with AI button into Fill what's
+// missing"), whose { mode: 'ideas' } covers the all-six ask. No page calls
+// this route now; it stays, with its tests, for any other caller.
 // ═══════════════════════════════════════════
 
 const SUGGEST_BASICS_FAILED = 'Couldn\'t get suggestions right now.';

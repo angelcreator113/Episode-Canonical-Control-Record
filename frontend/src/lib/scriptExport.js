@@ -100,7 +100,8 @@ export function readLine(line, on = null, { cast = null } = {}) {
     const p = words.match(/^(\([^)]*\))\s*(.*)$/);
     if (p && p[2]) { paren = p[1]; words = p[2]; }
     // `written`: the speaker as the Script tab reads it (`JAWIHP`, `Prime`).
-    return { type: 'dialogue', speaker: shownSpeaker(d.speaker), written: d.speaker, ext: d.note, paren, text: unquote(words) };
+    // `auto`: Lala's automatic reaction (lib/scriptSpeaker isAutoNote), played by the game.
+    return { type: 'dialogue', speaker: shownSpeaker(d.speaker), written: d.speaker, ext: d.note, paren, text: unquote(words), ...(d.auto ? { auto: true } : {}) };
   }
   return { type: 'narration', text: t };
 }

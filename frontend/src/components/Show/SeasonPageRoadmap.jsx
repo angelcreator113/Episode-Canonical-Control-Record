@@ -38,6 +38,7 @@ import {
 import { EVENT_SHOWS, EVENT_SHOW_STORAGE_KEY, eventShowFrom, isEventShow, seasonEventViews } from '../../lib/eventLibrary';
 import EventLibrary from './EventLibrary';
 import SeasonWeek from './SeasonWeek';
+import { packageHref } from '../../lib/eventFlow';
 
 // The roadmap's view, remembered per browser (the URL's ?view= wins); storage can be blocked.
 export const ROADMAP_VIEW_STORAGE_KEY = 'szn-roadmap-view';
@@ -90,7 +91,8 @@ function CardMenu({ slot, showId, onOpen, onIntention, readOnly = false }) {
           <button type="button" role="menuitem" onClick={() => { setOpen(false); onOpen(); }}>Open the slot</button>
           {editable && <button type="button" role="menuitem" onClick={() => { setOpen(false); onIntention(); }}>Edit intention</button>}
           {slot.episode && <Link role="menuitem" to={`/episodes/${slot.episode.id}`}>Open the episode</Link>}
-          {!slot.episode && slot.event && <Link role="menuitem" to={`/shows/${showId}/events/${slot.event.id}`}>Open the event package</Link>}
+          {/* ?from= keeps the way back to this slot on the Roadmap (2026-10-25). */}
+          {!slot.episode && slot.event && <Link role="menuitem" to={packageHref(showId, slot.event.id, { kind: 'roadmap', slot: slot.slot_number })}>Open the event package</Link>}
         </div>
       )}
     </div>
@@ -344,7 +346,7 @@ export function SeasonEventsTab({ plan, S, api, showId, setToast, episodes, even
     return (
       <div className="szn-events" data-testid="szn-events">
         {arc && <p className="szn-muted">The roadmap did not load, so the events cannot be sorted by slot: here is the whole library.</p>}
-        <EventLibrary showId={showId} onChanged={onChanged} data={libraryData} />
+        <EventLibrary showId={showId} onChanged={onChanged} data={libraryData} packageFrom="events" />
       </div>
     );
   }
@@ -373,7 +375,8 @@ export function SeasonEventsTab({ plan, S, api, showId, setToast, episodes, even
       )}
       {controls.slotError?.where === 'event' && <p className="szn-error" role="alert">{controls.slotError.text}</p>}
       {show === 'unplaced' && <p className="szn-muted">Open a slot to see the events ranked by how well they fit it.</p>}
-      <EventLibrary showId={showId} scope={scope} cardExtra={cardExtra} onChanged={onChanged} data={libraryData} />
+      {/* An event opened from here comes back to this filter (2026-10-25). */}
+      <EventLibrary showId={showId} scope={scope} cardExtra={cardExtra} onChanged={onChanged} data={libraryData} packageFrom={`events:${show}`} />
       <SlotDrawer controls={controls} plan={plan} S={S} api={api} showId={showId} setToast={setToast} episodes={episodes} events={events} readOnly={readOnly} />
     </div>
   );
