@@ -206,6 +206,9 @@ export default function SeasonPage() {
   const [episodes, setEpisodes] = useState([]);
   const [episodesTotal, setEpisodesTotal] = useState(null);
   const [events, setEvents] = useState([]);
+  // Whether the events and episodes have been read, and which reads failed:
+  // the Events tab's library uses these instead of fetching its own.
+  const [showData, setShowData] = useState({ loaded: false, failed: [] });
   const panelRef = useRef(null);
   const tabsRef = useRef(null);
 
@@ -213,14 +216,16 @@ export default function SeasonPage() {
   // pictures, the slot panel, the production board and the ledger (the same
   // reads as Producer Mode); the board and Opportunities reload them.
   const loadShowData = useCallback(async () => {
+    const failed = [];
     await Promise.all([
       api.get(`/api/v1/shows/${showId}`).then((r) => setShowName(r.data?.data?.name || r.data?.name || null))
         .catch((err) => console.error('[SeasonPage] show load failed:', err)),
       fetchAllEpisodes(api, showId).then((list) => { setEpisodes(list.items || []); setEpisodesTotal(list.total ?? (list.items || []).length); })
-        .catch((err) => console.error('[SeasonPage] episodes load failed:', err)),
+        .catch((err) => { console.error('[SeasonPage] episodes load failed:', err); failed.push('episodes'); }),
       api.get(`/api/v1/world/${showId}/events`).then((r) => setEvents(r.data?.events || []))
-        .catch((err) => console.error('[SeasonPage] events load failed:', err)),
+        .catch((err) => { console.error('[SeasonPage] events load failed:', err); failed.push('events'); }),
     ]);
+    setShowData({ loaded: true, failed: failed.sort().reverse() });
   }, [showId]);
   useEffect(() => { loadShowData(); }, [loadShowData]);
 
@@ -272,7 +277,7 @@ export default function SeasonPage() {
   );
 
   const tabProps = {
-    plan, S, api, showId, setToast, episodes, episodesTotal, events, arc, roadmap, stats, goTab, params, setParams,
+    plan, S, api, showId, setToast, episodes, episodesTotal, events, arc, roadmap, stats, goTab, params, setParams, showData,
     reloadShowData: loadShowData,
     onEdit: () => openPanel('edit'), onPanel: openPanel,
   };

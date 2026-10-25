@@ -146,7 +146,18 @@
 /* The deal and the organizer as one line; what is still needed as one line. */
 .wa-ev-facts { margin: 0; font-size: 13px; color: var(--text-primary); overflow-wrap: anywhere; }
 .wa-ev-facts .missing { color: var(--lala-lavender-text); font-weight: 600; }
-.wa-ev-needed { margin: 0; padding: 6px 10px; border-radius: 8px; background: var(--warning-bg); color: var(--warning-text); font-size: 12px; line-height: 1.45; overflow-wrap: anywhere; }
+/* What is still needed: a small chip that opens the list (Evoni, 2026-10-25). */
+.wa-ev-needed { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; min-width: 0; }
+.wa-ev-needed-chip {
+  display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px; min-height: 28px; border-radius: 999px;
+  border: 1px solid var(--lala-parchment-3); background: var(--surface-bg); color: var(--text-secondary);
+  font: inherit; font-size: 12px; font-weight: 600; cursor: pointer;
+}
+.wa-ev-needed-chip:hover { border-color: var(--lala-lavender); color: var(--lala-lavender-text); }
+.wa-ev-needed-chip:focus-visible { outline: 2px solid var(--lala-lavender); outline-offset: 2px; }
+.wa-ev-needed-caret { transition: transform 0.15s ease; }
+.wa-ev-needed-chip[aria-expanded="true"] .wa-ev-needed-caret { transform: rotate(180deg); }
+.wa-ev-needed-list { margin: 0; padding: 0 0 0 18px; color: var(--text-primary); font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
 
 /* The grid of cards, or the list: one row per event. */
 .wa-ev-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(340px, 100%), 1fr)); gap: 12px; scroll-margin-top: 16px; }
