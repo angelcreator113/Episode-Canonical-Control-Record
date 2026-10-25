@@ -7,7 +7,7 @@
  * use the current events?" — yes, her existing events drive the setup).
  *
  *   - normaliseSetup / buildPhases: the form (title, tagline, three part
- *     names and taglines, and the split of the 24 episodes, each part at
+ *     names, taglines and moods, and the split of the 24 episodes, each part at
  *     least one). arcProgressionService.seedArc seeds from it.
  *   - updateSetup: "Edit season". The split re-phases the slots that have
  *     not started; a started slot keeps its part, so a split that would move
@@ -53,7 +53,10 @@ const SEASON_ONE = {
 };
 
 // What each part position carries beyond its name: the emotional arc and how
-// the feed behaves. The form does not edit these; they follow the position.
+// the feed behaves. The form edits the emotional arc and the feed's tone
+// (2026-10-25: every season had Season 1's moods); these are the defaults
+// for a part the form leaves empty. The rest of the feed behaviour follows
+// the position.
 const PART_DEFAULTS = [
   {
     title: 'Foundation',
@@ -89,6 +92,9 @@ const PART_DEFAULTS = [
     },
   },
 ];
+
+// The longest part mood the form takes, in characters (the prompts cap them at 300).
+const MOOD_MAX = { emotional_arc: 300, feed_tone: 500 };
 
 class SeasonSetupError extends Error {
   constructor(message, status = 400, code = 'SEASON_SETUP_INVALID') {
@@ -233,6 +239,26 @@ function normalisePageFields(body = {}) {
   return out;
 }
 
+/** A part's mood: trimmed text, or null (the default) when empty; refused when longer than `max`. */
+function moodText(value, max, label) {
+  if (value == null) return null;
+  if (typeof value !== 'string') throw new SeasonSetupError(`${label} must be text.`);
+  const s = value.replace(/\s+/g, ' ').trim();
+  if (s.length > max) throw new SeasonSetupError(`${label} is ${s.length} characters; keep it to ${max}.`);
+  return s || null;
+}
+
+/** A part's emotional arc and feed behaviour: the form's, else the position's defaults. */
+function partMoods(part, i, saved = null) {
+  const defaults = PART_DEFAULTS[i] || PART_DEFAULTS[PART_DEFAULTS.length - 1];
+  // A saved part keeps its feed behaviour as stored; a new one takes the position's.
+  const feed = saved?.feed_behavior ? { ...saved.feed_behavior } : { ...defaults.feed_behavior };
+  const out = { emotional_arc: saved?.emotional_arc || defaults.emotional_arc, feed_behavior: feed };
+  if (has(part, 'emotional_arc')) out.emotional_arc = part.emotional_arc || defaults.emotional_arc;
+  if (has(part, 'feed_tone')) out.feed_behavior = { ...feed, feed_tone: part.feed_tone || defaults.feed_behavior.feed_tone };
+  return out;
+}
+
 /**
  * The form, checked: a title, three parts each with a name (a tagline is
  * optional), and the split; and the Season page's fields it sends (a cover,
@@ -249,6 +275,9 @@ function normaliseSetup(body = {}) {
     if (!name) throw new SeasonSetupError(`Part ${i + 1} needs a name.`);
     const part = { title: name, tagline: text(p?.tagline, 300) };
     if (has(p, 'picture_url')) part.picture_url = pictureUrl(p.picture_url, `Part ${i + 1}'s picture`);
+    // The part's moods, when the form sends them; empty takes the default.
+    if (has(p, 'emotional_arc')) part.emotional_arc = moodText(p.emotional_arc, MOOD_MAX.emotional_arc, `Part ${i + 1}'s emotional arc`);
+    if (has(p, 'feed_tone')) part.feed_tone = moodText(p.feed_tone, MOOD_MAX.feed_tone, `Part ${i + 1}'s feed tone`);
     return part;
   });
   const page = normalisePageFields(body);
@@ -272,8 +301,7 @@ function buildPhases(setup) {
     episode_end: ranges[i][1],
     status: i === 0 ? 'active' : 'upcoming',
     ...(i === 0 ? { activated_at: now, activated_by: 'auto' } : {}),
-    emotional_arc: PART_DEFAULTS[i].emotional_arc,
-    feed_behavior: { ...PART_DEFAULTS[i].feed_behavior },
+    ...partMoods(p, i),
     goal_summary: { total: 0, completed: 0, failed: 0, carried: 0 },
   }));
 }
@@ -296,7 +324,8 @@ async function nextNumbers(sequelize, showId, transaction) {
 const started = (slot) => Boolean(slot.episode_id || slot.locked_at || slot.accepted_at);
 
 /**
- * "Edit season": the title, tagline, part names and taglines, and the split.
+ * "Edit season": the title, tagline, part names, taglines and moods (emotional
+ * arc, feed tone), and the split.
  * Slots that have not started move to their new part. Refused (409) when the
  * split would move a started slot out of its part, or change a finished
  * part's episodes. A started episode's season snapshot takes the new names.
@@ -339,6 +368,8 @@ async function updateSetup(sequelize, showId, body) {
       tagline: setup.phases[i].tagline,
       // A part's picture changes only when the form sends it.
       ...(has(setup.phases[i], 'picture_url') ? { picture_url: setup.phases[i].picture_url } : {}),
+      // Its moods change only when the form sends them (empty: the default).
+      ...partMoods(setup.phases[i], i, p),
       episode_start: ranges[i][0],
       episode_end: ranges[i][1],
     }));
@@ -778,6 +809,8 @@ module.exports = {
   MODELS,
   DEFAULT_SPLIT,
   PART_DEFAULTS,
+  MOOD_MAX,
+  partMoods,
   SEASON_ONE,
   SeasonSetupError,
   defaultSetup,

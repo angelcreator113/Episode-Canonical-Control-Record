@@ -130,13 +130,22 @@ function threads(sequelize, showId) {
   });
 }
 
-/** Season twists still to plant or to pay off. */
+/**
+ * Season twists still to plant or to pay off, in the show's season (the
+ * active one, else its latest: seasonLoader's anyStatus, as the Twists
+ * panel reads it). It read every season's, so Season 1's unpaid twists
+ * reached Season 2's seeds (2026-10-25). Show-wide only for a show with no
+ * season at all.
+ */
 function twists(sequelize, showId, castIds) {
   return part('the season twists', [], async () => {
+    const season = showId ? await require('./seasonLoader').loadSeason(sequelize, showId, { anyStatus: true, slots: false }) : null;
+    const arcId = season?.arc?.id || null;
     const found = await rows(sequelize,
       `SELECT id, title, description, status, character_ids FROM season_twists
         WHERE deleted_at IS NULL AND status IN ('planned', 'planted') ${showId ? 'AND show_id = :showId' : ''}
-        ORDER BY (status = 'planted') DESC, created_at DESC LIMIT ${CAP.twists.rows}`, { showId });
+          ${arcId ? 'AND arc_id = :arcId' : ''}
+        ORDER BY (status = 'planted') DESC, created_at DESC LIMIT ${CAP.twists.rows}`, { showId, arcId });
     return found.map((t) => ({
       id: String(t.id), title: clip(t.title, 200), description: clip(t.description, 260), status: t.status,
       character_ids: listOf(t.character_ids).map(String).filter((id) => castIds.includes(id)),

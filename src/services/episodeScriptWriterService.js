@@ -386,13 +386,29 @@ async function loadScriptContext(episodeId, showId, models, { lite = false } = {
     }
   } catch { /* non-blocking */ }
 
-  // 13. Arc / season phase — the active arc, read through the shared
-  // getArcContext (show_arcs has no name or phase_title column; the phase
-  // title lives in its phases JSON).
+  // 13. This episode's season position (§8(ff) A5): the slot's context,
+  // snapshotted onto the episode at Start Episode.
+  context.seasonPosition = null;
+  try {
+    const [row] = await sequelize.query(
+      'SELECT season_context FROM episodes WHERE id = :episodeId AND deleted_at IS NULL',
+      { replacements: { episodeId }, type: sequelize.QueryTypes.SELECT }
+    );
+    const sc = row?.season_context;
+    context.seasonPosition = (typeof sc === 'string' ? JSON.parse(sc) : sc) || null;
+  } catch (err) {
+    console.error('[ScriptWriter] season position failed (non-blocking):', err.message);
+  }
+
+  // 13b. Arc / season phase, read through the shared getArcContext
+  // (show_arcs has no name or phase_title column; the phase title lives in
+  // its phases JSON): the episode's own season when its snapshot names one
+  // (a Season 1 episode written while Season 2 is active reads Season 1),
+  // else the active arc.
   context.arcPhase = null;
   try {
     const { getArcContext } = require('./arcProgressionService');
-    const arc = await getArcContext(showId, { sequelize });
+    const arc = await getArcContext(showId, { sequelize }, { arcId: context.seasonPosition?.arc_id || null });
     if (arc) {
       context.arcPhase = {
         name: arc.arc_title,
@@ -407,20 +423,6 @@ async function loadScriptContext(episodeId, showId, models, { lite = false } = {
     }
   } catch (err) {
     console.error('[ScriptWriter] season arc context failed (non-blocking):', err.message);
-  }
-
-  // 13b. This episode's season position (§8(ff) A5): the slot's context,
-  // snapshotted onto the episode at Start Episode.
-  context.seasonPosition = null;
-  try {
-    const [row] = await sequelize.query(
-      'SELECT season_context FROM episodes WHERE id = :episodeId AND deleted_at IS NULL',
-      { replacements: { episodeId }, type: sequelize.QueryTypes.SELECT }
-    );
-    const sc = row?.season_context;
-    context.seasonPosition = (typeof sc === 'string' ? JSON.parse(sc) : sc) || null;
-  } catch (err) {
-    console.error('[ScriptWriter] season position failed (non-blocking):', err.message);
   }
 
   // 13c. The season twists this episode's slot plants or pays off

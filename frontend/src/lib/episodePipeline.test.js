@@ -2,8 +2,8 @@
  * The Production tab's stages, pipeline and event panel (Evoni's mock,
  * 2026-10-07): a stage is the episode's status.
  */
-import { describe, test, expect } from 'vitest';
-import { stageOf, episodeCode, episodeTags, openSlots, cardLine, pipelineColumns, pipelineSummary, eventPanel, pipelineSteps, matchesSearch } from './episodePipeline';
+import { describe, test, expect, vi } from 'vitest';
+import { stageOf, episodeCode, episodeName, seasonContextOf, episodeTags, openSlots, cardLine, pipelineColumns, pipelineSummary, eventPanel, pipelineSteps, matchesSearch } from './episodePipeline';
 
 describe('stageOf', () => {
   test('each status has its stage; archived has none', () => {
@@ -23,6 +23,24 @@ describe('episode labels', () => {
     expect(cardLine({ status: 'draft' })).toBe('needs script');
     expect(cardLine({ status: 'draft', script_content: 'x' })).toBe('Draft');
     expect(cardLine({ status: 'in_build' })).toBe('In build');
+  });
+});
+
+describe('episode codes across seasons (2026-10-25)', () => {
+  test("a slotted episode reads its slot label, not the show-wide number", () => {
+    const opener = { season_number: 2, episode_number: 25, season_context: { label: 'S2 · E1', slot_number: 1 } };
+    expect(episodeCode(opener)).toBe('S2 · E1');
+    expect(episodeName(opener)).toBe('Episode 1');
+    expect(episodeCode({ ...opener, season_context: JSON.stringify(opener.season_context) })).toBe('S2 · E1');
+  });
+  test('no snapshot, or one that cannot be read: the old code', () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+    expect(episodeCode({ season_number: 2, episode_number: 25, season_context: '{nope' })).toBe('S2 E25');
+    expect(err).toHaveBeenCalled();
+    err.mockRestore();
+    expect(seasonContextOf({ season_context: null })).toBeNull();
+    expect(episodeName({ episode_number: 3 })).toBe('Episode 3');
+    expect(episodeName({})).toBeNull();
   });
 });
 

@@ -125,6 +125,13 @@ describe('ShowEpisodesBoard — Now producing and the pipeline (Evoni\'s mock, 2
     expect(screen.getByRole('link', { name: 'Open episode' }).getAttribute('href')).toBe('/episodes/ep-1');
   });
 
+  test('a Season 2 episode reads "S2 · E1", not its show-wide number (2026-10-25)', async () => {
+    renderIt([{ ...DRAFT, season_number: 2, episode_number: 25, season_context: { label: 'S2 · E1', slot_number: 1 } }]);
+    const hero = await screen.findByTestId('seb-hero');
+    expect(hero.querySelector('.seb-badge').textContent).toBe('S2 · E1');
+    expect(hero.textContent).not.toContain('E25');
+  });
+
   test("the card shows the episode's thumbnail, else the Studio's current one", async () => {
     renderIt([{ ...DRAFT, thumbnail_url: 'https://cdn.example/ep1.jpg' }]);
     await waitFor(() => expect(screen.getByTestId('seb-hero').querySelector('.seb-thumb img')?.getAttribute('src')).toBe('https://cdn.example/ep1.jpg'));

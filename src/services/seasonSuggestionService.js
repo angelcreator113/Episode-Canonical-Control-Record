@@ -106,8 +106,7 @@ function repeatsOf(event, recent) {
  */
 async function loadSeasonInputs(sequelize, showId) {
   const [[slot]] = await sequelize.query(
-    `SELECT s.slot_number, s.season_number, s.phase, s.story_purpose, s.career_focus, s.desired_pressure, s.outcome_range,
-            a.narrative_debt
+    `SELECT s.slot_number, s.season_number, s.phase, s.story_purpose, s.career_focus, s.desired_pressure, s.outcome_range
        FROM season_slots s
        JOIN show_arcs a ON a.id = s.arc_id AND a.status = 'active' AND a.deleted_at IS NULL
       WHERE s.show_id = :showId AND s.deleted_at IS NULL AND s.episode_id IS NULL AND s.locked_at IS NULL
@@ -140,7 +139,16 @@ async function loadSeasonInputs(sequelize, showId) {
     ...r,
     label: r.slot_number ? episodeLabel(r.season_number, r.slot_number) : 'a recent episode',
   }));
-  let debt = slot?.narrative_debt;
+  // The active season's narrative debt, whether or not a slot is open (it
+  // was read through the next open slot, so a full season had none).
+  const [[arc]] = await sequelize.query(
+    `SELECT narrative_debt FROM show_arcs WHERE show_id = :showId AND status = 'active' AND deleted_at IS NULL
+      ORDER BY arc_number ASC LIMIT 1`,
+    { replacements: { showId } }).catch((err) => {
+    console.error('[seasonSuggestion] narrative debt load failed:', err.message);
+    return [[]];
+  });
+  let debt = arc?.narrative_debt;
   if (typeof debt === 'string') {
     try { debt = JSON.parse(debt); } catch (err) { console.error('[seasonSuggestion] debt parse failed:', err.message); debt = []; }
   }

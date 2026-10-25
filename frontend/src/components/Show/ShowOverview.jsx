@@ -30,6 +30,7 @@ import {
 import api from '../../services/api';
 import { thumbnailStudioHref } from '../../lib/thumbnailStudioHref';
 import { currentThumbnail } from '../../lib/youtubeThumbnailsApi';
+import { episodeName } from '../../lib/episodePipeline';
 import { computeEventPackageReadiness, computeEventState, describeMissing } from '../../utils/eventReadinessSections';
 import { CHECKLIST_SECTIONS, computeSectionState, checklistFixTarget, loadProductionChecks } from '../Episodes/EpisodeProductionChecklist';
 import './ShowOverview.css';
@@ -314,7 +315,7 @@ function NowProducing({ showId, episodes, episode, onPick, checksState }) {
             {seasons.map((s) => <option key={s} value={s}>Season {s}</option>)}
           </select>
           <select aria-label="Episode" value={episode.id} onChange={(e) => onPick(e.target.value)}>
-            {inSeason.map((e) => <option key={e.id} value={e.id}>{e.episode_number ? `Episode ${e.episode_number}` : (e.title || 'Episode')}</option>)}
+            {inSeason.map((e) => <option key={e.id} value={e.id}>{episodeName(e) || e.title || 'Episode'}</option>)}
           </select>
         </div>
       </div>
@@ -426,7 +427,7 @@ function EpisodeAssets({ episode, showId }) {
 
 function EpisodeMoney({ episode, showId, linkedEvent, checksLoading, goTo }) {
   const { loading, forecast, failed, reload } = useEventForecast(showId, linkedEvent?.id);
-  const name = episode.episode_number ? `Episode ${episode.episode_number}` : 'This episode';
+  const name = episodeName(episode) || 'This episode';
   const look = (forecast?.expenses?.outfit_retail || 0) + (forecast?.expenses?.outfit_rentals || 0);
   const spending = Math.max(0, (forecast?.expenses?.total || 0) - look);
   return (

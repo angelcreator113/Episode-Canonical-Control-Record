@@ -95,9 +95,9 @@ const BUCKET_URL = `https://${process.env.S3_PRIMARY_BUCKET}.s3.us-east-1.amazon
     const res = await auth(request(app).get(`${base}/shows/${show}/season`));
     expect(res.status).toBe(200);
     expect(res.body.data).toEqual([
-      { id: first, title: 'Pilot', episode_number: 1, thumbnailUrl: saved.body.data.url, hasDraft: false },
-      { id: second, title: 'Red Dress', episode_number: 2, thumbnailUrl: null, hasDraft: true },
-      { id: third, title: 'Gala Night', episode_number: 3, thumbnailUrl: null, hasDraft: false },
+      { id: first, title: 'Pilot', episode_number: 1, thumbnailUrl: saved.body.data.url, slot_number: null, label: null, hasDraft: false },
+      { id: second, title: 'Red Dress', episode_number: 2, thumbnailUrl: null, slot_number: null, label: null, hasDraft: true },
+      { id: third, title: 'Gala Night', episode_number: 3, thumbnailUrl: null, slot_number: null, label: null, hasDraft: false },
     ]);
   });
 

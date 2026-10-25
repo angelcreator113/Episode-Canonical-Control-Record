@@ -5,6 +5,7 @@ import { Camera, Lock, Sparkles, Loader, AlertCircle, Plus, X, Clock, CheckCircl
 import apiClient from '../services/api';
 import { fetchAllPages } from '../lib/fetchAllPages';
 import { isAppPath } from '../utils/sceneSets';
+import { episodeCode } from '../lib/episodePipeline';
 import EventLookImage from '../components/EventPackage/EventLookImage';
 import DressedAngles from '../components/SceneSets/DressedAngles';
 import { UsePhotosFromSet, EventPhotosSet } from '../components/SceneSets/EventPhotos';
@@ -2011,7 +2012,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                           {set.episodes.map(ep => (
                             <span key={ep.id} style={{ padding: '3px 8px', background: 'var(--primary-subtle)', borderRadius: 4, fontSize: 11, fontWeight: 600, color: 'var(--primary-text)' }}>
-                              {ep.season_number ? `S${ep.season_number}` : ''}E{ep.episode_number || '?'} {ep.title}
+                              {episodeCode(ep)} {ep.title}
                             </span>
                           ))}
                         </div>
@@ -2966,7 +2967,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
               <div className="scene-sets-episode-list">
                 {set.episodes.map(ep => (
                   <span key={ep.id} className="scene-sets-episode-chip">
-                    {ep.season_number ? `S${ep.season_number}` : ''}E{ep.episode_number || '?'} {ep.title}
+                    {episodeCode(ep)} {ep.title}
                     <button onClick={() => onUnlinkEpisode(set, ep.id)} title="Remove"><X size={10} /></button>
                   </span>
                 ))}
@@ -2999,7 +3000,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                     .filter(ep => !set.episodes?.some(linked => linked.id === ep.id))
                     .map(ep => (
                       <option key={ep.id} value={ep.id}>
-                        {ep.season_number ? `S${ep.season_number}` : ''}E{ep.episode_number || '?'} — {ep.title}
+                        {episodeCode(ep)} — {ep.title}
                       </option>
                     ))}
                 </select>

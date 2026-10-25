@@ -709,15 +709,56 @@ async function scheduleHeldEarly({ sequelize, opp, eventData, extraCols, extraVa
 
 // ── AI-SUGGEST EVENTS BASED ON NARRATIVE STATE ──────────────────────────────
 
+/**
+ * Where the season stands for the narrative suggestions (2026-10-25): the
+ * active arc's next slot to make (the first with no episode, else its
+ * last), its part from the arc's own phases (title, range, feed's prestige
+ * cap), how many of the part's episodes are made, and whether it is the
+ * first or the last part. It counted every episode of the show and named
+ * Foundation / Ascension / Legacy, so Season 2's first episode read as the
+ * 25th, in Legacy. Null when the show has no active season (or it cannot be
+ * read: logged).
+ */
+async function seasonStand(sequelize, showId) {
+  try {
+    const season = await require('./seasonLoader').loadSeason(sequelize, showId);
+    if (!season || !season.slots.length) return null;
+    const { arcPhases } = require('./seasonSlotService');
+    const phases = arcPhases(season.arc);
+    const slot = season.slots.find((sl) => !sl.live_episode_id) || season.slots[season.slots.length - 1];
+    const index = Math.max(0, phases.findIndex((p) => Number(p.phase) === Number(slot.phase)));
+    const part = phases[index] || {};
+    const start = Number(part.episode_start) || slot.slot_number;
+    const madeInPart = season.slots.filter((sl) => sl.live_episode_id && Number(sl.phase) === Number(slot.phase)).length;
+    return {
+      made: season.slots.filter((sl) => sl.live_episode_id).length,
+      slot_number: slot.slot_number,
+      label: require('./seasonSlotService').episodeLabel(season.arc.season_number, slot.slot_number),
+      part: { number: Number(part.phase) || index + 1, title: part.title || `Part ${index + 1}`, range: [start, Number(part.episode_end) || start] },
+      made_in_part: madeInPart,
+      tier: index === 0 ? 'first' : index >= phases.length - 1 ? 'last' : 'middle',
+      max_prestige: Number(part.feed_behavior?.event_prestige_max) || 10,
+    };
+  } catch (err) {
+    console.error('[FeedEventPipeline] the season could not be read (suggestions go without it):', err.message);
+    return null;
+  }
+}
+
 async function suggestNextEvents(showId, models) {
   const { sequelize } = models;
 
-  // Get current state
-  const [episodes] = await sequelize.query(
-    `SELECT COUNT(*) as count FROM episodes WHERE show_id = :showId AND deleted_at IS NULL`,
-    { replacements: { showId } }
-  );
-  const episodeCount = parseInt(episodes[0]?.count) || 0;
+  // Where the season stands: the active arc's next slot and its part. With
+  // no season, the show's episode count and the three default parts, as before.
+  const stand = await seasonStand(sequelize, showId);
+  let episodeCount = stand ? stand.made : 0;
+  if (!stand) {
+    const [episodes] = await sequelize.query(
+      `SELECT COUNT(*) as count FROM episodes WHERE show_id = :showId AND deleted_at IS NULL`,
+      { replacements: { showId } }
+    );
+    episodeCount = parseInt(episodes[0]?.count) || 0;
+  }
 
   // Get active opportunities
   const [opps] = await sequelize.query(
@@ -737,7 +778,9 @@ async function suggestNextEvents(showId, models) {
       { replacements: { showId } }
     );
     goals = goalRows || [];
-  } catch { /* table may not exist */ }
+  } catch (err) {
+    console.error('[FeedEventPipeline] career goals could not be read (suggestions go without them):', err.message);
+  }
 
   // Build suggestions
   const suggestions = [];
@@ -755,7 +798,7 @@ async function suggestNextEvents(showId, models) {
     });
   }
 
-  // 2. Goal-driven suggestions
+  // 2. Goal-driven suggestions (early in the season: its episodes made)
   for (const goal of goals) {
     if (goal.target_metric === 'reputation' && episodeCount < 5) {
       suggestions.push({
@@ -779,46 +822,47 @@ async function suggestNextEvents(showId, models) {
     }
   }
 
-  // 3. Arc-aware narrative suggestions — phase determines event tier
-  let arcPhase = null;
-  let maxPrestige = 10;
-  try {
-    const { getArcContext } = require('./arcProgressionService');
-    const arc = await getArcContext(showId, { sequelize });
-    if (arc) {
-      arcPhase = arc.current_phase;
-      maxPrestige = arc.feed_behavior?.event_prestige_max || 10;
-    }
-  } catch { /* arc system not available */ }
+  // 3. Arc-aware narrative suggestions — the part determines the event tier:
+  // the first part low-stakes, the last its biggest stages, the ones between
+  // competitive. Each reason names the season's own part.
+  const fallback = [
+    { number: 1, title: 'Foundation', range: [1, 8] },
+    { number: 2, title: 'Ascension', range: [9, 16] },
+    { number: 3, title: 'Legacy', range: [17, 24] },
+  ];
+  const part = stand ? stand.part : fallback[episodeCount <= 8 ? 0 : episodeCount <= 16 ? 1 : 2];
+  const tier = stand ? stand.tier : ['first', 'middle', 'last'][part.number - 1];
+  const maxPrestige = stand ? stand.max_prestige : 10;
+  // How far into the part: its episodes made (the show's count without a season).
+  const made = stand ? stand.made_in_part : episodeCount;
+  const named = `Part ${part.number}: ${part.title}`;
 
-  const phaseNum = arcPhase?.number || (episodeCount <= 8 ? 1 : episodeCount <= 16 ? 2 : 3);
-
-  if (phaseNum === 1) {
-    // Foundation — low-stakes, prove you belong
-    if (episodeCount <= 2) {
-      suggestions.push({ source: 'narrative', type: 'social_event', name: 'Introductory social gathering', prestige: 3,
-        reason: 'Phase 1: Foundation — early episodes need low-stakes events to establish the world', action: 'create' });
+  if (tier === 'first') {
+    // Low-stakes, prove you belong
+    if (made <= 2) {
+      suggestions.push({ source: 'narrative', type: 'social_event', name: 'Introductory social gathering', prestige: Math.min(3, maxPrestige),
+        reason: `${named} — early episodes need low-stakes events to establish the world`, action: 'create' });
     }
-    if (episodeCount >= 3 && episodeCount <= 6) {
+    if (made >= 3 && made <= 6) {
       suggestions.push({ source: 'narrative', type: 'casting_call', name: 'First audition — prove you belong', prestige: Math.min(5, maxPrestige),
-        reason: `Phase 1: Foundation — time for Lala to test herself (max prestige ${maxPrestige})`, action: 'create' });
+        reason: `${named} — time for Lala to test herself (max prestige ${maxPrestige})`, action: 'create' });
     }
-    if (episodeCount >= 6) {
+    if (made >= 6) {
       suggestions.push({ source: 'narrative', type: 'podcast', name: 'First interview — tell your story', prestige: Math.min(4, maxPrestige),
-        reason: 'Phase 1: Foundation — Lala needs to articulate who she is', action: 'create' });
+        reason: `${named} — Lala needs to articulate who she is`, action: 'create' });
     }
-  } else if (phaseNum === 2) {
-    // Ascension — competitive, climbing
+  } else if (tier === 'middle') {
+    // Competitive, climbing
     suggestions.push({ source: 'narrative', type: 'runway', name: 'Competitive runway — stakes are real now', prestige: Math.min(7, maxPrestige),
-      reason: 'Phase 2: Ascension — the competition is real and everyone is watching', action: 'create' });
+      reason: `${named} — the competition is real and everyone is watching`, action: 'create' });
     suggestions.push({ source: 'narrative', type: 'campaign', name: 'Brand campaign — prove you can deliver', prestige: Math.min(6, maxPrestige),
-      reason: 'Phase 2: Ascension — brands are testing Lala with real money', action: 'create' });
+      reason: `${named} — brands are testing Lala with real money`, action: 'create' });
   } else {
-    // Legacy — prestige events, building her own room
+    // Prestige events, building her own room
     suggestions.push({ source: 'narrative', type: 'award_show', name: 'Award show — the biggest stage', prestige: Math.min(9, maxPrestige),
-      reason: 'Phase 3: Legacy — this is what everything was building toward', action: 'create' });
+      reason: `${named} — this is what everything was building toward`, action: 'create' });
     suggestions.push({ source: 'narrative', type: 'social_event', name: 'Host your own event — build the room', prestige: Math.min(8, maxPrestige),
-      reason: 'Phase 3: Legacy — stop entering rooms, start building them', action: 'create' });
+      reason: `${named} — stop entering rooms, start building them`, action: 'create' });
   }
 
   return suggestions;
@@ -1028,6 +1072,7 @@ module.exports = {
   generateOpportunitiesFromFeed,
   scheduleOpportunityAsEvent,
   suggestNextEvents,
+  seasonStand,
   chainEventFromMomentum,
   getEventChain,
 };
