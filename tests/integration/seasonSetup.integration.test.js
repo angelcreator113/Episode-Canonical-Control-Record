@@ -225,6 +225,83 @@ const FORM = {
     expect(res.body.error).toContain('Part 1 (Doors) is finished, so it keeps E1–E6');
   });
 
+  // ── The Season page's fields (2026-10-25) ─────────────────────────────
+
+  const COVER = 'https://assets.example.com/shows/lala/cover.jpg';
+  const PAGE = {
+    cover_url: COVER,
+    starts_on: '2026-01-05',
+    ends_on: '2026-03-29',
+    logline: 'Lala earns her place in the luxury tier.',
+    description: 'From bold fits to bigger opportunities.',
+  };
+  const withPictures = (phases, urls) => phases.map((p, i) => ({ ...p, picture_url: urls[i] }));
+
+  test('Edit season saves the cover, dates, logline, description and a picture per part, and the arc reads them back', async () => {
+    const show = await newShow();
+    await seedDirect(show);
+    const pics = ['https://assets.example.com/p1.jpg', 'https://assets.example.com/p2.jpg', null];
+    const res = await edit(show, { ...FORM, ...PAGE, phases: withPictures(FORM.phases, pics) });
+    expect(res.status).toBe(200);
+    const { arc } = await getArc(show);
+    expect([arc.cover_url, arc.starts_on, arc.ends_on, arc.logline, arc.description])
+      .toEqual([COVER, '2026-01-05', '2026-03-29', PAGE.logline, PAGE.description]);
+    expect(arc.phases.map((p) => p.picture_url)).toEqual(pics);
+    // The part's other keys stay (its arc, its status).
+    expect(arc.phases[0]).toEqual(expect.objectContaining({ status: 'active', emotional_arc: expect.any(String) }));
+  });
+
+  test('a field the form leaves out keeps what is saved; null clears it', async () => {
+    const show = await newShow();
+    await seedDirect(show);
+    await edit(show, { ...FORM, ...PAGE, phases: withPictures(FORM.phases, ['https://a.example.com/1.png', null, null]) });
+    // The older form (title, parts, split only) changes none of the new fields.
+    expect((await edit(show, { ...FORM, title: 'Velvet Again' })).status).toBe(200);
+    let { arc } = await getArc(show);
+    expect([arc.title, arc.cover_url, arc.starts_on, arc.logline, arc.phases[0].picture_url])
+      .toEqual(['Velvet Again', COVER, '2026-01-05', PAGE.logline, 'https://a.example.com/1.png']);
+    expect((await edit(show, { ...FORM, cover_url: null, logline: '', phases: withPictures(FORM.phases, [null, null, null]) })).status).toBe(200);
+    ({ arc } = await getArc(show));
+    expect([arc.cover_url, arc.logline, arc.starts_on, arc.phases[0].picture_url]).toEqual([null, null, '2026-01-05', null]);
+  });
+
+  test('seeding takes the new fields too', async () => {
+    const show = await newShow();
+    const res = await seed(show, { ...FORM, ...PAGE, phases: withPictures(FORM.phases, [null, 'https://a.example.com/2.png', null]) });
+    expect(res.status).toBe(201);
+    const { arc } = await getArc(show);
+    expect([arc.cover_url, arc.starts_on, arc.ends_on, arc.logline, arc.phases[1].picture_url])
+      .toEqual([COVER, '2026-01-05', '2026-03-29', PAGE.logline, 'https://a.example.com/2.png']);
+  });
+
+  test.each([
+    [{ starts_on: '2026-03-29', ends_on: '2026-01-05' }, 'cannot end before it starts'],
+    [{ starts_on: '2026-02-30' }, 'The start date must be a date'],
+    [{ ends_on: 'next spring' }, 'The end date must be a date'],
+    [{ cover_url: 'C:\\pictures\\cover.jpg' }, 'The cover must be a picture chosen from Files'],
+    [{ cover_url: 'javascript:alert(1)' }, 'The cover must be a picture chosen from Files'],
+    [{ phases: withPictures(FORM.phases, [null, 'data:image/png;base64,AAAA', null]) }, "Part 2's picture must be a picture chosen from Files"],
+  ])('Edit season refuses a wrong date order, a date that is not one, or a picture that is not a web address (%#)', async (extra, reason) => {
+    const show = await newShow();
+    await seedDirect(show);
+    const res = await edit(show, { ...FORM, ...extra });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toContain(reason);
+    const [arc] = await rows('SELECT cover_url, starts_on, ends_on, phases FROM show_arcs WHERE show_id = :show', { show });
+    expect([arc.cover_url, arc.starts_on, arc.ends_on]).toEqual([null, null, null]);
+    expect(arc.phases.every((p) => !p.picture_url)).toBe(true);
+  });
+
+  test('the date order is checked against the saved date the form leaves out', async () => {
+    const show = await newShow();
+    await seedDirect(show);
+    await edit(show, { ...FORM, starts_on: '2026-02-01' });
+    const res = await edit(show, { ...FORM, ends_on: '2026-01-15' });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toContain('cannot end before it starts');
+    expect((await edit(show, { ...FORM, ends_on: '2026-02-01' })).status).toBe(200); // the same day is fine
+  });
+
   // ── Season 2 ──────────────────────────────────────────────────────────
 
   test('after a season is complete, the next is Season 2 with its own slots and labels', async () => {

@@ -63,6 +63,9 @@ describe('Producer Mode shell', () => {
   // mock of 2026-10-17 (components/Show/ShowOverview.theme.test.js).
 
   test('cards keep their pink top edge and border', () => {
-    expect(jsx).toMatch(/card: \{[^}]*border: '1px solid var\(--accent-subtle\)', borderTop: '2px solid var\(--accent-light\)'/);
+    // The card style moved to components/Show/planStyles (PLAN_S, spread into S) with the Season page (2026-10-25).
+    const plan = readFileSync(resolve(__dirname, '../components/Show/planStyles.js'), 'utf8');
+    expect(plan).toMatch(/card: \{[^}]*border: '1px solid var\(--accent-subtle\)', borderTop: '2px solid var\(--accent-light\)'/);
+    expect(S.card).toMatchObject({ border: '1px solid var(--accent-subtle)', borderTop: '2px solid var(--accent-light)' });
   });
 });

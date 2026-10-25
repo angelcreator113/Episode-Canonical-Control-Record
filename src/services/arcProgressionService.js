@@ -68,10 +68,12 @@ async function seedArc(showId, models, { setup = null } = {}) {
       `INSERT INTO show_arcs (id, show_id, arc_number, title, tagline, description,
        season_number, episode_start, episode_end, phases, current_phase, status,
        narrative_debt, progression_log, emotional_temperature, icon, color,
+       cover_url, starts_on, ends_on, logline,
        created_at, updated_at)
        VALUES (:id, :showId, :arcNumber, :title, :tagline, :description,
        :seasonNumber, 1, 24, :phases, 1, 'active',
        '[]', :log, 'rising', '📖', '#B8962E',
+       :coverUrl, :startsOn, :endsOn, :logline,
        NOW(), NOW())`,
       { replacements: {
         id: arcId,
@@ -81,6 +83,11 @@ async function seedArc(showId, models, { setup = null } = {}) {
         title: chosen.title,
         tagline: chosen.tagline || null,
         description: chosen.description || null,
+        // The Season page's fields, when the form sent them (2026-10-25).
+        coverUrl: chosen.cover_url || null,
+        startsOn: chosen.starts_on || null,
+        endsOn: chosen.ends_on || null,
+        logline: chosen.logline || null,
         phases: JSON.stringify(phases),
         log: JSON.stringify([{
           from_phase: null, to_phase: 1,

@@ -6,8 +6,15 @@
  */
 import { vi, describe, test, expect } from 'vitest';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
+
+vi.mock('../../services/api', () => ({
+  default: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn(), patch: vi.fn() },
+}));
+
+import api from '../../services/api';
 import {
-  SeasonSetupForm, SeasonPlacement, SeasonDraft, SeasonChecklist, setupSteps, splitProblem, splitRanges, defaultForm, formFromArc,
+  SeasonSetupForm, SeasonPlacement, SeasonDraft, SeasonChecklist, setupSteps, splitProblem, splitRanges, defaultForm, formFromArc, datesProblem,
 } from './SeasonSetup';
 
 describe('the split', () => {
@@ -26,7 +33,22 @@ describe('the split', () => {
       { title: 'A', tagline: 'a', episode_start: 1, episode_end: 6 },
       { title: 'B', episode_start: 7, episode_end: 16 },
       { title: 'C', episode_start: 17, episode_end: 24 },
-    ] })).toEqual({ title: 'T', tagline: '', phases: [{ title: 'A', tagline: 'a' }, { title: 'B', tagline: '' }, { title: 'C', tagline: '' }], split: [6, 10, 8] });
+    ] })).toEqual({
+      title: 'T', tagline: '', logline: '', description: '', starts_on: '', ends_on: '', cover_url: null,
+      phases: [{ title: 'A', tagline: 'a', picture_url: null }, { title: 'B', tagline: '', picture_url: null }, { title: 'C', tagline: '', picture_url: null }],
+      split: [6, 10, 8],
+    });
+  });
+  test("the Season page's fields read back for Edit (2026-10-25)", () => {
+    const form = formFromArc({
+      title: 'T', logline: 'L', description: 'D', starts_on: '2026-01-05', ends_on: '2026-03-29', cover_url: 'https://x/c.jpg',
+      phases: [{ title: 'A', picture_url: 'https://x/a.jpg', episode_start: 1, episode_end: 8 }, { title: 'B', episode_start: 9, episode_end: 16 }, { title: 'C', episode_start: 17, episode_end: 24 }],
+    });
+    expect([form.logline, form.description, form.starts_on, form.ends_on, form.cover_url, form.phases[0].picture_url, form.phases[1].picture_url])
+      .toEqual(['L', 'D', '2026-01-05', '2026-03-29', 'https://x/c.jpg', 'https://x/a.jpg', null]);
+    expect(datesProblem('2026-02-01', '2026-01-31')).toBe('The season cannot end before it starts.');
+    expect(datesProblem('2026-02-01', '2026-02-01')).toBeNull();
+    expect(datesProblem('', '2026-02-01')).toBeNull();
   });
 });
 
@@ -46,7 +68,12 @@ describe('Set up the season form', () => {
     fireEvent.click(screen.getByTestId('sst-submit'));
     await waitFor(() => expect(onSubmit).toHaveBeenCalledWith({
       title: 'Velvet Season', tagline: 'Her own room',
-      phases: [{ title: 'Foundation', tagline: 'Prove you belong' }, { title: 'Rooms', tagline: 'Climb the ladder' }, { title: 'Legacy', tagline: 'Become uncopyable' }],
+      logline: '', description: '', starts_on: null, ends_on: null, cover_url: null,
+      phases: [
+        { title: 'Foundation', tagline: 'Prove you belong', picture_url: null },
+        { title: 'Rooms', tagline: 'Climb the ladder', picture_url: null },
+        { title: 'Legacy', tagline: 'Become uncopyable', picture_url: null },
+      ],
       split: [6, 10, 8],
     }));
   });
@@ -69,6 +96,71 @@ describe('Set up the season form', () => {
     fireEvent.change(screen.getByTestId('sst-split-2'), { target: { value: '8' } });
     fireEvent.click(screen.getByTestId('sst-submit'));
     expect((await screen.findByTestId('sst-error')).textContent).toContain('E7 ("The Gallery") has started in Part 2');
+  });
+});
+
+describe("Edit season: the Season page's fields (2026-10-25)", () => {
+  const ASSETS = [
+    { id: 'a1', name: 'Rooftop dusk', media_type: 'image', s3_url_processed: 'https://cdn.example.com/rooftop.jpg', metadata: { thumbnail_url: 'https://cdn.example.com/rooftop-t.jpg' } },
+    { id: 'a2', name: 'Theme song', media_type: 'audio', s3_url_raw: 'https://cdn.example.com/song.mp3' },
+    { id: 'a3', name: 'Atelier', content_type: 'image/png', s3_url_raw: 'https://cdn.example.com/atelier.png' },
+  ];
+  const ARC_FORM = formFromArc({
+    title: 'Soft Luxury Ascension', tagline: 'Lala earns her place', starts_on: '2026-01-05', ends_on: '2026-03-29', cover_url: null,
+    phases: [{ title: 'Foundation', episode_start: 1, episode_end: 8 }, { title: 'Ascension', episode_start: 9, episode_end: 16 }, { title: 'Legacy', episode_start: 17, episode_end: 24 }],
+  });
+  const renderEdit = (onSubmit) => render(
+    <MemoryRouter><SeasonSetupForm mode="edit" showId="show-1" seasonNumber={1} initial={ARC_FORM} onSubmit={onSubmit} onCancel={vi.fn()} /></MemoryRouter>,
+  );
+
+  test('logline, description, dates, a cover and a part picture chosen from Files are sent', async () => {
+    vi.mocked(api.get).mockReset().mockResolvedValue({ data: { data: ASSETS } });
+    const onSubmit = vi.fn().mockResolvedValue({});
+    renderEdit(onSubmit);
+    expect(screen.getByTestId('sst-starts-on').value).toBe('2026-01-05');
+    fireEvent.change(screen.getByTestId('sst-logline'), { target: { value: 'Lala earns her place in the luxury tier.' } });
+    fireEvent.change(screen.getByTestId('sst-description'), { target: { value: 'From bold fits to bigger opportunities.' } });
+    fireEvent.click(screen.getByTestId('sst-picture-open-Cover'));
+    const list = await screen.findByTestId('sst-picture-list-Cover');
+    // Images only, from the show's files.
+    expect(api.get).toHaveBeenCalledWith('/api/v1/assets?show_id=show-1');
+    expect(within(list).getAllByRole('button').map((b) => b.getAttribute('aria-label'))).toEqual(['Use Rooftop dusk for the cover', 'Use Atelier for the cover']);
+    fireEvent.click(within(list).getByLabelText('Use Rooftop dusk for the cover'));
+    expect(screen.getByAltText('Cover: chosen').getAttribute('src')).toBe('https://cdn.example.com/rooftop.jpg');
+    fireEvent.click(screen.getByTestId('sst-picture-open-Part 2 picture'));
+    fireEvent.click(within(await screen.findByTestId('sst-picture-list-Part 2 picture')).getByLabelText('Use Atelier for the part 2 picture'));
+    fireEvent.click(screen.getByTestId('sst-submit'));
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
+      logline: 'Lala earns her place in the luxury tier.', description: 'From bold fits to bigger opportunities.',
+      starts_on: '2026-01-05', ends_on: '2026-03-29', cover_url: 'https://cdn.example.com/rooftop.jpg',
+      phases: [
+        expect.objectContaining({ title: 'Foundation', picture_url: null }),
+        expect.objectContaining({ title: 'Ascension', picture_url: 'https://cdn.example.com/atelier.png' }),
+        expect.objectContaining({ title: 'Legacy', picture_url: null }),
+      ],
+    })));
+  });
+
+  test('an end before the start cannot be sent; Remove clears a picture', async () => {
+    vi.mocked(api.get).mockReset().mockResolvedValue({ data: { data: ASSETS } });
+    const onSubmit = vi.fn().mockResolvedValue({});
+    renderEdit(onSubmit);
+    fireEvent.change(screen.getByTestId('sst-ends-on'), { target: { value: '2026-01-01' } });
+    expect(screen.getByTestId('sst-missing').textContent).toBe('The season cannot end before it starts.');
+    expect(screen.getByTestId('sst-submit').disabled).toBe(true);
+    fireEvent.change(screen.getByTestId('sst-ends-on'), { target: { value: '' } });
+    fireEvent.click(screen.getByTestId('sst-picture-open-Cover'));
+    fireEvent.click(within(await screen.findByTestId('sst-picture-list-Cover')).getByLabelText('Use Atelier for the cover'));
+    fireEvent.click(screen.getByLabelText('Remove the cover'));
+    fireEvent.click(screen.getByTestId('sst-submit'));
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ cover_url: null, ends_on: null })));
+  });
+
+  test('Files that could not be read say so', async () => {
+    vi.mocked(api.get).mockReset().mockRejectedValue(Object.assign(new Error('x'), { response: { data: { error: 'Assets are down' } } }));
+    renderEdit(vi.fn());
+    fireEvent.click(screen.getByTestId('sst-picture-open-Cover'));
+    expect((await screen.findByRole('alert')).textContent).toBe('Assets are down');
   });
 });
 

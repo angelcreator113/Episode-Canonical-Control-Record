@@ -15,8 +15,24 @@ describe('the setup form', () => {
       title: 'Velvet', tagline: null, description: null,
       phases: [{ title: 'A', tagline: 'a' }, { title: 'B', tagline: null }, { title: 'C', tagline: null }],
       split: [6, 10, 8],
+      page_fields: [],
     });
     expect(normaliseSetup({ ...FORM, split: undefined }).split).toEqual([8, 8, 8]);
+  });
+  test("the Season page's fields: only those sent, checked (2026-10-25)", () => {
+    const out = normaliseSetup({
+      ...FORM, cover_url: ' https://x.example.com/c.jpg ', starts_on: '2026-01-05', ends_on: '2026-01-05', logline: '  A line. ',
+      phases: [{ title: 'A', picture_url: 'https://x.example.com/a.jpg' }, { title: 'B', picture_url: '' }, { title: 'C' }],
+    });
+    expect(out).toEqual(expect.objectContaining({
+      cover_url: 'https://x.example.com/c.jpg', starts_on: '2026-01-05', ends_on: '2026-01-05', logline: 'A line.',
+      page_fields: ['cover_url', 'starts_on', 'ends_on', 'logline'],
+    }));
+    expect(out.phases.map((p) => p.picture_url)).toEqual(['https://x.example.com/a.jpg', null, undefined]);
+    expect(buildPhases(out).map((p) => p.picture_url)).toEqual(['https://x.example.com/a.jpg', undefined, undefined]);
+    expect(() => normaliseSetup({ ...FORM, starts_on: '2026-02-02', ends_on: '2026-02-01' })).toThrow('cannot end before it starts');
+    expect(() => normaliseSetup({ ...FORM, ends_on: '2026-13-01' })).toThrow('The end date must be a date');
+    expect(() => normaliseSetup({ ...FORM, cover_url: 'ftp://x/c.jpg' })).toThrow('chosen from Files');
   });
   test.each([
     [[8, 8, 7], 'these add up to 23'],

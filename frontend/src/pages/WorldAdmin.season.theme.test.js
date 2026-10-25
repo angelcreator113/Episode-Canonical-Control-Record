@@ -32,7 +32,10 @@ const slice = (text, start, end, from = 0) => {
 // The goals block is the second season-sub-tab block (the first mounts SeasonTab).
 const firstSeason = jsx.indexOf("{activeTab === 'episodes' && subTab === 'season' && (");
 const goals = slice(jsx, "{activeTab === 'episodes' && subTab === 'season' && (", "{activeTab === 'wardrobe' && subTab === 'scene-sets' && (", firstSeason + 1);
-const season = slice(jsx, 'function BalanceTrend', 'function OpportunitiesTab');
+// SeasonTab and its helpers live in components/Show/SeasonPlan.jsx since the
+// Season page (2026-10-25), which draws the same pieces.
+const plan = readFileSync(resolve(__dirname, '../components/Show/SeasonPlan.jsx'), 'utf8');
+const season = plan.slice(plan.indexOf('export function BalanceTrend'));
 
 describe('Season Plan theme', () => {
   test('the goals block and SeasonTab with its helpers set colors only through tokens', () => {
@@ -68,7 +71,7 @@ describe('Season Plan theme', () => {
     expect(season).toMatch(/active: \{ bg: 'var\(--success-bg\)', color: 'var\(--success-text\)', border: 'var\(--success-border\)' \}/);
     expect(season).toMatch(/upcoming: \{ bg: 'var\(--lala-gold-soft\)', color: 'var\(--lala-gold-text\)', border: 'var\(--lala-gold-line\)' \}/);
     // The slot statuses are named in the JSX and coloured in WorldAdmin.css (the Season Arc redesign).
-    expect(jsx).toMatch(/const SLOT_STATE_LABEL = \{ done: 'Done', in_production: 'In production', event_ready: 'Event pencilled', needs_event: 'Open' \};/);
+    expect(plan).toMatch(/const SLOT_STATE_LABEL = \{ done: 'Done', in_production: 'In production', event_ready: 'Event pencilled', needs_event: 'Open' \};/);
     expect(css).toMatch(/\.wa-arc-slot\.state-done \.wa-arc-slot-state \{ color: var\(--lala-lavender-text\); \}/);
     expect(css).toMatch(/\.wa-arc-slot\.state-in_production \.wa-arc-slot-state \{ color: var\(--accent-dark\); \}/);
     expect(css).toMatch(/\.wa-arc-slot\.state-event_ready \.wa-arc-slot-state \{ color: var\(--warning-text\); \}/);
@@ -129,7 +132,7 @@ describe('Season Plan, tidied (Evoni, 2026-10-17)', () => {
   test('one advance control (at the phase boundary), and the phases, history and Career Goals folded', () => {
     expect(season).not.toMatch(/Phase Controls<\/h3>/);
     expect(season).not.toMatch(/Advance Warning/);
-    expect(jsx).toMatch(/data-testid="season-phases-fold"/);
+    expect(plan).toMatch(/data-testid="season-phases-fold"/);
     expect(jsx).toMatch(/data-testid="career-goals-fold"/);
     expect(jsx).toMatch(/\{goals\.length === 0 && <button[^>]*>/);
     expect(css).toMatch(/\.wa-season-fold-summary \{/);
