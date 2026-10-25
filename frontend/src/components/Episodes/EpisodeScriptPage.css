@@ -123,6 +123,10 @@
 .esp-dot { flex-shrink: 0; width: 9px; height: 9px; border-radius: 50%; background: var(--studio-ok); transform: translateY(1px); }
 .esp-uses-list .is-gap .esp-dot { background: var(--warning); }
 .esp-uses-note { margin: 12px 0 0; font-size: 12px; color: var(--studio-ink-muted); }
+/* Her goal this episode (2026-10-25), under what the script will use. */
+.esp-her-goal { margin: 12px 0; padding: 8px 10px; border-left: 3px solid var(--warning); border-radius: 6px; font-size: 13px; line-height: 1.45; color: var(--studio-ink-muted); overflow-wrap: anywhere; }
+.esp-her-goal.is-ok { border-left-color: var(--studio-purple); }
+.esp-her-goal strong { color: var(--studio-ink); }
 .esp-link { font-size: 14px; font-weight: 600; color: var(--studio-magenta); text-decoration: none; }
 .esp-link:hover { text-decoration: underline; }
 
