@@ -15,7 +15,7 @@ import { blockedReasons } from '../../lib/eventFlow';
 
 export default function EventIdentitySection({
   showId, event, basics, used, organizer, invitationAsset, nameDraft, reloadTick, fold, editor, names, ai,
-  invitationApprovalInfo, setInvitationApprovalInfo, invitationRegenSignal, load, openOrganizerPicker = null,
+  invitationApprovalInfo, setInvitationApprovalInfo, invitationRegenSignal, load, openOrganizerPicker = null, hints = null,
 }) {
   const { toFillShown, openBasicsEditor, basicsSaving, startFillIn } = editor;
   const {
@@ -59,6 +59,8 @@ export default function EventIdentitySection({
         <EventBasicsRow fieldKey="category" basics={basics} used={used} editor={editor} />
         <EventBasicsRow fieldKey="format" basics={basics} used={used} editor={editor} />
       </dl>
+      {/* The host's usual dress code and the same-day clash (EventFieldHints). */}
+      {hints}
 
       {toFillShown.length > 0 && (
         <div className="epp-to-fill" data-testid="basics-to-fill">
