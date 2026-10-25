@@ -21,7 +21,9 @@ const routeSrc = nodeRequire('fs').readFileSync(
   nodeRequire('path').resolve(nodeRequire('path').dirname(new URL(import.meta.url).pathname), '../../../src/routes/worldEvents/update.js'),
   'utf8'
 );
-const putBlock = routeSrc.slice(routeSrc.indexOf("router.put('/world/:showId/events/:eventId'"));
+// From the allowlist on: it sits just above the PUT since it is exported
+// (Fill what's missing drafts only fields on it, 2026-10-25).
+const putBlock = routeSrc.slice(routeSrc.indexOf('const allowedFields = ['));
 const listOf = (name) => {
   const m = putBlock.match(new RegExp(`const ${name} = (?:new Set\\()?\\[([\\s\\S]*?)\\]`));
   return [...m[1].matchAll(/'([a-z_]+)'/g)].map((x) => x[1]);

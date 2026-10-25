@@ -35,6 +35,7 @@ async function getStylePrefix(showId, models) {
 }
 
 // ── GET ALL OVERLAY TYPES (DB-only) ─────────────────────────────────────────
+// Throws (code PHONE_TYPES_READ) when the types can't be read.
 
 async function getAllOverlayTypes(showId, models) {
   try {
@@ -60,8 +61,12 @@ async function getAllOverlayTypes(showId, models) {
       custom_id: r.id,
     }));
   } catch (err) {
+    // A failed read is an error, not a phone with no screens (phone round
+    // step 1, D4): an empty list answered GET /ui-overlays/:showId with
+    // success and an empty phone. Callers that can go on without the list
+    // (the script writers) catch it themselves.
     console.error('[UIOverlay] getAllOverlayTypes failed:', err.message);
-    return [];
+    throw Object.assign(new Error(`Could not read the phone's screens: ${err.message}`), { code: 'PHONE_TYPES_READ' });
   }
 }
 

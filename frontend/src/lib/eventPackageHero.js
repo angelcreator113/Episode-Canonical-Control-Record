@@ -87,19 +87,22 @@ export function readinessHeadline(readiness, extraWarnings = 0) {
   return w ? `Ready · ${w} warning${w === 1 ? '' : 's'} to review` : 'Ready';
 }
 
-/** The page's sections, in order, as the "On this page" menu lists them; which readiness sections each covers. */
+/**
+ * The page's sections, in order, as the "On this page" menu lists them; which readiness sections each covers.
+ * `short`: the phone's jump bar name (Evoni, 2026-10-25: "Basics · People · Place · Look · Deal · Stakes").
+ */
 export const PAGE_SECTIONS = [
   // The invitation sits beside The Event's fields (the redesign's part 2).
-  { anchor: 'identity', label: 'The Event', covers: ['identity', 'invitation'] },
-  { anchor: 'people', label: 'People', covers: ['organizer', 'people'] },
-  { anchor: 'place', label: 'Place', covers: ['place'] },
-  { anchor: 'look', label: "Lala's Look", covers: ['look'] },
+  { anchor: 'identity', label: 'The Event', short: 'Basics', covers: ['identity', 'invitation'] },
+  { anchor: 'people', label: 'People', short: 'People', covers: ['organizer', 'people'] },
+  { anchor: 'place', label: 'Place', short: 'Place', covers: ['place'] },
+  { anchor: 'look', label: "Lala's Look", short: 'Look', covers: ['look'] },
   // Part 3: the terms and the money, the story stakes, the planning notes.
-  { anchor: 'deal', label: 'Deal & Money', covers: [] },
-  { anchor: 'stakes', label: 'Story Stakes', covers: ['stakes'] },
+  { anchor: 'deal', label: 'Deal & Money', short: 'Deal', covers: [] },
+  { anchor: 'stakes', label: 'Story Stakes', short: 'Stakes', covers: ['stakes'] },
   // The in-world documents beside the invitation (Evoni, 2026-10-06).
-  { anchor: 'documents', label: 'In-world documents', covers: [] },
-  { anchor: 'concept', label: 'Behind the Scenes', covers: [], optional: true },
+  { anchor: 'documents', label: 'In-world documents', short: 'Papers', covers: [] },
+  { anchor: 'concept', label: 'Behind the Scenes', short: 'Notes', covers: [], optional: true },
 ];
 
 const RANK = { complete: 0, warning: 1, blocking: 2 };

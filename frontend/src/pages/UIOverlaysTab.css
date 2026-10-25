@@ -375,6 +375,23 @@
 .overlays-load-state.is-error { color: var(--lala-danger); border-color: currentColor; }
 .overlays-load-state.is-error .ph-btn { color: var(--lala-ink); }
 
+/* Missions that need a screen the phone doesn't have (phone round step 1). */
+.ph-mission-health {
+  margin: 8px 0 0;
+  padding: 10px 14px;
+  font-size: 13px;
+  color: var(--lala-ink);
+  background: var(--surface-card, #fff);
+  border: 1px solid var(--lala-danger);
+  border-left-width: 4px;
+  border-radius: 10px;
+}
+.ph-mission-health__title { margin: 0 0 4px; font-weight: 600; color: var(--lala-danger); }
+.ph-mission-health__list { margin: 0; padding-left: 18px; }
+.ph-mission-health__list li { margin: 2px 0; overflow-wrap: anywhere; }
+.ph-mission-health__link { color: var(--lala-lavender, #5B4B8A); white-space: nowrap; }
+.ph-mission-health__more { margin: 4px 0 0; color: var(--lala-ink-muted); }
+
 /* ── Docked Editor Panel ──
    Desktop: docks to the right edge of the viewport, no scrim — the
    phone hub behind it stays visible and interactive (side-by-side feel).

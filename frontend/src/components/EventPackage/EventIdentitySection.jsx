@@ -1,26 +1,28 @@
 /**
  * EventIdentitySection — section 1, The Event: the name (and Suggest
- * names), the Basics rows, Still to fill with Fill in, Suggest with AI and
- * its review, and the invitation beside them.
+ * names), the Basics rows, Still to fill with Fill in, a pointer to Fill
+ * what's missing (the page's AI drafts, under the header; it replaced this
+ * section's Suggest with AI, Evoni 2026-10-25), and the invitation beside
+ * them.
  * Moved out of EventPackagePage.jsx when the page was split (Task #54);
  * the markup and class names are as they were.
  */
-import { Sparkles, Pencil, Loader2, AlertCircle, RefreshCw, X } from 'lucide-react';
+import { Sparkles, Pencil, Loader2, AlertCircle, RefreshCw, X, ArrowUp } from 'lucide-react';
 import { InvitationButton } from '../../pages/InvitationGenerator';
-import SuggestReview from '../../pages/eventPackage/SuggestReview';
 import EventBasicsRow from './EventBasicsRow';
 import { BASICS_FIELDS, BASICS_ORDER, basicsStateLabel, basicsStateIcon } from '../../lib/eventPackageFields';
+import BlockedReason from './BlockedReason';
+import { blockedReasons } from '../../lib/eventFlow';
 
 export default function EventIdentitySection({
-  showId, event, basics, used, organizer, invitationAsset, nameDraft, reloadTick, fold, editor, names, ai,
-  invitationApprovalInfo, setInvitationApprovalInfo, invitationRegenSignal, load,
+  showId, event, basics, used, organizer, invitationAsset, nameDraft, reloadTick, fold, editor, names, aiPointer = null,
+  invitationApprovalInfo, setInvitationApprovalInfo, invitationRegenSignal, load, openOrganizerPicker = null, hints = null,
 }) {
   const { toFillShown, openBasicsEditor, basicsSaving, startFillIn } = editor;
   const {
     nameSuggestOpen, setNameSuggestOpen, nameSuggestions, nameSuggesting, nameSuggestError,
     customName, setCustomName, nameSaving, fetchNameSuggestions, openNameSuggest, saveEventName,
   } = names;
-  const { aiSuggest, suggestSaving, askAiSuggestions, closeAiSuggestions, saveCheckedSuggestions } = ai;
   const NameStateIcon = nameDraft ? basicsStateIcon(nameDraft) : null;
   return (
     <section id="epp-sec-identity" className={fold.cls('identity')}>
@@ -57,6 +59,8 @@ export default function EventIdentitySection({
         <EventBasicsRow fieldKey="category" basics={basics} used={used} editor={editor} />
         <EventBasicsRow fieldKey="format" basics={basics} used={used} editor={editor} />
       </dl>
+      {/* The host's usual dress code and the same-day clash (EventFieldHints). */}
+      {hints}
 
       {toFillShown.length > 0 && (
         <div className="epp-to-fill" data-testid="basics-to-fill">
@@ -86,33 +90,15 @@ export default function EventIdentitySection({
         </div>
       )}
 
-      {/* Suggest with AI (Evoni, 2026-10-23): one ask for the empty
-          fields, reviewed before anything is saved. */}
-      {!used && (
-        <div className="epp-ai-suggest">
-          {aiSuggest.status !== 'review' && (
-            <button
-              type="button" className="epp-btn epp-btn-small epp-ai-suggest-btn" data-testid="ai-suggest"
-              onClick={askAiSuggestions} disabled={aiSuggest.status === 'loading' || basicsSaving}
-              aria-busy={aiSuggest.status === 'loading'}
-            >
-              {aiSuggest.status === 'loading'
-                ? <><Loader2 size={13} className="epp-spin-icon" aria-hidden="true" /> Asking AI…</>
-                : <><Sparkles size={13} aria-hidden="true" /> Suggest with AI</>}
-            </button>
-          )}
-          {aiSuggest.status === 'error' && (
-            <p className="epp-ai-suggest-error" role="alert" data-testid="ai-suggest-error">
-              <AlertCircle size={13} aria-hidden="true" /> {aiSuggest.error}
-            </p>
-          )}
-          {aiSuggest.status === 'review' && (
-            <SuggestReview
-              key={aiSuggest.n} rows={aiSuggest.rows} aiEmpty={aiSuggest.aiEmpty}
-              saving={suggestSaving} onSave={saveCheckedSuggestions} onCancel={closeAiSuggestions}
-            />
-          )}
-        </div>
+      {/* The AI drafts live in one place, Fill what's missing under the
+          header (Evoni, 2026-10-25: "Merge the Suggest with AI button into
+          Fill what's missing"); this line points there. */}
+      {!used && aiPointer && (
+        <p className="epp-ai-pointer">
+          <button type="button" className="epp-inline-link" data-testid="ai-pointer" onClick={aiPointer.onClick}>
+            <Sparkles size={12} aria-hidden="true" /> {aiPointer.label} <ArrowUp size={12} aria-hidden="true" />
+          </button>
+        </p>
       )}
 
       {nameSuggestOpen && (
@@ -172,7 +158,11 @@ export default function EventIdentitySection({
             it would read "A Special Host", so it waits for one. */}
         {!organizer.hasOrganizer && !invitationAsset ? (
           <div className="epp-empty" data-testid="invitation-needs-organizer">
-            Choose an organizer first — the invitation names them.
+            {/* Why it can't be made yet, and the step that unblocks it (2026-10-25). */}
+            <BlockedReason
+              reason={blockedReasons({ hasOrganizer: false, hasInvitation: false }).invitation}
+              onAction={openOrganizerPicker && !used ? () => openOrganizerPicker() : null} testId="blocked-invitation"
+            />
           </div>
         ) : (
           <InvitationButton key={`invitation-${reloadTick}`}
