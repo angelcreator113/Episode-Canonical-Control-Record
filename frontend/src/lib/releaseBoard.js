@@ -12,6 +12,7 @@
  * a held payout is not recorded.
  */
 import { rowDeltas, episodeTier } from './castContinuity';
+import { formatRelease } from './releaseSchedule';
 
 export const isReleased = (ep) => ep?.status === 'published';
 const isArchived = (ep) => ep?.status === 'archived';
@@ -27,9 +28,14 @@ export function nextRelease(episodes) {
 const platformEntries = (ep) => Object.entries(ep?.distribution_metadata || {})
   .filter(([key]) => key !== 'style_sheet').map(([, value]) => value);
 
-/** When the episode goes live: its air date, else the earliest platform schedule in its distribution. */
-export function goLive(ep) {
+/**
+ * When the episode goes live: its air date (set by hand), else its date from
+ * the show's release schedule (`row`, lib/releaseSchedule; a preview is not
+ * a date), else the earliest platform schedule in its distribution.
+ */
+export function goLive(ep, row = null) {
   if (ep?.air_date) return ep.air_date;
+  if (row?.date && row.source === 'schedule') return row.date;
   const times = platformEntries(ep)
     .map((p) => p?.scheduled_time).filter(Boolean).sort();
   return times[0] || null;
@@ -54,7 +60,7 @@ const copyWritten = (ep) => platformEntries(ep)
  * The next release's checklist: [{ key, label, state: 'ready'|'progress'|'todo', text }].
  * posts is the episode's feed posts, or null while they load.
  */
-export function readiness(ep, posts) {
+export function readiness(ep, posts, row = null) {
   const status = ep?.status || 'draft';
   const cut = status === 'published' || status === 'in_review'
     ? { state: 'ready', text: status === 'in_review' ? 'In review' : 'Released' }
@@ -73,13 +79,15 @@ export function readiness(ep, posts) {
     const drafts = posts.length - live;
     feed = { state: 'ready', text: [drafts && `${drafts} draft${drafts === 1 ? '' : 's'}`, live && `${live} live`].filter(Boolean).join(' · ') };
   }
-  const when = goLive(ep);
+  const when = goLive(ep, row);
+  // With a release schedule, the date carries its time ("Sun, Nov 1 · 10:00 AM").
+  const whenText = row?.date && row.source !== 'preview' ? formatRelease(row) : formatWhen(when);
   return [
     { key: 'cut', label: 'Final cut', ...cut },
     { key: 'thumbnail', label: 'Thumbnail', ...(ep?.thumbnail_url ? { state: 'ready', text: 'Ready' } : { state: 'todo', text: 'Missing' }) },
     { key: 'copy', label: 'Title & copy', ...words },
     { key: 'feed', label: 'Pulse posts', ...feed },
-    { key: 'schedule', label: 'Schedule', ...(when ? { state: 'ready', text: formatWhen(when) } : { state: 'todo', text: 'Not set' }) },
+    { key: 'schedule', label: 'Schedule', ...(when ? { state: 'ready', text: whenText } : { state: 'todo', text: 'Not set' }) },
   ];
 }
 
@@ -92,13 +100,14 @@ export const POST_TIMING = {
   week_later: 'A week later',
 };
 
-/** The episodes ahead, in order, each with its date and where it stands. */
-export function releaseCalendar(episodes, limit = 4) {
+/** The episodes ahead, in order, each with its date, its schedule row (rowsById, lib/releaseSchedule) and where it stands. */
+export function releaseCalendar(episodes, limit = 4, rowsById = {}) {
   return [...(episodes || [])].filter((e) => !isReleased(e) && !isArchived(e)).sort(byNumber).slice(0, limit)
     .map((ep) => {
-      const when = goLive(ep);
+      const row = rowsById?.[ep.id] || null;
+      const when = goLive(ep, row);
       const state = when ? 'Scheduled' : ['in_build', 'in_review'].includes(ep.status) ? 'In production' : ep.status === 'scripted' ? 'Scripted' : 'No date yet';
-      return { ep, when, state };
+      return { ep, when, state, row };
     });
 }
 

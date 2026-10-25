@@ -355,12 +355,20 @@ async function generateDistribution(episodeId, showId, sequelize, options = {}) 
 
 // ─── SAVE SHOW DISTRIBUTION DEFAULTS ─────────────────────────────────────────
 
+// The release schedule (services/releaseSchedule) is written only by its own
+// route, so saving the platform defaults keeps the stored one: a Distribution
+// tab loaded before the schedule was saved cannot put back an old one.
 async function saveShowDefaults(showId, defaults, sequelize) {
+  const { release_schedule: _ignored, ...platforms } = defaults && typeof defaults === 'object' ? defaults : {};
   await sequelize.query(
-    `UPDATE shows SET distribution_defaults = :defaults, updated_at = NOW() WHERE id = :showId`,
-    { replacements: { defaults: JSON.stringify(defaults), showId } }
+    `UPDATE shows SET distribution_defaults = CAST(:defaults AS jsonb)
+            || CASE WHEN jsonb_typeof(distribution_defaults) = 'object' AND distribution_defaults -> 'release_schedule' IS NOT NULL
+                    THEN jsonb_build_object('release_schedule', distribution_defaults -> 'release_schedule') ELSE '{}'::jsonb END,
+            updated_at = NOW()
+      WHERE id = :showId`,
+    { replacements: { defaults: JSON.stringify(platforms), showId } }
   );
-  return defaults;
+  return platforms;
 }
 
 module.exports = {

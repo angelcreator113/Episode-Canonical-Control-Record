@@ -8,6 +8,9 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../../services/api';
 import { nextRelease, goLive, formatWhen, readiness, POST_TIMING, releaseCalendar, releasedResults } from '../../lib/releaseBoard';
+import { useReleaseSchedule, whenText, deadlineWarning, formatDay, errorText } from '../../lib/releaseSchedule';
+import ReleaseScheduleEditor from './ReleaseScheduleEditor';
+import './ReleaseSchedule.css';
 
 const STAT_LABEL = { reputation: 'Reputation', brand_trust: 'Brand Trust', influence: 'Influence', stress: 'Stress' };
 const signed = (n) => `${n > 0 ? '+' : ''}${Number(n).toLocaleString()}`;
@@ -32,13 +35,60 @@ function useNextRelease(episodeId) {
   return { full, posts };
 }
 
-export default function ReleaseBoard({ showId, episodes = [], history = [] }) {
+/**
+ * An episode's own date on the calendar: change it by hand, or (when it was
+ * set by hand and there is a schedule) hand it back to the schedule.
+ */
+function EpisodeDate({ ep, row, hasSchedule, onSet }) {
+  const [editing, setEditing] = useState(false);
+  const [error, setError] = useState(null);
+  const n = ep.episode_number ?? '?';
+  const set = async (day) => {
+    setError(null);
+    try { await onSet(ep.id, day); setEditing(false); } catch (err) {
+      console.error('[ReleaseBoard] episode date failed:', err);
+      setError(errorText(err));
+    }
+  };
+  const hand = row?.source === 'hand';
+  return (
+    <span className="rsch-ep" data-testid={`release-date-${ep.id}`}>
+      {hand && hasSchedule && <span className="rsch-tag">Set by hand</span>}
+      {editing ? (
+        <input type="date" aria-label={`Episode ${n} release date`} defaultValue={hand ? row.date : (row?.date || '')}
+          onChange={(e) => { if (e.target.value) set(e.target.value); }} data-testid={`release-date-input-${ep.id}`} />
+      ) : (
+        <button type="button" className="rsch-link" onClick={() => setEditing(true)} data-testid={`release-date-change-${ep.id}`}>Change date</button>
+      )}
+      {hand && hasSchedule && (
+        <button type="button" className="rsch-link" onClick={() => set(null)} data-testid={`release-date-back-${ep.id}`}>Back to the schedule</button>
+      )}
+      {editing && <button type="button" className="rsch-link" onClick={() => setEditing(false)}>Cancel</button>}
+      {error && <span className="rsch-error" role="alert">{error}</span>}
+    </span>
+  );
+}
+
+export default function ReleaseBoard({ showId, episodes: listedEpisodes = [], history = [] }) {
+  const rs = useReleaseSchedule({ api, showId });
+  // Once the schedule loads, its rows are the dates (the list's air_date can
+  // be stale after a date is changed here).
+  const dated = (e) => {
+    const row = e && rs.view ? rs.rowsById[e.id] : null;
+    return row ? { ...e, air_date: row.source === 'hand' ? row.date : null } : e;
+  };
+  const episodes = listedEpisodes.map(dated);
   const listed = nextRelease(episodes);
   const { full, posts } = useNextRelease(listed?.id || null);
-  const ep = full && full.id === listed?.id ? { ...listed, ...full } : listed;
+  const ep = full && full.id === listed?.id ? dated({ ...listed, ...full }) : listed;
+  const row = ep ? rs.rowsById[ep.id] || null : null;
   // The calendar reads the next episode's full row too, so its date matches the card's.
-  const calendar = releaseCalendar(episodes.map((e) => (e.id === ep?.id ? ep : e)));
+  const calendar = releaseCalendar(episodes.map((e) => (e.id === ep?.id ? ep : e)), 4, rs.rowsById);
   const results = releasedResults(episodes, history);
+  const ready = ep ? readiness(ep, posts, row) : [];
+  const warning = deadlineWarning(row, ready);
+  const hasSchedule = Boolean(rs.view?.schedule);
+  const nextWhen = row?.date ? whenText(row) : goLive(ep) ? formatWhen(goLive(ep)) : null;
 
   return (
     <div className="wa-rel" data-testid="release-board">
@@ -46,6 +96,8 @@ export default function ReleaseBoard({ showId, episodes = [], history = [] }) {
         <h2>Release</h2>
         <p>Getting finished episodes out the door, and onto The Pulse</p>
       </div>
+
+      <ReleaseScheduleEditor rs={rs} />
 
       {ep ? (
         <section className="wa-rel-next" data-testid="release-next" aria-label="Next release">
@@ -56,9 +108,12 @@ export default function ReleaseBoard({ showId, episodes = [], history = [] }) {
           <div className="wa-rel-next-body">
             <span className="wa-rel-eyebrow">Next release</span>
             <h3>Episode {ep.episode_number ?? '?'} · {ep.title || 'Untitled'}</h3>
-            <p className="wa-rel-when">{goLive(ep) ? `Goes live ${formatWhen(goLive(ep))}` : 'No go-live date yet'}</p>
+            <p className="wa-rel-when" data-testid="release-next-when">
+              {nextWhen ? (row?.source === 'preview' ? `Not releasing yet · ${nextWhen}` : `Goes live ${nextWhen}`) : 'No go-live date yet'}
+            </p>
+            {warning && <p className={`rsch-warn is-${warning.tone}`} role="status" data-testid="release-deadline">{warning.text}</p>}
             <ul className="wa-rel-ready">
-              {readiness(ep, posts).map((r) => (
+              {ready.map((r) => (
                 <li key={r.key} className={`state-${r.state}`} data-testid={`release-ready-${r.key}`}>
                   <strong>{r.label}</strong>
                   <span>{r.text}</span>
@@ -106,16 +161,21 @@ export default function ReleaseBoard({ showId, episodes = [], history = [] }) {
           <div className="wa-rel-card-head"><h2>Release calendar</h2></div>
           {calendar.length ? (
             <ol>
-              {calendar.map(({ ep: e, when, state }) => {
-                const d = when ? formatWhen(when).split(/,? /) : null;
+              {calendar.map(({ ep: e, when, state, row: r }) => {
+                // The schedule's day ("Sun, Nov 1" → Nov / 1), a preview faded; else the old date.
+                const day = r?.date ? formatDay(r.date).split(/,? /) : null;
+                const d = day ? [day[1], day[2]] : when ? formatWhen(when).split(/,? /) : null;
+                const text = r?.date ? (r.source === 'preview' ? `Not releasing yet · ${whenText(r)}` : `${state} · ${whenText(r)}`)
+                  : when ? `${state} · ${formatWhen(when)}` : state;
                 return (
-                  <li key={e.id}>
-                    <span className={`wa-rel-date${when ? '' : ' none'}`} aria-hidden="true">
+                  <li key={e.id} data-testid={`release-cal-${e.id}`}>
+                    <span className={`wa-rel-date${d ? '' : ' none'}${r?.source === 'preview' ? ' is-preview' : ''}`} aria-hidden="true">
                       {d ? <><small>{d[0]}</small>{d[1]}</> : '—'}
                     </span>
                     <span className="wa-rel-cal-text">
                       <Link to={`/episodes/${e.id}`}>Episode {e.episode_number ?? '?'}</Link>
-                      <span>{when ? `${state} · ${formatWhen(when)}` : state}</span>
+                      <span>{text}</span>
+                      {rs.view && <EpisodeDate ep={e} row={r} hasSchedule={hasSchedule} onSet={rs.setEpisodeDate} />}
                     </span>
                   </li>
                 );
