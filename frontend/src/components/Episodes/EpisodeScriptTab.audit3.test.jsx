@@ -138,6 +138,8 @@ describe('a rewrite keeps to its own line', () => {
     renderTab(DUP);
     const beat = screen.getByTestId('script-beat-1');
     fireEvent.click(within(beat).getAllByRole('button', { name: /^Rewrite line:/ })[2]);
+    // The line's panel opens; its Rewrite asks (2026-10-25).
+    fireEvent.click(screen.getByTestId('script-rewrite-go'));
     fireEvent.click(within(beat).getByText(/Middle/));
     fireEvent.click(screen.getByTestId('script-line-delete'));
     // The spinner stays on the line being rewritten, now the second row.

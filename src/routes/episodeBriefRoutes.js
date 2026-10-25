@@ -745,12 +745,37 @@ router.post('/:episodeId/regenerate-beat', requireAuth, aiRateLimiter, async (re
 
 // ── REWRITE SINGLE LINE (with Show Brain voice DNA) ───────────────────────────
 
-// A line rewrite is a side call, on Haiku 4.5 (CLAUDE.md: Haiku for side calls).
-const REWRITE_MODELS = ['claude-haiku-4-5-20251001'];
+// Three versions of the line, each from its own angle (Evoni, 2026-10-25:
+// "When I ask the script to rewrite it's basically writing the same
+// thing."): Tighter, Punchier and New angle, in strict JSON, with a
+// direction chip and her note when she gives them, her other lines as the
+// voice to write in, and a must-differ rule the route checks
+// (utils/rewriteLineVersions). On Sonnet, as the writing routes are
+// (CLAUDE.md); the call goes through the SDK aiCostTracker patches, so it is
+// logged and budget-gated like every other.
+const MODELS = ['claude-sonnet-4-6'];
+const REWRITE_MAX_TOKENS = 700;
+
+/** One call, two attempts; a refused budget or a rate limit is not tried again. */
+async function askRewrite(client, prompt) {
+  for (const model of MODELS) {
+    for (let attempt = 1; attempt <= 2; attempt += 1) {
+      try {
+        const response = await client.messages.create({ model, max_tokens: REWRITE_MAX_TOKENS, messages: [{ role: 'user', content: prompt }] });
+        return (response?.content || []).filter((b) => b && (b.type === 'text' || b.type === undefined) && typeof b.text === 'string').map((b) => b.text).join('').trim();
+      } catch (modelErr) {
+        console.error(`[RewriteLine] ${model} attempt ${attempt} failed:`, modelErr.message);
+        if (modelErr?.code === 'AI_BUDGET_EXCEEDED' || modelErr?.status === 429 || (model === MODELS[MODELS.length - 1] && attempt === 2)) throw modelErr;
+      }
+    }
+  }
+  throw new Error('No model answered');
+}
 
 router.post('/:episodeId/rewrite-line', requireAuth, aiRateLimiter, async (req, res) => {
   try {
-    const { line, speaker, beatName, beatContext } = req.body;
+    const rv = require('../utils/rewriteLineVersions');
+    const { line, speaker: rawSpeaker, beatName, beatContext } = req.body;
     // The beat the line sits in, so the rewrite reads what is already there
     // (Evoni, 2026-10-08); at most 40 lines of 600 characters.
     const beatLines = Array.isArray(req.body.beatLines)
@@ -760,67 +785,68 @@ router.post('/:episodeId/rewrite-line', requireAuth, aiRateLimiter, async (req, 
     // own and the franchise's, never another show's (wiring map fix-list
     // item 25).
     const showId = req.body.showId || null;
-    if (!line) return res.status(400).json({ error: 'line is required' });
+    if (!line || typeof line !== 'string' || !line.trim()) return res.status(400).json({ error: 'line is required' });
     if (showId !== null && !SHOW_ID_RE.test(String(showId))) return res.status(400).json({ error: 'showId must be a show id (UUID)' });
+    // A direction chip, her note (at most 300 characters) and up to eight of
+    // the speaker's other lines (300 characters each).
+    const opts = rv.readRewriteOptions(req.body);
+    if (opts.error) return res.status(400).json({ error: opts.error });
+    const { direction, instruction } = opts.value;
+    const voiceSamples = opts.value.voiceSamples.filter((s) => s !== line.trim() && rv.spokenWords(s) !== rv.spokenWords(line));
+    const speaker = typeof rawSpeaker === 'string' && rawSpeaker.trim() ? rawSpeaker.trim().slice(0, 60) : 'Prime';
     if (!process.env.ANTHROPIC_API_KEY) return res.status(503).json({ error: 'ANTHROPIC_API_KEY not configured' });
 
-    // Load voice DNA from Show Brain
+    // Voice DNA from Show Brain: voice and character rules first, at most 12,
+    // so they do not drown the line.
     const models = require('../models');
-    let voiceLaws = '';
+    let voiceRules = [];
     try {
       if (models.FranchiseKnowledge) {
         // The first 30 always-inject rules in the show's scope and the
-        // shared order (services/brainRules): it took whichever 30 Postgres
-        // returned, from every show.
+        // shared order (services/brainRules).
         const { rules: laws } = await selectInjectedRules(models.FranchiseKnowledge, { showId, limit: 30 });
-        // For line rewrites, prioritize voice/character rules but include all
-        const voiceFirst = laws.sort((a, b) => {
-          const aVoice = /voice|lala|jawihp|character/i.test(a.title) ? 0 : 1;
-          const bVoice = /voice|lala|jawihp|character/i.test(b.title) ? 0 : 1;
-          return aVoice - bVoice;
-        });
-        voiceLaws = voiceFirst
-          .map(l => { try { const c = JSON.parse(l.content); return `${l.title}: ${c.summary || c.rule || ''}`; } catch { return l.title; } })
-          .join('\n');
+        voiceRules = rv.voiceRulesFor(laws);
       }
     } catch (err) { console.warn('[RewriteLine] Failed to load voice laws:', err?.message); }
 
-    const isLala = speaker === 'Lala';
-    const isPrime = speaker === 'Prime' || speaker === 'Me';
-
-    const prompt = `You are rewriting a single line of dialogue for "Styling Adventures with Lala."
-
-${voiceLaws ? `SHOW BRAIN VOICE RULES:\n${voiceLaws}\n\n` : ''}
-SPEAKER: ${speaker}
-BEAT: ${beatName || 'Unknown'}
-${beatContext ? `EMOTIONAL CONTEXT: ${beatContext}\n` : ''}
-${beatLines.length ? `THE BEAT AS IT STANDS (keep the rewrite consistent with it; do not repeat what other lines already say):\n${beatLines.map((l) => (l === line ? `>> ${l}   <- the line to rewrite` : `   ${l}`)).join('\n')}\n\n` : ''}ORIGINAL LINE: ${line}
-
-${isLala ? 'Rewrite as Lala — confident, short, punchy, calls people "bestie", slightly dramatic, always positive. Max 2 sentences.' : ''}
-${isPrime ? 'Rewrite as JAWIHP (Prime) — warm, direct, addresses "besties", reacts naturally, community-focused.' : ''}
-${!isLala && !isPrime ? `Rewrite naturally for ${speaker}.` : ''}
-
-Return ONLY the rewritten dialogue. No speaker prefix, no quotes, no explanation.`;
-
+    const ask = { line, speaker, beatName, beatContext, beatLines, voiceRules, voiceSamples, direction, instruction };
+    const prompt = rv.buildPrompt(ask);
     const Anthropic = require('@anthropic-ai/sdk');
     const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-    // Two attempts, as the AI routes try (Script page audit, 2026-10-19); a
-    // refused budget or a rate limit is not tried again.
-    let response = null;
-    for (const model of REWRITE_MODELS) {
-      for (let attempt = 1; attempt <= 2 && !response; attempt += 1) {
-        try {
-          response = await client.messages.create({ model, max_tokens: 200, messages: [{ role: 'user', content: prompt }] });
-        } catch (modelErr) {
-          console.error(`[RewriteLine] ${model} attempt ${attempt} failed:`, modelErr.message);
-          if (modelErr?.code === 'AI_BUDGET_EXCEEDED' || modelErr?.status === 429 || (model === REWRITE_MODELS[REWRITE_MODELS.length - 1] && attempt === 2)) throw modelErr;
-        }
-      }
-      if (response) break;
-    }
-    const rewrittenLine = response.content[0]?.text?.trim() || line;
 
-    return res.json({ rewrittenLine, original: line });
+    let versions = rv.parseVersions(await askRewrite(client, prompt));
+    if (!versions.length) return res.status(502).json({ error: 'The writer sent back no rewrite we could read; try again.' });
+
+    // Must differ: a version reusing more than 60% of the original's words
+    // is asked for once more, bolder; still too close, it is dropped.
+    const close = versions.filter((v) => rv.tooClose(line, v.text));
+    let retried = false;
+    if (close.length) {
+      retried = true;
+      try {
+        const again = rv.parseVersions(await askRewrite(client, rv.buildPrompt({ ...ask, retry: { angles: close.map((v) => v.angle), previous: close } })));
+        versions = versions.map((v) => {
+          if (!close.includes(v)) return v;
+          const fresh = again.find((a) => a.angle === v.angle) || (close.length === 1 && again.length === 1 ? { ...again[0], angle: v.angle } : null);
+          return fresh && !rv.tooClose(line, fresh.text) ? fresh : v;
+        });
+      } catch (err) {
+        // The first versions stand (a refused budget included); the check below still runs.
+        console.error('[RewriteLine] bolder retry failed:', err.message);
+      }
+    }
+    const differ = versions.filter((v) => !rv.tooClose(line, v.text));
+    const tooSimilar = differ.length === 0;
+    const kept = tooSimilar ? versions : differ;
+
+    return res.json({
+      rewrittenLine: kept[0].text,
+      original: line,
+      versions: kept,
+      ...(tooSimilar ? { tooSimilar: true } : {}),
+      ...(direction ? { direction } : {}),
+      retried,
+    });
   } catch (err) {
     console.error('[RewriteLine] Error:', err.message);
     // A refused budget is a 429 with its code, not a 500 (Script page audit, 2026-10-19).

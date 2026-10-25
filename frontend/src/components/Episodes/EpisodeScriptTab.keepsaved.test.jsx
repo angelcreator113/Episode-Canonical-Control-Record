@@ -208,6 +208,8 @@ describe('after the tab opened', () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true);
     renderTab();
     fireEvent.click(within(screen.getByTestId('script-beat-1')).getByRole('button', { name: /^Rewrite line:/ }));
+    // The line's panel opens; its Rewrite asks (2026-10-25).
+    fireEvent.click(screen.getByTestId('script-rewrite-go'));
     fireEvent.click(screen.getByTestId('script-regenerate'));
     await act(async () => { rewrite.resolve({ data: { rewrittenLine: 'Hey, gorgeous.' } }); });
     expect(await screen.findByText(/A new script was written while the line was being rewritten/)).toBeTruthy();
