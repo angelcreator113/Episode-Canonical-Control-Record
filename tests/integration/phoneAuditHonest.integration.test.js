@@ -88,7 +88,7 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
   test('deleting a screen removes its images and the zones that led to it', async () => {
     const res = await auth(request(app).delete(`/api/v1/ui-overlays/${show}/types/${feedType}`));
     expect(res.status).toBe(200);
-    expect(res.body.data).toEqual({ deletedKey: 'feed', zonesRemoved: 1 });
+    expect(res.body.data).toEqual({ deletedKey: 'feed', zonesRemoved: 1, navigateActionsRemoved: 0, missionRewardsRemoved: 0, missionsFlagged: [] });
     const [[img]] = await run(`SELECT deleted_at FROM assets WHERE id = :feedImg`, { feedImg });
     expect(img.deleted_at).not.toBeNull();
     const [[h]] = await run(`SELECT metadata::text AS m FROM assets WHERE id = :home`, { home });

@@ -247,23 +247,85 @@ function ContentZoneRenderer({ zone, showId, episodeId, storyAt = null, beat = n
   }
 }
 
-// ── Helper: fetch with cache ──
+// ── Helper: fetch, shared for an episode's moments ──
+// A failed read is logged and returned as `error` (phone round step 1, D5):
+// it used to read as no data, so a zone said "No DMs" when the messages
+// could not be loaded.
+//
+// The episode's phone moments (GET /feed-enhanced/:showId/moments/:episodeId)
+// are read once for every zone showing them at the same time (the DM and
+// notification zones): one request in flight, its answer shared. The copy
+// lives while a zone shows it, so another episode, or the screen opened
+// again, reads fresh; refreshEpisodeMoments re-reads it on demand (after
+// the moments are changed elsewhere on the page).
+const SHARED_READ = /^\/api\/v1\/feed-enhanced\/[^/]+\/moments\/[^/?]+$/;
+const sharedReads = new Map();
+const momentsUrl = (showId, episodeId) => `/api/v1/feed-enhanced/${showId}/moments/${episodeId}`;
+const readFailure = (url, err) => {
+  console.error('[ScreenContentRenderer] read failed:', url, err);
+  return { data: null, error: err?.response?.data?.error || err?.message || 'Could not load' };
+};
+
+function startSharedRead(url, entry) {
+  entry.promise = api.get(url)
+    .then(r => ({ data: r.data, error: null }), err => readFailure(url, err))
+    .then((result) => {
+      if (sharedReads.get(url) !== entry) return;
+      entry.result = result;
+      entry.subscribers.forEach(fn => fn(result));
+    });
+  return entry.promise;
+}
+
+function subscribeSharedRead(url, fn) {
+  let entry = sharedReads.get(url);
+  if (!entry) {
+    entry = { subscribers: new Set(), result: null, promise: null };
+    sharedReads.set(url, entry);
+    startSharedRead(url, entry);
+  }
+  entry.subscribers.add(fn);
+  if (entry.result) fn(entry.result);
+  return () => {
+    entry.subscribers.delete(fn);
+    if (entry.subscribers.size === 0 && sharedReads.get(url) === entry) sharedReads.delete(url);
+  };
+}
+
+// Re-read an episode's moments for the zones showing them. Returns the read
+// (or null when no zone shows them, so the next one to open reads fresh).
+export function refreshEpisodeMoments(showId, episodeId) {
+  const url = momentsUrl(showId, episodeId);
+  const entry = sharedReads.get(url);
+  return entry ? startSharedRead(url, entry) : null;
+}
+
 function useContentData(url, deps = []) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     if (!url) { setLoading(false); return; }
     let cancelled = false;
     setLoading(true);
+    setError(null);
+    const apply = (result) => {
+      if (cancelled) return;
+      setData(result.data);
+      setError(result.error);
+      setLoading(false);
+    };
+    if (SHARED_READ.test(url)) {
+      const unsubscribe = subscribeSharedRead(url, apply);
+      return () => { cancelled = true; unsubscribe(); };
+    }
     api.get(url)
-      .then(r => { if (!cancelled) setData(r.data); })
-      .catch(() => { if (!cancelled) setData(null); })
-      .finally(() => { if (!cancelled) setLoading(false); });
+      .then(r => apply({ data: r.data, error: null }), err => apply(readFailure(url, err)));
     return () => { cancelled = true; };
   }, [url, ...deps]);
 
-  return { data, loading };
+  return { data, loading, error };
 }
 
 // ════════════════════════════════════════════════════════════
@@ -533,12 +595,11 @@ function ProfileStatsRenderer({ showId, config }) {
 // ── DM Thread ──
 function DMThreadRenderer({ showId, episodeId, config }) {
   const maxMessages = config.max_items || 6;
-  const url = showId && episodeId
-    ? `/api/v1/feed-enhanced/${showId}/moments/${episodeId}`
-    : null;
-  const { data, loading } = useContentData(url);
+  const url = showId && episodeId ? momentsUrl(showId, episodeId) : null;
+  const { data, loading, error } = useContentData(url);
 
   if (loading) return <ZoneLoader />;
+  if (error) return <ZoneError label="Couldn't load messages" detail={error} />;
   const moments = (data?.data || data?.moments || [])
     .filter(m => m.phone_screen_type === 'dm')
     .slice(0, maxMessages);
@@ -772,12 +833,11 @@ function TaskListRenderer({ episodeId, config }) {
 // ── Notifications ──
 function NotificationsRenderer({ showId, episodeId, config }) {
   const maxItems = config.max_items || 5;
-  const url = showId && episodeId
-    ? `/api/v1/feed-enhanced/${showId}/moments/${episodeId}`
-    : null;
-  const { data, loading } = useContentData(url);
+  const url = showId && episodeId ? momentsUrl(showId, episodeId) : null;
+  const { data, loading, error } = useContentData(url);
 
   if (loading) return <ZoneLoader />;
+  if (error) return <ZoneError label="Couldn't load notifications" detail={error} />;
   const notifs = (data?.data || data?.moments || [])
     .filter(m => m.phone_screen_type === 'notification')
     .slice(0, maxItems);
@@ -1637,6 +1697,16 @@ function ZoneLoader() {
   return (
     <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.25)' }}>
       <div style={{ width: 10, height: 10, border: '1.5px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', borderRadius: '50%', animation: 'overlays-spin 0.8s linear infinite' }} />
+    </div>
+  );
+}
+
+// A read that failed, said so (not "No DMs"): warmer and brighter than the
+// empty state, with the reason on hover.
+function ZoneError({ label, detail }) {
+  return (
+    <div role="alert" title={detail || undefined} style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(120,30,30,0.45)', borderRadius: 3, padding: 3, boxSizing: 'border-box', textAlign: 'center' }}>
+      <span style={{ fontSize: 8, color: '#FFD9D2', fontFamily: "'DM Mono', monospace" }}>{label}</span>
     </div>
   );
 }

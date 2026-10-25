@@ -53,7 +53,8 @@ router.get('/:showId', requireAuth, async (req, res) => {
     try {
       status = await require('../services/phoneOverlays').overlayStatusForShow(models, showId, episodeId);
     } catch (listErr) {
-      if (listErr.code === 'PHONE_IMAGES_READ') return res.status(500).json({ success: false, error: listErr.message });
+      // A failed read of the images or the screens: logged where thrown.
+      if (listErr.code === 'PHONE_IMAGES_READ' || listErr.code === 'PHONE_TYPES_READ') return res.status(500).json({ success: false, error: listErr.message });
       throw listErr;
     }
 
@@ -159,6 +160,7 @@ router.post('/:showId/generate-all', requireAuth, async (req, res) => {
       setTimeout(() => { delete generationStatus[showId]; }, 120000);
     });
   } catch (err) {
+    console.error('[UIOverlay] POST /generate-all failed:', err);
     return res.status(500).json({ success: false, error: err.message });
   }
 });
@@ -230,6 +232,7 @@ router.get('/:showId/debug', requireAuth, authorize(['ADMIN']), async (req, res)
         : `Found ${allAssets.length} overlay assets. Check metadata.overlay_type values match the type definitions.`,
     });
   } catch (err) {
+    console.error('[UIOverlay] GET /debug failed:', err);
     return res.status(500).json({ success: false, error: err.message });
   }
 });
@@ -345,6 +348,7 @@ router.post('/:showId/upload/:overlayType', requireAuth, upload.single('image'),
 
     return res.json({ success: true, data: { ...overlayType, url, asset_id: assetId, generated: true, carried } });
   } catch (err) {
+    console.error('[UIOverlay] POST /upload/:overlayType failed:', err);
     return res.status(500).json({ success: false, error: err.message });
   }
 });
@@ -373,6 +377,7 @@ router.post('/:showId/frame', requireAuth, upload.single('frame'), async (req, r
 
     return res.json({ success: true, frame_url: url });
   } catch (err) {
+    console.error('[UIOverlay] POST /frame failed:', err);
     return res.status(500).json({ success: false, error: err.message });
   }
 });
@@ -419,6 +424,7 @@ router.delete('/:showId/frame', requireAuth, async (req, res) => {
 
     return res.json({ success: true, frame_url: null });
   } catch (err) {
+    console.error('[UIOverlay] DELETE /frame failed:', err);
     return res.status(500).json({ success: false, error: err.message });
   }
 });
@@ -440,6 +446,7 @@ router.put('/:showId/global-fit', requireAuth, async (req, res) => {
 
     return res.json({ success: true, global_fit });
   } catch (err) {
+    console.error('[UIOverlay] PUT /global-fit failed:', err);
     return res.status(500).json({ success: false, error: err.message });
   }
 });
@@ -486,6 +493,7 @@ router.get('/:showId/style-prefix', requireAuth, async (req, res) => {
     const prefix = await getStylePrefix(req.params.showId, models);
     return res.json({ success: true, style_prefix: prefix.trim(), default_prefix: DEFAULT_STYLE_PREFIX.trim() });
   } catch (err) {
+    console.error('[UIOverlay] GET /style-prefix failed:', err);
     return res.status(500).json({ success: false, error: err.message });
   }
 });
@@ -503,6 +511,7 @@ router.put('/:showId/style-prefix', requireAuth, async (req, res) => {
     );
     return res.json({ success: true, style_prefix: style_prefix || null });
   } catch (err) {
+    console.error('[UIOverlay] PUT /style-prefix failed:', err);
     return res.status(500).json({ success: false, error: err.message });
   }
 });
@@ -545,6 +554,7 @@ router.put('/:showId/category/:assetId', requireAuth, async (req, res) => {
 
     return res.json({ success: true, category, name });
   } catch (err) {
+    console.error('[UIOverlay] PUT /category/:assetId failed:', err);
     return res.status(500).json({ success: false, error: err.message });
   }
 });
@@ -577,6 +587,7 @@ router.put('/:showId/image-fit/:assetId', requireAuth, async (req, res) => {
 
     return res.json({ success: true, image_fit });
   } catch (err) {
+    console.error('[UIOverlay] PUT /image-fit/:assetId failed:', err);
     return res.status(500).json({ success: false, error: err.message });
   }
 });
@@ -619,6 +630,7 @@ router.put('/:showId/screen-links/:assetId', requireAuth, async (req, res) => {
 
     return res.json({ success: true, screen_links: validatedLinks });
   } catch (err) {
+    console.error('[UIOverlay] PUT /screen-links/:assetId failed:', err);
     return res.status(500).json({ success: false, error: err.message });
   }
 });
@@ -637,10 +649,11 @@ router.get('/:showId/screen-links/:assetId', requireAuth, async (req, res) => {
     if (!rows?.length) return res.status(404).json({ success: false, error: 'Asset not found' });
 
     let meta = {};
-    try { meta = JSON.parse(rows[0].metadata_text || '{}'); } catch { /* skip */ }
+    try { meta = JSON.parse(rows[0].metadata_text || '{}'); } catch (parseErr) { console.error(`[UIOverlay] screen ${req.params.assetId} metadata is not JSON, read as none:`, parseErr.message); }
 
     return res.json({ success: true, screen_links: meta.screen_links || [] });
   } catch (err) {
+    console.error('[UIOverlay] GET /screen-links/:assetId failed:', err);
     return res.status(500).json({ success: false, error: err.message });
   }
 });
@@ -759,6 +772,7 @@ router.put('/:showId/content-zones/:assetId', requireAuth, async (req, res) => {
 
     return res.json({ success: true, content_zones });
   } catch (err) {
+    console.error('[UIOverlay] PUT /content-zones/:assetId failed:', err);
     return res.status(500).json({ success: false, error: err.message });
   }
 });
@@ -777,10 +791,11 @@ router.get('/:showId/content-zones/:assetId', requireAuth, async (req, res) => {
     if (!rows?.length) return res.status(404).json({ success: false, error: 'Asset not found' });
 
     let meta = {};
-    try { meta = JSON.parse(rows[0].metadata_text || '{}'); } catch { /* skip */ }
+    try { meta = JSON.parse(rows[0].metadata_text || '{}'); } catch (parseErr) { console.error(`[UIOverlay] screen ${req.params.assetId} metadata is not JSON, read as none:`, parseErr.message); }
 
     return res.json({ success: true, content_zones: meta.content_zones || [] });
   } catch (err) {
+    console.error('[UIOverlay] GET /content-zones/:assetId failed:', err);
     return res.status(500).json({ success: false, error: err.message });
   }
 });
@@ -795,6 +810,7 @@ router.get('/:showId/types/suggest-links/:iconName', requireAuth, async (req, re
     const suggestions = await suggestLinkedScreens(req.params.showId, decodeURIComponent(req.params.iconName), models);
     return res.json({ success: true, data: suggestions });
   } catch (err) {
+    console.error('[UIOverlay] GET /types/suggest-links/:iconName failed:', err);
     return res.status(500).json({ success: false, error: err.message });
   }
 });
@@ -876,6 +892,7 @@ router.post('/:showId/types', requireAuth, async (req, res) => {
 
     return res.json({ success: true, data: { id, type_key: key, name, category: category || 'phone', beat: beat || 'Various', description, prompt: effectivePrompt, opens_screen: opens_screen || null } });
   } catch (err) {
+    console.error('[UIOverlay] POST /types failed:', err);
     return res.status(500).json({ success: false, error: err.message });
   }
 });
@@ -911,13 +928,6 @@ router.put('/:showId/types/:typeId', requireAuth, async (req, res) => {
     }
     if (is_home !== undefined) {
       sets.push('is_home = :isHome'); replacements.isHome = !!is_home;
-      // If marking as home, unset any existing home screen first
-      if (is_home) {
-        await models.sequelize.query(
-          `UPDATE ui_overlay_types SET is_home = false, updated_at = NOW() WHERE show_id = :showId AND is_home = true AND deleted_at IS NULL AND id != :typeId`,
-          { replacements: { showId: req.params.showId, typeId: req.params.typeId } }
-        );
-      }
     }
 
     if (sets.length === 0) {
@@ -925,13 +935,29 @@ router.put('/:showId/types/:typeId', requireAuth, async (req, res) => {
     }
 
     sets.push('updated_at = NOW()');
-    await models.sequelize.query(
-      `UPDATE ui_overlay_types SET ${sets.join(', ')} WHERE id = :typeId AND show_id = :showId AND deleted_at IS NULL`,
-      { replacements }
-    );
+    // The old home is unset with the update, in one transaction, and only
+    // when the update matched a live type (phone round step 1, D3): it was
+    // unset first and on its own, so an id that matched nothing, or a
+    // failed update, left the show with no home screen.
+    const matched = await models.sequelize.transaction(async (transaction) => {
+      const [rows] = await models.sequelize.query(
+        `UPDATE ui_overlay_types SET ${sets.join(', ')} WHERE id = :typeId AND show_id = :showId AND deleted_at IS NULL RETURNING id`,
+        { replacements, transaction }
+      );
+      if (!rows?.length) return false;
+      if (is_home) {
+        await models.sequelize.query(
+          `UPDATE ui_overlay_types SET is_home = false, updated_at = NOW() WHERE show_id = :showId AND is_home = true AND deleted_at IS NULL AND id != :typeId`,
+          { replacements: { showId: req.params.showId, typeId: req.params.typeId }, transaction }
+        );
+      }
+      return true;
+    });
+    if (!matched) return res.status(404).json({ success: false, error: 'Overlay type not found' });
 
     return res.json({ success: true });
   } catch (err) {
+    console.error('[UIOverlay] PUT types/:typeId failed:', err);
     return res.status(500).json({ success: false, error: err.message });
   }
 });
@@ -953,7 +979,7 @@ router.delete('/:showId/types/:typeId', requireAuth, async (req, res) => {
       );
       if (!rows?.length) return null;
       const deletedKey = rows[0].type_key;
-      if (!deletedKey) return { zonesRemoved: 0 };
+      if (!deletedKey) return { zonesRemoved: 0, navigateActionsRemoved: 0, missionRewardsRemoved: 0, missionsFlagged: [] };
 
       await models.sequelize.query(
         `UPDATE ui_overlay_types SET opens_screen = NULL, updated_at = NOW()
@@ -972,7 +998,13 @@ router.delete('/:showId/types/:typeId', requireAuth, async (req, res) => {
          FOR UPDATE`,
         { replacements: { showId }, transaction }
       );
+      // A zone's own "Go to" action wins over its target on the phone
+      // (phoneRuntime.actionsForZone), so a navigate action to the deleted
+      // screen is a dead link too (phone round step 1, D1): the action goes,
+      // and a zone left with no target and nothing to do goes with it.
+      const isDeadNavigate = (a) => a?.type === 'navigate' && a.target === deletedKey;
       let zonesRemoved = 0;
+      let navigateActionsRemoved = 0;
       for (const screen of screens || []) {
         let meta;
         try { meta = JSON.parse(screen.metadata_text || '{}'); } catch (parseErr) {
@@ -980,16 +1012,72 @@ router.delete('/:showId/types/:typeId', requireAuth, async (req, res) => {
           continue;
         }
         const links = Array.isArray(meta.screen_links) ? meta.screen_links : [];
-        const kept = links.filter(l => l?.target !== deletedKey);
-        if (kept.length === links.length) continue;
-        zonesRemoved += links.length - kept.length;
+        let changed = false;
+        const kept = [];
+        for (const link of links) {
+          if (link?.target === deletedKey) { zonesRemoved += 1; changed = true; continue; }
+          const actions = Array.isArray(link?.actions) ? link.actions : null;
+          const dead = actions ? actions.filter(isDeadNavigate).length : 0;
+          if (!dead) { kept.push(link); continue; }
+          changed = true;
+          navigateActionsRemoved += dead;
+          const rest = actions.filter(a => !isDeadNavigate(a));
+          if (!link.target && rest.length === 0) { zonesRemoved += 1; continue; }
+          kept.push({ ...link, actions: rest });
+        }
+        if (!changed) continue;
         meta.screen_links = kept;
         await models.sequelize.query(
           `UPDATE assets SET metadata = CAST(:metadata AS jsonb), updated_at = NOW() WHERE id = :id`,
           { replacements: { id: screen.id, metadata: JSON.stringify(meta) }, transaction }
         );
       }
-      return { deletedKey, zonesRemoved };
+
+      // Missions: a reward that opens the deleted screen is removed. An
+      // objective or start condition that needs it ("visited:<key>") is
+      // kept and named in the answer, and the Hub's health check flags it:
+      // deleting the objective could finish the mission on the spot, and
+      // what the mission should ask instead is Evoni's call.
+      let missionRewardsRemoved = 0;
+      const missionsFlagged = [];
+      const [[missionsTable]] = await models.sequelize.query(
+        `SELECT to_regclass('public.phone_missions') IS NOT NULL AS ok`, { transaction });
+      if (missionsTable?.ok) {
+        const [missions] = await models.sequelize.query(
+          `SELECT id, name, episode_id, objectives::text AS objectives_text,
+                  reward_actions::text AS rewards_text, start_condition::text AS start_text
+             FROM phone_missions WHERE show_id = :showId AND deleted_at IS NULL
+           FOR UPDATE`,
+          { replacements: { showId }, transaction }
+        );
+        const visitedKey = `visited:${deletedKey}`;
+        const needsScreen = (conds) => Array.isArray(conds) && conds.some(c => c?.key === visitedKey);
+        for (const m of missions || []) {
+          let objectives; let rewards; let start;
+          try {
+            objectives = JSON.parse(m.objectives_text || '[]');
+            rewards = JSON.parse(m.rewards_text || '[]');
+            start = JSON.parse(m.start_text || 'null');
+          } catch (parseErr) {
+            console.error(`[UIOverlay] type delete: mission ${m.id} is not JSON, skipped:`, parseErr.message);
+            continue;
+          }
+          const keptRewards = Array.isArray(rewards) ? rewards.filter(a => !isDeadNavigate(a)) : rewards;
+          if (Array.isArray(rewards) && keptRewards.length !== rewards.length) {
+            missionRewardsRemoved += rewards.length - keptRewards.length;
+            await models.sequelize.query(
+              `UPDATE phone_missions SET reward_actions = CAST(:rewards AS jsonb), updated_at = NOW() WHERE id = :id`,
+              { replacements: { id: m.id, rewards: JSON.stringify(keptRewards) }, transaction }
+            );
+          }
+          const objectivesNeeding = (Array.isArray(objectives) ? objectives : [])
+            .filter(o => needsScreen(o?.condition)).map(o => o.label || o.id || 'objective');
+          if (objectivesNeeding.length || needsScreen(start)) {
+            missionsFlagged.push({ id: m.id, name: m.name, episode_id: m.episode_id || null, objectives: objectivesNeeding, start_condition: needsScreen(start) });
+          }
+        }
+      }
+      return { deletedKey, zonesRemoved, navigateActionsRemoved, missionRewardsRemoved, missionsFlagged };
     });
     if (!result) return res.status(404).json({ success: false, error: 'Overlay type not found' });
 
