@@ -9,7 +9,8 @@
  *   Roadmap     Grid (three part columns of cards) or Timeline (every slot in
  *               order); All Parts / All Statuses; + Add Episode (the
  *               new-episode flow). `?view=`, `?part=`, `?status=` hold them.
- *               No Calendar: the slots carry no dates (only the season does).
+ *               No Calendar view; each card shows its release day from the
+ *               show's release schedule (Evoni, 2026-10-25) when there is one.
  *   Events      the slots' events in slot order, and the events in no slot,
  *               each pencilled from here; the placement preview.
  *   Each slot card and event row with an event says which goals it moves
@@ -25,6 +26,7 @@ import { SeasonPlacement } from './SeasonSetup';
 import { StatusChip } from './SeasonPageParts';
 import { MovesChips } from './GoalCoverage';
 import { useGoalCoverage, slotGoalsMap } from '../../lib/goalCoverage';
+import { useReleaseSchedule, slotWhen } from '../../lib/releaseSchedule';
 import {
   SLOT_STATUS, SLOT_STATUS_ORDER, allSlots, filterSlots, slotPicture, slotCardTitle, arcPart, partProgress, dayLabel,
 } from '../../lib/seasonPage';
@@ -74,8 +76,12 @@ function CardMenu({ slot, showId, onOpen, onIntention }) {
   );
 }
 
-/** One slot as a card: picture, E#, title, status chip, the goals its event moves, ⋯. Clicking opens its panel. */
-export function SlotCard({ slot, picture, showId, selected, onOpen, onIntention, nextSlot, moves = [] }) {
+/**
+ * One slot as a card: picture, E#, its release day (the show's release
+ * schedule, or a hand-set date), title, status chip, the goals its event
+ * moves, ⋯. Clicking opens its panel.
+ */
+export function SlotCard({ slot, picture, showId, selected, onOpen, onIntention, nextSlot, moves = [], when = null }) {
   return (
     <div className={`szn-slot is-${slot.state}${selected ? ' is-selected' : ''}`} data-testid={`szn-slot-${slot.slot_number}`}>
       <button type="button" className="szn-slot-open" onClick={onOpen} aria-pressed={selected}
@@ -84,7 +90,9 @@ export function SlotCard({ slot, picture, showId, selected, onOpen, onIntention,
           {picture && <img src={picture} alt="" loading="lazy" />}
         </span>
         <span className="szn-slot-body">
-          <span className="szn-slot-num">E{slot.slot_number}{nextSlot && <span className="szn-slot-next">Next</span>}</span>
+          <span className="szn-slot-num">E{slot.slot_number}{nextSlot && <span className="szn-slot-next">Next</span>}
+            {when && <span className={`szn-slot-when${when.source === 'preview' ? ' is-preview' : ''}`} data-testid={`szn-slot-when-${slot.slot_number}`}>{when.text}</span>}
+          </span>
           <span className={`szn-slot-title${slot.episode || slot.event || slot.intention?.story_purpose ? '' : ' is-empty'}`}>{slotCardTitle(slot)}</span>
           <StatusChip state={slot.state} />
           <MovesChips goals={moves} testId={`szn-slot-moves-${slot.slot_number}`} />
@@ -100,6 +108,7 @@ export function SeasonRoadmapTab({ plan, S, api, showId, setToast, episodes, eve
   const controls = useSlotDrawer({ plan, api, showId, setToast });
   const { roadmap } = plan;
   const coverage = useGoalCoverage({ api, showId, reloadKey: roadmap });
+  const release = useReleaseSchedule({ api, showId, reloadKey: roadmap });
   const movesBySlot = slotGoalsMap(coverage.data);
   const view = params.get('view') === 'timeline' ? 'timeline' : 'grid';
   const part = params.get('part') || 'all';
@@ -113,7 +122,7 @@ export function SeasonRoadmapTab({ plan, S, api, showId, setToast, episodes, eve
   const card = (slot) => (
     <SlotCard key={slot.id} slot={slot} showId={showId} picture={slotPicture(slot, { episodes, events, arc })}
       selected={controls.sheetOpen && controls.selected?.id === slot.id} nextSlot={!slot.locked && slot.slot_number === roadmap.next_slot_number}
-      onOpen={() => openSlot(slot)} onIntention={() => editIntention(slot)} moves={movesBySlot[slot.id] || []} />
+      onOpen={() => openSlot(slot)} onIntention={() => editIntention(slot)} moves={movesBySlot[slot.id] || []} when={slotWhen(release.view, slot)} />
   );
   const shownPhases = phases.filter((p) => part === 'all' || Number(p.phase) === Number(part));
   const timeline = filterSlots(allSlots(roadmap), { part, status });
