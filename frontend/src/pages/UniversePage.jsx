@@ -26,6 +26,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
+import { seasonPageHref } from '../lib/seasonPage';
 import api from '../services/api';
 import { fetchAllEpisodes } from '../lib/fetchAllPages';
 import { fetchClosetWithTotal } from '../lib/closetGrouping';
@@ -203,7 +204,7 @@ function Overview() {
   const producer = (sub) => (show ? `/shows/${show.id}/world?tab=${sub}` : '/universe');
   const counts = data?.counts || {};
   const tiles = [
-    { key: 'episodes', label: 'Episodes', value: counts.episodes, link: 'Open Season Plan', to: producer('season'), tone: 'overview' },
+    { key: 'episodes', label: 'Episodes', value: counts.episodes, link: 'Open the Season page', to: show ? seasonPageHref(show.id) : '/universe', tone: 'overview' },
     { key: 'events', label: 'Events', value: counts.events, link: 'Open Events library', to: producer('events'), tone: 'culture' },
     { key: 'characters', label: 'Characters', value: counts.characters, note: 'in Lala’s world',
       extra: counts.oldToReview > 0 ? `${counts.oldToReview.toLocaleString()} from the old system to review` : null,

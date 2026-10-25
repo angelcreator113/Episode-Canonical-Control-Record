@@ -19,7 +19,8 @@ import { loadProductionChecks } from '../Episodes/EpisodeProductionChecklist';
 import ShowEpisodesBoard from './ShowEpisodesBoard';
 
 let where;
-function Where() { const l = useLocation(); where = l.pathname; return null; }
+let whereSearch;
+function Where() { const l = useLocation(); where = l.pathname; whereSearch = l.search; return null; }
 const EPISODES = [
   { id: 'ep-2', episode_number: 2, title: 'Press Day', status: 'scripted', evaluation_json: '{"tier_final":"pass","score":81}' },
   { id: 'ep-1', episode_number: 1, title: 'Gala Night', status: 'draft', evaluation_status: 'accepted' },
@@ -108,6 +109,25 @@ describe('ShowEpisodesBoard — Now producing and the pipeline (Evoni\'s mock, 2
     });
     vi.mocked(loadProductionChecks).mockReset().mockResolvedValue({ checks: {}, linkedEvent: EVENT });
     Object.values(episodeService).forEach((fn) => fn.mockReset());
+  });
+
+  // The Season Plan tab is retired (2026-10-25): the open slots go to the Season page's roadmap.
+  test('"+ N more open slots in Season 1" opens the Season page\'s roadmap', async () => {
+    const many = { ...ROADMAP, phases: [{ slots: [...ROADMAP.phases[0].slots,
+      ...[4, 5, 6].map((n) => ({ id: `s${n}`, slot_number: n, label: `S1 · E${n}`, episode: null }))] }] };
+    vi.mocked(api.get).mockImplementation(async (url) => (url.endsWith('/season/roadmap') ? { data: { roadmap: many } } : { data: {} }));
+    renderIt([DRAFT]);
+    const more = await screen.findByRole('button', { name: '+ 3 more open slots in Season 1' });
+    fireEvent.click(more);
+    expect(where).toBe('/shows/show-1/season');
+    expect(whereSearch).toBe('?tab=roadmap');
+  });
+
+  test('a slot card\'s Pick an event opens the Season page\'s roadmap', async () => {
+    renderIt([DRAFT]);
+    fireEvent.click((await screen.findAllByRole('button', { name: 'Pick an event' }))[0]);
+    expect(where).toBe('/shows/show-1/season');
+    expect(whereSearch).toBe('?tab=roadmap');
   });
 
   test('Now producing: code, status, logline, tags, the stage, and the script still to generate', async () => {

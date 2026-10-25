@@ -541,7 +541,7 @@
   display: inline-flex; align-items: center; gap: 7px; flex-shrink: 0; white-space: nowrap;
   padding: 10px 18px; border: 1px solid var(--lala-parchment-3); border-radius: 999px;
   background: var(--surface-card); color: var(--text-primary); font: inherit; font-size: 14px; font-weight: 600;
-  cursor: pointer; transition: border-color 0.15s, background 0.15s;
+  cursor: pointer; transition: border-color 0.15s, background 0.15s; text-decoration: none;
 }
 .wa-tab svg { color: var(--accent-dark); }
 .wa-tab:hover { border-color: var(--accent-light); }
@@ -586,52 +586,11 @@
 .wa-results-title { margin: 0; font-family: var(--font-prose); font-size: 28px; font-weight: 600; color: var(--text-primary); }
 .wa-results-line { margin: 4px 0 0; font-size: 14px; color: var(--text-secondary); }
 .wa-results-count { font-size: 13px; color: var(--text-secondary); }
-.wa-goals-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
-.wa-goals-tools { display: flex; gap: 8px; flex-wrap: wrap; }
-.wa-goal-btn { min-height: 40px; padding: 0 16px; border: 1px solid var(--lala-lavender-line); border-radius: 999px; background: var(--surface-card); color: var(--lala-lavender-text); font-size: 13px; font-weight: 600; cursor: pointer; }
-.wa-goal-btn:hover { background: var(--lala-lavender-soft); }
 /* Producer Mode → Overview: its styles are components/Show/ShowOverview.css (Evoni's mock, 2026-10-17). */
 
-/* Episodes → Season Arc (Evoni's redesign, 2026-10-05): the season's slots
-   by part, the open slot beside them. A slot's state is its colour: done
-   lavender, in production pink, an event pencilled amber, open dashed. */
-.wa-arc-card { padding: 20px; border-radius: 16px; background: var(--surface-card); border: 1px solid var(--lala-parchment-3); box-shadow: var(--shadow-xs); margin-bottom: 16px; }
-.wa-arc-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 16px; margin-bottom: 16px; }
-.wa-arc-title { margin: 0; font-family: var(--font-prose); font-size: 22px; font-weight: 600; color: var(--text-primary); }
-.wa-arc-summary { margin: 0; font-size: 12px; color: var(--text-secondary); }
-.wa-arc { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 16px; align-items: start; }
-.wa-arc-parts { display: grid; gap: 16px; min-width: 0; }
-.wa-arc-part { padding: 16px; border-radius: 14px; border: 1px solid var(--lala-parchment-3); background: var(--surface-card); }
-.wa-arc-part-title { margin: 0 0 12px; font-family: var(--font-prose); font-size: 18px; font-weight: 600; color: var(--text-primary); }
-.wa-arc-part-num { font-family: var(--font-ui); font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent-dark); margin-right: 4px; }
-.wa-arc-part-range { font-family: var(--font-ui); font-size: 11px; font-weight: 400; color: var(--text-secondary); }
-.wa-arc-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
-.wa-arc-slot {
-  display: flex; flex-direction: column; align-items: stretch; gap: 4px; min-width: 0; min-height: 92px;
-  padding: 10px 12px; border-radius: 12px; text-align: left; cursor: pointer;
-  font: inherit; color: var(--text-primary); background: var(--surface-card); border: 1px solid var(--lala-parchment-3);
-}
-.wa-arc-slot:hover { border-color: var(--lala-lavender-light); }
-.wa-arc-slot:focus-visible { outline: 2px solid var(--lala-lavender); outline-offset: 2px; }
-.wa-arc-slot.selected { box-shadow: 0 0 0 2px var(--lala-lavender); }
-.wa-arc-slot-top { display: flex; align-items: center; gap: 6px; font-family: var(--font-ui); font-size: 12px; font-weight: 600; }
-.wa-arc-slot-num { margin-right: auto; }
-.wa-arc-next { font-size: 10px; font-weight: 700; color: var(--lala-gold-text); }
-.wa-arc-slot-title { font-size: 13px; font-weight: 600; line-height: 1.35; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow-wrap: anywhere; }
-.wa-arc-slot-title.empty { font-weight: 400; color: var(--text-secondary); }
-.wa-arc-slot-state { margin-top: auto; font-size: 11px; font-weight: 600; color: var(--text-secondary); }
-.wa-arc-dot { flex: none; width: 9px; height: 9px; border-radius: 50%; background: transparent; border: 1px dashed var(--text-secondary); }
-
-.state-done .wa-arc-dot { background: var(--lala-lavender); border: none; }
-.state-in_production .wa-arc-dot { background: var(--accent); border: none; }
-.state-event_ready .wa-arc-dot { background: var(--warning); border: none; }
-.wa-arc-slot.state-done { background: var(--lala-lavender-soft); border-color: var(--lala-lavender-line); }
-.wa-arc-slot.state-done .wa-arc-slot-state { color: var(--lala-lavender-text); }
-.wa-arc-slot.state-in_production { background: var(--accent-subtle); border: 2px solid var(--accent); padding: 9px 11px; }
-.wa-arc-slot.state-in_production .wa-arc-slot-state { color: var(--accent-dark); }
-.wa-arc-slot.state-event_ready .wa-arc-slot-state { color: var(--warning-text); }
-.wa-arc-slot.state-needs_event { background: var(--lala-parchment); border: 1.5px dashed var(--lala-parchment-3); }
-
+/* A season slot's panel (Evoni's redesign, 2026-10-05; the Season page's
+   drawer since 2026-10-25, SeasonPage.css): its state is its chip's colour,
+   done lavender, in production pink, an event pencilled amber. */
 .wa-arc-side { display: grid; gap: 16px; position: sticky; top: 16px; min-width: 0; }
 .wa-arc-panel { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; padding: 18px; scroll-margin-top: 130px; border-radius: 16px; background: var(--surface-card); border: 1px solid var(--lala-lavender-line); }
 .wa-arc-eyebrow { font-family: var(--font-ui); font-size: 12px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent-dark); }
@@ -656,23 +615,10 @@
 .wa-arc-secondary:hover { background: var(--lala-lavender-soft); }
 .wa-arc-primary { align-self: stretch; display: block; margin-top: 4px; padding: 12px 16px; border-radius: 12px; background: var(--lala-lavender); color: var(--text-inverse); text-align: center; font-size: 15px; font-weight: 700; text-decoration: none; }
 .wa-arc-primary:hover { background: var(--lala-lavender-dark); }
-/* The key, as one line under the arc's title (Evoni, 2026-10-22 layout list; it was a card). */
-.wa-arc-legend { flex-basis: 100%; display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 0; padding: 0; list-style: none; font-size: 12px; color: var(--text-secondary); }
-.wa-arc-legend li { display: inline-flex; align-items: center; gap: 6px; }
-/* A part with nothing in it yet: a row of small chips, one per slot. */
-.wa-arc-chips { display: flex; flex-wrap: wrap; gap: 6px; }
-.wa-arc-chip-slot {
-  min-width: 48px; min-height: 36px; padding: 4px 10px; border: 1.5px dashed var(--lala-parchment-3); border-radius: 10px;
-  background: var(--lala-parchment); color: var(--text-primary); font-family: var(--font-ui); font-size: 12px; font-weight: 600; cursor: pointer;
-}
-.wa-arc-chip-slot:hover { border-color: var(--lala-lavender-light); }
-.wa-arc-chip-slot:focus-visible { outline: 2px solid var(--lala-lavender); outline-offset: 2px; }
-.wa-arc-chip-slot.selected { box-shadow: 0 0 0 2px var(--lala-lavender); }
 /* The sheet's × and backdrop exist for a phone only. */
 .wa-arc-sheet-close, .wa-arc-sheet-backdrop { display: none; }
 
 @media (max-width: 1099px) {
-  .wa-arc { grid-template-columns: minmax(0, 1fr); }
   /* The open slot sits above the parts. */
   .wa-arc-side { display: contents; }
   .wa-arc-panel { order: -1; }
@@ -694,11 +640,6 @@
     width: 40px; height: 40px; border: none; border-radius: 999px; background: var(--lala-parchment); color: var(--text-primary);
     font-size: 22px; line-height: 1; cursor: pointer;
   }
-}
-@media (max-width: 640px) {
-  .wa-arc-card { padding: 14px; }
-  .wa-arc-part { padding: 12px; }
-  .wa-arc-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 }
 
 /* Cast & Continuity → Lala's State & Continuity (Evoni's redesign,
@@ -959,16 +900,6 @@
 /* The queue's true counts under the cards: "Showing 10–18 of 214 matching · 250 events". */
 .wa-ev-range { margin: 12px 0 0; font-size: 12px; color: var(--lala-ink-muted); }
 
-/* Season Plan folds (Evoni, 2026-10-17): the phases and history, and Career Goals. */
-.wa-season-fold { border: 1px solid var(--accent-light); border-radius: 16px; background: var(--surface-card); padding: 0 16px; }
-.wa-season-fold[open] { padding-bottom: 16px; }
-.wa-season-fold > * + * { margin-top: 12px; }
-.wa-season-fold-summary {
-  display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; min-height: 52px; padding: 14px 0; cursor: pointer;
-  font-family: var(--font-prose); font-size: 20px; font-weight: 700; color: var(--text-primary);
-}
-.wa-season-fold-meta { font-family: var(--font-ui); font-size: 13px; font-weight: 500; color: var(--text-secondary); }
-
 /* Episodes › Results (Evoni, 2026-10-22 layout list): one summary strip,
    filter and sort, rows that fit a phone, and an opened episode with its
    actions first and its stats, money and event side by side. */
@@ -1018,50 +949,6 @@
   .wa-ledger-meta { order: 3; flex-basis: 100%; padding-left: 42px; }
   .wa-ledger-chev { order: 2; }
   .wa-ledger-case { padding: 0 12px 12px; }
-}
-
-/* Season Plan (Evoni, 2026-10-22 layout list): the season on one line with
-   its counts under it; the threads with the narrative debt beside them. */
-.wa-season-head { margin-bottom: 16px; padding: 14px 18px; border-radius: 16px; background: var(--surface-card); border: 1px solid var(--lala-parchment-3); box-shadow: var(--shadow-xs); }
-.wa-season-head-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; }
-.wa-season-head-title { margin: 0; font-family: var(--font-prose); font-size: 20px; font-weight: 600; color: var(--text-primary); }
-.wa-season-head-tagline { font-size: 13px; color: var(--text-secondary); }
-.wa-season-head-chips { display: inline-flex; gap: 6px; margin-left: auto; }
-.wa-season-chip { padding: 3px 10px; border-radius: 8px; font-size: 12px; font-weight: 600; }
-.wa-season-chip.is-plain { background: var(--surface-bg); color: var(--text-secondary); border: 1px solid var(--lala-parchment-3); }
-.wa-season-counts { margin: 6px 0 0; font-size: 13px; color: var(--text-secondary); }
-.wa-season-counts .is-debt { color: var(--danger-text); font-weight: 600; }
-/* Setting up a season (2026-10-24): the header's setup actions, the empty
-   and completed states, and the line a setup step leaves. */
-.wa-season-head-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
-.wa-season-head-btn {
-  min-height: 44px; padding: 6px 14px; border: 1px solid var(--lala-gold-line); border-radius: 12px; font: inherit; font-size: 13px;
-  font-weight: 700; background: var(--surface-card); color: var(--accent-dark); cursor: pointer;
-}
-.wa-season-head-btn[aria-pressed='true'] { border-color: var(--accent-dark); background: var(--accent-subtle); color: var(--text-primary); }
-/* The way to the Season page (Evoni, 2026-10-25): prominent, a filled pill. */
-.wa-season-page-link {
-  display: inline-flex; align-items: center; gap: 6px; min-height: 44px; margin-top: 10px; padding: 8px 18px; border-radius: 999px;
-  font-size: 14px; font-weight: 700; text-decoration: none; background: var(--accent-dark); color: var(--text-inverse);
-}
-.wa-season-page-link:hover { filter: brightness(1.08); }
-.wa-season-page-link:focus-visible { outline: 2px solid var(--lala-lavender); outline-offset: 2px; }
-.wa-season-note { margin: 0; padding: 10px 14px; border-radius: 12px; font-size: 13px; background: var(--success-bg); color: var(--success-text); }
-.wa-season-empty { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 18px 20px; border-radius: 16px; background: var(--lala-gold-soft); border: 1px solid var(--lala-gold-line); }
-.wa-season-empty-title { margin: 0; font-family: var(--font-prose); font-size: 22px; font-weight: 700; color: var(--text-primary); }
-.wa-season-empty-about { margin: 0; max-width: 70ch; font-size: 14px; line-height: 1.5; color: var(--text-secondary); }
-.wa-season-start {
-  min-height: 44px; margin-top: 6px; padding: 8px 18px; border: none; border-radius: 12px; font: inherit; font-size: 14px; font-weight: 700;
-  background: var(--accent-dark); color: var(--text-inverse); cursor: pointer;
-}
-@media (max-width: 560px) {
-  .wa-season-head-btn { flex: 1 1 auto; }
-}
-.wa-season-pair { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; }
-.wa-season-pair.is-two { grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); }
-@media (max-width: 900px) {
-  .wa-season-pair.is-two { grid-template-columns: minmax(0, 1fr); }
-  .wa-season-head-chips { margin-left: 0; }
 }
 
 /* Season Plan fixes (Evoni's review, 2026-10-24): a load that failed, with

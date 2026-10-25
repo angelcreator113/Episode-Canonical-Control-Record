@@ -1,7 +1,8 @@
 /**
  * Lala's Career list (Task 3181): on her phone, as of the episode, on her
  * handwritten paper (goals, brands worked with, milestones); and in the
- * Season Plan, the brands with a per-brand hide (Evoni, 2026-10-14).
+ * Season page's Goals tab (the Season Plan's until 2026-10-25), the brands
+ * with a per-brand hide (Evoni, 2026-10-14).
  */
 import React from 'react';
 import { vi, describe, beforeEach, test, expect } from 'vitest';
@@ -69,7 +70,7 @@ describe("Lala's Career list on the phone", () => {
   });
 });
 
-describe('Brands worked with, in the Season Plan', () => {
+describe('Brands worked with, on the Season page\'s Goals tab', () => {
   test('each brand with its episodes; Hide saves it among the hidden', async () => {
     render(<CareerBrands showId="s1" />);
     const rows = await screen.findAllByTestId('career-brand');

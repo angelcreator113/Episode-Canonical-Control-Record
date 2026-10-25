@@ -1,8 +1,9 @@
 /**
- * Season Plan, planner PR 3 (2026-10-24), in the page: "Relationships the
- * season needs" under the roadmap; the slot panel lists its twists, secrets
- * and needs, and ranks "Pencil an event" by fit; "What the season knows"
- * folds the record and follow-ups the AI reads.
+ * Planner PR 3 (2026-10-24) on the Season page (which replaced Producer
+ * Mode's Season Plan tab, 2026-10-25): "Relationships the season needs" on
+ * Story Development; the slot panel lists its twists, secrets and needs,
+ * and ranks "Pencil an event" by fit; "What the season knows" folds the
+ * record and follow-ups the AI reads, on the Overview.
  */
 import { vi, describe, beforeEach, test, expect } from 'vitest';
 import { render, screen, waitFor, within, fireEvent } from '@testing-library/react';
@@ -13,7 +14,7 @@ vi.mock('../services/api', () => ({
 }));
 
 import api from '../services/api';
-import WorldAdmin from './WorldAdmin';
+import SeasonPage from './SeasonPage';
 
 const PHASES = [
   { phase: 1, title: 'Doors', tagline: 'Get in', status: 'active', episode_start: 1, episode_end: 8 },
@@ -64,11 +65,12 @@ function mockGets() {
   });
 }
 
-const renderSeason = () => render(
-  <MemoryRouter initialEntries={['/shows/show-1/world?tab=season']}>
-    <Routes><Route path="/shows/:id/world" element={<WorldAdmin />} /></Routes>
+const renderSeason = (tab = 'overview') => render(
+  <MemoryRouter initialEntries={[`/shows/show-1/season?tab=${tab}`]}>
+    <Routes><Route path="/shows/:showId/season" element={<SeasonPage />} /></Routes>
   </MemoryRouter>,
 );
+const openSlot = async (n) => fireEvent.click((await screen.findByTestId(`szn-slot-${n}`)).querySelector('.szn-slot-open'));
 
 beforeEach(() => {
   Object.values(api).forEach((fn) => fn?.mockReset?.());
@@ -76,21 +78,26 @@ beforeEach(() => {
   mockGets();
 });
 
-describe('Season Plan: what the season needs and knows', () => {
-  test('the needs fold sits under the roadmap with its count of missing; the knows fold too', async () => {
-    renderSeason();
+describe('The Season page: what the season needs and knows', () => {
+  test('the needs fold is on Story Development with its count of missing, after the threads', async () => {
+    renderSeason('story');
     const needs = await screen.findByTestId('season-needs');
     await waitFor(() => expect(within(needs).getByTestId('season-needs-count').textContent).toBe('1 missing'));
-    const roadmap = screen.getByTestId('season-roadmap');
-    expect(roadmap.compareDocumentPosition(needs) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    const knows = screen.getByTestId('season-knows');
+    const story = screen.getByTestId('szn-story');
+    expect(story.contains(needs)).toBe(true);
+  });
+
+  test('the knows fold and the proposals are on the Overview, folded together', async () => {
+    renderSeason();
+    const fold = await screen.findByTestId('szn-fold-proposals');
+    const knows = await within(fold).findByTestId('season-knows');
     expect(await within(knows).findByText('Episode 3')).toBeTruthy();
-    expect(screen.getByTestId('season-proposals-start')).toBeTruthy();
+    expect(within(fold).getByTestId('season-proposals-start')).toBeTruthy();
   });
 
   test("a slot's panel: its twists, secrets, needs, and the pencil list best fit first", async () => {
-    renderSeason();
-    fireEvent.click(await screen.findByTestId('season-slot-4'));
+    renderSeason('roadmap');
+    await openSlot(4);
     const panel = await screen.findByTestId('season-slot-panel');
     expect(await within(panel).findByTestId('slot-notes-twists')).toBeTruthy();
     expect(within(panel).getByTestId('slot-notes-reveals').textContent).toContain('She pawned it');

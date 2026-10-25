@@ -87,6 +87,8 @@
  */
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate, Link, useLocation } from 'react-router-dom';
+import { seasonPageHref } from '../lib/seasonPage';
+import { purposeLines } from '../lib/seasonArc';
 import {
   ArrowLeft, User, UserPlus, Pencil, PlayCircle, Lock, AlertCircle,
   Search, X, CheckCircle2, Sparkles, RefreshCw, Loader2, MapPin, Plus,
@@ -280,12 +282,13 @@ export { sceneSetThumb, sceneSetPath };
 // Event Package owns the event's facts." Season, phase, slot and purpose.
 // The header's title (Evoni's redesign, 2026-10-05): the season line from
 // the event's slot (S1 · E3 · Season 1 · Phase 1: Foundation), the name,
-// and the slot's story purpose under it. In no slot, the line says so and
-// points to the roadmap. Read-only.
+// and the slot's story purposes under it, primary first, with its desired
+// pressure (Evoni, 2026-10-25: it showed the first purpose only). In no
+// slot, the line says so and points to the roadmap. Read-only.
 function HeroTitle({ context, showId, name }) {
   const title = <h1 className="epp-title">{name}</h1>;
   if (!context) return <div className="epp-hero-title">{title}</div>;
-  const roadmapLink = <Link className="epp-season-link" to={`/shows/${showId}/world?tab=season`}>Season Plan</Link>;
+  const roadmapLink = <Link className="epp-season-link" to={seasonPageHref(showId, 'roadmap')}>the Season page</Link>;
   if (!context.in_slot) {
     return (
       <div className="epp-hero-title" data-testid="season-context" role="group" aria-label="Season">
@@ -304,7 +307,24 @@ function HeroTitle({ context, showId, name }) {
         <span> · Season {context.season_number}{context.phase?.title ? ` · Phase ${context.phase.number}: ${context.phase.title}` : ''}{context.via === 'pencilled' ? ' · pencilled in' : ''}</span>
       </p>
       {title}
-      <p className="epp-hero-summary">{context.story_purpose || 'No story purpose set for this slot yet.'}</p>
+      {(() => {
+        const lines = purposeLines(context);
+        if (!lines.length) return <p className="epp-hero-summary">No story purpose set for this slot yet.</p>;
+        return (
+          <ul className="epp-hero-purposes" data-testid="season-purposes" aria-label="Story purposes">
+            {lines.map((p, i) => (
+              <li key={i} className={p.primary ? 'is-primary' : ''}>
+                {lines.length > 1 && <span className="epp-hero-purpose-tag">{p.primary ? 'Primary' : 'Also'}</span>}
+                <span>{p.text || `Continues ${p.thread}`}</span>
+                {p.text && p.thread && <span className="epp-hero-purpose-thread"> · {p.thread}</span>}
+              </li>
+            ))}
+          </ul>
+        );
+      })()}
+      {context.desired_pressure && (
+        <p className="epp-hero-pressure" data-testid="season-pressure">Desired pressure: <strong>{context.desired_pressure}</strong></p>
+      )}
     </div>
   );
 }

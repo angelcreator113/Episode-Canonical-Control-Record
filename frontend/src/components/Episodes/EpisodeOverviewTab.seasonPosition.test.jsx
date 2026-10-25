@@ -50,14 +50,38 @@ describe('EpisodeOverviewTab season position (§8(ff) A5)', () => {
     expect(card.textContent).not.toMatch(/Episode 9/);
   });
 
+  test('every purpose, primary first, with its thread, and the desired pressure (2026-10-25: it showed the first only)', () => {
+    renderWith({
+      ...BASE,
+      season_context: {
+        label: 'S1 · E5', slot_number: 5, season_number: 1, phase: { number: 1, title: 'Foundation' },
+        story_purpose: 'Lala is tested by her first paid invite.', desired_pressure: 'Peak',
+        story_purposes: [
+          { text: 'Her mother turns up', primary: false, story_thread: "Mom's visit" },
+          { text: 'Lala is tested by her first paid invite.', primary: true, story_thread: null },
+          { text: 'The rival takes a photo', primary: false, story_thread: null },
+        ],
+      },
+    });
+    const card = screen.getByTestId('season-position');
+    const items = within(within(card).getByTestId('season-purposes')).getAllByRole('listitem');
+    expect(items.map((li) => li.querySelector('.eov-season-purpose').textContent)).toEqual([
+      'Lala is tested by her first paid invite.', 'Her mother turns up', 'The rival takes a photo',
+    ]);
+    expect(items.map((li) => li.querySelector('.eov-season-tag').textContent)).toEqual(['Primary', 'Also', 'Also']);
+    expect(within(items[1]).getByText("Thread: Mom's visit")).toBeTruthy();
+    expect(within(card).getByTestId('season-pressure').textContent).toBe('Desired pressure: Peak');
+  });
+
   test('says when the slot has no story purpose yet', () => {
     renderWith({ ...BASE, season_context: { label: 'S1 · E1', slot_number: 1, phase: { number: 1, title: 'Foundation' } } });
     expect(within(screen.getByTestId('season-position')).getByText('No story purpose set for this slot yet.')).toBeTruthy();
   });
 
-  test('an episode with no season context points to the roadmap', () => {
+  test('an episode with no season context points to the roadmap, on the Season page', () => {
     renderWith(BASE);
     expect(screen.getByTestId('season-position').textContent).toMatch(/Not in a season slot yet/);
+    expect(screen.getByTestId('season-position-link').getAttribute('href')).toBe('/shows/show-1/season?tab=roadmap');
   });
 
   test('no longer loads the show episode list just to count it', () => {

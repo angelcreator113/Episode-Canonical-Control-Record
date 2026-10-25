@@ -74,7 +74,7 @@ function buildNav() {
             // "Structure" (/story-engine) only redirected to Stories.
             { icon: '🧵', label: 'Threads', route: '/story-threads' },
             // Story Calendar: the novel's dates. The cultural calendar is Culture &
-            // Events; the production schedule is Producer Mode's Season Plan (IA-04).
+            // Events; the production schedule is the Season page (IA-04; it replaced Producer Mode's Season Plan, 2026-10-25).
             { icon: '📅', label: 'Story Calendar', route: '/story-calendar' },
             // Story Evaluation: write a scene three ways, judge, write back to a chapter.
             { icon: '⚖️', label: 'Story Evaluation', route: '/story-evaluation' },

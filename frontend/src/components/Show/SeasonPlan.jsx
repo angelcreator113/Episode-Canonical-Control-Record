@@ -1,29 +1,23 @@
 /**
- * The Season Plan's pieces, moved out of WorldAdmin.jsx (2026-10-25) so
- * Producer Mode's Season Plan tab and the Season page (pages/SeasonPage.jsx,
- * Evoni's mockup) draw the same components from the same data:
+ * The Season Plan's pieces, moved out of WorldAdmin.jsx (2026-10-25). The
+ * Season page (pages/SeasonPage.jsx, Evoni's mockup) draws them; Producer
+ * Mode's Season Plan tab, which drew them too, is retired (Evoni,
+ * 2026-10-25: Season is a banner entry that opens the Season page):
  *
  *   useSeasonPlan        the season's loaders and actions (arc, goals,
  *                        roadmap, threads, insights, needs; setup, advance)
- *   SeasonTab            Producer Mode's Season Plan, as it was
- *   SeasonRoadmap        the 24-slot grid, and its parts for other layouts:
- *                        useRoadmapControls, AdvanceBar, SlotSide (SlotPanel
- *                        with SlotIntentionEditor), UnslottedEpisodes
- *   StoryThreadsCard, PlanningInsights, BalanceTrend, AdvanceConfirm
+ *   the roadmap's parts  useRoadmapControls, AdvanceBar (with AdvanceConfirm),
+ *                        SlotSide (SlotPanel with SlotIntentionEditor),
+ *                        UnslottedEpisodes
+ *   StoryThreadsCard, PlanningInsights, BalanceTrend, SeasonLoadError
  *
  * Styles: the wa-arc-* and wa-season-* rules in WorldAdmin.css, and PLAN_S
  * (planStyles.js) through the `S` prop.
  */
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import SeasonProposals from './SeasonProposals';
-import SeasonRevealPlan from './SeasonRevealPlan';
-import SeasonTwists from './SeasonTwists';
-import SeasonNeeds from './SeasonNeeds';
-import SeasonKnows from './SeasonKnows';
 import SlotNotes, { useEventFit, rankedOptions } from './SlotNotes';
-import { SeasonSetupForm, SeasonPlacement, SeasonDraft, SeasonChecklist, setupSteps, formFromArc } from './SeasonSetup';
-import { shortSlotLabel, slotTitle, slotThreads, defaultSlotId, arcSummary } from '../../lib/seasonArc';
+import { slotTitle, slotThreads, defaultSlotId } from '../../lib/seasonArc';
 import { eventCardDetails } from '../../utils/eventCardSummary';
 import '../../pages/WorldAdmin.css';
 
@@ -306,12 +300,10 @@ export function StoryThreadsCard({ threads, drafts, S, api, showId, onChanged, s
 // have an event pencilled in, moved freely (Q5); an episode in no slot can
 // be placed in an open one (Q4). A started slot is locked (A7). When every
 // slot of the current phase is done, a summary asks before advancing (Q6).
-// A slot's state (seasonSlotService.slotState), as its tile, the panel and
-// the key name it (Evoni's redesign, 2026-10-05); the colours are the
-// .wa-arc-slot.state-* rules in WorldAdmin.css.
-export const SLOT_STATE_ORDER = ['done', 'in_production', 'event_ready', 'needs_event'];
+// A slot's state (seasonSlotService.slotState), as its panel names it
+// (Evoni's redesign, 2026-10-05); the colours are the .wa-arc-panel.state-*
+// rules in WorldAdmin.css.
 export const SLOT_STATE_LABEL = { done: 'Done', in_production: 'In production', event_ready: 'Event pencilled', needs_event: 'Open' };
-export const SLOT_STATE_KEY = { done: 'Done (episode accepted)', in_production: 'In production (slot locked)', event_ready: 'Event pencilled in', needs_event: 'Open' };
 
 const PRESSURE_OPTIONS = ['Low', 'Medium', 'High', 'Peak'];
 const OUTCOME_OPTIONS = ['fail', 'safe', 'pass', 'slay'];
@@ -594,8 +586,8 @@ export function AdvanceConfirm({ warning, advancing, onConfirm, onCancel, S }) {
 }
 
 /**
- * The roadmap's controls, for Producer Mode's grid and the Season page's
- * cards alike (2026-10-25): which slot is open, its sheet on a phone, the
+ * The roadmap's controls, for the Season page's roadmap cards and events
+ * list (2026-10-25): which slot is open, its sheet on a phone, the
  * intention editor, and the pencil and placement saves with their errors.
  */
 export function useRoadmapControls({ roadmap, api, showId, onChanged, setToast }) {
@@ -790,90 +782,6 @@ export function UnslottedEpisodes({ roadmap, controls }) {
   );
 }
 
-export function SeasonRoadmap({ roadmap, S, api, showId, onChanged, setToast, onAdvance, advancing, advanceWarning, onConfirmAdvance, onCancelAdvance, advanceError = null, threads = [], episodes = [], events = [], needs = [], onNeedsChanged }) {
-  const controls = useRoadmapControls({ roadmap, api, showId, onChanged, setToast });
-  if (!roadmap) return null;
-  const { phases = [] } = roadmap;
-  const { selected, open } = controls;
-
-  return (
-    <div className="wa-arc-card" data-testid="season-roadmap">
-      <div className="wa-arc-head">
-        <h3 className="wa-arc-title">Season {roadmap.season_number} arc</h3>
-        <p className="wa-arc-summary" data-testid="season-arc-summary">{arcSummary(roadmap)}</p>
-        {/* The key, as one line (it was a card beside the panel). */}
-        <ul className="wa-arc-legend" aria-label="Key">
-          {SLOT_STATE_ORDER.map((state) => (
-            <li key={state} className={`state-${state}`}><span className="wa-arc-dot" aria-hidden="true" />{SLOT_STATE_KEY[state]}</li>
-          ))}
-        </ul>
-      </div>
-
-      <AdvanceBar roadmap={roadmap} S={S} onAdvance={onAdvance} advancing={advancing} advanceWarning={advanceWarning}
-        onConfirmAdvance={onConfirmAdvance} onCancelAdvance={onCancelAdvance} advanceError={advanceError} />
-
-      <div className="wa-arc">
-        <div className="wa-arc-parts">
-          {phases.map((phase) => (
-            <section key={phase.phase} className="wa-arc-part" aria-label={`Part ${phase.phase}: ${phase.title}`}>
-              <h4 className="wa-arc-part-title">
-                <span className="wa-arc-part-num">Part {phase.phase}</span> {phase.title}
-                <span className="wa-arc-part-range"> · E{phase.episode_start}–E{phase.episode_end}</span>
-              </h4>
-              {phase.slots.every((sl) => sl.state === 'needs_event' && !slotTitle(sl)) ? (
-                // Nothing in this part yet: a row of small chips, one per slot.
-                <div className="wa-arc-chips" data-testid={`season-part-folded-${phase.phase}`}>
-                  {phase.slots.map((slot) => (
-                    <button
-                      key={slot.id}
-                      type="button"
-                      data-testid={`season-slot-${slot.slot_number}`}
-                      className={`wa-arc-chip-slot${selected?.id === slot.id ? ' selected' : ''}`}
-                      aria-pressed={selected?.id === slot.id}
-                      aria-label={`${slot.label}: Open slot, ${SLOT_STATE_LABEL.needs_event}`}
-                      onClick={() => open(slot)}
-                    >{shortSlotLabel(slot)}</button>
-                  ))}
-                </div>
-              ) : (
-              <div className="wa-arc-grid">
-                {phase.slots.map((slot) => {
-                  const title = slotTitle(slot);
-                  return (
-                    <button
-                      key={slot.id}
-                      type="button"
-                      data-testid={`season-slot-${slot.slot_number}`}
-                      className={`wa-arc-slot state-${slot.state}${selected?.id === slot.id ? ' selected' : ''}`}
-                      aria-pressed={selected?.id === slot.id}
-                      aria-label={`${slot.label}: ${title || 'Open slot'}, ${SLOT_STATE_LABEL[slot.state] || SLOT_STATE_LABEL.needs_event}`}
-                      onClick={() => open(slot)}
-                    >
-                      <span className="wa-arc-slot-top">
-                        <span className="wa-arc-slot-num">{shortSlotLabel(slot)}</span>
-                        {!slot.locked && slot.slot_number === roadmap.next_slot_number && <span className="wa-arc-next">Next</span>}
-                        <span className="wa-arc-dot" aria-hidden="true" />
-                      </span>
-                      <span className={`wa-arc-slot-title${title ? '' : ' empty'}`}>{title || 'No idea yet'}</span>
-                      <span className="wa-arc-slot-state">{SLOT_STATE_LABEL[slot.state] || SLOT_STATE_LABEL.needs_event}</span>
-                    </button>
-                  );
-                })}
-              </div>
-              )}
-            </section>
-          ))}
-        </div>
-
-        <SlotSide controls={controls} roadmap={roadmap} S={S} api={api} showId={showId} onChanged={onChanged} setToast={setToast}
-          threads={threads} episodes={episodes} events={events} needs={needs} onNeedsChanged={onNeedsChanged} />
-      </div>
-
-      <UnslottedEpisodes roadmap={roadmap} controls={controls} />
-    </div>
-  );
-}
-
 const SEASON_PART_LABEL = { season: 'the season', goals: 'the goals', roadmap: 'the roadmap', threads: 'the story threads', insights: 'Planning Insights' };
 
 // Lala's temperament (arc.emotional_temperature), as a chip: on the Season
@@ -888,12 +796,13 @@ export const TEMP_CONFIG = {
 };
 
 /**
- * The Season Plan's data and actions, for Producer Mode's Season Plan and
- * the Season page (Evoni, 2026-10-25: both read the same loaders, so the two
- * never drift). The first load shows "Loading"; every later one reloads in
- * place. A part that did not load is named in `failed`, with a Retry.
+ * The Season page's data and actions (Evoni, 2026-10-25). The first load
+ * shows "Loading"; every later one reloads in place. A part that did not
+ * load is named in `failed`, with a Retry. `loadGoals` reloads the goals
+ * alone, after the Goals tab changes one, so the stat card and the
+ * Overview's Season Goals count them at once.
  */
-export function useSeasonPlan({ showId, api, setToast, onGoalsChanged }) {
+export function useSeasonPlan({ showId, api, setToast }) {
   const [arc, setArc] = useState(null);
   const [loading, setLoading] = useState(true);
   // Setting up a season (Evoni, 2026-10-24): the next season's number, and
@@ -962,6 +871,19 @@ export function useSeasonPlan({ showId, api, setToast, onGoalsChanged }) {
     await loadNeeds();
   }, [showId, markFailed, loadNeeds]);
 
+  // Every goal, so the phases show what was hit and missed, the checklist
+  // knows whether any is live, and the Goals tab lists them.
+  const loadGoals = useCallback(async () => {
+    try {
+      const r = await api.get(`/api/v1/world/${showId}/goals`);
+      setGoals(r.data.goals || []);
+      markFailed('goals', null);
+    } catch (err) {
+      console.error('Season goals load failed:', err);
+      markFailed('goals', err);
+    }
+  }, [showId, markFailed]);
+
   // The first load shows "Loading"; every later one (after an accept, an
   // advance, a setup save) reloads in place, so the parts below keep what
   // she typed and the forms she has open (Evoni's review, 2026-10-24).
@@ -977,21 +899,11 @@ export function useSeasonPlan({ showId, api, setToast, onGoalsChanged }) {
       markFailed('season', err);
     }
 
-    // Every goal, so the phases show what was hit and missed and the
-    // checklist knows whether any is live.
-    try {
-      const r = await api.get(`/api/v1/world/${showId}/goals`);
-      setGoals(r.data.goals || []);
-      markFailed('goals', null);
-    } catch (err) {
-      console.error('Season goals load failed:', err);
-      markFailed('goals', err);
-    }
-
+    await loadGoals();
     await loadRoadmap();
 
     if (initial) setLoading(false);
-  }, [showId, loadRoadmap, markFailed]);
+  }, [showId, loadRoadmap, loadGoals, markFailed]);
 
   useEffect(() => { loadArc({ initial: true }); }, [loadArc]);
   const retry = () => loadArc({ initial: !arc });
@@ -1014,9 +926,8 @@ export function useSeasonPlan({ showId, api, setToast, onGoalsChanged }) {
     setSeedingGoals(true); setSetupNote(null);
     try {
       const r = await api.post(`/api/v1/world/${showId}/goals/seed`, { activate_tier: 1 });
-      setSetupNote(r.data.created ? `Seeded ${r.data.created} goals.` : 'No new goals: the show already has these. Open Career Goals to add your own.');
+      setSetupNote(r.data.created ? `Seeded ${r.data.created} goals.` : 'No new goals: the show already has these. Add your own on the Goals tab.');
       await loadArc();
-      if (onGoalsChanged) onGoalsChanged();
     } catch (err) {
       console.error('Seed goals failed:', err);
       setSetupNote(err.response?.data?.error || 'The goals were not seeded.');
@@ -1064,17 +975,7 @@ export function useSeasonPlan({ showId, api, setToast, onGoalsChanged }) {
   return {
     arc, loading, nextSeason, panel, setPanel, seedingGoals, setupNote, setSetupNote,
     advancing, warning, setWarning, advanceError, goals, roadmap, insights, threadData, needs, failed,
-    loadNeeds, loadRoadmap, loadArc, retry, handleSeed, handleEdit, seedGoals, handleAdvance, handleConfirmAdvance,
-  };
-}
-
-/** The roadmap's props from the plan, so both pages wire it the same way. */
-export function roadmapProps(plan, { S, api, showId, setToast, episodes = [], events = [] }) {
-  return {
-    roadmap: plan.roadmap, S, api, showId, onChanged: plan.loadRoadmap, setToast,
-    onAdvance: plan.handleAdvance, advancing: plan.advancing, advanceWarning: plan.warning,
-    onConfirmAdvance: plan.handleConfirmAdvance, onCancelAdvance: () => plan.setWarning(null), advanceError: plan.advanceError,
-    threads: plan.threadData.threads, episodes, events, needs: plan.needs.data?.needs || [], onNeedsChanged: plan.loadNeeds,
+    loadNeeds, loadRoadmap, loadArc, loadGoals, retry, handleSeed, handleEdit, seedGoals, handleAdvance, handleConfirmAdvance,
   };
 }
 
@@ -1091,307 +992,6 @@ export function SeasonLoadError({ plan }) {
           : `Some of the season did not load: ${failedParts.map((k) => SEASON_PART_LABEL[k] || k).join(', ')}.`}
       </span>
       <button type="button" className="wa-season-error-retry" onClick={retry} data-testid="season-load-retry">Retry</button>
-    </div>
-  );
-}
-
-export function SeasonTab({ showId, api, S, episodes, events = [], setToast, onGoalsChanged }) {
-  const plan = useSeasonPlan({ showId, api, setToast, onGoalsChanged });
-  const {
-    arc, loading, nextSeason, panel, setPanel, seedingGoals, setupNote, setSetupNote,
-    goals, roadmap, insights, threadData, needs, failed, loadNeeds, loadRoadmap, loadArc, handleSeed, handleEdit, seedGoals,
-  } = plan;
-  // The Career Goals and the threads live further down the page; the
-  // checklist opens and scrolls to them.
-  const reveal = (testId) => {
-    const el = typeof document !== 'undefined' ? document.querySelector(`[data-testid="${testId}"]`) : null;
-    if (!el) return;
-    if (el.tagName === 'DETAILS') el.open = true;
-    el.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
-  };
-  const loadErrorBox = <SeasonLoadError plan={plan} />;
-
-  if (loading) return <div style={S.center}>Loading season data...</div>;
-
-  // The season could not be read: say so, never "No season set up yet".
-  if (!arc && failed.season) return <div style={S.content}>{loadErrorBox}</div>;
-
-  // No season yet: the setup form, open (Evoni, 2026-10-24).
-  if (!arc) return (
-    <div style={S.content}>
-      <div className="wa-season-empty" data-testid="season-empty">
-        <h2 className="wa-season-empty-title">📖 No season set up yet</h2>
-        <p className="wa-season-empty-about">Name the season and its three parts. Then place the episodes and events you already have, and draft the rest.</p>
-      </div>
-      <SeasonSetupForm mode="create" showId={showId} seasonNumber={nextSeason} onSubmit={handleSeed} />
-    </div>
-  );
-
-  // A completed season: what it was, and the next one's form behind "Start Season N".
-  if (arc.status === 'completed') return (
-    <div style={S.content}>
-      <div className="wa-season-empty" data-testid="season-complete">
-        <h2 className="wa-season-empty-title">📖 Season {arc.season_number || 1}: {arc.title} is complete</h2>
-        <p className="wa-season-empty-about">
-          {(arc.narrative_debt || []).length > 0
-            ? `Lala carries ${(arc.narrative_debt || []).length} narrative debt into the next season.`
-            : 'Lala starts the next season with no narrative debt.'}
-        </p>
-        {panel !== 'new' && (
-          <button type="button" className="wa-season-start" onClick={() => setPanel('new')} data-testid="season-start-next">
-            Start Season {nextSeason}
-          </button>
-        )}
-      </div>
-      {panel === 'new' && <SeasonSetupForm mode="create" showId={showId} seasonNumber={nextSeason} onSubmit={handleSeed} onCancel={() => setPanel(null)} />}
-    </div>
-  );
-
-  const phases = arc.phases || [];
-  const currentPhase = phases.find(p => p.phase === arc.current_phase) || phases[0];
-  const debt = arc.narrative_debt || [];
-  const log = arc.progression_log || [];
-
-  const tempCfg = TEMP_CONFIG[arc.emotional_temperature] || TEMP_CONFIG.rising;
-
-  const PHASE_STATUS_COLORS = {
-    active: { bg: 'var(--success-bg)', color: 'var(--success-text)', border: 'var(--success-border)' },
-    completed: { bg: 'var(--surface-bg)', color: 'var(--text-secondary)', border: 'var(--lala-parchment-3)' },
-    upcoming: { bg: 'var(--lala-gold-soft)', color: 'var(--lala-gold-text)', border: 'var(--lala-gold-line)' },
-  };
-
-  // Goals grouped by phase
-  const phaseGoals = (phase) => goals.filter(g => {
-    const range = typeof g.episode_range === 'string' ? JSON.parse(g.episode_range) : g.episode_range;
-    if (!range) return false;
-    return range[0] >= phase.episode_start && range[0] <= phase.episode_end;
-  });
-
-  // Episodes done in THIS season: its accepted slots, not the show's whole count.
-  const completedEpisodes = roadmap?.counts?.done || 0;
-  const seasonNumber = arc.season_number || 1;
-  const steps = setupSteps({ roadmap, goals, threads: threadData.threads });
-  const stepActions = {
-    setup: { label: 'Edit season', icon: 'edit', onClick: () => setPanel('edit') },
-    place: { label: 'Place them', onClick: () => setPanel('place') },
-    goals: goals.length === 0
-      ? { label: 'Seed 24 goals', onClick: seedGoals, busy: seedingGoals }
-      : { label: 'Open Career Goals', onClick: () => reveal('career-goals-fold') },
-    threads: { label: 'Add a thread', onClick: () => reveal('story-threads') },
-    draft: { label: 'Draft the season', onClick: () => setPanel('draft') },
-  };
-
-  return (
-    <div style={S.content}>
-      {/* Season Header: one line, and the counts as a short line (Evoni,
-          2026-10-22 layout list; four stat boxes before). */}
-      <header className="wa-season-head" data-testid="season-head">
-        <div className="wa-season-head-row">
-          <h2 className="wa-season-head-title">📖 Season {seasonNumber}: {arc.title}</h2>
-          {arc.tagline && <span className="wa-season-head-tagline">{arc.tagline}</span>}
-          <span className="wa-season-head-chips">
-            <span className="wa-season-chip" style={{ background: tempCfg.bg, color: tempCfg.color }}>{tempCfg.label}</span>
-            <span className="wa-season-chip is-plain">Ep {arc.current_episode || 0} / {arc.episode_end}</span>
-          </span>
-        </div>
-        <p className="wa-season-counts" data-testid="season-counts">
-          {completedEpisodes} {completedEpisodes === 1 ? 'episode' : 'episodes'} done this season · {goals.filter(g => g.status === 'completed').length} goals hit · <span className={debt.length > 0 ? 'is-debt' : ''}>{debt.length} narrative debt</span> · Phase {arc.current_phase}
-        </p>
-        {/* The Season page (Evoni's mockup, 2026-10-25): the same season, laid out to read. */}
-        <Link className="wa-season-page-link" to={`/shows/${showId}/season`} data-testid="season-page-link">
-          Open the Season page <span aria-hidden="true">→</span>
-        </Link>
-        <div className="wa-season-head-actions">
-          <button type="button" className="wa-season-head-btn" onClick={() => setPanel(panel === 'edit' ? null : 'edit')} aria-pressed={panel === 'edit'} data-testid="season-edit">Edit season</button>
-          <button type="button" className="wa-season-head-btn" onClick={() => setPanel(panel === 'place' ? null : 'place')} aria-pressed={panel === 'place'} data-testid="season-place">Use events and episodes</button>
-          <button type="button" className="wa-season-head-btn" onClick={() => setPanel(panel === 'draft' ? null : 'draft')} aria-pressed={panel === 'draft'} data-testid="season-draft-open">Draft with AI</button>
-        </div>
-      </header>
-
-      {loadErrorBox}
-      {setupNote && <p className="wa-season-note" role="status" data-testid="season-setup-note">{setupNote}</p>}
-      {/* One checklist for a season still being set up; it folds away once every step is done. */}
-      <SeasonChecklist steps={steps} actions={stepActions} />
-      {panel === 'edit' && (
-        <SeasonSetupForm key={`edit-${arc.id}`} mode="edit" showId={showId} seasonNumber={seasonNumber} initial={formFromArc(arc)} onSubmit={handleEdit} onCancel={() => setPanel(null)} />
-      )}
-      {panel === 'place' && (
-        <SeasonPlacement showId={showId} api={api} onClose={() => setPanel(null)}
-          onSaved={async (text) => { setPanel(null); setSetupNote(text); await loadArc(); }} />
-      )}
-      {panel === 'draft' && (
-        <SeasonDraft showId={showId} api={api} phases={roadmap?.phases || phases} onClose={() => setPanel(null)} onSaved={loadRoadmap} />
-      )}
-
-      {/* Roadmap — the season's 24 slots, first under the header (Evoni's review, 2026-10-24; it was fourth). */}
-      <SeasonRoadmap {...roadmapProps(plan, { S, api, showId, setToast, episodes, events })} />
-
-      {/* The relationships each twist, thread and purpose depends on, and when (planner PR 3, 2026-10-24). */}
-      {roadmap && <SeasonNeeds data={needs.data} api={api} onChanged={loadNeeds} error={needs.error} onRetry={loadNeeds} />}
-
-      {/* What the season's AI reads of the story so far: the last approved record and the open follow-ups. */}
-      {roadmap && <SeasonKnows showId={showId} api={api} />}
-
-      {/* What the feed proposes for the season (2026-10-17); nothing changes until she accepts. */}
-      <SeasonProposals showId={showId} api={api} onApplied={() => loadArc()} />
-
-      {/* Which secret the season hints at or reveals, and when (stage E, 2026-10-18). */}
-      <SeasonRevealPlan showId={showId} api={api} />
-
-      {/* Twists planted in one episode and paid off in a later one (2026-10-23). */}
-      <SeasonTwists showId={showId} api={api} />
-
-      {/* The threads, with the narrative debt beside them (Evoni, 2026-10-22
-          layout list; the debt was its own full-width card further down). */}
-      {(roadmap || debt.length > 0) && (
-        <div className={`wa-season-pair${roadmap && debt.length > 0 ? ' is-two' : ''}`}>
-          {roadmap && (
-            <StoryThreadsCard threads={threadData.threads} drafts={threadData.drafts} S={S} api={api} showId={showId}
-              onChanged={loadRoadmap} setToast={setToast} />
-          )}
-          {debt.length > 0 && (
-            <div style={S.card} data-testid="season-debt">
-              <h3 style={{ ...S.cardTitle, margin: '0 0 12px', color: 'var(--danger-text)' }}>
-                Narrative Debt ({debt.length})
-              </h3>
-              <p style={{ ...S.muted, marginBottom: 12 }}>
-                Failed goals that carry emotional weight. These feed into AI-generated scripts, Pulse posts, and event stakes.
-              </p>
-              {debt.map((d, i) => (
-                <div key={i} style={{
-                  padding: '10px 14px', background: 'var(--danger-bg)', border: '1px solid var(--danger-border)',
-                  borderRadius: 8, marginBottom: 8,
-                }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--danger-text)', marginBottom: 4 }}>
-                    {d.goal_title} <span style={{ fontWeight: 400, fontSize: 11 }}>({d.achieved}/{d.target} {d.target_metric})</span>
-                  </div>
-                  <div style={{ fontSize: 12, color: 'var(--danger-text)', fontStyle: 'italic' }}>
-                    {d.narrative_weight}
-                  </div>
-                  <div style={{ fontSize: 10, color: 'var(--danger-text)', marginTop: 4 }}>
-                    From Phase: {d.phase} &middot; Affects: {(d.affects || []).join(', ')}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      <PlanningInsights insights={insights} S={S} />
-
-
-      {/* The phases and the season's history, folded (Evoni, 2026-10-17: one
-          long scroll before). Advancing a phase lives at the roadmap's phase
-          boundary, the only place it applies; the always-shown Phase Controls
-          card and its separate warning are gone. */}
-      <details className="wa-season-fold" data-testid="season-phases-fold">
-        <summary className="wa-season-fold-summary">Phases and history <span className="wa-season-fold-meta">{phases.length} phases{log.length ? ` · ${log.length} log entries` : ''}</span></summary>
-      <div style={{ display: 'grid', gap: 12 }}>
-        {phases.map(phase => {
-          const statusCfg = PHASE_STATUS_COLORS[phase.status] || PHASE_STATUS_COLORS.upcoming;
-          const pGoals = phaseGoals(phase);
-          const isCurrent = phase.phase === arc.current_phase;
-
-          return (
-            <div key={phase.phase} style={{
-              ...S.card,
-              borderColor: isCurrent ? 'var(--lala-gold)' : statusCfg.border,
-              borderWidth: isCurrent ? 2 : 1,
-              borderStyle: 'solid',
-              background: isCurrent ? 'var(--lala-gold-soft)' : 'var(--surface-card)',
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-                <div>
-                  <h3 style={{ margin: 0, fontSize: 15, fontWeight: 600, color: 'var(--text-primary)' }}>
-                    Phase {phase.phase}: {phase.title}
-                    {isCurrent && <span style={{ marginLeft: 8, fontSize: 10, padding: '2px 8px', background: 'var(--success-bg)', color: 'var(--success-text)', borderRadius: 4, fontWeight: 700 }}>ACTIVE</span>}
-                  </h3>
-                  <p style={{ margin: '2px 0 0', fontSize: 12, color: 'var(--text-secondary)', fontStyle: 'italic' }}>
-                    &ldquo;{phase.tagline}&rdquo; &middot; Episodes {phase.episode_start}-{phase.episode_end}
-                  </p>
-                </div>
-                <span style={{
-                  padding: '3px 10px', borderRadius: 6, fontSize: 11, fontWeight: 600,
-                  background: statusCfg.bg, color: statusCfg.color,
-                }}>{phase.status}</span>
-              </div>
-
-              {/* Emotional arc */}
-              {phase.emotional_arc && (
-                <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 8 }}>
-                  <strong>Emotional arc:</strong> {phase.emotional_arc}
-                </div>
-              )}
-
-              {/* Feed behavior */}
-              {phase.feed_behavior && (
-                <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 10, padding: '6px 10px', background: 'var(--surface-bg)', borderRadius: 6 }}>
-                  <strong>Pulse:</strong> {phase.feed_behavior.feed_tone || `Follow bias: ${phase.feed_behavior.follow_bias}`}
-                  {phase.feed_behavior.event_prestige_max && <span> &middot; Max prestige: {phase.feed_behavior.event_prestige_max}</span>}
-                </div>
-              )}
-
-              {/* Phase goals */}
-              {pGoals.length > 0 && (
-                <div style={{ marginTop: 8 }}>
-                  <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.3px', marginBottom: 6 }}>
-                    Goals ({pGoals.filter(g => g.status === 'completed').length}/{pGoals.length} complete)
-                  </div>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                    {pGoals.map(g => (
-                      <span key={g.id} style={{
-                        padding: '3px 10px', borderRadius: 6, fontSize: 11, fontWeight: 500,
-                        background: g.status === 'completed' ? 'var(--success-bg)' : g.status === 'failed' ? 'var(--danger-bg)' : g.status === 'paused' ? 'var(--surface-bg)' : 'var(--primary-subtle)',
-                        color: g.status === 'completed' ? 'var(--success-text)' : g.status === 'failed' ? 'var(--danger-text)' : g.status === 'paused' ? 'var(--text-secondary)' : 'var(--primary-text)',
-                        textDecoration: g.status === 'failed' ? 'line-through' : 'none',
-                      }}>
-                        {g.icon || '🎯'} {g.title}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Goal summary for completed phases */}
-              {phase.goal_summary && phase.status === 'completed' && (
-                <div style={{ marginTop: 8, fontSize: 11, color: 'var(--text-secondary)' }}>
-                  Results: {phase.goal_summary.completed} completed, {phase.goal_summary.failed} failed
-                  {phase.goal_summary.carried > 0 && <span style={{ color: 'var(--danger-text)' }}>, {phase.goal_summary.carried} carried as debt</span>}
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Progression Log */}
-      {log.length > 0 && (
-        <div style={S.card}>
-          <h3 style={{ ...S.cardTitle, margin: '0 0 12px' }}>Progression Log</h3>
-          {log.slice().reverse().map((entry, i) => (
-            <div key={i} style={{
-              display: 'flex', gap: 10, alignItems: 'flex-start',
-              padding: '8px 0', borderBottom: i < log.length - 1 ? '1px solid rgba(0,0,0,0.04)' : 'none',
-            }}>
-              <span style={{
-                padding: '2px 8px', borderRadius: 4, fontSize: 10, fontWeight: 700,
-                background: entry.triggered_by === 'manual' ? 'var(--warning-bg)' : 'var(--primary-subtle)',
-                color: entry.triggered_by === 'manual' ? 'var(--warning-text)' : 'var(--primary-text)',
-                flexShrink: 0,
-              }}>{entry.triggered_by}</span>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 12, color: 'var(--text-primary)' }}>{entry.trigger_reason}</div>
-                <div style={{ fontSize: 10, color: 'var(--text-secondary)', marginTop: 2 }}>
-                  {entry.timestamp ? new Date(entry.timestamp).toLocaleString() : ''}
-                  {entry.goals_carried > 0 && <span style={{ color: 'var(--danger-text)' }}> &middot; {entry.goals_carried} goals carried</span>}
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-      </details>
     </div>
   );
 }

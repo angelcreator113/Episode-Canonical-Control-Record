@@ -1,9 +1,10 @@
 /**
- * The Season Plan's setup on the page (Evoni, 2026-10-24): with no season
- * the setup form is open and seeds from it; a completed season offers
- * "Start Season N" with the same form; the header names the real season
- * and counts the episodes done in it; the checklist's steps open their
- * panels or run their action.
+ * Setting up a season on the Season page (Evoni, 2026-10-24; moved from
+ * Producer Mode's Season Plan tab, which the page replaced on 2026-10-25):
+ * with no season the setup form is open and seeds from it; a completed
+ * season offers "Start Season N" with the same form; the hero names the
+ * real season and the stat card counts the episodes done in it; the
+ * checklist's steps open their panels or run their action.
  */
 import { vi, describe, beforeEach, test, expect } from 'vitest';
 import { render, screen, waitFor, within, fireEvent } from '@testing-library/react';
@@ -14,7 +15,7 @@ vi.mock('../services/api', () => ({
 }));
 
 import api from '../services/api';
-import WorldAdmin from './WorldAdmin';
+import SeasonPage from './SeasonPage';
 
 const PHASES = [
   { phase: 1, title: 'Doors', tagline: 'Get in', status: 'active', episode_start: 1, episode_end: 6 },
@@ -54,8 +55,8 @@ function mockGets({ goals = [], threads = [] } = {}) {
 }
 function renderSeason() {
   return render(
-    <MemoryRouter initialEntries={['/shows/show-1/world?tab=season']}>
-      <Routes><Route path="/shows/:id/world" element={<WorldAdmin />} /></Routes>
+    <MemoryRouter initialEntries={['/shows/show-1/season']}>
+      <Routes><Route path="/shows/:showId/season" element={<SeasonPage />} /></Routes>
     </MemoryRouter>
   );
 }
@@ -66,13 +67,13 @@ beforeEach(() => {
   vi.spyOn(window, 'alert').mockImplementation(() => {});
 });
 
-describe('Setting up a season on the page', () => {
+describe('Setting up a season on the Season page', () => {
   test('no season: the form is open, with no fixed "Soft Luxury" seed button; Save seeds from it', async () => {
     arcResponse = { arc: null, next_season_number: 1 };
     mockGets();
     vi.mocked(api.post).mockResolvedValue({ data: { success: true, season_number: 1 } });
     renderSeason();
-    expect(await screen.findByTestId('season-empty')).toBeTruthy();
+    expect(await screen.findByTestId('szn-empty')).toBeTruthy();
     expect(screen.queryByText('Seed Season 1')).toBeNull();
     fireEvent.change(screen.getByTestId('sst-title'), { target: { value: 'Velvet Season' } });
     fireEvent.click(screen.getByTestId('sst-submit'));
@@ -86,24 +87,30 @@ describe('Setting up a season on the page', () => {
     arcResponse = { arc: { ...ARC2, season_number: 1, title: 'Soft Luxury Ascension', status: 'completed' }, next_season_number: 2 };
     mockGets();
     renderSeason();
-    const done = await screen.findByTestId('season-complete');
-    expect(within(done).getByRole('heading').textContent).toBe('📖 Season 1: Soft Luxury Ascension is complete');
-    fireEvent.click(screen.getByTestId('season-start-next'));
+    const hero = await screen.findByTestId('szn-hero');
+    expect(within(hero).getByRole('heading', { level: 1 }).textContent).toBe('Soft Luxury Ascension');
+    expect(within(hero).getByText('Complete')).toBeTruthy();
+    fireEvent.click(screen.getByTestId('szn-hero-more'));
+    fireEvent.click(within(screen.getByTestId('szn-hero-menu')).getByRole('menuitem', { name: 'Start Season 2' }));
     expect(screen.getByRole('heading', { name: /Set up Season 2/ })).toBeTruthy();
     expect(screen.getByTestId('sst-title').value).toBe('Season 2');
   });
 
-  test('Season 2: the header names it and counts only its own episodes; the checklist is partly done', async () => {
+  test('Season 2: the hero names it, the slots card counts only its own episodes; the checklist is partly done', async () => {
     arcResponse = { arc: ARC2, next_season_number: 3 };
     mockGets({ goals: [{ id: 'g1', status: 'completed', title: 'Old' }] });
     renderSeason();
-    const head = await screen.findByTestId('season-head');
-    expect(within(head).getByRole('heading', { level: 2 }).textContent).toBe('📖 Season 2: Velvet Season');
-    expect(screen.getByTestId('season-counts').textContent).toMatch(/^2 episodes done this season · 1 goals hit/);
+    const hero = await screen.findByTestId('szn-hero');
+    expect(within(hero).getByText('Season 2')).toBeTruthy();
+    expect(within(hero).getByRole('heading', { level: 1 }).textContent).toBe('Velvet Season');
+    expect(screen.getByTestId('szn-stat-slots').textContent).toContain('2 completed · 22 remaining');
     const list = await screen.findByTestId('season-checklist');
     expect(within(list).getByTestId('sst-check-count').textContent).toBe('1 of 5 done');
-    // The show has goals (from Season 1), none live: the action opens Career Goals, not the seed.
-    expect(within(list).getByTestId('sst-step-action-goals').textContent).toBe('Open Career Goals');
+    // The show has goals (from Season 1), none live: the action opens the Goals tab, not the seed.
+    expect(within(list).getByTestId('sst-step-action-goals').textContent).toBe('Open Goals');
+    fireEvent.click(within(list).getByTestId('sst-step-action-goals'));
+    expect(await screen.findByTestId('career-goals')).toBeTruthy();
+    expect(screen.getByTestId('szn-tab-goals').getAttribute('aria-selected')).toBe('true');
   });
 
   test('the checklist opens Edit season and the placement preview; Seed 24 goals runs the existing seed', async () => {
@@ -121,7 +128,7 @@ describe('Setting up a season on the page', () => {
     expect(screen.queryByTestId('season-setup-form')).toBeNull();
     fireEvent.click(within(list).getByTestId('sst-step-action-goals'));
     await waitFor(() => expect(api.post).toHaveBeenCalledWith('/api/v1/world/show-1/goals/seed', { activate_tier: 1 }));
-    expect((await screen.findByTestId('season-setup-note')).textContent).toBe('Seeded 24 goals.');
+    expect((await screen.findByTestId('szn-setup-note')).textContent).toBe('Seeded 24 goals.');
   });
 
   test('Edit season saves through PUT .../arc/setup and says how many slots moved', async () => {
@@ -129,11 +136,11 @@ describe('Setting up a season on the page', () => {
     mockGets();
     vi.mocked(api.put).mockResolvedValue({ data: { success: true, moved: 2 } });
     renderSeason();
-    fireEvent.click(await screen.findByTestId('season-edit'));
+    fireEvent.click(await screen.findByTestId('szn-edit-season'));
     fireEvent.change(screen.getByTestId('sst-split-1'), { target: { value: '8' } });
     fireEvent.change(screen.getByTestId('sst-split-2'), { target: { value: '8' } });
     fireEvent.click(screen.getByTestId('sst-submit'));
     await waitFor(() => expect(api.put).toHaveBeenCalledWith('/api/v1/world/show-1/arc/setup', expect.objectContaining({ split: [8, 8, 8], title: 'Velvet Season' })));
-    expect((await screen.findByTestId('season-setup-note')).textContent).toBe('Season saved; 2 slots moved to a new part.');
+    expect((await screen.findByTestId('szn-setup-note')).textContent).toBe('Season saved; 2 slots moved to a new part.');
   });
 });
