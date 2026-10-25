@@ -31,7 +31,8 @@ export function MarkedText({ text, wordStart = null, cursor = -1, from = 0 }) {
   });
 }
 
-/** The mic's level as a bar; `silent` adds the no-sound warning. */
+/** The mic's level as a bar; `silent` ('never' or 'lost') adds the no-sound warning. */
+const SILENT_SAYS = { never: "No sound from your mic yet — check it's on", lost: 'No sound from your mic' };
 export function MicMeter({ level = 0, silent = false }) {
   const pct = Math.round(Math.max(0, Math.min(1, level)) * 100);
   return (
@@ -40,7 +41,7 @@ export function MicMeter({ level = 0, silent = false }) {
       <span className="stp-meter-track" role="meter" aria-label="Microphone level" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct}>
         <span style={{ transform: `scaleX(${pct / 100})` }} />
       </span>
-      {silent && <span className="stp-meter-warn" role="alert" data-testid="stp-silent">No sound from your mic</span>}
+      {silent && <span className="stp-meter-warn" role="alert" data-testid="stp-silent" data-silent={silent}>{SILENT_SAYS[silent] || SILENT_SAYS.lost}</span>}
     </div>
   );
 }
