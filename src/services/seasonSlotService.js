@@ -146,13 +146,17 @@ async function recordSlotOutcome(sequelize, { showId, episodeId, tier, moneyNet,
  * phase, slot and purpose an event belongs to: the slot it is pencilled
  * into, or the slot of the episode it started. When it is in no slot, the
  * next open slot is named. Null when the show has no active season.
+ * story_purposes is every purpose, primary first, each with its thread's
+ * title (A10, as the episode's snapshot holds them); story_purpose stays
+ * the primary's text, for older readers.
  */
 async function eventSeasonContext(sequelize, showId, eventId) {
   const season = await loadSeason(sequelize, showId, { slots: false });
   if (!season) return null;
   const { arc } = season;
   const [[slot]] = await sequelize.query(
-    `SELECT s.slot_number, s.season_number, s.phase, s.story_purpose, s.desired_pressure, s.episode_id,
+    `SELECT s.slot_number, s.season_number, s.phase, s.story_purpose, s.story_purposes, s.story_thread_id,
+            s.intention_source, s.desired_pressure, s.episode_id,
             CASE WHEN s.event_id = :eventId THEN 'pencilled' ELSE 'episode' END AS via
        FROM season_slots s
        LEFT JOIN world_events ev ON ev.id = :eventId
@@ -175,6 +179,8 @@ async function eventSeasonContext(sequelize, showId, eventId) {
       slot_number: slot.slot_number,
       phase: phaseOf(slot.phase),
       story_purpose: slot.story_purpose || null,
+      story_purposes: purposesWithThreads(slot, await threadTitles(sequelize, showId))
+        .map((p) => ({ text: p.text, primary: p.primary, story_thread: p.story_thread?.title || null })),
       desired_pressure: slot.desired_pressure || null,
     };
   }

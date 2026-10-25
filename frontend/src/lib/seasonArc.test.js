@@ -1,5 +1,5 @@
 import { describe, test, expect } from 'vitest';
-import { shortSlotLabel, slotTitle, slotThreads, defaultSlotId, arcSummary } from './seasonArc';
+import { shortSlotLabel, slotTitle, slotThreads, defaultSlotId, arcSummary, purposeLines } from './seasonArc';
 
 const slot = (n, extra = {}) => ({ id: `s${n}`, slot_number: n, label: `S1 · E${n}`, state: 'needs_event', intention: {}, ...extra });
 
@@ -37,5 +37,26 @@ describe('Season Arc helpers', () => {
   test('the summary counts production, pencilled and slots; done only when there are any', () => {
     expect(arcSummary({ slot_count: 24, counts: { in_production: 1, event_ready: 3, needs_event: 20 } })).toBe('1 in production · 3 pencilled · 24 slots');
     expect(arcSummary({ slot_count: 24, counts: { done: 2, in_production: 0, event_ready: 0 } })).toBe('2 done · 0 in production · 0 pencilled · 24 slots');
+  });
+});
+
+describe('purposeLines (A10: every purpose, primary first)', () => {
+  test('a snapshot\'s purposes, primary first, with their threads (a title, or a roadmap thread object)', () => {
+    expect(purposeLines({ story_purposes: [
+      { text: 'The rival notices', primary: false, story_thread: { id: 't1', title: 'The rival' } },
+      { text: 'Lala bluffs her way in', primary: true, story_thread: null },
+      { text: '', primary: false, story_thread: 'Old debt' },
+      { text: '', primary: false, story_thread: null },
+    ] })).toEqual([
+      { text: 'Lala bluffs her way in', primary: true, thread: null },
+      { text: 'The rival notices', primary: false, thread: 'The rival' },
+      { text: '', primary: false, thread: 'Old debt' },
+    ]);
+  });
+
+  test('from before A10: the one story_purpose, as the primary; none at all is empty', () => {
+    expect(purposeLines({ story_purpose: 'Win the room', story_thread: 'Rivalry' })).toEqual([{ text: 'Win the room', primary: true, thread: 'Rivalry' }]);
+    expect(purposeLines({ story_purposes: [], story_purpose: null })).toEqual([]);
+    expect(purposeLines(null)).toEqual([]);
   });
 });

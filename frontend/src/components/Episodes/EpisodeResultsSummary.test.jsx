@@ -52,6 +52,8 @@ describe('Results summary', () => {
     expect(screen.getByText('Completed · 91/100')).toBeTruthy();
     expect((await screen.findByTestId('results-stat-stress')).textContent).toContain('−1');
     expect(await screen.findByText('Follow up with STUDIO BY SABLE')).toBeTruthy();
+    // Her goals are kept on the Season page's Goals tab (2026-10-25).
+    expect(within(screen.getByTestId('results-goals')).getByRole('link', { name: "Open Lala's goals" }).getAttribute('href')).toBe('/shows/show-1/season?tab=goals');
     const evaluation = screen.getByTestId('results-evaluation');
     expect(within(evaluation).getByText('outfit match')).toBeTruthy();
     expect(within(evaluation).getByText('+30')).toBeTruthy();

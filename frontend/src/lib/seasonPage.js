@@ -12,11 +12,18 @@ export const SEASON_TABS = [
   { key: 'overview', label: 'Overview' },
   { key: 'roadmap', label: 'Episode Roadmap' },
   { key: 'events', label: 'Events' },
+  // Lala's career goals and the brands she has worked with (Evoni, 2026-10-25:
+  // moved here from Producer Mode's Season Plan, which this page replaced).
+  { key: 'goals', label: 'Goals' },
   { key: 'story', label: 'Story Development' },
   { key: 'production', label: 'Production Plan' },
   { key: 'results', label: 'Results & Analytics' },
 ];
 export const tabFrom = (value) => (SEASON_TABS.some((t) => t.key === value) ? value : 'overview');
+
+/** The Season page, on one of its tabs: every in-app link to the season goes through here. */
+export const seasonPageHref = (showId, tab = null) =>
+  `/shows/${encodeURIComponent(showId)}/season${tab && tab !== 'overview' ? `?tab=${encodeURIComponent(tab)}` : ''}`;
 
 /** A slot's state in the mockup's words (seasonSlotService.slotState). */
 export const SLOT_STATUS = {

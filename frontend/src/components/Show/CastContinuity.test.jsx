@@ -83,6 +83,8 @@ describe('Cast & Continuity cards', () => {
     wrap(<StoryThreadsStrip showId="show-1" episodes={episodes} />);
     const quiet = await screen.findByTestId('cc-thread-t1');
     expect(api.get).toHaveBeenCalledWith('/api/v1/world/show-1/season/threads');
+    // All threads: the Season page's Story Development (the Season Plan tab is retired, 2026-10-25).
+    expect(screen.getByRole('link', { name: 'All threads' }).getAttribute('href')).toBe('/shows/show-1/season?tab=story');
     expect(quiet.className).toContain('quiet');
     expect(within(quiet).getByText('Quiet for 3 episodes')).toBeTruthy();
     expect(quiet.querySelectorAll('.wa-cc-squares li')).toHaveLength(8);
@@ -93,7 +95,7 @@ describe('Cast & Continuity cards', () => {
   test('no threads says where threads are made', async () => {
     vi.mocked(api.get).mockResolvedValue({ data: {} });
     wrap(<StoryThreadsStrip showId="show-1" episodes={[]} />);
-    await waitFor(() => expect(screen.getByText(/No story threads yet. Create them in Episodes → Season Plan./)).toBeTruthy());
+    await waitFor(() => expect(screen.getByText(/No story threads yet. Create them on the Season page, under Story Development./)).toBeTruthy());
   });
 
   test('the cast lists Lala and the narrator with a link to the registry', () => {

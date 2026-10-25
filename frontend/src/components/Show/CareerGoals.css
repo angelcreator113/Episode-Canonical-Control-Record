@@ -1,0 +1,92 @@
+/* Career Goals on the Season page's Goals tab (CareerGoals.jsx). It sits
+   inside .szn-page, so it reads the page's --sp-* colours (SeasonPage.css)
+   and its szn-card, szn-btn and szn-chip pieces. 44px targets, 12px
+   smallest text, one column on a phone. */
+.cg { display: grid; gap: 16px; min-width: 0; }
+.cg-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px 16px; }
+.cg-head .szn-muted { margin: 4px 0 0; }
+.cg-counts { margin: 6px 0 0; font-size: 13px; font-weight: 700; color: var(--sp-purple); }
+.cg-tools { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.cg-editor { display: grid; gap: 12px; border: 2px solid var(--sp-pink); }
+.cg-editor-title { margin: 0; font-family: var(--font-prose); font-size: 18px; font-weight: 600; color: var(--sp-ink); }
+.cg-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.cg-field { display: grid; gap: 4px; min-width: 0; font-size: 13px; font-weight: 700; color: var(--sp-muted); }
+.cg-field.is-wide { grid-column: 1 / -1; }
+.cg-field input, .cg-field select, .cg-field textarea {
+  width: 100%; min-height: 44px; padding: 8px 12px; border: 1px solid var(--sp-line); border-radius: 12px;
+  background: var(--sp-card); color: var(--sp-ink); font: inherit; font-size: 14px; font-weight: 400;
+}
+.cg-field textarea { resize: vertical; }
+.cg-field input:focus-visible, .cg-field select:focus-visible, .cg-field textarea:focus-visible { outline: 3px solid var(--sp-purple); outline-offset: 1px; }
+.cg-editor-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+
+.cg-type { display: grid; gap: 8px; }
+.cg-type-title { margin: 0; font-size: 14px; font-weight: 700; color: var(--sp-ink); }
+.cg-goals { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.cg-goals.is-one { grid-template-columns: minmax(0, 1fr); }
+.cg-empty { margin: 0; padding: 16px; border: 1px dashed var(--sp-line); border-radius: 14px; background: var(--sp-card); color: var(--sp-muted); font-size: 13px; text-align: center; }
+
+.cg-goal { min-width: 0; padding: 14px 16px; border: 1px solid var(--sp-line); border-radius: 16px; background: var(--sp-card); }
+.cg-goal.is-primary { border-width: 2px; border-color: var(--sp-pink); }
+.cg-goal-head { display: flex; align-items: flex-start; gap: 8px; }
+.cg-goal-icon { font-size: 22px; line-height: 44px; }
+.cg-goal.is-primary .cg-goal-icon { font-size: 28px; }
+.cg-goal-text { flex: 1; min-width: 0; padding-top: 10px; }
+.cg-goal-title { margin: 0; font-size: 15px; font-weight: 700; color: var(--sp-ink); overflow-wrap: anywhere; }
+.cg-goal-desc { margin: 2px 0 0; font-size: 13px; color: var(--sp-muted); }
+.cg-goal-metric { margin: 8px 0 6px; font-size: 13px; color: var(--sp-muted); }
+.cg-goal-metric strong { color: var(--sp-ink); }
+.cg-bar { display: block; height: 8px; border-radius: 999px; background: var(--sp-pink-soft); overflow: hidden; }
+.cg-bar > span { display: block; height: 100%; border-radius: 999px; background: var(--sp-pink); transition: width 0.3s; }
+.cg-bar > span.is-done { background: var(--sp-green); }
+.cg-goal-left { margin: 6px 0 0; font-size: 12px; color: var(--sp-muted); }
+.cg-goal-left.is-done { font-weight: 700; color: var(--sp-green); }
+
+.cg-done-list { display: grid; gap: 0; margin: 0; padding: 0; list-style: none; }
+.cg-done-list li { display: flex; align-items: center; gap: 8px; min-height: 44px; border-bottom: 1px solid var(--sp-line); }
+.cg-done-list li:last-child { border-bottom: none; }
+.cg-done-title { flex: 1; min-width: 0; font-weight: 700; color: var(--sp-green); overflow-wrap: anywhere; }
+
+.cg-sugs { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.cg-sug { padding: 12px 14px; border: 1px solid var(--sp-line); border-radius: 14px; background: var(--sp-bg); }
+.cg-sug.is-unmet { border-color: var(--sp-gold-text); }
+.cg-sug-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.cg-sug-name { flex: 1 1 100%; font-size: 15px; font-weight: 700; color: var(--sp-ink); }
+.cg-sug-stakes { margin: 6px 0 0; font-size: 13px; font-style: italic; color: var(--sp-muted); }
+.cg-sug-why { margin: 6px 0 0; font-size: 12px; color: var(--sp-purple); line-height: 1.5; }
+.cg-sug-links { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 4px; }
+
+@media (max-width: 640px) {
+  .cg-fields, .cg-goals { grid-template-columns: minmax(0, 1fr); }
+  .cg-tools { width: 100%; }
+  .cg-tools .szn-btn { flex: 1 1 auto; }
+  .cg-editor-actions .szn-btn { flex: 1 1 0; }
+}
+
+/* The narrative debt and the phases with their history (folded). */
+.cg-debt { display: grid; gap: 8px; margin: 12px 0 0; padding: 0; list-style: none; }
+.cg-debt li { padding: 10px 14px; border-radius: 12px; background: var(--sp-gold-soft); color: var(--sp-gold-text); }
+.cg-debt p { margin: 0; }
+.cg-debt-title { font-size: 14px; font-weight: 700; }
+.cg-debt-weight { margin-top: 4px; font-size: 13px; font-style: italic; }
+.cg-debt-meta { display: block; margin-top: 4px; font-size: 12px; font-weight: 400; }
+.cg-debt-title .cg-debt-meta { display: inline; }
+.cg-phase { padding: 14px 16px; border: 1px solid var(--sp-line); border-radius: 16px; background: var(--sp-card); }
+.cg-phase.is-current { border-width: 2px; border-color: var(--sp-pink); }
+.cg-phase-head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.cg-phase-title { margin: 0; font-size: 15px; font-weight: 700; color: var(--sp-ink); }
+.cg-phase-sub { margin: 2px 0 0; font-size: 13px; font-style: italic; color: var(--sp-muted); }
+.cg-phase-line { margin: 8px 0 0; font-size: 13px; color: var(--sp-muted); }
+.cg-phase-line strong { color: var(--sp-ink); }
+.cg-phase-label { margin: 10px 0 6px; font-size: 12px; font-weight: 700; letter-spacing: 0.03em; text-transform: uppercase; color: var(--sp-muted); }
+.cg-phase-goals ul, .cg-log ul { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.szn-chip.is-phase-active { background: var(--sp-green-soft); color: var(--sp-green); }
+.szn-chip.is-phase-completed { background: var(--sp-purple-soft); color: var(--sp-purple); }
+.szn-chip.is-phase-upcoming { background: var(--sp-gold-soft); color: var(--sp-gold-text); }
+.cg-log ul { display: grid; gap: 0; margin-top: 8px; }
+.cg-log li { display: flex; align-items: flex-start; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--sp-line); }
+.cg-log li:last-child { border-bottom: none; }
+.cg-log-text { flex: 1; min-width: 0; font-size: 13px; color: var(--sp-ink); }
+.cg-log-text .cg-debt-meta { color: var(--sp-muted); }
+.cg-phase-goals .szn-chip, .cg-sug-head .szn-chip { white-space: normal; }

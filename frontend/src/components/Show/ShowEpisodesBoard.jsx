@@ -20,10 +20,12 @@
  * clicked, and has a ⋯ "Move to" menu so the stage changes without dragging;
  * on a phone the board is one stage at a time, picked from tabs.
  * Props: showId, episodes, total (the show's true count, when known),
- * onChanged (reload after a status change or delete), goTo(tabKey).
+ * onChanged (reload after a status change or delete). Its open slots link
+ * to the Season page's roadmap.
  */
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { seasonPageHref } from '../../lib/seasonPage';
 import api from '../../services/api';
 import episodeService from '../../services/episodeService';
 import EpisodeCard from '../EpisodeCard';
@@ -299,7 +301,7 @@ const EMPTY = {
 };
 
 // Planning shows its episodes and the next open slots; the rest of the
-// season's slots are a link to Season Plan.
+// season's slots are a link to the Season page's roadmap.
 const SLOTS_SHOWN = 2;
 const visibleCards = (cards) => {
   let slots = 0;
@@ -380,7 +382,7 @@ function PipelineBoard({ columns, heroId, heroSummary, seasonNumber, searching, 
             )))}
             {hiddenSlots(col.cards) > 0 && (
               <button type="button" className="seb-card-link seb-more-slots" onClick={onPickEvent}>
-                + {hiddenSlots(col.cards)} more open slot{hiddenSlots(col.cards) === 1 ? '' : 's'} in Season {seasonNumber} Plan
+                + {hiddenSlots(col.cards)} more open slot{hiddenSlots(col.cards) === 1 ? '' : 's'} in Season {seasonNumber}
               </button>
             )}
           </section>
@@ -391,7 +393,7 @@ function PipelineBoard({ columns, heroId, heroSummary, seasonNumber, searching, 
 }
 
 // total: the show's true episode count (the list stops at 100), when known.
-export default function ShowEpisodesBoard({ showId, episodes = [], total = null, onChanged, goTo = () => {} }) {
+export default function ShowEpisodesBoard({ showId, episodes = [], total = null, onChanged }) {
   const navigate = useNavigate();
   const [view, setView] = useState('board');
   const roadmap = useRoadmap(showId);
@@ -486,7 +488,7 @@ export default function ShowEpisodesBoard({ showId, episodes = [], total = null,
               </button>
             ))}
           </div>
-          <PipelineBoard columns={columns} heroId={hero?.id} heroSummary={heroSummary} seasonNumber={seasonNumber} searching={Boolean(query.trim())} onOpen={open} onStatusChange={changeStatus} onPickEvent={() => goTo('season')} phoneStage={phoneStage} />
+          <PipelineBoard columns={columns} heroId={hero?.id} heroSummary={heroSummary} seasonNumber={seasonNumber} searching={Boolean(query.trim())} onOpen={open} onStatusChange={changeStatus} onPickEvent={() => navigate(seasonPageHref(showId, 'roadmap'))} phoneStage={phoneStage} />
           <p className="seb-board-hint">Drag an episode to another stage, or use its ⋯, to change its status.</p>
         </>
       ) : view === 'list' ? (

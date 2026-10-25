@@ -1918,6 +1918,13 @@
 .epp-hero .epp-title { margin: 0; font-family: var(--font-prose); font-size: 32px; font-weight: 600; line-height: 1.2; color: var(--lala-ink); overflow-wrap: anywhere; }
 .epp-hero-summary { margin: 6px 0 0; font-size: 14px; color: var(--lala-ink-muted); }
 .epp-hero-summary .epp-season-link { color: var(--lala-lavender-text); }
+.epp-hero-purposes { display: grid; gap: 4px; margin: 6px 0 0; padding: 0; list-style: none; }
+.epp-hero-purposes li { font-size: 14px; line-height: 1.45; color: var(--lala-ink-muted); overflow-wrap: anywhere; }
+.epp-hero-purposes li.is-primary { color: var(--lala-ink); font-weight: 600; }
+.epp-hero-purpose-tag { display: inline-block; margin-right: 6px; padding: 0 8px; border-radius: 999px; font-family: var(--font-sans); font-size: 12px; font-weight: 600; background: var(--lala-lavender-soft); color: var(--lala-lavender-text); }
+.epp-hero-purpose-thread { font-weight: 400; color: var(--lala-ink-muted); }
+.epp-hero-pressure { margin: 4px 0 0; font-family: var(--font-sans); font-size: 13px; color: var(--lala-ink-muted); }
+.epp-hero-pressure strong { color: var(--lala-ink); }
 .epp-hero-tiles { list-style: none; margin: 16px 0 0; padding: 0; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
 .epp-hero-tile { display: grid; gap: 2px; padding: 10px 12px; border-radius: 12px; background: var(--lala-lavender-soft); border: 1px solid var(--lala-lavender-line); min-width: 0; }
 .epp-hero-tile.empty { background: var(--lala-parchment); border-style: dashed; border-color: var(--lala-parchment-3); }
@@ -2443,6 +2450,9 @@ button.epp-next-count:focus-visible, .epp-basic-value-btn:focus-visible, .epp-to
   .epp-hero .epp-title { grid-area: title; min-width: 0; font-size: 19px; line-height: 1.25; overflow-wrap: anywhere; }
   .epp-hero-summary, .epp-hero-tiles { display: none; }
   .epp-hero-date { grid-area: date; display: block; margin-top: 2px; font-size: 12px; color: var(--lala-ink-muted); }
+  /* The slot's purposes and pressure stay on a phone, under the date, full width. */
+  .epp-hero-purposes, .epp-hero-pressure { grid-column: 1 / -1; }
+  .epp-hero-purposes li { font-size: 13px; }
   .epp-hero .epp-used-banner { grid-column: 1 / -1; margin-top: 10px; }
   .epp-shortcuts { display: none; }
 }
