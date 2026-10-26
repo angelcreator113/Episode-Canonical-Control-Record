@@ -701,10 +701,10 @@ ${narrativeLines.short || ''}`,
   // balance (synced in step 11). Passive goals ("never drop below") and
   // metrics Lala's state does not carry are left unchanged too. Goals this
   // step completes spawn their unlocks_on_complete (Task #1817).
-  const careerSummary = { goals_completed: [], goals_measured: [], unlocks: [], opportunities_advanced: [] };
+  const careerSummary = { goals_completed: [], goals_measured: [], unlocks: [], opportunities_advanced: [], goals_activated: [] };
   try {
     const goals = await sequelize.query(
-      `SELECT id, title, type, priority, target_metric, current_value, target_value, unlocks_on_complete FROM career_goals
+      `SELECT id, title, type, priority, target_metric, current_value, target_value, unlocks_on_complete, created_at FROM career_goals
        WHERE show_id = :showId AND status = 'active' AND deleted_at IS NULL`,
       { replacements: { showId }, type: sequelize.QueryTypes.SELECT }
     ).catch((err) => {
@@ -712,11 +712,12 @@ ${narrativeLines.short || ''}`,
       return [];
     });
     for (const goal of goals || []) {
-      if (goal.type === 'passive' || goal.target_metric === 'custom') continue;
+      if (!require('../utils/goalLadders').completesByReading(goal)) continue;
       const measured = Number(newState?.[goal.target_metric]);
       if (!Number.isFinite(measured)) continue;
       const target = Number(goal.target_value);
-      const newStatus = Number.isFinite(target) && measured >= target ? 'completed' : 'active';
+      // Direction-aware (utils/goalLadders): stress completes at or below its target, never because it rose.
+      const newStatus = Number.isFinite(target) && require('../utils/goalLadders').goalReached(goal, measured) ? 'completed' : 'active';
       if (Number(goal.current_value) === measured && newStatus === 'active') continue;
       let goalWritten = true;
       await sequelize.query(
@@ -744,6 +745,10 @@ ${narrativeLines.short || ''}`,
         }
       }
     }
+    // The next rung of each ladder this cleared is now the one worked on
+    // (derived from the goals on every read; reported here, never written).
+    careerSummary.goals_activated = require('../utils/goalLadders')
+      .activatedAfter((goals || []).map((g) => ({ ...g, status: 'active' })), careerSummary.goals_completed.map((g) => g.id));
   } catch (careerErr) {
     console.warn('[episodeComplete] Career goals failed (non-blocking):', careerErr.message);
   }

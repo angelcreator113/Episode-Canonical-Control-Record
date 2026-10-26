@@ -21,6 +21,7 @@ import { computeEventPackageReadiness, computeEventState, describeMissing } from
 import { readiness } from './releaseBoard';
 import { dueRows, formatDay, episodeNumberOf, formatRelease } from './releaseSchedule';
 import { isCompletedEpisode, heldEpisodeName } from '../components/Show/OpportunityBeat14';
+import { coveredGoalIds } from './goalCoverage';
 
 /** How many rows the list shows before "+N more". */
 export const ATTENTION_CAP = 6;
@@ -86,11 +87,19 @@ export function eventsNeedingSetup({ roadmap = null, events = [], episodes = [] 
   });
 }
 
-/** Each part from the one in progress on with a goal nothing moves: [{ phase, title, gaps, current }]. */
+/**
+ * Each part from the one in progress on with a goal nothing moves: [{ phase,
+ * title, gaps, current }]. Only goals being worked on of a stat events move
+ * count (goal ladders, Evoni 2026-10-25: the badge read 36): the server
+ * names only those, and a coverage that marks each goal's `covered` is
+ * filtered by it too.
+ */
 export function goalGaps(coverage, { arc = null } = {}) {
   const now = Number(arc?.current_phase) || 1;
+  const covered = coveredGoalIds(coverage);
   return (coverage?.parts || [])
-    .filter((p) => (p.gaps || []).length && Number(p.phase) >= now)
+    .map((p) => ({ ...p, gaps: (p.gaps || []).filter((g) => !covered || covered.has(String(g.goal_id))) }))
+    .filter((p) => p.gaps.length && Number(p.phase) >= now)
     .map((p) => ({ ...p, current: Number(p.phase) === now }));
 }
 
@@ -224,7 +233,8 @@ export function tabBadges({ arc = null, roadmap = null, events = [], episodes = 
   const setup = eventsNeedingSetup({ roadmap, events, episodes }).length;
   if (setup) out.events = { count: setup, text: `${setup} need${setup === 1 ? 's' : ''} setup`, tone: 'calm' };
   if (isCurrent) {
-    const gaps = goalGaps(coverage, { arc }).reduce((n, p) => n + p.gaps.length, 0);
+    // Each goal once, however many parts it is missing from.
+    const gaps = new Set(goalGaps(coverage, { arc }).flatMap((p) => p.gaps.map((g) => String(g.goal_id ?? g.title)))).size;
     if (gaps) out.goals = { count: gaps, text: plural(gaps, 'gap'), tone: 'calm' };
     const held = heldOpportunities(opps).length;
     if (held) out.opportunities = { count: held, text: `${held} held`, tone: 'calm' };

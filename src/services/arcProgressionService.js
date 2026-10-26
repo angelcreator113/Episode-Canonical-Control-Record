@@ -168,11 +168,27 @@ async function getPhaseGoalStatus(showId, phase, models, { transaction = null } 
       { replacements: { showId, start: phase.episode_start, end: phase.episode_end }, transaction }
     );
 
+    // Goal ladders (utils/goalLadders; Evoni, 2026-10-25): a rung waiting up
+    // next on its ladder (The Money Talk behind Starter Fund) is not judged by
+    // a phase ending — only the rung being worked on is. The ladders are
+    // built from every active goal of the show, not just this phase's, since
+    // a ladder spans phases. Passive goals are not rungs and are judged as
+    // before (an active passive goal in the phase is unmet).
+    const [allActive] = await sequelize.query(
+      `SELECT id, title, type, target_metric, target_value, status, priority, created_at, unlocks_on_complete
+         FROM career_goals WHERE show_id = :showId AND status = 'active' AND deleted_at IS NULL`,
+      { replacements: { showId }, transaction }
+    );
+    const { byGoal } = require('../utils/goalLadders').buildLadders(allActive);
+    for (const g of goals) g.rung = byGoal.get(String(g.id))?.rung || null;
+    const judged = goals.filter(g => g.rung !== 'up_next');
+
     const completed = goals.filter(g => g.status === 'completed');
     const failed = goals.filter(g => g.status === 'failed');
-    const active = goals.filter(g => g.status === 'active');
+    const active = judged.filter(g => g.status === 'active');
+    const upNext = goals.filter(g => g.rung === 'up_next');
     const primary = goals.filter(g => g.type === 'primary');
-    const primaryIncomplete = primary.filter(g => g.status !== 'completed');
+    const primaryIncomplete = judged.filter(g => g.type === 'primary' && g.status !== 'completed');
 
     return {
       total: goals.length,
@@ -181,6 +197,7 @@ async function getPhaseGoalStatus(showId, phase, models, { transaction = null } 
       active_remaining: active.length,
       primary_total: primary.length,
       primary_incomplete: primaryIncomplete.length,
+      up_next: upNext.length,
       goals,
       has_warning: primaryIncomplete.length > 0 || active.length > 0,
       warning_message: primaryIncomplete.length > 0
@@ -196,8 +213,12 @@ async function getPhaseGoalStatus(showId, phase, models, { transaction = null } 
   }
 }
 
-/** A goal advancing leaves unmet: still active, or a primary not completed. */
-const isUnmet = (g) => g.status === 'active' || (g.status !== 'completed' && g.type === 'primary');
+/**
+ * A goal advancing leaves unmet: still active, or a primary not completed —
+ * unless it is a rung waiting up next on its ladder (getPhaseGoalStatus sets
+ * rung), which the phase ending leaves as it is.
+ */
+const isUnmet = (g) => g.rung !== 'up_next' && (g.status === 'active' || (g.status !== 'completed' && g.type === 'primary'));
 
 /**
  * The current phase's slots that are not done (no accepted episode), so an
@@ -516,6 +537,7 @@ module.exports = {
   seedArc,
   checkPhaseTransition,
   getPhaseGoalStatus,
+  isUnmet,
   advancePhase,
   getArcContext,
   computeEmotionalTemperature,

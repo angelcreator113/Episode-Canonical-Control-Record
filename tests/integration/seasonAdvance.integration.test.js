@@ -131,6 +131,33 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
     expect(arc.narrative_debt.map((d) => d.goal_title)).toEqual(['Hit rep 5']);
   });
 
+  test('a coin ladder at the phase boundary: only the rung being worked on is judged; the rungs up next stay active', async () => {
+    const show = await newSeason();
+    await finish(show, 8);
+    const starter = await addGoal(show, { title: 'Starter Fund', metric: 'coins', current: 294, target: 500, range: [1, 8] });
+    const money = await addGoal(show, { title: 'The Money Talk', metric: 'coins', current: 294, target: 2000, range: [1, 8] });
+    const closet = await addGoal(show, { title: 'Closet Upgrade', metric: 'coins', current: 294, target: 5000, range: [1, 16] });
+    // A primary waiting up next on the reputation ladder is not failed either.
+    const firstImp = await addGoal(show, { title: 'First Impressions', metric: 'reputation', current: 0, target: 3, range: [1, 8] });
+    const legacy = await addGoal(show, { title: 'Legacy', type: 'primary', metric: 'reputation', current: 0, target: 10, range: [1, 8] });
+    // A passive goal keeps today's behaviour: active in the phase, so unmet.
+    const passive = await addGoal(show, { title: 'Stay Consistent', type: 'passive', metric: 'consistency_streak', current: 1, target: 7, range: [1, 8] });
+
+    const asked = await advance(show);
+    expect(asked.body.data.needs_confirmation).toBe(true);
+    expect(asked.body.data.unmet_goals.map((g) => g.title).sort()).toEqual(['First Impressions', 'Starter Fund', 'Stay Consistent']);
+    expect(asked.body.data.goal_status).toMatchObject({ active_remaining: 3, up_next: 3, primary_incomplete: 0 });
+
+    const done = await confirm(show);
+    expect(done.status).toBe(200);
+    expect(await goalStatus(starter)).toBe('failed');
+    expect(await goalStatus(firstImp)).toBe('failed');
+    expect(await goalStatus(passive)).toBe('failed');
+    for (const id of [money, closet, legacy]) expect(await goalStatus(id)).toBe('active');
+    const debt = (await arcOf(show)).narrative_debt.map((d) => d.goal_title).sort();
+    expect(debt).toEqual(['First Impressions', 'Starter Fund', 'Stay Consistent']);
+  });
+
   test('a failure while writing the arc leaves nothing half-written: goals, debt and phase as they were', async () => {
     const show = await newSeason();
     await finish(show, 3);
