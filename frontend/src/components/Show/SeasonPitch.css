@@ -1,0 +1,28 @@
+/* The season pitch on the one-pager (SeasonPitch, 2026-10-26), inside
+   SeasonPlanPrint's pitch spot, on the app's --lala-* tokens. The pitch
+   reads as the sheet's Lora text; the box and the buttons never print. */
+.spitch { min-width: 0; }
+.spitch-text { margin: 0; font-family: 'Lora', serif; font-size: 15px; white-space: pre-line; overflow-wrap: anywhere; }
+.spitch-empty { margin: 0; font-size: 13px; color: var(--lala-ink-muted, #6B6557); }
+.spitch-sub { margin: 4px 0 0; font-size: 12px; color: var(--lala-ink-muted, #6B6557); }
+.spitch-label { display: block; margin: 0 0 4px; font-size: 12px; font-weight: 700; color: var(--lala-ink-muted, #6B6557); }
+.spitch-box {
+  box-sizing: border-box; width: 100%; min-height: 88px; padding: 10px 12px; border-radius: 10px;
+  border: 1px solid var(--lala-gold-line, #E8D9A8); background: var(--lala-surface, #fff); color: var(--lala-ink, #2C2C2C);
+  font-family: 'Lora', serif; font-size: 15px; line-height: 1.5; resize: vertical;
+}
+.spitch-box:focus-visible { outline: 3px solid var(--lala-lavender-text, #4A3B7A); outline-offset: 1px; }
+.spitch-note { margin: 6px 0 0; font-size: 13px; color: var(--lala-teal-dark, #1f6f63); }
+.spitch-note.is-error { color: var(--lala-danger, #B84D2E); font-weight: 700; }
+.spitch-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.spitch-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; padding: 6px 16px;
+  border: none; border-radius: 999px; font: inherit; font-size: 14px; font-weight: 700; cursor: pointer;
+  background: var(--lala-gold, #B8962E); color: var(--lala-ink, #2C2C2C);
+}
+.spitch-btn.is-quiet { border: 1px solid var(--lala-gold-line, #E8D9A8); background: var(--lala-surface, #fff); color: var(--lala-gold-text, #7A6314); }
+.spitch-btn:disabled { opacity: .6; cursor: not-allowed; }
+.spitch-btn:focus-visible { outline: 3px solid var(--lala-lavender-text, #4A3B7A); outline-offset: 2px; }
+@media print {
+  .spitch-actions, .spitch-note, .spitch-sub, .spitch-label, .spitch-box { display: none; }
+}

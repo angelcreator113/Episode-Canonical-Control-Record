@@ -140,7 +140,8 @@ describe('the health line', () => {
     expect(within(line).getByTestId('szn-health-goals').textContent).toMatch(/1 goal behind/);
     expect(within(line).getByTestId('szn-health-release').textContent).toMatch(/next release \w{3}, Nov 1/);
     // The AI's "What should I do next?" spot is there, empty.
-    expect(within(line).getByTestId('szn-slot-next-step').textContent).toBe('');
+    // The AI button sits in its spot; nothing is asked until it is pressed.
+    expect(within(within(line).getByTestId('szn-slot-next-step')).getByTestId('szn-next-step-ask')).toBeTruthy();
   });
 
   test('a past season: Season complete, its own episodes, no goals', async () => {
@@ -164,7 +165,7 @@ describe('Story and Secrets follow the switcher', () => {
     // Suggest twists drafts for the season in progress: not offered on a past one.
     expect(screen.queryByTestId('stw-suggest')).toBeNull();
     // The AI's "Carried into Season N" spot is there, empty.
-    expect(screen.getByTestId('szn-slot-story-carried').textContent).toBe('');
+    expect(within(screen.getByTestId('szn-slot-story-carried')).getByTestId('szn-carried-ask')).toBeTruthy();
   });
 
   test('the Overview\'s Secrets & Reveals reads the season shown; the season in progress reads without ?season', async () => {
@@ -194,7 +195,7 @@ describe('the Cast tab', () => {
     expect(within(screen.getByTestId('szn-cast-person-profile:9')).queryByRole('link')).toBeNull();
     expect(screen.getByTestId('szn-cast-part-1').textContent).toMatch(/Truthville and Lala: strangers to rivals/);
     expect(screen.getByTestId('szn-cast-part-2').textContent).toMatch(/No relationship change saved/);
-    expect(screen.getByTestId('szn-slot-cast-suggestions').textContent).toBe('');
+    expect(within(screen.getByTestId('szn-slot-cast-suggestions')).getByTestId('szn-arc-ask')).toBeTruthy();
   });
 
   test('a past season reads its own cast', async () => {

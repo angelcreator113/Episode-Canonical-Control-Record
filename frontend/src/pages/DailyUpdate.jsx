@@ -13,8 +13,9 @@
  *   The season       each show's season in progress: the Season page's own
  *                    "Needs attention" list, same items and words
  *                    (components/Show/SeasonAttentionDigest; Evoni,
- *                    2026-10-26, Season page round 3), with an empty
- *                    "Focus for today" spot a later AI step fills
+ *                    2026-10-26, Season page round 3), with "Focus for
+ *                    today" above it: one AI line from those items, on a
+ *                    button press, never saved (SeasonFocusToday)
  *   Coming up        the next three days: scheduled posts (move or hold),
  *                    episode air dates and their events, deal dates
  *   Cost             today's AI spend against the daily budget
@@ -29,6 +30,7 @@ import {
 } from 'lucide-react';
 import api from '../services/api';
 import SeasonAttentionDigest from '../components/Show/SeasonAttentionDigest';
+import SeasonFocusToday from '../components/Show/SeasonFocusToday';
 import './DailyUpdate.css';
 
 const REVIEW = '/admin?tab=pulse&sub=review';
@@ -532,7 +534,8 @@ export default function DailyUpdate() {
             {data.waiting.map((g) => <WaitingGroup key={g.key} group={g} />)}
             <p className="du-muted">Comments, numbers, follower and closeness changes and DMs wait in <Link to={REVIEW}>Pulse Review</Link>.</p>
           </section>
-          <SeasonAttentionDigest seasons={data.seasons || []} api={api} />
+          <SeasonAttentionDigest seasons={data.seasons || []} api={api}
+            focusSlot={({ seasons, loading }) => <SeasonFocusToday api={api} seasons={seasons} loading={loading} />} />
           <ComingUp c={data.coming_up} />
           <Cost cost={data.cost} />
         </>
