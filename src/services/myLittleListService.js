@@ -157,7 +157,7 @@ function scriptIndex(beats, at) {
 function buildList(input, at) {
   const {
     episodeId, script = '', event = null, deliverables = [], opportunities = [],
-    wardrobeTasks = [], look = [], socialTasks = [], personal: rawPersonal = {},
+    wardrobeTasks = [], look = [], socialTasks = [], personal: rawPersonal = {}, charges = null,
   } = input;
   const personal = readPersonal(rawPersonal);
   const beats = scriptBeats(script);
@@ -190,10 +190,14 @@ function buildList(input, at) {
     const state = wardrobeTasks.map((t) => ({ required: Boolean(t.required), done: taskFilled(t.slot, filled, { legacyAccessories }) }));
     const needed = state.some((s) => s.required) ? state.filter((s) => s.required) : state;
     const words = personal.words.wardrobe || {};
+    // What the pieces she has on so far cost (the Shopping list's "spent so
+    // far", Task #3189), by the charge Finalize books (episodeLookCharges).
+    const spent = charges ? worn.reduce((sum, p) => sum + (Number(charges.get(String(p.id))) || 0), 0) : 0;
+    const sorted = `${state.filter((s) => s.done).length} of ${state.length} pieces sorted`;
     add({
       ref: 'wardrobe', kind: 'wardrobe', reveal: { fact: 'invitation_received' },
       title: clip(words.title, TITLE_MAX) || 'Find something to wear',
-      note: clip(words.note, NOTE_MAX) || `${state.filter((s) => s.done).length} of ${state.length} pieces sorted`,
+      note: clip(words.note, NOTE_MAX) || (spent > 0 ? `${sorted} · ${spent.toLocaleString('en-US')} coins spent` : sorted),
       done: needed.every((s) => s.done),
       can_check: false, can_edit: true, can_remove: false,
       label: 'Wardrobe list',
@@ -285,10 +289,22 @@ function publicList(built) {
 // Hidden for a reason the producer can fix; "not known yet" is the rule working.
 const REVIEW_REASONS = new Set(['needs_wording', 'spoiler', 'duplicate_wording', 'no_reveal_rule']);
 
-/** What the producer should look at: hidden items she might want shown. Producer view, never the phone's. */
-function reviewList(built) {
-  return built.items.filter((i) => REVIEW_REASONS.has(i.hidden)).map((i) => ({
-    key: i.key, kind: i.kind, reason: i.hidden, label: i.label, ...(i.leaked ? { leaked: i.leaked } : {}),
+/**
+ * What the producer should look at: hidden items she might want shown.
+ * With { all: true } (Phase 2's wording panel), every item, shown or not,
+ * with its wording, when it shows and why not yet, so she can word an item
+ * before Lala learns of it. Producer view, never the phone's.
+ */
+function reviewList(built, { all = false } = {}) {
+  const items = all ? built.items : built.items.filter((i) => REVIEW_REASONS.has(i.hidden));
+  return items.map((i) => ({
+    key: i.key, kind: i.kind, reason: i.hidden || null, label: i.label, ...(i.leaked ? { leaked: i.leaked } : {}),
+    ...(all ? {
+      title: i.title || null, note: i.note || null,
+      // When she learns of it; line null is "at the end of that beat".
+      shows_at: i.revealed_at ? { beat: i.revealed_at.beat, line: Number.isFinite(i.revealed_at.line) ? i.revealed_at.line : null } : null,
+      ...(i.kind === 'deal' ? { stage: i.stage } : {}),
+    } : {}),
   }));
 }
 
@@ -376,9 +392,22 @@ async function loadListInput(models, episodeId) {
     ...knowledge.opportunityBefore({ status: o.status, offered_episode_number: o.offered_episode_number }, episode.episode_number),
   }));
 
+  // The look's charges, for "coins spent" on her outfit item. A failed read
+  // leaves the note without it (logged), never the list.
+  let charges = null;
+  if (look.length) {
+    try {
+      const { episodeLook, chargeMap } = require('./episodeLookCharges');
+      charges = chargeMap(await episodeLook(sequelize, { episodeId, event: null, showId: episode.show_id }));
+    } catch (err) {
+      console.error('[MyLittleList] look charges read failed, coins spent left out:', err.message);
+    }
+  }
+
   return {
     episodeId,
     showId: episode.show_id,
+    charges,
     hasList: Boolean(todo),
     script: episode.script_content || '',
     event,
@@ -408,11 +437,11 @@ async function getMyLittleList(models, episodeId, at) {
 }
 
 /** The producer's review of what is hidden and why; null when there is no episode. */
-async function getReview(models, episodeId, at) {
+async function getReview(models, episodeId, at, { all = false } = {}) {
   const input = await loadListInput(models, episodeId);
   if (!input) return null;
   const built = buildList(input, at);
-  return { items: reviewList(built), issues: built.timeline.issues };
+  return { items: reviewList(built, { all }), issues: built.timeline.issues };
 }
 
 // ─── Writes ─────────────────────────────────────────────────────────────────
@@ -546,6 +575,47 @@ async function updateItem(models, episodeId, key, body = {}, at) {
   return { key };
 }
 
+// Every item of the episode, whatever Lala knows: the list at the last line.
+const EVERYTHING = { beat: 14, line: Number.MAX_SAFE_INTEGER };
+
+/**
+ * The producer's wording for any item of the episode, shown yet or not
+ * (Phase 2's wording panel): a reminder's own title and note, else the
+ * item's words (personal_list.words). A deal item's words go to the stage
+ * asked for ('considering' or 'committed'). Never touches a label.
+ */
+async function setWords(models, episodeId, key, body = {}) {
+  const input = await loadListInput(models, episodeId);
+  if (!input) throw fail(404, CODES.NOT_FOUND, 'No such item.');
+  const item = buildList(input, EVERYTHING).items.find((i) => i.key === key);
+  if (!item) throw fail(404, CODES.NOT_FOUND, 'No such item.');
+  const changes = {};
+  if (body.title !== undefined) changes.title = body.title === null || body.title === '' ? null : titleOf(body.title);
+  if (body.note !== undefined) changes.note = noteOf(body.note);
+  if (!Object.keys(changes).length) throw fail(400, CODES.INVALID, 'Nothing to change: send title or note.');
+  if (item.kind === 'reminder' && changes.title === null) throw fail(400, CODES.INVALID, 'A reminder needs a title.');
+  const stage = body.stage === undefined ? item.stage : body.stage;
+  if (item.kind === 'deal' && !['considering', 'committed'].includes(stage)) throw fail(400, CODES.INVALID, 'stage must be considering or committed');
+
+  await withLockedList(models, episodeId, async (state) => {
+    if (item.kind === 'reminder') {
+      const id = item.ref.slice('reminder:'.length);
+      const r = state.personal.reminders.find((x) => String(x.id) === id);
+      if (!r) throw fail(404, CODES.NOT_FOUND, 'No such item.');
+      Object.assign(r, changes);
+      return {};
+    }
+    const words = { ...(state.personal.words[item.ref] || {}) };
+    const field = item.kind === 'deal' && stage === 'considering' ? 'title_considering' : 'title';
+    // An empty title clears the wording: the item goes back to its fixed wording.
+    if (changes.title !== undefined) { if (changes.title === null) delete words[field]; else words[field] = changes.title; }
+    if (changes.note !== undefined) { if (changes.note === null) delete words.note; else words.note = changes.note; }
+    state.personal.words[item.ref] = words;
+    return {};
+  });
+  return { key };
+}
+
 /** Removes one of her reminders; a task is never removed here. */
 async function removeItem(models, episodeId, key, at) {
   const { item } = await visibleItem(models, episodeId, key, at);
@@ -581,5 +651,6 @@ module.exports = {
   getReview,
   addReminder,
   updateItem,
+  setWords,
   removeItem,
 };

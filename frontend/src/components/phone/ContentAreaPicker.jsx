@@ -19,8 +19,9 @@ export const CONTENT_AREA_KINDS = [
   { key: 'dm_thread', label: 'DM thread', desc: 'A conversation in Messages', tone: 'pink', content_type: 'dm_thread', content_config: {} },
   { key: 'profile_card', label: 'Profile card', desc: 'Any character, from the registry', tone: 'lavender', content_type: 'profile_header', content_config: {} },
   { key: 'lala_stats', label: "Lala's stats", desc: 'Coins and her next goal', tone: 'gold', content_type: 'money_balance', content_config: {} },
-  { key: 'shopping_list', label: 'Shopping list', desc: 'Her handwritten list, crossed off as she dresses', tone: 'pink', content_type: 'shopping_list', content_config: {} },
-  { key: 'todo', label: 'To-do by beat', desc: 'Shopping, the deal or her career, as the beat has it', tone: 'gold', content_type: 'todo', content_config: {} },
+  // My Little List ♡ (Evoni, 2026-10-26): one list, what she knows in her
+  // words. A screen saved with the old shopping_list area shows the same list.
+  { key: 'my_little_list', label: 'My Little List ♡', desc: 'Her own list: only what she knows, in her words', tone: 'pink', content_type: 'todo', content_config: {} },
   { key: 'career_list', label: 'Career list', desc: 'Her goals, brands worked with and milestones', tone: 'lavender', content_type: 'career_list', content_config: {} },
 ];
 
