@@ -43,9 +43,10 @@ export default function FamilyView({ chars = [], rels = [], charById = {}, genni
   const unconn = chars.filter(c => !connIds.has(c.id) && !c.company);
   const companyChars = chars.filter(c => c.company);
 
-  const save = b => {
-    onUpdateRole(b.id, { family_role: editRole.trim() });
-    setEditId(null);
+  // The editor closes once the role is saved; a refused one keeps what she typed.
+  const save = async b => {
+    const ok = await onUpdateRole(b.id, { family_role: editRole.trim() });
+    if (ok !== false) setEditId(null);
   };
 
   const bondColor = b => (isDashed(b.family_kind) || (!b.family_kind && !b.is_blood_relation) ? T.steel : T.orchid);

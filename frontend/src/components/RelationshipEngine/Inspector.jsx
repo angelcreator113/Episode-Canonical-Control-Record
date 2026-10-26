@@ -63,6 +63,17 @@ export const isFamilyType = t => /^family$/i.test(String(t || '').trim()) || gen
 
 export default function Inspector({ rel, charById = {}, onClose, onUpdate, onDelete, onSaved, sheet = false, seedMode = false, onConfirm, confirmBusy = false }) {
   const [edit, setEdit] = useState(seedMode);
+  // A Save waits for the server: a refused one keeps the editor and her edits.
+  const [saving, setSaving] = useState(false);
+  const save = async fields => {
+    setSaving(true);
+    try {
+      const ok = await onUpdate(fields);
+      if (ok !== false) setEdit(false);
+    } finally {
+      setSaving(false);
+    }
+  };
   const [confirming, setConfirming] = useState(false);
   const [f, setF] = useState(() => formOf(rel));
   const set = k => e => setF(p => ({ ...p, [k]: e.target.value }));
@@ -262,9 +273,9 @@ export default function Inspector({ rel, charById = {}, onClose, onUpdate, onDel
           </>
         ) : edit ? (
           <>
-            <Btn variant="primary" disabled={!typeOk}
-              onClick={() => { const { family_role: _role, ...fields } = f; onUpdate(companies.any ? { ...fields, is_romantic: false } : fields); setEdit(false); }}
-              className="re-inspector-save">Save</Btn>
+            <Btn variant="primary" disabled={!typeOk || saving}
+              onClick={() => { const { family_role: _role, ...fields } = f; save(companies.any ? { ...fields, is_romantic: false } : fields); }}
+              className="re-inspector-save">{saving ? 'Saving…' : 'Save'}</Btn>
             <Btn variant="ghost" onClick={() => setEdit(false)}>Cancel</Btn>
           </>
         ) : confirming ? (
