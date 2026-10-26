@@ -109,13 +109,18 @@ export default function EpisodeTodoPage() {
   // task is complete when Lala's outfit fills its slot; GET /todo derives
   // it from the episode's wardrobe, and a manual toggle was overwritten.
 
+  // A deliverable's task has no toggle either (Evoni, 2026-10-26): it is
+  // done when the deliverable is submitted in the deal's deliverables.
   const toggleSocialTask = async (slot) => {
+    const task = socialTasks.find(t => t.slot === slot);
+    if (task?.deliverable_id) return;
     try {
-      const task = socialTasks.find(t => t.slot === slot);
       const res = await completeSocialTodoSlotApi(episodeId, slot, { completed: !task?.completed });
       const d = res.data;
       if (d.success) setSocialTasks(d.social_tasks);
-    } catch {}
+    } catch (err) {
+      console.error('[EpisodeTodoPage] tick failed:', err);
+    }
   };
 
   if (loading) return <div style={{ padding: 40, textAlign: 'center', color: '#999' }}>Loading Episode Run Sheet...</div>;
@@ -262,12 +267,15 @@ export default function EpisodeTodoPage() {
                   <div
                     key={task.slot}
                     onClick={() => toggleSocialTask(task.slot)}
+                    data-testid={`social-task-${task.slot}`}
+                    aria-disabled={task.deliverable_id ? 'true' : undefined}
+                    title={task.deliverable_id ? 'Done when the deliverable is submitted in the deal\'s deliverables' : undefined}
                     style={{
                       display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px',
                       background: task.completed ? '#f0fdf4' : task.source === 'platform' ? '#f0f7ff' : task.source === 'category' ? '#fafffe' : '#fff',
                       border: `1px solid ${task.completed ? '#bbf7d0' : '#e2e8f0'}`,
                       borderLeft: `3px solid ${task.completed ? '#16a34a' : TIMING_COLORS[timing] || '#e2e8f0'}`,
-                      borderRadius: 10, cursor: 'pointer', transition: 'all 0.15s',
+                      borderRadius: 10, cursor: task.deliverable_id ? 'default' : 'pointer', transition: 'all 0.15s',
                     }}
                   >
                     <span style={{ fontSize: 18, width: 24, textAlign: 'center' }}>{task.completed ? '✅' : '⬜'}</span>
@@ -281,6 +289,7 @@ export default function EpisodeTodoPage() {
                         {task.source === 'category' && <span style={{ fontSize: 8, padding: '1px 5px', background: '#d1fae5', color: '#065f46', borderRadius: 3, fontWeight: 600 }}>niche</span>}
                       </div>
                       {task.description && <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 1 }}>{task.description}</div>}
+                      {task.deliverable_id && !task.completed && <div data-testid={`social-task-derived-${task.slot}`} style={{ fontSize: 11, color: '#94a3b8', marginTop: 1 }}>Done when it is submitted in the deal&apos;s deliverables</div>}
                     </div>
                     <span style={{ fontSize: 9, color: '#aaa', fontFamily: "'DM Mono', monospace", whiteSpace: 'nowrap' }}>{platformLabel(task.platform)}</span>
                   </div>

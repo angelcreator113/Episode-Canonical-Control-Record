@@ -17,6 +17,9 @@ const SHOW = 'show-1';
 const mockEvents = {};
 const mockDeliverables = {};
 const mockCalls = [];
+// The episode's task list by episode id (Evoni, 2026-10-26: submitting a
+// deliverable ticks its task in the same transaction).
+const mockTodoLists = {};
 // The shared terms lock (findTermsWriteLock): live briefs by event id, and
 // the live episodes a brief or used_in_episode_id can name.
 const mockBriefs = {};
@@ -98,6 +101,15 @@ jest.mock('../../../src/models', () => ({
         }
         return [[{ ...d }]];
       }
+      if (/^SELECT id, social_tasks FROM episode_todo_lists WHERE episode_id = :episodeId AND deleted_at IS NULL LIMIT 1 FOR UPDATE$/.test(sql)) {
+        const row = mockTodoLists[r.episodeId];
+        return [row ? [{ ...row }] : []];
+      }
+      if (/^UPDATE episode_todo_lists SET social_tasks = :tasks/.test(sql)) {
+        const row = Object.values(mockTodoLists).find((t) => t.id === r.id);
+        if (row) row.social_tasks = r.tasks;
+        return [[], 1];
+      }
       throw new Error(`Unexpected query in test: ${sql}`);
     }),
   },
@@ -129,6 +141,7 @@ beforeEach(() => {
   mockCalls.length = 0;
   for (const k of Object.keys(mockEvents)) delete mockEvents[k];
   for (const k of Object.keys(mockDeliverables)) delete mockDeliverables[k];
+  for (const k of Object.keys(mockTodoLists)) delete mockTodoLists[k];
   for (const k of Object.keys(mockBriefs)) delete mockBriefs[k];
   mockEvents['ev-open'] = { id: 'ev-open', show_id: SHOW, used_in_episode_id: null };
   mockEvents['ev-used'] = { id: 'ev-used', show_id: SHOW, used_in_episode_id: 'ep-1' };
@@ -479,5 +492,50 @@ describe('the deliverables lock agrees with the costs lock', () => {
     const lockRead = mockCalls.find((c) => /FROM world_events WHERE id = :eventId AND show_id = :showId/.test(c.sql) && /FOR UPDATE$/.test(c.sql));
     expect(lockRead).toBeDefined();
     expect(models.sequelize.transaction).toHaveBeenCalled();
+  });
+});
+
+// Evoni, 2026-10-26: "Required brand deliverables must not be completed
+// through a generic manual social-task endpoint." This route is the only
+// way a deliverable's task completes: submitted ticks it, in the same
+// transaction; the earlier step does not; approval does not book anything
+// for a legacy event and leaves the task as submitted left it.
+describe('submitting a deliverable ticks its task on the episode\'s list', () => {
+  const advance = (id, status) => request(app).post(`${base('ev-used')}/${id}/status`).set(AUTH).send({ status });
+  const goal = { slot: 'goal_a', label: 'Meet the stylist', task_source: 'goal', completed: false };
+  const task = (id) => ({ slot: `deliverable_${id}`, label: 'One reel', task_source: 'brand_deliverable', deliverable_id: id, required: true, completed: false });
+  const listOf = () => JSON.parse(mockTodoLists['ep-1'].social_tasks);
+
+  beforeEach(() => {
+    mockEvents['ev-used'].used_in_episode_id = 'ep-1';
+    mockTodoLists['ep-1'] = { id: 'todo-1', social_tasks: JSON.stringify([goal, task('d2')]) };
+  });
+
+  test('completed leaves the task open; submitted ticks it, read FOR UPDATE', async () => {
+    mockDeliverables.d2.status = 'pending';
+    expect((await advance('d2', 'completed')).status).toBe(200);
+    expect(listOf()[1].completed).toBe(false);
+    expect((await advance('d2', 'submitted')).status).toBe(200);
+    expect(listOf()[1]).toMatchObject({ completed: true, completed_source: 'deliverable' });
+    expect(listOf()[0]).toEqual(goal);
+    expect(mockCalls.some((c) => /episode_todo_lists .*FOR UPDATE$/.test(c.sql))).toBe(true);
+  });
+
+  test('approving after that writes nothing more to the list', async () => {
+    mockDeliverables.d2.status = 'completed';
+    await advance('d2', 'submitted');
+    mockCalls.length = 0;
+    expect((await advance('d2', 'approved')).status).toBe(200);
+    expect(mockCalls.some((c) => /episode_todo_lists/.test(c.sql))).toBe(false);
+  });
+
+  test('no list, or no task for it on the list: the move still succeeds and nothing else is written', async () => {
+    mockDeliverables.d2.status = 'completed';
+    mockTodoLists['ep-1'].social_tasks = JSON.stringify([goal]);
+    expect((await advance('d2', 'submitted')).status).toBe(200);
+    expect(writes().filter((w) => /episode_todo_lists/.test(w.sql))).toHaveLength(0);
+    delete mockTodoLists['ep-1'];
+    mockDeliverables.d2.status = 'completed';
+    expect((await advance('d2', 'submitted')).status).toBe(200);
   });
 });

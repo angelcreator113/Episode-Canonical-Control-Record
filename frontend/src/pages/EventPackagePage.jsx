@@ -384,6 +384,7 @@ function EventPackageBody({ pkg }) {
   const flow = useEventFlow({
     showId, eventId, event, seasonContext, readiness, used, usedInEpisode, hasOrganizer: organizer.hasOrganizer,
     hasInvitation: !!invitationAsset, moneyPending, continueTo, jumpToSection, openOrganizerPicker: picker.openOrganizerPicker,
+    reload: load, setToast,
   });
 
   // The open dialog: Escape, Tab and focus (useDialogFocus).
