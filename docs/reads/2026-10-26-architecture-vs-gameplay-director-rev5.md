@@ -81,6 +81,8 @@
   - The decisions doc's `episode_pip_tracks` and `episode_pip_layout` are dropped in favour of SPV's segments.
 
 **C4. Line identity (SPV §2.3 vs decisions doc §3.3 vs Rev 5 §7.2).**
+
+> **Superseded by Revision 2, §R2.1.** Evoni chose durable `line_key`s stored with the script. `matchLines` stays, for recovery only.
 - SPV's key (beat + normalised text hash + occurrence) is deterministic and needs no storage. But **an edited line gets a new key**. That turns Rev 5 §7.2's "an override on an edited line is marked **check**" into "orphaned".
 - The decisions doc's minted `line_id` survives edits, but needs a stored map that every one of about 25 script writers would have to maintain.
 - **Proposed:** keep SPV's content-derived `line_key`, and add a pure **`matchLines(oldLines, newLines)`**.
@@ -153,6 +155,8 @@
 
 ## 4. Implementation sequence (minimum duplicated work)
 
+> **Superseded by Revision 2, §R2.6.**
+
 Principles:
 - Pure contracts first (no migration, no behaviour change).
 - Then each owner's storage, as its own migration PR.
@@ -185,6 +189,8 @@ GD-2, GD-5 and MLL-3 run in parallel throughout, since they have no dependencies
 - GD-3 starts only after all four inputs it reads have real interfaces: line keys, PIP marks, resolved objects and dialogue sources.
 
 ## 5. The first small, independently testable architecture PR: **A1a, line keys and matching**
+
+> **Superseded by Revision 2, §R2.5.** A1a stays first, but its content changes.
 
 **Why first:**
 - Every later owner keys on lines: voice clips (A6), PIP marks (A2/A3), Director anchors and overrides (GD-3/GD-6), and outdated detection.
@@ -224,6 +230,8 @@ GD-2, GD-5 and MLL-3 run in parallel throughout, since they have no dependencies
 
 ## 6. Decisions that genuinely need you
 
+> **Answered by Evoni.** See Revision 2, §R2.0.
+
 | # | Decision | Recommendation |
 |---|---|---|
 | D1 | **What approval freezes (G2):** should an edit to the Stage, Timeline, PIP or dialogue selection *after* a scene is approved change the export? | No. The approved snapshot stores the resolved plan, and any later edit shows "inputs changed since approval" until you re-approve. This is what Rev 5 test 22 already says. |
@@ -253,3 +261,280 @@ GD-2, GD-5 and MLL-3 run in parallel throughout, since they have no dependencies
   - correct G4 (fractions → pixels);
   - close Q-T1.
 - **Rev 5 needs no change.** Two clarifications could be added: G2 (what the approved snapshot freezes), and G3 (where "active" is computed).
+
+---
+
+# Revision 2 (Evoni's decisions and two corrections, 2026-10-26)
+
+**Status:** local review draft. Nothing implemented, pushed, merged or deployed.
+
+**Basis:** `origin/main` `93a7b74a`.
+
+Where Revision 2 disagrees with the sections above, Revision 2 wins.
+
+## R2.0 Decisions recorded
+
+| # | Evoni's decision | Effect on the plan |
+|---|---|---|
+| D1 | **Approval freezes the complete production.** Changes to the Stage, Timeline, PIP, voices, gameplay or assets never alter an approved export. | G2 closed: an immutable approved-production manifest (§R2.2). Export reads only a manifest. |
+| D2 | **Old Timeline scenes are adopted only when Evoni chooses, after reviewing the proposed changes.** Never silently. | The adapter is a dry run that produces a per-scene **proposal** (objects, converted positions, anything it cannot place). Evoni accepts per scene. Opening a scene never writes (G5 closed). |
+| D3 | **TTS provider deferred.** First specify voice assignment, approval, clip reuse, cost limits and commercial-use requirements. | A6 splits: **A6-spec** first (§R2.3), then a provider-neutral implementation. No provider code until the provider is chosen. |
+| D4 | **No automatic regeneration when dialogue changes.** Mark the audio outdated, keep the approved clip, Evoni chooses when to regenerate. | Line audio state `approved → outdated` (§R2.3). Generation happens only on an explicit action. |
+| D5 | **A default voice per character, with episode and line overrides.** | Voice precedence: line > episode > character (§R2.3) |
+| D6 | **"Play voices" off by default while recording Prime; an explicit monitored-audio option for headphones.** | A teleprompter change (B8, §R2.6). Today `DEFAULTS.playVoice` is `true`, and a saved preference carries over (VERIFIED, `TeleprompterReader.jsx`). |
+
+## R2.1 Correction 1: persistent, immutable `line_key`s with the one script
+
+### What exists today (VERIFIED)
+
+- **The script is one text column.** It is `episodes.script_content`, and nothing else holds line content.
+- **About ten code paths write it, all through Sequelize, none through raw SQL** (VERIFIED: a grep for `SET … script_content` finds nothing):
+  - `PUT /episodes/:id` (`episodeController`, the Script tab's Save and Restore with `restored_from`);
+  - the script-locks route (`episodeController`);
+  - the grounded generate (`episodeBriefRoutes`);
+  - Script Writer `/lock` and generate (`episodeScriptWriterRoutes`, `episodeScriptWriterService`);
+  - `generate-beats` (`episodes.js`);
+  - skeleton script (`scriptAndBulk`);
+  - Start Episode's draft (`episodeGenerate`);
+  - batch (`episodeBatch`, through a static `Episode.update`, which **skips per-row model hooks**);
+  - event inject (`inject.js`).
+- **There is no single choke point.** `Episode` has no hooks (VERIFIED), and `snapshotScript` is called from 11 places but not from every write.
+- **Today's line identity is session-only.**
+  - The Script tab has `nextLineIds`: an LCS carry-forward guided by the editor's own splice and move operations. Its ids live **only in the browser session** (`line-1`, `line-2`, …), so a reload loses them (VERIFIED).
+  - Voice clips are keyed by the position `(beat, line_index)`.
+
+### Options considered
+
+| Option | Durable | One script | Cost and risk | Verdict |
+|---|---|---|---|---|
+| A. Key derived from content (the earlier §5) | **No.** An edit changes the key, and identity is recovered only by matching. | Yes | Lowest | Rejected (Evoni) |
+| B. Inline markers in the text (`⟦k:…⟧` on each line) | Yes | Yes (ids inside the text) | **High.** About 25 readers, the teleprompter, exports, AI prompts and imports would all have to strip them; AI generators rewrite text and drop them; a marker could leak to the screen or into a prompt | Rejected |
+| C. A separate lines table holding the text | Yes | **No.** It becomes a second script. | High | Rejected |
+| **D. A key list stored beside the text, in the same row** | **Yes** | **Yes.** The text stays the only content; the key list holds identity only. | Low: one additive JSONB column, written atomically with the text | **Recommended** |
+
+### Recommended design (option D)
+
+- **Storage.** One additive column, `episodes.script_line_keys JSONB`:
+  ```
+  { "v": 1, "text_hash": "<hash of script_content>",
+    "lines": [ { "k": "ln_7f3k9q2m4x", "b": 4, "h": "<hash of the normalised line>" }, … ] }
+  ```
+  The `lines` array is aligned one-to-one with `scriptLines(script_content)`: every non-blank, non-header line in order. Hidden cues and `[UI:]` tags are included.
+- **History.** The same column is added to `episode_script_versions`, so every snapshot keeps its keys (migration M-A1, additive).
+- **Immutable and never reused.** A key is minted once, randomly (`ln_` plus 10 base-32 characters), and never changes for its line. A deleted line's key is **retired**. It survives in version history, and is never given to another line.
+- **Same row, same transaction.** The text and its keys are written by one `UPDATE`. They cannot drift apart unless some writer leaves out the keys, which is covered next.
+
+**One write path.** The text and keys are written by a single function, `saveEpisodeScript(episode, nextText, { transaction, hints, source })`, in A1c.
+- **What it does:**
+  - takes a row lock on the episode;
+  - reconciles the keys (below);
+  - writes `script_content` and `script_line_keys` together;
+  - takes the version snapshot.
+- **What moves to it:** all ten writers.
+- **What stops new writers bypassing it:** a guard test, in the style of the repo's existing static lints (`scripts/lint-silent-catches.sh`). It fails CI if any file other than the service writes `script_content`.
+
+**Reconciliation** is `reconcileLineKeys(prevEntries, nextText, hints)`, pure, in A1a. It is deterministic apart from minting a new key.
+1. **Editor hints first.** The Script tab sends, with each save, the key of every line it still holds. It already tracks its lines through edits (`nextLineIds`); A1c seeds that from the server's keys instead of `line-N`.
+   - A hinted key is accepted if it is live in the previous entries and used once.
+   - **An edited line therefore keeps its key whatever its new words are.** This is the durable identity Evoni asked for.
+2. **Then `matchLines`, for writers that send no hints** (AI regeneration, inject, import, an old client):
+   - exact matches, per beat, by longest common run;
+   - then edited-in-place pairing between matched neighbours;
+   - then `moved` across beats.
+3. **Anything still unmatched gets a new key.** An unmatched previous key is retired.
+
+**Recovery.** A write that bypasses the service leaves `text_hash` different from `script_content`, for example a manual database edit or old code still running during a deploy. In that case:
+- the next read runs the same reconciliation from the stored entries;
+- it writes the repaired keys under the row lock;
+- it logs the event.
+
+Matching is therefore the recovery path, never the main one.
+
+### How keys survive each situation
+
+| Situation | What happens to `line_key`s |
+|---|---|
+| **Save** from the Script tab | Kept for every line the editor held (hints), even with entirely new words; minted only for new lines; retired for deleted lines |
+| **Page reload** | The keys are stored in the episode row and returned with the script by the GET. The Script tab, teleprompter and every reader receive them, so nothing is recomputed in the browser. |
+| **Substantial edit in the editor** (rewrites, reorders, splits) | Hints carry identity through any wording change. A **split** keeps the key on the first part and mints one for the second. A **merge** keeps the first line's key and retires the other. |
+| **Whole-script regeneration (AI)** | Locked beats come back word for word (`scriptKeepingLocks`, VERIFIED), so they match exactly and keep their keys. Regenerated lines are matched where they are unchanged or edited in place; everything else is new content with new keys. Dependants anchored to retired keys go to review (Rev 5 §7.2: *check* / *orphaned*), never silently re-pointed. |
+| **Restore a version** | The version's own `script_line_keys` are restored with its text, so the old keys come back exactly. Retired keys reappear only because the restored text is the same text. |
+| **Import or paste a new script** | No hints, so matching applies. A summary is shown: "N lines kept their identity, M new". |
+| **Writer bypass or old code** | Repaired on the next read (above) |
+| **Concurrent saves** | A row lock plus the existing stale-save checks. The second save reconciles against the first one's keys. |
+
+**Effect on the one-script rule.** None. `script_content` remains the only place line content lives. `script_line_keys` holds identity only, is valid only while its `text_hash` matches, and no reader takes text from it.
+
+**What `matchLines` is used for:**
+- recovery;
+- writers that send no hints;
+- the one-time backfill of `line_key` onto existing voice clips (`keyForStoredLine` from their `line_text`).
+
+It is **never** used for lines the editor knows.
+
+## R2.2 Correction 2: the immutable approved-production manifest
+
+**What it is.** One immutable record of **everything an approved export uses**. Export, and "play approved" in preview, read **only** a manifest, never live tables (D1).
+
+**Where it belongs and who owns it.**
+- **Owner:** an architecture **Production Approval** service. It spans every owner, so no single owner can hold it.
+- **Gameplay Director:** keeps owning its gameplay track versions and playback snapshots (Rev 5 §8). The manifest **references** them by immutable id plus content hash; it does not own them.
+- **Each owner** provides a `freeze(episode, scenes)` function that returns its exact data, resolved, as JSON with content hashes. The approval service only collects, hashes, stores and points.
+
+**Contents** (per scene, plus episode-level items):
+
+| Part | Frozen as |
+|---|---|
+| Script | `script_content` text, `script_line_keys`, `script_locked_beats` and the script version id |
+| Stage | The **resolved** composition per scene and per view used: episode-scene object ids, every resolved property, and asset references |
+| Timeline | Every `timeline_items` row in scope (ids and values), scene order and durations, transitions |
+| Prime PIP | Segments (take `raw_clip` id, trim, offsets, layout), visibility resolved to intervals, the fallback asset, and the take media references |
+| Dialogue | For each **active** line: `line_key`, speaker, voice used, source (recorded or generated), clip id, media reference, duration and approval |
+| Gameplay | The approved track version (id + hash) |
+| Playback snapshot | The approved snapshot id + hash (Rev 5 §8) |
+| Assets | Every file the export draws or plays (backgrounds, objects, phone screens and icons, cursor and hand, sounds, fallback, takes, voice clips), as **content-addressed** references (§below) |
+| Derived plans | `layoutAt` keyframe plan and mix plan hashes, with the contract versions that produced them (for verification) |
+
+**Asset immutability.** This is the part live data most easily breaks:
+- Phone Hub icons are drawn by their **current** image, so changing an icon updates every placement (VERIFIED, PROJECT_CONTEXT §4.4, placements by icon key).
+- S3 objects can be overwritten.
+
+**Proposed:**
+- **What gets copied.** At approval, every referenced file is copied **once** into a content-addressed prefix: `approved-media/<sha256>.<ext>`, deduplicated by hash and never overwritten. The manifest stores the hash and that key.
+- **Large takes.** Large takes may be referenced by S3 `VersionId` instead, if bucket versioning is on (NEEDS CONFIRMATION, which only Evoni can check). Otherwise they are copied the same way.
+- **What it costs.** Storage grows only with *distinct* approved files.
+
+**Storage.**
+- **Table** (new migration): `approved_production_manifests`
+  - columns: `id`, `episode_id`, `version` (1, 2, 3 …), `supersedes_id`, `scope` (`episode` or the scene list), `body_sha256`, `s3_key`, `approved_by`, `approved_at`, `created_at`, `updated_at`, `deleted_at` (repo convention);
+  - a database trigger refuses any `UPDATE` of the content columns and any `DELETE`;
+  - the only permitted change is setting `deleted_at` on a manifest that no export references.
+- **Body:** canonical JSON in S3 at `manifests/<episode>/<version>-<sha256>.json`, never overwritten.
+- **Current pointer:** `episodes.approved_manifest_id`, the only mutable piece. Each move is logged.
+
+**Re-approval creates a new version.**
+1. Evoni re-approves an episode or a scene.
+2. The service calls each owner's `freeze` for the scenes being re-approved, and copies the other scenes' entries **by value** from the current manifest (they are already immutable JSON).
+3. It writes manifest `version + 1` with `supersedes_id = previous`, then moves `episodes.approved_manifest_id`.
+4. **The previous manifest is never touched.** Earlier exports record the manifest id they used (in the export job and its result), so any past export can be traced and re-rendered from its own manifest.
+5. **Outdated detection** compares each owner's live fingerprint with the manifest's stored hashes and shows "inputs changed since approval" (Rev 5 §7.2). Nothing changes until Evoni re-approves.
+
+**What cannot be frozen.** Renderer code changes. The manifest records the contract versions (`layoutAt`, resolver, mix plan). A re-render under different contract versions is flagged before it starts.
+
+**This is a gap in Rev 5, not a contradiction.** Rev 5 §8's snapshot stays the Director's game-state part. The manifest wraps it together with the other owners' frozen data, and Rev 5 test 22 then holds for every layer.
+
+## R2.3 Voice specification (D3, D4, D5): provider-neutral, A6-spec
+
+**Assignment** (D5). The precedence is **line override > episode override > character default**.
+- **Character default:** `registry_characters.speech_voice` (SPV §2.3) holds `{ voice_ref, settings, rights_ref, assigned_by, assigned_at }`.
+- **Episode override:** `episode_voice_overrides (episode_id, character_key, voice_ref, settings)`.
+- **Line override:** keyed by `(episode_id, line_key)` on the dialogue line record.
+- **What changing the assignment does:** the affected lines' approved clips become **outdated** (D4). Nothing is regenerated.
+
+**Line audio states:**
+- `none` → `draft` → `approved`;
+- `approved` → **`outdated`** when the line's text hash, its assigned voice or its settings change. **The approved clip is kept** and stays playable with an Outdated badge until Evoni regenerates and approves a replacement, or re-approves it as it is (D4);
+- `rejected`.
+
+**Sources.**
+- A line's source is `recorded` or `generated`. Each line plays only its **approved** clip (Rev 5 §4.1), and nothing is preferred by kind.
+- Prime's lines have no dialogue source: they come from her take.
+
+**Clip reuse.**
+- A generated clip is identified by `(voice_ref, settings, normalised text)`.
+- An approved clip with the same identity is offered for reuse on another line or episode **before** any generation. That saves money, and reuse still needs line approval.
+- Recorded clips are reused only by explicit choice.
+
+**Cost limits** (before any provider is chosen):
+- Every generation is a non-token entry in `aiCostTracker`, which needs a characters/seconds cost path; the Amber TTS calls are not tracked today (VERIFIED, SPV V3).
+- An estimate is shown before generating.
+- There are a per-episode cap and a monthly cap, and refusal is visible.
+- Generation happens only on an explicit action. No batch runs on save.
+
+**Commercial-use requirements:** a voice can be assigned only with a `rights_ref`, which records:
+- the provider plan permits monetised YouTube use;
+- the voice is a stock voice, or a clone of a real person **with a recorded consent**;
+- the date and terms version.
+
+Generation is refused for a voice without one. The provider choice (D3) is made against this list.
+
+## R2.4 D2 and D6 specifics
+
+- **D2 adoption.** "Adopt into Stage" is an action on each legacy scene.
+  - It shows the proposal: objects to create, positions converted from percentages and 960-px sizes to platform pixels, and anything it cannot place.
+  - On **Accept** it writes `scene_assets` rows and records `canvas_settings.composition = 'scene_assets'`.
+  - The legacy JSONB is kept, and export v1 keeps reading it until the scene is adopted.
+  - The read-only dry run lists every scene.
+- **D6 recording.**
+  - When a take is recording **as Prime**, line voices are off unless **"Monitor voices in headphones"** is switched on for that take. That switch is explicit, is never inherited from the saved `playVoice` preference, and asks for confirmation.
+  - The take records `voice_playback: { monitored, clips_played }` (migration M-A3), so the PIP panel can warn about possible bleed.
+  - Rehearsal (not recording) keeps today's preference.
+
+## R2.5 Does this change A1a? Yes: the content, not the position
+
+**A1a stays the first PR.** It is still pure, with no migration, no route and no caller switched. But it now produces the parts for **durable** keys, not content-derived keys:
+
+| In A1a now | Notes |
+|---|---|
+| `scriptLines(text)` | The one definition of "a line": beats from `## BEAT:` headers; every non-blank, non-header line including tags and hidden cues; `{ b, index, text, norm, h }` |
+| `normaliseLine`, `lineHash` | The hash algorithm is specified (for example 32-bit FNV-1a, hex) |
+| `mintLineKey(random)` | `ln_` + 10 base-32 characters, with the random source injectable so tests are deterministic |
+| `reconcileLineKeys(prevEntries, nextText, { hints, mint })` | Returns `{ entries, kept, edited, moved, retired, minted, rejectedHints }`: hints first, then `matchLines`, then mint |
+| `matchLines(old, new)` | Recovery and no-hint writers only |
+| `keyForStoredLine(stored, entries)` | For the voice-clip backfill; returns `null` rather than guessing |
+
+**Copies.**
+- **Server:** `src/utils/lineKeys.js`, which is authoritative for minting and reconciliation.
+- **Frontend:** `frontend/src/lib/lineKeys.js`, with only `scriptLines`, `normaliseLine` and `lineHash`. The editor needs these to align lines with the server's key list and to build hints. It never mints.
+- **Parity:** a test checks the two copies agree on the fixtures.
+
+**A1a acceptance tests** (they replace the earlier list):
+1. **Parity:** the server and frontend `scriptLines`, `normaliseLine` and `lineHash` agree on every fixture, including Episode 1 (`tests/fixtures/myLittleListEpisode1.js`, on `main`).
+2. **Durable through edits:** with hints, every line keeps its key after rewording, reordering inside and across beats, splitting (the first part keeps it) and merging (the first line keeps it, the other is retired).
+3. **Hints validated:** a hint that is unknown, retired or duplicated is rejected and reported, and that line goes to matching.
+4. **No-hint matching:** the matching cases (unchanged, edited in place, moved, removed, added) give the expected `kept`/`edited`/`moved`/`retired`/`minted`.
+5. **Never reused:** a retired key is never minted or assigned again in later reconciliations of the same history.
+6. **Locked beats:** a beat returned word for word by a regeneration keeps every key without hints.
+7. **Restore:** reconciling to a version's own entries returns exactly those keys.
+8. **Deterministic:** the same inputs with a seeded `mint` give identical output.
+9. **Coverage:** headers and blank lines get no key; `[UI:CLICK Voice Icon]`, `[WEAR:]`, `[TALK:]` and `[LEARNS:]` lines do.
+10. **Stored lines:** `keyForStoredLine` finds a voice clip's `line_text` after insertions above it, and returns `null` when the text is gone.
+11. **No behaviour change:** nothing imports the new modules; every existing suite, lint and `/validate` pass.
+
+**What follows A1a:**
+- **A1b (migration):** `episodes.script_line_keys` and `episode_script_versions.script_line_keys`, additive and nullable. Episodes without keys are keyed on first save or read.
+- **A1c (wiring):**
+  - `saveEpisodeScript` used by all ten writers;
+  - the guard test;
+  - GET returns the keys;
+  - Script tab hints, with `useLineIds` seeded from server keys;
+  - recovery on read.
+- **A1d:** the `script_voice_clips.line_key` backfill (the former M-A1).
+
+## R2.6 Updated sequence
+
+| Step | PR | Kind | Needs |
+|---|---|---|---|
+| 0 | B1 export arguments (local), **B8: D6 recording default and the monitored option** (teleprompter), GD-2, GD-5, MLL-3 | bug fixes and independent work | — |
+| 1 | **A1a** line identity contract (§R2.5) | pure | — |
+| 2 | A5a composition resolver and episode-scene ids; A4a `layoutAt` | pure | — |
+| 3 | **A10a manifest contract:** canonical JSON, hashing, the `freeze` interface each owner implements, manifest schema | pure | 1, 2 |
+| 4 | A1b, then A1c | migration, then wiring | 1 |
+| 5 | M-A5 (inheritance columns, `timeline_items`), M-A3 (PIP tables, take marks, `voice_playback`) | migrations | 2 |
+| 6 | A2 marks; A3 PIP; A5b Stage and D2 adoption; A5c Timeline with `applyProposal` | features | 4, 5 |
+| 7 | **A6-spec** (§R2.3) approved by Evoni, then A6a provider-neutral voice assignment, states, reuse and cost paths, then A1d backfill | spec, then feature | 4 |
+| 8 | GD-3 Director core | Director | 4, 6, 7 (no provider needed: approved sources may all be recorded) |
+| 9 | A4b StageRenderer, A7, A8 mix plan | features | 6 |
+| 10 | **A10b manifest service:** migration, trigger, content-addressed media copy, `approved_manifest_id`; every owner's `freeze` | migration + feature | 3, 6, 7, 9 |
+| 11 | GD-6, GD-7 (snapshots register into manifests) | Director | 10 |
+| 12 | Export phase: the compositor reads only manifests | export | 11, B1 |
+| later | A6b TTS provider adapter, once D3 is decided against §R2.3 | feature | D3 |
+
+**Why the manifest contract is early (step 3):** every owner's storage PR (steps 4–7) can then add its `freeze` function and hash test in the same PR. That avoids a later pass over every owner.
+
+## R2.7 Decisions still needing Evoni
+
+- **D3 provider:** deferred by Evoni. First, approve the §R2.3 voice specification (assignment, states, reuse, caps, rights).
+- **Caps:** the per-episode and monthly TTS amounts, once a provider exists.
+- **Media freezing:** is S3 bucket versioning on for the media buckets? If not, approved takes are copied, which means storage cost (NEEDS CONFIRMATION by Evoni; a session cannot check).
+- **Manifest deletion:** may an approved manifest that no export used ever be deleted (soft), or are manifests permanent?
