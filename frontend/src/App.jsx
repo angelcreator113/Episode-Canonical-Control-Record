@@ -80,6 +80,8 @@ const EpisodeTodoPage = lazy(() => import('./pages/EpisodeTodoPage'));
 const WorldAdmin = lazy(() => import('./pages/WorldAdmin'));
 // The Season page (2026-10-25), reached from Producer Mode's banner (Season); it replaced the Season Plan tab.
 const SeasonPage = lazy(() => import('./pages/SeasonPage'));
+// The season plan on one printable page (2026-10-26): from the Season page's ⋯ menu and Overview.
+const SeasonPlanPrint = lazy(() => import('./pages/SeasonPlanPrint'));
 const EventPackagePage = lazy(() => import('./pages/EventPackagePage'));
 const WorldStudio = lazy(() => import('./pages/WorldStudio'));
 const SceneStudio = lazy(() => import('./pages/SceneStudio'));
@@ -389,6 +391,7 @@ function AppContent() {
           <Route path="/shows/:id/edit" element={<EditShow />} />
           <Route path="/shows/:id/world" element={<WorldAdmin />} />
           <Route path="/shows/:showId/season" element={<SeasonPage />} />
+          <Route path="/shows/:showId/season/plan" element={<SeasonPlanPrint />} />
           <Route path="/shows/:showId/quick-episode" element={<NewEpisodeRedirect />} />
           <Route path="/shows/:showId/new-episode" element={<NewEpisodeStarter />} />
           <Route path="/shows/:showId/events/:eventId" element={<EventPackagePage />} />

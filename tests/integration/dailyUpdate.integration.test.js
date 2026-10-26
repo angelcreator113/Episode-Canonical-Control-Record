@@ -10,6 +10,8 @@
  *   - coming up: a scheduled post, an episode airing and its event, a deal's
  *     shoot date; today's AI spend and where it went
  *   - Dr. Sinclair (a confidential professional) is in none of it
+ *   - seasons: each show's season in progress, named for the page's Needs
+ *     attention (Season page round 3, 2026-10-26); a completed season is not
  *   - ADMIN only; since must be before now
  */
 jest.unmock('uuid');
@@ -35,7 +37,7 @@ const HOUR = 60 * 60 * 1000;
   const ids = {
     show: uuid(), reg: uuid(), maren: uuid(), dr: uuid(), episode: uuid(), event: uuid(),
     live: uuid(), autoLive: uuid(), draft: uuid(), scheduled: uuid(), voice: uuid(), drVoice: uuid(),
-    secret: uuid(), drSecret: uuid(), deal: uuid(), dealSoon: uuid(),
+    secret: uuid(), drSecret: uuid(), deal: uuid(), dealSoon: uuid(), arcDone: uuid(), arcNow: uuid(),
   };
   const tag = ids.show.slice(0, 8);
   const later = (h) => new Date(Date.now() + h * HOUR);
@@ -91,6 +93,7 @@ const HOUR = 60 * 60 * 1000;
 
   afterAll(async () => {
     const r = ids;
+    await run('DELETE FROM show_arcs WHERE show_id = :show', r);
     await run('DELETE FROM ai_usage_logs WHERE route_name = \'daily-test-feature\'');
     await run('DELETE FROM character_fact_changes WHERE registry_character_id IN (:maren, :dr)', r);
     await run('DELETE FROM consistency_flag_log WHERE registry_character_id IN (:maren, :dr)', r);
@@ -104,6 +107,18 @@ const HOUR = 60 * 60 * 1000;
     if (r.marenProfile) await run('DELETE FROM social_profiles WHERE id IN (:marenProfile, :drProfile)', r);
     await run('DELETE FROM character_registries WHERE id = :reg', r);
     await run('DELETE FROM shows WHERE id = :show', r);
+  });
+
+  it('seasons: the show\'s season in progress, for the Season page\'s Needs attention; a completed one is not', async () => {
+    for (const [id, n, status] of [[ids.arcDone, 1, 'completed'], [ids.arcNow, 2, 'active']]) {
+      await run(`INSERT INTO show_arcs (id, show_id, arc_number, title, season_number, episode_start, episode_end, phases, current_phase, status,
+                   narrative_debt, progression_log, emotional_temperature, created_at, updated_at)
+                 VALUES (:id, :show, :n, :title, :n, 1, 24, '[]', 1, :status, '[]', '[]', 'rising', NOW(), NOW())`,
+      { id, show: ids.show, n, title: `Daily season ${n}`, status });
+    }
+    const { body } = await get();
+    const mine = body.seasons.filter((x) => x.show_id === ids.show);
+    expect(mine).toEqual([{ show_id: ids.show, show: `Daily ${tag}`, arc_id: ids.arcNow, season_number: 2, title: 'Daily season 2' }]);
   });
 
   it('is ADMIN only', async () => {

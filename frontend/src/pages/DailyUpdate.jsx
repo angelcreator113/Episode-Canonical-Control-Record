@@ -10,6 +10,11 @@
  *                    decided here through that item's own endpoint (so every
  *                    rule it keeps still holds), one at a time or all at once,
  *                    with Undo where the feature has one
+ *   The season       each show's season in progress: the Season page's own
+ *                    "Needs attention" list, same items and words
+ *                    (components/Show/SeasonAttentionDigest; Evoni,
+ *                    2026-10-26, Season page round 3), with an empty
+ *                    "Focus for today" spot a later AI step fills
  *   Coming up        the next three days: scheduled posts (move or hold),
  *                    episode air dates and their events, deal dates
  *   Cost             today's AI spend against the daily budget
@@ -23,6 +28,7 @@ import {
   Mic, Lock, Briefcase, AlertTriangle, Coins, Users, ArrowRight,
 } from 'lucide-react';
 import api from '../services/api';
+import SeasonAttentionDigest from '../components/Show/SeasonAttentionDigest';
 import './DailyUpdate.css';
 
 const REVIEW = '/admin?tab=pulse&sub=review';
@@ -526,6 +532,7 @@ export default function DailyUpdate() {
             {data.waiting.map((g) => <WaitingGroup key={g.key} group={g} />)}
             <p className="du-muted">Comments, numbers, follower and closeness changes and DMs wait in <Link to={REVIEW}>Pulse Review</Link>.</p>
           </section>
+          <SeasonAttentionDigest seasons={data.seasons || []} api={api} />
           <ComingUp c={data.coming_up} />
           <Cost cost={data.cost} />
         </>

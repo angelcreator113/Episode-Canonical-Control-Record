@@ -7,13 +7,16 @@
  * and their layout are the page's.
  *
  *   Roadmap     Grid (three part columns of cards), Timeline (every slot in
- *               order) or This week (the next two or three releases, each
+ *               order), This week (the next two or three releases, each
  *               with its stage, what it still needs, its event and Moves;
- *               SeasonWeek, 2026-10-25); All Parts / All Statuses; + Add
- *               Episode (the new-episode flow). `?view=`, `?part=`, `?status=`
- *               hold them; the view is also remembered per browser.
- *               No Calendar view; each card shows its release day from the
- *               show's release schedule (Evoni, 2026-10-25) when there is one.
+ *               SeasonWeek, 2026-10-25) or Calendar (a month of release
+ *               days, in-world event dates and deadlines; SeasonCalendar,
+ *               Evoni 2026-10-26, round 3: a list by week on a phone);
+ *               All Parts / All Statuses; + Add Episode (the new-episode
+ *               flow). `?view=`, `?part=`, `?status=` hold them; the view is
+ *               also remembered per browser. Each card shows its release day
+ *               from the show's release schedule (Evoni, 2026-10-25) when
+ *               there is one.
  *   Events      the event library (EventLibrary, from Producer Mode, 2026-10-25)
  *               under In this season · Not placed yet · All (`?show=`):
  *               the slots' events in slot order, the events in no slot, each
@@ -25,7 +28,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { LayoutGrid, ListOrdered, Plus, MoreHorizontal, CalendarDays, CalendarClock } from 'lucide-react';
+import { LayoutGrid, ListOrdered, Plus, MoreHorizontal, CalendarDays, CalendarClock, CalendarRange } from 'lucide-react';
 import { useRoadmapControls, AdvanceBar, SlotSide, UnslottedEpisodes } from './SeasonPlan';
 import { SeasonPlacement } from './SeasonSetup';
 import { StatusChip } from './SeasonPageParts';
@@ -38,11 +41,12 @@ import {
 import { EVENT_SHOWS, EVENT_SHOW_STORAGE_KEY, eventShowFrom, isEventShow, seasonEventViews } from '../../lib/eventLibrary';
 import EventLibrary from './EventLibrary';
 import SeasonWeek from './SeasonWeek';
+import SeasonCalendar from './SeasonCalendar';
 import { packageHref } from '../../lib/eventFlow';
 
 // The roadmap's view, remembered per browser (the URL's ?view= wins); storage can be blocked.
 export const ROADMAP_VIEW_STORAGE_KEY = 'szn-roadmap-view';
-const ROADMAP_VIEWS = ['grid', 'timeline', 'week'];
+const ROADMAP_VIEWS = ['grid', 'timeline', 'week', 'calendar'];
 function rememberedView() {
   try { return window.localStorage.getItem(ROADMAP_VIEW_STORAGE_KEY); } catch (err) { console.warn('[SeasonRoadmap] view not read:', err?.message); return null; }
 }
@@ -126,7 +130,7 @@ export function SlotCard({ slot, picture, showId, selected, onOpen, onIntention,
   );
 }
 
-export function SeasonRoadmapTab({ plan, S, api, showId, setToast, episodes, events, arc, params, goTab, setParams, readOnly = false }) {
+export function SeasonRoadmapTab({ plan, S, api, showId, setToast, episodes, events, arc, params, goTab, setParams, readOnly = false, opps = [] }) {
   const navigate = useNavigate();
   const controls = useSlotDrawer({ plan, api, showId, setToast });
   const { roadmap } = plan;
@@ -177,9 +181,12 @@ export function SeasonRoadmapTab({ plan, S, api, showId, setToast, episodes, eve
               <button type="button" aria-pressed={view === 'week'} className={view === 'week' ? 'is-on' : ''} onClick={() => setFilter({ view: 'week' })} data-testid="szn-view-week">
                 <CalendarClock size={16} aria-hidden="true" /> This week
               </button>
+              <button type="button" aria-pressed={view === 'calendar'} className={view === 'calendar' ? 'is-on' : ''} onClick={() => setFilter({ view: 'calendar' })} data-testid="szn-view-calendar">
+                <CalendarRange size={16} aria-hidden="true" /> Calendar
+              </button>
             </div>
-            {/* This week picks its own slots: the part and status filters are the grid's and the timeline's. */}
-            {view !== 'week' && (<>
+            {/* This week and Calendar pick their own slots: the part and status filters are the grid's and the timeline's. */}
+            {view !== 'week' && view !== 'calendar' && (<>
             <select className="szn-select" aria-label="Part" value={part} onChange={(e) => setFilter({ part: e.target.value })} data-testid="szn-filter-part">
               <option value="all">All Parts</option>
               {phases.map((p) => <option key={p.phase} value={String(p.phase)}>Part {p.phase}: {p.title}</option>)}
@@ -202,7 +209,10 @@ export function SeasonRoadmapTab({ plan, S, api, showId, setToast, episodes, eve
             onConfirmAdvance={plan.handleConfirmAdvance} onCancelAdvance={() => plan.setWarning(null)} advanceError={plan.advanceError} />
         )}
 
-        {view === 'week' ? (
+        {view === 'calendar' ? (
+          <SeasonCalendar release={release} roadmap={roadmap} events={events} opps={opps} arc={arc}
+            onOpenSlot={(n) => { const target = allSlots(roadmap).find((sl) => sl.slot_number === n); if (target) openSlot(target); }} />
+        ) : view === 'week' ? (
           <SeasonWeek roadmap={roadmap} release={release} episodes={episodes} events={events} api={api} showId={showId}
             movesBySlot={movesBySlot} onOpen={openSlot} />
         ) : view === 'grid' ? (

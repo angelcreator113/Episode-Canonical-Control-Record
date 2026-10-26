@@ -17,7 +17,8 @@
  * The plan checks itself: a reveal with no hint before it, a hint after the
  * reveal, a reveal of a secret the audience already knows, two reveals.
  *
- *   getPlan(sequelize, showId)                    { arc, slots, secrets, reveals, warnings }
+ *   getPlan(sequelize, showId, { arcId })         { arc, slots, secrets, reveals, warnings }; arcId: another
+ *                                                 season's (the Season page's switcher, ?season=N, 2026-10-26)
  *   setReveal(sequelize, showId, body, { by })    adds or changes one (slot + secret)
  *   deleteReveal(sequelize, showId, revealId)
  *   planForEpisode(sequelize, episodeId)          Map secret_id -> { intent, note }
@@ -85,11 +86,16 @@ function checkPlan(reveals, secrets) {
   return warnings;
 }
 
-/** The season's slots, the show's kept secrets, the plan and what is wrong with it. */
-async function getPlan(sequelize, showId) {
+/**
+ * The season's slots, the show's kept secrets, the plan and what is wrong
+ * with it. arcId: that season's (the caller checks it is this show's; Evoni,
+ * 2026-10-26: Story and Secrets "always show the season in progress even
+ * when a past season is picked").
+ */
+async function getPlan(sequelize, showId, { arcId = null } = {}) {
   if (!UUID_RE.test(String(showId || ''))) throw new RevealPlanError('showId must be a UUID');
   // The active season, else the show's first (a finished season's plan still reads).
-  const season = await loadSeason(sequelize, showId, { anyStatus: true });
+  const season = await loadSeason(sequelize, showId, arcId ? { arcId } : { anyStatus: true });
   if (!season) return { arc: null, slots: [], secrets: [], reveals: [], warnings: [] };
   const { arc } = season;
   const label = (n) => episodeLabel(arc.season_number, n);
@@ -117,7 +123,7 @@ async function setReveal(sequelize, showId, body = {}, { by = null } = {}) {
   if (!INTENTS.includes(intent)) throw new RevealPlanError('The plan is to hint at it or reveal it.');
   if (!UUID_RE.test(String(body.slot_id || '')) || !UUID_RE.test(String(body.secret_id || ''))) throw new RevealPlanError('Choose a slot and a secret.');
   const [[slot]] = await sequelize.query(
-    'SELECT id, accepted_at FROM season_slots WHERE id = :id AND show_id = :showId AND deleted_at IS NULL', { replacements: { id: body.slot_id, showId } });
+    'SELECT id, arc_id, accepted_at FROM season_slots WHERE id = :id AND show_id = :showId AND deleted_at IS NULL', { replacements: { id: body.slot_id, showId } });
   if (!slot) throw new RevealPlanError('That slot is not in this show\'s season.', 404);
   if (slot.accepted_at) throw new RevealPlanError('That episode is done; its story record says what it showed.', 409);
   if (!(await showSecrets(sequelize, showId)).some((s) => s.id === body.secret_id)) {
@@ -136,16 +142,18 @@ async function setReveal(sequelize, showId, body = {}, { by = null } = {}) {
        VALUES (:showId, :slot, :secret, :intent, :note, :by, NOW(), NOW())`,
       { replacements: { showId, slot: body.slot_id, secret: body.secret_id, intent, note, by } });
   }
-  return getPlan(sequelize, showId);
+  // The plan of the season the slot is in, so a past season's change reads back as that season.
+  return getPlan(sequelize, showId, { arcId: slot.arc_id || null });
 }
 
 async function deleteReveal(sequelize, showId, revealId) {
   if (!UUID_RE.test(String(revealId || ''))) throw new RevealPlanError('revealId must be a UUID');
   const [rows] = await sequelize.query(
-    'UPDATE season_reveals SET deleted_at = NOW(), updated_at = NOW() WHERE id = :id AND show_id = :showId AND deleted_at IS NULL RETURNING id',
+    `UPDATE season_reveals SET deleted_at = NOW(), updated_at = NOW() WHERE id = :id AND show_id = :showId AND deleted_at IS NULL
+     RETURNING id, (SELECT s.arc_id FROM season_slots s WHERE s.id = season_reveals.slot_id) AS arc_id`,
     { replacements: { id: revealId, showId } });
   if (!rows.length) throw new RevealPlanError('Not in the plan.', 404);
-  return getPlan(sequelize, showId);
+  return getPlan(sequelize, showId, { arcId: rows[0].arc_id || null });
 }
 
 /** The plan for the episode's slot: secret id -> { intent, note }; empty with none or no table yet. */

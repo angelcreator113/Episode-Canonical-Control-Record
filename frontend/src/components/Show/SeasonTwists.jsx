@@ -23,7 +23,10 @@
  * episode, warns about the ones that never pay off and marks where each
  * paid off. "See every plant" opens it.
  *
- * Props: showId, api (the page's client), onSeeAll (optional: opens the Plants tab).
+ * Props: showId, api (the page's client), onSeeAll (optional: opens the Plants tab),
+ * season (optional: a past season's number from the Season page's switcher,
+ * 2026-10-26; the list is that season's, and Suggest twists, which drafts for
+ * the season in progress, is left out).
  */
 import { useCallback, useEffect, useState } from 'react';
 import { Route, Plus, Pencil, Trash2, AlertTriangle, ArrowRight, Sparkles, Check, X, ListTree } from 'lucide-react';
@@ -41,8 +44,10 @@ const beatOut = (v) => (v === '' || v === null || v === undefined ? null : Numbe
 const errorOf = (err, fallback) => err?.response?.data?.error || fallback;
 const slotText = (s) => `${s.label}${s.episode?.title ? ` · ${s.episode.title}` : s.story_purpose ? ` · ${s.story_purpose.slice(0, 50)}` : ''}`;
 
-export default function SeasonTwists({ showId, api, onSeeAll = null }) {
+export default function SeasonTwists({ showId, api, onSeeAll = null, season = null }) {
   const base = `/api/v1/world/${showId}/season/twists`;
+  // The season shown (the Season page's switcher, ?season=N; 2026-10-26): reads follow it, writes answer with their own season.
+  const seasonQuery = season ? `?season=${encodeURIComponent(season)}` : '';
   const [data, setData] = useState(null);
   const [form, setForm] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -54,13 +59,13 @@ export default function SeasonTwists({ showId, api, onSeeAll = null }) {
 
   const load = useCallback(async () => {
     try {
-      setData((await api.get(base)).data);
+      setData((await api.get(`${base}${seasonQuery}`)).data);
     } catch (err) {
       console.error('[SeasonTwists] load failed:', err);
       setData(EMPTY);
       setNote({ error: true, text: errorOf(err, 'The season twists could not be loaded.') });
     }
-  }, [api, base]);
+  }, [api, base, seasonQuery]);
   useEffect(() => { load(); }, [load]);
 
   const save = async () => {
@@ -176,9 +181,11 @@ export default function SeasonTwists({ showId, api, onSeeAll = null }) {
               <ListTree size={14} aria-hidden="true" /> See every plant
             </button>
           )}
-          <button type="button" className="stw-btn is-quiet" disabled={busy || suggesting} onClick={suggest} data-testid="stw-suggest">
-            <Sparkles size={14} aria-hidden="true" /> {suggesting ? 'Suggesting…' : 'Suggest twists'}
-          </button>
+          {!season && (
+            <button type="button" className="stw-btn is-quiet" disabled={busy || suggesting} onClick={suggest} data-testid="stw-suggest">
+              <Sparkles size={14} aria-hidden="true" /> {suggesting ? 'Suggesting…' : 'Suggest twists'}
+            </button>
+          )}
           {!form && (
             <button type="button" className="stw-btn" disabled={busy} onClick={() => { setNote(null); setForm({ ...BLANK }); }}>
               <Plus size={14} aria-hidden="true" /> Add a twist

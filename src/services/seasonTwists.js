@@ -15,7 +15,9 @@
  * payoff with no plant, a slot no longer in the season, paid off but never
  * planted.
  *
- *   getTwists(sequelize, showId)                     { arc, slots, threads, characters, twists, warnings }
+ *   getTwists(sequelize, showId, { arcId })          { arc, slots, threads, characters, twists, warnings }; arcId:
+ *                                                    another season's (?season=N, 2026-10-26); a write
+ *                                                    answers with the season it wrote to
  *   setTwist(sequelize, showId, body, { by })        adds one, or changes it (body.id)
  *   deleteTwist(sequelize, showId, twistId)          soft delete
  *   restoreTwist(sequelize, showId, twistId)         undoes a delete
@@ -175,10 +177,11 @@ function seasonSlots({ arc, slots }) {
 }
 
 /** The season's slots, the show's threads and characters, the twists and what is wrong with them. */
-async function getTwists(sequelize, showId) {
+async function getTwists(sequelize, showId, { arcId = null } = {}) {
   if (!UUID_RE.test(String(showId || ''))) throw new TwistError('showId must be a UUID');
-  // The active season, else the show's first (a finished season's twists still read).
-  const season = await loadSeason(sequelize, showId, { anyStatus: true, scripts: true });
+  // The active season, else the show's first (a finished season's twists still read);
+  // arcId: that season (the caller checks it is this show's).
+  const season = await loadSeason(sequelize, showId, arcId ? { arcId, scripts: true } : { anyStatus: true, scripts: true });
   if (!season) return { arc: null, slots: [], threads: [], characters: [], twists: [], warnings: [], current_episode: null };
   const { arc } = season;
   const slots = seasonSlots(season);
@@ -307,26 +310,26 @@ async function setTwist(sequelize, showId, body = {}, { by = null } = {}) {
        VALUES (:showId, :arcId, :title, :description, :note, :status, :plant, :payoff, CAST(:threads AS jsonb), CAST(:characters AS jsonb),
               :planted, :paidOff, :kind, :plantBeat, :paidOffSlot, :payoffNote, :by, NOW(), NOW())`, { replacements });
   }
-  return getTwists(sequelize, showId);
+  return getTwists(sequelize, showId, { arcId: plant.arc_id || null });
 }
 
 async function deleteTwist(sequelize, showId, twistId) {
   if (!UUID_RE.test(String(twistId || ''))) throw new TwistError('twistId must be a UUID');
   const [rows] = await sequelize.query(
-    'UPDATE season_twists SET deleted_at = NOW(), updated_at = NOW() WHERE id = :id AND show_id = :showId AND deleted_at IS NULL RETURNING id',
+    'UPDATE season_twists SET deleted_at = NOW(), updated_at = NOW() WHERE id = :id AND show_id = :showId AND deleted_at IS NULL RETURNING id, arc_id',
     { replacements: { id: twistId, showId } });
   if (!rows.length) throw new TwistError('That twist is not in this show\'s season.', 404);
-  return getTwists(sequelize, showId);
+  return getTwists(sequelize, showId, { arcId: rows[0].arc_id || null });
 }
 
 /** Undo for a delete: the twist back as it was. */
 async function restoreTwist(sequelize, showId, twistId) {
   if (!UUID_RE.test(String(twistId || ''))) throw new TwistError('twistId must be a UUID');
   const [rows] = await sequelize.query(
-    'UPDATE season_twists SET deleted_at = NULL, updated_at = NOW() WHERE id = :id AND show_id = :showId AND deleted_at IS NOT NULL RETURNING id',
+    'UPDATE season_twists SET deleted_at = NULL, updated_at = NOW() WHERE id = :id AND show_id = :showId AND deleted_at IS NOT NULL RETURNING id, arc_id',
     { replacements: { id: twistId, showId } });
   if (!rows.length) throw new TwistError('There is no deleted twist to bring back.', 404);
-  return getTwists(sequelize, showId);
+  return getTwists(sequelize, showId, { arcId: rows[0].arc_id || null });
 }
 
 /**
@@ -624,7 +627,7 @@ async function markPaidOff(sequelize, showId, twistId, { slot_id: slotId, note }
             planted_episode_id = COALESCE(planted_episode_id, :plantEpisode), updated_at = NOW()
       WHERE id = :twistId`,
     { replacements: { slotId: slot.id, episodeId: slot.episode_id || null, note: text(note, 1000), plantEpisode: twist.plant_episode || null, twistId } });
-  return getTwists(sequelize, showId);
+  return getTwists(sequelize, showId, { arcId: slot.arc_id || null });
 }
 
 /** Undo for Mark paid off: open again (planted when an episode planted it, else planned). */
@@ -634,10 +637,10 @@ async function reopenTwist(sequelize, showId, twistId) {
   const [rows] = await sequelize.query(
     `UPDATE season_twists SET status = CASE WHEN planted_episode_id IS NULL THEN 'planned' ELSE 'planted' END,
             paid_off_slot_id = NULL, paid_off_episode_id = NULL, payoff_note = NULL, updated_at = NOW()
-      WHERE id = :twistId AND show_id = :showId AND deleted_at IS NULL AND status = 'paid_off' RETURNING id`,
+      WHERE id = :twistId AND show_id = :showId AND deleted_at IS NULL AND status = 'paid_off' RETURNING id, arc_id`,
     { replacements: { twistId, showId } });
   if (!rows.length) throw new TwistError('That plant is not paid off, so there is nothing to undo.', 404);
-  return getTwists(sequelize, showId);
+  return getTwists(sequelize, showId, { arcId: rows[0].arc_id || null });
 }
 
 const OPEN_PLANTS_CAP = 6;
