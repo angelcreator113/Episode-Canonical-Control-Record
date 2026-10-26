@@ -12,6 +12,11 @@
  *                 cards (after the episode it follows): its label, its own
  *                 release day, its title and status; opens its editor.
  *   AddSpecialForm  the form, also used to make a suggestion a bonus.
+ *   WillBeSpecial   on the Events tab, for an unplaced event once the
+ *                 season is full (every weekly episode has an event placed
+ *                 or started; Evoni, 2026-10-26): "Will be a special", Make
+ *                 it a special (in story order, lib/seasonFull), or open the
+ *                 event to swap it into a weekly episode.
  *
  * The weekly Sunday episodes keep their numbers and dates; a special has
  * its own date and time, set here (YouTube, like the main show).
@@ -28,6 +33,8 @@ import {
 import { allSlots } from '../../lib/seasonPage';
 import { formatDay, formatTime } from '../../lib/releaseSchedule';
 import { packageHref } from '../../lib/eventFlow';
+import { hasStoryDate, makeSpecialFor } from '../../lib/seasonFull';
+import { errorText } from '../../lib/releaseSchedule';
 import './SeasonSpecials.css';
 
 /** The events a special can be made from: those a weekly slot could take, and those pencilled in an open, unpaired slot. */
@@ -189,7 +196,9 @@ export function SpecialCard({ special, release, specials = null, showId, readOnl
   const when = specialWhen(release, special);
   const row = specialRow(release, special);
   const Icon = special.kind === 'bonus' ? Sparkles : Gift;
-  const subtitle = special.kind === 'special' ? `${special.place} · not in the parts or goals` : null;
+  // A bonus whose event has no in-world date yet sits after the part in progress (seasonFullSpecials).
+  const noDate = special.kind === 'bonus' && special.event && !hasStoryDate(special.event.event_date);
+  const subtitle = special.kind === 'special' ? `${special.place} · not in the parts or goals` : noDate ? 'No date yet: place it when you know' : null;
   return (
     <div className={`sspec-card is-${special.kind} is-${special.state}`} data-testid={`sspec-card-${special.id}`}>
       <button type="button" className="sspec-card-open" onClick={() => !readOnly && specials && setOpen((o) => !o)} aria-expanded={open}
@@ -200,7 +209,7 @@ export function SpecialCard({ special, release, specials = null, showId, readOnl
             <span className={`sspec-when${when.set ? '' : ' is-unset'}${row?.due ? ` is-${row.due}` : ''}`} data-testid={`sspec-when-${special.id}`}>{when.text}</span>
           </span>
           <span className="sspec-card-title">{special.title || 'Untitled special'}</span>
-          {subtitle && <span className="sspec-card-sub">{subtitle}</span>}
+          {subtitle && <span className="sspec-card-sub" data-testid={noDate ? `sspec-no-date-${special.id}` : undefined}>{subtitle}</span>}
           <StatusChip state={special.state} />
           {/* A bonus's event moves goals like any other; a stand-alone special counts toward none. */}
           {special.kind === 'bonus' && <MovesChips goals={moves} testId={`sspec-moves-${special.id}`} />}
@@ -293,5 +302,40 @@ export function SpecialsBar({ roadmap, events, release, specials, readOnly = fal
         </ul>
       )}
     </section>
+  );
+}
+
+/**
+ * An unplaced event on a full season (the Events tab): "Will be a special",
+ * Make it a special here, or Swap it into a weekly episode on its page.
+ * Before the specials' migration it says they need it, and nothing else.
+ */
+export function WillBeSpecial({ api, showId, event, ready = true, from = null, onChanged = null, setToast = null }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  if (!ready) {
+    return <span className="sspec-will is-waiting" data-testid={`sspec-will-${event.id}`}>Season full · specials need their migration first</span>;
+  }
+  const make = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const made = await makeSpecialFor(api, showId, event.id);
+      if (onChanged) await onChanged();
+      if (setToast) setToast(`“${event.name}” is ${made?.label || 'a special'}.`);
+    } catch (err) {
+      console.error('[SeasonSpecials] make it a special failed:', err);
+      setError(errorText(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <span className="sspec-will-row">
+      <span className="sspec-will" data-testid={`sspec-will-${event.id}`}><Sparkles size={13} aria-hidden="true" /> Will be a special</span>
+      <button type="button" className="szn-btn is-quiet" disabled={busy} onClick={make} data-testid={`sspec-will-make-${event.id}`}>Make it a special</button>
+      <Link className="szn-link sspec-will-swap" to={packageHref(showId, event.id, from)} data-testid={`sspec-will-swap-${event.id}`}>or swap it into a weekly episode</Link>
+      {error && <span className="szn-error" role="alert">{error}</span>}
+    </span>
   );
 }
