@@ -18,6 +18,7 @@ const path = require('path');
 const axios = require('axios');
 const { s3 } = require('../config/aws');
 const { emitExportProgress, emitExportComplete, emitExportFailed } = require('../sockets');
+const { readExportJob } = require('../utils/exportJobData');
 
 const TEMP_DIR = path.resolve(process.env.EXPORT_TEMP_DIR || './exports-temp');
 const S3_BUCKET = process.env.S3_PROCESSED_VIDEOS_BUCKET || process.env.S3_PRIMARY_BUCKET || 'episode-metadata-storage-dev';
@@ -43,7 +44,9 @@ videoQueue.process(
   'export-video',
   parseInt(process.env.EXPORT_MAX_CONCURRENT_JOBS, 10) || 2,
   async (job) => {
-    const { episodeId, episode: _episode, scenes, platform, timeline, userId: _userId } = job.data;
+    const { episodeId, episode: _episode, scenes, userId: _userId } = job.data;
+    // The route queues a platform key, a resolution and `timelineData`.
+    const { platform, timeline } = readExportJob(job.data);
 
     console.log(`🎬 [Job ${job.id}] Starting export for episode ${episodeId}`);
 
