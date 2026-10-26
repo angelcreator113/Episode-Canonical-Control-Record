@@ -764,3 +764,16 @@ It does **not** need:
 **Once A1a merges, behaviour changes only with later, separately approved PRs:**
 - A1b (migration, run through the Deploy workflow by Evoni);
 - A1c (the central save, the guard test, read status, the controlled repair, Script tab hints).
+
+## R3.9 A1c requirements (Evoni, 2026-10-26, on approving the A1a PR)
+
+A1a is PR #3603 (`claude/a1a-line-keys`, `61ec633f`): five new files, unused by production callers. A1c needs its own approval, and when it comes it must meet these four requirements:
+
+1. **Valid editor-provided keys always take precedence over text matching.** `reconcileLineKeys` already applies hints first. A1c's save path must pass the Script tab's keys for every line it holds.
+2. **Ambiguous or low-confidence matches never silently reuse an existing key.**
+   - **What A1a already does:** it pairs a line as "edited" only when the previous text is known and in step with its keys, and at least half its words match. Otherwise the line gets a new key. `keyForStoredLine` returns `null` when it is unsure.
+   - **What A1c adds:** it shows what was matched, never applying it silently.
+3. **Settle how scripts without beat headers behave before connecting persistent keys to the Script tab.** Today the Script tab shows a script with no headers as up to 14 beats by position, while A1a gives those lines no beat. Identity does not depend on the beat, but the beat shown and the beat stored must agree first.
+4. **Out-of-step keys need a controlled repair or explicit conflict resolution before an ordinary save goes ahead.**
+   - This **replaces R3.1's "a save while the status is `mismatch` saves the text and leaves the keys as `mismatch`"**.
+   - In A1c, a save on a `mismatch` episode is held: either a repair or an explicit conflict resolution happens first, and then the save completes. The text is never changed while its identity record is stale.
