@@ -31,7 +31,9 @@ function fn(name) {
 const STAGE_PATHS_LINE = /^STAGE_PATHS=\(.*\)$/m.exec(SCRIPT_TEXT)[0];
 
 const MIGRATE_FNS = ['die', 'redact', 'require_clean_tree', 'pending_check', 'processes_using', 'remove_stage',
-  'clean_stages', 'stage_release', 'verify_stage', 'finish_migrate', 'phase_migrate'];
+  'clean_stages', 'stage_release', 'verify_stage', 'finish_migrate', 'phase_migrate', 'require_migrated'];
+const RESTART_FNS = ['die', 'redact', 'require_at_target', 'require_migrated', 'verify_stage', 'pending_check',
+  'processes_using', 'remove_stage', 'pm2_state', 'pm2_status', 'phase_restart'];
 
 const GIT_ENV = {
   GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@t', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@t',
@@ -82,6 +84,10 @@ for a in "$@"; do if [ "$prev" = "--migrations-path" ]; then mig="$a"; fi; prev=
   echo "cli staged=$(find . -mindepth 1 -maxdepth 1 -printf '%P ' | tr ' ' '\\n' | sort | tr '\\n' ' ')"
 } >>"$CALLS"
 if [ "\${STUB_MIGRATE:-ok}" = "fail" ]; then echo 'ERROR: column "b" of relation "episodes" already exists'; exit 1; fi
+# The phase killed mid-migration (an SSM timeout): its bash goes, this keeps running.
+if [ "\${STUB_MIGRATE:-ok}" = "kill" ]; then kill -9 "$PHASE_PID"; exit 0; fi
+# A staged file changed while the migration runs.
+if [ "\${STUB_MIGRATE:-ok}" = "tamper" ]; then chmod u+w src/models/x.js; echo changed >>src/models/x.js; fi
 for f in "$mig"/*.js; do n="$(basename "$f")"; grep -qxF "$n" "$LEDGER" 2>/dev/null || echo "$n" >>"$LEDGER"; done
 echo '== 20261026000002-add-b: migrated'
 `;
@@ -138,7 +144,11 @@ beforeEach(() => {
   // stat: the box's ubuntu owner (the tests may run as another user).
   fs.writeFileSync(path.join(bin, 'stat'), '#!/usr/bin/env bash\necho "600 ubuntu"\n', { mode: 0o755 });
 });
-afterEach(() => { fs.rmSync(tmp, { recursive: true, force: true }); });
+afterEach(() => {
+  // Staged releases are read-only; give directories write back (links are not followed) so they can go.
+  spawnSync('find', [tmp, '-type', 'd', '-exec', 'chmod', 'u+w', '{}', '+']);
+  fs.rmSync(tmp, { recursive: true, force: true });
+});
 
 /** The live app directory, file by file (content and mtime), plus HEAD and status. */
 function snapshot() {
@@ -162,7 +172,8 @@ function run(body, { fns = MIGRATE_FNS, target = TARGET, env = {} } = {}) {
   const res = spawnSync('bash', ['-c', [
     'set -euo pipefail',
     fns.map(fn).join('\n'),
-    `PHASE=migrate; TARGET=${target}; APP_DIR="${app}"`,
+    `PHASE=migrate; TARGET=${target}; APP_DIR="${app}"; export PHASE_PID=$$`,
+    'API_APP=episode-api-prod-hotfix; WORKER_APP=episode-worker; HEALTH_URL=http://localhost:3000/health',
     'MIGRATE_ENV="$HOME/.episode-migrate.env"; DEPLOY_MIGRATED="$HOME/.episode-deploy-migrated"',
     'DEPLOY_MARKER="$HOME/.episode-deploy-unfinished"; STAGE_ROOT="$HOME/.episode-stage"',
     STAGE_PATHS_LINE,
@@ -188,7 +199,7 @@ const migrated = () => {
 };
 
 describe('the migrate phase runs from the staged target; the live directory never changes', () => {
-  test('pending files: migrated from the staged release with the live .env and node_modules, then recorded and cleaned up', () => {
+  test('pending files: migrated from the staged release with the live .env and node_modules, then recorded; the stage stays, read-only', () => {
     fs.writeFileSync(ledger, '20261026000001-add-a.js\n');
     const before = snapshot();
     const res = migrate();
@@ -215,8 +226,12 @@ describe('the migrate phase runs from the staged target; the live directory neve
     // Afterwards nothing in the live directory changed: tree, .env, uploads, logs, dist, node_modules.
     expect(snapshot()).toBe(before);
     expect(migrated()).toBe(TARGET);
-    expect(fs.existsSync(s)).toBe(false);
-    expect(fs.readdirSync(path.join(home, '.episode-stage'))).toEqual([]);
+    // Kept for the deploy and restart phases, read-only: no write bit on any file or directory.
+    expect(fs.readdirSync(path.join(home, '.episode-stage'))).toEqual([TARGET]);
+    const writable = spawnSync('find', [s, '(', '-type', 'f', '-o', '-type', 'd', ')', '-perm', '/222'], { encoding: 'utf8' }).stdout;
+    expect(writable).toBe('');
+    // The links' targets keep their own modes.
+    expect(fs.statSync(path.join(app, '.env')).mode & 0o200).toBe(0o200);
     expect(fs.readFileSync(path.join(app, '.env'), 'utf8')).toBe('LIVE_ENV_MARKER=1\n');
     expect(fs.existsSync(path.join(app, 'node_modules', '.bin', 'sequelize-cli'))).toBe(true);
   });
@@ -230,7 +245,7 @@ describe('the migrate phase runs from the staged target; the live directory neve
     expect(res.calls).toContain('cli staged=.env .sequelizerc node_modules package.json scripts src \n');
   });
 
-  test('nothing pending: no migration runs, the target is still recorded and the stage removed', () => {
+  test('nothing pending: no migration runs, the target is still recorded', () => {
     fs.writeFileSync(ledger, '20261026000001-add-a.js\n20261026000002-add-b.js\n');
     const before = snapshot();
     const res = migrate();
@@ -238,7 +253,6 @@ describe('the migrate phase runs from the staged target; the live directory neve
     expect(res.out).toMatch(/^MIGRATE_RAN=0$/m);
     expect(res.calls).not.toContain('cli ');
     expect(migrated()).toBe(TARGET);
-    expect(fs.existsSync(stage())).toBe(false);
     expect(snapshot()).toBe(before);
   });
 
@@ -422,10 +436,39 @@ describe('staged releases are cleaned up safely', () => {
     expect(res.status).toBe(0);
     expect(res.out).toContain('Left alone, not a staged release: ~/.episode-stage/keep-me');
     expect(fs.existsSync(path.join(home, '.episode-stage', 'keep-me'))).toBe(true);
-    const outside = run('remove_stage "$APP_DIR"', { fns: ['die', 'processes_using', 'remove_stage'] });
-    expect(outside.status).toBe(1);
-    expect(outside.err).toMatch(/refusing to remove .*: it is not under/);
+    for (const target of ['"$APP_DIR"', '"$STAGE_ROOT/../episode-metadata"', '"$STAGE_ROOT/keep-me"', '"$STAGE_ROOT"', `"$STAGE_ROOT/${TARGET}/../.."`]) {
+      const outside = run(`remove_stage ${target}`, { fns: ['die', 'processes_using', 'remove_stage'] });
+      expect(outside.status).toBe(1);
+      expect(outside.err).toMatch(/refusing to remove .*: it is not a staged release in/);
+    }
     expect(fs.existsSync(path.join(app, '.env'))).toBe(true);
+    expect(fs.existsSync(path.join(home, '.episode-stage', 'keep-me'))).toBe(true);
+  });
+
+  test('links planted in a leftover stage are removed as links: nothing live is followed, changed or deleted', () => {
+    const root = path.join(home, '.episode-stage');
+    // A leftover stage holding links into the live app, a read-only directory, and a stage that is itself a link.
+    const d = path.join(root, OLD);
+    fs.mkdirSync(path.join(d, 'src', 'deep'), { recursive: true });
+    fs.symlinkSync(app, path.join(d, 'src', 'app'));
+    fs.symlinkSync(path.join(app, 'uploads'), path.join(d, 'uploads'));
+    fs.symlinkSync(path.join(app, '.env'), path.join(d, '.env'));
+    fs.chmodSync(path.join(d, 'src', 'deep'), 0o555);
+    fs.chmodSync(path.join(d, 'src'), 0o555);
+    fs.symlinkSync(app, path.join(root, SIDE));
+    fs.chmodSync(path.join(app, '.env'), 0o600);
+    fs.chmodSync(path.join(app, 'uploads'), 0o555);
+    const before = snapshot();
+    const res = migrate();
+    expect(res.err).toBe('');
+    expect(res.status).toBe(0);
+    expect(fs.existsSync(d)).toBe(false);
+    expect(fs.existsSync(path.join(root, SIDE))).toBe(false);
+    expect(snapshot()).toBe(before);
+    expect(fs.statSync(path.join(app, '.env')).mode & 0o777).toBe(0o600);
+    expect(fs.statSync(path.join(app, 'uploads')).mode & 0o777).toBe(0o555);
+    expect(fs.readFileSync(path.join(app, 'uploads', 'portraits', 'p.png'), 'utf8')).toBe('png');
+    fs.chmodSync(path.join(app, 'uploads'), 0o755);
   });
 
   test('a stage root that is a symbolic link is refused', () => {
@@ -434,6 +477,136 @@ describe('staged releases are cleaned up safely', () => {
     const res = migrate();
     expect(res.status).toBe(1);
     expect(res.err).toMatch(/\.episode-stage is a symbolic link\./);
+  });
+});
+
+describe('what the migrate record can and cannot authorize', () => {
+  const guard = (body = 'PHASE=deploy; require_migrated') => run(body);
+  const record = (text) => fs.writeFileSync(path.join(home, '.episode-deploy-migrated'), text);
+
+  test('after a successful migrate the guard passes, reading the ledger from the unchanged staged release', () => {
+    expect(migrate().status).toBe(0);
+    fs.writeFileSync(calls, '');
+    const res = guard();
+    expect(res.err).toBe('');
+    expect(res.status).toBe(0);
+    expect(res.out).toMatch(/OK: 0 pending of 2 migration files checked/);
+    expect(res.calls).toContain(`check cwd=${stage()} env=LIVE_ENV_MARKER=1\n`);
+  });
+
+  test('a record whose database no longer has the migrations (restored since) authorizes nothing', () => {
+    expect(migrate().status).toBe(0);
+    fs.writeFileSync(ledger, '20261026000001-add-a.js\n');
+    const res = guard();
+    expect(res.status).toBe(1);
+    expect(res.err).toMatch(new RegExp(`the ledger check for ${TARGET} exited 1, not 0\\.`));
+    expect(res.err).toContain('Nothing was changed. Start a new run');
+  });
+
+  test('an unreadable ledger authorizes nothing', () => {
+    expect(migrate().status).toBe(0);
+    const res = guard().status;
+    expect(res).toBe(0);
+    expect(run('PHASE=deploy; require_migrated', { env: { STUB_LEDGER: '2' } }).status).toBe(1);
+  });
+
+  test.each([
+    ['another commit', () => `${'0'.repeat(40)}\n`],
+    ['a truncated SHA', () => TARGET.slice(0, 20)],
+    ['the SHA with anything after it', () => `${TARGET}\n${TARGET}\n`],
+    ['an empty file', () => ''],
+  ])('a record holding %s authorizes nothing', (_, text) => {
+    expect(migrate().status).toBe(0);
+    record(text());
+    const res = guard();
+    expect(res.status).toBe(1);
+    expect(res.err).toMatch(new RegExp(`the migrate phase has not succeeded for ${TARGET}`));
+  });
+
+  test('a record without its staged release authorizes nothing', () => {
+    record(`${TARGET}\n`);
+    const res = guard();
+    expect(res.status).toBe(1);
+    expect(res.err).toMatch(new RegExp(`the staged release of ${TARGET} is gone\\.`));
+  });
+
+  test('a staged release changed after the migrate phase authorizes nothing', () => {
+    expect(migrate().status).toBe(0);
+    const f = path.join(stage(), 'src', 'models', 'x.js');
+    fs.chmodSync(f, 0o644);
+    fs.appendFileSync(f, 'changed\n');
+    const res = guard();
+    expect(res.status).toBe(1);
+    expect(res.err).toMatch(/does not hold exactly/);
+  });
+
+  test('an interrupted migration (the phase killed mid-db:migrate) leaves no record, stale or new', () => {
+    record(`${TARGET}\n`); // an earlier attempt's success
+    const res = migrate({ env: { STUB_MIGRATE: 'kill' } });
+    expect(res.status).not.toBe(0);
+    expect(res.out).not.toMatch(/MIGRATE_RAN/);
+    expect(migrated()).toBeNull();
+    expect(fs.existsSync(path.join(home, '.episode-deploy-migrated.new'))).toBe(false);
+    expect(guard().status).toBe(1);
+  });
+
+  test('retry after Migrate succeeded and Deploy failed: the next migrate re-stages, finds nothing pending and records again', () => {
+    fs.writeFileSync(ledger, '20261026000001-add-a.js\n');
+    expect(migrate().status).toBe(0);
+    // Deploy stopped: nothing on the live tree moved. A new run starts with Migrate.
+    const again = migrate();
+    expect(again.err).toBe('');
+    expect(again.status).toBe(0);
+    expect(again.out).toMatch(/^MIGRATE_RAN=0$/m);
+    expect(migrated()).toBe(TARGET);
+    expect(guard().status).toBe(0);
+    // Nothing was rolled back: the ledger kept both migrations.
+    expect(fs.readFileSync(ledger, 'utf8')).toBe('20261026000001-add-a.js\n20261026000002-add-b.js\n');
+  });
+
+  test('a staged file changed between the check and db:migrate stops before db:migrate runs', () => {
+    // The ledger check (run from the stage) changes a staged migration on its first call.
+    const res = run([
+      fn('pending_check').replace('pending_check()', 'real_pending_check()'),
+      'pending_check() {',
+      `  if [ ! -e "${tmp}/tampered" ]; then f="$STAGE/src/migrations/20261026000002-add-b.js"; chmod u+w "$f"; echo '// x' >>"$f"; : >"${tmp}/tampered"; fi`,
+      '  real_pending_check "$@"',
+      '}',
+      'phase_migrate',
+    ].join('\n'));
+    expect(res.status).toBe(1);
+    expect(res.err).toMatch(/does not hold exactly/);
+    expect(res.calls).not.toContain('cli ');
+    expect(migrated()).toBeNull();
+  });
+
+  test('a staged file changed during db:migrate is caught after it, and nothing is recorded', () => {
+    const res = migrate({ env: { STUB_MIGRATE: 'tamper' } });
+    expect(res.status).toBe(1);
+    expect(res.out).toMatch(/db:migrate exit 0/);
+    expect(res.err).toMatch(/does not hold exactly/);
+    expect(migrated()).toBeNull();
+  });
+
+  test('a successful restart removes the record and the staged release; nothing live is touched', () => {
+    expect(migrate().status).toBe(0);
+    git('merge', '-q', '--ff-only', TARGET); // the deploy phase's fast-forward
+    fs.writeFileSync(path.join(bin, 'pm2'), `#!/usr/bin/env bash
+echo "pm2 $*" >>"${calls}"
+if [ "$1" = jlist ]; then echo '[{"name":"episode-api-prod-hotfix","pm2_env":{"status":"online","restart_time":3}},{"name":"episode-worker","pm2_env":{"status":"stopped","restart_time":0}}]'; fi
+`, { mode: 0o755 });
+    fs.writeFileSync(path.join(bin, 'curl'), '#!/usr/bin/env bash\necho \'{"status":"healthy","database":"connected"}\'\n', { mode: 0o755 });
+    fs.writeFileSync(path.join(bin, 'sleep'), '#!/usr/bin/env bash\nexit 0\n', { mode: 0o755 });
+    const before = snapshot();
+    const res = run('PHASE=restart; phase_restart', { fns: RESTART_FNS });
+    expect(res.err).toBe('');
+    expect(res.status).toBe(0);
+    expect(res.out).toMatch(/^RESTART_OK=1$/m);
+    expect(res.calls).toContain('pm2 restart episode-api-prod-hotfix');
+    expect(res.calls).not.toContain('pm2 restart episode-worker');
+    expect(migrated()).toBeNull();
+    expect(fs.existsSync(stage())).toBe(false);
+    expect(snapshot()).toBe(before);
   });
 });
 
@@ -451,7 +624,7 @@ describe('the phases, as written', () => {
     expect(m).not.toMatch(/git (merge|reset|checkout|pull|switch|stash|clean)(?![-\w])/);
     expect(m).not.toMatch(/\bpm2\b|npx /);
     // Its own record goes first, so a failure never leaves one behind.
-    expect(phase('migrate')).toMatch(/^phase_migrate\(\) \{\n(\s*#.*\n)*\s*rm -f "\$DEPLOY_MIGRATED"\n/);
+    expect(phase('migrate')).toMatch(/^phase_migrate\(\) \{\n(\s*#.*\n)*\s*rm -f "\$DEPLOY_MIGRATED" "\$DEPLOY_MIGRATED\.new"\n/);
   });
 
   test('deploy checks the record before anything else; restart before any pm2 call; restart clears it last', () => {

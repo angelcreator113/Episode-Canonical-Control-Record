@@ -20,12 +20,15 @@
 #                  against the commit; links to the live .env and
 #                  node_modules), and if files are pending runs
 #                  sequelize-cli db:migrate from there with the credential
-#                  in ~/.episode-migrate.env, then re-checks. The live tree
-#                  and the running API stay on the old code throughout. Only
-#                  a success records <sha> for the deploy and restart phases
+#                  in ~/.episode-migrate.env, then re-checks. The staged
+#                  release is read-only and checked again right before and
+#                  after db:migrate. The live tree and the running API stay
+#                  on the old code throughout. Only a success records <sha>
+#                  for the deploy and restart phases
 #                  (~/.episode-deploy-migrated); a failure is never undone.
 #   deploy  <sha> [<artifact-url> <sha256>]
-#                  only after this run's migrate phase succeeded for <sha>:
+#                  only for the <sha> the migrate phase recorded, with its
+#                  staged release unchanged and nothing pending in the ledger:
 #                  back up frontend/dist, fast-forward to <sha>, and put the
 #                  new frontend in place, marking the deploy unfinished until
 #                  the restart succeeds. With an artifact (the runner's own
@@ -40,9 +43,10 @@
 #                  ends a build that runs past BUILD_TIMEOUT_S itself, inside
 #                  the SSM document's 1800 s (Deploy runs 80-81 hung in the
 #                  build until SSM timed them out)
-#   restart <sha>  only after the migrate phase succeeded for <sha>: pm2
-#                  restart the API, /health, then the worker only if it was
-#                  online before (a stopped worker stays stopped, #2861)
+#   restart <sha>  under the same checks as deploy: pm2 restart the API,
+#                  /health, then the worker only if it was online before (a
+#                  stopped worker stays stopped, #2861); a success removes
+#                  the record and the staged release
 #
 # It prints no .env value, no credential, no host or IP (redact() below),
 # never runs `set -x`, `pm2 describe`, `pm2 env` or an unfiltered
@@ -73,7 +77,8 @@ DEPLOY_MARKER="$HOME/.episode-deploy-unfinished"
 # a successful restart.
 DEPLOY_MIGRATED="$HOME/.episode-deploy-migrated"
 # Staged releases, one per target: the migration runs from here, never from
-# the live tree.
+# the live tree. Kept until a successful restart (deploy and restart read
+# the ledger from it), or after a failure until the next migrate phase.
 STAGE_ROOT="$HOME/.episode-stage"
 # What a staged release holds: everything sequelize-cli and the ledger check
 # load. No file in src/ requires one outside it (checked at ab1d74e3).
@@ -291,15 +296,30 @@ pm2_status() {
   printf '%s' "${s// /-}"
 }
 
-# The deploy and restart phases run only after this run's migrate phase
-# succeeded for the same target.
+# The deploy and restart phases run only for the target the migrate phase
+# recorded, and only while the ledger still has every migration of that
+# target: the record alone is not enough, since the database may have been
+# restored since. Checks the staged release again and reads the ledger from
+# it; changes nothing. Sets STAGE.
 require_migrated() {
   local migrated
-  migrated="$(head -1 "$DEPLOY_MIGRATED" 2>/dev/null || true)"
+  migrated="$(cat "$DEPLOY_MIGRATED" 2>/dev/null || true)"
   if [ "$migrated" != "$TARGET" ]; then
     die "the migrate phase has not succeeded for $TARGET (recorded: ${migrated:-nothing})." \
       "Nothing was changed: the live tree, frontend/dist and the running API are as they were." \
       "This phase runs only after the same run's migrate phase (docs/runbooks/deploy-workflow.md §1)."
+  fi
+  STAGE="$STAGE_ROOT/$TARGET"
+  if [ -L "$STAGE" ] || [ ! -d "$STAGE" ]; then
+    die "the staged release of $TARGET is gone." "Nothing was changed. Start a new run."
+  fi
+  verify_stage
+  echo "Ledger against the staged release, before this phase changes anything:"
+  pending_check "$STAGE"
+  if [ "$PENDING_RC" -ne 0 ]; then
+    die "the ledger check for $TARGET exited $PENDING_RC, not 0." \
+      "The database no longer has every migration of this commit (restored or changed since the migrate phase), or the ledger could not be read." \
+      "Nothing was changed. Start a new run: its migrate phase applies what is missing."
   fi
 }
 
@@ -319,20 +339,24 @@ processes_using() {
   done
 }
 
-# Removes one staged release under $STAGE_ROOT, or returns 1 (printing why)
-# while a process still uses it. rm -rf removes the .env and node_modules
-# links themselves, never what they point to.
+# Removes one staged release, $STAGE_ROOT/<sha> or a .incoming. one, or
+# returns 1 (printing why) while a process still uses it. Never follows a
+# link: find without -L does not, -type d never matches one, and rm -rf
+# removes the .env and node_modules links themselves, not what they point to.
 remove_stage() {
-  local dir="$1" pids
-  case "$dir" in
-    "$STAGE_ROOT"/?*) ;;
-    *) die "refusing to remove $dir: it is not under $STAGE_ROOT." ;;
-  esac
+  local dir="$1" name pids
+  name="${dir#"$STAGE_ROOT"/}"
+  if [ "$name" = "$dir" ] || ! printf '%s' "$name" | grep -qE '^([0-9a-f]{40}|\.incoming\.[A-Za-z0-9]{6})$'; then
+    die "refusing to remove $dir: it is not a staged release in $STAGE_ROOT."
+  fi
   pids="$(processes_using "$dir")"
   if [ -n "$pids" ]; then
     echo "~/${dir#"$HOME"/} is in use (pid $(printf '%s' "$pids" | tr '\n' ' ' | sed 's/ $//')); not removed."
     return 1
   fi
+  # A staged release is read-only (stage_release); its directories need
+  # write permission back before rm can empty them.
+  if [ -d "$dir" ] && [ ! -L "$dir" ]; then find "$dir" -type d -exec chmod u+w {} +; fi
   rm -rf -- "$dir"
 }
 
@@ -378,6 +402,12 @@ stage_release() {
   STAGE="$STAGE_ROOT/$TARGET"
   mv -T "$incoming" "$STAGE"
   verify_stage
+  # Read-only from here, files and directories (never through a link): no
+  # file can change, appear or go without a mode changing first, and
+  # verify_stage runs again right before and after db:migrate and in the
+  # deploy and restart phases.
+  find "$STAGE" -type f -exec chmod a-w {} +
+  find "$STAGE" -type d -exec chmod a-w {} +
 }
 
 # The staged release holds exactly $TARGET's files (each one hashed and
@@ -428,8 +458,9 @@ console.log("STAGE_SEQUELIZE=" + real(require.resolve("sequelize")));' 2>&1)" ||
 }
 
 # After a successful migrate: the live tree must be where it was ($1); then
-# the target is recorded for the deploy and restart phases and its staged
-# release removed (left for the next run if a process still uses it).
+# the target is recorded for the deploy and restart phases, written whole or
+# not at all. The staged release stays for them; a successful restart
+# removes it.
 finish_migrate() {
   local now
   now="$(git rev-parse HEAD)"
@@ -437,8 +468,8 @@ finish_migrate() {
     die "the live tree moved during the migrate phase ($1 -> $now)." \
       "The deploy phase will refuse to run. Evoni looks at what moved it."
   fi
-  printf '%s\n' "$TARGET" >"$DEPLOY_MIGRATED"
-  remove_stage "$STAGE" || echo "The next migrate phase removes it."
+  printf '%s\n' "$TARGET" >"$DEPLOY_MIGRATED.new"
+  mv -f "$DEPLOY_MIGRATED.new" "$DEPLOY_MIGRATED"
 }
 
 phase_plan() {
@@ -577,7 +608,7 @@ phase_deploy() {
 # old code, so no process can load models the database does not match yet.
 phase_migrate() {
   # An earlier attempt's record never lets this run's deploy phase through.
-  rm -f "$DEPLOY_MIGRATED"
+  rm -f "$DEPLOY_MIGRATED" "$DEPLOY_MIGRATED.new"
   require_clean_tree
   # The plan's checks, repeated for this phase's own target: the staged
   # release shares the live node_modules, so a package change must stop here.
@@ -631,6 +662,8 @@ phase_migrate() {
     die "$MIGRATE_ENV needs a DB_USER= line and a DB_PASSWORD= line." "No migration was run."
   fi
 
+  # Checked again right before it runs, and again after.
+  verify_stage
   echo "Running sequelize-cli db:migrate from the staged release (NODE_ENV=production, the migration user from $MIGRATE_ENV)..."
   local out rc
   set +e
@@ -656,6 +689,8 @@ phase_migrate() {
       "The staged release is kept at ~/${STAGE#"$HOME"/} until the next run. See docs/runbooks/deploy-workflow.md §4."
   fi
 
+  # The staged release must still be exactly the commit it ran.
+  verify_stage
   echo "Ledger after the migration:"
   pending_check "$STAGE"
   if [ "$PENDING_RC" -ne 0 ]; then
@@ -720,6 +755,7 @@ phase_restart() {
   # The deploy is finished: the API runs the tree's code (Task #2948), and a
   # later deploy phase needs its own run's migrate phase.
   rm -f "$DEPLOY_MARKER" "$DEPLOY_MIGRATED"
+  remove_stage "$STAGE" || echo "The next migrate phase removes it."
   echo "RESTART_OK=1"
 }
 

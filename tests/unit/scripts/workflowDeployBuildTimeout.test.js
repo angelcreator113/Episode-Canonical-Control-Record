@@ -98,10 +98,10 @@ exit 1
     fs.mkdirSync(path.join(app, 'frontend'), { recursive: true });
     const res = spawnSync('bash', ['-c', [
       'set -euo pipefail',
-      ['die', 'redact', 'require_migrated', 'require_clean_tree', 'build_heap_mb', 'running_vite_builds', 'memory_lines', 'phase_deploy'].map(fn).join('\n'),
+      ['die', 'redact', 'require_clean_tree', 'build_heap_mb', 'running_vite_builds', 'memory_lines', 'phase_deploy'].map(fn).join('\n'),
       `PHASE=deploy; TARGET=${HEAD}; BUILD_TIMEOUT_S=1200; MEMINFO=/nonexistent; ARTIFACT_URL=none; ARTIFACT_SHA256=none`,
-      // This run's migrate phase succeeded for the target (workflowDeployStagedMigrate covers the refusal).
-      'DEPLOY_MIGRATED="$HOME/.episode-deploy-migrated"; printf \'%s\\n\' "$TARGET" >"$DEPLOY_MIGRATED"',
+      // The migrate-record and ledger guard passes here; workflowDeployStagedMigrate tests it.
+      'require_migrated() { :; }',
       `cd "${app}"`,
       'phase_deploy',
     ].join('\n')], { env: { PATH: `${bin}:/usr/bin:/bin`, HOME: tmp, ...env }, encoding: 'utf8' });
