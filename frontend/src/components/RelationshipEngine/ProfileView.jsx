@@ -69,8 +69,9 @@ export default function ProfileView({
       .sort((a, b) => new Date(b.updated_at || 0) - new Date(a.updated_at || 0))
     : []), [rels, char]);
 
+  // Pending only: kept ideas and Later wait in the Seeds tab's folds.
   const seeds = useMemo(() => (char
-    ? cands.filter(c => c.character_id_a === char.id || c.character_id_b === char.id)
+    ? cands.filter(c => !c.seed_state && (c.character_id_a === char.id || c.character_id_b === char.id))
     : []), [cands, char]);
 
   const stats = useMemo(() => {
@@ -117,7 +118,7 @@ export default function ProfileView({
   }
 
   // Lala is the show's Protagonist whatever her stored role (lib/theCast.js).
-  const isLala = findLala([char]) === char;
+  const isLala = lalaId ? String(char.id) === String(lalaId) : findLala([char]) === char;
   const roleType = isLala ? 'protagonist' : char.role_type;
   // Their pair with Lala says how they stand with her; a pair with anyone
   // else says nothing about it (it used to take the first one it found).
@@ -155,7 +156,8 @@ export default function ProfileView({
               {char.display_name && char.display_name !== cname(char) && <span className="rp-chip rp-chip-handle">{char.display_name}</span>}
               {char.status && <span className="rp-chip">{char.status}</span>}
             </div>
-            <p className="rp-bio">{char.description || char.personality || 'No description yet.'}</p>
+            {/* With nothing written, the About card says so (once). */}
+            {(char.description || char.personality) && <p className="rp-bio">{char.description || char.personality}</p>}
           </div>
         </section>
 
@@ -190,8 +192,10 @@ export default function ProfileView({
                           <span className="rp-row-title">{o.name}</span>
                           <span className="rp-row-sub">{[typeLabel(r), r.connection_mode, r.status].filter(Boolean).join(' · ')}</span>
                         </span>
-                        <Stage stage={r.stage} />
-                        {tc && <Pill color={tc.color} bg={tc.bg}>{humanize(r.tension_state)}</Pill>}
+                        <span className="rp-row-tags">
+                          <Stage stage={r.stage} />
+                          {tc && <Pill color={tc.color} bg={tc.bg}>{humanize(r.tension_state)}</Pill>}
+                        </span>
                         <ChevronRight size={18} aria-hidden className="rp-chev" />
                       </button>
                     </li>
@@ -219,7 +223,7 @@ export default function ProfileView({
                           <span className="rp-row-title">{o.name}</span>
                           <span className="rp-row-sub">{r.situation || typeLabel(r)}</span>
                         </span>
-                        <Stage stage={r.stage} />
+                        <span className="rp-row-tags"><Stage stage={r.stage} /></span>
                         <ChevronRight size={18} aria-hidden className="rp-chev" />
                       </button>
                     </li>

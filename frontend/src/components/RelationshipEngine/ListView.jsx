@@ -16,7 +16,7 @@ function Stage({ stage }) {
 // Columns a tablet's table leaves out (RelationshipEngine.css).
 const OPTIONAL = { Mode: 're-col-optional', Status: 're-col-optional' };
 
-export default function ListView({ rels, charById = {}, onSelect }) {
+export default function ListView({ rels, charById = {}, onSelect, selectedId = null }) {
   if (!rels.length) return (
     <div className="re-empty" role="status">
       <div className="re-empty-icon" style={{ fontSize: 32 }}>≡</div>
@@ -40,6 +40,7 @@ export default function ListView({ rels, charById = {}, onSelect }) {
         <tbody>
           {rows.map(({ r, a, b, tc }) => (
             <tr key={r.id} onClick={() => onSelect(r)} tabIndex={0}
+              className={r.id === selectedId ? 'is-selected' : undefined}
               onKeyDown={ev => { if (ev.key === 'Enter') onSelect(r); }}
               aria-label={`${a} ${typeLabel(r)} ${b}`}>
               <td className="re-list-name">{a}</td>
@@ -57,7 +58,7 @@ export default function ListView({ rels, charById = {}, onSelect }) {
       <ul className="re-list-cards" aria-label="Relationships">
         {rows.map(({ r, a, b, tc }) => (
           <li key={r.id}>
-            <button type="button" className="re-list-card" onClick={() => onSelect(r)}>
+            <button type="button" className={`re-list-card ${r.id === selectedId ? 'is-selected' : ''}`} onClick={() => onSelect(r)}>
               <span className="re-list-card-pair">{a} <span aria-hidden>↔</span> {b}</span>
               <span className="re-list-card-meta">
                 <Pill color={T.orchid}>{isLoveInterest(r) && <Heart size={10} fill="currentColor" aria-hidden />} {typeLabel(r)}</Pill>

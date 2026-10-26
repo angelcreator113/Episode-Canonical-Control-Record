@@ -2314,11 +2314,16 @@
 .re-pill { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
 .re-pill svg, .re-story-quote svg { display: inline-block; flex-shrink: 0; }
 .re-story-quote svg { vertical-align: -1px; margin-right: 4px; color: var(--re-magenta); }
+/* Recent rows: stage and tension side by side before the chevron */
+.rp-row-tags { display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.rp-row-tags:empty { display: none; }
 @media (max-width: 600px) {
-  /* Recent rows: the name gets the line; stage and tension wrap under it */
-  .rp-row { flex-wrap: wrap; row-gap: 6px; }
-  .rp-row-text { flex: 1 1 calc(100% - 90px); min-width: 0; }
-  .rp-row > .re-stage:first-of-type { margin-left: 48px; }
+  /* the name and the chevron share the first line; stage and tension sit
+     under the name (they used to wrap with the chevron, alone, under them) */
+  .rp-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; column-gap: 12px; row-gap: 6px; }
+  .rp-row > .rp-row-text { grid-column: 2; grid-row: 1; }
+  .rp-row > .rp-chev { grid-column: 3; grid-row: 1; }
+  .rp-row > .rp-row-tags { grid-column: 2; grid-row: 2; justify-self: start; flex-wrap: wrap; }
 }
 
 /* ── 2026-10-24 layout audit ────────────────────────────────────────── */
@@ -2397,4 +2402,80 @@
 @media (max-width: 600px) {
   /* a toast's Undo / Open Seeds is a finger's 44px too */
   .re-toast-action { min-height: 44px; }
+}
+
+/* ── 2026-10-26 layout audit ────────────────────────────────────────── */
+/* The app pads every page (App.css, 40px × 48px on a wide screen); the
+   shell's cards already keep a 12px gutter, so the page gives that space
+   to the views instead of an empty band above the header. */
+@media (min-width: 769px) {
+  .app-content > .re-shell { padding: 0 8px; }
+  .re-header { padding: 10px 20px; }
+  /* a tighter tab column leaves more of the sidebar to the people */
+  .re-nav-btn { padding: 8px 14px; }
+  /* The canvas hides overflow, so a view forced to 600px inside it put the
+     bottom of the Tree and the Web out of reach. The Tree's view now fits
+     the canvas and scrolls (the tree keeps its own height inside it); the
+     Web fills the canvas, never under 480px: on a short screen the page
+     grows and scrolls instead. */
+  .re-view.is-tree { min-height: 0; }
+  .re-view.is-web { min-height: 480px; }
+  .re-view.is-web > .re-webview { min-height: 0; }
+  .re-webview-canvas { min-height: 0; }
+  .re-shell:has(.re-view.is-web) { height: auto; min-height: 100%; }
+  .re-shell:has(.re-view.is-web) > .re-body { flex: 1 0 auto; }
+  /* with no people list (the Web), the tab column is only as tall as its tabs */
+  .re-sidebar.is-nav-only { align-self: flex-start; }
+  /* the Inspector ends with the views beside it, not below them */
+  .re-inspector-panel { align-self: stretch; }
+  /* with the Inspector open, the table leaves Mode and Status to it */
+  .re-body:has(> .re-inspector-panel) .re-list-table .re-col-optional { display: none; }
+  /* the zoom buttons, big enough to hit with a mouse */
+  .re-tree-zoom-btn { width: 36px; height: 36px; }
+}
+/* the open relationship's row */
+.re-list-table tbody tr.is-selected td { background: var(--re-blush); }
+.re-list-table tbody tr.is-selected td:first-child { box-shadow: inset 3px 0 0 var(--re-gold); }
+.re-list-card.is-selected { border-color: var(--re-gold); background: var(--re-blush); }
+/* the seed whose action is in flight; the other cards stay usable */
+.re-candidate-card.is-busy { opacity: 0.6; }
+/* List, Family and Seeds narrowed to the person picked in the sidebar */
+.re-narrowed {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 20px;
+  border-bottom: 1px solid var(--re-gold-soft);
+  background: var(--re-blush);
+  font-size: 13px;
+  color: var(--ps-ink);
+  flex-shrink: 0;
+}
+.re-narrowed-clear {
+  min-height: 36px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1.5px solid var(--re-gold);
+  background: var(--re-glass);
+  color: var(--ps-ink);
+  font-family: var(--ps-font);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+@media (max-width: 600px) {
+  .re-narrowed { padding: 8px 12px; }
+  .re-narrowed-clear { min-height: 44px; }
+}
+/* A phone reaches the views sooner: search and the type filter share a
+   line, and the profile portrait is smaller (the chrome above the first
+   view was ~450px of an 812px screen). */
+@media (max-width: 480px) {
+  .re-header-tools { flex-wrap: nowrap; }
+  .re-layer-select { width: auto; flex: 0 1 auto; max-width: 45%; }
+}
+@media (max-width: 600px) {
+  .rp-avatar-xl { width: 88px; height: 88px; font-size: 28px; }
 }

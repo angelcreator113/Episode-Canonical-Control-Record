@@ -168,6 +168,7 @@ const initial = {
   rels:     [],
   cands:    [],
   lalaId:   null,
+  outside:  [],         // ids of people a deep link added from outside the cast
   tab:      'overview',
   lf:       'all',
   selChar:  null,
@@ -184,10 +185,45 @@ const initial = {
 
 const byNewest = (a, b) => new Date(b.updated_at || 0) - new Date(a.updated_at || 0);
 
+/**
+ * A fresh read of the cast, keeping the people a deep link brought in from
+ * outside it (and their relationships): the cast read doesn't name them, so
+ * a refresh after a confirm used to drop them from every tab.
+ */
+export function keepOutside(state, loaded) {
+  const next = { ...state, ...loaded };
+  if (!state.outside?.length || !loaded.chars) return next;
+  const out = new Set(state.outside);
+  const charIds = new Set(loaded.chars.map(c => c.id));
+  const relIds = new Set((loaded.rels || []).map(r => r.id));
+  const extraChars = state.chars.filter(c => out.has(c.id) && !charIds.has(c.id));
+  const extraRels = state.rels.filter(r => !relIds.has(r.id) && (out.has(r.character_id_a) || out.has(r.character_id_b)));
+  return {
+    ...next,
+    chars: [...loaded.chars, ...extraChars],
+    rels: [...(loaded.rels || state.rels), ...extraRels].sort(byNewest),
+  };
+}
+
+/** The relationships of one person's family: every tie reachable from them. */
+export function familyOf(rels, personId) {
+  const ties = rels.filter(isFamily);
+  const seen = new Set([personId]);
+  for (let grew = true; grew;) {
+    grew = false;
+    for (const r of ties) {
+      const a = seen.has(r.character_id_a);
+      const b = seen.has(r.character_id_b);
+      if (a !== b) { seen.add(a ? r.character_id_b : r.character_id_a); grew = true; }
+    }
+  }
+  return rels.filter(r => seen.has(r.character_id_a) && seen.has(r.character_id_b));
+}
+
 function reducer(state, action) {
   switch (action.type) {
     case 'SET':          return { ...state, ...action.payload };
-    case 'LOADED':       return { ...state, ...action.payload, loading: false, loaded: true, error: null };
+    case 'LOADED':       return { ...keepOutside(state, action.payload), loading: false, loaded: true, error: null };
     // Seeds merge into the list as it is now: one dismissed or confirmed
     // while a generator ran stays gone.
     case 'MERGE_SEEDS':  return { ...state, ...action.payload, cands: mergeSeeds(state.cands, action.fresh) };
@@ -195,9 +231,11 @@ function reducer(state, action) {
     case 'ADD_PEOPLE': {
       const known = new Set(state.chars.map(c => c.id));
       const relIds = new Set((action.rels || []).map(r => r.id));
+      const added = (action.chars || []).filter(c => c && !known.has(c.id));
       return {
         ...state, ...action.payload,
-        chars: [...state.chars, ...(action.chars || []).filter(c => c && !known.has(c.id))],
+        outside: [...state.outside, ...added.map(c => c.id)],
+        chars: [...state.chars, ...added],
         rels: [...(action.rels || []), ...state.rels.filter(r => !relIds.has(r.id))].sort(byNewest),
       };
     }
@@ -271,7 +309,9 @@ export default function RelationshipEngine() {
       };
       dispatch({
         type: 'LOADED',
-        payload: { ...loaded, ...(deepLinkState(searchRef.current, loaded) || {}) },
+        // The link's tab and selection on a full load only: a quiet refresh
+        // after a confirm keeps the page where she is.
+        payload: { ...loaded, ...(quiet ? {} : deepLinkState(searchRef.current, loaded) || {}) },
       });
     } catch (err) {
       console.error('[RelationshipEngine] load failed:', err);
@@ -366,6 +406,7 @@ export default function RelationshipEngine() {
       toast('Relationship confirmed', 'success');
       load({ quiet: true });
     } catch (err) {
+      console.error('[RelationshipEngine] confirm failed:', err);
       dispatch({ type: 'SET', payload: { busy: null } });
       toast(errText(err, 'Confirm failed'), 'error');
     }
@@ -441,7 +482,7 @@ export default function RelationshipEngine() {
       toast('Seed restored', 'success');
     } catch (err) {
       console.error('[RelationshipEngine] seed restore failed:', err);
-      toast(err.message || 'Undo failed', 'error');
+      toast(errText(err, 'Undo failed'), 'error');
     }
   };
 
@@ -461,6 +502,7 @@ export default function RelationshipEngine() {
       toast(seed ? `Dismissed ${sideName(seed, 'a', charById)} and ${sideName(seed, 'b', charById)}` : 'Seed dismissed', 'info',
         seed ? { label: 'Undo', run: () => undoDismiss(seed) } : null);
     } catch (err) {
+      console.error('[RelationshipEngine] dismiss failed:', err);
       dispatch({ type: 'SET', payload: { busy: null } });
       toast(errText(err, 'Dismiss failed'), 'error');
     }
@@ -472,6 +514,7 @@ export default function RelationshipEngine() {
       dispatch({ type: 'ADD_REL', rel: r.data?.relationship || rel });
       toast('Relationship restored', 'success');
     } catch (err) {
+      console.error('[RelationshipEngine] relationship restore failed:', err);
       toast(errText(err, 'Undo failed'), 'error');
     }
   };
@@ -486,6 +529,7 @@ export default function RelationshipEngine() {
       const kept = r?.data?.pulse_kept?.length ? ' Their Pulse pair stays: "Where relationships disagree" on the Pulse map can take it off.' : '';
       toast(`Deleted ${sideName(rel, 'a', charById)} and ${sideName(rel, 'b', charById)}.${kept}`, 'info', { label: 'Undo', run: () => undoDelete(rel) });
     } catch (err) {
+      console.error('[RelationshipEngine] delete failed:', err);
       dispatch({ type: 'SET', payload: { busy: null } });
       toast(errText(err, 'Delete failed'), 'error');
     }
@@ -501,6 +545,7 @@ export default function RelationshipEngine() {
       dispatch({ type: 'MERGE_SEEDS', fresh, payload: { genning: false, genOpen: false, genSlot: null, tab: 'candidates', panel: false, selRel: null } });
       toast(fresh.length ? `${fresh.length} new seed${fresh.length === 1 ? '' : 's'} added` : 'No new seeds this time', 'success');
     } catch (err) {
+      console.error('[RelationshipEngine] generate failed:', err);
       dispatch({ type: 'SET', payload: { genning: false } });
       toast(errText(err, 'Generation failed'), 'error');
     }
@@ -568,6 +613,7 @@ export default function RelationshipEngine() {
       toast(d.family ? 'Family tie added' : 'Relationship added', 'success',
         d.family ? { label: 'Open Family', run: () => dispatch({ type: 'TAB', tab: 'family' }) } : null);
     } catch (err) {
+      console.error('[RelationshipEngine] add failed:', err);
       toast(errText(err, 'Add failed'), 'error');
     }
   };
@@ -582,17 +628,22 @@ export default function RelationshipEngine() {
       toast(fresh.length ? `${fresh.length} family seed${fresh.length === 1 ? '' : 's'} to confirm` : 'No new family proposed', 'success',
         fresh.length ? { label: 'Open Seeds', run: () => dispatch({ type: 'TAB', tab: 'candidates' }) } : null);
     } catch (err) {
+      console.error('[RelationshipEngine] family generation failed:', err);
       dispatch({ type: 'SET', payload: { genFam: false } });
       toast(errText(err, 'Family generation failed'), 'error');
     }
   };
 
+  // Both edits answer whether they saved, so a refused one keeps its editor open.
   const updateFamRole = async (id, fields) => {
     try {
       const r = await updateRelationshipFamilyRole(id, fields);
       dispatch({ type: 'UPDATE_REL', id, fields: r.data?.relationship || fields });
+      return true;
     } catch (err) {
+      console.error('[RelationshipEngine] family role not saved:', err);
       toast(errText(err, 'Update failed'), 'error');
+      return false;
     }
   };
 
@@ -601,8 +652,11 @@ export default function RelationshipEngine() {
       const r = await updateRelationshipFields(id, fields);
       dispatch({ type: 'UPDATE_REL', id, fields: r.data?.relationship || fields });
       toast('Updated', 'success');
+      return true;
     } catch (err) {
+      console.error('[RelationshipEngine] relationship not saved:', err);
       toast(errText(err, 'Update failed'), 'error');
+      return false;
     }
   };
 
@@ -676,10 +730,15 @@ export default function RelationshipEngine() {
   const setTab = tab => dispatch({ type: 'TAB', tab });
   const openRel = r => dispatch({ type: 'SET', payload: { selRel: r, panel: true, seedMode: false } });
   const closeRel = useCallback(() => dispatch({ type: 'SET', payload: { panel: false, selRel: null, seedMode: false } }), []);
+  // Steady closers: a dialog's focus effect re-runs when its onClose changes,
+  // so an inline one sent focus back to the first field on every render.
+  const closeAdd = useCallback(() => dispatch({ type: 'SET', payload: { addOpen: false } }), []);
+  const closeGen = useCallback(() => dispatch({ type: 'SET', payload: { genOpen: false, genSlot: null } }), []);
+  const closeTidy = useCallback(() => setTidy(t => ({ ...t, open: false, refused: [] })), []);
   // A seed's Confirm: the Inspector, open on its editor.
   const openSeed = seed => dispatch({ type: 'SET', payload: { selRel: seed, panel: true, seedMode: true } });
   const pickChar = c => {
-    const keep = s.tab === 'overview' || s.selChar?.id !== c.id;
+    const keep = s.tab === 'overview' || selInView?.id !== c.id;
     dispatch({ type: 'SET', payload: { selChar: keep ? c : null, selRel: null, panel: false } });
   };
 
@@ -690,13 +749,23 @@ export default function RelationshipEngine() {
     || s.chars[0]
     || null;
 
+  // The person picked in the sidebar narrows List, Family and Seeds to them
+  // (Tree and Web highlight them). Someone the search hides is not picked.
+  const selInView = s.selChar && filtChars.some(c => c.id === s.selChar.id) ? s.selChar : null;
+  const involves = r => !selInView || r.character_id_a === selInView.id || r.character_id_b === selInView.id;
+  const listRels = selInView ? filtRels.filter(involves) : filtRels;
+  const famRels = selInView ? familyOf(filtRels, selInView.id) : filtRels;
+  const seedList = selInView ? s.cands.filter(involves) : s.cands;
+  const narrowed = selInView && ['list', 'family', 'candidates'].includes(s.tab);
+
   // The Family tab's own rule and list (tokens' isFamily; spouses are romance).
-  const familyCount = filtRels.filter(isFamily).length;
+  const familyCount = famRels.filter(isFamily).length;
   // The counts live here, once (the Web's own bar already counts its graph).
   const subline =
-    s.tab === 'candidates' ? `${pendingCount} pending` :
+    s.tab === 'candidates' ? `${seedList.filter(c => !c.seed_state).length} pending` :
     s.tab === 'family'     ? `${familyCount} bond${familyCount === 1 ? '' : 's'}` :
     s.tab === 'web'        ? '' :
+    s.tab === 'list' && selInView ? `${listRels.length} relationship${listRels.length === 1 ? '' : 's'}` :
     `${filtChars.length} people · ${filtRels.length} relationships`;
   const failed = !!s.error && !s.loading;
 
@@ -780,7 +849,7 @@ export default function RelationshipEngine() {
       )}
       <div className="re-body">
         {/* LEFT SIDEBAR */}
-        <aside className="re-sidebar" aria-label="Views and characters">
+        <aside className={`re-sidebar ${s.tab === 'web' || failed ? 'is-nav-only' : ''}`} aria-label="Views and characters">
           <nav className="re-nav" role="tablist" aria-label="View tabs">
             {tabs.map(t => (
               <button key={t.key} role="tab" aria-selected={s.tab === t.key}
@@ -859,6 +928,14 @@ export default function RelationshipEngine() {
           </div>
           )}
 
+          {narrowed && (
+            <div className="re-narrowed" role="status">
+              <span>Showing {s.tab === 'candidates' ? 'seeds' : s.tab === 'family' ? 'the family' : 'relationships'} of <strong>{cname(selInView)}</strong></span>
+              <button type="button" className="re-narrowed-clear"
+                onClick={() => dispatch({ type: 'SET', payload: { selChar: null } })}>Show everyone</button>
+            </div>
+          )}
+
           {!failed && s.loaded && (
             <TypeTidyBanner count={tidy.items.length} onReview={() => setTidy(t => ({ ...t, open: true, refused: [] }))} />
           )}
@@ -872,24 +949,24 @@ export default function RelationshipEngine() {
                                       </div>
                                     ) :
              s.loading              ? <Spinner /> :
-             s.tab === 'web'        ? <WebView chars={filtChars} rels={filtRels} lalaId={lala?.id} selectedId={s.selChar?.id ?? null} navigate={navigate} onRelClick={openRel} /> :
-             s.tab === 'overview'   ? <ProfileView char={profileChar} chars={s.chars} rels={s.rels} cands={s.cands}
+             s.tab === 'web'        ? <WebView chars={filtChars} rels={filtRels} lalaId={lala?.id} selectedId={selInView?.id ?? null} navigate={navigate} onRelClick={openRel} /> :
+             s.tab === 'overview'   ? <ProfileView char={profileChar} chars={s.chars} rels={s.rels} cands={s.cands} lalaId={lala?.id ?? null}
                                         onSelectChar={c => dispatch({ type: 'SET', payload: { selChar: c, selRel: null, panel: false } })}
                                         onRelClick={openRel}
                                         onAdd={() => dispatch({ type: 'SET', payload: { addOpen: true } })}
                                         onGenerate={() => dispatch({ type: 'SET', payload: { genOpen: true } })}
                                         onExport={exportRelationships}
                                         onTab={setTab} /> :
-             s.tab === 'tree'       ? <TreeView chars={filtChars} rels={filtRels} lalaId={lala?.id} selChar={s.selChar} onRelClick={openRel} onCharClick={c => dispatch({ type: 'SET', payload: { selChar: c } })} /> :
-             s.tab === 'family'     ? <FamilyView chars={filtChars} rels={filtRels} charById={charById} genning={s.genFam} onGenerate={genFamFn} onUpdateRole={updateFamRole} onRelClick={openRel} /> :
+             s.tab === 'tree'       ? <TreeView chars={filtChars} rels={filtRels} lalaId={lala?.id} selChar={selInView} onRelClick={openRel} onCharClick={pickChar} /> :
+             s.tab === 'family'     ? <FamilyView chars={filtChars} rels={famRels} charById={charById} genning={s.genFam} onGenerate={genFamFn} onUpdateRole={updateFamRole} onRelClick={openRel} /> :
              s.tab === 'candidates' ? (
-                                      <CandidateView cands={s.cands} charById={charById} busy={!!s.busy}
+                                      <CandidateView cands={seedList} charById={charById} busy={s.busy}
                                         onConfirm={openSeed} onQuickConfirm={confirm} onKeep={keepIdea}
                                         onDismiss={dismiss} onBringBack={bringBack} onConfirmAll={confirmAll}>
                                         <PulseStrip pairs={pulseShown} busyKey={pulseBusy} onAdd={addPulse} />
                                       </CandidateView>
                                     ) :
-                                      <ListView rels={filtRels} charById={charById} onSelect={openRel} />
+                                      <ListView rels={listRels} charById={charById} onSelect={openRel} selectedId={showPanel ? s.selRel.id : null} />
             }
           </div>
         </main>
@@ -911,12 +988,12 @@ export default function RelationshipEngine() {
       </div>
 
       {/* Modals */}
-      {s.addOpen && <AddModal chars={s.chars} rels={s.rels} onAdd={addRel} onClose={() => dispatch({ type: 'SET', payload: { addOpen: false } })} />}
+      {s.addOpen && <AddModal chars={s.chars} rels={s.rels} onAdd={addRel} onClose={closeAdd} />}
       {tidy.open && (
         <TypeTidyDialog items={tidy.items} refused={tidy.refused} saving={tidy.saving}
-          onSave={saveTidy} onClose={() => setTidy(t => ({ ...t, open: false, refused: [] }))} />
+          onSave={saveTidy} onClose={closeTidy} />
       )}
-      {s.genOpen && <GenModal chars={s.chars} genning={s.genning} onGenerate={generate} initialSlot={s.genSlot} onClose={() => dispatch({ type: 'SET', payload: { genOpen: false, genSlot: null } })} />}
+      {s.genOpen && <GenModal chars={s.chars} genning={s.genning} onGenerate={generate} initialSlot={s.genSlot} onClose={closeGen} />}
     </div>
   );
 }
