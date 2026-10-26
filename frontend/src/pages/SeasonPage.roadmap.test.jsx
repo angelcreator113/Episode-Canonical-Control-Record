@@ -384,6 +384,8 @@ describe('Season Arc roadmap on the Season page (§8(ff) PR 1)', () => {
       vi.mocked(api.get).mockImplementation(async (url) => {
         if (url === '/api/v1/world/show-1/arc') return { data: { arc: ARC } };
         if (url === '/api/v1/world/show-1/season/roadmap') return { data: { roadmap: ROADMAP } };
+        // Before the threads list's migration: the Story tab shows the old card (Show/SeasonThreads fallback).
+        if (url === '/api/v1/world/show-1/season/threads/inbox') return { data: { needs_migration: true } };
         if (url === '/api/v1/world/show-1/season/threads') return { data: THREADS };
         return { data: {} };
       });
@@ -446,6 +448,31 @@ describe('Season Arc roadmap on the Season page (§8(ff) PR 1)', () => {
         { title: 'Maison Belle returns', seed_text: 'Maison Belle calls back', episode_id: 'ep-1' }));
       expect(prompt).not.toHaveBeenCalled();
       prompt.mockRestore();
+    });
+
+    test('after the migration: one threads list (Show/SeasonThreads), with "New thread"; the old card is gone', async () => {
+      vi.mocked(api.get).mockImplementation(async (url) => {
+        if (url === '/api/v1/world/show-1/arc') return { data: { arc: ARC } };
+        if (url === '/api/v1/world/show-1/season/roadmap') return { data: { roadmap: ROADMAP } };
+        if (url === '/api/v1/world/show-1/season/threads') return { data: THREADS };
+        if (url === '/api/v1/world/show-1/season/threads/inbox') {
+          return { data: { needs_migration: false, unchecked_seeds: 1, waiting: [], left_out: [], season: null, threads: [
+            { id: 'th-1', title: 'The rival from E1', status: 'open', origin: { label: 'Added by you' }, notes: [], notes_count: 0, slots: [{ slot_number: 3, label: 'S1 · E3' }], plan: null, twists: [], seen: true },
+          ] } };
+        }
+        return { data: {} };
+      });
+      renderAt('story');
+      const list = await screen.findByTestId('season-threads');
+      expect(screen.queryByTestId('story-threads')).toBeNull();
+      expect(within(list).getByTestId('sth-thread-th-1').textContent).toMatch(/Continued in S1 · E3/);
+      // The seed drafts are read by the list now ("Read them now"), not made by hand.
+      expect(within(list).getByRole('button', { name: /Read them now/ })).toBeTruthy();
+      fireEvent.click(within(list).getByTestId('sth-new-thread'));
+      const form = within(list).getByTestId('sth-new-thread-form');
+      fireEvent.change(within(form).getByLabelText('The thread (the question it leaves open)'), { target: { value: 'Her mother\'s visit' } });
+      fireEvent.click(within(form).getByRole('button', { name: /Add the thread/ }));
+      await waitFor(() => expect(api.post).toHaveBeenCalledWith('/api/v1/world/show-1/season/threads', { title: 'Her mother\'s visit', description: '' }));
     });
 
     test('a slot\'s intention can name the thread it continues; closed threads are not offered', async () => {
