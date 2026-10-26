@@ -473,6 +473,21 @@ async function loadScriptContext(episodeId, showId, models, { lite = false } = {
     context.characterState = state || null;
   } catch { /* non-blocking */ }
 
+  // 14b. Her goal this episode and her Beat 13 self-talk (Evoni,
+  // 2026-10-25; services/episodeMainGoal, services/episodeSelfTalk): the
+  // goal pinned to the event, else the active rung it moves most
+  // (scriptCareerService.loadEpisodeGoal, goal-ladders' pickMainGoal);
+  // the tone she chose on the Script tab, null with none saved.
+  context.herGoal = null;
+  try {
+    const balance = context.financial?.balance;
+    const state = { ...(context.characterState || {}), ...(balance != null ? { coins: balance } : {}) };
+    context.herGoal = await require('./scriptCareerService').loadEpisodeGoal(sequelize, { showId, event: context.event, state });
+  } catch (err) {
+    console.error('[ScriptWriter] her goal failed (non-blocking):', err.message);
+  }
+  context.selfTalkTone = require('./episodeSelfTalk').toneOf(context.brief?.event_metadata);
+
   // 15. Designed intent from brief — SLAY/PASS/SAFE/FAIL direction
   context.designedIntent = context.brief?.designed_intent || null;
 
@@ -661,11 +676,17 @@ function storyContextBlocks(context, { withSeason = true } = {}) {
     charBlock = `═══ LALA'S STATS ═══\n🪙 ${cs.coins} coins | ⭐ ${cs.reputation}/10 rep | 🤝 ${cs.brand_trust}/10 trust | 📣 ${cs.influence}/10 influence | 😰 ${cs.stress}/10 stress\nSCRIPT DIRECTIVE: When she checks her balance, use the exact number as it stands at that point: this one before any coin line, and after the coin lines the number they leave (after the look, LALA'S COINS gives it when it is given); never another.\n`;
   }
 
+  // Her goal this episode (Beat 6 weighs it, Beat 13 feels it) and her voice
+  // by her stress, with Beat 13's self-talk (services/episodeMainGoal).
+  const { herGoalBlock, herVoiceBlock } = require('./episodeMainGoal');
+  const goalBlock = herGoalBlock(context.herGoal || null);
+  const voiceBlock = herVoiceBlock({ stress: context.characterState ? context.characterState.stress : null, tone: context.selfTalkTone || null });
+
   const pulseBlock = require('./scriptPulsePosts').pulseScriptBlock(context.pulsePosts);
 
   const blocks = [socialBlock, secrecyBlock, pulseBlock, taskBlock, prevBlock, carryBlock, arcBlock, twistBlock];
   if (openPlantsBlock) blocks.push(openPlantsBlock);
-  return [...blocks, intentBlock, charBlock].filter(Boolean).join('\n');
+  return [...blocks, intentBlock, charBlock, voiceBlock, goalBlock].filter(Boolean).join('\n');
 }
 
 // Lala's money for the prompt: pressure, balance, the episode so far, and

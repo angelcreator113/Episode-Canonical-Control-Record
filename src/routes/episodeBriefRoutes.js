@@ -39,12 +39,47 @@ router.get('/:episodeId', requireAuth, async (req, res) => {
       });
     }
 
-    return res.json({ data: brief });
+    // Her goal this episode (Evoni, 2026-10-25; services/episodeMainGoal):
+    // the Script tab's "Her goal" must-cover item. Read beside the brief, so
+    // the tab makes no second call; null when there is none or it can't be read.
+    let herGoal = null;
+    try {
+      herGoal = await herGoalForEpisode(episodeId, brief.show_id);
+    } catch (goalErr) {
+      console.error('[EpisodeBrief] her goal read failed (non-blocking):', goalErr.message);
+    }
+
+    return res.json({ data: { ...brief.toJSON(), her_goal: herGoal } });
   } catch (err) {
     console.error('[EpisodeBrief] GET error:', err);
     return res.status(500).json({ error: err.message });
   }
 });
+
+// The episode's main goal as the writers read it (episodeScriptWriterService
+// loadScriptContext): the episode's event, Lala's stats, her ledger balance.
+async function herGoalForEpisode(episodeId, showId) {
+  const { sequelize, WorldEvent } = models;
+  const { episodeEventId } = require('../utils/episodeEventSql');
+  const eventId = await episodeEventId(sequelize, episodeId)
+    || (await EpisodeBrief.findOne({ where: { episode_id: episodeId }, attributes: ['event_id'] }))?.event_id;
+  if (!eventId || !showId) return null;
+  const event = await WorldEvent.findByPk(eventId, { attributes: WorldEvent.CURRENT_ATTRIBUTES });
+  if (!event) return null;
+  const [state] = await sequelize.query(
+    `SELECT coins, reputation, brand_trust, influence, stress FROM character_state
+      WHERE show_id = :showId AND character_key = 'lala' LIMIT 1`,
+    { replacements: { showId }, type: sequelize.QueryTypes.SELECT });
+  let balance = null;
+  try {
+    balance = await require('../services/financialTransactionService').getCurrentBalance(sequelize, showId);
+  } catch (balErr) {
+    console.error('[EpisodeBrief] balance read failed (non-blocking):', balErr.message);
+  }
+  return require('../services/scriptCareerService').loadEpisodeGoal(sequelize, {
+    showId, event: event.toJSON(), state: { ...(state || {}), ...(balance != null ? { coins: balance } : {}) },
+  });
+}
 
 // ── UPDATE BRIEF ──────────────────────────────────────────────────────────────
 
@@ -98,13 +133,13 @@ router.put('/:episodeId', requireAuth, async (req, res) => {
 // Only that key of event_metadata is written, in a transaction with the row
 // locked; no migration: event_metadata is an existing JSONB column. A locked
 // brief still takes marks: they say what the script does, not the brief.
-const COVER_KEY = /^(?:goal:[a-z0-9_]{1,80}:[a-z0-9-]{0,200}|carried:[A-Za-z0-9-]{1,64}|hook|opportunity)$/;
+const COVER_KEY = /^(?:goal:[a-z0-9_]{1,80}:[a-z0-9-]{0,200}|carried:[A-Za-z0-9-]{1,64}|career:[A-Za-z0-9-]{1,64}|hook|opportunity)$/;
 router.put('/:episodeId/cover-marks', requireAuth, async (req, res) => {
   try {
     const { episodeId } = req.params;
     const { key, covered = null, beat = null } = req.body || {};
     if (!SHOW_ID_RE.test(String(episodeId))) return res.status(400).json({ error: 'episodeId must be a UUID' });
-    if (typeof key !== 'string' || !COVER_KEY.test(key)) return res.status(400).json({ error: 'key must be a must-cover item key (goal:…, carried:…, hook or opportunity)' });
+    if (typeof key !== 'string' || !COVER_KEY.test(key)) return res.status(400).json({ error: 'key must be a must-cover item key (goal:…, carried:…, career:…, hook or opportunity)' });
     if (covered !== null && typeof covered !== 'boolean') return res.status(400).json({ error: 'covered must be true, false or null' });
     if (beat !== null && (!Number.isInteger(beat) || beat < 1 || beat > 14)) return res.status(400).json({ error: 'beat must be 1-14' });
     const { sequelize } = models;
@@ -132,6 +167,31 @@ router.put('/:episodeId/cover-marks', requireAuth, async (req, res) => {
     return res.json({ data: { cover_marks: marks } });
   } catch (err) {
     console.error('[EpisodeBrief] cover marks PUT error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ── HER SELF-TALK AT BEAT 13 ──────────────────────────────────────────────────
+// PUT /:episodeId/self-talk { tone: 'hard' | 'honest' | 'kind' | null }
+// The Script tab's "Her self-talk" choice (Evoni, 2026-10-25). Kept on the
+// brief as event_metadata.self_talk = { tone, at, by } (services/
+// episodeSelfTalk; no migration). The writers write Beat 13 in that tone;
+// Complete softens or adds stress by it (evaluationFormula
+// .selfTalkStressDelta). tone null takes the choice back. A locked brief
+// still takes it, as it does cover marks.
+router.put('/:episodeId/self-talk', requireAuth, async (req, res) => {
+  try {
+    const { episodeId } = req.params;
+    if (!SHOW_ID_RE.test(String(episodeId))) return res.status(400).json({ error: 'episodeId must be a UUID' });
+    const raw = req.body?.tone ?? null;
+    const { selfTalkTone } = require('../utils/evaluationFormula');
+    const tone = raw === null ? null : selfTalkTone(raw);
+    if (raw !== null && !tone) return res.status(400).json({ error: "tone must be 'hard', 'honest', 'kind' or null" });
+    const saved = await require('../services/episodeSelfTalk').saveSelfTalk(models.sequelize, episodeId, tone, req.user?.id ?? req.user?.sub ?? null);
+    if (saved === undefined) return res.status(404).json({ error: 'Brief not found. GET first to auto-create.' });
+    return res.json({ data: { self_talk: saved } });
+  } catch (err) {
+    console.error('[EpisodeBrief] self-talk PUT error:', err);
     return res.status(500).json({ error: err.message });
   }
 });
