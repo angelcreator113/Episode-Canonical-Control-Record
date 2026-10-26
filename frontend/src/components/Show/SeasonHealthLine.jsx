@@ -19,7 +19,7 @@ export default function SeasonHealthLine({ health, nextStepSlot = null }) {
         <span className={`shl-tone is-${health.tone}`} data-testid="szn-health-tone">{health.label}</span>
         {health.pieces.map((p) => (
           <span key={p.key} className="shl-piece" data-testid={`szn-health-${p.key}`}>
-            <span className="shl-dot" aria-hidden="true">·</span>{p.text}
+            {p.text}
           </span>
         ))}
       </p>

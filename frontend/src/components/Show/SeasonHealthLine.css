@@ -14,8 +14,12 @@
 .shl-tone.is-attention { background: var(--sp-gold, #E8B84A); color: var(--sp-ink, #3A1236); }
 .shl-tone.is-behind { background: var(--sp-pink-deep, #A3155E); }
 .shl-tone.is-complete { background: var(--sp-purple-fill, #7B3FA0); }
-.shl-piece { display: inline-flex; align-items: center; gap: 8px; overflow-wrap: anywhere; }
-.shl-dot { opacity: .8; }
+/* Each count is its own soft pill, so a wrapped line never starts with a
+   stray "·" separator (seen at 375px). */
+.shl-piece {
+  display: inline-flex; align-items: center; min-height: 28px; padding: 2px 10px; border-radius: 999px;
+  background: rgba(255, 255, 255, .14); overflow-wrap: anywhere;
+}
 .shl-ai-slot:empty { display: none; }
 @media (max-width: 640px) {
   .shl-line { font-size: 13px; }

@@ -147,7 +147,7 @@ describe('the health line', () => {
     renderPage('?season=1');
     const line = await screen.findByTestId('szn-health');
     expect(within(line).getByTestId('szn-health-tone').textContent).toBe('Season complete');
-    expect(within(line).getByTestId('szn-health-part').textContent).toMatch(/All 1 episodes done/);
+    expect(within(line).getByTestId('szn-health-part').textContent).toMatch(/The episode is done/);
     expect(within(line).queryByTestId('szn-health-goals')).toBeNull();
   });
 });
