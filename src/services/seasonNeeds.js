@@ -10,7 +10,7 @@
  * it: there (confirmed, with its stage and tension), seed only (an
  * unconfirmed seed, kept idea or Later) or missing.
  *
- *   getNeeds(sequelize, showId)            { arc, needs, counts }
+ *   getNeeds(sequelize, showId, { arcId }) { arc, needs, counts }; arcId: another season's (?season=N)
  *   seasonCharacters(sequelize, showId)    the show's registry characters and the
  *                                          Relationships page's cast, with names
  *   seasonRelationshipBlock(sequelize, showId, { cap })
@@ -255,13 +255,17 @@ async function seasonCharacters(sequelize, showId) {
   return out;
 }
 
-/** The relationships the season needs: { arc, needs, counts }; no arc, no needs. */
-async function getNeeds(sequelize, showId) {
+/**
+ * The relationships the season needs: { arc, needs, counts }; no arc, no
+ * needs. arcId: that season's (the Season page's switcher, 2026-10-26; the
+ * caller checks it is this show's).
+ */
+async function getNeeds(sequelize, showId, { arcId = null } = {}) {
   const { getRoadmap } = require('./seasonSlotService');
   const { getTwists } = require('./seasonTwists');
-  const roadmap = await getRoadmap(sequelize, showId);
+  const roadmap = await getRoadmap(sequelize, showId, { arcId });
   if (!roadmap) return { arc: null, needs: [], counts: { there: 0, seed: 0, missing: 0 } };
-  const season = await getTwists(sequelize, showId);
+  const season = await getTwists(sequelize, showId, { arcId: roadmap.arc?.id || arcId || null });
   const characters = await seasonCharacters(sequelize, showId);
   const names = new Map(characters.map((c) => [c.id, c.name]));
   const specs = needsFrom({

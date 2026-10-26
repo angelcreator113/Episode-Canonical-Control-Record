@@ -18,19 +18,32 @@
  * the placed events that move it, its on-track line, Find events and the
  * pins (GoalCoverage.jsx), and one line per part a goal has no event in,
  * from GET .../season/goal-coverage (lib/goalCoverage).
+ *
+ * Goal ladders (Evoni, 2026-10-25: "This is very confusing I don't know
+ * what I am to do"; lib/goalLadders): goals on one stat are rungs of one
+ * ladder, so the tab shows one card per ladder — the rung being worked on,
+ * with "Up next: The Money Talk 2,000 → Closet Upgrade 5,000 → …" folded
+ * under it — in three sections: the primary's ladder (one primary; an
+ * extra one shows Make primary, which swaps), the other ladders, and the
+ * background and passive goals as compact rows that only warn when off
+ * track. A stat events move gets Pick its event and one projection per
+ * ladder; a performance stat says what moves it. Tidy my goals reviews
+ * the goals once (GoalTidy.jsx).
  */
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, RefreshCw, Lightbulb, Sprout, Pencil, Trash2 } from 'lucide-react';
-import { GoalMovers, GoalPartWarnings } from './GoalCoverage';
-import { useGoalCoverage } from '../../lib/goalCoverage';
+import { Plus, RefreshCw, Lightbulb, Sprout, Pencil, Trash2, Star, TriangleAlert, Wand2 } from 'lucide-react';
+import { GoalMovers, GoalPartWarnings, GoalAdvice } from './GoalCoverage';
+import GoalTidy, { useTidy } from './GoalTidy';
+import { useGoalCoverage, coveredGoalIds } from '../../lib/goalCoverage';
+import { goalView, ladderProjectionText, targetText, offTrack, metricLabel as ladderMetricLabel } from '../../lib/goalLadders';
 import './CareerGoals.css';
 import { seasonPageHref } from '../../lib/seasonPage';
 
 const TYPES = [
   { key: 'primary', label: 'Primary Goal', option: 'Primary (1 max)', limit: '1 max' },
-  { key: 'secondary', label: 'Secondary Goals', option: 'Secondary (2 max)', limit: '2 max' },
-  { key: 'passive', label: 'Passive Goals', option: 'Passive (unlimited)', limit: '' },
+  { key: 'secondary', label: 'Secondary Goals', option: 'Secondary (2 max)', limit: '' },
+  { key: 'passive', label: 'Background and passive', option: 'Passive (unlimited)', limit: '' },
 ];
 const METRICS = [
   ['coins', 'Coins'], ['reputation', 'Reputation'], ['brand_trust', 'Brand Trust'], ['influence', 'Influence'],
@@ -99,23 +112,16 @@ function GoalEditor({ editing, form, setForm, saving, onSave, onCancel }) {
   );
 }
 
-function GoalCard({ goal, primary, onEdit, onDelete, coverage, showId, api, onCoverageChanged }) {
+const fmtN = (v) => Number(v || 0).toLocaleString('en-US');
+
+/** A rung's progress line and bar (the rung being worked on). */
+function RungProgress({ goal }) {
   const pct = goalProgress(goal);
   const done = pct >= 100;
   return (
-    <article className={`cg-goal${primary ? ' is-primary' : ''}`} data-testid={`cg-goal-${goal.id}`}
-      style={goal.color ? { borderColor: goal.color } : undefined}>
-      <div className="cg-goal-head">
-        <span className="cg-goal-icon" aria-hidden="true">{goal.icon || '🎯'}</span>
-        <div className="cg-goal-text">
-          <h4 className="cg-goal-title">{goal.title}</h4>
-          {goal.description && <p className="cg-goal-desc">{goal.description}</p>}
-        </div>
-        <button type="button" className="szn-icon-btn" onClick={onEdit} aria-label={`Edit ${goal.title}`}><Pencil size={16} aria-hidden="true" /></button>
-        <button type="button" className="szn-icon-btn" onClick={onDelete} aria-label={`Delete ${goal.title}`}><Trash2 size={16} aria-hidden="true" /></button>
-      </div>
+    <>
       <p className="cg-goal-metric">
-        {METRIC_LABEL[goal.target_metric] || String(goal.target_metric || '').replace(/_/g, ' ')}: <strong>{goal.current_value ?? 0}</strong> / {goal.target_value}
+        {METRIC_LABEL[goal.target_metric] || ladderMetricLabel(goal.target_metric)}: <strong>{goal.current_value ?? 0}</strong> / {goal.target_value}
       </p>
       <span className="cg-bar" role="progressbar" aria-label={`${goal.title} progress`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct}>
         <span className={done ? 'is-done' : ''} style={{ width: `${pct}%`, ...(goal.color && !done ? { background: goal.color } : {}) }} />
@@ -123,8 +129,99 @@ function GoalCard({ goal, primary, onEdit, onDelete, coverage, showId, api, onCo
       <p className={`cg-goal-left${done ? ' is-done' : ''}`}>
         {done ? 'Complete' : `${pct}% · ${Math.max(0, goal.target_value - (goal.current_value ?? 0))} to go`}
       </p>
-      <GoalMovers goal={goal} coverage={coverage} showId={showId} api={api} onChanged={onCoverageChanged} />
+    </>
+  );
+}
+
+/** "Make primary": swaps this goal in as the one primary. */
+function MakePrimary({ goal, onMakePrimary, busy }) {
+  return (
+    <button type="button" className="szn-link cg-make-primary" onClick={() => onMakePrimary(goal)} disabled={busy}
+      data-testid={`cg-make-primary-${goal.id}`}>Make primary</button>
+  );
+}
+
+/** The rungs waiting, folded: "Up next: The Money Talk 2,000 → Closet Upgrade 5,000 → …". */
+function UpNext({ ladder, primaryId, onEdit, onDelete, onMakePrimary, busy }) {
+  if (!ladder.upNext.length) return null;
+  const line = ladder.upNext.map((g) => `${g.title} ${targetText(g)}`).join(' → ');
+  return (
+    <details className="cg-upnext" data-testid={`cg-upnext-${ladder.id}`}>
+      <summary><span className="cg-upnext-label">Up next:</span> {line}</summary>
+      <ol className="cg-upnext-list">
+        {ladder.upNext.map((g) => (
+          <li key={g.id} data-testid={`cg-rung-${g.id}`}>
+            <span aria-hidden="true">{g.icon || '🎯'}</span>
+            <span className="cg-upnext-title">{g.title}{String(g.id) === primaryId && <Star size={12} aria-label="primary" className="cg-star" />}</span>
+            <span className="szn-muted">{targetText(g)}</span>
+            {g.type === 'primary' && String(g.id) !== primaryId && <MakePrimary goal={g} onMakePrimary={onMakePrimary} busy={busy} />}
+            <button type="button" className="szn-icon-btn" onClick={() => onEdit(g)} aria-label={`Edit ${g.title}`}><Pencil size={14} aria-hidden="true" /></button>
+            <button type="button" className="szn-icon-btn" onClick={() => onDelete(g)} aria-label={`Delete ${g.title}`}><Trash2 size={14} aria-hidden="true" /></button>
+          </li>
+        ))}
+      </ol>
+      <p className="cg-upnext-note">Each one becomes the goal to work on when the one before it is reached.</p>
+    </details>
+  );
+}
+
+/** One ladder: the rung being worked on, what moves it, its projection, and the rungs up next. */
+function LadderCard({ ladder, primary, primaryId, coverage, ladderCoverage, showId, api, onCoverageChanged, onEdit, onDelete, onMakePrimary, busy }) {
+  const goal = ladder.active;
+  const top = ladder.rungs.find((g) => String(g.id) === primaryId);
+  const projection = ladderProjectionText(ladderCoverage?.projection);
+  return (
+    <article className={`cg-goal cg-ladder${primary ? ' is-primary' : ''}`} data-testid={`cg-ladder-${ladder.id}`}
+      style={goal.color ? { borderColor: goal.color } : undefined}>
+      <div data-testid={`cg-goal-${goal.id}`}>
+        <div className="cg-goal-head">
+          <span className="cg-goal-icon" aria-hidden="true">{goal.icon || '🎯'}</span>
+          <div className="cg-goal-text">
+            <p className="cg-ladder-name">{ladderMetricLabel(ladder.metric)}{ladder.rungs.length > 1 ? ` · rung 1 of ${ladder.rungs.length}` : ''}</p>
+            <h4 className="cg-goal-title">{goal.title}</h4>
+            {goal.description && <p className="cg-goal-desc">{goal.description}</p>}
+          </div>
+          <button type="button" className="szn-icon-btn" onClick={() => onEdit(goal)} aria-label={`Edit ${goal.title}`}><Pencil size={16} aria-hidden="true" /></button>
+          <button type="button" className="szn-icon-btn" onClick={() => onDelete(goal)} aria-label={`Delete ${goal.title}`}><Trash2 size={16} aria-hidden="true" /></button>
+        </div>
+        {primary && top && String(top.id) !== String(goal.id) && (
+          <p className="cg-season-goal" data-testid="cg-season-goal"><Star size={14} aria-hidden="true" /> Season goal: {top.title} ({targetText(top)}), working up from here</p>
+        )}
+        {goal.type === 'primary' && String(goal.id) !== primaryId && <MakePrimary goal={goal} onMakePrimary={onMakePrimary} busy={busy} />}
+        <RungProgress goal={goal} />
+        {projection && <p className="cg-ladder-proj" data-testid={`cg-proj-${ladder.id}`}>{projection}</p>}
+        {ladder.kind === 'event' && (
+          <GoalMovers goal={goal} coverage={coverage} showId={showId} api={api} onChanged={onCoverageChanged} />
+        )}
+        {ladder.kind === 'performance' && <GoalAdvice goal={goal} showId={showId} />}
+      </div>
+      <UpNext ladder={ladder} primaryId={primaryId} onEdit={onEdit} onDelete={onDelete} onMakePrimary={onMakePrimary} busy={busy} />
     </article>
+  );
+}
+
+/** A background or passive goal: one compact row, a warning only when off track. */
+function BackgroundRow({ goal, then = [], onEdit, onDelete }) {
+  const off = offTrack(goal);
+  const down = targetText(goal).startsWith('≤');
+  return (
+    <li className={`cg-bg${off ? ' is-off' : ''}`} data-testid={`cg-goal-${goal.id}`}>
+      <span className="cg-bg-icon" aria-hidden="true">{goal.icon || '🎯'}</span>
+      <div className="cg-bg-text">
+        <span className="cg-bg-title">{goal.title}</span>
+        <span className="cg-bg-meta">
+          {down ? ladderMetricLabel(goal.target_metric) : METRIC_LABEL[goal.target_metric] || ladderMetricLabel(goal.target_metric)} {down ? `${targetText(goal)} · now ${goal.current_value ?? 0}` : `${goal.current_value ?? 0} / ${goal.target_value}`}
+          {goal.type === 'passive' ? ' · passive' : ''}{then.length ? ` · then ${then.map((g) => `${g.title} ${targetText(g)}`).join(', ')}` : ''}
+        </span>
+        {off && (
+          <span className="cg-bg-warn" role="status" data-testid={`cg-off-${goal.id}`}>
+            <TriangleAlert size={12} aria-hidden="true" /> Off track: {goal.current_value}, above {goal.target_value}
+          </span>
+        )}
+      </div>
+      <button type="button" className="szn-icon-btn" onClick={() => onEdit(goal)} aria-label={`Edit ${goal.title}`}><Pencil size={14} aria-hidden="true" /></button>
+      <button type="button" className="szn-icon-btn" onClick={() => onDelete(goal)} aria-label={`Delete ${goal.title}`}><Trash2 size={14} aria-hidden="true" /></button>
+    </li>
   );
 }
 
@@ -169,7 +266,9 @@ export default function CareerGoals({ showId, api, goals = [], onChanged, loadEr
   const goalsKey = goals.map((g) => `${g.id}:${g.status}:${g.target_metric}:${g.current_value}:${g.target_value}`).join('|');
   const coverage = useGoalCoverage({ api, showId, reloadKey: goalsKey });
   const coverageById = Object.fromEntries((coverage.data?.goals || []).map((c) => [c.id, c]));
+  const ladderCoverage = Object.fromEntries((coverage.data?.ladders || []).map((l) => [l.id, l]));
   const reload = async () => { if (onChanged) await onChanged(); };
+  const tidy = useTidy({ showId, goals });
 
   const run = async (what, fn) => {
     setBusy(what); setNote(null);
@@ -230,10 +329,28 @@ export default function CareerGoals({ showId, api, goals = [], onChanged, loadEr
     await reload();
   });
 
+  // Make primary: this goal becomes the one primary; the server makes the others secondary.
+  const makePrimary = (goal) => run('primary', async () => {
+    await api.put(`/api/v1/world/${showId}/goals/${goal.id}`, { type: 'primary', swap_primary: true });
+    setNote({ kind: 'ok', text: `${goal.title} is now the primary goal.` });
+    await reload();
+  });
+
   const openNew = () => { setForm(EMPTY_GOAL); setEditing('new'); };
   const openEdit = (g) => { setForm({ ...EMPTY_GOAL, ...g, color: g.color || '' }); setEditing(g.id); };
-  const active = goals.filter((g) => g.status === 'active');
   const completed = goals.filter((g) => g.status === 'completed');
+  const view = goalView(goals);
+  const cardProps = {
+    primaryId: view.primary_id, showId, api, onCoverageChanged: coverage.reload,
+    onEdit: openEdit, onDelete: remove, onMakePrimary: makePrimary, busy: busy === 'primary',
+  };
+  const card = (l, primary = false) => (
+    <LadderCard key={l.id} ladder={l} primary={primary} coverage={coverageById[l.active.id]} ladderCoverage={ladderCoverage[l.id]} {...cardProps} />
+  );
+  const backgroundRows = [
+    ...view.background.map((l) => ({ goal: l.active, then: l.upNext })),
+    ...view.passive.map((g) => ({ goal: g, then: [] })),
+  ];
 
   return (
     <section className="cg" data-testid="career-goals" aria-labelledby="cg-heading">
@@ -241,7 +358,9 @@ export default function CareerGoals({ showId, api, goals = [], onChanged, loadEr
         <div>
           <h2 id="cg-heading" className="szn-card-title">Career Goals</h2>
           <p className="szn-muted">What Lala is working toward this season. Each goal tracks one of her stats to a target.</p>
-          <p className="cg-counts" data-testid="cg-counts">{active.length} active · {completed.length} complete</p>
+          <p className="cg-counts" data-testid="cg-counts">
+            {view.activeCount} active{view.upNextCount ? ` · ${view.upNextCount} up next` : ''} · {completed.length} complete
+          </p>
         </div>
         <div className="cg-tools">
           <button type="button" className="szn-btn is-quiet" onClick={sync} disabled={busy === 'sync'} data-testid="cg-sync">
@@ -256,6 +375,11 @@ export default function CareerGoals({ showId, api, goals = [], onChanged, loadEr
               <Sprout size={16} aria-hidden="true" /> {busy === 'seed' ? 'Seeding…' : 'Seed 24 goals'}
             </button>
           )}
+          {tidy.items.length > 0 && !tidy.open && (
+            <button type="button" className="szn-btn is-quiet" onClick={tidy.show} data-testid="cg-tidy-open">
+              <Wand2 size={16} aria-hidden="true" /> Tidy my goals ({tidy.items.length})
+            </button>
+          )}
           <button type="button" className="szn-btn" onClick={openNew} data-testid="cg-new"><Plus size={16} aria-hidden="true" /> New Goal</button>
         </div>
       </header>
@@ -263,27 +387,36 @@ export default function CareerGoals({ showId, api, goals = [], onChanged, loadEr
       {loadError && <p className="szn-error" role="alert">The goals did not load ({loadError}).</p>}
       {note && <p className={note.kind === 'error' ? 'szn-error' : 'szn-note'} role={note.kind === 'error' ? 'alert' : 'status'} data-testid="cg-note">{note.text}</p>}
 
-      <GoalPartWarnings parts={coverage.data?.parts || []} />
+      {tidy.open && <GoalTidy tidy={tidy} api={api} showId={showId} goals={goals} onChanged={reload} />}
+
+      <GoalPartWarnings parts={coverage.data?.parts || []} covered={coveredGoalIds(coverage.data)} />
       {coverage.error && <p className="szn-muted" data-testid="cg-coverage-error">What moves each goal did not load ({coverage.error}).</p>}
 
       {editing && <GoalEditor editing={editing} form={form} setForm={setForm} saving={saving} onSave={save} onCancel={() => setEditing(null)} />}
 
-      {TYPES.map((t) => {
-        const list = active.filter((g) => g.type === t.key);
-        if (!list.length && t.key === 'passive') return null;
-        return (
-          <section key={t.key} className="cg-type" aria-label={t.label} data-testid={`cg-type-${t.key}`}>
-            <h3 className="cg-type-title">{t.label}{t.limit && <span className="szn-muted"> ({t.limit})</span>}</h3>
-            <div className={`cg-goals${t.key === 'primary' ? ' is-one' : ''}`}>
-              {list.map((g) => (
-                <GoalCard key={g.id} goal={g} primary={t.key === 'primary'} onEdit={() => openEdit(g)} onDelete={() => remove(g)}
-                  coverage={coverageById[g.id]} showId={showId} api={api} onCoverageChanged={coverage.reload} />
-              ))}
-              {!list.length && <p className="cg-empty">No active {t.key} goal. New Goal adds one.</p>}
-            </div>
-          </section>
-        );
-      })}
+      <section className="cg-type" aria-label="Primary Goal" data-testid="cg-type-primary">
+        <h3 className="cg-type-title">Primary Goal <span className="szn-muted">(1 max)</span></h3>
+        <div className="cg-goals is-one">
+          {view.primary ? card(view.primary, true) : <p className="cg-empty">No active primary goal. New Goal adds one.</p>}
+        </div>
+      </section>
+
+      <section className="cg-type" aria-label="Secondary Goals" data-testid="cg-type-secondary">
+        <h3 className="cg-type-title">Secondary Goals <span className="szn-muted">· one goal at a time on each ladder</span></h3>
+        <div className="cg-goals">
+          {view.ladders.map((l) => card(l))}
+          {!view.ladders.length && <p className="cg-empty">No active secondary goal. New Goal adds one.</p>}
+        </div>
+      </section>
+
+      {backgroundRows.length > 0 && (
+        <section className="cg-type" aria-label="Background and passive goals" data-testid="cg-type-passive">
+          <h3 className="cg-type-title">Background and passive <span className="szn-muted">· kept in range, flagged only when off track</span></h3>
+          <ul className="szn-card cg-bg-list">
+            {backgroundRows.map(({ goal, then }) => <BackgroundRow key={goal.id} goal={goal} then={then} onEdit={openEdit} onDelete={remove} />)}
+          </ul>
+        </section>
+      )}
 
       {completed.length > 0 && (
         <section className="szn-card" data-testid="cg-completed" aria-label="Completed goals">

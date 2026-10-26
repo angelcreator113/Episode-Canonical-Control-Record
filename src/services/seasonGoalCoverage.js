@@ -20,15 +20,29 @@
  * migration; server-owned, so an Event Package save cannot overwrite them).
  * setPin adds or removes one id, leaving every other key as it was.
  *
+ * Goal ladders (utils/goalLadders; Evoni, 2026-10-25: "How should I attach
+ * them to the right event at the right time?"): goals on one stat are rungs
+ * of a ladder and only the lowest rung not reached is worked on. Each goal
+ * also carries its kind, ladder and rung; only an active rung of a stat
+ * events move (coins, reputation, brand trust) is asked of the parts, so the
+ * part gaps, the pencil ranking's uncovered bonus and the tab badge count
+ * those alone. A pin is "the event this goal is for": its main_events (the
+ * rest of its movers are also_helps), and an event is the main event of at
+ * most one such goal (setPin refuses a second unless asked to move it).
+ * Each ladder carries one projection, so a stat's expected gain is counted
+ * once, not once per rung. Every older field is kept.
+ *
  *   goalCoverage(sequelize, showId, { eventId })   GET .../season/goal-coverage
  *   goalEvents(sequelize, showId, goalId)          GET .../season/goals/:goalId/events ("Find events")
- *   setPin(sequelize, showId, eventId, goalId, on) PUT / DELETE .../season/events/:eventId/goals/:goalId/pin
+ *   setPin(sequelize, showId, eventId, goalId, on, { move })  PUT / DELETE .../season/events/:eventId/goals/:goalId/pin
  *   uncoveredByPhase(coverage)                     the gaps placement and the pencil ranking prefer
+ *   mainGoalForEvent(sequelize, { showId, eventId }) the episode's main goal: pinned, else the best suggested
  *
  * No AI call.
  */
 
 const { goalMove, expectedGain, pinnedGoalIds } = require('./seasonSuggestionService');
+const { buildLadders, kindOf, directionOf, offTrack } = require('../utils/goalLadders');
 const { episodeEventIdSql } = require('../utils/episodeEventSql');
 
 const METRIC_LABEL = {
@@ -114,6 +128,45 @@ function projectionFor(goal, movers) {
 }
 
 /**
+ * One projection for a ladder of a stat events move: its current value plus
+ * the expected reward of every placed event that moves it (each counted
+ * once), the rungs that clears and the next one with how far short. null
+ * for a stat to keep under or one events do not move.
+ */
+function ladderProjection(ladder, goalsById, moversByGoal) {
+  if (ladder.kind !== 'event' || ladder.direction !== 'up') return null;
+  const rungs = ladder.goal_ids.map((id) => goalsById.get(id)).filter(Boolean);
+  if (!rungs.length) return null;
+  const seen = new Set();
+  let gain = 0;
+  let counted = 0;
+  for (const id of ladder.goal_ids) {
+    for (const m of moversByGoal.get(id) || []) {
+      const key = String(m.slot_id);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      if (m.done || !(m.gain > 0)) continue;
+      gain += m.gain;
+      counted += 1;
+    }
+  }
+  const current = Number(rungs[0].current_value) || 0;
+  const projected = current + gain;
+  const clears = rungs.filter((g) => Number(g.target_value) <= projected).map((g) => ({ goal_id: g.id, title: g.title, target_value: Number(g.target_value) || 0 }));
+  const nextGoal = rungs.find((g) => Number(g.target_value) > projected) || null;
+  return {
+    metric: ladder.metric,
+    label: metricLabel(ladder.metric),
+    current,
+    gain,
+    projected,
+    counted,
+    clears,
+    next: nextGoal ? { goal_id: nextGoal.id, title: nextGoal.title, target_value: Number(nextGoal.target_value) || 0, short: (Number(nextGoal.target_value) || 0) - projected } : null,
+  };
+}
+
+/**
  * The coverage, computed from what was read (pure, so it is unit-tested):
  *   parts   [{ phase, title, episode_start, episode_end }]
  *   slots   [{ id, slot_number, phase, label, done, event: { …event row } | null }]
@@ -127,6 +180,7 @@ function computeCoverage({ parts = [], slots = [], goals = [], state = {} }) {
     moves: goals.map((g) => ({ g, via: goalMove(s.event, g, state) })).filter((m) => m.via),
   }));
 
+  const lad = buildLadders(goals.map((g) => ({ status: 'active', ...g })));
   const goalOut = goals.map((g) => {
     const movers = [];
     for (const { slot, moves } of slotMoves) {
@@ -146,7 +200,13 @@ function computeCoverage({ parts = [], slots = [], goals = [], state = {} }) {
         done: Boolean(slot.done),
       });
     }
-    const gaps = parts.filter((p) => goalInPart(g, p) && !movers.some((m) => Number(m.phase) === Number(p.phase))).map((p) => p.phase);
+    const place = lad.byGoal.get(String(g.id)) || { ladder_id: null, rung: 'passive' };
+    const kind = kindOf(g.target_metric);
+    // Only an active rung of a stat events move is asked of the parts.
+    const covered = kind === 'event' && place.rung === 'active';
+    const gaps = covered
+      ? parts.filter((p) => goalInPart(g, p) && !movers.some((m) => Number(m.phase) === Number(p.phase))).map((p) => p.phase)
+      : [];
     return {
       id: g.id,
       title: g.title,
@@ -159,8 +219,31 @@ function computeCoverage({ parts = [], slots = [], goals = [], state = {} }) {
       movers,
       projection: projectionFor(g, movers),
       gap_phases: gaps,
+      kind,
+      direction: directionOf(g.target_metric),
+      ladder_id: place.ladder_id,
+      rung: place.rung,
+      is_primary: lad.primary_id === String(g.id),
+      covered,
+      off_track: offTrack(g),
+      main_events: movers.filter((m) => m.pinned),
+      also_helps: movers.filter((m) => !m.pinned),
     };
   });
+  const goalsById = new Map(goals.map((g) => [String(g.id), g]));
+  const moversByGoal = new Map(goalOut.map((g) => [String(g.id), g.movers]));
+  const laddersOut = lad.ladders.map((l) => ({
+    id: l.id,
+    metric: l.metric,
+    metric_label: metricLabel(l.metric),
+    kind: l.kind,
+    direction: l.direction,
+    goal_ids: l.goal_ids,
+    active_goal_id: l.active_goal_id,
+    up_next_ids: l.up_next_ids,
+    has_primary: l.has_primary,
+    projection: ladderProjection(l, goalsById, moversByGoal),
+  }));
 
   const partsOut = parts.map((p) => ({
     phase: Number(p.phase),
@@ -170,15 +253,19 @@ function computeCoverage({ parts = [], slots = [], goals = [], state = {} }) {
     gaps: goalOut.filter((g) => g.gap_phases.includes(p.phase)).map((g) => ({ goal_id: g.id, title: g.title, icon: g.icon })),
   }));
 
+  // A slot's "Moves:" chips name the goals being worked on (not the rungs
+  // waiting up next), its pinned main goal first.
   const slotsOut = slotMoves.map(({ slot, moves }) => ({
     slot_id: slot.id,
     slot_number: slot.slot_number,
     phase: slot.phase,
     event_id: slot.event.id,
-    goals: moves.map((m) => ({ ...goalRef(m.g), via: m.via })),
+    goals: moves.filter((m) => lad.byGoal.get(String(m.g.id))?.rung !== 'up_next')
+      .sort((x, y) => Number(y.via === 'pinned') - Number(x.via === 'pinned'))
+      .map((m) => ({ ...goalRef(m.g), via: m.via })),
   }));
 
-  return { goals: goalOut, parts: partsOut, slots: slotsOut };
+  return { goals: goalOut, parts: partsOut, slots: slotsOut, ladders: laddersOut, primary_goal_id: lad.primary_id };
 }
 
 /**
@@ -214,11 +301,13 @@ function lalaState(sequelize, showId) {
  * Everything computeCoverage reads, for the show's active season: its parts,
  * its slots each with its event (pencilled, else its episode's), the active
  * goals and Lala's stats. null when the show has no active season.
+ * Options (the season wrap-up, 2026-10-26): arcId reads that season instead,
+ * and goals replaces the active goals (a finished season's reached ones too).
  */
-async function loadCoverageInputs(sequelize, showId) {
+async function loadCoverageInputs(sequelize, showId, { arcId = null, goals: givenGoals = null } = {}) {
   const { loadSeason } = require('./seasonLoader');
   const { arcPhases, episodeLabel } = require('./seasonSlotService');
-  const season = await loadSeason(sequelize, showId);
+  const season = await loadSeason(sequelize, showId, arcId ? { arcId } : {});
   if (!season) return null;
   const { arc, slots: slotRows } = season;
   const [eventRows] = await sequelize.query(
@@ -240,7 +329,7 @@ async function loadCoverageInputs(sequelize, showId) {
   const parts = arcPhases(arc).map((p) => ({
     phase: Number(p.phase), title: p.title, episode_start: Number(p.episode_start), episode_end: Number(p.episode_end),
   }));
-  const goals = await activeGoalRows(sequelize, showId);
+  const goals = givenGoals || await activeGoalRows(sequelize, showId);
   const state = await lalaState(sequelize, showId);
   return { arc, season_number: seasonNumber, parts, slots, goals, state };
 }
@@ -256,16 +345,20 @@ async function eventRow(sequelize, showId, eventId) {
 function eventGoals(ev, inputs) {
   const slot = inputs.slots.find((s) => s.event && String(s.event.id) === String(ev.id)) || null;
   const pins = pinnedGoalIds(ev);
+  const lad = buildLadders(inputs.goals.map((g) => ({ status: 'active', ...g })));
   const goals = inputs.goals.map((g) => ({
     ...goalRef(g),
     via: goalMove(ev, g, inputs.state),
     pinned: pins.includes(String(g.id)),
+    kind: kindOf(g.target_metric),
+    rung: lad.byGoal.get(String(g.id))?.rung || null,
   }));
   return {
     id: ev.id,
     name: ev.name,
     slot: slot ? { slot_id: slot.id, slot_number: slot.slot_number, code: `E${slot.slot_number}`, label: slot.label, phase: slot.phase } : null,
     pinned_goal_ids: pins,
+    main_goal: mainGoalOf(ev, inputs.goals),
     moves: goals.filter((g) => g.via),
     goals,
   };
@@ -274,7 +367,7 @@ function eventGoals(ev, inputs) {
 /** GET .../season/goal-coverage: the coverage, and with eventId what that event moves. */
 async function goalCoverage(sequelize, showId, { eventId = null } = {}) {
   const inputs = await loadCoverageInputs(sequelize, showId);
-  if (!inputs) return { season: null, goals: [], parts: [], slots: [], event: null };
+  if (!inputs) return { season: null, goals: [], parts: [], slots: [], ladders: [], primary_goal_id: null, event: null };
   const coverage = computeCoverage(inputs);
   let event = null;
   if (eventId) {
@@ -300,36 +393,42 @@ function moveReason(ev, goal, via, gain, state) {
   return `Prestige ${Number(ev.prestige) || 0}, above her reputation ${Number(state.reputation) || 0}`;
 }
 
+// How many events "Pick its event" offers.
+const PICK_LIMIT = 3;
+
+/** Whether a slot's episode falls in the goal's episode range (no range: any). */
+function slotInRange(goal, slot) {
+  const r = rangeOf(goal);
+  return !r || (Number(slot.slot_number) >= r[0] && Number(slot.slot_number) <= r[1]);
+}
+
 /**
- * "Find events" for one goal: the events in this season's slots and the
- * events that can still be pencilled (draft or ready, unused), the ones that
- * move the goal first (pinned, then by expected reward, then prestige), each
- * with its slot when placed and why. At most FIND_LIMIT.
+ * The goal an event is already the main event for: the first goal of a
+ * stat events move, other than `goal`, pinned to it. null when none.
  */
-async function goalEvents(sequelize, showId, goalId) {
-  const [[goal]] = await sequelize.query(
-    `SELECT id, title, type, icon, target_metric, target_value, current_value, episode_range, status
-       FROM career_goals WHERE id = :goalId AND show_id = :showId AND deleted_at IS NULL`,
-    { replacements: { goalId, showId } });
-  if (!goal) throw new GoalCoverageError('That goal is not in this show.', 404, 'GOAL_NOT_FOUND');
-  const inputs = await loadCoverageInputs(sequelize, showId);
-  const state = inputs ? inputs.state : await lalaState(sequelize, showId);
-  const slotByEvent = new Map((inputs?.slots || []).filter((s) => s.event).map((s) => [String(s.event.id), s]));
-  const [free] = await sequelize.query(
-    `SELECT ${EVENT_COLUMNS} FROM world_events ev
-      WHERE ev.show_id = :showId AND ev.deleted_at IS NULL AND ev.used_in_episode_id IS NULL
-        AND COALESCE(ev.status, 'draft') IN ('draft', 'ready')
-      ORDER BY ev.name ASC`,
-    { replacements: { showId } });
-  const seen = new Set();
-  const all = [];
-  for (const ev of [...(inputs?.slots || []).filter((s) => s.event).map((s) => s.event), ...free]) {
-    if (seen.has(String(ev.id))) continue;
-    seen.add(String(ev.id));
-    all.push(ev);
+function mainGoalOf(ev, goals, goal = null) {
+  const byId = new Map((goals || []).map((g) => [String(g.id), g]));
+  for (const id of pinnedGoalIds(ev)) {
+    if (goal && id === String(goal.id)) continue;
+    const g = byId.get(id);
+    if (g && kindOf(g.target_metric) === 'event') return { goal_id: g.id, title: g.title };
   }
+  return null;
+}
+
+/**
+ * "Find events" and "Pick its event" for one goal, from what was read
+ * (pure): every event, the ones that move the goal first (pinned, then by
+ * expected reward, then prestige), each with its slot when placed, why, and
+ * the goal it is already the main event for. events is at most FIND_LIMIT;
+ * pick is the best PICK_LIMIT that move it, placed in the goal's episode
+ * range first (not done), then not placed yet.
+ */
+function rankGoalEvents(goal, allEvents, inputs = {}) {
+  const state = inputs.state || {};
+  const slotByEvent = new Map((inputs.slots || []).filter((s) => s.event).map((s) => [String(s.event.id), s]));
   const rank = { pinned: 0, fit: 1 };
-  const ranked = all.map((ev, i) => {
+  const ranked = (allEvents || []).map((ev, i) => {
     const via = goalMove(ev, goal, state);
     const gain = expectedGain(ev, goal.target_metric);
     const slot = slotByEvent.get(String(ev.id)) || null;
@@ -343,12 +442,85 @@ async function goalEvents(sequelize, showId, goalId) {
       prestige: Number(ev.prestige) || 0,
       slot: slot ? { slot_id: slot.id, slot_number: slot.slot_number, code: `E${slot.slot_number}`, label: slot.label, phase: slot.phase, done: slot.done } : null,
       reason: moveReason(ev, goal, via, gain, state),
+      main_goal: mainGoalOf(ev, inputs.goals, goal),
+      in_range: slot ? slotInRange(goal, slot) : null,
       order: i,
     };
   }).sort((a, b) => (rank[a.via] ?? 2) - (rank[b.via] ?? 2) || b.gain - a.gain || b.prestige - a.prestige || a.order - b.order)
-    .slice(0, FIND_LIMIT)
     .map(({ order: _order, ...ev }) => ev);
-  return { goal: { ...goalRef(goal), id: goal.id }, events: ranked };
+  const movers = ranked.filter((e) => e.via && !(e.slot && e.slot.done));
+  const placed = movers.filter((e) => e.slot && e.in_range);
+  const pick = [...placed, ...movers.filter((e) => !e.slot)].slice(0, PICK_LIMIT);
+  return { goal: { ...goalRef(goal), id: goal.id }, events: ranked.slice(0, FIND_LIMIT), pick };
+}
+
+/** Reads what rankGoalEvents needs for one goal: the season's slots, the events that can still be pencilled, the active goals. */
+async function goalEvents(sequelize, showId, goalId) {
+  const [[goal]] = await sequelize.query(
+    `SELECT id, title, type, icon, target_metric, target_value, current_value, episode_range, status
+       FROM career_goals WHERE id = :goalId AND show_id = :showId AND deleted_at IS NULL`,
+    { replacements: { goalId, showId } });
+  if (!goal) throw new GoalCoverageError('That goal is not in this show.', 404, 'GOAL_NOT_FOUND');
+  const inputs = await loadCoverageInputs(sequelize, showId);
+  const state = inputs ? inputs.state : await lalaState(sequelize, showId);
+  const goals = inputs ? inputs.goals : await activeGoalRows(sequelize, showId);
+  const [free] = await sequelize.query(
+    `SELECT ${EVENT_COLUMNS} FROM world_events ev
+      WHERE ev.show_id = :showId AND ev.deleted_at IS NULL AND ev.used_in_episode_id IS NULL
+        AND COALESCE(ev.status, 'draft') IN ('draft', 'ready')
+      ORDER BY ev.name ASC`,
+    { replacements: { showId } });
+  const seen = new Set();
+  const all = [];
+  for (const ev of [...(inputs?.slots || []).filter((s) => s.event).map((s) => s.event), ...free]) {
+    if (seen.has(String(ev.id))) continue;
+    seen.add(String(ev.id));
+    all.push(ev);
+  }
+  return rankGoalEvents(goal, all, { slots: inputs?.slots || [], state, goals });
+}
+
+/**
+ * The episode's MAIN career goal, from its event (pure): the active goal of
+ * a stat events move pinned to it (source 'pinned'; one per event, setPin's
+ * rule), else the goal being worked on (an active rung, utils/goalLadders)
+ * that the event moves best — largest expected gain, then the primary's
+ * ladder, then the goals' order (source 'suggested'), else nothing.
+ * `goals` are the active goals; returns { goal, source }.
+ */
+function pickMainGoal(ev, goals, state = {}) {
+  const active = (goals || []).map((g) => ({ status: 'active', ...g }));
+  const byId = new Map(active.map((g) => [String(g.id), g]));
+  for (const id of pinnedGoalIds(ev)) {
+    const g = byId.get(id);
+    if (g && kindOf(g.target_metric) === 'event') return { goal: g, source: 'pinned' };
+  }
+  const lad = buildLadders(active);
+  const candidates = active
+    .map((g, i) => ({ g, i, gain: expectedGain(ev, g.target_metric) }))
+    .filter(({ g }) => kindOf(g.target_metric) === 'event' && lad.byGoal.get(String(g.id))?.rung === 'active' && goalMove(ev, g, state));
+  if (!candidates.length) return { goal: null, source: null };
+  const primaryLadder = lad.ladders.find((l) => l.has_primary)?.id || null;
+  candidates.sort((a, b) => b.gain - a.gain
+    || Number(lad.byGoal.get(String(b.g.id))?.ladder_id === primaryLadder) - Number(lad.byGoal.get(String(a.g.id))?.ladder_id === primaryLadder)
+    || a.i - b.i);
+  return { goal: candidates[0].g, source: 'suggested' };
+}
+
+/**
+ * mainGoalForEvent(sequelize, { showId, eventId }) → { goal, source:
+ * 'pinned' | 'suggested' | null }: the one place the episode's main goal is
+ * worked out (the script writers read it too). goal is the career_goals row
+ * (id, title, type, icon, target_metric, target_value, current_value,
+ * episode_range, status) or null; an event not in the show is null too.
+ */
+async function mainGoalForEvent(sequelize, { showId, eventId }) {
+  if (!showId || !eventId) return { goal: null, source: null };
+  const ev = await eventRow(sequelize, showId, eventId);
+  if (!ev) return { goal: null, source: null };
+  const goals = await activeGoalRows(sequelize, showId);
+  const state = await lalaState(sequelize, showId);
+  return pickMainGoal(ev, goals, state || {});
 }
 
 /**
@@ -359,19 +531,42 @@ async function goalEvents(sequelize, showId, goalId) {
  * never writes) must not make an open package's next save look stale. Returns
  * { event_id, goal_id, pinned, pinned_goal_ids }.
  */
-async function setPin(sequelize, showId, eventId, goalId, on) {
+async function setPin(sequelize, showId, eventId, goalId, on, { move = false } = {}) {
   return sequelize.transaction(async (transaction) => {
     const [[goal]] = await sequelize.query(
-      'SELECT id FROM career_goals WHERE id = :goalId AND show_id = :showId AND deleted_at IS NULL',
+      'SELECT id, title, target_metric FROM career_goals WHERE id = :goalId AND show_id = :showId AND deleted_at IS NULL',
       { replacements: { goalId, showId }, transaction });
     if (!goal) throw new GoalCoverageError('That goal is not in this show.', 404, 'GOAL_NOT_FOUND');
     const [[ev]] = await sequelize.query(
-      `SELECT id, canon_consequences -> 'pinned_goal_ids' AS pinned_goal_ids FROM world_events
+      `SELECT id, name, canon_consequences -> 'pinned_goal_ids' AS pinned_goal_ids FROM world_events
         WHERE id = :eventId AND show_id = :showId AND deleted_at IS NULL FOR UPDATE`,
       { replacements: { eventId, showId }, transaction });
     if (!ev) throw new GoalCoverageError('That event is not in this show.', 404, 'EVENT_NOT_FOUND');
     const id = String(goal.id);
-    const current = pinnedGoalIds(ev);
+    let current = pinnedGoalIds(ev);
+    // One main goal per event (and so per episode): pinning a goal of a stat
+    // events move to an event already pinned to another such goal asks
+    // first; with move the other goal's pin goes. Other pins are unlimited.
+    let movedFrom = null;
+    if (on && !current.includes(id) && kindOf(goal.target_metric) === 'event') {
+      const others = current.filter((x) => x !== id);
+      const [pinnedRows] = others.length ? await sequelize.query(
+        `SELECT id, title, target_metric FROM career_goals
+          WHERE show_id = :showId AND deleted_at IS NULL AND status = 'active' AND id::text IN (:ids)`,
+        { replacements: { showId, ids: others }, transaction }) : [[]];
+      const mains = pinnedRows.filter((g) => kindOf(g.target_metric) === 'event');
+      if (mains.length && !move) {
+        const err = new GoalCoverageError(
+          `${ev.name || 'This event'} is already the event for ${mains[0].title}. Move it to ${goal.title}?`, 409, 'MAIN_GOAL_TAKEN');
+        err.details = { main_goal: { goal_id: mains[0].id, title: mains[0].title } };
+        throw err;
+      }
+      if (mains.length) {
+        const drop = new Set(mains.map((g) => String(g.id)));
+        current = current.filter((x) => !drop.has(x));
+        movedFrom = mains.map((g) => ({ goal_id: g.id, title: g.title }));
+      }
+    }
     const next = on ? (current.includes(id) ? current : [...current, id]) : current.filter((x) => x !== id);
     await sequelize.query(
       `UPDATE world_events
@@ -380,19 +575,25 @@ async function setPin(sequelize, showId, eventId, goalId, on) {
                 '{pinned_goal_ids}', CAST(:ids AS jsonb))
         WHERE id = :eventId AND show_id = :showId`,
       { replacements: { ids: JSON.stringify(next), eventId, showId }, transaction });
-    return { event_id: ev.id, goal_id: goal.id, pinned: Boolean(on), pinned_goal_ids: next };
+    return { event_id: ev.id, goal_id: goal.id, pinned: Boolean(on), pinned_goal_ids: next, moved_from: movedFrom };
   });
 }
 
 module.exports = {
   METRIC_LABEL,
   FIND_LIMIT,
+  PICK_LIMIT,
   GoalCoverageError,
   metricLabel,
   rangeOf,
   goalInPart,
   projectionFor,
+  ladderProjection,
   computeCoverage,
+  rankGoalEvents,
+  mainGoalOf,
+  pickMainGoal,
+  mainGoalForEvent,
   uncoveredByPhase,
   loadCoverageInputs,
   eventGoals,

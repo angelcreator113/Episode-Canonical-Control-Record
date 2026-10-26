@@ -1,0 +1,28 @@
+/* "Arc suggestions" (SeasonArcSuggestions, 2026-10-26), under the Cast
+   tab's cards, on the Season page's --sp-* tokens. One column of
+   suggestions; the buttons wrap under the text on a phone. */
+.sarc { min-width: 0; }
+.sarc-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; margin-bottom: 8px; }
+.sarc-heading { display: inline-flex; align-items: center; gap: 8px; margin: 0; font-family: var(--font-prose); font-size: 20px; font-weight: 600; color: var(--sp-ink); }
+.sarc-muted { margin: 0; font-size: 13px; color: var(--sp-muted); }
+.sarc-list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.sarc-item { min-width: 0; padding: 12px 14px; border-radius: 12px; background: var(--sp-bg); border-left: 4px solid var(--sp-pink); }
+.sarc-item.is-twist { border-left-color: var(--sp-purple-fill); }
+.sarc-item.is-note { border-left-color: var(--sp-gold); }
+.sarc-item.is-done { background: var(--sp-green-soft); border-left-color: var(--sp-green); }
+.sarc-kind { margin: 0 0 4px; font-family: var(--font-mono, 'DM Mono', monospace); font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--sp-purple); }
+.sarc-at { color: var(--sp-pink-deep); }
+.sarc-title { margin: 0 0 2px; font-weight: 700; color: var(--sp-ink); overflow-wrap: anywhere; }
+.sarc-text { margin: 0; font-size: 15px; color: var(--sp-ink); overflow-wrap: anywhere; }
+.sarc-why { margin: 4px 0 0; font-size: 13px; color: var(--sp-muted); overflow-wrap: anywhere; }
+.sarc-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.sarc-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; padding: 6px 16px;
+  border: none; border-radius: 999px; font: inherit; font-size: 14px; font-weight: 700; cursor: pointer;
+  background: var(--sp-pink); color: var(--sp-white);
+}
+.sarc-btn.is-quiet { border: 1px solid var(--sp-line); background: var(--sp-card); color: var(--sp-pink-deep); }
+.sarc-btn:disabled { opacity: .6; cursor: wait; }
+.sarc-btn:focus-visible { outline: 3px solid var(--sp-purple); outline-offset: 2px; }
+.sarc-done { display: inline-flex; align-items: center; gap: 6px; margin: 8px 0 0; font-size: 13px; font-weight: 700; color: var(--sp-green); }
+.sarc-error { margin: 8px 0 0; font-size: 13px; font-weight: 700; color: var(--sp-pink-deep); }

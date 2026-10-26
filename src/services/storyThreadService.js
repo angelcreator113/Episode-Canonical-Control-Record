@@ -6,9 +6,20 @@
  * docs/SEASON_ARC_DESIGN_NOTE.md; table show_story_threads, migration
  * 20261001250000).
  *
- *   Q9 (accepted). "you create and name them; drafts are offered from
- *   seeds_future_events. Acceptance can mark one "advanced", and only you
- *   close one."
+ *   Q9 (accepted; REPLACED in part on 2026-10-26, see below). "you create
+ *   and name them; drafts are offered from seeds_future_events. Acceptance
+ *   can mark one "advanced", and only you close one."
+ *
+ *   The rule now (Evoni, 2026-10-26). Her question: "How do we auto create
+ *   threads that make sense with the story". Her answer: "Let's let them
+ *   open themselves on new threads and build the threads list. I think
+ *   that will help things move along". New threads open by themselves,
+ *   each with Undo; closing a thread is still only Evoni's. A finished
+ *   script's new threads and an event's seeds open once they pass the
+ *   check (services/threadInbox); a short story's and the feed's still
+ *   wait in the threads list for her Keep, Merge into… or Drop. Q9's "you
+ *   create and name them" is replaced by this; "only you close one"
+ *   stands (closeThread).
  *   PR 7 choice 1 (Evoni, 2026-10-01). "a closed thread can be reopened by
  *   Evoni (with confirm), keeping its history".
  *   A3. A slot's intention includes "the story thread it continues".
@@ -47,19 +58,33 @@ function seedText(seed) {
   return text(seed.reason || seed.description || seed.name || seed.title, 500);
 }
 
-/** The show's threads, newest first, each with the slots that continue it. */
-async function listThreads(sequelize, showId) {
+/**
+ * The show's threads, newest first, each with the slots that continue it.
+ * arcId (the Season page's switcher, ?season=N; Evoni, 2026-10-26: Story
+ * "always show[s] the season in progress even when a past season is
+ * picked"): only the threads that season touched (a slot of it continues
+ * the thread, or an episode in its slots opened or moved it on), with that
+ * season's slot numbers alone. Without it, every thread and every slot, as
+ * before.
+ */
+async function listThreads(sequelize, showId, { arcId = null } = {}) {
+  const inArc = arcId ? 'AND s.arc_id = :arcId' : '';
+  const touched = arcId ? `AND (
+            EXISTS (SELECT 1 FROM season_slots s WHERE s.deleted_at IS NULL AND s.arc_id = :arcId AND (s.story_thread_id = t.id OR t.id::text IN (
+                      SELECT p->>'story_thread_id' FROM jsonb_array_elements(COALESCE(s.story_purposes, '[]'::jsonb)) p)))
+         OR EXISTS (SELECT 1 FROM season_slots s WHERE s.deleted_at IS NULL AND s.arc_id = :arcId AND s.episode_id IS NOT NULL
+                      AND s.episode_id IN (t.opened_episode_id, t.last_advanced_episode_id)))` : '';
   const [rows] = await sequelize.query(
     `SELECT t.id, t.title, t.description, t.status, t.source, t.seed_text, t.opened_episode_id,
             t.last_advanced_episode_id, t.last_advanced_at, t.closed_at, t.reopened_at, t.created_at,
             COALESCE((SELECT array_agg(s.slot_number ORDER BY s.slot_number) FROM season_slots s
-                       WHERE s.deleted_at IS NULL AND (s.story_thread_id = t.id OR t.id::text IN (
+                       WHERE s.deleted_at IS NULL ${inArc} AND (s.story_thread_id = t.id OR t.id::text IN (
                          SELECT p->>'story_thread_id' FROM jsonb_array_elements(COALESCE(s.story_purposes, '[]'::jsonb)) p))
                      ), '{}') AS slot_numbers
        FROM show_story_threads t
-      WHERE t.show_id = :showId AND t.deleted_at IS NULL
+      WHERE t.show_id = :showId AND t.deleted_at IS NULL ${touched}
       ORDER BY (t.status = 'closed') ASC, t.created_at DESC`,
-    { replacements: { showId } });
+    { replacements: { showId, arcId } });
   return rows;
 }
 
@@ -67,17 +92,21 @@ async function listThreads(sequelize, showId) {
  * Drafts offered from the seeds of the show's live episodes' briefs
  * (narrative_chain.seeds_future_events), leaving out seeds a thread was
  * already made from. Nothing is saved: Evoni creates and names (Q9).
+ * arcId: only the episodes in that season's slots.
  */
-async function seedDrafts(sequelize, showId) {
+async function seedDrafts(sequelize, showId, { arcId = null } = {}) {
   const [briefs] = await sequelize.query(
     `SELECT b.episode_id, b.narrative_chain, ep.title AS episode_title
        FROM episode_briefs b
        JOIN episodes ep ON ep.id = b.episode_id AND ep.deleted_at IS NULL
       WHERE ep.show_id = :showId AND b.deleted_at IS NULL
+        ${arcId ? 'AND ep.id IN (SELECT s.episode_id FROM season_slots s WHERE s.arc_id = :arcId AND s.deleted_at IS NULL AND s.episode_id IS NOT NULL)' : ''}
       ORDER BY ep.created_at DESC`,
-    { replacements: { showId } });
+    { replacements: { showId, arcId } });
+  // A soft-deleted row counts too: a seed the threads list left out, or one
+  // Evoni undid (services/threadInbox, 2026-10-26), is not offered again.
   const [taken] = await sequelize.query(
-    'SELECT seed_text FROM show_story_threads WHERE show_id = :showId AND deleted_at IS NULL AND seed_text IS NOT NULL',
+    'SELECT seed_text FROM show_story_threads WHERE show_id = :showId AND seed_text IS NOT NULL',
     { replacements: { showId } });
   const used = new Set(taken.map((t) => t.seed_text.toLowerCase()));
   const drafts = [];

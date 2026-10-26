@@ -75,3 +75,15 @@ test('followers: null before her numbers exist, with no Lala profile, or when th
   expect((await statsAt(db, 's', 15)).followers).toBeNull();
   expect(console.error).toHaveBeenCalledWith('[LalaStats] follower count read failed:', 'down');
 });
+
+// Stress on the stats card (Evoni, 2026-10-25): read like reputation and
+// influence, from the snapshot of the latest episode that counts.
+test('stress: now, and as of a beat from the snapshots', async () => {
+  let { db } = fakeDb({ state: { reputation: 7, influence: 6, stress: 3 } });
+  expect(await statsAt(db, 's')).toMatchObject({ stress: 3 });
+  const snap = (stress, d) => ({ state_after_json: { reputation: 5, influence: 4, stress }, deltas_json: { stress: d } });
+  ({ db } = fakeDb({ counted: [snap(6, 2)], uncounted: [snap(4, -2)] }));
+  expect(await statsAt(db, 's', 35)).toMatchObject({ stress: 6 });
+  ({ db } = fakeDb({ counted: [], uncounted: [snap(4, -2)] }));
+  expect(await statsAt(db, 's', 15)).toMatchObject({ stress: 6 });
+});

@@ -36,12 +36,34 @@
  * The page reads the goal coverage, the release schedule and the
  * opportunities once, for the list, the counts and the card together.
  *
+ * Round 3 (Evoni, 2026-10-26: "Start the Season page round 3, show me
+ * first"): the hero carries the season's health in one line
+ * (components/Show/SeasonHealthLine, lib/seasonHealth: "On track · Part 1
+ * is 6 of 8 ready · 2 goals behind · next release Sun, Nov 1"); Story and
+ * the Overview's Secrets & Reveals follow the switcher like the rest (a
+ * past season reads its own threads, twists, reveal plan and needs); a Cast
+ * tab says who is in which episode and which relationships changed in each
+ * part (components/Show/SeasonCast); the Roadmap has a Calendar view
+ * (components/Show/SeasonCalendar); Print plan opens the season on one
+ * printable page (pages/SeasonPlanPrint). The AI steps that come later have
+ * empty, named spots to fill: the health line's "What should I do next?",
+ * the Cast tab's "Arc suggestions", a past season's Story "Carried into
+ * Season N" and the one-pager's pitch.
+ *
+ * Those spots now hold their AI buttons (Evoni, 2026-10-26: "how can ai
+ * help with these"; services/seasonAiHelpers). Each is a button she
+ * presses for one AI call, and nothing is saved until she accepts:
+ * SeasonNextStep under the health line (the season in progress), the Cast
+ * tab's SeasonArcSuggestions (Accept goes through the slot's purposes or
+ * the twists), a past season's SeasonCarried on Story (only the ticked rows
+ * apply; nothing is deleted), and the one-pager's SeasonPitch.
+ *
  * Colours: the mockup's pinks and purples, page-scoped (--sp-* in
  * SeasonPage.css). Text is plum or ink; pink is for fills and accents.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
-import { Clapperboard, Target, CalendarHeart, Coins as CoinsIcon, MoreHorizontal, Pencil, ArrowLeft, CalendarClock, ChevronRight } from 'lucide-react';
+import { Clapperboard, Target, CalendarHeart, Coins as CoinsIcon, MoreHorizontal, Pencil, ArrowLeft, CalendarClock, ChevronRight, Printer } from 'lucide-react';
 import api from '../services/api';
 import { fetchAllEpisodes } from '../lib/fetchAllPages';
 import { useSeasonPlan, SeasonLoadError, BalanceTrend, coins, signedCoins } from '../components/Show/SeasonPlan';
@@ -52,6 +74,12 @@ import { SeasonOverviewTab, SeasonStoryTab, SeasonResultsTab } from '../componen
 import { SeasonRoadmapTab, SeasonEventsTab } from '../components/Show/SeasonPageRoadmap';
 import ShowEpisodesBoard from '../components/Show/ShowEpisodesBoard';
 import SeasonPlants from '../components/Show/SeasonPlants';
+import SeasonCast from '../components/Show/SeasonCast';
+import SeasonHealthLine from '../components/Show/SeasonHealthLine';
+import SeasonNextStep from '../components/Show/SeasonNextStep';
+import SeasonArcSuggestions from '../components/Show/SeasonArcSuggestions';
+import SeasonCarried from '../components/Show/SeasonCarried';
+import { seasonHealth } from '../lib/seasonHealth';
 import OpportunitiesTab from '../components/Show/OpportunitiesTab';
 import { S as PRODUCER_S } from '../components/Show/producerStyles';
 import CareerGoals, { NarrativeDebt, SeasonPhasesHistory } from '../components/Show/CareerGoals';
@@ -271,7 +299,7 @@ function HeroMenu({ arc, nextSeason, onPick }) {
   );
 }
 
-export function SeasonHero({ arc, roadmap, showName, nextSeason, onEdit, onPick, readOnly = false, switcher = null }) {
+export function SeasonHero({ arc, roadmap, showName, nextSeason, onEdit, onPick, readOnly = false, switcher = null, health = null, planHref = null }) {
   const cover = arc?.cover_url || null;
   return (
     <header className={`szn-hero${cover ? ' has-cover' : ''}`} data-testid="szn-hero"
@@ -285,14 +313,23 @@ export function SeasonHero({ arc, roadmap, showName, nextSeason, onEdit, onPick,
           {heroChips({ roadmap, arc }).map((c) => <li key={c}>{c}</li>)}
           {arc?.status === 'completed' && <li className="is-done">Complete</li>}
         </ul>
+        {/* The season's health in a line (round 3, 2026-10-26). */}
+        {health}
         {switcher}
-        {/* A past season is read here; its setup actions would write the season in progress. */}
-        {!readOnly && (
+        {/* A past season is read here; its setup actions would write the season in progress. Print plan reads any season. */}
+        {(!readOnly || planHref) && (
           <div className="szn-hero-actions">
-            <button type="button" className="szn-btn" onClick={onEdit} data-testid="szn-edit-season">
-              <Pencil size={16} aria-hidden="true" /> Edit Season
-            </button>
-            <HeroMenu arc={arc} nextSeason={nextSeason} onPick={onPick} />
+            {!readOnly && (
+              <button type="button" className="szn-btn" onClick={onEdit} data-testid="szn-edit-season">
+                <Pencil size={16} aria-hidden="true" /> Edit Season
+              </button>
+            )}
+            {planHref && (
+              <Link className="szn-btn is-ghost" to={planHref} data-testid="szn-print-plan">
+                <Printer size={16} aria-hidden="true" /> Print plan
+              </Link>
+            )}
+            {!readOnly && <HeroMenu arc={arc} nextSeason={nextSeason} onPick={onPick} />}
           </div>
         )}
       </div>
@@ -392,6 +429,9 @@ export default function SeasonPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [arc, roadmap, events, episodes, coverage.data, release.view, opps, isCurrent]);
   const nextRelease = useMemo(() => nextReleaseOf(release.view, seasonNumber), [release.view, seasonNumber]);
+  // The hero's health line: the same sources and the same Needs attention items, counted in words.
+  const health = useMemo(() => (arc ? seasonHealth({ arc, roadmap, coverage: coverage.data, release: release.view, attention, isCurrent }) : null),
+    [arc, roadmap, coverage.data, release.view, attention, isCurrent]);
 
   // Episodes and Results: this season's episodes unless "Show all seasons".
   const allSeasons = showsAllSeasons(params);
@@ -434,6 +474,8 @@ export default function SeasonPage() {
     reloadShowData: loadShowData,
     onEdit: () => openPanel('edit'), onPanel: openPanel,
     release, attention, hrefFor, readOnly: !isCurrent,
+    // The season shown (null: the one in progress), for the reads that follow the switcher; the deals for the calendar's deadlines.
+    season, opps,
   };
   // The Episodes and Results tabs read this season's episodes (or every season's).
   const scope = arc ? (
@@ -499,10 +541,13 @@ export default function SeasonPage() {
       {back}
       <SeasonHero arc={arc} roadmap={roadmap} showName={showName} nextSeason={nextSeason}
         onEdit={() => openPanel(panel === 'edit' ? null : 'edit')} onPick={openPanel} readOnly={!isCurrent}
+        health={<SeasonHealthLine health={health}
+          nextStepSlot={isCurrent && attention.length ? <SeasonNextStep api={api} showId={showId} items={attention} /> : null} />}
+        planHref={`/shows/${encodeURIComponent(showId)}/season/plan${season ? `?season=${encodeURIComponent(season)}` : ''}`}
         switcher={<SeasonSwitcher seasons={plan.seasons} arc={arc} currentArcId={plan.currentArcId} onPick={pickSeason} />} />
       {!isCurrent && (
         <p className="szn-note is-past" role="status" data-testid="szn-past-season">
-          You are looking at Season {arc.season_number || 1}{arc.status === 'completed' ? ', which is complete' : ''}. Its roadmap, episodes and results are its own; Story and Goals follow the season in progress.
+          You are looking at Season {arc.season_number || 1}{arc.status === 'completed' ? ', which is complete' : ''}. Its roadmap, episodes, story, cast and results are its own; Goals follow the season in progress.
           {' '}<button type="button" className="szn-link-btn" onClick={() => pickSeason(null)} data-testid="szn-past-season-back">Back to the season in progress</button>
         </p>
       )}
@@ -540,8 +585,15 @@ export default function SeasonPage() {
         {tab === 'episodes' && <SeasonEpisodesTab {...scopedProps} />}
         {tab === 'events' && <SeasonEventsTab {...tabProps} />}
         {tab === 'opportunities' && <SeasonOpportunitiesTab {...tabProps} />}
-        {tab === 'story' && <SeasonStoryTab {...tabProps} />}
-        {tab === 'plants' && <SeasonPlants showId={showId} api={api} onAddPlants={() => goTab('story')} />}
+        {tab === 'story' && (
+          <SeasonStoryTab {...tabProps}
+            carriedSlot={!isCurrent ? <SeasonCarried key={arc.id} api={api} showId={showId} season={season || arc.season_number || 1} onApplied={plan.loadRoadmap} /> : null} />
+        )}
+        {tab === 'cast' && (
+          <SeasonCast api={api} showId={showId} season={season} reloadKey={roadmap}
+            suggestionsSlot={<SeasonArcSuggestions key={arc.id} api={api} showId={showId} season={season} onApplied={plan.loadRoadmap} />} />
+        )}
+        {tab === 'plants' && <SeasonPlants showId={showId} api={api} onAddPlants={() => goTab('story')} season={season} />}
         {tab === 'goals' && <SeasonGoalsTab {...tabProps} />}
         {tab === 'results' && <SeasonResultsTab {...scopedProps} />}
       </section>

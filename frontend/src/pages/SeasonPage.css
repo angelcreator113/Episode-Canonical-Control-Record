@@ -119,6 +119,12 @@
 }
 .szn-hero-chips li.is-done { background: var(--sp-green); }
 .szn-hero-actions { position: absolute; right: 24px; bottom: 24px; display: flex; align-items: center; gap: 8px; }
+/* Round 3 (2026-10-26): Print plan beside Edit Season, white on the shade; the health line keeps clear of the actions. */
+.szn-btn.is-ghost { background: var(--sp-card); color: var(--sp-ink); }
+.szn-hero-shade .shl { max-width: calc(100% - 360px); }
+/* The empty spots a later AI step fills (the Story's carried-over, the Cast's suggestions): nothing shows while empty. */
+.szn-ai-slot:empty { display: none; }
+.szn-story-season { margin: 0 0 12px; }
 .szn-hero-more {
   display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border: none; border-radius: 999px;
   background: var(--sp-card); color: var(--sp-ink); cursor: pointer;
@@ -410,6 +416,7 @@
   .szn-hero-tagline { font-size: 15px; }
   .szn-hero-chips li { font-size: 12px; }
   .szn-hero-actions { left: 16px; right: 16px; bottom: 16px; justify-content: space-between; }
+  .szn-hero-shade .shl { max-width: 100%; }
   .szn-stats { gap: 10px; }
   .szn-stat { grid-template-columns: minmax(0, 1fr); grid-template-areas: 'icon' 'body' 'bar' 'line'; padding: 12px; row-gap: 8px; }
   .szn-stat.is-budget { grid-template-areas: 'icon' 'body' 'spark' 'line'; }

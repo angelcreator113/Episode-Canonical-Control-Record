@@ -230,6 +230,74 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
     expect((await canonOf(theirEvent)).canon_consequences).toEqual({});
   });
 
+  test('ladders: one active rung per stat, kinds, one projection per ladder; gaps only for active rungs events move (older fields kept)', async () => {
+    const { show, arcId } = await seedShow();
+    const starter = await goal(show, { title: 'Starter Fund', metric: 'coins', current_value: 294, target: 500 });
+    const money = await goal(show, { title: 'The Money Talk', metric: 'coins', current_value: 294, target: 2000 });
+    const closet = await goal(show, { title: 'Closet Upgrade', metric: 'coins', current_value: 294, target: 5000 });
+    const k5 = await goal(show, { title: 'First 5K', metric: 'followers', target: 5000 });
+    const stress = await goal(show, { title: 'Manage Stress', type: 'passive', metric: 'stress', current_value: 2, target: 3 });
+    await pencil(show, arcId, 2, await event(show, { name: 'Paid A', is_paid: true, payment_amount: 1000 }));
+    await pencil(show, arcId, 3, await event(show, { name: 'Paid B', is_paid: true, payment_amount: 1200 }));
+
+    const body = await coverage(show);
+    const byId = Object.fromEntries(body.goals.map((g) => [g.id, g]));
+    expect(byId[starter]).toEqual(expect.objectContaining({ kind: 'event', ladder_id: 'coins', rung: 'active', covered: true }));
+    expect(byId[money]).toEqual(expect.objectContaining({ rung: 'up_next', covered: false, gap_phases: [] }));
+    expect(byId[k5]).toEqual(expect.objectContaining({ kind: 'performance', covered: false }));
+    expect(byId[stress]).toEqual(expect.objectContaining({ kind: 'background', rung: 'passive' }));
+    // The older fields are all still there.
+    expect(byId[money]).toEqual(expect.objectContaining({ movers: expect.any(Array), projection: expect.any(Object), metric_label: 'Coins' }));
+    expect(byId[starter].also_helps.map((m) => m.code)).toEqual(['E2', 'E3']);
+    expect(byId[starter].main_events).toEqual([]);
+    const coins = body.ladders.find((l) => l.id === 'coins');
+    expect(coins).toEqual(expect.objectContaining({ active_goal_id: starter, up_next_ids: [money, closet], kind: 'event' }));
+    expect(coins.projection).toEqual(expect.objectContaining({ current: 294, gain: 2200, projected: 2494 }));
+    expect(coins.projection.clears.map((c) => c.goal_id)).toEqual([starter, money]);
+    expect(coins.projection.next).toEqual(expect.objectContaining({ goal_id: closet, short: 2506 }));
+    // Only Starter Fund (the coins rung worked on) is asked of the parts, and part 1 has its events.
+    expect(body.parts.map((p) => p.gaps.map((g) => g.goal_id))).toEqual([[], [starter], [starter]]);
+
+    // Pick its event: the movers, placed first.
+    const pick = await auth(request(app).get(`/api/v1/world/${show}/season/goals/${starter}/events`));
+    expect(pick.status).toBe(200);
+    expect(pick.body.pick.map((e) => e.name)).toEqual(['Paid B', 'Paid A']);
+  });
+
+  test('one main goal per event: a second goal of a stat events move asks to move it (409); move=1 moves it; side pins stay unlimited', async () => {
+    const { show } = await seedShow();
+    const starter = await goal(show, { title: 'Starter Fund', metric: 'coins', target: 500 });
+    const trust = await goal(show, { title: 'Brand Girl Era', metric: 'brand_trust', target: 4 });
+    const stress = await goal(show, { title: 'Manage Stress', type: 'passive', metric: 'stress', target: 3 });
+    const gala = await event(show, { name: 'Gala', is_paid: true, payment_amount: 400 });
+    expect((await auth(request(app).put(pinPath(show, gala, starter)))).status).toBe(200);
+    // A background goal can ride along.
+    expect((await auth(request(app).put(pinPath(show, gala, stress)))).status).toBe(200);
+    const refused = await auth(request(app).put(pinPath(show, gala, trust)));
+    expect(refused.status).toBe(409);
+    expect(refused.body).toEqual(expect.objectContaining({
+      code: 'MAIN_GOAL_TAKEN', error: 'Gala is already the event for Starter Fund. Move it to Brand Girl Era?',
+      main_goal: expect.objectContaining({ goal_id: starter, title: 'Starter Fund' }),
+    }));
+    expect((await canonOf(gala)).canon_consequences.pinned_goal_ids).toEqual([starter, stress]);
+    const moved = await auth(request(app).put(`${pinPath(show, gala, trust)}?move=1`));
+    expect(moved.status).toBe(200);
+    expect(moved.body.pinned_goal_ids).toEqual([stress, trust]);
+    expect(moved.body.moved_from).toEqual([expect.objectContaining({ goal_id: starter })]);
+    // Re-pinning the same goal is not a conflict.
+    expect((await auth(request(app).put(pinPath(show, gala, trust)))).status).toBe(200);
+    const body = await coverage(show, `?event_id=${gala}`);
+    expect(body.event.main_goal).toEqual(expect.objectContaining({ goal_id: trust }));
+    const { mainGoalForEvent } = require('../../src/services/seasonGoalCoverage');
+    const main = await mainGoalForEvent(sequelize, { showId: show, eventId: gala });
+    expect([main.goal.id, main.source]).toEqual([trust, 'pinned']);
+    // Unpinned, the paid gala suggests the coins goal it moves.
+    await auth(request(app).delete(pinPath(show, gala, trust)));
+    const suggested = await mainGoalForEvent(sequelize, { showId: show, eventId: gala });
+    expect([suggested.goal.id, suggested.source]).toEqual([starter, 'suggested']);
+    expect(await mainGoalForEvent(sequelize, { showId: show, eventId: uuid() })).toEqual({ goal: null, source: null });
+  });
+
   test('a show with no season answers with no goals and no parts', async () => {
     const show = uuid();
     shows.push(show);

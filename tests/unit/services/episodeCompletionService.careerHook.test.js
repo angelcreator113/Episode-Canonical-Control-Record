@@ -45,6 +45,8 @@ jest.mock('../../../src/services/financialTransactionService', () => ({
 
 // The Episode Story Record is drafted after completion, unawaited (stage C).
 jest.mock('../../../src/services/episodeStoryRecord', () => ({ draftLater: jest.fn(async () => null) }));
+// Seeds opening as threads by themselves (services/threadInbox) are its own test's.
+jest.mock('../../../src/services/threadInbox', () => ({ openSeedsLater: jest.fn() }));
 jest.mock('../../../src/routes/wardrobe', () => ({}));
 
 // The model layer completeEpisode loads with require('../models').
@@ -200,6 +202,26 @@ describe('completeEpisode career hook (Task #1817)', () => {
     await completeEpisode(EPISODE_ID, SHOW_ID, sequelize);
 
     expect(goalUpdates(queries)).toHaveLength(0);
+  });
+
+  it('a stress goal ("reduce to") completes at or below its target, never because stress rose', async () => {
+    resetModels();
+    const goals = [
+      // Under the old >= rule the first would complete and the second would not.
+      { id: 'g-tight', title: 'Stress under -1', priority: 3, type: 'secondary', target_metric: 'stress', current_value: 5, target_value: -1, unlocks_on_complete: [], deleted_at: null },
+      { id: 'g-calm', title: 'Stress at most 99', priority: 3, type: 'secondary', target_metric: 'stress', current_value: 120, target_value: 99, unlocks_on_complete: [], deleted_at: null },
+      { id: 'g-passive-stress', title: 'Manage stress', priority: 3, type: 'passive', target_metric: 'stress', current_value: 9, target_value: 99, unlocks_on_complete: [], deleted_at: null },
+    ];
+    const { sequelize, queries } = makeSequelize({ goals });
+
+    const result = await completeEpisode(EPISODE_ID, SHOW_ID, sequelize);
+
+    const byId = Object.fromEntries(goalUpdates(queries).map(q => [q.opts.replacements.id, q.opts.replacements.status]));
+    expect(byId['g-tight']).toBe('active');
+    expect(byId['g-calm']).toBe('completed');
+    // A passive goal is never completed by a reading (Sync from stats agrees).
+    expect(byId['g-passive-stress']).toBeUndefined();
+    expect(result.career.goals_completed.map(g => g.id)).toEqual(['g-calm']);
   });
 
   it('spawns unlocks_on_complete for a goal step 17 completes, and nothing for a goal it does not', async () => {

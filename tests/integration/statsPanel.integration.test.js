@@ -103,7 +103,7 @@ function pngDataUrl(width, height, fill) {
   test('the boxes are saved on the art, checked, and listed with the overlay', async () => {
     const put = (spots) => auth(request(app).put(`/api/v1/ui-overlays/${ids.show}/stats-panel/${ids.panel}`)).send({ spots });
     expect((await request(app).put(`/api/v1/ui-overlays/${ids.show}/stats-panel/${ids.panel}`).send({ spots: [] })).status).toBe(401);
-    const bad = await put([{ ...SPOTS[0], stat: 'stress' }]);
+    const bad = await put([{ ...SPOTS[0], stat: 'mood' }]);
     expect([bad.status, bad.body.code]).toEqual([400, 'INVALID_SPOTS']);
     const ok = await put(SPOTS);
     expect(ok.status).toBe(200);

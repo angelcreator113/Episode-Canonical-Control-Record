@@ -34,8 +34,11 @@ const keepBody = (t, change) => ({
   thread_ids: t.thread_ids || [], character_ids: t.character_ids || [], note: t.note || '', ...change,
 });
 
-export default function SeasonPlants({ showId, api, onAddPlants = null }) {
+// season: a past season's number (the Season page's switcher, 2026-10-26); the plants read are that season's.
+export default function SeasonPlants({ showId, api, onAddPlants = null, season = null }) {
   const base = `/api/v1/world/${showId}/season/twists`;
+  // The season shown (the Season page's switcher, ?season=N; 2026-10-26): reads follow it, writes answer with their own season.
+  const seasonQuery = season ? `?season=${encodeURIComponent(season)}` : '';
   const [data, setData] = useState(null);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState(null);
@@ -45,12 +48,12 @@ export default function SeasonPlants({ showId, api, onAddPlants = null }) {
 
   const load = useCallback(async () => {
     try {
-      setData((await api.get(base)).data);
+      setData((await api.get(`${base}${seasonQuery}`)).data);
     } catch (err) {
       console.error('[SeasonPlants] load failed:', err);
       setData({ arc: null, slots: [], twists: [], warnings: [], failed: true });
     }
-  }, [api, base]);
+  }, [api, base, seasonQuery]);
   useEffect(() => { load(); }, [load]);
 
   if (!data) return <p className="spl-note" role="status">Loading the plants…</p>;

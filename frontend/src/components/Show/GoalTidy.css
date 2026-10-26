@@ -1,0 +1,20 @@
+/* Tidy my goals (GoalTidy.jsx), on the Season page's Goals tab: it sits
+   inside .szn-page, so it reads the page's --sp-* colours. 44px targets on
+   a phone, 12px smallest text. */
+.gt { display: grid; gap: 10px; border: 2px solid var(--sp-purple-soft); }
+.gt-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.gt-head .szn-card-title { display: inline-flex; align-items: center; gap: 6px; margin: 0; }
+.gt-lede { margin: 0; font-size: 13px; }
+.gt-ladders { display: grid; gap: 4px; margin: 0; padding: 10px 12px; list-style: none; border-radius: 12px; background: var(--sp-bg); font-size: 13px; color: var(--sp-ink); }
+.gt-ladders li { overflow-wrap: anywhere; }
+.gt-items { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.gt-item { display: grid; gap: 6px; padding: 10px 12px; border: 1px solid var(--sp-line); border-radius: 12px; background: var(--sp-card); }
+.gt-item p { margin: 0; }
+.gt-item-title { font-size: 14px; font-weight: 700; color: var(--sp-ink); overflow-wrap: anywhere; }
+.gt-item-detail { font-size: 13px; color: var(--sp-muted); overflow-wrap: anywhere; }
+.gt-item-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.gt-item-actions .szn-btn { min-height: 36px; padding: 6px 12px; font-size: 13px; }
+
+@media (max-width: 640px) {
+  .gt-item-actions .szn-btn { flex: 1 1 0; min-height: 44px; }
+}

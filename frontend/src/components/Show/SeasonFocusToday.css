@@ -1,0 +1,23 @@
+/* "Focus for today" (SeasonFocusToday, 2026-10-26) at the top of the daily
+   update's "The season" (SeasonAttentionDigest), on the --sp-* tokens that
+   card sets from the app's --lala-* ones. */
+.sfocus { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; min-width: 0; }
+.sfocus-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; padding: 6px 16px;
+  border: 1px solid var(--sp-line); border-radius: 999px; background: var(--sp-pink-soft); color: var(--sp-ink);
+  font: inherit; font-size: 14px; font-weight: 700; cursor: pointer;
+}
+.sfocus-btn:disabled { opacity: .6; cursor: not-allowed; }
+.sfocus-btn:focus-visible, .sfocus-close:focus-visible { outline: 3px solid var(--sp-purple); outline-offset: 2px; }
+.sfocus-muted { font-size: 13px; color: var(--sp-muted); }
+.sfocus-card {
+  display: flex; align-items: center; gap: 10px; min-width: 0; padding: 8px 8px 8px 14px; border-radius: 12px;
+  background: var(--sp-pink-soft); border: 1px solid var(--sp-line); color: var(--sp-ink);
+}
+.sfocus-card.is-error { color: var(--sp-pink-deep); }
+.sfocus-icon { flex: 0 0 auto; color: var(--sp-purple); }
+.sfocus-line { flex: 1 1 auto; min-width: 0; margin: 0; font-size: 15px; font-weight: 600; line-height: 1.45; overflow-wrap: anywhere; }
+.sfocus-close {
+  flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px;
+  border: none; border-radius: 999px; background: transparent; color: var(--sp-ink); cursor: pointer;
+}

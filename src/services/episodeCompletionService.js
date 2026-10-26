@@ -21,6 +21,8 @@ const { v4: uuidv4 } = require('uuid');
 const {
   evaluate,
   computeStatDeltas,
+  selfTalkStressDelta,
+  SELF_TALK_TONES,
   applyDeltas,
   generateNarrativeLine,
   FORMULA_VERSION,
@@ -192,6 +194,25 @@ async function loadEpisodeLook(sequelize, episodeId, event, { eventPiecesFallbac
   return { pieces: [], outfit: { source: 'none', label: NO_LOOK_LABEL, pieces: 0, reason, match_scored: false } };
 }
 
+// ─── WHERE THE STRESS CAME FROM ──────────────────────────────────────────────
+// The completion result's stress lines (Evoni, 2026-10-25): each source that
+// moved it, with a plain reason. Lower stress is better.
+
+function selfTalkResult(selfTalk) {
+  return { tone: selfTalk.tone, label: SELF_TALK_TONES[selfTalk.tone] || null, delta: selfTalk.delta, reason: selfTalk.reason };
+}
+
+function stressBreakdownOf({ tier, base, social, wardrobe, selfTalk, financial }) {
+  const out = [];
+  const add = (key, delta, reason) => { if (Number(delta)) out.push({ key, delta: Number(delta), reason }); };
+  add('tier', base, `The ${String(tier || '').toUpperCase()} result`);
+  add('social', social, Number(social) > 0 ? 'Required content not done' : 'Her content got done');
+  add('wardrobe', wardrobe, 'The look for the room');
+  if (selfTalk?.delta) add('self_talk', selfTalk.delta, selfTalk.reason);
+  add('money', financial, Number(financial) > 0 ? 'Money worries' : 'Money relief');
+  return out;
+}
+
 // ─── MAIN: COMPLETE EPISODE ──────────────────────────────────────────────────
 
 // options.eventPiecesFallback overrides EVENT_PIECES_FALLBACK for one call
@@ -352,6 +373,23 @@ async function completeEpisode(episodeId, showId, sequelize, { eventPiecesFallba
     }
   }
 
+  // ── 10a. Her self-talk at Beat 13 (Evoni, 2026-10-25) ──
+  // The tone chosen on the Script tab (services/episodeSelfTalk): Kind or
+  // Honest after a safe or failed result softens the stress by one; Hard on
+  // herself after a pass or a slay adds one (evaluationFormula
+  // .selfTalkStressDelta). No choice saved changes nothing.
+  let selfTalk = { tone: null, delta: 0, reason: null };
+  try {
+    const tone = await require('./episodeSelfTalk').readSelfTalk(sequelize, episodeId);
+    selfTalk = selfTalkStressDelta(evalResult.tier_final, tone);
+  } catch (toneErr) {
+    console.error('[EpisodeCompletion] self-talk read failed; stress unchanged by it:', toneErr?.message);
+  }
+  if (selfTalk.delta !== 0) {
+    mergedDeltas.stress = (mergedDeltas.stress || 0) + selfTalk.delta;
+    mergedDeltas.self_talk_delta = selfTalk.delta;
+  }
+
   // ── 10b. Apply event.rewards on success ───────────────────────────────
   // Creator-authored stat rewards from the event form (rewards.reputation,
   // .brand_trust, .influence). Only granted on slay/pass tiers — failing
@@ -390,6 +428,7 @@ async function completeEpisode(episodeId, showId, sequelize, { eventPiecesFallba
   let newState;
   let evaluationId;
   let narrativeLines;
+  let stressBreakdown = [];
   const outcome = await sequelize.transaction(async (transaction) => {
     const { finalizeEpisodeFinancials } = require('./financialTransactionService');
     const { withTransaction } = require('../utils/withTransaction');
@@ -482,6 +521,12 @@ async function completeEpisode(episodeId, showId, sequelize, { eventPiecesFallba
       console.warn('[episodeComplete] financial mood delta failed:', moodErr.message);
     }
 
+    // Where the stress change came from, in plain words, for the result.
+    stressBreakdown = stressBreakdownOf({
+      tier: evalResult.tier_final, base: baseDeltas.stress, social: socialBonuses.deltas?.stress,
+      wardrobe: wardrobeBonuses.deltas?.stress, selfTalk, financial: mergedDeltas.financial_mood_delta,
+    });
+
     // ── 12. Apply all deltas to character state ──
     newState = applyDeltas(currentStats, mergedDeltas);
 
@@ -527,6 +572,8 @@ async function completeEpisode(episodeId, showId, sequelize, { eventPiecesFallba
       wardrobe_bonuses: wardrobeBonuses,
       outfit: look.outfit,
       financial_summary: financialResult.summary,
+      ...(selfTalk.tone ? { self_talk: selfTalkResult(selfTalk) } : {}),
+      stress_breakdown: stressBreakdown,
       completed_at: new Date().toISOString(),
     };
 
@@ -654,10 +701,10 @@ ${narrativeLines.short || ''}`,
   // balance (synced in step 11). Passive goals ("never drop below") and
   // metrics Lala's state does not carry are left unchanged too. Goals this
   // step completes spawn their unlocks_on_complete (Task #1817).
-  const careerSummary = { goals_completed: [], goals_measured: [], unlocks: [], opportunities_advanced: [] };
+  const careerSummary = { goals_completed: [], goals_measured: [], unlocks: [], opportunities_advanced: [], goals_activated: [] };
   try {
     const goals = await sequelize.query(
-      `SELECT id, title, type, priority, target_metric, current_value, target_value, unlocks_on_complete FROM career_goals
+      `SELECT id, title, type, priority, target_metric, current_value, target_value, unlocks_on_complete, created_at FROM career_goals
        WHERE show_id = :showId AND status = 'active' AND deleted_at IS NULL`,
       { replacements: { showId }, type: sequelize.QueryTypes.SELECT }
     ).catch((err) => {
@@ -665,11 +712,12 @@ ${narrativeLines.short || ''}`,
       return [];
     });
     for (const goal of goals || []) {
-      if (goal.type === 'passive' || goal.target_metric === 'custom') continue;
+      if (!require('../utils/goalLadders').completesByReading(goal)) continue;
       const measured = Number(newState?.[goal.target_metric]);
       if (!Number.isFinite(measured)) continue;
       const target = Number(goal.target_value);
-      const newStatus = Number.isFinite(target) && measured >= target ? 'completed' : 'active';
+      // Direction-aware (utils/goalLadders): stress completes at or below its target, never because it rose.
+      const newStatus = Number.isFinite(target) && require('../utils/goalLadders').goalReached(goal, measured) ? 'completed' : 'active';
       if (Number(goal.current_value) === measured && newStatus === 'active') continue;
       let goalWritten = true;
       await sequelize.query(
@@ -697,6 +745,10 @@ ${narrativeLines.short || ''}`,
         }
       }
     }
+    // The next rung of each ladder this cleared is now the one worked on
+    // (derived from the goals on every read; reported here, never written).
+    careerSummary.goals_activated = require('../utils/goalLadders')
+      .activatedAfter((goals || []).map((g) => ({ ...g, status: 'active' })), careerSummary.goals_completed.map((g) => g.id));
   } catch (careerErr) {
     console.warn('[episodeComplete] Career goals failed (non-blocking):', careerErr.message);
   }
@@ -741,6 +793,9 @@ ${narrativeLines.short || ''}`,
   // An AI call: not awaited; it drafts only when the episode has no record
   // yet, and nothing counts until Evoni approves it.
   require('./episodeStoryRecord').draftLater(sequelize, episodeId);
+  // The event seeds not read yet open by themselves once they pass the check
+  // (services/threadInbox; Evoni, 2026-10-26). Not awaited.
+  if (showId) require('./threadInbox').openSeedsLater(sequelize, showId);
 
   // ── 18. Complete the linked opportunity (Task #1817) ──
   // Runs once per completion: the already-accepted early return above skips
@@ -830,6 +885,8 @@ ${narrativeLines.short || ''}`,
       narrative: narrativeLines.short,
     },
     stat_deltas: mergedDeltas,
+    stress_breakdown: stressBreakdown,
+    self_talk: selfTalk.tone ? selfTalkResult(selfTalk) : null,
     previous_state: currentStats,
     new_state: newState,
     social_tasks: socialBonuses.detail,
@@ -850,4 +907,5 @@ module.exports = {
   loadEpisodeLook,
   computeSocialTaskBonuses,
   computeWardrobeBonuses,
+  stressBreakdownOf,
 };

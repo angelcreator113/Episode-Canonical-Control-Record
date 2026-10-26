@@ -807,7 +807,9 @@ export const TEMP_CONFIG = {
  */
 export function useSeasonPlan({ showId, api, setToast, season = null }) {
   // season: another season's number (the Season page's switcher, ?season=N);
-  // the arc, roadmap and Planning Insights read it, the rest read the show.
+  // the arc, roadmap, Planning Insights, story threads and the needs read it
+  // (the threads and needs since 2026-10-26: Story followed the season in
+  // progress), the goals read the show.
   const seasonQuery = season ? `?season=${encodeURIComponent(season)}` : '';
   const [arc, setArc] = useState(null);
   // Every season of the show, and the one in progress (else the latest).
@@ -831,13 +833,13 @@ export function useSeasonPlan({ showId, api, setToast, season = null }) {
   const [needs, setNeeds] = useState({ data: null, error: null });
   const loadNeeds = useCallback(async () => {
     try {
-      const r = await api.get(`/api/v1/world/${showId}/season/needs`);
+      const r = await api.get(`/api/v1/world/${showId}/season/needs${seasonQuery}`);
       setNeeds({ data: { needs: r.data?.needs || [], counts: r.data?.counts || {} }, error: null });
     } catch (err) {
       console.error('Season needs load failed:', err);
       setNeeds((n) => ({ ...n, error: err.response?.data?.error || err.message || 'failed' }));
     }
-  }, [showId]);
+  }, [showId, seasonQuery]);
   // What did not load, by part, so the tab says so with a Retry instead of
   // reading as "No season set up yet" (Evoni's review, 2026-10-24).
   const [failed, setFailed] = useState({});
@@ -859,7 +861,7 @@ export function useSeasonPlan({ showId, api, setToast, season = null }) {
     }
     // Story threads (§8(ff) Q9)
     try {
-      const r = await api.get(`/api/v1/world/${showId}/season/threads`);
+      const r = await api.get(`/api/v1/world/${showId}/season/threads${seasonQuery}`);
       setThreadData({ threads: r.data.threads || [], drafts: r.data.drafts || [] });
       markFailed('threads', null);
     } catch (err) {

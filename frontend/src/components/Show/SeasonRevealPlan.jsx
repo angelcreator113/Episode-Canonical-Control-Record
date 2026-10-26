@@ -18,8 +18,11 @@ const STATE_LABEL = { hidden: 'Not hinted yet', hinted: 'Hinted', revealed: 'Rev
 const errorOf = (err, fallback) => err?.response?.data?.error || fallback;
 const BLANK = { slot_id: '', secret_id: '', intent: 'hint', note: '' };
 
-export default function SeasonRevealPlan({ showId, api }) {
+// season: a past season's number (the Season page's switcher, 2026-10-26); the plan read is that season's.
+export default function SeasonRevealPlan({ showId, api, season = null }) {
   const base = `/api/v1/world/${showId}/season/reveals`;
+  // The season shown (the Season page's switcher, ?season=N; 2026-10-26): reads follow it, writes answer with their own season.
+  const seasonQuery = season ? `?season=${encodeURIComponent(season)}` : '';
   const [plan, setPlan] = useState(null);
   const [form, setForm] = useState(BLANK);
   const [busy, setBusy] = useState(false);
@@ -27,13 +30,13 @@ export default function SeasonRevealPlan({ showId, api }) {
 
   const load = useCallback(async () => {
     try {
-      setPlan((await api.get(base)).data);
+      setPlan((await api.get(`${base}${seasonQuery}`)).data);
     } catch (err) {
       console.error('[SeasonRevealPlan] load failed:', err);
       setPlan({ arc: null, slots: [], secrets: [], reveals: [], warnings: [] });
       setNote({ error: true, text: errorOf(err, 'The reveal plan could not be loaded.') });
     }
-  }, [api, base]);
+  }, [api, base, seasonQuery]);
   useEffect(() => { load(); }, [load]);
 
   const run = async (fn, failed, done) => {

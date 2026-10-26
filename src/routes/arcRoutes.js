@@ -25,11 +25,22 @@
  * PUT    /world/:showId/season/slots/:slotId/intention       — Edit a future slot's intention (A3)
  * POST   /world/:showId/season/slots/:slotId/intention/draft — Auto-draft it with AI (A3, Q12; a started draft slot from its episode, A9 as changed)
  * GET    /world/:showId/season/event/:eventId — The Event Package's Season Context (A4), read-only
- * GET    /world/:showId/season/threads           — Story threads, with drafts from seeds (Q9)
+ * GET    /world/:showId/season/threads           — Story threads, with drafts from seeds (Q9); ?season=N the threads that season touched
  * POST   /world/:showId/season/threads           — Create and name a thread (Q9)
  * PUT    /world/:showId/season/threads/:threadId — Rename or re-describe it
  * POST   /world/:showId/season/threads/:threadId/close — Close it (only Evoni closes, Q9)
  * POST   /world/:showId/season/threads/:threadId/reopen — Reopen a closed one, keeping its history
+ * GET    /world/:showId/season/threads/inbox — The one threads list (Evoni, 2026-10-26; services/threadInbox):
+ *                                        threads with where each came from, notes, slots and plan; the
+ *                                        suggestions still waiting; what was left out; ?season=N that season's
+ * POST   /world/:showId/season/threads/inbox/seeds — Read the event seeds not read yet (one AI check per batch)
+ * POST   /world/:showId/season/threads/seen — { thread_ids }: Evoni looked at them ("New" and its Undo end)
+ * POST   /world/:showId/season/threads/suggestions/decide — { source: short_story|feed, id, index?, action:
+ *                                        keep|merge|drop, into? }: a waiting suggestion
+ * POST   /world/:showId/season/threads/:threadId/undo — Undo a thread that opened by itself (soft delete)
+ * POST   /world/:showId/season/threads/:threadId/restore — Keep a left-out or undone thread after all
+ * POST   /world/:showId/season/threads/:threadId/notes/:noteKey/undo — Undo a note added by itself
+ * PUT    /world/:showId/season/threads/:threadId/plan — { carry_slot_id, payoff_slot_id }: the thread's plan
  * GET    /world/:showId/season/insights — Planning Insights: plan beside result, money from the ledger (A8, Q13, Q15); ?season=N another season's
  * GET    /world/:showId/season/proposals — The open season-arc proposal from the feed, and the last decided (Evoni, 2026-10-17)
  * POST   /world/:showId/season/proposals — Ask for one now (one AI call), even if the feed has not moved
@@ -37,12 +48,12 @@
  * POST   /world/:showId/season/proposals/:proposalId/dismiss — Dismiss it
  * GET    /world/:showId/season/reveals — The reveal plan (stage E): the season's slots, the show's kept
  *                                         secrets, which secret is hinted or revealed in which slot, and
- *                                         what is wrong with the plan (services/seasonRevealPlan)
+ *                                         what is wrong with the plan (services/seasonRevealPlan); ?season=N another season's
  * PUT    /world/:showId/season/reveals — { slot_id, secret_id, intent: hint|reveal, note? }: add or change one
  * DELETE /world/:showId/season/reveals/:revealId — Take it out of the plan
  * GET    /world/:showId/season/twists — Season twists (2026-10-23): each planted in one slot and paid off in a
  *                                        later one, the slots, threads and characters to link, and what is
- *                                        wrong with the list (services/seasonTwists)
+ *                                        wrong with the list (services/seasonTwists); ?season=N another season's
  * PUT    /world/:showId/season/twists — { title, description?, plant_slot_id, payoff_slot_id?, status?,
  *                                        thread_ids?, character_ids?, note? }: add one (or change it, with id)
  * PUT    /world/:showId/season/twists/:twistId — Change one
@@ -53,7 +64,10 @@
  * POST   /world/:showId/season/twists/:twistId/reopen   — Undo it: the plant is open again
  * GET    /world/:showId/season/needs — The relationships the season needs (planner PR 3, 2026-10-24): each
  *                                       twist's, thread's and slot purpose's pairs, the slot each is needed by,
- *                                       and whether it is there, a seed only, or missing (services/seasonNeeds)
+ *                                       and whether it is there, a seed only, or missing (services/seasonNeeds); ?season=N another season's
+ * GET    /world/:showId/season/cast — Who's in the season (2026-10-26): who appears in which slot (event hosts and
+ *                                      guests, approved story records) and the relationship changes per part
+ *                                      (services/seasonCast); ?season=N another season's
  * GET    /world/:showId/season/knows — What the season's AI reads of the story so far: the latest approved
  *                                       What changed record and the open follow-ups
  * GET    /world/:showId/season/slots/:slotId/notes — The slot's twists (plant, payoff) and reveals, for its panel
@@ -62,12 +76,30 @@
  *                                             its projection, the parts nothing moves it in, the slots' chips;
  *                                             ?event_id= adds what that event moves (services/seasonGoalCoverage)
  * GET    /world/:showId/season/goals/:goalId/events — "Find events": the events that move the goal first, placed or not
- * PUT    /world/:showId/season/events/:eventId/goals/:goalId/pin — Pin the goal to the event (a pin always counts)
+ * PUT    /world/:showId/season/events/:eventId/goals/:goalId/pin — Pin the goal to the event (a pin always counts);
+ *                                             409 MAIN_GOAL_TAKEN when the event is another goal's main event, ?move=1 moves it
  * DELETE /world/:showId/season/events/:eventId/goals/:goalId/pin — Unpin it
  * GET    /episodes/:episodeId/season-twists — The twists this episode plants and pays off (the Script tab)
  * POST   /episodes/:episodeId/season-twists/:twistId/mark — { as: planted|paid_off, undo? }: Evoni marks it done here, or takes the mark back
  * POST   /episodes/:episodeId/season-plants/suggest — "Suggest plants from this script": one Haiku call reads the
  *                                                  episode's script and drafts its plants; nothing saved (Evoni keeps each)
+ * GET    /world/:showId/season/wrap-up — The season wrap-up (2026-10-26): the plain recap (goals and the events that
+ *                                       moved them, best episodes, the season's money, open threads and twists) and
+ *                                       the saved wrap-up; ?season=N another season's (services/seasonWrapUp)
+ * POST   /world/:showId/season/wrap-up/draft — "Write the wrap-up": one AI call drafts it from the plain recap; nothing saved
+ * PUT    /world/:showId/season/wrap-up — { text }: save Evoni's edited wrap-up (shows.metadata.season_wrapups)
+ *
+ * The Season page's round 3 AI buttons (services/seasonAiHelpers; Evoni, 2026-10-26). Each is one AI call
+ * Evoni presses for, logged and budget-gated by aiCostTracker; nothing is saved until she accepts:
+ * POST   /world/:showId/season/ai/next-step — "What should I do next?" from { items } (the Needs attention rows)
+ * POST   /season-ai/focus                   — "Focus for today" from { seasons: [{ show, season_number, title, items }] }
+ * POST   /world/:showId/season/ai/arc-suggestions — Arc suggestions from the Cast tab's data; ?season=N another season's
+ * POST   /world/:showId/season/ai/arc-suggestions/accept — Accept one ({ kind: purpose|twist, ... }); no AI call
+ * POST   /world/:showId/season/ai/carried — What a past season (?season=N) carries into the next: continue, resolve or drop
+ * POST   /world/:showId/season/ai/carried/apply — Apply the ticked rows ({ decisions }); no AI call; never deletes
+ * POST   /world/:showId/season/ai/pitch     — Draft the two-line season pitch; ?season=N another season's
+ * GET    /world/:showId/season/pitch        — The saved pitch (shows.metadata.season_pitches[<arc id>]); ?season=N
+ * PUT    /world/:showId/season/pitch        — Save it ({ text }; empty clears it); ?season=N
  *
  * Removed with no caller (planner PR 4, 2026-10-24): GET /world/:showId/arc/context
  * (getArcContext stays: the feed and the script writer call it directly) and
@@ -88,7 +120,10 @@ const { aiRateLimiter } = require('../middleware/aiRateLimiter');
  * ?season=N (the Season page's season switcher, 2026-10-25): that season's
  * arc id, of this show only; null when absent. Sends 400 for a value that is
  * not a season number and 404 when the show has no such season, returning
- * undefined so the route stops.
+ * undefined so the route stops. The roadmap and insights read it; since
+ * 2026-10-26 the Story and Secrets reads do too (threads, twists, the reveal
+ * plan, the needs, the cast; Evoni: they "always show the season in progress
+ * even when a past season (e.g. Season 1) is picked").
  */
 async function seasonArcId(models, req, res) {
   const raw = req.query.season;
@@ -335,7 +370,7 @@ function sendSlotError(res, err, label) {
   // A refusal (409, 400 …) is expected; it is logged as a warning, never dropped.
   if (err.status && err.code) {
     console.warn(`[ArcRoutes] ${label} refused (${err.code}):`, err.message);
-    return res.status(err.status).json({ error: err.message, code: err.code });
+    return res.status(err.status).json({ error: err.message, code: err.code, ...(err.details || {}) });
   }
   console.error(`[ArcRoutes] ${label} error:`, err);
   return res.status(500).json({ error: err.message });
@@ -427,9 +462,26 @@ router.get('/world/:showId/season/needs', requireAuth, async (req, res) => {
   try {
     const models = require('../models');
     const { getNeeds } = require('../services/seasonNeeds');
-    return res.json({ success: true, ...(await getNeeds(models.sequelize, req.params.showId)) });
+    const arcId = await seasonArcId(models, req, res);
+    if (arcId === undefined) return undefined;
+    return res.json({ success: true, ...(await getNeeds(models.sequelize, req.params.showId, { arcId })) });
   } catch (err) {
     return sendSlotError(res, err, 'season needs');
+  }
+});
+
+// GET /world/:showId/season/cast — who appears where and what changed between them, read-only
+router.get('/world/:showId/season/cast', requireAuth, async (req, res) => {
+  if (badShow(req, res)) return undefined;
+  try {
+    const models = require('../models');
+    const { seasonCast } = require('../services/seasonCast');
+    const arcId = await seasonArcId(models, req, res);
+    if (arcId === undefined) return undefined;
+    return res.json({ success: true, ...(await seasonCast(models.sequelize, req.params.showId, { arcId })) });
+  } catch (err) {
+    console.error('[ArcRoutes] season cast error:', err);
+    return res.status(500).json({ error: err.message });
   }
 });
 
@@ -512,7 +564,9 @@ const pinRoute = (on) => async (req, res) => {
   try {
     const models = require('../models');
     const { setPin } = require('../services/seasonGoalCoverage');
-    return res.json({ success: true, ...(await setPin(models.sequelize, req.params.showId, req.params.eventId, req.params.goalId, on)) });
+    // ?move=1 (or { move: true }) moves the event from the goal it is already the main event for.
+    const move = ['1', 'true'].includes(String(req.query.move ?? '')) || req.body?.move === true;
+    return res.json({ success: true, ...(await setPin(models.sequelize, req.params.showId, req.params.eventId, req.params.goalId, on, { move })) });
   } catch (err) {
     return sendSlotError(res, err, on ? 'pin goal' : 'unpin goal');
   }
@@ -527,8 +581,10 @@ router.get('/world/:showId/season/threads', requireAuth, async (req, res) => {
   try {
     const models = require('../models');
     const { listThreads, seedDrafts } = require('../services/storyThreadService');
-    const threads = await listThreads(models.sequelize, req.params.showId);
-    const drafts = await seedDrafts(models.sequelize, req.params.showId);
+    const arcId = await seasonArcId(models, req, res);
+    if (arcId === undefined) return undefined;
+    const threads = await listThreads(models.sequelize, req.params.showId, { arcId });
+    const drafts = await seedDrafts(models.sequelize, req.params.showId, { arcId });
     return res.json({ success: true, threads, drafts });
   } catch (err) {
     return sendSlotError(res, err, 'list threads');
@@ -582,6 +638,109 @@ router.post('/world/:showId/season/threads/:threadId/reopen', requireAuth, async
     return res.json({ success: true });
   } catch (err) {
     return sendSlotError(res, err, 'reopen thread');
+  }
+});
+
+// ─── The one threads list; threads open by themselves (Evoni, 2026-10-26:
+// "Let's let them open themselves on new threads and build the threads
+// list"). services/threadInbox. Closing stays the close route above. ───
+
+const inbox = () => require('../services/threadInbox');
+const badThread = (req, res) => {
+  if (SHOW_UUID.test(String(req.params.threadId || ''))) return false;
+  res.status(400).json({ error: 'threadId must be a UUID' });
+  return true;
+};
+
+// GET /world/:showId/season/threads/inbox — the list, read-only (?season=N that season's)
+router.get('/world/:showId/season/threads/inbox', requireAuth, async (req, res) => {
+  if (badShow(req, res)) return undefined;
+  try {
+    const models = require('../models');
+    const arcId = await seasonArcId(models, req, res);
+    if (arcId === undefined) return undefined;
+    return res.json({ success: true, ...(await inbox().listInbox(models.sequelize, req.params.showId, { arcId })) });
+  } catch (err) {
+    return sendSlotError(res, err, 'threads list');
+  }
+});
+
+// POST /world/:showId/season/threads/inbox/seeds — read the event seeds now (an AI check per batch)
+router.post('/world/:showId/season/threads/inbox/seeds', requireAuth, aiRateLimiter, async (req, res) => {
+  if (badShow(req, res)) return undefined;
+  try {
+    const models = require('../models');
+    const read = await inbox().openSeeds(models.sequelize, req.params.showId);
+    if (read.skipped) return res.status(409).json({ error: 'The threads list needs its migration first.', code: 'THREAD_INBOX_NEEDS_MIGRATION' });
+    return res.json({ success: true, read });
+  } catch (err) {
+    return sendSlotError(res, err, 'read seeds');
+  }
+});
+
+// POST /world/:showId/season/threads/seen — { thread_ids }
+router.post('/world/:showId/season/threads/seen', requireAuth, async (req, res) => {
+  if (badShow(req, res)) return undefined;
+  try {
+    const models = require('../models');
+    return res.json({ success: true, seen: await inbox().markSeen(models.sequelize, req.params.showId, req.body?.thread_ids) });
+  } catch (err) {
+    return sendSlotError(res, err, 'mark threads seen');
+  }
+});
+
+// POST /world/:showId/season/threads/suggestions/decide — Keep / Merge into… / Drop
+router.post('/world/:showId/season/threads/suggestions/decide', requireAuth, async (req, res) => {
+  if (badShow(req, res)) return undefined;
+  try {
+    const models = require('../models');
+    const decided = await inbox().decideSuggestion(models.sequelize, req.params.showId, req.body || {}, { by: decidedBy(req) });
+    return res.json({ success: true, ...decided });
+  } catch (err) {
+    // storyCanon's refusals carry a status but no code.
+    if (err.status && !err.code && err.name === 'CanonError') {
+      console.warn('[ArcRoutes] decide suggestion refused:', err.message);
+      return res.status(err.status).json({ error: err.message });
+    }
+    return sendSlotError(res, err, 'decide suggestion');
+  }
+});
+
+// POST /world/:showId/season/threads/:threadId/undo|restore — a self-opened thread
+for (const [path, fn, label] of [['undo', 'undoThread', 'undo thread'], ['restore', 'restoreThread', 'restore thread']]) {
+  router.post(`/world/:showId/season/threads/:threadId/${path}`, requireAuth, async (req, res) => {
+    if (badShow(req, res) || badThread(req, res)) return undefined;
+    try {
+      const models = require('../models');
+      await inbox()[fn](models.sequelize, req.params.showId, req.params.threadId);
+      return res.json({ success: true });
+    } catch (err) {
+      return sendSlotError(res, err, label);
+    }
+  });
+}
+
+// POST /world/:showId/season/threads/:threadId/notes/:noteKey/undo — a note added by itself
+router.post('/world/:showId/season/threads/:threadId/notes/:noteKey/undo', requireAuth, async (req, res) => {
+  if (badShow(req, res) || badThread(req, res)) return undefined;
+  try {
+    const models = require('../models');
+    await inbox().undoNote(models.sequelize, req.params.showId, req.params.threadId, String(req.params.noteKey).slice(0, 64));
+    return res.json({ success: true });
+  } catch (err) {
+    return sendSlotError(res, err, 'undo note');
+  }
+});
+
+// PUT /world/:showId/season/threads/:threadId/plan — the slots that carry it on and pay it off
+router.put('/world/:showId/season/threads/:threadId/plan', requireAuth, async (req, res) => {
+  if (badShow(req, res) || badThread(req, res)) return undefined;
+  try {
+    const models = require('../models');
+    await inbox().setPlan(models.sequelize, req.params.showId, req.params.threadId, req.body || {});
+    return res.json({ success: true });
+  } catch (err) {
+    return sendSlotError(res, err, 'thread plan');
   }
 });
 
@@ -654,7 +813,9 @@ router.get('/world/:showId/season/reveals', requireAuth, async (req, res) => {
   try {
     const models = require('../models');
     const { getPlan } = require('../services/seasonRevealPlan');
-    return res.json({ success: true, ...(await getPlan(models.sequelize, req.params.showId)) });
+    const arcId = await seasonArcId(models, req, res);
+    if (arcId === undefined) return undefined;
+    return res.json({ success: true, ...(await getPlan(models.sequelize, req.params.showId, { arcId })) });
   } catch (err) {
     return sendPlanError(res, err, 'reveal plan');
   }
@@ -699,7 +860,9 @@ router.get('/world/:showId/season/twists', requireAuth, async (req, res) => {
   try {
     const models = require('../models');
     const { getTwists } = require('../services/seasonTwists');
-    return res.json({ success: true, ...(await getTwists(models.sequelize, req.params.showId)) });
+    const arcId = await seasonArcId(models, req, res);
+    if (arcId === undefined) return undefined;
+    return res.json({ success: true, ...(await getTwists(models.sequelize, req.params.showId, { arcId })) });
   } catch (err) {
     return sendTwistError(res, err, 'season twists');
   }
@@ -818,6 +981,197 @@ router.post('/episodes/:episodeId/season-plants/suggest', requireAuth, aiRateLim
     return res.json({ success: true, ...(await suggestPlantsFromScript(models.sequelize, req.params.episodeId)) });
   } catch (err) {
     return sendTwistError(res, err, 'suggest plants');
+  }
+});
+
+// ── The Season page's round 3 AI buttons (services/seasonAiHelpers; Evoni, 2026-10-26) ──
+// Each AI route is one call Evoni presses for; nothing is saved by it.
+
+const sendAiError = (res, err, label) => {
+  if (err && err.status && err.status < 500) {
+    console.warn(`[ArcRoutes] ${label} refused:`, err.message);
+    return res.status(err.status).json({ error: err.message, code: err.code });
+  }
+  if (err && err.status === 502) {
+    console.error(`[ArcRoutes] ${label} failed:`, err.message);
+    return res.status(502).json({ error: err.message, code: err.code });
+  }
+  console.error(`[ArcRoutes] ${label} error:`, err);
+  return res.status(500).json({ error: err?.message || 'Something went wrong' });
+};
+
+// POST /world/:showId/season/ai/next-step — "What should I do next?" (the health line)
+router.post('/world/:showId/season/ai/next-step', requireAuth, aiRateLimiter, async (req, res) => {
+  if (badShow(req, res)) return undefined;
+  try {
+    const models = require('../models');
+    const { nextStep } = require('../services/seasonAiHelpers');
+    return res.json({ success: true, ...(await nextStep(models.sequelize, req.params.showId, { items: req.body?.items })) });
+  } catch (err) {
+    return sendAiError(res, err, 'next step');
+  }
+});
+
+// POST /season-ai/focus — "Focus for today" (the daily update, every show's season in progress)
+router.post('/season-ai/focus', requireAuth, aiRateLimiter, async (req, res) => {
+  try {
+    const { focusToday } = require('../services/seasonAiHelpers');
+    return res.json({ success: true, ...(await focusToday({ seasons: req.body?.seasons })) });
+  } catch (err) {
+    return sendAiError(res, err, 'daily focus');
+  }
+});
+
+// POST /world/:showId/season/ai/arc-suggestions — Arc suggestions (the Cast tab)
+router.post('/world/:showId/season/ai/arc-suggestions', requireAuth, aiRateLimiter, async (req, res) => {
+  if (badShow(req, res)) return undefined;
+  try {
+    const models = require('../models');
+    const { arcSuggestions } = require('../services/seasonAiHelpers');
+    const arcId = await seasonArcId(models, req, res);
+    if (arcId === undefined) return undefined;
+    return res.json({ success: true, ...(await arcSuggestions(models.sequelize, req.params.showId, { arcId })) });
+  } catch (err) {
+    return sendAiError(res, err, 'arc suggestions');
+  }
+});
+
+// POST /world/:showId/season/ai/arc-suggestions/accept — Accept one suggestion (no AI call)
+router.post('/world/:showId/season/ai/arc-suggestions/accept', requireAuth, async (req, res) => {
+  if (badShow(req, res)) return undefined;
+  try {
+    const models = require('../models');
+    const { applyArcSuggestion } = require('../services/seasonAiHelpers');
+    return res.json({ success: true, ...(await applyArcSuggestion(models.sequelize, req.params.showId, req.body || {}, { by: decidedBy(req) })) });
+  } catch (err) {
+    return sendAiError(res, err, 'accept arc suggestion');
+  }
+});
+
+// POST /world/:showId/season/ai/carried — what a past season carries into the next
+router.post('/world/:showId/season/ai/carried', requireAuth, aiRateLimiter, async (req, res) => {
+  if (badShow(req, res)) return undefined;
+  try {
+    const models = require('../models');
+    const { carriedForward } = require('../services/seasonAiHelpers');
+    const arcId = await seasonArcId(models, req, res);
+    if (arcId === undefined) return undefined;
+    return res.json({ success: true, ...(await carriedForward(models.sequelize, req.params.showId, { arcId })) });
+  } catch (err) {
+    return sendAiError(res, err, 'carried forward');
+  }
+});
+
+// POST /world/:showId/season/ai/carried/apply — apply only the ticked rows (no AI call)
+router.post('/world/:showId/season/ai/carried/apply', requireAuth, async (req, res) => {
+  if (badShow(req, res)) return undefined;
+  try {
+    const models = require('../models');
+    const { applyCarried } = require('../services/seasonAiHelpers');
+    const arcId = await seasonArcId(models, req, res);
+    if (arcId === undefined) return undefined;
+    const result = await applyCarried(models.sequelize, req.params.showId, { arcId, decisions: req.body?.decisions }, { by: decidedBy(req) });
+    return res.json({ success: true, ...result });
+  } catch (err) {
+    return sendAiError(res, err, 'apply carried');
+  }
+});
+
+// POST /world/:showId/season/ai/pitch — draft the two-line pitch; nothing saved
+router.post('/world/:showId/season/ai/pitch', requireAuth, aiRateLimiter, async (req, res) => {
+  if (badShow(req, res)) return undefined;
+  try {
+    const models = require('../models');
+    const { draftPitch } = require('../services/seasonAiHelpers');
+    const arcId = await seasonArcId(models, req, res);
+    if (arcId === undefined) return undefined;
+    return res.json({ success: true, ...(await draftPitch(models.sequelize, req.params.showId, { arcId })) });
+  } catch (err) {
+    return sendAiError(res, err, 'draft pitch');
+  }
+});
+
+// GET /world/:showId/season/pitch — the saved pitch
+router.get('/world/:showId/season/pitch', requireAuth, async (req, res) => {
+  if (badShow(req, res)) return undefined;
+  try {
+    const models = require('../models');
+    const { getPitch } = require('../services/seasonAiHelpers');
+    const arcId = await seasonArcId(models, req, res);
+    if (arcId === undefined) return undefined;
+    return res.json({ success: true, ...(await getPitch(models.sequelize, req.params.showId, { arcId })) });
+  } catch (err) {
+    return sendAiError(res, err, 'read pitch');
+  }
+});
+
+// PUT /world/:showId/season/pitch — save Evoni's pitch ({ text }; empty clears it)
+router.put('/world/:showId/season/pitch', requireAuth, async (req, res) => {
+  if (badShow(req, res)) return undefined;
+  try {
+    const models = require('../models');
+    const { savePitch } = require('../services/seasonAiHelpers');
+    const arcId = await seasonArcId(models, req, res);
+    if (arcId === undefined) return undefined;
+    return res.json({ success: true, ...(await savePitch(models.sequelize, req.params.showId, { arcId, text: req.body?.text, savedBy: decidedBy(req) })) });
+  } catch (err) {
+    return sendAiError(res, err, 'save pitch');
+  }
+});
+
+// ─── The season wrap-up (Evoni, 2026-10-26: Season page round 3) ───────────
+// The Results tab's recap of the season shown (?season=N, else the one in
+// progress, else the latest): plain data (services/seasonWrapUp), one AI
+// draft from that recap, and Evoni's edited text, saved only on Save.
+
+function sendWrapUpError(res, err, label) {
+  if (err.status && err.code) {
+    console.warn(`[ArcRoutes] ${label} refused (${err.code}):`, err.message);
+    return res.status(err.status).json({ error: err.message, code: err.code });
+  }
+  console.error(`[ArcRoutes] ${label} error:`, err);
+  return res.status(500).json({ error: err.message });
+}
+
+// GET /world/:showId/season/wrap-up — the plain recap and the saved wrap-up, read-only
+router.get('/world/:showId/season/wrap-up', requireAuth, async (req, res) => {
+  if (badShow(req, res)) return undefined;
+  try {
+    const models = require('../models');
+    const arcId = await seasonArcId(models, req, res);
+    if (arcId === undefined) return undefined;
+    const { seasonWrapUp } = require('../services/seasonWrapUp');
+    return res.json({ success: true, ...(await seasonWrapUp(models.sequelize, req.params.showId, { arcId })) });
+  } catch (err) {
+    return sendWrapUpError(res, err, 'season wrap-up');
+  }
+});
+
+// POST /world/:showId/season/wrap-up/draft — "Write the wrap-up": one AI call from the plain recap; nothing saved
+router.post('/world/:showId/season/wrap-up/draft', requireAuth, aiRateLimiter, async (req, res) => {
+  if (badShow(req, res)) return undefined;
+  try {
+    const models = require('../models');
+    const arcId = await seasonArcId(models, req, res);
+    if (arcId === undefined) return undefined;
+    const { draftWrapUp } = require('../services/seasonWrapUp');
+    return res.json({ success: true, ...(await draftWrapUp(models.sequelize, req.params.showId, { arcId })) });
+  } catch (err) {
+    return sendWrapUpError(res, err, 'season wrap-up draft');
+  }
+});
+
+// PUT /world/:showId/season/wrap-up — { text }: save Evoni's wrap-up for the season (empty clears it)
+router.put('/world/:showId/season/wrap-up', requireAuth, async (req, res) => {
+  if (badShow(req, res)) return undefined;
+  try {
+    const models = require('../models');
+    const arcId = await seasonArcId(models, req, res);
+    if (arcId === undefined) return undefined;
+    const { saveWrapUp } = require('../services/seasonWrapUp');
+    return res.json({ success: true, ...(await saveWrapUp(models.sequelize, req.params.showId, { arcId, text: req.body?.text, savedBy: decidedBy(req) })) });
+  } catch (err) {
+    return sendWrapUpError(res, err, 'save season wrap-up');
   }
 });
 

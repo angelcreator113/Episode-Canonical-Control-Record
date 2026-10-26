@@ -90,3 +90,27 @@
 .cg-log-text { flex: 1; min-width: 0; font-size: 13px; color: var(--sp-ink); }
 .cg-log-text .cg-debt-meta { color: var(--sp-muted); }
 .cg-phase-goals .szn-chip, .cg-sug-head .szn-chip { white-space: normal; }
+
+/* Goal ladders (Evoni, 2026-10-25): one card per ladder, the rung being
+   worked on, the rungs up next folded, background goals as compact rows. */
+.cg-ladder-name { margin: 0 0 2px; font-size: 12px; font-weight: 700; letter-spacing: 0.03em; text-transform: uppercase; color: var(--sp-muted); }
+.cg-season-goal { display: flex; align-items: center; gap: 6px; margin: 8px 0 0; font-size: 13px; font-weight: 700; color: var(--sp-pink-deep); }
+.cg-make-primary { display: inline-flex; min-height: 32px; align-items: center; font-size: 13px; }
+.cg-ladder-proj { margin: 8px 0 0; padding: 6px 10px; border-radius: 10px; background: var(--sp-bg); font-size: 13px; color: var(--sp-ink); overflow-wrap: anywhere; }
+.cg-upnext { margin-top: 10px; padding-top: 8px; border-top: 1px dashed var(--sp-line); font-size: 13px; color: var(--sp-muted); }
+.cg-upnext > summary { min-height: 32px; padding: 4px 0; cursor: pointer; overflow-wrap: anywhere; }
+.cg-upnext-label { font-weight: 700; color: var(--sp-ink); }
+.cg-upnext-list { display: grid; gap: 2px; margin: 6px 0 0; padding: 0; list-style: none; }
+.cg-upnext-list li { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; min-height: 44px; }
+.cg-upnext-title { flex: 1 1 120px; min-width: 0; font-weight: 700; color: var(--sp-ink); overflow-wrap: anywhere; }
+.cg-star { margin-left: 4px; color: var(--sp-pink-deep); vertical-align: -1px; }
+.cg-upnext-note { margin: 4px 0 0; font-size: 12px; }
+.cg-bg-list { display: grid; gap: 0; margin: 0; padding: 4px 16px; list-style: none; }
+.cg-bg { display: flex; align-items: center; gap: 8px; min-height: 52px; padding: 6px 0; border-bottom: 1px solid var(--sp-line); }
+.cg-bg:last-child { border-bottom: none; }
+.cg-bg-icon { font-size: 18px; }
+.cg-bg-text { display: grid; flex: 1; gap: 2px; min-width: 0; }
+.cg-bg-title { font-size: 14px; font-weight: 700; color: var(--sp-ink); overflow-wrap: anywhere; }
+.cg-bg-meta { font-size: 12px; color: var(--sp-muted); overflow-wrap: anywhere; }
+.cg-bg-warn { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 700; color: var(--sp-gold-text); }
+.cg-bg.is-off .cg-bg-title { color: var(--sp-gold-text); }

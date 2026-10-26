@@ -95,6 +95,18 @@ describe('EpisodeStatsPanel', () => {
     expect(screen.getByTestId('eot-stats-download-1080p').textContent).toContain('1920 × 220');
   });
 
+  test('stress: lower is better, in its trend colour, and the note says which way it went', async () => {
+    const STRESS = { id: 's', stat: 'stress', x: 70, y: 20, w: 20, h: 60, icon: null, color: '#7BD389', trend: 'better', text: '6/10 → 4/10' };
+    vi.mocked(api.get).mockImplementation((url) => (url.includes('/stats-panel/episode/')
+      ? Promise.resolve({ data: { data: { panel: { url: 'https://x/art.png' }, spots: [{ ...SPOT, text: '700 → 600' }, STRESS] } } })
+      : Promise.resolve({ data: { data: [] } })));
+    renderPanel();
+    const box = await screen.findByTestId('stats-panel-spot-s');
+    expect(box.textContent).toBe('6/10 → 4/10');
+    expect(box.style.color).toBe('rgb(123, 211, 137)');
+    expect(screen.getByTestId('eot-stats-stress-note').textContent).toBe('Stress: lower is better. It fell this episode (green).');
+  });
+
   test('without a panel it says where to set one up', async () => {
     vi.mocked(api.get).mockImplementation((url) => (url.includes('/stats-panel/')
       ? Promise.reject(Object.assign(new Error('no'), { response: { data: { code: 'NO_PANEL', error: 'Set up the stats panel first' } } }))

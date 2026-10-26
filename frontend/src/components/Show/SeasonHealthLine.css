@@ -1,0 +1,26 @@
+/* The Season page's health line (SeasonHealthLine, 2026-10-26), on the
+   hero's dark shade: white text, a chip per tone in the page's --sp-*
+   colours (each pair as SeasonPage.css checks them: white on pink-deep,
+   purple-fill and green; plum on gold). Wraps on a phone. */
+.shl { margin: 12px 0 0; min-width: 0; }
+.shl-line {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin: 0;
+  font-size: 14px; font-weight: 600; line-height: 1.5; color: var(--sp-white, #fff);
+}
+.shl-tone {
+  display: inline-flex; align-items: center; min-height: 28px; padding: 2px 12px; border-radius: 999px;
+  font-size: 13px; font-weight: 700; background: var(--sp-green, #1F6B45); color: var(--sp-white, #fff);
+}
+.shl-tone.is-attention { background: var(--sp-gold, #E8B84A); color: var(--sp-ink, #3A1236); }
+.shl-tone.is-behind { background: var(--sp-pink-deep, #A3155E); }
+.shl-tone.is-complete { background: var(--sp-purple-fill, #7B3FA0); }
+/* Each count is its own soft pill, so a wrapped line never starts with a
+   stray "·" separator (seen at 375px). */
+.shl-piece {
+  display: inline-flex; align-items: center; min-height: 28px; padding: 2px 10px; border-radius: 999px;
+  background: rgba(255, 255, 255, .14); overflow-wrap: anywhere;
+}
+.shl-ai-slot:empty { display: none; }
+@media (max-width: 640px) {
+  .shl-line { font-size: 13px; }
+}

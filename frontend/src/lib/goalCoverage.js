@@ -5,9 +5,10 @@
  * and the pin routes. The hook reads it; the helpers word it.
  *
  *   useGoalCoverage({ api, showId, eventId, reloadKey })  → { data, error, reload }
- *   pinGoal(api, showId, eventId, goalId, on)              PUT (on) / DELETE (off) …/pin
+ *   pinGoal(api, showId, eventId, goalId, on, { move })    PUT (on) / DELETE (off) …/pin; move=1 moves
+ *                        the event from the goal it is already the main event for
  *   projectionText(p)    "Coins: 600 + 2,400 = 3,000 of 3,000"
- *   partGapText(part)    "nothing moves Save coins, Earn brand trust +1 more"
+ *   partGapText(part)    "nothing moves Save coins, Earn brand trust" (at most three names)
  *   slotGoalsMap(data)   { [slot_id]: [goal] } for the slot cards' "Moves:" chips
  */
 import { useCallback, useEffect, useState } from 'react';
@@ -27,15 +28,27 @@ export function projectionVerdict(p) {
   return p.on_track ? 'On track' : `${n(p.short)} short`;
 }
 
-// How many goal names one part's warning line spells out.
+// How many goal names one part's warning line spells out (Evoni,
+// 2026-10-25: no "+9 more" noise; the server only names goals being worked
+// on of a stat events move, so three is plenty).
 const GAP_NAMES = 3;
 
-/** One part's warning, compact: the first few goal names and how many more. */
-export function partGapText(part) {
-  const gaps = part?.gaps || [];
+/**
+ * One part's warning, compact: at most three goal names. `covered` (a Set
+ * of goal ids, optional) keeps only those, for a coverage read from a
+ * server that still named every goal.
+ */
+export function partGapText(part, covered = null) {
+  const gaps = (part?.gaps || []).filter((g) => !covered || covered.has(String(g.goal_id)));
   if (!gaps.length) return null;
-  const names = gaps.slice(0, GAP_NAMES).map((g) => g.title).join(', ');
-  return `nothing moves ${names}${gaps.length > GAP_NAMES ? ` +${gaps.length - GAP_NAMES} more` : ''}`;
+  return `nothing moves ${gaps.slice(0, GAP_NAMES).map((g) => g.title).join(', ')}`;
+}
+
+/** The goal ids the parts are asked to cover (active rungs of a stat events move); null when the coverage does not say. */
+export function coveredGoalIds(data) {
+  const goals = data?.goals || [];
+  if (!goals.length || !goals.some((g) => 'covered' in g)) return null;
+  return new Set(goals.filter((g) => g.covered).map((g) => String(g.id)));
 }
 
 /** The goals each placed slot's event moves, by slot id. */
@@ -45,9 +58,9 @@ export function slotGoalsMap(data) {
   return out;
 }
 
-export function pinGoal(api, showId, eventId, goalId, on) {
+export function pinGoal(api, showId, eventId, goalId, on, { move = false } = {}) {
   const path = `/api/v1/world/${showId}/season/events/${eventId}/goals/${goalId}/pin`;
-  return on ? api.put(path) : api.delete(path);
+  return on ? api.put(move ? `${path}?move=1` : path) : api.delete(path);
 }
 
 export const errorText = (err) => err?.response?.data?.error || err?.message || 'Something went wrong';

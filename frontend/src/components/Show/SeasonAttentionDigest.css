@@ -1,0 +1,26 @@
+/* The daily update's "The season" (SeasonAttentionDigest, 2026-10-26). The
+   Needs attention list inside it is the Season page's (SeasonAttention.css),
+   which reads the Season page's --sp-* tokens; outside that page they are
+   set here from the app's --lala-* tokens, so the list reads in the daily
+   update's parchment and gold. */
+.sad {
+  --sp-card: var(--lala-surface, #fff);
+  --sp-line: var(--lala-gold-line, #e8dcc0);
+  --sp-bg: var(--lala-parchment, #FAF7F0);
+  --sp-ink: var(--lala-ink, #2C2C2C);
+  --sp-muted: var(--lala-ink-muted, #6b6b6b);
+  --sp-pink-soft: var(--lala-gold-soft, #f6efdc);
+  --sp-pink-deep: var(--lala-danger, #b42318);
+  --sp-purple: var(--lala-lavender-text, #5b4a8a);
+  --sp-gold: var(--lala-gold, #B8962E);
+  --sp-green: var(--lala-teal-dark, #1f6f63);
+  background: var(--lala-surface, #fff); border: 1px solid var(--lala-gold-line, #e8dcc0); border-radius: var(--lala-radius, 14px);
+  padding: 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0;
+}
+.sad-head { margin: 0; font-family: 'Lora', serif; font-size: 20px; color: var(--lala-ink, #2C2C2C); }
+.sad-ai-slot:empty { display: none; }
+.sad-show { min-width: 0; }
+.sad-show .satt { margin-bottom: 0; }
+.sad-name { margin: 0 0 6px; font-size: 13px; font-weight: 700; }
+.sad-link { color: var(--lala-lavender-text, #5b4a8a); overflow-wrap: anywhere; }
+.sad-error { margin: 0; font-size: 13px; color: var(--lala-danger, #b42318); }

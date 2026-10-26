@@ -72,6 +72,10 @@ router.post('/world/:showId/events/:eventId/generate-episode', requireAuth, aiRa
       });
     }
 
+    // The event's seeds open as threads by themselves once they pass the
+    // check (services/threadInbox; Evoni, 2026-10-26). Never awaited.
+    require('../../services/threadInbox').openSeedsLater(models.sequelize, showId);
+
     // Optional: drop in a script skeleton right after the episode lands.
     // Reuses the same skeleton generator as POST /generate-script, just
     // inlined so the creator doesn't need a second click. Failures are
