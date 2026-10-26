@@ -27,6 +27,9 @@
  *   bonus suggestion above the views; each bonus or stand-alone special
  *   after the weekly card it follows; a slot's ⋯ menu makes its event a
  *   two-parter ("E12 · Part 1/2"), undoes it or starts Part 2.
+ *   A full season (every weekly episode has an event placed or started;
+ *   Evoni, 2026-10-26): an unplaced event on Events reads "Will be a
+ *   special", with Make it a special and the way to its page to swap.
  * The Production Plan tab (each placed episode's steps and checklist count)
  * gave way to the Episodes tab, the production board itself (2026-10-25).
  */
@@ -47,7 +50,8 @@ import EventLibrary from './EventLibrary';
 import SeasonWeek from './SeasonWeek';
 import SeasonCalendar from './SeasonCalendar';
 import { packageHref } from '../../lib/eventFlow';
-import { SpecialsBar, SpecialCard } from './SeasonSpecials';
+import { SpecialsBar, SpecialCard, WillBeSpecial } from './SeasonSpecials';
+import { seasonIsFull } from '../../lib/seasonFull';
 import { useSeasonSpecials, specialsAfter, canMakeTwoParter, slotCode } from '../../lib/seasonSpecials';
 
 // The roadmap's view, remembered per browser (the URL's ?view= wins); storage can be blocked.
@@ -349,6 +353,7 @@ export function SeasonEventsTab({ plan, S, api, showId, setToast, episodes, even
     return null;
   }, [roadmap, show, views]);
   const open = controls.openSlots.filter((s) => !s.event);
+  const full = seasonIsFull(roadmap);
   const pick = (key) => {
     rememberShow(key);
     setParams?.((prev) => {
@@ -367,6 +372,10 @@ export function SeasonEventsTab({ plan, S, api, showId, setToast, episodes, even
       // A past season's slots take no new event.
       if (readOnly) return null;
       if (!views.pencillable.has(ev.id)) return <span className="szn-muted" data-testid={`szn-event-nopencil-${ev.id}`}>{ev.status || 'draft'}: not one a slot takes</span>;
+      // Full (every weekly episode has an event placed or started): it will be a special (2026-10-26).
+      if (full) {
+        return <WillBeSpecial api={api} showId={showId} event={ev} ready={Boolean(roadmap.specials_ready)} from={`events:${show}`} onChanged={onChanged} setToast={setToast} />;
+      }
       return (
         <select className="szn-select szn-event-pencil" aria-label={`Pencil ${ev.name} into a slot`} value="" disabled={!open.length}
           data-testid={`szn-event-pencil-${ev.id}`}
@@ -419,7 +428,7 @@ export function SeasonEventsTab({ plan, S, api, showId, setToast, episodes, even
             </button>
           ))}
         </div>
-        <span className="szn-muted" data-testid="szn-events-slots">{slots.filter((s) => s.event).length} of {slots.length} slots have an event</span>
+        <span className="szn-muted" data-testid="szn-events-slots">{slots.filter((s) => s.event).length} of {slots.length} slots have an event{full ? ' · the season is full' : ''}</span>
         {!readOnly && (
           <button type="button" className="szn-btn" onClick={() => setPlacing((p) => !p)} aria-expanded={placing} data-testid="szn-events-place">
             Use events and episodes
@@ -431,7 +440,14 @@ export function SeasonEventsTab({ plan, S, api, showId, setToast, episodes, even
           onSaved={async (text) => { setPlacing(false); if (setToast) setToast(text); await plan.loadArc(); }} />
       )}
       {controls.slotError?.where === 'event' && <p className="szn-error" role="alert">{controls.slotError.text}</p>}
-      {show === 'unplaced' && <p className="szn-muted">Open a slot to see the events ranked by how well they fit it.</p>}
+      {show === 'unplaced' && !full && <p className="szn-muted">Open a slot to see the events ranked by how well they fit it.</p>}
+      {show !== 'in-season' && full && (
+        <p className="szn-muted" data-testid="szn-events-full">
+          The season is full: every weekly episode has an event. A new event will be a special: make it one here (it goes in story
+          order, by its date), or open it to swap it into a weekly episode instead.
+          {!roadmap.specials_ready && ' Special episodes need their migration first, so for now it stays unplaced.'}
+        </p>
+      )}
       {/* An event opened from here comes back to this filter (2026-10-25). */}
       <EventLibrary showId={showId} scope={scope} cardExtra={cardExtra} onChanged={onChanged} data={libraryData} packageFrom={`events:${show}`} />
       <SlotDrawer controls={controls} plan={plan} S={S} api={api} showId={showId} setToast={setToast} episodes={episodes} events={events} readOnly={readOnly} />

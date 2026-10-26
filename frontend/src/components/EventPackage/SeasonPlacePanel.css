@@ -14,3 +14,6 @@
   .epp-hero .esp { grid-column: 1 / -1; padding: 8px 10px; }
   .esp-place-link { min-height: 44px; }
 }
+
+/* A full season's choice (FullSeasonChoice) draws its own box. */
+.esp.is-full { border: none; padding: 0; background: transparent; }
