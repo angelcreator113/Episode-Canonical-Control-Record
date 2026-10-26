@@ -10,6 +10,7 @@ import { scriptInputs, mustCover, scriptPeople, quoteParts, goalTaskFor } from '
 import Beat14Opportunity from './Beat14Opportunity';
 import EpisodeTwistsDue from './EpisodeTwistsDue';
 import EpisodePlantSuggest from './EpisodePlantSuggest';
+import ScriptSelfTalk from './ScriptSelfTalk';
 import { beat14Outcome } from '../../lib/beat14Invitation';
 import { beatState } from '../../lib/beatState';
 import { moveBeat, moveLine, dropIndex, replaceBeat, appendLine, insertLine } from '../../lib/scriptBeatOrder';
@@ -1075,7 +1076,7 @@ function useLineIds(beatId, lines, opRef) {
   return held.current.ids;
 }
 
-function BeatSection({ voice = null, beat, index, beatCount, scenePlan, expanded, onToggle, onApprove, proposal = null, onAcceptProposal, onDiscardProposal, onRetryProposal = null, onEdit, onDeleteLine, onRewrite, rewritingLine, locking, onOpenMap, onMoveBeat, onMoveLine, drag, onRegenerate, regenerating, writing = false, onScreen, onAddMoment, phoneUpAtStart = false, request = null, onRequestDone, people = [], lalaSlots = [], dressCode = '', lineOpRef = null, lineIdsRef = null, onOpenEdit = null, onFocusLater = null, status = 'draft', healthRows = [], hasPhone = false, worn = [], look = [], storyTime = null, onStep = null, prevBeatId = null, nextBeatId = null, onTyped = null, lockEdited = false, drafts = null, aiHold = null, saving = false, duplicate = false }) {
+function BeatSection({ voice = null, beat, index, beatCount, scenePlan, expanded, onToggle, onApprove, proposal = null, onAcceptProposal, onDiscardProposal, onRetryProposal = null, onEdit, onDeleteLine, onRewrite, rewritingLine, locking, onOpenMap, onMoveBeat, onMoveLine, drag, onRegenerate, regenerating, writing = false, onScreen, onAddMoment, phoneUpAtStart = false, request = null, onRequestDone, people = [], lalaSlots = [], dressCode = '', lineOpRef = null, lineIdsRef = null, onOpenEdit = null, onFocusLater = null, status = 'draft', healthRows = [], hasPhone = false, worn = [], look = [], storyTime = null, onStep = null, prevBeatId = null, nextBeatId = null, onTyped = null, lockEdited = false, drafts = null, aiHold = null, saving = false, duplicate = false, extra = null }) {
   const scene = scenePlan?.find(p => p.beat_number === beat.number);
   const cardRef = useRef(null);
   const [picking, setPicking] = useState(false);
@@ -1302,6 +1303,8 @@ function BeatSection({ voice = null, beat, index, beatCount, scenePlan, expanded
         <div className="esp-beat-body">
           {lockEdited && <p className="esp-beat-edited-note" role="note" data-testid={`script-beat-lock-edited-note-${beat.number}`}>This beat is approved, and its words were changed in the Raw editor. Save puts back the approved words; Table read and Export read them too. Unlock the beat to keep the change.</p>}
           {proposal && <ProposalCard proposal={proposal} onAccept={onAcceptProposal} onDiscard={onDiscardProposal} onRetry={onRetryProposal} />}
+          {/* What the tab adds to this beat (Beat 13: her self-talk, 2026-10-25). */}
+          {extra}
           {/* What the beat puts on screen, by its lines (the picture is a
               small thumbnail on the head; the rest is under Details). */}
           {expects && (
@@ -1666,6 +1669,12 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
   // override"): episode_briefs.event_metadata.cover_marks, as the brief was
   // read, then as PUT /episode-brief/:id/cover-marks answers.
   const [coverMarks, setCoverMarks] = useState(null);
+  // Her self-talk at Beat 13 (Evoni, 2026-10-25; ScriptSelfTalk): the tone
+  // saved on the brief (event_metadata.self_talk), as read, then as PUT
+  // /episode-brief/:id/self-talk answers; undefined until it answers.
+  const [selfTalk, setSelfTalk] = useState(undefined);
+  const [selfTalkSaving, setSelfTalkSaving] = useState(null);
+  const [selfTalkFailed, setSelfTalkFailed] = useState(false);
   const [marking, setMarking] = useState(null);
   const [markFailed, setMarkFailed] = useState(null);
   // Read for every episode: a follow-up carried from an earlier one is a
@@ -1730,6 +1739,21 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
     setTickFailed(failed);
     setTicking(null);
     setTickedAll(done);
+  };
+  // Choose her self-talk (a tone, or null to take it back).
+  const chooseSelfTalk = async (tone) => {
+    if (selfTalkSaving) return;
+    setSelfTalkSaving(tone || 'clear');
+    setSelfTalkFailed(false);
+    try {
+      const res = await api.put(`/api/v1/episode-brief/${episodeId}/self-talk`, { tone });
+      setSelfTalk(res?.data?.data?.self_talk?.tone ?? null);
+    } catch (err) {
+      console.error('[EpisodeScript] self-talk save failed:', err);
+      setSelfTalkFailed(true);
+    } finally {
+      setSelfTalkSaving(null);
+    }
   };
   // Mark covered / Not covered / Undo mark: covered true, false, or null (the
   // mark taken back). The beat she means is the item's own when it has one.
@@ -2764,7 +2788,10 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
   // episode is designed to fail, nor once it expired (Script page audit,
   // 2026-10-19; lib/beat14Invitation beat14Outcome).
   // Her marks win (Evoni, 2026-10-24): as saved here, else as the brief was read.
-  const cover = mustCover({ beats, event: source?.event || null, brief, opportunity: beat14Outcome(beat14?.opportunity, brief?.designed_intent || null) === 'invitation' ? beat14.opportunity : null, profiles: [source?.sourceProfile, ...guestProfiles].filter(Boolean), carried: (goalTasks || []).filter((t) => t.follow_up_id), marks: coverMarks ?? brief?.event_metadata?.cover_marks ?? null });
+  const savedTone = selfTalk !== undefined ? selfTalk : (brief?.event_metadata?.self_talk?.tone ?? null);
+  const selfTalkControl = (testId) => <ScriptSelfTalk tone={savedTone} onChoose={chooseSelfTalk} saving={selfTalkSaving} failed={selfTalkFailed} testId={testId} />;
+  const herGoal = brief?.her_goal || null;
+  const cover = mustCover({ herGoal, beats, event: source?.event || null, brief, opportunity: beat14Outcome(beat14?.opportunity, brief?.designed_intent || null) === 'invitation' ? beat14.opportunity : null, profiles: [source?.sourceProfile, ...guestProfiles].filter(Boolean), carried: (goalTasks || []).filter((t) => t.follow_up_id), marks: coverMarks ?? brief?.event_metadata?.cover_marks ?? null });
   // Tick it ticks from the saved script only (Script tab audit 6, 2026-10-24).
   const tickUnsaved = scriptText !== savedScript;
   // The phone starts each beat where the beat before left it, not on the
@@ -3039,6 +3066,14 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
               </li>
             ))}
           </ul>
+          {/* Her goal this episode (Evoni, 2026-10-25; services/episodeMainGoal). */}
+          <p className={`esp-her-goal${herGoal ? ' is-ok' : ''}`} data-testid="script-uses-her-goal">
+            <strong>Her goal</strong>{' '}
+            {herGoal
+              ? <>{herGoal.title}{herGoal.kind === 'main' ? '' : ' (suggested: no goal is pinned to this event)'} · {herGoal.how_close}. She weighs it at Beat 6 and feels it at Beat 13, never as numbers.</>
+              : 'none: no active goal is pinned to this event.'}
+          </p>
+          {selfTalkControl('script-self-talk')}
           <p className="esp-uses-note">Amber items won't block generating; the script fills the gap and flags it.</p>
         </section>
         )}
@@ -3081,7 +3116,18 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
                   return (
                     <li key={c.key} className={c.covered ? 'is-covered' : ''} data-testid={`script-cover-${c.key}`} data-covered={c.covered ? 'true' : 'false'}>
                       {c.covered ? <Check size={14} aria-label="In the script" /> : <Circle size={14} aria-label="Not in the script yet" />}
-                      {goal ? (
+                      {c.key === 'her-goal' ? (
+                        <span className="esp-cover-goal">
+                          <span><strong>{c.source}</strong> {c.label}{c.suggested ? <span className="esp-cover-beat" data-testid="script-cover-her-goal-suggested"> · suggested</span> : null}</span>
+                          {/* Weighed at Beat 6, felt at Beat 13 (lib/episodeScript herGoalItem). */}
+                          <span className="esp-cover-beat" data-testid="script-cover-her-goal-beats">
+                            {c.weighed ? '✓' : '○'} weighed at Beat 6 · {c.felt ? '✓' : '○'} felt at Beat 13
+                          </span>
+                          {byYou}
+                          <span className="esp-cover-actions">{markButton}</span>
+                          {markFailed === c.key && <span className="esp-cover-fail" role="alert">Couldn&apos;t save your mark. Try again.</span>}
+                        </span>
+                      ) : goal ? (
                         <span className="esp-cover-goal">
                           <span><strong>{c.source}</strong> {c.label}</span>
                           {c.beat
@@ -3130,7 +3176,7 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
             <EpisodeTwistsDue key={`twists-${plantsKept}`} episodeId={episodeId} beats={beats} />
             {/* Suggest plants from this script (plant tracker, 2026-10-25; EpisodePlantSuggest): a kept one shows above as planted. */}
             <EpisodePlantSuggest episodeId={episodeId} hasScript={hasScript} onSaved={() => setPlantsKept((n) => n + 1)} />
-            <p className="esp-uses-note">From the event package, the brief, beat 14&apos;s opportunity and what Lala still owes from an earlier episode. A goal is ticked when a beat after the to-do list does it, in its own words (&ldquo;get to know&rdquo;), with its person there by any of their names; the hook, when beat 14 tells it; the opportunity, when beat 14 delivers it as a DM or notification. Mark covered or Not covered when the script says otherwise; your mark wins. Tick it marks the goal done on her to-do list from the saved script; Tick all covered does it for every covered goal and follow-up.</p>
+            <p className="esp-uses-note">From the event package, the brief, beat 14&apos;s opportunity and what Lala still owes from an earlier episode. A goal is ticked when a beat after the to-do list does it, in its own words (&ldquo;get to know&rdquo;), with its person there by any of their names; the hook, when beat 14 tells it; the opportunity, when beat 14 delivers it as a DM or notification. Mark covered or Not covered when the script says otherwise; your mark wins. Tick it marks the goal done on her to-do list from the saved script; Tick all covered does it for every covered goal and follow-up. Her goal (the career goal pinned to the event) is ticked when Beat 6 and Beat 13 both touch it: a word of its name, or of what it measures (money, brands, reputation…).</p>
           </section>
         )}
         {sideOn === 'truth' && hasScript && truth && (
@@ -3276,7 +3322,8 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
               storyTime={open && truth?.eventTimed ? truth.storyTime : null}
               onStep={stepBeat} prevBeatId={index > 0 ? beats[index - 1].id : null} nextBeatId={index < beats.length - 1 ? beats[index + 1].id : null}
               onTyped={trackTyped} lockEdited={beat.approved && lockEdits.has(beat.id)}
-              drafts={draftStore} aiHold={aiHold} saving={saving} duplicate={beat.id !== `beat-${beat.number}`} />;
+              drafts={draftStore} aiHold={aiHold} saving={saving} duplicate={beat.id !== `beat-${beat.number}`}
+              extra={open && beat.number === 13 ? selfTalkControl('script-self-talk-beat') : null} />;
           })}
           {/* Franchise Guard Results */}
           {guardResult && (

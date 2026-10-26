@@ -22,9 +22,9 @@ import { briefState } from './episodeOverview';
 import { dealLabelFor, relationshipGoalsOf } from '../utils/eventTerms';
 import { describeEventOrganizer } from '../utils/eventOrganizer';
 import { beatSpeakers } from './scriptMoments';
-import { beat14Delivers, BEAT } from './beat14Invitation';
+import { beat14Delivers, BEAT, stem } from './beat14Invitation';
 import { goalPerson } from './scriptRuleChecks';
-import { words, goalMatch, hookCovered, coverKey, withMark } from './coverMatch';
+import { words, keyWords, goalMatch, hookCovered, coverKey, withMark } from './coverMatch';
 
 const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
@@ -121,8 +121,63 @@ export function quoteParts(line, mark = null, max = 140) {
   return { before: `${pre}${cut(start, at).replace(/^\s+/, '')}`, mark: cut(at, at + len), after: `${cut(at + len, end).replace(/\s+$/, '')}${post}` };
 }
 
+// ─── HER GOAL THIS EPISODE (Evoni, 2026-10-25) ──────────────────────────────
+//
+// The episode's main career goal (GET /episode-brief/:id her_goal;
+// services/episodeMainGoal): the active goal pinned to the event, else the
+// one it best moves, marked suggested. The writers are told to have Lala
+// weigh it at Beat 6 (Strategic Reaction) and feel it at Beat 13 (Recap
+// Panel), in her own words and never as numbers, so the match is lenient:
+// a beat counts when any of its lines names one of the goal's own key words
+// ("Brand Girl Era": brand, girl) or a word of its stat's theme (a brand
+// trust goal: brand, partner, deal, campaign…). Both beats, covered.
+
+export const GOAL_BEATS = { weigh: 6, feel: 13 };
+const THEMES = {
+  coins: 'money coins coin afford pay paid budget savings save fund cash earn rent price cost broke bank',
+  reputation: 'reputation respect status prestige known invite invited seriously',
+  brand_trust: 'brand brands partner partnership deal campaign sponsor collab trust',
+  influence: 'influence audience voice culture reach followers besties community',
+  followers: 'followers follow fans audience community besties grow',
+  stress: 'breathe calm rest stress pressure overwhelm peace',
+  engagement_rate: 'comments engagement likes views reactions',
+  portfolio_strength: 'portfolio feature shoot editorial',
+  consistency_streak: 'consistent consistency streak',
+};
+
+/** The stems a beat's lines may name the goal by: its own key words and its stat's theme. */
+export function herGoalWords(goal) {
+  if (!goal) return [];
+  const own = keyWords(goal.title || '');
+  const theme = words(THEMES[goal.metric] || '').filter((w) => w.length >= 3).map(stem);
+  return [...new Set([...own, ...theme])];
+}
+
+/** Whether the beat numbered `number` names the goal (herGoalWords). */
+export function beatNamesGoal(beats, number, goal) {
+  const b = (beats || []).find((x) => x?.number === number);
+  if (!b) return false;
+  const want = new Set(herGoalWords(goal));
+  if (!want.size) return false;
+  return (b.lines || []).some((l) => words(l).map(stem).some((w) => want.has(w)));
+}
+
+/** The Her goal must-cover item, or null with no goal: weighed at 6, felt at 13, covered with both. */
+export function herGoalItem(beats, goal) {
+  if (!goal?.id || !goal?.title) return null;
+  const weighed = beatNamesGoal(beats, GOAL_BEATS.weigh, goal);
+  const felt = beatNamesGoal(beats, GOAL_BEATS.feel, goal);
+  return {
+    key: 'her-goal', markKey: `career:${goal.id}`, label: String(goal.title).trim(),
+    source: 'Her goal', suggested: goal.kind !== 'main', howClose: goal.how_close || null,
+    weighed, felt, beat: weighed && felt ? GOAL_BEATS.feel : null,
+    detail: `weighed at Beat ${GOAL_BEATS.weigh}, felt at Beat ${GOAL_BEATS.feel}`,
+  };
+}
+
 /**
- * [{ key, markKey, label, source, beat, covered }] in the order: goals,
+ * [{ key, markKey, label, source, beat, covered }] in the order: her goal
+ * (herGoalItem, when `herGoal` is given), goals,
  * follow-ups carried from an earlier episode (`carried`: the to-do list's
  * goal tasks with a follow_up_id), beat 14's opportunity, the brief's hook.
  * beat is the number of the beat that covers it (lib/coverMatch goalMatch:
@@ -139,8 +194,10 @@ export function quoteParts(line, mark = null, max = 140) {
  * withMark): one marked covered or not covered is so whatever the words
  * say, with `marked` set.
  */
-export function mustCover({ beats = [], event = null, brief = null, opportunity = null, profiles = [], carried = [], marks = null } = {}) {
+export function mustCover({ beats = [], event = null, brief = null, opportunity = null, profiles = [], carried = [], marks = null, herGoal = null } = {}) {
   const items = [];
+  const goalItem = herGoalItem(beats, herGoal);
+  if (goalItem) items.push(goalItem);
   relationshipGoalsOf(event).forEach((g, n) => {
     const label = String(g.label).trim();
     const person = goalPerson(g, event, profiles);

@@ -11,7 +11,7 @@
  * centred inside it. Its image's metadata holds the panel:
  *
  *   metadata.stats_panel = { spots: [{ id, stat, x, y, w, h, icon, color }] }
- *     stat        'coins' | 'reputation' | 'influence' | 'followers'
+ *     stat        'coins' | 'reputation' | 'influence' | 'followers' | 'stress'
  *     x, y, w, h  the number's box, in percent of the master
  *     icon        an overlay's key (an icon she uploaded to Overlays), drawn
  *                 beside the number; null draws none
@@ -28,7 +28,12 @@
  * Reels get a second master later.
  */
 
-const STATS = ['coins', 'reputation', 'influence', 'followers'];
+const STATS = ['coins', 'reputation', 'influence', 'followers', 'stress'];
+// Stats where lower is better (Evoni, 2026-10-25: stress on the stats card).
+const LOWER_IS_BETTER = new Set(['stress']);
+// A stress number with no colour of its own shows which way it went:
+// green when it fell, rose when it rose; white when it held.
+const TREND_COLORS = { better: '#7BD389', worse: '#F28B82' };
 const SPOTS_MAX = 8;
 const SIZES = { '1080p': { width: 1920, height: 220 }, '4k': { width: 3840, height: 440 } };
 const COLOR_RE = /^#[0-9a-fA-F]{6}$/;
@@ -64,7 +69,7 @@ function spotsProblem(spots) {
 
 const fmt = (v) => Number(v).toLocaleString('en-US');
 
-/** One stat's value as text: coins as a count, reputation and influence out of the scale. */
+/** One stat's value as text: coins as a count, reputation, influence and stress out of the scale. */
 function valueText(stats, stat) {
   if (!stats) return '—';
   if (stat === 'followers') return stats.followers ? fmt(stats.followers.count) : '—';
@@ -73,14 +78,31 @@ function valueText(stats, stat) {
   return stat === 'coins' ? fmt(v) : `${fmt(v)}/${stats.scale || 10}`;
 }
 
+/** 'better' | 'worse' | 'same' | null: which way the stat went, lower being better for stress. */
+function trendOf(stat, before, after) {
+  const value = (stats) => (stat === 'followers' ? stats?.followers?.count : stats?.[stat]);
+  const a = Number(value(before));
+  const b = Number(value(after));
+  if (value(before) == null || value(after) == null || !Number.isFinite(a) || !Number.isFinite(b)) return null;
+  if (a === b) return 'same';
+  const up = b > a;
+  return (LOWER_IS_BETTER.has(stat) ? !up : up) ? 'better' : 'worse';
+}
+
 /**
- * Each spot's text, "before → after"; a followers spot is left out while
- * neither side has her numbers. Pure, so the preview and the PNG agree.
+ * Each spot's text, "before → after", and its trend; a followers spot is
+ * left out while neither side has her numbers. A stress spot with no colour
+ * of its own is drawn in its trend's colour (lower is better). Pure, so the
+ * preview and the PNG agree.
  */
 function spotTexts(spots, before, after) {
   return (spots || [])
     .filter((s) => s.stat !== 'followers' || before?.followers || after?.followers)
-    .map((s) => ({ ...s, text: `${valueText(before, s.stat)} → ${valueText(after, s.stat)}` }));
+    .map((s) => {
+      const trend = trendOf(s.stat, before, after);
+      const color = !s.color && LOWER_IS_BETTER.has(s.stat) && TREND_COLORS[trend] ? TREND_COLORS[trend] : s.color;
+      return { ...s, color: color ?? null, trend, text: `${valueText(before, s.stat)} → ${valueText(after, s.stat)}` };
+    });
 }
 
 /** Lala's stats going into episode n and with its changes (storyClock orders). */
@@ -222,6 +244,6 @@ async function renderPng(models, showId, episodeId, size = '1080p') {
 }
 
 module.exports = {
-  STATS, SIZES, SPOTS_MAX, StatsPanelError,
-  spotsProblem, valueText, spotTexts, episodeStats, findPanel, iconUrls, saveSpots, episodePanel, renderPng,
+  STATS, SIZES, SPOTS_MAX, StatsPanelError, LOWER_IS_BETTER, TREND_COLORS,
+  spotsProblem, valueText, trendOf, spotTexts, episodeStats, findPanel, iconUrls, saveSpots, episodePanel, renderPng,
 };

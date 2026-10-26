@@ -74,6 +74,15 @@ export default function EpisodeStatsPanel({ showId, episode }) {
         <>
           <StatsPanelPreview url={data.panel?.url} spots={data.spots} iconUrls={iconUrls} label={`Stats panel for Episode ${episode?.episode_number ?? ''}: ${data.spots.map((s) => s.text).join(', ')}`} />
           <p className="eot-note">Lala&apos;s numbers going into this episode, then with its changes. The audience sees this panel; Lala doesn&apos;t.</p>
+          {/* Stress reads the other way (Evoni, 2026-10-25): lower is better. */}
+          {data.spots.some((s) => s.stat === 'stress') && (
+            <p className="eot-note" data-testid="eot-stats-stress-note">
+              Stress: lower is better{(() => {
+                const t = data.spots.find((s) => s.stat === 'stress')?.trend;
+                return t === 'better' ? '. It fell this episode (green).' : t === 'worse' ? '. It rose this episode (rose red).' : t === 'same' ? '. It held this episode.' : '.';
+              })()}
+            </p>
+          )}
           <div className="spx-downloads">
             {PANEL_SIZES.map((s) => (
               <button key={s.key} type="button" className="spx-btn" onClick={() => download(s.key)} disabled={!!busy} data-testid={`eot-stats-download-${s.key}`}>
