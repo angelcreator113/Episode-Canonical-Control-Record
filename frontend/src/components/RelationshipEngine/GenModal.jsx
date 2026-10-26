@@ -109,6 +109,10 @@ export default function GenModal({ chars, genning, onGenerate, onClose, initialS
   const kindWord = kind === 'any' ? '' : `${GEN_KINDS.find(k => k.v === kind).l.toLowerCase()} `;
   const seasonSlots = aims.phases.flatMap(p => p.slots);
   const aimedSlot = seasonSlots.find(sl => sl.id === slot) || null;
+  // "Generate for this": wait for the season before generating, and say so
+  // when the slot can't be aimed at (done, another show, or not loaded).
+  const slotWaiting = !!initialSlot && !aims.loaded;
+  const slotMissed = !!initialSlot && aims.loaded && slot === initialSlot && !aimedSlot;
 
   return (
     <div className="cg-overlay" onClick={onClose} role="dialog" aria-modal="true" aria-label="Generate relationship seeds">
@@ -176,10 +180,15 @@ export default function GenModal({ chars, genning, onGenerate, onClose, initialS
             {GEN_COUNTS.map(n => <option key={n} value={n}>{n}</option>)}
           </Select>
         </div>
+        {slotMissed && (
+          <p className="re-gen-note" role="status" data-testid="gen-slot-missed">
+            That season slot isn&apos;t open in the current show, so these seeds won&apos;t be aimed at it.
+          </p>
+        )}
         <div className="re-modal-footer">
           <Btn variant="ghost" onClick={onClose}>Cancel</Btn>
-          <Btn variant="primary" onClick={() => onGenerate(generateBody({ kind, focus, episode, twist, slot: aimedSlot ? slot : '', phase, showId: aims.showId, count }))} disabled={genning}>
-            {genning ? 'Generating…' : '◈ Generate'}
+          <Btn variant="primary" onClick={() => onGenerate(generateBody({ kind, focus, episode, twist, slot: aimedSlot ? slot : '', phase, showId: aims.showId, count }))} disabled={genning || slotWaiting}>
+            {genning ? 'Generating…' : slotWaiting ? 'Loading the season…' : '◈ Generate'}
           </Btn>
         </div>
       </div>

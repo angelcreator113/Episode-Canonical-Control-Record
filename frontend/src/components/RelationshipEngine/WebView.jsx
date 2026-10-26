@@ -179,11 +179,13 @@ function useD3(svgRef, nodes, edges, handlers, focusId) {
       graphRef.current = { focus };
       focus(focusRef.current);
 
-      /* tick: everyone stays inside the canvas */
+      /* tick: everyone stays inside the canvas, their name too (a name
+         is wider than its circle, and was cut at a phone's edges) */
       sim.on('tick', () => {
         sn.forEach(dd => {
           const m = nodeR(dd) + 8;
-          dd.x = Math.max(m, Math.min(room() - m, dd.x));
+          const mx = Math.max(m, labelRoom(dd));
+          dd.x = Math.max(mx, Math.min(room() - mx, dd.x));
           dd.y = Math.max(m, Math.min(size.h - m - 18, dd.y));
         });
         hits.attr('x1', e => e.source.x).attr('y1', e => e.source.y).attr('x2', e => e.target.x).attr('y2', e => e.target.y);

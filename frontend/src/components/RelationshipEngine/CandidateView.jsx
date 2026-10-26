@@ -111,7 +111,7 @@ function SeedCard({ c, charById, busy, onConfirm, onQuickConfirm, onKeep, onDism
   const pair = `${nA} ↔ ${nB}`;
   const source = SOURCE_LABEL[c.seed_source];
   return (
-    <div className="re-candidate-card re-fade-in" role="listitem">
+    <div className={`re-candidate-card re-fade-in ${busy ? 'is-busy' : ''}`} role="listitem" aria-busy={busy || undefined}>
       <div className="re-accent-bar" />
       <div className="re-candidate-body">
         <div className="re-seed-top">
@@ -199,7 +199,7 @@ function Fold({ title, hint, Icon, seeds, charById, busy, onBringBack, label }) 
                     {(c.seed_why || c.situation) && <div className="re-seed-fold-why">{c.seed_why || c.situation}</div>}
                     {c.dismiss_note && <div className="re-seed-fold-why">Your note: {c.dismiss_note}</div>}
                   </div>
-                  <Btn variant="outline" onClick={() => onBringBack(c)} disabled={busy} aria-label={`Bring back ${pair}`}>Bring back</Btn>
+                  <Btn variant="outline" onClick={() => onBringBack(c)} disabled={busyFor(busy, c.id)} aria-label={`Bring back ${pair}`}>Bring back</Btn>
                 </li>
               );
             })}
@@ -266,6 +266,12 @@ function ConfirmAll({ pending, busy, onConfirmAll, charById }) {
   );
 }
 
+// busy: the id of the seed in flight ('all' for Confirm all, true for
+// everything). Only that seed's buttons wait; the rest stay usable.
+function busyFor(busy, id) {
+  return busy === true || busy === 'all' || (busy != null && busy !== false && busy === id);
+}
+
 export default function CandidateView({
   cands, charById = {}, busy,
   onConfirm, onQuickConfirm, onKeep, onDismiss, onBringBack, onConfirmAll,
@@ -280,12 +286,12 @@ export default function CandidateView({
       {children}
       {/* outside the list, so what Confirm all did stays when nothing is left */}
       <div className="re-seeds-bar">
-        <ConfirmAll pending={pending} busy={busy} onConfirmAll={onConfirmAll} charById={charById} />
+        <ConfirmAll pending={pending} busy={!!busy} onConfirmAll={onConfirmAll} charById={charById} />
       </div>
       {pending.length ? (
         <div className="cg-seed-grid" role="list" aria-label="Candidate relationships">
           {pending.map(c => (
-            <SeedCard key={c.id} c={c} charById={charById} busy={busy}
+            <SeedCard key={c.id} c={c} charById={charById} busy={busyFor(busy, c.id)}
               onConfirm={onConfirm} onQuickConfirm={onQuickConfirm} onKeep={onKeep} onDismiss={onDismiss} />
           ))}
         </div>
