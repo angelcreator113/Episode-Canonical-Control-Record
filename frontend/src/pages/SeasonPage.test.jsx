@@ -72,6 +72,8 @@ function mockGets() {
     if (url === '/api/v1/world/show-1/arc') return { data: { arc: state.arc, next_season_number: 2 } };
     if (url === '/api/v1/world/show-1/goals') return { data: { goals: state.goals } };
     if (url === '/api/v1/world/show-1/season/roadmap') return { data: { roadmap: state.roadmap } };
+    // Before the threads list's migration: the Story tab shows the old card (Show/SeasonThreads fallback).
+    if (url === '/api/v1/world/show-1/season/threads/inbox') return { data: { needs_migration: true } };
     if (url === '/api/v1/world/show-1/season/threads') return { data: { threads: state.threads, drafts: [] } };
     if (url === '/api/v1/world/show-1/season/insights') {
       if (state.insightsFail) throw Object.assign(new Error('x'), { response: { data: { error: 'down' } } });

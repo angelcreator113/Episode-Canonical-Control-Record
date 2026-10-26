@@ -242,4 +242,45 @@ describe('What changed', () => {
     expect(await screen.findByText('Say what happened before approving it.')).toBeTruthy();
     expect(screen.queryByTestId('wc-result')).toBeNull();
   });
+
+  // Threads open by themselves (Evoni, 2026-10-26): shown as done, with Undo.
+  test('a thread that opened by itself at the read: shown as opened, with Undo; a left-out one with its reason', async () => {
+    const record = {
+      ...RECORD,
+      threads: [
+        ...RECORD.threads,
+        { key: 't-key-2', thread_id: 'th-old', title: 'Who saw the ring?', note: 'The photographer did', action: 'advance', keep: true },
+        { key: 't-key-3', thread_id: null, title: 'Maren is revealed', note: '', action: 'new', keep: true },
+      ],
+      applied: { threads: {
+        't-key-1': { thread_id: 'th-new', action: 'new', auto: true },
+        't-key-2': { thread_id: 'th-old', action: 'advance', auto: true, note_key: 'nk1' },
+        't-key-3': { thread_id: 'th-gone', action: 'left_out', auto: true, reason: 'It reveals a hidden secret.' },
+      } },
+    };
+    const states = {
+      't-key-1': { state: 'opened', thread_id: 'th-new', thread_title: 'Who sent the second invitation?', why: 'A second sender raises the stakes.', can_undo: true },
+      't-key-2': { state: 'noted', thread_id: 'th-old', thread_title: 'Who saw the ring?', note_key: 'nk1', can_undo: true },
+      't-key-3': { state: 'left_out', thread_id: 'th-gone', thread_title: 'Maren is revealed', reason: 'It reveals a hidden secret.', can_undo: false },
+    };
+    vi.mocked(api.get).mockResolvedValue({ data: { record, cast: CAST, threads: [], goals: [], show_id: 'show-1', thread_states: states } });
+    vi.mocked(api.post).mockResolvedValue({ data: { success: true } });
+    renderCard();
+    const opened = within(await screen.findByTestId('wc-thread-auto-opened'));
+    expect(opened.getByText('Opened by itself')).toBeTruthy();
+    expect(opened.getByText('Why it matters: A second sender raises the stakes.')).toBeTruthy();
+    // Not a row to tick: no checkbox.
+    expect(opened.queryByRole('checkbox')).toBeNull();
+    expect(within(screen.getByTestId('wc-thread-auto-noted')).getByText('Added as a note')).toBeTruthy();
+    expect(within(screen.getByTestId('wc-thread-auto-left_out')).getByText('It reveals a hidden secret.')).toBeTruthy();
+    // None of them counts toward Save.
+    expect(screen.getByTestId('wc-save').textContent).not.toMatch(/ 9 ticked/);
+    fireEvent.click(opened.getByRole('button', { name: 'Undo: Who sent the second invitation?' }));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/api/v1/world/show-1/season/threads/th-new/undo'));
+    fireEvent.click(within(screen.getByTestId('wc-thread-auto-noted')).getByRole('button', { name: 'Undo: Who saw the ring?' }));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/api/v1/world/show-1/season/threads/th-old/notes/nk1/undo'));
+    fireEvent.click(within(screen.getByTestId('wc-thread-auto-left_out')).getByRole('button', { name: 'Keep it after all: Maren is revealed' }));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/api/v1/world/show-1/season/threads/th-gone/restore'));
+    expect(screen.getByTestId('wc-all-threads')).toBeTruthy();
+  });
 });

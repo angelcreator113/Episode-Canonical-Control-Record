@@ -41,6 +41,8 @@ jest.mock('../../../src/services/financialTransactionService', () => ({
 }));
 // The Episode Story Record is drafted after completion, unawaited (stage C).
 jest.mock('../../../src/services/episodeStoryRecord', () => ({ draftLater: jest.fn(async () => null) }));
+// Seeds opening as threads by themselves (services/threadInbox) are its own test's.
+jest.mock('../../../src/services/threadInbox', () => ({ openSeedsLater: jest.fn() }));
 jest.mock('../../../src/routes/wardrobe', () => ({}));
 jest.mock('../../../src/services/careerPipelineService', () => ({
   onEpisodeCompleted: jest.fn(async () => ({ opportunities_advanced: [] })),

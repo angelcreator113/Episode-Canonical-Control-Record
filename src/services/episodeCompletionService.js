@@ -793,6 +793,9 @@ ${narrativeLines.short || ''}`,
   // An AI call: not awaited; it drafts only when the episode has no record
   // yet, and nothing counts until Evoni approves it.
   require('./episodeStoryRecord').draftLater(sequelize, episodeId);
+  // The event seeds not read yet open by themselves once they pass the check
+  // (services/threadInbox; Evoni, 2026-10-26). Not awaited.
+  if (showId) require('./threadInbox').openSeedsLater(sequelize, showId);
 
   // ── 18. Complete the linked opportunity (Task #1817) ──
   // Runs once per completion: the already-accepted early return above skips

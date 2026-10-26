@@ -186,6 +186,16 @@ const answer = (obj) => ({ content: [{ type: 'text', text: JSON.stringify(obj) }
     // Mo is not in this episode: the Maren and Mo pair is dropped.
     expect(res.body.record.relationships).toHaveLength(3);
     expect(res.body.record.threads.every((t) => t.key)).toBe(true);
+    // Threads open by themselves (Evoni, 2026-10-26): the check found no AI
+    // answer (the mock has none), so the plain check ran: "A new one" opened,
+    // and the advance became a note that moved "Who saw the ring?" on.
+    expect(mockCreate).toHaveBeenCalledTimes(3);
+    const [newKey, advanceKey] = [res.body.record.threads[1].key, res.body.record.threads[0].key];
+    expect(res.body.record.applied.threads[newKey]).toMatchObject({ action: 'new', auto: true });
+    expect(res.body.record.applied.threads[advanceKey]).toMatchObject({ action: 'advance', auto: true, thread_id: ids.thread });
+    expect(res.body.thread_states[newKey]).toMatchObject({ state: 'opened', thread_title: 'A new one', can_undo: true });
+    expect(res.body.thread_states[advanceKey]).toMatchObject({ state: 'noted', thread_title: 'Who saw the ring?', can_undo: true });
+    expect(res.body.show_id).toBe(ids.show);
     // A draft is not read by the writers.
     expect(await recordBlock(sequelize, ids.ep)).toBe('');
   });
@@ -211,7 +221,8 @@ const answer = (obj) => ({ content: [{ type: 'text', text: JSON.stringify(obj) }
     expect(ok.status).toBe(200);
     expect(ok.body.record).toMatchObject({ status: 'approved', approved_by: 'evoni@record.dev' });
     expect(ok.body.result.skipped).toEqual([{ kind: 'relationship', reason: 'not_linked', name: 'Studio Bystable', profile_id: studio }]);
-    expect(ok.body.result.written.map((w) => w.kind).sort()).toEqual(['follow_up', 'goal', 'relationship', 'secret', 'thread', 'thread']);
+    // The threads opened by themselves at the read: Save does not write them again.
+    expect(ok.body.result.written.map((w) => w.kind).sort()).toEqual(['follow_up', 'goal', 'relationship', 'secret']);
     expect(ok.body.result.pulse_suggestions).toBe(3);
 
     const [threads] = await run('SELECT title, status, source, opened_episode_id, last_advanced_episode_id FROM show_story_threads WHERE show_id = :show ORDER BY title', ids);
