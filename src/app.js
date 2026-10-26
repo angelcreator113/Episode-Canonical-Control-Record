@@ -1700,6 +1700,15 @@ try {
   console.error('✗ Failed to load Todo List routes:', e.message);
 }
 
+// My Little List ♡: Lala's own list on her phone (Evoni, 2026-10-26)
+try {
+  const myLittleListRoutes = require('./routes/myLittleListRoutes');
+  app.use('/api/v1', myLittleListRoutes);
+  console.log('✓ My Little List loaded at /api/v1/episodes/:episodeId/my-little-list');
+} catch (e) {
+  console.error('✗ Failed to load My Little List routes:', e.message);
+}
+
 // Scene Sets — generative scene pipeline (RunwayML)
 try {
   const sceneSetRoutes = require('./routes/sceneSetRoutes');

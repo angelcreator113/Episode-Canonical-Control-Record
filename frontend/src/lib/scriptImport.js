@@ -184,7 +184,7 @@ export function convertStep(line, onScreen = {}) {
 
 // ── Other lines ────────────────────────────────────────────────────────────
 // Tags the app reads as they are.
-const APP_TAG = /^\s*\[\s*(?:UI|WEAR|STAT|TRANSITION|MAIL|DELIVER|TODO_MODE|SCENE|LOCATION_HINT|EVENT|EPISODE_INTENT|SFX|EDIT)\s*:/i;
+const APP_TAG = /^\s*\[\s*(?:UI|WEAR|STAT|TRANSITION|MAIL|DELIVER|TODO_MODE|LEARNS|SCENE|LOCATION_HINT|EVENT|EPISODE_INTENT|SFX|EDIT)\s*:/i;
 // `[STATS: coins -50]` and `[COINS -50]` are a stat line.
 const STATS = /^\s*\[\s*STATS\s*:\s*([^\]]+)\]\s*$/i;
 const COINS = /^\s*\[\s*(COINS|REPUTATION|INFLUENCE|STRESS|BRAND[_\s]?TRUST)\s*:?\s*([+\-\u2212\u2013]\s*[\d,]+)\s*\]\s*$/i;

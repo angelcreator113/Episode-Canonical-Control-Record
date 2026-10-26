@@ -7,7 +7,7 @@
  * dealCueFlags as the side panel does, only over every beat instead of the
  * open one.
  */
-import { phoneCheck, phoneStartScreens, uncuedPieces, wearFlags, dealCueFlags, lastGettingReadyIndex } from './scriptMoments';
+import { phoneCheck, phoneStartScreens, uncuedPieces, wearFlags, dealCueFlags, learnsCueFlags, lastGettingReadyIndex } from './scriptMoments';
 import { REVEAL_BEAT, voiceOffLines, revealCheck, isCutsceneBeat } from './scriptShowRules';
 import { invitationLine, beat14Outcome, BEAT } from './beat14Invitation';
 import { atHandle } from '../pages/feed/feedConstants';
@@ -137,6 +137,8 @@ export function scriptHealth({
 
   // [DELIVER] and [TODO_MODE] cues that do nothing.
   rows.push(...perBeat(dealCueFlags(beats, dealItems), beats, 'deal'));
+  // [LEARNS] lines My Little List would ignore (Evoni, 2026-10-26).
+  rows.push(...perBeat(learnsCueFlags(beats), beats, 'learns'));
 
   // Beat 14's opportunity (Evoni, 2026-10-19): the invitation someone at the
   // event offers. Only when it was read (beat14 null: not known, no row).
