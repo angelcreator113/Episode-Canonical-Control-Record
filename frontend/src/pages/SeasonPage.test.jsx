@@ -137,7 +137,7 @@ describe('The tabs', () => {
     expect(await screen.findByTestId('szn-panel-overview')).toBeTruthy();
     const tabs = screen.getAllByRole('tab');
     // Evoni, 2026-10-25: Producer Mode's episodes, opportunities and results moved here.
-    expect(tabs.map((t) => t.querySelector('.szn-tab-label').textContent)).toEqual(['Overview', 'Roadmap', 'Episodes', 'Events', 'Opportunities', 'Story', 'Plants', 'Goals', 'Results']);
+    expect(tabs.map((t) => t.querySelector('.szn-tab-label').textContent)).toEqual(['Overview', 'Roadmap', 'Episodes', 'Events', 'Opportunities', 'Story', 'Cast', 'Plants', 'Goals', 'Results']);
     expect(screen.getByTestId('szn-tab-overview').getAttribute('aria-selected')).toBe('true');
     fireEvent.click(screen.getByTestId('szn-tab-story'));
     expect(await screen.findByTestId('szn-panel-story')).toBeTruthy();
@@ -166,7 +166,7 @@ describe('The tabs', () => {
       const note = await within(await screen.findByTestId(`szn-panel-${key}`)).findByTestId('szn-tab-note');
       notes[key] = note.textContent;
     }
-    expect(Object.keys(notes)).toEqual(['overview', 'roadmap', 'episodes', 'events', 'opportunities', 'story', 'plants', 'goals', 'results']);
+    expect(Object.keys(notes)).toEqual(['overview', 'roadmap', 'episodes', 'events', 'opportunities', 'story', 'cast', 'plants', 'goals', 'results']);
     expect(notes.episodes).toBe('Every episode this season and where it is in production.');
     for (const text of Object.values(notes)) expect(text.length).toBeGreaterThan(20);
   });
@@ -271,13 +271,13 @@ describe('The Episode Roadmap', () => {
     expect(screen.getByTestId('szn-slot-10')).toBeTruthy();
   });
 
-  test('Timeline: every slot in order, filtered the same way; no Calendar view', async () => {
+  test('Timeline: every slot in order, filtered the same way; Calendar is its own view (round 3)', async () => {
     renderPage('?tab=roadmap&view=timeline&status=event_ready');
     const tl = await screen.findByTestId('szn-roadmap-timeline');
     expect([...tl.querySelectorAll('[data-testid^="szn-slot-"]')].map((el) => el.dataset.testid).filter((id) => /^szn-slot-\d+$/.test(id)))
       .toEqual(['szn-slot-2', 'szn-slot-3', 'szn-slot-4', 'szn-slot-10']);
     expect(within(tl).getByText(/Part 1 · Foundation · Jan 19, 2026/)).toBeTruthy();
-    expect(screen.queryByText('Calendar')).toBeNull();
+    expect(screen.getByTestId('szn-view-calendar').textContent).toBe(' Calendar');
     fireEvent.click(screen.getByTestId('szn-view-grid'));
     expect(await screen.findByTestId('szn-roadmap-grid')).toBeTruthy();
   });

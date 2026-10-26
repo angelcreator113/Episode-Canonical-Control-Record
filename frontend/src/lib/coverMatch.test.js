@@ -3,7 +3,7 @@
 import { describe, test, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { goalMatch, hookCovered, verbPhrase } from './coverMatch';
+import { goalMatch, hookCovered, verbPhrase, scriptHandles } from './coverMatch';
 import { mustCover, goalTaskFor } from './episodeScript';
 import { scriptHealth } from './scriptHealth';
 
@@ -23,6 +23,21 @@ describe('coverMatch', () => {
     const beats = [{ number: 9, lines: ['Lala: follow up with Velour'] }, { number: 4, lines: ['Lala: I will follow up with Velour.'] }, { number: 12, lines: ['Lala: "Velour! Following up, as promised."'] }];
     expect(goalMatch(beats, goal, null)?.beat).toBe(12);
     expect(goalMatch([{ number: 11, lines: ['Lala: up next, Velour. I follow.'] }], goal, null)).toBeNull();
+  });
+  test('a lowercase handle is a name (Evoni, 2026-10-26: "Get to know thriftveil" never ticked)', () => {
+    const goal = { label: 'Get to know thriftveil' };
+    const beats = [
+      { number: 6, lines: ['Lala: And @thriftveil is going to be there. I need that conversation to happen.'] },
+      { number: 11, lines: ['Declan Ferris: I\'m Declan, by the way.', 'Prime: Wait — Declan is @thriftveil? Besties, we came here to get to know him, and he walked right up to her!'] },
+    ];
+    expect(scriptHandles(beats)).toEqual(['thriftveil']);
+    expect(verbPhrase(goal.label, null, scriptHandles(beats))).toEqual(['get', 'to', 'know']);
+    expect(verbPhrase('Get to know @thriftveil')).toEqual(['get', 'to', 'know']);
+    expect(goalMatch(beats, goal, null)?.beat).toBe(11);
+    // Without the handle anywhere the goal's words are still all needed.
+    expect(goalMatch([{ number: 11, lines: ['Prime: we came here to get to know him'] }], goal, null)).toBeNull();
+    // A capitalised name works as before.
+    expect(verbPhrase('Get to know Truthville', null, ['thriftveil'])).toEqual(['get', 'to', 'know']);
   });
   test('the hook only in beat 14', () => {
     expect(hookCovered([{ number: 3, lines: ['Me: a second invitation arrives'] }], 'A second invitation arrives')).toBeNull();

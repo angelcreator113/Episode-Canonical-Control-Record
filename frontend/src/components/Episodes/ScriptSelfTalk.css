@@ -1,0 +1,11 @@
+/* Script tab › Her self-talk at Beat 13 (2026-10-25): the Script page's --studio-* tokens only. */
+.sst { display: flex; flex-direction: column; gap: 8px; margin: 0 0 12px; padding: 10px 12px; border: 1px solid var(--studio-line); border-radius: 10px; background: var(--studio-card); min-width: 0; }
+.sst-title { display: flex; align-items: center; gap: 6px; margin: 0; font-size: 12px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--studio-purple); }
+.sst-options { display: flex; flex-wrap: wrap; gap: 6px; }
+.sst-option { min-height: 36px; padding: 6px 12px; border: 1px solid var(--studio-line-strong); border-radius: 999px; background: var(--studio-card); color: var(--studio-ink); font: inherit; font-size: 13px; cursor: pointer; }
+.sst-option:hover:not(:disabled) { border-color: var(--studio-purple); }
+.sst-option:focus-visible { outline: 2px solid var(--studio-purple); outline-offset: 2px; }
+.sst-option.is-on { border-color: var(--studio-purple); background: var(--studio-purple-soft); color: var(--studio-purple); font-weight: 700; }
+.sst-option:disabled { opacity: 0.6; cursor: wait; }
+.sst-note { margin: 0; font-size: 12px; line-height: 1.45; color: var(--studio-ink-muted); overflow-wrap: anywhere; }
+.sst-fail { margin: 0; font-size: 12px; color: var(--danger-text); }

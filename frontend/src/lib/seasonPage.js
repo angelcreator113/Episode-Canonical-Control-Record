@@ -23,6 +23,8 @@ export const SEASON_TABS = [
   // Brand offers and bookings (components/Show/OpportunitiesTab), from Producer Mode's Opportunities tab.
   { key: 'opportunities', label: 'Opportunities', note: 'Offers and bookings from brands, from the first offer to paid.' },
   { key: 'story', label: 'Story', note: 'The threads, twists and reveals the season is building, and what the story still needs.' },
+  // Who's in this season (components/Show/SeasonCast; Evoni, 2026-10-26, round 3).
+  { key: 'cast', label: 'Cast', note: "Who is in which episode, and which relationships changed in each part." },
   // The plant tracker (components/Show/SeasonPlants, 2026-10-25).
   { key: 'plants', label: 'Plants', note: 'Every detail a script plants for later: where each one pays off, and the ones that never do.' },
   // Lala's career goals and the brands she has worked with (Evoni, 2026-10-25:

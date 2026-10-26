@@ -18,7 +18,7 @@
  *               outside an episode) count from the start, before Episode 1
  *               (Evoni, 2026-10-14). Never getBalanceBeforeEpisode, which
  *               keeps later episodes' rows (read §7).
- *   reputation, influence
+ *   reputation, influence, stress
  *               the snapshot (state_after_json) of the latest history row of
  *               an episode that counts. With none, the value before the
  *               first episode that doesn't count (its snapshot less its
@@ -33,7 +33,9 @@ const { countedLedgerRows } = require('../utils/ledgerBalanceFilter');
 const { wholeCoins } = require('../utils/wholeCoins');
 
 const SCALE = 10;   // character_state's 0–10 stats
-const STATS = ['reputation', 'influence'];
+// Stress too (Evoni, 2026-10-25: stress on the stats card), read the same
+// way; lower is better.
+const STATS = ['reputation', 'influence', 'stress'];
 
 const counts = (alias) => `(COALESCE(${alias}.episode_number, 0) * 10 + 7 <= :at)`;
 const num = (v) => (v === null || v === undefined || v === '' || !Number.isFinite(Number(v)) ? null : Number(v));
@@ -57,8 +59,8 @@ async function coinsAt(sequelize, showId, at) {
 async function standingAt(sequelize, showId, at) {
   const q = (sql) => sequelize.query(sql, { replacements: { showId, at }, type: sequelize.QueryTypes.SELECT });
   const [state] = await q(
-    `SELECT reputation, influence FROM character_state WHERE show_id = :showId AND character_key = 'lala' LIMIT 1`);
-  const out = { reputation: state ? num(state.reputation) : null, influence: state ? num(state.influence) : null };
+    `SELECT reputation, influence, stress FROM character_state WHERE show_id = :showId AND character_key = 'lala' LIMIT 1`);
+  const out = Object.fromEntries(STATS.map((stat) => [stat, state ? num(state[stat]) : null]));
   if (!Number.isInteger(at)) return out;
   const rows = (where, order) => q(
     `SELECT h.deltas_json, h.state_after_json
@@ -91,7 +93,7 @@ async function followersAt(db, showId, at, lalaProfileId) {
   }
 }
 
-/** { at, coins, reputation, influence, scale, followers } as of `at` (a story order), or now. */
+/** { at, coins, reputation, influence, stress, scale, followers } as of `at` (a story order), or now. */
 async function statsAt(db, showId, at, { lalaProfileId } = {}) {
   const { sequelize } = db;
   const when = Number.isInteger(at) ? at : null;

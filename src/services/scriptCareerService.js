@@ -146,4 +146,29 @@ function careerBlock(career, { beat14 = null } = {}) {
   return out.join('\n');
 }
 
-module.exports = { loadScriptCareer, careerBlock, dealOf, DEAL_COLUMNS };
+// ─── HER GOAL THIS EPISODE (Evoni, 2026-10-25) ───────────────────────────────
+// The episode's main career goal, for both writers
+// (episodeScriptWriterService.loadScriptContext) and the Script tab
+// (GET /episode-brief/:id her_goal). The pick is goal-ladders' one rule
+// (seasonGoalCoverage.pickMainGoal, the same one mainGoalForEvent uses): the
+// goal pinned to the event, else the active rung the event moves most,
+// marked suggested. It is given the event and state already loaded here, so
+// the ledger's coin balance counts. Returns episodeMainGoal.describeGoal's
+// shape (kind 'main' when pinned, 'suggested' otherwise), or null.
+async function loadEpisodeGoal(sequelize, { showId, event, state = {} }) {
+  if (!showId || !event) return null;
+  const goals = await sequelize.query(
+    `SELECT id, title, description, type, icon, status, target_metric, target_value, current_value, starting_value,
+            priority, unlocks_on_complete, episode_range, created_at
+       FROM career_goals
+      WHERE show_id = :showId AND status = 'active' AND deleted_at IS NULL
+      ORDER BY CASE type WHEN 'primary' THEN 0 WHEN 'secondary' THEN 1 ELSE 2 END, priority ASC, created_at ASC`,
+    { replacements: { showId }, type: sequelize.QueryTypes.SELECT });
+  if (!goals || !goals.length) return null;
+  const { pickMainGoal } = require('./seasonGoalCoverage');
+  const { goal, source } = pickMainGoal(event, goals, state || {});
+  if (!goal) return null;
+  return require('./episodeMainGoal').describeGoal(goal, goals, state || {}, source === 'pinned' ? 'main' : 'suggested');
+}
+
+module.exports = { loadScriptCareer, careerBlock, dealOf, DEAL_COLUMNS, loadEpisodeGoal };
