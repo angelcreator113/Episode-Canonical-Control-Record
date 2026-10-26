@@ -49,6 +49,8 @@
  *   twoPartRole, completeTwoPart                 (completion)
  *   releaseSpecials(sequelize, showId)           (the release schedule)
  *   clearEventFromSpecials, eventsInSpecials     (the weekly pencil)
+ *   insertSpecial, takeEvent                     (also services/seasonFullSpecials:
+ *                                                 a full season's events become specials)
  * No AI call.
  */
 
@@ -351,16 +353,22 @@ async function createSpecial(sequelize, showId, body = {}) {
     let taken = { event: null, moved_from: null };
     if (eventId) taken = await takeEvent(sequelize, { showId, arc, slots, eventId, transaction });
     const title = readTitle(body.title) || taken.event?.name || (kind === 'special' ? TYPE_LABEL[specialType] : null);
-    const [[row]] = await sequelize.query(
-      `INSERT INTO ${TABLE} (id, show_id, arc_id, kind, after_slot_number, special_type, title, event_id, release_date, release_time, created_at, updated_at)
-       VALUES (gen_random_uuid(), :showId, :arcId, :kind, :after, :specialType, :title, :eventId, CAST(:date AS date), :time, NOW(), NOW())
-       RETURNING id`,
-      { replacements: {
-        showId, arcId: arc.id, kind, after, specialType, title, eventId,
-        date: readDate(body.release_date), time: readTime(body.release_time),
-      }, transaction });
-    return { id: row.id, label: specialLabel({ kind, after_slot_number: after, special_type: specialType }), moved_from: taken.moved_from };
+    const id = await insertSpecial(sequelize, {
+      showId, arcId: arc.id, kind, after, specialType, title, eventId,
+      date: readDate(body.release_date), time: readTime(body.release_time), transaction,
+    });
+    return { id, label: specialLabel({ kind, after_slot_number: after, special_type: specialType }), moved_from: taken.moved_from };
   });
+}
+
+/** One bonus or special row, as given (the callers check the event and the place). Returns its id. */
+async function insertSpecial(sequelize, { showId, arcId, kind, after, specialType = null, title = null, eventId = null, date = null, time = null, transaction }) {
+  const [[row]] = await sequelize.query(
+    `INSERT INTO ${TABLE} (id, show_id, arc_id, kind, after_slot_number, special_type, title, event_id, release_date, release_time, created_at, updated_at)
+     VALUES (gen_random_uuid(), :showId, :arcId, :kind, :after, :specialType, :title, :eventId, CAST(:date AS date), :time, NOW(), NOW())
+     RETURNING id`,
+    { replacements: { showId, arcId, kind, after, specialType, title, eventId, date, time }, transaction });
+  return row.id;
 }
 
 async function lockSpecial(sequelize, showId, specialId, transaction) {
@@ -825,6 +833,12 @@ module.exports = {
   twoPartOfSlot,
   twoPartContext,
   createSpecial,
+  insertSpecial,
+  takeEvent,
+  specialRows,
+  dayText,
+  mirrorAirDate,
+  assertReady,
   updateSpecial,
   removeSpecial,
   createTwoParter,

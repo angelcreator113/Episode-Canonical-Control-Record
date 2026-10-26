@@ -1,0 +1,44 @@
+/* "Will be a special" (FullSeasonChoice.jsx), in the Event Package's season
+   panel. Design tokens only; two options side by side, one column on a
+   phone; 44px targets there. */
+.fsc { display: grid; gap: 8px; margin: 10px 0 0; padding: 10px 12px; border-radius: 12px; min-width: 0;
+  background: var(--lala-parchment); border: 1px solid var(--lala-gold-line); font-family: var(--font-sans); }
+.fsc.is-waiting { border-style: dashed; border-color: var(--lala-parchment-3); }
+.fsc-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 0; font-size: 13px; color: var(--lala-ink); }
+.fsc-head > svg { color: var(--lala-gold-text); }
+.fsc-badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: 700;
+  background: var(--lala-gold-soft); color: var(--lala-ink); border: 1px solid var(--lala-gold-line); }
+.fsc-badge svg { color: var(--lala-gold-text); }
+.fsc-gap { min-width: 0; overflow-wrap: anywhere; color: var(--lala-ink-muted); }
+.fsc-when { display: inline-flex; align-items: center; gap: 4px; margin: 0; font-size: 13px; font-weight: 600; color: var(--lala-ink); }
+.fsc-when svg { flex: none; color: var(--lala-gold-text); }
+.fsc-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.fsc-option { display: grid; align-content: start; gap: 6px; min-width: 0; padding: 10px; border-radius: 10px;
+  background: var(--lala-surface); border: 1px solid var(--lala-parchment-3); }
+.fsc-option-title { display: flex; align-items: center; gap: 6px; margin: 0; font-family: var(--font-sans); font-size: 14px; font-weight: 700; color: var(--lala-ink); }
+.fsc-option-title svg { color: var(--lala-gold-text); }
+.fsc-place { margin: 0; font-size: 13px; color: var(--lala-ink); overflow-wrap: anywhere; }
+.fsc-note { margin: 0; font-size: 13px; line-height: 1.45; color: var(--lala-ink-muted); overflow-wrap: anywhere; }
+.fsc-note.is-refused { color: var(--lala-danger); }
+.fsc-note.is-nodate { font-style: italic; }
+.fsc-swap, .fsc-move { display: grid; gap: 6px; min-width: 0; }
+.fsc-move { grid-template-columns: minmax(0, 1fr) auto; align-items: end; }
+.fsc-field { display: grid; gap: 4px; min-width: 0; }
+.fsc-label { font-size: 12px; font-weight: 700; color: var(--lala-ink-muted); }
+.fsc-select { width: 100%; min-width: 0; min-height: 36px; padding: 4px 8px; border-radius: 8px; font: inherit; font-size: 13px;
+  border: 1px solid var(--lala-parchment-3); background: var(--lala-surface); color: var(--lala-ink); }
+.fsc-btn { justify-self: start; display: inline-flex; align-items: center; gap: 6px; }
+.fsc-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; margin: 0; font-size: 13px; color: var(--lala-ink-muted); }
+.fsc-start { font-weight: 600; color: var(--lala-ink); overflow-wrap: anywhere; }
+.fsc-link { display: inline-flex; align-items: center; gap: 4px; min-height: 32px; padding: 0; border: none; background: none; cursor: pointer;
+  font: inherit; font-size: 13px; font-weight: 600; color: var(--lala-lavender-text); text-align: left; }
+.fsc-link.is-quiet { color: var(--lala-ink-muted); font-weight: 500; }
+.fsc-link:disabled { opacity: 0.6; cursor: default; }
+
+@media (max-width: 600px) {
+  .epp-hero .fsc { grid-column: 1 / -1; padding: 8px 10px; }
+  .fsc-options { grid-template-columns: minmax(0, 1fr); }
+  .fsc-select, .fsc-link { min-height: 44px; }
+  .fsc-btn { min-height: 44px; }
+  .fsc-move { grid-template-columns: minmax(0, 1fr); }
+}

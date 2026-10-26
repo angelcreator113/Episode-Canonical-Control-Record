@@ -6,6 +6,10 @@
  * goal's chip, EventGoalPins, which still pins); and its episode's release
  * day. In no slot it is one line: "Not placed in the season yet · Place it",
  * to the Season page's Events tab under Not placed yet, with the goal pins.
+ * When the season is full (every weekly episode has an event placed or
+ * started, 2026-10-26) the line gives way to FullSeasonChoice: "Will be a
+ * special", with Make it a special and Swap it into E_n; and an event that
+ * is a special shows its place with Move it, Swap, Season 2 and Remove.
  *
  * Reads nothing itself: the page's useEventFlow hands it the season context
  * (from the package), the goal coverage and the release line.
@@ -16,12 +20,23 @@ import api from '../../services/api';
 import { purposeLines } from '../../lib/seasonArc';
 import { seasonPageHref } from '../../lib/seasonPage';
 import EventGoalPins from './EventGoalPins';
+import FullSeasonChoice from './FullSeasonChoice';
 import './SeasonPlacePanel.css';
 
 export default function SeasonPlacePanel({ place, showId, eventId }) {
   const context = place?.context;
   const pins = <EventGoalPins api={api} showId={showId} eventId={eventId} coverage={place?.coverage} gains={place?.gains} />;
   if (!context) return pins;
+  // A full season (every weekly episode has an event placed or started): it
+  // will be a special, or it is one; both options, every time (2026-10-26).
+  if (!context.in_slot && (context.in_special || context.season_full)) {
+    return (
+      <div className="esp is-unplaced is-full" data-testid="season-place" data-placed={context.in_special ? 'special' : 'false'}>
+        <FullSeasonChoice showId={showId} eventId={eventId} context={context} reload={place?.reload} setToast={place?.setToast} />
+        {pins}
+      </div>
+    );
+  }
   if (!context.in_slot) {
     return (
       <div className="esp is-unplaced" data-testid="season-place" data-placed="false">

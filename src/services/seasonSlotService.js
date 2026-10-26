@@ -193,11 +193,45 @@ async function eventSeasonContext(sequelize, showId, eventId) {
       WHERE arc_id = :arcId AND deleted_at IS NULL AND episode_id IS NULL AND locked_at IS NULL
       ORDER BY slot_number ASC LIMIT 1`,
     { replacements: { arcId: arc.id } });
+  // Full (Evoni, 2026-10-26): every slot has a live event or a live episode.
+  const [[fill]] = await sequelize.query(
+    `SELECT COUNT(*)::int AS total,
+            COUNT(*) FILTER (WHERE ev.id IS NULL AND ep.id IS NULL)::int AS open
+       FROM season_slots s
+       LEFT JOIN world_events ev ON ev.id = s.event_id AND ev.deleted_at IS NULL
+       LEFT JOIN episodes ep ON ep.id = s.episode_id AND ep.deleted_at IS NULL
+      WHERE s.arc_id = :arcId AND s.deleted_at IS NULL`,
+    { replacements: { arcId: arc.id } });
+  const specials = require('./seasonSpecials');
+  const ready = await specials.specialsReady(sequelize);
+  // A bonus or special of this season that holds it (its event, or the episode it started).
+  let special = null;
+  if (ready) {
+    const [[sp]] = await sequelize.query(
+      `SELECT sp.id, sp.kind, sp.after_slot_number, sp.special_type, sp.episode_id, sp.accepted_at
+         FROM season_specials sp LEFT JOIN world_events ev ON ev.id = :eventId
+        WHERE sp.arc_id = :arcId AND sp.deleted_at IS NULL AND sp.kind IN ('bonus', 'special')
+          AND (sp.event_id = :eventId OR (ev.used_in_episode_id IS NOT NULL AND sp.episode_id = ev.used_in_episode_id))
+        ORDER BY sp.created_at DESC LIMIT 1`,
+      { replacements: { arcId: arc.id, eventId } });
+    if (sp) {
+      special = {
+        id: sp.id, kind: sp.kind, label: specials.specialLabel(sp), after_slot_number: Number(sp.after_slot_number) || 0,
+        started: Boolean(sp.episode_id), done: Boolean(sp.accepted_at),
+      };
+    }
+  }
+  const full = Number(fill?.total) > 0 && Number(fill?.open) === 0;
   return {
     season_number: arc.season_number || 1,
     arc_title: arc.title,
     in_slot: false,
-    next_open: next ? { label: episodeLabel(next.season_number, next.slot_number), phase: phaseOf(next.phase) } : null,
+    in_special: Boolean(special),
+    special,
+    season_full: full,
+    specials_ready: ready,
+    // A full season has no open slot to name.
+    next_open: next && !full ? { label: episodeLabel(next.season_number, next.slot_number), phase: phaseOf(next.phase) } : null,
   };
 }
 
@@ -354,6 +388,8 @@ async function roadmapOf(sequelize, season) {
     unslotted_episodes: unslotted.filter((ep) => !specialEpisodes.has(String(ep.id))),
     available_events: pencillable,
     specials_ready: extra.ready,
+    // Every weekly slot has an event or an episode: a new event will be a special (seasonFullSpecials).
+    season_full: require('./seasonFullSpecials').seasonFull(slots),
     specials: extra.specials,
     two_parters: extra.two_parters,
     next_slot_number: nextSlot ? nextSlot.slot_number : null,
@@ -598,8 +634,11 @@ async function placeEpisodeIn(sequelize, showId, slotId, episodeId, transaction)
  *   - else the earliest open slot (no episode, no pencilled event) does.
  *   - an event in a bonus or stand-alone special starts that special's
  *     episode instead (seasonSpecials.assignSpecialOnStart; its label is returned);
+ *   - on a full season with no slot for it, the event becomes a bonus
+ *     special at its story position (seasonFullSpecials.specialOnFullStart;
+ *     its label is returned).
  * The slot is locked. Returns the slot number, or null when the show has no
- * active season or no open slot.
+ * active season or no open slot (and, before the specials' migration, a full one).
  */
 async function assignOnStart(sequelize, { showId, eventId, episodeId, replacingEpisodeId = null, transaction }) {
   if (replacingEpisodeId) {
@@ -626,7 +665,11 @@ async function assignOnStart(sequelize, { showId, eventId, episodeId, replacingE
       ORDER BY (event_id = :eventId) DESC NULLS LAST, slot_number ASC
       LIMIT 1 FOR UPDATE`,
     { replacements: { arcId: arc.id, eventId }, transaction });
-  if (!slot) return null;
+  // A full season (every slot has an event or an episode; Evoni, 2026-10-26)
+  // makes the event a special at its story position, so no episode is left
+  // outside the season (seasonFullSpecials). Before the specials' migration,
+  // or with no event, it stays in no slot as before.
+  if (!slot) return require('./seasonFullSpecials').specialOnFullStart(sequelize, { showId, eventId, episodeId, transaction });
   await sequelize.query(
     `UPDATE season_slots SET episode_id = :episodeId, event_id = :eventId, locked_at = NOW(), updated_at = NOW()
       WHERE id = :id`,
