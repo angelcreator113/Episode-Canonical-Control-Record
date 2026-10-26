@@ -50,6 +50,14 @@
  * the Cast tab's "Arc suggestions", a past season's Story "Carried into
  * Season N" and the one-pager's pitch.
  *
+ * Those spots now hold their AI buttons (Evoni, 2026-10-26: "how can ai
+ * help with these"; services/seasonAiHelpers). Each is a button she
+ * presses for one AI call, and nothing is saved until she accepts:
+ * SeasonNextStep under the health line (the season in progress), the Cast
+ * tab's SeasonArcSuggestions (Accept goes through the slot's purposes or
+ * the twists), a past season's SeasonCarried on Story (only the ticked rows
+ * apply; nothing is deleted), and the one-pager's SeasonPitch.
+ *
  * Colours: the mockup's pinks and purples, page-scoped (--sp-* in
  * SeasonPage.css). Text is plum or ink; pink is for fills and accents.
  */
@@ -68,6 +76,9 @@ import ShowEpisodesBoard from '../components/Show/ShowEpisodesBoard';
 import SeasonPlants from '../components/Show/SeasonPlants';
 import SeasonCast from '../components/Show/SeasonCast';
 import SeasonHealthLine from '../components/Show/SeasonHealthLine';
+import SeasonNextStep from '../components/Show/SeasonNextStep';
+import SeasonArcSuggestions from '../components/Show/SeasonArcSuggestions';
+import SeasonCarried from '../components/Show/SeasonCarried';
 import { seasonHealth } from '../lib/seasonHealth';
 import OpportunitiesTab from '../components/Show/OpportunitiesTab';
 import { S as PRODUCER_S } from '../components/Show/producerStyles';
@@ -530,7 +541,8 @@ export default function SeasonPage() {
       {back}
       <SeasonHero arc={arc} roadmap={roadmap} showName={showName} nextSeason={nextSeason}
         onEdit={() => openPanel(panel === 'edit' ? null : 'edit')} onPick={openPanel} readOnly={!isCurrent}
-        health={<SeasonHealthLine health={health} />}
+        health={<SeasonHealthLine health={health}
+          nextStepSlot={isCurrent && attention.length ? <SeasonNextStep api={api} showId={showId} items={attention} /> : null} />}
         planHref={`/shows/${encodeURIComponent(showId)}/season/plan${season ? `?season=${encodeURIComponent(season)}` : ''}`}
         switcher={<SeasonSwitcher seasons={plan.seasons} arc={arc} currentArcId={plan.currentArcId} onPick={pickSeason} />} />
       {!isCurrent && (
@@ -573,8 +585,14 @@ export default function SeasonPage() {
         {tab === 'episodes' && <SeasonEpisodesTab {...scopedProps} />}
         {tab === 'events' && <SeasonEventsTab {...tabProps} />}
         {tab === 'opportunities' && <SeasonOpportunitiesTab {...tabProps} />}
-        {tab === 'story' && <SeasonStoryTab {...tabProps} />}
-        {tab === 'cast' && <SeasonCast api={api} showId={showId} season={season} reloadKey={roadmap} />}
+        {tab === 'story' && (
+          <SeasonStoryTab {...tabProps}
+            carriedSlot={!isCurrent ? <SeasonCarried key={arc.id} api={api} showId={showId} season={season || arc.season_number || 1} onApplied={plan.loadRoadmap} /> : null} />
+        )}
+        {tab === 'cast' && (
+          <SeasonCast api={api} showId={showId} season={season} reloadKey={roadmap}
+            suggestionsSlot={<SeasonArcSuggestions key={arc.id} api={api} showId={showId} season={season} onApplied={plan.loadRoadmap} />} />
+        )}
         {tab === 'plants' && <SeasonPlants showId={showId} api={api} onAddPlants={() => goTab('story')} season={season} />}
         {tab === 'goals' && <SeasonGoalsTab {...tabProps} />}
         {tab === 'results' && <SeasonResultsTab {...scopedProps} />}

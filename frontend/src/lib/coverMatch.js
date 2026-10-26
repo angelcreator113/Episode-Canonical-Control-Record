@@ -80,9 +80,12 @@ const TRAILING = new Set(['with', 'to', 'at', 'for', 'about', 'on', 'in', 'from'
  * with Velour" → co style; "Follow up with Studio by Sable" → follow up).
  * The name is the person's (person.names) where the label has it, else the
  * first capitalised word after the first; up to an article, without the
- * preposition before the name. [] when there is none.
+ * preposition before the name. [] when there is none. A handle is a name
+ * however it is written: one the label writes with @, or one of `handles`
+ * (the @handles the script uses, scriptHandles) — "Get to know thriftveil"
+ * → get to know (Evoni, 2026-10-26).
  */
-function verbPhrase(label, person = null) {
+function verbPhrase(label, person = null, handles = []) {
   const raw = String(label || '');
   const ws = words(raw);
   if (ws.length < 2) return ws.map(stem);
@@ -93,6 +96,11 @@ function verbPhrase(label, person = null) {
     for (let i = 1; i + nw.length <= ws.length && i < at; i += 1) {
       if (nw.every((w, j) => ws[i + j] === w)) { at = i; break; }
     }
+  }
+  if (at === ws.length) {
+    const known = new Set([...(handles || []), ...[...raw.matchAll(/@([A-Za-z0-9_.]+)/g)].flatMap((m) => words(m[1]))]);
+    const h = ws.findIndex((w, i) => i > 0 && known.has(w));
+    if (h > 0) at = h;
   }
   if (at === ws.length) {
     const toks = raw.normalize('NFKD').replace(/[^A-Za-z0-9\s]/g, ' ').split(/\s+/).filter(Boolean);
@@ -138,10 +146,21 @@ function coveringLine(lines, keys, verb, person, { mustName = false } = {}) {
  * the name the person goes by in it (null when they are not named there).
  * Script tab audit 6 (2026-10-24); Evoni, 2026-10-23 for the person.
  */
+/** The @handles the script's lines use, as words ("@thriftveil" → thriftveil). */
+function scriptHandles(beats = []) {
+  const out = new Set();
+  for (const b of beats || []) {
+    for (const l of b?.lines || []) {
+      for (const m of String(l ?? '').matchAll(/@([A-Za-z0-9_.]+)/g)) words(m[1]).forEach((w) => out.add(w));
+    }
+  }
+  return [...out];
+}
+
 function goalMatch(beats = [], goal, person = null) {
   const label = String(goal?.label || '').trim();
   const keys = keyWords(label);
-  const verb = verbPhrase(label, person);
+  const verb = verbPhrase(label, person, scriptHandles(beats));
   if (!keys.length && !verb.length) return null;
   const verbSet = new Set(verb);
   const labelStems = new Set(stems(label));
@@ -209,4 +228,4 @@ function withMark(item, marks) {
 }
 // END SHARED
 
-export { LIST_BEAT, HOOK_BEAT, STOP, words, keyWords, mentionedIn, verbPhrase, goalMatch, hookCovered, coverKey, withMark, isListLine };
+export { LIST_BEAT, HOOK_BEAT, STOP, words, keyWords, mentionedIn, verbPhrase, scriptHandles, goalMatch, hookCovered, coverKey, withMark, isListLine };

@@ -42,6 +42,16 @@
  *   goals          the to-do list's matching social task ticked (source 'record')
  *   twists         season_twists planted / paid off in this episode (never moved back)
  *
+ * Threads open by themselves (Evoni, 2026-10-26: "Let's let them open
+ * themselves on new threads and build the threads list"): when the script
+ * is read (draftRecord, after completion and from the Script tab), its new
+ * threads that pass the check open right away and its advances become
+ * notes that move the thread on, each with Undo (services/threadInbox
+ * openFromRecord). They are written into `applied` (auto: true), so a
+ * re-read never duplicates them and Save skips them; closes stay
+ * suggestions to tick. Every read answers thread_states (what opened by
+ * itself, noted, was left out or undone) and show_id, for the card.
+ *
  *   getRecord(sequelize, episodeId)      { record, cast, threads, goals, twists } for the page
  *   draftRecord(sequelize, episodeId)    drafts (or redrafts) it; saves a draft
  *   draftLater(sequelize, episodeId)     the same after completion, when there is
@@ -292,10 +302,20 @@ async function openFollowUps(sequelize, showId) {
 async function getRecord(sequelize, episodeId) {
   const episode = await episodeOf(sequelize, episodeId);
   const { event, cast, profiles } = await castOf(sequelize, episode.id);
+  const record = shape(await rowOf(sequelize, episode.id));
   return {
-    record: shape(await rowOf(sequelize, episode.id)), cast,
+    record, cast,
     threads: await openThreads(sequelize, episode.show_id), goals: await goalsOf(sequelize, episode, event, profiles),
     twists: await dueTwists(sequelize, episode.id),
+    ...(await threadView(sequelize, episode, record)),
+  };
+}
+
+/** What of the record's threads opened by itself (services/threadInbox), and the show, for the card. */
+async function threadView(sequelize, episode, record) {
+  return {
+    show_id: episode.show_id || null,
+    thread_states: record ? await require('./threadInbox').recordThreadStates(sequelize, record.applied) : {},
   };
 }
 
@@ -546,7 +566,15 @@ async function draftRecord(sequelize, episodeId) {
     relationships: listOf(parsed.relationships), follow_ups: listOf(parsed.follow_ups), goals: listOf(parsed.goals), twists: listOf(parsed.twists),
   }, { cast, threads, goals, twists, script: episode.script_content });
   const saved = keepSavedKeys(fields, await rowOf(sequelize, episode.id));
-  return { record: await save(sequelize, episode, saved, { status: 'draft', drafted: true }), cast, threads, goals, twists };
+  let record = await save(sequelize, episode, saved, { status: 'draft', drafted: true });
+  // New threads open by themselves once they pass the check (services/threadInbox); the draft stands if that fails.
+  try {
+    const applied = await require('./threadInbox').openFromRecord(sequelize, episode, record);
+    if (applied) record = { ...record, applied };
+  } catch (err) {
+    console.error('[episodeStoryRecord] the script\'s threads did not open by themselves (the draft stands; Save writes them):', err.message);
+  }
+  return { record, cast, threads: await openThreads(sequelize, episode.show_id), goals, twists, ...(await threadView(sequelize, episode, record)) };
 }
 
 /**
@@ -595,7 +623,8 @@ async function updateRecord(sequelize, episodeId, body = {}) {
   const goals = await goalsOf(sequelize, episode, event, profiles);
   const twists = await dueTwists(sequelize, episode.id);
   const fields = clean(body, { cast, threads, goals, twists, script: episode.script_content });
-  return { record: await save(sequelize, episode, fields, { status: 'draft' }), cast, threads, goals, twists };
+  const record = await save(sequelize, episode, fields, { status: 'draft' });
+  return { record, cast, threads, goals, twists, ...(await threadView(sequelize, episode, record)) };
 }
 
 // ── Save: each kept item, written once ─────────────────────────────────────

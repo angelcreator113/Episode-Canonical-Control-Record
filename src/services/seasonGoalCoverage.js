@@ -301,11 +301,13 @@ function lalaState(sequelize, showId) {
  * Everything computeCoverage reads, for the show's active season: its parts,
  * its slots each with its event (pencilled, else its episode's), the active
  * goals and Lala's stats. null when the show has no active season.
+ * Options (the season wrap-up, 2026-10-26): arcId reads that season instead,
+ * and goals replaces the active goals (a finished season's reached ones too).
  */
-async function loadCoverageInputs(sequelize, showId) {
+async function loadCoverageInputs(sequelize, showId, { arcId = null, goals: givenGoals = null } = {}) {
   const { loadSeason } = require('./seasonLoader');
   const { arcPhases, episodeLabel } = require('./seasonSlotService');
-  const season = await loadSeason(sequelize, showId);
+  const season = await loadSeason(sequelize, showId, arcId ? { arcId } : {});
   if (!season) return null;
   const { arc, slots: slotRows } = season;
   const [eventRows] = await sequelize.query(
@@ -335,7 +337,7 @@ async function loadCoverageInputs(sequelize, showId) {
   const parts = arcPhases(arc).map((p) => ({
     phase: Number(p.phase), title: p.title, episode_start: Number(p.episode_start), episode_end: Number(p.episode_end),
   }));
-  const goals = await activeGoalRows(sequelize, showId);
+  const goals = givenGoals || await activeGoalRows(sequelize, showId);
   const state = await lalaState(sequelize, showId);
   return { arc, season_number: seasonNumber, parts, slots, goals, state };
 }

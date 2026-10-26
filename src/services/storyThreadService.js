@@ -6,9 +6,20 @@
  * docs/SEASON_ARC_DESIGN_NOTE.md; table show_story_threads, migration
  * 20261001250000).
  *
- *   Q9 (accepted). "you create and name them; drafts are offered from
- *   seeds_future_events. Acceptance can mark one "advanced", and only you
- *   close one."
+ *   Q9 (accepted; REPLACED in part on 2026-10-26, see below). "you create
+ *   and name them; drafts are offered from seeds_future_events. Acceptance
+ *   can mark one "advanced", and only you close one."
+ *
+ *   The rule now (Evoni, 2026-10-26). Her question: "How do we auto create
+ *   threads that make sense with the story". Her answer: "Let's let them
+ *   open themselves on new threads and build the threads list. I think
+ *   that will help things move along". New threads open by themselves,
+ *   each with Undo; closing a thread is still only Evoni's. A finished
+ *   script's new threads and an event's seeds open once they pass the
+ *   check (services/threadInbox); a short story's and the feed's still
+ *   wait in the threads list for her Keep, Merge into… or Drop. Q9's "you
+ *   create and name them" is replaced by this; "only you close one"
+ *   stands (closeThread).
  *   PR 7 choice 1 (Evoni, 2026-10-01). "a closed thread can be reopened by
  *   Evoni (with confirm), keeping its history".
  *   A3. A slot's intention includes "the story thread it continues".
@@ -92,8 +103,10 @@ async function seedDrafts(sequelize, showId, { arcId = null } = {}) {
         ${arcId ? 'AND ep.id IN (SELECT s.episode_id FROM season_slots s WHERE s.arc_id = :arcId AND s.deleted_at IS NULL AND s.episode_id IS NOT NULL)' : ''}
       ORDER BY ep.created_at DESC`,
     { replacements: { showId, arcId } });
+  // A soft-deleted row counts too: a seed the threads list left out, or one
+  // Evoni undid (services/threadInbox, 2026-10-26), is not offered again.
   const [taken] = await sequelize.query(
-    'SELECT seed_text FROM show_story_threads WHERE show_id = :showId AND deleted_at IS NULL AND seed_text IS NOT NULL',
+    'SELECT seed_text FROM show_story_threads WHERE show_id = :showId AND seed_text IS NOT NULL',
     { replacements: { showId } });
   const used = new Set(taken.map((t) => t.seed_text.toLowerCase()));
   const drafts = [];

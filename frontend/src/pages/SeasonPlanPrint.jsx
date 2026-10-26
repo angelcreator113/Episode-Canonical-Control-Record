@@ -6,7 +6,8 @@
  * release days, the events, the goals and the release schedule
  * (lib/seasonPlanSheet), with Print (the browser's Print, then Save as PDF:
  * no PDF library). At the top, a marked spot for the two-line season pitch:
- * the arc's logline when there is one; a later AI step fills it (pitchSlot).
+ * the arc's logline until a pitch is saved; SeasonPitch (pitchSlot) drafts
+ * two lines with AI on Evoni's press, for her to edit and Save.
  *
  * Reads what the Season page reads: useSeasonPlan (arc, roadmap, goals), the
  * show and its events, the release schedule. Styles: SeasonPlanPrint.css
@@ -20,6 +21,7 @@ import { useSeasonPlan, SeasonLoadError } from '../components/Show/SeasonPlan';
 import { useReleaseSchedule } from '../lib/releaseSchedule';
 import { seasonPageHref } from '../lib/seasonPage';
 import { seasonPlanSheet } from '../lib/seasonPlanSheet';
+import SeasonPitch from '../components/Show/SeasonPitch';
 import './SeasonPlanPrint.css';
 
 /** The sheet itself, from seasonPlanSheet's shape; pitchSlot replaces the pitch spot's content when given. */
@@ -130,7 +132,8 @@ export default function SeasonPlanPrint() {
       <SeasonLoadError plan={plan} />
       {plan.loading ? <p className="splan-muted" role="status">Loading the season…</p>
         : !sheet ? <p className="splan-muted">No season set up yet.</p>
-          : <SeasonPlanSheet sheet={sheet} showName={showName} />}
+          : <SeasonPlanSheet sheet={sheet} showName={showName}
+            pitchSlot={<SeasonPitch key={plan.arc.id} api={api} showId={showId} season={season} fallback={sheet.pitch} />} />}
     </div>
   );
 }

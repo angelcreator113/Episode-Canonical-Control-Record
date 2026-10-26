@@ -1,0 +1,28 @@
+/* "What should I do next?" (SeasonNextStep, 2026-10-26) on the hero's dark
+   shade, under the health line: a soft white pill button, then the answer
+   in a translucent card; white text throughout (as SeasonHealthLine). */
+.snext { margin-top: 10px; min-width: 0; }
+.snext-btn {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 6px 16px; border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, .55); background: rgba(255, 255, 255, .14); color: var(--sp-white, #fff);
+  font: inherit; font-size: 14px; font-weight: 700; cursor: pointer;
+}
+.snext-btn:hover { background: rgba(255, 255, 255, .24); }
+.snext-btn:disabled { opacity: .7; cursor: wait; }
+.snext-btn:focus-visible, .snext-close:focus-visible { outline: 3px solid var(--sp-gold, #E8B84A); outline-offset: 2px; }
+.snext-card {
+  display: flex; align-items: flex-start; gap: 8px; max-width: 720px; padding: 10px 8px 10px 14px; border-radius: 14px;
+  background: rgba(0, 0, 0, .38); border: 1px solid rgba(255, 255, 255, .3); color: var(--sp-white, #fff);
+}
+.snext-card.is-error { border-color: var(--sp-gold, #E8B84A); }
+.snext-text { flex: 1 1 auto; min-width: 0; }
+.snext-p { margin: 0 0 4px; font-size: 15px; line-height: 1.5; overflow-wrap: anywhere; }
+.snext-foot { margin: 4px 0 0; font-size: 12px; opacity: .85; }
+.snext-close {
+  flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px;
+  border: none; border-radius: 999px; background: transparent; color: var(--sp-white, #fff); cursor: pointer;
+}
+.snext-close:hover { background: rgba(255, 255, 255, .16); }
+@media (max-width: 640px) {
+  .snext-p { font-size: 14px; }
+}

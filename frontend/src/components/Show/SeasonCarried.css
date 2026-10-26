@@ -1,0 +1,42 @@
+/* "What's carried into Season N+1?" (SeasonCarried, 2026-10-26), a past
+   season's Story tab, on the Season page's --sp-* tokens. Each row: a tick,
+   then what it is, the reason, Continue · Resolve · Drop and what applying
+   it does; the choice wraps on a phone. */
+.scar { min-width: 0; }
+.scar-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; margin-bottom: 8px; }
+.scar-heading { margin: 0; font-family: var(--font-prose); font-size: 20px; font-weight: 600; color: var(--sp-ink); }
+.scar-muted { margin: 0; font-size: 13px; color: var(--sp-muted); }
+.scar-warn { display: flex; align-items: center; gap: 6px; margin: 0 0 8px; padding: 8px 12px; border-radius: 10px; font-size: 13px; background: var(--sp-gold-soft); color: var(--sp-gold-text); }
+.scar-list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.scar-row { display: flex; gap: 10px; min-width: 0; padding: 12px; border-radius: 12px; background: var(--sp-bg); border: 1px solid transparent; }
+.scar-row.is-ticked { border-color: var(--sp-pink); }
+.scar-tick { flex: 0 0 auto; display: inline-flex; align-items: flex-start; justify-content: center; width: 44px; min-height: 44px; padding-top: 2px; cursor: pointer; }
+.scar-tick input { width: 22px; height: 22px; accent-color: var(--sp-pink); cursor: pointer; }
+.scar-body { flex: 1 1 auto; min-width: 0; }
+.scar-type { margin: 0; font-family: var(--font-mono, 'DM Mono', monospace); font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--sp-purple); }
+.scar-title { margin: 2px 0 0; font-size: 15px; font-weight: 700; color: var(--sp-ink); overflow-wrap: anywhere; }
+.scar-reason { margin: 4px 0 0; font-size: 13px; color: var(--sp-muted); overflow-wrap: anywhere; }
+.scar-choice { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.scar-seg {
+  min-height: 44px; padding: 4px 14px; border-radius: 999px; border: 1px solid var(--sp-line); background: var(--sp-card);
+  font: inherit; font-size: 13px; font-weight: 700; color: var(--sp-ink); cursor: pointer;
+}
+.scar-seg.is-on { background: var(--sp-purple-fill); border-color: var(--sp-purple-fill); color: var(--sp-white); }
+.scar-row.is-drop .scar-seg.is-on { background: var(--sp-pink-deep); border-color: var(--sp-pink-deep); }
+.scar-seg:focus-visible, .scar-btn:focus-visible, .scar-tick input:focus-visible { outline: 3px solid var(--sp-purple); outline-offset: 2px; }
+.scar-outcome { margin: 6px 0 0; font-size: 13px; font-weight: 600; color: var(--sp-ink); }
+.scar-actions { display: flex; justify-content: flex-end; margin-top: 10px; }
+.scar-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; padding: 6px 16px;
+  border: none; border-radius: 999px; font: inherit; font-size: 14px; font-weight: 700; cursor: pointer;
+  background: var(--sp-pink); color: var(--sp-white);
+}
+.scar-btn:disabled { opacity: .6; cursor: not-allowed; }
+.scar-error { margin: 8px 0 0; font-size: 13px; font-weight: 700; color: var(--sp-pink-deep); }
+.scar-results { display: grid; gap: 4px; margin: 10px 0 0; padding: 0; list-style: none; font-size: 13px; }
+.scar-results .is-ok { color: var(--sp-green); }
+.scar-results .is-bad { color: var(--sp-pink-deep); font-weight: 700; }
+@media (max-width: 640px) {
+  .scar-actions { justify-content: stretch; }
+  .scar-actions .scar-btn { width: 100%; }
+}

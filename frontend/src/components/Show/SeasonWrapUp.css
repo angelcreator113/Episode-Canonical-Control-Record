@@ -1,0 +1,60 @@
+/* The season wrap-up (components/Show/SeasonWrapUp.jsx, 2026-10-26): the
+   Results tab's recap of the season, above the Episode Ledger's list. */
+
+.swu { margin-bottom: 16px; padding: 16px; border: 1px solid var(--lala-parchment-3); border-radius: 14px; background: var(--surface-card); min-width: 0; }
+.swu-head { margin-bottom: 12px; }
+.swu-title { margin: 0; font-family: var(--font-prose); font-size: 22px; font-weight: 600; color: var(--text-primary); }
+.swu-line { margin: 4px 0 0; font-size: 14px; color: var(--text-secondary); }
+.swu-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; align-items: start; }
+.swu-card { min-width: 0; padding: 12px 14px; border: 1px solid var(--lala-parchment-3); border-radius: 12px; background: var(--surface-bg); }
+.swu-card h4 { margin: 0 0 8px; font-size: 12px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; color: var(--text-secondary); }
+.swu-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 10px; }
+.swu-list + .swu-list { margin-top: 10px; }
+.swu-goal-line { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+.swu-goal-title { font-size: 14px; font-weight: 700; color: var(--text-primary); overflow-wrap: anywhere; }
+.swu-sub { margin-top: 2px; font-size: 13px; color: var(--text-secondary); overflow-wrap: anywhere; }
+.swu-sub strong { color: var(--text-primary); font-weight: 600; }
+.swu-muted { margin: 0; font-size: 13px; color: var(--text-secondary); }
+.swu-pill { display: inline-block; padding: 1px 8px; border: 1px solid var(--lala-parchment-3); border-radius: 999px; font-size: 11px; font-weight: 600; color: var(--text-secondary); background: var(--surface-card); white-space: nowrap; }
+.swu-pill.is-reached, .swu-pill.is-slay, .swu-pill.is-pass { color: var(--success-text); background: var(--success-bg); border-color: transparent; }
+.swu-pill.is-missed, .swu-pill.is-fail { color: var(--danger-text); background: var(--danger-bg); border-color: transparent; }
+.swu-pill.is-safe { color: var(--warning-text); background: var(--warning-bg); border-color: transparent; }
+.swu-best li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 8px; }
+.swu-best-meta { display: inline-flex; align-items: center; gap: 6px; }
+.swu-code { margin-right: 6px; font-family: var(--font-mono); font-size: 12px; font-weight: 500; color: var(--lala-gold-text); }
+.swu-score { font-size: 16px; font-weight: 800; color: var(--text-primary); }
+.swu-money { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 0 0 6px; }
+.swu-money div { display: flex; align-items: baseline; gap: 6px; }
+.swu-money dt { font-size: 12px; color: var(--text-secondary); }
+.swu-money dd { margin: 0; font-size: 16px; font-weight: 800; color: var(--text-primary); }
+.swu-money .is-in dd { color: var(--success-text); }
+.swu-money .is-out dd { color: var(--danger-text); }
+
+.swu-ai { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--lala-parchment-3); }
+.swu-saved-text { max-width: 75ch; margin: 0 0 6px; font-family: var(--font-prose); font-size: 15px; line-height: 1.6; color: var(--text-primary); white-space: pre-wrap; overflow-wrap: anywhere; }
+.swu-edit { display: flex; flex-direction: column; gap: 6px; }
+.swu-label { font-size: 13px; font-weight: 600; color: var(--text-primary); }
+.swu-text {
+  box-sizing: border-box; width: 100%; min-height: 200px; padding: 10px 12px; border: 1px solid var(--lala-parchment-3); border-radius: 10px;
+  background: var(--surface-card); color: var(--text-primary); font-family: var(--font-prose); font-size: 15px; line-height: 1.6; resize: vertical;
+}
+.swu-text:focus-visible { outline: 2px solid var(--lala-lavender); outline-offset: 1px; }
+.swu-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.swu-btn {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 6px 14px; border: 1px solid var(--lala-parchment-3); border-radius: 10px;
+  background: var(--surface-card); color: var(--text-primary); font: inherit; font-size: 14px; font-weight: 600; cursor: pointer;
+}
+.swu-btn:disabled { opacity: 0.6; cursor: wait; }
+.swu-btn.is-primary { background: var(--primary); border-color: var(--primary); color: var(--text-inverse); }
+.swu-btn.is-save { background: var(--lala-gold); border-color: var(--lala-gold); color: var(--lala-ink); }
+.swu-btn:focus-visible { outline: 2px solid var(--lala-lavender); outline-offset: 2px; }
+.swu-note { margin-top: 8px; font-size: 12px; }
+.swu-error { margin: 8px 0 0; font-size: 13px; color: var(--danger-text); }
+.swu-load-error { margin: 0 0 12px; font-size: 13px; color: var(--danger-text); }
+.swu-link { padding: 0; border: none; background: none; color: var(--lala-gold-text); font: inherit; font-weight: 600; text-decoration: underline; cursor: pointer; }
+
+@media (max-width: 600px) {
+  .swu { padding: 12px; }
+  .swu-grid { grid-template-columns: minmax(0, 1fr); }
+  .swu-btn { flex: 1 1 auto; justify-content: center; }
+}

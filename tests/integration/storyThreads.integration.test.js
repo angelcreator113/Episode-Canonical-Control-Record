@@ -67,6 +67,8 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
     jest.spyOn(console, 'log').mockImplementation(() => {});
     jest.spyOn(console, 'warn').mockImplementation(() => {});
     jest.spyOn(intentions, 'draftNextSlot').mockResolvedValue(null); // no AI call on acceptance
+    // Seeds opening by themselves (services/threadInbox) are threadInbox's own test's: no AI check here.
+    jest.spyOn(require('../../src/services/threadInbox'), 'openSeedsLater').mockImplementation(() => {});
   });
   afterEach(() => jest.restoreAllMocks());
 
@@ -120,6 +122,21 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
     const res = await create(show, { title: 'Maison Belle returns', seed_text: 'Maison Belle calls back', episode_id: ep });
     expect(res.body.thread).toEqual(expect.objectContaining({ source: 'seed', opened_episode_id: ep }));
     expect((await threadsOf(show)).drafts.map((d) => d.seed_text)).toEqual(['The rival returns']);
+  });
+
+  test('a seed the threads list left out, or one Evoni undid (a soft-deleted row), is not offered again', async () => {
+    const { show } = await seedSeason();
+    const ep = uuid();
+    await run(`INSERT INTO episodes (id, show_id, title, episode_number, status, created_at, updated_at) VALUES (:ep, :show, 'Gala Night', 1, 'draft', NOW(), NOW())`, { ep, show });
+    await run(`INSERT INTO episode_briefs (id, episode_id, show_id, narrative_chain, created_at, updated_at)
+               VALUES (:id, :ep, :show, CAST(:chain AS jsonb), NOW(), NOW())`,
+      { id: uuid(), ep, show, chain: JSON.stringify({ seeds_future_events: ['Maison Belle calls back', 'The rival returns', 'Maren sold the ring'] }) });
+    await run(`INSERT INTO show_story_threads (id, show_id, title, status, source, seed_text, opened_episode_id, created_at, updated_at, deleted_at) VALUES
+               (:a, :show, 'Maison Belle calls back', 'open', 'seed', 'Maison Belle calls back', :ep, NOW(), NOW(), NOW()),
+               (:b, :show, 'Maren sold the ring', 'open', 'seed', 'Maren sold the ring', :ep, NOW(), NOW(), NOW())`, { a: uuid(), b: uuid(), show, ep });
+    const res = await threadsOf(show);
+    expect(res.drafts.map((d) => d.seed_text)).toEqual(['The rival returns']);
+    expect(res.threads).toEqual([]);
   });
 
   test('a slot\'s intention names the thread it continues; a closed thread cannot be chosen; only a close closes it', async () => {
