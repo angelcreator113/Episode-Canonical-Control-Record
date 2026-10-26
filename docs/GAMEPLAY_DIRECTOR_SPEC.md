@@ -1,358 +1,365 @@
 # Gameplay Director and animated export: implementation spec
 
-**Status:** revision 2 of a proposal. Nothing here is built. It revises revision 1 after Evoni's review of 2026-10-26.
+**Status:** revision 3 of a proposal. Nothing here is built.
 
-**Rulings this spec keeps** (Evoni, 2026-10-26):
-- The video export is a separate project. My Little List does not wait for it.
-- The phone stays an interactive game interface. Its appearance is controlled through the gameplay production system.
-- No flattened checklist image goes into the beat-9 scene.
-- The no-overlays-on-beats switch of 2026-10-07 stays as it is.
+**Revision history**
+- **Rev 1** (2026-10-26): the first draft.
+- **Rev 2:** Prime's performance, the Voice icon, decisions and recovery, scenes, overrides and ownership, after Evoni's first review.
+- **Rev 3:** brings in the approved production architecture (`docs/STAGE_PIP_VOICE_PLAN.md`, decisions C1–C6) and Evoni's three corrections:
+  1. The Timeline owns duration.
+  2. A deterministic playback snapshot.
+  3. No beat is non-interactive by rule.
+
+**Rulings this spec keeps** (Evoni, 2026-10-26, unless dated otherwise):
+- The video export is a separate project; My Little List doesn't wait for it.
+- The phone stays an interactive game interface, and the gameplay production system controls how it looks.
+- No flattened checklist image is put into a beat's scene.
+- The no-overlays-on-beats switch (2026-10-07) stays.
 - The Mouse Cursor and Grabbing Hand already in World → Overlays are reused, never regenerated.
-- No merge, deploy or production-server change without Evoni's explicit yes.
-
-**What revision 2 adds** (her review):
-- Prime's performance as the clock (§3).
-- The Voice icon rules (§4).
-- Decisions and backtracking (§5).
-- Scenes and locations (§6).
-- Regeneration and overrides (§7).
-- Who owns what (§2).
-- The Episode 1 walkthrough (§11).
-- A check on the cursor tables (§10).
+- **One authoritative episode script.**
+- **One shared Stage**, on Scene Studio's composition foundation. The Timeline adds timing, animation and sequencing to that same composition.
+- **Prime's PIP is her recorded footage**: an editable layer, **visible by default** and shown or hidden by hand. **Missing footage uses a designated fallback, with a warning.**
+- **Lala and the NPCs use assigned or generated voices.** Lala normally speaks only after the Voice icon is clicked, except for approved automatic triggers.
+- **Front and Back View belong to the same Scene Set.**
+- **Episode scenes inherit master objects but keep local customizations.** A customized object survives the master's deletion.
+- **Gameplay is generated automatically but stays editable**, and manual overrides are protected.
+- **Preview and export use the same authoritative production data.**
+- No merge, deploy or production-server change without Evoni's explicit approval.
 
 ---
 
-## 1. The idea in one paragraph
+## 1. The idea
 
-The Gameplay Director is a pure, rule-based compiler; it makes no AI calls. From the systems that already own the episode, it works out **what Prime does in the game, when, and why**:
-- the script (her lines, Lala's lines, the `[UI:]` actions);
-- the event and its terms;
-- what Lala knows;
-- the look;
-- the coins;
-- the scene plan and the Stage;
-- her recorded takes.
+The Gameplay Director is a pure compiler built on rules, not AI. From the systems that own the episode, it works out **what Prime does in the game, and when**: the script, the event, what Lala knows, the look, the coins, the Stage and Timeline, Prime's PIP takes, and the dialogue voices.
 
-The result is a **gameplay track**: actions anchored to Prime's performance, plus Evoni's overrides kept on a layer of their own. The same track drives the in-app preview and the exported video.
+Its output is a **gameplay track**: actions anchored to the script and to Prime's performance, plus Evoni's overrides on a layer of their own.
 
-The Director **owns only one new thing: the gameplay actions and Evoni's adjustments to them.** It owns no story, no state and no money. Everything it shows, it reads from the system that owns it.
+Before anything plays, the track is paired with a **playback snapshot**: the game state at every moment the track shows, frozen and versioned (§8). Preview and export both read the track version and the snapshot version, never the live system.
 
-## 2. Who owns what: no second source of truth
+**The Director owns only the gameplay actions, Evoni's adjustments to them, and the snapshot it derives.** Everything it shows comes from the system that owns it.
 
-| Kind of thing | Owner today | How the Director uses it | What the track stores |
+## 2. Who owns what (shared with the architecture session)
+
+| Kind of thing | Owner | How the Director uses it | What the Director stores |
 |---|---|---|---|
-| Episode story and dialogue text | `episodes.script_content`, with history in `episode_script_versions` and locks in `episodes.script_locked_beats` (`scriptBeatLocks`); `episode_briefs`; the approved `episode_story_records` | Reads lines, speakers and tags (`scriptBeats`, `scriptSpeaker`) | Line anchors (beat, line, content hash), never the text. A dialogue edit goes to the script. |
-| Event information | `world_events`, including `canon_consequences.documents` and `.terms`; `event_deliverables`; `opportunities` | Reads the invitation, offer, deliverables and opportunity | Nothing |
-| What Lala knows | Worked out, not stored: `utils/lalaKnowledge` (PR #3599) from the script, the event and the opportunities | Asks `knowsAt(beat, line)` | Nothing |
-| Wardrobe state | `episode_wardrobe` (the approved look, locked by `/wardrobe/lock-outfit-atomic`); what she has on by a line comes from the `[WEAR]` cues (`scriptWear.wornByBeat`) | Reads pieces and `[WEAR]` lines | Nothing (no "worn" state) |
-| Money and stats | The `financial_transactions` ledger; `character_state` via `coinBalanceGuard`; `lalaStats.statsAt` for what is shown; `episodeCompletionService` for stat changes | Reads `statsAt` for any stats it shows; checks script `[STAT:]` lines against it | Nothing |
-| Recorded takes | `episode_raw_clips` (takes, `is_favorite`, `start_line`, `beat_marks`); `script_voice_clips` (per-line recordings); `episode_performance_clips` (the approved clip per beat and performer) | Uses the takes as the clock (§3) | Which take each beat uses, if Evoni overrides the favourite |
-| Phone layout | `ui_overlay_types` and `assets` (screens, `screen_links` tap zones, `content_zones`), through `phoneOverlays.overlayStatusForShow` | Resolves tap targets to zones | Zone ids, never coordinates (except Evoni's cursor nudges, as offsets) |
-| My Little List | PR #3599's service (a view of `episode_todo_lists`) | Item keys and visibility at each line | Item keys |
-| Stage composition | `scene_plans` (set, `angle_label`, `transition_in`, `locked`, `chosen_by_user` per beat); `scenes` (`syncBeatScenes`); `scene_assets` (Scene Studio positions); `timeline_data` (keyframes); `timeline_placements` (overlays) | Reads the set and angle per beat, transitions, and character positions | Shots *within* a beat (§6.3), which nothing else owns today |
-| Gameplay actions | **New:** `episode_gameplay_tracks` | — | The generated actions (rebuildable) plus Evoni's overrides (original data) |
-| Final rendering | Today: `routes/export.js`, `videoQueue`, `workers/videoRenderer` | — | A render record: the track version and input hashes it was made from |
+| Episode story and dialogue text | **The one episode script** (`episodes.script_content`, history and locks). The architecture session confirms this against `episode_scripts` | Reads lines, speakers and tags by **`line_key`** | Line anchors by `line_key`. Never the text |
+| Line identity | **`line_key`** utility (architecture session) | Keys anchors and overrides | — |
+| Event information | `world_events` (documents, terms), `event_deliverables`, `opportunities` | Reads them into the snapshot | Snapshot copy only (§8) |
+| What Lala knows | Worked out by `lalaKnowledge` (PR #3599) | Resolves it into the snapshot | Snapshot copy only |
+| Wardrobe state | `episode_wardrobe` (the locked look) and the script's `[WEAR]` (`wornByBeat`) | Into the snapshot | Snapshot copy only |
+| Money and stats | The ledger and `character_state` (`coinBalanceGuard`); `lalaStats.statsAt` | Into the snapshot | Snapshot copy only |
+| Tasks and My Little List | `episode_todo_lists` plus the My Little List service | Into the snapshot | Snapshot copy only |
+| Phone layout and content | `ui_overlay_types`/`assets` (screens, zones); feed, DMs and profiles at the story moment | Into the snapshot | Snapshot copy only |
+| **Stage composition** | **Shared Stage:** episode-scene objects on Scene Studio's foundation, inheriting master objects with local overrides (architecture session) | References **episode-scene object ids**, never master ids | Object ids |
+| **Timing, animation, sequencing, final duration** | **Timeline:** scene order and duration, object and camera keyframes, `scene_plans.transition_in` | Places actions on the Timeline's clock (§3) | Anchors and offsets |
+| **Prime's footage, take choice, trim, visibility, fallback** | **PIP system:** performer segments over the raw takes (architecture session) | Line and cue marks become timing anchors (§3) | Nothing. **No take choice in the track** |
+| Lala and NPC voices | **Dialogue lines:** speaker, assigned voice, source, status, duration, by `line_key` (architecture session) | Places lines and checks they fit | Nothing |
+| Render geometry and mix | **`layoutAt`, `StageRenderer`, the mix plan and the compositor** (architecture session) | Adds gameplay layers (phone, cursor, toasts) and gameplay audio events (clicks, sounds) | — |
+| Gameplay actions | **`episode_gameplay_tracks`** (this spec) | — | Generated actions and Evoni's overrides |
+| Playback state | **`episode_playback_snapshots`** (this spec): a frozen, derived projection | — | The snapshot (§8) |
 
-**Rules that keep it single-sourced:**
-1. The generated layer can always be rebuilt from its inputs. Only the override layer is original.
-2. The track never stores a value another system owns: no coins, no list text, no positions, no set choice, no dialogue.
-3. Where the track and an owner disagree (an override names a zone the phone no longer has), the owner wins and the override goes to review (§7).
-4. The cursor tables (`cursor_actions`, `icon_cues`) are not a source for the track (§10).
+**Rules**
+1. The generated layer and the snapshot can always be rebuilt from their owners. Only the override layer is original data.
+2. **The snapshot is a frozen copy for playback, never a source.** Nothing reads it except preview and export, and nothing is ever written back from it.
+3. The Director never writes Stage objects, PIP segments, dialogue clips, Timeline durations or any owner's state.
+4. Where an override and its owner disagree, the owner wins and the override goes to review (§7).
+5. The cursor tables (`cursor_actions`, `icon_cues`) are not a source (§11).
 
-## 3. Prime's performance is the clock
+## 3. Timing: the Timeline owns duration; Prime's takes are anchors
 
-Prime is the streamer playing the game. Her reactions only make sense if the game waits for her and reacts with her. So **the take leads, and the gameplay follows it**.
+**The Timeline owns the episode clock.** That covers the order of scenes and beats, each scene's final duration, keyframes and transitions.
 
-### 3.1 Timing anchors
+Prime's recorded performance **does not set the duration automatically**. It supplies **timing anchors**, and where the takes and the Timeline disagree, the conflict goes to review.
 
-Every gameplay action is placed relative to an **anchor**, never at a bare number of seconds:
+### 3.1 Anchors
 
-| Anchor | Means | Source today | Gap |
-|---|---|---|---|
-| `beat_start` | The beat's first frame in the take | `episode_raw_clips.beat_marks` (full takes); a per-beat favourite starts at 0 | None |
-| `line_start` / `line_end` | When Prime starts or finishes a script line in the take | **None:** timing is per beat only | **To build:** line marks (§3.2) |
-| `cue_shown` | When the teleprompter showed her a `[UI:]` moment, which is what she reacted to | **None:** the teleprompter shows cues for 3 s but doesn't record when | **To build:** cue marks (§3.2) |
-| `after_action` | A fixed gap after another action (the screen opens 0.6 s after the press) | The Director's rules | None |
+Every gameplay action is placed relative to an anchor, then mapped onto the Timeline's clock:
 
-An action is stored as `{ anchor, offset }`. For example, `cursor.press` sits at `line_start(beat 5, line 2) − 0.4 s`, so the press lands just before Prime says "Oh, a letter."
+| Anchor | Means | Source |
+|---|---|---|
+| `scene_start` / `scene_end` | The Timeline's own boundaries | Timeline |
+| `line_start` / `line_end` | When Prime starts or finishes a line | PIP segment's **line marks** (teleprompter), mapped through the segment's trim and offset; else the script estimate (`lineSeconds`), spread across the Timeline's duration |
+| `cue_shown` | When the teleprompter showed Prime a `[UI:]` moment | PIP segment's **cue marks** |
+| `after_action` | A fixed gap after another action | The Director's rules |
 
-### 3.2 Capturing line and cue marks
+An action is stored as `{ anchor, offset }`. Its time on the Timeline is worked out from the current Timeline and PIP data, so editing either moves the action with it.
 
-**Line marks:** the teleprompter already follows her voice (`lib/voiceFollow`) and knows which line she is on. When a line becomes current, it records `{ beat, line, t }` in take time, with pauses excluded, the same clock as `fullEpisodeTake`'s beat marks. Stored as a new `episode_raw_clips.line_marks` JSONB, capped like `beat_marks`.
+### 3.2 When the takes and the Timeline disagree
 
-**Cue marks:** when the teleprompter shows a `[UI:]` moment (`teleprompterScreen`), it records `{ beat, line, verb, t }` in `episode_raw_clips.cue_marks`. When she reacts to "a letter arrives", the letter arrives in the video at the moment she saw it.
+These are findings for review. Nothing is resolved silently.
 
-**Without marks:** older takes, or takes not read with "Follow my voice", fall back to the script estimate (`scriptRuntime.lineSeconds`) scaled to the beat's real length. The preview labels that beat **"estimated timing"**, and Evoni can nudge it (§7).
+| Conflict | Shown as | Choices (Evoni) |
+|---|---|---|
+| The selected take is **longer** than the scene's Timeline duration | `take_overruns_scene` (by N s) | Extend the scene on the Timeline · trim the PIP segment · keep both and let the PIP cut at the scene end |
+| The take is **shorter** | `take_underruns_scene` | Shorten the scene · let the PIP's fallback cover the rest · loop the PIP's last frame |
+| An action anchored to a line falls **outside** its scene | `anchor_outside_scene` | Move the action · adjust the Timeline · re-pin it |
+| A generated Lala or NPC line doesn't fit the gap Prime left | `line_overruns_gap` | Hold the PIP frame · shorten the line (regenerate) · re-record |
+| No marks (an older take, or no "Follow my voice") | `estimated_timing` | Nudge the actions by hand |
 
-### 3.3 Reactions, pauses, jokes and decisions
+### 3.3 Reactions, pauses and decisions
 
-- **Surprise:** an event that surprises her (a notification, a refused action, the runway) is placed at its `cue_shown` mark. The take holds her reaction: the gameplay doesn't move until her next line anchor, so a laugh or a pause is never covered by motion.
-- **Decisions:** "I'm going with the gold heels" puts the equip press on that line's anchor. Hovering and comparing (§5) fill the lines before it, so she is seen thinking with the cursor.
-- **Pauses for dialogue:** while Prime or Lala is speaking, the cursor *rests*. Any motion is scheduled between lines, unless the script ties an action to a line (`[UI:CLICK x]` written mid-line).
-- **Jokes or asides with no game action** produce no gameplay. The cursor idles with small, seeded drift so the screen doesn't look frozen.
-
-### 3.4 Two recording workflows; both work
-
-1. **Record, then direct** (the default). Prime records the beat. The Director places actions on her line and cue marks. Evoni nudges them in the preview.
-2. **Direct, then record** (rehearsal). The preview plays the drafted track while the teleprompter shows it. The take's cue marks then re-anchor the track to what she actually reacted to.
+- A surprise sits at its `cue_shown` mark. Gameplay holds until Prime's next line anchor, so her reaction is never covered by motion.
+- A decision's press ("the gold ones") sits on that line's anchor. Hovering and comparing (§5) fill the lines before it.
+- The cursor **may move while Prime talks**, because she narrates while she plays. It **rests** while Lala or an NPC speaks, and during a reaction hold.
+- Two ways to work, both supported: **record, then direct** (the default), or **direct, then record**, where the teleprompter shows the drafted track and the take's cue marks re-anchor it.
 
 ## 4. Lala's Voice icon
 
-### 4.1 The rule and its exceptions, from one place
-
-Both the rule and its exceptions live in `utils/scriptShowRules` (backend, with an identical frontend twin and a parity test). The Director calls `voiceOffLines` and `dressedAt` and **does not write a second rule engine**.
+The rule and its exceptions live in `utils/scriptShowRules` (backend, with a frontend twin covered by a parity test). The Director calls `voiceOffLines` and `dressedAt`; it doesn't write a second rule engine.
 
 | Lala line | Allowed when | In code today |
 |---|---|---|
-| An ordinary line | Right after Prime clicks Lala's Voice icon: one click, one line (`isVoiceOn`: CLICK, TAP or SELECT on a target matching /voice/, or `[UI:VOICE_ACTIVATE]`) | Yes |
-| Her thoughts, `Lala (V.O.):` | Always; thoughts aren't speech | Yes |
-| An **automatic wardrobe reaction** | While she is being dressed (`dressedAt`: the closet is open, the line just before a `[WEAR:]`, or the first line after a `[WEAR:]` and its `[STAT:]` lines) | Yes (the `dressedAt` window) |
-| `Lala (auto):` lines | Today, anywhere (`AUTO_REACTION` is skipped wherever it appears) | Yes, but too loose (decision D-3) |
-| A **reaction to a notification** | The next Lala line after a `[UI:NOTIFY]`, `[UI:DM]` or `[MAIL:]` | Yes (`MESSAGES`) |
-| **NPC conversations** | Cutscene beats 11 to 13 (`isCutsceneBeat`), where beat 11's host and guest lines are required (`scriptRuleChecks` `beat11-*`) | Only in the cutscene; **no trigger exists for an NPC talk outside it** (decision D-4) |
+| An ordinary line | Right after a click on Lala's Voice icon: one click, one line (`isVoiceOn`) | Yes |
+| `Lala (V.O.):`, her thoughts | Always | Yes |
+| **Automatic wardrobe reaction** | Inside `dressedAt`: the closet is open, the line just before a `[WEAR:]`, or the first line after it | Yes |
+| **Automatic reaction to a notification** | The next Lala line after `[UI:NOTIFY]`, `[UI:DM]` or `[MAIL:]` | Yes (`MESSAGES`) |
+| `Lala (auto):` lines | Today, anywhere | Too loose. Decision D-3 limits them to the two triggers above |
+| **NPC conversations** | Today only in beats 11–13 (`isCutsceneBeat`). An approved trigger elsewhere is decision D-4 | Partly |
 
-### 4.2 What the Director emits
+**Emitted actions**
+- For an ordinary line: `cursor.move` to the Voice zone, `cursor.press` with the `click` sound, and `voice.on` ("Lala speaks"), all anchored before the line. Then `lala.line`, whose audio comes from the dialogue line's clip.
+- For an exception: no click, and the line is marked with its reason.
 
-For every ordinary Lala line, it emits, anchored before the line:
-1. `cursor.move` to the Voice zone (`phoneVoice.isVoiceZone`);
-2. `cursor.press` with the `click` sound;
-3. `voice.on`, which shows the "Lala speaks" toast (`phoneVoice.VOICE_TOAST`).
+**Findings** (Script tab health, one list):
+- `lala_unvoiced`, the existing finding, fixed by the existing fix;
+- `auto_without_trigger` (D-3);
+- `npc_without_trigger` (D-4);
+- `voice_click_unreachable`.
 
-Then comes `lala.line`, which plays her line's audio: the `script_voice_clips` row for that line, or the Lala performance clip for the beat. The click lands 0.3 to 0.5 s before the line's `line_start`.
+The Director never edits the script on its own.
 
-For an exception it emits no click. It marks the line with its reason (`wardrobe_auto`, `message_reaction`, `voice_over`, `cutscene`), so the preview can show why no click was needed.
+**Note on beats 11–13:** today `scriptShowRules` exempts them from the click rule as a cutscene. Rev 3 doesn't treat them as non-interactive (§6.4). Whether the click rule should apply in those beats when the script puts gameplay there is decision D-12.
 
-### 4.3 Validation (Script tab health, one finding list)
+## 5. Decisions, backtracking and recovery
 
-| Finding | When | Fix offered |
-|---|---|---|
-| `lala_unvoiced` | An ordinary Lala line with no click before it: `voiceOffLines`, the same finding the Script tab shows today | The existing fix, `beatWithVoiceClicks` |
-| `auto_without_trigger` *(new, needs D-3)* | `Lala (auto):` that is not right after a `[WEAR]` (or inside `dressedAt`) or a message | "Make it a voiced line (adds a click)" or "Move it after the `[WEAR]`/notification" |
-| `npc_without_trigger` *(new, needs D-4)* | An NPC line outside beats 11 to 13 with no approved trigger before it | "Add the trigger" |
-| `voice_click_unreachable` | The Voice zone isn't on the screen the phone shows at that line | The `phonePaths` fix that adds `[UI:OPEN]` |
+**Script verbs** use the same `[UI:]` form; the parser and writers learn them in one PR:
 
-The Director never "fixes" a script by itself. Findings appear in the Script tab, and the writer's prompt already states the rule (`groundedScriptGeneratorService`).
-
-## 5. Decisions, backtracking and recovery: a game, not a click list
-
-### 5.1 More verbs for the script, in the same `[UI:]` form
-
-| Tag | Gameplay |
+| Verb | Shows |
 |---|---|
-| `[UI:HOVER <target>]` | The cursor rests on a target; its tooltip or price shows |
-| `[UI:PREVIEW <piece>]` | The piece's detail card opens (`inspecting` in `EpisodeWardrobeGameplay`); Lala's figure shows it as a try-on preview where the closet supports it |
-| `[UI:COMPARE <piece> \| <piece>]` | Two pieces side by side |
-| `[WEAR: <id>]` | Equips the piece, as now. It moves the `wornByBeat` state, and its wardrobe reaction is allowed (§4) |
-| `[UI:UNEQUIP <id>]` / a second `[WEAR]` for the same slot | Reconsidering: takes off, or replaces |
-| `[UI:BACK]`, `[UI:CLOSE <screen>]`, `[UI:OPEN <screen>]` | Closing and reopening screens. `phonePaths` already checks reachability |
-| `[UI:WAIT <n>s]` | An explicit hold for dialogue or a beat of thought |
-| `[UI:TRY <action>]` | An attempt that may be refused (§5.3) |
+| `[UI:HOVER x]` | The cursor resting on x |
+| `[UI:PREVIEW piece]` | The piece's detail card |
+| `[UI:COMPARE a \| b]` | Two pieces side by side |
+| `[WEAR: id]` | Equip, as today |
+| `[UI:UNEQUIP id]`, or a second `[WEAR]` in the same slot | Reconsider |
+| `[UI:BACK]`, `[UI:CLOSE x]`, `[UI:OPEN x]` | Leave or return to a screen |
+| `[UI:WAIT n s]` | Hold |
+| `[UI:TRY action]` | An attempt that may be refused |
 
-The parser reads them as it reads `[UI:CLICK]`, and gives them durations in `UI_ACTION_DURATIONS`. The writers' prompts learn them in the same PR (§12, PR 4).
+**Rules**
+- The `[WEAR]` sequence must end on the look locked in `episode_wardrobe`. The script tells the story of choosing; the lock is the choice.
+- A **read-only replay** checks the script against the owners' rules: coins under `coinBalanceGuard`'s refusal and the look's charges, the closet and pool, reachable screens (`phonePaths`), and what Lala knows. It writes nothing.
+- A refused attempt becomes `action.refused`: a shake, the game's own message, and the `error` sound. The script's following lines are the recovery.
+- An unintended refusal (not a `[UI:TRY]`) is a finding.
 
-### 5.2 The look is the one the game locked
+## 6. Scenes, Stage and Timeline
 
-The order of `[WEAR]` lines must end in the approved look (`episode_wardrobe` `approved`). A piece worn and then replaced is fine; it's the reconsidering. A finding flags a script that ends in a look other than the locked one. **The script tells the story of choosing; the lock is the choice.**
+### 6.1 Where each beat happens
 
-### 5.3 Invalid or unavailable actions
+`scene_plans` holds each beat's Scene Set and angle (`planLocationsService`, `beatLocations`), plus `transition_in`. **Front and Back View are angles of the same Scene Set** (`scene_angles.angle_kind`). The Director emits:
+- `scene.enter`: the set and angle, using the Timeline's transition;
+- `venue.enter`: e.g. beat 10 on the venue's front, then inside at beat 11, all within one set;
+- `camera.view`: a shot within a scene. It may use **only angles of that scene's Scene Set**, and is placed on the Timeline's camera track (§6.3).
 
-To validate the script line by line, the Director **replays** it against the owners' rules:
-- coins from `statsAt` with the look's charges (`episodeLookCharges`), using the same refusal as `coinBalanceGuard`;
-- what's in the closet or the pool;
-- which screens can be reached (`phonePaths`);
-- what she knows (`lalaKnowledge`).
+### 6.2 Objects, inheritance and references
 
-The replay writes nothing. When the script tries something the game would refuse ("buy the 900-coin coat" with 600 coins), the track shows the refusal:
-- `action.refused`: a shake, plus a toast with the game's own message ("Not enough coins");
-- the `error` sound.
+- **Composition** is the shared Stage: episode-scene objects on Scene Studio's foundation (`scene_assets`).
+- An episode scene **inherits the master objects** of its Scene Set and **keeps local overrides**, copy-on-write: a changed object becomes the scene's own. A customized object **survives the master's deletion**. This is owned and specified by the architecture session.
+- **Gameplay references episode-scene object ids**, never master ids, so an action pointing at "Nia's chair" stays valid if the master object changes or is deleted.
+- A script beat that needs a character or prop the scene doesn't have produces a finding: "Place Nia in beat 11's scene."
+- **Movement over time** is the Timeline's: per-object keyframes, and camera keyframes for the whole scene (the architecture plan). The Director refers to keyframes; it doesn't author or store motion.
 
-**Recovery** is simply the script's next lines (pick the rental instead). A refusal the script didn't intend, meaning an action that isn't a `[UI:TRY]`, is a finding, not a silent success.
+### 6.3 Transitions and shots
 
-## 6. Scenes, locations, Stage and Timeline
+- **Between scenes:** `scene_plans.transition_in`, owned by the Timeline. The script's `[TRANSITION: …]`, which the parser ignores today, is parsed and **proposed** as `transition_in` for Evoni to accept, never written on its own.
+- **Within a scene:** a `camera.view` is written to the **Timeline's camera track**, as a cut or keyframe there, so the Timeline stays the one place for shots. The track keeps only the action that asked for it.
 
-The phone is one layer. A beat on screen has a **scene layer**, a **character layer**, the **phone layer**, the **cursor layer** and the **overlays**. The Director coordinates them; the Stage and Timeline still own what they own.
+### 6.4 No beat is non-interactive by rule
 
-### 6.1 Where each beat takes place
-
-`scene_plans` already holds the set and angle for each beat:
-- `scene_set_id` and `angle_label`, chosen by `planLocationsService.placeBeat` with `beatLocations` (`BEAT_KINDS`: beat 10 = front, beats 11 and 12 = inside);
-- `transition_in` (cut, glow, push, wipe, dissolve or none);
-- `locked` and `chosen_by_user`.
-
-The Director reads these and emits:
-- `scene.enter` at each beat's start: the set, the angle and the transition from `transition_in`;
-- `venue.enter` for the event: beat 10 Event Travel opens on the venue's **front**; beat 11 cuts **inside** (`angle_kind` front → inside), using `transition_in`;
-- `camera.view` for shots **within** a beat (§6.3).
-
-### 6.2 Characters and positions
-
-- Positions live where they are placed today: `scene_assets` rows (Scene Studio: `position_x`/`position_y`, size, `layer_order`, `character_name`, `scene_angle_id`) and `scenes.characters`.
-- Movement over time lives in `timeline_data.keyframes`.
-- The Director **references** them: `character.show <scene asset id>` and `character.move <keyframe id>`. It never copies coordinates.
-- A script beat that needs a character the Stage hasn't placed gives a finding: "Place Nia in beat 11's scene."
-
-### 6.3 Cinematic transitions and shots
-
-- **Between beats:** `transition_in` (owned by `scene_plans`). The script's `[TRANSITION: …]` tag is written by the writers today, but **the parser ignores it** (`scriptBeatParser` hard-codes cut/dissolve). PR 4 parses it and proposes it as `transition_in` for Evoni to accept, rather than having two owners.
-- **Within a beat:** a cut from the front view to a close-up while Lala reacts has **no owner today**. It is the one Stage-like thing the track owns: `camera.view { angle_id, at: anchor }`, chosen by Evoni in the preview. If the Stage later gains per-shot rows, they move there.
-- **Cutscene beats 11 to 13** (AI-video, no phone UI) are a `cutscene` segment: the clip plays, and no cursor or phone appears.
-
-### 6.4 "Build Scene"
-
-There is no "Build Scene" action. The nearest things are **Build Scene Spec** (`sceneSpecService.buildSceneSpec`, in the Scene Sets tab) and **Build Scene Brief** (`SceneInterview`). The Director needs neither directly; it uses their results through `scene_sets` and `scene_angles`. Decision D-8 asks which one Evoni meant.
+Beats 11–13 are often staged as an AI-video cutscene, but **some outcome or deliverable beats include gameplay**: posting the Reel at the event, checking a DM at the venue, a stats moment. Rev 3 doesn't assume any beat has no phone or cursor:
+- **The script decides.** A beat with `[UI:]`, `[WEAR]` or `[DELIVER]` lines gets gameplay actions, whatever its number.
+- **The approved track decides what shows.** Evoni can turn gameplay layers on or off per scene through overrides.
+- A beat with a cutscene clip and no gameplay lines simply has no gameplay actions. Nothing hides them; there are none.
+- **Prime's PIP shows by default in every beat.** Hiding it is a manual PIP control, not a beat rule.
 
 ### 6.5 Layer order (bottom to top)
 
-1. Scene (the set and angle still, or the performance clip as the base video).
-2. Characters (the Stage).
-3. Phone (when shown).
-4. Overlays, only from real `timeline_placements`, so the beat switch applies.
+1. Scene (the angle's still or video; the Stage's objects).
+2. Prime's PIP (its own layer, never baked in), unless the PIP system places it elsewhere.
+3. The phone (when the track shows it).
+4. Overlays (only from real `timeline_placements`, with the beat switch respected).
 5. Toasts.
 6. Cursor.
-7. The audience stats panel (`statsPanelService`), when the script displays it.
+7. The audience stats panel, when the script displays it.
+
+The PIP's position in this order is set by the PIP system's layout.
 
 ## 7. Regeneration and creative overrides
 
-### 7.1 Drafting automatically
-
-- **Start Episode** creates an empty track for the episode ("waiting for a script"). Start Episode writes no script today.
-- **Every script save** (the writers, the Script tab, a restore) redrafts the generated layer of the beats that changed. It is cheap, pure and has no AI cost.
-- **Other changes redraft the beats they touch:**
-  - an event package change (terms, documents, deliverables);
-  - a phone layout change (zones, screens);
-  - a scene plan change (set, angle, transition);
-  - a new take or new marks.
-- **A draft is never approved automatically.** Every redraft leaves the track *draft*, or *changed since approval* for just the beats it touched.
-
-### 7.2 Generated layer and override layer
-
-Each generated action has a **stable anchor id**: its source (beat + line content hash + which occurrence, or the `[WEAR]` piece id, or the item key) plus its role ("voice click before line …").
-
-Evoni's adjustments are stored **separately**, keyed by that id:
+- **Drafting:**
+  - Start Episode creates an empty track.
+  - Every save of the script, the event package, the phone layout, the Stage, the Timeline or the PIP segments redrafts the generated actions of the scenes it touches. This is pure work, with no AI cost.
+  - A draft is never approved automatically.
+- **Stable anchor ids:** each id is the source's `line_key`, the `[WEAR]` piece id, the item key or the episode-scene object id, plus a role.
+- **Overrides,** kept separately and keyed by anchor id:
 
 | Override | Example |
 |---|---|
-| Timing | +0.3 s on the voice click before "Oh, a letter" |
-| Cursor | A path control point, or a hover held longer |
-| Hold | A 1.5 s pause after the runway notification |
-| Camera | The within-beat close-up at line 4 |
-| Take | Use take 3 for beat 8, not the favourite |
+| Timing | +0.3 s on the voice click before a line |
+| Cursor | A path control point, a longer hover |
+| Hold | 1.5 s after the runway notification |
+| Gameplay layer | Show the phone in beat 12 / hide the cursor in beat 13 |
 | Off | Don't show this hover |
 
-**Dialogue edits are not track overrides:** dialogue is the script's, so it is edited in the Script tab. The redraft then follows it, and a timing override survives if its line's anchor survives.
+  **Not overrides here:**
+  - take choice, trim and PIP visibility (the PIP system);
+  - shots and durations (the Timeline);
+  - dialogue text (the script);
+  - voice or audio (dialogue lines).
 
-### 7.3 What happens to an override after a change
+  The Director's preview opens those owners' controls rather than copying them.
+- **After a change**, each override is one of:
+  - **kept**, when its anchor survives with the same meaning;
+  - **check**, when the line was edited but kept its place;
+  - **orphaned**, when its anchor is gone: listed and never dropped silently;
+  - **conflict**, when it no longer fits: keep and adjust, drop, or re-pin.
+- **Locked beats** (`script_locked_beats`, `scene_plans.locked`) don't redraft; a source change there becomes a conflict.
+- Approval is **per scene**. An approved scene stays approved until a redraft touches it.
 
-| What changed | Outcome |
-|---|---|
-| Its anchor still exists, with the same meaning | Kept and re-applied. Nothing to do. |
-| The line's text changed but it's the same line (same beat and position, similar text) | Kept, marked *check*: shown in the preview with "line edited" |
-| The anchor is gone (the line was deleted) | **Orphaned:** listed for review and never dropped silently. Re-pin it to a line, or delete it. |
-| It no longer fits (the zone it nudges was removed, or a hold now overlaps the next line) | **Conflict:** listed with three choices: keep and adjust, drop, or re-pin |
-| The beat is locked (`script_locked_beats` or `scene_plans.locked`) | The beat's generated actions don't move. If its sources change, the beat shows a conflict instead of a redraft |
+## 8. The playback snapshot: deterministic phone and gameplay
 
-Approval is **per beat**: an approved beat stays approved until a redraft touches it.
+Live API answers change as the show moves on: a post goes live, a deliverable is approved, coins move. **Export must not depend on them.**
 
-## 8. Assets: reused, never regenerated
+**What it is:** the playback snapshot is everything the gameplay layers draw, resolved from the owners **once** and frozen.
 
-- **Mouse Cursor and Grabbing Hand:** the existing World → Overlays production types, chosen once per show in two settings, `gameplay.cursor_type_key` and `gameplay.hand_type_key`. Each image gets a **hotspot** (the click pixel) as `assets.metadata.hotspot`, an additive field set with a picker on the overlay card.
-- **Sounds:** the repo has none. The plan is a show sound library on the same assets table (`asset_type 'UI_SOUND'`), uploaded beside Overlays.
+**Contents.** For each position the track uses (scene, beat and line, at each action and each change), it holds:
+- **Story knowledge:** the `lalaKnowledge` states known.
+- **Phone:** the screen stack, and each screen's content at that story moment (feed posts and DMs as of their reveal, profile cards, notifications).
+- **My Little List:** the public list (the same safe fields as its API).
+- **Wardrobe:** pieces worn so far (`wornByBeat`), the locked look, and what each costs.
+- **Coins and stats:** `statsAt`, and the coin moves the script shows.
+- **Tasks and deliverables:** story-time delivery (`[DELIVER]`). Production status is shown only when the script displays it.
+- **Assets:** the URLs, plus content hashes, of every image, cursor, hand and sound used.
+
+**Storage:** `episode_playback_snapshots` (`id`, `episode_id`, `version`, `track_version`, `inputs_hash`, `s3_key`, `created_at`, `approved_at`, `deleted_at`). The body is JSON in S3, because it may be large. The row is new; the migration runs through the Deploy workflow.
+
+**Lifecycle**
+1. **Build.** When Evoni approves the track (or asks for a preview), the Director resolves every position through the owners' own read paths: the same services the live API uses, so there's no second logic.
+2. **Freeze.** It writes the version, the input hashes (script, Stage, Timeline, PIP, dialogue, event, ledger position) and the body.
+3. **Play.** Preview and render mode read **only the snapshot and the track version**. The phone's components render from snapshot data instead of fetching. There is one data-source switch, and nothing else changes.
+4. **Out of date.** When an owner's input hash changes, the snapshot reads **outdated**. Preview shows "playing approved snapshot vN; live data changed: rebuild?", and nothing rebuilds on its own.
+
+**Spoiler safety carries over:** the snapshot holds only what My Little List's and the other public read paths return. It never holds production labels.
+
+## 9. Assets: reused, never regenerated
+
+- **Mouse Cursor and Grabbing Hand:** the existing World → Overlays production types. They are chosen per show (`gameplay.cursor_type_key`, `gameplay.hand_type_key`), each with a **hotspot** (`assets.metadata.hotspot`). The asset metadata belongs to the architecture session.
+- **Sounds:** a show sound library on the assets table (`UI_SOUND`), holding licensed files only.
   - Slots: `click`, `tick`, `open`, `close`, `notify`, `error`, `voice_on`, `whoosh`, plus Evoni's own.
-  - It holds only licensed files.
   - A slot with no sound plays nothing and shows a warning.
+- **Prime fallback:** when a scene has no PIP footage, the PIP system shows the **designated fallback**, with the warning `prime_footage_missing` (scene, time range). The Director treats the fallback as Prime for layout and never invents footage.
 
-## 9. Preview, render and export (unchanged in substance from revision 1)
+## 10. Preview, render and export
 
-- **Preview** (the Lala's Phone tab, or an Episode Preview page): the real `PhoneDevice` over the scene layer, with the cursor layer, toasts, My Little List animations and Web Audio sounds. The Prime and Lala audio come from the chosen takes. Pausing hands the phone back to Evoni. **This is where she approves the track and makes overrides.**
-- **Render mode:** the same components with a virtual clock (`window.__renderAt(t)`), driven by the approved track version and captured frame by frame in headless Chromium.
-  - Data is read at each action's beat and line (My Little List's public endpoint; `?at=` for DMs).
-  - The same render mode also produces the preview's "frame-exact" check, so the export provably matches the preview.
-- **Compositor v2:** FFmpeg layers in the §6.5 order, with audio from the takes plus sounds (`adelay`, `amix`, −14 LUFS). It runs behind `EXPORT_ENGINE=v2`; the old exporter stays the default.
-- **Running it:** its own Bull queue, idempotent by input hashes. Chromium and the worker on the server are **Evoni's setup**, decision D-10.
+All of this uses the architecture session's renderer contracts.
 
-## 10. The cursor tables: existence unverified
+- **One geometry:** `layoutAt(composition, t)`, used by Build, Timeline, preview and export.
+- **One renderer for non-video layers:** `StageRenderer` draws the scene objects plus the gameplay layers (an HTML phone, cursor, toasts) at time t, from the **snapshot**.
+- **Video layers** (Prime's PIP, base video) are drawn by `<video>` in preview and by FFmpeg in export, **from the same layout**. This split is chosen because frame-exact video seeking in a headless browser isn't reliable.
+- **One mix plan** feeds both Web Audio (preview) and FFmpeg (export):
+  - Prime's audio comes from her PIP segment;
+  - Lala and NPC audio from their dialogue lines;
+  - sounds and voice clicks from the track.
+- **Render mode:** the same page, a virtual clock (`window.__renderAt(t)`), and the snapshot plus track version.
+- **Compositor v2:** behind `EXPORT_ENGINE=v2`. The old exporter stays the default until Evoni switches.
+- **Running it:** its own Bull queue, idempotent by snapshot version plus asset hashes. Chromium and the worker on the server are **Evoni's** to set up.
 
-**What is known:**
-- `cursor_actions` and `icon_cues` (and `icon_slot_mappings`) are created only by `migrations/20260209060127-icon-cue-timeline-system.js`. That is a migration tree CLAUDE.md says never runs; only `src/migrations/` runs.
-- The audit register's **`docs/audit/Canon_AbsentTable_Classification_2026-09-17.md`** lists all three as **absent from the 2026-08-29 canon capture**, and classifies them REAL-ROUTE: live routes use them through `cursorPathController`, `iconCueController` and `iconSlotController`, mounted in `app.js`.
-- No `src/migrations/` file has created them since.
+## 11. The cursor tables: existence unverified
 
-**Status: unverified for today's database.** This session has no database access, by rule.
+`cursor_actions`, `icon_cues` and `icon_slot_mappings` are created only by `migrations/20260209060127-icon-cue-timeline-system.js`, a migration tree that doesn't run. The register (`docs/audit/Canon_AbsentTable_Classification_2026-09-17.md`) records them as **absent from the 2026-08-29 canon capture**, yet live routes use them.
 
-**Safe, read-only check (Evoni, any one of these):**
-1. In the read-only database client she already uses:
-   ```sql
-   SELECT to_regclass('public.cursor_actions')    AS cursor_actions,
-          to_regclass('public.icon_cues')          AS icon_cues,
-          to_regclass('public.icon_slot_mappings') AS icon_slot_mappings;
-   SELECT name FROM "SequelizeMeta" WHERE name ILIKE '%icon-cue%';
-   ```
-   A NULL means the table doesn't exist. Both are reads; nothing is written.
-2. In the app: open an episode's **Icon Cue Timeline**, or call `GET /api/v1/episodes/:id/cursor-paths`. A "relation … does not exist" error means it is absent. This is a read, but it hits production, so it is hers to do.
+**Status: unverified today.** Safe read-only checks, for Evoni:
+1. Run `SELECT to_regclass('public.cursor_actions'), to_regclass('public.icon_cues'), to_regclass('public.icon_slot_mappings'); SELECT name FROM "SequelizeMeta" WHERE name ILIKE '%icon-cue%';` with a read-only client.
+2. Or open the Icon Cue Timeline page (or `GET …/cursor-paths`) and see whether it errors.
 
-**Then:**
-- **Absent:** the track never depends on them, as planned. The broken pages become their own audit finding, filed through `/audit-file`, not edited here.
-- **Present with rows:** a one-time, read-only report of what's in them. Evoni decides whether any cursor paths are worth importing as **overrides** (§7). They are still never a live source.
+**What follows:**
+- **Absent:** an audit finding, filed through `/audit-file`.
+- **Present with rows:** a read-only report. Paths worth keeping may be imported as **overrides**, never as a live source.
 
-## 11. Acceptance test: Episode 1, end to end
+## 12. Acceptance test: Episode 1, end to end
 
-Each step lists what exists, what must be built, and the PR (§12) that builds it.
-
-| # | Step | Exists today | Must be built | PR |
+| # | Step | Exists today | Must be built | Owner / PR |
 |---|---|---|---|---|
-| 1 | **Prime starts the game** (beats 1–2: Opening Ritual, Login Sequence) | Canonical beats; the phone's login screen in the Phone Hub; full-take `beat_marks` | Line marks; a `game.start` / login sequence in the track; the preview player | 1, 3, 7 |
-| 2 | **Opens Lala's phone** | `[UI:OPEN phone]`; `phonePaths`; `PhoneDevice` | Cursor move and press to the phone; `phone.open` anchored to her line | 3, 7 |
-| 3 | **Clicks Voice before ordinary Lala dialogue** | `scriptShowRules.voiceOffLines`; the Script tab's voice row and fix; `phoneVoice`; `script_voice_clips` | Voice click, toast and `lala.line` actions; the line's audio in the preview | 3, 7 |
-| 4 | **A notification, and its automatic reaction** | `[UI:NOTIFY]`; the `MESSAGES` exception; beat 4 Interruption Pulse | `toast.show` at the cue mark; the `notify` sound; `auto_without_trigger` (D-3) | 3, 4, 2 |
-| 5 | **Equips clothing; hears automatic wardrobe reactions** | `EpisodeWardrobeGameplay` (equip, remove, lock); `[WEAR]`; `dressedAt` | `HOVER`, `PREVIEW`, `COMPARE` and `UNEQUIP` in the closet and the script; the replay that ends in the locked look; reaction lines after `[WEAR]` | 4, 5, 3 |
-| 6 | **Opens My Little List** | PR #3599's list (what she knows, her words) | The Phase 2 phone component; `list.tick` and `list.reword` actions | MLL Phase 2, 3 |
-| 7 | **Travels to the event** | Beat 10 front angle and beat 11 inside (`beatLocations`, `scene_plans`); `transition_in` | `scene.enter` and `venue.enter`; `[TRANSITION]` parsing; transitions in the compositor | 3, 4, 9 |
-| 8 | **Triggers NPC conversations** | Beat 11 host and guest rules (cutscene) | An NPC trigger outside the cutscene (D-4); `npc_without_trigger` | 4, 3 |
-| 9 | **Submits the Reel** | `[DELIVER]`; the deliverable's status route; PR #3598 (submitting completes the task) | The submit gesture on the phone (the post screen) anchored to her line; the list item ticks. The production status moves only by Evoni's hand | 3, 7 |
-| 10 | **Gets the surprise runway opportunity** | Beat 14's opportunity check; `[LEARNS: opportunity_discovered]` (PR #3599) | `toast.show` and `list.appear`, at the cue mark | 3 |
-| 11 | **Accurate stats** | `lalaStats.statsAt`; `statsPanelService`; the `[STAT:]` checks | A stats panel action reading `statsAt` at that line; the replay flags a `[STAT:]` that doesn't match the ledger-based value | 3, 7 |
-| 12 | **The export matches the approved preview** | The old still-per-scene exporter | Render mode; golden frames; compositor v2. Acceptance: the export's frames equal render mode's frames for the approved track version (hash per frame), with audio within one frame | 8, 9, D6 |
+| 1 | Prime starts the game | Canonical beats; the login screen; full-take beat marks | Line marks; game start in the track; preview | Arch A2 · GD-3 · GD-7 |
+| 2 | Opens Lala's phone | `[UI:OPEN]`; `phonePaths`; `PhoneDevice` | Cursor and press; `phone.open`; HTML phone layer in `StageRenderer` | GD-3 · Arch A4 · GD-7 |
+| 3 | Clicks Voice before ordinary Lala lines | `scriptShowRules`; Script tab finding and fix; `phoneVoice` | Voice-click actions; the line's audio from dialogue lines | GD-3 · Arch A6 |
+| 4 | A notification and its automatic reaction | `[UI:NOTIFY]`; `MESSAGES` | Toast at the cue mark; `notify` sound; `auto_without_trigger` (D-3) | GD-3 · GD-2 |
+| 5 | Equips clothing; automatic wardrobe reaction | `EpisodeWardrobeGameplay`; `[WEAR]`; `dressedAt` | Hover, preview, compare, undo; the replay ending on the locked look | GD-4 · GD-5 · GD-3 |
+| 6 | Opens My Little List | PRs #3599 and #3601 | List ticks in the track; the list from the snapshot | GD-3 · GD-6 |
+| 7 | Travels to the event | Front and inside angles of one set; `transition_in` | `scene.enter` and `venue.enter`; `[TRANSITION]` proposed; transitions in compositor v2 | GD-3 · GD-4 · Arch A9 |
+| 8 | NPC conversations | Beat-11 host and guest rules | NPC trigger (D-4); `npc_without_trigger`; NPC voices | GD-2 · Arch A6 |
+| 9 | Submits the Reel, gameplay inside an outcome beat | `[DELIVER]`; #3598 (submission completes the task) | Post screen and press in whatever beat the script puts it (§6.4) | GD-3 · GD-7 |
+| 10 | The surprise runway opportunity | `[LEARNS]` (#3599); beat-14 check | Toast and `list.appear` at the cue mark | GD-3 |
+| 11 | Accurate stats | `statsAt`; stats panel; `[STAT]` checks | Stats from the snapshot; replay flags a `[STAT]` that disagrees | GD-6 · GD-3 |
+| 12 | The export matches the approved preview | The old exporter | Snapshot; render mode; compositor v2 | GD-6 · GD-8 · Arch A9 · server setup (Evoni) |
 
-**Pass conditions for the whole run:**
-- No Lala line without a click or an allowed exception.
-- No `action.refused` the script didn't mean.
-- No list item before she knows it, and no private text in any frame (My Little List's leak scan over the frame DOM).
+**Pass conditions**
+- No Lala line without a click or an approved exception.
+- No unintended `action.refused`.
+- No list item before she knows it.
+- No private text in any frame (the snapshot holds only public read results).
 - The final look equals the locked look.
-- Every stat shown equals `statsAt` at that line.
-- The export's frame hashes equal render mode's.
+- Every stat shown equals the snapshot's `statsAt`.
+- Prime's PIP shows in every beat unless hidden by hand, and missing footage shows the fallback with its warning.
+- **Preview and export use the same snapshot version and track version.** The non-video layers' frame hashes match; the video layers come from the same layout; the audio events land within one frame.
+- **Rebuilding the snapshot from unchanged inputs gives byte-identical JSON.**
 
-## 12. Recommended PR sequence
+## 13. PR sequence, coordinated with the architecture session
 
-Each PR is separate and needs its own approval. Nothing reaches production except through Evoni's Deploy workflow.
+**Architecture session (A-numbers; their own sequence):**
+- A1: `line_key` and dialogue-line identity.
+- A2: teleprompter line and cue marks.
+- A3: PIP segments, fallback, visibility and layout.
+- A4: `StageRenderer` and `layoutAt`.
+- A5: Timeline on the shared composition, including object and camera keyframes and inheritance with local overrides.
+- A6: voices and dialogue audio.
+- A7: asset hotspots and sound library.
+- A8: mix plan.
+- A9: compositor.
 
-| # | PR | Contains | Migration | Depends on |
-|---|---|---|---|---|
-| 0 | **This spec** | `docs/GAMEPLAY_DIRECTOR_SPEC.md` | — | — |
-| 1 | **Line and cue marks** | The teleprompter records `line_marks` and `cue_marks`; `episode_raw_clips` columns; tests | Yes | — |
-| 2 | **Voice and trigger rules** | `auto_without_trigger` and `npc_without_trigger` in `scriptShowRules` (both twins), per D-3 and D-4; Script tab rows; writer prompts | — | D-3, D-4 |
-| 3 | **Director core (D1)** | `gameplayDirector.directEpisode`: anchors, voice and exceptions, messages, wardrobe, the list, scenes (read-only), the replay validator; findings into Script tab health. Episode 1 fixture tests. No storage. | — | 1 (it falls back to estimates without marks) |
-| 4 | **Script verbs** | `HOVER`, `PREVIEW`, `COMPARE`, `UNEQUIP`, `BACK`, `WAIT`, `TRY`; `[TRANSITION]` parsing proposed as `transition_in`; NPC trigger syntax; parser, health checks and writer prompts | — | 2 |
-| 5 | **Closet decisions** | Hover, preview, compare and undo in `EpisodeWardrobeGameplay` (the game UI) | — | — |
-| 6 | **Track storage and overrides (D2)** | `episode_gameplay_tracks` (generated + overrides, fingerprints, per-beat approval); redraft on save and on input changes; conflict review; cursor and hand keys, hotspot, sound library | Yes | 3 |
-| 7 | **Preview player (D3)** | Scene + phone + cursor + toasts + list + audio; override editing (timing, cursor, hold, camera, take); per-beat Approve | — | 6, MLL Phase 2 |
-| 8 | **Render mode (D4)** | Virtual clock; frame capture; golden frames in CI | — | 7 |
-| 9 | **Compositor v2 (D5)** | FFmpeg layers and audio behind `EXPORT_ENGINE=v2` | — | 8 |
-| D6 | **Server enablement** | **Evoni:** Chromium libraries, the worker, the flag, the first approved render | — | 9, D-10 |
+**Gameplay Director (GD), each its own PR and its own approval:**
 
-My Little List Phase 2 and Phase 3 go on as already planned. PR 7 uses Phase 2's component.
+| # | PR | Needs |
+|---|---|---|
+| GD-0 | This spec (#3600) | — |
+| GD-2 | Voice and trigger findings (`auto_without_trigger`, `npc_without_trigger`) in `scriptShowRules`, both twins | D-3, D-4 |
+| GD-3 | Director core: anchors on the Timeline clock, voice clicks and exceptions, messages, wardrobe, list, scene references (episode-scene ids), read-only replay, conflict findings (§3.2). No storage | A1, A2 (falls back to estimates without) |
+| GD-4 | Script verbs; `[TRANSITION]` proposed as `transition_in` | GD-2 |
+| GD-5 | Closet decisions: hover, preview, compare, undo in `EpisodeWardrobeGameplay` | — |
+| GD-6 | Track storage and overrides, plus **playback snapshots** (build, freeze, outdated) | GD-3; migrations through Deploy |
+| GD-7 | Preview player: snapshot-driven `StageRenderer` with gameplay layers, PIP `<video>`, mix plan; override editing; per-scene approve | A3, A4, A5, A8, GD-6 |
+| GD-8 | Render mode for gameplay layers (virtual clock, snapshot only) | GD-7 |
+| Server setup | **Evoni:** Chromium, worker, flag, first approved render | A9, GD-8, D-10 |
 
-## 13. Open product decisions
+My Little List Phases 2 and 3 continue; GD-7 uses Phase 2's component in snapshot mode.
+
+## 14. Open decisions
 
 | # | Decision | Recommendation |
 |---|---|---|
-| D-1 | **The clock.** Take-led (the gameplay follows Prime), or gameplay-led (she records to a fixed track)? | Take-led, with the rehearsal workflow available (§3.4) |
-| D-2 | **Line timing.** Live marks from "Follow my voice", or offline alignment of each take (more exact; needs a speech service, which costs money)? | Live marks first. Offline alignment only if live marks drift. |
-| D-3 | **Auto reactions.** Should `Lala (auto):` be allowed only right after a `[WEAR]` or a notification? Scripts written so far may gain findings. | Yes. Flag, never block. |
-| D-4 | **NPC triggers outside beats 11–13.** What starts an NPC conversation: clicking the NPC in the scene, a DM thread, the event's own moment? Should it get a tag (`[TALK: <name>]`)? | A click on the NPC or a DM, written as `[UI:CLICK <name>]` / `[UI:DM <name>]`; an NPC line with neither is flagged |
-| D-5 | **Lala's audio.** Is her voice always the per-line `script_voice_clips`, the Lala performance clip, or Prime's own read? | Per-line clips, else the performance clip |
-| D-6 | **Within-beat camera shots.** Owned by the track (as proposed), or a new per-shot table on the Stage? | The track for now; move them if the Stage grows shots |
-| D-7 | **Failed attempts on screen.** May scripts stage a refusal for drama (`[UI:TRY]`), and is the game's own wording right for the video? | Yes; reuse the game's wording |
-| D-8 | **"Build Scene."** Was that Build Scene Spec, Build Scene Brief, or a new feature? | Clarify; nothing here depends on it |
-| D-9 | **Redraft on every script save, or on request?** | On every save, never approving automatically |
-| D-10 | **Rendering host, render retention on S3, 9:16 Shorts.** | Decide before D6 |
-| D-11 | **The cursor tables,** after the §10 check | Leave them out of the track either way |
+| D-2 | **Line timing:** live marks from "Follow my voice", or offline alignment (more exact, costs money)? | Live marks first |
+| D-3 | **`Lala (auto):`** only after `[WEAR]` or a notification? | Yes; flag, never block |
+| D-4 | **NPC triggers outside the cutscene:** a click on the NPC, a DM, or a new `[TALK: name]`? | `[UI:CLICK name]` / `[UI:DM name]`; flag NPC lines without one |
+| D-5 | Lala's audio when you've also recorded a line | Your recording wins (plan Q5) |
+| D-7 | Failed attempts on screen with the game's own wording? | Yes |
+| D-9 | Redraft on every save? | Yes, never auto-approve |
+| D-10 | Render host, render retention on S3, 9:16 | Before server setup |
+| D-11 | The cursor tables, after the §11 check | Never a live source |
+| D-12 *(new)* | **Voice clicks in gameplay beats 11–13:** today the cutscene exemption skips the click rule there. When the script puts gameplay in those beats, should ordinary Lala lines need a click? | Yes when the scene has phone gameplay; the exemption stays for cutscene-clip scenes |
+| D-13 *(new)* | **Snapshot build timing:** on Approve only, or also for every preview? | Build on preview (cached by input hash); freeze on Approve |
+| D-14 *(new)* | **Take and Timeline conflicts (§3.2):** which choice is the default when a take overruns its scene? | Flag only, no default; Evoni picks |
+| D-15 *(new)* | **Gameplay layers per scene:** is on/off a track override (as proposed), or a Timeline track? | A track override, shown on the Timeline as a lane |
+
+Resolved since rev 2:
+- **D-1** (the clock): the Timeline owns duration, and takes are anchors.
+- **D-6** (shots): the Timeline's camera track.
+- **D-8** ("Build Scene"): Scene Studio, on the shared Stage.

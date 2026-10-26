@@ -7,7 +7,7 @@
 2. **Prime PIP.** Prime is her own recorded footage, synchronised with the gameplay automatically.
 3. **Voice sources.** Prime uses her recorded voice. Lala and the NPCs use their assigned or generated voices.
 
-**Companion to** `docs/GAMEPLAY_DIRECTOR_SPEC.md` (revision 2): this document supplies the Stage, PIP and voice parts that spec assumes.
+**Companion to** `docs/GAMEPLAY_DIRECTOR_SPEC.md` (revision 3; where the two differ, revision 3 and Evoni's 2026-10-26 decisions win): this document supplies the Stage, PIP and voice parts that spec assumes.
 
 **Classification** of every finding:
 - **VERIFIED:** read in the code on `main` (at `cb02c6a` plus #3598/#3599), with names cited.
@@ -96,7 +96,7 @@ Both read and write the same rows through `sceneStudioController`. Switching mod
 
 The takes already live in `episode_raw_clips` (P2), so no new media table is needed. What's missing is **the decision of which take plays when, and where**. That needs a small owner of its own:
 
-**New table, `episode_performer_segments`:** `id`, `episode_id`, `raw_clip_id` (the take), `performer` (copied from the clip and checked: a PIP segment must be `justawoman`, **so a Lala or guest clip is never treated as Prime**), `source_in`/`source_out` (trim, in seconds of the take), `anchor` (`{ kind: 'beat_start' | 'line_start', beat, line }`) plus `offset`, `visible_beats` or a time range, `layout` (`{ preset: 'corner_br' | …, x, y, w, h, shape, border, use_cutout }` in stage pixels), `audio` (`{ role: 'prime_voice', gain }`), `status` (draft/approved), and timestamps plus `deleted_at`.
+**New table, `episode_performer_segments`:** `id`, `episode_id`, `raw_clip_id` (the take), `performer` (copied from the clip and checked: a PIP segment must be `justawoman`, **so a Lala or guest clip is never treated as Prime**), `source_in`/`source_out` (trim, in seconds of the take), `anchor` (`{ kind: 'beat_start' | 'line_start', beat, line }`) plus `offset`, `visible` (**on by default**; Evoni hides a range by hand: approved 2026-10-26), `layout` (`{ preset: 'corner_br' | …, x, y, w, h, shape, border, use_cutout }` in stage pixels), `audio` (`{ role: 'prime_voice', gain }`), `status` (draft/approved), and timestamps plus `deleted_at`.
 
 - **Multiple takes:** a beat can have several segments, for example two halves from different takes, as long as they don't overlap in time.
 - **Replaces the localStorage picks:** the Assemble sheet's picks become segments (a one-time "Save these picks" from the browser's stored picks).
@@ -191,8 +191,8 @@ This merges with the Director spec's PR list (§12 there). Each item is its own 
 | # | PR | Why here |
 |---|---|---|
 | 1 | **Line identity** (`line_key` utility, shared by server and client) and the `script_voice_clips` columns and backfill | Everything (voice, Director anchors, overrides) keys on it |
-| 2 | **Take timing:** line marks, cue marks, `voice_playback` (Director PR 1) | The clock |
-| 3 | **Performer segments:** table, API, Assemble writes segments, PIP layout presets | Prime is the clock's source |
+| 2 | **Take timing:** line marks, cue marks, `voice_playback` (Director PR 1) | Timing anchors (the Timeline owns duration: Director spec rev 3 §3) |
+| 3 | **Performer segments:** table, API, Assemble writes segments, PIP layout presets, fallback and warning, visible by default | Prime's footage, the anchors' source |
 | 4 | **`StageRenderer` extracted** from `StudioCanvas`; Build keeps working unchanged | One renderer before any new editor work |
 | 5 | **Timeline on `scene_assets`:** object visibility and keyframe tracks, camera track, legacy adapter and dry-run, PreviewMonitor → `StageRenderer` | The shared Stage |
 | 6 | **Speech voices:** `speech_voice` on characters, `speechService` (extracted from Amber) with budget tracking, generation queue, Dialogue panel | Lala and NPC voices |
@@ -211,8 +211,8 @@ My Little List Phases 2 and 3 go on in parallel. Phase 2's component appears in 
 | # | Question | Recommendation |
 |---|---|---|
 | Q1 | Is "Build Scene" **Scene Studio** ("Open in Studio")? | Yes. Rename its button "Build Scene" so the words match |
-| Q2 | Should objects placed on a **scene set's** canvas appear in every scene that uses the set? | Yes, as a locked base layer each scene can hide |
-| Q3 | **Prime's PIP look:** which corner, how big, rectangle or green-screen cut-out, border; hidden during the cutscene beats 11 to 13? | Bottom-right, 28% width, cut-out when keyed, hidden in 11 to 13 |
+| Q2 | ~~Should a set's objects appear in every scene that uses it?~~ **Decided (2026-10-26):** episode scenes inherit the set's master objects and keep local overrides, copy-on-write; a customized object survives the master's deletion; gameplay references the episode-scene object, never the master | — |
+| Q3 | **Prime's PIP look:** which corner, how big, rectangle or cut-out, border. **Decided (2026-10-26):** visible by default in every beat (no automatic cutscene hiding), shown or hidden by hand; missing footage uses a designated fallback, with a warning | Bottom-right, 28% width, cut-out when keyed |
 | Q4 | Retire **`episode_performance_clips`** writes once Production Coverage reads performer segments? | Yes, one owner |
 | Q5 | When you've **recorded** a Lala or NPC line *and* a generated one exists, which plays? | Your recording |
 | Q6 | **TTS provider and plan:** ElevenLabs (the account Amber uses), a monthly cap, and commercial-use rights for YouTube? | ElevenLabs, a cap you set, rights confirmed before PR 6 merges |
@@ -261,7 +261,7 @@ My Little List Phases 2 and 3 go on in parallel. Phase 2's component appears in 
 | Beat 8 equip | "The gold ones" (decision line) | Hover, compare, `[WEAR]` press on her line, tick sound | Lala's wardrobe reaction (no click) |
 | Beat 9 My Little List | Comments | List opens, the outfit item ticks | — |
 | Beat 10 travel | Narrates | `scene.enter` venue front → beat 11 inside, transition from the plan | — |
-| Beat 11 NPC | Hidden (cutscene, Q3) | Cutscene clip | Host and guest lines, generated, trigger `npc_trigger` |
+| Beat 11 NPC | Visible by default (hidden only by hand) | The cutscene clip, plus any gameplay the script puts in the beat | Host and guest lines, generated, trigger `npc_trigger` |
 | After the NPC | Back on screen, reacts on her next line | Holds | — |
 | Reel | "Posting it" | Post screen, press, the list's video item ticks | — |
 | Beat 14 runway | Surprise, at her cue mark | DM toast, `list.appear` | Lala's message reaction |
