@@ -376,3 +376,87 @@ describe('before the migration has run', () => {
     expect(calls.filter((c) => /information_schema/.test(c.sql))).toHaveLength(1);
   });
 });
+
+// ─── Phase 2: the producer's wording panel ──────────────────────────────────
+
+describe('review with all items (the wording panel)', () => {
+  test('every item, its wording, when it shows and why not yet; labels for the producer only', () => {
+    const items = list.reviewList(list.buildList(ep1.input(), at(3)), { all: true });
+    const byLabel = Object.fromEntries(items.map((i) => [i.label, i]));
+    expect(byLabel['Check my coins']).toMatchObject({ kind: 'reminder', reason: null, title: 'Check my coins', shows_at: { beat: 0, line: 0 } });
+    expect(byLabel['Wardrobe list']).toMatchObject({ kind: 'wardrobe', reason: 'not_known_yet', title: 'Find something to wear', shows_at: { beat: 5, line: 1 } });
+    expect(byLabel[ep1.EVENT.name]).toMatchObject({ kind: 'deal', reason: 'not_known_yet', stage: 'considering', shows_at: { beat: 5, line: 3 } });
+    expect(byLabel['Win over the creative director before the reveal']).toMatchObject({ reason: 'not_known_yet', title: null });
+    expect(byLabel['Practice my catwalk']).toMatchObject({ reason: 'spoiler', leaked: ['runway'] });
+  });
+
+  test('without all: only what needs the producer, as before', () => {
+    expect(list.reviewList(list.buildList(ep1.input(), at(3))).map((i) => i.reason)).toEqual(['spoiler']);
+  });
+});
+
+describe('setWords: wording any item, shown yet or not', () => {
+  beforeEach(() => list.resetColumnCache());
+  const keyOf = (ref) => list.itemKey(ep1.EPISODE_ID, ref);
+
+  test('a goal that needed wording gets it and shows from then on; its label is untouched', async () => {
+    const { models, store } = fakeModels();
+    await list.setWords(models, ep1.EPISODE_ID, keyOf('task:scheme'), { title: 'Make a good impression' });
+    expect(store.personal.words['task:scheme']).toEqual({ title: 'Make a good impression' });
+    expect(store.social.find((t) => t.slot === 'scheme').label).toBe('Win over the creative director before the reveal');
+    const out = await list.getMyLittleList(models, ep1.EPISODE_ID, at(12));
+    expect(out.items.map((i) => i.title)).toContain('Make a good impression');
+  });
+
+  test('an item she does not know yet can be worded ahead (the deal, both stages)', async () => {
+    const { models, store } = fakeModels();
+    await list.setWords(models, ep1.EPISODE_ID, keyOf(`deal:${ep1.EVENT.id}`), { title: 'Think about the studio offer', stage: 'considering' });
+    await list.setWords(models, ep1.EPISODE_ID, keyOf(`deal:${ep1.EVENT.id}`), { title: 'Film the studio video', stage: 'committed' });
+    expect(store.personal.words[`deal:${ep1.EVENT.id}`]).toEqual({ title_considering: 'Think about the studio offer', title: 'Film the studio video' });
+  });
+
+  test('an empty title goes back to the fixed wording', async () => {
+    const { models, store } = fakeModels();
+    await list.setWords(models, ep1.EPISODE_ID, keyOf('task:network'), { title: 'Say hi', note: 'the stylists' });
+    await list.setWords(models, ep1.EPISODE_ID, keyOf('task:network'), { title: '', note: null });
+    expect(store.personal.words['task:network']).toEqual({});
+    const out = await list.getMyLittleList(models, ep1.EPISODE_ID, at(12));
+    expect(out.items.map((i) => i.title)).toContain('Meet some interesting people');
+  });
+
+  test('a hidden reminder (a spoiler) can be re-worded', async () => {
+    const { models, store } = fakeModels();
+    await list.setWords(models, ep1.EPISODE_ID, keyOf('reminder:r-catwalk'), { title: 'Practice walking in heels' });
+    expect(store.personal.reminders.find((r) => r.id === 'r-catwalk').title).toBe('Practice walking in heels');
+    expect((await list.getMyLittleList(models, ep1.EPISODE_ID, at(3))).items.map((i) => i.title)).toContain('Practice walking in heels');
+  });
+
+  test.each([
+    [{ }, 400], [{ title: 'x'.repeat(81) }, 400], [{ title: 'ok', stage: 'maybe' }, 400],
+  ])('%j on the deal is a %s', async (body, status) => {
+    const { models } = fakeModels();
+    await expect(list.setWords(models, ep1.EPISODE_ID, keyOf(`deal:${ep1.EVENT.id}`), body)).rejects.toMatchObject({ status });
+  });
+
+  test('a reminder can\'t lose its title; an unknown key is a 404', async () => {
+    const { models } = fakeModels();
+    await expect(list.setWords(models, ep1.EPISODE_ID, keyOf('reminder:r-coins'), { title: '' })).rejects.toMatchObject({ status: 400 });
+    await expect(list.setWords(models, ep1.EPISODE_ID, 'mll_000000000000000000000000', { title: 'x' })).rejects.toMatchObject({ status: 404 });
+  });
+
+  test('before the migration: 503, nothing written', async () => {
+    const { models, calls } = fakeModels({ columnReady: false });
+    await expect(list.setWords(models, ep1.EPISODE_ID, keyOf('task:network'), { title: 'x' })).rejects.toMatchObject({ status: 503 });
+    expect(calls.some((c) => /^UPDATE/.test(c.sql))).toBe(false);
+  });
+});
+
+describe('coins spent on her outfit item (the Shopping list\'s "spent so far", Task 3189)', () => {
+  const charges = new Map([['p-dress', 400], ['p-shoes', 240]]);
+  test('the pieces she has on so far, by their charge; nothing spent, nothing said', () => {
+    const note = (pos) => list.publicList(list.buildList(ep1.input({ charges }), pos)).items.find((i) => i.title === 'Find something to wear').note;
+    expect(note(at(5, 1))).toBe('0 of 3 pieces sorted');
+    expect(note(at(8, 0))).toBe('1 of 3 pieces sorted · 400 coins spent');
+    expect(note(at(12))).toBe('2 of 3 pieces sorted · 640 coins spent');
+  });
+});

@@ -34,6 +34,8 @@ const usePhonePlaybackSpy = vi.fn();
 vi.mock('../../hooks/usePhonePlayback', () => ({
   default: (...args) => { usePhonePlaybackSpy(...args); return {}; },
 }));
+// My Little List ♡ has its own tests (MyLittleListPanel.test.jsx).
+vi.mock('./MyLittleListPanel', () => ({ default: () => null }));
 
 import api from '../../services/api';
 import EpisodeLalasPhoneTab, { playablePhoneScreens } from './EpisodeLalasPhoneTab';

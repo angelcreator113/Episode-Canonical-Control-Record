@@ -2,8 +2,8 @@
 
 Lala's own list on her phone. It replaces how the Shopping List / To-Do overlay is shown to the player. Rulings: Evoni, 2026-10-26 (redesign brief, then the Phase 1 rulings).
 
-**Phase 1** (this doc) is the reader, the knowledge rules, the safe wording and the API. Nothing on screen calls it yet.
-**Phase 2** is the phone screen. **Phase 3** is AI-written wording that Evoni approves.
+**Phase 1** is the reader, the knowledge rules, the safe wording and the API.
+**Phase 2** is the phone screen and the producer's panel (§ Phase 2 below). **Phase 3** is AI-written wording that Evoni approves.
 
 ## It is a view, not a task engine
 
@@ -85,3 +85,35 @@ Both behaviours are tested in `tests/unit/services/myLittleListService.test.js`.
 - `frontend/src/lib/learnsCue.test.js`
 - `tests/integration/myLittleList.integration.test.js`: Postgres, migration applied.
 - Fixture: `tests/fixtures/myLittleListEpisode1.js`.
+
+## Phase 2: the phone screen and the producer's panel
+
+**On her phone** (`components/phone/MyLittleList`, `lib/myLittleList`):
+- The content areas `shopping_list`, `todo` and `task_list` all draw My Little List. Saved screens keep working because the keys are unchanged.
+- **None of them reads a production list any more** (`/todo`, `/todo/social`, `/todo/at`); they read only `GET /my-little-list` at the beat shown. The old renderers (`ShoppingListRenderer`, `TodoRenderer`, `DealChecklistRenderer`, `TaskListRenderer`) are gone. `career_list` is unchanged.
+- The design: warm cream, blush and lavender, rounded rows, the title and notes in Caveat, a progress line, and a tick that pops and draws its check (none with reduced motion). It is sized from its container (cqw), so it fits any content area.
+- Notes open and close. Minimise folds it to a pill with the count, and Close shows when the phone can close it.
+- On the phone the list is read only, as the phone preview saves nothing.
+- The outfit item's note carries "N coins spent", the old Shopping list's "spent so far" (Task #3189), by the charge Finalize books (`episodeLookCharges`).
+
+**On Production → Phone** (`components/Episodes/MyLittleListPanel`), the producer picks a beat and a line.
+- **Left:** her list as the phone shows it then, interactive:
+  - her reminders can be added, edited, ticked and removed;
+  - goals and ideas tick;
+  - her outfit and the deal say "That one ticks itself as she plays".
+- **Right:** every item (`GET /review?all=1`), with:
+  - its production label, here only;
+  - why it doesn't show yet, and when it does;
+  - leaked words, for a spoiler;
+  - an input for her words. `PUT /review/:key` saves to `personal_list.words`, or to the reminder itself.
+- An item can be worded before Lala learns of it. The deal has two inputs, before and after she says yes. An empty input goes back to the standard wording.
+- `[LEARNS]` lines the knowledge rules ignore are listed under the wording.
+
+Phone Hub labels: the picker offers one **My Little List ♡** (content type `todo`). A screen saved with `shopping_list` reads "My Little List ♡ (getting ready)".
+
+Tests:
+- `frontend/src/components/phone/MyLittleList.test.jsx`
+- `frontend/src/components/ScreenContentRenderer.myLittleList.test.jsx`: the leak guard on the phone's URLs.
+- `frontend/src/components/Episodes/MyLittleListPanel.test.jsx`
+- `frontend/src/lib/myLittleList.test.js`
+- The backend tests for `setWords` and `review?all=1`.

@@ -66,6 +66,7 @@ describe('GET /episodes/:episodeId/my-little-list', () => {
       ['get', `/api/v1/episodes/${EP}/my-little-list`], ['get', `/api/v1/episodes/${EP}/my-little-list/review`],
       ['post', `/api/v1/episodes/${EP}/my-little-list/items`], ['patch', `/api/v1/episodes/${EP}/my-little-list/items/${KEY}`],
       ['delete', `/api/v1/episodes/${EP}/my-little-list/items/${KEY}`],
+      ['put', `/api/v1/episodes/${EP}/my-little-list/review/${KEY}`],
     ]) {
       expect((await request(a)[method](url)).status).toBe(401);
     }
@@ -118,4 +119,17 @@ test('GET review: the producer\'s view, with its issues', async () => {
   const res = await request(app({ getReview })).get(`/api/v1/episodes/${EP}/my-little-list/review?beat=12`);
   expect(res.status).toBe(200);
   expect(res.body.items[0]).toMatchObject({ reason: 'needs_wording' });
+});
+
+test('GET review with all=1 asks the service for every item', async () => {
+  const getReview = jest.fn(async () => ({ items: [], issues: [] }));
+  await request(app({ getReview })).get(`/api/v1/episodes/${EP}/my-little-list/review?all=1`);
+  expect(getReview).toHaveBeenCalledWith(expect.anything(), EP, { beat: 1, line: 0 }, { all: true });
+});
+
+test('PUT review/:key sets the producer\'s wording', async () => {
+  const setWords = jest.fn(async () => ({ key: KEY }));
+  const res = await request(app({ setWords })).put(`/api/v1/episodes/${EP}/my-little-list/review/${KEY}`).send({ title: 'Make a good impression', stage: 'committed', extra: 'ignored' });
+  expect(res.status).toBe(200);
+  expect(setWords).toHaveBeenCalledWith(expect.anything(), EP, KEY, { title: 'Make a good impression', note: undefined, stage: 'committed' });
 });

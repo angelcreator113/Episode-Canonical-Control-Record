@@ -8,9 +8,13 @@
  *            { app, items: [{ key, title, note, done, can_check, can_edit, can_remove }], progress }
  *            only what she knows by then, in her words; the start of the
  *            episode when no beat is given
- *   GET    /api/v1/episodes/:episodeId/my-little-list/review?beat=&line=
+ *   GET    /api/v1/episodes/:episodeId/my-little-list/review?beat=&line=[&all=1]
  *            the producer's view: items hidden for wording, a spoiler or a
- *            missing rule, with their production labels. Never for the phone.
+ *            missing rule, with their production labels; with all=1 every
+ *            item, its wording and when it shows. Never for the phone.
+ *   PUT    /api/v1/episodes/:episodeId/my-little-list/review/:key
+ *            { title?, note?, stage? } the producer's wording for any item,
+ *            shown yet or not (an empty title goes back to the fixed words)
  *   POST   /api/v1/episodes/:episodeId/my-little-list/items
  *            { title, note?, reveal?: { when, ref? } } adds one of her reminders
  *   PATCH  /api/v1/episodes/:episodeId/my-little-list/items/:key
@@ -66,11 +70,23 @@ router.get('/episodes/:episodeId/my-little-list/review', requireAuth, async (req
   if (!guard(req, res)) return undefined;
   try {
     const at = list.positionOf(req.query);
-    const out = await list.getReview(modelsOf(req), req.params.episodeId, at);
+    const all = req.query.all === '1' || req.query.all === 'true';
+    const out = await list.getReview(modelsOf(req), req.params.episodeId, at, { all });
     if (!out) return res.status(404).json({ success: false, error: 'Episode not found' });
     return res.json({ success: true, as_of: at, ...out });
   } catch (err) {
     return answer(res, err, 'GET review');
+  }
+});
+
+router.put('/episodes/:episodeId/my-little-list/review/:key', requireAuth, async (req, res) => {
+  if (!guard(req, res)) return undefined;
+  try {
+    const { title, note, stage } = req.body || {};
+    const out = await list.setWords(modelsOf(req), req.params.episodeId, req.params.key, { title, note, stage });
+    return res.json({ success: true, ...out });
+  } catch (err) {
+    return answer(res, err, 'PUT words');
   }
 });
 
