@@ -343,6 +343,8 @@ Where Revision 2 disagrees with the sections above, Revision 2 wins.
    - then `moved` across beats.
 3. **Anything still unmatched gets a new key.** An unmatched previous key is retired.
 
+> **Revision 3, §R3.1: no repair on read.** The recovery paragraph below is superseded. A mismatch is detected and reported; only a controlled repair writes keys.
+
 **Recovery.** A write that bypasses the service leaves `text_hash` different from `script_content`, for example a manual database edit or old code still running during a deploy. In that case:
 - the next read runs the same reconciliation from the stored entries;
 - it writes the repaired keys under the row lock;
@@ -404,6 +406,8 @@ It is **never** used for lines the editor knows.
 - **Large takes.** Large takes may be referenced by S3 `VersionId` instead, if bucket versioning is on (NEEDS CONFIRMATION, which only Evoni can check). Otherwise they are copied the same way.
 - **What it costs.** Storage grows only with *distinct* approved files.
 
+> **Revision 3, §R3.2–R3.3:** approval is a prepare/commit process, manifests are never deleted (the `deleted_at` allowance below is withdrawn), and media are always copied by content (no dependence on S3 versioning).
+
 **Storage.**
 - **Table** (new migration): `approved_production_manifests`
   - columns: `id`, `episode_id`, `version` (1, 2, 3 …), `supersedes_id`, `scope` (`episode` or the scene list), `body_sha256`, `s3_key`, `approved_by`, `approved_at`, `created_at`, `updated_at`, `deleted_at` (repo convention);
@@ -445,6 +449,8 @@ It is **never** used for lines the editor knows.
 - An approved clip with the same identity is offered for reuse on another line or episode **before** any generation. That saves money, and reuse still needs line approval.
 - Recorded clips are reused only by explicit choice.
 
+> **Revision 3, §R3.4:** paid generation stays off until the provider, rights and limits are each explicitly approved.
+
 **Cost limits** (before any provider is chosen):
 - Every generation is a non-token entry in `aiCostTracker`, which needs a characters/seconds cost path; the Amber TTS calls are not tracked today (VERIFIED, SPV V3).
 - An estimate is shown before generating.
@@ -471,6 +477,8 @@ Generation is refused for a voice without one. The provider choice (D3) is made 
   - Rehearsal (not recording) keeps today's preference.
 
 ## R2.5 Does this change A1a? Yes: the content, not the position
+
+> **Superseded by Revision 3, §R3.6** (the final A1a scope).
 
 **A1a stays the first PR.** It is still pure, with no migration, no route and no caller switched. But it now produces the parts for **durable** keys, not content-derived keys:
 
@@ -538,3 +546,221 @@ Generation is refused for a voice without one. The provider choice (D3) is made 
 - **Caps:** the per-episode and monthly TTS amounts, once a provider exists.
 - **Media freezing:** is S3 bucket versioning on for the media buckets? If not, approved takes are copied, which means storage cost (NEEDS CONFIRMATION by Evoni; a session cannot check).
 - **Manifest deletion:** may an approved manifest that no export used ever be deleted (soft), or are manifests permanent?
+
+---
+
+# Revision 3 (Evoni's final safeguards, 2026-10-26)
+
+**Status.** Local review draft. Nothing is implemented, pushed, merged or deployed.
+
+**Approved by Evoni:**
+- persistent line keys;
+- one authoritative script;
+- centralised script saves;
+- an immutable approved-production manifest;
+- the R2.6 sequence.
+
+Revision 3 adds five safeguards. Where it disagrees with R2, R3 wins.
+
+## R3.1 Script key integrity
+
+**Reading never writes.** A read of the script, or of its keys, compares `script_line_keys.text_hash` with `script_content` and returns one of these statuses:
+
+| Status | Meaning | Readers get |
+|---|---|---|
+| `ok` | The keys match the text | Keys |
+| `unkeyed` | The episode has never been keyed (it predates A1) | No keys. Readers behave as today: voice clips by position, and the editor's session ids. |
+| `mismatch` | The text changed without its keys: an old writer, a manual edit, or a header-rule change | **No keys**, the same as `unkeyed`, plus a visible report: "Line identities need checking" |
+
+**Keys are written in only two places:**
+1. **`saveEpisodeScript`**, on a save Evoni or a generator makes. It works only when the stored keys are `ok`. When the episode is `unkeyed`, the first save keys it; nothing existed to repair, so this is initial keying.
+2. **The controlled repair**, `POST …/script/line-keys/repair`, which needs `requireAuth`:
+   - **Step 1, the dry run** (default). It returns what reconciliation would do: kept, edited, moved, minted and retired lines, and any hints refused.
+   - **Step 2, the apply.** It runs only with an explicit `confirm`, and with the dry run's `plan_hash`, so it applies exactly what was shown.
+   - **Effect.** It writes only `script_line_keys`, never the text, under the episode row lock. It records a version snapshot with `source: 'line-key-repair'` and logs the counts.
+
+**A save while the status is `mismatch`:**
+- The text is saved, because the script is never blocked.
+- The keys stay `mismatch`. No reconciliation is guessed during the save.
+- The save response carries the mismatch report. The only way out is the repair.
+
+**Retired-key history is kept and never reused.**
+- **Where it lives.** `script_line_keys` holds `retired: [{ k, h, b, retired_in }]`. This list only ever grows. Every write (save, generation, import, repair, restore) merges the stored list with any newly retired keys, so it never shrinks.
+- **Version snapshots keep it too.** `episode_script_versions.script_line_keys` stores the whole object, `retired` included.
+- **Minting is checked.** A new key is checked against every key the episode has ever had: live, retired, and every key in its versions. If it collides, it is minted again.
+- **Restore** reinstates a key only for the **same dialogue**. A version's entry `(k, h)` is reinstated only where the restored line has that same hash `h`, which it has by construction because it is that version's text. Every reinstated key is removed from `retired`. A key retired in the current history that the restored text does not contain stays retired.
+- **Import or paste** of a whole script sends no hints. Lines are matched (`matchLines`); everything else is minted. A retired key is **never** matched to a new line, because matching considers only live keys.
+- **Regeneration** works the same way: locked beats keep their keys, and new content gets new keys.
+
+## R3.2 Atomic production approval: prepare, then commit
+
+**Rule.** A manifest is published, and the approved pointer moves, only after **every** required input has been validated and frozen. Any failure leaves the pointer and the published manifests exactly as they were.
+
+**Tables** (approval migration, A10b):
+- `approved_production_manifests`: committed manifests only, immutable (R3.3).
+- `production_approval_preparations`:
+  - columns: `id`, `episode_id`, `scope`, `status` (`preparing` · `ready` · `committed` · `failed` · `expired`), `expected_manifest_id` (the pointer when preparation began), `inputs_fingerprint`, `staged_body_key`, `media_refs` (content hashes copied), `errors`, `started_at`, `finished_at`, `created_at`, `updated_at`, `deleted_at`;
+  - a partial unique index allows **one** active (`preparing` or `ready`) preparation per episode.
+
+**Prepare** (it can fail at any step; nothing is published):
+1. **Start.** Record the preparation, `expected_manifest_id` and the inputs fingerprint (each owner's fingerprint).
+2. **Freeze.** Call every owner's `freeze(episode, scope)`. The database reads happen in one `REPEATABLE READ` transaction, so every owner sees the same moment.
+3. **Validate the required inputs.** Each item below either freezes or fails with a named error:
+
+   | Required | Fails when |
+   |---|---|
+   | Stage objects | A referenced object or asset is missing; the scene is not adopted (D2) |
+   | Timeline items | One is invalid (references a missing object or angle); a scene has no duration |
+   | PIP | A beat with Prime visible has neither a frozen take segment nor a **fallback Evoni accepted** (Rev 5 / missing-footage ruling); the take media cannot be read |
+   | Dialogue clips | An **active** line has no approved clip, or its clip is outdated and not re-approved (D4); the media cannot be read |
+   | Gameplay | No approved track version, or no approved playback snapshot for the scope |
+   | Assets | Any referenced file cannot be read or copied |
+   | Script | The line keys are not `ok` (R3.1) |
+
+4. **Copy media** into content-addressed storage (R3.5). Each copy is put-if-absent, then re-read to verify its sha256.
+5. **Stage the body.** Write the canonical JSON to a **staging** key, re-read it, verify its hash, and mark the preparation `ready`.
+
+**Commit** (one database transaction):
+- Lock the episode row.
+- Check that `episodes.approved_manifest_id` still equals `expected_manifest_id` (compare-and-swap).
+- Check that the inputs fingerprint is unchanged since the freeze.
+- Then:
+  1. copy the staged body to its final immutable key (verified);
+  2. insert the manifest row (`version + 1`, `supersedes_id`);
+  3. move the pointer;
+  4. mark the preparation `committed`.
+
+  These four steps happen together or not at all.
+
+**If a commit check fails:** the preparation becomes `failed`, with the reason ("approval changed meanwhile" or "inputs changed during approval"). The pointer does not move. Evoni approves again.
+
+**Cleanup of incomplete preparations** (a scheduled job, also runnable by hand):
+- A preparation stuck in `preparing`/`ready` past a time limit becomes `expired`.
+- The staging bodies of `failed` and `expired` preparations are deleted.
+- A media copy is deleted only when **no committed manifest** and **no active preparation** references its hash. A copy any manifest references is never deleted (R3.3).
+- Cleanup never touches committed manifests or the pointer.
+
+**Exports and preview.** Export and "play approved" read only a committed manifest, by id, and every export records the manifest id it used.
+
+## R3.3 Manifest retention
+
+- **Approved manifests are never deleted automatically,** whether or not an export used them. **Superseded versions stay available** for reproducibility.
+- **Enforced in the database.** The trigger refuses `DELETE`, and refuses every `UPDATE`, including setting `deleted_at`. The column is kept only for the repo's migration convention. This **withdraws R2.2's allowance** to soft-delete an unused manifest.
+- **Media lasts as long as its manifest.** Media referenced by any committed manifest is retained just as long.
+- **Archiving is designed later.** An archive or retention policy is a later, separate design. Until then, nothing removes a manifest or its media.
+
+## R3.4 Voice generation stays off
+
+The A6-spec (R2.3) is provider-neutral, and covers:
+- assignment (character default, then episode, then line);
+- audio states, including outdated (D4);
+- reuse before generation;
+- the rights record;
+- the cost paths.
+
+**Without any provider,** A6a delivers voice assignment, the recorded-clip flow, approval, the outdated status and reuse. All of that works with recorded clips alone.
+
+**Paid generation stays disabled.** The generation endpoint refuses with a clear reason unless **all three** of these exist, each recorded with who approved it and when:
+1. **An approved provider**, set in server configuration. Evoni sets it; a session never does.
+2. **An approved rights record** for the voice (R2.3).
+3. **Approved spending limits**: per episode and monthly amounts, configurable and stored, never hard-coded.
+
+The default is "off". No code path generates paid audio implicitly: not on save, not on approval, and not in a batch.
+
+## R3.5 Media storage
+
+- **Default:** immutability **never depends on S3 versioning**. Every approved file is copied into content-addressed storage (`approved-media/<sha256>.<ext>`), written put-if-absent, verified by re-reading, and never overwritten. This applies to takes too, which withdraws R2.2's "reference by `VersionId`" option.
+- **Versioning check:**
+  - **What to check.** Whether the media buckets have S3 versioning enabled. It is useful to know, as extra protection against accidental overwrites of *live* media, but the design does not rely on it.
+  - **Who checks.** `CLAUDE.md`'s read-only `aws` allowance does not include `s3api get-bucket-versioning`, so **a session cannot check it**. Evoni checks it in the AWS console, or approves adding the call to the read-only list.
+  - **Recorded as** NEEDS CONFIRMATION. It is not a dependency.
+- **Storage cost.** It grows only with distinct approved files, deduplicated by hash.
+
+## R3.6 Final A1a scope
+
+**Name.** A1a: the line identity contract, pure functions.
+
+**Files** (all new):
+
+| File | Contents |
+|---|---|
+| `src/utils/lineKeys.js` | The authoritative copy: `scriptLines`, `normaliseLine`, `lineHash`, `checkLineKeys`, `mintLineKey`, `reconcileLineKeys`, `matchLines`, `restoreLineKeys`, `keyForStoredLine` |
+| `frontend/src/lib/lineKeys.js` | Read-only twin: `scriptLines`, `normaliseLine`, `lineHash`, `checkLineKeys`. It never mints or reconciles. |
+| `tests/unit/utils/lineKeys.test.js` | Server tests |
+| `frontend/src/lib/lineKeys.test.js` | Frontend tests |
+| `tests/fixtures/lineKeysScripts.js` | Shared fixtures (edge cases). It reuses the existing `tests/fixtures/myLittleListEpisode1.js` read-only. |
+
+**What each function does:**
+- **`scriptLines(text)`**: the single definition of a line.
+  - Beat headers are recognised and numbered by the **existing** `normalizeBeatHeaders` and `headerNumber` (`src/utils/beatLabelNumber.js` and its frontend twin). These are imported read-only and not modified, so line beats agree with the Script tab and beat locks.
+  - Every non-blank, non-header line is a line, including `[UI:]`, `[WEAR:]`, `[TALK:]` and `[LEARNS:]`.
+  - Text before the first header (the preamble, for example `[EVENT:]`) is beat `0`.
+  - A script with no headers puts every line in beat `null`.
+  - Returns `{ b, index, text, norm, h }`.
+- **`normaliseLine` / `lineHash`.**
+  - Normalisation: CRLF to LF, whitespace collapsed, quotes and dashes unified, trailing space trimmed. Case and words are kept.
+  - Hash: 32-bit FNV-1a, 8 hex characters, specified in a header comment so both copies agree.
+- **`checkLineKeys(text, stored)`**: returns `ok` · `unkeyed` · `mismatch` (R3.1). It is pure and never repairs.
+- **`mintLineKey(rand, taken)`**:
+  - Returns `ln_` + 10 base-32 characters.
+  - `rand` is injected, for deterministic tests.
+  - `taken` is every key ever used. On a collision it mints again.
+- **`reconcileLineKeys(stored, nextText, { hints, rand, history })`**:
+  - Order: hints first (validated), then `matchLines` over **live** keys only, then mint.
+  - Returns the new `script_line_keys` object (lines, `text_hash`, `retired` merged so it only grows) and a report: kept, edited, moved, minted, retired, refused hints.
+- **`restoreLineKeys(current, versionKeys, versionText)`**: reinstates a version's keys only where `(k, h)` matches. It keeps every other retired key retired (R3.1).
+- **`matchLines(oldLines, newLines)`**: exact matches per beat by longest common run (the `nextLineIds` rule), then edited-in-place pairing between matched neighbours, then `moved` for unique exact text across beats.
+- **`keyForStoredLine(stored, entries)`**: finds a stored `line_text` (for example a voice clip's). Returns `null` rather than guessing.
+
+**Not in A1a:**
+- **No storage:** no migration, no column, no model change.
+- **No new or changed interface:** no route, no controller.
+- **No caller switched:** no existing file imports the new modules, so no writer, reader, teleprompter or Script tab code changes.
+- **No change to the reused helpers:** `beatLabelNumber.js` is unmodified.
+- **Nothing external:** no AI call, no configuration.
+
+## R3.7 A1a acceptance tests
+
+1. **Parity:** the server and frontend `scriptLines`, `normaliseLine`, `lineHash` and `checkLineKeys` give identical output on every fixture, including Episode 1.
+2. **Header rules match the Script tab:** for `## BEAT: 5 · Reveal`, `## Beat 5: Reveal`, `### BEAT: 5`, the bold variants, a name-only canonical header and CRLF text, line beat numbers equal `headerNumber`'s. The preamble is beat 0.
+3. **Coverage:** headers and blank lines get no entry; tag and hidden-cue lines do.
+4. **Normalisation:** whitespace, quote and dash variants keep the hash; a changed word changes it.
+5. **Hints keep identity:** with hints, every line keeps its key through rewording, reordering within and across beats, a split (the first part keeps it) and a merge (the first line keeps it, the other is retired).
+6. **Hints are validated:** an unknown, retired or duplicated hint is refused and reported, and that line goes to matching.
+7. **No-hint matching:** unchanged, edited-in-place, moved, removed and added lines give the expected `kept`/`edited`/`moved`/`retired`/`minted`.
+8. **Retired history only grows:** across a sequence of saves, imports and restores, `retired` never loses an entry unless that exact `(k, h)` is reinstated by a restore.
+9. **Never reassigned:** a retired key is never given to a line with a different hash, after edits, a full-script import, or a restore of a different version. Minting never returns any key in `taken`.
+10. **Restore:** restoring a version reinstates its keys exactly for its lines. Keys retired since, which that version's text doesn't contain, stay retired.
+11. **Locked beats:** a beat returned word for word by a regeneration keeps every key without hints.
+12. **Integrity check:** `checkLineKeys` returns `ok` for matching text, `unkeyed` for no stored keys, and `mismatch` for text changed without keys. It never returns repaired keys.
+13. **Deterministic:** the same inputs with the same injected `rand` give byte-identical JSON.
+14. **Stored lines:** `keyForStoredLine` finds a stored `line_text` after insertions above it, and returns `null` when the text is gone or ambiguous.
+15. **No behaviour change:** `git grep` finds no import of `lineKeys` outside the new tests. The full backend and frontend suites, ESLint, `scripts/lint-silent-catches.sh` and `/validate` pass unchanged. A production build (`npx vite build`) contains no `lineKeys` code, because the module is imported nowhere.
+
+## R3.8 Dependencies, independence and production impact
+
+**Dependencies:**
+- `main` at or after `93a7b74a`, which has #3599 merged.
+- The existing `beatLabelNumber.js` twins, read only.
+- Nothing else.
+
+It does **not** need:
+- #3600 (the spec) merged;
+- any other architecture PR;
+- any migration or Deploy-workflow run;
+- any decision still open (voice provider, caps, S3 versioning, archiving).
+
+**Independence:**
+- **Code:** A1a is completely independent. It adds new files only.
+- **Overlap with open work:** it overlaps no file touched by GD-2 (`scriptShowRules`, `scriptHealth`), #3601 (My Little List Phase 2) or the export fix branch.
+- **Downstream:** it is the dependency of A1b/A1c/A1d, the voice-clip backfill and GD-3. It depends on none of them.
+
+**Production behaviour:** none.
+- **Backend:** no existing file requires the new module, so the server never loads it. `src/app.js`, routes, models and services are untouched.
+- **Frontend:** no page imports the new module, so Vite leaves it out of the bundle, and the deployed bundle's behaviour is unchanged.
+- **Database, configuration, AWS:** no table, column or configuration is touched, and there is no call to AWS, S3 or any provider.
+- **Its only effect is new tests in CI.**
+
+**Once A1a merges, behaviour changes only with later, separately approved PRs:**
+- A1b (migration, run through the Deploy workflow by Evoni);
+- A1c (the central save, the guard test, read status, the controlled repair, Script tab hints).
