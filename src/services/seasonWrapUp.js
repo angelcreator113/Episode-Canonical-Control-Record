@@ -244,7 +244,7 @@ async function seasonWrapUp(sequelize, showId, { arcId = null } = {}) {
   const best = finished.filter((e) => e.score != null || e.tier)
     .sort((a, b) => (b.score ?? -1) - (a.score ?? -1))
     .slice(0, CAPS.episodes)
-    .map(({ accepted, ...e }) => e);
+    .map(({ accepted: _accepted, ...e }) => e);
   const complete = arc.status === 'completed';
   const seasonNumber = Number(arc.season_number) || 1;
   return {
