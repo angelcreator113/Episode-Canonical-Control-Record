@@ -147,29 +147,28 @@ function careerBlock(career, { beat14 = null } = {}) {
 }
 
 // ─── HER GOAL THIS EPISODE (Evoni, 2026-10-25) ───────────────────────────────
-// The one adapter that picks the episode's main career goal, for both
-// writers (episodeScriptWriterService.loadScriptContext) and the Script tab
-// (GET /episode-brief/:id her_goal). TODO: replace with mainGoalForEvent from
-// goal-ladders (one main goal per event, only the active rung counts), which
-// also gives a 'suggested' goal when none is pinned. Interim rule: the first
-// id in the event's canon_consequences.pinned_goal_ids that is an active goal
-// of the show, else null. Returns episodeMainGoal.describeGoal's shape
-// (kind 'main'), or null.
+// The episode's main career goal, for both writers
+// (episodeScriptWriterService.loadScriptContext) and the Script tab
+// (GET /episode-brief/:id her_goal). The pick is goal-ladders' one rule
+// (seasonGoalCoverage.pickMainGoal, the same one mainGoalForEvent uses): the
+// goal pinned to the event, else the active rung the event moves most,
+// marked suggested. It is given the event and state already loaded here, so
+// the ledger's coin balance counts. Returns episodeMainGoal.describeGoal's
+// shape (kind 'main' when pinned, 'suggested' otherwise), or null.
 async function loadEpisodeGoal(sequelize, { showId, event, state = {} }) {
   if (!showId || !event) return null;
-  const { pinnedGoalIds } = require('./seasonSuggestionService');
-  const pins = pinnedGoalIds(event);
-  if (!pins.length) return null;
   const goals = await sequelize.query(
-    `SELECT id, title, description, type, status, target_metric, target_value, current_value, starting_value,
-            priority, unlocks_on_complete, created_at
+    `SELECT id, title, description, type, icon, status, target_metric, target_value, current_value, starting_value,
+            priority, unlocks_on_complete, episode_range, created_at
        FROM career_goals
-      WHERE show_id = :showId AND status = 'active' AND deleted_at IS NULL`,
+      WHERE show_id = :showId AND status = 'active' AND deleted_at IS NULL
+      ORDER BY CASE type WHEN 'primary' THEN 0 WHEN 'secondary' THEN 1 ELSE 2 END, priority ASC, created_at ASC`,
     { replacements: { showId }, type: sequelize.QueryTypes.SELECT });
-  const byId = new Map((goals || []).map((g) => [String(g.id), g]));
-  const goal = pins.map((id) => byId.get(id)).find(Boolean);
+  if (!goals || !goals.length) return null;
+  const { pickMainGoal } = require('./seasonGoalCoverage');
+  const { goal, source } = pickMainGoal(event, goals, state || {});
   if (!goal) return null;
-  return require('./episodeMainGoal').describeGoal(goal, goals, state || {}, 'main');
+  return require('./episodeMainGoal').describeGoal(goal, goals, state || {}, source === 'pinned' ? 'main' : 'suggested');
 }
 
 module.exports = { loadScriptCareer, careerBlock, dealOf, DEAL_COLUMNS, loadEpisodeGoal };

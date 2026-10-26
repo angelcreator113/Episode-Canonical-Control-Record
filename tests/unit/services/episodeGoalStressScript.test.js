@@ -1,8 +1,8 @@
 // ============================================================================
 // Her goal in the script, and her stress and self-talk in her voice (Evoni,
 // 2026-10-25: "Yes build the goals and stress script work"). The episode's
-// main goal is the first active goal pinned to its event
-// (scriptCareerService.loadEpisodeGoal, the interim adapter); both writers
+// main goal is the goal pinned to its event, else the active rung it moves
+// most (scriptCareerService.loadEpisodeGoal, goal-ladders' pickMainGoal); both writers
 // get HER GOAL THIS EPISODE and HER VOICE through storyContextBlocks. No
 // database, no network, no AI call.
 // ============================================================================
@@ -35,7 +35,7 @@ const db = (rows) => {
 };
 const pinned = (...ids) => ({ id: 'ev-1', name: 'Velour Gala', canon_consequences: { pinned_goal_ids: ids } });
 
-describe('main goal selection (interim adapter)', () => {
+describe('main goal selection (goal-ladders pickMainGoal)', () => {
   test("the first pinned goal that is active is the episode's main goal, with its next rung", async () => {
     const g = await loadEpisodeGoal(db(GOALS), { showId: 's1', event: pinned('g-brand', 'g-coins'), state: { brand_trust: 5 } });
     expect(g).toMatchObject({ id: 'g-brand', title: 'Brand Girl Era', kind: 'main', metric: 'brand_trust', current: 5, target: 7 });
@@ -49,13 +49,20 @@ describe('main goal selection (interim adapter)', () => {
     expect(g).toMatchObject({ id: 'g-coins', kind: 'main', current: 400, target: 500 });
   });
 
-  test('nothing pinned, or no event: no goal, and no query', async () => {
+  test('no event: no goal and no query; nothing pinned and nothing it moves: no goal', async () => {
     const d = db(GOALS);
-    expect(await loadEpisodeGoal(d, { showId: 's1', event: { id: 'ev', canon_consequences: {} } })).toBeNull();
     expect(await loadEpisodeGoal(d, { showId: 's1', event: null })).toBeNull();
     expect(d.query).not.toHaveBeenCalled();
+    expect(await loadEpisodeGoal(d, { showId: 's1', event: { id: 'ev', canon_consequences: {} } })).toBeNull();
     // Pinned ids that name no active goal: none either.
     expect(await loadEpisodeGoal(db(GOALS), { showId: 's1', event: pinned('gone') })).toBeNull();
+  });
+
+  test('nothing pinned: the active rung the event moves most, marked suggested', async () => {
+    const event = { id: 'ev', name: 'Pop-up', prestige: 0, is_paid: true, payment_amount: 150, rewards: {}, canon_consequences: {} };
+    const g = await loadEpisodeGoal(db(GOALS), { showId: 's1', event, state: { coins: 300 } });
+    expect(g).toMatchObject({ id: 'g-coins', kind: 'suggested' });
+    expect(herGoalBlock(g)).toContain('Suggested: the goal this event moves most; no goal is pinned to it.');
   });
 
   test('a pin given as a JSON string still reads', async () => {

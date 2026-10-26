@@ -475,7 +475,8 @@ async function loadScriptContext(episodeId, showId, models, { lite = false } = {
 
   // 14b. Her goal this episode and her Beat 13 self-talk (Evoni,
   // 2026-10-25; services/episodeMainGoal, services/episodeSelfTalk): the
-  // active goal pinned to the event (scriptCareerService.loadEpisodeGoal);
+  // goal pinned to the event, else the active rung it moves most
+  // (scriptCareerService.loadEpisodeGoal, goal-ladders' pickMainGoal);
   // the tone she chose on the Script tab, null with none saved.
   context.herGoal = null;
   try {

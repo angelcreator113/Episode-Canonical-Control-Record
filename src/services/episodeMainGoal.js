@@ -6,8 +6,8 @@
  * "Yes build the goals and stress script work").
  *
  * Which goal is the episode's main one is chosen in one place only,
- * scriptCareerService.loadEpisodeGoal (an interim adapter until
- * goal-ladders' mainGoalForEvent replaces it); this module only describes
+ * scriptCareerService.loadEpisodeGoal (goal-ladders' pickMainGoal, the rule
+ * mainGoalForEvent uses); this module only describes
  * the chosen goal and writes the prompt blocks. Goals never change the score
  * or the stress; they change what she weighs at Beat 6 and feels at Beat 13.
  *
