@@ -9,6 +9,7 @@
 .sth.is-compact { padding: 12px 0 0; border: none; border-top: 1px solid var(--lala-gold-line); border-radius: 0; background: transparent; }
 .sth-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .sth-icon { flex: none; color: var(--lala-gold-text); }
+.sth-add { margin-left: auto; }
 .sth-heading { margin: 0; font-family: var(--font-prose); font-size: 18px; font-weight: 700; color: var(--lala-ink); }
 .sth-count {
   display: inline-flex; align-items: center; padding: 0 8px; border-radius: 999px; font-size: 12px; font-weight: 700;

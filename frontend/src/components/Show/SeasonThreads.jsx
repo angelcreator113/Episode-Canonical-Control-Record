@@ -17,11 +17,17 @@
  * listed with the reason. Closing stays hers: Close and Reopen.
  *
  * Self-contained: props showId and, optionally, season (the season number;
- * ?season=N, the Season page's switcher). onChange hears every change.
- * compact leaves out the header's explanation (the What changed card).
+ * ?season=N, the Season page's switcher: a past season lists the threads it
+ * touched). onChange hears every change. compact leaves out the header's
+ * explanation and "+ New thread" (the What changed card). "+ New thread"
+ * adds one by hand (title and description), as the Story tab's card did.
+ * fallback: shown instead while the list's migration (20261026120000) has
+ * not run (the inbox answers needs_migration): nothing opens by itself
+ * then, so the Season page passes its old StoryThreadsCard, whose seed
+ * drafts still let Evoni make a thread from a seed.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { GitBranch, Undo2, Check, X, Sparkles, Shuffle, ChevronDown, AlertTriangle, Merge, Lock, Unlock } from 'lucide-react';
+import { GitBranch, Undo2, Check, X, Sparkles, Shuffle, ChevronDown, AlertTriangle, Merge, Lock, Unlock, Plus } from 'lucide-react';
 import api from '../../services/api';
 import './SeasonThreads.css';
 
@@ -204,15 +210,19 @@ function Waiting({ w, open, busy, decide }) {
   );
 }
 
-export default function SeasonThreads({ showId, season = null, onChange, compact = false }) {
+export default function SeasonThreads({ showId, season = null, onChange, compact = false, fallback = null }) {
   const base = `/api/v1/world/${showId}/season/threads`;
   const [data, setData] = useState(null);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState(null);
+  const [adding, setAdding] = useState(false);
+  const [newTitle, setNewTitle] = useState('');
+  const [newDescription, setNewDescription] = useState('');
 
   const load = useCallback(async () => {
     try {
-      const res = await api.get(`${base}/inbox`, { params: season ? { season } : undefined });
+      // ?season=N in the URL, as the Story tab's other reads send it (Season page round 3).
+      const res = await api.get(`${base}/inbox${season ? `?season=${encodeURIComponent(season)}` : ''}`);
       setData(res.data);
     } catch (err) {
       console.error('[SeasonThreads] load failed:', err);
@@ -253,6 +263,12 @@ export default function SeasonThreads({ showId, season = null, onChange, compact
   }, [data]);
 
   if (!data) return <section className="sth" aria-busy="true"><p className="sth-hint">Loading the threads…</p></section>;
+  if (data.needs_migration && fallback) return fallback;
+  const addThread = async () => {
+    if (!newTitle.trim()) return;
+    const ok = await act(() => api.post(base, { title: newTitle.trim(), description: newDescription.trim() }), 'The thread was not added.', 'Story thread added.');
+    if (ok) { setNewTitle(''); setNewDescription(''); setAdding(false); }
+  };
   const waiting = data.waiting || [];
   const leftOut = data.left_out || [];
 
@@ -262,7 +278,28 @@ export default function SeasonThreads({ showId, season = null, onChange, compact
         <GitBranch size={18} aria-hidden="true" className="sth-icon" />
         <h3 id="sth-title" className="sth-heading">Story threads</h3>
         <span className="sth-count">{live.length} open</span>
+        {!compact && !adding && (
+          <button type="button" className="sth-btn-soft sth-add" onClick={() => setAdding(true)} data-testid="sth-new-thread">
+            <Plus size={14} aria-hidden="true" /> New thread
+          </button>
+        )}
       </header>
+      {adding && (
+        <div className="sth-twist" data-testid="sth-new-thread-form">
+          <label className="sth-field is-wide">
+            <span className="sth-sublabel">The thread (the question it leaves open)</span>
+            <input type="text" value={newTitle} onChange={(e) => setNewTitle(e.target.value)} maxLength={200} />
+          </label>
+          <label className="sth-field is-wide">
+            <span className="sth-sublabel">Description (optional)</span>
+            <input type="text" value={newDescription} onChange={(e) => setNewDescription(e.target.value)} maxLength={2000} />
+          </label>
+          <div className="sth-actions">
+            <button type="button" className="sth-btn" disabled={busy || !newTitle.trim()} onClick={addThread}><Check size={14} aria-hidden="true" /> Add the thread</button>
+            <button type="button" className="sth-btn-soft" onClick={() => setAdding(false)}>Cancel</button>
+          </div>
+        </div>
+      )}
       {!compact && (
         <p className="sth-hint">
           New threads open by themselves from finished scripts and event seeds, once they fit the story so far. Undo any you don't want; only you close a thread.

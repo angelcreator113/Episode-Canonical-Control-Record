@@ -38,6 +38,7 @@ import SeasonRevealPlan from './SeasonRevealPlan';
 import SeasonNeeds from './SeasonNeeds';
 import { SeasonChecklist, setupSteps } from './SeasonSetup';
 import { StoryThreadsCard, PlanningInsights, TEMP_CONFIG, THREAD_STATUS } from './SeasonPlan';
+import SeasonThreads from './SeasonThreads';
 import { SeasonBar, SummaryCard } from './SeasonPageParts';
 import EpisodeLedger from './EpisodeLedger';
 import SeasonAttention from './SeasonAttention';
@@ -310,9 +311,14 @@ export function SeasonStoryTab({ plan, S, api, showId, setToast, goTab, season =
           Season {arc?.season_number || season}&apos;s story: the threads it carried, its twists and its reveal plan.
         </p>
       )}
+      {/* The one threads list (Show/SeasonThreads; Evoni, 2026-10-26: threads open by themselves). Before its
+          migration has run, the old card, whose seed drafts still make a thread from a seed. */}
       {plan.roadmap && (
-        <StoryThreadsCard threads={plan.threadData.threads} drafts={plan.threadData.drafts} S={S} api={api} showId={showId}
-          onChanged={plan.loadRoadmap} setToast={setToast} />
+        <SeasonThreads showId={showId} season={season} onChange={plan.loadRoadmap}
+          fallback={(
+            <StoryThreadsCard threads={plan.threadData.threads} drafts={plan.threadData.drafts} S={S} api={api} showId={showId}
+              onChanged={plan.loadRoadmap} setToast={setToast} />
+          )} />
       )}
       {/* AI mount point: "Carried into Season N" (what this past season hands on). Empty until a later step fills it. */}
       {season && (

@@ -50,7 +50,7 @@ describe('SeasonThreads', () => {
   test('a self-opened thread: where it came from, why, its part and plan; Undo and Keep', async () => {
     render(<SeasonThreads showId="show-1" season={2} />);
     const card = within(await screen.findByTestId('sth-thread-t1'));
-    expect(api.get).toHaveBeenCalledWith(`${BASE}/inbox`, { params: { season: 2 } });
+    expect(api.get).toHaveBeenCalledWith(`${BASE}/inbox?season=2`);
     expect(card.getByText('New · opened by itself')).toBeTruthy();
     expect(card.getByText('From the Velour Gala\'s seeds')).toBeTruthy();
     expect(card.getByText('Part 1: Foundation')).toBeTruthy();

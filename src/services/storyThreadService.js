@@ -103,8 +103,10 @@ async function seedDrafts(sequelize, showId, { arcId = null } = {}) {
         ${arcId ? 'AND ep.id IN (SELECT s.episode_id FROM season_slots s WHERE s.arc_id = :arcId AND s.deleted_at IS NULL AND s.episode_id IS NOT NULL)' : ''}
       ORDER BY ep.created_at DESC`,
     { replacements: { showId, arcId } });
+  // A soft-deleted row counts too: a seed the threads list left out, or one
+  // Evoni undid (services/threadInbox, 2026-10-26), is not offered again.
   const [taken] = await sequelize.query(
-    'SELECT seed_text FROM show_story_threads WHERE show_id = :showId AND deleted_at IS NULL AND seed_text IS NOT NULL',
+    'SELECT seed_text FROM show_story_threads WHERE show_id = :showId AND seed_text IS NOT NULL',
     { replacements: { showId } });
   const used = new Set(taken.map((t) => t.seed_text.toLowerCase()));
   const drafts = [];

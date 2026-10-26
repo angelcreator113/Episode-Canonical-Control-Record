@@ -62,6 +62,8 @@ function mockGets() {
     }
     if (url === '/api/v1/world/show-1/season/roadmap') return { data: { roadmap: state.roadmap } };
     if (url === '/api/v1/world/show-1/goals') return { data: { goals: state.goals } };
+    // Before the threads list's migration: the Story tab shows the old card (Show/SeasonThreads fallback).
+    if (url === '/api/v1/world/show-1/season/threads/inbox') return { data: { needs_migration: true } };
     if (url === '/api/v1/world/show-1/season/threads') return { data: { threads: [], drafts: state.drafts || [] } };
     if (url === '/api/v1/world/show-1/season/proposals') return { data: { open: state.proposal, recent: state.recent || [] } };
     if (url === '/api/v1/world/show-1/season/reveals') return { data: { arc: { id: 'arc-2' }, slots: [], secrets: [], reveals: [], warnings: [] } };
@@ -326,6 +328,8 @@ describe('In-page messages, no browser alert or prompt', () => {
 
   test('a thread that fails to close says so in the threads card', async () => {
     vi.mocked(api.get).mockImplementation(async (url) => {
+      // Before the threads list's migration: the Story tab shows the old card (Show/SeasonThreads fallback).
+      if (url === '/api/v1/world/show-1/season/threads/inbox') return { data: { needs_migration: true } };
       if (url === '/api/v1/world/show-1/season/threads') return { data: { threads: [{ id: 'th-1', title: 'Rival', status: 'open' }], drafts: [] } };
       if (url === '/api/v1/world/show-1/arc') return { data: { arc: ARC } };
       if (url === '/api/v1/world/show-1/season/roadmap') return { data: { roadmap: state.roadmap } };
@@ -365,7 +369,7 @@ describe('In-page messages, no browser alert or prompt', () => {
     expect(season).not.toMatch(/\balert\(/);
     expect(season).not.toMatch(/\bprompt\(/);
     for (const file of ['SeasonProposals.jsx', 'SeasonRevealPlan.jsx', 'SeasonTwists.jsx', 'SeasonSetup.jsx', 'SeasonTwistLine.jsx', 'SeasonPicturePicker.jsx',
-      'CareerGoals.jsx', 'SeasonPageOverview.jsx', 'SeasonPageRoadmap.jsx']) {
+      'CareerGoals.jsx', 'SeasonPageOverview.jsx', 'SeasonPageRoadmap.jsx', 'SeasonThreads.jsx']) {
       const src = readFileSync(resolve(__dirname, '../components/Show', file), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
       expect(src, file).not.toMatch(/\balert\(/);
       expect(src, file).not.toMatch(/\bprompt\(/);

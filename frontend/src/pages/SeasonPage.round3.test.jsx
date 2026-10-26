@@ -65,6 +65,12 @@ function mockGets() {
     if (path === '/api/v1/world/show-1/goals') return { data: { goals: [] } };
     if (path === '/api/v1/world/show-1/season/roadmap') return { data: { roadmap: season === '1' ? roadmapFor(1, S1_SLOTS) : roadmapFor(2, state.s2Slots) } };
     if (path === '/api/v1/world/show-1/season/threads') return { data: { threads: [], drafts: [] } };
+    // The one threads list (Show/SeasonThreads), migrated: a past season lists the threads it touched.
+    if (path === '/api/v1/world/show-1/season/threads/inbox') {
+      return { data: { needs_migration: false, unchecked_seeds: 0, waiting: [], left_out: [], season: null, threads: season === '1'
+        ? [{ id: 'th-s1', title: 'Did Mo forgive her?', status: 'closed', origin: { label: 'Added by you' }, notes: [], notes_count: 0, slots: [{ slot_number: 2, label: 'S1 · E2' }], plan: null, twists: [], seen: true }]
+        : [] } };
+    }
     if (path === '/api/v1/world/show-1/season/insights') return { data: { insights: { phases: [], health: { accepted: 0, with_range: 0, in_range: 0, without_range: 0 }, money: { season: { income: 0, spend: 0, net: 0 }, balance: 0, trend: [] } } } };
     if (path === '/api/v1/world/show-1/season/needs') return { data: { needs: [], counts: {} } };
     if (path === '/api/v1/world/show-1/season/reveals') return { data: { secrets: [], reveals: [], slots: [], warnings: [] } };
@@ -158,8 +164,12 @@ describe('Story and Secrets follow the switcher', () => {
     expect(await screen.findByTestId('szn-story-season')).toBeTruthy();
     await waitFor(() => {
       const urls = getUrls();
-      for (const p of ['threads', 'twists', 'reveals', 'needs']) expect(urls).toContain(`/api/v1/world/show-1/season/${p}?season=1`);
+      for (const p of ['threads', 'threads/inbox', 'twists', 'reveals', 'needs']) expect(urls).toContain(`/api/v1/world/show-1/season/${p}?season=1`);
     });
+    // The one threads list, with that season's thread; the old card is not shown beside it.
+    expect(await screen.findByTestId('season-threads')).toBeTruthy();
+    expect(screen.getByTestId('sth-closed').textContent).toMatch(/Did Mo forgive her\?/);
+    expect(screen.queryByTestId('story-threads')).toBeNull();
     expect(screen.getByTestId('szn-past-season').textContent).toMatch(/story, cast and results are its own; Goals follow the season in progress/);
     // Suggest twists drafts for the season in progress: not offered on a past one.
     expect(screen.queryByTestId('stw-suggest')).toBeNull();
