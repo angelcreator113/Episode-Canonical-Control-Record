@@ -127,7 +127,11 @@ async function recordSlotOutcome(sequelize, { showId, episodeId, tier, moneyNet,
       WHERE episode_id = :episodeId AND show_id = :showId AND deleted_at IS NULL
       RETURNING slot_number, phase`,
     { replacements: { tier, pressure, episodeId, showId } });
-  if (!rows.length) return null;
+  if (!rows.length) {
+    // A bonus or stand-alone special's episode records on its special (seasonSpecials); it is in no part.
+    await require('./seasonSpecials').recordSpecialOutcome(sequelize, { showId, episodeId, tier, pressure });
+    return null;
+  }
   const slotNumber = rows[0].slot_number;
   const { checkPhaseTransition } = require('./arcProgressionService');
   const transition = await checkPhaseTransition(showId, slotNumber, { sequelize });
@@ -262,6 +266,11 @@ async function roadmapOf(sequelize, season) {
       result: { actual_outcome: r.actual_outcome, actual_pressure: r.actual_pressure },
     };
   });
+  // Special episodes (seasonSpecials, 2026-10-26): the bonus and stand-alone
+  // specials beside the 24 weekly slots, and each two-parter's part on its
+  // two slots. All empty before their migration has run.
+  const extra = await require('./seasonSpecials').roadmapSpecials(sequelize, arc, slots);
+  for (const sl of slots) sl.two_part = extra.twoPartBySlot.get(String(sl.id)) || null;
 
   const phases = arcPhases(arc).map((p) => ({
     phase: Number(p.phase),
@@ -291,6 +300,10 @@ async function roadmapOf(sequelize, season) {
         AND NOT EXISTS (SELECT 1 FROM season_slots s WHERE s.event_id = ev.id AND s.arc_id = :arcId AND s.deleted_at IS NULL)
       ORDER BY ev.name ASC`,
     { replacements: { showId, arcId: arc.id } });
+  // An event a bonus or special holds is placed too.
+  const inSpecials = await require('./seasonSpecials').eventsInSpecials(sequelize, arc.id);
+  const pencillable = availableEvents.filter((ev) => !inSpecials.has(String(ev.id)));
+  const specialEpisodes = await require('./seasonSpecials').specialEpisodeIds(sequelize, showId);
 
   // The next slot to fill (A6 "readies the next slot"): the earliest slot
   // with no episode.
@@ -337,8 +350,12 @@ async function roadmapOf(sequelize, season) {
     slot_count: slots.length,
     counts,
     phases,
-    unslotted_episodes: unslotted,
-    available_events: availableEvents,
+    // A bonus's or special's episode is placed, though in no weekly slot.
+    unslotted_episodes: unslotted.filter((ep) => !specialEpisodes.has(String(ep.id))),
+    available_events: pencillable,
+    specials_ready: extra.ready,
+    specials: extra.specials,
+    two_parters: extra.two_parters,
     next_slot_number: nextSlot ? nextSlot.slot_number : null,
     phase_boundary: phaseBoundary,
   };
@@ -398,6 +415,12 @@ async function snapshotEpisode(sequelize, { slotId, episodeId, transaction }) {
       .map((p) => ({ text: p.text, primary: p.primary, story_thread: p.story_thread?.title || null })),
     snapshotted_at: new Date().toISOString(),
   };
+  // A two-parter's part (seasonSpecials): "S1 · E12 · Part 1/2", kept on every snapshot.
+  const twoPart = await require('./seasonSpecials').twoPartContext(sequelize, slotId, { transaction });
+  if (twoPart) {
+    context.two_part = twoPart;
+    context.label = `${context.label} · Part ${twoPart.part}/2`;
+  }
   await sequelize.query(
     `UPDATE episodes SET season_context = CAST(:context AS jsonb), season_number = :season, updated_at = NOW()
       WHERE id = :episodeId`,
@@ -482,6 +505,14 @@ async function pencilEventIn(sequelize, showId, slotId, eventId, transaction) {
   assertFuture(slot);
   const replaced = slot.event_id && slot.event_id !== eventId ? slot.event_id : null;
   let movedFrom = null;
+  // A two-parter's slots share Part 1's event (seasonSpecials).
+  const specials = require('./seasonSpecials');
+  const twoPart = await specials.twoPartOfSlot(sequelize, slot.id, { transaction });
+  if (twoPart && (twoPart.part === 2 || !eventId)) {
+    throw new SeasonSlotError(twoPart.part === 2
+      ? `E${slot.slot_number} is Part 2 of a two-parter: it takes Part 1's event. Undo the two-parter to give it its own.`
+      : `E${slot.slot_number} is Part 1 of a two-parter: undo the two-parter before clearing its event.`, 409, 'SEASON_SLOT_TWO_PART');
+  }
 
   if (eventId) {
     const [[event]] = await sequelize.query(
@@ -497,14 +528,25 @@ async function pencilEventIn(sequelize, showId, slotId, eventId, transaction) {
         WHERE arc_id = :arcId AND event_id = :eventId AND id <> :slotId AND deleted_at IS NULL FOR UPDATE`,
       { replacements: { arcId: slot.arc_id, eventId, slotId }, transaction });
     if (other) {
+      if (await specials.twoPartOfSlot(sequelize, other.id, { transaction })) {
+        throw new SeasonSlotError(`"${event.name}" is the two-parter in E${other.slot_number}: undo the two-parter to move it.`, 409, 'SEASON_SLOT_TWO_PART');
+      }
       await sequelize.query('UPDATE season_slots SET event_id = NULL, updated_at = NOW() WHERE id = :id',
         { replacements: { id: other.id }, transaction });
       movedFrom = other.slot_number;
     }
+    // It leaves a bonus or special that had it (one that has not started).
+    await specials.clearEventFromSpecials(sequelize, { arcId: slot.arc_id, eventId, transaction });
   }
 
   await sequelize.query('UPDATE season_slots SET event_id = :eventId, updated_at = NOW() WHERE id = :slotId',
     { replacements: { eventId: eventId || null, slotId }, transaction });
+  // Part 1's new event is Part 2's too, while Part 2 has not started.
+  if (twoPart) {
+    await sequelize.query(
+      'UPDATE season_slots SET event_id = :eventId, updated_at = NOW() WHERE id = :id AND episode_id IS NULL AND locked_at IS NULL',
+      { replacements: { eventId, id: twoPart.other_slot_id }, transaction });
+  }
   return { slot_number: slot.slot_number, event_id: eventId || null, moved_from: movedFrom, replaced_event_id: replaced };
 }
 
@@ -554,6 +596,8 @@ async function placeEpisodeIn(sequelize, showId, slotId, episodeId, transaction)
  *   - a regenerate moves the replaced episode's slot to the new episode;
  *   - else the slot the event is pencilled into takes the episode;
  *   - else the earliest open slot (no episode, no pencilled event) does.
+ *   - an event in a bonus or stand-alone special starts that special's
+ *     episode instead (seasonSpecials.assignSpecialOnStart; its label is returned);
  * The slot is locked. Returns the slot number, or null when the show has no
  * active season or no open slot.
  */
@@ -568,6 +612,10 @@ async function assignOnStart(sequelize, { showId, eventId, episodeId, replacingE
       return rows[0].slot_number;
     }
   }
+  // An event in a bonus or stand-alone special starts that special's episode,
+  // never the next weekly slot's (seasonSpecials, 2026-10-26).
+  const special = await require('./seasonSpecials').assignSpecialOnStart(sequelize, { showId, eventId, episodeId, replacingEpisodeId, transaction });
+  if (special) return special;
   const season = await loadSeason(sequelize, showId, { slots: false, transaction });
   if (!season) return null;
   const { arc } = season;

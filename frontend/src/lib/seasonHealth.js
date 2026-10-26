@@ -92,6 +92,13 @@ export function seasonHealth({ arc = null, roadmap = null, coverage = null, rele
 
   if (behind) pieces.push({ key: 'goals', text: behind.length ? `${plural(behind.length, 'goal')} behind` : 'no goals behind' });
 
+  // Bonus episodes and specials (seasonSpecials, 2026-10-26), counted apart from the parts.
+  const specials = roadmap?.specials || [];
+  if (specials.length && !complete) {
+    const open = specials.filter((s) => s.state !== 'done').length;
+    if (open) pieces.push({ key: 'specials', text: `${plural(open, 'special')} planned` });
+  }
+
   // A finished season has no next release to name.
   const seasonNumber = roadmap?.season_number ?? arc?.season_number ?? null;
   const next = complete ? null : nextReleaseOf(release, seasonNumber, today);

@@ -11,6 +11,10 @@
  *          'schedule'  from the schedule; moves when the schedule changes
  *          'preview'   not releasing yet: what the schedule would give
  *   due    'soon' (within 3 days) | 'overdue' | 'released' | 'later' | null
+ * A special's row (services/seasonSpecials) has `special` { label, kind } and
+ * no number, source 'special' (its own date and time, set by hand); a
+ * two-parter's part has `two_part` { part, of }. view.specials lists every
+ * bonus and special, dated or not, with its `suggested` date.
  * Dates and times are Evoni's own wall-clock time, shown as stored.
  */
 import { useCallback, useEffect, useState } from 'react';
@@ -86,6 +90,7 @@ export function whenText(row) {
   if (!when) return null;
   if (row.source === 'preview') return `Would be ${when}`;
   if (row.source === 'schedule') return `${when} (from the weekly schedule)`;
+  if (row.source === 'special') return `${when} (its own day, set by hand)`;
   return `${when} (set by hand)`;
 }
 
@@ -101,7 +106,7 @@ export function deadlineWarning(row, ready = []) {
   // ready null: the checklist is not loaded here, so the line leaves it out.
   const missing = ready ? ready.filter((r) => r.state !== 'ready' && r.key !== 'schedule').map((r) => r.label.toLowerCase()) : null;
   const needs = !missing ? null : missing.length ? `still needs: ${missing.join(', ')}` : 'has everything it needs';
-  const who = `Episode ${episodeNumberOf(row) ?? '?'}`;
+  const who = releaseLabel(row);
   if (row.due === 'overdue') {
     return { tone: 'overdue', text: `${who} was due ${formatRelease(row)} and is not released yet.${needs ? ` It ${needs}.` : ''}` };
   }
@@ -110,6 +115,17 @@ export function deadlineWarning(row, ready = []) {
 
 /** The episode's number in its season (the server's `number`), else its stored number. */
 export const episodeNumberOf = (row) => row?.number ?? row?.episode_number ?? null;
+
+/**
+ * How a release row is named: a special's label ("Special · after E7",
+ * "Holiday special"; services/seasonSpecials), a two-parter's part
+ * ("E12 · Part 1/2"), else "Episode 7".
+ */
+export function releaseLabel(row) {
+  if (row?.special?.label) return row.special.label;
+  if (row?.two_part && row.number != null) return `E${row.number} · Part ${row.two_part.part}/${row.two_part.of || 2}`;
+  return `Episode ${episodeNumberOf(row) ?? '?'}`;
+}
 
 /** The rows of one season (every row when the view has no seasons, or no season is named). */
 export function seasonRows(view, seasonNumber = null) {
@@ -154,8 +170,8 @@ export function nextReleaseOf(view, seasonNumber = null, today = todayIso()) {
     const done = mine.length > 0 && mine.every((r) => r.status === 'published' || r.due === 'released');
     return { state: 'none', text: view.state === 'paused' ? 'Paused' : done ? 'Every episode is out' : 'Not releasing yet' };
   }
-  const n = episodeNumberOf(row);
-  return { state: 'next', row, text: formatDay(row.date), code: n != null ? `E${n}` : null, overdue: row.due === 'overdue' };
+  const n = row.special ? null : episodeNumberOf(row);
+  return { state: 'next', row, text: formatDay(row.date), code: row.special?.label || (n != null ? `E${n}` : null), overdue: row.due === 'overdue' };
 }
 
 /**

@@ -23,6 +23,10 @@
  *               pencilled from here, or every event; the placement preview.
  *   Each slot card and event row with an event says which goals it moves
  *   ("Moves: <goal>", GoalCoverage's MovesChips; Evoni, 2026-10-25).
+ *   Specials (SeasonSpecials, Evoni 2026-10-26): + Add a special and the
+ *   bonus suggestion above the views; each bonus or stand-alone special
+ *   after the weekly card it follows; a slot's ⋯ menu makes its event a
+ *   two-parter ("E12 · Part 1/2"), undoes it or starts Part 2.
  * The Production Plan tab (each placed episode's steps and checklist count)
  * gave way to the Episodes tab, the production board itself (2026-10-25).
  */
@@ -43,6 +47,8 @@ import EventLibrary from './EventLibrary';
 import SeasonWeek from './SeasonWeek';
 import SeasonCalendar from './SeasonCalendar';
 import { packageHref } from '../../lib/eventFlow';
+import { SpecialsBar, SpecialCard } from './SeasonSpecials';
+import { useSeasonSpecials, specialsAfter, canMakeTwoParter, slotCode } from '../../lib/seasonSpecials';
 
 // The roadmap's view, remembered per browser (the URL's ?view= wins); storage can be blocked.
 export const ROADMAP_VIEW_STORAGE_KEY = 'szn-roadmap-view';
@@ -72,7 +78,7 @@ function SlotDrawer({ controls, plan, S, api, showId, setToast, episodes, events
 }
 
 /** A slot card's ⋯ menu: its panel, its episode or event package, its intention. */
-function CardMenu({ slot, showId, onOpen, onIntention, readOnly = false }) {
+function CardMenu({ slot, showId, onOpen, onIntention, readOnly = false, twoPart = null }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
   useEffect(() => {
@@ -97,6 +103,17 @@ function CardMenu({ slot, showId, onOpen, onIntention, readOnly = false }) {
           {slot.episode && <Link role="menuitem" to={`/episodes/${slot.episode.id}`}>Open the episode</Link>}
           {/* ?from= keeps the way back to this slot on the Roadmap (2026-10-25). */}
           {!slot.episode && slot.event && <Link role="menuitem" to={packageHref(showId, slot.event.id, { kind: 'roadmap', slot: slot.slot_number })}>Open the event package</Link>}
+          {!readOnly && twoPart?.canMake && (
+            <button type="button" role="menuitem" onClick={() => { setOpen(false); twoPart.make(); }} data-testid={`szn-slot-two-part-${slot.slot_number}`}>
+              Make it a two-parter (Part 2 in E{slot.slot_number + 1})
+            </button>
+          )}
+          {!readOnly && twoPart?.startPartTwo && (
+            <button type="button" role="menuitem" onClick={() => { setOpen(false); twoPart.startPartTwo(); }} data-testid={`szn-slot-part-two-${slot.slot_number}`}>Start Part 2</button>
+          )}
+          {!readOnly && twoPart?.undo && (
+            <button type="button" role="menuitem" onClick={() => { setOpen(false); twoPart.undo(); }} data-testid={`szn-slot-undo-two-part-${slot.slot_number}`}>Undo the two-parter</button>
+          )}
         </div>
       )}
     </div>
@@ -108,16 +125,16 @@ function CardMenu({ slot, showId, onOpen, onIntention, readOnly = false }) {
  * schedule, or a hand-set date), title, status chip, the goals its event
  * moves, ⋯. Clicking opens its panel.
  */
-export function SlotCard({ slot, picture, showId, selected, onOpen, onIntention, nextSlot, moves = [], when = null, readOnly = false }) {
+export function SlotCard({ slot, picture, showId, selected, onOpen, onIntention, nextSlot, moves = [], when = null, readOnly = false, twoPart = null }) {
   return (
-    <div className={`szn-slot is-${slot.state}${selected ? ' is-selected' : ''}`} data-testid={`szn-slot-${slot.slot_number}`}>
+    <div className={`szn-slot is-${slot.state}${selected ? ' is-selected' : ''}${slot.two_part ? ' is-two-part' : ''}`} data-testid={`szn-slot-${slot.slot_number}`}>
       <button type="button" className="szn-slot-open" onClick={onOpen} aria-pressed={selected}
-        aria-label={`E${slot.slot_number}: ${slotCardTitle(slot)}, ${SLOT_STATUS[slot.state] || SLOT_STATUS.needs_event}`}>
+        aria-label={`${slotCode(slot)}: ${slotCardTitle(slot)}, ${SLOT_STATUS[slot.state] || SLOT_STATUS.needs_event}`}>
         <span className={`szn-slot-pic is-part-${slot.phase}`} aria-hidden="true">
           {picture && <img src={picture} alt="" loading="lazy" />}
         </span>
         <span className="szn-slot-body">
-          <span className="szn-slot-num">E{slot.slot_number}{nextSlot && <span className="szn-slot-next">Next</span>}
+          <span className="szn-slot-num">{slotCode(slot)}{nextSlot && <span className="szn-slot-next">Next</span>}
             {when && <span className={`szn-slot-when${when.source === 'preview' ? ' is-preview' : ''}`} data-testid={`szn-slot-when-${slot.slot_number}`}>{when.text}</span>}
           </span>
           <span className={`szn-slot-title${slot.episode || slot.event || slot.intention?.story_purpose ? '' : ' is-empty'}`}>{slotCardTitle(slot)}</span>
@@ -125,7 +142,7 @@ export function SlotCard({ slot, picture, showId, selected, onOpen, onIntention,
           <MovesChips goals={moves} testId={`szn-slot-moves-${slot.slot_number}`} />
         </span>
       </button>
-      <CardMenu slot={slot} showId={showId} onOpen={onOpen} onIntention={onIntention} readOnly={readOnly} />
+      <CardMenu slot={slot} showId={showId} onOpen={onOpen} onIntention={onIntention} readOnly={readOnly} twoPart={twoPart} />
     </div>
   );
 }
@@ -136,6 +153,7 @@ export function SeasonRoadmapTab({ plan, S, api, showId, setToast, episodes, eve
   const { roadmap } = plan;
   const coverage = useGoalCoverage({ api, showId, reloadKey: roadmap });
   const release = useReleaseSchedule({ api, showId, reloadKey: roadmap });
+  const specials = useSeasonSpecials({ api, showId, onChanged: plan.loadRoadmap, setToast });
   // ?slot=N (a "Needs attention" row, 2026-10-25) opens that slot's panel once, then leaves the address.
   const slotParam = params.get('slot');
   useEffect(() => {
@@ -157,11 +175,27 @@ export function SeasonRoadmapTab({ plan, S, api, showId, setToast, episodes, eve
   const newEpisode = () => navigate(`/shows/${showId}/new-episode`);
   const openSlot = (slot) => controls.open(slot);
   const editIntention = (slot) => { controls.open(slot); controls.setEditingSlotId(slot.id); };
+  // A slot's two-parter actions for its ⋯ menu (seasonSpecials).
+  const twoPartOf = (slot) => {
+    const tp = slot.two_part ? (roadmap.two_parters || []).find((t) => t.id === slot.two_part.id) : null;
+    if (tp) {
+      return {
+        startPartTwo: slot.two_part.part === 2 && tp.can_start_part_two ? () => specials.startPartTwo(tp.id) : null,
+        undo: tp.can_undo ? () => specials.undoTwoParter(tp.id) : null,
+      };
+    }
+    return canMakeTwoParter(roadmap, slot) ? { canMake: true, make: () => specials.makeTwoParter(slot.id) } : null;
+  };
   const card = (slot) => (
     <SlotCard key={slot.id} slot={slot} showId={showId} picture={slotPicture(slot, { episodes, events, arc })}
       selected={controls.sheetOpen && controls.selected?.id === slot.id} nextSlot={!slot.locked && slot.slot_number === roadmap.next_slot_number}
-      onOpen={() => openSlot(slot)} onIntention={() => editIntention(slot)} moves={movesBySlot[slot.id] || []} when={slotWhen(release.view, slot, roadmap.season_number)} readOnly={readOnly} />
+      onOpen={() => openSlot(slot)} onIntention={() => editIntention(slot)} moves={movesBySlot[slot.id] || []} when={slotWhen(release.view, slot, roadmap.season_number)} readOnly={readOnly}
+      twoPart={twoPartOf(slot)} />
   );
+  // The bonus episodes and specials after weekly episode n, in the status filter.
+  const specialCards = (n) => specialsAfter(roadmap, n).filter((sp) => status === 'all' || sp.state === status)
+    .map((sp) => <SpecialCard key={sp.id} special={sp} release={release.view} specials={specials} showId={showId} readOnly={readOnly} moves={movesBySlot[sp.id] || []} />);
+  const withSpecials = (slot, i) => [...(i === 0 && slot.slot_number === 1 ? specialCards(0) : []), card(slot), ...specialCards(slot.slot_number)];
   const shownPhases = phases.filter((p) => part === 'all' || Number(p.phase) === Number(part));
   const timeline = filterSlots(allSlots(roadmap), { part, status });
 
@@ -209,6 +243,8 @@ export function SeasonRoadmapTab({ plan, S, api, showId, setToast, episodes, eve
             onConfirmAdvance={plan.handleConfirmAdvance} onCancelAdvance={() => plan.setWarning(null)} advanceError={plan.advanceError} />
         )}
 
+        <SpecialsBar roadmap={roadmap} events={events} release={release.view} specials={specials} readOnly={readOnly} />
+
         {view === 'calendar' ? (
           <SeasonCalendar release={release} roadmap={roadmap} events={events} opps={opps} arc={arc}
             onOpenSlot={(n) => { const target = allSlots(roadmap).find((sl) => sl.slot_number === n); if (target) openSlot(target); }} />
@@ -228,7 +264,7 @@ export function SeasonRoadmapTab({ plan, S, api, showId, setToast, episodes, eve
                     <span className="szn-part-count">{prog.done} of {prog.total} completed</span>
                   </header>
                   <div className="szn-slot-list">
-                    {slots.length ? slots.map(card) : <p className="szn-muted">No slot here is {SLOT_STATUS[status]?.toLowerCase()}.</p>}
+                    {slots.length ? slots.flatMap(withSpecials) : <p className="szn-muted">No slot here is {SLOT_STATUS[status]?.toLowerCase()}.</p>}
                   </div>
                   {!readOnly && (
                     <button type="button" className="szn-add-row" onClick={newEpisode} data-testid={`szn-add-episode-part-${phase.phase}`}>
@@ -250,6 +286,7 @@ export function SeasonRoadmapTab({ plan, S, api, showId, setToast, episodes, eve
                   <span className="szn-tl-dot" aria-hidden="true" />
                   <span className="szn-tl-part">Part {slot.phase}{p?.title ? ` · ${p.title}` : ''}{when ? ` · ${when}` : ''}</span>
                   {card(slot)}
+                  {specialCards(slot.slot_number)}
                 </li>
               );
             })}
@@ -342,9 +379,19 @@ export function SeasonEventsTab({ plan, S, api, showId, setToast, episodes, even
     const slot = slotOf.get(ev.id);
     if (!slotOf.has(ev.id)) return null;
     if (!slot) return <span className="szn-muted" data-testid={`szn-event-episode-${ev.id}`}>In an episode this season, not in a slot</span>;
+    // A bonus episode or special holds it (seasonSpecials): its label, no slot panel.
+    if (slot.special) {
+      return (
+        <>
+          <span className="szn-event-code" data-testid={`szn-event-special-${slot.id}`}>{slot.label}</span>
+          <StatusChip state={slot.state} />
+          <MovesChips goals={movesBySlot[slot.id] || []} max={3} testId={`szn-event-moves-special-${slot.id}`} />
+        </>
+      );
+    }
     return (
       <>
-        <span className="szn-event-code" data-testid={`szn-event-slot-${slot.slot_number}`}>E{slot.slot_number}</span>
+        <span className="szn-event-code" data-testid={`szn-event-slot-${slot.slot_number}`}>{slotCode(slot)}</span>
         <StatusChip state={slot.state} />
         <MovesChips goals={movesBySlot[slot.id] || []} max={3} testId={`szn-event-moves-${slot.slot_number}`} />
         <button type="button" className="szn-btn is-quiet" onClick={() => controls.open(slot)} data-testid={`szn-event-open-${slot.slot_number}`}>Open slot</button>

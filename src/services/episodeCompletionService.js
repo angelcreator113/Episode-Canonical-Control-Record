@@ -217,7 +217,21 @@ function stressBreakdownOf({ tier, base, social, wardrobe, selfTalk, financial }
 
 // options.eventPiecesFallback overrides EVENT_PIECES_FALLBACK for one call
 // (tests); callers pass nothing.
-async function completeEpisode(episodeId, showId, sequelize, { eventPiecesFallback = EVENT_PIECES_FALLBACK } = {}) {
+/**
+ * The episode's part in a two-parter, or null (seasonSpecials.twoPartRole).
+ * Part 1 completing alone is refused there ("to be continued"); Part 2 runs
+ * this completion once, on Part 1, then marks itself done.
+ */
+async function twoPartOf(sequelize, episodeId) {
+  try {
+    return await require('./seasonSpecials').twoPartRole(sequelize, { episodeId });
+  } catch (err) {
+    console.error('[EpisodeCompletion] two-parter read failed; completing as a single episode:', err?.message);
+    return null;
+  }
+}
+
+async function completeEpisode(episodeId, showId, sequelize, { eventPiecesFallback = EVENT_PIECES_FALLBACK, twoPartOne = false } = {}) {
   // ── 1. Load episode ──
   const [episode] = await sequelize.query(
     `SELECT id, title, episode_number, show_id, evaluation_json, evaluation_status, total_income, total_expenses
@@ -238,6 +252,12 @@ async function completeEpisode(episodeId, showId, sequelize, { eventPiecesFallba
       console.error('[EpisodeCompletion] Beat 14 late resolve failed (non-blocking):', beat14Err?.message);
     }
     return { already_completed: true, message: 'Episode already completed', evaluation: episode.evaluation_json, ...(beat14 ? { beat14_opportunity: beat14 } : {}) };
+  }
+
+  // A two-parter's event completes once, with Part 2 (seasonSpecials, 2026-10-26).
+  const twoPart = twoPartOne ? null : await twoPartOf(sequelize, episodeId);
+  if (twoPart) {
+    return require('./seasonSpecials').completeTwoPart(twoPart, { completeEpisode, episodeId, showId, sequelize, options: { eventPiecesFallback } });
   }
 
   // Reopened terms (Reopen ruling, §8(cc); Task #2378): refused before any

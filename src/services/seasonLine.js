@@ -176,6 +176,13 @@ function slotLines(sc, { cap = 200, purposes: maxPurposes = 4 } = {}) {
     out.push('Slot purposes (primary first):',
       ...shown.map((p, i) => `${i + 1}. ${p.primary ? '[Primary] ' : ''}${clip(p.text, cap)}${p.story_thread ? ` (thread: ${clip(p.story_thread, 100)})` : ''}`));
   }
+  // Special episodes (seasonSpecials, 2026-10-26): what kind of episode this is.
+  const tp = sc.two_part && typeof sc.two_part === 'object' ? sc.two_part : null;
+  if (tp?.part === 1) out.push(`Two-parter: Part 1 of 2 (Part 2 is E${tp.other_slot_number}). Build the event up and end on a to-be-continued; its outcome comes in Part 2.`);
+  if (tp?.part === 2) out.push(`Two-parter: Part 2 of 2. Pick up where Part 1 (E${tp.other_slot_number}) left off; the event's outcome lands in this episode.`);
+  const sp = sc.special && typeof sc.special === 'object' ? sc.special : null;
+  if (sp?.kind === 'bonus') out.push(`Bonus episode between the weekly episodes (${clip(sp.label, 60)}): one event of its own; the weekly story carries on around it.`);
+  if (sp?.kind === 'special') out.push(`Stand-alone special (${clip(sp.label, 60)}${sp.title ? `: ${clip(sp.title, 80)}` : ''}): outside the season's story parts.`);
   if (sc.career_focus) out.push(`Career focus: ${clip(sc.career_focus, 100)}`);
   if (sc.desired_pressure) out.push(`Desired pressure: ${clip(sc.desired_pressure, 20)}`);
   const range = sc.outcome_range && typeof sc.outcome_range === 'object' ? sc.outcome_range : null;

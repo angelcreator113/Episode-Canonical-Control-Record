@@ -126,7 +126,14 @@ export function seasonEventViews({ roadmap = null, events = [], episodes = [], s
     if (slot.event?.id) add(slot.event.id, slot);
     if (slot.episode?.id && usedBy.has(slot.episode.id)) add(usedBy.get(slot.episode.id), slot);
   }
-  const slottedEpisodes = new Set(slots.map((s) => s.episode?.id).filter(Boolean));
+  // A bonus episode's or special's event is in the season too (seasonSpecials, 2026-10-26),
+  // with the special in place of a slot ({ special: true, label, code, state }).
+  for (const sp of roadmap?.specials || []) {
+    const asSlot = { id: sp.id, special: true, kind: sp.kind, label: sp.label, code: sp.label, state: sp.state, slot_number: sp.after_slot_number, phase: sp.phase };
+    if (sp.event?.id) add(sp.event.id, asSlot);
+    if (sp.episode?.id && usedBy.has(sp.episode.id)) add(usedBy.get(sp.episode.id), asSlot);
+  }
+  const slottedEpisodes = new Set([...slots.map((s) => s.episode?.id), ...(roadmap?.specials || []).map((s) => s.episode?.id)].filter(Boolean));
   if (seasonNumber != null) {
     const seasonEpisodes = new Set(episodes
       .filter((ep) => Number(ep.season_number) === Number(seasonNumber) && !slottedEpisodes.has(ep.id))

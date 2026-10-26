@@ -877,6 +877,9 @@ app.use('/api/v1', worldEventRoutes);
 // The show's weekly release schedule and each episode's release date (Evoni, 2026-10-25): requireAuth on every route.
 const releaseScheduleRoutes = trackRouteLoad('releaseSchedule', () => require('./routes/releaseScheduleRoutes'));
 app.use('/api/v1', releaseScheduleRoutes);
+// Special episodes: bonus, two-parter, stand-alone (Evoni, 2026-10-26): requireAuth on every route, no AI.
+const seasonSpecialsRoutes = trackRouteLoad('seasonSpecials', () => require('./routes/seasonSpecialsRoutes'));
+app.use('/api/v1', seasonSpecialsRoutes);
 
 // The public landing page's media slots (Task #2821). The admin routes are
 // requireAuth + authorize(['ADMIN']); the one public read is its own file on

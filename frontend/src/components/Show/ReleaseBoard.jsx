@@ -8,8 +8,9 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../../services/api';
 import { nextRelease, goLive, formatWhen, readiness, POST_TIMING, releaseCalendar, releasedResults } from '../../lib/releaseBoard';
-import { useReleaseSchedule, whenText, deadlineWarning, formatDay, errorText, episodeNumberOf } from '../../lib/releaseSchedule';
+import { useReleaseSchedule, whenText, deadlineWarning, formatDay, errorText, episodeNumberOf, releaseLabel } from '../../lib/releaseSchedule';
 import ReleaseScheduleEditor from './ReleaseScheduleEditor';
+import SpecialReleaseDates from './SpecialReleaseDates';
 import './ReleaseSchedule.css';
 
 const STAT_LABEL = { reputation: 'Reputation', brand_trust: 'Brand Trust', influence: 'Influence', stress: 'Stress' };
@@ -99,6 +100,8 @@ export default function ReleaseBoard({ showId, episodes: listedEpisodes = [], hi
       </div>
 
       <ReleaseScheduleEditor rs={rs} />
+      {/* Bonus episodes and specials: their own days (seasonSpecials, 2026-10-26). */}
+      <SpecialReleaseDates rs={rs} api={api} showId={showId} />
 
       {ep ? (
         <section className="wa-rel-next" data-testid="release-next" aria-label="Next release">
@@ -108,7 +111,7 @@ export default function ReleaseBoard({ showId, episodes: listedEpisodes = [], hi
           </div>
           <div className="wa-rel-next-body">
             <span className="wa-rel-eyebrow">Next release</span>
-            <h3>Episode {episodeNumberOf(row) ?? ep.episode_number ?? '?'} · {ep.title || 'Untitled'}</h3>
+            <h3>{row ? releaseLabel(row) : `Episode ${ep.episode_number ?? '?'}`} · {ep.title || 'Untitled'}</h3>
             <p className="wa-rel-when" data-testid="release-next-when">
               {nextWhen ? (row?.source === 'preview' ? `Not releasing yet · ${nextWhen}` : `Goes live ${nextWhen}`) : 'No go-live date yet'}
             </p>
@@ -174,9 +177,10 @@ export default function ReleaseBoard({ showId, episodes: listedEpisodes = [], hi
                       {d ? <><small>{d[0]}</small>{d[1]}</> : '—'}
                     </span>
                     <span className="wa-rel-cal-text">
-                      <Link to={`/episodes/${e.id}`}>Episode {episodeNumberOf(r) ?? e.episode_number ?? '?'}</Link>
+                      <Link to={`/episodes/${e.id}`}>{r ? releaseLabel(r) : `Episode ${e.episode_number ?? '?'}`}</Link>
                       <span>{text}</span>
-                      {rs.view && <EpisodeDate ep={e} row={r} hasSchedule={hasSchedule} onSet={rs.setEpisodeDate} />}
+                      {/* A special's day is set under Specials above, not here. */}
+                      {rs.view && !r?.special && <EpisodeDate ep={e} row={r} hasSchedule={hasSchedule} onSet={rs.setEpisodeDate} />}
                     </span>
                   </li>
                 );
@@ -196,7 +200,7 @@ export default function ReleaseBoard({ showId, episodes: listedEpisodes = [], hi
               <li key={e.id} className={tier ? `tier-${tier}` : undefined} data-testid={`release-result-${e.id}`}>
                 <span className="wa-rel-tier">{tier ? tier.toUpperCase() : 'Not scored'}</span>
                 <span className="wa-rel-result-text">
-                  <Link to={`/episodes/${e.id}`}>Episode {episodeNumberOf(rs.rowsById[e.id]) ?? e.episode_number ?? '?'} · {e.title || 'Untitled'}</Link>
+                  <Link to={`/episodes/${e.id}`}>{rs.rowsById[e.id] ? releaseLabel(rs.rowsById[e.id]) : `Episode ${e.episode_number ?? '?'}`} · {e.title || 'Untitled'}</Link>
                   <span>{stats.length ? stats.map(([k, v]) => `${STAT_LABEL[k] || k} ${signed(v)}`).join(' · ') : 'No stat changes recorded'}</span>
                 </span>
                 {coins !== 0 && <span className="wa-rel-coins">{signed(coins)} coins</span>}

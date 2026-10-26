@@ -10,6 +10,8 @@
  *   event     the in-world date of each event in the season's slots (an
  *             event_date written as YYYY-MM-DD; a date in words, "the night
  *             of the gala", has no day to put it on and is counted instead)
+ *             A bonus episode or special has its own release day (tone
+ *             'special'), and a two-parter's slots read "E12 · Part 1/2"
  *   deadline  a brand deal's answer-by, shoot and goes-public dates (open
  *             deals only, the daily update's rule), and the season's own
  *             start and end dates
@@ -54,7 +56,7 @@ export function calendarItems({ release = null, roadmap = null, events = [], opp
       const name = slot.episode?.title || slot.event?.name || null;
       items.push({
         key: `release-${slot.id}`, date, kind: 'release', slot_number: slot.slot_number,
-        title: `${preview ? 'Would release' : 'Releases'} E${n}`,
+        title: `${preview ? 'Would release' : 'Releases'} ${slot.two_part ? slot.two_part.label : `E${n}`}`,
         detail: name || (slot.episode ? null : 'Open slot'),
         tone: row.due === 'overdue' ? 'overdue' : row.due === 'soon' ? 'soon' : preview ? 'preview' : 'calm',
       });
@@ -67,6 +69,26 @@ export function calendarItems({ release = null, roadmap = null, events = [], opp
       } else if (ev.event_date) {
         undated += 1;
       }
+    }
+  }
+
+  // Bonus episodes and specials (seasonSpecials): their own release day, marked
+  // as specials, and a bonus's event on its in-world day.
+  for (const sp of roadmap?.specials || []) {
+    const row = (release?.specials || []).find((r) => r.special_id === sp.id) || null;
+    const date = dayOf(row?.date || sp.release?.date);
+    if (date) {
+      items.push({
+        key: `special-${sp.id}`, date, kind: 'release', special: true, slot_number: null,
+        title: `Special: ${sp.title || sp.label}`, detail: `${sp.label} · its own day`,
+        tone: row?.due === 'overdue' ? 'overdue' : row?.due === 'soon' ? 'soon' : 'special',
+      });
+    }
+    if (sp.event) {
+      const ev = byId.get(sp.event.id) || sp.event;
+      const at = dayOf(ev.event_date);
+      if (at) items.push({ key: `event-special-${sp.id}`, date: at, kind: 'event', slot_number: null, title: ev.name || 'Event', detail: `In-world · ${sp.label}`, tone: 'calm' });
+      else if (ev.event_date) undated += 1;
     }
   }
 

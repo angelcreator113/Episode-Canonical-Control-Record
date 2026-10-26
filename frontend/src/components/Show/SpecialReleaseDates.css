@@ -1,0 +1,20 @@
+/* The Release tab's specials (SpecialReleaseDates.jsx): each bonus episode
+   or special on its own day. Studio tokens only (light and dark). */
+.srel { margin-top: 14px; padding: 14px 18px; border-radius: 16px; background: var(--surface-card); border: 1px solid var(--lala-parchment-3); box-shadow: var(--shadow-xs); min-width: 0; }
+.srel-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; margin: 0 0 10px; font-family: var(--font-prose); font-size: 18px; font-weight: 600; color: var(--text-primary); }
+.srel-head svg { align-self: center; color: var(--accent-dark); }
+.srel-head span { font-family: var(--font-ui); font-size: 12px; font-weight: 500; color: var(--text-secondary); }
+.srel-list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.srel-row { display: grid; grid-template-columns: minmax(120px, 180px) minmax(0, 1fr); gap: 6px 14px; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--lala-parchment-3); background: var(--surface-bg); }
+.srel-row.is-unset { border-style: dashed; }
+.srel-label { font: 700 12px var(--font-ui); letter-spacing: 0.02em; color: var(--accent-dark); overflow-wrap: anywhere; }
+.srel-body { display: grid; gap: 4px; min-width: 0; }
+.srel-title { font-size: 14px; color: var(--text-primary); overflow-wrap: anywhere; }
+.srel-when { font-size: 13px; color: var(--text-secondary); }
+.srel-warn { font-size: 12px; font-weight: 600; color: var(--warning-text); }
+.srel-warn.is-overdue { color: var(--danger-text); }
+.srel-edit { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
+.srel-edit input { min-height: 36px; padding: 2px 8px; border-radius: 8px; border: 1px solid var(--lala-parchment-3); background: var(--surface-card); color: var(--text-primary); font: 13px var(--font-ui); max-width: 100%; }
+@media (max-width: 600px) {
+  .srel-row { grid-template-columns: minmax(0, 1fr); }
+}
