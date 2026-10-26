@@ -83,7 +83,9 @@ describe('the wording', () => {
     expect(projectionText(COVERAGE.goals[1].projection)).toBe('Brand Trust: 2 of 6 · no expected reward counted yet');
     expect(projectionVerdict(COVERAGE.goals[1].projection)).toBeNull();
     expect(projectionText(null)).toBeNull();
-    expect(partGapText({ gaps: [{ title: 'A' }, { title: 'B' }, { title: 'C' }, { title: 'D' }, { title: 'E' }] })).toBe('nothing moves A, B, C +2 more');
+    // At most three names, no "+N more" noise (goal ladders, 2026-10-25).
+    expect(partGapText({ gaps: [{ title: 'A' }, { title: 'B' }, { title: 'C' }, { title: 'D' }, { title: 'E' }] })).toBe('nothing moves A, B, C');
+    expect(partGapText({ gaps: [{ goal_id: 'a', title: 'A' }, { goal_id: 'b', title: 'B' }] }, new Set(['b']))).toBe('nothing moves B');
     expect(partGapText({ gaps: [] })).toBeNull();
     expect(slotGoalsMap(COVERAGE).s3.map((g) => g.title)).toEqual(['Save 3,000 coins']);
   });
@@ -93,13 +95,15 @@ describe('the Goals tab', () => {
   let api;
   beforeEach(() => { api = makeApi(); });
 
-  test('Moved by names each event with its episode code, and the on-track line', async () => {
+  test('Moved by names only the event picked for it (pinned); the others that help fold into Also helps', async () => {
     renderGoals(api);
     const moved = await screen.findByTestId('gc-moved-g-coins');
-    expect(moved.textContent).toBe('Moved by: E3Paid runway, E11Beauty deal');
-    expect(within(moved).getByRole('link', { name: 'E3 Paid runway' }).getAttribute('href')).toBe('/shows/show-1/events/ev-3');
-    expect(screen.getByTestId('gc-proj-g-coins').textContent).toBe('Coins: 600 + 2,400 = 3,000 of 3,000 · On track');
-    expect(within(moved).getByRole('link', { name: 'E11 Beauty deal (pinned)' })).toBeTruthy();
+    expect(moved.textContent).toBe('Moved by: E11Beauty deal');
+    expect(within(moved).getByRole('link', { name: 'E11 Beauty deal (picked)' }).getAttribute('href')).toBe('/shows/show-1/events/ev-11');
+    const also = screen.getByTestId('gc-also-g-coins');
+    expect(also.textContent).toBe('Also helps: E3');
+    fireEvent.click(within(also).getByRole('button'));
+    expect(within(also).getByRole('link', { name: /Paid runway/ }).getAttribute('href')).toBe('/shows/show-1/events/ev-3');
     expect(api.get).toHaveBeenCalledWith('/api/v1/world/show-1/season/goal-coverage');
   });
 
@@ -112,10 +116,11 @@ describe('the Goals tab', () => {
     expect(screen.queryByRole('button', { name: /Unpin Paid runway/ })).toBeNull();
   });
 
-  test('nothing moves it: the line, Find events lists the best fits with Pin, Open and Place it', async () => {
+  test('no event picked yet: Pick its event, and See every event lists the best fits with Pin, Open and Place it', async () => {
     renderGoals(api);
-    expect((await screen.findByTestId('gc-none-g-trust')).textContent).toBe('Nothing this season moves this goal');
-    fireEvent.click(screen.getByTestId('gc-find-btn-g-trust'));
+    expect((await screen.findByTestId('gc-none-g-trust')).textContent).toBe('No event picked for it yet');
+    fireEvent.click(screen.getByTestId('gc-pick-btn-g-trust'));
+    fireEvent.click(await screen.findByTestId('gc-find-btn-g-trust'));
     const find = await screen.findByTestId('gc-find-g-trust');
     const rows = await within(find).findAllByTestId('gc-find-row');
     expect(rows.map((r) => r.textContent)).toEqual([
@@ -126,12 +131,14 @@ describe('the Goals tab', () => {
     expect(within(rows[1]).queryByText('Place it')).toBeNull();
     fireEvent.click(within(rows[0]).getByTestId('gc-pin-ev-dinner'));
     await waitFor(() => expect(api.put).toHaveBeenCalledWith('/api/v1/world/show-1/season/events/ev-dinner/goals/g-trust/pin'));
-    await waitFor(() => expect(api.get.mock.calls.filter(([u]) => u.includes('/goals/g-trust/events')).length).toBe(2));
+    // The full list and the pick list above it both reload (one read each before, one each after).
+    await waitFor(() => expect(api.get.mock.calls.filter(([u]) => u.includes('/goals/g-trust/events')).length).toBe(4));
   });
 
   test('an already pinned event in Find events unpins', async () => {
     api = makeApi({ find: { ...FIND, events: [{ ...FIND.events[0], via: 'pinned', pinned: true, reason: 'Pinned to this goal' }] } });
     renderGoals(api);
+    fireEvent.click(await screen.findByTestId('gc-pick-btn-g-trust'));
     fireEvent.click(await screen.findByTestId('gc-find-btn-g-trust'));
     const pin = await screen.findByTestId('gc-pin-ev-dinner');
     expect(pin.textContent).toBe('Unpin');

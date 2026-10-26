@@ -79,12 +79,13 @@ describe('computeCoverage', () => {
     expect(done.goals[0].projection).toEqual(expect.objectContaining({ gain: 900, counted: 1, projected: 1500 }));
   });
 
-  test('per-part gaps: each part names the goals no event in it moves', () => {
+  test('per-part gaps: each part names the goals no event in it moves (a stat to keep under is never a gap)', () => {
     expect(cov.parts.map((p) => [p.phase, p.gaps.map((g) => g.goal_id)])).toEqual([
       [1, ['g-rep', 'g-trust']],
-      [2, ['g-rep', 'g-stress']],
-      [3, ['g-coins', 'g-trust', 'g-stress']],
+      [2, ['g-rep']],
+      [3, ['g-coins', 'g-trust']],
     ]);
+    expect(goal('g-stress').gap_phases).toEqual([]);
     expect(goal('g-coins').gap_phases).toEqual([3]);
   });
 
@@ -113,7 +114,7 @@ describe('computeCoverage', () => {
 
   test('uncoveredByPhase gives the goals themselves, for scoreForSeason', () => {
     const gaps = uncoveredByPhase(cov, [COINS, REP, TRUST, STRESS]);
-    expect(gaps[3].map((g) => g.title)).toEqual(['Save 3,000 coins', 'Earn brand trust', 'Keep stress low']);
+    expect(gaps[3].map((g) => g.title)).toEqual(['Save 3,000 coins', 'Earn brand trust']);
   });
 });
 
