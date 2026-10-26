@@ -66,7 +66,7 @@ Two other lists look like to-do lists:
   - on the episode, `episode_todo_lists.social_tasks`, JSONB, with the comment `'Social media content tasks: [{slot, label, description, required, completed, platform, timing}]'` (`src/migrations/20260712000000-wardrobe-pricing-episode-financials-social-tasks.js:48-53`). `episode_todo_lists` has no Sequelize model; every access is raw SQL.
   - The PNG assets use two roles: `UI.OVERLAY.SOCIAL_CHECKLIST` (`socialChecklistService.js:315`) and `UI.OVERLAY.SOCIAL_TASKS` (WE:3531).
 - **Who can edit:** every route is `requireAuth` only.
-  - Toggle `completed`: `POST /api/v1/episodes/:episodeId/todo/complete-social/:slot` (TLR:288), from the Run Sheet row click (`EpisodeTodoPage.jsx:95-101, 236`).
+  - Toggle `completed`: `POST /api/v1/episodes/:episodeId/todo/complete-social/:slot` (TLR:288), from the Run Sheet row click (`EpisodeTodoPage.jsx:95-101, 236`). A deliverable's task has no toggle since 2026-10-26: the route answers 409 `DELIVERABLE_COMPLETION_DERIVED`, and the task is ticked when the deliverable is submitted (`DELIVERABLES_READ.md`).
   - Edit labels and descriptions: the "Edit Tasks" tab of `OverlayApprovalPanel` (`:259-292`), then re-render and approve. Approve writes the **event** copy only (WE:3669-3673). The episode copy is upserted only for the wardrobe role (WE:3681).
   - Regenerate the event copy: the "Regenerate Social Tasks" button. The episode copy is rewritten only by regenerating the episode.
   - There is no route that adds or deletes a single task.
