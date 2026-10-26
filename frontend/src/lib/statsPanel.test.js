@@ -7,7 +7,7 @@ import { newSpot, moveSpot, resizeSpot, iconUrlsOf, PANEL_STATS, PANEL_SIZES, PA
 
 test('new boxes take the next stat and sit left to right inside the 1600 × 180 design', () => {
   const boxes = [0, 1, 2, 3].map((n) => newSpot(n));
-  expect(boxes.map((b) => b.stat)).toEqual(PANEL_STATS.map((s) => s.key));
+  expect(boxes.map((b) => b.stat)).toEqual(PANEL_STATS.slice(0, 4).map((s) => s.key));
   expect(boxes.map((b) => b.x)).toEqual([10, 30, 50, 70]);
   for (const b of boxes) {
     expect(b.x).toBeGreaterThanOrEqual(1600 / 1920 * 0 + 160 / 1920 * 100 - 0.1);
@@ -31,4 +31,10 @@ test('icons by overlay key; the sizes and the master shape', () => {
   expect(iconUrlsOf([{ id: 'coin_icon', url: 'https://x/c.png' }, { id: 'none', url: null }])).toEqual({ coin_icon: 'https://x/c.png' });
   expect(PANEL_SIZES.map((s) => [s.key, s.dims])).toEqual([['1080p', '1920 × 220'], ['4k', '3840 × 440']]);
   expect(PANEL_ASPECT).toBeCloseTo(1920 / 220);
+});
+
+test('stress is a panel stat, the one where lower is better', () => {
+  expect(PANEL_STATS.find((s) => s.key === 'stress')).toEqual({ key: 'stress', label: 'Stress', lowerIsBetter: true });
+  expect(PANEL_STATS.filter((s) => s.lowerIsBetter).map((s) => s.key)).toEqual(['stress']);
+  expect(newSpot(4).stat).toBe('stress');
 });

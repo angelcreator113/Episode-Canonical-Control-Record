@@ -13,6 +13,10 @@ export const PANEL_STATS = [
   { key: 'reputation', label: 'Reputation' },
   { key: 'influence', label: 'Influence' },
   { key: 'followers', label: 'Followers' },
+  // Lower is better (Evoni, 2026-10-25): with no colour of its own the
+  // number is green when it fell and rose-red when it rose
+  // (services/statsPanelService spotTexts).
+  { key: 'stress', label: 'Stress', lowerIsBetter: true },
 ];
 
 /** The master's shape: the PNG is 1920 × 220 (or twice that for 4K). */

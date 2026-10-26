@@ -336,6 +336,44 @@ function computeStatDeltas(evaluation, event, overrides = []) {
 }
 
 
+// ─── SELF-TALK AT BEAT 13 (Evoni, 2026-10-25) ───
+// How Lala talks to herself in the Recap Panel, chosen on the Script tab
+// (episode_briefs.event_metadata.self_talk). Kind or honest self-talk after a
+// safe or failed result softens the stress by one; being hard on herself
+// after a pass or a slay adds one. Applied after computeStatDeltas; an
+// episode with no choice saved is unchanged.
+const SELF_TALK_TONES = {
+  hard: 'Hard on herself',
+  honest: 'Honest',
+  kind: 'Kind',
+};
+
+/** The tone key ('hard' | 'honest' | 'kind'), or null for anything else. */
+function selfTalkTone(value) {
+  const t = typeof value === 'string' ? value.trim().toLowerCase() : '';
+  return Object.prototype.hasOwnProperty.call(SELF_TALK_TONES, t) ? t : null;
+}
+
+/**
+ * The stress change her self-talk makes for a tier: { tone, delta, reason }.
+ * delta is -1, 0 or +1; reason is a plain sentence, or null when it changes
+ * nothing. No tone (none saved) is { tone: null, delta: 0, reason: null }.
+ */
+function selfTalkStressDelta(tier, tone) {
+  const t = selfTalkTone(tone);
+  if (!t) return { tone: null, delta: 0, reason: null };
+  const low = tier === 'safe' || tier === 'fail';
+  const high = tier === 'slay' || tier === 'pass';
+  if (low && (t === 'kind' || t === 'honest')) {
+    return { tone: t, delta: -1, reason: `${SELF_TALK_TONES[t]} self-talk softened the stress` };
+  }
+  if (high && t === 'hard') {
+    return { tone: t, delta: 1, reason: 'Being hard on herself added stress, even after a good result' };
+  }
+  return { tone: t, delta: 0, reason: null };
+}
+
+
 /**
  * Apply deltas to a state object, clamping values
  */
@@ -437,6 +475,9 @@ module.exports = {
   computeAccessoryMatch,
   computeDeadlinePenalty,
   computeStatDeltas,
+  SELF_TALK_TONES,
+  selfTalkTone,
+  selfTalkStressDelta,
   applyDeltas,
   validateOverride,
   generateNarrativeLine,
