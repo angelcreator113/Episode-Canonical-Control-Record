@@ -33,6 +33,8 @@ vi.mock('../phone-editor/MissionEditor', () => ({
     ? <div data-testid="mission-editor">editor {showId} {episodeId}</div>
     : null),
 }));
+// My Little List ♡ has its own tests (MyLittleListPanel.test.jsx).
+vi.mock('./MyLittleListPanel', () => ({ default: () => null }));
 
 import api from '../../services/api';
 import EpisodeLalasPhoneTab, {

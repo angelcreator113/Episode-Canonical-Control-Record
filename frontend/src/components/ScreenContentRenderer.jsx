@@ -15,6 +15,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Heart, MessageCircle, Send, Bookmark, MoreHorizontal, ChevronRight } from 'lucide-react';
 import api from '../services/api';
+import MyLittleList from './phone/MyLittleList';
 import { evaluate as evaluatePhoneConditions } from '../lib/phoneRuntime';
 import { RELATIONSHIP_POST_TYPE, parseRelationship } from '../lib/feedRelationship';
 import { pulseFeedUrl } from '../lib/pulsePosts';
@@ -70,14 +71,16 @@ export const CONTENT_TYPES = [
   // saved episode_todo_lists.social_tasks the Run Sheet and Career Checklist
   // read, each task with its source. Canonical beat 9 (Reminder/Deadline)
   // shows it on Lala's Phone.
-  { key: 'task_list', label: 'Task List', icon: '📋', desc: 'The episode’s one task list, each task with its source', group: 'messages' },
+  // My Little List ♡ (Evoni, 2026-10-26): task_list, todo and shopping_list
+  // all show Lala's own list; the keys stay for saved screens.
+  { key: 'task_list', label: 'My Little List ♡', icon: '📋', desc: 'Lala’s own list: only what she knows, in her words', group: 'messages' },
   // Task #3179: Lala's Shopping list on her phone, her handwritten note.
   // Task #3181: her Career list, as of the episode, on the same paper.
   { key: 'career_list', label: 'Career List', icon: '⭐', desc: 'Lala’s goals, the brands she has worked with and her milestones, as of the episode', group: 'messages' },
   // Task #3191: her to-do list as the beat has it: the Shopping list, the
   // deal checklist or the Career list, by the script (TODO_MODE overrides).
-  { key: 'todo', label: 'To-Do (by beat)', icon: '🗒️', desc: 'Lala’s to-do list as the beat has it: shopping while she dresses, the deal checklist at a deal, else her career list', group: 'messages' },
-  { key: 'shopping_list', label: 'Shopping List', icon: '🛍️', desc: 'Lala’s handwritten shopping list for the episode; a line is crossed off once her look fills it', group: 'messages' },
+  { key: 'todo', label: 'My Little List ♡ (by beat)', icon: '🗒️', desc: 'Lala’s own list as of the beat shown: what she knows by then', group: 'messages' },
+  { key: 'shopping_list', label: 'My Little List ♡ (getting ready)', icon: '🛍️', desc: 'Lala’s own list; her outfit item ticks as she puts the look on', group: 'messages' },
   { key: 'custom_text', label: 'Custom Text', icon: '✏️', desc: 'Static text overlay', group: 'other' },
 ];
 
@@ -226,14 +229,16 @@ function ContentZoneRenderer({ zone, showId, episodeId, storyAt = null, beat = n
       return <ClosetNetWorthRenderer showId={showId} config={config} />;
     case 'closet_wishlist_grid':
       return <ClosetWishlistGridRenderer showId={showId} config={config} />;
+    // My Little List ♡ (Evoni, 2026-10-26): the shopping list, the to-do by
+    // beat and the task list are one list on her phone, what she knows in
+    // her words. The zone keys stay as they were so saved screens keep
+    // working; none of them reads a production list any more.
     case 'task_list':
-      return <TaskListRenderer episodeId={episodeId} config={config} />;
     case 'shopping_list':
-      return <ShoppingListRenderer episodeId={episodeId} beat={beat} config={config} />;
+    case 'todo':
+      return <MyLittleList episodeId={episodeId} beat={beat} />;
     case 'career_list':
       return <CareerListRenderer showId={showId} episodeId={episodeId} />;
-    case 'todo':
-      return <TodoRenderer showId={showId} episodeId={episodeId} beat={beat} config={config} />;
     case 'custom_text':
       return <CustomTextRenderer config={config} />;
     default:
@@ -633,61 +638,6 @@ function DMThreadRenderer({ showId, episodeId, config }) {
   );
 }
 
-// ── Task List (Task #2295) ──
-// The source labels the Run Sheet prints (todoListService SOURCE_BADGE);
-// 'deliverable' is a T1-era task stamped before owed_to existed.
-export const TASK_SOURCE_LABELS = {
-  host_requirement: 'host requirement',
-  brand_deliverable: 'brand deliverable',
-  deliverable: 'host requirement',
-  goal: 'goal',
-  optional: 'optional idea',
-};
-
-// Read-only: GET /episodes/:id/todo/social returns the saved list and its
-// completion; nothing here completes a task. A show's screen (no episode)
-// says where the list comes from instead of fetching.
-// ── Lala's Shopping list, her handwritten note (Lala's Phone spec §5, §13;
-// Task #3179) ──
-// The episode's wardrobe list (GET /episodes/:id/todo), drawn on the Event
-// Package's paper (EventPackage/EventDocuments.css, .evd-paper.is-phone):
-// lined pink paper, tape, her hand. A line is crossed off once her look
-// fills it, read from the current look as the To-Do tab does
-// (todoListService.getTodoList); crossing off from the beat follows the
-// [WEAR] cue (phone phase 3, issue 3).
-export function ShoppingListRenderer({ episodeId, beat = null, config = {} }) {
-  // As of the beat shown (Task #3188): crossed off from the line each piece
-  // is put on; with no beat, from the look as it is now.
-  const asOf = Number.isInteger(beat) && beat >= 1 && beat <= 14 ? `?beat=${beat}` : '';
-  const url = episodeId ? `/api/v1/episodes/${episodeId}/todo${asOf}` : null;
-  const { data, loading } = useContentData(url);
-
-  if (!episodeId) return <ZoneEmpty label="Shopping list · shown in an episode" />;
-  if (loading) return <ZoneLoader />;
-  const tasks = [...(data?.data?.tasks || [])].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)).slice(0, config.max_items || 12);
-  if (!tasks.length) return <ZoneEmpty label="No shopping list yet" />;
-  // Spent so far (Task #3189): what the pieces worn by the beat cost, by the
-  // charge Finalize books; hidden when nothing has been spent.
-  const spent = Number(data?.data?.spent_so_far) || 0;
-  return (
-    <div style={{ width: '100%', height: '100%', containerType: 'inline-size' }}>
-      <div className="evd-paper is-phone" data-testid="phone-shopping-list">
-        <span className="evd-tape" aria-hidden="true" />
-        <div className="evd-paper-title">Lala&apos;s shopping list</div>
-        <ul className="evd-paper-lines">
-          {tasks.map((t, i) => (
-            <li key={t.slot || i} data-testid="phone-shopping-line" data-crossed={t.completed ? 'true' : 'false'}>
-              <span className="evd-box" aria-hidden="true">{t.completed ? '✓' : ''}</span>
-              <span className={`evd-line-text${t.completed ? ' is-crossed' : ''}`}>{t.label || t.description || t.slot}</span>
-            </li>
-          ))}
-        </ul>
-        {spent > 0 && <div className="evd-paper-total" data-testid="phone-shopping-spent">spent so far: 🪙 {spent.toLocaleString('en-US')}</div>}
-      </div>
-    </div>
-  );
-}
-
 // ── Lala's Career list (Lala's Phone spec §5; Task #3181) ──
 // Goals, brands worked with and milestones, as of the episode shown (GET
 // /shows/:id/career-list?episode_id=, services/careerListService), on the
@@ -750,85 +700,6 @@ export function CareerListRenderer({ showId, episodeId = null }) {
   );
 }
 
-// ── Lala's to-do list by beat (Lala's Phone spec §5; Task #3191) ──
-// Evoni, 2026-10-14 (phone phase 3 rulings 3 and 6). The server says which
-// list the beat shows (GET /episodes/:id/todo/at, services/dealChecklistService):
-// the beat's [TODO_MODE] cue, else the Shopping list through the closet beat,
-// the deal checklist at a deal whose terms are locked, else the Career list.
-// Read-only: nothing here moves a deliverable's status.
-export const todoAtUrl = (episodeId, beat) =>
-  `/api/v1/episodes/${encodeURIComponent(episodeId)}/todo/at${Number.isInteger(beat) && beat >= 1 && beat <= 14 ? `?beat=${beat}` : ''}`;
-
-export function TodoRenderer({ showId, episodeId, beat = null, config = {} }) {
-  const { data, loading } = useContentData(episodeId ? todoAtUrl(episodeId, beat) : null);
-  if (!episodeId) return <ZoneEmpty label="To-do list · shown in an episode" />;
-  if (loading) return <ZoneLoader />;
-  const at = data?.data;
-  if (at?.mode === 'shopping') return <ShoppingListRenderer episodeId={episodeId} beat={beat} config={config} />;
-  if (at?.mode === 'deal' && at.deal) return <DealChecklistRenderer deal={at.deal} />;
-  return <CareerListRenderer showId={showId} episodeId={episodeId} />;
-}
-
-// The deal checklist on her note: headed with where the deal happens
-// ("At STUDIO BY SABLE's Studio"), each item ticked at its [DELIVER] cue and
-// then "ready to approve" until it is approved in Money.
-export function DealChecklistRenderer({ deal }) {
-  const items = deal?.items || [];
-  if (!items.length) return <ZoneEmpty label="No deal items yet" />;
-  return (
-    <div style={{ width: '100%', height: '100%', containerType: 'inline-size' }}>
-      <div className="evd-paper is-phone" data-testid="phone-deal-checklist">
-        <span className="evd-tape" aria-hidden="true" />
-        <div className="evd-paper-title">{deal.label}</div>
-        <ul className="evd-paper-lines">
-          {items.map((i) => (
-            <li key={i.deliverable_id} data-testid="phone-deal-item" data-delivered={i.delivered ? 'true' : 'false'}>
-              <span className="evd-box" aria-hidden="true">{i.delivered ? '✓' : ''}</span>
-              <span className={`evd-line-text${i.delivered ? ' is-crossed' : ''}`}>{i.label}</span>
-              {i.ready_to_approve && <span className="evd-line-note" data-testid="phone-deal-ready">ready to approve</span>}
-            </li>
-          ))}
-        </ul>
-      </div>
-    </div>
-  );
-}
-
-function TaskListRenderer({ episodeId, config }) {
-  const maxItems = config.max_items || 6;
-  const url = episodeId ? `/api/v1/episodes/${episodeId}/todo/social` : null;
-  const { data, loading } = useContentData(url);
-
-  if (!episodeId) return <ZoneEmpty label="Task list · shown in an episode" />;
-  if (loading) return <ZoneLoader />;
-  const tasks = (data?.social_tasks || []).slice(0, maxItems);
-  if (!tasks.length) return <ZoneEmpty label="No tasks yet" />;
-  const total = data?.completion?.total ?? data.social_tasks.length;
-  const done = data?.completion?.completed ?? data.social_tasks.filter(t => t.completed).length;
-
-  return (
-    <div data-testid="task-list-zone" style={{ width: '100%', height: '100%', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 2, padding: 3, background: config.bg || 'rgba(0,0,0,0.35)' }}>
-      <div style={{ fontSize: 7, fontWeight: 700, color: 'rgba(255,255,255,0.6)', fontFamily: "'DM Mono', monospace", textTransform: 'uppercase' }}>
-        To do · {done}/{total}
-      </div>
-      {tasks.map((t, i) => {
-        const source = t.task_source ? (TASK_SOURCE_LABELS[t.task_source] || 'optional idea') : null;
-        return (
-          <div key={t.slot || i} data-testid="task-list-item" style={{ display: 'flex', alignItems: 'flex-start', gap: 4 }}>
-            <span aria-hidden="true" style={{ fontSize: 8, color: t.completed ? '#86efac' : 'rgba(255,255,255,0.6)', lineHeight: 1.3 }}>{t.completed ? '✓' : '○'}</span>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 8, color: '#fff', lineHeight: 1.3, textDecoration: t.completed ? 'line-through' : 'none', opacity: t.completed ? 0.7 : 1 }}>
-                {t.label || t.description || 'Task'}
-                {t.required && !t.completed && <span style={{ color: '#fca5a5' }}> *</span>}
-              </div>
-              {source && <div style={{ fontSize: 6, color: 'rgba(255,255,255,0.5)', fontFamily: "'DM Mono', monospace" }}>{source}</div>}
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
 
 // ── Notifications ──
 function NotificationsRenderer({ showId, episodeId, config }) {

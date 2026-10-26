@@ -17,7 +17,7 @@ const TRANSITION_SECONDS = 1;
 
 // Tags that are read by the show, not seen (stats, mail, wardrobe and deal
 // cues, scene hints). [TRANSITION:] takes a beat of screen time.
-const HIDDEN_TAG = /^\[(STAT|MAIL|WEAR|DELIVER|TODO_MODE|SCENE|LOCATION_HINT)\s*:/i;
+const HIDDEN_TAG = /^\[(STAT|MAIL|WEAR|DELIVER|TODO_MODE|LEARNS|SCENE|LOCATION_HINT)\s*:/i;
 const TRANSITION_TAG = /^\[TRANSITION\s*:/i;
 const UI_TAG = /^\[UI\s*:/i;
 const ANY_TAG = /^\[[A-Z_]+\s*:.*\]$/i;

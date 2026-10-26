@@ -691,6 +691,29 @@ export function todoModeAt(beats = [], beatIndex = 0, { closetNumber = null, dea
  * that isn't one of the event's deliverables, and a [TODO_MODE] that isn't
  * shopping, deal or career. { beatIndex, lineIndex, flag, text }.
  */
+// [LEARNS: <state> [id]] (Evoni, 2026-10-26): what Lala learns at that line,
+// for My Little List. The server's utils/lalaKnowledge is the reader; this
+// only flags a line it would ignore for its form.
+export const LEARNS_STATES = ['invitation_received', 'deal_discovered', 'deal_accepted', 'opportunity_discovered', 'opportunity_accepted'];
+const LEARNS_REF_STATES = new Set(['opportunity_discovered', 'opportunity_accepted']);
+const LEARNS_LINE = /^\s*\[LEARNS:\s*([A-Za-z_]*)(?:\s+([^\]\s]+))?\s*\]\s*$/i;
+
+/** [LEARNS] lines that do nothing: { beatIndex, lineIndex, flag, text }. */
+export function learnsCueFlags(beats = []) {
+  const flags = [];
+  (beats || []).forEach((beat, beatIndex) => {
+    (beat?.lines || []).forEach((line, lineIndex) => {
+      const m = String(line || '').match(LEARNS_LINE);
+      if (!m) return;
+      const state = m[1].toLowerCase();
+      if (!LEARNS_STATES.includes(state)) flags.push({ beatIndex, lineIndex, flag: 'unknown_state', text: `[LEARNS: ${m[1]}] is not one of ${LEARNS_STATES.join(', ')}` });
+      else if (LEARNS_REF_STATES.has(state) && !m[2]) flags.push({ beatIndex, lineIndex, flag: 'no_reference', text: `[LEARNS: ${state}] needs the opportunity's id after it` });
+      else if (!LEARNS_REF_STATES.has(state) && m[2]) flags.push({ beatIndex, lineIndex, flag: 'unexpected_reference', text: `[LEARNS: ${state}] takes no id` });
+    });
+  });
+  return flags;
+}
+
 export function dealCueFlags(beats = [], deliverables = []) {
   const flags = deliverCues(beats, deliverables)
     .filter((c) => !c.deliverable)

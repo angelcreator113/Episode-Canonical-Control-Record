@@ -1,0 +1,40 @@
+/* My Little List ♡ panel on Production → Phone (Evoni, 2026-10-26). */
+
+.mllp-intro { margin: 0 0 12px; font-size: 13px; color: var(--lala-ink-muted, #6B6557); }
+
+.mllp-at { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.mllp-at label { display: flex; align-items: center; gap: 6px; font-family: 'DM Mono', monospace; font-size: 12px; color: var(--lala-ink-muted, #6B6557); }
+.mllp-at select,
+.mllp-at input { height: var(--lala-h-inline, 32px); padding: 0 8px; border: 1px solid var(--lala-gold-line, #E8D9A8); border-radius: var(--lala-radius, 8px); background: #fff; font: inherit; color: var(--lala-ink, #2C2C2C); }
+.mllp-at input { width: 64px; }
+
+.mllp-panes { display: grid; grid-template-columns: minmax(220px, 300px) 1fr; gap: 16px; align-items: start; }
+.mllp-phone { width: 100%; height: 460px; }
+
+.mllp-sub { margin: 0 0 8px; font-family: 'DM Mono', monospace; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--lala-ink-muted, #6B6557); }
+.mllp-rows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.mllp-row { padding: 10px 12px; border: 1px solid var(--lala-gold-line, #E8D9A8); border-radius: var(--lala-radius, 8px); background: #fff; }
+.mllp-row-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.mllp-chip { padding: 2px 8px; border-radius: 99px; font-family: 'DM Mono', monospace; font-size: 11px; background: var(--lala-lavender-soft, #ECE6F7); color: var(--lala-lavender-text, #4A3B7A); }
+.mllp-chip.is-shown { background: var(--lala-gold-soft, #FDF8EE); color: var(--lala-gold-text, #7A6314); }
+.mllp-chip.is-needs_wording,
+.mllp-chip.is-spoiler,
+.mllp-chip.is-duplicate_wording,
+.mllp-chip.is-no_reveal_rule { background: var(--lala-danger-soft, #F7E4DC); color: var(--lala-danger, #B84D2E); }
+.mllp-when { font-size: 12px; color: var(--lala-ink-muted, #6B6557); }
+.mllp-label { margin-top: 6px; font-size: 12px; color: var(--lala-ink-faint, #A09889); overflow-wrap: anywhere; }
+.mllp-leak { margin-top: 4px; font-size: 12px; color: var(--lala-danger, #B84D2E); }
+.mllp-words { display: flex; align-items: center; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+.mllp-stage { width: 100%; font-size: 11px; color: var(--lala-ink-muted, #6B6557); }
+.mllp-words input { flex: 1; min-width: 0; height: var(--lala-h-inline, 32px); padding: 0 8px; border: 1px solid var(--lala-lavender-line, #D9CFEE); border-radius: var(--lala-radius, 8px); font: inherit; font-size: 13px; }
+.mllp-words button { height: var(--lala-h-inline, 32px); padding: 0 12px; border: 0; border-radius: var(--lala-radius, 8px); background: var(--lala-gold, #B8962E); color: var(--lala-ink, #2C2C2C); font: inherit; font-size: 13px; cursor: pointer; }
+.mllp-words button:disabled { opacity: 0.45; cursor: default; }
+.mllp-error { margin: 6px 0 0; font-size: 12px; color: var(--lala-danger, #B84D2E); }
+.mllp-muted { font-size: 13px; color: var(--lala-ink-muted, #6B6557); }
+.mllp-issues { margin-top: 12px; font-size: 12px; color: var(--lala-ink-muted, #6B6557); }
+.mllp-issues ul { margin: 0; padding-left: 18px; }
+
+@media (max-width: 640px) {
+  .mllp-panes { grid-template-columns: 1fr; }
+  .mllp-phone { height: 420px; max-width: 320px; margin: 0 auto; }
+}

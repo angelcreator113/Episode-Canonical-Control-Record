@@ -5,6 +5,7 @@ import { Play, MessageCircle } from 'lucide-react';
 import api from '../../services/api';
 import EpisodePhoneMissionsTab from './EpisodePhoneMissionsTab';
 import EpisodePhoneNeeds from './EpisodePhoneNeeds';
+import MyLittleListPanel from './MyLittleListPanel';
 import PhonePreviewMode from '../PhonePreviewMode';
 import { isIcon, isScreen } from '../../lib/overlayUtils';
 import { BEAT_PHASES, beatOrder, pinnedBeatOrder, storyLabel } from '../../lib/storyClock';
@@ -505,6 +506,9 @@ function EpisodeLalasPhoneTab({ episode, onPreview, previewError = null }) {
             reloadOverlays={reloadOverlays}
             studioPath={studioPath}
           />
+
+          {/* ── My Little List ♡: Lala's own list at a moment, and its wording (Evoni, 2026-10-26) ── */}
+          <MyLittleListPanel episodeId={episodeId} />
 
           {/* ── Missions: a section, not the whole tab ── */}
           <section className="lalas-phone-card" aria-label="Missions">

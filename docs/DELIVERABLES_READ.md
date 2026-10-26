@@ -155,6 +155,14 @@ There are two opportunity-to-event paths, and neither copies deliverables or
   (around lines 75-111). Both are called from `EpisodeTodoPage.jsx`, the only UI that checks tasks
   off.
 - Nothing sets it automatically. Playthrough completion does not touch it.
+- **Since 2026-10-26 a task backed by a deliverable is the exception** (Evoni: "Required brand
+  deliverables must not be completed through a generic manual social-task endpoint"). Both tick
+  routes answer 409 `DELIVERABLE_COMPLETION_DERIVED` for it (`socialTaskSource.completionIsDerived`).
+  Moving the deliverable to `submitted` (`POST /world/:showId/events/:eventId/deliverables/:id/status`)
+  ticks it in the same transaction (`eventDeliverables.js` `markDeliverableTaskDone`), with
+  `completed_source: 'deliverable'`. Approval and the content fee stay on that route's `approved`
+  step. The Run Sheet shows such a row without a toggle. Tasks ticked by hand before this change keep
+  their stored state.
 - It is **read automatically** only when the episode completes (§0), and
   `evaluation_json.social_task_bonuses` records the counts (`episodeCompletionService.js`, around
   lines 428-452).
