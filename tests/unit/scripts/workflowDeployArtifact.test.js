@@ -115,9 +115,11 @@ cp "$STUB_PACK" "$out"
     fs.writeFileSync(path.join(app, 'frontend', 'dist', 'index.html'), 'old build');
     const res = spawnSync('bash', ['-c', [
       'set -euo pipefail',
-      ['die', 'redact', 'require_clean_tree', 'build_heap_mb', 'running_vite_builds', 'memory_lines',
+      ['die', 'redact', 'require_migrated', 'require_clean_tree', 'build_heap_mb', 'running_vite_builds', 'memory_lines',
         'fetch_artifact', 'install_artifact', 'phase_deploy'].map(fn).join('\n'),
       `PHASE=deploy; TARGET=${TARGET}; BUILD_TIMEOUT_S=1200; MEMINFO=/nonexistent; DEPLOY_MARKER="$HOME/.episode-deploy-unfinished"`,
+      // This run's migrate phase succeeded for the target (workflowDeployStagedMigrate covers the refusal).
+      'DEPLOY_MIGRATED="$HOME/.episode-deploy-migrated"; printf \'%s\\n\' "$TARGET" >"$DEPLOY_MIGRATED"',
       `cd "${app}"`,
       'phase_deploy',
     ].join('\n')], { env: { PATH: `${bin}:/usr/bin:/bin`, HOME: tmp, ARTIFACT_URL: LINK, ...env }, encoding: 'utf8' });
