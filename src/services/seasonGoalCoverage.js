@@ -191,7 +191,7 @@ function computeCoverage({ parts = [], slots = [], goals = [], state = {} }) {
         name: slot.event.name,
         slot_id: slot.id,
         slot_number: slot.slot_number,
-        code: `E${slot.slot_number}`,
+        code: slot.code || `E${slot.slot_number}`,
         label: slot.label,
         phase: slot.phase,
         via: m.via,
@@ -326,12 +326,46 @@ async function loadCoverageInputs(sequelize, showId, { arcId = null, goals: give
     done: r.episode_evaluation_status === 'accepted' || Boolean(r.accepted_at),
     event: eventBySlot.get(String(r.id)) || null,
   }));
+  // A two-parter's two slots hold one event: it is counted once, in Part 1.
+  const counted = new Set();
+  for (const sl of slots) {
+    if (!sl.event) continue;
+    if (counted.has(String(sl.event.id))) sl.event = null;
+    else counted.add(String(sl.event.id));
+  }
+  slots.push(...await bonusSlots(sequelize, arc, slots, counted));
   const parts = arcPhases(arc).map((p) => ({
     phase: Number(p.phase), title: p.title, episode_start: Number(p.episode_start), episode_end: Number(p.episode_end),
   }));
   const goals = givenGoals || await activeGoalRows(sequelize, showId);
   const state = await lalaState(sequelize, showId);
   return { arc, season_number: seasonNumber, parts, slots, goals, state };
+}
+
+/**
+ * The season's bonus episodes as coverage slots (seasonSpecials, 2026-10-26):
+ * a bonus's event counts like any other, in the part of the weekly episode it
+ * follows (slot_number is that episode's, for the goals' episode ranges).
+ * Stand-alone specials count toward no part and no goal. [] before the
+ * specials' migration.
+ */
+async function bonusSlots(sequelize, arc, slots, counted) {
+  const specials = require('./seasonSpecials');
+  if (!(await specials.specialsReady(sequelize))) return [];
+  const [rows] = await sequelize.query(
+    `SELECT sp.id AS special_id, sp.kind, sp.after_slot_number, sp.special_type, sp.accepted_at, ep.evaluation_status, ${EVENT_COLUMNS}
+       FROM ${specials.TABLE} sp
+       JOIN world_events ev ON ev.id = COALESCE(sp.event_id, ${episodeEventIdSql('sp.episode_id')}) AND ev.deleted_at IS NULL
+       LEFT JOIN episodes ep ON ep.id = sp.episode_id AND ep.deleted_at IS NULL
+      WHERE sp.arc_id = :arcId AND sp.kind = 'bonus' AND sp.deleted_at IS NULL
+      ORDER BY sp.after_slot_number, sp.created_at`,
+    { replacements: { arcId: arc.id } });
+  return rows.filter((r) => !counted.has(String(r.id))).map(({ special_id: id, kind, after_slot_number: after, special_type: type, accepted_at: acceptedAt, evaluation_status: evaluation, ...ev }) => {
+    const n = Math.max(1, Number(after) || 0);
+    const near = slots.find((s) => Number(s.slot_number) === n);
+    const label = specials.specialLabel({ kind, after_slot_number: after, special_type: type });
+    return { id, slot_number: n, phase: Number(near?.phase) || 1, label, code: label, special: true, done: evaluation === 'accepted' || Boolean(acceptedAt), event: ev };
+  });
 }
 
 async function eventRow(sequelize, showId, eventId) {
@@ -356,7 +390,7 @@ function eventGoals(ev, inputs) {
   return {
     id: ev.id,
     name: ev.name,
-    slot: slot ? { slot_id: slot.id, slot_number: slot.slot_number, code: `E${slot.slot_number}`, label: slot.label, phase: slot.phase } : null,
+    slot: slot ? { slot_id: slot.id, slot_number: slot.slot_number, code: slot.code || `E${slot.slot_number}`, label: slot.label, phase: slot.phase } : null,
     pinned_goal_ids: pins,
     main_goal: mainGoalOf(ev, inputs.goals),
     moves: goals.filter((g) => g.via),
@@ -440,7 +474,7 @@ function rankGoalEvents(goal, allEvents, inputs = {}) {
       pinned: pinnedGoalIds(ev).includes(String(goal.id)),
       gain,
       prestige: Number(ev.prestige) || 0,
-      slot: slot ? { slot_id: slot.id, slot_number: slot.slot_number, code: `E${slot.slot_number}`, label: slot.label, phase: slot.phase, done: slot.done } : null,
+      slot: slot ? { slot_id: slot.id, slot_number: slot.slot_number, code: slot.code || `E${slot.slot_number}`, label: slot.label, phase: slot.phase, done: slot.done } : null,
       reason: moveReason(ev, goal, via, gain, state),
       main_goal: mainGoalOf(ev, inputs.goals, goal),
       in_range: slot ? slotInRange(goal, slot) : null,

@@ -23,6 +23,7 @@ import SeasonWrapUp from './SeasonWrapUp';
 import { getEpisodeAnchorEvent } from '../../services/episodeEventsApi';
 import { fetchAllSceneSets } from '../../lib/fetchAllPages';
 import { fetchClosetWithTotal } from '../../lib/closetGrouping';
+import { specialTagOf } from '../../lib/seasonSpecials';
 import { S, STAT_ICONS, TIER_COLORS, TIER_BG, TIER_BORDER, TIER_EMOJIS, EVENT_TYPE_ICONS, EVALUATION_LABEL } from './producerStyles';
 import './EpisodeLedger.css';
 
@@ -204,6 +205,7 @@ export default function EpisodeLedger({ showId, api = defaultApi, episodes = [],
               <span className="wa-ledger-num">{ep.episode_number || i + 1}</span>
               <span className="wa-ledger-name">
                 <span className="wa-ledger-title">{ep.title || 'Untitled'}</span>
+                {specialTagOf(ep) && <span className="wa-ledger-special" data-testid={`ledger-special-${ep.id}`}>{specialTagOf(ep)}</span>}
                 {linkedEvent && <span className="wa-ledger-event">{EVENT_TYPE_ICONS[linkedEvent.event_type]} {linkedEvent.name}</span>}
               </span>
               <span className="wa-ledger-meta">

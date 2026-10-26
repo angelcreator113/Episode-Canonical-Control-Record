@@ -1,0 +1,79 @@
+/* Special episodes on the Roadmap (SeasonSpecials.jsx). The Season page's
+   own colours (--sp-*, SeasonPage.css): a special reads gold-edged beside
+   the weekly cards, a dashed edge while it has no date. 44px targets, 12px
+   smallest text, one column on a phone. */
+.sspec-bar {
+  display: grid; gap: 10px; margin: 12px 0; padding: 12px 14px; border-radius: 16px;
+  background: var(--sp-gold-soft); border: 1px solid var(--sp-line);
+}
+.sspec-bar-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.sspec-bar-title {
+  display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0;
+  font-family: var(--font-prose); font-size: 18px; font-weight: 600; color: var(--sp-ink);
+}
+.sspec-bar-count { font-family: var(--font-sans); font-size: 13px; font-weight: 500; color: var(--sp-muted); }
+.sspec-hint { margin: 0; font-size: 13px; line-height: 1.45; color: var(--sp-muted); overflow-wrap: anywhere; }
+.sspec-list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.sspec-suggest, .sspec-two {
+  display: grid; grid-template-columns: 20px minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 10px 12px;
+  border-radius: 12px; background: var(--sp-card); border: 1px solid var(--sp-line); color: var(--sp-ink);
+}
+.sspec-suggest > svg { color: var(--sp-gold-text); }
+.sspec-two > svg { color: var(--sp-purple); }
+.sspec-suggest-text, .sspec-two-text { display: grid; gap: 2px; min-width: 0; font-size: 13px; line-height: 1.4; overflow-wrap: anywhere; }
+.sspec-suggest-text strong, .sspec-two-text strong { font-size: 14px; }
+.sspec-suggest-actions { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+
+/* The form and the editor */
+.sspec-form, .sspec-editor { display: grid; gap: 10px; padding: 12px; border-radius: 12px; background: var(--sp-card); border: 1px solid var(--sp-line); }
+.sspec-kinds { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 0; padding: 0; border: none; }
+.sspec-kind {
+  display: flex; align-items: flex-start; gap: 8px; min-height: 44px; padding: 10px; border-radius: 12px; cursor: pointer;
+  border: 1px solid var(--sp-line); background: var(--sp-bg); color: var(--sp-ink);
+}
+.sspec-kind.is-on { border: 2px solid var(--sp-pink); background: var(--sp-pink-soft); }
+.sspec-kind input { margin-top: 3px; accent-color: var(--sp-pink); }
+.sspec-kind span { display: grid; gap: 2px; min-width: 0; }
+.sspec-kind small { font-size: 12px; color: var(--sp-muted); line-height: 1.35; }
+.sspec-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.sspec-field { display: grid; gap: 4px; min-width: 0; }
+.sspec-label { font-size: 12px; font-weight: 700; color: var(--sp-muted); }
+.sspec-field .szn-select, .sspec-input { width: 100%; min-width: 0; }
+.sspec-input {
+  min-height: 44px; padding: 8px 12px; border-radius: 12px; border: 1px solid var(--sp-line);
+  background: var(--sp-card); color: var(--sp-ink); font: inherit; font-size: 14px;
+}
+.sspec-input:focus-visible, .sspec-kind:focus-within, .sspec-card-open:focus-visible { outline: 3px solid var(--sp-purple); outline-offset: 2px; }
+.sspec-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* A special among the weekly cards */
+.sspec-card {
+  display: grid; min-width: 0; border-radius: 14px; background: var(--sp-card);
+  border: 2px solid var(--sp-gold); box-shadow: inset 4px 0 0 var(--sp-gold);
+}
+.sspec-card.is-special { border-color: var(--sp-purple-fill); box-shadow: inset 4px 0 0 var(--sp-purple-fill); }
+.sspec-card-open {
+  display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: 10px; min-height: 72px; padding: 10px 12px;
+  border: none; border-radius: 14px; background: none; font: inherit; text-align: left; color: var(--sp-ink); cursor: pointer;
+}
+.sspec-card-open:disabled { cursor: default; }
+.sspec-card-icon {
+  display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; border-radius: 999px;
+  background: var(--sp-gold-soft); color: var(--sp-gold-text);
+}
+.sspec-card.is-special .sspec-card-icon { background: var(--sp-purple-soft); color: var(--sp-purple); }
+.sspec-card-body { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; min-width: 0; }
+.sspec-card-num { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 13px; font-weight: 800; color: var(--sp-gold-text); }
+.sspec-card.is-special .sspec-card-num { color: var(--sp-purple); }
+.sspec-when { padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; color: var(--sp-ink); border: 1px solid var(--sp-line); }
+.sspec-when.is-unset { border-style: dashed; color: var(--sp-muted); font-weight: 500; }
+.sspec-when.is-soon, .sspec-when.is-overdue { border-color: var(--sp-pink); color: var(--sp-pink-deep); }
+.sspec-card-title { font-size: 14px; font-weight: 600; line-height: 1.3; overflow-wrap: anywhere; }
+.sspec-card-sub { font-size: 12px; color: var(--sp-muted); }
+.sspec-card .sspec-editor { margin: 0 8px 8px; }
+
+@media (max-width: 720px) {
+  .sspec-kinds, .sspec-grid { grid-template-columns: minmax(0, 1fr); }
+  .sspec-suggest, .sspec-two { grid-template-columns: 20px minmax(0, 1fr); }
+  .sspec-suggest-actions { grid-column: 1 / -1; justify-content: flex-start; }
+}

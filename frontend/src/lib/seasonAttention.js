@@ -191,7 +191,7 @@ export function attentionItems({
   }
 
   const setup = eventsNeedingSetup({ roadmap, events, episodes });
-  const eventLine = (x) => `${x.event.name}${x.slot ? ` (E${x.slot.slot_number})` : ''}`;
+  const eventLine = (x) => `${x.event.name}${x.slot ? ` (${x.slot.code || `E${x.slot.slot_number}`})` : ''}`;
   if (setup.length > 2) {
     items.push({
       key: 'events-setup', kind: 'events', rank: RANK.events_setup, sort: setup[0].slot?.slot_number ?? 99, tone: 'calm',

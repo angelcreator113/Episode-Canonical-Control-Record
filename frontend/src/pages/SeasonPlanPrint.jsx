@@ -68,6 +68,20 @@ export function SeasonPlanSheet({ sheet, showName = null, pitchSlot = null }) {
         ))}
       </section>
 
+      {sheet.specials?.length > 0 && (
+        <section className="splan-specials" aria-label="Specials" data-testid="splan-specials">
+          <p className="splan-label" role="heading" aria-level={2}>Specials</p>
+          <ul className="splan-list">
+            {sheet.specials.map((s) => (
+              <li key={s.id} data-testid={`splan-special-${s.id}`}>
+                <strong>{s.code}</strong> {s.title}{s.event && s.event !== s.title ? ` · ${s.event}` : ''} · {s.when || 'No date yet'}
+                <span className="splan-sub"> · {s.kind}{s.place ? `, ${s.place}` : ''}{s.status ? ` · ${s.status}` : ''}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
       <div className="splan-two">
         <section aria-label="Events" data-testid="splan-events">
           <p className="splan-label" role="heading" aria-level={2}>Events</p>

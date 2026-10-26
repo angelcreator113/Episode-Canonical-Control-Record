@@ -65,6 +65,17 @@
  *                                     seasons: { [season]: { state, first_release, own_start, numbers } } }
  *                                   numbers is the current season's (the roadmap's)
  *   moves(before, after, episodes)  the schedule dates a change moves
+ *
+ * Special episodes (services/seasonSpecials, 2026-10-26; YouTube, like the
+ * main show): a bonus or stand-alone special is dated by hand, its own date
+ * and time, and the weekly dating never sees it, so it moves no weekly
+ * number or date (it is not a hand-set date the weeks step around). Its row
+ * is in `episodes` once it has an episode, with `special` and no number; every
+ * special is in `specials` too, with a suggested date (bonus: the nearest
+ * Wednesday to its event's in-world date when that falls between the two
+ * weekly releases around it, else midweek after the episode it follows) and
+ * the same deadline warnings as the weekly rows. A two-parter's parts are
+ * weekly slots, dated as such; their rows carry `two_part`.
  *   zonedInstant(date, time, schedule), todayIn(now, schedule)
  */
 
@@ -313,12 +324,22 @@ function dueOf(entry, ep, { state, schedule, now }) {
  * `slots` is the current season's (the roadmap's) dates by slot number;
  * `seasons` lists every season with its own state, start and slot dates.
  */
-function buildView({ schedule, episodes = [], slotCount = 0, baseDate = null, now = new Date(), seasons = null, currentSeason = null }) {
-  const computed = computeDates({ schedule, episodes, slotCount, baseDate, now, seasons, currentSeason });
+function buildView({ schedule, episodes = [], slotCount = 0, baseDate = null, now = new Date(), seasons = null, currentSeason = null, specials = [], twoParts = [] }) {
+  // A special's episode is dated by its special, never by the weekly schedule.
+  const specialByEpisode = new Map((specials || []).filter((sp) => sp.episode_id).map((sp) => [sp.episode_id, sp]));
+  const weekly = (episodes || []).filter((ep) => !specialByEpisode.has(ep.id));
+  const computed = computeDates({ schedule, episodes: weekly, slotCount, baseDate, now, seasons, currentSeason });
   const { state } = computed;
   const stateOf = (entry) => (entry ? computed.seasons[entry.season_number]?.state || state : state);
-  const order = (r) => [r.season_number ?? 1e9, r.number ?? 1e9, Number(r.episode_number) || 1e9];
-  const rows = [...episodes].filter(releasable)
+  const order = (r) => [r.season_number ?? 1e9, r.number ?? r.special?.sort ?? 1e9, Number(r.episode_number) || 1e9];
+  const partOf = new Map();
+  for (const tp of twoParts || []) {
+    const season = posInt(tp.season_number) || 1;
+    partOf.set(`${season}:${tp.one_number}`, { part: 1, of: 2, other_number: Number(tp.two_number) });
+    partOf.set(`${season}:${tp.two_number}`, { part: 2, of: 2, other_number: Number(tp.one_number) });
+  }
+  const specialRows = specialsOf({ specials, episodes, computed, schedule, state, now });
+  const rows = [...weekly].filter(releasable)
     .map((ep) => {
       const entry = computed.byEpisode[ep.id] || null;
       const sState = stateOf(entry);
@@ -336,8 +357,10 @@ function buildView({ schedule, episodes = [], slotCount = 0, baseDate = null, no
         source: entry?.source || null,
         starts_at: at,
         ...dueOf(entry, ep, { state: sState, schedule, now }),
+        ...(entry?.number && partOf.has(`${entry.season_number}:${entry.number}`) ? { two_part: partOf.get(`${entry.season_number}:${entry.number}`) } : {}),
       };
     })
+    .concat(specialRows.filter((r) => r.episode_id && releasable({ status: r.status })))
     .sort((a, b) => {
       const x = order(a); const y = order(b);
       return x[0] - y[0] || x[1] - y[1] || x[2] - y[2];
@@ -362,7 +385,69 @@ function buildView({ schedule, episodes = [], slotCount = 0, baseDate = null, no
     episodes: rows,
     slots: slotsOf(computed.numbers),
     seasons: seasonList,
+    specials: specialRows,
   };
+}
+
+const MIDWEEK_DAYS = 3;
+/**
+ * Each bonus and special as a release row: its hand-set date and time (the
+ * schedule's time when none is set), its suggestion and its deadline.
+ */
+function specialsOf({ specials = [], episodes = [], computed, schedule, state, now }) {
+  const byId = new Map((episodes || []).map((ep) => [ep.id, ep]));
+  return (specials || []).map((sp) => {
+    const ep = sp.episode_id ? byId.get(sp.episode_id) || null : null;
+    const season = posInt(sp.season_number) || 1;
+    const sState = computed.seasons[season]?.state || state;
+    const hand = ep ? dayFromAirDate(ep.air_date) : null;
+    const date = (isDay(sp.release_date) ? sp.release_date : null) || hand;
+    const time = sp.release_time || (schedule ? schedule.time : null);
+    const entry = date ? { date, time } : null;
+    const timed = entry && time && (sState === 'active' || sState === 'preview');
+    const label = sp.label || 'Special';
+    return {
+      special_id: sp.id,
+      episode_id: sp.episode_id || null,
+      episode_number: ep?.episode_number ?? null,
+      season_number: season,
+      number: null,
+      title: sp.title || ep?.title || null,
+      status: ep?.status || sp.episode_status || null,
+      date: entry ? date : null,
+      time: entry ? time : null,
+      source: entry ? 'special' : null,
+      starts_at: timed ? zonedInstant(date, time, schedule).toISOString() : null,
+      ...dueOf(entry, ep, { state: sState, schedule, now }),
+      suggested: suggestSpecialDate(sp, computed.seasons[season]?.numbers || {}, schedule),
+      special: {
+        id: sp.id, kind: sp.kind, special_type: sp.special_type || null, label,
+        after_slot_number: Number(sp.after_slot_number) || 0, sort: (Number(sp.after_slot_number) || 0) + 0.5,
+      },
+    };
+  });
+}
+
+/**
+ * A special's suggested release: the nearest Wednesday to a bonus's in-world
+ * event date when that day falls between the weekly releases around it; else
+ * midweek after the episode it follows (a Wednesday for a Sunday show), or
+ * the midweek before Episode 1. The time is the schedule's. null with no
+ * weekly date to place it by.
+ */
+function suggestSpecialDate(sp, numbers, schedule) {
+  const after = Number(sp.after_slot_number) || 0;
+  const before = numbers[after]?.date || null;
+  const next = numbers[after + 1]?.date || null;
+  const time = schedule?.time || DEFAULT_SCHEDULE.time;
+  const inside = (d) => (!before || d > before) && (!next || d < next);
+  if (sp.kind === 'bonus' && isDay(String(sp.event_date || '').slice(0, 10))) {
+    const wed = onOrAfter(addDays(String(sp.event_date).slice(0, 10), -3), 'wed');
+    if ((before || next) && inside(wed)) return { date: wed, time, from: 'event' };
+  }
+  if (before) return { date: addDays(before, MIDWEEK_DAYS), time, from: 'midweek' };
+  if (next) return { date: addDays(next, MIDWEEK_DAYS - 7), time, from: 'midweek' };
+  return null;
 }
 
 /**
@@ -445,7 +530,11 @@ async function loadInputs(sequelize, showId) {
   }
   const current = arcs.find((a) => a.status === 'active')
     || [...arcs].sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0] || null;
+  // Bonus episodes, stand-alone specials and two-parters (none before their migration).
+  const extra = await require('./seasonSpecials').releaseSpecials(sequelize, showId);
   return {
+    specials: extra.specials,
+    twoParts: extra.two_parts,
     defaults,
     schedule: readStored(defaults.release_schedule),
     episodes,
@@ -496,6 +585,7 @@ module.exports = {
   scheduleState,
   computeDates,
   buildView,
+  suggestSpecialDate,
   moves,
   zonedInstant,
   todayIn,

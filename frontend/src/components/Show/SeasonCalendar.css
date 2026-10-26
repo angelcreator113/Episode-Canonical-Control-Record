@@ -38,6 +38,8 @@ button.scal-item { cursor: pointer; }
 .scal-item.is-preview { opacity: .85; font-style: italic; }
 .scal-item.is-overdue { background: var(--sp-pink-deep); color: var(--sp-white); }
 .scal-item.is-soon { box-shadow: inset 3px 0 0 var(--sp-gold); }
+/* A bonus episode's or special's own release day (seasonSpecials): gold-edged. */
+.scal-item.is-special { background: var(--sp-gold-soft); color: var(--sp-gold-text); box-shadow: inset 3px 0 0 var(--sp-gold); }
 .scal-item svg { flex: none; }
 .scal-item-text { display: flex; flex-direction: column; min-width: 0; }
 .scal-item-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

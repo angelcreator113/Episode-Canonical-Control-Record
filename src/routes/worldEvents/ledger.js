@@ -48,6 +48,10 @@ router.post('/world/:showId/episodes/:episodeId/complete', requireAuth, async (r
     console.error('[CompleteEpisode] Error:', err);
     // Task #2378: nothing books while the event's terms are reopened.
     if (err instanceof TermsReopenedError) return res.status(err.status).json(termsReopenedBody(err));
+    // A two-parter's Part 1 is "to be continued": the event completes with Part 2 (seasonSpecials).
+    if (err instanceof require('../../services/seasonSpecials').SpecialsError) {
+      return res.status(err.status).json({ success: false, error: err.message, code: err.code });
+    }
     // Task #1933: completion refuses a result that would take coins below zero.
     const { InsufficientCoinsError, insufficientCoinsBody } = require('../../services/coinBalanceGuard');
     if (err instanceof InsufficientCoinsError) {
