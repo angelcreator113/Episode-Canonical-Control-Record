@@ -1,6 +1,6 @@
 # Gameplay Director and animated export: implementation spec
 
-**Status:** revision 4, final for planning (2026-10-26). Nothing here is built.
+**Status:** revision 5, the approved planning baseline (Evoni approved revision 4 as the baseline on 2026-10-26; revision 5 adds her final clarifications and creative decisions). Nothing here is built.
 
 **Revision history**
 - **Rev 1:** the first draft.
@@ -19,6 +19,12 @@
   - conflicts flagged;
   - visibility as a track setting shown in a Timeline lane;
   - Timeline proposals written only through the Timeline.
+- **Rev 5:** Evoni's final clarifications, with no architecture change:
+  - the first draft is made automatically once a scene has what it needs (§7.1);
+  - only active dialogue in the approved production blocks export (§4.1);
+  - Prime's commentary is kept apart from the Lala and NPC voices (§4.1);
+  - creative decisions G-1 to G-5 settled (§16);
+  - beat 9's old Shopping list reference becomes My Little List ♡ (§6.7).
 
 **Rulings this spec keeps** (Evoni, 2026-10-26, unless dated otherwise):
 - The video export is a separate project; My Little List doesn't wait for it.
@@ -28,12 +34,12 @@
 - The Mouse Cursor and Grabbing Hand already in World → Overlays are reused, never regenerated.
 - **One authoritative episode script.**
 - **One shared Stage** (Scene Studio's composition foundation). The **Timeline** adds timing, animation and sequencing to that same composition, and owns final duration.
-- **Prime's PIP is her recorded footage**: an editable layer, **visible by default** and controlled by hand. Take choice belongs to the PIP system. **Missing footage uses a designated fallback, with a warning.**
+- **Prime is the real streamer playing the game, never an AI avatar.** **Prime's PIP is her recorded footage**: an editable layer, **visible by default in all 14 beats**, event and deliverable scenes included, and controlled by hand. Take choice belongs to the PIP system. **Missing footage uses a designated fallback, with a warning.**
 - **Lala and the NPCs use assigned or generated voices**, and each line uses its **explicitly approved audio source**.
 - **Ordinary Lala dialogue needs a Voice-icon click**, decided by the line's trigger, never by its beat number. Approved wardrobe and notification reactions are automatic.
 - **Front and Back View belong to the same Scene Set.**
 - **Episode scenes inherit master objects and keep local customizations.** A customized object survives the master's deletion. **Gameplay references episode-scene objects**, never master ids.
-- **Gameplay is generated automatically but stays editable.** Manual overrides and approved work are protected.
+- **Gameplay is generated automatically but stays editable.** The first draft is made without being asked; nothing is ever approved automatically. Manual overrides, locked scenes and approved work are protected.
 - **Preview and export use the same authoritative production data.**
 - No merge, deploy or production-server change without Evoni's explicit approval.
 
@@ -107,7 +113,13 @@ Each choice is made in its owner's tool: the Timeline, the PIP system or dialogu
 ### 3.3 Reactions, pauses and decisions
 - A surprise sits on its `cue_shown` mark, and gameplay holds until Prime's next line.
 - A decision's press sits on the line where she decides.
-- The cursor **may move while Prime talks**. It **rests** while Lala or an NPC speaks, and during a reaction hold.
+- The cursor **may move while Prime talks**. It **rests** while Lala or an NPC speaks, and during important reaction pauses (a reaction hold).
+
+### 3.4 Cursor movement (decision G-1)
+- Natural streamer-style movement: moderate speed, smooth curves, gentle arcs and subtle imperfections.
+- A brief hesitation when Prime is choosing between items (`[UI:HOVER]`, `[UI:COMPARE]`, before a decision's press).
+- The imperfections come from a seed (the track id plus the action's anchor id), so the same track always moves the same way and preview and export match (§13, tests 21 and 23).
+- The existing Mouse Cursor and Grabbing Hand assets only (§9). They are never regenerated.
 
 ## 4. Dialogue triggers and Lala's Voice icon
 
@@ -119,10 +131,12 @@ Each choice is made in its owner's tool: the Timeline, the PIP system or dialogu
 | **Wardrobe reaction** | Equipping a piece: inside `dressedAt` (the closet open, around a `[WEAR:]`) | Not needed (automatic) |
 | **Notification reaction** | The next Lala line after `[UI:NOTIFY]`, `[UI:DM]` or `[MAIL:]` | Not needed (automatic) |
 | `Lala (auto):` | Valid only as one of the two reactions above | A finding when it has neither trigger |
-| `Lala (V.O.):` (her thoughts) | Not dialogue | Not needed (as today; see decision G-4) |
+| `Lala (V.O.):` (her thoughts) | Not dialogue | Not needed (decision G-4) |
 | **NPC conversation** | **Clicking the NPC** (`[UI:CLICK <name>]`), **opening a DM** (`[UI:DM <name>]` / `[UI:OPEN DM <name>]`), or **an explicit scripted event** (`[TALK: <name>]`, a new cue) | No Voice click (they aren't Lala); the conversation's lines follow its trigger |
 
-**Beat-number exemptions are removed.** Today `scriptShowRules` exempts beats 11–13 as a cutscene (`isCutsceneBeat`). GD-2 replaces that with trigger-based rules: an ordinary Lala line in a cutscene beat needs a click like any other, and NPC lines there need one of the three triggers. Scripts already written may gain findings, which flag and never block.
+**Beat-number exemptions are removed.** Today `scriptShowRules` exempts beats 11–13 from the voice rule as a cutscene (`isCutsceneBeat`, in `scriptWithShowRules`). GD-2 replaces that with trigger-based rules: an ordinary Lala line in a cutscene beat needs a click like any other, and NPC lines there need one of the three triggers. Scripts already written may gain findings, which flag and never block.
+
+`isCutsceneBeat` has other callers that are not the voice rule: the voice style in `characterVoice`, the teleprompter's labelling, and phone placement in `phonePaths` and `EpisodeScriptTab`. GD-2 changes only the voice rule. The phone-placement callers are reviewed against §6.4 in GD-4.
 
 **Emitted actions** for an ordinary Lala line:
 1. `cursor.move` to the Voice zone;
@@ -132,7 +146,11 @@ Each choice is made in its owner's tool: the Timeline, the PIP system or dialogu
 
 Automatic reactions and NPC lines get no click; each line is marked with its trigger.
 
-**Audio:** every Lala and NPC line plays its **explicitly approved audio source** from dialogue lines. That may be Evoni's recording or a generated clip, whichever she approved. A line with **no approved source** is a finding (`line_audio_unapproved`). In preview it plays silent with a marker; export is blocked until it is resolved.
+### 4.1 Dialogue audio
+- Every Lala and NPC line plays its **explicitly approved audio source** from dialogue lines. That may be Evoni's recording or a generated clip, whichever she approved.
+- **Only active dialogue blocks export.** A line is active when it is in the approved production: a line of the script that the approved track plays. A missing or unapproved source on an active line is `line_audio_unapproved`. In preview it plays silent with a marker; export is blocked until it is resolved.
+- **These never block export:** unused alternate lines, discarded takes or audio drafts, and inactive dialogue (a line the approved track doesn't play, such as one in a scene that has no approved version yet, or an alternate that wasn't chosen). Missing audio on them is at most a note.
+- **Prime's recorded commentary is separate.** Her voice comes only from her PIP take (the PIP system's `prime_voice` audio role). It is never a dialogue-line source, never stands in for Lala or an NPC, and has its own place in the mix plan. A Lala or NPC line is never taken from Prime's take, and Prime's take is never checked by `line_audio_unapproved`.
 
 **Findings** (Script tab health, one list):
 - `lala_unvoiced`
@@ -159,7 +177,7 @@ The Director never edits the script on its own.
 **Rules**
 - The `[WEAR]` sequence ends on the look locked in `episode_wardrobe`.
 - A **read-only replay** checks the script against the owners' rules: coins and `coinBalanceGuard`'s refusal, the closet and pool, reachable screens (`phonePaths`), and knowledge.
-- **Failed attempts are kept and shown.** A `[UI:TRY]` the game refuses plays as `action.refused`, with **game-appropriate feedback**: the real screen's own refusal (a shake, the game's message such as "Not enough coins", the `error` sound). The script's following lines are the recovery.
+- **Failed attempts are kept and shown, never skipped** (decision G-3). A `[UI:TRY]` the game refuses plays as `action.refused`, with playful, game-appropriate feedback: a brief shake, the game's actual refusal message (such as "Not enough coins"), and a short `error` sound. Prime's reaction is kept, and the script's following lines are the recovery.
 - A refusal the script didn't mark as an attempt is a finding, never a silent success.
 
 ## 6. Scenes, Stage and Timeline
@@ -211,11 +229,30 @@ A proposal whose target vanished (object deleted, angle removed) becomes `stale`
 6. Cursor
 7. Audience stats panel (when the script shows it)
 
+### 6.7 Beat 9: My Little List ♡ (Evoni, 2026-10-26)
+- Beat 9's old **Shopping list** gameplay reference becomes **My Little List ♡**, Lala's actual interactive phone screen (#3599, #3601).
+- Prime opens it through gameplay (`[UI:OPEN My Little List]`), reviews the tasks Lala knows about, and interacts with it. Its content is the snapshot's public My Little List, so spoiler safety holds: nothing appears before Lala learns it (§13, test 10).
+- **No flattened checklist overlay** is drawn into the scene.
+- **What is renamed:** only beat 9's gameplay target in the script rules: `scriptRuleChecks`'s beat-9 check, `scriptMoney`'s beat-9 wording, and their asks to the writer. The old `[UI:DISPLAY Shopping list]` is still read as the same moment and gets a finding suggesting the new name. Scripts are never edited automatically.
+- **What is not renamed:** the event's approved `shopping_list` document, `eventDocumentOverlayService`'s drawing of it, `todoListService`'s list wording, and every other shopping list. The approved document still supplies the outfit lines that My Little List reads.
+- The rename is its own small PR, outside the GD sequence (§15).
+
 ## 7. Outdated detection and targeted regeneration
 
 **Nothing redrafts on save.**
 
-- **Start Episode** creates an empty track. The **first draft** is made when Evoni asks for it (Draft gameplay).
+### 7.1 The automatic first draft
+- Evoni never starts from an empty track. When a scene has what it needs, the Director makes that scene's **first draft automatically**. The Director is rules-based, so this costs no AI calls.
+- **What a scene needs:**
+  - the episode script;
+  - the beat's scene assignment (`scene_plans`: Scene Set and angle);
+  - the gameplay context its lines use: the event package for `[UI:]` moments about the event, the locked look for `[WEAR]`, the phone screens it opens, the characters and props it names.
+- **Missing information is shown, never invented.** A scene without what it needs gets no generated actions. Instead it lists what's needed ("Beat 4 has no Scene Set", "No look is locked for `[WEAR]`", "Place Nia in this scene"). The rest of the episode drafts.
+- When the missing information arrives, that scene's first draft is made automatically. It never had a draft, so this is a first draft, not a regeneration.
+- **A first draft is only a draft.** It is never approved automatically.
+- Once a scene has a draft, saving anything never regenerates it. Later changes go through outdated detection (below).
+
+### 7.2 Outdated detection and targeted regeneration
 - **Outdated detection.** The track keeps each scene's input fingerprint: script lines by `line_key`, the event package, phone layout, Stage objects, Timeline, PIP segments and dialogue audio. When an input changes, the affected scenes read **outdated**, and the changes are listed (lines edited, objects removed, take changed…). Nothing is regenerated by that.
 - **Targeted regeneration.** Evoni chooses what to regenerate: one action, one scene, or every outdated scene. Regeneration rebuilds **only the generated actions** of what she chose.
   - **Overrides and approved work are preserved.** An override is re-applied by its anchor id.
@@ -224,7 +261,7 @@ A proposal whose target vanished (object deleted, angle removed) becomes `stale`
   - An override whose anchor is gone is **orphaned** (listed, never dropped).
   - An override that no longer fits is a **conflict** (keep and adjust, drop, or re-pin).
   - Accepted Timeline proposals are untouched (they're the Timeline's). Rejected ones stay rejected unless their source changed.
-  - Locked beats (`script_locked_beats`, `scene_plans.locked`) are never regenerated; a source change there becomes a conflict.
+  - Locked scenes (`script_locked_beats`, `scene_plans.locked`) are never regenerated; a source change there becomes a conflict.
 - **Approval is per scene.**
   - An approved scene that becomes outdated stays approved: its approved snapshot still plays, flagged "inputs changed since approval".
   - Regenerating it creates a **new draft** beside the approved one.
@@ -273,7 +310,19 @@ Live answers change, so playback uses a snapshot: the game state at every positi
 
 ## 9. Assets
 - **Cursor and hand:** the existing World → Overlays types, with hotspots (architecture A7). Never regenerated.
-- **Sounds:** the show's sound library (architecture A7), licensed files only. A missing slot plays nothing, with a warning.
+- **Sounds** (decision G-2): the show's licensed sound library (architecture A7), as a balanced streamer and gameplay palette.
+
+  | Slot | Character |
+  |---|---|
+  | `click` | Satisfying, not excessive |
+  | `hover`, `select` | Subtle feedback |
+  | `open`, `close` | Soft phone opening and closing |
+  | `notify` | Distinct notification sounds |
+  | `dramatic` | A stronger effect for surprising or dramatic moments |
+  | `error` | The failed-attempt sound (§5) |
+  | `tick`, `voice_on`, `whoosh` | List tick, Lala's voice coming on, a scene change |
+
+  A slot with no library file plays nothing and gives a warning. No replacement sound is invented or generated.
 - **Prime fallback:** the PIP system's designated fallback, with `prime_footage_missing`. The Director lays it out like Prime and never invents footage.
 
 ## 10. Preview and export behaviour
@@ -292,7 +341,7 @@ Live answers change, so playback uses a snapshot: the game state at every positi
 
 ## 12. Episode 1 walkthrough
 
-Times are illustrative and come from the Timeline. Prime's PIP is visible throughout, bottom-right.
+Times are illustrative and come from the Timeline. Prime's PIP (her recorded footage) is visible throughout, bottom-right at about 28% width. The first draft of every scene below is made automatically once the scene has what it needs (§7.1).
 
 | Time | Prime (PIP: her take) | Lala | Cursor and phone | Sound | Owner of the timing |
 |---|---|---|---|---|---|
@@ -304,14 +353,14 @@ Times are illustrative and come from the Timeline. Prime's PIP is visible throug
 | 0:33 | — | Automatic reaction: "Ooh, mail!" (no click) | Rests | — | Notification trigger |
 | 0:40 | Reads it | — | Invitation opens; then the offer letter | `open` | Line marks |
 | 1:05 | "Can we afford this?" | — | Coins screen: the snapshot's `statsAt` | `click` | Line mark |
-| 1:30 | "The gold ones." | — | Hover, compare two heels, `[WEAR]` press on her line | `click`, `tick` | Line mark (decision) |
+| 1:30 | "The gold ones." | — | Hover, a brief hesitation between two heels, compare, `[WEAR]` press on her line | `hover`, `select`, `click` | Line mark (decision) |
 | 1:32 | — | Wardrobe reaction (no click) | Rests | — | Wardrobe trigger |
-| 1:45 | "Let me check my list." | — | **My Little List** opens; the outfit item ticks | `open`, `tick` | Line mark |
+| 1:45 | Beat 9: "Let me check my list." | — | Prime opens **My Little List ♡** on the phone (no overlay image); she reviews what Lala knows; the outfit item ticks | `click`, `open`, `tick` | Line mark |
 | 2:10 | "Okay, heading out." | — | Phone closes. **Proposal:** cut to the venue's Front View (accepted on the Timeline) | `close`, `whoosh` | Timeline (accepted proposal) |
 | 2:40 | Reacts | — | Click on **Nia** at the venue: NPC conversation | `click` | NPC trigger |
 | 2:41 | Quiet | Nia's lines (approved source) | Rests | — | NPC trigger |
 | 3:05 | "Posting it now." | — | Post screen; press; the list's video item ticks | `click`, `tick` | Line mark (outcome beat, gameplay allowed) |
-| 3:30 | Surprise, on her cue mark | — | DM toast: the runway; `list.appear` | `notify` | Cue mark |
+| 3:30 | Surprise, on her cue mark | — | DM toast: the runway; `list.appear` | `notify`, `dramatic` | Cue mark |
 | 3:32 | — | Automatic reaction to the DM (no click) | — | — | Notification trigger |
 | 3:50 | Sign-off | — | Stats panel from the snapshot | — | Timeline (scene end) |
 
@@ -323,37 +372,44 @@ Times are illustrative and come from the Timeline. Prime's PIP is visible throug
 1. Every ordinary Lala line in any beat, beats 11–13 included, has a Voice click 0.3–0.5 s before it. A line without one is `lala_unvoiced`.
 2. Wardrobe and notification reactions have no click. `Lala (auto):` outside those triggers is `auto_without_trigger`.
 3. NPC lines start only from a click on the NPC, a DM or `[TALK:]`; otherwise `npc_without_trigger`.
-4. Each Lala and NPC line plays its approved audio source. A line without one is flagged, plays silent in preview, and blocks export.
+4. Each Lala and NPC line plays its approved audio source. An **active** line without one is flagged, plays silent in preview, and blocks export. Unused alternates, discarded takes and inactive lines never block export.
+5. Prime's voice comes only from her PIP take, in its own place in the mix plan. No Lala or NPC line uses Prime's take, and her take is never checked as dialogue audio.
 
 **Timing**
-5. Actions sit on line and cue marks when present; estimates are labelled.
-6. A take longer or shorter than its scene, an action outside its scene, and a line overrunning Prime's gap each give their finding. **No duration, trim or speed changes on its own.**
+6. Actions sit on line and cue marks when present; estimates are labelled.
+7. A take longer or shorter than its scene, an action outside its scene, and a line overrunning Prime's gap each give their finding. **No duration, trim or speed changes on its own.**
 
 **Gameplay and state**
-7. A refused `[UI:TRY]` shows the game's own refusal and sound; an unmarked refusal is a finding.
-8. The `[WEAR]` sequence ends on the locked look; the replay writes nothing.
-9. No list item, post, DM or name appears before Lala learns it; no production label appears in any snapshot.
+8. A refused `[UI:TRY]` is kept, not skipped: a brief shake, the game's own refusal message and the `error` sound, with Prime's reaction kept. An unmarked refusal is a finding.
+9. The `[WEAR]` sequence ends on the locked look; the replay writes nothing.
+10. No list item, post, DM or name appears before Lala learns it; no production label appears in any snapshot.
 
 **Timeline proposals**
-10. A pending proposal shows as a ghost item and changes no Timeline data.
-11. Accepting writes only through `timeline.applyProposal`; the Timeline item then belongs to the Timeline, and later Timeline edits are never undone by the Director.
-12. A rejected proposal isn't offered again for the same anchor.
-13. A proposal can only target an episode-scene object or an angle of the scene's own Scene Set.
+11. A pending proposal shows as a ghost item and changes no Timeline data.
+12. Accepting writes only through `timeline.applyProposal`; the Timeline item then belongs to the Timeline, and later Timeline edits are never undone by the Director.
+13. A rejected proposal isn't offered again for the same anchor.
+14. A proposal can only target an episode-scene object or an angle of the scene's own Scene Set.
 
-**Regeneration**
-14. Saving the script or another input marks the affected scenes **outdated**, with the changes listed, and regenerates nothing.
-15. Regenerating one scene leaves other scenes, all overrides (kept, check, orphaned or conflict, never dropped), accepted proposals and locked beats untouched.
-16. Regenerating an approved scene makes a new draft; the approved version and its snapshot stay until Evoni approves the new one.
+**First draft and regeneration**
+15. A scene's first draft is made automatically once it has its script, scene assignment and gameplay context, and is never approved automatically.
+16. A scene missing required information gets no generated actions and lists what it needs; the rest of the episode still drafts; when the information arrives, that scene's first draft is made.
+17. Saving the script or another input marks the affected scenes **outdated**, with the changes listed, and regenerates nothing.
+18. Regenerating one scene leaves other scenes, all overrides (kept, check, orphaned or conflict, never dropped), accepted proposals and locked scenes untouched.
+19. Regenerating an approved scene makes a new draft; the approved version and its snapshot stay until Evoni approves the new one.
 
 **Snapshots and parity**
-17. Playing a preview creates or reuses a **preview** snapshot and never creates, changes or replaces the **approved** one.
-18. Rebuilding a snapshot from unchanged inputs gives byte-identical JSON.
-19. Export reads only the approved snapshot and approved track. A live data change after approval doesn't change the export, and the episode shows "inputs changed since approval".
-20. **Preview of the approved version and export match:** the non-video layers' frame hashes match at every action time; the video layers use the same layout; every audio event lands within one frame.
+20. Playing a preview creates or reuses a **preview** snapshot and never creates, changes or replaces the **approved** one.
+21. Rebuilding a snapshot from unchanged inputs gives byte-identical JSON.
+22. Export reads only the approved snapshot and approved track. A live data change after approval doesn't change the export, and the episode shows "inputs changed since approval".
+23. **Preview of the approved version and export match:** the non-video layers' frame hashes match at every action time; the video layers use the same layout; every audio event lands within one frame.
 
 **PIP and assets**
-21. Prime's PIP shows in every scene unless hidden in the PIP system. Missing footage shows the fallback, with `prime_footage_missing`.
-22. Cursor and hand use the existing Overlays assets with their hotspots. A missing sound plays nothing and warns.
+24. Prime's PIP (her recorded footage) shows in all 14 beats, event and deliverable scenes included, bottom-right at about 28% width by default, unless hidden in the PIP system. Frame, position, size, background removal and visibility stay editable there. Missing footage shows the fallback, with `prime_footage_missing`.
+25. Cursor and hand use the existing Overlays assets with their hotspots. A missing sound plays nothing and warns; no sound is invented.
+
+**Cursor and beat 9**
+26. The cursor rests during every Lala and NPC line and every reaction hold; it hesitates briefly before a choice; the same track gives the same path every time.
+27. In beat 9, Prime opens My Little List ♡ through gameplay; no checklist image is drawn into the scene; an old `[UI:DISPLAY Shopping list]` is read as the same moment with a rename finding.
 
 ---
 
@@ -364,19 +420,20 @@ Times are illustrative and come from the Timeline. Prime's PIP is visible throug
 | A1 | **`line_key`** utility and dialogue-line identity | Anchors, overrides, outdated detection | GD-3 |
 | A2 | **Teleprompter line and cue marks** on takes | Anchors (else estimates) | GD-3 (soft) |
 | A3 | **PIP segments**: take choice, trim, offset, visibility, fallback and warning, marks exposed per segment | Anchors; PIP layer | GD-3, GD-7 |
-| A5 | **Timeline on the shared composition**: object and camera keyframes, angle changes within a Scene Set, **`timeline.applyProposal`** (validated write), a **lane API** for the Gameplay lane | Proposals; visibility lane | GD-6, GD-7 |
-| A5 | **Episode-scene objects** with master inheritance and local overrides, and stable ids | Object references | GD-3 |
-| A6 | **Dialogue lines**: assigned voice, **approved audio source**, duration, status | Line audio, `line_overruns_gap` | GD-3, GD-7 |
+| A5 (Timeline) | **Timeline on the shared composition**: object and camera keyframes, angle changes within a Scene Set, **`timeline.applyProposal`** (validated write), a **lane API** for the Gameplay lane | Proposals; visibility lane | GD-6, GD-7 |
+| A5 (objects) | **Episode-scene objects** with master inheritance and local overrides, and stable ids | Object references | GD-3 |
+| A6 | **Dialogue lines**: assigned voice, **approved audio source**, duration, status, and which lines are **active** in the approved production | Line audio, `line_overruns_gap`, the export block (§4.1) | GD-3, GD-7 |
 | A4 | **`StageRenderer` and `layoutAt`**, with hooks for gameplay layers (an HTML phone, cursor, toasts) | Preview | GD-7 |
-| A8 | **Mix plan** that accepts gameplay audio events | Preview and export audio | GD-7 |
+| A8 | **Mix plan** that accepts gameplay audio events and keeps Prime's take audio apart from dialogue audio | Preview and export audio | GD-7 |
 | A7 | **Cursor and hand hotspots; sound library** | Cursor layer, sounds | GD-7 |
 | A9 | **Compositor** (export phase) | Export | Export phase only |
 
 **What can start before any of this:**
-- **GD-2:** trigger-based voice rules and the new findings, a `scriptShowRules` change;
+- **GD-2:** trigger-based voice rules and the new findings, a `scriptShowRules` change. **The first implementation PR** (§15.1).
 - **GD-5:** closet hover, preview, compare and undo.
+- **MLL-3:** the beat-9 rename (§6.7), a My Little List PR outside the GD sequence.
 
-Both are self-contained.
+All three are self-contained.
 
 ## 15. Gameplay PR sequence
 
@@ -385,6 +442,7 @@ Each step is its own PR with its own approval.
 | # | PR | Needs |
 |---|---|---|
 | GD-0 | This spec (#3600) | — |
+| MLL-3 | Beat 9's Shopping list reference becomes My Little List ♡ (§6.7) | #3599 merged (the phone screen itself is #3601) |
 | GD-2 | Trigger-based voice rules: drop the beat exemption; `auto_without_trigger`, `npc_without_trigger`; `[TALK:]` | — |
 | GD-4 | Script verbs; `[TRANSITION]` read as a proposal | GD-2 |
 | GD-5 | Closet decisions in `EpisodeWardrobeGameplay` | — |
@@ -392,6 +450,26 @@ Each step is its own PR with its own approval.
 | GD-6 | Track storage, overrides, visibility, proposals, outdated detection, targeted regeneration, preview and approved snapshots | GD-3, A5 (`applyProposal`, lane API); migrations through Deploy |
 | GD-7 | Preview player and approval | A4, A7, A8, GD-6 |
 | Export phase | Render mode, compositor, infrastructure decisions | A9, GD-7, Evoni's infrastructure decisions |
+
+### 15.1 The first implementation PR: GD-2, trigger-based voice rules
+
+GD-2 needs nothing from the architecture session: no `line_key`, Stage, Timeline, PIP, dialogue-audio or renderer work, no migration, no new route and no AI call. It starts only on Evoni's approval, from `main` after #3599 has merged, because #3599 changes the same script tools (`scriptBeatParser`, `scriptHealth`).
+
+**Scope**
+- `scriptShowRules`, server and frontend copies: the voice rule and its "Click her voice icon first" fix apply in every beat, beats 11–13 included. `isCutsceneBeat` stays exported for its other callers (§4).
+- `scriptHealth`: the voice row stops skipping cutscene beats; the new findings `auto_without_trigger` and `npc_without_trigger`.
+- `[TALK: <name>]` read as an NPC conversation trigger by the server parser and the frontend script tools, in the places `[LEARNS]` was added in #3599.
+- Not in GD-2: `line_audio_unapproved` (needs A6), `voice_click_unreachable` (needs the phone layout in the Director, GD-3), and every playback behaviour.
+
+**Acceptance tests**
+1. An ordinary Lala line in beats 11–13 with no click before it gets the voice finding, and the fix adds the click there as in any other beat.
+2. Wardrobe reactions (inside `dressedAt`) and notification reactions need no click and get no finding.
+3. `Lala (auto):` with neither trigger is `auto_without_trigger`.
+4. `Lala (V.O.):` never needs a click (G-4).
+5. An NPC line with no click on the NPC, no DM and no `[TALK:]` before it is `npc_without_trigger`; any one of the three clears it.
+6. Findings only flag: saving, the teleprompter and script generation behave as before, and the script changes only when Evoni presses a fix. An approved beat offers no fix, as today.
+7. The other `isCutsceneBeat` callers (`characterVoice`, the teleprompter, `phonePaths`, `EpisodeScriptTab`) behave exactly as before.
+8. The server and frontend copies give the same findings on the Episode 1 fixture.
 
 ---
 
@@ -413,15 +491,21 @@ Each step is its own PR with its own approval.
 - the Timeline owns duration;
 - the PIP owns takes;
 - scene objects inherit masters with local overrides.
+- the automatic first draft, never approved automatically, with missing information shown (rev 5);
+- only active dialogue in the approved production blocks export (rev 5);
+- Prime's commentary kept apart from the Lala and NPC voices (rev 5);
+- beat 9 becomes My Little List ♡ (rev 5).
 
-**Still needing Evoni's creative decision:**
+**Creative decisions** (Evoni, 2026-10-26, settled in revision 5):
 
-| # | Decision | Default until decided |
+| # | Decision | Settled as |
 |---|---|---|
-| G-1 | **Cursor feel:** speed, arc and how much natural wobble; whether it idles while Prime chats | Moderate speed, gentle arc, slight seeded wobble, small idle drift |
-| G-2 | **The sound palette:** which sounds fill `click`, `tick`, `open`, `close`, `notify`, `error`, `voice_on`, `whoosh` | Silent slots, with a warning |
-| G-3 | **Failed-attempt style:** the shake and wording when the game refuses ("Not enough coins") | The game's existing refusal text, a short shake |
-| G-4 | **Lala's thoughts (`V.O.`):** stay click-free as "not dialogue"? | Click-free (as today) |
-| G-5 | **Prime's PIP look:** corner, size, cut-out or frame (the PIP system's controls) | Bottom-right, about 28% width, cut-out when keyed |
+| G-1 | Cursor movement (§3.4) | Natural streamer-style: moderate speed, smooth curves, gentle arcs, subtle imperfections, brief hesitation when choosing. It may move while Prime talks and rests during Lala and NPC dialogue and important reaction pauses. The existing Mouse Cursor and Grabbing Hand, never regenerated |
+| G-2 | Sound effects (§9) | A balanced streamer and gameplay palette from the show's licensed library. A missing sound warns and is never invented |
+| G-3 | Failed attempts (§5) | Playful, game-appropriate: a brief shake, the game's actual refusal message, a short error sound. The attempt and Prime's reaction are kept |
+| G-4 | Lala's thoughts (`V.O.`) (§4) | Click-free. Ordinary Lala dialogue needs the Voice click in any beat; wardrobe and notification reactions are automatic |
+| G-5 | Prime's PIP | Her actual recorded video, bottom-right, about 28% of the frame width. Frame, position, size, background removal and visibility stay editable in the PIP system. Visible by default in all 14 beats, event and deliverable scenes included. Missing footage uses the designated fallback with a warning. Prime is the real streamer, never an AI avatar |
+
+**No creative decision is still open in this spec.**
 
 **Deferred to the export phase:** render host, queue, render retention on S3, 9:16 format.

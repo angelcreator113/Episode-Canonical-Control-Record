@@ -212,7 +212,7 @@ My Little List Phases 2 and 3 go on in parallel. Phase 2's component appears in 
 |---|---|---|
 | Q1 | Is "Build Scene" **Scene Studio** ("Open in Studio")? | Yes. Rename its button "Build Scene" so the words match |
 | Q2 | ~~Should a set's objects appear in every scene that uses it?~~ **Decided (2026-10-26):** episode scenes inherit the set's master objects and keep local overrides, copy-on-write; a customized object survives the master's deletion; gameplay references the episode-scene object, never the master | — |
-| Q3 | **Prime's PIP look:** which corner, how big, rectangle or cut-out, border. **Decided (2026-10-26):** visible by default in every beat (no automatic cutscene hiding), shown or hidden by hand; missing footage uses a designated fallback, with a warning | Bottom-right, 28% width, cut-out when keyed |
+| Q3 | ~~Prime's PIP look~~ **Decided (2026-10-26):** her actual recorded video (she is the real streamer, never an AI avatar), bottom-right, about 28% of the frame width; frame, position, size, background removal and visibility stay editable; visible by default in all 14 beats, event and deliverable scenes included (no automatic cutscene hiding), shown or hidden by hand; missing footage uses a designated fallback, with a warning | — |
 | Q4 | Retire **`episode_performance_clips`** writes once Production Coverage reads performer segments? | Yes, one owner |
 | Q5 | When you've **recorded** a Lala or NPC line *and* a generated one exists, which plays? | Your recording |
 | Q6 | **TTS provider and plan:** ElevenLabs (the account Amber uses), a monthly cap, and commercial-use rights for YouTube? | ElevenLabs, a cap you set, rights confirmed before PR 6 merges |
