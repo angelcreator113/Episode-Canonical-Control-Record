@@ -23,9 +23,9 @@
  * one sticky readiness bar (eventPackage/ReadinessBar) replaces the strip's
  * tiles, the next-step bar and the footer action bar, with Lala's balance
  * beside Start; finished sections fold to one line (useSectionFolds);
- * Basics are edited in their rows (InlineBasicsField); Suggest with AI asks
- * POST …/suggest-basics and opens a review list (SuggestReview) saved in one
- * PUT; the page's one-tap guest and organizer changes offer Undo on the
+ * Basics are edited in their rows (InlineBasicsField); the AI drafts are
+ * Fill what's missing under the header (useFillMissing, which took over
+ * Suggest with AI on 2026-10-25), reviewed before anything is saved; the page's one-tap guest and organizer changes offer Undo on the
  * toast; desktop shortcuts (usePackageShortcuts); the Terms' deliverable and
  * cost prices feed the readiness gate; on a phone the hero is one line.
  *
@@ -90,8 +90,8 @@
 /*
  * The split (Task #54): this file composes the page. Its data and saves are
  * useEventPackage (one combined GET, each part failing on its own); each
- * concern's state is a hook in ./eventPackage/ (Basics, names, Suggest with
- * AI, stakes, organizer, guests, the place pickers, Start Episode, where the
+ * concern's state is a hook in ./eventPackage/ (Basics, names, Fill what's
+ * missing, stakes, organizer, guests, the place pickers, Start Episode, where the
  * page is, the open dialog); each section and dialog is a component in
  * components/EventPackage/. The markup, class names and this stylesheet are
  * as they were.
@@ -135,7 +135,6 @@ import usePackageShortcuts from './eventPackage/usePackageShortcuts';
 import useEventPackage from './eventPackage/useEventPackage';
 import useBasicsEditor from './eventPackage/useBasicsEditor';
 import useNameSuggest from './eventPackage/useNameSuggest';
-import useAiSuggest from './eventPackage/useAiSuggest';
 import useStakesEditor from './eventPackage/useStakesEditor';
 import useOrganizerPicker from './eventPackage/useOrganizerPicker';
 import useGuests from './eventPackage/useGuests';
@@ -143,6 +142,15 @@ import usePlacePickers from './eventPackage/usePlacePickers';
 import useStartEpisode from './eventPackage/useStartEpisode';
 import usePackageNavigation from './eventPackage/usePackageNavigation';
 import useDialogFocus from './eventPackage/useDialogFocus';
+import useEventFlow from './eventPackage/useEventFlow';
+import EventFlowHeader from '../components/EventPackage/EventFlowHeader';
+// Where the event goes next (Evoni, 2026-10-25): beat 14, the episode, Fill what's missing, the follow-up, defaults and clashes.
+import EventFlowStrip from '../components/EventPackage/EventFlowStrip';
+import EventFieldHints from '../components/EventPackage/EventFieldHints';
+import StartCopiesPreview from '../components/EventPackage/StartCopiesPreview';
+import useEventActions from './eventPackage/useEventActions';
+import useFillMissing from './eventPackage/useFillMissing';
+import useFollowUpEvent from './eventPackage/useFollowUpEvent';
 import './EventPackagePage.css';
 
 // The scene-set helpers moved to lib/eventPackageFields and utils/sceneSets;
@@ -308,12 +316,24 @@ function EventPackageBody({ pkg }) {
 
   const editor = useBasicsEditor({ basics, used, putEvent, load, setToast, openSection });
   const names = useNameSuggest({ showId, eventId, putEvent, load, setToast });
-  const ai = useAiSuggest({ showId, eventId, event, basics, used, startedFrom, organizer, putEvent, load, setToast });
   const stakesEditor = useStakesEditor({ event, used, putEvent, load, setToast });
   const picker = useOrganizerPicker({ event, used, organizer, sourceProfile, putEvent, load, setToast, undoChange, loadedEventRef });
   const guests = useGuests({ event, guestList, putEvent, load, setToast, undoChange, loadedEventRef });
   const place = usePlacePickers({ showId, event, putEvent, load, setToast });
   const start = useStartEpisode({ showId, eventId, gatesMet, used, moneyPending, readiness, moneyWarnings, setToast, navigate });
+  const actions = useEventActions({ showId, eventId, reloadTick });
+  const fill = useFillMissing({ showId, eventId, event, basics, used, startedFrom, organizer, putEvent, load, setToast });
+  // The Event section's pointer to Fill what's missing: up to the strip,
+  // focus on its button (or on the drafts, when they are open).
+  const showFill = () => {
+    const strip = document.getElementById('eff-strip');
+    if (strip && typeof strip.scrollIntoView === 'function') strip.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    document.getElementById(fill.status === 'review' ? 'eff-fill-title' : 'eff-fill-missing')?.focus({ preventScroll: true });
+  };
+  const aiPointer = { label: fill.ideas ? 'AI ideas: Suggest fresh ideas' : 'AI drafts: Fill what’s missing', onClick: showFill };
+  const followUp = useFollowUpEvent({ showId, event, organizer, venueLocation, navigate, setToast });
+  const hints = (fields) => <EventFieldHints flow={actions.flow} fields={fields} used={used} putEvent={putEvent} load={load} setToast={setToast} />;
+  const copies = <StartCopiesPreview event={event} seeds={seeds} invitationAsset={invitationAsset} venueDate={venueDate} seasonContext={seasonContext} />;
   const { activeAnchor, tocListRef } = usePackageNavigation({ pageRef, setFoldOpen, setBarOpen, setFullGuestListOpen: guests.setFullGuestListOpen });
 
   // Started-from suggestions (Task #1790): one click each.
@@ -358,6 +378,13 @@ function EventPackageBody({ pkg }) {
       default: break;
     }
   };
+
+  // The header and navigation (Evoni, 2026-10-25): the season panel, the
+  // stage, what is left to set up, the slot order and the way back.
+  const flow = useEventFlow({
+    showId, eventId, event, seasonContext, readiness, used, usedInEpisode, hasOrganizer: organizer.hasOrganizer,
+    hasInvitation: !!invitationAsset, moneyPending, continueTo, jumpToSection, openOrganizerPicker: picker.openOrganizerPicker,
+  });
 
   // The open dialog: Escape, Tab and focus (useDialogFocus).
   const closeTopDialogRef = useRef(null);
@@ -450,6 +477,12 @@ function EventPackageBody({ pkg }) {
       <PackageHero
         showId={showId} eventId={eventId} event={event} seasonContext={seasonContext} badge={badge} venueDate={venueDate}
         organizer={organizer} projection={projection} used={used} lockEpisode={lockEpisode} termsReopen={termsReopen}
+        back={flow.back} neighbours={flow.neighbours} place={flow.place}
+      />
+      <EventFlowHeader flow={flow} used={used} />
+      <EventFlowStrip
+        showId={showId} used={used} lockEpisode={lockEpisode} episodeId={lockEpisode?.id || event.used_in_episode_id || null}
+        flow={actions.flow} fill={fill} followUp={followUp}
       />
 
       {/* One sticky readiness bar (Evoni, 2026-10-23): it replaces the
@@ -478,9 +511,10 @@ function EventPackageBody({ pkg }) {
         <div className="epp-sections">
           <EventIdentitySection
             showId={showId} event={event} basics={basics} used={used} organizer={organizer} invitationAsset={invitationAsset}
-            nameDraft={nameDraft} reloadTick={reloadTick} fold={fold} editor={editor} names={names} ai={ai}
+            nameDraft={nameDraft} reloadTick={reloadTick} fold={fold} editor={editor} names={names} aiPointer={aiPointer}
             invitationApprovalInfo={invitationApprovalInfo} setInvitationApprovalInfo={setInvitationApprovalInfo}
-            invitationRegenSignal={invitationRegenSignal} load={load}
+            invitationRegenSignal={invitationRegenSignal} load={load} openOrganizerPicker={picker.openOrganizerPicker}
+            hints={hints(['dress_code', 'date'])}
           />
           <EventPeopleSection
             event={event} used={used} castLocked={castLocked} organizer={organizer} sourceProfile={sourceProfile}
@@ -488,6 +522,7 @@ function EventPackageBody({ pkg }) {
             lockEpisode={lockEpisode} reloadTick={reloadTick} fold={fold} guests={guests}
             openOrganizerPicker={picker.openOrganizerPicker} organizerSaving={picker.organizerSaving}
             acceptStartedFromOrganizer={acceptStartedFromOrganizer} acceptStartedFromAttendee={acceptStartedFromAttendee}
+            hints={hints(['guests'])}
           />
           <EventPlaceSection
             showId={showId} eventId={eventId} used={used} placeLocked={placeLocked} venueDate={venueDate} sceneSet={sceneSet}
@@ -523,9 +558,9 @@ function EventPackageBody({ pkg }) {
             showId={showId} eventId={eventId} event={event} used={used} termsReopen={termsReopen} lockEpisode={lockEpisode}
             stakes={stakes} moneyPreview={moneyPreview} seeds={seeds} reloadTick={reloadTick}
             termsOffer={termsOffer} setTermsOffer={setTermsOffer} setInvitationRegenSignal={setInvitationRegenSignal}
-            setPriceInputs={setPriceInputs} putEvent={putEvent} setToast={setToast} load={load}
+            setPriceInputs={setPriceInputs} putEvent={putEvent} setToast={setToast} load={load} hints={hints(['deal_type', 'money'])}
           />
-          <EventStakesSection used={used} stakes={stakes} projection={projection} fold={fold} openStakesEditor={stakesEditor.openStakesEditor} />
+          <EventStakesSection used={used} stakes={stakes} projection={projection} fold={fold} openStakesEditor={stakesEditor.openStakesEditor} hints={hints(['prestige'])} />
 
           {/* 7. In-world documents (Evoni, 2026-10-06): the shopping list and
               the career plan beside the invitation, each Draft, Edit, Redraft
@@ -549,7 +584,7 @@ function EventPackageBody({ pkg }) {
       </div>
 
       {start.startConfirmOpen && gatesMet && !used && (
-        <StartConfirmDialog readiness={readiness} moneyWarnings={moneyWarnings} confirmCount={confirmCount} start={start} />
+        <StartConfirmDialog readiness={readiness} moneyWarnings={moneyWarnings} confirmCount={confirmCount} start={start} copies={copies} />
       )}
 
       {start.locationsStep && gatesMet && !used && (
@@ -562,7 +597,7 @@ function EventPackageBody({ pkg }) {
           removed={start.locationsStep.removed || []}
           eventLook={start.locationsStep.event_look}
           angleGaps={start.locationsStep.angle_gaps}
-          busy={start.starting}
+          busy={start.starting} intro={copies}
           onConfirm={start.confirmStartEpisode}
           onCancel={() => start.setLocationsStep(null)}
         />

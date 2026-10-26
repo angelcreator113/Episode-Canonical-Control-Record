@@ -49,6 +49,8 @@
  * DELETE /world/:showId/season/twists/:twistId — Delete it (soft)
  * POST   /world/:showId/season/twists/:twistId/restore — Undo a delete
  * POST   /world/:showId/season/twists/suggest — 3-5 drafted twists from the AI (one call); nothing saved
+ * POST   /world/:showId/season/twists/:twistId/paid-off — { slot_id, note? }: the Plants tab's "Mark paid off in episode N"
+ * POST   /world/:showId/season/twists/:twistId/reopen   — Undo it: the plant is open again
  * GET    /world/:showId/season/needs — The relationships the season needs (planner PR 3, 2026-10-24): each
  *                                       twist's, thread's and slot purpose's pairs, the slot each is needed by,
  *                                       and whether it is there, a seed only, or missing (services/seasonNeeds)
@@ -65,6 +67,8 @@
  * DELETE /world/:showId/season/events/:eventId/goals/:goalId/pin — Unpin it
  * GET    /episodes/:episodeId/season-twists — The twists this episode plants and pays off (the Script tab)
  * POST   /episodes/:episodeId/season-twists/:twistId/mark — { as: planted|paid_off, undo? }: Evoni marks it done here, or takes the mark back
+ * POST   /episodes/:episodeId/season-plants/suggest — "Suggest plants from this script": one Haiku call reads the
+ *                                                  episode's script and drafts its plants; nothing saved (Evoni keeps each)
  *
  * Removed with no caller (planner PR 4, 2026-10-24): GET /world/:showId/arc/context
  * (getArcContext stays: the feed and the script writer call it directly) and
@@ -781,6 +785,42 @@ router.post('/world/:showId/season/twists/:twistId/restore', requireAuth, async 
     return res.json({ success: true, ...(await restoreTwist(models.sequelize, req.params.showId, req.params.twistId)) });
   } catch (err) {
     return sendTwistError(res, err, 'restore twist');
+  }
+});
+
+// ── Plant tracker (2026-10-25; services/seasonTwists) ─────────────────────
+
+// POST /world/:showId/season/twists/:twistId/paid-off — "Mark paid off in episode N"
+router.post('/world/:showId/season/twists/:twistId/paid-off', requireAuth, async (req, res) => {
+  try {
+    const models = require('../models');
+    const { markPaidOff } = require('../services/seasonTwists');
+    const body = { slot_id: req.body?.slot_id, note: req.body?.note };
+    return res.json({ success: true, ...(await markPaidOff(models.sequelize, req.params.showId, req.params.twistId, body)) });
+  } catch (err) {
+    return sendTwistError(res, err, 'mark plant paid off');
+  }
+});
+
+// POST /world/:showId/season/twists/:twistId/reopen — Undo for Mark paid off
+router.post('/world/:showId/season/twists/:twistId/reopen', requireAuth, async (req, res) => {
+  try {
+    const models = require('../models');
+    const { reopenTwist } = require('../services/seasonTwists');
+    return res.json({ success: true, ...(await reopenTwist(models.sequelize, req.params.showId, req.params.twistId)) });
+  } catch (err) {
+    return sendTwistError(res, err, 'reopen plant');
+  }
+});
+
+// POST /episodes/:episodeId/season-plants/suggest — drafts from the script, for Evoni to keep, edit or drop
+router.post('/episodes/:episodeId/season-plants/suggest', requireAuth, aiRateLimiter, async (req, res) => {
+  try {
+    const models = require('../models');
+    const { suggestPlantsFromScript } = require('../services/seasonTwists');
+    return res.json({ success: true, ...(await suggestPlantsFromScript(models.sequelize, req.params.episodeId)) });
+  } catch (err) {
+    return sendTwistError(res, err, 'suggest plants');
   }
 });
 

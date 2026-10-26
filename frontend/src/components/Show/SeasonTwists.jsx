@@ -17,22 +17,31 @@
  * A draft is only shown: Keep saves it as it is, Edit opens it in the form,
  * Drop discards it. Nothing is saved without her.
  *
- * Props: showId, api (the page's client).
+ * Plant tracker (2026-10-25): each twist is a plant, with its kind
+ * (twist, relationship, opportunity, mystery, callback) and the beat it is
+ * planted in; the Season page's Plants tab (SeasonPlants) lists them all by
+ * episode, warns about the ones that never pay off and marks where each
+ * paid off. "See every plant" opens it.
+ *
+ * Props: showId, api (the page's client), onSeeAll (optional: opens the Plants tab).
  */
 import { useCallback, useEffect, useState } from 'react';
-import { Route, Plus, Pencil, Trash2, AlertTriangle, ArrowRight, Sparkles, Check, X } from 'lucide-react';
+import { Route, Plus, Pencil, Trash2, AlertTriangle, ArrowRight, Sparkles, Check, X, ListTree } from 'lucide-react';
 import UndoNotice from '../EventPackage/UndoNotice';
 import { useUndo } from '../EventPackage/useUndo';
 import SeasonTwistLine from './SeasonTwistLine';
+import { PLANT_KINDS, KIND_LABEL } from '../../lib/seasonPlants';
 import './SeasonTwists.css';
 
 const STATUS_LABEL = { planned: 'Planned', planted: 'Planted', paid_off: 'Paid off', dropped: 'Dropped' };
 const EMPTY = { arc: null, slots: [], threads: [], characters: [], twists: [], warnings: [] };
-const BLANK = { id: null, title: '', description: '', plant_slot_id: '', payoff_slot_id: '', status: 'planned', thread_ids: [], character_ids: [], note: '' };
+const BLANK = { id: null, title: '', description: '', kind: 'twist', plant_beat: '', plant_slot_id: '', payoff_slot_id: '', status: 'planned', thread_ids: [], character_ids: [], note: '' };
+// The beat box holds text; the server reads a number or nothing.
+const beatOut = (v) => (v === '' || v === null || v === undefined ? null : Number(v));
 const errorOf = (err, fallback) => err?.response?.data?.error || fallback;
 const slotText = (s) => `${s.label}${s.episode?.title ? ` · ${s.episode.title}` : s.story_purpose ? ` · ${s.story_purpose.slice(0, 50)}` : ''}`;
 
-export default function SeasonTwists({ showId, api }) {
+export default function SeasonTwists({ showId, api, onSeeAll = null }) {
   const base = `/api/v1/world/${showId}/season/twists`;
   const [data, setData] = useState(null);
   const [form, setForm] = useState(null);
@@ -56,7 +65,8 @@ export default function SeasonTwists({ showId, api }) {
 
   const save = async () => {
     setBusy(true); setNote(null);
-    const { id, draftKey, ...body } = form;
+    const { id, draftKey, ...rest } = form;
+    const body = { ...rest, plant_beat: beatOut(rest.plant_beat) };
     try {
       const res = id ? await api.put(`${base}/${id}`, body) : await api.put(base, body);
       setData(res.data);
@@ -82,7 +92,7 @@ export default function SeasonTwists({ showId, api }) {
   };
 
   const draftBody = (d) => ({
-    title: d.title, description: d.description || '', plant_slot_id: d.plant_slot_id || '', payoff_slot_id: d.payoff_slot_id || '',
+    title: d.title, description: d.description || '', kind: d.kind || 'twist', plant_beat: null, plant_slot_id: d.plant_slot_id || '', payoff_slot_id: d.payoff_slot_id || '',
     status: 'planned', thread_ids: d.thread_ids || [], character_ids: d.character_ids || [], note: '',
   });
   const keepDraft = async (d) => {
@@ -96,7 +106,7 @@ export default function SeasonTwists({ showId, api }) {
       setNote({ error: true, text: errorOf(err, 'The twist was not saved.') });
     } finally { setBusy(false); }
   };
-  const editDraft = (d) => { setNote(null); setForm({ ...BLANK, ...draftBody(d), draftKey: d.key }); };
+  const editDraft = (d) => { setNote(null); setForm({ ...BLANK, ...draftBody(d), plant_beat: '', draftKey: d.key }); };
   const dropDraft = (d) => setDrafts((ds) => ds.filter((x) => x.key !== d.key));
 
   const remove = async (t) => {
@@ -126,7 +136,7 @@ export default function SeasonTwists({ showId, api }) {
   const edit = (t) => {
     setNote(null);
     setForm({
-      id: t.id, title: t.title || '', description: t.description || '', plant_slot_id: t.plant_slot_id || '',
+      id: t.id, title: t.title || '', description: t.description || '', kind: t.kind || 'twist', plant_beat: t.plant_beat ?? '', plant_slot_id: t.plant_slot_id || '',
       payoff_slot_id: t.payoff_slot_id || '', status: t.status || 'planned', thread_ids: t.thread_ids || [],
       character_ids: t.character_ids || [], note: t.note || '',
     });
@@ -161,6 +171,11 @@ export default function SeasonTwists({ showId, api }) {
           </p>
         </div>
         <div className="stw-head-actions">
+          {onSeeAll && (
+            <button type="button" className="stw-btn is-quiet" onClick={onSeeAll} data-testid="stw-see-plants">
+              <ListTree size={14} aria-hidden="true" /> See every plant
+            </button>
+          )}
           <button type="button" className="stw-btn is-quiet" disabled={busy || suggesting} onClick={suggest} data-testid="stw-suggest">
             <Sparkles size={14} aria-hidden="true" /> {suggesting ? 'Suggesting…' : 'Suggest twists'}
           </button>
@@ -232,6 +247,10 @@ export default function SeasonTwists({ showId, api }) {
                   <span className="stw-twist-title">{t.title}</span>
                   <span className={`stw-status is-${t.status}`}>{STATUS_LABEL[t.status] || t.status}</span>
                 </div>
+                <p className="stw-links">
+                  <span className="stw-tag">{KIND_LABEL[t.kind] || 'Twist'}</span>
+                  {t.plant_beat ? <span className="stw-tag">Beat {t.plant_beat}</span> : null}
+                </p>
                 {t.description && <p className="stw-desc">{t.description}</p>}
                 {path(t)}
                 {(threads.length > 0 || people.length > 0) && (
@@ -267,6 +286,16 @@ export default function SeasonTwists({ showId, api }) {
           <label className="stw-field is-wide">
             <span>What it is</span>
             <textarea rows={3} value={form.description} maxLength={2000} placeholder="Maren wears a ring she says was her mother's; it was Mo's." onChange={set('description')} />
+          </label>
+          <label className="stw-field">
+            <span>Kind</span>
+            <select value={form.kind} onChange={set('kind')}>
+              {PLANT_KINDS.map((k) => <option key={k} value={k}>{KIND_LABEL[k]}</option>)}
+            </select>
+          </label>
+          <label className="stw-field">
+            <span>Beat (optional)</span>
+            <input type="number" min={1} max={99} inputMode="numeric" value={form.plant_beat} placeholder="Which beat plants it" onChange={set('plant_beat')} />
           </label>
           <label className="stw-field">
             <span>Planted in</span>

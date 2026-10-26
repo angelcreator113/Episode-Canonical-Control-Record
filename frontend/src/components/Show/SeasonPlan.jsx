@@ -20,6 +20,7 @@ import SlotNotes, { useEventFit, rankedOptions } from './SlotNotes';
 import { slotTitle, slotThreads, defaultSlotId } from '../../lib/seasonArc';
 import { eventCardDetails } from '../../utils/eventCardSummary';
 import '../../pages/WorldAdmin.css';
+import { packageHref } from '../../lib/eventFlow';
 
 // ─── SEASON TAB COMPONENT ───────────────────────────────────────────────────
 // Planning Insights (§8(ff) A8, Q13, Q15): per slot the plan beside the
@@ -537,7 +538,7 @@ export function SlotPanel({ slot, showId, available, busy, episode, event, onPen
           {slot.state === 'done' ? 'Open episode' : 'Continue episode'}
         </Link>
       ) : slot.event ? (
-        <Link className="wa-arc-primary" to={`/shows/${showId}/events/${slot.event.id}`}>Open the event package</Link>
+        <Link className="wa-arc-primary" to={packageHref(showId, slot.event.id, { kind: 'roadmap', slot: slot.slot_number })}>Open the event package</Link>
       ) : null}
     </section>
   );

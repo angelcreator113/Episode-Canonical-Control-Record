@@ -1,0 +1,24 @@
+/* Before and after in the season (EventSlotNav.jsx), in the header's top
+   row. Design tokens only. */
+.esn { display: inline-flex; align-items: center; gap: 2px; margin-left: auto; font-family: var(--font-sans); font-size: 13px; }
+.esn-link {
+  display: inline-flex; align-items: center; gap: 2px; min-height: 36px; min-width: 36px; padding: 0 8px; justify-content: center;
+  border-radius: 999px; border: 1px solid var(--lala-lavender-line); background: var(--surface-card);
+  color: var(--lala-lavender-text); font-weight: 600; text-decoration: none;
+}
+.esn-link:hover { background: var(--lala-lavender-soft); }
+.esn-link:focus-visible { outline: 2px solid var(--lala-lavender); outline-offset: 1px; }
+.esn-link.is-none { border-color: var(--lala-parchment-3); color: var(--lala-parchment-3); background: transparent; }
+.esn-current { padding: 0 6px; font-weight: 600; color: var(--lala-ink-muted); }
+
+@media (max-width: 900px) {
+  .esn-link { min-height: 44px; min-width: 44px; }
+}
+@media (max-width: 600px) {
+  /* The phone hero is a grid: the order sits beside the way back. */
+  .epp-hero .esn { grid-area: nav; justify-self: end; }
+}
+@media (max-width: 600px) {
+  /* The page's phone grid, with a place for the order beside the way back. */
+  .epp-page .epp-hero { grid-template-areas: "back nav" "eye eye" "title badge" "date date"; }
+}

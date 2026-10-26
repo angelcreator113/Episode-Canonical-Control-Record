@@ -14,6 +14,9 @@ const TOKENS = { parchment: '#FAF7F0', gold: '#B8962E', ink: '#2C2C2C', lavender
 const MONO = "'DM Mono', monospace";
 const PROSE = "'Lora', serif";
 const TRANSITION_MS = 300;
+// The most screens mission rewards may open in a row on arrival, without a
+// tap between (a reward loop stops here).
+const ARRIVAL_HOPS_MAX = 3;
 
 function getLinks(screen) {
   return screen?.screen_links || screen?.metadata?.screen_links || [];
@@ -92,6 +95,10 @@ export default function PhonePreviewMode({ screens = [], initialScreen, onClose,
   // Player mode remembers every screen landed on (Back, Home and icon taps
   // included), so a reopened play-through resumes there.
   const saveScreen = playthrough?.saveScreen;
+  // Screens opened in a row by arrival rewards (below); a tap, Back or Home
+  // resets it.
+  const arrivalHopsRef = useRef(0);
+  const navigateRef = useRef(null);
   const activeScreenId = activeScreen?.id;
   useEffect(() => {
     if (!saveScreen || !activeScreenId || !resumedRef.current) return;
@@ -101,12 +108,25 @@ export default function PhonePreviewMode({ screens = [], initialScreen, onClose,
     }
     if (activeScreenId === savedScreenRef.current) return;
     savedScreenRef.current = activeScreenId;
+    const landedOn = activeScreenId;
     Promise.resolve(saveScreen(activeScreenId)).then((result) => {
       const toastsIn = result?.effects?.toasts || [];
       if (toastsIn.length) setToasts(prev => [...prev, ...toastsIn.map((t, i) => ({ ...t, id: Date.now() + i }))]);
       if (result?.newlyCompleted?.length) {
         setCelebrations(prev => [...prev, ...result.newlyCompleted.map((m, i) => ({ id: `${m.id}-${Date.now()}-${i}`, name: m.name }))]);
       }
+      // A mission finished by landing here can open another screen, as its
+      // reward does after a tap (phone round step 1, D2). Guarded against a
+      // loop: not to the screen already shown, not after the player moved
+      // on, and at most ARRIVAL_HOPS_MAX in a row without a tap, Back or Home.
+      const dest = result?.effects?.navigate;
+      if (!dest || dest === landedOn || savedScreenRef.current !== landedOn) return;
+      if (arrivalHopsRef.current >= ARRIVAL_HOPS_MAX) {
+        console.warn('[PhonePreviewMode] mission rewards keep opening screens; stopped at', landedOn);
+        return;
+      }
+      arrivalHopsRef.current += 1;
+      navigateRef.current?.(dest, 'left');
     });
   }, [saveScreen, activeScreenId]);
 
@@ -195,6 +215,7 @@ export default function PhonePreviewMode({ screens = [], initialScreen, onClose,
       setAnimating(false);
     }, TRANSITION_MS);
   }, [findScreen, activeScreen, animating]);
+  navigateRef.current = navigateTo;
 
   // The show's icons, so each tap zone draws its icon's current image
   // (doctrine rule 17, Task #2005), and a Voice zone is known (Task #3163).
@@ -208,6 +229,7 @@ export default function PhonePreviewMode({ screens = [], initialScreen, onClose,
    * the same UI updates.
    */
   const handleZoneTap = useCallback(async (zone) => {
+    arrivalHopsRef.current = 0;
     // Voice is an action, not a screen (Task #3163): "Lala speaks", and the
     // tap opens nothing. The tap still runs below, so missions and the
     // playthrough see it.
@@ -298,6 +320,7 @@ export default function PhonePreviewMode({ screens = [], initialScreen, onClose,
 
   const goBack = useCallback(() => {
     if (!history.length || animating) return;
+    arrivalHopsRef.current = 0;
     setSlideDir('right');
     setAnimating(true);
     const prev = history[history.length - 1];
@@ -312,6 +335,7 @@ export default function PhonePreviewMode({ screens = [], initialScreen, onClose,
   const goHome = useCallback(() => {
     const home = homeScreen || initialScreen || screens[0];
     if (!home || animating) return;
+    arrivalHopsRef.current = 0;
     setSlideDir('right');
     setAnimating(true);
     setHistory([]);

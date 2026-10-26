@@ -64,10 +64,11 @@ describe('WorldAdmin Overview: four questions, true counts', () => {
     // e2 says "ready" but lacks its invitation: it needs attention, with what is missing.
     const attention = screen.getByTestId('sov-attention');
     expect(attention.textContent).toMatch(/Missing: .*invitation/i);
-    expect(attention.querySelector('a').getAttribute('href')).toBe('/shows/show-1/events/e2');
+    // ?from=producer: the Event Package's way back to Producer Mode (2026-10-25).
+    expect(attention.querySelector('a').getAttribute('href')).toBe('/shows/show-1/events/e2?from=producer');
     // e1 says "draft" but meets every gate: it is the next ready event. e3 is used.
     const nextEvent = screen.getByTestId('sov-next-event');
-    expect(nextEvent.querySelector('a').getAttribute('href')).toBe('/shows/show-1/events/e1');
+    expect(nextEvent.querySelector('a').getAttribute('href')).toBe('/shows/show-1/events/e1?from=producer');
     expect(screen.queryByTestId('wa-load-failed')).toBeNull();
   });
 
@@ -104,7 +105,7 @@ describe('WorldAdmin Overview: four questions, true counts', () => {
     failing = new Set();
     fireEvent.click(within(banner).getByRole('button', { name: 'Retry' }));
     await waitFor(() => expect(screen.queryByTestId('wa-load-failed')).toBeNull());
-    expect(screen.getByTestId('sov-next-event').querySelector('a').getAttribute('href')).toBe('/shows/show-1/events/e1');
+    expect(screen.getByTestId('sov-next-event').querySelector('a').getAttribute('href')).toBe('/shows/show-1/events/e1?from=producer');
   });
 
   test('nothing answering is a connection failure, not an empty show (audit TRUTH-01)', async () => {
@@ -121,11 +122,11 @@ describe('WorldAdmin Overview: four questions, true counts', () => {
     renderIt();
     const first = await screen.findByTestId('wa-load-failed');
     expect(first.textContent).toContain("Couldn't load wardrobe");
-    expect(screen.getByTestId('sov-next-event').querySelector('a').getAttribute('href')).toBe('/shows/show-1/events/e1');
+    expect(screen.getByTestId('sov-next-event').querySelector('a').getAttribute('href')).toBe('/shows/show-1/events/e1?from=producer');
     failing = new Set(['/api/v1/world/show-1/events']);
     fireEvent.click(within(first).getByRole('button', { name: 'Retry' }));
     await waitFor(() => expect(screen.getByTestId('wa-load-failed').textContent).toContain("Couldn't refresh events; showing what loaded before."));
     // The events read before the failed refresh are still on the page.
-    expect(screen.getByTestId('sov-next-event').querySelector('a').getAttribute('href')).toBe('/shows/show-1/events/e1');
+    expect(screen.getByTestId('sov-next-event').querySelector('a').getAttribute('href')).toBe('/shows/show-1/events/e1?from=producer');
   });
 });

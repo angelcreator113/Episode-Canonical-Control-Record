@@ -1,0 +1,281 @@
+/* EpisodePhoneNeeds.css — "What this episode needs from the phone" (phone round step 2) */
+
+.phone-needs-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.phone-needs-head .lalas-phone-section-title {
+  margin: 0;
+}
+
+.phone-needs-build {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 6px 14px;
+  border: none;
+  border-radius: 8px;
+  background: var(--primary);
+  color: var(--text-inverse);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.phone-needs-build:hover:not(:disabled) {
+  background: var(--primary-dark);
+}
+
+.phone-needs-build:disabled,
+.phone-needs-act:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.phone-needs-act {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 32px;
+  padding: 4px 10px;
+  border: 1px solid var(--lala-lavender-line);
+  border-radius: 8px;
+  background: var(--surface-card);
+  color: var(--lala-lavender-text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.phone-needs-act:hover:not(:disabled) {
+  background: var(--lala-lavender-soft);
+}
+
+.phone-needs-note {
+  padding: 12px 14px;
+  border: 1px dashed var(--lala-gold-line);
+  border-radius: 10px;
+  background: var(--lala-gold-soft);
+  color: var(--lala-ink-muted);
+  font-size: 13px;
+}
+
+.phone-needs-summary {
+  margin: 0 0 8px;
+  font-size: 13px;
+  color: var(--lala-ink-muted);
+}
+
+.phone-needs-list,
+.phone-needs-problems ul,
+.phone-needs-review ul,
+.phone-needs-failed ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.phone-needs-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--lala-lavender-line);
+}
+
+.phone-needs-row:last-child {
+  border-bottom: none;
+}
+
+.phone-needs-name {
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--lala-ink);
+  overflow-wrap: anywhere;
+}
+
+.phone-needs-name a {
+  color: var(--lala-lavender-text);
+  text-decoration: none;
+}
+
+.phone-needs-name a:hover {
+  text-decoration: underline;
+}
+
+.phone-needs-beats {
+  font-weight: 400;
+  color: var(--lala-ink-muted);
+}
+
+.phone-needs-status {
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.phone-needs-status.is-ok {
+  background: var(--lala-lavender-soft);
+  color: var(--lala-lavender-text);
+}
+
+.phone-needs-status.is-missing {
+  background: var(--accent-subtle);
+  color: var(--accent-dark);
+}
+
+.phone-needs-status.is-warn {
+  background: var(--lala-gold-soft);
+  color: var(--lala-ink-muted);
+}
+
+.phone-needs-more {
+  font-weight: 400;
+}
+
+.phone-needs-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.phone-needs-subhead {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 14px 0 6px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--lala-ink);
+}
+
+.phone-needs-problems li,
+.phone-needs-failed li {
+  padding: 3px 0;
+  font-size: 13px;
+}
+
+.phone-needs-hint {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--lala-ink-muted);
+}
+
+.phone-needs-confirm {
+  margin-top: 14px;
+  padding: 14px;
+  border: 1px solid var(--lala-lavender-line);
+  border-radius: 10px;
+  background: var(--lala-surface);
+  font-size: 13px;
+  color: var(--lala-ink);
+}
+
+.phone-needs-confirm p {
+  margin: 0;
+}
+
+.phone-needs-confirm-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.phone-needs-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 14px;
+  font-size: 13px;
+  color: var(--lala-ink);
+}
+
+.phone-needs-bar {
+  display: block;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--lala-lavender-soft);
+  overflow: hidden;
+}
+
+.phone-needs-bar span {
+  display: block;
+  height: 100%;
+  background: var(--primary);
+  transition: width 0.3s ease;
+}
+
+.phone-needs-failed {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--danger-bg);
+  color: var(--danger-text);
+  font-size: 13px;
+}
+
+.phone-needs-failed .phone-needs-subhead {
+  margin-top: 0;
+  color: var(--danger-text);
+}
+
+.phone-needs-review li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--lala-lavender-line);
+  font-size: 13px;
+  color: var(--lala-ink);
+}
+
+.phone-needs-review li > span:first-child {
+  min-width: 0;
+  flex: 1 1 200px;
+  overflow-wrap: anywhere;
+}
+
+.phone-needs-review li.is-undone > span:first-child {
+  text-decoration: line-through;
+  color: var(--lala-ink-muted);
+}
+
+.phone-needs-undone {
+  font-size: 12px;
+  color: var(--lala-ink-muted);
+}
+
+.phone-needs-undo-error {
+  flex-basis: 100%;
+  font-size: 12px;
+  color: var(--lala-danger);
+}
+
+/* At phone width the status and the action go under the name. */
+@media (max-width: 600px) {
+  .phone-needs-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .phone-needs-name {
+    grid-column: 1 / -1;
+  }
+
+  .phone-needs-status {
+    justify-self: start;
+  }
+}

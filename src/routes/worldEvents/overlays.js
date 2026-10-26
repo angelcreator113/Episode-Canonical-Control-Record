@@ -591,6 +591,7 @@ router.get('/world/:showId/events/:eventId/overlay-suggestions', requireAuth, as
       },
     });
   } catch (err) {
+    console.error('[OverlaySelections] GET overlay-selections failed:', err);
     return res.status(500).json({ success: false, error: err.message });
   }
 });

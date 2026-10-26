@@ -77,7 +77,8 @@ describe('Event Package header', () => {
     expect(look.getAttribute('data-state')).not.toBe('complete'); // no outfit yet
 
     const toc = screen.getByTestId('package-toc');
-    const label = (a) => [...a.childNodes].filter((n) => !n.classList?.contains('epp-sr-only')).map((n) => n.textContent).join('');
+    // The phone's short name (the jump bar, 2026-10-25) is not the label.
+    const label = (a) => [...a.childNodes].filter((n) => !n.classList?.contains('epp-sr-only') && !n.classList?.contains('epp-toc-short')).map((n) => n.textContent).join('');
     expect([...toc.querySelectorAll('a')].map(label)).toEqual(['The Event', 'People', 'Place', "Lala's Look", 'Deal & Money', 'Story Stakes', 'In-world documents']);
     expect(within(toc).getByTestId('toc-look').className).toMatch(/state-(warning|blocking)/);
     // The dot's state is read out too, not colour alone (audit, 2026-10-23).

@@ -193,8 +193,7 @@
   font-size: 12px;
 }
 
-.lalas-phone-empty,
-.lalas-phone-deferred {
+.lalas-phone-empty {
   padding: 14px 16px;
   border-radius: var(--lala-radius, 8px);
   border: 1px solid var(--lala-gold-line);
@@ -202,11 +201,6 @@
   font-size: 12px;
   line-height: 1.5;
   color: var(--lala-ink-muted);
-}
-
-.lalas-phone-deferred {
-  border-style: dashed;
-  background: var(--lala-parchment);
 }
 
 /* Evoni's Episode mock (2026-10-06): one row per screen — thumb, name and

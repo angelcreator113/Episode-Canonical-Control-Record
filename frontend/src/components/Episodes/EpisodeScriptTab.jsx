@@ -9,6 +9,7 @@ import { episodePlanning } from '../../utils/episodePlanning';
 import { scriptInputs, mustCover, scriptPeople, quoteParts, goalTaskFor } from '../../lib/episodeScript';
 import Beat14Opportunity from './Beat14Opportunity';
 import EpisodeTwistsDue from './EpisodeTwistsDue';
+import EpisodePlantSuggest from './EpisodePlantSuggest';
 import { beat14Outcome } from '../../lib/beat14Invitation';
 import { beatState } from '../../lib/beatState';
 import { moveBeat, moveLine, dropIndex, replaceBeat, appendLine, insertLine } from '../../lib/scriptBeatOrder';
@@ -28,6 +29,7 @@ import ScriptHealthPanel, { shownText } from './ScriptHealthPanel';
 import { ScriptBeatList, BeatStatusBadge, SceneContextCard, AssetsCard, BeatChecklistCard, sceneContextFields } from './ScriptBeatParts';
 import { beatStatus, beatPictures, beatChecklist, beatAssets, piecesWornIn, lineDuration } from '../../lib/scriptBeatView';
 import ScriptReadActions from './ScriptReadActions';
+import ScriptImport from './ScriptImport';
 import EpisodeStoryRecord from './EpisodeStoryRecord';
 import ScriptHistory from './ScriptHistory';
 import useScriptDraft from '../../hooks/useScriptDraft';
@@ -1473,6 +1475,8 @@ function BeatSection({ voice = null, beat, index, beatCount, scenePlan, expanded
 }
 
 export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange }) {
+  // Bumped when a suggested plant is kept, so the twists due here re-read (EpisodePlantSuggest).
+  const [plantsKept, setPlantsKept] = useState(0);
   const episodeId = episode?.id;
   // Voice clips (Teleprompter batch 3): lines Evoni recorded in another
   // speaker's voice. Kept apart from the script, so recording one never
@@ -2825,6 +2829,10 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
     rawRefocusRef.current = true;
     setDeveloperMode((d) => !d);
   };
+  // Import a script (Evoni, 2026-10-25; ScriptImport, lib/scriptImport): the
+  // converted script lands as unsaved changes, and Save keeps it.
+  const importAction = <ScriptImport scriptText={scriptText} look={outfit || []} onScreen={onScreen} approvedCount={lockedCount} disabled={busy || locking || saving}
+    onImport={(next) => { if (refuseOpenEdit() || refuseTyped()) return; setScriptText(next); flash('Script imported ✦ Save to keep it.', 'success', 5000); }} />;
   const rawToggle = <button type="button" ref={rawToggleRef} className={`esp-btn${developerMode ? ' is-on' : ''}`} aria-pressed={developerMode} data-testid="script-raw-toggle" onClick={toggleRaw}>{developerMode ? 'Beat view' : 'Raw editor'}</button>;
   // The context panel's tabs: what generation reads, what must be covered,
   // what is true at the open beat, the open beat's checks, and the voices.
@@ -2902,7 +2910,7 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
             {/* Table read and Export (Script tab audit, 2026-10-15): the script as on the page. */}
             {/* false: refused, so History stays open on the version (Script page audit, 2026-10-19). */}
             {history}
-            <span className="esp-tools" role="group" aria-label="Script tools" data-testid="script-tools">{readActions}{rawToggle}</span>
+            <span className="esp-tools" role="group" aria-label="Script tools" data-testid="script-tools">{readActions}{importAction}{rawToggle}</span>
             {/* Not while a lock or a save is on its way (Script page audit,
                 2026-10-19: the new script landed over the lock's or save's answer). */}
             <button type="button" className="esp-btn" data-testid="script-regenerate" onClick={() => {
@@ -2925,6 +2933,7 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
           <div className="esp-actions esp-actions--empty">
             {episodeId && history}
             {developerMode && <span className="esp-tools" role="group" aria-label="Script tools" data-testid="script-tools">{rawToggle}</span>}
+            {importAction}
             <button type="button" className="esp-btn-primary is-large" onClick={() => handleGenerate()} disabled={generating}>
               {waitingForScript ? 'Still writing the 14 beats…' : generating ? 'Generating the 14 beats…' : 'Generate Script'}
             </button>
@@ -3118,7 +3127,9 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
               <p className="esp-cover-empty" data-testid="script-cover-empty">Nothing to cover: the event has no goals, nothing is carried from an earlier episode, the brief has no forward hook, and beat 14 has no opportunity coming.</p>
             )}
             {/* The Season Plan's twists due in this episode (2026-10-23; EpisodeTwistsDue). */}
-            <EpisodeTwistsDue episodeId={episodeId} beats={beats} />
+            <EpisodeTwistsDue key={`twists-${plantsKept}`} episodeId={episodeId} beats={beats} />
+            {/* Suggest plants from this script (plant tracker, 2026-10-25; EpisodePlantSuggest): a kept one shows above as planted. */}
+            <EpisodePlantSuggest episodeId={episodeId} hasScript={hasScript} onSaved={() => setPlantsKept((n) => n + 1)} />
             <p className="esp-uses-note">From the event package, the brief, beat 14&apos;s opportunity and what Lala still owes from an earlier episode. A goal is ticked when a beat after the to-do list does it, in its own words (&ldquo;get to know&rdquo;), with its person there by any of their names; the hook, when beat 14 tells it; the opportunity, when beat 14 delivers it as a DM or notification. Mark covered or Not covered when the script says otherwise; your mark wins. Tick it marks the goal done on her to-do list from the saved script; Tick all covered does it for every covered goal and follow-up.</p>
           </section>
         )}
