@@ -89,6 +89,18 @@
  * POST   /world/:showId/season/wrap-up/draft — "Write the wrap-up": one AI call drafts it from the plain recap; nothing saved
  * PUT    /world/:showId/season/wrap-up — { text }: save Evoni's edited wrap-up (shows.metadata.season_wrapups)
  *
+ * The Season page's round 3 AI buttons (services/seasonAiHelpers; Evoni, 2026-10-26). Each is one AI call
+ * Evoni presses for, logged and budget-gated by aiCostTracker; nothing is saved until she accepts:
+ * POST   /world/:showId/season/ai/next-step — "What should I do next?" from { items } (the Needs attention rows)
+ * POST   /season-ai/focus                   — "Focus for today" from { seasons: [{ show, season_number, title, items }] }
+ * POST   /world/:showId/season/ai/arc-suggestions — Arc suggestions from the Cast tab's data; ?season=N another season's
+ * POST   /world/:showId/season/ai/arc-suggestions/accept — Accept one ({ kind: purpose|twist, ... }); no AI call
+ * POST   /world/:showId/season/ai/carried — What a past season (?season=N) carries into the next: continue, resolve or drop
+ * POST   /world/:showId/season/ai/carried/apply — Apply the ticked rows ({ decisions }); no AI call; never deletes
+ * POST   /world/:showId/season/ai/pitch     — Draft the two-line season pitch; ?season=N another season's
+ * GET    /world/:showId/season/pitch        — The saved pitch (shows.metadata.season_pitches[<arc id>]); ?season=N
+ * PUT    /world/:showId/season/pitch        — Save it ({ text }; empty clears it); ?season=N
+ *
  * Removed with no caller (planner PR 4, 2026-10-24): GET /world/:showId/arc/context
  * (getArcContext stays: the feed and the script writer call it directly) and
  * PUT /world/:showId/arc/phase/:phase.
@@ -969,6 +981,141 @@ router.post('/episodes/:episodeId/season-plants/suggest', requireAuth, aiRateLim
     return res.json({ success: true, ...(await suggestPlantsFromScript(models.sequelize, req.params.episodeId)) });
   } catch (err) {
     return sendTwistError(res, err, 'suggest plants');
+  }
+});
+
+// ── The Season page's round 3 AI buttons (services/seasonAiHelpers; Evoni, 2026-10-26) ──
+// Each AI route is one call Evoni presses for; nothing is saved by it.
+
+const sendAiError = (res, err, label) => {
+  if (err && err.status && err.status < 500) {
+    console.warn(`[ArcRoutes] ${label} refused:`, err.message);
+    return res.status(err.status).json({ error: err.message, code: err.code });
+  }
+  if (err && err.status === 502) {
+    console.error(`[ArcRoutes] ${label} failed:`, err.message);
+    return res.status(502).json({ error: err.message, code: err.code });
+  }
+  console.error(`[ArcRoutes] ${label} error:`, err);
+  return res.status(500).json({ error: err?.message || 'Something went wrong' });
+};
+
+// POST /world/:showId/season/ai/next-step — "What should I do next?" (the health line)
+router.post('/world/:showId/season/ai/next-step', requireAuth, aiRateLimiter, async (req, res) => {
+  if (badShow(req, res)) return undefined;
+  try {
+    const models = require('../models');
+    const { nextStep } = require('../services/seasonAiHelpers');
+    return res.json({ success: true, ...(await nextStep(models.sequelize, req.params.showId, { items: req.body?.items })) });
+  } catch (err) {
+    return sendAiError(res, err, 'next step');
+  }
+});
+
+// POST /season-ai/focus — "Focus for today" (the daily update, every show's season in progress)
+router.post('/season-ai/focus', requireAuth, aiRateLimiter, async (req, res) => {
+  try {
+    const { focusToday } = require('../services/seasonAiHelpers');
+    return res.json({ success: true, ...(await focusToday({ seasons: req.body?.seasons })) });
+  } catch (err) {
+    return sendAiError(res, err, 'daily focus');
+  }
+});
+
+// POST /world/:showId/season/ai/arc-suggestions — Arc suggestions (the Cast tab)
+router.post('/world/:showId/season/ai/arc-suggestions', requireAuth, aiRateLimiter, async (req, res) => {
+  if (badShow(req, res)) return undefined;
+  try {
+    const models = require('../models');
+    const { arcSuggestions } = require('../services/seasonAiHelpers');
+    const arcId = await seasonArcId(models, req, res);
+    if (arcId === undefined) return undefined;
+    return res.json({ success: true, ...(await arcSuggestions(models.sequelize, req.params.showId, { arcId })) });
+  } catch (err) {
+    return sendAiError(res, err, 'arc suggestions');
+  }
+});
+
+// POST /world/:showId/season/ai/arc-suggestions/accept — Accept one suggestion (no AI call)
+router.post('/world/:showId/season/ai/arc-suggestions/accept', requireAuth, async (req, res) => {
+  if (badShow(req, res)) return undefined;
+  try {
+    const models = require('../models');
+    const { applyArcSuggestion } = require('../services/seasonAiHelpers');
+    return res.json({ success: true, ...(await applyArcSuggestion(models.sequelize, req.params.showId, req.body || {}, { by: decidedBy(req) })) });
+  } catch (err) {
+    return sendAiError(res, err, 'accept arc suggestion');
+  }
+});
+
+// POST /world/:showId/season/ai/carried — what a past season carries into the next
+router.post('/world/:showId/season/ai/carried', requireAuth, aiRateLimiter, async (req, res) => {
+  if (badShow(req, res)) return undefined;
+  try {
+    const models = require('../models');
+    const { carriedForward } = require('../services/seasonAiHelpers');
+    const arcId = await seasonArcId(models, req, res);
+    if (arcId === undefined) return undefined;
+    return res.json({ success: true, ...(await carriedForward(models.sequelize, req.params.showId, { arcId })) });
+  } catch (err) {
+    return sendAiError(res, err, 'carried forward');
+  }
+});
+
+// POST /world/:showId/season/ai/carried/apply — apply only the ticked rows (no AI call)
+router.post('/world/:showId/season/ai/carried/apply', requireAuth, async (req, res) => {
+  if (badShow(req, res)) return undefined;
+  try {
+    const models = require('../models');
+    const { applyCarried } = require('../services/seasonAiHelpers');
+    const arcId = await seasonArcId(models, req, res);
+    if (arcId === undefined) return undefined;
+    const result = await applyCarried(models.sequelize, req.params.showId, { arcId, decisions: req.body?.decisions }, { by: decidedBy(req) });
+    return res.json({ success: true, ...result });
+  } catch (err) {
+    return sendAiError(res, err, 'apply carried');
+  }
+});
+
+// POST /world/:showId/season/ai/pitch — draft the two-line pitch; nothing saved
+router.post('/world/:showId/season/ai/pitch', requireAuth, aiRateLimiter, async (req, res) => {
+  if (badShow(req, res)) return undefined;
+  try {
+    const models = require('../models');
+    const { draftPitch } = require('../services/seasonAiHelpers');
+    const arcId = await seasonArcId(models, req, res);
+    if (arcId === undefined) return undefined;
+    return res.json({ success: true, ...(await draftPitch(models.sequelize, req.params.showId, { arcId })) });
+  } catch (err) {
+    return sendAiError(res, err, 'draft pitch');
+  }
+});
+
+// GET /world/:showId/season/pitch — the saved pitch
+router.get('/world/:showId/season/pitch', requireAuth, async (req, res) => {
+  if (badShow(req, res)) return undefined;
+  try {
+    const models = require('../models');
+    const { getPitch } = require('../services/seasonAiHelpers');
+    const arcId = await seasonArcId(models, req, res);
+    if (arcId === undefined) return undefined;
+    return res.json({ success: true, ...(await getPitch(models.sequelize, req.params.showId, { arcId })) });
+  } catch (err) {
+    return sendAiError(res, err, 'read pitch');
+  }
+});
+
+// PUT /world/:showId/season/pitch — save Evoni's pitch ({ text }; empty clears it)
+router.put('/world/:showId/season/pitch', requireAuth, async (req, res) => {
+  if (badShow(req, res)) return undefined;
+  try {
+    const models = require('../models');
+    const { savePitch } = require('../services/seasonAiHelpers');
+    const arcId = await seasonArcId(models, req, res);
+    if (arcId === undefined) return undefined;
+    return res.json({ success: true, ...(await savePitch(models.sequelize, req.params.showId, { arcId, text: req.body?.text, savedBy: decidedBy(req) })) });
+  } catch (err) {
+    return sendAiError(res, err, 'save pitch');
   }
 });
 

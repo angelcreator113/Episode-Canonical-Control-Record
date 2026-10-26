@@ -73,7 +73,7 @@ describe('DailyUpdate: the season', () => {
     expect(within(box).getByTestId('szn-attention-gap-1').getAttribute('href')).toBe('/shows/show-1/season?tab=goals');
     const section = screen.getByTestId('du-seasons');
     expect(within(section).getByRole('link', { name: 'Styling Adventures · Season 2: Glow' }).getAttribute('href')).toBe('/shows/show-1/season');
-    expect(within(section).getByTestId('du-slot-focus').textContent).toBe('');
+    expect(within(within(section).getByTestId('du-slot-focus')).getByTestId('du-focus-ask')).toBeTruthy();
   });
 
   test('no season in progress: no section', async () => {
