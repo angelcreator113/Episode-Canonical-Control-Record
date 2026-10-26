@@ -16,7 +16,10 @@
  * until Evoni accepts it:
  *   secret  its audience state moves on (hidden -> hinted, or -> revealed),
  *           with the story as where
- *   thread  a new one opens; an existing one is marked advanced
+ *   thread  a new one opens; an existing one is marked advanced. Its thread
+ *           proposals also wait in the show's threads list (services/
+ *           threadInbox, 2026-10-26), checked there, for Keep, Merge into…
+ *           or Drop; those go through acceptProposal and dismissProposal.
  *   fact    canon the chapter writer may build on; a dismissed fact is not
  *
  *   listCanon(sequelize, episodeId)          the episode's stories with their proposals
@@ -180,6 +183,8 @@ async function reviewStory(sequelize, storyId) {
       `UPDATE stories SET metadata = jsonb_set(COALESCE(metadata, '{}'::jsonb), '{canon_reviewed_at}', to_jsonb(NOW()::text)), updated_at = NOW()
         WHERE id = :storyId`, { replacements: { storyId: story.id }, transaction });
   });
+  // Its thread proposals wait in the show's threads list; the check reads them there (never awaited).
+  if (showId && proposals.some((p) => p.kind === 'thread' && !p.payload.thread_id)) require('./threadInbox').checkWaitingLater(sequelize, showId);
   return listCanon(sequelize, story.episode_id);
 }
 

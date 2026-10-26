@@ -67,6 +67,8 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
     jest.spyOn(console, 'log').mockImplementation(() => {});
     jest.spyOn(console, 'warn').mockImplementation(() => {});
     jest.spyOn(intentions, 'draftNextSlot').mockResolvedValue(null); // no AI call on acceptance
+    // Seeds opening by themselves (services/threadInbox) are threadInbox's own test's: no AI check here.
+    jest.spyOn(require('../../src/services/threadInbox'), 'openSeedsLater').mockImplementation(() => {});
   });
   afterEach(() => jest.restoreAllMocks());
 

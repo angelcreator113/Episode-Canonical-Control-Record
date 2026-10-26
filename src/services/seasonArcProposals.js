@@ -28,6 +28,10 @@
  *     through the season's own services (saveIntention, createThread,
  *     closeThread, the phase's tagline and emotional arc)
  *   dismiss(db, showId, id, { by })
+ *
+ * Its new threads (thread_open) also wait in the show's threads list
+ * (services/threadInbox, 2026-10-26), checked there. One decided there is
+ * marked `taken` in changes; accept skips it.
  */
 
 const crypto = require('crypto');
@@ -283,6 +287,8 @@ async function propose(db, showId, { trigger = 'manual', force = false, anthropi
       showId, arcId: season.arc.id, status: result.changes.length ? 'proposed' : 'no_change', trigger: String(trigger).slice(0, 30),
       signals: JSON.stringify(signals), hash, summary: result.summary, changes: JSON.stringify(result.changes),
     } });
+  // Its new threads wait in the show's threads list too; the check reads them there (never awaited).
+  if (result.changes.some((c) => c.kind === 'thread_open')) require('./threadInbox').checkWaitingLater(sequelize, showId);
   return { proposal: row };
 }
 
@@ -363,6 +369,8 @@ async function accept(db, showId, id, { indexes = null, by = null } = {}) {
   const applied = [];
   for (let i = 0; i < changes.length; i += 1) {
     if (chosen && !chosen.has(i)) { applied.push({ index: i, ok: false, skipped: true }); continue; }
+    // Decided already in the threads list (services/threadInbox decideSuggestion): kept, merged or dropped there.
+    if (changes[i]?.taken) { applied.push({ index: i, ok: true, skipped: true, taken: changes[i].taken.as }); continue; }
     try {
       applied.push({ index: i, ok: true, ...(await applyChange(db, showId, row.arc_id, changes[i])) });
     } catch (err) {

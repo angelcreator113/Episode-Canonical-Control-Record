@@ -20,11 +20,20 @@
  * a relationship change, the Pulse drafts posts about it for Review
  * (services/storyRipples); the result says how many are coming, with a
  * link to Review, where she approves them.
+ *
+ * Threads open by themselves (Evoni, 2026-10-26: "Let's let them open
+ * themselves on new threads and build the threads list"): when the script
+ * is read, its new threads that fit the story open right away and its
+ * advances become notes on their threads (services/threadInbox). The card
+ * shows them as already done, each with Undo (or, for one the check left
+ * out, the reason and "Keep it after all"); closes stay rows to tick.
+ * "See all the show's threads" opens the threads list (Show/SeasonThreads).
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useInRouterContext } from 'react-router-dom';
-import { ScrollText, Sparkles, Check, X, Pencil, Heart, Target, Users, MessageCircle, GitBranch, KeyRound, Shuffle, AlertTriangle, Plus, Megaphone } from 'lucide-react';
+import { ScrollText, Sparkles, Check, X, Pencil, Heart, Target, Users, MessageCircle, GitBranch, KeyRound, Shuffle, AlertTriangle, Plus, Megaphone, Undo2 } from 'lucide-react';
 import api from '../../services/api';
+import SeasonThreads from '../Show/SeasonThreads';
 import './EpisodeStoryRecord.css';
 import './EpisodeWhatChanged.css';
 
@@ -130,12 +139,16 @@ export default function EpisodeStoryRecord({ episodeId, embedded = false, onStat
   const [note, setNote] = useState(null);
   const [result, setResult] = useState(null);
   const [editing, setEditing] = useState(null);
+  const [allThreads, setAllThreads] = useState(false);
   const heard = useRef(onStatus);
   heard.current = onStatus;
   useEffect(() => { if (data) heard.current?.(data.record?.status || null); }, [data]);
 
   const take = useCallback((d) => {
-    const next = { record: d?.record || null, cast: d?.cast || [], threads: d?.threads || [], goals: d?.goals || [], twists: d?.twists || [] };
+    const next = {
+      record: d?.record || null, cast: d?.cast || [], threads: d?.threads || [], goals: d?.goals || [], twists: d?.twists || [],
+      show_id: d?.show_id || null, thread_states: d?.thread_states || {},
+    };
     setData(next);
     setForm(formOf(next.record));
     setEditing(null);
@@ -161,7 +174,9 @@ export default function EpisodeStoryRecord({ episodeId, embedded = false, onStat
         // Read again after a Save: say how much is new.
         const rec = d?.record;
         if (!rec?.applied || !Object.keys(rec.applied).length) return d;
-        const all = LISTS.filter((k) => k !== 'characters').flatMap((k) => (rec[k] || []).map((x) => wasSaved(k, x, rec.applied)));
+        // What opened by itself at this read is not "already saved".
+        const auto = rec.applied.threads || {};
+        const all = LISTS.filter((k) => k !== 'characters').flatMap((k) => (rec[k] || []).filter((x) => k !== 'threads' || !auto[x.key]?.auto).map((x) => wasSaved(k, x, rec.applied)));
         const old = all.filter(Boolean).length;
         setNote({ text: `Read it again: ${all.length - old} new, ${old} already saved (folded away below).` });
         return d;
@@ -182,6 +197,19 @@ export default function EpisodeStoryRecord({ episodeId, embedded = false, onStat
     });
     return () => { live = false; };
   }, [base, take, readOnOpen, read]);
+
+  // The thread states only (Undo, Keep it after all): the form keeps her edits.
+  const threadAct = useCallback(async (key, fn, failed) => {
+    setBusy(`thread-${key}`); setNote(null);
+    try {
+      await fn();
+      const res = await api.get(base);
+      setData((d) => ({ ...d, thread_states: res.data?.thread_states || {} }));
+    } catch (err) {
+      console.error('[EpisodeStoryRecord] thread action failed:', err);
+      setNote({ error: true, text: errorOf(err, failed) });
+    } finally { setBusy(null); }
+  }, [base]);
 
   const dirty = useMemo(() => data && JSON.stringify(body(form)) !== JSON.stringify(body(formOf(data.record))), [data, form]);
   const redraft = () => {
@@ -309,7 +337,45 @@ export default function EpisodeStoryRecord({ episodeId, embedded = false, onStat
       <Field label="When"><input type="text" value={f.due_hint || ''} onChange={(e) => setAt('follow_ups', i, { due_hint: e.target.value })} /></Field>
     </>
   )));
-  const [threadRows, threadSaved] = rows('threads', (t, i) => row('threads', i, t, t.title || 'New thread', (
+  // Threads that opened by themselves (or were noted, or left out) at the read: shown as done, with Undo.
+  const states = data.thread_states || {};
+  const threadsBase = data.show_id ? `/api/v1/world/${data.show_id}/season/threads` : null;
+  const AUTO_LABEL = { opened: 'Opened by itself', noted: 'Added as a note', left_out: 'Left out', undone: 'Undone' };
+  const autoRows = form.threads.filter((t) => states[t.key]).map((t) => {
+    const st = states[t.key];
+    return (
+      <li key={t.key} className={`wc-row${st.state === 'undone' || st.state === 'left_out' ? ' is-off' : ''}`} data-testid={`wc-thread-auto-${st.state}`}>
+        <div className="wc-row-main">
+          <div className="wc-row-body">
+            <p className="wc-line">{t.title}</p>
+            <p className="wc-meta">
+              <span className={`wc-chip${st.state === 'opened' || st.state === 'noted' ? ' is-good' : ''}`}>{AUTO_LABEL[st.state]}</span>
+              {st.state === 'noted' && st.thread_title !== t.title && <span className="wc-sub">on “{st.thread_title}”</span>}
+              {t.note && <span className="wc-sub">{t.note}</span>}
+            </p>
+            {st.why && st.state === 'opened' && <p className="wc-sub">Why it matters: {st.why}</p>}
+            {st.state === 'left_out' && st.reason && <p className="wc-warn"><AlertTriangle size={13} aria-hidden="true" /> {st.reason}</p>}
+            <Quote text={t.quote} />
+          </div>
+          <div className="wc-row-tools">
+            {threadsBase && st.can_undo && (
+              <button type="button" className="esr-btn-soft" disabled={locked} aria-label={`Undo: ${t.title}`}
+                onClick={() => threadAct(t.key, () => api.post(st.state === 'noted' ? `${threadsBase}/${st.thread_id}/notes/${st.note_key}/undo` : `${threadsBase}/${st.thread_id}/undo`), 'It was not undone.')}>
+                <Undo2 size={14} aria-hidden="true" /> Undo
+              </button>
+            )}
+            {threadsBase && (st.state === 'left_out' || (st.state === 'undone' && !st.note_key)) && (
+              <button type="button" className="esr-btn-soft" disabled={locked} aria-label={`Keep it after all: ${t.title}`}
+                onClick={() => threadAct(t.key, () => api.post(`${threadsBase}/${st.thread_id}/restore`), 'It was not kept.')}>
+                <Check size={14} aria-hidden="true" /> Keep it after all
+              </button>
+            )}
+          </div>
+        </div>
+      </li>
+    );
+  });
+  const [threadRows, threadSaved] = rows('threads', (t, i) => (states[t.key] ? null : row('threads', i, t, t.title || 'New thread', (
     <>
       <p className="wc-line">{t.title || <em>Untitled</em>}</p>
       <p className="wc-meta">
@@ -331,7 +397,9 @@ export default function EpisodeStoryRecord({ episodeId, embedded = false, onStat
         </Field>
       )}
     </>
-  )));
+  ))));
+  const threadNew = threadRows.filter(Boolean);
+  const threadOld = threadSaved.filter(Boolean);
   const [secretRows, secretSaved] = rows('secrets', (s, i) => row('secrets', i, s, s.text, (
     <>
       <p className="wc-line">{people.has(s.character_id) ? `${nameOf(s.character_id)}: ` : ''}{s.text}</p>
@@ -380,7 +448,7 @@ export default function EpisodeStoryRecord({ episodeId, embedded = false, onStat
           </header>
           <p className="esr-note">
             Read from the finished script: the goals it covers, the relationships that moved, what Lala owes people, the plot threads, the secrets and the season twists.
-            Tick what is right, fix or drop the rest, then Save. Nothing is written until you do.
+            Tick what is right, fix or drop the rest, then Save. Nothing is written until you do, except new plot threads: those open by themselves when they fit the story, each with Undo.
           </p>
         </>
       )}
@@ -411,7 +479,7 @@ export default function EpisodeStoryRecord({ episodeId, embedded = false, onStat
             {followRows}
           </Section>
 
-          <Section icon={GitBranch} title="Plot threads" count={threadRows.length} saved={threadSaved} empty="No thread opened or moved." testid="wc-threads"
+          <Section icon={GitBranch} title="Plot threads" count={threadNew.length + autoRows.length} saved={threadOld} empty="No thread opened or moved." testid="wc-threads"
             after={(
               <li className="wc-add">
                 <button type="button" className="esr-btn-soft" onClick={() => {
@@ -420,8 +488,17 @@ export default function EpisodeStoryRecord({ episodeId, embedded = false, onStat
                 }}><Plus size={14} aria-hidden="true" /> Add a thread</button>
               </li>
             )}>
-            {threadRows}
+            {autoRows}
+            {threadNew}
           </Section>
+          {data.show_id && (
+            <div className="wc-all-threads">
+              <button type="button" className="esr-btn-soft" aria-expanded={allThreads} onClick={() => setAllThreads((v) => !v)} data-testid="wc-all-threads">
+                <GitBranch size={14} aria-hidden="true" /> {allThreads ? 'Hide the show\'s threads' : 'See all the show\'s threads'}
+              </button>
+              {allThreads && <SeasonThreads showId={data.show_id} compact />}
+            </div>
+          )}
 
           <Section icon={KeyRound} title="Secrets" count={secretRows.length} saved={secretSaved} empty="No secret was hinted at or revealed." testid="wc-secrets"
             after={spare.length > 0 ? (
