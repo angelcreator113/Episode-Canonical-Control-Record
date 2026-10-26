@@ -10,11 +10,16 @@
  * money by episode (GET /shows/:id/financial-summary, never
  * episodes.total_income/expenses), its scene sets and its closet; the
  * episodes and events come from the page.
+ *
+ * The season wrap-up (components/Show/SeasonWrapUp, 2026-10-26) sits under
+ * the summary strip once the season shown has a finished episode: it reads
+ * its own recap for `?season=` (or the season in progress).
  */
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import defaultApi from '../../services/api';
 import EpisodeTasksPanel from '../EpisodeTasksPanel';
+import SeasonWrapUp from './SeasonWrapUp';
 import { getEpisodeAnchorEvent } from '../../services/episodeEventsApi';
 import { fetchAllSceneSets } from '../../lib/fetchAllPages';
 import { fetchClosetWithTotal } from '../../lib/closetGrouping';
@@ -154,6 +159,8 @@ export default function EpisodeLedger({ showId, api = defaultApi, episodes = [],
           )}
         </div>
       )}
+
+      <SeasonWrapUp showId={showId} api={api} setToast={setToast} />
 
       {episodes.length > 0 && (
         <div className="wa-ledger-tools">

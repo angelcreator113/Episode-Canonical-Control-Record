@@ -72,6 +72,11 @@
  * POST   /episodes/:episodeId/season-twists/:twistId/mark — { as: planted|paid_off, undo? }: Evoni marks it done here, or takes the mark back
  * POST   /episodes/:episodeId/season-plants/suggest — "Suggest plants from this script": one Haiku call reads the
  *                                                  episode's script and drafts its plants; nothing saved (Evoni keeps each)
+ * GET    /world/:showId/season/wrap-up — The season wrap-up (2026-10-26): the plain recap (goals and the events that
+ *                                       moved them, best episodes, the season's money, open threads and twists) and
+ *                                       the saved wrap-up; ?season=N another season's (services/seasonWrapUp)
+ * POST   /world/:showId/season/wrap-up/draft — "Write the wrap-up": one AI call drafts it from the plain recap; nothing saved
+ * PUT    /world/:showId/season/wrap-up — { text }: save Evoni's edited wrap-up (shows.metadata.season_wrapups)
  *
  * Removed with no caller (planner PR 4, 2026-10-24): GET /world/:showId/arc/context
  * (getArcContext stays: the feed and the script writer call it directly) and
@@ -850,6 +855,62 @@ router.post('/episodes/:episodeId/season-plants/suggest', requireAuth, aiRateLim
     return res.json({ success: true, ...(await suggestPlantsFromScript(models.sequelize, req.params.episodeId)) });
   } catch (err) {
     return sendTwistError(res, err, 'suggest plants');
+  }
+});
+
+// ─── The season wrap-up (Evoni, 2026-10-26: Season page round 3) ───────────
+// The Results tab's recap of the season shown (?season=N, else the one in
+// progress, else the latest): plain data (services/seasonWrapUp), one AI
+// draft from that recap, and Evoni's edited text, saved only on Save.
+
+function sendWrapUpError(res, err, label) {
+  if (err.status && err.code) {
+    console.warn(`[ArcRoutes] ${label} refused (${err.code}):`, err.message);
+    return res.status(err.status).json({ error: err.message, code: err.code });
+  }
+  console.error(`[ArcRoutes] ${label} error:`, err);
+  return res.status(500).json({ error: err.message });
+}
+
+// GET /world/:showId/season/wrap-up — the plain recap and the saved wrap-up, read-only
+router.get('/world/:showId/season/wrap-up', requireAuth, async (req, res) => {
+  if (badShow(req, res)) return undefined;
+  try {
+    const models = require('../models');
+    const arcId = await seasonArcId(models, req, res);
+    if (arcId === undefined) return undefined;
+    const { seasonWrapUp } = require('../services/seasonWrapUp');
+    return res.json({ success: true, ...(await seasonWrapUp(models.sequelize, req.params.showId, { arcId })) });
+  } catch (err) {
+    return sendWrapUpError(res, err, 'season wrap-up');
+  }
+});
+
+// POST /world/:showId/season/wrap-up/draft — "Write the wrap-up": one AI call from the plain recap; nothing saved
+router.post('/world/:showId/season/wrap-up/draft', requireAuth, aiRateLimiter, async (req, res) => {
+  if (badShow(req, res)) return undefined;
+  try {
+    const models = require('../models');
+    const arcId = await seasonArcId(models, req, res);
+    if (arcId === undefined) return undefined;
+    const { draftWrapUp } = require('../services/seasonWrapUp');
+    return res.json({ success: true, ...(await draftWrapUp(models.sequelize, req.params.showId, { arcId })) });
+  } catch (err) {
+    return sendWrapUpError(res, err, 'season wrap-up draft');
+  }
+});
+
+// PUT /world/:showId/season/wrap-up — { text }: save Evoni's wrap-up for the season (empty clears it)
+router.put('/world/:showId/season/wrap-up', requireAuth, async (req, res) => {
+  if (badShow(req, res)) return undefined;
+  try {
+    const models = require('../models');
+    const arcId = await seasonArcId(models, req, res);
+    if (arcId === undefined) return undefined;
+    const { saveWrapUp } = require('../services/seasonWrapUp');
+    return res.json({ success: true, ...(await saveWrapUp(models.sequelize, req.params.showId, { arcId, text: req.body?.text, savedBy: decidedBy(req) })) });
+  } catch (err) {
+    return sendWrapUpError(res, err, 'save season wrap-up');
   }
 });
 
