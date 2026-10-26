@@ -14,7 +14,14 @@ const express = require('express');
 const router = express.Router();
 
 const { requireAuth } = require('../middleware/auth');
-const { isSocialTaskRequired } = require('../utils/socialTaskSource');
+const { isSocialTaskRequired, completionIsDerived, DELIVERABLE_COMPLETION_DERIVED } = require('../utils/socialTaskSource');
+
+// The 409 a manual tick of a deliverable's task gets (Evoni, 2026-10-26).
+const DELIVERABLE_REFUSAL = Object.freeze({
+  success: false,
+  code: DELIVERABLE_COMPLETION_DERIVED,
+  error: 'A deliverable is done when it is submitted. Record it in the deal\'s deliverables instead; approval and payment stay there.',
+});
 
 const WARDROBE_COMPLETION_DERIVED = 'WARDROBE_COMPLETION_DERIVED';
 
@@ -162,6 +169,7 @@ router.post('/episodes/:episodeId/todo/complete/:slot', requireAuth, async (req,
         ? JSON.parse(todoList.social_tasks || '[]')
         : (todoList.social_tasks || []);
       const slotInSocial = socialTasksRaw.some(t => t.slot === slot);
+      if (socialTasksRaw.some(t => t.slot === slot && completionIsDerived(t))) return { status: 409, body: DELIVERABLE_REFUSAL };
 
       // T7 (§8(bb); Task #2307): a wardrobe task's completion comes from Lala's
       // outfit (getTodoList derives it from episode_wardrobe on every read),
@@ -380,26 +388,35 @@ router.post('/episodes/:episodeId/todo/unlock', requireAuth, async (req, res) =>
 router.post('/episodes/:episodeId/todo/complete-social/:slot', requireAuth, async (req, res) => {
   try {
     const { episodeId, slot } = req.params;
-    const { completed = true } = req.body;
+    const { completed = true } = req.body || {};
     const { sequelize } = req.app.get('models') || require('../models');
 
-    const [todoList] = await sequelize.query(
-      'SELECT id, social_tasks FROM episode_todo_lists WHERE episode_id = :episodeId AND deleted_at IS NULL LIMIT 1',
-      { replacements: { episodeId }, type: sequelize.QueryTypes.SELECT }
-    );
+    // Read, check and write with the row locked, as /todo/complete does.
+    // A deliverable's task is refused (Evoni, 2026-10-26): it is done when
+    // the deliverable is submitted, through the deal's own status route.
+    const outcome = await sequelize.transaction(async (transaction) => {
+      const [todoList] = await sequelize.query(
+        'SELECT id, social_tasks FROM episode_todo_lists WHERE episode_id = :episodeId AND deleted_at IS NULL LIMIT 1 FOR UPDATE',
+        { replacements: { episodeId }, type: sequelize.QueryTypes.SELECT, transaction }
+      );
+      if (!todoList) return { status: 404, body: { error: 'No to-do list found' } };
 
-    if (!todoList) return res.status(404).json({ error: 'No to-do list found' });
+      let list = todoList.social_tasks;
+      if (typeof list === 'string') list = JSON.parse(list);
+      if (!Array.isArray(list)) return { status: 400, body: { error: 'No social tasks found' } };
+      const target = list.find(t => t?.slot === slot);
+      if (!target) return { status: 404, body: { error: `No task with slot "${slot}"` } };
+      if (completionIsDerived(target)) return { status: 409, body: DELIVERABLE_REFUSAL };
 
-    let socialTasks = todoList.social_tasks;
-    if (typeof socialTasks === 'string') socialTasks = JSON.parse(socialTasks);
-    if (!Array.isArray(socialTasks)) return res.status(400).json({ error: 'No social tasks found' });
-
-    socialTasks = socialTasks.map(t => t.slot === slot ? { ...t, completed } : t);
-
-    await sequelize.query(
-      'UPDATE episode_todo_lists SET social_tasks = :tasks, updated_at = NOW() WHERE id = :id',
-      { replacements: { tasks: JSON.stringify(socialTasks), id: todoList.id } }
-    );
+      const next = list.map(t => t.slot === slot ? { ...t, completed } : t);
+      await sequelize.query(
+        'UPDATE episode_todo_lists SET social_tasks = :tasks, updated_at = NOW() WHERE id = :id',
+        { replacements: { tasks: JSON.stringify(next), id: todoList.id }, transaction }
+      );
+      return { socialTasks: next };
+    });
+    if (outcome.status) return res.status(outcome.status).json(outcome.body);
+    const { socialTasks } = outcome;
     // A follow-up carried from an earlier episode is done here, or open again.
     await require('../services/storyCarryForward').settleFollowUps(sequelize, socialTasks.filter(t => t.slot === slot), { episodeId });
 
