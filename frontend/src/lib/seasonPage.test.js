@@ -13,8 +13,8 @@ describe('seasonPage helpers', () => {
     expect(tabFrom('production')).toBe('episodes');
   });
 
-  test('the eight tabs, in order, each with its note', () => {
-    expect(SEASON_TABS.map((t) => t.key)).toEqual(['overview', 'roadmap', 'episodes', 'events', 'opportunities', 'story', 'plants', 'goals', 'results']);
+  test('the ten tabs, in order, each with its note (Cast after Story, round 3, 2026-10-26)', () => {
+    expect(SEASON_TABS.map((t) => t.key)).toEqual(['overview', 'roadmap', 'episodes', 'events', 'opportunities', 'story', 'cast', 'plants', 'goals', 'results']);
     for (const t of SEASON_TABS) expect(t.note).toMatch(/\.$/);
   });
 

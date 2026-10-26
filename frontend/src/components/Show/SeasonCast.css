@@ -1,0 +1,31 @@
+/* The Season page's Cast tab (SeasonCast, 2026-10-26). Inside .szn-page, on
+   its --sp-* tokens; two cards side by side, one column on a phone. */
+.scast { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 16px; align-items: start; }
+.scast .szn-ai-slot { grid-column: 1 / -1; }
+.scast-card .szn-card-title { display: inline-flex; align-items: center; gap: 8px; }
+.scast-people { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.scast-person {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; padding: 10px 12px;
+  border-radius: 12px; background: var(--sp-bg); min-width: 0;
+}
+.scast-name { display: inline-flex; align-items: center; gap: 8px; min-width: 0; font-size: 15px; overflow-wrap: anywhere; }
+.scast-link { font-weight: 700; color: var(--sp-pink-deep); }
+.scast-tag { padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 700; background: var(--sp-purple-soft); color: var(--sp-purple); }
+.scast-codes { justify-self: end; font-size: 13px; font-weight: 700; color: var(--sp-purple); text-align: right; overflow-wrap: anywhere; }
+.scast-sub { grid-column: 1 / -1; font-size: 13px; color: var(--sp-muted); overflow-wrap: anywhere; }
+.scast-gap { color: var(--sp-gold-text); font-weight: 600; }
+.scast-parts { display: grid; gap: 14px; }
+.scast-part-title { margin: 0 0 6px; font-size: 15px; font-weight: 700; color: var(--sp-ink); }
+.scast-changes { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; font-size: 14px; }
+.scast-changes li { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px; align-items: baseline; overflow-wrap: anywhere; }
+.scast-code {
+  display: inline-flex; min-width: 38px; justify-content: center; padding: 1px 6px; border-radius: 999px;
+  font-size: 12px; font-weight: 700; background: var(--sp-pink-soft); color: var(--sp-pink-deep);
+}
+@media (max-width: 900px) {
+  .scast { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 600px) {
+  .scast-person { grid-template-columns: minmax(0, 1fr); }
+  .scast-codes { justify-self: start; text-align: left; }
+}

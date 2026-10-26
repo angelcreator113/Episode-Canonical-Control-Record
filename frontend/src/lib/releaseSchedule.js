@@ -158,11 +158,21 @@ export function nextReleaseOf(view, seasonNumber = null, today = todayIso()) {
   return { state: 'next', row, text: formatDay(row.date), code: n != null ? `E${n}` : null, overdue: row.due === 'overdue' };
 }
 
-/** A roadmap slot's release day: its episode's row, else the slot number's date in its season; "Sun, Nov 1" or "Would be Sun, Nov 1". */
-export function slotWhen(view, slot, seasonNumber = null) {
+/**
+ * A roadmap slot's release row: its episode's row, else the slot number's
+ * date in its season ({ date, time, source }); null when there is none.
+ * slotWhen words it; the Season calendar (lib/seasonCalendar, 2026-10-26)
+ * places it on its day.
+ */
+export function slotRow(view, slot, seasonNumber = null) {
   if (!view || !slot) return null;
   const slots = (seasonNumber != null && seasonOf(view, seasonNumber)?.slots) || view.slots;
-  const row = slot.episode ? (view.episodes || []).find((r) => r.episode_id === slot.episode.id) : slots?.[slot.slot_number];
+  return (slot.episode ? (view.episodes || []).find((r) => r.episode_id === slot.episode.id) : slots?.[slot.slot_number]) || null;
+}
+
+/** A roadmap slot's release day (slotRow): "Sun, Nov 1" or "Would be Sun, Nov 1". */
+export function slotWhen(view, slot, seasonNumber = null) {
+  const row = slotRow(view, slot, seasonNumber);
   const day = formatDay(row?.date);
   if (!day) return null;
   return { text: row.source === 'preview' ? `Would be ${day}` : day, source: row.source };
