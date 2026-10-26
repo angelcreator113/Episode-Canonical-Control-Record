@@ -43,6 +43,29 @@ function socialTaskSource(task) {
   return task?.required ? 'goal' : 'optional';
 }
 
+/**
+ * A task backed by a deliverable row is done when the deliverable is
+ * submitted through its own status route (POST .../deliverables/:id/status;
+ * Evoni, 2026-10-26: "Required brand deliverables must not be completed
+ * through a generic manual social-task endpoint"), never by a manual tick.
+ */
+const DELIVERABLE_COMPLETION_DERIVED = 'DELIVERABLE_COMPLETION_DERIVED';
+const DELIVERABLE_DONE_STATUS = 'submitted';
+function completionIsDerived(task) {
+  return Boolean(task?.deliverable_id);
+}
+
+/**
+ * The episode's list with the task for this deliverable done, or null when
+ * the list has no such task or it is already done.
+ */
+function withDeliverableDone(socialTasks, deliverableId) {
+  const list = Array.isArray(socialTasks) ? socialTasks : [];
+  const i = list.findIndex((t) => t && String(t.deliverable_id) === String(deliverableId));
+  if (i < 0 || list[i].completed) return null;
+  return list.map((t, j) => (j === i ? { ...t, completed: true, completed_source: 'deliverable' } : t));
+}
+
 function isSocialTaskRequired(task) {
   return Boolean(task?.deliverable_id) && task.required !== false;
 }
@@ -152,6 +175,10 @@ module.exports = {
   RETIRED_SLOTS,
   socialTaskSource,
   isSocialTaskRequired,
+  completionIsDerived,
+  withDeliverableDone,
+  DELIVERABLE_COMPLETION_DERIVED,
+  DELIVERABLE_DONE_STATUS,
   deliverableTask,
   withDeliverableTasks,
   dealLocationLabel,
