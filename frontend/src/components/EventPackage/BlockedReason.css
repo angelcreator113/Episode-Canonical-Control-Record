@@ -1,0 +1,20 @@
+/* Why something can't run yet (BlockedReason.jsx): a quiet line with its
+   step as an inline button. Design tokens only. */
+.ebr {
+  margin: 6px 0 0; font-style: normal;
+  font-family: var(--font-sans); font-size: 13px; line-height: 1.4; color: var(--lala-ink-muted);
+}
+.ebr-icon { display: inline-block; margin-right: 4px; vertical-align: -1px; color: var(--accent-dark); }
+.ebr-text { overflow-wrap: anywhere; }
+.ebr-action {
+  display: inline-flex; align-items: center; gap: 3px; min-height: 32px; padding: 0 6px; margin: -6px 0; vertical-align: middle; white-space: nowrap;
+  border: none; border-radius: 8px; background: transparent; cursor: pointer;
+  font: inherit; font-weight: 600; color: var(--lala-lavender-text); text-decoration: underline; text-underline-offset: 2px;
+}
+.ebr-action svg { display: inline-block; }
+.ebr-action:hover { background: var(--lala-lavender-soft); }
+.ebr-action:focus-visible { outline: 2px solid var(--lala-lavender); outline-offset: 1px; }
+
+@media (max-width: 900px) {
+  .ebr-action { min-height: 44px; margin: -10px 0; }
+}

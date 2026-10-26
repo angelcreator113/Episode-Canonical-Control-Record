@@ -29,6 +29,7 @@ import ScreenThumbnailStrip from '../components/phone/ScreenThumbnailStrip';
 import ToolbarMenu from '../components/phone/ToolbarMenu';
 import PhoneFrame from '../components/phone/PhoneFrame';
 import PhoneSetupGuide, { phoneSetupProgress } from '../components/phone/PhoneSetupGuide';
+import { deadNavigateZones, missionScreenIssues, stripScreenFromLinks } from '../lib/phoneDeadLinks';
 import PhoneMapStage from '../components/phone/PhoneMapStage';
 import ConnectScreenList from '../components/phone/ConnectScreenList';
 import ContentAreaPicker from '../components/phone/ContentAreaPicker';
@@ -187,6 +188,8 @@ export default function UIOverlaysTab({ showId: propShowId }) {
   const [overlays, setOverlays] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
+  // The show's missions, for the health check (phone round step 1, D1).
+  const [missions, setMissions] = useState([]);
   const [showsLoaded, setShowsLoaded] = useState(false);
   const [activeScreen, setActiveScreen] = useState(null);
   const [panelOpen, setPanelOpen] = useState(false);
@@ -583,6 +586,20 @@ export default function UIOverlaysTab({ showId: propShowId }) {
       .finally(() => setLoading(false));
   }, [showId, flash]);
 
+  // The show's missions (every episode's), so the health check can name a
+  // mission that needs a screen the phone doesn't have. A failed read is
+  // logged and flags nothing; it is not the phone failing to load.
+  const loadMissions = useCallback(() => {
+    if (!showId) { setMissions([]); return; }
+    api.get(`/api/v1/ui-overlays/${showId}/missions`)
+      .then(r => setMissions(Array.isArray(r.data?.missions) ? r.data.missions : []))
+      .catch((err) => {
+        console.error('[UIOverlaysTab] missions not read, not checked:', err);
+        setMissions([]);
+      });
+  }, [showId]);
+  useEffect(() => { loadMissions(); }, [loadMissions]);
+
   // While Connect has unsaved zones, the screen being edited is checked as
   // drawn, not as last saved (phone audit, 2026-10-07: health named problems
   // already fixed, or missed new ones, until Save).
@@ -606,22 +623,38 @@ export default function UIOverlaysTab({ showId: propShowId }) {
 
       const missingTargetZones = links.filter(link => !link?.target);
       const brokenTargetZones = links.filter(link => link?.target && !generatedKeys.has(link.target));
+      // A "Go to" action wins over the target on the phone, so one to a
+      // missing screen is a dead link too (phone round step 1, D1).
+      const deadActionZones = deadNavigateZones(links, generatedKeys);
       const untypedContentZones = contentZones.filter(zone => !zone?.content_type);
       const overlapPairs = findZoneOverlapPairs(links);
 
       const invalidBounds = invalidBoundsZones.length;
       const missingTarget = missingTargetZones.length;
-      const brokenTarget = brokenTargetZones.length;
+      const brokenTarget = new Set([...brokenTargetZones, ...deadActionZones]).size;
+      const deadAction = deadActionZones.length;
       const untypedContent = untypedContentZones.length;
       const overlapCount = overlapPairs.length;
 
       const issues = [];
       const issueItems = [];
       if (brokenTarget > 0) issues.push(`${brokenTarget} zone${brokenTarget > 1 ? 's have' : ' has'} a missing destination screen`);
-      if (brokenTarget > 0) {
+      if (deadAction > 0) {
+        const name = (z) => `"${z.label || z.target || `Zone ${links.indexOf(z) + 1}`}"`;
+        issueItems.push({
+          id: `${screen.id}-dead-action`,
+          text: deadAction === 1
+            ? `${name(deadActionZones[0])} has a Go to action to a screen that isn't on the phone`
+            : `${deadAction} zones have a Go to action to a screen that isn't on the phone`,
+          mode: 'zones',
+          screenId: screen.id,
+          zoneId: deadActionZones[0]?.id,
+        });
+      }
+      if (brokenTargetZones.length > 0) {
         issueItems.push({
           id: `${screen.id}-broken-target`,
-          text: `${brokenTarget} broken target${brokenTarget > 1 ? 's' : ''}`,
+          text: `${brokenTargetZones.length} broken target${brokenTargetZones.length > 1 ? 's' : ''}`,
           mode: 'zones',
           screenId: screen.id,
           zoneId: brokenTargetZones[0]?.id,
@@ -696,6 +729,15 @@ export default function UIOverlaysTab({ showId: propShowId }) {
 
     return diagnostics;
   }, [overlays, draftScreenId, tapZonesDraft]);
+  // Missions that need a screen the phone doesn't have (phone round step 1,
+  // D1): a reward that opens it, or an objective or start condition that
+  // asks for a visit to it. Missions are edited on the episode's Missions tab.
+  // Nothing is checked while the screens failed to load: every screen
+  // would read as missing.
+  const missionIssues = useMemo(
+    () => (loadError && overlays.length === 0 ? [] : missionScreenIssues(missions, new Set(overlays.map(o => o.id)))),
+    [missions, overlays, loadError]
+  );
 
   // Full edit of a screen: select it and open the detail panel in Build.
   // The card's ⋮ → Edit, a click on a card with no image, and a card's
@@ -869,9 +911,10 @@ export default function UIOverlaysTab({ showId: propShowId }) {
     if (!confirm(`Delete "${screen.name}"? Any links pointing to this screen will be removed.`)) return;
     try {
       const deletedKey = screen.id;
+      let removed = null;
       if (screen.custom && screen.custom_id) {
         // Custom screen: delete the type definition (removes it from the list entirely)
-        await api.delete(`/api/v1/ui-overlays/${showId}/types/${screen.custom_id}`);
+        removed = (await api.delete(`/api/v1/ui-overlays/${showId}/types/${screen.custom_id}`))?.data?.data || null;
       }
       if (screen.asset_id) {
         // Delete the asset (image)
@@ -888,9 +931,10 @@ export default function UIOverlaysTab({ showId: propShowId }) {
       if (!(screen.custom && screen.custom_id)) {
         for (const overlay of overlays) {
           const links = getScreenLinks(overlay);
-          if (!overlay.asset_id || !links.some(l => l.target === deletedKey)) continue;
+          const kept = stripScreenFromLinks(links, deletedKey);
+          if (!overlay.asset_id || (kept.length === links.length && kept.every((l, i) => l === links[i]))) continue;
           try {
-            await api.put(`/api/v1/ui-overlays/${showId}/screen-links/${overlay.asset_id}`, { screen_links: links.filter(l => l.target !== deletedKey) });
+            await api.put(`/api/v1/ui-overlays/${showId}/screen-links/${overlay.asset_id}`, { screen_links: kept });
           } catch (cleanErr) {
             console.error(`[handleDeleteScreen] link cleanup failed on ${overlay.name}`, cleanErr);
             failed.push(overlay.name);
@@ -898,10 +942,11 @@ export default function UIOverlaysTab({ showId: propShowId }) {
         }
       }
       // Zones that led to it are gone from the other screens too.
+      // Go to actions that opened it go as well (phone round step 1, D1).
       const dropLinks = (o) => {
         const links = getScreenLinks(o);
-        if (!links.some(l => l.target === deletedKey)) return o;
-        const kept = links.filter(l => l.target !== deletedKey);
+        const kept = stripScreenFromLinks(links, deletedKey);
+        if (kept.length === links.length && kept.every((l, i) => l === links[i])) return o;
         return { ...o, screen_links: kept, metadata: { ...(o.metadata || {}), screen_links: kept } };
       };
       setOverlays(prev => prev.map(dropLinks));
@@ -916,7 +961,12 @@ export default function UIOverlaysTab({ showId: propShowId }) {
           || rest.find(o => o.generated && o.url && isScreen(o)) || null);
         setNavHistory([]);
       }
+      // Mission rewards that opened it were removed; missions that ask for
+      // a visit to it are kept, and the health check names them.
+      loadMissions();
+      const flagged = removed?.missionsFlagged?.length || 0;
       if (failed.length) flash(`Deleted, but links to it remain on: ${failed.join(', ')}`, 'error');
+      else if (flagged) flash(`Deleted. ${flagged} mission${flagged === 1 ? ' asks' : 's ask'} for a visit to it: change ${flagged === 1 ? 'it' : 'them'} on the episode's Missions tab.`, 'error');
       else flash('Deleted');
     } catch (err) { flash(err.response?.data?.error || err.message, 'error'); }
   };
@@ -1772,6 +1822,36 @@ export default function UIOverlaysTab({ showId: propShowId }) {
           onContinue={continueSetup}
           onRunPreview={runSetupFlowTest}
         />
+      )}
+
+      {/* Missions that need a screen the phone doesn't have (phone round
+          step 1, D1). Missions live on the episode, so each links there. */}
+      {!loading && missionIssues.length > 0 && (
+        <section className="ph-mission-health" role="status" aria-label="Missions to check" data-testid="phone-mission-health">
+          <p className="ph-mission-health__title">
+            {missionIssues.length} mission{missionIssues.length === 1 ? ' needs' : 's need'} a screen that isn&apos;t on the phone
+          </p>
+          <ul className="ph-mission-health__list">
+            {missionIssues.slice(0, 5).map(({ mission, rewards, objectives, start }) => (
+              <li key={mission.id}>
+                <strong>{mission.name || 'A mission'}</strong>
+                {': '}
+                {[
+                  ...objectives.map(o => `${o.label} asks for a visit to "${o.key}"`),
+                  ...start.map(k => `it starts after a visit to "${k}"`),
+                  ...rewards.map(k => `its reward opens "${k}"`),
+                ].join('; ')}
+                {mission.episode_id && (
+                  <>
+                    {' '}
+                    <a className="ph-mission-health__link" href={`/episodes/${mission.episode_id}?tab=phone`}>Open its episode</a>
+                  </>
+                )}
+              </li>
+            ))}
+          </ul>
+          {missionIssues.length > 5 && <p className="ph-mission-health__more">and {missionIssues.length - 5} more</p>}
+        </section>
       )}
 
       {/* No show to open (phone audit, 2026-10-15: "Loading…" spun for good):

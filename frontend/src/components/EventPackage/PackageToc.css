@@ -1,0 +1,17 @@
+/* "On this page" as the phone's section jump bar (PackageToc.jsx); its
+   desktop look and the chip row from 1000px down are in EventPackagePage.css. */
+.epp-toc-short { display: none; }
+
+@media (max-width: 900px) {
+  /* Short names, so most of the row fits on one screen; the full name stays
+     the link's name for a screen reader. */
+  .epp-toc a:has(.epp-toc-short) .epp-toc-long { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .epp-toc-short { display: inline; }
+  nav.epp-toc a { min-height: 44px; padding: 0 14px; gap: 6px; }
+  .epp-toc ul { gap: 6px; }
+  /* The row scrolls inside itself; it never widens the page. */
+  .epp-toc { max-width: 100%; }
+  .epp-toc ul { max-width: 100%; overscroll-behavior-x: contain; scroll-snap-type: x proximity; }
+  .epp-toc li { scroll-snap-align: start; }
+  nav.epp-toc a.is-active { font-weight: 700; box-shadow: inset 0 -2px 0 var(--lala-lavender); }
+}

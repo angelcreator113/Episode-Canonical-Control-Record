@@ -29,6 +29,9 @@ const BEAT_TYPES = [
 // A Markdown rule: three or more dashes, stars or underscores, spaced or not.
 const RULE_LINE = /^(?:-[ \t]*){3,}$|^(?:\*[ \t]*){3,}$|^(?:_[ \t]*){3,}$/;
 
+// `Lala (auto):`, `Lala (automatic reaction):`, `Lala (auto-reaction):`.
+const AUTO_REACTION = /^(?:\*\*|__)?\s*lala\s*\(\s*auto(?:matic)?(?:[\s-]*reaction)?\s*\)/i;
+
 const SPEAKER_MAP = {
   'lala': 'lala',
   'prime': 'prime',
@@ -249,11 +252,15 @@ function parseScript(scriptContent, options = {}) {
       if (dialogueMatch) {
         const speaker = SPEAKER_MAP[dialogueMatch[1].toLowerCase()] || 'system';
         const dialogue = dialogueMatch[2] || '';
+        // Lala's automatic reaction, `Lala (auto):` / `Lala (automatic
+        // reaction):` (Evoni, 2026-10-25; frontend lib/scriptSpeaker
+        // AUTO_REACTION): the game plays it, so it needs no voice activation.
+        const auto = speaker === 'lala' && AUTO_REACTION.test(trimmed);
         speakers.add(speaker);
-        dialogueLines.push({ speaker, line: dialogue, lineNumber });
+        dialogueLines.push({ speaker, line: dialogue, lineNumber, ...(auto ? { auto: true } : {}) });
         if (dialogue) wordCount += dialogue.split(/\s+/).length;
 
-        if (speaker === 'lala' && !voiceActivateSeen) {
+        if (speaker === 'lala' && !auto && !voiceActivateSeen) {
           warnings.push({
             code: 'lala_without_voice_activate',
             severity: 'warning',

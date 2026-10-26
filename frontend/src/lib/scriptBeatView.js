@@ -18,7 +18,8 @@ export const STATUS_LABELS = { approved: 'APPROVED', revision: 'NEEDS REVISION',
 export function beatStatus(beat, healthRows = []) {
   if (!beat) return 'draft';
   if (beat.approved) return 'approved';
-  const gaps = (healthRows || []).some((r) => r && !r.ok && r.beatId && r.beatId === beat.id);
+  // A tip (`advice`, lib/scriptPacing) is no revision.
+  const gaps = (healthRows || []).some((r) => r && !r.ok && !r.advice && r.beatId && r.beatId === beat.id);
   return gaps ? 'revision' : 'draft';
 }
 
@@ -72,7 +73,7 @@ export function beatChecklist(beat, { healthRows = [], scene = null, pictures = 
     { key: 'location', label: 'Has a location', ok: !!scene?.scene_set_name },
   ];
   for (const r of healthRows || []) {
-    if (r && r.beatId && r.beatId === beat.id) items.push({ key: `health-${r.key}`, label: shown(r.text), ok: !!r.ok });
+    if (r && !r.advice && r.beatId && r.beatId === beat.id) items.push({ key: `health-${r.key}`, label: shown(r.text), ok: !!r.ok });
   }
   items.push({ key: 'approved', label: 'Approved and locked', ok: !!beat.approved });
   return { items, done: items.filter((i) => i.ok).length, total: items.length };

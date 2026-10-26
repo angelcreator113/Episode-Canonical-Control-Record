@@ -39,7 +39,6 @@
 1	src/routes/memories/voice.js	} catch (_) { /* proceed without */ }
 1	src/routes/onboarding.js	db.Universe ? db.Universe.findAll({ attributes: ['id', 'name'] }).catch(() => []) : Promise.resolve([]),
 3	src/routes/onboarding.js	}).catch(() => []),
-1	src/routes/phoneAIRoutes.js	try { meta = JSON.parse(rows?.[0]?.metadata_text || '{}'); } catch { /* noop */ }
 1	src/routes/phonePlaythroughRoutes.js	try { meta = JSON.parse(row.metadata_text || '{}'); } catch { /* noop */ }
 1	src/routes/sceneProposeRoute.js	? db.CharacterCrossing.findAll({ where: { character_id: charIds }, order: [['created_at', 'DESC']], limit: 10 }).catch(() => [])
 1	src/routes/sceneProposeRoute.js	? db.CharacterGrowthLog.findAll({ where: { character_id: charIds, author_decision: { [Op.or]: ['accepted', null] } }, order: [['created_at', 'DESC']], limit: 20 }).catch(() => [])
@@ -76,8 +75,6 @@
 2	src/routes/tierFeatures.js	).catch(() => []);
 1	src/routes/tierFeatures.js	} catch { /* table may not exist */ }
 1	src/routes/tierFeatures.js	}).catch(() => []);
-3	src/routes/uiOverlayRoutes.js	try { meta = JSON.parse(rows[0].metadata_text || '{}'); } catch { /* skip */ }
-1	src/routes/uiOverlayRoutes.js	try { meta = r.metadata_text ? JSON.parse(r.metadata_text) : {}; } catch { /* skip */ }
 1	src/routes/wardrobe.js	} catch (e) { /* non-fatal */ }
 1	src/routes/wardrobeEventRoutes.js	} catch { /* return raw */ }
 1	src/routes/wardrobeEventRoutes.js	} catch { /* skip */ }
@@ -129,12 +126,6 @@
 3	src/services/groundedScriptGeneratorService.js	} catch { /* non-blocking */ }
 2	src/services/groundedScriptGeneratorService.js	}).catch(() => []);
 1	src/services/invitationGeneratorService.js	} catch { /* non-blocking */ }
-3	src/services/phoneContextBuilder.js	).catch(() => [[]]);
-2	src/services/phoneContextBuilder.js	try { meta = JSON.parse(r.metadata_text || '{}'); } catch { /* noop */ }
-1	src/services/phoneContextBuilder.js	try { meta = JSON.parse(row.metadata_text || '{}'); } catch { /* noop */ }
-1	src/services/phoneContextBuilder.js	try { payload = JSON.parse(r.payload_text || '{}'); } catch { /* noop */ }
-1	src/services/phoneContextBuilder.js	} catch { /* noop */ }
-1	src/services/phoneContextBuilder.js	} catch { /* table not yet created */ }
 1	src/services/postProcessingService.js	} catch (_) { /* best effort */ }
 1	src/services/registrySyncService.js	} catch { /* non-blocking */ }
 1	src/services/sceneGenerationService.js	} catch { /* non-blocking */ }

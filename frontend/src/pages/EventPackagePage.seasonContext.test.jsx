@@ -75,13 +75,14 @@ describe('EventPackagePage Season Context (§8(ff) A4)', () => {
     expect(within(block).queryByTestId('season-pressure')).toBeNull();
   });
 
-  test('an event in no slot names the next open slot and links to the roadmap', async () => {
+  // Evoni, 2026-10-25: "Not placed in the season yet · Place it", to the
+  // Events tab's Not placed yet (it said "Pencil it in on the Season page").
+  test('an event in no slot names the next open slot and links to Not placed yet', async () => {
     renderWith({ in_slot: false, season_number: 1, next_open: { label: 'S1 · E2', phase: { number: 1, title: 'Foundation' } } });
 
     const block = await screen.findByTestId('season-context');
-    expect(block.textContent).toMatch(/Not on the roadmap yet; the next open slot is S1 · E2/);
-    expect(block.textContent).toMatch(/Pencil it in on the Season page\./);
-    expect(within(block).getByRole('link', { name: 'the Season page' }).getAttribute('href')).toBe('/shows/show-1/season?tab=roadmap');
+    expect(block.textContent).toMatch(/Not placed in the season yet; the next open slot is S1 · E2 · Place it/);
+    expect(within(block).getByRole('link', { name: 'Place it' }).getAttribute('href')).toBe('/shows/show-1/season?tab=events&show=unplaced');
   });
 
   test('a show with no season shows no block', async () => {

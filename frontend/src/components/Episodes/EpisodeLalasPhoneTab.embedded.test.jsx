@@ -54,6 +54,8 @@ function mockGets({ overlays = [HOME, CALLS, CAMERA], frame = { phone_skin: 'lav
     if (url === '/api/v1/ui-overlays/s-1/frame') return Promise.resolve({ data: { success: true, ...frame } });
     if (url.startsWith('/api/v1/ui-overlays/s-1?')) return Promise.resolve({ data: { data: overlays } });
     if (url.startsWith('/api/v1/feed-enhanced/s-1/moments/ep-1')) return Promise.resolve({ data: { data: [] } });
+    // The needs card reads the saved script (EpisodePhoneNeeds); none here.
+    if (url === '/api/v1/episodes/ep-1') return Promise.resolve({ data: { data: { id: 'ep-1' } } });
     return Promise.reject(new Error(`unexpected GET ${url}`));
   });
 }
@@ -124,13 +126,13 @@ describe('EpisodeLalasPhoneTab — embedded phone (Task #1994)', () => {
   });
 
   // Evoni's Episode mock (2026-10-06): + Add screen and Edit tap zones.
-  test('Add screen and Edit tap zones link to the show\'s Lala\'s Phone in Producer Mode', async () => {
+  // Edit tap zones opens the Hub at the screen the phone shows (#2867's ?screen=; phone round step 2).
+  test('Add screen links to the show\'s Lala\'s Phone; Edit tap zones opens it at the screen shown', async () => {
     mockGets();
     renderTab();
     await phonePane();
-    for (const name of ['+ Add screen', 'Edit tap zones']) {
-      expect(screen.getByRole('link', { name }).getAttribute('href')).toBe('/shows/s-1/world?tab=overlays-tab');
-    }
+    expect(screen.getByRole('link', { name: '+ Add screen' }).getAttribute('href')).toBe('/shows/s-1/world?tab=overlays-tab');
+    expect(screen.getByRole('link', { name: 'Edit tap zones' }).getAttribute('href')).toBe('/shows/s-1/world?tab=overlays-tab&screen=home');
   });
 
   test('with no screens, the phone shows "Select a screen" and points to Producer Mode → Lala\'s Phone', async () => {

@@ -94,6 +94,8 @@ import UndoNotice from './UndoNotice';
 import { useUndo } from './useUndo';
 import { unpricedItems, nextUnpriced, getPriceWalk, setPriceWalk, retainPriceWalk } from '../../utils/eventPriceWalk';
 import DeliverableProgress from '../Deliverables/DeliverableProgress';
+import BlockedReason from './BlockedReason';
+import { blockedReasons } from '../../lib/eventFlow';
 import './EventTermsSection.css';
 
 // The deliverable formats that go out as a Pulse post (services/postMedia FORMAT_FOR_DELIVERABLE).
@@ -562,6 +564,18 @@ export default function EventTermsSection({ showId, eventId, event, locked, putE
     await loadDeliverables();
     await refreshPage();
     setProposing(false);
+  };
+
+  // Propose terms needs a paid part in the deal; "Pick one" opens the Deal's
+  // form above with its first box focused.
+  const proposeBlocked = blockedReasons({ plan, termsLocked: locked }).propose;
+  const openDealForm = () => {
+    setDealDraft(deal.components || []);
+    setTimeout(() => {
+      const form = document.querySelector('[data-testid="terms-deal-components-form"]');
+      if (form && typeof form.scrollIntoView === 'function') form.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      form?.querySelector('input, button')?.focus({ preventScroll: true });
+    }, 0);
   };
 
   const premiumChoices = premiumChoicesFrom(pricing?.card);
@@ -1067,6 +1081,10 @@ export default function EventTermsSection({ showId, eventId, event, locked, putE
             <p className="epp-term-note" data-testid="terms-no-cash">
               {plan.giftedValue ? 'Gifted: no cash income. The gifted value is recorded, never paid.' : 'No cash income for this deal.'}
             </p>
+          )}
+          {/* Why Propose terms is off, with the step that turns it on (2026-10-25). */}
+          {!locked && !pricing && dealDraft === null && (
+            <BlockedReason reason={proposeBlocked} onAction={openDealForm} testId="terms-propose-blocked" />
           )}
           {/* D14: a partnership that requires an appearance ticks Paid to appear (Terms > Deal). */}
           {plan.components.map((c) => componentRow(c.field, c.label, describeComponentFee(event, c.field), true))}

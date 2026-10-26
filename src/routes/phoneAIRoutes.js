@@ -19,7 +19,37 @@ const Anthropic = require('@anthropic-ai/sdk').default || require('@anthropic-ai
 const { buildPhoneContext } = require('../services/phoneContextBuilder');
 const { validateScreenLinks } = require('../services/phoneConditionSchema');
 
-const CLAUDE_MODEL = 'claude-sonnet-4-6';  // the repo's primary model (CLAUDE.md)
+// The house two-attempt loop (phone round step 1, D7; as
+// routes/worldEvents/suggest.js): each model is tried twice, 2s apart, on
+// 529/503 (overloaded); a 404 or repeated overload moves to the next model;
+// anything else, an out-of-budget refusal (aiCostTracker, 429) included, is
+// thrown at once and never retried. Every call goes through the SDK that
+// aiCostTracker patches, so it is logged and budget-gated.
+const MODELS = ['claude-sonnet-4-6'];
+const RETRY_DELAY_MS = 2000;
+
+async function createMessage(client, params, { delayMs = RETRY_DELAY_MS } = {}) {
+  for (const model of MODELS) {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        return await client.messages.create({ ...params, model });
+      } catch (apiErr) {
+        const status = apiErr?.status || apiErr?.error?.status;
+        if ((status === 529 || status === 503) && attempt < 1) {
+          console.warn(`[phoneAIRoutes] AI overloaded (${status}), retrying once:`, apiErr.message);
+          await new Promise((r) => setTimeout(r, delayMs));
+          continue;
+        }
+        if (status === 529 || status === 503 || status === 404) {
+          console.warn(`[phoneAIRoutes] AI unavailable (${status}) on this model:`, apiErr.message);
+          break;
+        }
+        throw apiErr;
+      }
+    }
+  }
+  throw Object.assign(new Error('The AI service is temporarily overloaded. Please try again.'), { status: 503 });
+}
 
 const SYSTEM_PROMPT = `You are a show-aware co-creator inside the Lala's Phone editor.
 You extend what the creator has already built — you do not invent a standalone phone.
@@ -85,9 +115,11 @@ function hintText(hint) {
 }
 
 // Out of AI budget (aiCostTracker sets status 429) is a 429 the page can
-// say plainly, not a 500.
+// say plainly, not a 500; an AI still overloaded after the retry is a 503.
 function aiErrorStatus(err) {
-  return err?.status === 429 ? 429 : 500;
+  if (err?.status === 429) return 429;
+  if (err?.status === 503) return 503;
+  return 500;
 }
 
 // Body: { asset_id, prompt_hint?, episode_id? }
@@ -129,8 +161,7 @@ router.post('/add-zones', requireAuth, aiRateLimiter, async (req, res) => {
     ].filter(Boolean).join('\n');
 
     const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-    const response = await client.messages.create({
-      model: CLAUDE_MODEL,
+    const response = await createMessage(client, {
       max_tokens: 1500,
       system: SYSTEM_PROMPT,
       messages: [{ role: 'user', content: userPrompt }],
@@ -221,7 +252,9 @@ router.post('/fill-content-zone', requireAuth, aiRateLimiter, async (req, res) =
       { replacements: { assetId: asset_id, showId: req.params.showId } }
     );
     let meta = {};
-    try { meta = JSON.parse(rows?.[0]?.metadata_text || '{}'); } catch { /* noop */ }
+    try { meta = JSON.parse(rows?.[0]?.metadata_text || '{}'); } catch (parseErr) {
+      console.error(`[phoneAIRoutes] screen ${asset_id} metadata is not JSON:`, parseErr.message);
+    }
     const zone = (meta.content_zones || []).find(z => z.id === zone_id);
     if (!zone) {
       return res.status(404).json({ success: false, error: 'content zone not found on this asset' });
@@ -246,8 +279,7 @@ router.post('/fill-content-zone', requireAuth, aiRateLimiter, async (req, res) =
     ].filter(Boolean).join('\n');
 
     const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-    const response = await client.messages.create({
-      model: CLAUDE_MODEL,
+    const response = await createMessage(client, {
       max_tokens: 1000,
       system: FILL_SYSTEM_PROMPT,
       messages: [{ role: 'user', content: userPrompt }],
@@ -289,3 +321,4 @@ router.post('/fill-content-zone', requireAuth, aiRateLimiter, async (req, res) =
 
 module.exports = router;
 module.exports.clampZone = clampZone;
+module.exports.createMessage = createMessage;

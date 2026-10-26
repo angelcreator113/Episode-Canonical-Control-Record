@@ -1266,7 +1266,7 @@ const EpisodeDetail = () => {
         {/* Phone tab — Lala's Phone for this episode (issue #1908): the
             Preview Phone action (issue #1601 moved it here, #1605 relabelled
             it; same phone.start handler and overlay), what is on the phone,
-            the deferred beat-requirements notice, and missions as a section
+            what the script needs from it (EpisodePhoneNeeds), and missions as a section
             (EpisodePhoneMissionsTab, unchanged toggles + MissionEditor). */}
         {tabKey === 'production.phone' && (
           <EpisodeLalasPhoneTab episode={episode} onPreview={phone.start} previewError={phone.error} />
