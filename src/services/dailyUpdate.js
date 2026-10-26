@@ -38,8 +38,16 @@
  *                    whose deliverables all went out.
  *   cost             today's AI spend (UTC day) against the daily budget,
  *                    and the features it went to
+ *   seasons          each show's season in progress ({ show_id, show, arc_id,
+ *                    season_number, title }), so the page can add that
+ *                    Season page's "Needs attention" list (Evoni, 2026-10-26,
+ *                    Season page round 3). The list itself is
+ *                    lib/seasonAttention's attentionItems, run by the page
+ *                    (components/Show/SeasonAttentionDigest) over the same
+ *                    reads the Season page makes, so it has the same items
+ *                    in the same words; it is not worked out a second time here.
  *
- *   dailyUpdate(db, { since, now }) → { since, now, since_yesterday, waiting, coming_up, cost }
+ *   dailyUpdate(db, { since, now }) → { since, now, since_yesterday, waiting, coming_up, cost, seasons }
  *
  * Reads only; no AI call. Every list is capped (LIMIT) and carries its full
  * count. Dr. Amara Sinclair and any confidential professional stay out
@@ -367,6 +375,16 @@ async function cost(db, { end }) {
   };
 }
 
+/** Each show's season in progress (the active arc), named for the page's Needs attention; one per show. */
+async function seasonsInProgress(db, shows) {
+  const list = await rows(db, `SELECT DISTINCT ON (a.show_id) a.id, a.show_id, a.season_number, a.title
+    FROM show_arcs a JOIN shows s ON s.id = a.show_id AND s.deleted_at IS NULL
+    WHERE a.deleted_at IS NULL AND a.status = 'active'
+    ORDER BY a.show_id, a.arc_number ASC LIMIT ${LIMIT}`, {}, 'seasons in progress');
+  return list.map((a) => ({ show_id: a.show_id, show: shows.get(a.show_id) || null, arc_id: a.id, season_number: Number(a.season_number) || 1, title: a.title || null }))
+    .sort((x, y) => String(x.show || '').localeCompare(String(y.show || '')));
+}
+
 async function dailyUpdate(db, { since, now } = {}) {
   const { start, end } = windowOf({ since, now });
   const shows = await showNames(db);
@@ -377,6 +395,7 @@ async function dailyUpdate(db, { since, now } = {}) {
     waiting: await waiting(db, shows),
     coming_up: await comingUp(db, { end }, shows),
     cost: await cost(db, { end }),
+    seasons: await seasonsInProgress(db, shows),
   };
 }
 

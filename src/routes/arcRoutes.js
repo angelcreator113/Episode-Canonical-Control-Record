@@ -25,7 +25,7 @@
  * PUT    /world/:showId/season/slots/:slotId/intention       — Edit a future slot's intention (A3)
  * POST   /world/:showId/season/slots/:slotId/intention/draft — Auto-draft it with AI (A3, Q12; a started draft slot from its episode, A9 as changed)
  * GET    /world/:showId/season/event/:eventId — The Event Package's Season Context (A4), read-only
- * GET    /world/:showId/season/threads           — Story threads, with drafts from seeds (Q9)
+ * GET    /world/:showId/season/threads           — Story threads, with drafts from seeds (Q9); ?season=N the threads that season touched
  * POST   /world/:showId/season/threads           — Create and name a thread (Q9)
  * PUT    /world/:showId/season/threads/:threadId — Rename or re-describe it
  * POST   /world/:showId/season/threads/:threadId/close — Close it (only Evoni closes, Q9)
@@ -37,12 +37,12 @@
  * POST   /world/:showId/season/proposals/:proposalId/dismiss — Dismiss it
  * GET    /world/:showId/season/reveals — The reveal plan (stage E): the season's slots, the show's kept
  *                                         secrets, which secret is hinted or revealed in which slot, and
- *                                         what is wrong with the plan (services/seasonRevealPlan)
+ *                                         what is wrong with the plan (services/seasonRevealPlan); ?season=N another season's
  * PUT    /world/:showId/season/reveals — { slot_id, secret_id, intent: hint|reveal, note? }: add or change one
  * DELETE /world/:showId/season/reveals/:revealId — Take it out of the plan
  * GET    /world/:showId/season/twists — Season twists (2026-10-23): each planted in one slot and paid off in a
  *                                        later one, the slots, threads and characters to link, and what is
- *                                        wrong with the list (services/seasonTwists)
+ *                                        wrong with the list (services/seasonTwists); ?season=N another season's
  * PUT    /world/:showId/season/twists — { title, description?, plant_slot_id, payoff_slot_id?, status?,
  *                                        thread_ids?, character_ids?, note? }: add one (or change it, with id)
  * PUT    /world/:showId/season/twists/:twistId — Change one
@@ -53,7 +53,10 @@
  * POST   /world/:showId/season/twists/:twistId/reopen   — Undo it: the plant is open again
  * GET    /world/:showId/season/needs — The relationships the season needs (planner PR 3, 2026-10-24): each
  *                                       twist's, thread's and slot purpose's pairs, the slot each is needed by,
- *                                       and whether it is there, a seed only, or missing (services/seasonNeeds)
+ *                                       and whether it is there, a seed only, or missing (services/seasonNeeds); ?season=N another season's
+ * GET    /world/:showId/season/cast — Who's in the season (2026-10-26): who appears in which slot (event hosts and
+ *                                      guests, approved story records) and the relationship changes per part
+ *                                      (services/seasonCast); ?season=N another season's
  * GET    /world/:showId/season/knows — What the season's AI reads of the story so far: the latest approved
  *                                       What changed record and the open follow-ups
  * GET    /world/:showId/season/slots/:slotId/notes — The slot's twists (plant, payoff) and reveals, for its panel
@@ -89,7 +92,10 @@ const { aiRateLimiter } = require('../middleware/aiRateLimiter');
  * ?season=N (the Season page's season switcher, 2026-10-25): that season's
  * arc id, of this show only; null when absent. Sends 400 for a value that is
  * not a season number and 404 when the show has no such season, returning
- * undefined so the route stops.
+ * undefined so the route stops. The roadmap and insights read it; since
+ * 2026-10-26 the Story and Secrets reads do too (threads, twists, the reveal
+ * plan, the needs, the cast; Evoni: they "always show the season in progress
+ * even when a past season (e.g. Season 1) is picked").
  */
 async function seasonArcId(models, req, res) {
   const raw = req.query.season;
@@ -428,9 +434,26 @@ router.get('/world/:showId/season/needs', requireAuth, async (req, res) => {
   try {
     const models = require('../models');
     const { getNeeds } = require('../services/seasonNeeds');
-    return res.json({ success: true, ...(await getNeeds(models.sequelize, req.params.showId)) });
+    const arcId = await seasonArcId(models, req, res);
+    if (arcId === undefined) return undefined;
+    return res.json({ success: true, ...(await getNeeds(models.sequelize, req.params.showId, { arcId })) });
   } catch (err) {
     return sendSlotError(res, err, 'season needs');
+  }
+});
+
+// GET /world/:showId/season/cast — who appears where and what changed between them, read-only
+router.get('/world/:showId/season/cast', requireAuth, async (req, res) => {
+  if (badShow(req, res)) return undefined;
+  try {
+    const models = require('../models');
+    const { seasonCast } = require('../services/seasonCast');
+    const arcId = await seasonArcId(models, req, res);
+    if (arcId === undefined) return undefined;
+    return res.json({ success: true, ...(await seasonCast(models.sequelize, req.params.showId, { arcId })) });
+  } catch (err) {
+    console.error('[ArcRoutes] season cast error:', err);
+    return res.status(500).json({ error: err.message });
   }
 });
 
@@ -530,8 +553,10 @@ router.get('/world/:showId/season/threads', requireAuth, async (req, res) => {
   try {
     const models = require('../models');
     const { listThreads, seedDrafts } = require('../services/storyThreadService');
-    const threads = await listThreads(models.sequelize, req.params.showId);
-    const drafts = await seedDrafts(models.sequelize, req.params.showId);
+    const arcId = await seasonArcId(models, req, res);
+    if (arcId === undefined) return undefined;
+    const threads = await listThreads(models.sequelize, req.params.showId, { arcId });
+    const drafts = await seedDrafts(models.sequelize, req.params.showId, { arcId });
     return res.json({ success: true, threads, drafts });
   } catch (err) {
     return sendSlotError(res, err, 'list threads');
@@ -657,7 +682,9 @@ router.get('/world/:showId/season/reveals', requireAuth, async (req, res) => {
   try {
     const models = require('../models');
     const { getPlan } = require('../services/seasonRevealPlan');
-    return res.json({ success: true, ...(await getPlan(models.sequelize, req.params.showId)) });
+    const arcId = await seasonArcId(models, req, res);
+    if (arcId === undefined) return undefined;
+    return res.json({ success: true, ...(await getPlan(models.sequelize, req.params.showId, { arcId })) });
   } catch (err) {
     return sendPlanError(res, err, 'reveal plan');
   }
@@ -702,7 +729,9 @@ router.get('/world/:showId/season/twists', requireAuth, async (req, res) => {
   try {
     const models = require('../models');
     const { getTwists } = require('../services/seasonTwists');
-    return res.json({ success: true, ...(await getTwists(models.sequelize, req.params.showId)) });
+    const arcId = await seasonArcId(models, req, res);
+    if (arcId === undefined) return undefined;
+    return res.json({ success: true, ...(await getTwists(models.sequelize, req.params.showId, { arcId })) });
   } catch (err) {
     return sendTwistError(res, err, 'season twists');
   }

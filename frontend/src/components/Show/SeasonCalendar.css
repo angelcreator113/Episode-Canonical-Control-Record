@@ -1,0 +1,60 @@
+/* The Season calendar (SeasonCalendar, 2026-10-26), inside .szn-page on its
+   --sp-* tokens. Wide: a seven-column month grid. At 600px and under the
+   grid gives way to a list by week (no sideways scroll at 375px). */
+.scal { margin-top: 12px; min-width: 0; }
+.scal-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.scal-month { margin: 0; min-width: 150px; text-align: center; font-family: var(--font-prose); font-size: 20px; font-weight: 600; color: var(--sp-ink); }
+.scal-nav {
+  display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border-radius: 999px;
+  border: 1px solid var(--sp-line); background: var(--sp-card); color: var(--sp-pink-deep); cursor: pointer;
+}
+.scal-nav:focus-visible, .scal-item:focus-visible { outline: 3px solid var(--sp-purple); outline-offset: 2px; }
+.scal-summary { flex: 1 1 200px; }
+.scal-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 10px 0; padding: 0; list-style: none; font-size: 13px; color: var(--sp-muted); }
+.scal-legend li { display: inline-flex; align-items: center; gap: 4px; }
+.scal-legend .is-release svg { color: var(--sp-pink-deep); }
+.scal-legend .is-event svg { color: var(--sp-purple); }
+.scal-legend .is-deadline svg { color: var(--sp-gold-text); }
+
+.scal-grid { display: table; width: 100%; min-width: 0; table-layout: fixed; border-collapse: separate; border-spacing: 4px; }  /* not responsive.css's 600px table scroller */
+.scal-grid th { padding: 4px 0; font-size: 12px; font-weight: 700; color: var(--sp-muted); text-align: left; }
+.scal-grid td {
+  height: 104px; padding: 6px; vertical-align: top; border-radius: 10px; background: var(--sp-card); border: 1px solid var(--sp-line);
+  overflow: hidden;
+}
+.scal-grid td.is-out { background: var(--sp-bg); }
+.scal-grid td.is-out .scal-day { color: var(--sp-muted); }
+.scal-grid td.is-today { border: 2px solid var(--sp-pink); }
+.scal-day { display: block; margin-bottom: 4px; font-size: 13px; font-weight: 700; color: var(--sp-ink); }
+.scal-day-items { display: grid; gap: 3px; }
+.scal-item {
+  display: flex; align-items: center; gap: 4px; width: 100%; min-width: 0; padding: 2px 6px; border: none; border-radius: 6px;
+  font: inherit; font-size: 12px; font-weight: 600; text-align: left; cursor: default;
+  background: var(--sp-pink-soft); color: var(--sp-pink-deep);
+}
+button.scal-item { cursor: pointer; }
+.scal-item.is-event { background: var(--sp-purple-soft); color: var(--sp-purple); }
+.scal-item.is-deadline { background: var(--sp-gold-soft); color: var(--sp-gold-text); }
+.scal-item.is-preview { opacity: .85; font-style: italic; }
+.scal-item.is-overdue { background: var(--sp-pink-deep); color: var(--sp-white); }
+.scal-item.is-soon { box-shadow: inset 3px 0 0 var(--sp-gold); }
+.scal-item svg { flex: none; }
+.scal-item-text { display: flex; flex-direction: column; min-width: 0; }
+.scal-item-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.scal-item-detail { font-weight: 400; color: inherit; opacity: .9; overflow-wrap: anywhere; }
+
+.scal-weeks { display: none; }
+.scal-week { margin-bottom: 12px; }
+.scal-week-title { margin: 0 0 6px; font-size: 14px; font-weight: 700; color: var(--sp-ink); }
+.scal-week-list { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.scal-week-list li { display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 8px; align-items: center; }
+.scal-week-day { font-size: 13px; font-weight: 700; color: var(--sp-muted); }
+.scal-week-list .scal-item { min-height: 44px; padding: 6px 10px; font-size: 13px; }
+.scal-week-list .scal-item-title { white-space: normal; }
+.scal-undated { margin-top: 8px; }
+
+@media (max-width: 600px) {
+  .scal-grid { display: none; }
+  .scal-weeks { display: block; }
+  .scal-month { min-width: 0; flex: 1 1 auto; }
+}

@@ -7,7 +7,9 @@
  * lib/seasonAttention's attentionItems; nothing is loaded here.
  *
  * Props: items (ranked), hrefFor(link) → the row's address, loading (a
- * source still loading: the list says so instead of "Nothing waiting").
+ * source still loading: the list says so instead of "Nothing waiting"),
+ * title and headingId (the daily update shows one list per show, each with
+ * its own heading; 2026-10-26), testId.
  */
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
@@ -17,13 +19,13 @@ import './SeasonAttention.css';
 
 const ICONS = { release: CalendarClock, held: Gift, slots: Clapperboard, goals: Target, events: CalendarHeart };
 
-export default function SeasonAttention({ items = [], hrefFor, loading = false }) {
+export default function SeasonAttention({ items = [], hrefFor, loading = false, title = 'Needs attention', headingId = 'satt-title', testId = 'szn-attention' }) {
   const [all, setAll] = useState(false);
   const { shown, more } = capAttention(items, all ? items.length : ATTENTION_CAP);
   return (
-    <section className="satt" aria-labelledby="satt-title" data-testid="szn-attention">
+    <section className="satt" aria-labelledby={headingId} data-testid={testId}>
       <header className="satt-head">
-        <h2 id="satt-title" className="satt-title"><AlertCircle size={18} aria-hidden="true" /> Needs attention</h2>
+        <h2 id={headingId} className="satt-title"><AlertCircle size={18} aria-hidden="true" /> {title}</h2>
         {items.length > 0 && <span className="satt-count" data-testid="szn-attention-count">{items.length}</span>}
       </header>
       {items.length === 0 ? (

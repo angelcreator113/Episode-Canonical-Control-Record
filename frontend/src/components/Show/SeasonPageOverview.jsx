@@ -14,7 +14,14 @@
  *              & Reveals (the hint and reveal slots per secret) and Season
  *              Goals, each with See all and an add button (Season Goals'
  *              open the Goals tab).
- *   Story      threads, twists, the reveal plan, the relationships needed.
+ *   Story      threads, twists, the reveal plan, the relationships needed, of
+ *              the season shown: a past season from the switcher reads its
+ *              own (`season`; Evoni, 2026-10-26: Story and Secrets "always
+ *              show the season in progress even when a past season (e.g.
+ *              Season 1) is picked"), as the Overview's Secrets & Reveals
+ *              card does. `carriedSlot` is an empty spot under a past
+ *              season's threads for what it carried into the next season (a
+ *              later AI step fills it).
  *   Results    this season's episodes (or every season's, `?seasons=all`) in
  *              the Episode Ledger (how each episode turned out: tier, score,
  *              money, what it changed; Producer Mode's old Episodes ›
@@ -199,20 +206,20 @@ function ThreadsSummary({ threads, goTab }) {
   );
 }
 
-/** Secrets & Reveals: per secret, the slots that hint at it and the one that reveals it (the reveal plan). */
-function SecretsSummary({ api, showId, goTab }) {
+/** Secrets & Reveals: per secret, the slots that hint at it and the one that reveals it (the reveal plan); `season` a past season's. */
+function SecretsSummary({ api, showId, goTab, season = null }) {
   const [plan, setPlan] = useState(null);
   const [error, setError] = useState(null);
   useEffect(() => {
     let cancelled = false;
-    api.get(`/api/v1/world/${showId}/season/reveals`)
+    api.get(`/api/v1/world/${showId}/season/reveals${season ? `?season=${encodeURIComponent(season)}` : ''}`)
       .then((r) => { if (!cancelled) setPlan(r.data); })
       .catch((err) => {
         console.error('[SeasonPage] reveal plan load failed:', err);
         if (!cancelled) setError(err?.response?.data?.error || 'The reveal plan could not be loaded.');
       });
     return () => { cancelled = true; };
-  }, [api, showId]);
+  }, [api, showId, season]);
   const rows = revealMatrix(plan).slice(0, 5);
   return (
     <SummaryCard title="Secrets & Reveals" testId="szn-sum-secrets" onSeeAll={() => goTab('story')}
@@ -262,7 +269,7 @@ function GoalsSummary({ goals, goTab }) {
   );
 }
 
-export function SeasonOverviewTab({ plan, api, showId, arc, roadmap, events, goTab, onEdit, onPanel, attention = null, hrefFor = null, release = null, readOnly = false }) {
+export function SeasonOverviewTab({ plan, api, showId, arc, roadmap, events, goTab, onEdit, onPanel, attention = null, hrefFor = null, release = null, readOnly = false, season = null }) {
   return (
     <div className="szn-overview-tab">
       {attention && hrefFor && (
@@ -288,22 +295,31 @@ export function SeasonOverviewTab({ plan, api, showId, arc, roadmap, events, goT
       <div className="szn-summary-row">
         <KeyEventsCard roadmap={roadmap} events={events} goTab={goTab} />
         <ThreadsSummary threads={plan.threadData.threads} goTab={goTab} />
-        <SecretsSummary api={api} showId={showId} goTab={goTab} />
+        <SecretsSummary api={api} showId={showId} goTab={goTab} season={season} />
         <GoalsSummary goals={plan.goals} goTab={goTab} />
       </div>
     </div>
   );
 }
 
-export function SeasonStoryTab({ plan, S, api, showId, setToast, goTab }) {
+export function SeasonStoryTab({ plan, S, api, showId, setToast, goTab, season = null, arc = null, carriedSlot = null }) {
   return (
     <div className="szn-story" data-testid="szn-story">
+      {season && (
+        <p className="szn-muted szn-story-season" data-testid="szn-story-season">
+          Season {arc?.season_number || season}&apos;s story: the threads it carried, its twists and its reveal plan.
+        </p>
+      )}
       {plan.roadmap && (
         <StoryThreadsCard threads={plan.threadData.threads} drafts={plan.threadData.drafts} S={S} api={api} showId={showId}
           onChanged={plan.loadRoadmap} setToast={setToast} />
       )}
-      <SeasonTwists showId={showId} api={api} onSeeAll={goTab ? () => goTab('plants') : null} />
-      <SeasonRevealPlan showId={showId} api={api} />
+      {/* AI mount point: "Carried into Season N" (what this past season hands on). Empty until a later step fills it. */}
+      {season && (
+        <div className="szn-ai-slot" data-slot="story-carried" data-testid="szn-slot-story-carried">{carriedSlot}</div>
+      )}
+      <SeasonTwists showId={showId} api={api} onSeeAll={goTab ? () => goTab('plants') : null} season={season} />
+      <SeasonRevealPlan showId={showId} api={api} season={season} />
       {plan.roadmap && <SeasonNeeds data={plan.needs.data} api={api} onChanged={plan.loadNeeds} error={plan.needs.error} onRetry={plan.loadNeeds} />}
     </div>
   );
