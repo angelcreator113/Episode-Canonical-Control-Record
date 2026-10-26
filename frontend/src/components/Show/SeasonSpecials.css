@@ -77,3 +77,14 @@
   .sspec-suggest, .sspec-two { grid-template-columns: 20px minmax(0, 1fr); }
   .sspec-suggest-actions { grid-column: 1 / -1; justify-content: flex-start; }
 }
+
+/* "Will be a special" on the Events tab (WillBeSpecial). */
+.sspec-will-row { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; min-width: 0; }
+.sspec-will {
+  display: inline-flex; align-items: center; gap: 4px; padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: 700;
+  background: var(--sp-gold-soft); color: var(--sp-ink); border: 1px solid var(--sp-line);
+}
+.sspec-will svg { color: var(--sp-gold-text); }
+.sspec-will.is-waiting { font-weight: 500; color: var(--sp-muted); border-style: dashed; background: transparent; }
+.sspec-will-swap { min-height: 32px; display: inline-flex; align-items: center; font-size: 13px; overflow-wrap: anywhere; }
+@media (max-width: 600px) { .sspec-will-swap { min-height: 44px; } }
