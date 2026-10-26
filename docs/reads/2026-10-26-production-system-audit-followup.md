@@ -1,5 +1,7 @@
 # Prime Studios — Production System Audit, follow-up (read)
 
+> **Revised 2026-10-26.** The recommendations in §2 (Stage), §3 (voices), §6 (order) and the owner decisions are superseded by `2026-10-26-production-architecture-decisions.md`, which records Evoni's rulings on these: script, Stage, PIP, voices, Scene Set inheritance, master deletion, Front and Back View, missing footage and precedence. Its §9 and §18 list each conflicting statement in this document. The findings here (what the code does today) are unchanged.
+
 **Basis.** `cb02c6a7`, the same as `2026-10-26-production-system-audit.md`. `origin/main` has since moved to `390de42b`; that change is season specials only, and it adds no new path that creates episodes (VERIFIED by diff).
 
 **Mode.** Read-only. The one exception is the export-argument fix in §5. It is written and tested on a separate local branch, `claude/export-job-args`. It is **not pushed and not proposed for merge** until Evoni approves.

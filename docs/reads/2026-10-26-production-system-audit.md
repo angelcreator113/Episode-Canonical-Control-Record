@@ -1,5 +1,7 @@
 # Prime Studios — End-to-End Production System Audit (read)
 
+> **Revised 2026-10-26.** The target-state map (§2), the roadmap (§7) and the owner questions (§8) are superseded by `2026-10-26-production-architecture-decisions.md`, which records Evoni's rulings and the updated implementation sequence. Its conflict tables (§9 and §18) list the affected statements. The current-state findings are unchanged.
+
 **Basis:** `origin/main` at `cb02c6a7` (2026-10-26). **Mode:** read-only. Nothing was implemented, migrated, merged or deployed. No host, database, S3 bucket or AWS API was contacted.
 **Scope:** *Styling Adventures with Lala*, from Season Planning to the FFmpeg export.
 **Out of scope:** My Little List. Its Phase 1 is open PR #3599 (`claude/my-little-list-phase1`). It is described in §E only where it touches the traced interaction.
