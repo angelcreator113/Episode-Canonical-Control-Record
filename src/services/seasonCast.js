@@ -159,7 +159,7 @@ function castFrom({ arc = null, slots = [], profiles = new Map(), records = [], 
     title: p.title || null,
     episode_start: Number(p.episode_start),
     episode_end: Number(p.episode_end),
-    changes: changes.filter((c) => c.phase === Number(p.phase)).map(({ phase, ...c }) => c),
+    changes: changes.filter((c) => c.phase === Number(p.phase)).map(({ phase: _phase, ...c }) => c),
   }));
 
   return {
