@@ -8,7 +8,7 @@
  * tab's chip.
  */
 import { describe, test, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 
 vi.mock('../../services/api', () => ({
@@ -40,6 +40,10 @@ const CHOICE = {
 };
 const CONTEXT = { in_slot: false, in_special: false, season_full: true, specials_ready: true, season_number: 1 };
 const wrap = (ui) => render(<MemoryRouter>{ui}</MemoryRouter>);
+// Renders inside act, so the load and every effect it sets off have run before the test goes on.
+// SwapPicker selects the suggested slot in an effect; on a slow runner that effect could land
+// after the test's change and undo it (Validate #7697, #7699).
+const renderSettled = async (ui) => { let r; await act(async () => { r = wrap(ui); }); return r; };
 const answer = (data) => vi.mocked(api.get).mockResolvedValue({ data: { success: true, data } });
 
 beforeEach(() => { Object.values(api).forEach((fn) => fn.mockReset()); });
@@ -63,8 +67,8 @@ describe('FullSeasonChoice: Will be a special', () => {
 
   test('a started slot and a two-parter cannot be swapped into, in plain words', async () => {
     answer(CHOICE);
-    wrap(<FullSeasonChoice showId="show" eventId="ev" context={CONTEXT} />);
-    const select = await screen.findByTestId('fsc-swap-slot');
+    await renderSettled(<FullSeasonChoice showId="show" eventId="ev" context={CONTEXT} />);
+    const select = screen.getByTestId('fsc-swap-slot');
     expect([...select.options].filter((o) => o.disabled).map((o) => o.value)).toEqual(['s2', 's11']);
     fireEvent.change(select, { target: { value: 's11' } });
     expect(screen.getByTestId('fsc-swap-outcome').textContent).toMatch(/E11 is Part 2 of a two-parter: a swap would split it/);
