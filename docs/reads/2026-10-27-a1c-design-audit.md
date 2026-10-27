@@ -1,15 +1,175 @@
-# A1c design and dependency audit (read), revision 3
+# A1c design and dependency audit (read), revision 4
 
-**Status:** design only. Nothing is implemented. A1c needs Evoni's approval of this plan, and of each release in §12, before any code.
+**Status:** design only. Nothing is implemented. Each release needs Evoni's approval before any code. The R1 implementation specification is a separate document: `docs/reads/2026-10-27-a1c-r1-spec.md`.
 
 **History:**
 - **Revision 1:** the code audit and the first design.
 - **Revision 2:** Evoni's rulings on D1–D11 and her seven requirements.
-- **Revision 3 (this one):**
-  - her rulings on N1–N6 (N1 with a clarification; N5 conditional; N6 modified);
-  - answers to her three technical questions: hints §6, stale saves §7, restore collisions §5;
-  - the release-boundary assessment, §12.
-  - It replaces revision 2. Where they differ, revision 3 wins.
+- **Revision 3:** her rulings on N1–N6; the hints, stale-save and restore answers; the release boundary.
+- **Revision 4 (2026-10-27):** her rulings on P1–P6 and her seven release conditions, set out in the "Revision 4" section below.
+  - Revision 4 wins wherever it differs from the revision 3 body that follows it. The body is kept for its detail.
+
+---
+
+## Revision 4: rulings P1–P6 and the release conditions
+
+### R4.1 Rulings
+
+| # | Ruling | Effect on the plan |
+|---|---|---|
+| P1 | Three releases, approved on two conditions: R1 and R2 stay **identity-neutral**, and R3 turns identity writes on **consistently for all ten writers** | R1 and R2 never write, retire or change identity data (R4.2). R3 turns writes on with one switch that every writer goes through (R4.4) |
+| P2 | Strict revision tokens for non-empty scripts, keeping local drafts, with an actionable conflict-or-reload path | As in §7. The old-tab sequence is spelled out in R4.6 |
+| P3 | All three inject refusals | The error names the blocking beat (number and label), or the locked beat holding an old `[EVENT:]` or `[LOCATION_HINT:]` tag. The tag is never moved to another beat or to the top |
+| P4 | The tightened repeated-line policy | As in §2.1, rule 3 |
+| P5 | Recorded edit operations, with explicit rules. **A broad AI rewrite never inherits keys by position** | See R4.3 |
+| P6 | The retention contract also covers references with no foreign key: JSON manifests, external asset records and future durable references. A foreign key alone is not assumed to protect everything | See R4.5. This replaces §9.2 |
+
+### R4.2 Identity-neutral in R1 and R2 (condition 1)
+
+**Neither release writes identity data.**
+- No `UPDATE` in R1 or R2 includes `script_line_keys`, on `episodes` or on `episode_script_versions`.
+- No key is minted, retired or changed.
+- A version row written in R1 or R2 has `script_line_keys = NULL`.
+- The R2 repair runs as a **dry run only**. Its apply step writes keys, so it arrives with R3.
+
+**Any row that already has keys is refused, never changed.**
+- Production should have none: nothing has ever written them. The pre-deploy check in the R1 spec confirms it.
+- If an R1 or R2 writer finds an episode whose `script_line_keys` is not null, it answers `409 LINE_IDENTITY_ACTIVE`: "Line identities are active for this episode; this version of the app can't change its script safely." Nothing is written.
+- This is also what keeps an R3 rollback safe (R4.7).
+
+**The identity plan is computed only for logs** (condition 2). After a write commits, the service simulates the identity plan from the replaced text to the saved text under §2's strict rules, with no hints. It logs **counts only**, as one line:
+
+`[line-identity-plan] {"v":1,"episode":"<id>","writer":"W1","source":"save","state":"unkeyed","lines_before":120,"lines_after":121,"kept_exact":110,"kept_group":4,"moved":1,"uncertain_similar":3,"uncertain_group":0,"new":3,"removed":2,"ms":4}`
+
+What the log line never contains:
+- script text, dialogue, line or beat labels;
+- line hashes (a short line's 32-bit hash could be guessed);
+- keys, character names or event names.
+
+Its failure is logged as a message with no content, and never affects the save. Its purpose is to measure, before R3, how often edits would fall into "uncertain" without hints.
+
+### R4.3 Identity rules for recorded operations (P5)
+
+| Operation | Rule |
+|---|---|
+| Edit a line's words (line editor) | same key: the person chose this one line |
+| AI rewrite of **one** line, "Use this" | same key: an explicit single-line replace the person accepted |
+| AI regenerate of a **beat**, and any AI or template rewrite of more than one line | **no positional inheritance.** Replaced lines are new. Only lines that come back byte-identical keep their keys, by the exact rules (§2.1, rules 2–3) |
+| Generate the whole script (AI or template) | the same: exact rules only |
+| Duplicate a line | the original keeps its key; the copy is new |
+| Split a line | the first part keeps the key; the other parts are new |
+| Merge lines | the merged line keeps the **first** line's key; the others retire |
+| Move a line, or move a beat | keys move with their lines |
+
+### R4.4 R3 activation gate (condition 4)
+
+R3 turns identity writes on with **one constant in the save service**. Every writer reaches the database only through that service, and a static guard proves it. Before the R3 deploy is approved, all of these must hold:
+
+1. **All ten writers.** The static guard shows `script_content` and `script_line_keys` are written only by the service. The integration matrix (W1–W10 × unkeyed / valid / inconsistent, plus atomicity and §5.4 invariants) passes with writes **on**.
+2. **Frontend hints.**
+   - Save and Approve send `line_hints`, `script_revision` and `identity_review:'ask'`, and the review round trip passes.
+   - The frontend `scriptLines` twin matches the server's (the A1a parity test).
+   - **For an episode that already has keys, the R3 server refuses any text write without `line_hints`,** answering `409 SCRIPT_CLIENT_OUTDATED`, "reload". A browser tab opened before R3 can't create identity churn.
+3. **Read and repair compatibility.**
+   - `line_identity` is right for all three states.
+   - Repair dry run and apply use the same rule function as the service, so the same input gives the same plan.
+   - The R2 report, run just before the R3 deploy, shows **no** episode with non-null keys.
+4. **Deployment state of every process.**
+   - The Deploy run's `RESTART_HEAD` is the R3 commit, and the frontend artifact was built from it.
+   - The worker is stopped (as today), or was restarted on R3. Workers write no scripts, which the guard confirms.
+   - No other script or scheduled job writes `script_content`: the guard also covers `scripts/`.
+5. **Rollback proven.** CI shows R2 code refusing writes to episodes that have keys (R4.7).
+6. **First production check after the deploy, with Evoni's approval:**
+   - one save keys an episode and `line_identity` reads `ok`;
+   - a second save keeps unchanged lines' keys;
+   - nothing changes in `script_voice_clips`.
+
+### R4.5 Retention contract (P6; replaces §9.2)
+
+1. **Today.**
+   - No durable reference to a version row exists: §9.1 lists everything that reads versions, all of it transient.
+   - No protection is claimed, and none is added.
+2. **What counts as a durable reference** is any stored value that names a version row or depends on its text or keys staying available, **whatever form it takes**:
+   - a foreign-key column;
+   - an id inside JSON (a manifest);
+   - an id in an external asset record, such as an object's metadata or a media service's record;
+   - any future durable record.
+3. **Protection lives in code, in one place.**
+   - `scriptVersions.prune` asks a **registry of reference providers**. Each provider answers "which of these version ids does my data still reference?", reading its own column, JSON path or asset table.
+   - `prune` keeps every id any provider names.
+   - **A foreign key with `ON DELETE RESTRICT` is added where the reference is a column,** as a second line of defence, never as the only one.
+4. **External records must be mirrored.** A reference that exists only in an external system (an object store, a third-party service) can't be protected. A feature that creates one must also write a database record its provider can read. Without that, the version it relies on is not protected, and the feature must not rely on it.
+5. **The first feature that adds a durable reference,** in the same PR:
+   - adds its provider to the registry (the registry is created by that first feature);
+   - adds the foreign key where applicable;
+   - adds a test that prune keeps a referenced version.
+6. **Approved manifests freeze their own copy** of text, keys and locks (REV R2.2). If they also record a version id, that is a durable reference.
+7. **Enforcement from R1, with no new structure.** A static test keeps an allowlist of the files that may read or name version rows today:
+   - `scriptVersions.js`;
+   - the version model;
+   - the history routes;
+   - the controller's restore check;
+   - `characterVoice` (a read at lock time).
+
+   Any new file that touches `episode_script_versions`, `EpisodeScriptVersion` or a stored version id fails CI until it is added to the allowlist **with its classification**: transient, or durable with a provider. The same test fails on any migration that references the table.
+
+### R4.6 An older browser tab across a deploy (condition 7)
+
+1. **Before R1 deploys,** a tab is open on the Script tab with unsaved text.
+   - That text is already kept in this browser's storage: `useScriptDraft` writes it 800 ms after typing stops, and again when the page unloads.
+   - Only a successful save clears it.
+2. **R1 deploys.** The tab keeps running the old page code, which doesn't know about `script_revision`.
+3. **The person presses Save.** The R1 server sees a non-empty stored script with no token and answers `409 SCRIPT_REVISION_REQUIRED`. Nothing is written.
+   - The old code shows "Save failed".
+   - The typed text stays on the page, and the stored draft is untouched because only a successful save clears it.
+   - Approve/Lock behaves the same way.
+4. **The person reloads** (or opens the episode again).
+   - The new page loads the current script and its `script_revision`.
+   - Because the stored draft differs from the saved script, the page shows "Put them back".
+   - If someone saved the script in the meantime, the existing confirmation warns: "The saved script has changed since these changes were kept. Put them back over it? Save keeps them; History has the saved one."
+5. **The person chooses.**
+   - **"Put them back"** puts the draft on the page, and Save sends it with the **current** token. The person has seen the warning, so this is an explicit decision.
+   - **Discard** keeps the newer script.
+   - Either way, the script being replaced is kept in History, atomically (N2).
+6. **Limits.**
+   - If the browser blocks storage, the draft only survives while the old tab stays open. The person can copy the text before reloading. The new page's conflict messages say so ("Copy your text before reloading if this browser doesn't keep drafts").
+   - A new tab opened after the deploy always has a token, so it never sees `SCRIPT_REVISION_REQUIRED`. It can see `SCRIPT_CHANGED` when another tab saved first.
+   - In that case the page:
+     - keeps the text;
+     - shows "This script changed since you opened it";
+     - offers "Load the newer script", which keeps the person's text as a draft, the same "Put them back" path;
+     - offers "Compare".
+
+### R4.7 Rollback, per release (condition 5)
+
+All three releases add no migration, so rolling back means deploying the previous release's commit through the Deploy workflow. The migrate step finds nothing pending.
+
+| Release rolled back | What happens | Data left behind |
+|---|---|---|
+| **R1 → before R1** | The previous behaviour returns, including the bugs R1 fixed: the inject editing locked beats, the swallowed failures, the missing guard, the non-atomic history. The old server ignores `script_revision`; tabs opened under R1 that keep sending it are fine | The version rows R1 wrote are ordinary rows, all with keys null. No identity data exists to clean up |
+| **R2 → R1** | The read fields and the admin report go. The repair dry run goes; it never wrote anything | Nothing |
+| **R3 → R2** | **Episodes R3 keyed become read-only for script changes.** R2's writers refuse them with `409 LINE_IDENTITY_ACTIVE`, keeping the page's draft. Episodes that are still unkeyed stay fully editable. **No key, version or voice clip is changed, so the identities stay valid** for when R3 is deployed again | The keys R3 wrote stay as they are and still describe their scripts, because nothing could change those scripts while R2 was running. Re-deploying R3 continues with no repair needed |
+
+**After an R3 rollback, the recommended response is to fix forward.** Making keyed episodes editable again without R3 would mean deliberately dropping their identities. That is a separate admin decision (Q1 below), never an automatic one.
+
+### R4.8 Voice clips (condition 6)
+
+- In all three releases, nothing reads, writes, re-keys, deletes or soft-deletes `script_voice_clips`, and clip matching is unchanged.
+- Each release's tests assert the table is untouched by every writer.
+- A1d comes after R3, with its own approval.
+
+### R4.9 Remaining question
+
+| # | Question | Recommendation |
+|---|---|---|
+| Q1 | Should R3 also ship an admin-only, per-episode "deactivate identity" tool (dry run, then apply, logged) for use after an R3 rollback? It would drop an episode's keys back to unkeyed | **Not now.** Fixing forward is safer, and the tool would itself be a write that discards identity data. Revisit only if an R3 rollback actually happens and keeps episodes read-only for too long |
+
+---
+
+*The revision 3 body follows. Where it differs from Revision 4 above, Revision 4 wins:*
+- *§8: repair apply moves to R3;*
+- *§9.2: replaced by R4.5;*
+- *§12.3: R2 is dry-run only.*
 
 **Measured at:** `main` `2899dbc9`, in production since Deploy #170.
 
