@@ -24,6 +24,232 @@ Where they conflict, the order they set applies: rulings, spec Rev 5 and review 
 
 ---
 
+# Revision 2 (Evoni's direction and six requirements, 2026-10-27)
+
+**Where Revision 2 disagrees with the body below, Revision 2 wins.** The body is kept as written.
+
+## R2.0 Decisions recorded (Evoni, 2026-10-27)
+
+Her proposed product direction, subject to the safeguards in R2.1–R2.6:
+
+| Q | Decision |
+|---|---|
+| Q1 | Yes: voice work proceeds before R3, with the validated association |
+| Q2 | Legacy clips are imported **unapproved** |
+| Q3 | The Teleprompter plays **approved and valid** takes only |
+| Q4 | Reuse the reviewed schema **after comparison** (R2.5) |
+| Q5 | Preserve the legacy editor |
+| Q6 | Desktop-first |
+| Q7 | **Isolated** background rendering (R2.4) |
+| Q8 | SRT later |
+| Q9 | Music and SFX later, with **reserved track support** |
+| Q10 | Per-line approval |
+| Q11 | Script hash **plus structured line context** |
+| Q12 | Prime's camera and audio remain synchronized (R2.2) |
+| Q13 | Working-preview warnings (R2.3) |
+| Q14 | Independent bug fixes. **A1 (export job settings) is authorised for local implementation only** |
+
+Still not authorised: B1, C1, B2, C2, D1, any push, PR, merge or deploy, restarting the worker, production data changes, and R2/R3.
+
+## R2.1 Approval binds to an exact candidate revision and a validated association; once invalidated it never reactivates
+
+**The risk:**
+1. A take is approved on script revision r1.
+2. At r2 the line is reworded, so the take is now unbound.
+3. At r3 the old wording comes back, by an undo, a restore or a coincidental edit.
+
+§3.2's resolver, which looks only at the current script, would call the take bound again and silently revive the approval. That is the "guess" Evoni ruled out.
+
+**Design (PROPOSED), replacing §4.1's approval and §3.2's approval paragraph:**
+
+**1. Candidates have revisions.** Every change to a candidate's trim, gain, fades or normalise creates a new immutable **candidate revision**:
+- table `line_voice_candidate_revisions`: `id, candidate_id, revision_no, in_s, out_s, gain_db, fade_in_ms, fade_out_ms, normalise, settings_hash, created_by, created_at`;
+- the candidate row holds only identity and its association.
+
+**2. An approval names exactly one candidate revision and one association check.**
+- `line_voice_approvals`: `candidate_revision_id`, `association_check_id`, `approved_revision` (the script `sr1-` hash), `approved_line_context` (R2.6), `approved_by`, `approved_at`, `invalidated_at`, `invalidated_reason`, `superseded_by`.
+
+**3. Validity is decided over the script's history, never by the current wording alone.** An approval is **valid** at the current script revision only when both hold:
+- **(a)** its candidate revision is still the candidate's latest;
+- **(b)** the line is bound, with the same structured line context (R2.6), in **every** script revision saved since `approved_revision`.
+
+**The history it walks:** A1c R1 already guarantees it. Every write of `script_content` goes through `scriptSave`, which keeps the replaced script as a version in the same transaction (`snapshotScript` strict), so the chain of revisions is complete. The walk:
+- **Read-only.** "Reading never writes" (review R3.1) holds: it reads `episode_script_versions` and computes.
+- **Cached** by `(approval_id, current revision)`.
+- **Deterministic.** The same history always gives the same answer.
+
+**4. Invalidation is permanent.**
+- If any revision in the chain unbound the line, the approval is invalid forever, even if a later revision restores the exact wording.
+- The first write that observes an invalid approval records `invalidated_at` and the reason, for display and audit. The writes that can observe it are an approve, an association confirm, and the start of a render job.
+- A restored wording makes the take **eligible for a new approval** (it is bound again), never re-approved.
+
+**5. A new approval supersedes, never edits.** The old row keeps `superseded_by`. There is at most one current approval per line (partial unique index).
+
+**6. Dependencies on script history:**
+- **Retention.** The walk depends on the script versions between `approved_revision` and now, which makes approvals a **durable dependency on version history** under the A1c retention contract (R4.5). B1 must add the provider: `prune` may not remove a version an unsuperseded approval's walk needs, unless the walk result is first recorded on the approval.
+- **A gap in the history fails closed.** If a version is missing, for example from before R1, the approval is treated as invalid.
+
+**What this prevents:**
+- reviving approvals because wording matches again;
+- approvals of a take that was later re-trimmed or re-gained (a new candidate revision);
+- approvals across a speaker or note change (R2.6).
+
+**Considered and not recommended:** the script save writes "revision changed" checks into the voice tables after commit. It needs no history walk, but it puts voice writes inside the A1c save path, against A1c R4.8 ("no release reads or writes voice clips"). It is noted in case Evoni prefers it (DECISION Q15).
+
+## R2.2 Prime's camera audio and video stay synchronized
+
+**Rule:** a Prime segment is one take, on one clock.
+
+**The data, under the reviewed C3 segments (R2.5):**
+- **The video:** `source_in`, `source_out` and its placement (anchor plus offset).
+- **The commentary:** a sub-range `audio_in`, `audio_out` in the **same source timebase**, plus `gain_db`, `muted`, `fade_in_ms` and `fade_out_ms`.
+- There is **no separate audio offset field**, so audio can't slide.
+
+**Constraints, enforced by the service and by a CHECK where SQL allows:**
+- `source_in ≤ audio_in < audio_out ≤ source_out`.
+- **Moving** the segment moves picture and commentary together: there is one placement.
+- **Trimming the video** clamps the commentary range inside the new video range. It never shifts it.
+- **Trimming the commentary** works only inside the video range.
+- **Splitting** a segment splits both at the same source time.
+- **Replacing the take** creates a new segment. The old one is kept, superseded.
+- **Hiding** the PIP (a visibility rule) never mutes the commentary.
+- **Muting** never hides the picture.
+
+**In the render:** `mixPlan` takes the commentary from the same file at `source_in + (t − placement)` with the commentary sub-range applied, so audio and video come from one decode position.
+
+**Golden test:** after move, trim-video, trim-audio, split and gain, a frame-exact check that the audio sample at a known clap marker equals the video frame time, ±1 frame at 30 fps.
+
+## R2.3 Working previews and review-ready previews
+
+There are two kinds of preview render. Neither is an export, and neither approves anything.
+
+**Working preview**
+- **When:** always renders, whatever is missing.
+- **What shows:**
+  - a burnt-in top banner: `WORKING PREVIEW · 7 issues`;
+  - at each unapproved or invalid line, a lower-third marker `UNAPPROVED · Lala · "…"`, with silence there;
+  - missing scene picture: a slate `MISSING SCENE · Beat 6`;
+  - missing Prime footage: a PIP placeholder `NO PRIME FOOTAGE`, with no audio invented.
+- **With it:** an `issues.json` and an on-page list with a time and a link per issue.
+
+**Review-ready preview**
+- **When:** renders only when there are **no blocking findings**:
+  - every active line has a valid approval (R2.1);
+  - every beat has a scene picture;
+  - Prime footage or an accepted fallback for every beat (Q-F1/Q-F2 still open; until decided, missing footage blocks review-ready);
+  - no `take_overruns_scene` left unresolved.
+- **What shows:** a small corner mark `REVIEW · <date>`, with no banners or slates.
+- **If you ask while something blocks:** the request is refused with the list. Nothing renders.
+
+**Both kinds:**
+- `render_jobs.kind` is `working_preview` or `review_preview` (`final` is reserved for the manifest export).
+- Both store the findings list and the exact project state hash they rendered, so the file can be traced to its inputs.
+- Outputs go to `previews/working/` and `previews/review/`.
+
+## R2.4 Render queue: isolation, limits, persistence, failure and retry
+
+**Checked against today's options (VERIFIED):**
+
+| Option | Isolated from request handling | Resource limits | Job state persists | Safe failure and retry |
+|---|---|---|---|---|
+| Green-removal queue (`rawClipMedia.js:146-214`) | **No.** In-process inside the API (ffmpeg is a child process at nice 15, but queueing, temp files and S3 streams share the API process) | nice 15, 2 h timeout, one at a time | **No:** in memory, lost on restart; stale after 3 h | Partial: "stale" marking only |
+| `episode-worker` with Bull/Redis (`workers/start.js`, `queues/videoQueue.js`) | Yes, separate PM2 process | concurrency `EXPORT_MAX_CONCURRENT_JOBS` (default 2); no CPU or memory limit | In Redis, if Redis persists (production Redis durability is **unverified**) | 3 attempts with backoff. Automatic retry of a render is not wanted for a long job |
+
+**Neither meets requirement 4 as it stands.** Note that the body's recommendation for Q7 (the green-removal queue) **fails isolation and persistence** and is withdrawn.
+
+**PROPOSED for D1: a dedicated render process with a database-backed job table.**
+
+**Isolation:**
+- A separate PM2 app, `episode-render`, runs only render jobs. It is not part of the API process, and not shared with scene generation.
+- The API only inserts a `render_jobs` row and reads its status.
+- Starting a new PM2 process is a production action: it needs Evoni, or a reviewed change to the Deploy workflow that starts it (DECISION Q16). It does not restart `episode-worker`.
+
+**Limits:**
+- one job at a time;
+- ffmpeg at `nice 19`, `ionice -c3`, `-threads 2`;
+- a PM2 memory limit (`max_memory_restart`, e.g. 1.5 GB);
+- a wall-clock timeout of 3× the episode length plus 10 minutes;
+- a temp-disk check before starting (refuses if free space is below 3× the estimated output);
+- a maximum episode length of 60 minutes per render.
+
+**Persistence:**
+- The `render_jobs` row is the state: `queued → running → done | failed | cancelled`, with `attempt`, `heartbeat_at`, `started_at`, `finished_at`, `error`, `output_s3_key`, `output_sha256` and `inputs_hash`.
+- Claiming a job is atomic: `UPDATE … SET status='running' … WHERE status='queued' … RETURNING`, with `FOR UPDATE SKIP LOCKED`.
+
+**Failure:**
+- A job whose heartbeat is older than 2 minutes is marked `failed` ("render stopped unexpectedly"). It is never resumed half-written.
+- Output is written to a temp key, then copied to its final key only after ffprobe confirms a playable file with the expected duration ±1 s and an audio stream.
+- A failed job leaves no output row and no final key.
+
+**Retry:** no automatic retry. "Render again" creates a new job with `attempt + 1` and the same inputs hash. Earlier failed jobs are kept for diagnosis.
+
+**Cancel:** sets `cancel_requested`. The worker checks it between stages and kills ffmpeg.
+
+## R2.5 Reviewed schema compared with the first release and future tracks
+
+| Track | First release needs | Reviewed schema | Fit | Gap and resolution |
+|---|---|---|---|---|
+| **Scene** (Lala's scenes) | picture per beat (still or angle video), duration, order, video in/out | C1: scene length stays `scenes.duration_seconds`, order `scene_number`. `timeline_items` is for object and camera keyframes, visibility, angle change and transition | **Partial** | No scene-video in/out. Duration lives on `scenes` rows the **legacy editor also writes** (Q5 keeps it). **Resolution:** scene timing stays on `scenes` (one owner, per the ruling "the Timeline owns duration"); add `scene_video_in_s` and `scene_video_out_s` to a new per-scene edit row; the legacy editor and the new one show the same durations. DECISION Q17 |
+| **Prime video** | take, trim, placement, layout, visibility | C3: segments (take, trim, anchor plus offset, layout overrides, audio gain); `episode_pip_settings`; `episode_pip_visibility` | **Good** | Add segment `superseded_by` (take replaced), keep `status` |
+| **Prime commentary** | gain, mute, fades, sub-range, synced | C3 segment `audio { role: 'prime_voice', gain }` | **Partial** | Add `audio_in`, `audio_out`, `muted`, `fade_in_ms`, `fade_out_ms`, with R2.2's constraints |
+| **Dialogue** | approved take placed at its line, optional nudge | none in C1/C3; voice is A6 (review R2.3) | **Missing** | Placement is derived from `line_start` anchors (no row needed). A nudge is a `timeline_items` row of a new kind, `audio_offset`, targeting the line association. C1's `kind` list is extended, not forked |
+| **Overlays** (later) | phone or UI overlay, time, layout | C1 `object_visibility` and keyframes cover timing; overlay objects come from the Stage (episode-scene object ids, C2) | **Good** (later) | none |
+| **Music, SFX** (reserved, Q9) | library file, range, gain, fades, ducking setting | none | **Missing** | New `timeline_audio_items` (`track` ∈ music, sfx; `asset_ref` library id; `source_in`, `source_out`; anchor plus offset; gain, fades; `duck_under_dialogue_db` explicit). Created in C1 so the tracks are **reserved**, with no UI in the first release |
+| **Captions** (later, Q8) | SRT from lines and timings | none | **Missing**, deferred | Derived at render from approved lines and their placements. Manual caption edits later, as `timeline_items` kind `caption_override` |
+| **Project** | a saved, editable timeline | none: C1 and C3 are per episode | **Missing** | **Recommendation:** one live edit per episode (as C1/C3 and the manifest assume), plus **named saved versions** (immutable snapshots of the episode's edit rows, restorable), rather than several parallel projects. This keeps one owner per fact. DECISION Q18 |
+
+**Result:**
+- adopt C3, with the commentary fields;
+- adopt C1's `timeline_items`, with the `audio_offset` kind added;
+- add `timeline_audio_items` (reserved music and SFX), `episode_scene_edits` (scene video in/out), `edit_versions` (saved snapshots) and `render_jobs`.
+
+§4.3's `edit_projects` and `edit_items` are **withdrawn**.
+
+## R2.6 Duplicates, speaker changes, restored scripts and approval invalidation, without guessing
+
+**Structured line context (Q11).** Each association and each approval stores:
+- `beat_number` and the beat's header text, as written;
+- `line_index` (teleprompter counting) and `occurrence`: which instance of identical lines in the beat, counting from the top;
+- `speaker` (resolved character key and the written name), `delivery_note` and `words`;
+- `row_hash`: the SHA-256 of the normalised whole line;
+- `prev_hash` and `next_hash`: the row hashes of the counted lines before and after it, or a beat edge;
+- `script_revision`: the `sr1-` hash.
+
+**The one rule** (pure, shared by front and back, unit-tested case by case):
+
+| Case | Decision | Why it doesn't guess |
+|---|---|---|
+| Revision unchanged since the check | bound | nothing changed |
+| Same position, same row, same neighbours | bound | three independent matches |
+| Same row and neighbours at another position, same beat, and the only such match | **moved**: needs a person's confirmation | the move is unambiguous, but a person still decides |
+| **Identical lines** (two `Lala: Okay.` in a beat) | Bound only with position **and** both neighbours matching. Otherwise **ambiguous**: shown with each possible line; a person picks | the occurrence index alone is never trusted after an edit |
+| **Speaker changed** (`Lala:` → `Guest:`), even with the same words | **unbound** | the speaker is in `row_hash` and checked separately |
+| **Delivery note changed** | **unbound** | the note is in `row_hash` |
+| Words changed | **unbound** | — |
+| Line moved to another beat, or the beat renumbered | **unbound**, with a "possible match in beat N" hint and no action | cross-beat matches are never applied |
+| **Script restored** to an older version | Evaluated like any new revision. Associations are re-checked; **approvals are not revived** (R2.1) | approval validity walks the history |
+| Unsaved page text | the server refuses association or approval unless the sent revision is current | — |
+| Prime's line | refused | Prime's voice is her take only |
+
+**When an approval is invalidated:**
+- the line plays silent in the Teleprompter (Q3) and in a working preview, with a marker;
+- review-ready previews are refused;
+- the take and its recording stay;
+- Voice Studio shows the reason ("speaker changed in revision of 27 Oct 15:02"), with **Approve again** when the take is bound again, or **Reassign** otherwise.
+
+## R2.7 New questions
+
+- **Q15:** approval validity by history walk (recommended), or by checks written after each script save, which touches the A1c save path?
+- **Q16:** the dedicated `episode-render` PM2 process: started by Evoni by hand once, or by a reviewed Deploy-workflow change?
+- **Q17:** scene duration stays on `scenes`, shared with the legacy editor (recommended), or a separate override for the new editor?
+- **Q18:** one live edit per episode with named saved versions (recommended), or several parallel projects?
+
+## R2.8 A1 status
+
+The independent export job settings fix is implemented and tested **locally** on branch `claude/export-job-settings`. It is reported separately; nothing is pushed.
+
+---
+
 ## 0. Summary
 
 1. **Today no path ends in a finished episode** (VERIFIED, §1.3):
