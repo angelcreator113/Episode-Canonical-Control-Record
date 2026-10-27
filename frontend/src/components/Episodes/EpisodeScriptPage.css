@@ -616,8 +616,12 @@
 .esp-truth-note { display: block; margin-top: 2px; font-size: 11px; font-weight: 400; color: var(--studio-ink-muted); }
 
 /* Version history and the kept draft (Script tab audit, 2026-10-15). */
-.esp-history { position: fixed; inset: 0 0 0 auto; width: min(420px, 100vw); z-index: 60; box-sizing: border-box; overflow-y: auto; padding: 16px; background: var(--studio-page); border-left: 1px solid var(--studio-line-strong); box-shadow: -8px 0 24px color-mix(in srgb, var(--studio-ink) 12%, transparent); }
-.esp-history-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+/* On the modal layer (Evoni, 2026-10-27: on a phone the site's sticky header
+   and the assistant button covered the panel's top, so Close could not be
+   seen or tapped). The header row stays in view as the list scrolls. */
+.esp-history { position: fixed; inset: 0 0 0 auto; width: min(420px, 100vw); z-index: var(--z-modal, 1100); box-sizing: border-box; overflow-y: auto; padding: 0 16px 16px; padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px)); background: var(--studio-page); border-left: 1px solid var(--studio-line-strong); box-shadow: -8px 0 24px color-mix(in srgb, var(--studio-ink) 12%, transparent); }
+.esp-history-head { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0 -16px 12px; padding: calc(12px + env(safe-area-inset-top, 0px)) 16px 12px; background: var(--studio-page); border-bottom: 1px solid var(--studio-line); }
+.esp-history-head .esp-btn { min-width: 44px; min-height: 44px; justify-content: center; }
 .esp-history-title { margin: 0; font-family: var(--font-prose); font-size: 18px; color: var(--studio-ink); }
 .esp-history-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
 .esp-history-item { display: grid; gap: 4px; width: 100%; text-align: left; padding: 10px; border: 1px solid var(--studio-line); border-radius: 10px; background: var(--studio-card); color: var(--studio-ink); cursor: pointer; }
@@ -631,7 +635,7 @@
 /* History audit (2026-10-24): a backdrop makes the panel modal on a desktop
    too (a click on it closes History); a version shows what putting it back
    changes, lines in and out of the page, in the success and danger pairs. */
-.esp-history-backdrop { position: fixed; inset: 0; z-index: 59; background: color-mix(in srgb, var(--studio-ink) 28%, transparent); }
+.esp-history-backdrop { position: fixed; inset: 0; z-index: calc(var(--z-modal, 1100) - 1); background: color-mix(in srgb, var(--studio-ink) 28%, transparent); }
 .esp-history-empty:empty { display: none; }
 .esp-history-error { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 10px; }
 .esp-history-error .esp-error { margin: 0; }
