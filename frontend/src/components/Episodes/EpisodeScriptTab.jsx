@@ -1542,6 +1542,11 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
   // The History version put on the page, named in the next Save
   // (restored_from), which the server keeps as a 'restore' snapshot (H7).
   const [restoredFrom, setRestoredFrom] = useState(null);
+  // A Save or Approve the server refused because the script changed since
+  // the page read it (A1c R1: SCRIPT_CHANGED, SCRIPT_REVISION_REQUIRED) or
+  // can't be changed by this app (LINE_IDENTITY_ACTIVE): { code, message }.
+  // The page text stays; the banner offers the newer script.
+  const [conflict, setConflict] = useState(null);
   // A key pressed in the Raw editor while it can't change (a lock or a new
   // script on its way): it says why instead of nothing (Raw editor audit, 2026-10-24).
   const [rawTried, setRawTried] = useState(false);
@@ -1984,6 +1989,7 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
     // while nothing has been edited here.
     api.get(`/api/v1/episodes/${episodeId}`).then((res) => {
       const ep = res?.data?.data || {};
+      if (mountedRef.current) noteRevision(typeof ep.script_content === 'string' ? ep.script_content : '', res?.data?.script_revision);
       if (!mountedRef.current || typeof ep.script_content !== 'string' || ep.script_content === script) return;
       const nowLocks = Array.isArray(ep.script_locked_beats) ? ep.script_locked_beats : lockedRef.current;
       // Edited here already: the newer one is the base, and the banner asks (H3).
@@ -2030,6 +2036,62 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
     setSavedScript(script); setLockedBeats(locks);
     if (scriptRef.current === script) { setNewer(null); return; }
     setNewer({ script, n: Date.now() }); setViewNewer(false);
+  };
+  // The script revision (A1c R1, src/services/scriptSave.js) the saved
+  // script was read or saved with: Save and Approve send it, and the server
+  // refuses a write against any other revision, so a page opened earlier
+  // never writes over a newer script. Kept with its text: a saved script
+  // taken without one (the episode page's copy) is read again first.
+  const revisionRef = useRef({ text: null, revision: null });
+  const noteRevision = (text, revision) => {
+    if (typeof revision === 'string' && revision) revisionRef.current = { text: typeof text === 'string' ? text : '', revision };
+  };
+  // The saved script as the server has it now: { script, locks, revision }, or null.
+  const readSaved = async () => {
+    try {
+      const res = await api.get(`/api/v1/episodes/${episodeId}`);
+      const ep = res?.data?.data || {};
+      const script = typeof ep.script_content === 'string' ? ep.script_content : '';
+      noteRevision(script, res?.data?.script_revision);
+      return { script, locks: Array.isArray(ep.script_locked_beats) ? ep.script_locked_beats : lockedRef.current, revision: res?.data?.script_revision || null };
+    } catch (err) {
+      console.error('[EpisodeScript] could not read the saved script:', err);
+      return null;
+    }
+  };
+  // The revision for this saved script, or null when the server's script is
+  // another one (the server then refuses the write, and the page says so).
+  const revisionFor = async (text) => {
+    if (revisionRef.current.text === text) return revisionRef.current.revision;
+    const now = await readSaved();
+    return now && now.script === text ? now.revision : null;
+  };
+  // A refused write's { code, message }, or null for any other failure.
+  const conflictOf = (err) => {
+    const d = err?.response?.data;
+    if (err?.response?.status !== 409 || !d) return null;
+    if (d.code === 'SCRIPT_CHANGED' || d.code === 'SCRIPT_REVISION_REQUIRED' || d.code === 'LINE_IDENTITY_ACTIVE') {
+      return { code: d.code, message: d.error || d.message || 'Nothing was saved.' };
+    }
+    return null;
+  };
+  // "Load the newer script": the newer one goes on the page as saved, and
+  // the page's text is kept in this browser, offered back by Put them back.
+  const loadNewer = async () => {
+    const now = await readSaved();
+    if (!now) { flash('Could not load the newer script. Try again.', 'error'); return; }
+    if (scriptRef.current !== now.script) draft.keep(scriptRef.current, savedRef.current);
+    setScriptText(now.script); setSavedScript(now.script); setLockedBeats(now.locks); reportSaved(now.script, now.locks);
+    setProposal(null); setRestoredFrom(null); setNewer(null); setUnsaved(null); setConflict(null);
+    flash('The newer script is on the page. Your text is kept: Put them back brings it back.', 'success', 7000);
+  };
+  // "Compare": the newer one becomes the page's base, the page's text stays,
+  // and the newer-script banner shows both (View newer, Keep mine, Use newer).
+  const compareNewer = async () => {
+    const now = await readSaved();
+    if (!now) { flash('Could not load the newer script. Try again.', 'error'); return; }
+    setConflict(null); reportSaved(now.script, now.locks);
+    takeNewer(now.script, now.locks); setViewNewer(true);
   };
   useEffect(() => { if (!busy && !locking) setRawTried(false); }, [busy, locking]);
   // Saved, or typed into the newer one's words: nothing is left to choose.
@@ -2273,8 +2335,12 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
     // A version put back from History is named, so the server keeps what it replaced as a restore (H7).
     const from = restoredFrom;
     try {
-      const res = await api.put(`/api/v1/episodes/${episodeId}`, { script_content: scriptText, ...(from ? { restored_from: from } : {}) });
+      // The revision of the saved script these edits were made on (A1c R1).
+      const revision = await revisionFor(savedRef.current);
+      const res = await api.put(`/api/v1/episodes/${episodeId}`, { script_content: scriptText, script_revision: revision, ...(from ? { restored_from: from } : {}) });
       const stored = typeof res?.data?.data?.script_content === 'string' ? res.data.data.script_content : scriptText;
+      noteRevision(stored, res?.data?.script_revision);
+      setConflict(null);
       const kept = res?.data?.locked_beats_kept || [];
       const moved = movedNote(res?.data?.locked_beats_moved);
       // Edits made while the save ran stay on the page (still unsaved).
@@ -2287,7 +2353,13 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
       if (kept.length || moved) flash(['Saved.', kept.length ? `${keptNote(kept)}.` : '', moved].filter(Boolean).join(' '), 'success', 6000);
       if (/\[UI:\s*POST\s/i.test(stored) && !(await syncPostDrafts())) flash("Saved, but Lala's post drafts could not be made. Save again to retry.", 'error', 6000);
     }
-    catch (err) { console.error('[EpisodeScript] save failed:', err); flash('Save failed', 'error'); }
+    catch (err) {
+      console.error('[EpisodeScript] save failed:', err);
+      // Refused, not failed: the page keeps its text and says what to do (A1c R1).
+      const refused = conflictOf(err);
+      if (refused) setConflict(refused);
+      else flash('Save failed', 'error');
+    }
     finally { setSaving(false); }
   }, [busy, locking, episodeId, scriptText, syncPostDrafts, restoredFrom]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -2584,11 +2656,15 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
     const sendText = text !== savedScript;
     setLocking(true);
     try {
-      const res = await api.put(`/api/v1/episodes/${episodeId}/script-locks`, { locked_beats: next, ...(sendText ? { script_content: text } : {}) });
+      // A lock, with or without text, is sent against the saved script's revision (A1c R1).
+      const revision = await revisionFor(savedScript);
+      const res = await api.put(`/api/v1/episodes/${episodeId}/script-locks`, { locked_beats: next, script_revision: revision, ...(sendText ? { script_content: text } : {}) });
       const data = res?.data?.data || {};
       const nowLocks = Array.isArray(data.script_locked_beats) ? data.script_locked_beats : next;
       setLockedBeats(nowLocks);
       const stored = sendText ? (typeof data.script_content === 'string' ? data.script_content : text) : savedScript;
+      noteRevision(stored, res?.data?.script_revision);
+      setConflict(null);
       reportSaved(stored, nowLocks);
       if (sendText) {
         if (stored !== scriptText && scriptRef.current === scriptText) { setScriptText(stored); }
@@ -2601,7 +2677,9 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
       if (kept.length || moved) flash([kept.length ? `${keptNote(kept)}.` : '', moved].filter(Boolean).join(' '), 'success', 6000);
     } catch (err) {
       console.error('[EpisodeScript] lock failed:', err);
-      flash(err.response?.data?.error || (beat.approved ? 'Could not unlock the beat' : 'Could not approve the beat'), 'error');
+      const refused = conflictOf(err);
+      if (refused) setConflict(refused);
+      else flash(err.response?.data?.error || (beat.approved ? 'Could not unlock the beat' : 'Could not approve the beat'), 'error');
     } finally { setLocking(false); }
   };
 
@@ -2626,6 +2704,7 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
           const ep = res.data?.data || res.data || {};
           const script = typeof ep.script_content === 'string' ? ep.script_content : null;
           if (script !== null && script !== before) {
+            noteRevision(script, res.data?.script_revision);
             setScriptText(script); setSavedScript(script); setUnsaved(null); setProposal(null); setNewer(null);
             const locks = Array.isArray(ep.script_locked_beats) ? ep.script_locked_beats : lockedRef.current;
             setLockedBeats(locks); reportSaved(script, locks);
@@ -2663,7 +2742,7 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
       const script = res.data.script || res.data.script_text || '';
       setScriptText(script);
       setProposal(null);
-      if (res.data.saved !== false) { setSavedScript(script); reportSaved(script, lockedRef.current); if (/\[UI:\s*POST\s/i.test(script)) syncPostDrafts(); }
+      if (res.data.saved !== false) { noteRevision(script, res.data.script_revision); setSavedScript(script); setConflict(null); reportSaved(script, lockedRef.current); if (/\[UI:\s*POST\s/i.test(script)) syncPostDrafts(); }
       // The server saves as part of success (audit GATE-03). Generated but
       // not saved: keep the draft here and say so; Save keeps it without
       // another generation.
@@ -2692,7 +2771,19 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
       console.error('[EpisodeScript] generate failed:', err);
       const status = err.response?.status;
       if (!err.response || status === 502 || status === 504) { await waitForSavedScript(before); return; }
-      setGenError(err.response?.data?.error || 'Generation failed');
+      // The script changed while the new one was written (A1c R1): the new
+      // one is on the page, unsaved, over the newer saved script, and the
+      // newer-script banner offers both (Save would write it over the newer one).
+      const d = err.response?.data;
+      if (status === 409 && d?.code === 'SCRIPT_CHANGED' && typeof d.draft === 'string') {
+        scriptRef.current = d.draft;
+        setScriptText(d.draft);
+        setUnsaved(d.error || 'The script changed while this one was being written, so it was not saved.');
+        const now = await readSaved();
+        if (now) { reportSaved(now.script, now.locks); takeNewer(now.script, now.locks); }
+        return;
+      }
+      setGenError(d?.error || 'Generation failed');
     }
     finally { if (mountedRef.current) setGenerating(false); }
   };
@@ -2899,6 +2990,16 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
       {/* A new suggestion is announced where it lands (Script tab audit 6, 2026-10-24). */}
       <div className="esp-sr" aria-live="polite" data-testid="script-proposal-live">{proposal ? (proposal.kind === 'beat' ? `New version of beat ${proposal.number} is ready: Use it or Keep mine.` : `The rewritten line is ready: ${proposal.versions?.length > 1 ? `${proposal.versions.length} versions; choose one, then Use this` : 'Use this'} or Keep mine.${proposal.tooSimilar ? ` ${TOO_SIMILAR_NOTE}` : ''}`) : ''}</div>
 
+      {conflict && (
+        <div className="esp-unsaved-banner" data-testid="script-conflict" role="alert">
+          <span className="esp-unsaved-banner-text"><strong>Not saved.</strong> {conflict.message}</span>
+          {conflict.code !== 'LINE_IDENTITY_ACTIVE' && <>
+            <button type="button" className="esp-btn-primary is-small" data-testid="script-conflict-load" disabled={saving || busy || locking} onClick={loadNewer}>Load the newer script</button>
+            <button type="button" className="esp-btn is-small" data-testid="script-conflict-compare" disabled={saving || busy || locking} onClick={compareNewer}>Compare</button>
+          </>}
+          <button type="button" className="esp-btn is-small" data-testid="script-conflict-dismiss" onClick={() => setConflict(null)}>Dismiss</button>
+        </div>
+      )}
       {unsaved && (
         <div className="esp-unsaved-banner" data-testid="script-unsaved" role="alert">
           <span className="esp-unsaved-banner-text"><strong>Not saved.</strong> {unsaved} The draft is only on this page until it is saved.</span>

@@ -1476,19 +1476,32 @@ router.post('/:id/generate-beats', requireAuth, aiRateLimiter, asyncHandler(asyn
     ].join('\n');
   }
 
-  // Save to episode, keeping its locked beats (utils/scriptBeatLocks.js)
+  // Save to episode through services/scriptSave.js (A1c R1): the row
+  // locked; an existing script kept unless confirmOverwrite, as for the
+  // other generators (D10); locked beats kept; the replaced script kept as a
+  // version, a failure failing the save. The response's script is the saved one.
+  const { saveEpisodeScript, sendScriptSaveError } = require('../services/scriptSave');
   const { scriptKeepingLocks } = require('../utils/scriptBeatLocks');
-  script = scriptKeepingLocks(episode, script).script;
-  // Version history (services/scriptVersions.js; History audit H2,
-  // 2026-10-24): the script this replaces is kept first; a failure to keep
-  // it never stops the save.
-  const { snapshotScript } = require('../services/scriptVersions');
-  await snapshotScript(require('../models'), episode, { source: 'generate', userId: req.user?.id, next: script });
-  await episode.update({ script_content: script });
+  const generated = script;
+  let saved;
+  try {
+    saved = await saveEpisodeScript(require('../models'), id, {
+      writer: 'W9',
+      source: 'generate',
+      guard: req.body || {},
+      userId: req.user?.id,
+      compose: (row) => ({ script: scriptKeepingLocks(row, generated).script }),
+    });
+  } catch (err) {
+    if (sendScriptSaveError(res, err)) return undefined;
+    throw err;
+  }
+  script = saved.script_content;
 
   return res.json({
     success: true,
     script,
+    script_revision: saved.script_revision,
     source: worldEvent ? 'world_event' : 'basic_template',
     event_name: worldEvent?.name || null,
     beat_count: (script.match(/## BEAT:/g) || []).length,

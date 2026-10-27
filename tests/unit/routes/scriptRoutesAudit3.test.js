@@ -18,11 +18,12 @@ jest.mock('@anthropic-ai/sdk', () => {
   Anthropic.default = Anthropic;
   return Anthropic;
 });
-jest.mock('../../../src/models', () => ({
-  EpisodeBrief: { findOne: async () => ({ id: 'b1', toJSON: () => ({}) }) },
-  Episode: { findByPk: async () => ({ id: 'ep1', show_id: '3f2a9c1e-0000-4000-8000-000000000001', deleted_at: null, script_content: '', script_locked_beats: [] }) },
-  ScenePlan: {}, SceneSet: {},
-}));
+jest.mock('../../../src/models', () => {
+  const Episode = { findByPk: async () => ({ id: 'ep1', show_id: '3f2a9c1e-0000-4000-8000-000000000001', deleted_at: null, script_content: '', script_locked_beats: [] }) };
+  // The script revision is read unscoped before the writing (A1c R1, services/scriptSave.js).
+  Episode.unscoped = () => Episode;
+  return { EpisodeBrief: { findOne: async () => ({ id: 'b1', toJSON: () => ({}) }) }, Episode, ScenePlan: {}, SceneSet: {} };
+});
 jest.mock('../../../src/middleware/auth', () => {
   const actual = jest.requireActual('../../../src/middleware/auth');
   return { ...actual, requireAuth: (req, _res, next) => { req.user = { id: 'u1' }; next(); } };

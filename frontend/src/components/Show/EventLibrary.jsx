@@ -634,7 +634,9 @@ The revised event should feel like a completely different experience from the si
         const epLabel = ep ? `${ep.episode_number || '?'}. ${ep.title || 'Untitled'}` : 'episode';
         const sceneSet = res.data.scene_set;
         const pending = sceneSet?.status === 'needs_reconnecting' || sceneSet?.status === 'choose';
-        const msg = !pending ? `✅ Injected into ${epLabel}`
+        // No script yet (A1c R1): attached, its tag not added.
+        const untagged = res.data.script_tagged === false ? ' · no script yet, so the event tag was not added' : '';
+        const msg = !pending ? `✅ ${untagged ? 'Attached to' : 'Injected into'} ${epLabel}${untagged}`
           : sceneSet.status === 'choose' ? 'Event attached · Choose its scene set' : 'Event attached · Scene set needs reconnecting';
         setSceneSetReconnect(pending ? { eventId, status: sceneSet.status, reason: sceneSet.reason || null, options: sceneSet.options || [] } : null);
         // Show inline success in the inject panel briefly; a scene set still

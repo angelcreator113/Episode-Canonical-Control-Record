@@ -386,6 +386,89 @@ function keyForStoredLine(storedLine, scriptText, stored) {
   return found.length === 1 ? stored.lines[found[0].index].k : null;
 }
 
+/**
+ * The strict identity plan from one text to the next (A1c, Evoni,
+ * 2026-10-27; docs/reads/2026-10-27-a1c-design-audit.md §2 and R4): which
+ * lines would keep an identity with no editor hints, and which would not.
+ * Exact text only; similarity alone never keeps an identity.
+ *   - a text once in each: kept (same beat) or moved (another beat);
+ *   - a text repeated the same number of times in each, with no other
+ *     exactly-matched line moved past any copy: its copies are paired in
+ *     order (group);
+ *   - a repeated text whose count changed, or whose copies another line
+ *     moved past: every copy is uncertain (uncertainGroup);
+ *   - an unmatched new line with words at least half the same as an
+ *     unmatched old line of its beat: uncertain, a suggestion only
+ *     (uncertainSimilar); never paired;
+ *   - every other new line is new; every unmatched old line is removed.
+ * Pure. Used in A1c R1 only for counts (services/identityPlanLog.js); it
+ * stores nothing and leaves matchLines and reconcileLineKeys as they are.
+ * { pairs: [{ old, new, kind }], counts: { lines_before, lines_after,
+ *   kept_exact, moved, kept_group, uncertain_group, uncertain_similar, new, removed } }
+ */
+function planLineIdentity(prevText, nextText) {
+  const before = scriptLines(prevText);
+  const after = scriptLines(nextText);
+  const byHash = (lines) => {
+    const m = new Map();
+    lines.forEach((l, i) => { if (!m.has(l.h)) m.set(l.h, []); m.get(l.h).push(i); });
+    return m;
+  };
+  const oldBy = byHash(before);
+  const newBy = byHash(after);
+  const pairs = [];
+  const groups = [];
+  const uncertainNew = new Set();
+  for (const [h, news] of newBy) {
+    const olds = oldBy.get(h);
+    if (!olds) continue;
+    if (olds.length === 1 && news.length === 1) {
+      pairs.push({ old: olds[0], new: news[0], kind: before[olds[0]].b === after[news[0]].b ? 'kept' : 'moved', h });
+    } else if (olds.length === news.length) {
+      groups.push({ h, olds, news });
+    } else {
+      news.forEach((n) => uncertainNew.add(n));
+    }
+  }
+  // A repeated group holds only when no other exact match crosses any copy.
+  const candidate = [...pairs, ...groups.flatMap((g) => g.olds.map((o, k) => ({ old: o, new: g.news[k], kind: 'group', h: g.h })))];
+  const crosses = (a, b) => (a.old - b.old) * (a.new - b.new) < 0;
+  const failed = new Set();
+  for (const g of groups) {
+    const mine = candidate.filter((p) => p.h === g.h);
+    const others = candidate.filter((p) => p.h !== g.h);
+    if (mine.some((p) => others.some((q) => crosses(p, q)))) failed.add(g.h);
+  }
+  for (const g of groups) {
+    if (failed.has(g.h)) { g.news.forEach((n) => uncertainNew.add(n)); continue; }
+    g.olds.forEach((o, k) => pairs.push({ old: o, new: g.news[k], kind: 'group', h: g.h }));
+  }
+  const oldTaken = new Set(pairs.map((p) => p.old));
+  const newTaken = new Set(pairs.map((p) => p.new));
+  // Suggestions only: an unmatched new line like an unmatched old one in its beat.
+  let similar = 0;
+  after.forEach((line, n) => {
+    if (newTaken.has(n) || uncertainNew.has(n)) return;
+    const like = before.some((o, p) => !oldTaken.has(p) && o.b === line.b && similarity(o.norm, line.norm) >= EDIT_SIMILARITY);
+    if (like) { similar += 1; uncertainNew.add(n); }
+  });
+  const count = (kind) => pairs.filter((p) => p.kind === kind).length;
+  return {
+    pairs: pairs.map(({ old, new: n, kind }) => ({ old, new: n, kind })).sort((a, b) => a.new - b.new),
+    counts: {
+      lines_before: before.length,
+      lines_after: after.length,
+      kept_exact: count('kept'),
+      moved: count('moved'),
+      kept_group: count('group'),
+      uncertain_group: [...uncertainNew].length - similar,
+      uncertain_similar: similar,
+      new: after.length - newTaken.size,
+      removed: before.length - oldTaken.size,
+    },
+  };
+}
+
 module.exports = {
   VERSION,
   KEY_RE,
@@ -399,4 +482,5 @@ module.exports = {
   reconcileLineKeys,
   restoreLineKeys,
   keyForStoredLine,
+  planLineIdentity,
 };

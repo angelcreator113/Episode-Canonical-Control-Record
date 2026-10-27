@@ -39,7 +39,8 @@ const mockEpisodes = {
 };
 
 const mockEventUpdates = [];
-const mockTx = { id: 'tx' };
+// LOCK as Sequelize's transaction has it (services/scriptSave.js locks the episode row; A1c R1).
+const mockTx = Object.defineProperty({ id: 'tx' }, 'LOCK', { value: { UPDATE: 'UPDATE' } });
 
 const mockQuery = jest.fn(async (sql, opts = {}) => {
   const r = opts.replacements || {};
@@ -74,13 +75,14 @@ const mockQuery = jest.fn(async (sql, opts = {}) => {
 const mockEpisodeUpdate = jest.fn(async () => {});
 const mockEpisodeFindOne = jest.fn(async () => { throw new Error('PASSED_GUARD'); });
 
-jest.mock('../../../src/models', () => ({
-  sequelize: {
+jest.mock('../../../src/models', () => {
+  const sequelize = {
     query: (...args) => mockQuery(...args),
     // Managed transaction; called as (cb) or ({ transaction }, cb) for a savepoint.
     transaction: jest.fn(async (a, b) => (typeof a === 'function' ? a(mockTx) : b(mockTx))),
-  },
-  Episode: {
+  };
+  const Episode = {
+    sequelize,
     findByPk: jest.fn(async (id) => {
       const ep = mockEpisodes[id];
       return ep ? { ...ep, script_content: '', update: mockEpisodeUpdate } : null;
@@ -88,8 +90,11 @@ jest.mock('../../../src/models', () => ({
     // generateEpisodeFromEvent's episode-number fallback: reaching it means
     // the used-event guard let the event through.
     findOne: (...args) => mockEpisodeFindOne(...args),
-  },
-}));
+  };
+  // The script is saved through services/scriptSave.js, which reads the row unscoped (A1c R1).
+  Episode.unscoped = () => Episode;
+  return { sequelize, Episode };
+});
 jest.mock('@anthropic-ai/sdk', () => jest.fn().mockImplementation(() => ({ messages: { create: jest.fn() } })));
 jest.mock('../../../src/middleware/aiRateLimiter', () => ({ aiRateLimiter: (_req, _res, next) => next() }));
 jest.mock('../../../src/middleware/auth', () => {
@@ -136,11 +141,12 @@ const inject = (eventId, episodeId) =>
   request(app).post(`/api/v1/world/${SHOW}/events/${eventId}/inject`).send({ episode_id: episodeId });
 
 describe('POST /world/:showId/events/:eventId/inject (a started event is never moved, §8(x) D4)', () => {
-  test('an unused event is injected: script saved and event marked used', async () => {
+  test('an unused event is injected: event marked used (its episode has no script yet, so none is written; A1c R1)', async () => {
     const res = await inject('ev-unused', 'ep-target');
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
-    expect(mockEpisodeUpdate).toHaveBeenCalledTimes(1);
+    expect(res.body.script_tagged).toBe(false);
+    expect(mockEpisodeUpdate).not.toHaveBeenCalled();
     expect(mockEventUpdates).toHaveLength(1);
     expect(mockEventUpdates[0].replacements).toEqual({ episodeId: 'ep-target', eventId: 'ev-unused' });
     expect(mockEventUpdates[0].sql).toMatch(/status = 'used'/);
