@@ -46,6 +46,14 @@ describe('the verb phrase', () => {
     expect(goalMatch([B(11, 'Lala: "Velour, we co-styled a moment!"')], brand, null)?.beat).toBe(11);
     expect(goalMatch([B(11, 'Lala: "Velour has style, what a moment."')], brand, null)).toBeNull();
   });
+  test('the verb in the past tense the stem does not reach (Evoni, 2026-10-27)', () => {
+    expect(goalMatch([B(11, 'Lala: "I finally got to know Marcus Hale."')], GUEST, person())).toMatchObject({ beat: 11, as: 'Marcus Hale' });
+    expect(goalMatch([B(11, 'Lala: "Got to know you, Truthville!"')], GUEST, person())?.beat).toBe(11);
+    expect(goalMatch([B(11, 'Lala: "I got Marcus Hale a drink. I know him now."')], GUEST, person())).toBeNull();
+    expect(goalMatch([B(12, 'Lala: "Took a moment with Velour."')], { label: 'Take a moment with Velour' }, null)?.beat).toBe(12);
+    // Not "met": "The Met" is a place, so "Meet Velour" still needs "meet".
+    expect(goalMatch([B(11, 'Lala: "Velour at The Met tonight."')], { label: 'Meet Velour' }, null)).toBeNull();
+  });
 });
 
 describe('where a goal is covered', () => {
