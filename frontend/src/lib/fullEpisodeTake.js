@@ -9,16 +9,21 @@
  * markers can be downloaded instead. Pure: no React, no network.
  */
 
+import { takeStamp } from './teleprompterLines';
+
 export const FULL_LABEL = 'Full episode';
-// About 19 MB a minute: a 20-minute episode fits under the upload limit.
+// About 19 MB a minute: an hour is a little over 1 GB.
 export const FULL_BITRATE = 2_500_000;
 const AUDIO_BITRATE = 128_000;
-export const UPLOAD_LIMIT_MB = 500;
-export const WARN_BYTES = 450 * 1024 * 1024;
+// Takes go up in 8 MB parts straight to the video storage (2026-10-27), so
+// the limit is the server's 5 GB for one clip, not the old 500 MB.
+export const UPLOAD_LIMIT_MB = 5 * 1024;
+export const UPLOAD_LIMIT_TEXT = '5 GB';
+export const WARN_BYTES = 4.5 * 1024 * 1024 * 1024;
 // Teleprompter audit 1 (2026-10-24): a take stops by itself here, so it can
-// still be saved (the server and nginx refuse 500 MB and over).
-export const STOP_BYTES = 490 * 1024 * 1024;
-export const LIMIT_NOTE = 'Stopped at the 500 MB limit — saved takes must be under 500 MB.';
+// still be saved (the server refuses one over 5 GB).
+export const STOP_BYTES = 4.9 * 1024 * 1024 * 1024;
+export const LIMIT_NOTE = 'Stopped at the 5 GB limit — saved takes must be under 5 GB.';
 
 /** What the take's pause is about (useTakeRecorder `interrupted`), or null. */
 export function interruptNote(why) {
@@ -82,8 +87,15 @@ export function sizeText(bytes) {
   return `≈ ${Math.max(1, Math.round(mb))} MB`;
 }
 
-/** The markers file's name: "Full episode · take 2 · beat markers.txt" with the dots kept file-safe. */
-export const marksFileName = (label) => `${String(label || FULL_LABEL).replace(/[\\/:*?"<>|]+/g, '-').replace(/\s*·\s*/g, ' - ')} - beat markers.txt`;
+/**
+ * The markers file's name: "Full episode - take 2 - 2026-10-27 14-58 - beat
+ * markers.txt" (the dots kept file-safe; `at`, when the take was recorded,
+ * keeps two takes' files apart).
+ */
+export const marksFileName = (label, at = null) => {
+  const stamp = at != null ? takeStamp(at) : null;
+  return `${String(label || FULL_LABEL).replace(/[\\/:*?"<>|]+/g, '-').replace(/\s*·\s*/g, ' - ')}${stamp ? ` - ${stamp}` : ''} - beat markers.txt`;
+};
 
 /** The markers as a text file she can keep: one line a beat, then the same as JSON. */
 export function marksText(label, marks, episodeTitle = null) {

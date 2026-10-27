@@ -12,6 +12,7 @@ vi.mock('../services/api', () => ({
 }));
 
 import api from '../services/api';
+import { fakeTakeUploads } from '../test/fakeTakeUploads';
 import TeleprompterReader, { SETTINGS_KEY } from '../components/Teleprompter/TeleprompterReader';
 import { setTakeStore, createTakeStore } from '../lib/takeStore';
 import { fakeIndexedDB } from '../lib/fakeIndexedDB.testutil';
@@ -50,7 +51,7 @@ beforeEach(() => {
   tracks = [track(), track()];
   setTakeStore(createTakeStore(null));
   vi.mocked(api.get).mockImplementation(async () => ({ data: { data: [] } }));
-  vi.mocked(api.post).mockImplementation(async (url, form) => {
+  fakeTakeUploads(api, async (url, form) => {
     posted = form;
     return { data: { data: { id: 'clip-new', beat_number: Number(form.get('beat_number')) || null, is_favorite: false, start_line: Number(form.get('start_line')), label: form.get('label') }, stored: ['start_line'], not_stored: [] } };
   });
@@ -91,8 +92,8 @@ async function recordAndStop() {
   return screen.findByTestId('stp-review');
 }
 
-describe('audit 1: the 500 MB limit', () => {
-  test('a take stops by itself at 490 MB, says why, and can be downloaded from the review', async () => {
+describe('audit 1: the upload limit (5 GB since takes go up in parts)', () => {
+  test('a take stops by itself just under 5 GB, says why, and can be downloaded from the review', async () => {
     await openRecord();
     const r = await startTake();
     act(() => { r.ondataavailable({ data: { size: STOP_BYTES } }); });
@@ -101,7 +102,7 @@ describe('audit 1: the 500 MB limit', () => {
     const names = [];
     vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function c() { names.push(this.download); });
     fireEvent.click(screen.getByTestId('stp-download-take'));
-    expect(names).toEqual(['Beat 2 - Login Sequence - take 1.webm']);
+    expect(names).toEqual([expect.stringMatching(/^Beat 2 - Login Sequence - take 1 - \d{4}-\d{2}-\d{2} \d{2}-\d{2}\.webm$/)]);
     // The take stays for review (and Save) after the download.
     expect(screen.getByTestId('stp-review')).toBeTruthy();
     expect(URL.revokeObjectURL).not.toHaveBeenCalledWith('blob:take');
@@ -243,7 +244,8 @@ describe('audit 5: an expired sign-in keeps the take', () => {
     fireEvent.click(screen.getByTestId('stp-save'));
     expect((await screen.findByRole('alert')).textContent).toContain('Your sign-in expired. Sign in in another tab, then press Retry here.');
     expect(api.get).toHaveBeenCalledWith('/api/v1/episode-clips/ep-1', { keepSession: true });
-    expect(api.post.mock.calls[0][2]).toMatchObject({ keepSession: true, timeout: 0 });
+    expect(api.post.mock.calls[0][0]).toBe('/api/v1/episode-clips/ep-1/uploads');
+    expect(api.post.mock.calls[0][2]).toMatchObject({ keepSession: true });
     expect(screen.getByTestId('stp-review')).toBeTruthy();
     expect(screen.getByTestId('stp-save').textContent).toBe('Retry');
   });
@@ -280,7 +282,7 @@ describe('audit 8 and 14: one request carries the beat, start line, markers and 
   });
 
   test('a whole-episode take: beat_marks go with the upload; kept → saved with markers; not kept → the plain note and Download markers', async () => {
-    vi.mocked(api.post).mockImplementation(async (url, form) => {
+    fakeTakeUploads(api, async (url, form) => {
       posted = form;
       return { data: { data: { id: 'clip-full', beat_number: null, beat_marks: JSON.parse(form.get('beat_marks')), is_favorite: false, start_line: null }, stored: ['beat_marks'], not_stored: [] } };
     });
@@ -297,7 +299,7 @@ describe('audit 8 and 14: one request carries the beat, start line, markers and 
     expect(posted.get('beat_number')).toBeNull();
     expect(api.patch).not.toHaveBeenCalled();
 
-    vi.mocked(api.post).mockImplementation(async () => ({ data: { data: { id: 'clip-full2', beat_number: null }, stored: [], not_stored: ['beat_marks'] } }));
+    fakeTakeUploads(api, async () => ({ data: { data: { id: 'clip-full2', beat_number: null }, stored: [], not_stored: ['beat_marks'] } }));
     await startTake();
     fireEvent.click(screen.getByTestId('stp-stop'));
     await screen.findByTestId('stp-review');

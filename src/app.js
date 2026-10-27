@@ -298,8 +298,14 @@ const writeLimiter = rateLimit({
   handler: refusedBy('writes', 'API_TOO_MANY_WRITES', (mins) =>
     `Too many saves in the last minute from this device. Try again in ${waitText(mins)}.`),
 });
+// The parts of a raw-clip upload are not counted as saves: a long take is
+// 50+ parts of 8 MB, which a fast connection sends in under a minute
+// (rawClipRoutes, Evoni 2026-10-27). They still need a signed-in user, and
+// the signed-out limit above still applies to them.
+const UPLOAD_PART_PATH = /^\/v1\/episode-clips\/[^/]+\/uploads\/[^/]+\/parts\/\d+$/;
 // Apply to all mutating methods on /api
 app.use('/api', (req, res, next) => {
+  if (req.method === 'PUT' && UPLOAD_PART_PATH.test(req.path)) return next();
   if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) {
     return writeLimiter(req, res, next);
   }

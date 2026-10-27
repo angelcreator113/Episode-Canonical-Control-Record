@@ -9,12 +9,14 @@ vi.mock('../services/api', () => ({
 }));
 
 import api from '../services/api';
+import { fakeTakeUploads } from '../test/fakeTakeUploads';
 import TeleprompterReader, { SETTINGS_KEY } from '../components/Teleprompter/TeleprompterReader';
 import TakesPanel from '../components/Teleprompter/TeleprompterTakes';
 import { teleprompterLines, teleprompterScript, teleprompterIndexMap } from '../lib/teleprompterLines';
 import { screenLabel, screenLine, tidyTarget, SCREEN_SECONDS } from '../lib/teleprompterScreen';
 import {
   cleanMarks, markClock, fullTakeName, isFullTake, fullTakes, hasMarksField, marksText, marksFileName, takeBytes, sizeText, MARKS_NOT_KEPT, FULL_BITRATE,
+  WARN_BYTES,
 } from '../lib/fullEpisodeTake';
 
 // ── Pure pieces ──────────────────────────────────────────────────────────
@@ -121,9 +123,10 @@ FakeRecorder.isTypeSupported = (t) => t === 'video/webm';
 let clipRows;
 let uploaded;
 let patchStatus;
+let uploads;
 function mockApi() {
   vi.mocked(api.get).mockImplementation(async (url) => (url === '/api/v1/episode-clips/ep-1' ? { data: { data: clipRows } } : { data: { data: [] } }));
-  vi.mocked(api.post).mockImplementation(async (url, form) => ({ data: { data: { ...uploaded, label: form.get('label') } } }));
+  uploads = fakeTakeUploads(api, async (url, form) => ({ data: { data: { ...uploaded, label: form.get('label') } } }));
   vi.mocked(api.patch).mockImplementation(async (url, body) => {
     if (patchStatus === 409) { const e = new Error('409'); e.response = { status: 409, data: { error: "the database update hasn't run yet" } }; throw e; }
     return { data: { data: { id: url.split('/').pop(), ...uploaded, ...body } } };
@@ -290,7 +293,7 @@ describe('Record whole episode', () => {
     expect(within(screen.getByTestId('stp-review-marks')).getAllByTestId('stp-mark').map((b) => b.textContent)).toEqual(['Beat 11 · 0:00.0', 'Beat 14 · 0:03.2']);
   });
 
-  test('near 450 MB the REC bar warns that the 500 MB upload limit is near', async () => {
+  test('near 4.5 GB the REC bar warns that the 5 GB upload limit is near (takes go up in parts)', async () => {
     await openWhole();
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'Date'] });
     fireEvent.click(screen.getByTestId('stp-record'));
@@ -298,7 +301,11 @@ describe('Record whole episode', () => {
     expect(screen.queryByTestId('stp-rec-warn')).toBeNull();
     act(() => { recorders[0].ondataavailable({ data: { size: 455 * 1024 * 1024 } }); });
     tick(250);
-    expect(screen.getByTestId('stp-rec-warn').textContent).toMatch(/Nearly 500 MB: that is the upload limit/);
+    // 455 MB (the old limit's warning) is far from 5 GB now.
+    expect(screen.queryByTestId('stp-rec-warn')).toBeNull();
+    act(() => { recorders[0].ondataavailable({ data: { size: WARN_BYTES - 455 * 1024 * 1024 } }); });
+    tick(250);
+    expect(screen.getByTestId('stp-rec-warn').textContent).toMatch(/Nearly 5 GB: that is the upload limit/);
     expect(recorders[0].state).toBe('recording'); // stopping is still hers
   });
 
@@ -319,8 +326,8 @@ describe('Record whole episode', () => {
     await recordTwoBeats();
     fireEvent.click(screen.getByTestId('stp-save'));
     await waitFor(() => expect(screen.getByTestId('stp-status').textContent).toContain("Saved to the episode's Files: Full episode · take 1 · 2 beat markers"));
-    expect(api.post).toHaveBeenCalledTimes(1);
-    const form = vi.mocked(api.post).mock.calls[0][1];
+    expect(uploads.starts).toHaveLength(1);
+    const form = uploads.form();
     expect(form.get('label')).toBe('Full episode · take 1');
     expect(form.get('performer')).toBe('justawoman');
     expect(form.get('video').name).toBe('full-episode-take-1.webm');
@@ -352,7 +359,7 @@ describe('Record whole episode', () => {
     fireEvent.click(screen.getByTestId('stp-save'));
     await waitFor(() => expect(screen.getByTestId('stp-status').textContent).toContain(MARKS_NOT_KEPT));
     expect(MARKS_NOT_KEPT).toBe('Saved. Beat markers will be kept once the database update runs.');
-    expect(api.post).toHaveBeenCalledTimes(1);
+    expect(uploads.starts).toHaveLength(1);
     expect(api.patch).not.toHaveBeenCalled();
     vi.mocked(URL.createObjectURL).mockClear();
     const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});

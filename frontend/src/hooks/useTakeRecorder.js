@@ -274,6 +274,7 @@ export default function useTakeRecorder(enabled, { storeKey = 'text', store = nu
       return false;
     }
     const id = newId();
+    const startedAt = Date.now(); // when the take began: its file names carry it
     const st = storeRef.current;
     idRef.current = id;
     memRef.current = new Map();
@@ -316,7 +317,7 @@ export default function useTakeRecorder(enabled, { storeKey = 'text', store = nu
       const show = (blob) => {
         setFinishing(false);
         if (!blob.size) { forget(id); setError('Nothing was recorded. Try the take again.'); return; }
-        const next = { blob, url: URL.createObjectURL(blob), type: kind, seconds, id };
+        const next = { blob, url: URL.createObjectURL(blob), type: kind, seconds, id, startedAt };
         takeRef.current = next;
         setTake(next);
         if (st.available) st.update(id, { finished: true, seconds }).catch((err) => console.error('[useTakeRecorder] take not marked finished:', err));
@@ -392,7 +393,7 @@ export default function useTakeRecorder(enabled, { storeKey = 'text', store = nu
       const blob = new Blob(parts.map((p) => p.data), { type: kind });
       revoke(takeRef.current);
       const seconds = Number(saved.seconds) > 0 ? Number(saved.seconds) : Number(saved.lastT) || parts.length;
-      const next = { blob, url: URL.createObjectURL(blob), type: kind, seconds, id: saved.id, restored: true };
+      const next = { blob, url: URL.createObjectURL(blob), type: kind, seconds, id: saved.id, restored: true, startedAt: saved.startedAt || null };
       takeRef.current = next;
       setTake(next);
       setError(null);

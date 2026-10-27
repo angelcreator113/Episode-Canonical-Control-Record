@@ -137,10 +137,36 @@ export function pastedParagraphs(text) {
 /** The take's file extension from its type. */
 export const takeExtension = (type) => (/mp4/i.test(String(type || '')) ? 'mp4' : 'webm');
 
+/** "2026-10-20 14-05": when a take was recorded, file-safe (local time); null for no date. */
+export function takeStamp(at) {
+  const d = at instanceof Date ? at : new Date(at);
+  if (at == null || Number.isNaN(d.getTime())) return null;
+  const p = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}-${p(d.getMinutes())}`;
+}
+
 /** "Teleprompter take 2026-10-20 14-05.webm", a pasted-text take's file name (local time). */
 export function downloadName(type, at = new Date()) {
-  const p = (n) => String(n).padStart(2, '0');
-  return `Teleprompter take ${at.getFullYear()}-${p(at.getMonth() + 1)}-${p(at.getDate())} ${p(at.getHours())}-${p(at.getMinutes())}.${takeExtension(type)}`;
+  return `Teleprompter take ${takeStamp(at)}.${takeExtension(type)}`;
+}
+
+/** The n of "… · take n …" in a take's name, or null. */
+export function takeNumberOf(label) {
+  const m = /(?:^|·\s*)take (\d+)\b/.exec(String(label || ''));
+  return m ? Number(m[1]) : null;
+}
+
+/**
+ * The next take's number (Evoni, 2026-10-27: an unsaved "take 1" was
+ * followed by another "take 1"): every recording counts, saved or not.
+ * One more than the highest of: the takes in Files (how many, and the
+ * numbers in their names), the takes still kept on this phone, and the
+ * numbers already used this visit.
+ */
+export function nextTakeNumber({ savedLabels = [], savedCount = savedLabels.length, others = [] } = {}) {
+  const nums = [Number(savedCount) || 0, ...savedLabels.map(takeNumberOf), ...others]
+    .map(Number).filter((n) => Number.isFinite(n) && n > 0);
+  return (nums.length ? Math.max(...nums) : 0) + 1;
 }
 
 /**

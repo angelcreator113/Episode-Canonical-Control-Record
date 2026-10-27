@@ -491,3 +491,4 @@ body.stp-open { overflow: hidden; }
   .stp-btn.is-rec.is-lead { flex: 1 1 100%; min-height: 56px; }
   .stp-practice { font-size: 13px; }
 }
+.stp-progress-note { margin: 0; font-size: 13px; color: var(--studio-prompter-dim); }

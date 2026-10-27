@@ -10,6 +10,7 @@ vi.mock('../services/api', () => ({
 }));
 
 import api from '../services/api';
+import { fakeTakeUploads } from '../test/fakeTakeUploads';
 import TeleprompterReader, { SETTINGS_KEY, ENDING_MS } from '../components/Teleprompter/TeleprompterReader';
 
 const SCRIPT = [
@@ -38,7 +39,7 @@ beforeEach(() => {
   Object.values(api).forEach((fn) => fn?.mockReset?.());
   recorders = [];
   vi.mocked(api.get).mockImplementation(async () => ({ data: { data: [] } }));
-  vi.mocked(api.post).mockImplementation(async (url, form) => ({ data: { data: { id: 'clip-new', beat_number: null, is_favorite: false, start_line: null, label: form.get('label') } } }));
+  fakeTakeUploads(api, async (url, form) => ({ data: { data: { id: 'clip-new', beat_number: null, is_favorite: false, start_line: null, label: form.get('label') } } }));
   vi.mocked(api.patch).mockImplementation(async (url, body) => ({ data: { data: { id: 'clip-new', ...body } } }));
   try { window.localStorage.clear(); window.sessionStorage.clear(); } catch (err) { console.error(err); }
   // Even with the 3-2-1 off, a take counts in.
@@ -267,7 +268,8 @@ describe('the review sheet', () => {
     fireEvent.click(screen.getByTestId('stp-discard'));
     expect(screen.queryByTestId('stp-review')).toBeNull();
     expect(activeLine().textContent).toContain('Okay.');
-    expect(screen.getByTestId('stp-record').textContent).toContain('Record beat 2 · take 1');
+    // Every recording counts, saved or not (2026-10-27): the next is take 2, never a second "take 1".
+    expect(screen.getByTestId('stp-record').textContent).toContain('Record beat 2 · take 2');
     expect(recorders).toHaveLength(1);
     expect(api.post).not.toHaveBeenCalled();
   });

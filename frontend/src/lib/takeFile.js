@@ -5,11 +5,17 @@
  * Photos or Files" opens the share sheet. Neither forgets the take: it stays
  * in the review until she is done with it. Pure DOM, no React.
  */
+import { takeStamp } from './teleprompterLines';
 
-/** "Beat 8 - Transformation Loop - take 2.mp4": a take's name as a file name. */
-export function takeFileName(label, ext) {
+/**
+ * "Beat 8 - Transformation Loop - take 2 - 2026-10-27 14-58.mp4": a take's
+ * name as a file name, with when it was recorded (`at`) so two downloads
+ * never share a name (Evoni, 2026-10-27).
+ */
+export function takeFileName(label, ext, at = null) {
   const base = String(label || 'Teleprompter take').replace(/[\\/:*?"<>|]+/g, '-').replace(/\s*·\s*/g, ' - ').trim() || 'Teleprompter take';
-  return `${base}.${ext || 'mp4'}`;
+  const stamp = at != null ? takeStamp(at) : null;
+  return `${base}${stamp ? ` - ${stamp}` : ''}.${ext || 'mp4'}`;
 }
 
 /** The take as a File named `name`, or null when it can't be made. */

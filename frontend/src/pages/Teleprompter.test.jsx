@@ -11,6 +11,7 @@ vi.mock('../services/api', () => ({
 }));
 
 import api from '../services/api';
+import { fakeTakeUploads } from '../test/fakeTakeUploads';
 import Teleprompter, { PASTE_KEY } from './Teleprompter';
 import TeleprompterReader, { SETTINGS_KEY } from '../components/Teleprompter/TeleprompterReader';
 import { lineSeconds } from '../lib/scriptRuntime';
@@ -42,6 +43,7 @@ class FakeRecorder {
 }
 FakeRecorder.isTypeSupported = (t) => t === 'video/webm;codecs=vp9,opus';
 
+let uploads;
 function mockApi() {
   vi.mocked(api.get).mockImplementation(async (url) => {
     if (url === '/api/v1/shows') return { data: { data: [{ id: 'show-1', name: 'Styling Adventures' }] } };
@@ -51,10 +53,7 @@ function mockApi() {
     if (url === '/api/v1/episode-clips/ep-1') return { data: { data: [{ id: 'c1', performer: 'justawoman', beat_number: 8 }, { id: 'c2', performer: 'lala', beat_number: 8 }] } };
     return { data: { data: [] } };
   });
-  vi.mocked(api.post).mockImplementation(async (url, form, cfg) => {
-    cfg?.onUploadProgress?.({ loaded: 50, total: 100 });
-    return { data: { data: { id: 'clip-new', beat_number: null, label: form.get('label') } } };
-  });
+  uploads = fakeTakeUploads(api, async (url, form) => ({ data: { data: { id: 'clip-new', beat_number: null, label: form.get('label') } } }));
   vi.mocked(api.patch).mockImplementation(async (url, body) => ({ data: { data: { id: 'clip-new', ...body } } }));
 }
 
@@ -256,8 +255,12 @@ describe('Teleprompter reader: read & record', () => {
     expect(review.textContent).toContain('Beat 8 · Transformation Loop · take 2');
     fireEvent.click(screen.getByTestId('stp-save'));
     await waitFor(() => expect(api.patch).toHaveBeenCalledWith('/api/v1/episode-clips/ep-1/clip-new', { beat_number: 8 }, { keepSession: true }));
-    const [url, form] = vi.mocked(api.post).mock.calls[0];
-    expect(url).toBe('/api/v1/episode-clips/ep-1');
+    // Sent in parts (2026-10-27): started with the take's fields, then its parts, then complete.
+    const [url] = vi.mocked(api.post).mock.calls[0];
+    expect(url).toBe('/api/v1/episode-clips/ep-1/uploads');
+    expect(uploads.parts[0].url).toBe('/api/v1/episode-clips/ep-1/uploads/up-1/parts/1');
+    expect(uploads.completes[0].url).toBe('/api/v1/episode-clips/ep-1/uploads/up-1/complete');
+    const form = uploads.form();
     expect(form.get('performer')).toBe('justawoman');
     expect(form.get('label')).toBe('Beat 8 · Transformation Loop · take 2');
     expect(form.get('video').name).toBe('beat-8-take-2.webm');
@@ -275,7 +278,8 @@ describe('Teleprompter reader: read & record', () => {
     expect(screen.getByTestId('stp-save').textContent).toBe('Retry');
     fireEvent.click(screen.getByTestId('stp-save'));
     await waitFor(() => expect(api.patch).toHaveBeenCalledTimes(2));
-    expect(api.post).toHaveBeenCalledTimes(1);
+    expect(uploads.starts).toHaveLength(1);
+    expect(uploads.completes).toHaveLength(1);
     await waitFor(() => expect(screen.queryByTestId('stp-review')).toBeNull());
   });
 
