@@ -18,15 +18,18 @@
  *     exact candidate revision and association it approved
  *   line_voice_reconfirmations      a person's re-confirmation (design E1)
  *
- * An approval and a re-confirmation pin the script revision and the id of
- * the episode's newest kept script version (Evoni, 2026-10-27: the revision
- * is a hash of the text, so A -> B -> A has the approved revision again; every
- * save that changes the text keeps a new version row, so the newest id moves
- * on). NULL: the episode had no kept version yet. No foreign key: while an
- * approval is in force services/scriptVersions.js keeps the version it names
- * (a reference provider), and once it is superseded, invalidated or revoked
- * the version may be pruned while the approval's own row keeps the id as
- * history. Approval rows are never deleted.
+ * An approval and a re-confirmation pin the script revision and the
+ * episode's script save number, episodes.script_seq (Evoni, 2026-10-27,
+ * decisions 1 and 2): the revision is a hash of the text, so A -> B -> A (an
+ * empty B included) has the approved revision again; script_seq goes up on
+ * every save that changes the text and on nothing else, whatever the clock.
+ * The pair decides whether the script was saved since. They also record the
+ * id of the episode's newest kept script version when they were written, as
+ * history only (it decides nothing). No foreign key: while an approval is in
+ * force services/scriptVersions.js keeps the version it names (a reference
+ * provider); once it is superseded, invalidated or revoked the version may
+ * be pruned while the approval's own row keeps its id, revision, save
+ * number and approved context. Approval rows are never deleted.
  *
  * Every table has created_at, updated_at and deleted_at. down() refuses while
  * any of the tables has a row, so a rollback cannot drop data; empty, it drops
@@ -154,6 +157,7 @@ module.exports = {
         approved_context JSONB NOT NULL,
         ${hash('approved_context_hash')},
         ${revision('pinned_script_revision')},
+        pinned_script_seq BIGINT NOT NULL CHECK (pinned_script_seq >= 0),
         pinned_script_version_id UUID NULL,
         approved_by VARCHAR(255) NOT NULL,
         approved_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -181,6 +185,7 @@ module.exports = {
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         approval_id UUID NOT NULL REFERENCES line_voice_approvals(id) ON DELETE RESTRICT,
         ${revision('pinned_script_revision')},
+        pinned_script_seq BIGINT NOT NULL CHECK (pinned_script_seq >= 0),
         pinned_script_version_id UUID NULL,
         ${hash('context_hash')},
         confirmed_by VARCHAR(255) NOT NULL,

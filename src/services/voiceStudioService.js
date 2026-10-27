@@ -30,14 +30,16 @@
  * - Approvals are history: superseded, invalidated and revoked rows stay.
  *
  * Condition (3) is held by two pins taken when an approval or a
- * re-confirmation is written: the script revision and the id of the
- * episode's newest kept script version (scriptVersions.newestVersionId).
- * The revision alone is a hash of the text, so a script put back to the
- * approved words (A -> B -> A) has the approved revision again; each save
- * that changes the text keeps a new version, so the newest id has moved on.
- * Episode edits that are not the script (title, air date, coins) change
- * neither pin (Evoni, 2026-10-27). While an approval is in force the version
- * it names is kept (referencedScriptVersionIds, a reference provider).
+ * re-confirmation is written: the script revision and the episode's script
+ * save number (episodes.script_seq, kept by scriptSave). The revision alone
+ * is a hash of the text, so a script put back to the approved words
+ * (A -> B -> A, an empty B included) has the approved revision again; the
+ * save number went up with each of those saves and never comes back.
+ * Episode edits that are not the script (title, air date, coins) and a save
+ * of the locks alone change neither pin (Evoni, 2026-10-27). The id of the
+ * newest kept script version is recorded beside them, as history only; while
+ * an approval is in force that version is kept (referencedScriptVersionIds,
+ * a reference provider).
  *
  * Locks, always in this order: the episode row FOR SHARE (scriptSave holds
  * FOR UPDATE), the take FOR UPDATE, the line (an advisory lock per beat and
@@ -134,18 +136,21 @@ const one = async (sequelize, sql, replacements, t) => (await rows(sequelize, sq
 
 /**
  * The episode's saved script as the service reads it: { script, revision,
- * version_id } (version_id: the newest kept version, or null). lock:
- * 'share' (a voice write checks the script against a save in flight;
- * scriptSave holds FOR UPDATE) or none.
+ * seq (the script save number), version_id (the newest kept version, or
+ * null; history only) }. lock: 'share' (a voice write checks the script
+ * against a save in flight; scriptSave holds FOR UPDATE) or none.
  */
 async function episodeState(sequelize, episodeId, t, { lock = null } = {}) {
   checkId(episodeId, 'Episode');
-  const row = await one(sequelize, `SELECT id, script_content, script_line_keys, deleted_at
+  const row = await one(sequelize, `SELECT id, script_content, script_line_keys, script_seq, deleted_at
     FROM episodes WHERE id = :episodeId${lock === 'share' ? ' FOR SHARE' : ''}`, { episodeId }, t);
   if (!row || row.deleted_at) fail(404, 'NOT_FOUND', 'Episode not found');
   const script = typeof row.script_content === 'string' ? row.script_content : '';
   const { newestVersionId } = require('./scriptVersions');
-  return { script, revision: scriptRevision(script, row.script_line_keys ?? null), version_id: await newestVersionId(sequelize, episodeId, t) };
+  return {
+    script, revision: scriptRevision(script, row.script_line_keys ?? null), seq: String(row.script_seq),
+    version_id: await newestVersionId(sequelize, episodeId, t),
+  };
 }
 
 function requireCurrent(state, sent) {
@@ -318,9 +323,10 @@ async function associate(sequelize, { episodeId, candidateId, scriptRevision: se
 
 // ── Approval state (design E1) ───────────────────────────────────────────────
 
+// The script is as pinned: the same text and no save since (the version id is history, not compared).
 const pinsMatch = (pin, state) => Boolean(pin)
   && pin.pinned_script_revision === state.revision
-  && (pin.pinned_script_version_id ?? null) === state.version_id;
+  && String(pin.pinned_script_seq) === state.seq;
 
 /**
  * An approval's state now: { state, reason, resolution }. `contexts` is
@@ -345,7 +351,7 @@ async function evaluate(sequelize, approval, contexts, state, t) {
   if (resolution.status !== 'bound') return { state: resolution.status, reason: resolution.reason, resolution };
   const now = resolution.ctx.context_hash;
   if (pinsMatch(approval, state) && now === approval.approved_context_hash) return { state: 'current', reason: null, resolution };
-  const confirmation = await one(sequelize, `SELECT pinned_script_revision, pinned_script_version_id, context_hash
+  const confirmation = await one(sequelize, `SELECT pinned_script_revision, pinned_script_seq, context_hash
     FROM line_voice_reconfirmations WHERE approval_id = :id AND deleted_at IS NULL
     ORDER BY confirmed_at DESC, created_at DESC, id DESC LIMIT 1`, { id: approval.id }, t);
   if (pinsMatch(confirmation, state) && now === confirmation.context_hash) return { state: 'current', reason: null, resolution };
@@ -355,7 +361,7 @@ async function evaluate(sequelize, approval, contexts, state, t) {
 // Every column the state needs.
 const APPROVAL_COLUMNS = `a.id, a.episode_id, a.candidate_id, a.candidate_revision_id, a.association_id, a.beat_number, a.line_index,
   a.occurrence, a.approved_context, a.approved_context_hash, a.pinned_script_revision,
-  a.pinned_script_version_id, a.approved_by, a.approved_at, a.superseded_at, a.superseded_by,
+  a.pinned_script_seq, a.pinned_script_version_id, a.approved_by, a.approved_at, a.superseded_at, a.superseded_by,
   a.invalidated_at, a.invalidated_reason, a.revoked_at, a.revoked_by, a.deleted_at`;
 
 async function invalidate(sequelize, approvalId, reason, t) {
@@ -401,11 +407,11 @@ function checkExpected(found, expected) {
 async function insertApproval(sequelize, { episodeId, candidateId, revisionId, assocId, ctx, state, userId }, t) {
   const [row] = await rows(sequelize, `INSERT INTO line_voice_approvals
     (episode_id, candidate_id, candidate_revision_id, association_id, beat_number, line_index, occurrence,
-     approved_context, approved_context_hash, pinned_script_revision, pinned_script_version_id, approved_by)
+     approved_context, approved_context_hash, pinned_script_revision, pinned_script_seq, pinned_script_version_id, approved_by)
     VALUES (:episodeId, :candidateId, :revisionId, :assocId, :beat, :index, :occurrence,
-     CAST(:context AS jsonb), :contextHash, :rev, :versionId, :userId) RETURNING id`, {
+     CAST(:context AS jsonb), :contextHash, :rev, :seq, :versionId, :userId) RETURNING id`, {
     episodeId, candidateId, revisionId, assocId, beat: ctx.beat_number, index: ctx.line_index, occurrence: ctx.occurrence,
-    context: JSON.stringify(lc.associationOf(ctx)), contextHash: ctx.context_hash, rev: state.revision, versionId: state.version_id, userId,
+    context: JSON.stringify(lc.associationOf(ctx)), contextHash: ctx.context_hash, rev: state.revision, seq: state.seq, versionId: state.version_id, userId,
   }, t);
   return row;
 }
@@ -633,7 +639,8 @@ async function playableApprovals(sequelize, { episodeId }) {
 async function approvalHistory(sequelize, { episodeId }) {
   await episodeState(sequelize, episodeId);
   return rows(sequelize, `SELECT a.id, a.candidate_id, a.candidate_revision_id, a.beat_number, a.line_index, a.occurrence,
-      a.approved_context->>'words' AS words, a.approved_by, a.approved_at, a.pinned_script_revision, a.pinned_script_version_id,
+      a.approved_context->>'words' AS words, a.approved_context->>'speaker_written' AS speaker, a.approved_context_hash,
+      a.approved_by, a.approved_at, a.pinned_script_revision, a.pinned_script_seq::text AS pinned_script_seq, a.pinned_script_version_id,
       a.superseded_at, a.superseded_by, a.invalidated_at, a.invalidated_reason, a.revoked_at, a.revoked_by
     FROM line_voice_approvals a WHERE a.episode_id = :episodeId AND a.deleted_at IS NULL
     ORDER BY a.approved_at DESC, a.created_at DESC`, { episodeId });
@@ -673,8 +680,8 @@ async function reconfirm(sequelize, { episodeId, scriptRevision: sent, items, us
       }
       const now = e.resolution.ctx.context_hash;
       if (item.context_hash !== now) { refused.push({ approval_id: id, reason: 'context_mismatch' }); continue; }
-      await q(sequelize, `INSERT INTO line_voice_reconfirmations (approval_id, pinned_script_revision, pinned_script_version_id, context_hash, confirmed_by)
-        VALUES (:id, :rev, :versionId, :hash, :userId)`, { id, rev: state.revision, versionId: state.version_id, hash: now, userId }, t);
+      await q(sequelize, `INSERT INTO line_voice_reconfirmations (approval_id, pinned_script_revision, pinned_script_seq, pinned_script_version_id, context_hash, confirmed_by)
+        VALUES (:id, :rev, :seq, :versionId, :hash, :userId)`, { id, rev: state.revision, seq: state.seq, versionId: state.version_id, hash: now, userId }, t);
       confirmed.push(id);
     }
     return { script_revision: state.revision, confirmed, refused };

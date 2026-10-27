@@ -310,13 +310,13 @@ const SCRIPT = [
     const take = await takeAt(ep, 6, 0);
     const { approval_id: id } = await approveTake(ep, take);
     const approved = await stateOf(ep);
-    expect((await approvalRow(id)).pinned_script_version_id).toBe(approved.version_id);
+    expect(String((await approvalRow(id)).pinned_script_seq)).toBe(approved.seq);
     // B: the line changed, and nothing observed it. Then A again.
     await saveScript(ep, B);
     await saveScript(ep, SCRIPT);
     const restored = await stateOf(ep);
     expect(restored.revision).toBe(approved.revision);
-    expect(restored.version_id).not.toBe(approved.version_id);
+    expect(Number(restored.seq)).toBe(Number(approved.seq) + 2);
     expect((await stateOfApproval(ep, id))).toMatchObject({ state: 'needs_review', reason: 'script_saved', playable: false });
 
     // Observed: at B, approving another take for that line records the approval invalid; A again does not revive it.
@@ -344,27 +344,64 @@ const SCRIPT = [
     expect((await approvalRow(id)).revoked_at).not.toBeNull();
   });
 
-  // KNOWN GAP, reported to Evoni (2026-10-27): snapshotScript keeps no version when the script it replaces
-  // is empty, and returns the last version instead of a new one when the text it replaces equals it. After
-  // one A -> '' -> A, the newest version holds A; a second A -> '' -> A then keeps no version at all, so
-  // neither pin moves. Closing it is an A1c change (scriptVersions.snapshotScript) or E2. test.failing:
-  // this passes while the gap is there and fails once it is closed, so the marker is then removed.
-  test.failing('KNOWN GAP: A -> empty -> A after an earlier empty round trip leaves both pins as they were', async () => {
+  test('A -> empty -> A, repeated: the save number moves on each time, so an old approval never comes back by itself', async () => {
     const ep = await makeEpisode();
+    // An earlier empty round trip first: after it the newest version already holds A (the case version rows missed).
     await saveScript(ep, '');
     await saveScript(ep, SCRIPT);
     const take = await takeAt(ep, 6, 2);
     const { approval_id: id } = await approveTake(ep, take);
-    await saveScript(ep, '');
-    await saveScript(ep, SCRIPT);
+    const approved = await stateOf(ep);
+    for (let cycle = 0; cycle < 3; cycle += 1) {
+      await saveScript(ep, '');
+      expect((await stateOfApproval(ep, id)).state).toBe('unbound');
+      await saveScript(ep, SCRIPT);
+      const now = await stateOf(ep);
+      expect(now.revision).toBe(approved.revision);
+      expect(Number(now.seq)).toBe(Number(approved.seq) + 2 * (cycle + 1));
+      expect(await stateOfApproval(ep, id)).toMatchObject({ state: 'needs_review', reason: 'script_saved', playable: false });
+    }
+    expect((await studio.playableApprovals(sequelize, { episodeId: ep })).takes).toEqual([]);
+    // Only a person's re-confirmation makes it current again, pinned to the new save number.
+    const x = await stateOfApproval(ep, id);
+    await studio.reconfirm(sequelize, { episodeId: ep, scriptRevision: (await stateOf(ep)).revision, items: [{ approval_id: id, context_hash: x.context_hash }], userId: USER });
+    expect((await stateOfApproval(ep, id)).state).toBe('current');
+    const [conf] = await rows('SELECT pinned_script_seq::text AS seq FROM line_voice_reconfirmations WHERE approval_id = :id', { id });
+    expect(conf.seq).toBe((await stateOf(ep)).seq);
+  });
+
+  test('version rows with the same time, or a frozen clock, do not decide anything: the save number does', async () => {
+    const ep = await makeEpisode();
+    await saveScript(ep, SCRIPT.replace('This is my moment.', 'This is my moment 0.'));
+    const { approval_id: id } = await approveTake(ep, await takeAt(ep, 8, 0));
+    // Saves with the clock frozen: their version rows all share one created_at, the approval's own version's too.
+    jest.useFakeTimers({ now: new Date('2026-10-27T12:00:00.000Z'), doNotFake: ['nextTick', 'setImmediate', 'clearImmediate', 'setInterval', 'clearInterval', 'setTimeout', 'clearTimeout', 'queueMicrotask', 'hrtime', 'performance'] });
+    try {
+      await saveScript(ep, SCRIPT.replace('This is my moment.', 'This is my moment 1.'));
+      await saveScript(ep, SCRIPT.replace('This is my moment.', 'This is my moment 0.'));
+    } finally {
+      jest.useRealTimers();
+    }
+    await run('UPDATE episode_script_versions SET created_at = :t WHERE episode_id = :ep', { ep, t: '2026-10-27T12:00:00.000Z' });
+    expect((await rows('SELECT DISTINCT created_at FROM episode_script_versions WHERE episode_id = :ep', { ep }))).toHaveLength(1);
+    // Back to the approved text, every version at one time: still a save since, so still for review.
+    expect(await stateOfApproval(ep, id)).toMatchObject({ state: 'needs_review', reason: 'script_saved' });
+  });
+
+  test('saves at once around an approval: each moves the save number on, and the approval needs review after any of them', async () => {
+    const ep = await makeEpisode();
+    const { approval_id: id } = await approveTake(ep, await takeAt(ep, 8, 0));
+    const before = Number((await stateOf(ep)).seq);
+    await Promise.all([1, 2, 3, 4].map((n) => saveScript(ep, SCRIPT.replace('This is my moment.', `At once ${n}.`))));
+    expect(Number((await stateOf(ep)).seq)).toBe(before + 4);
     expect((await stateOfApproval(ep, id)).state).toBe('needs_review');
   });
 
-  test('every save that changes the text moves the newest version on (save, lock, generate, restore); nothing else does', async () => {
+  test('every save that changes the text moves the save number on (save, lock, generate, restore); nothing else does', async () => {
     const ep = await makeEpisode();
     const take = await takeAt(ep, 8, 0);
     const seen = [];
-    const step = async (fn) => { await sleep(3); await fn(); const v = (await stateOf(ep)).version_id; expect(v).not.toBeNull(); expect(seen).not.toContain(v); seen.push(v); };
+    const step = async (fn) => { await fn(); const v = (await stateOf(ep)).seq; expect(seen).not.toContain(v); seen.push(v); };
     const line = (n) => SCRIPT.replace('This is my moment.', `This is my moment ${n}.`);
     await step(() => saveScript(ep, line(1), { source: 'save' }));
     await step(() => saveScript(ep, line(2), { source: 'lock' }));
@@ -376,11 +413,11 @@ const SCRIPT = [
 
     // Approved now; then a lock-only save (same text) and edits to the episode that are not the script.
     const { approval_id: id } = await approveTake(ep, take);
-    const pinned = (await stateOf(ep)).version_id;
+    const pinned = (await stateOf(ep)).seq;
     await saveEpisodeScript(models, ep, { writer: 'test', source: 'lock', compose: async (row) => ({ script: row.script_content, lockedBeats: [6] }) });
     await run(`UPDATE episodes SET title = 'Renamed', episode_title = 'New', air_date = NOW(), total_income = 1200, total_expenses = 300,
       money_plan = '{"coins": 50}'::jsonb, distribution_metadata = '{"x": 1}'::jsonb, description = 'd', updated_at = NOW() WHERE id = :ep`, { ep });
-    expect((await stateOf(ep)).version_id).toBe(pinned);
+    expect((await stateOf(ep)).seq).toBe(pinned);
     expect((await stateOfApproval(ep, id))).toMatchObject({ state: 'current', playable: true });
   });
 
@@ -460,6 +497,7 @@ const SCRIPT = [
     await saving;
     expect((await approvalRow(id)).pinned_script_version_id).toBe(before);
     expect((await stateOf(ep)).version_id).not.toBe(before);
+    expect(String((await approvalRow(id)).pinned_script_seq)).toBe(String(Number((await stateOf(ep)).seq) - 1));
     expect((await stateOfApproval(ep, id)).state).toBe('needs_review');
     expect(await versionIds(ep)).toContain(before);
   });
@@ -485,6 +523,10 @@ const SCRIPT = [
     sum = await summaryOf(ep);
     expect(sum.approvals.map((a) => [a.line_index, a.state, a.playable])).toEqual([[0, 'ambiguous', false], [2, 'ambiguous', false], [3, 'ambiguous', false]]);
     expect(sum.approvals[0].resolution.candidates).toEqual([1, 2]);
+    expect((await studio.playableApprovals(sequelize, { episodeId: ep })).takes).toEqual([]);
+    // An ambiguous take is not approved again by itself either.
+    const a0 = (await rows('SELECT candidate_id, candidate_revision_id FROM line_voice_approvals WHERE id = :id', { id: ids[0] }))[0];
+    await expectRefusal(studio.approve(sequelize, { episodeId: ep, candidateId: a0.candidate_id, candidateRevisionId: a0.candidate_revision_id, scriptRevision: (await stateOf(ep)).revision, expectedApprovalId: ids[0], userId: USER }), 409, 'NOT_BOUND');
     const rev = (await stateOf(ep)).revision;
     const resolve = (approvalId, lineIndex, expected = null) => studio.resolveApproval(sequelize, { episodeId: ep, approvalId, scriptRevision: rev, lineIndex, expectedApprovalId: expected, userId: USER });
     // A person picks: the first take is for the line now at 1, the second stays at 2.
@@ -507,6 +549,10 @@ const SCRIPT = [
     const inserted = SCRIPT.replace('## BEAT: 6 · Beat 6\n', '## BEAT: 6 · Beat 6\nGuest: "Hi!"\n');
     await saveScript(ep, inserted);
     expect(await stateOfApproval(ep, id)).toMatchObject({ state: 'moved', playable: false, resolution: { candidates: [1] } });
+    // Nothing approves it where it was: the take's association is not bound now.
+    const latest = (await rows('SELECT candidate_id, candidate_revision_id FROM line_voice_approvals WHERE id = :id', { id }))[0];
+    await expectRefusal(studio.approve(sequelize, { episodeId: ep, candidateId: latest.candidate_id, candidateRevisionId: latest.candidate_revision_id, scriptRevision: (await stateOf(ep)).revision, expectedApprovalId: id, userId: USER }), 409, 'NOT_BOUND');
+    expect((await studio.playableApprovals(sequelize, { episodeId: ep })).takes).toEqual([]);
     // Reconfirming cannot move it.
     const sum = await summaryOf(ep);
     const out = await studio.reconfirm(sequelize, { episodeId: ep, scriptRevision: sum.script_revision, items: [{ approval_id: id, context_hash: 'b'.repeat(64) }], userId: USER });
@@ -602,7 +648,12 @@ const SCRIPT = [
     expect((await approvalRow(id)).pinned_script_version_id).toBe(pinned);
     const [conf] = await rows('SELECT pinned_script_version_id FROM line_voice_reconfirmations WHERE approval_id = :id', { id });
     expect(conf.pinned_script_version_id).toBe(confirmedAt);
-    expect((await studio.approvalHistory(sequelize, { episodeId: ep }))[0]).toMatchObject({ id, pinned_script_version_id: pinned });
+    // Still readable without the version row: what was approved, against which revision and save number, and what became of it.
+    const [hist] = await studio.approvalHistory(sequelize, { episodeId: ep });
+    expect(hist).toMatchObject({ id, pinned_script_version_id: pinned, beat_number: 8, line_index: 0, words: 'Closet time.', speaker: 'Lala' });
+    expect(hist.pinned_script_revision).toMatch(/^sr1-[0-9a-f]{40}$/);
+    expect(hist.pinned_script_seq).toMatch(/^[0-9]+$/);
+    expect(hist.revoked_by).toBe(USER);
   });
 
   test('retention: a superseded approval releases its version; a provider that fails prunes nothing and the save goes on', async () => {
