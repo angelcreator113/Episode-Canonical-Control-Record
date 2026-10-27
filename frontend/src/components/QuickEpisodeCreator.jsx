@@ -382,12 +382,19 @@ export default function QuickEpisodeCreator() {
             try {
               await api.post(`/api/v1/world/${effectiveShowId}/events/${event.id}/inject`, { episode_id: episodeId });
             } catch (injectErr) {
-              console.error('[QuickEpisodeCreator] event inject failed, linking directly:', injectErr);
-              try {
-                await api.put(`/api/v1/world/${effectiveShowId}/events/${event.id}`, { episode_id: episodeId });
-              } catch (linkErr) {
-                console.error('[QuickEpisodeCreator] event link failed:', linkErr);
-                eventWarning = `The episode was saved and the event "${eventName.trim()}" was created, but it isn't linked to this episode: ${linkErr.response?.data?.error || linkErr.message}`;
+              console.error('[QuickEpisodeCreator] event inject failed:', injectErr);
+              // Refused (A1c R1, N6): the script has no beat the tag can go in,
+              // or that beat is approved. Said as it is, not linked around it.
+              const code = injectErr.response?.data?.code || '';
+              if (injectErr.response?.status === 409 && code.startsWith('INJECT_')) {
+                eventWarning = `The episode was saved and the event "${eventName.trim()}" was created, but it isn't attached to this episode: ${injectErr.response.data.error}`;
+              } else {
+                try {
+                  await api.put(`/api/v1/world/${effectiveShowId}/events/${event.id}`, { episode_id: episodeId });
+                } catch (linkErr) {
+                  console.error('[QuickEpisodeCreator] event link failed:', linkErr);
+                  eventWarning = `The episode was saved and the event "${eventName.trim()}" was created, but it isn't linked to this episode: ${linkErr.response?.data?.error || linkErr.message}`;
+                }
               }
             }
           } catch (createErr) {
@@ -434,11 +441,18 @@ export default function QuickEpisodeCreator() {
         });
         const event = evRes.data?.event || evRes.data;
 
+        // The new episode's script revision (A1c R1, initial-write contract):
+        // the create answer's, for its empty script, then each script write's
+        // own. The skeleton below is saved against it, so it never writes
+        // over a script someone else saved to this episode meanwhile.
+        let scriptRevision = epRes.data?.script_revision || null;
+
         // Inject event into episode
         try {
-          await api.post(`/api/v1/world/${effectiveShowId}/events/${event.id}/inject`, {
+          const injRes = await api.post(`/api/v1/world/${effectiveShowId}/events/${event.id}/inject`, {
             episode_id: episodeId,
           });
+          if (injRes?.data?.script_revision) scriptRevision = injRes.data.script_revision;
         } catch (injectErr) {
           try {
             await api.put(`/api/v1/world/${effectiveShowId}/events/${event.id}`, {
@@ -452,8 +466,9 @@ export default function QuickEpisodeCreator() {
         try {
           await api.put(`/api/v1/episodes/${episodeId}`, {
             script_content: scriptContent,
+            script_revision: scriptRevision,
           });
-        } catch { /* script save failed — not fatal */ }
+        } catch (scriptErr) { console.error('[QuickEpisodeCreator] script skeleton save failed (not fatal):', scriptErr.response?.data?.code || scriptErr.message); }
       }
 
       // Clear draft and navigate to episode detail

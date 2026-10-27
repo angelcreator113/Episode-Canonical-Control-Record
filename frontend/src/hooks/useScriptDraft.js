@@ -31,7 +31,7 @@ function writeDraft(episodeId, draft) {
 }
 
 /**
- * { offer, discard } — offer is { text, at, baseChanged } when this browser
+ * { offer, discard, keep } — offer is { text, at, baseChanged } when this browser
  * holds edits the saved script doesn't have, else null. Restoring is the
  * caller's (it puts offer.text on the page); either way call discard() to
  * drop the offer, which also clears the kept copy when nothing is unsaved.
@@ -58,8 +58,18 @@ export default function useScriptDraft({ episodeId, scriptText, savedScript, del
   useEffect(() => () => { pending.current?.(); }, []);
 
   const discard = () => setOffer(null);
+  // Keeps this text now and offers it back (A1c R1: "Load the newer script"
+  // puts the newer script on the page; the person's text waits here, behind
+  // "Put them back"). base: the saved script it was written against.
+  const keep = (text, base) => {
+    if (!episodeId || typeof text !== 'string') return;
+    const kept = { text, base: typeof base === 'string' ? base : null, at: Date.now() };
+    pending.current = null;
+    writeDraft(episodeId, kept);
+    setOffer(kept);
+  };
   // Whether the saved script has changed since the draft was kept, against
   // the saved script as it is now (re-audit 2: read once, it missed a newer
   // script the tab took after opening).
-  return { offer: offer ? { ...offer, baseChanged: offer.base !== null && offer.base !== savedScript } : null, discard };
+  return { offer: offer ? { ...offer, baseChanged: offer.base !== null && offer.base !== savedScript } : null, discard, keep };
 }

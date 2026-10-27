@@ -99,7 +99,11 @@ const defaultAi = async ({ messages }) => {
   let userToken;
   let start;
   const auth = (r, t = token) => r.set('Authorization', `Bearer ${t}`);
-  const lock = (beats, body = {}) => auth(request(app).put(`/api/v1/episodes/${ep}/script-locks`)).send({ locked_beats: beats, ...body });
+  // With the script revision the page read (A1c R1).
+  const lock = async (beats, body = {}) => {
+    const revision = (await auth(request(app).get(`/api/v1/episodes/${ep}`))).body.script_revision;
+    return auth(request(app).put(`/api/v1/episodes/${ep}/script-locks`)).send({ locked_beats: beats, script_revision: revision, ...body });
+  };
 
   beforeAll(async () => {
     await migration.down(sequelize.getQueryInterface(), Sequelize);

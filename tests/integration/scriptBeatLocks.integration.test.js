@@ -51,7 +51,10 @@ const ORIGINAL = script(beat(1, 'Opening Ritual', 'Prime: "Hey besties"'), beat(
   });
 
   const auth = (r) => r.set('Authorization', `Bearer ${token}`);
-  const locks = (body) => auth(request(app).put(`/api/v1/episodes/${ep}/script-locks`)).send(body);
+  // Each script write carries the revision the page read (A1c R1).
+  const rev = async () => (await auth(request(app).get(`/api/v1/episodes/${ep}`))).body.script_revision;
+  const locks = async (body) => auth(request(app).put(`/api/v1/episodes/${ep}/script-locks`)).send({ script_revision: await rev(), ...body });
+  const save = async (body) => auth(request(app).put(`/api/v1/episodes/${ep}`)).send({ script_revision: await rev(), ...body });
   const stored = async () => (await run(`SELECT script_content, script_locked_beats FROM episodes WHERE id = :ep`, { ep }))[0][0];
 
   test('approving a beat keeps the lock on the episode, and the episode returns it', async () => {
@@ -70,7 +73,7 @@ const ORIGINAL = script(beat(1, 'Opening Ritual', 'Prime: "Hey besties"'), beat(
 
   test("Save can't change a locked beat: it is put back and named", async () => {
     const edited = ORIGINAL.replace('Logging in', 'Changed while locked').replace('Welcome back', 'Welcome, besties');
-    const res = await auth(request(app).put(`/api/v1/episodes/${ep}`)).send({ script_content: edited });
+    const res = await save({ script_content: edited });
     expect(res.status).toBe(200);
     expect(res.body.locked_beats_kept).toEqual([2]);
     const row = await stored();
@@ -104,9 +107,11 @@ const ORIGINAL = script(beat(1, 'Opening Ritual', 'Prime: "Hey besties"'), beat(
     expect(res.body.script).toBe(row.script_content);
   });
 
-  test('a beat approved while Regenerate is writing keeps its approved words', async () => {
+  test('a beat approved with an edit while Regenerate is writing: the new script comes back unsaved', async () => {
     // Script tab audit (2026-10-15): the writing takes minutes, and the page
-    // can approve a beat (with its unsaved edit) before it comes back.
+    // can approve a beat (with its unsaved edit) before it comes back. A1c R1
+    // (ruling N3): the edit changed the script, so the new one is not saved
+    // over it; it comes back as a draft, the approved words kept in it.
     generateGroundedScript.mockImplementationOnce(async () => {
       const { script_content: now } = await stored();
       const approved = await locks({ locked_beats: [1, 2, 3], script_content: now.replace('Brand new opening', 'Approved while writing') });
@@ -118,11 +123,12 @@ const ORIGINAL = script(beat(1, 'Opening Ritual', 'Prime: "Hey besties"'), beat(
       );
     });
     const res = await auth(request(app).post(`/api/v1/episode-brief/${ep}/generate-script`)).send({ showId: show, confirmOverwrite: true });
-    expect(res.status).toBe(200);
-    expect(res.body.locked_kept).toEqual([1, 2, 3]);
+    expect(res.status).toBe(409);
+    expect(res.body).toMatchObject({ code: 'SCRIPT_CHANGED', saved: false });
+    expect(res.body.draft).toContain('Prime: "Approved while writing"');
+    expect(res.body.draft).not.toContain('Newer opening');
     const row = await stored();
     expect(row.script_content).toContain('Prime: "Approved while writing"');
-    expect(row.script_content).not.toContain('Newer opening');
     expect(row.script_locked_beats).toEqual([1, 2, 3]);
   });
 
@@ -171,11 +177,11 @@ const ORIGINAL = script(beat(1, 'Opening Ritual', 'Prime: "Hey besties"'), beat(
   });
 
   test('clearing the script keeps the locked beats', async () => {
-    const res = await auth(request(app).put(`/api/v1/episodes/${ep}`)).send({ script_content: null });
+    const res = await save({ script_content: null });
     expect(res.status).toBe(200);
     expect(res.body.locked_beats_kept).toEqual([1, 2, 3]);
     expect((await stored()).script_content).toContain('Lala: "Logging in"');
-    expect((await auth(request(app).put(`/api/v1/episodes/${ep}`)).send({ script_content: 42 })).status).toBe(400);
+    expect((await save({ script_content: 42 })).status).toBe(400);
   });
 
   test('an approved beat whose header names no beat reaches the writer with its number', async () => {
@@ -200,7 +206,7 @@ const ORIGINAL = script(beat(1, 'Opening Ritual', 'Prime: "Hey besties"'), beat(
   test('unlocking lets Save change the beat again', async () => {
     expect((await locks({ locked_beats: [] })).body.data.script_locked_beats).toEqual([]);
     const { script_content: current } = await stored();
-    const res = await auth(request(app).put(`/api/v1/episodes/${ep}`)).send({ script_content: current.replace('Logging in', 'Logged in') });
+    const res = await save({ script_content: current.replace('Logging in', 'Logged in') });
     expect(res.body.locked_beats_kept).toBeUndefined();
     expect((await stored()).script_content).toContain('Logged in');
   });

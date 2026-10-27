@@ -191,8 +191,14 @@ module.exports = {
       }
       */
 
+      // The script's revision (A1c R1): the page sends it back with its next
+      // script write, so it never overwrites a newer script.
+      const { readScriptRevision } = require('../services/scriptSave');
+      const scriptRevision = await readScriptRevision({ Episode }, id);
+
       res.json({
         data: episode,
+        script_revision: scriptRevision,
       });
     } catch (error) {
       console.error('❌ Error in getEpisode:', error);
@@ -434,8 +440,12 @@ module.exports = {
         // Service not available, skip silently
       }
 
+      // The initial-write contract (A1c R1, Evoni, 2026-10-27): the new
+      // episode's script revision, which its creator sends with the first
+      // script it writes, as any later save does.
       res.status(201).json({
         data: episode,
+        script_revision: require('../utils/scriptRevision').scriptRevision(episode.script_content, null),
         message: 'Episode created successfully',
       });
     } catch (error) {
@@ -563,17 +573,11 @@ module.exports = {
       if (updateData.script_content === null && String(oldValues.script_content || '').trim()) {
         updateData.script_content = '';
       }
-      if (updateData.script_content !== undefined && updateData.script_content !== null && typeof updateData.script_content !== 'string') {
+      // Clearing a script that is already empty changes nothing (A1c R1:
+      // every script write goes through services/scriptSave.js).
+      if (updateData.script_content === null) delete updateData.script_content;
+      if (updateData.script_content !== undefined && typeof updateData.script_content !== 'string') {
         return { refused: 'script_content must be text' };
-      }
-      if (typeof updateData.script_content === 'string') {
-        const { scriptKeepingLocks } = require('../utils/scriptBeatLocks');
-        // A save is the page's own edits: a new beat under an approved
-        // beat's number is kept, renumbered, and named (locked_beats_moved).
-        const locks = scriptKeepingLocks(oldValues, updateData.script_content, { keepExtras: true });
-        updateData.script_content = locks.script;
-        lockedKept = locks.changed;
-        lockedMoved = locks.moved;
       }
 
       // The style sheet entry in Distribution (Task #2878) is written only by
@@ -583,32 +587,56 @@ module.exports = {
         updateData.distribution_metadata = await keepStyleSheet(Episode.sequelize, episode.id, updateData.distribution_metadata, { transaction });
       }
 
-      // Version history (services/scriptVersions.js): the script this save
-      // replaces is kept first; a failure to keep it never stops the save.
-      // A save that puts back a version from History names it (restored_from,
-      // a version of this episode; any other value is ignored), and the
-      // script it replaces is kept as source 'restore' (History audit H7).
+      // The script (A1c R1, services/scriptSave.js), in this transaction:
+      // the script revision the page loaded is required; locked beats are put
+      // back as before (a new beat under an approved beat's number is kept,
+      // renumbered, and named: locked_beats_moved); the script this save
+      // replaces is kept as a version, and a failure to keep it fails the
+      // save. A save naming a version from History (restored_from) is a
+      // restore only when its text is the server's copy of that version (H7;
+      // Evoni, 2026-10-27); an edited one is an ordinary save.
+      let scriptRevision = null;
       if (typeof updateData.script_content === 'string') {
-        const models = require('../models');
-        const { snapshotScript, isEpisodeVersion } = require('../services/scriptVersions');
-        let source = 'save';
-        if (updates.restored_from != null) {
-          try {
-            // In a savepoint: a failed check never aborts the save.
-            const known = await Episode.sequelize.transaction({ transaction }, (sp) => isEpisodeVersion(models, episode.id, updates.restored_from, sp));
-            if (known) source = 'restore';
-          } catch (err) {
-            console.error('[episodeController] restored_from could not be checked (kept as a save):', err.message);
-          }
-        }
-        await snapshotScript(models, episode, { source, userId: req.user?.id, next: updateData.script_content, transaction });
+        const { saveEpisodeScript } = require('../services/scriptSave');
+        const { scriptKeepingLocks } = require('../utils/scriptBeatLocks');
+        const text = updateData.script_content;
+        const saved = await saveEpisodeScript(require('../models'), episode.id, {
+          writer: 'W1',
+          source: 'save',
+          revision: updates.script_revision,
+          requireRevision: true,
+          restoredFrom: updates.restored_from ?? null,
+          userId: req.user?.id,
+          transaction,
+          compose: (row) => {
+            const locks = scriptKeepingLocks(row, text, { keepExtras: true });
+            return { script: locks.script, kept: locks.changed, moved: locks.moved };
+          },
+        });
+        updateData.script_content = saved.script_content;
+        lockedKept = saved.locked_beats_kept;
+        lockedMoved = saved.locked_beats_moved;
+        scriptRevision = saved.script_revision;
       }
 
-      await episode.update(updateData, { transaction });
-      return { episode, oldValues, updateData, lockedKept, lockedMoved };
+      // The other fields; the script is already written, on the locked row,
+      // so this episode is read again to answer with it.
+      const { script_content: _script, ...rest } = updateData;
+      if (scriptRevision) {
+        if (Object.keys(rest).length) await episode.update(rest, { transaction });
+        await episode.reload({ transaction });
+      } else {
+        await episode.update(rest, { transaction });
+      }
+      return { episode, oldValues, updateData, lockedKept, lockedMoved, scriptRevision };
+    }).catch((err) => {
+      const { ScriptSaveError } = require('../services/scriptSave');
+      if (err instanceof ScriptSaveError) return { scriptRefusal: err };
+      throw err;
     });
+    if (result.scriptRefusal) return res.status(result.scriptRefusal.status).json(result.scriptRefusal.body);
     if (result.refused) return res.status(400).json({ error: result.refused });
-    const { episode, oldValues, updateData, lockedKept, lockedMoved } = result;
+    const { episode, oldValues, updateData, lockedKept, lockedMoved, scriptRevision } = result;
 
     // A moved air date moves the episode's scheduled Pulse posts with it
     // (services/postRelease shiftForAirDate); one that would land in the
@@ -683,6 +711,7 @@ module.exports = {
     res.json({
       data: episode,
       message: 'Episode updated successfully',
+      ...(scriptRevision ? { script_revision: scriptRevision } : {}),
       ...(lockedKept.length ? { locked_beats_kept: lockedKept } : {}),
       ...(lockedMoved.length ? { locked_beats_moved: lockedMoved } : {}),
       ...(releaseShift && (releaseShift.shifted.length || releaseShift.held.length) ? { release_shift: releaseShift } : {}),
@@ -714,29 +743,38 @@ module.exports = {
     }
 
     // One transaction with the row locked, as the episode save (History
-    // audit H11): a lock and a save at once can't lose a version.
-    const { episode, lockedKept, lockedMoved, newlyLocked } = await Episode.sequelize.transaction(async (transaction) => {
-      const row = await Episode.findByPk(id, { transaction, lock: transaction.LOCK.UPDATE });
-      if (!row) {
-        throw new NotFoundError('Episode', id);
-      }
-      const before = normalizeLockedBeats(row.script_locked_beats);
-      const update = { script_locked_beats: next };
-      let kept = [];
-      let moved = [];
-      if (typeof scriptContent === 'string') {
-        const stillLocked = before.filter((n) => next.includes(n));
-        // The page's own edits: a new beat under an approved beat's number is kept, renumbered.
-        const locks = keepLockedBeats(scriptContent, row.script_content, stillLocked, { keepExtras: true });
-        update.script_content = locks.script;
-        kept = locks.changed;
-        moved = locks.moved;
-        const { snapshotScript } = require('../services/scriptVersions');
-        await snapshotScript(require('../models'), row, { source: 'lock', userId: req.user?.id, next: update.script_content, transaction });
-      }
-      await row.update(update, { transaction });
-      return { episode: row, lockedKept: kept, lockedMoved: moved, newlyLocked: next.filter((n) => !before.includes(n)) };
-    });
+    // audit H11): a lock and a save at once can't lose a version. Through
+    // services/scriptSave.js (A1c R1): the script revision the page loaded
+    // is required, for a lock alone too (a beat is approved as the page
+    // showed it), and the version is kept strictly.
+    const { saveEpisodeScript, sendScriptSaveError } = require('../services/scriptSave');
+    let before = [];
+    let saved;
+    try {
+      saved = await saveEpisodeScript(require('../models'), id, {
+        writer: 'W2',
+        source: 'lock',
+        revision: req.body?.script_revision,
+        requireRevision: true,
+        userId: req.user?.id,
+        compose: (row) => {
+          before = normalizeLockedBeats(row.script_locked_beats);
+          if (typeof scriptContent !== 'string') return { script: typeof row.script_content === 'string' ? row.script_content : '', lockedBeats: next };
+          const stillLocked = before.filter((n) => next.includes(n));
+          // The page's own edits: a new beat under an approved beat's number is kept, renumbered.
+          const locks = keepLockedBeats(scriptContent, row.script_content, stillLocked, { keepExtras: true });
+          return { script: locks.script, kept: locks.changed, moved: locks.moved, lockedBeats: next };
+        },
+      });
+    } catch (err) {
+      if (err?.body?.code === 'EPISODE_NOT_FOUND') throw new NotFoundError('Episode', id);
+      if (sendScriptSaveError(res, err)) return undefined;
+      throw err;
+    }
+    const episode = saved.episode;
+    const lockedKept = saved.locked_beats_kept;
+    const lockedMoved = saved.locked_beats_moved;
+    const newlyLocked = next.filter((n) => !before.includes(n));
 
     // Character voices that learn (Evoni, 2026-10-25; services/characterVoice):
     // the newly locked beats' lines are approved lines, and each line she
@@ -753,6 +791,7 @@ module.exports = {
 
     res.json({
       data: { id: episode.id, script_locked_beats: episode.script_locked_beats, script_content: episode.script_content },
+      script_revision: saved.script_revision,
       ...(lockedKept.length ? { locked_beats_kept: lockedKept } : {}),
       ...(lockedMoved.length ? { locked_beats_moved: lockedMoved } : {}),
     });

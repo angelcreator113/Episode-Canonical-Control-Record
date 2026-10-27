@@ -134,7 +134,8 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
 
     // The caller keeps the draft and saves it; no second generation.
     const calls = generateGroundedScript.mock.calls.length;
-    const saved = await auth(request(app).put(`/api/v1/episodes/${ep}`)).send({ script_content: failed.body.script });
+    const revision = (await auth(request(app).get(`/api/v1/episodes/${ep}`))).body.script_revision;
+    const saved = await auth(request(app).put(`/api/v1/episodes/${ep}`)).send({ script_content: failed.body.script, script_revision: revision });
     expect(saved.status).toBe(200);
     expect(generateGroundedScript.mock.calls.length).toBe(calls);
     const [after] = await rows('SELECT script_content FROM episodes WHERE id = :ep', { ep });

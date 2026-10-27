@@ -642,6 +642,11 @@ router.post('/:episodeId/generate-script', requireAuth, aiRateLimiter, async (re
 
     const { generateGroundedScript } = require('../services/groundedScriptGeneratorService');
     const models = require('../models');
+    // The episode's script revision now (A1c R1): the written script is
+    // saved only if nothing changed the script while it was written; if
+    // something did, it comes back as a draft, unsaved (409 SCRIPT_CHANGED).
+    const { readScriptRevision, saveEpisodeScript, ScriptSaveError } = require('../services/scriptSave');
+    const expectRevision = await readScriptRevision(models, episodeId);
     // Locked beats (utils/scriptBeatLocks.js): Regenerate rewrites only the
     // unlocked beats; each locked one comes back word for word. The writer
     // reads the locked beats so the new ones fit around them (Evoni,
@@ -668,15 +673,13 @@ router.post('/:episodeId/generate-script', requireAuth, aiRateLimiter, async (re
     }
     const generated = typeof written === 'string' ? written : written?.script || '';
     // Writing the script takes minutes, and the page can approve a beat or
-    // save while it runs (Script tab audit, 2026-10-15). The locks kept are
-    // the episode's as they are now, not as they were when the request came
-    // in, so a beat approved during the writing keeps its approved words.
-    // A failed read keeps the paid script: it falls back to the first read.
-    const current = (await Episode.findByPk(episodeId).catch((readErr) => {
-      console.error('[ScriptGen] Could not re-read the episode before saving:', readErr.message);
-      return null;
-    })) || episodeForGuard;
-    let locks = scriptKeepingLocks(current, generated);
+    // save while it runs (Script tab audit, 2026-10-15). Through
+    // services/scriptSave.js (A1c R1): the row locked (SELECT ... FOR
+    // UPDATE), the locks kept the episode's as they are at that moment (a
+    // beat approved during the writing keeps its approved words), the
+    // replaced script kept as a version in the same transaction (a failure
+    // fails the save), and the save refused if the script itself changed.
+    let locks = scriptKeepingLocks(episodeForGuard, generated);
     let script = locks.script;
 
     // Audit GATE-03 (2026-10-03): saving is part of success. A script that
@@ -685,27 +688,30 @@ router.post('/:episodeId/generate-script', requireAuth, aiRateLimiter, async (re
     // retries the save, never the paid generation.
     let saved = false;
     let saveError = null;
+    let savedRevision = null;
     try {
-      if (!current) {
-        saveError = 'Episode not found';
-      } else {
-        // History audit H11 (2026-10-24): the row is read again locked
-        // (SELECT ... FOR UPDATE) with the kept version and the update in one
-        // transaction, so a save or lock landing now can't lose a version;
-        // the locks kept are the episode's as it is at this moment.
-        await models.sequelize.transaction(async (transaction) => {
-          const episode = (await Episode.findByPk(episodeId, { transaction, lock: transaction.LOCK.UPDATE })) || current;
-          locks = scriptKeepingLocks(episode, generated);
-          script = locks.script;
-          // Version history: the script Regenerate replaces is kept first.
-          const { snapshotScript } = require('../services/scriptVersions');
-          await snapshotScript(models, episode, { source: 'generate', userId: req.user?.id, next: script, transaction });
-          await episode.update({ script_content: script }, { transaction });
-        });
-        saved = true;
-      }
+      const result = await saveEpisodeScript(models, episodeId, {
+        writer: 'W10',
+        source: 'generate',
+        expectRevision,
+        guard: req.body,
+        userId: req.user?.id,
+        compose: (row) => {
+          locks = scriptKeepingLocks(row, generated);
+          return { script: locks.script };
+        },
+      });
+      script = result.script_content;
+      saved = true;
+      savedRevision = result.script_revision;
     } catch (saveErr) {
       console.error('[ScriptGen] Could not save to episode:', saveErr.message);
+      // A refusal (the script changed while it was written, line identity
+      // active, an overwrite now needing confirmation): its status and code,
+      // with the written script as the unsaved draft.
+      if (saveErr instanceof ScriptSaveError) {
+        return res.status(saveErr.status).json({ ...saveErr.body, saved: false, draft: saveErr.body.draft ?? script, episodeId });
+      }
       saveError = saveErr.message;
     }
 
@@ -719,6 +725,7 @@ router.post('/:episodeId/generate-script', requireAuth, aiRateLimiter, async (re
     }
     const body = {
       success: saved, saved, script, episodeId,
+      ...(saved ? { script_revision: savedRevision } : {}),
       locked_kept: locks.kept,
       beats: check.beats.map(({ number, name }) => ({ number, name })),
       beat_check: { complete: check.complete, missing: check.missing, unknown: check.unknown, out_of_order: check.outOfOrder },

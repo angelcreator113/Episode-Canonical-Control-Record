@@ -15,13 +15,16 @@ import api from '../../services/api';
 import EpisodeScriptTab, { parseScriptIntoBeats, scriptPreamble } from './EpisodeScriptTab';
 
 const SCRIPT = '## BEAT: 1 · Opening Ritual\nLala: Hi besties.\n\n## BEAT: 2 · Login Sequence\nLala: Logging in.\n';
+const REV = `sr1-${'a'.repeat(40)}`; // the saved script's revision (A1c R1), as GET /episodes/:id gives it
 const renderTab = (locked = []) => render(
   <MemoryRouter><EpisodeScriptTab episode={{ id: 'ep-1', show_id: 'show-1', script_content: SCRIPT, script_locked_beats: locked }} show={{ id: 'show-1' }} /></MemoryRouter>,
 );
 
 beforeEach(() => {
   Object.values(api).forEach((fn) => fn?.mockReset?.());
-  vi.mocked(api.get).mockResolvedValue({ data: { data: [] } });
+  vi.mocked(api.get).mockImplementation(async (url) => (url === '/api/v1/episodes/ep-1'
+    ? { data: { data: { id: 'ep-1', script_content: SCRIPT, script_locked_beats: [] }, script_revision: REV } }
+    : { data: { data: [] } }));
 });
 
 describe('Script beat locks', () => {
@@ -59,7 +62,7 @@ describe('Script beat locks', () => {
     renderTab();
     fireEvent.click(screen.getByTestId('script-lock-1'));
     await waitFor(() => expect(screen.getByTestId('script-beat-1').getAttribute('data-locked')).toBe('true'));
-    expect(api.put).toHaveBeenCalledWith('/api/v1/episodes/ep-1/script-locks', { locked_beats: [1] });
+    expect(api.put).toHaveBeenCalledWith('/api/v1/episodes/ep-1/script-locks', { locked_beats: [1], script_revision: REV });
     expect(screen.getByTestId('script-lock-1').textContent).toBe('Unlock');
   });
 

@@ -154,6 +154,9 @@ describe('Episode Controller - Real Tests', () => {
   });
 
   describe('getEpisode()', () => {
+    // The script revision is read unscoped (A1c R1, services/scriptSave.js readScriptRevision).
+    beforeEach(() => { models.Episode.unscoped = jest.fn(() => models.Episode); });
+
     test('should return episode with includes', async () => {
       const mockEpisode = {
         id: 1,
@@ -168,7 +171,7 @@ describe('Episode Controller - Real Tests', () => {
       await episodeController.getEpisode(mockReq, mockRes);
 
       expect(models.Episode.findByPk).toHaveBeenCalledWith('1', expect.any(Object));
-      expect(mockRes.json).toHaveBeenCalledWith({ data: mockEpisode });
+      expect(mockRes.json).toHaveBeenCalledWith({ data: mockEpisode, script_revision: expect.stringMatching(/^sr1-[0-9a-f]{40}$/) });
     });
 
     test('should throw NotFoundError if episode missing', async () => {

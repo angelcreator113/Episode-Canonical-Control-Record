@@ -272,6 +272,8 @@ describe('A1a line identity', () => {
       'src/utils/lineKeys.js',
       'frontend/src/lib/lineKeys.js',
       'frontend/src/lib/lineKeys.test.js',
+      // A1c R1 (Evoni, 2026-10-27): the counts-only plan log, which stores nothing.
+      'src/services/identityPlanLog.js',
     ]);
     const found = [];
     const walk = (dir) => {
