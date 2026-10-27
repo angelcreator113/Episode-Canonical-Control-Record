@@ -228,9 +228,13 @@ describe('7: Approve waits for a Save', () => {
     expect(lock.getAttribute('aria-disabled')).toBe('true');
     expect(lock.title).toBe('Wait for the save to finish');
     fireEvent.click(lock);
+    // The save reads its revision first (A1c R1), so its request is sent a tick later; the lock never is.
     await waitFor(() => expect(api.put).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(api.put).mock.calls[0][0]).toBe('/api/v1/episodes/ep-1');
+    expect(vi.mocked(api.put).mock.calls[0][1]).toHaveProperty('script_revision');
     await act(async () => { put.resolve({ data: { data: { script_content: SCRIPT.replace('Lala: Hi besties.', 'Lala: New.') } } }); });
     expect(screen.getByTestId('script-lock-1').getAttribute('aria-disabled')).toBeNull();
+    expect(vi.mocked(api.put).mock.calls.map(([u]) => u)).toEqual(['/api/v1/episodes/ep-1']);
   });
 });
 

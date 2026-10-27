@@ -11,11 +11,19 @@
  * The line is counts and ids only: never script text, dialogue, beat or line
  * labels, line hashes, keys, character or event names. It never throws and
  * never affects the write it describes.
+ *
+ * On by default; SCRIPT_IDENTITY_PLAN_LOG=off (or 0, false, no) turns it off
+ * without a deploy of code.
  */
 
 const { planLineIdentity } = require('../utils/lineKeys');
 
 const PREFIX = '[line-identity-plan]';
+
+/** Whether the plan is logged (SCRIPT_IDENTITY_PLAN_LOG; on unless set to off, 0, false or no). */
+function planLogEnabled(env = process.env) {
+  return !/^(off|0|false|no)$/i.test(String(env.SCRIPT_IDENTITY_PLAN_LOG ?? '').trim());
+}
 
 /** The log line for a write, or null when there is nothing to describe. */
 function identityPlanLine({ episodeId, writer, source, state, prevText, nextText, now = Date.now }) {
@@ -32,8 +40,9 @@ function identityPlanLine({ episodeId, writer, source, state, prevText, nextText
   };
 }
 
-function logIdentityPlan(args, log = console.log) {
+function logIdentityPlan(args, log = console.log, env = process.env) {
   try {
+    if (!planLogEnabled(env)) return null;
     if (typeof args?.prevText === 'string' && typeof args?.nextText === 'string' && args.prevText === args.nextText) return null;
     const line = identityPlanLine(args);
     log(`${PREFIX} ${JSON.stringify(line)}`);
@@ -45,4 +54,4 @@ function logIdentityPlan(args, log = console.log) {
   }
 }
 
-module.exports = { logIdentityPlan, identityPlanLine, PREFIX };
+module.exports = { logIdentityPlan, identityPlanLine, planLogEnabled, PREFIX };

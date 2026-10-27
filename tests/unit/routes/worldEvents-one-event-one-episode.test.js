@@ -141,11 +141,12 @@ const inject = (eventId, episodeId) =>
   request(app).post(`/api/v1/world/${SHOW}/events/${eventId}/inject`).send({ episode_id: episodeId });
 
 describe('POST /world/:showId/events/:eventId/inject (a started event is never moved, §8(x) D4)', () => {
-  test('an unused event is injected: script saved and event marked used', async () => {
+  test('an unused event is injected: event marked used (its episode has no script yet, so none is written; A1c R1)', async () => {
     const res = await inject('ev-unused', 'ep-target');
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
-    expect(mockEpisodeUpdate).toHaveBeenCalledTimes(1);
+    expect(res.body.script_tagged).toBe(false);
+    expect(mockEpisodeUpdate).not.toHaveBeenCalled();
     expect(mockEventUpdates).toHaveLength(1);
     expect(mockEventUpdates[0].replacements).toEqual({ episodeId: 'ep-target', eventId: 'ev-unused' });
     expect(mockEventUpdates[0].sql).toMatch(/status = 'used'/);

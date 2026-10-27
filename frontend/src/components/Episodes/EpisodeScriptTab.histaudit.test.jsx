@@ -43,6 +43,7 @@ const typeRaw = (value) => {
 
 let versions;
 let version;
+const REV = `sr1-${'a'.repeat(40)}`; // the saved script's revision (A1c R1), as GET /episodes/:id gives it
 beforeEach(() => {
   Object.values(api).forEach((fn) => fn?.mockReset?.());
   window.localStorage.clear();
@@ -172,13 +173,18 @@ describe('H5: an open suggestion', () => {
 
 describe('H7: the next Save names the version', () => {
   test('restored_from goes with the save, once', async () => {
+    // The saved script as the server has it, with its revision (A1c R1).
+    const versionsGet = vi.mocked(api.get).getMockImplementation();
+    vi.mocked(api.get).mockImplementation(async (url) => (url === '/api/v1/episodes/ep-1'
+      ? { data: { data: { id: 'ep-1', script_content: SCRIPT, script_locked_beats: [] }, script_revision: REV } }
+      : versionsGet(url)));
     vi.mocked(api.put).mockImplementation(async (url, body) => ({ data: { data: { script_content: body.script_content } } }));
     renderTab();
     await openVersion();
     fireEvent.click(screen.getByTestId('script-history-restore'));
     fireEvent.click(screen.getByTestId('script-savebar-save'));
     await waitFor(() => expect(api.put).toHaveBeenCalledTimes(1));
-    expect(vi.mocked(api.put).mock.calls[0][1]).toEqual(expect.objectContaining({ script_content: OLD, restored_from: VID }));
+    expect(vi.mocked(api.put).mock.calls[0][1]).toEqual({ script_content: OLD, restored_from: VID, script_revision: REV });
     typeRaw(`${OLD}\nLala: more.`);
     fireEvent.click(screen.getByTestId('script-savebar-save'));
     await waitFor(() => expect(api.put).toHaveBeenCalledTimes(2));

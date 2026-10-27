@@ -159,10 +159,15 @@ async function saveEpisodeScript(models, episodeId, opts = {}) {
     };
   };
 
+  // After the commit, and never able to fail the save it describes.
   const logAfter = (result) => {
     if (!result || result.skipped) return;
-    const { logIdentityPlan } = require('./identityPlanLog');
-    logIdentityPlan({ episodeId, writer, source: result.version_source, state: 'unkeyed', prevText: result.previous_content, nextText: result.script_content });
+    try {
+      const { logIdentityPlan } = require('./identityPlanLog');
+      logIdentityPlan({ episodeId, writer, source: result.version_source, state: 'unkeyed', prevText: result.previous_content, nextText: result.script_content });
+    } catch (err) {
+      console.error(`[line-identity-plan] not logged (the save stands): ${err?.name || 'Error'}`);
+    }
   };
 
   if (transaction) {

@@ -15,13 +15,16 @@ import api from '../../services/api';
 import EpisodeScriptTab from './EpisodeScriptTab';
 
 const SCRIPT = '## BEAT: 1 · Opening Ritual\nLala: Hi besties.\n';
+const REV = `sr1-${'a'.repeat(40)}`; // the saved script's revision (A1c R1), as GET /episodes/:id gives it
 const renderTab = () => render(
   <MemoryRouter><EpisodeScriptTab episode={{ id: 'ep-1', show_id: 'show-1', script_content: '' }} show={{ id: 'show-1' }} /></MemoryRouter>,
 );
 
 beforeEach(() => {
   Object.values(api).forEach((fn) => fn?.mockReset?.());
-  vi.mocked(api.get).mockResolvedValue({ data: { data: [] } });
+  vi.mocked(api.get).mockImplementation(async (url) => (url === '/api/v1/episodes/ep-1'
+    ? { data: { data: { id: 'ep-1', script_content: '', script_locked_beats: [] }, script_revision: REV } }
+    : { data: { data: [] } }));
   vi.mocked(api.put).mockResolvedValue({ data: { success: true } });
 });
 
@@ -40,7 +43,7 @@ describe('EpisodeScriptTab: generated but not saved', () => {
     expect(api.post).toHaveBeenCalledTimes(1);
 
     fireEvent.click(screen.getByTestId('script-unsaved-save'));
-    await waitFor(() => expect(api.put).toHaveBeenCalledWith('/api/v1/episodes/ep-1', expect.objectContaining({ script_content: SCRIPT })));
+    await waitFor(() => expect(api.put).toHaveBeenCalledWith('/api/v1/episodes/ep-1', { script_content: SCRIPT, script_revision: REV }));
     await waitFor(() => expect(screen.queryByTestId('script-unsaved')).toBeNull());
     expect(api.post).toHaveBeenCalledTimes(1);
   });

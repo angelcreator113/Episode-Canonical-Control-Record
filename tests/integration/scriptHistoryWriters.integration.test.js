@@ -78,13 +78,15 @@ const beat = (n, name, body) => `## BEAT: ${n} · ${name}\n${body}`;
     });
 
     test('inject keeps the script before the event tag went in', async () => {
-      const ep = await episode(OLD);
+      // With a beat 6, where the tag goes (A1c R1, N6: with no such beat it is refused).
+      const WITH_STAKES = `${OLD}\n\n${beat(6, 'Strategic Reaction', 'Lala: "This is my moment."')}`;
+      const ep = await episode(WITH_STAKES);
       const ev = await worldEvent();
       const res = await auth(request(app).post(`/api/v1/world/${show}/events/${ev}/inject`)).send({ episode_id: ep });
       expect(res.status).toBe(200);
       const kept = await versions(ep);
       expect(kept).toHaveLength(1);
-      expect(kept[0]).toMatchObject({ source: 'generate', script_content: OLD });
+      expect(kept[0]).toMatchObject({ source: 'generate', script_content: WITH_STAKES });
     });
 
     test('generate-beats keeps the script it replaces', async () => {

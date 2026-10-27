@@ -18,13 +18,18 @@
  * text, locks and versions unchanged, (c) a row with line identities is
  * refused and nothing is written, (d) script_line_keys stays NULL on the
  * episode and every version, (e) script_voice_clips rows are identical
- * before and after, (f) a concurrent write is serialised by the row lock.
+ * before and after, (f) a concurrent write is serialised by the row lock,
+ * (g) a writer with an overwrite guard checks it under the row lock, and
+ * (h) its counts-only identity-plan line names the writer and no words.
  *
  * Only the AI is stubbed (the Anthropic SDK and the grounded writer's model
- * call), and the Script Writer's own episode_scripts row for W3/W4: the
- * test database's episode_scripts table predates the EpisodeScript model
- * (see scriptHistoryWriters.integration.test.js). The episode, its versions
- * and every other table are the real ones.
+ * call). The Script Writer's episode_scripts rows (W3, W4) are real rows in
+ * a real table: the test database's own episode_scripts predates the
+ * EpisodeScript model (its 2024 migration ran first, so the 2026-07-18 one
+ * found the table there), so this suite runs that 2026-07-18 migration's
+ * episode_scripts steps into a schema of its own and points the model at it.
+ * Its foreign keys reach the real episodes and episode_briefs tables. The
+ * episode, its versions and every other table are the real ones.
  */
 jest.unmock('uuid');
 
@@ -38,6 +43,7 @@ jest.mock('../../src/services/groundedScriptGeneratorService', () => ({
   generateGroundedScript: (...a) => mockGrounded(...a),
 }));
 
+const { Sequelize } = require('sequelize');
 const request = require('supertest');
 const crypto = require('crypto');
 const app = require('../../src/app');
@@ -60,26 +66,31 @@ const rows = async (sql, replacements = {}) => (await run(sql, replacements))[0]
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const beat = (n, name, body) => `## BEAT: ${n} · ${name}\n${body}`;
 
-// The fixture: an approved beat 1, an unlocked STAKES beat 2, a beat 3.
+// The fixture: an approved beat 1, an unlocked beat 6 (the strategic
+// reaction, where an event's tag goes), a beat 8.
 const B1 = beat(1, 'Opening Ritual', 'Lala: "Bestie, come style me."\n(Lala twirls)');
-const B2 = beat(2, 'STAKES_INTENTION', 'Prime: "This is the one."');
-const B3 = beat(3, 'Transformation', 'Lala: "Closet time."');
+const B2 = beat(6, 'Strategic Reaction', 'Prime: "This is the one."');
+const B3 = beat(8, 'Transformation Loop', 'Lala: "Closet time."');
 const FIXTURE = `${B1}\n\n${B2}\n\n${B3}`;
 const LOCKS = [1];
 // What a generator writes: every beat new, beat 1 included (which is kept).
 const GENERATED = [
   beat(1, 'Opening Ritual', 'Lala: "A NEW OPENING THAT MUST NOT LAND."'),
-  beat(2, 'STAKES_INTENTION', 'Prime: "New stakes."'),
-  beat(3, 'Transformation', 'Lala: "New closet."'),
+  beat(6, 'Strategic Reaction', 'Prime: "New stakes."'),
+  beat(8, 'Transformation Loop', 'Lala: "New closet."'),
 ].join('\n\n');
 const EDITED = FIXTURE.replace('Closet time.', 'Closet time, edited.');
+const withTag = (script, header, tag) => script.replace(`${header}\n`, `${header}\n${tag}\n`);
+const SCHEMA = `a1c_r1_${crypto.randomUUID().slice(0, 8)}`;
 
 (shouldSkip ? describe.skip : describe)('A1c R1: every script writer through the one save', () => {
   const show = uuid();
   const episodes = [];
   let token;
-  let scriptStub;
   let realEpisodeScript;
+  // EpisodeScript on the real table in this suite's schema (see the header).
+  let ScriptRow;
+  let failScriptUpdate = false;
   // Each test from its own address (app.js trusts one proxy): the write
   // limiter (60 a minute per address) is not what is under test here.
   let testNumber = 0;
@@ -90,10 +101,28 @@ const EDITED = FIXTURE.replace('Closet time.', 'Closet time, edited.');
     token = TokenService.generateTokenPair({ id: `test-a1c-${show.slice(0, 8)}`, email: 'w@a1c.dev', name: 'Writers', groups: ['USER', 'EDITOR'], role: 'USER' }).accessToken;
     await run(`INSERT INTO shows (id, name, slug, created_at, updated_at) VALUES (:id, :n, :n, NOW(), NOW())`, { id: show, n: `a1c-${show.slice(0, 8)}` });
     realEpisodeScript = models.EpisodeScript;
+    await run(`CREATE SCHEMA "${SCHEMA}"`);
+    // The 2026-07-18 migration's episode_scripts steps, into this schema; its feed_posts steps are skipped.
+    const migration = require('../../src/migrations/20260718000000-create-episode-scripts-and-feed-posts');
+    const qi = sequelize.getQueryInterface();
+    const mine = (t) => (t === 'episode_scripts' ? { tableName: t, schema: SCHEMA } : null);
+    // Its foreign keys go to the real tables (public), not to copies in this schema.
+    const toPublic = (attrs) => Object.fromEntries(Object.entries(attrs).map(([k, a]) => [k, typeof a?.references?.model === 'string'
+      ? { ...a, references: { ...a.references, model: { tableName: a.references.model, schema: 'public' } } } : a]));
+    await migration.up({
+      createTable: (t, attrs, o) => (mine(t) ? qi.createTable(mine(t), toPublic(attrs), o) : Promise.resolve()),
+      describeTable: (t) => qi.describeTable(mine(t) || t),
+      addColumn: (t, ...rest) => qi.addColumn(mine(t) || t, ...rest),
+      sequelize: { query: (sql, o) => (/feed_posts/.test(sql) ? Promise.resolve([[], 0]) : sequelize.query(sql.replace(/\bON episode_scripts\b/g, `ON "${SCHEMA}".episode_scripts`), o)) },
+    }, Sequelize);
+    ScriptRow = realEpisodeScript.schema(SCHEMA);
+    const cols = await qi.describeTable({ tableName: 'episode_scripts', schema: SCHEMA });
+    for (const c of Object.keys(realEpisodeScript.getAttributes())) expect(cols).toHaveProperty(realEpisodeScript.getAttributes()[c].field || c);
   });
 
   afterAll(async () => {
     models.EpisodeScript = realEpisodeScript;
+    await run(`DROP SCHEMA IF EXISTS "${SCHEMA}" CASCADE`).catch((err) => console.error('[cleanup] schema:', err.message));
     const eps = (await rows(`SELECT id FROM episodes WHERE show_id = :show`, { show })).map((r) => r.id);
     if (eps.length) {
       for (const table of ['episode_script_versions', 'script_voice_clips', 'episode_spending_lines', 'episode_briefs', 'scene_plans']) {
@@ -113,25 +142,9 @@ const EDITED = FIXTURE.replace('Closet time.', 'Closet time, edited.');
     mockCreate.mockResolvedValue({ content: [{ text: GENERATED }], usage: { input_tokens: 1, output_tokens: 1 } });
     mockGrounded.mockReset();
     mockGrounded.mockResolvedValue({ script: GENERATED });
-    // The Script Writer's own row (W3, W4), in memory: its table here is an older shape.
-    const made = [];
-    scriptStub = {
-      made,
-      async findOne() { return null; },
-      async findByPk(id) { return made.find((s) => s.id === id) || null; },
-      async create(vals) {
-        const row = {
-          id: uuid(), ...vals,
-          async update(next) { if (scriptStub.failUpdate) throw new Error('forced script row failure'); Object.assign(row, next); return row; },
-          setDataValue(k, v) { row[k] = v; },
-          toJSON() { const { update, setDataValue, toJSON, ...data } = row; return data; },
-        };
-        made.push(row);
-        return row;
-      },
-      failUpdate: false,
-    };
-    models.EpisodeScript = scriptStub;
+    // The Script Writer's rows (W3, W4) in the real table in this suite's schema.
+    failScriptUpdate = false;
+    models.EpisodeScript = ScriptRow;
   });
   afterEach(() => { jest.restoreAllMocks(); models.EpisodeScript = realEpisodeScript; });
 
@@ -160,6 +173,20 @@ const EDITED = FIXTURE.replace('Closet time.', 'Closet time, edited.');
   const clips = (ep) => rows(`SELECT * FROM script_voice_clips WHERE episode_id = :ep ORDER BY id`, { ep });
   const revisionOf = async (ep) => (await auth(request(app).get(`/api/v1/episodes/${ep}`))).body.script_revision;
   const setKeys = (ep) => run(`UPDATE episodes SET script_line_keys = CAST(:k AS jsonb) WHERE id = :ep`, { ep, k: JSON.stringify({ v: 1, text_hash: 'x', lines: [], retired: [] }) });
+  // The Script Writer's rows of an episode, as stored.
+  const scriptRows = (ep) => rows(`SELECT id, version, status, script_text FROM "${SCHEMA}".episode_scripts WHERE episode_id = :ep ORDER BY version`, { ep });
+  const makeScriptRow = async (ep, text = GENERATED) => {
+    const row = await ScriptRow.create({ episode_id: ep, show_id: show, version: (await scriptRows(ep)).length + 1, status: 'draft', script_text: text });
+    return row.id;
+  };
+  // A Script Writer row whose status can't be saved: the lock must roll the episode back too.
+  const failScriptRowUpdate = () => {
+    const real = ScriptRow.prototype.update;
+    return jest.spyOn(ScriptRow.prototype, 'update').mockImplementation(async function update(...args) {
+      if (args[0] && args[0].status === 'locked') throw new Error('forced script row failure');
+      return real.apply(this, args);
+    });
+  };
   const newEpisodesOf = async (before) => (await rows(`SELECT id FROM episodes WHERE show_id = :show`, { show })).map((r) => r.id).filter((id) => !before.includes(id));
   const allEpisodeIds = async () => (await rows(`SELECT id FROM episodes WHERE show_id = :show`, { show })).map((r) => r.id);
 
@@ -174,7 +201,7 @@ const EDITED = FIXTURE.replace('Closet time.', 'Closet time, edited.');
 
   // Holds the episode row (SELECT ... FOR UPDATE), writes HELD into it, and
   // commits after `ms`: a write that started meanwhile must wait, then read HELD.
-  const HELD = beat(1, 'Opening Ritual', 'Lala: "Bestie, come style me."\n(Lala twirls)') + '\n\n' + beat(2, 'STAKES_INTENTION', 'Prime: "Written by the other tab."');
+  const HELD = beat(1, 'Opening Ritual', 'Lala: "Bestie, come style me."\n(Lala twirls)') + '\n\n' + beat(6, 'Strategic Reaction', 'Prime: "Written by the other tab."');
   const holdRow = async (ep, ms = 600) => {
     const t = await sequelize.transaction();
     await sequelize.query(`SELECT id FROM episodes WHERE id = :ep FOR UPDATE`, { replacements: { ep }, transaction: t });
@@ -188,6 +215,7 @@ const EDITED = FIXTURE.replace('Closet time.', 'Closet time, edited.');
   // Each: setup() → ctx; drive(ctx) → response; the episode it writes (ctx.ep
   // or, for W6/W8, the new one); the text it should write (parity), or null
   // when the writer's own input is not known to the test.
+  // The old marker rule, for a named-header script (where it found the beat).
   const legacyInject = (script, injection) => {
     let s = script.replace(/\[EVENT:[^\]]*\]/gi, '').replace(/\[LOCATION_HINT:[^\]]*\]/gi, '');
     const marker = ['## BEAT: STAKES', '## BEAT: REVEAL', '## BEAT: INTERRUPTION'].find((m) => s.indexOf(m) >= 0);
@@ -205,27 +233,28 @@ const EDITED = FIXTURE.replace('Closet time.', 'Closet time, edited.');
     },
     {
       id: 'W2', existing: true, revisioned: true,
-      drive: async (ctx) => auth(request(app).put(`/api/v1/episodes/${ctx.ep}/script-locks`)).send({ locked_beats: [1, 3], script_content: EDITED, script_revision: ctx.revision }),
+      drive: async (ctx) => auth(request(app).put(`/api/v1/episodes/${ctx.ep}/script-locks`)).send({ locked_beats: [1, 8], script_content: EDITED, script_revision: ctx.revision }),
       expected: () => require('../../src/utils/scriptBeatLocks').keepLockedBeats(EDITED, FIXTURE, [1], { keepExtras: true }).script,
-      locksAfter: [1, 3],
+      locksAfter: [1, 8],
     },
     {
-      id: 'W3', existing: true, generator: true,
-      drive: async (ctx) => auth(request(app).post(`/api/v1/episode-scripts/${ctx.ep}/generate`)).send({ showId: show, confirmOverwrite: true }),
-      expected: () => scriptKeepingLocks(fixtureRow, scriptStub.made[scriptStub.made.length - 1].script_text).script,
+      id: 'W3', existing: true, generator: true, guarded: true,
+      drive: async (ctx, body = { confirmOverwrite: true }) => auth(request(app).post(`/api/v1/episode-scripts/${ctx.ep}/generate`)).send({ showId: show, ...body }),
+      // The text the Script Writer row holds, as stored, with the episode's locked beats kept.
+      expected: async (_res, ctx) => scriptKeepingLocks(fixtureRow, (await scriptRows(ctx.ep)).pop().script_text).script,
     },
     {
-      id: 'W4', existing: true,
-      setup: async (ctx) => { ctx.script = await scriptStub.create({ episode_id: ctx.ep, version: 1, status: 'draft', script_text: GENERATED }); },
-      drive: async (ctx) => auth(request(app).post(`/api/v1/episode-scripts/${ctx.script.id}/lock`)).send({ confirmOverwrite: true }),
+      id: 'W4', existing: true, guarded: true,
+      setup: async (ctx) => { ctx.scriptId = await makeScriptRow(ctx.ep); },
+      drive: async (ctx, body = { confirmOverwrite: true }) => auth(request(app).post(`/api/v1/episode-scripts/${ctx.scriptId}/lock`)).send(body),
       expected: () => scriptKeepingLocks(fixtureRow, GENERATED).script,
     },
     {
       id: 'W5', existing: true,
       setup: async (ctx) => { ctx.ev = await makeEvent({ name: 'Velour Gala' }); },
       drive: async (ctx) => auth(request(app).post(`/api/v1/world/${show}/events/${ctx.ev}/inject`)).send({ episode_id: ctx.ep }),
-      // The tag as the route built it (its response's event_tag), placed as before.
-      expected: (res) => legacyInject(FIXTURE, `${res.body.event_tag}\n`),
+      // The tag as the route built it (its response's event_tag), on the lines after beat 6's header.
+      expected: (res) => withTag(FIXTURE, '## BEAT: 6 · Strategic Reaction', res.body.event_tag),
     },
     {
       id: 'W6', created: true,
@@ -234,9 +263,9 @@ const EDITED = FIXTURE.replace('Closet time.', 'Closet time, edited.');
       expected: null,
     },
     {
-      id: 'W7', existing: true,
+      id: 'W7', existing: true, guarded: true,
       setup: async (ctx) => { ctx.ev = await makeEvent(); },
-      drive: async (ctx) => auth(request(app).post(`/api/v1/world/${show}/events/${ctx.ev}/generate-script`)).send({ episode_id: ctx.ep, confirmOverwrite: true }),
+      drive: async (ctx, body = { confirmOverwrite: true }) => auth(request(app).post(`/api/v1/world/${show}/events/${ctx.ev}/generate-script`)).send({ episode_id: ctx.ep, ...body }),
       expected: null,
     },
     {
@@ -246,13 +275,13 @@ const EDITED = FIXTURE.replace('Closet time.', 'Closet time, edited.');
       expected: null,
     },
     {
-      id: 'W9', existing: true,
-      drive: async (ctx) => auth(request(app).post(`/api/v1/episodes/${ctx.ep}/generate-beats`)).send({ confirmOverwrite: true }),
+      id: 'W9', existing: true, guarded: true,
+      drive: async (ctx, body = { confirmOverwrite: true }) => auth(request(app).post(`/api/v1/episodes/${ctx.ep}/generate-beats`)).send(body),
       expected: null,
     },
     {
-      id: 'W10', existing: true, generator: true,
-      drive: async (ctx) => auth(request(app).post(`/api/v1/episode-brief/${ctx.ep}/generate-script`)).send({ showId: show, confirmOverwrite: true }),
+      id: 'W10', existing: true, generator: true, guarded: true,
+      drive: async (ctx, body = { confirmOverwrite: true }) => auth(request(app).post(`/api/v1/episode-brief/${ctx.ep}/generate-script`)).send({ showId: show, ...body }),
       expected: () => scriptKeepingLocks(fixtureRow, GENERATED).script,
     },
   ];
@@ -272,7 +301,7 @@ const EDITED = FIXTURE.replace('Closet time.', 'Closet time, edited.');
   const prepare = async (w, opts = {}) => {
     const ctx = {};
     if (w.existing) {
-      ctx.ep = await makeEpisode();
+      ctx.ep = await makeEpisode(opts.episode || {});
       ctx.revision = await revisionOf(ctx.ep);
     }
     if (w.setup) await w.setup(ctx);
@@ -285,14 +314,22 @@ const EDITED = FIXTURE.replace('Closet time.', 'Closet time, edited.');
   const episodeOf = async (w, ctx) => (w.created ? (await newEpisodesOf(ctx.before))[0] : ctx.ep);
 
   describe.each(WRITERS)('$id', (w) => {
-    test('(a) writes the text it wrote before, locked beats kept; (d) no line identity; (e) voice clips unchanged', async () => {
+    test('(a) writes the text it wrote before, locked beats kept; (d) no line identity; (e) voice clips unchanged; (h) a counts-only plan line', async () => {
       const ctx = await prepare(w);
       const clipsBefore = w.existing ? await clips(ctx.ep) : null;
+      const logSpy = jest.spyOn(console, 'log');
       const res = await w.drive(ctx);
       expect([200, 201]).toContain(res.status);
       const ep = await episodeOf(w, ctx);
       const row = await episodeRow(ep);
-      if (w.expected) expect(row.script_content).toBe(w.expected(res));
+      if (w.expected) expect(row.script_content).toBe(await w.expected(res, ctx));
+      // (h) One plan line for this write: the writer, counts, no words, hashes or keys.
+      const plan = logSpy.mock.calls.map((c) => String(c[0])).filter((l) => l.startsWith('[line-identity-plan]') && l.includes(`"episode":"${ep}"`));
+      expect(plan).toHaveLength(1);
+      const json = JSON.parse(plan[0].slice('[line-identity-plan] '.length));
+      expect(json).toMatchObject({ v: 1, writer: w.id, state: 'unkeyed' });
+      expect(Object.keys(json).sort()).toEqual(['episode', 'kept_exact', 'kept_group', 'lines_after', 'lines_before', 'moved', 'ms', 'new', 'removed', 'source', 'state', 'uncertain_group', 'uncertain_similar', 'v', 'writer'].sort());
+      expect(plan[0]).not.toMatch(/Bestie|Lala|Prime|BEAT|Velour|ln_/);
       if (w.existing) {
         // The approved beat is word for word as it was.
         expect(splitScriptBeats(row.script_content).beats.find((b) => b.number === 1).text).toBe(B1);
@@ -334,7 +371,7 @@ const EDITED = FIXTURE.replace('Closet time.', 'Closet time, edited.');
         expect(row.script_locked_beats).toEqual(LOCKS);
       }
       expect(await versionRows(ep)).toEqual([]);
-      if (w.id === 'W4') expect(ctx.script.status).toBe('draft');
+      if (w.id === 'W4') expect((await scriptRows(ctx.ep)).map((r) => r.status)).toEqual(['draft']);
       if (w.id === 'W5') expect((await rows(`SELECT used_in_episode_id FROM world_events WHERE id = :ev`, { ev: ctx.ev }))[0].used_in_episode_id).toBeNull();
     });
 
@@ -393,6 +430,27 @@ const EDITED = FIXTURE.replace('Closet time.', 'Closet time, edited.');
         expect([200, 201]).toContain(res.status);
         expect((await versionRows(ep))[0].script_content).toBe(HELD);
       }
+    });
+
+    // (g) for the writers that replace a whole script (W3, W4, W7, W9, W10); W1, W2 and W5 are (f), W6 and W8 skip under the lock (f).
+    if (w.guarded) test('(g) its overwrite guard is checked under the lock: a script written while it waited is not replaced', async () => {
+      // Empty when the writer starts (any check before the lock passes); the
+      // other transaction writes a script while holding the row.
+      const ctx = await prepare(w, { episode: { script: '', locks: [] } });
+      const hold = await holdRow(ctx.ep);
+      const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+      const errSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+      const res = await w.drive(ctx, {}).then((r) => ({ r, releasedFirst: hold.released() }));
+      await hold.done;
+      warnSpy.mockRestore(); errSpy.mockRestore();
+      expect(res.releasedFirst).toBe(true);
+      expect(res.r.status).toBe(409);
+      // The guard is read from the row as it is once locked (the generators' revision check would refuse it too).
+      expect(res.r.body.code).toBe('SCRIPT_OVERWRITE_CONFIRMATION_REQUIRED');
+      if (w.generator) expect(res.r.body.saved).toBe(false);
+      expect((await episodeRow(ctx.ep)).script_content).toBe(HELD);
+      expect(await versionRows(ctx.ep)).toEqual([]);
+      if (w.id === 'W4') expect((await scriptRows(ctx.ep)).map((r) => r.status)).toEqual(['draft']);
     });
   });
 
@@ -455,42 +513,96 @@ const EDITED = FIXTURE.replace('Closet time.', 'Closet time, edited.');
     });
   });
 
-  describe('W1: a restore (C9)', () => {
-    const OLD = `${B1}\n\n${beat(2, 'STAKES_INTENTION', 'Prime: "An older take."')}\n\n${B3}`;
+  describe('W1: restore authority (C9)', () => {
+    const OLD = `${B1}\n\n${beat(6, 'Strategic Reaction', 'Prime: "An older take."')}\n\n${B3}`;
     const versionOf = async (ep, text) => (await rows(`SELECT id FROM episode_script_versions WHERE episode_id = :ep AND script_content = :text`, { ep, text }))[0].id;
+    // An episode whose history holds `then`, now saved as `now`.
+    const withHistory = async (then, now = FIXTURE, locks = LOCKS) => {
+      const ep = await makeEpisode({ script: then, locks });
+      expect((await auth(request(app).put(`/api/v1/episodes/${ep}`)).send({ script_content: now, script_revision: await revisionOf(ep) })).status).toBe(200);
+      return { ep, vid: await versionOf(ep, then) };
+    };
+    const restore = async (ep, text, vid, revision) => auth(request(app).put(`/api/v1/episodes/${ep}`)).send({ script_content: text, restored_from: vid, script_revision: revision ?? await revisionOf(ep) });
 
     test('the server\'s copy of the version is a restore', async () => {
-      const ep = await makeEpisode({ script: OLD });
-      await auth(request(app).put(`/api/v1/episodes/${ep}`)).send({ script_content: FIXTURE, script_revision: await revisionOf(ep) });
-      const vid = await versionOf(ep, OLD);
-      const res = await auth(request(app).put(`/api/v1/episodes/${ep}`)).send({ script_content: OLD, restored_from: vid, script_revision: await revisionOf(ep) });
+      const { ep, vid } = await withHistory(OLD);
+      const res = await restore(ep, OLD, vid);
       expect(res.status).toBe(200);
       expect((await episodeRow(ep)).script_content).toBe(OLD);
       expect((await versionRows(ep))[0]).toMatchObject({ source: 'restore', script_content: FIXTURE });
     });
 
+    test('the server reads the version from its own history, not from the page', async () => {
+      const { ep, vid } = await withHistory(OLD);
+      // The stored version is not what the page holds: the page's text is not taken as it.
+      await run(`UPDATE episode_script_versions SET script_content = :t WHERE id = :vid`, { vid, t: `${B1}\n\n${beat(6, 'Strategic Reaction', 'Prime: "What the server kept."')}\n\n${B3}` });
+      const res = await restore(ep, OLD, vid);
+      expect(res.status).toBe(200);
+      expect((await versionRows(ep))[0]).toMatchObject({ source: 'save', script_content: FIXTURE });
+    });
+
+    test('text the browser makes up cannot pass as a restore of a real version', async () => {
+      const { ep, vid } = await withHistory(OLD);
+      const forged = `${B1}\n\n${beat(6, 'Strategic Reaction', 'Prime: "Never in History."')}\n\n${B3}`;
+      const res = await restore(ep, forged, vid);
+      expect(res.status).toBe(200);
+      expect((await episodeRow(ep)).script_content).toBe(forged);
+      expect((await versionRows(ep)).map((v) => v.source)).toEqual(['save', 'save']);
+    });
+
+    test('a version of another episode, or a made-up id, is not a restore', async () => {
+      const mine = await withHistory(OLD);
+      const theirs = await withHistory(OLD);
+      expect((await restore(mine.ep, OLD, theirs.vid)).status).toBe(200);
+      expect((await versionRows(mine.ep))[0].source).toBe('save');
+      const other = await withHistory(OLD);
+      expect((await restore(other.ep, OLD, uuid())).status).toBe(200);
+      expect((await versionRows(other.ep))[0].source).toBe('save');
+    });
+
     test('a version edited after it was put back is an ordinary save', async () => {
-      const ep = await makeEpisode({ script: OLD });
-      await auth(request(app).put(`/api/v1/episodes/${ep}`)).send({ script_content: FIXTURE, script_revision: await revisionOf(ep) });
-      const vid = await versionOf(ep, OLD);
+      const { ep, vid } = await withHistory(OLD);
       const edited = `${OLD}\nLala: "edited after restoring"`;
-      const res = await auth(request(app).put(`/api/v1/episodes/${ep}`)).send({ script_content: edited, restored_from: vid, script_revision: await revisionOf(ep) });
+      const res = await restore(ep, edited, vid);
       expect(res.status).toBe(200);
       expect((await episodeRow(ep)).script_content).toBe(edited);
       expect((await versionRows(ep))[0]).toMatchObject({ source: 'save', script_content: FIXTURE });
     });
 
-    test('a version whose approved beat changed since is restored with the beat as approved now', async () => {
-      const ep = await makeEpisode({ script: `${beat(1, 'Opening Ritual', 'Lala: "the opening then"')}\n\n${B2}\n\n${B3}`, locks: [] });
-      const then = (await episodeRow(ep)).script_content;
-      await auth(request(app).put(`/api/v1/episodes/${ep}`)).send({ script_content: FIXTURE, script_revision: await revisionOf(ep) });
-      await run(`UPDATE episodes SET script_locked_beats = '[1]'::jsonb WHERE id = :ep`, { ep });
-      const vid = await versionOf(ep, then);
-      // The page puts the version back with beat 1 as approved now (lib/scriptLocks): FIXTURE's beat 1.
-      const res = await auth(request(app).put(`/api/v1/episodes/${ep}`)).send({ script_content: FIXTURE, restored_from: vid, script_revision: await revisionOf(ep) });
-      expect(res.status).toBe(200);
-      // Same text as now: nothing replaced, no version.
-      expect((await versionRows(ep)).map((v) => v.source)).toEqual(['save']);
+    test('a restore keeps the approved beat as it is now, whether the page sent it or the version\'s', async () => {
+      const THEN = `${beat(1, 'Opening Ritual', 'Lala: "the opening then"')}\n\n${beat(6, 'Strategic Reaction', 'Prime: "An older take."')}\n\n${B3}`;
+      for (const pageSends of ['version as it was', 'version as the page puts it back']) {
+        // eslint-disable-next-line no-await-in-loop
+        const { ep, vid } = await withHistory(THEN, FIXTURE, []);
+        // eslint-disable-next-line no-await-in-loop
+        await run(`UPDATE episodes SET script_locked_beats = '[1]'::jsonb WHERE id = :ep`, { ep });
+        const text = pageSends === 'version as it was' ? THEN : THEN.replace('Lala: "the opening then"', 'Lala: "Bestie, come style me."\n(Lala twirls)');
+        // eslint-disable-next-line no-await-in-loop
+        const res = await restore(ep, text, vid);
+        expect(res.status).toBe(200);
+        // eslint-disable-next-line no-await-in-loop
+        const row = await episodeRow(ep);
+        expect(splitScriptBeats(row.script_content).beats.find((b) => b.number === 1).text).toBe(B1);
+        expect(row.script_content).toContain('Prime: "An older take."');
+        // eslint-disable-next-line no-await-in-loop
+        expect((await versionRows(ep))[0]).toMatchObject({ source: 'restore', script_content: FIXTURE });
+      }
+    });
+
+    test('a restore sent from an older page is refused and writes over nothing', async () => {
+      const { ep, vid } = await withHistory(OLD);
+      const pageRevision = await revisionOf(ep);
+      // Another tab saves meanwhile.
+      const NEWER = FIXTURE.replace('Closet time.', 'Closet time, from the other tab.');
+      expect((await auth(request(app).put(`/api/v1/episodes/${ep}`)).send({ script_content: NEWER, script_revision: pageRevision })).status).toBe(200);
+      const res = await restore(ep, OLD, vid, pageRevision);
+      expect(res.status).toBe(409);
+      expect(res.body).toMatchObject({ code: 'SCRIPT_CHANGED', current_revision: scriptRevision(NEWER) });
+      expect((await episodeRow(ep)).script_content).toBe(NEWER);
+      expect((await versionRows(ep)).map((v) => v.source)).toEqual(['save', 'save']);
+      // And with no revision at all.
+      expect((await auth(request(app).put(`/api/v1/episodes/${ep}`)).send({ script_content: OLD, restored_from: vid })).body.code).toBe('SCRIPT_REVISION_REQUIRED');
+      expect((await episodeRow(ep)).script_content).toBe(NEWER);
     });
   });
 
@@ -506,7 +618,10 @@ const EDITED = FIXTURE.replace('Closet time.', 'Closet time, edited.');
       errSpy.mockRestore();
       expect(res.status).toBe(409);
       expect(res.body).toMatchObject({ code: 'SCRIPT_CHANGED', saved: false, draft: expect.any(String) });
-      expect(res.body.data.id).toBe(scriptStub.made[0].id);
+      // The Script Writer row is the draft, kept as a version of its own (spec §2.2, W3).
+      const [kept] = await scriptRows(ep);
+      expect(res.body.data.id).toBe(kept.id);
+      expect(kept.status).toBe('draft');
       expect((await episodeRow(ep)).script_content).toBe('CHANGED ELSEWHERE');
       expect(await versionRows(ep)).toEqual([]);
     });
@@ -528,40 +643,18 @@ const EDITED = FIXTURE.replace('Closet time.', 'Closet time, edited.');
     test('W10: a beat approved while it was written keeps its approved words (lock-only does not change the revision)', async () => {
       const ep = await makeEpisode({ locks: [] });
       mockGrounded.mockImplementation(async () => {
-        await run(`UPDATE episodes SET script_locked_beats = '[3]'::jsonb WHERE id = :ep`, { ep });
+        await run(`UPDATE episodes SET script_locked_beats = '[8]'::jsonb WHERE id = :ep`, { ep });
         return { script: GENERATED };
       });
       const res = await auth(request(app).post(`/api/v1/episode-brief/${ep}/generate-script`)).send({ showId: show, confirmOverwrite: true });
       expect(res.status).toBe(200);
       const row = await episodeRow(ep);
-      expect(splitScriptBeats(row.script_content).beats.find((b) => b.number === 3).text).toBe(B3);
+      expect(splitScriptBeats(row.script_content).beats.find((b) => b.number === 8).text).toBe(B3);
       expect(row.script_content).toContain('A NEW OPENING THAT MUST NOT LAND');
     });
   });
 
   describe('W4 and W9: the overwrite guard (C6)', () => {
-    test('W4: locking a Script Writer script over an episode\'s script asks first; the script stays unlocked', async () => {
-      const ep = await makeEpisode();
-      const script = await scriptStub.create({ episode_id: ep, version: 1, status: 'draft', script_text: GENERATED });
-      const res = await auth(request(app).post(`/api/v1/episode-scripts/${script.id}/lock`)).send({});
-      expect(res.status).toBe(409);
-      expect(res.body.code).toBe('SCRIPT_OVERWRITE_CONFIRMATION_REQUIRED');
-      expect(script.status).toBe('draft');
-      expect((await episodeRow(ep)).script_content).toBe(FIXTURE);
-    });
-
-    test('W4: a Script Writer row that can\'t be locked rolls the episode\'s script back', async () => {
-      const ep = await makeEpisode();
-      const script = await scriptStub.create({ episode_id: ep, version: 1, status: 'draft', script_text: GENERATED });
-      scriptStub.failUpdate = true;
-      const errSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
-      const res = await auth(request(app).post(`/api/v1/episode-scripts/${script.id}/lock`)).send({ confirmOverwrite: true });
-      errSpy.mockRestore();
-      expect(res.status).toBe(500);
-      expect((await episodeRow(ep)).script_content).toBe(FIXTURE);
-      expect(await versionRows(ep)).toEqual([]);
-    });
-
     test('W9: generate-beats asks before replacing a script', async () => {
       const ep = await makeEpisode();
       const res = await auth(request(app).post(`/api/v1/episodes/${ep}/generate-beats`)).send({});
@@ -571,51 +664,145 @@ const EDITED = FIXTURE.replace('Closet time.', 'Closet time, edited.');
     });
   });
 
-  describe('W5: inject keeps its beat (C4)', () => {
-    const inject = (ev, ep) => auth(request(app).post(`/api/v1/world/${show}/events/${ev}/inject`)).send({ episode_id: ep });
-    // The tag goes after the first "## BEAT: STAKES|REVEAL|INTERRUPTION" header,
-    // as the skeleton writers head their beats (a numbered header does not
-    // match, and the tag goes at the top, as it always has). A named header
-    // is its canonical beat: STAKES_INTENTION is beat 6.
-    const NAMED = '## BEAT: OPENING_RITUAL\nLala: "Bestie, come style me."\n\n## BEAT: STAKES_INTENTION\nPrime: "This is the one."\n\n## BEAT: TRANSFORMATION\nLala: "Closet time."';
-
-    test('the intended beat approved: refused, naming the beat; nothing linked', async () => {
-      const ep = await makeEpisode({ script: NAMED, locks: [1, 6] });
-      const ev = await makeEvent();
-      const res = await inject(ev, ep);
-      expect(res.status).toBe(409);
-      expect(res.body).toMatchObject({ code: 'INJECT_BLOCKED_BY_LOCK', reason: 'intended_beat_locked', beat_number: 6, beat_label: 'STAKES_INTENTION' });
-      expect(res.body.error).toContain('Beat 6 · STAKES_INTENTION is approved');
-      expect((await episodeRow(ep)).script_content).toBe(NAMED);
-      expect((await rows(`SELECT used_in_episode_id FROM world_events WHERE id = :ev`, { ev }))[0].used_in_episode_id).toBeNull();
-    });
-
-    test('an old tag in an approved beat: refused, naming that beat', async () => {
-      const tagged = `${beat(1, 'Opening Ritual', '[EVENT: name="Old"]\nLala: "hi"')}\n\n${B2}`;
-      const ep = await makeEpisode({ script: tagged, locks: [1] });
-      const res = await inject(await makeEvent(), ep);
-      expect(res.status).toBe(409);
-      expect(res.body).toMatchObject({ code: 'INJECT_BLOCKED_BY_LOCK', reason: 'old_tag_in_locked_beat', beat_number: 1 });
-      expect((await episodeRow(ep)).script_content).toBe(tagged);
-    });
-
-    test('numbered headers: the tag goes at the top, before the approved beat, as before', async () => {
+  // W3 and W4 on the real episode_scripts table (this suite's schema).
+  describe('W3 and W4: the Script Writer row and the episode script together', () => {
+    test('W4: the row is locked and the episode script saved in one commit', async () => {
       const ep = await makeEpisode();
-      const res = await inject(await makeEvent(), ep);
+      const id = await makeScriptRow(ep);
+      const res = await auth(request(app).post(`/api/v1/episode-scripts/${id}/lock`)).send({ confirmOverwrite: true });
+      expect(res.status).toBe(200);
+      expect((await scriptRows(ep)).map((r) => r.status)).toEqual(['locked']);
+      expect((await episodeRow(ep)).script_content).toBe(scriptKeepingLocks(fixtureRow, GENERATED).script);
+      expect((await versionRows(ep)).map((v) => [v.source, v.script_content])).toEqual([['generate', FIXTURE]]);
+    });
+
+    test('W4: a row that can\'t be locked rolls the episode script and its version back', async () => {
+      const ep = await makeEpisode();
+      const id = await makeScriptRow(ep);
+      failScriptRowUpdate();
+      const errSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+      const res = await auth(request(app).post(`/api/v1/episode-scripts/${id}/lock`)).send({ confirmOverwrite: true });
+      errSpy.mockRestore();
+      expect(res.status).toBe(500);
+      expect((await scriptRows(ep)).map((r) => r.status)).toEqual(['draft']);
+      expect((await episodeRow(ep)).script_content).toBe(FIXTURE);
+      expect(await versionRows(ep)).toEqual([]);
+    });
+
+    test('W4: an episode save that fails leaves the row unlocked', async () => {
+      const ep = await makeEpisode();
+      const id = await makeScriptRow(ep);
+      failVersions();
+      const errSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+      const res = await auth(request(app).post(`/api/v1/episode-scripts/${id}/lock`)).send({ confirmOverwrite: true });
+      errSpy.mockRestore();
+      expect(res.status).toBe(500);
+      expect((await scriptRows(ep)).map((r) => r.status)).toEqual(['draft']);
+      expect((await episodeRow(ep)).script_content).toBe(FIXTURE);
+    });
+
+    test('W4: an overwrite refused leaves both as they were', async () => {
+      const ep = await makeEpisode();
+      const id = await makeScriptRow(ep);
+      const res = await auth(request(app).post(`/api/v1/episode-scripts/${id}/lock`)).send({});
+      expect(res.status).toBe(409);
+      expect(res.body.code).toBe('SCRIPT_OVERWRITE_CONFIRMATION_REQUIRED');
+      expect((await scriptRows(ep)).map((r) => r.status)).toEqual(['draft']);
+      expect((await episodeRow(ep)).script_content).toBe(FIXTURE);
+      expect(await versionRows(ep)).toEqual([]);
+    });
+
+    test('W4: an episode with line identities refuses the lock; the row stays a draft', async () => {
+      const ep = await makeEpisode();
+      const id = await makeScriptRow(ep);
+      await setKeys(ep);
+      const res = await auth(request(app).post(`/api/v1/episode-scripts/${id}/lock`)).send({ confirmOverwrite: true });
+      expect(res.status).toBe(409);
+      expect(res.body.code).toBe('LINE_IDENTITY_ACTIVE');
+      expect((await scriptRows(ep)).map((r) => r.status)).toEqual(['draft']);
+      expect((await episodeRow(ep)).script_content).toBe(FIXTURE);
+    });
+
+    test('W3: the new row and the episode script it saved hold the same script', async () => {
+      const ep = await makeEpisode();
+      const res = await auth(request(app).post(`/api/v1/episode-scripts/${ep}/generate`)).send({ showId: show, confirmOverwrite: true });
+      expect(res.status).toBe(200);
+      const [row] = await scriptRows(ep);
+      expect(row).toMatchObject({ version: 1, status: 'draft', id: res.body.data.id });
+      expect((await episodeRow(ep)).script_content).toBe(scriptKeepingLocks(fixtureRow, row.script_text).script);
+      expect(res.body.script_revision).toBe(scriptRevision((await episodeRow(ep)).script_content));
+    });
+
+    test('W3: an overwrite refused before writing makes no row and changes nothing', async () => {
+      const ep = await makeEpisode();
+      const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+      const res = await auth(request(app).post(`/api/v1/episode-scripts/${ep}/generate`)).send({ showId: show });
+      warnSpy.mockRestore();
+      expect(res.status).toBe(409);
+      expect(res.body.code).toBe('SCRIPT_OVERWRITE_CONFIRMATION_REQUIRED');
+      expect(await scriptRows(ep)).toEqual([]);
+      expect(mockCreate).not.toHaveBeenCalled();
+      expect((await episodeRow(ep)).script_content).toBe(FIXTURE);
+    });
+
+    test('W3: a stale revision (the script saved while it wrote) leaves the episode as saved; the row is the unsaved draft', async () => {
+      const ep = await makeEpisode();
+      mockCreate.mockImplementation(async () => {
+        await run(`UPDATE episodes SET script_content = 'CHANGED ELSEWHERE' WHERE id = :ep`, { ep });
+        return { content: [{ text: GENERATED }], usage: {} };
+      });
+      const errSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+      const res = await auth(request(app).post(`/api/v1/episode-scripts/${ep}/generate`)).send({ showId: show, confirmOverwrite: true });
+      errSpy.mockRestore();
+      expect(res.status).toBe(409);
+      expect(res.body).toMatchObject({ code: 'SCRIPT_CHANGED', saved: false });
+      expect((await episodeRow(ep)).script_content).toBe('CHANGED ELSEWHERE');
+      expect(await versionRows(ep)).toEqual([]);
+      expect((await scriptRows(ep)).map((r) => r.status)).toEqual(['draft']);
+    });
+
+    test('W3: a failed episode save leaves the episode as it was and says so; the row is kept as the draft', async () => {
+      const ep = await makeEpisode();
+      failVersions();
+      const errSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+      const res = await auth(request(app).post(`/api/v1/episode-scripts/${ep}/generate`)).send({ showId: show, confirmOverwrite: true });
+      errSpy.mockRestore();
+      expect(res.status).toBe(500);
+      expect(res.body.saved).toBe(false);
+      expect(res.body.error).toContain('kept as Script v1, but could not be saved to the episode');
+      expect((await episodeRow(ep)).script_content).toBe(FIXTURE);
+      expect(await versionRows(ep)).toEqual([]);
+      expect(await scriptRows(ep)).toHaveLength(1);
+    });
+  });
+
+  describe('W5: inject keeps its beat (C4, N6)', () => {
+    const inject = (ev, ep) => auth(request(app).post(`/api/v1/world/${show}/events/${ev}/inject`)).send({ episode_id: ep });
+    const linkOf = async (ev) => (await rows(`SELECT used_in_episode_id, times_used FROM world_events WHERE id = :ev`, { ev }))[0];
+    // The skeleton writers' named headers; STAKES_INTENTION is canonical beat 6.
+    const NAMED = '## BEAT: OPENING_RITUAL\nLala: "Bestie, come style me."\n\n## BEAT: STAKES_INTENTION\nPrime: "This is the one."\n\n## BEAT: TRANSFORMATION\nLala: "Closet time."';
+    const refusedAndUnlinked = async (res, ep, ev, script, body) => {
+      expect(res.status).toBe(409);
+      expect(res.body).toMatchObject(body);
+      expect((await episodeRow(ep)).script_content).toBe(script);
+      expect(await versionRows(ep)).toEqual([]);
+      expect((await linkOf(ev)).used_in_episode_id).toBeNull();
+    };
+
+    test('numbered headers: the tag goes in beat 6, not at the top, and the event is linked', async () => {
+      const ep = await makeEpisode();
+      const ev = await makeEvent({ name: 'Velour Gala' });
+      const res = await inject(ev, ep);
       expect(res.status).toBe(200);
       const row = await episodeRow(ep);
-      expect(row.script_content.startsWith(res.body.event_tag)).toBe(true);
+      expect(row.script_content).toBe(withTag(FIXTURE, '## BEAT: 6 · Strategic Reaction', res.body.event_tag));
+      expect(row.script_content.startsWith('## BEAT: 1 · Opening Ritual')).toBe(true);
       expect(splitScriptBeats(row.script_content).beats.find((b) => b.number === 1).text).toBe(B1);
+      expect((await linkOf(ev)).used_in_episode_id).toBe(ep);
+      expect(res.body.script_revision).toBe(scriptRevision(row.script_content));
     });
 
-    test('a script with no beat headers and an approved beat: refused', async () => {
-      const ep = await makeEpisode({ script: 'Lala: "no headers here"', locks: [1] });
-      const res = await inject(await makeEvent(), ep);
-      expect(res.status).toBe(409);
-      expect(res.body).toMatchObject({ code: 'INJECT_BLOCKED_BY_LOCK', reason: 'headerless_locked', beat_number: null });
-    });
-
-    test('a successful inject puts the tag where it always went and links the event', async () => {
+    test('named headers: the tag goes where it always went, and the event is linked', async () => {
       const ep = await makeEpisode({ script: NAMED, locks: [1] });
       const ev = await makeEvent({ name: 'Velour Gala' });
       const res = await inject(ev, ep);
@@ -623,8 +810,62 @@ const EDITED = FIXTURE.replace('Closet time.', 'Closet time, edited.');
       const row = await episodeRow(ep);
       expect(row.script_content).toBe(legacyInject(NAMED, `${res.body.event_tag}\n`));
       expect(splitScriptBeats(row.script_content).beats.find((b) => b.number === 6).text).toContain('[EVENT: name="Velour Gala"');
-      expect((await rows(`SELECT used_in_episode_id FROM world_events WHERE id = :ev`, { ev }))[0].used_in_episode_id).toBe(ep);
-      expect(res.body.script_revision).toBe(scriptRevision(row.script_content));
+      expect((await linkOf(ev)).used_in_episode_id).toBe(ep);
+    });
+
+    test('the intended beat approved (named): refused, naming it; nothing written or linked', async () => {
+      const ep = await makeEpisode({ script: NAMED, locks: [1, 6] });
+      const ev = await makeEvent();
+      const res = await inject(ev, ep);
+      await refusedAndUnlinked(res, ep, ev, NAMED, { code: 'INJECT_BLOCKED_BY_LOCK', reason: 'intended_beat_locked', beat_number: 6, beat_label: 'STAKES_INTENTION' });
+      expect(res.body.error).toContain('Beat 6 · STAKES_INTENTION is approved');
+    });
+
+    test('the intended beat approved (numbered): refused, naming it', async () => {
+      const ep = await makeEpisode({ locks: [1, 6] });
+      const ev = await makeEvent();
+      const res = await inject(ev, ep);
+      await refusedAndUnlinked(res, ep, ev, FIXTURE, { code: 'INJECT_BLOCKED_BY_LOCK', reason: 'intended_beat_locked', beat_number: 6, beat_label: '6 · Strategic Reaction' });
+      expect(res.body.error).toContain('Beat 6 · Strategic Reaction is approved');
+    });
+
+    test('an old tag in an approved beat: refused, naming that beat', async () => {
+      const tagged = `${beat(1, 'Opening Ritual', '[EVENT: name="Old"]\nLala: "hi"')}\n\n${B2}`;
+      const ep = await makeEpisode({ script: tagged, locks: [1] });
+      const ev = await makeEvent();
+      await refusedAndUnlinked(await inject(ev, ep), ep, ev, tagged, { code: 'INJECT_BLOCKED_BY_LOCK', reason: 'old_tag_in_locked_beat', beat_number: 1 });
+    });
+
+    test('no intended beat (numbered headers without 4, 5, 6 or 7): refused, never placed at the top', async () => {
+      const script = `${B1}\n\n${B3}`;
+      const ep = await makeEpisode({ script, locks: [] });
+      const ev = await makeEvent();
+      await refusedAndUnlinked(await inject(ev, ep), ep, ev, script, { code: 'INJECT_NO_INTENDED_BEAT', reason: 'no_intended_beat', beat_number: null });
+    });
+
+    test('no beat headers: refused', async () => {
+      const script = 'Lala: "no headers here"';
+      const ep = await makeEpisode({ script, locks: [] });
+      const ev = await makeEvent();
+      await refusedAndUnlinked(await inject(ev, ep), ep, ev, script, { code: 'INJECT_NO_INTENDED_BEAT', reason: 'no_beat_headers' });
+    });
+
+    test('no script yet: the event is attached with no tag, the script left empty, and the answer says so', async () => {
+      const ep = await makeEpisode({ script: '', locks: [] });
+      const ev = await makeEvent();
+      const res = await inject(ev, ep);
+      expect(res.status).toBe(200);
+      expect(res.body).toMatchObject({ success: true, attached: true, script_tagged: false, script_revision: scriptRevision('') });
+      expect(res.body.message).toContain('has no script yet, so its tag was not added');
+      expect((await episodeRow(ep)).script_content).toBe('');
+      expect(await versionRows(ep)).toEqual([]);
+      expect((await linkOf(ev)).used_in_episode_id).toBe(ep);
+    });
+
+    test('a tagged inject says so', async () => {
+      const ep = await makeEpisode();
+      const res = await inject(await makeEvent(), ep);
+      expect(res.body.script_tagged).toBe(true);
     });
   });
 

@@ -251,4 +251,48 @@ describe('saveEpisodeScript', () => {
     expect(calls.findByPk[0].attributes).toEqual(['id', 'script_content', 'script_line_keys']);
     expect(await readScriptRevision(models, 'ep-x')).toBeNull();
   });
+
+  test('the plan log can never fail a save: a throwing logger, with or without the caller\'s transaction', async () => {
+    const planLog = require('../../../src/services/identityPlanLog');
+    const spy = jest.spyOn(planLog, 'logIdentityPlan').mockImplementation(() => { throw new Error('logger broke on "Velour"'); });
+    const err = jest.spyOn(console, 'error').mockImplementation(() => {});
+    const own = recorder();
+    const saved = await saveEpisodeScript(own.models, 'ep-1', { requireRevision: true, revision: scriptRevision(SCRIPT), compose: keep('x') });
+    expect(saved.script_content).toBe('x');
+    expect(own.db.episode.script_content).toBe('x');
+    const theirs = recorder();
+    let committed;
+    const t = { LOCK: { UPDATE: 'UPDATE' }, afterCommit: (fn) => { committed = fn; } };
+    await saveEpisodeScript(theirs.models, 'ep-1', { requireRevision: true, revision: scriptRevision(SCRIPT), transaction: t, compose: keep('y') });
+    expect(() => committed()).not.toThrow();
+    expect(err.mock.calls.map((c) => String(c[0])).every((m) => !m.includes('Velour'))).toBe(true);
+    spy.mockRestore(); err.mockRestore();
+  });
+
+  test('the plan log off: the save logs nothing and saves as before', async () => {
+    const before = process.env.SCRIPT_IDENTITY_PLAN_LOG;
+    process.env.SCRIPT_IDENTITY_PLAN_LOG = 'off';
+    try {
+      const { models, db } = recorder();
+      await saveEpisodeScript(models, 'ep-1', { requireRevision: true, revision: scriptRevision(SCRIPT), compose: keep('z') });
+      expect(db.episode.script_content).toBe('z');
+      expect(logSpy.mock.calls.filter((c) => String(c[0]).startsWith('[line-identity-plan]'))).toHaveLength(0);
+    } finally {
+      if (before === undefined) delete process.env.SCRIPT_IDENTITY_PLAN_LOG; else process.env.SCRIPT_IDENTITY_PLAN_LOG = before;
+    }
+  });
+
+  test('every check runs under the row lock: the row is locked before the revision, the guard, the compose and the write', async () => {
+    const { models, calls } = recorder();
+    const order = [];
+    const realFind = models.Episode.findByPk;
+    models.Episode.findByPk = async (...a) => { order.push(`lock:${a[1]?.lock}`); return realFind(...a); };
+    await saveEpisodeScript(models, 'ep-1', {
+      requireRevision: true, revision: scriptRevision(SCRIPT), guard: { confirmOverwrite: true },
+      compose: (row) => { order.push('compose'); return keep('w')(row); },
+    });
+    expect(order).toEqual(['lock:UPDATE', 'compose']);
+    expect(calls.findByPk).toHaveLength(1);
+  });
 });
+

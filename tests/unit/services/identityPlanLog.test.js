@@ -6,7 +6,7 @@
  * and a failure never throws into the write.
  */
 
-const { logIdentityPlan, identityPlanLine, PREFIX } = require('../../../src/services/identityPlanLog');
+const { logIdentityPlan, identityPlanLine, planLogEnabled, PREFIX } = require('../../../src/services/identityPlanLog');
 
 const BEFORE = '## BEAT: 1 · Opening Ritual\nLala: "Velour Society is calling."\nPrime: "Answer it, bestie."\n';
 const AFTER = '## BEAT: 1 · Opening Ritual\nLala: "Velour Society is calling."\nPrime: "Answer it now, bestie."\nLala: "Marcus? Is that you?"\n';
@@ -54,4 +54,21 @@ describe('identity-plan log', () => {
     const line = identityPlanLine({ episodeId: 7, writer: 'W3', source: 'generate', prevText: '', nextText: 'A.\nB.' });
     expect(line).toMatchObject({ episode: '7', writer: 'W3', source: 'generate', state: 'unkeyed', lines_before: 0, lines_after: 2, new: 2, removed: 0 });
   });
+
+  test('SCRIPT_IDENTITY_PLAN_LOG=off (0, false, no) turns it off; unset or anything else leaves it on', () => {
+    for (const v of ['off', 'OFF', '0', 'false', 'no', ' off ']) expect(planLogEnabled({ SCRIPT_IDENTITY_PLAN_LOG: v })).toBe(false);
+    for (const v of [undefined, '', 'on', '1', 'true']) expect(planLogEnabled({ SCRIPT_IDENTITY_PLAN_LOG: v })).toBe(true);
+    const log = jest.fn();
+    expect(logIdentityPlan({ episodeId: 'ep-1', writer: 'W1', prevText: BEFORE, nextText: AFTER }, log, { SCRIPT_IDENTITY_PLAN_LOG: 'off' })).toBeNull();
+    expect(log).not.toHaveBeenCalled();
+    expect(logIdentityPlan({ episodeId: 'ep-1', writer: 'W1', prevText: BEFORE, nextText: AFTER }, log, {})).not.toBeNull();
+    expect(log).toHaveBeenCalledTimes(1);
+  });
+
+  test('a script whose text looks like line keys still logs counts only', () => {
+    const lines = [];
+    logIdentityPlan({ episodeId: 'ep-1', writer: 'W1', prevText: 'Lala: ln_aaaaaaaaaa', nextText: 'Lala: ln_bbbbbbbbbb\nPrime: "Marcus?"' }, (l) => lines.push(l));
+    expect(lines[0]).not.toMatch(/ln_|Marcus|Lala|Prime/);
+  });
 });
+

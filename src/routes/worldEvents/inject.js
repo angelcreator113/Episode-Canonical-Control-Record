@@ -19,46 +19,94 @@ const { loadScopedEvent } = require('../../utils/eventScope');
 const { getModels } = require('./helpers');
 
 const TAG_RE = /\[(?:EVENT|LOCATION_HINT):[^\]]*\]/i;
-const HEADER_MARKERS = ['## BEAT: STAKES', '## BEAT: REVEAL', '## BEAT: INTERRUPTION'];
+const HEADER_LINE_RE = /^\s*##\s*BEAT:\s*(.*)$/i;
+// The beat an event's tag goes in, in order of preference: the strategic
+// reaction (STAKES_INTENTION, canonical beat 6), else the reveal (5), else
+// the first interruption (4, then 7). The same preference as the old
+// "## BEAT: STAKES / REVEAL / INTERRUPTION" markers, read from the beat's
+// canonical number so a numbered header (`## BEAT: 6 · Strategic Reaction`)
+// and a named one (`## BEAT: STAKES_INTENTION`) both count (A1c R1; Evoni,
+// 2026-10-27, N6).
+const INTENDED_BEATS = [6, 5, 4, 7];
+// A named header the old markers matched by its start ("## BEAT: STAKES",
+// "## BEAT: REVEAL - the invite", "## BEAT: INTERRUPTION 2"), when its name
+// is not a canonical one (utils/beatLabelNumber.js reads those).
+function markerBeat(label) {
+  const text = String(label || '').trim().toUpperCase();
+  if (/^STAKES\b/.test(text)) return 6;
+  if (/^REVEAL\b/.test(text)) return 5;
+  if (/^INTERRUPTION\b/.test(text)) return /\b2\b|#\s*2|II\b/.test(text.slice('INTERRUPTION'.length)) ? 7 : 4;
+  return null;
+}
 
 // A beat's label for a refusal: its header after "## BEAT:".
 const beatLabel = (beat) => (String(beat.text).split('\n')[0].replace(/^\s*##\s*BEAT:\s*/i, '').trim() || `Beat ${beat.number}`);
+// "Beat 6 · Strategic Reaction", from a label with or without its number.
+const beatName = (number, label) => {
+  const name = String(label || '').replace(/^\d{1,2}\b\s*[·.:\-–—]?\s*/, '').trim();
+  return name ? `Beat ${number} · ${name}` : `Beat ${number}`;
+};
 
 /**
- * The episode's script with the event's tag lines in place (as it has
- * always been placed: the old [EVENT:] and [LOCATION_HINT:] tags removed,
- * the new ones after the first STAKES, REVEAL or INTERRUPTION header, else at
- * the top), or a refusal naming the approved beat it would change (A1c R1;
- * Evoni, 2026-10-27, D9 and P3). Never moved to another beat or to the top.
+ * The episode's script with the event's tag lines in its intended beat (the
+ * old [EVENT:] and [LOCATION_HINT:] tags removed, the new ones on the lines
+ * after that beat's header), or a refusal (A1c R1; Evoni, 2026-10-27, D9, P3
+ * and N6): the tag is never put in another beat or at the top.
+ *   INJECT_BLOCKED_BY_LOCK: the intended beat is approved, or an old tag is in
+ *     an approved beat (it would be removed);
+ *   INJECT_NO_INTENDED_BEAT: the script has no beat headers, or none of the
+ *     beats a tag goes in. A header is that beat only by its
+ *     number, its canonical name, or the old markers' names (STAKES, REVEAL,
+ *     INTERRUPTION), never by its place.
  */
 function injectedScript(row, injection) {
   const { splitScriptBeats, normalizeLockedBeats } = require('../../utils/scriptBeatLocks');
+  const { headerNumber, normalizeBeatHeaders } = require('../../utils/beatLabelNumber');
   const { refuse } = require('../../services/scriptSave');
-  const original = row.script_content || '';
+  const original = typeof row.script_content === 'string' ? row.script_content : '';
   const locked = normalizeLockedBeats(row.script_locked_beats);
-  const { beats } = splitScriptBeats(original);
-  const blocked = (beat, reason, message) => refuse(409, 'INJECT_BLOCKED_BY_LOCK', message, { beat_number: beat ? beat.number : null, beat_label: beat ? beatLabel(beat) : null, reason });
+  const blocked = (number, label, reason, message) => refuse(409, 'INJECT_BLOCKED_BY_LOCK', message, { beat_number: number, beat_label: label, reason });
+  const missing = (reason, message) => refuse(409, 'INJECT_NO_INTENDED_BEAT', message, { beat_number: null, beat_label: null, reason, intended_beats: INTENDED_BEATS });
 
-  if (locked.length && !beats.length) {
-    blocked(null, 'headerless_locked', 'This script has no beat headers and has an approved beat, so the event tag can\'t be placed without changing approved text. Add the tag by hand.');
-  }
-  for (const beat of beats) {
+  // An empty script has no beat to put the tag in and nothing to displace:
+  // null, and the event is attached with no tag (Evoni, 2026-10-27).
+  if (!original.trim()) return null;
+  for (const beat of splitScriptBeats(original).beats) {
     if (locked.includes(beat.number) && TAG_RE.test(beat.text)) {
-      blocked(beat, 'old_tag_in_locked_beat', `Beat ${beat.number} · ${beatLabel(beat)} is approved and holds this episode's event tag. Unlock it to change the event, or edit the tag by hand.`);
+      blocked(beat.number, beatLabel(beat), 'old_tag_in_locked_beat', `${beatName(beat.number, beatLabel(beat))} is approved and holds this episode's event tag. Unlock it to change the event, or edit the tag by hand.`);
     }
   }
 
-  let script = original.replace(/\[EVENT:[^\]]*\]/gi, '').replace(/\[LOCATION_HINT:[^\]]*\]/gi, '');
-  const marker = HEADER_MARKERS.find((m) => script.indexOf(m) >= 0);
-  if (marker) {
-    const target = beats.find((b) => String(b.text).split('\n')[0].includes(marker));
-    if (target && locked.includes(target.number)) {
-      blocked(target, 'intended_beat_locked', `Beat ${target.number} · ${beatLabel(target)} is approved, and that is where this event's tag goes. Unlock it to place the event, or add the tag by hand.`);
+  const lines = original.replace(/\[EVENT:[^\]]*\]/gi, '').replace(/\[LOCATION_HINT:[^\]]*\]/gi, '').split('\n');
+  const headers = [];
+  lines.forEach((line, index) => {
+    // A Windows line end is read past here; the script keeps its own line ends.
+    const m = normalizeBeatHeaders(line.replace(/\r$/, '')).match(HEADER_LINE_RE);
+    // number: the beat as locks count it (its header's number or canonical
+    // name, else its place, as splitScriptBeats); beat: the canonical beat it
+    // is, from its number or name only, never from its place.
+    if (m) {
+      const named = headerNumber(m[1]);
+      headers.push({ index, number: named || headers.length + 1, beat: named || markerBeat(m[1]), label: m[1].trim() });
     }
+  });
+  if (!headers.length) {
+    missing('no_beat_headers', 'This script has no beat headers, so the event tag has no beat to go in. Add the beat headers (Beat view does), then attach the event, or add the tag by hand.');
   }
-  const at = marker ? script.indexOf('\n', script.indexOf(marker)) + 1 : 0;
-  script = script.substring(0, at) + injection + script.substring(at);
-  return script.trim();
+  let target = null;
+  for (const n of INTENDED_BEATS) {
+    target = headers.find((h) => h.beat === n);
+    if (target) break;
+  }
+  if (!target) {
+    missing('no_intended_beat', 'This script has none of the beats an event tag goes in (Strategic Reaction, Reveal or an Interruption, beats 6, 5, 4 or 7). Add one of them, then attach the event, or add the tag by hand.');
+  }
+  if (locked.includes(target.number)) {
+    blocked(target.number, target.label || `Beat ${target.number}`, 'intended_beat_locked', `${beatName(target.number, target.label)} is approved, and that is where this event's tag goes. Unlock it to place the event, or add the tag by hand.`);
+  }
+  const tagLines = String(injection).replace(/\n$/, '').split('\n');
+  lines.splice(target.index + 1, 0, ...tagLines);
+  return lines.join('\n').trim();
 }
 
 // ═══════════════════════════════════════════
@@ -123,10 +171,10 @@ router.post('/world/:showId/events/:eventId/inject', requireAuth, async (req, re
     // The script (A1c R1, services/scriptSave.js): built from the episode
     // as it is now, its row locked in this transaction; the script it
     // replaces kept as a version, a failure failing the injection. Locked
-    // beats are never edited (D9, P3): the tag goes where it always has (the
-    // first STAKES, REVEAL or INTERRUPTION beat, else the top), and is refused,
-    // naming the beat, when that beat is approved, when the old tag is in an
-    // approved beat, or when a script with no beat headers has a lock.
+    // beats are never edited (D9, P3), and the tag stays in its intended beat
+    // (N6; injectedScript above): refused, naming the beat, when that beat is
+    // approved or the old tag is in an approved beat, and refused when the
+    // script has no intended beat. Nothing is linked when it is refused.
     const { linkEventSceneSet, STATUS } = require('../../services/eventSceneSetLinkService');
     const { saveEpisodeScript, sendScriptSaveError } = require('../../services/scriptSave');
     let sceneSet;
@@ -138,7 +186,11 @@ router.post('/world/:showId/events/:eventId/inject', requireAuth, async (req, re
           source: 'generate',
           userId: req.user?.id,
           transaction: t,
-          compose: (row) => ({ script: injectedScript(row, injection) }),
+          compose: (row) => {
+            const script = injectedScript(row, injection);
+            // An empty script stays as it is (nothing is written); the event is still attached.
+            return script === null ? { script: typeof row.script_content === 'string' ? row.script_content : '', extra: { tagged: false } } : { script, extra: { tagged: true } };
+          },
         });
         await models.sequelize.query(
           `UPDATE world_events SET used_in_episode_id = :episodeId, times_used = COALESCE(times_used, 0) + 1, status = 'used', updated_at = NOW() WHERE id = :eventId`,
@@ -168,8 +220,10 @@ router.post('/world/:showId/events/:eventId/inject', requireAuth, async (req, re
       scene_set: sceneSet,
       scene_set_linked: sceneSetLinked,
       episode_id,
+      // false when the episode had no script yet: the event is attached, its tag not placed.
+      script_tagged: saved.extra?.tagged !== false,
       script_revision: saved.script_revision,
-      message: `Event "${event.name}" injected into episode script.${sceneSetLinked ? ' Scene set auto-linked.' : ''}${sceneSet.status === STATUS.NEEDS_RECONNECTING ? ' Scene set needs reconnecting.' : ''}${sceneSet.status === STATUS.CHOOSE ? ' Choose its scene set.' : ''}`,
+      message: `${saved.extra?.tagged === false ? `Event "${event.name}" attached. The episode has no script yet, so its tag was not added; generate or write the script, then attach the event again to add it.` : `Event "${event.name}" injected into episode script.`}${sceneSetLinked ? ' Scene set auto-linked.' : ''}${sceneSet.status === STATUS.NEEDS_RECONNECTING ? ' Scene set needs reconnecting.' : ''}${sceneSet.status === STATUS.CHOOSE ? ' Choose its scene set.' : ''}`,
     });
   } catch (error) {
     console.error('Inject event error:', error);
@@ -219,3 +273,6 @@ router.post('/world/:showId/events/:eventId/scene-set-link', requireAuth, async 
 });
 
 module.exports = router;
+// For tests/unit/routes/injectPlacement.test.js.
+module.exports.injectedScript = injectedScript;
+module.exports.INTENDED_BEATS = INTENDED_BEATS;
