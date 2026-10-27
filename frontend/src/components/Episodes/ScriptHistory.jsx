@@ -9,6 +9,7 @@
 // back; dates read "2 hours ago" with the full time on hover; Escape on a
 // version goes back to the list; a backdrop closes it.
 import { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { History, X } from 'lucide-react';
 import api from '../../services/api';
 import useDialogLayer from '../../hooks/useDialogLayer';
@@ -212,7 +213,10 @@ export default function ScriptHistory({ episodeId, dirty = false, hasProposal = 
   return (
     <>
       <button type="button" ref={openerRef} className="esp-btn" data-testid="script-history" aria-haspopup="dialog" aria-expanded={open} onClick={openPanel}><History size={14} aria-hidden="true" /> History</button>
-      {open && (
+      {/* On the page's body (Evoni, 2026-10-27): inside the tab, the site's
+          sticky header and the assistant button drew over the panel's top on a
+          phone, so Close could not be seen or tapped. As ScriptTableRead does. */}
+      {open && createPortal(
         <>
           {/* Modal on a desktop too (History audit, 2026-10-24): the page behind is covered, and a click on it closes History. */}
           <div className="esp-history-backdrop" data-testid="script-history-backdrop" aria-hidden="true" onClick={close} />
@@ -260,7 +264,8 @@ export default function ScriptHistory({ episodeId, dirty = false, hasProposal = 
               </ul>
             )}
           </div>
-        </>
+        </>,
+        document.body,
       )}
     </>
   );
