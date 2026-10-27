@@ -154,17 +154,22 @@ export default function EpisodeScriptWriterPage() {
   const [locking, setLocking] = useState(false);
   const [viewMode, setViewMode] = useState('structured'); // structured | raw
   const [error, setError] = useState(null);
+  // The episode's script revision as this page read it (A1c R1): Lock sends
+  // it, so a script saved to the episode since is never replaced unseen.
+  const [scriptRevision, setScriptRevision] = useState(null);
 
   // Load episode
+  const loadEpisode = useCallback(() => api.get(`/api/v1/episodes/${episodeId}`)
+    .then(r => {
+      const ep = r.data.data || r.data;
+      setEpisode(ep);
+      setShowId(ep.show_id);
+      setScriptRevision(r.data.script_revision || null);
+      return r.data.script_revision || null;
+    }), [episodeId]);
   useEffect(() => {
-    api.get(`/api/v1/episodes/${episodeId}`)
-      .then(r => {
-        const ep = r.data.data || r.data;
-        setEpisode(ep);
-        setShowId(ep.show_id);
-      })
-      .catch(err => setError(err.message));
-  }, [episodeId]);
+    loadEpisode().catch(err => setError(err.message));
+  }, [loadEpisode]);
 
   // Load scripts
   const loadScripts = useCallback(() => {
@@ -216,6 +221,8 @@ export default function EpisodeScriptWriterPage() {
         }
       }
       const script = r.data.data;
+      // The episode's script is the new one now (A1c R1): its revision for the next Lock.
+      if (r.data.script_revision) setScriptRevision(r.data.script_revision);
       setActiveScript(script);
       loadScripts();
     } catch (err) {
@@ -232,22 +239,35 @@ export default function EpisodeScriptWriterPage() {
   const handleLock = async () => {
     if (!activeScript) return;
     setLocking(true);
-    const lock = (confirmOverwrite) => api.post(`/api/v1/episode-scripts/${activeScript.id}/lock`, confirmOverwrite ? { confirmOverwrite: true } : {});
+    setError(null);
+    const lock = (confirmOverwrite) => api.post(`/api/v1/episode-scripts/${activeScript.id}/lock`, {
+      script_revision: scriptRevision, ...(confirmOverwrite ? { confirmOverwrite: true } : {}),
+    });
     try {
+      let r;
       try {
-        await lock(false);
+        r = await lock(false);
       } catch (err) {
         if (err.response?.status === 409 && err.response?.data?.code === 'SCRIPT_OVERWRITE_CONFIRMATION_REQUIRED') {
           if (!window.confirm('This episode already has a script. Replace it with this one?')) return;
-          await lock(true);
+          r = await lock(true);
         } else {
           throw err;
         }
       }
+      if (r?.data?.script_revision) setScriptRevision(r.data.script_revision);
       setActiveScript({ ...activeScript, status: 'locked' });
       loadScripts();
     } catch (err) {
-      setError(err.response?.data?.error || err.message);
+      const code = err.response?.data?.code;
+      if (err.response?.status === 409 && (code === 'SCRIPT_CHANGED' || code === 'SCRIPT_REVISION_REQUIRED')) {
+        // Nothing was locked. The page reads the episode's script revision again, so the
+        // next Lock is against the script as it is now (and asks before replacing it).
+        setError('The episode\'s script changed since this page opened, so this script was not locked or saved over it. Open the episode\'s Script tab to see the newer script, or Lock again to replace it.');
+        loadEpisode().catch((loadErr) => console.error('[ScriptWriter] could not read the episode again:', loadErr));
+      } else {
+        setError(err.response?.data?.error || err.message);
+      }
     } finally {
       setLocking(false);
     }

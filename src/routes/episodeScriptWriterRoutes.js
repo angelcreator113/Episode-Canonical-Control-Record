@@ -170,8 +170,10 @@ router.post('/:scriptId/lock', requireAuth, async (req, res) => {
     // the episode's locked beats kept, the replaced script kept as a
     // version. It replaces the episode's whole script, so the overwrite
     // guard applies as for the other writers (D10): an episode with a script
-    // needs confirmOverwrite. A failure is reported, never swallowed, and
-    // leaves this script unlocked.
+    // needs confirmOverwrite. It is a write from the page, so the episode's
+    // script revision the page read is required too (P2): a script saved
+    // since is never replaced unseen. A failure is reported, never
+    // swallowed, and leaves this script unlocked.
     const models = require('../models');
     const { saveEpisodeScript, sendScriptSaveError } = require('../services/scriptSave');
     const { scriptKeepingLocks } = require('../utils/scriptBeatLocks');
@@ -181,6 +183,8 @@ router.post('/:scriptId/lock', requireAuth, async (req, res) => {
         const result = await saveEpisodeScript(models, script.episode_id, {
           writer: 'W4',
           source: 'generate',
+          revision: req.body?.script_revision,
+          requireRevision: true,
           guard: req.body || {},
           userId: req.user?.id,
           transaction,
