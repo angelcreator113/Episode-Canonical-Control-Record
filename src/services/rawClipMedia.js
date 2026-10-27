@@ -110,9 +110,18 @@ function run(cmd, args, { low = false, timeoutMs = 10 * 60 * 1000 } = {}) {
 
 async function uploadFile(localPath, key, contentType) {
   const { size } = await fsp.stat(localPath);
-  await getS3().send(new PutObjectCommand({
-    Bucket: requireAssetBucket(), Key: key, Body: fs.createReadStream(localPath), ContentLength: size, ContentType: contentType,
-  }));
+  // Closed whatever S3 does: a send that fails before reading the file would
+  // otherwise keep it open, and an unread stream whose file is then removed
+  // would throw with nothing listening (2026-10-27).
+  const body = fs.createReadStream(localPath);
+  body.on('error', (err) => console.error('[rawClips] could not read the file being uploaded', localPath, err.message));
+  try {
+    await getS3().send(new PutObjectCommand({
+      Bucket: requireAssetBucket(), Key: key, Body: body, ContentLength: size, ContentType: contentType,
+    }));
+  } finally {
+    body.destroy();
+  }
   return publicUrl(key);
 }
 
