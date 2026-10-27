@@ -67,7 +67,7 @@ describe('EpisodeScriptTab: saved work', () => {
     await waitFor(() => expect(onDirtyChange).toHaveBeenLastCalledWith(true));
 
     fireEvent.keyDown(window, { key: 's', ctrlKey: true });
-    await waitFor(() => expect(api.put).toHaveBeenCalledWith('/api/v1/episodes/ep-1', { script_content: next }));
+    await waitFor(() => expect(api.put).toHaveBeenCalledWith('/api/v1/episodes/ep-1', expect.objectContaining({ script_content: next })));
     await waitFor(() => expect(onSaved).toHaveBeenLastCalledWith({ id: 'ep-1', script_content: next, script_locked_beats: [] }));
     await waitFor(() => expect(onDirtyChange).toHaveBeenLastCalledWith(false));
   });

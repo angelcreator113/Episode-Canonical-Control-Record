@@ -1109,7 +1109,9 @@ async function loadRulesContext(context, episodeId, showId, models) {
   return context;
 }
 
-async function generateEpisodeScript(episodeId, showId, models) {
+// options (A1c R1): expectRevision, the episode's script revision when the
+// request came in; guardBody, the request body for the overwrite guard; userId.
+async function generateEpisodeScript(episodeId, showId, models, options = {}) {
   const context = await loadRulesContext(await loadScriptContext(episodeId, showId, models), episodeId, showId, models);
 
   const prompt = buildFullPrompt(context);
@@ -1196,20 +1198,32 @@ async function generateEpisodeScript(episodeId, showId, models) {
     beat_count: scriptJson?.length || 14,
   });
 
-  // Also save to episode.script_content for backwards compat
+  // The episode's script too (A1c R1, services/scriptSave.js): in one
+  // transaction with the row locked, the episode's locked beats kept, the
+  // replaced script kept as a version, the overwrite guard checked again
+  // under the lock. If the script changed while this one was being written
+  // (the revision taken before the writing), it is not saved over it (N3).
+  // A failure is no longer swallowed (D10): it is thrown at the end, with
+  // this script attached, so the caller says the draft is kept here but not
+  // on the episode. The steps below still run, as they did before.
+  let episodeSaveError = null;
   try {
     const { scriptKeepingLocks } = require('../utils/scriptBeatLocks');
-    const current = await models.Episode.findByPk(episodeId, { attributes: ['id', 'script_content', 'script_locked_beats'] });
-    const nextScript = scriptKeepingLocks(current, scriptText).script;
-    // Version history (services/scriptVersions.js; History audit H2,
-    // 2026-10-24): the episode's script this replaces is kept first.
-    const { snapshotScript } = require('./scriptVersions');
-    await snapshotScript(models, current, { source: 'generate', next: nextScript });
-    await models.Episode.update(
-      { script_content: nextScript },
-      { where: { id: episodeId } }
-    );
-  } catch (err) { console.error('[ScriptWriter] Could not copy the script to the episode (non-blocking):', err.message); }
+    const { saveEpisodeScript } = require('./scriptSave');
+    const saved = await saveEpisodeScript(models, episodeId, {
+      writer: 'W3',
+      source: 'generate',
+      expectRevision: options.expectRevision || null,
+      guard: options.guardBody || null,
+      userId: options.userId || null,
+      compose: (row) => ({ script: scriptKeepingLocks(row, scriptText).script }),
+    });
+    script.setDataValue('episode_saved', true);
+    script.setDataValue('script_revision', saved.script_revision);
+  } catch (err) {
+    console.error('[ScriptWriter] Could not save the script to the episode:', err.message);
+    episodeSaveError = err;
+  }
 
   // Track which franchise laws were injected
   if (context.franchiseLawIds?.length > 0 && models.FranchiseKnowledge) {
@@ -1283,6 +1297,10 @@ Return ONLY the JSON.` }],
     });
   } catch { /* non-blocking */ }
 
+  if (episodeSaveError) {
+    episodeSaveError.scriptRow = { ...script.toJSON(), guardResult };
+    throw episodeSaveError;
+  }
   return { ...script.toJSON(), guardResult };
 }
 

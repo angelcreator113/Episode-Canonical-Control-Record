@@ -97,25 +97,39 @@ router.post('/world/:showId/events/:eventId/generate-script', requireAuth, aiRat
       includeAnimations: include_animations,
     });
 
-    // If episode_id provided, save to episode
+    // If episode_id provided, save to episode, through
+    // services/scriptSave.js (A1c R1): the row locked, the overwrite guard
+    // checked again under the lock, locked beats kept, the replaced script
+    // kept as a version (a failure fails the save). The response's script is
+    // the one saved (D10).
+    let saved = null;
     if (episodeForGuard) {
+      const { saveEpisodeScript, sendScriptSaveError } = require('../../services/scriptSave');
       const { scriptKeepingLocks } = require('../../utils/scriptBeatLocks');
-      const nextScript = scriptKeepingLocks(episodeForGuard, script).script;
-      // Version history (History audit H2, 2026-10-24): the script this
-      // replaces is kept first; a failure to keep it never stops the save.
-      const { snapshotScript } = require('../../services/scriptVersions');
-      await snapshotScript(models, episodeForGuard, { source: 'generate', userId: req.user?.id, next: nextScript });
-      await episodeForGuard.update({ script_content: nextScript });
+      try {
+        saved = await saveEpisodeScript(models, episode_id, {
+          writer: 'W7',
+          source: 'generate',
+          guard: req.body,
+          userId: req.user?.id,
+          compose: (row) => ({ script: scriptKeepingLocks(row, script).script }),
+        });
+      } catch (err) {
+        if (sendScriptSaveError(res, err)) return undefined;
+        throw err;
+      }
     }
+    const text = saved ? saved.script_content : script;
 
     return res.json({
       success: true,
-      script,
+      script: text,
+      ...(saved ? { script_revision: saved.script_revision } : {}),
       event_name: event.name,
       character_state_used: characterState,
       intent,
-      line_count: script.split('\n').length,
-      beat_count: (script.match(/## BEAT:/g) || []).length,
+      line_count: text.split('\n').length,
+      beat_count: (text.match(/## BEAT:/g) || []).length,
     });
   } catch (error) {
     console.error('Generate script error:', error);

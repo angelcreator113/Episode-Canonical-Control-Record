@@ -59,7 +59,7 @@ describe('Script beat locks', () => {
     renderTab();
     fireEvent.click(screen.getByTestId('script-lock-1'));
     await waitFor(() => expect(screen.getByTestId('script-beat-1').getAttribute('data-locked')).toBe('true'));
-    expect(api.put).toHaveBeenCalledWith('/api/v1/episodes/ep-1/script-locks', { locked_beats: [1] });
+    expect(api.put).toHaveBeenCalledWith('/api/v1/episodes/ep-1/script-locks', expect.objectContaining({ locked_beats: [1] }));
     expect(screen.getByTestId('script-lock-1').textContent).toBe('Unlock');
   });
 

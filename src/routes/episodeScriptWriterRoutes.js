@@ -38,16 +38,33 @@ router.post('/:episodeId/generate', requireAuth, aiRateLimiter, async (req, res)
 
     console.log(`[ScriptWriter] Generate request for episode ${episodeId}`);
 
+    // The episode's script revision now (A1c R1): the generated script is
+    // saved to the episode only if nothing changed it while it was written.
+    const { readScriptRevision } = require('../services/scriptSave');
+    const expectRevision = await readScriptRevision(models, episodeId);
+
     const { generateEpisodeScript } = require('../services/episodeScriptWriterService');
-    const script = await generateEpisodeScript(episodeId, showId, models);
+    const script = await generateEpisodeScript(episodeId, showId, models, { expectRevision, guardBody: req.body, userId: req.user?.id });
 
     return res.json({
       success: true,
       message: `Script v${script.version} generated — ${script.word_count} words, ${script.beat_count} beats.`,
       data: script,
+      script_revision: script.script_revision,
     });
   } catch (err) {
     console.error('[ScriptWriter] Generate error:', err);
+    // Generated and kept as a Script Writer version, but not saved to the
+    // episode (A1c R1, D10: no longer reported as a success).
+    if (err?.scriptRow) {
+      const { ScriptSaveError } = require('../services/scriptSave');
+      const refusal = err instanceof ScriptSaveError ? err.body : null;
+      return res.status(refusal ? err.status : 500).json({
+        ...(refusal || { success: false, error: `The script was generated and kept as Script v${err.scriptRow.version}, but could not be saved to the episode: ${err.message}` }),
+        saved: false,
+        data: err.scriptRow,
+      });
+    }
     // A refused budget or a rate limit is a 429 with its code, as the
     // grounded routes answer it (Script page audit 3, 2026-10-19).
     if (err?.code === 'AI_BUDGET_EXCEEDED' || err?.status === 429) return res.status(429).json({ error: err.message, code: 'AI_BUDGET_EXCEEDED' });
@@ -148,27 +165,39 @@ router.post('/:scriptId/lock', requireAuth, async (req, res) => {
     const script = await EpisodeScript.findByPk(req.params.scriptId);
     if (!script) return res.status(404).json({ error: 'Script not found' });
 
-    await script.update({ status: 'locked' });
-
-    // Save locked script to episode
+    // Lock it and save it to the episode together (A1c R1,
+    // services/scriptSave.js): one transaction with the episode row locked,
+    // the episode's locked beats kept, the replaced script kept as a
+    // version. It replaces the episode's whole script, so the overwrite
+    // guard applies as for the other writers (D10): an episode with a script
+    // needs confirmOverwrite. A failure is reported, never swallowed, and
+    // leaves this script unlocked.
+    const models = require('../models');
+    const { saveEpisodeScript, sendScriptSaveError } = require('../services/scriptSave');
+    const { scriptKeepingLocks } = require('../utils/scriptBeatLocks');
+    let saved;
     try {
-      const models = require('../models');
-      const { Episode } = models;
-      const { scriptKeepingLocks } = require('../utils/scriptBeatLocks');
-      const current = await Episode.findByPk(script.episode_id, { attributes: ['id', 'script_content', 'script_locked_beats'] });
-      const nextScript = scriptKeepingLocks(current, script.script_text).script;
-      // Version history (services/scriptVersions.js; History audit H2,
-      // 2026-10-24): the episode's script this replaces is kept first.
-      const { snapshotScript } = require('../services/scriptVersions');
-      await snapshotScript(models, current, { source: 'generate', userId: req.user?.id, next: nextScript });
-      await Episode.update(
-        { script_content: nextScript },
-        { where: { id: script.episode_id } }
-      );
-    } catch (err) { console.error('[ScriptWriter] Could not copy the locked script to the episode (non-blocking):', err.message); }
+      saved = await models.sequelize.transaction(async (transaction) => {
+        const result = await saveEpisodeScript(models, script.episode_id, {
+          writer: 'W4',
+          source: 'generate',
+          guard: req.body || {},
+          userId: req.user?.id,
+          transaction,
+          compose: (row) => ({ script: scriptKeepingLocks(row, script.script_text).script }),
+        });
+        await script.update({ status: 'locked' }, { transaction });
+        return result;
+      });
+    } catch (err) {
+      console.error('[ScriptWriter] Could not lock the script and save it to the episode:', err.message);
+      if (sendScriptSaveError(res, err)) return undefined;
+      return res.status(500).json({ error: `The script was not locked: it could not be saved to the episode (${err.message}).` });
+    }
 
-    return res.json({ data: script, message: 'Script locked and saved to episode.' });
+    return res.json({ data: script, script_revision: saved.script_revision, message: 'Script locked and saved to episode.' });
   } catch (err) {
+    console.error('[ScriptWriter] Lock error:', err.message);
     return res.status(500).json({ error: err.message });
   }
 });

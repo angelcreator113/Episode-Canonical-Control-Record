@@ -228,7 +228,7 @@ describe('7: Approve waits for a Save', () => {
     expect(lock.getAttribute('aria-disabled')).toBe('true');
     expect(lock.title).toBe('Wait for the save to finish');
     fireEvent.click(lock);
-    expect(api.put).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(api.put).toHaveBeenCalledTimes(1));
     await act(async () => { put.resolve({ data: { data: { script_content: SCRIPT.replace('Lala: Hi besties.', 'Lala: New.') } } }); });
     expect(screen.getByTestId('script-lock-1').getAttribute('aria-disabled')).toBeNull();
   });

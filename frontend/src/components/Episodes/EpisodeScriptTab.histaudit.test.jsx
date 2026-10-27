@@ -178,7 +178,7 @@ describe('H7: the next Save names the version', () => {
     fireEvent.click(screen.getByTestId('script-history-restore'));
     fireEvent.click(screen.getByTestId('script-savebar-save'));
     await waitFor(() => expect(api.put).toHaveBeenCalledTimes(1));
-    expect(vi.mocked(api.put).mock.calls[0][1]).toEqual({ script_content: OLD, restored_from: VID });
+    expect(vi.mocked(api.put).mock.calls[0][1]).toEqual(expect.objectContaining({ script_content: OLD, restored_from: VID }));
     typeRaw(`${OLD}\nLala: more.`);
     fireEvent.click(screen.getByTestId('script-savebar-save'));
     await waitFor(() => expect(api.put).toHaveBeenCalledTimes(2));

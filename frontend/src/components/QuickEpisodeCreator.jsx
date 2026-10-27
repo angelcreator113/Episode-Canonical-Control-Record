@@ -434,11 +434,18 @@ export default function QuickEpisodeCreator() {
         });
         const event = evRes.data?.event || evRes.data;
 
+        // The new episode's script revision (A1c R1, initial-write contract):
+        // the create answer's, for its empty script, then each script write's
+        // own. The skeleton below is saved against it, so it never writes
+        // over a script someone else saved to this episode meanwhile.
+        let scriptRevision = epRes.data?.script_revision || null;
+
         // Inject event into episode
         try {
-          await api.post(`/api/v1/world/${effectiveShowId}/events/${event.id}/inject`, {
+          const injRes = await api.post(`/api/v1/world/${effectiveShowId}/events/${event.id}/inject`, {
             episode_id: episodeId,
           });
+          if (injRes?.data?.script_revision) scriptRevision = injRes.data.script_revision;
         } catch (injectErr) {
           try {
             await api.put(`/api/v1/world/${effectiveShowId}/events/${event.id}`, {
@@ -452,8 +459,9 @@ export default function QuickEpisodeCreator() {
         try {
           await api.put(`/api/v1/episodes/${episodeId}`, {
             script_content: scriptContent,
+            script_revision: scriptRevision,
           });
-        } catch { /* script save failed — not fatal */ }
+        } catch (scriptErr) { console.error('[QuickEpisodeCreator] script skeleton save failed (not fatal):', scriptErr.response?.data?.code || scriptErr.message); }
       }
 
       // Clear draft and navigate to episode detail

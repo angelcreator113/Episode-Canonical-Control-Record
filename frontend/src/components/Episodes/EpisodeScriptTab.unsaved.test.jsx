@@ -40,7 +40,7 @@ describe('EpisodeScriptTab: generated but not saved', () => {
     expect(api.post).toHaveBeenCalledTimes(1);
 
     fireEvent.click(screen.getByTestId('script-unsaved-save'));
-    await waitFor(() => expect(api.put).toHaveBeenCalledWith('/api/v1/episodes/ep-1', { script_content: SCRIPT }));
+    await waitFor(() => expect(api.put).toHaveBeenCalledWith('/api/v1/episodes/ep-1', expect.objectContaining({ script_content: SCRIPT })));
     await waitFor(() => expect(screen.queryByTestId('script-unsaved')).toBeNull());
     expect(api.post).toHaveBeenCalledTimes(1);
   });

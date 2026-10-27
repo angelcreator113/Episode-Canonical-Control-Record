@@ -18,6 +18,49 @@ const { findTermsLockEpisode, termsLockedBody, episodeLabel } = require('../../u
 const { loadScopedEvent } = require('../../utils/eventScope');
 const { getModels } = require('./helpers');
 
+const TAG_RE = /\[(?:EVENT|LOCATION_HINT):[^\]]*\]/i;
+const HEADER_MARKERS = ['## BEAT: STAKES', '## BEAT: REVEAL', '## BEAT: INTERRUPTION'];
+
+// A beat's label for a refusal: its header after "## BEAT:".
+const beatLabel = (beat) => (String(beat.text).split('\n')[0].replace(/^\s*##\s*BEAT:\s*/i, '').trim() || `Beat ${beat.number}`);
+
+/**
+ * The episode's script with the event's tag lines in place (as it has
+ * always been placed: the old [EVENT:] and [LOCATION_HINT:] tags removed,
+ * the new ones after the first STAKES, REVEAL or INTERRUPTION header, else at
+ * the top), or a refusal naming the approved beat it would change (A1c R1;
+ * Evoni, 2026-10-27, D9 and P3). Never moved to another beat or to the top.
+ */
+function injectedScript(row, injection) {
+  const { splitScriptBeats, normalizeLockedBeats } = require('../../utils/scriptBeatLocks');
+  const { refuse } = require('../../services/scriptSave');
+  const original = row.script_content || '';
+  const locked = normalizeLockedBeats(row.script_locked_beats);
+  const { beats } = splitScriptBeats(original);
+  const blocked = (beat, reason, message) => refuse(409, 'INJECT_BLOCKED_BY_LOCK', message, { beat_number: beat ? beat.number : null, beat_label: beat ? beatLabel(beat) : null, reason });
+
+  if (locked.length && !beats.length) {
+    blocked(null, 'headerless_locked', 'This script has no beat headers and has an approved beat, so the event tag can\'t be placed without changing approved text. Add the tag by hand.');
+  }
+  for (const beat of beats) {
+    if (locked.includes(beat.number) && TAG_RE.test(beat.text)) {
+      blocked(beat, 'old_tag_in_locked_beat', `Beat ${beat.number} · ${beatLabel(beat)} is approved and holds this episode's event tag. Unlock it to change the event, or edit the tag by hand.`);
+    }
+  }
+
+  let script = original.replace(/\[EVENT:[^\]]*\]/gi, '').replace(/\[LOCATION_HINT:[^\]]*\]/gi, '');
+  const marker = HEADER_MARKERS.find((m) => script.indexOf(m) >= 0);
+  if (marker) {
+    const target = beats.find((b) => String(b.text).split('\n')[0].includes(marker));
+    if (target && locked.includes(target.number)) {
+      blocked(target, 'intended_beat_locked', `Beat ${target.number} · ${beatLabel(target)} is approved, and that is where this event's tag goes. Unlock it to place the event, or add the tag by hand.`);
+    }
+  }
+  const at = marker ? script.indexOf('\n', script.indexOf(marker)) + 1 : 0;
+  script = script.substring(0, at) + injection + script.substring(at);
+  return script.trim();
+}
+
 // ═══════════════════════════════════════════
 // POST /api/v1/world/:showId/events/:eventId/inject
 // Inject an event into an episode's script as [EVENT:] tag
@@ -70,60 +113,51 @@ router.post('/world/:showId/events/:eventId/inject', requireAuth, async (req, re
     // Build location hint if present
     const locationTag = event.location_hint ? `[LOCATION_HINT: "${event.location_hint}"]` : '';
 
-    // Insert into script
-    let script = episode.script_content || '';
-
-    // Remove existing [EVENT:] tag if present
-    script = script.replace(/\[EVENT:[^\]]*\]/gi, '');
-    script = script.replace(/\[LOCATION_HINT:[^\]]*\]/gi, '');
-
-    // Find best insertion point (after STAKES_INTENTION beat or after first REVEAL)
-    const stakesIdx = script.indexOf('## BEAT: STAKES');
-    const revealIdx = script.indexOf('## BEAT: REVEAL');
-    const interruptIdx = script.indexOf('## BEAT: INTERRUPTION');
-
-    let insertIdx;
-    if (stakesIdx >= 0) {
-      insertIdx = script.indexOf('\n', stakesIdx) + 1;
-    } else if (revealIdx >= 0) {
-      insertIdx = script.indexOf('\n', revealIdx) + 1;
-    } else if (interruptIdx >= 0) {
-      insertIdx = script.indexOf('\n', interruptIdx) + 1;
-    } else {
-      // Insert at top
-      insertIdx = 0;
-    }
-
     const injection = eventTag + '\n' + (locationTag ? locationTag + '\n' : '');
-    script = script.substring(0, insertIdx) + injection + script.substring(insertIdx);
 
     // F2 (Evoni, 2026-10-01): the required links (the script's tag, the
     // event's episode, its invitation's episode) commit together or not at
     // all. The scene-set link runs in a savepoint: if it can't be made, the
     // event is still attached and the response says the scene set needs
     // reconnecting, with POST .../scene-set-link to retry.
+    // The script (A1c R1, services/scriptSave.js): built from the episode
+    // as it is now, its row locked in this transaction; the script it
+    // replaces kept as a version, a failure failing the injection. Locked
+    // beats are never edited (D9, P3): the tag goes where it always has (the
+    // first STAKES, REVEAL or INTERRUPTION beat, else the top), and is refused,
+    // naming the beat, when that beat is approved, when the old tag is in an
+    // approved beat, or when a script with no beat headers has a lock.
     const { linkEventSceneSet, STATUS } = require('../../services/eventSceneSetLinkService');
-    const sceneSet = await models.sequelize.transaction(async (t) => {
-      // Version history (services/scriptVersions.js; History audit H2,
-      // 2026-10-24): the script before the event went in is kept first, in
-      // a savepoint, so a failure to keep it never stops the injection.
-      const { snapshotScript } = require('../../services/scriptVersions');
-      await snapshotScript(models, episode, { source: 'generate', userId: req.user?.id, next: script.trim(), transaction: t });
-      await episode.update({ script_content: script.trim() }, { transaction: t });
-      await models.sequelize.query(
-        `UPDATE world_events SET used_in_episode_id = :episodeId, times_used = COALESCE(times_used, 0) + 1, status = 'used', updated_at = NOW() WHERE id = :eventId`,
-        { replacements: { episodeId: episode_id, eventId }, transaction: t }
-      );
-      // If this event has an approved invitation, stamp the episode_id on the asset
-      if (event.invitation_asset_id) {
+    const { saveEpisodeScript, sendScriptSaveError } = require('../../services/scriptSave');
+    let sceneSet;
+    let saved;
+    try {
+      sceneSet = await models.sequelize.transaction(async (t) => {
+        saved = await saveEpisodeScript(models, episode_id, {
+          writer: 'W5',
+          source: 'generate',
+          userId: req.user?.id,
+          transaction: t,
+          compose: (row) => ({ script: injectedScript(row, injection) }),
+        });
         await models.sequelize.query(
-          `UPDATE assets SET episode_id = :episodeId, updated_at = NOW()
-           WHERE id = :assetId AND deleted_at IS NULL`,
-          { replacements: { episodeId: episode_id, assetId: event.invitation_asset_id }, transaction: t }
+          `UPDATE world_events SET used_in_episode_id = :episodeId, times_used = COALESCE(times_used, 0) + 1, status = 'used', updated_at = NOW() WHERE id = :eventId`,
+          { replacements: { episodeId: episode_id, eventId }, transaction: t }
         );
-      }
-      return linkEventSceneSet(models.sequelize, { event, episodeId: episode_id, transaction: t });
-    });
+        // If this event has an approved invitation, stamp the episode_id on the asset
+        if (event.invitation_asset_id) {
+          await models.sequelize.query(
+            `UPDATE assets SET episode_id = :episodeId, updated_at = NOW()
+             WHERE id = :assetId AND deleted_at IS NULL`,
+            { replacements: { episodeId: episode_id, assetId: event.invitation_asset_id }, transaction: t }
+          );
+        }
+        return linkEventSceneSet(models.sequelize, { event, episodeId: episode_id, transaction: t });
+      });
+    } catch (err) {
+      if (sendScriptSaveError(res, err)) return undefined;
+      throw err;
+    }
     const sceneSetLinked = sceneSet.status === STATUS.LINKED;
 
     return res.json({
@@ -134,6 +168,7 @@ router.post('/world/:showId/events/:eventId/inject', requireAuth, async (req, re
       scene_set: sceneSet,
       scene_set_linked: sceneSetLinked,
       episode_id,
+      script_revision: saved.script_revision,
       message: `Event "${event.name}" injected into episode script.${sceneSetLinked ? ' Scene set auto-linked.' : ''}${sceneSet.status === STATUS.NEEDS_RECONNECTING ? ' Scene set needs reconnecting.' : ''}${sceneSet.status === STATUS.CHOOSE ? ' Choose its scene set.' : ''}`,
     });
   } catch (error) {

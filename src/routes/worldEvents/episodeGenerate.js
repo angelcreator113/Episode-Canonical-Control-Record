@@ -15,7 +15,6 @@ const router = express.Router();
 
 const { requireAuth } = require('../../middleware/auth');
 const { aiRateLimiter } = require('../../middleware/aiRateLimiter');
-const { scriptOverwriteBlocked } = require('../../utils/scriptOverwriteGuard');
 const { eventEpisodeConflictBody, EVENT_EPISODE_CONFLICT_CODE } = require('../../utils/eventEpisodeLink');
 const { dealPriceRequiredBody, DEAL_PRICE_REQUIRED_CODE } = require('../../services/dealPricingService');
 const { loadScopedEvent } = require('../../utils/eventScope');
@@ -90,20 +89,25 @@ router.post('/world/:showId/events/:eventId/generate-episode', requireAuth, aiRa
             includeAnimations: true,
           });
           if (skeleton && models.Episode) {
-            const freshEpisode = await models.Episode.findByPk(result.episode.id);
-            if (scriptOverwriteBlocked(freshEpisode?.script_content, req.body)) {
+            // Through services/scriptSave.js (A1c R1): the row locked, an
+            // existing script left as it is unless confirmOverwrite, checked
+            // under the lock; locked beats kept; the replaced script kept as
+            // a version. The response carries the episode as saved (D10).
+            const { saveEpisodeScript } = require('../../services/scriptSave');
+            const { scriptKeepingLocks } = require('../../utils/scriptBeatLocks');
+            const saved = await saveEpisodeScript(models, result.episode.id, {
+              writer: 'W6',
+              source: 'generate',
+              skipIfScript: req.body?.confirmOverwrite !== true,
+              userId: req.user?.id,
+              compose: (row) => ({ script: scriptKeepingLocks(row, skeleton).script }),
+            });
+            if (saved.skipped) {
               console.warn(`[GenerateEpisode] Skipped script draft for episode ${result.episode.id}: existing script_content present, no confirmOverwrite flag.`);
             } else {
-              const { scriptKeepingLocks } = require('../../utils/scriptBeatLocks');
-              const nextScript = scriptKeepingLocks(freshEpisode, skeleton).script;
-              // Version history (History audit H2): the replaced script is kept first.
-              const { snapshotScript } = require('../../services/scriptVersions');
-              await snapshotScript(models, freshEpisode, { source: 'generate', userId: req.user?.id, next: nextScript });
-              await models.Episode.update(
-                { script_content: nextScript },
-                { where: { id: result.episode.id } }
-              );
               scriptDrafted = true;
+              result.episode = saved.episode;
+              result.script_revision = saved.script_revision;
             }
           }
         }

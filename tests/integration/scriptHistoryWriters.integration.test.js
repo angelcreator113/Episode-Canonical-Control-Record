@@ -3,6 +3,10 @@
  * episode's script keeps the script it replaces (H2); a restore saved from
  * History is named (H7); the list is read in the database and matches the
  * text (H10); and two saves at once keep both replaced scripts (H11).
+ * A1c R1 (2026-10-27): each script write from the page carries the script
+ * revision it read (GET /episodes/:id script_revision); two saves made from
+ * the same revision are serialised by the row lock, and the second is
+ * refused (SCRIPT_CHANGED) instead of writing over the first.
  */
 jest.unmock('uuid');
 
@@ -57,6 +61,8 @@ const beat = (n, name, body) => `## BEAT: ${n} · ${name}\n${body}`;
                VALUES (:id, :show, 'Velour Gala', 'ready', 5, NOW(), NOW())`, { id, show });
     return id;
   };
+  // The script revision the page reads with the episode (A1c R1).
+  const revisionOf = async (ep) => (await auth(request(app).get(`/api/v1/episodes/${ep}`))).body.script_revision;
   const versions = (ep) => run(`SELECT source, script_content FROM episode_script_versions WHERE episode_id = :ep ORDER BY created_at DESC`, { ep }).then(([rows]) => rows);
   const OLD = beat(1, 'Opening Ritual', 'Lala: "the script before"');
 
@@ -83,11 +89,20 @@ const beat = (n, name, body) => `## BEAT: ${n} · ${name}\n${body}`;
 
     test('generate-beats keeps the script it replaces', async () => {
       const ep = await episode(OLD);
-      const res = await auth(request(app).post(`/api/v1/episodes/${ep}/generate-beats`)).send({});
+      const res = await auth(request(app).post(`/api/v1/episodes/${ep}/generate-beats`)).send({ confirmOverwrite: true });
       expect(res.status).toBe(200);
       const kept = await versions(ep);
       expect(kept.map((v) => v.source)).toEqual(['generate']);
       expect(kept[0].script_content).toBe(OLD);
+    });
+    test('generate-beats asks before replacing a script (A1c R1, C6)', async () => {
+      const ep = await episode(OLD);
+      const res = await auth(request(app).post(`/api/v1/episodes/${ep}/generate-beats`)).send({});
+      expect(res.status).toBe(409);
+      expect(res.body.code).toBe('SCRIPT_OVERWRITE_CONFIRMATION_REQUIRED');
+      expect(await versions(ep)).toEqual([]);
+      const [[row]] = await run(`SELECT script_content FROM episodes WHERE id = :ep`, { ep });
+      expect(row.script_content).toBe(OLD);
     });
     // The Script Writer's generate and lock (episodeScriptWriterService,
     // episodeScriptWriterRoutes) keep the script the same way; the test
@@ -99,9 +114,9 @@ const beat = (n, name, body) => `## BEAT: ${n} · ${name}\n${body}`;
     test('restored_from, a version of this episode, keeps the replaced script as source restore', async () => {
       const ep = await episode(OLD);
       const NEW = beat(1, 'Opening Ritual', 'Lala: "a new take"');
-      expect((await auth(request(app).put(`/api/v1/episodes/${ep}`)).send({ script_content: NEW })).status).toBe(200);
+      expect((await auth(request(app).put(`/api/v1/episodes/${ep}`)).send({ script_content: NEW, script_revision: await revisionOf(ep) })).status).toBe(200);
       const [first] = await listVersions(models, ep);
-      const res = await auth(request(app).put(`/api/v1/episodes/${ep}`)).send({ script_content: OLD, restored_from: first.id });
+      const res = await auth(request(app).put(`/api/v1/episodes/${ep}`)).send({ script_content: OLD, restored_from: first.id, script_revision: await revisionOf(ep) });
       expect(res.status).toBe(200);
       expect(res.body.data.script_content).toBe(OLD);
       const list = (await auth(request(app).get(`/api/v1/episodes/${ep}/script-versions`))).body.data;
@@ -114,8 +129,8 @@ const beat = (n, name, body) => `## BEAT: ${n} · ${name}\n${body}`;
       const other = await episode(OLD);
       await snapshotScript(models, { id: other, script_content: 'x', script_locked_beats: [] });
       const [foreign] = await listVersions(models, other);
-      expect((await auth(request(app).put(`/api/v1/episodes/${ep}`)).send({ script_content: 'one', restored_from: foreign.id })).status).toBe(200);
-      expect((await auth(request(app).put(`/api/v1/episodes/${ep}`)).send({ script_content: 'two', restored_from: 'not-an-id' })).status).toBe(200);
+      expect((await auth(request(app).put(`/api/v1/episodes/${ep}`)).send({ script_content: 'one', restored_from: foreign.id, script_revision: await revisionOf(ep) })).status).toBe(200);
+      expect((await auth(request(app).put(`/api/v1/episodes/${ep}`)).send({ script_content: 'two', restored_from: 'not-an-id', script_revision: await revisionOf(ep) })).status).toBe(200);
       expect((await versions(ep)).map((v) => v.source)).toEqual(['save', 'save']);
     });
   });
@@ -145,35 +160,49 @@ const beat = (n, name, body) => `## BEAT: ${n} · ${name}\n${body}`;
   });
 
   describe('H11: two saves at once', () => {
-    test('each save keeps the script it replaced; none is lost', async () => {
+    test('two tabs saving from one revision: one saves, the other is refused; nothing is lost', async () => {
       const ep = await episode(OLD);
       const A = beat(1, 'Opening Ritual', 'Lala: "tab A"');
       const B = beat(1, 'Opening Ritual', 'Lala: "tab B"');
+      const revision = await revisionOf(ep);
       const [ra, rb] = await Promise.all([
-        auth(request(app).put(`/api/v1/episodes/${ep}`)).send({ script_content: A }),
-        auth(request(app).put(`/api/v1/episodes/${ep}`)).send({ script_content: B }),
+        auth(request(app).put(`/api/v1/episodes/${ep}`)).send({ script_content: A, script_revision: revision }),
+        auth(request(app).put(`/api/v1/episodes/${ep}`)).send({ script_content: B, script_revision: revision }),
       ]);
-      expect([ra.status, rb.status]).toEqual([200, 200]);
+      expect([ra.status, rb.status].sort()).toEqual([200, 409]);
+      const refused = ra.status === 409 ? ra : rb;
+      expect(refused.body.code).toBe('SCRIPT_CHANGED');
       const [[row]] = await run(`SELECT script_content FROM episodes WHERE id = :ep`, { ep });
-      const kept = (await versions(ep)).map((v) => v.script_content);
-      // The first save kept OLD; the second kept the first's script.
-      const winner = row.script_content;
-      const loser = winner === A ? B : A;
-      expect(kept.sort()).toEqual([OLD, loser].sort());
+      expect(row.script_content).toBe(ra.status === 200 ? A : B);
+      expect(refused.body.current_revision).toBe(await revisionOf(ep));
+      // The saved one kept OLD; the refused one wrote nothing.
+      expect((await versions(ep)).map((v) => v.script_content)).toEqual([OLD]);
     });
 
-    test('a lock that saves and a save at once keep both replaced scripts', async () => {
+    test('a lock that saves and a save at once, from one revision: one is written, the other refused', async () => {
       const ep = await episode(OLD);
       const A = beat(1, 'Opening Ritual', 'Lala: "save"');
       const B = beat(1, 'Opening Ritual', 'Lala: "lock"');
+      const revision = await revisionOf(ep);
       const [ra, rb] = await Promise.all([
-        auth(request(app).put(`/api/v1/episodes/${ep}`)).send({ script_content: A }),
-        auth(request(app).put(`/api/v1/episodes/${ep}/script-locks`)).send({ locked_beats: [], script_content: B }),
+        auth(request(app).put(`/api/v1/episodes/${ep}`)).send({ script_content: A, script_revision: revision }),
+        auth(request(app).put(`/api/v1/episodes/${ep}/script-locks`)).send({ locked_beats: [], script_content: B, script_revision: revision }),
       ]);
-      expect([ra.status, rb.status]).toEqual([200, 200]);
+      expect([ra.status, rb.status].sort()).toEqual([200, 409]);
+      expect((ra.status === 409 ? ra : rb).body.code).toBe('SCRIPT_CHANGED');
       const kept = await versions(ep);
-      expect(kept).toHaveLength(2);
-      expect(kept.map((v) => v.script_content)).toContain(OLD);
+      expect(kept.map((v) => v.script_content)).toEqual([OLD]);
+    });
+
+    test('a save from the revision the other returned is written after it, and keeps its script', async () => {
+      const ep = await episode(OLD);
+      const A = beat(1, 'Opening Ritual', 'Lala: "first"');
+      const B = beat(1, 'Opening Ritual', 'Lala: "second"');
+      const first = await auth(request(app).put(`/api/v1/episodes/${ep}`)).send({ script_content: A, script_revision: await revisionOf(ep) });
+      expect(first.status).toBe(200);
+      const second = await auth(request(app).put(`/api/v1/episodes/${ep}`)).send({ script_content: B, script_revision: first.body.script_revision });
+      expect(second.status).toBe(200);
+      expect((await versions(ep)).map((v) => v.script_content)).toEqual([A, OLD]);
     });
   });
 
@@ -183,7 +212,7 @@ const beat = (n, name, body) => `## BEAT: ${n} · ${name}\n${body}`;
       const B2 = beat(2, 'Login Sequence', 'APPROVED');
       const ep = await episode(`${B1}\n\n${B2}`);
       await run(`UPDATE episodes SET script_locked_beats = '[2]'::jsonb WHERE id = :ep`, { ep });
-      const res = await auth(request(app).put(`/api/v1/episodes/${ep}`)).send({ script_content: `${B1}\n\n${B2}\n\n${beat(2, 'New scene', 'NEW LINES')}` });
+      const res = await auth(request(app).put(`/api/v1/episodes/${ep}`)).send({ script_content: `${B1}\n\n${B2}\n\n${beat(2, 'New scene', 'NEW LINES')}`, script_revision: await revisionOf(ep) });
       expect(res.status).toBe(200);
       expect(res.body.data.script_content).toBe(`${B1}\n\n${B2}\n\n${beat(15, 'New scene', 'NEW LINES')}`);
       expect(res.body.locked_beats_moved).toEqual([{ from: 2, to: 15, header: '## BEAT: 15 · New scene' }]);

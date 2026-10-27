@@ -39,7 +39,8 @@ const mockEpisodes = {
 };
 
 const mockEventUpdates = [];
-const mockTx = { id: 'tx' };
+// LOCK as Sequelize's transaction has it (services/scriptSave.js locks the episode row; A1c R1).
+const mockTx = Object.defineProperty({ id: 'tx' }, 'LOCK', { value: { UPDATE: 'UPDATE' } });
 
 const mockQuery = jest.fn(async (sql, opts = {}) => {
   const r = opts.replacements || {};
@@ -74,13 +75,14 @@ const mockQuery = jest.fn(async (sql, opts = {}) => {
 const mockEpisodeUpdate = jest.fn(async () => {});
 const mockEpisodeFindOne = jest.fn(async () => { throw new Error('PASSED_GUARD'); });
 
-jest.mock('../../../src/models', () => ({
-  sequelize: {
+jest.mock('../../../src/models', () => {
+  const sequelize = {
     query: (...args) => mockQuery(...args),
     // Managed transaction; called as (cb) or ({ transaction }, cb) for a savepoint.
     transaction: jest.fn(async (a, b) => (typeof a === 'function' ? a(mockTx) : b(mockTx))),
-  },
-  Episode: {
+  };
+  const Episode = {
+    sequelize,
     findByPk: jest.fn(async (id) => {
       const ep = mockEpisodes[id];
       return ep ? { ...ep, script_content: '', update: mockEpisodeUpdate } : null;
@@ -88,8 +90,11 @@ jest.mock('../../../src/models', () => ({
     // generateEpisodeFromEvent's episode-number fallback: reaching it means
     // the used-event guard let the event through.
     findOne: (...args) => mockEpisodeFindOne(...args),
-  },
-}));
+  };
+  // The script is saved through services/scriptSave.js, which reads the row unscoped (A1c R1).
+  Episode.unscoped = () => Episode;
+  return { sequelize, Episode };
+});
 jest.mock('@anthropic-ai/sdk', () => jest.fn().mockImplementation(() => ({ messages: { create: jest.fn() } })));
 jest.mock('../../../src/middleware/aiRateLimiter', () => ({ aiRateLimiter: (_req, _res, next) => next() }));
 jest.mock('../../../src/middleware/auth', () => {

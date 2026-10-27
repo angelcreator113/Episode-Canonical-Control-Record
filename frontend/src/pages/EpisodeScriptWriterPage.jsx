@@ -220,16 +220,30 @@ export default function EpisodeScriptWriterPage() {
       loadScripts();
     } catch (err) {
       setError(err.response?.data?.error || err.message);
+      // Generated and kept as a version here, but not saved to the episode (A1c R1).
+      if (err.response?.data?.saved === false && err.response?.data?.data) { setActiveScript(err.response.data.data); loadScripts(); }
     } finally {
       setGenerating(false);
     }
   };
 
+  // Locking saves this script over the episode's (A1c R1): an episode that
+  // has a script asks first, as Generate does.
   const handleLock = async () => {
     if (!activeScript) return;
     setLocking(true);
+    const lock = (confirmOverwrite) => api.post(`/api/v1/episode-scripts/${activeScript.id}/lock`, confirmOverwrite ? { confirmOverwrite: true } : {});
     try {
-      await api.post(`/api/v1/episode-scripts/${activeScript.id}/lock`);
+      try {
+        await lock(false);
+      } catch (err) {
+        if (err.response?.status === 409 && err.response?.data?.code === 'SCRIPT_OVERWRITE_CONFIRMATION_REQUIRED') {
+          if (!window.confirm('This episode already has a script. Replace it with this one?')) return;
+          await lock(true);
+        } else {
+          throw err;
+        }
+      }
       setActiveScript({ ...activeScript, status: 'locked' });
       loadScripts();
     } catch (err) {
