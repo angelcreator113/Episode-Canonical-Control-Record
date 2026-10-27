@@ -24,6 +24,310 @@ Where they conflict, the order they set applies: rulings, spec Rev 5 and review 
 
 ---
 
+# Revision 4 (Q19, Q-F1, Q-F2 and the final schema for B1 and C1, 2026-10-27)
+
+**Where Revision 4 disagrees with earlier revisions or the body, Revision 4 wins.** It is still design only.
+
+## R4.0 Decisions (Evoni, 2026-10-27, proposed; final when she confirms R4.1)
+
+**Q19:** E1 now, E2 later (definitions in R4.1).
+
+**Q-F1:** where Prime footage is missing, the working preview shows Lala's gameplay full-screen, with a clear editing warning.
+- No Prime footage is fabricated, and no stand-in Prime image or idle clip is put in the video.
+
+**Q-F2:** missing Prime footage blocks review-ready previews and final exports **only in a beat that requires Prime**.
+- A beat explicitly designated **gameplay-only** may proceed without her.
+
+**This amends recorded rulings.** It needs a matching revision of the spec when Evoni confirms it:
+- **Spec Rev 5:** §1, test 24, G-5 ("Missing footage uses a designated fallback, with a warning") and §6/§326 (Prime fallback).
+- **Decisions:** §14 and the §15 level-6 source chain (take → designated fallback → placeholder).
+
+Under Q-F1 the chain becomes **take → nothing**:
+- The PIP isn't drawn, and `prime_footage_missing` is raised.
+- `fallback_asset_id`, the `PRIME.PIP.FALLBACK` role and the placeholder frame are **withdrawn**.
+
+**Unchanged from those rulings:**
+- the warning;
+- "never adds audio";
+- "a beat without footage is *not filmed* on the production checklist";
+- "never an AI avatar".
+
+## R4.1 E1 and E2, stated exactly
+
+**E1 (now): revision-pinned approval, with a person's re-confirmation**
+
+An approval of a take for a line is **valid** at the current moment only when all of the following hold:
+
+1. **It's still in force.** The approval isn't superseded, invalidated or deleted.
+2. **It's for the take as it is now.** It names the take's latest candidate revision: the trim, gain, fades and normalise it was approved with are still the take's current settings.
+3. **It's for the script as it is now.** The episode's current script revision (`sr1-` hash) is either:
+   - **(a)** the revision the approval was made at, or
+   - **(b)** a revision for which a person has stored a **re-confirmation** of this approval.
+4. **The line still matches.** In the current script, the take's association resolves to **bound** with the approval's stored structured line context (R2.6: beat, position, occurrence, speaker, delivery note, words, row hash, neighbour hashes).
+
+**How E1 works:**
+- **Re-confirming:** an explicit person's action, either per line or "re-confirm unchanged lines in this beat", which lists only lines meeting condition 4.
+  - It writes one re-confirmation row per approval: approval, script revision, the context hash checked, who, when.
+  - It is refused unless the revision it was shown for is still current.
+- **What E1 reads:** no script versions, and no change to `scriptSave`.
+- **What a script save does:** every approval in the episode becomes "needs re-confirm". It is silent in the Teleprompter (Q3) and marked in working previews, and blocks review-ready previews, until re-confirmed.
+- **Invalidation:**
+  - When a write observes a condition-4 failure (an approve, a re-confirm attempt, or a render-job start), it records `invalidated_at` and the reason.
+  - An invalidated approval is never valid again; only a **new approval** can follow.
+  - A condition-3 failure on its own only means "needs re-confirm".
+
+**E2 (later, as its own reviewed change): a script revision log**
+
+1. **Inside `scriptSave`'s transaction** (an additive change to the A1c R1 save path), write one row per save to a never-pruned table: episode, new revision, previous revision, saved at, source, and a compact line-context index.
+   - The index lists every counted line's beat, position, occurrence and row hash.
+   - Empty scripts and repeated texts are logged too.
+2. **Condition 3 then becomes automatic:** walk the log from the approval's revision to now, following `prev_revision` links, which prove the chain is complete. The approval stays valid only if the line was bound, with the approved context, in **every** logged revision.
+   - A missing link fails closed.
+   - Re-confirmation is needed only where the walk finds the line changed.
+3. **E1's re-confirmation rows stay valid evidence.** E2 only adds automatic evidence; nothing is migrated or discarded.
+
+**What E2 changes:** the A1c save path (one insert) and a new table. It does **not** touch voice tables from the save path, so A1c R4.8 holds.
+
+**E2 needs its own design approval:** the table, its retention, and the line-context index format shared with the R2.6 rule.
+
+## R4.2 Prime-required or gameplay-only: where it lives and how it's validated
+
+**It belongs to the episode's beats, in the Timeline's data. It is not the script, the scene set or the PIP visibility rules.**
+
+| Choice | Why not |
+|---|---|
+| The script (a tag in the beat) | A script edit would silently change a production requirement; the script is A1c's domain |
+| Scene sets | Reusable across episodes; the same set can be Prime-required in one episode and not in another |
+| `episode_pip_visibility` | Visibility says whether her picture is **shown**; this says whether it's **required**. Rulings keep visibility manual and independent (decisions R2/R3, §15 level 5), and "hiding the PIP never mutes her voice". Combining them would hide footage that exists, or require footage you've hidden |
+
+**Table `episode_beat_production`** (C1):
+- `id`, `episode_id`, `beat_number`, `prime_mode` (`required` | `gameplay_only`), `note`, `set_by`, `set_at`, timestamps, `deleted_at`.
+- **No row means `required`**, the default for every beat 1–14, cutscene beats 11–13 included, as rulings forbid automatic beat exemptions (decisions R2; spec §4).
+- A change is a new row; the previous one is soft-deleted, which keeps the history of who changed it and when.
+
+**Validation:**
+
+*When it is set:*
+- server-side;
+- `beat_number` must be 1–14;
+- `prime_mode` must be one of the two values;
+- signed in, with owner or admin rights;
+- a stale `edit_revision` is refused.
+
+*When a render is requested.* For each beat:
+- **required:** every stretch of the beat where the PIP is visible (default visible, minus manual hide rules) must be covered by a current Prime segment.
+  - An uncovered stretch is `prime_footage_missing`.
+  - It's a warning in a working preview, and **blocks** a review-ready preview and the final export.
+- **gameplay_only:**
+  - Missing footage is **not** a finding.
+  - If footage exists, it shows according to the visibility rules: being designated gameplay-only doesn't hide footage you've placed (DECISION Q21).
+
+*In the working preview's missing stretch:*
+- no PIP is drawn (Lala's gameplay full-screen);
+- a burnt-in editing banner `PRIME FOOTAGE MISSING · Beat 4 · 00:41–01:12` at the top edge, outside the PIP area;
+- no Prime audio;
+- no image standing in for her.
+
+*In review-ready and final renders:* there are no banners. A required beat can't get there with a gap, and a gameplay-only beat simply shows gameplay.
+
+*In the manifest (A10):* each beat's `prime_mode` is frozen with who set it and when, so an export shows the designation it was approved under.
+
+- **Q21:** confirm that gameplay-only changes only the requirement, not visibility. Or should gameplay-only also hide any footage you've placed in that beat?
+
+## R4.3 Final schema and migration scope for B1 and C1
+
+**Conventions for both migrations:**
+- Each is **one new file** under `src/migrations/`. It is additive: no existing table, column or index is changed, and nothing is dropped.
+- Every table has `created_at`, `updated_at` and `deleted_at`.
+- The `down()` refuses (throws) if any new table has rows, and drops only empty new tables, so a rollback can't destroy data.
+- Each ships through the Deploy workflow, with its snapshot, after Evoni approves.
+
+### B1: Voice data (migration `…-create-voice-studio-tables.js`)
+
+**`voice_source_assets`**: immutable source media; never edited, never hard-deleted.
+- **Columns:**
+  - `id` (uuid);
+  - `episode_id` (FK `episodes`, **ON DELETE RESTRICT**);
+  - `source_kind` (`uploaded` | `recorded` | `extracted` | `legacy`);
+  - `s3_key` (unique), `sha256` (char 64), `content_type`, `file_size_bytes`;
+  - `duration_ms`, `sample_rate`, `channels` (all from server-side ffprobe);
+  - `original_filename`;
+  - `source_raw_clip_id` (FK `episode_raw_clips`, RESTRICT), `source_in_ms`, `source_out_ms`;
+  - `legacy_voice_clip_id` (FK `script_voice_clips`, RESTRICT);
+  - `created_by`.
+- **CHECKs:**
+  - `extracted` needs a raw clip and `0 ≤ source_in_ms < source_out_ms`;
+  - `legacy` needs `legacy_voice_clip_id`;
+  - `uploaded` and `recorded` have neither.
+- **Immutability:** the service never updates media columns, and a source guard test (like `scriptWriteGuard`) allows no `UPDATE voice_source_assets SET s3_key|sha256|duration_ms`.
+- **S3:**
+  - Uploads, recordings and extractions are written to `episodes/<id>/voice/sources/<sha256>.<ext>` and never overwritten.
+  - Legacy rows point at the existing `script_voice_clips` file.
+
+**`line_voice_candidates`**: one take for one line.
+- `id`, `episode_id` (RESTRICT), `source_asset_id` (FK, RESTRICT), `label`, `line_key` (null until A1d), `created_by`.
+
+**`line_voice_associations`**: which line a candidate is tied to. Append-only: a confirmed move or a reassignment is a new row.
+- **Columns:**
+  - `id`, `candidate_id` (FK);
+  - `beat_number` (1–14), `line_index` (≥ 0), `occurrence` (≥ 1);
+  - `speaker_key`, `speaker_written`, `delivery_note`, `words`;
+  - `row_hash`, `prev_hash`, `next_hash`;
+  - `script_revision`, `context_hash`;
+  - `created_by`, `superseded_at`, `superseded_by`.
+- **Index:** one current association per candidate (partial unique where `superseded_at IS NULL AND deleted_at IS NULL`).
+
+**`line_voice_candidate_revisions`**: append-only adjustment history.
+- **Columns:**
+  - `id`, `candidate_id`, `revision_no` (unique per candidate);
+  - `in_ms`, `out_ms`;
+  - `gain_db` (numeric 4,1; −24 to +12);
+  - `fade_in_ms`, `fade_out_ms` (0–2000);
+  - `normalise`, `settings_hash`;
+  - `rendered_s3_key`, `rendered_sha256` (a derived file, rebuildable from the source);
+  - `created_by`.
+- **CHECK:** `0 ≤ in_ms < out_ms`. The service also checks `out_ms` ≤ the source duration.
+
+**`line_voice_approvals`**:
+- **Columns:**
+  - `id`, `episode_id`;
+  - `candidate_revision_id` (FK), `association_id` (FK);
+  - `beat_number`, `line_index`, `occurrence` (copied, for the index);
+  - `approved_script_revision`, `approved_context` (jsonb);
+  - `approved_by`, `approved_at`;
+  - `superseded_by`, `superseded_at`, `invalidated_at`, `invalidated_reason`.
+- **Index:** at most one current approval per line: a partial unique on `(episode_id, beat_number, line_index, occurrence)` where not superseded, not invalidated, not deleted. At A1d an index on `line_key` is added alongside.
+
+**`line_voice_reconfirmations`** (E1):
+- `id`, `approval_id` (FK), `script_revision`, `context_hash`, `confirmed_by`, `confirmed_at`.
+- Unique `(approval_id, script_revision)`.
+
+**Legacy import:**
+- Not part of the migration. An idempotent service job run from Voice Studio ("bring in old clips").
+- Each `script_voice_clips` row becomes a `legacy` source asset plus a candidate with **no association** (unbound) and **no approval** (Q2). You assign it to a line, validated as at creation. That way the import never guesses a line.
+- Production has 0 such rows today (2026-10-27).
+
+**Not in B1:**
+- Voice Studio UI, the Teleprompter changeover and the voice bug fixes (B2);
+- extraction jobs (V3);
+- the E2 log.
+
+### C1: Timeline data (migration `…-create-episode-edit-tables.js`)
+
+**`episode_edit_state`**: the live edit's concurrency token.
+- `episode_id` (unique), `edit_revision`, `updated_by`.
+- Every edit write sends the revision it read; a stale one gets 409. It is never merged silently.
+
+**`episode_beat_production`**: as in R4.2.
+
+**`episode_scene_clips`**: the scene track (Q17).
+- **Columns:**
+  - `id`, `episode_id`, `beat_number` (1–14), `position` (order within the beat);
+  - `source_kind` (`angle_still` | `angle_video` | `raw_clip`);
+  - `source_id`;
+  - `source_in_ms`, `source_out_ms` (video only);
+  - `duration_ms` (**episode-specific clip length**);
+  - `created_by`.
+- **CHECKs:** `duration_ms > 0`; video sources need `0 ≤ in < out`.
+- **What it never writes:** `scene_angles.video_duration` (the reusable source) or `scenes.duration_seconds` (the legacy editor's).
+- **Raw clips:** a `raw_clip` source must have `performer = 'lala'` or `'guest'`, checked by the service.
+
+**`episode_prime_segments`**: C3 segments with R2.2's synchronization.
+- **Columns:**
+  - `id`, `episode_id`, `raw_clip_id` (FK, RESTRICT; the service checks `performer = 'justawoman'`);
+  - `source_in_ms`, `source_out_ms`;
+  - `anchor_kind` (`beat_start` | `line_start` | `item_start`), `anchor_beat`, `anchor_ref`, `offset_ms`;
+  - `layout` (jsonb overrides, pixels at 1920×1080, nullable);
+  - `audio_in_ms`, `audio_out_ms`, `audio_gain_db`, `audio_muted`, `audio_fade_in_ms`, `audio_fade_out_ms`;
+  - `status` (draft | approved);
+  - `superseded_by`, `superseded_at`.
+- **CHECK:** `source_in_ms ≤ audio_in_ms < audio_out_ms ≤ source_out_ms`.
+- **There is no audio offset column**, so audio can't slide. Moving changes only the anchor and offset; trimming the video clamps the audio range (service, tested).
+
+**`episode_pip_settings`** (C3): `episode_id` (unique), `default_layout` (jsonb: bottom right, 28 % width), `default_visible` (true), `use_cutout`. **No `fallback_asset_id`** (Q-F1).
+
+**`episode_pip_visibility`** (C3): manual rules only.
+- `id`, `episode_id`, `scope` (`beat` | `range`), `beat_number`, `anchor_kind`, `anchor_ref`, `offset_ms`, `end_anchor_kind`, `end_anchor_ref`, `end_offset_ms`, `visible`, `set_by`.
+
+**`timeline_items`** (review C1, adopted): object and camera keyframes, visibility, angle changes and transitions, **plus** these kinds:
+- `audio_offset` (a dialogue nudge, targeting a line association);
+- `caption_override` (reserved).
+
+Columns: `id`, `episode_id`, `scene_clip_id`, `kind`, `target_id`, `view`, `anchor_kind`, `anchor_ref`, `offset_ms`, `values` (jsonb), `origin`, `approval`, `proposal_id`.
+
+**`timeline_audio_items`**: music and SFX, **reserved** (Q9), with no UI in the first release.
+- **Columns:**
+  - `id`, `episode_id`, `track` (`music` | `sfx`);
+  - `asset_ref` (library id), `slot` (the SFX slot name);
+  - `source_in_ms`, `source_out_ms`;
+  - `anchor_kind`, `anchor_ref`, `offset_ms`;
+  - `gain_db`, `fade_in_ms`, `fade_out_ms`;
+  - `duck_under_dialogue_db` (an explicit user setting, never automatic).
+
+**`edit_versions`**: named saved versions (Q18).
+- **Columns:**
+  - `id`, `episode_id`, `name`;
+  - `snapshot` (jsonb: every live edit row above, plus `edit_revision` and the script revision);
+  - `snapshot_sha256`;
+  - `created_by`.
+- **Immutable**, never hard-deleted.
+- **Restore** writes a new live `edit_revision`, never edits a version.
+- A version is renderable as a working preview.
+
+**Not in C1:**
+- **Captions:** derived at render from approved lines and their placements. Overrides use the reserved `timeline_items` kind.
+- **Overlays:** objects from the Stage (C2 ids), timed by `timeline_items`. No new table.
+- **Frozen manifests:** A10 (`approved_production_manifests`, content-addressed media, never deleted).
+- **Render jobs:** D1 (`render_jobs`).
+- **UI:** C2.
+
+### Retention
+
+| Data | Kept | Deleted by |
+|---|---|---|
+| Voice source assets and their S3 objects | forever | nothing. No code path or lifecycle rule; soft delete only hides |
+| Candidates, associations, candidate revisions, approvals, re-confirmations | forever, append-only | nothing; soft delete hides |
+| Rendered (derived) voice files | while referenced | may be rebuilt; deletion only by a future reviewed cleanup |
+| Prime segments, scene clips, timeline items, audio items, visibility rules, beat production | live rows; superseded rows kept | soft delete; never hard |
+| Edit versions | forever | soft delete only |
+| Frozen manifests (A10) | forever | never (review R3.3) |
+| Script versions | unchanged: 50 + 10 per episode (`scriptVersions`) | `prune`. E1 references none, so no retention provider is added |
+| Raw takes (`episode_raw_clips`) | unchanged | the new foreign keys RESTRICT a hard delete of a take used as a source or segment. Production only soft-deletes episodes (`episodeController.deleteEpisode`, hard delete outside production only) |
+
+### Rollback
+
+- **Code rollback:** the feature flags `VOICE_STUDIO` and `EPISODE_EDIT` turn off the new pages and services. The legacy Script tab recording, the Teleprompter and the legacy Timeline Editor keep working against untouched tables. New rows stay, unused.
+- **Schema rollback:** `down()` refuses while any new table has rows. Fix forward is the rule (A1c R4.7). The deploy snapshot taken before the migration is the last resort, restored only by Evoni per the runbook.
+- **Teleprompter (Q3):** if B2 is rolled back, it returns to playing legacy clips as today. B1 alone changes no playback.
+
+## R4.4 Deploy snapshots: status (from Deploy #173's log, 2026-10-27)
+
+**What the log shows:**
+- `65 deploy snapshot(s) available; keeping the newest 10.`
+- `The deploy role may not delete snapshots, so none were removed.` (`PRUNE_NOTE=not-permitted`)
+- Deploy #173 then created `deploy-c907ed562096-40572580920-1`, which became available.
+
+**Can the next migration deploy safely take one?**
+- **Yes, until the account's manual-snapshot limit.** The workflow's snapshot step fails **before anything on the box changes** if RDS refuses (`SnapshotQuotaExceeded`). So reaching the limit stops a deploy safely; it doesn't break production.
+- **The limit itself:** I can't confirm the account's actual limit or the count of non-deploy manual snapshots from this session; I haven't queried AWS. The AWS default is 100 manual snapshots per region (adjustable), and non-deploy manual snapshots count too.
+- **How many B and C need:** B1 and C1 are two migration deploys, so two more snapshots.
+
+**Recommendation before B1 is deployed** (an action for Evoni):
+- either give the deploy role the delete permission (runbook §2.1), so each run keeps the newest 10;
+- or remove old `deploy-*` snapshots by hand (runbook §7), keeping the recent ones the recovery policy needs.
+
+## R4.5 Open questions
+
+**Needed before B1/C1 code:**
+- **Confirm R4.1:** E1 now, E2 later.
+- **Q21:** does gameplay-only change only the requirement, or also hide placed footage?
+
+**Needed before C2/D1 (not B1/C1):**
+- the spec revision amending G-5 / §14 for Q-F1;
+- the D1 render process (R3.3).
+
+---
+
 # Revision 3 (Evoni's Q15–Q18 direction, and the approval model checked, 2026-10-27)
 
 **Where Revision 3 disagrees with Revision 2 or the body, Revision 3 wins.**
