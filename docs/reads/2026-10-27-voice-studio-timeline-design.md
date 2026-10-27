@@ -24,6 +24,289 @@ Where they conflict, the order they set applies: rulings, spec Rev 5 and review 
 
 ---
 
+# Read this first: the authoritative design (Revision 5)
+
+**Implementation follows only:**
+- Revision 5 (this section and R5.x);
+- Revision 4 §R4.1–R4.3, as amended by R5;
+- Revision 3 §R3.2–R3.5;
+- Revision 2 §R2.2, §R2.3 (as amended by R4.0), §R2.4 and §R2.6.
+
+Everything else is background. Superseded passages carry a **SUPERSEDED** banner naming what replaces them.
+
+| Topic | Authoritative | Superseded (do not build) |
+|---|---|---|
+| Voice tables | R4.3 B1, with R5.3 | §4.1, §4.2 (`voice_recordings`, the import that associates), R2.1's table list |
+| Approval validity | R4.1 E1, R3.2, R5.2 | R2.1's history walk (R3.1: not sound) |
+| Timeline tables | R4.3 C1, with R5.1 and R5.3 | §4.3 (`edit_projects`, `edit_items`), R2.5's resolution column |
+| Scene duration | R3.4, R4.3 `episode_scene_clips` | R2.5 "scene timing stays on `scenes`" |
+| Missing Prime footage | R4.0, R5.1 | §2 ruling 5's fallback, §5.2 "fallback", R2.3 "accepted fallback", spec G-5 / decisions §14 fallback (spec amendment owed) |
+| Prime-required designation | R4.2, as amended by R5.1 | R4.2's "covered where the PIP is visible" |
+| Render process | R2.4 (D1), R3.3 | §9 Q7's "green-removal queue" |
+| Phases and sequence | R5.4 | §7, §7 Dependencies, R2/R3 phase notes |
+
+---
+
+# Revision 5 (Evoni's confirmations and refinements A–G, 2026-10-27)
+
+**Where Revision 5 disagrees with earlier text, Revision 5 wins.** Design only: nothing is implemented, pushed or deployed.
+
+## R5.0 Confirmed decisions (Evoni, 2026-10-27)
+
+1. **Q19:** E1 now, E2 later, as a separate reviewed change. **B1 does not modify A1c R1's script-save path.**
+2. **Q21:** gameplay-only changes **only** the Prime-footage requirement. It never hides footage already placed; PIP visibility settings alone decide whether Prime appears.
+3. **Q-F1 / Q-F2:** the amendment of R4.0 is confirmed.
+   - No fabricated image or idle clip.
+   - Working previews show gameplay with an editing warning.
+   - Missing **required** footage blocks review-ready previews and final export.
+
+**Spec Rev 5 G-5, §1, test 24 and decisions §14/§15 level 6 need a matching documentation revision.** It is owed and will be a separate docs PR.
+
+## R5.1 Refinements A and E: coverage is independent of visibility; commentary is never muted by hiding
+
+**A. The coverage rule** (replaces R4.2's "where the PIP is visible"):
+- **A `required` beat must be covered by current Prime segments for its whole length**, from beat start to beat end on the edit's clock, **whatever the PIP visibility**.
+  - Hiding the PIP in a beat, or in a range, **does not** waive or reduce the requirement.
+  - **Only `prime_mode = gameplay_only`**, set explicitly for that beat, waives it.
+- A `gameplay_only` beat has no Prime requirement. Footage placed there still appears according to visibility (Q21).
+- **What counts as covered:** at each instant of the beat, some current (not superseded, not deleted) segment's video range is placed. Gaps longer than one frame (33 ms at 30 fps) are findings.
+  - `prime_footage_missing` (required beat, gap) blocks review-ready and final.
+  - In a working preview it's a warning, with the banner of R4.2.
+- **The commentary doesn't count by itself.** A segment whose commentary is muted still covers: the requirement is that she was recorded, and the recording exists.
+
+**E. Picture and commentary together** (R2.2, restated with the ruling):
+
+| Situation | Picture | Commentary |
+|---|---|---|
+| Segment placed, PIP visible | shown | plays (its gain, fades, sub-range) |
+| Segment placed, **PIP hidden** (beat or range rule) | not drawn | **plays**: hiding never mutes (decisions §8.1 PIP-R, Q3) |
+| Segment placed, commentary **muted** | shown per visibility | silent |
+| No segment (required beat) | gameplay full-screen; working-preview banner | silent; no audio invented |
+| No segment (gameplay-only beat) | gameplay full-screen; no banner | silent |
+| Segment moved, trimmed or split | follows | follows (same source clock; no audio offset field) |
+
+**Acceptance (C1/D1):**
+- A required beat that is fully hidden but fully covered has no finding.
+- A required beat that is hidden with a gap has `prime_footage_missing`.
+- A gameplay-only beat with a gap has none.
+- Hiding the PIP leaves the mix plan's commentary events unchanged (the same samples).
+
+## R5.2 Refinement B: the E1 re-confirmation workflow
+
+**Where:**
+- **The Voice Studio header:** `Re-confirm 12 · Invalid 3 · Unbound 2`, for the episode.
+- **The beat chips:** each shows its own count.
+- **The Script tab:** a one-line notice with the same counts, linking to Voice Studio.
+
+**The summary**, computed on the server (`GET /api/v1/voice/:episodeId/approvals/summary`), for the current script revision. Each approval is in exactly one state:
+
+| State | Meaning | Action offered |
+|---|---|---|
+| `valid` | conditions 1–4 hold at this revision | none |
+| `needs_reconfirm` | conditions 1, 2 and 4 hold; the script revision changed since the last approval or re-confirm | **Re-confirm** |
+| `invalid` | an `invalidated_at` is recorded | **Approve a take** (new approval) |
+| `unbound` | condition 4 fails now; reason code given | **Reassign** or **Confirm move** (only for `moved`) |
+| `outdated_take` | the take was re-trimmed or re-gained after approval (condition 2) | **Approve the new version** |
+
+**Reason codes**, each shown in words:
+- `speaker_changed`, `note_changed`, `words_changed`;
+- `moved` (confirm), `ambiguous_duplicate` (pick a line);
+- `beat_changed`, `line_removed`;
+- `take_changed`;
+- `approval_superseded`.
+
+**One-click review of unchanged lines, per beat:**
+1. **Review unchanged (9)** opens a list. Each line shows the approved line context beside the current line: identical speaker, note and words, and the same neighbours. **Nothing is pre-checked.**
+2. **Select all 9**, then **Confirm these 9 takes still match their lines** opens a confirmation naming the script save (time and who). Pressing **Confirm** is the human action.
+3. **The request carries:** `script_revision` and `[{ approval_id, context_hash }]`.
+4. **On the server, in one transaction:**
+   - `FOR SHARE` on the episode row; the revision must be current, **else 409 for the whole batch, nothing written**;
+   - each approval is re-checked against conditions 1, 2 and 4 under `FOR UPDATE` on its candidate;
+   - matching ones get a re-confirmation row (who, when, revision, context hash);
+   - any that no longer match are returned with their reason and are **not** confirmed.
+5. **The response lists confirmed and refused separately.** The page never assumes success.
+
+**Never automatic:**
+- no job, script save, page load or render re-confirms or approves anything;
+- a re-confirmation can't be made for a revision other than the current one;
+- `invalid` approvals can't be re-confirmed.
+
+**Audit:** every approval, re-confirmation, invalidation and move confirmation is a row with who and when. Voice Studio shows a line's history.
+
+## R5.3 Refinement C: server-side validation of every relationship
+
+**All B1 and C1 writes:**
+- `requireAuth` + `authorize(['ADMIN'])` (the convention for production writes);
+- the episode must exist and not be soft-deleted;
+- every child row's `episode_id` must equal the route's episode;
+- each write is one transaction.
+
+| Relationship | Validation (server, in the write transaction) |
+|---|---|
+| candidate → source asset | the same episode; asset not deleted |
+| source asset (`extracted`) → raw clip | the clip's `episode_id` equals the asset's; performer is `lala` or `guest` (**never** `justawoman`: Prime's voice is her take); `0 ≤ in < out ≤` the clip's probed `duration_seconds` |
+| source asset media | server ffprobe on upload: an audio stream, duration > 0 and ≤ `VOICE_SOURCE_MAX_SECONDS` (600, as today); the type is in the allow-list; sha256 computed on the server |
+| candidate revision | `0 ≤ in_ms < out_ms ≤` the source's probed duration; gain −24..+12 dB; fades 0..2000 ms and `fade_in + fade_out ≤ out − in` |
+| association → script | the sent `script_revision` equals the episode's current one (`FOR SHARE` on `episodes`); the teleprompter line at (beat, index) re-derived **from the saved script** matches speaker, note, words, row hash and neighbours; the speaker is not Prime; beat 1–14 |
+| approval → candidate revision and association | `FOR UPDATE` on the candidate; the revision is the candidate's latest; the association is the current one and resolves **bound** now; the script revision is current; the partial unique index enforces one current approval per line (a race gets 409) |
+| re-confirmation | as R5.2 |
+| scene clip → `angle_still` / `angle_video` | the angle exists and isn't deleted; its scene set is linked to this episode (`scene_set_episodes`); a still needs `still_image_url`, a video needs `video_clip_url` |
+| scene clip → `raw_clip` | the same episode; performer `lala` or `guest`; not deleted |
+| scene clip media duration | **finding:** `scene_angles.video_duration` is the requested generation length (default 5, set by `sceneGenerationService` / `venueGenerationService`), **not a measured one**. So a video scene clip stores `source_duration_ms`, measured by server ffprobe on the clip URL (timeout 20 s) when placed. A failed probe refuses the placement with a message. `source_out_ms ≤ source_duration_ms`; raw clips use their probed `duration_seconds` |
+| Prime segment → raw clip | the same episode; performer **`justawoman`**; not deleted; `0 ≤ source_in < source_out ≤` the probed duration; the audio sub-range is inside it (CHECK) |
+| beat production | beat 1–14; `prime_mode` one of two; a change supersedes |
+| visibility rule | beat 1–14 or a valid anchored range; the anchor target exists in this episode |
+| timeline item / audio item | the target exists in this episode (scene clip, line association, Stage object id); `kind` is in the allowed set |
+| **concurrent edits (C1)** | every write sends `edit_revision`; the transaction takes `FOR UPDATE` on `episode_edit_state`; a mismatch gets 409 with the current revision; a success bumps it. No silent merge |
+| **concurrent edits (B1)** | candidate-level `FOR UPDATE`; the script revision is checked under the episode `FOR SHARE`; unique indexes for one current association and one current approval |
+| raw clip performer changed later | segments and sources re-check the performer when read for render; a mismatch is the finding `source_performer_changed` (blocks review-ready) |
+
+**What the database can enforce:** CHECKs for ranges and enums, partial unique indexes, and foreign keys with RESTRICT.
+
+**What only the service can enforce:** checks against another table's column (performer, scene-set link, durations), held under row locks. Each is a named unit or integration test (R5.5, R5.6).
+
+## R5.4 Refinement D: the first playable MP4, stage by stage
+
+**Layer 1, database foundations** (no UI; each its own PR and its own migration deploy):
+- **B1:** voice tables, the shared association rule, and the voice services and APIs (upload or record a source, create a candidate and revision, associate, approve, re-confirm, summary, legacy import), all server-side, tested.
+- **C1:** edit tables, the services and APIs for every C1 table, and the pure `layoutAt(edit, t)` and `mixPlan(edit)`, tested with golden fixtures.
+
+B1 and C1 are independent: either can go first, and their PRs can be reviewed in parallel.
+
+**Layer 2, interfaces** (no migrations):
+- **B2, Voice Studio, minimum:** line list by beat; **upload** a take (recording writes candidates too); play; set in and out, gain and fades; associate; **approve**; the re-confirm workflow (R5.2). The Teleprompter plays approved-and-valid only (Q3). Plus the B2 voice fixes (owner-only delete, server duration, `keepSession`, no recording on lines that never play). **Extraction from takes is not in the minimum.**
+- **C2, Timeline Editor, minimum:**
+  - auto-assemble a first draft (one scene clip per beat from its scene set; the starred Prime take per beat as a segment; approved dialogue at its lines);
+  - beat chips;
+  - per-beat Prime-required or gameplay-only toggle;
+  - PIP inspector (position, size, cutout, visibility rules);
+  - commentary gain, mute, fades and sub-range;
+  - scene clip trim and duration;
+  - save with `edit_revision`;
+  - named versions;
+  - the findings panel;
+  - desktop-first.
+
+**Layer 3, rendering:**
+- **D1:** `render_jobs` (migration), the dedicated render process (R2.4), and FFmpeg graph construction from `layoutAt` and `mixPlan`.
+  - Scene clips (still or video) at 1920×1080, 30 fps.
+  - Prime segment video overlaid (cutout WebM alpha where chosen) and its audio from the same file.
+  - Dialogue from approved revisions' rendered files at their anchors.
+  - Working and review-ready kinds (R2.3, R5.1).
+  - Output check (ffprobe: video and AAC, duration ±1 s), S3 `previews/…`, download link.
+
+**The smallest sequence to edit one episode and render a playable 16:9 MP4:**
+
+```
+G. snapshot retention resolved (Evoni)  ─┐
+B1 ──► deploy ──► B2 ──► deploy ─────────┤
+C1 ──► deploy ──► C2 ──► deploy ─────────┼──► D1 ──► deploy ──► render process started
+                                         │    (Evoni, or a reviewed mechanism: Q20)
+docs PR: spec G-5/§14 amendment ─────────┘
+                                              ──► first working preview MP4
+                                              ──► all required beats covered, all lines approved
+                                              ──► first review-ready MP4
+```
+
+- **Six code PRs and five deploys:** B1, C1, B2, C2, D1. B2 and C2 have no migration, so they can share a deploy.
+- **Not needed for the first MP4:**
+  - extraction from takes (V3), silence detection;
+  - music and SFX UI, captions, overlays;
+  - E2;
+  - the approved manifest and final export (A10);
+  - YouTube upload.
+
+## R5.5 B1 checklist and acceptance tests
+
+**Checklist:**
+1. Migration `…-create-voice-studio-tables.js`: the six tables of R4.3 B1, with CHECKs, partial unique indexes, RESTRICT foreign keys and `deleted_at`. `down()` refuses when any table has rows.
+2. Models registered in `src/models/index.js`.
+3. `src/utils/voiceLineContext.js`: the pure association rule (R2.6), shared word for word with `frontend/src/lib/voiceLineContext.js` (the coverMatch shared-block pattern, with a test that keeps them identical).
+4. `src/services/voiceStudioService.js`: source create (upload / recorded; ffprobe, sha256, S3), candidate and revision create, associate, confirm move, approve, re-confirm (batch), summary, invalidate-on-observe, legacy import (idempotent, unassociated, unapproved).
+5. `src/routes/voiceStudioRoutes.js` at `/api/v1/voice`: `requireAuth` + `authorize(['ADMIN'])` on writes; mounted in `app.js`; route registration validated.
+6. Guard test: no code updates `voice_source_assets` media columns; nothing outside the service writes the new tables; `scriptSave.js` is unchanged (diff-guard against `main`).
+7. No change to `script_voice_clips`, `scriptSave`, `scriptVersions`, the Teleprompter or the Script tab.
+
+**Acceptance tests** (Jest unit plus Postgres integration):
+
+| # | Test |
+|---|---|
+| B1-1 | Migration up on an empty database creates the six tables; `down()` drops them when empty and refuses when one row exists |
+| B1-2 | Upload: a bad type is refused before S3; a file with no audio stream is refused; the duration comes from ffprobe, not the client; sha256 is stored |
+| B1-3 | A second candidate for the same line leaves the first, and its source, untouched |
+| B1-4 | Associate with a stale `script_revision` gets 409 and nothing is written; with the current revision but a mismatched line, 409; a Prime speaker is refused; a beat outside 1–14 is refused |
+| B1-5 | Context rule, every R2.6 row: unchanged → bound; moved unique → moved; duplicate with different neighbours → ambiguous; speaker, note or words changed → unbound; another beat → unbound |
+| B1-6 | Approve needs bound, current association and latest revision; a re-trim after approval puts it in `outdated_take` |
+| B1-7 | Script saved (a new revision) → `needs_reconfirm`; batch re-confirm with a stale revision gets 409 and writes nothing; with the current revision, it writes a row per matching approval and returns the non-matching with reasons |
+| B1-8 | A → B (line unbound, observed by an approve attempt, so `invalidated_at` is recorded) → restore A: the approval stays `invalid`, and only a new approval makes the line valid |
+| B1-9 | Two concurrent approvals for one line: one succeeds, one gets 409 |
+| B1-10 | An approve racing a script save: serialised; whichever is second is refused or re-checked |
+| B1-11 | Legacy import twice gives one set of rows; none associated, none approved |
+| B1-12 | Guard: `scriptSave.js` byte-identical to `main`; no `script_voice_clips` writes |
+
+## R5.6 C1 checklist and acceptance tests
+
+**Checklist:**
+1. Migration `…-create-episode-edit-tables.js`: the C1 tables of R4.3 (`episode_edit_state`, `episode_beat_production`, `episode_scene_clips` with `source_duration_ms`, `episode_prime_segments`, `episode_pip_settings`, `episode_pip_visibility`, `timeline_items`, `timeline_audio_items`, `edit_versions`), with CHECKs, RESTRICT foreign keys, `deleted_at`, and a `down()` that refuses when not empty.
+2. Models registered.
+3. `src/services/episodeEditService.js`: per-table writes under the `edit_revision` lock; the relationship validation of R5.3; ffprobe for video scene sources; the commentary clamp on video trim; split; take replacement (supersede); beat production; versions (snapshot, restore as a new revision).
+4. `src/utils/editTimeline.js`: pure `layoutAt(edit, t)` and `mixPlan(edit)`, plus `coverageFindings(edit)` (R5.1). Shared with the frontend later (C2).
+5. `src/routes/episodeEditRoutes.js` at `/api/v1/episodes/:id/edit`: writes `requireAuth` + `authorize(['ADMIN'])`; reads `requireAuth`.
+6. Guard: nothing writes `scenes.duration_seconds` or `scene_angles.video_duration` from the new code; legacy `timeline_data` untouched.
+
+**Acceptance tests:**
+
+| # | Test |
+|---|---|
+| C1-1 | Migration up and down (empty), and down refused when not empty |
+| C1-2 | Stale `edit_revision` gets 409; a success bumps the revision; two concurrent writes, one 409 |
+| C1-3 | Scene clip: an angle not linked to the episode's scene sets is refused; a video with no `video_clip_url` is refused; a failed probe refuses the placement; `out ≤ source_duration_ms`; `scenes.duration_seconds` and `scene_angles.video_duration` unchanged after trims |
+| C1-4 | Prime segment: a `lala` clip refused; another episode's clip refused; audio sub-range outside the video refused (CHECK and service) |
+| C1-5 | Sync: after move, video trim (audio clamped), audio trim, split, gain and mute, `mixPlan` takes commentary samples at `source_in + (t − placement)`, matching the video frame time within one frame (golden fixture with a clap marker) |
+| C1-6 | Hide the PIP over a covered range: `layoutAt` draws no PIP; `mixPlan` commentary events are identical to the visible case |
+| C1-7 | Coverage: required + full cover → none; required + hidden + full cover → none; required + gap → `prime_footage_missing`; gameplay-only + gap → none; muted commentary still covers |
+| C1-8 | `layoutAt` defaults: PIP bottom-right, 28 % of 1920 width; a gameplay-only beat with footage still shows it (Q21) |
+| C1-9 | Versions: save a version; edit; restore → new live revision equal to the snapshot; the version row unchanged (sha256) |
+| C1-10 | Beat production: beat 15 refused; a change supersedes and keeps history |
+
+## R5.7 Refinement G: snapshot retention, verified before any migration deploy
+
+**Deploy logs only show:**
+- 65 `deploy-*` snapshots;
+- the role can't delete them;
+- a new one is created per run.
+
+They don't show the account's limit, or how many other manual snapshots count against it. **This design doesn't assume either.**
+
+**Gate:** B1's and C1's deploys wait until Evoni confirms, from the AWS console or her own read-only CLI, these three:
+
+1. The manual DB snapshot count in `us-east-1`, all kinds:
+   ```
+   aws rds describe-db-snapshots --snapshot-type manual --query 'length(DBSnapshots)'
+   ```
+2. The account's limit: Service Quotas → Amazon RDS → "Manual DB instance snapshots".
+3. One of:
+   - the deploy role now has the delete permission (runbook §2.1), and a deploy log shows `PRUNE_NOTE=ok`;
+   - or old `deploy-*` snapshots were removed by hand (runbook §7), keeping what the recovery policy needs.
+
+   Either way, leave headroom for at least the five deploys of R5.4.
+
+**This session doesn't run those commands**: it contacts no AWS (Rule 7 decision of 2026-10-10).
+
+## R5.8 Blockers that still need Evoni
+
+**Before code (B1/C1):** none. The product decisions are made. B1 and C1 each need **implementation authorisation**.
+
+**Before the first deploy of B1 or C1:** G (R5.7), your confirmation of the snapshot count, the limit and the cleanup.
+
+**Before the first preview in production:**
+- **Q20:** how D1's render process is started and managed in production: by you, once, by hand, or by a reviewed Deploy-workflow change (R3.3). Either is your action or approval.
+- D1's resource limits on the production box (R2.4) to be confirmed against its size. I can't read the instance size from here; you or the runbook can.
+
+**Owed documentation** (not blocking code): the spec G-5 / §14 amendment for Q-F1/Q-F2.
+
+---
+
 # Revision 4 (Q19, Q-F1, Q-F2 and the final schema for B1 and C1, 2026-10-27)
 
 **Where Revision 4 disagrees with earlier revisions or the body, Revision 4 wins.** It is still design only.
@@ -91,6 +374,9 @@ An approval of a take for a line is **valid** at the current moment only when al
 **E2 needs its own design approval:** the table, its retention, and the line-context index format shared with the R2.6 rule.
 
 ## R4.2 Prime-required or gameplay-only: where it lives and how it's validated
+
+> **SUPERSEDED (Revision 5):** its "every stretch where the PIP is visible" coverage rule and the Q21 question: coverage is the whole beat whatever the visibility (R5.1); Q21 is answered (R5.0). The table and the place it lives stand.
+
 
 **It belongs to the episode's beats, in the Timeline's data. It is not the script, the scene set or the PIP visibility rules.**
 
@@ -318,6 +604,9 @@ Columns: `id`, `episode_id`, `scene_clip_id`, `kind`, `target_id`, `view`, `anch
 
 ## R4.5 Open questions
 
+> **SUPERSEDED (Revision 5):** answered or moved to R5.8.
+
+
 **Needed before B1/C1 code:**
 - **Confirm R4.1:** E1 now, E2 later.
 - **Q21:** does gameplay-only change only the requirement, or also hide placed footage?
@@ -457,6 +746,9 @@ This **reverses R2.5's recommendation** (scene timing on `scenes`). R2.5's `epis
 
 ## R3.6 Design questions still open
 
+> **SUPERSEDED (Revision 5):** answered (R4.0, R5.0) or moved to R5.8.
+
+
 **Needed before the first playable MP4:**
 - **Q19:** E1 now (no R1 change, a person re-confirms after script edits), with E2 as a later reviewed change? Or E2 first (one additive insert in R1's save transaction, automatic and provable)?
 - **Q-F1 / Q-F2** (already open): the Prime fallback's home, and whether a missing Prime stretch blocks a review-ready preview or only warns. Until decided, missing footage blocks review-ready (R2.3).
@@ -495,6 +787,9 @@ Her proposed product direction, subject to the safeguards in R2.1–R2.6:
 Still not authorised: B1, C1, B2, C2, D1, any push, PR, merge or deploy, restarting the worker, production data changes, and R2/R3.
 
 ## R2.1 Approval binds to an exact candidate revision and a validated association; once invalidated it never reactivates
+
+> **SUPERSEDED (Revision 5):** the history walk is not sound (R3.1). Validity is E1 (R4.1, R5.2); tables are R4.3.
+
 
 **The risk:**
 1. A take is approved on script revision r1.
@@ -579,7 +874,7 @@ There are two kinds of preview render. Neither is an export, and neither approve
 - **When:** renders only when there are **no blocking findings**:
   - every active line has a valid approval (R2.1);
   - every beat has a scene picture;
-  - Prime footage or an accepted fallback for every beat (Q-F1/Q-F2 still open; until decided, missing footage blocks review-ready);
+  - Prime footage or an accepted fallback for every beat (Q-F1/Q-F2 still open; until decided, missing footage blocks review-ready); **SUPERSEDED (R5.1):** full coverage of every `required` beat, whatever the visibility; no fallback.
   - no `take_overruns_scene` left unresolved.
 - **What shows:** a small corner mark `REVIEW · <date>`, with no banners or slates.
 - **If you ask while something blocks:** the request is refused with the list. Nothing renders.
@@ -629,6 +924,9 @@ There are two kinds of preview render. Neither is an export, and neither approve
 **Cancel:** sets `cancel_requested`. The worker checks it between stages and kills ffmpeg.
 
 ## R2.5 Reviewed schema compared with the first release and future tracks
+
+> **SUPERSEDED (Revision 5):** the resolution column is replaced by R4.3 C1 (scene clips own their duration, R3.4).
+
 
 | Track | First release needs | Reviewed schema | Fit | Gap and resolution |
 |---|---|---|---|---|
@@ -681,6 +979,9 @@ There are two kinds of preview render. Neither is an export, and neither approve
 - Voice Studio shows the reason ("speaker changed in revision of 27 Oct 15:02"), with **Approve again** when the take is bound again, or **Reassign** otherwise.
 
 ## R2.7 New questions
+
+> **SUPERSEDED (Revision 5):** answered (R3.0, R4.0, R5.0).
+
 
 - **Q15:** approval validity by history walk (recommended), or by checks written after each script save, which touches the A1c save path?
 - **Q16:** the dedicated `episode-render` PM2 process: started by Evoni by hand once, or by a reviewed Deploy-workflow change?
@@ -838,7 +1139,7 @@ The independent export job settings fix is implemented and tested **locally** on
 5. **PIP defaults:** her real video, bottom right, about 28 % of the frame width, visible in all 14 beats.
    - Frame, position, size, background removal and visibility are each editable.
    - It is never hidden by a cutscene rule and never frozen automatically.
-   - Missing footage uses the fallback with a warning and never adds audio (spec §1; decisions R2, R3, §8.1, §14).
+   - Missing footage uses the fallback with a warning and never adds audio (spec §1; decisions R2, R3, §8.1, §14). **SUPERSEDED (R4.0, R5.0):** no fallback image; gameplay full-screen with a working-preview warning; required beats block review-ready and final.
 6. **Layer order:** scene < PIP < phone < overlays < toasts < cursor < stats (spec §6.6).
 
 **Timing:**
@@ -941,6 +1242,9 @@ This milestone also brings forward part of approved step 7 (A6a voice states) an
 ---
 
 ## 4. Data model (PROPOSED)
+
+> **SUPERSEDED (Revision 5):** this section's tables (`voice_recordings`, `edit_projects`, `edit_items`, the approval table and the associating legacy import) are replaced by R4.3 as amended by R5.3. Do not build from §4.
+
 
 **Conventions:**
 - All new tables have `deleted_at`, live under `src/migrations/` and are additive.
@@ -1077,6 +1381,9 @@ The recommendation is (a), so there is one model. This document's fields are wha
 
 ### 5.2 Timeline Editor
 
+> **SUPERSEDED (Revision 5):** track rules on missing footage: no fallback; see R4.0 and R5.1. The rest of the layout stands as a sketch.
+
+
 **Route:** `/episodes/:id/edit`.
 - A new page beside today's `/episodes/:id/timeline`, which keeps working on `timeline_data` until "Adopt into Edit" (review D2: legacy is adopted only by an explicit action, after a dry run).
 - The Sidebar's "Timeline Editor" points here once phase T2 ships. DECISION Q5.
@@ -1163,6 +1470,9 @@ Evoni uploads to YouTube (the in-app upload remains a placeholder, T-4; later ph
 
 ## 7. Phases (small, each independently testable)
 
+> **SUPERSEDED (Revision 5):** replaced by R5.4 (sequence), R5.5 (B1) and R5.6 (C1).
+
+
 **Bug fixes first, independent of the design (each its own PR):**
 - **B-1:** the export job arguments. Bring the local `claude/export-job-args` (`35fb3af3`) up to date with main and review it.
 - **B-2:** voice delete ownership (V-1); `keepSession` on the voice upload (V-3); server ffprobe duration and a clear error over the cap (V-2); no recording on lines that never play (V-4).
@@ -1219,6 +1529,9 @@ Evoni uploads to YouTube (the in-app upload remains a placeholder, T-4; later ph
 
 ## 8. Acceptance, failure handling and rollback
 
+> **SUPERSEDED (Revision 5):** acceptance tests are R5.5 and R5.6; rollback is R4.3 Rollback.
+
+
 **V1:**
 - A candidate can't be created against a stale revision (409) or a mismatched line (409).
 - A Prime line is refused.
@@ -1263,6 +1576,9 @@ Evoni uploads to YouTube (the in-app upload remains a placeholder, T-4; later ph
 ---
 
 ## 9. Questions for Evoni
+
+> **SUPERSEDED (Revision 5):** all answered (R2.0, R3.0, R4.0, R5.0). Q7's "green-removal queue" is withdrawn (R2.4).
+
 
 1. **Before R3?** May V1–V3 proceed with the restricted, validated association (§3.2, §3.4), bringing voice states (A6a) ahead of the approved sequence's steps 2–6? Or should they wait for R3 and A1d?
 2. **Legacy clips:** import as unapproved candidates (recommended), or approved as SPV §5.4 said?
