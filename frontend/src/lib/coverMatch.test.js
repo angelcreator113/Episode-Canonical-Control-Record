@@ -39,6 +39,14 @@ describe('coverMatch', () => {
     // A capitalised name works as before.
     expect(verbPhrase('Get to know Truthville', null, ['thriftveil'])).toEqual(['get', 'to', 'know']);
   });
+  test('the verb in the past tense (Evoni, 2026-10-27: "I finally got to know @thriftveil" never ticked)', () => {
+    const goal = { label: 'Get to know thriftveil' };
+    expect(goalMatch([{ number: 11, lines: ['Lala: I finally got to know @thriftveil tonight.'] }], goal, null)?.beat).toBe(11);
+    expect(goalMatch([{ number: 11, lines: ['Lala: We have gotten to know @thriftveil.'] }], goal, null)?.beat).toBe(11);
+    // The phrase is still needed: "got" alone is not getting to know them.
+    expect(goalMatch([{ number: 11, lines: ['Lala: I got @thriftveil a drink.'] }], goal, null)).toBeNull();
+    expect(goalMatch([{ number: 11, lines: ['Lala: I sent Velour the lookbook.'] }], { label: 'Send Velour the lookbook' }, null)?.beat).toBe(11);
+  });
   test('the hook only in beat 14', () => {
     expect(hookCovered([{ number: 3, lines: ['Me: a second invitation arrives'] }], 'A second invitation arrives')).toBeNull();
     expect(hookCovered([{ number: 14, lines: ['Me: and then, another invitation arrived'] }], 'A second invitation arrives')).toBe(14);

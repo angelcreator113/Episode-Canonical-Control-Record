@@ -33,12 +33,24 @@ const keyWords = (s) => [...new Set(words(s).filter((w) => w.length >= 4 && !STO
 const needOf = (n) => (n <= 2 ? n : Math.ceil(n * 0.75));
 // How many of the key words the text has.
 const hits = (text, keys) => { const have = new Set(stems(text)); return keys.filter((k) => have.has(k)).length; };
-// Whether the stemmed phrase is in the text, its words in a row.
+// A goal's verb in the past tense the stem does not reach: "got to know"
+// is "get to know" (Evoni, 2026-10-27: "I finally got to know @thriftveil"
+// never ticked "Get to know thriftveil"). Stemmed on both sides, and read
+// only where a verb phrase is matched. Not "met" ("The Met"), "made" or
+// "came" (their stems are "mad" and "cam").
+const PAST = Object.fromEntries([
+  ['got', 'get'], ['gotten', 'get'], ['took', 'take'], ['taken', 'take'], ['gave', 'give'], ['given', 'give'],
+  ['went', 'go'], ['gone', 'go'], ['told', 'tell'], ['caught', 'catch'], ['brought', 'bring'], ['built', 'build'],
+  ['sent', 'send'], ['found', 'find'], ['won', 'win'], ['kept', 'keep'], ['spoke', 'speak'], ['spoken', 'speak'],
+].map(([past, base]) => [stem(past), stem(base)]));
+const present = (w) => PAST[w] || w;
+// Whether the stemmed phrase is in the text, its words in a row, in any tense.
 function hasPhrase(text, phrase) {
   if (!phrase.length) return true;
-  const have = stems(text);
-  for (let i = 0; i + phrase.length <= have.length; i += 1) {
-    if (phrase.every((w, j) => have[i + j] === w)) return true;
+  const have = stems(text).map(present);
+  const want = phrase.map(present);
+  for (let i = 0; i + want.length <= have.length; i += 1) {
+    if (want.every((w, j) => have[i + j] === w)) return true;
   }
   return false;
 }
