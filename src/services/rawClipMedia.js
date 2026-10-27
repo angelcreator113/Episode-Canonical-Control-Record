@@ -12,6 +12,12 @@
  *
  * Files never pass through memory whole: uploads arrive on disk (multer),
  * stream to S3, and jobs stream the original back down to a temp file.
+ * A teleprompter take goes to S3 in parts instead (rawClipMultipart), with
+ * no copy on this disk.
+ *
+ * The temp folder is swept on start and then hourly (sweepTmp): files older
+ * than six hours go, except any a green-removal job is still using
+ * (Evoni, 2026-10-27: a full disk stopped a take from saving).
  */
 
 const { spawn } = require('child_process');
@@ -29,6 +35,10 @@ const { ASSET_BUCKET: BUCKET, requireAssetBucket } = require('./assetBucket');
 const REGION = process.env.AWS_REGION || 'us-east-1';
 const JOB_TIMEOUT_MS = 2 * 60 * 60 * 1000;
 const TMP_DIR = path.join(os.tmpdir(), 'raw-clips');
+const TMP_MAX_AGE_MS = 6 * 60 * 60 * 1000;
+const SWEEP_EVERY_MS = 60 * 60 * 1000;
+// Temp files a queued or running job still needs (sweepTmp leaves them alone).
+const inUse = new Set();
 
 let s3Client = null;
 const getS3 = () => {
@@ -160,6 +170,7 @@ const activeIds = () => [...active];
 function enqueueKey(sequelize, { clipId, episodeId, s3KeyRaw, strength = 'medium', localPath = null }) {
   if (active.has(clipId)) return false;
   active.add(clipId);
+  if (localPath) inUse.add(localPath);
   queue.push({ sequelize, clipId, episodeId, s3KeyRaw, strength, localPath });
   setImmediate(drain);
   return true;
@@ -182,6 +193,7 @@ async function drain() {
         }
       } finally {
         active.delete(job.clipId);
+        if (job.localPath) inUse.delete(job.localPath);
         await removeFile(job.localPath);
       }
     }
@@ -195,9 +207,11 @@ async function keyClip({ sequelize, clipId, episodeId, s3KeyRaw, strength, local
   let input = localPath;
   let downloaded = null;
   const output = await tmpPath('cutout.webm');
+  inUse.add(output);
   try {
     if (!input) {
       downloaded = await tmpPath(path.basename(s3KeyRaw));
+      inUse.add(downloaded);
       await downloadFile(s3KeyRaw, downloaded);
       input = downloaded;
     }
@@ -214,12 +228,77 @@ async function keyClip({ sequelize, clipId, episodeId, s3KeyRaw, strength, local
     const cutoutUrl = await uploadFile(output, cutoutKey, 'video/webm');
     await clips.setKeyState(sequelize, clipId, 'done', { cutoutKey, cutoutUrl });
   } finally {
+    inUse.delete(output);
+    if (downloaded) inUse.delete(downloaded);
     await removeFile(output);
     await removeFile(downloaded);
   }
 }
 
+// ── The temp folder: old leftovers go (on start, then hourly) ───────────────
+
+/**
+ * Removes files in the temp folder older than maxAgeMs (by last change),
+ * leaving alone any a job still uses. Resolves the names removed; logs them.
+ * A folder that is not there yet is nothing to do.
+ */
+async function sweepTmp({ dir = TMP_DIR, maxAgeMs = TMP_MAX_AGE_MS, now = Date.now(), busy = inUse } = {}) {
+  let names;
+  try {
+    names = await fsp.readdir(dir);
+  } catch (err) {
+    if (err.code === 'ENOENT') return [];
+    console.error('[rawClips] temp folder not read for clean-up:', err.message);
+    return [];
+  }
+  const removed = [];
+  for (const name of names) {
+    const file = path.join(dir, name);
+    if (busy.has(file)) continue;
+    try {
+      // eslint-disable-next-line no-await-in-loop
+      const st = await fsp.stat(file);
+      if (!st.isFile() || now - st.mtimeMs < maxAgeMs) continue;
+      // eslint-disable-next-line no-await-in-loop
+      await fsp.unlink(file);
+      removed.push({ name, bytes: st.size });
+    } catch (err) {
+      if (err.code !== 'ENOENT') console.error('[rawClips] temp file not cleaned up:', file, err.message);
+    }
+  }
+  if (removed.length) {
+    const mb = Math.round(removed.reduce((n, r) => n + r.bytes, 0) / (1024 * 1024));
+    console.log(`[rawClips] temp clean-up removed ${removed.length} file(s), ${mb} MB:`, removed.map((r) => r.name).join(', '));
+  }
+  return removed.map((r) => r.name);
+}
+
+let sweeper = null;
+/** Sweeps now and then hourly (once per process). The timer never keeps the process up. */
+function startTmpSweeper() {
+  if (sweeper) return sweeper;
+  const sweep = () => sweepTmp().catch((err) => console.error('[rawClips] temp clean-up failed:', err.message));
+  sweep();
+  sweeper = setInterval(sweep, SWEEP_EVERY_MS);
+  if (typeof sweeper.unref === 'function') sweeper.unref();
+  return sweeper;
+}
+
+/** Free bytes on the disk that holds dir (made if missing), or null when it can't be read. */
+async function freeBytes(dir = TMP_DIR) {
+  try {
+    await fsp.mkdir(dir, { recursive: true });
+    if (typeof fsp.statfs !== 'function') return null;
+    const st = await fsp.statfs(dir);
+    return Number(st.bavail) * Number(st.bsize);
+  } catch (err) {
+    console.error('[rawClips] free disk space not read:', err.message);
+    return null;
+  }
+}
+
 module.exports = {
-  BUCKET, TMP_DIR, publicUrl, clipPrefix, tmpPath, removeFile,
+  BUCKET, TMP_DIR, TMP_MAX_AGE_MS, publicUrl, clipPrefix, tmpPath, removeFile, getS3,
   run, uploadFile, downloadFile, inspect, enqueueKey, activeIds,
+  sweepTmp, startTmpSweeper, freeBytes,
 };

@@ -12,7 +12,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Upload, Film, Trash2, Play, WandSparkles, X, Loader, CircleCheck, CircleAlert, Clock, RefreshCw, UserRound, ListOrdered, Copy,
 } from 'lucide-react';
-import { rawClipsApi, PERFORMERS, STRENGTHS, clipLength, clipSize, anyKeying, sceneChoices } from '../../lib/rawClipsApi';
+import { rawClipsApi, PERFORMERS, STRENGTHS, clipLength, clipSize, anyKeying, sceneChoices, uploadErrorMessage } from '../../lib/rawClipsApi';
 import { isFullTake } from '../../lib/fullEpisodeTake';
 import { clipMarks } from '../../lib/assembleTakes';
 import { youtubeChapters, draftDescription } from '../../lib/youtubeChapters';
@@ -280,7 +280,7 @@ export default function EpisodeRawFootageTab({ episode, onCount }) {
         setUploads((u) => u.filter((x) => x.id !== id));
       } catch (err) {
         console.error('[RawFootage] upload failed:', err);
-        const message = err?.response?.status === 413 ? 'Too big to upload' : (err?.response?.data?.error || 'Upload failed');
+        const message = err?.response?.status === 413 ? 'Too big to upload' : uploadErrorMessage(err);
         setUploads((u) => u.map((x) => (x.id === id ? { ...x, error: message } : x)));
       }
     }

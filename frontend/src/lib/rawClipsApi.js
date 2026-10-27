@@ -1,11 +1,12 @@
 /**
  * The episode's raw clips (Assets → Files; Evoni, 2026-10-17):
- * /api/v1/episode-clips/:episodeId. Upload sends one clip as multipart
- * (field "video") with who is on camera and whether it was filmed on a
- * green screen; the server keeps the original and, for green screen, makes
- * a cut-out in the background.
+ * /api/v1/episode-clips/:episodeId. Upload sends one clip, in 8 MB parts
+ * straight to the video storage (sendInParts; 2026-10-27), with who is on
+ * camera and whether it was filmed on a green screen; the server keeps the
+ * original and, for green screen, makes a cut-out in the background.
  */
 import api from '../services/api';
+import { PART_SIZE, uploadInParts, makeThumbnail } from './chunkedUpload';
 
 const base = (episodeId) => `/api/v1/episode-clips/${episodeId}`;
 
@@ -21,48 +22,123 @@ export const STRENGTHS = [
   { key: 'high', label: 'Strong' },
 ];
 
+/** The fields of a take or clip as the server reads them (the one-request upload's names). */
+export function uploadFields({ performer, greenScreen = false, guestName, strength, label, beatNumber, startLine, beatMarks, seconds } = {}) {
+  const out = { performer, green_screen: greenScreen ? 'true' : 'false' };
+  if (guestName) out.guest_name = guestName;
+  if (strength) out.strength = strength;
+  if (label) out.label = label;
+  if (Number.isInteger(beatNumber) && beatNumber >= 1 && beatNumber <= 14) out.beat_number = beatNumber;
+  if (Number.isInteger(startLine) && startLine >= 0) out.start_line = startLine;
+  if (Array.isArray(beatMarks)) out.beat_marks = JSON.stringify(beatMarks);
+  if (Number(seconds) > 0 && Number(seconds) <= 36000) out.seconds = Math.round(Number(seconds) * 100) / 100;
+  return out;
+}
+
+const uploadsBase = (episodeId, uploadId) => `${base(episodeId)}/uploads${uploadId ? `/${encodeURIComponent(uploadId)}` : ''}`;
+const PART_TIMEOUT_MS = 5 * 60 * 1000; // one 8 MB part, even on a slow phone connection
+
+/**
+ * Sends a file in parts straight to the video storage (Evoni, 2026-10-27:
+ * "ENOSPC" on a 22-minute take). fields: uploadFields(). resume: what an
+ * earlier try sent ({ uploadId, clipId, partSize, size, done }), so only
+ * the rest goes; onState(state) after every part (null once finished) for
+ * the caller to keep. thumbnail: a JPEG data URL, or a function that makes
+ * one. A server that no longer knows the upload (restarted, or older than
+ * 6 hours) starts it again from the beginning, once. Resolves { clip, stored }.
+ */
+export async function sendInParts(episodeId, blob, fields, { resume = null, onState, onProgress, thumbnail = null, keepSession = false, sleep } = {}) {
+  const cfg = keepSession ? { keepSession: true } : {};
+  const usable = resume && resume.uploadId && Number(resume.size) === blob.size && Array.isArray(resume.done);
+  let state = usable ? { ...resume, done: [...resume.done] } : null;
+  const keep = (next) => { state = next; onState?.(next); };
+  let restarted = false;
+  for (let round = 0; ; round += 1) {
+    try {
+      if (!state) {
+        const r = await api.post(uploadsBase(episodeId), {
+          ...fields, filename: blob.name || fields.filename || 'take.mp4', content_type: blob.type || 'video/mp4', size: blob.size,
+        }, cfg);
+        keep({ uploadId: r.data.uploadId, clipId: r.data.clipId, partSize: r.data.partSize || PART_SIZE, size: blob.size, done: [] });
+      }
+      const st = state;
+      await uploadInParts({
+        blob, partSize: st.partSize, done: st.done, onProgress, sleep,
+        send: (n, slice, onLoaded) => api.put(`${uploadsBase(episodeId, st.uploadId)}/parts/${n}`, slice, {
+          ...cfg, timeout: PART_TIMEOUT_MS, headers: { 'Content-Type': 'application/octet-stream' },
+          onUploadProgress: (e) => onLoaded?.(e.loaded),
+        }),
+        onPartDone: (n) => keep({ ...state, done: [...state.done, n] }),
+      });
+      let thumb = null;
+      try { thumb = typeof thumbnail === 'function' ? await thumbnail() : thumbnail; } catch (err) {
+        console.warn('[rawClipsApi] thumbnail not made; the server makes one:', err);
+      }
+      const r = await api.post(`${uploadsBase(episodeId, st.uploadId)}/complete`, thumb ? { thumbnail: thumb } : {}, { ...cfg, timeout: PART_TIMEOUT_MS });
+      keep(null);
+      return { clip: r.data?.data, stored: Array.isArray(r.data?.stored) ? new Set(r.data.stored) : null };
+    } catch (err) {
+      const status = err?.response?.status;
+      // Parts the server says it does not have: send those again (once or twice).
+      if (status === 409 && Array.isArray(err.response.data?.missing) && state && round < 2) {
+        console.warn('[rawClipsApi] parts missing at the end, sending them again:', err.response.data.missing);
+        const missing = new Set(err.response.data.missing);
+        keep({ ...state, done: state.done.filter((n) => !missing.has(n)) });
+        continue;
+      }
+      // The server no longer knows this upload: start again from the beginning, once.
+      if (status === 404 && state && !restarted) {
+        console.warn('[rawClipsApi] the upload was forgotten by the server; starting it again:', err);
+        restarted = true;
+        keep(null);
+        continue;
+      }
+      throw err;
+    }
+  }
+}
+
+/** Throws an upload in parts away on the server (best effort; logged). */
+export async function abortUpload(episodeId, uploadId) {
+  if (!uploadId) return false;
+  try {
+    await api.delete(uploadsBase(episodeId, uploadId));
+    return true;
+  } catch (err) {
+    console.error('[rawClipsApi] upload not thrown away (the server forgets it within 6 hours):', err);
+    return false;
+  }
+}
+
 export const rawClipsApi = {
   list: (episodeId) => api.get(base(episodeId)).then((r) => (Array.isArray(r.data?.data) ? r.data.data : [])),
   // label: the clip's name in Files (the teleprompter names each take; Evoni, 2026-10-20).
-  upload: (episodeId, file, { performer, greenScreen = false, guestName, strength, label } = {}, onProgress) => {
-    const form = new FormData();
-    form.append('video', file);
-    form.append('performer', performer);
-    form.append('green_screen', greenScreen ? 'true' : 'false');
-    if (guestName) form.append('guest_name', guestName);
-    if (strength) form.append('strength', strength);
-    if (label) form.append('label', label);
-    return api.post(base(episodeId), form, {
-      timeout: 0, // a big clip can take longer than the client's usual 3 minutes
-      onUploadProgress: (e) => { if (onProgress && e.total) onProgress(Math.round((e.loaded / e.total) * 100)); },
-    }).then((r) => r.data?.data);
+  // Sent in parts, straight to the video storage; a failed upload is thrown away on the server.
+  upload: async (episodeId, file, { performer, greenScreen = false, guestName, strength, label } = {}, onProgress) => {
+    let state = null;
+    try {
+      const { clip } = await sendInParts(episodeId, file, uploadFields({ performer, greenScreen, guestName, strength, label }), {
+        onProgress, onState: (st) => { state = st; }, thumbnail: () => makeThumbnail(file),
+      });
+      return clip;
+    } catch (err) {
+      if (state?.uploadId) abortUpload(episodeId, state.uploadId);
+      throw err;
+    }
   },
   /**
    * A teleprompter take (Teleprompter audit 5, 8, 14; 2026-10-24): the beat,
-   * start line, beat markers and the take's own length go with the upload,
-   * one request. keepSession: an expired sign-in never leaves the page (the
-   * take exists only here) and the file is never sent twice by itself.
+   * start line, beat markers and the take's own length go with the upload.
+   * Sent in 8 MB parts (2026-10-27); opts: sendInParts's resume / onState /
+   * thumbnail, so Retry sends only the parts not sent yet. keepSession: an
+   * expired sign-in never leaves the page (the take exists only here).
    * Resolves { clip, stored }: stored is the set of start_line / beat_marks
-   * the server kept, or null from a server that does not take them yet (then
-   * the caller links them with update(), as before).
+   * the server kept, or null from a server that does not say.
    */
-  uploadTake: (episodeId, file, { performer, guestName, label, beatNumber, startLine, beatMarks, seconds } = {}, onProgress) => {
-    const form = new FormData();
-    form.append('video', file);
-    form.append('performer', performer);
-    form.append('green_screen', 'false');
-    if (guestName) form.append('guest_name', guestName);
-    if (label) form.append('label', label);
-    if (Number.isInteger(beatNumber) && beatNumber >= 1 && beatNumber <= 14) form.append('beat_number', String(beatNumber));
-    if (Number.isInteger(startLine) && startLine >= 0) form.append('start_line', String(startLine));
-    if (Array.isArray(beatMarks)) form.append('beat_marks', JSON.stringify(beatMarks));
-    if (Number(seconds) > 0 && Number(seconds) <= 36000) form.append('seconds', String(Math.round(Number(seconds) * 100) / 100));
-    return api.post(base(episodeId), form, {
-      timeout: 0,
-      keepSession: true,
-      onUploadProgress: (e) => { if (onProgress && e.total) onProgress(Math.round((e.loaded / e.total) * 100)); },
-    }).then((r) => ({ clip: r.data?.data, stored: Array.isArray(r.data?.stored) ? new Set(r.data.stored) : null }));
-  },
+  uploadTake: (episodeId, file, { performer, guestName, label, beatNumber, startLine, beatMarks, seconds } = {}, onProgress, opts = {}) => sendInParts(
+    episodeId, file, uploadFields({ performer, guestName, label, beatNumber, startLine, beatMarks, seconds }),
+    { ...opts, onProgress, keepSession: true },
+  ),
   // A cheap signed-in request before a big upload, so the sign-in is fresh
   // (refreshed here if it had expired) and never wiped while a take is unsaved.
   checkSession: (episodeId) => api.get(base(episodeId), { keepSession: true }).then((r) => (Array.isArray(r.data?.data) ? r.data.data : [])),
@@ -123,6 +199,36 @@ export function signInMessage(err) {
   if (err?.authRefreshed) return 'Your sign-in had expired and is renewed now. Press Retry to upload the take.';
   if (err?.sessionExpired) return 'Your sign-in expired. Sign in in another tab, then press Retry here. The take is kept.';
   return null;
+}
+
+const KEPT_NOTE = {
+  phone: 'Your take is still safe on this phone — tap Retry.',
+  page: 'Your take is still here — keep this page open and tap Retry.',
+};
+// Looks like a system code or a programmer's message, not words for Evoni.
+const RAW_CODE = /\b(E[A-Z]{3,}|errno|ECONN\w*|syscall|undefined|TypeError|AccessDenied|NoSuch\w+|\d{3} \w+Error)\b|^[A-Z_]{4,}$|[{}<>]/;
+
+/**
+ * A failed upload in plain words, never a raw code (2026-10-27). kept:
+ * 'phone' (the take is kept on this phone: say so), 'page' (only while the
+ * page stays open), or null (nothing to add: a file on her computer). The
+ * server's own message is used when it is plain; the 507 one already says
+ * the take is safe.
+ */
+export function uploadErrorMessage(err, { kept = null } = {}) {
+  const note = kept ? KEPT_NOTE[kept] : null;
+  const withNote = (text) => (note && !/still (safe|here)/.test(text) ? `${text} ${note}` : text);
+  const auth = signInMessage(err);
+  if (auth) return auth;
+  const status = err?.response?.status;
+  const server = err?.response?.data?.error;
+  // Too big: Retry would not help, so no Retry note.
+  if (status === 413) return typeof server === 'string' && !RAW_CODE.test(server) ? server : `The ${kept ? 'take' : 'video'} is too big to upload.`;
+  if (typeof server === 'string' && server.trim() && !RAW_CODE.test(server)) return withNote(server.trim());
+  if (status === 507) return 'The server ran out of room while saving this take. Your take is still safe on this phone — tap Retry later.';
+  if (!status) return withNote('The connection dropped while saving.');
+  if (status >= 500) return withNote('The server had a problem saving it.');
+  return withNote(kept ? 'The take was not saved.' : 'The upload did not go through. Try again.');
 }
 
 /** The episode's takes for one beat (any raw clip linked to it), oldest first. */

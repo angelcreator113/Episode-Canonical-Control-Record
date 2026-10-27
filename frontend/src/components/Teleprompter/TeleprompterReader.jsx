@@ -57,15 +57,23 @@
 // starts (3 seconds, to get into place), whatever the 3-2-1 setting, which is
 // for reading.
 // Teleprompter audit, recording and saving (Evoni, 2026-10-24: "fix all of
-// them"): a take stops by itself just under the 500 MB upload limit; any take
+// them"): a take stops by itself just under the upload limit (5 GB since
+// takes go up in parts, 2026-10-27; it was 500 MB); any take
 // can be downloaded (or, on a phone, shared to Photos or Files) from the
 // review, which stays open until she is done with it; the take's pieces are
 // kept on the device as they are recorded (lib/takeStore), so Back (asked
 // first), a reload or a crash never loses it: next time "You have an unsaved
 // take" offers it back. The screen is kept on while recording, and the take
 // pauses when the phone looks away or the camera is taken. The upload carries
-// the beat, start line, markers and length in one request, and an expired
-// sign-in never leaves the page with a take unsaved.
+// the beat, start line, markers and length, and an expired sign-in never
+// leaves the page with a take unsaved.
+// Saving in parts (Evoni, 2026-10-27: "ENOSPC" on a 22-minute take): the take
+// goes up in 8 MB slices straight to the video storage, with a percent; a
+// slice is tried again up to 3 times, and Retry after a failure sends only
+// the slices not sent yet (what was sent is kept with the take on the phone,
+// so this works after a reload too). A failure says in plain words that the
+// take is still on the phone. Take numbers count every recording, saved or
+// not, and downloads carry the date and time, so no two share a name.
 // Keys: Space play/pause, Up/Down speed (or pace), PageUp/PageDown jump a
 // half screen (a line, pacing by line times; clickers and foot pedals send
 // these), Left/Right beat, Enter or S stop & review a take, Escape closes
@@ -106,11 +114,13 @@ import useLineVoice from '../../hooks/useLineVoice';
 import TeleprompterRemotePanel from './TeleprompterRemotePanel';
 import VoiceRecordPanel from './VoiceRecord';
 import { voiceClipsApi, isNotReady as voiceNotReady, VOICE_NOT_READY, clipsByLine, lineKey, withClip, clipSeconds, clipForLine } from '../../lib/voiceClipsApi';
-import { teleprompterScript, pastedParagraphs, pastedScript, speakersOf, HER, takeName, takeExtension, downloadName, clock, lineChoice, withoutScreen } from '../../lib/teleprompterLines';
-import { rawClipsApi, hasTakeFields, beatTakes, withFavorite, signInMessage } from '../../lib/rawClipsApi';
+import { teleprompterScript, pastedParagraphs, pastedScript, speakersOf, HER, takeName, takeExtension, downloadName, clock, lineChoice, withoutScreen, nextTakeNumber, takeNumberOf } from '../../lib/teleprompterLines';
+import { rawClipsApi, hasTakeFields, beatTakes, withFavorite, uploadErrorMessage, abortUpload } from '../../lib/rawClipsApi';
+import { makeThumbnail } from '../../lib/chunkedUpload';
+import { withDuration } from '../../lib/takeDuration';
 import { isCutsceneBeat } from '../../lib/scriptShowRules';
 import {
-  FULL_BITRATE, WARN_BYTES, UPLOAD_LIMIT_MB, MARKS_NOT_KEPT, fullTakeName, fullTakes, hasMarksField, markTime, cleanMarks,
+  FULL_BITRATE, WARN_BYTES, UPLOAD_LIMIT_TEXT, MARKS_NOT_KEPT, fullTakeName, fullTakes, hasMarksField, markTime, cleanMarks,
   takeBytes, sizeText, marksText, marksFileName, STOP_BYTES, LIMIT_NOTE, interruptNote,
 } from '../../lib/fullEpisodeTake';
 
@@ -133,6 +143,8 @@ export const QUIET_LOST_MS = 15000;
 export const ENDING_MS = 2000;
 const roundPace = (n) => Math.round(n * 10) / 10;
 
+/** Which takes share a numbering: the whole episode, or one beat; per reader. */
+const takeSlot = (scope, beatNo, as) => (scope === 'episode' ? `episode|${as}` : `beat|${beatNo == null ? '-' : Number(beatNo)}|${as}`);
 const clamp = (n, lo, hi) => Math.min(hi, Math.max(lo, n));
 // A `//` pause holds a second more (an on-screen moment holds its own 3 seconds).
 const lineBreaks = (l) => (l?.kind === 'screen' ? 0 : pauseCount(l?.text));
@@ -305,6 +317,20 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
   const episodeId = isScript ? source.episodeId : null;
   const rec = useTakeRecorder(recordOn, { storeKey: takeKey(episodeId) });
   const { take, recording } = rec;
+  // The take with its length written into its header (Evoni, 2026-10-27: a
+  // downloaded take showed 0:00 in her phone's player): made once per take,
+  // and what Download, Share and Save send.
+  const [playable, setPlayable] = useState(null);
+  useEffect(() => {
+    if (!take) { setPlayable(null); return undefined; }
+    let live = true;
+    withDuration(take.blob, take.seconds)
+      .then((blob) => { if (live) setPlayable({ take, blob }); })
+      .catch((err) => console.error('[Teleprompter] the take\'s length was not written:', err));
+    return () => { live = false; };
+  }, [take]);
+  const takeBlob = take && playable?.take === take ? playable.blob : take?.blob;
+  const lengthed = async (t) => (playable?.take === t ? playable.blob : withDuration(t.blob, t.seconds));
   // A voice clip recording or waiting to be saved counts as unsaved work too.
   const [voiceBusy, setVoiceBusy] = useState(false);
   const busyTake = recording || count > 0 || !!take || rec.finishing || voiceBusy;
@@ -314,6 +340,14 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
   const [downloaded, setDownloaded] = useState(null);
   // A take kept on this device but never saved, offered back on opening.
   const [offer, setOffer] = useState(null);
+  // Every take kept on this device unsaved (their numbers count), the take
+  // numbers used this visit by slot, and the number of the take now
+  // recording or in review (it keeps its name until it is saved or gone).
+  const [keptTakes, setKeptTakes] = useState([]);
+  const [usedNos, setUsedNos] = useState({});
+  const [liveNo, setLiveNo] = useState(null);
+  // How far each take's upload in parts got, by take id (Retry sends the rest).
+  const uploadsRef = useRef({});
   // A take is running or about to: the bar is Stop & review and Pause.
   const takeLive = recording || arming;
   // Mid-take or in review: the controls that make no sense then are hidden.
@@ -486,7 +520,11 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
   useEffect(() => {
     let live = true;
     takeStore().unsaved(takeKey(episodeId))
-      .then((list) => { if (live && list.length) setOffer(list[0]); })
+      .then((list) => {
+        if (!live) return;
+        setKeptTakes(list);
+        if (list.length) setOffer(list[0]);
+      })
       .catch((err) => console.error('[Teleprompter] unsaved takes not looked for:', err));
     return () => { live = false; };
   }, [episodeId]);
@@ -925,6 +963,7 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
       toBeatStart(i);
       if (voiceOn) setVoiceFrom(syncCursor(layout.beatFirst[i] ?? 0));
       if (!rec.begin({ videoBitsPerSecond: FULL_BITRATE, maxBytes: STOP_BYTES, meta: takeMeta('episode', i) })) return;
+      claimNo();
       const n = beats[i]?.number;
       marksRef.current = n != null ? [{ beat: Number(n), t: 0 }] : [];
       lastMarkedRef.current = i;
@@ -935,8 +974,14 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
   };
   // What the device keeps with a take, to review and save it after a reload.
   const takeMeta = (scope, at) => ({
-    scope, beatIndex: at, beatNumber: beats[at]?.number ?? null, startLine: scope === 'beat' ? fromLine : 0, readAs, label,
+    scope, beatIndex: at, beatNumber: beats[at]?.number ?? null, startLine: scope === 'beat' ? fromLine : 0, readAs, label, takeNo,
   });
+  // A take started: its number is its own, and the next take counts on from it.
+  const claimNo = () => {
+    if (!isScript) return;
+    setLiveNo(takeNo);
+    setUsedNos((u) => ({ ...u, [slot]: Math.max(u[slot] || 0, takeNo) }));
+  };
   // A take always counts 3-2-1 first (3 seconds to get into place); the 3-2-1
   // setting is for reading.
   const startTake = () => {
@@ -952,7 +997,7 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
       setArming(false);
       toStart();
       if (voiceOn) setVoiceFrom(syncCursor(fromLine));
-      if (rec.begin({ maxBytes: STOP_BYTES, meta: takeMeta('beat', current) })) setPlaying(true);
+      if (rec.begin({ maxBytes: STOP_BYTES, meta: takeMeta('beat', current) })) { claimNo(); setPlaying(true); }
     });
   };
   const record = () => {
@@ -982,6 +1027,12 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
   const doneWithTake = () => {
     if (downloaded && !isScript) setSessionTakes((k) => k + 1);
     setDownloaded(null);
+    // An upload in parts never finished for this take: thrown away on the server too.
+    const left = take?.id ? uploadsRef.current[take.id] : null;
+    if (left?.uploadId && episodeId) abortUpload(episodeId, left.uploadId);
+    if (take?.id) delete uploadsRef.current[take.id];
+    if (take?.id) setKeptTakes((ks) => ks.filter((k) => k.id !== take.id));
+    setLiveNo(null);
     rec.discard();
   };
   // Retake: this take goes and the next one counts in straight away.
@@ -1042,7 +1093,7 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = marksFileName(what.label);
+      a.download = marksFileName(what.label, what.at ?? null);
       a.rel = 'noopener';
       document.body.appendChild(a);
       a.click();
@@ -1057,10 +1108,17 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
   // Who is on camera in Files: JustAWoman, Lala, or a guest by name.
   const performer = readAs === HER ? 'justawoman' : readAs === 'Lala' ? 'lala' : 'guest';
   const beatNumber = beat?.number != null ? Number(beat.number) : null;
-  const inFiles = clips.filter((c) => c.performer === performer && Number(c.beat_number) === beatNumber && (performer !== 'guest' || c.guest_name === readAs)).length;
-  // Whole episode: "Full episode · take n", n from the full-episode takes in Files.
-  const fullInFiles = fullTakes(clips).filter((c) => c.performer === performer && (performer !== 'guest' || c.guest_name === readAs)).length;
-  const takeNo = whole ? fullInFiles + 1 : isScript ? inFiles + 1 : sessionTakes + 1;
+  const mine = (c) => c.performer === performer && (performer !== 'guest' || c.guest_name === readAs);
+  // Whole episode: "Full episode · take n", counted among the full-episode takes; else the beat's.
+  const savedHere = whole ? fullTakes(clips).filter(mine) : clips.filter((c) => mine(c) && Number(c.beat_number) === beatNumber);
+  // Every recording counts, saved or not (Evoni, 2026-10-27: an unsaved "take 1"
+  // was followed by another "take 1"): the takes in Files, those still kept on
+  // this phone for the same beat (or the whole episode), and those used this visit.
+  const slot = takeSlot(whole ? 'episode' : 'beat', beatNumber, readAs);
+  const keptHere = keptTakes.filter((k) => k?.meta && takeSlot(k.meta.scope, k.meta.beatNumber, k.meta.readAs || HER) === slot)
+    .map((k) => k.meta.takeNo ?? takeNumberOf(k.meta.label));
+  const nextNo = nextTakeNumber({ savedLabels: savedHere.map((c) => c.label), savedCount: savedHere.length, others: [...keptHere, usedNos[slot]] });
+  const takeNo = !isScript ? sessionTakes + 1 : midTake && liveNo != null ? liveNo : nextNo;
   const label = whole ? fullTakeName(takeNo, readAs !== HER ? readAs : null)
     : isScript ? `${takeName(beat, takeNo, fromLine > 0 ? fromIndex + 1 : null)}${readAs !== HER ? ` · as ${readAs}` : ''}` : null;
   // The beat's takes in Files (every performer), for the Takes panel.
@@ -1084,12 +1142,14 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
 
   // The take to this device: a download (the review stays open; the take is
   // kept until she is done with it), or the phone's share sheet.
-  const takeFile = isScript ? takeFileName(label, take ? takeExtension(take.type) : 'mp4') : (take ? downloadName(take.type) : null);
-  const shareFile = useMemo(() => (take ? takeAsFile(take.blob, takeFile, take.type) : null), [take, takeFile]);
+  // The file carries when the take was recorded, so two downloads never share a name.
+  const takeFile = isScript ? takeFileName(label, take ? takeExtension(take.type) : 'mp4', take?.startedAt || Date.now())
+    : (take ? downloadName(take.type, take.startedAt ? new Date(take.startedAt) : new Date()) : null);
+  const shareFile = useMemo(() => (take ? takeAsFile(takeBlob, takeFile, take.type) : null), [take, takeBlob, takeFile]);
   const canShare = canShareTake(shareFile);
   const downloadTake = () => {
     if (!take) return;
-    if (downloadBlob(take.blob, takeFile)) {
+    if (downloadBlob(takeBlob, takeFile)) {
       setNotice(`Downloaded ${takeFile}`);
       setDownloaded(take.url);
     } else setSave((s) => ({ ...s, status: 'error', progress: 0, error: 'The take could not be downloaded.' }));
@@ -1110,6 +1170,20 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
     }
   };
 
+  // The upload in parts for this take: where an earlier try got to, kept
+  // with the take on the phone after every slice, and its thumbnail.
+  const partsFor = (t) => ({
+    resume: uploadsRef.current[t.id] || null,
+    onState: (st) => {
+      if (st) uploadsRef.current[t.id] = st; else delete uploadsRef.current[t.id];
+      Promise.resolve(takeStore().update(t.id, { meta: { upload: st } }))
+        .catch((err) => console.error('[Teleprompter] upload progress not kept with the take:', err));
+    },
+    thumbnail: () => makeThumbnail(t.blob),
+  });
+  // A failed save in plain words, saying the take is still on the phone.
+  const saveError = (err) => uploadErrorMessage(err, { kept: takeStore().available ? 'phone' : 'page' });
+
   const saveTake = async () => {
     if (!take) return;
     if (!isScript) { downloadTake(); return; }
@@ -1120,12 +1194,12 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
     try {
       if (!clip) {
         await freshSignIn();
-        const file = new File([take.blob], `beat-${beatNumber ?? 'x'}-take-${takeNo}.${takeExtension(take.type)}`, { type: take.type });
+        const file = new File([await lengthed(take)], `beat-${beatNumber ?? 'x'}-take-${takeNo}.${takeExtension(take.type)}`, { type: take.type });
         // The beat, the start line and the length go with the upload (one request).
         ({ clip, stored } = await rawClipsApi.uploadTake(source.episodeId, file, {
           performer, label, guestName: performer === 'guest' ? readAs : undefined,
           beatNumber, startLine: fromIndex, seconds: take.seconds,
-        }, (p) => setSave((s) => ({ ...s, progress: p }))));
+        }, (p) => setSave((s) => ({ ...s, progress: p })), partsFor(take)));
         setSave((s) => ({ ...s, clip }));
       }
       // The scene the take is for (Production plays clips by beat_number),
@@ -1148,7 +1222,7 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
       doneWithTake();
     } catch (err) {
       console.error('[Teleprompter] take not saved:', err);
-      const base = signInMessage(err) || (err?.response?.status === 413 ? 'The take is too big to upload.' : (err?.response?.data?.error || 'The take was not saved.'));
+      const base = saveError(err);
       setSave((s) => ({ ...s, clip, status: 'error', error: clip ? `It is in Files, but not linked to Beat ${beatNumber} yet. ${base}` : base }));
     }
   };
@@ -1162,11 +1236,11 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
     try {
       if (!clip) {
         await freshSignIn();
-        const file = new File([take.blob], `full-episode-take-${takeNo}.${takeExtension(take.type)}`, { type: take.type });
+        const file = new File([await lengthed(take)], `full-episode-take-${takeNo}.${takeExtension(take.type)}`, { type: take.type });
         // The markers and the length go with the upload (one request).
         ({ clip, stored: keptSet } = await rawClipsApi.uploadTake(source.episodeId, file, {
           performer, label, guestName: performer === 'guest' ? readAs : undefined, beatMarks: kept, seconds: take.seconds,
-        }, (p) => setSave((s) => ({ ...s, progress: p }))));
+        }, (p) => setSave((s) => ({ ...s, progress: p })), partsFor(take)));
         setSave((s) => ({ ...s, clip }));
       }
       // A server that took the markers with the upload says whether it kept them.
@@ -1192,14 +1266,14 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
         setPendingMarks(null);
       } else {
         setNotice(MARKS_NOT_KEPT);
-        setPendingMarks({ label, marks: kept });
+        setPendingMarks({ label, marks: kept, at: take.startedAt || Date.now() });
       }
       setSave({ status: 'idle', progress: 0, error: null, clip: null });
       doneWithTake();
       resetMarks();
     } catch (err) {
       console.error('[Teleprompter] full-episode take not saved:', err);
-      const base = signInMessage(err) || (err?.response?.status === 413 ? `The take is too big to upload (the limit is ${UPLOAD_LIMIT_MB} MB).` : (err?.response?.data?.error || 'The take was not saved.'));
+      const base = saveError(err);
       setSave((s) => ({ ...s, clip, status: 'error', error: clip ? `It is in Files, but its beat markers are not saved yet. ${base}` : base }));
     }
   };
@@ -1237,6 +1311,9 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
     const m = o.meta || {};
     const got = await rec.restore(o);
     if (!got) { setNotice('That take could not be opened.'); return; }
+    // Its own number, and how far its upload got before (Retry sends the rest).
+    setLiveNo(Number.isInteger(m.takeNo) ? m.takeNo : takeNumberOf(m.label));
+    if (m.upload?.uploadId) uploadsRef.current[o.id] = m.upload;
     setNotice(null);
     setSavedNext(null);
     setSave({ status: 'idle', progress: 0, error: null, clip: null });
@@ -1256,6 +1333,8 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
     const o = offer;
     if (!o || !window.confirm(`Throw away the take from ${takeWhen(o.startedAt)}? It can't be brought back.`)) return;
     setOffer(null);
+    if (o.meta?.upload?.uploadId && episodeId) abortUpload(episodeId, o.meta.upload.uploadId);
+    setKeptTakes((ks) => ks.filter((k) => k.id !== o.id));
     const gone = await takeStore().remove(o.id);
     if (!gone) console.error('[Teleprompter] unsaved take not thrown away:', o.id);
   };
@@ -1516,7 +1595,7 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
             )}
             {recording && whole && takeSize >= WARN_BYTES && (
               <div className="stp-recwarn" role="alert" data-testid="stp-rec-warn">
-                <AlertTriangle size={16} aria-hidden="true" /> Nearly {UPLOAD_LIMIT_MB} MB: that is the upload limit. Stop soon so the take can be saved.
+                <AlertTriangle size={16} aria-hidden="true" /> Nearly {UPLOAD_LIMIT_TEXT}: that is the upload limit. Stop soon so the take can be saved.
               </div>
             )}
             {meterStream && <MicMeter level={level} silent={silent} />}
@@ -1559,6 +1638,11 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
               <div className="stp-progress" role="progressbar" aria-valuenow={save.progress} aria-valuemin={0} aria-valuemax={100} aria-label="Uploading the take">
                 <span style={{ width: `${save.progress}%` }} />
               </div>
+            )}
+            {save.status === 'saving' && (
+              <p className="stp-progress-note" aria-live="polite" data-testid="stp-progress-note">
+                {save.progress >= 100 ? 'Finishing…' : `Uploading the take… ${save.progress}%`}
+              </p>
             )}
             {save.status === 'error' && <p className="stp-error" role="alert"><AlertTriangle size={16} aria-hidden="true" /> {save.error}</p>}
             <div className="stp-review-actions">
