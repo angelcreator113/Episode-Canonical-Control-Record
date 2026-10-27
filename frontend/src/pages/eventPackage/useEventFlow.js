@@ -42,7 +42,7 @@ export function focusSection(anchor, keepIn = null) {
 
 export default function useEventFlow({
   showId, eventId, event, seasonContext, readiness, used, usedInEpisode, hasOrganizer, hasInvitation,
-  moneyPending, continueTo, jumpToSection, openOrganizerPicker,
+  moneyPending, continueTo, jumpToSection, openOrganizerPicker, reload = null, setToast = null,
 }) {
   const { search } = useLocation();
   const fromValue = new URLSearchParams(search).get('from');
@@ -95,6 +95,9 @@ export default function useEventFlow({
     coverage,
     gains: goalGains(coverage.data, eventId),
     release: inSlot && slot ? releaseLine(slotWhen(release.view, slot, seasonContext?.season_number ?? null)) : null,
+    // A full season's choice (FullSeasonChoice) reloads the page and says what it did.
+    reload,
+    setToast,
   };
 
   // A setup entry (or a reason's target item) jumps to where it is set:

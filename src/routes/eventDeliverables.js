@@ -53,6 +53,7 @@ const {
 } = require('../utils/deliverableFormats');
 const { findTermsWriteLock } = require('../utils/eventTermsLock');
 const { loadScopedEvent, assertTermsWritable } = require('../utils/eventScope');
+const { withDeliverableDone, DELIVERABLE_DONE_STATUS } = require('../utils/socialTaskSource');
 
 const TERMS_LOCKED_CODE = 'EVENT_TERMS_LOCKED';
 const STATUS_NOT_EDITABLE_CODE = 'DELIVERABLE_STATUS_NOT_EDITABLE';
@@ -350,6 +351,33 @@ router.delete('/world/:showId/events/:eventId/deliverables/:deliverableId', requ
 
 
 // ═══════════════════════════════════════════
+/** Ticks the episode's task for a deliverable, with the list row locked. */
+async function markDeliverableTaskDone(sequelize, { episodeId, deliverableId, transaction }) {
+  if (!episodeId) return false;
+  const [rows] = await sequelize.query(
+    'SELECT id, social_tasks FROM episode_todo_lists WHERE episode_id = :episodeId AND deleted_at IS NULL LIMIT 1 FOR UPDATE',
+    { replacements: { episodeId }, transaction }
+  );
+  const row = rows?.[0];
+  if (!row) return false;
+  let list = row.social_tasks;
+  if (typeof list === 'string') {
+    try {
+      list = JSON.parse(list || '[]');
+    } catch (err) {
+      console.error('[EventDeliverables] the episode\'s task list is not JSON, its task was left as it is:', err.message);
+      return false;
+    }
+  }
+  const next = withDeliverableDone(list, deliverableId);
+  if (!next) return false;
+  await sequelize.query(
+    'UPDATE episode_todo_lists SET social_tasks = :tasks, updated_at = NOW() WHERE id = :id',
+    { replacements: { tasks: JSON.stringify(next), id: row.id }, transaction }
+  );
+  return true;
+}
+
 // POST /api/v1/world/:showId/events/:eventId/deliverables/:deliverableId/status
 // Body: { status: 'completed' | 'submitted' | 'approved' }
 // Records fulfilment (Task #1815). Only after Start Episode; one step
@@ -409,7 +437,14 @@ router.post('/world/:showId/events/:eventId/deliverables/:deliverableId/status',
          ${RETURNING}`,
         { replacements: { to, from: deliverable.status, deliverableId, eventId }, transaction }
       );
-      if (!moved?.[0] || to !== 'approved') return { rows: moved, contentFee: null };
+      if (!moved?.[0]) return { rows: moved, contentFee: null };
+      // Submitted: the deliverable's task on the episode's list is done, in
+      // the same transaction (Evoni, 2026-10-26). This route is the only way
+      // a deliverable's task completes; the manual ticks refuse it.
+      if (to === DELIVERABLE_DONE_STATUS) {
+        await markDeliverableTaskDone(sequelize, { episodeId: deliverable.episode_id || event.used_in_episode_id, deliverableId, transaction });
+      }
+      if (to !== 'approved') return { rows: moved, contentFee: null };
       const [dealRows] = await sequelize.query(
         `SELECT id, name, deal_type, deal_components, host, host_brand, used_in_episode_id FROM world_events WHERE id = :eventId`,
         { replacements: { eventId }, transaction }

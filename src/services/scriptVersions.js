@@ -5,8 +5,9 @@
  * and Regenerate replaces the whole script"). Each writer that replaces an
  * episode's script keeps the script it replaces first: a save, a lock that
  * saves, a restore, and every writer that drafts or regenerates the script.
- * Keeping a version never stops the save: a failure is logged and the save
- * goes on.
+ * Every script writer keeps it through services/scriptSave.js, strictly (A1c
+ * R1, ruling N2): a failure to keep it fails the save. Called without
+ * `strict`, a failure is logged and the caller goes on.
  *
  * Sources: 'save' (Save on the Script tab), 'lock' (a lock that saves),
  * 'restore' (a save of a version put back from History: the script it
@@ -38,8 +39,20 @@ async function prune(EpisodeScriptVersion, episodeId, sources, keep, transaction
  * Keeps the episode's current script before a writer replaces it. Returns
  * the row, or null. With `transaction`, the version is written inside it,
  * in a savepoint, so a failure to keep it never aborts the writer's update.
+ *
+ * `strict` (A1c R1, Evoni, 2026-10-27, ruling N2: text and its history save
+ * atomically): a failure to keep the version is thrown, so the writer's
+ * whole transaction rolls back and nothing is saved. Every script writer
+ * calls this through services/scriptSave.js with strict set.
+ *
+ * Retention contract (design R4.5): only prune() deletes version rows. No
+ * stored record references a version row today, so none is protected
+ * beyond the limits; the first feature that adds a durable reference (a
+ * column, an id in JSON, an external asset record mirrored here) adds a
+ * reference provider that prune() consults, in the same PR
+ * (tests/unit/guards/scriptWriteGuard.test.js holds the allowlist).
  */
-async function snapshotScript(models, episode, { source = 'save', userId = null, next = null, transaction = null } = {}) {
+async function snapshotScript(models, episode, { source = 'save', userId = null, next = null, transaction = null, strict = false } = {}) {
   const { EpisodeScriptVersion } = models || {};
   const text = typeof episode?.script_content === 'string' ? episode.script_content : '';
   if (!EpisodeScriptVersion || !episode?.id || !text.trim()) return null;
@@ -62,6 +75,8 @@ async function snapshotScript(models, episode, { source = 'save', userId = null,
     else await prune(EpisodeScriptVersion, episode.id, { exclude: GENERATED }, KEEP, t);
     return row;
   };
+  // Strict: inside the writer's transaction, so a failure rolls it all back.
+  if (strict) return keep(transaction);
   try {
     if (!transaction) return await keep(null);
     // A savepoint: a failed insert rolls back to here, not the writer's update.

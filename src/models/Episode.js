@@ -1,5 +1,9 @@
 'use strict';
-const { DataTypes } = require('sequelize');
+const { DataTypes, Model } = require('sequelize');
+
+// Columns no default query selects and no response carries (A1b): read only
+// by a query that names them.
+const INTERNAL_ATTRIBUTES = ['script_line_keys'];
 
 /**
  * Episode Model
@@ -159,6 +163,16 @@ module.exports = (sequelize) => {
         allowNull: true,
         comment: 'Locked beat numbers, e.g. [2, 5]; whole-script writers keep these beats word for word',
       },
+      // The script's line keys (architecture A1b, migration 20261026190000;
+      // utils/lineKeys.js): { v, text_hash, lines, retired }. Internal: no
+      // default query selects it and toJSON leaves it out, so no episode
+      // response carries it. Nothing reads or writes it yet (A1c); null is
+      // an unkeyed script.
+      script_line_keys: {
+        type: DataTypes.JSONB,
+        allowNull: true,
+        comment: 'Line identity for script_content (utils/lineKeys.js); internal, never in responses',
+      },
       evaluation_json: {
         type: DataTypes.JSONB,
         allowNull: true,
@@ -262,15 +276,21 @@ module.exports = (sequelize) => {
           fields: ['deleted_at'],
         },
       ],
+      // script_line_keys is selected only when a query names it (A1b).
+      defaultScope: {
+        attributes: { exclude: INTERNAL_ATTRIBUTES },
+      },
       scopes: {
         // Exclude soft-deleted records
         active: {
+          attributes: { exclude: INTERNAL_ATTRIBUTES },
           where: {
             deleted_at: null,
           },
         },
         // Only deleted records
         deleted: {
+          attributes: { exclude: INTERNAL_ATTRIBUTES },
           where: {
             deleted_at: {
               [sequelize.Sequelize.Op.ne]: null,
@@ -284,6 +304,14 @@ module.exports = (sequelize) => {
   /**
    * Instance Methods
    */
+
+  // No response carries script_line_keys, even from an instance that loaded
+  // it (create returns every attribute).
+  Episode.prototype.toJSON = function toJSON() {
+    const values = Model.prototype.toJSON.call(this);
+    for (const name of INTERNAL_ATTRIBUTES) delete values[name];
+    return values;
+  };
 
   /**
    * Set deleted_at and, in the same transaction, sync Lala's coins: under

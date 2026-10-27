@@ -24,11 +24,14 @@ const renderTab = (props = {}) => render(
     <EpisodeScriptTab episode={{ id: 'ep-1', show_id: 'show-1', script_content: SCRIPT }} show={{ id: 'show-1' }} {...props} />
   </MemoryRouter>,
 );
+const REV = `sr1-${'a'.repeat(40)}`; // the saved script's revision (A1c R1), as GET /episodes/:id gives it
 const raw = () => screen.getByRole('textbox', { name: 'Raw script' });
 
 beforeEach(() => {
   Object.values(api).forEach((fn) => fn?.mockReset?.());
-  vi.mocked(api.get).mockResolvedValue({ data: { data: [] } });
+  vi.mocked(api.get).mockImplementation(async (url) => (url === '/api/v1/episodes/ep-1'
+    ? { data: { data: { id: 'ep-1', script_content: SCRIPT, script_locked_beats: [] }, script_revision: REV } }
+    : { data: { data: [] } }));
   vi.mocked(api.put).mockImplementation(async (_url, body) => ({ data: { success: true, data: { script_content: body.script_content } } }));
 });
 
@@ -67,7 +70,7 @@ describe('EpisodeScriptTab: saved work', () => {
     await waitFor(() => expect(onDirtyChange).toHaveBeenLastCalledWith(true));
 
     fireEvent.keyDown(window, { key: 's', ctrlKey: true });
-    await waitFor(() => expect(api.put).toHaveBeenCalledWith('/api/v1/episodes/ep-1', { script_content: next }));
+    await waitFor(() => expect(api.put).toHaveBeenCalledWith('/api/v1/episodes/ep-1', { script_content: next, script_revision: REV }));
     await waitFor(() => expect(onSaved).toHaveBeenLastCalledWith({ id: 'ep-1', script_content: next, script_locked_beats: [] }));
     await waitFor(() => expect(onDirtyChange).toHaveBeenLastCalledWith(false));
   });

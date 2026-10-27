@@ -177,4 +177,27 @@ describe('QuickEpisodeCreator edit — only the episode\'s own event (#1916)', (
     ]);
     expect(writes[1].body).toEqual({ episode_id: EPISODE_ID });
   });
+
+  test('an inject refused (no beat for the tag, or it is approved) is said, and not linked around (A1c R1, N6)', async () => {
+    mockLoad([]);
+    const refusal = 'This script has none of the beats an event tag goes in (Strategic Reaction, Reveal or an Interruption, beats 6, 5, 4 or 7). Add one of them, then attach the event, or add the tag by hand.';
+    vi.mocked(api.post).mockImplementation(async (url) => {
+      if (url === `/api/v1/world/${SHOW_ID}/events`) return { data: { event: { id: 'ev-new' } } };
+      if (url.endsWith('/inject')) throw Object.assign(new Error('409'), { response: { status: 409, data: { code: 'INJECT_NO_INTENDED_BEAT', error: refusal } } });
+      return { data: {} };
+    });
+    renderEditor();
+    await screen.findByTestId('quick-episode-event-link');
+    fireEvent.change(eventNameInput(), { target: { value: 'Fresh Soirée' } });
+    await save();
+    expect(await screen.findByText(/isn't attached to this episode/)).toBeTruthy();
+    expect(screen.getByText(/none of the beats an event tag goes in/)).toBeTruthy();
+    expect(screen.queryByText('episode page')).toBeNull();
+    // No PUT of the event around the refusal.
+    expect(eventWrites().map((w) => `${w.method} ${w.url}`)).toEqual([
+      `POST /api/v1/world/${SHOW_ID}/events`,
+      `POST /api/v1/world/${SHOW_ID}/events/ev-new/inject`,
+    ]);
+  });
 });
+

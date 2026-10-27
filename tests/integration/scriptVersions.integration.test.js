@@ -54,11 +54,13 @@ const V3 = beat(1, 'Opening Ritual', 'Lala: "Third draft"');
   });
 
   const auth = (r) => r.set('Authorization', `Bearer ${token}`);
+  // Each script write carries the revision the page read (A1c R1).
+  const rev = async () => (await auth(request(app).get(`/api/v1/episodes/${ep}`))).body.script_revision;
   const list = async () => (await auth(request(app).get(`/api/v1/episodes/${ep}/script-versions`))).body.data;
 
   test('a save keeps the script it replaces; saving the same text keeps nothing', async () => {
-    expect((await auth(request(app).put(`/api/v1/episodes/${ep}`)).send({ script_content: V2 })).status).toBe(200);
-    await auth(request(app).put(`/api/v1/episodes/${ep}`)).send({ script_content: V2 });
+    expect((await auth(request(app).put(`/api/v1/episodes/${ep}`)).send({ script_content: V2, script_revision: await rev() })).status).toBe(200);
+    await auth(request(app).put(`/api/v1/episodes/${ep}`)).send({ script_content: V2, script_revision: await rev() });
     const versions = await list();
     expect(versions).toHaveLength(1);
     expect(versions[0]).toMatchObject({ source: 'save', restore: false, beats: 1, preview: 'Lala: "First draft"' });
@@ -71,7 +73,7 @@ const V3 = beat(1, 'Opening Ritual', 'Lala: "Third draft"');
   });
 
   test('a lock that saves keeps the script it replaces', async () => {
-    const res = await auth(request(app).put(`/api/v1/episodes/${ep}/script-locks`)).send({ locked_beats: [], script_content: V3 });
+    const res = await auth(request(app).put(`/api/v1/episodes/${ep}/script-locks`)).send({ locked_beats: [], script_content: V3, script_revision: await rev() });
     expect(res.status).toBe(200);
     expect((await list()).map((v) => v.source)).toEqual(['lock', 'save']);
   });

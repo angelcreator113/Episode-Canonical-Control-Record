@@ -73,19 +73,23 @@ const mockQuery = jest.fn(async (sql, opts = {}) => {
 });
 
 const mockEpisodeUpdate = jest.fn(async () => {});
-jest.mock('../../../src/models', () => ({
-  sequelize: {
+jest.mock('../../../src/models', () => {
+  const sequelize = {
     query: (...a) => mockQuery(...a),
-    transaction: jest.fn(async (fn) => fn({ id: 'tx' })),
-  },
-  SceneSet: { findByPk: jest.fn() },
-  Episode: {
+    // LOCK not enumerable, so the transaction still reads as { id: 'tx' }.
+    transaction: jest.fn(async (fn) => fn(Object.defineProperty({ id: 'tx' }, 'LOCK', { value: { UPDATE: 'UPDATE' } }))),
+  };
+  // unscoped and sequelize: the script is saved through services/scriptSave.js (A1c R1).
+  const Episode = {
+    sequelize,
     findByPk: jest.fn(async (id) => {
       const ep = mockEpisodes[id];
       return ep ? { ...ep, script_content: '', update: mockEpisodeUpdate } : null;
     }),
-  },
-}));
+  };
+  Episode.unscoped = () => Episode;
+  return { sequelize, SceneSet: { findByPk: jest.fn() }, Episode };
+});
 jest.mock('@anthropic-ai/sdk', () => jest.fn().mockImplementation(() => ({ messages: { create: jest.fn() } })));
 jest.mock('../../../src/middleware/aiRateLimiter', () => ({ aiRateLimiter: (_req, _res, next) => next() }));
 jest.mock('../../../src/middleware/auth', () => {

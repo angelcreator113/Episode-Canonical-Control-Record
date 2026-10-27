@@ -15,9 +15,14 @@
 # What it does, in order (docs/reads/2026-10-10-deploy-path-read.md §6):
 #   plan (read-only, on the box) -> remove older deploy-* snapshots (keep the
 #   newest few) -> RDS snapshot -> wait until available ->
-#   fast-forward + vite build -> db:migrate if pending -> restart API, /health,
+#   db:migrate if pending, from a staged copy of the commit while the live
+#   tree and the API stay on the old code -> fast-forward + frontend (only
+#   after the migrate step succeeded) -> restart API, /health,
 #   restart the worker if it was online (a stopped one stays stopped) ->
 #   public health check -> job summary.
+# Migrate runs before Deploy (Evoni, 2026-10-26): no process can load models
+# the database does not match yet. Every phase gets the same TARGET_SHA, and
+# the box refuses Deploy and Restart unless Migrate succeeded for it.
 # On any failure it stops. It never rolls back by itself: the summary names
 # the snapshot and the runbook says what to do.
 #
@@ -238,6 +243,17 @@ jobs:
           echo "::error::Snapshot ${SNAP} was not available within 60 minutes. Nothing on the box was changed."
           exit 1
 
+      # Before Deploy (Evoni, 2026-10-26): runs from a staged copy of the
+      # commit; the live tree and the API stay on the old code. A failure
+      # stops the run here, and the box refuses Deploy and Restart anyway.
+      - name: Migrate (on the box, from the staged commit, if pending)
+        id: migrate
+        run: |
+          bash scripts/deploy/ssm-phase.sh migrate
+          ran="$(grep -E '^MIGRATE_RAN=[01]$' "$RUNNER_TEMP/phase-migrate.out" | head -1 | cut -d= -f2 || true)"
+          echo "ran=${ran}" >>"$GITHUB_OUTPUT"
+
+      # After Migrate, so the 15-minute link is not spent on the migration.
       - name: Fetch the runner's frontend build
         if: vars.DEPLOY_ARTIFACT_BUCKET != ''
         uses: actions/download-artifact@v4
@@ -274,14 +290,8 @@ jobs:
           echo "Uploaded the frontend pack (sha256 ${got:0:12}…) to s3://${BUCKET}/${key}."
 
       - name: Deploy (fast-forward and the frontend, on the box)
+        if: steps.migrate.outcome == 'success'
         run: bash scripts/deploy/ssm-phase.sh deploy
-
-      - name: Migrate (on the box, if pending)
-        id: migrate
-        run: |
-          bash scripts/deploy/ssm-phase.sh migrate
-          ran="$(grep -E '^MIGRATE_RAN=[01]$' "$RUNNER_TEMP/phase-migrate.out" | head -1 | cut -d= -f2 || true)"
-          echo "ran=${ran}" >>"$GITHUB_OUTPUT"
 
       - name: Restart and health check (on the box)
         id: restart

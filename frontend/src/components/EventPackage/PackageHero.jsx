@@ -35,7 +35,7 @@ function HeroTitle({ context, name, panel }) {
   if (!context.in_slot) {
     return (
       <div className="epp-hero-title" data-testid="season-context" role="group" aria-label="Season">
-        <p className="epp-hero-eyebrow">Season {context.season_number}</p>
+        <p className="epp-hero-eyebrow">Season {context.season_number}{context.in_special && context.special?.label ? ` · ${context.special.label}` : ''}</p>
         {title}
         {panel}
       </div>

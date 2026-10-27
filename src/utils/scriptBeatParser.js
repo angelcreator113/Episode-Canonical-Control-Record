@@ -233,6 +233,9 @@ function parseScript(scriptContent, options = {}) {
     // the deliverable's status.
     const deliverCues = [];
     let todoMode = null;
+    // [LEARNS: <state> [id]]: Lala learns that at this line (utils/lalaKnowledge;
+    // Evoni, 2026-10-26). Never spoken, never shown.
+    const learnsCues = [];
     const fxEvents = [];
     const sceneLoads = [];
     const dialogueLines = [];
@@ -358,6 +361,13 @@ function parseScript(scriptContent, options = {}) {
         continue;
       }
 
+      // ── LEARNS: what Lala learns at this line (My Little List) ──
+      const learnsMatch = trimmed.match(/^\[LEARNS:\s*([A-Za-z_]+)(?:\s+([^\]\s]+))?\s*\]$/i);
+      if (learnsMatch) {
+        learnsCues.push({ state: learnsMatch[1].toLowerCase(), ref: learnsMatch[2] || null, line: lineNumber });
+        continue;
+      }
+
       // ── LOCATION_HINT ──
       const locMatch = trimmed.match(/^\[LOCATION_HINT:\s*"?([^"\]]+)"?\]$/i);
       if (locMatch) {
@@ -412,6 +422,7 @@ function parseScript(scriptContent, options = {}) {
     if (wearCues.length > 0) beat.tags.wear = wearCues;
     if (deliverCues.length > 0) beat.tags.deliver = deliverCues;
     if (todoMode) beat.tags.todo_mode = todoMode;
+    if (learnsCues.length > 0) beat.tags.learns = learnsCues;
     if (fxEvents.length > 0) beat.tags.fx = fxEvents;
     if (sceneLoads.length > 0) beat.tags.scenes = sceneLoads;
     if (raw.locationHint) beat.tags.location_hint = raw.locationHint;
