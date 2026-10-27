@@ -68,6 +68,8 @@ const REASONS = Object.freeze({
   duplicate_beat: 'The script has two beats with this number, so the line cannot be found safely.',
   ambiguous_duplicate: 'The beat has identical lines and this take could be either. Pick the line.',
   moved: 'The line moved within the beat. Confirm the take is still for it.',
+  neighbours_changed: 'The lines around this one changed. Check the take still fits.',
+  moved_or_edited: 'This line was edited, or it moved and an identical line took its place. Pick the line, or withdraw the approval.',
 });
 
 const sha256 = (s) => crypto.createHash('sha256').update(String(s)).digest('hex');
@@ -189,7 +191,9 @@ const sameNeighbours = (a, b) => a.prev_hash === b.prev_hash && a.next_hash === 
 /**
  * Where a stored association stands in `contexts` (lineContexts of the
  * current script). `assoc`: a stored context (the fields above).
- * Returns { status, reason, line_index, candidates, hint_beat }.
+ * Returns { status, reason, line_index, candidates, hint_beat, ctx }: ctx is
+ * the line's context now when bound or moved. A bound line whose neighbours
+ * changed has reason 'neighbours_changed'.
  */
 function resolve(assoc, contexts) {
   const out = (status, extra = {}) => ({ status, reason: null, line_index: null, candidates: [], hint_beat: null, ...extra });
@@ -201,12 +205,22 @@ function resolve(assoc, contexts) {
   if (beat.count > 1) return out('unbound', { reason: 'duplicate_beat' });
 
   const here = beat.lines[assoc.line_index] || null;
-  if (here && here.row_hash === assoc.row_hash && sameNeighbours(here, assoc)) return out('bound', { line_index: here.line_index });
+  if (here && here.row_hash === assoc.row_hash && sameNeighbours(here, assoc)) return out('bound', { line_index: here.line_index, ctx: here });
 
   const same = beat.lines.filter((c) => c.row_hash === assoc.row_hash);
+  if (same.length === 1 && here && here === same[0]) {
+    // The same line at the same place, the only one like it in the beat: only its neighbours
+    // changed. Still bound; the changed context is for a person to review (Evoni, 2026-10-27).
+    return out('bound', { reason: 'neighbours_changed', line_index: here.line_index, ctx: here });
+  }
+  if (same.length === 1 && here && here.speaker_key === assoc.speaker_key) {
+    // Its place now holds another line by the same speaker, and an identical line is elsewhere:
+    // the line was edited (and that one is its twin) or it moved. A person decides.
+    return out('ambiguous', { reason: 'moved_or_edited', candidates: [same[0].line_index] });
+  }
   if (same.length === 1) {
-    // The only such line in the beat: moved, or its neighbours changed. A person confirms.
-    return out('moved', { reason: 'moved', line_index: same[0].line_index, candidates: [same[0].line_index] });
+    // The only such line in the beat, at another place: moved. A person confirms.
+    return out('moved', { reason: 'moved', line_index: same[0].line_index, candidates: [same[0].line_index], ctx: same[0] });
   }
   if (same.length > 1) {
     // Identical lines: only position and both neighbours bind (above); otherwise a person picks.

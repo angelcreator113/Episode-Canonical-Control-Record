@@ -25,14 +25,61 @@ const KEEP_GENERATED = 10;
 const SOURCES = new Set(['save', 'lock', 'restore', 'generate']);
 const GENERATED = ['generate'];
 
-/** Drops an episode's versions past the newest `keep` of the given sources. */
+/**
+ * Retention reference providers (design R4.5). Each names the versions of an
+ * episode that a stored record still needs; prune() never deletes them, past
+ * the limits or not. A provider returns ids (strings) and must read only its
+ * own tables. Once no record needs a version, the limits apply to it again.
+ *   voice-studio approvals: the version an approval in force, or one of its
+ *     re-confirmations, was pinned to (services/voiceStudioService.js).
+ */
+const REFERENCE_PROVIDERS = [
+  { name: 'voice-studio approvals', ids: (sequelize, episodeId, t) => require('./voiceStudioService').referencedScriptVersionIds(sequelize, episodeId, t) },
+];
+
+/** The ids of the episode's versions some stored record needs (every provider's). */
+async function referencedVersionIds(sequelize, episodeId, transaction = null) {
+  const ids = new Set();
+  for (const provider of REFERENCE_PROVIDERS) {
+    for (const id of await provider.ids(sequelize, episodeId, transaction)) ids.add(String(id));
+  }
+  return ids;
+}
+
+/** Drops an episode's versions past the newest `keep` of the given sources, except those a record needs. */
 async function prune(EpisodeScriptVersion, episodeId, sources, keep, transaction) {
   const { Op } = require('sequelize');
   const where = { episode_id: episodeId, source: sources.include ? { [Op.in]: sources.include } : { [Op.notIn]: sources.exclude } };
   const older = await EpisodeScriptVersion.findAll({
     where, order: [['created_at', 'DESC'], ['id', 'DESC']], offset: keep, attributes: ['id'], transaction,
   });
-  if (older.length) await EpisodeScriptVersion.destroy({ where: { id: older.map((o) => o.id) }, force: true, transaction });
+  if (!older.length) return;
+  const { sequelize } = EpisodeScriptVersion;
+  let needed;
+  try {
+    // In a savepoint: a provider that fails leaves the save's transaction usable.
+    needed = transaction
+      ? await sequelize.transaction({ transaction }, (sp) => referencedVersionIds(sequelize, episodeId, sp))
+      : await referencedVersionIds(sequelize, episodeId, null);
+  } catch (err) {
+    // Not knowing what is needed, nothing is dropped this time; the save goes on.
+    console.error('[ScriptVersions] references not read; no version pruned:', err.message);
+    return;
+  }
+  const drop = older.map((o) => o.id).filter((id) => !needed.has(String(id)));
+  if (drop.length) await EpisodeScriptVersion.destroy({ where: { id: drop }, force: true, transaction });
+}
+
+/**
+ * The id of the episode's newest kept version, or null when it has none: what
+ * a record pins to know the script has not been saved since (every save that
+ * changes the text keeps the text it replaces, so the newest id moves on).
+ * Ordered as snapshotScript finds the last version, with the id breaking ties.
+ */
+async function newestVersionId(sequelize, episodeId, transaction = null) {
+  const [found] = await sequelize.query(`SELECT id FROM episode_script_versions
+    WHERE episode_id = :episodeId AND deleted_at IS NULL ORDER BY created_at DESC, id DESC LIMIT 1`, { replacements: { episodeId }, transaction });
+  return found[0] ? String(found[0].id) : null;
 }
 
 /**
@@ -45,11 +92,10 @@ async function prune(EpisodeScriptVersion, episodeId, sources, keep, transaction
  * whole transaction rolls back and nothing is saved. Every script writer
  * calls this through services/scriptSave.js with strict set.
  *
- * Retention contract (design R4.5): only prune() deletes version rows. No
- * stored record references a version row today, so none is protected
- * beyond the limits; the first feature that adds a durable reference (a
- * column, an id in JSON, an external asset record mirrored here) adds a
- * reference provider that prune() consults, in the same PR
+ * Retention contract (design R4.5): only prune() deletes version rows, and
+ * it keeps every version a reference provider names (REFERENCE_PROVIDERS).
+ * A feature that adds a durable reference (a column, an id in JSON, an
+ * external asset record mirrored here) adds its provider, in the same PR
  * (tests/unit/guards/scriptWriteGuard.test.js holds the allowlist).
  */
 async function snapshotScript(models, episode, { source = 'save', userId = null, next = null, transaction = null, strict = false } = {}) {
@@ -150,4 +196,7 @@ async function isEpisodeVersion(models, episodeId, versionId, transaction = null
   return Boolean(v);
 }
 
-module.exports = { snapshotScript, listVersions, getVersion, isEpisodeVersion, summary, KEEP, KEEP_GENERATED, SOURCES };
+module.exports = {
+  snapshotScript, listVersions, getVersion, isEpisodeVersion, summary, newestVersionId, referencedVersionIds,
+  REFERENCE_PROVIDERS, KEEP, KEEP_GENERATED, SOURCES,
+};

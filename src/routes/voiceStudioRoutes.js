@@ -7,12 +7,16 @@
  * no page calls these yet.
  *
  *   GET    /:episodeId/summary                         approvals and their states, counts by beat
+ *   GET    /:episodeId/playable                        current approvals only: the one list a player or export may use
+ *   GET    /:episodeId/approvals/history               every approval, superseded, invalid and revoked included
  *   GET    /:episodeId/takes                           the takes, with their latest revision and line
  *   POST   /:episodeId/sources                         upload or recording (multipart `audio`, `kind`)
  *   POST   /:episodeId/candidates                      a take for a source { source_asset_id, label, in_ms, out_ms }
  *   POST   /:episodeId/candidates/:candidateId/revisions    trim, gain, fades { in_ms, out_ms, gain_db, fade_in_ms, fade_out_ms, normalise }
  *   POST   /:episodeId/candidates/:candidateId/associate    tie it to a line { script_revision, beat_number, line_index }
- *   POST   /:episodeId/candidates/:candidateId/approve      { candidate_revision_id, script_revision }
+ *   POST   /:episodeId/candidates/:candidateId/approve      { candidate_revision_id, script_revision, expected_approval_id }
+ *   POST   /:episodeId/approvals/:approvalId/resolve   a moved or ambiguous line confirmed { script_revision, line_index, expected_approval_id }
+ *   POST   /:episodeId/approvals/:approvalId/revoke    withdraw an approval (kept as history)
  *   DELETE /:episodeId/candidates/:candidateId         remove a take (its source stays)
  *   POST   /:episodeId/reconfirm                       { script_revision, items: [{ approval_id, context_hash }] }
  *   POST   /:episodeId/legacy-import                   bring in the old voice clips, unassociated, unapproved
@@ -80,6 +84,8 @@ const handle = (what, fn) => async (req, res) => {
 const s = () => models.sequelize;
 
 router.get('/:episodeId/summary', requireAuth, handle('summary', (req) => studio.summary(s(), { episodeId: req.params.episodeId })));
+router.get('/:episodeId/playable', requireAuth, handle('playable takes', (req) => studio.playableApprovals(s(), { episodeId: req.params.episodeId })));
+router.get('/:episodeId/approvals/history', requireAuth, handle('approval history', (req) => studio.approvalHistory(s(), { episodeId: req.params.episodeId })));
 router.get('/:episodeId/takes', requireAuth, handle('list takes', (req) => studio.listTakes(s(), { episodeId: req.params.episodeId })));
 
 router.post('/:episodeId/sources', ...admin, (req, res) => {
@@ -115,7 +121,16 @@ router.post('/:episodeId/candidates/:candidateId/associate', ...admin, handle('a
 
 router.post('/:episodeId/candidates/:candidateId/approve', ...admin, handle('approve', (req) => studio.approve(s(), {
   episodeId: req.params.episodeId, candidateId: req.params.candidateId, candidateRevisionId: req.body?.candidate_revision_id,
-  scriptRevision: req.body?.script_revision, userId: userOf(req),
+  scriptRevision: req.body?.script_revision, expectedApprovalId: req.body?.expected_approval_id, userId: userOf(req),
+})));
+
+router.post('/:episodeId/approvals/:approvalId/resolve', ...admin, handle('confirm line', (req) => studio.resolveApproval(s(), {
+  episodeId: req.params.episodeId, approvalId: req.params.approvalId, scriptRevision: req.body?.script_revision,
+  lineIndex: req.body?.line_index, expectedApprovalId: req.body?.expected_approval_id, userId: userOf(req),
+})));
+
+router.post('/:episodeId/approvals/:approvalId/revoke', ...admin, handle('withdraw approval', (req) => studio.revokeApproval(s(), {
+  episodeId: req.params.episodeId, approvalId: req.params.approvalId, userId: userOf(req),
 })));
 
 router.delete('/:episodeId/candidates/:candidateId', ...admin, handle('remove take', (req) => studio.removeCandidate(s(), {

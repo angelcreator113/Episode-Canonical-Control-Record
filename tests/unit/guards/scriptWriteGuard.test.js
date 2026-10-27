@@ -11,6 +11,7 @@
  *   3. Only the files listed here refer to the version table (design R4.5:
  *      the first durable reference to a version row adds a reference
  *      provider that pruning consults, and is added here in the same PR).
+ *      3a. Each column that stores a version id is listed with its provider.
  *   4. No R1 code writes script_line_keys.
  */
 
@@ -112,6 +113,23 @@ describe('A1c R1 static guards', () => {
     const all = [...files('src'), ...files('scripts')];
     const referring = all.filter((f) => /EpisodeScriptVersion|episode_script_versions/.test(read(f))).sort();
     expect(referring).toEqual(Object.keys(ALLOWED).sort());
+  });
+
+  test('3a. a stored reference to a version row has a reference provider that pruning consults', () => {
+    // migration with a column that holds a version id → the provider (scriptVersions.REFERENCE_PROVIDERS) keeping those versions.
+    const REFERENCES = {
+      'src/migrations/20261027200000-create-voice-studio-tables.js': 'voice-studio approvals',
+    };
+    const referencing = files('src/migrations').filter((f) => /script_version_id\b/.test(read(f))).sort();
+    expect(referencing).toEqual(Object.keys(REFERENCES).sort());
+    const { REFERENCE_PROVIDERS } = require('../../../src/services/scriptVersions');
+    expect(REFERENCE_PROVIDERS.map((p) => p.name).sort()).toEqual([...new Set(Object.values(REFERENCES))].sort());
+    const versions = code(read('src/services/scriptVersions.js'));
+    expect(versions).toMatch(/needed = [^;]*referencedVersionIds\(/s);
+    expect(versions).toMatch(/filter\(\(id\) => !needed\.has\(String\(id\)\)\)/);
+    // The one deletion of version rows is prune's, of the ids left after the filter.
+    expect(versions.match(/\.destroy\(/g)).toHaveLength(1);
+    expect(versions).toMatch(/EpisodeScriptVersion\.destroy\(\{ where: \{ id: drop \}/);
   });
 
   test('4. R1 writes no line identity: the save never names script_line_keys in an update', () => {

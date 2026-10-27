@@ -18,9 +18,15 @@
  *     exact candidate revision and association it approved
  *   line_voice_reconfirmations      a person's re-confirmation (design E1)
  *
- * An approval and a re-confirmation pin the script revision and the episode
- * row's updated_at, as text (COALESCE(updated_at::text, 'none')): the column
- * is nullable in production, and text compares the same whatever its type.
+ * An approval and a re-confirmation pin the script revision and the id of
+ * the episode's newest kept script version (Evoni, 2026-10-27: the revision
+ * is a hash of the text, so A -> B -> A has the approved revision again; every
+ * save that changes the text keeps a new version row, so the newest id moves
+ * on). NULL: the episode had no kept version yet. No foreign key: while an
+ * approval is in force services/scriptVersions.js keeps the version it names
+ * (a reference provider), and once it is superseded, invalidated or revoked
+ * the version may be pruned while the approval's own row keeps the id as
+ * history. Approval rows are never deleted.
  *
  * Every table has created_at, updated_at and deleted_at. down() refuses while
  * any of the tables has a row, so a rollback cannot drop data; empty, it drops
@@ -148,26 +154,34 @@ module.exports = {
         approved_context JSONB NOT NULL,
         ${hash('approved_context_hash')},
         ${revision('pinned_script_revision')},
-        pinned_episode_updated_at TEXT NOT NULL,
+        pinned_script_version_id UUID NULL,
         approved_by VARCHAR(255) NOT NULL,
         approved_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         superseded_at TIMESTAMPTZ NULL,
         superseded_by UUID NULL REFERENCES line_voice_approvals(id) ON DELETE RESTRICT,
         invalidated_at TIMESTAMPTZ NULL,
         invalidated_reason VARCHAR(40) NULL,
+        revoked_at TIMESTAMPTZ NULL,
+        revoked_by VARCHAR(255) NULL,
         ${TS},
-        CONSTRAINT line_voice_approval_invalid CHECK ((invalidated_at IS NULL) = (invalidated_reason IS NULL))
+        CONSTRAINT line_voice_approval_invalid CHECK ((invalidated_at IS NULL) = (invalidated_reason IS NULL)),
+        CONSTRAINT line_voice_approval_revoked CHECK ((revoked_at IS NULL) = (revoked_by IS NULL))
       )`);
-      // At most one current approval per line (a racing second approval gets a unique violation, a 409).
-      await q(`CREATE UNIQUE INDEX line_voice_approvals_current ON line_voice_approvals (episode_id, beat_number, line_index)
-        WHERE superseded_at IS NULL AND invalidated_at IS NULL AND deleted_at IS NULL`);
+      // In force: not superseded, invalidated, revoked or deleted. At most one in force per line, the
+      // line being (beat, index) in the script it was approved against; occurrence is not part of it
+      // (within one script the index already tells identical lines apart). A racing second approval
+      // gets a unique violation, a 409.
+      const IN_FORCE = 'superseded_at IS NULL AND invalidated_at IS NULL AND revoked_at IS NULL AND deleted_at IS NULL';
+      await q(`CREATE UNIQUE INDEX line_voice_approvals_current ON line_voice_approvals (episode_id, beat_number, line_index) WHERE ${IN_FORCE}`);
+      // At most one in force per take.
+      await q(`CREATE UNIQUE INDEX line_voice_approvals_current_take ON line_voice_approvals (candidate_id) WHERE ${IN_FORCE}`);
       await q('CREATE INDEX line_voice_approvals_candidate ON line_voice_approvals (candidate_id)');
 
       await q(`CREATE TABLE line_voice_reconfirmations (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         approval_id UUID NOT NULL REFERENCES line_voice_approvals(id) ON DELETE RESTRICT,
         ${revision('pinned_script_revision')},
-        pinned_episode_updated_at TEXT NOT NULL,
+        pinned_script_version_id UUID NULL,
         ${hash('context_hash')},
         confirmed_by VARCHAR(255) NOT NULL,
         confirmed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),

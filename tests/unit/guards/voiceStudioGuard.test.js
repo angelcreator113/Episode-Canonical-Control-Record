@@ -4,8 +4,9 @@
  * Voice Studio B1 (design R5.5 B1-12): the boundaries held in the code.
  * - Only the migration, the service, its routes and tests name the new tables.
  * - Sources and candidate revisions are never updated in place (immutable);
- *   an association only gets superseded, an approval only superseded or
- *   invalidated.
+ *   an association only gets superseded, an approval only superseded,
+ *   invalidated or revoked (history is kept).
+ * - Only a current approval is playable.
  * - The service never writes the script or the legacy voice clips, and the
  *   A1c script save names no Voice Studio table.
  */
@@ -37,7 +38,7 @@ describe('Voice Studio boundaries', () => {
     ].sort());
   });
 
-  test('sources and candidate revisions are never updated; associations and approvals only superseded or invalidated', () => {
+  test('sources and candidate revisions are never updated; associations only superseded; approvals only superseded, invalidated or revoked', () => {
     const code = read(SERVICE);
     expect(code).not.toMatch(/UPDATE\s+voice_source_assets/i);
     expect(code).not.toMatch(/UPDATE\s+line_voice_candidate_revisions/i);
@@ -46,7 +47,7 @@ describe('Voice Studio boundaries', () => {
       expect(m[1]).toMatch(/^(superseded_at = NOW\(\), updated_at = NOW\(\)|superseded_by = :to)$/);
     }
     for (const m of code.matchAll(/UPDATE\s+line_voice_approvals\s+SET\s+([^`]*?)\s+WHERE/gi)) {
-      expect(m[1]).toMatch(/^(superseded_at = NOW\(\), updated_at = NOW\(\)|superseded_by = :to|invalidated_at = NOW\(\), invalidated_reason = :reason, updated_at = NOW\(\))$/);
+      expect(m[1]).toMatch(/^(superseded_at = NOW\(\), updated_at = NOW\(\)|superseded_at = NOW\(\), superseded_by = :byId, updated_at = NOW\(\)|invalidated_at = NOW\(\), invalidated_reason = :reason, updated_at = NOW\(\)|revoked_at = NOW\(\), revoked_by = :userId, updated_at = NOW\(\))$/);
     }
     // A take is removed by a soft delete only.
     expect(code).toMatch(/UPDATE line_voice_candidates SET deleted_at = NOW\(\), updated_at = NOW\(\) WHERE id = :candidateId/);
@@ -64,5 +65,15 @@ describe('Voice Studio boundaries', () => {
     for (const f of ['src/services/scriptSave.js', 'src/services/scriptVersions.js', 'src/services/scriptVoiceClipsService.js', 'src/routes/scriptVoiceClipRoutes.js']) {
       expect(TABLES.test(read(f))).toBe(false);
     }
+    // The save never reaches Voice Studio; the version pruning reaches it only through its reference provider.
+    expect(read('src/services/scriptSave.js')).not.toMatch(/voiceStudio/);
+    const versions = read('src/services/scriptVersions.js');
+    expect(versions.match(/require\(['"][^'"]*voiceStudio/g)).toHaveLength(1);
+    expect(versions).toMatch(/require\('\.\/voiceStudioService'\)\.referencedScriptVersionIds\(/);
+  });
+
+  test('only a current approval is playable', () => {
+    const { STATES, isPlayable } = require('../../../src/services/voiceStudioService');
+    expect(STATES.filter(isPlayable)).toEqual(['current']);
   });
 });
