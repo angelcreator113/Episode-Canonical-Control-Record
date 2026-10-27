@@ -24,6 +24,145 @@ Where they conflict, the order they set applies: rulings, spec Rev 5 and review 
 
 ---
 
+# Revision 3 (Evoni's Q15–Q18 direction, and the approval model checked, 2026-10-27)
+
+**Where Revision 3 disagrees with Revision 2 or the body, Revision 3 wins.**
+
+## R3.0 Decisions recorded (Evoni, 2026-10-27, proposed direction)
+
+**Q15:**
+- Prefer approval verification through script history, **without modifying A1c R1's centralised save path**.
+- Missing or pruned history must **never silently count as proof**.
+- Evaluate whether durable approval-validity evidence is needed to avoid keeping script versions forever.
+
+**Q16:**
+- The dedicated render process should eventually be managed by a **reviewed deployment mechanism**, with explicit start and stop, health, resource limits and failure recovery.
+- Do not modify the Deploy workflow or start a worker yet.
+
+**Q17:**
+- The scene set's **source duration** and the episode's **timeline clip duration** are separate.
+- Trimming a clip in the new editor never changes a reusable scene's duration.
+
+**Q18:**
+- **One live editable timeline per episode, with named saved versions.**
+- Future approved or frozen versions are immutable and independently renderable.
+
+## R3.1 Q15 finding: script history alone cannot prove an approval stayed valid
+
+I checked R2.1's history walk against the code (VERIFIED, `src/services/scriptVersions.js` at `08b70d28`). It is **not sound on its own**, for three reasons.
+
+**1. Versions are pruned on every save.**
+- `snapshotScript` keeps the newest **50** `save` / `lock` / `restore` versions and the newest **10** `generate` versions per episode (`KEEP`, `KEEP_GENERATED`, `prune`), deleting older ones with `force: true`.
+- An episode edited many times after an approval loses the history its walk needs.
+- Under "missing history never counts as proof", every such approval would then fail closed, so approvals would lapse just from ordinary editing.
+
+**2. Some script states are never recorded.** `snapshotScript` keeps the script being **replaced**, and returns without a version when:
+- that script is empty (`!text.trim()`);
+- the next text is the same;
+- the latest version already has that text.
+
+So **an empty script in between is invisible**:
+- A → (cleared) → A leaves versions `[A]` and current `A`.
+- A walk sees A, A and would call the approval valid, though the line was absent in between.
+
+The same holds for any state that is replaced by a save the history doesn't distinguish. **A complete chain can't be proved from versions alone.**
+
+**3. Versions don't store the revision that replaced them.** There is no `next_revision` on a version row, so gaps can't even be detected.
+
+**Conclusion:** durable approval-validity evidence **is needed**. Keeping versions forever (a retention provider that blocks `prune`) still doesn't close gap 2, and it grows storage without bound. That option is rejected.
+
+**Options for that evidence:**
+
+| | Option | Changes the A1c R1 save path? | Guess-free? | Burden on Evoni |
+|---|---|---|---|---|
+| E1 | **Revision-pinned approval.** An approval is valid only at the exact script revision it was approved or re-confirmed at. Any later script revision puts it in **needs re-confirm**. Re-confirm is a person's action, one tap per line or "re-confirm unchanged lines in this beat", shown beside the approved line context. Each re-confirmation is a stored row (approval, revision, by, at) | **No** | Yes: a person attests every revision that counts | High: after every script Save, approvals need re-confirming before a review-ready preview or Teleprompter playback |
+| E2 | **Script revision log.** `scriptSave` writes one small row per save **in the same transaction**: `episode_id, revision, prev_revision, saved_at, source`, plus a compact **line-context index** (for each counted line: beat, position, row hash). The log is never pruned while an approval depends on it, and it's tiny compared with versions. Validity walks the log from the approval's revision to now. The chain is provable (`prev_revision` links), and every state, empty ones included, is recorded | **Yes, additively**: one insert in R1's transaction. No voice table is touched, so A1c R4.8 holds | Yes | Low: re-confirm only when a line actually changed and changed back |
+| E3 | After-commit notifier (like the identity-plan log) | Yes, outside the transaction | **No**: a lost notification leaves a gap | — rejected |
+
+**Recommendation:** start the first release with **E1**. It keeps your Q15 constraint (no R1 change) and is guess-free. Plan **E2** as its own reviewed change, to bring in when the re-confirm burden shows in practice.
+- E1 can move to E2 without data loss. E1's re-confirmation rows stay as evidence, and E2 only adds automatic evidence from the log.
+- This is DECISION **Q19**.
+
+**Retention (A1c R4.5):**
+- E1 references **no version rows**. Approvals store the revision hash and the line context, not version ids, so `prune` is unaffected and versions aren't kept longer.
+- E2's log is a new durable record with its own retention, decided in its PR.
+
+## R3.2 The approval model, checked case by case (under E1)
+
+The conditions an approval is **valid** under:
+1. Its candidate revision is the candidate's latest.
+2. The current script revision equals the approval's revision, or a stored re-confirmation for the current revision exists.
+3. The line is **bound** in the current script with the approved structured line context (R2.6).
+
+Anything else is **not valid**: the line plays silent, previews mark it, and review-ready previews refuse.
+
+| Case | What happens | Silent reactivation possible? |
+|---|---|---|
+| **Version pruning** (51st save) | Nothing changes. E1 never reads versions | No |
+| **Script restored** to the approved wording (A → B → restore A) | The restore is a new save, so a new revision. The approval is "needs re-confirm" at the new revision even though the line reads A | **No.** Only a person's re-confirmation, stored, makes it valid again |
+| **A → cleared → A** | The two saves give two new revisions; the approval needs re-confirm | No |
+| **Duplicate dialogue** (two identical lines, one deleted) | Binding needs position **and** both neighbours (R2.6). If the surviving copy's context differs, the take is **ambiguous**: a person picks the line. Re-confirm is only offered once bound | No |
+| **Speaker or delivery note changed** | The row hash changes, so it's unbound. Re-confirm isn't offered; only a fresh approval after reassigning | No |
+| **Re-trim or re-gain after approval** | A new candidate revision, so condition 1 fails; it needs a new approval | No |
+| **Concurrent script save and approve** | Approve runs in one transaction that takes `SELECT … FOR SHARE` on the episode row and checks the sent revision equals the row's. `scriptSave` holds `FOR UPDATE` (`scriptSave.js:104`), so the two serialise. If a save lands first, the approve gets 409 `SCRIPT_CHANGED` and nothing is written | No |
+| **Two approvals for one line at once** | The partial unique index on the current approval per line lets one win; the other gets 409 | No |
+| **Approve while a re-trim is being saved** | Both lock the candidate row (`FOR UPDATE`); the approve checks the candidate revision is latest under the lock | No |
+| **Re-confirm sent from an old page** | Re-confirm carries the revision it was shown for; it is refused unless that revision is current | No |
+| **Bulk "re-confirm unchanged lines in this beat"** | Only lines bound with an identical approved context are listed, and each is stored separately. A person presses it | No (an explicit action, recorded) |
+
+## R3.3 Q16: render process management (recorded, not built)
+
+**Requirements for D1's eventual deployment mechanism (a reviewed change, separately authorised):**
+- explicit start and stop;
+- a health endpoint or heartbeat check reported in the Deploy summary;
+- the resource limits of R2.4;
+- recovery: the stale-heartbeat → `failed` rule, and no automatic resume or retry;
+- it never restarts `episode-worker`, and leaves stopped things stopped, as the Deploy workflow already does.
+
+**Until then:** D1 can be built and tested locally, but nothing starts it in production.
+
+## R3.4 Q17: source duration vs timeline clip duration
+
+**Where durations live today (VERIFIED):**
+- **The reusable source:** `scene_angles.video_duration` (the scene set's angle clip, shared by episodes).
+- **Per episode:** `scenes.duration_seconds`, which the legacy Timeline Editor writes and the current export reads.
+
+**The new editor, per Q17 and Q5:**
+- It writes **neither**. Each beat's scene clip is an episode-specific timeline item with its own `source_in_s`, `source_out_s` and `duration_ms`, in the episode's edit rows.
+- The scene set's angle is only a source reference.
+- The legacy editor keeps `scenes.duration_seconds` to itself.
+
+This **reverses R2.5's recommendation** (scene timing on `scenes`). R2.5's `episode_scene_edits` becomes the scene track's item table, with the duration in it, not only the in and out points.
+
+**Consequence:** the two editors can show different scene lengths for one episode. The new editor shows a notice ("this episode has a legacy timeline; its lengths are not used here"). "Adopt into Edit" copies lengths once, after a dry run (review D2).
+
+## R3.5 Q18: one live timeline, named versions, frozen versions
+
+**The live edit:**
+- One per episode: the episode's edit rows (C1 `timeline_items`, C3 segments, the scene items, `timeline_audio_items`).
+- Saves are optimistic: an `edit_revision` token, the same pattern as A1c R1's script revision. A stale save is refused, never merged silently.
+
+**Named versions:**
+- `edit_versions`: `id, episode_id, name, created_by, created_at`, plus an **immutable snapshot** (a JSON document of every edit row, the edit revision, and the script revision it was made at).
+- **Restore** writes the snapshot back as a new live edit revision. It never edits a version.
+- A version is renderable as a **working preview** directly from its snapshot.
+
+**Frozen (approved) versions:**
+- These are the manifest (A10): `approved_production_manifests`, immutable and content-addressed media, never deleted (review R3.2, R3.3).
+- A review-ready preview or a final export renders from a frozen snapshot or manifest, never from the live edit. That makes it reproducible however the live edit changes.
+
+## R3.6 Design questions still open
+
+**Needed before the first playable MP4:**
+- **Q19:** E1 now (no R1 change, a person re-confirms after script edits), with E2 as a later reviewed change? Or E2 first (one additive insert in R1's save transaction, automatic and provable)?
+- **Q-F1 / Q-F2** (already open): the Prime fallback's home, and whether a missing Prime stretch blocks a review-ready preview or only warns. Until decided, missing footage blocks review-ready (R2.3).
+
+**Can wait:**
+- **Q-E1:** export aspect for non-16:9 platforms.
+- **Q20:** may D1's render process later be started by the Deploy workflow (a reviewed change), or only by you by hand?
+
+---
+
 # Revision 2 (Evoni's direction and six requirements, 2026-10-27)
 
 **Where Revision 2 disagrees with the body below, Revision 2 wins.** The body is kept as written.
