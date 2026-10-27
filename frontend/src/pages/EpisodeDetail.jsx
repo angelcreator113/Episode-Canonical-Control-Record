@@ -1120,7 +1120,10 @@ const EpisodeDetail = () => {
           <EpisodeScriptTab
             key={episode.id}
             episode={episode}
-            show={episode.show || show}
+            // The episode's show, as the Overview gets it; the tab reads
+            // episode.show_id when there is none. (`|| show` named a variable
+            // that does not exist here, so an episode without its show threw.)
+            show={episode.show}
             onSaved={handleScriptSaved}
             onDirtyChange={handleScriptDirty}
           />
