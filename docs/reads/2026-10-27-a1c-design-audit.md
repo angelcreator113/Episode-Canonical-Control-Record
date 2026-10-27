@@ -1,13 +1,15 @@
-# A1c design and dependency audit (read), revision 2
+# A1c design and dependency audit (read), revision 3
 
-**Status:** design only. Nothing is implemented. A1c needs Evoni's approval of this revised plan, and of each PR in §9, before any code.
+**Status:** design only. Nothing is implemented. A1c needs Evoni's approval of this plan, and of each release in §12, before any code.
 
-**Revision 2 (2026-10-27)** records Evoni's rulings on D1–D11 and her seven additional requirements:
-- **Approved as recommended:** D1 (structure kept), D2, D3, D5, D6, D7, D8, D9, D10.
-- **Modified:**
-  - **D4:** deterministic hints and exact matches only. Uncertain matches are never kept on the strength of which screen saved them. The confidence and review policy is §3.
-  - **D11:** ordinary retention stays, but anything a durable production reference names is kept (§6).
-- **Superseded:** revision 1's §2–§9. §0 (the post-deploy checks) and §1 (the code audit) still stand, unchanged in substance.
+**History:**
+- **Revision 1:** the code audit and the first design.
+- **Revision 2:** Evoni's rulings on D1–D11 and her seven requirements.
+- **Revision 3 (this one):**
+  - her rulings on N1–N6 (N1 with a clarification; N5 conditional; N6 modified);
+  - answers to her three technical questions: hints §6, stale saves §7, restore collisions §5;
+  - the release-boundary assessment, §12.
+  - It replaces revision 2. Where they differ, revision 3 wins.
 
 **Measured at:** `main` `2899dbc9`, in production since Deploy #170.
 
@@ -16,127 +18,103 @@
 - `docs/GAMEPLAY_DIRECTOR_SPEC.md` Rev 5 (GD);
 - `docs/STAGE_PIP_VOICE_PLAN.md` (SPV);
 - `src/utils/lineKeys.js` (LK);
-- three read-only code audits.
+- read-only code audits.
 
 ---
 
-## 0. Post-deploy verification (Deploy #170)
+## 0. Rulings in force
 
-This session has no database or box access. "Evidence" is from the deploy's own on-box output and the code it ran.
+| Ruling | Content |
+|---|---|
+| D1 | Keep the real script structure. Never invent beat headers or rewrite a script from the 14-beat display. Identity uses LK's beats, so a headerless script has `b:null` |
+| D2 | Every writer obeys the same identity rules |
+| D3 | An existing mismatch needs an explicit dry run, then an approved repair |
+| D4 + N1 | Verified editor hints keep identity, even through wording changes. Exact, unambiguous matches keep it automatically. Repeated identical lines keep theirs only when the mapping cannot swap identities silently. Similarity alone never establishes identity |
+| D5 | Restore reads its text from the saved version on the server, never from the browser |
+| D6 | Optimistic concurrency: an actionable conflict, and never an overwrite of newer changes |
+| D7 | `line_identity` exposes consistent active identities; retired history stays internal |
+| D8 | Repair is admin-only, one episode at a time; the report is read-only |
+| D9 + N6 | Event injection keeps its intended beat and narrative position, and never edits a locked beat. If its position is blocked, it refuses and names the beat. It never moves its tag to the top or into another beat |
+| D10 | The writer integrity bugs are fixed in A1c-1 |
+| D11 + N5 | Ordinary retention limits stay. A durably referenced version is never pruned. The contract is defined now, with no speculative database structure and no claim to protect references the system can't yet identify |
+| N2 | Text, keys and the required version history save atomically; a failed history write fails the save |
+| N3 | If the script changed during an AI generation, the draft comes back unsaved with a conflict explanation |
+| N4 | A lock-only Approve on an unkeyed episode keys it in the same transaction, with no text change |
 
-| # | Check | Evidence | Still to do (Evoni, read-only) |
-|---|---|---|---|
-| 1 | Both `script_line_keys` columns are nullable JSONB | Migration `20261026190000` adds both as `{ type: JSONB, allowNull: true }` (L74, L77), and its guard refuses any other existing definition. The log shows `migrated (0.041s)` and `db:migrate exit 0` | `SELECT table_name, data_type, is_nullable FROM information_schema.columns WHERE column_name='script_line_keys';` should return 2 rows, `jsonb` / `YES` |
-| 2 | The A1b migration is in `SequelizeMeta` | The ledger read `1 pending of 390` before the migration and `OK: 0 pending of 390` after it. Deploy and Restart each re-read it: 0 pending | `SELECT name FROM "SequelizeMeta" WHERE name LIKE '20261026190000%';` should return 1 row |
-| 3 | The staging directory and success record were removed | `phase_restart` removes the record, then the stage, then prints `RESTART_OK=1`. The log has `RESTART_OK=1` and no "is in use" or "next migrate phase removes it" line | On the box: `ls -la ~/.episode-stage ~/.episode-deploy-migrated` should show the directory empty or absent, and no record file |
-| 4 | Episode creation and script-version saving | **Not tested after the deploy.** No session test touched production. The deploy checks only `/health` | Needs Evoni's approval: one test episode and one Script tab save, then check that a version row appears |
+Evoni's requirements 1–7 (revision 2) still apply in full. §0 of revision 2 (the post-deploy checks) and §1 (the code audit) are unchanged and not repeated here, except for the facts each section below relies on.
 
-## 1. Every path that writes an episode script
+---
 
-### 1.1 Server writers
+## 1. Identity states (unchanged from revision 2)
 
-These ten are the only places `episodes.script_content` is written:
-
-| # | Writer (stable name) | Route / caller | Text source | Transaction / row lock | Lock-keeping, overwrite guard | Version source |
-|---|---|---|---|---|---|---|
-| W1 | `episodeController.updateEpisode` (L492–607) | `PUT /episodes/:id` (Script tab Save, Raw editor, Import, Restore, QuickEpisodeCreator skeleton) | client, whole text | yes, `FOR UPDATE` | `scriptKeepingLocks(keepExtras)`, no guard | `save`, or `restore` when `restored_from` is a known version |
-| W2 | `episodeController.updateScriptLocks` (L702–755) | `PUT /episodes/:id/script-locks` (Approve/Unlock) | client, optional | yes, `FOR UPDATE` | `keepLockedBeats` | `lock`, then `captureOnLock` in the background |
-| W3 | `episodeScriptWriterService.generateEpisodeScript` (L1202–1212) | `POST /episode-scripts/:episodeId/generate` | AI | **no** | guard only before the AI call; locks kept | `generate`. **Failure swallowed** |
-| W4 | `episodeScriptWriterRoutes` lock (L158–168) | `POST /episode-scripts/:scriptId/lock` | the `episode_scripts.script_text` row, which the client can edit | **no** | **no guard**; locks kept | `generate`. **Failure swallowed** |
-| W5 | `worldEvents/inject` (L48, L106–112) | `POST /world/:show/events/:ev/inject` | server merge of `[EVENT:]` / `[LOCATION_HINT:]` tags | transaction, but the episode is read **outside** it, unlocked | **edits locked beats**; no guard by design | `generate` |
-| W6 | `worldEvents/episodeGenerate` (L96–103) | `POST …/generate-episode` with `draft_script` | template | **no** | skips if a script exists; locks kept | `generate` |
-| W7 | `worldEvents/scriptAndBulk` (L61–108) | `POST …/generate-script` | template | **no** | guard 409; locks kept | `generate`. Returns the raw skeleton |
-| W8 | `worldEvents/episodeBatch` (L124–129) | `POST …/generate-episode-from-many` with `draft_script` | template | **no** | skip guard; locks kept | `generate` |
-| W9 | `episodes.js` generate-beats (L1374–1487) | `POST /episodes/:id/generate-beats` (no frontend caller) | template | **no** | **no overwrite guard**; locks kept | `generate` |
-| W10 | `episodeBriefRoutes` generate-script (L606–703) | `POST /episode-brief/:id/generate-script` | AI | yes, re-read under `FOR UPDATE` | guard 409, locks re-applied under the lock | `generate` |
-
-None of these write the script: any other `Episode.create`, the seed `bulkCreate`s, raw SQL, `scriptParse`, `world`, `evaluation`, the workers and queues, regenerate-beat and rewrite-line.
-
-**Facts that shape the design:**
-- Every writer loads the episode without its keys (default scope).
-- Nine of ten change the text after it arrives: lock-keeping puts beats back, renumbers extras to 15+, and re-joins with `\n\n`.
-- Six have no transaction or row lock, and W5 reads unlocked.
-- Restore trusts the browser's text.
-- `snapshotScript` copies text and locks but never keys. It swallows its own failures, de-duplicates against the newest version, and hard-deletes beyond 50/10.
-
-### 1.2 Frontend
-
-Only two calls send editor text, both in `EpisodeScriptTab`:
-- `handleSave` → W1;
-- `handleApprove` → W2.
-
-Both send the **whole** text, with no hints and no version or hash. Every edit (line edit, delete, add, move, beat move, regenerate-beat accept, phone-path fix, Raw editor, Import, Restore) changes local text only.
-
-`useLineIds` / `nextLineIds` / `lineOpRef` already track per-line ids within a beat, but seeded per session as `line-N`. Three edits record no operation: beat move, regenerate-beat accept, phone-path fixes.
-
-There is no server autosave. Every write is last-write-wins, and a save from another tab goes undetected.
-
-### 1.3 Consumers that name lines by position (depend on A1c; not changed by it)
-
-| Consumer | Identifier | Risk today |
+| State | Stored record | Readers |
 |---|---|---|
-| `script_voice_clips` (unique `episode_id, beat_number, line_index`) | teleprompter index, spoken lines only | Inserting a line above makes a clip point at the wrong line, and recording the new line **soft-deletes the moved line's clip**. Renumbering a beat orphans its clips |
-| `todo/at`, `dealChecklistService`, `scriptWear`, `scriptTodo` | request-time beat and line index | stale positions give the wrong "as of" state |
-| My Little List / `lalaKnowledge` | `{beat,line}` recomputed per read | positions a client cached go stale |
-| `characterVoice.captureOnLock` | content pairing; its AI baseline is a version row | a pruned baseline is lost |
-| `scriptPostDrafts` | `${beat}|${text}` | an edit or renumber makes a duplicate draft |
+| **No identity yet** (`unkeyed`) | `null`: every episode today | `{ status:'unkeyed' }` |
+| **Valid** (`ok`) | describes the stored text exactly | `{ status:'ok', lines:[{k,b,h}] }`, active lines only |
+| **Inconsistent** (`mismatch`) | doesn't describe the stored text | `{ status:'mismatch', reason }`; reading never repairs it |
+| **Historical version** | a version row's record, or `null` before A1c | Restore only, checked against the version's own text |
 
-**Three line counts exist:**
-- LK: every non-blank, non-header line. A headerless script gets `b:null`.
-- `scriptWear` / `lalaKnowledge`: the same per beat, but a headerless script becomes 14 beats.
-- The teleprompter: spoken lines only.
-
-**Identity uses LK's count only.** Under D1, the 14-beat display never becomes stored structure, and no header is ever invented or written.
+The state is computed only by `checkLineKeys(storedText, storedKeys)`, and no read path writes (requirement 5).
 
 ---
 
-## 2. The four identity states
+## 2. Confidence policy (N1 as ruled)
 
-An episode's state is read **only** by checking the stored record against the stored text: `checkLineKeys(storedText, storedKeys)`. Nothing on a read path changes it (requirement 5).
+Each line of the text being saved gets one outcome. Rules are applied in this order.
 
-| State | Stored `script_line_keys` | Meaning | Readers (`GET`) |
-|---|---|---|---|
-| **No identity yet** (`unkeyed`) | `null` | Every episode written before A1c. Nothing is wrong; it was never keyed | `line_identity: { status: 'unkeyed' }`, no lines. Consumers keep today's behaviour |
-| **Valid** (`ok`) | a record whose `text_hash`, line count and every line's beat and hash describe the stored text | The keys can be trusted | `line_identity: { status: 'ok', lines: [{ k, b, h }] }`, active lines only; `retired` stays internal (D7) |
-| **Inconsistent** (`mismatch`) | a record that does not describe the stored text: the reason is `version`, `text_hash`, `line_count` or `line` | Something changed the text, or the rules, without the keys | `line_identity: { status: 'mismatch', reason }`, no lines. The page says "Line identities need checking", and reading it repairs nothing |
-| **A historical version** | a version row's `script_line_keys`, which is null for versions saved before A1c | The identities the script had when that version was replaced | used only by Restore (§4.4), checked against the version's **own** text |
+### 2.1 Identity is kept
 
-The first save after A1c is the safe way out of **No identity yet** (requirement 6). The only way out of **Inconsistent** is an admin repair (D3, D8).
+1. **Verified editor hint.** The line carries a key that is live in the stored record and used by no other line in the request. The request's `script_revision` must match the stored one (§7), which proves the hint was made against this record. A verified hint keeps identity **whatever the wording change**.
+   - The server's own writers give deterministic hints for lines they carry over byte for byte: lock-keeping (§5, §6.4), inject (§4.3) and restore provenance (§5).
+2. **Exact and unique.** Among the lines still unmatched, the normalised text appears exactly once in the stored record and exactly once in the new text. Its key is kept, whether the line stays in its beat or moves to another one. A unique text cannot be swapped, so this is never ambiguous.
+3. **Exact repeated group, order-preserving.** A text appears more than once. Its occurrences keep their keys, paired in order, **only if both** hold:
+   - (a) the group has the same number of occurrences before and after;
+   - (b) the order of the group's occurrences relative to every other exactly-matched line in the script is unchanged: the old-to-new mapping of all exact matches is monotonic across the group.
+
+   When (b) fails, some line moved past an occurrence. The occurrence that moved can't be told apart from the one that stayed, so pairing them would be guesswork.
+   - Example: `[Yes.(K1), Hello, Yes.(K3)]` → `[Yes., Yes., Hello]` fails (b), so the whole group is uncertain.
+
+### 2.2 Uncertain: identity is not kept automatically
+
+4. **Similar but not identical** text without a hint, at any similarity. This is a *suggestion* for review only (N1: similarity never establishes identity).
+5. **A repeated group failing 3(a) or 3(b).**
+6. **A refused hint:** unknown, retired, used twice, or sent without a matching `script_revision`. The line is treated as having no hint, and the refusal is reported.
+
+Uncertain lines get **new keys**, and the candidates' old keys retire, unless a person confirms the pairing (§6.3). The rule doesn't depend on which screen or writer saved the text.
+
+### 2.3 New and removed
+
+7. **New:** a line with no kept identity gets a newly minted key. It is checked against live keys, retired keys and every remaining version's keys, so it is never one used before.
+8. **Removed:** a stored key with no pairing retires, with `retired_in` set to the version row this save creates. The retired list only grows.
+
+### 2.4 A1a change (inside A1c)
+
+LK's `matchLines` currently does three things A1c can't accept:
+- it **takes** edited pairs (word similarity ≥ 0.5);
+- it pairs repeated lines by longest common run whatever their counts;
+- that run's tie-break order is arbitrary.
+
+A1c adds a strict mode, used by the save service everywhere:
+- edited pairs are returned as suggestions only;
+- repeated groups follow rule 3.
+
+A1a's existing default and its tests stay as they are.
 
 ---
 
-## 3. Confidence and review policy (D4, modified)
+## 3. Atomic saves (N2)
 
-Every line of the text being saved gets exactly one outcome.
+Every script write is one transaction:
+1. lock the row and read text, locks, keys and revision;
+2. check `script_revision` (§7);
+3. check the state (§1);
+4. keep locked beats, recording each line's provenance;
+5. assign identities (§2, §5);
+6. check the invariants (§5.4);
+7. write the version row: the replaced text with its own keys;
+8. write the text, keys and locks in one update.
 
-### 3.1 Certain: identity kept, no review
-
-1. **Editor hint.** The line carries a key that is live in the stored record and not used by another line in the same request. The request's `base_text_hash` must equal the stored text's hash (D6), so the hint refers to the record it was made from.
-   - A server writer that builds the text itself (inject, lock-keeping) gives its own deterministic hints for the lines it carries over unchanged.
-2. **Exact and unique.** The line's normalised text appears exactly once among the stored lines still unmatched, and exactly once among the new lines still unmatched, in the same beat or across beats. In the same beat it is "kept"; in another beat it is "moved".
-3. **Exact repeated group, same count.** A text appears *n* times in a beat before and *n* times after, in the same relative order: the copies are paired in order.
-
-### 3.2 Uncertain: never kept without an explicit confirmation
-
-Uncertain lines get a **new** key, and the old key retires, unless a person explicitly confirms the pairing. Uncertain cases:
-
-4. **Edited in place.** A line with no hint whose words are similar to a removed line, by LK's word similarity (≥ 0.5 today).
-5. **Repeated group whose count changed.** A text appears 3 times before and 2 after: which copy went is ambiguous, so every copy in the group is uncertain.
-6. **A refused hint:** the key is unknown, retired, used twice, or sent with a stale base. The line is treated as having no hint, and the refusal is reported.
-
-### 3.3 New and removed
-
-7. **New.** A line with no certain pairing gets a newly minted key, checked against live, retired and every remaining version's keys. It is never one used before.
-8. **Removed.** A stored key with no pairing retires, with `retired_in` set to the version row this save creates. The retired list only grows.
-
-### 3.4 Review, and how it phases in
-
-- **The server never decides from the screen that saved the text.** The same rules apply to Save, Generate, Inject, Approve and Restore. Only the *confirmation* differs, and only a person can give it.
-- **Until A1c-4 ships,** no client can confirm, so uncertain lines always get new keys. Every response and log line lists them: `report.uncertain: [{ new_line, candidate_old_key, reason }]`.
-- **From A1c-4,** the Script tab sends `identity_review: 'ask'`. If any line is uncertain, the save is **not** applied. The server answers `409 LINE_IDENTITY_REVIEW` with the candidate pairs. The screen asks, per line, "same line, edited" or "new line" (with "all new" as a shortcut). It re-sends with the confirmed pairs as hints (rule 1).
-  - Clients that send no `identity_review` keep the default of new keys.
-  - Server writers (generate, inject, templates) have no person to ask, so their uncertain lines always get new keys, and the report lists them.
-- **A1a change inside A1c-1.** LK's `matchLines` applies step 2 ("edited") itself, and pairs repeated lines by longest common run whatever their counts. A1c adds a strict option: edited pairs are **suggested**, not taken, and a repeated group is certain only when its count is unchanged. A1a's existing tests keep the current default. The save service always uses the strict option.
+**Any failure rolls back everything.** That includes the version-row write, which today logs its failure and lets the save go on. The response then says nothing was saved and why.
 
 ---
 
@@ -144,184 +122,340 @@ Uncertain lines get a **new** key, and the old key retires, unless a person expl
 
 The actions:
 - **Save:** W1 (Script tab, Raw editor, Import, skeleton).
-- **Generate:** W3, W6, W7, W8, W9, W10, plus W4 (Script Writer lock), which replaces the whole script with generated text.
-- **Restore:** W1 with a version id; the text is read on the server (D5).
+- **Generate:** W3, W4, W6, W7, W8, W9, W10.
+- **Restore:** W1 with a version id.
 - **Event Inject:** W5.
-- **Approve/Lock:** W2, a lock with or without unsaved text.
+- **Approve/Lock:** W2.
 
-Every write runs in **one transaction** (requirement 1):
-1. lock the row and read its text, locks and keys;
-2. check `base_text_hash` where one was sent;
-3. check the state;
-4. keep locked beats;
-5. assign identities (§3);
-6. write the version row (the replaced text with **its** keys);
-7. write the text, keys and locks in one update.
-
-If any step fails, **nothing** is written. That includes the version history, which today logs its own failure and lets the save go on; this is a deliberate behaviour change (N2). Locked beats keep their text **and** keys in every case (requirement 7).
-
-### 4.1 No identity yet (`unkeyed`)
+### 4.1 No identity yet
 
 | Action | Behaviour |
 |---|---|
-| Save | **First-save initialisation.** Lock-keeping runs, then every line of the saved text gets a new key; session hints are ignored, since there is nothing they could refer to. The state becomes **Valid**. The version row stores the replaced text with keys `null`, which is accurate |
-| Generate | The same initialisation on the generated text. The overwrite guard and locks apply as today, plus the stale check (N3) |
-| Restore | The server reads the version's text. If the version has valid keys for its own text, they are reinstated (§4.4); otherwise every line is minted. The state becomes **Valid** |
-| Event Inject | The inject builds the new text outside locked beats (D9), then every line is minted. The state becomes **Valid** |
-| Approve/Lock | With unsaved text: the same as Save. Lock only, text unchanged: the text is keyed in the same write (N4). The state becomes **Valid** |
+| Save | First-save initialisation: every line of the saved text is minted. The state becomes Valid |
+| Generate | Revision taken before the AI call; if the script changed during the call, `409 SCRIPT_CHANGED` with the draft unsaved (N3). Otherwise initialised as Save |
+| Restore | §5 (no current keys, so there can be no collision with them) |
+| Event Inject | §4.3, then initialised |
+| Approve/Lock | With text: as Save. Lock only: the unchanged text is keyed in the same transaction (N4). The state becomes Valid |
 
-### 4.2 Valid identity (`ok`)
-
-| Action | Behaviour |
-|---|---|
-| Save | A stale `base_text_hash` returns `409 SCRIPT_CHANGED`, with nothing written (D6). Lines are assigned as in §3: before A1c-4 uncertain lines get new keys; from A1c-4 the save stops at `409 LINE_IDENTITY_REVIEW`. Locked beats keep their keys |
-| Generate | The base hash is taken **before** the AI call. If the stored text changed by write time, the result is `409 SCRIPT_CHANGED` with the generated draft returned unsaved, so newer text is never overwritten (N3). Otherwise only certain rules 2–3 apply: unchanged lines keep keys, everything else is new, removed keys retire. Locked beats keep text and keys |
-| Restore | §4.4 |
-| Event Inject | Inject knows exactly which tag lines it removes and adds, so every untouched line keeps its key through its own deterministic hints. Removed tags retire, and new tags are minted. Locked beats are never edited (D9): tags go into the first allowed position outside them, or the inject refuses with a reason (N6) |
-| Approve/Lock | With unsaved text: the same as Save. Lock only: text and keys are unchanged, and only `script_locked_beats` changes. The version row stores the replaced text with its keys |
-
-### 4.3 Inconsistent identity (`mismatch`)
+### 4.2 Valid
 
 | Action | Behaviour |
 |---|---|
-| Save, Restore, Event Inject, Approve/Lock | **Refused before any change:** `409 LINE_KEYS_NEED_REPAIR` with the reason and the repair dry-run link (D2). Text, keys, locks and history are all left as they were. The Script tab keeps the person's edits in the local draft |
-| Generate | Refused **before the AI call**, so no money is spent, and checked again at write time |
-| Way out | An admin runs the repair dry run, approves it (D3, D8, §5), and then the original action is retried |
+| Save | `script_revision` check (§7), then §2. Locked beats keep text and keys |
+| Generate | N3 check after the AI call. Rules 2–3 only, because a generator has no editor hints. Locked beats keep text and keys |
+| Restore | §5 |
+| Event Inject | §4.3: untouched lines keep their keys through the inject's own hints |
+| Approve/Lock | With text: as Save. Lock only: keys and text unchanged |
 
-### 4.4 Restore, and historical identities (requirement 2)
+### 4.3 Event injection (N6 as ruled)
 
-1. **The text comes from the server.** It reads the version row by id, for this episode only. Browser text sent with a restore is ignored (D5).
-2. **Lock-keeping applies** to the restored text: today's locked beats stay as they are now, with their current keys (requirement 7).
-3. **If the version's keys describe the version's own text** (`checkLineKeys` = ok), each version line takes **its own historical key**, with these exceptions:
-   - **a key that a kept locked beat uses right now** stays with the locked line. The version's line gets a new key, and the report names it. A key is never on two lines;
-   - **a key that is neither live, nor retired in this episode, nor in any version of this episode** cannot have belonged to this episode. It is refused and the line gets a new key. This should never happen; it is a guard;
-   - **otherwise the key is reinstated.** A reinstated key comes back only for its own line, because the version's keys describe that version's text. A retired key is never given to an unrelated line.
+1. **The intended beat is chosen exactly as today**, by what the script contains, never by locks:
+   - the first beat headed `STAKES`;
+   - else the first headed `REVEAL`;
+   - else the first headed `INTERRUPTION`;
+   - else the top of the script, before its first beat header.
+2. **The intended position is right after that beat's header,** as today.
+3. **Every beat lock is whole-beat** (`script_locked_beats` holds beat numbers), so a locked beat has no unlocked position inside it.
+   - If the intended beat is locked, the inject refuses: `409 INJECT_BLOCKED_BY_LOCK` with `{ beat_number, beat_label }`, for example "Beat 5 · STAKES is approved. Unlock it to place this event, or add the tag by hand."
+   - It never falls back to REVEAL or INTERRUPTION when STAKES is locked, and never to the top. That would be "another beat" (N6).
+4. **The top-of-script case:**
+   - **Script with headers:** the top is the preamble before the first header. It belongs to no beat, so no beat lock can block it.
+   - **Script with no headers** (D1: `b:null`): the top is the start of the only text. If any positional beat lock is in force on that episode, the inject refuses and names the lock: inserting at the start would change the first approved block.
+5. **Old tags.** Today the inject removes every `[EVENT:]` and `[LOCATION_HINT:]` tag anywhere in the script. If one sits inside a locked beat, the inject refuses and names that beat. Removing it would edit approved content, and keeping it would leave two event tags.
+6. **Identities.** The inject knows exactly which lines it removes (old tags) and adds (new tags):
+   - every other line keeps its key through deterministic hints;
+   - removed tags retire;
+   - new tags are minted.
 
-   Every key live now that the restored text doesn't use retires. The retired list is merged and only grows.
-4. **If the version has no keys** (saved before A1c), or its keys don't describe its text, the restore is treated like a Generate:
-   - unchanged lines keep today's keys by certain rules 2–3;
-   - everything else gets new keys;
-   - the report says the version's identities could not be used.
-5. **The restore's `base_text_hash`** guards against restoring over a newer save (D6).
+### 4.4 Inconsistent
 
-LK's `restoreLineKeys` already reinstates only the version's own keys, and refuses when the keys don't describe the text. A1c adds the locked-beat exception and the "belongs to this episode" guard around it.
+Every action is refused before any change with `409 LINE_KEYS_NEED_REPAIR`, which gives the reason and a link to the repair dry run. Generate is refused before the AI call. The way out is an admin dry run, then an approved repair, then a retry.
 
 ---
 
-## 5. Repair of inconsistent episodes (D3, D8)
+## 5. Restore without collisions (question 3)
 
-- **Who:** `requireAuth` + `authorize(['ADMIN'])`.
-- **Scope:** one episode per call. There is no bulk apply.
-- **Dry run:** `POST /api/v1/episodes/:id/script/line-keys/repair`, the default.
-  - Under a read lock it returns `{ status_before, reason, plan: { kept, moved, uncertain, new, retired }, per_line, plan_hash }`. Nothing is written.
-  - It uses §3's rules with no hints: uncertain lines are listed, never kept.
-- **Apply:** `{ confirm: true, plan_hash, confirmed_pairs? }`.
+### 5.1 Inputs
+
+Inside the restore transaction:
+- **V**: the version row, read by id for this episode only (D5). That gives its text, and its record `VK`, which is `null` before A1c.
+- **C**: the current record, with live keys `L` and retired keys `R`.
+- **Final text:** V's text after lock-keeping. Each **current locked beat** stays as it is now, with its current lines. Every other line comes from V.
+
+### 5.2 Assigning a key to every line of the final text
+
+Each line's provenance comes from lock-keeping: *locked* or *from V*.
+1. **Locked lines** keep their current keys (requirement 7). Call that set `Lk`.
+2. **Lines from V, when `VK` describes V's own text** (`checkLineKeys` = ok). Each line takes its own historical key `k` from `VK`, unless:
+   - **`k ∈ Lk`:** the key is held right now by a kept locked line, for example a line that moved into a beat that has since been approved. The locked line keeps `k`, and the V line gets a **new** key. The report names both. *A key is never on two lines.*
+   - **`k` is not in `L ∪ R ∪ (any remaining version's keys of this episode)`:** it cannot belong to this episode's lineage. It is refused and the line gets a new key. This should never happen; it guards against a corrupted version row.
+   - **Otherwise `k` is reinstated.** That is safe in each case:
+     - `k ∈ L \ Lk`: the line currently holding `k` is not in the final text, because restore replaces every unlocked line. So `k` returns to its own historical line, and nothing else holds it.
+     - `k ∈ R`: a retired key returns to the one line it described in V. It never goes to a different line, because it comes from V's own record for that exact line.
+3. **Lines from V, when `VK` is `null` or doesn't describe V's text:** rules 2–3 (§2) against the **live** keys `L \ Lk` only. Retired keys are never matched by text. Everything else is minted, and the report says the version's identities could not be used.
+
+### 5.3 Retired history after the restore
+
+- **Newly retired:** every key in `L` that the final text doesn't use, with `retired_in` set to the new version row and its **current** `(b, h)` as the last known line.
+- **New retired list:** `R ∪ VK.retired ∪ newly retired`, minus every key the final text uses. Where a key appears in more than one list, the newest `(b, h, retired_in)` wins, current first.
+- **It only grows,** except for keys reinstated by this restore. Reinstating a retired key is the one way a key leaves `R` (REV R3.1).
+
+### 5.4 Invariants checked before writing (on every save, not only restore)
+
+If any of these fails, the transaction is rolled back and the response says nothing was saved:
+- every key appears **at most once** among the final lines;
+- no key is both live and retired;
+- every final key is newly minted or comes from `L`, `R` or this episode's versions;
+- `checkLineKeys(finalText, finalRecord)` = ok;
+- the retired list contains every key of the previous live set that isn't in the final lines.
+
+---
+
+## 6. Editor hints (question 1)
+
+### 6.1 What the Script tab has today
+
+- `BeatSection` keeps a per-beat list of session ids (`useLineIds` → `nextLineIds`, ids `line-N`). It is updated from the last recorded operation (`lineOpRef` / `noteLineOp`: `move`, or `splice` with `at` and `removed`), or else by the longest common run.
+- **These ids are for keeping focus on a line, not for identity:**
+  - they start fresh every page load and aren't tied to the saved text;
+  - they live per beat, so a line moving to another beat loses its id;
+  - an **edit is recorded as a splice that removes one line and adds one,** so an edited line gets a **new** id;
+  - beat moves, regenerate-beat accept and phone-path fixes record no operation;
+  - the Raw editor, Import and Restore change the whole text with no structure.
+
+### 6.2 What A1c-4 adds
+
+- **A script-level identity list.** `identityRef` is an array aligned to `scriptLines(scriptText)` from the frontend twin of LK (parity already tested, A1a). Each entry is a server key, or `null` for a line the page added.
+- **It is seeded from `line_identity`**, which arrives in the GET and in **every save response** for the text actually saved. It is reseeded after every successful save, and whenever the page takes newer text from the server.
+- **Every edit operation updates it deterministically:**
+
+| Operation | Effect on `identityRef` |
+|---|---|
+| Edit a line's words (line editor) | **same key**: a new `replace` operation, instead of today's remove-and-add |
+| Rewrite a line (AI), "Use this" | same key (`replace`) |
+| Delete a line | entry removed; the server retires the key |
+| Add a line, moment or overlay | `null` inserted |
+| Move a line, within or across beats | the key moves with the line (a `move` operation with beat and index on both ends) |
+| Move a beat | every key of that beat moves with it (a new `beatMove` operation) |
+| Duplicate a line (new operation) | the original keeps its key; the copy is `null` |
+| Split a line (new line-editor action) | the first part keeps the key; the rest are `null` |
+| Merge lines (new line-editor action) | the merged line keeps the first line's key; the others are removed (retired on the server) |
+| Regenerate a beat, "Use it" | the replaced lines get `null`; the server's exact rules (2–3) keep any line that came back unchanged |
+| Phone-path fix | the inserted lines are `null`; every existing line keeps its key |
+| Raw editor typing, Import, "Use newer", "Put them back" | `identityRef` is recomputed **only** for lines whose text is unchanged and unique (rule 2). Every other line is `null`. These lines are then up to the server's rules and the review (§6.3) |
+
+- **Save and Approve send** `{ script_content, script_revision, line_hints, identity_review:'ask' }`. Here `line_hints[i]` is `identityRef[i]` for the `i`-th `scriptLines` line of the text sent.
+- **Locked beats are never edited on the page,** so their keys stay the same.
+
+### 6.3 Review
+
+- **When to ask:** if a save has uncertain lines (rules 4–6) and the client sent `identity_review:'ask'`, the server applies nothing.
+- **The question:** it answers `409 LINE_IDENTITY_REVIEW` with `[{ line_index, text, candidates:[{ key, old_text, reason }] }]`. For each line the page asks: "the same line, edited" (pick one candidate) or "a new line". It offers "treat all as new" as a shortcut.
+- **The re-send:** the confirmed choices become `line_hints`, which are verified hints (rule 1), and the page sends the save again.
+- **Clients without review:** a client that sends no `identity_review` gets new keys for uncertain lines, reported in the response.
+
+### 6.4 Hints through lock-keeping
+
+The server re-applies locked beats after receiving the text, so the saved text can differ from the text sent. Each saved line's provenance comes from lock-keeping:
+- **a line from the sent text** takes its hint, by its index in the sent text's `scriptLines`;
+- **a line of a locked beat that was put back** takes its stored key;
+- **an extra beat renumbered to 15+** keeps its hints, with a new `b`.
+
+### 6.5 Before A1c-4
+
+The Script tab sends **no** hints. Under rules 2–3 alone:
+- **wording edits** get new keys;
+- **a duplicated line** makes its group fail rule 3(a), so the original also gets a new key;
+- **splits and merges** get new keys;
+- **moves of unique lines** keep theirs.
+
+§12 explains why the recommended release boundary means none of this ever happens to stored identities.
+
+---
+
+## 7. Stale-save protection for existing clients (question 2)
+
+### 7.1 The token
+
+`script_revision` is an opaque hash of the stored text **and** its identity record (or `unkeyed`). Using the identity record as well as the text catches the case where another tab saved the same text with different keys, for example after an edit and an undo.
+
+Two exclusions:
+- **`updated_at` is not used,** because a title or teaser edit would cause a false conflict.
+- **The token is not a key,** and it never contains `ln_…`. A1b's "no response carries keys" test still holds.
+
+**Where it comes from:**
+- The episode GET returns it from A1c-1 onwards.
+- Every script-writing response returns the new one.
+
+### 7.2 The rule, in A1c-1
+
+| Request | Rule |
+|---|---|
+| `PUT /episodes/:id` with `script_content`, or `PUT …/script-locks` (with or without text) | `script_revision` is **required** whenever the stored script is not empty. If it is missing: `409 SCRIPT_REVISION_REQUIRED`, "This page is out of date. Reload to see the current script; your unsaved text is kept." If it differs: `409 SCRIPT_CHANGED`, with the current revision so the page can offer compare and reload |
+| The same, when the stored script is empty | allowed without a revision, because there is nothing to overwrite. This is QuickEpisodeCreator's skeleton for a new episode |
+| Server writers (generate, inject, templates) | each takes the revision itself when it starts. Those with an AI call compare it again at write time (N3) |
+
+### 7.3 Why requiring it is safe
+
+- **Old tabs, not old apps.** The Deploy workflow ships the frontend and the backend in the same run, from the same commit. After a deploy, the only "existing clients" are browser tabs opened before it.
+- **Today's code fails safe.** An old tab's Save gets the 409, and today's `handleSave` shows "Save failed".
+- **The text survives.** The page's local draft (`useScriptDraft`, kept in the browser every 800 ms) holds the typed text. After a reload, the existing "Put them back" banner restores it. Nothing is overwritten, and nothing typed is lost.
+- **Leniency would defeat the protection.** Accepting a missing revision would keep last-write-wins for exactly the tabs most likely to be stale. So the rule is strict.
+
+### 7.4 Frontend part of A1c-1 (small)
+
+- The Script tab stores `script_revision` from the GET and from each save response.
+- It sends it on Save and Approve.
+- It handles `SCRIPT_REVISION_REQUIRED`, `SCRIPT_CHANGED`, `LINE_KEYS_NEED_REPAIR` and `INJECT_BLOCKED_BY_LOCK` with clear messages, keeping the local draft.
+- QuickEpisodeCreator's skeleton save needs no change, because it writes to an empty script.
+
+This is the only frontend change in A1c-1; hints are A1c-4.
+
+---
+
+## 8. Repair and report (D3, D8; unchanged from revision 2)
+
+- **Who:** admin-only, one episode per call.
+- **Dry run:** the default. It returns `{ status_before, reason, plan:{kept, moved, uncertain, new, retired}, per_line, plan_hash }` and writes nothing. It applies §2 with no hints.
+- **Apply:** `{ confirm:true, plan_hash, confirmed_pairs? }`.
   - Under `FOR UPDATE` it recomputes the plan; if it differs, it returns `409 PLAN_CHANGED`.
-  - It writes **only** `script_line_keys`, never the text.
-  - It writes a version row with source `line-key-repair`.
-  - It logs the counts.
-  - The admin can confirm individual uncertain pairs, the same review as §3.4.
-- **Report:** a read-only admin GET lists every episode's state, reason and what a dry run would do. It writes nothing.
-- **Today's episodes** are all **No identity yet**, which is not inconsistent, so no repair is needed: their first save initialises them. An admin may also key one without changing its text through the same dry run and apply, for example before the voice-clip backfill.
+  - It writes **only** `script_line_keys` and a `line-key-repair` version row, atomically.
+- **Report:** a read-only admin listing of each episode's state and dry-run summary.
 
 ---
 
-## 6. Version retention (D11, modified)
+## 9. Version-retention contract (N5 as ruled)
 
-- **Ordinary drafts keep today's limits:** the newest 50 save, lock and restore versions, and the newest 10 generated, per episode.
-- **A durably referenced version is never pruned.** `prune` skips any version id named by an approved production manifest, a dialogue asset, or another durable production reference. A1c-1 adds that check as a registry of referencing sources.
-- **No table references a version row today,** because manifests and line-keyed dialogue assets don't exist yet. So the registry starts **empty**, and nothing pruned today is protected by it. N5 asks whether to add a protective column now instead.
-- **Every future table** that references a version must register in the same PR that creates it. A test proves a referenced version survives pruning.
-- **Identity safety never depends on retention.** The live `retired` list only grows, and minting checks it. A pruned version can never cause a key to be reused.
+### 9.1 What references version rows today (verified at `2899dbc9`)
+
+| Reference | Kind | Durable? |
+|---|---|---|
+| History list and view: `GET /episodes/:id/script-versions[/:versionId]`, `ScriptHistory` | read | no |
+| `restored_from` on a save (W1) | request field, checked and then used only as the version source | no |
+| `characterVoice.captureOnLock` baseline | a query at lock time for the first version after the newest `generate`; nothing stored | no |
+| Foreign keys or columns naming `episode_script_versions` | none: only its own two migrations mention the table | — |
+| Manifests, dialogue assets, other production records | do not exist yet | — |
+
+**So no durable reference to a version row exists today.** A1c claims to protect nothing beyond that, and adds no table or column for it.
+
+### 9.2 The contract
+
+1. **Pruning.** Only `scriptVersions.prune` deletes version rows. It keeps the newest 50 save, lock and restore versions, and the newest 10 generated.
+2. **What counts as durable.** A durable reference is any stored value in another table that names an `episode_script_versions.id`, or that needs a version's text or keys to stay reproducible.
+3. **What a feature that adds one must do, in the same PR:**
+   - (a) declare the reference with a database foreign key to `episode_script_versions.id`, `ON DELETE RESTRICT`. The database then refuses to delete a referenced row whatever the code does;
+   - (b) make `prune` skip referenced rows. It queries the declared referencing tables, so a restricted delete never surfaces as an error;
+   - (c) add a test showing a referenced version survives pruning.
+4. **Approved manifests freeze their own copy** of the text, keys and locks (REV R2.2), so they never depend on a version row staying. If a manifest also records the version id, that is a durable reference under rule 2.
+5. **Enforcement now, without new structure:** A1c-1 adds a static test that fails CI when any migration other than the table's own adds a reference to `episode_script_versions`, unless `prune` handles that table. A future feature can't add a reference silently.
+
+**Identity safety does not rely on retention.** The live retired list only grows, and minting checks it, so pruning can never cause a key to be reused.
 
 ---
 
-## 7. Voice clips and other position-based consumers (requirement 3)
+## 10. Voice clips and other position-based consumers (unchanged)
 
-- **A1c does not read, change, re-key, delete or soft-delete any `script_voice_clips` row,** and doesn't change how clips are matched or saved. A test asserts that every A1c write leaves `script_voice_clips` exactly as it was.
-- **The existing loss risk is not fixed by A1c:** recording a line soft-deletes whichever clip held the same `(beat, line_index)` slot. That is A1d's job: move clips to `(line_key, h)` with `keyForStoredLine`, and flag ambiguity instead of guessing. A1d needs Valid identities, so it comes right after A1c-3.
-- **A1c changes none of the other consumers** (todo/at, My Little List, post drafts, `captureOnLock`). They keep reading positions as today.
+- A1c reads, changes, re-keys, deletes and soft-deletes no `script_voice_clips` row, and doesn't change clip matching. A test asserts that every A1c write leaves the table unchanged.
+- The existing loss risk is A1d's: today, recording a line soft-deletes whichever clip held the same `(beat, line_index)` slot.
+- todo/at, My Little List, post drafts and `captureOnLock` are unchanged.
 
 ---
 
-## 8. Tests and acceptance criteria
+## 11. Tests and acceptance
 
-### 8.1 Integration tests, one per writer (requirement 4)
+Revision 2's list stands, plus the tests below.
 
-Postgres, through the real routes. Each writer is tested in all three states:
-- **No identity yet:** it initialises, and the result is `ok`.
-- **Valid:** unchanged lines keep keys, removed keys retire, and new lines are minted.
-- **Inconsistent:** 409, and nothing written.
+**Confidence (§2):**
+- A verified hint keeps a key through any wording change.
+- An unverified hint (stale revision, retired, duplicated) is refused and reported.
+- Rule 3: the `[Yes., Hello, Yes.]` → `[Yes., Yes., Hello]` case is uncertain; a pure deletion of `Hello` keeps both Yes keys, in order.
+- Similarity alone never keeps a key, at any score.
 
-Each also asserts that **text, keys and the version row change together or not at all.** A forced failure in the version write leaves all three unchanged.
+**Restore (§5):**
+- A key held by a kept locked line is never put on a second line; the version line gets a new key and the report names both.
+- A key live elsewhere and unlocked returns to its historical line.
+- A retired key returns only to its own line.
+- A foreign key in a corrupted version is refused.
+- Retired-history merge: newest wins, reinstated keys leave `R`, and nothing else ever leaves it.
+- Invariants (§5.4): a forced violation rolls back everything.
 
-| Writer | Also covers |
-|---|---|
-| W1 Save | stale `base_text_hash` → 409 with nothing written; hints honoured; refused hints reported; locked beats keep text and keys; clearing the script retires every key |
-| W1 Restore | server-side text, with browser text ignored; valid version keys reinstated; a key held by a kept locked beat is not duplicated; a pre-A1c version reconciles; retired keys go only to their own line |
-| W2 Approve/Lock | lock only keeps keys; lock with text behaves like Save; a mismatch refuses the lock too |
-| W3 Script Writer generate | stale check after the AI call → 409 with the draft unsaved; a failed save is reported, not swallowed (D10) |
-| W4 Script Writer lock | overwrite guard added; transaction and row lock; failure reported (D10) |
-| W5 Event inject | locked beats never edited (D9); the inject's own hints keep untouched lines; refusal when no allowed position exists (N6) |
-| W6 generate-episode draft | transaction and lock; skipped when a script exists |
-| W7 event generate-script | guard 409; the response returns the **saved** text |
-| W8 episode from many | transaction and lock; skip guard |
-| W9 generate-beats | **new overwrite guard** (D10); transaction and lock |
-| W10 episode-brief generate-script | stale check after the AI call (N3); locks re-applied under the lock |
+**Atomicity (§3):** a forced version-row failure leaves text, keys and locks unchanged, and the response says nothing was saved.
 
-### 8.2 Unit and property tests
+**Stale saves (§7):**
+- missing revision on a non-empty script gets `409 SCRIPT_REVISION_REQUIRED`;
+- a changed revision gets `409 SCRIPT_CHANGED` with the current one;
+- an empty script saves without a revision;
+- a title-only change doesn't change the revision;
+- the same text with different keys does change it.
 
-- §3's rules: hint; exact and unique; repeated group with the same count; edited suggested, never taken; repeated group with a changed count is uncertain.
-- The retired list only grows across 50 random saves, and no key ever appears on two lines.
-- A new key is never one that was live, retired or in a remaining version.
-- The A1a strict option keeps the existing A1a tests green.
+**Inject (§4.3):**
+- intended beat locked → refused, naming it, with no fallback to another beat;
+- an old tag in a locked beat → refused;
+- top of a script with headers → allowed;
+- headerless with a lock → refused;
+- untouched lines keep their keys.
 
-### 8.3 Guards and the rest
+**Retention (§9):**
+- the static test fails on a new reference to `episode_script_versions` that `prune` doesn't handle;
+- `prune` still keeps 50 and 10.
 
-- **Single write path.** A static test fails CI if any file other than the save service writes `script_content` **or** `script_line_keys`.
-- **Reads don't write (requirement 5).** GET of an episode and of a version leaves `script_line_keys`, `updated_at` and the version count unchanged in all three states.
-- **Voice clips untouched (requirement 3):** every writer leaves `script_voice_clips` unchanged.
-- **Retention:** a version named by the reference registry survives pruning.
-- **Repair:** the dry run writes nothing; a stale `plan_hash` gets 409; apply writes only keys plus a `line-key-repair` version; it is admin-only.
-- **Reads (A1c-3):** `line_identity` per state as in §2; the raw column never appears.
-- **Frontend (A1c-4):**
-  - ids are seeded from the server keys;
-  - hints are aligned to the twin's `scriptLines` and sent with the base hash;
-  - the three 409s keep the local draft and explain what happened;
-  - the review sends confirmed pairs.
+**Hints (A1c-4):** every operation in §6.2's table produces the stated `identityRef`; lock-keeping provenance (§6.4); the review round trip (§6.3).
 
-### 8.4 Acceptance
+**Per-writer integration tests (W1–W10):** all three states each, with atomicity (requirement 4).
 
-- After A1c-1, every writer leaves the episode **Valid** (`checkLineKeys` = ok on the saved text), and none ever leaves it **Inconsistent**.
-- No uncertain identity is kept without a person's confirmation.
-- Locked beats keep their text and keys.
+**Acceptance:**
+- No identity is kept by similarity or by guesswork.
+- No key ever appears on two lines.
+- No newer script is ever overwritten.
 - No read changes anything.
-- No voice clip changes.
-- Each step is deployed through the Deploy workflow.
+- Locked content is preserved.
+- Voice clips are unchanged.
 
 ---
 
-## 9. Revised sequence
+## 12. Release boundary (assessment and recommendation)
 
-| Step | PR | Contents | Needs |
-|---|---|---|---|
-| A1c-1 | **Single write path** | the save service; all ten writers at once (a partly moved state would make Inconsistent episodes); the A1a strict option; versions carry keys and history becomes atomic; the D6 stale check; the mismatch refusal; the D9 inject change; the D10 fixes; the D11 registry; the static guard; §8.1, §8.2, the read-doesn't-write test and the voice-clips-untouched test | N1–N6 |
-| A1c-2 | **Repair and report** | admin dry run and apply, one episode at a time, plus the read-only report | — |
-| A1c-3 | **Reads** | `line_identity` on episode and version GETs; the A1b "no response carries keys" test changes on purpose, because the raw column still never appears | — |
-| A1c-4 | **Script tab** | ids seeded from keys; hints and base hash on Save and Approve; operations recorded for beat move, regenerate-beat accept and phone-path fixes; restore by version id; the three 409 screens; identity review | A1c-1, A1c-3 |
-| next | A1d (not A1c) | voice clips moved to `(line_key, h)` with an ambiguity report and no guessing, which ends the existing loss risk; then A2 teleprompter marks | A1c-3 |
+### 12.1 Does A1c-1 alone lose identities?
 
-No step needs a migration. The new version source `line-key-repair` fits the existing `STRING(16)` column. Each PR is reviewed separately and deployed through the Deploy workflow.
+If A1c-1 wrote identities before the Script tab sends hints (A1c-4), every ordinary Script tab wording edit, duplicate, split or merge would retire the old key and mint a new one (§6.5). Those keys would be lost unnecessarily. Nothing breaks during that period, because:
+- no consumer reads keys until A1d, A2 or manifests;
+- `line_identity` isn't exposed until A1c-3.
+
+But the lost lineage could never be recovered once a consumer anchors to keys. And the retired list would grow with churn that serves no purpose.
+
+### 12.2 Options
+
+| Option | Contents | Risk |
+|---|---|---|
+| A | A1c-1 through A1c-4 in one release | No churn, but the largest change at once: the save path, all ten writers, repair, reads and the Script tab. Long-lived branch, hard to review, one failure blocks everything, including the integrity fixes |
+| B | A1c-1 writing identities, then A1c-4 later | Unnecessary identity churn in between (§12.1) |
+| **C (recommended)** | **Three releases. Identities are written only from the release that also ships hints** | Each release small enough to review and deploy alone; no interim loss |
+
+### 12.3 Recommended releases
+
+| Release | Contents | Identity writes |
+|---|---|---|
+| **R1: integrity** (A1c-1) | all of A1c-1, plus §7.4's small frontend part | **Off.** The service computes the identity plan for every write and logs its counts per save. That gives real kept/new/uncertain numbers to check the policy against. It stores nothing: `script_line_keys` stays `null` on every episode. The off switch is a constant in the service, not an environment variable, so turning it on is a reviewed code change |
+| **R2: repair and reads** (A1c-2 + A1c-3) | admin repair dry run and apply, the read-only report, `line_identity` on episode and version GETs | **Off.** With every episode unkeyed, repair has nothing to repair; its "key without text change" apply stays disabled until R3. Reads return `unkeyed` |
+| **R3: identity on** (A1c-4) | Script tab identity list, hints, review and the new operations (§6), plus the one-line switch that turns identity writes on | **On**, for every writer at once. From the first save after R3, an episode is initialised (§4.1), and the page receives `line_identity` to hint every later edit |
+
+Each release goes through its own PR review and its own Deploy workflow run. **A1d and every other key consumer may start only after R3 is live and its first-save initialisation is verified in production.**
+
+**Why C is safest:**
+- the integrity fixes (atomic history, stale protection, locks, D10) reach production without waiting for UI work;
+- identity starts only when the page can keep it;
+- R1's logged plans test the confidence policy on real saves before anything is stored;
+- every release can be reverted alone. R1 and R2 store no identities, so reverting them leaves nothing to undo.
 
 ---
 
-## 10. Decisions still needed
+## 13. Decisions still needed
 
 | # | Question | Recommendation |
 |---|---|---|
-| N1 | Is §3's confidence policy right? In particular: a repeated line whose count is unchanged is certain, and a changed count makes the whole group uncertain | **Yes**, as written |
-| N2 | Atomic history (requirement 1): today a failed version write is logged and the save goes on. A1c makes it fail the whole save, with nothing written and a clear error | **Yes.** It is what requirement 1 asks |
-| N3 | A generator whose base changed during the AI call | **Refuse with `409 SCRIPT_CHANGED`**, returning the draft unsaved so it can be applied deliberately; W3 also keeps it in `episode_scripts` as today |
-| N4 | Approve/Lock with no text change on an episode with no identity yet: key it in the same write, or leave it | **Key it.** It is a script write, and it saves a later surprise |
-| N5 | Retention protection (D11): a registry in code (empty until manifests or dialogue assets exist), or a protective column now | **Registry now.** The first manifest or dialogue PR registers itself; a column can follow if a reference outside code ever needs it |
-| N6 | Inject when the only valid tag position is inside a locked beat | **Put the tags before the first unlocked beat**, or at the top when no beat is unlocked; refuse with a reason only when no position outside a locked beat exists |
+| P1 | Release boundary: C (R1 integrity with identity writes off; R2 repair and reads; R3 hints with identity on), A, or B | **C** |
+| P2 | §7.2: strict `script_revision` on a non-empty script, so an old tab gets "reload" and its text is kept locally | **Strict**, as written |
+| P3 | §4.3 inject: refuse when the intended beat is locked (no fallback), refuse on an old tag in a locked beat, refuse at the top of a headerless script with a lock | **Yes, all three.** If you want locks finer than a whole beat, that's a separate design |
+| P4 | §2.1 rule 3: a repeated group keeps its keys only with the same count **and** an order-preserving position; otherwise every occurrence is uncertain | **Yes** |
+| P5 | §6.2 new line-editor actions in A1c-4: duplicate, split, merge, beat move as recorded operations | **Yes**, so these keep identity deterministically instead of needing review |
+| P6 | §9.2 rule 5: the static test now; foreign key plus `prune` handling in the first feature that adds a version reference | **Yes** |
