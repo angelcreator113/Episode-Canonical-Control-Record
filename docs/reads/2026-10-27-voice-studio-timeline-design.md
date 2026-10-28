@@ -1,6 +1,6 @@
 # Voice Studio and Timeline Editor: one episode-production workflow (read, design proposal)
 
-**Status:** audit and design proposal only. Nothing is implemented, migrated, pushed or deployed. Each phase in §7 needs Evoni's approval before any code, and each needs its own approval to push, open a PR, merge or deploy.
+**Status:** design. B1 and its A1c prerequisite are implemented locally to Revision 6 (2026-10-28); nothing is merged, migrated in production or deployed. Each phase needs Evoni's approval before any code, and its own approval to push, open a PR, merge or deploy.
 
 **Basis:** `origin/main` `7ac13358`. Code citations are `path:line` at that commit, each paired with a function or component name.
 
@@ -24,26 +24,100 @@ Where they conflict, the order they set applies: rulings, spec Rev 5 and review 
 
 ---
 
-# Read this first: the authoritative design (Revision 5)
+# Read this first: the authoritative design (Revision 6)
 
 **Implementation follows only:**
-- Revision 5 (this section and R5.x);
-- Revision 4 §R4.1–R4.3, as amended by R5;
+- Revision 6 (this section and R6.x), which records what B1 and the A1c prerequisite were built to;
+- Revision 5 (R5.x), as amended by R6;
+- Revision 4 §R4.1–R4.3, as amended by R5 and R6;
 - Revision 3 §R3.2–R3.5;
-- Revision 2 §R2.2, §R2.3 (as amended by R4.0), §R2.4 and §R2.6.
+- Revision 2 §R2.2, §R2.3 (as amended by R4.0), §R2.4 and §R2.6 (as amended by R6.3).
 
 Everything else is background. Superseded passages carry a **SUPERSEDED** banner naming what replaces them.
 
 | Topic | Authoritative | Superseded (do not build) |
 |---|---|---|
-| Voice tables | R4.3 B1, with R5.3 | §4.1, §4.2 (`voice_recordings`, the import that associates), R2.1's table list |
-| Approval validity | R4.1 E1, R3.2, R5.2 | R2.1's history walk (R3.1: not sound) |
+| Voice tables | R4.3 B1, with R5.3 and R6.4 | §4.1, §4.2 (`voice_recordings`, the import that associates), R2.1's table list; R4.3's approval index on `occurrence` and unique re-confirmation per revision |
+| Approval validity | R4.1 E1 as amended by R6.1, R3.2, R5.2 as amended by R6.2 | R2.1's history walk (R3.1: not sound); a pin on the revision hash alone; the episode `updated_at` pin and the script-version-id pin (both tried in B1 and withdrawn, R6.1) |
+| Script save order | R6.1 (`episodes.script_seq`, A1c) | version-row times (`created_at`) as an order |
+| Approval states and actions | R6.2 | R5.2's state table (`valid`, `needs_reconfirm`, and `moved` as unbound) |
+| Script-version retention | R6.5 | any reference provider for Voice Studio |
 | Timeline tables | R4.3 C1, with R5.1 and R5.3 | §4.3 (`edit_projects`, `edit_items`), R2.5's resolution column |
 | Scene duration | R3.4, R4.3 `episode_scene_clips` | R2.5 "scene timing stays on `scenes`" |
 | Missing Prime footage | R4.0, R5.1 | §2 ruling 5's fallback, §5.2 "fallback", R2.3 "accepted fallback", spec G-5 / decisions §14 fallback (spec amendment owed) |
 | Prime-required designation | R4.2, as amended by R5.1 | R4.2's "covered where the PIP is visible" |
 | Render process | R2.4 (D1), R3.3 | §9 Q7's "green-removal queue" |
-| Phases and sequence | R5.4 | §7, §7 Dependencies, R2/R3 phase notes |
+| Phases and sequence | R5.4, with the A1c prerequisite (R6.6) | §7, §7 Dependencies, R2/R3 phase notes |
+
+---
+
+# Revision 6 (as built: the script save number, approval states, retention; Evoni's rulings 2026-10-27/28)
+
+**Where Revision 6 disagrees with earlier text, Revision 6 wins.** It records what was decided while B1 was built and reviewed. Implemented locally only: A1c `claude/a1c-script-seq`, B1 `claude/voice-studio-b1`; nothing merged or deployed.
+
+## R6.1 Condition 3: the script revision **and** the script save number
+
+**Finding (B1, 2026-10-27):** the `sr1-` revision is a hash of the text, so A → B → A returns the approved revision. Version rows could not stand in for a save counter either:
+- `snapshotScript` keeps no version when the replaced script is empty, and returns the last version instead of a new one when the replaced text equals it. After one A → empty → A round trip, a second one keeps no version at all.
+- Versions are ordered by `created_at`, set by the app's clock: two saves in one millisecond, or a clock going back, misorder them. UUIDs are not ordered.
+
+**Ruling (Evoni, 2026-10-28): `episodes.script_seq` is the authoritative per-episode script save sequence.**
+- A1c change (its own PR, before B1): `episodes.script_seq BIGINT NOT NULL DEFAULT 0`. `scriptSave` adds one under the episode row lock, inside the save's transaction, whenever the text changes (clearing and restoring included). A lock-only save, a refused save and a rolled-back save take none. Only `scriptSave` writes it (guard).
+- It is read and compared as a **decimal string** (`::text`), never as a JavaScript number.
+- `snapshotScript` is **unchanged**: its shortcut stays (removing it passes every A1c suite but only duplicates History rows).
+
+**Condition 3, as built:** the episode's current `(script_revision, script_seq)` equals the pair pinned by the approval, or by the latest re-confirmation of it. **Both** are required; existing episodes start at 0 and are pinned at 0.
+
+**Withdrawn while building (do not reintroduce):**
+- pinning the episode's `updated_at` (every title, air date or coin edit sent approvals to review);
+- pinning the newest script-version id (relied on `created_at` order; missed the empty round trip).
+
+**Unchanged:** conditions 1, 2 and 4; re-confirmation is a person's action; nothing approves or re-confirms by itself.
+
+## R6.2 Approval states (replaces R5.2's state table)
+
+Each approval not superseded is in exactly one state. **Only `current` may be played or exported** (`playableApprovals` is the one list a player or export reads).
+
+| State | Meaning | Action |
+|---|---|---|
+| `current` | conditions 1–4 hold | none |
+| `needs_review` | bound, but the script was saved since (`script_saved`), or only its neighbours changed (`neighbours_changed`) | **Re-confirm**, shown with the line's context now |
+| `moved` | the only identical line in the beat is elsewhere | **Confirm the line** (resolve) or withdraw |
+| `ambiguous` | identical lines (`ambiguous_duplicate`), or edited with an identical twin elsewhere (`moved_or_edited`) | **Pick the line** (resolve) or withdraw |
+| `unbound` | the line is gone: `speaker_changed`, `note_changed`, `words_changed`, `line_removed`, `beat_changed`, `beat_missing`, `duplicate_beat` | recorded `invalid` when a write sees it; approve a new take |
+| `outdated_take` | the take was re-trimmed or re-gained | approve the new version |
+| `invalid` | recorded: never current again | approve a new take |
+| `revoked` | a person withdrew it | approve afresh |
+
+- **Not invalidated by themselves:** `needs_review`, `moved`, `ambiguous`. A neighbour edit never invalidates an unchanged line.
+- **Approve** sends `expected_approval_id` (the approval the page saw at the line, or null). Another one there now is a 409 `APPROVAL_CHANGED`; two approvals sent from one view give one success and one 409 (per-line advisory lock).
+- **Resolve** re-ties the take to the chosen candidate line and approves it there with the same take revision; the old approval is superseded, kept.
+- **History:** superseded, invalid and revoked approvals stay (`approvals/history`).
+
+## R6.3 Approval identity and `occurrence` (amends R2.6 and R4.3)
+
+- An approval's line is `(episode, beat_number, line_index)` in the script it was approved against. Within one script, `(beat, index)` and `(beat, row, occurrence)` name the same line, so `occurrence` adds nothing to identity; it is stored as context and shown.
+- At most one approval in force per line, and per take (partial unique indexes). A line whose approval moved or is ambiguous is resolved or withdrawn before another take is approved there.
+
+## R6.4 B1 schema, as built (amends R4.3)
+
+- Approvals: `pinned_script_revision`, `pinned_script_seq BIGINT`, `revoked_at`, `revoked_by`; no `approved_script_revision`, no version id.
+- Re-confirmations: `pinned_script_revision`, `pinned_script_seq`, `context_hash` (the line's context when confirmed). Not unique per revision: a revision can come back.
+- Routes are at `/api/v1/voice-studio` (`/api/v1/voice` is Lala's written voice), off unless `VOICE_STUDIO=on`. Raw SQL services, no Sequelize models (accepted).
+- The B1 migration checks for `episodes.script_seq` first and creates nothing without it (one transaction).
+
+## R6.5 Script-version retention (amends R4.3 Retention)
+
+- **No row in any Voice Studio table names a script version, and no reference provider is added** (Evoni, 2026-10-28). `scriptVersions` and its pruning are as on `main`.
+- Approval and re-confirmation rows keep what they approved (words, speaker, line, context hash, revision, save number), so they stay readable after the versions of their day are pruned. Approval rows are never deleted.
+
+## R6.6 Order of changes
+
+1. **A1c script save number** (`claude/a1c-script-seq`): migration `20261027190000-add-episode-script-seq` and `scriptSave`. Its own PR, first.
+2. **B1** (`claude/voice-studio-b1`), on 1: migration `20261027200000-create-voice-studio-tables`. A migration-order test proves B1 alone refuses and creates nothing.
+3. **`rawClipMedia.uploadFile` stream fix** (`claude/rawclip-upload-stream`): independent; found while testing B1.
+
+Deploys still run only through the Deploy workflow, with its snapshot; R5.7 stands.
 
 ---
 
@@ -54,6 +128,7 @@ Everything else is background. Superseded passages carry a **SUPERSEDED** banner
 ## R5.0 Confirmed decisions (Evoni, 2026-10-27)
 
 1. **Q19:** E1 now, E2 later, as a separate reviewed change. **B1 does not modify A1c R1's script-save path.**
+   > **SUPERSEDED in part (Revision 6):** B1 still does not modify the save path, but the A1c save-number change (R6.1) does, as its own PR before B1.
 2. **Q21:** gameplay-only changes **only** the Prime-footage requirement. It never hides footage already placed; PIP visibility settings alone decide whether Prime appears.
 3. **Q-F1 / Q-F2:** the amendment of R4.0 is confirmed.
    - No fabricated image or idle clip.
@@ -92,6 +167,8 @@ Everything else is background. Superseded passages carry a **SUPERSEDED** banner
 - Hiding the PIP leaves the mix plan's commentary events unchanged (the same samples).
 
 ## R5.2 Refinement B: the E1 re-confirmation workflow
+
+> **SUPERSEDED (Revision 6):** the state table and reason codes are replaced by R6.2 (`current`, `needs_review`, `moved`, `ambiguous`, `revoked`; `moved` is not unbound). The summary route is `/api/v1/voice-studio/:episodeId/summary`. The batch, the 409 for a stale revision and "never automatic" stand; a re-confirmation pins the revision and the save number (R6.1).
 
 **Where:**
 - **The Voice Studio header:** `Re-confirm 12 · Invalid 3 · Unbound 2`, for the episode.
@@ -337,6 +414,8 @@ Under Q-F1 the chain becomes **take → nothing**:
 
 ## R4.1 E1 and E2, stated exactly
 
+> **SUPERSEDED (Revision 6):** condition 3 compares `(script_revision, script_seq)` (R6.1), not the revision alone; "no change to `scriptSave`" is replaced by the A1c save-number change (R6.1, its own PR); a neighbour change, a move or an ambiguity is not invalidation (R6.2).
+
 **E1 (now): revision-pinned approval, with a person's re-confirmation**
 
 An approval of a take for a line is **valid** at the current moment only when all of the following hold:
@@ -429,6 +508,8 @@ An approval of a take for a line is **valid** at the current moment only when al
 - Each ships through the Deploy workflow, with its snapshot, after Evoni approves.
 
 ### B1: Voice data (migration `…-create-voice-studio-tables.js`)
+
+> **SUPERSEDED (Revision 6):** the approval and re-confirmation columns, the approval index (no `occurrence`) and the re-confirmation uniqueness are as built in R6.3 and R6.4.
 
 **`voice_source_assets`**: immutable source media; never edited, never hard-deleted.
 - **Columns:**
@@ -577,7 +658,7 @@ Columns: `id`, `episode_id`, `scene_clip_id`, `kind`, `target_id`, `view`, `anch
 | Prime segments, scene clips, timeline items, audio items, visibility rules, beat production | live rows; superseded rows kept | soft delete; never hard |
 | Edit versions | forever | soft delete only |
 | Frozen manifests (A10) | forever | never (review R3.3) |
-| Script versions | unchanged: 50 + 10 per episode (`scriptVersions`) | `prune`. E1 references none, so no retention provider is added |
+| Script versions | unchanged: 50 + 10 per episode (`scriptVersions`) | `prune`. E1 references none, so no retention provider is added (confirmed, R6.5) |
 | Raw takes (`episode_raw_clips`) | unchanged | the new foreign keys RESTRICT a hard delete of a take used as a source or segment. Production only soft-deletes episodes (`episodeController.deleteEpisode`, hard delete outside production only) |
 
 ### Rollback
