@@ -11,10 +11,17 @@
 // desktop is doing (Teleprompter audit 10, 2026-10-24): REC or PAUSED,
 // "Reviewing the take" while the review is open, a Start take that waits
 // until the desktop can record, and "Stop & review" for a running take.
+// "Record on this phone" (Rig mode; Evoni, 2026-10-28): the phone behind the
+// beam-splitter glass records the take itself (PhoneRecorder) while the
+// prompter under the glass scrolls; the state is read every 0.7 seconds
+// while it records (for the beat markers), with how old it was and the
+// round trip, so a marker lands as close as the connection allows.
 
-import { useState, useEffect, useCallback } from 'react';
-import { Play, Pause, Rabbit, Turtle, ChevronLeft, ChevronRight, Circle, Square, Smartphone, AlertTriangle } from 'lucide-react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { Play, Pause, Rabbit, Turtle, ChevronLeft, ChevronRight, Circle, Square, Smartphone, AlertTriangle, Video } from 'lucide-react';
 import { phoneApi, tokenFrom, expiryText, REMOTE_GONE, REMOTE_NOT_READY } from '../lib/teleprompterRemoteApi';
+import { POLL_MS } from '../hooks/useTeleprompterRemote';
+import PhoneRecorder from '../components/Teleprompter/PhoneRecorder';
 import './TeleprompterRemote.css';
 
 export const STATE_POLL_MS = 1500;
@@ -33,6 +40,11 @@ export default function TeleprompterRemote({ pollMs = STATE_POLL_MS }) {
   const [phase, setPhase] = useState(token ? 'connecting' : 'code'); // code | connecting | live | gone | unavailable
   const [error, setError] = useState(null);
   const [sending, setSending] = useState(null);
+  // Record on this phone: open, and recording (the state is read faster then).
+  const [recOpen, setRecOpen] = useState(false);
+  const [recording, setRecording] = useState(false);
+  // How old the last state was and the round trip that fetched it (beat markers).
+  const [lag, setLag] = useState(null);
 
   useEffect(() => {
     const onHash = () => { const t = readHash(); if (t) { setToken(t); setPhase('connecting'); } };
@@ -43,6 +55,7 @@ export default function TeleprompterRemote({ pollMs = STATE_POLL_MS }) {
   const read = useCallback((r) => {
     if (r.ok) {
       setState(r.data?.state || null);
+      if (r.rttMs != null) setLag({ ageMs: r.data?.state_age_ms ?? null, rttMs: r.rttMs });
       if (r.data?.expires_at) setExpires(r.data.expires_at);
       setPhase('live');
       setError(null);
@@ -58,11 +71,24 @@ export default function TeleprompterRemote({ pollMs = STATE_POLL_MS }) {
   useEffect(() => {
     if (!token || phase === 'gone' || phase === 'unavailable' || phase === 'code') return undefined;
     let live = true;
-    const tick = () => phoneApi.state(token).then((r) => { if (live) read(r); });
+    const tick = () => {
+      const t0 = Date.now();
+      return phoneApi.state(token).then((r) => { if (live) read({ ...r, rttMs: Date.now() - t0 }); });
+    };
     tick();
-    const t = window.setInterval(tick, pollMs);
+    const t = window.setInterval(tick, recording ? Math.min(pollMs, POLL_MS) : pollMs);
     return () => { live = false; window.clearInterval(t); };
-  }, [token, phase, pollMs, read]);
+  }, [token, phase, pollMs, read, recording]);
+
+  // The recorder's commands go even while a button press is on its way.
+  const sendRef = useRef(null);
+  const sendNow = useCallback(async (command) => {
+    if (!sendRef.current) return;
+    const r = await phoneApi.send(sendRef.current, command);
+    if (r.ok && r.data?.state) setState(r.data.state);
+    if (!r.ok) console.error('[TeleprompterRemote] command not sent:', command, r.status, r.error);
+  }, []);
+  sendRef.current = token;
 
   const send = async (command) => {
     if (!token || sending) return;
@@ -85,9 +111,9 @@ export default function TeleprompterRemote({ pollMs = STATE_POLL_MS }) {
   };
 
   const running = !!state?.running;
-  const recording = !!state?.recording;
+  const deskRecording = !!state?.recording;
   const canTake = !!state?.recordMode;
-  const paused = recording && !!state?.paused;
+  const paused = deskRecording && !!state?.paused;
   const reviewing = !!state?.reviewing;
   // Start waits until the desktop can record (camera ready, no take in review).
   const startBlocked = reviewing || !state?.canRecord;
@@ -131,7 +157,8 @@ export default function TeleprompterRemote({ pollMs = STATE_POLL_MS }) {
               <>
                 <p className="tpr-state" data-testid="tpr-state">
                   {paused ? <span className="tpr-rec" data-testid="tpr-paused">PAUSED · take paused</span>
-                    : recording ? <span className="tpr-rec"><span className="tpr-dot" aria-hidden="true" /> Recording{state?.scope === 'episode' ? ' · whole episode' : ''}</span>
+                    : deskRecording ? <span className="tpr-rec"><span className="tpr-dot" aria-hidden="true" /> Recording{state?.scope === 'episode' ? ' · whole episode' : ''}</span>
+                      : state?.phoneTake ? <span className="tpr-rec" data-testid="tpr-phone-take"><span className="tpr-dot" aria-hidden="true" /> Recording on this phone</span>
                       : reviewing ? <span data-testid="tpr-reviewing">Reviewing the take on the teleprompter</span>
                         : running ? 'Running' : 'Paused'}
                 </p>
@@ -147,6 +174,15 @@ export default function TeleprompterRemote({ pollMs = STATE_POLL_MS }) {
           </section>
           {error && <p className="tpr-error" role="alert">{error}</p>}
 
+          {phase === 'live' && (
+            <button type="button" className={`tpr-btn is-wide tpr-rec-toggle${recOpen ? ' is-on' : ''}`} data-testid="tpr-record-here" aria-pressed={recOpen}
+              disabled={recording} onClick={() => setRecOpen((v) => !v)}>
+              <Video size={24} aria-hidden="true" /><span>{recOpen ? 'Recording on this phone' : 'Record on this phone'}</span>
+            </button>
+          )}
+          {recOpen && phase === 'live' && <PhoneRecorder state={state} lag={lag} send={sendNow} onRecording={setRecording} />}
+
+          {!recording && (
           <div className="tpr-pad">
             <button type="button" className="tpr-btn is-primary is-play" data-testid="tpr-toggle" disabled={phase !== 'live' || !!sending} onClick={() => send('toggle')}>
               {running ? <Pause size={32} aria-hidden="true" /> : <Play size={32} aria-hidden="true" />}
@@ -158,12 +194,13 @@ export default function TeleprompterRemote({ pollMs = STATE_POLL_MS }) {
             {btn('next_beat', 'Next beat', ChevronRight)}
             <button type="button" className="tpr-btn" data-testid="tpr-smaller" disabled={phase !== 'live' || !!sending} onClick={() => send('smaller')}><span className="tpr-aa" aria-hidden="true">A-</span><span>Text smaller</span></button>
             <button type="button" className="tpr-btn" data-testid="tpr-bigger" disabled={phase !== 'live' || !!sending} onClick={() => send('bigger')}><span className="tpr-aa" aria-hidden="true">A+</span><span>Text bigger</span></button>
-            {canTake && (recording
+            {canTake && !recOpen && (deskRecording
               ? btn('record_stop', 'Stop & review', Square, 'is-rec is-wide')
               : btn('record_start', 'Start take', Circle, 'is-rec is-wide', startBlocked))}
           </div>
-          {canTake && !recording && reviewing && phase === 'live' && <p className="tpr-hint" data-testid="tpr-review-hint">Save, retake or discard the take on the teleprompter, then start the next one here.</p>}
-          {!canTake && phase === 'live' && <p className="tpr-hint">Turn on Read &amp; record on the teleprompter to start and stop takes from here. A stopped take waits for review there; nothing is saved from the phone.</p>}
+          )}
+          {canTake && !recOpen && !deskRecording && reviewing && phase === 'live' && <p className="tpr-hint" data-testid="tpr-review-hint">Save, retake or discard the take on the teleprompter, then start the next one here.</p>}
+          {!canTake && !recOpen && phase === 'live' && <p className="tpr-hint">Turn on Read &amp; record on the teleprompter to start and stop takes from here, or tap Record on this phone to film with this phone.</p>}
         </>
       )}
     </main>

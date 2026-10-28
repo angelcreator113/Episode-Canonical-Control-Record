@@ -312,6 +312,7 @@
   --studio-prompter-ok:       #7FD88A;  /* saved note (10.9:1) */
   --studio-prompter-scrim:    rgba(20, 16, 26, 0.88);  /* behind the countdown and review */
   --studio-prompter-grid:     rgba(255, 255, 255, 0.45);  /* framing grid lines on the camera preview (batch 1) */
+  --studio-prompter-rig:      #000000;  /* Rig mode: pure black under the beam-splitter glass (2026-10-28) */
 
   /* ════════════════════════════════════════════════════════════
      THE PULSE — LalaVerse's social network (pages/SocialMediaPage;

@@ -103,7 +103,8 @@ describe('Continue from where a take stopped', () => {
     await waitFor(() => expect(uploads.completes).toHaveLength(1));
     expect(JSON.parse(uploads.starts[0].body.beat_marks)).toEqual([{ beat: 11, t: 0 }, { beat: 14, t: 3.2 }]);
     expect(uploads.starts[0].body).toMatchObject({ width: 1280, height: 720 });
-    expect(uploads.completes[0].body).toEqual({ thumbnail: 'data:image/jpeg;base64,/9j/CC==' });
+    // The size and the fields as they ended up go with complete (Save while you record, 2026-10-28).
+    expect(uploads.completes[0].body).toMatchObject({ thumbnail: 'data:image/jpeg;base64,/9j/CC==', size: expect.any(Number), fields: expect.objectContaining({ label: 'Full episode · take 2' }) });
     expect(probeVideo).toHaveBeenCalledWith(expect.any(File), { knownSeconds: expect.any(Number) });
   });
 

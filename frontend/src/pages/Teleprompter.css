@@ -511,3 +511,29 @@ body.stp-open { overflow: hidden; }
   .stp-practice { font-size: 13px; }
 }
 .stp-progress-note { margin: 0; font-size: 13px; color: var(--studio-prompter-dim); }
+
+/* ── Rig mode and Flip upside down (Evoni, 2026-10-28) ─────────────────────
+   .stp-view holds the reading area and everything over it (the 3-2-1, the
+   silence cue, the "Recording on phone" dot); Flip turns all of it over at
+   once, so they stay where they belong on the glass. Mirror still turns the
+   words (and the 3-2-1 and the cue) left to right; both can be on. The
+   buttons, panels and the review are outside it and never flip. */
+.stp-view { position: absolute; inset: 0; }
+.stp-root.is-flipped .stp-view { transform: scaleY(-1); }
+.stp-rigdot {
+  position: absolute; right: 12px; top: 12px; display: flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px;
+  background: var(--studio-prompter-scrim); color: var(--studio-prompter-rec); font-family: 'DM Mono', var(--font-mono); font-size: 12px; font-weight: 700;
+  pointer-events: none;
+}
+.stp-root.is-mirrored .stp-rigdot { transform: scaleX(-1); }
+/* The device on the rig: only the words, big, on black. */
+.stp-root.is-rig { background: var(--studio-prompter-rig); }
+.stp-root.is-rig .stp-bar { display: none; }
+.stp-root.is-rig .stp-page { font-size: calc(var(--stp-size, 40px) * 1.25); }
+.stp-root.is-rig .stp-quiet, .stp-root.is-rig .stp-countdown { background: var(--studio-prompter-rig); }
+.stp-root.is-rig .stp-controls { background: var(--studio-prompter-rig); }
+.stp-root.is-rig .stp-remote { z-index: 2; }
+@media (max-width: 600px) {
+  .stp-root.is-rig .stp-page { font-size: calc(var(--stp-size, 40px) * 1.1); }
+  .stp-root.is-rig .stp-controls .stp-btn { flex: 1 1 auto; }
+}

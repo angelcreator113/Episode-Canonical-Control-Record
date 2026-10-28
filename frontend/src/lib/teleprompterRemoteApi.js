@@ -19,7 +19,11 @@ export const REMOTE_NOT_READY = "The phone remote isn't switched on yet: the dat
 export const REMOTE_GONE = 'This remote session has ended or expired. Open a new one on the teleprompter.';
 
 /** What the phone can ask for (the server keeps the same list). */
-export const COMMANDS = ['toggle', 'faster', 'slower', 'next_beat', 'prev_beat', 'bigger', 'smaller', 'record_start', 'record_stop'];
+// phone_take_*: the phone records and the prompter follows it (Rig mode, 2026-10-28).
+export const COMMANDS = [
+  'toggle', 'faster', 'slower', 'next_beat', 'prev_beat', 'bigger', 'smaller', 'record_start', 'record_stop',
+  'phone_take_start', 'phone_take_stop', 'phone_take_pause', 'phone_take_resume',
+];
 
 export const isNotReady = (err) => err?.response?.status === 409 && err?.response?.data?.code === 'MIGRATION_PENDING';
 

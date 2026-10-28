@@ -92,6 +92,10 @@ const PART_TIMEOUT_MS = 5 * 60 * 1000; // one 8 MB part, even on a slow phone co
 export async function sendInParts(episodeId, blob, fields, { resume = null, onState, onProgress, thumbnail = null, keepSession = false, sleep } = {}) {
   const cfg = keepSession ? { keepSession: true } : {};
   const usable = resume && resume.uploadId && Number(resume.size) === blob.size && Array.isArray(resume.done);
+  if (resume?.uploadId && !usable) {
+    console.warn('[rawClipsApi] the upload kept for this take does not fit it; starting again');
+    abortUpload(episodeId, resume.uploadId);
+  }
   let state = usable ? { ...resume, done: [...resume.done] } : null;
   const keep = (next) => { state = next; onState?.(next); };
   let restarted = false;
@@ -116,7 +120,7 @@ export async function sendInParts(episodeId, blob, fields, { resume = null, onSt
       try { thumb = typeof thumbnail === 'function' ? await thumbnail() : thumbnail; } catch (err) {
         console.warn('[rawClipsApi] thumbnail not made; the server makes one:', err);
       }
-      const r = await api.post(`${uploadsBase(episodeId, st.uploadId)}/complete`, thumb ? { thumbnail: thumb } : {}, { ...cfg, timeout: PART_TIMEOUT_MS });
+      const r = await api.post(`${uploadsBase(episodeId, st.uploadId)}/complete`, { ...(thumb ? { thumbnail: thumb } : {}), size: blob.size, fields }, { ...cfg, timeout: PART_TIMEOUT_MS });
       keep(null);
       return { clip: r.data?.data, stored: Array.isArray(r.data?.stored) ? new Set(r.data.stored) : null };
     } catch (err) {

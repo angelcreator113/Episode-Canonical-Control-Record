@@ -373,3 +373,89 @@ describe('end_beat_number with the upload (2026-10-28)', () => {
     expect(res.body.data.beat_number).toBe(1);
   });
 });
+
+// Saving while recording (Evoni, 2026-10-28): the upload starts before the
+// take's size is known; parts are checked again once complete brings it.
+describe('an upload begun while the take records (size_unknown)', () => {
+  const startLive = (body = {}) => start({ size: undefined, size_unknown: true, ...body });
+  const complete = (body) => request(app).post(`${BASE}/uploads/up-1/complete`).send(body);
+
+  test('starts without a size; a part of 1 byte to 8 MB is taken; no part past 5 GB worth (640)', async () => {
+    const res = await startLive();
+    expect(res.status).toBe(201);
+    expect(res.body).toMatchObject({ uploadId: 'up-1', partSize: 8 * MB, parts: null });
+    expect(multipart.get('up-1').size).toBeNull();
+    expect((await putPart(2, 8 * MB)).status).toBe(200);
+    expect((await putPart(3, 1234)).status).toBe(200);
+    expect((await putPart(641, 10)).body.error).toMatch(/only 640 parts/);
+    expect((await putPart(4, 0)).status).toBe(400);
+    expect(sent('UploadPart')).toHaveLength(2);
+  });
+
+  test('still needs size_unknown: true to leave the size out (an old page that forgets it is a 400)', async () => {
+    expect((await start({ size: undefined })).status).toBe(400);
+    expect((await start({ size: undefined, size_unknown: 'yes' })).status).toBe(400);
+  });
+
+  test('complete needs the size; every part but the last must be exactly 8 MB, else it is missing (409)', async () => {
+    await startLive();
+    await putPart(1, 8 * MB);
+    await putPart(2, 3 * MB); // sent short while recording (cannot be: it is not the last)
+    await putPart(3, 2 * MB);
+    expect((await complete({})).body.error).toMatch(/size of the take was not sent/);
+    const short = await complete({ size: 18 * MB });
+    expect(short.status).toBe(409);
+    expect(short.body.missing).toEqual([2]);
+    expect(multipart.get('up-1').size).toBe(18 * MB);
+    // Once the size is known, a part must be exactly its size.
+    expect((await putPart(2, 3 * MB)).status).toBe(400);
+    expect((await putPart(2, 8 * MB)).status).toBe(200);
+    // A size that differs from the one now fixed is refused.
+    expect((await complete({ size: 19 * MB })).status).toBe(400);
+    const done = await complete({ size: 18 * MB });
+    expect(done.status).toBe(201);
+    expect(sent('CompleteMultipartUpload')[0].input.MultipartUpload.Parts.map((p) => p.PartNumber)).toEqual([1, 2, 3]);
+    const insert = mockQuery.mock.calls.find(([sql]) => /INSERT INTO episode_raw_clips/.test(sql))[1].replacements;
+    expect(insert.size).toBe(18 * MB);
+  });
+
+  test('a part past the last (the take ended shorter) is left out of the join', async () => {
+    await startLive();
+    await putPart(1, 8 * MB);
+    await putPart(2, 5);
+    await putPart(3, 7);
+    const res = await complete({ size: 8 * MB + 5 });
+    expect(res.status).toBe(201);
+    expect(sent('CompleteMultipartUpload')[0].input.MultipartUpload.Parts.map((p) => p.PartNumber)).toEqual([1, 2]);
+  });
+
+  test('a bad or too-big size at complete is refused before anything is joined', async () => {
+    await startLive();
+    await putPart(1, 10);
+    expect((await complete({ size: -1 })).status).toBe(400);
+    expect((await complete({ size: 'big' })).status).toBe(400);
+    expect((await complete({ size: 6 * 1024 * MB })).status).toBe(413);
+    expect(sent('CompleteMultipartUpload')).toHaveLength(0);
+  });
+
+  test('the fields that exist only once the take ends come with complete, validated the same way', async () => {
+    await startLive({ label: 'Full episode · take 4', beat_number: undefined, start_line: undefined, seconds: undefined });
+    await putPart(1, 10);
+    expect((await complete({ size: 10, fields: { beat_number: 99 } })).body.error).toMatch(/beat_number must be/);
+    expect((await complete({ size: 10, fields: 'nope' })).status).toBe(400);
+    media.run.mockRejectedValue(new Error('ffprobe failed'));
+    const res = await complete({ size: 10, fields: { beat_marks: [{ beat: 1, t: 0 }, { beat: 2, t: 61.5 }], seconds: 300.4, width: 720, height: 1280, performer: 'lala' } });
+    expect(res.status).toBe(201);
+    const insert = mockQuery.mock.calls.find(([sql]) => /INSERT INTO episode_raw_clips/.test(sql))[1].replacements;
+    expect(insert).toMatchObject({ duration: 300.4, width: 720, height: 1280, performer: 'lala', label: 'Full episode · take 4' });
+    const marks = mockQuery.mock.calls.find(([sql]) => /beat_marks/.test(sql) && /UPDATE/.test(sql));
+    expect(marks).toBeTruthy();
+  });
+
+  test('a known-size upload still completes with no size, or the same one; a different size is a 400', async () => {
+    await start({ size: 3 * MB });
+    await putPart(1, 3 * MB);
+    expect((await complete({ size: 4 * MB })).status).toBe(400);
+    expect((await complete({ size: 3 * MB })).status).toBe(201);
+  });
+});

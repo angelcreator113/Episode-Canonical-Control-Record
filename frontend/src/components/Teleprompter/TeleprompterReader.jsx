@@ -94,11 +94,28 @@
 // that beat, whose markers start there (the beat at 0:00). Every take is
 // measured in the browser before it uploads (lib/videoProbe): its width,
 // height and thumbnail go with it.
+// Rig mode (Evoni, 2026-10-28: she reads off a beam-splitter teleprompter;
+// the device under the glass can't film her). "Flip upside down" turns the
+// reading area over (with Mirror, or on its own), and everything over it
+// with it: the 3-2-1, the silence cue, the cutscene banner and beat headings;
+// the buttons stay as they are. "Rig mode", remembered on this device, is for
+// the device on the rig: Mirror on, only the script, big on black, no camera
+// here, the screen kept on, and the phone remote's QR code open so the
+// phone behind the glass can join and record ("Record on this phone",
+// pages/TeleprompterRemote). Starting a take there counts in and scrolls
+// here (phone_take_start), Stop stops both; while the phone records, a small
+// red "Recording on phone" dot is all this screen adds. The phone places the
+// beat markers from the state sent here (beat, line), and saves the take
+// with the name, number, performer and start line sent with it.
+// Save while you record (same day): a take's 8 MB parts go up while it
+// records (hooks/useLiveUpload, lib/liveUpload), so after Stop the review
+// says "Saved while recording: 92%" and Save only finishes it; Discard and
+// Retake throw the upload away; Save waits for parts still going up.
 
 import { useState, useEffect, useLayoutEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  X, ChevronLeft, ChevronRight, Play, Pause, FlipHorizontal2, Timer, Video, VideoOff, Circle, Square,
+  X, ChevronLeft, ChevronRight, Play, Pause, FlipHorizontal2, FlipVertical2, Tablet, Timer, Video, VideoOff, Circle, Square,
   RotateCcw, Upload, Download, AlertTriangle, Trash2, ArrowRight, CheckCircle2, ALargeSmall, Gauge, Hourglass, SlidersHorizontal,
   AudioLines, Grid3x3, Clock, Film, Smartphone, Mic, Volume2, MoveRight, StepForward,
   Bell, MessageCircle, MousePointerClick, ArrowDownUp, Send, MonitorPlay, AppWindow, Monitor, EyeOff, Clapperboard, Smile, StickyNote, FileDown, Share2, History,
@@ -119,6 +136,8 @@ import TakesPanel, { MarkLinks, seekVideo } from './TeleprompterTakes';
 import useDialogLayer from '../../hooks/useDialogLayer';
 import useTakeRecorder from '../../hooks/useTakeRecorder';
 import useWakeLock from '../../hooks/useWakeLock';
+import useLiveUpload from '../../hooks/useLiveUpload';
+import { restoredUpload } from '../../lib/liveUpload';
 import useBackGuard from '../../hooks/useBackGuard';
 import { takeStore, takeKey, takeWhen } from '../../lib/takeStore';
 import { takeAsFile, canShareTake, downloadBlob, shareTake, takeFileName } from '../../lib/takeFile';
@@ -131,7 +150,7 @@ import { voiceClipsApi, isNotReady as voiceNotReady, VOICE_NOT_READY, clipsByLin
 import { SILENT as STUDIO_SILENT } from '../../lib/teleprompterVoiceStudio';
 import useApprovedTakes from '../../hooks/useApprovedTakes';
 import { teleprompterScript, pastedParagraphs, pastedScript, speakersOf, HER, takeName, takeExtension, downloadName, clock, lineChoice, withoutScreen, withoutSceneNotes, nextTakeNumber, takeNumberOf } from '../../lib/teleprompterLines';
-import { rawClipsApi, hasTakeFields, beatTakes, withFavorite, uploadErrorMessage, abortUpload } from '../../lib/rawClipsApi';
+import { rawClipsApi, hasTakeFields, beatTakes, withFavorite, uploadErrorMessage, abortUpload, uploadFields } from '../../lib/rawClipsApi';
 import { makeThumbnail } from '../../lib/chunkedUpload';
 import { probeVideo } from '../../lib/videoProbe';
 import { rangeText, continueFrom, beatNames } from '../../lib/clipRange';
@@ -150,7 +169,7 @@ export const SPEED_MAX = 20;
 const PX_PER_STEP = 8; // speed 5 scrolls 40px a second
 export const PACE_MIN = 0.5;
 export const PACE_MAX = 2;
-export const DEFAULTS = { size: 40, speed: 5, mirror: false, countdown: true, lineMode: 'mine', readAs: HER, pacing: 'steady', pace: 1, grid: false, playVoice: true, screen: true, sceneNotes: false };
+export const DEFAULTS = { size: 40, speed: 5, mirror: false, flipV: false, countdown: true, lineMode: 'mine', readAs: HER, pacing: 'steady', pace: 1, grid: false, playVoice: true, screen: true, sceneNotes: false };
 // The mic warning (Evoni, 2026-10-25: it warned 3 seconds in, before she had
 // spoken). Nothing in the first 8 seconds of a take; then "yet" while the mic
 // has never gone above this level, or, after sound, 15 seconds below it.
@@ -175,6 +194,7 @@ export function readSettings() {
       size: Number.isFinite(raw.size) ? clamp(raw.size, SIZE_MIN, SIZE_MAX) : DEFAULTS.size,
       speed: Number.isFinite(raw.speed) ? clamp(raw.speed, SPEED_MIN, SPEED_MAX) : DEFAULTS.speed,
       mirror: typeof raw.mirror === 'boolean' ? raw.mirror : DEFAULTS.mirror,
+      flipV: typeof raw.flipV === 'boolean' ? raw.flipV : DEFAULTS.flipV,
       countdown: typeof raw.countdown === 'boolean' ? raw.countdown : DEFAULTS.countdown,
       lineMode: raw.lineMode === 'same' ? 'same' : 'mine',
       readAs: typeof raw.readAs === 'string' && raw.readAs.trim() ? raw.readAs : HER,
@@ -188,6 +208,20 @@ export function readSettings() {
   } catch (err) {
     console.error('[Teleprompter] settings not read:', err);
     return { ...DEFAULTS };
+  }
+}
+
+// Rig mode is per device: the device on the rig keeps it, her laptop does not.
+export const RIG_KEY = 'teleprompter.rig';
+export function readRig() {
+  try { return window.localStorage.getItem(RIG_KEY) === 'on'; } catch (err) {
+    console.error('[Teleprompter] rig mode not read:', err);
+    return false;
+  }
+}
+function writeRig(on) {
+  try { if (on) window.localStorage.setItem(RIG_KEY, 'on'); else window.localStorage.removeItem(RIG_KEY); } catch (err) {
+    console.error('[Teleprompter] rig mode not kept:', err);
   }
 }
 
@@ -207,8 +241,16 @@ const reducedMotion = () => {
   }
 };
 
-// Where an element sits in the scroll box's content (works mirrored too).
-const topIn = (el, box) => el.getBoundingClientRect().top - box.getBoundingClientRect().top + box.scrollTop;
+// Where an element sits in the scroll box's content (works mirrored and
+// flipped upside down too: offsets ignore transforms; where the browser has
+// none to give, as in tests, its box on screen).
+const topIn = (el, box) => {
+  let y = 0;
+  let node = el;
+  while (node && node !== box && node.offsetParent !== undefined) { y += node.offsetTop || 0; node = node.offsetParent; }
+  if (node === box && el !== box) return y;
+  return el.getBoundingClientRect().top - box.getBoundingClientRect().top + box.scrollTop;
+};
 
 // The on-screen moment's icon (lib/teleprompterScreen screenIcon).
 const SCREEN_ICONS = {
@@ -340,7 +382,22 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
   const noteTimerRef = useRef(null);
 
   const episodeId = isScript ? source.episodeId : null;
-  const rec = useTakeRecorder(recordOn, { storeKey: takeKey(episodeId) });
+  // Rig mode: this device sits under the glass; the phone behind it records.
+  const [rig, setRig] = useState(readRig);
+  // A take the phone is recording: this screen counts in and scrolls with it.
+  const [phoneTake, setPhoneTake] = useState(false);
+  // How far each take's upload in parts got, by take id (Retry sends the rest).
+  const uploadsRef = useRef({});
+  // Each take's parts go up while it records (Save while you record).
+  const live = useLiveUpload({
+    episodeId,
+    onState: (id, st) => {
+      if (st) uploadsRef.current[id] = st; else delete uploadsRef.current[id];
+      Promise.resolve(takeStore().update(id, { meta: { upload: st } }))
+        .catch((err) => console.error('[Teleprompter] upload progress not kept with the take:', err));
+    },
+  });
+  const rec = useTakeRecorder(recordOn && !rig, { storeKey: takeKey(episodeId), listener: live.listener });
   const { take, recording } = rec;
   // The take with its length written into its header (Evoni, 2026-10-27: a
   // downloaded take showed 0:00 in her phone's player): made once per take,
@@ -355,12 +412,18 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
     return () => { live = false; };
   }, [take]);
   const takeBlob = take && playable?.take === take ? playable.blob : take?.blob;
+  // Stop: the take's last parts go up while she reviews it (Save finishes it).
+  useEffect(() => {
+    if (take?.id && playable?.take === take) live.finish(take.id, take.blob, playable.blob);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [take, playable]);
   const lengthed = async (t) => (playable?.take === t ? playable.blob : withDuration(t.blob, t.seconds));
   // A voice clip recording or waiting to be saved counts as unsaved work too.
   const [voiceBusy, setVoiceBusy] = useState(false);
   const busyTake = recording || count > 0 || !!take || rec.finishing || voiceBusy;
-  // The screen stays on while Read & record is on (a locked phone stops a take).
-  useWakeLock(recordOn);
+  // The screen stays on while Read & record is on (a locked phone stops a
+  // take), and on the rig all the time.
+  useWakeLock(recordOn || rig);
   // The take was downloaded (or shared) to this device: its review says Done.
   const [downloaded, setDownloaded] = useState(null);
   // A take kept on this device but never saved, offered back on opening.
@@ -371,8 +434,6 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
   const [keptTakes, setKeptTakes] = useState([]);
   const [usedNos, setUsedNos] = useState({});
   const [liveNo, setLiveNo] = useState(null);
-  // How far each take's upload in parts got, by take id (Retry sends the rest).
-  const uploadsRef = useRef({});
   // A take is running or about to: the bar is Stop & review and Pause.
   const takeLive = recording || arming;
   // Mid-take or in review: the controls that make no sense then are hidden.
@@ -384,8 +445,10 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
   // recording until a take starts or Read & record goes off.
   const [practicing, setPracticing] = useState(false);
   const canWhole = isScript && numbered && !!episodeId && beats.length > 0;
-  const whole = canWhole && recordOn && takeScope === 'episode';
-  const oneBeat = isScript && recordOn && beats.length > 0 && !whole;
+  // Takes are recorded here (Read & record) or by the phone behind the glass (rig mode).
+  const takeMode = recordOn || rig;
+  const whole = canWhole && takeMode && takeScope === 'episode';
+  const oneBeat = isScript && takeMode && beats.length > 0 && !whole;
   const beat = beats[current] || null;
   // Follow my voice falls back to the steady scroll where the browser can't listen.
   const voiceSupported = !!speechRecognition();
@@ -880,7 +943,7 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
   }, [oneBeat]);
 
   const goTo = (i) => {
-    if (i < 0 || i >= beats.length || busyTake) return;
+    if (i < 0 || i >= beats.length || busyTake || phoneTake) return;
     endedRef.current = false;
     setCurrent(i);
     setNotice(null);
@@ -1045,7 +1108,7 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
       setArming(false);
       toBeatStart(i);
       if (voiceOn) setVoiceFrom(syncCursor(layout.beatFirst[i] ?? 0));
-      if (!rec.begin({ videoBitsPerSecond: FULL_BITRATE, maxBytes: STOP_BYTES, meta: takeMeta('episode', i) })) return;
+      if (!rec.begin({ videoBitsPerSecond: FULL_BITRATE, maxBytes: STOP_BYTES, meta: takeMeta('episode', i), tag: liveTag('episode') })) return;
       claimNo();
       const n = beats[i]?.number;
       marksRef.current = n != null ? [{ beat: Number(n), t: 0 }] : [];
@@ -1080,9 +1143,40 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
       setArming(false);
       toStart();
       if (voiceOn) setVoiceFrom(syncCursor(fromLine));
-      if (rec.begin({ maxBytes: STOP_BYTES, meta: takeMeta('beat', current) })) { claimNo(); setPlaying(true); }
+      if (rec.begin({ maxBytes: STOP_BYTES, meta: takeMeta('beat', current), tag: liveTag('beat') })) { claimNo(); setPlaying(true); }
     });
   };
+  // What a take's upload starts with while it records (Save while you
+  // record): its file name and fields; its markers and length come at Save.
+  const liveTag = (scope) => (isScript && episodeId ? {
+    filename: scope === 'episode' ? `full-episode-take-${takeNo}` : `beat-${beatNumber ?? 'x'}-take-${takeNo}`,
+    fields: uploadFields({
+      performer, label, guestName: performer === 'guest' ? readAs : undefined,
+      beatNumber: scope === 'episode' ? undefined : beatNumber, startLine: scope === 'episode' ? undefined : fromIndex,
+    }),
+  } : null);
+  // The phone behind the glass records the take (rig mode): this screen
+  // counts in from the take's start and scrolls; Stop on either stops both.
+  const startPhoneTake = () => {
+    if (recording || take || phoneTake || count > 0) return;
+    setPracticing(false);
+    setNotice(null);
+    setSavedNext(null);
+    setPlaying(false);
+    setShowRemote(false);
+    setPhoneTake(true);
+    claimNo();
+    const toTop = () => { if (whole) toBeatStart(wholeFrom); else toStart(); };
+    toTop();
+    setArming(true);
+    countdown(() => {
+      setArming(false);
+      toTop();
+      if (voiceOn) setVoiceFrom(syncCursor(whole ? (layout.beatFirst[wholeFrom] ?? 0) : fromLine));
+      setPlaying(true);
+    });
+  };
+  const stopPhoneTake = () => { cancelCountdown(); cancelEnding(); setPlaying(false); setPhoneTake(false); setLiveNo(null); };
   const record = () => {
     if (rec.camera.status !== 'ready' || busyTake) return;
     startTake();
@@ -1110,6 +1204,8 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
   const doneWithTake = () => {
     if (downloaded && !isScript) setSessionTakes((k) => k + 1);
     setDownloaded(null);
+    // Saving while recording: that upload goes first (and stops sending).
+    if (take?.id) live.abort(take.id);
     // An upload in parts never finished for this take: thrown away on the server too.
     const left = take?.id ? uploadsRef.current[take.id] : null;
     if (left?.uploadId && episodeId) abortUpload(episodeId, left.uploadId);
@@ -1138,11 +1234,13 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
   // it; any other take ends ENDING_MS later ("Ending the take…"), then the review.
   endRef.current = () => {
     setPlaying(false);
-    if (!recording) { endedRef.current = true; return; }
-    if (whole) { stopTake(); return; }
+    if (!recording && !phoneTake) { endedRef.current = true; return; }
+    // The phone's take ends with the script too (the phone sees it and stops).
+    if (whole) { if (phoneTake) stopPhoneTake(); else stopTake(); return; }
     if (endTimerRef.current) return;
     setEnding(true);
-    endTimerRef.current = window.setTimeout(() => { endTimerRef.current = null; setEnding(false); rec.stop(); }, ENDING_MS);
+    const end = phoneTake ? stopPhoneTake : () => rec.stop();
+    endTimerRef.current = window.setTimeout(() => { endTimerRef.current = null; setEnding(false); end(); }, ENDING_MS);
   };
 
   // The beat on the reading line while a whole-episode take runs: its
@@ -1302,6 +1400,8 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
     setSave((s) => ({ ...s, status: 'saving', error: null }));
     try {
       if (!clip) {
+        // Parts still going up from the recording: wait, so nothing goes up twice.
+        await live.settled(take.id);
         await freshSignIn();
         const file = new File([await lengthed(take)], `beat-${beatNumber ?? 'x'}-take-${takeNo}.${takeExtension(take.type)}`, { type: take.type });
         const m = await measureTake(file, take);
@@ -1329,6 +1429,7 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
       // "Next beat →": the next beat, ready to record.
       setSavedNext(oneBeat && current < beats.length - 1 ? current + 1 : null);
       setSave({ status: 'idle', progress: 0, error: null, clip: null });
+      live.forget(take.id);
       doneWithTake();
     } catch (err) {
       console.error('[Teleprompter] take not saved:', err);
@@ -1345,6 +1446,7 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
     setSave((s) => ({ ...s, status: 'saving', error: null }));
     try {
       if (!clip) {
+        await live.settled(take.id);
         await freshSignIn();
         const file = new File([await lengthed(take)], `full-episode-take-${takeNo}.${takeExtension(take.type)}`, { type: take.type });
         const m = await measureTake(file, take);
@@ -1381,6 +1483,7 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
         setPendingMarks({ label, marks: kept, at: take.startedAt || Date.now() });
       }
       setSave({ status: 'idle', progress: 0, error: null, clip: null });
+      live.forget(take.id);
       doneWithTake();
       resetMarks();
     } catch (err) {
@@ -1425,7 +1528,8 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
     if (!got) { setNotice('That take could not be opened.'); return; }
     // Its own number, and how far its upload got before (Retry sends the rest).
     setLiveNo(Number.isInteger(m.takeNo) ? m.takeNo : takeNumberOf(m.label));
-    if (m.upload?.uploadId) uploadsRef.current[o.id] = m.upload;
+    // A take whose parts went up while it recorded (its size not known then): ready for Retry.
+    if (m.upload?.uploadId) uploadsRef.current[o.id] = restoredUpload(m.upload, got.blob?.size) || m.upload;
     setNotice(null);
     setSavedNext(null);
     setSave({ status: 'idle', progress: 0, error: null, clip: null });
@@ -1467,6 +1571,8 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
   const [remoteOn, setRemoteOn] = useState(false);
   const [showRemote, setShowRemote] = useState(false);
   const onRemoteCommand = (cmd) => {
+    // On the rig the QR code steps aside once the phone is driving.
+    if (rig) setShowRemote(false);
     switch (cmd) {
       case 'toggle': if (!take) togglePlay(); break;
       case 'faster': faster(1); break;
@@ -1478,6 +1584,11 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
       // A take starts only in Read & record; a stopped one waits for review here, never saved by itself.
       case 'record_start': if (recordOn && !busyTake && rec.camera.status === 'ready') record(); break;
       case 'record_stop': if (recording) stopAndReview(); break;
+      // The phone records; this screen counts in, scrolls, pauses and stops with it.
+      case 'phone_take_start': startPhoneTake(); break;
+      case 'phone_take_stop': if (phoneTake || arming) stopPhoneTake(); break;
+      case 'phone_take_pause': if (phoneTake) { cancelCountdown(); cancelEnding(); setPlaying(false); } break;
+      case 'phone_take_resume': if (phoneTake && !playing && count === 0) setPlaying(true); break;
       default: break;
     }
   };
@@ -1487,11 +1598,38 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
     scope: whole ? 'episode' : 'beat', paused: !!rec.paused,
     beat: (whole ? liveNumber : beat?.number) ?? null, beatName: (whole ? beats[liveBeat]?.name : beat?.name) || null, title: isScript ? (source.title || 'Script') : 'Your text',
     pacing, speed: settings.speed, pace, size: settings.size,
+    // Rig mode: what the phone recording behind the glass needs (Evoni, 2026-10-28).
+    rig, playing, phoneTake, line: active, count, episodeId: episodeId || null,
+    takeLabel: label, takeNo, readAs, performer, startLine: oneBeat ? fromIndex : 0,
   };
   const remote = useTeleprompterRemote(remoteOn, { episodeId: isScript ? source.episodeId || null : null, onCommand: onRemoteCommand, state: remoteState });
   const openRemote = () => {
     if (!remoteOn) { setRemoteOn(true); setShowRemote(true); return; }
     setShowRemote((v) => !v);
+  };
+  // Rig mode opens the remote and shows its QR code, for the phone to join.
+  useEffect(() => {
+    if (!rig) return;
+    setRemoteOn(true);
+    setShowRemote(true);
+  }, [rig]);
+  const toggleRig = () => {
+    const on = !rig;
+    // A take recorded here comes first (save or discard it).
+    if (on && busyTake) return;
+    cancelCountdown();
+    cancelEnding();
+    setPlaying(false);
+    setPracticing(false);
+    setPhoneTake(false);
+    if (on) {
+      if (recordOn) { doneWithTake(); resetMarks(); setRecordOn(false); }
+      set('mirror', true);
+      setMore(false);
+    }
+    setRig(on);
+    writeRig(on);
+    refocus();
   };
 
   // Record voice (batch 3): the line on the reading line, someone else's spoken line in a numbered beat.
@@ -1590,6 +1728,9 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
     else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
   };
 
+  // The take's parts already up from the recording, for its review.
+  const liveInfo = take ? live.info(take.id) : null;
+  const liveSaved = liveInfo && liveInfo.status !== 'off' && liveInfo.status !== 'aborted' ? liveInfo.percent : null;
   const problem = rec.camera.message || rec.error || (voiceOn ? voice.error || voiceMicError : null);
   const cueOn = showCue && !take && count === 0 && !ending;
   // Voice clips play through the speakers during a take; say how to keep them out of it.
@@ -1615,7 +1756,7 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
   return createPortal(
     <div
       ref={dialogRef}
-      className={`stp-root is-${settings.lineMode}${settings.mirror ? ' is-mirrored' : ''}${pacing !== 'steady' ? ' is-paced' : ''}${recordOn && rec.camera.status === 'ready' ? ' has-cam' : ''}`}
+      className={`stp-root is-${settings.lineMode}${settings.mirror ? ' is-mirrored' : ''}${settings.flipV ? ' is-flipped' : ''}${rig ? ' is-rig' : ''}${pacing !== 'steady' ? ' is-paced' : ''}${recordOn && rec.camera.status === 'ready' ? ' has-cam' : ''}`}
       role="dialog"
       aria-modal="true"
       aria-labelledby="stp-title"
@@ -1654,6 +1795,8 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
       </div>
 
       <div className="stp-stage">
+        {/* The reading area and everything over it: what Flip upside down turns over. */}
+        <div className="stp-view" data-testid="stp-view">
         <div className="stp-scroll" ref={scrollRef} onScroll={onScroll} data-testid="stp-scroll">
           <div className="stp-spacer is-top" aria-hidden="true" />
           <article className="stp-page" style={{ '--stp-size': `${settings.size}px` }} data-testid="stp-page">
@@ -1679,8 +1822,16 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
         {cueOn && <SilenceCue line={atLine} left={cueLeft} total={cueTotal} reduced={reduced} voice={!!activeClip && !lineVoice.failed} note={studioNote} />}
         {studioNote && !take && !cueOn && <p className="stp-studio-note" data-testid="stp-studio-note">{studioNote}</p>}
         <p className="stp-sr" role="status" data-testid="stp-quiet-live">{cueOn ? cueSays(atLine) : ''}</p>
+        {count > 0 && <div className="stp-countdown" aria-live="assertive" data-testid="stp-countdown">{count}</div>}
+        {/* The phone behind the glass is recording: a small dot, nothing more. */}
+        {phoneTake && (
+          <div className="stp-rigdot" role="status" data-testid="stp-rig-recording">
+            <span className="stp-dot" aria-hidden="true" /> Recording on phone
+          </div>
+        )}
+        </div>
 
-        {(recording || meterStream || (practicing && recordLead)) && (
+        {!rig && (recording || meterStream || (practicing && recordLead)) && (
           <div className="stp-hud">
             {practicing && recordLead && (
               <div className="stp-practice" role="status" data-testid="stp-practicing">
@@ -1743,8 +1894,6 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
         {showTimes && rehearsalKey && !take && (
           <RehearsalPanel rows={rehearsalRows} savedAt={savedNote} onReset={() => { setTimes({}); setSavedNote(null); }} onSave={saveTimes} />
         )}
-        {count > 0 && <div className="stp-countdown" aria-live="assertive" data-testid="stp-countdown">{count}</div>}
-
         {take && (
           <div className="stp-review" role="region" aria-labelledby="stp-review-title" data-testid="stp-review">
             <div className="stp-review-head">
@@ -1759,6 +1908,11 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
             )}
             {whole && marks.length > 0 && (
               <MarkLinks marks={marks} onSeek={(t) => seekVideo(reviewRef.current, t)} testId="stp-review-marks" />
+            )}
+            {liveSaved != null && save.status !== 'saving' && (
+              <p className="stp-progress-note" aria-live="polite" data-testid="stp-live-saved">
+                {liveSaved >= 100 ? 'Saved while recording: 100%. Save take finishes it.' : `Saved while recording: ${liveSaved}%`}
+              </p>
             )}
             {save.status === 'saving' && (
               <div className="stp-progress" role="progressbar" aria-valuenow={save.progress} aria-valuemin={0} aria-valuemax={100} aria-label="Uploading the take">
@@ -1826,7 +1980,7 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
         </p>
       )}
 
-      {offer && !take && !recording && (
+      {offer && !take && !recording && !rig && (
         <p className="stp-status is-ok" role="status" data-testid="stp-recover">
           <History size={16} aria-hidden="true" />
           <span>You have an unsaved take from {takeWhen(offer.startedAt)}{offer.meta?.label ? ` (${offer.meta.label})` : ''}.</span>
@@ -1836,6 +1990,36 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
       )}
 
       <div className={`stp-controls${takeLive ? ' is-take' : ''}`} data-testid="stp-controls">
+        {rig ? (
+          <>
+            {/* Rig mode: only what the rig needs; the phone behind the glass does the rest. */}
+            <button type="button" className="stp-btn is-primary is-play" data-testid="stp-play" aria-pressed={playing} aria-label={playing || count > 0 ? 'Pause' : 'Play'} onClick={togglePlay}>
+              {playing || count > 0 ? <Pause size={20} aria-hidden="true" /> : <Play size={20} aria-hidden="true" />}
+              <span className="stp-btn-text">{playing || count > 0 ? 'Pause' : 'Play'}</span>
+            </button>
+            <button type="button" className="stp-btn" data-testid="stp-mirror" aria-pressed={settings.mirror} onClick={() => set('mirror', !settings.mirror)}>
+              <FlipHorizontal2 size={18} aria-hidden="true" /> Mirror
+            </button>
+            <button type="button" className="stp-btn" data-testid="stp-flip" aria-pressed={settings.flipV} onClick={() => set('flipV', !settings.flipV)}>
+              <FlipVertical2 size={18} aria-hidden="true" /> Flip upside down
+            </button>
+            <button type="button" className="stp-btn" data-testid="stp-remote-toggle" aria-pressed={showRemote && remoteOn} onClick={openRemote}>
+              <Smartphone size={18} aria-hidden="true" /> Phone{remote.status === 'live' && <span className="stp-live-dot" aria-hidden="true" />}
+            </button>
+            {/* What the phone's take records: this beat, or the whole episode. */}
+            {canWhole && (
+              <div className="stp-scope" role="group" aria-label="What a take records">
+                <button type="button" className="stp-btn" data-testid="stp-scope-beat" aria-pressed={!whole} disabled={phoneTake || arming} onClick={() => setTakeScope('beat')}>One beat</button>
+                <button type="button" className="stp-btn" data-testid="stp-scope-episode" aria-pressed={whole} disabled={phoneTake || arming} onClick={() => setTakeScope('episode')}>
+                  <Clapperboard size={18} aria-hidden="true" /> Whole episode
+                </button>
+              </div>
+            )}
+            <button type="button" className="stp-btn is-on" data-testid="stp-rig-toggle" aria-pressed="true" disabled={phoneTake} onClick={toggleRig}>
+              <Tablet size={18} aria-hidden="true" /> Leave rig mode
+            </button>
+          </>
+        ) : (<>
         {takeLive ? (
           <>
             {/* A take: the way out is the biggest thing on the bar. */}
@@ -1901,6 +2085,13 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
         </div>
         <button type="button" className="stp-btn" data-testid="stp-mirror" aria-pressed={settings.mirror} onClick={() => set('mirror', !settings.mirror)}>
           <FlipHorizontal2 size={18} aria-hidden="true" /> Mirror
+        </button>
+        <button type="button" className="stp-btn" data-testid="stp-flip" aria-pressed={settings.flipV} title="Turn the words upside down, for a teleprompter whose glass shows them flipped" onClick={() => set('flipV', !settings.flipV)}>
+          <FlipVertical2 size={18} aria-hidden="true" /> Flip upside down
+        </button>
+        <button type="button" className="stp-btn" data-testid="stp-rig-toggle" aria-pressed={rig} disabled={busyTake}
+          title="For the device under the teleprompter glass: only the words, and your phone records" onClick={toggleRig}>
+          <Tablet size={18} aria-hidden="true" /> Rig mode
         </button>
         <button type="button" className="stp-btn" data-testid="stp-countdown-toggle" aria-pressed={settings.countdown} title="Count 3-2-1 before scrolling (a take always counts 3-2-1 first)" onClick={() => set('countdown', !settings.countdown)}>
           <Timer size={18} aria-hidden="true" /> 3-2-1
@@ -2023,6 +2214,7 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
             </select>
           </label>
         )}
+        </>)}
       </div>
     </div>,
     document.body,

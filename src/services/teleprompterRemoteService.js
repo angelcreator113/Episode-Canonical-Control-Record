@@ -24,7 +24,14 @@ const TTL_HOURS = 2;
 // when it was opened.
 const MAX_HOURS = 8;
 const RECENT = 10; // commands kept in last_command.recent
-const COMMANDS = Object.freeze(['toggle', 'faster', 'slower', 'next_beat', 'prev_beat', 'bigger', 'smaller', 'record_start', 'record_stop']);
+// phone_take_*: the phone records the take itself and the prompter (the
+// rig under the glass) counts in, scrolls, pauses and stops with it (Rig
+// mode; Evoni, 2026-10-28). Added to the end: the older commands are unchanged.
+const COMMANDS = Object.freeze([
+  'toggle', 'faster', 'slower', 'next_beat', 'prev_beat', 'bigger', 'smaller', 'record_start', 'record_stop',
+  'phone_take_start', 'phone_take_stop', 'phone_take_pause', 'phone_take_resume',
+]);
+const PERFORMERS = ['justawoman', 'lala', 'guest'];
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const TOKEN_RE = /^[A-Za-z0-9_-]{43}$/; // 32 bytes, base64url
 const NOT_READY = "The phone remote isn't switched on yet: the database update that adds it (20261020120000) hasn't run.";
@@ -88,9 +95,16 @@ const text = (v, max) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, 
  * (number), beatName, pacing, title (short text); scope ('beat' or
  * 'episode', else null); speed, pace, size (numbers). paused and scope are
  * kept so the phone can show PAUSED and "Stop & review" (Teleprompter audit 10).
+ *
+ * Rig mode (Evoni, 2026-10-28), for a phone that records the take itself:
+ * rig, playing, phoneTake (booleans); line (the line on the reading line)
+ * and count (the 3-2-1 showing) (numbers); and what the phone needs to save
+ * the take as the prompter would: episodeId (a uuid, else null), takeLabel,
+ * takeNo, readAs, performer (one of PERFORMERS), startLine.
  */
 function readState(body = {}) {
   const s = body && typeof body === 'object' ? body : {};
+  const whole = (v, lo, hi) => { const n = v == null || v === '' ? null : num(v, lo, hi); return n == null ? null : Math.round(n); };
   return {
     running: s.running === true,
     recording: s.recording === true,
@@ -106,6 +120,17 @@ function readState(body = {}) {
     speed: num(s.speed, 0, 100),
     pace: num(s.pace, 0, 10),
     size: num(s.size, 0, 400),
+    rig: s.rig === true,
+    playing: s.playing === true,
+    phoneTake: s.phoneTake === true,
+    line: whole(s.line, 0, 100000),
+    count: whole(s.count, 0, 9),
+    episodeId: typeof s.episodeId === 'string' && UUID_RE.test(s.episodeId) ? s.episodeId : null,
+    takeLabel: text(s.takeLabel, 200),
+    takeNo: whole(s.takeNo, 0, 100000),
+    readAs: text(s.readAs, 120),
+    performer: PERFORMERS.includes(s.performer) ? s.performer : null,
+    startLine: whole(s.startLine, 0, 100000),
   };
 }
 
@@ -161,7 +186,7 @@ async function putState(sequelize, { id, userId, state }) {
   const clean = readState(state);
   return guarded('state', async () => {
     const [rows] = await sequelize.query(
-      `UPDATE ${TABLE} SET state = CAST(:state AS JSONB), updated_at = NOW(),
+      `UPDATE ${TABLE} SET state = CAST(:state AS JSONB) || jsonb_build_object('saved_at', NOW()), updated_at = NOW(),
           expires_at = GREATEST(expires_at, LEAST(NOW() + INTERVAL '${TTL_HOURS} hours', created_at + INTERVAL '${MAX_HOURS} hours'))
         WHERE ${liveOwned} AND expires_at > NOW()
         RETURNING ${PUBLIC_COLUMNS}`,
@@ -216,15 +241,24 @@ async function addCommand(sequelize, { token, command }) {
   });
 }
 
-/** What the phone shows: { state, expires_at, seq } of the token's live session, or a 410. */
+/**
+ * What the phone shows: { state, expires_at, seq, state_age_ms } of the
+ * token's live session, or a 410. state_age_ms: how long ago the desktop
+ * sent this state, by the database's own clock (no two devices' clocks
+ * compared), so a phone recording the take can place a beat marker that
+ * much earlier; null for a state sent before saved_at was kept.
+ */
 async function stateByToken(sequelize, { token }) {
   const tokenHash = hashToken(readToken(token));
   return guarded('phone state', async () => {
     const [[row]] = await sequelize.query(
-      `SELECT state, expires_at, command_seq FROM ${TABLE} WHERE ${liveByToken} LIMIT 1`,
+      `SELECT state, expires_at, command_seq,
+              GREATEST(0, EXTRACT(EPOCH FROM (NOW() - (state->>'saved_at')::timestamptz)) * 1000) AS state_age_ms
+         FROM ${TABLE} WHERE ${liveByToken} LIMIT 1`,
       { replacements: { tokenHash } });
     if (!row) throw new RemoteError(410, GONE, 'SESSION_GONE');
-    return { state: row.state || null, expires_at: row.expires_at, seq: Number(row.command_seq) };
+    const age = row.state_age_ms == null ? null : Math.round(Number(row.state_age_ms));
+    return { state: row.state || null, expires_at: row.expires_at, seq: Number(row.command_seq), state_age_ms: Number.isFinite(age) ? age : null };
   });
 }
 
