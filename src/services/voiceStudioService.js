@@ -98,6 +98,8 @@ function defaultMedia() {
       fs.createReadStream(localPath).on('error', reject).on('data', (d) => h.update(d)).on('end', () => resolve(h.digest('hex')));
     }),
     upload: (localPath, key, contentType) => media.uploadFile(localPath, key, contentType),
+    // Where a stored source is played from (the asset bucket's public URL, as the raw takes and the old voice clips are).
+    url: (key) => media.publicUrl(key),
     download: (key, localPath) => media.downloadFile(key, localPath),
     tmpPath: (name) => media.tmpPath(name),
     removeFile: (p) => media.removeFile(p),
@@ -105,7 +107,7 @@ function defaultMedia() {
 }
 let mediaImpl = null;
 const media = () => (mediaImpl ||= defaultMedia());
-/** For tests: replace the media functions (probe, sha256File, upload, download, tmpPath, removeFile). */
+/** For tests: replace the media functions (probe, sha256File, upload, download, tmpPath, removeFile, url). */
 function setMedia(m) { mediaImpl = m; }
 
 /** { hasAudio, duration_ms, sample_rate, channels } from ffprobe's JSON. */
@@ -586,9 +588,10 @@ function listed(a, e) {
   };
 }
 
-/** Every approval not superseded, with its state now, and counts by episode and beat. */
-async function summary(sequelize, { episodeId }) {
-  return sequelize.transaction(async (t) => {
+/** Every approval not superseded, with its state now, and counts by episode and beat. In `t` when given (studioView). */
+async function summary(sequelize, { episodeId }, outer = null) {
+  const inTx = (fn) => (outer ? fn(outer) : sequelize.transaction(fn));
+  return inTx(async (t) => {
     const state = await episodeState(sequelize, episodeId, t);
     const contexts = lc.lineContexts(state.script);
     const approvals = await rows(sequelize, `SELECT ${APPROVAL_COLUMNS} FROM line_voice_approvals a
@@ -699,11 +702,14 @@ async function removeCandidate(sequelize, { episodeId, candidateId }) {
   });
 }
 
-/** The episode's takes: candidate, source, latest revision and current association. */
-async function listTakes(sequelize, { episodeId }) {
-  await episodeState(sequelize, episodeId);
-  return rows(sequelize, `SELECT c.id, c.label, c.created_at, c.created_by,
-      s.id AS source_id, s.source_kind, s.duration_ms AS source_duration_ms, s.original_filename,
+// Where a take's source is played from.
+const sourceUrl = (key) => (media().url ? media().url(key) : require('./rawClipMedia').publicUrl(key));
+
+/** The episode's takes: candidate, source (with the URL it plays from), latest revision and current association. */
+async function listTakes(sequelize, { episodeId }, t = null) {
+  await episodeState(sequelize, episodeId, t);
+  const found = await rows(sequelize, `SELECT c.id, c.label, c.created_at, c.created_by,
+      s.id AS source_id, s.source_kind, s.duration_ms AS source_duration_ms, s.original_filename, s.s3_key, s.content_type,
       r.id AS revision_id, r.revision_no, r.in_ms, r.out_ms, r.gain_db, r.fade_in_ms, r.fade_out_ms, r.normalise,
       a.id AS association_id, a.beat_number, a.line_index, a.speaker_written, a.words, a.script_revision AS associated_at_revision
     FROM line_voice_candidates c
@@ -711,7 +717,75 @@ async function listTakes(sequelize, { episodeId }) {
     LEFT JOIN LATERAL (SELECT * FROM line_voice_candidate_revisions x WHERE x.candidate_id = c.id AND x.deleted_at IS NULL ORDER BY x.revision_no DESC LIMIT 1) r ON TRUE
     LEFT JOIN line_voice_associations a ON a.candidate_id = c.id AND a.superseded_at IS NULL AND a.deleted_at IS NULL
     WHERE c.episode_id = :episodeId AND c.deleted_at IS NULL
-    ORDER BY a.beat_number NULLS LAST, a.line_index NULLS LAST, c.created_at`, { episodeId });
+    ORDER BY a.beat_number NULLS LAST, a.line_index NULLS LAST, c.created_at, c.id`, { episodeId }, t);
+  return found.map(({ s3_key: key, ...take }) => ({ ...take, audio_url: sourceUrl(key) }));
+}
+
+/** listTakes, each with where its current tie stands in the script now (null when untied). */
+async function boundTakes(sequelize, episodeId, contexts, t) {
+  const takes = await listTakes(sequelize, { episodeId }, t);
+  const assocs = await rows(sequelize, `SELECT * FROM line_voice_associations
+    WHERE episode_id = :episodeId AND superseded_at IS NULL AND deleted_at IS NULL`, { episodeId }, t);
+  const byCandidate = new Map(assocs.map((a) => [a.candidate_id, a]));
+  return takes.map((take) => {
+    const assoc = byCandidate.get(take.id);
+    if (!assoc) return { ...take, binding: null };
+    const r = lc.resolve(assoc, contexts);
+    return { ...take, binding: { status: r.status, reason: r.reason, reason_text: r.reason ? STATE_REASONS[r.reason] || r.reason : null, line_index: r.line_index, candidates: r.candidates } };
+  });
+}
+
+/**
+ * Everything the Voice Studio page shows, read in one snapshot (REPEATABLE
+ * READ, read only), so its lines, takes and approval states all belong to
+ * the same saved script (Voice Studio B2, Evoni, 2026-10-28):
+ *   episode          { id, title, episode_number }
+ *   script_revision  the revision every write from this page sends back
+ *   script_seq       the script save number (a decimal string)
+ *   beats            [{ beat_number, duplicate, usable, lines: [line] }], in
+ *                    script order; a line is its context from
+ *                    utils/voiceLineContext (the one rule), with `spoken`
+ *                    (a voice take can be tied to it: a speaker, not Prime)
+ *   takes            listTakes, each with `binding`: where its tie stands in
+ *                    this script (lc.resolve: bound, moved, ambiguous or
+ *                    unbound, with the line index and candidates), so a take
+ *                    is shown at the line it is for, never at whatever line
+ *                    now sits at its old place
+ *   summary          summary (approvals with their states, counts)
+ * Nothing here is computed from the page's words; the page only shows it.
+ */
+async function studioView(sequelize, { episodeId }) {
+  const { Transaction } = require('sequelize');
+  return sequelize.transaction({ isolationLevel: Transaction.ISOLATION_LEVELS.REPEATABLE_READ, readOnly: true }, async (t) => {
+    const state = await episodeState(sequelize, episodeId, t);
+    const ep = await one(sequelize, 'SELECT id, title, episode_number FROM episodes WHERE id = :episodeId', { episodeId }, t);
+    const contexts = lc.lineContexts(state.script);
+    const beats = [];
+    const seen = new Set();
+    for (const [number, beat] of contexts.beats) {
+      if (seen.has(number)) continue;
+      seen.add(number);
+      const usable = Number.isInteger(number) && number >= 1 && number <= 14 && beat.count === 1;
+      beats.push({
+        beat_number: number,
+        duplicate: beat.count > 1,
+        usable,
+        lines: beat.lines.map((c) => ({
+          beat_number: c.beat_number, line_index: c.line_index, occurrence: c.occurrence,
+          speaker_key: c.speaker_key, speaker_written: c.speaker_written, delivery_note: c.delivery_note,
+          words: c.words, prime: c.prime, context_hash: c.context_hash, spoken: Boolean(c.speaker_key) && !c.prime,
+        })),
+      });
+    }
+    return {
+      episode: { id: ep.id, title: ep.title, episode_number: ep.episode_number },
+      script_revision: state.revision,
+      script_seq: state.seq,
+      beats,
+      takes: await boundTakes(sequelize, episodeId, contexts, t),
+      summary: await summary(sequelize, { episodeId }, t),
+    };
+  });
 }
 
 // ── Legacy import ────────────────────────────────────────────────────────────
@@ -770,5 +844,5 @@ module.exports = {
   VoiceStudioError, STATE_REASONS, STATES, AUDIO_EXTS, MAX_SECONDS, isPlayable,
   setMedia, readAudioProbe, readSettings, settingsHash, episodeState,
   createSource, createCandidate, reviseCandidate, associate, approve, resolveApproval, revokeApproval,
-  summary, playableApprovals, approvalHistory, reconfirm, removeCandidate, listTakes, importLegacy,
+  summary, playableApprovals, approvalHistory, reconfirm, removeCandidate, listTakes, importLegacy, studioView,
 };
