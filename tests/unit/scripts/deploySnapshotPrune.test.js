@@ -18,19 +18,19 @@ const SCRIPT = path.join(ROOT, 'scripts', 'deploy', 'prune-snapshots.sh');
 const WORKFLOW = fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'deploy.yml'), 'utf8');
 const RUNBOOK = fs.readFileSync(path.join(ROOT, 'docs', 'runbooks', 'deploy-workflow.md'), 'utf8');
 
-// Lists FAKE_LIST for describe-db-snapshots (or fails when FAKE_LIST_FAIL is
+// Lists FAKE_JSON for describe-db-snapshots (or fails when FAKE_LIST_FAIL is
 // set); for delete-db-snapshot, records the id and fails for FAKE_DENY (every
-// id) or FAKE_FAIL (one id).
+// id) or FAKE_FAIL (a comma-separated list of ids).
 const FAKE_AWS = `#!/usr/bin/env bash
 echo "$*" >>"$CALLS"
 case "$2" in
   describe-db-snapshots)
     if [ -n "\${FAKE_LIST_FAIL:-}" ]; then echo "An error occurred (Throttling)" >&2; exit 255; fi
-    printf '%s\\n' "$FAKE_LIST" ;;
+    printf '%s\\n' "$FAKE_JSON" ;;
   delete-db-snapshot)
     id="$4"
     if [ -n "\${FAKE_DENY:-}" ]; then echo "An error occurred (AccessDenied) when calling the DeleteDBSnapshot operation: not authorized" >&2; exit 254; fi
-    if [ "$id" = "\${FAKE_FAIL:-}" ]; then echo "An error occurred (InvalidDBSnapshotState)" >&2; exit 254; fi
+    case ",\${FAKE_FAIL:-}," in *",$id,"*) echo "An error occurred (InvalidDBSnapshotState)" >&2; exit 254 ;; esac
     echo "$id" ;;
   *) echo "unexpected: $*" >&2; exit 2 ;;
 esac
@@ -44,9 +44,18 @@ beforeEach(() => {
 });
 afterEach(() => { fs.rmSync(tmp, { recursive: true, force: true }); });
 
-const snaps = (n) => Array.from({ length: n }, (_, i) => `deploy-${String(i).padStart(12, '0')}-${1000 - i}-1`);
+const NOW = Date.parse('2026-10-28T12:00:00Z');
+const DAY = 24 * 60 * 60 * 1000;
+// n snapshots, newest first: index i was made (i + 1) * 2 days ago (all past the 7-day minimum from index 3).
+const snaps = (n, { start = 0 } = {}) => Array.from({ length: n }, (_, i) => ({
+  id: `deploy-${(start + i).toString(16).padStart(12, '0')}-${9000 - start - i}-1`,
+  created: new Date(NOW - (start + i + 1) * 2 * DAY).toISOString(),
+  tags: [],
+}));
+const ids = (list) => list.map((x) => x.id);
+const shuffle = (list) => [...list].reverse();
 
-function prune(env = {}) {
+function prune(list, env = {}) {
   const calls = path.join(tmp, 'calls');
   const output = path.join(tmp, 'github_output');
   fs.rmSync(calls, { force: true });
@@ -57,17 +66,22 @@ function prune(env = {}) {
       RDS_INSTANCE_ID: 'episode-control-dev',
       CALLS: calls,
       GITHUB_OUTPUT: output,
+      NOW_EPOCH: String(NOW / 1000),
+      DRY_RUN: '0',
+      FAKE_JSON: typeof list === 'string' ? list : JSON.stringify(list),
       ...env,
     },
     encoding: 'utf8',
   });
   const lines = fs.existsSync(calls) ? fs.readFileSync(calls, 'utf8').trim().split('\n').filter(Boolean) : [];
+  const out = fs.existsSync(output) ? fs.readFileSync(output, 'utf8') : '';
   return {
     status: res.status,
-    stdout: res.stdout,
+    stdout: res.stdout + res.stderr,
     deleted: lines.filter((l) => l.startsWith('rds delete-db-snapshot')).map((l) => l.split(' ')[3]),
     calls: lines,
-    output: fs.existsSync(output) ? fs.readFileSync(output, 'utf8') : '',
+    output: out,
+    note: (/note=(.*)/.exec(out) || [])[1],
   };
 }
 
@@ -77,64 +91,118 @@ test('the script parses (bash -n)', () => {
   expect(res.status).toBe(0);
 });
 
-test('lists only this instance\'s available deploy-* manual snapshots, newest first', () => {
-  const res = prune({ FAKE_LIST: '' });
+test('lists only this instance\'s available deploy-* manual snapshots, with their times and tags', () => {
+  const res = prune([]);
   expect(res.calls[0]).toContain('rds describe-db-snapshots --db-instance-identifier episode-control-dev --snapshot-type manual');
   expect(res.calls[0]).toContain("starts_with(DBSnapshotIdentifier, 'deploy-') && Status == 'available'");
-  expect(res.calls[0]).toContain('reverse(sort_by(');
-  expect(res.calls[0]).toContain('&SnapshotCreateTime');
+  expect(res.calls[0]).toContain('created: SnapshotCreateTime');
+  expect(res.calls[0]).toContain('tags: TagList');
+  expect(res.calls[0]).toContain('--output json');
 });
 
-test('keeps the newest 10 by default and deletes the older ones', () => {
+test('a dry run unless switched off: names what it would remove, removes nothing', () => {
   const all = snaps(14);
-  const res = prune({ FAKE_LIST: all.join('\t') });
-  expect(res.status).toBe(0);
-  expect(res.deleted).toEqual(all.slice(10));
-  expect(res.output).toBe('kept=10\nremoved=4\nnote=ok\n');
+  for (const flag of [undefined, '', '1', 'true', 'yes']) {
+    const res = prune(all, { DRY_RUN: flag });
+    expect(res.deleted).toEqual([]);
+    expect(res.note).toBe('dry-run');
+    expect(res.output).toContain('would_remove=4');
+  }
+  const res = prune(all, { DRY_RUN: '' });
+  expect(res.stdout).toContain(`Would remove ${all[13].id}.`);
+  expect(res.stdout).toContain('dry run: nothing will be removed');
+  for (const off of ['0', 'false', 'OFF']) expect(prune(all, { DRY_RUN: off }).deleted).toHaveLength(4);
 });
 
-test('at or under the keep count, nothing is deleted; an empty list ("None") is fine', () => {
-  expect(prune({ FAKE_LIST: snaps(10).join('\t') }).deleted).toEqual([]);
-  const none = prune({ FAKE_LIST: 'None' });
-  expect(none.deleted).toEqual([]);
-  expect(none.output).toContain('removed=0');
+test('keeps the newest 10 by default and removes older ones, oldest first, whatever order they are listed in', () => {
+  const all = snaps(14);
+  const res = prune(shuffle(all));
+  expect(res.status).toBe(0);
+  expect(res.deleted).toEqual(ids(all.slice(10)).reverse());
+  expect(res.output).toBe('kept=10\nremoved=4\nwould_remove=0\nprotected=0\nnote=ok\n');
+});
+
+test('at most MAX_DELETE per run (default 5, 1 to 20), the oldest first', () => {
+  const all = snaps(67);
+  const res = prune(all);
+  expect(res.deleted).toEqual(ids(all.slice(-5)).reverse());
+  expect(prune(all, { MAX_DELETE: '2' }).deleted).toEqual(ids(all.slice(-2)).reverse());
+  expect(prune(all, { MAX_DELETE: '0' }).deleted).toHaveLength(1);
+  expect(prune(all, { MAX_DELETE: '500' }).deleted).toHaveLength(20);
+  expect(prune(all, { MAX_DELETE: 'all' }).deleted).toHaveLength(5);
+});
+
+test('nothing newer than MIN_AGE_DAYS (default 7, at least 1) is removed', () => {
+  // Made 2, 4, 6 … days ago; with KEEP=3 the candidates are 8 days old and older.
+  const all = snaps(12);
+  const res = prune(all, { KEEP: '3', MAX_DELETE: '20' });
+  expect(res.deleted).toEqual(ids(all.slice(3)).reverse());
+  const strict = prune(all, { KEEP: '3', MAX_DELETE: '20', MIN_AGE_DAYS: '15' });
+  // 16 days and older only (index 7 onward).
+  expect(strict.deleted).toEqual(ids(all.slice(7)).reverse());
+  expect(strict.stdout).toContain(`Kept ${all[3].id}: newer than 15 day(s).`);
+  expect(prune(all, { KEEP: '3', MAX_DELETE: '20', MIN_AGE_DAYS: '0' }).stdout).toContain('using 1, the least it allows');
 });
 
 test('DEPLOY_SNAPSHOTS_KEEP sets the count, never below 3; not a number means 10', () => {
-  const all = snaps(12);
-  expect(prune({ FAKE_LIST: all.join('\t'), KEEP: '5' }).deleted).toEqual(all.slice(5));
-  const low = prune({ FAKE_LIST: all.join('\t'), KEEP: '0' });
-  expect(low.deleted).toEqual(all.slice(3));
-  expect(low.stdout).toContain('keeping the newest 3');
-  expect(prune({ FAKE_LIST: all.join('\t'), KEEP: 'ten' }).deleted).toEqual(all.slice(10));
+  const all = snaps(14);
+  expect(prune(all, { KEEP: '12' }).deleted).toEqual(ids(all.slice(12)).reverse());
+  const low = prune(all, { KEEP: '0', MAX_DELETE: '20' });
+  expect(low.deleted).toEqual(ids(all.slice(3)).reverse());
+  expect(low.stdout).toContain('using 3, the least it allows');
+  expect(prune(all, { KEEP: 'ten' }).deleted).toEqual(ids(all.slice(10)).reverse());
 });
 
-test('anything not shaped like a deploy-* identifier is never deleted', () => {
-  const all = snaps(11);
-  const res = prune({ FAKE_LIST: [...all.slice(0, 10), 'rds:manual-keep', 'deploy-x;rm', all[10]].join('\t') });
-  expect(res.deleted).toEqual([all[10]]);
+test('protected: keep=true, a name not made by the workflow, this run\'s own, an unreadable time', () => {
+  const all = snaps(15);
+  all[11].tags = [{ Key: 'Keep', Value: 'TRUE' }];
+  all[12].id = 'deploy-before-gala';
+  all[13].id = `deploy-${'a'.repeat(12)}-424242-2`;
+  all[14].created = 'not a time';
+  const res = prune(all, { GITHUB_RUN_ID: '424242', MAX_DELETE: '20' });
+  expect(res.deleted).toEqual([all[10].id]);
+  expect(res.output).toContain('protected=4');
+  expect(res.stdout).toContain(`Kept ${all[11].id}: tagged keep=true.`);
+  expect(res.stdout).toContain('Kept deploy-before-gala: not named as the workflow names its snapshots.');
+  expect(res.stdout).toContain("this run's own");
+  expect(res.stdout).toContain('its creation time could not be read');
+});
+
+test('a listing that looks wrong removes nothing: not JSON, not a list, a name twice', () => {
+  for (const bad of ['None', '{"id":"x"}', 'not json']) {
+    const res = prune(bad);
+    expect(res.deleted).toEqual([]);
+    expect(res.note).toBe('list-failed');
+  }
+  const all = snaps(14);
+  const twice = prune([...all, all[12]]);
+  expect(twice.deleted).toEqual([]);
+  expect(twice.note).toBe('list-suspect');
+  const failed = prune(all, { FAKE_LIST_FAIL: '1' });
+  expect(failed.deleted).toEqual([]);
+  expect(failed.note).toBe('list-failed');
+  expect(prune([]).output).toContain('removed=0');
 });
 
 test('without the delete permission: one warning, nothing else tried, the run goes on', () => {
-  const res = prune({ FAKE_LIST: snaps(15).join('\t'), FAKE_DENY: '1' });
+  const res = prune(snaps(15), { FAKE_DENY: '1' });
   expect(res.status).toBe(0);
   expect(res.deleted).toHaveLength(1);
   expect(res.stdout).toContain('::warning::The deploy role may not delete snapshots');
-  expect(res.output).toBe('kept=10\nremoved=0\nnote=not-permitted\n');
+  expect(res.note).toBe('not-permitted');
 });
 
-test('one failed delete is a warning; the rest still go; a failed listing removes nothing', () => {
-  const all = snaps(13);
-  const res = prune({ FAKE_LIST: all.join('\t'), FAKE_FAIL: all[11] });
-  expect(res.status).toBe(0);
-  expect(res.deleted).toEqual(all.slice(10));
-  expect(res.stdout).toContain(`::warning::Could not remove ${all[11]}`);
-  expect(res.output).toBe('kept=10\nremoved=2\nnote=some-failed\n');
-
-  const failed = prune({ FAKE_LIST_FAIL: '1' });
-  expect(failed.status).toBe(0);
-  expect(failed.deleted).toEqual([]);
-  expect(failed.output).toContain('note=list-failed');
+test('a failed removal is a warning and the rest go; three failures stop the run\'s removals', () => {
+  const all = snaps(16);
+  const old = ids(all.slice(10)).reverse(); // oldest first: the order they are tried
+  const one = prune(all, { FAKE_FAIL: old[1] });
+  expect(one.status).toBe(0);
+  expect(one.deleted).toEqual(old.slice(0, 5));
+  expect(one.output).toContain('removed=4');
+  expect(one.note).toBe('some-failed');
+  const three = prune(all, { FAKE_FAIL: old.slice(0, 3).join(','), MAX_DELETE: '6' });
+  expect(three.deleted).toEqual(old.slice(0, 3));
+  expect(three.stdout).toContain('Three removals failed, so no more were tried this run.');
 });
 
 describe('the workflow', () => {
@@ -147,8 +215,17 @@ describe('the workflow', () => {
     expect(snap).toBeGreaterThan(step);
     const block = WORKFLOW.slice(step, snap);
     expect(block).toContain('KEEP: ${{ vars.DEPLOY_SNAPSHOTS_KEEP }}');
+    expect(block).toContain('DRY_RUN: ${{ vars.DEPLOY_SNAPSHOTS_PRUNE_DRY_RUN }}');
+    expect(block).toContain('MAX_DELETE: ${{ vars.DEPLOY_SNAPSHOTS_MAX_DELETE }}');
+    expect(block).toContain('MIN_AGE_DAYS: ${{ vars.DEPLOY_SNAPSHOTS_MIN_AGE_DAYS }}');
     expect(block).toContain('run: bash scripts/deploy/prune-snapshots.sh');
     expect(block).not.toContain('continue-on-error');
+  });
+
+  test('the summary says when it was a dry run and how many it would remove', () => {
+    expect(WORKFLOW).toContain('PRUNE_WOULD: ${{ steps.prune.outputs.would_remove }}');
+    expect(WORKFLOW).toMatch(/dry-run\) echo "\| Older deploy snapshots removed \| none: dry run, \$\{PRUNE_WOULD:-0\} would be removed/);
+    expect(WORKFLOW).toContain('list-suspect) echo');
   });
 
   test('a full snapshot quota stops the run with what to do', () => {
