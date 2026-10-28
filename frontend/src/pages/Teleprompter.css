@@ -355,6 +355,7 @@ body.stp-open { overflow: hidden; }
 .stp-root .vr-line { margin: 0; color: var(--studio-prompter-ink); font-family: var(--font-prose); font-size: 16px; overflow-wrap: anywhere; }
 .stp-root .vr-audio { width: 100%; min-height: 44px; }
 .stp-root .vr-meta, .stp-root .vr-note { margin: 0; font-size: 13px; color: var(--studio-prompter-dim); }
+.stp-root .vr-note a { display: inline-flex; align-items: center; gap: 4px; color: inherit; }
 .stp-root .vr-stale { display: inline-flex; align-items: flex-start; gap: 6px; color: var(--studio-prompter-mark); }
 .stp-root .vr-error { margin: 0; font-size: 14px; color: var(--studio-prompter-rec); }
 .stp-root .vr-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
