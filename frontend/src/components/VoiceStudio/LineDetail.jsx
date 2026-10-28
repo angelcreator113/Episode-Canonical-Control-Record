@@ -11,11 +11,11 @@ import { useRef, useState } from 'react';
 import { Mic, Square, Upload, Play, Pause, Check, RotateCcw, Trash2, SlidersHorizontal } from 'lucide-react';
 import useVoiceRecorder from '../../hooks/useVoiceRecorder';
 import { voiceStudioApi, explainError } from '../../lib/voiceStudioApi';
+import useTakeSave from '../../hooks/useTakeSave';
 import { STATE_INFO, takeRange, formatMs } from '../../lib/voiceStudioView';
 
 const ACCEPT = '.m4a,.mp3,.wav,.webm,.ogg,.oga,.opus,.aac,.mp4,audio/*';
 // The server refused the file itself (type, no audio, unreadable, too long, too big).
-const FILE_REFUSED = new Set(['BAD_TYPE', 'NO_AUDIO', 'UNREADABLE', 'NO_DURATION', 'TOO_LONG', 'TOO_BIG', 'NO_FILE']);
 
 function StateCard({ line, onRevoke, canEdit, busy }) {
   const a = line.approval;
@@ -131,9 +131,11 @@ function TakeRow({ take, n, line, approvable, canEdit, audition, onApprove, onRe
 export default function LineDetail({ episodeId, line, beat, scriptRevision, canEdit, audition, onChanged, onMessage }) {
   const rec = useVoiceRecorder();
   const fileRef = useRef(null);
-  const [busy, setBusy] = useState(false);
+  const [requesting, setBusy] = useState(false);
   // A new take on its way: what is done so far, so a retry carries on (never uploads twice).
-  const [pending, setPending] = useState(null);
+  const takes = useTakeSave(episodeId);
+  const { pending } = takes;
+  const busy = requesting || takes.busy;
   const approvable = line.spoken && beat.usable;
   const lineForRows = { ...line, scriptRevision };
 
@@ -146,60 +148,29 @@ export default function LineDetail({ episodeId, line, beat, scriptRevision, canE
     } finally { setBusy(false); }
   };
 
-  /** source → take → tie; each step once. */
+  /** source → take → tie, each step once (useTakeSave); what happened, in words. */
   const saveTake = async (start) => {
-    let p = start;
-    setPending(p);
-    setBusy(true);
-    try {
-      if (!p.sourceId) {
-        const out = await voiceStudioApi.uploadSource(episodeId, p.media, p.kind);
-        p = { ...p, sourceId: out.source.id };
-        setPending(p);
-      }
-      if (!p.candidateId) {
-        const out = await voiceStudioApi.createTake(episodeId, p.sourceId);
-        p = { ...p, candidateId: out.candidate.id };
-        setPending(p);
-      }
-      // Tied only to the line it was recorded for: if the script changed and another line is here now, it waits untied.
-      if (p.contextHash && p.contextHash !== line.context_hash) {
-        setPending(null);
-        rec.discard();
-        onMessage({ tone: 'warn', message: 'The take was saved, but not tied: this line changed since it was recorded. It is under "Takes not tied to a line"; tie it to the right line from there.' });
-        await onChanged();
-        return;
-      }
-      try {
-        await voiceStudioApi.tie(episodeId, p.candidateId, { scriptRevision, beatNumber: line.beat_number, lineIndex: line.line_index });
-      } catch (err) {
-        const e = explainError(err);
-        if (e.stale || e.code === 'NO_SUCH_LINE' || e.code === 'DUPLICATE_BEAT') {
-          // The take is saved; only the tie was refused. It waits in "Takes not tied to a line".
-          setPending(null);
-          rec.discard();
-          onMessage({ ...e, message: `The take was saved, but not tied to this line: ${e.message} It is under "Takes not tied to a line"; tie it from there after reloading.` });
-          await onChanged();
-          return;
-        }
-        throw err;
-      }
-      setPending(null);
+    const out = await takes.save(start, { scriptRevision, beatNumber: line.beat_number, lineIndex: line.line_index, contextHash: line.context_hash });
+    if (out.status === 'tied') {
       rec.discard();
       onMessage({ tone: 'ok', message: 'Take saved for this line. Audition it, then approve it.' });
       await onChanged();
-    } catch (err) {
-      console.error('[VoiceStudio] saving the take failed:', err);
-      const e = explainError(err, 'The take was not saved.');
-      if (FILE_REFUSED.has(e.code)) {
-        // The file itself was refused: trying it again cannot help.
-        setPending(null);
-        onMessage({ ...e, message: `${e.message} Nothing was saved; choose another file or record the line.` });
-        return;
-      }
-      const done = p.candidateId ? ' The take is saved; only tying it to the line is left.' : p.sourceId ? ' The audio is saved; only making it a take is left.' : '';
-      onMessage({ ...e, message: `${e.message}${done} Press "Try again" to carry on.`, retry: true });
-    } finally { setBusy(false); }
+    } else if (out.status === 'untied' && out.reason === 'line_changed') {
+      rec.discard();
+      onMessage({ tone: 'warn', message: 'The take was saved, but not tied: this line changed since it was recorded. It is under "Takes not tied to a line"; tie it to the right line from there.' });
+      await onChanged();
+    } else if (out.status === 'untied') {
+      // The take is saved; only the tie was refused. It waits in "Takes not tied to a line".
+      rec.discard();
+      onMessage({ ...out.error, message: `The take was saved, but not tied to this line: ${out.error.message} It is under "Takes not tied to a line"; tie it from there after reloading.` });
+      await onChanged();
+    } else if (out.status === 'refused') {
+      // The file itself was refused: trying it again cannot help.
+      onMessage({ ...out.error, message: `${out.error.message} Nothing was saved; choose another file or record the line.` });
+    } else {
+      const done = out.done === 'take' ? ' The take is saved; only tying it to the line is left.' : out.done === 'source' ? ' The audio is saved; only making it a take is left.' : '';
+      onMessage({ ...out.error, message: `${out.error.message}${done} Press "Try again" to carry on.`, retry: true });
+    }
   };
 
   const onFile = (e) => {
@@ -263,7 +234,7 @@ export default function LineDetail({ episodeId, line, beat, scriptRevision, canE
           {pending && !busy && (
             <span className="vs-row">
               <button type="button" className="vs-btn vs-btn--gold" onClick={() => saveTake(pending)} data-testid="vs-retry"><RotateCcw size={14} /> Try again</button>
-              <button type="button" className="vs-btn" onClick={() => { setPending(null); rec.discard(); }}>Give up</button>
+              <button type="button" className="vs-btn" onClick={() => { takes.clear(); rec.discard(); }}>Give up</button>
             </span>
           )}
           {busy && pending && <span className="vs-faint" role="status">Saving the take…</span>}

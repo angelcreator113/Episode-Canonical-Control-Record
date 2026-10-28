@@ -145,7 +145,10 @@ import useTeleprompterRemote from '../../hooks/useTeleprompterRemote';
 import useLineVoice from '../../hooks/useLineVoice';
 import TeleprompterRemotePanel from './TeleprompterRemotePanel';
 import VoiceRecordPanel from './VoiceRecord';
+import StudioRecordPanel from './StudioRecord';
 import { voiceClipsApi, isNotReady as voiceNotReady, VOICE_NOT_READY, clipsByLine, lineKey, withClip, clipSeconds, clipForLine } from '../../lib/voiceClipsApi';
+import { SILENT as STUDIO_SILENT } from '../../lib/teleprompterVoiceStudio';
+import useApprovedTakes from '../../hooks/useApprovedTakes';
 import { teleprompterScript, pastedParagraphs, pastedScript, speakersOf, HER, takeName, takeExtension, downloadName, clock, lineChoice, withoutScreen, withoutSceneNotes, nextTakeNumber, takeNumberOf } from '../../lib/teleprompterLines';
 import { rawClipsApi, hasTakeFields, beatTakes, withFavorite, uploadErrorMessage, abortUpload, uploadFields } from '../../lib/rawClipsApi';
 import { makeThumbnail } from '../../lib/chunkedUpload';
@@ -289,7 +292,7 @@ function Line({ l, mine, at, lineRef, index, wordStart = null, cursor = -1, from
 // "Action · Ns" for a stage direction (Evoni, 2026-10-20).
 // An on-screen moment: "On screen · react" with what happens; in the
 // cutscene, someone else's line is watching time.
-function SilenceCue({ line, left, total, reduced, voice = false }) {
+function SilenceCue({ line, left, total, reduced, voice = false, note = null }) {
   const n = Math.max(0, Math.ceil(left - 0.05));
   // No live region here: it would read the number every second. The
   // reader's one status line (cueSays) says what the cue is, once a line.
@@ -303,6 +306,7 @@ function SilenceCue({ line, left, total, reduced, voice = false }) {
       {voice && <span className="stp-quiet-voice" data-testid="stp-quiet-voice"><Volume2 size={14} aria-hidden="true" /> voice clip</span>}
       <span className="stp-quiet-n" data-testid="stp-quiet-n">{n}s</span>
       <span className="stp-quiet-who">{screenCue ? line.text : line.speaker}</span>
+      {note && <span className="stp-quiet-note" data-testid="stp-studio-note">{note}</span>}
       {!reduced && <span className="stp-quiet-bar" data-testid="stp-quiet-bar" aria-hidden="true"><span style={{ transform: `scaleX(${frac})` }} /></span>}
     </div>
   );
@@ -674,10 +678,21 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
   };
   // Voice clips (batch 3): the episode's recorded lines; null until loaded.
   const voiceEpisode = isScript ? source.episodeId || null : null;
+  // Voice Studio (B2b): when it is on, only the current approved takes play,
+  // from the playable list (useApprovedTakes: asked afresh on every Play, on
+  // coming back to the tab and when a take fails), and the old clips never
+  // do. Until the server says whether it is on, nothing plays; if it can't be
+  // asked, or the list can't be had, nothing plays.
+  const scriptRevision = isScript ? source.scriptRevision || null : null;
+  const approved = useApprovedTakes(voiceEpisode, scriptRevision);
+  const studioMode = approved.mode;
+  const studioLines = approved.lines;
   const [voiceClips, setVoiceClips] = useState([]);
   const [voiceReady, setVoiceReady] = useState(null); // null loading, true, false (database update not run)
+  // Only while Voice Studio is off: with it on, the old clips are neither played nor shown.
+  const legacyVoice = !!voiceEpisode && studioMode === 'off';
   useEffect(() => {
-    if (!voiceEpisode) return undefined;
+    if (!legacyVoice) return undefined;
     let live = true;
     voiceClipsApi.list(voiceEpisode)
       .then((rows) => { if (live) { setVoiceClips(rows); setVoiceReady(true); } })
@@ -686,21 +701,60 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
         if (live) setVoiceReady(voiceNotReady(err) ? false : null);
       });
     return () => { live = false; };
-  }, [voiceEpisode]);
+  }, [legacyVoice, voiceEpisode]);
   const voiceByLine = useMemo(() => clipsByLine(voiceClips), [voiceClips]);
-  // The clip of a line: someone else's spoken line with a recording.
-  const clipOf = (i) => {
+  const studio = studioMode === 'on';
+  // A line a voice could speak: someone else's spoken line. The cutscene is
+  // an AI video: its characters speak for themselves. Prime's own lines are
+  // hers to say (with Voice Studio on, never a take).
+  const speaks = (i) => {
     const l = flat[i];
     const w = where[i];
-    // The cutscene is an AI video: its characters speak for themselves.
-    if (!l || !w || !l.who || l.who === readAs || l.cut || (l.kind !== 'cue' && l.kind !== 'mine')) return null;
+    if (!l || !w || !l.who || l.who === readAs || l.cut || (l.kind !== 'cue' && l.kind !== 'mine')) return false;
+    return !(studio && l.who === HER);
+  };
+  // The clip of a line: someone else's spoken line with a recording.
+  const clipOf = (i) => {
+    if (!speaks(i) || studioMode == null || studioMode === 'unknown') return null;
+    const w = where[i];
+    // Voice Studio: the line's current approved take, by beat and index alone (it plays only once the list is fresh).
+    if (studio) return studioLines.byLine.get(lineKey(w.beat, w.index)) || null;
     // Not a recording of other words (Script tab audit 6, 2026-10-24).
-    return clipForLine(voiceByLine, w.beat, w.index, l.text);
+    return clipForLine(voiceByLine, w.beat, w.index, flat[i].text);
   };
   const activeClip = settings.playVoice ? clipOf(active) : null;
   // In Pace by line times and Follow my voice the scroll waits for the clip.
   const holdForClip = !!activeClip && pacing !== 'steady';
-  const lineVoice = useLineVoice(activeClip, activeClip ? `${active}:${activeClip.id}` : null, !!activeClip && playing && count === 0);
+  // Each Play is numbered in the render that starts it, so no take plays from
+  // the list it had before; with Voice Studio on a take waits (loaded,
+  // silent) until this Play's fresh list has answered.
+  const playGenRef = useRef({ playing: false, gen: 0 });
+  if (playing && !playGenRef.current.playing) playGenRef.current.gen += 1;
+  playGenRef.current.playing = playing;
+  const playGen = playGenRef.current.gen;
+  const lineVoice = useLineVoice(activeClip, activeClip ? `${active}:${activeClip.id}` : null,
+    !!activeClip && playing && count === 0 && (!studio || (approved.ready && approved.verifiedFor(playGen))));
+  // Why the line on the reading line is silent, with Voice Studio on (or unreachable).
+  const studioNote = (() => {
+    if (!voiceEpisode || !settings.playVoice || !speaks(active)) return null;
+    if (studioMode === 'unknown') return STUDIO_SILENT.unknown;
+    if (!studio) return null;
+    if (approved.failed) return STUDIO_SILENT.failed;
+    if (!approved.ready) return STUDIO_SILENT.loading;
+    if (studioLines.stale) return STUDIO_SILENT.stale;
+    if (activeClip) return lineVoice.failed ? STUDIO_SILENT.playFailed : null;
+    const w = where[active];
+    return studioLines.notes.get(lineKey(w.beat, w.index))?.text || STUDIO_SILENT.none;
+  })();
+  // Every Play asks Voice Studio afresh (nothing plays until it answers); a take that fails asks once more.
+  useEffect(() => {
+    if (playing && voiceEpisode && studioMode !== 'off') approved.onPlay(playGen);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playing, playGen]);
+  useEffect(() => {
+    if (studio && lineVoice.failed && activeClip?.approval_id) approved.onFailed(activeClip.approval_id, activeClip.url);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [studio, lineVoice.failed, activeClip?.approval_id]);
 
   const voice = useVoiceFollow(voiceOn && playing, { onHeard, recording });
   useEffect(() => {
@@ -1586,7 +1640,8 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
     if (!l || !w || !l.who || l.who === HER || (l.kind !== 'cue' && l.kind !== 'mine')) return null;
     return { beatNumber: w.beat, lineIndex: w.index, speaker: l.who, text: l.text };
   };
-  const recordableLine = voiceEpisode && voiceReady ? voiceLineAt(active) : null;
+  // With Voice Studio on, a new unapproved Voice Studio take (StudioRecordPanel); off, an old voice clip.
+  const recordableLine = voiceEpisode && (studio || voiceReady) ? voiceLineAt(active) : null;
   const voiceLine = voiceFor != null ? voiceLineAt(voiceFor) : null;
   // Closing the voice recorder with a clip not saved asks first.
   const closeVoice = () => {
@@ -1764,7 +1819,8 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
           <div className="stp-spacer is-bottom" aria-hidden="true" />
         </div>
         <div className="stp-marker" aria-hidden="true" data-testid="stp-marker" />
-        {cueOn && <SilenceCue line={atLine} left={cueLeft} total={cueTotal} reduced={reduced} voice={!!activeClip} />}
+        {cueOn && <SilenceCue line={atLine} left={cueLeft} total={cueTotal} reduced={reduced} voice={!!activeClip && !lineVoice.failed} note={studioNote} />}
+        {studioNote && !take && !cueOn && <p className="stp-studio-note" data-testid="stp-studio-note">{studioNote}</p>}
         <p className="stp-sr" role="status" data-testid="stp-quiet-live">{cueOn ? cueSays(atLine) : ''}</p>
         {count > 0 && <div className="stp-countdown" aria-live="assertive" data-testid="stp-countdown">{count}</div>}
         {/* The phone behind the glass is recording: a small dot, nothing more. */}
@@ -1821,7 +1877,13 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
           <TakesPanel takes={takes} beatNumber={beatNumber} onFavorite={toggleFavorite} starring={starring} error={takesError} loading={!clipsLoaded} fullTakes={fullTakes(clips)} names={names} />
         )}
         {showRemote && remoteOn && !take && <TeleprompterRemotePanel remote={remote} onClose={() => setShowRemote(false)} />}
-        {voiceLine && !take && (
+        {voiceLine && !take && studio && (
+          <div className="stp-voicebox">
+            <StudioRecordPanel key={voiceFor} episodeId={voiceEpisode} line={voiceLine} scriptRevision={scriptRevision}
+              onClose={() => setVoiceFor(null)} onBusy={setVoiceBusy} />
+          </div>
+        )}
+        {voiceLine && !take && !studio && (
           <div className="stp-voicebox">
             <VoiceRecordPanel key={voiceFor} episodeId={voiceEpisode} line={voiceLine} clip={voiceByLine.get(lineKey(voiceLine.beatNumber, voiceLine.lineIndex)) || null}
               onSaved={(clip) => setVoiceClips((cs) => withClip(cs, clip))}
@@ -2060,7 +2122,14 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
             <Grid3x3 size={18} aria-hidden="true" /> Grid
           </button>
         )}
-        {voiceEpisode && voiceReady !== null && (
+        {voiceEpisode && studio && (
+          <button type="button" className="stp-btn" data-testid="stp-voice-toggle" aria-pressed={settings.playVoice}
+            title="Play the takes approved in Voice Studio when their lines reach the reading line"
+            onClick={() => set('playVoice', !settings.playVoice)}>
+            <Volume2 size={18} aria-hidden="true" /> Play approved takes
+          </button>
+        )}
+        {voiceEpisode && !studio && voiceReady !== null && (
           <button type="button" className="stp-btn" data-testid="stp-voice-toggle" aria-pressed={voiceReady && settings.playVoice} disabled={!voiceReady}
             title={voiceReady ? "Play the lines you recorded in someone else's voice when they reach the reading line" : VOICE_NOT_READY}
             onClick={() => set('playVoice', !settings.playVoice)}>
@@ -2102,9 +2171,9 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
         )}
         {recordableLine && !recordOn && !take && (
           <button type="button" className="stp-btn" data-testid="stp-voice-record" aria-pressed={voiceFor != null}
-            aria-label={`Record voice for this ${recordableLine.speaker} line`} onClick={voiceFor != null ? closeVoice : openVoice}>
-            <Mic size={18} aria-hidden="true" /> <span className="stp-btn-text">Record voice</span>
-            {voiceByLine.has(lineKey(recordableLine.beatNumber, recordableLine.lineIndex)) && <span className="stp-count" aria-hidden="true">✓</span>}
+            aria-label={studio ? `Record a Voice Studio take for this ${recordableLine.speaker} line` : `Record voice for this ${recordableLine.speaker} line`} onClick={voiceFor != null ? closeVoice : openVoice}>
+            <Mic size={18} aria-hidden="true" /> <span className="stp-btn-text">{studio ? 'Record a take' : 'Record voice'}</span>
+            {!studio && voiceByLine.has(lineKey(recordableLine.beatNumber, recordableLine.lineIndex)) && <span className="stp-count" aria-hidden="true">✓</span>}
           </button>
         )}
         {!midTake && (

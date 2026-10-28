@@ -39,6 +39,7 @@ import useScriptDraft from '../../hooks/useScriptDraft';
 import useDialogLayer from '../../hooks/useDialogLayer';
 import VoiceRecordPanel, { VoiceBadge, VoiceMicButton } from '../Teleprompter/VoiceRecord';
 import { voiceClipsApi, isNotReady as voiceNotReady, VOICE_NOT_READY, clipsByLine, lineKey, withClip } from '../../lib/voiceClipsApi';
+import { voiceStudioMode } from '../../lib/voiceStudioApi';
 import { teleprompterLines, teleprompterIndexMap, HER } from '../../lib/teleprompterLines';
 import { voiceApi } from '../../lib/characterVoice';
 import './EpisodeScriptPage.css';
@@ -1489,11 +1490,13 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
   // update has not run: the mic buttons hide and a note says why).
   const [voiceClips, setVoiceClips] = useState([]);
   const [voiceReady, setVoiceReady] = useState(null);
+  // With Voice Studio on (or its status unknown) the old clips are neither
+  // listed, played nor recorded here: lines are recorded in Voice Studio (B2b).
   useEffect(() => {
     if (!episodeId) return undefined;
     let live = true;
-    voiceClipsApi.list(episodeId)
-      .then((rows) => { if (live) { setVoiceClips(rows); setVoiceReady(true); } })
+    voiceStudioMode().then((mode) => (mode === 'off' && live ? voiceClipsApi.list(episodeId) : null))
+      .then((rows) => { if (live && rows) { setVoiceClips(rows); setVoiceReady(true); } })
       .catch((err) => {
         console.error('[EpisodeScriptTab] voice clips not loaded:', err);
         if (live) setVoiceReady(voiceNotReady(err) ? false : null);

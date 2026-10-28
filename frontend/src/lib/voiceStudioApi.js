@@ -20,21 +20,34 @@ const data = (r) => r?.data?.data;
 // session or retries a file by itself (api.js keepSession).
 const KEEP = { keepSession: true, timeout: 0 };
 
-let statusOnce = null;
-/** Whether Voice Studio is switched on on this server (asked once per page load); false when off or unreachable. */
-export function voiceStudioOn() {
-  statusOnce ||= api.get('/api/v1/voice-studio/status').then(() => true, (err) => {
-    if (err?.response?.status !== 404) console.error('[voiceStudio] status check failed:', err?.message);
-    return false;
+let modeOnce = null;
+/**
+ * Whether Voice Studio is switched on on this server, asked once per page
+ * load: 'on' (it answers { on: true }), 'off' (a 404, or any other answer),
+ * or 'unknown' (it couldn't be asked; asked again next time). The
+ * Teleprompter plays nothing on 'unknown', so a failed check never falls
+ * back to the old clips (B2b).
+ */
+export function voiceStudioMode() {
+  // Only the route's own answer, { on: true }, means on.
+  modeOnce ||= api.get('/api/v1/voice-studio/status').then((r) => (r?.data?.data?.on === true ? 'on' : 'off'), (err) => {
+    if (err?.response?.status === 404) return 'off';
+    console.error('[voiceStudio] status check failed:', err?.message);
+    modeOnce = null;
+    return 'unknown';
   });
-  return statusOnce;
+  return modeOnce;
 }
+/** Whether Voice Studio is switched on; false when off or unreachable. */
+export const voiceStudioOn = () => voiceStudioMode().then((m) => m === 'on');
 /** For tests. */
-export const resetVoiceStudioStatus = () => { statusOnce = null; };
+export const resetVoiceStudioStatus = () => { modeOnce = null; };
 
 export const voiceStudioApi = {
   view: (episodeId) => api.get(`${base(episodeId)}/studio`).then(data),
   history: (episodeId) => api.get(`${base(episodeId)}/approvals/history`).then(data),
+  /** Current approvals only, each with its audio_url and trim, and the held ones (no audio): the one list a player reads (B2b). */
+  playable: (episodeId) => api.get(`${base(episodeId)}/playable`).then(data),
 
   /** A recording or an uploaded file as a source. take: { blob | file, type }. */
   uploadSource: (episodeId, { blob, file, type }, kind) => {

@@ -844,6 +844,59 @@ const SCRIPT = [
     expect(await rows('SELECT id, invalidated_at, superseded_at FROM line_voice_approvals WHERE episode_id = :ep', { ep })).toEqual(before);
   });
 
+  // ── B2b: the Teleprompter's one list ─────────────────────────────────────────
+  test('B2b playable: the approved revision\'s trim and its audio URL; held approvals listed without audio; nothing else', async () => {
+    const ep = await makeEpisode();
+    const t0 = await takeAt(ep, 6, 0, { ms: 5000 });
+    const { revision: trimmed } = await studio.reviseCandidate(sequelize, { episodeId: ep, candidateId: t0.candidate.id, settings: { in_ms: 1200, out_ms: 3700 }, userId: USER });
+    const { approval_id: a0 } = await approveTake(ep, { ...t0, revision: trimmed });
+    const { approval_id: a1 } = await approveTake(ep, await takeAt(ep, 6, 1));
+    await studio.revokeApproval(sequelize, { episodeId: ep, approvalId: a1, userId: USER });
+    const play = await studio.playableApprovals(sequelize, { episodeId: ep });
+    expect(play.script_revision).toBe((await stateOf(ep)).revision);
+    expect(play.takes).toHaveLength(1);
+    expect(play.takes[0]).toMatchObject({ approval_id: a0, beat_number: 6, line_index: 0, revision_id: trimmed.id, in_ms: 1200, out_ms: 3700 });
+    expect(play.takes[0].audio_url).toBe(require('../../src/services/rawClipMedia').publicUrl(play.takes[0].s3_key));
+    expect(play.held).toEqual([expect.objectContaining({ approval_id: a1, beat_number: 6, line_index: 1, state: 'revoked' })]);
+    expect(Object.keys(play.held[0]).sort()).toEqual(['approval_id', 'beat_number', 'line_index', 'reason_text', 'state']);
+  });
+
+  test('B2b playable after a script save: the approval is held for review, not played; re-confirmed it plays again', async () => {
+    const ep = await makeEpisode();
+    const { approval_id: id } = await approveTake(ep, await takeAt(ep, 8, 0));
+    expect((await studio.playableApprovals(sequelize, { episodeId: ep })).takes.map((x) => x.approval_id)).toEqual([id]);
+    await saveScript(ep, SCRIPT.replace('Guest: "Love the look!"', 'Guest: "Wow."'));
+    const held = await studio.playableApprovals(sequelize, { episodeId: ep });
+    expect(held.takes).toEqual([]);
+    expect(held.held).toEqual([expect.objectContaining({ approval_id: id, state: 'needs_review' })]);
+    const a = (await summaryOf(ep)).approvals[0];
+    await studio.reconfirm(sequelize, { episodeId: ep, scriptRevision: held.script_revision, items: [{ approval_id: id, context_hash: a.context_hash }], userId: USER });
+    expect((await studio.playableApprovals(sequelize, { episodeId: ep })).takes.map((x) => x.approval_id)).toEqual([id]);
+  });
+
+  test('B2b routes: /playable answers only while switched on, for the script revision the episode page reads', async () => {
+    const ep = await makeEpisode();
+    await approveTake(ep, await takeAt(ep, 6, 0));
+    const prev = process.env.VOICE_STUDIO;
+    try {
+      delete process.env.VOICE_STUDIO;
+      expect((await request(app).get(`/api/v1/voice-studio/${ep}/playable`).set('Authorization', `Bearer ${userToken}`)).status).toBe(404);
+      process.env.VOICE_STUDIO = 'on';
+      const res = await request(app).get(`/api/v1/voice-studio/${ep}/playable`).set('Authorization', `Bearer ${userToken}`);
+      expect(res.status).toBe(200);
+      expect(res.body.data.takes[0].audio_url).toMatch(/^https:\/\/.*\/voice\/sources\/[0-9a-f]{64}\.wav$/);
+      const page = await request(app).get(`/api/v1/episodes/${ep}`).set('Authorization', `Bearer ${userToken}`);
+      expect(page.status).toBe(200);
+      expect(page.body.script_revision).toBe(res.body.data.script_revision);
+      // A non-admin's list carries no held approvals (#3626); an admin's does.
+      expect(res.body.data).not.toHaveProperty('held');
+      const asAdmin = await request(app).get(`/api/v1/voice-studio/${ep}/playable`).set('Authorization', `Bearer ${adminToken}`);
+      expect(asAdmin.body.data).toHaveProperty('held');
+    } finally {
+      if (prev === undefined) delete process.env.VOICE_STUDIO; else process.env.VOICE_STUDIO = prev;
+    }
+  });
+
   test('admins only (2026-10-28): every studio read is ADMIN; only /status and /playable answer any signed-in user', async () => {
     const ep = await makeEpisode();
     await approveTake(ep, await takeAt(ep, 6, 0));
