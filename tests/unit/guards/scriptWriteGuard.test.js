@@ -124,6 +124,7 @@ describe('A1c R1 static guards', () => {
     // approved them; none of them names script_line_keys.
     const LATER = {
       'src/migrations/20261027190000-add-episode-script-seq.js': 'A1c correction (Evoni, 2026-10-27): the script save number',
+      'src/migrations/20261027200000-create-voice-studio-tables.js': 'Voice Studio B1 (Evoni, 2026-10-27): new tables only',
     };
     const migrations = files('src/migrations').filter((f) => /\/2026102[7-9]|\/20261[1-2]|\/2027/.test(f));
     expect(migrations.sort()).toEqual(Object.keys(LATER).sort());

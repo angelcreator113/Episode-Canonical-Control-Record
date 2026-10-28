@@ -1074,6 +1074,11 @@ app.use('/api/v1/episode-poses', episodePoseRoutes);
 const scriptVoiceClipRoutes = trackRouteLoad('scriptVoiceClips', () => require('./routes/scriptVoiceClipRoutes'));
 app.use('/api/v1/script-voice-clips', scriptVoiceClipRoutes);
 
+// Voice Studio (B1): line-based dialogue takes, approvals and re-confirmations; off unless VOICE_STUDIO=on.
+// Not /api/v1/voice: that is characterVoiceRoutes (Lala's written voice).
+const voiceStudioRoutes = trackRouteLoad('voiceStudio', () => require('./routes/voiceStudioRoutes'));
+app.use('/api/v1/voice-studio', voiceStudioRoutes);
+
 // YouTube thumbnails: an episode's thumbnail from its show's style (Templates)
 const youtubeThumbnailRoutes = trackRouteLoad('youtubeThumbnails', () => require('./routes/youtubeThumbnailRoutes'));
 app.use('/api/v1/youtube-thumbnails', youtubeThumbnailRoutes);
