@@ -56,6 +56,8 @@ describe('Timeline C1 boundaries', () => {
     const migration = read(MIGRATION);
     expect(migration).not.toMatch(/audio_offset_ms|audio_start_ms|audio_anchor/);
     expect(migration).toMatch(/source_in_ms <= audio_in_ms AND audio_in_ms < audio_out_ms AND audio_out_ms <= source_out_ms/);
+    // No commentary is both ends NULL, with no fades: nothing to play.
+    expect(migration).toMatch(/audio_in_ms IS NULL AND audio_out_ms IS NULL AND audio_fade_in_ms = 0 AND audio_fade_out_ms = 0/);
   });
 
   test('editTimeline is pure: no database, files, clock or randomness', () => {

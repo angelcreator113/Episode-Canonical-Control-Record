@@ -425,7 +425,9 @@ function audioSettings(body, base = {}) {
 }
 
 // Fades that no longer fit a shorter commentary are shortened, never moved. Returns the two fades only.
+// No commentary (a NULL range) has no fades.
 function fitFades(s, ain, aout) {
+  if (ain == null || aout == null) return { audio_fade_in_ms: 0, audio_fade_out_ms: 0 };
   const len = aout - ain;
   const fin = Math.min(s.audio_fade_in_ms, len);
   return { audio_fade_in_ms: fin, audio_fade_out_ms: Math.min(s.audio_fade_out_ms, len - fin) };
@@ -433,6 +435,12 @@ function fitFades(s, ain, aout) {
 
 function checkSegmentValues(v) {
   if (!(v.source_in_ms >= 0 && v.source_in_ms < v.source_out_ms)) fail(400, 'BAD_RANGE', 'In must be before out');
+  if (v.audio_in_ms == null || v.audio_out_ms == null) {
+    // No commentary: nothing to play, so nothing to fade.
+    if (v.audio_in_ms != null || v.audio_out_ms != null) fail(400, 'BAD_RANGE', 'The commentary needs both its in and its out');
+    if (v.audio_fade_in_ms || v.audio_fade_out_ms) fail(400, 'BAD_FADE', 'This segment has no commentary to fade');
+    return;
+  }
   if (!(v.source_in_ms <= v.audio_in_ms && v.audio_in_ms < v.audio_out_ms && v.audio_out_ms <= v.source_out_ms)) {
     fail(400, 'COMMENTARY_OUTSIDE_VIDEO', "The commentary must sit inside the video's range");
   }
@@ -513,15 +521,18 @@ const trimSegmentVideo = (sequelize, args) => editSegment(sequelize, args, async
   const sin = int(args.body.source_in_ms ?? s.source_in_ms, 'source_in_ms');
   const sout = int(args.body.source_out_ms ?? s.source_out_ms, 'source_out_ms');
   if (!(sin < sout && sout <= duration)) fail(400, 'BAD_RANGE', `In and out must be within the take (0–${duration} ms), with in before out`);
+  // Non-ripple (Evoni, 2026-10-28): the frames left keep their edit time, so trimming the head moves
+  // the start later; nothing else on the timeline moves.
+  const offset = Number(s.offset_ms) + (sin - s.source_in_ms);
+  if (s.audio_in_ms == null) return { source_in_ms: sin, source_out_ms: sout, offset_ms: offset };
   const ain = Math.max(s.audio_in_ms, sin);
   const aout = Math.min(s.audio_out_ms, sout);
+  // Never a silent mute (Evoni, 2026-10-28): a trim that would leave no commentary is refused.
   if (ain >= aout) fail(409, 'COMMENTARY_OUTSIDE_TRIM', 'The commentary would be cut away entirely. Trim or move the commentary first.');
-  // The placement keeps the same source time at the same edit time: trimming the head moves the start later.
-  const offset = Number(s.offset_ms) + (sin - s.source_in_ms);
   return { source_in_ms: sin, source_out_ms: sout, offset_ms: offset, audio_in_ms: ain, audio_out_ms: aout, ...fitFades(s, ain, aout) };
 });
 
-/** Trims the commentary, inside the video's range. */
+/** Trims the commentary, inside the video's range (on a segment with none, this sets one explicitly). */
 const trimSegmentAudio = (sequelize, args) => editSegment(sequelize, args, async (s) => {
   const ain = int(args.body.audio_in_ms ?? s.audio_in_ms, 'audio_in_ms');
   const aout = int(args.body.audio_out_ms ?? s.audio_out_ms, 'audio_out_ms');
@@ -537,8 +548,9 @@ const setSegmentLayout = (sequelize, args) => editSegment(sequelize, args, async
 /**
  * Splits a segment at one source time: both halves keep the take's clock (the
  * second is placed where that source time already played). The commentary is
- * cut at the same time; a half left with no commentary keeps its video range
- * as its (muted) commentary range. The segment split is kept, superseded.
+ * cut at the same time; a half the commentary was not in has none (a NULL
+ * range: no event in the mix, and unmuting it plays nothing). The segment
+ * split is kept, superseded.
  */
 async function splitSegment(sequelize, { episodeId, editRevision, userId, segmentId, body }) {
   return withEdit(sequelize, { episodeId, editRevision, userId }, async (t) => {
@@ -546,12 +558,12 @@ async function splitSegment(sequelize, { episodeId, editRevision, userId, segmen
     const at = int(body.at_source_ms, 'at_source_ms');
     if (!(s.source_in_ms < at && at < s.source_out_ms)) fail(400, 'BAD_SPLIT', 'Split inside the segment');
     const half = (sin, sout, offset, fades) => {
-      let ain = Math.max(s.audio_in_ms, sin);
-      let aout = Math.min(s.audio_out_ms, sout);
-      let muted = s.audio_muted;
-      if (ain >= aout) { ain = sin; aout = sout; muted = true; }
+      let ain = s.audio_in_ms == null ? null : Math.max(s.audio_in_ms, sin);
+      let aout = s.audio_out_ms == null ? null : Math.min(s.audio_out_ms, sout);
+      // A half the commentary was not in has none (NULL): never audible, whatever its mute says.
+      if (ain == null || ain >= aout) { ain = null; aout = null; }
       const audio = fitFades({ ...s, ...fades }, ain, aout);
-      return { ...s, source_in_ms: sin, source_out_ms: sout, offset_ms: offset, audio_in_ms: ain, audio_out_ms: aout, audio_muted: muted,
+      return { ...s, source_in_ms: sin, source_out_ms: sout, offset_ms: offset, audio_in_ms: ain, audio_out_ms: aout,
         audio_fade_in_ms: audio.audio_fade_in_ms, audio_fade_out_ms: audio.audio_fade_out_ms };
     };
     const first = half(s.source_in_ms, at, Number(s.offset_ms), { audio_fade_out_ms: 0 });

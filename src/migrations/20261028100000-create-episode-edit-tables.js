@@ -16,7 +16,8 @@
  *     length measured by the server (source_duration_ms)
  *   episode_prime_segments   Prime's takes placed on the edit: video range,
  *     one placement (anchor + offset) and the commentary sub-range on the same
- *     source clock (no audio offset column, so audio can't slide)
+ *     source clock (no audio offset column, so audio can't slide); a NULL
+ *     commentary range means this segment has none
  *   episode_pip_settings     the PIP's default layout, visibility and cutout
  *   episode_pip_visibility   manual hide/show rules (never mute)
  *   timeline_items           keyframes, visibility, angle changes, transitions,
@@ -118,8 +119,8 @@ module.exports = {
         source_out_ms INTEGER NOT NULL,
         ${anchor('')},
         layout JSONB NULL,
-        audio_in_ms INTEGER NOT NULL,
-        audio_out_ms INTEGER NOT NULL,
+        audio_in_ms INTEGER NULL,
+        audio_out_ms INTEGER NULL,
         ${GAIN('audio_gain_db')},
         audio_muted BOOLEAN NOT NULL DEFAULT FALSE,
         ${FADE('audio_fade_in_ms')},
@@ -129,9 +130,15 @@ module.exports = {
         superseded_at TIMESTAMPTZ NULL,
         created_by VARCHAR(255) NULL,
         ${TS},
-        -- One clock: the commentary is a sub-range of the video's source range.
-        CONSTRAINT episode_prime_segments_sync CHECK (source_in_ms <= audio_in_ms AND audio_in_ms < audio_out_ms AND audio_out_ms <= source_out_ms),
-        CONSTRAINT episode_prime_segments_fades CHECK (audio_fade_in_ms + audio_fade_out_ms <= audio_out_ms - audio_in_ms)
+        -- One clock: the commentary is a sub-range of the video's source range, or there is none
+        -- (both NULL: a split half the commentary was not in). None is never audible. Each branch
+        -- states its NULLs, since a CHECK that comes out NULL would pass.
+        CONSTRAINT episode_prime_segments_sync CHECK (
+          (audio_in_ms IS NULL AND audio_out_ms IS NULL AND audio_fade_in_ms = 0 AND audio_fade_out_ms = 0)
+          OR (audio_in_ms IS NOT NULL AND audio_out_ms IS NOT NULL
+              AND source_in_ms <= audio_in_ms AND audio_in_ms < audio_out_ms AND audio_out_ms <= source_out_ms)
+        ),
+        CONSTRAINT episode_prime_segments_fades CHECK (audio_in_ms IS NULL OR audio_fade_in_ms + audio_fade_out_ms <= audio_out_ms - audio_in_ms)
       )`);
       await q('CREATE INDEX episode_prime_segments_episode ON episode_prime_segments (episode_id) WHERE deleted_at IS NULL AND superseded_at IS NULL');
 

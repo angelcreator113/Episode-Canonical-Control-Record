@@ -273,8 +273,20 @@ const SCRIPT = [
     // Both halves are written in one transaction: listed by source time here (they never overlap).
     const halves = afterSplit.segments.slice().sort((x, y) => x.source_in_ms - y.source_in_ms);
     expect(halves.map((s) => [s.source_in_ms, s.source_out_ms])).toEqual([[6000, 6800], [6800, 16000]]);
-    // The first half had no commentary in it: it keeps its video range as a muted commentary range.
-    expect(halves[0]).toMatchObject({ audio_in_ms: 6000, audio_out_ms: 6800, audio_muted: true });
+    // The first half had no commentary in it: it has none (NULL), not a placeholder range.
+    expect(halves[0]).toMatchObject({ audio_in_ms: null, audio_out_ms: null, audio_fade_in_ms: 0, audio_fade_out_ms: 0 });
+    // Unmuting it, or giving it fades, cannot make sound out of nothing.
+    await segOp(w, 'setSegmentAudio', halves[0].id, { audio_muted: false });
+    await expectRefusal(segOp(w, 'setSegmentAudio', halves[0].id, { audio_fade_in_ms: 100 }), 400, 'BAD_FADE');
+    let mix = (await svc.mixPlanOf(sequelize, { episodeId: w.ep })).mix;
+    expect(mix.commentary.map((c) => c.segment_id)).toEqual([halves[1].id]);
+    // Trimming its video leaves it without commentary (nothing to clamp, nothing refused).
+    await segOp(w, 'trimSegmentVideo', halves[0].id, { source_in_ms: 6100 });
+    mix = (await svc.mixPlanOf(sequelize, { episodeId: w.ep })).mix;
+    expect(mix.commentary.map((c) => c.segment_id)).toEqual([halves[1].id]);
+    // The database refuses a half-set commentary range or fades without commentary, whatever the caller.
+    await expect(run('UPDATE episode_prime_segments SET audio_in_ms = 6200 WHERE id = :id', { id: halves[0].id })).rejects.toThrow(/episode_prime_segments_sync/);
+    await expect(run('UPDATE episode_prime_segments SET audio_fade_in_ms = 10 WHERE id = :id', { id: halves[0].id })).rejects.toThrow(/episode_prime_segments_sync/);
     expect(halves[1]).toMatchObject({ audio_in_ms: 9000, audio_out_ms: 16000, audio_gain_db: -4.5, audio_fade_in_ms: 0, audio_fade_out_ms: 300 });
     expect((await rows('SELECT superseded_by FROM episode_prime_segments WHERE id = :id', { id }))[0].superseded_by).toBe(split.segment_ids[0]);
     await expectRefusal(segOp(w, 'moveSegment', id, { anchor_kind: 'beat_start', anchor_beat: 1 }), 409, 'SEGMENT_REPLACED');

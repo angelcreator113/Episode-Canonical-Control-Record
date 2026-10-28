@@ -95,8 +95,9 @@ function placedSegments(edit, timeline = beatTimeline(edit)) {
       order,
       start,
       end: start + (seg.source_out_ms - seg.source_in_ms),
-      audioStart: start + (seg.audio_in_ms - seg.source_in_ms),
-      audioEnd: start + (seg.audio_out_ms - seg.source_in_ms),
+      // No commentary (a NULL range): nothing to place.
+      audioStart: seg.audio_in_ms == null ? null : start + (seg.audio_in_ms - seg.source_in_ms),
+      audioEnd: seg.audio_out_ms == null ? null : start + (seg.audio_out_ms - seg.source_in_ms),
     };
   });
 }
@@ -190,7 +191,7 @@ function mixPlan(edit, timeline = beatTimeline(edit), placed = placedSegments(ed
   };
   const commentary = [];
   for (const p of placed) {
-    if (p.error || p.seg.audio_muted) continue;
+    if (p.error || p.seg.audio_muted || p.seg.audio_in_ms == null || p.seg.audio_out_ms == null) continue;
     const ev = cut({
       kind: 'commentary', segment_id: p.seg.id, raw_clip_id: p.seg.raw_clip_id,
       timeline_start_ms: p.audioStart, timeline_end_ms: p.audioEnd,
@@ -256,9 +257,12 @@ function editFindings(edit) {
       }
     }
   }
+  // A take may span many beats (a whole-episode recording): what is checked is the segment's
+  // placed interval on the edit, never its source against a beat (Evoni, 2026-10-28).
   for (const p of placed) {
-    if (p.error) findings.push({ code: 'anchor_unresolved', severity: 'blocking', ref: p.seg.id, reason: p.error });
-    else if (p.end > timeline.duration) findings.push({ code: 'segment_beyond_edit_end', severity: 'warning', ref: p.seg.id, from_ms: timeline.duration, to_ms: p.end });
+    if (p.error) { findings.push({ code: 'anchor_unresolved', severity: 'blocking', ref: p.seg.id, reason: p.error }); continue; }
+    if (p.start < 0) findings.push({ code: 'segment_before_edit_start', severity: 'warning', ref: p.seg.id, from_ms: p.start, to_ms: Math.min(0, p.end) });
+    if (p.end > timeline.duration) findings.push({ code: 'segment_beyond_edit_end', severity: 'warning', ref: p.seg.id, from_ms: Math.max(timeline.duration, p.start), to_ms: p.end });
   }
   const ok = placed.filter((p) => !p.error).sort((a, b) => a.start - b.start);
   for (let i = 1; i < ok.length; i += 1) {

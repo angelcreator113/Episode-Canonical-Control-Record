@@ -172,6 +172,52 @@ describe('C1-8 layout defaults and gameplay-only footage', () => {
   });
 });
 
+describe('takes across beats: the placed interval is what is checked', () => {
+  test('one take spanning every beat: no overrun finding, every required beat covered', () => {
+    const e = edit({ segments: [segment()] });
+    expect(tl.editFindings(e).filter((f) => f.code !== 'scene_missing')).toEqual([]);
+  });
+
+  test('a take from beat 3 through beat 9: covered there, gaps only where it is not placed', () => {
+    const e = edit({ segments: [segment({ anchor_beat: 3, source_out_ms: 70000, audio_out_ms: 70000 })] });
+    const f = tl.editFindings(e);
+    expect(f.filter((x) => x.code === 'prime_footage_missing').map((x) => x.beat)).toEqual([1, 2, 10, 11, 12, 13, 14]);
+    expect(f.filter((x) => /overrun|beyond|before/.test(x.code))).toEqual([]);
+  });
+
+  test('a take placed before the edit starts: a warning, and only its placed part inside the edit covers', () => {
+    const e = edit({ segments: [segment({ offset_ms: -5000, source_out_ms: 25000, audio_out_ms: 25000 })] });
+    const f = tl.editFindings(e);
+    expect(f.find((x) => x.code === 'segment_before_edit_start')).toMatchObject({ severity: 'warning', from_ms: -5000, to_ms: 0 });
+    // 25 s of take placed at -5 s: on the edit, 0-20 s; beat 3 (20-30 s) is not covered.
+    expect(f.find((x) => x.code === 'prime_footage_missing')).toMatchObject({ beat: 3, from_ms: 20000, to_ms: 30000 });
+    expect(tl.mixPlan(e).commentary[0]).toMatchObject({ timeline_start_ms: 0, source_start_ms: 5000 });
+  });
+
+  test('the more-than-one-frame rule holds between two takes that each span beats', () => {
+    const a = segment({ id: id(1), source_out_ms: 45000, audio_out_ms: 45000 });
+    const b = segment({ id: id(2), raw_clip_id: id(8), offset_ms: 45034, source_out_ms: 100000, audio_out_ms: 100000 });
+    expect(tl.coverageFindings(edit({ segments: [a, b] })).find((x) => x.beat === 5)).toMatchObject({ from_ms: 45000, to_ms: 45034 });
+    expect(tl.coverageFindings(edit({ segments: [a, { ...b, offset_ms: 45033 }] })).find((x) => x.beat === 5)).toBeUndefined();
+  });
+});
+
+describe('a segment with no commentary (a split half the commentary was not in)', () => {
+  test('no event in the mix, whatever its mute; other segments and tracks unchanged', () => {
+    const music = { id: id(81), track: 'music', asset_ref: 'lib:bed', slot: null, source_in_ms: 0, source_out_ms: 30000, anchor_kind: 'beat_start', anchor_beat: 1, anchor_ref: null, offset_ms: 0, gain_db: -12, fade_in_ms: 0, fade_out_ms: 0, duck_under_dialogue_db: null };
+    const none = segment({ id: id(1), source_out_ms: 6000, audio_in_ms: null, audio_out_ms: null, audio_muted: false });
+    const other = segment({ id: id(2), raw_clip_id: id(8), offset_ms: 6000, source_in_ms: 6000, source_out_ms: 20000, audio_in_ms: 9000, audio_out_ms: 20000 });
+    const e = edit({ segments: [none, other], audioItems: [music] });
+    const m = tl.mixPlan(e);
+    expect(m.commentary.map((c) => c.segment_id)).toEqual([id(2)]);
+    expect(m.audio).toEqual(tl.mixPlan(edit({ audioItems: [music] })).audio);
+    expect(tl.mixPlan(edit({ segments: [{ ...none, audio_muted: true }, other], audioItems: [music] }))).toEqual(m);
+    // Its picture still shows and covers.
+    expect(tl.layoutAt(e, 3000).pip.segment_id).toBe(id(1));
+    expect(tl.coverageFindings(edit({ sceneClips: scenes().slice(0, 2), segments: [none, other] }))).toEqual([]);
+  });
+});
+
 describe('the mix plan', () => {
   test('events past the edit end are cut, source and timeline together; music and SFX are placed by anchor', () => {
     const e = edit({
