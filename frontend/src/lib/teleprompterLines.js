@@ -109,6 +109,16 @@ export function teleprompterScript(scriptText) {
 /** A script without its on-screen moments ("Show on-screen moments" off). */
 export const withoutScreen = (lines = []) => lines.filter((l) => l.kind !== 'screen');
 
+/**
+ * A script without its scene notes ("Show scene notes" off, the default;
+ * Evoni, 2026-10-28: "I don't need the scene set when reading the
+ * teleprompter"): the (bracketed) stage directions and narration are not
+ * read aloud, so they neither show nor hold the reading line. A (breath)
+ * mark stays. A voice clip's line index (`vi`) still counts them, so clips
+ * and a take's start line keep their lines.
+ */
+export const withoutSceneNotes = (lines = []) => lines.filter((l) => l.kind !== 'direction');
+
 /** Who speaks in these lines, for "Read as": JustAWoman, Lala, then the rest as they come. */
 export function speakersOf(lines = []) {
   const seen = [];

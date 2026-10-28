@@ -9,7 +9,7 @@ vi.mock('../services/api', () => ({
 
 import api from '../services/api';
 import { fakeTakeUploads } from '../test/fakeTakeUploads';
-import TeleprompterReader from '../components/Teleprompter/TeleprompterReader';
+import TeleprompterReader, { SETTINGS_KEY } from '../components/Teleprompter/TeleprompterReader';
 import TakesPanel from '../components/Teleprompter/TeleprompterTakes';
 import { hasTakeFields, beatTakes, withFavorite } from '../lib/rawClipsApi';
 import { takeName, lineChoice } from '../lib/teleprompterLines';
@@ -54,6 +54,8 @@ beforeEach(() => {
   Object.values(api).forEach((fn) => fn?.mockReset?.());
   mockApi(WITH_FIELDS);
   try { window.localStorage.clear(); window.sessionStorage.clear(); } catch (err) { console.error(err); }
+  // "Start from" counts the scene notes (stage directions), off by default since 2026-10-28.
+  window.localStorage.setItem(SETTINGS_KEY, JSON.stringify({ sceneNotes: true }));
   tracks = [{ stop: vi.fn() }];
   recorders = [];
   Object.defineProperty(window, 'isSecureContext', { configurable: true, value: true });
