@@ -56,6 +56,13 @@ class FakeAudio {
   at(seconds) { this._t = seconds; this.emit('timeupdate'); }
 }
 
+class FakeRecorder {
+  constructor(stream, opts) { this.mimeType = opts?.mimeType || ''; this.state = 'inactive'; }
+  start() { this.state = 'recording'; }
+  stop() { this.state = 'inactive'; this.ondataavailable?.({ data: new Blob(['voice'], { type: this.mimeType || 'audio/webm' }) }); this.onstop?.(); }
+}
+FakeRecorder.isTypeSupported = (t) => t === 'audio/webm;codecs=opus';
+
 let status; // 'on' | 'off' | 'error'
 let playable;
 let playRefused;
@@ -87,9 +94,20 @@ beforeEach(() => {
   try { window.localStorage.clear(); } catch (err) { console.error(err); }
   window.localStorage.setItem(SETTINGS_KEY, JSON.stringify({ countdown: false, pacing: 'lines' }));
   window.Audio = FakeAudio;
+  window.MediaRecorder = FakeRecorder;
+  Object.defineProperty(window, 'isSecureContext', { configurable: true, value: true });
+  Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: { getUserMedia: vi.fn(async () => ({ getTracks: () => [{ stop: vi.fn() }] })) } });
+  URL.createObjectURL = vi.fn(() => 'blob:take');
+  URL.revokeObjectURL = vi.fn();
+  vi.mocked(api.post).mockImplementation(async (url) => {
+    if (url.endsWith('/sources')) return { data: { data: { source: { id: 's-new' } } } };
+    if (url.endsWith('/candidates')) return { data: { data: { candidate: { id: 'c-new' } } } };
+    if (url.endsWith('/associate')) return { data: { data: { association: { id: 'as-new' } } } };
+    throw new Error(`unexpected post ${url}`);
+  });
   vi.spyOn(console, 'error').mockImplementation(() => {});
 });
-afterEach(() => { vi.restoreAllMocks(); delete window.Audio; });
+afterEach(() => { vi.restoreAllMocks(); delete window.Audio; delete window.MediaRecorder; });
 
 const activeLine = () => document.querySelector('[data-at="true"]');
 const note = () => screen.queryByTestId('stp-studio-note')?.textContent || null;
@@ -270,5 +288,160 @@ describe('Voice Studio off or unknown', () => {
     fireEvent.click(screen.getByTestId('stp-play'));
     await new Promise((r) => setTimeout(r, 50));
     expect(audios.length).toBe(0);
+  });
+});
+
+describe('refreshing the approvals (B2b-1, B2b-3)', () => {
+  const playableCalls = () => vi.mocked(api.get).mock.calls.filter(([u]) => u.endsWith('/playable')).length;
+  const press = () => fireEvent.click(screen.getByTestId('stp-play'));
+
+  test('every Play asks afresh; a take withdrawn in between does not play on the next Play', async () => {
+    await open();
+    await waitFor(() => expect(screen.getByTestId('stp-voice-toggle')).toBeTruthy());
+    const before = playableCalls();
+    press();
+    await waitFor(() => expect(playableCalls()).toBe(before + 1));
+    await waitFor(() => expect(audios.length).toBe(1));
+    act(() => audios[0].meta());
+    await waitFor(() => expect(audios[0].play).toHaveBeenCalledTimes(1));
+    press(); // pause
+    playable = { script_revision: REV, takes: [], held: [{ approval_id: 'a-8-0', beat_number: 8, line_index: 0, state: 'revoked', reason_text: 'The approval was withdrawn.' }] };
+    press(); // play again: asks afresh, and the withdrawn take is gone
+    await waitFor(() => expect(playableCalls()).toBe(before + 2));
+    await waitFor(() => expect(note()).toMatch(/withdrawn/i));
+    expect(audios[0].play).toHaveBeenCalledTimes(1);
+    expect(audios[0].paused).toBe(true);
+  });
+
+  test('nothing plays until the fresh list answers; a refresh that fails plays nothing (fail closed)', async () => {
+    await open();
+    await waitFor(() => expect(screen.getByTestId('stp-voice-toggle')).toBeTruthy());
+    let answer;
+    vi.mocked(api.get).mockImplementation(async (url) => {
+      if (url === '/api/v1/voice-studio/status') return { data: { data: { on: true } } };
+      if (url.endsWith('/playable')) return new Promise((resolve, reject) => { answer = { resolve, reject }; });
+      return { data: { data: [] } };
+    });
+    press();
+    await waitFor(() => expect(answer).toBeTruthy());
+    await new Promise((r) => setTimeout(r, 30));
+    expect(audios.every((a) => a.play.mock.calls.length === 0)).toBe(true);
+    await act(async () => { answer.reject(new Error('500')); });
+    await waitFor(() => expect(note()).toBe(SILENT.failed));
+    await new Promise((r) => setTimeout(r, 30));
+    expect(audios.every((a) => a.play.mock.calls.length === 0)).toBe(true);
+  });
+
+  test('back to the tab: a fresh list that withdrew the take stops it mid-line; an unchanged one carries on', async () => {
+    let visibility = 'visible';
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => visibility });
+    await open();
+    await waitFor(() => expect(screen.getByTestId('stp-voice-toggle')).toBeTruthy());
+    press();
+    await waitFor(() => expect(audios.length).toBe(1));
+    act(() => audios[0].meta());
+    await waitFor(() => expect(audios[0].play).toHaveBeenCalledTimes(1));
+    // Unchanged: the same take object, no new audio, no restart.
+    const calls = playableCalls();
+    act(() => { visibility = 'hidden'; document.dispatchEvent(new Event('visibilitychange')); visibility = 'visible'; document.dispatchEvent(new Event('visibilitychange')); });
+    await waitFor(() => expect(playableCalls()).toBe(calls + 1));
+    await new Promise((r) => setTimeout(r, 30));
+    expect(audios.length).toBe(1);
+    expect(audios[0].paused).toBe(false);
+    // Withdrawn meanwhile: it stops.
+    playable = { script_revision: REV, takes: [], held: [] };
+    act(() => document.dispatchEvent(new Event('visibilitychange')));
+    await waitFor(() => expect(audios[0].paused).toBe(true));
+    await waitFor(() => expect(note()).toBe(SILENT.none));
+  });
+
+  test('a take that fails to play asks for a fresh list once (a fresh link), not again and again', async () => {
+    await open();
+    await waitFor(() => expect(screen.getByTestId('stp-voice-toggle')).toBeTruthy());
+    press();
+    await waitFor(() => expect(audios.length).toBe(1));
+    const calls = playableCalls();
+    // The fresh list carries a fresh link for the same take.
+    playable = { ...playable, takes: playable.takes.map((t) => (t.approval_id === 'a-8-0' ? { ...t, audio_url: 'https://bucket/vs-8-0.wav?fresh=1' } : t)) };
+    act(() => audios[0].emit('error'));
+    await waitFor(() => expect(playableCalls()).toBe(calls + 1));
+    await waitFor(() => expect(audios.length).toBe(2));
+    expect(audios[1].src).toBe('https://bucket/vs-8-0.wav?fresh=1');
+    act(() => audios[1].emit('error'));
+    await new Promise((r) => setTimeout(r, 50));
+    expect(playableCalls()).toBe(calls + 1);
+    expect(note()).toBe(SILENT.playFailed);
+  });
+
+  test('Voice Studio status unknown at first: Play asks again, and plays once it answers on', async () => {
+    status = 'error';
+    await open();
+    await waitFor(() => expect(note()).toBe(SILENT.unknown));
+    status = 'on';
+    press();
+    await waitFor(() => expect(audios.length).toBe(1));
+    expect(audios[0].src).toBe('https://bucket/vs-8-0.wav');
+  });
+});
+
+describe('recording from the teleprompter with Voice Studio on', () => {
+  test('records an unapproved Voice Studio take for the line and links to Voice Studio; no old clip, no approval', async () => {
+    await open();
+    await waitFor(() => expect(screen.getByTestId('stp-voice-record').textContent).toContain('Record a take'));
+    fireEvent.click(screen.getByTestId('stp-voice-record'));
+    expect(screen.queryByTestId('stp-voice-panel')).toBeNull(); // the old recorder and its player
+    expect(screen.queryByTestId('vr-clip-audio')).toBeNull();
+    const link = screen.getByTestId('stp-studio-link');
+    expect(link.getAttribute('href')).toBe('/episodes/ep-1/voice?beat=8&line=0');
+    fireEvent.click(screen.getByTestId('stp-studio-start'));
+    await waitFor(() => expect(screen.getByTestId('stp-studio-stop').disabled).toBe(false));
+    fireEvent.click(screen.getByTestId('stp-studio-stop'));
+    await waitFor(() => expect(screen.getByTestId('stp-studio-save')).toBeTruthy());
+    fireEvent.click(screen.getByTestId('stp-studio-save'));
+    await waitFor(() => expect(screen.getByTestId('stp-studio-result').textContent).toMatch(/not approved/));
+    const posts = vi.mocked(api.post).mock.calls.map(([u, body]) => [u, body]);
+    expect(posts.map(([u]) => u)).toEqual(['/api/v1/voice-studio/ep-1/sources', '/api/v1/voice-studio/ep-1/candidates', '/api/v1/voice-studio/ep-1/candidates/c-new/associate']);
+    expect(posts[2][1]).toEqual({ script_revision: REV, beat_number: 8, line_index: 0 });
+    expect(posts.some(([u]) => /approve|script-voice-clips/.test(u))).toBe(false);
+    expect(vi.mocked(api.get).mock.calls.some(([u]) => u.includes('script-voice-clips'))).toBe(false);
+  });
+
+  test('a refused save says so and offers to carry on from the step that failed, never uploading twice', async () => {
+    let tieFails = true;
+    vi.mocked(api.post).mockImplementation(async (url) => {
+      if (url.endsWith('/sources')) return { data: { data: { source: { id: 's-new' } } } };
+      if (url.endsWith('/candidates')) return { data: { data: { candidate: { id: 'c-new' } } } };
+      if (url.endsWith('/associate')) {
+        if (tieFails) { const e = new Error('Network Error'); throw e; }
+        return { data: { data: {} } };
+      }
+      throw new Error(url);
+    });
+    await open();
+    await waitFor(() => expect(screen.getByTestId('stp-voice-record')).toBeTruthy());
+    fireEvent.click(screen.getByTestId('stp-voice-record'));
+    fireEvent.click(screen.getByTestId('stp-studio-start'));
+    await waitFor(() => expect(screen.getByTestId('stp-studio-stop').disabled).toBe(false));
+    fireEvent.click(screen.getByTestId('stp-studio-stop'));
+    await waitFor(() => expect(screen.getByTestId('stp-studio-save')).toBeTruthy());
+    fireEvent.click(screen.getByTestId('stp-studio-save'));
+    await waitFor(() => expect(screen.getByTestId('stp-studio-result').textContent).toMatch(/only tying it to the line is left/));
+    tieFails = false;
+    fireEvent.click(screen.getByTestId('stp-studio-retry'));
+    await waitFor(() => expect(screen.getByTestId('stp-studio-result').textContent).toMatch(/not approved/));
+    const urls = vi.mocked(api.post).mock.calls.map(([u]) => u);
+    expect(urls.filter((u) => u.endsWith('/sources'))).toHaveLength(1);
+    expect(urls.filter((u) => u.endsWith('/candidates'))).toHaveLength(1);
+    expect(urls.filter((u) => u.endsWith('/associate'))).toHaveLength(2);
+  });
+
+  test('Voice Studio off: the old recorder and its clip player are as before', async () => {
+    status = 'off';
+    await open();
+    await waitFor(() => expect(screen.getByTestId('stp-voice-record').textContent).toContain('Record voice'));
+    fireEvent.click(screen.getByTestId('stp-voice-record'));
+    expect(screen.getByTestId('stp-voice-panel')).toBeTruthy();
+    expect(screen.getByTestId('vr-clip-audio').getAttribute('src')).toBe('https://bucket/legacy-0.webm');
+    expect(screen.queryByTestId('stp-studio-record')).toBeNull();
   });
 });

@@ -115,4 +115,18 @@ describe('Voice Studio boundaries', () => {
     // The server's list is the only one read in Voice Studio mode.
     expect(read('frontend/src/lib/voiceStudioApi.js')).toMatch(/playable: \(episodeId\) => api\.get\(`\$\{base\(episodeId\)\}\/playable`\)/);
   });
+  test('B2b: recording from the teleprompter makes unapproved takes only; never an old clip; links to Voice Studio', () => {
+    const panel = read('frontend/src/components/Teleprompter/StudioRecord.jsx');
+    const save = read('frontend/src/hooks/useTakeSave.js');
+    for (const code of [panel, save]) {
+      expect(code).not.toMatch(/voiceStudioApi\.(approve|reconfirm|resolve|revoke|removeTake)|voiceClipsApi/);
+    }
+    expect(save).toMatch(/voiceStudioApi\.uploadSource[\s\S]*voiceStudioApi\.createTake[\s\S]*voiceStudioApi\.tie/);
+    expect(panel).toMatch(/\/voice\?beat=/);
+    // The reader only shows the old recorder and old clips while Voice Studio is off.
+    const reader = read('frontend/src/components/Teleprompter/TeleprompterReader.jsx');
+    expect(reader).toMatch(/const legacyVoice = !!voiceEpisode && studioMode === 'off';/);
+    expect(reader).toMatch(/\{voiceLine && !take && !studio && \(/);
+    expect(read('frontend/src/components/Episodes/EpisodeScriptTab.jsx')).toMatch(/mode === 'off' && live \? voiceClipsApi\.list\(episodeId\)/);
+  });
 });
