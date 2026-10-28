@@ -133,6 +133,9 @@ describe('A1c R1 static guards', () => {
   test('5. the save number: the save adds one only when the text changed, inside its transaction', () => {
     const save = code(read(SAVE));
     expect(save.match(/script_seq = script_seq \+ 1/g)).toHaveLength(1);
+    // A BIGINT: read as text, never turned into a JavaScript number.
+    expect(save).toMatch(/RETURNING script_seq::text AS script_seq/);
+    expect(save).not.toMatch(/(Number|parseInt|parseFloat)\([^)]*script_?seq/i);
     expect(save).toMatch(/const scriptSeq = update\.script_content !== undefined \? await nextScriptSeq\(Episode\.sequelize, row\.id, t\) : null;/);
     // 1b's forms catch a write of it elsewhere.
     expect(WRITES.some((re) => re.test('UPDATE episodes SET script_seq = 3 WHERE id = 1'))).toBe(true);

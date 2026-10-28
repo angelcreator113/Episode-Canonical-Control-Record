@@ -52,7 +52,8 @@ const A = '## BEAT: 1 · Opening Ritual\nLala: "Bestie, come style me."\n\n## BE
       VALUES (:ep, :show, 'Seq', :n, 'draft', :script, '[]'::jsonb, NOW(), NOW())`, { ep, show, n: 9000 + eps.length, script });
     return ep;
   };
-  const seqOf = async (ep) => Number((await rows('SELECT script_seq FROM episodes WHERE id = :ep', { ep }))[0].script_seq);
+  // As text: a BIGINT is compared as a decimal string, never as a JavaScript number.
+  const seqOf = async (ep) => (await rows('SELECT script_seq::text AS s FROM episodes WHERE id = :ep', { ep }))[0].s;
   const save = (ep, text, opts = {}) => saveEpisodeScript(models, ep, { writer: 'test', compose: async () => ({ script: text }), ...opts });
 
   test('the migration is idempotent: run again, the column is as it was', async () => {
@@ -61,7 +62,7 @@ const A = '## BEAT: 1 · Opening Ritual\nLala: "Bestie, come style me."\n\n## BE
       WHERE table_schema = current_schema() AND table_name = 'episodes' AND column_name = 'script_seq'`);
     expect(col).toEqual({ data_type: 'bigint', is_nullable: 'NO', column_default: '0' });
     const ep = await makeEpisode();
-    expect(await seqOf(ep)).toBe(0);
+    expect(await seqOf(ep)).toBe('0');
   });
 
   test('A -> empty -> A, again and again: every save moves it on, though the revision comes back', async () => {
@@ -74,11 +75,11 @@ const A = '## BEAT: 1 · Opening Ritual\nLala: "Bestie, come style me."\n\n## BE
         seen.push(out.script_seq);
       }
     }
-    expect(seen).toEqual([1, 2, 3, 4, 5, 6]);
-    expect(await seqOf(ep)).toBe(6);
+    expect(seen).toEqual(['1', '2', '3', '4', '5', '6']);
+    expect(await seqOf(ep)).toBe('6');
     // The same text again changes nothing, and takes no number.
     expect((await save(ep, A)).script_seq).toBeNull();
-    expect(await seqOf(ep)).toBe(6);
+    expect(await seqOf(ep)).toBe('6');
   });
 
   test('a restore from History moves it on; a lock alone and edits that are not the script do not', async () => {
@@ -87,7 +88,7 @@ const A = '## BEAT: 1 · Opening Ritual\nLala: "Bestie, come style me."\n\n## BE
     await save(ep, `${A}\nLala: "three"`);
     const [v] = await rows("SELECT id, script_content FROM episode_script_versions WHERE episode_id = :ep AND script_content = :t", { ep, t: `${A}\nLala: "two"` });
     const restored = await saveEpisodeScript(models, ep, { writer: 'W1', restoredFrom: v.id, compose: async () => ({ script: v.script_content }) });
-    expect(restored).toMatchObject({ version_source: 'restore', script_seq: 3 });
+    expect(restored).toMatchObject({ version_source: 'restore', script_seq: '3' });
     const lock = await saveEpisodeScript(models, ep, { writer: 'W2', source: 'lock', compose: async (row) => ({ script: row.script_content, lockedBeats: [1] }) });
     expect(lock.script_seq).toBeNull();
     // The episode's other fields, through the API (title, air date) and directly (coins, plans, metadata).
@@ -95,17 +96,17 @@ const A = '## BEAT: 1 · Opening Ritual\nLala: "Bestie, come style me."\n\n## BE
     expect(put.status).toBe(200);
     await run(`UPDATE episodes SET total_income = 900, total_expenses = 100, money_plan = '{"coins": 5}'::jsonb,
       distribution_metadata = '{"x": 1}'::jsonb, description = 'd', updated_at = NOW() WHERE id = :ep`, { ep });
-    expect(await seqOf(ep)).toBe(3);
+    expect(await seqOf(ep)).toBe('3');
   });
 
   test('saves at once: the row lock serialises them, each gets its own number, none is lost', async () => {
     const ep = await makeEpisode();
     const texts = Array.from({ length: 6 }, (_, i) => `${A}\nLala: "at once ${i}"`);
     const outs = await Promise.all(texts.map((t) => save(ep, t)));
-    expect(outs.map((o) => o.script_seq).sort((x, y) => x - y)).toEqual([1, 2, 3, 4, 5, 6]);
-    expect(await seqOf(ep)).toBe(6);
+    expect(outs.map((o) => o.script_seq).sort((x, y) => (BigInt(x) < BigInt(y) ? -1 : 1))).toEqual(['1', '2', '3', '4', '5', '6']);
+    expect(await seqOf(ep)).toBe('6');
     // The last number is the text that is saved.
-    const last = outs.find((o) => o.script_seq === 6);
+    const last = outs.find((o) => o.script_seq === '6');
     expect((await rows('SELECT script_content FROM episodes WHERE id = :ep', { ep }))[0].script_content).toBe(last.script_content);
   });
 
@@ -119,9 +120,19 @@ const A = '## BEAT: 1 · Opening Ritual\nLala: "Bestie, come style me."\n\n## BE
     } finally {
       jest.useRealTimers();
     }
-    expect(outs.map((o) => o.script_seq)).toEqual([1, 2, 3, 4]);
+    expect(outs.map((o) => o.script_seq)).toEqual(['1', '2', '3', '4']);
     const times = await rows('SELECT DISTINCT created_at FROM episode_script_versions WHERE episode_id = :ep', { ep });
     expect(times).toHaveLength(1);
+  });
+
+  test('past 2^53 the number stays exact, in the database and in what the save returns', async () => {
+    const ep = await makeEpisode();
+    await run("UPDATE episodes SET script_seq = '9007199254740993' WHERE id = :ep", { ep });
+    const out = await save(ep, `${A}\nbig`);
+    expect(out.script_seq).toBe('9007199254740994');
+    expect(await seqOf(ep)).toBe('9007199254740994');
+    // As a JavaScript number it would have read 9007199254740994 for 9007199254740993 already.
+    expect(Number('9007199254740993')).toBe(9007199254740992);
   });
 
   test('a save that fails takes no number (the save and the number roll back together)', async () => {
@@ -130,6 +141,6 @@ const A = '## BEAT: 1 · Opening Ritual\nLala: "Bestie, come style me."\n\n## BE
     await expect(failing).rejects.toThrow('compose failed');
     const stale = saveEpisodeScript(models, ep, { writer: 'W1', requireRevision: true, revision: scriptRevision('not this'), compose: async () => ({ script: 'x' }) });
     await expect(stale).rejects.toMatchObject({ status: 409 });
-    expect(await seqOf(ep)).toBe(0);
+    expect(await seqOf(ep)).toBe('0');
   });
 });

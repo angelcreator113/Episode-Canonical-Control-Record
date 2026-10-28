@@ -64,11 +64,11 @@ const mockQuery = jest.fn(async (sql, opts = {}) => {
   }
   if (/^SELECT canon_consequences FROM world_events WHERE id = :eventId AND deleted_at IS NULL/.test(sql)) return [[{ canon_consequences: {} }]];
   // The save's script save number (scriptSave, decisions 1 and 2, 2026-10-27).
-  if (/^UPDATE episodes SET script_seq = script_seq \+ 1 WHERE id = :episodeId RETURNING script_seq$/.test(sql)) {
+  if (/^UPDATE episodes SET script_seq = script_seq \+ 1 WHERE id = :episodeId RETURNING script_seq::text AS script_seq$/.test(sql)) {
     const ep = mockEpisodes[r.episodeId];
     if (!ep) return [[], 0];
-    ep.script_seq = (ep.script_seq || 0) + 1;
-    return [[{ script_seq: String(ep.script_seq) }], 1];
+    ep.script_seq = (BigInt(ep.script_seq || 0) + 1n).toString();
+    return [[{ script_seq: ep.script_seq }], 1];
   }
   if (/^UPDATE world_events SET /.test(sql)) {
     const ev = mockRowFor(r);

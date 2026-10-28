@@ -72,13 +72,17 @@ async function readScriptRevision(models, episodeId, { transaction = null } = {}
 }
 
 /**
- * Adds one to the episode's script save number and returns it. Called only
- * by the save, inside its transaction, on the row it holds FOR UPDATE.
+ * Adds one to the episode's script save number and returns it as a decimal
+ * string: it is a BIGINT, past what a JavaScript number holds exactly, so it
+ * is never turned into one (compare it as text). Called only by the save,
+ * inside its transaction, on the row it holds FOR UPDATE.
  */
 async function nextScriptSeq(sequelize, episodeId, t) {
-  const [found] = await sequelize.query('UPDATE episodes SET script_seq = script_seq + 1 WHERE id = :episodeId RETURNING script_seq',
+  const [found] = await sequelize.query('UPDATE episodes SET script_seq = script_seq + 1 WHERE id = :episodeId RETURNING script_seq::text AS script_seq',
     { replacements: { episodeId }, transaction: t });
-  return Number(found[0].script_seq);
+  const seq = found[0] ? found[0].script_seq : null;
+  if (typeof seq !== 'string' || !/^[0-9]+$/.test(seq)) throw new Error('saveEpisodeScript: the script save number was not advanced');
+  return seq;
 }
 
 /** The text a version restores to, by the same rule the Script tab uses to put it on the page. */
@@ -102,7 +106,8 @@ function restoredText(row, versionText) {
  *   restoredFrom:    the version a Save names (Restore);
  *   userId, transaction (the caller's, when it writes other rows with this).
  * Returns { episode, skipped, script_content, script_revision, script_seq
- *   (the new save number, or null when the text did not change),
+ *   (the new save number as a decimal string, or null when the text did
+ *   not change),
  *   locked_beats_kept, locked_beats_moved, version_source, previous_content }.
  */
 async function saveEpisodeScript(models, episodeId, opts = {}) {
