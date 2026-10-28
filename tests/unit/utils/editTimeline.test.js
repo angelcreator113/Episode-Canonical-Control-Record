@@ -380,6 +380,10 @@ describe('dialogue placements', () => {
     const at = (over) => tl.editFindings(edit({ items: [placement(over)], voiceTakes: k })).filter((x) => x.code.startsWith('dialogue'));
     // 8.5 s into beat 2 (10 s long): 2 s of take runs 500 ms into beat 3.
     expect(at({ offset_ms: 8500 })).toEqual([expect.objectContaining({ code: 'dialogue_outside_beat', severity: 'warning', from_ms: 18500, to_ms: 20500 })]);
+    // Crossing the boundary is permitted: it plays in full, into beat 3, and blocks nothing.
+    const crossing = edit({ items: [placement({ offset_ms: 8500 })], voiceTakes: k });
+    expect(tl.mixPlan(crossing).dialogue).toEqual([expect.objectContaining({ timeline_start_ms: 18500, timeline_end_ms: 20500, source_start_ms: 500, source_end_ms: 2500, gain_db: -1 })]);
+    expect(tl.editFindings(crossing).filter((x) => x.code.startsWith('dialogue') && x.severity === 'blocking')).toEqual([]);
     expect(at({ offset_ms: 8000 })).toEqual([]);
     expect(at({ anchor_kind: 'edit_start', anchor_beat: null, offset_ms: 138001 }).map((x) => [x.code, x.severity])).toEqual([['dialogue_beyond_edit', 'blocking'], ['dialogue_outside_beat', 'warning']]);
     expect(at({ anchor_kind: 'edit_start', anchor_beat: null, offset_ms: -1 }).map((x) => x.code)).toContain('dialogue_beyond_edit');
@@ -391,7 +395,8 @@ describe('dialogue placements', () => {
   test('overlapping dialogue is reported, not refused: both still play', () => {
     const second = placement({ id: id(91), voice_association_id: id(77), voice_approval_id: id(76), line_index: 1, offset_ms: 2500 });
     const e = edit({ items: [placement(), second], voiceTakes: { [id(72)]: take(), [id(76)]: take({ association_id: id(77), line_index: 1 }) } });
-    expect(tl.mixPlan(e).dialogue.map((d) => d.item_id)).toEqual([id(90), id(91)]);
+    // Neither is muted, ducked or shortened: each keeps its full range and its own gain.
+    expect(tl.mixPlan(e).dialogue.map((d) => [d.item_id, d.timeline_start_ms, d.timeline_end_ms, d.gain_db])).toEqual([[id(90), 11500, 13500, -1], [id(91), 12500, 14500, -1]]);
     expect(tl.editFindings(e).filter((x) => x.code.startsWith('dialogue'))).toEqual([{ code: 'dialogue_overlap', severity: 'warning', ref: id(91), with: id(90), from_ms: 12500, to_ms: 13500 }]);
   });
 });

@@ -651,6 +651,16 @@ const SCRIPT = [
       expect.objectContaining({ item_id: pb, approval_id: b.approval_id, beat: 2, line_index: 0, timeline_start_ms: 12000, timeline_end_ms: 15000, source_start_ms: 0, source_end_ms: 3000 }),
     ]);
     expect(await findingsOf(w.ep)).toEqual([]);
+    // Across a beat boundary (beat 2 ends at 20 s): it plays in full, a warning only, nothing blocks.
+    await svc.moveDialogue(sequelize, await as(w.ep, { itemId: pb, body: { anchor_kind: 'beat_start', anchor_beat: 2, offset_ms: 8500 } }));
+    expect((await dialogueOf(w.ep)).find((d) => d.item_id === pb)).toMatchObject({ timeline_start_ms: 18500, timeline_end_ms: 21500, source_start_ms: 0, source_end_ms: 3000 });
+    expect(await findingsOf(w.ep)).toEqual([expect.objectContaining({ code: 'dialogue_outside_beat', severity: 'warning', ref: pb })]);
+    // Overlapping (line 0 of beat 1 moved onto it): both play, in full, at their own gain; a warning only.
+    await svc.moveDialogue(sequelize, await as(w.ep, { itemId: pa, body: { anchor_kind: 'edit_start', offset_ms: 19000 } }));
+    expect((await dialogueOf(w.ep)).map((d) => [d.item_id, d.timeline_start_ms, d.timeline_end_ms, d.gain_db])).toEqual([[pa, 19000, 21000, 0], [pb, 18500, 21500, 0]]);
+    const both = await svc.reviewReadiness(sequelize, { episodeId: w.ep });
+    expect(both.findings.filter((f) => f.code.startsWith('dialogue')).map((f) => [f.code, f.severity]).sort()).toEqual([['dialogue_outside_beat', 'warning'], ['dialogue_outside_beat', 'warning'], ['dialogue_overlap', 'warning']]);
+    await svc.moveDialogue(sequelize, await as(w.ep, { itemId: pb, body: { anchor_kind: 'edit_start', offset_ms: 12000 } }));
     // Moving: beat-relative to absolute; the take is not touched.
     await svc.moveDialogue(sequelize, await as(w.ep, { itemId: pa, body: { anchor_kind: 'edit_start', offset_ms: 4000 } }));
     expect((await dialogueOf(w.ep))[0]).toMatchObject({ item_id: pa, approval_id: a.approval_id, timeline_start_ms: 4000 });
