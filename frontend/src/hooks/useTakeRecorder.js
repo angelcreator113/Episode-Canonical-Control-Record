@@ -27,6 +27,14 @@
  *    resume: the camera status says so, and the take can only be stopped).
  *  - note(meta): more about the take for the store (the beat markers).
  *
+ * Rig mode (Evoni, 2026-10-28): `facingMode` picks the camera ('user', the
+ * front one, by default; 'environment', the back one, for the phone behind
+ * the glass); changing it opens that camera. `listener` hears the take as it
+ * records, for saving while recording (hooks/useLiveUpload): onStart(id,
+ * { type, tag }) when a take begins (tag: begin's own `tag`), onChunk(id,
+ * seq, blob) for each piece, onStop(id) when it stops (its last piece came
+ * just before), onDiscard(id) when a take is thrown away.
+ *
  * Returns { camera: { status: 'off'|'starting'|'ready'|'error', message },
  * stream, recording, paused, finishing, interrupted, limited, elapsed, bytes,
  * take, error, begin, stop, pause, resume, takeTime, discard, restore, note,
@@ -47,7 +55,7 @@ export const TRACK_MUTED = 'The phone paused the camera or microphone. The take 
 
 const newId = () => `take-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
-export default function useTakeRecorder(enabled, { storeKey = 'text', store = null } = {}) {
+export default function useTakeRecorder(enabled, { storeKey = 'text', store = null, facingMode = 'user', listener = null } = {}) {
   const [camera, setCamera] = useState({ status: 'off', message: null });
   const [stream, setStream] = useState(null);
   const [recording, setRecording] = useState(false);
@@ -81,6 +89,12 @@ export default function useTakeRecorder(enabled, { storeKey = 'text', store = nu
   storeRef.current = store || sharedStore();
   const keyRef = useRef(storeKey);
   keyRef.current = storeKey;
+  const listenerRef = useRef(listener);
+  listenerRef.current = listener;
+  // A listener that throws never stops the take.
+  const tell = (what, ...args) => {
+    try { listenerRef.current?.[what]?.(...args); } catch (err) { console.error(`[useTakeRecorder] ${what} listener failed:`, err); }
+  };
 
   const forget = (id) => {
     if (!id) return;
@@ -115,11 +129,13 @@ export default function useTakeRecorder(enabled, { storeKey = 'text', store = nu
   const discard = useCallback(() => {
     if (recRef.current) {
       halt();
+      tell('onDiscard', idRef.current);
       forget(idRef.current);
       idRef.current = null;
       memRef.current = new Map();
     }
     revoke(takeRef.current);
+    if (takeRef.current?.id) tell('onDiscard', takeRef.current.id);
     forget(takeRef.current?.id);
     takeRef.current = null;
     setTake(null);
@@ -142,7 +158,7 @@ export default function useTakeRecorder(enabled, { storeKey = 'text', store = nu
     if (problem) { setCamera({ status: 'error', message: problem }); return undefined; }
     let live = true;
     setCamera({ status: 'starting', message: null });
-    navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } }, audio: true })
+    navigator.mediaDevices.getUserMedia({ video: { facingMode, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: true })
       .then((s) => {
         if (!live) { stopTracks(s); return; }
         streamRef.current = s;
@@ -153,8 +169,15 @@ export default function useTakeRecorder(enabled, { storeKey = 'text', store = nu
         console.error('[useTakeRecorder] camera did not start:', err);
         if (live) setCamera({ status: 'error', message: cameraErrorMessage(err) });
       });
-    return () => { live = false; };
-  }, [enabled, attempt, halt]);
+    return () => {
+      live = false;
+      // Another camera (front ↔ back): the one open now is let go first.
+      if (!recRef.current && streamRef.current) {
+        stopTracks(streamRef.current);
+        streamRef.current = null;
+      }
+    };
+  }, [enabled, attempt, halt, facingMode]);
 
   // Leaving: the recorder stops, the tracks are released, the take's URL
   // goes. The take's copy in the store stays: it is offered back next time.
@@ -260,7 +283,7 @@ export default function useTakeRecorder(enabled, { storeKey = 'text', store = nu
    * the bit rate, if set; maxBytes: it stops by itself at this size; meta:
    * what the store keeps with it (to review and save it after a reload).
    */
-  const begin = useCallback(({ videoBitsPerSecond, maxBytes = 0, meta = {} } = {}) => {
+  const begin = useCallback(({ videoBitsPerSecond, maxBytes = 0, meta = {}, tag = null } = {}) => {
     if (!streamRef.current || recRef.current) return false;
     setError(null);
     const type = pickRecordType(window.MediaRecorder);
@@ -293,6 +316,7 @@ export default function useTakeRecorder(enabled, { storeKey = 'text', store = nu
       seqRef.current += 1;
       memRef.current.set(seq, e.data);
       bytesRef.current += e.data.size;
+      tell('onChunk', id, seq, e.data);
       if (st.available) {
         const w = st.addChunk(id, seq, e.data, Math.round(takeTime() * 10) / 10)
           .then((ok) => { if (ok) { memRef.current.delete(seq); keptRef.current = true; } })
@@ -307,6 +331,7 @@ export default function useTakeRecorder(enabled, { storeKey = 'text', store = nu
       }
     };
     rec.onstop = () => {
+      tell('onStop', id);
       const kind = rec.mimeType || type || 'video/webm';
       recRef.current = null;
       const seconds = takeTime();
@@ -349,6 +374,7 @@ export default function useTakeRecorder(enabled, { storeKey = 'text', store = nu
       return false;
     }
     recRef.current = rec;
+    tell('onStart', id, { type: rec.mimeType || type || 'video/webm', tag });
     startedRef.current = Date.now();
     pausedMsRef.current = 0;
     pausedAtRef.current = 0;

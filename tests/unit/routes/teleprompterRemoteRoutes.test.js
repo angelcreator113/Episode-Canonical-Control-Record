@@ -95,6 +95,19 @@ test('before the migration: 409 with the plain message; an unexpected error is a
   spy.mockRestore();
 });
 
+test('Rig mode (2026-10-28): the phone sends phone_take_* commands and reads the state with its age', async () => {
+  remote.addCommand.mockImplementation(async (_db, { command }) => ({ seq: 4, state: null, expires_at: 'later', command: remote.readCommand(command) }));
+  const ok = await request(app).post('/api/v1/teleprompter-remote/phone/commands').set('X-Remote-Token', TOKEN).send({ command: 'phone_take_start' });
+  expect(ok.status).toBe(200);
+  expect(remote.addCommand).toHaveBeenCalledWith(expect.anything(), { token: TOKEN, command: 'phone_take_start' });
+  const bad = await request(app).post('/api/v1/teleprompter-remote/phone/commands').set('X-Remote-Token', TOKEN).send({ command: 'phone_take_upload' });
+  expect(bad.status).toBe(400);
+  remote.stateByToken.mockResolvedValue({ state: { phoneTake: true, beat: 3 }, expires_at: 'later', seq: 4, state_age_ms: 250 });
+  const st = await request(app).get('/api/v1/teleprompter-remote/phone/state').set('X-Remote-Token', TOKEN);
+  expect(st.body.data).toMatchObject({ state_age_ms: 250, state: { phoneTake: true, beat: 3 } });
+});
+
+
 test('the phone routes are rate limited', async () => {
   remote.stateByToken.mockResolvedValue({ state: null, expires_at: 'later', seq: 0 });
   let last;
