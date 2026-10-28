@@ -115,6 +115,8 @@ const SCRIPT = [
   const stateOfApproval = async (ep, id) => (await summaryOf(ep)).approvals.find((a) => a.approval_id === id);
   const approvalRow = async (id) => (await rows('SELECT * FROM line_voice_approvals WHERE id = :id', { id }))[0];
   const versionIds = async (ep) => (await rows('SELECT id FROM episode_script_versions WHERE episode_id = :ep', { ep })).map((r) => r.id);
+  // The save number is a BIGINT: compared as a decimal string, counted with BigInt.
+  const plus = (seq, n) => (BigInt(seq) + BigInt(n)).toString();
   const expectRefusal = async (promise, status, code) => {
     await expect(promise).rejects.toMatchObject({ status, ...(code ? { code } : {}) });
   };
@@ -316,7 +318,7 @@ const SCRIPT = [
     await saveScript(ep, SCRIPT);
     const restored = await stateOf(ep);
     expect(restored.revision).toBe(approved.revision);
-    expect(Number(restored.seq)).toBe(Number(approved.seq) + 2);
+    expect(restored.seq).toBe(plus(approved.seq, 2));
     expect((await stateOfApproval(ep, id))).toMatchObject({ state: 'needs_review', reason: 'script_saved', playable: false });
 
     // Observed: at B, approving another take for that line records the approval invalid; A again does not revive it.
@@ -358,7 +360,7 @@ const SCRIPT = [
       await saveScript(ep, SCRIPT);
       const now = await stateOf(ep);
       expect(now.revision).toBe(approved.revision);
-      expect(Number(now.seq)).toBe(Number(approved.seq) + 2 * (cycle + 1));
+      expect(now.seq).toBe(plus(approved.seq, 2 * (cycle + 1)));
       expect(await stateOfApproval(ep, id)).toMatchObject({ state: 'needs_review', reason: 'script_saved', playable: false });
     }
     expect((await studio.playableApprovals(sequelize, { episodeId: ep })).takes).toEqual([]);
@@ -391,9 +393,9 @@ const SCRIPT = [
   test('saves at once around an approval: each moves the save number on, and the approval needs review after any of them', async () => {
     const ep = await makeEpisode();
     const { approval_id: id } = await approveTake(ep, await takeAt(ep, 8, 0));
-    const before = Number((await stateOf(ep)).seq);
+    const before = (await stateOf(ep)).seq;
     await Promise.all([1, 2, 3, 4].map((n) => saveScript(ep, SCRIPT.replace('This is my moment.', `At once ${n}.`))));
-    expect(Number((await stateOf(ep)).seq)).toBe(before + 4);
+    expect((await stateOf(ep)).seq).toBe(plus(before, 4));
     expect((await stateOfApproval(ep, id)).state).toBe('needs_review');
   });
 
@@ -468,12 +470,12 @@ const SCRIPT = [
     expect(n).toBe(0);
   });
 
-  test('B1-10 a script save racing an approval waits for it; the approval keeps the version it saw and then needs review', async () => {
+  test('B1-10 a script save racing an approval waits for it; the approval keeps the save number it saw and then needs review', async () => {
     const ep = await makeEpisode();
     await saveScript(ep, SCRIPT.replace('This is my moment.', 'This is my moment!'));
     const take = await takeAt(ep, 8, 0);
     const rev = (await stateOf(ep)).revision;
-    const before = (await stateOf(ep)).version_id;
+    const before = (await stateOf(ep)).seq;
     // Hold the line's lock elsewhere, so the approval stops inside its transaction, after FOR SHARE on the episode.
     let releaseLine;
     const lineHeld = new Promise((r) => { releaseLine = r; });
@@ -495,11 +497,9 @@ const SCRIPT = [
     await holder;
     const { approval_id: id } = await approving;
     await saving;
-    expect((await approvalRow(id)).pinned_script_version_id).toBe(before);
-    expect((await stateOf(ep)).version_id).not.toBe(before);
-    expect(String((await approvalRow(id)).pinned_script_seq)).toBe(String(Number((await stateOf(ep)).seq) - 1));
+    expect(String((await approvalRow(id)).pinned_script_seq)).toBe(before);
+    expect((await stateOf(ep)).seq).toBe(plus(before, 1));
     expect((await stateOfApproval(ep, id)).state).toBe('needs_review');
-    expect(await versionIds(ep)).toContain(before);
   });
 
   test('repeated dialogue: identical lines are approved apart by index; occurrence is stored, not part of the identity', async () => {
@@ -615,77 +615,86 @@ const SCRIPT = [
     expect(sum.approvals.filter((x) => x.playable).map((x) => x.approval_id)).toEqual([b0]);
   });
 
-  test('retention: a pinned version outlives the limits while its approval is in force, and is pruned once released; the approval keeps its pin', async () => {
+  test('version pruning ignores Voice Studio; an approval stays readable once every version of its day is pruned', async () => {
     const { KEEP } = require('../../src/services/scriptVersions');
     const ep = await makeEpisode();
     await saveScript(ep, SCRIPT.replace('This is my moment.', 'This is my moment 0.'));
+    const ofItsDay = await versionIds(ep);
     const { approval_id: id } = await approveTake(ep, await takeAt(ep, 8, 0));
-    const pinned = (await approvalRow(id)).pinned_script_version_id;
-    expect(pinned).not.toBeNull();
-    expect(await studio.referencedScriptVersionIds(sequelize, ep)).toEqual([pinned]);
-    const churn = async (from, n) => { for (let i = from; i < from + n; i += 1) await saveScript(ep, SCRIPT.replace('This is my moment.', `This is my moment ${i}.`)); };
-    await churn(1, KEEP + 5);
-    let kept = await versionIds(ep);
-    expect(kept).toContain(pinned);
-    expect(kept).toHaveLength(KEEP + 1);
-    // Re-confirmed: its re-confirmation pins the newest version, which is kept too.
-    const sum = await summaryOf(ep);
-    await studio.reconfirm(sequelize, { episodeId: ep, scriptRevision: sum.script_revision, items: [{ approval_id: id, context_hash: sum.approvals[0].context_hash }], userId: USER });
-    const confirmedAt = (await stateOf(ep)).version_id;
-    expect((await studio.referencedScriptVersionIds(sequelize, ep)).sort()).toEqual([pinned, confirmedAt].sort());
-    await churn(100, KEEP + 5);
-    kept = await versionIds(ep);
-    expect(kept).toEqual(expect.arrayContaining([pinned, confirmedAt]));
-    expect(kept).toHaveLength(KEEP + 2);
-    // Released (withdrawn): the next save prunes them; the approval and its re-confirmation keep their ids as history.
-    await studio.revokeApproval(sequelize, { episodeId: ep, approvalId: id, userId: USER });
-    expect(await studio.referencedScriptVersionIds(sequelize, ep)).toEqual([]);
-    await churn(200, 1);
-    kept = await versionIds(ep);
-    expect(kept).not.toContain(pinned);
-    expect(kept).not.toContain(confirmedAt);
+    const pinned = await approvalRow(id);
+    for (let i = 1; i <= KEEP + 5; i += 1) await saveScript(ep, SCRIPT.replace('This is my moment.', `This is my moment ${i}.`));
+    const kept = await versionIds(ep);
     expect(kept).toHaveLength(KEEP);
-    expect((await approvalRow(id)).pinned_script_version_id).toBe(pinned);
-    const [conf] = await rows('SELECT pinned_script_version_id FROM line_voice_reconfirmations WHERE approval_id = :id', { id });
-    expect(conf.pinned_script_version_id).toBe(confirmedAt);
-    // Still readable without the version row: what was approved, against which revision and save number, and what became of it.
+    for (const v of ofItsDay) expect(kept).not.toContain(v);
+    // The approval reads as it did: what was approved, where, against which text and save number.
+    expect(await approvalRow(id)).toEqual(pinned);
+    expect(await stateOfApproval(ep, id)).toMatchObject({ state: 'needs_review', reason: 'script_saved', words: 'Closet time.', speaker: 'Lala', beat_number: 8, line_index: 0 });
     const [hist] = await studio.approvalHistory(sequelize, { episodeId: ep });
-    expect(hist).toMatchObject({ id, pinned_script_version_id: pinned, beat_number: 8, line_index: 0, words: 'Closet time.', speaker: 'Lala' });
+    expect(hist).toMatchObject({ id, beat_number: 8, line_index: 0, words: 'Closet time.', speaker: 'Lala', pinned_script_seq: String(pinned.pinned_script_seq) });
     expect(hist.pinned_script_revision).toMatch(/^sr1-[0-9a-f]{40}$/);
-    expect(hist.pinned_script_seq).toMatch(/^[0-9]+$/);
-    expect(hist.revoked_by).toBe(USER);
+    expect(hist).not.toHaveProperty('pinned_script_version_id');
+    // A person can still re-confirm it; then withdraw it, and it stays in the history.
+    const x = await stateOfApproval(ep, id);
+    await studio.reconfirm(sequelize, { episodeId: ep, scriptRevision: (await stateOf(ep)).revision, items: [{ approval_id: id, context_hash: x.context_hash }], userId: USER });
+    expect((await stateOfApproval(ep, id)).state).toBe('current');
+    await studio.revokeApproval(sequelize, { episodeId: ep, approvalId: id, userId: USER });
+    await saveScript(ep, SCRIPT.replace('This is my moment.', 'This is my moment last.'));
+    expect((await studio.approvalHistory(sequelize, { episodeId: ep }))[0]).toMatchObject({ id, revoked_by: USER, words: 'Closet time.' });
   });
 
-  test('retention: a superseded approval releases its version; a provider that fails prunes nothing and the save goes on', async () => {
-    const versions = require('../../src/services/scriptVersions');
+  test('an episode still at save number 0 is approved against 0; the text and the number are both needed for current', async () => {
     const ep = await makeEpisode();
-    await saveScript(ep, SCRIPT.replace('This is my moment.', 'This is my moment 0.'));
-    const { approval_id: first } = await approveTake(ep, await takeAt(ep, 8, 0));
-    const pinnedFirst = (await approvalRow(first)).pinned_script_version_id;
-    await saveScript(ep, SCRIPT.replace('This is my moment.', 'This is my moment 1.'));
-    const { approval_id: second } = await approveTake(ep, await takeAt(ep, 8, 0), first);
-    const pinnedSecond = (await approvalRow(second)).pinned_script_version_id;
-    expect(await studio.referencedScriptVersionIds(sequelize, ep)).toEqual([pinnedSecond]);
-    expect(pinnedSecond).not.toBe(pinnedFirst);
+    expect((await stateOf(ep)).seq).toBe('0');
+    const { approval_id: id } = await approveTake(ep, await takeAt(ep, 8, 0));
+    expect(String((await approvalRow(id)).pinned_script_seq)).toBe('0');
+    expect((await stateOfApproval(ep, id)).state).toBe('current');
+    // The text changed with no save number (a write around the save; guard 1 forbids it in the code): not current.
+    await run('UPDATE episodes SET script_content = :t WHERE id = :ep', { ep, t: SCRIPT.replace('This is my moment.', 'Changed around the save.') });
+    expect(await stateOfApproval(ep, id)).toMatchObject({ state: 'needs_review', reason: 'script_saved' });
+    await run('UPDATE episodes SET script_content = :t WHERE id = :ep', { ep, t: SCRIPT });
+    expect((await stateOfApproval(ep, id)).state).toBe('current');
+    // The same text with a later save number: not current either.
+    await run('UPDATE episodes SET script_seq = script_seq + 1 WHERE id = :ep', { ep });
+    expect(await stateOfApproval(ep, id)).toMatchObject({ state: 'needs_review', reason: 'script_saved' });
+    // And the line context: the take's own line edited, the number and the text both new. Not current, never.
+    await saveScript(ep, SCRIPT.replace('Lala: "Closet time."', 'Lala: "Closet, now."'));
+    expect((await stateOfApproval(ep, id)).state).toBe('unbound');
+  });
 
-    for (let i = 2; i < versions.KEEP + 4; i += 1) await saveScript(ep, SCRIPT.replace('This is my moment.', `This is my moment ${i}.`));
-    const before = await versionIds(ep);
-    expect(before).not.toContain(pinnedFirst);
-    expect(before).toContain(pinnedSecond);
-    const provider = versions.REFERENCE_PROVIDERS[0];
-    const real = provider.ids;
-    provider.ids = (s, episodeId, t) => s.query('SELECT id FROM no_such_voice_table', { transaction: t });
-    const errors = jest.spyOn(console, 'error').mockImplementation(() => {});
+  test('migration order: without A1c the Voice Studio migration refuses and creates nothing; after A1c it runs (an isolated schema)', async () => {
+    const { Sequelize } = require('sequelize');
+    const a1c = require('../../src/migrations/20261027190000-add-episode-script-seq');
+    const schema = `vs_order_${uuid().slice(0, 8)}`;
+    await run(`CREATE SCHEMA "${schema}"`);
+    const own = new Sequelize(process.env.DATABASE_URL, {
+      logging: false, pool: { max: 1, min: 0 },
+      hooks: { afterConnect: (conn) => conn.query(`SET search_path TO "${schema}", public`) },
+    });
+    // One text value, whatever row shape this connection returns.
+    const tablesIn = async () => {
+      const [[row]] = await own.query("SELECT coalesce(string_agg(table_name::text, ',' ORDER BY table_name), '') AS t FROM information_schema.tables WHERE table_schema = :schema", { replacements: { schema } });
+      const text = Array.isArray(row) ? row[0] : row.t;
+      return text ? text.split(',') : [];
+    };
     try {
-      await saveScript(ep, SCRIPT.replace('This is my moment.', 'This is my moment last.'));
+      // The tables the Voice Studio tables point at, as they are before A1c (no script_seq).
+      await own.query('CREATE TABLE episodes (id UUID PRIMARY KEY, script_content TEXT); CREATE TABLE episode_raw_clips (id UUID PRIMARY KEY); CREATE TABLE script_voice_clips (id UUID PRIMARY KEY)');
+      const before = await tablesIn();
+      expect(before).toEqual(['episode_raw_clips', 'episodes', 'script_voice_clips']);
+      await expect(migration.up(own.getQueryInterface())).rejects.toThrow(/needs episodes\.script_seq.*Nothing was created/);
+      expect(await tablesIn()).toEqual(before);
+      await a1c.up(own.getQueryInterface());
+      await migration.up(own.getQueryInterface());
+      expect(await tablesIn()).toEqual(expect.arrayContaining(['voice_source_assets', 'line_voice_candidates', 'line_voice_associations',
+        'line_voice_candidate_revisions', 'line_voice_approvals', 'line_voice_reconfirmations']));
+      // And back: Voice Studio first (empty), then A1c.
+      await migration.down(own.getQueryInterface());
+      expect(await tablesIn()).toEqual(before);
+      await a1c.down(own.getQueryInterface());
     } finally {
-      provider.ids = real;
-      errors.mockRestore();
+      await own.close();
+      await run(`DROP SCHEMA "${schema}" CASCADE`);
     }
-    const after = await versionIds(ep);
-    expect(after).toEqual(expect.arrayContaining(before));
-    expect(after).toHaveLength(before.length + 1);
-    expect((await stateOf(ep)).script).toContain('This is my moment last.');
   });
 
   test('B1-11 legacy import twice: one set of rows, none associated, none approved; old rows untouched', async () => {

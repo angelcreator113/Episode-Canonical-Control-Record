@@ -59,17 +59,22 @@ describe('Voice Studio boundaries', () => {
     expect(code).not.toMatch(/script_content\s*=(?!=)/);
     expect(code).not.toMatch(/(UPDATE|INSERT\s+INTO|DELETE\s+FROM)\s+script_voice_clips/i);
     expect(code).not.toMatch(/saveEpisodeScript|snapshotScript|episode_script_versions|EpisodeScriptVersion/);
+    // The save number is read as text and compared as text (a BIGINT).
+    expect(code).toMatch(/script_seq::text AS script_seq/);
+    expect(code).not.toMatch(/(Number|parseInt|parseFloat)\([^)]*seq/i);
   });
 
   test('the A1c script save and the legacy voice clips name no Voice Studio table', () => {
     for (const f of ['src/services/scriptSave.js', 'src/services/scriptVersions.js', 'src/services/scriptVoiceClipsService.js', 'src/routes/scriptVoiceClipRoutes.js']) {
       expect(TABLES.test(read(f))).toBe(false);
     }
-    // The save never reaches Voice Studio; the version pruning reaches it only through its reference provider.
-    expect(read('src/services/scriptSave.js')).not.toMatch(/voiceStudio/);
-    const versions = read('src/services/scriptVersions.js');
-    expect(versions.match(/require\(['"][^'"]*voiceStudio/g)).toHaveLength(1);
-    expect(versions).toMatch(/require\('\.\/voiceStudioService'\)\.referencedScriptVersionIds\(/);
+    // Neither the save nor the version history reaches Voice Studio: no version row is kept for an
+    // approval (Evoni, 2026-10-28), so pruning never asks it.
+    expect(read('src/services/scriptSave.js')).not.toMatch(/voiceStudio|voice_studio|line_voice/i);
+    expect(read('src/services/scriptVersions.js')).not.toMatch(/voiceStudio|voice_studio|line_voice/i);
+    // And Voice Studio holds no reference to a version row.
+    const code = read(SERVICE);
+    expect(code).not.toMatch(/script_version_id|episode_script_versions|EpisodeScriptVersion|scriptVersions/);
   });
 
   test('only a current approval is playable', () => {

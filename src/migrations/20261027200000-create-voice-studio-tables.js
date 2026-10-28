@@ -19,17 +19,18 @@
  *   line_voice_reconfirmations      a person's re-confirmation (design E1)
  *
  * An approval and a re-confirmation pin the script revision and the
- * episode's script save number, episodes.script_seq (Evoni, 2026-10-27,
- * decisions 1 and 2): the revision is a hash of the text, so A -> B -> A (an
- * empty B included) has the approved revision again; script_seq goes up on
- * every save that changes the text and on nothing else, whatever the clock.
- * The pair decides whether the script was saved since. They also record the
- * id of the episode's newest kept script version when they were written, as
- * history only (it decides nothing). No foreign key: while an approval is in
- * force services/scriptVersions.js keeps the version it names (a reference
- * provider); once it is superseded, invalidated or revoked the version may
- * be pruned while the approval's own row keeps its id, revision, save
- * number and approved context. Approval rows are never deleted.
+ * episode's script save number, episodes.script_seq (Evoni, 2026-10-27/28):
+ * the revision is a hash of the text, so A -> B -> A (an empty B included)
+ * has the approved revision again; script_seq goes up on every save that
+ * changes the text and on nothing else, whatever the clock. The pair decides
+ * whether the script was saved since. No row here names a script version, so
+ * version pruning never depends on Voice Studio; an approval's own row keeps
+ * what it approved (words, speaker, line, context), the revision and the
+ * save number, and stays readable once the versions of its day are gone.
+ * Approval rows are never deleted.
+ *
+ * Needs episodes.script_seq (20261027190000-add-episode-script-seq, A1c):
+ * up() checks for it first and creates nothing without it.
  *
  * Every table has created_at, updated_at and deleted_at. down() refuses while
  * any of the tables has a row, so a rollback cannot drop data; empty, it drops
@@ -61,6 +62,12 @@ module.exports = {
     const { sequelize } = queryInterface;
     await sequelize.transaction(async (transaction) => {
       const q = (sql) => sequelize.query(sql, { transaction });
+      // The A1c prerequisite, before anything is made: one transaction, so a refusal leaves nothing behind.
+      const [seq] = await sequelize.query(`SELECT 1 FROM information_schema.columns
+        WHERE table_schema = current_schema() AND table_name = 'episodes' AND column_name = 'script_seq'`, { transaction });
+      if (!seq.length) {
+        throw new Error('Voice Studio needs episodes.script_seq: run 20261027190000-add-episode-script-seq (A1c) first. Nothing was created.');
+      }
 
       await q(`CREATE TABLE voice_source_assets (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -158,7 +165,6 @@ module.exports = {
         ${hash('approved_context_hash')},
         ${revision('pinned_script_revision')},
         pinned_script_seq BIGINT NOT NULL CHECK (pinned_script_seq >= 0),
-        pinned_script_version_id UUID NULL,
         approved_by VARCHAR(255) NOT NULL,
         approved_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         superseded_at TIMESTAMPTZ NULL,
@@ -186,7 +192,6 @@ module.exports = {
         approval_id UUID NOT NULL REFERENCES line_voice_approvals(id) ON DELETE RESTRICT,
         ${revision('pinned_script_revision')},
         pinned_script_seq BIGINT NOT NULL CHECK (pinned_script_seq >= 0),
-        pinned_script_version_id UUID NULL,
         ${hash('context_hash')},
         confirmed_by VARCHAR(255) NOT NULL,
         confirmed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -200,7 +205,7 @@ module.exports = {
     const { sequelize } = queryInterface;
     await sequelize.transaction(async (transaction) => {
       for (const table of TABLES) {
-        const [[reg]] = await sequelize.query('SELECT to_regclass(:name) AS reg', { replacements: { name: `public.${table}` }, transaction });
+        const [[reg]] = await sequelize.query('SELECT to_regclass(:name) AS reg', { replacements: { name: table }, transaction });
         if (!reg.reg) continue;
         const [[{ n }]] = await sequelize.query(`SELECT count(*)::int AS n FROM ${table}`, { transaction });
         if (n > 0) throw new Error(`Refusing to drop ${table}: it has ${n} row(s). Voice Studio data is never dropped by a rollback; fix forward.`);
