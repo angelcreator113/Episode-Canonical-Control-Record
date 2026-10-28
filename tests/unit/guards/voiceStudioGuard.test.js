@@ -35,6 +35,8 @@ describe('Voice Studio boundaries', () => {
     expect(naming).toEqual([
       'src/migrations/20261027200000-create-voice-studio-tables.js',
       SERVICE,
+      // Timeline C1 reads line associations (only) to check a line anchor's target; its guard forbids writes.
+      'src/services/episodeEditService.js',
     ].sort());
   });
 
