@@ -173,7 +173,8 @@ const SCRIPT = [
       expect(off.body.code).toBe('VOICE_STUDIO_OFF');
       process.env.VOICE_STUDIO = 'on';
       const read = await request(app).get(`/api/v1/voice-studio/${ep}/summary`).set('Authorization', `Bearer ${userToken}`);
-      expect(read.status).toBe(200);
+      expect(read.status).toBe(403); // Voice Studio is for admins only (2026-10-28)
+      expect((await request(app).get(`/api/v1/voice-studio/${ep}/summary`).set('Authorization', `Bearer ${adminToken}`)).status).toBe(200);
       const f = audioFile(1500);
       const forbidden = await request(app).post(`/api/v1/voice-studio/${ep}/sources`).set('Authorization', `Bearer ${userToken}`)
         .field('kind', 'uploaded').attach('audio', f.path, 'line.wav');
@@ -821,7 +822,8 @@ const SCRIPT = [
       expect(admin.status).toBe(200);
       expect(admin.body.data.can_edit).toBe(true);
       const viewer = await request(app).get(`/api/v1/voice-studio/${ep}/studio`).set('Authorization', `Bearer ${userToken}`);
-      expect(viewer.body.data.can_edit).toBe(false);
+      expect(viewer.status).toBe(403);
+      expect(viewer.body.code).toBe('AUTH_GROUP_REQUIRED');
       const refused = await request(app).post(`/api/v1/voice-studio/${ep}/reconfirm`).set('Authorization', `Bearer ${userToken}`).send({ script_revision: admin.body.data.script_revision, items: [] });
       expect(refused.status).toBe(403);
       const missing = await request(app).get(`/api/v1/voice-studio/${uuid()}/studio`).set('Authorization', `Bearer ${adminToken}`);
@@ -840,6 +842,33 @@ const SCRIPT = [
     const v = await studio.studioView(sequelize, { episodeId: ep });
     expect(v.summary.approvals[0].state).toBe('unbound');
     expect(await rows('SELECT id, invalidated_at, superseded_at FROM line_voice_approvals WHERE episode_id = :ep', { ep })).toEqual(before);
+  });
+
+  test('admins only (2026-10-28): every studio read is ADMIN; only /status and /playable answer any signed-in user', async () => {
+    const ep = await makeEpisode();
+    await approveTake(ep, await takeAt(ep, 6, 0));
+    const prev = process.env.VOICE_STUDIO;
+    process.env.VOICE_STUDIO = 'on';
+    try {
+      const get = (url, token) => {
+        const r = request(app).get(`/api/v1/voice-studio${url}`);
+        return token ? r.set('Authorization', `Bearer ${token}`) : r;
+      };
+      for (const url of [`/${ep}/studio`, `/${ep}/summary`, `/${ep}/approvals/history`, `/${ep}/takes`]) {
+        expect([url, (await get(url, userToken)).status]).toEqual([url, 403]);
+        expect([url, (await get(url, adminToken)).status]).toEqual([url, 200]);
+        expect([url, (await get(url, null)).status]).toEqual([url, 401]);
+      }
+      for (const url of ['/status', `/${ep}/playable`]) {
+        expect([url, (await get(url, userToken)).status]).toEqual([url, 200]);
+        expect([url, (await get(url, null)).status]).toEqual([url, 401]);
+      }
+      // What /playable gives anyone signed in: current approvals' takes only, nothing of the studio.
+      const play = (await get(`/${ep}/playable`, userToken)).body.data;
+      expect(Object.keys(play).sort()).toEqual(['script_revision', 'takes']);
+    } finally {
+      if (prev === undefined) delete process.env.VOICE_STUDIO; else process.env.VOICE_STUDIO = prev;
+    }
   });
 
   test('a soft-deleted episode is not found', async () => {
