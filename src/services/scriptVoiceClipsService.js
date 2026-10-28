@@ -14,14 +14,25 @@
  * soft-deletes the old one in the same transaction (and a partial unique
  * index holds it).
  *
+ * Who may change a clip (V-1, Evoni, 2026-10-28): replacing a line's live
+ * clip (by uploading over it) or removing one is for the clip's recorder
+ * (created_by, the signed-in user's id) or an admin (the ADMIN group). A
+ * clip with no recorder on record is an admin's only. The check runs in
+ * the same transaction as the change, on the locked row, so a clip saved
+ * a moment before can't be taken over. Recording a line that has no live
+ * clip is open to any signed-in user, as before.
+ *
  * The table arrives with 20261020120000-create-teleprompter-remote-and-voice-clips.js,
  * which runs only through the Deploy workflow; until then every call is a
  * 409 that says so (Postgres 42P01).
  */
 
+const { userInGroup } = require('../middleware/auth');
+
 const TABLE = 'script_voice_clips';
 const NOT_READY = "Voice clips aren't switched on yet: the database update that adds them (20261020120000) hasn't run.";
 const MAX_SECONDS = 600;
+const NOT_YOURS = "Someone else recorded this line's clip. Only they or an admin can replace or remove it.";
 
 const COLUMNS = `id, episode_id, beat_number, line_index, speaker, line_text, url, content_type,
   duration_seconds, file_size_bytes, created_by, created_at, updated_at`;
@@ -55,6 +66,17 @@ async function guarded(what, fn) {
     throw err;
   }
 }
+
+/** Whether user may replace or remove clip ({ created_by }): its recorder, or an admin. */
+function mayChange(user, clip) {
+  if (!user) return false;
+  if (userInGroup(user, 'admin')) return true;
+  return !!clip.created_by && !!user.id && String(clip.created_by) === String(user.id);
+}
+
+const refuseUnlessMayChange = (user, clip) => {
+  if (!mayChange(user, clip)) throw new VoiceClipError(403, NOT_YOURS, 'NOT_CLIP_OWNER');
+};
 
 /** Whether the table is there (before an upload, so no file goes to S3 for nothing). */
 async function ensureTable(sequelize) {
@@ -120,14 +142,40 @@ async function listClips(sequelize, episodeId) {
   });
 }
 
+/** The line's live clip ({ id, created_by }), or null; locked when a transaction is given. */
+async function lineClip(sequelize, { episodeId, beatNumber, lineIndex }, transaction = undefined) {
+  return guarded('read line', async () => {
+    const [rows] = await sequelize.query(
+      `SELECT id, created_by FROM ${TABLE}
+        WHERE episode_id = :episodeId AND beat_number = :beat AND line_index = :line AND deleted_at IS NULL
+        ${transaction ? 'FOR UPDATE' : ''}`,
+      { replacements: { episodeId, beat: beatNumber, line: lineIndex }, ...(transaction ? { transaction } : {}) });
+    return (rows || [])[0] || null;
+  });
+}
+
+/**
+ * Before an upload goes to S3: refuses (403 NOT_CLIP_OWNER) when the line
+ * has a live clip that user may not replace. saveClip checks again, in its
+ * transaction; this only spares a file that would be refused.
+ */
+async function checkMayRecord(sequelize, user, line) {
+  const live = await lineClip(sequelize, line);
+  if (live) refuseUnlessMayChange(user, live);
+}
+
 /**
  * Saves a clip as the line's live one: the line's earlier live clip is
  * soft-deleted first, in one transaction. clip: the validated fields plus
  * id, episode_id, s3_key, url, content_type, file_size_bytes, created_by.
+ * user (req.user) must be allowed to replace the earlier clip (mayChange),
+ * checked on the locked row; otherwise 403 NOT_CLIP_OWNER and nothing changes.
  * Returns { clip, replaced } (replaced: the id of the clip it took over from, or null).
  */
-async function saveClip(sequelize, clip) {
+async function saveClip(sequelize, clip, user) {
   return guarded('save', () => sequelize.transaction(async (transaction) => {
+    const live = await lineClip(sequelize, { episodeId: clip.episode_id, beatNumber: clip.beat_number, lineIndex: clip.line_index }, transaction);
+    if (live) refuseUnlessMayChange(user, live);
     const [old] = await sequelize.query(
       `UPDATE ${TABLE} SET deleted_at = NOW(), updated_at = NOW()
         WHERE episode_id = :episodeId AND beat_number = :beat AND line_index = :line AND deleted_at IS NULL
@@ -153,22 +201,33 @@ async function saveClip(sequelize, clip) {
   }));
 }
 
-/** Soft-deletes one of the episode's clips (the file stays in S3). True when one was removed. */
-async function removeClip(sequelize, episodeId, clipId) {
-  return guarded('delete', async () => {
+/**
+ * Soft-deletes one of the episode's clips (the file stays in S3). True when
+ * one was removed, false when there is no such live clip. user (req.user)
+ * must be its recorder or an admin (mayChange); otherwise 403 NOT_CLIP_OWNER.
+ */
+async function removeClip(sequelize, episodeId, clipId, user) {
+  return guarded('delete', () => sequelize.transaction(async (transaction) => {
+    const [found] = await sequelize.query(
+      `SELECT id, created_by FROM ${TABLE}
+        WHERE id = :clipId AND episode_id = :episodeId AND deleted_at IS NULL FOR UPDATE`,
+      { replacements: { episodeId, clipId }, transaction });
+    const clip = (found || [])[0];
+    if (!clip) return false;
+    refuseUnlessMayChange(user, clip);
     const [rows] = await sequelize.query(
       `UPDATE ${TABLE} SET deleted_at = NOW(), updated_at = NOW()
         WHERE id = :clipId AND episode_id = :episodeId AND deleted_at IS NULL RETURNING id`,
-      { replacements: { episodeId, clipId } });
+      { replacements: { episodeId, clipId }, transaction });
     return (rows || []).length > 0;
-  });
+  }));
 }
 
 /** The clip's S3 key: episodes/<episode>/voice-clips/<id><ext>. */
 const clipKey = (episodeId, id, ext) => `episodes/${episodeId}/voice-clips/${id}${ext}`;
 
 module.exports = {
-  TABLE, NOT_READY, MAX_SECONDS,
+  TABLE, NOT_READY, NOT_YOURS, MAX_SECONDS,
   VoiceClipError, missingTable, ensureTable, readFields, findEpisode,
-  listClips, saveClip, removeClip, clipKey,
+  mayChange, lineClip, checkMayRecord, listClips, saveClip, removeClip, clipKey,
 };
