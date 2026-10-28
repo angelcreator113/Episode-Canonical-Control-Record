@@ -107,7 +107,7 @@ describe('Voice Studio boundaries', () => {
     expect(lib).not.toMatch(/clipForLine|clipsByLine|voiceClipsApi\.|line_text|\.text\b|isStale/);
     expect(lib).toMatch(/lineKey\(t\.beat_number, t\.line_index\)/);
     const reader = read('frontend/src/components/Teleprompter/TeleprompterReader.jsx');
-    const clipOf = reader.match(/const clipOf = \(i\) => \{[\s\S]*?\n  \};/)[0];
+    const clipOf = reader.match(/const clipOf = \(i\) => \{[\s\S]*?\n {2}\};/)[0];
     // Unknown or still checking: nothing; on: the studio list and a return before the old clips are looked at.
     expect(clipOf).toMatch(/studioMode == null \|\| studioMode === 'unknown'\) return null/);
     expect(clipOf.indexOf('if (studio) return studioLines.byLine.get(lineKey(w.beat, w.index)) || null;')).toBeGreaterThan(-1);
