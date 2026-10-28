@@ -97,7 +97,10 @@ test('before the migration: 409 and nothing goes to S3; the list and delete say 
 });
 
 test('list and delete; a bad id is a 404', async () => {
-  mockQuery.mockImplementation(async (sql) => (/^\s*SELECT/.test(sql) ? [[{ id: 'v1', duration_seconds: '1.50', file_size_bytes: '2048' }]] : [[{ id: 'v1' }]]));
+  mockQuery.mockImplementation(async (sql) => {
+    if (/FOR UPDATE/.test(sql)) return [[{ id: 'v1', created_by: 'u1' }]];
+    return /^\s*SELECT/.test(sql) ? [[{ id: 'v1', duration_seconds: '1.50', file_size_bytes: '2048' }]] : [[{ id: 'v1' }]];
+  });
   const list = await request(app).get(`/api/v1/script-voice-clips/${EP}`);
   expect(list.body.data).toEqual([{ id: 'v1', duration_seconds: 1.5, file_size_bytes: 2048 }]);
   const del = await request(app).delete(`/api/v1/script-voice-clips/${EP}/22222222-2222-4222-8222-222222222222`);
