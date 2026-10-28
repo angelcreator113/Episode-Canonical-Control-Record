@@ -86,7 +86,7 @@ const MESSAGES = {
   TOO_LONG: 'That take is too long (10 minutes at most).',
   NO_FILE: 'No audio was sent. Try again.',
   VOICE_STUDIO_OFF: "Voice Studio isn't switched on here.",
-  AUTH_GROUP_REQUIRED: 'Only an admin can change takes and approvals.',
+  AUTH_GROUP_REQUIRED: 'Voice Studio is for admins only. Sign in with an admin account to record, review or approve takes.',
   NOT_FOUND: 'That take or approval is no longer there. Reload.',
 };
 
