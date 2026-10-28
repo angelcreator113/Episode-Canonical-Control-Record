@@ -64,6 +64,24 @@ describe('uploadFile', () => {
     }
   });
 
+  // Linux: how many of the process's open descriptors point at this file, as the kernel lists them.
+  const openOn = (target) => fs.readdirSync('/proc/self/fd').filter((n) => {
+    try { return fs.readlinkSync(`/proc/self/fd/${n}`) === target; } catch (err) { return err.code !== 'ENOENT' && err.code !== 'EBADF' && Boolean(console.error('fd', n, err.message)); }
+  }).length;
+  (fs.existsSync('/proc/self/fd') ? test : test.skip)('twenty failed sends leave no file open (the descriptors, counted by the kernel)', async () => {
+    const { S3Client } = require('@aws-sdk/client-s3');
+    jest.spyOn(S3Client.prototype, 'send').mockRejectedValue(new Error('S3 unavailable (test)'));
+    const media = require('../../../src/services/rawClipMedia');
+    const target = fs.realpathSync(file);
+    expect(openOn(target)).toBe(0);
+    for (let i = 0; i < 20; i += 1) {
+      await expect(media.uploadFile(file, `k/${i}.bin`, 'application/octet-stream')).rejects.toThrow('S3 unavailable');
+    }
+    await Promise.all(streams.map(closed));
+    expect(streams).toHaveLength(20);
+    expect(openOn(target)).toBe(0);
+  });
+
   test('a send that succeeds: the whole file was read, the stream is closed, the public URL comes back', async () => {
     const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
     let read = 0;
