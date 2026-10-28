@@ -19,7 +19,10 @@
  *   7. keeps the replaced script as a version, strictly: a failure rolls the
  *      whole save back (ruling N2);
  *   8. writes script_content (and the locks, for Approve) in one update.
- *      script_line_keys is never written (IDENTITY_WRITES is off in R1).
+ *      script_line_keys is never written (IDENTITY_WRITES is off in R1);
+ *   9. when the text changed, adds one to episodes.script_seq, the script's
+ *      save number (decisions 1 and 2, 2026-10-27): under the row lock, so
+ *      it only goes up and no two saves share one. A lock-only save leaves it.
  * After the commit it logs the identity plan as counts only
  * (services/identityPlanLog.js). A refusal throws ScriptSaveError, which
  * sendScriptSaveError turns into its HTTP answer.
@@ -68,6 +71,20 @@ async function readScriptRevision(models, episodeId, { transaction = null } = {}
   return row ? revisionOf(row) : null;
 }
 
+/**
+ * Adds one to the episode's script save number and returns it as a decimal
+ * string: it is a BIGINT, past what a JavaScript number holds exactly, so it
+ * is never turned into one (compare it as text). Called only by the save,
+ * inside its transaction, on the row it holds FOR UPDATE.
+ */
+async function nextScriptSeq(sequelize, episodeId, t) {
+  const [found] = await sequelize.query('UPDATE episodes SET script_seq = script_seq + 1 WHERE id = :episodeId RETURNING script_seq::text AS script_seq',
+    { replacements: { episodeId }, transaction: t });
+  const seq = found[0] ? found[0].script_seq : null;
+  if (typeof seq !== 'string' || !/^[0-9]+$/.test(seq)) throw new Error('saveEpisodeScript: the script save number was not advanced');
+  return seq;
+}
+
 /** The text a version restores to, by the same rule the Script tab uses to put it on the page. */
 function restoredText(row, versionText) {
   const { keepLockedBeats, scriptKeepingLocks } = require('../utils/scriptBeatLocks');
@@ -88,7 +105,9 @@ function restoredText(row, versionText) {
  *   skipIfScript:    leave an episode that already has a script as it is;
  *   restoredFrom:    the version a Save names (Restore);
  *   userId, transaction (the caller's, when it writes other rows with this).
- * Returns { episode, skipped, script_content, script_revision,
+ * Returns { episode, skipped, script_content, script_revision, script_seq
+ *   (the new save number as a decimal string, or null when the text did
+ *   not change),
  *   locked_beats_kept, locked_beats_moved, version_source, previous_content }.
  */
 async function saveEpisodeScript(models, episodeId, opts = {}) {
@@ -146,11 +165,13 @@ async function saveEpisodeScript(models, episodeId, opts = {}) {
     if (script !== previous) update.script_content = script;
     if (Array.isArray(composed.lockedBeats)) update.script_locked_beats = composed.lockedBeats;
     if (Object.keys(update).length) await row.update(update, { transaction: t });
+    const scriptSeq = update.script_content !== undefined ? await nextScriptSeq(Episode.sequelize, row.id, t) : null;
     return {
       episode: row,
       skipped: false,
       script_content: script,
       script_revision: scriptRevision(script, null),
+      script_seq: scriptSeq,
       locked_beats_kept: composed.kept || [],
       locked_beats_moved: composed.moved || [],
       version_source: versionSource,

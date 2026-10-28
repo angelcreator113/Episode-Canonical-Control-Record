@@ -12,6 +12,7 @@
  * W8  POST /world/:showId/events/generate-episode-from-many  (draft_script)
  * W9  POST /episodes/:id/generate-beats                (skeleton)
  * W10 POST /episode-brief/:episodeId/generate-script   (grounded Regenerate)
+ * Each also adds one to episodes.script_seq when it changes the text (i).
  *
  * Each writer: (a) writes the text it wrote before for the same input
  * (lock-keeping parity), (b) a forced failure of the version row leaves
@@ -168,7 +169,7 @@ const SCHEMA = `a1c_r1_${crypto.randomUUID().slice(0, 8)}`;
                VALUES (:id, :show, :name, 'ready', 5, NOW(), NOW())`, { id, show, name: over.name || `Velour Gala ${id.slice(0, 4)}` });
     return id;
   };
-  const episodeRow = async (ep) => (await rows(`SELECT script_content, script_locked_beats, script_line_keys FROM episodes WHERE id = :ep`, { ep }))[0];
+  const episodeRow = async (ep) => (await rows(`SELECT script_content, script_locked_beats, script_line_keys, script_seq::text AS script_seq FROM episodes WHERE id = :ep`, { ep }))[0];
   const versionRows = (ep) => rows(`SELECT source, script_content, script_line_keys FROM episode_script_versions WHERE episode_id = :ep ORDER BY created_at DESC, id DESC`, { ep });
   const clips = (ep) => rows(`SELECT * FROM script_voice_clips WHERE episode_id = :ep ORDER BY id`, { ep });
   const revisionOf = async (ep) => (await auth(request(app).get(`/api/v1/episodes/${ep}`))).body.script_revision;
@@ -318,6 +319,7 @@ const SCHEMA = `a1c_r1_${crypto.randomUUID().slice(0, 8)}`;
     test('(a) writes the text it wrote before, locked beats kept; (d) no line identity; (e) voice clips unchanged; (h) a counts-only plan line', async () => {
       const ctx = await prepare(w);
       const clipsBefore = w.existing ? await clips(ctx.ep) : null;
+      const before = w.existing ? await episodeRow(ctx.ep) : null;
       const logSpy = jest.spyOn(console, 'log');
       const res = await w.drive(ctx);
       expect([200, 201]).toContain(res.status);
@@ -346,6 +348,9 @@ const SCHEMA = `a1c_r1_${crypto.randomUUID().slice(0, 8)}`;
       expect(row.script_line_keys).toBeNull();
       for (const v of await versionRows(ep)) expect(v.script_line_keys).toBeNull();
       expect(res.body.script_revision ?? res.body.data?.script_revision).toBe(scriptRevision(row.script_content));
+      // (i) The save number: one more when the writer changed the text, none when it did not (decisions 1 and 2).
+      if (w.existing) expect(row.script_seq).toBe((BigInt(before.script_seq) + (row.script_content !== before.script_content ? 1n : 0n)).toString());
+      else expect(row.script_seq).toBe('1');
     });
 
     test('(b) a version row that fails rolls the whole save back', async () => {
@@ -372,6 +377,8 @@ const SCHEMA = `a1c_r1_${crypto.randomUUID().slice(0, 8)}`;
         expect(row.script_locked_beats).toEqual(LOCKS);
       }
       expect(await versionRows(ep)).toEqual([]);
+      // A save rolled back takes no save number.
+      expect(row.script_seq).toBe('0');
       if (w.id === 'W4') expect((await scriptRows(ctx.ep)).map((r) => r.status)).toEqual(['draft']);
       if (w.id === 'W5') expect((await rows(`SELECT used_in_episode_id FROM world_events WHERE id = :ev`, { ev: ctx.ev }))[0].used_in_episode_id).toBeNull();
     });

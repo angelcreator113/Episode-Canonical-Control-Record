@@ -5,7 +5,8 @@
  * docs/reads/2026-10-27-a1c-r1-spec.md §4.3). They read the source as text,
  * so a new writer that goes around services/scriptSave.js fails here before
  * it ships.
- *   1. Only scriptSave.js writes script_content or script_line_keys.
+ *   1. Only scriptSave.js writes script_content, script_line_keys or
+ *      script_seq (the save number, decisions 1 and 2, 2026-10-27).
  *   2. Only scriptSave.js calls snapshotScript.
  *   3. Only the files listed here refer to the version table (design R4.5:
  *      the first durable reference to a version row adds a reference
@@ -39,7 +40,7 @@ const code = (text) => text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:'"`\
 // Migrations create and change the columns; models define them.
 const SOURCES = [...files('src'), ...files('scripts')].filter((f) => !f.startsWith('src/migrations/') && !f.startsWith('src/models/'));
 
-const COLUMN = 'script_(?:content|line_keys)';
+const COLUMN = 'script_(?:content|line_keys|seq)';
 const WRITES = [
   // an update or save whose values name the column: Model.update({ ... }), row.update({ ... }), row.set('...')
   new RegExp(`\\.(?:update|upsert|bulkCreate|set)\\(\\s*\\{[^}]*\\b${COLUMN}\\b`, 's'),
@@ -60,7 +61,7 @@ const ALLOWED_ASSIGNMENTS = [
 ];
 
 describe('A1c R1 static guards', () => {
-  test('1. only scriptSave.js writes script_content or script_line_keys', () => {
+  test('1. only scriptSave.js writes script_content, script_line_keys or script_seq', () => {
     const offenders = [];
     for (const f of SOURCES) {
       if (f === SAVE) continue;
@@ -118,8 +119,26 @@ describe('A1c R1 static guards', () => {
     expect(save).toMatch(/const IDENTITY_WRITES = false;/);
     expect(save).not.toMatch(/script_line_keys\s*:/);
     expect(save).not.toMatch(/update\.script_line_keys|\['script_line_keys'\]\s*=/);
-    // R1 adds no migration.
+    // R1 adds no migration, and no later migration touches the episode's
+    // line identity. Later migrations are listed with the change that
+    // approved them; none of them names script_line_keys.
+    const LATER = {
+      'src/migrations/20261027190000-add-episode-script-seq.js': 'A1c correction (Evoni, 2026-10-27): the script save number',
+    };
     const migrations = files('src/migrations').filter((f) => /\/2026102[7-9]|\/20261[1-2]|\/2027/.test(f));
-    expect(migrations).toEqual([]);
+    expect(migrations.sort()).toEqual(Object.keys(LATER).sort());
+    for (const f of migrations) expect(read(f)).not.toMatch(/script_line_keys/);
+  });
+
+  test('5. the save number: the save adds one only when the text changed, inside its transaction', () => {
+    const save = code(read(SAVE));
+    expect(save.match(/script_seq = script_seq \+ 1/g)).toHaveLength(1);
+    // A BIGINT: read as text, never turned into a JavaScript number.
+    expect(save).toMatch(/RETURNING script_seq::text AS script_seq/);
+    expect(save).not.toMatch(/(Number|parseInt|parseFloat)\([^)]*script_?seq/i);
+    expect(save).toMatch(/const scriptSeq = update\.script_content !== undefined \? await nextScriptSeq\(Episode\.sequelize, row\.id, t\) : null;/);
+    // 1b's forms catch a write of it elsewhere.
+    expect(WRITES.some((re) => re.test('UPDATE episodes SET script_seq = 3 WHERE id = 1'))).toBe(true);
+    expect(WRITES.some((re) => re.test('await episode.update({ script_seq: 9 });'))).toBe(true);
   });
 });

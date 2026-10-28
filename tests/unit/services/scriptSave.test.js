@@ -19,10 +19,10 @@ const VID = '11111111-2222-4333-8444-555555555555';
 // An episode row, its versions and a transaction that rolls back on a throw.
 function recorder(initial = {}, { versionFails = false } = {}) {
   const db = {
-    episode: { id: 'ep-1', script_content: SCRIPT, script_locked_beats: [], script_line_keys: null, ...initial },
+    episode: { id: 'ep-1', script_content: SCRIPT, script_locked_beats: [], script_line_keys: null, script_seq: '0', ...initial },
     versions: [],
   };
-  const calls = { findByPk: [], updates: [], logs: [] };
+  const calls = { findByPk: [], updates: [], logs: [], seq: [] };
   const rowOf = () => {
     const data = db.episode;
     return {
@@ -52,6 +52,13 @@ function recorder(initial = {}, { versionFails = false } = {}) {
       const before = JSON.parse(JSON.stringify(db));
       const t = { LOCK: { UPDATE: 'UPDATE' }, afterCommit: () => {} };
       try { return await fn(t); } catch (err) { Object.assign(db, before); throw err; }
+    },
+    // The one query the save runs itself: the save number.
+    async query(sql, { replacements, transaction }) {
+      if (!/^UPDATE episodes SET script_seq = script_seq \+ 1 WHERE id = :episodeId RETURNING script_seq::text AS script_seq$/.test(sql)) throw new Error(`unexpected query: ${sql}`);
+      calls.seq.push({ id: replacements.episodeId, transaction });
+      db.episode.script_seq = (BigInt(db.episode.script_seq) + 1n).toString();
+      return [[{ script_seq: db.episode.script_seq }], 1];
     },
   };
   const Episode = {
@@ -280,6 +287,38 @@ describe('saveEpisodeScript', () => {
     } finally {
       if (before === undefined) delete process.env.SCRIPT_IDENTITY_PLAN_LOG; else process.env.SCRIPT_IDENTITY_PLAN_LOG = before;
     }
+  });
+
+  test('the save number: one more for each save that changes the text (a clear and a restore of the same text included), none for a lock alone or a refusal', async () => {
+    const { models, db, calls } = recorder();
+    const save = async (text, extra = {}) => saveEpisodeScript(models, 'ep-1', { writer: 'W1', compose: () => ({ script: text }), ...extra });
+    expect((await save(`${SCRIPT}x`)).script_seq).toBe('1');
+    expect((await save('')).script_seq).toBe('2');
+    expect((await save(SCRIPT)).script_seq).toBe('3');
+    expect((await save('')).script_seq).toBe('4');
+    expect((await save(SCRIPT)).script_seq).toBe('5');
+    // The same text again, or the locks alone: no change, no number.
+    expect((await save(SCRIPT)).script_seq).toBeNull();
+    expect((await save(SCRIPT, { compose: () => ({ script: SCRIPT, lockedBeats: [1] }) })).script_seq).toBeNull();
+    expect(db.episode.script_seq).toBe('5');
+    // Each number was taken inside the save's transaction.
+    expect(calls.seq.every((c) => c.transaction && c.id === 'ep-1')).toBe(true);
+    // A refused or failed save takes none.
+    await refusalOf(saveEpisodeScript(models, 'ep-1', { writer: 'W1', requireRevision: true, revision: 'sr1-0000000000000000000000000000000000000000', compose: () => ({ script: 'z' }) }));
+    expect(db.episode.script_seq).toBe('5');
+  });
+
+  test('the save number past 2^53 comes back exact, as a decimal string', async () => {
+    const { models } = recorder({ script_seq: '9007199254740993' });
+    const out = await saveEpisodeScript(models, 'ep-1', { writer: 'W1', compose: () => ({ script: 'changed' }) });
+    expect(out.script_seq).toBe('9007199254740994');
+    expect(typeof out.script_seq).toBe('string');
+  });
+
+  test('the save number rolls back with a save whose version cannot be kept', async () => {
+    const { models, db } = recorder({}, { versionFails: true });
+    await refusalOf(saveEpisodeScript(models, 'ep-1', { writer: 'W1', compose: () => ({ script: 'other' }) }));
+    expect(db.episode.script_seq).toBe('0');
   });
 
   test('every check runs under the row lock: the row is locked before the revision, the guard, the compose and the write', async () => {

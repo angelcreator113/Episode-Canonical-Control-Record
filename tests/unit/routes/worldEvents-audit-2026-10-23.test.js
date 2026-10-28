@@ -63,6 +63,13 @@ const mockQuery = jest.fn(async (sql, opts = {}) => {
     return [ep && !ep.deleted_at ? [ep] : []];
   }
   if (/^SELECT canon_consequences FROM world_events WHERE id = :eventId AND deleted_at IS NULL/.test(sql)) return [[{ canon_consequences: {} }]];
+  // The save's script save number (scriptSave, decisions 1 and 2, 2026-10-27).
+  if (/^UPDATE episodes SET script_seq = script_seq \+ 1 WHERE id = :episodeId RETURNING script_seq::text AS script_seq$/.test(sql)) {
+    const ep = mockEpisodes[r.episodeId];
+    if (!ep) return [[], 0];
+    ep.script_seq = (BigInt(ep.script_seq || 0) + 1n).toString();
+    return [[{ script_seq: ep.script_seq }], 1];
+  }
   if (/^UPDATE world_events SET /.test(sql)) {
     const ev = mockRowFor(r);
     if (ev) for (const [k, v] of Object.entries(r)) if (!['eventId', 'showId'].includes(k)) ev[k] = v;
@@ -161,6 +168,10 @@ describe('generate-script', () => {
     const res = await request(app).post(`/api/v1/world/${SHOW}/events/ev-1/generate-script`).send({ episode_id: EP_SAME });
     expect(res.status).toBe(200);
     expect(mockEpisodeUpdate).toHaveBeenCalledTimes(1);
+    // One save number for the one text change, taken in the save's transaction.
+    const seq = mockQuery.mock.calls.filter(([sql]) => /script_seq = script_seq \+ 1/.test(sql));
+    expect(seq).toHaveLength(1);
+    expect(seq[0][1]).toMatchObject({ replacements: { episodeId: EP_SAME }, transaction: { id: 'tx' } });
   });
 });
 
