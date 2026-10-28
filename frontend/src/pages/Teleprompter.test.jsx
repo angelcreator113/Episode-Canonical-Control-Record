@@ -61,6 +61,8 @@ beforeEach(() => {
   Object.values(api).forEach((fn) => fn?.mockReset?.());
   mockApi();
   try { window.localStorage.clear(); } catch (err) { console.error(err); }
+  // These tests read the scene notes (stage directions), off by default since 2026-10-28.
+  window.localStorage.setItem(SETTINGS_KEY, JSON.stringify({ sceneNotes: true }));
   tracks = [{ stop: vi.fn() }, { stop: vi.fn() }];
   recorders = [];
   Object.defineProperty(window, 'isSecureContext', { configurable: true, value: true });
@@ -422,7 +424,7 @@ describe('Teleprompter reader: Read as and silence cues', () => {
   });
 
   test('pace by line times holds each line for its time, scaled by the pace; the cue counts down', () => {
-    window.localStorage.setItem(SETTINGS_KEY, JSON.stringify({ pacing: 'lines', pace: 2, countdown: false }));
+    window.localStorage.setItem(SETTINGS_KEY, JSON.stringify({ pacing: 'lines', pace: 2, countdown: false, sceneNotes: true }));
     vi.useFakeTimers();
     render(<TeleprompterReader source={quietSource} onClose={() => {}} />);
     expect(screen.getByTestId('stp-pace').value).toBe('2');
