@@ -5,7 +5,8 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { BookOpen, Download, Printer, FileText, ScrollText, Copy, ListChecks } from 'lucide-react';
+import { BookOpen, Download, Printer, FileText, ScrollText, Copy, ListChecks, AudioLines } from 'lucide-react';
+import { voiceStudioOn } from '../../lib/voiceStudioApi';
 import ScriptTableRead from './ScriptTableRead';
 import CueSheetDialog from './CueSheetDialog';
 import { toFountain, toPlainText, scriptFileName } from '../../lib/scriptExport';
@@ -71,6 +72,13 @@ export default function ScriptReadActions({ scriptText, title = '', dirty = fals
   const [error, setError] = useState(null);
   const [copied, setCopied] = useState(false);
   const [cues, setCues] = useState(false);
+  // Voice Studio's link shows only while the server has it switched on.
+  const [voiceStudio, setVoiceStudio] = useState(false);
+  useEffect(() => {
+    let live = true;
+    if (episodeId) voiceStudioOn().then((on) => { if (live) setVoiceStudio(on); });
+    return () => { live = false; };
+  }, [episodeId]);
   const [place, setPlace] = useState(null);
   const menuRef = useRef(null);
   const summaryRef = useRef(null);
@@ -138,6 +146,14 @@ export default function ScriptReadActions({ scriptText, title = '', dirty = fals
           to={`/teleprompter?episode=${encodeURIComponent(episodeId)}${beatNumber != null ? `&beat=${encodeURIComponent(beatNumber)}` : ''}`}
           title={`Read the saved script on the teleprompter and record yourself${dirty ? ' (save first: unsaved changes are not in it)' : ''}`}>
           <ScrollText size={14} aria-hidden="true" /> Teleprompter
+        </Link>
+      )}
+      {/* Voice Studio (B2): this episode's line takes and approvals; shown only while it is switched on. */}
+      {episodeId && voiceStudio && (
+        <Link className="esp-btn str-launch" data-testid="script-voice-studio"
+          to={`/episodes/${encodeURIComponent(episodeId)}/voice${beatNumber != null ? `?beat=${encodeURIComponent(beatNumber)}` : ''}`}
+          title={`Record, audition and approve each line's voice take${dirty ? ' (save first: unsaved changes are not in it)' : ''}`}>
+          <AudioLines size={14} aria-hidden="true" /> Voice Studio
         </Link>
       )}
       <details className="str-export" ref={menuRef} data-testid="script-export" onToggle={onToggle}>

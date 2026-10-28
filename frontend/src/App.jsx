@@ -42,6 +42,8 @@ const NewEpisodeRedirect = lazy(() => import('./pages/NewEpisodeRedirect'));
 const IconCueTimeline = lazy(() => import('./pages/IconCueTimeline'));
 // Teleprompter: read a script or pasted text, and record yourself (Evoni, 2026-10-20).
 const Teleprompter = lazy(() => import('./pages/Teleprompter'));
+// Voice Studio (B2): an episode's line takes and approvals (Evoni, 2026-10-28). Linked from the Script tab.
+const VoiceStudio = lazy(() => import('./pages/VoiceStudio'));
 // The teleprompter's phone remote (Teleprompter batch 3): public, no layout.
 const TeleprompterRemote = lazy(() => import('./pages/TeleprompterRemote'));
 const SearchResults = lazy(() => import('./pages/SearchResults'));
@@ -379,6 +381,7 @@ function AppContent() {
           <Route path="/episodes/:episodeId/edit" element={<QuickEpisodeCreator />} />
           <Route path="/episodes/:id/evaluate" element={<EvaluateEpisode />} />
           <Route path="/episodes/:episodeId/todo" element={<EpisodeTodoPage />} />
+          <Route path="/episodes/:episodeId/voice" element={<VoiceStudio />} />
           <Route path="/episodes/:episodeId" element={<EpisodeDetail />} />
           
           {/* Assets */}
