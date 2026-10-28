@@ -1,6 +1,6 @@
 # Voice Studio and Timeline Editor: one episode-production workflow (read, design proposal)
 
-**Status:** design. B1 and its A1c prerequisite are implemented locally to Revision 6 (2026-10-28); nothing is merged, migrated in production or deployed. Each phase needs Evoni's approval before any code, and its own approval to push, open a PR, merge or deploy.
+**Status:** design. A1c (#3615) and B1 (#3616) are merged to Revision 6. C1 is implemented to Revision 7 (2026-10-28) on `claude/c1-episode-edit`; its migration has not run in production, and nothing of C1 is deployed or switched on. Each phase needs Evoni's approval before any code, and its own approval to push, open a PR, merge or deploy.
 
 **Basis:** `origin/main` `7ac13358`. Code citations are `path:line` at that commit, each paired with a function or component name.
 
@@ -24,10 +24,11 @@ Where they conflict, the order they set applies: rulings, spec Rev 5 and review 
 
 ---
 
-# Read this first: the authoritative design (Revision 6)
+# Read this first: the authoritative design (Revision 7)
 
 **Implementation follows only:**
-- Revision 6 (this section and R6.x), which records what B1 and the A1c prerequisite were built to;
+- Revision 7 (R7.x), which records what Timeline C1 was built to: the stored beat clock, manual dialogue placement, `edit_start`, and the findings and their severity;
+- Revision 6 (R6.x), which records what B1 and the A1c prerequisite were built to;
 - Revision 5 (R5.x), as amended by R6;
 - Revision 4 §R4.1–R4.3, as amended by R5 and R6;
 - Revision 3 §R3.2–R3.5;
@@ -42,12 +43,129 @@ Everything else is background. Superseded passages carry a **SUPERSEDED** banner
 | Script save order | R6.1 (`episodes.script_seq`, A1c) | version-row times (`created_at`) as an order |
 | Approval states and actions | R6.2 | R5.2's state table (`valid`, `needs_reconfirm`, and `moved` as unbound) |
 | Script-version retention | R6.5 | any reference provider for Voice Studio |
-| Timeline tables | R4.3 C1, with R5.1 and R5.3 | §4.3 (`edit_projects`, `edit_items`), R2.5's resolution column |
+| Timeline tables | R4.3 C1, with R5.1, R5.3 and R7.8 | §4.3 (`edit_projects`, `edit_items`), R2.5's resolution column |
 | Scene duration | R3.4, R4.3 `episode_scene_clips` | R2.5 "scene timing stays on `scenes`" |
+| The edit clock (beat timing) | R7.1, R7.2 | a beat that always lasts as long as its scene clips, once timing is locked |
+| Dialogue timing and placement | R7.3, R7.4 | §5.3 "placed at `line_start` anchors" and "estimated" timing; R2.5's "placement is derived from `line_start` anchors (no row needed)"; R4.3's `audio_offset` nudge as the way dialogue is timed |
+| Findings and their severity | R7.6 | §5.3's warnings-panel names `take_overruns_scene`, `line_overruns_gap`; R2.3's `take_overruns_scene` |
+| C2 first assembly | R7.7 | §7 T2 and R5.4 C2 "approved dialogue at its lines" |
 | Missing Prime footage | R4.0, R5.1 | §2 ruling 5's fallback, §5.2 "fallback", R2.3 "accepted fallback", spec G-5 / decisions §14 fallback (spec amendment owed) |
 | Prime-required designation | R4.2, as amended by R5.1 | R4.2's "covered where the PIP is visible" |
 | Render process | R2.4 (D1), R3.3 | §9 Q7's "green-removal queue" |
 | Phases and sequence | R5.4, with the A1c prerequisite (R6.6) | §7, §7 Dependencies, R2/R3 phase notes |
+
+---
+
+# Revision 7 (as built: Timeline C1; Evoni's rulings 2026-10-28)
+
+**Where Revision 7 disagrees with earlier text, Revision 7 wins.** It records what Timeline C1 was built to after Evoni's review of the measured clock drift and her final C1 rulings (2026-10-28). Code is cited by name: `src/utils/editTimeline.js` (the pure clock, layout, mix and findings), `src/services/episodeEditService.js`, `src/routes/episodeEditRoutes.js`, migration `20261028100000-create-episode-edit-tables`.
+
+## R7.1 The edit clock: stored beat durations
+
+**Finding (C1, measured 2026-10-28):** with each beat as long as its scene clips, replacing beat 3's 10 s clip with a 6 s one moved beat 5 from 40 s to 36 s. A whole-episode Prime take then showed its 36 s moment where its 40 s moment had played, music anchored to beat 5 moved 4 s, and an SFX at an absolute 43 s moved from 3 s to 7 s into beat 5. The only finding was a warning.
+
+**Ruling (Evoni, 2026-10-28): stable beat timing.**
+- `episode_beat_production.duration_ms INTEGER NULL CHECK (duration_ms > 0)`.
+- **NULL is draft timing:** the beat lasts as long as its scene clips (each clip's own `duration_ms`, in position order).
+- **A stored length is authoritative.** The beat lasts exactly that, whatever its clips. Clips fill it in position order and are cut at its end; a clip wholly past the end plays nothing. Replacing, trimming, splitting or removing a scene clip never changes the length and never moves anything after the beat.
+- **Gaps and overruns never change the clock.** Clips short of the length leave `scene_gap`; clips past it are cut, `scene_overruns_beat`. Both block review-ready and final output (R7.6). The working preview shows the beat with no scene where no clip covers it (`layoutAt` gives `scene: null`, `scene_gap: true`), with the finding as a warning on screen.
+- A beat with no clip is `scene_missing` (blocking); a locked one keeps its length.
+- The beat-production row keeps its history: every change of mode or length soft-deletes the current row and writes a new one carrying forward what was not changed. No row means Prime required, draft timing.
+
+## R7.2 Locking timing and changing a locked beat
+
+- **`lockBeatTiming`** stores the length of all 14 beats in **one transaction, all or none**. A beat already locked keeps its length (changing it this way is refused, `BEAT_ALREADY_LOCKED`). An unlocked beat gets the length given for it, else its draft length now. A beat that would have no length refuses the whole lock (`BEAT_HAS_NO_LENGTH`); with every beat already locked it is `TIMING_ALREADY_LOCKED`.
+- **C2's first assembly locks all 14 beat durations in that one operation** (R7.7), so no one locks 14 beats by hand.
+- **`setBeatDuration(beat, ms | null)`** is the only write that changes a locked beat's length (or clears it to draft timing). It is explicit, never a side effect of a scene-clip edit (guarded by a test: only `setBeatMode`, `setBeatDuration` and `lockBeatTiming` write the beat-production row).
+- **Dry run first.** `dry_run: true` writes nothing and needs no `edit_revision`. It answers with every downstream time that would change (beats, Prime segments, dialogue placements, music, SFX, timeline items, visibility ranges: `timingOf` / `timingChanges`), the edit's length before and after, the findings it adds and clears, and `for_edit_revision`. The write sends that revision: if the edit changed in between it is a 409 and nothing is written, so what was previewed is what is applied.
+- Routes: `POST /beats/:beat/duration` (`{ duration_ms, dry_run }`), `POST /beats/lock` (`{ durations? }`), both ADMIN.
+
+## R7.3 Anchors, and no estimated line timing
+
+Everything other than scene clips is placed by an anchor plus `offset_ms`:
+
+| Anchor | Resolves to |
+|---|---|
+| `beat_start` | the beat's start (`anchor_beat`) |
+| `edit_start` | **new:** the edit's start; an absolute timeline position |
+| `line_start` | a line's recorded time (teleprompter marks), when mapped |
+| `item_start` | a timeline item's own resolved time |
+
+**Ruling (Evoni, 2026-10-28): no fabricated line timing.** The instruction to estimate missing line times (§5.3, spec §3) is **superseded**. A `line_start` anchor without an actual recorded mark stays unresolved and is `line_timing_unknown`, **blocking**, wherever it is used (Prime segments, timeline items, music and SFX, visibility ranges). No automatic estimate may stand in for a recorded mark. In C1 no marks are mapped (`lineTimes` is empty, guarded), so `line_start` never resolves yet.
+
+## R7.4 Manual dialogue placement
+
+**Ruling (Evoni, 2026-10-28):** dialogue is placed explicitly, as a `timeline_items` row of kind **`dialogue_placement`**.
+- **Identity.** Each placement names the exact line association (`voice_association_id`) and approval (`voice_approval_id`), both foreign keys to the Voice Studio tables, and the line (`line_beat`, `line_index`: the line as B1 approves it, R6.3).
+- **Position.** Beat-relative (`beat_start` + offset) or absolute (`edit_start` + offset) only. A database CHECK refuses a line mark (`line_start`) or an item anchor for a placement, and refuses those four columns on any other kind.
+- **One live placement per script line**, enforced by the service (`LINE_ALREADY_PLACED`, naming the existing one) and by a partial unique index on `(episode_id, line_beat, line_index)` of live placements. Two placements sent from one view: the edit-revision lock refuses the second; the index is the backstop.
+- **Placing** (`placeDialogue`): the approval must be current and playable (Voice Studio's state rule, R6.2) for exactly that association, checked before the edit is locked and again inside it. **Moving** (`moveDialogue`) changes the position only, never the take. Removing is a soft delete.
+- **Playback.** A placement plays only while its named approval is the current one for that association and line. Its length is the approved revision's trim (`in_ms` to `out_ms`), never past the source's measured `duration_ms`; gain, fades and normalise come from the same revision. `mixPlan` emits one dialogue event per playable placement.
+- **No substitution.** A new approval for the line, a re-trim (`outdated_take`), a re-tied take (`invalid`), a script save (`needs_review`), a revoke: the placement stays, plays nothing, and is `dialogue_take_not_current` (**blocking**), naming the line's current approval when there is one. Nothing switches it to another take. After a person re-confirms (R6.2), the same placement plays again.
+- **Stale placements are kept, protected.** A placement whose approval is no longer current is never removed or re-pointed automatically. Re-placing the line is explicit: remove or move the stale one first. **C2 provides a Resolve Placement workflow** to review each stale placement and move, keep or remove it.
+- **Crossing a beat boundary is permitted:** the dialogue plays in full; while it stays inside the edit and its approval is current, `dialogue_outside_beat` is a warning only.
+- **Overlap is allowed:** overlapping placements both play, at their own gain; neither is muted or ducked automatically. `dialogue_overlap` is a warning.
+- **Beyond the edit** (starting before 0 or ending after the edit's end): `dialogue_beyond_edit`, **blocking**; the mix cuts it at the edit's edges.
+- **Unplaced:** an approved spoken line (a playable approval) with no placement is `dialogue_unplaced`, **blocking**. A spoken line with no approved take is `line_audio_unapproved` (blocking), as before.
+- Routes: `POST /dialogue` (`{ approval_id, association_id, anchor_kind, anchor_beat, offset_ms }`), `POST /dialogue/:itemId/move`, `DELETE /dialogue/:id`, ADMIN.
+- `audio_offset` (R4.3's dialogue nudge) is reserved and unused; dialogue timing is the placement.
+
+## R7.5 Prime segments, as built (amends R2.2 and R4.3)
+
+- A take may span many beats (a whole-episode recording). What is checked is the segment's **placed interval** on the edit (`segment_before_edit_start`, `segment_beyond_edit_end`, both blocking), never the source's length against a beat. Coverage of each Prime-required beat is unchanged: a gap longer than one frame (33 ms) is `prime_footage_missing`.
+- **No commentary is NULL:** `audio_in_ms` and `audio_out_ms` are both NULL with zero fades (a split half the commentary was not in). It is never audible, whatever its mute; the database CHECK states each NULL branch.
+- **Video trim is non-ripple:** the frames kept keep their edit time; nothing else moves. A trim that would cut away all of the commentary is refused (`COMMENTARY_OUTSIDE_TRIM`), never a silent mute.
+
+## R7.6 Findings and severity (replaces §5.3's warnings list and R2.3's `take_overruns_scene`)
+
+**Blocking** findings refuse a review-ready preview and the final render. **Warnings** are shown. A working preview is always available, with every finding marked on it.
+
+| Code | Severity | Meaning |
+|---|---|---|
+| `scene_missing` | blocking | a beat has no scene clip |
+| `scene_gap` | blocking | a locked beat's clips are shorter than its length |
+| `scene_overruns_beat` | blocking | a locked beat's clips run past its length (cut) |
+| `scene_clip_holds_last_frame` | warning | a video clip is longer than its source range (last frame held) |
+| `scene_source_missing` | blocking | a scene source was deleted, unlinked or lost its media |
+| `prime_footage_missing` | blocking | a Prime-required beat has a gap longer than one frame |
+| `prime_source_missing` | blocking | a segment's take was deleted |
+| `source_performer_changed` | blocking | a take's performer no longer fits its use |
+| `segment_before_edit_start` | blocking | a Prime segment is placed before 0 |
+| `segment_beyond_edit_end` | blocking | a Prime segment runs past the edit's end |
+| `prime_segments_overlap` | warning | two Prime segments overlap (the later one is drawn) |
+| `line_timing_unknown` | blocking | a `line_start` anchor has no recorded mark |
+| `anchor_unresolved` | blocking for a segment or dialogue; warning for an item, music/SFX or visibility rule | an anchor's item is missing, a cycle, or no such beat |
+| `line_audio_unapproved` | blocking | a spoken line has no current approved take |
+| `dialogue_unplaced` | blocking | an approved spoken line has no placement |
+| `dialogue_take_not_current` | blocking | a placement's approval is not current (silent) |
+| `dialogue_take_bad_range` | blocking | the approved trim is outside the source's measured length |
+| `dialogue_beyond_edit` | blocking | a placement starts before 0 or ends after the edit |
+| `dialogue_outside_beat` | warning | a placement crosses its line's beat boundary (it plays in full) |
+| `dialogue_overlap` | warning | two placements overlap (both play) |
+
+## R7.7 C2 first assembly (amends R5.4 C2 and §7 T2)
+
+- Scene clips per beat and the starred Prime take(s) as segments, as before.
+- **Then all 14 beat durations are locked in one `lockBeatTiming` call**, with the lengths the assembly has (for example from Prime's `beat_marks`), the rest their draft lengths.
+- **Dialogue is placed automatically only where actual, usable timing marks exist** for the line. Otherwise the approved line stays **visibly unplaced** (`dialogue_unplaced`, blocking) for a person to place. No estimate is made.
+
+## R7.8 C1 schema, as built (amends R4.3)
+
+- `episode_beat_production`: plus `duration_ms` (R7.1).
+- Anchors everywhere: plus `edit_start` (needs neither `anchor_beat` nor `anchor_ref`).
+- `episode_prime_segments`: `audio_in_ms`, `audio_out_ms` NULL-able, both or neither (R7.5).
+- `episode_pip_visibility`: plus `anchor_beat`, `end_anchor_beat`.
+- `timeline_items`: kind `dialogue_placement`; plus `voice_association_id`, `voice_approval_id` (FK RESTRICT), `line_beat`, `line_index`; CHECK `timeline_items_dialogue`; unique index `timeline_items_dialogue_line`.
+- **Order:** the C1 migration needs the B1 tables (it sorts after B1). A rollback of B1 needs C1 rolled back first (the normal reverse order); C1's `down()` refuses while any of its tables has a row.
+- Versions snapshot these columns with the rest; a restored placement whose approval has since changed stays silent and blocking.
+
+## R7.9 Order of changes
+
+1. A1c (#3615) and B1 (#3616): merged.
+2. **C1** (`claude/c1-episode-edit`): migration `20261028100000-create-episode-edit-tables`, `editTimeline`, `episodeEditService`, routes off unless `EPISODE_EDIT=on`. Its own PR.
+3. `rawClipMedia.uploadFile` stream fix (#3617): independent.
+
+Deploys still run only through the Deploy workflow, with its snapshot; R5.7 stands. B2, C2 and D1 each need Evoni's approval first.
 
 ---
 
@@ -253,7 +371,7 @@ B1 and C1 are independent: either can go first, and their PRs can be reviewed in
 **Layer 2, interfaces** (no migrations):
 - **B2, Voice Studio, minimum:** line list by beat; **upload** a take (recording writes candidates too); play; set in and out, gain and fades; associate; **approve**; the re-confirm workflow (R5.2). The Teleprompter plays approved-and-valid only (Q3). Plus the B2 voice fixes (owner-only delete, server duration, `keepSession`, no recording on lines that never play). **Extraction from takes is not in the minimum.**
 - **C2, Timeline Editor, minimum:**
-  - auto-assemble a first draft (one scene clip per beat from its scene set; the starred Prime take per beat as a segment; approved dialogue at its lines);
+  - auto-assemble a first draft (one scene clip per beat from its scene set; the starred Prime take per beat as a segment; approved dialogue at its lines); **SUPERSEDED (R7.7):** the assembly locks all 14 beat durations in one operation, and places dialogue only where actual usable timing marks exist; other approved lines stay visibly unplaced;
   - beat chips;
   - per-beat Prime-required or gameplay-only toggle;
   - PIP inspector (position, size, cutout, visibility rules);
@@ -603,7 +721,7 @@ An approval of a take for a line is **valid** at the current moment only when al
 - **Columns:**
   - `id`, `episode_id`, `raw_clip_id` (FK, RESTRICT; the service checks `performer = 'justawoman'`);
   - `source_in_ms`, `source_out_ms`;
-  - `anchor_kind` (`beat_start` | `line_start` | `item_start`), `anchor_beat`, `anchor_ref`, `offset_ms`;
+  - `anchor_kind` (`beat_start` | `line_start` | `item_start`), `anchor_beat`, `anchor_ref`, `offset_ms`; **AMENDED (R7.3, R7.8):** plus `edit_start`;
   - `layout` (jsonb overrides, pixels at 1920×1080, nullable);
   - `audio_in_ms`, `audio_out_ms`, `audio_gain_db`, `audio_muted`, `audio_fade_in_ms`, `audio_fade_out_ms`;
   - `status` (draft | approved);
@@ -617,8 +735,9 @@ An approval of a take for a line is **valid** at the current moment only when al
 - `id`, `episode_id`, `scope` (`beat` | `range`), `beat_number`, `anchor_kind`, `anchor_ref`, `offset_ms`, `end_anchor_kind`, `end_anchor_ref`, `end_offset_ms`, `visible`, `set_by`.
 
 **`timeline_items`** (review C1, adopted): object and camera keyframes, visibility, angle changes and transitions, **plus** these kinds:
-- `audio_offset` (a dialogue nudge, targeting a line association);
-- `caption_override` (reserved).
+- `audio_offset` (a dialogue nudge, targeting a line association); **SUPERSEDED (R7.4):** reserved and unused; dialogue is timed by `dialogue_placement` rows;
+- `caption_override` (reserved);
+- **AMENDED (R7.4, R7.8):** `dialogue_placement`, with its association, approval and line columns.
 
 Columns: `id`, `episode_id`, `scene_clip_id`, `kind`, `target_id`, `view`, `anchor_kind`, `anchor_ref`, `offset_ms`, `values` (jsonb), `origin`, `approval`, `proposal_id`.
 
@@ -956,7 +1075,7 @@ There are two kinds of preview render. Neither is an export, and neither approve
   - every active line has a valid approval (R2.1);
   - every beat has a scene picture;
   - Prime footage or an accepted fallback for every beat (Q-F1/Q-F2 still open; until decided, missing footage blocks review-ready); **SUPERSEDED (R5.1):** full coverage of every `required` beat, whatever the visibility; no fallback.
-  - no `take_overruns_scene` left unresolved.
+  - no `take_overruns_scene` left unresolved. **SUPERSEDED (R7.6):** no blocking finding of R7.6's table.
 - **What shows:** a small corner mark `REVIEW · <date>`, with no banners or slates.
 - **If you ask while something blocks:** the request is refused with the list. Nothing renders.
 
@@ -1014,7 +1133,7 @@ There are two kinds of preview render. Neither is an export, and neither approve
 | **Scene** (Lala's scenes) | picture per beat (still or angle video), duration, order, video in/out | C1: scene length stays `scenes.duration_seconds`, order `scene_number`. `timeline_items` is for object and camera keyframes, visibility, angle change and transition | **Partial** | No scene-video in/out. Duration lives on `scenes` rows the **legacy editor also writes** (Q5 keeps it). **Resolution:** scene timing stays on `scenes` (one owner, per the ruling "the Timeline owns duration"); add `scene_video_in_s` and `scene_video_out_s` to a new per-scene edit row; the legacy editor and the new one show the same durations. DECISION Q17 |
 | **Prime video** | take, trim, placement, layout, visibility | C3: segments (take, trim, anchor plus offset, layout overrides, audio gain); `episode_pip_settings`; `episode_pip_visibility` | **Good** | Add segment `superseded_by` (take replaced), keep `status` |
 | **Prime commentary** | gain, mute, fades, sub-range, synced | C3 segment `audio { role: 'prime_voice', gain }` | **Partial** | Add `audio_in`, `audio_out`, `muted`, `fade_in_ms`, `fade_out_ms`, with R2.2's constraints |
-| **Dialogue** | approved take placed at its line, optional nudge | none in C1/C3; voice is A6 (review R2.3) | **Missing** | Placement is derived from `line_start` anchors (no row needed). A nudge is a `timeline_items` row of a new kind, `audio_offset`, targeting the line association. C1's `kind` list is extended, not forked |
+| **Dialogue** | approved take placed at its line, optional nudge | none in C1/C3; voice is A6 (review R2.3) | **Missing** | Placement is derived from `line_start` anchors (no row needed). A nudge is a `timeline_items` row of a new kind, `audio_offset`, targeting the line association. C1's `kind` list is extended, not forked. **SUPERSEDED (R7.4):** an explicit `dialogue_placement` row per line, placed by hand from a beat's start or the edit's start |
 | **Overlays** (later) | phone or UI overlay, time, layout | C1 `object_visibility` and keyframes cover timing; overlay objects come from the Stage (episode-scene object ids, C2) | **Good** (later) | none |
 | **Music, SFX** (reserved, Q9) | library file, range, gain, fades, ducking setting | none | **Missing** | New `timeline_audio_items` (`track` ∈ music, sfx; `asset_ref` library id; `source_in`, `source_out`; anchor plus offset; gain, fades; `duck_under_dialogue_db` explicit). Created in C1 so the tracks are **reserved**, with no UI in the first release |
 | **Captions** (later, Q8) | SRT from lines and timings | none | **Missing**, deferred | Derived at render from approved lines and their placements. Manual caption edits later, as `timeline_items` kind `caption_override` |
@@ -1507,11 +1626,11 @@ The recommendation is (a), so there is one model. This document's fields are wha
   - It can't slide against the video, which would break sync.
   - Hiding the PIP never mutes it.
 - **Dialogue:** approved, bound candidates placed at `line_start` anchors.
-  - Where teleprompter marks are missing, the timing is "estimated" (spec §3).
+  - Where teleprompter marks are missing, the timing is "estimated" (spec §3). **SUPERSEDED (R7.3, R7.4):** no line timing is ever estimated; dialogue is placed explicitly (`dialogue_placement`, beat-relative or absolute), or from actual recorded marks; an approved line without either is unplaced and blocks.
   - Overruns are findings, never automatic changes (spec §3.2).
 - **Overlays:** phone and UI overlays, later (T7). **SFX:** library slots only (spec §9). **Music:** library files. **Captions:** from the script lines and the dialogue timings (T8).
 
-**Warnings panel**, one list fed by the shared resolver; each item jumps to its source:
+**Warnings panel**, one list fed by the shared resolver; each item jumps to its source. **SUPERSEDED (R7.6):** the codes and severities are R7.6's table; `take_overruns_scene` and `line_overruns_gap` are not built.
 - `line_audio_unapproved`
 - outdated approval
 - unbound or moved take
@@ -1574,7 +1693,7 @@ Evoni uploads to YouTube (the in-app upload remains a placeholder, T-4; later ph
 
 **Timeline:**
 - **T1, data and pure core:** `edit_projects`, `edit_items` (or C1/C3, Q4), `render_jobs`; pure `layoutAt(project, t)` and `mixPlan(project)`. These are the review's A4a and A8, written once for preview and export. Unit-tested against fixtures.
-- **T2, editor v1:** auto-assemble a draft from the episode (scenes, favourite Prime takes, approved dialogue); the PIP inspector; save; the warnings panel.
+- **T2, editor v1:** auto-assemble a draft from the episode (scenes, favourite Prime takes, approved dialogue); the PIP inspector; save; the warnings panel. **SUPERSEDED (R7.7):** see R7.7; plus the Resolve Placement workflow for stale dialogue placements (R7.4).
 - **T3, editing:** trim, split, reorder, timing offsets, volume and fades on every track.
 - **T4, preview render:** a `render_jobs` worker builds one FFmpeg filter graph from `layoutAt` and `mixPlan` (scale/overlay for scene and PIP, `adelay` / `volume` / `afade` / `amix` for audio) → a 1920×1080 (or 960×540 for speed) H.264/AAC MP4 under `previews/`. **This meets the first functional goal.**
 - **T5, music and SFX:** library files and slots; per-item gain and fade; music ducking as an explicit user setting, never automatic.
