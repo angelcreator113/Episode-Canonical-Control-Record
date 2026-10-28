@@ -1079,6 +1079,11 @@ app.use('/api/v1/script-voice-clips', scriptVoiceClipRoutes);
 const voiceStudioRoutes = trackRouteLoad('voiceStudio', () => require('./routes/voiceStudioRoutes'));
 app.use('/api/v1/voice-studio', voiceStudioRoutes);
 
+// Timeline C1: the episode's edit (scene clips, Prime segments, PIP, items, versions); off unless EPISODE_EDIT=on.
+// The legacy Timeline Editor's routes and timeline_data are separate and unchanged.
+const episodeEditRoutes = trackRouteLoad('episodeEdit', () => require('./routes/episodeEditRoutes'));
+app.use('/api/v1/episodes/:episodeId/edit', episodeEditRoutes);
+
 // YouTube thumbnails: an episode's thumbnail from its show's style (Templates)
 const youtubeThumbnailRoutes = trackRouteLoad('youtubeThumbnails', () => require('./routes/youtubeThumbnailRoutes'));
 app.use('/api/v1/youtube-thumbnails', youtubeThumbnailRoutes);
