@@ -51,7 +51,8 @@ export const FramingGrid = () => <span className="stp-grid" aria-hidden="true" d
 
 /**
  * The rehearsal summary: each beat she spent time on, against the
- * estimate; Reset, and Save rehearsal times (this device only).
+ * estimate (at her learned pace when she uses it) and what her saved takes
+ * of it took; Reset, and Save rehearsal times (this device only).
  */
 export function RehearsalPanel({ rows, onReset, onSave, savedAt = null }) {
   return (
@@ -63,6 +64,7 @@ export function RehearsalPanel({ rows, onReset, onSave, savedAt = null }) {
             <li key={r.key} data-testid="stp-rehearsal-row" className={r.current ? 'is-current' : ''}>
               Beat {r.number}: {durationText(r.actual)} · est. {durationText(r.estimate)} · <span className={r.actual > r.estimate ? 'is-over' : 'is-under'}>{diffText(r.actual, r.estimate)}</span>
               {r.saved != null && <span className="stp-rehearsal-saved"> · last saved {durationText(r.saved)}</span>}
+              {r.takes != null && <span className="stp-rehearsal-saved" data-testid="stp-rehearsal-takes"> · your takes {durationText(r.takes)}</span>}
             </li>
           ))}
         </ul>

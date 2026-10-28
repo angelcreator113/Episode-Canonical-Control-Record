@@ -120,7 +120,7 @@ export default function Teleprompter() {
   const title = episode ? episodeLabel(episode) : '';
   const source = sourceKind === 'paste'
     ? { kind: 'text', text: pasted }
-    : { kind: 'script', scriptText: episode?.script_content || '', episodeId: episode?.id || null, title };
+    : { kind: 'script', scriptText: episode?.script_content || '', episodeId: episode?.id || null, showId: episode?.show_id || showId || null, title };
   const numberedBeats = script.beats.filter((b) => b.number != null);
   // The source tabs: arrow keys, Home and End move between them (one tab stop).
   const tabRefs = useRef({});

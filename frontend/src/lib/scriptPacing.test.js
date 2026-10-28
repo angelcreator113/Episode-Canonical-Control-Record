@@ -88,3 +88,24 @@ describe('pacing in Ready to film?', () => {
     expect(beatChecklist(beats[0], { healthRows: rows }).items.some((i) => i.key.startsWith('health-pacing'))).toBe(false);
   });
 });
+
+// Her learned reading pace (lib/learnedPace; Evoni, 2026-10-28).
+describe('pacing at her learned pace', () => {
+  it('with no pace, exactly as before', () => {
+    const beats = [beat(1, [say(75), '[UI:OPEN closet]'])];
+    expect(scriptPacing(beats, null)).toEqual(scriptPacing(beats));
+    expect(pacingRows(beats)[0].text).toBe('Rough running time: ~33s (150 spoken words a minute, a few seconds per step on screen).');
+  });
+  it('her lines at her pace, others at 150, and the row says so', () => {
+    const beats = [beat(1, [say(75), say(25, 'Lala'), '[UI:OPEN closet]'])];
+    const p = scriptPacing(beats, { wpm: 225 });
+    expect(p.beats[0].seconds).toBe(20 + 10 + 3);
+    expect(pacingRows(beats, { wpm: 225 })[0].text).toBe('Rough running time: ~33s (your lines at your pace, 225 words a minute; others at 150, a few seconds per step on screen).');
+    expect(scriptHealth({ beats, pace: { wpm: 225 } }).find((r) => r.key === 'pacing').timings[0].seconds).toBe(33);
+  });
+  it('a hook that talks too long at 150 may not at her faster pace', () => {
+    const beats = [beat(1, [say(90), '[UI:OPEN closet]']), beat(2, [say(10)])];
+    expect(scriptPacing(beats).warnings.some((w) => w.key === 'pacing-hook')).toBe(true);
+    expect(scriptPacing(beats, { wpm: 200 }).warnings.some((w) => w.key === 'pacing-hook')).toBe(false);
+  });
+});
