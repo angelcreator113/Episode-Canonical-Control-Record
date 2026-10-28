@@ -60,6 +60,25 @@ describe('Timeline C1 boundaries', () => {
     expect(migration).toMatch(/audio_in_ms IS NULL AND audio_out_ms IS NULL AND audio_fade_in_ms = 0 AND audio_fade_out_ms = 0/);
   });
 
+  test('a beat\'s stored length is written only by setBeatMode, setBeatDuration and lockBeatTiming (never by a scene clip write)', () => {
+    const code = read(SERVICE);
+    expect(code.match(/INSERT INTO episode_beat_production/g)).toHaveLength(1);
+    expect(code.match(/UPDATE episode_beat_production/g)).toHaveLength(1);
+    // Each top-level function, by name, and whether it writes the beat production.
+    const parts = code.split(/\n(?=(?:async )?function \w+|const \w+ = (?:\(|async))/);
+    const writers = parts.filter((p) => /writeBeatProduction\(/.test(p)).map((p) => (p.match(/^(?:async )?function (\w+)|^const (\w+)/) || [])[1] || (p.match(/^const (\w+)/) || [])[1]);
+    expect(writers.sort()).toEqual(['lockBeatTiming', 'setBeatDuration', 'setBeatMode', 'writeBeatProduction'].sort());
+  });
+
+  test('line marks are never estimated: the edit\'s line times stay empty, and dialogue is never anchored to a line', () => {
+    const code = read(SERVICE);
+    expect(code).toMatch(/lineTimes: \{\},/);
+    expect(code.match(/lineTimes/g)).toHaveLength(1);
+    expect(code).toMatch(/const DIALOGUE_ANCHORS = \['beat_start', 'edit_start'\];/);
+    expect(read(MIGRATION)).toMatch(/kind = 'dialogue_placement' AND voice_association_id IS NOT NULL AND voice_approval_id IS NOT NULL[\s\S]*?anchor_kind IN \('beat_start', 'edit_start'\)/);
+    expect(read(MIGRATION)).toMatch(/CREATE UNIQUE INDEX timeline_items_dialogue_line ON timeline_items \(episode_id, line_beat, line_index\)\s+WHERE kind = 'dialogue_placement' AND deleted_at IS NULL/);
+  });
+
   test('editTimeline is pure: no database, files, clock or randomness', () => {
     const code = read('src/utils/editTimeline.js');
     expect(code).not.toMatch(/require\(/);

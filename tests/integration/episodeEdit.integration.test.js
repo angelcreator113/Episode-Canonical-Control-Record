@@ -12,6 +12,8 @@ const app = require('../../src/app');
 const TokenService = require('../../src/services/tokenService');
 const models = require('../../src/models');
 const svc = require('../../src/services/episodeEditService');
+const studio = require('../../src/services/voiceStudioService');
+const { saveEpisodeScript } = require('../../src/services/scriptSave');
 const tl = require('../../src/utils/editTimeline');
 const migration = require('../../src/migrations/20261028100000-create-episode-edit-tables');
 
@@ -59,6 +61,16 @@ const SCRIPT = [
       const e = { e: episodes };
       await run('UPDATE episode_prime_segments SET superseded_by = NULL WHERE episode_id IN (:e)', e);
       for (const table of EDIT_TABLES) await run(`DELETE FROM ${table} WHERE episode_id IN (:e)`, e);
+      // Voice Studio rows the dialogue tests made (after the placements that name them).
+      await run(`DELETE FROM line_voice_reconfirmations WHERE approval_id IN (SELECT id FROM line_voice_approvals WHERE episode_id IN (:e))`, e);
+      await run('UPDATE line_voice_approvals SET superseded_by = NULL WHERE episode_id IN (:e)', e);
+      await run('DELETE FROM line_voice_approvals WHERE episode_id IN (:e)', e);
+      await run('DELETE FROM line_voice_candidate_revisions WHERE candidate_id IN (SELECT id FROM line_voice_candidates WHERE episode_id IN (:e))', e);
+      await run('UPDATE line_voice_associations SET superseded_by = NULL WHERE episode_id IN (:e)', e);
+      await run('DELETE FROM line_voice_associations WHERE episode_id IN (:e)', e);
+      await run('DELETE FROM line_voice_candidates WHERE episode_id IN (:e)', e);
+      await run('DELETE FROM voice_source_assets WHERE episode_id IN (:e)', e);
+      await run('DELETE FROM episode_script_versions WHERE episode_id IN (:e)', e);
       await run('DELETE FROM episode_raw_clips WHERE episode_id IN (:e)', e);
       await run('DELETE FROM scene_set_episodes WHERE episode_id IN (:e)', e);
     }
@@ -326,10 +338,11 @@ const SCRIPT = [
 
   test('review readiness: missing or changed sources and unapproved lines block; with them fixed it is ready', async () => {
     const w = await world({ script: '## BEAT: 1 · Opening\nPrime: hello' });
-    // 14 x 9 s + Lala's 10 s = 136 s, inside Prime's 140 s take: every required beat covered.
+    // 14 x 9 s + Lala's 10 s = 136 s; Prime's take placed for exactly that: every required beat covered,
+    // nothing past the end (segment_beyond_edit_end blocks, Evoni 2026-10-28).
     await fillBeats(w, 9000);
     const { scene_clip_id: lalaClip } = await svc.placeSceneClip(sequelize, await as(w.ep, { body: { beat_number: 2, source_kind: 'raw_clip', source_id: w.c.lala, source_out_ms: 10000 } }));
-    await place(w, {});
+    await place(w, { source_out_ms: 136000 });
     let r = await svc.reviewReadiness(sequelize, { episodeId: w.ep });
     expect(r).toMatchObject({ ready: true, counts: { blocking: 0 } });
     await run("UPDATE episode_raw_clips SET performer = 'justawoman' WHERE id = :id", { id: w.c.lala });
@@ -448,12 +461,310 @@ const SCRIPT = [
       expect(layout.status).toBe(200);
       const findings = await request(app).get(`/api/v1/episodes/${w.ep}/edit/findings`).set('Authorization', `Bearer ${userToken}`);
       expect(findings.body.data.findings.filter((f) => f.code === 'scene_missing')).toHaveLength(14);
+      // Beat timing and dialogue routes: a dry run by any admin writes nothing; the lock is one write; a line mark is refused.
+      await fillBeats(w);
+      const r0 = await rev(w.ep);
+      const dry = await request(app).post(`/api/v1/episodes/${w.ep}/edit/beats/3/duration`).set('Authorization', `Bearer ${adminToken}`).send({ duration_ms: 8000, dry_run: true });
+      expect(dry.status).toBe(200);
+      expect(dry.body.data).toMatchObject({ dry_run: true, for_edit_revision: r0, from: { ms: 10000, locked: false }, to: { ms: 8000, locked: true } });
+      expect(await rev(w.ep)).toBe(r0);
+      const userDry = await request(app).post(`/api/v1/episodes/${w.ep}/edit/beats/3/duration`).set('Authorization', `Bearer ${userToken}`).send({ duration_ms: 8000, dry_run: true });
+      expect(userDry.status).toBe(403);
+      const lock = await request(app).post(`/api/v1/episodes/${w.ep}/edit/beats/lock`).set('Authorization', `Bearer ${adminToken}`).send({ edit_revision: r0 });
+      expect(lock.status).toBe(200);
+      expect(lock.body.data.locked).toHaveLength(14);
+      const lineMark = await request(app).post(`/api/v1/episodes/${w.ep}/edit/dialogue`).set('Authorization', `Bearer ${adminToken}`)
+        .send({ edit_revision: lock.body.data.edit_revision, approval_id: uuid(), association_id: uuid(), anchor_kind: 'line_start', anchor_ref: uuid() });
+      expect(lineMark.status).toBe(400);
+      expect(lineMark.body.code).toBe('BAD_ANCHOR');
       // The episode's own routes are unaffected.
       const episode = await request(app).get(`/api/v1/episodes/${w.ep}`).set('Authorization', `Bearer ${adminToken}`);
       expect(episode.status).toBe(200);
     } finally {
       if (prev === undefined) delete process.env.EPISODE_EDIT; else process.env.EPISODE_EDIT = prev;
     }
+  });
+
+  // ── Stable beat timing (Evoni, 2026-10-28) ─────────────────────────────────
+  const beatRows = (ep) => rows(`SELECT beat_number, prime_mode, duration_ms, note, deleted_at IS NULL AS current FROM episode_beat_production
+    WHERE episode_id = :ep ORDER BY beat_number, created_at, set_at`, { ep });
+  const locked = async (ep) => (await svc.loadEdit(sequelize, { episodeId: ep })).edit.beatDurations;
+
+  test('locked timing: the measured beat-3 case through the service keeps beat 5, Prime, music and SFX where they were', async () => {
+    const w = await world();
+    await fillBeats(w);
+    await place(w, {});
+    await svc.addAudioItem(sequelize, await as(w.ep, { body: { track: 'music', asset_ref: 'lib:bed', source_out_ms: 30000, anchor_kind: 'beat_start', anchor_beat: 5, offset_ms: 1000 } }));
+    await svc.addAudioItem(sequelize, await as(w.ep, { body: { track: 'sfx', slot: 'door', source_out_ms: 800, anchor_kind: 'beat_start', anchor_beat: 1, offset_ms: 43000 } }));
+    const measure = async () => {
+      const { edit } = await svc.loadEdit(sequelize, { episodeId: w.ep });
+      const t = tl.beatTimeline(edit);
+      const mix = tl.mixPlan(edit);
+      return {
+        beat3: t.beats[2].end - t.beats[2].start, beat5: t.beats[4].start, prime: (await svc.layoutAtTime(sequelize, { episodeId: w.ep, t: t.beats[4].start })).layout.pip.source_time_ms,
+        music: mix.audio.find((a) => a.kind === 'music').timeline_start_ms, sfx: mix.audio.find((a) => a.kind === 'sfx').timeline_start_ms, edit: t.duration,
+      };
+    };
+    const BEFORE = { beat3: 10000, beat5: 40000, prime: 40000, music: 41000, sfx: 43000, edit: 140000 };
+    expect(await measure()).toEqual(BEFORE);
+
+    const lock = await svc.lockBeatTiming(sequelize, await as(w.ep));
+    expect(lock.locked).toHaveLength(14);
+    expect(lock.locked.every((b) => b.duration_ms === 10000 && !b.was_locked)).toBe(true);
+    expect(Object.keys(await locked(w.ep))).toHaveLength(14);
+
+    // Replace beat 3's clip with a 6 s one: nothing moves; the 4 s gap blocks review.
+    const { edit } = await svc.loadEdit(sequelize, { episodeId: w.ep });
+    const beat3 = edit.sceneClips.find((c) => c.beat_number === 3);
+    await svc.removeRow(sequelize, await as(w.ep, { what: 'scene_clip', id: beat3.id }));
+    expect(await measure()).toEqual(BEFORE);
+    await svc.placeSceneClip(sequelize, await as(w.ep, { body: { beat_number: 3, source_kind: 'angle_still', source_id: w.a.still, duration_ms: 6000 } }));
+    expect(await measure()).toEqual(BEFORE);
+    let r = await svc.reviewReadiness(sequelize, { episodeId: w.ep });
+    expect(r.ready).toBe(false);
+    expect(r.findings.filter((f) => f.code === 'scene_gap')).toEqual([{ code: 'scene_gap', severity: 'blocking', beat: 3, from_ms: 26000, to_ms: 30000, gap_ms: 4000 }]);
+    // Trim beat 4's clip longer: cut at the beat end, blocking; still nothing moves.
+    const beat4 = edit.sceneClips.find((c) => c.beat_number === 4);
+    await svc.updateSceneClip(sequelize, await as(w.ep, { clipId: beat4.id, body: { duration_ms: 12500 } }));
+    expect(await measure()).toEqual(BEFORE);
+    r = await svc.reviewReadiness(sequelize, { episodeId: w.ep });
+    expect(r.findings.find((f) => f.code === 'scene_overruns_beat')).toEqual({ code: 'scene_overruns_beat', severity: 'blocking', beat: 4, overrun_ms: 2500, refs: [beat4.id] });
+    // Filled exactly again: those findings clear.
+    await svc.updateSceneClip(sequelize, await as(w.ep, { clipId: beat4.id, body: { duration_ms: 10000 } }));
+    const { edit: e2 } = await svc.loadEdit(sequelize, { episodeId: w.ep });
+    await svc.updateSceneClip(sequelize, await as(w.ep, { clipId: e2.sceneClips.find((c) => c.beat_number === 3).id, body: { duration_ms: 10000 } }));
+    r = await svc.reviewReadiness(sequelize, { episodeId: w.ep });
+    expect(r.findings.filter((f) => ['scene_gap', 'scene_overruns_beat'].includes(f.code))).toEqual([]);
+  });
+
+  test('lockBeatTiming: all 14 at once or none; an empty beat refuses the lock unless a length is given; a locked beat is never changed by it', async () => {
+    const w = await world();
+    await fillBeats(w);
+    const { edit } = await svc.loadEdit(sequelize, { episodeId: w.ep });
+    await svc.removeRow(sequelize, await as(w.ep, { what: 'scene_clip', id: edit.sceneClips.find((c) => c.beat_number === 12).id }));
+    const r0 = await rev(w.ep);
+    await expect(svc.lockBeatTiming(sequelize, await as(w.ep))).rejects.toMatchObject({ status: 409, code: 'BEAT_HAS_NO_LENGTH', extra: { beats: [12] } });
+    expect(await rev(w.ep)).toBe(r0);
+    expect(await beatRows(w.ep)).toEqual([]);
+    // A failure part-way through the writes leaves nothing: beat 9's row is refused by a trigger, so beats 1-8 roll back too.
+    await run(`CREATE OR REPLACE FUNCTION c1_refuse_beat9() RETURNS trigger AS $$ BEGIN
+      IF NEW.beat_number = 9 AND NEW.episode_id = '${w.ep}' THEN RAISE EXCEPTION 'test: beat 9 refused'; END IF; RETURN NEW; END $$ LANGUAGE plpgsql`);
+    await run('CREATE TRIGGER c1_refuse_beat9 BEFORE INSERT ON episode_beat_production FOR EACH ROW EXECUTE FUNCTION c1_refuse_beat9()');
+    try {
+      await expect(svc.lockBeatTiming(sequelize, await as(w.ep, { durations: { 12: 7000 } }))).rejects.toThrow(/beat 9 refused/);
+    } finally {
+      await run('DROP TRIGGER c1_refuse_beat9 ON episode_beat_production');
+      await run('DROP FUNCTION c1_refuse_beat9()');
+    }
+    expect(await beatRows(w.ep)).toEqual([]);
+    expect(await rev(w.ep)).toBe(r0);
+    // C2's first assembly gives the lengths it has (here only beat 12's); the rest are their draft lengths.
+    const lock = await svc.lockBeatTiming(sequelize, await as(w.ep, { durations: { 12: 7000 } }));
+    expect(lock.locked.find((b) => b.beat === 12)).toEqual({ beat: 12, duration_ms: 7000, was_locked: false });
+    expect(await locked(w.ep)).toEqual({ ...Object.fromEntries(tl.BEATS.map((b) => [b, 10000])), 12: 7000 });
+    expect(await rev(w.ep)).toBe((BigInt(r0) + 1n).toString());
+    await expectRefusal(svc.lockBeatTiming(sequelize, await as(w.ep)), 409, 'TIMING_ALREADY_LOCKED');
+    await expectRefusal(svc.lockBeatTiming(sequelize, await as(w.ep, { durations: { 3: 9000 } })), 409, 'BEAT_ALREADY_LOCKED');
+    await expectRefusal(svc.lockBeatTiming(sequelize, await as(w.ep, { durations: { 15: 9000 } })), 400, 'BAD_BEAT');
+    await expectRefusal(svc.lockBeatTiming(sequelize, await as(w.ep, { durations: { 3: 0 } })), 400, 'BAD_VALUE');
+    // Two locks sent from one view: one is saved.
+    const v = await world();
+    await fillBeats(v);
+    const seen = await rev(v.ep);
+    const both = await Promise.allSettled([1, 2].map(() => svc.lockBeatTiming(sequelize, { episodeId: v.ep, editRevision: seen, userId: USER })));
+    expect(both.map((x) => x.status).sort()).toEqual(['fulfilled', 'rejected']);
+    expect((await beatRows(v.ep)).filter((b) => b.current)).toHaveLength(14);
+  });
+
+  test('setBeatDuration: explicit; a dry run writes nothing and says what moves; the write applies that plan only at that revision', async () => {
+    const w = await world();
+    await fillBeats(w);
+    await place(w, { anchor_beat: 6, source_out_ms: 5000 });
+    await svc.addAudioItem(sequelize, await as(w.ep, { body: { track: 'sfx', slot: 'pop', source_out_ms: 500, anchor_kind: 'edit_start', offset_ms: 65000 } }));
+    await svc.lockBeatTiming(sequelize, await as(w.ep));
+    const r0 = await rev(w.ep);
+    const dry = await svc.setBeatDuration(sequelize, { episodeId: w.ep, beatNumber: 4, durationMs: 12000, dryRun: true });
+    expect(dry).toMatchObject({ dry_run: true, for_edit_revision: r0, beat: 4, from: { ms: 10000, locked: true }, to: { ms: 12000, locked: true }, duration_ms: { from: 140000, to: 142000 } });
+    const moved = Object.fromEntries(dry.changes.map((c) => [c.key, c.delta_ms]));
+    expect(moved).toMatchObject({ 'beat:4': 0, 'beat:5': 2000, 'beat:14': 2000 });
+    expect(Object.keys(moved).filter((k) => k.startsWith('segment:'))).toHaveLength(1);
+    expect(Object.keys(moved).some((k) => k.startsWith('sfx:'))).toBe(false); // absolute: stays at 65 s
+    expect(dry.findings_added.map((f) => f.code)).toContain('scene_gap');
+    expect(await rev(w.ep)).toBe(r0);
+    expect((await locked(w.ep))[4]).toBe(10000);
+    // The write, at the revision the dry run was for; a stale one is refused and writes nothing.
+    await expectRefusal(svc.setBeatDuration(sequelize, { episodeId: w.ep, editRevision: '0', userId: USER, beatNumber: 4, durationMs: 12000 }), 409, 'EDIT_CHANGED');
+    const done = await svc.setBeatDuration(sequelize, { episodeId: w.ep, editRevision: dry.for_edit_revision, userId: USER, beatNumber: 4, durationMs: 12000 });
+    expect(done.changes).toEqual(dry.changes);
+    expect((await locked(w.ep))[4]).toBe(12000);
+    await expectRefusal(svc.setBeatDuration(sequelize, await as(w.ep, { beatNumber: 4, durationMs: 0 })), 400, 'BAD_VALUE');
+    await expectRefusal(svc.setBeatDuration(sequelize, await as(w.ep, { beatNumber: 4, durationMs: 2.5 })), 400, 'BAD_VALUE');
+    await expectRefusal(svc.setBeatDuration(sequelize, await as(w.ep, { beatNumber: 4 })), 400, 'BAD_VALUE');
+    // The database refuses a zero length too.
+    await expect(run('INSERT INTO episode_beat_production (episode_id, beat_number, prime_mode, duration_ms) VALUES (:ep, 1, \'required\', 0)', { ep: w.ep })).rejects.toThrow(/duration_ms_check/);
+    // Mode and length carry each other forward; every change is a kept row.
+    await svc.setBeatMode(sequelize, await as(w.ep, { beatNumber: 4, primeMode: 'gameplay_only' }));
+    expect((await locked(w.ep))[4]).toBe(12000);
+    await svc.setBeatDuration(sequelize, await as(w.ep, { beatNumber: 4, durationMs: null }));
+    const b4 = (await beatRows(w.ep)).filter((b) => b.beat_number === 4);
+    expect(b4.map((b) => [b.prime_mode, b.duration_ms, b.current])).toEqual([['required', 10000, false], ['required', 12000, false], ['gameplay_only', 12000, false], ['gameplay_only', null, true]]);
+    expect((await locked(w.ep))[4]).toBeUndefined();
+  });
+
+  // ── Dialogue placements (Evoni, 2026-10-28) ─────────────────────────────────
+  const VOICE_SCRIPT = [
+    '## BEAT: 1 · Opening', 'Lala: "Bestie, come style me."', 'Prime: right',
+    '', '## BEAT: 2 · Arrival', 'Lala: "Love the look!"', 'Lala: "Spin for me."',
+  ].join('\n');
+  const scriptRev = async (ep) => (await studio.episodeState(sequelize, ep)).revision;
+  // A take of `ms` (measured) tied to (beat, index) and approved there: { candidate, revision, association, approval_id }.
+  const approvedTake = async (ep, beat, index, { ms = 3000, settings = {} } = {}) => {
+    const src = uuid();
+    await run(`INSERT INTO voice_source_assets (id, episode_id, source_kind, s3_key, sha256, content_type, file_size_bytes, duration_ms)
+      VALUES (:src, :ep, 'uploaded', :key, :sha, 'audio/wav', 1000, :ms)`, { src, ep, key: `voice/${src}.wav`, sha: crypto.createHash('sha256').update(src).digest('hex'), ms });
+    const { candidate, revision } = await studio.createCandidate(sequelize, { episodeId: ep, sourceAssetId: src, settings, userId: USER });
+    const { association } = await studio.associate(sequelize, { episodeId: ep, candidateId: candidate.id, scriptRevision: await scriptRev(ep), beatNumber: beat, lineIndex: index, userId: USER });
+    const atLine = (await studio.summary(sequelize, { episodeId: ep })).approvals.find((x) => x.beat_number === beat && x.line_index === index && !['superseded', 'invalid', 'revoked'].includes(x.state));
+    const { approval_id } = await studio.approve(sequelize, { episodeId: ep, candidateId: candidate.id, candidateRevisionId: revision.id, scriptRevision: await scriptRev(ep),
+      expectedApprovalId: atLine ? atLine.approval_id : null, userId: USER });
+    return { candidate, revision, association, approval_id };
+  };
+  const placeLine = async (w, take, anchor) => svc.placeDialogue(sequelize, await as(w.ep, { body: { approval_id: take.approval_id, association_id: take.association.id, ...anchor } }));
+  const dialogueOf = async (ep) => (await svc.mixPlanOf(sequelize, { episodeId: ep })).mix.dialogue;
+  const findingsOf = async (ep, prefix = 'dialogue') => (await svc.reviewReadiness(sequelize, { episodeId: ep })).findings.filter((f) => f.code.startsWith(prefix));
+
+  test('dialogue: beat-relative and absolute placements play the approved trim; unplaced approved lines block; line marks are refused', async () => {
+    const w = await world({ script: VOICE_SCRIPT });
+    await fillBeats(w);
+    const a = await approvedTake(w.ep, 1, 0, { settings: { in_ms: 200, out_ms: 2200 } });
+    const b = await approvedTake(w.ep, 2, 0);
+    expect((await findingsOf(w.ep)).map((f) => [f.code, f.beat, f.line_index])).toEqual([['dialogue_unplaced', 1, 0], ['dialogue_unplaced', 2, 0]]);
+    await expectRefusal(placeLine(w, a, { anchor_kind: 'line_start', anchor_ref: a.association.id }), 400, 'BAD_ANCHOR');
+    await expectRefusal(placeLine(w, a, { anchor_kind: 'item_start', anchor_ref: uuid() }), 400, 'BAD_ANCHOR');
+    await expectRefusal(placeLine(w, { ...a, association: b.association }, { anchor_kind: 'beat_start', anchor_beat: 1 }), 409, 'ASSOCIATION_MISMATCH');
+    await expectRefusal(placeLine(w, { ...a, approval_id: uuid() }, { anchor_kind: 'beat_start', anchor_beat: 1 }), 409, 'TAKE_NOT_PLAYABLE');
+    const { item_id: pa, length_ms: la } = await placeLine(w, a, { anchor_kind: 'beat_start', anchor_beat: 1, offset_ms: 1500 });
+    expect(la).toBe(2000);
+    const { item_id: pb } = await placeLine(w, b, { anchor_kind: 'edit_start', offset_ms: 12000 });
+    expect(await dialogueOf(w.ep)).toEqual([
+      expect.objectContaining({ item_id: pa, approval_id: a.approval_id, association_id: a.association.id, beat: 1, line_index: 0, timeline_start_ms: 1500, timeline_end_ms: 3500, source_start_ms: 200, source_end_ms: 2200 }),
+      expect.objectContaining({ item_id: pb, approval_id: b.approval_id, beat: 2, line_index: 0, timeline_start_ms: 12000, timeline_end_ms: 15000, source_start_ms: 0, source_end_ms: 3000 }),
+    ]);
+    expect(await findingsOf(w.ep)).toEqual([]);
+    // Moving: beat-relative to absolute; the take is not touched.
+    await svc.moveDialogue(sequelize, await as(w.ep, { itemId: pa, body: { anchor_kind: 'edit_start', offset_ms: 4000 } }));
+    expect((await dialogueOf(w.ep))[0]).toMatchObject({ item_id: pa, approval_id: a.approval_id, timeline_start_ms: 4000 });
+    await expectRefusal(svc.moveDialogue(sequelize, await as(w.ep, { itemId: pa, body: { anchor_kind: 'line_start', anchor_ref: uuid() } })), 400, 'BAD_ANCHOR');
+    // The database refuses a line mark, or a placement without its association and approval, whatever the service does.
+    await expect(run(`INSERT INTO timeline_items (episode_id, kind, anchor_kind, anchor_ref, offset_ms, voice_association_id, voice_approval_id, line_beat, line_index)
+      VALUES (:ep, 'dialogue_placement', 'line_start', :ref, 0, :as, :ap, 1, 1)`, { ep: w.ep, ref: uuid(), as: a.association.id, ap: a.approval_id })).rejects.toThrow(/timeline_items_dialogue/);
+    await expect(run(`INSERT INTO timeline_items (episode_id, kind, anchor_kind, anchor_beat, offset_ms, line_beat, line_index)
+      VALUES (:ep, 'dialogue_placement', 'beat_start', 1, 0, 1, 1)`, { ep: w.ep })).rejects.toThrow(/timeline_items_dialogue/);
+    await expect(run(`INSERT INTO timeline_items (episode_id, kind, anchor_kind, anchor_beat, offset_ms, voice_approval_id)
+      VALUES (:ep, 'transition', 'beat_start', 1, 0, :ap)`, { ep: w.ep, ap: a.approval_id })).rejects.toThrow(/timeline_items_dialogue/);
+    // A dialogue placement is not an ordinary item.
+    await expectRefusal(svc.addItem(sequelize, await as(w.ep, { body: { kind: 'dialogue_placement', anchor_kind: 'beat_start', anchor_beat: 1 } })), 400, 'BAD_KIND');
+    await expectRefusal(svc.placeDialogue(sequelize, { episodeId: w.ep, editRevision: '0', userId: USER, body: { approval_id: a.approval_id, association_id: a.association.id, anchor_kind: 'beat_start', anchor_beat: 1 } }), 409);
+  });
+
+  test('dialogue: one live placement per line, in the service, in a race and in the database', async () => {
+    const w = await world({ script: VOICE_SCRIPT });
+    await fillBeats(w);
+    const a = await approvedTake(w.ep, 2, 1);
+    const { item_id: first } = await placeLine(w, a, { anchor_kind: 'beat_start', anchor_beat: 2 });
+    const refused = placeLine(w, a, { anchor_kind: 'beat_start', anchor_beat: 2, offset_ms: 500 });
+    await expect(refused).rejects.toMatchObject({ status: 409, code: 'LINE_ALREADY_PLACED', extra: { item_id: first } });
+    await expect(run(`INSERT INTO timeline_items (episode_id, kind, anchor_kind, anchor_beat, offset_ms, voice_association_id, voice_approval_id, line_beat, line_index)
+      VALUES (:ep, 'dialogue_placement', 'beat_start', 2, 0, :as, :ap, 2, 1)`, { ep: w.ep, as: a.association.id, ap: a.approval_id }))
+      .rejects.toMatchObject({ original: { constraint: 'timeline_items_dialogue_line' } });
+    // Removed (a soft delete), the line can be placed again.
+    await svc.removeRow(sequelize, await as(w.ep, { what: 'dialogue', id: first }));
+    await expectRefusal(svc.removeRow(sequelize, await as(w.ep, { what: 'dialogue', id: first })), 404);
+    const { item_id: again } = await placeLine(w, a, { anchor_kind: 'beat_start', anchor_beat: 2, offset_ms: 500 });
+    expect(again).not.toBe(first);
+    // Two placements of one line sent at once, each with the revision it saw: exactly one is saved.
+    await svc.removeRow(sequelize, await as(w.ep, { what: 'dialogue', id: again }));
+    const seen = await rev(w.ep);
+    const both = await Promise.allSettled([0, 1].map((n) => svc.placeDialogue(sequelize, { episodeId: w.ep, editRevision: seen, userId: USER,
+      body: { approval_id: a.approval_id, association_id: a.association.id, anchor_kind: 'beat_start', anchor_beat: 2, offset_ms: n * 100 } })));
+    expect(both.map((x) => x.status).sort()).toEqual(['fulfilled', 'rejected']);
+    // The edit's revision lock refuses the second first; the one-per-line index is the backstop under it.
+    expect(both.find((x) => x.status === 'rejected').reason).toMatchObject({ status: 409, code: 'EDIT_CHANGED' });
+    expect((await rows(`SELECT count(*)::int AS n FROM timeline_items WHERE episode_id = :ep AND kind = 'dialogue_placement' AND deleted_at IS NULL`, { ep: w.ep }))[0].n).toBe(1);
+  });
+
+  test('dialogue: a new approval, a re-trim, a reassignment or a script save stops the placement playing; nothing stands in', async () => {
+    const w = await world({ script: VOICE_SCRIPT });
+    await fillBeats(w);
+    const a = await approvedTake(w.ep, 2, 0);
+    const { item_id: pa } = await placeLine(w, a, { anchor_kind: 'beat_start', anchor_beat: 2 });
+    expect(await dialogueOf(w.ep)).toHaveLength(1);
+
+    // A new take approved for the same line: the placement still names the old approval and is silent.
+    const b = await approvedTake(w.ep, 2, 0, { ms: 2500 });
+    expect(await dialogueOf(w.ep)).toEqual([]);
+    expect(await findingsOf(w.ep)).toEqual([expect.objectContaining({ code: 'dialogue_take_not_current', severity: 'blocking', ref: pa, approval_id: a.approval_id, state: 'superseded', current_approval_id: b.approval_id })]);
+    // Re-placing is explicit: the line already has its (stale) placement.
+    await expectRefusal(placeLine(w, b, { anchor_kind: 'beat_start', anchor_beat: 2 }), 409, 'LINE_ALREADY_PLACED');
+    await svc.removeRow(sequelize, await as(w.ep, { what: 'dialogue', id: pa }));
+    const { item_id: pb } = await placeLine(w, b, { anchor_kind: 'beat_start', anchor_beat: 2 });
+    expect(await dialogueOf(w.ep)).toEqual([expect.objectContaining({ item_id: pb, approval_id: b.approval_id, timeline_end_ms: 12500 })]);
+
+    // The approved take is re-trimmed: outdated, silent.
+    await studio.reviseCandidate(sequelize, { episodeId: w.ep, candidateId: b.candidate.id, settings: { in_ms: 100 }, userId: USER });
+    expect(await dialogueOf(w.ep)).toEqual([]);
+    expect((await findingsOf(w.ep))[0]).toMatchObject({ code: 'dialogue_take_not_current', state: 'outdated_take' });
+
+    // A take re-tied to another line: its approval is invalid; the placement for line 0 is silent.
+    const c = await approvedTake(w.ep, 1, 0);
+    const { item_id: pc } = await placeLine(w, c, { anchor_kind: 'beat_start', anchor_beat: 1 });
+    await studio.associate(sequelize, { episodeId: w.ep, candidateId: c.candidate.id, scriptRevision: await scriptRev(w.ep), beatNumber: 2, lineIndex: 1, userId: USER });
+    expect((await dialogueOf(w.ep)).map((d) => d.item_id)).not.toContain(pc);
+    expect((await findingsOf(w.ep)).find((f) => f.ref === pc)).toMatchObject({ code: 'dialogue_take_not_current', state: 'invalid', reason: 'take_reassigned' });
+
+    // A script save: the approval needs re-confirming, and until then plays nothing.
+    const d = await approvedTake(w.ep, 2, 1);
+    const { item_id: pd } = await placeLine(w, d, { anchor_kind: 'beat_start', anchor_beat: 2, offset_ms: 4000 });
+    expect((await dialogueOf(w.ep)).map((x) => x.item_id)).toEqual([pd]);
+    await saveEpisodeScript(models, w.ep, { writer: 'test', compose: async () => ({ script: `${VOICE_SCRIPT}\n\n## BEAT: 3 · Later\nLala: "New."` }) });
+    expect(await dialogueOf(w.ep)).toEqual([]);
+    expect((await findingsOf(w.ep)).find((f) => f.ref === pd)).toMatchObject({ code: 'dialogue_take_not_current', state: 'needs_review' });
+    // Re-confirmed by a person: the same placement plays again, the same approval.
+    const listed = (await studio.summary(sequelize, { episodeId: w.ep })).approvals.find((x) => x.approval_id === d.approval_id);
+    await studio.reconfirm(sequelize, { episodeId: w.ep, scriptRevision: await scriptRev(w.ep), items: [{ approval_id: d.approval_id, context_hash: listed.context_hash }], userId: USER });
+    expect((await dialogueOf(w.ep)).map((x) => [x.item_id, x.approval_id])).toEqual([[pd, d.approval_id]]);
+  });
+
+  test('versions: locked beats and dialogue placements restore exactly; a restored placement whose approval changed stays silent', async () => {
+    const w = await world({ script: VOICE_SCRIPT });
+    await fillBeats(w);
+    await svc.lockBeatTiming(sequelize, await as(w.ep));
+    const a = await approvedTake(w.ep, 2, 0);
+    const { item_id: pa } = await placeLine(w, a, { anchor_kind: 'beat_start', anchor_beat: 2, offset_ms: 300 });
+    const saved = await svc.createVersion(sequelize, await as(w.ep, { name: 'Locked cut' }));
+    const versionBefore = await rows('SELECT * FROM edit_versions WHERE id = :id', { id: saved.version_id });
+
+    await svc.setBeatDuration(sequelize, await as(w.ep, { beatNumber: 2, durationMs: 15000 }));
+    await svc.setBeatDuration(sequelize, await as(w.ep, { beatNumber: 7, durationMs: null }));
+    await svc.removeRow(sequelize, await as(w.ep, { what: 'dialogue', id: pa }));
+    const b = await approvedTake(w.ep, 2, 1);
+    await placeLine(w, b, { anchor_kind: 'edit_start', offset_ms: 16000 });
+
+    await svc.restoreVersion(sequelize, await as(w.ep, { versionId: saved.version_id }));
+    const { rows: live, edit } = await svc.loadEdit(sequelize, { episodeId: w.ep });
+    const version = await svc.getVersion(sequelize, { episodeId: w.ep, versionId: saved.version_id });
+    expect(svc.stableJson(live)).toBe(svc.stableJson(version.snapshot));
+    expect(await rows('SELECT * FROM edit_versions WHERE id = :id', { id: saved.version_id })).toEqual(versionBefore);
+    expect(edit.beatDurations).toEqual(Object.fromEntries(tl.BEATS.map((n) => [n, 10000])));
+    expect((await dialogueOf(w.ep)).map((d) => [d.item_id, d.timeline_start_ms])).toEqual([[pa, 10300]]);
+    // Line 1's approval is still current but no longer placed (the version had no placement for it).
+    expect((await findingsOf(w.ep)).map((f) => [f.code, f.line_index])).toEqual([['dialogue_unplaced', 1]]);
+
+    // Approve a new take for line 0, then restore again: the placement names the old approval and stays silent.
+    await approvedTake(w.ep, 2, 0, { ms: 1000 });
+    await svc.restoreVersion(sequelize, await as(w.ep, { versionId: saved.version_id }));
+    expect(await dialogueOf(w.ep)).toEqual([]);
+    expect((await findingsOf(w.ep)).find((f) => f.ref === pa)).toMatchObject({ code: 'dialogue_take_not_current', state: 'superseded' });
   });
 
   test('a soft-deleted episode is not found', async () => {

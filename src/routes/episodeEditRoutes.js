@@ -9,10 +9,14 @@
  *
  *   GET    /                         the live edit: edit_revision and every live row
  *   GET    /layout?t=ms              layoutAt: the scene and the PIP at t
- *   GET    /mix                      mixPlan: commentary, music and SFX events
+ *   GET    /mix                      mixPlan: commentary, dialogue, music and SFX events
  *   GET    /findings                 review readiness: blocking findings and warnings
  *   GET    /versions                 named versions;  GET /versions/:versionId  one, with its snapshot
  *   POST   /beats/:beat/mode         { prime_mode: required | gameplay_only, note }
+ *   POST   /beats/:beat/duration     { duration_ms (null: draft timing), dry_run } (dry_run: what would move; no write)
+ *   POST   /beats/lock               { durations?: { beat: ms } } all 14 beats' lengths, in one write
+ *   POST   /dialogue                 { approval_id, association_id, anchor_kind: beat_start | edit_start, anchor_beat, offset_ms }
+ *   POST   /dialogue/:itemId/move    { anchor_kind, anchor_beat, offset_ms }
  *   POST   /scene-clips              { beat_number, source_kind, source_id, source_in_ms, source_out_ms, duration_ms, position }
  *   PATCH  /scene-clips/:clipId      { source_in_ms, source_out_ms, duration_ms, position }
  *   POST   /segments                 { raw_clip_id, source_in_ms, source_out_ms, anchor_*, audio_*, layout }
@@ -20,7 +24,7 @@
  *   PUT    /pip                      { default_layout, default_visible, use_cutout }
  *   POST   /visibility               { scope: beat | range, beat_number | anchor_* and end_anchor_*, visible }
  *   POST   /items, /audio-items      timeline items and music/SFX items
- *   DELETE /scene-clips|segments|visibility|items|audio-items/:id   (soft delete)
+ *   DELETE /scene-clips|segments|visibility|items|audio-items|dialogue/:id   (soft delete)
  *   POST   /versions                 { name };  POST /versions/:versionId/restore
  *
  * Every write sends edit_revision (409 EDIT_CHANGED when stale) and is
@@ -74,6 +78,14 @@ router.post('/beats/:beat/mode', ...admin, handle('beat mode', (req) => edit.set
   ...base(req), beatNumber: req.params.beat, primeMode: req.body?.prime_mode, note: req.body?.note,
 })));
 
+router.post('/beats/lock', ...admin, handle('lock beat timing', (req) => edit.lockBeatTiming(s(), { ...base(req), durations: req.body?.durations ?? null })));
+router.post('/beats/:beat/duration', ...admin, handle('beat duration', (req) => edit.setBeatDuration(s(), {
+  ...base(req), beatNumber: req.params.beat, durationMs: req.body?.duration_ms === undefined ? undefined : req.body.duration_ms, dryRun: req.body?.dry_run,
+})));
+
+router.post('/dialogue', ...admin, handle('place dialogue', (req) => edit.placeDialogue(s(), base(req))));
+router.post('/dialogue/:itemId/move', ...admin, handle('move dialogue', (req) => edit.moveDialogue(s(), { ...base(req), itemId: req.params.itemId })));
+
 router.post('/scene-clips', ...admin, handle('place scene clip', (req) => edit.placeSceneClip(s(), base(req))));
 router.patch('/scene-clips/:clipId', ...admin, handle('update scene clip', (req) => edit.updateSceneClip(s(), { ...base(req), clipId: req.params.clipId })));
 
@@ -96,7 +108,7 @@ router.post('/visibility', ...admin, handle('visibility rule', (req) => edit.add
 router.post('/items', ...admin, handle('timeline item', (req) => edit.addItem(s(), base(req))));
 router.post('/audio-items', ...admin, handle('audio item', (req) => edit.addAudioItem(s(), base(req))));
 
-const REMOVE = { 'scene-clips': 'scene_clip', segments: 'segment', visibility: 'visibility', items: 'item', 'audio-items': 'audio_item' };
+const REMOVE = { 'scene-clips': 'scene_clip', segments: 'segment', visibility: 'visibility', items: 'item', 'audio-items': 'audio_item', dialogue: 'dialogue' };
 for (const [path, what] of Object.entries(REMOVE)) {
   router.delete(`/${path}/:id`, ...admin, handle(`remove ${what}`, (req) => edit.removeRow(s(), { ...base(req), what, id: req.params.id })));
 }

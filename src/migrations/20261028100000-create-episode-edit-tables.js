@@ -9,8 +9,9 @@
  * scene_angles.video_duration is never written.
  *
  *   episode_edit_state       the live edit's concurrency token (edit_revision)
- *   episode_beat_production  per beat: Prime required (no row) or gameplay_only;
- *     a change soft-deletes the previous row (history kept)
+ *   episode_beat_production  per beat: Prime required (no row) or gameplay_only,
+ *     and the beat's stored length (duration_ms; NULL: draft timing, the sum
+ *     of its scene clips). A change soft-deletes the previous row (history kept)
  *   episode_scene_clips      the scene track: one or more clips per beat, each
  *     with its own episode-specific duration and, for a video, the source
  *     length measured by the server (source_duration_ms)
@@ -21,9 +22,14 @@
  *   episode_pip_settings     the PIP's default layout, visibility and cutout
  *   episode_pip_visibility   manual hide/show rules (never mute)
  *   timeline_items           keyframes, visibility, angle changes, transitions,
- *     dialogue nudges (audio_offset) and caption overrides (reserved)
+ *     dialogue nudges (audio_offset), caption overrides (reserved) and
+ *     dialogue placements: an approved voice take placed by hand, naming its
+ *     line association and approval, one live placement per line
  *   timeline_audio_items     music and SFX (reserved, no UI yet)
  *   edit_versions            named, immutable snapshots of the live edit
+ *
+ * Needs the Voice Studio B1 tables (20261027200000-create-voice-studio-tables,
+ * which sorts and runs first): a dialogue placement's foreign keys name them.
  *
  * Times are integer milliseconds; layout is pixels at 1920x1080. Every table
  * has created_at, updated_at and deleted_at. down() refuses while any of the
@@ -48,8 +54,9 @@ const TS = `created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   deleted_at TIMESTAMPTZ NULL`;
 
 const BEAT = (col, nullable = false) => `${col} SMALLINT ${nullable ? 'NULL' : 'NOT NULL'} CHECK (${col} IS NULL OR ${col} BETWEEN 1 AND 14)`;
-const ANCHOR_KINDS = "('beat_start', 'line_start', 'item_start')";
-// An anchor: a beat's start (needs the beat), or a line or a timeline item (needs its id).
+const ANCHOR_KINDS = "('beat_start', 'edit_start', 'line_start', 'item_start')";
+// An anchor: a beat's start (needs the beat), the edit's start (absolute: needs nothing), or a
+// line or a timeline item (needs its id).
 const anchor = (prefix, nullable = false) => `
         ${prefix}anchor_kind VARCHAR(16) ${nullable ? 'NULL' : 'NOT NULL'} CHECK (${prefix}anchor_kind IS NULL OR ${prefix}anchor_kind IN ${ANCHOR_KINDS}),
         ${BEAT(`${prefix}anchor_beat`, true)},
@@ -58,6 +65,7 @@ const anchor = (prefix, nullable = false) => `
         CONSTRAINT ${prefix || 'start_'}anchor_target_CHK CHECK (
           ${prefix}anchor_kind IS NULL
           OR (${prefix}anchor_kind = 'beat_start' AND ${prefix}anchor_beat IS NOT NULL AND ${prefix}anchor_ref IS NULL)
+          OR (${prefix}anchor_kind = 'edit_start' AND ${prefix}anchor_beat IS NULL AND ${prefix}anchor_ref IS NULL)
           OR (${prefix}anchor_kind IN ('line_start', 'item_start') AND ${prefix}anchor_ref IS NOT NULL)
         )`;
 const GAIN = (col) => `${col} NUMERIC(4,1) NOT NULL DEFAULT 0 CHECK (${col} BETWEEN -24 AND 12)`;
@@ -82,6 +90,8 @@ module.exports = {
         episode_id UUID NOT NULL REFERENCES episodes(id) ON DELETE RESTRICT,
         ${BEAT('beat_number')},
         prime_mode VARCHAR(16) NOT NULL CHECK (prime_mode IN ('required', 'gameplay_only')),
+        -- The beat's length once timing is locked; it never follows the scene clips. NULL: draft timing.
+        duration_ms INTEGER NULL CHECK (duration_ms > 0),
         note TEXT NULL,
         set_by VARCHAR(255) NULL,
         set_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -172,7 +182,7 @@ module.exports = {
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         episode_id UUID NOT NULL REFERENCES episodes(id) ON DELETE RESTRICT,
         scene_clip_id UUID NULL REFERENCES episode_scene_clips(id) ON DELETE RESTRICT,
-        kind VARCHAR(24) NOT NULL CHECK (kind IN ('object_keyframe', 'camera_keyframe', 'object_visibility', 'angle_change', 'transition', 'audio_offset', 'caption_override')),
+        kind VARCHAR(24) NOT NULL CHECK (kind IN ('object_keyframe', 'camera_keyframe', 'object_visibility', 'angle_change', 'transition', 'audio_offset', 'caption_override', 'dialogue_placement')),
         target_id TEXT NULL,
         view VARCHAR(16) NULL,
         ${anchor('')},
@@ -180,10 +190,26 @@ module.exports = {
         origin VARCHAR(16) NOT NULL DEFAULT 'user' CHECK (origin IN ('auto', 'user', 'director')),
         approval VARCHAR(16) NOT NULL DEFAULT 'approved' CHECK (approval IN ('pending', 'approved', 'rejected')),
         proposal_id UUID NULL,
+        voice_association_id UUID NULL REFERENCES line_voice_associations(id) ON DELETE RESTRICT,
+        voice_approval_id UUID NULL REFERENCES line_voice_approvals(id) ON DELETE RESTRICT,
+        ${BEAT('line_beat', true)},
+        line_index INTEGER NULL CHECK (line_index IS NULL OR line_index >= 0),
         created_by VARCHAR(255) NULL,
-        ${TS}
+        ${TS},
+        -- A dialogue placement names its exact association, approval and line, and is placed by hand
+        -- from a beat's start or the edit's start: never at a line mark (no estimated timing). No other
+        -- kind carries those columns.
+        CONSTRAINT timeline_items_dialogue CHECK (
+          (kind <> 'dialogue_placement' AND voice_association_id IS NULL AND voice_approval_id IS NULL AND line_beat IS NULL AND line_index IS NULL)
+          OR (kind = 'dialogue_placement' AND voice_association_id IS NOT NULL AND voice_approval_id IS NOT NULL
+              AND line_beat IS NOT NULL AND line_index IS NOT NULL AND scene_clip_id IS NULL
+              AND anchor_kind IN ('beat_start', 'edit_start'))
+        )
       )`);
       await q('CREATE INDEX timeline_items_episode ON timeline_items (episode_id) WHERE deleted_at IS NULL');
+      // One live placement per script line: the line as Voice Studio approves it, (beat, index).
+      await q(`CREATE UNIQUE INDEX timeline_items_dialogue_line ON timeline_items (episode_id, line_beat, line_index)
+        WHERE kind = 'dialogue_placement' AND deleted_at IS NULL`);
 
       await q(`CREATE TABLE timeline_audio_items (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

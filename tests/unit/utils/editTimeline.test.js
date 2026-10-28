@@ -14,7 +14,7 @@ const segment = (over = {}) => ({
   id: id(1), raw_clip_id: id(9), source_in_ms: 0, source_out_ms: 140000, anchor_kind: 'beat_start', anchor_beat: 1, anchor_ref: null, offset_ms: 0, layout: null,
   audio_in_ms: 0, audio_out_ms: 140000, audio_gain_db: 0, audio_muted: false, audio_fade_in_ms: 0, audio_fade_out_ms: 0, ...over,
 });
-const edit = (over = {}) => ({ fps: 30, beatModes: {}, sceneClips: scenes(), segments: [], pip: null, visibility: [], items: [], audioItems: [], lineTimes: {}, dialogue: [], ...over });
+const edit = (over = {}) => ({ fps: 30, beatModes: {}, sceneClips: scenes(), segments: [], pip: null, visibility: [], items: [], audioItems: [], lineTimes: {}, voiceTakes: {}, ...over });
 const codes = (fs) => fs.map((f) => f.code);
 
 describe('the clock', () => {
@@ -43,7 +43,17 @@ describe('the clock', () => {
     expect(tl.resolveAnchor(e, t, { anchor_kind: 'line_start', anchor_ref: id(60), offset_ms: 9 })).toEqual({ t: 4330 });
     expect(tl.resolveAnchor(e, t, { anchor_kind: 'line_start', anchor_ref: id(61), offset_ms: 0 })).toEqual({ error: 'line_timing_unknown' });
     const unplaced = tl.editFindings(edit({ segments: [segment({ anchor_kind: 'line_start', anchor_beat: null, anchor_ref: id(61) })] }));
-    expect(unplaced.find((f) => f.code === 'anchor_unresolved')).toMatchObject({ severity: 'blocking', reason: 'line_timing_unknown' });
+    expect(unplaced.find((f) => f.code === 'line_timing_unknown')).toMatchObject({ severity: 'blocking', what: 'segment' });
+    // Any unmapped line mark blocks, wherever it anchors: an item, music, a visibility range.
+    const lineAnchor = { anchor_kind: 'line_start', anchor_beat: null, anchor_ref: id(61), offset_ms: 0 };
+    const everywhere = tl.editFindings(edit({
+      items: [{ id: id(54), kind: 'transition', ...lineAnchor }],
+      audioItems: [{ id: id(55), track: 'sfx', slot: 'x', source_in_ms: 0, source_out_ms: 500, ...lineAnchor }],
+      visibility: [{ id: id(56), scope: 'range', ...lineAnchor, end_anchor_kind: 'beat_start', end_anchor_beat: 3, end_anchor_ref: null, end_offset_ms: 0, visible: false }],
+    })).filter((f) => f.code === 'line_timing_unknown');
+    expect(everywhere.map((f) => [f.what, f.severity])).toEqual([['item', 'blocking'], ['audio_item', 'blocking'], ['visibility', 'blocking']]);
+    // edit_start: an absolute time.
+    expect(tl.resolveAnchor(e, t, { anchor_kind: 'edit_start', offset_ms: 61234 })).toEqual({ t: 61234 });
   });
 });
 
@@ -188,7 +198,7 @@ describe('takes across beats: the placed interval is what is checked', () => {
   test('a take placed before the edit starts: a warning, and only its placed part inside the edit covers', () => {
     const e = edit({ segments: [segment({ offset_ms: -5000, source_out_ms: 25000, audio_out_ms: 25000 })] });
     const f = tl.editFindings(e);
-    expect(f.find((x) => x.code === 'segment_before_edit_start')).toMatchObject({ severity: 'warning', from_ms: -5000, to_ms: 0 });
+    expect(f.find((x) => x.code === 'segment_before_edit_start')).toMatchObject({ severity: 'blocking', from_ms: -5000, to_ms: 0 });
     // 25 s of take placed at -5 s: on the edit, 0-20 s; beat 3 (20-30 s) is not covered.
     expect(f.find((x) => x.code === 'prime_footage_missing')).toMatchObject({ beat: 3, from_ms: 20000, to_ms: 30000 });
     expect(tl.mixPlan(e).commentary[0]).toMatchObject({ timeline_start_ms: 0, source_start_ms: 5000 });
@@ -228,7 +238,7 @@ describe('the mix plan', () => {
     const m = tl.mixPlan(e);
     expect(m.commentary).toEqual([expect.objectContaining({ timeline_start_ms: 15000, timeline_end_ms: 20000, source_start_ms: 0, source_end_ms: 5000 })]);
     expect(m.audio).toEqual([expect.objectContaining({ kind: 'music', timeline_start_ms: 10000, timeline_end_ms: 16000, source_start_ms: 2000, gain_db: -6, duck_under_dialogue_db: -9 })]);
-    expect(tl.editFindings(e).find((f) => f.code === 'segment_beyond_edit_end')).toMatchObject({ from_ms: 20000, to_ms: 25000 });
+    expect(tl.editFindings(e).find((f) => f.code === 'segment_beyond_edit_end')).toMatchObject({ severity: 'blocking', from_ms: 20000, to_ms: 25000 });
   });
 
   test('overlapping segments: the later one is drawn, both are heard, and it is a warning', () => {
@@ -236,5 +246,152 @@ describe('the mix plan', () => {
     expect(tl.layoutAt(e, 15000).pip.segment_id).toBe(id(2));
     expect(tl.mixPlan(e).commentary).toHaveLength(2);
     expect(tl.editFindings(e).find((f) => f.code === 'prime_segments_overlap')).toMatchObject({ severity: 'warning', from_ms: 10000, to_ms: 20000 });
+  });
+});
+
+// ── Stable beat timing (Evoni, 2026-10-28) ──────────────────────────────────
+const LOCKED = Object.fromEntries(tl.BEATS.map((b) => [b, 10000]));
+// The measured drift case: a whole-episode Prime take from beat 1, music from beat 5 (+1 s), an SFX at 43 s
+// from beat 1; then beat 3's clip is replaced by one of 6 s.
+const driftCase = (beatDurations) => {
+  const music = { id: id(81), track: 'music', asset_ref: 'lib:bed', slot: null, source_in_ms: 0, source_out_ms: 30000, anchor_kind: 'beat_start', anchor_beat: 5, anchor_ref: null, offset_ms: 1000, gain_db: -12, fade_in_ms: 0, fade_out_ms: 0, duck_under_dialogue_db: null };
+  const sfx = { id: id(82), track: 'sfx', asset_ref: null, slot: 'door', source_in_ms: 0, source_out_ms: 800, anchor_kind: 'beat_start', anchor_beat: 1, anchor_ref: null, offset_ms: 43000, gain_db: 0, fade_in_ms: 0, fade_out_ms: 0, duck_under_dialogue_db: null };
+  const before = edit({ beatDurations, segments: [segment()], audioItems: [music, sfx] });
+  const clips = scenes().map((c) => (c.beat_number === 3 ? { ...c, id: id(399), duration_ms: 6000 } : c));
+  const after = { ...before, sceneClips: clips };
+  const measure = (e) => {
+    const t = tl.beatTimeline(e);
+    const b5 = t.beats[4].start;
+    const m = tl.mixPlan(e);
+    const sfxAt = m.audio.find((a) => a.kind === 'sfx').timeline_start_ms;
+    return {
+      beat3_ms: t.beats[2].end - t.beats[2].start, beat5_start: b5, prime_source_at_beat5_start: tl.layoutAt(e, b5).pip.source_time_ms,
+      music_at: m.audio.find((a) => a.kind === 'music').timeline_start_ms, sfx_at: sfxAt, sfx_into_beat5: sfxAt - b5,
+      edit_ms: t.duration,
+    };
+  };
+  return { before, after, measure };
+};
+
+describe('stable beat timing: a stored beat length is the clock', () => {
+  test('draft timing (no stored length): the measured drift, reproduced', () => {
+    const { before, after, measure } = driftCase({});
+    expect(measure(before)).toEqual({ beat3_ms: 10000, beat5_start: 40000, prime_source_at_beat5_start: 40000, music_at: 41000, sfx_at: 43000, sfx_into_beat5: 3000, edit_ms: 140000 });
+    expect(measure(after)).toEqual({ beat3_ms: 6000, beat5_start: 36000, prime_source_at_beat5_start: 36000, music_at: 37000, sfx_at: 43000, sfx_into_beat5: 7000, edit_ms: 136000 });
+  });
+
+  test('locked: replacing beat 3 with a shorter clip moves nothing; the gap is a blocking scene_gap', () => {
+    const { before, after, measure } = driftCase(LOCKED);
+    const same = { beat3_ms: 10000, beat5_start: 40000, prime_source_at_beat5_start: 40000, music_at: 41000, sfx_at: 43000, sfx_into_beat5: 3000, edit_ms: 140000 };
+    expect(measure(before)).toEqual(same);
+    expect(measure(after)).toEqual(same);
+    expect(tl.timingChanges(tl.timingOf(before), tl.timingOf(after))).toEqual([]);
+    const f = tl.editFindings(after);
+    expect(f.filter((x) => x.severity === 'blocking')).toEqual([{ code: 'scene_gap', severity: 'blocking', beat: 3, from_ms: 26000, to_ms: 30000, gap_ms: 4000 }]);
+    // The working preview still answers: no scene drawn in the gap, Prime still there.
+    expect(tl.layoutAt(after, 27000)).toMatchObject({ beat: 3, scene: null, scene_gap: true, pip: { source_time_ms: 27000 } });
+  });
+
+  test('locked: a longer clip is cut at the beat end (scene_overruns_beat, blocking); removing every clip keeps the length', () => {
+    const long = scenes().map((c) => (c.beat_number === 3 ? { ...c, duration_ms: 13000 } : c));
+    long.push({ ...long[2], id: id(398), position: 1, duration_ms: 2000 });
+    const e = edit({ beatDurations: LOCKED, sceneClips: long });
+    const t = tl.beatTimeline(e);
+    expect(t.beats[2]).toMatchObject({ start: 20000, end: 30000, content_ms: 15000, locked: true });
+    expect(t.beats[2].clips.map((c) => [c.start, c.end, c.cut_ms])).toEqual([[20000, 30000, 3000], [30000, 30000, 2000]]);
+    expect(t.beats[3].start).toBe(30000);
+    expect(tl.layoutAt(e, 29999).scene).toMatchObject({ clip_id: long[2].id });
+    expect(tl.layoutAt(e, 30000)).toMatchObject({ beat: 4 });
+    expect(tl.editFindings(e).find((x) => x.code === 'scene_overruns_beat')).toEqual({ code: 'scene_overruns_beat', severity: 'blocking', beat: 3, overrun_ms: 5000, refs: [long[2].id, id(398)] });
+    const none = edit({ beatDurations: LOCKED, sceneClips: scenes().filter((c) => c.beat_number !== 3) });
+    expect(tl.beatTimeline(none).beats[2]).toMatchObject({ start: 20000, end: 30000 });
+    expect(tl.beatTimeline(none).beats[4].start).toBe(40000);
+    expect(codes(tl.editFindings(none).filter((x) => x.beat === 3 && x.code.startsWith('scene')))).toEqual(['scene_missing']);
+    // Exactly filled: no finding.
+    expect(codes(tl.editFindings(edit({ beatDurations: LOCKED, segments: [segment()] })))).toEqual([]);
+  });
+
+  test('timingChanges: an explicit length change says what moves downstream', () => {
+    const { before } = driftCase(LOCKED);
+    const after = { ...before, beatDurations: { ...LOCKED, 3: 12000 } };
+    const ch = tl.timingChanges(tl.timingOf(before), tl.timingOf(after));
+    const keys = ch.map((c) => c.key);
+    expect(keys).toEqual(expect.arrayContaining(['beat:3', 'beat:4', 'beat:14', `music:${id(81)}`]));
+    expect(keys).not.toContain('beat:2');
+    expect(keys).not.toContain(`sfx:${id(82)}`);
+    expect(keys).not.toContain(`segment:${id(1)}`);
+    expect(ch.find((c) => c.key === 'beat:5')).toEqual({ key: 'beat:5', from: [40000, 50000], to: [42000, 52000], delta_ms: 2000 });
+    expect(ch.find((c) => c.key === 'beat:3')).toEqual({ key: 'beat:3', from: [20000, 30000], to: [20000, 32000], delta_ms: 0 });
+  });
+});
+
+// ── Dialogue placements (Evoni, 2026-10-28) ─────────────────────────────────
+const take = (over = {}) => ({
+  playable: true, state: 'current', reason: null, association_id: id(70), beat_number: 2, line_index: 0,
+  in_ms: 500, out_ms: 2500, source_duration_ms: 3000, gain_db: -1, fade_in_ms: 10, fade_out_ms: 20, normalise: false, source_asset_id: id(71), s3_key: 'v/a.wav', ...over,
+});
+const placement = (over = {}) => ({
+  id: id(90), kind: 'dialogue_placement', voice_association_id: id(70), voice_approval_id: id(72), line_beat: 2, line_index: 0,
+  anchor_kind: 'beat_start', anchor_beat: 2, anchor_ref: null, offset_ms: 1500, values: { timing: 'manual' }, ...over,
+});
+
+describe('dialogue placements', () => {
+  test('beat-relative and absolute placements play the approved revision\'s trim, on the edit clock', () => {
+    const rel = edit({ items: [placement()], voiceTakes: { [id(72)]: take() } });
+    expect(tl.mixPlan(rel).dialogue).toEqual([{
+      kind: 'dialogue', item_id: id(90), approval_id: id(72), association_id: id(70), beat: 2, line_index: 0, source_asset_id: id(71), s3_key: 'v/a.wav',
+      timeline_start_ms: 11500, timeline_end_ms: 13500, source_start_ms: 500, source_end_ms: 2500, gain_db: -1, fade_in_ms: 10, fade_out_ms: 20, normalise: false,
+    }]);
+    const abs = edit({ items: [placement({ anchor_kind: 'edit_start', anchor_beat: null, offset_ms: 11500 })], voiceTakes: { [id(72)]: take() } });
+    expect(tl.mixPlan(abs).dialogue).toEqual(tl.mixPlan(rel).dialogue);
+    expect(tl.editFindings(rel).filter((x) => x.code.startsWith('dialogue'))).toEqual([]);
+    // A locked clock: the beat-relative one stays with its beat when beat 1 changes; the absolute one stays at 11.5 s.
+    const shorter = scenes().map((c) => (c.beat_number === 1 ? { ...c, duration_ms: 8000 } : c));
+    expect(tl.mixPlan({ ...rel, sceneClips: shorter }).dialogue[0].timeline_start_ms).toBe(9500);
+    expect(tl.mixPlan({ ...rel, sceneClips: shorter, beatDurations: LOCKED }).dialogue[0].timeline_start_ms).toBe(11500);
+    expect(tl.mixPlan({ ...abs, sceneClips: shorter }).dialogue[0].timeline_start_ms).toBe(11500);
+  });
+
+  test('a take that is not current plays nothing and blocks; no other take stands in', () => {
+    const states = [
+      [take({ playable: false, state: 'needs_review', reason: 'script_saved' }), 'needs_review'],
+      [take({ playable: false, state: 'superseded' }), 'superseded'],
+      [take({ playable: false, state: 'invalid', reason: 'take_reassigned' }), 'invalid'],
+      [take({ association_id: id(73) }), 'association_changed'],
+    ];
+    for (const [k, state] of states) {
+      // A newer playable approval for the same line exists: it is named, never used.
+      const e = edit({ items: [placement()], voiceTakes: { [id(72)]: k, [id(74)]: take({ association_id: id(75) }) } });
+      expect(tl.mixPlan(e).dialogue).toEqual([]);
+      const f = tl.editFindings(e).filter((x) => x.code.startsWith('dialogue'));
+      expect(f).toEqual([expect.objectContaining({ code: 'dialogue_take_not_current', severity: 'blocking', ref: id(90), state, current_approval_id: id(74) })]);
+    }
+    const missing = edit({ items: [placement()], voiceTakes: {} });
+    expect(tl.editFindings(missing).find((x) => x.code === 'dialogue_take_not_current')).toMatchObject({ state: 'not_found', current_approval_id: null });
+  });
+
+  test('an approved line with no placement blocks; a placed one does not', () => {
+    const e = edit({ voiceTakes: { [id(72)]: take(), [id(76)]: take({ association_id: id(77), beat_number: 4, line_index: 2 }) }, items: [placement()] });
+    expect(tl.editFindings(e).filter((x) => x.code === 'dialogue_unplaced')).toEqual([{ code: 'dialogue_unplaced', severity: 'blocking', beat: 4, line_index: 2, approval_id: id(76) }]);
+  });
+
+  test('duration boundaries: beyond the edit blocks; outside its beat warns; a trim past the measured source blocks', () => {
+    const k = { [id(72)]: take() };
+    const at = (over) => tl.editFindings(edit({ items: [placement(over)], voiceTakes: k })).filter((x) => x.code.startsWith('dialogue'));
+    // 8.5 s into beat 2 (10 s long): 2 s of take runs 500 ms into beat 3.
+    expect(at({ offset_ms: 8500 })).toEqual([expect.objectContaining({ code: 'dialogue_outside_beat', severity: 'warning', from_ms: 18500, to_ms: 20500 })]);
+    expect(at({ offset_ms: 8000 })).toEqual([]);
+    expect(at({ anchor_kind: 'edit_start', anchor_beat: null, offset_ms: 138001 }).map((x) => [x.code, x.severity])).toEqual([['dialogue_beyond_edit', 'blocking'], ['dialogue_outside_beat', 'warning']]);
+    expect(at({ anchor_kind: 'edit_start', anchor_beat: null, offset_ms: -1 }).map((x) => x.code)).toContain('dialogue_beyond_edit');
+    const past = tl.editFindings(edit({ items: [placement()], voiceTakes: { [id(72)]: take({ out_ms: 3200 }) } }));
+    expect(past.find((x) => x.code === 'dialogue_take_bad_range')).toMatchObject({ severity: 'blocking' });
+    expect(tl.mixPlan(edit({ items: [placement()], voiceTakes: { [id(72)]: take({ out_ms: 3200 }) } })).dialogue).toEqual([]);
+  });
+
+  test('overlapping dialogue is reported, not refused: both still play', () => {
+    const second = placement({ id: id(91), voice_association_id: id(77), voice_approval_id: id(76), line_index: 1, offset_ms: 2500 });
+    const e = edit({ items: [placement(), second], voiceTakes: { [id(72)]: take(), [id(76)]: take({ association_id: id(77), line_index: 1 }) } });
+    expect(tl.mixPlan(e).dialogue.map((d) => d.item_id)).toEqual([id(90), id(91)]);
+    expect(tl.editFindings(e).filter((x) => x.code.startsWith('dialogue'))).toEqual([{ code: 'dialogue_overlap', severity: 'warning', ref: id(91), with: id(90), from_ms: 12500, to_ms: 13500 }]);
   });
 });

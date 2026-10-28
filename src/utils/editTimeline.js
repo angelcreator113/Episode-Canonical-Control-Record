@@ -6,14 +6,29 @@
  * database, no clock, no randomness, so the server, the C2 editor and the D1
  * render read the same answer from the same rows.
  *
- * The clock: beats 1-14 in order. A beat lasts as long as its scene clips
- * (each clip's own duration_ms, in position order); a beat with no clip has
- * no length and is the finding scene_missing. Everything else is placed by an
- * anchor plus an offset:
+ * The clock: beats 1-14 in order. A beat with a stored length
+ * (edit.beatDurations[beat], the beat production's duration_ms) lasts
+ * exactly that, whatever its scene clips: they fill it in position order and
+ * are cut at its end, so replacing, trimming, splitting or removing a clip
+ * never moves anything after it (Evoni, 2026-10-28). Clips short of the
+ * length leave a gap (scene_gap), clips past it are cut (scene_overruns_beat);
+ * neither changes the clock. A beat without one is in draft timing: it lasts
+ * as long as its clips (each clip's own duration_ms). A beat with no clip is
+ * the finding scene_missing (and, in draft timing, has no length).
+ * Everything else is placed by an anchor plus an offset:
  *   beat_start  the beat's start (anchor_beat)
+ *   edit_start  the edit's start: an absolute time
  *   line_start  a line's time, from edit.lineTimes[anchor_ref] (teleprompter
- *               marks; until those are mapped, unresolved: anchor_unresolved)
+ *               marks; never estimated: until mapped, line_timing_unknown)
  *   item_start  a timeline item's own resolved time (anchor_ref)
+ *
+ * Dialogue: only dialogue placements play (timeline items of kind
+ * dialogue_placement, placed by hand from a beat's start or the edit's start).
+ * Each names its line association and approval; it plays only while that
+ * approval is the current, playable one for that association and line
+ * (edit.voiceTakes, from Voice Studio), for the approved revision's trim, and
+ * never another take in its place. An approved line with no placement is
+ * dialogue_unplaced.
  *
  * Prime: one take, one clock (R2.2). A segment plays its source from
  * source_in_ms, placed at its anchor; the commentary is a sub-range of the
@@ -24,8 +39,14 @@
  *
  * Shapes (what episodeEditService.loadEdit builds; tests build them directly):
  *   edit = { fps, beatModes: { [beat]: 'required' | 'gameplay_only' },
- *            sceneClips, segments (current only), pip, visibility (in order),
- *            items, audioItems, lineTimes }
+ *            beatDurations: { [beat]: ms }, sceneClips, segments (current
+ *            only), pip, visibility (in order), items (dialogue placements
+ *            included), audioItems, lineTimes,
+ *            voiceTakes: { [approval_id]: { playable, state, reason,
+ *              association_id, beat_number, line_index, in_ms, out_ms,
+ *              source_duration_ms, gain_db, fade_in_ms, fade_out_ms, normalise,
+ *              source_asset_id, s3_key } } (every playable approval, and each
+ *              approval a placement names) }
  * Times are integer milliseconds; layout is pixels at 1920x1080.
  */
 
@@ -41,8 +62,18 @@ const DEFAULT_LAYOUT = Object.freeze({ x: FRAME_W - PIP_WIDTH - PIP_MARGIN, y: F
 const GAP_TOLERANCE_MS = 33;
 
 const modeOf = (edit, beat) => (edit.beatModes && edit.beatModes[beat] === 'gameplay_only' ? 'gameplay_only' : 'required');
+const lockedLength = (edit, beat) => {
+  const ms = edit.beatDurations ? Number(edit.beatDurations[beat]) : NaN;
+  return Number.isInteger(ms) && ms > 0 ? ms : null;
+};
+const DIALOGUE = 'dialogue_placement';
+const placementsOf = (edit) => (edit.items || []).filter((i) => i.kind === DIALOGUE);
 
-/** Each beat's span on the edit clock, and each scene clip's. */
+/**
+ * Each beat's span on the edit clock, and each scene clip's. A beat with a
+ * stored length (locked) ends there; its clips are cut at that end (cut_ms),
+ * a clip wholly past it has an empty span. content_ms is the clips' own total.
+ */
 function beatTimeline(edit) {
   const byBeat = new Map(BEATS.map((b) => [b, []]));
   for (const c of edit.sceneClips || []) if (byBeat.has(c.beat_number)) byBeat.get(c.beat_number).push(c);
@@ -50,13 +81,19 @@ function beatTimeline(edit) {
   const beats = [];
   for (const b of BEATS) {
     const clips = byBeat.get(b).slice().sort((x, y) => x.position - y.position);
+    const locked = lockedLength(edit, b);
     const start = t;
+    const limit = locked == null ? Infinity : start + locked;
+    let at = start;
     const placed = clips.map((clip) => {
-      const span = { clip, start: t, end: t + clip.duration_ms };
-      t = span.end;
-      return span;
+      const from = Math.min(at, limit);
+      const to = Math.min(at + clip.duration_ms, limit);
+      at += clip.duration_ms;
+      return { clip, start: from, end: to, cut_ms: clip.duration_ms - (to - from) };
     });
-    beats.push({ beat: b, start, end: t, clips: placed, mode: modeOf(edit, b) });
+    const content = at - start;
+    t = locked == null ? at : limit;
+    beats.push({ beat: b, start, end: t, clips: placed, mode: modeOf(edit, b), locked: locked != null, content_ms: content });
   }
   return { beats, duration: t };
 }
@@ -69,6 +106,7 @@ function resolveAnchor(edit, timeline, a, seen = new Set()) {
     if (!beat) return { error: 'no_such_beat' };
     return { t: beat.start + offset };
   }
+  if (a.anchor_kind === 'edit_start') return { t: offset };
   if (a.anchor_kind === 'line_start') {
     const at = edit.lineTimes ? edit.lineTimes[a.anchor_ref] : undefined;
     return Number.isFinite(at) ? { t: at + offset } : { error: 'line_timing_unknown' };
@@ -101,6 +139,30 @@ function placedSegments(edit, timeline = beatTimeline(edit)) {
     };
   });
 }
+
+/**
+ * Each dialogue placement where it is placed, with its take: { item, take,
+ * start, end, length, error (its anchor), problem (the take may not play:
+ * { state, reason }), bad_range }. The length is the approved revision's trim
+ * (in to out), never past the source's measured length.
+ */
+function placedDialogue(edit, timeline = beatTimeline(edit)) {
+  return placementsOf(edit).map((item) => {
+    const take = (edit.voiceTakes && edit.voiceTakes[item.voice_approval_id]) || null;
+    let problem = null;
+    if (!take) problem = { state: 'not_found', reason: null };
+    else if (!take.playable) problem = { state: take.state || 'not_playable', reason: take.reason || null };
+    else if (take.association_id !== item.voice_association_id || take.beat_number !== item.line_beat || take.line_index !== item.line_index) {
+      problem = { state: 'association_changed', reason: 'take_reassigned' };
+    }
+    const length = take ? Math.min(take.out_ms, take.source_duration_ms ?? take.out_ms) - take.in_ms : null;
+    const badRange = Boolean(take) && (!(length > 0) || (take.source_duration_ms != null && take.out_ms > take.source_duration_ms));
+    const r = resolveAnchor(edit, timeline, item);
+    if (r.error) return { item, take, error: r.error, problem, bad_range: badRange, length };
+    return { item, take, start: r.t, end: length > 0 ? r.t + length : r.t, length, problem, bad_range: badRange };
+  });
+}
+const playable = (d) => !d.error && !d.problem && !d.bad_range;
 
 /** Whether the PIP is shown at t: the default, then each applying rule in order (the last wins). */
 function visibleAt(edit, timeline, t) {
@@ -167,6 +229,8 @@ function layoutAt(edit, t, timeline = beatTimeline(edit), placed = placedSegment
     scene,
     pip,
     prime_missing: Boolean(beat && beat.mode === 'required' && !top),
+    // Inside a beat with no scene clip at t (a locked beat's gap, or no clip): nothing is drawn there.
+    scene_gap: Boolean(beat && !scene),
   };
 }
 
@@ -176,10 +240,10 @@ const sourceTimeAt = (event, t) => event.source_start_ms + (t - event.timeline_s
 /**
  * What is heard: Prime's commentary (each placed, unmuted segment's audio
  * sub-range from its own take, on the take's clock), music and SFX, and
- * dialogue placements given in edit.dialogue (approved takes at their lines;
- * none until line timing is mapped). Visibility is not read: hiding the PIP
- * changes nothing here. Events are cut at the edit's end, source and
- * timeline together.
+ * dialogue: each placement whose named approval is still current (the
+ * approved revision's file and trim), nothing for any other. Visibility is not
+ * read: hiding the PIP changes nothing here. Events are cut at the edit's
+ * end, source and timeline together.
  */
 function mixPlan(edit, timeline = beatTimeline(edit), placed = placedSegments(edit, timeline)) {
   const end = timeline.duration;
@@ -213,7 +277,18 @@ function mixPlan(edit, timeline = beatTimeline(edit), placed = placedSegments(ed
     });
     if (ev) audio.push(ev);
   }
-  const dialogue = (edit.dialogue || []).map((d) => cut({ kind: 'dialogue', ...d })).filter(Boolean);
+  const dialogue = [];
+  for (const d of placedDialogue(edit, timeline)) {
+    if (!playable(d)) continue;
+    const { item, take } = d;
+    const ev = cut({
+      kind: 'dialogue', item_id: item.id, approval_id: item.voice_approval_id, association_id: item.voice_association_id,
+      beat: item.line_beat, line_index: item.line_index, source_asset_id: take.source_asset_id || null, s3_key: take.s3_key || null,
+      timeline_start_ms: d.start, timeline_end_ms: d.end, source_start_ms: take.in_ms, source_end_ms: take.in_ms + d.length,
+      gain_db: Number(take.gain_db) || 0, fade_in_ms: take.fade_in_ms || 0, fade_out_ms: take.fade_out_ms || 0, normalise: Boolean(take.normalise),
+    });
+    if (ev) dialogue.push(ev);
+  }
   return { duration_ms: end, commentary, audio, dialogue };
 }
 
@@ -241,42 +316,150 @@ function coverageFindings(edit, timeline = beatTimeline(edit), placed = placedSe
 
 /**
  * Every finding the rows alone can show. Blocking ones stop a review-ready
- * preview; warnings are shown. The service adds what needs other tables
- * (sources deleted or changed, dialogue approvals).
+ * preview and the final render; warnings are shown, and a working preview is
+ * always available. The service adds what needs other tables (sources deleted
+ * or changed, lines with no approved take).
  */
 function editFindings(edit) {
   const timeline = beatTimeline(edit);
   const placed = placedSegments(edit, timeline);
   const findings = [];
+  // An unresolved anchor: a line mark that is not mapped is line_timing_unknown, always blocking (never
+  // estimated); any other reason blocks for what must be on screen or heard (Prime, dialogue).
+  const anchorFinding = (error, ref, what, blocking) => (error === 'line_timing_unknown'
+    ? { code: 'line_timing_unknown', severity: 'blocking', ref, what }
+    : { code: 'anchor_unresolved', severity: blocking ? 'blocking' : 'warning', ref, what, reason: error });
+
   for (const beat of timeline.beats) {
     if (!beat.clips.length) findings.push({ code: 'scene_missing', severity: 'blocking', beat: beat.beat });
     for (const span of beat.clips) {
       const c = span.clip;
-      if (c.source_kind !== 'angle_still' && c.duration_ms > c.source_out_ms - c.source_in_ms) {
-        findings.push({ code: 'scene_clip_holds_last_frame', severity: 'warning', beat: beat.beat, ref: c.id, from_ms: span.start + (c.source_out_ms - c.source_in_ms), to_ms: span.end });
+      const played = span.start + (c.source_kind === 'angle_still' ? Infinity : c.source_out_ms - c.source_in_ms);
+      if (played < span.end) findings.push({ code: 'scene_clip_holds_last_frame', severity: 'warning', beat: beat.beat, ref: c.id, from_ms: played, to_ms: span.end });
+    }
+    if (beat.locked && beat.clips.length) {
+      const length = beat.end - beat.start;
+      if (beat.content_ms < length) {
+        findings.push({ code: 'scene_gap', severity: 'blocking', beat: beat.beat, from_ms: beat.start + beat.content_ms, to_ms: beat.end, gap_ms: length - beat.content_ms });
+      } else if (beat.content_ms > length) {
+        findings.push({ code: 'scene_overruns_beat', severity: 'blocking', beat: beat.beat, overrun_ms: beat.content_ms - length,
+          refs: beat.clips.filter((sp) => sp.cut_ms > 0).map((sp) => sp.clip.id) });
       }
     }
   }
   // A take may span many beats (a whole-episode recording): what is checked is the segment's
   // placed interval on the edit, never its source against a beat (Evoni, 2026-10-28).
   for (const p of placed) {
-    if (p.error) { findings.push({ code: 'anchor_unresolved', severity: 'blocking', ref: p.seg.id, reason: p.error }); continue; }
-    if (p.start < 0) findings.push({ code: 'segment_before_edit_start', severity: 'warning', ref: p.seg.id, from_ms: p.start, to_ms: Math.min(0, p.end) });
-    if (p.end > timeline.duration) findings.push({ code: 'segment_beyond_edit_end', severity: 'warning', ref: p.seg.id, from_ms: Math.max(timeline.duration, p.start), to_ms: p.end });
+    if (p.error) { findings.push(anchorFinding(p.error, p.seg.id, 'segment', true)); continue; }
+    if (p.start < 0) findings.push({ code: 'segment_before_edit_start', severity: 'blocking', ref: p.seg.id, from_ms: p.start, to_ms: Math.min(0, p.end) });
+    if (p.end > timeline.duration) findings.push({ code: 'segment_beyond_edit_end', severity: 'blocking', ref: p.seg.id, from_ms: Math.max(timeline.duration, p.start), to_ms: p.end });
   }
   const ok = placed.filter((p) => !p.error).sort((a, b) => a.start - b.start);
   for (let i = 1; i < ok.length; i += 1) {
     if (ok[i].start < ok[i - 1].end) findings.push({ code: 'prime_segments_overlap', severity: 'warning', ref: ok[i].seg.id, from_ms: ok[i].start, to_ms: Math.min(ok[i].end, ok[i - 1].end) });
   }
   for (const item of edit.items || []) {
+    if (item.kind === DIALOGUE) continue;
     const r = resolveAnchor(edit, timeline, item);
-    if (r.error) findings.push({ code: 'anchor_unresolved', severity: 'warning', ref: item.id, reason: r.error });
+    if (r.error) findings.push(anchorFinding(r.error, item.id, 'item', false));
   }
+  for (const a of edit.audioItems || []) {
+    const r = resolveAnchor(edit, timeline, a);
+    if (r.error) findings.push(anchorFinding(r.error, a.id, 'audio_item', false));
+  }
+  for (const rule of edit.visibility || []) {
+    if (rule.scope !== 'range') continue;
+    const s = resolveAnchor(edit, timeline, rule);
+    const e = resolveAnchor(edit, timeline, { anchor_kind: rule.end_anchor_kind, anchor_beat: rule.end_anchor_beat, anchor_ref: rule.end_anchor_ref, offset_ms: rule.end_offset_ms });
+    const error = s.error || e.error;
+    if (error) findings.push(anchorFinding(error, rule.id, 'visibility', false));
+  }
+
+  // Dialogue: only the named, current approval plays; nothing stands in for it.
+  const takes = Object.entries(edit.voiceTakes || {});
+  const lineKey = (beat, index) => `${beat}:${index}`;
+  const currentAt = new Map(takes.filter(([, k]) => k.playable).map(([id, k]) => [lineKey(k.beat_number, k.line_index), id]));
+  const dialogue = placedDialogue(edit, timeline);
+  const placedLines = new Set();
+  for (const d of dialogue) {
+    const { item } = d;
+    placedLines.add(lineKey(item.line_beat, item.line_index));
+    if (d.error) { findings.push(anchorFinding(d.error, item.id, 'dialogue', true)); continue; }
+    if (d.problem) {
+      const current = currentAt.get(lineKey(item.line_beat, item.line_index));
+      findings.push({ code: 'dialogue_take_not_current', severity: 'blocking', ref: item.id, beat: item.line_beat, line_index: item.line_index,
+        approval_id: item.voice_approval_id, state: d.problem.state, reason: d.problem.reason,
+        current_approval_id: current && current !== item.voice_approval_id ? current : null });
+      continue;
+    }
+    if (d.bad_range) { findings.push({ code: 'dialogue_take_bad_range', severity: 'blocking', ref: item.id, beat: item.line_beat, line_index: item.line_index }); continue; }
+    if (d.start < 0 || d.end > timeline.duration) {
+      findings.push({ code: 'dialogue_beyond_edit', severity: 'blocking', ref: item.id, beat: item.line_beat, line_index: item.line_index, from_ms: d.start, to_ms: d.end, edit_ms: timeline.duration });
+    }
+    const beat = timeline.beats.find((b) => b.beat === item.line_beat);
+    if (beat && (d.start < beat.start || d.end > beat.end)) {
+      findings.push({ code: 'dialogue_outside_beat', severity: 'warning', ref: item.id, beat: item.line_beat, line_index: item.line_index, from_ms: d.start, to_ms: d.end, beat_from_ms: beat.start, beat_to_ms: beat.end });
+    }
+  }
+  // Overlap is reported, never refused: two voices at once can be meant.
+  const heard = dialogue.filter(playable).sort((a, b) => (a.start - b.start) || String(a.item.id).localeCompare(String(b.item.id)));
+  for (let i = 0; i < heard.length; i += 1) {
+    for (let j = i + 1; j < heard.length && heard[j].start < heard[i].end; j += 1) {
+      findings.push({ code: 'dialogue_overlap', severity: 'warning', ref: heard[j].item.id, with: heard[i].item.id, from_ms: heard[j].start, to_ms: Math.min(heard[i].end, heard[j].end) });
+    }
+  }
+  for (const [id, k] of takes) {
+    if (!k.playable || placedLines.has(lineKey(k.beat_number, k.line_index))) continue;
+    findings.push({ code: 'dialogue_unplaced', severity: 'blocking', beat: k.beat_number, line_index: k.line_index, approval_id: id });
+  }
+
   findings.push(...coverageFindings(edit, timeline, placed));
   return findings;
 }
 
+/**
+ * Where everything sits on the clock: beats, segments, dialogue, music and
+ * SFX, items and visibility ranges, keyed for timingChanges.
+ */
+function timingOf(edit) {
+  const timeline = beatTimeline(edit);
+  const at = {};
+  for (const b of timeline.beats) at[`beat:${b.beat}`] = [b.start, b.end];
+  for (const p of placedSegments(edit, timeline)) if (!p.error) at[`segment:${p.seg.id}`] = [p.start, p.end];
+  for (const d of placedDialogue(edit, timeline)) if (!d.error) at[`dialogue:${d.item.id}`] = [d.start, d.end];
+  for (const a of edit.audioItems || []) {
+    const r = resolveAnchor(edit, timeline, a);
+    if (!r.error) at[`${a.track}:${a.id}`] = [r.t, r.t + (a.source_out_ms - a.source_in_ms)];
+  }
+  for (const i of edit.items || []) {
+    if (i.kind === DIALOGUE) continue;
+    const r = resolveAnchor(edit, timeline, i);
+    if (!r.error) at[`item:${i.id}`] = [r.t, r.t];
+  }
+  for (const rule of edit.visibility || []) {
+    if (rule.scope !== 'range') continue;
+    const s = resolveAnchor(edit, timeline, rule);
+    const e = resolveAnchor(edit, timeline, { anchor_kind: rule.end_anchor_kind, anchor_beat: rule.end_anchor_beat, anchor_ref: rule.end_anchor_ref, offset_ms: rule.end_offset_ms });
+    if (!s.error && !e.error) at[`visibility:${rule.id}`] = [s.t, e.t];
+  }
+  return { duration_ms: timeline.duration, at };
+}
+
+/** What moved between two timings: [{ key, from: [start, end], to: [start, end], delta_ms }], in key order. */
+function timingChanges(before, after) {
+  const keys = [...new Set([...Object.keys(before.at), ...Object.keys(after.at)])].sort();
+  const out = [];
+  for (const key of keys) {
+    const a = before.at[key] || null;
+    const b = after.at[key] || null;
+    if (a && b && a[0] === b[0] && a[1] === b[1]) continue;
+    out.push({ key, from: a, to: b, delta_ms: a && b ? b[0] - a[0] : null });
+  }
+  return out;
+}
+
 module.exports = {
   FRAME_W, FRAME_H, DEFAULT_LAYOUT, GAP_TOLERANCE_MS, BEATS,
-  beatTimeline, resolveAnchor, placedSegments, visibleAt, layoutAt, mixPlan, sourceTimeAt, coverageFindings, editFindings,
+  beatTimeline, resolveAnchor, placedSegments, placedDialogue, visibleAt, layoutAt, mixPlan, sourceTimeAt, coverageFindings, editFindings,
+  timingOf, timingChanges,
 };

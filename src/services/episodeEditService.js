@@ -25,6 +25,17 @@
  *   both at one source time; replacing the take supersedes the segment (kept).
  * - Visibility rules hide or show the picture only; nothing here mutes on
  *   hiding (R5.1).
+ * - Beat timing (Evoni, 2026-10-28): a beat's stored length
+ *   (episode_beat_production.duration_ms) is changed only by setBeatDuration,
+ *   which can be asked first as a dry run of what would move, or by
+ *   lockBeatTiming, which stores all 14 in one transaction. No scene clip
+ *   write touches it.
+ * - Dialogue (Evoni, 2026-10-28): placed by hand only (placeDialogue), from a
+ *   beat's start or the edit's start, naming the exact line association and
+ *   approval; one live placement per line. Nothing here estimates a line's
+ *   time, and nothing swaps in another take when the approval changes: the
+ *   placement then stops playing and is a blocking finding. Voice Studio's
+ *   tables are only read.
  * - Versions are immutable snapshots; restore writes them back as a new live
  *   revision and never edits a version.
  *
@@ -39,7 +50,8 @@ const { scriptRevision } = require('../utils/scriptRevision');
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_CLIP_MS = 30 * 60 * 1000;
 const PROBE_TIMEOUT_MS = 20 * 1000;
-const ANCHOR_KINDS = ['beat_start', 'line_start', 'item_start'];
+const ANCHOR_KINDS = ['beat_start', 'edit_start', 'line_start', 'item_start'];
+const DIALOGUE_ANCHORS = ['beat_start', 'edit_start'];
 const ITEM_KINDS = ['object_keyframe', 'camera_keyframe', 'object_visibility', 'angle_change', 'transition', 'audio_offset', 'caption_override'];
 const SCENE_PERFORMERS = ['lala', 'guest'];
 const PRIME = 'justawoman';
@@ -121,6 +133,7 @@ function anchorOf(body, prefix = '') {
   const offset = Number(body[`${prefix}offset_ms`] ?? 0);
   if (!Number.isInteger(offset) || Math.abs(offset) > MAX_CLIP_MS * 4) fail(400, 'BAD_ANCHOR', 'The offset is a whole number of milliseconds');
   if (kind === 'beat_start') return { anchor_kind: kind, anchor_beat: beatOf(body[`${prefix}anchor_beat`]), anchor_ref: null, offset_ms: offset };
+  if (kind === 'edit_start') return { anchor_kind: kind, anchor_beat: null, anchor_ref: null, offset_ms: offset };
   const ref = body[`${prefix}anchor_ref`];
   if (!UUID_RE.test(String(ref || ''))) fail(400, 'BAD_ANCHOR', 'A line or item anchor names its line or item');
   return { anchor_kind: kind, anchor_beat: null, anchor_ref: String(ref), offset_ms: offset };
@@ -190,7 +203,7 @@ async function withEdit(sequelize, { episodeId, editRevision, userId }, fn) {
 const LIVE = {
   beat_production: {
     table: 'episode_beat_production', where: 'deleted_at IS NULL',
-    cols: ['id', 'beat_number', 'prime_mode', 'note', 'set_by', 'set_at'],
+    cols: ['id', 'beat_number', 'prime_mode', 'duration_ms', 'note', 'set_by', 'set_at'],
   },
   scene_clips: {
     table: 'episode_scene_clips', where: 'deleted_at IS NULL',
@@ -211,7 +224,8 @@ const LIVE = {
   },
   items: {
     table: 'timeline_items', where: 'deleted_at IS NULL',
-    cols: ['id', 'scene_clip_id', 'kind', 'target_id', 'view', 'anchor_kind', 'anchor_beat', 'anchor_ref', 'offset_ms', 'values', 'origin', 'approval', 'proposal_id', 'created_by'],
+    cols: ['id', 'scene_clip_id', 'kind', 'target_id', 'view', 'anchor_kind', 'anchor_beat', 'anchor_ref', 'offset_ms', 'values', 'origin', 'approval', 'proposal_id',
+      'voice_association_id', 'voice_approval_id', 'line_beat', 'line_index', 'created_by'],
   },
   audio_items: {
     table: 'timeline_audio_items', where: 'deleted_at IS NULL',
@@ -235,43 +249,176 @@ async function liveRows(sequelize, episodeId, t) {
   return out;
 }
 
-/** The pure edit (editTimeline's shape) from the live rows. */
-function editFrom(live) {
+/** The pure edit (editTimeline's shape) from the live rows and the voice takes (voiceTakesFor). */
+function editFrom(live, voiceTakes = {}) {
   const beatModes = {};
-  for (const b of live.beat_production) beatModes[b.beat_number] = b.prime_mode;
+  const beatDurations = {};
+  for (const b of live.beat_production) {
+    beatModes[b.beat_number] = b.prime_mode;
+    if (b.duration_ms != null) beatDurations[b.beat_number] = b.duration_ms;
+  }
   return {
     fps: 30,
     beatModes,
+    beatDurations,
     sceneClips: live.scene_clips,
     segments: live.segments,
     pip: live.pip[0] || null,
     visibility: live.visibility,
     items: live.items,
     audioItems: live.audio_items,
+    // Line marks are not mapped yet, and are never estimated: a line_start anchor stays unresolved.
     lineTimes: {},
-    dialogue: [],
+    voiceTakes,
   };
 }
 
-/** The live edit: { edit_revision, rows, edit }. */
+/**
+ * The voice takes the edit may name, read from Voice Studio (never written):
+ * every playable approval (its state from voiceStudioService.summary, the one
+ * rule for "current") and every approval a dialogue placement names, whatever
+ * its state, each with the approved revision's trim and the source's measured
+ * length. { [approval_id]: { playable, state, reason, association_id,
+ * beat_number, line_index, in_ms, out_ms, source_duration_ms, gain_db,
+ * fade_in_ms, fade_out_ms, normalise, source_asset_id, s3_key } }.
+ */
+async function voiceTakesFor(sequelize, episodeId, live, t = null) {
+  const { summary } = require('./voiceStudioService');
+  const { approvals } = await summary(sequelize, { episodeId });
+  const states = new Map(approvals.map((a) => [a.approval_id, a]));
+  const named = live.items.filter((i) => i.kind === 'dialogue_placement').map((i) => i.voice_approval_id);
+  const ids = [...new Set([...approvals.filter((a) => a.playable).map((a) => a.approval_id), ...named])];
+  if (!ids.length) return {};
+  const found = await rows(sequelize, `SELECT a.id, a.association_id, a.beat_number, a.line_index, a.superseded_at,
+      r.in_ms, r.out_ms, r.gain_db::float8 AS gain_db, r.fade_in_ms, r.fade_out_ms, r.normalise,
+      s.id AS source_asset_id, s.s3_key, s.duration_ms AS source_duration_ms
+    FROM line_voice_approvals a
+    JOIN line_voice_candidate_revisions r ON r.id = a.candidate_revision_id
+    JOIN line_voice_candidates c ON c.id = a.candidate_id
+    JOIN voice_source_assets s ON s.id = c.source_asset_id
+    WHERE a.id IN (:ids) AND a.episode_id = :episodeId ORDER BY a.beat_number, a.line_index, a.id`, { ids, episodeId }, t);
+  const out = {};
+  for (const r of found) {
+    const st = states.get(r.id);
+    out[r.id] = {
+      playable: Boolean(st && st.playable),
+      state: st ? st.state : (r.superseded_at ? 'superseded' : 'not_found'),
+      reason: st ? st.reason : null,
+      association_id: r.association_id, beat_number: r.beat_number, line_index: r.line_index,
+      in_ms: r.in_ms, out_ms: r.out_ms, source_duration_ms: r.source_duration_ms,
+      gain_db: r.gain_db, fade_in_ms: r.fade_in_ms, fade_out_ms: r.fade_out_ms, normalise: r.normalise,
+      source_asset_id: r.source_asset_id, s3_key: r.s3_key,
+    };
+  }
+  return out;
+}
+
+/** The live edit: { edit_revision, rows, edit } (with the voice takes it may play). */
 async function loadEdit(sequelize, { episodeId }, t = null) {
   await episodeRow(sequelize, episodeId, t);
   const live = await liveRows(sequelize, episodeId, t);
-  return { edit_revision: await currentRevision(sequelize, episodeId, t), rows: live, edit: editFrom(live) };
+  const takes = await voiceTakesFor(sequelize, episodeId, live, t);
+  return { edit_revision: await currentRevision(sequelize, episodeId, t), rows: live, edit: editFrom(live, takes) };
 }
 
 // ── Beat production ──────────────────────────────────────────────────────────
 
-/** Prime required (the default) or gameplay_only for one beat. The previous setting is kept, soft-deleted. */
+/**
+ * A beat's new production setting: the current row is soft-deleted (history)
+ * and a new one written, carrying forward what `change` does not set (the
+ * mode, the stored length, the note). No row means required, draft timing.
+ */
+async function writeBeatProduction(sequelize, episodeId, beat, change, userId, t) {
+  const cur = await one(sequelize, `SELECT prime_mode, duration_ms, note FROM episode_beat_production
+    WHERE episode_id = :episodeId AND beat_number = :beat AND deleted_at IS NULL FOR UPDATE`, { episodeId, beat }, t);
+  const next = {
+    prime_mode: change.prime_mode ?? (cur ? cur.prime_mode : 'required'),
+    duration_ms: 'duration_ms' in change ? change.duration_ms : (cur ? cur.duration_ms : null),
+    note: 'note' in change ? change.note : (cur ? cur.note : null),
+  };
+  await q(sequelize, `UPDATE episode_beat_production SET deleted_at = NOW(), updated_at = NOW()
+    WHERE episode_id = :episodeId AND beat_number = :beat AND deleted_at IS NULL`, { episodeId, beat }, t);
+  const [row] = await rows(sequelize, `INSERT INTO episode_beat_production (episode_id, beat_number, prime_mode, duration_ms, note, set_by)
+    VALUES (:episodeId, :beat, :prime_mode, :duration_ms, :note, :userId) RETURNING id`, { episodeId, beat, ...next, userId }, t);
+  return row.id;
+}
+
+/** Prime required (the default) or gameplay_only for one beat. The previous setting is kept, soft-deleted; the beat's length is kept. */
 async function setBeatMode(sequelize, { episodeId, editRevision, userId, beatNumber, primeMode, note = null }) {
   const beat = beatOf(beatNumber);
   if (!['required', 'gameplay_only'].includes(primeMode)) fail(400, 'BAD_MODE', 'A beat is "required" or "gameplay_only"');
+  return withEdit(sequelize, { episodeId, editRevision, userId }, async (t) => ({
+    beat_production_id: await writeBeatProduction(sequelize, episodeId, beat, { prime_mode: primeMode, note: note ? String(note).slice(0, 2000) : null }, userId, t),
+  }));
+}
+
+const MAX_BEAT_MS = MAX_CLIP_MS;
+// Findings as comparable text, to say which a timing change adds or clears.
+const findingKeys = (list) => new Map(list.map((f) => [stableJson(f), f]));
+function timingPlan(before, after) {
+  const was = findingKeys(tl.editFindings(before));
+  const now = findingKeys(tl.editFindings(after));
+  return {
+    changes: tl.timingChanges(tl.timingOf(before), tl.timingOf(after)),
+    duration_ms: { from: tl.beatTimeline(before).duration, to: tl.beatTimeline(after).duration },
+    findings_added: [...now.keys()].filter((k) => !was.has(k)).map((k) => now.get(k)),
+    findings_cleared: [...was.keys()].filter((k) => !now.has(k)).map((k) => was.get(k)),
+  };
+}
+
+/**
+ * Sets one beat's stored length (ms), or clears it (null: draft timing again).
+ * The only write that changes a locked beat's length, and the clock after it.
+ * With dryRun, nothing is written and no edit_revision is needed: the answer
+ * is what would move (every beat, segment, dialogue, music, SFX, item and
+ * visibility range whose time changes), the findings it adds and clears, and
+ * the edit_revision it was worked out for; send that revision with the write
+ * to apply exactly that plan (409 if the edit changed in between).
+ */
+async function setBeatDuration(sequelize, { episodeId, editRevision, userId, beatNumber, durationMs, dryRun = false }) {
+  const beat = beatOf(beatNumber);
+  const ms = durationMs === null ? null : int(durationMs, 'duration_ms', { min: 1, max: MAX_BEAT_MS });
+  const plan = (edit) => {
+    const lengthOf = (e) => { const b = tl.beatTimeline(e).beats[beat - 1]; return { ms: b.end - b.start, locked: b.locked }; };
+    const after = { ...edit, beatDurations: { ...edit.beatDurations } };
+    if (ms === null) delete after.beatDurations[beat]; else after.beatDurations[beat] = ms;
+    return { beat, from: lengthOf(edit), to: lengthOf(after), ...timingPlan(edit, after) };
+  };
+  if (dryRun === true || dryRun === 'true') {
+    const { edit, edit_revision: rev } = await loadEdit(sequelize, { episodeId });
+    return { dry_run: true, for_edit_revision: rev, ...plan(edit) };
+  }
   return withEdit(sequelize, { episodeId, editRevision, userId }, async (t) => {
-    await q(sequelize, `UPDATE episode_beat_production SET deleted_at = NOW(), updated_at = NOW()
-      WHERE episode_id = :episodeId AND beat_number = :beat AND deleted_at IS NULL`, { episodeId, beat }, t);
-    const [row] = await rows(sequelize, `INSERT INTO episode_beat_production (episode_id, beat_number, prime_mode, note, set_by)
-      VALUES (:episodeId, :beat, :primeMode, :note, :userId) RETURNING id`, { episodeId, beat, primeMode, note: note ? String(note).slice(0, 2000) : null, userId }, t);
-    return { beat_production_id: row.id };
+    const live = await liveRows(sequelize, episodeId, t);
+    const result = plan(editFrom(live, await voiceTakesFor(sequelize, episodeId, live, t)));
+    await writeBeatProduction(sequelize, episodeId, beat, { duration_ms: ms }, userId, t);
+    return { dry_run: false, ...result };
+  });
+}
+
+/**
+ * Locks the clock: stores the length of all 14 beats in one transaction, all
+ * or none. A beat already locked keeps its length (changing it is
+ * setBeatDuration's, never this). An unlocked beat gets `durations[beat]` when
+ * given (C2's first auto-assembly, from Prime's beat marks), else its draft
+ * length now. A beat that would have no length refuses the whole lock.
+ */
+async function lockBeatTiming(sequelize, { episodeId, editRevision, userId, durations = null }) {
+  const given = {};
+  if (durations != null) {
+    if (typeof durations !== 'object' || Array.isArray(durations)) fail(400, 'BAD_VALUE', 'durations is { beat: ms }');
+    for (const [k, v] of Object.entries(durations)) given[beatOf(k)] = int(v, `durations.${k}`, { min: 1, max: MAX_BEAT_MS });
+  }
+  return withEdit(sequelize, { episodeId, editRevision, userId }, async (t) => {
+    const { beats } = tl.beatTimeline(editFrom(await liveRows(sequelize, episodeId, t)));
+    const already = beats.filter((b) => b.locked && given[b.beat] != null && given[b.beat] !== b.end - b.start).map((b) => b.beat);
+    if (already.length) fail(409, 'BEAT_ALREADY_LOCKED', 'A locked beat changes only by setting its length on its own', { beats: already });
+    const todo = beats.filter((b) => !b.locked).map((b) => ({ beat: b.beat, ms: given[b.beat] ?? b.end - b.start }));
+    if (!todo.length) fail(409, 'TIMING_ALREADY_LOCKED', 'Every beat already has its length. Change one with its own length setting.');
+    const empty = todo.filter((b) => !(b.ms > 0)).map((b) => b.beat);
+    if (empty.length) fail(409, 'BEAT_HAS_NO_LENGTH', 'Some beats have no scene clip and no length given, so nothing was locked', { beats: empty });
+    for (const b of todo) await writeBeatProduction(sequelize, episodeId, b.beat, { duration_ms: b.ms }, userId, t);
+    return { locked: beats.map((b) => ({ beat: b.beat, duration_ms: b.locked ? b.end - b.start : todo.find((x) => x.beat === b.beat).ms, was_locked: b.locked })) };
   });
 }
 
@@ -592,6 +739,75 @@ async function replaceTake(sequelize, { episodeId, editRevision, userId, segment
   });
 }
 
+// ── Dialogue placements (by hand, never estimated) ───────────────────────────
+
+const DIALOGUE_COLS = `id, episode_id, kind, voice_association_id, voice_approval_id, line_beat, line_index, deleted_at`;
+const IN_FORCE = 'superseded_at IS NULL AND invalidated_at IS NULL AND revoked_at IS NULL AND deleted_at IS NULL';
+
+function dialogueAnchorOf(body) {
+  const a = anchorOf(body);
+  if (!DIALOGUE_ANCHORS.includes(a.anchor_kind)) {
+    fail(400, 'BAD_ANCHOR', "Dialogue is placed from a beat's start or the edit's start (a line's own time is never estimated)");
+  }
+  return a;
+}
+
+/**
+ * Places an approved take by hand: { approval_id, association_id, anchor_kind
+ * (beat_start | edit_start), anchor_beat, offset_ms }. The approval must be
+ * the current, playable one (Voice Studio's rule, checked before the edit is
+ * locked) for exactly that association, and still in force at the write.
+ * Its length is the approved revision's trim. One live placement per line:
+ * another is refused, never replaced.
+ */
+async function placeDialogue(sequelize, { episodeId, editRevision, userId, body }) {
+  const a = dialogueAnchorOf(body);
+  checkId(body.approval_id, 'Approval');
+  checkId(body.association_id, 'Line association');
+  await episodeRow(sequelize, episodeId);
+  const takes = await voiceTakesFor(sequelize, episodeId, { items: [] });
+  const take = takes[body.approval_id];
+  if (!take) fail(409, 'TAKE_NOT_PLAYABLE', 'Only a current approved take can be placed', { state: 'not_current' });
+  if (take.association_id !== body.association_id) fail(409, 'ASSOCIATION_MISMATCH', 'This approval is for another line association. Reload.');
+  if (!(take.out_ms > take.in_ms) || (take.source_duration_ms != null && take.out_ms > take.source_duration_ms)) {
+    fail(409, 'TAKE_BAD_RANGE', "The approved take's trim is outside its measured length");
+  }
+  try {
+    return await withEdit(sequelize, { episodeId, editRevision, userId }, async (t) => {
+      const ap = await one(sequelize, `SELECT id, association_id, beat_number, line_index FROM line_voice_approvals
+        WHERE id = :id AND episode_id = :episodeId AND ${IN_FORCE} FOR SHARE`, { id: body.approval_id, episodeId }, t);
+      if (!ap || ap.association_id !== body.association_id) fail(409, 'TAKE_NOT_PLAYABLE', 'The approval changed while it was placed. Reload.');
+      const taken = await one(sequelize, `SELECT id FROM timeline_items WHERE episode_id = :episodeId AND kind = 'dialogue_placement'
+        AND line_beat = :beat AND line_index = :index AND deleted_at IS NULL`, { episodeId, beat: ap.beat_number, index: ap.line_index }, t);
+      if (taken) fail(409, 'LINE_ALREADY_PLACED', 'This line is already placed. Move that placement, or remove it first.', { item_id: taken.id });
+      const [row] = await rows(sequelize, `INSERT INTO timeline_items
+        (episode_id, kind, anchor_kind, anchor_beat, anchor_ref, offset_ms, "values", origin, approval, voice_association_id, voice_approval_id, line_beat, line_index, created_by)
+        VALUES (:episodeId, 'dialogue_placement', :anchor_kind, :anchor_beat, :anchor_ref, :offset_ms, CAST(:values AS jsonb), 'user', 'approved',
+          :assoc, :approval, :beat, :index, :userId) RETURNING id`, {
+        episodeId, ...a, values: JSON.stringify({ timing: 'manual' }), assoc: ap.association_id, approval: ap.id, beat: ap.beat_number, index: ap.line_index, userId,
+      }, t);
+      return { item_id: row.id, length_ms: take.out_ms - take.in_ms };
+    });
+  } catch (err) {
+    // Two placements of one line racing: the one-per-line index refuses the second.
+    if ((err?.original || err?.parent)?.constraint === 'timeline_items_dialogue_line') fail(409, 'LINE_ALREADY_PLACED', 'This line is already placed.');
+    throw err;
+  }
+}
+
+/** Moves a dialogue placement (beat-relative or absolute). Its take is never changed here. */
+async function moveDialogue(sequelize, { episodeId, editRevision, userId, itemId, body }) {
+  const a = dialogueAnchorOf(body);
+  checkId(itemId, 'Dialogue placement');
+  return withEdit(sequelize, { episodeId, editRevision, userId }, async (t) => {
+    const d = await one(sequelize, `SELECT ${DIALOGUE_COLS} FROM timeline_items WHERE id = :itemId FOR UPDATE`, { itemId }, t);
+    if (!d || d.deleted_at || d.episode_id !== episodeId || d.kind !== 'dialogue_placement') fail(404, 'NOT_FOUND', 'Dialogue placement not found');
+    await q(sequelize, `UPDATE timeline_items SET anchor_kind = :anchor_kind, anchor_beat = :anchor_beat, anchor_ref = :anchor_ref, offset_ms = :offset_ms, updated_at = NOW()
+      WHERE id = :itemId`, { ...a, itemId }, t);
+    return { item_id: itemId };
+  });
+}
+
 // ── PIP settings and visibility ──────────────────────────────────────────────
 
 /** The episode's PIP defaults: layout, visible, cutout. */
@@ -689,14 +905,16 @@ async function addAudioItem(sequelize, { episodeId, editRevision, userId, body }
 // Removing is a soft delete, in every table.
 const REMOVABLE = {
   scene_clip: 'episode_scene_clips', segment: 'episode_prime_segments', visibility: 'episode_pip_visibility', item: 'timeline_items', audio_item: 'timeline_audio_items',
+  dialogue: 'timeline_items',
 };
 async function removeRow(sequelize, { episodeId, editRevision, userId, what, id }) {
   const table = REMOVABLE[what];
   if (!table) fail(400, 'BAD_KIND', 'Nothing of that kind');
   checkId(id, 'Row');
   return withEdit(sequelize, { episodeId, editRevision, userId }, async (t) => {
-    const r = await one(sequelize, `SELECT id, episode_id, deleted_at FROM ${table} WHERE id = :id FOR UPDATE`, { id }, t);
+    const r = await one(sequelize, `SELECT * FROM ${table} WHERE id = :id FOR UPDATE`, { id }, t);
     if (!r || r.deleted_at || r.episode_id !== episodeId) fail(404, 'NOT_FOUND', 'Not found');
+    if (what === 'dialogue' && r.kind !== 'dialogue_placement') fail(404, 'NOT_FOUND', 'Dialogue placement not found');
     await q(sequelize, `UPDATE ${table} SET deleted_at = NOW(), updated_at = NOW() WHERE id = :id`, { id }, t);
     return { removed: id };
   });
@@ -808,7 +1026,8 @@ async function reviewReadiness(sequelize, { episodeId }) {
   return sequelize.transaction(async (t) => {
     const ep = await episodeRow(sequelize, episodeId, t);
     const live = await liveRows(sequelize, episodeId, t);
-    const edit = editFrom(live);
+    const takes = await voiceTakesFor(sequelize, episodeId, live, t);
+    const edit = editFrom(live, takes);
     const findings = tl.editFindings(edit);
 
     for (const c of live.scene_clips) {
@@ -834,9 +1053,7 @@ async function reviewReadiness(sequelize, { episodeId }) {
     const lc = require('../utils/voiceLineContext');
     const script = typeof ep.script_content === 'string' ? ep.script_content : '';
     const contexts = lc.lineContexts(script);
-    const { playableApprovals } = require('./voiceStudioService');
-    const playable = await playableApprovals(sequelize, { episodeId });
-    const approved = new Set(playable.takes.map((p) => `${p.beat_number}:${p.line_index}`));
+    const approved = new Set(Object.values(takes).filter((k) => k.playable).map((k) => `${k.beat_number}:${k.line_index}`));
     for (const ctx of contexts.all) {
       if (!ctx.speaker_key || ctx.prime) continue;
       if (ctx.beat_number < 1 || ctx.beat_number > 14) continue;
@@ -871,7 +1088,8 @@ async function mixPlanOf(sequelize, { episodeId }) {
 
 module.exports = {
   EditError, setMedia, readVideoProbe, stableJson, ITEM_KINDS, MAX_CLIP_MS, PROBE_TIMEOUT_MS,
-  loadEdit, setBeatMode, placeSceneClip, updateSceneClip,
+  loadEdit, setBeatMode, setBeatDuration, lockBeatTiming, placeSceneClip, updateSceneClip,
+  placeDialogue, moveDialogue,
   placeSegment, moveSegment, trimSegmentVideo, trimSegmentAudio, setSegmentAudio, setSegmentLayout, splitSegment, replaceTake,
   setPipSettings, addVisibilityRule, addItem, addAudioItem, removeRow,
   createVersion, listVersions, getVersion, restoreVersion,
