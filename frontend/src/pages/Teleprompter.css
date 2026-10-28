@@ -107,6 +107,7 @@ body.stp-open { overflow: hidden; }
   color: var(--studio-prompter-mark);
 }
 .stp-beat:first-child .stp-beat-head { margin-top: 0; }
+.stp-beat-pace { margin: -0.4em 0 0.8em; font-family: 'DM Mono', var(--font-mono); font-size: max(12px, 0.3em); letter-spacing: 0.04em; color: var(--studio-prompter-dim); }
 .stp-line { margin: 0 0 0.8em; }
 .stp-speaker { display: block; font-family: 'DM Mono', var(--font-mono); font-size: max(12px, 0.32em); font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--studio-prompter-cue); }
 .stp-paren { display: block; font-size: 0.5em; font-style: italic; color: var(--studio-prompter-dim); }

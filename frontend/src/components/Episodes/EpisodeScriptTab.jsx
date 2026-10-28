@@ -22,6 +22,8 @@ import { speakerLine, unquote, isRuleLine, isHerSpeaker } from '../../lib/script
 import { keepLockedBeats, editedLockedBeats } from '../../lib/scriptLocks';
 import { beatImage, beatImageLabel, SHOT_LABELS, fmtType } from '../BeatPlan/BeatPlanParts';
 import { beatSeconds, scriptSeconds, formatRuntime } from '../../lib/scriptRuntime';
+import useReadingPace from '../../hooks/useReadingPace';
+import ReadingPaceNote from './ReadingPaceNote';
 import { scriptHealth } from '../../lib/scriptHealth';
 import { scriptMoneyFrom, shoppingListApproved, eventCast, featuredGuestIds, goalProfileIds } from '../../lib/scriptRuleChecks';
 import { scriptWithPhonePaths } from '../../lib/phonePaths';
@@ -454,7 +456,7 @@ function RewritePanel({ id, label, aiHold = null, onGo, onCancel }) {
   );
 }
 
-function ScriptLine({ voice = null, look = [], line, number = null, beatId, lineId = null, onOpenEdit = null, onFocusLater = null, beatNumber = null, lineIndex, onEdit, onDelete, onRewrite, rewriting, aiHold = null, locked, prevLine = null, nextLine = null, onMoveLine, drag, onScreen, withOnScreen, phoneDown = false }) {
+function ScriptLine({ voice = null, look = [], line, number = null, beatId, lineId = null, onOpenEdit = null, onFocusLater = null, beatNumber = null, lineIndex, onEdit, onDelete, onRewrite, rewriting, aiHold = null, locked, prevLine = null, nextLine = null, onMoveLine, drag, onScreen, withOnScreen, phoneDown = false, pace = null }) {
   const [editing, setEditing] = useState(false);
   const [dropAt, setDropAt] = useState(null);
   const [editText, setEditText] = useState('');
@@ -533,7 +535,7 @@ function ScriptLine({ voice = null, look = [], line, number = null, beatId, line
   // icon. The kind label sits inside the row; the number, length and icon
   // beside it, hidden from screen readers.
   const kind = lineKind(parsed, onScreen);
-  const duration = lineDuration(lineStr);
+  const duration = lineDuration(lineStr, pace);
   const TypeIcon = parsed.type === 'dialogue' ? AudioLines : parsed.type === 'moment' ? Smartphone : parsed.type === 'cue' ? null : ImageIcon;
   const canVoice = !!voice && voice.ready === true;
   return (
@@ -1076,7 +1078,7 @@ function useLineIds(beatId, lines, opRef) {
   return held.current.ids;
 }
 
-function BeatSection({ voice = null, beat, index, beatCount, scenePlan, expanded, onToggle, onApprove, proposal = null, onAcceptProposal, onDiscardProposal, onRetryProposal = null, onEdit, onDeleteLine, onRewrite, rewritingLine, locking, onOpenMap, onMoveBeat, onMoveLine, drag, onRegenerate, regenerating, writing = false, onScreen, onAddMoment, phoneUpAtStart = false, request = null, onRequestDone, people = [], lalaSlots = [], dressCode = '', lineOpRef = null, lineIdsRef = null, onOpenEdit = null, onFocusLater = null, status = 'draft', healthRows = [], hasPhone = false, worn = [], look = [], storyTime = null, onStep = null, prevBeatId = null, nextBeatId = null, onTyped = null, lockEdited = false, drafts = null, aiHold = null, saving = false, duplicate = false, extra = null }) {
+function BeatSection({ voice = null, beat, index, beatCount, scenePlan, expanded, onToggle, onApprove, proposal = null, onAcceptProposal, onDiscardProposal, onRetryProposal = null, onEdit, onDeleteLine, onRewrite, rewritingLine, locking, onOpenMap, onMoveBeat, onMoveLine, drag, onRegenerate, regenerating, writing = false, onScreen, onAddMoment, phoneUpAtStart = false, request = null, onRequestDone, people = [], lalaSlots = [], dressCode = '', lineOpRef = null, lineIdsRef = null, onOpenEdit = null, onFocusLater = null, status = 'draft', healthRows = [], hasPhone = false, worn = [], look = [], storyTime = null, onStep = null, prevBeatId = null, nextBeatId = null, onTyped = null, lockEdited = false, drafts = null, aiHold = null, saving = false, duplicate = false, extra = null, pace = null }) {
   const scene = scenePlan?.find(p => p.beat_number === beat.number);
   const cardRef = useRef(null);
   const [picking, setPicking] = useState(false);
@@ -1273,7 +1275,7 @@ function BeatSection({ voice = null, beat, index, beatCount, scenePlan, expanded
             </div>
           </div>
           {picture && <span className="esp-beat-thumb" aria-hidden="true"><img src={picture} alt="" loading="lazy" /></span>}
-          <span className="esp-beat-count">{visibleLines} line{visibleLines === 1 ? '' : 's'}<span className="esp-beat-runtime" data-testid={`script-beat-runtime-${beat.number}`} title="Rough length: words at 150 a minute, a few seconds per action or moment">{formatRuntime(beatSeconds(beat.lines))}</span></span>
+          <span className="esp-beat-count">{visibleLines} line{visibleLines === 1 ? '' : 's'}<span className="esp-beat-runtime" data-testid={`script-beat-runtime-${beat.number}`} title={pace ? `Rough length: your lines at your pace (${pace.wpm} words a minute), others at 150, a few seconds per action or moment` : 'Rough length: words at 150 a minute, a few seconds per action or moment'}>{formatRuntime(beatSeconds(beat.lines, pace))}</span></span>
           {/* Beside the beat list the open beat's head doesn't fold it, so the
               chevron hides there (EpisodeScriptPage.css; Script page audit 4,
               2026-10-19: folding it left every beat stacked beside the list). */}
@@ -1324,7 +1326,7 @@ function BeatSection({ voice = null, beat, index, beatCount, scenePlan, expanded
               const at = shownLines.indexOf(i);
               return (
                 <Fragment key={lineKeys[i]}>
-                  <ScriptLine voice={voiceFor(i)} look={look} line={line} number={at >= 0 ? at + 1 : null} beatId={beat.id} lineId={lineKeys[i]} onOpenEdit={onOpenEdit} onFocusLater={onFocusLater} lineIndex={i} prevLine={at > 0 ? shownLines[at - 1] : null} nextLine={at >= 0 && at < shownLines.length - 1 ? shownLines[at + 1] : null} onEdit={onEdit} onDelete={onDeleteLine} onRewrite={onRewrite} rewriting={rewritingLine === `${beat.id}-${lineKeys[i]}`} aiHold={aiHold} locked={beat.approved} onMoveLine={onMoveLine} drag={drag} onScreen={onScreen} withOnScreen={withByLine[i]} phoneDown={phoneDownAt.includes(i)} beatNumber={beat.number} />
+                  <ScriptLine voice={voiceFor(i)} look={look} line={line} number={at >= 0 ? at + 1 : null} beatId={beat.id} lineId={lineKeys[i]} onOpenEdit={onOpenEdit} onFocusLater={onFocusLater} lineIndex={i} prevLine={at > 0 ? shownLines[at - 1] : null} nextLine={at >= 0 && at < shownLines.length - 1 ? shownLines[at + 1] : null} onEdit={onEdit} onDelete={onDeleteLine} onRewrite={onRewrite} rewriting={rewritingLine === `${beat.id}-${lineKeys[i]}`} aiHold={aiHold} locked={beat.approved} onMoveLine={onMoveLine} drag={drag} onScreen={onScreen} withOnScreen={withByLine[i]} phoneDown={phoneDownAt.includes(i)} beatNumber={beat.number} pace={pace} />
                   {slot && <LalaLineSlot piece={slot.piece} dressCode={dressCode} onInsert={(text) => onAddMoment(beat.id, text, i)} />}
                 </Fragment>
               );
@@ -1553,6 +1555,10 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
   // Unsaved edits kept in this browser, offered back when the tab opens.
   const draft = useScriptDraft({ episodeId, scriptText, savedScript });
   const [beats, setBeats] = useState([]);
+  // Her learned reading pace (hooks/useReadingPace; Evoni, 2026-10-28):
+  // the timings use it when she has chosen to, else the standard estimate.
+  const reading = useReadingPace({ showId, episodeId, beats });
+  const pace = reading.active;
   // Which script is committed, parsed and drawn (focusLineLater; Script page audit 4, 2026-10-19).
   const committedTextRef = useRef(null);
   const parsedTextRef = useRef(null);
@@ -2920,13 +2926,13 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
     rules: { money: scriptMoney, shoppingApproved: shoppingListApproved(source?.event || null), cast: source?.event ? eventCast(source.event, [source.sourceProfile, ...guestProfiles]) : [] },
     closetNumber: closetBeat(scriptText), dirty: scriptText !== savedScript, unsaved,
     beat14, designedIntent: brief?.designed_intent || null,
-    voice: { rules: voiceRules, speakers: voiceSpeakers },
+    voice: { rules: voiceRules, speakers: voiceSpeakers }, pace,
   }) : [];
   // The studio layout (Evoni's mockup, 2026-10-19): each beat's status from
   // its lock and its "Ready to film?" rows, its rough length, and the open
   // beat's neighbours and the look's pieces it puts on.
   const statuses = Object.fromEntries(beats.map((b) => [b.id, beatStatus(b, healthRows)]));
-  const runtimes = Object.fromEntries(beats.map((b) => [b.id, formatRuntime(beatSeconds(b.lines))]));
+  const runtimes = Object.fromEntries(beats.map((b) => [b.id, formatRuntime(beatSeconds(b.lines, pace))]));
   const wornInOpen = openBeat ? piecesWornIn(beats, openIndex, outfit) : [];
   // Table read, Teleprompter, Export and the raw editor work on the whole
   // script, so they sit on the script's bar (Evoni, 2026-10-22 layout list;
@@ -3028,7 +3034,7 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
         <div className="esp-head-text">
           <h2 className="esp-title">Script</h2>
           <p className="esp-sub">
-            {hasScript ? <>{beats.length} beats · <span data-testid="script-runtime">{formatRuntime(scriptSeconds(beats))}</span> · <span data-testid="script-approved">{approvedCount} of {BEAT_NAMES.length} approved</span>{allApproved && <span className="esp-complete"> · Complete</span>}
+            {hasScript ? <>{beats.length} beats · <span data-testid="script-runtime">{formatRuntime(scriptSeconds(beats, pace))}</span> · <span data-testid="script-approved">{approvedCount} of {BEAT_NAMES.length} approved</span>{allApproved && <span className="esp-complete"> · Complete</span>}
               {!allApproved && approvedCount > 0 && toApprove.length > 0 && <span className="esp-approve-left" data-testid="script-approve-left"> · to approve: {toApprove.join(', ')}</span>}
               {!allApproved && approvedCount > 0 && notInScript.length > 0 && <span className="esp-approve-left" data-testid="script-beats-missing"> · not in the script: {notInScript.join(', ')}</span>}{scriptText !== savedScript ? <span className="esp-unsaved" data-testid="script-dirty"> · Unsaved changes</span> : <span className="esp-saved-state" data-testid="script-saved"> · Saved</span>}</> : 'Not generated yet'}
           </p>
@@ -3111,6 +3117,7 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
           <button type="button" className="esp-btn is-small" data-testid="script-draft-discard" onClick={draft.discard}>Discard</button>
         </div>
       )}
+      {showBeatList && <ReadingPaceNote reading={reading} />}
       {showBeatList && <ScriptHealthPanel rows={healthRows} beatNumbers={Object.fromEntries(beats.map((b) => [b.id, b.number]))} onOpenBeat={chooseBeat} onFix={handleFixPhonePaths} busy={busy || locking} />}
       {generating && !waitingForScript && hasScript && <div className="esp-waiting" role="status" data-testid="script-generating">Writing the new script. Editing, approving and saving are paused until it arrives.</div>}
       {waitingForScript && <div className="esp-waiting" role="status" data-testid="script-waiting">Still writing. The new script will show here as soon as it is saved; no need to refresh.</div>}
@@ -3123,7 +3130,7 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
     <div className="esp-rail" data-testid="script-rail">
     {showBeatList && (
       <ScriptBeatList beats={beats} openId={openId} onChoose={chooseBeat} statuses={statuses} scenePlan={scenePlan} phoneBeats={phoneBeats}
-        runtimes={runtimes} totalRuntime={formatRuntime(scriptSeconds(beats))} drag={drag} onMoveBeat={handleMoveBeat} onApprove={handleApprove} locking={locking || busy} saving={saving} />
+        runtimes={runtimes} totalRuntime={formatRuntime(scriptSeconds(beats, pace))} drag={drag} onMoveBeat={handleMoveBeat} onApprove={handleApprove} locking={locking || busy} saving={saving} />
     )}
       {/* What generation reads, and where the voices come from (Evoni's Episode mock). */}
       {/* On a phone, open, it is a modal sheet (Script page audit 3, 2026-10-19). */}
@@ -3418,7 +3425,7 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
           {beats.map((beat, index) => {
             const open = openId === beat.id;
             const phoneUp = phoneUpAtStart[index] || false;
-            return <BeatSection key={beat.id} voice={voice} request={open && barRequest?.beatId === beat.id ? barRequest : null} beat={beat} index={index} beatCount={beats.length} scenePlan={scenePlan} expanded={open} onToggle={() => { const to = open && !isPhoneWidth() && !showBeatList ? null : beat.id; if (to !== openId && refuseOpenEdit()) return; setExpandedBeat(to); }} onApprove={handleApprove} proposal={proposal?.beatId === beat.id ? proposal : null} onAcceptProposal={acceptProposal} onDiscardProposal={() => setProposal(null)} onRetryProposal={retryProposal} onEdit={handleEditLine} onDeleteLine={handleDeleteLine} onRewrite={handleRewriteLine} rewritingLine={rewritingLine} locking={locking || busy} onOpenMap={() => setShowMap(true)} onMoveBeat={handleMoveBeat} onMoveLine={handleMoveLine} drag={drag} onRegenerate={handleRegenerateBeat} regenerating={regeneratingBeat === beat.id} writing={!!regeneratingBeat || busy} onRequestDone={clearBarRequest} onScreen={onScreenWithDrafts} onAddMoment={handleAddMoment} lineOpRef={lineOpRef} lineIdsRef={lineIdsRef} onOpenEdit={trackOpenEdit} onFocusLater={focusLineLater} phoneUpAtStart={phoneUp} people={people} lalaSlots={lineSlots.filter((s) => s.beatIndex === index)} dressCode={source?.event?.dress_code || ''}
+            return <BeatSection key={beat.id} pace={pace} voice={voice} request={open && barRequest?.beatId === beat.id ? barRequest : null} beat={beat} index={index} beatCount={beats.length} scenePlan={scenePlan} expanded={open} onToggle={() => { const to = open && !isPhoneWidth() && !showBeatList ? null : beat.id; if (to !== openId && refuseOpenEdit()) return; setExpandedBeat(to); }} onApprove={handleApprove} proposal={proposal?.beatId === beat.id ? proposal : null} onAcceptProposal={acceptProposal} onDiscardProposal={() => setProposal(null)} onRetryProposal={retryProposal} onEdit={handleEditLine} onDeleteLine={handleDeleteLine} onRewrite={handleRewriteLine} rewritingLine={rewritingLine} locking={locking || busy} onOpenMap={() => setShowMap(true)} onMoveBeat={handleMoveBeat} onMoveLine={handleMoveLine} drag={drag} onRegenerate={handleRegenerateBeat} regenerating={regeneratingBeat === beat.id} writing={!!regeneratingBeat || busy} onRequestDone={clearBarRequest} onScreen={onScreenWithDrafts} onAddMoment={handleAddMoment} lineOpRef={lineOpRef} lineIdsRef={lineIdsRef} onOpenEdit={trackOpenEdit} onFocusLater={focusLineLater} phoneUpAtStart={phoneUp} people={people} lalaSlots={lineSlots.filter((s) => s.beatIndex === index)} dressCode={source?.event?.dress_code || ''}
               status={statuses[beat.id]} healthRows={open ? healthRows : []} hasPhone={phoneBeats.has(beat.id)} worn={open ? wornInOpen : []} look={outfit || []}
               storyTime={open && truth?.eventTimed ? truth.storyTime : null}
               onStep={stepBeat} prevBeatId={index > 0 ? beats[index - 1].id : null} nextBeatId={index < beats.length - 1 ? beats[index + 1].id : null}
