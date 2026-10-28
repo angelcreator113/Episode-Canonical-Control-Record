@@ -23,7 +23,13 @@
  *   POST   /:episodeId/reconfirm                       { script_revision, items: [{ approval_id, context_hash }] }
  *   POST   /:episodeId/legacy-import                   bring in the old voice clips, unassociated, unapproved
  *
- * Reads need a sign-in; every write is requireAuth + authorize(['ADMIN']).
+ * Voice Studio is for admins only (Evoni, 2026-10-28): every write, and every
+ * read of the studio (studio, summary, history, takes), is requireAuth +
+ * authorize(['ADMIN']). Only /status and /playable answer any signed-in user
+ * (a non-admin's /playable is the current approved takes only: no held
+ * approvals, states or reasons, no storage keys; PLAYER_TAKE_FIELDS):
+ * the Teleprompter plays approved takes, and nothing else, for anyone it lets
+ * read a script.
  * Switched off unless VOICE_STUDIO=on (every route then answers 404), so
  * deploying B1 changes nothing anyone uses until it is switched on.
  */
@@ -33,7 +39,7 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
-const { requireAuth, authorize } = require('../middleware/auth');
+const { requireAuth, authorize, userInGroup } = require('../middleware/auth');
 const models = require('../models');
 const studio = require('../services/voiceStudioService');
 
@@ -86,16 +92,29 @@ const handle = (what, fn) => async (req, res) => {
 const s = () => models.sequelize;
 
 router.get('/status', requireAuth, (req, res) => res.json({ success: true, data: { on: true } }));
-router.get('/:episodeId/studio', requireAuth, handle('studio', async (req) => ({
+router.get('/:episodeId/studio', ...admin, handle('studio', async (req) => ({
   ...(await studio.studioView(s(), { episodeId: req.params.episodeId })),
   // Writes are ADMIN only; the page shows read-only to anyone else (the server still refuses them).
   // The same test authorize(['ADMIN']) makes (case-insensitive group names).
   can_edit: Array.isArray(req.user?.groups) && req.user.groups.some((g) => String(g).toLowerCase() === 'admin'),
 })));
-router.get('/:episodeId/summary', requireAuth, handle('summary', (req) => studio.summary(s(), { episodeId: req.params.episodeId })));
-router.get('/:episodeId/playable', requireAuth, handle('playable takes', (req) => studio.playableApprovals(s(), { episodeId: req.params.episodeId })));
-router.get('/:episodeId/approvals/history', requireAuth, handle('approval history', (req) => studio.approvalHistory(s(), { episodeId: req.params.episodeId })));
-router.get('/:episodeId/takes', requireAuth, handle('list takes', (req) => studio.listTakes(s(), { episodeId: req.params.episodeId })));
+router.get('/:episodeId/summary', ...admin, handle('summary', (req) => studio.summary(s(), { episodeId: req.params.episodeId })));
+// What a non-admin's player gets: the current approved takes, only what playing one needs
+// (which line, which revision, the trim and level, the link). No approval states or
+// reasons, no held or other approvals, no storage key or hash.
+const PLAYER_TAKE_FIELDS = ['approval_id', 'beat_number', 'line_index', 'revision_id', 'in_ms', 'out_ms',
+  'gain_db', 'fade_in_ms', 'fade_out_ms', 'normalise', 'content_type', 'audio_url'];
+const forPlayer = (list) => ({
+  script_revision: list.script_revision,
+  takes: (list.takes || []).map((take) => Object.fromEntries(PLAYER_TAKE_FIELDS.filter((k) => k in take).map((k) => [k, take[k]]))),
+});
+// Admins get the list whole; anyone else the Teleprompter lets read a script gets forPlayer.
+router.get('/:episodeId/playable', requireAuth, handle('playable takes', async (req) => {
+  const list = await studio.playableApprovals(s(), { episodeId: req.params.episodeId });
+  return userInGroup(req.user, 'admin') ? list : forPlayer(list);
+}));
+router.get('/:episodeId/approvals/history', ...admin, handle('approval history', (req) => studio.approvalHistory(s(), { episodeId: req.params.episodeId })));
+router.get('/:episodeId/takes', ...admin, handle('list takes', (req) => studio.listTakes(s(), { episodeId: req.params.episodeId })));
 
 router.post('/:episodeId/sources', ...admin, (req, res) => {
   upload.single('audio')(req, res, async (uploadErr) => {

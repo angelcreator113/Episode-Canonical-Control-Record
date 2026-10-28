@@ -10,6 +10,11 @@
  *                                 earlier clip is soft-deleted
  *   DELETE /:episodeId/:clipId    soft delete (the file stays in S3)
  *
+ * Replacing a line's clip (an upload over it) and removing one are for the
+ * clip's recorder or an admin (V-1; scriptVoiceClipsService.mayChange);
+ * anyone else gets a 403 NOT_CLIP_OWNER, and an upload is refused before
+ * its file goes to S3.
+ *
  * The audio goes to S3 the raw clips' way (rawClipMedia.uploadFile), under
  * episodes/<episode>/voice-clips/. Before migration 20261020120000 has run,
  * each route is a 409 that says so, and an upload is refused before any file
@@ -80,6 +85,7 @@ router.post('/:episodeId', requireAuth, (req, res) => {
       const fields = voice.readFields(req.body || {});
       await voice.ensureTable(models.sequelize);
       const episode = await voice.findEpisode(models.sequelize, req.params.episodeId);
+      await voice.checkMayRecord(models.sequelize, req.user, { episodeId: episode.id, beatNumber: fields.beat_number, lineIndex: fields.line_index });
       const id = uuidv4();
       const ext = path.extname(file.originalname || '').toLowerCase() || '.webm';
       const s3Key = voice.clipKey(episode.id, id, ext);
@@ -88,7 +94,7 @@ router.post('/:episodeId', requireAuth, (req, res) => {
       const { clip, replaced } = await voice.saveClip(models.sequelize, {
         ...fields, id, episode_id: episode.id, s3_key: s3Key, url, content_type: contentType,
         file_size_bytes: file.size, created_by: req.user?.id || null,
-      });
+      }, req.user);
       return res.status(201).json({ success: true, data: clip, replaced });
     } catch (err) {
       return sendError(res, err, 'upload');
@@ -102,7 +108,7 @@ router.delete('/:episodeId/:clipId', requireAuth, async (req, res) => {
   try {
     checkEpisodeId(req.params.episodeId);
     if (!UUID_RE.test(String(req.params.clipId || ''))) return res.status(404).json({ success: false, error: 'Voice clip not found' });
-    const removed = await voice.removeClip(models.sequelize, req.params.episodeId, req.params.clipId);
+    const removed = await voice.removeClip(models.sequelize, req.params.episodeId, req.params.clipId, req.user);
     if (!removed) return res.status(404).json({ success: false, error: 'Voice clip not found' });
     return res.json({ success: true });
   } catch (err) {
