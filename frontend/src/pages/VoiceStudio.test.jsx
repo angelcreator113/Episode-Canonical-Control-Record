@@ -289,6 +289,10 @@ describe('Voice Studio page', () => {
     const off = renderAt();
     expect((await screen.findByTestId('vs-load-error')).textContent).toContain("Voice Studio isn't switched on yet");
     off.unmount();
+    vi.mocked(api.get).mockRejectedValueOnce(err(403, { code: 'AUTH_GROUP_REQUIRED', error: 'Forbidden' }));
+    const notAdmin = renderAt();
+    expect((await screen.findByTestId('vs-load-error')).textContent).toContain('Voice Studio is for admins only');
+    notAdmin.unmount();
     vi.mocked(api.get).mockRejectedValueOnce(offline());
     renderAt();
     expect((await screen.findByTestId('vs-load-error')).textContent).toContain("Couldn't reach the server");
