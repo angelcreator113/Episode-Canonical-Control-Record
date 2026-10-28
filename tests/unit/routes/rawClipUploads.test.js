@@ -299,3 +299,77 @@ describe('the temp folder clean-up (sweepTmp)', () => {
     expect(await media.sweepTmp({ dir: path.join(os.tmpdir(), `raw-clips-none-${Date.now()}`) })).toEqual([]);
   });
 });
+
+// Evoni, 2026-10-28: a 453 MB phone MP4 uploaded on Assets → Files showed
+// only "453 MB" (no length, size or picture). The browser now measures
+// every upload; the server takes its length, width, height and thumbnail
+// whenever ffprobe gives nothing, and ffprobe can't hold the upload up.
+describe('the browser\'s measure when ffprobe gives nothing (2026-10-28)', () => {
+  const JPEG = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(200, 1)]).toString('base64');
+  const filesUpload = (body = {}) => start({
+    performer: 'justawoman', label: undefined, beat_number: undefined, start_line: undefined,
+    filename: 'phone.mp4', content_type: 'video/mp4', size: 3 * MB, seconds: 481.4, width: 1080, height: 1920, ...body,
+  });
+
+  test('ffprobe failing over the link: the browser\'s length, width, height and thumbnail are kept', async () => {
+    media.run.mockRejectedValue(new Error('ffprobe failed: https protocol not found'));
+    const { body: started } = await filesUpload();
+    await putPart(1, 3 * MB);
+    const res = await request(app).post(`${BASE}/uploads/up-1/complete`).send({ thumbnail: `data:image/jpeg;base64,${JPEG}` });
+    expect(res.status).toBe(201);
+    const insert = mockQuery.mock.calls.find(([sql]) => /INSERT INTO episode_raw_clips/.test(sql))[1].replacements;
+    expect(insert).toMatchObject({ duration: 481.4, width: 1080, height: 1920, thumbKey: `episodes/ep-1/raw-clips/${started.clipId}/thumbnail.jpg` });
+    expect(sent('PutObject')).toHaveLength(1);
+  });
+
+  test('ffprobe answering with no length (a fragmented MP4: "N/A") keeps the browser\'s length; its own size wins', async () => {
+    media.run.mockResolvedValue({ stdout: Buffer.from(JSON.stringify({ format: { duration: 'N/A' }, streams: [{ codec_type: 'video', width: 720, height: 1280 }] })), stderr: '' });
+    await filesUpload();
+    await putPart(1, 3 * MB);
+    await request(app).post(`${BASE}/uploads/up-1/complete`).send({});
+    const insert = mockQuery.mock.calls.find(([sql]) => /INSERT INTO episode_raw_clips/.test(sql))[1].replacements;
+    expect(insert).toMatchObject({ duration: 481.4, width: 720, height: 1280 });
+  });
+
+  test('an ffprobe that never answers is left behind: the clip is saved with the browser\'s measure', async () => {
+    media.run.mockImplementation(() => new Promise(() => {}));
+    const info = await multipart.probe('https://bucket.example/signed-link', { timeoutMs: 10, hardStopMs: 10 });
+    expect(info).toBeNull();
+    expect(console.error).toHaveBeenCalledWith(expect.stringMatching(/was not measured/), expect.stringMatching(/did not answer in time/));
+  });
+
+  test('a bad width or height is left out, not a refusal', async () => {
+    media.run.mockRejectedValue(new Error('ffprobe failed'));
+    const res = await filesUpload({ width: 'wide', height: -3 });
+    expect(res.status).toBe(201);
+    await putPart(1, 3 * MB);
+    await request(app).post(`${BASE}/uploads/up-1/complete`).send({});
+    const insert = mockQuery.mock.calls.find(([sql]) => /INSERT INTO episode_raw_clips/.test(sql))[1].replacements;
+    expect(insert).toMatchObject({ width: null, height: null });
+  });
+});
+
+describe('end_beat_number with the upload (2026-10-28)', () => {
+  test('an end beat with no start beat is refused before anything is sent to S3', async () => {
+    const res = await start({ beat_number: undefined, end_beat_number: 11 });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/Pick the beat the clip starts on/);
+    expect((await start({ beat_number: 5, end_beat_number: 3 })).status).toBe(400);
+    expect(sent('CreateMultipartUpload')).toHaveLength(0);
+  });
+
+  test('kept after the row is made; before the database update it is reported not stored and the clip is saved', async () => {
+    mockQuery.mockImplementation(async (sql, opts = {}) => {
+      if (/FROM episodes WHERE id/.test(sql)) return [[{ id: 'ep-1', show_id: 'show-1' }]];
+      if (/^\s*INSERT INTO episode_raw_clips/.test(sql)) return [[{ id: opts.replacements.id, beat_number: opts.replacements.beatNumber }]];
+      if (/^\s*SELECT beat_number/.test(sql)) return [[{ beat_number: 1, has_end_beat: false }]];
+      return [[]];
+    });
+    await start({ beat_number: 1, end_beat_number: 11, start_line: undefined, size: 3 * MB });
+    await putPart(1, 3 * MB);
+    const res = await request(app).post(`${BASE}/uploads/up-1/complete`).send({});
+    expect(res.status).toBe(201);
+    expect(res.body).toMatchObject({ stored: [], not_stored: ['end_beat_number'] });
+    expect(res.body.data.beat_number).toBe(1);
+  });
+});

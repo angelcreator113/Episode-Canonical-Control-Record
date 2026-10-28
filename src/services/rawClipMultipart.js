@@ -18,6 +18,11 @@
  * Duration and size: ffprobe reads the file through a short-lived signed
  * link (only the bytes it needs; never a whole download), with a timeout;
  * when that does not work the browser's own measure of the take is used.
+ * The browser measures every upload (frontend lib/videoProbe, 2026-10-28:
+ * a 453 MB phone MP4 came back with no length, size or picture, ffprobe
+ * over HTTPS giving nothing), so ffprobe is a first try, never a wait: it is
+ * killed at its timeout, and a hard stop a few seconds later moves on even
+ * if the killed process never reports back.
  */
 
 const {
@@ -37,6 +42,8 @@ const MAX_THUMB_BYTES = 500 * 1024;
 const EXPIRE_MS = 6 * 60 * 60 * 1000;
 const PROBE_TIMEOUT_MS = 20 * 1000;
 const THUMB_TIMEOUT_MS = 30 * 1000;
+// After the timeout's kill, this much longer at most before moving on regardless.
+const HARD_STOP_MS = 5 * 1000;
 const FFPROBE = process.env.FFPROBE_PATH || 'ffprobe';
 const FFMPEG = process.env.FFMPEG_PATH || 'ffmpeg';
 
@@ -136,13 +143,24 @@ const readLink = (key) => getSignedUrl(media.getS3(), new GetObjectCommand({ Buc
  * { duration_seconds, width, height, hasVideo } read through the signed
  * link, or null when ffprobe is missing, too slow, or can't read it (logged).
  */
-async function probe(link) {
+async function probe(link, { timeoutMs = PROBE_TIMEOUT_MS, hardStopMs = HARD_STOP_MS } = {}) {
+  let timer = null;
   try {
-    const { stdout } = await media.run(FFPROBE, clips.probeArgs(link), { timeoutMs: PROBE_TIMEOUT_MS });
-    return clips.readProbe(stdout.toString());
+    const stop = new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error('ffprobe did not answer in time (moved on)')), timeoutMs + hardStopMs);
+      if (typeof timer.unref === 'function') timer.unref();
+    });
+    const { stdout } = await Promise.race([media.run(FFPROBE, clips.probeArgs(link), { timeoutMs }), stop]);
+    const info = clips.readProbe(stdout.toString());
+    if (info.duration_seconds == null || info.width == null) {
+      console.warn('[rawClips] ffprobe read the uploaded take only in part (the browser\'s measure fills the rest):', JSON.stringify(info));
+    }
+    return info;
   } catch (err) {
     console.error('[rawClips] the uploaded take was not measured (the browser\'s length is used):', err.message);
     return null;
+  } finally {
+    clearTimeout(timer);
   }
 }
 

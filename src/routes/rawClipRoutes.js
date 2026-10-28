@@ -7,8 +7,9 @@
  *   GET    /:episodeId                         the episode's clips
  *   POST   /:episodeId                         upload one (multipart: video, performer,
  *                                              guest_name?, label?, green_screen?, strength?,
- *                                              and for a teleprompter take beat_number?,
- *                                              start_line?, beat_marks? (JSON), seconds?)
+ *                                              beat_number?, end_beat_number?, and for a
+ *                                              teleprompter take start_line?, beat_marks? (JSON);
+ *                                              the browser's own measure: seconds?, width?, height?)
  *   POST   /:episodeId/uploads                 start an upload in parts (JSON: the same fields,
  *                                              plus filename, content_type, size) →
  *                                              { uploadId, clipId, key, partSize }
@@ -19,6 +20,7 @@
  *                                              → 201 { success, data, stored, not_stored }
  *   DELETE /:episodeId/uploads/:uploadId       throw the upload away
  *   PATCH  /:episodeId/:clipId                 performer, guest_name, label, beat_number (the scene),
+ *                                              end_beat_number (the beat it ends on),
  *                                              is_favorite (one per beat), start_line (teleprompter),
  *                                              beat_marks (a full-episode take's [{ beat, t }])
  *   POST   /:episodeId/:clipId/remove-green    (re)run green removal { strength }
@@ -29,7 +31,13 @@
  *
  * is_favorite and start_line come with migration 20261020090000; until it
  * has run, clips list without them and a PATCH of them is a 409 that says so.
- * beat_marks comes with migration 20261023235900, the same way.
+ * beat_marks comes with migration 20261023235900, the same way, and
+ * end_beat_number with 20261028120000.
+ *
+ * The browser measures every upload (frontend lib/videoProbe, 2026-10-28:
+ * a 453 MB phone MP4 showed no length, size or picture): its length,
+ * width, height and a thumbnail come with the upload. ffprobe is still
+ * tried first, with a timeout; whatever it can't read, the browser's is used.
  *
  * A teleprompter take sends its beat, start line and beat markers with the
  * upload (Teleprompter audit 8, 2026-10-24: one request, not an upload and
@@ -142,6 +150,9 @@ router.post('/:episodeId/uploads', requireAuth, async (req, res) => {
     const greenScreen = clips.truthy(body.green_screen);
     const strength = clips.readStrength(body.strength);
     const seconds = clips.readTakeSeconds(body.seconds);
+    const width = clips.readVideoSize(body.width);
+    const height = clips.readVideoSize(body.height);
+    if (fields.end_beat_number != null && fields.beat_number == null) throw new clips.RawClipError(400, 'Pick the beat the clip starts on before the beat it ends on');
     const filename = typeof body.filename === 'string' && body.filename.trim() ? body.filename.trim().slice(0, 255) : 'take.mp4';
     const contentType = typeof body.content_type === 'string' && body.content_type.trim() ? body.content_type.trim().slice(0, 100) : 'video/mp4';
     if (!isVideo(filename, contentType)) throw new clips.RawClipError(400, 'Only video files can be uploaded here');
@@ -156,7 +167,7 @@ router.post('/:episodeId/uploads', requireAuth, async (req, res) => {
     const key = `${media.clipPrefix(episode.id, clipId)}/original${ext}`;
     const entry = await parts.begin({
       episode, clipId, key, contentType, size, filename, userId: req.user?.id ?? null,
-      fields: { ...fields, greenScreen, strength, seconds },
+      fields: { ...fields, greenScreen, strength, seconds, width, height },
     });
     return res.status(201).json({ success: true, uploadId: entry.uploadId, clipId, key, partSize: entry.partSize, parts: parts.partCount(size) });
   } catch (err) {
@@ -231,12 +242,13 @@ async function completeUpload(entry, thumbnailB64) {
   const extras = {};
   if (f.start_line !== undefined) extras.start_line = f.start_line;
   if (f.beat_marks !== undefined) extras.beat_marks = f.beat_marks;
+  if (f.end_beat_number !== undefined) extras.end_beat_number = f.end_beat_number;
   let row = await clips.createClip(models.sequelize, {
     id: entry.clipId, episode_id: entry.episodeId, show_id: entry.showId,
     performer: f.performer, guest_name: f.guest_name, label: f.label ?? clips.readFields({ label: entry.filename }).label,
     original_filename: entry.filename, content_type: entry.contentType, file_size_bytes: entry.size,
     beat_number: f.beat_number ?? null,
-    duration_seconds: info?.duration_seconds ?? f.seconds, width: info?.width ?? null, height: info?.height ?? null,
+    duration_seconds: info?.duration_seconds ?? f.seconds ?? null, width: info?.width ?? f.width ?? null, height: info?.height ?? f.height ?? null,
     s3_key_raw: entry.key, url_raw: urlRaw, thumbnail_key: thumbUrl ? thumbKey : null, thumbnail_url: thumbUrl,
     key_status: f.greenScreen ? 'queued' : 'none', key_strength: f.strength,
   });
@@ -315,9 +327,13 @@ router.post('/:episodeId', requireAuth, async (req, res) => {
       const greenScreen = clips.truthy(req.body.green_screen);
       const strength = clips.readStrength(req.body.strength);
       const seconds = clips.readTakeSeconds(req.body.seconds);
+      const width = clips.readVideoSize(req.body.width);
+      const height = clips.readVideoSize(req.body.height);
+      if (fields.end_beat_number != null && fields.beat_number == null) throw new clips.RawClipError(400, 'Pick the beat the clip starts on before the beat it ends on');
       const extras = {};
       if (fields.start_line !== undefined) extras.start_line = fields.start_line;
       if (fields.beat_marks !== undefined) extras.beat_marks = fields.beat_marks;
+      if (fields.end_beat_number !== undefined) extras.end_beat_number = fields.end_beat_number;
       const episode = await clips.findEpisode(models.sequelize, req.params.episodeId);
 
       const info = await media.inspect(file.path);
@@ -339,7 +355,7 @@ router.post('/:episodeId', requireAuth, async (req, res) => {
         performer: fields.performer, guest_name: fields.guest_name, label: fields.label ?? clips.readFields({ label: file.originalname }).label,
         original_filename: file.originalname, content_type: file.mimetype, file_size_bytes: file.size,
         beat_number: fields.beat_number ?? null,
-        duration_seconds: info.duration_seconds ?? seconds, width: info.width, height: info.height,
+        duration_seconds: info.duration_seconds ?? seconds, width: info.width ?? width, height: info.height ?? height,
         s3_key_raw: s3KeyRaw, url_raw: urlRaw, thumbnail_key: thumbKey, thumbnail_url: thumbUrl,
         key_status: greenScreen ? 'queued' : 'none', key_strength: strength,
       });
