@@ -45,9 +45,9 @@ export function beatPictures(scene) {
   return out;
 }
 
-/** "2.4s", "12s", or null for a line that takes no screen time. */
-export function lineDuration(line) {
-  const s = lineSeconds(line);
+/** "2.4s", "12s", or null for a line that takes no screen time. `pace`: lib/scriptRuntime lineWpm. */
+export function lineDuration(line, pace = null) {
+  const s = lineSeconds(line, pace);
   if (!(s > 0)) return null;
   return s < 10 ? `${Math.round(s * 10) / 10}s` : `${Math.round(s)}s`;
 }

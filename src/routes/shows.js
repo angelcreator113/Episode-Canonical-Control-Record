@@ -542,6 +542,48 @@ router.put('/:id/lala-home', requireAuth, async (req, res) => {
 });
 
 /**
+ * GET /api/v1/shows/:id/reading-pace
+ * PUT /api/v1/shows/:id/reading-pace   Body: { performer, episode_id?, ratios?, takes?, use? }
+ * Her learned reading pace (Evoni, 2026-10-28), a show setting stored on
+ * Show.metadata.reading_pace (utils/readingPace): each episode's figures
+ * from her takes, and her switch between her pace and the standard. The
+ * PUT keeps every other metadata key, performer and episode; the row is
+ * locked while it is changed, so two saves at once both stay.
+ */
+router.get('/:id/reading-pace', requireAuth, async (req, res) => {
+  try {
+    const show = await getShow().findByPk(req.params.id);
+    if (!show) return res.status(404).json({ success: false, error: 'Show not found' });
+    const { readReadingPace } = require('../utils/readingPace');
+    return res.json({ success: true, data: readReadingPace(show.metadata) });
+  } catch (err) {
+    console.error('GET /shows/:id/reading-pace error:', err);
+    return res.status(500).json({ success: false, error: 'Your reading pace could not be read.' });
+  }
+});
+
+router.put('/:id/reading-pace', requireAuth, async (req, res) => {
+  try {
+    const { readReadingPaceBody, mergeReadingPace } = require('../utils/readingPace');
+    const read = readReadingPaceBody(req.body);
+    if (read.error) return res.status(400).json({ success: false, error: read.error });
+    const Show = getShow();
+    const data = await Show.sequelize.transaction(async (transaction) => {
+      const show = await Show.findByPk(req.params.id, { transaction, lock: transaction.LOCK.UPDATE });
+      if (!show) return null;
+      const pace = mergeReadingPace(show.metadata, read.value);
+      await show.update({ metadata: { ...(show.metadata || {}), reading_pace: pace } }, { transaction });
+      return pace;
+    });
+    if (!data) return res.status(404).json({ success: false, error: 'Show not found' });
+    return res.json({ success: true, data });
+  } catch (err) {
+    console.error('PUT /shows/:id/reading-pace error:', err);
+    return res.status(500).json({ success: false, error: 'Your reading pace could not be saved.' });
+  }
+});
+
+/**
  * GET    /api/v1/shows/:id/logo
  * POST   /api/v1/shows/:id/logo   multipart, field "image"
  * DELETE /api/v1/shows/:id/logo

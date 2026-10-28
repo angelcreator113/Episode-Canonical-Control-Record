@@ -44,6 +44,7 @@ export function scriptHealth({
   beats = [], canonical = [], cover = [], onScreen = {}, outfit = [], dealItems = [],
   rules = null, voice = null,
   closetNumber = null, dirty = false, unsaved = null, beat14 = null, designedIntent = null,
+  pace = null,
 } = {}) {
   const rows = [];
 
@@ -173,7 +174,8 @@ export function scriptHealth({
   // Notes to the writer left in the lines (lib/scriptWriterNotes; Evoni, 2026-10-25).
   rows.push(...writerNoteRows(beats));
   // Pacing tips (lib/scriptPacing): `advice: true`, never a blocker.
-  rows.push(...pacingRows(beats));
+  // `pace`: her learned reading pace when she uses it (lib/learnedPace).
+  rows.push(...pacingRows(beats, pace));
   // Each character's learned voice (lib/voiceChecks; Evoni, 2026-10-25):
   // lines that break a rule a script can check. None loaded: no rows.
   rows.push(...voiceHealthRows({ beats, rules: voice?.rules || null, speakers: voice?.speakers || [] }));

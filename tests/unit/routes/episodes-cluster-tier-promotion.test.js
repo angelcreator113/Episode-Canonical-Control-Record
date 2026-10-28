@@ -117,7 +117,7 @@ const REQUIRE_AUTH_COUNTS = {
   // +2 for GET /:id/career-list and PUT /:id/career-list/hidden-brands (Task #3181, requireAuth);
   // +4 for GET/POST /:id/character-places, POST .../unlink and PUT /:id/lead-character (character homes, 2026-10-15, requireAuth).
   // +1 for POST /:id/character-places/fill (Lala's home filled in, 2026-10-16, requireAuth).
-  'shows.js': 40,
+  'shows.js': 42,
   // 25 at CP2 close; +1 for PUT /:showId/phone-skin (Task #1964, requireAuth);
   // +1 for GET /:showId/usage (the show's Overlays library, 2026-10-07, requireAuth);
   // +3 for the stats panel: PUT /:showId/stats-panel/:assetId, GET its episode read and PNG (Task #3164, requireAuth).
@@ -321,7 +321,8 @@ describe('Step 3 CP2 — Episodes cluster tier promotion', () => {
     // +1 for episodeBriefRoutes.js PUT /:episodeId/cover-marks (Script tab audit 6, 2026-10-24).
     // +1 for todoListRoutes.js POST use-career-plan (the documents rework, 2026-10-24).
     // -1 for it again: the offer letter replaced the career plan (2026-10-24).
-    test('CP2 zone contains 328 total requireAuth references across 22 files', () => {
+    // +2 for shows.js GET and PUT /:id/reading-pace (her learned reading pace, 2026-10-28).
+    test('CP2 zone contains 331 total requireAuth references across 22 files', () => {
       const total = CP2_FILES.reduce((sum, filename) => {
         const src = readSrc(filename);
         const matches = src.match(/\brequireAuth\b/g) || [];
@@ -338,7 +339,7 @@ describe('Step 3 CP2 — Episodes cluster tier promotion', () => {
     // +1 for episodes.js POST /:id/lookbook/images/from-pose (Choose from Files, 2026-10-22).
     // +2 for episodes.js GET style-sheet/design/:design/:size and designs-zip/:size (2026-10-22).
     // +1 for episodeBriefRoutes.js PUT /:episodeId/self-talk (her self-talk at Beat 13, 2026-10-25).
-      expect(total).toBe(329);
+      expect(total).toBe(331);
     });
 
     test('F-AUTH-3 Tier 3 consumer count (2 in src/routes/, press.js only)', () => {

@@ -111,6 +111,10 @@ import { beatSeconds } from '../../lib/scriptRuntime';
 import { SESSION_KEY, SAVED_KEY, readTimes, writeTimes, durationText } from '../../lib/rehearsal';
 import { cameraErrorMessage } from '../../lib/teleprompterLines';
 import { MarkedText, MicMeter, FramingGrid, RehearsalPanel } from './TeleprompterParts';
+import { BeatPace } from './TeleprompterPace';
+import ReadingPaceNote from '../Episodes/ReadingPaceNote';
+import useReadingPace from '../../hooks/useReadingPace';
+import { promptSeconds } from '../../lib/learnedPace';
 import TakesPanel, { MarkLinks, seekVideo } from './TeleprompterTakes';
 import useDialogLayer from '../../hooks/useDialogLayer';
 import useTakeRecorder from '../../hooks/useTakeRecorder';
@@ -300,6 +304,11 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
   const [notice, setNotice] = useState(null);
   const [clips, setClips] = useState([]); // the episode's clips already in Files
   const [clipsLoaded, setClipsLoaded] = useState(false);
+  // Her learned reading pace (hooks/useReadingPace): the silence cues and
+  // "Pace by line times" use it when she chose it, else the standard.
+  const paceBeats = useMemo(() => (script?.beats || []).map((b) => ({ number: b.number, lines: b.raw || [] })), [script]);
+  const reading = useReadingPace({ showId: isScript ? source.showId || null : null, episodeId: isScript ? source.episodeId : null, beats: paceBeats, clips: clipsLoaded ? clips : null });
+  const tpPace = reading.active ? { wpm: reading.active.wpm } : null;
   const [showTakes, setShowTakes] = useState(false);
   const [starring, setStarring] = useState(null);
   const [takesError, setTakesError] = useState(null);
@@ -693,10 +702,10 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
     if (isMine(l) && !wordless) return undefined;
     scrollToLine(active);
     if (holdForClip) return undefined; // the clip's end moves on
-    const t = window.setTimeout(() => nextAfter(active), Math.max(200, ((l.seconds || 0) + lineBreaks(l)) * 1000));
+    const t = window.setTimeout(() => nextAfter(active), Math.max(200, (promptSeconds(l, tpPace) + lineBreaks(l)) * 1000));
     return () => window.clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [voiceOn, playing, active, flat, readAs, holdForClip]);
+  }, [voiceOn, playing, active, flat, readAs, holdForClip, tpPace?.wpm]);
 
   // Follow my voice while reading: the mic for the meter (recording has its own).
   const [voiceMic, setVoiceMic] = useState(null);
@@ -780,14 +789,14 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
     scrollToLine(i);
     if (holdForClip) return undefined; // the clip's end moves on
     // A `//` pause holds a second more.
-    const ms = Math.max(200, (((flat[i].seconds || 0) + lineBreaks(flat[i])) / pace) * 1000);
+    const ms = Math.max(200, ((promptSeconds(flat[i], tpPace) + lineBreaks(flat[i])) / pace) * 1000);
     const t = window.setTimeout(() => {
       if (i >= flat.length - 1) endRef.current?.();
       else setActive(i + 1);
     }, ms);
     return () => window.clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [playing, pacing, active, pace, flat, holdForClip]);
+  }, [playing, pacing, active, pace, flat, holdForClip, tpPace?.wpm]);
 
   // A clip played to its end: the next line comes up (paced modes).
   useEffect(() => {
@@ -804,7 +813,7 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
   // A line with a voice clip counts the clip's own length.
   const activeClipSeconds = clipSeconds(activeClip);
   const cueTotal = !atLine ? 0 : activeClipSeconds != null ? activeClipSeconds
-    : (pacing === 'lines' ? ((atLine.seconds || 0) + lineBreaks(atLine)) / pace : (atLine.seconds || 0));
+    : (pacing === 'lines' ? (promptSeconds(atLine, tpPace) + lineBreaks(atLine)) / pace : promptSeconds(atLine, tpPace));
   const showCue = !!atLine && !isMine(atLine) && cueTotal > 0;
   const [cueLeft, setCueLeft] = useState(cueTotal);
   const cueSpentRef = useRef(0);
@@ -833,7 +842,7 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
   }, [rehearsalKey, running, beatKey]);
   useEffect(() => { if (rehearsalKey) writeTimes(store('sessionStorage'), SESSION_KEY(rehearsalKey), times); }, [rehearsalKey, times]);
   const rehearsalRows = beats.filter((b) => b.number != null && (times[b.number] || 0) >= 1).map((b) => ({
-    key: b.number, number: b.number, actual: times[b.number], estimate: beatSeconds(b.raw || []),
+    key: b.number, number: b.number, actual: times[b.number], estimate: beatSeconds(b.raw || [], reading.active), takes: reading.beatTimes[b.number] ?? null,
     saved: savedTimes?.beats?.[b.number] ?? null, current: b === beat,
   }));
   const saveTimes = () => {
@@ -1652,6 +1661,7 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
             {isScript && shown.map((b) => (
               <section key={`${b.number}-${b.at}`} className="stp-beat" ref={(el) => { beatRefs.current[b.at] = el; }} data-testid="stp-beat" aria-current={b.at === current ? 'true' : undefined}>
                 {b.number !== null && <h3 className="stp-beat-head">{b.number} · {b.name}</h3>}
+                {b.number !== null && <BeatPace number={b.number} estimate={beatSeconds(b.raw || [], reading.active)} takes={reading.beatTimes[b.number]} />}
                 {isCutsceneBeat(b.number) && (
                   <p className="stp-cutscene" data-testid="stp-cutscene"><Clapperboard size={18} aria-hidden="true" /> Cutscene · watch &amp; comment</p>
                 )}
@@ -1910,6 +1920,7 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
             {!voiceSupported && <span className="stp-needs" data-testid="stp-voice-needs">Needs Chrome or Edge</span>}
           </button>
         </div>
+        {isScript && source.episodeId && <ReadingPaceNote reading={reading} tone="prompter" testid="stp-reading-pace" />}
         {rehearsalKey && (
           <button type="button" className="stp-btn" data-testid="stp-rehearsal-toggle" aria-pressed={showTimes} onClick={() => { setShowTimes((v) => !v); setShowTakes(false); }}>
             <Clock size={18} aria-hidden="true" /> Times

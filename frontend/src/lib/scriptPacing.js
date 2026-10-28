@@ -16,7 +16,7 @@
  *
  * Pure: no React, no network.
  */
-import { lineSeconds, formatRuntime } from './scriptRuntime';
+import { lineSeconds, formatRuntime, WORDS_PER_MINUTE } from './scriptRuntime';
 import { speakerLine } from './scriptSpeaker';
 import { parseMoment } from './scriptMoments';
 import { isCutsceneBeat } from './scriptShowRules';
@@ -51,13 +51,14 @@ const r1 = (n) => Math.round(n);
 /**
  * The script's pacing: { total, average, beats: [{ beatId, number, name,
  * seconds, label, hookSeconds? }], warnings: [{ key, beatId, text }] }.
- * `beats`: the Script tab's beats ({ id, number, name, lines }).
+ * `beats`: the Script tab's beats ({ id, number, name, lines }). `pace`:
+ * her learned pace when she uses it (lib/scriptRuntime lineWpm), else null.
  */
-export function scriptPacing(beats = []) {
+export function scriptPacing(beats = [], pace = null) {
   const list = (Array.isArray(beats) ? beats : []).filter(Boolean);
   const timed = list.map((b) => {
     const lines = Array.isArray(b.lines) ? b.lines : [];
-    const seconds = lines.reduce((s, l) => s + lineSeconds(String(l ?? '').trim()), 0);
+    const seconds = lines.reduce((s, l) => s + lineSeconds(String(l ?? '').trim(), pace), 0);
     return { beatId: b.id || null, number: b.number, name: b.name || '', seconds: r1(seconds), label: formatRuntime(seconds), lines };
   });
   const total = timed.reduce((s, b) => s + b.seconds, 0);
@@ -72,7 +73,7 @@ export function scriptPacing(beats = []) {
     for (const l of first.lines) {
       const k = paceKind(l);
       if (k === 'screen') break;
-      if (k === 'talk') talk += lineSeconds(String(l).trim());
+      if (k === 'talk') talk += lineSeconds(String(l).trim(), pace);
     }
     if (talk > HOOK_SECONDS) {
       warnings.push({
@@ -114,7 +115,7 @@ export function scriptPacing(beats = []) {
       if (k !== 'talk') return;
       if (!run) run = { beatId: b.beatId, from: b.number, to: b.number, startLine: i, seconds: 0 };
       run.to = b.number;
-      run.seconds += lineSeconds(String(l).trim());
+      run.seconds += lineSeconds(String(l).trim(), pace);
     });
   }
   close();
@@ -125,14 +126,17 @@ export function scriptPacing(beats = []) {
 /**
  * "Ready to film?" rows: the timing row (with `timings`, the per-beat list)
  * and one row per warning, every one `advice: true`. None for no beats.
+ * `pace`: her learned pace when she uses it, else null (the standard 150).
  */
-export function pacingRows(beats = []) {
-  const p = scriptPacing(beats);
+export function pacingRows(beats = [], pace = null) {
+  const p = scriptPacing(beats, pace);
   if (!p.beats.length) return [];
+  const wpm = Number(pace?.wpm) > 0 ? Math.round(pace.wpm) : null;
+  const speed = wpm ? `your lines at your pace, ${wpm} words a minute; others at ${WORDS_PER_MINUTE}` : `${WORDS_PER_MINUTE} spoken words a minute`;
   return [
     {
       key: 'pacing', ok: !p.warnings.length, advice: true, beatId: null,
-      text: `Rough running time: ${formatRuntime(p.total)} (150 spoken words a minute, a few seconds per step on screen).`,
+      text: `Rough running time: ${formatRuntime(p.total)} (${speed}, a few seconds per step on screen).`,
       timings: p.beats,
     },
     ...p.warnings.map((w) => ({ key: w.key, ok: false, advice: true, beatId: w.beatId, text: w.text })),
