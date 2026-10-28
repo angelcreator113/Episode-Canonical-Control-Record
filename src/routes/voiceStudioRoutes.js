@@ -6,6 +6,8 @@
  * line-based dialogue takes. Mounted at /api/v1/voice-studio (/api/v1/voice is characterVoiceRoutes). Server only in B1:
  * no page calls these yet.
  *
+ *   GET    /status                                     200 while switched on (the page's links show only then; B2)
+ *   GET    /:episodeId/studio                          the page's view in one snapshot: lines by beat, takes, approvals (B2)
  *   GET    /:episodeId/summary                         approvals and their states, counts by beat
  *   GET    /:episodeId/playable                        current approvals only: the one list a player or export may use
  *   GET    /:episodeId/approvals/history               every approval, superseded, invalid and revoked included
@@ -83,6 +85,13 @@ const handle = (what, fn) => async (req, res) => {
 
 const s = () => models.sequelize;
 
+router.get('/status', requireAuth, (req, res) => res.json({ success: true, data: { on: true } }));
+router.get('/:episodeId/studio', requireAuth, handle('studio', async (req) => ({
+  ...(await studio.studioView(s(), { episodeId: req.params.episodeId })),
+  // Writes are ADMIN only; the page shows read-only to anyone else (the server still refuses them).
+  // The same test authorize(['ADMIN']) makes (case-insensitive group names).
+  can_edit: Array.isArray(req.user?.groups) && req.user.groups.some((g) => String(g).toLowerCase() === 'admin'),
+})));
 router.get('/:episodeId/summary', requireAuth, handle('summary', (req) => studio.summary(s(), { episodeId: req.params.episodeId })));
 router.get('/:episodeId/playable', requireAuth, handle('playable takes', (req) => studio.playableApprovals(s(), { episodeId: req.params.episodeId })));
 router.get('/:episodeId/approvals/history', requireAuth, handle('approval history', (req) => studio.approvalHistory(s(), { episodeId: req.params.episodeId })));
