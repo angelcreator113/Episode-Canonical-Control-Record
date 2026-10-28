@@ -101,4 +101,18 @@ describe('Voice Studio boundaries', () => {
     // The approval states are the server's names; only `current` is described as playing.
     expect(read('frontend/src/lib/voiceStudioView.js')).toMatch(/current: \{ label: 'Approved', tone: 'ok', help: 'This take plays for the line\.' \}/);
   });
+  test('B2b: with Voice Studio on, the Teleprompter plays only the playable list, found by beat and index', () => {
+    const lib = read('frontend/src/lib/teleprompterVoiceStudio.js');
+    // No words, no old clips: the line is its beat and index (lineKey), as the server placed the approval.
+    expect(lib).not.toMatch(/clipForLine|clipsByLine|voiceClipsApi\.|line_text|\.text\b|isStale/);
+    expect(lib).toMatch(/lineKey\(t\.beat_number, t\.line_index\)/);
+    const reader = read('frontend/src/components/Teleprompter/TeleprompterReader.jsx');
+    const clipOf = reader.match(/const clipOf = \(i\) => \{[\s\S]*?\n  \};/)[0];
+    // Unknown or still checking: nothing; on: the studio list and a return before the old clips are looked at.
+    expect(clipOf).toMatch(/studioMode == null \|\| studioMode === 'unknown'\) return null/);
+    expect(clipOf.indexOf('if (studio) return studioLines.byLine.get(lineKey(w.beat, w.index)) || null;')).toBeGreaterThan(-1);
+    expect(clipOf.indexOf('if (studio) return')).toBeLessThan(clipOf.indexOf('clipForLine('));
+    // The server's list is the only one read in Voice Studio mode.
+    expect(read('frontend/src/lib/voiceStudioApi.js')).toMatch(/playable: \(episodeId\) => api\.get\(`\$\{base\(episodeId\)\}\/playable`\)/);
+  });
 });

@@ -620,19 +620,35 @@ async function summary(sequelize, { episodeId }, outer = null) {
  * teleprompter's Voice Studio playback, an export) reads this and nothing
  * looser; an approval that moved, is ambiguous, needs review or is not in
  * force is never in it.
+ *
+ * B2b: each take carries audio_url, the URL its source plays from (null
+ * when the source has no key). `held` lists the approvals that are not
+ * playable, with their state and why, so a player can say why a line is
+ * silent; it has no audio and nothing in it may be played. All of it is
+ * read in one snapshot.
  */
 async function playableApprovals(sequelize, { episodeId }) {
-  const sum = await summary(sequelize, { episodeId });
-  const ids = sum.approvals.filter((a) => a.playable).map((a) => a.approval_id);
-  if (!ids.length) return { script_revision: sum.script_revision, takes: [] };
-  const takes = await rows(sequelize, `SELECT a.id AS approval_id, a.beat_number, a.line_index, a.candidate_id, r.id AS revision_id,
-      r.in_ms, r.out_ms, r.gain_db, r.fade_in_ms, r.fade_out_ms, r.normalise, s.id AS source_id, s.s3_key, s.sha256, s.content_type
-    FROM line_voice_approvals a
-    JOIN line_voice_candidate_revisions r ON r.id = a.candidate_revision_id
-    JOIN line_voice_candidates c ON c.id = a.candidate_id
-    JOIN voice_source_assets s ON s.id = c.source_asset_id
-    WHERE a.id IN (:ids) ORDER BY a.beat_number, a.line_index`, { ids });
-  return { script_revision: sum.script_revision, takes };
+  const { Transaction } = require('sequelize');
+  return sequelize.transaction({ isolationLevel: Transaction.ISOLATION_LEVELS.REPEATABLE_READ, readOnly: true }, async (t) => {
+    const sum = await summary(sequelize, { episodeId }, t);
+    const held = sum.approvals.filter((a) => !a.playable).map((a) => ({
+      approval_id: a.approval_id, beat_number: a.beat_number, line_index: a.line_index, state: a.state, reason_text: a.reason_text,
+    }));
+    const ids = sum.approvals.filter((a) => a.playable).map((a) => a.approval_id);
+    if (!ids.length) return { script_revision: sum.script_revision, takes: [], held };
+    const takes = await rows(sequelize, `SELECT a.id AS approval_id, a.beat_number, a.line_index, a.candidate_id, r.id AS revision_id,
+        r.in_ms, r.out_ms, r.gain_db, r.fade_in_ms, r.fade_out_ms, r.normalise, s.id AS source_id, s.s3_key, s.sha256, s.content_type
+      FROM line_voice_approvals a
+      JOIN line_voice_candidate_revisions r ON r.id = a.candidate_revision_id
+      JOIN line_voice_candidates c ON c.id = a.candidate_id
+      JOIN voice_source_assets s ON s.id = c.source_asset_id
+      WHERE a.id IN (:ids) ORDER BY a.beat_number, a.line_index`, { ids }, t);
+    return {
+      script_revision: sum.script_revision,
+      takes: takes.map((take) => ({ ...take, audio_url: take.s3_key ? sourceUrl(take.s3_key) : null })),
+      held,
+    };
+  });
 }
 
 /** Every approval the episode has had, newest first, as stored (history: superseded, invalid and revoked included). */

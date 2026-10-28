@@ -47,6 +47,7 @@ export default function Teleprompter() {
   const [showId, setShowId] = useState('');
   const [episodes, setEpisodes] = useState([]);
   const [episode, setEpisode] = useState(null);
+  const [scriptRevision, setScriptRevision] = useState(null);
   const [startBeat, setStartBeat] = useState(askedBeat ? Number(askedBeat) : null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -87,6 +88,8 @@ export default function Teleprompter() {
         if (!live) return;
         const ep = r.data?.data || r.data || null;
         setEpisode(ep);
+        // The saved script's revision: Voice Studio playback plays only for this script (B2b).
+        setScriptRevision(typeof r.data?.script_revision === 'string' ? r.data.script_revision : null);
         if (ep?.show_id) setShowId(String(ep.show_id));
       })
       .catch((err) => {
@@ -120,7 +123,7 @@ export default function Teleprompter() {
   const title = episode ? episodeLabel(episode) : '';
   const source = sourceKind === 'paste'
     ? { kind: 'text', text: pasted }
-    : { kind: 'script', scriptText: episode?.script_content || '', episodeId: episode?.id || null, title };
+    : { kind: 'script', scriptText: episode?.script_content || '', episodeId: episode?.id || null, scriptRevision: episode ? scriptRevision : null, title };
   const numberedBeats = script.beats.filter((b) => b.number != null);
   // The source tabs: arrow keys, Home and End move between them (one tab stop).
   const tabRefs = useRef({});
