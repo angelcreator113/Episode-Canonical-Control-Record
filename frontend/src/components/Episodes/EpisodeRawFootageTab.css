@@ -61,6 +61,11 @@
 .erf-clip-name { margin: 0; font-size: 14px; font-weight: 700; color: var(--text-primary); overflow-wrap: anywhere; }
 .erf-guest { display: inline-flex; align-items: center; gap: 4px; margin: 0; font-size: 12px; font-weight: 600; color: var(--lala-gold-text); }
 .erf-meta { margin: 0; font-size: 12px; color: var(--text-secondary); }
+/* Where the clip starts and ends, and the clips it overlaps (2026-10-28) */
+.erf-range { display: flex; align-items: flex-start; gap: 4px; margin: 0; font-size: 12px; font-weight: 600; color: var(--text-primary); overflow-wrap: anywhere; }
+.erf-range svg, .erf-overlap svg { flex: none; margin-top: 2px; }
+.erf-overlap { display: flex; align-items: flex-start; gap: 4px; align-self: flex-start; margin: 0; padding: 2px 8px; border-radius: 8px; font-size: 12px; background: var(--lala-parchment-2); color: var(--text-secondary); overflow-wrap: anywhere; }
+.erf-clip-actions select { max-width: 100%; }
 .erf-status { display: inline-flex; align-items: center; gap: 5px; align-self: flex-start; padding: 2px 9px; border-radius: 999px; font-size: 12px; font-weight: 700; }
 .erf-status.is-plain { background: var(--lala-parchment-2); color: var(--text-secondary); }
 .erf-status.is-wait { background: var(--warning-bg); color: var(--warning-text); }

@@ -38,11 +38,23 @@ const MAX_BEAT_MARKS = 30;
 const MAX_MARK_SECONDS = 36000; // ten hours
 const BEAT_MARKS_MISSING = "Beat markers can't be kept yet: the database update that adds them (20261023235900) hasn't run yet. The take itself is saved.";
 
+// end_beat_number (Evoni, 2026-10-28: "show where a video starts and
+// ends"): the beat an uploaded clip with no markers ends on, so its card
+// reads "Beat 1 → Beat 11". Arrives with
+// 20261028120000-add-episode-raw-clips-end-beat-number.js and is read the
+// same way: has_end_beat says the column is there; shapeRow leaves the field
+// out until then, and a PATCH of it is a 409 that says so.
+const END_BEAT_COLUMNS = `to_jsonb(episode_raw_clips) -> 'end_beat_number' AS end_beat_number,
+  (to_jsonb(episode_raw_clips) -> 'end_beat_number') IS NOT NULL AS has_end_beat`;
+const END_BEAT_MISSING = "The beat a clip ends on can't be saved yet: the database update that adds it (20261028120000) hasn't run yet. Everything else about the clip still works.";
+const END_BEAT_RULE = 'end_beat_number must be a whole number from 1 to 14, no earlier than the beat the clip starts on, or null';
+
 const COLUMNS = `id, episode_id, show_id, performer, guest_name, label, beat_number, original_filename, content_type,
   file_size_bytes, duration_seconds, width, height, url_raw, thumbnail_url,
   key_status, key_strength, url_cutout, key_error, key_started_at, key_finished_at, created_at, updated_at,
   ${TAKE_COLUMNS},
-  ${MARKS_COLUMNS}`;
+  ${MARKS_COLUMNS},
+  ${END_BEAT_COLUMNS}`;
 
 // A job still queued or processing this long after its last update was cut
 // off (the server restarted mid-job); list marks it failed so Retry shows.
@@ -59,7 +71,8 @@ class RawClipError extends Error {
 /**
  * A row as the API sends it: is_favorite (boolean) and start_line (a whole
  * number or null) only when those columns exist; beat_marks (an array, or
- * null) only when its column exists; has_take_fields and has_beat_marks never.
+ * null) and end_beat_number (a whole number, or null) only when their
+ * columns exist; has_take_fields, has_beat_marks and has_end_beat never.
  */
 function shapeRow(row) {
   if (!row || typeof row !== 'object') return row;
@@ -71,6 +84,11 @@ function shapeRow(row) {
   if ('has_beat_marks' in out) {
     const { has_beat_marks: hasMarks, beat_marks: marks, ...rest } = out;
     out = hasMarks ? { ...rest, beat_marks: Array.isArray(marks) ? marks : null } : rest;
+  }
+  if ('has_end_beat' in out) {
+    const { has_end_beat: hasEnd, end_beat_number: end, ...rest } = out;
+    const n = end == null ? null : Number(end);
+    out = hasEnd ? { ...rest, end_beat_number: Number.isInteger(n) ? n : null } : rest;
   }
   return out;
 }
@@ -88,6 +106,21 @@ const missingMarksColumn = (err) => {
   const code = err?.original?.code || err?.parent?.code || err?.code;
   const text = String(err?.original?.message || err?.message || '');
   return (code === '42703' || /column .* does not exist/i.test(text)) && text.includes('beat_marks');
+};
+
+// The same for end_beat_number before 20261028120000 has run.
+const missingEndBeatColumn = (err) => {
+  const code = err?.original?.code || err?.parent?.code || err?.code;
+  const text = String(err?.original?.message || err?.message || '');
+  return (code === '42703' || /column .* does not exist/i.test(text)) && text.includes('end_beat_number');
+};
+
+/** A beat number 1-14, null for null or '', or undefined when it is anything else. */
+const readBeat = (value) => {
+  if (value === null || value === '') return null;
+  if (typeof value !== 'number' && typeof value !== 'string') return undefined;
+  const n = Number(value);
+  return Number.isInteger(n) && n >= 1 && n <= 14 ? n : undefined;
 };
 
 const cleanText = (v, max) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : null);
@@ -125,9 +158,10 @@ function readBeatMarks(value) {
 
 /**
  * Validates the editable fields. Returns { performer, guest_name, label,
- * beat_number, is_favorite, start_line, beat_marks } (only the keys given).
- * beat_number links the clip to a scene (canonical beat 1-14); null unlinks
- * it. is_favorite stars the take for its beat (a boolean); start_line is the
+ * beat_number, end_beat_number, is_favorite, start_line, beat_marks } (only
+ * the keys given). beat_number links the clip to a scene (canonical beat
+ * 1-14); null unlinks it. end_beat_number is the beat the clip ends on (1-14,
+ * not before beat_number when both are sent), or null. is_favorite stars the take for its beat (a boolean); start_line is the
  * line within the beat a teleprompter take was read from (0 = the top), a
  * whole number from 0, or null. beat_marks: readBeatMarks.
  */
@@ -146,6 +180,15 @@ function readFields(body = {}, { requirePerformer = false } = {}) {
       if (!Number.isInteger(beat) || beat < 1 || beat > 14) throw new RawClipError(400, 'beat_number must be a whole number from 1 to 14, or null');
       out.beat_number = beat;
     }
+  }
+  if (body.end_beat_number !== undefined) {
+    const end = readBeat(body.end_beat_number);
+    if (end === undefined) throw new RawClipError(400, END_BEAT_RULE);
+    if (end != null && out.beat_number !== undefined) {
+      if (out.beat_number == null) throw new RawClipError(400, 'Pick the beat the clip starts on before the beat it ends on');
+      if (end < out.beat_number) throw new RawClipError(400, END_BEAT_RULE);
+    }
+    out.end_beat_number = end;
   }
   if (body.is_favorite !== undefined) {
     const v = body.is_favorite;
@@ -239,15 +282,41 @@ async function createClip(sequelize, clip) {
 }
 
 /**
- * Updates performer, guest_name, label, beat_number, is_favorite,
- * start_line and beat_marks. Returns the row, or null when there is no such clip.
- * Starring a take un-stars the episode's other takes for the same beat, in
- * one transaction: one favourite per beat (Evoni, 2026-10-20).
+ * The clip's end beat checked against its start beat when only the end is
+ * sent: the start is read first. Before 20261028120000 has run, a 409.
+ * Resolves false when there is no such clip.
+ */
+async function checkEndBeat(sequelize, episodeId, clipId, end) {
+  const [[row]] = await sequelize.query(
+    `SELECT beat_number, (to_jsonb(episode_raw_clips) -> 'end_beat_number') IS NOT NULL AS has_end_beat
+       FROM episode_raw_clips WHERE id = :clipId AND episode_id = :episodeId AND deleted_at IS NULL LIMIT 1`,
+    { replacements: { episodeId, clipId } });
+  if (!row) return false;
+  if (!row.has_end_beat) {
+    console.error('[rawClips] end_beat_number column is missing (migration 20261028120000 not run)');
+    throw new RawClipError(409, END_BEAT_MISSING);
+  }
+  if (end == null) return true;
+  if (row.beat_number == null) throw new RawClipError(400, 'Pick the beat the clip starts on before the beat it ends on');
+  if (end < Number(row.beat_number)) throw new RawClipError(400, END_BEAT_RULE);
+  return true;
+}
+
+/**
+ * Updates performer, guest_name, label, beat_number, end_beat_number,
+ * is_favorite, start_line and beat_marks. Returns the row, or null when
+ * there is no such clip. Starring a take un-stars the episode's other takes
+ * for the same beat, in one transaction: one favourite per beat (Evoni,
+ * 2026-10-20). A start beat moved past the clip's end beat clears the end
+ * beat (the clip is then that one beat).
  */
 async function updateClip(sequelize, episodeId, clipId, body = {}) {
   const fields = readFields(body);
   const keys = Object.keys(fields);
-  if (!keys.length) throw new RawClipError(400, 'Nothing to change: send performer, guest_name, label, beat_number, is_favorite, start_line or beat_marks');
+  if (!keys.length) throw new RawClipError(400, 'Nothing to change: send performer, guest_name, label, beat_number, end_beat_number, is_favorite, start_line or beat_marks');
+  if ('end_beat_number' in fields && !('beat_number' in fields)) {
+    if (!(await checkEndBeat(sequelize, episodeId, clipId, fields.end_beat_number))) return null;
+  }
   // beat_marks is JSONB: sent as its JSON text and cast.
   const sets = keys.map((k) => (k === 'beat_marks' ? 'beat_marks = CAST(:beat_marks AS jsonb)' : `${k} = :${k}`)).join(', ');
   const values = 'beat_marks' in fields ? { ...fields, beat_marks: fields.beat_marks == null ? null : JSON.stringify(fields.beat_marks) } : fields;
@@ -257,7 +326,16 @@ async function updateClip(sequelize, episodeId, clipId, body = {}) {
         WHERE id = :clipId AND episode_id = :episodeId AND deleted_at IS NULL
         RETURNING ${COLUMNS}`,
       { replacements: { ...values, episodeId, clipId }, transaction });
-    const row = shapeRow((rows || [])[0]) || null;
+    let row = shapeRow((rows || [])[0]) || null;
+    if (row && 'beat_number' in fields && !('end_beat_number' in fields) && row.end_beat_number != null
+      && (row.beat_number == null || row.end_beat_number < Number(row.beat_number))) {
+      const [cleared] = await sequelize.query(
+        `UPDATE episode_raw_clips SET end_beat_number = NULL, updated_at = NOW()
+          WHERE id = :clipId AND episode_id = :episodeId AND deleted_at IS NULL
+          RETURNING ${COLUMNS}`,
+        { replacements: { episodeId, clipId }, transaction });
+      row = shapeRow((cleared || [])[0]) || { ...row, end_beat_number: null };
+    }
     if (row && fields.is_favorite === true && row.beat_number != null) {
       await sequelize.query(
         `UPDATE episode_raw_clips SET is_favorite = false, updated_at = NOW()
@@ -271,6 +349,11 @@ async function updateClip(sequelize, episodeId, clipId, body = {}) {
     if (fields.is_favorite === true) return await sequelize.transaction((t) => run(t));
     return await run(undefined);
   } catch (err) {
+    if (err instanceof RawClipError) throw err;
+    if (missingEndBeatColumn(err)) {
+      console.error('[rawClips] end_beat_number column is missing (migration 20261028120000 not run):', err.message);
+      throw new RawClipError(409, END_BEAT_MISSING);
+    }
     if (missingMarksColumn(err)) {
       console.error('[rawClips] beat_marks column is missing (migration 20261023235900 not run):', err.message);
       throw new RawClipError(409, BEAT_MARKS_MISSING);
@@ -285,12 +368,13 @@ async function updateClip(sequelize, episodeId, clipId, body = {}) {
 }
 
 // The take fields an upload may carry whose columns come with a migration
-// (Teleprompter audit 8, 2026-10-24): start_line (20261020090000) and
-// beat_marks (20261023235900). beat_number has always been a column.
-const UPLOAD_EXTRAS = Object.freeze(['start_line', 'beat_marks']);
+// (Teleprompter audit 8, 2026-10-24): start_line (20261020090000),
+// beat_marks (20261023235900) and end_beat_number (20261028120000).
+// beat_number has always been a column.
+const UPLOAD_EXTRAS = Object.freeze(['start_line', 'beat_marks', 'end_beat_number']);
 
 /**
- * Keeps an uploaded take's start_line and beat_marks (extras: readFields
+ * Keeps an uploaded take's start_line, beat_marks and end_beat_number (extras: readFields
  * output), each in its own UPDATE so a column that is not there yet costs
  * only that field. Never throws: the clip is already saved, so a field the
  * database can't keep is reported, not a failed upload. Returns { row,
@@ -327,6 +411,21 @@ function readTakeSeconds(value) {
     return null;
   }
   return Math.round(s * 100) / 100;
+}
+
+/**
+ * The video's width or height the browser measured (a multipart or JSON
+ * field), used when ffprobe can't read the file: a whole number of pixels
+ * from 1 to 16384; anything else is left out (null, logged).
+ */
+function readVideoSize(value) {
+  if (value === undefined || value === null || value === '') return null;
+  const n = Number(value);
+  if (!Number.isInteger(n) || n < 1 || n > 16384) {
+    console.warn('[rawClips] video width/height left out (not a whole number from 1 to 16384):', String(value).slice(0, 40));
+    return null;
+  }
+  return n;
 }
 
 /** Sets the green-removal state. extra: { strength, cutoutKey, cutoutUrl, error }. */
@@ -420,9 +519,14 @@ function thumbnailArgs(input, output, at = 1) {
   return ['-hide_banner', '-y', '-ss', String(at), '-i', input, '-frames:v', '1', '-vf', 'scale=480:-2', '-q:v', '4', output];
 }
 
-/** ffprobe arguments: the format and streams as JSON. */
+/**
+ * ffprobe arguments: the format and streams as JSON. A link (http/https)
+ * also gets a 15-second read timeout, so a stalled connection fails
+ * instead of waiting for the kill.
+ */
 function probeArgs(input) {
-  return ['-v', 'error', '-print_format', 'json', '-show_format', '-show_streams', input];
+  const net = /^https?:\/\//i.test(String(input)) ? ['-rw_timeout', '15000000'] : [];
+  return ['-v', 'error', ...net, '-print_format', 'json', '-show_format', '-show_streams', input];
 }
 
 /** { duration_seconds, width, height, hasVideo } from ffprobe's JSON output. */
@@ -436,19 +540,22 @@ function readProbe(json) {
   }
   const streams = Array.isArray(data?.streams) ? data.streams : [];
   const video = streams.find((s) => s.codec_type === 'video');
+  // A fragmented MP4 or a browser's WebM can say "N/A" or 0: no length, not 0:00.
   const duration = Number(data?.format?.duration ?? video?.duration);
+  const width = Number(video?.width);
+  const height = Number(video?.height);
   return {
-    duration_seconds: Number.isFinite(duration) ? Math.round(duration * 100) / 100 : null,
-    width: video?.width ? Number(video.width) : null,
-    height: video?.height ? Number(video.height) : null,
+    duration_seconds: Number.isFinite(duration) && duration > 0 ? Math.round(duration * 100) / 100 : null,
+    width: Number.isFinite(width) && width > 0 ? width : null,
+    height: Number.isFinite(height) && height > 0 ? height : null,
     hasVideo: Boolean(video),
   };
 }
 
 module.exports = {
   PERFORMERS, KEY_STATUSES, KEY_STRENGTHS, STALE_HOURS, STALE_MESSAGE, DEFAULT_KEY_COLOR, STRENGTH_SIMILARITY,
-  TAKE_FIELDS, TAKE_FIELDS_MISSING, BEAT_MARKS_MISSING, MAX_BEAT_MARKS, MAX_MARK_SECONDS,
-  UPLOAD_EXTRAS, RawClipError, readFields, readBeatMarks, readStrength, readTakeSeconds, truthy, findEpisode, shapeRow,
+  TAKE_FIELDS, TAKE_FIELDS_MISSING, BEAT_MARKS_MISSING, END_BEAT_MISSING, MAX_BEAT_MARKS, MAX_MARK_SECONDS,
+  UPLOAD_EXTRAS, RawClipError, readFields, readBeatMarks, readStrength, readTakeSeconds, readVideoSize, truthy, findEpisode, shapeRow,
   listClips, getClip, createClip, updateClip, storeTakeExtras, setKeyState, removeClip,
   pickKeyColor, chromakeyArgs, sampleFrameArgs, thumbnailArgs, probeArgs, readProbe,
 };
