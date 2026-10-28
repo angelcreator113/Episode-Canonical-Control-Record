@@ -11,12 +11,16 @@
  *                                              teleprompter take start_line?, beat_marks? (JSON);
  *                                              the browser's own measure: seconds?, width?, height?)
  *   POST   /:episodeId/uploads                 start an upload in parts (JSON: the same fields,
- *                                              plus filename, content_type, size) →
+ *                                              plus filename, content_type, size — or
+ *                                              size_unknown: true for a take still recording) →
  *                                              { uploadId, clipId, key, partSize }
  *   PUT    /:episodeId/uploads/:uploadId/parts/:partNumber
  *                                              one part (the raw bytes, at most 10 MB)
  *   POST   /:episodeId/uploads/:uploadId/complete
- *                                              finish it (JSON: thumbnail? a small base64 JPEG)
+ *                                              finish it (JSON: thumbnail? a small base64 JPEG;
+ *                                              size, required when it started without one;
+ *                                              fields? the take's fields as they ended up:
+ *                                              label, beat_marks, seconds, width, height …)
  *                                              → 201 { success, data, stored, not_stored }
  *   DELETE /:episodeId/uploads/:uploadId       throw the upload away
  *   PATCH  /:episodeId/:clipId                 performer, guest_name, label, beat_number (the scene),
@@ -56,6 +60,15 @@
  *
  * Failures answer in plain words (rawClipErrors): a full disk is a 507 that
  * says the take is still safe on the phone. The raw error is only logged.
+ *
+ * Saving while recording (Evoni, 2026-10-28): the teleprompter starts a
+ * take's upload while it records (size_unknown: true) and sends each 8 MB
+ * part as it fills. Until "complete" brings the size, a part may be 1 byte
+ * to 8 MB and at most 640 parts (5 GB) are taken; at complete every part but
+ * the last must be exactly 8 MB, or it is listed as missing (409) and sent
+ * again. The fields that only exist once the take has ended (its beat
+ * markers, its length, its picture size) come with complete, read by the
+ * same rules as at the start.
  */
 
 const express = require('express');
@@ -156,10 +169,14 @@ router.post('/:episodeId/uploads', requireAuth, async (req, res) => {
     const filename = typeof body.filename === 'string' && body.filename.trim() ? body.filename.trim().slice(0, 255) : 'take.mp4';
     const contentType = typeof body.content_type === 'string' && body.content_type.trim() ? body.content_type.trim().slice(0, 100) : 'video/mp4';
     if (!isVideo(filename, contentType)) throw new clips.RawClipError(400, 'Only video files can be uploaded here');
-    const size = Number(body.size);
-    if (!Number.isInteger(size) || size <= 0) throw new clips.RawClipError(400, 'The video is empty, or its size was not sent');
-    if (size > parts.MAX_BYTES) throw new clips.RawClipError(413, 'That video is over 5 GB, too big to upload here');
-    if (parts.partCount(size) > parts.MAX_PARTS) throw new clips.RawClipError(413, 'That video is too big to upload in parts');
+    // A take still recording has no size yet: it comes with complete.
+    const unknown = body.size_unknown === true && (body.size === undefined || body.size === null);
+    const size = unknown ? null : Number(body.size);
+    if (!unknown) {
+      if (!Number.isInteger(size) || size <= 0) throw new clips.RawClipError(400, 'The video is empty, or its size was not sent');
+      if (size > parts.MAX_BYTES) throw new clips.RawClipError(413, 'That video is over 5 GB, too big to upload here');
+      if (parts.partCount(size) > parts.MAX_PARTS) throw new clips.RawClipError(413, 'That video is too big to upload in parts');
+    }
     const episode = await clips.findEpisode(models.sequelize, req.params.episodeId);
 
     const clipId = uuidv4();
@@ -169,7 +186,7 @@ router.post('/:episodeId/uploads', requireAuth, async (req, res) => {
       episode, clipId, key, contentType, size, filename, userId: req.user?.id ?? null,
       fields: { ...fields, greenScreen, strength, seconds, width, height },
     });
-    return res.status(201).json({ success: true, uploadId: entry.uploadId, clipId, key, partSize: entry.partSize, parts: parts.partCount(size) });
+    return res.status(201).json({ success: true, uploadId: entry.uploadId, clipId, key, partSize: entry.partSize, parts: unknown ? null : parts.partCount(size) });
   } catch (err) {
     return sendError(res, err, 'upload start');
   }
@@ -189,10 +206,10 @@ router.put('/:episodeId/uploads/:uploadId/parts/:partNumber', requireAuth, (req,
       if (!Number.isInteger(n) || n < 1 || n > parts.MAX_PARTS) throw new clips.RawClipError(400, 'The part number must be a whole number from 1 to 10000');
       const entry = ownUpload(req);
       if (entry.result) return res.json({ success: true, partNumber: n, done: true });
-      if (n > parts.partCount(entry.size, entry.partSize)) throw new clips.RawClipError(400, `This upload has only ${parts.partCount(entry.size, entry.partSize)} parts`);
+      const most = entry.size == null ? parts.maxUnknownParts(entry.partSize) : parts.partCount(entry.size, entry.partSize);
+      if (n > most) throw new clips.RawClipError(400, `This upload has only ${most} parts`);
       const body = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
-      const want = parts.expectedPartSize(entry, n);
-      if (body.length !== want) throw new clips.RawClipError(400, `Part ${n} arrived incomplete. Try again.`);
+      if (!parts.partFits(entry, n, body.length)) throw new clips.RawClipError(400, `Part ${n} arrived incomplete. Try again.`);
       const etag = await parts.putPart(entry, n, body);
       return res.json({ success: true, partNumber: n, etag });
     } catch (err) {
@@ -264,23 +281,46 @@ async function completeUpload(entry, thumbnailB64) {
   return { success: true, data: row, stored, not_stored: notStored };
 }
 
+/**
+ * The upload's fields with the ones sent at complete (a take started while
+ * recording: its markers, length and picture size only exist once it ends),
+ * read by the same rules as at the start; a field not sent stays as it was.
+ */
+function endFields(fields, sent) {
+  if (sent === undefined || sent === null) return fields;
+  if (typeof sent !== 'object' || Array.isArray(sent)) throw new clips.RawClipError(400, 'fields must be an object');
+  const next = { ...fields, ...clips.readFields(sent) };
+  if (sent.seconds !== undefined) next.seconds = clips.readTakeSeconds(sent.seconds) ?? fields.seconds ?? null;
+  if (sent.width !== undefined && sent.height !== undefined) {
+    const width = clips.readVideoSize(sent.width);
+    const height = clips.readVideoSize(sent.height);
+    if (width && height) { next.width = width; next.height = height; }
+  }
+  if (next.end_beat_number != null && next.beat_number == null) throw new clips.RawClipError(400, 'Pick the beat the clip starts on before the beat it ends on');
+  return next;
+}
+
 router.post('/:episodeId/uploads/:uploadId/complete', requireAuth, async (req, res) => {
   try {
     const entry = ownUpload(req);
     // Finished already (its answer was lost on the way): the same clip, not a second one.
     if (entry.result) return res.status(201).json(entry.result);
+    const body = req.body || {};
+    // Started while recording: the size comes now (a known one must match).
+    parts.setSize(entry, body.size);
+    if (!entry.completing) entry.fields = endFields(entry.fields, body.fields);
     const missing = parts.missingParts(entry);
     if (missing.length) {
       console.warn(`[RawClips] complete refused: ${missing.length} part(s) missing for ${entry.uploadId}`);
       return res.status(409).json({ success: false, error: 'Some of the take has not arrived yet. Tap Retry to send the rest.', missing: missing.slice(0, 100) });
     }
     if (!entry.completing) {
-      entry.completing = completeUpload(entry, (req.body || {}).thumbnail)
-        .then((body) => { entry.result = body; return body; })
+      entry.completing = completeUpload(entry, body.thumbnail)
+        .then((out) => { entry.result = out; return out; })
         .finally(() => { entry.completing = null; });
     }
-    const body = await entry.completing;
-    return res.status(201).json(body);
+    const out = await entry.completing;
+    return res.status(201).json(out);
   } catch (err) {
     return sendError(res, err, 'upload complete');
   }

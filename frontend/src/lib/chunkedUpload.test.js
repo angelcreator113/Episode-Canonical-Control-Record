@@ -119,7 +119,8 @@ describe('sendInParts (the API)', () => {
     }, {}]);
     expect(api.put.mock.calls.map(([u]) => u)).toEqual(['/api/v1/episode-clips/ep-1/uploads/u%2F1/parts/1', '/api/v1/episode-clips/ep-1/uploads/u%2F1/parts/2']);
     expect(api.post.mock.calls[1][0]).toBe('/api/v1/episode-clips/ep-1/uploads/u%2F1/complete');
-    expect(api.post.mock.calls[1][1]).toEqual({ thumbnail: 'data:image/jpeg;base64,/9j/AA==' });
+    // The size and the fields go with complete too (an upload begun while recording needs them; 2026-10-28).
+    expect(api.post.mock.calls[1][1]).toEqual({ thumbnail: 'data:image/jpeg;base64,/9j/AA==', size: 9 * MB, fields: expect.objectContaining({ performer: 'justawoman' }) });
     expect(states.map((s) => s && s.done)).toEqual([[], [1], [1, 2], null]);
   });
 
@@ -172,7 +173,7 @@ describe('sendInParts (the API)', () => {
       filename: 'IMG_4410.mp4', content_type: 'video/mp4', size: 3 * MB,
     });
     expect(api.post.mock.calls[1][0]).toBe('/api/v1/episode-clips/ep-1/uploads/u7/complete');
-    expect(api.post.mock.calls[1][1]).toEqual({ thumbnail: 'data:image/jpeg;base64,/9j/BB==' });
+    expect(api.post.mock.calls[1][1]).toMatchObject({ thumbnail: 'data:image/jpeg;base64,/9j/BB==', size: 3 * MB });
   });
 
   test('a video the browser could not measure still uploads, without the fields', async () => {

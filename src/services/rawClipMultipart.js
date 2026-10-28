@@ -23,6 +23,13 @@
  * over HTTPS giving nothing), so ffprobe is a first try, never a wait: it is
  * killed at its timeout, and a hard stop a few seconds later moves on even
  * if the killed process never reports back.
+ *
+ * Saving while recording (Evoni, 2026-10-28): a take's upload starts while
+ * it is still recording, so its size is not known yet (size: null). Its
+ * parts are then 1 byte to partSize each, numbered up to what MAX_BYTES
+ * allows; the size comes with "complete" (setSize), and only then is every
+ * part but the last checked to be exactly partSize (wrongParts): a part of
+ * the wrong length counts as missing and is sent again.
  */
 
 const {
@@ -55,6 +62,38 @@ const partCount = (size, partSize = PART_SIZE) => Math.max(1, Math.ceil(size / p
 /** The byte length part `n` must have (every part is partSize but the last). */
 const expectedPartSize = (entry, n) => Math.min(entry.partSize, entry.size - (n - 1) * entry.partSize);
 
+/** The most parts an upload whose size is not known yet may send (MAX_BYTES in partSize parts). */
+const maxUnknownParts = (partSize = PART_SIZE) => Math.min(MAX_PARTS, partCount(MAX_BYTES, partSize));
+
+/**
+ * Whether a part of `length` bytes may be sent as part `n` now: exactly its
+ * size when the upload's size is known; while it is not, 1 byte to partSize
+ * (any part may turn out to be the last), checked again at setSize.
+ */
+function partFits(entry, n, length) {
+  if (entry.size == null) return n <= maxUnknownParts(entry.partSize) && length >= 1 && length <= entry.partSize;
+  return n <= partCount(entry.size, entry.partSize) && length === expectedPartSize(entry, n);
+}
+
+/**
+ * Fixes the size of an upload begun without one (at "complete"). Throws a
+ * RawClipError for a size that is not a whole number above 0, over
+ * MAX_BYTES, or different from the size it already has.
+ */
+function setSize(entry, value) {
+  if (value === undefined || value === null || value === '') {
+    if (entry.size == null) throw new clips.RawClipError(400, 'The size of the take was not sent. Tap Retry.');
+    return entry.size;
+  }
+  const size = Number(value);
+  if (!Number.isInteger(size) || size <= 0) throw new clips.RawClipError(400, 'The size of the take must be a whole number of bytes');
+  if (size > MAX_BYTES) throw new clips.RawClipError(413, 'That video is over 5 GB, too big to upload here');
+  if (partCount(size, entry.partSize) > MAX_PARTS) throw new clips.RawClipError(413, 'That video is too big to upload in parts');
+  if (entry.size != null && entry.size !== size) throw new clips.RawClipError(400, 'The size of the take does not match its upload. Tap Retry.');
+  entry.size = size;
+  return size;
+}
+
 /** Starts the S3 upload and remembers it. Resolves the entry. */
 async function begin({ episode, clipId, key, contentType, fields, size, filename, userId = null, partSize = PART_SIZE, now = Date.now() }) {
   const out = await media.getS3().send(new CreateMultipartUploadCommand({
@@ -83,16 +122,23 @@ async function putPart(entry, partNumber, body) {
   return out.ETag;
 }
 
-/** Part numbers still missing before the upload can be finished. */
+/**
+ * Part numbers still missing before the upload can be finished: not sent,
+ * or (an upload begun without a size) sent at the wrong length.
+ */
 function missingParts(entry) {
   const missing = [];
-  for (let n = 1; n <= partCount(entry.size, entry.partSize); n += 1) if (!entry.parts.has(n)) missing.push(n);
+  for (let n = 1; n <= partCount(entry.size, entry.partSize); n += 1) {
+    const p = entry.parts.get(n);
+    if (!p || p.size !== expectedPartSize(entry, n)) missing.push(n);
+  }
   return missing;
 }
 
-/** Joins the parts into the one file in S3. */
+/** Joins parts 1..N into the one file in S3 (any part past the size is left out, and S3 drops it). */
 async function finish(entry) {
-  const Parts = [...entry.parts.entries()].sort((a, b) => a[0] - b[0]).map(([PartNumber, p]) => ({ PartNumber, ETag: p.etag }));
+  const last = partCount(entry.size, entry.partSize);
+  const Parts = [...entry.parts.entries()].filter(([n]) => n <= last).sort((a, b) => a[0] - b[0]).map(([PartNumber, p]) => ({ PartNumber, ETag: p.etag }));
   await media.getS3().send(new CompleteMultipartUploadCommand({
     Bucket: requireAssetBucket(), Key: entry.key, UploadId: entry.uploadId, MultipartUpload: { Parts },
   }));
@@ -207,6 +253,6 @@ const reset = () => pending.clear();
 
 module.exports = {
   PART_SIZE, MAX_PARTS, MAX_BYTES, MAX_THUMB_BYTES, EXPIRE_MS,
-  partCount, expectedPartSize, begin, get, putPart, missingParts, finish, abort,
+  partCount, expectedPartSize, maxUnknownParts, partFits, setSize, begin, get, putPart, missingParts, finish, abort,
   sweepExpired, startExpirySweeper, readLink, probe, thumbnailFromLink, readThumbnail, putSmall, reset,
 };

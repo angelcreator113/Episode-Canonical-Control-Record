@@ -9,6 +9,7 @@ import { stripTaskRefs } from '../styles/contrast';
 const files = [
   'TeleprompterRemote.css', 'TeleprompterRemote.jsx',
   '../components/Teleprompter/TeleprompterRemotePanel.jsx', '../components/Teleprompter/VoiceRecord.jsx',
+  '../components/Teleprompter/PhoneRecorder.jsx',
 ].map((f) => [f, readFileSync(resolve(__dirname, f), 'utf8')]);
 const COLOUR = /#[0-9a-f]{3,8}\b|\b(?:rgba?|hsla?)\(/i;
 

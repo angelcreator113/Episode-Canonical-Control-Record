@@ -107,3 +107,36 @@ describe('queries', () => {
     spy.mockRestore();
   });
 });
+
+describe('Rig mode: the phone records the take (2026-10-28)', () => {
+  test('the phone_take_* commands are allowed; the older ones are unchanged and still first', () => {
+    ['phone_take_start', 'phone_take_stop', 'phone_take_pause', 'phone_take_resume'].forEach((c) => expect(remote.readCommand(c)).toBe(c));
+    expect(remote.COMMANDS.slice(0, 9)).toEqual(['toggle', 'faster', 'slower', 'next_beat', 'prev_beat', 'bigger', 'smaller', 'record_start', 'record_stop']);
+    expect(() => remote.readCommand('phone_take_delete')).toThrow(/command must be one of/);
+  });
+
+  test('readState keeps the rig fields, validated and bounded', () => {
+    const s = remote.readState({
+      rig: true, playing: true, phoneTake: true, line: 12.4, count: 3, episodeId: ID, takeLabel: 'Full episode · take 3',
+      takeNo: 3, readAs: 'JustAWoman', performer: 'justawoman', startLine: 2,
+    });
+    expect(s).toMatchObject({ rig: true, playing: true, phoneTake: true, line: 12, count: 3, episodeId: ID, takeLabel: 'Full episode · take 3', takeNo: 3, readAs: 'JustAWoman', performer: 'justawoman', startLine: 2 });
+    const bad = remote.readState({ rig: 'yes', phoneTake: 1, line: -5, count: 99, episodeId: 'ep; drop table', takeLabel: 'x'.repeat(500), performer: 'admin', startLine: 'two' });
+    expect(bad).toMatchObject({ rig: false, phoneTake: false, line: 0, count: 9, episodeId: null, performer: null, startLine: null });
+    expect(bad.takeLabel).toHaveLength(200);
+    // Not sent: null, never 0 (an older desktop's state reads as before).
+    expect(remote.readState({})).toMatchObject({ line: null, count: null, takeNo: null, startLine: null, rig: false });
+  });
+
+  test('putState stamps saved_at in the database; stateByToken answers how old the state is', async () => {
+    const put = jest.fn(async () => [[{ id: ID, command_seq: 1, expires_at: 'later' }]]);
+    await remote.putState({ query: put }, { id: ID, userId: 'u1', state: { beat: 4 } });
+    expect(put.mock.calls[0][0]).toMatch(/state = CAST\(:state AS JSONB\) \|\| jsonb_build_object\('saved_at', NOW\(\)\)/);
+    const get = jest.fn(async () => [[{ state: { beat: 4 }, expires_at: 'later', command_seq: 2, state_age_ms: '412.7' }]]);
+    const out = await remote.stateByToken({ query: get }, { token: remote.newToken() });
+    expect(out).toEqual({ state: { beat: 4 }, expires_at: 'later', seq: 2, state_age_ms: 413 });
+    expect(get.mock.calls[0][0]).toMatch(/NOW\(\) - \(state->>'saved_at'\)::timestamptz/);
+    const old = await remote.stateByToken({ query: jest.fn(async () => [[{ state: { beat: 4 }, expires_at: 'later', command_seq: 2, state_age_ms: null }]]) }, { token: remote.newToken() });
+    expect(old.state_age_ms).toBeNull();
+  });
+});
