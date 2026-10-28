@@ -7,11 +7,15 @@
 // "Full episode" (Evoni, 2026-10-23): the whole-episode takes in their own
 // group, each with its beat markers as links that play the take from that
 // beat (beat_marks, once migration 20261023235900 has run).
+// Where each starts and ends (Evoni, 2026-10-28): "Beats 10 → 14 · ended in
+// beat 14 · Cliffhanger", and a note when two of her full takes cover the
+// same beats ("Overlaps Full episode · take 1 on beats 10–11").
 
 import { useState, useRef, useEffect } from 'react';
-import { Play, Square, Star, Film, Clapperboard } from 'lucide-react';
+import { Play, Square, Star, Film, Clapperboard, MoveRight, Layers } from 'lucide-react';
 import { clipLength, hasTakeFields } from '../../lib/rawClipsApi';
 import { markClock, cleanMarks, hasMarksField } from '../../lib/fullEpisodeTake';
+import { rangeText, rangeOverlaps, overlapText, beatNames } from '../../lib/clipRange';
 
 /** Puts a video at `t` seconds (once it can), and plays it. */
 export function seekVideo(video, t) {
@@ -55,7 +59,7 @@ const when = (iso) => {
  * takes: the beat's clips, oldest first. beatNumber: the beat on screen.
  * onFavorite(clip): star or un-star. starring: the clip id being saved.
  */
-export default function TakesPanel({ takes, beatNumber, onFavorite, starring = null, error = null, loading = false, fullTakes = [] }) {
+export default function TakesPanel({ takes, beatNumber, onFavorite, starring = null, error = null, loading = false, fullTakes = [], names = beatNames() }) {
   const [playing, setPlaying] = useState(null);
   // A marker picked: the full take plays from { id, t }.
   const [seek, setSeek] = useState(null);
@@ -65,6 +69,7 @@ export default function TakesPanel({ takes, beatNumber, onFavorite, starring = n
     if (seek && shown && seek.id === shown.id) seekVideo(videoRef.current, seek.t);
   }, [seek, shown]);
   const playFrom = (t, at) => { setPlaying(t.id); setSeek({ id: t.id, t: at, n: Date.now() }); };
+  const overlaps = rangeOverlaps(fullTakes);
   return (
     <div className="stp-takes" role="region" aria-label={`Takes for beat ${beatNumber}`} data-testid="stp-takes">
       <p className="stp-takes-title">Beat {beatNumber} · takes in Files</p>
@@ -110,6 +115,7 @@ export default function TakesPanel({ takes, beatNumber, onFavorite, starring = n
               const len = clipLength(t.duration_seconds);
               const at = when(t.created_at);
               const name = t.label || t.original_filename || 'Full episode take';
+              const range = rangeText(t, names);
               return (
                 <li key={t.id} className="stp-take is-full" data-testid="stp-full-take">
                   <div className="stp-take-row">
@@ -123,6 +129,10 @@ export default function TakesPanel({ takes, beatNumber, onFavorite, starring = n
                       {playing === t.id ? <Square size={16} aria-hidden="true" /> : <Play size={16} aria-hidden="true" />}
                     </button>
                   </div>
+                  {range && <span className="stp-take-range" data-testid="stp-full-range"><MoveRight size={13} aria-hidden="true" /> {range}</span>}
+                  {(overlaps.get(t.id) || []).map((o) => (
+                    <span key={o.clip.id} className="stp-take-meta stp-take-overlap" data-testid="stp-full-overlap"><Layers size={13} aria-hidden="true" /> {overlapText(o)}</span>
+                  ))}
                   {t.url_raw && Array.isArray(t.beat_marks) && t.beat_marks.length > 0 && (
                     <MarkLinks marks={t.beat_marks} name={name} testId="stp-full-marks" onSeek={(s) => playFrom(t, s)} />
                   )}
