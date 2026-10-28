@@ -10,10 +10,12 @@
  *                                 earlier clip is soft-deleted
  *   DELETE /:episodeId/:clipId    soft delete (the file stays in S3)
  *
- * Replacing a line's clip (an upload over it) and removing one are for the
- * clip's recorder or an admin (V-1; scriptVoiceClipsService.mayChange);
- * anyone else gets a 403 NOT_CLIP_OWNER, and an upload is refused before
- * its file goes to S3.
+ * Recording a clip (POST, new or over a line's clip) is for admins only
+ * (403 otherwise). Removing one is for its recorder or an admin (V-1;
+ * scriptVoiceClipsService.mayChange; else 403 NOT_CLIP_OWNER). While Voice
+ * Studio is on (VOICE_STUDIO=on) both are refused with a 409
+ * VOICE_CLIPS_FROZEN: lines are recorded in Voice Studio then. A refused
+ * upload never sends its file to S3 (multer runs after the checks).
  *
  * The audio goes to S3 the raw clips' way (rawClipMedia.uploadFile), under
  * episodes/<episode>/voice-clips/. Before migration 20261020120000 has run,
@@ -25,7 +27,7 @@ const express = require('express');
 const multer = require('multer');
 const path = require('path');
 const { v4: uuidv4 } = require('uuid');
-const { requireAuth } = require('../middleware/auth');
+const { requireAuth, authorize } = require('../middleware/auth');
 const models = require('../models');
 const voice = require('../services/scriptVoiceClipsService');
 const media = require('../services/rawClipMedia');
@@ -61,6 +63,14 @@ const sendError = (res, err, what) => {
   return res.status(500).json({ success: false, error: err.message });
 };
 
+// While Voice Studio is on, lines are recorded there; the old clips are frozen (Evoni, 2026-10-28).
+const voiceStudioOn = () => String(process.env.VOICE_STUDIO || '').toLowerCase() === 'on';
+const FROZEN = "Voice Studio is on, so old voice clips can't be recorded, replaced or removed. Record the line in Voice Studio.";
+const frozen = (req, res, next) => {
+  if (!voiceStudioOn()) return next();
+  return res.status(409).json({ success: false, error: FROZEN, code: 'VOICE_CLIPS_FROZEN' });
+};
+
 const checkEpisodeId = (id) => {
   if (!UUID_RE.test(String(id || ''))) throw new voice.VoiceClipError(404, 'Episode not found');
 };
@@ -75,7 +85,8 @@ router.get('/:episodeId', requireAuth, async (req, res) => {
   }
 });
 
-router.post('/:episodeId', requireAuth, (req, res) => {
+// Recording a clip (a new one or over a line's clip) is for admins (Evoni, 2026-10-28).
+router.post('/:episodeId', requireAuth, authorize(['ADMIN']), frozen, (req, res) => {
   upload.single('audio')(req, res, async (uploadErr) => {
     const file = req.file;
     try {
@@ -104,7 +115,7 @@ router.post('/:episodeId', requireAuth, (req, res) => {
   });
 });
 
-router.delete('/:episodeId/:clipId', requireAuth, async (req, res) => {
+router.delete('/:episodeId/:clipId', requireAuth, frozen, async (req, res) => {
   try {
     checkEpisodeId(req.params.episodeId);
     if (!UUID_RE.test(String(req.params.clipId || ''))) return res.status(404).json({ success: false, error: 'Voice clip not found' });
