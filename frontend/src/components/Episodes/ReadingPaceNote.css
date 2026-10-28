@@ -1,0 +1,18 @@
+/* Her learned reading pace (ReadingPaceNote): design tokens only. */
+.rpn { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 0 0 10px; font-size: 13px; line-height: 1.45; min-width: 0; }
+.rpn svg { flex: none; vertical-align: -2px; }
+.rpn-text { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.rpn-switch { display: inline-flex; flex-wrap: wrap; gap: 6px; }
+.rpn-opt { min-height: 36px; padding: 6px 12px; border-radius: 999px; font: inherit; font-size: 13px; cursor: pointer; }
+.rpn-opt:focus-visible { outline-offset: 2px; }
+
+.rpn.is-studio { color: var(--studio-ink-muted); }
+.rpn.is-studio .rpn-opt { border: 1px solid var(--studio-line-strong); background: var(--studio-card); color: var(--studio-ink); }
+.rpn.is-studio .rpn-opt:hover { border-color: var(--studio-purple); }
+.rpn.is-studio .rpn-opt:focus-visible { outline: 2px solid var(--studio-purple); }
+.rpn.is-studio .rpn-opt.is-on { border-color: var(--studio-purple); background: var(--studio-purple-soft); color: var(--studio-purple); font-weight: 700; }
+
+.rpn.is-prompter { color: var(--studio-prompter-cue); }
+.rpn.is-prompter .rpn-opt { border: 1px solid var(--studio-prompter-line); background: var(--studio-prompter-bar); color: var(--studio-prompter-cue); }
+.rpn.is-prompter .rpn-opt:focus-visible { outline: 2px solid var(--studio-prompter-mark); }
+.rpn.is-prompter .rpn-opt.is-on { border-color: var(--studio-prompter-mark); color: var(--studio-prompter-ink); font-weight: 700; }
