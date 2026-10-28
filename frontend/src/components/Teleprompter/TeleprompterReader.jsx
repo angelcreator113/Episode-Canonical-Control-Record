@@ -92,7 +92,7 @@ import {
   X, ChevronLeft, ChevronRight, Play, Pause, FlipHorizontal2, Timer, Video, VideoOff, Circle, Square,
   RotateCcw, Upload, Download, AlertTriangle, Trash2, ArrowRight, CheckCircle2, ALargeSmall, Gauge, Hourglass, SlidersHorizontal,
   AudioLines, Grid3x3, Clock, Film, Smartphone, Mic, Volume2,
-  Bell, MessageCircle, MousePointerClick, ArrowDownUp, Send, MonitorPlay, AppWindow, Monitor, EyeOff, Clapperboard, Smile, FileDown, Share2, History,
+  Bell, MessageCircle, MousePointerClick, ArrowDownUp, Send, MonitorPlay, AppWindow, Monitor, EyeOff, Clapperboard, Smile, StickyNote, FileDown, Share2, History,
 } from 'lucide-react';
 import useVoiceFollow from '../../hooks/useVoiceFollow';
 import useMicLevel from '../../hooks/useMicLevel';
@@ -114,7 +114,7 @@ import useLineVoice from '../../hooks/useLineVoice';
 import TeleprompterRemotePanel from './TeleprompterRemotePanel';
 import VoiceRecordPanel from './VoiceRecord';
 import { voiceClipsApi, isNotReady as voiceNotReady, VOICE_NOT_READY, clipsByLine, lineKey, withClip, clipSeconds, clipForLine } from '../../lib/voiceClipsApi';
-import { teleprompterScript, pastedParagraphs, pastedScript, speakersOf, HER, takeName, takeExtension, downloadName, clock, lineChoice, withoutScreen, nextTakeNumber, takeNumberOf } from '../../lib/teleprompterLines';
+import { teleprompterScript, pastedParagraphs, pastedScript, speakersOf, HER, takeName, takeExtension, downloadName, clock, lineChoice, withoutScreen, withoutSceneNotes, nextTakeNumber, takeNumberOf } from '../../lib/teleprompterLines';
 import { rawClipsApi, hasTakeFields, beatTakes, withFavorite, uploadErrorMessage, abortUpload } from '../../lib/rawClipsApi';
 import { makeThumbnail } from '../../lib/chunkedUpload';
 import { withDuration } from '../../lib/takeDuration';
@@ -132,7 +132,7 @@ export const SPEED_MAX = 20;
 const PX_PER_STEP = 8; // speed 5 scrolls 40px a second
 export const PACE_MIN = 0.5;
 export const PACE_MAX = 2;
-export const DEFAULTS = { size: 40, speed: 5, mirror: false, countdown: true, lineMode: 'mine', readAs: HER, pacing: 'steady', pace: 1, grid: false, playVoice: true, screen: true };
+export const DEFAULTS = { size: 40, speed: 5, mirror: false, countdown: true, lineMode: 'mine', readAs: HER, pacing: 'steady', pace: 1, grid: false, playVoice: true, screen: true, sceneNotes: false };
 // The mic warning (Evoni, 2026-10-25: it warned 3 seconds in, before she had
 // spoken). Nothing in the first 8 seconds of a take; then "yet" while the mic
 // has never gone above this level, or, after sound, 15 seconds below it.
@@ -164,6 +164,7 @@ export function readSettings() {
       grid: typeof raw.grid === 'boolean' ? raw.grid : DEFAULTS.grid,
       playVoice: typeof raw.playVoice === 'boolean' ? raw.playVoice : DEFAULTS.playVoice,
       screen: typeof raw.screen === 'boolean' ? raw.screen : DEFAULTS.screen,
+      sceneNotes: typeof raw.sceneNotes === 'boolean' ? raw.sceneNotes : DEFAULTS.sceneNotes,
       pace: Number.isFinite(raw.pace) ? clamp(roundPace(raw.pace), PACE_MIN, PACE_MAX) : DEFAULTS.pace,
     };
   } catch (err) {
@@ -383,7 +384,12 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
     const own = (ls, list) => ls.forEach((l) => { src.push(l); srcList.push(list); });
     // On-screen moments show unless she turned them off; a voice clip's line
     // index (`vi`) never counts them, so clips recorded before keep their lines.
-    const shownLines = (ls) => (settings.screen ? ls : withoutScreen(ls));
+    // Scene notes (stage directions) show only when she turns them on: they
+    // are not read aloud, so they would hold the reading line (Evoni, 2026-10-28).
+    const shownLines = (ls) => {
+      const seen = settings.screen ? ls : withoutScreen(ls);
+      return settings.sceneNotes ? seen : withoutSceneNotes(seen);
+    };
     if (isScript) {
       if (!oneBeat) { intro = shownLines(script.intro); flat.push(...intro); intro.forEach(() => where.push(null)); own(intro, script.intro); }
       beats.forEach((b, i) => {
@@ -404,12 +410,15 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
       groups.forEach((g, gi) => { flat.push(...g); own(g, pasted[gi]); });
     } else paragraphs.forEach((p) => { const l = { kind: 'para', who: null, text: p, seconds: 0 }; flat.push(l); own([l], null); });
     return { flat, beatFirst, where, beatLines, intro, src, srcList, groups };
-  }, [isScript, oneBeat, script, beats, current, pasted, paragraphs, settings.screen]);
+  }, [isScript, oneBeat, script, beats, current, pasted, paragraphs, settings.screen, settings.sceneNotes]);
   const { flat, where } = layout;
   // Lines with speakers and times (not plain pasted prose).
   const hasLines = flat.some((l) => l.kind !== 'para');
   // The script has on-screen moments to show or hide.
-  const hasScreen = (isScript ? [...script.intro, ...beats.flatMap((b) => b.lines)] : (pasted || []).flat()).some((l) => l.kind === 'screen');
+  const allLines = isScript ? [...script.intro, ...beats.flatMap((b) => b.lines)] : (pasted || []).flat();
+  const hasScreen = allLines.some((l) => l.kind === 'screen');
+  // The script has scene notes to show or hide.
+  const hasSceneNotes = allLines.some((l) => l.kind === 'direction');
 
   // "Read as": whose lines are hers; JustAWoman unless she picks another.
   const speakers = useMemo(() => speakersOf(isScript ? [...script.intro, ...beats.flatMap((b) => b.lines)] : (pasted || []).flat()), [isScript, script, beats, pasted]);
@@ -859,7 +868,7 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
   };
   const reflowRef = useRef(null);
   useLayoutEffect(() => {
-    const now = [settings.size, settings.lineMode, settings.screen, readAs].join('|');
+    const now = [settings.size, settings.lineMode, settings.screen, settings.sceneNotes, readAs].join('|');
     const before = reflowRef.current;
     reflowRef.current = now;
     if (before == null || before === now || !flat.length) return;
@@ -869,7 +878,7 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
     setActive(at);
     scrollToLine(at);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [settings.size, settings.lineMode, settings.screen, readAs]);
+  }, [settings.size, settings.lineMode, settings.screen, settings.sceneNotes, readAs]);
   // The reading area changes size (the phone's settings open or close, the
   // phone turns, a status line comes and goes): the same line stays on the reading line.
   useEffect(() => {
@@ -1821,6 +1830,13 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
             title="Show what happens on Lala's screen as a cue to react to"
             onClick={() => { cancelCountdown(); setPlaying(false); set('screen', !settings.screen); }}>
             <MonitorPlay size={18} aria-hidden="true" /> Show on-screen moments
+          </button>
+        )}
+        {hasSceneNotes && (
+          <button type="button" className="stp-btn" data-testid="stp-scene-notes-toggle" aria-pressed={settings.sceneNotes} disabled={busyTake}
+            title="Show the (bracketed) scene notes; they are not read aloud, so they are off by default"
+            onClick={() => { cancelCountdown(); setPlaying(false); set('sceneNotes', !settings.sceneNotes); }}>
+            <StickyNote size={18} aria-hidden="true" /> Show scene notes
           </button>
         )}
         {hasLines && (
