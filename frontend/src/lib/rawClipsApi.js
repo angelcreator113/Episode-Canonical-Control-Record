@@ -7,6 +7,8 @@
  */
 import api from '../services/api';
 import { PART_SIZE, uploadInParts, makeThumbnail } from './chunkedUpload';
+import { probeVideo, lengthWritable } from './videoProbe';
+import { withDuration } from './takeDuration';
 
 const base = (episodeId) => `/api/v1/episode-clips/${episodeId}`;
 
@@ -22,17 +24,57 @@ export const STRENGTHS = [
   { key: 'high', label: 'Strong' },
 ];
 
-/** The fields of a take or clip as the server reads them (the one-request upload's names). */
-export function uploadFields({ performer, greenScreen = false, guestName, strength, label, beatNumber, startLine, beatMarks, seconds } = {}) {
+const isBeat = (n) => Number.isInteger(n) && n >= 1 && n <= 14;
+const isPixels = (n) => Number.isInteger(n) && n >= 1 && n <= 16384;
+
+/**
+ * The fields of a take or clip as the server reads them (the one-request
+ * upload's names). width/height: the browser's measure (lib/videoProbe),
+ * used by the server when ffprobe can't read the file. endBeatNumber: the
+ * beat the clip ends on, sent only with its start beat.
+ */
+export function uploadFields({ performer, greenScreen = false, guestName, strength, label, beatNumber, endBeatNumber, startLine, beatMarks, seconds, width, height } = {}) {
   const out = { performer, green_screen: greenScreen ? 'true' : 'false' };
   if (guestName) out.guest_name = guestName;
   if (strength) out.strength = strength;
   if (label) out.label = label;
-  if (Number.isInteger(beatNumber) && beatNumber >= 1 && beatNumber <= 14) out.beat_number = beatNumber;
+  if (isBeat(beatNumber)) out.beat_number = beatNumber;
+  if (isBeat(beatNumber) && isBeat(endBeatNumber) && endBeatNumber >= beatNumber) out.end_beat_number = endBeatNumber;
   if (Number.isInteger(startLine) && startLine >= 0) out.start_line = startLine;
   if (Array.isArray(beatMarks)) out.beat_marks = JSON.stringify(beatMarks);
   if (Number(seconds) > 0 && Number(seconds) <= 36000) out.seconds = Math.round(Number(seconds) * 100) / 100;
+  if (isPixels(width) && isPixels(height)) { out.width = width; out.height = height; }
   return out;
+}
+
+/**
+ * A file ready to upload, measured in the browser (Evoni, 2026-10-28: a
+ * 453 MB phone MP4 showed no length, size or picture): { file, seconds,
+ * width, height, thumbnail }. An MP4 or WebM whose length is known gets it
+ * written into its header (lib/takeDuration), so a phone's player can show
+ * and seek it too; the name and type stay. Never throws: what could not be
+ * measured is null, and the server measures it instead (or leaves it out).
+ */
+export async function measureForUpload(file, { knownSeconds = null, probe = probeVideo, writeLength = withDuration } = {}) {
+  let m = null;
+  try {
+    m = await probe(file, { knownSeconds });
+  } catch (err) {
+    console.error('[rawClipsApi] the video was not measured; uploading it as it is:', err);
+  }
+  const seconds = Number(m?.seconds) > 0 ? m.seconds : (Number(knownSeconds) > 0 ? knownSeconds : null);
+  let out = file;
+  if (seconds && lengthWritable(file)) {
+    try {
+      const written = await writeLength(file, seconds);
+      if (written && written !== file) {
+        out = typeof File === 'function' ? new File([written], file.name || 'video.mp4', { type: file.type || written.type }) : written;
+      }
+    } catch (err) {
+      console.error('[rawClipsApi] the length was not written into the video; uploading it as it is:', err);
+    }
+  }
+  return { file: out, seconds, width: m?.width ?? null, height: m?.height ?? null, thumbnail: m?.thumbnail ?? null };
 }
 
 const uploadsBase = (episodeId, uploadId) => `${base(episodeId)}/uploads${uploadId ? `/${encodeURIComponent(uploadId)}` : ''}`;
@@ -113,12 +155,18 @@ export async function abortUpload(episodeId, uploadId) {
 export const rawClipsApi = {
   list: (episodeId) => api.get(base(episodeId)).then((r) => (Array.isArray(r.data?.data) ? r.data.data : [])),
   // label: the clip's name in Files (the teleprompter names each take; Evoni, 2026-10-20).
-  // Sent in parts, straight to the video storage; a failed upload is thrown away on the server.
-  upload: async (episodeId, file, { performer, greenScreen = false, guestName, strength, label } = {}, onProgress) => {
+  // Measured in the browser first (length, size, thumbnail; 2026-10-28), its
+  // length written into an MP4 or WebM, then sent in parts straight to the
+  // video storage; a failed upload is thrown away on the server.
+  upload: async (episodeId, file, { performer, greenScreen = false, guestName, strength, label, beatNumber, endBeatNumber } = {}, onProgress, { measure = measureForUpload } = {}) => {
     let state = null;
     try {
-      const { clip } = await sendInParts(episodeId, file, uploadFields({ performer, greenScreen, guestName, strength, label }), {
-        onProgress, onState: (st) => { state = st; }, thumbnail: () => makeThumbnail(file),
+      const m = await measure(file);
+      const body = m?.file || file;
+      const { clip } = await sendInParts(episodeId, body, uploadFields({
+        performer, greenScreen, guestName, strength, label, beatNumber, endBeatNumber, seconds: m?.seconds, width: m?.width, height: m?.height,
+      }), {
+        onProgress, onState: (st) => { state = st; }, thumbnail: m?.thumbnail || (() => makeThumbnail(file)),
       });
       return clip;
     } catch (err) {
@@ -135,8 +183,8 @@ export const rawClipsApi = {
    * Resolves { clip, stored }: stored is the set of start_line / beat_marks
    * the server kept, or null from a server that does not say.
    */
-  uploadTake: (episodeId, file, { performer, guestName, label, beatNumber, startLine, beatMarks, seconds } = {}, onProgress, opts = {}) => sendInParts(
-    episodeId, file, uploadFields({ performer, guestName, label, beatNumber, startLine, beatMarks, seconds }),
+  uploadTake: (episodeId, file, { performer, guestName, label, beatNumber, startLine, beatMarks, seconds, width, height } = {}, onProgress, opts = {}) => sendInParts(
+    episodeId, file, uploadFields({ performer, guestName, label, beatNumber, startLine, beatMarks, seconds, width, height }),
     { ...opts, onProgress, keepSession: true },
   ),
   // A cheap signed-in request before a big upload, so the sign-in is fresh
@@ -190,6 +238,12 @@ export const anyKeying = (clips) => clips.some((c) => c.key_status === 'queued' 
  * until then.
  */
 export const hasTakeFields = (clip) => !!clip && typeof clip === 'object' && 'is_favorite' in clip;
+
+/**
+ * Whether the server keeps the beat a clip ends on (2026-10-28): only once
+ * migration 20261028120000 has run, so the "ends on" picker shows then.
+ */
+export const hasEndBeatField = (clip) => !!clip && typeof clip === 'object' && 'end_beat_number' in clip;
 
 /**
  * A failed upload or link in plain words, the take kept (Teleprompter audit 5).

@@ -126,6 +126,7 @@ describe('A1c R1 static guards', () => {
       'src/migrations/20261027190000-add-episode-script-seq.js': 'A1c correction (Evoni, 2026-10-27): the script save number',
       'src/migrations/20261027200000-create-voice-studio-tables.js': 'Voice Studio B1 (Evoni, 2026-10-27): new tables only',
       'src/migrations/20261028100000-create-episode-edit-tables.js': 'Timeline C1 (Evoni, 2026-10-28): new tables only',
+      'src/migrations/20261028120000-add-episode-raw-clips-end-beat-number.js': 'Clip range (Evoni, 2026-10-28): one column on episode_raw_clips',
     };
     const migrations = files('src/migrations').filter((f) => /\/2026102[7-9]|\/20261[1-2]|\/2027/.test(f));
     expect(migrations.sort()).toEqual(Object.keys(LATER).sort());

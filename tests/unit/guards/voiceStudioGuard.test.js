@@ -86,4 +86,19 @@ describe('Voice Studio boundaries', () => {
     const { STATES, isPlayable } = require('../../../src/services/voiceStudioService');
     expect(STATES.filter(isPlayable)).toEqual(['current']);
   });
+
+  test('B2: the page judges nothing and writes nothing by itself', () => {
+    const page = ['frontend/src/pages/VoiceStudio.jsx', 'frontend/src/lib/voiceStudioView.js', 'frontend/src/lib/voiceStudioApi.js',
+      ...fs.readdirSync(path.join(ROOT, 'frontend/src/components/VoiceStudio')).map((f) => `frontend/src/components/VoiceStudio/${f}`)];
+    for (const f of page) {
+      const code = read(f);
+      // No copy of the line rule: the server's voiceLineContext is the only judge of a line or an approval.
+      expect(code).not.toMatch(/voiceLineContext|teleprompterLines|lineContexts|rowHashOf|contextHash\(|sha256|crypto\.subtle/);
+    }
+    // Every write is a person's press: none is made while loading (no write inside an effect).
+    const effects = page.map(read).join('\n').match(/useEffect\([\s\S]*?\}, \[[^\]]*\]\)/g) || [];
+    for (const e of effects) expect(e).not.toMatch(/voiceStudioApi\.(approve|reconfirm|resolve|revoke|tie|revise|removeTake|uploadSource|createTake)/);
+    // The approval states are the server's names; only `current` is described as playing.
+    expect(read('frontend/src/lib/voiceStudioView.js')).toMatch(/current: \{ label: 'Approved', tone: 'ok', help: 'This take plays for the line\.' \}/);
+  });
 });

@@ -4,10 +4,16 @@
 import { vi, describe, test, expect, beforeEach } from 'vitest';
 
 vi.mock('../services/api', () => ({ default: { get: vi.fn(), post: vi.fn(), put: vi.fn(), patch: vi.fn(), delete: vi.fn() } }));
+// The browser's measure of an upload (lib/videoProbe), faked: nothing is decoded here.
+vi.mock('./videoProbe', async () => {
+  const actual = await vi.importActual('./videoProbe');
+  return { ...actual, probeVideo: vi.fn(async () => ({ seconds: null, width: null, height: null, thumbnail: null, problems: [] })) };
+});
 
 import api from '../services/api';
 import { PART_SIZE, slicePlan, withRetry, worthRetrying, uploadInParts, percentOf } from './chunkedUpload';
 import { sendInParts, uploadFields, rawClipsApi } from './rawClipsApi';
+import { probeVideo } from './videoProbe';
 
 const MB = 1024 * 1024;
 const blobOf = (bytes) => new Blob([new Uint8Array(bytes)], { type: 'video/webm' });
@@ -150,4 +156,42 @@ describe('sendInParts (the API)', () => {
     expect(api.post.mock.calls[0][1]).toMatchObject({ performer: 'lala', green_screen: 'true', filename: 'lala.mov', content_type: 'video/quicktime', size: 100 });
     await vi.waitFor(() => expect(api.delete).toHaveBeenCalledWith('/api/v1/episode-clips/ep-1/uploads/u9'));
   });
+
+  // Evoni, 2026-10-28: a 453 MB phone MP4 uploaded on Files showed only "453 MB".
+  test('Assets → Files measures the video in the browser first: seconds, width and height start the upload, the thumbnail completes it', async () => {
+    probeVideo.mockResolvedValueOnce({ seconds: 481.43, width: 1080, height: 1920, thumbnail: 'data:image/jpeg;base64,/9j/BB==', problems: [] });
+    api.post.mockImplementation(async (url) => (url.endsWith('/uploads') ? { data: { uploadId: 'u7', clipId: 'clip-7', partSize: 8 * MB } } : { data: { success: true, data: { id: 'clip-7' }, stored: [] } }));
+    api.put.mockResolvedValue({ data: { success: true } });
+    // Not a real MP4: its header can't take a length, so it goes as it is.
+    const file = new File([new Uint8Array(3 * MB)], 'IMG_4410.mp4', { type: 'video/mp4' });
+    const clip = await rawClipsApi.upload('ep-1', file, { performer: 'justawoman', greenScreen: false });
+    expect(clip).toEqual({ id: 'clip-7' });
+    expect(probeVideo).toHaveBeenCalledWith(file, { knownSeconds: null });
+    expect(api.post.mock.calls[0][1]).toEqual({
+      performer: 'justawoman', green_screen: 'false', seconds: 481.43, width: 1080, height: 1920,
+      filename: 'IMG_4410.mp4', content_type: 'video/mp4', size: 3 * MB,
+    });
+    expect(api.post.mock.calls[1][0]).toBe('/api/v1/episode-clips/ep-1/uploads/u7/complete');
+    expect(api.post.mock.calls[1][1]).toEqual({ thumbnail: 'data:image/jpeg;base64,/9j/BB==' });
+  });
+
+  test('a video the browser could not measure still uploads, without the fields', async () => {
+    api.post.mockImplementation(async (url) => (url.endsWith('/uploads') ? { data: { uploadId: 'u8', clipId: 'clip-8', partSize: 8 * MB } } : { data: { success: true, data: { id: 'clip-8' } } }));
+    api.put.mockResolvedValue({ data: { success: true } });
+    const file = new File([new Uint8Array(100)], 'odd.mkv', { type: 'video/x-matroska' });
+    await rawClipsApi.upload('ep-1', file, { performer: 'lala' });
+    expect(api.post.mock.calls[0][1]).not.toHaveProperty('seconds');
+    expect(api.post.mock.calls[0][1]).not.toHaveProperty('width');
+    expect(api.post.mock.calls[1][0]).toMatch(/\/complete$/);
+  });
+
+  test('uploadFields: width and height only together and in range; an end beat only with its start beat, not before it', () => {
+    expect(uploadFields({ performer: 'lala', width: 1080, height: 1920 })).toMatchObject({ width: 1080, height: 1920 });
+    expect(uploadFields({ performer: 'lala', width: 1080 })).not.toHaveProperty('width');
+    expect(uploadFields({ performer: 'lala', width: 0, height: 10 })).not.toHaveProperty('width');
+    expect(uploadFields({ performer: 'lala', beatNumber: 1, endBeatNumber: 11 })).toMatchObject({ beat_number: 1, end_beat_number: 11 });
+    expect(uploadFields({ performer: 'lala', endBeatNumber: 11 })).not.toHaveProperty('end_beat_number');
+    expect(uploadFields({ performer: 'lala', beatNumber: 5, endBeatNumber: 3 })).not.toHaveProperty('end_beat_number');
+  });
 });
+

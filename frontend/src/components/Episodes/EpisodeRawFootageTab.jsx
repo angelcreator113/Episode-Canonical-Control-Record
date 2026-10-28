@@ -7,14 +7,24 @@
  * clip plays as the original or the cut-out, can redo the green removal at
  * another strength, be linked to a scene (Production plays it there), move
  * to another lane, or be deleted.
+ *
+ * Where a clip starts and ends (Evoni, 2026-10-28): a full-episode take
+ * with beat markers says which beats it covers and where it ended ("Beats
+ * 10 → 14 · ended in beat 14 · Cliffhanger"); any other clip linked to a
+ * scene gets an "Ends on" picker beside it, so a card reads "Beat 1 → Beat
+ * 11" (end_beat_number; until its database update runs, choosing one says
+ * so plainly). Two clips of the same person covering the same beats each
+ * say so ("Overlaps Full episode · take 1 on beats 10–11"). Every upload is
+ * measured in the browser first (rawClipsApi.upload, lib/videoProbe), so a
+ * phone video shows its length, size and picture.
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  Upload, Film, Trash2, Play, WandSparkles, X, Loader, CircleCheck, CircleAlert, Clock, RefreshCw, UserRound, ListOrdered, Copy,
+  Upload, Film, Trash2, Play, WandSparkles, X, Loader, CircleCheck, CircleAlert, Clock, RefreshCw, UserRound, ListOrdered, Copy, Layers, MoveRight,
 } from 'lucide-react';
 import { rawClipsApi, PERFORMERS, STRENGTHS, clipLength, clipSize, anyKeying, sceneChoices, uploadErrorMessage } from '../../lib/rawClipsApi';
-import { isFullTake } from '../../lib/fullEpisodeTake';
 import { clipMarks } from '../../lib/assembleTakes';
+import { clipRange, rangeText, rangeOverlaps, overlapText, beatNames } from '../../lib/clipRange';
 import { youtubeChapters, draftDescription } from '../../lib/youtubeChapters';
 import { copyText } from './ScriptReadActions';
 import './EpisodeRawFootageTab.css';
@@ -110,12 +120,19 @@ function ChaptersSheet({ clip, episode, names, onClose }) {
   );
 }
 
-function ClipCard({ clip, scenes, onPlay, onChapters, onRemoveGreen, onMove, onLink, onDelete, busy }) {
+function ClipCard({ clip, scenes, names, overlaps = [], onPlay, onChapters, onRemoveGreen, onMove, onLink, onEndBeat, onDelete, busy }) {
   const [strength, setStrength] = useState(clip.key_strength || 'medium');
   const st = STATUS[clip.key_status] || STATUS.none;
   const meta = [clipLength(clip.duration_seconds), clipSize(clip.file_size_bytes), clip.width && clip.height ? `${clip.width}×${clip.height}` : null].filter(Boolean);
   const working = clip.key_status === 'queued' || clip.key_status === 'processing';
-  const hasMarks = isFullTake(clip) && clipMarks(clip).length > 0;
+  // A full-episode take with markers says its beats itself; any other clip
+  // linked to a beat can say which beat it ends on.
+  const byMarks = clipRange(clip)?.source === 'marks';
+  const hasMarks = byMarks && clipMarks(clip).length > 0;
+  const range = rangeText(clip, names);
+  const start = clip.beat_number == null || clip.beat_number === '' ? null : Number(clip.beat_number);
+  const endChoices = start != null && !byMarks ? scenes.filter((sc) => sc.value > start) : [];
+  const end = Number(clip.end_beat_number) > start ? Number(clip.end_beat_number) : '';
   return (
     <li className="erf-clip" data-testid="erf-clip">
       <button type="button" className="erf-thumb" onClick={() => onPlay(clip)} aria-label={`Play ${clip.label || 'clip'}`}>
@@ -127,6 +144,10 @@ function ClipCard({ clip, scenes, onPlay, onChapters, onRemoveGreen, onMove, onL
         <p className="erf-clip-name" title={clip.original_filename || ''}>{clip.label || clip.original_filename || 'Untitled clip'}</p>
         {clip.performer === 'guest' && clip.guest_name && <p className="erf-guest"><UserRound size={13} aria-hidden /> {clip.guest_name}</p>}
         {meta.length > 0 && <p className="erf-meta">{meta.join(' · ')}</p>}
+        {range && <p className="erf-range" data-testid="erf-range"><MoveRight size={13} aria-hidden /> {range}</p>}
+        {overlaps.map((o) => (
+          <p key={o.clip.id} className="erf-overlap" data-testid="erf-overlap"><Layers size={13} aria-hidden /> {overlapText(o)}</p>
+        ))}
         <span className={`erf-status ${st.tone}`} data-testid="erf-status">
           <st.Icon size={13} aria-hidden className={clip.key_status === 'processing' ? 'erf-spin' : undefined} /> {st.label}
         </span>
@@ -152,6 +173,13 @@ function ClipCard({ clip, scenes, onPlay, onChapters, onRemoveGreen, onMove, onL
             <option value="">No scene yet</option>
             {scenes.map((sc) => <option key={sc.value} value={sc.value}>{sc.label}</option>)}
           </select>
+          {endChoices.length > 0 && (
+            <select className="erf-scene erf-end" value={end} onChange={(e) => onEndBeat(clip, e.target.value === '' ? null : Number(e.target.value))}
+              aria-label="Which beat this clip ends on" disabled={busy} data-testid="erf-end-beat">
+              <option value="">Ends in the same beat</option>
+              {endChoices.map((sc) => <option key={sc.value} value={sc.value}>Ends on {sc.label}</option>)}
+            </select>
+          )}
           <select className="erf-move" value={clip.performer} onChange={(e) => onMove(clip, e.target.value)} aria-label="Who is in this clip" disabled={busy}>
             {PERFORMERS.map((p) => <option key={p.key} value={p.key}>{p.label}</option>)}
           </select>
@@ -164,7 +192,7 @@ function ClipCard({ clip, scenes, onPlay, onChapters, onRemoveGreen, onMove, onL
   );
 }
 
-function Lane({ performer, clips, uploads, onFiles, busyId, scenes, ...handlers }) {
+function Lane({ performer, clips, uploads, onFiles, busyId, scenes, names, overlaps, ...handlers }) {
   const inputRef = useRef(null);
   const [green, setGreen] = useState(performer.greenByDefault);
   const [guestName, setGuestName] = useState('');
@@ -215,7 +243,7 @@ function Lane({ performer, clips, uploads, onFiles, busyId, scenes, ...handlers 
       )}
       {clips.length === 0 && uploads.length === 0 ? <p className="erf-note">No {performer.label} clips yet.</p> : (
         <ul className="erf-clips">
-          {clips.map((c) => <ClipCard key={c.id} clip={c} scenes={scenes} busy={busyId === c.id} {...handlers} />)}
+          {clips.map((c) => <ClipCard key={c.id} clip={c} scenes={scenes} names={names} overlaps={overlaps.get(c.id) || []} busy={busyId === c.id} {...handlers} />)}
         </ul>
       )}
     </section>
@@ -260,6 +288,8 @@ export default function EpisodeRawFootageTab({ episode, onCount }) {
     return () => { live = false; };
   }, [episodeId]);
   const scenes = sceneChoices(beats);
+  const names = beatNames(beats);
+  const overlaps = rangeOverlaps(clips);
 
   // While a clip waits on green removal, check back every few seconds.
   useEffect(() => {
@@ -306,6 +336,8 @@ export default function EpisodeRawFootageTab({ episode, onCount }) {
     onRemoveGreen: (clip, strength) => act(clip, () => rawClipsApi.removeGreen(episodeId, clip.id, strength), 'Could not start removing the green.'),
     onMove: (clip, performer) => act(clip, () => rawClipsApi.update(episodeId, clip.id, { performer }), 'Could not move the clip.'),
     onLink: (clip, beatNumber) => act(clip, () => rawClipsApi.update(episodeId, clip.id, { beat_number: beatNumber }), 'Could not link the clip to the scene.'),
+    // The server says plainly when its database update for this hasn't run yet (409).
+    onEndBeat: (clip, endBeat) => act(clip, () => rawClipsApi.update(episodeId, clip.id, { end_beat_number: endBeat }), 'Could not save the beat the clip ends on.'),
     onDelete: async (clip) => {
       if (!window.confirm(`Delete "${clip.label || 'this clip'}" from the episode? The file stays in storage.`)) return;
       setBusyId(clip.id);
@@ -339,7 +371,7 @@ export default function EpisodeRawFootageTab({ episode, onCount }) {
       {loading ? <p className="erf-note">Loading clips…</p> : (
         <div className="erf-lanes">
           {PERFORMERS.map((p) => (
-            <Lane key={p.key} performer={p} busyId={busyId} scenes={scenes}
+            <Lane key={p.key} performer={p} busyId={busyId} scenes={scenes} names={names} overlaps={overlaps}
               clips={clips.filter((c) => c.performer === p.key)}
               uploads={uploads.filter((u) => u.performer === p.key)}
               onFiles={onFiles} {...handlers} />

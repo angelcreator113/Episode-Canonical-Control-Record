@@ -85,13 +85,22 @@
 // she is on; Space and Up/Down stay Play/Pause and speed after she taps a
 // control (a reader button, the speed slider, or a choice made in a list);
 // Play at the end goes back to the top.
+// Where a take starts and ends (Evoni, 2026-10-28): the review and the Full
+// episode takes say which beats a whole-episode take covers and where it
+// ended ("Beats 10 → 14 · ended in beat 14 · Cliffhanger", lib/clipRange),
+// and two of her full takes covering the same beats each say so. When her
+// latest full take stopped before the last beat, Read & record offers
+// "Continue from beat 12 · Fashion Challenge": a whole-episode take from
+// that beat, whose markers start there (the beat at 0:00). Every take is
+// measured in the browser before it uploads (lib/videoProbe): its width,
+// height and thumbnail go with it.
 
 import { useState, useEffect, useLayoutEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import {
   X, ChevronLeft, ChevronRight, Play, Pause, FlipHorizontal2, Timer, Video, VideoOff, Circle, Square,
   RotateCcw, Upload, Download, AlertTriangle, Trash2, ArrowRight, CheckCircle2, ALargeSmall, Gauge, Hourglass, SlidersHorizontal,
-  AudioLines, Grid3x3, Clock, Film, Smartphone, Mic, Volume2,
+  AudioLines, Grid3x3, Clock, Film, Smartphone, Mic, Volume2, MoveRight, StepForward,
   Bell, MessageCircle, MousePointerClick, ArrowDownUp, Send, MonitorPlay, AppWindow, Monitor, EyeOff, Clapperboard, Smile, StickyNote, FileDown, Share2, History,
 } from 'lucide-react';
 import useVoiceFollow from '../../hooks/useVoiceFollow';
@@ -117,6 +126,8 @@ import { voiceClipsApi, isNotReady as voiceNotReady, VOICE_NOT_READY, clipsByLin
 import { teleprompterScript, pastedParagraphs, pastedScript, speakersOf, HER, takeName, takeExtension, downloadName, clock, lineChoice, withoutScreen, withoutSceneNotes, nextTakeNumber, takeNumberOf } from '../../lib/teleprompterLines';
 import { rawClipsApi, hasTakeFields, beatTakes, withFavorite, uploadErrorMessage, abortUpload } from '../../lib/rawClipsApi';
 import { makeThumbnail } from '../../lib/chunkedUpload';
+import { probeVideo } from '../../lib/videoProbe';
+import { rangeText, continueFrom, beatNames } from '../../lib/clipRange';
 import { withDuration } from '../../lib/takeDuration';
 import { isCutsceneBeat } from '../../lib/scriptShowRules';
 import {
@@ -1130,6 +1141,23 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
   const takeNo = !isScript ? sessionTakes + 1 : midTake && liveNo != null ? liveNo : nextNo;
   const label = whole ? fullTakeName(takeNo, readAs !== HER ? readAs : null)
     : isScript ? `${takeName(beat, takeNo, fromLine > 0 ? fromIndex + 1 : null)}${readAs !== HER ? ` · as ${readAs}` : ''}` : null;
+  // The beats' names: the script's headings, else the standard names.
+  const names = useMemo(() => beatNames(beats.filter((b) => b.number != null && b.name).map((b) => ({ beat_number: b.number, beat_name: b.name }))), [beats]);
+  // Her latest full take stopped before the last beat: "Continue from beat N".
+  const carryOn = canWhole && recordOn && !midTake ? continueFrom(fullTakes(clips).filter(mine), lastNumber || 14) : null;
+  const carryAt = carryOn ? beats.findIndex((b) => b.number != null && Number(b.number) > carryOn.ended) : -1;
+  const continueTake = () => {
+    if (carryAt < 0 || busyTake) return;
+    setTakeScope('episode');
+    setEpisodeFrom('this');
+    setStartLine(0);
+    setNotice(null);
+    setSavedNext(null);
+    setCurrent(carryAt);
+    // Already the whole episode: move the reader there now (otherwise the switch does).
+    if (whole) { toBeat(carryAt); setActive(layout.beatFirst[carryAt] ?? 0); }
+    refocus();
+  };
   // The beat's takes in Files (every performer), for the Takes panel.
   const takes = beatTakes(clips, beatNumber);
   const canTakes = isScript && !!episodeId && beatNumber != null;
@@ -1181,15 +1209,24 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
 
   // The upload in parts for this take: where an earlier try got to, kept
   // with the take on the phone after every slice, and its thumbnail.
-  const partsFor = (t) => ({
+  const partsFor = (t, thumb = null) => ({
     resume: uploadsRef.current[t.id] || null,
     onState: (st) => {
       if (st) uploadsRef.current[t.id] = st; else delete uploadsRef.current[t.id];
       Promise.resolve(takeStore().update(t.id, { meta: { upload: st } }))
         .catch((err) => console.error('[Teleprompter] upload progress not kept with the take:', err));
     },
-    thumbnail: () => makeThumbnail(t.blob),
+    thumbnail: thumb || (() => makeThumbnail(t.blob)),
   });
+  // The take measured in the browser (width, height, a thumbnail); never holds the save up.
+  const measureTake = async (file, t) => {
+    try {
+      return await probeVideo(file, { knownSeconds: t.seconds });
+    } catch (err) {
+      console.error('[Teleprompter] the take was not measured; saving it anyway:', err);
+      return null;
+    }
+  };
   // A failed save in plain words, saying the take is still on the phone.
   const saveError = (err) => uploadErrorMessage(err, { kept: takeStore().available ? 'phone' : 'page' });
 
@@ -1204,11 +1241,12 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
       if (!clip) {
         await freshSignIn();
         const file = new File([await lengthed(take)], `beat-${beatNumber ?? 'x'}-take-${takeNo}.${takeExtension(take.type)}`, { type: take.type });
+        const m = await measureTake(file, take);
         // The beat, the start line and the length go with the upload (one request).
         ({ clip, stored } = await rawClipsApi.uploadTake(source.episodeId, file, {
           performer, label, guestName: performer === 'guest' ? readAs : undefined,
-          beatNumber, startLine: fromIndex, seconds: take.seconds,
-        }, (p) => setSave((s) => ({ ...s, progress: p })), partsFor(take)));
+          beatNumber, startLine: fromIndex, seconds: take.seconds, width: m?.width, height: m?.height,
+        }, (p) => setSave((s) => ({ ...s, progress: p })), partsFor(take, m?.thumbnail)));
         setSave((s) => ({ ...s, clip }));
       }
       // The scene the take is for (Production plays clips by beat_number),
@@ -1246,10 +1284,12 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
       if (!clip) {
         await freshSignIn();
         const file = new File([await lengthed(take)], `full-episode-take-${takeNo}.${takeExtension(take.type)}`, { type: take.type });
+        const m = await measureTake(file, take);
         // The markers and the length go with the upload (one request).
         ({ clip, stored: keptSet } = await rawClipsApi.uploadTake(source.episodeId, file, {
           performer, label, guestName: performer === 'guest' ? readAs : undefined, beatMarks: kept, seconds: take.seconds,
-        }, (p) => setSave((s) => ({ ...s, progress: p })), partsFor(take)));
+          width: m?.width, height: m?.height,
+        }, (p) => setSave((s) => ({ ...s, progress: p })), partsFor(take, m?.thumbnail)));
         setSave((s) => ({ ...s, clip }));
       }
       // A server that took the markers with the upload says whether it kept them.
@@ -1617,7 +1657,7 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
           </div>
         )}
         {showTakes && canTakes && !take && (
-          <TakesPanel takes={takes} beatNumber={beatNumber} onFavorite={toggleFavorite} starring={starring} error={takesError} loading={!clipsLoaded} fullTakes={fullTakes(clips)} />
+          <TakesPanel takes={takes} beatNumber={beatNumber} onFavorite={toggleFavorite} starring={starring} error={takesError} loading={!clipsLoaded} fullTakes={fullTakes(clips)} names={names} />
         )}
         {showRemote && remoteOn && !take && <TeleprompterRemotePanel remote={remote} onClose={() => setShowRemote(false)} />}
         {voiceLine && !take && (
@@ -1640,6 +1680,11 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
               <p className="stp-review-name" data-testid="stp-review-name">{isScript ? label : `Take ${takeNo}`} · {clock(take.seconds)}</p>
             </div>
             <video ref={reviewRef} className="stp-review-video" src={take.url} controls playsInline data-testid="stp-review-video" />
+            {whole && rangeText({ label: label || 'Full episode', beat_marks: marks }, names) && (
+              <p className="stp-take-range" data-testid="stp-review-range">
+                <MoveRight size={13} aria-hidden="true" /> {rangeText({ label: label || 'Full episode', beat_marks: marks }, names)}
+              </p>
+            )}
             {whole && marks.length > 0 && (
               <MarkLinks marks={marks} onSeek={(t) => seekVideo(reviewRef.current, t)} testId="stp-review-marks" />
             )}
@@ -1872,6 +1917,13 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
               <Clapperboard size={18} aria-hidden="true" /> Whole episode
             </button>
           </div>
+        )}
+        {carryAt >= 0 && (
+          <button type="button" className="stp-btn stp-continue" data-testid="stp-continue" disabled={busyTake} onClick={continueTake}
+            aria-label={`Continue from beat ${beats[carryAt].number} · ${names(beats[carryAt].number)}: record the whole episode from there`}>
+            <span className="stp-continue-main"><StepForward size={16} aria-hidden="true" /> Continue from beat {beats[carryAt].number} · {beats[carryAt].name || names(beats[carryAt].number)}</span>
+            <span className="stp-continue-sub">{carryOn.take.label || 'Your last full take'} ended in beat {carryOn.ended}</span>
+          </button>
         )}
         {whole && !midTake && (
           <label className="stp-startfrom">

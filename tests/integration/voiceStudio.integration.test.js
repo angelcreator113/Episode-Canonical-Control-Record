@@ -766,6 +766,82 @@ const SCRIPT = [
     }
   });
 
+  // ── B2: the page's one read ──────────────────────────────────────────────────
+
+  test('B2 studio view: lines by beat from the one rule, takes with their audio and binding, approvals, all for one saved script', async () => {
+    const ep = await makeEpisode([beat(6, 'Lala: "Hi."', 'Prime: right', '(She waves.)'), beat(15, 'Lala: "Too far."')].join('\n\n'));
+    const t = await takeAt(ep, 6, 0);
+    await approveTake(ep, t);
+    const loose = await studio.createCandidate(sequelize, { episodeId: ep, sourceAssetId: (await studio.createSource(sequelize, { episodeId: ep, kind: 'uploaded', file: audioFile(900), userId: USER })).source.id, userId: USER });
+    const v = await studio.studioView(sequelize, { episodeId: ep });
+    const state = await stateOf(ep);
+    expect(v).toMatchObject({ script_revision: state.revision, script_seq: state.seq, episode: { id: ep } });
+    expect(v.beats.map((b) => [b.beat_number, b.usable, b.duplicate])).toEqual([[6, true, false], [15, false, false]]);
+    expect(v.beats[0].lines.map((l) => [l.line_index, l.speaker_key, l.spoken, l.prime])).toEqual([[0, 'lala', true, false], [1, 'justawoman', false, true], [2, null, false, false]]);
+    expect(v.beats[0].lines[0].context_hash).toMatch(/^[0-9a-f]{64}$/);
+    const tied = v.takes.find((x) => x.id === t.candidate.id);
+    expect(tied).toMatchObject({ binding: { status: 'bound', line_index: 0 }, revision_id: t.revision.id });
+    expect(tied.audio_url).toContain(t.source.s3_key);
+    expect(tied).not.toHaveProperty('s3_key');
+    expect(v.takes.find((x) => x.id === loose.candidate.id).binding).toBeNull();
+    expect(v.summary.approvals.map((a) => a.state)).toEqual(['current']);
+  });
+
+  test('B2 studio view after a script edit: a moved line\'s take is bound where the line is now, never at its old place', async () => {
+    const ep = await makeEpisode(beat(6, 'Lala: "One."', 'Guest: "Two."'));
+    const t = await takeAt(ep, 6, 0);
+    await approveTake(ep, t);
+    await saveScript(ep, beat(6, 'Guest: "New first."', 'Lala: "One."', 'Guest: "Two."'));
+    const v = await studio.studioView(sequelize, { episodeId: ep });
+    const tk = v.takes.find((x) => x.id === t.candidate.id);
+    expect(tk.binding).toMatchObject({ status: 'moved', line_index: 1, candidates: [1] });
+    expect(tk.line_index).toBe(0); // the stored tie is unchanged: nothing is re-tied by reading
+    expect(v.summary.approvals[0]).toMatchObject({ state: 'moved', playable: false });
+    expect(v.beats[0].lines[0]).toMatchObject({ speaker_key: 'guest', words: 'New first.' });
+    // Duplicate beats are shown, never usable.
+    await saveScript(ep, [beat(6, 'Lala: "One."'), beat(6, 'Lala: "Again."')].join('\n\n'));
+    const dup = await studio.studioView(sequelize, { episodeId: ep });
+    expect(dup.beats.map((b) => [b.beat_number, b.duplicate, b.usable])).toEqual([[6, true, false]]);
+  });
+
+  test('B2 routes: /status answers only while switched on; /studio says whether this person may edit; a viewer\'s write is refused', async () => {
+    const ep = await makeEpisode();
+    const prev = process.env.VOICE_STUDIO;
+    try {
+      delete process.env.VOICE_STUDIO;
+      const off = await request(app).get('/api/v1/voice-studio/status').set('Authorization', `Bearer ${adminToken}`);
+      expect(off.status).toBe(404);
+      expect(off.body.code).toBe('VOICE_STUDIO_OFF');
+      expect((await request(app).get(`/api/v1/voice-studio/${ep}/studio`).set('Authorization', `Bearer ${adminToken}`)).status).toBe(404);
+      process.env.VOICE_STUDIO = 'on';
+      const on = await request(app).get('/api/v1/voice-studio/status').set('Authorization', `Bearer ${userToken}`);
+      expect(on.status).toBe(200);
+      expect((await request(app).get('/api/v1/voice-studio/status')).status).toBe(401);
+      const admin = await request(app).get(`/api/v1/voice-studio/${ep}/studio`).set('Authorization', `Bearer ${adminToken}`);
+      expect(admin.status).toBe(200);
+      expect(admin.body.data.can_edit).toBe(true);
+      const viewer = await request(app).get(`/api/v1/voice-studio/${ep}/studio`).set('Authorization', `Bearer ${userToken}`);
+      expect(viewer.body.data.can_edit).toBe(false);
+      const refused = await request(app).post(`/api/v1/voice-studio/${ep}/reconfirm`).set('Authorization', `Bearer ${userToken}`).send({ script_revision: admin.body.data.script_revision, items: [] });
+      expect(refused.status).toBe(403);
+      const missing = await request(app).get(`/api/v1/voice-studio/${uuid()}/studio`).set('Authorization', `Bearer ${adminToken}`);
+      expect(missing.status).toBe(404);
+    } finally {
+      if (prev === undefined) delete process.env.VOICE_STUDIO; else process.env.VOICE_STUDIO = prev;
+    }
+  });
+
+  test('B2 studio view is read only: reading changes no row, records nothing invalid', async () => {
+    const ep = await makeEpisode(beat(6, 'Lala: "One."'));
+    const t = await takeAt(ep, 6, 0);
+    await approveTake(ep, t);
+    await saveScript(ep, beat(6, 'Lala: "Changed."'));
+    const before = await rows('SELECT id, invalidated_at, superseded_at FROM line_voice_approvals WHERE episode_id = :ep', { ep });
+    const v = await studio.studioView(sequelize, { episodeId: ep });
+    expect(v.summary.approvals[0].state).toBe('unbound');
+    expect(await rows('SELECT id, invalidated_at, superseded_at FROM line_voice_approvals WHERE episode_id = :ep', { ep })).toEqual(before);
+  });
+
   test('a soft-deleted episode is not found', async () => {
     const ep = await makeEpisode();
     await run('UPDATE episodes SET deleted_at = NOW() WHERE id = :ep', { ep });

@@ -4,7 +4,12 @@
  * (beat_number) is one of that beat's takes, and its ★ (is_favorite, one per
  * beat, kept by the server) is her pick. A beat she only has in a
  * whole-episode take (lib/fullEpisodeTake) can use that take's stretch, from
- * its beat marker to the next one.
+ * its beat marker to the next one. Only markers the reading reached count
+ * (lib/clipRange realMarks): beats the reader was moved past at the start of
+ * a take, all at 0:00, are not stretches of it. Where two whole-episode
+ * takes overlap (her 22-minute take of beats 1-11 and a second take of
+ * beats 10-14), each overlapping beat lists both takes' stretches, so she
+ * picks which to use.
  *
  *   beatOptions(clips, beatNumber) → [option], the ★ first
  *   option: { key, clip, favorite, full, start, end }   start/end in seconds for a stretch
@@ -16,6 +21,7 @@
  */
 import { cleanMarks, isFullTake } from './fullEpisodeTake';
 import { beatName } from './canonicalBeats';
+import { realMarks } from './clipRange';
 
 export const BEAT_COUNT = 14;
 export const PICKS_KEY = (episodeId) => `assemble.picks.${episodeId}`;
@@ -48,7 +54,7 @@ export function beatOptions(clips, beatNumber) {
   const stretches = [];
   list.forEach((c, i) => {
     if (!isFullTake(c)) return;
-    const marks = clipMarks(c);
+    const marks = realMarks(clipMarks(c));
     const at = marks.findIndex((m) => m.beat === n);
     if (at < 0) return;
     const next = marks[at + 1];
