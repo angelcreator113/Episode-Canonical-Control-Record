@@ -32,7 +32,7 @@ const router  = express.Router();
 const { v4: uuidv4 } = require('uuid');
 
 // ── Auth ───────────────────────────────────────────────────────────────────
-const { optionalAuth, requireAuth } = require('../middleware/auth');
+const { optionalAuth, requireAuth, authorize } = require('../middleware/auth');
 const { canAccessAuthorFields, stripAuthorOnlyFields } = require('../middleware/authorOnlyFields');
 
 // ── DB ─────────────────────────────────────────────────────────────────────
@@ -2532,8 +2532,11 @@ router.delete('/world/previews/:previewId', requireAuth, async (req, res) => {
  * Same Claude prompt as generate-ecosystem BUT does NOT commit to DB.
  * Returns preview characters so the user can select/deselect before confirming.
  */
-// PUBLIC: World ecosystem preview generation with ownership-when-authenticated; degraded auth tolerated for audience growth — see Audit Handoff §4.1
-router.post('/world/generate-ecosystem-preview', optionalAuth({ degradeOnInfraFailure: true }), async (req, res) => {
+// Admin only (SEC-5, Evoni's admin-only ruling 2026-10-29). It was public
+// (Audit Handoff §4.1, "for audience growth"): anyone could run this Claude
+// call, and every anonymous run spent the studio's shared daily AI budget.
+// Its only caller is World Studio, an admin page.
+router.post('/world/generate-ecosystem-preview', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     if (!process.env.ANTHROPIC_API_KEY) {
       return res.status(500).json({ error: 'ANTHROPIC_API_KEY not configured on server' });
