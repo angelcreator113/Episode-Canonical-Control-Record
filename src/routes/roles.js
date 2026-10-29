@@ -1,13 +1,18 @@
 const express = require('express');
 const router = express.Router();
 const AssetRoleService = require('../services/AssetRoleService');
-const { optionalAuth } = require('../middleware/auth');
+const { requireAuth, authorize } = require('../middleware/auth');
+
+// Studio configuration, admin only (SEC-2, Evoni's admin-only ruling
+// 2026-10-29): every route here was optionalAuth, so anyone, signed in or
+// not, could create, change, delete or bulk-assign asset roles.
+const admin = [requireAuth, authorize(['ADMIN'])];
 
 /**
  * GET /api/v1/roles
  * Get all roles for show
  */
-router.get('/', optionalAuth, async (req, res) => {
+router.get('/', ...admin, async (req, res) => {
   try {
     const showId = req.query.show_id || req.user?.show_id;
 
@@ -37,7 +42,7 @@ router.get('/', optionalAuth, async (req, res) => {
  * GET /api/v1/roles/stats
  * Get role usage statistics
  */
-router.get('/stats', optionalAuth, async (req, res) => {
+router.get('/stats', ...admin, async (req, res) => {
   try {
     const showId = req.query.show_id || req.user?.show_id;
 
@@ -66,7 +71,7 @@ router.get('/stats', optionalAuth, async (req, res) => {
  * GET /api/v1/roles/:roleKey
  * Get specific role
  */
-router.get('/:roleKey', optionalAuth, async (req, res) => {
+router.get('/:roleKey', ...admin, async (req, res) => {
   try {
     const { roleKey } = req.params;
     const showId = req.query.show_id || req.user?.show_id;
@@ -96,7 +101,7 @@ router.get('/:roleKey', optionalAuth, async (req, res) => {
  * POST /api/v1/roles
  * Create custom role
  */
-router.post('/', optionalAuth, async (req, res) => {
+router.post('/', ...admin, async (req, res) => {
   try {
     const showId = req.body.show_id || req.user?.show_id;
 
@@ -126,7 +131,7 @@ router.post('/', optionalAuth, async (req, res) => {
  * PUT /api/v1/roles/:roleKey
  * Update role (label, required flag, etc.)
  */
-router.put('/:roleKey', optionalAuth, async (req, res) => {
+router.put('/:roleKey', ...admin, async (req, res) => {
   try {
     const { roleKey } = req.params;
     const showId = req.body.show_id || req.user?.show_id;
@@ -151,7 +156,7 @@ router.put('/:roleKey', optionalAuth, async (req, res) => {
  * DELETE /api/v1/roles/:roleKey
  * Delete role (only if unused)
  */
-router.delete('/:roleKey', optionalAuth, async (req, res) => {
+router.delete('/:roleKey', ...admin, async (req, res) => {
   try {
     const { roleKey } = req.params;
     const showId = req.query.show_id || req.user?.show_id;
@@ -176,7 +181,7 @@ router.delete('/:roleKey', optionalAuth, async (req, res) => {
  * POST /api/v1/roles/bulk-assign
  * Bulk assign roles to assets
  */
-router.post('/bulk-assign', optionalAuth, async (req, res) => {
+router.post('/bulk-assign', ...admin, async (req, res) => {
   try {
     const { assignments } = req.body; // [{ assetId, roleKey }, ...]
 
@@ -206,7 +211,7 @@ router.post('/bulk-assign', optionalAuth, async (req, res) => {
  * GET /api/v1/roles/:roleKey/assets
  * Get assets assigned to a role
  */
-router.get('/:roleKey/assets', optionalAuth, async (req, res) => {
+router.get('/:roleKey/assets', ...admin, async (req, res) => {
   try {
     const { roleKey } = req.params;
     const showId = req.query.show_id || req.user?.show_id;
@@ -237,7 +242,7 @@ router.get('/:roleKey/assets', optionalAuth, async (req, res) => {
  * POST /api/v1/roles/validate-required
  * Validate required roles for composer export
  */
-router.post('/validate-required', optionalAuth, async (req, res) => {
+router.post('/validate-required', ...admin, async (req, res) => {
   try {
     const { providedRoles } = req.body; // { HOST: assetId, ... }
     const showId = req.body.show_id || req.user?.show_id;
