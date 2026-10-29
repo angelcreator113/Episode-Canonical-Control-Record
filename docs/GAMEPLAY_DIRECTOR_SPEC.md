@@ -291,7 +291,7 @@ A proposal whose target vanished (object deleted, angle removed) becomes `stale`
 
 ## 8. Playback snapshots: temporary for preview, approved for export
 
-> **REV 6:** the behaviour stands (preview never approves; export uses only approved state). The storage is realised as: the preview computes the game state live (`gameStateAt`, design R8.3.2); each render job freezes its state into its manifest with its `inputs_hash` (design R8.9.1); the approved state is part of the frozen production manifest written at final episode approval (design R8.7). A separate `episode_playback_snapshots` table is not built unless Stage 5 shows a need (design R8.16).
+> **REV 6:** the behaviour stands (preview never approves; export uses only approved state). The storage is realised as: the preview computes the game state live (`gameStateAt`, design R8.3.2); each render job freezes its state into its manifest with its `inputs_hash` (design R8.9.1); the approved state is part of the frozen production manifest written at final episode approval (design R8.7). The approved state is immutable at the database level. Whether it needs a table of its own beyond the A10 manifest (`episode_playback_snapshots`) is decided by an audit before Stage 5. No duplicate table is added without that evidence (design R8.16 item 1). In-app gameplay capture, synchronised with Prime's take and with rehearsal and playback, is planned in design R8.16 item 2.
 
 Live answers change, so playback uses a snapshot: the game state at every position the track uses, resolved through **the owners' own read paths**. The same services as the live API, so there's no second logic.
 

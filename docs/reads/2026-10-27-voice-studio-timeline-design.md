@@ -197,7 +197,7 @@ At 375 px the page stacks vertically: preview, status, missing items, actions, d
 
 - **The beat default.** `episode_beat_production.visual_mode` is `gameplay` or `cinematic` (PROPOSED schema, R8.5).
   - It is written only by the existing beat writer (`writeBeatProduction`, through `setBeatMode`), which keeps the row history.
-  - No row means `gameplay`. The default is Evoni's to change (R8.16 Q3).
+  - No row means `gameplay`. For a new draft, the mode is inferred from the script, with manual override (R8.16 item 5).
 - **A timed change.** A `timeline_items` row of kind `visual_mode` carries `{ mode }`, placed by `beat_start` + offset or `edit_start` + offset.
   - It switches the mode at that instant. It changes no timing, and needs no new beat.
   - It holds until the next change or the end of its beat. The next beat then starts in its own default.
@@ -251,7 +251,7 @@ Each layer carries:
 - **Recorded gameplay video** is a first-class scene source. An `episode_scene_clips` row with a new `source_kind` `gameplay_recording` plays a recorded screen video on the edit clock, with in and out points, exactly like `angle_video`. Its own audio is muted by default, and can be enabled as its own mix event.
 - **Combining footage and states.** A recorded gameplay clip can carry state actions on top of it, for example a toast or a My Little List tick drawn over the recording.
 - **Sync with Prime.** When a gameplay recording was captured together with one of Prime's takes, it is placed against that take's clock with a fixed sync offset (`item_start` on the Prime segment, plus an offset). Moving the segment moves the recording, and trimming the segment never slides one against the other.
-- **Capture.** How a gameplay recording is captured inside Prime Studios is an open question (R8.16 Q1). It is not needed for the PoC (R4).
+- **Capture.** How a gameplay recording is captured inside Prime Studios is planned in R8.16 item 2 (Stage 5). It is not needed for the PoC (R4).
 
 ## R8.4 One synchronised edit clock (Gate 1 addition 3)
 
@@ -435,7 +435,7 @@ The API hashes the manifest (`inputs_hash`). The render host renders only what t
 
 ### R8.10.3 Cost ceiling
 
-- **Explicit.** Evoni sets a monthly ceiling (R8.16 Q2).
+- **Explicit.** Evoni sets a monthly ceiling: an initial target of $25, subject to verified pricing (R8.16 item 3).
 - **Enforced twice:**
   - **In the app.** The API totals `render_jobs.runtime_ms` for the month, multiplied by the configured hourly rate. It refuses new jobs once the ceiling is reached, and shows the month's spend and the ceiling on the render panel.
   - **In AWS.** An AWS Budget alerts Evoni at 50 %, 80 % and 100 % of the ceiling.
@@ -549,7 +549,7 @@ It then recommends one correction, with regression tests that pin:
   - all 14 beats of gameplay;
   - line-mark mapping;
   - Gameplay Director proposals;
-  - recorded gameplay capture (R8.16 Q1);
+  - in-app gameplay capture, with rehearsal and playback (R8.16 item 2);
   - the A10 manifest and final episode approval;
   - retiring the legacy editor and export.
 - **Before full Episode One production: P2**, the runway opportunity (R11).
@@ -605,17 +605,82 @@ It then recommends one correction, with regression tests that pin:
 
 **Evoni's sign-off on the MP4 is the final gate.**
 
-## R8.16 Open design questions
+## R8.16 Gate 1 final rulings (Evoni, 2026-10-29)
+
+**Where R8.16 disagrees with R8.0–R8.15, R8.16 wins.**
+
+1. **An immutable approved episode playback state is kept (amends R8.7, spec §8).**
+   - **Audit, at `0139d384` (VERIFIED):** `edit_versions` (`createVersion`) is not enough on its own to be that state.
+     - **What it stores:** the stable JSON of the live rows of the seven C1 tables, with its sha256, `edit_revision`, `script_revision` and `script_seq`.
+     - **What is missing:**
+       - media identity (storage keys, file hashes);
+       - the voice revisions' trim, gain, fade and settings hashes (only the approval ids reachable through placements);
+       - the game state (My Little List, wardrobe, money);
+       - the licence records;
+       - who approved, and when.
+     - **Why it cannot recreate an approved state:** `restoreVersion` re-points live rows at sources that may since have changed. Immutability is enforced only by the service and by a guard test (`episodeEditGuard`, "versions are never updated or deleted"). There is no database trigger.
+   - **The A10 production manifest (R8.7) is specified but not built.**
+   - **Design.** The immutable approved playback state is **part of the A10 approved production manifest**, written at final episode approval. It holds:
+     - the rows;
+     - content-addressed media;
+     - the resolved voice revisions;
+     - the frozen game state at every position the gameplay uses;
+     - the licence records in force;
+     - the approver.
+
+     It is immutable at the database level (a trigger refusing update and delete), not by convention.
+   - **No duplicate table.** Before Stage 5 builds A10, a short audit decides whether A10 is an extension of `edit_versions` (a `kind` of `approved`, plus manifest columns and the trigger) or its own table. The proposed `episode_playback_snapshots` table is neither built nor deleted from the plan until that audit shows which of the two is necessary. **This decision stays open until the Stage 5 audit** (R8.17 Q8).
+   - Preview state stays computed (`gameStateAt`). Each render job keeps its own frozen manifest (R8.9.1).
+2. **In-app gameplay capture, synchronised with Prime's recording (amends R8.3.3; answers Q1).**
+   - **Planned for Stage 5.** No external recording or editing software is required.
+   - **Capture.** The Teleprompter's recording session captures the game screen in the app (the browser's screen-capture API, on the Prime Studios game window) **in the same session as** Prime's camera take. Both recordings get one shared session clock: the start times of both recorders against one time origin, and a sync flash and tone the app plays at the start.
+   - **Sync check.** After upload, the server measures the offset from the flash and tone. It stores it on the pair, and shows any offset above one frame as a finding, never corrected silently.
+   - **Continuous integrity checks, not only the start offset.** A single starting offset is not enough:
+     - **Interruptions:** recorder stop, pause and error events, a tab hidden, the capture permission revoked, a device change. Each is logged with its time on the session clock. The pair is marked `capture_interrupted` with the gap's position and length, and never joined across the gap silently.
+     - **Dropped frames:** per-second frame counts recorded during capture and the frame timestamps read after upload. A gap longer than one frame is a `capture_frames_dropped` finding at its position.
+     - **Clock drift:** the app replays a short sync marker at a fixed interval (for example every 60 s) on both recordings. The server measures the offset at every marker. Drift beyond one frame across the take is a `capture_clock_drift` finding, giving the measured drift and where it occurs.
+     - These findings block a review-ready render of the stretch they cover until the producer re-records it, or trims to a clean stretch. Nothing is stretched or re-timed automatically.
+   - **Rehearsal.** A rehearsal mode runs the same capture and plays it back side by side (the game recording, Prime's take and the script position) without creating production takes. Rehearsal recordings are kept apart and expire.
+   - **Playback.** A paired recording plays back in the app with both views in sync, and enters the edit as a `gameplay_recording` scene clip locked to its Prime segment (R8.3.3).
+   - **Device limits.** Screen-capture support varies by browser and device. Desktop Chrome or Edge is the reference, and a device without support is told so, never given a partial capture.
+3. **Render budget (amends R8.10.3; answers Q2).** The initial monthly render-infrastructure target is **$25**, subject to the verified pricing (R8.10.4).
+   - **Enforcement is in the app, before a job starts. It does not rely on AWS alerts.** The API keeps the month's estimate:
+     - finished jobs' `runtime_ms` × the configured hourly rate, plus a configured monthly fixed cost (disk, endpoints);
+     - plus the running jobs' time so far;
+     - plus each new job's estimated runtime (from its length and the measured render speed).
+   - **When a new job would reach the limit, it is refused** with a visible reason and the month's figures.
+   - **Administrators can always inspect, cancel and manage existing jobs**, whatever the budget state: view, cancel, read errors, download finished outputs, delete. Only *new* job creation is blocked. A running job is never killed by the budget; its cost counts towards the month.
+   - **AWS Budget alerts** at 50 %, 80 % and 100 % are a backstop and a notice to Evoni. They are not enforcement: AWS billing data lags by hours, and an alert stops nothing.
+4. **Licence expiry (amends R8.8; answers Q2).**
+   - A warning **30 days** before an audio licence expires.
+   - Any use the licence no longer authorises is **blocked**: expired, or out of scope for the platform, monetisation, use or territory. That covers every new render (working previews included, once expired) and final approval.
+5. **The initial visual mode (amends R8.2; answers Q3).**
+   - **For a new draft, the mode is inferred from the script:** a beat with `[UI:]`, `[WEAR]`, `[DELIVER]` or `[TALK]` lines (spec §6.4) is `gameplay`; otherwise `cinematic`. The assembly dry run shows the inferred mode, and the producer can override it.
+   - **The inference never runs on a beat that already has a mode, and never changes an approved beat.** A script change that would infer a different mode shows a suggestion on that beat. Nothing is rewritten.
+6. **The compact My Little List overlay (amends R5; answers Q4).**
+   - **Default position:** bottom-left, with geometry that never intersects Prime's PIP at its current layout. The overlap is checked on every change, and an overlap is a finding.
+   - **Default visibility:** it shows when a list objective changes (a tick, untick or reveal), for a set hold time. A per-episode or per-range setting makes it persistent instead.
+7. **Starting the render host (answers Q5).** **Manual for the proof of concept:** Evoni starts it. Any automatic start is a later, separate decision.
+8. **Licence expiry after publication (amends R8.8; answers Q6).**
+   - **Published episode history is preserved.** Records of what was published, with which assets and under which licence, are never altered.
+   - **When a licence expires:**
+     - every asset under it is flagged, and every published or approved episode that used it is listed;
+     - new renders that would use it are refused;
+     - distribution actions in the app (a new export, a download for distribution, any future upload) for affected episodes are refused until the asset is replaced or the licence renewed, with the reason shown.
+9. **Outfit scoring (R9)** stays unresolved until its evidence-based audit is complete (R8.12.4). No weight is chosen, and no snapshot records a formula version, until then.
+
+## R8.17 Open design questions
 
 | # | Question | Needed by |
 |---|---|---|
-| Q1 | **How is recorded gameplay video captured inside Prime Studios?** For example, screen capture in the Teleprompter while Prime plays, recorded with her take on one clock. And how is the recording's sync to her take measured? A clap or flash marker, or manual alignment | Stage 5 (not the PoC) |
-| Q2 | **The monthly render cost ceiling**, and the warning threshold before licence expiry (30 days proposed) | Gate 5 |
-| Q3 | **The default visual mode** for a beat with no row: gameplay (proposed), or per beat by its script (a beat with `[UI:]` lines is gameplay, otherwise cinematic) | Gate 2 |
-| Q4 | **The compact My Little List overlay:** its default position and size, and whether it shows throughout gameplay or only when the list changes | Gate 3 |
-| Q5 | **After the PoC**, may the API start the render host itself (a narrowly scoped `ec2:StartInstances` on that one instance, an IAM change Evoni makes), or does Evoni always start it? | Stage 5 |
-| Q6 | **Licence expiry after release:** when a music licence expires after an episode is published, what is required? Nothing; a re-check; or a re-render without that track | before final approval is built |
-| Q7 | **Is ×0.25 or ×0.35 (or neither) the intended outfit weight?** This is answered by the R9 audit, not here | P3 |
+| Q1 | ~~**How is recorded gameplay video captured inside Prime Studios?**~~ **Answered, R8.16 item 2.** For example, screen capture in the Teleprompter while Prime plays, recorded with her take on one clock. And how is the recording's sync to her take measured? A clap or flash marker, or manual alignment | Stage 5 (not the PoC) |
+| Q2 | ~~The monthly render cost ceiling, and the licence warning threshold~~ **Answered, R8.16 items 3 and 4** ($25 target; 30 days) | — |
+| Q3 | ~~The default visual mode~~ **Answered, R8.16 item 5.** for a beat with no row: gameplay (proposed), or per beat by its script (a beat with `[UI:]` lines is gameplay, otherwise cinematic) | Gate 2 |
+| Q4 | ~~The compact My Little List overlay~~ **Answered, R8.16 item 6.** its default position and size, and whether it shows throughout gameplay or only when the list changes | Gate 3 |
+| Q5 | **Answered for the PoC (manual, R8.16 item 7).** Still open for later: may the API start the render host itself (a narrowly scoped `ec2:StartInstances` on that one instance, an IAM change Evoni makes), or does Evoni always start it? | Stage 5 |
+| Q6 | ~~Licence expiry after release~~ **Answered, R8.16 item 8.** when a music licence expires after an episode is published, what is required? Nothing; a re-check; or a re-render without that track | before final approval is built |
+| Q7 | **Is ×0.25 or ×0.35 (or neither) the intended outfit weight?** This is answered by the R9 audit, not here (R8.16 item 9) | P3 |
+| Q8 | **A10's storage:** an extension of `edit_versions`, or its own table (R8.16 item 1). Decided by the audit before Stage 5 | Stage 5 |
 
 ---
 
@@ -1056,7 +1121,7 @@ They don't show the account's limit, or how many other manual snapshots count ag
 
 ## R5.8 Blockers that still need Evoni
 
-> **SUPERSEDED in part (Revision 8):** Q20 and the D1 limits on the production box are closed by R8.0.3 and R8.10; the spec amendment is made (spec Rev 6). Open questions are R8.16.
+> **SUPERSEDED in part (Revision 8):** Q20 and the D1 limits on the production box are closed by R8.0.3 and R8.10; the spec amendment is made (spec Rev 6). Open questions are R8.17.
 
 
 **Before code (B1/C1):** none. The product decisions are made. B1 and C1 each need **implementation authorisation**.
