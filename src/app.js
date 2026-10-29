@@ -411,8 +411,10 @@ app.get('/_diag/health', async (req, res) => {
 // Alias so /api/v1/health also works (nginx only proxies /api to backend)
 app.get('/api/v1/health', (req, res) => res.redirect('/health'));
 
-// Debug endpoints — development only
-if (process.env.NODE_ENV !== 'production') {
+// Debug endpoints: only when NODE_ENV says development or test (SEC-6,
+// 2026-10-29). They were mounted whenever NODE_ENV was not 'production', so a
+// server started without it exposed its environment summary and route list.
+if (['development', 'test'].includes(process.env.NODE_ENV)) {
   app.get('/api/v1/debug/env', (req, res) => {
     res.json({
       NODE_ENV: process.env.NODE_ENV,

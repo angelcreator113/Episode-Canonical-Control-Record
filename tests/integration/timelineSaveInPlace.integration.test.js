@@ -52,8 +52,9 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
                               WHERE episode_id = :ep AND deleted_at IS NULL ORDER BY scene_number`, { ep });
 
   beforeAll(async () => {
+    // The studio is admin-only (SEC-6 put export behind ADMIN, 2026-10-29).
     token = TokenService.generateTokenPair({
-      id: 'test-user-timeline', email: 'user@timeline.dev', name: 'Editor', groups: ['USER', 'EDITOR'], role: 'USER',
+      id: 'test-user-timeline', email: 'user@timeline.dev', name: 'Admin', groups: ['ADMIN'], role: 'ADMIN',
     }).accessToken;
     await run(`INSERT INTO shows (id, name, slug, metadata, created_at, updated_at) VALUES (:show, :name, :slug, '{}', NOW(), NOW())`,
       { show, name: `Timeline ${show.slice(0, 8)}`, slug: `timeline-${show.slice(0, 8)}` });
