@@ -14,7 +14,7 @@ console.log('🆕 SCENES.JS VERSION: 2026-02-10-05:20 - Routes reordered with /:
  * Base path: /api/v1/scenes
  *
  * ⚠️ CRITICAL ROUTING ORDER:
- * - Specific routes (/, /ultra-test, /db-test, /test-direct/:id, /:id/duplicate, etc.) MUST come FIRST
+ * - Specific routes (/, /:id/duplicate, etc.) MUST come FIRST
  * - Generic parameterized route (/:id) MUST come LAST
  * - Express matches routes sequentially - if /:id comes first, it catches EVERYTHING
  */
@@ -25,91 +25,6 @@ console.log('🆕 SCENES.JS VERSION: 2026-02-10-05:20 - Routes reordered with /:
 
 // GET /api/v1/scenes - List all scenes with filters
 router.get('/', requireAuth, asyncHandler(sceneController.listScenes));
-
-// ULTRA SIMPLE TEST - No validation, no async, nothing
-router.get('/ultra-test', requireAuth, (req, res) => {
-  console.log('🚨 ULTRA-TEST HIT!');
-  res.json({ success: true, message: 'ULTRA TEST WORKS', timestamp: new Date().toISOString() });
-});
-
-// DATABASE CONNECTIVITY TEST - Check what database we're actually connected to
-router.get('/db-test', requireAuth, asyncHandler(async (req, res) => {
-  console.log('🧪 DB-TEST HIT!');
-  const { sequelize } = require('../models');
-  
-  try {
-    // Test 1: Check current database
-    const [dbInfo] = await sequelize.query('SELECT current_database(), current_schema()');
-    console.log('Database:', dbInfo[0].current_database, 'Schema:', dbInfo[0].current_schema);
-
-    // Test 2: Check if scenes table exists
-    const [sceneTableCheck] = await sequelize.query(`
-      SELECT EXISTS (
-        SELECT FROM information_schema.tables 
-        WHERE table_schema = 'public' 
-        AND table_name = 'scenes'
-      ) as exists
-    `);
-    console.log('Scenes table exists:', sceneTableCheck[0].exists);
-
-    // Test 3: Try to query scenes
-    let sceneCount = 0;
-    let firstScene = null;
-    if (sceneTableCheck[0].exists) {
-      const [countResult] = await sequelize.query('SELECT COUNT(*) as count FROM scenes');
-      sceneCount = countResult[0].count;
-      
-      if (sceneCount > 0) {
-        const [sceneResult] = await sequelize.query('SELECT id, title FROM scenes LIMIT 1');
-        firstScene = sceneResult[0];
-      }
-    }
-
-    res.json({
-      success: true,
-      database: dbInfo[0].current_database,
-      schema: dbInfo[0].current_schema,
-      scenesTableExists: sceneTableCheck[0].exists,
-      sceneCount,
-      firstScene,
-    });
-  } catch (error) {
-    console.error('❌ DB-TEST ERROR:', error.message);
-    res.status(500).json({
-      success: false,
-      error: error.message,
-    });
-  }
-}));
-
-// TEST ROUTE - Inline handler to verify route registration
-router.get('/test-direct/:id', requireAuth, asyncHandler(async (req, res) => {
-  console.log('🧪 TEST-DIRECT ROUTE HIT! ID:', req.params.id);
-  const { sequelize } = require('../models');
-  const { QueryTypes } = require('sequelize');
-  
-  try {
-    const scenes = await sequelize.query(
-      `SELECT * FROM scenes WHERE id = $1::uuid LIMIT 1`,
-      {
-        bind: [req.params.id],
-        type: QueryTypes.SELECT
-      }
-    );
-    
-    res.json({
-      success: true,
-      message: '✅ TEST ROUTE WORKS! Code is loading!',
-      scene: scenes[0] || null,
-      timestamp: new Date().toISOString()
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
-  }
-}));
 
 // POST /api/v1/scenes - Create new scene
 router.post(
