@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
-import axios from 'axios';
+// The app's client: it sends the sign-in token these admin-only routes need
+// (SEC-3, 2026-10-29; plain axios sent none).
+import axios from '../services/api';
 import {
   BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
