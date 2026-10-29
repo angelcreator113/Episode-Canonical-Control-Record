@@ -1,6 +1,6 @@
 # Gameplay Director and animated export: implementation spec
 
-**Status:** revision 5, the approved planning baseline (Evoni approved revision 4 as the baseline on 2026-10-26; revision 5 adds her final clarifications and creative decisions). Nothing here is built.
+**Status:** revision 6 (2026-10-29): revision 5, the approved planning baseline, amended by Evoni's editor architecture rulings of 2026-10-29 (§17). Revision 6 is documentation only; nothing here is built. Where §17 or a **REV 6** banner disagrees with the text, the banner wins.
 
 **Revision history**
 - **Rev 1:** the first draft.
@@ -25,6 +25,12 @@
   - Prime's commentary is kept apart from the Lala and NPC voices (§4.1);
   - creative decisions G-1 to G-5 settled (§16);
   - beat 9's old Shopping list reference becomes My Little List ♡ (§6.7).
+- **Rev 6** (2026-10-29): amendments from the editor and render architecture (Evoni's rulings, `docs/reads/2026-10-27-voice-studio-timeline-design.md` Revision 8), §17:
+  - gameplay actions, timed overlays and timed mode changes are `timeline_items` rows on the one edit clock;
+  - overlays no longer come from `timeline_placements`;
+  - gameplay is drawn by the existing React components (discrete states) and may also be recorded gameplay video;
+  - missing Prime footage has no fallback (the Q-F1/Q-F2 amendment owed since 2026-10-27);
+  - the render infrastructure is no longer deferred: a separate, stateless render host.
 
 **Rulings this spec keeps** (Evoni, 2026-10-26, unless dated otherwise):
 - The video export is a separate project; My Little List doesn't wait for it.
@@ -34,7 +40,7 @@
 - The Mouse Cursor and Grabbing Hand already in World → Overlays are reused, never regenerated.
 - **One authoritative episode script.**
 - **One shared Stage** (Scene Studio's composition foundation). The **Timeline** adds timing, animation and sequencing to that same composition, and owns final duration.
-- **Prime is the real streamer playing the game, never an AI avatar.** **Prime's PIP is her recorded footage**: an editable layer, **visible by default in all 14 beats**, event and deliverable scenes included, and controlled by hand. Take choice belongs to the PIP system. **Missing footage uses a designated fallback, with a warning.**
+- **Prime is the real streamer playing the game, never an AI avatar.** **Prime's PIP is her recorded footage**: an editable layer, **visible by default in all 14 beats**, event and deliverable scenes included, and controlled by hand. Take choice belongs to the PIP system. ~~Missing footage uses a designated fallback, with a warning.~~ **REV 6:** there is no fallback. Missing footage in a Prime-required beat is `prime_footage_missing`, blocking review-ready and final output; the working preview shows the gameplay full-screen with a burnt-in banner (Evoni's Q-F1/Q-F2, design R4.0, R5.1).
 - **Lala and the NPCs use assigned or generated voices**, and each line uses its **explicitly approved audio source**.
 - **Ordinary Lala dialogue needs a Voice-icon click**, decided by the line's trigger, never by its beat number. Approved wardrobe and notification reactions are automatic.
 - **Front and Back View belong to the same Scene Set.**
@@ -103,7 +109,7 @@ No approved performance is ever stretched, trimmed, sped up or shifted automatic
 | Conflict | Finding | Evoni chooses |
 |---|---|---|
 | The take is longer than the scene | `take_overruns_scene` | Extend the scene (Timeline) · trim the segment (PIP) · let it cut at the scene end |
-| The take is shorter than the scene | `take_underruns_scene` | Shorten the scene · cover with the fallback · hold the last frame |
+| The take is shorter than the scene | `take_underruns_scene` | Shorten the scene · ~~cover with the fallback~~ (REV 6: no fallback) · hold the last frame. REV 6: C1 reports this as `prime_footage_missing` (design R7.6) |
 | An anchored action falls outside its scene | `anchor_outside_scene` | Move it · adjust the Timeline · re-pin it |
 | A Lala or NPC line doesn't fit Prime's pause | `line_overruns_gap` | Hold the PIP frame · choose a shorter approved audio · re-record |
 | No marks | `estimated_timing` | Nudge by hand |
@@ -195,6 +201,8 @@ The Director never edits the script on its own.
 
 ### 6.3 Timeline proposals (the Director never owns Timeline data)
 
+> **REV 6:** the Director's own gameplay actions are also `timeline_items` rows (kinds `gameplay_action`, `phone_screen`, `overlay`, `visual_mode`; design R8.5). A proposal is a row with `origin` `director` (or `auto`, from the script's `[UI:]` tags) and `approval` `pending`, written through the edit service (C1's validated writes are the `timeline.applyProposal` of step 3). "Ghost items" are the pending rows. Accepting sets `approved`; rejecting soft-deletes the row, and the same anchor is not proposed again. Pending rows play in working previews, marked, and block review-ready and final output (`gameplay_proposal_pending`).
+
 The Director can **suggest** Timeline changes that gameplay implies:
 - **camera moves:** push in on the phone while Prime reads her list;
 - **Front/Back View changes:** cut to the venue's Back View as she leaves;
@@ -215,16 +223,18 @@ A proposal whose target vanished (object deleted, angle removed) becomes `stale`
 - A beat with only a cutscene clip has no gameplay actions. Nothing hides them; there are none.
 
 ### 6.5 Gameplay visibility: a track setting, shown as a Timeline lane
+
+> **REV 6:** whether the phone, cursor, toasts and stats are drawn follows the **visual mode** (design R8.2): each beat's default (`gameplay` or `cinematic`) plus timed `visual_mode` changes, which may fall inside a beat and never move time. It is stored in C1 (the beat-production row and `timeline_items`), shown as the MODE lane, and read by both editor views. Prime's PIP visibility is still the PIP system's; a mode sets only the PIP's default preset, and explicit PIP rules win. A mode never mutes commentary.
 - Whether the phone, cursor and toasts show in a scene or time range is a **track-owned setting**. By default it follows the script: shown where there are gameplay actions.
 - The Timeline shows it as a **"Gameplay" lane** that reads and writes the track's setting through the Director's interface.
 - The Timeline doesn't store it.
 - **Prime's PIP visibility is not this setting.** It belongs to the PIP system (visible by default, manual control).
 
 ### 6.6 Layer order (bottom to top)
-1. Scene (angle and Stage objects)
+1. Scene (angle and Stage objects; **REV 6:** or a recorded gameplay video, design R8.3.3)
 2. Prime's PIP (placed by the PIP system's layout)
 3. Phone
-4. Overlays (only from real `timeline_placements`)
+4. Overlays (**REV 6:** `overlay` items in `timeline_items`, with a length; `timeline_placements` is not used: it has no migration in the live tree)
 5. Toasts
 6. Cursor
 7. Audience stats panel (when the script shows it)
@@ -281,6 +291,8 @@ A proposal whose target vanished (object deleted, angle removed) becomes `stale`
 
 ## 8. Playback snapshots: temporary for preview, approved for export
 
+> **REV 6:** the behaviour stands (preview never approves; export uses only approved state). The storage is realised as: the preview computes the game state live (`gameStateAt`, design R8.3.2); each render job freezes its state into its manifest with its `inputs_hash` (design R8.9.1); the approved state is part of the frozen production manifest written at final episode approval (design R8.7). A separate `episode_playback_snapshots` table is not built unless Stage 5 shows a need (design R8.16).
+
 Live answers change, so playback uses a snapshot: the game state at every position the track uses, resolved through **the owners' own read paths**. The same services as the live API, so there's no second logic.
 
 **Contents:**
@@ -323,11 +335,14 @@ Live answers change, so playback uses a snapshot: the game state at every positi
   | `tick`, `voice_on`, `whoosh` | List tick, Lala's voice coming on, a scene change |
 
   A slot with no library file plays nothing and gives a warning. No replacement sound is invented or generated.
-- **Prime fallback:** the PIP system's designated fallback, with `prime_footage_missing`. The Director lays it out like Prime and never invents footage.
+- ~~**Prime fallback:** the PIP system's designated fallback, with `prime_footage_missing`. The Director lays it out like Prime and never invents footage.~~ **REV 6:** no fallback; `prime_footage_missing` is blocking (see the rulings above). No footage is invented.
+- **REV 6, the music and SFX library:** `assets` rows (categories `music`, `sfx`) with a validated licence record (permission scope, evidence, expiry); checked before final approval (design R8.8).
 
 ## 10. Preview and export behaviour
 
-**The rendering infrastructure is deferred to the export phase.** That covers the render host, the queue, Chromium on the server, storage retention and 9:16. This spec fixes only the **behaviour**:
+> **REV 6:** the infrastructure is no longer deferred. Rendering runs on a separate, stateless render host (no database access, presigned media only, idle stop, a cost ceiling); the phone and gameplay UI are drawn by headless Chromium running the same React components as the preview, as one PNG per state, with motion in FFmpeg; preview and render parity is tested (design R8.3, R8.9–R8.11). The behaviour below stands. 9:16 stays deferred.
+
+~~**The rendering infrastructure is deferred to the export phase.**~~ That covers the render host, the queue, Chromium on the server, storage retention and 9:16. This spec fixes only the **behaviour**:
 - **Preview** plays the latest **preview snapshot** plus the **draft or approved track**. The non-video layers come from the architecture's shared renderer; the PIP and video from the same layout; audio from the one mix plan.
 - **Export** plays **only the approved snapshot plus the approved track**, through the same renderer contracts and mix plan.
 - Both use the same layout, the same gameplay layers and the same mix plan. The only differences are the clock (real time or virtual) and which snapshot.
@@ -404,7 +419,7 @@ Times are illustrative and come from the Timeline. Prime's PIP (her recorded foo
 23. **Preview of the approved version and export match:** the non-video layers' frame hashes match at every action time; the video layers use the same layout; every audio event lands within one frame.
 
 **PIP and assets**
-24. Prime's PIP (her recorded footage) shows in all 14 beats, event and deliverable scenes included, bottom-right at about 28% width by default, unless hidden in the PIP system. Frame, position, size, background removal and visibility stay editable there. Missing footage shows the fallback, with `prime_footage_missing`.
+24. Prime's PIP (her recorded footage) shows in all 14 beats, event and deliverable scenes included, bottom-right at about 28% width by default, unless hidden in the PIP system. Frame, position, size, background removal and visibility stay editable there. ~~Missing footage shows the fallback, with `prime_footage_missing`.~~ **REV 6:** missing footage is `prime_footage_missing`, blocking; the working preview shows a banner, never a fallback.
 25. Cursor and hand use the existing Overlays assets with their hotspots. A missing sound plays nothing and warns; no sound is invented.
 
 **Cursor and beat 9**
@@ -419,14 +434,14 @@ Times are illustrative and come from the Timeline. Prime's PIP (her recorded foo
 |---|---|---|---|
 | A1 | **`line_key`** utility and dialogue-line identity | Anchors, overrides, outdated detection | GD-3 |
 | A2 | **Teleprompter line and cue marks** on takes | Anchors (else estimates) | GD-3 (soft) |
-| A3 | **PIP segments**: take choice, trim, offset, visibility, fallback and warning, marks exposed per segment | Anchors; PIP layer | GD-3, GD-7 |
+| A3 | **PIP segments**: take choice, trim, offset, visibility, ~~fallback~~ and warning, marks exposed per segment (**REV 6:** built in C1, `episode_prime_segments`; no fallback) | Anchors; PIP layer | GD-3, GD-7 |
 | A5 (Timeline) | **Timeline on the shared composition**: object and camera keyframes, angle changes within a Scene Set, **`timeline.applyProposal`** (validated write), a **lane API** for the Gameplay lane | Proposals; visibility lane | GD-6, GD-7 |
 | A5 (objects) | **Episode-scene objects** with master inheritance and local overrides, and stable ids | Object references | GD-3 |
 | A6 | **Dialogue lines**: assigned voice, **approved audio source**, duration, status, and which lines are **active** in the approved production | Line audio, `line_overruns_gap`, the export block (§4.1) | GD-3, GD-7 |
 | A4 | **`StageRenderer` and `layoutAt`**, with hooks for gameplay layers (an HTML phone, cursor, toasts) | Preview | GD-7 |
 | A8 | **Mix plan** that accepts gameplay audio events and keeps Prime's take audio apart from dialogue audio | Preview and export audio | GD-7 |
 | A7 | **Cursor and hand hotspots; sound library** | Cursor layer, sounds | GD-7 |
-| A9 | **Compositor** (export phase) | Export | Export phase only |
+| A9 | **Compositor** (export phase; **REV 6:** the render host and graph builder, design R8.9–R8.10) | Export | Export phase only |
 
 **What can start before any of this:**
 - **GD-2:** trigger-based voice rules and the new findings, a `scriptShowRules` change. **The first implementation PR** (§15.1).
@@ -504,8 +519,25 @@ GD-2 needs nothing from the architecture session: no `line_key`, Stage, Timeline
 | G-2 | Sound effects (§9) | A balanced streamer and gameplay palette from the show's licensed library. A missing sound warns and is never invented |
 | G-3 | Failed attempts (§5) | Playful, game-appropriate: a brief shake, the game's actual refusal message, a short error sound. The attempt and Prime's reaction are kept |
 | G-4 | Lala's thoughts (`V.O.`) (§4) | Click-free. Ordinary Lala dialogue needs the Voice click in any beat; wardrobe and notification reactions are automatic |
-| G-5 | Prime's PIP | Her actual recorded video, bottom-right, about 28% of the frame width. Frame, position, size, background removal and visibility stay editable in the PIP system. Visible by default in all 14 beats, event and deliverable scenes included. Missing footage uses the designated fallback with a warning. Prime is the real streamer, never an AI avatar |
+| G-5 | Prime's PIP | Her actual recorded video, bottom-right, about 28% of the frame width. Frame, position, size, background removal and visibility stay editable in the PIP system. Visible by default in all 14 beats, event and deliverable scenes included. ~~Missing footage uses the designated fallback with a warning.~~ **REV 6:** missing footage is blocking, with no fallback. Prime is the real streamer, never an AI avatar |
 
 **No creative decision is still open in this spec.**
 
-**Deferred to the export phase:** render host, queue, render retention on S3, 9:16 format.
+**Deferred to the export phase:** ~~render host, queue,~~ render retention on S3, 9:16 format. **REV 6:** the render host and queue are decided (design R8.9, R8.10).
+
+## 17. Revision 6: amendments from the editor architecture (Evoni, 2026-10-29)
+
+Authoritative detail: `docs/reads/2026-10-27-voice-studio-timeline-design.md` Revision 8. This section lists only what changes in this spec.
+
+1. **Gameplay actions, overlays and timed mode changes are `timeline_items`** on the one C1 edit clock (ruling 5). The Director proposes them as pending rows and never writes approved ones; acceptance is the producer's (§6.3 banner).
+2. **One synchronised clock.** Gameplay actions, Prime's PIP footage and her commentary share it. An action that follows Prime's words is anchored to her segment, so moving or trimming the segment carries the action; an action's sound moves with it (design R8.4).
+3. **Discrete states and continuous video.** Gameplay is drawn from data as discrete UI states by the existing React components (the phone, My Little List and its optional compact overlay, the stats panel, the cursor), and may also be **recorded gameplay video** placed on the edit clock and, when recorded with a Prime take, locked to that take's clock (design R8.3). The proof of concept uses the phone's wardrobe screen (R4); future gameplay is not limited to static phone states.
+4. **Gameplay visibility follows the visual mode** (§6.5 banner): a default per beat plus timed changes within a beat, never a new beat for a camera change (ruling A).
+5. **Overlays** are `overlay` items, not `timeline_placements` (§6.6 banner).
+6. **No Prime fallback** (Q-F1/Q-F2; rulings, §3.2, §9, §13 test 24, §14 A3, G-5 banners). This is the amendment the design has listed as owed since 2026-10-27.
+7. **Snapshots** are realised by the live preview state, the render manifest and the final production manifest (§8 banner).
+8. **Rendering** is no longer deferred (§10 banner): a separate render host; 9:16 and render retention stay deferred.
+9. **Sounds** come from the in-app library with licence records (§9 banner); a missing slot still plays nothing and warns.
+10. **The `[UI:]` tags** in the script seed pending gameplay actions at assembly (design R8.1.1); scripts are never edited automatically.
+
+**Unchanged:** the ownership boundary (§2), anchors and flagged conflicts (§3), dialogue triggers and the Voice icon (§4), failed attempts (§5), outdated detection (§7), the creative decisions G-1 to G-4, and beat 9's My Little List (§6.7).
