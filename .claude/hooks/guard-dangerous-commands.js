@@ -79,6 +79,10 @@ process.stdin.on('end', () => {
   const guardedScripts = [
     [execForms('deploy-prod'), "executing scripts/deploy-prod.sh, Evoni's production deploy. Agent sessions never run it; reading, editing and git commands on it are fine."],
     [execForms('(?:workflow-deploy|ssm-phase)'), 'executing scripts/deploy/workflow-deploy.sh or scripts/deploy/ssm-phase.sh, the Deploy workflow\'s scripts. Only GitHub Actions runs them, after Evoni approves a run; reading, editing, linting and git commands on them are fine.'],
+    // F-Tools-2: the Diagnostics workflow's runner-side scripts (they call aws
+    // and push to the private output repository). A session starts the
+    // workflow through the GitHub tool and reads its private report instead.
+    [execForms('diagnostics/(?:runner|publish)'), 'executing scripts/diagnostics/runner.sh or publish.sh, the Diagnostics workflow\'s scripts. Only GitHub Actions runs them; a session starts the workflow and reads its report. Reading, editing, testing and git commands on them are fine.'],
   ];
   for (const [res, why] of guardedScripts) {
     if (res.some((re) => re.test(scanExec))) {

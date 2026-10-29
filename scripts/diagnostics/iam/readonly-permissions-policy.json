@@ -1,0 +1,64 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "InfraRead",
+      "Effect": "Allow",
+      "Action": [
+        "ec2:DescribeInstances", "ec2:DescribeInstanceStatus", "ec2:DescribeSecurityGroups",
+        "ec2:DescribeVolumes", "ec2:DescribeAddresses",
+        "rds:DescribeDBInstances", "rds:DescribeDBSnapshots", "rds:DescribeEvents",
+        "ssm:DescribeInstanceInformation", "ssm:ListCommandInvocations", "ssm:GetCommandInvocation",
+        "sqs:ListQueues", "sqs:GetQueueAttributes",
+        "cloudwatch:GetMetricStatistics", "cloudwatch:DescribeAlarms",
+        "sts:GetCallerIdentity"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "S3SettingsAndListingOnly",
+      "Effect": "Allow",
+      "Action": [
+        "s3:ListAllMyBuckets", "s3:GetBucketLocation", "s3:GetBucketPolicy", "s3:GetBucketPolicyStatus",
+        "s3:GetBucketPublicAccessBlock", "s3:GetBucketOwnershipControls", "s3:GetBucketCORS",
+        "s3:GetBucketVersioning", "s3:GetEncryptionConfiguration", "s3:GetLifecycleConfiguration",
+        "s3:ListBucket"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "CognitoConfigurationOnly",
+      "Effect": "Allow",
+      "Action": ["cognito-idp:DescribeUserPool", "cognito-idp:ListUserPoolClients", "cognito-idp:ListGroups"],
+      "Resource": "*"
+    },
+    {
+      "Sid": "RunOnlyTheDiagnosticsDocumentOnTheProductionBox",
+      "Effect": "Allow",
+      "Action": "ssm:SendCommand",
+      "Resource": [
+        "arn:aws:ssm:us-east-1:637423256673:document/PrimeStudios-Diagnostics",
+        "arn:aws:ec2:us-east-1:637423256673:instance/<EC2_INSTANCE_ID>"
+      ]
+    },
+    {
+      "Sid": "NeverTheseEvenIfAnAllowIsAddedLater",
+      "Effect": "Deny",
+      "Action": [
+        "s3:GetObject*", "s3:Put*", "s3:Delete*", "s3:Restore*", "s3:Replicate*",
+        "ssm:GetParameter*", "ssm:PutParameter", "ssm:StartSession", "ssm:CreateDocument", "ssm:UpdateDocument*",
+        "secretsmanager:GetSecretValue", "kms:Decrypt", "kms:GenerateDataKey*",
+        "ec2:GetPasswordData", "ec2:DescribeInstanceAttribute", "ec2:GetConsoleOutput", "ec2:GetConsoleScreenshot",
+        "lambda:GetFunction*", "lambda:ListFunctions", "rds:DownloadDBLogFilePortion", "rds:DownloadCompleteDBLogFile",
+        "iam:*", "sts:AssumeRole", "organizations:*",
+        "cognito-idp:Admin*", "cognito-idp:ListUsers", "cognito-idp:ListUsersInGroup",
+        "cognito-idp:Create*", "cognito-idp:Update*", "cognito-idp:Delete*", "cognito-idp:DescribeUserPoolClient",
+        "rds:Create*", "rds:Modify*", "rds:Delete*", "rds:Reboot*", "rds:Restore*", "rds:Start*", "rds:Stop*",
+        "ec2:Run*", "ec2:Start*", "ec2:Stop*", "ec2:Reboot*", "ec2:Terminate*", "ec2:Modify*",
+        "ec2:Authorize*", "ec2:Revoke*", "ec2:Create*", "ec2:Delete*", "ec2:Associate*", "ec2:Disassociate*",
+        "sqs:ReceiveMessage", "sqs:SendMessage*", "sqs:DeleteMessage*", "sqs:PurgeQueue", "sqs:SetQueueAttributes"
+      ],
+      "Resource": "*"
+    }
+  ]
+}
