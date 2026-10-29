@@ -69,6 +69,13 @@ API_APP="episode-api-prod-hotfix"
 WORKER_APP="episode-worker"
 HEALTH_URL="http://localhost:3000/health"
 MIGRATE_ENV="$HOME/.episode-migrate.env"
+# The longest db:migrate waits for any one lock (Postgres lock_timeout, sent
+# as PGOPTIONS, which pg reads at connect). Deploy run 176 (2026-10-28): an
+# ALTER TABLE on episode_raw_clips waited for its lock until the SSM
+# document's 1800 s timeout, and every query on that table queued behind it.
+# A lock that is not free in this time stops the migration with "canceling
+# statement due to lock timeout" (a migration in one transaction rolls back whole).
+MIGRATE_LOCK_TIMEOUT=30s
 # "<from> <to>" while a deploy that moved the tree has not yet restarted the
 # API; removed by a successful restart (Task #2948).
 DEPLOY_MARKER="$HOME/.episode-deploy-unfinished"
@@ -664,10 +671,11 @@ phase_migrate() {
 
   # Checked again right before it runs, and again after.
   verify_stage
-  echo "Running sequelize-cli db:migrate from the staged release (NODE_ENV=production, the migration user from $MIGRATE_ENV)..."
-  local out rc
+  echo "Running sequelize-cli db:migrate from the staged release (NODE_ENV=production, the migration user from $MIGRATE_ENV, lock_timeout $MIGRATE_LOCK_TIMEOUT)..."
+  local out rc lock_hit=0
   set +e
   out="$(cd "$STAGE" && DB_USER="$mig_user" DB_PASSWORD="$mig_pass" NODE_ENV=production \
+    PGOPTIONS="-c lock_timeout=$MIGRATE_LOCK_TIMEOUT" \
     "$STAGE/node_modules/.bin/sequelize-cli" db:migrate \
     --config "$STAGE/src/config/sequelize.js" --migrations-path "$STAGE/src/migrations" 2>&1)"
   rc=$?
@@ -680,8 +688,15 @@ phase_migrate() {
       return line
     }
     { print scrub(scrub($0, ENVIRON["MIG_PASS"]), ENVIRON["MIG_USER"]) }' | redact
+  case "$out" in *"lock timeout"*) lock_hit=1 ;; esac
   unset mig_user mig_pass out
   echo "db:migrate exit $rc"
+  if [ "$rc" -ne 0 ] && [ "$lock_hit" = 1 ]; then
+    die "db:migrate exited $rc: a migration waited more than $MIGRATE_LOCK_TIMEOUT for a lock (another connection held the table) and was stopped." \
+      "The statement that waited was cancelled (a migration that runs in one transaction is rolled back whole); migrations that finished before it stay applied. Nothing else is undone or restored automatically." \
+      "The live tree ($live) and the running API are unchanged, and the deploy phase will refuse to run." \
+      "Find what holds the lock (docs/runbooks/deploy-workflow.md §4, row \"Migrate\"), then start a new run."
+  fi
   if [ "$rc" -ne 0 ]; then
     die "db:migrate exited $rc." \
       "The database may be partly migrated. Nothing is undone or restored automatically; the snapshot taken before this phase is the restore point." \

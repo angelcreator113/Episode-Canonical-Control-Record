@@ -29,6 +29,7 @@ function fn(name) {
   return m[0];
 }
 const STAGE_PATHS_LINE = /^STAGE_PATHS=\(.*\)$/m.exec(SCRIPT_TEXT)[0];
+const LOCK_TIMEOUT_LINE = /^MIGRATE_LOCK_TIMEOUT=.*$/m.exec(SCRIPT_TEXT)[0];
 
 const MIGRATE_FNS = ['die', 'redact', 'require_clean_tree', 'pending_check', 'processes_using', 'remove_stage',
   'clean_stages', 'stage_release', 'verify_stage', 'finish_migrate', 'phase_migrate', 'require_migrated'];
@@ -79,11 +80,14 @@ for a in "$@"; do if [ "$prev" = "--migrations-path" ]; then mig="$a"; fi; prev=
   echo "cli cwd=$(pwd -P)"
   echo "cli args=$*"
   echo "cli env=$(cat .env) link=$(readlink .env) modules=$(readlink node_modules) node_env=$NODE_ENV user=$DB_USER"
+  echo "cli pgoptions=\${PGOPTIONS:-}"
   echo "cli live_head=$(git -C "$LIVE_APP" rev-parse HEAD)"
   echo "cli b=$(tr -d '\\n' <"$mig/20261026000002-add-b.js") model=$(tr -d '\\n' <src/models/x.js)"
   echo "cli staged=$(find . -mindepth 1 -maxdepth 1 -printf '%P ' | tr ' ' '\\n' | sort | tr '\\n' ' ')"
 } >>"$CALLS"
 if [ "\${STUB_MIGRATE:-ok}" = "fail" ]; then echo 'ERROR: column "b" of relation "episodes" already exists'; exit 1; fi
+# Another connection holds the table past lock_timeout (Deploy run 176).
+if [ "\${STUB_MIGRATE:-ok}" = "lock" ]; then echo 'ERROR: canceling statement due to lock timeout'; exit 1; fi
 # The phase killed mid-migration (an SSM timeout): its bash goes, this keeps running.
 if [ "\${STUB_MIGRATE:-ok}" = "kill" ]; then kill -9 "$PHASE_PID"; exit 0; fi
 # A staged file changed while the migration runs.
@@ -177,6 +181,7 @@ function run(body, { fns = MIGRATE_FNS, target = TARGET, env = {} } = {}) {
     'MIGRATE_ENV="$HOME/.episode-migrate.env"; DEPLOY_MIGRATED="$HOME/.episode-deploy-migrated"',
     'DEPLOY_MARKER="$HOME/.episode-deploy-unfinished"; STAGE_ROOT="$HOME/.episode-stage"',
     STAGE_PATHS_LINE,
+    LOCK_TIMEOUT_LINE,
     'cd "$APP_DIR"',
     body,
   ].join('\n')], {
@@ -213,6 +218,9 @@ describe('the migrate phase runs from the staged target; the live directory neve
     expect(res.calls).toContain(`cli args=db:migrate --config ${s}/src/config/sequelize.js --migrations-path ${s}/src/migrations\n`);
     // With the live .env and node_modules (links, not copies), the migration user and NODE_ENV.
     expect(res.calls).toContain(`cli env=LIVE_ENV_MARKER=1 link=${app}/.env modules=${app}/node_modules node_env=production user=migrator\n`);
+    // Every lock it takes is waited for at most 30 s (Deploy run 176), and the log says so.
+    expect(res.calls).toContain('cli pgoptions=-c lock_timeout=30s\n');
+    expect(res.out).toContain('lock_timeout 30s');
     // The ledger was checked from the stage, before and after.
     expect(res.calls.match(new RegExp(`^check cwd=${s} env=LIVE_ENV_MARKER=1$`, 'gm'))).toHaveLength(2);
     // Node, started in the stage, resolved the staged config and the live .env and sequelize.
@@ -683,5 +691,27 @@ describe('deploy.yml: Migrate before Deploy, Restart last', () => {
     expect(RUNBOOK).toMatch(/\*\*Migrate\*\*, from a staged copy of the commit/);
     expect(RUNBOOK).toContain('Migrate succeeded, Deploy or Restart did not');
     expect(RUNBOOK).toContain('Never run the migration\'s `down`');
+  });
+});
+
+describe('a migration that cannot get its lock stops at the lock timeout, not at the SSM timeout (Deploy run 176)', () => {
+  test('lock timeout: stops with its own message and records nothing, so the deploy phase refuses', () => {
+    fs.writeFileSync(ledger, '20261026000001-add-a.js\n');
+    fs.rmSync(path.join(home, '.episode-deploy-migrated'), { force: true });
+    const before = snapshot();
+    const res = migrate({ env: { STUB_MIGRATE: 'lock' } });
+    expect(res.status).toBe(1);
+    expect(res.out).toContain('ERROR: canceling statement due to lock timeout');
+    expect(res.err).toMatch(/STOPPED \(migrate\): db:migrate exited 1: a migration waited more than 30s for a lock/);
+    expect(res.err).toContain('Find what holds the lock (docs/runbooks/deploy-workflow.md §4, row "Migrate")');
+    expect(res.err).not.toMatch(/STOPPED \(migrate\): db:migrate exited 1\.$/m);
+    expect(migrated()).toBeNull();
+    expect(snapshot()).toBe(before);
+    expect(res.out).not.toMatch(/MIGRATE_RAN/);
+  });
+
+  test('the runbook names the lock timeout and how to find what holds the lock', () => {
+    expect(RUNBOOK).toContain('lock_timeout');
+    expect(RUNBOOK).toContain('pg_stat_activity');
   });
 });
