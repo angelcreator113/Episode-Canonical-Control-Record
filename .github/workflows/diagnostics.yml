@@ -1,0 +1,168 @@
+# =============================================================================
+# Diagnostics — read-only production checks (F-Tools-2, Evoni's ruling 2026-10-29)
+#
+# Level 1 of the three access levels: standing read-only. A session may start
+# this workflow (and only this one) to investigate production, without asking
+# each time, once the ruling's self-test has passed. It changes nothing.
+#
+# Off until Evoni turns it on: the job runs only when the repository variable
+# DIAG_ENABLED is "true", after the one-time setup in
+# docs/runbooks/diagnostics-workflow.md.
+#
+# How it differs from Deploy (.github/workflows/deploy.yml):
+#   - environment prod-readonly (main only, no reviewer) instead of production;
+#   - its own role, PrimeStudios-ReadOnly-GHA: describe/list/settings reads, and
+#     SendCommand for the PrimeStudios-Diagnostics document only. It cannot
+#     snapshot, deploy, migrate, restart, read objects, or read secrets;
+#   - its SSM document runs one check from a fixed list (scripts/diagnostics/
+#     on-box.sh, taken from a commit on main) as ubuntu, reading only;
+#   - it works when the API is down: it needs the box and its SSM agent, not
+#     the app.
+#
+# PRIVACY: this repository is public, so its logs and artifacts are readable by
+# anyone. The report never goes to either. The collect step writes everything
+# to a file; redact.js masks it; publish.sh puts it in the PRIVATE repository
+# DIAG_OUTPUT_REPO (refusing if that repository is not private). This log
+# shows only step names, fixed messages, the private path and a checksum.
+# =============================================================================
+
+name: Diagnostics
+
+on:
+  workflow_dispatch:
+    inputs:
+      check:
+        description: Which read-only check to run
+        type: choice
+        default: overview
+        options:
+          - overview
+          - health
+          - deploy-state
+          - app-logs
+          - worker-logs
+          - nginx-logs
+          - db
+          - db-schema
+          - db-counts
+          - aws-infra
+          - s3-config
+          - cognito-config
+          - self-test
+
+permissions:
+  contents: read
+
+# One run at a time; a second request waits for the first.
+concurrency:
+  group: diagnostics
+  cancel-in-progress: false
+
+jobs:
+  diagnose:
+    name: Read-only diagnostics
+    if: vars.DIAG_ENABLED == 'true' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: prod-readonly
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      CHECK: ${{ inputs.check }}
+      TARGET_SHA: ${{ github.sha }}
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      EC2_INSTANCE_ID: ${{ vars.EC2_INSTANCE_ID }}
+      RDS_INSTANCE_ID: ${{ vars.RDS_INSTANCE_ID }}
+      HEALTH_URL: ${{ vars.HEALTH_URL }}
+      DIAG_S3_BUCKETS: ${{ vars.DIAG_S3_BUCKETS }}
+      DIAG_COGNITO_POOL_ID: ${{ vars.DIAG_COGNITO_POOL_ID }}
+      DIAG_OUTPUT_REPO: ${{ vars.DIAG_OUTPUT_REPO }}
+      SSM_DOCUMENT: PrimeStudios-Diagnostics
+      RUNBOOK: docs/runbooks/diagnostics-workflow.md
+    steps:
+      - name: Check configuration
+        env:
+          # Environment secrets (prod-readonly): only their presence is checked.
+          AWS_READONLY_ROLE_ARN: ${{ secrets.AWS_READONLY_ROLE_ARN }}
+          DIAG_OUTPUT_DEPLOY_KEY: ${{ secrets.DIAG_OUTPUT_DEPLOY_KEY }}
+        run: |
+          missing=""
+          for v in AWS_READONLY_ROLE_ARN DIAG_OUTPUT_DEPLOY_KEY AWS_REGION EC2_INSTANCE_ID RDS_INSTANCE_ID DIAG_OUTPUT_REPO; do
+            if [ -z "${!v}" ]; then missing="$missing $v"; fi
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Not set:$missing. Nothing was read. See $RUNBOOK, 'One-time setup'."
+            exit 1
+          fi
+          if ! printf '%s' "$TARGET_SHA" | grep -qE '^[0-9a-f]{40}$'; then
+            echo "::error::Unexpected commit SHA."
+            exit 1
+          fi
+          echo "Check: $CHECK"
+
+      - name: Check out the diagnostics scripts
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          sparse-checkout: scripts/diagnostics
+
+      # Before anything is collected: if the output repository is not private,
+      # stop here with nothing read.
+      - name: Confirm the output repository is private
+        run: bash scripts/diagnostics/publish.sh --check-private
+
+      - name: Configure AWS credentials (OIDC, read-only role, 15 minutes)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_READONLY_ROLE_ARN }}
+          role-session-name: diag-${{ github.run_id }}
+          role-duration-seconds: 900
+          aws-region: ${{ vars.AWS_REGION }}
+
+      # Everything the check prints goes to a file, then through redact.js.
+      # Only the size and the exit status appear here.
+      - name: Collect (output stays off this log)
+        id: collect
+        run: |
+          set +e
+          RAW="$RUNNER_TEMP/raw.txt"
+          REPORT="$RUNNER_TEMP/report.md"
+          bash scripts/diagnostics/runner.sh "$CHECK" >"$RAW" 2>&1
+          rc=$?
+          node scripts/diagnostics/redact.js <"$RAW" >"$REPORT"
+          rm -f "$RAW"
+          echo "rc=$rc" >>"$GITHUB_OUTPUT"
+          echo "Collected $(wc -c <"$REPORT") bytes; checks exit $rc."
+
+      - name: Publish to the private repository
+        if: always() && steps.collect.outcome == 'success'
+        env:
+          DIAG_OUTPUT_DEPLOY_KEY: ${{ secrets.DIAG_OUTPUT_DEPLOY_KEY }}
+        run: bash scripts/diagnostics/publish.sh "$RUNNER_TEMP/report.md" "$CHECK"
+
+      - name: Remove the local report
+        if: always()
+        run: rm -f "$RUNNER_TEMP/report.md" "$RUNNER_TEMP/raw.txt"
+
+      - name: Result
+        if: always()
+        env:
+          RC: ${{ steps.collect.outputs.rc }}
+        run: |
+          {
+            echo "### Diagnostics: $CHECK"
+            echo
+            echo "The report is in the private repository \`$DIAG_OUTPUT_REPO\` under \`runs/\`. Nothing from it is shown here."
+            echo
+            case "$RC" in
+              0) echo "Result: ok." ;;
+              1) echo "Result: the check found problems (see the report)." ;;
+              *) echo "Result: the check did not run (exit ${RC:-none})." ;;
+            esac
+          } >>"$GITHUB_STEP_SUMMARY"
+          case "$RC" in
+            0) exit 0 ;;
+            *) echo "::error::The check reported problems or did not run; see the private report."; exit 1 ;;
+          esac
