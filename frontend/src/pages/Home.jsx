@@ -38,6 +38,7 @@ import { DECIDE } from './DailyUpdate';
 import { activeShowId } from '../utils/activeShow';
 import { seasonPageHref } from '../lib/seasonPage';
 import PageLayout from '../components/layout/PageLayout';
+import useAllowPullToRefresh from '../hooks/useAllowPullToRefresh';
 import './Home.css';
 
 // ─── Track 6 CP7 module-scope helper (Pattern F prophylactic — Api suffix) ───
@@ -269,6 +270,7 @@ function Todo({ update, onDecided }) {
 
 function Home() {
   const { user } = useAuth();
+  useAllowPullToRefresh();
   const [loading, setLoading] = useState(true);
   // A refresh keeps the page on screen and reloads its data (Evoni, 2026-10-23:
   // pull-to-refresh is off on phones, so the page has its own Refresh).

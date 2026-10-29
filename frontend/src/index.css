@@ -72,6 +72,14 @@ html {
   overscroll-behavior: none;
 }
 
+/* Pages that allow pull-to-refresh (useAllowPullToRefresh: Home, the public
+   landing page, sign-in; Evoni, 2026-10-29). The attribute selector outranks
+   the plain html/body rules here and in App.css. */
+html[data-pull-refresh="on"],
+html[data-pull-refresh="on"] body {
+  overscroll-behavior-y: auto;
+}
+
 code {
   font-family: var(--font-mono);
 }

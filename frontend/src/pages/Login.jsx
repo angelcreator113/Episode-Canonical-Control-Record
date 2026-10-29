@@ -4,10 +4,12 @@ import { ArrowLeft, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import authService from '../services/authService';
 import useCountdown, { formatWait } from '../hooks/useCountdown';
+import useAllowPullToRefresh from '../hooks/useAllowPullToRefresh';
 import '../styles/Login.css';
 
 export default function Login() {
   const navigate = useNavigate();
+  useAllowPullToRefresh();
   const { login, isAuthenticated } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
