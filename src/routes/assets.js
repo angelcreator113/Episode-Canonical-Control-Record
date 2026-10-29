@@ -1325,9 +1325,11 @@ router.post('/process', requireAuth, async (req, res) => {
 
 /**
  * GET /api/v1/assets/config/check
- * Check AWS and API configuration (for debugging)
+ * Check AWS and API configuration (for debugging). Admin only, and it says
+ * only whether each setting is there (SEC-2, 2026-10-29): it was open to
+ * anyone and returned the first 8 characters of the AWS access key ID.
  */
-router.get('/config/check', optionalAuth, async (req, res) => {
+router.get('/config/check', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const hasRemoveBgProvider = !!(
       process.env.REMOVEBG_API_KEY
@@ -1337,9 +1339,7 @@ router.get('/config/check', optionalAuth, async (req, res) => {
 
     const config = {
       awsRegion: process.env.AWS_REGION || 'not set',
-      awsAccessKeyId: process.env.AWS_ACCESS_KEY_ID
-        ? `${process.env.AWS_ACCESS_KEY_ID.substring(0, 8)}...`
-        : 'not set',
+      awsAccessKeyId: process.env.AWS_ACCESS_KEY_ID ? 'configured' : 'not set',
       awsSecretKey: process.env.AWS_SECRET_ACCESS_KEY ? 'configured' : 'not set',
       s3Bucket: process.env.AWS_S3_BUCKET || 'not set',
       runwayApiKey: process.env.RUNWAY_ML_API_KEY ? 'configured' : 'not set',

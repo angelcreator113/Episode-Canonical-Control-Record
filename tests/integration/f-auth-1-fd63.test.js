@@ -186,30 +186,19 @@ const SHAPES = [
     expect(noHeader.body.code).not.toBe(badHeader.body.code);
   });
 
-  // roles.js is HELD under XK-3 (F-Stats-1 v1.57) per Fix Plan v2.45 §3 and
-  // v2.46 §4 — deliberately NOT promoted. This asserts the hold is real rather
-  // than an oversight, and will fail if roles.js is swept without a register
-  // decision. It is not an assertion that the current state is safe: the eight
-  // handlers take tenancy from the query string with no entitlement check.
-  //
-  // show_id is supplied because the handler 400s without it; without the
-  // parameter this test would pass on the missing-parameter guard rather than
-  // on the absence of auth.
-  //
-  // NOTE: this previously green-lit on a 500, not a working handler.
-  // roles.js:19 called AssetRoleService.getRolesForshow — lowercase `show`,
-  // against an exported getRolesForShow — so the request threw past the
-  // show_id guard. Fixed incidentally during F-AUTH-1 FD-67 Option 1's
-  // testing (unrelated to auth; a plain method-name typo, not gated by the
-  // XK-3 hold below). Now passes on a 200. The assertion remains
-  // load-bearing regardless: promoting roles.js would produce
-  // 401/AUTH_REQUIRED and trip it either way.
-  describe('roles.js — HELD under XK-3, deliberately unpromoted', () => {
-    test('anonymous request is not rejected by auth', async () => {
+  // roles.js was HELD under XK-3 (F-Stats-1 v1.57; Fix Plan v2.45 §3, v2.46
+  // §4), deliberately left unpromoted. Evoni's admin-only ruling of
+  // 2026-10-29 (SEC-2) lifts the hold: every roles route is now requireAuth +
+  // authorize(['ADMIN']). The register amendment recording this is owed as a
+  // new file (the register is append-only). The tenancy finding XK-3 named,
+  // handlers taking show_id from the query string with no entitlement check,
+  // is unchanged by this test and stays open for the register.
+  describe('roles.js: admin only since SEC-2 (XK-3 hold lifted, 2026-10-29)', () => {
+    test('an anonymous request is refused by auth', async () => {
       const res = await request(app).get('/api/v1/roles?show_id=held-under-xk-3');
 
-      expect(res.status).not.toBe(401);
-      expect(res.body?.code).not.toBe('AUTH_REQUIRED');
+      expect(res.status).toBe(401);
+      expect(res.body?.code).toBe('AUTH_REQUIRED');
     });
   });
 });

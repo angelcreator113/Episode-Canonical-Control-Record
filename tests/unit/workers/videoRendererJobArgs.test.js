@@ -100,7 +100,9 @@ async function queueThroughRoute(body) {
   const app = express();
   app.use(express.json());
   app.use('/api/v1', exportRoutes);
-  const res = await request(app).post('/api/v1/episodes/ep-1/export').send(body);
+  // Export is admin only in every environment since SEC-6 (2026-10-29).
+  const admin = require('../../../src/services/tokenService').generateTokenPair({ id: 'export-admin', email: 'export@test.dev', name: 'export', groups: ['ADMIN'], role: 'ADMIN' }).accessToken;
+  const res = await request(app).post('/api/v1/episodes/ep-1/export').set('Authorization', `Bearer ${admin}`).send(body);
   expect(res.status).toBeLessThan(300);
   return mockAddExportJob.mock.calls.at(-1)[0];
 }
