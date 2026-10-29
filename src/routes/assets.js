@@ -768,9 +768,11 @@ router.get('/:id', optionalAuth, validateUUIDParam('id'), async (req, res) => {
 
 /**
  * POST /api/v1/assets
- * Upload new asset
+ * Upload new asset. The sign-in and admin checks run before multer reads the
+ * body (SEC-1, Evoni's admin-only ruling 2026-10-29): with multer first, up
+ * to 500 MB was held in memory for a request that was then refused.
  */
-router.post('/', upload.single('file'), requireAuth, validateAssetUpload, async (req, res) => {
+router.post('/', requireAuth, authorize(['ADMIN']), upload.single('file'), validateAssetUpload, async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({
