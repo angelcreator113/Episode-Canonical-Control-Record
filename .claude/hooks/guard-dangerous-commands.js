@@ -3,6 +3,8 @@
 // Blocks anything that would touch a production host, AWS, RDS, PM2,
 // dispatch or enable a workflow, push straight to main/dev, or force-sync the DB.
 // Agent sessions never contact hosts; production actions are Evoni's (CLAUDE.md).
+// Production reads are default-deny: only the method F-Tools-3 approves, for a
+// task Evoni authorizes, and never with credentials found in the environment.
 // Exit 2 = block (stderr is shown to Claude). Exit 0 = allow.
 // It matches COMMAND POSITION only, so prose or documents that merely mention
 // `pm2` or an RDS hostname are not blocked. Heredoc bodies written to files with
@@ -36,7 +38,19 @@ process.stdin.on('end', () => {
   const rules = [
     [at('(ssh|scp|sftp|rsync)'), 'SSH/SCP/rsync to any host. Agent sessions never contact hosts; production actions are Evoni\'s (CLAUDE.md).'],
     [at('pm2'), 'pm2 on any box. A process reload can silently swap prod onto the empty DB.'],
-    [at('aws'), 'AWS CLI. Evoni runs AWS commands personally (v25 Owed Index Amd30 AF2.6).'],
+    [at('aws'), 'AWS CLI. Evoni runs AWS commands personally (v25 Owed Index Amd30 AF2.6). Task-scoped production reads go only through the approved method in F-Tools-3, never the CLI in a session.'],
+    // F-Tools-3 (2026-10-29): production is default-deny. No direct request to
+    // AWS from a session, whatever the tool: a production read happens only
+    // through the method F-Tools-3 approves, for a task Evoni authorizes.
+    [/(^|[\n;&|(`]\s*|\$\(\s*)(sudo\s+)?(curl|wget|aria2c|https?|xh)\b[^\n]*(amazonaws\.com|awsapps\.com|amazoncognito\.com|cloudfront\.net)/i, 'A direct request to an AWS endpoint (S3, SSO, Cognito, CloudFront). Production is default-deny (F-Tools-3); reads go only through the approved method for a task Evoni authorizes.'],
+    [/(^|[\n;&|(`]\s*)(python3?|node|deno|bun|ruby|perl)\b[\s\S]*?(amazonaws\.com|awsapps\.com|amazoncognito\.com)/i, 'A script that calls an AWS endpoint. Production is default-deny (F-Tools-3); reads go only through the approved method for a task Evoni authorizes.'],
+    [/\b(boto3|botocore|@aws-sdk\/|aws-sdk['"/])/, 'An AWS SDK used from a session. Production is default-deny (F-Tools-3).'],
+    // A signed link is a credential: it never appears in a command, where the transcript would keep it.
+    [/X-Amz-(Signature|Credential|Security-Token)=/i, 'A presigned AWS link in a command. Signed links are credentials and never appear in a session transcript (F-Tools-3).'],
+    // Credentials in the session environment are never read or used (CLAUDE.md, F-Tools-1, F-Tools-3).
+    [/AWS_(SECRET_ACCESS_KEY|SESSION_TOKEN|ACCESS_KEY_ID)\b/, 'Reading or using AWS credentials from the environment. Credentials found in a session are never used (F-Tools-1, F-Tools-3).'],
+    [/(^|[\n;&|(`]\s*)(printenv|env|export\s+-p|declare\s+-x|set)\s*($|\||;|&|\n)/, 'Printing the whole environment, which may contain credentials. Name the variable you need instead (F-Tools-3).'],
+    [/(^|[\s;&|(=])~?[^\s;&|]*\.aws\/(credentials|config|sso|cli)\b/, 'Reading the AWS credential or SSO cache files. Credentials found in a session are never used (F-Tools-1, F-Tools-3).'],
     [/(psql|pg_dump|pg_restore|pg_isready|DATABASE_URL=|DB_HOST=|postgres(ql)?:\/\/)[^\n]*(rds\.amazonaws\.com|episode-control-(dev|prod))/i, 'A connection to a live RDS instance. No DB contact from agent sessions; identity by query, never by name.'],
     [/(rds\.amazonaws\.com|episode-control-(dev|prod))[^\n]*(psql|pg_dump|pg_restore|sequelize)/i, 'A connection to a live RDS instance. No DB contact from agent sessions.'],
     [/(^|[\s;&|(])(DB_SYNC_FORCE|CONFIRM_FORCE_SYNC)=/, 'Force sync drops every table.'],
