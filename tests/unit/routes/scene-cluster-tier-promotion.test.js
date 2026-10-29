@@ -39,7 +39,7 @@ const CP4_FILES = [
 
 // Per-file requireAuth counts captured at CP4 close (1 import + handler-level invocations).
 const REQUIRE_AUTH_COUNTS = {
-  'scenes.js': 37,             // 1 import + 36 handlers
+  'scenes.js': 34,             // 1 import + 33 handlers (the 3 diagnostic routes /ultra-test, /db-test, /test-direct/:id removed by SEC-6, 2026-10-29)
   'sceneTemplates.js': 6,      // 1 import + 5 handlers
   'sceneLibrary.js': 6,        // 1 import + 5 handlers (3 ex-authenticateToken + 2 ex-bare)
   'sceneProposeRoute.js': 7,   // 1 import + 6 handlers (1 with aiRateLimiter)
@@ -203,13 +203,13 @@ describe('Step 3 CP4 — Scene cluster pure Tier 1 sweep + AI POST reference mod
   });
 
   describe('CP4 zone aggregate consumer counts', () => {
-    test('CP4 zone contains 151 total requireAuth references across 6 files (6 imports + 133 handlers; +4 Task #2396; +1 S2 POST /:id/brief; +2 S6 approve-base; +1 D1 GET /:id/uses; +1 POST /:id/description-review; +5 look variants; +2 event versions; +2 venue photo; +1 transform-object)', () => {
+    test('CP4 zone contains 151 total requireAuth references across 6 files (6 imports + 133 handlers; +4 Task #2396; +1 S2 POST /:id/brief; +2 S6 approve-base; +1 D1 GET /:id/uses; +1 POST /:id/description-review; +5 look variants; +2 event versions; +2 venue photo; +1 transform-object; -3 diagnostic routes removed by SEC-6)', () => {
       const total = CP4_FILES.reduce((sum, filename) => {
         const src = readSrc(filename);
         const matches = src.match(/\brequireAuth\b/g) || [];
         return sum + matches.length;
       }, 0);
-      expect(total).toBe(151);
+      expect(total).toBe(148);
     });
 
     test('CP4 zone contains 30 total aiRateLimiter references (4 import-line matches + 26 handler invocations; +7 re-audit 2026-10-15; +1 upload-base, third audit; +2 post-process and validate-angle, fourth audit; +1 transform-object, show side check)', () => {
@@ -243,7 +243,8 @@ describe('Step 3 CP4 — Scene cluster pure Tier 1 sweep + AI POST reference mod
       expect((pressSrc.match(pattern) || []).length).toBe(2);
       // manuscript-export.js left Tier 3 on 2026-10-15 (Evoni: the memoir downloads need sign-in).
       expect((manuscriptSrc.match(pattern) || []).length).toBe(0);
-      expect((worldStudioSrc.match(pattern) || []).length).toBe(1);
+      // worldStudio.js's one factory (the ecosystem preview) is admin only since SEC-5, 2026-10-29.
+      expect((worldStudioSrc.match(pattern) || []).length).toBe(0);
     });
   });
 });

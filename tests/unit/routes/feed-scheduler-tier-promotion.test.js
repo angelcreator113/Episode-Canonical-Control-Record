@@ -13,7 +13,7 @@ const SRC = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'src', 'route
 
 describe('Step 3 CP8 — feedSchedulerRoutes.js PROMOTE shape', () => {
   test('imports requireAuth + aiRateLimiter (lazy-noop removed)', () => {
-    expect(SRC).toMatch(/const\s*\{\s*requireAuth\s*\}\s*=\s*require\(['"]\.\.\/middleware\/auth['"]\)/);
+    expect(SRC).toMatch(/const\s*\{\s*requireAuth,\s*authorize\s*\}\s*=\s*require\(['"]\.\.\/middleware\/auth['"]\)/);
     expect(SRC).toMatch(/const\s*\{\s*aiRateLimiter\s*\}\s*=\s*require\(['"]\.\.\/middleware\/aiRateLimiter['"]\)/);
   });
 
@@ -26,11 +26,23 @@ describe('Step 3 CP8 — feedSchedulerRoutes.js PROMOTE shape', () => {
     });
   });
 
-  describe('Non-AI admin/control handlers (10)', () => {
+  describe('Scheduler controls are admin only (SEC-4, 2026-10-29)', () => {
+    test('one admin guard: requireAuth + authorize ADMIN', () => {
+      expect(SRC).toMatch(/const admin = \[requireAuth, authorize\(\['ADMIN'\]\)\];/);
+    });
+    [['/start', true], ['/stop', false], ['/run-now', true], ['/fill-one', true]].forEach(([route, paid]) => {
+      test(`POST ${route} → admin${paid ? ' + aiRateLimiter' : ''}`, () => {
+        const escaped = route.replace(/\//g, '\\/');
+        const re = new RegExp(`router\\.post\\('${escaped}',\\s*\\.\\.\\.admin,\\s*${paid ? 'aiRateLimiter,\\s*' : ''}(?:async|\\(req)`);
+        expect(SRC).toMatch(re);
+      });
+    });
+  });
+
+  describe('Non-AI handlers (6)', () => {
     [
       ['get', '/status'], ['get', '/events'], ['get', '/history'],
       ['get', '/config'], ['put', '/config'],
-      ['post', '/start'], ['post', '/stop'], ['post', '/run-now'], ['post', '/fill-one'],
       ['get', '/layer-status'],
     ].forEach(([verb, route]) => {
       test(`${verb.toUpperCase()} ${route} → requireAuth`, () => {

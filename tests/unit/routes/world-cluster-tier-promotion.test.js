@@ -95,17 +95,19 @@ const CP3_FILES = [
 // City's image or story bubble, The Pulse Uploads, Task #2920, requireAuth).
 // 38: +2 for GET and POST /world/locations/studio-types (creator studios
 // typed "other", Evoni 2026-10-18; requireAuth, no AI call).
+// 39: +1 for POST /world/generate-ecosystem-preview, admin only since SEC-5
+// (Evoni's admin-only ruling, 2026-10-29; it was the Tier 3 optionalAuth factory).
 const REQUIRE_AUTH_COUNTS = {
   'world.js': 5,
   'worldEvents.js': 115,
-  'worldStudio.js': 38,
+  'worldStudio.js': 39,
   'worldTemperatureRoutes.js': 3,
 };
 
 const OPTIONAL_AUTH_COUNTS = {
   'world.js': 0,
   'worldEvents.js': 0,
-  'worldStudio.js': 20, // 1 import + 18 Tier 4 plain + 1 Tier 3 factory
+  'worldStudio.js': 19, // 1 import + 18 Tier 4 plain (the Tier 3 factory is admin only since SEC-5)
   'worldTemperatureRoutes.js': 0,
 };
 
@@ -170,7 +172,7 @@ describe('Step 3 CP3 — World cluster mixed Tier 1+3+4 disposition', () => {
 
     test('worldStudio.js uses direct destructuring import for optionalAuth + requireAuth (mixed split)', () => {
       expect(readSrc('worldStudio.js')).toMatch(
-        /const\s*\{\s*optionalAuth,\s*requireAuth\s*\}\s*=\s*require\(['"]\.\.\/middleware\/auth['"]\)/,
+        /const\s*\{\s*optionalAuth,\s*requireAuth,\s*authorize\s*\}\s*=\s*require\(['"]\.\.\/middleware\/auth['"]\)/,
       );
     });
   });
@@ -294,16 +296,11 @@ describe('Step 3 CP3 — World cluster mixed Tier 1+3+4 disposition', () => {
       src = readSrc('worldStudio.js');
     });
 
-    test('Tier 3 — POST /world/generate-ecosystem-preview uses optionalAuth({ degradeOnInfraFailure: true })', () => {
+    test('POST /world/generate-ecosystem-preview is admin only (SEC-5, was the Tier 3 optionalAuth factory)', () => {
       expect(src).toMatch(
-        /router\.post\(['"]\/world\/generate-ecosystem-preview['"],\s*optionalAuth\(\{\s*degradeOnInfraFailure:\s*true\s*\}\),/,
+        /router\.post\(['"]\/world\/generate-ecosystem-preview['"],\s*requireAuth,\s*authorize\(\['ADMIN'\]\),/,
       );
-    });
-
-    test('Tier 3 — generate-ecosystem-preview has PUBLIC comment with audit handoff reference', () => {
-      expect(src).toMatch(
-        /\/\/\s*PUBLIC:\s*World ecosystem preview generation with ownership-when-authenticated[\s\S]*?Audit Handoff §4\.1\s*\n\s*router\.post\(['"]\/world\/generate-ecosystem-preview['"]/,
-      );
+      expect(src).not.toMatch(/PUBLIC:\s*World ecosystem preview generation/);
     });
 
     test('Tier 4 — file has 18 PUBLIC group-rationale comments before plain-optionalAuth GETs', () => {
@@ -318,7 +315,7 @@ describe('Step 3 CP3 — World cluster mixed Tier 1+3+4 disposition', () => {
       expect(matches.length).toBe(18);
     });
 
-    test('Tier 1 — exactly 36 mutation handlers use requireAuth (24 POST + 6 PUT + 7 DELETE excl. line 2483)', () => {
+    test('Tier 1 — exactly 37 mutation handlers use requireAuth (24 POST + 6 PUT + 7 DELETE; the preview POST is admin since SEC-5)', () => {
       // Mutations are POST/PUT/DELETE with requireAuth
       const postPattern = /router\.post\([^)]*,\s*requireAuth,/g;
       const putPattern = /router\.put\([^)]*,\s*requireAuth,/g;
@@ -326,10 +323,10 @@ describe('Step 3 CP3 — World cluster mixed Tier 1+3+4 disposition', () => {
       const postCount = (src.match(postPattern) || []).length;
       const putCount = (src.match(putPattern) || []).length;
       const deleteCount = (src.match(deletePattern) || []).length;
-      expect(postCount).toBe(23); // 24 POST minus 1 Tier 3 (+1 dream-cities image, Task #2920; +1 studio-types, 2026-10-18)
+      expect(postCount).toBe(24); // all 24 POST (+1 dream-cities image, Task #2920; +1 studio-types, 2026-10-18; the preview, SEC-5)
       expect(putCount).toBe(6);
       expect(deleteCount).toBe(7);
-      expect(postCount + putCount + deleteCount).toBe(36);
+      expect(postCount + putCount + deleteCount).toBe(37);
     });
 
     test('Tier 3 + Tier 4 + Tier 1 cover all 56 worldStudio handlers', () => {
@@ -398,40 +395,41 @@ describe('Step 3 CP3 — World cluster mixed Tier 1+3+4 disposition', () => {
     // 138 with the documents rework (restore, keep-look, line redraft; 2026-10-24);
     // 158 since Task #54 split worldEvents.js into 21 parts, each with its own import.
     // 161 with flow.js (its import, GET .../flow, POST .../fill-missing; 2026-10-25).
-    test('CP3 zone contains 161 total requireAuth references (25 imports + 136 handlers)', () => {
+    // 162 with the ecosystem preview admin only (SEC-5, 2026-10-29).
+    test('CP3 zone contains 162 total requireAuth references (25 imports + 137 handlers)', () => {
       const total = CP3_FILES.reduce((sum, filename) => {
         const src = readSrc(filename);
         const matches = src.match(/\brequireAuth\b/g) || [];
         return sum + matches.length;
       }, 0);
-      expect(total).toBe(161);
+      expect(total).toBe(162);
     });
 
-    test('CP3 zone contains 20 total optionalAuth references (all in worldStudio.js)', () => {
+    test('CP3 zone contains 19 total optionalAuth references (all in worldStudio.js)', () => {
       const total = CP3_FILES.reduce((sum, filename) => {
         const src = readSrc(filename);
         const matches = src.match(/\boptionalAuth\b/g) || [];
         return sum + matches.length;
       }, 0);
-      expect(total).toBe(20);
+      expect(total).toBe(19);
     });
 
-    test('CP3 zone contains exactly 1 degradeOnInfraFailure: true factory invocation (worldStudio.js Tier 3)', () => {
+    test('CP3 zone contains no degradeOnInfraFailure factory invocation (the Tier 3 preview is admin only since SEC-5)', () => {
       const total = CP3_FILES.reduce((sum, filename) => {
         const src = readSrc(filename);
         const matches = src.match(/degradeOnInfraFailure:\s*true/g) || [];
         return sum + matches.length;
       }, 0);
-      expect(total).toBe(1);
+      expect(total).toBe(0);
     });
 
-    test('CP3 zone contains 19 PUBLIC comments (1 Tier 3 specific + 18 Tier 4 group)', () => {
+    test('CP3 zone contains 18 PUBLIC comments (the 18 Tier 4 group; the Tier 3 one went with SEC-5)', () => {
       const total = CP3_FILES.reduce((sum, filename) => {
         const src = readSrc(filename);
         const matches = src.match(/^\/\/ PUBLIC:/gm) || [];
         return sum + matches.length;
       }, 0);
-      expect(total).toBe(19);
+      expect(total).toBe(18);
     });
 
     test('CP3 zone contains 0 authenticateToken active hits (planning forecast was 1; was lazy-noop fallback false positive)', () => {

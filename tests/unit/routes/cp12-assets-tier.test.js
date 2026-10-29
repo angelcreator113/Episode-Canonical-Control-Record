@@ -11,10 +11,10 @@ describe('CP12 — assets.js §5.21 12th 3-TIER architectural first', () => {
   test('§5.41 G6-EXTENDED: authenticate alias absent', () => {
     expect(SRC).not.toMatch(/[^A-Za-z]authenticate[^A-Za-z]/);
   });
-  test('optionalAuth present on the 10 Tier 4 catalog reads only, not on Tier 1/2 writes (FD-67 Option 1)', () => {
+  test('optionalAuth present on the 9 Tier 4 catalog reads only, not on Tier 1/2 writes (FD-67 Option 1)', () => {
     const optionalAuthCount = (SRC.match(/\boptionalAuth\b/g) || []).length;
-    // 1 import + 10 route declarations
-    expect(optionalAuthCount).toBe(11);
+    // 1 import + 9 route declarations (GET /config/check is admin only since SEC-2, 2026-10-29)
+    expect(optionalAuthCount).toBe(10);
   });
   test('Tier 4 PUBLIC marker present for 10 bare GET catalog reads (§5.21 12th)', () => {
     expect(SRC).toMatch(/PUBLIC: asset catalog reads are Tier 4/);
@@ -31,8 +31,8 @@ describe('CP12 — assets.js §5.21 12th 3-TIER architectural first', () => {
   test('Tier 1 POST /search migrated bare → requireAuth', () => {
     expect(SRC).toMatch(/router\.post\('\/search', requireAuth,/);
   });
-  test('Tier 1 POST / (upload) carries requireAuth + multer + validateAssetUpload PRESERVED', () => {
-    expect(SRC).toMatch(/router\.post\('\/', upload\.single\('file'\), requireAuth, validateAssetUpload,/);
+  test('POST / (upload): requireAuth + ADMIN run before multer reads the body (SEC-1)', () => {
+    expect(SRC).toMatch(/router\.post\('\/', requireAuth, authorize\(\['ADMIN'\]\), upload\.single\('file'\), validateAssetUpload,/);
   });
   test('Tier 4 PUBLIC bare GETs now carry explicit optionalAuth (FD-67 Option 1 — global mount removed)', () => {
     expect(SRC).toMatch(/router\.get\('\/', optionalAuth, async/);
