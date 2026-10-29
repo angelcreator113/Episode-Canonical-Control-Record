@@ -1,13 +1,18 @@
 const express = require('express');
 const router = express.Router();
 const decisionAnalyticsService = require('../services/decisionAnalyticsService');
-const { optionalAuth } = require('../middleware/auth');
+const { requireAuth, authorize } = require('../middleware/auth');
+
+// Internal analytics, admin only (SEC-3, Evoni's admin-only ruling
+// 2026-10-29): every route was optionalAuth, and GET /export handed anyone
+// the decision rows with their user ids and full context.
+const admin = [requireAuth, authorize(['ADMIN'])];
 
 /**
  * GET /api/decision-analytics/stats
  * Get overall decision statistics
  */
-router.get('/stats', optionalAuth, async (req, res) => {
+router.get('/stats', ...admin, async (req, res) => {
   try {
     const filters = {
       user_id: req.query.user_id,
@@ -35,7 +40,7 @@ router.get('/stats', optionalAuth, async (req, res) => {
  * GET /api/decision-analytics/by-type
  * Get decisions grouped by type
  */
-router.get('/by-type', optionalAuth, async (req, res) => {
+router.get('/by-type', ...admin, async (req, res) => {
   try {
     const filters = {
       user_id: req.query.user_id,
@@ -63,7 +68,7 @@ router.get('/by-type', optionalAuth, async (req, res) => {
  * GET /api/decision-analytics/top-choices/:type
  * Get most frequent choices for a decision type
  */
-router.get('/top-choices/:type', optionalAuth, async (req, res) => {
+router.get('/top-choices/:type', ...admin, async (req, res) => {
   try {
     const decisionType = req.params.type;
     const limit = parseInt(req.query.limit) || 10;
@@ -98,7 +103,7 @@ router.get('/top-choices/:type', optionalAuth, async (req, res) => {
  * GET /api/decision-analytics/timeline
  * Get decision timeline (decisions over time)
  */
-router.get('/timeline', optionalAuth, async (req, res) => {
+router.get('/timeline', ...admin, async (req, res) => {
   try {
     const interval = req.query.interval || 'day'; // hour, day, week, month
     
@@ -132,7 +137,7 @@ router.get('/timeline', optionalAuth, async (req, res) => {
  * GET /api/decision-analytics/patterns
  * Detect decision patterns
  */
-router.get('/patterns', optionalAuth, async (req, res) => {
+router.get('/patterns', ...admin, async (req, res) => {
   try {
     const filters = {
       user_id: req.query.user_id,
@@ -160,7 +165,7 @@ router.get('/patterns', optionalAuth, async (req, res) => {
  * GET /api/decision-analytics/distribution/:type
  * Get decision value distribution for charts
  */
-router.get('/distribution/:type', optionalAuth, async (req, res) => {
+router.get('/distribution/:type', ...admin, async (req, res) => {
   try {
     const decisionType = req.params.type;
     
@@ -193,7 +198,7 @@ router.get('/distribution/:type', optionalAuth, async (req, res) => {
  * GET /api/decision-analytics/export
  * Export decision data for AI training
  */
-router.get('/export', optionalAuth, async (req, res) => {
+router.get('/export', ...admin, async (req, res) => {
   try {
     const format = req.query.format || 'json'; // json or csv
     
