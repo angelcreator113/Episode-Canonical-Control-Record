@@ -24,9 +24,11 @@ import CollaborationSection from '../components/site/CollaborationSection';
 import FinalCallToAction from '../components/site/FinalCallToAction';
 import AudiencePoll from '../components/site/AudiencePoll';
 import { SiteContentContext, fetchPreviewSlots, fetchPublicSlots } from '../components/site/siteMedia';
+import useAllowPullToRefresh from '../hooks/useAllowPullToRefresh';
 
 export default function PublicLanding({ preview = false }) {
   const [params] = useSearchParams();
+  useAllowPullToRefresh();
   const drafts = preview && params.get('drafts') === '1';
   const [content, setContent] = useState({ slots: {}, loaded: false });
 

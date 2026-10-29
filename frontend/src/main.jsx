@@ -74,6 +74,8 @@ window.addEventListener('unhandledrejection', (e) => { if (isStaleChunkError(e))
 
   document.addEventListener('touchmove', (e) => {
     if (startY == null) return;       // no start recorded — pass through
+    // Pages that allow pull-to-refresh (useAllowPullToRefresh) are left alone.
+    if (document.documentElement.dataset.pullRefresh === 'on') return;
     const t = Array.from(e.touches || []).find(tt => tt.identifier === trackedId) || e.touches?.[0];
     if (!t) return;
     const dy = t.clientY - startY;
