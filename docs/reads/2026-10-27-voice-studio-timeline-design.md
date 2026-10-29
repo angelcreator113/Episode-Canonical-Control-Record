@@ -1,6 +1,6 @@
 # Voice Studio and Timeline Editor: one episode-production workflow (read, design proposal)
 
-**Status:** design. A1c (#3615) and B1 (#3616) are merged to Revision 6. C1 is implemented to Revision 7 (2026-10-28) on `claude/c1-episode-edit`; its migration has not run in production, and nothing of C1 is deployed or switched on. Each phase needs Evoni's approval before any code, and its own approval to push, open a PR, merge or deploy.
+**Status:** design. A1c (#3615), B1 (#3616) and C1 (#3619) are merged; C1 is in the production code (`a1908523`), and whether its migration has run there and whether `EPISODE_EDIT` is on are unconfirmed. **Revision 8 (2026-10-29) is the editor and render architecture, approved for documentation only (Gate 1):** it authorises no code, migration, infrastructure or deploy. Each later gate needs Evoni's own approval, and its own approval to push, open a PR, merge or deploy.
 
 **Basis:** `origin/main` `7ac13358`. Code citations are `path:line` at that commit, each paired with a function or component name.
 
@@ -24,9 +24,10 @@ Where they conflict, the order they set applies: rulings, spec Rev 5 and review 
 
 ---
 
-# Read this first: the authoritative design (Revision 7)
+# Read this first: the authoritative design (Revision 8)
 
 **Implementation follows only:**
+- Revision 8 (R8.x), the in-app editor, composition, render and approval architecture (Evoni's rulings 2026-10-29); where it disagrees with an earlier revision, it wins;
 - Revision 7 (R7.x), which records what Timeline C1 was built to: the stored beat clock, manual dialogue placement, `edit_start`, and the findings and their severity;
 - Revision 6 (R6.x), which records what B1 and the A1c prerequisite were built to;
 - Revision 5 (R5.x), as amended by R6;
@@ -49,10 +50,637 @@ Everything else is background. Superseded passages carry a **SUPERSEDED** banner
 | Dialogue timing and placement | R7.3, R7.4 | §5.3 "placed at `line_start` anchors" and "estimated" timing; R2.5's "placement is derived from `line_start` anchors (no row needed)"; R4.3's `audio_offset` nudge as the way dialogue is timed |
 | Findings and their severity | R7.6 | §5.3's warnings-panel names `take_overruns_scene`, `line_overruns_gap`; R2.3's `take_overruns_scene` |
 | C2 first assembly | R7.7 | §7 T2 and R5.4 C2 "approved dialogue at its lines" |
-| Missing Prime footage | R4.0, R5.1 | §2 ruling 5's fallback, §5.2 "fallback", R2.3 "accepted fallback", spec G-5 / decisions §14 fallback (spec amendment owed) |
+| Missing Prime footage | R4.0, R5.1 | §2 ruling 5's fallback, §5.2 "fallback", R2.3 "accepted fallback", spec G-5 / decisions §14 fallback (spec amended in its Rev 6, 2026-10-29) |
 | Prime-required designation | R4.2, as amended by R5.1 | R4.2's "covered where the PIP is visible" |
-| Render process | R2.4 (D1), R3.3 | §9 Q7's "green-removal queue" |
-| Phases and sequence | R5.4, with the A1c prerequisite (R6.6) | §7, §7 Dependencies, R2/R3 phase notes |
+| Render process | R8.9 and R8.10; R2.4's job rules where R8.9 keeps them | §9 Q7's "green-removal queue"; R2.4's process on the production box |
+| The editor (views, page, journey) | R8.1 | §5.2's single multitrack page as the default; R5.4 C2's minimum as the whole editor |
+| Visual modes (gameplay, cinematic) | R8.2 | a mode only per beat; `prime_mode` read as a composition mode |
+| Layers, gameplay and overlays | R8.3, R8.5 | §5.2 "Overlays… later (T7)"; §7 T7's open drawer choice; overlays timed by `timeline_placements` |
+| Beat status, beat approval, episode approval | R8.6, R8.7 | a status checklist kept by hand |
+| Music and SFX library and licences | R8.8 | §9 Q9's open library location; R5.4's "not needed for the first MP4: music and SFX" |
+| Render jobs and the render host | R8.9, R8.10 | R2.4's `episode-render` PM2 app on the production box, and R3.3/Q16/Q20's start on that box; the D1 limits checked against the production box (R5.8) |
+| Preview and render parity | R8.11 | — |
+| Phases and sequence | R8.14 (gates), with R5.4 and R6.6 as history | R5.4's single D1 step; R5.4's "not needed for the first MP4" list |
+
+---
+
+# Revision 8 (the in-app editor, composition, render and approval; Evoni's rulings 2026-10-29)
+
+**Where Revision 8 disagrees with earlier text, Revision 8 wins.**
+
+**Scope.** Revision 8 records the architecture Evoni approved in her Editor Audit Rulings and her Gate 1 approval (both 2026-10-29). **It is approved as documentation only.** It authorises no code, migration, infrastructure, feature flag, worker or deploy. Each gate in R8.14 needs her own approval.
+
+**Sources:**
+- the Editor and Render Audit (2026-10-29);
+- the revised architecture and vertical-slice plan (2026-10-29), which Evoni reviewed.
+
+**Code basis:** cited by name at `origin/main` `0139d384`:
+- `src/utils/editTimeline.js`;
+- `src/services/episodeEditService.js`;
+- `src/routes/episodeEditRoutes.js`;
+- migration `20261028100000-create-episode-edit-tables`.
+
+**Goal.** Every step of making an episode happens inside Prime Studios:
+- script and gameplay planning;
+- scene and wardrobe selection;
+- voice recording;
+- Prime's PIP recording;
+- phone and gameplay overlays;
+- composition and editing;
+- music and SFX;
+- preview of a beat and of the full episode;
+- the final MP4 render and export.
+
+The producer never operates FFmpeg or an external editor. FFmpeg and a headless browser run only inside the render service.
+
+## R8.0 Rulings and the decision register
+
+### R8.0.1 Rulings (Evoni, 2026-10-29, RULING)
+
+1. **Editor model.** One editor at `/episodes/:id/edit`, on the existing C1 model. Nothing duplicates it.
+2. **In-app only.** Editing, previewing, rendering and approval all happen inside Prime Studios.
+3. **Render host.** A separate render host renders video, not the production API server.
+4. **Game UI frames.** Video states of the phone and gameplay UI come from the existing React components.
+5. **Timing.** Timed overlays and gameplay actions are `timeline_items` rows.
+6. **Sync.** Prime's video, her commentary and the gameplay stay synchronised.
+7. **Audio library.** An in-app music and SFX library, with source and licence records.
+8. **My Little List.** Full phone screens, and an optional compact My Little List overlay.
+9. **Runway deal.** The original 439-coin Pulse Reel agreement is preserved when the separate runway opportunity is added.
+10. **Money.** One source of truth for financial displays.
+11. **Outfit.** The final outfit is saved as a permanent episode continuity snapshot.
+12. **Transitions.** The first transitions are cut, crossfade and dip-to-black.
+13. **Dialogue placement.** Manual placement is acceptable for the proof of concept.
+14. **Legacy.** The legacy editor (`/episodes/:id/timeline`) and the legacy export stay available until the new workflow passes testing.
+
+**Required design improvements:**
+- **A.** Each beat has a default visual mode, and timed mode changes can happen within a beat. A camera change between gameplay and cinematic never forces a new beat.
+- **B.** Two editing experiences on the same C1 data. The **Guided Production View** is the default. The **Advanced Timeline** is optional.
+- **C.** Each beat shows a production status, derived from real production state wherever possible.
+- **D.** A 60–90-second proof of concept from Episode One, made entirely in the app (R8.15.2).
+
+**Gate 1 additions** (Evoni, 2026-10-29):
+- The Guided view stays the default, and the Advanced Timeline stays planned after the PoC (R8.1).
+- Gameplay actions, PIP footage and commentary share one edit clock (R8.4).
+- Gameplay supports both discrete UI state changes and continuous video (R8.3).
+- An approval goes stale when any material input changes, including media revisions (R8.6).
+- Render jobs support cancellation, timeouts, cleanup, visible errors and safe retry (R8.9).
+- The host has a verified idle stop and an explicit cost ceiling (R8.10).
+- Final episode approval is separate from beat approval (R8.7).
+- **A successful PoC does not authorise full production rollout** (R8.14).
+- **No system may silently replace the original 439-coin Pulse Reel terms** (R8.12).
+
+### R8.0.2 Decision register
+
+| # | Decision | Status (Evoni, 2026-10-29) |
+|---|---|---|
+| R1 | Revision 8 is the authoritative design | **RULED: approved**, for documentation (Gate 1) |
+| R2 | An append-only `episode_beat_reviews` record holds beat approvals and change requests, bound to a content hash | **RULED: approved** |
+| R3 | Timed modes: a beat-default column plus `timeline_items` kind `visual_mode` | **RULED: approved** |
+| R4 | The PoC's fashion-game screen is the phone's wardrobe screen, full-screen, with the closet angle behind it | **RULED: approved for the PoC only.** Future gameplay is not limited to static phone states. The design must support recorded gameplay video and timed interactive state changes (R8.3) |
+| R5 | The compact My Little List overlay is a small React component reading the same list state, placed as an `overlay` item | **RULED: approved** |
+| R6 | Licence records live in validated asset metadata at first | **RULED: approved**, with permission scope, evidence, expiry, and checks before final approval (R8.8) |
+| R7 | The render host authenticates with a worker token held in SSM SecureString | **RULED: approved** |
+| R8 | A separate render host, on demand, stopping itself when idle | **RULED: approved in principle.** Nothing is provisioned until pricing, capacity, security and running costs are verified (R8.10) |
+| R9 | The outfit scoring weight (×0.25 in `evaluation.js`, ×0.35 in `episodeCompletionService.js`) | **DEFERRED.** First an audit of the intended formula, what each multiplier means, and its effect on historical results; then a recommended correction with regression tests. No number is chosen arbitrarily (R8.12) |
+| R10 | Parity thresholds (R8.11) | **RULED: approved** |
+| R11 | P-track sequencing | **RULED:** the financial consistency work starts early. The separate runway opportunity is complete before full Episode One production. Neither overwrites approved deal terms (R8.14) |
+
+### R8.0.3 Earlier questions this revision closes
+
+| Earlier question | Answer |
+|---|---|
+| Q5: where the Sidebar's editor entry points | An **Editor** entry for `/episodes/:id/edit`. The legacy Timeline entry stays until the new workflow passes testing (ruling 14) |
+| Q6: desktop-first editing | The Advanced Timeline is desktop-only. The Guided view must work at 375 px for review and approval |
+| Q16, Q20, R3.3, R5.8: how the D1 render process starts, and its limits on the production box | **No render process runs on the production box.** The render host is separate (R8.10). Its worker is installed and started only by a reviewed Deploy-workflow job that Evoni approves, or by her by hand |
+| §7 T7 drawer choice (SPV R1/Q11, decisions G1) | Headless Chromium running the existing React components, as state frames (R8.3) |
+| §9 Q9: where music and SFX live | An in-app library of `assets` rows with licence records (R8.8) |
+| Owed spec amendment for Q-F1/Q-F2 (spec G-5, §14) | Made in the spec's Rev 6 (2026-10-29) |
+
+## R8.1 One editor, two views (ruling B)
+
+- **Route.** `/episodes/:id/edit`, with an in-app link from the episode page and a Sidebar "Editor" entry.
+- **Both views read and write only the C1 routes** (`/api/v1/episodes/:episodeId/edit/*`). Every write goes through the same `edit_revision` lock, so a change made in one view is seen by the other and a stale write gets a 409.
+- **Neither view writes the legacy `timeline_data`** (guarded today by `episodeEditGuard`).
+
+### R8.1.1 The Guided Production View (default)
+
+The Guided view works one beat at a time. The producer:
+1. **Opens a beat.** Beat chips across the top show each beat's status (R8.6).
+2. **Sees the script and the gameplay actions.**
+   - The beat's lines and their audio state come from `voiceLineContext.lineContexts` and Voice Studio's `summary`.
+   - Each `[UI:<VERB> <target>]` line, read by the parser in `phonePaths` / `voiceLineContext` (`UI_LINE`), is shown as a gameplay action, marked proposed, accepted or placed.
+3. **Reviews an assembled draft.** **Assemble draft** shows a dry run of what it would write before it writes anything (the same pattern as `setBeatDuration`'s dry run and `timingChanges`).
+4. **Identifies missing assets.** Each finding of the beat (every C1 finding carries `beat`) and each input check (R8.6) links to the page that fixes it: Voice Studio, raw takes and the Teleprompter, Scene Sets, or the audio library.
+5. **Previews the beat.** An instant in-browser loop, or **Render beat** for the server's exact MP4 (R8.9).
+6. **Adjusts the composition**, with a small set of controls:
+   - the mode, plus a timed mode switch;
+   - the PIP preset and its visibility;
+   - dialogue placement on a strip of the beat;
+   - the music bed and SFX choices;
+   - the transition at a cut or a mode change.
+7. **Approves the beat, or requests changes with a note** (R8.7).
+
+At 375 px the page stacks vertically: preview, status, missing items, actions, decision.
+
+### R8.1.2 The Advanced Timeline (optional; after the PoC)
+
+- A tab on the same page, desktop only. Built only after the PoC passes (R8.14).
+- **Lanes:** MODE, SCENE, PRIME PIP, PRIME VO (linked commentary), GAMEPLAY, PHONE, OVERLAYS, DIALOGUE, MUSIC, SFX, TRANSITIONS.
+- **What it reuses.** Its parts are adapted from the legacy components, not their data model:
+  - `Timeline.jsx` (lanes, playhead, scrub, drag, zoom);
+  - `AudioWaveform` (wavesurfer, WebAudio);
+  - `KeyframeTrack`;
+  - `TimelineEditor`'s transport and undo shell.
+- **What it does not reuse:** `PreviewMonitor`, the `timeline_data` model, `IconCueTimeline`, and the cursor, icon and music cue services.
+
+## R8.2 Visual modes and timed mode changes (ruling A)
+
+- **The beat default.** `episode_beat_production.visual_mode` is `gameplay` or `cinematic` (PROPOSED schema, R8.5).
+  - It is written only by the existing beat writer (`writeBeatProduction`, through `setBeatMode`), which keeps the row history.
+  - No row means `gameplay`. For a new draft, the mode is inferred from the script, with manual override (R8.16 item 5).
+- **A timed change.** A `timeline_items` row of kind `visual_mode` carries `{ mode }`, placed by `beat_start` + offset or `edit_start` + offset.
+  - It switches the mode at that instant. It changes no timing, and needs no new beat.
+  - It holds until the next change or the end of its beat. The next beat then starts in its own default.
+- **The pure answer.** `modeAt(edit, t)` is part of `editTimeline`, so the preview and the render share it.
+- **What a mode controls: composition defaults only.**
+  - the PIP preset (layout, frame) and its default visibility, from `episode_pip_settings.mode_presets`;
+  - whether the gameplay layers (phone, cursor, toasts, stats) are drawn by default.
+
+  An explicit PIP visibility rule or a segment's own layout always overrides the preset.
+- **What a mode never controls:**
+  - it never mutes or trims commentary (R5.1: hiding never mutes);
+  - it never changes `prime_mode`;
+  - it never moves any time.
+- **Mode is not coverage.** `prime_mode` (required | gameplay_only) remains the Prime-coverage rule. A cinematic beat where Prime must be absent is `gameplay_only` for coverage *and* `cinematic` for composition. The two are set separately, and the Guided view shows both.
+- **A transition at a mode change.** A crossfade or dip-to-black blends the two compositions over its window, centred on the change (R8.5).
+
+## R8.3 Layers and the gameplay architecture
+
+### R8.3.1 Layer order
+
+`layoutAt(edit, t)` returns an ordered list of layers. The order follows spec §6.6, as amended in spec Rev 6:
+1. Scene (an angle still or video, or a recorded gameplay video, R8.3.3)
+2. Prime's PIP
+3. Phone
+4. Overlays (`overlay` items: static assets and widgets such as the compact My Little List)
+5. Toasts
+6. Cursor
+7. Audience stats panel
+
+Each layer carries:
+- its kind;
+- its source, either a media id or a game-UI state id;
+- geometry in pixels at 1920×1080;
+- opacity;
+- a blend factor inside a transition.
+
+### R8.3.2 Discrete UI state changes
+
+- **State changes are actions.** Opening or closing a screen, ticking or unticking a list item, a toast, and a stats change are each a `gameplay_action` or `phone_screen` item at an anchored instant.
+- **The state at time t** is the frozen starting state (R8.9.1), plus every action up to t, in order. The pure function `gameStateAt(edit, t)` computes it.
+- **Drawing the state.** The existing React components draw it: `PhoneHub` / `ScreenContentRenderer` screens, My Little List, the compact My Little List overlay (R5), and the stats panel.
+  - In the preview they are mounted live.
+  - In the render, headless Chromium loads a render-only page from the same frontend build (`/render/stage`). The page reads the state only from injected JSON. It makes no network calls and holds no token.
+  - The render saves **one transparent PNG per distinct state, not one per frame**.
+- **Motion is drawn by FFmpeg.** Cursor movement and presses, phone slide-in and slide-out, and fades between states are FFmpeg overlay expressions over those PNGs. They are exact to the frame.
+- **Cursor movement** follows spec G-1 (natural streamer-style, resting during Lala and NPC dialogue). A cursor needs a hotspot on its asset (architecture A7).
+
+### R8.3.3 Continuous video footage
+
+- The design does not limit gameplay to static phone states (R4 qualification).
+- **Recorded gameplay video** is a first-class scene source. An `episode_scene_clips` row with a new `source_kind` `gameplay_recording` plays a recorded screen video on the edit clock, with in and out points, exactly like `angle_video`. Its own audio is muted by default, and can be enabled as its own mix event.
+- **Combining footage and states.** A recorded gameplay clip can carry state actions on top of it, for example a toast or a My Little List tick drawn over the recording.
+- **Sync with Prime.** When a gameplay recording was captured together with one of Prime's takes, it is placed against that take's clock with a fixed sync offset (`item_start` on the Prime segment, plus an offset). Moving the segment moves the recording, and trimming the segment never slides one against the other.
+- **Capture.** How a gameplay recording is captured inside Prime Studios is planned in R8.16 item 2 (Stage 5). It is not needed for the PoC (R4).
+
+## R8.4 One synchronised edit clock (Gate 1 addition 3)
+
+These invariants are stated here and tested by R8.11:
+1. **Prime's video and commentary share one source clock.** This is unchanged from R2.2 and R7.5. There is no audio-offset column.
+2. **Gameplay actions use the edit clock.** Every `gameplay_action`, `phone_screen`, `overlay` and `visual_mode` item resolves through the same anchors as everything else (`beat_start`, `edit_start`, `item_start`; and `line_start` once marks are mapped).
+   - An action meant to follow Prime's words is anchored to her Prime segment (`item_start`) plus an offset. Moving or trimming the segment then carries the action with it.
+3. **An action's sound moves with it.** An SFX tied to an action is either the action's `sfx_slot` value or an audio item anchored `item_start` to the action.
+4. **These never shift an audio event:** a mode change, hiding the PIP, a transition, or switching between state frames.
+5. **Frame snapping.** Times are integer milliseconds. The render snaps them to frames at 30 fps with one shared function, which the preview also uses.
+
+## R8.5 `timeline_items` kinds and their values (PROPOSED; built at Gate 2)
+
+**C1b migration (one file, through the Deploy workflow).** All of these are column additions or CHECK changes. There is no new timing table.
+- **`timeline_items`:**
+  - widen the `kind` CHECK with `visual_mode`, `gameplay_action`, `phone_screen` and `overlay`;
+  - add `duration_ms INT NULL CHECK (duration_ms > 0)`. Items are single instants today, and an overlay or a timed screen needs a length.
+- **`episode_beat_production`:** add `visual_mode VARCHAR(16) NULL CHECK (visual_mode IN ('gameplay','cinematic'))`.
+- **`episode_pip_settings`:** add `mode_presets JSONB NULL`.
+- **`episode_scene_clips`:** widen the `source_kind` CHECK with `gameplay_recording`. This can wait until recorded gameplay is built.
+- **`episode_beat_reviews`:** a new table (R2, R8.7).
+- **`render_jobs`:** its own migration file (R8.9).
+
+**Per-kind `values`, validated by the service.** Today `values` is free JSON. After C1b, a write with an unknown key or a value out of range is refused.
+
+| Kind | `values` | Needs `duration_ms` |
+|---|---|---|
+| `visual_mode` | `{ mode: 'gameplay' \| 'cinematic' }` | no |
+| `gameplay_action` | `{ action: 'open' \| 'close' \| 'tick' \| 'untick' \| 'press' \| 'move' \| 'toast' \| 'stat', target, cursor_to?: {x,y}, sfx_slot? }` | no (`move` may carry it) |
+| `phone_screen` | `{ screen_key, content_ref? }` | yes |
+| `overlay` | `{ asset_id }` or `{ widget: 'mll_compact' \| 'stats' }`, `layout: {x,y,w,h}`, `layer` | yes |
+| `transition` (the kind exists) | `{ type: 'cut' \| 'crossfade' \| 'dip_to_black', duration_ms }`. It is placed at a scene-clip cut or at a `visual_mode` change. Half the window falls on each side; a source that runs out holds its last frame, with the existing `scene_clip_holds_last_frame` warning. **The clock never moves.** | no |
+
+**Proposals and acceptance.** The `timeline_items` columns `origin` (`auto`, `user`, `director`), `approval` (`pending`, `approved`, `rejected`) and `proposal_id` already exist and are unused.
+- **Proposed** actions from the script's `[UI:]` tags, and later from the Gameplay Director, are written with `origin` `auto` or `director` and `approval` `pending`.
+- **A pending item plays in working previews** with a "proposed" mark, and is a blocking finding for review-ready and final output.
+- **Accepting** a proposal sets it to `approved`. **Rejecting** it soft-deletes it, so it is not proposed again for the same anchor (spec §6.3).
+
+**New findings** (all severities are the Revision 7 pattern):
+- **`gameplay_proposal_pending`** (blocking for review-ready and final; a warning in working previews);
+- **`overlay_asset_missing`** (blocking);
+- **`audio_asset_missing`** (blocking);
+- **`audio_item_beyond_source`** (blocking): an item longer than its probed file;
+- **`audio_licence_missing`**, **`audio_licence_expired`** and **`audio_licence_scope`** (all blocking before final approval, R8.8);
+- **`transition_not_at_cut`** (blocking);
+- **`game_state_unknown`** (blocking): an action whose target is not in the frozen state, for example a list item that does not exist.
+
+## R8.6 Beat production status and staleness (ruling C; Gate 1 addition 5)
+
+`beatStatus(edit, findings, inputs, reviews, renders)` is pure and runs on the server. **The first row that matches wins:**
+
+| Status | Derived from |
+|---|---|
+| **Rendered** | The beat is Approved, **and** a `render_jobs` row in state `done` covers the beat with a manifest whose hash for this beat equals the current beat content hash |
+| **Approved** | The latest `episode_beat_reviews` row for the beat is `approved`, **and** its `content_hash` equals the current beat content hash |
+| **Needs review** | Assembled, with no blocking finding for the beat, and no current approval. This includes a stale approval, and changes requested, which is shown with its note |
+| **Draft assembled** | The beat has C1 rows, and a blocking finding remains |
+| **Ready to assemble** | All inputs exist, and the beat has no C1 rows |
+| **Missing assets** | An input check fails, or a beat finding of the source family is present (`scene_source_missing`, `prime_source_missing`, `line_audio_unapproved`, `overlay_asset_missing`, `audio_asset_missing`, `game_state_unknown`) |
+| **Not started** | No scene plan, no take, no line context and no C1 rows for the beat |
+
+**Input checks** (all read existing tables):
+- the beat's `scene_plans` row names an angle that has media;
+- a `justawoman` raw clip covers the beat when `prime_mode` is `required` (`beat_number`, `end_beat_number`, `beat_marks`);
+- each spoken line of the beat has a playable approval (Voice Studio's state rule, R6.2);
+- each overlay and audio item points at a live asset.
+
+**The beat content hash** is the sha256 of the stable JSON (`stableJson`, as `edit_versions` uses) of every material input to the beat:
+- **The beat's edit rows:** its live C1 rows. That means its beat-production row, its scene clips, the segments and items placed over it, its audio items (an item spanning several beats is in each), its visibility rules, and the PIP settings.
+- **Media identity, not only row ids:**
+  - for a raw clip, its storage key and its cutout's key;
+  - for an angle, its still and video URLs;
+  - for an asset, its storage key and `updated_at`.
+
+  A revised upload, a new cutout or a regenerated angle therefore changes the hash.
+- **Voice:** each placed approval's revision (trim, gain, fades, normalise, its `settings_hash`) and its source asset's sha256.
+- **Script:** the beat's script lines (`script_seq` and the lines' text).
+- **Game and money:** the frozen game state the beat reads (the My Little List and wardrobe state, and the money values from the one money service, R8.12).
+- **Licences:** each audio asset's licence record.
+
+**Staleness.** Any change to a material input changes the hash. A beat that was Approved then reads **Needs review**, with the changed inputs listed. Nothing re-approves automatically.
+
+## R8.7 Beat approval and final episode approval (Gate 1 addition 8)
+
+- **The beat review record.** `episode_beat_reviews` is append-only and never updated (removal is a soft delete through `deleted_at`). Its columns:
+  - `id`, `episode_id`, `beat_number` (1–14);
+  - `decision`: `approved` or `changes_requested`;
+  - `note`;
+  - `content_hash`, `edit_revision`;
+  - `reviewed_by`, `reviewed_at`;
+  - `deleted_at`.
+- **Who may record a review.** Approving or requesting changes is ADMIN-only.
+- **When approval is allowed.** Approval is refused while the beat has a blocking finding. The approval is bound to the beat content hash at that moment.
+- **Final episode approval is a separate act.** It is not the sum of the beat approvals. It requires:
+  - all 14 beats Approved (current hashes);
+  - a full-episode review-ready render, in state `done`, of exactly those hashes, which Evoni has watched in the app;
+  - the episode-level checks: zero blocking findings; total duration; loudness; every audio licence valid for the release, by scope and by expiry on the approval date (R8.8);
+  - Evoni's explicit "Approve episode" action.
+
+  It writes a frozen production manifest (A10: content-addressed media, resolved takes, `prime_mode` and `visual_mode` frozen, with who approved and when). **The final MP4 is rendered only from that manifest.** The manifest's table and flow are built after the PoC (R8.14 Stage 5). The PoC's approval is beat-level plus Evoni's sign-off on the PoC render.
+
+## R8.8 The music and SFX library and its licences (ruling 7; R6)
+
+- **Storage.** Each music and SFX file is an `assets` row. The category enum already includes `music` and `sfx`.
+  - On upload, the file is probed for length and channels and hashed (sha256).
+  - The spec §9 slot names (`click`, `hover`, `select`, `open`, `close`, `notify`, `dramatic`, `error`, `tick`, `voice_on`, `whoosh`) map to chosen assets.
+- **The licence record** is in `assets.metadata.licence`, validated by the service on every write. Required fields:
+  - `source` (where it came from) and `licensor`;
+  - `licence_type`;
+  - **`permission_scope`**: the platforms (for example YouTube, social clips); monetisation allowed or not; the uses (background, theme, SFX); the territory; whether attribution is required;
+  - **`evidence`**: a stored proof file (an asset id) and/or a licence or order reference;
+  - `acquired_at`;
+  - **`expires_at`** (`null` means perpetual, stated explicitly);
+  - `attribution_text` when attribution is required.
+- **Checks:**
+  - A working preview may use an asset with an incomplete record, and shows a warning.
+  - A review-ready render and **final approval refuse** an asset whose record is missing (`audio_licence_missing`), expired on the approval date (`audio_licence_expired`), or whose scope does not cover the release platform and monetisation (`audio_licence_scope`).
+  - An expiry within 30 days of approval is a warning. The number of days is Evoni's to set.
+- **No sound is ever invented** (spec G-2). An empty slot plays silence and gives a finding.
+- **Later.** A dedicated licence table with history can replace the metadata if Evoni wants one. The validated fields carry over unchanged.
+
+## R8.9 Render jobs (amends R2.4; Gate 1 addition 6)
+
+`render_jobs` (PROPOSED migration). Its columns:
+- `id`, `episode_id`;
+- `kind`: `beat`, `range`, `working`, `review` or `final` (`final` is reserved until A10);
+- `range_start_ms`, `range_end_ms`;
+- `status`: `queued`, `claimed`, `running`, `done`, `failed`, `cancelled` or `expired`;
+- `attempt`, `retry_of`;
+- `inputs_hash`, `manifest` (JSONB, or an S3 key when large);
+- `claimed_at`, `heartbeat_at`, `started_at`, `finished_at`;
+- `cancel_requested`;
+- `error_code`, `error_message`;
+- `output_s3_key`, `output_sha256`, `output_probe` (JSONB);
+- `runtime_ms`;
+- `created_by`, timestamps, `deleted_at`.
+
+### R8.9.1 The frozen manifest
+
+When a job is created (ADMIN, in the app), the API resolves everything the render needs into one manifest:
+- the layers and the mix events for the range;
+- every media storage key, with its size and sha256 where known;
+- each voice revision's trim, gain, fades and normalise;
+- the starting game state and every action;
+- the fonts and the render settings.
+
+The API hashes the manifest (`inputs_hash`). The render host renders only what the manifest says.
+
+### R8.9.2 Lifecycle
+
+| Concern | Rule |
+|---|---|
+| **Claiming** | The host claims one job at a time. The claim is an atomic update from `queued` to `claimed`, and only one claimant can win. It receives the manifest, short-lived presigned GET URLs for the inputs, and one presigned PUT URL for a temporary output key |
+| **Heartbeat** | Every 15 s while running. With no heartbeat for 2 minutes, the job is `failed` (`heartbeat_lost`). A job is never resumed half-written |
+| **Timeouts** | Wall clock: 3× the range length plus 10 minutes. A job past it is `failed` (`timeout`), and the host kills ffmpeg and Chromium. A queued job not claimed within a set time (default 2 h) becomes `expired`, with a visible reason (for example, host not running) |
+| **Cancellation** | The editor sets `cancel_requested`. The host checks it between chunks and at every heartbeat, kills its child processes, deletes its temporary files and reports `cancelled`. A heartbeat reply tells the host when a job was cancelled |
+| **Cleanup** | The host deletes its job directory on every outcome, and sweeps leftover job directories when it starts. Temporary output keys live under `renders/tmp/`, which has an S3 lifecycle rule that expires them. A job's output is copied to its final key only after the ffprobe gate passes |
+| **Output gate** | ffprobe must confirm: H.264, yuv420p, 1920×1080, SAR 1:1, constant 30 fps, AAC 48 kHz stereo, the duration within ±1 frame, faststart, and loudness within its target (R8.11). Otherwise the job is `failed` (`output_check_failed`) with the measured values |
+| **Visible errors** | Every failure has an `error_code` from a fixed list and a plain message. The editor's job list shows both, with the job's runtime and its findings. No error is swallowed (every catch logs) |
+| **Safe retry** | **There is no automatic retry.** "Render again" creates a new job with `attempt + 1`, `retry_of`, and a newly frozen manifest (the same `inputs_hash` if nothing changed). Failed jobs are kept for diagnosis. A late "complete" from a job that is `failed`, `cancelled` or `expired` is refused, so a stale output never becomes current |
+| **Limits** | One job at a time per host. At most one queued job per episode. A daily cap on jobs. Jobs are refused when the monthly cost ceiling is reached (R8.10) |
+
+## R8.10 The render host (ruling 3; R7, R8; Gate 1 addition 7)
+
+### R8.10.1 Design
+
+1. **Stateless.** The host holds no database credentials ("Database credentials stay on the server"), no Cognito access, and opens no inbound ports. It is managed through SSM only.
+2. **No S3 permissions.** Its instance role can only use SSM and read its own worker token. Every input and output is a presigned URL for one job.
+3. **Locked-down egress.** Network egress is limited to S3 (through a VPC endpoint), the API's HTTPS endpoint and the SSM endpoints.
+4. **Worker token (R7).** A worker token stored as an SSM SecureString that only the host's role may read. Evoni creates it and can rotate it.
+   - It is valid only for the claim, heartbeat, complete and fail routes. It cannot read or write editor data.
+   - The API compares it in constant time.
+5. **Pinned software.** ffmpeg (libx264, the libvpx-vp9 decoder for alpha, libopus, aac), Chromium and the fonts (Lora, DM Mono) are installed at pinned versions. A reviewed script in the repository does it, and Evoni runs it. No session fetches and runs an installer from a URL.
+6. **Worker code delivery.** The worker code arrives through a render-host job in the Deploy workflow (a reviewed PR; Evoni approves each run). The frontend's `/render/stage` page is built on the GitHub runner, not on the host.
+
+### R8.10.2 Idle stop
+
+- **Primary.** The worker shuts the instance down after 15 idle minutes (no job claimed or running). The instance's shutdown behaviour is set to *stop*, never *terminate*.
+- **Backstop.** A CloudWatch alarm on low CPU over 30 minutes stops the instance through an EC2 alarm action. It needs no Lambda.
+- **Verified before relying on it.** At Gate 6, Evoni starts the host, leaves it idle, and confirms in the console or through Diagnostics that it stopped by itself within the window. **Both mechanisms are tested**, the backstop with the worker stopped.
+
+### R8.10.3 Cost ceiling
+
+- **Explicit.** Evoni sets a monthly ceiling: an initial target of $25, subject to verified pricing (R8.16 item 3).
+- **Enforced twice:**
+  - **In the app.** The API totals `render_jobs.runtime_ms` for the month, multiplied by the configured hourly rate. It refuses new jobs once the ceiling is reached, and shows the month's spend and the ceiling on the render panel.
+  - **In AWS.** An AWS Budget alerts Evoni at 50 %, 80 % and 100 % of the ceiling.
+
+### R8.10.4 Verified before anything is provisioned (R8 qualification)
+
+| Check | What must be verified | By whom |
+|---|---|---|
+| **Pricing** | Current on-demand (and spot, if considered) rates for the candidate types in the account's region; the EBS, VPC endpoint (interface endpoints for SSM have an hourly cost; the S3 gateway endpoint is free), CloudWatch and data-transfer costs, from the AWS pricing pages or the account's billing console | a session reading public pricing pages, and Evoni in her console |
+| **Capacity** | Measured render speed for the PoC manifest on the candidate type (a local measurement on fixture media first, Gate 3); peak memory with Chromium and ffmpeg together; disk for a full episode's inputs, intermediate chunks and output | the Gate 3 local proof, then a measured first run |
+| **Security** | The role policy (SSM-only plus one parameter), the security group (no inbound), the egress rules, the token's scope, the presigned URL lifetimes; reviewed as files in a PR | the PR review, then Evoni |
+| **Running costs** | A monthly estimate at the expected render hours, the idle-stop behaviour, and the budget alerts in place | the PR, then Evoni |
+
+**Planning figures (unverified):** on-demand c7i.large is about $0.09 an hour, and c7i.xlarge about $0.18 an hour. At about 20 render-hours a month, the compute is roughly $2–4, plus about $2.40 a month for 30 GB of gp3 disk. These are **not** decisions. They are replaced by the verified figures above.
+
+## R8.11 Preview and render parity (R10)
+
+1. **One pure core.** `editTimeline` (the clock, `layoutAt` and its layers, `modeAt`, `gameStateAt`, `mixPlan`, the findings, `beatStatus` and the content hash) has a byte-identical frontend copy. A CI test fails if the copies differ, as for the shared line-context rule.
+2. **One set of components.** The preview and `/render/stage` mount the same layer components.
+3. **A golden fixture edit.** A fixture episode in the repository uses only generated media:
+   - an ffmpeg `lavfi` colour-bar scene;
+   - a "clap" take with a flash frame and a beep;
+   - tone-burst dialogue;
+   - a click SFX;
+   - a test cutout WebM with alpha;
+   - test overlay PNGs.
+4. **Picture.** Frames are extracted from the render and compared with Playwright captures of the preview at the same times (before and after a mode change, mid-crossfade, during a tick, PIP shown and hidden).
+   - Scene and video layers: SSIM ≥ 0.97.
+   - Phone, overlay, cursor and stats layers: **identical pixels**, measured on the state PNGs against the preview's layer canvas.
+5. **Timing.** Every audio event's onset in the rendered file is within ±1 frame (33 ms) of its `mixPlan` start. The clap's flash and beep coincide within ±1 frame. A mode change and an action's SFX land on their anchor frames.
+6. **The file.** The R8.9.2 output gate. Loudness is measured with `ebur128`: integrated −14 LUFS ±1 and true peak ≤ −1 dBTP.
+7. **Determinism.** The same manifest gives the same `inputs_hash`. Two renders with fixed thread settings give identical per-frame hashes, or SSIM 1.0 where the encoder is not bit-exact.
+8. **CI.** A job with pinned ffmpeg and Playwright Chromium runs on the fixture media. It is a workflow-file PR, never dispatched by a session.
+
+## R8.12 Money, the runway agreement, the outfit snapshot and the scoring audit (rulings 9–11; R9; R11; Gate 1 addition 10)
+
+### R8.12.1 One money service (ruling 10)
+
+One deal-aware service supplies every financial figure the app or an episode shows:
+- the Start Episode estimate (`calculateFinancials` in `episodeGeneratorService`, which today counts `cost_coins` and `payment_amount`);
+- the script prompts (`groundedScriptGeneratorService`'s stat-line instruction and beat rules);
+- the invitation's money text (`describeInvitationMoney`);
+- the stats panel;
+- the phone's finance screen;
+- the render's game state.
+
+On a deal event with the entry covered, every display shows the entry fee **waived** (never a −50 cost), and the 439-coin Pulse Reel fee as income.
+
+### R8.12.2 The runway opportunity alongside the 439-coin terms (ruling 9; addition 10)
+
+- **The runway is a separate opportunity.** It is an `opportunities` row of type `runway`, linked to the event and the episode, with its own offered amount, its own fee'd deliverable (`opportunity_id`) and its own letter key.
+- **It is never folded into the original deal.** It is excluded from the original deal's terms snapshot (`buildTermsSnapshot` in `eventTermsService`), its letter, and the letter's `terms_key` fingerprint (`eventDocumentsService`).
+- **Invariant:** no code path may change, replace or re-derive the original approved terms when the runway is added, and none may silently. A write that would alter an approved deal's terms is refused with a visible error.
+- **Tests:**
+  - the original 439-coin terms, the letter and `terms_key` are byte-identical before and after the runway is added;
+  - the runway is paid once, at its own approval;
+  - the money service lists the two agreements separately.
+
+### R8.12.3 The outfit continuity snapshot (ruling 11)
+
+- At episode completion, the final outfit (its items, their scores, and the formula and weight version used) is written to an **immutable** continuity snapshot. Later wardrobe edits never change it.
+- It is the source for continuity in later episodes and for any outfit display in the render.
+- Its table is PROPOSED with the P-track work (R8.14), as its own migration.
+
+### R8.12.4 The scoring audit (R9: deferred)
+
+Before any weight changes, an audit records:
+- the intended outfit-scoring formula, from the specs and Evoni's earlier rulings;
+- what ×0.25 (`evaluation.js`) and ×0.35 (`episodeCompletionService.js`) each mean, and where each applies;
+- the breakdown signal-name mismatch (`wardrobe.js`);
+- the effect of each choice on **historical results**, recomputed read-only from stored data where it exists.
+
+It then recommends one correction, with regression tests that pin:
+- the agreed formula;
+- the historical results it keeps or changes, each listed.
+
+**No number is chosen arbitrarily.** The snapshot (R8.12.3) records which formula version produced a score.
+
+## R8.13 Security assumptions
+
+1. **Sessions.** No session holds credentials, contacts a host, AWS, the database or Cognito, or dispatches or approves a workflow (CLAUDE.md). Production checks go through the app, or through the Diagnostics workflow once Evoni has set it up.
+2. **The production API.**
+   - It keeps its database credentials. They never leave it.
+   - Render, review, approval and library writes are `requireAuth + authorize(['ADMIN'])`.
+   - The worker routes accept only the worker token and expose no editor data.
+3. **The render host** is stateless and limited as described in R8.10.1. A compromised host exposes one job's media for the lifetime of its presigned URLs, not the studio.
+4. **No user text reaches an FFmpeg filter.** All text (names, captions, list items, money) is drawn as PNG by the React components, so there is no `drawtext` injection. FFmpeg arguments are built only from validated numbers and the presigned URLs.
+5. **Chromium** runs as a non-root user, with its sandbox on. It loads only the bundled `/render/stage` page, with no token, cookies or API access. Network is blocked except to the job's presigned media.
+6. **Outputs** go to a private prefix (`renders/…`) and are downloaded only through a signed link. This deliberately departs from today's public-style media URLs, which stay on the security backlog.
+7. **Licences** are checked before final approval (R8.8).
+8. **Supply chain.** All tools are at pinned versions, installed by a reviewed script that Evoni runs.
+
+## R8.14 Dependencies and implementation sequence
+
+**Each gate needs Evoni's own approval before it starts**, and each PR needs her yes to push, open, merge and deploy (Rule 7). Nothing in a gate authorises the next gate.
+
+| Gate | Work | Production impact |
+|---|---|---|
+| **1** | **This revision and the spec's Rev 6** (documentation PR) | none |
+| **2** | The C1b schema and service writes, with per-kind validation; the `editTimeline` layers, `modeAt`, `gameStateAt`, transitions, `beatStatus` and the content hash; the byte-identical frontend copy; `episode_beat_reviews`; the library's licence validation. **Alongside: P1, the one money service** (R11: early) | migrations written, not deployed |
+| **3** | The Guided view for a beat (status, script, actions, missing items, adjust, approve or request changes) and the preview player; assembly (dry run and apply, `[UI:]` tags become pending proposals); the render pipeline as code (`render_jobs`, the manifest, the worker routes, the worker, `/render/stage`, the graph builder, the output gate). **A local proof** on fixture media: an MP4, screenshots at 375 px and desktop, and the parity results, delivered to Evoni | none |
+| **4** | Evoni approves the Deploy run for the migrations and switches `EPISODE_EDIT` on | Deploy run, flag |
+| **5** | The render-host runbook and its policies as reviewed files; the Deploy workflow's render-host job; the pinned install script; idle stop and the cost ceiling. **The R8.10.4 verification** | none until Evoni acts |
+| **6** | Evoni provisions the host and the token, and approves the run that installs and starts the worker. **The idle stop is verified** | infrastructure |
+| **7** | **The production PoC** on Episode One (R8.15.2), made in the app | in-app only |
+
+**After the PoC: Stage 5, each part separately approved.**
+- **A passing PoC does not authorise full production.**
+- Full rollout needs Evoni's own approval of a Stage 5 plan:
+  - the Advanced Timeline;
+  - all 14 beats of gameplay;
+  - line-mark mapping;
+  - Gameplay Director proposals;
+  - in-app gameplay capture, with rehearsal and playback (R8.16 item 2);
+  - the A10 manifest and final episode approval;
+  - retiring the legacy editor and export.
+- **Before full Episode One production: P2**, the runway opportunity (R11).
+
+**The P-track** (each its own PR, sequenced by Evoni):
+
+| Item | When | Notes |
+|---|---|---|
+| P1 one money service | with Gate 2 | — |
+| P2 the runway opportunity | before full Episode One production | — |
+| P3 the outfit continuity snapshot | — | the scoring weight only after the R9 audit |
+| P4 the offer letter as a screen on Lala's phone | — | today the phone reads only `UI_OVERLAY` assets (`phoneOverlays`), so the `DOCUMENT_OVERLAY` offer letter does not appear |
+
+**What does not change:**
+- the legacy editor and export, until the new workflow passes testing;
+- `episode-worker`;
+- the Deploy workflow's existing jobs.
+
+## R8.15 Acceptance criteria
+
+### R8.15.1 Per gate
+
+| Gate | Accepted when |
+|---|---|
+| 2 | Every C1 test still passes. Golden unit tests cover each new kind, `modeAt` (a mid-beat change moves no time, checked with `timingChanges`), transitions, `gameStateAt`, `beatStatus` (each of the seven statuses from fixture state) and staleness (each class of material input in R8.6 changes the hash). The frontend copy is byte-identical. Validation refuses unknown values. P1 shows the waived entry and the 439 income in every display, with a test per display |
+| 3 | The local proof plays and renders the PoC shape on fixture media and meets R8.11. A cancelled job leaves nothing behind. A killed worker's job is `failed` (`heartbeat_lost`). A late complete is refused. A second claim cannot win |
+| 4 | The migrations apply through the Deploy workflow with its snapshot. `EPISODE_EDIT` is on. The Guided view opens Episode One |
+| 5–6 | The R8.10.4 checks are on record. The host has no inbound ports, an SSM-only role and a scoped token. Idle stop and the backstop are both observed to work. The budget alerts exist. The in-app ceiling refuses a job when reached (tested) |
+| 7 | R8.15.2 |
+
+### R8.15.2 The proof of concept (ruling D)
+
+**The sequence.** 60–90 seconds of Episode One containing:
+- JustAWoman actively playing the fashion game (R4: the phone's wardrobe screen);
+- her synchronised PIP commentary;
+- a real phone interaction (for example the invitation, or the offer letter once P4 lands);
+- a visible My Little List update, on the full screen or the compact overlay;
+- at least one approved character dialogue take, placed by hand;
+- music and an SFX (licensed, with complete records);
+- a transition between gameplay and cinematic visuals, at a timed mode change.
+
+**The file and sync.** Generated, previewed and approved entirely inside Prime Studios, and meeting:
+- the output gate (R8.9.2) and the R8.11 thresholds;
+- Prime's commentary in sync within ±1 frame;
+- each dialogue line and the SFX within ±1 frame of their anchors;
+- the mode change on its frame;
+- the money shown, from the money service.
+
+**The process:**
+- The beats move through Ready → Draft → Needs review → Approved → Rendered from real actions. A changed input makes an approval stale.
+- The API stays healthy throughout.
+- The render cost is recorded against the ceiling.
+
+**Evoni's sign-off on the MP4 is the final gate.**
+
+## R8.16 Gate 1 final rulings (Evoni, 2026-10-29)
+
+**Where R8.16 disagrees with R8.0–R8.15, R8.16 wins.**
+
+1. **An immutable approved episode playback state is kept (amends R8.7, spec §8).**
+   - **Audit, at `0139d384` (VERIFIED):** `edit_versions` (`createVersion`) is not enough on its own to be that state.
+     - **What it stores:** the stable JSON of the live rows of the seven C1 tables, with its sha256, `edit_revision`, `script_revision` and `script_seq`.
+     - **What is missing:**
+       - media identity (storage keys, file hashes);
+       - the voice revisions' trim, gain, fade and settings hashes (only the approval ids reachable through placements);
+       - the game state (My Little List, wardrobe, money);
+       - the licence records;
+       - who approved, and when.
+     - **Why it cannot recreate an approved state:** `restoreVersion` re-points live rows at sources that may since have changed. Immutability is enforced only by the service and by a guard test (`episodeEditGuard`, "versions are never updated or deleted"). There is no database trigger.
+   - **The A10 production manifest (R8.7) is specified but not built.**
+   - **Design.** The immutable approved playback state is **part of the A10 approved production manifest**, written at final episode approval. It holds:
+     - the rows;
+     - content-addressed media;
+     - the resolved voice revisions;
+     - the frozen game state at every position the gameplay uses;
+     - the licence records in force;
+     - the approver.
+
+     It is immutable at the database level (a trigger refusing update and delete), not by convention.
+   - **No duplicate table.** Before Stage 5 builds A10, a short audit decides whether A10 is an extension of `edit_versions` (a `kind` of `approved`, plus manifest columns and the trigger) or its own table. The proposed `episode_playback_snapshots` table is neither built nor deleted from the plan until that audit shows which of the two is necessary. **This decision stays open until the Stage 5 audit** (R8.17 Q8).
+   - Preview state stays computed (`gameStateAt`). Each render job keeps its own frozen manifest (R8.9.1).
+2. **In-app gameplay capture, synchronised with Prime's recording (amends R8.3.3; answers Q1).**
+   - **Planned for Stage 5.** No external recording or editing software is required.
+   - **Capture.** The Teleprompter's recording session captures the game screen in the app (the browser's screen-capture API, on the Prime Studios game window) **in the same session as** Prime's camera take. Both recordings get one shared session clock: the start times of both recorders against one time origin, and a sync flash and tone the app plays at the start.
+   - **Sync check.** After upload, the server measures the offset from the flash and tone. It stores it on the pair, and shows any offset above one frame as a finding, never corrected silently.
+   - **Continuous integrity checks, not only the start offset.** A single starting offset is not enough:
+     - **Interruptions:** recorder stop, pause and error events, a tab hidden, the capture permission revoked, a device change. Each is logged with its time on the session clock. The pair is marked `capture_interrupted` with the gap's position and length, and never joined across the gap silently.
+     - **Dropped frames:** per-second frame counts recorded during capture and the frame timestamps read after upload. A gap longer than one frame is a `capture_frames_dropped` finding at its position.
+     - **Clock drift:** the app replays a short sync marker at a fixed interval (for example every 60 s) on both recordings. The server measures the offset at every marker. Drift beyond one frame across the take is a `capture_clock_drift` finding, giving the measured drift and where it occurs.
+     - These findings block a review-ready render of the stretch they cover until the producer re-records it, or trims to a clean stretch. Nothing is stretched or re-timed automatically.
+   - **Rehearsal.** A rehearsal mode runs the same capture and plays it back side by side (the game recording, Prime's take and the script position) without creating production takes. Rehearsal recordings are kept apart and expire.
+   - **Playback.** A paired recording plays back in the app with both views in sync, and enters the edit as a `gameplay_recording` scene clip locked to its Prime segment (R8.3.3).
+   - **Device limits.** Screen-capture support varies by browser and device. Desktop Chrome or Edge is the reference, and a device without support is told so, never given a partial capture.
+3. **Render budget (amends R8.10.3; answers Q2).** The initial monthly render-infrastructure target is **$25**, subject to the verified pricing (R8.10.4).
+   - **Enforcement is in the app, before a job starts. It does not rely on AWS alerts.** The API keeps the month's estimate:
+     - finished jobs' `runtime_ms` × the configured hourly rate, plus a configured monthly fixed cost (disk, endpoints);
+     - plus the running jobs' time so far;
+     - plus each new job's estimated runtime (from its length and the measured render speed).
+   - **When a new job would reach the limit, it is refused** with a visible reason and the month's figures.
+   - **Administrators can always inspect, cancel and manage existing jobs**, whatever the budget state: view, cancel, read errors, download finished outputs, delete. Only *new* job creation is blocked. A running job is never killed by the budget; its cost counts towards the month.
+   - **AWS Budget alerts** at 50 %, 80 % and 100 % are a backstop and a notice to Evoni. They are not enforcement: AWS billing data lags by hours, and an alert stops nothing.
+4. **Licence expiry (amends R8.8; answers Q2).**
+   - A warning **30 days** before an audio licence expires.
+   - Any use the licence no longer authorises is **blocked**: expired, or out of scope for the platform, monetisation, use or territory. That covers every new render (working previews included, once expired) and final approval.
+5. **The initial visual mode (amends R8.2; answers Q3).**
+   - **For a new draft, the mode is inferred from the script:** a beat with `[UI:]`, `[WEAR]`, `[DELIVER]` or `[TALK]` lines (spec §6.4) is `gameplay`; otherwise `cinematic`. The assembly dry run shows the inferred mode, and the producer can override it.
+   - **The inference never runs on a beat that already has a mode, and never changes an approved beat.** A script change that would infer a different mode shows a suggestion on that beat. Nothing is rewritten.
+6. **The compact My Little List overlay (amends R5; answers Q4).**
+   - **Default position:** bottom-left, with geometry that never intersects Prime's PIP at its current layout. The overlap is checked on every change, and an overlap is a finding.
+   - **Default visibility:** it shows when a list objective changes (a tick, untick or reveal), for a set hold time. A per-episode or per-range setting makes it persistent instead.
+7. **Starting the render host (answers Q5).** **Manual for the proof of concept:** Evoni starts it. Any automatic start is a later, separate decision.
+8. **Licence expiry after publication (amends R8.8; answers Q6).**
+   - **Published episode history is preserved.** Records of what was published, with which assets and under which licence, are never altered.
+   - **When a licence expires:**
+     - every asset under it is flagged, and every published or approved episode that used it is listed;
+     - new renders that would use it are refused;
+     - distribution actions in the app (a new export, a download for distribution, any future upload) for affected episodes are refused until the asset is replaced or the licence renewed, with the reason shown.
+9. **Outfit scoring (R9)** stays unresolved until its evidence-based audit is complete (R8.12.4). No weight is chosen, and no snapshot records a formula version, until then.
+
+## R8.17 Open design questions
+
+| # | Question | Needed by |
+|---|---|---|
+| Q1 | ~~**How is recorded gameplay video captured inside Prime Studios?**~~ **Answered, R8.16 item 2.** For example, screen capture in the Teleprompter while Prime plays, recorded with her take on one clock. And how is the recording's sync to her take measured? A clap or flash marker, or manual alignment | Stage 5 (not the PoC) |
+| Q2 | ~~The monthly render cost ceiling, and the licence warning threshold~~ **Answered, R8.16 items 3 and 4** ($25 target; 30 days) | — |
+| Q3 | ~~The default visual mode~~ **Answered, R8.16 item 5.** for a beat with no row: gameplay (proposed), or per beat by its script (a beat with `[UI:]` lines is gameplay, otherwise cinematic) | Gate 2 |
+| Q4 | ~~The compact My Little List overlay~~ **Answered, R8.16 item 6.** its default position and size, and whether it shows throughout gameplay or only when the list changes | Gate 3 |
+| Q5 | **Answered for the PoC (manual, R8.16 item 7).** Still open for later: may the API start the render host itself (a narrowly scoped `ec2:StartInstances` on that one instance, an IAM change Evoni makes), or does Evoni always start it? | Stage 5 |
+| Q6 | ~~Licence expiry after release~~ **Answered, R8.16 item 8.** when a music licence expires after an episode is published, what is required? Nothing; a re-check; or a re-render without that track | before final approval is built |
+| Q7 | **Is ×0.25 or ×0.35 (or neither) the intended outfit weight?** This is answered by the R9 audit, not here (R8.16 item 9) | P3 |
+| Q8 | **A10's storage:** an extension of `edit_versions`, or its own table (R8.16 item 1). Decided by the audit before Stage 5 | Stage 5 |
 
 ---
 
@@ -362,6 +990,9 @@ Deploys still run only through the Deploy workflow, with its snapshot; R5.7 stan
 
 ## R5.4 Refinement D: the first playable MP4, stage by stage
 
+> **SUPERSEDED in part (Revision 8, R8.14):** the sequence is R8.14's gates; music and SFX, overlays and gameplay are in the proof of concept, and D1 runs on the separate render host (R8.10).
+
+
 **Layer 1, database foundations** (no UI; each its own PR and its own migration deploy):
 - **B1:** voice tables, the shared association rule, and the voice services and APIs (upload or record a source, create a candidate and revision, associate, approve, re-confirm, summary, legacy import), all server-side, tested.
 - **C1:** edit tables, the services and APIs for every C1 table, and the pure `layoutAt(edit, t)` and `mixPlan(edit)`, tested with golden fixtures.
@@ -489,6 +1120,9 @@ They don't show the account's limit, or how many other manual snapshots count ag
 **This session doesn't run those commands**: it contacts no AWS (Rule 7 decision of 2026-10-10).
 
 ## R5.8 Blockers that still need Evoni
+
+> **SUPERSEDED in part (Revision 8):** Q20 and the D1 limits on the production box are closed by R8.0.3 and R8.10; the spec amendment is made (spec Rev 6). Open questions are R8.17.
+
 
 **Before code (B1/C1):** none. The product decisions are made. B1 and C1 each need **implementation authorisation**.
 
@@ -905,6 +1539,9 @@ Anything else is **not valid**: the line plays silent, previews mark it, and rev
 
 ## R3.3 Q16: render process management (recorded, not built)
 
+> **SUPERSEDED (Revision 8, R8.0.3 and R8.10):** the render worker runs on the separate render host, installed and started only by a reviewed Deploy-workflow job Evoni approves, or by her by hand.
+
+
 **Requirements for D1's eventual deployment mechanism (a reviewed change, separately authorised):**
 - explicit start and stop;
 - a health endpoint or heartbeat check reported in the Deploy summary;
@@ -1085,6 +1722,9 @@ There are two kinds of preview render. Neither is an export, and neither approve
 - Outputs go to `previews/working/` and `previews/review/`.
 
 ## R2.4 Render queue: isolation, limits, persistence, failure and retry
+
+> **SUPERSEDED in part (Revision 8, R8.9 and R8.10):** no render process runs on the production box; rendering is on a separate, stateless render host, with no database access, that claims jobs from the API. The job rules here (the table is the state, no automatic retry, stale heartbeat → failed, cancel, the ffprobe gate) stand as amended by R8.9.
+
 
 **Checked against today's options (VERIFIED):**
 
