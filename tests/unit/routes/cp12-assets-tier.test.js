@@ -31,8 +31,8 @@ describe('CP12 — assets.js §5.21 12th 3-TIER architectural first', () => {
   test('Tier 1 POST /search migrated bare → requireAuth', () => {
     expect(SRC).toMatch(/router\.post\('\/search', requireAuth,/);
   });
-  test('Tier 1 POST / (upload) carries requireAuth + multer + validateAssetUpload PRESERVED', () => {
-    expect(SRC).toMatch(/router\.post\('\/', upload\.single\('file'\), requireAuth, validateAssetUpload,/);
+  test('POST / (upload): requireAuth + ADMIN run before multer reads the body (SEC-1)', () => {
+    expect(SRC).toMatch(/router\.post\('\/', requireAuth, authorize\(\['ADMIN'\]\), upload\.single\('file'\), validateAssetUpload,/);
   });
   test('Tier 4 PUBLIC bare GETs now carry explicit optionalAuth (FD-67 Option 1 — global mount removed)', () => {
     expect(SRC).toMatch(/router\.get\('\/', optionalAuth, async/);
