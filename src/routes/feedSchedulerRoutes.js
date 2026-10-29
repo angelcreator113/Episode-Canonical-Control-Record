@@ -21,7 +21,7 @@
 const express = require('express');
 const router  = express.Router();
 
-const { requireAuth } = require('../middleware/auth');
+const { requireAuth, authorize } = require('../middleware/auth');
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 
 const {
@@ -78,22 +78,33 @@ router.put('/config', requireAuth, (req, res) => {
   res.json({ config: updated, message: 'Configuration updated' });
 });
 
+// The scheduler's controls start paid AI work (a full cycle is estimated at
+// $30-50), so they are admin only, and the paid ones rate-limited (SEC-4,
+// Evoni's admin-only ruling 2026-10-29). They were open to any signed-in user.
+const admin = [requireAuth, authorize(['ADMIN'])];
+
 // ── POST /start ─────────────────────────────────────────────────────────────
-router.post('/start', requireAuth, (req, res) => {
+// startScheduler does nothing unless FEED_SCHEDULER_ENABLED is 'true'; say so
+// rather than answering "started".
+router.post('/start', ...admin, aiRateLimiter, (req, res) => {
+  if (process.env.FEED_SCHEDULER_ENABLED !== 'true') {
+    console.warn('[FeedScheduler] start refused: FEED_SCHEDULER_ENABLED is not true');
+    return res.status(409).json({ error: 'The feed scheduler is switched off on the server (FEED_SCHEDULER_ENABLED is not true), so nothing was started.', status: getSchedulerStatus() });
+  }
   const db = req.app.locals.db || req.app.get('models') || require('../models');
   const intervalHours = req.body.interval_hours || null;
   startScheduler(intervalHours, db);
-  res.json({ message: 'Feed scheduler started', status: getSchedulerStatus() });
+  return res.json({ message: 'Feed scheduler started', status: getSchedulerStatus() });
 });
 
 // ── POST /stop ──────────────────────────────────────────────────────────────
-router.post('/stop', requireAuth, (req, res) => {
+router.post('/stop', ...admin, (req, res) => {
   stopScheduler();
   res.json({ message: 'Feed scheduler stopped', status: getSchedulerStatus() });
 });
 
 // ── POST /run-now ───────────────────────────────────────────────────────────
-router.post('/run-now', requireAuth, async (req, res) => {
+router.post('/run-now', ...admin, aiRateLimiter, async (req, res) => {
   const db = req.app.locals.db || req.app.get('models') || require('../models');
   setDb(db);
 
@@ -108,7 +119,7 @@ router.post('/run-now', requireAuth, async (req, res) => {
 
 // ── POST /fill-one ──────────────────────────────────────────────────────────
 // Generate a single auto-filled profile (useful for testing)
-router.post('/fill-one', requireAuth, async (req, res) => {
+router.post('/fill-one', ...admin, aiRateLimiter, async (req, res) => {
   const db = req.app.locals.db || req.app.get('models') || require('../models');
   const layer = req.body.feed_layer || 'real_world';
 
