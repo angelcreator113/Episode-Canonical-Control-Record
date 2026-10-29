@@ -84,7 +84,7 @@ const REQUIRE_AUTH_COUNTS = {
   // on the website, Task #3021, requireAuth + ADMIN).
   // +2 for GET /:id/script-versions and GET /:id/script-versions/:versionId (Script tab audit, 2026-10-15, requireAuth).
   // -1 for POST /:id/thumbnail, retired (one thumbnail editor, 2026-10-20).
-  'episodes.js': 115, // +1 POST /:id/lookbook/images/from-pose, +2 the designs' GETs (2026-10-22)
+  'episodes.js': 114, // +1 POST /:id/lookbook/images/from-pose, +2 the designs' GETs (2026-10-22); -1 GET /test-create removed (SEC-6, 2026-10-29)
   // 12 at CP2 close; +1 for POST /:episodeId/feed-moments/retry (Task #2220, requireAuth);
   // +3 for POST /:episodeId/dressed-angles/:angleId/{brief,generate,upload} (L10, §8(hh), requireAuth).
   // +1 for GET /:episodeId/dressed-angles (S8, §8(dd), requireAuth).
@@ -322,7 +322,7 @@ describe('Step 3 CP2 — Episodes cluster tier promotion', () => {
     // +1 for todoListRoutes.js POST use-career-plan (the documents rework, 2026-10-24).
     // -1 for it again: the offer letter replaced the career plan (2026-10-24).
     // +2 for shows.js GET and PUT /:id/reading-pace (her learned reading pace, 2026-10-28).
-    test('CP2 zone contains 331 total requireAuth references across 22 files', () => {
+    test('CP2 zone contains 330 total requireAuth references across 22 files (GET /test-create removed, SEC-6)', () => {
       const total = CP2_FILES.reduce((sum, filename) => {
         const src = readSrc(filename);
         const matches = src.match(/\brequireAuth\b/g) || [];
@@ -339,7 +339,7 @@ describe('Step 3 CP2 — Episodes cluster tier promotion', () => {
     // +1 for episodes.js POST /:id/lookbook/images/from-pose (Choose from Files, 2026-10-22).
     // +2 for episodes.js GET style-sheet/design/:design/:size and designs-zip/:size (2026-10-22).
     // +1 for episodeBriefRoutes.js PUT /:episodeId/self-talk (her self-talk at Beat 13, 2026-10-25).
-      expect(total).toBe(331);
+      expect(total).toBe(330);
     });
 
     test('F-AUTH-3 Tier 3 consumer count (2 in src/routes/, press.js only)', () => {

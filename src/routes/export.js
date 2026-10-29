@@ -5,15 +5,17 @@
 
 const express = require('express');
 const router = express.Router();
-const { authenticate, optionalAuth } = require('../middleware/auth');
+const { requireAuth, authorize } = require('../middleware/auth');
 const { addExportJob, getExportJob, getQueueStats, cancelExportJob, videoQueue } = require('../queues/videoQueue');
 const _db = require('../config/database');
 const { sequelize } = require('../models');
 const s3Service = require('../services/S3Service');
 const AWS = require('aws-sdk');
 
-// Use optionalAuth in dev so exports work without Cognito tokens
-const authMiddleware = process.env.NODE_ENV === 'production' ? authenticate : optionalAuth;
+// Admin only, in every environment (SEC-6, Evoni's admin-only ruling
+// 2026-10-29). It was optionalAuth whenever NODE_ENV was not 'production',
+// so a box started without NODE_ENV took export jobs from anyone.
+const authMiddleware = [requireAuth, authorize(['ADMIN'])];
 
 // ============================================================================
 // POST /api/v1/episodes/:episodeId/export  — Start a new export job
