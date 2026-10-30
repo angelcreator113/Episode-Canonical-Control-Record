@@ -17,12 +17,19 @@
  * say so ("Overlaps Full episode · take 1 on beats 10–11"). Every upload is
  * measured in the browser first (rawClipsApi.upload, lib/videoProbe), so a
  * phone video shows its length, size and picture.
+ *
+ * The beats a clip covers, asked when it is uploaded (Evoni, 2026-10-30;
+ * Voice plan V1): each lane's drop area has "Starts in" and "Ends in", sent
+ * with every clip dropped there (rawClipsApi.upload: beat_number,
+ * end_beat_number). Both can be left unset and changed on the card later.
+ * When the server can't keep the end beat yet (its database update hasn't
+ * run), the clip is still saved and the lane says so.
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Upload, Film, Trash2, Play, WandSparkles, X, Loader, CircleCheck, CircleAlert, Clock, RefreshCw, UserRound, ListOrdered, Copy, Layers, MoveRight,
 } from 'lucide-react';
-import { rawClipsApi, PERFORMERS, STRENGTHS, clipLength, clipSize, anyKeying, sceneChoices, uploadErrorMessage } from '../../lib/rawClipsApi';
+import { rawClipsApi, PERFORMERS, STRENGTHS, clipLength, clipSize, anyKeying, sceneChoices, uploadErrorMessage, uploadBeats, uploadEndChoices, endBeatNotKept } from '../../lib/rawClipsApi';
 import { clipMarks } from '../../lib/assembleTakes';
 import { clipRange, rangeText, rangeOverlaps, overlapText, beatNames } from '../../lib/clipRange';
 import { youtubeChapters, draftDescription } from '../../lib/youtubeChapters';
@@ -197,10 +204,23 @@ function Lane({ performer, clips, uploads, onFiles, busyId, scenes, names, overl
   const [green, setGreen] = useState(performer.greenByDefault);
   const [guestName, setGuestName] = useState('');
   const [over, setOver] = useState(false);
+  // The beats the next clips cover: '' (not set) or a beat number.
+  const [startBeat, setStartBeat] = useState('');
+  const [endBeat, setEndBeat] = useState('');
+  const endChoices = uploadEndChoices(scenes, startBeat);
   const total = clips.reduce((n, c) => n + (Number(c.duration_seconds) || 0), 0);
   const send = (files) => {
     const list = [...(files || [])].filter((f) => (f.type || '').startsWith('video/') || /\.(mp4|mov|m4v|webm|avi|mkv|3gp)$/i.test(f.name));
-    if (list.length) onFiles(performer.key, list, { greenScreen: green, guestName: performer.key === 'guest' ? guestName.trim() : '' });
+    if (list.length) {
+      onFiles(performer.key, list, {
+        greenScreen: green, guestName: performer.key === 'guest' ? guestName.trim() : '', ...uploadBeats(startBeat, endBeat),
+      });
+    }
+  };
+  const chooseStart = (value) => {
+    setStartBeat(value);
+    // An end before the new start no longer makes sense.
+    if (value === '' || (endBeat !== '' && Number(endBeat) <= Number(value))) setEndBeat('');
   };
   return (
     <section className={`erf-lane is-${performer.key}`} data-testid={`erf-lane-${performer.key}`} aria-label={`${performer.label} clips`}>
@@ -226,6 +246,22 @@ function Lane({ performer, clips, uploads, onFiles, busyId, scenes, names, overl
           <input type="checkbox" checked={green} onChange={(e) => setGreen(e.target.checked)} />
           Filmed on a green screen: remove the green
         </label>
+        <div className="erf-upload-beats" role="group" aria-label={`Beats the next ${performer.label} clips cover`} data-testid={`erf-upload-beats-${performer.key}`}>
+          <label className="erf-upload-beat">
+            <span>Starts in</span>
+            <select value={startBeat} onChange={(e) => chooseStart(e.target.value)} data-testid={`erf-upload-start-${performer.key}`}>
+              <option value="">Not set yet</option>
+              {scenes.map((sc) => <option key={sc.value} value={sc.value}>{sc.label}</option>)}
+            </select>
+          </label>
+          <label className="erf-upload-beat">
+            <span>Ends in</span>
+            <select value={endBeat} onChange={(e) => setEndBeat(e.target.value)} disabled={startBeat === ''} data-testid={`erf-upload-end-${performer.key}`}>
+              <option value="">{startBeat === '' ? 'Pick where it starts' : 'The same beat'}</option>
+              {endChoices.map((sc) => <option key={sc.value} value={sc.value}>{sc.label}</option>)}
+            </select>
+          </label>
+        </div>
       </div>
       {uploads.length > 0 && (
         <ul className="erf-uploads">
@@ -308,6 +344,7 @@ export default function EpisodeRawFootageTab({ episode, onCount }) {
         });
         if (row) setClips((c) => [...c, row]);
         setUploads((u) => u.filter((x) => x.id !== id));
+        if (endBeatNotKept(row, opts)) setError(`${file.name} is saved, but the beat it ends on wasn't kept: the database update that adds it (20261028120000) hasn't run yet. You can set it on the clip once it has.`);
       } catch (err) {
         console.error('[RawFootage] upload failed:', err);
         const message = err?.response?.status === 413 ? 'Too big to upload' : uploadErrorMessage(err);
