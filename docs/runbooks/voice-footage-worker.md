@@ -78,15 +78,10 @@ Uploads then queue nothing. The Files page shows no voice line, and the Prepare 
 
 ## 5. Deploys
 
-- **The Deploy workflow does not restart the voice worker.** It restarts only the API, and `episode-worker` only if that was already running.
-- **A running voice worker keeps the old code** until it is restarted. After a deploy that changes the voice worker or its services, restart it if it is running:
-
-  ```bash
-  pm2 restart episode-voice-worker
-  ```
-
-  Or stop it before the deploy and start it after.
-- Teaching the Deploy workflow to restart it is a separate decision (see the V2 PR).
+- **The Deploy workflow restarts the voice worker only if it was running** before the deploy, so it runs the new code (Evoni, Issue #3650, 2026-10-30).
+  - **A stopped or missing voice worker is left exactly as it was.** A deploy never starts it, and never starts `episode-worker` either.
+  - **The run's summary** shows a "Voice worker" row: before → after.
+- **If it isn't online after that restart,** the run stops with a plain message. The API is already restarted and healthy. Look at `pm2 logs episode-voice-worker`.
 
 ## 6. Failures and retries
 
