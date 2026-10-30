@@ -199,7 +199,7 @@ describe('POST /:episodeId/uploads/:uploadId/complete', () => {
     expect(res.body.data.key_status).toBe('queued');
     const insert = mockQuery.mock.calls.find(([sql]) => /INSERT INTO episode_raw_clips/.test(sql))[1].replacements;
     expect(insert.duration).toBe(41.2);
-    expect(media.enqueueKey).toHaveBeenCalledWith(expect.anything(), { clipId: started.clipId, episodeId: 'ep-1', s3KeyRaw: started.key, strength: 'medium' });
+    expect(media.enqueueKey).toHaveBeenCalledWith(expect.anything(), { clipId: started.clipId, episodeId: 'ep-1', s3KeyRaw: started.key, strength: 'medium', durationSeconds: 41.2 });
   });
 
   test('missing parts are a 409 that names them', async () => {

@@ -25,6 +25,7 @@ jest.mock('../../../src/services/rawClipMedia', () => {
     removeFile: jest.fn(async () => {}),
     enqueueKey: jest.fn(() => true),
     activeIds: jest.fn(() => []),
+    roomToKey: jest.fn(async () => ({ ok: true, needs: 721 * 1048576, free: 2600 * 1048576 })),
   };
 });
 
@@ -155,6 +156,29 @@ describe('POST /:episodeId/:clipId/remove-green', () => {
     expect(res.status).toBe(202);
     expect(res.body.data).toMatchObject({ key_status: 'queued', key_strength: 'high' });
     expect(media.enqueueKey).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ clipId: 'c1', strength: 'high', s3KeyRaw: 'episodes/ep-1/raw-clips/c1/original.mp4' }));
+  });
+
+  test('passes the clip\'s length (for the disk check) and whether it has a cut-out (for the message) to the job', async () => {
+    mockQuery.mockImplementation(async (sql, opts = {}) => {
+      if (/FROM episode_raw_clips/.test(sql) && /LIMIT 1/.test(sql)) return [[{ id: 'c1', episode_id: 'ep-1', s3_key_raw: 'k', duration_seconds: 184, url_cutout: 'https://b/old.webm' }]];
+      if (/^\s*UPDATE episode_raw_clips SET key_status/.test(sql)) return [[{ id: 'c1', key_status: opts.replacements.status }]];
+      return [[]];
+    });
+    const res = await request(app).post('/api/v1/episode-clips/ep-1/c1/remove-green').send({});
+    expect(res.status).toBe(202);
+    expect(media.roomToKey).toHaveBeenCalledWith(184);
+    expect(media.enqueueKey).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ durationSeconds: 184, hadCutout: true }));
+  });
+
+  test('low disk: a 507 in plain words at once; nothing queued and the clip left as it was', async () => {
+    media.roomToKey.mockResolvedValueOnce({ ok: false, needs: 721 * 1048576, free: 300 * 1048576 });
+    const errors = jest.spyOn(console, 'error').mockImplementation(() => {});
+    const res = await request(app).post('/api/v1/episode-clips/ep-1/c1/remove-green').send({});
+    errors.mockRestore();
+    expect(res.status).toBe(507);
+    expect(res.body.error).toBe('Not enough space on the server to remove the green (needs about 721 MB, 300 MB free). Nothing was changed: the original is as it was. Space has to be freed on the server before Retry will work.');
+    expect(media.enqueueKey).not.toHaveBeenCalled();
+    expect(mockQuery.mock.calls.some(([sql]) => /UPDATE episode_raw_clips/.test(sql))).toBe(false);
   });
 
   test('a clip already running is a 409', async () => {

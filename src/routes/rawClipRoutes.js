@@ -80,7 +80,7 @@ const models = require('../models');
 const clips = require('../services/rawClipsService');
 const media = require('../services/rawClipMedia');
 const parts = require('../services/rawClipMultipart');
-const { friendlyError, NO_ROOM } = require('../services/rawClipErrors');
+const { friendlyError, NO_ROOM, KeyNoRoomError } = require('../services/rawClipErrors');
 
 const router = express.Router();
 
@@ -269,8 +269,8 @@ async function completeUpload(entry, thumbnailB64) {
     s3_key_raw: entry.key, url_raw: urlRaw, thumbnail_key: thumbUrl ? thumbKey : null, thumbnail_url: thumbUrl,
     key_status: f.greenScreen ? 'queued' : 'none', key_strength: f.strength,
   });
-  // No copy on this disk: the green-removal job downloads the original from S3.
-  if (f.greenScreen) media.enqueueKey(models.sequelize, { clipId: entry.clipId, episodeId: entry.episodeId, s3KeyRaw: entry.key, strength: f.strength });
+  // No copy on this disk: the green-removal job reads the original from S3.
+  if (f.greenScreen) media.enqueueKey(models.sequelize, { clipId: entry.clipId, episodeId: entry.episodeId, s3KeyRaw: entry.key, strength: f.strength, durationSeconds: row?.duration_seconds ?? info?.duration_seconds ?? f.seconds ?? null });
   let stored = [];
   let notStored = [];
   if (Object.keys(extras).length) {
@@ -400,7 +400,7 @@ router.post('/:episodeId', requireAuth, async (req, res) => {
         key_status: greenScreen ? 'queued' : 'none', key_strength: strength,
       });
       if (greenScreen) {
-        handedToJob = media.enqueueKey(models.sequelize, { clipId: id, episodeId: episode.id, s3KeyRaw, strength, localPath: file.path });
+        handedToJob = media.enqueueKey(models.sequelize, { clipId: id, episodeId: episode.id, s3KeyRaw, strength, localPath: file.path, durationSeconds: info.duration_seconds ?? seconds });
       }
       let stored = [];
       let notStored = [];
@@ -437,8 +437,14 @@ router.post('/:episodeId/:clipId/remove-green', requireAuth, async (req, res) =>
     if (media.activeIds().includes(clip.id)) {
       return res.status(409).json({ success: false, error: 'Green removal is already running for this clip' });
     }
+    // Refused at once when the disk has no room (the job checks again when it starts).
+    const hadCutout = Boolean(clip.url_cutout);
+    if (typeof media.roomToKey === 'function') {
+      const room = await media.roomToKey(clip.duration_seconds);
+      if (!room.ok) throw new KeyNoRoomError(room.needs, room.free, hadCutout);
+    }
     const row = await clips.setKeyState(models.sequelize, clip.id, 'queued', { strength });
-    media.enqueueKey(models.sequelize, { clipId: clip.id, episodeId: clip.episode_id, s3KeyRaw: clip.s3_key_raw, strength });
+    media.enqueueKey(models.sequelize, { clipId: clip.id, episodeId: clip.episode_id, s3KeyRaw: clip.s3_key_raw, strength, durationSeconds: clip.duration_seconds, hadCutout });
     return res.status(202).json({ success: true, data: row });
   } catch (err) {
     return sendError(res, err, 'remove-green');
