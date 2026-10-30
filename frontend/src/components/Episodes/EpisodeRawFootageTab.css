@@ -120,3 +120,9 @@
 @media (max-width: 640px) {
   .erf-copies { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* Voice from footage (V2): the voice line on a Lala clip's card (admins). */
+.erf-voice { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-top: 4px; font-size: 12px; color: var(--text-secondary); }
+.erf-voice-text { display: inline-flex; align-items: center; gap: 4px; }
+.erf-voice.is-ok { color: var(--success-text); }
+.erf-voice.is-bad { color: var(--danger-text); }

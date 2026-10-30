@@ -1081,6 +1081,11 @@ app.use('/api/v1/script-voice-clips', scriptVoiceClipRoutes);
 const voiceStudioRoutes = trackRouteLoad('voiceStudio', () => require('./routes/voiceStudioRoutes'));
 app.use('/api/v1/voice-studio', voiceStudioRoutes);
 
+// Voice from footage (V2): status and Prepare Voice for Lala's clips; admin only, off unless VOICE_FROM_FOOTAGE=on.
+// The work itself is done by the footage-only worker (src/workers/voiceFootageWorker.js), never in this process.
+const voiceFootageRoutes = trackRouteLoad('voiceFootage', () => require('./routes/voiceFootageRoutes'));
+app.use('/api/v1/voice-footage', voiceFootageRoutes);
+
 // Timeline C1: the episode's edit (scene clips, Prime segments, PIP, items, versions); off unless EPISODE_EDIT=on.
 // The legacy Timeline Editor's routes and timeline_data are separate and unchanged.
 const episodeEditRoutes = trackRouteLoad('episodeEdit', () => require('./routes/episodeEditRoutes'));

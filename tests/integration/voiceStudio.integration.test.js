@@ -21,6 +21,7 @@ const migration = require('../../src/migrations/20261027200000-create-voice-stud
 // Timeline C1's dialogue placements hold foreign keys to these tables, so its (empty) tables come down
 // first and go back up after: the order a rollback runs in.
 const editMigration = require('../../src/migrations/20261028100000-create-episode-edit-tables');
+const footageMigration = require('../../src/migrations/20261030120000-create-voice-footage-jobs');
 
 const { sequelize } = models;
 const shouldSkip =
@@ -131,14 +132,19 @@ const SCRIPT = [
     const [{ n }] = await rows('SELECT count(*)::int AS n FROM voice_source_assets WHERE episode_id = :ep', { ep });
     expect(n).toBe(1);
     // Empty the tables (only this suite writes them), then down and up.
+    // Tables that reference Voice Studio's (C1's edit tables; V2's footage jobs) go down first and come back after.
+    const [{ footage }] = await rows("SELECT to_regclass('public.voice_footage_jobs') IS NOT NULL AS footage");
+    if (footage) await run('DELETE FROM voice_footage_jobs');
     await run('DELETE FROM line_voice_candidate_revisions'); await run('DELETE FROM line_voice_candidates'); await run('DELETE FROM voice_source_assets');
     const [{ edit }] = await rows("SELECT to_regclass('public.timeline_items') IS NOT NULL AS edit");
+    if (footage) await footageMigration.down(sequelize.getQueryInterface());
     if (edit) await editMigration.down(sequelize.getQueryInterface());
     await migration.down(sequelize.getQueryInterface());
     const [{ reg }] = await rows("SELECT to_regclass('public.voice_source_assets') AS reg");
     expect(reg).toBeNull();
     await migration.up(sequelize.getQueryInterface());
     if (edit) await editMigration.up(sequelize.getQueryInterface());
+    if (footage) await footageMigration.up(sequelize.getQueryInterface());
     for (const table of ['voice_source_assets', 'line_voice_candidates', 'line_voice_associations', 'line_voice_candidate_revisions', 'line_voice_approvals', 'line_voice_reconfirmations']) {
       const [{ reg: there }] = await rows('SELECT to_regclass(:name)::text AS reg', { name: `public.${table}` });
       expect(there).toBe(table);

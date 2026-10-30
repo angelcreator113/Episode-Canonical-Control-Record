@@ -29,7 +29,10 @@ jest.mock('../../../src/services/rawClipMedia', () => {
   };
 });
 
+jest.mock('../../../src/services/voiceFootageJobs', () => ({ onClipUploaded: jest.fn(async () => null) }));
+
 const media = require('../../../src/services/rawClipMedia');
+const voiceFootage = require('../../../src/services/voiceFootageJobs');
 const router = require('../../../src/routes/rawClipRoutes');
 
 const app = express();
@@ -61,6 +64,17 @@ describe('POST /:episodeId (upload)', () => {
     expect(media.enqueueKey).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ episodeId: 'ep-1', strength: 'medium', localPath: expect.any(String) }));
     const insert = mockQuery.mock.calls.find(([sql]) => /INSERT INTO episode_raw_clips/.test(sql))[1].replacements;
     expect(insert).toMatchObject({ showId: 'show-1', duration: 12.5, width: 1920, label: 'take1.MP4', originalFilename: 'take1.MP4' });
+  });
+
+  test('voice from footage (V2): every new clip is offered to the voice queue, which decides (Lala only, flag on); the upload never waits on it', async () => {
+    voiceFootage.onClipUploaded.mockClear();
+    const res = await request(app).post('/api/v1/episode-clips/ep-1')
+      .field('performer', 'lala').field('green_screen', 'true')
+      .attach('video', VIDEO, { filename: 'take2.mp4', contentType: 'video/mp4' });
+    expect(res.status).toBe(201);
+    expect(voiceFootage.onClipUploaded).toHaveBeenCalledWith(expect.anything(),
+      expect.objectContaining({ episode_id: 'ep-1', performer: 'lala', s3_key_raw: expect.stringMatching(/^episodes\/ep-1\/raw-clips\/.+\/original\.mp4$/) }),
+      { userId: 'u1' });
   });
 
   test('a guest clip without green screen is stored with no green removal', async () => {
