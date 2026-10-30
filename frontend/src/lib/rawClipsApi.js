@@ -258,6 +258,32 @@ export function clipSize(bytes) {
 /** Whether any clip is still waiting on green removal (the tab polls while so). */
 export const anyKeying = (clips) => clips.some((c) => c.key_status === 'queued' || c.key_status === 'processing');
 
+/** A length of time in words: "under a minute", "14 min", "1 h 5 min". */
+export function minutesText(seconds) {
+  const m = Math.round(Number(seconds) / 60);
+  if (!Number.isFinite(m) || m < 1) return 'under a minute';
+  return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h${m % 60 ? ` ${m % 60} min` : ''}`;
+}
+
+/**
+ * How far a clip's green removal has got, in words (Evoni, 2026-10-30: "no
+ * way of knowing how long"): { percent, text }, or null when it isn't
+ * running. With the server's progress (key_progress): "42% · about 15 min
+ * left", or the time so far until there is a pace to go on. Without it (the
+ * server restarted, or an older server): the time since it started.
+ */
+export function keyingProgress(clip, now = Date.now()) {
+  if (!clip || clip.key_status !== 'processing') return null;
+  const p = clip.key_progress;
+  if (p && p.percent != null) {
+    const tail = p.eta_seconds != null ? `about ${minutesText(p.eta_seconds)} left` : `${minutesText(p.elapsed_seconds)} so far`;
+    return { percent: p.percent, text: `${p.percent}% · ${tail}` };
+  }
+  const started = Date.parse(clip.key_started_at);
+  if (!Number.isFinite(started)) return null;
+  return { percent: null, text: `Started ${minutesText((now - started) / 1000)} ago` };
+}
+
 /**
  * Whether the server sends a clip's favourite and start line (Teleprompter
  * batch 2): only once migration 20261020090000 has run, so the ★ hides

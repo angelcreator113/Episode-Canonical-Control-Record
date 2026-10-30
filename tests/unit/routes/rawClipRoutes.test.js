@@ -25,6 +25,7 @@ jest.mock('../../../src/services/rawClipMedia', () => {
     removeFile: jest.fn(async () => {}),
     enqueueKey: jest.fn(() => true),
     activeIds: jest.fn(() => []),
+    keyProgress: jest.fn(() => ({})),
     roomToKey: jest.fn(async () => ({ ok: true, needs: 721 * 1048576, free: 2600 * 1048576 })),
   };
 });
@@ -209,6 +210,19 @@ describe('GET, PATCH and DELETE', () => {
     const res = await request(app).get('/api/v1/episode-clips/ep-1');
     expect(res.status).toBe(200);
     expect(mockQuery.mock.calls[0][1].replacements.activeIds).toEqual(['c7']);
+  });
+
+  test('a running green removal carries its progress; other clips, and a clip no longer processing, do not', async () => {
+    mockQuery.mockImplementation(async (sql) => (/SELECT/.test(sql) && /FROM episode_raw_clips/.test(sql)
+      ? [[{ id: 'c1', key_status: 'processing' }, { id: 'c2', key_status: 'done' }, { id: 'c3', key_status: 'processing' }]]
+      : [[]]));
+    media.keyProgress.mockReturnValueOnce({ c1: { percent: 42, elapsed_seconds: 600, eta_seconds: 828 }, c2: { percent: 99, elapsed_seconds: 1, eta_seconds: null } });
+    const res = await request(app).get('/api/v1/episode-clips/ep-1');
+    expect(res.status).toBe(200);
+    const byId = Object.fromEntries(res.body.data.map((c) => [c.id, c]));
+    expect(byId.c1.key_progress).toEqual({ percent: 42, elapsed_seconds: 600, eta_seconds: 828 });
+    expect(byId.c2.key_progress).toBeUndefined();
+    expect(byId.c3.key_progress).toBeUndefined();
   });
 
   test('delete of an unknown clip is a 404', async () => {

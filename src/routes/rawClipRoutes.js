@@ -343,7 +343,10 @@ router.delete('/:episodeId/uploads/:uploadId', requireAuth, async (req, res) => 
 router.get('/:episodeId', requireAuth, async (req, res) => {
   try {
     const rows = await clips.listClips(models.sequelize, req.params.episodeId, { activeIds: media.activeIds() });
-    return res.json({ success: true, data: rows });
+    // A running green removal says how far it has got (in memory, this process only).
+    const progress = media.keyProgress();
+    const data = rows.map((r) => (progress[r.id] && r.key_status === 'processing' ? { ...r, key_progress: progress[r.id] } : r));
+    return res.json({ success: true, data });
   } catch (err) {
     return sendError(res, err, 'list');
   }
