@@ -84,8 +84,10 @@ function toolError(err, tool) {
 /**
  * Runs a command; resolves { stdout (Buffer), stderr (string) }, rejects on a
  * non-zero exit with the tail of stderr. low: run at low CPU priority.
+ * onLine: stdout is read line by line as it comes and passed to onLine
+ * instead of being kept (ffmpeg's -progress output).
  */
-function run(cmd, args, { low = false, timeoutMs = 10 * 60 * 1000 } = {}) {
+function run(cmd, args, { low = false, timeoutMs = 10 * 60 * 1000, onLine = null } = {}) {
   return new Promise((resolve, reject) => {
     let child;
     try {
@@ -101,12 +103,24 @@ function run(cmd, args, { low = false, timeoutMs = 10 * 60 * 1000 } = {}) {
     }
     const out = [];
     let err = '';
-    child.stdout.on('data', (d) => out.push(d));
+    let partial = '';
+    const emit = (line) => {
+      try { onLine(line); } catch (e) {
+        console.error(`[rawClips] could not read a line of ${path.basename(cmd)} output:`, e.message);
+      }
+    };
+    child.stdout.on('data', (d) => {
+      if (!onLine) { out.push(d); return; }
+      const lines = (partial + d.toString()).split('\n');
+      partial = lines.pop();
+      lines.forEach(emit);
+    });
     child.stderr.on('data', (d) => { err = (err + d.toString()).slice(-4000); });
     const timer = setTimeout(() => { child.kill('SIGKILL'); }, timeoutMs);
     child.on('error', (e) => { clearTimeout(timer); reject(toolError(e, path.basename(cmd))); });
     child.on('close', (code, signal) => {
       clearTimeout(timer);
+      if (onLine && partial) emit(partial);
       if (code === 0) resolve({ stdout: Buffer.concat(out), stderr: err });
       else {
         const why = signal === 'SIGKILL' ? 'took too long and was stopped' : (err.trim().split('\n').slice(-3).join(' ') || `exit ${code}`);
@@ -189,6 +203,19 @@ let running = false;
 
 /** Clip ids queued or running here (listClips leaves these alone). */
 const activeIds = () => [...active];
+
+// The running green removal's progress, in memory only: { startedAt,
+// doneSeconds, totalSeconds } by clip id while ffmpeg runs (Evoni,
+// 2026-10-30). Gone when the job ends or the process restarts; the Files page
+// then falls back to the time since key_started_at.
+const progress = new Map();
+
+/** { clipId: { percent, elapsed_seconds, eta_seconds } } for the jobs running now. */
+function keyProgress(now = Date.now()) {
+  const out = {};
+  for (const [clipId, p] of progress) out[clipId] = clips.progressView(p, now);
+  return out;
+}
 
 /** A file's or link's length in seconds by ffprobe, or null (logged) when it can't be read. */
 async function secondsOf(input) {
@@ -284,7 +311,16 @@ async function keyClip({ sequelize, clipId, episodeId, s3KeyRaw, strength, local
       if (/not installed/.test(err.message)) throw err;
       console.error('[rawClips] could not sample the green; using chroma-key green:', err.message);
     }
-    await run(FFMPEG, clips.chromakeyArgs(input, output, { color, strength }), { low: true, timeoutMs: JOB_TIMEOUT_MS });
+    const p = { startedAt: Date.now(), doneSeconds: null, totalSeconds: expected };
+    progress.set(clipId, p);
+    await run(FFMPEG, ['-progress', 'pipe:1', '-nostats', ...clips.chromakeyArgs(input, output, { color, strength })], {
+      low: true,
+      timeoutMs: JOB_TIMEOUT_MS,
+      onLine: (line) => {
+        const s = clips.progressSeconds(line);
+        if (s != null) p.doneSeconds = s;
+      },
+    });
     // ffmpeg can end "successfully" with only part of the clip when its read
     // of the original breaks for good (it did in testing, with a link that
     // had expired): such a cut-out is never stored.
@@ -299,6 +335,7 @@ async function keyClip({ sequelize, clipId, episodeId, s3KeyRaw, strength, local
     await clips.setKeyState(sequelize, clipId, 'done', { cutoutKey, cutoutUrl });
     if (source) console.log(`[rawClips] green removed for ${clipId}, original read from storage:`, JSON.stringify(source.stats));
   } finally {
+    progress.delete(clipId);
     inUse.delete(output);
     if (source) await source.close();
     await removeFile(output);
@@ -369,6 +406,6 @@ async function freeBytes(dir = TMP_DIR) {
 
 module.exports = {
   BUCKET, TMP_DIR, TMP_MAX_AGE_MS, FFMPEG, FFPROBE, publicUrl, clipPrefix, tmpPath, removeFile, getS3, openStoredFile,
-  run, uploadFile, downloadFile, inspect, enqueueKey, activeIds, roomToKey, keyClip,
+  run, uploadFile, downloadFile, inspect, enqueueKey, activeIds, keyProgress, roomToKey, keyClip,
   sweepTmp, startTmpSweeper, freeBytes,
 };

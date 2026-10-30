@@ -398,3 +398,32 @@ describe('green removal failures in plain words (rawClipErrors, P0)', () => {
     expect(errors.isDiskFull(new Error('Invalid data'))).toBe(false);
   });
 });
+
+describe('green removal progress, pure pieces (Evoni, 2026-10-30: "no way of knowing how long")', () => {
+  test('progressSeconds: reads out_time_us (and the older out_time_ms, also microseconds); nothing else', () => {
+    expect(clips.progressSeconds('out_time_us=92000000')).toBe(92);
+    expect(clips.progressSeconds('out_time_ms=1500000')).toBe(1.5);
+    expect(clips.progressSeconds('out_time=00:01:32.000000')).toBeNull();
+    expect(clips.progressSeconds('progress=continue')).toBeNull();
+    expect(clips.progressSeconds('out_time_us=N/A')).toBeNull();
+    expect(clips.progressSeconds(undefined)).toBeNull();
+  });
+
+  test('progressView: percent, time so far, and time left once there is a pace to go on', () => {
+    const t0 = 1_000_000;
+    expect(clips.progressView({ startedAt: t0, doneSeconds: 46, totalSeconds: 184 }, t0 + 600_000))
+      .toEqual({ percent: 25, elapsed_seconds: 600, eta_seconds: 1800 });
+    // Too early for a fair guess: no time left yet.
+    expect(clips.progressView({ startedAt: t0, doneSeconds: 2, totalSeconds: 184 }, t0 + 60_000))
+      .toEqual({ percent: 1, elapsed_seconds: 60, eta_seconds: null });
+    expect(clips.progressView({ startedAt: t0, doneSeconds: 20, totalSeconds: 184 }, t0 + 10_000).eta_seconds).toBeNull();
+  });
+
+  test('progressView: never 100 before the cut-out is checked and stored; no percent without a length or a report', () => {
+    const t0 = 0;
+    expect(clips.progressView({ startedAt: t0, doneSeconds: 184, totalSeconds: 184 }, 900_000).percent).toBe(99);
+    expect(clips.progressView({ startedAt: t0, doneSeconds: 250, totalSeconds: 184 }, 900_000).percent).toBe(99);
+    expect(clips.progressView({ startedAt: t0, doneSeconds: 40, totalSeconds: null }, 900_000)).toEqual({ percent: null, elapsed_seconds: 900, eta_seconds: null });
+    expect(clips.progressView({ startedAt: t0, doneSeconds: null, totalSeconds: 184 }, 900_000)).toEqual({ percent: null, elapsed_seconds: 900, eta_seconds: null });
+  });
+});

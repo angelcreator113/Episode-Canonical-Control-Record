@@ -566,6 +566,34 @@ function chromakeyArgs(input, output, { color = DEFAULT_KEY_COLOR, strength = 'm
   ];
 }
 
+/**
+ * Green removal's progress (Evoni, 2026-10-30: "no way of knowing how long
+ * it will take"). ffmpeg writes key=value lines to stdout with -progress
+ * pipe:1; out_time_us (out_time_ms in older builds, also microseconds) is how
+ * far into the clip it has got. Returns the seconds done, or null for any
+ * other line.
+ */
+function progressSeconds(line) {
+  const m = /^out_time_(?:us|ms)=(\d+)\s*$/.exec(String(line || ''));
+  return m ? Number(m[1]) / 1e6 : null;
+}
+
+/**
+ * What the Files page shows for a running green removal:
+ * { percent, elapsed_seconds, eta_seconds }. percent is null until ffmpeg
+ * has reported and the clip's length is known; it stops at 99 until the
+ * cut-out is checked and stored. The time left is the pace so far carried
+ * forward, offered only once there is a pace to go on (2% and 30 s in).
+ */
+function progressView({ startedAt, doneSeconds = null, totalSeconds = null } = {}, now = Date.now()) {
+  const elapsed = Math.max(0, Math.round((now - startedAt) / 1000));
+  const fraction = doneSeconds != null && Number(doneSeconds) >= 0 && Number(totalSeconds) > 0
+    ? Math.min(0.99, Number(doneSeconds) / Number(totalSeconds)) : null;
+  const eta = fraction != null && fraction >= 0.02 && elapsed >= 30
+    ? Math.round((elapsed * (1 - fraction)) / fraction) : null;
+  return { percent: fraction == null ? null : Math.floor(fraction * 100), elapsed_seconds: elapsed, eta_seconds: eta };
+}
+
 /** ffmpeg arguments: one frame at `at` seconds, size x size, raw rgb24 to stdout (for pickKeyColor). */
 function sampleFrameArgs(input, at = 1, size = 16) {
   return ['-hide_banner', ...netInputArgs(input), '-ss', String(at), '-i', input, '-frames:v', '1', '-vf', `scale=${size}:${size}`, '-f', 'rawvideo', '-pix_fmt', 'rgb24', 'pipe:1'];
@@ -615,5 +643,5 @@ module.exports = {
   UPLOAD_EXTRAS, RawClipError, readFields, readBeatMarks, readStrength, readTakeSeconds, readVideoSize, truthy, findEpisode, shapeRow,
   listClips, getClip, createClip, updateClip, storeTakeExtras, setKeyState, removeClip,
   KEY_MB_PER_SECOND, KEY_MIN_BYTES, KEY_MARGIN_BYTES, KEY_UNKNOWN_SECONDS, keyRoomNeeded, cutoutKeyFor, netInputArgs, CutoutIncompleteError, cutoutComplete,
-  pickKeyColor, chromakeyArgs, sampleFrameArgs, thumbnailArgs, probeArgs, readProbe,
+  pickKeyColor, chromakeyArgs, progressSeconds, progressView, sampleFrameArgs, thumbnailArgs, probeArgs, readProbe,
 };

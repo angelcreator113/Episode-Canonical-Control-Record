@@ -29,9 +29,9 @@ function restoreEnv() {
 }
 // The stand-in tools read their settings from a file (Jest's process.env does
 // not reach the processes they run as).
-const fake = { seconds: '184.0', out: '184.0', err: '' };
+const fake = { seconds: '184.0', out: '184.0', err: '', progress: '' };
 const writeFake = () => fs.writeFileSync(path.join(work, 'fake.env'),
-  `FAKE_SECONDS='${fake.seconds}'\nFAKE_OUT_SECONDS='${fake.out}'\nFAKE_FFMPEG_ERR='${fake.err}'\nFAKE_LOG='${path.join(work, 'ffmpeg.log')}'\n`);
+  `FAKE_SECONDS='${fake.seconds}'\nFAKE_OUT_SECONDS='${fake.out}'\nFAKE_FFMPEG_ERR='${fake.err}'\nFAKE_PROGRESS='${fake.progress}'\nFAKE_LOG='${path.join(work, 'ffmpeg.log')}'\n`);
 const REAL_FFMPEG = process.env.FFMPEG_PATH || 'ffmpeg';
 const REAL_FFPROBE = process.env.FFPROBE_PATH || 'ffprobe';
 let realTools = false; // the last block runs the installed ffmpeg
@@ -49,12 +49,15 @@ case "$last" in *.webm) d=$(cat "$last") ;; *) d="$FAKE_SECONDS" ;; esac
 echo "{\\"format\\":{\\"duration\\":\\"$d\\"},\\"streams\\":[{\\"codec_type\\":\\"video\\",\\"width\\":3840,\\"height\\":2160}]}"
 `);
   // ffmpeg: logs each call; the frame sample answers green; the key writes
-  // FAKE_OUT_SECONDS into the output, or fails with FAKE_FFMPEG_ERR.
+  // FAKE_OUT_SECONDS into the output, or fails with FAKE_FFMPEG_ERR. With
+  // FAKE_PROGRESS, the key first reports FAKE_PROGRESS seconds done the way
+  // -progress pipe:1 does, then pauses a moment.
   fs.writeFileSync(ffmpeg, `#!/bin/sh
 . "${path.join(work, 'fake.env')}"
 for a; do last="$a"; done
 echo "$*" >> "$FAKE_LOG"
 if [ "$last" = "pipe:1" ]; then i=0; while [ $i -lt 256 ]; do printf '\\000\\261\\100'; i=$((i+1)); done; exit 0; fi
+if [ -n "$FAKE_PROGRESS" ]; then printf 'frame=1\\nout_time_us=%s000000\\nprogress=continue\\n' "$FAKE_PROGRESS"; sleep 1; fi
 if [ -n "$FAKE_FFMPEG_ERR" ]; then echo "$FAKE_FFMPEG_ERR" >&2; exit 1; fi
 printf '%s' "$FAKE_OUT_SECONDS" > "$last"
 `);
@@ -79,7 +82,7 @@ beforeEach(() => {
   process.env.AWS_S3_BUCKET = 'key-test-bucket';
   process.env.FFMPEG_PATH = realTools ? REAL_FFMPEG : path.join(work, 'fake-ffmpeg');
   process.env.FFPROBE_PATH = realTools ? REAL_FFPROBE : path.join(work, 'fake-ffprobe');
-  Object.assign(fake, { seconds: '184.0', out: '184.0', err: '' });
+  Object.assign(fake, { seconds: '184.0', out: '184.0', err: '', progress: '' });
   writeFake();
   try { fs.unlinkSync(path.join(work, 'ffmpeg.log')); } catch (err) { if (err.code !== 'ENOENT') throw err; }
   free = 5 * 1024 ** 3;
@@ -131,13 +134,18 @@ const JOB = { clipId: 'c1', episodeId: 'ep1', s3KeyRaw: 'episodes/ep1/raw-clips/
 /** Queues the job and waits for the queue to finish it. */
 async function key(extra = {}) {
   expect(media.enqueueKey(db.sequelize, { ...JOB, ...extra })).toBe(true);
+  return key.wait();
+}
+
+/** Waits for the queue to finish; resolves the clip's state. */
+key.wait = async () => {
   for (let i = 0; i < 9000 && media.activeIds().length; i += 1) {
     // eslint-disable-next-line no-await-in-loop
     await new Promise((r) => setTimeout(r, 10));
   }
   expect(media.activeIds()).toEqual([]);
   return db.state;
-}
+};
 
 const puts = () => sent.filter((c) => c.name === 'PutObjectCommand').map((c) => c.key);
 const deletes = () => sent.filter((c) => /Delete/.test(c.name));
@@ -148,6 +156,36 @@ const tmpFiles = () => (fs.existsSync(media.TMP_DIR) ? fs.readdirSync(media.TMP_
 let tmpBefore = [];
 // Temp files this test's jobs left behind (the temp folder may be shared).
 const leftInTmp = () => tmpFiles().filter((n) => !tmpBefore.includes(n));
+
+describe('progress while green removal runs (Evoni, 2026-10-30)', () => {
+  test('ffmpeg reports its progress; the job shows how far it has got while running, and nothing once it ends', async () => {
+    fake.progress = '92'; // half of the 184 s clip
+    writeFake();
+    expect(media.enqueueKey(db.sequelize, JOB)).toBe(true);
+    let seen = null;
+    for (let i = 0; i < 300 && !seen; i += 1) {
+      // eslint-disable-next-line no-await-in-loop
+      await new Promise((r) => setTimeout(r, 10));
+      const p = media.keyProgress();
+      if (p.c1 && p.c1.percent != null) seen = p.c1;
+    }
+    expect(seen).toMatchObject({ percent: 50 });
+    expect(seen.elapsed_seconds).toBeGreaterThanOrEqual(0);
+    const state = await key.wait();
+    expect(state.key_status).toBe('done');
+    expect(media.keyProgress()).toEqual({});
+    expect(ffmpegCalls().find((c) => /chromakey/.test(c))).toMatch(/^-progress pipe:1 -nostats /);
+  });
+
+  test('a failed run leaves no progress behind', async () => {
+    fake.progress = '30';
+    fake.err = 'Invalid data found when processing input';
+    writeFake();
+    const state = await key();
+    expect(state.key_status).toBe('failed');
+    expect(media.keyProgress()).toEqual({});
+  });
+});
 
 describe('low disk space', () => {
   test('too little room: refused before ffmpeg runs or anything is stored, with the numbers, and the earlier cut-out kept', async () => {

@@ -29,7 +29,7 @@ import React, { useCallback, useContext, useEffect, useRef, useState } from 'rea
 import {
   Upload, Film, Trash2, Play, WandSparkles, X, Loader, CircleCheck, CircleAlert, Clock, RefreshCw, UserRound, ListOrdered, Copy, Layers, MoveRight,
 } from 'lucide-react';
-import { rawClipsApi, PERFORMERS, STRENGTHS, clipLength, clipSize, anyKeying, sceneChoices, uploadErrorMessage, uploadBeats, uploadEndChoices, endBeatNotKept } from '../../lib/rawClipsApi';
+import { rawClipsApi, PERFORMERS, STRENGTHS, clipLength, clipSize, anyKeying, keyingProgress, sceneChoices, uploadErrorMessage, uploadBeats, uploadEndChoices, endBeatNotKept } from '../../lib/rawClipsApi';
 import { clipMarks } from '../../lib/assembleTakes';
 import { clipRange, rangeText, rangeOverlaps, overlapText, beatNames } from '../../lib/clipRange';
 import { youtubeChapters, draftDescription } from '../../lib/youtubeChapters';
@@ -156,6 +156,7 @@ function VoiceLine({ clip, job, onPrepareVoice, busy }) {
 function ClipCard({ clip, scenes, names, overlaps = [], onPlay, onChapters, onRemoveGreen, onMove, onLink, onEndBeat, onDelete, busy, voice = null, onPrepareVoice }) {
   const [strength, setStrength] = useState(clip.key_strength || 'medium');
   const st = STATUS[clip.key_status] || STATUS.none;
+  const keying = keyingProgress(clip);
   const meta = [clipLength(clip.duration_seconds), clipSize(clip.file_size_bytes), clip.width && clip.height ? `${clip.width}×${clip.height}` : null].filter(Boolean);
   const working = clip.key_status === 'queued' || clip.key_status === 'processing';
   // A full-episode take with markers says its beats itself; any other clip
@@ -184,6 +185,12 @@ function ClipCard({ clip, scenes, names, overlaps = [], onPlay, onChapters, onRe
         <span className={`erf-status ${st.tone}`} data-testid="erf-status">
           <st.Icon size={13} aria-hidden className={clip.key_status === 'processing' ? 'erf-spin' : undefined} /> {st.label}
         </span>
+        {keying && (
+          <div className="erf-progress" data-testid="erf-progress">
+            {keying.percent != null && <progress className="erf-progress-bar" max="100" value={keying.percent} aria-label="Green removal progress" />}
+            <span>{keying.text}</span>
+          </div>
+        )}
         {clip.key_status === 'failed' && clip.key_error && <p className="erf-error">{clip.key_error}</p>}
         {voice && voiceLane(clip.performer) && <VoiceLine clip={clip} job={voice[clip.id]} onPrepareVoice={onPrepareVoice} busy={busy} />}
         <div className="erf-clip-actions">
