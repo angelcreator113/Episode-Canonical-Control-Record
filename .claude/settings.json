@@ -31,6 +31,10 @@
       "Bash(aws *)",
       "Bash(gh workflow run *)",
       "Bash(gh workflow enable *)",
+      "Bash(gh workflow disable *)",
+      "Bash(gh run rerun *)",
+      "Bash(gh run cancel *)",
+      "Bash(gh pr merge *)",
       "Bash(git push * main)",
       "Bash(git push * dev)",
       "Bash(git push --force *)",
@@ -41,9 +45,15 @@
       "PowerShell(aws *)",
       "PowerShell(gh workflow run *)",
       "PowerShell(gh workflow enable *)",
+      "PowerShell(gh workflow disable *)",
+      "PowerShell(gh run rerun *)",
+      "PowerShell(gh run cancel *)",
+      "PowerShell(gh pr merge *)",
       "PowerShell(git push * main)",
       "PowerShell(git push * dev)",
       "PowerShell(git push --force *)",
+      "mcp__github__actions_run_trigger",
+      "mcp__github__enable_pr_auto_merge",
       "Read(./.env)",
       "Read(./.env.local)",
       "Read(./.env.production)",
@@ -72,6 +82,16 @@
           {
             "type": "command",
             "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard-dangerous-commands.js\"",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "mcp__github__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard-github-tools.js\"",
             "timeout": 10
           }
         ]

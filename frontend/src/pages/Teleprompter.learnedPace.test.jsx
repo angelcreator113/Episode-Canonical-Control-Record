@@ -69,7 +69,8 @@ describe('learned pace on the Script tab', () => {
     mockApi([TAKE]);
     renderTab();
     await waitFor(() => expect(screen.getByTestId('reading-pace-text').textContent).toBe('Your pace: 188 words/min (from 1 take) — timings use it'));
-    expect(api.put).toHaveBeenCalledWith('/api/v1/shows/show-1/reading-pace', expect.objectContaining({ performer: 'justawoman', episode_id: 'ep-1', ratios: [0.8, 0.8, 0.8], takes: 1 }));
+    // The save runs a microtask after the pace is shown (useReadingPace), so wait for it.
+    await waitFor(() => expect(api.put).toHaveBeenCalledWith('/api/v1/shows/show-1/reading-pace', expect.objectContaining({ performer: 'justawoman', episode_id: 'ep-1', ratios: [0.8, 0.8, 0.8], takes: 1 })));
     const beats = teleprompterScript(SCRIPT).beats.map((b) => ({ lines: b.raw }));
     const mine = formatRuntime(scriptSeconds(beats, { wpm: 188 }));
     const standard = formatRuntime(scriptSeconds(beats));

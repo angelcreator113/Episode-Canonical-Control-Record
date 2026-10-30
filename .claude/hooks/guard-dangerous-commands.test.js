@@ -186,6 +186,46 @@ const cases = [
   [ALLOW, 'awsome-tool --version'],
   [ALLOW, 'node scripts/check-root-junk.js'],
   [ALLOW, 'git push origin claude/feature-dev-mainline'],
+  // Issue #3650 rulings: Evoni starts every workflow run; a session never
+  // re-runs, cancels, approves or merges from the shell, and never changes
+  // settings, secrets or variables.
+  [BLOCK, 'gh workflow disable deploy.yml'],
+  [BLOCK, 'gh run rerun 123 --failed'],
+  [BLOCK, 'gh run cancel 123'],
+  [BLOCK, 'gh run delete 123'],
+  [BLOCK, 'gh pr merge 5 --squash'],
+  [BLOCK, 'gh pr merge 5 --auto --squash'],
+  [BLOCK, 'gh repo edit --enable-auto-merge'],
+  [BLOCK, 'gh secret set AWS_ROLE_ARN --env production'],
+  [BLOCK, 'gh variable set DEPLOY_ENABLED --body true'],
+  [BLOCK, 'gh api -X POST repos/o/r/actions/workflows/deploy.yml/dispatches -f ref=main'],
+  [BLOCK, 'gh api -X POST repos/o/r/actions/runs/1/pending_deployments -f state=approved'],
+  [BLOCK, 'gh api -X POST repos/o/r/actions/runs/1/rerun'],
+  [BLOCK, 'gh api -X POST repos/o/r/actions/runs/1/rerun-failed-jobs'],
+  [BLOCK, 'gh api -X POST repos/o/r/actions/runs/1/cancel'],
+  [BLOCK, 'gh api -X PUT repos/o/r/pulls/5/merge -f merge_method=squash'],
+  [BLOCK, 'gh api -X POST repos/o/r/merges -f base=main -f head=x'],
+  [BLOCK, 'gh api -X PUT repos/o/r/environments/production'],
+  [BLOCK, 'gh api -X POST repos/o/r/rulesets --input r.json'],
+  [BLOCK, 'gh api -X DELETE repos/o/r/branches/main/protection'],
+  [BLOCK, 'gh api -X PUT repos/o/r/actions/secrets/X'],
+  [BLOCK, "gh api graphql -f query='mutation { enablePullRequestAutoMerge(input: {pullRequestId: \"x\"}) { clientMutationId } }'"],
+  [BLOCK, "gh api graphql -f query='mutation { mergePullRequest(input: {pullRequestId: \"x\"}) { clientMutationId } }'"],
+  [BLOCK, 'curl -X POST -H "Authorization: token x" https://api.github.com/repos/o/r/actions/workflows/deploy.yml/dispatches'],
+  [BLOCK, 'cd /x && gh run rerun 9'],
+  [ALLOW, 'gh run list --limit 5'],
+  [ALLOW, 'gh run view 123 --log-failed'],
+  [ALLOW, 'gh pr view 5 --json state'],
+  [ALLOW, 'gh api repos/o/r/actions/runs/1/jobs'],
+  [ALLOW, 'gh api repos/o/r/pulls/5/comments'],
+  [ALLOW, 'curl -sS https://example.com/merge-guide'],
+  // An escaped pipe is a literal character in a grep pattern, not a pipe.
+  [ALLOW, 'grep -n "pm2\\|restart" scripts/deploy/workflow-deploy.sh | head'],
+  [ALLOW, 'grep -rn "x\\|workflow-deploy\\|ssm-phase" docs | head'],
+  [ALLOW, 'grep -n "aws\\|ssh" docs/runbooks/deploy-workflow.md'],
+  // …but a real pipe into a real command is still caught.
+  [BLOCK, 'grep -n x f | pm2 restart all'],
+  [BLOCK, 'echo "a\\|b" | bash scripts/deploy/ssm-phase.sh plan'],
 ];
 
 let failed = 0;
