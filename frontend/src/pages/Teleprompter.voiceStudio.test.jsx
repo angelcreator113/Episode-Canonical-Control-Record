@@ -392,7 +392,7 @@ describe('recording from the teleprompter with Voice Studio on', () => {
     expect(screen.queryByTestId('stp-voice-panel')).toBeNull(); // the old recorder and its player
     expect(screen.queryByTestId('vr-clip-audio')).toBeNull();
     const link = screen.getByTestId('stp-studio-link');
-    expect(link.getAttribute('href')).toBe('/episodes/ep-1/voice?beat=8&line=0');
+    expect(link.getAttribute('href')).toBe('/episodes/ep-1?tab=voice&beat=8&line=0');
     fireEvent.click(screen.getByTestId('stp-studio-start'));
     await waitFor(() => expect(screen.getByTestId('stp-studio-stop').disabled).toBe(false));
     fireEvent.click(screen.getByTestId('stp-studio-stop'));

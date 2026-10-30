@@ -3,8 +3,9 @@
  * docs/reads/2026-10-27-voice-studio-timeline-design.md, Revision 7, §5.1,
  * R5.2, R6.2): an episode's spoken lines by beat and character, each line's
  * takes and approval, recording or uploading a take, auditioning, approving,
- * withdrawing and re-confirming. Route /episodes/:episodeId/voice, linked
- * from the Script tab.
+ * withdrawing and re-confirming. Production → Voice on the episode page
+ * (Evoni, 2026-10-30), `embedded`; /episodes/:episodeId/voice, the page it
+ * was, lands there (VoiceStudioRedirect), keeping ?beat= and ?line=.
  *
  * Everything shown comes from one server read (GET …/studio), so lines,
  * takes and approval states belong to the same saved script; after any
@@ -13,7 +14,7 @@
  * another take in its place. Only a current approval plays.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, useParams, useSearchParams } from 'react-router-dom';
+import { Link, Navigate, useParams, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, RefreshCw, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { voiceStudioApi, explainError } from '../lib/voiceStudioApi';
 import { arrange } from '../lib/voiceStudioView';
@@ -39,8 +40,20 @@ function Banner({ message, onReload, onClose }) {
   );
 }
 
-export default function VoiceStudio() {
+/** /episodes/:episodeId/voice → the episode's Voice tab, with the beat and line asked for. */
+export function VoiceStudioRedirect() {
   const { episodeId } = useParams();
+  const [params] = useSearchParams();
+  const next = new URLSearchParams({ tab: 'voice' });
+  for (const k of ['beat', 'line']) if (params.get(k) != null) next.set(k, params.get(k));
+  return <Navigate to={`/episodes/${encodeURIComponent(episodeId)}?${next}`} replace />;
+}
+
+/** embedded: shown in the episode page's Voice tab (no way back, a smaller heading). */
+export default function VoiceStudio({ episodeId: givenId = null, embedded = false } = {}) {
+  const routeParams = useParams();
+  const episodeId = givenId || routeParams.episodeId;
+  const Heading = embedded ? 'h2' : 'h1';
   const [params, setParams] = useSearchParams();
   const [view, setView] = useState(null);
   const [loadError, setLoadError] = useState(null);
@@ -76,14 +89,14 @@ export default function VoiceStudio() {
   const reload = async () => { setMessage(null); audition.stop(); await load(); };
   const changed = async () => { audition.stop(); await load(); };
 
-  if (loading && !view) return <div className="vs-page"><p className="vs-note" role="status">Loading Voice Studio…</p></div>;
+  if (loading && !view) return <div className={`vs-page${embedded ? ' vs-page--embedded' : ''}`}><p className="vs-note" role="status">Loading Voice Studio…</p></div>;
   if (loadError && !view) {
     const off = loadError.code === 'VOICE_STUDIO_OFF';
     return (
-      <div className="vs-page">
-        <Link to={`/episodes/${episodeId}`} className="vs-back"><ArrowLeft size={14} /> Episode</Link>
+      <div className={`vs-page${embedded ? ' vs-page--embedded' : ''}`}>
+        {!embedded && <Link to={`/episodes/${episodeId}`} className="vs-back"><ArrowLeft size={14} /> Episode</Link>}
         <div className="vs-empty" role="alert" data-testid="vs-load-error">
-          <h1>Voice Studio</h1>
+          <Heading>Voice Studio</Heading>
           <p>{off ? "Voice Studio isn't switched on yet. Until it is, the Teleprompter keeps using the voice clips recorded on the Script tab." : loadError.message}</p>
           {!off && <button type="button" className="vs-btn" onClick={reload}><RefreshCw size={14} /> Try again</button>}
         </div>
@@ -97,10 +110,10 @@ export default function VoiceStudio() {
   const lines = beat ? beat.lines.filter((l) => speaker === 'all' || l.speaker_key === speaker) : [];
 
   return (
-    <div className="vs-page">
+    <div className={`vs-page${embedded ? ' vs-page--embedded' : ''}`} data-testid="vs-page">
       <header className="vs-head">
-        <Link to={`/episodes/${episodeId}`} className="vs-back"><ArrowLeft size={14} /> {title}</Link>
-        <h1>Voice Studio</h1>
+        {!embedded && <Link to={`/episodes/${episodeId}`} className="vs-back"><ArrowLeft size={14} /> {title}</Link>}
+        <Heading>Voice Studio</Heading>
         <p className="vs-counts" data-testid="vs-counts">
           <span>{totals.approved}/{totals.spoken} spoken lines approved</span>
           {totals.review > 0 && <span className="vs-badge vs-badge--warn">{totals.review} need review</span>}
@@ -115,7 +128,7 @@ export default function VoiceStudio() {
       {!usableBeats.length ? (
         <div className="vs-empty" data-testid="vs-empty">
           <p>This episode has no script lines yet. Write the script in the Script tab, save it, then come back to record its lines.</p>
-          <Link className="vs-btn" to={`/episodes/${episodeId}?tab=script`}>Open the Script tab</Link>
+          <Link className="vs-btn" to={`/episodes/${episodeId}?tab=scripts`}>Open the Script tab</Link>
         </div>
       ) : (
         <>

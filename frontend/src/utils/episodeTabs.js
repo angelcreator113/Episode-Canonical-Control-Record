@@ -27,6 +27,12 @@ export const EP_TABS = [
     // (EpisodeRawFootageTab), by who is on camera; since 2026-10-20 it
     // opens with Lala and JustAWoman pose photos (EpisodePosesPanel).
     { key: 'files', label: 'Files', group: 'Make' },
+    // Evoni, 2026-10-30: Voice Studio is Production's Voice pill, next to
+    // Files (it was a page of its own, linked from the Script tab). The pill
+    // shows only where `gate` is open: an admin, with Voice Studio switched
+    // on (gatedTab). ?tab=voice opens it either way; the page says why it
+    // can't load. /episodes/:id/voice lands here.
+    { key: 'voice', label: 'Voice', group: 'Make', gate: 'voiceStudio' },
     { key: 'wardrobe', label: 'Wardrobe', group: 'Look' },
     // The Style Page (was Lookbook; Task #2876): the style sheet as its
     // own editor. The key stays 'lookbook' so links keep working.
@@ -88,6 +94,12 @@ export function withEpisodeTab(params, tab) {
   const next = new URLSearchParams(params);
   next.set('tab', tab);
   return next;
+}
+
+/** The tab less the sub-tabs whose gate is not open (open: { [gate]: true }). */
+export function gatedTab(tab, open = {}) {
+  if (!tab?.subs?.some((s) => s.gate)) return tab;
+  return { ...tab, subs: tab.subs.filter((s) => !s.gate || open[s.gate]) };
 }
 
 /** A tab's pills: its sub-tabs less the ones that are a view of another. */

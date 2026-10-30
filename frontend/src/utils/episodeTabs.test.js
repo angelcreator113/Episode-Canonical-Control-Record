@@ -1,5 +1,5 @@
 import { describe, test, expect } from 'vitest';
-import { resolveEpisodeTab, withEpisodeTab, EP_TABS, pillsOf, pillGroups, pillFor } from './episodeTabs';
+import { resolveEpisodeTab, withEpisodeTab, EP_TABS, pillsOf, pillGroups, pillFor, gatedTab } from './episodeTabs';
 
 describe('resolveEpisodeTab (audit LINK-04)', () => {
   test('a main tab opens its first sub-tab; a sub-tab opens under its main tab', () => {
@@ -55,11 +55,11 @@ describe('the tab layout', () => {
     expect(EP_TABS.map((t) => t.label)).toEqual(['Overview', 'Script', 'Production', 'Results']);
     const production = EP_TABS.find((t) => t.key === 'production');
     expect(production.subs.map((s) => s.label))
-      .toEqual(['Scenes', 'Plan', 'Files', 'Wardrobe', 'Style Page', 'Phone', 'Overlays', 'Money', 'Checklist']);
+      .toEqual(['Scenes', 'Plan', 'Files', 'Voice', 'Wardrobe', 'Style Page', 'Phone', 'Overlays', 'Money', 'Checklist']);
     // Evoni, 2026-10-22: Beat Plan is Scenes' Plan view; the pills in four groups.
-    expect(pillsOf(production).map((s) => s.label)).toEqual(['Scenes', 'Files', 'Wardrobe', 'Style Page', 'Phone', 'Overlays', 'Money', 'Checklist']);
+    expect(pillsOf(production).map((s) => s.label)).toEqual(['Scenes', 'Files', 'Voice', 'Wardrobe', 'Style Page', 'Phone', 'Overlays', 'Money', 'Checklist']);
     expect(pillGroups(production).map((g) => [g.group, g.pills.map((p) => p.key)])).toEqual([
-      ['Make', ['scenes', 'files']], ['Look', ['wardrobe', 'lookbook']], ['On screen', ['phone', 'overlays']], ['Track', ['money', 'checklist']],
+      ['Make', ['scenes', 'files', 'voice']], ['Look', ['wardrobe', 'lookbook']], ['On screen', ['phone', 'overlays']], ['Track', ['money', 'checklist']],
     ]);
     expect(pillFor(production, 'beatplan')).toBe('scenes');
     expect(pillFor(production, 'files')).toBe('files');
@@ -68,5 +68,21 @@ describe('the tab layout', () => {
     expect(pillsOf(results).map((s) => s.label)).toEqual(['Summary', 'Story', 'Distribution']);
     expect(pillFor(results, 'evaluation')).toBe('summary');
     expect(resolveEpisodeTab('evaluation')).toEqual({ main: 'results', sub: 'evaluation', key: 'results.evaluation' });
+  });
+});
+
+describe('Production → Voice (Evoni, 2026-10-30)', () => {
+  const production = EP_TABS.find((t) => t.key === 'production');
+  test('?tab=voice opens it under Production; the old Voice Studio link is its own route, not a tab', () => {
+    expect(resolveEpisodeTab('voice')).toEqual({ main: 'production', sub: 'voice', key: 'production.voice' });
+  });
+  test('the pill shows only where its gate is open (an admin, Voice Studio on)', () => {
+    const make = (tab) => pillGroups(tab).find((g) => g.group === 'Make').pills.map((p) => p.key);
+    expect(make(gatedTab(production, { voiceStudio: true }))).toEqual(['scenes', 'files', 'voice']);
+    expect(make(gatedTab(production, {}))).toEqual(['scenes', 'files']);
+    expect(make(gatedTab(production))).toEqual(['scenes', 'files']);
+    // A tab with nothing gated is returned as it is.
+    const results = EP_TABS.find((t) => t.key === 'results');
+    expect(gatedTab(results)).toBe(results);
   });
 });

@@ -3,10 +3,12 @@
 // 2026-10-15). Kept out of EpisodeScriptTab.jsx so the tab mounts one
 // element. Both read the script as the page has it, saved or not.
 
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useContext } from 'react';
 import { Link } from 'react-router-dom';
 import { BookOpen, Download, Printer, FileText, ScrollText, Copy, ListChecks, AudioLines } from 'lucide-react';
 import { voiceStudioOn } from '../../lib/voiceStudioApi';
+import AuthContext from '../../contexts/AuthContext';
+import { isAdmin } from '../../utils/authGroups';
 import ScriptTableRead from './ScriptTableRead';
 import CueSheetDialog from './CueSheetDialog';
 import { toFountain, toPlainText, scriptFileName } from '../../lib/scriptExport';
@@ -72,13 +74,15 @@ export default function ScriptReadActions({ scriptText, title = '', dirty = fals
   const [error, setError] = useState(null);
   const [copied, setCopied] = useState(false);
   const [cues, setCues] = useState(false);
-  // Voice Studio's link shows only while the server has it switched on.
+  // Voice Studio's link shows, as Production → Voice does, to an admin while
+  // the server has it switched on.
+  const admin = isAdmin(useContext(AuthContext)?.user);
   const [voiceStudio, setVoiceStudio] = useState(false);
   useEffect(() => {
     let live = true;
-    if (episodeId) voiceStudioOn().then((on) => { if (live) setVoiceStudio(on); });
+    if (episodeId && admin) voiceStudioOn().then((on) => { if (live) setVoiceStudio(on); });
     return () => { live = false; };
-  }, [episodeId]);
+  }, [episodeId, admin]);
   const [place, setPlace] = useState(null);
   const menuRef = useRef(null);
   const summaryRef = useRef(null);
@@ -148,10 +152,12 @@ export default function ScriptReadActions({ scriptText, title = '', dirty = fals
           <ScrollText size={14} aria-hidden="true" /> Teleprompter
         </Link>
       )}
-      {/* Voice Studio (B2): this episode's line takes and approvals; shown only while it is switched on. */}
+      {/* Voice Studio (B2): this episode's line takes and approvals, now
+          Production → Voice (2026-10-30); the tab's unsaved-changes guard
+          asks first, as for any link. */}
       {episodeId && voiceStudio && (
         <Link className="esp-btn str-launch" data-testid="script-voice-studio"
-          to={`/episodes/${encodeURIComponent(episodeId)}/voice${beatNumber != null ? `?beat=${encodeURIComponent(beatNumber)}` : ''}`}
+          to={`/episodes/${encodeURIComponent(episodeId)}?tab=voice${beatNumber != null ? `&beat=${encodeURIComponent(beatNumber)}` : ''}`}
           title={`Record, audition and approve each line's voice take${dirty ? ' (save first: unsaved changes are not in it)' : ''}`}>
           <AudioLines size={14} aria-hidden="true" /> Voice Studio
         </Link>
