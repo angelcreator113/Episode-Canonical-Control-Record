@@ -311,6 +311,10 @@ jobs:
             echo "worker_before=$(wstate WORKER_BEFORE)"
             echo "worker_after=$(wstate WORKER_AFTER)"
             echo "worker_action=$(wstate WORKER_ACTION)"
+            echo "voice_worker_before=$(wstate VOICE_WORKER_BEFORE)"
+            echo "voice_worker_after=$(wstate VOICE_WORKER_AFTER)"
+            echo "voice_worker_action=$(wstate VOICE_WORKER_ACTION)"
+            echo "backups_removed=$(grep -E '^BACKUPS_REMOVED=[0-9]+$' "$RUNNER_TEMP/phase-restart.out" 2>/dev/null | head -1 | cut -d= -f2 || true)"
           } >>"$GITHUB_OUTPUT"
           if [ "$rc" -ne 0 ]; then exit "$rc"; fi
           head_sha="$(grep -E '^RESTART_HEAD=[0-9a-f]{40}$' "$RUNNER_TEMP/phase-restart.out" | head -1 | cut -d= -f2 || true)"
@@ -353,6 +357,10 @@ jobs:
           WORKER_BEFORE: ${{ steps.restart.outputs.worker_before }}
           WORKER_AFTER: ${{ steps.restart.outputs.worker_after }}
           WORKER_ACTION: ${{ steps.restart.outputs.worker_action }}
+          VOICE_WORKER_BEFORE: ${{ steps.restart.outputs.voice_worker_before }}
+          VOICE_WORKER_AFTER: ${{ steps.restart.outputs.voice_worker_after }}
+          VOICE_WORKER_ACTION: ${{ steps.restart.outputs.voice_worker_action }}
+          BACKUPS_REMOVED: ${{ steps.restart.outputs.backups_removed }}
           HEALTH_OUTCOME: ${{ steps.health.outcome }}
         run: |
           {
@@ -390,6 +398,17 @@ jobs:
                 *) if [ -n "$WORKER_AFTER" ]; then note="restart failed"; else note="not reached"; fi ;;
               esac
               echo "| Worker | ${WORKER_BEFORE} → ${WORKER_AFTER:-?} (${note}) |"
+            fi
+            if [ -n "$VOICE_WORKER_BEFORE" ]; then
+              case "$VOICE_WORKER_ACTION" in
+                restarted) note="restarted" ;;
+                left-*) note="left ${VOICE_WORKER_ACTION#left-}, not started" ;;
+                *) if [ -n "$VOICE_WORKER_AFTER" ]; then note="restart failed"; else note="not reached"; fi ;;
+              esac
+              echo "| Voice worker | ${VOICE_WORKER_BEFORE} → ${VOICE_WORKER_AFTER:-?} (${note}) |"
+            fi
+            if [ -n "$BACKUPS_REMOVED" ]; then
+              echo "| Older frontend backups removed | ${BACKUPS_REMOVED} (the newest 3 kept) |"
             fi
             echo "| Public health | ${HEALTH_OUTCOME:-not reached} |"
             if [ -s "$RUNNER_TEMP/migrations.txt" ]; then

@@ -30,11 +30,13 @@ function fn(name) {
 }
 const STAGE_PATHS_LINE = /^STAGE_PATHS=\(.*\)$/m.exec(SCRIPT_TEXT)[0];
 const LOCK_TIMEOUT_LINE = /^MIGRATE_LOCK_TIMEOUT=.*$/m.exec(SCRIPT_TEXT)[0];
+const VOICE_WORKER_LINE = /^VOICE_WORKER_APP=.*$/m.exec(SCRIPT_TEXT)[0];
+const BACKUP_KEEP_LINE = /^BACKUP_KEEP=.*$/m.exec(SCRIPT_TEXT)[0];
 
 const MIGRATE_FNS = ['die', 'redact', 'require_clean_tree', 'pending_check', 'processes_using', 'remove_stage',
   'clean_stages', 'stage_release', 'verify_stage', 'finish_migrate', 'phase_migrate', 'require_migrated'];
 const RESTART_FNS = ['die', 'redact', 'require_at_target', 'require_migrated', 'verify_stage', 'pending_check',
-  'processes_using', 'remove_stage', 'pm2_state', 'pm2_status', 'phase_restart'];
+  'processes_using', 'remove_stage', 'pm2_state', 'pm2_status', 'prune_backups', 'phase_restart'];
 
 const GIT_ENV = {
   GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@t', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@t',
@@ -182,6 +184,8 @@ function run(body, { fns = MIGRATE_FNS, target = TARGET, env = {} } = {}) {
     'DEPLOY_MARKER="$HOME/.episode-deploy-unfinished"; STAGE_ROOT="$HOME/.episode-stage"',
     STAGE_PATHS_LINE,
     LOCK_TIMEOUT_LINE,
+    VOICE_WORKER_LINE,
+    BACKUP_KEEP_LINE,
     'cd "$APP_DIR"',
     body,
   ].join('\n')], {
@@ -615,6 +619,124 @@ if [ "$1" = jlist ]; then echo '[{"name":"episode-api-prod-hotfix","pm2_env":{"s
     expect(migrated()).toBeNull();
     expect(fs.existsSync(stage())).toBe(false);
     expect(snapshot()).toBe(before);
+  });
+});
+
+// Evoni's rulings on Issue #3650 (2026-10-30): Deploy restarts the isolated
+// voice worker only if it was already running and never starts a stopped one
+// (nor episode-worker); and it keeps only its newest frontend backups, which
+// had filled the disk (230 of them, 1.5 GB).
+describe('restart: the voice worker, and the frontend backups', () => {
+  const flag = () => path.join(tmp, 'voice-restarted');
+  const entry = (name, status) => (status === 'missing' ? '' : `{"name":"${name}","pm2_env":{"status":"${status}","restart_time":1}}`);
+  function restartWith({ worker = 'stopped', voice = 'online', voiceAfter = 'online' } = {}) {
+    expect(migrate().status).toBe(0);
+    git('merge', '-q', '--ff-only', TARGET); // the deploy phase's fast-forward
+    const api = entry('episode-api-prod-hotfix', 'online');
+    const work = entry('episode-worker', worker);
+    const before = entry('episode-voice-worker', voice);
+    const after = entry('episode-voice-worker', voiceAfter);
+    fs.writeFileSync(path.join(bin, 'pm2'), `#!/usr/bin/env bash
+echo "pm2 $*" >>"${calls}"
+if [ "$1" = restart ] && [ "$2" = episode-voice-worker ]; then touch "${flag()}"; fi
+if [ "$1" = jlist ]; then
+  if [ -e "${flag()}" ]; then v='${after}'; else v='${before}'; fi
+  w='${work}'
+  printf '[%s%s%s]\\n' '${api}' "\${w:+,\$w}" "\${v:+,\$v}"
+fi
+`, { mode: 0o755 });
+    fs.writeFileSync(path.join(bin, 'curl'), '#!/usr/bin/env bash\necho \'{"status":"healthy","database":"connected"}\'\n', { mode: 0o755 });
+    fs.writeFileSync(path.join(bin, 'sleep'), '#!/usr/bin/env bash\nexit 0\n', { mode: 0o755 });
+    return run('PHASE=restart; phase_restart', { fns: RESTART_FNS });
+  }
+
+  test('a voice worker that was online is restarted, after the API is healthy', () => {
+    const res = restartWith({ voice: 'online' });
+    expect(res.err).toBe('');
+    expect(res.status).toBe(0);
+    expect(res.out).toMatch(/^VOICE_WORKER_BEFORE=online$/m);
+    expect(res.out).toMatch(/^VOICE_WORKER_ACTION=restarted$/m);
+    expect(res.out).toMatch(/^VOICE_WORKER_AFTER=online$/m);
+    const lines = res.calls.split('\n');
+    expect(lines.indexOf('pm2 restart episode-voice-worker')).toBeGreaterThan(lines.indexOf('pm2 restart episode-api-prod-hotfix'));
+    expect(res.out).toMatch(/^RESTART_OK=1$/m);
+  });
+
+  test.each(['stopped', 'missing', 'errored'])('a voice worker that was %s is left exactly as it was (never started)', (state) => {
+    const res = restartWith({ voice: state });
+    expect(res.status).toBe(0);
+    expect(res.out).toMatch(new RegExp(`^VOICE_WORKER_ACTION=left-${state}$`, 'm'));
+    expect(res.calls).not.toMatch(/episode-voice-worker/);
+    expect(res.calls).not.toMatch(/^pm2 start/m);
+  });
+
+  test('episode-worker (paid scene generation) stays stopped while the voice worker is restarted', () => {
+    const res = restartWith({ worker: 'stopped', voice: 'online' });
+    expect(res.status).toBe(0);
+    expect(res.calls).not.toMatch(/episode-worker(\s|$)/);
+    expect(res.out).toMatch(/^WORKER_ACTION=left-stopped$/m);
+    expect(res.calls).not.toMatch(/^pm2 start/m);
+  });
+
+  test('a voice worker that is not online after its restart stops the phase with a plain message; the API stays restarted', () => {
+    const res = restartWith({ voice: 'online', voiceAfter: 'errored' });
+    expect(res.status).not.toBe(0);
+    expect(res.out + res.err).toMatch(/episode-voice-worker is not online after its restart/);
+    expect(res.out).toMatch(/^VOICE_WORKER_AFTER=errored$/m);
+    expect(res.calls).toContain('pm2 restart episode-api-prod-hotfix');
+    expect(res.out).not.toMatch(/^RESTART_OK=1$/m);
+  });
+
+  test('after a finished deploy only the newest 3 frontend backups stay, plus the target\'s; links, logs and other files are never touched', () => {
+    const names = [
+      'dist-backup-20260929T190104Z', // the manual deploy's naming, no commit
+      `dist-backup-20261001T000000Z-${TARGET.slice(0, 12)}`, // old, but of the target: kept
+      'dist-backup-20261002T000000Z-aaaaaaaaaaaa',
+      'dist-backup-20261028T000000Z-bbbbbbbbbbbb',
+      'dist-backup-20261029T000000Z-cccccccccccc',
+      'dist-backup-20261030T000000Z-dddddddddddd',
+    ];
+    for (const n of names) {
+      fs.mkdirSync(path.join(home, n));
+      fs.writeFileSync(path.join(home, n, 'index.html'), n);
+    }
+    const outside = path.join(tmp, 'outside');
+    fs.mkdirSync(outside);
+    fs.writeFileSync(path.join(outside, 'keep.txt'), 'x');
+    fs.symlinkSync(outside, path.join(home, 'dist-backup-20250101T000000Z-link'));
+    fs.writeFileSync(path.join(home, 'dist-backup-20260929T190104Z.vite-build.log'), 'log');
+    fs.writeFileSync(path.join(home, 'dist-backup-20250101T000000Z-file'), 'a file');
+
+    const res = restartWith({ voice: 'stopped' });
+    expect(res.status).toBe(0);
+    expect(res.out).toMatch(/^BACKUPS_REMOVED=2$/m);
+    const left = fs.readdirSync(home).filter((f) => f.startsWith('dist-backup-')).sort();
+    expect(left).toEqual([
+      'dist-backup-20250101T000000Z-file',
+      'dist-backup-20250101T000000Z-link',
+      `dist-backup-20261001T000000Z-${TARGET.slice(0, 12)}`,
+      'dist-backup-20260929T190104Z.vite-build.log',
+      'dist-backup-20261028T000000Z-bbbbbbbbbbbb',
+      'dist-backup-20261029T000000Z-cccccccccccc',
+      'dist-backup-20261030T000000Z-dddddddddddd',
+    ].sort());
+    expect(fs.readFileSync(path.join(outside, 'keep.txt'), 'utf8')).toBe('x');
+    expect(res.out.indexOf('BACKUPS_REMOVED=')).toBeLessThan(res.out.indexOf('RESTART_OK=1'));
+  });
+
+  test('backups are not pruned when the restart does not finish', () => {
+    for (const n of ['20261001', '20261002', '20261003', '20261004', '20261005']) {
+      fs.mkdirSync(path.join(home, `dist-backup-${n}T000000Z-eeeeeeeeeeee`));
+    }
+    const res = restartWith({ voice: 'online', voiceAfter: 'errored' });
+    expect(res.status).not.toBe(0);
+    expect(fs.readdirSync(home).filter((f) => f.startsWith('dist-backup-'))).toHaveLength(5);
+  });
+
+  test('the workflow summary reports the voice worker and the backups', () => {
+    expect(WORKFLOW).toMatch(/voice_worker_action=\$\(wstate VOICE_WORKER_ACTION\)/);
+    expect(WORKFLOW).toMatch(/\| Voice worker \|/);
+    expect(WORKFLOW).toMatch(/backups_removed=/);
   });
 });
 

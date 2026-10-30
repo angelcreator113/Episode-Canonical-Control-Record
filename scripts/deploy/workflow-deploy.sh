@@ -67,6 +67,14 @@ ARTIFACT_SHA256="${4:-none}"
 APP_DIR="/home/ubuntu/episode-metadata"
 API_APP="episode-api-prod-hotfix"
 WORKER_APP="episode-worker"
+# The isolated footage-only voice worker (Voice plan V2). Like WORKER_APP, it
+# is restarted only if it was online before the deploy and never started
+# (Evoni's ruling on Issue #3650, 2026-10-30).
+VOICE_WORKER_APP="episode-voice-worker"
+# Frontend backups (~/dist-backup-*) kept after a finished deploy. Each deploy
+# adds one; with none removed, 230 of them filled the 7.6 GB disk by
+# 2026-10-30 (Issue #3650).
+BACKUP_KEEP=3
 HEALTH_URL="http://localhost:3000/health"
 MIGRATE_ENV="$HOME/.episode-migrate.env"
 # The longest db:migrate waits for any one lock (Postgres lock_timeout, sent
@@ -301,6 +309,40 @@ pm2_status() {
   s="$(pm2_state "$1")"
   s="${s%% restarts=*}"
   printf '%s' "${s// /-}"
+}
+
+# Removes all but the newest $BACKUP_KEEP frontend backups, after a finished
+# deploy. The names start with the deploy's UTC time, so name order is age
+# order. Never removes the backup of $TARGET or of the commit the tree is at
+# (unfinished_deploy_of reads those). Only real directories directly in $HOME,
+# owned by this user, are considered: links, files (the build logs) and
+# anything else are left alone. Never fails the deploy; a backup it cannot
+# remove is counted and reported.
+prune_backups() {
+  local head name d i=0 removed=0 failed=0
+  local -a all
+  head="$(git rev-parse HEAD 2>/dev/null || true)"
+  mapfile -t all < <(find "$HOME" -mindepth 1 -maxdepth 1 -type d -name 'dist-backup-*' -user "$(id -u)" -printf '%f\n' | sort -r)
+  for name in "${all[@]}"; do
+    i=$((i + 1))
+    if [ "$i" -le "$BACKUP_KEEP" ]; then continue; fi
+    case "$name" in
+      *-"${TARGET:0:12}") continue ;;
+    esac
+    if [ -n "$head" ]; then
+      case "$name" in *-"${head:0:12}") continue ;; esac
+    fi
+    d="$HOME/$name"
+    if [ -L "$d" ] || [ ! -d "$d" ]; then continue; fi
+    if rm -rf -- "$d"; then removed=$((removed + 1)); else failed=$((failed + 1)); fi
+  done
+  echo "BACKUPS_REMOVED=$removed"
+  if [ "$failed" -gt 0 ]; then
+    echo "Frontend backups: kept the newest $BACKUP_KEEP, removed $removed; $failed could not be removed (the deploy is not affected)."
+  else
+    echo "Frontend backups: kept the newest $BACKUP_KEEP, removed $removed."
+  fi
+  return 0
 }
 
 # The deploy and restart phases run only for the target the migrate phase
@@ -719,10 +761,12 @@ phase_migrate() {
 phase_restart() {
   require_at_target
   require_migrated
-  local worker_before
+  local worker_before voice_before
   worker_before="$(pm2_status "$WORKER_APP")"
-  echo "Before: $API_APP $(pm2_state "$API_APP"); $WORKER_APP $(pm2_state "$WORKER_APP")"
+  voice_before="$(pm2_status "$VOICE_WORKER_APP")"
+  echo "Before: $API_APP $(pm2_state "$API_APP"); $WORKER_APP $(pm2_state "$WORKER_APP"); $VOICE_WORKER_APP $(pm2_state "$VOICE_WORKER_APP")"
   echo "WORKER_BEFORE=$worker_before"
+  echo "VOICE_WORKER_BEFORE=$voice_before"
   if ! pm2 restart "$API_APP" >/dev/null 2>&1; then
     die "pm2 restart $API_APP failed." "The tree and the database are already at the new version."
   fi
@@ -764,13 +808,36 @@ phase_restart() {
     echo "WORKER_ACTION=left-$worker_before"
     echo "$WORKER_APP was $worker_before before the deploy, so it was left as it was (not started)."
   fi
-  echo "After: $API_APP $(pm2_state "$API_APP"); $WORKER_APP $(pm2_state "$WORKER_APP")"
+
+  # The voice worker follows the same rule: restarted only if it was online,
+  # so it runs the new code; a stopped or missing one is never started.
+  if [ "$voice_before" = "online" ]; then
+    if ! pm2 restart "$VOICE_WORKER_APP" >/dev/null 2>&1; then
+      echo "VOICE_WORKER_AFTER=$(pm2_status "$VOICE_WORKER_APP")"
+      die "pm2 restart $VOICE_WORKER_APP failed (the API is restarted and healthy)."
+    fi
+    sleep 5
+    local voice
+    voice="$(pm2_state "$VOICE_WORKER_APP")"
+    case "$voice" in
+      online*) ;;
+      *) echo "VOICE_WORKER_AFTER=$(pm2_status "$VOICE_WORKER_APP")"
+         die "$VOICE_WORKER_APP is not online after its restart ($voice). The API is restarted and healthy." ;;
+    esac
+    echo "VOICE_WORKER_ACTION=restarted"
+  else
+    echo "VOICE_WORKER_ACTION=left-$voice_before"
+    echo "$VOICE_WORKER_APP was $voice_before before the deploy, so it was left as it was (not started)."
+  fi
+  echo "After: $API_APP $(pm2_state "$API_APP"); $WORKER_APP $(pm2_state "$WORKER_APP"); $VOICE_WORKER_APP $(pm2_state "$VOICE_WORKER_APP")"
   echo "WORKER_AFTER=$(pm2_status "$WORKER_APP")"
+  echo "VOICE_WORKER_AFTER=$(pm2_status "$VOICE_WORKER_APP")"
   echo "RESTART_HEAD=$(git rev-parse HEAD)"
   # The deploy is finished: the API runs the tree's code (Task #2948), and a
   # later deploy phase needs its own run's migrate phase.
   rm -f "$DEPLOY_MARKER" "$DEPLOY_MIGRATED"
   remove_stage "$STAGE" || echo "The next migrate phase removes it."
+  prune_backups
   echo "RESTART_OK=1"
 }
 
