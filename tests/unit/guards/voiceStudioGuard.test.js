@@ -122,7 +122,8 @@ describe('Voice Studio boundaries', () => {
       expect(code).not.toMatch(/voiceStudioApi\.(approve|reconfirm|resolve|revoke|removeTake)|voiceClipsApi/);
     }
     expect(save).toMatch(/voiceStudioApi\.uploadSource[\s\S]*voiceStudioApi\.createTake[\s\S]*voiceStudioApi\.tie/);
-    expect(panel).toMatch(/\/voice\?beat=/);
+    // Production → Voice on the episode page since 2026-10-30.
+    expect(panel).toMatch(/\?tab=voice&beat=/);
     // The reader only shows the old recorder and old clips while Voice Studio is off.
     const reader = read('frontend/src/components/Teleprompter/TeleprompterReader.jsx');
     expect(reader).toMatch(/const legacyVoice = !!voiceEpisode && studioMode === 'off';/);
