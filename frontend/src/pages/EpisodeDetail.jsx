@@ -20,6 +20,7 @@ import SceneLibraryPicker from '../components/SceneLibraryPicker';
 // fetched when the user clicks into the tab. PhonePreviewMode is lazy
 // because the player overlay only mounts when "Preview Phone" is clicked.
 const EpisodeFilesTab = lazy(() => import('../components/Episodes/EpisodeFilesTab'));
+const VoiceStudio = lazy(() => import('./VoiceStudio'));
 const EpisodeTodoList = lazy(() => import('../components/Episodes/EpisodeTodoList'));
 const EpisodeSceneWorkspace = lazy(() => import('../components/Episodes/EpisodeSceneWorkspace'));
 const EpisodeProductionHeader = lazy(() => import('../components/Episodes/EpisodeProductionHeader'));
@@ -39,7 +40,9 @@ import usePhonePlayback from '../hooks/usePhonePlayback';
 import api from '../services/api';
 import { fetchAllEpisodes } from '../lib/fetchAllPages';
 import { getEpisodeEvents } from '../services/episodeEventsApi';
-import { EP_TABS, resolveEpisodeTab, withEpisodeTab, pillGroups, pillFor } from '../utils/episodeTabs';
+import { EP_TABS, resolveEpisodeTab, withEpisodeTab, pillGroups, pillFor, gatedTab } from '../utils/episodeTabs';
+import { isAdmin } from '../utils/authGroups';
+import { voiceStudioOn } from '../lib/voiceStudioApi';
 import { closetBeat } from '../lib/scriptMoments';
 import { checklistProgress, coinsLabel } from '../lib/episodeShell';
 import { isScreen } from '../lib/overlayUtils';
@@ -118,7 +121,16 @@ const EpisodeDetail = () => {
   const navigate = useNavigate();
   const toast = useToast();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { isAuthenticated, loading: authLoading } = useAuth();
+  const { isAuthenticated, loading: authLoading, user } = useAuth();
+  // Production → Voice shows for an admin while Voice Studio is switched on.
+  const [voiceStudio, setVoiceStudio] = useState(false);
+  const admin = isAdmin(user);
+  useEffect(() => {
+    let live = true;
+    if (admin) voiceStudioOn().then((on) => { if (live) setVoiceStudio(on); });
+    else setVoiceStudio(false);
+    return () => { live = false; };
+  }, [admin]);
   const [episode, setEpisode] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -1043,7 +1055,7 @@ const EpisodeDetail = () => {
         </div>
         {/* Sub-tabs */}
         {(() => {
-          const currentTab = EP_TABS.find(t => t.key === activeTab);
+          const currentTab = gatedTab(EP_TABS.find(t => t.key === activeTab), { voiceStudio });
           const groups = pillGroups(currentTab);
           // A tab with one sub-tab (Production → Checklist) needs no row.
           if (groups.reduce((n, g) => n + g.pills.length, 0) < 2) return null;
@@ -1133,6 +1145,9 @@ const EpisodeDetail = () => {
             Style photos (2026-10-22) and Footage (raw clips by who is on
             camera, 2026-10-17) as tabs (Evoni, 2026-10-22) */}
         {tabKey === 'production.files' && <EpisodeFilesTab episode={episode} />}
+
+        {/* Voice: Voice Studio, the episode's line takes and approvals (Evoni, 2026-10-30). */}
+        {tabKey === 'production.voice' && <VoiceStudio episodeId={episode.id} embedded />}
 
         {/* Scenes has two views (Evoni, 2026-10-22: Beat Plan "is the same
             as scenes"): the Workspace and the Plan, the full plan editor. */}

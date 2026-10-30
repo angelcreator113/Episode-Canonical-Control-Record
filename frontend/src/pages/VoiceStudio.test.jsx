@@ -5,14 +5,14 @@
 // chosen and confirmed, and the empty, switched-off and read-only pages.
 import { vi, beforeEach, afterEach, test, expect, describe } from 'vitest';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
-import { MemoryRouter, Routes, Route } from 'react-router-dom';
+import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom';
 
 vi.mock('../services/api', () => ({
   default: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn(), patch: vi.fn() },
 }));
 
 import api from '../services/api';
-import VoiceStudio from './VoiceStudio';
+import VoiceStudio, { VoiceStudioRedirect } from './VoiceStudio';
 
 const EP = '22222222-2222-4222-8222-222222222222';
 const BASE = `/api/v1/voice-studio/${EP}`;
@@ -297,5 +297,44 @@ describe('Voice Studio page', () => {
     renderAt();
     expect((await screen.findByTestId('vs-load-error')).textContent).toContain("Couldn't reach the server");
     expect(screen.getByRole('button', { name: /Try again/ })).toBeTruthy();
+  });
+});
+
+// Production → Voice (Evoni, 2026-10-30): Voice Studio is a tab on the episode page.
+describe('Voice Studio in the episode\'s Voice tab', () => {
+  const Where = () => { const l = useLocation(); return <div data-testid="where">{l.pathname}{l.search}</div>; };
+
+  test('embedded: the given episode, a tab heading, no way back to the page it is already on', async () => {
+    render(
+      <MemoryRouter initialEntries={[`/episodes/${EP}?tab=voice&beat=2`]}>
+        <Routes><Route path="/episodes/:episodeId" element={<VoiceStudio episodeId={EP} embedded />} /></Routes>
+      </MemoryRouter>,
+    );
+    expect(await screen.findByRole('heading', { level: 2, name: 'Voice Studio' })).toBeTruthy();
+    expect(screen.queryByRole('heading', { level: 1 })).toBeNull();
+    expect(document.querySelector('.vs-back')).toBeNull();
+    expect(screen.getByTestId('vs-page').className).toContain('vs-page--embedded');
+    expect(vi.mocked(api.get)).toHaveBeenCalledWith(`${BASE}/studio`);
+    // ?beat= from the episode page's URL picks the beat.
+    expect(screen.getByTestId('vs-beat-2').getAttribute('aria-pressed')).toBe('true');
+  });
+
+  test('the old /episodes/:id/voice link lands on the tab, keeping the beat and line', () => {
+    render(
+      <MemoryRouter initialEntries={[`/episodes/${EP}/voice?beat=8&line=0&junk=1`]}>
+        <Routes>
+          <Route path="/episodes/:episodeId/voice" element={<VoiceStudioRedirect />} />
+          <Route path="/episodes/:episodeId" element={<Where />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    expect(screen.getByTestId('where').textContent).toBe(`/episodes/${EP}?tab=voice&beat=8&line=0`);
+  });
+
+  test('no script yet: the Script tab link opens the Script tab (?tab=scripts)', async () => {
+    view = { ...baseView(), beats: [], takes: [] };
+    renderAt();
+    const link = await screen.findByRole('link', { name: 'Open the Script tab' });
+    expect(link.getAttribute('href')).toBe(`/episodes/${EP}?tab=scripts`);
   });
 });

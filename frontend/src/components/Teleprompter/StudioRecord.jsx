@@ -14,7 +14,7 @@ import useTakeSave from '../../hooks/useTakeSave';
 import { clock } from '../../lib/teleprompterLines';
 
 export const studioLink = (episodeId, beatNumber, lineIndex) =>
-  `/episodes/${encodeURIComponent(episodeId)}/voice?beat=${encodeURIComponent(beatNumber)}&line=${encodeURIComponent(lineIndex)}`;
+  `/episodes/${encodeURIComponent(episodeId)}?tab=voice&beat=${encodeURIComponent(beatNumber)}&line=${encodeURIComponent(lineIndex)}`;
 
 /**
  * line: { beatNumber, lineIndex, speaker, text }; scriptRevision: the saved
