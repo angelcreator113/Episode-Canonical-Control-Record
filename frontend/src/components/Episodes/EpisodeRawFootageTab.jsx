@@ -17,16 +17,26 @@
  * say so ("Overlaps Full episode · take 1 on beats 10–11"). Every upload is
  * measured in the browser first (rawClipsApi.upload, lib/videoProbe), so a
  * phone video shows its length, size and picture.
+ *
+ * The beats a clip covers, asked when it is uploaded (Evoni, 2026-10-30;
+ * Voice plan V1): each lane's drop area has "Starts in" and "Ends in", sent
+ * with every clip dropped there (rawClipsApi.upload: beat_number,
+ * end_beat_number). Both can be left unset and changed on the card later.
+ * When the server can't keep the end beat yet (its database update hasn't
+ * run), the clip is still saved and the lane says so.
  */
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useContext, useEffect, useRef, useState } from 'react';
 import {
   Upload, Film, Trash2, Play, WandSparkles, X, Loader, CircleCheck, CircleAlert, Clock, RefreshCw, UserRound, ListOrdered, Copy, Layers, MoveRight,
 } from 'lucide-react';
-import { rawClipsApi, PERFORMERS, STRENGTHS, clipLength, clipSize, anyKeying, sceneChoices, uploadErrorMessage } from '../../lib/rawClipsApi';
+import { rawClipsApi, PERFORMERS, STRENGTHS, clipLength, clipSize, anyKeying, sceneChoices, uploadErrorMessage, uploadBeats, uploadEndChoices, endBeatNotKept } from '../../lib/rawClipsApi';
 import { clipMarks } from '../../lib/assembleTakes';
 import { clipRange, rangeText, rangeOverlaps, overlapText, beatNames } from '../../lib/clipRange';
 import { youtubeChapters, draftDescription } from '../../lib/youtubeChapters';
 import { copyText } from './ScriptReadActions';
+import { voiceFootageApi, voiceLane, voiceLine } from '../../lib/voiceFootageApi';
+import AuthContext from '../../contexts/AuthContext';
+import { isAdmin } from '../../utils/authGroups';
 import './EpisodeRawFootageTab.css';
 
 const POLL_MS = 5000;
@@ -120,7 +130,30 @@ function ChaptersSheet({ clip, episode, names, onClose }) {
   );
 }
 
-function ClipCard({ clip, scenes, names, overlaps = [], onPlay, onChapters, onRemoveGreen, onMove, onLink, onEndBeat, onDelete, busy }) {
+// The voice line's icon by tone (words carry the meaning; the icon only echoes it).
+const VOICE_ICON = { none: Clock, wait: Clock, busy: Loader, ok: CircleCheck, bad: CircleAlert };
+
+/**
+ * Voice from footage (V2), on a Lala clip's card, for admins only while it
+ * is switched on: where the clip's voice is, and Prepare Voice when it has
+ * none yet (footage from before V2, such as 4481.mp4) or after a failure.
+ */
+function VoiceLine({ clip, job, onPrepareVoice, busy }) {
+  const line = voiceLine(job);
+  const Icon = VOICE_ICON[line.tone] || Clock;
+  return (
+    <div className={`erf-voice is-${line.tone}`} data-testid="erf-voice">
+      <span className="erf-voice-text"><Icon size={13} aria-hidden className={line.tone === 'busy' ? 'erf-spin' : undefined} /> {line.text}</span>
+      {line.canPrepare && (
+        <button type="button" className="erf-btn" onClick={() => onPrepareVoice(clip)} disabled={busy} data-testid="erf-prepare-voice">
+          <WandSparkles size={14} aria-hidden /> Prepare Voice
+        </button>
+      )}
+    </div>
+  );
+}
+
+function ClipCard({ clip, scenes, names, overlaps = [], onPlay, onChapters, onRemoveGreen, onMove, onLink, onEndBeat, onDelete, busy, voice = null, onPrepareVoice }) {
   const [strength, setStrength] = useState(clip.key_strength || 'medium');
   const st = STATUS[clip.key_status] || STATUS.none;
   const meta = [clipLength(clip.duration_seconds), clipSize(clip.file_size_bytes), clip.width && clip.height ? `${clip.width}×${clip.height}` : null].filter(Boolean);
@@ -152,6 +185,7 @@ function ClipCard({ clip, scenes, names, overlaps = [], onPlay, onChapters, onRe
           <st.Icon size={13} aria-hidden className={clip.key_status === 'processing' ? 'erf-spin' : undefined} /> {st.label}
         </span>
         {clip.key_status === 'failed' && clip.key_error && <p className="erf-error">{clip.key_error}</p>}
+        {voice && voiceLane(clip.performer) && <VoiceLine clip={clip} job={voice[clip.id]} onPrepareVoice={onPrepareVoice} busy={busy} />}
         <div className="erf-clip-actions">
           {hasMarks && (
             <button type="button" className="erf-btn" onClick={() => onChapters(clip)} data-testid="erf-chapters-open" title="Chapters and a draft description for YouTube, from this take's beat markers">
@@ -197,10 +231,23 @@ function Lane({ performer, clips, uploads, onFiles, busyId, scenes, names, overl
   const [green, setGreen] = useState(performer.greenByDefault);
   const [guestName, setGuestName] = useState('');
   const [over, setOver] = useState(false);
+  // The beats the next clips cover: '' (not set) or a beat number.
+  const [startBeat, setStartBeat] = useState('');
+  const [endBeat, setEndBeat] = useState('');
+  const endChoices = uploadEndChoices(scenes, startBeat);
   const total = clips.reduce((n, c) => n + (Number(c.duration_seconds) || 0), 0);
   const send = (files) => {
     const list = [...(files || [])].filter((f) => (f.type || '').startsWith('video/') || /\.(mp4|mov|m4v|webm|avi|mkv|3gp)$/i.test(f.name));
-    if (list.length) onFiles(performer.key, list, { greenScreen: green, guestName: performer.key === 'guest' ? guestName.trim() : '' });
+    if (list.length) {
+      onFiles(performer.key, list, {
+        greenScreen: green, guestName: performer.key === 'guest' ? guestName.trim() : '', ...uploadBeats(startBeat, endBeat),
+      });
+    }
+  };
+  const chooseStart = (value) => {
+    setStartBeat(value);
+    // An end before the new start no longer makes sense.
+    if (value === '' || (endBeat !== '' && Number(endBeat) <= Number(value))) setEndBeat('');
   };
   return (
     <section className={`erf-lane is-${performer.key}`} data-testid={`erf-lane-${performer.key}`} aria-label={`${performer.label} clips`}>
@@ -226,6 +273,22 @@ function Lane({ performer, clips, uploads, onFiles, busyId, scenes, names, overl
           <input type="checkbox" checked={green} onChange={(e) => setGreen(e.target.checked)} />
           Filmed on a green screen: remove the green
         </label>
+        <div className="erf-upload-beats" role="group" aria-label={`Beats the next ${performer.label} clips cover`} data-testid={`erf-upload-beats-${performer.key}`}>
+          <label className="erf-upload-beat">
+            <span>Starts in</span>
+            <select value={startBeat} onChange={(e) => chooseStart(e.target.value)} data-testid={`erf-upload-start-${performer.key}`}>
+              <option value="">Not set yet</option>
+              {scenes.map((sc) => <option key={sc.value} value={sc.value}>{sc.label}</option>)}
+            </select>
+          </label>
+          <label className="erf-upload-beat">
+            <span>Ends in</span>
+            <select value={endBeat} onChange={(e) => setEndBeat(e.target.value)} disabled={startBeat === ''} data-testid={`erf-upload-end-${performer.key}`}>
+              <option value="">{startBeat === '' ? 'Pick where it starts' : 'The same beat'}</option>
+              {endChoices.map((sc) => <option key={sc.value} value={sc.value}>{sc.label}</option>)}
+            </select>
+          </label>
+        </div>
       </div>
       {uploads.length > 0 && (
         <ul className="erf-uploads">
@@ -262,6 +325,9 @@ export default function EpisodeRawFootageTab({ episode, onCount }) {
   const [chapters, setChapters] = useState(null);
   const [busyId, setBusyId] = useState(null);
   const [beats, setBeats] = useState([]);
+  // Voice from footage (V2): each clip's latest voice job, for admins while it is on; null otherwise.
+  const admin = isAdmin(useContext(AuthContext)?.user);
+  const [voice, setVoice] = useState(null);
 
   const load = useCallback(async () => {
     if (!episodeId) return;
@@ -277,6 +343,22 @@ export default function EpisodeRawFootageTab({ episode, onCount }) {
   }, [episodeId]);
 
   useEffect(() => { load(); }, [load]);
+
+  const loadVoice = useCallback(async () => {
+    if (!episodeId || !admin) { setVoice(null); return; }
+    try {
+      setVoice(await voiceFootageApi.status(episodeId));
+    } catch (err) {
+      console.error('[RawFootage] voice status not read:', err);
+    }
+  }, [episodeId, admin]);
+  useEffect(() => { loadVoice(); }, [loadVoice]);
+  // While a clip's voice is queued or being prepared, check back every few seconds.
+  useEffect(() => {
+    if (!voice || !Object.values(voice).some((j) => j.status === 'queued' || j.status === 'running')) return undefined;
+    const t = setTimeout(loadVoice, POLL_MS);
+    return () => clearTimeout(t);
+  }, [voice, loadVoice]);
 
   // The scene names for the Scene picker; without them it offers Beats 1-14.
   useEffect(() => {
@@ -308,6 +390,7 @@ export default function EpisodeRawFootageTab({ episode, onCount }) {
         });
         if (row) setClips((c) => [...c, row]);
         setUploads((u) => u.filter((x) => x.id !== id));
+        if (endBeatNotKept(row, opts)) setError(`${file.name} is saved, but the beat it ends on wasn't kept: the database update that adds it (20261028120000) hasn't run yet. You can set it on the clip once it has.`);
       } catch (err) {
         console.error('[RawFootage] upload failed:', err);
         const message = err?.response?.status === 413 ? 'Too big to upload' : uploadErrorMessage(err);
@@ -331,6 +414,12 @@ export default function EpisodeRawFootageTab({ episode, onCount }) {
   };
 
   const handlers = {
+    voice,
+    onPrepareVoice: (clip) => act(clip, async () => {
+      const job = await voiceFootageApi.prepare(episodeId, clip.id);
+      if (job) setVoice((v) => ({ ...(v || {}), [clip.id]: job }));
+      return null;
+    }, "Could not start preparing the clip's voice."),
     onPlay: setPlaying,
     onChapters: setChapters,
     onRemoveGreen: (clip, strength) => act(clip, () => rawClipsApi.removeGreen(episodeId, clip.id, strength), 'Could not start removing the green.'),

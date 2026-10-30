@@ -224,6 +224,52 @@ async function createSource(sequelize, { episodeId, kind, file, userId = null })
   }
 }
 
+/**
+ * A clip's sound as a Voice Studio source (Voice plan V2; Evoni,
+ * 2026-10-30): kind 'extracted', tied to the raw clip with its range (0
+ * to the sound's length), never offered by the upload route (createSource
+ * takes only uploaded and recorded). Written by the footage-only worker.
+ *
+ * localPath: the extracted audio file on this machine. Resolves
+ * { source, existed }: a clip already extracted keeps its source (one per
+ * clip and original; sources are never replaced or deleted).
+ */
+async function createExtractedSource(sequelize, { episodeId, rawClipId, localPath, contentType = 'audio/flac', ext = '.flac', userId = null }) {
+  checkId(rawClipId, 'Clip');
+  if (!localPath) fail(400, 'NO_FILE', 'No extracted audio was given');
+  await episodeState(sequelize, episodeId);
+  const clip = await one(sequelize, `SELECT id, episode_id, deleted_at FROM episode_raw_clips WHERE id = :rawClipId`, { rawClipId });
+  if (!clip || clip.deleted_at || String(clip.episode_id) !== String(episodeId)) fail(404, 'NOT_FOUND', 'Clip not found');
+
+  const already = await one(sequelize, `SELECT * FROM voice_source_assets
+    WHERE source_kind = 'extracted' AND source_raw_clip_id = :rawClipId AND deleted_at IS NULL
+    ORDER BY created_at ASC LIMIT 1`, { rawClipId });
+  if (already) return { source: already, existed: true };
+
+  const probe = await media().probe(localPath);
+  if (!probe.hasAudio || !probe.duration_ms) fail(400, 'NO_AUDIO', 'The extracted file has no sound');
+  const sha = await media().sha256File(localPath);
+  const { size } = await fs.promises.stat(localPath);
+  const key = `episodes/${episodeId}/voice/sources/${sha}${ext}`;
+  const sameFile = await one(sequelize, 'SELECT * FROM voice_source_assets WHERE s3_key = :key', { key });
+  if (sameFile) return { source: sameFile, existed: true };
+
+  await media().upload(localPath, key, contentType);
+  try {
+    const [created] = await rows(sequelize, `INSERT INTO voice_source_assets
+      (episode_id, source_kind, s3_key, sha256, content_type, file_size_bytes, duration_ms, sample_rate, channels,
+       source_raw_clip_id, source_in_ms, source_out_ms, created_by)
+      VALUES (:episodeId, 'extracted', :key, :sha, :type, :size, :duration, :rate, :channels, :rawClipId, 0, :duration, :userId) RETURNING *`, {
+      episodeId, key, sha, type: contentType, size, duration: probe.duration_ms, rate: probe.sample_rate, channels: probe.channels, rawClipId, userId,
+    });
+    return { source: created, existed: false };
+  } catch (err) {
+    // The file is in S3 and no row names it; it is left there (sources are never deleted), and logged.
+    console.error(`[voiceStudio] extracted source row not written; ${key} is in S3 without a row:`, err.message);
+    throw err;
+  }
+}
+
 // ── Candidates and their revisions ───────────────────────────────────────────
 
 function readSettings(body, durationMs, base = null) {
@@ -859,6 +905,6 @@ async function importLegacy(sequelize, { episodeId, userId = null }) {
 module.exports = {
   VoiceStudioError, STATE_REASONS, STATES, AUDIO_EXTS, MAX_SECONDS, isPlayable,
   setMedia, readAudioProbe, readSettings, settingsHash, episodeState,
-  createSource, createCandidate, reviseCandidate, associate, approve, resolveApproval, revokeApproval,
+  createSource, createExtractedSource, createCandidate, reviseCandidate, associate, approve, resolveApproval, revokeApproval,
   summary, playableApprovals, approvalHistory, reconfirm, removeCandidate, listTakes, importLegacy, studioView,
 };

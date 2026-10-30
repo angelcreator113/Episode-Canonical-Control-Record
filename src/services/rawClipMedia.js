@@ -136,6 +136,14 @@ async function uploadFile(localPath, key, contentType) {
 const headObject = (key) => getS3().send(new HeadObjectCommand({ Bucket: requireAssetBucket(), Key: key }));
 const getObject = (key, range) => getS3().send(new GetObjectCommand({ Bucket: requireAssetBucket(), Key: key, Range: range }));
 
+/**
+ * A stored file (an original) opened for ffmpeg through rawClipSource: a
+ * link on this machine, read in signed parts, no copy on disk. Resolves
+ * { url, size, close, stats }; close() when done. (Voice plan V2 reads a
+ * clip's sound this way.)
+ */
+const openStoredFile = (key) => openSource({ key, headObject, getObject });
+
 async function downloadFile(key, localPath) {
   const res = await getS3().send(new GetObjectCommand({ Bucket: requireAssetBucket(), Key: key }));
   await pipeline(res.Body, fs.createWriteStream(localPath));
@@ -360,7 +368,7 @@ async function freeBytes(dir = TMP_DIR) {
 }
 
 module.exports = {
-  BUCKET, TMP_DIR, TMP_MAX_AGE_MS, publicUrl, clipPrefix, tmpPath, removeFile, getS3,
+  BUCKET, TMP_DIR, TMP_MAX_AGE_MS, FFMPEG, FFPROBE, publicUrl, clipPrefix, tmpPath, removeFile, getS3, openStoredFile,
   run, uploadFile, downloadFile, inspect, enqueueKey, activeIds, roomToKey, keyClip,
   sweepTmp, startTmpSweeper, freeBytes,
 };

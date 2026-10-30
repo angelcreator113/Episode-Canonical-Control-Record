@@ -79,6 +79,7 @@ const { requireAuth } = require('../middleware/auth');
 const models = require('../models');
 const clips = require('../services/rawClipsService');
 const media = require('../services/rawClipMedia');
+const voiceFootage = require('../services/voiceFootageJobs');
 const parts = require('../services/rawClipMultipart');
 const { friendlyError, NO_ROOM, KeyNoRoomError } = require('../services/rawClipErrors');
 
@@ -271,6 +272,8 @@ async function completeUpload(entry, thumbnailB64) {
   });
   // No copy on this disk: the green-removal job reads the original from S3.
   if (f.greenScreen) media.enqueueKey(models.sequelize, { clipId: entry.clipId, episodeId: entry.episodeId, s3KeyRaw: entry.key, strength: f.strength, durationSeconds: row?.duration_seconds ?? info?.duration_seconds ?? f.seconds ?? null });
+  // Voice from footage (V2): a new Lala clip's voice is queued for the footage-only worker (never fails the upload).
+  await voiceFootage.onClipUploaded(models.sequelize, { ...row, id: entry.clipId, episode_id: entry.episodeId, performer: f.performer, s3_key_raw: entry.key }, { userId: entry.userId || null });
   let stored = [];
   let notStored = [];
   if (Object.keys(extras).length) {
@@ -402,6 +405,8 @@ router.post('/:episodeId', requireAuth, async (req, res) => {
       if (greenScreen) {
         handedToJob = media.enqueueKey(models.sequelize, { clipId: id, episodeId: episode.id, s3KeyRaw, strength, localPath: file.path, durationSeconds: info.duration_seconds ?? seconds });
       }
+      // Voice from footage (V2): a new Lala clip's voice is queued for the footage-only worker (never fails the upload).
+      await voiceFootage.onClipUploaded(models.sequelize, { ...row, id, episode_id: episode.id, performer: fields.performer, s3_key_raw: s3KeyRaw }, { userId: req.user?.id || null });
       let stored = [];
       let notStored = [];
       if (Object.keys(extras).length) {
