@@ -20,10 +20,14 @@ process.stdin.on('end', () => {
   // quoted -m/--message arguments are blanked, and a heredoc that git reads
   // as a message is treated like a cat/tee heredoc. Anything outside the
   // quotes, or a heredoc piped on into a shell, is still scanned.
-  const isGitMessage = /(^|[\n;&|(`]\s*)git\s+(commit|tag|notes)\b/.test(cmd);
+  // An escaped pipe (`\|`, as in grep -n "a\|pm2") is a literal character,
+  // never a shell pipe, so it never starts a command (Issue #3650: two such
+  // greps were blocked as if they ran pm2 or the deploy script).
+  const unescaped = cmd.replace(/\\\|/g, '\\¦');
+  const isGitMessage = /(^|[\n;&|(`]\s*)git\s+(commit|tag|notes)\b/.test(unescaped);
   const input = isGitMessage
-    ? cmd.replace(/(\s(?:-m|--message)(?:\s+|=))("(?:[^"\\]|\\[\s\S])*"|'[^']*')/g, '$1""')
-    : cmd;
+    ? unescaped.replace(/(\s(?:-m|--message)(?:\s+|=))("(?:[^"\\]|\\[\s\S])*"|'[^']*')/g, '$1""')
+    : unescaped;
   const dataConsumer = (line) =>
     /(^|[\s;&|(])(cat|tee)\b/.test(line) || /(^|[\s;&|(])git\s+(commit|tag|notes)\b/.test(line);
 
@@ -54,7 +58,17 @@ process.stdin.on('end', () => {
     [/(psql|pg_dump|pg_restore|pg_isready|DATABASE_URL=|DB_HOST=|postgres(ql)?:\/\/)[^\n]*(rds\.amazonaws\.com|episode-control-(dev|prod))/i, 'A connection to a live RDS instance. No DB contact from agent sessions; identity by query, never by name.'],
     [/(rds\.amazonaws\.com|episode-control-(dev|prod))[^\n]*(psql|pg_dump|pg_restore|sequelize)/i, 'A connection to a live RDS instance. No DB contact from agent sessions.'],
     [/(^|[\s;&|(])(DB_SYNC_FORCE|CONFIRM_FORCE_SYNC)=/, 'Force sync drops every table.'],
-    [at('gh\\s+workflow\\s+(enable|run|dispatch)'), 'Enabling or dispatching a workflow is a Rule 7 gate for Evoni, not an agent action.'],
+    [at('gh\\s+workflow\\s+(enable|disable|run|dispatch)'), 'Enabling or dispatching a workflow is a Rule 7 gate for Evoni, not an agent action.'],
+    // Issue #3650 rulings (2026-10-30): Evoni starts every workflow run; a
+    // session never re-runs, cancels or approves one, never merges without her
+    // explicit yes (and then only through the GitHub tool, which asks), never
+    // turns on auto-merge and never changes repository settings or secrets.
+    // The GitHub tool has its own guard (guard-github-tools.js); these close
+    // the same doors in the shell.
+    [at('gh\\s+run\\s+(rerun|cancel|delete)'), 'Re-running, cancelling or deleting a workflow run is Evoni\'s (Issue #3650 rulings).'],
+    [at('gh\\s+pr\\s+merge'), 'Merging from the shell. A merge needs Evoni\'s explicit yes and goes through the GitHub tool, which asks (Rule 7).'],
+    [at('gh\\s+(repo\\s+(edit|delete|rename|archive)|secret\\s+(set|delete|remove)|variable\\s+(set|delete|remove))'), 'Changing repository settings, secrets or variables is Evoni\'s (Issue #3650 rulings).'],
+    [/(^|[\n;&|(`]\s*|\$\(\s*)(sudo\s+)?(gh\s+api|(curl|wget|https?|xh)\b[^\n]*api\.github\.com)\b[^\n]*(\/dispatches\b|\/pending_deployments\b|\/merges?\b|\/rerun|\/cancel\b|\/environments\b|\/rulesets\b|\/protection\b|\/actions\/(secrets|variables|permissions)\b|\/automerge|mergePullRequest|enablePullRequestAutoMerge|approveDeployments|reviewPendingDeployments)/i, 'A GitHub API call that starts, approves, re-runs, cancels or merges, or changes settings, environments, rulesets, secrets or variables. Those are Evoni\'s (Issue #3650 rulings).'],
     [/(^|[\n;&|(`]\s*)git\s+push\b[^\n]*(\s|:)(origin\s+)?(main|dev)(\s|$)/, 'Direct push to main or dev. Work lands by PR + squash-merge.'],
     [/(^|[\n;&|(`]\s*)git\s+push\b[^\n]*(--force\b|\s-f\b|--force-with-lease)/, 'Force push. Never rewrite history on a shared branch.'],
   ];
