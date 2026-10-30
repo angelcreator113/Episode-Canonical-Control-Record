@@ -204,6 +204,28 @@ export const rawClipsApi = {
     .then((r) => (Array.isArray(r.data?.data) ? r.data.data : []).map((b) => ({ beat_number: b.beat_number, beat_name: b.beat_name || null }))),
 };
 
+/**
+ * The beats an upload covers, from the lane's "Starts in" / "Ends in"
+ * (each '' or a beat number): { beatNumber, endBeatNumber } for
+ * rawClipsApi.upload. No start sends neither; an end that is not after the
+ * start is "the same beat" and is not sent (2026-10-30, Voice plan V1).
+ */
+export function uploadBeats(start, end) {
+  const s = start === '' || start == null ? null : Number(start);
+  if (!isBeat(s)) return {};
+  const e = end === '' || end == null ? null : Number(end);
+  return isBeat(e) && e > s ? { beatNumber: s, endBeatNumber: e } : { beatNumber: s };
+}
+
+/** The "Ends in" choices for an upload: the scenes after the start (none until a start is chosen). */
+export const uploadEndChoices = (scenes, start) => (start === '' || start == null ? [] : (scenes || []).filter((sc) => sc.value > Number(start)));
+
+/**
+ * Whether an upload asked for an end beat the server didn't keep (its
+ * database update, 20261028120000, hasn't run): the clip is saved either way.
+ */
+export const endBeatNotKept = (clip, { endBeatNumber } = {}) => isBeat(endBeatNumber) && !!clip && Number(clip.end_beat_number) !== endBeatNumber;
+
 /** The scene choices for a clip: the episode's beats, or Beats 1-14 when it has no plan yet. */
 export function sceneChoices(beats) {
   const named = new Map((beats || []).map((b) => [Number(b.beat_number), b.beat_name]));
