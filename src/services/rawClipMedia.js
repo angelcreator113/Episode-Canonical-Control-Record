@@ -10,8 +10,14 @@
  * No outside service and no per-clip cost. ffmpeg and ffprobe are found on
  * PATH, or at FFMPEG_PATH / FFPROBE_PATH.
  *
- * Files never pass through memory whole: uploads arrive on disk (multer),
- * stream to S3, and jobs stream the original back down to a temp file.
+ * Files never pass through memory whole: uploads arrive on disk (multer)
+ * and stream to S3. A job reads the original where it is: the upload's own
+ * temp file if it is still here, otherwise straight from S3 through a link
+ * on this machine (rawClipSource), with no copy on this disk (P0; Evoni,
+ * 2026-10-30: a 956 MB 4K original filled the disk). Before it starts, a
+ * job checks there is room for the cut-out (roomToKey), and each run writes
+ * its own cut-out file, so a failed run or a re-key never replaces one that
+ * worked.
  * A teleprompter take goes to S3 in parts instead (rawClipMultipart), with
  * no copy on this disk.
  *
@@ -26,8 +32,10 @@ const fsp = require('fs').promises;
 const os = require('os');
 const path = require('path');
 const { pipeline } = require('stream/promises');
-const { S3Client, PutObjectCommand, GetObjectCommand } = require('@aws-sdk/client-s3');
+const { S3Client, PutObjectCommand, GetObjectCommand, HeadObjectCommand } = require('@aws-sdk/client-s3');
 const clips = require('./rawClipsService');
+const { openSource } = require('./rawClipSource');
+const { KeyNoRoomError, friendlyKeyError } = require('./rawClipErrors');
 
 const FFMPEG = process.env.FFMPEG_PATH || 'ffmpeg';
 const FFPROBE = process.env.FFPROBE_PATH || 'ffprobe';
@@ -125,6 +133,9 @@ async function uploadFile(localPath, key, contentType) {
   return publicUrl(key);
 }
 
+const headObject = (key) => getS3().send(new HeadObjectCommand({ Bucket: requireAssetBucket(), Key: key }));
+const getObject = (key, range) => getS3().send(new GetObjectCommand({ Bucket: requireAssetBucket(), Key: key, Range: range }));
+
 async function downloadFile(key, localPath) {
   const res = await getS3().send(new GetObjectCommand({ Bucket: requireAssetBucket(), Key: key }));
   await pipeline(res.Body, fs.createWriteStream(localPath));
@@ -171,16 +182,43 @@ let running = false;
 /** Clip ids queued or running here (listClips leaves these alone). */
 const activeIds = () => [...active];
 
+/** A file's or link's length in seconds by ffprobe, or null (logged) when it can't be read. */
+async function secondsOf(input) {
+  try {
+    const { stdout } = await run(FFPROBE, clips.probeArgs(input), { timeoutMs: 60 * 1000 });
+    return clips.readProbe(stdout.toString()).duration_seconds;
+  } catch (err) {
+    console.error('[rawClips] length not read:', err.message);
+    return null;
+  }
+}
+
+/**
+ * { ok, needs, free } for green removal of a clip durationSeconds long: ok
+ * when the temp disk has room for the cut-out and the margin. free is null
+ * (and ok true, logged) when the disk can't be read.
+ */
+async function roomToKey(durationSeconds, { dir = TMP_DIR } = {}) {
+  const needs = clips.keyRoomNeeded(durationSeconds);
+  const free = await freeBytes(dir);
+  if (free == null) {
+    console.warn('[rawClips] free disk space unknown; green removal goes ahead without the check');
+    return { ok: true, needs, free };
+  }
+  return { ok: free >= needs, needs, free };
+}
+
 /**
  * Queues green removal for a clip. localPath: the original on disk, if the
  * upload still has it (the job removes it when done); otherwise the job
- * downloads the original from S3.
+ * reads the original from S3. durationSeconds sizes the disk check;
+ * hadCutout (an earlier cut-out exists) words the message if it fails.
  */
-function enqueueKey(sequelize, { clipId, episodeId, s3KeyRaw, strength = 'medium', localPath = null }) {
+function enqueueKey(sequelize, { clipId, episodeId, s3KeyRaw, strength = 'medium', localPath = null, durationSeconds = null, hadCutout = false }) {
   if (active.has(clipId)) return false;
   active.add(clipId);
   if (localPath) inUse.add(localPath);
-  queue.push({ sequelize, clipId, episodeId, s3KeyRaw, strength, localPath });
+  queue.push({ sequelize, clipId, episodeId, s3KeyRaw, strength, localPath, durationSeconds, hadCutout });
   setImmediate(drain);
   return true;
 }
@@ -194,9 +232,9 @@ async function drain() {
       try {
         await keyClip(job);
       } catch (err) {
-        console.error(`[rawClips] green removal failed for ${job.clipId}:`, err.message);
+        console.error(`[rawClips] green removal failed for ${job.clipId}:`, err.code || err.name || '', err.message);
         try {
-          await clips.setKeyState(job.sequelize, job.clipId, 'failed', { error: err.message });
+          await clips.setKeyState(job.sequelize, job.clipId, 'failed', { error: friendlyKeyError(err, { hadCutout: job.hadCutout }) });
         } catch (dbErr) {
           console.error('[rawClips] could not record the failure:', dbErr.message);
         }
@@ -211,19 +249,25 @@ async function drain() {
   }
 }
 
-async function keyClip({ sequelize, clipId, episodeId, s3KeyRaw, strength, localPath }) {
+async function keyClip({ sequelize, clipId, episodeId, s3KeyRaw, strength, localPath, durationSeconds, hadCutout, source: open = openSource }) {
   await clips.setKeyState(sequelize, clipId, 'processing');
+  // Before anything is written: is there room for the cut-out?
+  const room = await roomToKey(durationSeconds);
+  if (!room.ok) {
+    console.error(`[rawClips] green removal not started for ${clipId}: ${Math.round(room.free / 1048576)} MB free, about ${Math.round(room.needs / 1048576)} MB needed`);
+    throw new KeyNoRoomError(room.needs, room.free, hadCutout);
+  }
   let input = localPath;
-  let downloaded = null;
+  let source = null;
   const output = await tmpPath('cutout.webm');
   inUse.add(output);
   try {
     if (!input) {
-      downloaded = await tmpPath(path.basename(s3KeyRaw));
-      inUse.add(downloaded);
-      await downloadFile(s3KeyRaw, downloaded);
-      input = downloaded;
+      source = await open({ key: s3KeyRaw, headObject, getObject });
+      input = source.url;
     }
+    // The original's length, to check the cut-out against (the stored one if ffprobe can't say).
+    const expected = (await secondsOf(input)) ?? (Number(durationSeconds) > 0 ? Number(durationSeconds) : null);
     let color = clips.DEFAULT_KEY_COLOR;
     try {
       const { stdout } = await run(FFMPEG, clips.sampleFrameArgs(input, 1), { timeoutMs: 60 * 1000 });
@@ -233,14 +277,23 @@ async function keyClip({ sequelize, clipId, episodeId, s3KeyRaw, strength, local
       console.error('[rawClips] could not sample the green; using chroma-key green:', err.message);
     }
     await run(FFMPEG, clips.chromakeyArgs(input, output, { color, strength }), { low: true, timeoutMs: JOB_TIMEOUT_MS });
-    const cutoutKey = `${clipPrefix(episodeId, clipId)}/cutout.webm`;
+    // ffmpeg can end "successfully" with only part of the clip when its read
+    // of the original breaks for good (it did in testing, with a link that
+    // had expired): such a cut-out is never stored.
+    if (source && source.stats.failures > 0) throw new clips.CutoutIncompleteError('the original could not be read to the end');
+    const got = await secondsOf(output);
+    if (!clips.cutoutComplete(got, expected)) {
+      throw new clips.CutoutIncompleteError(`the cut-out is ${got ?? 'of unknown length'} s, the original ${expected} s`);
+    }
+    // A new file for this run; the clip moves to it only once it is stored.
+    const cutoutKey = clips.cutoutKeyFor(clipPrefix(episodeId, clipId));
     const cutoutUrl = await uploadFile(output, cutoutKey, 'video/webm');
     await clips.setKeyState(sequelize, clipId, 'done', { cutoutKey, cutoutUrl });
+    if (source) console.log(`[rawClips] green removed for ${clipId}, original read from storage:`, JSON.stringify(source.stats));
   } finally {
     inUse.delete(output);
-    if (downloaded) inUse.delete(downloaded);
+    if (source) await source.close();
     await removeFile(output);
-    await removeFile(downloaded);
   }
 }
 
@@ -308,6 +361,6 @@ async function freeBytes(dir = TMP_DIR) {
 
 module.exports = {
   BUCKET, TMP_DIR, TMP_MAX_AGE_MS, publicUrl, clipPrefix, tmpPath, removeFile, getS3,
-  run, uploadFile, downloadFile, inspect, enqueueKey, activeIds,
+  run, uploadFile, downloadFile, inspect, enqueueKey, activeIds, roomToKey, keyClip,
   sweepTmp, startTmpSweeper, freeBytes,
 };

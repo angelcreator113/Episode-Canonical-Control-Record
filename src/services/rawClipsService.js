@@ -59,7 +59,7 @@ const COLUMNS = `id, episode_id, show_id, performer, guest_name, label, beat_num
 // A job still queued or processing this long after its last update was cut
 // off (the server restarted mid-job); list marks it failed so Retry shows.
 const STALE_HOURS = 3;
-const STALE_MESSAGE = 'Stopped before it finished (the server restarted). Press Retry.';
+const STALE_MESSAGE = 'Stopped before it finished (the server restarted). The original and any earlier cut-out are unchanged. Press Retry.';
 
 class RawClipError extends Error {
   constructor(status, message) {
@@ -490,6 +490,63 @@ function pickKeyColor(rgb, size = 16) {
   return `0x${hex(r)}${hex(g)}${hex(b)}`;
 }
 
+/**
+ * ffmpeg input options for a link (http/https), none for a file: reconnect
+ * from the byte reached when a read breaks, and a 30-second read timeout so
+ * a stalled link fails instead of waiting for the job's kill. Only options
+ * ffmpeg has had for years (an older ffmpeg refuses one it doesn't know).
+ */
+function netInputArgs(input) {
+  if (!/^https?:\/\//i.test(String(input))) return [];
+  return ['-reconnect', '1', '-reconnect_streamed', '1', '-reconnect_delay_max', '5', '-rw_timeout', '30000000'];
+}
+
+// Room green removal needs on the temp disk (P0; Evoni, 2026-10-30): the
+// cut-out it writes, at most KEY_MB_PER_SECOND for each second of the clip
+// (VP9 with alpha at 1920 is well under that), never under KEY_MIN_BYTES,
+// plus KEY_MARGIN_BYTES left free for uploads and the rest of the server.
+// The original is read from storage, not copied here.
+const MB = 1024 * 1024;
+const KEY_MB_PER_SECOND = 1.2;
+const KEY_MIN_BYTES = 200 * MB;
+const KEY_MARGIN_BYTES = 500 * MB;
+const KEY_UNKNOWN_SECONDS = 600; // a clip whose length was never read: assume ten minutes
+
+/** Bytes green removal needs free for a clip of durationSeconds (null: not known). */
+function keyRoomNeeded(durationSeconds) {
+  const seconds = Number(durationSeconds) > 0 ? Number(durationSeconds) : KEY_UNKNOWN_SECONDS;
+  return Math.max(KEY_MIN_BYTES, Math.ceil(seconds * KEY_MB_PER_SECOND * MB)) + KEY_MARGIN_BYTES;
+}
+
+/**
+ * The S3 key of one green-removal run's cut-out. Each run writes its own
+ * file, so a run that fails, or a re-key, never replaces a cut-out that
+ * worked; the clip points at the new one only once it is stored.
+ */
+function cutoutKeyFor(prefix, now = new Date(), rand = Math.random().toString(36).slice(2, 6)) {
+  const stamp = now.toISOString().replace(/[-:.]/g, '');
+  return `${prefix}/cutout-${stamp}-${rand}.webm`;
+}
+
+/** Thrown when a cut-out is shorter than its original: it is never stored. */
+class CutoutIncompleteError extends Error {
+  constructor(detail) {
+    super(`The cut-out came out incomplete (${detail})`);
+    this.code = 'CUTOUT_INCOMPLETE';
+  }
+}
+
+/**
+ * Whether a cut-out of gotSeconds covers an original of expectedSeconds
+ * (within half a second, or 1% of a long clip). A length that can't be read
+ * is not complete; an original whose length is unknown can't be checked.
+ */
+function cutoutComplete(gotSeconds, expectedSeconds) {
+  if (!(Number(expectedSeconds) > 0)) return true;
+  if (!(Number(gotSeconds) > 0)) return false;
+  return Number(gotSeconds) >= Number(expectedSeconds) - Math.max(0.5, Number(expectedSeconds) * 0.01);
+}
+
 /** ffmpeg arguments: input → WebM (VP9 with alpha, Opus audio), green keyed out, longest side at most 1920. */
 function chromakeyArgs(input, output, { color = DEFAULT_KEY_COLOR, strength = 'medium' } = {}) {
   const similarity = STRENGTH_SIMILARITY[strength] ?? STRENGTH_SIMILARITY.medium;
@@ -500,7 +557,7 @@ function chromakeyArgs(input, output, { color = DEFAULT_KEY_COLOR, strength = 'm
     'format=yuva420p',
   ].join(',');
   return [
-    '-hide_banner', '-y', '-i', input,
+    '-hide_banner', '-y', ...netInputArgs(input), '-i', input,
     '-vf', filter,
     '-c:v', 'libvpx-vp9', '-pix_fmt', 'yuva420p', '-b:v', '0', '-crf', '32',
     '-deadline', 'good', '-cpu-used', '4', '-row-mt', '1', '-threads', '2', '-auto-alt-ref', '0',
@@ -511,7 +568,7 @@ function chromakeyArgs(input, output, { color = DEFAULT_KEY_COLOR, strength = 'm
 
 /** ffmpeg arguments: one frame at `at` seconds, size x size, raw rgb24 to stdout (for pickKeyColor). */
 function sampleFrameArgs(input, at = 1, size = 16) {
-  return ['-hide_banner', '-ss', String(at), '-i', input, '-frames:v', '1', '-vf', `scale=${size}:${size}`, '-f', 'rawvideo', '-pix_fmt', 'rgb24', 'pipe:1'];
+  return ['-hide_banner', ...netInputArgs(input), '-ss', String(at), '-i', input, '-frames:v', '1', '-vf', `scale=${size}:${size}`, '-f', 'rawvideo', '-pix_fmt', 'rgb24', 'pipe:1'];
 }
 
 /** ffmpeg arguments: a 480px-wide JPEG thumbnail at `at` seconds. */
@@ -557,5 +614,6 @@ module.exports = {
   TAKE_FIELDS, TAKE_FIELDS_MISSING, BEAT_MARKS_MISSING, END_BEAT_MISSING, MAX_BEAT_MARKS, MAX_MARK_SECONDS,
   UPLOAD_EXTRAS, RawClipError, readFields, readBeatMarks, readStrength, readTakeSeconds, readVideoSize, truthy, findEpisode, shapeRow,
   listClips, getClip, createClip, updateClip, storeTakeExtras, setKeyState, removeClip,
+  KEY_MB_PER_SECOND, KEY_MIN_BYTES, KEY_MARGIN_BYTES, KEY_UNKNOWN_SECONDS, keyRoomNeeded, cutoutKeyFor, netInputArgs, CutoutIncompleteError, cutoutComplete,
   pickKeyColor, chromakeyArgs, sampleFrameArgs, thumbnailArgs, probeArgs, readProbe,
 };

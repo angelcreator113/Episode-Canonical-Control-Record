@@ -317,3 +317,84 @@ describe('Teleprompter audit 8 and 14 (2026-10-24): take fields with the upload'
     warn.mockRestore();
   });
 });
+
+describe('green removal safety, pure pieces (P0, 2026-10-30)', () => {
+  const MB = 1024 * 1024;
+
+  test('keyRoomNeeded: the cut-out (1.2 MB a second, at least 200 MB) plus 500 MB kept free; ten minutes when the length is unknown', () => {
+    expect(Math.round(clips.keyRoomNeeded(184) / MB)).toBe(721); // 4481.mp4, 3:04
+    expect(clips.keyRoomNeeded(10)).toBe(700 * MB); // the 200 MB floor
+    expect(clips.keyRoomNeeded(null)).toBe(clips.keyRoomNeeded(600));
+    expect(clips.keyRoomNeeded('nonsense')).toBe(clips.keyRoomNeeded(600));
+  });
+
+  test('cutoutKeyFor: a new file per run, under the clip, never the old fixed cutout.webm', () => {
+    const at = new Date('2026-10-30T12:34:56.789Z');
+    expect(clips.cutoutKeyFor('episodes/e/raw-clips/c', at, 'ab12')).toBe('episodes/e/raw-clips/c/cutout-20261030T123456789Z-ab12.webm');
+    const keys = new Set(Array.from({ length: 50 }, () => clips.cutoutKeyFor('p', at)));
+    expect(keys.size).toBe(50); // the same millisecond still gives different files
+    expect([...keys].every((k) => /^p\/cutout-20261030T123456789Z-[0-9a-z]{1,4}\.webm$/.test(k))).toBe(true);
+  });
+
+  test('netInputArgs: reconnect and a read timeout for a link, nothing for a file; used by the key and the frame sample', () => {
+    const net = ['-reconnect', '1', '-reconnect_streamed', '1', '-reconnect_delay_max', '5', '-rw_timeout', '30000000'];
+    expect(clips.netInputArgs('http://127.0.0.1:1/x')).toEqual(net);
+    expect(clips.netInputArgs('/tmp/in.mp4')).toEqual([]);
+    const key = clips.chromakeyArgs('http://127.0.0.1:1/x', 'out.webm');
+    expect(key.slice(key.indexOf('-reconnect'), key.indexOf('-i'))).toEqual(net);
+    expect(clips.chromakeyArgs('in.mp4', 'out.webm')).not.toContain('-reconnect');
+    const sample = clips.sampleFrameArgs('http://127.0.0.1:1/x', 1);
+    expect(sample.indexOf('-reconnect')).toBeLessThan(sample.indexOf('-i'));
+  });
+
+  test('cutoutComplete: within half a second (or 1% of a long clip); an unreadable cut-out is never complete', () => {
+    expect(clips.cutoutComplete(184.02, 184.0)).toBe(true);
+    expect(clips.cutoutComplete(182.2, 184.0)).toBe(true); // 1% of 184 s is 1.84 s
+    expect(clips.cutoutComplete(61.2, 184.0)).toBe(false);
+    expect(clips.cutoutComplete(5.4, 6)).toBe(false);
+    expect(clips.cutoutComplete(5.6, 6)).toBe(true);
+    expect(clips.cutoutComplete(null, 6)).toBe(false);
+    expect(clips.cutoutComplete(3, null)).toBe(true); // no length to check against
+    expect(new clips.CutoutIncompleteError('x').code).toBe('CUTOUT_INCOMPLETE');
+  });
+});
+
+describe('green removal failures in plain words (rawClipErrors, P0)', () => {
+  const errors = require('../../../src/services/rawClipErrors');
+  const say = (err, hadCutout = false) => errors.friendlyKeyError(err, { hadCutout });
+
+  test('each says what was kept, and never shows a system code', () => {
+    const cases = [
+      [new Error('ENOSPC: no space left on device, write'), /^The server ran out of space while removing the green\./],
+      [new Error('ffmpeg failed: Error writing trailer: No space left on device'), /^The server ran out of space/],
+      [Object.assign(new Error('x'), { code: 'EDQUOT' }), /^The server ran out of space/],
+      [Object.assign(new Error('NotFound'), { name: 'NotFound', $metadata: { httpStatusCode: 404 } }), /^The original video could not be found in storage/],
+      [new Error('ffmpeg failed: took too long and was stopped'), /^Removing the green took longer than two hours/],
+      [new Error('ffmpeg failed: Error opening input: Server returned 403 Forbidden (access denied)'), /^The server could not read the original video from storage/],
+      [Object.assign(new Error('reset'), { code: 'ECONNRESET' }), /^The server could not read the original video from storage/],
+      [new clips.CutoutIncompleteError('a'), /^The original video could not be read to the end, so the cut-out was not kept\./],
+      [new Error('ffmpeg is not installed on the server'), /^ffmpeg is not installed on the server\. Nothing was changed/],
+      [new Error('ffmpeg failed: Conversion failed!'), /^Removing the green failed\./],
+    ];
+    for (const [err, want] of cases) {
+      const msg = say(err);
+      expect(msg).toMatch(want);
+      expect(msg).toContain('Nothing was changed: the original is as it was.');
+      expect(msg).not.toMatch(/ENOSPC|EDQUOT|ECONNRESET|ffmpeg failed|403/);
+    }
+    expect(say(new Error('ENOSPC'), true)).toContain('Nothing was changed: the original and the earlier cut-out are as they were.');
+  });
+
+  test('the free-space refusal gives the numbers and is a 507', () => {
+    const err = new errors.KeyNoRoomError(721 * 1048576, 300 * 1048576, true);
+    expect(err.status).toBe(507);
+    expect(say(err)).toBe('Not enough space on the server to remove the green (needs about 721 MB, 300 MB free). Nothing was changed: the original and the earlier cut-out are as they were. Space has to be freed on the server before Retry will work.');
+    expect(errors.friendlyError(err)).toEqual({ status: 507, message: err.message });
+  });
+
+  test('isDiskFull also knows ffmpeg\'s wording', () => {
+    expect(errors.isDiskFull(new Error('av_interleaved_write_frame(): No space left on device'))).toBe(true);
+    expect(errors.isDiskFull(new Error('Disk quota exceeded'))).toBe(true);
+    expect(errors.isDiskFull(new Error('Invalid data'))).toBe(false);
+  });
+});
