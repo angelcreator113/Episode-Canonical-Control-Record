@@ -642,7 +642,7 @@ if [ "$1" = restart ] && [ "$2" = episode-voice-worker ]; then touch "${flag()}"
 if [ "$1" = jlist ]; then
   if [ -e "${flag()}" ]; then v='${after}'; else v='${before}'; fi
   w='${work}'
-  printf '[%s%s%s]\\n' '${api}' "\${w:+,\$w}" "\${v:+,\$v}"
+  printf '[%s%s%s]\\n' '${api}' "\${w:+,$w}" "\${v:+,$v}"
 fi
 `, { mode: 0o755 });
     fs.writeFileSync(path.join(bin, 'curl'), '#!/usr/bin/env bash\necho \'{"status":"healthy","database":"connected"}\'\n', { mode: 0o755 });
