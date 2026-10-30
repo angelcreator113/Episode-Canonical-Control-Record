@@ -202,6 +202,19 @@ describe('POST /:episodeId/uploads/:uploadId/complete', () => {
     expect(media.enqueueKey).toHaveBeenCalledWith(expect.anything(), { clipId: started.clipId, episodeId: 'ep-1', s3KeyRaw: started.key, strength: 'medium', durationSeconds: 41.2 });
   });
 
+  test('voice from footage (V2): the joined clip is offered to the voice queue with its uploader; the upload never waits on it', async () => {
+    const voiceFootage = require('../../../src/services/voiceFootageJobs');
+    const offered = jest.spyOn(voiceFootage, 'onClipUploaded').mockResolvedValue(null);
+    const { body: started } = await start({ performer: 'lala', size: 3 * MB, beat_number: undefined, start_line: undefined });
+    await putPart(1, 3 * MB);
+    const res = await request(app).post(`${BASE}/uploads/up-1/complete`).send({});
+    expect(res.status).toBe(201);
+    expect(offered).toHaveBeenCalledWith(expect.anything(),
+      expect.objectContaining({ id: started.clipId, episode_id: 'ep-1', performer: 'lala', s3_key_raw: started.key }),
+      { userId: expect.anything() });
+    offered.mockRestore();
+  });
+
   test('missing parts are a 409 that names them', async () => {
     await start();
     await putPart(1, 8 * MB);

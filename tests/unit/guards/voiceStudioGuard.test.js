@@ -40,6 +40,8 @@ describe('Voice Studio boundaries', () => {
       // tables a placement's foreign keys point at (associations, approvals).
       'src/services/episodeEditService.js',
       'src/migrations/20261028100000-create-episode-edit-tables.js',
+      // V2's footage jobs point at the extracted source they made (a foreign key only).
+      'src/migrations/20261030120000-create-voice-footage-jobs.js',
     ].sort());
   });
 
