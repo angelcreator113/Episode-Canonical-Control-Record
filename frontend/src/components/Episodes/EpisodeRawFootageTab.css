@@ -35,6 +35,10 @@
 .erf-guest-input { width: 100%; min-height: 38px; padding: 6px 12px; border-radius: 10px; border: 1px solid var(--lala-gold-line); background: var(--surface-card); color: var(--text-primary); font: inherit; font-size: 14px; }
 .erf-check { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-primary); text-align: left; cursor: pointer; }
 .erf-check input { width: 18px; height: 18px; flex-shrink: 0; accent-color: var(--accent-dark); }
+.erf-upload-beats { display: flex; flex-wrap: wrap; gap: 8px; width: 100%; }
+.erf-upload-beat { display: flex; flex-direction: column; gap: 4px; flex: 1 1 140px; min-width: 0; font-size: 12px; color: var(--text-secondary); text-align: left; }
+.erf-upload-beat select { width: 100%; min-height: 38px; padding: 6px 10px; border-radius: 10px; border: 1px solid var(--lala-gold-line); background: var(--surface-card); color: var(--text-primary); font: inherit; font-size: 14px; }
+.erf-upload-beat select:disabled { opacity: 0.6; }
 
 /* Buttons */
 .erf-btn { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 6px 14px; border-radius: 999px; border: 1px solid var(--accent-light); background: var(--surface-card); color: var(--accent-dark); font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
