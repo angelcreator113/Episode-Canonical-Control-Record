@@ -81,12 +81,12 @@ describe('EpisodeRawFootageTab', () => {
     await waitFor(() => expect(screen.getAllByTestId('erf-clip')).toHaveLength(3));
     const file = new File(['x'], 'new.mp4', { type: 'video/mp4' });
     fireEvent.change(screen.getByTestId('erf-input-lala'), { target: { files: [file] } });
-    await waitFor(() => expect(rawClipsApi.upload).toHaveBeenCalledWith('ep-1', file, expect.objectContaining({ performer: 'lala', greenScreen: true }), expect.any(Function)));
+    await waitFor(() => expect(rawClipsApi.upload).toHaveBeenCalledWith('ep-1', file, expect.objectContaining({ performer: 'lala', greenScreen: true }), expect.any(Function), expect.objectContaining({ resume: null })));
     await waitFor(() => expect(within(lane('lala')).getByText('new.mp4')).toBeTruthy());
     expect(within(lane('lala')).getByText('Waiting to remove green')).toBeTruthy();
 
     fireEvent.change(screen.getByTestId('erf-input-justawoman'), { target: { files: [new File(['y'], 'jaw.mov', { type: 'video/quicktime' })] } });
-    await waitFor(() => expect(rawClipsApi.upload).toHaveBeenLastCalledWith('ep-1', expect.any(File), expect.objectContaining({ performer: 'justawoman', greenScreen: false }), expect.any(Function)));
+    await waitFor(() => expect(rawClipsApi.upload).toHaveBeenLastCalledWith('ep-1', expect.any(File), expect.objectContaining({ performer: 'justawoman', greenScreen: false }), expect.any(Function), expect.anything()));
   });
 
   test('a non-video file is not uploaded', async () => {

@@ -472,3 +472,61 @@ describe('an upload begun while the take records (size_unknown)', () => {
     expect((await complete({ size: 3 * MB })).status).toBe(201);
   });
 });
+
+describe('upload reliability (Evoni, 2026-10-31)', () => {
+  test('green screen with too little disk to remove it: the clip is saved and says so at once; nothing is queued', async () => {
+    jest.spyOn(media, 'roomToKey').mockResolvedValue({ ok: false, needs: 721 * MB, free: 159 * MB });
+    mockQuery.mockImplementation(async (sql, opts = {}) => {
+      if (/FROM episodes WHERE id/.test(sql)) return [[{ id: 'ep-1', show_id: 'show-1' }]];
+      if (/^\s*INSERT INTO episode_raw_clips/.test(sql)) return [[{ id: opts.replacements.id, performer: opts.replacements.performer, key_status: opts.replacements.keyStatus }]];
+      if (/^\s*UPDATE episode_raw_clips SET key_status/.test(sql)) return [[{ id: opts.replacements.clipId, key_status: opts.replacements.status, key_error: opts.replacements.error }]];
+      return [[]];
+    });
+    await start({ performer: 'lala', green_screen: 'true', size: 3 * MB, beat_number: undefined, start_line: undefined });
+    await putPart(1, 3 * MB);
+    const res = await request(app).post(`${BASE}/uploads/up-1/complete`).send({});
+    expect(res.status).toBe(201);
+    expect(res.body.data.key_status).toBe('failed');
+    expect(res.body.data.key_error).toMatch(/^Not enough space on the server to remove the green \(needs about 721 MB, 159 MB free\)/);
+    expect(media.enqueueKey).not.toHaveBeenCalled();
+  });
+
+  test('a disk check that fails to run does not stop the queue', async () => {
+    jest.spyOn(media, 'roomToKey').mockRejectedValue(new Error('statfs failed'));
+    await start({ performer: 'lala', green_screen: 'true', size: 3 * MB, beat_number: undefined, start_line: undefined });
+    await putPart(1, 3 * MB);
+    const res = await request(app).post(`${BASE}/uploads/up-1/complete`).send({});
+    expect(res.status).toBe(201);
+    expect(media.enqueueKey).toHaveBeenCalled();
+  });
+
+  test('Cancel while the upload is being saved is refused (409); the clip is still made; asking to complete again gives the same clip', async () => {
+    // ffprobe (and anything after it) waits until released, all at once.
+    let release;
+    const gate = new Promise((resolve) => { release = resolve; });
+    let started = false;
+    media.run.mockImplementation(async () => {
+      started = true;
+      await gate;
+      return { stdout: Buffer.from(JSON.stringify({ format: { duration: '41.5' }, streams: [{ codec_type: 'video', width: 1080, height: 1920 }] })), stderr: '' };
+    });
+    await start({ size: 3 * MB });
+    await putPart(1, 3 * MB);
+    const completing = request(app).post(`${BASE}/uploads/up-1/complete`).send({}).then((r) => r);
+    for (let i = 0; i < 100 && !started; i += 1) {
+      // eslint-disable-next-line no-await-in-loop
+      await new Promise((r) => setTimeout(r, 10));
+    }
+    const cancel = await request(app).delete(`${BASE}/uploads/up-1`);
+    expect(cancel.status).toBe(409);
+    expect(cancel.body.error).toBe('This upload is being saved, so it can no longer be cancelled.');
+    expect(sent('AbortMultipartUpload')).toEqual([]);
+    release();
+    const done = await completing;
+    expect(done.status).toBe(201);
+    const again = await request(app).post(`${BASE}/uploads/up-1/complete`).send({});
+    expect(again.status).toBe(201);
+    expect(again.body.data.id).toBe(done.body.data.id);
+    expect(mockQuery.mock.calls.filter(([sql]) => /INSERT INTO episode_raw_clips/.test(sql))).toHaveLength(1);
+  });
+});

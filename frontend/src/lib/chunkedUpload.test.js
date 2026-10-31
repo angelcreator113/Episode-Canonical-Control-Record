@@ -147,15 +147,60 @@ describe('sendInParts (the API)', () => {
     expect(states[0]).toBeNull();
   });
 
-  test('Assets → Files uploads go in parts too; a failed one is thrown away on the server', async () => {
+  // Evoni, 2026-10-31: a dropped upload started again from zero. It is kept now, for Resume.
+  test('Assets → Files uploads go in parts too; a failed one is kept (not thrown away), its state on the error for Resume', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
     api.post.mockResolvedValue({ data: { uploadId: 'u9', clipId: 'clip-9', partSize: 8 * MB } });
     api.put.mockRejectedValue(Object.assign(new Error('400'), { response: { status: 400, data: { error: 'Part 1 arrived incomplete. Try again.' } } }));
     api.delete.mockResolvedValue({ data: { success: true } });
+    const states = [];
     const file = new File([new Uint8Array(100)], 'lala.mov', { type: 'video/quicktime' });
-    await expect(rawClipsApi.upload('ep-1', file, { performer: 'lala', greenScreen: true })).rejects.toThrow('400');
+    const err = await rawClipsApi.upload('ep-1', file, { performer: 'lala', greenScreen: true }, undefined, { onState: (s) => states.push(s) }).catch((e) => e);
+    expect(err.message).toBe('400');
+    expect(err.resume).toMatchObject({ uploadId: 'u9', clipId: 'clip-9', size: 100, done: [] });
+    expect(states[0]).toMatchObject({ uploadId: 'u9' });
     expect(api.post.mock.calls[0][1]).toMatchObject({ performer: 'lala', green_screen: 'true', filename: 'lala.mov', content_type: 'video/quicktime', size: 100 });
-    await vi.waitFor(() => expect(api.delete).toHaveBeenCalledWith('/api/v1/episode-clips/ep-1/uploads/u9'));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(api.delete).not.toHaveBeenCalled();
+  });
+
+  test('Resume: the kept state goes back in, so only the parts not sent go up', async () => {
+    api.post.mockResolvedValue(answerComplete);
+    api.put.mockResolvedValue({ data: {} });
+    const file = new File([new Uint8Array(17 * MB)], 'big.mp4', { type: 'video/mp4' });
+    await rawClipsApi.upload('ep-1', file, { performer: 'lala' }, undefined, {
+      measure: async () => ({ file, seconds: null }), resume: { uploadId: 'u1', clipId: 'clip-1', partSize: 8 * MB, size: file.size, done: [1, 2] },
+    });
+    expect(api.post).toHaveBeenCalledTimes(1);
+    expect(api.post.mock.calls[0][0]).toMatch(/\/uploads\/u1\/complete$/);
+    expect(api.put.mock.calls.map(([u]) => u.split('/').pop())).toEqual(['3']);
+  });
+
+  test('a lost answer to "complete" is asked again (the server gives the same clip); a refusal is not', async () => {
+    let n = 0;
+    api.post.mockImplementation(async (url) => {
+      if (url.endsWith('/uploads')) return { data: { uploadId: 'u5', clipId: 'clip-5', partSize: 8 * MB } };
+      n += 1;
+      if (n === 1) throw Object.assign(new Error('Network Error'), { code: 'ERR_NETWORK' });
+      return answerComplete;
+    });
+    api.put.mockResolvedValue({ data: {} });
+    const out = await sendInParts('ep-1', blobOf(1 * MB), {}, { sleep: noWait });
+    expect(out.clip.id).toBe('clip-1');
+    expect(n).toBe(2);
+  });
+
+  test('Cancel (an aborted signal): the request is not tried again', async () => {
+    const controller = new AbortController();
+    api.post.mockResolvedValue({ data: { uploadId: 'u6', clipId: 'clip-6', partSize: 8 * MB } });
+    api.put.mockImplementation(async (_u, _b, cfg) => {
+      expect(cfg.signal).toBe(controller.signal);
+      controller.abort();
+      throw Object.assign(new Error('canceled'), { name: 'CanceledError', code: 'ERR_CANCELED' });
+    });
+    await expect(sendInParts('ep-1', blobOf(1 * MB), {}, { sleep: noWait, signal: controller.signal })).rejects.toThrow('canceled');
+    expect(api.put).toHaveBeenCalledTimes(1);
+    expect(worthRetrying({ code: 'ERR_CANCELED' })).toBe(false);
   });
 
   // Evoni, 2026-10-28: a 453 MB phone MP4 uploaded on Files showed only "453 MB".

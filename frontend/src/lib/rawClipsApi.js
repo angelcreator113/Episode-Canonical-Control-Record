@@ -6,7 +6,7 @@
  * original and, for green screen, makes a cut-out in the background.
  */
 import api from '../services/api';
-import { PART_SIZE, uploadInParts, makeThumbnail } from './chunkedUpload';
+import { PART_SIZE, uploadInParts, makeThumbnail, withRetry } from './chunkedUpload';
 import { probeVideo, lengthWritable } from './videoProbe';
 import { withDuration } from './takeDuration';
 
@@ -79,6 +79,7 @@ export async function measureForUpload(file, { knownSeconds = null, probe = prob
 
 const uploadsBase = (episodeId, uploadId) => `${base(episodeId)}/uploads${uploadId ? `/${encodeURIComponent(uploadId)}` : ''}`;
 const PART_TIMEOUT_MS = 5 * 60 * 1000; // one 8 MB part, even on a slow phone connection
+const COMPLETE_RETRY_DELAYS_MS = [2000, 5000, 15000];
 
 /**
  * Sends a file in parts straight to the video storage (Evoni, 2026-10-27:
@@ -87,10 +88,13 @@ const PART_TIMEOUT_MS = 5 * 60 * 1000; // one 8 MB part, even on a slow phone co
  * the rest goes; onState(state) after every part (null once finished) for
  * the caller to keep. thumbnail: a JPEG data URL, or a function that makes
  * one. A server that no longer knows the upload (restarted, or older than
- * 6 hours) starts it again from the beginning, once. Resolves { clip, stored }.
+ * 6 hours) starts it again from the beginning, once. signal: an
+ * AbortController's, to cancel. Finishing is tried again when its answer
+ * is lost (the server gives the same clip, never a second one). Resolves
+ * { clip, stored }.
  */
-export async function sendInParts(episodeId, blob, fields, { resume = null, onState, onProgress, thumbnail = null, keepSession = false, sleep } = {}) {
-  const cfg = keepSession ? { keepSession: true } : {};
+export async function sendInParts(episodeId, blob, fields, { resume = null, onState, onProgress, thumbnail = null, keepSession = false, sleep, signal } = {}) {
+  const cfg = { ...(keepSession ? { keepSession: true } : {}), ...(signal ? { signal } : {}) };
   const usable = resume && resume.uploadId && Number(resume.size) === blob.size && Array.isArray(resume.done);
   if (resume?.uploadId && !usable) {
     console.warn('[rawClipsApi] the upload kept for this take does not fit it; starting again');
@@ -120,7 +124,11 @@ export async function sendInParts(episodeId, blob, fields, { resume = null, onSt
       try { thumb = typeof thumbnail === 'function' ? await thumbnail() : thumbnail; } catch (err) {
         console.warn('[rawClipsApi] thumbnail not made; the server makes one:', err);
       }
-      const r = await api.post(`${uploadsBase(episodeId, st.uploadId)}/complete`, { ...(thumb ? { thumbnail: thumb } : {}), size: blob.size, fields }, { ...cfg, timeout: PART_TIMEOUT_MS });
+      // A lost answer is asked again (Evoni, 2026-10-31: "failed" shown for a clip that was saved).
+      const r = await withRetry(
+        () => api.post(`${uploadsBase(episodeId, st.uploadId)}/complete`, { ...(thumb ? { thumbnail: thumb } : {}), size: blob.size, fields }, { ...cfg, timeout: PART_TIMEOUT_MS }),
+        { retries: 3, delays: COMPLETE_RETRY_DELAYS_MS, ...(sleep ? { sleep } : {}) },
+      );
       keep(null);
       return { clip: r.data?.data, stored: Array.isArray(r.data?.stored) ? new Set(r.data.stored) : null };
     } catch (err) {
@@ -161,20 +169,28 @@ export const rawClipsApi = {
   // label: the clip's name in Files (the teleprompter names each take; Evoni, 2026-10-20).
   // Measured in the browser first (length, size, thumbnail; 2026-10-28), its
   // length written into an MP4 or WebM, then sent in parts straight to the
-  // video storage; a failed upload is thrown away on the server.
-  upload: async (episodeId, file, { performer, greenScreen = false, guestName, strength, label, beatNumber, endBeatNumber } = {}, onProgress, { measure = measureForUpload } = {}) => {
-    let state = null;
+  // video storage. A failed upload is kept, not thrown away (Evoni,
+  // 2026-10-31): the error carries `resume` (what was sent), and passing it
+  // back as opts.resume sends only the rest; onState(state) after every part
+  // (null once finished), for the page to keep across a reload. Cancel is
+  // opts.signal, then abortUpload.
+  upload: async (episodeId, file, { performer, greenScreen = false, guestName, strength, label, beatNumber, endBeatNumber } = {}, onProgress, { measure = measureForUpload, resume = null, onState, signal } = {}) => {
+    let state = resume;
     try {
       const m = await measure(file);
       const body = m?.file || file;
       const { clip } = await sendInParts(episodeId, body, uploadFields({
         performer, greenScreen, guestName, strength, label, beatNumber, endBeatNumber, seconds: m?.seconds, width: m?.width, height: m?.height,
       }), {
-        onProgress, onState: (st) => { state = st; }, thumbnail: m?.thumbnail || (() => makeThumbnail(file)),
+        resume,
+        signal,
+        onProgress,
+        onState: (st) => { state = st; onState?.(st); },
+        thumbnail: m?.thumbnail || (() => makeThumbnail(file)),
       });
       return clip;
     } catch (err) {
-      if (state?.uploadId) abortUpload(episodeId, state.uploadId);
+      if (state?.uploadId && err && typeof err === 'object') err.resume = state;
       throw err;
     }
   },

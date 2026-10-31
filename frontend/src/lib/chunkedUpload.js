@@ -22,13 +22,18 @@ export function slicePlan(size, partSize = PART_SIZE) {
   return Array.from({ length: count }, (_, i) => ({ partNumber: i + 1, start: i * step, end: Math.min(total, (i + 1) * step) }));
 }
 
+/** Whether a request failed because it was cancelled (an AbortController's signal). */
+export const isCancelled = (err) => Boolean(err) && (err.code === 'ERR_CANCELED' || err.name === 'CanceledError' || err.name === 'AbortError');
+
 /**
  * Whether a failed slice is worth sending again: the connection dropped, it
  * timed out, the server was busy or briefly down. Not: a refusal (4xx), a
- * sign-in that is over, or the server's disk being full (507).
+ * sign-in that is over, the server's disk being full (507), or an upload
+ * the person cancelled.
  */
 export function worthRetrying(err) {
   if (!err) return false;
+  if (isCancelled(err)) return false;
   if (err.sessionExpired) return false;
   if (err.authRefreshed) return true;
   const status = err.response?.status;

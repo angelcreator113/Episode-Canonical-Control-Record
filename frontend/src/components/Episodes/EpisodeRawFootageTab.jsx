@@ -29,7 +29,10 @@ import React, { useCallback, useContext, useEffect, useRef, useState } from 'rea
 import {
   Upload, Film, Trash2, Play, Square, WandSparkles, X, Loader, CircleCheck, CircleAlert, Clock, RefreshCw, UserRound, ListOrdered, Copy, Layers, MoveRight,
 } from 'lucide-react';
-import { rawClipsApi, PERFORMERS, STRENGTHS, clipLength, clipSize, anyKeying, keyingProgress, sceneChoices, uploadErrorMessage, uploadBeats, uploadEndChoices, endBeatNotKept } from '../../lib/rawClipsApi';
+import { rawClipsApi, abortUpload, PERFORMERS, STRENGTHS, clipLength, clipSize, anyKeying, keyingProgress, sceneChoices, uploadErrorMessage, uploadBeats, uploadEndChoices, endBeatNotKept } from '../../lib/rawClipsApi';
+import { isCancelled } from '../../lib/chunkedUpload';
+import { fileSignature, keepUpload, unfinishedUploads, sentPercent } from '../../lib/uploadResume';
+import useWakeLock from '../../hooks/useWakeLock';
 import { clipMarks } from '../../lib/assembleTakes';
 import { clipRange, rangeText, rangeOverlaps, overlapText, beatNames } from '../../lib/clipRange';
 import { youtubeChapters, draftDescription } from '../../lib/youtubeChapters';
@@ -238,7 +241,7 @@ function ClipCard({ clip, scenes, names, overlaps = [], onPlay, onChapters, onRe
   );
 }
 
-function Lane({ performer, clips, uploads, onFiles, busyId, scenes, names, overlaps, ...handlers }) {
+function Lane({ performer, clips, uploads, onFiles, onResume, onCancel, busyId, scenes, names, overlaps, ...handlers }) {
   const inputRef = useRef(null);
   const [green, setGreen] = useState(performer.greenByDefault);
   const [guestName, setGuestName] = useState('');
@@ -305,13 +308,23 @@ function Lane({ performer, clips, uploads, onFiles, busyId, scenes, names, overl
       {uploads.length > 0 && (
         <ul className="erf-uploads">
           {uploads.map((u) => (
-            <li key={u.id} className={u.error ? 'is-failed' : ''}>
-              <span className="erf-upload-name">{u.name}</span>
-              {u.error ? <span className="erf-error">{u.error}</span> : (
+            <li key={u.id} className={u.error ? 'is-failed' : ''} data-testid="erf-upload">
+              <span className="erf-upload-name">{u.name}{u.resumed && !u.error ? ' · carrying on' : ''}</span>
+              {u.error ? <span className="erf-error">{u.error}{u.canResume ? ` ${u.progress}% is already sent.` : ''}</span> : (
                 <span className="erf-bar" role="progressbar" aria-valuenow={u.progress} aria-valuemin={0} aria-valuemax={100} aria-label={`Uploading ${u.name}`}>
                   <span style={{ width: `${u.progress}%` }} />
                 </span>
               )}
+              <span className="erf-upload-actions">
+                {u.error && u.canResume && (
+                  <button type="button" className="erf-btn is-primary" onClick={() => onResume(u.id)} data-testid="erf-upload-resume">
+                    <RefreshCw size={14} aria-hidden /> Resume
+                  </button>
+                )}
+                <button type="button" className="erf-btn" onClick={() => onCancel(u.id)} data-testid="erf-upload-cancel">
+                  <X size={14} aria-hidden /> {u.error ? 'Dismiss' : 'Cancel'}
+                </button>
+              </span>
             </li>
           ))}
         </ul>
@@ -392,23 +405,88 @@ export default function EpisodeRawFootageTab({ episode, onCount }) {
     return () => clearTimeout(t);
   }, [clips, load]);
 
+  // Uploads that did not finish, kept on this device (a reload, a dropped
+  // connection; Evoni, 2026-10-31): choosing the same file again carries on.
+  const [unfinished, setUnfinished] = useState([]);
+  useEffect(() => { if (episodeId) setUnfinished(unfinishedUploads(episodeId)); }, [episodeId]);
+  // Per upload: its file, fields, what was sent, and how to stop it.
+  const running = useRef(new Map());
+  const uploading = uploads.some((u) => !u.error);
+  // Keep the screen on while uploading (a locked phone pauses the page),
+  // and ask before leaving the page.
+  useWakeLock(uploading);
+  useEffect(() => {
+    if (!uploading) return undefined;
+    const warn = (e) => { e.preventDefault(); e.returnValue = ''; };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [uploading]);
+
+  const patchUpload = (id, patch) => setUploads((u) => u.map((x) => (x.id === id ? { ...x, ...patch } : x)));
+
+  const runUpload = async (id) => {
+    const job = running.current.get(id);
+    if (!job) return;
+    const controller = new AbortController();
+    job.controller = controller;
+    patchUpload(id, { error: null, canResume: false, progress: job.state ? sentPercent(job.state) : 0 });
+    try {
+      const row = await rawClipsApi.upload(episodeId, job.file, { performer: job.performer, ...job.opts }, (p) => patchUpload(id, { progress: p }), {
+        resume: job.state,
+        signal: controller.signal,
+        onState: (st) => {
+          job.state = st;
+          keepUpload(episodeId, job.signature, st ? { name: job.file.name, performer: job.performer, state: st } : null);
+        },
+      });
+      running.current.delete(id);
+      keepUpload(episodeId, job.signature, null);
+      setUnfinished((list) => list.filter((e) => e.signature !== job.signature));
+      if (row) setClips((c) => [...c, row]);
+      setUploads((u) => u.filter((x) => x.id !== id));
+      if (endBeatNotKept(row, job.opts)) setError(`${job.file.name} is saved, but the beat it ends on wasn't kept: the database update that adds it (20261028120000) hasn't run yet. You can set it on the clip once it has.`);
+    } catch (err) {
+      if (isCancelled(err)) return; // Cancel has already tidied up.
+      console.error('[RawFootage] upload failed:', err);
+      if (err?.resume) job.state = err.resume;
+      const message = err?.response?.status === 413 ? 'Too big to upload' : uploadErrorMessage(err);
+      // How much is really kept on the server: the parts sent, not the last part's bar.
+      patchUpload(id, { error: message, canResume: Boolean(job.state?.uploadId), progress: job.state ? sentPercent(job.state) : 0 });
+    }
+  };
+
   const onFiles = async (performer, files, opts) => {
     for (const file of files) {
+      // The same file (name and size) already in this lane: ask first.
+      const twin = clips.find((c) => c.performer === performer && c.original_filename === file.name && Number(c.file_size_bytes) === file.size);
+      if (twin && !window.confirm(`"${file.name}" is already in this lane (same name and size). Upload it again?`)) continue;
       const id = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-      setUploads((u) => [...u, { id, performer, name: file.name, progress: 0, error: null }]);
-      try {
-        const row = await rawClipsApi.upload(episodeId, file, { performer, ...opts }, (p) => {
-          setUploads((u) => u.map((x) => (x.id === id ? { ...x, progress: p } : x)));
-        });
-        if (row) setClips((c) => [...c, row]);
-        setUploads((u) => u.filter((x) => x.id !== id));
-        if (endBeatNotKept(row, opts)) setError(`${file.name} is saved, but the beat it ends on wasn't kept: the database update that adds it (20261028120000) hasn't run yet. You can set it on the clip once it has.`);
-      } catch (err) {
-        console.error('[RawFootage] upload failed:', err);
-        const message = err?.response?.status === 413 ? 'Too big to upload' : uploadErrorMessage(err);
-        setUploads((u) => u.map((x) => (x.id === id ? { ...x, error: message } : x)));
-      }
+      const signature = fileSignature(file);
+      const saved = unfinished.find((e) => e.signature === signature);
+      running.current.set(id, { file, performer, opts, signature, state: saved?.state || null });
+      setUploads((u) => [...u, { id, performer, name: file.name, progress: saved ? sentPercent(saved.state) : 0, error: null, resumed: Boolean(saved) }]);
+      // eslint-disable-next-line no-await-in-loop
+      await runUpload(id);
     }
+  };
+
+  const onResume = (id) => runUpload(id);
+
+  const onCancel = (id) => {
+    const job = running.current.get(id);
+    running.current.delete(id);
+    setUploads((u) => u.filter((x) => x.id !== id));
+    if (!job) return;
+    job.controller?.abort();
+    keepUpload(episodeId, job.signature, null);
+    setUnfinished((list) => list.filter((e) => e.signature !== job.signature));
+    if (job.state?.uploadId) abortUpload(episodeId, job.state.uploadId);
+  };
+
+  const onForget = (entry) => {
+    keepUpload(episodeId, entry.signature, null);
+    setUnfinished((list) => list.filter((e) => e.signature !== entry.signature));
+    abortUpload(episodeId, entry.state?.uploadId);
   };
 
   const act = async (clip, fn, failMessage) => {
@@ -473,13 +551,21 @@ export default function EpisodeRawFootageTab({ episode, onCount }) {
           <button type="button" className="erf-icon-btn" onClick={() => setError(null)} aria-label="Dismiss"><X size={16} aria-hidden /></button>
         </div>
       )}
+      {unfinished.filter((e) => !uploads.some((u) => !u.error && running.current.get(u.id)?.signature === e.signature)).map((e) => (
+        <div key={e.signature} className="erf-alert erf-unfinished" role="status" data-testid="erf-unfinished">
+          <span>
+            <strong>{e.name}</strong> didn&apos;t finish uploading ({sentPercent(e.state)}% sent). Choose the same file again in its lane to carry on from there.
+          </span>
+          <button type="button" className="erf-btn" onClick={() => onForget(e)} data-testid="erf-unfinished-forget">Forget it</button>
+        </div>
+      ))}
       {loading ? <p className="erf-note">Loading clips…</p> : (
         <div className="erf-lanes">
           {PERFORMERS.map((p) => (
             <Lane key={p.key} performer={p} busyId={busyId} scenes={scenes} names={names} overlaps={overlaps}
               clips={clips.filter((c) => c.performer === p.key)}
               uploads={uploads.filter((u) => u.performer === p.key)}
-              onFiles={onFiles} {...handlers} />
+              onFiles={onFiles} onResume={onResume} onCancel={onCancel} {...handlers} />
           ))}
         </div>
       )}
