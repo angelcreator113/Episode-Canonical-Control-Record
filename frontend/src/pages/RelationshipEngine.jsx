@@ -295,6 +295,11 @@ export default function RelationshipEngine() {
   // separate step after it showed the Overview first, for a moment.
   const searchRef = useRef(location.search);
   searchRef.current = location.search;
+  // The address whose link the last full load already applied, so the
+  // deep-link effect below does not apply it a second time. A second time
+  // could land after a tab change she had already made and reopen the
+  // relationship over it.
+  const appliedSearchRef = useRef(null);
   // quiet: a refresh after a confirm, with no spinner in place of the view
   // (Confirm all's result stays on screen).
   const load = useCallback(async ({ quiet = false } = {}) => {
@@ -307,6 +312,7 @@ export default function RelationshipEngine() {
         cands:  data?.candidates || [],
         lalaId: data?.lala_id || null,
       };
+      if (!quiet) appliedSearchRef.current = searchRef.current;
       dispatch({
         type: 'LOADED',
         // The link's tab and selection on a full load only: a quiet refresh
@@ -359,7 +365,11 @@ export default function RelationshipEngine() {
   /* ── Deep links: ?char= selects a person, ?rel= opens a relationship ── */
   useEffect(() => {
     if (!s.loaded) return;
-    const next = deepLinkState(location.search, { chars: s.chars, rels: s.rels });
+    // The full load applied this link already; only a link that changed since
+    // (she followed another one) is applied here.
+    const alreadyApplied = appliedSearchRef.current === location.search;
+    appliedSearchRef.current = location.search;
+    const next = alreadyApplied ? null : deepLinkState(location.search, { chars: s.chars, rels: s.rels });
     if (next) dispatch({ type: 'SET', payload: next });
     // The character page links to anyone; someone outside the cast is
     // fetched and added, so the link opens them instead of nothing.
