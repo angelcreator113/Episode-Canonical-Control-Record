@@ -24,8 +24,10 @@ jest.mock('../../../src/services/rawClipMedia', () => {
     uploadFile: jest.fn(async (_p, key) => `https://bucket/${key}`),
     removeFile: jest.fn(async () => {}),
     enqueueKey: jest.fn(() => true),
+    cancelKey: jest.fn(() => null),
     activeIds: jest.fn(() => []),
     keyProgress: jest.fn(() => ({})),
+    startedAt: new Date('2026-10-31T03:00:00Z'),
     roomToKey: jest.fn(async () => ({ ok: true, needs: 721 * 1048576, free: 2600 * 1048576 })),
   };
 });
@@ -270,5 +272,44 @@ describe('GET, PATCH and DELETE', () => {
   test('patch of a bad start_line is a 400', async () => {
     const res = await request(app).patch('/api/v1/episode-clips/ep-1/c1').send({ start_line: -2 });
     expect(res.status).toBe(400);
+  });
+});
+
+describe('stopping green removal (Evoni, 2026-10-31)', () => {
+  test('the list tells listClips when this process started (jobs from before fail at once)', async () => {
+    await request(app).get('/api/v1/episode-clips/ep-1');
+    expect(mockQuery.mock.calls[0][1].replacements.since).toEqual(new Date('2026-10-31T03:00:00Z'));
+  });
+
+  test('stop a running job: its ffmpeg is stopped; the job records "Stopped" itself', async () => {
+    media.cancelKey.mockReturnValueOnce('running');
+    const res = await request(app).post('/api/v1/episode-clips/ep-1/c1/stop-green').send({});
+    expect(res.status).toBe(202);
+    expect(res.body.stopped).toBe('running');
+    expect(media.cancelKey).toHaveBeenCalledWith('c1');
+    expect(mockQuery.mock.calls.some(([sql]) => /UPDATE episode_raw_clips SET key_status/.test(sql))).toBe(false);
+  });
+
+  test('stop a queued job: it leaves the queue and the clip says "Stopped" with Retry', async () => {
+    media.cancelKey.mockReturnValueOnce('queued');
+    const res = await request(app).post('/api/v1/episode-clips/ep-1/c1/stop-green').send({});
+    expect(res.status).toBe(202);
+    const update = mockQuery.mock.calls.find(([sql]) => /UPDATE episode_raw_clips SET key_status/.test(sql));
+    expect(update[1].replacements).toMatchObject({ status: 'failed', error: expect.stringMatching(/^Stopped\./) });
+  });
+
+  test('nothing to stop is a 409; an unknown clip a 404', async () => {
+    const none = await request(app).post('/api/v1/episode-clips/ep-1/c1/stop-green').send({});
+    expect(none.status).toBe(409);
+    mockQuery.mockImplementation(async () => [[]]);
+    const missing = await request(app).post('/api/v1/episode-clips/ep-1/nope/stop-green').send({});
+    expect(missing.status).toBe(404);
+  });
+
+  test('deleting a clip stops its green removal', async () => {
+    mockQuery.mockImplementation(async (sql) => (/deleted_at = NOW\(\)/.test(sql) ? [[{ id: 'c1' }]] : [[]]));
+    const res = await request(app).delete('/api/v1/episode-clips/ep-1/c1');
+    expect(res.status).toBe(200);
+    expect(media.cancelKey).toHaveBeenCalledWith('c1');
   });
 });

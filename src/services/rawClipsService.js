@@ -60,6 +60,8 @@ const COLUMNS = `id, episode_id, show_id, performer, guest_name, label, beat_num
 // off (the server restarted mid-job); list marks it failed so Retry shows.
 const STALE_HOURS = 3;
 const STALE_MESSAGE = 'Stopped before it finished (the server restarted). The original and any earlier cut-out are unchanged. Press Retry.';
+// Stopped with the Stop button (Evoni, 2026-10-31).
+const CANCELLED_MESSAGE = 'Stopped. The original and any earlier cut-out are unchanged. Press Retry to start again.';
 
 class RawClipError extends Error {
   constructor(status, message) {
@@ -227,17 +229,21 @@ async function findEpisode(sequelize, episodeId) {
 
 /**
  * The episode's live clips, oldest first. Jobs left queued or processing
- * past STALE_HOURS (and not running now: activeIds) are marked failed first.
+ * (and not running now: activeIds) are marked failed first: those past
+ * STALE_HOURS, and, given since (when this process started), those last
+ * updated before it, whose process is gone (one API process; a restart or
+ * deploy killed them). Then Retry shows at once instead of hours later.
  */
-async function listClips(sequelize, episodeId, { activeIds = [] } = {}) {
+async function listClips(sequelize, episodeId, { activeIds = [], since = null } = {}) {
+  const startedBefore = since instanceof Date && !Number.isNaN(since.getTime());
   await sequelize.query(
     `UPDATE episode_raw_clips
         SET key_status = 'failed', key_error = :message, updated_at = NOW()
       WHERE episode_id = :episodeId AND deleted_at IS NULL
         AND key_status IN ('queued', 'processing')
-        AND updated_at < NOW() - INTERVAL '${STALE_HOURS} hours'
+        AND (updated_at < NOW() - INTERVAL '${STALE_HOURS} hours'${startedBefore ? ' OR updated_at < :since' : ''})
         ${activeIds.length ? 'AND id NOT IN (:activeIds)' : ''}`,
-    { replacements: { episodeId, message: STALE_MESSAGE, activeIds } });
+    { replacements: { episodeId, message: STALE_MESSAGE, activeIds, ...(startedBefore ? { since } : {}) } });
   const [rows] = await sequelize.query(
     `SELECT ${COLUMNS} FROM episode_raw_clips
       WHERE episode_id = :episodeId AND deleted_at IS NULL
@@ -673,7 +679,7 @@ function readFrameRate(json) {
 }
 
 module.exports = {
-  PERFORMERS, KEY_STATUSES, KEY_STRENGTHS, STALE_HOURS, STALE_MESSAGE, DEFAULT_KEY_COLOR, STRENGTH_SIMILARITY,
+  PERFORMERS, KEY_STATUSES, KEY_STRENGTHS, STALE_HOURS, STALE_MESSAGE, CANCELLED_MESSAGE, DEFAULT_KEY_COLOR, STRENGTH_SIMILARITY,
   TAKE_FIELDS, TAKE_FIELDS_MISSING, BEAT_MARKS_MISSING, END_BEAT_MISSING, MAX_BEAT_MARKS, MAX_MARK_SECONDS,
   UPLOAD_EXTRAS, RawClipError, readFields, readBeatMarks, readStrength, readTakeSeconds, readVideoSize, truthy, findEpisode, shapeRow,
   listClips, getClip, createClip, updateClip, storeTakeExtras, setKeyState, removeClip,

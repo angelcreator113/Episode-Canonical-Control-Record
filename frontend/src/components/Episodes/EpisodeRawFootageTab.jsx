@@ -27,7 +27,7 @@
  */
 import React, { useCallback, useContext, useEffect, useRef, useState } from 'react';
 import {
-  Upload, Film, Trash2, Play, WandSparkles, X, Loader, CircleCheck, CircleAlert, Clock, RefreshCw, UserRound, ListOrdered, Copy, Layers, MoveRight,
+  Upload, Film, Trash2, Play, Square, WandSparkles, X, Loader, CircleCheck, CircleAlert, Clock, RefreshCw, UserRound, ListOrdered, Copy, Layers, MoveRight,
 } from 'lucide-react';
 import { rawClipsApi, PERFORMERS, STRENGTHS, clipLength, clipSize, anyKeying, keyingProgress, sceneChoices, uploadErrorMessage, uploadBeats, uploadEndChoices, endBeatNotKept } from '../../lib/rawClipsApi';
 import { clipMarks } from '../../lib/assembleTakes';
@@ -153,7 +153,7 @@ function VoiceLine({ clip, job, onPrepareVoice, busy }) {
   );
 }
 
-function ClipCard({ clip, scenes, names, overlaps = [], onPlay, onChapters, onRemoveGreen, onMove, onLink, onEndBeat, onDelete, busy, voice = null, onPrepareVoice }) {
+function ClipCard({ clip, scenes, names, overlaps = [], onPlay, onChapters, onRemoveGreen, onStopGreen, onMove, onLink, onEndBeat, onDelete, busy, voice = null, onPrepareVoice }) {
   const [strength, setStrength] = useState(clip.key_strength || 'medium');
   const st = STATUS[clip.key_status] || STATUS.none;
   const keying = keyingProgress(clip);
@@ -197,6 +197,11 @@ function ClipCard({ clip, scenes, names, overlaps = [], onPlay, onChapters, onRe
           {hasMarks && (
             <button type="button" className="erf-btn" onClick={() => onChapters(clip)} data-testid="erf-chapters-open" title="Chapters and a draft description for YouTube, from this take's beat markers">
               <ListOrdered size={14} aria-hidden /> YouTube chapters
+            </button>
+          )}
+          {working && (
+            <button type="button" className="erf-btn" onClick={() => onStopGreen(clip)} disabled={busy} data-testid="erf-stop-green">
+              <Square size={14} aria-hidden /> Stop
             </button>
           )}
           {!working && (
@@ -430,6 +435,10 @@ export default function EpisodeRawFootageTab({ episode, onCount }) {
     onPlay: setPlaying,
     onChapters: setChapters,
     onRemoveGreen: (clip, strength) => act(clip, () => rawClipsApi.removeGreen(episodeId, clip.id, strength), 'Could not start removing the green.'),
+    onStopGreen: (clip) => {
+      if (!window.confirm(`Stop removing the green from "${clip.label || 'this clip'}"? The original stays as it is, and you can press Retry later.`)) return undefined;
+      return act(clip, () => rawClipsApi.stopGreen(episodeId, clip.id), 'Could not stop removing the green.');
+    },
     onMove: (clip, performer) => act(clip, () => rawClipsApi.update(episodeId, clip.id, { performer }), 'Could not move the clip.'),
     onLink: (clip, beatNumber) => act(clip, () => rawClipsApi.update(episodeId, clip.id, { beat_number: beatNumber }), 'Could not link the clip to the scene.'),
     // The server says plainly when its database update for this hasn't run yet (409).

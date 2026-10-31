@@ -78,6 +78,8 @@ const isNotFound = (err) => !!err && (err.name === 'NoSuchKey' || err.name === '
 function friendlyKeyError(err, { hadCutout = false } = {}) {
   const msg = String(err?.message || '');
   if (err instanceof KeyNoRoomError) return msg;
+  // The cut-out was made but storing it failed, after its retries.
+  if (err?.stage === 'store') return `The cut-out was made, but it could not be saved to storage. ${kept(hadCutout)} Press Retry in a few minutes.`;
   if (isDiskFull(err)) return `The server ran out of space while removing the green. ${kept(hadCutout)} Space has to be freed on the server before Retry will work.`;
   if (/is not installed on the server/.test(msg)) return `${msg}. ${kept(hadCutout)}`;
   if (isNotFound(err)) return `The original video could not be found in storage, so the green was not removed. ${kept(hadCutout)}`;

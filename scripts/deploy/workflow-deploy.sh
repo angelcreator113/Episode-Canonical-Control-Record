@@ -211,6 +211,13 @@ running_vite_builds() {
   pgrep -f -- 'vite(\.js)? build' 2>/dev/null || true
 }
 
+# The process ids of green removals (the API's ffmpeg chromakey runs) going
+# on now, one per line, or nothing. The restart this deploy ends with would
+# stop them, losing up to hours of work (Evoni, 2026-10-31).
+running_green_removals() {
+  pgrep -f -- 'chromakey=color=' 2>/dev/null || true
+}
+
 # The box's memory and swap in one line each, in MB (no host, no credential).
 # FREE_CMD overrides `free -m` for the tests.
 memory_lines() {
@@ -523,6 +530,13 @@ finish_migrate() {
 
 phase_plan() {
   require_clean_tree
+  local keying
+  keying="$(running_green_removals)"
+  if [ -n "$keying" ]; then
+    die "a green removal is running on the box (ffmpeg pid $(printf '%s' "$keying" | tr '\n' ' ' | sed 's/ $//'))." \
+      "This deploy ends by restarting the API, which would stop it and lose its work." \
+      "Nothing was changed. Start the deploy again once the Files page shows it finished, or press Stop on that clip first."
+  fi
   git fetch --quiet origin main
   if ! git merge-base --is-ancestor "$TARGET" origin/main; then
     die "$TARGET is not on origin/main."

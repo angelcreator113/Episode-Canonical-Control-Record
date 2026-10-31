@@ -461,3 +461,32 @@ describe('green removal speed (Evoni, 2026-10-31: 4481.mp4 ran past the time lim
     for (const fps of [30, 29.97, 25, 24, null, undefined]) expect(vf(fps)).not.toMatch(/fps=/);
   });
 });
+
+describe('green removal reliability (Evoni, 2026-10-31)', () => {
+  const errors = require('../../../src/services/rawClipErrors');
+
+  test('listClips with since: a job left from before this process started fails at once (no 3-hour wait); running ones are spared', async () => {
+    const since = new Date('2026-10-31T03:00:00Z');
+    const s = seq([[]], [[{ id: 'c1' }]]);
+    await clips.listClips(s, 'ep', { activeIds: ['c9'], since });
+    const [sql, opts] = s.query.mock.calls[0];
+    expect(sql).toMatch(/updated_at < NOW\(\) - INTERVAL '3 hours' OR updated_at < :since/);
+    expect(sql).toMatch(/id NOT IN \(:activeIds\)/);
+    expect(opts.replacements).toMatchObject({ since, activeIds: ['c9'], message: clips.STALE_MESSAGE });
+  });
+
+  test('listClips without since keeps the 3-hour rule only', async () => {
+    const s = seq([[]], [[]]);
+    await clips.listClips(s, 'ep');
+    const [sql, opts] = s.query.mock.calls[0];
+    expect(sql).not.toMatch(/:since/);
+    expect(opts.replacements).not.toHaveProperty('since');
+  });
+
+  test('a cut-out that could not be stored says so (not "could not read the original"); a stop says Stopped', () => {
+    const s3 = Object.assign(new Error('InternalError'), { name: 'InternalError', $metadata: { httpStatusCode: 500 }, stage: 'store' });
+    expect(errors.friendlyKeyError(s3)).toMatch(/^The cut-out was made, but it could not be saved to storage\. .*Press Retry in a few minutes\.$/);
+    expect(errors.friendlyKeyError(s3)).not.toMatch(/original video/);
+    expect(clips.CANCELLED_MESSAGE).toMatch(/^Stopped\. The original and any earlier cut-out are unchanged\./);
+  });
+});

@@ -198,6 +198,8 @@ export const rawClipsApi = {
   // Stars a take for its beat; the server un-stars the beat's other takes.
   favorite: (episodeId, clipId, on) => api.patch(`${base(episodeId)}/${clipId}`, { is_favorite: !!on }).then((r) => r.data?.data),
   removeGreen: (episodeId, clipId, strength) => api.post(`${base(episodeId)}/${clipId}/remove-green`, { strength }).then((r) => r.data?.data),
+  // Stops a queued or running green removal (the clip then says "Stopped", with Retry).
+  stopGreen: (episodeId, clipId) => api.post(`${base(episodeId)}/${clipId}/stop-green`).then((r) => r.data?.data),
   remove: (episodeId, clipId) => api.delete(`${base(episodeId)}/${clipId}`).then(() => true),
   // The episode's scenes (canonical beats) a clip can be linked to.
   beats: (episodeId) => api.get(`/api/v1/episode-brief/${episodeId}/plan`)
