@@ -28,6 +28,7 @@
  *                                              is_favorite (one per beat), start_line (teleprompter),
  *                                              beat_marks (a full-episode take's [{ beat, t }])
  *   POST   /:episodeId/:clipId/remove-green    (re)run green removal { strength }
+ *   POST   /:episodeId/:clipId/stop-green      stop a queued or running green removal
  *   DELETE /:episodeId/:clipId                 soft delete (files stay in S3)
  *
  * green_screen on upload queues green removal at once. The original is
@@ -342,7 +343,7 @@ router.delete('/:episodeId/uploads/:uploadId', requireAuth, async (req, res) => 
 
 router.get('/:episodeId', requireAuth, async (req, res) => {
   try {
-    const rows = await clips.listClips(models.sequelize, req.params.episodeId, { activeIds: media.activeIds() });
+    const rows = await clips.listClips(models.sequelize, req.params.episodeId, { activeIds: media.activeIds(), since: media.startedAt });
     // A running green removal says how far it has got (in memory, this process only).
     const progress = media.keyProgress();
     const data = rows.map((r) => (progress[r.id] && r.key_status === 'processing' ? { ...r, key_progress: progress[r.id] } : r));
@@ -459,10 +460,30 @@ router.post('/:episodeId/:clipId/remove-green', requireAuth, async (req, res) =>
   }
 });
 
+// Stops a clip's green removal, queued or running (Evoni, 2026-10-31). The
+// clip then shows "Stopped" with Retry; nothing is changed or deleted.
+router.post('/:episodeId/:clipId/stop-green', requireAuth, async (req, res) => {
+  try {
+    const clip = await clips.getClip(models.sequelize, req.params.episodeId, req.params.clipId);
+    if (!clip) return res.status(404).json({ success: false, error: 'Clip not found' });
+    const stopped = media.cancelKey(clip.id);
+    if (!stopped) return res.status(409).json({ success: false, error: 'Green removal is not running for this clip' });
+    // A queued job never started, so nothing else will record that it stopped.
+    const row = stopped === 'queued'
+      ? await clips.setKeyState(models.sequelize, clip.id, 'failed', { error: clips.CANCELLED_MESSAGE })
+      : clip;
+    return res.status(202).json({ success: true, stopped, data: row });
+  } catch (err) {
+    return sendError(res, err, 'stop-green');
+  }
+});
+
 router.delete('/:episodeId/:clipId', requireAuth, async (req, res) => {
   try {
     const removed = await clips.removeClip(models.sequelize, req.params.episodeId, req.params.clipId);
     if (!removed) return res.status(404).json({ success: false, error: 'Clip not found' });
+    // A deleted clip's green removal stops too (it would run on for hours).
+    media.cancelKey(req.params.clipId);
     return res.json({ success: true });
   } catch (err) {
     return sendError(res, err, 'delete');

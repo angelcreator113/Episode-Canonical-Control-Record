@@ -87,9 +87,10 @@ function toolError(err, tool) {
  * Runs a command; resolves { stdout (Buffer), stderr (string) }, rejects on a
  * non-zero exit with the tail of stderr. low: run at low CPU priority.
  * onLine: stdout is read line by line as it comes and passed to onLine
- * instead of being kept (ffmpeg's -progress output).
+ * instead of being kept (ffmpeg's -progress output). onSpawn: given the
+ * child process once it starts (so a job can be stopped).
  */
-function run(cmd, args, { low = false, timeoutMs = 10 * 60 * 1000, onLine = null } = {}) {
+function run(cmd, args, { low = false, timeoutMs = 10 * 60 * 1000, onLine = null, onSpawn = null } = {}) {
   return new Promise((resolve, reject) => {
     let child;
     try {
@@ -98,6 +99,7 @@ function run(cmd, args, { low = false, timeoutMs = 10 * 60 * 1000, onLine = null
       reject(toolError(err, path.basename(cmd)));
       return;
     }
+    if (onSpawn) onSpawn(child);
     if (low && child.pid) {
       try { os.setPriority(child.pid, 15); } catch (err) {
         console.error('[rawClips] could not lower ffmpeg priority:', err.message);
@@ -202,9 +204,42 @@ async function inspect(localPath) {
 const queue = [];
 const active = new Set();
 let running = false;
+// The job being worked on now: { clipId, controls: { cancelled, child } }.
+let current = null;
+// When this process started. A clip still queued or processing from before
+// then belongs to a process that is gone (one API process, ecosystem.config.js):
+// listClips marks it failed at once, so Retry shows (Evoni, 2026-10-31).
+const startedAt = new Date();
+// Retries for storing a finished cut-out (a failure after hours of work
+// would throw it away). An object, so tests can shorten the waits.
+const storeRetry = { delaysMs: [2000, 10000] };
 
 /** Clip ids queued or running here (listClips leaves these alone). */
 const activeIds = () => [...active];
+
+/**
+ * Stops a clip's green removal: a queued one leaves the queue, a running one
+ * has its ffmpeg stopped (the job then fails with CANCELLED_MESSAGE).
+ * Resolves 'queued', 'running', or null when the clip has no job here.
+ */
+function cancelKey(clipId) {
+  const i = queue.findIndex((j) => j.clipId === clipId);
+  if (i >= 0) {
+    const [job] = queue.splice(i, 1);
+    active.delete(clipId);
+    if (job.localPath) {
+      inUse.delete(job.localPath);
+      removeFile(job.localPath).catch((err) => console.error('[rawClips] could not remove a stopped job\'s file:', err.message));
+    }
+    return 'queued';
+  }
+  if (current && current.clipId === clipId) {
+    current.controls.cancelled = true;
+    if (current.controls.child) current.controls.child.kill('SIGTERM');
+    return 'running';
+  }
+  return null;
+}
 
 // The running green removal's progress, in memory only: { startedAt,
 // doneSeconds, totalSeconds } by clip id while ffmpeg runs (Evoni,
@@ -259,7 +294,7 @@ function enqueueKey(sequelize, { clipId, episodeId, s3KeyRaw, strength = 'medium
   if (active.has(clipId)) return false;
   active.add(clipId);
   if (localPath) inUse.add(localPath);
-  queue.push({ sequelize, clipId, episodeId, s3KeyRaw, strength, localPath, durationSeconds, hadCutout });
+  queue.push({ sequelize, clipId, episodeId, s3KeyRaw, strength, localPath, durationSeconds, hadCutout, controls: { cancelled: false, child: null } });
   setImmediate(drain);
   return true;
 }
@@ -270,16 +305,20 @@ async function drain() {
   try {
     while (queue.length) {
       const job = queue.shift();
+      current = job;
       try {
         await keyClip(job);
       } catch (err) {
-        console.error(`[rawClips] green removal failed for ${job.clipId}:`, err.code || err.name || '', err.message);
+        const stopped = job.controls.cancelled;
+        console.error(`[rawClips] green removal ${stopped ? 'stopped' : 'failed'} for ${job.clipId}:`, err.code || err.name || '', err.message);
         try {
-          await clips.setKeyState(job.sequelize, job.clipId, 'failed', { error: friendlyKeyError(err, { hadCutout: job.hadCutout }) });
+          const error = stopped ? clips.CANCELLED_MESSAGE : friendlyKeyError(err, { hadCutout: job.hadCutout });
+          await clips.setKeyState(job.sequelize, job.clipId, 'failed', { error });
         } catch (dbErr) {
           console.error('[rawClips] could not record the failure:', dbErr.message);
         }
       } finally {
+        current = null;
         active.delete(job.clipId);
         if (job.localPath) inUse.delete(job.localPath);
         await removeFile(job.localPath);
@@ -290,7 +329,34 @@ async function drain() {
   }
 }
 
-async function keyClip({ sequelize, clipId, episodeId, s3KeyRaw, strength, localPath, durationSeconds, hadCutout, source: open = openSource }) {
+/** Stops a job between its steps once it has been cancelled. */
+function stopIfCancelled(controls) {
+  if (controls.cancelled) throw new Error('green removal stopped by request');
+}
+
+/**
+ * Stores the finished cut-out, trying again after storeRetry.delaysMs when
+ * storage fails. A last failure is marked stage 'store' (its own message).
+ */
+async function storeCutout(output, cutoutKey, controls) {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      // eslint-disable-next-line no-await-in-loop
+      return await uploadFile(output, cutoutKey, 'video/webm');
+    } catch (err) {
+      const wait = storeRetry.delaysMs[attempt];
+      if (wait == null || controls.cancelled) {
+        err.stage = 'store';
+        throw err;
+      }
+      console.error(`[rawClips] storing the cut-out failed (attempt ${attempt + 1}); trying again in ${wait / 1000} s:`, err.message);
+      // eslint-disable-next-line no-await-in-loop
+      await new Promise((r) => setTimeout(r, wait));
+    }
+  }
+}
+
+async function keyClip({ sequelize, clipId, episodeId, s3KeyRaw, strength, localPath, durationSeconds, hadCutout, source: open = openSource, controls = { cancelled: false, child: null } }) {
   await clips.setKeyState(sequelize, clipId, 'processing');
   // Before anything is written: is there room for the cut-out?
   const room = await roomToKey(durationSeconds);
@@ -319,6 +385,7 @@ async function keyClip({ sequelize, clipId, episodeId, s3KeyRaw, strength, local
       if (/not installed/.test(err.message)) throw err;
       console.error('[rawClips] could not sample the green; using chroma-key green:', err.message);
     }
+    stopIfCancelled(controls);
     const p = { startedAt: Date.now(), doneSeconds: null, totalSeconds: expected };
     progress.set(clipId, p);
     await run(FFMPEG, ['-progress', 'pipe:1', '-nostats', ...clips.chromakeyArgs(input, output, { color, strength, sourceFps: original.fps })], {
@@ -328,7 +395,13 @@ async function keyClip({ sequelize, clipId, episodeId, s3KeyRaw, strength, local
         const s = clips.progressSeconds(line);
         if (s != null) p.doneSeconds = s;
       },
+      onSpawn: (child) => {
+        controls.child = child;
+        if (controls.cancelled) child.kill('SIGTERM');
+      },
     });
+    controls.child = null;
+    stopIfCancelled(controls);
     // ffmpeg can end "successfully" with only part of the clip when its read
     // of the original breaks for good (it did in testing, with a link that
     // had expired): such a cut-out is never stored.
@@ -339,7 +412,7 @@ async function keyClip({ sequelize, clipId, episodeId, s3KeyRaw, strength, local
     }
     // A new file for this run; the clip moves to it only once it is stored.
     const cutoutKey = clips.cutoutKeyFor(clipPrefix(episodeId, clipId));
-    const cutoutUrl = await uploadFile(output, cutoutKey, 'video/webm');
+    const cutoutUrl = await storeCutout(output, cutoutKey, controls);
     await clips.setKeyState(sequelize, clipId, 'done', { cutoutKey, cutoutUrl });
     if (source) console.log(`[rawClips] green removed for ${clipId}, original read from storage:`, JSON.stringify(source.stats));
   } finally {
@@ -414,6 +487,6 @@ async function freeBytes(dir = TMP_DIR) {
 
 module.exports = {
   BUCKET, TMP_DIR, TMP_MAX_AGE_MS, FFMPEG, FFPROBE, publicUrl, clipPrefix, tmpPath, removeFile, getS3, openStoredFile,
-  run, uploadFile, downloadFile, inspect, enqueueKey, activeIds, keyProgress, roomToKey, keyClip,
+  run, uploadFile, downloadFile, inspect, enqueueKey, cancelKey, activeIds, keyProgress, startedAt, storeRetry, roomToKey, keyClip,
   sweepTmp, startTmpSweeper, freeBytes,
 };

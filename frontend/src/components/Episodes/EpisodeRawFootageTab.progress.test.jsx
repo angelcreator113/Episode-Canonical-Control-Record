@@ -6,13 +6,13 @@
  * bar only when there is a percentage.
  */
 import { vi, describe, beforeEach, test, expect } from 'vitest';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { render, screen, waitFor, within, fireEvent } from '@testing-library/react';
 
 vi.mock('../../lib/rawClipsApi', async () => {
   const actual = await vi.importActual('../../lib/rawClipsApi');
   return {
     ...actual,
-    rawClipsApi: { list: vi.fn(), upload: vi.fn(), update: vi.fn(), removeGreen: vi.fn(), remove: vi.fn(), beats: vi.fn() },
+    rawClipsApi: { list: vi.fn(), upload: vi.fn(), update: vi.fn(), removeGreen: vi.fn(), stopGreen: vi.fn(), remove: vi.fn(), beats: vi.fn() },
   };
 });
 
@@ -77,5 +77,41 @@ describe('the card', () => {
     render(<EpisodeRawFootageTab episode={{ id: 'ep-1' }} />);
     await waitFor(() => expect(screen.getByTestId('erf-progress').textContent).toBe('Started 14 min ago'));
     expect(screen.queryByRole('progressbar')).toBeNull();
+  });
+});
+
+describe('Stop (Evoni, 2026-10-31)', () => {
+  beforeEach(() => {
+    Object.values(rawClipsApi).forEach((fn) => fn?.mockReset?.());
+    rawClipsApi.beats.mockResolvedValue([]);
+  });
+  const cardOf = (label) => screen.getAllByTestId('erf-clip').find((c) => within(c).queryByText(label));
+
+  test('a running or waiting clip has Stop (and no Retry); asks first, then stops it', async () => {
+    rawClipsApi.list.mockResolvedValue([
+      { id: 'a', performer: 'lala', label: '4481.mp4', url_raw: 'https://x/a.mp4', key_status: 'processing' },
+      { id: 'b', performer: 'lala', label: 'next.mp4', url_raw: 'https://x/b.mp4', key_status: 'queued' },
+      { id: 'c', performer: 'lala', label: 'done.mp4', url_raw: 'https://x/c.mp4', key_status: 'done' },
+    ]);
+    rawClipsApi.stopGreen.mockResolvedValue({ id: 'a', key_status: 'processing' });
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    render(<EpisodeRawFootageTab episode={{ id: 'ep-1' }} />);
+    const stop = await waitFor(() => within(cardOf('4481.mp4')).getByTestId('erf-stop-green'));
+    expect(within(cardOf('next.mp4')).getByTestId('erf-stop-green')).toBeTruthy();
+    expect(within(cardOf('done.mp4')).queryByTestId('erf-stop-green')).toBeNull();
+    expect(within(cardOf('4481.mp4')).queryByText('Retry')).toBeNull();
+    fireEvent.click(stop);
+    expect(confirm).toHaveBeenCalledWith(expect.stringMatching(/^Stop removing the green from "4481\.mp4"\? The original stays as it is/));
+    await waitFor(() => expect(rawClipsApi.stopGreen).toHaveBeenCalledWith('ep-1', 'a'));
+    confirm.mockRestore();
+  });
+
+  test('saying no at the question stops nothing', async () => {
+    rawClipsApi.list.mockResolvedValue([{ id: 'a', performer: 'lala', label: '4481.mp4', url_raw: 'https://x/a.mp4', key_status: 'processing' }]);
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    render(<EpisodeRawFootageTab episode={{ id: 'ep-1' }} />);
+    fireEvent.click(await screen.findByTestId('erf-stop-green'));
+    expect(rawClipsApi.stopGreen).not.toHaveBeenCalled();
+    confirm.mockRestore();
   });
 });

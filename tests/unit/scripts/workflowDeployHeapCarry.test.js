@@ -171,9 +171,12 @@ exit 1
     fs.mkdirSync(path.join(app, 'frontend', 'dist'), { recursive: true });
     fs.writeFileSync(path.join(bin, 'git'), GIT, { mode: 0o755 });
     fs.writeFileSync(path.join(bin, 'node'), NODE, { mode: 0o755 });
+    // pgrep: no green removal running, unless STUB_KEYING names its pids
+    // (never the real one: another test may be running ffmpeg).
+    fs.writeFileSync(path.join(bin, 'pgrep'), '#!/usr/bin/env bash\necho "pgrep $*" >>"$HOME/pgrep.log"\nif [ -n "$STUB_KEYING" ]; then printf "%s\\n" $STUB_KEYING; exit 0; fi\nexit 1\n', { mode: 0o755 });
     const res = spawnSync('bash', ['-c', [
       'set -euo pipefail',
-      ['die', 'redact', 'require_clean_tree', 'pending_check', 'unfinished_deploy_of', 'phase_plan'].map(fn).join('\n'),
+      ['die', 'redact', 'require_clean_tree', 'pending_check', 'unfinished_deploy_of', 'running_green_removals', 'phase_plan'].map(fn).join('\n'),
       `PHASE=plan; TARGET=${TARGET}; DEPLOY_MARKER="$HOME/.episode-deploy-unfinished"`,
       `cd "${app}"`,
       'phase_plan',
@@ -198,6 +201,23 @@ exit 1
     expect(res.status).toBe(1);
     expect(res.out).not.toMatch(/PLAN_OK|PLAN_CARRIED/);
     expect(res.err).toMatch(/STOPPED \(plan\): the pending-migration check on the current tree exited 1, not 0\./);
+  });
+
+  test('a green removal running on the box stops the plan before anything, naming it (Evoni, 2026-10-31)', () => {
+    fs.mkdirSync(path.join(tmp, `dist-backup-20261011T214232Z-${HEAD.slice(0, 12)}`));
+    const res = plan({ STUB_KEYING: '4242 4343' });
+    expect(res.status).toBe(1);
+    expect(res.out).not.toMatch(/PLAN_OK|PLAN_OLD_SHA/);
+    expect(res.err).toMatch(/STOPPED \(plan\): a green removal is running on the box \(ffmpeg pid 4242 4343\)\./);
+    expect(res.err).toMatch(/Nothing was changed\. Start the deploy again once the Files page shows it finished, or press Stop on that clip first\./);
+    expect(fs.readFileSync(path.join(tmp, 'pgrep.log'), 'utf8')).toContain('-f -- chromakey=color=');
+  });
+
+  test('the green-removal check looks for the API\'s ffmpeg key, as chromakeyArgs writes it', () => {
+    const clips = require('../../../src/services/rawClipsService');
+    const vf = clips.chromakeyArgs('in.mp4', 'out.webm')[clips.chromakeyArgs('in.mp4', 'out.webm').indexOf('-vf') + 1];
+    expect(vf).toContain('chromakey=color=');
+    expect(fn('running_green_removals')).toContain("'chromakey=color='");
   });
 
   test('an unreadable ledger always stops, even with the backup there', () => {

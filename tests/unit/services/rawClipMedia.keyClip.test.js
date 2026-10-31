@@ -215,6 +215,68 @@ describe('progress while green removal runs (Evoni, 2026-10-30)', () => {
   });
 });
 
+describe('reliability (Evoni, 2026-10-31)', () => {
+  test('Stop while ffmpeg runs: ffmpeg is stopped, nothing is stored, the clip says Stopped, the queue is free', async () => {
+    fake.progress = '30'; // the stand-in ffmpeg pauses a moment after reporting
+    writeFake();
+    expect(media.enqueueKey(db.sequelize, JOB)).toBe(true);
+    for (let i = 0; i < 300 && !(media.keyProgress().c1 && media.keyProgress().c1.percent != null); i += 1) {
+      // eslint-disable-next-line no-await-in-loop
+      await new Promise((r) => setTimeout(r, 10));
+    }
+    expect(media.cancelKey('c1')).toBe('running');
+    const state = await key.wait();
+    expect(state.key_status).toBe('failed');
+    expect(state.key_error).toMatch(/^Stopped\. The original and any earlier cut-out are unchanged\./);
+    expect(puts()).toEqual([]);
+    expect(media.activeIds()).toEqual([]);
+    expect(media.keyProgress()).toEqual({});
+  });
+
+  test('Stop on a queued job: it leaves the queue and never runs; the running one carries on', async () => {
+    fake.progress = '30';
+    writeFake();
+    expect(media.enqueueKey(db.sequelize, JOB)).toBe(true);
+    expect(media.enqueueKey(db.sequelize, { ...JOB, clipId: 'c2' })).toBe(true);
+    expect(media.cancelKey('c2')).toBe('queued');
+    expect(media.cancelKey('c2')).toBeNull();
+    const state = await key.wait();
+    expect(state.key_status).toBe('done');
+    expect(ffmpegCalls().filter((c) => /chromakey/.test(c))).toHaveLength(1);
+    expect(media.cancelKey('nothing-here')).toBeNull();
+  });
+
+  test('storing the cut-out fails once: tried again, and the clip is done', async () => {
+    media.storeRetry.delaysMs = [5, 5];
+    let failures = 1;
+    s3Answer = async (command, name) => {
+      if (name === 'PutObjectCommand' && failures > 0) {
+        failures -= 1;
+        command.input.Body.resume();
+        throw Object.assign(new Error('InternalError'), { name: 'InternalError', $metadata: { httpStatusCode: 500 } });
+      }
+      return undefined;
+    };
+    const state = await key();
+    expect(state.key_status).toBe('done');
+    expect(puts()).toHaveLength(2);
+  });
+
+  test('storing the cut-out keeps failing: its own message, not "could not read the original"', async () => {
+    media.storeRetry.delaysMs = [5, 5];
+    s3Answer = async (command, name) => {
+      if (name !== 'PutObjectCommand') return undefined;
+      command.input.Body.resume();
+      throw Object.assign(new Error('InternalError'), { name: 'InternalError', $metadata: { httpStatusCode: 500 } });
+    };
+    const state = await key();
+    expect(state.key_status).toBe('failed');
+    expect(state.key_error).toMatch(/^The cut-out was made, but it could not be saved to storage\./);
+    expect(puts()).toHaveLength(3);
+    expect(leftInTmp()).toEqual([]);
+  });
+});
+
 describe('low disk space', () => {
   test('too little room: refused before ffmpeg runs or anything is stored, with the numbers, and the earlier cut-out kept', async () => {
     db = fakeDb({ key_status: 'done', s3_key_cutout: 'episodes/ep1/raw-clips/c1/cutout.webm', url_cutout: 'https://b/old.webm' });
