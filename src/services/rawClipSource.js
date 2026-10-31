@@ -11,7 +11,7 @@
  * whose index sits at the end needs that). Each request, and each resume,
  * is a new S3 GetObject signed at that moment, so nothing expires during a
  * job however long it runs. A signed link made once at the start would not
- * do: the job may run up to two hours, ffmpeg reconnects with the same link,
+ * do: the job may run up to four hours, ffmpeg reconnects with the same link,
  * and a link signed with the server's role credentials stops working when
  * those credentials do, whatever expiry it was given.
  *

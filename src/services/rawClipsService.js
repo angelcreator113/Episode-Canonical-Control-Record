@@ -547,11 +547,25 @@ function cutoutComplete(gotSeconds, expectedSeconds) {
   return Number(gotSeconds) >= Number(expectedSeconds) - Math.max(0.5, Number(expectedSeconds) * 0.01);
 }
 
-/** ffmpeg arguments: input → WebM (VP9 with alpha, Opus audio), green keyed out, longest side at most 1920. */
-function chromakeyArgs(input, output, { color = DEFAULT_KEY_COLOR, strength = 'medium' } = {}) {
+// The cut-out's frame rate cap: a 60 fps phone clip is keyed at 30, half the
+// work (Evoni, 2026-10-31: 4481.mp4 ran past the time limit).
+const KEY_MAX_FPS = 30;
+
+/**
+ * ffmpeg arguments: input → WebM (VP9 with alpha, Opus audio), green keyed
+ * out, longest side at most 1920, at most KEY_MAX_FPS frames a second when
+ * sourceFps says the original has more.
+ *
+ * VP9 runs at its realtime speed (cpu-used 8) with crf 30: measured
+ * 2026-10-31 on a 4K test clip with 2 threads, about 1.7x the frames per
+ * second of the earlier good/cpu-used 4/crf 32, SSIM 0.997 against its
+ * output, alpha kept. The files are about 1.9x larger.
+ */
+function chromakeyArgs(input, output, { color = DEFAULT_KEY_COLOR, strength = 'medium', sourceFps = null } = {}) {
   const similarity = STRENGTH_SIMILARITY[strength] ?? STRENGTH_SIMILARITY.medium;
   const filter = [
     "scale='if(gte(iw,ih),min(1920,iw),-2)':'if(gte(iw,ih),-2,min(1920,ih))'",
+    ...(Number(sourceFps) > KEY_MAX_FPS + 0.5 ? [`fps=${KEY_MAX_FPS}`] : []),
     `chromakey=color=${color}:similarity=${similarity}:blend=0.08`,
     'despill=type=green',
     'format=yuva420p',
@@ -559,8 +573,8 @@ function chromakeyArgs(input, output, { color = DEFAULT_KEY_COLOR, strength = 'm
   return [
     '-hide_banner', '-y', ...netInputArgs(input), '-i', input,
     '-vf', filter,
-    '-c:v', 'libvpx-vp9', '-pix_fmt', 'yuva420p', '-b:v', '0', '-crf', '32',
-    '-deadline', 'good', '-cpu-used', '4', '-row-mt', '1', '-threads', '2', '-auto-alt-ref', '0',
+    '-c:v', 'libvpx-vp9', '-pix_fmt', 'yuva420p', '-b:v', '0', '-crf', '30',
+    '-deadline', 'realtime', '-cpu-used', '8', '-row-mt', '1', '-threads', '2', '-auto-alt-ref', '0',
     '-c:a', 'libopus', '-b:a', '128k',
     output,
   ];
@@ -637,11 +651,32 @@ function readProbe(json) {
   };
 }
 
+/**
+ * The video's frame rate from ffprobe's JSON output (avg_frame_rate, else
+ * r_frame_rate, as "60000/1001" or "30"), or null when it can't be read.
+ */
+function readFrameRate(json) {
+  let data = json;
+  if (typeof json === 'string') {
+    try { data = JSON.parse(json); } catch (err) {
+      console.error('[rawClips] ffprobe output is not JSON:', err.message);
+      return null;
+    }
+  }
+  const video = (Array.isArray(data?.streams) ? data.streams : []).find((s) => s.codec_type === 'video');
+  for (const rate of [video?.avg_frame_rate, video?.r_frame_rate]) {
+    const [num, den = '1'] = String(rate ?? '').split('/');
+    const fps = Number(num) / Number(den);
+    if (Number.isFinite(fps) && fps > 0) return Math.round(fps * 100) / 100;
+  }
+  return null;
+}
+
 module.exports = {
   PERFORMERS, KEY_STATUSES, KEY_STRENGTHS, STALE_HOURS, STALE_MESSAGE, DEFAULT_KEY_COLOR, STRENGTH_SIMILARITY,
   TAKE_FIELDS, TAKE_FIELDS_MISSING, BEAT_MARKS_MISSING, END_BEAT_MISSING, MAX_BEAT_MARKS, MAX_MARK_SECONDS,
   UPLOAD_EXTRAS, RawClipError, readFields, readBeatMarks, readStrength, readTakeSeconds, readVideoSize, truthy, findEpisode, shapeRow,
   listClips, getClip, createClip, updateClip, storeTakeExtras, setKeyState, removeClip,
   KEY_MB_PER_SECOND, KEY_MIN_BYTES, KEY_MARGIN_BYTES, KEY_UNKNOWN_SECONDS, keyRoomNeeded, cutoutKeyFor, netInputArgs, CutoutIncompleteError, cutoutComplete,
-  pickKeyColor, chromakeyArgs, progressSeconds, progressView, sampleFrameArgs, thumbnailArgs, probeArgs, readProbe,
+  KEY_MAX_FPS, pickKeyColor, chromakeyArgs, progressSeconds, progressView, sampleFrameArgs, thumbnailArgs, probeArgs, readProbe, readFrameRate,
 };

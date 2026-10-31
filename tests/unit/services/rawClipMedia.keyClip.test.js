@@ -29,9 +29,9 @@ function restoreEnv() {
 }
 // The stand-in tools read their settings from a file (Jest's process.env does
 // not reach the processes they run as).
-const fake = { seconds: '184.0', out: '184.0', err: '', progress: '' };
+const fake = { seconds: '184.0', out: '184.0', err: '', progress: '', fps: '30/1' };
 const writeFake = () => fs.writeFileSync(path.join(work, 'fake.env'),
-  `FAKE_SECONDS='${fake.seconds}'\nFAKE_OUT_SECONDS='${fake.out}'\nFAKE_FFMPEG_ERR='${fake.err}'\nFAKE_PROGRESS='${fake.progress}'\nFAKE_LOG='${path.join(work, 'ffmpeg.log')}'\n`);
+  `FAKE_SECONDS='${fake.seconds}'\nFAKE_OUT_SECONDS='${fake.out}'\nFAKE_FFMPEG_ERR='${fake.err}'\nFAKE_PROGRESS='${fake.progress}'\nFAKE_FPS='${fake.fps}'\nFAKE_LOG='${path.join(work, 'ffmpeg.log')}'\n`);
 const REAL_FFMPEG = process.env.FFMPEG_PATH || 'ffmpeg';
 const REAL_FFPROBE = process.env.FFPROBE_PATH || 'ffprobe';
 let realTools = false; // the last block runs the installed ffmpeg
@@ -41,12 +41,13 @@ beforeAll(() => {
   work = fs.mkdtempSync(path.join(os.tmpdir(), 'rawclip-key-'));
   const ffprobe = path.join(work, 'fake-ffprobe');
   const ffmpeg = path.join(work, 'fake-ffmpeg');
-  // ffprobe: a .webm's length is the number written in it; anything else is FAKE_SECONDS long.
+  // ffprobe: a .webm's length is the number written in it; anything else is
+  // FAKE_SECONDS long, at FAKE_FPS frames a second.
   fs.writeFileSync(ffprobe, `#!/bin/sh
 . "${path.join(work, 'fake.env')}"
 for a; do last="$a"; done
 case "$last" in *.webm) d=$(cat "$last") ;; *) d="$FAKE_SECONDS" ;; esac
-echo "{\\"format\\":{\\"duration\\":\\"$d\\"},\\"streams\\":[{\\"codec_type\\":\\"video\\",\\"width\\":3840,\\"height\\":2160}]}"
+echo "{\\"format\\":{\\"duration\\":\\"$d\\"},\\"streams\\":[{\\"codec_type\\":\\"video\\",\\"width\\":3840,\\"height\\":2160,\\"avg_frame_rate\\":\\"$FAKE_FPS\\"}]}"
 `);
   // ffmpeg: logs each call; the frame sample answers green; the key writes
   // FAKE_OUT_SECONDS into the output, or fails with FAKE_FFMPEG_ERR. With
@@ -82,7 +83,7 @@ beforeEach(() => {
   process.env.AWS_S3_BUCKET = 'key-test-bucket';
   process.env.FFMPEG_PATH = realTools ? REAL_FFMPEG : path.join(work, 'fake-ffmpeg');
   process.env.FFPROBE_PATH = realTools ? REAL_FFPROBE : path.join(work, 'fake-ffprobe');
-  Object.assign(fake, { seconds: '184.0', out: '184.0', err: '', progress: '' });
+  Object.assign(fake, { seconds: '184.0', out: '184.0', err: '', progress: '', fps: '30/1' });
   writeFake();
   try { fs.unlinkSync(path.join(work, 'ffmpeg.log')); } catch (err) { if (err.code !== 'ENOENT') throw err; }
   free = 5 * 1024 ** 3;
@@ -156,6 +157,33 @@ const tmpFiles = () => (fs.existsSync(media.TMP_DIR) ? fs.readdirSync(media.TMP_
 let tmpBefore = [];
 // Temp files this test's jobs left behind (the temp folder may be shared).
 const leftInTmp = () => tmpFiles().filter((n) => !tmpBefore.includes(n));
+
+describe('speed (Evoni, 2026-10-31: 4481.mp4 ran past the two-hour limit)', () => {
+  const keyCall = () => ffmpegCalls().find((c) => /chromakey/.test(c));
+
+  test('a 60 fps original is keyed at 30 fps, with VP9 at realtime speed', async () => {
+    fake.fps = '60000/1001';
+    writeFake();
+    const state = await key();
+    expect(state.key_status).toBe('done');
+    expect(keyCall()).toMatch(/,fps=30,chromakey=/);
+    expect(keyCall()).toMatch(/-deadline realtime -cpu-used 8/);
+  });
+
+  test('a 30 fps original keeps its own rate', async () => {
+    const state = await key();
+    expect(state.key_status).toBe('done');
+    expect(keyCall()).not.toMatch(/fps=/);
+  });
+
+  test('a frame rate ffprobe cannot say: the original rate is kept', async () => {
+    fake.fps = '0/0';
+    writeFake();
+    const state = await key();
+    expect(state.key_status).toBe('done');
+    expect(keyCall()).not.toMatch(/fps=/);
+  });
+});
 
 describe('progress while green removal runs (Evoni, 2026-10-30)', () => {
   test('ffmpeg reports its progress; the job shows how far it has got while running, and nothing once it ends', async () => {

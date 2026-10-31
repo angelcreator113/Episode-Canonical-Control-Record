@@ -81,7 +81,7 @@ function friendlyKeyError(err, { hadCutout = false } = {}) {
   if (isDiskFull(err)) return `The server ran out of space while removing the green. ${kept(hadCutout)} Space has to be freed on the server before Retry will work.`;
   if (/is not installed on the server/.test(msg)) return `${msg}. ${kept(hadCutout)}`;
   if (isNotFound(err)) return `The original video could not be found in storage, so the green was not removed. ${kept(hadCutout)}`;
-  if (/took too long and was stopped/.test(msg)) return `Removing the green took longer than two hours and was stopped. ${kept(hadCutout)} Try Retry with a shorter clip, or ask for help.`;
+  if (/took too long and was stopped/.test(msg)) return `Removing the green took longer than four hours and was stopped. ${kept(hadCutout)} Try Retry with a shorter clip, or ask for help.`;
   if (err?.code === 'CUTOUT_INCOMPLETE') return `The original video could not be read to the end, so the cut-out was not kept. ${kept(hadCutout)} Press Retry in a few minutes.`;
   if (NETWORK_CODES.has(err?.code) || NETWORK_NAMES.has(err?.name) || isS3Error(err)
     || /\b(Connection reset|Connection refused|Input\/output error|Server returned 4\d\d|Server returned 5\d\d|End of file)\b/i.test(msg)) {

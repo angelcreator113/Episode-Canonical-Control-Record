@@ -41,7 +41,9 @@ const FFMPEG = process.env.FFMPEG_PATH || 'ffmpeg';
 const FFPROBE = process.env.FFPROBE_PATH || 'ffprobe';
 const { ASSET_BUCKET: BUCKET, requireAssetBucket } = require('./assetBucket');
 const REGION = process.env.AWS_REGION || 'us-east-1';
-const JOB_TIMEOUT_MS = 2 * 60 * 60 * 1000;
+// Four hours (was two until 2026-10-31, when 4481.mp4, 3:04 of 4K, ran past
+// it on the t3.small). rawClipErrors says the same number.
+const JOB_TIMEOUT_MS = 4 * 60 * 60 * 1000;
 const TMP_DIR = path.join(os.tmpdir(), 'raw-clips');
 const TMP_MAX_AGE_MS = 6 * 60 * 60 * 1000;
 const SWEEP_EVERY_MS = 60 * 60 * 1000;
@@ -217,16 +219,20 @@ function keyProgress(now = Date.now()) {
   return out;
 }
 
-/** A file's or link's length in seconds by ffprobe, or null (logged) when it can't be read. */
-async function secondsOf(input) {
+/** { seconds, fps } of a file or link by ffprobe; each null (logged) when it can't be read. */
+async function probeOf(input) {
   try {
     const { stdout } = await run(FFPROBE, clips.probeArgs(input), { timeoutMs: 60 * 1000 });
-    return clips.readProbe(stdout.toString()).duration_seconds;
+    const text = stdout.toString();
+    return { seconds: clips.readProbe(text).duration_seconds, fps: clips.readFrameRate(text) };
   } catch (err) {
     console.error('[rawClips] length not read:', err.message);
-    return null;
+    return { seconds: null, fps: null };
   }
 }
+
+/** A file's or link's length in seconds by ffprobe, or null (logged) when it can't be read. */
+const secondsOf = async (input) => (await probeOf(input)).seconds;
 
 /**
  * { ok, needs, free } for green removal of a clip durationSeconds long: ok
@@ -301,8 +307,10 @@ async function keyClip({ sequelize, clipId, episodeId, s3KeyRaw, strength, local
       source = await open({ key: s3KeyRaw, headObject, getObject });
       input = source.url;
     }
-    // The original's length, to check the cut-out against (the stored one if ffprobe can't say).
-    const expected = (await secondsOf(input)) ?? (Number(durationSeconds) > 0 ? Number(durationSeconds) : null);
+    // The original's length, to check the cut-out against (the stored one if
+    // ffprobe can't say), and its frame rate (a 60 fps clip is keyed at 30).
+    const original = await probeOf(input);
+    const expected = original.seconds ?? (Number(durationSeconds) > 0 ? Number(durationSeconds) : null);
     let color = clips.DEFAULT_KEY_COLOR;
     try {
       const { stdout } = await run(FFMPEG, clips.sampleFrameArgs(input, 1), { timeoutMs: 60 * 1000 });
@@ -313,7 +321,7 @@ async function keyClip({ sequelize, clipId, episodeId, s3KeyRaw, strength, local
     }
     const p = { startedAt: Date.now(), doneSeconds: null, totalSeconds: expected };
     progress.set(clipId, p);
-    await run(FFMPEG, ['-progress', 'pipe:1', '-nostats', ...clips.chromakeyArgs(input, output, { color, strength })], {
+    await run(FFMPEG, ['-progress', 'pipe:1', '-nostats', ...clips.chromakeyArgs(input, output, { color, strength, sourceFps: original.fps })], {
       low: true,
       timeoutMs: JOB_TIMEOUT_MS,
       onLine: (line) => {
