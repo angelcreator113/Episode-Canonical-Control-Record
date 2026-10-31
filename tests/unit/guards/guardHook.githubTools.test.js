@@ -100,7 +100,8 @@ describe('settings wire the guard', () => {
   test('the hook runs before every GitHub tool call', () => {
     const entry = settings.hooks.PreToolUse.find((h) => h.matcher === 'mcp__github__.*');
     expect(entry).toBeDefined();
-    expect(entry.hooks[0].command).toContain('guard-github-tools.js');
+    expect(entry.hooks[0].command).toBe('node');
+    expect(entry.hooks[0].args.join(' ')).toContain('guard-github-tools.js');
   });
 
   test('the shell guard still runs for Bash and PowerShell', () => {
