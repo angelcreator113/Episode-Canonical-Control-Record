@@ -51,7 +51,7 @@ These come from the repo's audit register (`docs/audit/NEW_CHAT_ONBOARDING.md` �
 
 ### 2.1 Toolchain
 
-1. Install **Git for Windows** (gives Claude Code a Bash tool; without it the PowerShell tool is used and the repo's hooks assume bash paths).
+1. Install **Git for Windows** (gives Claude Code a Bash tool; without it the PowerShell tool is used). The repo's hooks run either way: they are exec-form `node` commands with no shell syntax (Task #3661).
 2. Install **Node.js 20 LTS** (`package.json` engines: node ≥ 20, npm ≥ 9). Check: `node --version`.
 3. Install **Docker Desktop** if you want `npm test` locally (Postgres 15 container). Optional; CI runs the DB tests on every PR.
 4. Install the **GitHub CLI** (`winget install GitHub.cli`), then `gh auth login` (browser flow, HTTPS, default scopes plus `workflow`). Claude Code's `/web-setup` and `/pr` both use it.
@@ -113,7 +113,7 @@ When you first run `claude` in the repo it asks you to trust the folder and to a
 | `CLAUDE.md` | Standing instructions loaded every session (short; points at `PROJECT_CONTEXT.md`). |
 | `.claude/settings.json` | Allow-list for the validation commands; **deny-list** for `ssh`, `scp`, `pm2`, `aws`, `gh workflow run/enable`, pushes to `main`/`dev`, force-push; `Read` deny for `.env*` and `backups/`; the SessionStart dependency hook; the PreToolUse guard. |
 | `.claude/hooks/guard-dangerous-commands.js` | Second layer: blocks the same things inside compound commands, plus connections to RDS hostnames and `DB_SYNC_FORCE`. Matches command position only, so documents that mention these words are not blocked. Exit 2 shows Claude why. |
-| `.claude/hooks/session-start.sh` | In cloud sessions (`CLAUDE_CODE_REMOTE=true`) installs backend and frontend deps in the background. Does nothing locally. |
+| `.claude/hooks/session-start.js` | In cloud sessions (`CLAUDE_CODE_REMOTE=true`) installs backend and frontend deps in the background. Does nothing locally. |
 | `.claude/skills/*` | `/wake-up`, `/task N`, `/validate`, `/pr N`, `/audit-file` (§6). |
 | `.mcp.json` | GitHub MCP server (hosted, `https://api.githubcopilot.com/mcp/`) authenticated with `${GITHUB_PAT}`. |
 | `.github/ISSUE_TEMPLATE/claude-task.yml` | The issue form the Desktop project fills in. |
