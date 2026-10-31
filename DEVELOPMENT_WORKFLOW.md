@@ -111,8 +111,8 @@ When you first run `claude` in the repo it asks you to trust the folder and to a
 | File | Purpose |
 |---|---|
 | `CLAUDE.md` | Standing instructions loaded every session (short; points at `PROJECT_CONTEXT.md`). |
-| `.claude/settings.json` | Allow-list for the validation commands; **deny-list** for `ssh`, `scp`, `pm2`, `aws`, `gh workflow run/enable`, pushes to `main`/`dev`, force-push; `Read` deny for `.env*` and `backups/`; the SessionStart dependency hook; the PreToolUse guard. |
-| `.claude/hooks/guard-dangerous-commands.js` | Second layer: blocks the same things inside compound commands, plus connections to RDS hostnames and `DB_SYNC_FORCE`. Matches command position only, so documents that mention these words are not blocked. Exit 2 shows Claude why. |
+| `.claude/settings.json` | Allow-list for the validation commands; **deny-list** for `ssh`, `scp`, `pm2`, `gh workflow run/enable`, `gh pr merge`, pushes to `main`/`dev`, force-push; `Read` deny for `.env*` and `backups/`; the SessionStart dependency hook; the PreToolUse guard. The AWS CLI is not in the static list: the guard blocks it, except in attended laptop mode (§2.7), where it asks. |
+| `.claude/hooks/guard-dangerous-commands.js` | Second layer: blocks the same things inside compound commands, plus connections to RDS hostnames and `DB_SYNC_FORCE`, and the F-Tools-4 never-list (destructive, credential, security-boundary commands) in every mode. Strict unless attended laptop mode holds (§2.7); there it asks for each `gh`/`aws` command. Matches command position only, so documents that mention these words are not blocked. Exit 2 shows Claude why. |
 | `.claude/hooks/session-start.js` | In cloud sessions (`CLAUDE_CODE_REMOTE=true`) installs backend and frontend deps in the background. Does nothing locally. |
 | `.claude/skills/*` | `/wake-up`, `/task N`, `/validate`, `/pr N`, `/audit-file` (§6). |
 | `.mcp.json` | GitHub MCP server (hosted, `https://api.githubcopilot.com/mcp/`) authenticated with `${GITHUB_PAT}`. |
@@ -135,6 +135,26 @@ Never commit the PAT. `.mcp.json` only references `${GITHUB_PAT}`.
 Inside `claude`: run `/web-setup`. It syncs the `gh` token to your claude.ai account and creates the **Default** cloud environment (Trusted network: npm and GitHub reachable, nothing else). Alternatively do it in the browser at https://claude.ai/code (Continue on web → Sign in with GitHub → Default environment).
 
 Optional but recommended: install the **Claude GitHub App** on this one repository (https://github.com/apps/claude). It is what enables PR **Auto-fix** (Claude reacts to CI failures and review comments) and GitHub-event **Routines**. It does not change what sessions can read.
+
+### 2.7 Attended laptop mode (optional; `docs/audit/F-Tools-4_AttendedLaptopMode_Ruling_2026-10-31.md`)
+
+In a session you run and watch on this laptop, the agent can run the `gh` and `aws` commands you ask for. Each one stops at the permission prompt for your approval and runs with your own login. Every other session (cloud, CI, another machine, or this laptop without the marker) stays strict.
+
+**Turn it on (once, on this laptop only; never in the repo):**
+1. Log in yourself: `gh auth login` and/or `aws sso login` (or use your existing AWS profile). The agent never runs a login.
+2. Open your **user** settings file, `%USERPROFILE%\.claude\settings.json` (macOS/Linux: `~/.claude/settings.json`), and add:
+   ```json
+   { "env": { "PRIME_ATTENDED_LAPTOP": "1" } }
+   ```
+   If the file already has an `"env"` block, add the line inside it.
+3. Restart the Claude Code session. Use the normal permission mode (`default`), or `plan` / `acceptEdits`. In `auto`, `dontAsk` or `bypassPermissions` the guard stays strict, because a prompt there may not reach you.
+4. Check it: ask the agent to run `aws sts get-caller-identity`. You should get a prompt with the reason "Attended laptop mode (F-Tools-4)". Approve it, and the account shows on your screen. Don't paste it anywhere public.
+
+**What you will see:**
+- every `gh` / `aws` command: a prompt, each time;
+- never-list commands (deletes, terminate/stop/reboot/modify, credential-returning commands, IAM / bucket-policy / Cognito / KMS / security-group changes, `ssm send-command`, logins, workflow dispatch or re-run, `gh pr merge` from the shell): blocked with the reason, in every mode.
+
+**Turn it off:** remove the `PRIME_ATTENDED_LAPTOP` line and restart. Nothing in the repo changes.
 
 ---
 
