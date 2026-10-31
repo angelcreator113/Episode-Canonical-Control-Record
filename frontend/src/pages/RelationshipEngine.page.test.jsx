@@ -129,6 +129,31 @@ describe('the Inspector', () => {
     await waitFor(() => expect(screen.queryByLabelText('Story so far')).toBeNull());
   });
 
+  // The deep link is applied once, with the cast. A tab change made before the
+  // page's effects have run (a slow machine, a fast tap) must stay changed:
+  // the link must not open the relationship a second time over it. The
+  // observer clicks Tree in the same commit that first shows the Inspector.
+  test('a tab change right after a ?rel= link opened the Inspector is not undone by the link', async () => {
+    let clicked = false;
+    const observer = new MutationObserver(() => {
+      if (clicked) return;
+      const tree = screen.queryByRole('tab', { name: /Tree/ });
+      if (document.querySelector('.re-inspector-panel') && tree) { clicked = true; tree.click(); }
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+    try {
+      renderAt('/relationships?rel=rel-lm');
+      await waitFor(() => expect(clicked).toBe(true));
+      await waitFor(() => expect(screen.getByRole('tab', { name: /Tree/ }).getAttribute('aria-selected')).toBe('true'));
+      // Give the page's effects and the story's own read time to run, then check.
+      await new Promise((r) => setTimeout(r, 300));
+      expect(document.querySelector('.re-inspector-panel')).toBeNull();
+      expect(screen.queryByLabelText('Story so far')).toBeNull();
+    } finally {
+      observer.disconnect();
+    }
+  });
+
   test('Delete asks first, then marks it deleted; Undo restores it', async () => {
     vi.mocked(apiClient.delete).mockResolvedValue({ data: { deleted: true } });
     vi.mocked(apiClient.post).mockResolvedValue({ data: { relationship: rels[0] } });
