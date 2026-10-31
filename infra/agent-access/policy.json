@@ -1,0 +1,64 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ProjectBucketReadAndList",
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetObject",
+        "s3:GetObjectVersion",
+        "s3:ListBucket",
+        "s3:ListBucketVersions",
+        "s3:GetBucketLocation",
+        "s3:GetBucketVersioning"
+      ],
+      "Resource": [
+        "arn:aws:s3:::<BUCKET_NAME>",
+        "arn:aws:s3:::<BUCKET_NAME>/*"
+      ]
+    },
+    {
+      "Sid": "CloudWatchLogsReadOnly",
+      "Effect": "Allow",
+      "Action": [
+        "logs:DescribeLogGroups",
+        "logs:DescribeLogStreams",
+        "logs:DescribeQueries",
+        "logs:GetLogEvents",
+        "logs:FilterLogEvents",
+        "logs:StartQuery",
+        "logs:StopQuery",
+        "logs:GetQueryResults"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "NeverTheseEvenIfAnAllowIsAddedLater",
+      "Effect": "Deny",
+      "Action": [
+        "s3:DeleteObject",
+        "s3:DeleteBucket",
+        "s3:Delete*",
+        "s3:Put*",
+        "s3:Restore*",
+        "s3:Replicate*",
+        "s3:BypassGovernanceRetention",
+        "iam:*",
+        "sts:AssumeRole",
+        "ec2:TerminateInstances",
+        "ec2:Terminate*",
+        "ec2:Modify*",
+        "rds:Delete*",
+        "rds:Modify*",
+        "cognito-idp:*",
+        "logs:Create*",
+        "logs:Delete*",
+        "logs:Put*",
+        "logs:Unmask",
+        "ssm:GetParameter*",
+        "secretsmanager:GetSecretValue"
+      ],
+      "Resource": "*"
+    }
+  ]
+}
