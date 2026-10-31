@@ -5,7 +5,12 @@
 // Agent sessions never contact hosts; production actions are Evoni's (CLAUDE.md).
 // Production reads are default-deny: only the method F-Tools-3 approves, for a
 // task Evoni authorizes, and never with credentials found in the environment.
-// Exit 2 = block (stderr is shown to Claude). Exit 0 = allow.
+// Two modes (F-Tools-4, 2026-10-31): strict everywhere (every rule here), and
+// attended laptop mode (see `attended` below), where the AWS CLI rule gives
+// way to an `ask` for every gh/aws command. The F-Tools-4 never-list is
+// denied in both.
+// Exit 2 = block (stderr is shown to Claude). Exit 0 = allow, or `ask` JSON on
+// stdout in attended mode.
 // It matches COMMAND POSITION only, so prose or documents that merely mention
 // `pm2` or an RDS hostname are not blocked. Heredoc bodies written to files with
 // `cat`/`tee` are treated as data and ignored; heredocs fed to a shell are not.
@@ -14,7 +19,17 @@ process.stdin.setEncoding('utf8');
 process.stdin.on('data', (c) => { raw += c; });
 process.stdin.on('end', () => {
   let cmd = '';
-  try { cmd = String((JSON.parse(raw).tool_input || {}).command || ''); } catch (e) { process.exit(0); }
+  let event = {};
+  try { event = JSON.parse(raw) || {}; cmd = String((event.tool_input || {}).command || ''); } catch (e) { process.exit(0); }
+
+  // F-Tools-4 (2026-10-31): attended laptop mode. Fail closed: a session is
+  // attended only when it is not a cloud session, Evoni's own user-level
+  // settings carry the opt-in marker, and the permission mode is one where an
+  // `ask` reaches her. Everything else is strict (cloud mode), unchanged.
+  const ATTENDED_MODES = new Set(['default', 'plan', 'acceptEdits']);
+  const attended = process.env.CLAUDE_CODE_REMOTE !== 'true'
+    && process.env.PRIME_ATTENDED_LAPTOP === '1'
+    && ATTENDED_MODES.has(String(event.permission_mode || ''));
 
   // A commit, tag or note message is data, not commands (Task #2299): its
   // quoted -m/--message arguments are blanked, and a heredoc that git reads
@@ -42,7 +57,9 @@ process.stdin.on('end', () => {
   const rules = [
     [at('(ssh|scp|sftp|rsync)'), 'SSH/SCP/rsync to any host. Agent sessions never contact hosts; production actions are Evoni\'s (CLAUDE.md).'],
     [at('pm2'), 'pm2 on any box. A process reload can silently swap prod onto the empty DB.'],
-    [at('aws'), 'AWS CLI. Evoni runs AWS commands personally (v25 Owed Index Amd30 AF2.6). Task-scoped production reads go only through the approved method in F-Tools-3, never the CLI in a session.'],
+    // In attended mode (F-Tools-4) the AWS CLI is not blocked here: the
+    // never-list below denies what is never allowed, and the rest is asked.
+    ...(attended ? [] : [[at('aws'), 'AWS CLI. Evoni runs AWS commands personally (v25 Owed Index Amd30 AF2.6). Task-scoped production reads go only through the approved method in F-Tools-3, never the CLI in a session.']]),
     // F-Tools-3 (2026-10-29): production is default-deny. No direct request to
     // AWS from a session, whatever the tool: a production read happens only
     // through the method F-Tools-3 approves, for a task Evoni authorizes.
@@ -55,6 +72,7 @@ process.stdin.on('end', () => {
     [/AWS_(SECRET_ACCESS_KEY|SESSION_TOKEN|ACCESS_KEY_ID)\b/, 'Reading or using AWS credentials from the environment. Credentials found in a session are never used (F-Tools-1, F-Tools-3).'],
     [/(^|[\n;&|(`]\s*)(printenv|env|export\s+-p|declare\s+-x|set)\s*($|\||;|&|\n)/, 'Printing the whole environment, which may contain credentials. Name the variable you need instead (F-Tools-3).'],
     [/(^|[\s;&|(=])~?[^\s;&|]*\.aws\/(credentials|config|sso|cli)\b/, 'Reading the AWS credential or SSO cache files. Credentials found in a session are never used (F-Tools-1, F-Tools-3).'],
+    [/(^|[\s;&|(=])~?[^\s;&|]*\.config[\/\\]gh[\/\\]/, 'Reading the GitHub CLI credential files. A session never reads credentials (F-Tools-4 §4.2).'],
     [/(psql|pg_dump|pg_restore|pg_isready|DATABASE_URL=|DB_HOST=|postgres(ql)?:\/\/)[^\n]*(rds\.amazonaws\.com|episode-control-(dev|prod))/i, 'A connection to a live RDS instance. No DB contact from agent sessions; identity by query, never by name.'],
     [/(rds\.amazonaws\.com|episode-control-(dev|prod))[^\n]*(psql|pg_dump|pg_restore|sequelize)/i, 'A connection to a live RDS instance. No DB contact from agent sessions.'],
     [/(^|[\s;&|(])(DB_SYNC_FORCE|CONFIRM_FORCE_SYNC)=/, 'Force sync drops every table.'],
@@ -123,6 +141,82 @@ process.stdin.on('end', () => {
       process.stderr.write(`[guard] BLOCKED: ${why}\nCommand: ${cmd.slice(0, 300)}\nIf this is genuinely needed, Evoni runs it herself outside the agent session.\n`);
       process.exit(2);
     }
+  }
+
+  // F-Tools-4 §4: the never-list, denied in every mode. Each `aws` / `gh`
+  // invocation at command position is split into words, the CLI's global
+  // options are skipped, and the service/group and operation are checked.
+  const invocations = (tool) => {
+    // Wrappers count: sudo, env, xargs, nohup/time/watch/eval/exec/command,
+    // and a shell given the command as a string (bash -c "aws …").
+    const wrap = `(?:sudo\\s+(?:-\\S+\\s+)*|env\\s+(?:-\\S+\\s+)*(?:[A-Za-z_]+=\\S*\\s+)*|xargs\\s+(?:-\\S+\\s+)*|(?:nohup|time|watch|eval|exec|command)\\s+|(?:bash|sh|zsh|dash|pwsh|powershell|cmd)(?:\\.exe)?\\s+(?:[-/]\\S+\\s+)*["']?)*`;
+    const re = new RegExp(`(?:^|[\\n;&|(\`]\\s*|\\$\\(\\s*)${wrap}${tool}(?:\\.exe)?(?:\\s+([^\\n;&|]*)|\\s*$)`, 'gm');
+    return [...scan.matchAll(re)].map((m) => (m[1] || '').trim().split(/\s+/).filter(Boolean).map((w) => w.replace(/^['"]|['"]$/g, '')));
+  };
+  const AWS_BOOLEAN_GLOBALS = new Set(['--debug', '--no-verify-ssl', '--no-paginate', '--no-cli-pager', '--no-sign-request', '--no-cli-auto-prompt', '--cli-auto-prompt']);
+  const skipGlobals = (words) => {
+    let i = 0;
+    while (i < words.length && words[i].startsWith('--')) i += AWS_BOOLEAN_GLOBALS.has(words[i]) || words[i].includes('=') ? 1 : 2;
+    return words.slice(i);
+  };
+  const DESTRUCTIVE_OP = /^(?:admin-)?(?:delete|remove|terminate|deregister|purge|cancel|stop|reboot|restore|modify|revoke|disable|detach|disassociate)-/;
+  const awsNever = (all) => {
+    const [svc = '', op = '', ...rest] = skipGlobals(all);
+    const flags = rest.join(' ');
+    const positional = rest.filter((w) => !w.startsWith('-'));
+    if (svc === 'configure' || svc === 'login' || svc === 'logout' || (svc === 'sso' && op === 'login')) return 'configuring the CLI or running a login: Evoni runs logins herself';
+    if (DESTRUCTIVE_OP.test(op)) return `a destructive AWS action (${svc} ${op})`;
+    if (svc === 's3' && ['rm', 'rb', 'mv'].includes(op)) return `a destructive S3 command (s3 ${op})`;
+    if (svc === 's3' && ['cp', 'sync'].includes(op) && (/^s3:\/\//.test(positional[positional.length - 1] || '') || /--delete\b/.test(flags))) return 'a write to production storage (s3 cp/sync to s3://, or sync --delete)';
+    if (svc === 's3api' && /^(?:put|copy|upload|complete|create|restore|write)-/.test(op) && op !== 'put-bucket-versioning') return `a write to production storage or bucket settings (s3api ${op})`;
+    if (svc === 'sts' && /^(?:get-session-token|assume-role|get-federation-token)/.test(op)) return `a command that returns AWS credentials (sts ${op})`;
+    if (svc === 'iam' && op && !/^(?:get|list|simulate)-/.test(op)) return `an IAM change (iam ${op}); only get-/list-/simulate- are reads`;
+    if (svc === 'ssm' && /^(?:get-parameter|put-parameter|send-command|start-session|start-automation-execution)/.test(op)) return `an SSM secret read, parameter write, remote command or shell session (ssm ${op})`;
+    if (svc === 'secretsmanager' && op && !['list-secrets', 'describe-secret'].includes(op)) return `a Secrets Manager value read or change (secretsmanager ${op})`;
+    if ((/^ecr(?:-public)?$/.test(svc) && op === 'get-login-password') || (svc === 'codeartifact' && op === 'get-authorization-token')) return `a command that returns a registry credential (${svc} ${op})`;
+    if (svc === 'cognito-idp' && op && !/^(?:describe|list)-/.test(op)) return `a Cognito change or token request (cognito-idp ${op}); only describe-/list- are reads`;
+    if (svc === 'cognito-idp' && op === 'describe-user-pool-client') {
+      const q = (flags.match(/--query[=\s]+(\S+)/) || [])[1] || '';
+      if (!q || /ClientSecret/i.test(q) || /^UserPoolClient\s*$|\*|^@$/.test(q)) return 'describe-user-pool-client without a --query that selects named fields and leaves out ClientSecret (F-Tools-1)';
+    }
+    if ((svc === 'kms' && /^(?:put-key-policy|create-grant|schedule-key-deletion)/.test(op))
+      || (svc === 'ec2' && /^(?:authorize-|create-security-group|run-instances|start-instances)/.test(op))
+      || svc === 'rds-data' || svc === 'deploy'
+      || (svc === 'dynamodb' && /^(?:put|update|batch-write|transact-write)/.test(op))
+      || (svc === 'lambda' && /^(?:update|put|invoke|add|create)/.test(op))
+      || (svc === 'cloudformation' && /^(?:create|update|execute)-/.test(op))) return `a security-boundary, configuration or production change (${svc} ${op})`;
+    return null;
+  };
+  const ghNever = (words) => {
+    const [group = '', sub = ''] = words;
+    const flags = words.slice(2).join(' ');
+    if (sub === 'delete' || (group === 'repo' && sub === 'archive')) return `a destructive GitHub action (gh ${group} ${sub})`;
+    if (group === 'api' && /(?:-X\s*|--method[=\s]+)DELETE\b/i.test(words.slice(1).join(' '))) return 'a GitHub API DELETE';
+    if (group === 'auth' && (['token', 'login', 'refresh', 'setup-git'].includes(sub) || (sub === 'status' && /--show-token|(?:^|\s)-t\b/.test(flags)))) return `a GitHub login or a command that prints a token (gh auth ${sub}): Evoni runs logins herself`;
+    return null;
+  };
+  for (const [tool, check] of [['aws', awsNever], ['gh', ghNever]]) {
+    for (const words of invocations(tool)) {
+      const what = check(words);
+      if (what) {
+        process.stderr.write(`[guard] BLOCKED: ${what}. This is on the never-list in every mode (F-Tools-4 §4).\nCommand: ${cmd.slice(0, 300)}\nIf this is genuinely needed, Evoni runs it herself outside the agent session.\n`);
+        process.exit(2);
+      }
+    }
+  }
+
+  // F-Tools-4 §3: in attended mode every remaining gh / aws command goes to
+  // Evoni's prompt. The guard never returns allow for them.
+  // Anything else that names either CLI as a word (a wrapper the parser above
+  // did not recognise, a script line) is asked too: in attended mode nothing
+  // reaches gh or aws without Evoni's prompt.
+  if (attended && (invocations('aws').length || invocations('gh').length || /(^|[^\w./-])(aws|gh)(\.exe)?(\s|$)/.test(scan))) {
+    process.stdout.write(JSON.stringify({ hookSpecificOutput: {
+      hookEventName: 'PreToolUse',
+      permissionDecision: 'ask',
+      permissionDecisionReason: '[guard] Attended laptop mode (F-Tools-4): approve this one gh/aws command only if you asked for it. It runs with your own login.',
+    } }));
+    process.exit(0);
   }
   process.exit(0);
 });
