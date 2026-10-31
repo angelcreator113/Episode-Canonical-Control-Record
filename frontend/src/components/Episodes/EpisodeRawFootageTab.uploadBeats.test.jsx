@@ -93,7 +93,7 @@ describe('Starts in / Ends in on each lane', () => {
     fireEvent.change(endOf('lala'), { target: { value: '5' } });
     const file = drop('lala');
     await waitFor(() => expect(rawClipsApi.upload).toHaveBeenCalledWith('ep-1', file,
-      expect.objectContaining({ performer: 'lala', greenScreen: true, beatNumber: 1, endBeatNumber: 5 }), expect.any(Function)));
+      expect.objectContaining({ performer: 'lala', greenScreen: true, beatNumber: 1, endBeatNumber: 5 }), expect.any(Function), expect.anything()));
     await waitFor(() => expect(within(lane('lala')).getByText('take.mp4')).toBeTruthy());
     expect(screen.queryByRole('alert')).toBeNull();
   });

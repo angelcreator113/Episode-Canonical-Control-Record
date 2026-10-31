@@ -51,6 +51,9 @@
 .erf-uploads { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .erf-uploads li { display: flex; flex-direction: column; gap: 4px; padding: 8px 10px; border-radius: 10px; background: var(--lala-parchment-2); color: var(--text-primary); }
 .erf-upload-name { font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
+.erf-upload-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+/* An upload that didn't finish (kept on this device): a note, not an error. */
+.erf-alert.erf-unfinished { border-color: var(--warning-border); background: var(--warning-bg); color: var(--warning-text); }
 .erf-bar { display: block; height: 6px; border-radius: 3px; background: var(--lala-parchment-3); overflow: hidden; }
 .erf-bar span { display: block; height: 100%; border-radius: 3px; background: var(--accent-dark); transition: width 0.2s; }
 

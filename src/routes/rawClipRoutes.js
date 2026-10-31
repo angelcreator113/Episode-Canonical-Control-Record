@@ -272,7 +272,22 @@ async function completeUpload(entry, thumbnailB64) {
     key_status: f.greenScreen ? 'queued' : 'none', key_strength: f.strength,
   });
   // No copy on this disk: the green-removal job reads the original from S3.
-  if (f.greenScreen) media.enqueueKey(models.sequelize, { clipId: entry.clipId, episodeId: entry.episodeId, s3KeyRaw: entry.key, strength: f.strength, durationSeconds: row?.duration_seconds ?? info?.duration_seconds ?? f.seconds ?? null });
+  // Not enough room to remove the green: the clip is saved and says so at
+  // once, instead of failing when the job starts (Evoni, 2026-10-31).
+  if (f.greenScreen) {
+    const durationSeconds = row?.duration_seconds ?? info?.duration_seconds ?? f.seconds ?? null;
+    let room = { ok: true };
+    try {
+      if (typeof media.roomToKey === 'function') room = await media.roomToKey(durationSeconds);
+    } catch (err) {
+      console.error('[RawClips] disk room check failed; queuing green removal anyway:', err.message);
+    }
+    if (room.ok) {
+      media.enqueueKey(models.sequelize, { clipId: entry.clipId, episodeId: entry.episodeId, s3KeyRaw: entry.key, strength: f.strength, durationSeconds });
+    } else {
+      row = (await clips.setKeyState(models.sequelize, entry.clipId, 'failed', { error: new KeyNoRoomError(room.needs, room.free, false).message })) || row;
+    }
+  }
   // Voice from footage (V2): a new Lala clip's voice is queued for the footage-only worker (never fails the upload).
   await voiceFootage.onClipUploaded(models.sequelize, { ...row, id: entry.clipId, episode_id: entry.episodeId, performer: f.performer, s3_key_raw: entry.key }, { userId: entry.userId || null });
   let stored = [];
@@ -334,6 +349,8 @@ router.delete('/:episodeId/uploads/:uploadId', requireAuth, async (req, res) => 
   try {
     const entry = ownUpload(req);
     if (entry.result) return res.json({ success: true, finished: true });
+    // Being saved now: too late to throw away (the clip is about to exist).
+    if (entry.completing) return res.status(409).json({ success: false, error: 'This upload is being saved, so it can no longer be cancelled.' });
     await parts.abort(entry);
     return res.json({ success: true });
   } catch (err) {
