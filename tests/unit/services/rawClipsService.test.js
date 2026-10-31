@@ -369,7 +369,7 @@ describe('green removal failures in plain words (rawClipErrors, P0)', () => {
       [new Error('ffmpeg failed: Error writing trailer: No space left on device'), /^The server ran out of space/],
       [Object.assign(new Error('x'), { code: 'EDQUOT' }), /^The server ran out of space/],
       [Object.assign(new Error('NotFound'), { name: 'NotFound', $metadata: { httpStatusCode: 404 } }), /^The original video could not be found in storage/],
-      [new Error('ffmpeg failed: took too long and was stopped'), /^Removing the green took longer than two hours/],
+      [new Error('ffmpeg failed: took too long and was stopped'), /^Removing the green took longer than four hours/],
       [new Error('ffmpeg failed: Error opening input: Server returned 403 Forbidden (access denied)'), /^The server could not read the original video from storage/],
       [Object.assign(new Error('reset'), { code: 'ECONNRESET' }), /^The server could not read the original video from storage/],
       [new clips.CutoutIncompleteError('a'), /^The original video could not be read to the end, so the cut-out was not kept\./],
@@ -425,5 +425,39 @@ describe('green removal progress, pure pieces (Evoni, 2026-10-30: "no way of kno
     expect(clips.progressView({ startedAt: t0, doneSeconds: 250, totalSeconds: 184 }, 900_000).percent).toBe(99);
     expect(clips.progressView({ startedAt: t0, doneSeconds: 40, totalSeconds: null }, 900_000)).toEqual({ percent: null, elapsed_seconds: 900, eta_seconds: null });
     expect(clips.progressView({ startedAt: t0, doneSeconds: null, totalSeconds: 184 }, 900_000)).toEqual({ percent: null, elapsed_seconds: 900, eta_seconds: null });
+  });
+});
+
+describe('green removal speed (Evoni, 2026-10-31: 4481.mp4 ran past the time limit)', () => {
+  test('readFrameRate: avg_frame_rate, else r_frame_rate, as a fraction or a number; null when unreadable', () => {
+    const json = (v) => ({ streams: [{ codec_type: 'audio', avg_frame_rate: '0/0' }, { codec_type: 'video', ...v }] });
+    expect(clips.readFrameRate(json({ avg_frame_rate: '60000/1001' }))).toBe(59.94);
+    expect(clips.readFrameRate(json({ avg_frame_rate: '0/0', r_frame_rate: '30/1' }))).toBe(30);
+    expect(clips.readFrameRate(json({ avg_frame_rate: '25' }))).toBe(25);
+    expect(clips.readFrameRate(JSON.stringify(json({ avg_frame_rate: '60/1' })))).toBe(60);
+    expect(clips.readFrameRate(json({}))).toBeNull();
+    expect(clips.readFrameRate({ streams: [{ codec_type: 'audio' }] })).toBeNull();
+    const errors = jest.spyOn(console, 'error').mockImplementation(() => {});
+    expect(clips.readFrameRate('not json')).toBeNull();
+    errors.mockRestore();
+  });
+
+  test('chromakeyArgs: VP9 at realtime speed (cpu-used 8, crf 30), alpha and the size cap kept', () => {
+    const args = clips.chromakeyArgs('in.mp4', 'out.webm', { color: '0x00b140' });
+    const at = (flag) => args[args.indexOf(flag) + 1];
+    expect(at('-deadline')).toBe('realtime');
+    expect(at('-cpu-used')).toBe('8');
+    expect(at('-crf')).toBe('30');
+    expect(at('-pix_fmt')).toBe('yuva420p');
+    expect(at('-vf')).toMatch(/min\(1920,iw\)/);
+    expect(at('-vf')).toMatch(/format=yuva420p$/);
+  });
+
+  test('chromakeyArgs: a clip over 30 fps is keyed at 30; 30 fps or less, or unknown, is left at its own rate', () => {
+    const vf = (sourceFps) => { const a = clips.chromakeyArgs('in.mp4', 'out.webm', { sourceFps }); return a[a.indexOf('-vf') + 1]; };
+    expect(clips.KEY_MAX_FPS).toBe(30);
+    expect(vf(59.94)).toMatch(/,fps=30,chromakey=/);
+    expect(vf(60)).toMatch(/,fps=30,chromakey=/);
+    for (const fps of [30, 29.97, 25, 24, null, undefined]) expect(vf(fps)).not.toMatch(/fps=/);
   });
 });
