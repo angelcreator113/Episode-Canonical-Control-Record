@@ -23,6 +23,9 @@ import EpisodeRawFootageTab from './EpisodeRawFootageTab';
 
 const MB = 1024 * 1024;
 const lane = (key) => screen.getByTestId(`erf-lane-${key}`);
+// Wait for the lanes, not just the list request: the lane inputs render only
+// after the list has loaded, which a slow CI runner can take a while to do.
+const laneReady = (key = 'lala') => screen.findByTestId(`erf-input-${key}`);
 const pick = (key, file) => fireEvent.change(screen.getByTestId(`erf-input-${key}`), { target: { files: [file] } });
 const video = (name = '4481.mp4', bytes = 10) => new File([new Uint8Array(bytes)], name, { type: 'video/mp4', lastModified: 1700000000000 });
 const dropped = (resume) => Object.assign(new Error('Network Error'), { code: 'ERR_NETWORK', resume });
@@ -44,7 +47,7 @@ describe('upload reliability', () => {
       .mockImplementationOnce(async (_ep, _f, _o, _p, opts) => { opts.onState(st); throw dropped(st); })
       .mockResolvedValueOnce({ id: 'c1', performer: 'lala', label: '4481.mp4', key_status: 'queued' });
     render(<EpisodeRawFootageTab episode={{ id: 'ep-1' }} />);
-    await waitFor(() => expect(rawClipsApi.list).toHaveBeenCalled());
+    await laneReady();
     pick('lala', video());
     const resume = await waitFor(() => within(lane('lala')).getByTestId('erf-upload-resume'));
     expect(within(lane('lala')).getByTestId('erf-upload').textContent).toMatch(/48% is already sent\./);
@@ -66,7 +69,7 @@ describe('upload reliability', () => {
       opts.signal.addEventListener('abort', () => reject(Object.assign(new Error('canceled'), { code: 'ERR_CANCELED', name: 'CanceledError' })));
     }));
     render(<EpisodeRawFootageTab episode={{ id: 'ep-1' }} />);
-    await waitFor(() => expect(rawClipsApi.list).toHaveBeenCalled());
+    await laneReady();
     pick('lala', video());
     fireEvent.click(await waitFor(() => within(lane('lala')).getByTestId('erf-upload-cancel')));
     expect(signal.aborted).toBe(true);
@@ -83,6 +86,7 @@ describe('upload reliability', () => {
     const { unmount } = render(<EpisodeRawFootageTab episode={{ id: 'ep-1' }} />);
     const note = await screen.findByTestId('erf-unfinished');
     expect(note.textContent).toMatch(/4481\.mp4 didn.t finish uploading \(24% sent\)\. Choose the same file again/);
+    await laneReady();
     pick('lala', file);
     await waitFor(() => expect(rawClipsApi.upload).toHaveBeenCalled());
     expect(rawClipsApi.upload.mock.calls[0][4]).toMatchObject({ resume: st });
@@ -114,7 +118,7 @@ describe('upload reliability', () => {
     const add = vi.spyOn(window, 'addEventListener');
     const remove = vi.spyOn(window, 'removeEventListener');
     render(<EpisodeRawFootageTab episode={{ id: 'ep-1' }} />);
-    await waitFor(() => expect(rawClipsApi.list).toHaveBeenCalled());
+    await laneReady();
     pick('lala', video());
     await waitFor(() => expect(add.mock.calls.some(([type]) => type === 'beforeunload')).toBe(true));
     const handler = add.mock.calls.find(([type]) => type === 'beforeunload')[1];
