@@ -130,6 +130,25 @@ process.stdin.on('end', () => {
     }
   }
 
+  /* ── F-Tools-2 Amendment 1 §2: the snapshot is schedule-only (every mode) ── */
+  // A session reads the newest snapshot at /wake-up; it never starts one, by
+  // workflow dispatch, a dispatch API call, or SSM to the diagnostics document.
+  const SNAPSHOT_CHECK = /(^|[^a-z0-9-])db-(snapshot|samples)([^a-z0-9-]|$)/;
+  const startsSnapshot = (words) => SNAPSHOT_CHECK.test(words.join(' '));
+  for (const { words } of gh) {
+    const [group = '', sub = ''] = words;
+    const dispatch = (group === 'workflow' && sub === 'run') || (group === 'api' && /\/dispatches\b/.test(words.join(' ')));
+    if (dispatch && startsSnapshot(words)) {
+      refuse('the database snapshot (db-snapshot / db-samples) runs only from the Diagnostics schedule; a session never starts it (F-Tools-2 Amendment 1 §2). Read latest-db-snapshot.md in the private diagnostics repository instead.');
+    }
+  }
+  for (const { words } of aws) {
+    const { svc, op } = awsParts(words);
+    if (svc === 'ssm' && op === 'send-command' && startsSnapshot(words)) {
+      refuse('the database snapshot (db-snapshot / db-samples) runs only from the Diagnostics schedule; a session never starts it on the box (F-Tools-2 Amendment 1 §2).');
+    }
+  }
+
   /* ── Git conventions (every mode) ──────────────────────────────────── */
   if (/(^|[\n;&|(`]\s*)git\s+push\b[^\n]*(--force\b|\s-f\b|--force-with-lease)/.test(scan)) {
     refuse('force push (settings.json denies it too). History on a shared branch is not rewritten; if it is truly needed, Evoni runs it.');

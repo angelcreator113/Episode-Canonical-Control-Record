@@ -4,7 +4,9 @@
 // Sessions may start, re-run and cancel workflow runs and merge PRs when
 // Evoni asks (§1, §8 Q1–Q2 defaults). What stays:
 //   deny: auto-merge (a merge nobody watches); direct writes to main or dev
-//         (work lands by PR + squash-merge, CLAUDE.md "Git");
+//         (work lands by PR + squash-merge, CLAUDE.md "Git"); starting the
+//         database snapshot, which runs only from the Diagnostics schedule
+//         (F-Tools-2 Amendment 1 §2);
 //   ask:  irreversible or outside-the-repo GitHub actions (§4): deleting a
 //         workflow run's logs, creating or forking a repository, handing
 //         work to another agent. In a permission mode where a
@@ -17,6 +19,8 @@
 const DENY_AUTO_MERGE = 'No auto-merge: a PR is merged by a person or a session she asked, never left to merge itself.';
 const DENY_MAIN = 'No direct writes to main or dev. Work lands by PR + squash-merge; push to a claude/ branch instead.';
 const GATED = 'F-Tools-5 §4: this cannot be undone. Run it only after Evoni\'s explicit yes in this conversation, for this exact action.';
+const DENY_SNAPSHOT = 'The database snapshot (db-snapshot / db-samples) runs only from the Diagnostics schedule; a session never starts it (F-Tools-2 Amendment 1 §2). Read latest-db-snapshot.md in the private diagnostics repository instead.';
+const SNAPSHOT_CHECK = /(^|[^a-z0-9-])db-(snapshot|samples)([^a-z0-9-]|$)/;
 const ASK_MODES = new Set(['default', 'plan', 'acceptEdits']);
 
 const PROTECTED = new Set(['main', 'dev']);
@@ -34,7 +38,9 @@ function decide(toolName, input, permissionMode) {
       return ['deny', DENY_AUTO_MERGE];
     case 'actions_run_trigger':
       // Starting, re-running and cancelling runs pass; deleting a run's logs cannot be undone.
-      return String(input.method || '') === 'delete_workflow_run_logs' ? gated() : null;
+      if (String(input.method || '') === 'delete_workflow_run_logs') return gated();
+      if (String(input.method || '') === 'run_workflow' && SNAPSHOT_CHECK.test(JSON.stringify(input.inputs || {}))) return ['deny', DENY_SNAPSHOT];
+      return null;
     case 'delete_workflow_run_logs':
     case 'create_repository':
     case 'fork_repository':

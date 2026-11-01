@@ -42,6 +42,8 @@ checks:
   s3-config       bucket settings and listing summaries (never object contents)
   cognito-config  user pool settings, app clients, groups (no users, no secrets)
   self-test       proves reads work and writes, secrets and object reads are refused
+  db-snapshot     the daily database snapshot: schema, exact counts, allowlisted samples
+                  (scheduled runs only; F-Tools-2 Amendment 1)
 EOF
 }
 
@@ -50,9 +52,15 @@ if [ -n "${CLAUDECODE:-}" ]; then
   exit 2
 fi
 case "$CHECK" in
-  overview|health|deploy-state|app-logs|worker-logs|nginx-logs|db|db-schema|db-counts|aws-infra|s3-config|cognito-config|self-test) ;;
+  overview|health|deploy-state|app-logs|worker-logs|nginx-logs|db|db-schema|db-counts|aws-infra|s3-config|cognito-config|self-test|db-snapshot) ;;
   *) echo "REFUSED: unknown check '$CHECK'."; usage; exit 2 ;;
 esac
+# Amendment 1 §2: the snapshot, with its content samples, comes only from the
+# schedule. A re-run of a scheduled run keeps the event name; a dispatch does not.
+if [ "$CHECK" = "db-snapshot" ] && [ "${GITHUB_EVENT_NAME:-}" != "schedule" ]; then
+  echo "REFUSED: db-snapshot runs only from the schedule (F-Tools-2 Amendment 1 §2)."
+  exit 2
+fi
 : "${AWS_REGION:?}" "${EC2_INSTANCE_ID:?}" "${RDS_INSTANCE_ID:?}" "${TARGET_SHA:?}"
 if ! printf '%s' "$TARGET_SHA" | grep -qE '^[0-9a-f]{40}$'; then
   echo "REFUSED: TARGET_SHA must be a full 40-character SHA."; exit 2
@@ -78,7 +86,7 @@ read_cmd() {
 # SSM agent need to be up. If the agent is not online, says so and returns.
 # ---------------------------------------------------------------------------
 box() {
-  local check="$1" ping cmd_id status waited=0 params
+  local check="$1" page="${2:-0}" run="${3:-0}" ping cmd_id status waited=0 params
   section "server: $check"
   ping="$(aws ssm describe-instance-information \
     --filters "Key=InstanceIds,Values=${EC2_INSTANCE_ID}" \
@@ -89,7 +97,7 @@ box() {
     RC=1; return
   fi
   params="$(mktemp)"
-  jq -n --arg c "$check" --arg s "$TARGET_SHA" '{check: [$c], sha: [$s]}' >"$params"
+  jq -n --arg c "$check" --arg s "$TARGET_SHA" --arg p "$page" --arg r "$run" '{check: [$c], sha: [$s], page: [$p], run: [$r]}' >"$params"
   if ! cmd_id="$(aws ssm send-command \
       --instance-ids "$EC2_INSTANCE_ID" \
       --document-name "$SSM_DOCUMENT" \
@@ -118,6 +126,42 @@ box() {
   if [ -n "$err" ] && [ "$err" != "None" ]; then printf 'on-box errors:\n%s\n' "$(printf '%s' "$err" | tail -20)"; fi
   echo "SSM status: $status"
   if [ "$status" != "Success" ]; then RC=1; fi
+}
+
+# ---------------------------------------------------------------------------
+# The daily database snapshot (F-Tools-2 Amendment 1): fetched from the box in
+# pages through the diagnostics document, joined, checked against the box's
+# sha256, unpacked, and printed into the report. It was masked on the box.
+# ---------------------------------------------------------------------------
+snapshot() {
+  local run="${GITHUB_RUN_ID:-0}" page=0 pages=1 out b64="" sha="" dbexit="" part
+  while [ "$page" -lt "$pages" ]; do
+    out="$(box db-snapshot "$page" "$run")"
+    if ! printf '%s\n' "$out" | grep -q '^SNAPSHOT-END$'; then
+      section "database snapshot"
+      echo "FAIL page $page did not arrive:"
+      printf '%s\n' "$out" | grep -vE '^[A-Za-z0-9+/=]{20,}$' | tail -15
+      RC=1; return
+    fi
+    pages="$(printf '%s\n' "$out" | sed -n 's/^SNAPSHOT-PAGES \([0-9]*\)$/\1/p' | head -1)"
+    if [ "$page" = 0 ]; then
+      sha="$(printf '%s\n' "$out" | sed -n 's/^SNAPSHOT-SHA256 \([0-9a-f]*\)$/\1/p' | head -1)"
+      dbexit="$(printf '%s\n' "$out" | sed -n 's/^SNAPSHOT-DB-EXIT \(.*\)$/\1/p' | head -1)"
+    fi
+    part="$(printf '%s\n' "$out" | sed -n '/^SNAPSHOT-PART /,/^SNAPSHOT-END$/p' | sed '1d;$d' | tr -d '\n')"
+    b64="$b64$part"
+    page=$((page + 1))
+    if [ "$page" -gt 500 ]; then section "database snapshot"; echo "FAIL more than 500 pages"; RC=1; return; fi
+  done
+  if [ -z "$sha" ] || [ "$(printf '%s' "$b64" | sha256sum | cut -d' ' -f1)" != "$sha" ]; then
+    section "database snapshot"; echo "FAIL the joined pages do not match the box's checksum"; RC=1; return
+  fi
+  if ! printf '%s' "$b64" | base64 -d | gunzip; then
+    section "database snapshot"; echo "FAIL the snapshot could not be unpacked"; RC=1; return
+  fi
+  echo
+  echo "snapshot: $pages page(s), sha256 ${sha:0:16}…; database part exit ${dbexit:-unknown}"
+  if [ "$dbexit" != "0" ]; then RC=1; fi
 }
 
 public_health() {
@@ -284,6 +328,7 @@ case "$CHECK" in
   s3-config) s3_config ;;
   cognito-config) cognito_config ;;
   self-test) self_test ;;
+  db-snapshot) snapshot ;;
 esac
 echo
 echo "result: $([ "$RC" = 0 ] && echo ok || echo 'problems found (see FAIL / FAILED lines above)')"

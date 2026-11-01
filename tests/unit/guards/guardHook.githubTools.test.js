@@ -37,6 +37,25 @@ describe('guard-github-tools: workflow runs are allowed (F-Tools-5 §1, §8 Q2)'
   });
 });
 
+describe('guard-github-tools: the database snapshot is schedule-only (F-Tools-2 Amendment 1 §2)', () => {
+  test.each([
+    ['dispatching db-snapshot', { method: 'run_workflow', workflow_id: 'diagnostics.yml', ref: 'main', inputs: { check: 'db-snapshot' } }],
+    ['dispatching db-samples', { method: 'run_workflow', workflow_id: 'diagnostics.yml', ref: 'main', inputs: { check: 'db-samples' } }],
+  ])('denies %s, in every mode', (_label, input) => {
+    for (const mode of ['default', 'acceptEdits', 'auto', 'bypassPermissions']) {
+      expect(decisionOf('actions_run_trigger', input, mode)).toBe('deny');
+    }
+  });
+
+  test.each([
+    ['db-schema', 'db-schema'],
+    ['db-counts', 'db-counts'],
+    ['overview', 'overview'],
+  ])('passes dispatching %s', (_label, check) => {
+    expect(decisionOf('actions_run_trigger', { method: 'run_workflow', workflow_id: 'diagnostics.yml', ref: 'main', inputs: { check } })).toBe('pass');
+  });
+});
+
 describe('guard-github-tools: merges and branches', () => {
   test('a merge passes (F-Tools-5 §8 Q1 default: no separate yes)', () => {
     expect(decisionOf('merge_pull_request', { pullNumber: 5, merge_method: 'squash' })).toBe('pass');
