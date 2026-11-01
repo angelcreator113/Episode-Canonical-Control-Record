@@ -75,6 +75,16 @@ const cases = [
   [DENY, 'gh auth token'],
   [DENY, 'gh auth status --show-token'],
 
+  // F-Tools-2 Amendment 1 §2: the database snapshot is schedule-only (every mode).
+  [DENY, 'gh workflow run diagnostics.yml -f check=db-snapshot'],
+  [DENY, 'gh workflow run Diagnostics --ref main -f check=db-samples'],
+  [DENY, 'gh api -X POST repos/o/r/actions/workflows/diagnostics.yml/dispatches -f ref=main -f inputs[check]=db-snapshot'],
+  [DENY, 'aws ssm send-command --document-name PrimeStudios-Diagnostics --instance-ids i-1 --parameters check=db-snapshot,sha=abc'],
+  [PASS, 'gh workflow run diagnostics.yml -f check=db-schema'],
+  [PASS, 'gh workflow run diagnostics.yml -f check=db-counts'],
+  [PASS, 'gh run list --workflow diagnostics.yml'],
+  [PASS, 'grep -n "db-snapshot" scripts/diagnostics/runner.sh'],
+
   // Git conventions (every mode).
   [DENY, 'git push origin main'],
   [DENY, 'git push origin HEAD:main'],
@@ -133,6 +143,7 @@ const automatic = [
   ['auto', 'aws s3 rm s3://bucket/x'],
   ['dontAsk', 'psql -h db -c "DROP TABLE users"'],
   ['bypassPermissions', 'gh repo delete o/r --yes'],
+  ['auto', 'gh workflow run diagnostics.yml -f check=db-snapshot'],
 ];
 
 const decide = (command, mode = 'default') => {

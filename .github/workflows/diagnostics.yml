@@ -19,6 +19,14 @@
 #   - it works when the API is down: it needs the box and its SSM agent, not
 #     the app.
 #
+# The daily database snapshot (F-Tools-2 Amendment 1, 2026-10-31; Task #3659):
+# the schedule below runs check db-snapshot once a day: every table's columns
+# and indexes, exact counts, and the latest rows of an allowlisted set of
+# content tables, columns denylisted and values bounded. It is schedule-only:
+# db-snapshot is not a dispatch option, runner.sh refuses it unless the event
+# is the schedule, and the session guards refuse a dispatch that names it. It
+# lands in the private repository as latest-db-snapshot.md; /wake-up reads it.
+#
 # PRIVACY: this repository is public, so its logs and artifacts are readable by
 # anyone. The report never goes to either. The collect step writes everything
 # to a file; redact.js masks it; publish.sh puts it in the PRIVATE repository
@@ -29,6 +37,9 @@
 name: Diagnostics
 
 on:
+  # Once a day at 06:17 UTC: the database snapshot (Amendment 1 §2).
+  schedule:
+    - cron: '17 6 * * *'
   workflow_dispatch:
     inputs:
       check:
@@ -63,13 +74,14 @@ jobs:
     name: Read-only diagnostics
     if: vars.DIAG_ENABLED == 'true' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     environment: prod-readonly
     permissions:
       contents: read
       id-token: write
     env:
-      CHECK: ${{ inputs.check }}
+      # A scheduled run is always the snapshot; a dispatch is one of the options above.
+      CHECK: ${{ github.event_name == 'schedule' && 'db-snapshot' || inputs.check }}
       TARGET_SHA: ${{ github.sha }}
       AWS_REGION: ${{ vars.AWS_REGION }}
       EC2_INSTANCE_ID: ${{ vars.EC2_INSTANCE_ID }}

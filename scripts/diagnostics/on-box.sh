@@ -26,6 +26,11 @@
 #   db-schema     table list with column counts
 #   db-counts     row counts (fixed table list) and largest tables
 #   self-test     runs as ubuntu, file modes, redaction works, database refuses writes
+#   db-snapshot   the daily database snapshot (F-Tools-2 Amendment 1), in pages:
+#                 on-box.sh db-snapshot <sha> <page> <run>. Page 0 builds the
+#                 masked snapshot once, gzipped and base64'd, in a mode-600 file
+#                 under /tmp named for the run; each page returns one slice
+#                 below SSM's output limit; the last page removes the file.
 # Exit: 0 ok; 1 a check reported a failure; 2 refused (bad arguments, CLAUDECODE, root).
 
 set -uo pipefail
@@ -47,7 +52,7 @@ if [ -n "${CLAUDECODE:-}" ]; then
   refuse "CLAUDECODE is set, so this is a Claude Code session. Only the Diagnostics workflow runs this, on the box."
 fi
 case "$CHECK" in
-  health|deploy-state|app-logs|worker-logs|nginx-logs|db|db-schema|db-counts|self-test) ;;
+  health|deploy-state|app-logs|worker-logs|nginx-logs|db|db-schema|db-counts|self-test|db-snapshot) ;;
   *) refuse "unknown check '$CHECK'." ;;
 esac
 if ! printf '%s' "$TARGET" | grep -qE '^[0-9a-f]{40}$'; then
@@ -210,6 +215,40 @@ check_self_test() {
   fi
   run_db self-test
 }
+
+# The database snapshot, in pages (Amendment 1 §2, §4). It is masked before it
+# is packed, so the base64 slices are not run through mask again (masking
+# could alter them); the runner checks the whole against its sha256.
+if [ "$CHECK" = "db-snapshot" ]; then
+  PAGE="${3:-0}"
+  RUN="${4:-0}"
+  printf '%s' "$PAGE" | grep -qE '^[0-9]{1,3}$' || refuse "the page must be a number."
+  printf '%s' "$RUN" | grep -qE '^[0-9]{1,20}$' || refuse "the run must be a number."
+  CHUNK=18000
+  SNAP="/tmp/prime-db-snapshot-$RUN.b64"
+  if [ "$PAGE" = 0 ]; then
+    if [ "$HAVE_NODE" != 1 ]; then echo "SNAPSHOT-ERROR node is not available"; exit 1; fi
+    # Leftovers of an interrupted run are removed after an hour.
+    find /tmp -maxdepth 1 -name 'prime-db-snapshot-*.b64' -mmin +60 -delete 2>/dev/null || true
+    ( umask 077
+      APP_DIR="$APP_DIR" node "$HERE/db-check.js" snapshot 2>&1 | node "$HERE/redact.js" | gzip -9 | base64 -w 0 >"$SNAP"
+      exit "${PIPESTATUS[0]}" )
+    echo "$?" >"$SNAP.rc"
+  fi
+  if [ ! -s "$SNAP" ]; then echo "SNAPSHOT-ERROR no snapshot for run $RUN (page 0 has not run, or the last page removed it)"; exit 1; fi
+  SIZE="$(wc -c <"$SNAP")"
+  PAGES=$(( (SIZE + CHUNK - 1) / CHUNK ))
+  if [ "$PAGE" -ge "$PAGES" ]; then echo "SNAPSHOT-ERROR page $PAGE of $PAGES does not exist"; exit 1; fi
+  echo "SNAPSHOT-PAGES $PAGES"
+  echo "SNAPSHOT-SHA256 $(sha256sum "$SNAP" | cut -d' ' -f1)"
+  echo "SNAPSHOT-DB-EXIT $(cat "$SNAP.rc" 2>/dev/null || echo unknown)"
+  echo "SNAPSHOT-PART $PAGE"
+  tail -c +$((PAGE * CHUNK + 1)) "$SNAP" | head -c "$CHUNK" | fold -w 76
+  echo
+  echo "SNAPSHOT-END"
+  if [ "$PAGE" -eq $((PAGES - 1)) ]; then rm -f "$SNAP" "$SNAP.rc"; fi
+  exit 0
+fi
 
 # The body writes to a file, not a pipe, so RC set inside it survives.
 OUT_FILE="$(mktemp)"

@@ -49,6 +49,7 @@ The public run log shows only step names, "Collected N bytes; checks exit X", an
 | `s3-config` | runner | per bucket: block-public-access, policy and policy status, ownership, versioning, encryption, CORS/lifecycle counts, object counts and sizes per top folder (no key names, no contents) |
 | `cognito-config` | runner | pool settings, app client names, groups (no users, no client secret) |
 | `self-test` | both | §5 |
+| `db-snapshot` | box | **schedule only, never dispatched.** The daily database snapshot: full schema, exact counts for every table, allowlisted content samples. See `docs/runbooks/prod-db-snapshot.md` (F-Tools-2 Amendment 1). |
 
 Adding or changing a check is a reviewed PR: the workflow's `options`, `runner.sh`, `on-box.sh`, and (for a box check) the SSM document's `allowedValues` must agree, which `tests/unit/scripts/diagnostics.test.js` enforces. A new box check also needs Evoni to update the SSM document (§3 step 7).
 
@@ -56,16 +57,16 @@ Adding or changing a check is a reviewed PR: the workflow's `options`, `runner.s
 
 | Layer | Allows | Refuses |
 |---|---|---|
-| **GitHub** | `workflow_dispatch` on `main`, in environment `prod-readonly` (deployment branches: `main` only) | push/PR triggers; other branches; forks (no environment secrets) |
+| **GitHub** | `workflow_dispatch` on `main`, and one daily `schedule` (always `db-snapshot`), in environment `prod-readonly` (deployment branches: `main` only) | push/PR triggers; other branches; forks (no environment secrets); `db-snapshot` from any event but the schedule |
 | **AWS role** `PrimeStudios-ReadOnly-GHA` (`scripts/diagnostics/iam/`) | assumed only by `repo:…:environment:prod-readonly`; Describe/List/Get on EC2, RDS, SSM, SQS, CloudWatch, S3 bucket settings and listings, Cognito pool/clients/groups; `ssm:SendCommand` for **one document on one instance** | an explicit **Deny** (wins over any later Allow): object reads (`s3:GetObject*`, which also covers `HeadObject`), every S3/EC2/RDS/SQS write family, SSM parameters and shell sessions, Secrets Manager, KMS decrypt, IAM, `sts:AssumeRole`, Lambda (its config carries environment variables), the instance's start-up script, Cognito users and app-client details (which carry the client secret) |
-| **SSM document** `PrimeStudios-Diagnostics` | one `check` from `allowedValues`, one 40-hex `sha` that is on `origin/main`; runs `on-box.sh` from that commit, as `ubuntu`, 120 s | anything else; root; `AWS-RunShellScript` is not in the role |
+| **SSM document** `PrimeStudios-Diagnostics` | one `check` from `allowedValues`, one 40-hex `sha` that is on `origin/main`, and (for `db-snapshot` only) a `page` and `run` number; runs `on-box.sh` from that commit, as `ubuntu`, 120 s | anything else; root; `AWS-RunShellScript` is not in the role |
 | **Box script** `on-box.sh` | reads files, `pm2 jlist` filtered to five fields, `systemctl is-active`, `curl localhost` | refuses root, `CLAUDECODE`, unknown checks; never `pm2 restart`, `git checkout`, `.env` printing, `pm2 env`/`describe` |
 | **Database role** `prime_readonly` (`sql/readonly-role.sql`) | `SELECT` on `public` tables; read-only session by default; 30 s statement timeout; 2 connections | `INSERT`/`UPDATE`/`DELETE` refused by **grants** (42501) even with read-only switched off; server file reads (42501); not a superuser |
 | **SQL** `db-check.js` | fixed statements in the file | any SQL from input: there is no input path |
 | **Output** `publish.sh` | write to the private repo with a deploy key for that repo only; pinned GitHub host key | publishing when the repo is not confirmed private (a signed-out request must get 404); publishing to this repo |
 | **Sessions** | start Diagnostics through the GitHub tool; read the private report | the guard and deny list are unchanged for `aws`, `ssh`, `pm2`, `psql` to RDS, `gh workflow run`; the guard now also blocks running `runner.sh`/`publish.sh` from a session |
 
-**Residual, stated plainly.** PostgreSQL lets any role create temporary tables and large objects; with the read-only default switched off, `prime_readonly` could create those (they are not production tables). `db-check.js` never does, and its statements are fixed, so this would need a reviewed code change. SSM returns at most 24,000 characters per command: `on-box.sh` caps its output at 22,000 bytes, so very long logs are cut, not lost silently.
+**Residual, stated plainly.** PostgreSQL lets any role create temporary tables and large objects; with the read-only default switched off, `prime_readonly` could create those (they are not production tables). `db-check.js` never does, and its statements are fixed, so this would need a reviewed code change. SSM returns at most 24,000 characters per command: `on-box.sh` caps its output at 22,000 bytes, so very long logs are cut, not lost silently. The snapshot is the exception: it is returned in checksummed pages (`docs/runbooks/prod-db-snapshot.md` §2).
 
 ## 3. One-time setup (Evoni)
 
@@ -88,7 +89,7 @@ Do these in order. Nothing runs until step 9. Each is browser-only (phone or des
    - Trust relationships → Edit → paste `scripts/diagnostics/iam/readonly-trust-policy.json`.
    - Permissions → Add permissions → Create inline policy → JSON → paste `scripts/diagnostics/iam/readonly-permissions-policy.json`, with `<EC2_INSTANCE_ID>` replaced by the production instance id → name `diagnostics-read-only`.
    - Maximum session duration: 1 hour. Copy the role ARN into step 4's `AWS_READONLY_ROLE_ARN`.
-7. **SSM document.** Systems Manager → Documents → Create document → **Command or Session** → name `PrimeStudios-Diagnostics`, type Command, JSON → paste `scripts/diagnostics/ssm-document.json`.
+7. **SSM document.** Systems Manager → Documents → Create document → **Command or Session** → name `PrimeStudios-Diagnostics`, type Command, JSON → paste `scripts/diagnostics/ssm-document.json`. If the document already exists, create a new version from the file instead and set it as the default (Actions → Create new version, then Set default version): `docs/runbooks/prod-db-snapshot.md` §3.
 8. **Read-only database role** (once, on the box, through Session Manager, as you set up the migration credential):
    ```
    sudo -iu ubuntu
