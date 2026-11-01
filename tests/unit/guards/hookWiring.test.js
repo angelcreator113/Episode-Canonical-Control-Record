@@ -44,7 +44,7 @@ describe('each hook runs the way exec form runs it', () => {
 
   test('the shell guard blocks a guarded command and allows a plain one', () => {
     const guard = find('PreToolUse', 'Bash|PowerShell');
-    const blocked = runExecForm(guard, JSON.stringify({ tool_input: { command: 'pm2 list' } }));
+    const blocked = runExecForm(guard, JSON.stringify({ tool_input: { command: 'printenv' } }));
     expect(blocked.status).toBe(2);
     expect(blocked.stderr).toContain('[guard] BLOCKED');
     expect(runExecForm(guard, JSON.stringify({ tool_input: { command: 'git status' } })).status).toBe(0);
@@ -52,14 +52,14 @@ describe('each hook runs the way exec form runs it', () => {
 
   test('the shell guard reads a PowerShell command with Windows line endings', () => {
     const guard = find('PreToolUse', 'Bash|PowerShell');
-    const r = runExecForm(guard, JSON.stringify({ tool_name: 'PowerShell', tool_input: { command: 'Get-ChildItem\r\npm2 list\r\n' } }));
+    const r = runExecForm(guard, JSON.stringify({ tool_name: 'PowerShell', tool_input: { command: 'Get-ChildItem\r\nprintenv\r\n' } }));
     expect(r.status).toBe(2);
     expect(runExecForm(guard, JSON.stringify({ tool_name: 'PowerShell', tool_input: { command: 'Get-ChildItem -Path .\r\n' } })).status).toBe(0);
   });
 
-  test('the GitHub tool guard denies a workflow dispatch', () => {
+  test('the GitHub tool guard denies turning on auto-merge', () => {
     const guard = find('PreToolUse', 'mcp__github__.*');
-    const r = runExecForm(guard, JSON.stringify({ tool_name: 'mcp__github__actions_run_trigger', tool_input: {} }));
+    const r = runExecForm(guard, JSON.stringify({ tool_name: 'mcp__github__enable_pr_auto_merge', tool_input: {} }));
     expect(r.status).toBe(0);
     expect(JSON.parse(r.stdout).hookSpecificOutput.permissionDecision).toBe('deny');
   });

@@ -1,5 +1,7 @@
 # Runbook: reading production media for an authorized task
 
+> **Since F-Tools-5 (`docs/audit/F-Tools-5_AgentProductionAccess_Ruling_2026-10-31.md`, 2026-11-01):** a session may read production media directly (AWS CLI, SSH) when Evoni asks, with the credentials she set up (`DEVELOPMENT_WORKFLOW.md` §2.7). Deleting or overwriting media needs her explicit yes in the session. M1 and M2 below remain available, and M2's design is still the one to use if she wants reads that never hold credentials in a session.
+
 Ruling: `docs/audit/F-Tools-3_TaskScopedProductionReads_Ruling_2026-10-29.md`. Production is **default-deny**; this runbook covers only reads Evoni authorizes for a named task.
 
 ## 1. Today: method M1 (no setup)

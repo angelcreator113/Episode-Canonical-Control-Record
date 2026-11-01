@@ -7,7 +7,7 @@ body:
     attributes:
       value: |
         One issue = one branch = one PR. Keep it small enough to review on a phone.
-        Prod is FROZEN. Nothing in this issue may ask an agent session to SSH, run pm2, run aws, touch RDS, or edit a server .env.
+        Production access follows F-Tools-5 (CLAUDE.md): a session may operate production for what Evoni asks; anything that deletes or irreversibly changes data or infrastructure needs her explicit yes in that session; secrets are never printed, committed or put in chat.
   - type: dropdown
     id: lane
     attributes:
@@ -65,7 +65,7 @@ body:
     attributes:
       label: Guardrails
       options:
-        - label: Session holds no credentials and contacts no host, AWS, database, or Cognito. Migrations and deploys run only through the approved Deploy workflow.
+        - label: Production work stays within what this issue asks; deletes and irreversible changes need Evoni's explicit yes in the session (F-Tools-5 §4); no secret is printed, committed or put in chat (§5).
           required: true
         - label: This task is inside the locked fix sequence or is explicitly approved product work (see PROJECT_CONTEXT.md).
           required: false
