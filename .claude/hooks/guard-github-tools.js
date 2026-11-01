@@ -1,41 +1,46 @@
 #!/usr/bin/env node
-// PreToolUse guard for the GitHub MCP tools (matcher `mcp__github__.*`).
-// Evoni's rulings on Issue #3650 (2026-10-30): she starts every production
-// workflow; a session never starts, approves, re-runs or cancels a workflow
-// run, never turns on auto-merge, and merges only after her explicit yes.
-// A session's GitHub tool acts as her account, so GitHub itself cannot tell
-// the two apart; this hook is defense in depth, not authorization.
-// Decisions go to stdout as PreToolUse JSON:
-//   deny: the call is refused, with the rule that refuses it;
-//   ask:  Claude Code asks before the call runs (merges only);
-//   no output: the normal permission flow applies.
+// PreToolUse guard for the GitHub MCP tools (matcher `mcp__github__.*`),
+// F-Tools-5 (2026-10-31, docs/audit/F-Tools-5_AgentProductionAccess_Ruling_2026-10-31.md).
+// Sessions may start, re-run and cancel workflow runs and merge PRs when
+// Evoni asks (§1, §8 Q1–Q2 defaults). What stays:
+//   deny: auto-merge (a merge nobody watches); direct writes to main or dev
+//         (work lands by PR + squash-merge, CLAUDE.md "Git");
+//   ask:  irreversible or outside-the-repo GitHub actions (§4): deleting a
+//         workflow run's logs, creating or forking a repository, handing
+//         work to another agent. In a permission mode where a
+//         prompt may not reach Evoni (auto, dontAsk, bypassPermissions) they
+//         are refused, and the session asks her in the conversation.
+// The session's GitHub tool acts as her account, so GitHub cannot tell the
+// two apart; this hook is defense in depth, not authorization.
 // Anything it cannot read is denied (fail closed).
 
-const DENY_WORKFLOW_RUNS = 'Workflow runs are Evoni\'s: a session never starts, re-runs, cancels or deletes the logs of a workflow run, CI or production (Issue #3650 rulings, 2026-10-30). Report what needs running and stop.';
-const DENY_AUTO_MERGE = 'No auto-merge (CLAUDE.md, Rule 7). A PR is merged only after Evoni\'s explicit yes.';
+const DENY_AUTO_MERGE = 'No auto-merge: a PR is merged by a person or a session she asked, never left to merge itself.';
 const DENY_MAIN = 'No direct writes to main or dev. Work lands by PR + squash-merge; push to a claude/ branch instead.';
-const DENY_OUTSIDE = 'Outside any task: creating or forking repositories, or handing work to another agent, needs Evoni\'s explicit decision.';
-const ASK_MERGE = 'Rule 7: merge only after Evoni\'s explicit yes naming this merge. Approve only if she gave it.';
+const GATED = 'F-Tools-5 §4: this cannot be undone. Run it only after Evoni\'s explicit yes in this conversation, for this exact action.';
+const ASK_MODES = new Set(['default', 'plan', 'acceptEdits']);
 
 const PROTECTED = new Set(['main', 'dev']);
 const refName = (b) => String(b || '').replace(/^refs\/heads\//, '').trim();
 
-function decide(toolName, input) {
+function decide(toolName, input, permissionMode) {
   const m = /^mcp__github__(.+)$/i.exec(String(toolName || ''));
   if (!m) return null;
   const tool = m[1].toLowerCase();
+  const gated = () => (ASK_MODES.has(String(permissionMode || ''))
+    ? ['ask', GATED]
+    : ['deny', `${GATED} In this permission mode the prompt may not reach her, so it is refused: ask her in the conversation.`]);
   switch (tool) {
-    case 'actions_run_trigger':
-    case 'run_workflow':
-    case 'rerun_workflow_run':
-    case 'rerun_failed_jobs':
-    case 'cancel_workflow_run':
-    case 'delete_workflow_run_logs':
-      return ['deny', DENY_WORKFLOW_RUNS];
     case 'enable_pr_auto_merge':
       return ['deny', DENY_AUTO_MERGE];
-    case 'merge_pull_request':
-      return ['ask', ASK_MERGE];
+    case 'actions_run_trigger':
+      // Starting, re-running and cancelling runs pass; deleting a run's logs cannot be undone.
+      return String(input.method || '') === 'delete_workflow_run_logs' ? gated() : null;
+    case 'delete_workflow_run_logs':
+    case 'create_repository':
+    case 'fork_repository':
+    case 'create_pull_request_with_copilot':
+    case 'assign_copilot_to_issue':
+      return gated();
     case 'create_or_update_file':
     case 'push_files':
     case 'delete_file': {
@@ -45,11 +50,6 @@ function decide(toolName, input) {
     }
     case 'create_branch':
       return PROTECTED.has(refName(input.branch)) ? ['deny', DENY_MAIN] : null;
-    case 'create_repository':
-    case 'fork_repository':
-    case 'create_pull_request_with_copilot':
-    case 'assign_copilot_to_issue':
-      return ['deny', DENY_OUTSIDE];
     default:
       return null;
   }
@@ -74,7 +74,7 @@ if (require.main === module) {
       emit('deny', 'The GitHub tool call could not be read, so it is refused (fail closed).');
       process.exit(0);
     }
-    const result = decide(event.tool_name, event.tool_input || {});
+    const result = decide(event.tool_name, event.tool_input || {}, event.permission_mode);
     if (result) emit(result[0], result[1]);
     process.exit(0);
   });

@@ -15,7 +15,7 @@ node scripts/check-root-junk.js
 
 ## Guardrails
 
-- [ ] Session holds no credentials and contacts no host, AWS, database, or Cognito. Migrations and deploys run only through the approved Deploy workflow.
+- [ ] Any production action was asked for by Evoni; anything that deleted or irreversibly changed data or infrastructure had her explicit yes in the session (F-Tools-5 §4); no secret was printed, committed or put in chat (§5).
 - [ ] No file under `docs/audit/` was edited in place (amendments mint a new file; banners are additive).
 - [ ] No migration file that has already run was edited; new schema changes are new files under `src/migrations/`.
 - [ ] Contains a migration: deploys through the Deploy workflow after Evoni approves.
