@@ -142,7 +142,9 @@ describe('Record on this phone', () => {
     // The rig reached the end of the script: it ends the take, and so does the phone.
     rig = { ...rig, phoneTake: false, running: false };
     await screen.findByTestId('tpr-review');
-    expect(screen.getByTestId('tpr-rec-notice').textContent).toContain('The prompter ended the take.');
+    // The notice lands one render after the review appears, so it is waited
+    // for, not read at once (on a slow machine the next render had not landed).
+    expect((await screen.findByTestId('tpr-rec-notice')).textContent).toContain('The prompter ended the take.');
     expect(screen.getByTestId('tpr-review-name').textContent).toMatch(/^Full episode · take 3 · /);
     fireEvent.click(screen.getByTestId('tpr-save'));
     await waitFor(() => expect(screen.getByTestId('tpr-rec-notice').textContent.trim()).toBe("Saved to the episode's Files: Full episode · take 3"));
