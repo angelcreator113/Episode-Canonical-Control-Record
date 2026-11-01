@@ -264,7 +264,7 @@ expect_denied() {
     pass "$label: refused"
   # HEAD errors have no response body; S3 reports a generic HTTP code instead.
   elif [ "${1:-}" = aws ] && [ "${2:-}" = s3api ] && [ "${3:-}" = head-object ] &&
-    printf '%s' "$out" | grep -qE '^An error occurred \(403\) when calling the HeadObject operation: Forbidden$'; then
+    printf '%s' "$out" | grep -qE 'An error occurred \(403\) when calling the HeadObject operation([[:space:]:]|$)'; then
     pass "$label: refused"
   else
     fail "$label: not refused by IAM ($(printf '%s' "$out" | grep -oE '\(([A-Za-z0-9]+)\)' | head -1 || echo 'unexpected error'))"

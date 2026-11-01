@@ -343,7 +343,7 @@ case "$op" in
     [ -n "\${ALLOW_READ:-}" ] && { echo '{}'; exit 0; }
     if [ "$2" = head-object ]; then
       [ -n "\${HEAD_UNEXPECTED:-}" ] && { echo 'Connection timed out at https://example.test/media/clip.mp4' >&2; exit 255; }
-      echo "An error occurred (\${HEAD_CODE:-403}) when calling the HeadObject operation: \${HEAD_MESSAGE:-Forbidden}" >&2
+      echo "An error occurred (\${HEAD_CODE:-403}) when calling the HeadObject operation\${HEAD_RETRY:-}: \${HEAD_MESSAGE:-Forbidden}" >&2
       exit 254
     fi
     [ -n "\${GET_HTTP_403:-}" ] && { echo 'An error occurred (403) when calling the GetObject operation: Forbidden' >&2; exit 254; }
@@ -434,10 +434,14 @@ describe('runner.sh (the AWS half) and the self-test', () => {
     expect(res.stdout).toContain(`FAIL read an object's metadata (needs GetObject) from studio-bucket: not refused by IAM ((${code}))`);
   });
 
-  test('does not classify an unrelated HeadObject 403 message as the documented Forbidden response', () => {
-    const res = runner('self-test', { HEAD_MESSAGE: 'Unexpected response' });
-    expect(res.status).toBe(1);
-    expect(res.stdout).toContain("FAIL read an object's metadata (needs GetObject) from studio-bucket: not refused by IAM ((403))");
+  test.each([
+    { HEAD_MESSAGE: 'Unexpected response' },
+    { HEAD_RETRY: ' (reached max retries: 2)' },
+    { HEAD_MESSAGE: 'Forbidden\r' },
+  ])('recognizes HeadObject 403 independently of CLI wording and retry annotations: %s', (env) => {
+    const res = runner('self-test', env);
+    expect(res.status).toBe(0);
+    expect(res.stdout).toContain("PASS read an object's metadata (needs GetObject) from studio-bucket: refused");
   });
 
   test('unexpected HeadObject errors still fail without exposing raw error text or object keys', () => {
