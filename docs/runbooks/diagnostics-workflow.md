@@ -156,6 +156,11 @@ The S3 object-read refusal probes in `runner.sh` select one existing key with
 multiple lines, which must not be passed as one object key. Failed listings,
 empty buckets and multiline selections fail the self-test explicitly rather
 than silently skipping these probes. `NoSuchKey` is not evidence of IAM denial.
+S3 [`HeadObject` errors](https://docs.aws.amazon.com/AmazonS3/latest/API/API_HeadObject.html)
+have no response body and use generic HTTP codes. Only its specific CLI
+`(403) ... HeadObject operation: Forbidden` response counts as refusal;
+numeric errors from other operations, `404`, other errors and successful reads
+still fail. Failure reports include the error code, not raw error text or keys.
 
 ## 6. Costs
 

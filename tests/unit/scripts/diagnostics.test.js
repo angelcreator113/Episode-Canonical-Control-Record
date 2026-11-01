@@ -340,6 +340,13 @@ case "$op" in
   "s3api put-object") [ -n "\${ALLOW_PUT:-}" ] && { echo '{"ETag":"x"}'; exit 0; }; deny s3 PutObject ;;
   "s3api get-object"|"s3api head-object")
     [ -n "\${READ_NOT_FOUND:-}" ] && { echo "An error occurred (NoSuchKey) when calling the $2 operation" >&2; exit 254; }
+    [ -n "\${ALLOW_READ:-}" ] && { echo '{}'; exit 0; }
+    if [ "$2" = head-object ]; then
+      [ -n "\${HEAD_UNEXPECTED:-}" ] && { echo 'Connection timed out at https://example.test/media/clip.mp4' >&2; exit 255; }
+      echo "An error occurred (\${HEAD_CODE:-403}) when calling the HeadObject operation: \${HEAD_MESSAGE:-Forbidden}" >&2
+      exit 254
+    fi
+    [ -n "\${GET_HTTP_403:-}" ] && { echo 'An error occurred (403) when calling the GetObject operation: Forbidden' >&2; exit 254; }
     case "$*" in
       *$'\\n'*) echo "An error occurred (NoSuchKey) when calling the $2 operation" >&2; exit 254 ;;
     esac
@@ -413,6 +420,45 @@ describe('runner.sh (the AWS half) and the self-test', () => {
     const res = runner('self-test', { ALLOW_PUT: '1' });
     expect(res.stdout).toContain('FAIL write an object to studio-bucket: it SUCCEEDED');
     expect(res.status).toBe(1);
+  });
+
+  test('recognizes the bodyless HeadObject 403 Forbidden response as refusal', () => {
+    const res = runner('self-test');
+    expect(res.status).toBe(0);
+    expect(res.stdout).toContain("PASS read an object's metadata (needs GetObject) from studio-bucket: refused");
+  });
+
+  test.each(['400', '404', '405', '412', '500'])('HeadObject HTTP %s remains a failure and reports its numeric code', (code) => {
+    const res = runner('self-test', { HEAD_CODE: code });
+    expect(res.status).toBe(1);
+    expect(res.stdout).toContain(`FAIL read an object's metadata (needs GetObject) from studio-bucket: not refused by IAM ((${code}))`);
+  });
+
+  test('does not classify an unrelated HeadObject 403 message as the documented Forbidden response', () => {
+    const res = runner('self-test', { HEAD_MESSAGE: 'Unexpected response' });
+    expect(res.status).toBe(1);
+    expect(res.stdout).toContain("FAIL read an object's metadata (needs GetObject) from studio-bucket: not refused by IAM ((403))");
+  });
+
+  test('unexpected HeadObject errors still fail without exposing raw error text or object keys', () => {
+    const res = runner('self-test', { HEAD_UNEXPECTED: '1' });
+    expect(res.status).toBe(1);
+    expect(res.stdout).toContain("FAIL read an object's metadata (needs GetObject) from studio-bucket: not refused by IAM (unexpected error)");
+    expect(res.stdout).not.toContain('example.test/media/clip.mp4');
+  });
+
+  test('does not extend numeric HTTP refusal recognition to GetObject', () => {
+    const res = runner('self-test', { GET_HTTP_403: '1' });
+    expect(res.status).toBe(1);
+    expect(res.stdout).toContain("FAIL read an object's contents from studio-bucket: not refused by IAM ((403))");
+  });
+
+  test('successful object reads still fail both refusal checks', () => {
+    const res = runner('self-test', { ALLOW_READ: '1' });
+    expect(res.status).toBe(1);
+    for (const label of ["read an object's contents", "read an object's metadata (needs GetObject)"]) {
+      expect(res.stdout).toContain(`FAIL ${label} from studio-bucket: it SUCCEEDED, so the role is allowed to do it`);
+    }
   });
 
   test('selects one service-bounded key without CLI pagination for both object-read probes', () => {

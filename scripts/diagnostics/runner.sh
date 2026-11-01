@@ -262,8 +262,12 @@ expect_denied() {
     fail "$label: it SUCCEEDED, so the role is allowed to do it"
   elif printf '%s' "$out" | grep -qE 'AccessDenied|UnauthorizedOperation|not authorized|explicit deny'; then
     pass "$label: refused"
+  # HEAD errors have no response body; S3 reports a generic HTTP code instead.
+  elif [ "${1:-}" = aws ] && [ "${2:-}" = s3api ] && [ "${3:-}" = head-object ] &&
+    printf '%s' "$out" | grep -qE '^An error occurred \(403\) when calling the HeadObject operation: Forbidden$'; then
+    pass "$label: refused"
   else
-    fail "$label: not refused by IAM ($(printf '%s' "$out" | grep -oE '\(([A-Za-z]+)\)' | head -1 || echo 'unexpected error'))"
+    fail "$label: not refused by IAM ($(printf '%s' "$out" | grep -oE '\(([A-Za-z0-9]+)\)' | head -1 || echo 'unexpected error'))"
   fi
 }
 
