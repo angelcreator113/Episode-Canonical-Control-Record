@@ -325,9 +325,26 @@ case "$op" in
       *StandardOutputContent*) printf 'PASS runs as ubuntu\\nleak ${SECRET_KEY_ID} person@example.com\\n' ;;
       *) echo None ;;
     esac ;;
-  "s3api list-objects-v2") echo "media/clip.mp4" ;;
+  "s3api list-objects-v2")
+    case "$*" in
+      *"Contents[0].Key"*)
+        [ -n "\${LIST_FAIL:-}" ] && deny s3 ListBucket
+        [ -n "\${LIST_EMPTY:-}" ] && { echo None; exit 0; }
+        [ -n "\${LIST_MULTILINE:-}" ] && { printf 'media/clip.mp4\\nNone\\n'; exit 0; }
+        case "$*" in
+          *"--max-keys 1 --no-paginate"*) echo "media/clip.mp4" ;;
+          *) printf 'media/clip.mp4\\nNone\\n' ;;
+        esac ;;
+      *) echo 1 ;;
+    esac ;;
   "s3api put-object") [ -n "\${ALLOW_PUT:-}" ] && { echo '{"ETag":"x"}'; exit 0; }; deny s3 PutObject ;;
-  "s3api get-object"|"s3api head-object"|"s3api delete-object") deny s3 "$2" ;;
+  "s3api get-object"|"s3api head-object")
+    [ -n "\${READ_NOT_FOUND:-}" ] && { echo "An error occurred (NoSuchKey) when calling the $2 operation" >&2; exit 254; }
+    case "$*" in
+      *$'\\n'*) echo "An error occurred (NoSuchKey) when calling the $2 operation" >&2; exit 254 ;;
+    esac
+    deny s3 "$2" ;;
+  "s3api delete-object") deny s3 "$2" ;;
   "ssm get-parameter") deny ssm GetParameter ;;
   "secretsmanager get-secret-value") deny secretsmanager GetSecretValue ;;
   "ec2 stop-instances") echo "An error occurred (UnauthorizedOperation) when calling the StopInstances operation" >&2; exit 254 ;;
@@ -396,6 +413,35 @@ describe('runner.sh (the AWS half) and the self-test', () => {
     const res = runner('self-test', { ALLOW_PUT: '1' });
     expect(res.stdout).toContain('FAIL write an object to studio-bucket: it SUCCEEDED');
     expect(res.status).toBe(1);
+  });
+
+  test('selects one service-bounded key without CLI pagination for both object-read probes', () => {
+    const res = runner('self-test');
+    expect(res.status).toBe(0);
+    expect(res.calls).toContain('s3api list-objects-v2 --bucket studio-bucket --max-keys 1 --no-paginate --query Contents[0].Key --output text');
+    expect(res.calls).toContain('s3api get-object --bucket studio-bucket --key media/clip.mp4 /dev/null');
+    expect(res.calls).toContain('s3api head-object --bucket studio-bucket --key media/clip.mp4');
+    expect(res.stdout).not.toContain('media/clip.mp4');
+  });
+
+  test.each([
+    [{ LIST_FAIL: '1' }, 'listing failed'],
+    [{ LIST_EMPTY: '1' }, 'no object found'],
+    [{ LIST_MULTILINE: '1' }, 'expected one single-line key'],
+  ])('fails explicitly without object reads when selection is invalid: %s', (env, reason) => {
+    const res = runner('self-test', env);
+    expect(res.status).toBe(1);
+    expect(res.stdout).toContain(`FAIL select an object from studio-bucket: ${reason}; object-read refusals were not tested`);
+    expect(res.calls).not.toMatch(/s3api (get-object|head-object)/);
+    expect(res.stdout).not.toContain('media/clip.mp4');
+  });
+
+  test('missing-object errors still fail both refusal checks instead of passing as IAM denials', () => {
+    const res = runner('self-test', { READ_NOT_FOUND: '1' });
+    expect(res.status).toBe(1);
+    for (const label of ["read an object's contents", "read an object's metadata (needs GetObject)"]) {
+      expect(res.stdout).toContain(`FAIL ${label} from studio-bucket: not refused by IAM ((NoSuchKey))`);
+    }
   });
 
   test('"not found" instead of "access denied" counts as a FAIL (the permission was granted)', () => {

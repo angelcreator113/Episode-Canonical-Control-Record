@@ -282,7 +282,7 @@ self_test() {
   expect_allowed "SSM agent status" aws ssm describe-instance-information --filters "Key=InstanceIds,Values=${EC2_INSTANCE_ID}"
   for b in $(buckets); do
     expect_allowed "bucket settings: $b" aws s3api get-public-access-block --bucket "$b"
-    expect_allowed "bucket listing: $b" aws s3api list-objects-v2 --bucket "$b" --max-items 1 --query "KeyCount"
+    expect_allowed "bucket listing: $b" aws s3api list-objects-v2 --bucket "$b" --max-keys 1 --no-paginate --query "KeyCount"
   done
   section "writes, secrets and object reads that must be refused"
   b="$(buckets | awk '{print $1}')"
@@ -290,8 +290,14 @@ self_test() {
   if [ -n "$b" ]; then
     expect_denied "write an object to $b" aws s3api put-object --bucket "$b" --key "$key" --content-length 0
     local first
-    first="$(aws s3api list-objects-v2 --bucket "$b" --max-items 1 --query "Contents[0].Key" --output text 2>/dev/null)"
-    if [ -n "$first" ] && [ "$first" != "None" ]; then
+    # Bound the service response, not CLI pagination: text queries run per page.
+    if ! first="$(aws s3api list-objects-v2 --bucket "$b" --max-keys 1 --no-paginate --query "Contents[0].Key" --output text)"; then
+      fail "select an object from $b: listing failed; object-read refusals were not tested"
+    elif [ -z "$first" ] || [ "$first" = "None" ]; then
+      fail "select an object from $b: no object found; object-read refusals were not tested"
+    elif [[ "$first" == *$'\n'* || "$first" == *$'\r'* ]]; then
+      fail "select an object from $b: expected one single-line key; object-read refusals were not tested"
+    else
       expect_denied "read an object's contents from $b" aws s3api get-object --bucket "$b" --key "$first" /dev/null
       expect_denied "read an object's metadata (needs GetObject) from $b" aws s3api head-object --bucket "$b" --key "$first"
     fi
