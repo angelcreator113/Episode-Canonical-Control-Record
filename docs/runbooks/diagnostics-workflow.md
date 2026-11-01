@@ -151,6 +151,12 @@ The checks do not go through the app. The runner reads AWS directly, and the ser
 
 Any FAIL: Level 1 stays off; the session reports which line failed and the fix. Re-run `self-test` after any change to the role, the document or the workflow.
 
+The S3 object-read refusal probes in `runner.sh` select one existing key with
+`--max-keys 1 --no-paginate`. CLI `--max-items` with a text query can produce
+multiple lines, which must not be passed as one object key. Failed listings,
+empty buckets and multiline selections fail the self-test explicitly rather
+than silently skipping these probes. `NoSuchKey` is not evidence of IAM denial.
+
 ## 6. Costs
 
 - **GitHub:** Actions minutes are free and unlimited for public repositories on standard runners; a run takes about a minute. Environments, environment secrets and branch rules are free on public repositories. The private repository runs no Actions and holds small text files (about 5–20 KB per run).
