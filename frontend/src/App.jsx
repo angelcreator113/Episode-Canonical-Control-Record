@@ -76,6 +76,8 @@ const TemplateDesigner = lazy(() => import('./pages/TemplateDesigner'));
 const YouTubeThumbnailStudio = lazy(() => import('./pages/YouTubeThumbnailStudio'));
 const DecisionAnalyticsDashboard = lazy(() => import('./pages/DecisionAnalyticsDashboard'));
 const TimelineEditor = lazy(() => import('./pages/TimelineEditor'));
+// The episode's multitrack editor on the C1 edit (Timeline Editor redesign P1, D2).
+const EpisodeEditor = lazy(() => import('./pages/EpisodeEditor'));
 const BeatGeneration = lazy(() => import('./pages/BeatGeneration'));
 const EpisodeReview = lazy(() => import('./pages/EpisodeReview'));
 const EvaluateEpisode = lazy(() => import('./pages/EvaluateEpisode'));
@@ -317,7 +319,7 @@ function AppContent() {
 
   // Check if current route is Timeline Editor, Scene Composer, Export, Storyteller, or WriteMode (full-screen modes)
   // Only match episode-scoped URLs for full-screen (not /studio/* picker pages)
-  const isTimelineEditor = /\/episodes\/[^/]+\/timeline/.test(location.pathname);
+  const isTimelineEditor = /\/episodes\/[^/]+\/(timeline|editor)(\/|$)/.test(location.pathname);
   const isExportPage = location.pathname.includes('/export');
   const isReadingMode = location.pathname.includes('/books/') && location.pathname.includes('/read');
   const isWriteMode = location.pathname.startsWith('/write/');
@@ -402,6 +404,7 @@ function AppContent() {
           <Route path="/shows/:id/settings" element={<ShowSettingsRedirect />} />
           {/* Studio — universe-level entry points */}
           <Route path="/studio/timeline" element={<StudioTimelinePage />} />
+          <Route path="/studio/editor" element={<StudioTimelinePage target="editor" />} />
           <Route path="/teleprompter" element={<Teleprompter />} />
 
           {/* Scene Studio (Canva-like visual editor) */}
@@ -422,6 +425,7 @@ function AppContent() {
           
           {/* Timeline Editor */}
           <Route path="/episodes/:episodeId/timeline" element={<TimelineEditor />} />
+          <Route path="/episodes/:episodeId/editor" element={<EpisodeEditor />} />
           <Route path="/episodes/:episodeId/icon-cues" element={<IconCueTimeline />} />
           
           {/* ===== PRODUCTION ROUTES ===== */}

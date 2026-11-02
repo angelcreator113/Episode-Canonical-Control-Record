@@ -578,3 +578,61 @@ The Dark Timeline Editor Dashboard reference is the final visual direction.
 - `ScenePicker` reads the real scenes envelope.
 - L5 (keyframes), L6 (hook order), L7, L8 and L9 are **not** in P0.
 
+
+---
+
+## 12. P1 as built (2026-11-02)
+
+Evoni said "let's continue" after P0 merged (#3678). This session read that as the go-ahead for P1 only, the read-only page shell. Nothing in P1 deploys, migrates, switches a flag, starts a worker or writes to the edit.
+
+**What P1 is:**
+- **The page.** `EpisodeEditor` (`frontend/src/pages/EpisodeEditor.jsx`, `EpisodeEditor.css`) at `/episodes/:episodeId/editor` (D2), full screen like the legacy editor.
+- **The entry points.**
+  - The Sidebar has an **Editor** entry (`/studio/editor`, `StudioTimelinePage` with `target="editor"`).
+  - The episode header has a **New editor** link beside Open Editor, which is kept (ruling 14).
+- **The layout** follows §3:
+  - the top bar and title row;
+  - media | preview | inspector, with three splitters, sizes kept in this browser, and the preview-focus and timeline-focus presets;
+  - the edit toolbar;
+  - the collapsible 14-beat rail;
+  - the 11-lane multitrack.
+
+  Below 1024 px it is the stacked review layout: preview, beats, beat card, media.
+- **The reads, and only these:**
+  - `GET /episodes/:id`, `/edit` and `/edit/findings`;
+  - `/episode-clips/:id`, `/episodes/:id/scene-sets` and `/voice-studio/:id/playable` (`frontend/src/lib/episodeEditApi.js`).
+
+  `EPISODE_EDIT` off is a full-page notice with a link to the legacy editor.
+- **Lanes, blocks, readiness and the still frame** come from `frontend/src/lib/editorModel.js`, through the edit clock.
+
+**One departure from §6:**
+- The frontend copy of `editTimeline` (`frontend/src/lib/editTimeline.js`) moved from P2 into P1, because the timeline cannot place blocks without the clock. `GET /edit` returns rows, not times.
+- It is the server module byte for byte, apart from its two module lines. Two things keep it that way:
+  - `frontend/src/lib/editTimeline.test.js` fails if the two differ;
+  - `node scripts/sync-edit-timeline.js` rewrites the copy.
+
+**What is live in P1:**
+- Selection, from the timeline or the PIP in the preview, with its stored values in the inspector.
+- The playhead: ruler or lane click, previous and next edit point, ←/→ for a frame, Shift for a second, Home and End.
+- Zoom, Fit to Timeline, and Beat Focus.
+- The still frame: the scene image and Prime's PIP where the edit places it.
+- Track view toggles.
+
+**Disabled, each saying why:**
+
+| Control | Why |
+|---|---|
+| Play, volume | P2 |
+| Save Draft, Undo/Redo, Split, Cut, Copy, Paste, Delete, Snap, transitions | P3 |
+| Preview Render, Export Video | The render host, Gates 3–6 |
+| Rotation | Deferred (D5) |
+| Opacity, the performer lane, phone, gameplay, overlays, captions | Gate 2 |
+
+**D5 note: track lock.**
+- In P1 the lock, eye and speaker are kept in this browser (`localStorage`, per episode).
+- Each is labelled as a view setting that is not saved and never changes the export.
+- Persisting the lock "for the project/user" across devices needs a small server store. That is proposed for P3 with editing, when the lock first has an effect.
+
+**Visual check.**
+- The production build was served with `vite preview`. A scratch harness answered every `/api` call with generated fixtures inside the browser. Widths: 1536×1024, 1440×900, 1024×768 and 375×812.
+- Result: no page errors, no write requests, no horizontal scroll.

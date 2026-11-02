@@ -11,7 +11,7 @@
  */
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Check, Clapperboard, CircleCheck } from 'lucide-react';
+import { Check, Clapperboard, CircleCheck, Film } from 'lucide-react';
 import { rawClipsApi } from '../../lib/rawClipsApi';
 import { currentThumbnail } from '../../lib/youtubeThumbnailsApi';
 import { productionSteps, sectionSummary, canMarkReady } from '../../lib/productionSteps';
@@ -86,6 +86,7 @@ export default function EpisodeProductionHeader({ episode, checks = null, sectio
 
       <div className="eph-actions">
         <Link className="eph-btn" to={`/episodes/${episodeId}/timeline`}><Clapperboard size={16} aria-hidden /> Open Editor</Link>
+        <Link className="eph-btn" to={`/episodes/${episodeId}/editor`}><Film size={16} aria-hidden /> New editor</Link>
         {canMarkReady(episode) ? (
           <button type="button" className="eph-btn is-primary" onClick={onMarkReady} disabled={statusSaving} data-testid="eph-mark-ready">
             <Check size={16} aria-hidden /> Mark Ready
