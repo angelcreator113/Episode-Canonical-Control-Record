@@ -8,9 +8,14 @@
  * - a scene sent with its id is updated, keeping its id and its assets;
  * - a scene with no known id is created, and the response maps the
  *   editor's id to the new one;
- * - a scene no longer sent is soft-deleted (deleted_at), and the episode's
- *   scene readers (export, cue generators, production package, phone
- *   context) read live scenes only.
+ * - a scene the save names in removed_scene_ids is soft-deleted
+ *   (deleted_at), and the episode's scene readers (export, cue generators,
+ *   production package, phone context) read live scenes only.
+ *
+ * P0 (Timeline Editor redesign, 2026-11-02): a scene is removed only when
+ * the save names it. It used to be removed whenever the save did not send
+ * it, so a save from an editor whose scenes failed to load removed them
+ * all. The protections are tested at the end of this file.
  */
 jest.unmock('uuid');
 
@@ -35,7 +40,7 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
   const show = uuid();
   let token;
   const auth = (r) => r.set('Authorization', `Bearer ${token}`);
-  const save = (ep, scenes) => auth(request(app).post(`/api/v1/episodes/${ep}/save`)).send({ scenes });
+  const save = (ep, scenes, extra = {}) => auth(request(app).post(`/api/v1/episodes/${ep}/save`)).send({ scenes, ...extra });
 
   async function episodeWithScenes() {
     const ep = uuid(); const a = uuid(); const b = uuid();
@@ -91,12 +96,12 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
     expect(await rows('SELECT id FROM scene_assets WHERE scene_id = :a', { a })).toHaveLength(1);
   });
 
-  it("a new scene is created and the response maps the editor's id to it; a scene not sent is soft-deleted", async () => {
+  it("a new scene is created and the response maps the editor's id to it; a scene named for removal is soft-deleted", async () => {
     const { ep, a, b } = await episodeWithScenes();
     const res = await save(ep, [
       { id: a, scene_number: 1, title: 'Arrival' },
       { id: 'scene-1717', scene_number: 2, title: 'Cutaway', duration_seconds: 3 },
-    ]);
+    ], { removed_scene_ids: [b] });
     expect(res.status).toBe(200);
     const scenes = await live(ep);
     expect(scenes.map((s) => s.title)).toEqual(['Arrival', 'Cutaway']);
@@ -111,8 +116,10 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
   });
 
   it('a scene the Timeline removed is not exported: export reads live scenes only', async () => {
-    const { ep } = await episodeWithScenes();
-    await save(ep, []);
+    const { ep, a, b } = await episodeWithScenes();
+    // Removing every scene takes an explicit confirm (P0); the Timeline
+    // itself never removes the last scene.
+    expect((await save(ep, [], { removed_scene_ids: [a, b], confirm_remove_all: true })).status).toBe(200);
     expect(await live(ep)).toHaveLength(0);
     jest.spyOn(console, 'error').mockImplementation(() => {});
     const res = await auth(request(app).post(`/api/v1/episodes/${ep}/export`)).send({ platform: 'youtube', quality: '1080p', format: 'mp4' });
@@ -127,7 +134,7 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
       { id: one.a, scene_number: 1, title: 'Arrival' },
       { id: one.a, scene_number: 2, title: 'Arrival again' },
       { id: two.a, scene_number: 3, title: 'Borrowed' },
-    ]);
+    ], { removed_scene_ids: [one.b] });
     expect(res.status).toBe(200);
     const scenes = await live(one.ep);
     expect(scenes).toHaveLength(3);
@@ -135,5 +142,117 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
     expect(new Set(scenes.map((s) => s.id)).size).toBe(3);
     expect(scenes.map((s) => s.id)).not.toContain(two.a);
     expect((await live(two.ep)).map((s) => s.id)).toEqual([two.a, two.b]);
+  });
+
+  // ── P0: a save never destroys what the editor did not load ──────────
+  describe('P0: a failed or partial load cannot make a destructive save', () => {
+    const timelineRow = { beats: [{ id: 'b1', time: 1, title: 'Hook' }], markers: [{ id: 'm1', time: 2, label: 'Cut' }] };
+    async function withTimeline(ep) {
+      await run(`INSERT INTO timeline_data (episode_id, beats, markers, audio_clips, character_clips, keyframes, created_at, updated_at)
+                 VALUES (:ep, CAST(:beats AS jsonb), CAST(:markers AS jsonb), '[]', '[]', '[]', NOW(), NOW())`,
+      { ep, beats: JSON.stringify(timelineRow.beats), markers: JSON.stringify(timelineRow.markers) });
+    }
+    const storedTimeline = async (ep) => (await rows('SELECT beats, markers FROM timeline_data WHERE episode_id = :ep', { ep }))[0];
+    const title = async (ep) => (await rows('SELECT title FROM episodes WHERE id = :ep', { ep }))[0].title;
+    // Exactly what the pre-P0 editor sent from its "not found" screen.
+    const emptyLoadSave = {
+      episode: {},
+      platform: { platform: 'youtube', width: 1920, height: 1080, aspect_ratio: '16:9' },
+      scenes: [],
+      timeline: { beats: [], markers: [], audioClips: [], characterClips: [], keyframes: [] },
+    };
+    beforeEach(() => { jest.spyOn(console, 'error').mockImplementation(() => {}); });
+
+    it("the pre-P0 empty save is refused: every scene stays live and the beats and markers are kept", async () => {
+      const { ep, a, b } = await episodeWithScenes();
+      await withTimeline(ep);
+      const res = await auth(request(app).post(`/api/v1/episodes/${ep}/save`)).send(emptyLoadSave);
+      expect(res.status).toBe(409);
+      expect(res.body.code).toBe('TIMELINE_BASIS_MISSING');
+      expect((await live(ep)).map((s) => s.id)).toEqual([a, b]);
+      expect(await storedTimeline(ep)).toEqual(timelineRow);
+      expect(await title(ep)).toBe('Timeline ep');
+    });
+
+    it('a save that sends no scenes and names none removes nothing', async () => {
+      const { ep, a, b } = await episodeWithScenes();
+      const res = await save(ep, []);
+      expect(res.status).toBe(200);
+      expect((await live(ep)).map((s) => s.id)).toEqual([a, b]);
+    });
+
+    it('a scene neither sent nor named is left alone (for example one added in another tab)', async () => {
+      const { ep, a, b } = await episodeWithScenes();
+      const res = await save(ep, [{ id: a, scene_number: 1, title: 'Arrival' }]);
+      expect(res.status).toBe(200);
+      expect((await live(ep)).map((s) => s.id)).toEqual([a, b]);
+    });
+
+    it("naming every scene with nothing sent is refused without confirm_remove_all; nothing is removed", async () => {
+      const { ep, a, b } = await episodeWithScenes();
+      const res = await save(ep, [], { removed_scene_ids: [a, b] });
+      expect(res.status).toBe(409);
+      expect(res.body.code).toBe('SAVE_WOULD_REMOVE_ALL_SCENES');
+      expect((await live(ep)).map((s) => s.id)).toEqual([a, b]);
+    });
+
+    it("another episode's scene named for removal is not removed", async () => {
+      const one = await episodeWithScenes();
+      const two = await episodeWithScenes();
+      const res = await save(one.ep, [{ id: one.a, scene_number: 1, title: 'Arrival' }], { removed_scene_ids: [two.a] });
+      expect(res.status).toBe(200);
+      expect((await live(two.ep)).map((s) => s.id)).toEqual([two.a, two.b]);
+    });
+
+    it('the timeline is written from the loaded basis; a stale basis is refused and writes nothing', async () => {
+      const { ep, a, b } = await episodeWithScenes();
+      await withTimeline(ep);
+      const loaded = await auth(request(app).get(`/api/v1/episodes/${ep}/timeline-data`));
+      expect(loaded.status).toBe(200);
+      expect(loaded.body.basis).toMatch(/^[0-9a-f]{64}$/);
+
+      const scenes = [{ id: a, scene_number: 1, title: 'Arrival' }, { id: b, scene_number: 2, title: 'Reveal' }];
+      const beats = [...timelineRow.beats, { id: 'b2', time: 3, title: 'Turn' }];
+      const ok = await save(ep, scenes, { timeline: { beats, markers: timelineRow.markers }, timeline_basis: loaded.body.basis });
+      expect(ok.status).toBe(200);
+      expect((await storedTimeline(ep)).beats).toEqual(beats);
+      // The response's basis is the one a fresh load would give.
+      const reloaded = await auth(request(app).get(`/api/v1/episodes/${ep}/timeline-data`));
+      expect(ok.body.timeline_basis).toBe(reloaded.body.basis);
+      expect(ok.body.timeline_basis).not.toBe(loaded.body.basis);
+
+      // A second tab still holding the first basis is refused.
+      const stale = await save(ep, scenes, { episode: { title: 'Stale tab' }, timeline: { beats: [], markers: [] }, timeline_basis: loaded.body.basis });
+      expect(stale.status).toBe(409);
+      expect(stale.body.code).toBe('TIMELINE_CHANGED');
+      expect((await storedTimeline(ep)).beats).toEqual(beats);
+      expect(await title(ep)).toBe('Timeline ep');
+    });
+
+    it('a refused save rolls back everything it would have written', async () => {
+      const { ep, a, b } = await episodeWithScenes();
+      await withTimeline(ep);
+      const res = await save(ep, [{ id: a, scene_number: 1, title: 'Renamed' }, { id: 'new-1', scene_number: 2, title: 'New' }],
+        { removed_scene_ids: [b], episode: { title: 'Renamed episode' }, timeline: { beats: [], markers: [] } });
+      expect(res.status).toBe(409);
+      const scenes = await live(ep);
+      expect(scenes.map((s) => s.id)).toEqual([a, b]);
+      expect(scenes[0].title).toBe('Arrival');
+      expect(await title(ep)).toBe('Timeline ep');
+    });
+
+    it('an episode with an empty or no timeline row can be saved without a basis', async () => {
+      const { ep, a, b } = await episodeWithScenes();
+      const scenes = [{ id: a, scene_number: 1, title: 'Arrival' }, { id: b, scene_number: 2, title: 'Reveal' }];
+      const res = await save(ep, scenes, { timeline: { beats: [{ id: 'b1', time: 1 }], markers: [] } });
+      expect(res.status).toBe(200);
+      expect(res.body.timeline_basis).toMatch(/^[0-9a-f]{64}$/);
+    });
+
+    it('an unknown episode is a 404, not a 500', async () => {
+      const res = await save(uuid(), []);
+      expect(res.status).toBe(404);
+      expect(res.body.code).toBe('EPISODE_NOT_FOUND');
+    });
   });
 });

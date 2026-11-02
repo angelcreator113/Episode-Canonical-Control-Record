@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Image, Check, Loader2, MapPin } from 'lucide-react';
+import { unwrapScenes } from '../../utils/timelineLoad';
 
 /**
  * ScenePicker — Modal for selecting a scene to add/replace in the timeline.
@@ -18,9 +19,11 @@ export default function ScenePicker({ episodeId, onSelect, onClose }) {
       try {
         const { sceneAPI } = await import('../../services/api');
         const res = await sceneAPI.getAll(episodeId);
-        const data = res.data?.scenes || res.data || [];
+        // GET /episodes/:id/scenes answers { success, data: [scene] } (P0).
+        const data = unwrapScenes(res?.data);
+        if (!data) throw new Error('unrecognised scenes response');
         // Show all scenes (user can pick any)
-        setScenes(Array.isArray(data) ? data : []);
+        setScenes(data);
       } catch (err) {
         console.error('ScenePicker load error:', err);
         setScenes([]);

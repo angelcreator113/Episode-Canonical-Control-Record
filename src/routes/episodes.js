@@ -178,15 +178,27 @@ router.post(
   requireAuth,
   asyncHandler(async (req, res) => {
     const { Episode, Scene, TimelineData } = require('../models');
+    const { checkTimelineWrite, scenesToRemove, timelineBasis, SaveConflict } = require('../utils/timelineSaveGuard');
     const { id } = req.params;
-    const { episode: episodeData, platform: platformData, scenes, timeline } = req.body;
+    const {
+      episode: episodeData, platform: platformData, scenes, timeline,
+      removed_scene_ids: removedSceneIds, timeline_basis: sentTimelineBasis, confirm_remove_all: confirmRemoveAll,
+    } = req.body;
 
     const _result = await Episode.sequelize.transaction(async (t) => {
       // 1. Update episode metadata + platform
       const episodeRecord = await Episode.findByPk(id, { transaction: t });
-      if (!episodeRecord) throw new Error('Episode not found');
+      if (!episodeRecord) throw new SaveConflict(404, 'EPISODE_NOT_FOUND', 'Episode not found');
 
-      console.log(`[Save] Episode ${id}: ${scenes?.length || 0} scenes, timeline=${!!timeline}`);
+      console.log(`[Save] Episode ${id}: ${scenes?.length || 0} scenes, ${Array.isArray(removedSceneIds) ? removedSceneIds.length : 0} named for removal, timeline=${!!timeline}`);
+
+      // The timeline is written only from the row the editor loaded
+      // (timelineSaveGuard rule 2), checked before anything is written.
+      let timelineRecord = null;
+      if (timeline) {
+        timelineRecord = await TimelineData.findOne({ where: { episode_id: id }, transaction: t, lock: t.LOCK.UPDATE });
+        checkTimelineWrite(timelineRecord, sentTimelineBasis);
+      }
 
       const episodeUpdate = {};
       if (episodeData?.title) episodeUpdate.title = episodeData.title;
@@ -205,8 +217,10 @@ router.post(
       // with the id of one of this episode's live scenes updates it, keeping
       // its id, its dialogue clips when none are sent, and the Scene Studio
       // work that hangs off it (scene_assets, object variants). Any other
-      // scene is created. A live scene not sent is soft-deleted. The editor
-      // learns the new ids from sceneIds (client_id -> id).
+      // scene is created. A live scene is soft-deleted only when the save
+      // names it in removed_scene_ids (timelineSaveGuard rule 1, P0
+      // 2026-11-02): one it neither sends nor names is left alone. The
+      // editor learns the new ids from sceneIds (client_id -> id).
       const sceneIds = [];
       if (scenes && Array.isArray(scenes)) {
         const existing = await Scene.findAll({ where: { episode_id: id }, transaction: t });
@@ -236,18 +250,14 @@ router.post(
           }
         }
         // A beat's scene (L12) belongs to its beat: the Timeline never removes it.
-        const removed = existing.filter((row) => !kept.has(row.id) && !row.scene_plan_id);
+        const removed = scenesToRemove(existing, kept, removedSceneIds, scenes.length, confirmRemoveAll === true);
         for (const row of removed) await row.destroy({ transaction: t });
         console.log(`[Save] Scenes: ${scenes.length} saved (${sceneIds.filter((m) => String(m.client_id) !== String(m.id)).length} new), ${removed.length} removed`);
       }
 
       // 3. Upsert timeline data
+      let savedTimelineBasis = null;
       if (timeline) {
-        const timelineRecord = await TimelineData.findOne({
-          where: { episode_id: id },
-          transaction: t
-        });
-
         const tlUpdate = {
           beats: timeline.beats ?? (timelineRecord ? timelineRecord.beats : []),
           markers: timeline.markers ?? (timelineRecord ? timelineRecord.markers : []),
@@ -258,18 +268,31 @@ router.post(
         if (timelineRecord) {
           await timelineRecord.update(tlUpdate, { transaction: t });
         } else {
-          await TimelineData.create({ episode_id: id, ...tlUpdate }, { transaction: t });
+          timelineRecord = await TimelineData.create({ episode_id: id, ...tlUpdate }, { transaction: t });
         }
+        // The editor's next save sends this back (read back, as stored).
+        await timelineRecord.reload({ transaction: t });
+        savedTimelineBasis = timelineBasis(timelineRecord);
       }
 
-      return { success: true, sceneIds };
+      return { success: true, sceneIds, timelineBasis: savedTimelineBasis };
+    }).catch((error) => {
+      if (error instanceof SaveConflict) return { conflict: error };
+      throw error;
     });
+
+    if (_result.conflict) {
+      const { status, code, message, extra } = _result.conflict;
+      console.error(`[Save] Episode ${id} refused: ${code}`);
+      return res.status(status).json({ success: false, error: message, code, ...extra });
+    }
 
     res.json({
       success: true,
       message: 'Saved successfully',
       timestamp: new Date().toISOString(),
       scenes: _result.sceneIds,
+      timeline_basis: _result.timelineBasis,
     });
   })
 );
