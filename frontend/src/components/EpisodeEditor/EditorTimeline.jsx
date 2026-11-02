@@ -7,13 +7,29 @@
  * Track header toggles are view settings in this browser, never saved to
  * the episode and never part of a render: the eye hides a lane in the
  * preview, the speaker silences it in preview playback, the lock keeps
- * it from being edited here (editing arrives in P3).
+ * it from being edited here.
+ *
+ * Editing (P3): a Prime segment or a dialogue block is dragged to move it;
+ * the handles at a selected block's edges trim it (both ends of a segment,
+ * the end of a scene clip). Media dragged from the media panel is dropped on
+ * the lane that takes it. Each gesture is one change, saved when the pointer
+ * is released (onMoveBlock, onTrimBlock, onDropAsset).
  */
-import React, { useMemo, useRef } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { Eye, EyeOff, Lock, Unlock, Volume2, VolumeX, Link2 } from 'lucide-react';
 import { LANES, timecode } from '../../lib/editorModel';
 
 export const LABEL_W = 190;
+
+/** What can be dragged along the clock, and which edges trim. */
+export const MOVABLE = new Set(['segment', 'dialogue']);
+export const TRIM_EDGES = { segment: ['start', 'end'], scene_clip: ['end'] };
+/** Which lane takes which media (an asset's `kind`). */
+export const LANE_TAKES = {
+  scene: ['angle_still', 'angle_video', 'scene_clip_source'],
+  prime: ['prime_clip'],
+  dialogue: ['take'],
+};
 
 /** A tick step (ms) that keeps major ticks at least ~90 px apart. */
 export function tickStep(pxPerMs) {
@@ -23,7 +39,11 @@ export function tickStep(pxPerMs) {
 
 export default function EditorTimeline({
   model, pxPerMs, playhead, onSeek, selectedId, onSelect, view, onToggleView, scrollRef,
+  editable = false, onMoveBlock, onTrimBlock, onDropAsset, draggingAsset,
 }) {
+  const [drag, setDrag] = useState(null); // { id, mode: 'move' | 'start' | 'end', x0, dx }
+  const [dropLane, setDropLane] = useState(null);
+  const justDragged = useRef(false);
   const width = Math.max(1, Math.ceil(model.duration * pxPerMs) + 120);
   const step = tickStep(pxPerMs);
   const ticks = useMemo(() => {
@@ -40,6 +60,41 @@ export default function EditorTimeline({
     onSeek(Math.max(0, Math.min(model.duration, Math.round(x / pxPerMs))));
   };
   const at = (ms) => Math.round(ms * pxPerMs);
+  const locked = (laneKey) => Boolean(view[laneKey]?.locked);
+
+  const startDrag = (e, b, laneKey, mode) => {
+    if (!editable || locked(laneKey) || e.button !== 0) return;
+    if (mode === 'move' && !MOVABLE.has(b.kind)) return;
+    e.stopPropagation();
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+    setDrag({ id: b.id, mode, x0: e.clientX, dx: 0, block: b });
+  };
+  // A trim handle sits inside its block: its events stop there, so one gesture is one change.
+  const moveDrag = (e) => { if (!drag) return; e.stopPropagation(); setDrag({ ...drag, dx: e.clientX - drag.x0 }); };
+  const endDrag = (e) => {
+    if (!drag) return;
+    e.stopPropagation();
+    const { block, mode } = drag;
+    const dx = e.clientX - drag.x0;
+    setDrag(null);
+    if (Math.abs(dx) < 3) return;
+    justDragged.current = true;
+    const delta = Math.round(dx / pxPerMs);
+    if (mode === 'move') onMoveBlock?.(block, block.start + delta);
+    else onTrimBlock?.(block, mode, mode === 'start' ? block.start + delta : block.end + delta);
+  };
+  const shown = (b) => {
+    if (!drag || drag.id !== b.id) return { left: at(b.start), width: Math.max(4, at(b.end) - at(b.start)) };
+    if (drag.mode === 'move') return { left: at(b.start) + drag.dx, width: Math.max(4, at(b.end) - at(b.start)) };
+    if (drag.mode === 'start') return { left: at(b.start) + drag.dx, width: Math.max(4, at(b.end) - at(b.start) - drag.dx) };
+    return { left: at(b.start), width: Math.max(4, at(b.end) - at(b.start) + drag.dx) };
+  };
+
+  const takes = (laneKey) => Boolean(draggingAsset) && (LANE_TAKES[laneKey] || []).includes(draggingAsset.kind) && !locked(laneKey);
+  const timeFromEvent = (e) => {
+    const rect = area.current.getBoundingClientRect();
+    return Math.max(0, Math.round((e.clientX - rect.left) / pxPerMs));
+  };
 
   return (
     <div className="tle-tl" data-testid="editor-timeline">
@@ -66,7 +121,7 @@ export default function EditorTimeline({
                   </button>
                 )}
                 <button type="button" className="tle-icon-btn" aria-pressed={Boolean(v.locked)} onClick={() => onToggleView(lane.key, 'locked')}
-                  aria-label={`${v.locked ? 'Unlock' : 'Lock'} ${lane.name} for editing in this browser`} title="Lock against editing in this browser (editing arrives in P3)">
+                  aria-label={`${v.locked ? 'Unlock' : 'Lock'} ${lane.name} for editing in this browser`} title="Lock against editing in this browser: not saved to the episode">
                   {v.locked ? <Lock size={15} /> : <Unlock size={15} />}
                 </button>
               </div>
@@ -86,24 +141,41 @@ export default function EditorTimeline({
             ))}
           </div>
           {LANES.map((lane) => (
-            <div key={lane.key} className={`tle-lane is-${lane.kind} lane-${lane.key}${lane.pending ? ' is-pending' : ''}`} onClick={seekFromEvent} role="presentation" data-lane={lane.key}>
+            <div key={lane.key}
+              className={`tle-lane is-${lane.kind} lane-${lane.key}${lane.pending ? ' is-pending' : ''}${locked(lane.key) ? ' is-locked' : ''}${takes(lane.key) ? ' can-drop' : ''}${dropLane === lane.key ? ' is-drop' : ''}`}
+              onClick={seekFromEvent} role="presentation" data-lane={lane.key}
+              onDragOver={(e) => { if (takes(lane.key)) { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; setDropLane(lane.key); } }}
+              onDragLeave={() => setDropLane((cur) => (cur === lane.key ? null : cur))}
+              onDrop={(e) => { setDropLane(null); if (takes(lane.key)) { e.preventDefault(); onDropAsset?.(lane.key, draggingAsset, timeFromEvent(e)); } }}>
               {lane.pending && <span className="tle-lane-pending">{lane.pending}</span>}
-              {(model.blocks[lane.key] || []).map((b) => (
-                <button
-                  key={b.id}
-                  type="button"
-                  className={`tle-block kind-${b.kind}${selectedId === b.id ? ' is-selected' : ''}${b.muted ? ' is-muted' : ''}${b.problem || b.missing ? ' is-problem' : ''}`}
-                  style={{ left: at(b.start), width: Math.max(4, at(b.end) - at(b.start)) }}
-                  onClick={(e) => { e.stopPropagation(); onSelect(b.id); }}
-                  aria-pressed={selectedId === b.id}
-                  aria-label={`${lane.name}: ${b.label}, ${timecode(b.start)} to ${timecode(b.end)}`}
-                  title={`${b.label} · ${timecode(b.start)}–${timecode(b.end)}${b.muted ? ' · muted in the episode' : ''}${b.problem ? ` · will not play (${b.problem})` : ''}`}
-                >
-                  {b.image && lane.kind === 'video' && <span className="tle-block-strip" style={{ backgroundImage: `url("${b.image}")` }} aria-hidden="true" />}
-                  {lane.kind === 'audio' && <span className="tle-block-wave" aria-hidden="true" />}
-                  <span className="tle-block-label">{b.linked && <Link2 size={11} aria-hidden="true" />} {b.label}</span>
-                </button>
-              ))}
+              {(model.blocks[lane.key] || []).map((b) => {
+                const selected = selectedId === b.id;
+                const canMove = editable && MOVABLE.has(b.kind) && !locked(lane.key);
+                const edges = editable && selected && !locked(lane.key) ? (TRIM_EDGES[b.kind] || []) : [];
+                return (
+                  <button
+                    key={b.id}
+                    type="button"
+                    className={`tle-block kind-${b.kind}${selected ? ' is-selected' : ''}${b.muted ? ' is-muted' : ''}${b.problem || b.missing ? ' is-problem' : ''}${canMove ? ' can-move' : ''}${drag?.id === b.id ? ' is-dragging' : ''}`}
+                    style={shown(b)}
+                    onClick={(e) => { e.stopPropagation(); if (justDragged.current) { justDragged.current = false; return; } onSelect(b.id); }}
+                    onPointerDown={(e) => startDrag(e, b, lane.key, 'move')}
+                    onPointerMove={moveDrag}
+                    onPointerUp={endDrag}
+                    aria-pressed={selected}
+                    aria-label={`${lane.name}: ${b.label}, ${timecode(b.start)} to ${timecode(b.end)}`}
+                    title={`${b.label} · ${timecode(b.start)}–${timecode(b.end)}${b.muted ? ' · muted in the episode' : ''}${b.problem ? ` · will not play (${b.problem})` : ''}${canMove ? ' · drag to move' : ''}`}
+                  >
+                    {b.image && lane.kind === 'video' && <span className="tle-block-strip" style={{ backgroundImage: `url("${b.image}")` }} aria-hidden="true" />}
+                    {lane.kind === 'audio' && <span className="tle-block-wave" aria-hidden="true" />}
+                    <span className="tle-block-label">{b.linked && <Link2 size={11} aria-hidden="true" />} {b.label}</span>
+                    {edges.map((edge) => (
+                      <span key={edge} className={`tle-trim tle-trim-${edge}`} role="presentation" aria-hidden="true" data-testid={`trim-${edge}-${b.id}`}
+                        onPointerDown={(e) => startDrag(e, b, lane.key, edge)} onPointerMove={moveDrag} onPointerUp={endDrag} />
+                    ))}
+                  </button>
+                );
+              })}
               {lane.key === 'scene' && model.transitions.map((tr) => (
                 <span key={tr.id} className="tle-transition" style={{ left: at(tr.at) }} title={`Transition: ${tr.type} (stored; drawn after Gate 2)`} aria-hidden="true" />
               ))}

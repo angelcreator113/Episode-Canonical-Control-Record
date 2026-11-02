@@ -1,0 +1,254 @@
+/**
+ * Editing in the episode editor (Timeline Editor redesign P3). The mock
+ * server answers in the C1 routes' real shapes and keeps an edit revision:
+ * every write must send the revision it holds, and gets the next one back.
+ * The tests check what each gesture sends, that undo sends its exact
+ * inverse, and that a stale page, a locked lane and a refused write save
+ * nothing.
+ */
+import React from 'react';
+import { vi, describe, beforeEach, afterEach, test, expect } from 'vitest';
+import { render, screen, fireEvent, within, waitFor } from '@testing-library/react';
+import { MemoryRouter, Routes, Route } from 'react-router-dom';
+
+vi.mock('../services/api', () => ({
+  default: { get: vi.fn(), post: vi.fn(), put: vi.fn(), patch: vi.fn(), delete: vi.fn() },
+}));
+
+import api from '../services/api';
+import EpisodeEditor from './EpisodeEditor';
+
+const EP = 'ep-1';
+const BASE = `/api/v1/episodes/${EP}/edit`;
+const SEG = {
+  id: 's1', raw_clip_id: 'r1', source_in_ms: 0, source_out_ms: 6000, anchor_kind: 'beat_start', anchor_beat: 1, anchor_ref: null, offset_ms: 0,
+  layout: { x: 1300, y: 700, w: 540, h: 304 }, audio_in_ms: 0, audio_out_ms: 6000, audio_gain_db: -2, audio_muted: false, audio_fade_in_ms: 0, audio_fade_out_ms: 0, status: 'draft',
+};
+const editWith = (over = {}) => ({
+  fps: 30, beatModes: {}, beatDurations: {},
+  sceneClips: [{ id: 'c1', beat_number: 1, position: 0, source_kind: 'angle_still', source_id: 'a1', source_in_ms: null, source_out_ms: null, source_duration_ms: null, duration_ms: 6000 }],
+  segments: [SEG], pip: null, visibility: [], items: [], audioItems: [], lineTimes: {},
+  voiceTakes: { ap1: { playable: true, state: 'current', association_id: 'as1', beat_number: 1, line_index: 0, in_ms: 0, out_ms: 1500, source_duration_ms: 2000, gain_db: 0, fade_in_ms: 0, fade_out_ms: 0, normalise: false } },
+  ...over,
+});
+
+let server;
+const ok = (data) => Promise.resolve({ data: { success: true, data } });
+const refuse = (status, code, error) => Promise.reject(Object.assign(new Error(code), { response: { status, data: { success: false, code, error } } }));
+
+function setupServer({ refuseNext = null } = {}) {
+  server = { rev: 7, edit: editWith(), writes: [], refuseNext };
+  vi.mocked(api.get).mockImplementation((url) => {
+    if (url === `/api/v1/episodes/${EP}`) return Promise.resolve({ data: { data: { id: EP, episode_number: 3, title: 'A New Alliance' } } });
+    if (url === BASE) return ok({ edit_revision: String(server.rev), rows: {}, edit: server.edit });
+    if (url === `${BASE}/findings`) return ok({ ready: true, counts: { blocking: 0, warning: 0 }, findings: [] });
+    if (url === `${BASE}/versions`) return ok([{ id: 'v1', name: 'Before the split', edit_revision: '5', created_at: '2026-11-02T10:00:00Z' }]);
+    if (url === `/api/v1/episode-clips/${EP}`) return ok([{ id: 'r1', performer: 'justawoman', label: 'Prime take', url_raw: 'https://cdn/r1.mp4', duration_seconds: 6, beat_number: 1 }]);
+    if (url === `/api/v1/episodes/${EP}/scene-sets`) return ok([{ id: 'set1', name: 'Closet', angles: [{ id: 'a1', angle_label: 'Wide', still_image_url: 'https://cdn/a1.jpg' }] }]);
+    if (url === `/api/v1/voice-studio/${EP}/playable`) return ok({ takes: [{ approval_id: 'ap1', beat_number: 1, line_index: 0, in_ms: 0, out_ms: 1500, audio_url: 'https://cdn/ap1.webm' }], held: [] });
+    return refuse(404, 'NOT_FOUND', 'not found');
+  });
+  const write = (method) => (url, payload, opts) => {
+    // axios sends a DELETE's body as its config's `data`.
+    const body = method === 'delete' ? payload?.data : payload;
+    server.writes.push({ method, path: url.replace(BASE, ''), body });
+    if (server.refuseNext) { const r = server.refuseNext; server.refuseNext = null; return refuse(...r); }
+    if (body?.dry_run) return ok({ dry_run: true, for_edit_revision: String(server.rev), beat: 1, from: { ms: 6000 }, to: { ms: body.duration_ms }, changes: [{ key: 'segment:s1' }], duration_ms: { from: 6000, to: body.duration_ms }, findings_added: [], findings_cleared: [] });
+    if (String(body?.edit_revision) !== String(server.rev)) return refuse(409, 'EDIT_CHANGED', 'The edit changed since this page read it.');
+    if (url.endsWith('/versions')) return ok({ version_id: 'v2', edit_revision: String(server.rev) });
+    server.rev += 1;
+    const path = url.replace(BASE, '');
+    const extra = path === '/segments' ? { segment_id: 's2' } : path === '/dialogue' ? { item_id: 'd9' } : path === '/scene-clips' ? { scene_clip_id: 'c9' } : path === '/visibility' ? { rule_id: 'v9' } : {};
+    return ok({ ...extra, edit_revision: String(server.rev) });
+  };
+  for (const m of ['post', 'patch', 'put', 'delete']) vi.mocked(api[m]).mockImplementation(write(m));
+}
+
+const renderAt = () => render(
+  <MemoryRouter initialEntries={[`/episodes/${EP}/editor`]}>
+    <Routes><Route path="/episodes/:episodeId/editor" element={<EpisodeEditor />} /></Routes>
+  </MemoryRouter>
+);
+const opened = async () => {
+  await screen.findByTestId('editor-timeline');
+  await waitFor(() => expect(screen.getByText('Edit revision 7')).toBeTruthy());
+};
+const inspector = () => screen.getByRole('region', { name: 'Inspector' });
+const lastWrite = () => server.writes[server.writes.length - 1];
+const selectPrime = () => fireEvent.click(within(screen.getByTestId('editor-monitor')).getByRole('button', { name: 'Prime PIP: Prime take' }));
+
+// jsdom has no PointerEvent: a MouseEvent with a pointerId stands in, so clientX and button arrive.
+if (typeof window.PointerEvent === 'undefined') {
+  window.PointerEvent = class PointerEvent extends window.MouseEvent {
+    constructor(type, init = {}) { super(type, init); this.pointerId = init.pointerId ?? 1; }
+  };
+}
+
+describe('EpisodeEditor: editing (P3)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    localStorage.clear();
+    vi.spyOn(window.HTMLMediaElement.prototype, 'play').mockImplementation(function play() { return Promise.resolve(); });
+    vi.spyOn(window.HTMLMediaElement.prototype, 'pause').mockImplementation(function pause() {});
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+  });
+  afterEach(() => vi.restoreAllMocks());
+
+  test("placing Prime's take at the playhead sends one segment, with the page's revision; undo deletes exactly it; redo places it again", async () => {
+    setupServer();
+    renderAt();
+    await opened();
+    fireEvent.click(screen.getByRole('button', { name: 'Place Prime take at the playhead' }));
+    await waitFor(() => expect(screen.getByText('Edit revision 8')).toBeTruthy());
+    expect(server.writes[0]).toEqual({ method: 'post', path: '/segments', body: { raw_clip_id: 'r1', anchor_kind: 'edit_start', offset_ms: 0, edit_revision: '7' } });
+
+    fireEvent.click(screen.getByRole('button', { name: /^Undo$/ }));
+    await waitFor(() => expect(screen.getByText('Edit revision 9')).toBeTruthy());
+    expect(server.writes[1]).toEqual({ method: 'delete', path: '/segments/s2', body: { edit_revision: '8' } });
+
+    fireEvent.click(screen.getByRole('button', { name: /^Redo$/ }));
+    await waitFor(() => expect(screen.getByText('Edit revision 10')).toBeTruthy());
+    expect(server.writes[2]).toMatchObject({ method: 'post', path: '/segments', body: { raw_clip_id: 'r1', edit_revision: '9' } });
+  });
+
+  test("a field in the inspector saves on Enter: Prime's place; undo puts the stored place back", async () => {
+    setupServer();
+    renderAt();
+    await opened();
+    selectPrime();
+    const x = within(inspector()).getByLabelText('Position X');
+    fireEvent.change(x, { target: { value: '1200' } });
+    fireEvent.keyDown(x, { key: 'Enter' });
+    await waitFor(() => expect(server.writes).toHaveLength(1));
+    expect(lastWrite()).toEqual({ method: 'post', path: '/segments/s1/layout', body: { layout: { x: 1200, y: 700, w: 540, h: 304 }, edit_revision: '7' } });
+    await waitFor(() => expect(screen.getByRole('button', { name: /^Undo$/ }).disabled).toBe(false));
+    fireEvent.click(screen.getByRole('button', { name: /^Undo$/ }));
+    await waitFor(() => expect(server.writes).toHaveLength(2));
+    expect(lastWrite()).toEqual({ method: 'post', path: '/segments/s1/layout', body: { layout: { x: 1300, y: 700, w: 540, h: 304 }, edit_revision: '8' } });
+  });
+
+  test('dragging Prime in the preview saves her new place once, on release', async () => {
+    setupServer();
+    renderAt();
+    await opened();
+    selectPrime();
+    const box = within(screen.getByTestId('editor-monitor')).getByTestId('preview-pip');
+    fireEvent.pointerDown(box, { button: 0, clientX: 100, clientY: 100, pointerId: 1 });
+    fireEvent.pointerMove(box, { clientX: 160, clientY: 80, pointerId: 1 });
+    expect(within(inspector()).getByLabelText('Position X').value).toBe('1360');
+    fireEvent.pointerMove(box, { clientX: 200, clientY: 80, pointerId: 1 });
+    expect(server.writes).toHaveLength(0);
+    fireEvent.pointerUp(box, { clientX: 200, clientY: 80, pointerId: 1 });
+    await waitFor(() => expect(server.writes).toHaveLength(1));
+    expect(lastWrite()).toMatchObject({ method: 'post', path: '/segments/s1/layout', body: { layout: { x: 1400, y: 680, w: 540, h: 304 } } }); // 100 px right, 20 px up; nothing to snap to
+  });
+
+  test("Delete removes the selected segment; undo puts it back with its stored values", async () => {
+    setupServer();
+    renderAt();
+    await opened();
+    selectPrime();
+    fireEvent.keyDown(window, { key: 'Delete' });
+    await waitFor(() => expect(server.writes).toHaveLength(1));
+    expect(lastWrite()).toEqual({ method: 'delete', path: '/segments/s1', body: { edit_revision: '7' } });
+    fireEvent.click(screen.getByRole('button', { name: /^Undo$/ }));
+    await waitFor(() => expect(server.writes).toHaveLength(2));
+    expect(lastWrite()).toEqual({ method: 'post', path: '/segments', body: {
+      raw_clip_id: 'r1', source_in_ms: 0, source_out_ms: 6000, anchor_kind: 'beat_start', anchor_beat: 1, anchor_ref: null, offset_ms: 0,
+      layout: { x: 1300, y: 700, w: 540, h: 304 }, audio_in_ms: 0, audio_out_ms: 6000, audio_gain_db: -2, audio_muted: false, audio_fade_in_ms: 0, audio_fade_out_ms: 0,
+      edit_revision: '8',
+    } });
+  });
+
+  test('a lane locked in this browser refuses the change and sends nothing', async () => {
+    setupServer();
+    renderAt();
+    await opened();
+    fireEvent.click(screen.getByRole('button', { name: 'Lock Prime PIP for editing in this browser' }));
+    selectPrime();
+    fireEvent.keyDown(window, { key: 'Delete' });
+    expect((await screen.findByTestId('editor-notice')).textContent).toMatch(/lane is locked/);
+    expect(server.writes).toHaveLength(0);
+  });
+
+  test('a change refused as stale (409) reloads the edit, says so, and leaves nothing to undo', async () => {
+    setupServer();
+    renderAt();
+    await opened();
+    server.rev = 12; // someone else saved meanwhile
+    selectPrime();
+    fireEvent.keyDown(window, { key: 'Delete' });
+    expect((await screen.findByTestId('editor-notice')).textContent).toMatch(/changed in another tab or by someone else/);
+    await waitFor(() => expect(screen.getByText('Edit revision 12')).toBeTruthy());
+    expect(screen.getByRole('button', { name: /^Undo$/ }).disabled).toBe(true);
+  });
+
+  test("a refused change shows the server's reason and saves nothing", async () => {
+    setupServer({ refuseNext: [409, 'COMMENTARY_OUTSIDE_TRIM', 'The commentary would be cut away entirely.'] });
+    renderAt();
+    await opened();
+    selectPrime();
+    const out = within(inspector()).getByLabelText('Source out');
+    fireEvent.change(out, { target: { value: '100' } });
+    fireEvent.blur(out);
+    expect((await screen.findByTestId('editor-notice')).textContent).toMatch(/commentary would be cut away entirely/);
+    expect(screen.getByText('Edit revision 7')).toBeTruthy();
+    expect(screen.getByRole('button', { name: /^Undo$/ }).disabled).toBe(true);
+  });
+
+  test("Split sends the source time at the playhead; undo explains it can't be undone and sends nothing", async () => {
+    setupServer();
+    renderAt();
+    await opened();
+    fireEvent.click(screen.getByRole('button', { name: 'Next edit point' })); // 6000 is the segment's end; step back into it
+    fireEvent.keyDown(window, { key: 'ArrowLeft', shiftKey: true });
+    selectPrime();
+    fireEvent.click(screen.getByRole('button', { name: /^Split$/ }));
+    await waitFor(() => expect(server.writes).toHaveLength(1));
+    expect(lastWrite()).toEqual({ method: 'post', path: '/segments/s1/split', body: { at_source_ms: 5000, edit_revision: '7' } });
+    await waitFor(() => expect(screen.getByRole('button', { name: /^Undo$/ }).title).toMatch(/can't be undone/));
+    expect(screen.getByRole('button', { name: /^Undo$/ }).disabled).toBe(true);
+  });
+
+  test('an approved take is placed in its own beat with its line association', async () => {
+    setupServer();
+    renderAt();
+    await opened();
+    fireEvent.click(within(screen.getByRole('region', { name: 'Media' })).getByRole('button', { name: 'Place Beat 1 · line 1 at the playhead' }));
+    await waitFor(() => expect(server.writes).toHaveLength(1));
+    expect(lastWrite()).toEqual({ method: 'post', path: '/dialogue', body: { approval_id: 'ap1', association_id: 'as1', anchor_kind: 'beat_start', anchor_beat: 1, offset_ms: 0, edit_revision: '7' } });
+  });
+
+  test("a beat's new length is previewed (a dry run, no revision) before it is applied with the revision the preview was worked out for", async () => {
+    setupServer();
+    renderAt();
+    await opened();
+    const card = within(inspector()).getByTestId('beat-card');
+    fireEvent.change(within(card).getByLabelText(/Set its length/), { target: { value: '8000' } });
+    fireEvent.click(within(card).getByRole('button', { name: 'Preview the change' }));
+    expect((await within(card).findByTestId('beat-plan')).textContent).toMatch(/1 thing moves/);
+    expect(server.writes[0]).toEqual({ method: 'post', path: '/beats/1/duration', body: { duration_ms: 8000, dry_run: true } });
+    fireEvent.click(within(card).getByRole('button', { name: 'Apply' }));
+    await waitFor(() => expect(server.writes).toHaveLength(2));
+    expect(lastWrite()).toEqual({ method: 'post', path: '/beats/1/duration', body: { duration_ms: 8000, edit_revision: '7' } });
+  });
+
+  test('Save Draft names a version without changing the edit; a saved draft is restored only after a confirmation', async () => {
+    setupServer();
+    vi.spyOn(window, 'prompt').mockReturnValue('Before trims');
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    renderAt();
+    await opened();
+    fireEvent.click(screen.getByRole('button', { name: /Save Draft/ }));
+    await waitFor(() => expect(server.writes).toHaveLength(1));
+    expect(lastWrite()).toEqual({ method: 'post', path: '/versions', body: { name: 'Before trims', edit_revision: '7' } });
+    expect(screen.getByText('Edit revision 7')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'More' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Saved drafts…' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: /Restore “Before the split”/ }));
+    expect(confirm).toHaveBeenCalled();
+    expect(server.writes).toHaveLength(1); // declined: nothing restored
+  });
+});

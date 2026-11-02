@@ -690,3 +690,73 @@ R8.11's preview/render parity thresholds belong to the render pipeline (Gate 3),
 - The music with no file showed as unavailable. Space paused everything.
 - There were no page errors and no write requests.
 - The cutout drew with its transparency over the scene video.
+
+---
+
+## 14. P3 as built (2026-11-02)
+
+Evoni approved P3: editing on the existing C1 routes. P3 is frontend only. There is no backend change, migration, flag, worker or deploy. Its writes reach a server only where `EPISODE_EDIT` is on, and an admin makes them.
+
+**How a change is saved:**
+- Every change is a command (`frontend/src/lib/editOps.js`), run by `useEditOps`.
+- Its requests go one by one through the C1 routes. Each carries the `edit_revision` the page holds, or the one the request before it returned. The edit is then read again, so the page shows what the server stored.
+- There is no separate autosave: each change is saved when it is made. A drag saves on release, and an inspector field saves on Enter or when the field is left, once.
+
+**Undo and redo:**
+- One change is one undo step.
+- Undo runs the command's exact inverse, built from the stored row values, never from what is on screen. Some examples:
+  - trimming Prime's video is undone by restoring the video range, then the commentary range and fades the server clamped;
+  - deleting a segment is undone by placing the same take, range, place, commentary and level.
+- Three changes are barriers that Undo explains it can't take back:
+  - **a split:** the API supersedes the original segment;
+  - **locking timing for all 14 beats:** clear a beat's length on its card instead;
+  - **restoring a draft.**
+- A change made elsewhere (409 `EDIT_CHANGED`) reloads the edit, says so, and clears both stacks.
+- A refused change shows the server's reason and saves nothing.
+
+**What can be edited:**
+
+| What | How | Route |
+|---|---|---|
+| Place a scene (angle still or video, or a Lala or guest clip) | Drag from the media panel onto the Scene lane, or its + places it at the playhead, in the beat there (Beat Focus: that beat) | `POST /scene-clips` |
+| Place Prime's take | Onto the Prime PIP lane, at the drop time | `POST /segments` |
+| Place an approved take | Onto the Dialogue lane, in its own line's beat, with its line association | `POST /dialogue` |
+| Move Prime or a line | Drag the block; a beat-relative anchor stays relative | `/segments/:id/move`, `/dialogue/:id/move` |
+| Trim | Edge handles: both ends of a segment, the end of a scene clip; or the inspector's in, out and length | `/segments/:id/trim-video`, `PATCH /scene-clips/:id` |
+| Split Prime | At the playhead | `/segments/:id/split` |
+| Delete, cut, copy, paste | Toolbar and Del, Ctrl+X/C/V. Paste puts a copy at the playhead. A line is placed once, so dialogue is moved, not copied | `DELETE /…/:id`, then the place routes |
+| Prime's place and size | Drag her in the preview, or her eight handles. Corners keep her proportions and Shift frees them. She snaps to the frame's edges, centre and the 48 px safe margin. The inspector follows the drag; one save on release | `/segments/:id/layout` |
+| Prime's commentary | The inspector: gain (−24 to +12 dB), muted in the episode, fades | `/segments/:id/audio` |
+| A beat | The beat card: Prime required or not needed; its length with a dry run first ("Preview the change", then Apply with the revision the preview was worked out for); back to draft timing; hide or show Prime in this beat (her commentary still plays); lock timing for all 14 beats | `/beats/:beat/mode`, `/beats/:beat/duration`, `/visibility`, `/beats/lock` |
+| Save Draft | A named version; the edit is unchanged. The ⋮ menu lists saved drafts, and Restore asks first | `POST /versions`, `/versions/:id/restore` |
+
+**Locked lanes.** A lane locked in its track header refuses every change in this browser and says so. The lock is still a per-browser setting. Keeping it for the project across devices needs a server store, which is proposed with the P4 API additions.
+
+**Not in P3:**
+
+| Not built | Why |
+|---|---|
+| Moving, trimming or changing a music or SFX item; splitting a scene clip or a sound; reordering scene clips inside a beat | These need the P4 API additions (§4.3). Deleting and copying sounds works |
+| Placing music and SFX | No files until the library exists (R8.8) |
+| Transitions | Wait for Gate 2, when the preview and the render can draw them |
+| Snapping to other clips | Times snap to whole frames only |
+
+**Measured end to end.**
+- Setup:
+  - the production frontend build in Chromium;
+  - the real backend, with `EPISODE_EDIT=on` and a local admin token;
+  - a throwaway local Postgres with every migration applied, and a seeded episode, a linked scene set with a still, and Prime's take with a cutout.
+- The run:
+  1. placed the still and Prime's take;
+  2. dragged Prime 120 px left and 60 px up, and resized her from a corner;
+  3. set her gain to −6 dB, then Undo (0) and Redo (−6);
+  4. split her at the playhead;
+  5. saved a draft;
+  6. reloaded the page.
+- Every write returned 200, and the revision went 0 → 8. Save Draft left it at 8.
+- The database held:
+  - one still in beat 1;
+  - the original segment superseded, plus two halves at 0–4033 and 4033–14000 ms;
+  - the dragged and resized layout (1010, 571, 649×365) and −6 dB on both halves;
+  - the draft at revision 8.
+- **One bug found and fixed:** the timecode rounded frames down while the clock rounds to the nearest frame, so 4033 ms showed as 04.00 instead of 04.01.

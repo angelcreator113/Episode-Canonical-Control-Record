@@ -67,7 +67,7 @@ const noWrites = () => {
   for (const m of ['post', 'put', 'patch', 'delete']) expect(api[m]).not.toHaveBeenCalled();
 };
 
-describe('EpisodeEditor (P1 read only, P2 working preview)', () => {
+describe('EpisodeEditor: reading the edit (P1) and the working preview (P2)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
@@ -112,27 +112,29 @@ describe('EpisodeEditor (P1 read only, P2 working preview)', () => {
     noWrites();
   });
 
-  test('render, export, save and every edit button are disabled and say why', async () => {
+  test('render and export are disabled and say why; with nothing selected or done, the edit buttons are off', async () => {
     answer();
     renderAt();
     await screen.findByText('Episode 3: A New Alliance');
-    for (const name of [/^Save Draft/, /^Preview Render \(Pending: the render host/, /^Export Video \(Pending: the render host/,
-      /^Undo \(Editing arrives in P3\)/, /^Redo/, /^Split/, /^Cut/, /^Copy/, /^Paste/, /^Delete/]) {
+    for (const name of [/^Preview Render \(Pending: the render host/, /^Export Video \(Pending: the render host/]) {
       const b = screen.getByRole('button', { name });
       expect(b.disabled).toBe(true);
       expect(b.getAttribute('aria-disabled')).toBe('true');
     }
+    for (const name of [/^Undo$/, /^Redo$/, /^Split$/, /^Cut$/, /^Paste$/, /^Delete$/]) expect(screen.getByRole('button', { name }).disabled).toBe(true);
+    expect(screen.getByRole('button', { name: /Save Draft/ }).disabled).toBe(false);
     noWrites();
   });
 
-  test("the preview shows the scene and Prime's PIP where the edit places it; clicking the PIP selects her segment", async () => {
+  test("the preview shows the scene and Prime's PIP where the edit places it; clicking the PIP selects her segment and the inspector shows her stored values", async () => {
     answer();
     renderAt();
     const monitor = await screen.findByTestId('editor-monitor');
     await waitFor(() => expect(within(monitor).getByRole('img', { name: 'Closet · Wide' }).getAttribute('src')).toBe('https://cdn/a1.jpg'));
     const pip = within(monitor).getByRole('button', { name: 'Prime PIP: Prime take' });
-    expect(pip.style.left).toBe(`${(1300 / 1920) * 100}%`);
-    expect(pip.style.width).toBe(`${(540 / 1920) * 100}%`);
+    const box = within(monitor).getByTestId('preview-pip');
+    expect(box.style.left).toBe(`${(1300 / 1920) * 100}%`);
+    expect(box.style.width).toBe(`${(540 / 1920) * 100}%`);
     fireEvent.click(pip);
     expect(pip.getAttribute('aria-pressed')).toBe('true');
     // The inspector shows her stored layout and audio, read only.
@@ -140,7 +142,7 @@ describe('EpisodeEditor (P1 read only, P2 working preview)', () => {
     expect(screen.getByLabelText('Width').value).toBe('540');
     expect(screen.getByLabelText('Rotation (Deferred (D5))').disabled).toBe(true);
     fireEvent.click(within(screen.getByRole('region', { name: 'Inspector' })).getByRole('tab', { name: 'Audio' }));
-    expect(screen.getByLabelText('Gain').value).toBe('-2.0 dB');
+    expect(screen.getByLabelText('Gain').value).toBe('-2');
     noWrites();
   });
 

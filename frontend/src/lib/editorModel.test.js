@@ -100,6 +100,7 @@ describe('helpers', () => {
     expect(timecode(0)).toBe('00:00.00');
     expect(timecode(14767)).toBe('00:14.23');
     expect(timecode(158400)).toBe('02:38.12');
+    expect(timecode(4033)).toBe('00:04.01'); // the frame the clock snaps to, not the one before it
   });
   test('edit points are every beat and block edge, sorted', () => {
     expect(editPoints(buildTimeline(EDIT, media))).toEqual([0, 500, 1000, 2500, 4500, 6000, 8000, 13000]);

@@ -4,12 +4,17 @@
  * framePlan → layoutAt): the scene (an angle still, an angle video, or a
  * clip), then Prime's PIP where the edit places her, from her cutout when
  * the edit asks for it. Videos are muted: every sound plays from the mix
- * (usePreviewPlayback). Clicking the PIP selects her segment. Moving and
- * resizing in the preview arrive with editing (P3).
+ * (usePreviewPlayback). Clicking the PIP selects her segment.
+ *
+ * Editing (P3): with her segment selected, Prime is dragged to move her and
+ * resized from her eight handles (corners keep her proportions; Shift frees
+ * them). The inspector follows the drag (onLayoutDrag); the new layout is
+ * saved once, on release (onLayoutCommit).
  */
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { SkipBack, Play, Pause, SkipForward, Volume2, VolumeX, Maximize } from 'lucide-react';
 import { FRAME_W, FRAME_H, timecode } from '../../lib/editorModel';
+import { HANDLES, dragLayout, sameLayout } from '../../lib/pipGeometry';
 
 const pct = (v, of) => `${(v / of) * 100}%`;
 
@@ -48,8 +53,10 @@ export function SyncedVideo({ src, timeMs, playing, rate, className, style, post
 export default function EditorPreview({
   frame, duration, selectedId, onSelect, onPrevEdit, onNextEdit, hidden,
   playing, rate, onToggle, volume, onVolume, muted, onMute, sounds, failedVideo, onVideoFailed,
+  editable = false, primeLocked = false, onLayoutDrag, onLayoutCommit,
 }) {
   const box = useRef(null);
+  const [pipDrag, setPipDrag] = useState(null); // { handle, x0, y0, start, live, moved }
   const fullscreen = () => {
     const el = box.current;
     if (!el?.requestFullscreen) return;
@@ -57,6 +64,32 @@ export default function EditorPreview({
   };
   const scene = frame?.scene && !hidden.scene ? frame.scene : null;
   const pip = frame?.pip && !hidden.prime ? frame.pip : null;
+  const canArrange = Boolean(pip) && editable && !primeLocked && selectedId === pip.segment_id && !playing;
+  const pipLayout = pipDrag && pip && pipDrag.segmentId === pip.segment_id ? pipDrag.live : pip?.layout;
+
+  const beginPip = (e, handle) => {
+    if (!canArrange || e.button !== 0) return;
+    e.stopPropagation();
+    e.preventDefault();
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+    setPipDrag({ segmentId: pip.segment_id, handle, x0: e.clientX, y0: e.clientY, start: pip.layout, live: pip.layout, moved: false });
+  };
+  const movePip = (e) => {
+    if (!pipDrag) return;
+    e.stopPropagation();
+    const scale = FRAME_W / (box.current?.clientWidth || FRAME_W);
+    const live = dragLayout(pipDrag.start, pipDrag.handle, (e.clientX - pipDrag.x0) * scale, (e.clientY - pipDrag.y0) * scale, { free: e.shiftKey });
+    setPipDrag({ ...pipDrag, live, moved: pipDrag.moved || !sameLayout(live, pipDrag.start) });
+    onLayoutDrag?.({ segmentId: pipDrag.segmentId, layout: live });
+  };
+  const endPip = (e) => {
+    if (!pipDrag) return;
+    e.stopPropagation();
+    const { segmentId, live, start, moved } = pipDrag;
+    setPipDrag(null);
+    onLayoutDrag?.(null);
+    if (moved && !sameLayout(live, start)) onLayoutCommit?.(segmentId, live);
+  };
   const unavailable = (sounds || []).filter((s) => !s.url || s.failed);
   const notes = [pip?.note, frame?.scene && scene && !scene.url ? `${scene.name}: no media` : null].filter(Boolean);
 
@@ -74,18 +107,25 @@ export default function EditorPreview({
             <div className="tle-monitor-msg">{frame?.scene_gap ? 'No scene here (scene gap)' : 'No scene at the playhead'}</div>
           )}
           {pip && (
-            <button
-              type="button"
-              className={`tle-monitor-pip${pip.cutout ? ' is-cutout' : ''}${selectedId === pip.segment_id ? ' is-selected' : ''}`}
-              style={{ left: pct(pip.layout.x, FRAME_W), top: pct(pip.layout.y, FRAME_H), width: pct(pip.layout.w, FRAME_W), height: pct(pip.layout.h, FRAME_H) }}
-              onClick={() => onSelect(pip.segment_id)}
-              aria-label={`Prime PIP: ${pip.name}`}
-              aria-pressed={selectedId === pip.segment_id}
+            <div
+              className={`tle-monitor-pip${pip.cutout ? ' is-cutout' : ''}${selectedId === pip.segment_id ? ' is-selected' : ''}${canArrange ? ' can-arrange' : ''}`}
+              style={{ left: pct(pipLayout.x, FRAME_W), top: pct(pipLayout.y, FRAME_H), width: pct(pipLayout.w, FRAME_W), height: pct(pipLayout.h, FRAME_H) }}
+              data-testid="preview-pip"
+              onPointerDown={(e) => beginPip(e, 'move')} onPointerMove={movePip} onPointerUp={endPip}
             >
-              {pip.url && !failedVideo[pip.url] ? (
-                <SyncedVideo src={pip.url} poster={pip.poster} timeMs={pip.source_time_ms} playing={playing} rate={rate} label={`Prime: ${pip.name}`} onFailed={onVideoFailed} />
-              ) : <span>{pip.url ? "Prime's video could not load" : "Prime's take is missing"}</span>}
-            </button>
+              <button type="button" className="tle-monitor-pip-hit" onClick={() => onSelect(pip.segment_id)}
+                aria-label={`Prime PIP: ${pip.name}`} aria-pressed={selectedId === pip.segment_id}
+                title={canArrange ? 'Drag to move; drag a handle to resize (Shift frees the proportions)' : 'Select Prime'}>
+                {pip.url && !failedVideo[pip.url] ? (
+                  <SyncedVideo src={pip.url} poster={pip.poster} timeMs={pip.source_time_ms} playing={playing} rate={rate} label={`Prime: ${pip.name}`} onFailed={onVideoFailed} />
+                ) : <span>{pip.url ? "Prime's video could not load" : "Prime's take is missing"}</span>}
+              </button>
+              {canArrange && HANDLES.map((h) => (
+                <span key={h} className={`tle-pip-handle h-${h}`} data-testid={`pip-handle-${h}`} aria-hidden="true"
+                  onPointerDown={(e) => beginPip(e, h)} onPointerMove={movePip} onPointerUp={endPip} />
+              ))}
+              {pipDrag && <span className="tle-pip-readout" aria-hidden="true">{pipLayout.x}, {pipLayout.y} · {pipLayout.w}×{pipLayout.h}</span>}
+            </div>
           )}
           {frame?.prime_missing && <span className="tle-monitor-badge">Prime footage missing</span>}
           <span className="tle-monitor-note">Working preview{rate !== 1 ? ` · ${rate}×` : ''}</span>

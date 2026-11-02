@@ -193,7 +193,8 @@ export const findingText = (f) => FINDING_TEXT[f.code] || f.code.replace(/_/g, '
 /** mm:ss.ff at 30 fps (frames, not hundredths), as the transport shows time. */
 export function timecode(ms) {
   const v = Math.max(0, Math.round(Number(ms) || 0));
-  const totalFrames = Math.floor((v * 30) / 1000);
+  // The nearest frame, as snapToFrame rounds: 4033 ms is frame 121 (04.01), not 120.
+  const totalFrames = Math.round((v * 30) / 1000);
   const ff = totalFrames % 30;
   const s = Math.floor(totalFrames / 30);
   return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}.${String(ff).padStart(2, '0')}`;

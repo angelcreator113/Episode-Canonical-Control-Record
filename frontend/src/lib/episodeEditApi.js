@@ -1,6 +1,9 @@
 /**
- * The episode editor's reads (Timeline Editor redesign P1, 2026-11-02).
- * P1 only reads: nothing here writes the edit, a take, a clip or a scene.
+ * The episode editor's reads (Timeline Editor redesign P1, 2026-11-02) and,
+ * from P3, its writes to the episode edit. Every write goes through `write`,
+ * which sends the edit_revision the page holds: a write made from a stale
+ * page is refused by the server (409 EDIT_CHANGED) and nothing is written.
+ * Nothing here writes a take, a clip, a scene set or the legacy timeline.
  *
  * The C1 routes (/api/v1/episodes/:id/edit) answer { success, data } and
  * answer 404 EPISODE_EDIT_OFF while the episode edit is switched off.
@@ -18,13 +21,32 @@ export function readFailure(err) {
   const code = err?.response?.data?.code;
   if (code === 'EPISODE_EDIT_OFF') return { kind: 'off', message: 'The episode edit is switched off on this server (EPISODE_EDIT).' };
   if (status === 404) return { kind: 'not_found', message: 'This episode was not found.' };
+  if (code === 'EDIT_CHANGED' || code === 'EDIT_REVISION_REQUIRED') return { kind: 'stale', message: 'The edit changed in another tab or by someone else. It has been reloaded; nothing of this change was saved.' };
+  if (code === 'AUTH_GROUP_REQUIRED' || status === 403) return { kind: 'forbidden', message: 'Editing needs an admin account. Nothing was changed.' };
   if (status === 401) return { kind: 'auth', message: 'Sign in to open the editor.' };
-  if (status === 403) return { kind: 'auth', message: 'Your account cannot open this editor.' };
   if (!err?.response) return { kind: 'offline', message: 'The server could not be reached. Nothing was changed.' };
   return { kind: 'failed', message: err?.response?.data?.error || 'The editor could not be loaded. Nothing was changed.' };
 }
 
+const WRITE_METHODS = new Set(['post', 'patch', 'put', 'delete']);
+
 export const episodeEditApi = {
+  /**
+   * One write to the edit: { method, path (under /edit), body } with the
+   * edit_revision the page holds. Resolves the server's data, which carries
+   * the new edit_revision (createVersion's is unchanged).
+   */
+  write: (episodeId, { method, path, body = {} }, editRevision) => {
+    const m = String(method).toLowerCase();
+    if (!WRITE_METHODS.has(m)) throw new Error(`not a write: ${method}`);
+    const url = `${editBase(episodeId)}${path}`;
+    const payload = { ...body, edit_revision: editRevision };
+    const req = m === 'delete' ? api.delete(url, { data: payload }) : api[m](url, payload);
+    return req.then((r) => dataOf(r) || {});
+  },
+  /** Dry run of a beat's new length: what would move, and the findings it adds and clears. */
+  beatDurationPlan: (episodeId, beat, durationMs) => api.post(`${editBase(episodeId)}/beats/${beat}/duration`, { duration_ms: durationMs, dry_run: true }).then(dataOf),
+  versions: (episodeId) => api.get(`${editBase(episodeId)}/versions`).then((r) => (Array.isArray(dataOf(r)) ? dataOf(r) : [])),
   /** The episode (GET /episodes/:id answers { data: episode, script_revision }), or null. */
   episode: (episodeId) => api.get(`/api/v1/episodes/${enc(episodeId)}`).then((r) => unwrapEpisode(r?.data)),
   /** { edit_revision, rows, edit }: the live edit, in editTimeline's shape. */

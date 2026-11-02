@@ -9,7 +9,14 @@
  * P2 adds the working preview: playback on the edit's one clock, with the
  * scene, Prime's PIP, her commentary and the approved dialogue.
  *
- * What is not built yet is shown disabled with what unlocks it: editing (P3),
+ * P3 adds editing on the existing C1 routes: placing media from the media
+ * panel, moving, trimming, splitting, deleting, copying and pasting, Prime's
+ * place and size dragged in the preview, the inspector's stored values, the
+ * beat card (Prime mode, length with a dry run, timing lock, hiding Prime),
+ * undo and redo, and Save Draft (a named version). Every change is saved
+ * when it is made, with the edit_revision the page read (useEditOps).
+ *
+ * What is not built yet is shown disabled with what unlocks it:
  * render and export (the render host, Gates 3–6), and the
  * performer, phone, gameplay, overlay and caption lanes (Gate 2). The legacy
  * Timeline Editor (/episodes/:id/timeline) stays until this one passes
@@ -27,6 +34,8 @@ import {
 } from '../lib/editorModel';
 import { mixPlan } from '../lib/editTimeline';
 import { framePlan, mixAt, snapToFrame } from '../lib/previewPlan';
+import * as ops from '../lib/editOps';
+import useEditOps from '../components/EpisodeEditor/useEditOps';
 import usePreviewPlayback from '../components/EpisodeEditor/usePreviewPlayback';
 import AssetBrowser from '../components/EpisodeEditor/AssetBrowser';
 import EditorPreview from '../components/EpisodeEditor/EditorPreview';
@@ -41,30 +50,40 @@ const MIN_PX_PER_MS = 0.004; // 4 px a second
 const MAX_PX_PER_MS = 0.6; // 600 px a second
 const clamp = (v, min, max) => Math.min(max, Math.max(min, v));
 
-/** A read's state: { loading, data, error }. */
+/**
+ * A read's state: { loading, data, error, reload }. reload() reads again and
+ * keeps showing the last answer until the new one arrives; it rejects when
+ * the read fails, so a caller can say so.
+ */
 function useRead(fn, deps) {
   const [state, setState] = useState({ loading: true, data: null, error: null });
+  const fnRef = useRef(fn);
+  fnRef.current = fn;
+  const gen = useRef(0);
   useEffect(() => {
-    let live = true;
+    const mine = ++gen.current;
     setState({ loading: true, data: null, error: null });
     fn().then(
-      (data) => { if (live) setState({ loading: false, data, error: null }); },
+      (data) => { if (gen.current === mine) setState({ loading: false, data, error: null }); },
       (err) => {
         console.error('[EpisodeEditor] read failed:', err?.message);
-        if (live) setState({ loading: false, data: null, error: err });
+        if (gen.current === mine) setState({ loading: false, data: null, error: err });
       },
     );
-    return () => { live = false; };
   }, deps);
-  return state;
+  const reload = useCallback(async () => {
+    const mine = ++gen.current;
+    const data = await fnRef.current();
+    if (gen.current === mine) setState({ loading: false, data, error: null });
+    return data;
+  }, []);
+  return { ...state, reload };
 }
 
 const messageOf = (err) => (err ? readFailure(err).message : null);
 
 const PENDING = {
-  edit: 'Editing arrives in P3',
   render: 'Pending: the render host (Gates 3–6)',
-  draft: 'Save Draft (a named checkpoint) arrives with editing in P3',
 };
 
 function FullPage({ title, children, episodeId }) {
@@ -109,6 +128,21 @@ export default function EpisodeEditor() {
   const [upper, setUpper, dragUpper, resetUpper] = useStoredSize('tle-upper-ratio', 0.52, { min: 0.25, max: 0.75 });
   const scrollRef = useRef(null);
   const bodyRef = useRef(null);
+  const [draggingAsset, setDraggingAsset] = useState(null);
+  const [clipboard, setClipboard] = useState(null);
+  const [liveLayout, setLiveLayout] = useState(null);
+  const [beatPlan, setBeatPlan] = useState(null);
+  const [versions, setVersions] = useState(null);
+
+  // ── Saving changes (P3) ─────────────────────────────────────────────
+  const editRef = useRef(null);
+  editRef.current = edit.data;
+  const reloadAll = useCallback(async () => {
+    await edit.reload();
+    findings.reload().catch((err) => console.error('[EpisodeEditor] findings reload failed:', err?.message));
+  }, [edit.reload, findings.reload]);
+  const editor = useEditOps({ episodeId, getRevision: () => editRef.current?.edit_revision, reload: reloadAll });
+  const editable = Boolean(edit.data) && !editor.busy;
 
   const toggleView = useCallback((lane, key) => {
     setView((cur) => {
@@ -126,10 +160,16 @@ export default function EpisodeEditor() {
   useEffect(() => { if (model && pxPerMs == null) fitTo(model.duration); }, [model, pxPerMs, fitTo]);
 
   const allBlocks = useMemo(() => (model ? Object.values(model.blocks).flat() : []), [model]);
-  const selected = allBlocks.find((b) => b.id === selectedId) || null;
+  const selectedRaw = allBlocks.find((b) => b.id === selectedId) || null;
+  const selected = selectedRaw ? { ...selectedRaw, locked: Boolean(view[selectedRaw.lane]?.locked) } : null;
+  // The selection survives a reload by id; a block that is gone is no longer selected.
+  useEffect(() => { if (selectedId && model && !allBlocks.some((b) => b.id === selectedId)) setSelectedId(null); }, [model, allBlocks, selectedId]);
   const beatAt = model ? (model.beats.find((b) => playhead >= b.start && playhead < b.end)
     || (playhead >= model.duration ? [...model.beats].reverse().find((b) => b.end > b.start) : null)) : null;
   const cardBeat = focusBeat != null ? model?.beats.find((b) => b.beat === focusBeat) : beatAt;
+  const pipHiddenRule = cardBeat && edit.data
+    ? [...(edit.data.edit.visibility || [])].reverse().find((r) => r.scope === 'beat' && r.beat_number === cardBeat.beat && r.visible === false) || null
+    : null;
   const frame = useMemo(() => (edit.data ? framePlan(edit.data.edit, playhead, media) : null), [edit.data, playhead, media]);
   const hidden = { scene: view.scene?.hidden, prime: view.prime?.hidden };
 
@@ -167,6 +207,180 @@ export default function EpisodeEditor() {
   const prevEdit = () => seek([...points].reverse().find((p) => p < playhead) ?? 0);
   const nextEdit = () => seek(points.find((p) => p > playhead) ?? (model?.duration || 0));
 
+  // ── Editing actions (P3): each builds one command (lib/editOps) and runs it ──
+  const laneLocked = (lane) => Boolean(view[lane]?.locked);
+  const refuseLocked = (lane, what) => {
+    if (!laneLocked(lane)) return false;
+    editor.say({ kind: 'info', text: `${what}: the ${lane.replace('_', ' ')} lane is locked in this browser. Unlock it in its track header.` });
+    return true;
+  };
+  const beatStart = (n) => model?.beats.find((b) => b.beat === n)?.start ?? 0;
+  const segmentOf = (block) => (block.kind === 'commentary' ? allBlocks.find((b) => b.id === block.linked) || block : block);
+
+  /** Places media from the media panel at edit time t (a drop, or the playhead). */
+  const placeAsset = useCallback((asset, t, lane = null) => {
+    if (!model || !edit.data) return;
+    const at = snapToFrame(t);
+    if (asset.kind === 'prime_clip') {
+      if (refuseLocked('prime', 'Place Prime')) return;
+      editor.run(ops.placeSegment({ raw_clip_id: asset.id, anchor_kind: 'edit_start', offset_ms: at }, `Place ${asset.label}`));
+      return;
+    }
+    if (asset.kind === 'take') {
+      if (refuseLocked('dialogue', 'Place dialogue')) return;
+      const take = edit.data.edit.voiceTakes?.[asset.id];
+      if (!take || !take.playable) {
+        editor.say({ kind: 'error', text: `${asset.label}: this take is not the current approved one any more. Reload, or approve it again in Voice Studio.` });
+        return;
+      }
+      const b = model.beats.find((x) => x.beat === take.beat_number);
+      const offset = b && at >= b.start && at < b.end ? at - b.start : 0;
+      editor.run(ops.placeDialogue({ approval_id: asset.id, association_id: take.association_id, anchor_kind: 'beat_start', anchor_beat: take.beat_number, offset_ms: offset }, `Place ${asset.label}`));
+      return;
+    }
+    if (['angle_still', 'angle_video', 'scene_clip_source'].includes(asset.kind)) {
+      if (refuseLocked('scene', 'Place scene')) return;
+      const beat = focusBeat ?? ops.beatForDrop(model.beats, at, model.duration);
+      const body = { beat_number: beat, source_kind: asset.source_kind, source_id: asset.id };
+      if (asset.source_kind === 'angle_still') body.duration_ms = 5000;
+      editor.run(ops.placeSceneClip(body, `Place ${asset.label} in beat ${beat}`));
+      return;
+    }
+    editor.say({ kind: 'info', text: `${asset.label} can't be placed ${lane ? `on that lane` : 'here'}.` });
+  }, [model, edit.data, editor, focusBeat, view]);
+
+  const moveBlock = useCallback((block, newStart) => {
+    const at = snapToFrame(Math.max(0, newStart));
+    if (refuseLocked(block.lane, 'Move')) return;
+    if (block.kind === 'segment') editor.run(ops.moveSegment(block.row, ops.anchorAt(block.row, at, model.beats)));
+    else if (block.kind === 'dialogue') editor.run(ops.moveDialogue(block.row, ops.anchorAt(block.row, at, model.beats)));
+  }, [editor, model, view]);
+
+  const trimBlock = useCallback((block, edge, t) => {
+    if (refuseLocked(block.lane, 'Trim')) return;
+    const at = snapToFrame(t);
+    const row = block.row;
+    if (block.kind === 'segment') {
+      if (edge === 'end') {
+        const out = row.source_in_ms + Math.max(33, at - block.start);
+        editor.run(ops.trimSegment(row, { source_out_ms: Math.round(out) }));
+      } else {
+        const inMs = Math.max(0, Math.min(row.source_out_ms - 33, row.source_in_ms + (at - block.start)));
+        editor.run(ops.trimSegment(row, { source_in_ms: Math.round(inMs) }));
+      }
+    } else if (block.kind === 'scene_clip' && edge === 'end') {
+      editor.run(ops.updateSceneClip(row, { duration_ms: Math.max(33, Math.round(at - block.start)) }, 'Change scene clip length'));
+    }
+  }, [editor, view]);
+
+  const deleteBlock = useCallback((block) => {
+    if (!block) return;
+    const b = segmentOf(block);
+    if (refuseLocked(b.lane, 'Delete')) return;
+    if (b.kind === 'scene_clip') editor.run(ops.removeSceneClip(b.row));
+    else if (b.kind === 'segment') editor.run(ops.removeSegment(b.row));
+    else if (b.kind === 'dialogue') editor.run(ops.removeDialogue(b.row));
+    else if (b.kind === 'audio_item') editor.run(ops.removeAudioItem(b.row));
+  }, [editor, allBlocks, view]);
+
+  const splitAtPlayhead = useCallback((block) => {
+    const b = block && segmentOf(block);
+    if (!b || b.kind !== 'segment') { editor.say({ kind: 'info', text: 'Split works on a Prime segment: select one and put the playhead inside it. Splitting scene clips and sounds needs an API addition (P4).' }); return; }
+    if (refuseLocked('prime', 'Split')) return;
+    if (!(playhead > b.start && playhead < b.end)) { editor.say({ kind: 'info', text: 'Put the playhead inside the segment to split it there.' }); return; }
+    editor.run(ops.splitSegment(b.row, Math.round(b.row.source_in_ms + (playhead - b.start))));
+  }, [editor, playhead, allBlocks, view]);
+
+  const copyBlock = useCallback((block, cut = false) => {
+    const b = block && segmentOf(block);
+    if (!b) return;
+    if (b.kind === 'dialogue') { editor.say({ kind: 'info', text: 'A line is placed once: move it instead of copying it.' }); return; }
+    setClipboard({ kind: b.kind, row: b.row, label: b.label, duration: b.end - b.start });
+    if (cut) deleteBlock(b);
+    else editor.say({ kind: 'ok', text: `Copied ${b.label}. Paste puts it at the playhead.` });
+  }, [editor, deleteBlock, allBlocks]);
+
+  const paste = useCallback(() => {
+    if (!clipboard || !model) return;
+    const at = snapToFrame(playhead);
+    const { kind, row, label } = clipboard;
+    if (kind === 'segment') {
+      if (refuseLocked('prime', 'Paste')) return;
+      const body = { raw_clip_id: row.raw_clip_id, source_in_ms: row.source_in_ms, source_out_ms: row.source_out_ms, anchor_kind: 'edit_start', offset_ms: at,
+        layout: row.layout || null, audio_gain_db: row.audio_gain_db, audio_muted: row.audio_muted };
+      if (row.audio_in_ms != null) Object.assign(body, { audio_in_ms: row.audio_in_ms, audio_out_ms: row.audio_out_ms, audio_fade_in_ms: row.audio_fade_in_ms, audio_fade_out_ms: row.audio_fade_out_ms });
+      editor.run(ops.placeSegment(body, `Paste ${label}`));
+    } else if (kind === 'scene_clip') {
+      if (refuseLocked('scene', 'Paste')) return;
+      const beat = focusBeat ?? ops.beatForDrop(model.beats, at, model.duration);
+      const body = { beat_number: beat, source_kind: row.source_kind, source_id: row.source_id, duration_ms: row.duration_ms };
+      if (row.source_kind !== 'angle_still') Object.assign(body, { source_in_ms: row.source_in_ms, source_out_ms: row.source_out_ms });
+      editor.run(ops.placeSceneClip(body, `Paste ${label} in beat ${beat}`));
+    } else if (kind === 'audio_item') {
+      const lane = row.track === 'sfx' ? 'sfx' : 'music';
+      if (refuseLocked(lane, 'Paste')) return;
+      const body = { track: row.track, asset_ref: row.asset_ref, slot: row.slot, source_in_ms: row.source_in_ms, source_out_ms: row.source_out_ms,
+        anchor_kind: 'edit_start', offset_ms: at, gain_db: row.gain_db, fade_in_ms: row.fade_in_ms, fade_out_ms: row.fade_out_ms, duck_under_dialogue_db: row.duck_under_dialogue_db };
+      editor.run(ops.addAudioItem(Object.fromEntries(Object.entries(body).filter(([, v]) => v != null)), `Paste ${label}`));
+    }
+  }, [clipboard, model, playhead, editor, focusBeat, view]);
+
+  const act = {
+    move: (block, t) => moveBlock(block, t),
+    updateScene: (block, changes) => { if (!refuseLocked('scene', 'Change')) editor.run(ops.updateSceneClip(block.row, changes, 'Change scene clip')); },
+    trimSegment: (block, range) => { if (!refuseLocked('prime', 'Trim')) editor.run(ops.trimSegment(segmentOf(block).row, range)); },
+    segmentAudio: (block, changes) => { if (!refuseLocked('prime_vo', 'Change')) editor.run(ops.setSegmentAudio(segmentOf(block).row, changes)); },
+    layout: (block, layout) => { if (!refuseLocked('prime', 'Move Prime')) editor.run(ops.setSegmentLayout(segmentOf(block).row, layout)); },
+    beatMode: (beat, mode) => editor.run(ops.setBeatMode(beat.beat, mode, beat.prime_mode)),
+    hidePip: (beat) => editor.run(ops.setBeatPipVisible(beat.beat, false)),
+    showPip: (beat, rule) => editor.run(ops.removeVisibility(rule)),
+    planBeatLength: async (beat, msValue) => {
+      try {
+        const plan = await episodeEditApi.beatDurationPlan(episodeId, beat.beat, Math.round(msValue));
+        setBeatPlan({ ...plan, requested_ms: Math.round(msValue) });
+      } catch (err) {
+        console.error('[EpisodeEditor] beat length dry run failed:', err?.message);
+        editor.say({ kind: 'error', text: ops.writeFailure(err).message });
+      }
+    },
+    applyBeatLength: async (beat, plan) => {
+      if (String(plan.for_edit_revision) !== String(editRef.current?.edit_revision)) {
+        setBeatPlan(null);
+        editor.say({ kind: 'error', text: 'The edit changed after that preview, so nothing was applied. Preview the change again.' });
+        return;
+      }
+      const stored = edit.data.edit.beatDurations?.[beat.beat] ?? null;
+      const ok = await editor.run(ops.setBeatDuration(beat.beat, plan.requested_ms, stored));
+      if (ok) setBeatPlan(null);
+    },
+    clearPlan: () => setBeatPlan(null),
+    unlockBeat: (beat) => editor.run(ops.setBeatDuration(beat.beat, null, edit.data.edit.beatDurations?.[beat.beat] ?? null)),
+    lockTiming: () => {
+      if (window.confirm('Lock timing for all 14 beats? Each beat keeps the length it has now, so changing a clip later never moves anything after it. This is not undone with Undo.')) editor.run(ops.lockTiming());
+    },
+  };
+
+  const saveDraft = async () => {
+    const name = window.prompt('Name this draft', `Draft ${new Date().toLocaleString()}`);
+    if (!name || !name.trim()) return;
+    await editor.once('Save Draft', () => episodeEditApi.write(episodeId, { method: 'post', path: '/versions', body: { name: name.trim() } }, editRef.current?.edit_revision));
+    setVersions(null);
+  };
+  const openVersions = async () => {
+    try {
+      setVersions(await episodeEditApi.versions(episodeId));
+    } catch (err) {
+      console.error('[EpisodeEditor] versions failed:', err?.message);
+      editor.say({ kind: 'error', text: 'The saved drafts could not be listed.' });
+    }
+  };
+  const restore = async (v) => {
+    setMenuOpen(false);
+    if (!window.confirm(`Restore “${v.name}”? The edit goes back to that draft as a new revision. Undo can't take a restore back, so save a draft first if you may want to return.`)) return;
+    const ok = await editor.run(ops.restoreVersion(v));
+    if (ok) editor.resetHistory();
+  };
+
   const focus = (beat) => {
     if (focusBeat === beat) { setFocusBeat(null); return; }
     setFocusBeat(beat);
@@ -186,6 +400,13 @@ export default function EpisodeEditor() {
     const onKey = (e) => {
       const tag = e.target?.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || e.target?.isContentEditable) return;
+      const mod = e.ctrlKey || e.metaKey;
+      if (mod && (e.key === 'z' || e.key === 'Z')) { e.preventDefault(); if (e.shiftKey) editor.redo(); else editor.undo(); return; }
+      if (mod && (e.key === 'y' || e.key === 'Y')) { e.preventDefault(); editor.redo(); return; }
+      if (mod && (e.key === 'c' || e.key === 'C') && selected) { e.preventDefault(); copyBlock(selected); return; }
+      if (mod && (e.key === 'x' || e.key === 'X') && selected) { e.preventDefault(); copyBlock(selected, true); return; }
+      if (mod && (e.key === 'v' || e.key === 'V') && clipboard) { e.preventDefault(); paste(); return; }
+      if ((e.key === 'Delete' || e.key === 'Backspace') && selected) { e.preventDefault(); deleteBlock(selected); return; }
       if (e.key === ' ' && tag !== 'BUTTON') { e.preventDefault(); player.toggle(); }
       else if (e.key === 'k' || e.key === 'K') { e.preventDefault(); player.pause(); }
       else if (e.key === 'l' || e.key === 'L') { e.preventDefault(); if (player.playing) player.faster(); else player.play(); }
@@ -198,7 +419,7 @@ export default function EpisodeEditor() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [playhead, seek, model, player]);
+  }, [playhead, seek, model, player, editor, selected, clipboard, copyBlock, paste, deleteBlock]);
 
   // ── Whole-page states ───────────────────────────────────────────────
   if (edit.loading) {
@@ -236,13 +457,25 @@ export default function EpisodeEditor() {
           <span className="tle-crumb-here" aria-current="page">Editor</span>
         </nav>
         <div className="tle-top-actions">
-          <button type="button" className="tle-btn" disabled aria-disabled="true" title={PENDING.draft} aria-label={`Save Draft (${PENDING.draft})`}><Save size={16} aria-hidden="true" /> Save Draft</button>
+          <button type="button" className="tle-btn" onClick={saveDraft} disabled={!editable} title="Save the edit as a named draft you can restore"><Save size={16} aria-hidden="true" /> Save Draft</button>
           <button type="button" className="tle-btn" disabled aria-disabled="true" title={PENDING.render} aria-label={`Preview Render (${PENDING.render})`}><MonitorPlay size={16} aria-hidden="true" /> Preview Render</button>
           <button type="button" className="tle-btn tle-btn-primary" disabled aria-disabled="true" title={PENDING.render} aria-label={`Export Video (${PENDING.render})`}><Upload size={16} aria-hidden="true" /> Export Video</button>
           <div className="tle-menu-wrap">
-            <button type="button" className="tle-btn tle-btn-square" aria-haspopup="menu" aria-expanded={menuOpen} aria-label="More" onClick={() => setMenuOpen((o) => !o)}><MoreVertical size={16} /></button>
+            <button type="button" className="tle-btn tle-btn-square" aria-haspopup="menu" aria-expanded={menuOpen} aria-label="More" onClick={() => { setMenuOpen((o) => !o); setVersions(null); }}><MoreVertical size={16} /></button>
             {menuOpen && (
               <div className="tle-menu" role="menu">
+                {versions == null
+                  ? <button type="button" role="menuitem" onClick={openVersions}>Saved drafts…</button>
+                  : (
+                    <div className="tle-menu-versions" role="group" aria-label="Saved drafts">
+                      {!versions.length && <p className="tle-muted">No saved drafts yet.</p>}
+                      {versions.map((v) => (
+                        <button key={v.id} type="button" role="menuitem" onClick={() => restore(v)} title={`Saved at revision ${v.edit_revision}`}>
+                          Restore “{v.name}” <span className="tle-muted">{new Date(v.created_at).toLocaleString()}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 <button type="button" role="menuitem" onClick={() => { setUpper(0.62); setMenuOpen(false); }}>Layout: preview focus</button>
                 <button type="button" role="menuitem" onClick={() => { setUpper(0.36); setMenuOpen(false); }}>Layout: timeline focus</button>
                 <button type="button" role="menuitem" onClick={() => { resetLeft(); resetRight(); resetUpper(); setMenuOpen(false); }}>Reset layout</button>
@@ -256,22 +489,34 @@ export default function EpisodeEditor() {
       <div className="tle-titlebar">
         <h1 className="tle-title">{ep?.episode_number ? `Episode ${ep.episode_number}: ` : ''}{ep?.title || (episode.loading ? '…' : 'Untitled episode')}</h1>
         <Link to={`/episodes/${episodeId}/edit`} className="tle-icon-btn" aria-label="Edit details" title="Edit details"><Pencil size={15} /></Link>
-        <span className="tle-pill" title="P1 reads the edit; editing arrives in P3">Read only</span>
-        <span className="tle-muted">Edit revision {edit.data.edit_revision}</span>
+        <span className={`tle-pill${editor.busy ? ' is-busy' : ''}`} role="status" aria-live="polite">
+          {editor.busy ? 'Saving…' : editor.lastSaved ? `Saved · ${editor.lastSaved.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'Draft'}
+        </span>
+        <span className="tle-muted" title="Every change is saved when it is made">Edit revision {edit.data.edit_revision}</span>
         {counts && <span className={`tle-counts${counts.blocking ? ' is-blocked' : ''}`}>{counts.blocking} blocking · {counts.warning} {counts.warning === 1 ? 'warning' : 'warnings'}</span>}
         {findings.error && <span className="tle-counts is-blocked" role="status">Findings could not be loaded: {messageOf(findings.error)}</span>}
+        {editor.notice && (
+          <span className={`tle-notice is-${editor.notice.kind}`} role={editor.notice.kind === 'error' ? 'alert' : 'status'} data-testid="editor-notice">
+            {editor.notice.text}
+            <button type="button" className="tle-icon-btn" onClick={editor.clearNotice} aria-label="Dismiss"><X size={13} /></button>
+          </span>
+        )}
       </div>
 
       <div className="tle-body" ref={bodyRef}>
         <div className="tle-upper">
           <AssetBrowser episodeId={episodeId} rawClips={{ ...rawClips, error: messageOf(rawClips.error) }} sceneSets={{ ...sceneSets, error: messageOf(sceneSets.error) }}
-            takes={{ ...takes, error: messageOf(takes.error) }} focusBeat={focusBeat} />
+            takes={{ ...takes, error: messageOf(takes.error) }} focusBeat={focusBeat}
+            editable={editable} onPlace={(asset) => placeAsset(asset, playhead)} onDragAsset={setDraggingAsset} />
           <div className="tle-split-v" role="separator" aria-orientation="vertical" aria-label="Resize the media panel" onPointerDown={(e) => dragLeft(e, { axis: 'x' })} onDoubleClick={resetLeft} />
           <EditorPreview frame={frame} duration={model.duration} selectedId={selectedId} onSelect={setSelectedId} onPrevEdit={prevEdit} onNextEdit={nextEdit} hidden={hidden}
             playing={player.playing} rate={player.rate} onToggle={player.toggle} volume={volume} onVolume={setVolume}
-            muted={previewMuted} onMute={() => setPreviewMuted((m) => !m)} sounds={sounds} failedVideo={failedVideo} onVideoFailed={onVideoFailed} />
+            muted={previewMuted} onMute={() => setPreviewMuted((m) => !m)} sounds={sounds} failedVideo={failedVideo} onVideoFailed={onVideoFailed}
+            editable={editable} primeLocked={laneLocked('prime')} onLayoutDrag={setLiveLayout}
+            onLayoutCommit={(segmentId, layout) => { const b = allBlocks.find((x) => x.id === segmentId); if (b) act.layout(b, layout); }} />
           <div className="tle-split-v" role="separator" aria-orientation="vertical" aria-label="Resize the inspector" onPointerDown={(e) => dragRight(e, { axis: 'x', sign: -1 })} onDoubleClick={resetRight} />
-          <EditorInspector block={selected} beat={cardBeat} readiness={readiness?.beats.find((r) => r.beat === cardBeat?.beat)} />
+          <EditorInspector block={selected} beat={cardBeat} readiness={readiness?.beats.find((r) => r.beat === cardBeat?.beat)}
+            editable={editable} act={act} liveLayout={liveLayout} beatPlan={beatPlan} pipHidden={pipHiddenRule} />
         </div>
 
         <div className="tle-split-h" role="separator" aria-orientation="horizontal" aria-label="Resize the preview and the timeline"
@@ -280,20 +525,21 @@ export default function EpisodeEditor() {
         <div className="tle-lower">
           <div className="tle-toolbar" role="toolbar" aria-label="Edit">
             <div className="tle-toolbar-group">
-              {[[Undo2, 'Undo'], [Redo2, 'Redo']].map(([Icon, label]) => (
-                <button key={label} type="button" className="tle-btn" disabled aria-disabled="true" title={PENDING.edit} aria-label={`${label} (${PENDING.edit})`}><Icon size={16} aria-hidden="true" /> {label}</button>
-              ))}
+              <button type="button" className="tle-btn" onClick={editor.undo} disabled={!editable || !editor.canUndo} title={editor.undoLabel ? `${editor.undoLabel} (Ctrl+Z)` : 'Nothing to undo'}><Undo2 size={16} aria-hidden="true" /> Undo</button>
+              <button type="button" className="tle-btn" onClick={editor.redo} disabled={!editable || !editor.canRedo} title={editor.redoLabel ? `${editor.redoLabel} (Ctrl+Shift+Z)` : 'Nothing to redo'}><Redo2 size={16} aria-hidden="true" /> Redo</button>
               <span className="tle-toolbar-sep" aria-hidden="true" />
-              {[[SquareSplitHorizontal, 'Split'], [Scissors, 'Cut'], [Copy, 'Copy'], [ClipboardPaste, 'Paste'], [Trash2, 'Delete']].map(([Icon, label]) => (
-                <button key={label} type="button" className="tle-btn" disabled aria-disabled="true" title={PENDING.edit} aria-label={`${label} (${PENDING.edit})`}><Icon size={16} aria-hidden="true" /> {label}</button>
-              ))}
-              <span className="tle-toolbar-note">Read only · {PENDING.edit}</span>
+              <button type="button" className="tle-btn" onClick={() => splitAtPlayhead(selected)} disabled={!editable || !selected || segmentOf(selected).kind !== 'segment'} title="Split the selected Prime segment at the playhead"><SquareSplitHorizontal size={16} aria-hidden="true" /> Split</button>
+              <button type="button" className="tle-btn" onClick={() => copyBlock(selected, true)} disabled={!editable || !selected || selected.kind === 'dialogue'} title="Cut (Ctrl+X)"><Scissors size={16} aria-hidden="true" /> Cut</button>
+              <button type="button" className="tle-btn" onClick={() => copyBlock(selected)} disabled={!selected || selected.kind === 'dialogue'} title="Copy (Ctrl+C)"><Copy size={16} aria-hidden="true" /> Copy</button>
+              <button type="button" className="tle-btn" onClick={paste} disabled={!editable || !clipboard} title={clipboard ? `Paste ${clipboard.label} at the playhead (Ctrl+V)` : 'Copy something first'}><ClipboardPaste size={16} aria-hidden="true" /> Paste</button>
+              <button type="button" className="tle-btn" onClick={() => deleteBlock(selected)} disabled={!editable || !selected} title="Delete (Del)"><Trash2 size={16} aria-hidden="true" /> Delete</button>
+              <span className="tle-toolbar-note">{editor.busy ? 'Saving…' : 'Every change is saved when it is made'}</span>
             </div>
             <div className="tle-toolbar-group">
               {focusBeat != null && (
                 <button type="button" className="tle-btn" onClick={() => { setFocusBeat(null); fitTo(model.duration); }}><X size={14} aria-hidden="true" /> Leave beat {focusBeat}</button>
               )}
-              <span className="tle-icon-btn is-off" title={`Snap: ${PENDING.edit}`} aria-hidden="true"><Magnet size={16} /></span>
+              <span className="tle-icon-btn is-off" title="Snapping: times snap to whole frames; snapping to other clips arrives with P4" aria-hidden="true"><Magnet size={16} /></span>
               <button type="button" className="tle-icon-btn" onClick={() => setPxPerMs((p) => clamp((p || px) / 1.5, MIN_PX_PER_MS, MAX_PX_PER_MS))} aria-label="Zoom out"><ZoomOut size={17} /></button>
               <input type="range" className="tle-zoom" min="0" max="100" value={zoomSlider} onChange={(e) => setZoomFromSlider(Number(e.target.value))} aria-label="Timeline zoom" />
               <button type="button" className="tle-icon-btn" onClick={() => setPxPerMs((p) => clamp((p || px) * 1.5, MIN_PX_PER_MS, MAX_PX_PER_MS))} aria-label="Zoom in"><ZoomIn size={17} /></button>
@@ -306,11 +552,13 @@ export default function EpisodeEditor() {
 
           {model.duration === 0 && (
             <p className="tle-tl-empty" data-testid="timeline-empty">
-              No beat has a length yet: the edit has no scene clips. Placing clips arrives with editing (P3); nothing is invented in their place.
+              No beat has a length yet: the edit has no scene clips. Drag a scene or a clip from the media panel onto the Scene lane, or use its + to place it at the playhead.
             </p>
           )}
           <EditorTimeline model={model} pxPerMs={px} playhead={playhead} onSeek={seek} selectedId={selectedId} onSelect={setSelectedId}
-            view={view} onToggleView={toggleView} scrollRef={scrollRef} labelWidth={LABEL_W} />
+            view={view} onToggleView={toggleView} scrollRef={scrollRef} labelWidth={LABEL_W}
+            editable={editable} onMoveBlock={moveBlock} onTrimBlock={trimBlock} draggingAsset={draggingAsset}
+            onDropAsset={(lane, asset, t) => { setDraggingAsset(null); if (asset) placeAsset(asset, t, lane); }} />
           <p className="tle-desktop-only">The multitrack timeline is desktop only. Review the beats above.</p>
         </div>
       </div>
