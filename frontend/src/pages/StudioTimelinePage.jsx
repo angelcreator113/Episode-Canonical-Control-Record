@@ -1,7 +1,9 @@
 /**
- * StudioTimelinePage.jsx — Studio › Timeline
+ * StudioTimelinePage.jsx — Studio › Timeline, and Studio › Editor
  * 
- * Universe-level entry point for the Timeline Editor.
+ * Universe-level entry point for the Timeline Editor (/studio/timeline) and,
+ * with target="editor", for the episode editor (/studio/editor, Timeline
+ * Editor redesign P1).
  * If a working episode is set, redirects to the full-screen editor.
  * Otherwise shows an episode picker.
  */
@@ -10,8 +12,14 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { episodeAPI } from '../services/api';
 import './StudioPickerPage.css';
 
-export default function StudioTimelinePage() {
+const TARGETS = {
+  timeline: { path: 'timeline', title: 'Timeline Editor', icon: '⏱️', subtitle: 'Select an episode to open in the timeline' },
+  editor: { path: 'editor', title: 'Editor', icon: '🎞️', subtitle: 'Select an episode to open in the editor' },
+};
+
+export default function StudioTimelinePage({ target = 'timeline' }) {
   const navigate = useNavigate();
+  const to = TARGETS[target] || TARGETS.timeline;
   // An episode asked for by the link (e.g. Production → Scenes → Timeline
   // Editor) always wins; the working episode is only used when none is
   // requested (§8(w) P4, Task #2212).
@@ -24,11 +32,11 @@ export default function StudioTimelinePage() {
   /* If a working episode exists, go straight to the editor */
   useEffect(() => {
     if (requestedId) {
-      navigate(`/episodes/${requestedId}/timeline`, { replace: true });
+      navigate(`/episodes/${requestedId}/${to.path}`, { replace: true });
       return;
     }
     if (workingId) {
-      navigate(`/episodes/${workingId}/timeline`, { replace: true });
+      navigate(`/episodes/${workingId}/${to.path}`, { replace: true });
       return;
     }
     episodeAPI.getAll({ limit: 50 })
@@ -39,13 +47,13 @@ export default function StudioTimelinePage() {
       })
       .catch(() => setEpisodes([]))
       .finally(() => setLoading(false));
-  }, [requestedId, workingId, navigate]);
+  }, [requestedId, workingId, navigate, to.path]);
 
   if (requestedId || workingId) {
     return (
       <div className="sp-loading">
         <div className="sp-loading-dots"><span /><span /><span /></div>
-        <p>Opening Timeline Editor…</p>
+        <p>Opening {to.title}…</p>
       </div>
     );
   }
@@ -53,15 +61,15 @@ export default function StudioTimelinePage() {
   const pick = (ep) => {
     localStorage.setItem('working-episode-id', ep.id);
     localStorage.setItem('working-episode-title', ep.title || 'Untitled');
-    navigate(`/episodes/${ep.id}/timeline`);
+    navigate(`/episodes/${ep.id}/${to.path}`);
   };
 
   return (
     <div className="sp-page">
       <div className="sp-header">
-        <div className="sp-icon">⏱️</div>
-        <h1 className="sp-title">Timeline Editor</h1>
-        <p className="sp-subtitle">Select an episode to open in the timeline</p>
+        <div className="sp-icon">{to.icon}</div>
+        <h1 className="sp-title">{to.title}</h1>
+        <p className="sp-subtitle">{to.subtitle}</p>
       </div>
 
       {loading ? (

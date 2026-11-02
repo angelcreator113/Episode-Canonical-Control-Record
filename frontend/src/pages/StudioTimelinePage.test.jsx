@@ -19,11 +19,18 @@ function OpenedTimeline() {
   return <div>timeline for {episodeId}</div>;
 }
 
+function OpenedEditor() {
+  const { episodeId } = useParams();
+  return <div>editor for {episodeId}</div>;
+}
+
 const renderAt = (url) => render(
   <MemoryRouter initialEntries={[url]}>
     <Routes>
       <Route path="/studio/timeline" element={<StudioTimelinePage />} />
+      <Route path="/studio/editor" element={<StudioTimelinePage target="editor" />} />
       <Route path="/episodes/:episodeId/timeline" element={<OpenedTimeline />} />
+      <Route path="/episodes/:episodeId/editor" element={<OpenedEditor />} />
     </Routes>
   </MemoryRouter>
 );
@@ -44,5 +51,10 @@ describe('StudioTimelinePage', () => {
     localStorage.setItem('working-episode-id', 'ep-working');
     renderAt('/studio/timeline');
     expect(await screen.findByText('timeline for ep-working')).toBeTruthy();
+  });
+
+  test('/studio/editor opens the requested episode in the new editor (Timeline Editor redesign P1)', async () => {
+    renderAt('/studio/editor?episode_id=ep-requested');
+    expect(await screen.findByText('editor for ep-requested')).toBeTruthy();
   });
 });

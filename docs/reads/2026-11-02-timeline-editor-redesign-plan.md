@@ -578,3 +578,237 @@ The Dark Timeline Editor Dashboard reference is the final visual direction.
 - `ScenePicker` reads the real scenes envelope.
 - L5 (keyframes), L6 (hook order), L7, L8 and L9 are **not** in P0.
 
+
+---
+
+## 12. P1 as built (2026-11-02)
+
+Evoni said "let's continue" after P0 merged (#3678). This session read that as the go-ahead for P1 only, the read-only page shell. Nothing in P1 deploys, migrates, switches a flag, starts a worker or writes to the edit.
+
+**What P1 is:**
+- **The page.** `EpisodeEditor` (`frontend/src/pages/EpisodeEditor.jsx`, `EpisodeEditor.css`) at `/episodes/:episodeId/editor` (D2), full screen like the legacy editor.
+- **The entry points.**
+  - The Sidebar has an **Editor** entry (`/studio/editor`, `StudioTimelinePage` with `target="editor"`).
+  - The episode header has a **New editor** link beside Open Editor, which is kept (ruling 14).
+- **The layout** follows §3:
+  - the top bar and title row;
+  - media | preview | inspector, with three splitters, sizes kept in this browser, and the preview-focus and timeline-focus presets;
+  - the edit toolbar;
+  - the collapsible 14-beat rail;
+  - the 11-lane multitrack.
+
+  Below 1024 px it is the stacked review layout: preview, beats, beat card, media.
+- **The reads, and only these:**
+  - `GET /episodes/:id`, `/edit` and `/edit/findings`;
+  - `/episode-clips/:id`, `/episodes/:id/scene-sets` and `/voice-studio/:id/playable` (`frontend/src/lib/episodeEditApi.js`).
+
+  `EPISODE_EDIT` off is a full-page notice with a link to the legacy editor.
+- **Lanes, blocks, readiness and the still frame** come from `frontend/src/lib/editorModel.js`, through the edit clock.
+
+**One departure from §6:**
+- The frontend copy of `editTimeline` (`frontend/src/lib/editTimeline.js`) moved from P2 into P1, because the timeline cannot place blocks without the clock. `GET /edit` returns rows, not times.
+- It is the server module byte for byte, apart from its two module lines. Two things keep it that way:
+  - `frontend/src/lib/editTimeline.test.js` fails if the two differ;
+  - `node scripts/sync-edit-timeline.js` rewrites the copy.
+
+**What is live in P1:**
+- Selection, from the timeline or the PIP in the preview, with its stored values in the inspector.
+- The playhead: ruler or lane click, previous and next edit point, ←/→ for a frame, Shift for a second, Home and End.
+- Zoom, Fit to Timeline, and Beat Focus.
+- The still frame: the scene image and Prime's PIP where the edit places it.
+- Track view toggles.
+
+**Disabled, each saying why:**
+
+| Control | Why |
+|---|---|
+| Play, volume | P2 |
+| Save Draft, Undo/Redo, Split, Cut, Copy, Paste, Delete, Snap, transitions | P3 |
+| Preview Render, Export Video | The render host, Gates 3–6 |
+| Rotation | Deferred (D5) |
+| Opacity, the performer lane, phone, gameplay, overlays, captions | Gate 2 |
+
+**D5 note: track lock.**
+- In P1 the lock, eye and speaker are kept in this browser (`localStorage`, per episode).
+- Each is labelled as a view setting that is not saved and never changes the export.
+- Persisting the lock "for the project/user" across devices needs a small server store. That is proposed for P3 with editing, when the lock first has an effect.
+
+**Visual check.**
+- The production build was served with `vite preview`. A scratch harness answered every `/api` call with generated fixtures inside the browser. Widths: 1536×1024, 1440×900, 1024×768 and 375×812.
+- Result: no page errors, no write requests, no horizontal scroll.
+
+---
+
+## 13. P2 as built (2026-11-02)
+
+Evoni confirmed P1 was what she meant, and approved P2: the working preview in the browser. It is frontend only. There is no backend change, migration, flag or deploy, and still no write.
+
+**What P2 adds:**
+- **One clock.**
+  - While playing, the playhead is the wall clock since Play, times the rate, snapped to whole frames at 30 fps (`snapToFrame`, R8.4.5).
+  - Every picture and sound follows it. Each frame, it is told where it should be in its source and is moved back when it drifts: sounds past 0.12 s, videos past 0.25 s (`usePreviewPlayback`).
+  - The playhead stops at the end of the edit.
+- **What plays comes from the edit**, through `previewPlan` (`framePlan` from `layoutAt`, `mixAt` from `mixPlan`):
+  - **The scene:** an angle still, an angle video from its in point (holding its last frame past its out point), or a clip's original file.
+  - **Prime's PIP** at her stored layout, from her VP9-alpha cutout when the edit asks for it (`use_cutout`). Her picture and her commentary are read on her take's one clock.
+  - **Her commentary** from her original file, at its gain and fades. A segment muted in the edit is silent.
+  - **Approved dialogue** from the take's file at its approved trim.
+  - **Music and SFX** have no files until the library exists (R8.8). They are listed as "unavailable" on the monitor, and nothing plays in their place.
+- **Controls:**
+  - Play/Pause and Space; K pauses; L plays, then 2×; J goes back 5 s.
+  - A seek while playing carries on from the new time, and the timeline follows the playhead.
+  - Preview volume and mute are kept in this browser and are not saved.
+  - A lane's speaker mutes that lane in preview playback only.
+
+**What the working preview does not do, and says so:**
+
+| Limitation | What happens instead |
+|---|---|
+| Gain above 0 dB | Plays at 0 dB: a browser element cannot boost without reading the file's samples across origins. The render applies it |
+| A take's "normalise" | Not applied; the render applies it |
+| Safari (no VP9 transparency) | Prime is shown from her original video, with a notice to use Chrome or Edge |
+| A cutout that isn't ready | Prime is shown from her original video, with a notice |
+
+R8.11's preview/render parity thresholds belong to the render pipeline (Gate 3), and are not claimed here.
+
+**Measured in a real browser.**
+- Setup:
+  - the production build in Playwright's Chromium;
+  - every `/api` call answered with fixtures in the browser;
+  - media generated with ffmpeg as WebM: a moving scene, a VP9-alpha Prime cutout, her original with a tone, and a dialogue tone.
+- At 4.06 s on the clock:
+
+| Element | Expected | Measured |
+|---|---|---|
+| Prime cutout video | 6.06 s | 6.23 s |
+| Her commentary | 6.06 s | 6.17 s, volume 0.401 (−6 dB × 0.8 preview volume) |
+| Scene video | 2.06 s | 2.16 s |
+| Dialogue | 0.56 s | 0.66 s, volume 0.8 |
+
+- Each element started at its exact source point: 2.00, 2.00, 1.00 and 0.00 s.
+- The media read about 0.1 s ahead of the displayed timecode, which is within the drift limits.
+- The music with no file showed as unavailable. Space paused everything.
+- There were no page errors and no write requests.
+- The cutout drew with its transparency over the scene video.
+
+---
+
+## 14. P3 as built (2026-11-02)
+
+Evoni approved P3: editing on the existing C1 routes. P3 is frontend only. There is no backend change, migration, flag, worker or deploy. Its writes reach a server only where `EPISODE_EDIT` is on, and an admin makes them.
+
+**How a change is saved:**
+- Every change is a command (`frontend/src/lib/editOps.js`), run by `useEditOps`.
+- Its requests go one by one through the C1 routes. Each carries the `edit_revision` the page holds, or the one the request before it returned. The edit is then read again, so the page shows what the server stored.
+- There is no separate autosave: each change is saved when it is made. A drag saves on release, and an inspector field saves on Enter or when the field is left, once.
+
+**Undo and redo:**
+- One change is one undo step.
+- Undo runs the command's exact inverse, built from the stored row values, never from what is on screen. Some examples:
+  - trimming Prime's video is undone by restoring the video range, then the commentary range and fades the server clamped;
+  - deleting a segment is undone by placing the same take, range, place, commentary and level.
+- Three changes are barriers that Undo explains it can't take back:
+  - **a split:** the API supersedes the original segment;
+  - **locking timing for all 14 beats:** clear a beat's length on its card instead;
+  - **restoring a draft.**
+- A change made elsewhere (409 `EDIT_CHANGED`) reloads the edit, says so, and clears both stacks.
+- A refused change shows the server's reason and saves nothing.
+
+**What can be edited:**
+
+| What | How | Route |
+|---|---|---|
+| Place a scene (angle still or video, or a Lala or guest clip) | Drag from the media panel onto the Scene lane, or its + places it at the playhead, in the beat there (Beat Focus: that beat) | `POST /scene-clips` |
+| Place Prime's take | Onto the Prime PIP lane, at the drop time | `POST /segments` |
+| Place an approved take | Onto the Dialogue lane, in its own line's beat, with its line association | `POST /dialogue` |
+| Move Prime or a line | Drag the block; a beat-relative anchor stays relative | `/segments/:id/move`, `/dialogue/:id/move` |
+| Trim | Edge handles: both ends of a segment, the end of a scene clip; or the inspector's in, out and length | `/segments/:id/trim-video`, `PATCH /scene-clips/:id` |
+| Split Prime | At the playhead | `/segments/:id/split` |
+| Delete, cut, copy, paste | Toolbar and Del, Ctrl+X/C/V. Paste puts a copy at the playhead. A line is placed once, so dialogue is moved, not copied | `DELETE /…/:id`, then the place routes |
+| Prime's place and size | Drag her in the preview, or her eight handles. Corners keep her proportions and Shift frees them. She snaps to the frame's edges, centre and the 48 px safe margin. The inspector follows the drag; one save on release | `/segments/:id/layout` |
+| Prime's commentary | The inspector: gain (−24 to +12 dB), muted in the episode, fades | `/segments/:id/audio` |
+| A beat | The beat card: Prime required or not needed; its length with a dry run first ("Preview the change", then Apply with the revision the preview was worked out for); back to draft timing; hide or show Prime in this beat (her commentary still plays); lock timing for all 14 beats | `/beats/:beat/mode`, `/beats/:beat/duration`, `/visibility`, `/beats/lock` |
+| Save Draft | A named version; the edit is unchanged. The ⋮ menu lists saved drafts, and Restore asks first | `POST /versions`, `/versions/:id/restore` |
+
+**Locked lanes.** A lane locked in its track header refuses every change in this browser and says so. The lock is still a per-browser setting. Keeping it for the project across devices needs a server store, which is proposed with the P4 API additions.
+
+**Not in P3:**
+
+| Not built | Why |
+|---|---|
+| Moving, trimming or changing a music or SFX item; splitting a scene clip or a sound; reordering scene clips inside a beat | These need the P4 API additions (§4.3). Deleting and copying sounds works |
+| Placing music and SFX | No files until the library exists (R8.8) |
+| Transitions | Wait for Gate 2, when the preview and the render can draw them |
+| Snapping to other clips | Times snap to whole frames only |
+
+**Measured end to end.**
+- Setup:
+  - the production frontend build in Chromium;
+  - the real backend, with `EPISODE_EDIT=on` and a local admin token;
+  - a throwaway local Postgres with every migration applied, and a seeded episode, a linked scene set with a still, and Prime's take with a cutout.
+- The run:
+  1. placed the still and Prime's take;
+  2. dragged Prime 120 px left and 60 px up, and resized her from a corner;
+  3. set her gain to −6 dB, then Undo (0) and Redo (−6);
+  4. split her at the playhead;
+  5. saved a draft;
+  6. reloaded the page.
+- Every write returned 200, and the revision went 0 → 8. Save Draft left it at 8.
+- The database held:
+  - one still in beat 1;
+  - the original segment superseded, plus two halves at 0–4033 and 4033–14000 ms;
+  - the dragged and resized layout (1010, 571, 649×365) and −6 dB on both halves;
+  - the draft at revision 8.
+- **One bug found and fixed:** the timecode rounded frames down while the clock rounds to the nearest frame, so 4033 ms showed as 04.00 instead of 04.01.
+
+---
+
+## 15. P4 as built (2026-11-02)
+
+Evoni approved P4: the C1 API additions of §4.3. This is the first backend change in the redesign. It has **no migration**: no new table, column or constraint, and every addition reads and writes the existing C1 tables through `episodeEditService`. Nothing is deployed and no flag is changed. On a server the routes stay behind `EPISODE_EDIT` and ADMIN, like the rest of C1.
+
+**New routes**, all ADMIN, and all sending `edit_revision`:
+
+| Route | What it does |
+|---|---|
+| `POST /scene-clips/:clipId/split { at_ms }` | Splits a scene clip into two whose lengths add up to the old one, so the clock moves nothing. A video splits at its own source time; a split in a held last frame is refused (`SPLIT_IN_HOLD`) |
+| `POST /scene-clips/:clipId/reorder { index }` | Moves a clip to another place among its beat's clips; the others keep their order. Positions are rewritten in two steps past the unique place index, in one transaction |
+| `PATCH /audio-items/:audioItemId` | Moves, trims and re-levels a music or SFX item: anchor, source in and out, gain, fades, ducking. It is checked as `addAudioItem` is, and fades may not be longer than the sound |
+| `PATCH /items/:itemId` | Changes a timeline item's anchor or values. Not for dialogue (`USE_DIALOGUE_MOVE`), and never anchored to itself |
+| `PATCH /visibility/:ruleId` | Shows or hides Prime under a rule in place, and moves a range rule's start and end. Only a range rule has those (`NOT_A_RANGE`) |
+| `POST /ops { steps: [{ op, id?, body? }] }` | Several steps as one change: one transaction, one revision check, one new revision, at most 50 steps. A refused step rolls back every step, and the answer names it ("Step 2 (segment.place): …", `extra.step`). A batch holds the same writes as their routes, by name (`BATCH_STEPS`); versions, restores, the timing lock and beat lengths are their own acts and cannot be in one |
+
+**What else changed in the backend:**
+- `GET /edit` now gives each voice take its `audio_url`, so the editor needs no second list.
+- **How a batch works:** `withEdit` takes an optional `batch` (the batch's transaction). A step run in a batch skips its own revision check and bump; `batchOps` does both once. Outside a batch, every write behaves exactly as before. The 22 C1 integration tests, the Voice Studio tests and the C1 guards still pass.
+
+**The editor uses them:**
+- Sounds can be dragged to move them, trimmed at either end, and changed in the inspector: start, in and out, gain, fades, ducking. Trimming a sound's head keeps the rest where it plays, as Prime's trims do.
+- A scene clip can be dragged to another place in its beat, or moved with Earlier/Later in the inspector, and split at the playhead.
+- Two undos that need several steps are now one `/ops` request, applied entirely or not at all:
+  - undoing a Prime trim restores the video range, then the commentary range and fades;
+  - undoing a scene-clip split removes the new part and gives the first part back its length and trim.
+
+**Still not built:**
+
+| Not built | Why |
+|---|---|
+| Splitting a sound | Not in §4.3 |
+| A cross-device track-lock store | It needs a new table, so a migration. Locks stay per browser |
+| Snapping to other clips' edges | Not built yet |
+| Placing music and SFX | Waits for the library (R8.8) |
+
+**Measured:**
+- **Integration tests on Postgres** (`tests/integration/episodeEditP4.integration.test.js`), 10 tests: split (still and video, hold and edge refusals), reorder, sound and item and rule updates (with refusals that change nothing), batch success as one revision, batch rollback naming the step, batch refusals (stale, empty, too long, unknown step), and the routes (admin only; split then `/ops` in one revision).
+- **End to end** in Chromium against the real backend (`EPISODE_EDIT=on`, a throwaway local Postgres with every migration). The run:
+  1. placed two stills, and moved Mirror earlier;
+  2. split Mirror at 00:02, then undid it in one batch;
+  3. set the music gain to −9 dB, then undid it (−6);
+  4. dragged the music 1 s later;
+  5. trimmed its head by 0.5 s;
+  6. reloaded the page.
+- Every write returned 200, and the revision went 0 → 9.
+- The database held:
+  - Mirror then Wide, Mirror at its full 5000 ms;
+  - the split-off part soft-deleted;
+  - the music at source 500–4000, offset 1500, −6 dB.

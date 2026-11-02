@@ -48,6 +48,9 @@ function buildNav() {
       zone: 'PRODUCE',
       items: [
         { icon: '🎬', label: 'Shows', route: '/shows', expandable: true },
+        // The episode editor on the C1 edit (Timeline Editor redesign P1). The legacy
+        // Timeline Editor stays until the new one passes testing (ruling 14).
+        { icon: '🎞️', label: 'Editor', route: '/studio/editor' },
         { icon: '⏱️', label: 'Timeline Editor', route: '/studio/timeline' },
         // Teleprompter: read a script or pasted text and record yourself (Evoni, 2026-10-20).
         { icon: <ScrollText size={16} aria-hidden="true" />, label: 'Teleprompter', route: '/teleprompter', hint: 'Read your script and record yourself' },
