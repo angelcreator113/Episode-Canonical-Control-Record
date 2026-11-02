@@ -1,6 +1,6 @@
 # Timeline Editor redesign: audit, visual plan and implementation plan (read, for Evoni's approval)
 
-**Status:** plan only. Nothing here authorises code, a migration, a feature flag, a render worker or a deploy. The build starts only after Evoni approves this plan and rules on the decisions in §8.
+**Status:** plan. **Evoni ruled on D1–D7 on 2026-11-02 and authorised P0 only** (§11). Nothing here authorises P1–P6, a migration, a feature flag, a render worker or a deploy; each needs her separate approval.
 
 **Basis:** `origin/main` `d19216db` (2026-11-02). Code is cited by stable name (component, function, route), with a line number only where it helps find the spot at this basis.
 
@@ -542,3 +542,39 @@ Run on a dev or test database with `EPISODE_EDIT=on`, never against production. 
 - No deploy, merge, migration, feature-flag change, render worker or host.
 - No change to the legacy editor beyond P0, and P0 only with Evoni's yes.
 - No placeholder scenes, sample media or simulated renders. Anything not backed by data is labelled pending.
+
+---
+
+## 11. Evoni's rulings (2026-11-02, RULING)
+
+The Dark Timeline Editor Dashboard reference is the final visual direction.
+
+| # | Ruling |
+|---|---|
+| D1 | **Approved.** The professional multitrack timeline is the primary editing page. Clicking one of the 14 beats enters Beat Focus, the Guided editing. A usable responsive review experience is kept |
+| D2 | **Approved.** The editor is at `/episodes/:id/editor`. The existing Edit Details route (`/episodes/:id/edit`) and its navigation are kept |
+| D3 | **Approved for design.** A performer layer for Lala and guests, above the scene background and below Prime's PIP. It is built through the Revision 8 Gate 2 schema work, never as an unauthorised migration |
+| D4 | **Approved with conditions.** Captions and titles use a structured, render-compatible item model. React may draw them in the preview, but the final render must reproduce the same text, placement and styling |
+| D5 | **Modified.** Opacity is supported. Rotation is deferred. Track locking persists for the project or user, as appropriate. Preview-only hide and mute are kept distinct from saved, output-affecting visibility and mute, and the page never implies that a preview-only setting changes the exported episode |
+| D6 | **Approved.** No automatic import or overwrite of legacy episode timelines |
+| D7 | **Approved.** P0 comes first |
+
+**Authorisation: P0 only.**
+- **Scope.** Fix the legacy Timeline Editor's episode loading, scene loading and destructive empty-save path.
+- **The requirement.** No missing, failed or incomplete episode or scene load can trigger an autosave, a Ctrl+S save, or a destructive replacement of existing scenes, beats or markers.
+- **Server-side protection.** The safeguard must not depend solely on the frontend.
+- **Tests.** Regression tests on the actual API response shapes, plus tests proving that failed and partial loads cannot submit destructive saves.
+- **Production data.** No episode, scene, beat or marker is modified or deleted by hand.
+- **Not authorised.** No merge or deploy without Evoni's separate approval. P1–P6, migrations, feature-flag changes, worker setup and production edits are not authorised. The session stops for review after P0.
+
+**P0 as built** (the P0 PR):
+- `timelineSaveGuard` (`src/utils/timelineSaveGuard.js`) and the `/save` route:
+  - scenes are removed only when the save names them in `removed_scene_ids`;
+  - a save that sends no scenes and would remove all of them needs `confirm_remove_all`;
+  - the timeline row is written only with the `timeline_basis` from the row the editor loaded, and a stale or missing basis is a 409 with nothing written.
+- `GET /timeline-data` returns `basis`.
+- `TimelineEditor` reads the real response envelopes (`unwrapEpisode`, `unwrapScenes`, `unwrapTimeline` in `frontend/src/utils/timelineLoad.js`). It treats an unrecognised shape as a failed load, and enables saving only after every load succeeded.
+- `useSaveManager`'s `enabled` now blocks `save()`, Ctrl+S and a pending auto-save, and saves run one at a time.
+- `ScenePicker` reads the real scenes envelope.
+- L5 (keyframes), L6 (hook order), L7, L8 and L9 are **not** in P0.
+

@@ -8,6 +8,7 @@ import SaveIndicator from '../components/SaveIndicator/SaveIndicator';
 import ExportDropdown from '../components/ExportDropdown/ExportDropdown';
 import useSaveManager from '../hooks/useSaveManager';
 import { adoptSceneIds } from '../utils/sceneIds';
+import { unwrapEpisode, unwrapScenes, unwrapTimeline } from '../utils/timelineLoad';
 import LandscapeRequired from '../components/LandscapeRequired';
 import AssembleTakesSheet from '../components/Timeline/AssembleTakesSheet';
 import { episodeAPI, platformAPI, sceneAPI, timelineDataAPI } from '../services/api';
@@ -36,6 +37,16 @@ function TimelineEditor() {
   const [timelineZoom, setTimelineZoom] = useState(1.0); // Zoom for timeline tracks
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(null); // 'not_found' | 'failed' | 'data_failed' | null
+  // True only once the episode, its scenes and its timeline have all loaded
+  // (P0, 2026-11-02). Until then nothing can be saved: not the auto-save,
+  // not the Save button, not Ctrl+S.
+  const [loaded, setLoaded] = useState(false);
+  // The scene ids the server holds for this episode, as far as this editor
+  // knows (from the load, then from each save). A save names for removal
+  // only these, when they are no longer on the timeline.
+  const knownSceneIdsRef = useRef(new Set());
+  // The fingerprint of the timeline row this editor loaded or last saved.
+  const timelineBasisRef = useRef(null);
   const [playbackSpeed, setPlaybackSpeed] = useState(1.0);
   const [loopMode, setLoopMode] = useState(false);
   const [selectedScene, setSelectedScene] = useState(null);
@@ -68,7 +79,7 @@ function TimelineEditor() {
   const [showSafeZones, setShowSafeZones] = useState(false);
 
   // Save system
-  const getSavePayload = useCallback(() => ({
+  const getSavePayload = useCallback(() => (!loaded ? null : {
     episode: episode ? { title: episode.title, episode_number: episode.episode_number } : {},
     platform: {
       platform,
@@ -87,12 +98,19 @@ function TimelineEditor() {
       scene_set_id: scene.scene_set_id || null,
       scene_angle_id: scene.scene_angle_id || null,
     })),
+    // Removal is by name only: the server never removes a scene this
+    // editor did not know about.
+    removed_scene_ids: [...knownSceneIdsRef.current].filter((id) => !scenes.some((s) => String(s.id) === id)),
     timeline: { beats, markers, audioClips, characterClips, keyframes },
-  }), [episode, platform, scenes, beats, markers, audioClips, characterClips, keyframes, currentPlatform]);
+    timeline_basis: timelineBasisRef.current,
+  }), [loaded, episode, platform, scenes, beats, markers, audioClips, characterClips, keyframes, currentPlatform]);
 
   // L12a (§8(hh)): scenes the save created take their row's id.
   const adoptSavedSceneIds = useCallback((body) => {
+    if (body?.timeline_basis) timelineBasisRef.current = body.timeline_basis;
     if (!Array.isArray(body?.scenes)) return;
+    // The server now holds exactly the scenes this save sent.
+    knownSceneIdsRef.current = new Set(body.scenes.filter((m) => m?.id != null).map((m) => String(m.id)));
     setScenes((prev) => adoptSceneIds(prev, body.scenes));
     // A selected scene that took a new id stays selected.
     const renamed = new Map(body.scenes.filter((m) => m?.client_id != null && m.id && !String(m.client_id).match(/^[0-9a-f-]{36}$/i))
@@ -104,7 +122,7 @@ function TimelineEditor() {
     episodeId,
     getSavePayload,
     autoSaveDelay: 3000,
-    enabled: true,
+    enabled: loaded,
     onSaved: adoptSavedSceneIds,
   });
 
@@ -321,8 +339,11 @@ function TimelineEditor() {
   }, [totalDuration, handleUndo, handleRedo]);
 
   const loadEpisodeData = async () => {
+    setLoaded(false);
     setLoading(true);
     setLoadError(null);
+    knownSceneIdsRef.current = new Set();
+    timelineBasisRef.current = null;
 
     // The requested episode must load, and must be that episode, before
     // anything else does: never show another episode's timeline or a
@@ -330,7 +351,8 @@ function TimelineEditor() {
     let ep = null;
     try {
       const episodeRes = await episodeAPI.getById(episodeId);
-      ep = episodeRes?.data?.episode || episodeRes?.data || null;
+      // GET /episodes/:id answers { data: episode, script_revision }.
+      ep = unwrapEpisode(episodeRes?.data);
     } catch (error) {
       console.error('Timeline: episode load failed:', error.message);
       setLoadError(error?.response?.status === 404 ? 'not_found' : 'failed');
@@ -353,12 +375,20 @@ function TimelineEditor() {
         timelineDataAPI.get(episodeId),
       ]);
 
-      const plat = platformRes.data;
+      // GET /scenes answers { success, data: [scene] }; GET /timeline-data
+      // answers the row. A shape we don't recognise is a failed load, never
+      // "no scenes" (P0: a save from that would remove the real ones).
+      const loadedScenes = unwrapScenes(scenesRes?.data);
+      const tl = unwrapTimeline(timelineRes?.data);
+      if (!loadedScenes || !tl) {
+        throw new Error(`unrecognised ${!loadedScenes ? 'scenes' : 'timeline'} response`);
+      }
+
+      const plat = platformRes?.data || {};
       setPlatform(plat.platform || 'youtube');
 
       // Load scenes
-      const loadedScenes = scenesRes.data;
-      if (loadedScenes && loadedScenes.length > 0) {
+      if (loadedScenes.length > 0) {
         setScenes(loadedScenes.map((s, i) => ({
           id: s.id,
           scene_number: s.sceneNumber || s.scene_number || i + 1,
@@ -377,13 +407,16 @@ function TimelineEditor() {
         setScenes([]);
       }
 
+      knownSceneIdsRef.current = new Set(loadedScenes.filter((s) => s?.id != null).map((s) => String(s.id)));
+
       // Load timeline data (beats, markers, audio/character clips)
-      const tl = timelineRes.data;
-      setBeats(tl.beats || tl.beats || []);
+      setBeats(tl.beats || []);
       setMarkers(tl.markers || []);
       setAudioClips(tl.audioClips || tl.audio_clips || []);
       setCharacterClips(tl.characterClips || tl.character_clips || []);
       setKeyframes(tl.keyframes || []);
+      timelineBasisRef.current = tl.basis || null;
+      setLoaded(true);
     } catch (error) {
       // Audit TRUTH-05: a failed read is an error state, never a sample
       // Intro / Main Content / Outro timeline. Nothing can be saved or

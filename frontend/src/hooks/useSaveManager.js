@@ -16,7 +16,11 @@ import { saveEpisodeData } from '../services/api';
  * @param {string} options.episodeId - Episode UUID
  * @param {Function} options.getSavePayload - Returns { episode, scenes, ...extras } to save
  * @param {number} [options.autoSaveDelay=3000] - Ms to debounce auto-save
- * @param {boolean} [options.enabled=true] - Enable/disable auto-save
+ * @param {boolean} [options.enabled=true] - Whether anything may be saved.
+ *   While false, nothing saves: not the auto-save timer, not save(), not
+ *   Ctrl+S. The Timeline passes false until its episode, scenes and timeline
+ *   have all loaded, so a failed or partial load can never be saved over the
+ *   stored data (Timeline Editor redesign P0, 2026-11-02).
  * @param {Function} [options.onSaved] - Called with the save response's body
  *   (the Timeline adopts the ids of scenes the save created, L12a)
  */
@@ -42,11 +46,25 @@ export default function useSaveManager({
   const getSavePayloadRef = useRef(getSavePayload);
   const episodeIdRef = useRef(episodeId);
   const onSavedRef = useRef(onSaved);
+  const enabledRef = useRef(enabled);
+  // One save at a time: a change made while a save is in flight saves once
+  // more after it, with the basis the first save returned.
+  const inFlightRef = useRef(false);
+  const againRef = useRef(false);
 
   // Keep refs in sync with latest values every render
   useEffect(() => { getSavePayloadRef.current = getSavePayload; }, [getSavePayload]);
   useEffect(() => { episodeIdRef.current = episodeId; }, [episodeId]);
   useEffect(() => { onSavedRef.current = onSaved; }, [onSaved]);
+  useEffect(() => {
+    enabledRef.current = enabled;
+    // Switched off (a reload started, or the load failed): a pending
+    // auto-save is dropped, never sent from what is on screen now.
+    if (!enabled && timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+  }, [enabled]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -59,6 +77,14 @@ export default function useSaveManager({
 
   // Perform the actual save — always reads latest payload via ref
   const doSave = useCallback(async () => {
+    if (!enabledRef.current) {
+      console.warn('[SaveManager] Not saving: the editor has not loaded this episode');
+      return;
+    }
+    if (inFlightRef.current) {
+      againRef.current = true;
+      return;
+    }
     const currentEpisodeId = episodeIdRef.current;
     const currentGetPayload = getSavePayloadRef.current;
     if (!currentEpisodeId || !currentGetPayload) {
@@ -80,6 +106,7 @@ export default function useSaveManager({
     setSaveStatus('saving');
     setErrorMessage(null);
 
+    inFlightRef.current = true;
     try {
       // Use unified save endpoint for atomic saves
       const response = await saveEpisodeData(currentEpisodeId, payload);
@@ -97,12 +124,23 @@ export default function useSaveManager({
         setSaveStatus('error');
         setErrorMessage(error.response?.data?.error || error.message);
       }
+      // A refused save is not retried behind the producer's back.
+      againRef.current = false;
+    } finally {
+      inFlightRef.current = false;
+    }
+    if (againRef.current && isMountedRef.current) {
+      againRef.current = false;
+      doSaveRef.current?.();
     }
   }, []); // No deps needed — reads everything from refs
+  const doSaveRef = useRef(doSave);
+  useEffect(() => { doSaveRef.current = doSave; }, [doSave]);
 
   // Manual save
   const save = useCallback(() => {
     if (timerRef.current) clearTimeout(timerRef.current);
+    if (!enabledRef.current) return;
     doSave();
   }, [doSave]);
 
