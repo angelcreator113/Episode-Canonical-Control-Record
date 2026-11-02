@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
 import { saveEpisodeData } from '../services/api';
 
 /**
@@ -56,7 +56,11 @@ export default function useSaveManager({
   useEffect(() => { getSavePayloadRef.current = getSavePayload; }, [getSavePayload]);
   useEffect(() => { episodeIdRef.current = episodeId; }, [episodeId]);
   useEffect(() => { onSavedRef.current = onSaved; }, [onSaved]);
-  useEffect(() => {
+  // A layout effect, not a passive one: React runs it during the commit, so
+  // the ref is true by the time the loaded editor is on screen. A passive
+  // effect runs after the screen updates, and a Ctrl+S in that moment was
+  // dropped (useSaveManager.enabledOnCommit.test.jsx).
+  useLayoutEffect(() => {
     enabledRef.current = enabled;
     // Switched off (a reload started, or the load failed): a pending
     // auto-save is dropped, never sent from what is on screen now.
