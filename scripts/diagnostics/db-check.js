@@ -97,6 +97,33 @@ function indexSummary(def) {
   return `${/^CREATE UNIQUE INDEX/i.test(d) ? 'unique' : 'not unique'}, ${boundValue(using ? using[1] : d)}`;
 }
 
+/**
+ * How many rows of each sampled table fit under the cap, newest first (Task #3659).
+ * sizes[i] is table i's row sizes in bytes. The next row always goes to the
+ * table that has used the fewest bytes so far (ties: list order), while it
+ * fits; a table whose next row does not fit stops. So every table gets its
+ * newest row before any table gets a second, the cap is shared as evenly as
+ * the row sizes allow, and the total never exceeds the cap: a very wide table
+ * neither crowds out the rest nor is crowded out itself.
+ */
+function allocateSamples(sizes, cap) {
+  const shown = sizes.map(() => 0);
+  const mine = sizes.map(() => 0);
+  const open = sizes.map((rows) => rows.length > 0);
+  let used = 0;
+  for (;;) {
+    let i = -1;
+    open.forEach((o, k) => { if (o && (i < 0 || mine[k] < mine[i])) i = k; });
+    if (i < 0) return shown;
+    const next = sizes[i][shown[i]];
+    if (used + next > cap) { open[i] = false; continue; }
+    used += next;
+    mine[i] += next;
+    shown[i] += 1;
+    if (shown[i] >= sizes[i].length) open[i] = false;
+  }
+}
+
 const countSql = (table) => `SELECT count(*)::bigint AS n FROM public.${ident(table)}`;
 
 /** The latest rows of one sampled table: kept columns only, newest first, not soft-deleted. */
@@ -285,35 +312,41 @@ async function snapshot(client, say) {
   say('');
   say('## 3. Content samples (db-samples)');
   say(`The latest ${SAMPLE_ROWS} rows of each allowlisted table; columns whose names suggest a secret, a credential, contact details, a link or a person are left out, and values are cut at ${VALUE_MAX} characters.`);
-  let used = 0;
+  // Read every table first, then share the 200 KB cap (see allocateSamples).
+  const sections = [];
   for (const t of SAMPLE_TABLES) {
-    say('');
-    say(`### ${t}`);
-    if (isNeverTable(t)) { say('(refused: on the never-list)'); continue; }
+    const sec = { t, notes: [], rows: [] };
+    sections.push(sec);
+    if (isNeverTable(t)) { sec.notes.push('(refused: on the never-list)'); continue; }
     const tcols = tables.get(t);
-    if (!tcols) { say('(no such table)'); continue; }
+    if (!tcols) { sec.notes.push('(no such table)'); continue; }
     const kept = tcols.filter((c) => !dropColumn(c.column_name, c.data_type)).map((c) => c.column_name)
       .filter((c) => /^[A-Za-z_][A-Za-z0-9_]{0,62}$/.test(c));
     const dropped = tcols.length - kept.length;
     const has = (n) => tcols.some((c) => c.column_name === n);
     const orderBy = ['updated_at', 'created_at', 'id'].find(has) || null;
-    if (!kept.length) { say('(no columns left to show)'); continue; }
+    if (!kept.length) { sec.notes.push('(no columns left to show)'); continue; }
     let r;
     try {
       r = await client.query(sampleSql(t, kept, { orderBy, paranoid: has('deleted_at') }));
     } catch (err) {
-      say(`(sample failed: ${err.code || 'error'})`);
+      sec.notes.push(`(sample failed: ${err.code || 'error'})`);
       ok = false;
       continue;
     }
-    say(`${r.rows.length} rows; ${kept.length} columns shown, ${dropped} left out${orderBy ? `; newest by ${orderBy}` : ''}`);
-    for (const [n, row] of r.rows.entries()) {
-      const lines = [`row ${n + 1}:`, ...kept.map((c) => `  ${c}: ${boundValue(row[c])}`)];
-      const size = Buffer.byteLength(lines.join('\n'));
-      if (used + size > SAMPLES_MAX_BYTES) { say(`…[samples stop here: the ${SAMPLES_MAX_BYTES / 1024} KB cap was reached]`); return ok; }
-      used += size;
-      lines.forEach((l) => say(l));
-    }
+    sec.summary = `${kept.length} columns shown, ${dropped} left out${orderBy ? `; newest by ${orderBy}` : ''}`;
+    sec.rows = r.rows.map((row, n) => [`row ${n + 1}:`, ...kept.map((c) => `  ${c}: ${boundValue(row[c])}`)]);
+  }
+  const shown = allocateSamples(sections.map((x) => x.rows.map((l) => Buffer.byteLength(l.join('\n')))), SAMPLES_MAX_BYTES);
+  for (const [i, sec] of sections.entries()) {
+    say('');
+    say(`### ${sec.t}`);
+    sec.notes.forEach((l) => say(l));
+    if (sec.summary === undefined) continue;
+    const k = shown[i];
+    const cut = k < sec.rows.length ? ` (${sec.rows.length - k} more left out: this table's share of the ${SAMPLES_MAX_BYTES / 1024} KB cap)` : '';
+    say(`${sec.rows.length} rows; ${k} shown${cut}; ${sec.summary}`);
+    sec.rows.slice(0, k).forEach((lines) => lines.forEach((l) => say(l)));
   }
   return ok;
 }
@@ -353,7 +386,7 @@ async function main(mode, say = (l) => process.stdout.write(`${l}\n`)) {
 
 module.exports = {
   parseEnvFile, connectionConfig, main, snapshot, COUNT_TABLES, MODES,
-  SAMPLE_TABLES, NEVER_TABLES, isNeverTable, dropColumn, boundValue, indexSummary, ident, countSql, sampleSql, SAMPLE_ROWS, VALUE_MAX, SAMPLES_MAX_BYTES,
+  SAMPLE_TABLES, NEVER_TABLES, isNeverTable, dropColumn, boundValue, indexSummary, allocateSamples, ident, countSql, sampleSql, SAMPLE_ROWS, VALUE_MAX, SAMPLES_MAX_BYTES,
 };
 
 if (require.main === module) {

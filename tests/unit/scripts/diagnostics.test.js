@@ -804,7 +804,7 @@ describe('db-snapshot: the report db-check.js builds', () => {
     expect(seen.filter((q) => /FROM public\."users"/.test(q))).toEqual(['SELECT count(*)::bigint AS n FROM public."users"']);
     expect(seen.some((q) => /SELECT \*/.test(q))).toBe(false);
     const samples = text.split('## 3. Content samples (db-samples)')[1];
-    expect(samples).toContain('2 rows; 4 columns shown, 2 left out; newest by updated_at');
+    expect(samples).toContain('2 rows; 2 shown; 4 columns shown, 2 left out; newest by updated_at');
     expect(samples).toContain(`  title: Styling Adventures ${'!'.repeat(200 - 'Styling Adventures '.length)}…[cut]`);
     expect(samples).toContain('  updated_at: 2026-10-30T00:00:00.000Z');
     expect(samples).not.toMatch(/owner_id|cover_url|person@example\.com|hunter2/);
@@ -818,20 +818,63 @@ describe('db-snapshot: the report db-check.js builds', () => {
     expect(text).toContain('## 3. Content samples (db-samples)');
   });
 
-  test('the samples stop at the 200 KB cap', async () => {
-    expect(dbCheck.SAMPLES_MAX_BYTES).toBe(200 * 1024);
-    const wide = [col('episodes', 'id', 'integer'), ...Array.from({ length: 40 }, (_, i) => col('episodes', `field_${i}`))];
-    const many = Array.from({ length: 20 }, (_, i) => Object.fromEntries([['id', i], ...Array.from({ length: 40 }, (__, k) => [`field_${k}`, 'y'.repeat(300)])]));
-    const big = {};
-    for (const t of dbCheck.SAMPLE_TABLES) big[t] = many;
-    const allCols = dbCheck.SAMPLE_TABLES.flatMap((t) => wide.map((c) => ({ ...c, table_name: t })));
-    const client = fakeClient({ columns: allCols, rows: big });
+  /** A snapshot where every sampled table has `n` rows of `width` columns of 300 characters (cut to 200). */
+  async function wideSnapshot(widthOf, n = 20) {
+    const columns = dbCheck.SAMPLE_TABLES.flatMap((t) => [col(t, 'id', 'integer'),
+      ...Array.from({ length: widthOf(t) }, (_, i) => col(t, `field_${i}`))]);
+    const rows = Object.fromEntries(dbCheck.SAMPLE_TABLES.map((t) => [t, Array.from({ length: n }, (_, i) => Object.fromEntries(
+      [['id', i], ...Array.from({ length: widthOf(t) }, (__, k) => [`field_${k}`, 'y'.repeat(300)])]))]));
     const lines = [];
-    await dbCheck.snapshot(client, (l) => lines.push(l));
-    const text = lines.join('\n');
-    const samples = text.split('## 3. Content samples (db-samples)')[1];
-    expect(Buffer.byteLength(samples)).toBeLessThan(200 * 1024 + 4096);
-    expect(text).toContain('…[samples stop here: the 200 KB cap was reached]');
+    await dbCheck.snapshot(fakeClient({ columns, rows }), (l) => lines.push(l));
+    const samples = lines.join('\n').split('## 3. Content samples (db-samples)')[1];
+    const shown = Object.fromEntries(dbCheck.SAMPLE_TABLES.map((t) => {
+      const m = new RegExp(`### ${t}\\n\\d+ rows; (\\d+) shown`).exec(samples);
+      return [t, m ? Number(m[1]) : null];
+    }));
+    return { samples, shown };
+  }
+
+  test('the samples stay under the 200 KB cap, and every table gets a share', async () => {
+    expect(dbCheck.SAMPLES_MAX_BYTES).toBe(200 * 1024);
+    const { samples, shown } = await wideSnapshot(() => 40);
+    expect(Buffer.byteLength(samples)).toBeLessThan(200 * 1024 + 8192);
+    for (const t of dbCheck.SAMPLE_TABLES) expect(shown[t]).toBeGreaterThan(0);
+    expect(samples).toContain("more left out: this table's share of the 200 KB cap");
+  });
+
+  test('one very wide table cannot crowd out the tables after it (the 2026-11-02 snapshot)', async () => {
+    // registry_characters had 205 columns; it used most of the cap and 12 tables got no rows.
+    const { samples, shown } = await wideSnapshot((t) => (t === 'registry_characters' ? 205 : 8));
+    expect(Buffer.byteLength(samples)).toBeLessThan(200 * 1024 + 8192);
+    for (const t of dbCheck.SAMPLE_TABLES) expect(shown[t]).toBeGreaterThan(0);
+    // The narrow tables share what the wide one's newest row leaves, evenly (within one row).
+    const narrow = dbCheck.SAMPLE_TABLES.filter((t) => t !== 'registry_characters').map((t) => shown[t]);
+    expect(Math.max(...narrow) - Math.min(...narrow)).toBeLessThanOrEqual(1);
+    expect(shown.registry_characters).toBe(1);
+  });
+
+  test('allocateSamples: the next row goes to the table with the fewest bytes so far, never over the cap', () => {
+    const { allocateSamples } = dbCheck;
+    const total = (sizes, shown) => sizes.reduce((sum, rows, i) => sum + rows.slice(0, shown[i]).reduce((x, y) => x + y, 0), 0);
+    const cases = [
+      [[[100, 100], [50000, 50000], [10, 10, 10]], 1000],
+      [[[600, 600], [600, 600]], 1000],
+      [[[5000, 5000], [5000]], 12000],
+      [[Array(20).fill(12000), Array(20).fill(300), []], 200 * 1024],
+      [[], 1000],
+    ];
+    for (const [sizes, cap] of cases) {
+      const shown = allocateSamples(sizes, cap);
+      expect(total(sizes, shown)).toBeLessThanOrEqual(cap);
+      shown.forEach((k, i) => expect(k).toBeLessThanOrEqual(sizes[i].length));
+    }
+    expect(allocateSamples([[100, 100], [50000, 50000], [10, 10, 10]], 1000)).toEqual([2, 0, 3]);
+    // The narrow table keeps all 20 rows; the wide one gets what is left.
+    const [wide, narrow] = allocateSamples([Array(20).fill(12000), Array(20).fill(300), []], 200 * 1024);
+    expect(narrow).toBe(20);
+    expect(wide).toBe(Math.floor((200 * 1024 - 20 * 300) / 12000));
+    // A table whose newest row is bigger than its share still gets that row.
+    expect(allocateSamples([[43000], Array(20).fill(1000), Array(20).fill(1000)], 60000)[0]).toBe(1);
   });
 });
 
@@ -1078,7 +1121,7 @@ const PG_URL = process.env.TEST_DATABASE_URL;
     expect(res.stdout).toContain('- shows: 1');
     expect(res.stdout).toContain('- episodes: 0');
     expect(res.stdout).toContain('  name: Styling Adventures');
-    expect(res.stdout).toContain('1 rows; 2 columns shown, 0 left out; newest by id');
+    expect(res.stdout).toContain('1 rows; 1 shown; 2 columns shown, 0 left out; newest by id');
     expect(res.stdout).not.toContain(PASSWORD);
     expect(res.status).toBe(0);
   });

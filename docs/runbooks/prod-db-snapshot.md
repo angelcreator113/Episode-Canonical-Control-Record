@@ -18,7 +18,9 @@ The rules come from `docs/audit/F-Tools-2_ReadOnlyProdVisibility_Ruling_Amendmen
 - **Tables.** Only the 20 tables in `SAMPLE_TABLES` are sampled. `NEVER_TABLES` lists the categories that may never be added: users, accounts, roles, permissions, auth, sessions, tokens, private and therapy writing, DMs, social-media imports, AI and activity logs, `user_decisions`, and media records. `sampleSql()` refuses any table that is not on the allowlist, or that is on the never-list.
 - **Columns.** `dropColumn()` splits each name on `_` and on camelCase. It drops the column if any part is on the denylist (`password`, `token`, `email`, `phone`, `url`, `path`, `s3`, `user`, `owner` and the rest), or begins with `passw`, `secret`, `token` or `credential`. `bytea` columns are always dropped. The query names its columns; there is no `SELECT *`.
 - **Rows.** At most 20 per table, newest first: by `updated_at`, else `created_at`, else `id`. Rows with a `deleted_at` are left out.
-- **Values.** `boundValue()` cuts each value at 200 characters (`…[cut]`). The samples section stops at 200 KB.
+- **Values.** `boundValue()` cuts each value at 200 characters (`…[cut]`).
+- **The 200 KB cap is shared** (`allocateSamples()`). All the tables are read first. The next row always goes to the table that has used the fewest bytes so far, until no next row fits. So every table gets its newest row before any table gets a second, and one very wide table cannot use up the cap. Each table's line says how many rows it has and how many are shown, and when rows are left out it says why.
+  - Before this, the cap was used in table order. In the first snapshot (2026-11-02), `registry_characters` (205 columns) used most of it, and the 12 tables after `world_characters` got no rows.
 - **Names.** Every table and column name is passed through `ident()` before it reaches SQL. Nothing comes from input.
 - **Masking.** `redact.js` masks the whole report on the box, and again on the runner before it is published.
 
