@@ -38,14 +38,17 @@ let server;
 const ok = (data) => Promise.resolve({ data: { success: true, data } });
 const refuse = (status, code, error) => Promise.reject(Object.assign(new Error(code), { response: { status, data: { success: false, code, error } } }));
 
-function setupServer({ refuseNext = null } = {}) {
-  server = { rev: 7, edit: editWith(), writes: [], refuseNext };
+const PRIME_CLIP = { id: 'r1', performer: 'justawoman', label: 'Prime take', url_raw: 'https://cdn/r1.mp4', duration_seconds: 6, beat_number: 1 };
+const LALA_CLIP = { id: 'r2', performer: 'lala', label: 'Lala twirl', url_raw: 'https://cdn/r2.mp4', url_cutout: 'https://cdn/r2-cut.webm', key_status: 'done', duration_seconds: 4, beat_number: 1 };
+
+function setupServer({ refuseNext = null, c1b = true, edit = editWith(), clips = [PRIME_CLIP] } = {}) {
+  server = { rev: 7, edit, writes: [], refuseNext, c1b, clips };
   vi.mocked(api.get).mockImplementation((url) => {
     if (url === `/api/v1/episodes/${EP}`) return Promise.resolve({ data: { data: { id: EP, episode_number: 3, title: 'A New Alliance' } } });
-    if (url === BASE) return ok({ edit_revision: String(server.rev), rows: {}, edit: server.edit });
+    if (url === BASE) return ok({ edit_revision: String(server.rev), c1b: server.c1b, rows: {}, edit: server.edit });
     if (url === `${BASE}/findings`) return ok({ ready: true, counts: { blocking: 0, warning: 0 }, findings: [] });
     if (url === `${BASE}/versions`) return ok([{ id: 'v1', name: 'Before the split', edit_revision: '5', created_at: '2026-11-02T10:00:00Z' }]);
-    if (url === `/api/v1/episode-clips/${EP}`) return ok([{ id: 'r1', performer: 'justawoman', label: 'Prime take', url_raw: 'https://cdn/r1.mp4', duration_seconds: 6, beat_number: 1 }]);
+    if (url === `/api/v1/episode-clips/${EP}`) return ok(server.clips);
     if (url === `/api/v1/episodes/${EP}/scene-sets`) return ok([{ id: 'set1', name: 'Closet', angles: [{ id: 'a1', angle_label: 'Wide', still_image_url: 'https://cdn/a1.jpg' }] }]);
     if (url === `/api/v1/voice-studio/${EP}/playable`) return ok({ takes: [{ approval_id: 'ap1', beat_number: 1, line_index: 0, in_ms: 0, out_ms: 1500, audio_url: 'https://cdn/ap1.webm' }], held: [] });
     return refuse(404, 'NOT_FOUND', 'not found');
@@ -62,7 +65,7 @@ function setupServer({ refuseNext = null } = {}) {
     const path = url.replace(BASE, '');
     const extra = path === '/segments' ? { segment_id: 's2' } : path === '/dialogue' ? { item_id: 'd9' } : path === '/scene-clips' ? { scene_clip_id: 'c9' }
       : path === '/visibility' ? { rule_id: 'v9' } : path.endsWith('/split') && path.startsWith('/scene-clips') ? { scene_clip_id: 'c1', new_scene_clip_id: 'c10' }
-        : path === '/ops' ? { results: body.steps.map(() => ({})) } : {};
+        : path === '/ops' ? { results: body.steps.map(() => ({})) } : path === '/items' ? { item_id: 'i9', duration_ms: body.duration_ms ?? null } : {};
     return ok({ ...extra, edit_revision: String(server.rev) });
   };
   for (const m of ['post', 'patch', 'put', 'delete']) vi.mocked(api[m]).mockImplementation(write(m));
@@ -305,5 +308,125 @@ describe('EpisodeEditor: editing (P3)', () => {
     await waitFor(() => expect(server.writes).toHaveLength(1));
     expect(lastWrite()).toMatchObject({ method: 'patch', path: '/audio-items/m1', body: { anchor_kind: 'edit_start', edit_revision: '7' } });
     expect(Math.abs(lastWrite().body.offset_ms - 1000)).toBeLessThanOrEqual(34);
+  });
+});
+
+describe('EpisodeEditor: Gate 2a (D3, D4, D5)', () => {
+  const CAPTION = { id: 'k1', kind: 'caption', anchor_kind: 'edit_start', anchor_beat: null, anchor_ref: null, offset_ms: 0, duration_ms: 3000,
+    values: { text: 'Hello', style_key: 'lower_third', layout: { x: 100, y: 850, w: 800, h: 120, opacity: 0.5 } } };
+  const monitor = () => screen.getByTestId('editor-monitor');
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    localStorage.clear();
+    vi.spyOn(window.HTMLMediaElement.prototype, 'play').mockImplementation(function play() { return Promise.resolve(); });
+    vi.spyOn(window.HTMLMediaElement.prototype, 'pause').mockImplementation(function pause() {});
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+  });
+  afterEach(() => vi.restoreAllMocks());
+
+  test('the Text tab adds a title at the playhead for 3 seconds; undo deletes it', async () => {
+    setupServer();
+    vi.spyOn(window, 'prompt').mockReturnValue('  A New Alliance ');
+    renderAt();
+    await opened();
+    fireEvent.click(screen.getByRole('tab', { name: 'Text' }));
+    fireEvent.click(screen.getByRole('button', { name: /Add title/ }));
+    await waitFor(() => expect(server.writes).toHaveLength(1));
+    expect(lastWrite()).toEqual({ method: 'post', path: '/items', body: {
+      kind: 'caption', anchor_kind: 'beat_start', anchor_beat: 1, offset_ms: 0, duration_ms: 3000,
+      values: { text: 'A New Alliance', style_key: 'title', layout: { x: 160, y: 420, w: 1600, h: 240 } }, edit_revision: '7' } });
+    await waitFor(() => expect(screen.getByRole('button', { name: /^Undo$/ }).disabled).toBe(false));
+    fireEvent.click(screen.getByRole('button', { name: /^Undo$/ }));
+    await waitFor(() => expect(server.writes).toHaveLength(2));
+    expect(lastWrite()).toMatchObject({ method: 'delete', path: '/items/i9' });
+  });
+
+  test("Lala's + places her whole take over the scene, full frame; a Prime take still goes to the PIP", async () => {
+    setupServer({ clips: [PRIME_CLIP, LALA_CLIP] });
+    renderAt();
+    await opened();
+    await screen.findByText('Lala twirl');
+    fireEvent.click(screen.getByRole('button', { name: 'Place Lala twirl at the playhead' }));
+    await waitFor(() => expect(server.writes).toHaveLength(1));
+    expect(lastWrite()).toEqual({ method: 'post', path: '/items', body: {
+      kind: 'performer_clip', anchor_kind: 'beat_start', anchor_beat: 1, offset_ms: 0,
+      values: { raw_clip_id: 'r2', source_in_ms: 0, source_out_ms: 4000, layout: { x: 0, y: 0, w: 1920, h: 1080 }, layer: 0 }, edit_revision: '7' } });
+  });
+
+  test('a caption is drawn, dragged in the preview (keeping its opacity), and its words and opacity change in the inspector', async () => {
+    setupServer({ edit: editWith({ items: [CAPTION] }) });
+    renderAt();
+    await opened();
+    const box = within(monitor()).getByTestId('preview-caption-k1');
+    expect(box.style.opacity).toBe('0.5');
+    expect(box.className).toMatch(/is-lower-third/);
+    fireEvent.click(within(monitor()).getByRole('button', { name: 'Caption: Hello' }));
+    fireEvent.pointerDown(box, { button: 0, clientX: 100, clientY: 100, pointerId: 1 });
+    fireEvent.pointerMove(box, { clientX: 140, clientY: 100, pointerId: 1 });
+    expect(within(inspector()).getByLabelText('Position X').value).toBe('140');
+    fireEvent.pointerUp(box, { clientX: 140, clientY: 100, pointerId: 1 });
+    await waitFor(() => expect(server.writes).toHaveLength(1));
+    expect(lastWrite()).toEqual({ method: 'patch', path: '/items/k1', body: { values: { layout: { x: 140, y: 850, w: 800, h: 120, opacity: 0.5 } }, edit_revision: '7' } });
+
+    const text = within(inspector()).getByLabelText('Text');
+    fireEvent.change(text, { target: { value: 'Hello, Lala' } });
+    fireEvent.blur(text);
+    await waitFor(() => expect(server.writes).toHaveLength(2));
+    expect(lastWrite()).toEqual({ method: 'patch', path: '/items/k1', body: { values: { text: 'Hello, Lala' }, edit_revision: '8' } });
+
+    const opacity = within(inspector()).getByLabelText('Opacity');
+    expect(opacity.value).toBe('50');
+    fireEvent.change(opacity, { target: { value: '80' } });
+    fireEvent.keyDown(opacity, { key: 'Enter' });
+    await waitFor(() => expect(server.writes).toHaveLength(3));
+    expect(lastWrite().body.values.layout).toEqual({ x: 100, y: 850, w: 800, h: 120, opacity: 0.8 });
+  });
+
+  test("Prime's opacity is set on her layout", async () => {
+    setupServer();
+    renderAt();
+    await opened();
+    selectPrime();
+    const opacity = within(inspector()).getByLabelText('Opacity');
+    expect(opacity.value).toBe('100');
+    fireEvent.change(opacity, { target: { value: '60' } });
+    fireEvent.keyDown(opacity, { key: 'Enter' });
+    await waitFor(() => expect(server.writes).toHaveLength(1));
+    expect(lastWrite()).toEqual({ method: 'post', path: '/segments/s1/layout', body: { layout: { x: 1300, y: 700, w: 540, h: 304, opacity: 0.6 }, edit_revision: '7' } });
+  });
+
+  test("the beat card sets a beat's visual mode (undo puts back 'not chosen') and switches it at the playhead", async () => {
+    setupServer();
+    renderAt();
+    await opened();
+    const card = screen.getByTestId('beat-card');
+    fireEvent.change(within(card).getByLabelText('Visual mode of beat 1'), { target: { value: 'cinematic' } });
+    await waitFor(() => expect(server.writes).toHaveLength(1));
+    expect(lastWrite()).toEqual({ method: 'post', path: '/beats/1/mode', body: { visual_mode: 'cinematic', edit_revision: '7' } });
+    await waitFor(() => expect(screen.getByRole('button', { name: /^Undo$/ }).disabled).toBe(false));
+    fireEvent.click(screen.getByRole('button', { name: /^Undo$/ }));
+    await waitFor(() => expect(server.writes).toHaveLength(2));
+    expect(lastWrite().body).toEqual({ visual_mode: null, edit_revision: '8' });
+
+    fireEvent.keyDown(window, { key: 'ArrowRight', shiftKey: true });
+    fireEvent.click(await within(screen.getByTestId('beat-card')).findByRole('button', { name: 'Switch to cinematic at the playhead' }));
+    await waitFor(() => expect(server.writes).toHaveLength(3));
+    expect(lastWrite()).toEqual({ method: 'post', path: '/items', body: {
+      kind: 'visual_mode', anchor_kind: 'beat_start', anchor_beat: 1, offset_ms: 1000, values: { mode: 'cinematic' }, edit_revision: '9' } });
+  });
+
+  test('without the C1b migration on the server, nothing C1b is sent and the editor says why', async () => {
+    setupServer({ c1b: false });
+    vi.spyOn(window, 'prompt').mockReturnValue('Hi');
+    renderAt();
+    await opened();
+    expect(within(screen.getByTestId('beat-card')).queryByLabelText('Visual mode of beat 1')).toBeNull();
+    expect(within(screen.getByTestId('beat-card')).getByText(/need the C1b migration/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('tab', { name: 'Text' }));
+    fireEvent.click(screen.getByRole('button', { name: /Add caption/ }));
+    expect(await screen.findByTestId('editor-notice')).toHaveProperty('textContent', expect.stringMatching(/needs the C1b migration/));
+    expect(server.writes).toHaveLength(0);
   });
 });

@@ -2,7 +2,7 @@
 
 /**
  * Timeline C1 (design R5.6 checklist 6): the boundaries held in the code.
- * - Only the migration and the service name the nine edit tables.
+ * - Only the migrations (C1, and C1b of Gate 2a) and the service name the nine edit tables.
  * - Nothing in C1 writes the legacy Timeline Editor's data
  *   (timeline_data, scenes.duration_seconds), the reusable
  *   scene_angles.video_duration, episodes, or the raw takes.
@@ -28,12 +28,14 @@ function files(dir) {
 const TABLES = /\b(episode_edit_state|episode_beat_production|episode_scene_clips|episode_prime_segments|episode_pip_settings|episode_pip_visibility|timeline_items|timeline_audio_items|edit_versions)\b/;
 const SERVICE = 'src/services/episodeEditService.js';
 const MIGRATION = 'src/migrations/20261028100000-create-episode-edit-tables.js';
+// C1b (Timeline Editor redesign Gate 2a, 2026-11-02): column and CHECK additions to the same tables.
+const MIGRATION_C1B = 'src/migrations/20261102120000-add-episode-edit-c1b-kinds.js';
 const C1_CODE = [SERVICE, 'src/utils/editTimeline.js', 'src/routes/episodeEditRoutes.js'];
 
 describe('Timeline C1 boundaries', () => {
-  test('only the migration and the service name the edit tables', () => {
+  test('only the migrations and the service name the edit tables', () => {
     const naming = [...files('src'), ...files('scripts'), ...files('frontend/src')].filter((f) => TABLES.test(read(f))).sort();
-    expect(naming).toEqual([MIGRATION, SERVICE].sort());
+    expect(naming).toEqual([MIGRATION, MIGRATION_C1B, SERVICE].sort());
   });
 
   test('C1 never writes the legacy timeline, the scene sources, the episode or the takes', () => {

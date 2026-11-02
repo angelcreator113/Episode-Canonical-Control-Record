@@ -99,6 +99,44 @@ describe('commands and their inverses', () => {
   });
 });
 
+describe('C1b items (Gate 2a)', () => {
+  const cap = { id: 'k1', kind: 'caption', anchor_kind: 'beat_start', anchor_beat: 2, anchor_ref: null, offset_ms: 500, duration_ms: 3000,
+    values: { text: 'A New Alliance', style_key: 'title', layout: { x: 160, y: 80, w: 1600, h: 160 } } };
+  const lala = { id: 'p1', kind: 'performer_clip', anchor_kind: 'edit_start', anchor_beat: null, anchor_ref: null, offset_ms: 2000, duration_ms: 4000,
+    values: { raw_clip_id: 'r2', source_in_ms: 0, source_out_ms: 4000, layout: { x: 0, y: 0, w: 1920, h: 1080 }, layer: 0 } };
+
+  test('placing an item is undone by deleting the one the server made', () => {
+    const body = { kind: 'caption', anchor_kind: 'edit_start', offset_ms: 1000, duration_ms: 3000, values: cap.values };
+    const cmd = ops.addItem(body, 'Add title');
+    expect(cmd.requests).toEqual([{ method: 'post', path: '/items', body }]);
+    expect(cmd.undo([{ item_id: 'new', duration_ms: 3000 }]).requests).toEqual([{ method: 'delete', path: '/items/new' }]);
+  });
+
+  test("deleting is undone by placing it back as it was stored; a performer clip's length is not sent", () => {
+    expect(ops.removeItem(cap).undo().requests[0]).toEqual({ method: 'post', path: '/items', body: {
+      kind: 'caption', anchor_kind: 'beat_start', anchor_beat: 2, offset_ms: 500, values: cap.values, duration_ms: 3000 } });
+    expect(ops.removeItem(lala).undo().requests[0].body).toEqual({ kind: 'performer_clip', anchor_kind: 'edit_start', offset_ms: 2000, values: lala.values });
+  });
+
+  test('a change sends only what changed, and its undo sends the stored values of exactly those', () => {
+    const move = ops.updateItem(cap, { anchor_kind: 'edit_start', offset_ms: 9000 }, 'Move caption');
+    expect(move.requests[0]).toEqual({ method: 'patch', path: '/items/k1', body: { anchor_kind: 'edit_start', offset_ms: 9000 } });
+    expect(move.undo().requests[0].body).toEqual({ anchor_kind: 'beat_start', anchor_beat: 2, offset_ms: 500 });
+    const layout = ops.updateItem(lala, { values: { layout: { x: 10, y: 10, w: 960, h: 540, opacity: 0.5 } } });
+    expect(layout.undo().requests[0].body).toEqual({ values: { layout: lala.values.layout } });
+    const len = ops.updateItem(cap, { duration_ms: 5000 });
+    expect(len.undo().requests[0].body).toEqual({ duration_ms: 3000 });
+    // Redo of the undo gives the change again.
+    expect(len.undo().undo().requests[0].body).toEqual({ duration_ms: 5000 });
+  });
+
+  test("a beat's visual mode, and back to the mode it had (or none)", () => {
+    const cmd = ops.setBeatVisualMode(3, 'cinematic', null);
+    expect(cmd.requests[0]).toEqual({ method: 'post', path: '/beats/3/mode', body: { visual_mode: 'cinematic' } });
+    expect(cmd.undo().requests[0].body).toEqual({ visual_mode: null });
+  });
+});
+
 describe('anchors and drops', () => {
   test('a drag keeps a beat-relative anchor relative to its beat, and makes anything else absolute', () => {
     expect(ops.anchorAt(seg, 13000, beats)).toEqual({ anchor_kind: 'beat_start', anchor_beat: 2, offset_ms: 3000 });

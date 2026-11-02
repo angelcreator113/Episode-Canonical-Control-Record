@@ -52,10 +52,13 @@ export default function useSaveManager({
   const inFlightRef = useRef(false);
   const againRef = useRef(false);
 
-  // Keep refs in sync with latest values every render
-  useEffect(() => { getSavePayloadRef.current = getSavePayload; }, [getSavePayload]);
-  useEffect(() => { episodeIdRef.current = episodeId; }, [episodeId]);
-  useEffect(() => { onSavedRef.current = onSaved; }, [onSaved]);
+  // Keep refs in sync with latest values every render. Layout effects, like
+  // `enabled` below: a caller's payload can be null until its load is done
+  // (TimelineEditor), so a passive sync left Ctrl+S, in the moment after the
+  // loaded commit, saving with the pre-load payload, which saved nothing.
+  useLayoutEffect(() => { getSavePayloadRef.current = getSavePayload; }, [getSavePayload]);
+  useLayoutEffect(() => { episodeIdRef.current = episodeId; }, [episodeId]);
+  useLayoutEffect(() => { onSavedRef.current = onSaved; }, [onSaved]);
   // A layout effect, not a passive one: React runs it during the commit, so
   // the ref is true by the time the loaded editor is on screen. A passive
   // effect runs after the screen updates, and a Ctrl+S in that moment was

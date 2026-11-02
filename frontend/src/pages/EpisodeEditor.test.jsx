@@ -108,7 +108,8 @@ describe('EpisodeEditor: reading the edit (P1) and the working preview (P2)', ()
     for (const name of ['Scene', 'Lala & guests', 'Prime PIP', 'Prime VO', 'Dialogue', 'Phone', 'Gameplay', 'Overlays', 'Music', 'SFX', 'Captions & titles']) {
       expect(within(tl).getByText(name)).toBeTruthy();
     }
-    expect(within(tl).getByText('Performer layer: Gate 2 (D3)')).toBeTruthy();
+    expect(within(tl).getByText('Phone screens: Gate 2b (their state model)')).toBeTruthy();
+    expect(within(tl).queryByText(/Performer layer: Gate 2/)).toBeNull();
     noWrites();
   });
 

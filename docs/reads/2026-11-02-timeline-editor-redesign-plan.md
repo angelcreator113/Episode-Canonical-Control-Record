@@ -812,3 +812,121 @@ Evoni approved P4: the C1 API additions of §4.3. This is the first backend chan
   - Mirror then Wide, Mirror at its full 5000 ms;
   - the split-off part soft-deleted;
   - the music at source 500–4000, offset 1500, −6 dB.
+
+---
+
+## 16. Gate 2a as built (2026-11-02)
+
+Evoni said "Let's continue" after P4. This section is the first slice of P5 (Gate 2, R8.14), called **Gate 2a**: the C1b migration, and the editor using what it adds, for rulings D3 (Lala over the scene), D4 (structured captions) and D5 (opacity). The rest of Gate 2 is **Gate 2b** (below).
+
+**The migration is written and tested only on a throwaway local Postgres. It has not been run against production, nothing is deployed, and no flag is changed.** Running it is a separate approval, by the Deploy workflow, which snapshots first.
+
+### The migration: `src/migrations/20261102120000-add-episode-edit-c1b-kinds.js`
+
+It changes only the C1 edit tables, and adds no table:
+
+| Change | What |
+|---|---|
+| `timeline_items_kind_check` | Widened from the C1 kinds to add `visual_mode`, `performer_clip`, `caption`, `overlay`, `phone_screen`, `gameplay_action` |
+| `timeline_items.duration_ms` | Nullable integer, with the CHECK `timeline_items_duration_ms_positive` (more than 0 when set) |
+| `episode_beat_production.visual_mode` | Nullable text, with the CHECK `episode_beat_production_visual_mode_kind` (`gameplay` or `cinematic`) |
+| `episode_pip_settings.mode_presets` | Nullable jsonb, for Prime's place per mode. Stored only; nothing reads it yet (Gate 2b) |
+
+- **Rerunning it:** each step is guarded, so a second run changes nothing (tested).
+- **Down:** it refuses ("Refusing to undo C1b") while any row uses a C1b kind, column or mode, and changes nothing. With none, it restores the C1 kinds and drops the columns. It is tested in Jest, not by `db:migrate:undo`, which the repo guard blocks.
+
+### The service and routes (`episodeEditService`, `episodeEditRoutes`)
+
+**A runtime check:** `c1bReady()` checks whether the columns exist, and caches the answer once it is true.
+- **Before the migration runs:** every C1 read and write behaves exactly as before. A C1b write is refused with 409 `C1B_NOT_MIGRATED`, and nothing is changed.
+- **`GET /edit` gives `c1b`:** the editor uses it to offer only what the server can save.
+
+**The new item kinds**, through the existing `POST /items`, `PATCH /items/:id` and `DELETE /items/:id`:
+
+| Kind | Values | Length |
+|---|---|---|
+| `performer_clip` (D3) | `raw_clip_id` (a Lala or guest take of this episode, with a measured length), `source_in_ms`, `source_out_ms`, `layout`, `layer` (0–99) | Always its source range; the server computes it |
+| `caption` (D4) | `text` (trimmed, 1–500 characters), `style_key` (`caption`, `title` or `lower_third`), `layout` | `duration_ms`, at least 33 |
+| `visual_mode` (R8.2) | `mode` | None: it holds to the end of its beat, or the next change |
+
+- **Refused for now:** `overlay`, `phone_screen` and `gameplay_action` get 409 `KIND_NOT_BUILT` until their state model exists (Gate 2b).
+- **Validation:** values are checked field by field against an exact key list.
+- **Updates:** `PATCH` merges the values sent with the stored ones and checks the whole item again.
+
+**Opacity (D5):** `layout` takes `opacity` from 0 to 1, stored in hundredths, on Prime's segments and on C1b items. Any other key is refused. Rotation stays deferred, as ruled.
+
+**Visual mode:** `POST /beats/:beat/mode` takes `visual_mode` (`gameplay`, `cinematic`, or null for not chosen), beside or instead of `prime_mode`. The `/ops` step `beat.mode` passes it too.
+
+**Other changes:**
+- Findings: a performer clip whose take is removed is a blocking finding, `performer_source_missing`.
+- Versions: they save and restore the C1b columns.
+
+### The shared clock (`src/utils/editTimeline.js`, synced to the frontend copy)
+
+| Function | What it gives |
+|---|---|
+| `modeAt(edit, t)` | The visual mode at t. A beat starts in its own mode, and gameplay when none is chosen. Its timed changes switch it at their instant, and the latest change at or before t wins. A mode change moves no time |
+| `layersAt(edit, t)` | The picture as ordered layers: scene; then performers by layer, then by the order placed; then Prime; then captions. Each layer carries its opacity |
+| `itemSpans` | Where each lasting item starts and ends on the clock |
+
+- `layoutAt` is unchanged by C1b items (tested).
+- `editFindings` adds a warning, `item_beyond_edit_end`.
+
+### The editor
+
+| Lane or panel | What it does now |
+|---|---|
+| **Lala & guests lane** | Lala's and guests' clips. Their **+** in the media panel places the whole take over the scene, full frame, at the playhead. Dragging onto the Scene lane still makes it the background. A clip moves and trims at either end; trimming the head keeps the rest where it plays |
+| **Captions & titles lane** | The media panel's **Text** tab adds a caption, title or lower third at the playhead for 3 s, with its words asked for. Each has a default place at 1920×1080. It moves and trims at either end |
+| **Preview** | Draws the layers in `layersAt` order, at their opacity. Lala is shown in her cutout once its key is done, and otherwise in her original video with a note, as Prime is. Captions are drawn in their style. A selected performer clip or caption is moved and resized like Prime, with the same handles and snapping (`ArrangeBox`). A drag keeps the stored opacity |
+| **Inspector** | **Performer clip:** start, source in and out, layer, place, opacity. **Caption:** text, style, start, length, place, opacity. **Prime:** opacity, which replaces "Gate 2 (D5)" |
+| **Beat card** | The beat's visual mode (not chosen, gameplay or cinematic). "Switch to gameplay/cinematic at the playhead", and a list of the beat's changes, each removable |
+| **Ruler and preview** | A mode change is a mark on the ruler. The preview shows a "Cinematic" badge while that mode plays |
+
+**Undo:** every change is one undo step with an exact inverse (`editOps` `addItem`, `removeItem`, `updateItem`, `setBeatVisualMode`). The undo sends the stored values of exactly the fields changed, and a mode goes back to "not chosen" when that is what was stored.
+
+**When the server has no C1b** (`c1b: false`): the editor sends nothing C1b. It says the migration is needed, and the beat card shows the mode without a control.
+
+**Copy, cut, paste and delete** work for performer clips and captions. A split does not, as for sounds.
+
+**What the preview does not do, and says:**
+- A visual mode is shown, not drawn. What cinematic changes on screen, and Prime's place per mode (`mode_presets`), is for the render (Gate 3) and Gate 2b.
+- How a caption style looks in the preview is the preview's version: its type size is a share of the box's height (`CAPTION_LOOKS`). The render draws from the same text, place and style (D4), and it waits for the render host (Gates 3–6).
+
+### Gate 2b, not built
+
+- `beatStatus` and `episode_beat_reviews`, and approving a beat;
+- the content hash and licence validation;
+- `gameStateAt`, and the `phone_screen`, `gameplay_action` and `overlay` kinds with their lanes (still labelled Gate 2b);
+- transitions drawn;
+- reading `mode_presets`.
+
+### Measured
+
+**Tests:**
+
+| Suite | Tests | What it covers |
+|---|---|---|
+| `tests/integration/episodeEditC1b.integration.test.js` | 9 | Migration reruns and its refusing down; each kind's validation and refusals; merge-and-recheck updates; visual modes; opacity; the kinds not built; the missing-source finding; a version restoring C1b items; the routes |
+| `tests/unit/utils/editTimelineC1b.test.js` | 8 | `modeAt`, `layersAt` and `editFindings` |
+| C1-1 in `tests/integration/episodeEdit.integration.test.js` | — | Now reapplies C1b after recreating the C1 tables |
+| Frontend | — | `editOps` inverses, `editorModel` blocks and modes, `previewPlan` performers and captions, and six page tests: add a title and undo it; Lala's **+**; drag a caption and change its words and opacity; Prime's opacity; the beat's visual mode with undo and a switch at the playhead; a server without C1b |
+
+**End to end** in Chromium, with the production build against the real backend (`EPISODE_EDIT=on`, a throwaway local Postgres with every migration including C1b). The run:
+1. placed a still;
+2. placed Lala over the scene, drawn from her cutout;
+3. added the title "A New Alliance";
+4. dragged it 100 px right (the inspector followed to x 260);
+5. set its opacity to 70%, then undid that (back to 100);
+6. set beat 1 to cinematic (the badge showed);
+7. switched to gameplay at 00:01 (one ruler mark, and no badge at 00:01);
+8. trimmed Lala's end by 2 s;
+9. reloaded the page.
+
+Every write returned 200, and the revision went 0 → 9. The database held:
+- the title at x 260, with no opacity;
+- Lala's clip at 0–4000 ms, full frame;
+- beat 1 `cinematic`;
+- a `visual_mode` item `gameplay` at offset 1000.
+
+At 375 px there is no horizontal scroll.

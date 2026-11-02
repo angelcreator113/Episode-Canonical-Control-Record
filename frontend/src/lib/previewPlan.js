@@ -14,7 +14,7 @@
  * - Safari cannot draw VP9 transparency: Prime is shown from her original
  *   video, with its background, and the preview says so.
  */
-import { layoutAt, DEFAULT_LAYOUT } from './editTimeline';
+import { layoutAt, layersAt, DEFAULT_LAYOUT } from './editTimeline';
 
 export const FPS = 30;
 
@@ -40,7 +40,19 @@ export function primeVideo(clip, useCutout, safari) {
 }
 
 /**
- * The picture at t: { beat, scene, pip, prime_missing, scene_gap }.
+ * Which file shows Lala or a guest over the scene (D3): their cutout once its
+ * green removal is done, else their original (with its background, and a note).
+ */
+export function performerVideo(clip, safari) {
+  if (!clip) return { url: null, cutout: false, note: null };
+  if (clip.url_cutout && clip.key_status === 'done' && !safari) return { url: clip.url_cutout, cutout: true, note: null };
+  const who = clip.performer === 'guest' ? (clip.guest_name || 'The guest') : 'Lala';
+  if (clip.url_cutout && safari) return { url: clip.url_raw || null, cutout: false, note: `This browser can't show transparent video: ${who} is shown with her background. Use Chrome or Edge.` };
+  return { url: clip.url_raw || null, cutout: false, note: `${who}'s cutout isn't ready yet: she is shown with her background.` };
+}
+
+/**
+ * The picture at t: { beat, scene, performers, pip, captions, mode, prime_missing, scene_gap }.
  * scene: { clip_id, kind: 'image' | 'video', url, source_time_ms, held, name }.
  * pip:   { segment_id, url, cutout, note, source_time_ms, layout, name }.
  */
@@ -74,7 +86,19 @@ export function framePlan(edit, t, media, { safari = isSafari() } = {}) {
       name: c ? (c.label || c.original_filename || 'Prime take') : 'Missing Prime take',
     };
   }
-  return { t, beat: at.beat, scene, pip, prime_missing: at.prime_missing, scene_gap: at.scene_gap };
+  // C1b (D3, D4, D5): Lala and guests over the scene, Prime's opacity, captions on top, the visual mode.
+  const layered = layersAt(edit, t);
+  const performers = layered.layers.filter((l) => l.kind === 'performer').map((l) => {
+    const c = media.clips.get(String(l.raw_clip_id));
+    return {
+      item_id: l.item_id, ...performerVideo(c, safari), poster: c?.thumbnail_url || null, source_time_ms: l.source_time_ms,
+      layout: l.layout, opacity: l.opacity, layer: l.layer, name: c ? (c.label || c.original_filename || 'Performer take') : 'Missing take',
+    };
+  });
+  const pipLayer = layered.layers.find((l) => l.kind === 'pip');
+  if (pip && pipLayer) { pip.opacity = pipLayer.opacity; pip.layout = pipLayer.layout; }
+  const captions = layered.layers.filter((l) => l.kind === 'caption').map((l) => ({ item_id: l.item_id, text: l.text, style_key: l.style_key, layout: l.layout, opacity: l.opacity }));
+  return { t, beat: at.beat, scene, performers, pip, captions, mode: layered.mode, prime_missing: at.prime_missing, scene_gap: at.scene_gap };
 }
 
 /** The lane a mix event plays on (the track-header mute keys). */

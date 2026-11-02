@@ -12,7 +12,7 @@
  *   GET    /mix                      mixPlan: commentary, dialogue, music and SFX events
  *   GET    /findings                 review readiness: blocking findings and warnings
  *   GET    /versions                 named versions;  GET /versions/:versionId  one, with its snapshot
- *   POST   /beats/:beat/mode         { prime_mode: required | gameplay_only, note }
+ *   POST   /beats/:beat/mode         { prime_mode: required | gameplay_only, note, visual_mode (C1b): gameplay | cinematic | null }
  *   POST   /beats/:beat/duration     { duration_ms (null: draft timing), dry_run } (dry_run: what would move; no write)
  *   POST   /beats/lock               { durations?: { beat: ms } } all 14 beats' lengths, in one write
  *   POST   /dialogue                 { approval_id, association_id, anchor_kind: beat_start | edit_start, anchor_beat, offset_ms }
@@ -32,6 +32,9 @@
  *   PATCH  /audio-items/:audioItemId     { anchor_*, source_in_ms, source_out_ms, gain_db, fade_*, duck_under_dialogue_db }
  *   PATCH  /visibility/:ruleId           { visible, anchor_*, end_anchor_* (range rules) }
  *   POST   /ops                          { steps: [{ op, id?, body? }] }  one transaction, one revision
+ *   C1b (Gate 2a, migration 20261102120000): POST /items also takes kind visual_mode { mode },
+ *   performer_clip { raw_clip_id, source_in_ms, source_out_ms, layout, layer } and caption
+ *   { text, style_key, layout } with duration_ms; PATCH /items/:itemId changes them, checked again.
  *   POST   /versions                 { name };  POST /versions/:versionId/restore
  *
  * Every write sends edit_revision (409 EDIT_CHANGED when stale) and is
@@ -82,7 +85,7 @@ router.get('/versions', requireAuth, handle('list versions', (req) => edit.listV
 router.get('/versions/:versionId', requireAuth, handle('read version', (req) => edit.getVersion(s(), { episodeId: req.params.episodeId, versionId: req.params.versionId })));
 
 router.post('/beats/:beat/mode', ...admin, handle('beat mode', (req) => edit.setBeatMode(s(), {
-  ...base(req), beatNumber: req.params.beat, primeMode: req.body?.prime_mode, note: req.body?.note,
+  ...base(req), beatNumber: req.params.beat, primeMode: req.body?.prime_mode, visualMode: req.body?.visual_mode, note: req.body?.note,
 })));
 
 router.post('/beats/lock', ...admin, handle('lock beat timing', (req) => edit.lockBeatTiming(s(), { ...base(req), durations: req.body?.durations ?? null })));

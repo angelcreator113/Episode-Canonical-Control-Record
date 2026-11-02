@@ -6,7 +6,7 @@
  * here invents a clip, a time or a status.
  */
 import {
-  beatTimeline, placedSegments, placedDialogue, resolveAnchor, FRAME_W, FRAME_H,
+  beatTimeline, placedSegments, placedDialogue, resolveAnchor, itemSpans, FRAME_W, FRAME_H,
 } from './editTimeline';
 import { beatName } from './canonicalBeats';
 
@@ -18,16 +18,16 @@ export { FRAME_W, FRAME_H };
  */
 export const LANES = [
   { key: 'scene', name: 'Scene', sub: 'Background', kind: 'video' },
-  { key: 'performer', name: 'Lala & guests', sub: 'Performer · cutout', kind: 'video', pending: 'Performer layer: Gate 2 (D3)' },
+  { key: 'performer', name: 'Lala & guests', sub: 'Performer · cutout', kind: 'video' },
   { key: 'prime', name: 'Prime PIP', sub: 'JustAWoman', kind: 'video' },
   { key: 'prime_vo', name: 'Prime VO', sub: 'Commentary · linked', kind: 'audio' },
   { key: 'dialogue', name: 'Dialogue', sub: 'Lala · guests', kind: 'audio' },
-  { key: 'phone', name: 'Phone', sub: 'Screens', kind: 'video', pending: 'Phone screens: Gate 2 (C1b)' },
-  { key: 'gameplay', name: 'Gameplay', sub: 'Actions · cursor · UI', kind: 'video', pending: 'Gameplay actions: Gate 2 (C1b)' },
-  { key: 'overlays', name: 'Overlays', sub: 'Widgets · images', kind: 'video', pending: 'Overlays: Gate 2 (C1b)' },
+  { key: 'phone', name: 'Phone', sub: 'Screens', kind: 'video', pending: 'Phone screens: Gate 2b (their state model)' },
+  { key: 'gameplay', name: 'Gameplay', sub: 'Actions · cursor · UI', kind: 'video', pending: 'Gameplay actions: Gate 2b (their state model)' },
+  { key: 'overlays', name: 'Overlays', sub: 'Widgets · images', kind: 'video', pending: 'Overlays: Gate 2b (their state model)' },
   { key: 'music', name: 'Music', sub: 'Bed', kind: 'audio' },
   { key: 'sfx', name: 'SFX', sub: 'Effects', kind: 'audio' },
-  { key: 'captions', name: 'Captions & titles', sub: 'Text', kind: 'video', pending: 'Captions and titles: Gate 2 (D4)' },
+  { key: 'captions', name: 'Captions & titles', sub: 'Text', kind: 'video' },
 ];
 
 /** The media an edit names, looked up by id. */
@@ -70,6 +70,10 @@ export function buildTimeline(edit, media = mediaIndex()) {
 
   const beats = timeline.beats.map((b) => ({
     beat: b.beat, name: beatLabel(b.beat), start: b.start, end: b.end, locked: b.locked, prime_mode: b.mode, clip_count: b.clips.length,
+    // C1b: the beat's default visual mode (no row: gameplay, R8.2).
+    // visual_mode is what plays (none chosen plays as gameplay); visual_mode_set is what is stored (null: not chosen).
+    visual_mode: edit.beatVisualModes && edit.beatVisualModes[b.beat] === 'cinematic' ? 'cinematic' : 'gameplay',
+    visual_mode_set: (edit.beatVisualModes && edit.beatVisualModes[b.beat]) || null,
   }));
 
   for (const b of timeline.beats) {
@@ -115,13 +119,36 @@ export function buildTimeline(edit, media = mediaIndex()) {
 
   // Transitions are stored items; they are drawn as marks on the scene lane.
   const transitions = [];
+  // C1b: timed visual-mode changes (R8.2), drawn as marks on the ruler.
+  const modeMarks = [];
   for (const item of edit.items || []) {
-    if (item.kind !== 'transition') continue;
+    if (item.kind !== 'transition' && item.kind !== 'visual_mode') continue;
     const r = resolveAnchor(edit, timeline, item);
-    if (!r.error) transitions.push({ id: item.id, at: r.t, type: item.values?.type || 'transition', row: item });
+    if (r.error) { if (item.kind === 'visual_mode') unplaced.push({ id: item.id, kind: 'visual_mode', label: 'Mode change', reason: r.error }); continue; }
+    if (item.kind === 'transition') transitions.push({ id: item.id, at: r.t, type: item.values?.type || 'transition', row: item });
+    else modeMarks.push({ id: item.id, at: r.t, mode: item.values?.mode === 'cinematic' ? 'cinematic' : 'gameplay', row: item });
   }
 
-  return { duration: timeline.duration, beats, blocks, transitions, unplaced };
+  // C1b (D3, D4): Lala's and guests' takes over the scene, and captions and titles. Each lasts duration_ms.
+  for (const s of itemSpans(edit, timeline, 'performer_clip')) {
+    const v = s.item.values || {};
+    const c = media.clips.get(String(v.raw_clip_id));
+    blocks.performer.push({
+      id: s.item.id, lane: 'performer', kind: 'performer_clip', start: s.start, end: s.end, label: clipName(c) || 'Missing take',
+      image: c?.thumbnail_url || null, missing: !c, row: s.item, layout: v.layout,
+    });
+  }
+  for (const s of itemSpans(edit, timeline, 'caption')) {
+    const v = s.item.values || {};
+    blocks.captions.push({ id: s.item.id, lane: 'captions', kind: 'caption', start: s.start, end: s.end, label: v.text || 'Caption', row: s.item, layout: v.layout, style_key: v.style_key });
+  }
+  for (const item of edit.items || []) {
+    if ((item.kind === 'performer_clip' || item.kind === 'caption') && resolveAnchor(edit, timeline, item).error) {
+      unplaced.push({ id: item.id, kind: item.kind, label: item.kind === 'caption' ? (item.values?.text || 'Caption') : 'Performer clip', reason: resolveAnchor(edit, timeline, item).error });
+    }
+  }
+
+  return { duration: timeline.duration, beats, blocks, transitions, modeMarks: modeMarks.sort((a, b) => a.at - b.at), unplaced };
 }
 
 /** A finding's beat, when it names one directly or through a block it refers to. */

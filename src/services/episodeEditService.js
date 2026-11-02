@@ -52,7 +52,16 @@ const MAX_CLIP_MS = 30 * 60 * 1000;
 const PROBE_TIMEOUT_MS = 20 * 1000;
 const ANCHOR_KINDS = ['beat_start', 'edit_start', 'line_start', 'item_start'];
 const DIALOGUE_ANCHORS = ['beat_start', 'edit_start'];
-const ITEM_KINDS = ['object_keyframe', 'camera_keyframe', 'object_visibility', 'angle_change', 'transition', 'audio_offset', 'caption_override'];
+const C1_ITEM_KINDS = ['object_keyframe', 'camera_keyframe', 'object_visibility', 'angle_change', 'transition', 'audio_offset', 'caption_override'];
+// C1b (Gate 2a, 2026-11-02; migration 20261102120000): items with validated values (R8.5, D3, D4).
+// overlay, phone_screen and gameplay_action are in the schema but refused here until their state model is built.
+const C1B_ITEM_KINDS = ['visual_mode', 'performer_clip', 'caption'];
+const C1B_LATER_KINDS = ['overlay', 'phone_screen', 'gameplay_action'];
+const ITEM_KINDS = [...C1_ITEM_KINDS, ...C1B_ITEM_KINDS];
+const VISUAL_MODES = ['gameplay', 'cinematic'];
+/** Caption and title styles (D4): the preview and the render draw each the same way, from the same key. */
+const CAPTION_STYLES = ['caption', 'title', 'lower_third'];
+const MAX_CAPTION_CHARS = 500;
 const SCENE_PERFORMERS = ['lala', 'guest'];
 const PRIME = 'justawoman';
 
@@ -151,6 +160,13 @@ function layoutOf(v) {
     if ((k === 'w' || k === 'h') && n <= 0) fail(400, 'BAD_LAYOUT', `${k} must be more than 0`);
     out[k] = Math.round(n);
   }
+  // Opacity (D5, Gate 2a): 0 to 1 in hundredths; absent means fully opaque.
+  if (v.opacity !== undefined && v.opacity !== null) {
+    const o = Number(v.opacity);
+    if (!Number.isFinite(o) || o < 0 || o > 1) fail(400, 'BAD_LAYOUT', 'opacity is 0 to 1');
+    out.opacity = Math.round(o * 100) / 100;
+  }
+  for (const k of Object.keys(v)) if (!['x', 'y', 'w', 'h', 'opacity'].includes(k)) fail(400, 'BAD_LAYOUT', `A layout has no ${k}`);
   return out;
 }
 
@@ -242,10 +258,32 @@ const quoted = (c) => (c === 'values' ? '"values"' : c);
 // A row as JSON-stable values: numbers as numbers, timestamps as ISO text.
 const plain = (row) => Object.fromEntries(Object.entries(row).map(([k, v]) => [k, v instanceof Date ? v.toISOString() : v]));
 
+/**
+ * C1b's columns (migration 20261102120000). They are read and restored only
+ * once that migration has run, so code deployed before it still reads every
+ * edit; the new kinds and the visual mode are refused until then.
+ */
+const C1B_COLS = { beat_production: ['visual_mode'], items: ['duration_ms'], pip: ['mode_presets'] };
+let c1bKnown = false;
+async function c1bReady(sequelize, t = null) {
+  if (c1bKnown) return true;
+  const r = await one(sequelize, `SELECT 1 AS ok FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'timeline_items' AND column_name = 'duration_ms'`, {}, t);
+  if (r) c1bKnown = true;
+  return Boolean(r);
+}
+const requireC1b = async (sequelize, t, what) => {
+  if (!(await c1bReady(sequelize, t))) fail(409, 'C1B_NOT_MIGRATED', `${what} needs the C1b migration, which has not run on this server yet. Nothing was changed.`);
+};
+/** The live tables and their columns: C1's, plus C1b's once it has run. */
+const liveSpec = (c1b) => (c1b
+  ? Object.fromEntries(Object.entries(LIVE).map(([k, s]) => [k, C1B_COLS[k] ? { ...s, cols: [...s.cols, ...C1B_COLS[k]] } : s]))
+  : LIVE);
+
 /** Every live row, per table, ordered (the order rules apply in: created, then id). */
 async function liveRows(sequelize, episodeId, t) {
   const out = {};
-  for (const [key, spec] of Object.entries(LIVE)) {
+  for (const [key, spec] of Object.entries(liveSpec(await c1bReady(sequelize, t)))) {
     const cols = spec.cols.map((c) => {
       if (['audio_gain_db', 'gain_db', 'duck_under_dialogue_db'].includes(c)) return `${c}::float8 AS ${c}`;
       return quoted(c);
@@ -259,14 +297,18 @@ async function liveRows(sequelize, episodeId, t) {
 function editFrom(live, voiceTakes = {}) {
   const beatModes = {};
   const beatDurations = {};
+  // C1b: each beat's default visual mode (R8.2); a beat with none is gameplay.
+  const beatVisualModes = {};
   for (const b of live.beat_production) {
     beatModes[b.beat_number] = b.prime_mode;
     if (b.duration_ms != null) beatDurations[b.beat_number] = b.duration_ms;
+    if (b.visual_mode) beatVisualModes[b.beat_number] = b.visual_mode;
   }
   return {
     fps: 30,
     beatModes,
     beatDurations,
+    ...(Object.keys(beatVisualModes).length ? { beatVisualModes } : {}),
     sceneClips: live.scene_clips,
     segments: live.segments,
     pip: live.pip[0] || null,
@@ -319,7 +361,7 @@ async function voiceTakesFor(sequelize, episodeId, live, t = null) {
   return out;
 }
 
-/** The live edit: { edit_revision, rows, edit } (with the voice takes it may play). */
+/** The live edit: { edit_revision, c1b, rows, edit } (with the voice takes it may play). */
 async function loadEdit(sequelize, { episodeId }, t = null) {
   await episodeRow(sequelize, episodeId, t);
   const live = await liveRows(sequelize, episodeId, t);
@@ -327,7 +369,8 @@ async function loadEdit(sequelize, { episodeId }, t = null) {
   // Each take carries the URL it plays from (P4), so the editor needs no second list.
   const { publicUrl } = require('./rawClipMedia');
   const withUrls = Object.fromEntries(Object.entries(takes).map(([id, k]) => [id, { ...k, audio_url: k.s3_key ? publicUrl(k.s3_key) : null }]));
-  return { edit_revision: await currentRevision(sequelize, episodeId, t), rows: live, edit: editFrom(live, withUrls) };
+  // c1b: whether this server has the Gate 2a columns, so the editor offers only what it can save.
+  return { edit_revision: await currentRevision(sequelize, episodeId, t), c1b: await c1bReady(sequelize, t), rows: live, edit: editFrom(live, withUrls) };
 }
 
 // ── Beat production ──────────────────────────────────────────────────────────
@@ -338,27 +381,46 @@ async function loadEdit(sequelize, { episodeId }, t = null) {
  * mode, the stored length, the note). No row means required, draft timing.
  */
 async function writeBeatProduction(sequelize, episodeId, beat, change, userId, t) {
-  const cur = await one(sequelize, `SELECT prime_mode, duration_ms, note FROM episode_beat_production
+  // C1b: the beat's visual mode is carried forward like the rest (once the column exists).
+  const c1b = await c1bReady(sequelize, t);
+  const cur = await one(sequelize, `SELECT prime_mode, duration_ms, note${c1b ? ', visual_mode' : ''} FROM episode_beat_production
     WHERE episode_id = :episodeId AND beat_number = :beat AND deleted_at IS NULL FOR UPDATE`, { episodeId, beat }, t);
   const next = {
     prime_mode: change.prime_mode ?? (cur ? cur.prime_mode : 'required'),
     duration_ms: 'duration_ms' in change ? change.duration_ms : (cur ? cur.duration_ms : null),
     note: 'note' in change ? change.note : (cur ? cur.note : null),
   };
+  if (c1b) next.visual_mode = 'visual_mode' in change ? change.visual_mode : (cur ? cur.visual_mode : null);
   await q(sequelize, `UPDATE episode_beat_production SET deleted_at = NOW(), updated_at = NOW()
     WHERE episode_id = :episodeId AND beat_number = :beat AND deleted_at IS NULL`, { episodeId, beat }, t);
-  const [row] = await rows(sequelize, `INSERT INTO episode_beat_production (episode_id, beat_number, prime_mode, duration_ms, note, set_by)
-    VALUES (:episodeId, :beat, :prime_mode, :duration_ms, :note, :userId) RETURNING id`, { episodeId, beat, ...next, userId }, t);
+  const [row] = await rows(sequelize, `INSERT INTO episode_beat_production (episode_id, beat_number, prime_mode, duration_ms, note${c1b ? ', visual_mode' : ''}, set_by)
+    VALUES (:episodeId, :beat, :prime_mode, :duration_ms, :note${c1b ? ', :visual_mode' : ''}, :userId) RETURNING id`, { episodeId, beat, ...next, userId }, t);
   return row.id;
 }
 
-/** Prime required (the default) or gameplay_only for one beat. The previous setting is kept, soft-deleted; the beat's length is kept. */
-async function setBeatMode(sequelize, { episodeId, editRevision, userId, batch, beatNumber, primeMode, note = null }) {
+/**
+ * One beat's production mode: Prime required (the default) or gameplay_only,
+ * and (C1b, R8.2) its default visual mode, gameplay or cinematic (null: the
+ * default, gameplay). Either may be sent alone. The previous setting is kept,
+ * soft-deleted; the beat's length is kept.
+ */
+async function setBeatMode(sequelize, { episodeId, editRevision, userId, batch, beatNumber, primeMode, visualMode, note = null }) {
   const beat = beatOf(beatNumber);
-  if (!['required', 'gameplay_only'].includes(primeMode)) fail(400, 'BAD_MODE', 'A beat is "required" or "gameplay_only"');
-  return withEdit(sequelize, { episodeId, editRevision, userId, batch }, async (t) => ({
-    beat_production_id: await writeBeatProduction(sequelize, episodeId, beat, { prime_mode: primeMode, note: note ? String(note).slice(0, 2000) : null }, userId, t),
-  }));
+  const change = {};
+  if (primeMode !== undefined) {
+    if (!['required', 'gameplay_only'].includes(primeMode)) fail(400, 'BAD_MODE', 'A beat is "required" or "gameplay_only"');
+    change.prime_mode = primeMode;
+    change.note = note ? String(note).slice(0, 2000) : null;
+  }
+  if (visualMode !== undefined) {
+    if (visualMode !== null && !VISUAL_MODES.includes(visualMode)) fail(400, 'BAD_MODE', 'A visual mode is "gameplay" or "cinematic"');
+    change.visual_mode = visualMode;
+  }
+  if (!Object.keys(change).length) fail(400, 'BAD_MODE', 'Send prime_mode, visual_mode, or both');
+  return withEdit(sequelize, { episodeId, editRevision, userId, batch }, async (t) => {
+    if ('visual_mode' in change) await requireC1b(sequelize, t, 'A visual mode');
+    return { beat_production_id: await writeBeatProduction(sequelize, episodeId, beat, change, userId, t) };
+  });
 }
 
 const MAX_BEAT_MS = MAX_CLIP_MS;
@@ -862,13 +924,76 @@ async function addVisibilityRule(sequelize, { episodeId, editRevision, userId, b
 
 // ── Timeline items and audio items ───────────────────────────────────────────
 
+/** Only these keys, or the write is refused (R8.5: C1b values are validated, never free JSON). */
+const onlyKeys = (v, keys, what) => {
+  for (const k of Object.keys(v)) if (!keys.includes(k)) fail(400, 'BAD_VALUE', `A ${what} has no "${k}"`);
+};
+
+/**
+ * A C1b item's values and length, checked (R8.5; D3, D4): { values, duration_ms }.
+ *   visual_mode     { mode: gameplay | cinematic }, no length: it holds until the next change or the beat's end.
+ *   performer_clip  { raw_clip_id (Lala's or a guest's take of this episode), source_in_ms, source_out_ms,
+ *                   layout { x, y, w, h, opacity? }, layer? }; its length is its source range.
+ *   caption         { text, style_key, layout }, and a length (duration_ms).
+ */
+async function c1bItem(sequelize, episodeId, kind, values, durationMs, t) {
+  if (kind === 'visual_mode') {
+    onlyKeys(values, ['mode'], 'visual mode change');
+    if (!VISUAL_MODES.includes(values.mode)) fail(400, 'BAD_VALUE', 'A visual mode is "gameplay" or "cinematic"');
+    if (durationMs != null) fail(400, 'BAD_VALUE', 'A visual mode change has no length: it holds until the next one');
+    return { values: { mode: values.mode }, duration_ms: null };
+  }
+  if (kind === 'caption') {
+    onlyKeys(values, ['text', 'style_key', 'layout'], 'caption');
+    const text = typeof values.text === 'string' ? values.text.trim() : '';
+    if (!text) fail(400, 'BAD_VALUE', 'A caption has its text');
+    if (text.length > MAX_CAPTION_CHARS) fail(400, 'BAD_VALUE', `A caption is at most ${MAX_CAPTION_CHARS} characters`);
+    if (!CAPTION_STYLES.includes(values.style_key)) fail(400, 'BAD_VALUE', `A caption's style is one of ${CAPTION_STYLES.join(', ')}`);
+    const layout = layoutOf(values.layout);
+    if (!layout || ['x', 'y', 'w', 'h'].some((k) => layout[k] === undefined)) fail(400, 'BAD_LAYOUT', 'A caption has its place: { x, y, w, h }');
+    return { values: { text, style_key: values.style_key, layout }, duration_ms: int(durationMs, 'duration_ms', { min: 33 }) };
+  }
+  if (kind === 'performer_clip') {
+    onlyKeys(values, ['raw_clip_id', 'source_in_ms', 'source_out_ms', 'layout', 'layer'], 'performer clip');
+    checkId(values.raw_clip_id, 'Take');
+    const c = await one(sequelize, `SELECT id, episode_id, performer, duration_seconds::float8 AS duration_seconds, deleted_at
+      FROM episode_raw_clips WHERE id = :id FOR SHARE`, { id: values.raw_clip_id }, t);
+    if (!c || c.deleted_at || c.episode_id !== episodeId) fail(404, 'NOT_FOUND', 'Take not found');
+    if (!SCENE_PERFORMERS.includes(c.performer)) fail(409, 'WRONG_PERFORMER', "A performer clip is Lala's or a guest's take; Prime's takes are segments");
+    if (!(c.duration_seconds > 0)) fail(409, 'NO_DURATION', 'This take has no measured length yet');
+    const length = Math.round(c.duration_seconds * 1000);
+    const sin = int(values.source_in_ms ?? 0, 'source_in_ms');
+    const sout = int(values.source_out_ms ?? length, 'source_out_ms');
+    if (!(sin < sout && sout <= length)) fail(400, 'BAD_RANGE', `In and out must be within the take (0–${length} ms), with in before out`);
+    const layout = layoutOf(values.layout);
+    if (!layout || ['x', 'y', 'w', 'h'].some((k) => layout[k] === undefined)) fail(400, 'BAD_LAYOUT', 'A performer clip has its place: { x, y, w, h }');
+    const layer = values.layer == null ? 0 : int(values.layer, 'layer', { max: 99 });
+    if (durationMs != null && Number(durationMs) !== sout - sin) fail(400, 'BAD_VALUE', "A performer clip's length is its source range");
+    return { values: { raw_clip_id: values.raw_clip_id, source_in_ms: sin, source_out_ms: sout, layout, layer }, duration_ms: sout - sin };
+  }
+  return fail(400, 'BAD_KIND', `${kind} is not a C1b kind`);
+}
+
 async function addItem(sequelize, { episodeId, editRevision, userId, batch, body }) {
+  if (C1B_LATER_KINDS.includes(body.kind)) fail(409, 'KIND_NOT_BUILT', `${body.kind} items wait for their state model (Gate 2b). Nothing was changed.`);
   if (!ITEM_KINDS.includes(body.kind)) fail(400, 'BAD_KIND', `An item is one of ${ITEM_KINDS.join(', ')}`);
   const a = anchorOf(body);
   const values = body.values === undefined ? {} : body.values;
   if (typeof values !== 'object' || values === null || Array.isArray(values)) fail(400, 'BAD_VALUE', 'values is an object');
   if (JSON.stringify(values).length > 20000) fail(400, 'BAD_VALUE', 'values is too large');
+  if (body.duration_ms != null && !C1B_ITEM_KINDS.includes(body.kind)) fail(400, 'BAD_VALUE', `A ${body.kind} item has no length`);
   return withEdit(sequelize, { episodeId, editRevision, userId, batch }, async (t) => {
+    if (C1B_ITEM_KINDS.includes(body.kind)) {
+      await requireC1b(sequelize, t, `A ${body.kind} item`);
+      if (body.scene_clip_id != null || body.target_id != null) fail(400, 'BAD_VALUE', `A ${body.kind} item names no scene clip or target`);
+      const checked = await c1bItem(sequelize, episodeId, body.kind, values, body.duration_ms, t);
+      await checkAnchorTarget(sequelize, episodeId, a, t);
+      const [row] = await rows(sequelize, `INSERT INTO timeline_items
+        (episode_id, kind, anchor_kind, anchor_beat, anchor_ref, offset_ms, "values", duration_ms, origin, approval, created_by)
+        VALUES (:episodeId, :kind, :anchor_kind, :anchor_beat, :anchor_ref, :offset_ms, CAST(:values AS jsonb), :duration, 'user', 'approved', :userId)
+        RETURNING id`, { episodeId, kind: body.kind, ...a, values: JSON.stringify(checked.values), duration: checked.duration_ms, userId }, t);
+      return { item_id: row.id, duration_ms: checked.duration_ms };
+    }
     if (body.scene_clip_id != null) await sceneClipRow(sequelize, episodeId, body.scene_clip_id, t);
     let target = body.target_id == null ? null : String(body.target_id).slice(0, 200);
     if (body.kind === 'audio_offset') {
@@ -996,15 +1121,17 @@ const getVersion = (sequelize, { episodeId, versionId }) => versionRow(sequelize
 async function restoreVersion(sequelize, { episodeId, editRevision, userId, batch, versionId }) {
   return withEdit(sequelize, { episodeId, editRevision, userId, batch }, async (t) => {
     const v = await versionRow(sequelize, episodeId, versionId, t);
-    for (const [key, spec] of Object.entries(LIVE)) {
+    // C1b's columns are restored once it has run; a version saved before C1b gives them null.
+    const spec0 = liveSpec(await c1bReady(sequelize, t));
+    for (const [key, spec] of Object.entries(spec0)) {
       const keep = (v.snapshot[key] || []).map((r) => r.id);
       await q(sequelize, `UPDATE ${spec.table} SET deleted_at = NOW(), updated_at = NOW() WHERE episode_id = :episodeId AND ${spec.where}${keep.length ? ' AND id NOT IN (:keep)' : ''}`,
         { episodeId, keep }, t);
     }
-    for (const [key, spec] of Object.entries(LIVE)) {
+    for (const [key, spec] of Object.entries(spec0)) {
       for (const r of v.snapshot[key] || []) {
         const cols = spec.cols;
-        const jsonCols = ['layout', 'values', 'default_layout'];
+        const jsonCols = ['layout', 'values', 'default_layout', 'mode_presets'];
         const vals = cols.map((c) => (jsonCols.includes(c) ? `CAST(:${c} AS jsonb)` : `:${c}`)).join(', ');
         const sets = cols.filter((c) => c !== 'id').map((c) => `${quoted(c)} = EXCLUDED.${quoted(c)}`);
         sets.push('deleted_at = NULL', 'updated_at = NOW()');
@@ -1057,6 +1184,12 @@ async function reviewReadiness(sequelize, { episodeId }) {
       if (!r || r.deleted_at) findings.push({ code: 'prime_source_missing', severity: 'blocking', ref: s.id });
       else if (r.performer !== PRIME) findings.push({ code: 'source_performer_changed', severity: 'blocking', ref: s.id });
     }
+    // C1b: a performer clip's take is still there, and still Lala's or a guest's (D3).
+    for (const item of live.items.filter((i) => i.kind === 'performer_clip')) {
+      const r = await one(sequelize, 'SELECT performer, deleted_at FROM episode_raw_clips WHERE id = :id', { id: item.values?.raw_clip_id }, t);
+      if (!r || r.deleted_at) findings.push({ code: 'performer_source_missing', severity: 'blocking', ref: item.id });
+      else if (!SCENE_PERFORMERS.includes(r.performer)) findings.push({ code: 'source_performer_changed', severity: 'blocking', ref: item.id });
+    }
 
     // Spoken lines (not Prime's) each need a current approved take (Voice Studio B1).
     const lc = require('../utils/voiceLineContext');
@@ -1108,11 +1241,22 @@ async function updateItem(sequelize, { episodeId, editRevision, userId, batch, i
     if (JSON.stringify(body.values).length > 20000) fail(400, 'BAD_VALUE', 'values is too large');
     values = body.values;
   }
-  if (!a && values === null) fail(400, 'NOTHING_TO_CHANGE', 'Send an anchor or values');
+  if (!a && values === null && body.duration_ms === undefined) fail(400, 'NOTHING_TO_CHANGE', 'Send an anchor, values or a length');
   return withEdit(sequelize, { episodeId, editRevision, userId, batch }, async (t) => {
-    const r = await one(sequelize, 'SELECT id, episode_id, kind, deleted_at FROM timeline_items WHERE id = :itemId FOR UPDATE', { itemId }, t);
+    const r = await one(sequelize, 'SELECT id, episode_id, kind, "values", deleted_at FROM timeline_items WHERE id = :itemId FOR UPDATE', { itemId }, t);
     if (!r || r.deleted_at || r.episode_id !== episodeId) fail(404, 'NOT_FOUND', 'Timeline item not found');
     if (r.kind === 'dialogue_placement') fail(409, 'USE_DIALOGUE_MOVE', 'A dialogue placement is moved with its own route');
+    if (C1B_ITEM_KINDS.includes(r.kind)) {
+      // A C1b item's values change field by field, and the whole is checked again (R8.5).
+      const cur = await one(sequelize, 'SELECT duration_ms FROM timeline_items WHERE id = :itemId', { itemId }, t);
+      const merged = values === null ? r.values : { ...r.values, ...values };
+      const length = body.duration_ms !== undefined ? body.duration_ms : (r.kind === 'caption' ? cur.duration_ms : null);
+      const checked = await c1bItem(sequelize, episodeId, r.kind, merged, r.kind === 'performer_clip' && body.duration_ms === undefined ? null : length, t);
+      values = checked.values;
+      await q(sequelize, 'UPDATE timeline_items SET duration_ms = :d, updated_at = NOW() WHERE id = :itemId', { d: checked.duration_ms, itemId }, t);
+    } else if (body.duration_ms !== undefined) {
+      fail(400, 'BAD_VALUE', `A ${r.kind} item has no length`);
+    }
     if (a) {
       await checkAnchorTarget(sequelize, episodeId, a, t);
       if (a.anchor_kind === 'item_start' && a.anchor_ref === itemId) fail(400, 'BAD_ANCHOR', 'An item cannot be anchored to itself');
@@ -1274,7 +1418,7 @@ const BATCH_STEPS = {
   'audio-item.update': (s, a) => updateAudioItem(s, { ...a, audioItemId: a.id }),
   'visibility.add': (s, a) => addVisibilityRule(s, a),
   'visibility.update': (s, a) => updateVisibility(s, { ...a, ruleId: a.id }),
-  'beat.mode': (s, a) => setBeatMode(s, { ...a, beatNumber: a.body.beat, primeMode: a.body.prime_mode, note: a.body.note }),
+  'beat.mode': (s, a) => setBeatMode(s, { ...a, beatNumber: a.body.beat, primeMode: a.body.prime_mode, visualMode: a.body.visual_mode, note: a.body.note }),
   remove: (s, a) => removeRow(s, { ...a, what: a.body.what, id: a.id }),
 };
 const MAX_BATCH = 50;
@@ -1310,6 +1454,7 @@ async function batchOps(sequelize, { episodeId, editRevision, userId, steps }) {
 
 module.exports = {
   EditError, setMedia, readVideoProbe, stableJson, ITEM_KINDS, MAX_CLIP_MS, PROBE_TIMEOUT_MS,
+  C1B_ITEM_KINDS, CAPTION_STYLES, VISUAL_MODES, c1bReady,
   loadEdit, setBeatMode, setBeatDuration, lockBeatTiming, placeSceneClip, updateSceneClip,
   placeDialogue, moveDialogue,
   placeSegment, moveSegment, trimSegmentVideo, trimSegmentAudio, setSegmentAudio, setSegmentLayout, splitSegment, replaceTake,

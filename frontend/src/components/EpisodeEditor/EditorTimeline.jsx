@@ -15,6 +15,10 @@
  * sound, the end of a scene clip). Media dragged from the media panel is dropped on
  * the lane that takes it. Each gesture is one change, saved when the pointer
  * is released (onMoveBlock, onTrimBlock, onDropAsset).
+ *
+ * Gate 2a: a Lala or guest clip (Performer lane) and a caption move and trim
+ * like a sound; the Performer lane takes Lala's and guests' clips. The
+ * ruler marks each timed change of visual mode (gameplay ↔ cinematic).
  */
 import React, { useMemo, useRef, useState } from 'react';
 import { Eye, EyeOff, Lock, Unlock, Volume2, VolumeX, Link2 } from 'lucide-react';
@@ -23,14 +27,19 @@ import { LANES, timecode } from '../../lib/editorModel';
 export const LABEL_W = 190;
 
 /** What can be dragged along the clock, and which edges trim. */
-export const MOVABLE = new Set(['segment', 'dialogue', 'audio_item', 'scene_clip']);
-export const TRIM_EDGES = { segment: ['start', 'end'], scene_clip: ['end'], audio_item: ['start', 'end'] };
+export const MOVABLE = new Set(['segment', 'dialogue', 'audio_item', 'scene_clip', 'performer_clip', 'caption']);
+export const TRIM_EDGES = {
+  segment: ['start', 'end'], scene_clip: ['end'], audio_item: ['start', 'end'], performer_clip: ['start', 'end'], caption: ['start', 'end'],
+};
 /** Which lane takes which media (an asset's `kind`). */
 export const LANE_TAKES = {
   scene: ['angle_still', 'angle_video', 'scene_clip_source'],
+  performer: ['scene_clip_source'],
   prime: ['prime_clip'],
   dialogue: ['take'],
 };
+/** Whether a lane takes this asset: the Performer lane only Lala's and guests' clips (D3). */
+export const laneTakes = (laneKey, asset) => Boolean(asset) && (LANE_TAKES[laneKey] || []).includes(asset.kind) && (laneKey !== 'performer' || Boolean(asset.performer));
 
 /** A tick step (ms) that keeps major ticks at least ~90 px apart. */
 export function tickStep(pxPerMs) {
@@ -91,7 +100,7 @@ export default function EditorTimeline({
     return { left: at(b.start), width: Math.max(4, at(b.end) - at(b.start) + drag.dx) };
   };
 
-  const takes = (laneKey) => Boolean(draggingAsset) && (LANE_TAKES[laneKey] || []).includes(draggingAsset.kind) && !locked(laneKey);
+  const takes = (laneKey) => laneTakes(laneKey, draggingAsset) && !locked(laneKey);
   const timeFromEvent = (e) => {
     const rect = area.current.getBoundingClientRect();
     return Math.max(0, Math.round((e.clientX - rect.left) / pxPerMs));
@@ -139,6 +148,10 @@ export default function EditorTimeline({
             ))}
             {model.beats.filter((b) => b.end > b.start).map((b) => (
               <span key={b.beat} className="tle-ruler-beat" style={{ left: at(b.start), width: Math.max(1, at(b.end) - at(b.start)) }} title={`Beat ${b.beat}: ${b.name}`}>{b.beat}</span>
+            ))}
+            {(model.modeMarks || []).map((m) => (
+              <span key={m.id} className={`tle-mode-mark is-${m.mode}`} style={{ left: at(m.at) }} data-testid={`mode-mark-${m.id}`}
+                title={`Visual mode: ${m.mode} from ${timecode(m.at)} (change it on the beat card)`} aria-label={`Visual mode ${m.mode} at ${timecode(m.at)}`} />
             ))}
           </div>
           {LANES.map((lane) => (

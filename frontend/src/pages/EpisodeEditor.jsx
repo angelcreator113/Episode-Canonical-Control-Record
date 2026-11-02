@@ -16,9 +16,13 @@
  * undo and redo, and Save Draft (a named version). Every change is saved
  * when it is made, with the edit_revision the page read (useEditOps).
  *
+ * Gate 2a (rulings D3, D4, D5) adds Lala's and guests' clips over the scene
+ * (the Performer lane), captions, titles and lower thirds, opacity on every
+ * placed picture, and each beat's visual mode with timed mode changes.
+ *
  * What is not built yet is shown disabled with what unlocks it:
  * render and export (the render host, Gates 3–6), and the
- * performer, phone, gameplay, overlay and caption lanes (Gate 2). The legacy
+ * phone, gameplay and overlay lanes (Gate 2b, their state model). The legacy
  * Timeline Editor (/episodes/:id/timeline) stays until this one passes
  * testing (ruling 14).
  */
@@ -34,6 +38,7 @@ import {
 } from '../lib/editorModel';
 import { mixPlan } from '../lib/editTimeline';
 import { framePlan, mixAt, snapToFrame } from '../lib/previewPlan';
+import { TEXT_MS } from '../components/EpisodeEditor/AssetBrowser';
 import * as ops from '../lib/editOps';
 import useEditOps from '../components/EpisodeEditor/useEditOps';
 import usePreviewPlayback from '../components/EpisodeEditor/usePreviewPlayback';
@@ -178,7 +183,7 @@ export default function EpisodeEditor() {
     ? [...(edit.data.edit.visibility || [])].reverse().find((r) => r.scope === 'beat' && r.beat_number === cardBeat.beat && r.visible === false) || null
     : null;
   const frame = useMemo(() => (edit.data ? framePlan(edit.data.edit, playhead, media) : null), [edit.data, playhead, media]);
-  const hidden = { scene: view.scene?.hidden, prime: view.prime?.hidden };
+  const hidden = { scene: view.scene?.hidden, prime: view.prime?.hidden, performer: view.performer?.hidden, captions: view.captions?.hidden };
 
   // The mix, once per edit; what each sound does at t, with the preview-only lane mutes.
   const mix = useMemo(() => (edit.data ? mixPlan(edit.data.edit) : null), [edit.data]);
@@ -224,10 +229,39 @@ export default function EpisodeEditor() {
   const beatStart = (n) => model?.beats.find((b) => b.beat === n)?.start ?? 0;
   const segmentOf = (block) => (block.kind === 'commentary' ? allBlocks.find((b) => b.id === block.linked) || block : block);
 
+  /** Where something new placed at t is anchored: to the beat it starts in, else to the start of the edit. */
+  const anchorForNew = (t) => {
+    const b = model.beats.find((x) => t >= x.start && t < x.end);
+    return b ? { anchor_kind: 'beat_start', anchor_beat: b.beat, offset_ms: Math.round(t - b.start) } : { anchor_kind: 'edit_start', offset_ms: Math.round(t) };
+  };
+  const c1b = edit.data?.c1b !== false;
+  const refuseNoC1b = (what) => {
+    if (c1b) return false;
+    editor.say({ kind: 'info', text: `${what} needs the C1b migration (Gate 2a), which has not run on this server. Nothing was changed.` });
+    return true;
+  };
+
   /** Places media from the media panel at edit time t (a drop, or the playhead). */
   const placeAsset = useCallback((asset, t, lane = null) => {
     if (!model || !edit.data) return;
     const at = snapToFrame(t);
+    if (asset.kind === 'caption') {
+      if (refuseNoC1b('A caption') || refuseLocked('captions', 'Add text')) return;
+      const text = window.prompt(`${asset.label} text`, '');
+      if (!text || !text.trim()) return;
+      editor.run(ops.addItem({ kind: 'caption', ...anchorForNew(at), duration_ms: TEXT_MS, values: { text: text.trim().slice(0, 500), style_key: asset.style_key, layout: asset.layout } }, `Add ${asset.label.toLowerCase()}`));
+      return;
+    }
+    if (asset.performer && (lane === 'performer' || lane == null)) {
+      if (refuseNoC1b('Lala over the scene') || refuseLocked('performer', 'Place performer')) return;
+      if (!(asset.duration_ms > 0)) {
+        editor.say({ kind: 'error', text: `${asset.label} has no measured length yet, so it can't be placed over the scene. Nothing was changed.` });
+        return;
+      }
+      editor.run(ops.addItem({ kind: 'performer_clip', ...anchorForNew(at),
+        values: { raw_clip_id: asset.id, source_in_ms: 0, source_out_ms: asset.duration_ms, layout: { x: 0, y: 0, w: 1920, h: 1080 }, layer: 0 } }, `Place ${asset.label} over the scene`));
+      return;
+    }
     if (asset.kind === 'prime_clip') {
       if (refuseLocked('prime', 'Place Prime')) return;
       editor.run(ops.placeSegment({ raw_clip_id: asset.id, anchor_kind: 'edit_start', offset_ms: at }, `Place ${asset.label}`));
@@ -271,6 +305,7 @@ export default function EpisodeEditor() {
     if (block.kind === 'segment') editor.run(ops.moveSegment(block.row, ops.anchorAt(block.row, at, model.beats)));
     else if (block.kind === 'dialogue') editor.run(ops.moveDialogue(block.row, ops.anchorAt(block.row, at, model.beats)));
     else if (block.kind === 'audio_item') editor.run(ops.updateAudioItem(block.row, ops.anchorAt(block.row, at, model.beats), 'Move sound'));
+    else if (block.kind === 'performer_clip' || block.kind === 'caption') editor.run(ops.updateItem(block.row, ops.anchorAt(block.row, at, model.beats), block.kind === 'caption' ? 'Move caption' : 'Move performer clip'));
     else if (block.kind === 'scene_clip') {
       // Scene clips are laid end to end in their beat: a drag changes their order, never a time.
       const { from, to } = sceneOrder(block, newStart);
@@ -300,6 +335,22 @@ export default function EpisodeEditor() {
         const delta = Math.max(-row.source_in_ms, Math.min(row.source_out_ms - row.source_in_ms - 33, Math.round(at - block.start)));
         editor.run(ops.updateAudioItem(row, { source_in_ms: row.source_in_ms + delta, ...ops.anchorAt(row, block.start + delta, model.beats) }, 'Trim sound'));
       }
+    } else if (block.kind === 'performer_clip') {
+      const v = row.values || {};
+      if (edge === 'end') {
+        editor.run(ops.updateItem(row, { values: { source_out_ms: Math.round(v.source_in_ms + Math.max(33, at - block.start)) } }, 'Trim performer clip'));
+      } else {
+        const delta = Math.max(-v.source_in_ms, Math.min(v.source_out_ms - v.source_in_ms - 33, Math.round(at - block.start)));
+        editor.run(ops.updateItem(row, { values: { source_in_ms: v.source_in_ms + delta }, ...ops.anchorAt(row, block.start + delta, model.beats) }, 'Trim performer clip'));
+      }
+    } else if (block.kind === 'caption') {
+      if (edge === 'end') {
+        editor.run(ops.updateItem(row, { duration_ms: Math.max(33, Math.round(at - block.start)) }, 'Change caption length'));
+      } else {
+        // Its end stays where it is.
+        const delta = Math.max(-block.start, Math.min(row.duration_ms - 33, Math.round(at - block.start)));
+        editor.run(ops.updateItem(row, { duration_ms: row.duration_ms - delta, ...ops.anchorAt(row, block.start + delta, model.beats) }, 'Change caption length'));
+      }
     }
   }, [editor, view, model]);
 
@@ -311,6 +362,7 @@ export default function EpisodeEditor() {
     else if (b.kind === 'segment') editor.run(ops.removeSegment(b.row));
     else if (b.kind === 'dialogue') editor.run(ops.removeDialogue(b.row));
     else if (b.kind === 'audio_item') editor.run(ops.removeAudioItem(b.row));
+    else if (b.kind === 'performer_clip' || b.kind === 'caption') editor.run(ops.removeItem(b.row));
   }, [editor, allBlocks, view]);
 
   const splitAtPlayhead = useCallback((block) => {
@@ -353,6 +405,10 @@ export default function EpisodeEditor() {
       const body = { track: row.track, asset_ref: row.asset_ref, slot: row.slot, source_in_ms: row.source_in_ms, source_out_ms: row.source_out_ms,
         anchor_kind: 'edit_start', offset_ms: at, gain_db: row.gain_db, fade_in_ms: row.fade_in_ms, fade_out_ms: row.fade_out_ms, duck_under_dialogue_db: row.duck_under_dialogue_db };
       editor.run(ops.addAudioItem(Object.fromEntries(Object.entries(body).filter(([, v]) => v != null)), `Paste ${label}`));
+    } else if (kind === 'performer_clip' || kind === 'caption') {
+      if (refuseLocked(kind === 'caption' ? 'captions' : 'performer', 'Paste')) return;
+      const body = { kind, ...anchorForNew(at), values: row.values, ...(kind === 'caption' ? { duration_ms: row.duration_ms } : {}) };
+      editor.run(ops.addItem(body, `Paste ${label}`));
     }
   }, [clipboard, model, playhead, editor, focusBeat, view]);
 
@@ -369,6 +425,18 @@ export default function EpisodeEditor() {
     trimSegment: (block, range) => { if (!refuseLocked('prime', 'Trim')) editor.run(ops.trimSegment(segmentOf(block).row, range)); },
     segmentAudio: (block, changes) => { if (!refuseLocked('prime_vo', 'Change')) editor.run(ops.setSegmentAudio(segmentOf(block).row, changes)); },
     layout: (block, layout) => { if (!refuseLocked('prime', 'Move Prime')) editor.run(ops.setSegmentLayout(segmentOf(block).row, layout)); },
+    item: (block, changes, label) => { if (!refuseLocked(block.lane, 'Change')) editor.run(ops.updateItem(block.row, changes, label)); },
+    itemLayout: (block, layout) => {
+      if (!refuseLocked(block.lane, 'Move')) editor.run(ops.updateItem(block.row, { values: { layout } }, block.kind === 'caption' ? 'Move caption' : 'Move performer clip'));
+    },
+    visualMode: (beat, mode) => { if (!refuseNoC1b('A visual mode')) editor.run(ops.setBeatVisualMode(beat.beat, mode, beat.visual_mode_set ?? null)); },
+    addModeChange: (beat, mode) => {
+      if (refuseNoC1b('A mode change')) return;
+      const at = snapToFrame(playhead);
+      if (!(at > beat.start && at < beat.end)) { editor.say({ kind: 'info', text: 'Put the playhead inside the beat to switch its mode there.' }); return; }
+      editor.run(ops.addItem({ kind: 'visual_mode', anchor_kind: 'beat_start', anchor_beat: beat.beat, offset_ms: Math.round(at - beat.start), values: { mode } }, `Beat ${beat.beat}: ${mode} from the playhead`));
+    },
+    removeModeChange: (mark) => editor.run(ops.removeItem(mark.row, 'Remove mode change')),
     beatMode: (beat, mode) => editor.run(ops.setBeatMode(beat.beat, mode, beat.prime_mode)),
     hidePip: (beat) => editor.run(ops.setBeatPipVisible(beat.beat, false)),
     showPip: (beat, rule) => editor.run(ops.removeVisibility(rule)),
@@ -551,10 +619,19 @@ export default function EpisodeEditor() {
             playing={player.playing} rate={player.rate} onToggle={player.toggle} volume={volume} onVolume={setVolume}
             muted={previewMuted} onMute={() => setPreviewMuted((m) => !m)} sounds={sounds} failedVideo={failedVideo} onVideoFailed={onVideoFailed}
             editable={editable} primeLocked={laneLocked('prime')} onLayoutDrag={setLiveLayout}
-            onLayoutCommit={(segmentId, layout) => { const b = allBlocks.find((x) => x.id === segmentId); if (b) act.layout(b, layout); }} />
+            locked={{ performer: laneLocked('performer'), captions: laneLocked('captions') }}
+            onLayoutCommit={(id, layout) => {
+              const b = allBlocks.find((x) => x.id === id);
+              if (!b) return;
+              // A drag moves and resizes; the stored opacity stays.
+              const stored = b.kind === 'segment' ? b.row?.layout : b.row?.values?.layout;
+              const next = stored?.opacity != null ? { ...layout, opacity: stored.opacity } : layout;
+              if (b.kind === 'segment') act.layout(b, next); else act.itemLayout(b, next);
+            }} />
           <div className="tle-split-v" role="separator" aria-orientation="vertical" aria-label="Resize the inspector" onPointerDown={(e) => dragRight(e, { axis: 'x', sign: -1 })} onDoubleClick={resetRight} />
           <EditorInspector block={selected} beat={cardBeat} readiness={readiness?.beats.find((r) => r.beat === cardBeat?.beat)}
-            editable={editable} act={act} liveLayout={liveLayout} beatPlan={beatPlan} pipHidden={pipHiddenRule} />
+            editable={editable} act={act} liveLayout={liveLayout} beatPlan={beatPlan} pipHidden={pipHiddenRule}
+            modeMarks={model.modeMarks} playhead={playhead} c1b={c1b} />
         </div>
 
         <div className="tle-split-h" role="separator" aria-orientation="horizontal" aria-label="Resize the preview and the timeline"

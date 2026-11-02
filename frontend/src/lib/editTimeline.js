@@ -232,6 +232,76 @@ function layoutAt(edit, t, timeline = beatTimeline(edit), placed = placedSegment
   };
 }
 
+// ── C1b (Gate 2a, 2026-11-02; design R8.2, R8.3.1; rulings D3, D4, D5) ─────────
+
+const LASTING_KINDS = ['performer_clip', 'caption'];
+
+/** Each item of `kind` that lasts, where it is placed: [{ item, order, start, end }] (unresolved ones left out). */
+function itemSpans(edit, timeline, kind) {
+  const out = [];
+  (edit.items || []).forEach((item, order) => {
+    if (item.kind !== kind || !(item.duration_ms > 0)) return;
+    const r = resolveAnchor(edit, timeline, item);
+    if (!r.error) out.push({ item, order, start: r.t, end: r.t + item.duration_ms });
+  });
+  return out;
+}
+
+/**
+ * The visual mode at t (R8.2): the beat's default (gameplay unless the beat
+ * says cinematic), changed by each visual_mode item placed in that beat at or
+ * before t (the latest wins; a tie goes to the one listed last). It holds
+ * until the next change or the beat's end; the next beat starts in its own
+ * default. It moves no time. null outside every beat.
+ */
+function modeAt(edit, t, timeline = beatTimeline(edit)) {
+  const beat = timeline.beats.find((b) => t >= b.start && t < b.end);
+  if (!beat) return null;
+  let mode = (edit.beatVisualModes && edit.beatVisualModes[beat.beat] === 'cinematic') ? 'cinematic' : 'gameplay';
+  let at = -Infinity;
+  for (const item of edit.items || []) {
+    if (item.kind !== 'visual_mode') continue;
+    const r = resolveAnchor(edit, timeline, item);
+    if (r.error || r.t < beat.start || r.t >= beat.end || r.t > t || r.t < at) continue;
+    at = r.t;
+    mode = item.values && item.values.mode === 'cinematic' ? 'cinematic' : 'gameplay';
+  }
+  return mode;
+}
+
+const opacityOf = (layout) => (layout && Number.isFinite(layout.opacity) ? layout.opacity : 1);
+const boxOf = (layout) => ({ x: layout.x, y: layout.y, w: layout.w, h: layout.h });
+
+/**
+ * The picture at t as ordered layers, bottom to top (R8.3.1 with D3 and D4):
+ * the scene; Lala's and guests' performer clips (by their layer, then the
+ * order they were placed), over the scene and under Prime; Prime's PIP; then
+ * captions and titles. Each layer has its kind, its source, its box in pixels
+ * at 1920x1080 and its opacity (D5). Phone, overlays, toasts, cursor and stats
+ * come with their state model (Gate 2b). layoutAt is unchanged.
+ */
+function layersAt(edit, t, timeline = beatTimeline(edit), placed = placedSegments(edit, timeline)) {
+  const at = layoutAt(edit, t, timeline, placed);
+  const layers = [];
+  if (at.scene) layers.push({ kind: 'scene', ...at.scene, opacity: 1 });
+  const performers = itemSpans(edit, timeline, 'performer_clip').filter((s) => t >= s.start && t < s.end)
+    .sort((a, b) => ((a.item.values.layer || 0) - (b.item.values.layer || 0)) || (a.order - b.order));
+  for (const s of performers) {
+    const v = s.item.values;
+    layers.push({
+      kind: 'performer', item_id: s.item.id, raw_clip_id: v.raw_clip_id, source_time_ms: v.source_in_ms + (t - s.start),
+      layout: boxOf(v.layout), opacity: opacityOf(v.layout), layer: v.layer || 0,
+    });
+  }
+  if (at.pip) layers.push({ kind: 'pip', ...at.pip, layout: boxOf(at.pip.layout), opacity: opacityOf(at.pip.layout) });
+  const captions = itemSpans(edit, timeline, 'caption').filter((s) => t >= s.start && t < s.end).sort((a, b) => a.order - b.order);
+  for (const s of captions) {
+    const v = s.item.values;
+    layers.push({ kind: 'caption', item_id: s.item.id, text: v.text, style_key: v.style_key, layout: boxOf(v.layout), opacity: opacityOf(v.layout) });
+  }
+  return { t, beat: at.beat, mode: modeAt(edit, t, timeline), layers, prime_missing: at.prime_missing, scene_gap: at.scene_gap };
+}
+
 /** The source time a mix event plays at edit time t (one clock: no offset field). */
 const sourceTimeAt = (event, t) => event.source_start_ms + (t - event.timeline_start_ms);
 
@@ -411,6 +481,13 @@ function editFindings(edit) {
     findings.push({ code: 'dialogue_unplaced', severity: 'blocking', beat: k.beat_number, line_index: k.line_index, approval_id: id });
   }
 
+  // C1b: a performer clip or a caption that runs past the edit's end is cut there.
+  for (const kind of LASTING_KINDS) {
+    for (const s of itemSpans(edit, timeline, kind)) {
+      if (s.end > timeline.duration) findings.push({ code: 'item_beyond_edit_end', severity: 'warning', ref: s.item.id, what: kind, from_ms: Math.max(timeline.duration, s.start), to_ms: s.end });
+    }
+  }
+
   findings.push(...coverageFindings(edit, timeline, placed));
   return findings;
 }
@@ -459,5 +536,6 @@ function timingChanges(before, after) {
 export {
   FRAME_W, FRAME_H, DEFAULT_LAYOUT, GAP_TOLERANCE_MS, BEATS,
   beatTimeline, resolveAnchor, placedSegments, placedDialogue, visibleAt, layoutAt, mixPlan, sourceTimeAt, coverageFindings, editFindings,
+  modeAt, layersAt, itemSpans,
   timingOf, timingChanges,
 };

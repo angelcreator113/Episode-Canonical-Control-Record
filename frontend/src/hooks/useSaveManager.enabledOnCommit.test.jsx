@@ -7,8 +7,16 @@
  * 80275cc0). Here the key is pressed exactly when the DOM shows the loaded
  * state, as a person (or findByTestId) would see it, before React's passive
  * effects run.
+ *
+ * Gate 2a follow-up (2026-11-02): the payload, episode id and onSaved were
+ * still copied in passive effects. TimelineEditor's getSavePayload is null
+ * until its load is done, so in the same moment `enabled` was true but the
+ * payload was the pre-load one, and Ctrl+S saved nothing ("called 0 times",
+ * Frontend Tests on PR 3682). The second test presses Ctrl+S from a later
+ * sibling's layout effect: after the editor's layout effects, before any
+ * passive effect, every time.
  */
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { vi, describe, test, expect, beforeEach, afterEach } from 'vitest';
 
@@ -65,5 +73,45 @@ describe('useSaveManager: enabled as soon as the loaded state is on screen', () 
     await pressed;
     await new Promise((r) => setTimeout(r, 50));
     expect(saveEpisodeData).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('useSaveManager: the loaded payload is used as soon as the loaded state commits', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.mocked(saveEpisodeData).mockResolvedValue({ data: { success: true, scenes: [] } });
+  });
+  afterEach(() => vi.restoreAllMocks());
+
+  test('Ctrl+S in the commit that loads the editor saves the loaded payload, not the pre-load null', async () => {
+    function GatedEditor({ loaded }) {
+      // As TimelineEditor: the payload is null until the load is done.
+      const getSavePayload = useCallback(() => (loaded ? payload() : null), [loaded]);
+      useSaveManager({ episodeId: 'ep-1', getSavePayload, enabled: loaded, autoSaveDelay: 10000 });
+      return null;
+    }
+    // A later sibling: its layout effect runs after GatedEditor's and before any passive effect.
+    function PressOnLoad({ loaded }) {
+      useLayoutEffect(() => {
+        if (loaded) window.dispatchEvent(new KeyboardEvent('keydown', { key: 's', ctrlKey: true }));
+      }, [loaded]);
+      return null;
+    }
+    function App() {
+      const [loaded, setLoaded] = useState(false);
+      useEffect(() => { Promise.resolve().then(() => setLoaded(true)); }, []);
+      return <><GatedEditor loaded={loaded} /><PressOnLoad loaded={loaded} /></>;
+    }
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const root = createRoot(host);
+    root.render(<App />);
+    await new Promise((r) => setTimeout(r, 50));
+    expect(saveEpisodeData).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(saveEpisodeData).mock.calls[0]).toEqual(['ep-1', payload()]);
+    root.unmount();
+    host.remove();
   });
 });

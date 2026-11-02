@@ -16,6 +16,8 @@ const studio = require('../../src/services/voiceStudioService');
 const { saveEpisodeScript } = require('../../src/services/scriptSave');
 const tl = require('../../src/utils/editTimeline');
 const migration = require('../../src/migrations/20261028100000-create-episode-edit-tables');
+// C1b (Gate 2a) adds columns to the same tables: re-applied after C1-1 re-creates them.
+const migrationC1b = require('../../src/migrations/20261102120000-add-episode-edit-c1b-kinds');
 
 const { sequelize } = models;
 const shouldSkip =
@@ -146,6 +148,9 @@ const SCRIPT = [
     for (const table of EDIT_TABLES) expect((await rows('SELECT to_regclass(:t) AS r', { t: table }))[0].r).toBeNull();
     await migration.up(sequelize.getQueryInterface());
     for (const table of EDIT_TABLES) expect((await rows('SELECT to_regclass(:t)::text AS r', { t: table }))[0].r).toBe(table);
+    // The schema the rest of the suite runs on is the latest one: C1 and then C1b.
+    await migrationC1b.up(sequelize.getQueryInterface(), require('sequelize'));
+    expect((await rows(`SELECT count(*)::int AS n FROM information_schema.columns WHERE table_name = 'timeline_items' AND column_name = 'duration_ms'`))[0].n).toBe(1);
   });
 
   test('C1-2 a stale edit_revision is refused and writes nothing; a success adds one; two writes from one view: one 409', async () => {
