@@ -32,7 +32,10 @@ router.get('/:episodeId/timeline-data', requireAuth, asyncHandler(async (req, re
     });
   }
 
-  res.json(timelineData);
+  // `basis`: the fingerprint the Timeline Editor sends back with its next
+  // save, so the save never replaces a timeline it did not load.
+  const { timelineBasis } = require('../utils/timelineSaveGuard');
+  res.json({ ...timelineData.toJSON(), basis: timelineBasis(timelineData) });
 }));
 
 // PUT /api/v1/episodes/:episodeId/timeline-data
