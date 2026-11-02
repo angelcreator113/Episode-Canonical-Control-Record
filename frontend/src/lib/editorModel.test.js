@@ -1,7 +1,7 @@
 /** What the episode editor draws, from an edit in the server's shape (Timeline Editor redesign P1). */
 import { describe, test, expect } from 'vitest';
 import {
-  LANES, buildTimeline, beatReadiness, mediaIndex, stillFrame, timecode, editPoints, findingText,
+  LANES, buildTimeline, beatReadiness, mediaIndex, timecode, editPoints, findingText,
 } from './editorModel';
 
 const media = mediaIndex({
@@ -92,25 +92,6 @@ describe('beatReadiness', () => {
     expect(r.beats.find((b) => b.beat === 3)).toMatchObject({ status: 'blocked' });
     expect(r.beats.find((b) => b.beat === 4)).toMatchObject({ status: 'empty' });
     expect(r.episode).toEqual([{ code: 'something', severity: 'warning' }]);
-  });
-});
-
-describe('stillFrame', () => {
-  test('the scene image and Prime’s PIP box at t come from layoutAt', () => {
-    const f = stillFrame(EDIT, 2000, media);
-    expect(f.beat).toBe(1);
-    expect(f.scene).toMatchObject({ clip_id: 'c1', image: 'https://cdn/a1.jpg', video: false });
-    expect(f.pip).toMatchObject({ segment_id: 's1', layout: { x: 100, y: 80, w: 480, h: 270 }, image: 'https://cdn/r1.jpg' });
-  });
-  test('a locked beat past its clips shows no scene (scene gap)', () => {
-    const f = stillFrame(EDIT, 7000, media);
-    expect(f.scene).toBeNull();
-    expect(f.scene_gap).toBe(true);
-  });
-  test('a gameplay-only beat with no Prime footage is not "missing"; a required one is', () => {
-    expect(stillFrame(EDIT, 9000, media).prime_missing).toBe(false);
-    const noPrime = { ...EDIT, segments: [] };
-    expect(stillFrame(noPrime, 2000, media).prime_missing).toBe(true);
   });
 });
 

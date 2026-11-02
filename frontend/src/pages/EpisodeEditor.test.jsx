@@ -67,10 +67,13 @@ const noWrites = () => {
   for (const m of ['post', 'put', 'patch', 'delete']) expect(api[m]).not.toHaveBeenCalled();
 };
 
-describe('EpisodeEditor (P1, read only)', () => {
+describe('EpisodeEditor (P1 read only, P2 working preview)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
+    // jsdom has no media playback: play and pause only record that they were asked.
+    vi.spyOn(window.HTMLMediaElement.prototype, 'play').mockImplementation(function play() { return Promise.resolve(); });
+    vi.spyOn(window.HTMLMediaElement.prototype, 'pause').mockImplementation(function pause() {});
     vi.spyOn(console, 'error').mockImplementation(() => {});
     vi.spyOn(console, 'warn').mockImplementation(() => {});
   });
@@ -114,7 +117,7 @@ describe('EpisodeEditor (P1, read only)', () => {
     renderAt();
     await screen.findByText('Episode 3: A New Alliance');
     for (const name of [/^Save Draft/, /^Preview Render \(Pending: the render host/, /^Export Video \(Pending: the render host/,
-      /^Undo \(Editing arrives in P3\)/, /^Redo/, /^Split/, /^Cut/, /^Copy/, /^Paste/, /^Delete/, /^Play \(arrives in P2\)/]) {
+      /^Undo \(Editing arrives in P3\)/, /^Redo/, /^Split/, /^Cut/, /^Copy/, /^Paste/, /^Delete/]) {
       const b = screen.getByRole('button', { name });
       expect(b.disabled).toBe(true);
       expect(b.getAttribute('aria-disabled')).toBe('true');
@@ -171,5 +174,21 @@ describe('EpisodeEditor (P1, read only)', () => {
     renderAt();
     expect(await screen.findByText(/Raw clips could not be loaded/)).toBeTruthy();
     expect(screen.getByTestId('editor-timeline')).toBeTruthy();
+  });
+
+  test("P2: Prime plays from her cutout in the preview, and Play and Space start and stop the clock without writing anything", async () => {
+    answer({ [`/api/v1/episode-clips/${EP}`]: () => ok([{ id: 'r1', performer: 'justawoman', label: 'Prime take', thumbnail_url: 'https://cdn/r1.jpg',
+      url_raw: 'https://cdn/r1.mp4', url_cutout: 'https://cdn/r1-cutout.webm', duration_seconds: 6, beat_number: 1 }]) });
+    renderAt();
+    const monitor = await screen.findByTestId('editor-monitor');
+    await waitFor(() => expect(within(monitor).getByLabelText('Prime: Prime take').getAttribute('src')).toBe('https://cdn/r1-cutout.webm'));
+    expect(within(monitor).getByLabelText('Prime: Prime take').muted).toBe(true);
+    const play = screen.getByRole('button', { name: 'Play' });
+    expect(play.disabled).toBe(false);
+    fireEvent.click(play);
+    expect(screen.getByRole('button', { name: 'Pause' })).toBeTruthy();
+    fireEvent.keyDown(window, { key: ' ' });
+    expect(screen.getByRole('button', { name: 'Play' })).toBeTruthy();
+    noWrites();
   });
 });

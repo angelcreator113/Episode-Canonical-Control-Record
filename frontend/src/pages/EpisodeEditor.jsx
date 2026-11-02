@@ -6,8 +6,11 @@
  * the chosen reference (plan §3): top bar, media | preview | inspector,
  * the edit toolbar, then the 14-beat rail and the multitrack.
  *
+ * P2 adds the working preview: playback on the edit's one clock, with the
+ * scene, Prime's PIP, her commentary and the approved dialogue.
+ *
  * What is not built yet is shown disabled with what unlocks it: editing (P3),
- * playback (P2), render and export (the render host, Gates 3–6), and the
+ * render and export (the render host, Gates 3–6), and the
  * performer, phone, gameplay, overlay and caption lanes (Gate 2). The legacy
  * Timeline Editor (/episodes/:id/timeline) stays until this one passes
  * testing (ruling 14).
@@ -20,8 +23,11 @@ import {
 } from 'lucide-react';
 import { episodeEditApi, readFailure } from '../lib/episodeEditApi';
 import {
-  buildTimeline, beatReadiness, mediaIndex, stillFrame, editPoints,
+  buildTimeline, beatReadiness, mediaIndex, editPoints,
 } from '../lib/editorModel';
+import { mixPlan } from '../lib/editTimeline';
+import { framePlan, mixAt, snapToFrame } from '../lib/previewPlan';
+import usePreviewPlayback from '../components/EpisodeEditor/usePreviewPlayback';
 import AssetBrowser from '../components/EpisodeEditor/AssetBrowser';
 import EditorPreview from '../components/EpisodeEditor/EditorPreview';
 import EditorInspector from '../components/EpisodeEditor/EditorInspector';
@@ -124,10 +130,39 @@ export default function EpisodeEditor() {
   const beatAt = model ? (model.beats.find((b) => playhead >= b.start && playhead < b.end)
     || (playhead >= model.duration ? [...model.beats].reverse().find((b) => b.end > b.start) : null)) : null;
   const cardBeat = focusBeat != null ? model?.beats.find((b) => b.beat === focusBeat) : beatAt;
-  const frame = useMemo(() => (edit.data ? stillFrame(edit.data.edit, playhead, media) : null), [edit.data, playhead, media]);
+  const frame = useMemo(() => (edit.data ? framePlan(edit.data.edit, playhead, media) : null), [edit.data, playhead, media]);
   const hidden = { scene: view.scene?.hidden, prime: view.prime?.hidden };
 
-  const seek = useCallback((t) => setPlayhead(clamp(Math.round(t), 0, model?.duration || 0)), [model]);
+  // The mix, once per edit; what each sound does at t, with the preview-only lane mutes.
+  const mix = useMemo(() => (edit.data ? mixPlan(edit.data.edit) : null), [edit.data]);
+  const mutedLanes = useMemo(() => Object.fromEntries(Object.entries(view).filter(([, v]) => v?.muted).map(([k]) => [k, true])), [view]);
+  const soundsAt = useCallback((t) => (mix ? mixAt(mix, t, media, { mutedLanes }) : []), [mix, media, mutedLanes]);
+  const [volume, setVolumeState] = useState(() => {
+    const v = Number(readStored('tle-preview-volume', 0.8));
+    return Number.isFinite(v) ? clamp(v, 0, 1) : 0.8;
+  });
+  const [previewMuted, setPreviewMuted] = useState(false);
+  const setVolume = (v) => { setVolumeState(v); writeStored('tle-preview-volume', v); };
+  const [failedVideo, setFailedVideo] = useState({});
+  const onVideoFailed = useCallback((src) => { if (src) setFailedVideo((cur) => ({ ...cur, [src]: true })); }, []);
+  const player = usePreviewPlayback({
+    duration: model?.duration || 0, playhead, setPlayhead, soundsAt, masterVolume: previewMuted ? 0 : volume,
+  });
+  const sounds = useMemo(() => soundsAt(playhead).map((s) => ({ ...s, failed: Boolean(player.failed[s.key]) })), [soundsAt, playhead, player.failed]);
+
+  const seek = useCallback((t) => {
+    const at = snapToFrame(clamp(Math.round(t), 0, model?.duration || 0));
+    setPlayhead(at);
+    player.restartAt(at);
+  }, [model, player]);
+
+  // While playing, the timeline keeps the playhead in view.
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!player.playing || !el || !pxPerMs) return;
+    const x = playhead * pxPerMs;
+    if (x < el.scrollLeft || x > el.scrollLeft + el.clientWidth - 40) el.scrollLeft = Math.max(0, x - 40);
+  }, [playhead, player.playing, pxPerMs]);
   const points = useMemo(() => (model ? editPoints(model) : [0]), [model]);
   const prevEdit = () => seek([...points].reverse().find((p) => p < playhead) ?? 0);
   const nextEdit = () => seek(points.find((p) => p > playhead) ?? (model?.duration || 0));
@@ -151,7 +186,11 @@ export default function EpisodeEditor() {
     const onKey = (e) => {
       const tag = e.target?.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || e.target?.isContentEditable) return;
-      if (e.key === 'ArrowLeft') { e.preventDefault(); seek(playhead - (e.shiftKey ? 1000 : FRAME_MS)); }
+      if (e.key === ' ' && tag !== 'BUTTON') { e.preventDefault(); player.toggle(); }
+      else if (e.key === 'k' || e.key === 'K') { e.preventDefault(); player.pause(); }
+      else if (e.key === 'l' || e.key === 'L') { e.preventDefault(); if (player.playing) player.faster(); else player.play(); }
+      else if (e.key === 'j' || e.key === 'J') { e.preventDefault(); seek(playhead - 5000); }
+      else if (e.key === 'ArrowLeft') { e.preventDefault(); seek(playhead - (e.shiftKey ? 1000 : FRAME_MS)); }
       else if (e.key === 'ArrowRight') { e.preventDefault(); seek(playhead + (e.shiftKey ? 1000 : FRAME_MS)); }
       else if (e.key === 'Home') { e.preventDefault(); seek(0); }
       else if (e.key === 'End') { e.preventDefault(); seek(model?.duration || 0); }
@@ -159,7 +198,7 @@ export default function EpisodeEditor() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [playhead, seek, model]);
+  }, [playhead, seek, model, player]);
 
   // ── Whole-page states ───────────────────────────────────────────────
   if (edit.loading) {
@@ -228,7 +267,9 @@ export default function EpisodeEditor() {
           <AssetBrowser episodeId={episodeId} rawClips={{ ...rawClips, error: messageOf(rawClips.error) }} sceneSets={{ ...sceneSets, error: messageOf(sceneSets.error) }}
             takes={{ ...takes, error: messageOf(takes.error) }} focusBeat={focusBeat} />
           <div className="tle-split-v" role="separator" aria-orientation="vertical" aria-label="Resize the media panel" onPointerDown={(e) => dragLeft(e, { axis: 'x' })} onDoubleClick={resetLeft} />
-          <EditorPreview frame={frame} duration={model.duration} selectedId={selectedId} onSelect={setSelectedId} onPrevEdit={prevEdit} onNextEdit={nextEdit} hidden={hidden} />
+          <EditorPreview frame={frame} duration={model.duration} selectedId={selectedId} onSelect={setSelectedId} onPrevEdit={prevEdit} onNextEdit={nextEdit} hidden={hidden}
+            playing={player.playing} rate={player.rate} onToggle={player.toggle} volume={volume} onVolume={setVolume}
+            muted={previewMuted} onMute={() => setPreviewMuted((m) => !m)} sounds={sounds} failedVideo={failedVideo} onVideoFailed={onVideoFailed} />
           <div className="tle-split-v" role="separator" aria-orientation="vertical" aria-label="Resize the inspector" onPointerDown={(e) => dragRight(e, { axis: 'x', sign: -1 })} onDoubleClick={resetRight} />
           <EditorInspector block={selected} beat={cardBeat} readiness={readiness?.beats.find((r) => r.beat === cardBeat?.beat)} />
         </div>

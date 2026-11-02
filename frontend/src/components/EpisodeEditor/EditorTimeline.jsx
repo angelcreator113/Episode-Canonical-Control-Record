@@ -6,7 +6,7 @@
  *
  * Track header toggles are view settings in this browser, never saved to
  * the episode and never part of a render: the eye hides a lane in the
- * preview, the speaker silences it in preview playback (P2), the lock keeps
+ * preview, the speaker silences it in preview playback, the lock keeps
  * it from being edited here (editing arrives in P3).
  */
 import React, { useMemo, useRef } from 'react';
@@ -61,7 +61,7 @@ export default function EditorTimeline({
                   </button>
                 ) : (
                   <button type="button" className="tle-icon-btn" aria-pressed={Boolean(v.muted)} onClick={() => onToggleView(lane.key, 'muted')}
-                    aria-label={`${v.muted ? 'Unmute' : 'Mute'} ${lane.name} in preview playback (view only, not saved)`} title="Mute in preview playback only (P2): not saved, the export is unchanged">
+                    aria-label={`${v.muted ? 'Unmute' : 'Mute'} ${lane.name} in preview playback (view only, not saved)`} title="Mute in preview playback only: not saved, the export is unchanged">
                     {v.muted ? <VolumeX size={15} /> : <Volume2 size={15} />}
                   </button>
                 )}

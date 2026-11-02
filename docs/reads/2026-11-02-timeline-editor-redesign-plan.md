@@ -636,3 +636,57 @@ Evoni said "let's continue" after P0 merged (#3678). This session read that as t
 **Visual check.**
 - The production build was served with `vite preview`. A scratch harness answered every `/api` call with generated fixtures inside the browser. Widths: 1536×1024, 1440×900, 1024×768 and 375×812.
 - Result: no page errors, no write requests, no horizontal scroll.
+
+---
+
+## 13. P2 as built (2026-11-02)
+
+Evoni confirmed P1 was what she meant, and approved P2: the working preview in the browser. It is frontend only. There is no backend change, migration, flag or deploy, and still no write.
+
+**What P2 adds:**
+- **One clock.**
+  - While playing, the playhead is the wall clock since Play, times the rate, snapped to whole frames at 30 fps (`snapToFrame`, R8.4.5).
+  - Every picture and sound follows it. Each frame, it is told where it should be in its source and is moved back when it drifts: sounds past 0.12 s, videos past 0.25 s (`usePreviewPlayback`).
+  - The playhead stops at the end of the edit.
+- **What plays comes from the edit**, through `previewPlan` (`framePlan` from `layoutAt`, `mixAt` from `mixPlan`):
+  - **The scene:** an angle still, an angle video from its in point (holding its last frame past its out point), or a clip's original file.
+  - **Prime's PIP** at her stored layout, from her VP9-alpha cutout when the edit asks for it (`use_cutout`). Her picture and her commentary are read on her take's one clock.
+  - **Her commentary** from her original file, at its gain and fades. A segment muted in the edit is silent.
+  - **Approved dialogue** from the take's file at its approved trim.
+  - **Music and SFX** have no files until the library exists (R8.8). They are listed as "unavailable" on the monitor, and nothing plays in their place.
+- **Controls:**
+  - Play/Pause and Space; K pauses; L plays, then 2×; J goes back 5 s.
+  - A seek while playing carries on from the new time, and the timeline follows the playhead.
+  - Preview volume and mute are kept in this browser and are not saved.
+  - A lane's speaker mutes that lane in preview playback only.
+
+**What the working preview does not do, and says so:**
+
+| Limitation | What happens instead |
+|---|---|
+| Gain above 0 dB | Plays at 0 dB: a browser element cannot boost without reading the file's samples across origins. The render applies it |
+| A take's "normalise" | Not applied; the render applies it |
+| Safari (no VP9 transparency) | Prime is shown from her original video, with a notice to use Chrome or Edge |
+| A cutout that isn't ready | Prime is shown from her original video, with a notice |
+
+R8.11's preview/render parity thresholds belong to the render pipeline (Gate 3), and are not claimed here.
+
+**Measured in a real browser.**
+- Setup:
+  - the production build in Playwright's Chromium;
+  - every `/api` call answered with fixtures in the browser;
+  - media generated with ffmpeg as WebM: a moving scene, a VP9-alpha Prime cutout, her original with a tone, and a dialogue tone.
+- At 4.06 s on the clock:
+
+| Element | Expected | Measured |
+|---|---|---|
+| Prime cutout video | 6.06 s | 6.23 s |
+| Her commentary | 6.06 s | 6.17 s, volume 0.401 (−6 dB × 0.8 preview volume) |
+| Scene video | 2.06 s | 2.16 s |
+| Dialogue | 0.56 s | 0.66 s, volume 0.8 |
+
+- Each element started at its exact source point: 2.00, 2.00, 1.00 and 0.00 s.
+- The media read about 0.1 s ahead of the displayed timecode, which is within the drift limits.
+- The music with no file showed as unavailable. Space paused everything.
+- There were no page errors and no write requests.
+- The cutout drew with its transparency over the scene video.

@@ -159,7 +159,13 @@
 .tle-monitor-scene { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .tle-monitor-msg { position: absolute; inset: 0; display: grid; place-items: center; color: var(--tle-muted); text-align: center; padding: 12px; }
 .tle-monitor-pip { position: absolute; padding: 0; border: 1px solid rgba(255, 255, 255, 0.35); background: #222; cursor: pointer; overflow: hidden; color: var(--tle-muted); }
-.tle-monitor-pip img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.tle-monitor-pip img, .tle-monitor-pip video { width: 100%; height: 100%; object-fit: cover; display: block; pointer-events: none; }
+.tle-monitor-pip.is-cutout { background: transparent; border-color: transparent; }
+.tle-monitor-pip.is-cutout video { object-fit: contain; }
+video.tle-monitor-scene { background: #000; }
+.tle-monitor-sound { position: absolute; right: 10px; bottom: 8px; padding: 2px 8px; border-radius: 4px; background: rgba(224, 164, 58, 0.85); color: #111; font-size: 11px; }
+.tle-monitor-notes { margin: 0; padding: 6px 12px; color: var(--tle-warn); font-size: 12px; border-top: 1px solid var(--tle-line); }
+.tle-volume { width: 90px; accent-color: var(--tle-accent); }
 .tle-monitor-pip.is-selected { outline: 2px solid var(--tle-select); outline-offset: 0; }
 .tle-monitor-badge { position: absolute; top: 10px; right: 10px; padding: 3px 8px; border-radius: 4px; background: rgba(229, 72, 77, 0.85); font-size: 12px; }
 .tle-monitor-note { position: absolute; left: 10px; bottom: 8px; padding: 2px 8px; border-radius: 4px; background: rgba(0, 0, 0, 0.6); color: var(--tle-muted); font-size: 11px; }

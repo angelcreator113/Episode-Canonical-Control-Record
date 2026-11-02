@@ -1,13 +1,12 @@
 /**
  * What the episode editor draws, worked out from the live edit (Timeline
  * Editor redesign P1, 2026-11-02; plan §3.7, §3.9). Pure: the beats, the
- * lanes and their blocks, the beat readiness and the still frame at a time
- * all come from the edit's rows through editTimeline (the server's own clock,
+ * lanes and their blocks and the beat readiness all come from the edit's rows through editTimeline (the server's own clock,
  * copied byte for byte), the media lists and the server's findings. Nothing
  * here invents a clip, a time or a status.
  */
 import {
-  beatTimeline, placedSegments, placedDialogue, resolveAnchor, layoutAt, DEFAULT_LAYOUT, FRAME_W, FRAME_H,
+  beatTimeline, placedSegments, placedDialogue, resolveAnchor, FRAME_W, FRAME_H,
 } from './editTimeline';
 import { beatName } from './canonicalBeats';
 
@@ -190,29 +189,6 @@ const FINDING_TEXT = {
 };
 /** A finding as a sentence a producer reads, with its code kept for reference. */
 export const findingText = (f) => FINDING_TEXT[f.code] || f.code.replace(/_/g, ' ');
-
-/**
- * The still frame at edit time t (P1: thumbnails, no playback): the scene's
- * image, Prime's PIP box in 1920x1080 pixels with its image, and the
- * working-preview flags. Every value comes from layoutAt.
- */
-export function stillFrame(edit, t, media = mediaIndex()) {
-  const at = layoutAt(edit, t);
-  let scene = null;
-  if (at.scene) {
-    const clip = (edit.sceneClips || []).find((c) => c.id === at.scene.clip_id);
-    if (clip) scene = { clip_id: clip.id, ...sceneSource(clip, media), video: clip.source_kind !== 'angle_still' };
-  }
-  let pip = null;
-  if (at.pip) {
-    const c = media.clips.get(String(at.pip.raw_clip_id));
-    pip = {
-      segment_id: at.pip.segment_id, layout: at.pip.layout || DEFAULT_LAYOUT, cutout: at.pip.cutout,
-      image: c?.thumbnail_url || null, name: clipName(c) || 'Prime take', missing: !c,
-    };
-  }
-  return { t, beat: at.beat, scene, pip, prime_missing: at.prime_missing, scene_gap: at.scene_gap };
-}
 
 /** mm:ss.ff at 30 fps (frames, not hundredths), as the transport shows time. */
 export function timecode(ms) {
