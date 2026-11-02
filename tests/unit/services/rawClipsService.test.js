@@ -490,3 +490,66 @@ describe('green removal reliability (Evoni, 2026-10-31)', () => {
     expect(clips.CANCELLED_MESSAGE).toMatch(/^Stopped\. The original and any earlier cut-out are unchanged\./);
   });
 });
+
+describe('green removal stops early when it cannot finish in time (Evoni, 2026-11-02)', () => {
+  const errors = require('../../../src/services/rawClipErrors');
+  const LIMIT_MS = 4 * 60 * 60 * 1000;
+  const MIN = 60;
+  const view = (elapsedMin, fraction) => clips.progressView(
+    { startedAt: 0, doneSeconds: fraction == null ? null : 184 * fraction, totalSeconds: 184 }, elapsedMin * MIN * 1000,
+  );
+
+  test('under five minutes never stops, however slow the pace', () => {
+    expect(clips.keyPaceVerdict(view(4.9, 0.02), LIMIT_MS, 184).stop).toBe(false);
+    expect(clips.keyPaceVerdict(view(4.9, null), LIMIT_MS, 184).stop).toBe(false);
+  });
+
+  test('a pace that finishes within the limit never stops', () => {
+    // 20 minutes for half: about 40 minutes in all.
+    const v = clips.keyPaceVerdict(view(20, 0.5), LIMIT_MS, 184);
+    expect(v).toEqual({ stop: false, projectedSeconds: 40 * MIN });
+    // Just under 90% of the limit (3.6 hours) still runs.
+    expect(clips.keyPaceVerdict({ percent: 10, elapsed_seconds: 21 * MIN, eta_seconds: 3.5 * 3600 - 21 * MIN }, LIMIT_MS, 184).stop).toBe(false);
+  });
+
+  test('a pace that would pass 90% of the limit stops, with the time it would have taken', () => {
+    // 6 minutes for 2%: about five hours in all.
+    const v = clips.keyPaceVerdict(view(6, 0.02), LIMIT_MS, 184);
+    expect(v.stop).toBe(true);
+    expect(v.projectedSeconds).toBe(300 * MIN);
+    // 3.7 hours is past 90% of four hours.
+    expect(clips.keyPaceVerdict({ percent: 10, elapsed_seconds: 6 * MIN, eta_seconds: 3.7 * 3600 - 6 * MIN }, LIMIT_MS, 184).stop).toBe(true);
+  });
+
+  test('no progress at ten minutes stops (percent null or 0), with no projection', () => {
+    expect(clips.keyPaceVerdict(view(10, null), LIMIT_MS, 184)).toEqual({ stop: true, projectedSeconds: null });
+    expect(clips.keyPaceVerdict(view(10, 0), LIMIT_MS, 184)).toEqual({ stop: true, projectedSeconds: null });
+    expect(clips.keyPaceVerdict(view(9.9, null), LIMIT_MS, 184).stop).toBe(false);
+  });
+
+  test('a clip whose length is unknown never trips the no-progress rule', () => {
+    const unknown = clips.progressView({ startedAt: 0, doneSeconds: 30, totalSeconds: null }, 60 * MIN * 1000);
+    expect(unknown.percent).toBeNull();
+    expect(clips.keyPaceVerdict(unknown, LIMIT_MS, null).stop).toBe(false);
+    expect(clips.keyPaceVerdict(unknown, LIMIT_MS).stop).toBe(false);
+  });
+
+  test('KeyTooSlowError carries its code and projection', () => {
+    const err = new clips.KeyTooSlowError(5 * 3600);
+    expect(err.code).toBe('KEY_TOO_SLOW');
+    expect(err.projectedSeconds).toBe(5 * 3600);
+    expect(new clips.KeyTooSlowError().projectedSeconds).toBeNull();
+  });
+
+  test('the card names the projected hours, rounded up to the half hour, and what was kept', () => {
+    expect(errors.friendlyKeyError(new clips.KeyTooSlowError(5 * 3600 + 60))).toBe(
+      'At this pace removing the green would take about 5.5 hours, longer than the four-hour limit, so it was stopped. Nothing was changed: the original is as it was.',
+    );
+    expect(errors.friendlyKeyError(new clips.KeyTooSlowError(9 * 3600), { hadCutout: true })).toBe(
+      'At this pace removing the green would take about 9 hours, longer than the four-hour limit, so it was stopped. Nothing was changed: the original and the earlier cut-out are as they were.',
+    );
+    // Stopped at 3.7 hours: never reads as under the limit.
+    expect(errors.friendlyKeyError(new clips.KeyTooSlowError(3.7 * 3600))).toMatch(/^At this pace removing the green would take about 4 hours, too close to the four-hour limit, so it was stopped\./);
+    expect(errors.friendlyKeyError(new clips.KeyTooSlowError(null))).toMatch(/^Removing the green made no progress in ten minutes, so it was stopped\. Nothing was changed/);
+  });
+});
