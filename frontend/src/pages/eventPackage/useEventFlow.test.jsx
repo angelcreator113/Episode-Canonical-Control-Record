@@ -36,11 +36,22 @@ function setup(entry = '/shows/show-1/events/ev-1?from=roadmap:5') {
 }
 
 describe('useEventFlow', () => {
+  // A jump focuses its section on a 60 ms timer (focusSection). On real timers
+  // a test can end first, and the timer then fires after Vitest has torn the
+  // jsdom environment down ("document is not defined", Frontend Tests on #3677).
+  // So every test runs on fake timers, and whatever is still pending runs here,
+  // while the document exists.
   beforeEach(() => {
+    vi.useFakeTimers();
     Object.values(api).forEach((fn) => fn?.mockReset?.());
     vi.mocked(api.get).mockResolvedValue({ data: {} });
   });
-  afterEach(() => { vi.useRealTimers(); document.body.innerHTML = ''; });
+  afterEach(() => {
+    act(() => { vi.runOnlyPendingTimers(); });
+    expect(vi.getTimerCount()).toBe(0);
+    vi.useRealTimers();
+    document.body.innerHTML = '';
+  });
 
   test('entries tick off as they are filled in, and the way back then reads Done', () => {
     const { result, rerender, props } = setup();
@@ -58,7 +69,6 @@ describe('useEventFlow', () => {
   });
 
   test('a jump opens what Continue opens for it, then focuses its section unless something took focus', () => {
-    vi.useFakeTimers();
     const section = document.createElement('section');
     section.id = 'epp-sec-place';
     document.body.appendChild(section);
