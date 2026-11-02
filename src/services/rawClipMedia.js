@@ -213,6 +213,9 @@ const startedAt = new Date();
 // Retries for storing a finished cut-out (a failure after hours of work
 // would throw it away). An object, so tests can shorten the waits.
 const storeRetry = { delaysMs: [2000, 10000] };
+// The pace check (clips.keyPaceVerdict): how often it runs, and the clock it
+// reads. An object, so tests can check at once and move the clock.
+const paceCheck = { everyMs: 30 * 1000, now: () => Date.now() };
 
 /** Clip ids queued or running here (listClips leaves these alone). */
 const activeIds = () => [...active];
@@ -386,22 +389,49 @@ async function keyClip({ sequelize, clipId, episodeId, s3KeyRaw, strength, local
       console.error('[rawClips] could not sample the green; using chroma-key green:', err.message);
     }
     stopIfCancelled(controls);
-    const p = { startedAt: Date.now(), doneSeconds: null, totalSeconds: expected };
+    const p = { startedAt: paceCheck.now(), doneSeconds: null, totalSeconds: expected };
     progress.set(clipId, p);
-    await run(FFMPEG, ['-progress', 'pipe:1', '-nostats', ...clips.chromakeyArgs(input, output, { color, strength, sourceFps: original.fps })], {
-      low: true,
-      timeoutMs: JOB_TIMEOUT_MS,
-      onLine: (line) => {
-        const s = clips.progressSeconds(line);
-        if (s != null) p.doneSeconds = s;
-      },
-      onSpawn: (child) => {
-        controls.child = child;
-        if (controls.cancelled) child.kill('SIGTERM');
-      },
-    });
+    // A run on pace to pass the time limit is stopped early (Evoni,
+    // 2026-11-02), checked at most every paceCheck.everyMs: as ffmpeg
+    // reports, and on a timer in case it reports nothing at all.
+    let tooSlow = null;
+    let lastCheck = p.startedAt;
+    const checkPace = () => {
+      const now = paceCheck.now();
+      if (tooSlow || now - lastCheck < paceCheck.everyMs) return;
+      lastCheck = now;
+      const verdict = clips.keyPaceVerdict(clips.progressView(p, now), JOB_TIMEOUT_MS, p.totalSeconds);
+      if (!verdict.stop) return;
+      tooSlow = verdict;
+      console.error(`[rawClips] green removal for ${clipId} stopped early: ${Math.round((now - p.startedAt) / 1000)} s in, ${p.doneSeconds ?? 'no'} of ${p.totalSeconds} s done, projected ${verdict.projectedSeconds ?? 'unknown'} s`);
+      if (controls.child) controls.child.kill('SIGTERM');
+    };
+    const paceTimer = setInterval(checkPace, paceCheck.everyMs || 1000);
+    if (typeof paceTimer.unref === 'function') paceTimer.unref();
+    try {
+      await run(FFMPEG, ['-progress', 'pipe:1', '-nostats', ...clips.chromakeyArgs(input, output, { color, strength, sourceFps: original.fps })], {
+        low: true,
+        timeoutMs: JOB_TIMEOUT_MS,
+        onLine: (line) => {
+          const s = clips.progressSeconds(line);
+          if (s != null) p.doneSeconds = s;
+          checkPace();
+        },
+        onSpawn: (child) => {
+          controls.child = child;
+          if (controls.cancelled || tooSlow) child.kill('SIGTERM');
+        },
+      });
+    } catch (err) {
+      // ffmpeg stopped by the pace check fails; that failure is the pace's.
+      if (!tooSlow) throw err;
+    } finally {
+      clearInterval(paceTimer);
+    }
     controls.child = null;
     stopIfCancelled(controls);
+    // Never stored, even if ffmpeg finished as it was being stopped.
+    if (tooSlow) throw new clips.KeyTooSlowError(tooSlow.projectedSeconds);
     // ffmpeg can end "successfully" with only part of the clip when its read
     // of the original breaks for good (it did in testing, with a link that
     // had expired): such a cut-out is never stored.
@@ -487,6 +517,6 @@ async function freeBytes(dir = TMP_DIR) {
 
 module.exports = {
   BUCKET, TMP_DIR, TMP_MAX_AGE_MS, FFMPEG, FFPROBE, publicUrl, clipPrefix, tmpPath, removeFile, getS3, openStoredFile,
-  run, uploadFile, downloadFile, inspect, enqueueKey, cancelKey, activeIds, keyProgress, startedAt, storeRetry, roomToKey, keyClip,
+  run, uploadFile, downloadFile, inspect, enqueueKey, cancelKey, activeIds, keyProgress, startedAt, storeRetry, paceCheck, roomToKey, keyClip,
   sweepTmp, startTmpSweeper, freeBytes,
 };

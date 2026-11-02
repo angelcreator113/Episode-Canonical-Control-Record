@@ -614,6 +614,49 @@ function progressView({ startedAt, doneSeconds = null, totalSeconds = null } = {
   return { percent: fraction == null ? null : Math.floor(fraction * 100), elapsed_seconds: elapsed, eta_seconds: eta };
 }
 
+// When a green removal is judged too slow to finish (Evoni, 2026-11-02: a
+// run on pace to pass the four-hour limit should stop in minutes, not fail
+// at the limit). Before KEY_PACE_MIN_SECONDS the pace is not trusted; a run
+// whose time so far plus time left passes KEY_PACE_SHARE of the limit stops.
+// A run that has reported nothing by KEY_NO_PROGRESS_SECONDS stops too.
+const KEY_PACE_MIN_SECONDS = 5 * 60;
+const KEY_NO_PROGRESS_SECONDS = 10 * 60;
+const KEY_PACE_SHARE = 0.9;
+
+/**
+ * Whether a running green removal should stop because it cannot finish in
+ * time. view: progressView's output. limitMs: the job's time limit.
+ * totalSeconds: the clip's length (null when unknown; the no-progress rule
+ * needs it, since without it percent is always null). Returns { stop,
+ * projectedSeconds }: projectedSeconds is the time so far plus the time
+ * left, or null when there is no pace to go on.
+ */
+function keyPaceVerdict(view, limitMs, totalSeconds = null) {
+  const elapsed = Number(view?.elapsed_seconds) || 0;
+  const eta = view?.eta_seconds;
+  const projectedSeconds = eta != null && Number.isFinite(Number(eta)) ? elapsed + Number(eta) : null;
+  const limitSeconds = Number(limitMs) / 1000;
+  if (elapsed >= KEY_PACE_MIN_SECONDS && projectedSeconds != null && projectedSeconds > limitSeconds * KEY_PACE_SHARE) {
+    return { stop: true, projectedSeconds };
+  }
+  const noProgress = view?.percent == null || Number(view.percent) === 0;
+  if (elapsed >= KEY_NO_PROGRESS_SECONDS && Number(totalSeconds) > 0 && noProgress) {
+    return { stop: true, projectedSeconds };
+  }
+  return { stop: false, projectedSeconds };
+}
+
+/** Thrown when a green removal is stopped because it cannot finish in time. */
+class KeyTooSlowError extends Error {
+  constructor(projectedSeconds = null) {
+    super(projectedSeconds != null
+      ? `green removal stopped early: on pace to take about ${Math.round(projectedSeconds)} s`
+      : 'green removal stopped early: no progress');
+    this.code = 'KEY_TOO_SLOW';
+    this.projectedSeconds = projectedSeconds;
+  }
+}
+
 /** ffmpeg arguments: one frame at `at` seconds, size x size, raw rgb24 to stdout (for pickKeyColor). */
 function sampleFrameArgs(input, at = 1, size = 16) {
   return ['-hide_banner', ...netInputArgs(input), '-ss', String(at), '-i', input, '-frames:v', '1', '-vf', `scale=${size}:${size}`, '-f', 'rawvideo', '-pix_fmt', 'rgb24', 'pipe:1'];
@@ -684,5 +727,6 @@ module.exports = {
   UPLOAD_EXTRAS, RawClipError, readFields, readBeatMarks, readStrength, readTakeSeconds, readVideoSize, truthy, findEpisode, shapeRow,
   listClips, getClip, createClip, updateClip, storeTakeExtras, setKeyState, removeClip,
   KEY_MB_PER_SECOND, KEY_MIN_BYTES, KEY_MARGIN_BYTES, KEY_UNKNOWN_SECONDS, keyRoomNeeded, cutoutKeyFor, netInputArgs, CutoutIncompleteError, cutoutComplete,
-  KEY_MAX_FPS, pickKeyColor, chromakeyArgs, progressSeconds, progressView, sampleFrameArgs, thumbnailArgs, probeArgs, readProbe, readFrameRate,
+  KEY_MAX_FPS, pickKeyColor, chromakeyArgs, progressSeconds, progressView, sampleFrameArgs,
+  KEY_PACE_MIN_SECONDS, KEY_NO_PROGRESS_SECONDS, KEY_PACE_SHARE, keyPaceVerdict, KeyTooSlowError, thumbnailArgs, probeArgs, readProbe, readFrameRate,
 };

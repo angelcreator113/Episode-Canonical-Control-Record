@@ -215,6 +215,52 @@ describe('progress while green removal runs (Evoni, 2026-10-30)', () => {
   });
 });
 
+describe('stopped early when it cannot finish in time (Evoni, 2026-11-02)', () => {
+  // The pace check runs on every ffmpeg line, and its clock reads `minutes`
+  // later once ffmpeg has said how far it has got.
+  const jumpOnceReported = (minutes) => {
+    media.paceCheck.everyMs = 0;
+    media.paceCheck.now = () => Date.now() + (media.keyProgress().c1?.percent ? minutes * 60 * 1000 : 0);
+  };
+  test('on pace to pass the limit: ffmpeg is stopped, nothing is stored, the card names the hours, the queue is free', async () => {
+    fake.progress = '10'; // 10 of 184 s, about 5%; the stand-in ffmpeg pauses a moment after reporting
+    writeFake();
+    // The clock jumps 30 minutes once ffmpeg has reported: 5% in 30 minutes
+    // is about 9.2 hours in all, shown rounded up to 9.5.
+    jumpOnceReported(30);
+    const kill = jest.spyOn(require('child_process').ChildProcess.prototype, 'kill');
+    const state = await key();
+    expect(kill).toHaveBeenCalledWith('SIGTERM');
+    expect(state.key_status).toBe('failed');
+    expect(state.key_error).toBe('At this pace removing the green would take about 9.5 hours, longer than the four-hour limit, so it was stopped. Nothing was changed: the original is as it was.');
+    expect(puts()).toEqual([]);
+    expect(cutoutStatements()).toEqual([]);
+    expect(media.activeIds()).toEqual([]);
+    expect(media.keyProgress()).toEqual({});
+    expect(leftInTmp()).toEqual([]);
+  });
+
+  test('keyClip itself rejects with KeyTooSlowError and its projection', async () => {
+    fake.progress = '10';
+    writeFake();
+    jumpOnceReported(30);
+    const err = await media.keyClip({ sequelize: db.sequelize, ...JOB, localPath: null }).then(() => null, (e) => e);
+    expect(err).toBeInstanceOf(require('../../../src/services/rawClipsService').KeyTooSlowError);
+    expect(err.projectedSeconds / 3600).toBeCloseTo(9.2, 1);
+    expect(puts()).toEqual([]);
+  });
+
+  test('a run on pace stays alone: the check runs and the clip is done', async () => {
+    fake.progress = '92';
+    writeFake();
+    jumpOnceReported(6); // half in 6 minutes
+    const kill = jest.spyOn(require('child_process').ChildProcess.prototype, 'kill');
+    const state = await key();
+    expect(state.key_status).toBe('done');
+    expect(kill).not.toHaveBeenCalled();
+  });
+});
+
 describe('reliability (Evoni, 2026-10-31)', () => {
   test('Stop while ffmpeg runs: ffmpeg is stopped, nothing is stored, the clip says Stopped, the queue is free', async () => {
     fake.progress = '30'; // the stand-in ffmpeg pauses a moment after reporting

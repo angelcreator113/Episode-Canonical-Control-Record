@@ -72,12 +72,28 @@ class KeyNoRoomError extends Error {
 const isNotFound = (err) => !!err && (err.name === 'NoSuchKey' || err.name === 'NotFound' || Number(err.$metadata?.httpStatusCode) === 404);
 
 /**
+ * A green removal stopped early by the pace check (rawClipsService
+ * keyPaceVerdict). projectedSeconds: how long it was on pace to take, or
+ * null when it made no progress at all. Hours are rounded up to the half
+ * hour, so a run stopped at 90% of the limit never reads as under it.
+ */
+function keyTooSlow(projectedSeconds, hadCutout) {
+  if (!(Number(projectedSeconds) > 0)) {
+    return `Removing the green made no progress in ten minutes, so it was stopped. ${kept(hadCutout)}`;
+  }
+  const hours = Math.ceil(Number(projectedSeconds) / 1800) / 2;
+  const vsLimit = hours > 4 ? 'longer than' : 'too close to';
+  return `At this pace removing the green would take about ${hours} hours, ${vsLimit} the four-hour limit, so it was stopped. ${kept(hadCutout)}`;
+}
+
+/**
  * The plain message stored on the clip when green removal fails. The raw
  * error is logged by the caller. hadCutout: an earlier cut-out exists.
  */
 function friendlyKeyError(err, { hadCutout = false } = {}) {
   const msg = String(err?.message || '');
   if (err instanceof KeyNoRoomError) return msg;
+  if (err?.code === 'KEY_TOO_SLOW') return keyTooSlow(err.projectedSeconds, hadCutout);
   // The cut-out was made but storing it failed, after its retries.
   if (err?.stage === 'store') return `The cut-out was made, but it could not be saved to storage. ${kept(hadCutout)} Press Retry in a few minutes.`;
   if (isDiskFull(err)) return `The server ran out of space while removing the green. ${kept(hadCutout)} Space has to be freed on the server before Retry will work.`;
@@ -95,5 +111,5 @@ function friendlyKeyError(err, { hadCutout = false } = {}) {
 module.exports = {
   NO_ROOM, STORAGE_REFUSED, STORAGE_UNREACHABLE, UPLOAD_GONE, SOMETHING_WRONG,
   isDiskFull, isS3Error, friendlyError,
-  KeyNoRoomError, keyNoRoom, friendlyKeyError,
+  KeyNoRoomError, keyNoRoom, keyTooSlow, friendlyKeyError,
 };
