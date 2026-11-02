@@ -27,7 +27,9 @@ const SEG = {
 const editWith = (over = {}) => ({
   fps: 30, beatModes: {}, beatDurations: {},
   sceneClips: [{ id: 'c1', beat_number: 1, position: 0, source_kind: 'angle_still', source_id: 'a1', source_in_ms: null, source_out_ms: null, source_duration_ms: null, duration_ms: 6000 }],
-  segments: [SEG], pip: null, visibility: [], items: [], audioItems: [], lineTimes: {},
+  segments: [SEG], pip: null, visibility: [], items: [],
+  audioItems: [{ id: 'm1', track: 'music', asset_ref: 'Bed', slot: null, source_in_ms: 0, source_out_ms: 4000, anchor_kind: 'edit_start', anchor_beat: null, anchor_ref: null, offset_ms: 0, gain_db: -6, fade_in_ms: 0, fade_out_ms: 0, duck_under_dialogue_db: null }],
+  lineTimes: {},
   voiceTakes: { ap1: { playable: true, state: 'current', association_id: 'as1', beat_number: 1, line_index: 0, in_ms: 0, out_ms: 1500, source_duration_ms: 2000, gain_db: 0, fade_in_ms: 0, fade_out_ms: 0, normalise: false } },
   ...over,
 });
@@ -58,7 +60,9 @@ function setupServer({ refuseNext = null } = {}) {
     if (url.endsWith('/versions')) return ok({ version_id: 'v2', edit_revision: String(server.rev) });
     server.rev += 1;
     const path = url.replace(BASE, '');
-    const extra = path === '/segments' ? { segment_id: 's2' } : path === '/dialogue' ? { item_id: 'd9' } : path === '/scene-clips' ? { scene_clip_id: 'c9' } : path === '/visibility' ? { rule_id: 'v9' } : {};
+    const extra = path === '/segments' ? { segment_id: 's2' } : path === '/dialogue' ? { item_id: 'd9' } : path === '/scene-clips' ? { scene_clip_id: 'c9' }
+      : path === '/visibility' ? { rule_id: 'v9' } : path.endsWith('/split') && path.startsWith('/scene-clips') ? { scene_clip_id: 'c1', new_scene_clip_id: 'c10' }
+        : path === '/ops' ? { results: body.steps.map(() => ({})) } : {};
     return ok({ ...extra, edit_revision: String(server.rev) });
   };
   for (const m of ['post', 'patch', 'put', 'delete']) vi.mocked(api[m]).mockImplementation(write(m));
@@ -201,12 +205,12 @@ describe('EpisodeEditor: editing (P3)', () => {
     setupServer();
     renderAt();
     await opened();
-    fireEvent.click(screen.getByRole('button', { name: 'Next edit point' })); // 6000 is the segment's end; step back into it
+    fireEvent.click(screen.getByRole('button', { name: 'Next edit point' })); // 4000, the music item's end; step back a second
     fireEvent.keyDown(window, { key: 'ArrowLeft', shiftKey: true });
     selectPrime();
     fireEvent.click(screen.getByRole('button', { name: /^Split$/ }));
     await waitFor(() => expect(server.writes).toHaveLength(1));
-    expect(lastWrite()).toEqual({ method: 'post', path: '/segments/s1/split', body: { at_source_ms: 5000, edit_revision: '7' } });
+    expect(lastWrite()).toEqual({ method: 'post', path: '/segments/s1/split', body: { at_source_ms: 3000, edit_revision: '7' } });
     await waitFor(() => expect(screen.getByRole('button', { name: /^Undo$/ }).title).toMatch(/can't be undone/));
     expect(screen.getByRole('button', { name: /^Undo$/ }).disabled).toBe(true);
   });
@@ -250,5 +254,56 @@ describe('EpisodeEditor: editing (P3)', () => {
     fireEvent.click(await screen.findByRole('menuitem', { name: /Restore “Before the split”/ }));
     expect(confirm).toHaveBeenCalled();
     expect(server.writes).toHaveLength(1); // declined: nothing restored
+  });
+
+  // ── P4: the API additions ─────────────────────────────────────────────
+  test('P4: a scene clip splits at the playhead; undo is one batch that removes the new part and gives the first back its length', async () => {
+    setupServer();
+    renderAt();
+    await opened();
+    fireEvent.keyDown(window, { key: 'ArrowRight', shiftKey: true });
+    fireEvent.keyDown(window, { key: 'ArrowRight', shiftKey: true });
+    fireEvent.click(within(screen.getByTestId('editor-timeline')).getByRole('button', { name: /^Scene: Closet · Wide/ }));
+    fireEvent.click(screen.getByRole('button', { name: /^Split$/ }));
+    await waitFor(() => expect(server.writes).toHaveLength(1));
+    expect(lastWrite()).toEqual({ method: 'post', path: '/scene-clips/c1/split', body: { at_ms: 2000, edit_revision: '7' } });
+    await waitFor(() => expect(screen.getByRole('button', { name: /^Undo$/ }).disabled).toBe(false));
+    fireEvent.click(screen.getByRole('button', { name: /^Undo$/ }));
+    await waitFor(() => expect(server.writes).toHaveLength(2));
+    expect(lastWrite()).toEqual({ method: 'post', path: '/ops', body: { edit_revision: '8', steps: [
+      { op: 'remove', id: 'c10', body: { what: 'scene_clip' } },
+      { op: 'scene-clip.update', id: 'c1', body: { duration_ms: 6000 } },
+    ] } });
+  });
+
+  test("P4: a sound's level changes in place; undo puts the stored level back", async () => {
+    setupServer();
+    renderAt();
+    await opened();
+    fireEvent.click(within(screen.getByTestId('editor-timeline')).getByRole('button', { name: /^Music: Bed/ }));
+    fireEvent.click(within(inspector()).getByRole('tab', { name: 'Audio' }));
+    const gain = within(inspector()).getByLabelText('Gain');
+    fireEvent.change(gain, { target: { value: '-9' } });
+    fireEvent.keyDown(gain, { key: 'Enter' });
+    await waitFor(() => expect(server.writes).toHaveLength(1));
+    expect(lastWrite()).toEqual({ method: 'patch', path: '/audio-items/m1', body: { gain_db: -9, edit_revision: '7' } });
+    await waitFor(() => expect(screen.getByRole('button', { name: /^Undo$/ }).disabled).toBe(false));
+    fireEvent.click(screen.getByRole('button', { name: /^Undo$/ }));
+    await waitFor(() => expect(server.writes).toHaveLength(2));
+    expect(lastWrite()).toEqual({ method: 'patch', path: '/audio-items/m1', body: { gain_db: -6, edit_revision: '8' } });
+  });
+
+  test('P4: dragging a sound moves it on the clock (one change, on release)', async () => {
+    setupServer();
+    renderAt();
+    await opened();
+    const block = within(screen.getByTestId('editor-timeline')).getByRole('button', { name: /^Music: Bed/ });
+    const px = parseFloat(block.style.width) / 4000; // the block is 4000 ms wide
+    fireEvent.pointerDown(block, { button: 0, clientX: 10, pointerId: 2 });
+    fireEvent.pointerMove(block, { clientX: 10 + px * 1000, pointerId: 2 });
+    fireEvent.pointerUp(block, { clientX: 10 + px * 1000, pointerId: 2 });
+    await waitFor(() => expect(server.writes).toHaveLength(1));
+    expect(lastWrite()).toMatchObject({ method: 'patch', path: '/audio-items/m1', body: { anchor_kind: 'edit_start', edit_revision: '7' } });
+    expect(Math.abs(lastWrite().body.offset_ms - 1000)).toBeLessThanOrEqual(34);
   });
 });

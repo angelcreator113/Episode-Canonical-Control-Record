@@ -13,12 +13,18 @@
  * segment; a restore or a timing lock rewrites many rows).
  *
  * Only the C1 routes are named. Times are whole milliseconds.
+ *
+ * P4: an undo that takes several steps is one request to POST /ops (one
+ * transaction, one revision), so it is applied entirely or not at all.
  */
 
 const pick = (row, keys) => Object.fromEntries(keys.map((k) => [k, row[k]]));
 const ANCHOR = ['anchor_kind', 'anchor_beat', 'anchor_ref', 'offset_ms'];
 const anchorOfRow = (row) => pick(row, ANCHOR);
 const barrier = (label, why) => () => ({ barrier: true, label, why });
+
+/** Several steps as one request: POST /ops { steps: [{ op, id?, body? }] } (P4). */
+export const batchRequest = (steps) => ({ method: 'post', path: '/ops', body: { steps } });
 
 /** A write's failure as the producer reads it. */
 export function writeFailure(err) {
@@ -68,6 +74,36 @@ export function updateSceneClip(clip, changes, label = 'Trim scene clip') {
   };
 }
 
+/**
+ * Splits a scene clip `atMs` into its own length (P4): two clips whose
+ * lengths add up to the old one. Undone in one batch: the new part removed
+ * and the first part given back its length and trim.
+ */
+export function splitSceneClip(clip, atMs) {
+  const back = { duration_ms: clip.duration_ms, ...(clip.source_kind === 'angle_still' ? {} : { source_in_ms: clip.source_in_ms, source_out_ms: clip.source_out_ms }) };
+  return {
+    label: 'Split scene clip',
+    requests: [{ method: 'post', path: `/scene-clips/${clip.id}/split`, body: { at_ms: atMs } }],
+    undo: ([r]) => ({
+      label: 'Undo: split scene clip',
+      requests: [batchRequest([
+        { op: 'remove', id: r.new_scene_clip_id, body: { what: 'scene_clip' } },
+        { op: 'scene-clip.update', id: clip.id, body: back },
+      ])],
+      undo: () => splitSceneClip(clip, atMs),
+    }),
+  };
+}
+
+/** Moves a scene clip to `index` among its beat's clips (P4); undone by moving it back to `fromIndex`. */
+export function reorderSceneClip(clip, index, fromIndex, label = 'Move scene clip in its beat') {
+  return {
+    label,
+    requests: [{ method: 'post', path: `/scene-clips/${clip.id}/reorder`, body: { index } }],
+    undo: () => reorderSceneClip(clip, fromIndex, index, `Undo: ${label.toLowerCase()}`),
+  };
+}
+
 // ── Prime segments ──────────────────────────────────────────────────────
 
 const SEGMENT_PLACE = ['raw_clip_id', 'source_in_ms', 'source_out_ms', ...ANCHOR, 'layout', 'audio_in_ms', 'audio_out_ms',
@@ -112,12 +148,12 @@ export function trimSegment(seg, { source_in_ms = seg.source_in_ms, source_out_m
     label,
     requests: [{ method: 'post', path: `/segments/${seg.id}/trim-video`, body: { source_in_ms, source_out_ms } }],
     undo: () => {
-      const requests = [{ method: 'post', path: `/segments/${seg.id}/trim-video`, body: { source_in_ms: seg.source_in_ms, source_out_ms: seg.source_out_ms } }];
+      const steps = [{ op: 'segment.trim-video', id: seg.id, body: { source_in_ms: seg.source_in_ms, source_out_ms: seg.source_out_ms } }];
       if (seg.audio_in_ms != null && seg.audio_out_ms != null) {
-        requests.push({ method: 'post', path: `/segments/${seg.id}/trim-audio`, body: { audio_in_ms: seg.audio_in_ms, audio_out_ms: seg.audio_out_ms } });
-        requests.push({ method: 'post', path: `/segments/${seg.id}/audio`, body: { audio_fade_in_ms: seg.audio_fade_in_ms ?? 0, audio_fade_out_ms: seg.audio_fade_out_ms ?? 0 } });
+        steps.push({ op: 'segment.trim-audio', id: seg.id, body: { audio_in_ms: seg.audio_in_ms, audio_out_ms: seg.audio_out_ms } });
+        steps.push({ op: 'segment.audio', id: seg.id, body: { audio_fade_in_ms: seg.audio_fade_in_ms ?? 0, audio_fade_out_ms: seg.audio_fade_out_ms ?? 0 } });
       }
-      return { label: `Undo: ${label.toLowerCase()}`, requests, undo: () => trimSegment(seg, { source_in_ms, source_out_ms }, label) };
+      return { label: `Undo: ${label.toLowerCase()}`, requests: [batchRequest(steps)], undo: () => trimSegment(seg, { source_in_ms, source_out_ms }, label) };
     },
     after,
   };
@@ -199,6 +235,22 @@ export function removeAudioItem(item, label = 'Delete sound') {
     label,
     requests: [{ method: 'delete', path: `/audio-items/${item.id}` }],
     undo: () => addAudioItem(back, 'Put back sound'),
+  };
+}
+
+/**
+ * Changes a music or SFX item in place (P4): any of its anchor (a move),
+ * source in and out (a trim), gain, fades and ducking. Undone with the
+ * stored values of exactly the fields it changed.
+ */
+export function updateAudioItem(item, changes, label = 'Change sound') {
+  const keys = Object.keys(changes);
+  const before = pick(item, keys.some((k) => ANCHOR.includes(k)) ? [...new Set([...keys, ...ANCHOR])] : keys);
+  if (before.anchor_ref === undefined) delete before.anchor_ref;
+  return {
+    label,
+    requests: [{ method: 'patch', path: `/audio-items/${item.id}`, body: changes }],
+    undo: () => updateAudioItem({ ...item, ...changes }, before, `Undo: ${label.toLowerCase()}`),
   };
 }
 

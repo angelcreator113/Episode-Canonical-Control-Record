@@ -9,9 +9,10 @@
  * preview, the speaker silences it in preview playback, the lock keeps
  * it from being edited here.
  *
- * Editing (P3): a Prime segment or a dialogue block is dragged to move it;
- * the handles at a selected block's edges trim it (both ends of a segment,
- * the end of a scene clip). Media dragged from the media panel is dropped on
+ * Editing (P3, P4): a Prime segment, a dialogue block or a sound is dragged
+ * to move it; a scene clip is dragged to another place in its beat. The
+ * handles at a selected block's edges trim it (both ends of a segment or a
+ * sound, the end of a scene clip). Media dragged from the media panel is dropped on
  * the lane that takes it. Each gesture is one change, saved when the pointer
  * is released (onMoveBlock, onTrimBlock, onDropAsset).
  */
@@ -22,8 +23,8 @@ import { LANES, timecode } from '../../lib/editorModel';
 export const LABEL_W = 190;
 
 /** What can be dragged along the clock, and which edges trim. */
-export const MOVABLE = new Set(['segment', 'dialogue']);
-export const TRIM_EDGES = { segment: ['start', 'end'], scene_clip: ['end'] };
+export const MOVABLE = new Set(['segment', 'dialogue', 'audio_item', 'scene_clip']);
+export const TRIM_EDGES = { segment: ['start', 'end'], scene_clip: ['end'], audio_item: ['start', 'end'] };
 /** Which lane takes which media (an asset's `kind`). */
 export const LANE_TAKES = {
   scene: ['angle_still', 'angle_video', 'scene_clip_source'],

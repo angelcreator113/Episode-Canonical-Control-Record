@@ -75,7 +75,7 @@ function ClipTab({ block, layout, editable, act }) {
       {block.kind === 'segment' && can
         ? <NumberField label="Start" unit="ms" value={Math.round(block.start)} step={33} onCommit={(v) => act.move(block, v)} note="Where it starts on the edit clock" />
         : <Field label="Start time" value={timecode(block.start)} />}
-      {block.kind === 'dialogue' && can && <NumberField label="Start" unit="ms" value={Math.round(block.start)} step={33} onCommit={(v) => act.move(block, v)} />}
+      {(block.kind === 'dialogue' || block.kind === 'audio_item') && can && <NumberField label="Start" unit="ms" value={Math.round(block.start)} step={33} onCommit={(v) => act.move(block, v)} />}
       <Field label="End time" value={timecode(block.end)} />
       <Field label="Duration" value={timecode(block.end - block.start)} />
 
@@ -95,6 +95,12 @@ function ClipTab({ block, layout, editable, act }) {
             </>
           ))}
           <Field label="Beat" value={`${row.beat_number}: ${beatLabel(row.beat_number)}`} />
+          {can && (
+            <div className="tle-row tle-insp-actions">
+              <button type="button" className="tle-btn tle-btn-small" onClick={() => act.reorderScene(block, -1)}>Earlier in the beat</button>
+              <button type="button" className="tle-btn tle-btn-small" onClick={() => act.reorderScene(block, 1)}>Later in the beat</button>
+            </div>
+          )}
           <Field label="Source" value={row.source_kind === 'angle_still' ? 'Angle still' : row.source_kind === 'angle_video' ? 'Angle video' : 'Raw clip'} />
           {block.cut_ms > 0 && <p className="tle-insp-warn">Cut by {ms(block.cut_ms)} at the beat's locked end.</p>}
         </>
@@ -129,7 +135,17 @@ function ClipTab({ block, layout, editable, act }) {
         </>
       )}
       {block.kind === 'dialogue' && block.problem && <p className="tle-insp-warn">This take will not play: {block.problem.replace(/_/g, ' ')}.</p>}
-      {block.kind === 'audio_item' && <p className="tle-insp-note">Moving or changing a sound needs an API addition (P4). Delete and copy work now.</p>}
+      {block.kind === 'audio_item' && (can ? (
+        <>
+          <NumberField label="Source in" unit="ms" value={row.source_in_ms} min={0} onCommit={(v) => act.audioItem(block, { source_in_ms: Math.round(v) })} />
+          <NumberField label="Source out" unit="ms" value={row.source_out_ms} min={1} onCommit={(v) => act.audioItem(block, { source_out_ms: Math.round(v) })} />
+        </>
+      ) : (
+        <>
+          <Field label="Source in" value={ms(row.source_in_ms)} />
+          <Field label="Source out" value={ms(row.source_out_ms)} />
+        </>
+      ))}
       <Pending label="Speed" value="1.0×" reason="Not supported: one clock (R8.4)" />
     </>
   );
@@ -161,6 +177,18 @@ function AudioTab({ block, editable, act }) {
     );
   }
   if (block.kind === 'audio_item') {
+    if (can) {
+      return (
+        <>
+          <NumberField label="Gain" unit="dB" value={row.gain_db} min={-24} max={12} step={0.1} onCommit={(v) => act.audioItem(block, { gain_db: Math.round(v * 10) / 10 })} />
+          <NumberField label="Fade in" unit="ms" value={row.fade_in_ms} min={0} max={2000} onCommit={(v) => act.audioItem(block, { fade_in_ms: Math.round(v) })} />
+          <NumberField label="Fade out" unit="ms" value={row.fade_out_ms} min={0} max={2000} onCommit={(v) => act.audioItem(block, { fade_out_ms: Math.round(v) })} />
+          <NumberField label="Duck under dialogue" unit="dB" value={row.duck_under_dialogue_db} min={-24} max={0} step={0.5}
+            onCommit={(v) => act.audioItem(block, { duck_under_dialogue_db: v })} note="How far it dips while a line plays (−24 to 0 dB)" />
+          {row.duck_under_dialogue_db != null && <button type="button" className="tle-btn tle-btn-small" onClick={() => act.audioItem(block, { duck_under_dialogue_db: null })}>No ducking</button>}
+        </>
+      );
+    }
     return (
       <>
         <Field label="Gain" value={db(row.gain_db)} />

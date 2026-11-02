@@ -28,14 +28,39 @@ describe('commands and their inverses', () => {
     expect(c.undo().requests[0].body).toEqual({ duration_ms: 4000 });
   });
 
-  test("trimming Prime's video is undone by restoring the video range, then the commentary range and fades the server clamped", () => {
+  test("trimming Prime's video is undone in one batch: the video range, then the commentary range and fades the server clamped", () => {
     const c = ops.trimSegment(seg, { source_out_ms: 5000 });
     expect(c.requests).toEqual([{ method: 'post', path: '/segments/s1/trim-video', body: { source_in_ms: 1000, source_out_ms: 5000 } }]);
-    expect(c.undo().requests).toEqual([
-      { method: 'post', path: '/segments/s1/trim-video', body: { source_in_ms: 1000, source_out_ms: 9000 } },
-      { method: 'post', path: '/segments/s1/trim-audio', body: { audio_in_ms: 2000, audio_out_ms: 8000 } },
-      { method: 'post', path: '/segments/s1/audio', body: { audio_fade_in_ms: 200, audio_fade_out_ms: 300 } },
-    ]);
+    expect(c.undo().requests).toEqual([{ method: 'post', path: '/ops', body: { steps: [
+      { op: 'segment.trim-video', id: 's1', body: { source_in_ms: 1000, source_out_ms: 9000 } },
+      { op: 'segment.trim-audio', id: 's1', body: { audio_in_ms: 2000, audio_out_ms: 8000 } },
+      { op: 'segment.audio', id: 's1', body: { audio_fade_in_ms: 200, audio_fade_out_ms: 300 } },
+    ] } }]);
+  });
+
+  test('P4: a scene clip split is undone in one batch: the new part removed, the first part given back its length and trim', () => {
+    const c = ops.splitSceneClip(clip, 1500);
+    expect(c.requests).toEqual([{ method: 'post', path: '/scene-clips/c1/split', body: { at_ms: 1500 } }]);
+    const undo = c.undo([{ scene_clip_id: 'c1', new_scene_clip_id: 'c2' }]);
+    expect(undo.requests).toEqual([{ method: 'post', path: '/ops', body: { steps: [
+      { op: 'remove', id: 'c2', body: { what: 'scene_clip' } },
+      { op: 'scene-clip.update', id: 'c1', body: { duration_ms: 4000, source_in_ms: 0, source_out_ms: 4000 } },
+    ] } }]);
+    expect(undo.undo().requests[0].path).toBe('/scene-clips/c1/split');
+  });
+
+  test('P4: a reorder is undone by moving the clip back to where it was', () => {
+    const c = ops.reorderSceneClip(clip, 0, 2);
+    expect(c.requests[0]).toEqual({ method: 'post', path: '/scene-clips/c1/reorder', body: { index: 0 } });
+    expect(c.undo().requests[0].body).toEqual({ index: 2 });
+  });
+
+  test('P4: a sound moved, trimmed or re-levelled in place is undone with the stored values of the fields it changed', () => {
+    const item = { id: 'm1', track: 'music', source_in_ms: 0, source_out_ms: 9000, anchor_kind: 'edit_start', anchor_beat: null, anchor_ref: null, offset_ms: 500, gain_db: -6, fade_in_ms: 0, fade_out_ms: 0 };
+    const move = ops.updateAudioItem(item, { anchor_kind: 'beat_start', anchor_beat: 2, offset_ms: 100 });
+    expect(move.requests[0]).toEqual({ method: 'patch', path: '/audio-items/m1', body: { anchor_kind: 'beat_start', anchor_beat: 2, offset_ms: 100 } });
+    expect(move.undo().requests[0].body).toEqual({ anchor_kind: 'edit_start', anchor_beat: null, anchor_ref: null, offset_ms: 500 });
+    expect(ops.updateAudioItem(item, { gain_db: -3 }).undo().requests[0].body).toEqual({ gain_db: -6 });
   });
 
   test("moving, Prime's place and her commentary are undone with what was stored", () => {

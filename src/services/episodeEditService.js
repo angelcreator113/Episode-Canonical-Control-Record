@@ -182,8 +182,14 @@ async function currentRevision(sequelize, episodeId, t) {
  * FOR UPDATE, the sent revision compared, `fn` run, the revision advanced.
  * Returns fn's result with edit_revision (the new one).
  */
-async function withEdit(sequelize, { episodeId, editRevision, userId }, fn) {
+async function withEdit(sequelize, { episodeId, editRevision, userId, batch = null }, fn) {
   if (!userId) fail(401, 'AUTH_REQUIRED', 'Sign in to edit');
+  // One step of batchOps: its transaction already holds the edit state, checked the revision
+  // and advances it once for the whole batch (P4, 2026-11-02).
+  if (batch) {
+    if (batch.episodeId !== episodeId) fail(400, 'BAD_BATCH', 'A batch edits one episode');
+    return (await fn(batch.t)) || {};
+  }
   const expected = revisionOf(editRevision);
   return sequelize.transaction(async (t) => {
     await episodeRow(sequelize, episodeId, t);
@@ -318,7 +324,10 @@ async function loadEdit(sequelize, { episodeId }, t = null) {
   await episodeRow(sequelize, episodeId, t);
   const live = await liveRows(sequelize, episodeId, t);
   const takes = await voiceTakesFor(sequelize, episodeId, live, t);
-  return { edit_revision: await currentRevision(sequelize, episodeId, t), rows: live, edit: editFrom(live, takes) };
+  // Each take carries the URL it plays from (P4), so the editor needs no second list.
+  const { publicUrl } = require('./rawClipMedia');
+  const withUrls = Object.fromEntries(Object.entries(takes).map(([id, k]) => [id, { ...k, audio_url: k.s3_key ? publicUrl(k.s3_key) : null }]));
+  return { edit_revision: await currentRevision(sequelize, episodeId, t), rows: live, edit: editFrom(live, withUrls) };
 }
 
 // ── Beat production ──────────────────────────────────────────────────────────
@@ -344,10 +353,10 @@ async function writeBeatProduction(sequelize, episodeId, beat, change, userId, t
 }
 
 /** Prime required (the default) or gameplay_only for one beat. The previous setting is kept, soft-deleted; the beat's length is kept. */
-async function setBeatMode(sequelize, { episodeId, editRevision, userId, beatNumber, primeMode, note = null }) {
+async function setBeatMode(sequelize, { episodeId, editRevision, userId, batch, beatNumber, primeMode, note = null }) {
   const beat = beatOf(beatNumber);
   if (!['required', 'gameplay_only'].includes(primeMode)) fail(400, 'BAD_MODE', 'A beat is "required" or "gameplay_only"');
-  return withEdit(sequelize, { episodeId, editRevision, userId }, async (t) => ({
+  return withEdit(sequelize, { episodeId, editRevision, userId, batch }, async (t) => ({
     beat_production_id: await writeBeatProduction(sequelize, episodeId, beat, { prime_mode: primeMode, note: note ? String(note).slice(0, 2000) : null }, userId, t),
   }));
 }
@@ -375,7 +384,7 @@ function timingPlan(before, after) {
  * the edit_revision it was worked out for; send that revision with the write
  * to apply exactly that plan (409 if the edit changed in between).
  */
-async function setBeatDuration(sequelize, { episodeId, editRevision, userId, beatNumber, durationMs, dryRun = false }) {
+async function setBeatDuration(sequelize, { episodeId, editRevision, userId, batch, beatNumber, durationMs, dryRun = false }) {
   const beat = beatOf(beatNumber);
   const ms = durationMs === null ? null : int(durationMs, 'duration_ms', { min: 1, max: MAX_BEAT_MS });
   const plan = (edit) => {
@@ -388,7 +397,7 @@ async function setBeatDuration(sequelize, { episodeId, editRevision, userId, bea
     const { edit, edit_revision: rev } = await loadEdit(sequelize, { episodeId });
     return { dry_run: true, for_edit_revision: rev, ...plan(edit) };
   }
-  return withEdit(sequelize, { episodeId, editRevision, userId }, async (t) => {
+  return withEdit(sequelize, { episodeId, editRevision, userId, batch }, async (t) => {
     const live = await liveRows(sequelize, episodeId, t);
     const result = plan(editFrom(live, await voiceTakesFor(sequelize, episodeId, live, t)));
     await writeBeatProduction(sequelize, episodeId, beat, { duration_ms: ms }, userId, t);
@@ -403,13 +412,13 @@ async function setBeatDuration(sequelize, { episodeId, editRevision, userId, bea
  * given (C2's first auto-assembly, from Prime's beat marks), else its draft
  * length now. A beat that would have no length refuses the whole lock.
  */
-async function lockBeatTiming(sequelize, { episodeId, editRevision, userId, durations = null }) {
+async function lockBeatTiming(sequelize, { episodeId, editRevision, userId, batch, durations = null }) {
   const given = {};
   if (durations != null) {
     if (typeof durations !== 'object' || Array.isArray(durations)) fail(400, 'BAD_VALUE', 'durations is { beat: ms }');
     for (const [k, v] of Object.entries(durations)) given[beatOf(k)] = int(v, `durations.${k}`, { min: 1, max: MAX_BEAT_MS });
   }
-  return withEdit(sequelize, { episodeId, editRevision, userId }, async (t) => {
+  return withEdit(sequelize, { episodeId, editRevision, userId, batch }, async (t) => {
     const { beats } = tl.beatTimeline(editFrom(await liveRows(sequelize, episodeId, t)));
     const already = beats.filter((b) => b.locked && given[b.beat] != null && given[b.beat] !== b.end - b.start).map((b) => b.beat);
     if (already.length) fail(409, 'BEAT_ALREADY_LOCKED', 'A locked beat changes only by setting its length on its own', { beats: already });
@@ -485,12 +494,12 @@ function sceneRange(kind, sourceDuration, body, base = null) {
 }
 
 /** Places a scene clip in a beat (at the end of the beat unless a position is given). */
-async function placeSceneClip(sequelize, { episodeId, editRevision, userId, body }) {
+async function placeSceneClip(sequelize, { episodeId, editRevision, userId, batch, body }) {
   const beat = beatOf(body.beat_number);
   const kind = body.source_kind;
   // Measured first, outside the edit's lock; checked again inside it.
   const probed = kind === 'angle_video' ? await probeAngleVideo(sequelize, body.source_id) : null;
-  return withEdit(sequelize, { episodeId, editRevision, userId }, async (t) => {
+  return withEdit(sequelize, { episodeId, editRevision, userId, batch }, async (t) => {
     const { source_duration_ms: sourceDuration } = await sceneSource(sequelize, episodeId, kind, body.source_id, t, probed);
     const range = sceneRange(kind, sourceDuration, body);
     const duration = int(body.duration_ms ?? (kind === 'angle_still' ? undefined : range.source_out_ms - range.source_in_ms), 'duration_ms', { min: 1 });
@@ -521,8 +530,8 @@ async function sceneClipRow(sequelize, episodeId, clipId, t) {
 }
 
 /** Trims a scene clip, or sets its episode-specific duration or position. The source is never touched. */
-async function updateSceneClip(sequelize, { episodeId, editRevision, userId, clipId, body }) {
-  return withEdit(sequelize, { episodeId, editRevision, userId }, async (t) => {
+async function updateSceneClip(sequelize, { episodeId, editRevision, userId, batch, clipId, body }) {
+  return withEdit(sequelize, { episodeId, editRevision, userId, batch }, async (t) => {
     const c = await sceneClipRow(sequelize, episodeId, clipId, t);
     const range = sceneRange(c.source_kind, c.source_duration_ms, body, c);
     const duration = int(body.duration_ms ?? c.duration_ms, 'duration_ms', { min: 1 });
@@ -608,9 +617,9 @@ async function insertSegment(sequelize, episodeId, v, userId, t) {
 }
 
 /** Places a stretch of Prime's take. The commentary defaults to the whole video range. */
-async function placeSegment(sequelize, { episodeId, editRevision, userId, body }) {
+async function placeSegment(sequelize, { episodeId, editRevision, userId, batch, body }) {
   const a = anchorOf(body);
-  return withEdit(sequelize, { episodeId, editRevision, userId }, async (t) => {
+  return withEdit(sequelize, { episodeId, editRevision, userId, batch }, async (t) => {
     const duration = await primeClip(sequelize, episodeId, body.raw_clip_id, t);
     await checkAnchorTarget(sequelize, episodeId, a, t);
     const sin = int(body.source_in_ms ?? 0, 'source_in_ms');
@@ -643,7 +652,7 @@ async function updateSegment(sequelize, segmentId, v, t) {
 }
 
 /** One edit of a segment: `change(s, t)` returns the new values from the locked row. */
-const editSegment = (sequelize, { episodeId, editRevision, userId, segmentId }, change) => withEdit(sequelize, { episodeId, editRevision, userId }, async (t) => {
+const editSegment = (sequelize, { episodeId, editRevision, userId, batch, segmentId }, change) => withEdit(sequelize, { episodeId, editRevision, userId, batch }, async (t) => {
   const s = await segmentRow(sequelize, episodeId, segmentId, t);
   const v = await change(s, t);
   await updateSegment(sequelize, segmentId, { ...s, ...v }, t);
@@ -699,8 +708,8 @@ const setSegmentLayout = (sequelize, args) => editSegment(sequelize, args, async
  * range: no event in the mix, and unmuting it plays nothing). The segment
  * split is kept, superseded.
  */
-async function splitSegment(sequelize, { episodeId, editRevision, userId, segmentId, body }) {
-  return withEdit(sequelize, { episodeId, editRevision, userId }, async (t) => {
+async function splitSegment(sequelize, { episodeId, editRevision, userId, batch, segmentId, body }) {
+  return withEdit(sequelize, { episodeId, editRevision, userId, batch }, async (t) => {
     const s = await segmentRow(sequelize, episodeId, segmentId, t);
     const at = int(body.at_source_ms, 'at_source_ms');
     if (!(s.source_in_ms < at && at < s.source_out_ms)) fail(400, 'BAD_SPLIT', 'Split inside the segment');
@@ -724,8 +733,8 @@ async function splitSegment(sequelize, { episodeId, editRevision, userId, segmen
 }
 
 /** Replaces the take: a new segment in the same place and layout; the old one is kept, superseded. */
-async function replaceTake(sequelize, { episodeId, editRevision, userId, segmentId, body }) {
-  return withEdit(sequelize, { episodeId, editRevision, userId }, async (t) => {
+async function replaceTake(sequelize, { episodeId, editRevision, userId, batch, segmentId, body }) {
+  return withEdit(sequelize, { episodeId, editRevision, userId, batch }, async (t) => {
     const s = await segmentRow(sequelize, episodeId, segmentId, t);
     const duration = await primeClip(sequelize, episodeId, body.raw_clip_id, t);
     const sin = int(body.source_in_ms ?? 0, 'source_in_ms');
@@ -760,7 +769,7 @@ function dialogueAnchorOf(body) {
  * Its length is the approved revision's trim. One live placement per line:
  * another is refused, never replaced.
  */
-async function placeDialogue(sequelize, { episodeId, editRevision, userId, body }) {
+async function placeDialogue(sequelize, { episodeId, editRevision, userId, batch, body }) {
   const a = dialogueAnchorOf(body);
   checkId(body.approval_id, 'Approval');
   checkId(body.association_id, 'Line association');
@@ -773,7 +782,7 @@ async function placeDialogue(sequelize, { episodeId, editRevision, userId, body 
     fail(409, 'TAKE_BAD_RANGE', "The approved take's trim is outside its measured length");
   }
   try {
-    return await withEdit(sequelize, { episodeId, editRevision, userId }, async (t) => {
+    return await withEdit(sequelize, { episodeId, editRevision, userId, batch }, async (t) => {
       const ap = await one(sequelize, `SELECT id, association_id, beat_number, line_index FROM line_voice_approvals
         WHERE id = :id AND episode_id = :episodeId AND ${IN_FORCE} FOR SHARE`, { id: body.approval_id, episodeId }, t);
       if (!ap || ap.association_id !== body.association_id) fail(409, 'TAKE_NOT_PLAYABLE', 'The approval changed while it was placed. Reload.');
@@ -796,10 +805,10 @@ async function placeDialogue(sequelize, { episodeId, editRevision, userId, body 
 }
 
 /** Moves a dialogue placement (beat-relative or absolute). Its take is never changed here. */
-async function moveDialogue(sequelize, { episodeId, editRevision, userId, itemId, body }) {
+async function moveDialogue(sequelize, { episodeId, editRevision, userId, batch, itemId, body }) {
   const a = dialogueAnchorOf(body);
   checkId(itemId, 'Dialogue placement');
-  return withEdit(sequelize, { episodeId, editRevision, userId }, async (t) => {
+  return withEdit(sequelize, { episodeId, editRevision, userId, batch }, async (t) => {
     const d = await one(sequelize, `SELECT ${DIALOGUE_COLS} FROM timeline_items WHERE id = :itemId FOR UPDATE`, { itemId }, t);
     if (!d || d.deleted_at || d.episode_id !== episodeId || d.kind !== 'dialogue_placement') fail(404, 'NOT_FOUND', 'Dialogue placement not found');
     await q(sequelize, `UPDATE timeline_items SET anchor_kind = :anchor_kind, anchor_beat = :anchor_beat, anchor_ref = :anchor_ref, offset_ms = :offset_ms, updated_at = NOW()
@@ -811,8 +820,8 @@ async function moveDialogue(sequelize, { episodeId, editRevision, userId, itemId
 // ── PIP settings and visibility ──────────────────────────────────────────────
 
 /** The episode's PIP defaults: layout, visible, cutout. */
-async function setPipSettings(sequelize, { episodeId, editRevision, userId, body }) {
-  return withEdit(sequelize, { episodeId, editRevision, userId }, async (t) => {
+async function setPipSettings(sequelize, { episodeId, editRevision, userId, batch, body }) {
+  return withEdit(sequelize, { episodeId, editRevision, userId, batch }, async (t) => {
     const cur = await one(sequelize, 'SELECT * FROM episode_pip_settings WHERE episode_id = :episodeId AND deleted_at IS NULL', { episodeId }, t);
     const layout = body.default_layout === undefined ? (cur ? cur.default_layout : null) : layoutOf(body.default_layout);
     const visible = body.default_visible === undefined ? (cur ? cur.default_visible : true) : body.default_visible !== false;
@@ -826,7 +835,7 @@ async function setPipSettings(sequelize, { episodeId, editRevision, userId, body
 }
 
 /** A manual rule: hide or show the PIP for a beat or a range. It never mutes the commentary. */
-async function addVisibilityRule(sequelize, { episodeId, editRevision, userId, body }) {
+async function addVisibilityRule(sequelize, { episodeId, editRevision, userId, batch, body }) {
   const visible = body.visible === true || body.visible === 'true' ? true : body.visible === false || body.visible === 'false' ? false : fail(400, 'BAD_VALUE', 'visible is true or false');
   let v;
   if (body.scope === 'beat') v = { scope: 'beat', beat_number: beatOf(body.beat_number) };
@@ -835,7 +844,7 @@ async function addVisibilityRule(sequelize, { episodeId, editRevision, userId, b
     const e = anchorOf(body, 'end_');
     v = { scope: 'range', beat_number: null, ...s, end_anchor_kind: e.anchor_kind, end_anchor_beat: e.anchor_beat, end_anchor_ref: e.anchor_ref, end_offset_ms: e.offset_ms };
   } else fail(400, 'BAD_SCOPE', 'A rule is for a "beat" or a "range"');
-  return withEdit(sequelize, { episodeId, editRevision, userId }, async (t) => {
+  return withEdit(sequelize, { episodeId, editRevision, userId, batch }, async (t) => {
     if (v.scope === 'range') {
       await checkAnchorTarget(sequelize, episodeId, v, t);
       await checkAnchorTarget(sequelize, episodeId, { anchor_kind: v.end_anchor_kind, anchor_ref: v.end_anchor_ref }, t);
@@ -853,13 +862,13 @@ async function addVisibilityRule(sequelize, { episodeId, editRevision, userId, b
 
 // ── Timeline items and audio items ───────────────────────────────────────────
 
-async function addItem(sequelize, { episodeId, editRevision, userId, body }) {
+async function addItem(sequelize, { episodeId, editRevision, userId, batch, body }) {
   if (!ITEM_KINDS.includes(body.kind)) fail(400, 'BAD_KIND', `An item is one of ${ITEM_KINDS.join(', ')}`);
   const a = anchorOf(body);
   const values = body.values === undefined ? {} : body.values;
   if (typeof values !== 'object' || values === null || Array.isArray(values)) fail(400, 'BAD_VALUE', 'values is an object');
   if (JSON.stringify(values).length > 20000) fail(400, 'BAD_VALUE', 'values is too large');
-  return withEdit(sequelize, { episodeId, editRevision, userId }, async (t) => {
+  return withEdit(sequelize, { episodeId, editRevision, userId, batch }, async (t) => {
     if (body.scene_clip_id != null) await sceneClipRow(sequelize, episodeId, body.scene_clip_id, t);
     let target = body.target_id == null ? null : String(body.target_id).slice(0, 200);
     if (body.kind === 'audio_offset') {
@@ -880,7 +889,7 @@ async function addItem(sequelize, { episodeId, editRevision, userId, body }) {
   });
 }
 
-async function addAudioItem(sequelize, { episodeId, editRevision, userId, body }) {
+async function addAudioItem(sequelize, { episodeId, editRevision, userId, batch, body }) {
   if (!['music', 'sfx'].includes(body.track)) fail(400, 'BAD_TRACK', 'An audio item is "music" or "sfx"');
   if (!body.asset_ref && !body.slot) fail(400, 'BAD_VALUE', 'An audio item names a library file or an SFX slot');
   const a = anchorOf(body);
@@ -889,7 +898,7 @@ async function addAudioItem(sequelize, { episodeId, editRevision, userId, body }
   if (!(sin < sout)) fail(400, 'BAD_RANGE', 'In must be before out');
   const duck = body.duck_under_dialogue_db == null ? null : Number(body.duck_under_dialogue_db);
   if (duck !== null && !(Number.isFinite(duck) && duck >= -24 && duck <= 0)) fail(400, 'BAD_GAIN', 'Ducking is −24 to 0 dB');
-  return withEdit(sequelize, { episodeId, editRevision, userId }, async (t) => {
+  return withEdit(sequelize, { episodeId, editRevision, userId, batch }, async (t) => {
     await checkAnchorTarget(sequelize, episodeId, a, t);
     const [row] = await rows(sequelize, `INSERT INTO timeline_audio_items
       (episode_id, track, asset_ref, slot, source_in_ms, source_out_ms, anchor_kind, anchor_beat, anchor_ref, offset_ms, gain_db, fade_in_ms, fade_out_ms, duck_under_dialogue_db, created_by)
@@ -907,11 +916,11 @@ const REMOVABLE = {
   scene_clip: 'episode_scene_clips', segment: 'episode_prime_segments', visibility: 'episode_pip_visibility', item: 'timeline_items', audio_item: 'timeline_audio_items',
   dialogue: 'timeline_items',
 };
-async function removeRow(sequelize, { episodeId, editRevision, userId, what, id }) {
+async function removeRow(sequelize, { episodeId, editRevision, userId, batch, what, id }) {
   const table = REMOVABLE[what];
   if (!table) fail(400, 'BAD_KIND', 'Nothing of that kind');
   checkId(id, 'Row');
-  return withEdit(sequelize, { episodeId, editRevision, userId }, async (t) => {
+  return withEdit(sequelize, { episodeId, editRevision, userId, batch }, async (t) => {
     const r = await one(sequelize, `SELECT * FROM ${table} WHERE id = :id FOR UPDATE`, { id }, t);
     if (!r || r.deleted_at || r.episode_id !== episodeId) fail(404, 'NOT_FOUND', 'Not found');
     if (what === 'dialogue' && r.kind !== 'dialogue_placement') fail(404, 'NOT_FOUND', 'Dialogue placement not found');
@@ -984,8 +993,8 @@ const getVersion = (sequelize, { episodeId, versionId }) => versionRow(sequelize
  * soft-deleted, the version's rows are written back with their own ids (a row
  * removed or replaced since is live again). The version row is only read.
  */
-async function restoreVersion(sequelize, { episodeId, editRevision, userId, versionId }) {
-  return withEdit(sequelize, { episodeId, editRevision, userId }, async (t) => {
+async function restoreVersion(sequelize, { episodeId, editRevision, userId, batch, versionId }) {
+  return withEdit(sequelize, { episodeId, editRevision, userId, batch }, async (t) => {
     const v = await versionRow(sequelize, episodeId, versionId, t);
     for (const [key, spec] of Object.entries(LIVE)) {
       const keep = (v.snapshot[key] || []).map((r) => r.id);
@@ -1086,12 +1095,226 @@ async function mixPlanOf(sequelize, { episodeId }) {
   return { edit_revision: rev, mix: tl.mixPlan(edit) };
 }
 
+// ── P4 additions (Timeline Editor redesign P4, 2026-11-02): changes in place, a scene-clip
+//    split and reorder, and a batch of steps as one change. No new table or column. ──────────
+
+/** A timeline item's anchor and values (not a dialogue placement: that is moveDialogue's). */
+async function updateItem(sequelize, { episodeId, editRevision, userId, batch, itemId, body }) {
+  checkId(itemId, 'Timeline item');
+  const a = body.anchor_kind === undefined ? null : anchorOf(body);
+  let values = null;
+  if (body.values !== undefined) {
+    if (typeof body.values !== 'object' || body.values === null || Array.isArray(body.values)) fail(400, 'BAD_VALUE', 'values is an object');
+    if (JSON.stringify(body.values).length > 20000) fail(400, 'BAD_VALUE', 'values is too large');
+    values = body.values;
+  }
+  if (!a && values === null) fail(400, 'NOTHING_TO_CHANGE', 'Send an anchor or values');
+  return withEdit(sequelize, { episodeId, editRevision, userId, batch }, async (t) => {
+    const r = await one(sequelize, 'SELECT id, episode_id, kind, deleted_at FROM timeline_items WHERE id = :itemId FOR UPDATE', { itemId }, t);
+    if (!r || r.deleted_at || r.episode_id !== episodeId) fail(404, 'NOT_FOUND', 'Timeline item not found');
+    if (r.kind === 'dialogue_placement') fail(409, 'USE_DIALOGUE_MOVE', 'A dialogue placement is moved with its own route');
+    if (a) {
+      await checkAnchorTarget(sequelize, episodeId, a, t);
+      if (a.anchor_kind === 'item_start' && a.anchor_ref === itemId) fail(400, 'BAD_ANCHOR', 'An item cannot be anchored to itself');
+      await q(sequelize, `UPDATE timeline_items SET anchor_kind = :anchor_kind, anchor_beat = :anchor_beat, anchor_ref = :anchor_ref, offset_ms = :offset_ms, updated_at = NOW()
+        WHERE id = :itemId`, { ...a, itemId }, t);
+    }
+    if (values !== null) await q(sequelize, 'UPDATE timeline_items SET "values" = CAST(:values AS jsonb), updated_at = NOW() WHERE id = :itemId', { values: JSON.stringify(values), itemId }, t);
+    return { item_id: itemId };
+  });
+}
+
+/** A music or SFX item moved, trimmed or re-levelled: any of anchor, source in/out, gain, fades, ducking. */
+async function updateAudioItem(sequelize, { episodeId, editRevision, userId, batch, audioItemId, body }) {
+  checkId(audioItemId, 'Audio item');
+  const a = body.anchor_kind === undefined ? null : anchorOf(body);
+  return withEdit(sequelize, { episodeId, editRevision, userId, batch }, async (t) => {
+    const r = await one(sequelize, `SELECT id, episode_id, source_in_ms, source_out_ms, gain_db::float8 AS gain_db, fade_in_ms, fade_out_ms,
+        duck_under_dialogue_db::float8 AS duck_under_dialogue_db, deleted_at FROM timeline_audio_items WHERE id = :audioItemId FOR UPDATE`, { audioItemId }, t);
+    if (!r || r.deleted_at || r.episode_id !== episodeId) fail(404, 'NOT_FOUND', 'Audio item not found');
+    const sin = body.source_in_ms === undefined ? r.source_in_ms : int(body.source_in_ms, 'source_in_ms');
+    const sout = body.source_out_ms === undefined ? r.source_out_ms : int(body.source_out_ms, 'source_out_ms');
+    if (!(sin < sout)) fail(400, 'BAD_RANGE', 'In must be before out');
+    const gain = body.gain_db === undefined ? r.gain_db : gainOf(body.gain_db);
+    const fin = body.fade_in_ms === undefined ? r.fade_in_ms : fadeOf(body.fade_in_ms, 'fade_in_ms');
+    const fout = body.fade_out_ms === undefined ? r.fade_out_ms : fadeOf(body.fade_out_ms, 'fade_out_ms');
+    if (fin + fout > sout - sin) fail(400, 'BAD_FADE', 'The fades are longer than the sound');
+    let duck = r.duck_under_dialogue_db;
+    if (body.duck_under_dialogue_db !== undefined) {
+      duck = body.duck_under_dialogue_db === null ? null : Number(body.duck_under_dialogue_db);
+      if (duck !== null && !(Number.isFinite(duck) && duck >= -24 && duck <= 0)) fail(400, 'BAD_GAIN', 'Ducking is −24 to 0 dB');
+    }
+    if (a) await checkAnchorTarget(sequelize, episodeId, a, t);
+    const anchorSet = a ? ', anchor_kind = :anchor_kind, anchor_beat = :anchor_beat, anchor_ref = :anchor_ref, offset_ms = :offset_ms' : '';
+    await q(sequelize, `UPDATE timeline_audio_items SET source_in_ms = :sin, source_out_ms = :sout, gain_db = :gain, fade_in_ms = :fin, fade_out_ms = :fout,
+        duck_under_dialogue_db = :duck${anchorSet}, updated_at = NOW()
+      WHERE id = :audioItemId`, { sin, sout, gain, fin, fout, duck, ...(a || {}), audioItemId }, t);
+    return { audio_item_id: audioItemId };
+  });
+}
+
+/** A PIP visibility rule shown or hidden (and, for a range rule, its start and end moved). It never mutes the commentary. */
+async function updateVisibility(sequelize, { episodeId, editRevision, userId, batch, ruleId, body }) {
+  checkId(ruleId, 'Visibility rule');
+  let visible;
+  if (body.visible !== undefined) {
+    if (body.visible === true || body.visible === 'true') visible = true;
+    else if (body.visible === false || body.visible === 'false') visible = false;
+    else fail(400, 'BAD_VALUE', 'visible is true or false');
+  }
+  return withEdit(sequelize, { episodeId, editRevision, userId, batch }, async (t) => {
+    const r = await one(sequelize, 'SELECT id, episode_id, scope, visible, deleted_at FROM episode_pip_visibility WHERE id = :ruleId FOR UPDATE', { ruleId }, t);
+    if (!r || r.deleted_at || r.episode_id !== episodeId) fail(404, 'NOT_FOUND', 'Visibility rule not found');
+    const sets = [];
+    const rep = { ruleId };
+    if (visible !== undefined) { sets.push('visible = :visible'); rep.visible = visible; }
+    if (body.anchor_kind !== undefined || body.end_anchor_kind !== undefined) {
+      if (r.scope !== 'range') fail(409, 'NOT_A_RANGE', 'Only a range rule has a start and an end');
+      if (body.anchor_kind !== undefined) {
+        const s0 = anchorOf(body);
+        await checkAnchorTarget(sequelize, episodeId, s0, t);
+        sets.push('anchor_kind = :anchor_kind', 'anchor_beat = :anchor_beat', 'anchor_ref = :anchor_ref', 'offset_ms = :offset_ms');
+        Object.assign(rep, s0);
+      }
+      if (body.end_anchor_kind !== undefined) {
+        const e = anchorOf(body, 'end_');
+        await checkAnchorTarget(sequelize, episodeId, e, t);
+        sets.push('end_anchor_kind = :end_anchor_kind', 'end_anchor_beat = :end_anchor_beat', 'end_anchor_ref = :end_anchor_ref', 'end_offset_ms = :end_offset_ms');
+        Object.assign(rep, { end_anchor_kind: e.anchor_kind, end_anchor_beat: e.anchor_beat, end_anchor_ref: e.anchor_ref, end_offset_ms: e.offset_ms });
+      }
+    }
+    if (!sets.length) fail(400, 'NOTHING_TO_CHANGE', "Send visible, or a range rule's start or end");
+    await q(sequelize, `UPDATE episode_pip_visibility SET ${sets.join(', ')}, updated_at = NOW() WHERE id = :ruleId`, rep, t);
+    return { rule_id: ruleId };
+  });
+}
+
+// Positions above this are a reorder's scratch space: the unique place index is checked row by row.
+const SCRATCH_POSITION = 1000000;
+
+/** Puts a beat's live clips in `order` (ids) at positions 0..n-1, past the unique place index in two steps. */
+async function renumberBeat(sequelize, episodeId, beat, order, t) {
+  const scratch = `UPDATE episode_scene_clips SET position = position + ${SCRATCH_POSITION}`;
+  await q(sequelize, `${scratch} WHERE episode_id = :episodeId AND beat_number = :beat AND deleted_at IS NULL`, { episodeId, beat }, t);
+  for (const [i, id] of order.entries()) {
+    await q(sequelize, 'UPDATE episode_scene_clips SET position = :i, updated_at = NOW() WHERE id = :id', { i, id }, t);
+  }
+}
+
+const beatClipIds = async (sequelize, episodeId, beat, t) => (await rows(sequelize, `SELECT id FROM episode_scene_clips
+  WHERE episode_id = :episodeId AND beat_number = :beat AND deleted_at IS NULL ORDER BY position, id FOR UPDATE`, { episodeId, beat }, t)).map((r) => r.id);
+
+/**
+ * Splits a scene clip `at_ms` into its own length: the first part keeps the
+ * row and plays to there, the second is a new row right after it, playing on
+ * from the same source time. The two lengths add up to the old one, so the
+ * clock moves nothing. A video is split only where it still plays (not in a
+ * held last frame); a still splits anywhere.
+ */
+async function splitSceneClip(sequelize, { episodeId, editRevision, userId, batch, clipId, body }) {
+  return withEdit(sequelize, { episodeId, editRevision, userId, batch }, async (t) => {
+    const c = await sceneClipRow(sequelize, episodeId, clipId, t);
+    const at = int(body.at_ms, 'at_ms', { min: 1 });
+    if (!(at < c.duration_ms)) fail(400, 'BAD_SPLIT', 'Split inside the clip');
+    let first = { source_in_ms: c.source_in_ms, source_out_ms: c.source_out_ms };
+    let second = { source_in_ms: c.source_in_ms, source_out_ms: c.source_out_ms };
+    if (c.source_kind !== 'angle_still') {
+      const cut = c.source_in_ms + at;
+      if (!(cut < c.source_out_ms)) fail(409, 'SPLIT_IN_HOLD', 'This part of the clip holds its last frame; split where the video still plays');
+      first = { source_in_ms: c.source_in_ms, source_out_ms: cut };
+      second = { source_in_ms: cut, source_out_ms: c.source_out_ms };
+    }
+    const order = await beatClipIds(sequelize, episodeId, c.beat_number, t);
+    await q(sequelize, 'UPDATE episode_scene_clips SET source_in_ms = :sin, source_out_ms = :sout, duration_ms = :d, updated_at = NOW() WHERE id = :clipId',
+      { sin: first.source_in_ms, sout: first.source_out_ms, d: at, clipId }, t);
+    const [row] = await rows(sequelize, `INSERT INTO episode_scene_clips
+      (episode_id, beat_number, position, source_kind, source_id, source_in_ms, source_out_ms, source_duration_ms, duration_ms, created_by)
+      VALUES (:episodeId, :beat, :position, :kind, :sourceId, :sin, :sout, :sdur, :d, :userId) RETURNING id`, {
+      episodeId, beat: c.beat_number, position: SCRATCH_POSITION * 2, kind: c.source_kind, sourceId: c.source_id,
+      sin: second.source_in_ms, sout: second.source_out_ms, sdur: c.source_duration_ms, d: c.duration_ms - at, userId,
+    }, t);
+    const i = order.indexOf(clipId);
+    await renumberBeat(sequelize, episodeId, c.beat_number, [...order.slice(0, i + 1), row.id, ...order.slice(i + 1)], t);
+    return { scene_clip_id: clipId, new_scene_clip_id: row.id };
+  });
+}
+
+/** Moves a scene clip to `index` among its beat's clips (0 is first); the others keep their order. */
+async function reorderSceneClip(sequelize, { episodeId, editRevision, userId, batch, clipId, body }) {
+  return withEdit(sequelize, { episodeId, editRevision, userId, batch }, async (t) => {
+    const c = await sceneClipRow(sequelize, episodeId, clipId, t);
+    const order = (await beatClipIds(sequelize, episodeId, c.beat_number, t)).filter((id) => id !== clipId);
+    const index = int(body.index, 'index', { max: order.length });
+    order.splice(index, 0, clipId);
+    await renumberBeat(sequelize, episodeId, c.beat_number, order, t);
+    return { scene_clip_id: clipId, index };
+  });
+}
+
+/**
+ * The steps a batch may hold: the same writes as their routes, by name. Not
+ * versions, restores, the timing lock or a beat length (each is its own act).
+ */
+const BATCH_STEPS = {
+  'scene-clip.place': (s, a) => placeSceneClip(s, a),
+  'scene-clip.update': (s, a) => updateSceneClip(s, { ...a, clipId: a.id }),
+  'scene-clip.split': (s, a) => splitSceneClip(s, { ...a, clipId: a.id }),
+  'scene-clip.reorder': (s, a) => reorderSceneClip(s, { ...a, clipId: a.id }),
+  'segment.place': (s, a) => placeSegment(s, a),
+  'segment.move': (s, a) => moveSegment(s, { ...a, segmentId: a.id }),
+  'segment.trim-video': (s, a) => trimSegmentVideo(s, { ...a, segmentId: a.id }),
+  'segment.trim-audio': (s, a) => trimSegmentAudio(s, { ...a, segmentId: a.id }),
+  'segment.audio': (s, a) => setSegmentAudio(s, { ...a, segmentId: a.id }),
+  'segment.layout': (s, a) => setSegmentLayout(s, { ...a, segmentId: a.id }),
+  'dialogue.place': (s, a) => placeDialogue(s, a),
+  'dialogue.move': (s, a) => moveDialogue(s, { ...a, itemId: a.id }),
+  'item.add': (s, a) => addItem(s, a),
+  'item.update': (s, a) => updateItem(s, { ...a, itemId: a.id }),
+  'audio-item.add': (s, a) => addAudioItem(s, a),
+  'audio-item.update': (s, a) => updateAudioItem(s, { ...a, audioItemId: a.id }),
+  'visibility.add': (s, a) => addVisibilityRule(s, a),
+  'visibility.update': (s, a) => updateVisibility(s, { ...a, ruleId: a.id }),
+  'beat.mode': (s, a) => setBeatMode(s, { ...a, beatNumber: a.body.beat, primeMode: a.body.prime_mode, note: a.body.note }),
+  remove: (s, a) => removeRow(s, { ...a, what: a.body.what, id: a.id }),
+};
+const MAX_BATCH = 50;
+
+/**
+ * Several steps as one change: one transaction, one revision check, one new
+ * revision. Steps run in order; any refusal rolls every step back, and the
+ * answer names the step that failed. steps: [{ op, id?, body? }].
+ */
+async function batchOps(sequelize, { episodeId, editRevision, userId, steps }) {
+  if (!Array.isArray(steps) || !steps.length) fail(400, 'NO_STEPS', 'A batch has at least one step');
+  if (steps.length > MAX_BATCH) fail(400, 'TOO_MANY_STEPS', `A batch has at most ${MAX_BATCH} steps`);
+  for (const [i, st] of steps.entries()) {
+    if (!st || typeof st !== 'object' || !BATCH_STEPS[st.op]) fail(400, 'BAD_STEP', `Step ${i + 1} is not a step a batch can hold`, { step: i });
+    if (st.body != null && (typeof st.body !== 'object' || Array.isArray(st.body))) fail(400, 'BAD_STEP', `Step ${i + 1}'s body is an object`, { step: i });
+  }
+  return withEdit(sequelize, { episodeId, editRevision, userId }, async (t) => {
+    const results = [];
+    for (const [i, st] of steps.entries()) {
+      try {
+        results.push(await BATCH_STEPS[st.op](sequelize, { episodeId, editRevision, userId, batch: { t, episodeId }, id: st.id, body: st.body || {} }));
+      } catch (err) {
+        if (err instanceof EditError) {
+          err.message = `Step ${i + 1} (${st.op}): ${err.message}`;
+          err.extra = { ...(err.extra || {}), step: i };
+        }
+        throw err;
+      }
+    }
+    return { results };
+  });
+}
+
 module.exports = {
   EditError, setMedia, readVideoProbe, stableJson, ITEM_KINDS, MAX_CLIP_MS, PROBE_TIMEOUT_MS,
   loadEdit, setBeatMode, setBeatDuration, lockBeatTiming, placeSceneClip, updateSceneClip,
   placeDialogue, moveDialogue,
   placeSegment, moveSegment, trimSegmentVideo, trimSegmentAudio, setSegmentAudio, setSegmentLayout, splitSegment, replaceTake,
   setPipSettings, addVisibilityRule, addItem, addAudioItem, removeRow,
+  updateItem, updateAudioItem, updateVisibility, splitSceneClip, reorderSceneClip, batchOps, BATCH_STEPS,
   createVersion, listVersions, getVersion, restoreVersion,
   reviewReadiness, layoutAtTime, mixPlanOf,
 };

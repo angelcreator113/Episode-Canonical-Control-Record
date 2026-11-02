@@ -3,9 +3,9 @@
 /**
  * Timeline C1 (Evoni, 2026-10-28; design read
  * docs/reads/2026-10-27-voice-studio-timeline-design.md, Revision 6, R5.6):
- * the episode's edit. Mounted at /api/v1/episodes/:episodeId/edit. Server
- * only in C1: no page calls these yet, and the legacy Timeline Editor's
- * routes and data are untouched.
+ * the episode's edit. Mounted at /api/v1/episodes/:episodeId/edit. The
+ * episode editor (/episodes/:id/editor, Timeline Editor redesign P1–P4)
+ * calls them; the legacy Timeline Editor's routes and data are untouched.
  *
  *   GET    /                         the live edit: edit_revision and every live row
  *   GET    /layout?t=ms              layoutAt: the scene and the PIP at t
@@ -25,6 +25,13 @@
  *   POST   /visibility               { scope: beat | range, beat_number | anchor_* and end_anchor_*, visible }
  *   POST   /items, /audio-items      timeline items and music/SFX items
  *   DELETE /scene-clips|segments|visibility|items|audio-items|dialogue/:id   (soft delete)
+ *   P4 (2026-11-02), changes in place and as one:
+ *   POST   /scene-clips/:clipId/split    { at_ms }  two clips whose lengths add up to the old one
+ *   POST   /scene-clips/:clipId/reorder  { index }  its place among its beat's clips
+ *   PATCH  /items/:itemId                { anchor_*, values }  (not dialogue: /dialogue/:itemId/move)
+ *   PATCH  /audio-items/:audioItemId     { anchor_*, source_in_ms, source_out_ms, gain_db, fade_*, duck_under_dialogue_db }
+ *   PATCH  /visibility/:ruleId           { visible, anchor_*, end_anchor_* (range rules) }
+ *   POST   /ops                          { steps: [{ op, id?, body? }] }  one transaction, one revision
  *   POST   /versions                 { name };  POST /versions/:versionId/restore
  *
  * Every write sends edit_revision (409 EDIT_CHANGED when stale) and is
@@ -112,6 +119,13 @@ const REMOVE = { 'scene-clips': 'scene_clip', segments: 'segment', visibility: '
 for (const [path, what] of Object.entries(REMOVE)) {
   router.delete(`/${path}/:id`, ...admin, handle(`remove ${what}`, (req) => edit.removeRow(s(), { ...base(req), what, id: req.params.id })));
 }
+
+router.post('/scene-clips/:clipId/split', ...admin, handle('split scene clip', (req) => edit.splitSceneClip(s(), { ...base(req), clipId: req.params.clipId })));
+router.post('/scene-clips/:clipId/reorder', ...admin, handle('reorder scene clip', (req) => edit.reorderSceneClip(s(), { ...base(req), clipId: req.params.clipId })));
+router.patch('/items/:itemId', ...admin, handle('update timeline item', (req) => edit.updateItem(s(), { ...base(req), itemId: req.params.itemId })));
+router.patch('/audio-items/:audioItemId', ...admin, handle('update audio item', (req) => edit.updateAudioItem(s(), { ...base(req), audioItemId: req.params.audioItemId })));
+router.patch('/visibility/:ruleId', ...admin, handle('update visibility rule', (req) => edit.updateVisibility(s(), { ...base(req), ruleId: req.params.ruleId })));
+router.post('/ops', ...admin, handle('batch', (req) => edit.batchOps(s(), { ...base(req), steps: req.body?.steps })));
 
 router.post('/versions', ...admin, handle('save version', (req) => edit.createVersion(s(), { ...base(req), name: req.body?.name })));
 router.post('/versions/:versionId/restore', ...admin, handle('restore version', (req) => edit.restoreVersion(s(), { ...base(req), versionId: req.params.versionId })));

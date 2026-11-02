@@ -760,3 +760,55 @@ Evoni approved P3: editing on the existing C1 routes. P3 is frontend only. There
   - the dragged and resized layout (1010, 571, 649×365) and −6 dB on both halves;
   - the draft at revision 8.
 - **One bug found and fixed:** the timecode rounded frames down while the clock rounds to the nearest frame, so 4033 ms showed as 04.00 instead of 04.01.
+
+---
+
+## 15. P4 as built (2026-11-02)
+
+Evoni approved P4: the C1 API additions of §4.3. This is the first backend change in the redesign. It has **no migration**: no new table, column or constraint, and every addition reads and writes the existing C1 tables through `episodeEditService`. Nothing is deployed and no flag is changed. On a server the routes stay behind `EPISODE_EDIT` and ADMIN, like the rest of C1.
+
+**New routes**, all ADMIN, and all sending `edit_revision`:
+
+| Route | What it does |
+|---|---|
+| `POST /scene-clips/:clipId/split { at_ms }` | Splits a scene clip into two whose lengths add up to the old one, so the clock moves nothing. A video splits at its own source time; a split in a held last frame is refused (`SPLIT_IN_HOLD`) |
+| `POST /scene-clips/:clipId/reorder { index }` | Moves a clip to another place among its beat's clips; the others keep their order. Positions are rewritten in two steps past the unique place index, in one transaction |
+| `PATCH /audio-items/:audioItemId` | Moves, trims and re-levels a music or SFX item: anchor, source in and out, gain, fades, ducking. It is checked as `addAudioItem` is, and fades may not be longer than the sound |
+| `PATCH /items/:itemId` | Changes a timeline item's anchor or values. Not for dialogue (`USE_DIALOGUE_MOVE`), and never anchored to itself |
+| `PATCH /visibility/:ruleId` | Shows or hides Prime under a rule in place, and moves a range rule's start and end. Only a range rule has those (`NOT_A_RANGE`) |
+| `POST /ops { steps: [{ op, id?, body? }] }` | Several steps as one change: one transaction, one revision check, one new revision, at most 50 steps. A refused step rolls back every step, and the answer names it ("Step 2 (segment.place): …", `extra.step`). A batch holds the same writes as their routes, by name (`BATCH_STEPS`); versions, restores, the timing lock and beat lengths are their own acts and cannot be in one |
+
+**What else changed in the backend:**
+- `GET /edit` now gives each voice take its `audio_url`, so the editor needs no second list.
+- **How a batch works:** `withEdit` takes an optional `batch` (the batch's transaction). A step run in a batch skips its own revision check and bump; `batchOps` does both once. Outside a batch, every write behaves exactly as before. The 22 C1 integration tests, the Voice Studio tests and the C1 guards still pass.
+
+**The editor uses them:**
+- Sounds can be dragged to move them, trimmed at either end, and changed in the inspector: start, in and out, gain, fades, ducking. Trimming a sound's head keeps the rest where it plays, as Prime's trims do.
+- A scene clip can be dragged to another place in its beat, or moved with Earlier/Later in the inspector, and split at the playhead.
+- Two undos that need several steps are now one `/ops` request, applied entirely or not at all:
+  - undoing a Prime trim restores the video range, then the commentary range and fades;
+  - undoing a scene-clip split removes the new part and gives the first part back its length and trim.
+
+**Still not built:**
+
+| Not built | Why |
+|---|---|
+| Splitting a sound | Not in §4.3 |
+| A cross-device track-lock store | It needs a new table, so a migration. Locks stay per browser |
+| Snapping to other clips' edges | Not built yet |
+| Placing music and SFX | Waits for the library (R8.8) |
+
+**Measured:**
+- **Integration tests on Postgres** (`tests/integration/episodeEditP4.integration.test.js`), 10 tests: split (still and video, hold and edge refusals), reorder, sound and item and rule updates (with refusals that change nothing), batch success as one revision, batch rollback naming the step, batch refusals (stale, empty, too long, unknown step), and the routes (admin only; split then `/ops` in one revision).
+- **End to end** in Chromium against the real backend (`EPISODE_EDIT=on`, a throwaway local Postgres with every migration). The run:
+  1. placed two stills, and moved Mirror earlier;
+  2. split Mirror at 00:02, then undid it in one batch;
+  3. set the music gain to −9 dB, then undid it (−6);
+  4. dragged the music 1 s later;
+  5. trimmed its head by 0.5 s;
+  6. reloaded the page.
+- Every write returned 200, and the revision went 0 → 9.
+- The database held:
+  - Mirror then Wide, Mirror at its full 5000 ms;
+  - the split-off part soft-deleted;
+  - the music at source 500–4000, offset 1500, −6 dB.

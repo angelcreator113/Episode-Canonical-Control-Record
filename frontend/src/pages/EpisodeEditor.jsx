@@ -110,8 +110,15 @@ export default function EpisodeEditor() {
   const sceneSets = useRead(() => episodeEditApi.sceneSets(episodeId), [episodeId]);
   const takes = useRead(() => episodeEditApi.takes(episodeId), [episodeId]);
 
-  const media = useMemo(() => mediaIndex({ rawClips: rawClips.data || [], sceneSets: sceneSets.data || [], takes: takes.data?.takes || [] }),
-    [rawClips.data, sceneSets.data, takes.data]);
+  // Takes: Voice Studio's playable list, and (P4) the URL each take the edit names carries in GET /edit.
+  const media = useMemo(() => {
+    const listed = takes.data?.takes || [];
+    const known = new Set(listed.map((t) => String(t.approval_id)));
+    const fromEdit = Object.entries(edit.data?.edit?.voiceTakes || {})
+      .filter(([id, k]) => !known.has(String(id)) && k.audio_url)
+      .map(([id, k]) => ({ approval_id: id, audio_url: k.audio_url, beat_number: k.beat_number, line_index: k.line_index }));
+    return mediaIndex({ rawClips: rawClips.data || [], sceneSets: sceneSets.data || [], takes: [...listed, ...fromEdit] });
+  }, [rawClips.data, sceneSets.data, takes.data, edit.data]);
   const model = useMemo(() => (edit.data ? buildTimeline(edit.data.edit, media) : null), [edit.data, media]);
   const readiness = useMemo(() => (model && findings.data ? beatReadiness(model, findings.data.findings) : null), [model, findings.data]);
 
@@ -249,11 +256,26 @@ export default function EpisodeEditor() {
     editor.say({ kind: 'info', text: `${asset.label} can't be placed ${lane ? `on that lane` : 'here'}.` });
   }, [model, edit.data, editor, focusBeat, view]);
 
+  /** A scene clip's place among its beat's clips, and where a drag to `start` would put it. */
+  const sceneOrder = (block, start = block.start) => {
+    const siblings = (model?.blocks.scene || []).filter((b) => b.beat === block.beat).sort((a, b) => a.start - b.start);
+    const from = siblings.findIndex((b) => b.id === block.id);
+    const mid = start + (block.end - block.start) / 2;
+    const to = siblings.filter((b) => b.id !== block.id && (b.start + b.end) / 2 < mid).length;
+    return { from, to, count: siblings.length };
+  };
+
   const moveBlock = useCallback((block, newStart) => {
     const at = snapToFrame(Math.max(0, newStart));
     if (refuseLocked(block.lane, 'Move')) return;
     if (block.kind === 'segment') editor.run(ops.moveSegment(block.row, ops.anchorAt(block.row, at, model.beats)));
     else if (block.kind === 'dialogue') editor.run(ops.moveDialogue(block.row, ops.anchorAt(block.row, at, model.beats)));
+    else if (block.kind === 'audio_item') editor.run(ops.updateAudioItem(block.row, ops.anchorAt(block.row, at, model.beats), 'Move sound'));
+    else if (block.kind === 'scene_clip') {
+      // Scene clips are laid end to end in their beat: a drag changes their order, never a time.
+      const { from, to } = sceneOrder(block, newStart);
+      if (to !== from) editor.run(ops.reorderSceneClip(block.row, to, from));
+    }
   }, [editor, model, view]);
 
   const trimBlock = useCallback((block, edge, t) => {
@@ -270,8 +292,16 @@ export default function EpisodeEditor() {
       }
     } else if (block.kind === 'scene_clip' && edge === 'end') {
       editor.run(ops.updateSceneClip(row, { duration_ms: Math.max(33, Math.round(at - block.start)) }, 'Change scene clip length'));
+    } else if (block.kind === 'audio_item') {
+      if (edge === 'end') {
+        editor.run(ops.updateAudioItem(row, { source_out_ms: Math.round(row.source_in_ms + Math.max(33, at - block.start)) }, 'Trim sound'));
+      } else {
+        // Trimming the head keeps the rest where it plays: the start moves later by as much (as Prime's trims do).
+        const delta = Math.max(-row.source_in_ms, Math.min(row.source_out_ms - row.source_in_ms - 33, Math.round(at - block.start)));
+        editor.run(ops.updateAudioItem(row, { source_in_ms: row.source_in_ms + delta, ...ops.anchorAt(row, block.start + delta, model.beats) }, 'Trim sound'));
+      }
     }
-  }, [editor, view]);
+  }, [editor, view, model]);
 
   const deleteBlock = useCallback((block) => {
     if (!block) return;
@@ -285,10 +315,11 @@ export default function EpisodeEditor() {
 
   const splitAtPlayhead = useCallback((block) => {
     const b = block && segmentOf(block);
-    if (!b || b.kind !== 'segment') { editor.say({ kind: 'info', text: 'Split works on a Prime segment: select one and put the playhead inside it. Splitting scene clips and sounds needs an API addition (P4).' }); return; }
-    if (refuseLocked('prime', 'Split')) return;
-    if (!(playhead > b.start && playhead < b.end)) { editor.say({ kind: 'info', text: 'Put the playhead inside the segment to split it there.' }); return; }
-    editor.run(ops.splitSegment(b.row, Math.round(b.row.source_in_ms + (playhead - b.start))));
+    if (!b || !['segment', 'scene_clip'].includes(b.kind)) { editor.say({ kind: 'info', text: 'Split works on a Prime segment or a scene clip: select one and put the playhead inside it.' }); return; }
+    if (refuseLocked(b.lane, 'Split')) return;
+    if (!(playhead > b.start && playhead < b.end)) { editor.say({ kind: 'info', text: 'Put the playhead inside the clip to split it there.' }); return; }
+    if (b.kind === 'segment') editor.run(ops.splitSegment(b.row, Math.round(b.row.source_in_ms + (playhead - b.start))));
+    else editor.run(ops.splitSceneClip(b.row, Math.round(playhead - b.start)));
   }, [editor, playhead, allBlocks, view]);
 
   const copyBlock = useCallback((block, cut = false) => {
@@ -328,6 +359,13 @@ export default function EpisodeEditor() {
   const act = {
     move: (block, t) => moveBlock(block, t),
     updateScene: (block, changes) => { if (!refuseLocked('scene', 'Change')) editor.run(ops.updateSceneClip(block.row, changes, 'Change scene clip')); },
+    reorderScene: (block, step) => {
+      if (refuseLocked('scene', 'Move')) return;
+      const { from, count } = sceneOrder(block);
+      const to = from + step;
+      if (to >= 0 && to < count) editor.run(ops.reorderSceneClip(block.row, to, from, step < 0 ? 'Move scene clip earlier' : 'Move scene clip later'));
+    },
+    audioItem: (block, changes) => { if (!refuseLocked(block.lane, 'Change')) editor.run(ops.updateAudioItem(block.row, changes)); },
     trimSegment: (block, range) => { if (!refuseLocked('prime', 'Trim')) editor.run(ops.trimSegment(segmentOf(block).row, range)); },
     segmentAudio: (block, changes) => { if (!refuseLocked('prime_vo', 'Change')) editor.run(ops.setSegmentAudio(segmentOf(block).row, changes)); },
     layout: (block, layout) => { if (!refuseLocked('prime', 'Move Prime')) editor.run(ops.setSegmentLayout(segmentOf(block).row, layout)); },
@@ -528,7 +566,7 @@ export default function EpisodeEditor() {
               <button type="button" className="tle-btn" onClick={editor.undo} disabled={!editable || !editor.canUndo} title={editor.undoLabel ? `${editor.undoLabel} (Ctrl+Z)` : 'Nothing to undo'}><Undo2 size={16} aria-hidden="true" /> Undo</button>
               <button type="button" className="tle-btn" onClick={editor.redo} disabled={!editable || !editor.canRedo} title={editor.redoLabel ? `${editor.redoLabel} (Ctrl+Shift+Z)` : 'Nothing to redo'}><Redo2 size={16} aria-hidden="true" /> Redo</button>
               <span className="tle-toolbar-sep" aria-hidden="true" />
-              <button type="button" className="tle-btn" onClick={() => splitAtPlayhead(selected)} disabled={!editable || !selected || segmentOf(selected).kind !== 'segment'} title="Split the selected Prime segment at the playhead"><SquareSplitHorizontal size={16} aria-hidden="true" /> Split</button>
+              <button type="button" className="tle-btn" onClick={() => splitAtPlayhead(selected)} disabled={!editable || !selected || !['segment', 'scene_clip'].includes(segmentOf(selected).kind)} title="Split the selected Prime segment or scene clip at the playhead"><SquareSplitHorizontal size={16} aria-hidden="true" /> Split</button>
               <button type="button" className="tle-btn" onClick={() => copyBlock(selected, true)} disabled={!editable || !selected || selected.kind === 'dialogue'} title="Cut (Ctrl+X)"><Scissors size={16} aria-hidden="true" /> Cut</button>
               <button type="button" className="tle-btn" onClick={() => copyBlock(selected)} disabled={!selected || selected.kind === 'dialogue'} title="Copy (Ctrl+C)"><Copy size={16} aria-hidden="true" /> Copy</button>
               <button type="button" className="tle-btn" onClick={paste} disabled={!editable || !clipboard} title={clipboard ? `Paste ${clipboard.label} at the playhead (Ctrl+V)` : 'Copy something first'}><ClipboardPaste size={16} aria-hidden="true" /> Paste</button>
@@ -539,7 +577,7 @@ export default function EpisodeEditor() {
               {focusBeat != null && (
                 <button type="button" className="tle-btn" onClick={() => { setFocusBeat(null); fitTo(model.duration); }}><X size={14} aria-hidden="true" /> Leave beat {focusBeat}</button>
               )}
-              <span className="tle-icon-btn is-off" title="Snapping: times snap to whole frames; snapping to other clips arrives with P4" aria-hidden="true"><Magnet size={16} /></span>
+              <span className="tle-icon-btn is-off" title="Times snap to whole frames. Snapping to other clips' edges is not built yet." aria-hidden="true"><Magnet size={16} /></span>
               <button type="button" className="tle-icon-btn" onClick={() => setPxPerMs((p) => clamp((p || px) / 1.5, MIN_PX_PER_MS, MAX_PX_PER_MS))} aria-label="Zoom out"><ZoomOut size={17} /></button>
               <input type="range" className="tle-zoom" min="0" max="100" value={zoomSlider} onChange={(e) => setZoomFromSlider(Number(e.target.value))} aria-label="Timeline zoom" />
               <button type="button" className="tle-icon-btn" onClick={() => setPxPerMs((p) => clamp((p || px) * 1.5, MIN_PX_PER_MS, MAX_PX_PER_MS))} aria-label="Zoom in"><ZoomIn size={17} /></button>
