@@ -6,7 +6,7 @@
  * and Results tabs kept to this season with "Show all seasons", the season
  * switcher (two seasons; none for one), and ?slot=N opening a slot's panel.
  */
-import { vi, describe, beforeEach, test, expect } from 'vitest';
+import { vi, describe, beforeEach, afterEach, test, expect } from 'vitest';
 import { render, screen, waitFor, within, fireEvent } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 
@@ -171,6 +171,16 @@ describe('Counts on the tabs', () => {
 });
 
 describe('The stat cards', () => {
+  // The fixture's next release is dated 2026-11-01 and only a date from
+  // today on counts as next, so the clock is held three days before it
+  // (the test failed once the real date passed it, 2026-11-02). Only Date
+  // is faked: timers, findBy and waitFor run as usual.
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-29T12:00:00'));
+  });
+  afterEach(() => vi.useRealTimers());
+
   test('each opens its tab, and the fifth is the next release, to the Release tab', async () => {
     renderPage();
     expect((await screen.findByTestId('szn-stat-slots')).getAttribute('href')).toBe('/shows/show-1/season?tab=roadmap');
