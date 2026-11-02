@@ -50,10 +50,32 @@ describe('buildTimeline', () => {
 
   test('every lane is drawn; lanes without a data model say what unlocks them', () => {
     expect(LANES.map((l) => l.key)).toEqual(['scene', 'performer', 'prime', 'prime_vo', 'dialogue', 'phone', 'gameplay', 'overlays', 'music', 'sfx', 'captions']);
-    for (const key of ['performer', 'phone', 'gameplay', 'overlays', 'captions']) {
-      expect(LANES.find((l) => l.key === key).pending).toMatch(/Gate 2/);
+    for (const key of ['phone', 'gameplay', 'overlays']) {
+      expect(LANES.find((l) => l.key === key).pending).toMatch(/Gate 2b/);
       expect(model.blocks[key]).toEqual([]);
     }
+    for (const key of ['performer', 'captions']) expect(LANES.find((l) => l.key === key).pending).toBeUndefined();
+  });
+
+  test('C1b: a Lala take, a caption and a mode change sit where the clock puts them; a lost anchor is unplaced', () => {
+    const c1b = buildTimeline({ ...EDIT, items: [
+      ...EDIT.items,
+      { id: 'p1', kind: 'performer_clip', anchor_kind: 'beat_start', anchor_beat: 1, anchor_ref: null, offset_ms: 2000, duration_ms: 3000,
+        values: { raw_clip_id: 'r2', source_in_ms: 0, source_out_ms: 3000, layout: { x: 0, y: 0, w: 1920, h: 1080 }, layer: 0 } },
+      { id: 'k1', kind: 'caption', anchor_kind: 'beat_start', anchor_beat: 2, anchor_ref: null, offset_ms: 0, duration_ms: 1500,
+        values: { text: 'A New Alliance', style_key: 'title', layout: { x: 160, y: 80, w: 1600, h: 160 } } },
+      { id: 'v1', kind: 'visual_mode', anchor_kind: 'beat_start', anchor_beat: 1, anchor_ref: null, offset_ms: 4000, duration_ms: null, values: { mode: 'cinematic' } },
+      { id: 'k2', kind: 'caption', anchor_kind: 'item_start', anchor_beat: null, anchor_ref: 'gone', offset_ms: 0, duration_ms: 1000, values: { text: 'Lost', style_key: 'caption', layout: { x: 0, y: 0, w: 10, h: 10 } } },
+    ] }, media);
+    expect(c1b.blocks.performer).toEqual([expect.objectContaining({ id: 'p1', start: 2000, end: 5000, label: 'Lala walk', kind: 'performer_clip' })]);
+    expect(c1b.blocks.captions).toEqual([expect.objectContaining({ id: 'k1', start: 8000, end: 9500, label: 'A New Alliance', style_key: 'title' })]);
+    expect(c1b.modeMarks).toEqual([expect.objectContaining({ id: 'v1', at: 4000, mode: 'cinematic' })]);
+    expect(c1b.unplaced).toContainEqual(expect.objectContaining({ id: 'k2', kind: 'caption', label: 'Lost' }));
+  });
+
+  test("a beat's visual mode: what plays, and what is stored (not chosen is null and plays as gameplay)", () => {
+    const m = buildTimeline({ ...EDIT, beatVisualModes: { 2: 'cinematic' } }, media);
+    expect(m.beats.slice(0, 2).map((b) => [b.visual_mode, b.visual_mode_set])).toEqual([['gameplay', null], ['cinematic', 'cinematic']]);
   });
 
   test('scene clips, the Prime segment and its linked commentary, dialogue and music sit where the clock puts them', () => {

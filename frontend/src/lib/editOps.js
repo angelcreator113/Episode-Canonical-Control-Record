@@ -254,6 +254,65 @@ export function updateAudioItem(item, changes, label = 'Change sound') {
   };
 }
 
+// ── C1b items: Lala and guest clips, captions and titles, mode changes (Gate 2a) ──
+
+const ITEM_NAMES = { performer_clip: 'performer clip', caption: 'caption', visual_mode: 'mode change' };
+const itemName = (kind) => ITEM_NAMES[kind] || 'item';
+
+/**
+ * body: { kind, anchor_kind, anchor_beat?, anchor_ref?, offset_ms, values, duration_ms? }.
+ * A performer clip's length is its source in to out (the server measures it);
+ * a caption's is duration_ms; a mode change has none.
+ */
+export function addItem(body, label = `Place ${itemName(body.kind)}`) {
+  return {
+    label,
+    requests: [{ method: 'post', path: '/items', body }],
+    undo: ([r]) => removeItem({ ...body, id: r.item_id, duration_ms: r.duration_ms ?? body.duration_ms ?? null }, `Undo: ${label.toLowerCase()}`),
+  };
+}
+
+export function removeItem(item, label = `Delete ${itemName(item.kind)}`) {
+  const back = { kind: item.kind, ...anchorOfRow(item), values: item.values || {} };
+  if (back.anchor_ref == null) delete back.anchor_ref;
+  if (back.anchor_beat == null) delete back.anchor_beat;
+  if (item.kind === 'caption' && item.duration_ms != null) back.duration_ms = item.duration_ms;
+  return {
+    label,
+    requests: [{ method: 'delete', path: `/items/${item.id}` }],
+    undo: () => addItem(back, `Put back ${itemName(item.kind)}`),
+  };
+}
+
+/**
+ * Changes a C1b item in place: any of its anchor (a move), some of its values
+ * (merged by the server and checked again), and a caption's duration_ms. The
+ * undo sends the stored value of exactly what changed. A performer clip's
+ * length follows its source in and out, so it is never sent.
+ */
+export function updateItem(item, changes, label = `Change ${itemName(item.kind)}`) {
+  const before = {};
+  if (Object.keys(changes).some((k) => ANCHOR.includes(k))) Object.assign(before, anchorOfRow(item));
+  if (changes.values) before.values = Object.fromEntries(Object.keys(changes.values).map((k) => [k, item.values?.[k] ?? null]));
+  if (changes.duration_ms !== undefined) before.duration_ms = item.duration_ms;
+  if (before.anchor_ref == null) delete before.anchor_ref;
+  const after = { ...item, ...changes, values: { ...(item.values || {}), ...(changes.values || {}) } };
+  return {
+    label,
+    requests: [{ method: 'patch', path: `/items/${item.id}`, body: changes }],
+    undo: () => updateItem(after, before, `Undo: ${label.toLowerCase()}`),
+  };
+}
+
+/** A beat's own visual mode (R8.2: gameplay or cinematic; null is "not chosen", which plays as gameplay). */
+export function setBeatVisualMode(beat, mode, before) {
+  return {
+    label: `Beat ${beat}: ${mode ? `${mode} mode` : 'mode not chosen'}`,
+    requests: [{ method: 'post', path: `/beats/${beat}/mode`, body: { visual_mode: mode } }],
+    undo: () => setBeatVisualMode(beat, before ?? null, mode),
+  };
+}
+
 // ── Beats and PIP visibility ────────────────────────────────────────────
 
 export function setBeatMode(beat, primeMode, before) {

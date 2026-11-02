@@ -5,9 +5,14 @@
  * the media comes from.
  *
  * Editing (P3): a tile is dragged onto the lane that takes it, or placed at
- * the playhead with its + button. Lala's and guests' clips and angles go to
- * the Scene lane, Prime's takes to the Prime PIP lane, approved takes to the
- * Dialogue lane. Music and SFX wait for the library (R8.8).
+ * the playhead with its + button. Angles go to the Scene lane, Prime's takes
+ * to the Prime PIP lane, approved takes to the Dialogue lane. Music and SFX
+ * wait for the library (R8.8).
+ *
+ * Gate 2a (D3, D4): Lala's and guests' clips go over the scene on the
+ * Performer lane (their +), or are dragged onto the Scene lane to be the
+ * background. Other raw clips are scene clips. The Text tab adds captions,
+ * titles and lower thirds at the playhead.
  */
 import React, { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
@@ -40,10 +45,22 @@ const inBeat = (clip, beat) => {
 export function assetOfClip(c) {
   const label = c.label || c.original_filename || 'Untitled clip';
   if (c.performer === 'justawoman') return { kind: 'prime_clip', id: c.id, label };
-  return { kind: 'scene_clip_source', id: c.id, label, source_kind: 'raw_clip' };
+  const performer = c.performer === 'lala' || c.performer === 'guest';
+  const ms = Number(c.duration_seconds) > 0 ? Math.floor(Number(c.duration_seconds) * 1000) : null;
+  return { kind: 'scene_clip_source', id: c.id, label, source_kind: 'raw_clip', ...(performer ? { performer: c.performer, duration_ms: ms } : {}) };
 }
+
+/** The text styles the Text tab adds (D4), with where each sits by default at 1920×1080. */
+export const TEXT_STYLES = [
+  { style_key: 'caption', label: 'Caption', hint: 'Subtitle-style text across the bottom', layout: { x: 240, y: 900, w: 1440, h: 110 } },
+  { style_key: 'title', label: 'Title', hint: 'Large text in the middle of the frame', layout: { x: 160, y: 420, w: 1600, h: 240 } },
+  { style_key: 'lower_third', label: 'Lower third', hint: 'A name or place on a band at the lower left', layout: { x: 96, y: 820, w: 900, h: 140 } },
+];
+export const TEXT_MS = 3000;
 const assetOfAngle = (a, kind) => ({ kind, id: a.id, label: `${a.set_name || 'Scene'} · ${a.angle_label || a.angle_name || 'Angle'}`, source_kind: kind });
 const assetOfTake = (t) => ({ kind: 'take', id: t.approval_id, label: `Beat ${t.beat_number} · line ${t.line_index + 1}`, beat_number: t.beat_number, line_index: t.line_index });
+
+const placeTitle = (asset) => (asset.performer ? 'Place over the scene at the playhead (drag onto the Scene lane to make it the background)' : 'Place at the playhead');
 
 function Placeable({ asset, editable, onPlace, onDragAsset, children, className = 'tle-tile' }) {
   if (!asset || !editable) return <li className={className}>{children}</li>;
@@ -52,7 +69,7 @@ function Placeable({ asset, editable, onPlace, onDragAsset, children, className 
       onDragStart={(e) => { e.dataTransfer.effectAllowed = 'copy'; e.dataTransfer.setData('text/plain', asset.label); onDragAsset?.(asset); }}
       onDragEnd={() => onDragAsset?.(null)}>
       {children}
-      <button type="button" className="tle-tile-place" onClick={() => onPlace?.(asset)} aria-label={`Place ${asset.label} at the playhead`} title="Place at the playhead">
+      <button type="button" className="tle-tile-place" onClick={() => onPlace?.(asset)} aria-label={`Place ${asset.label} at the playhead`} title={placeTitle(asset)}>
         <CirclePlus size={16} aria-hidden="true" />
       </button>
     </li>
@@ -193,7 +210,23 @@ export default function AssetBrowser({ episodeId, rawClips, sceneSets, takes, fo
           </>
         )}
 
-        {tab === 'text' && <p className="tle-empty tle-pending">Pending: captions and titles (D4, Gate 2). Their text, placement and style will render exactly as previewed.</p>}
+        {tab === 'text' && (
+          <>
+            <ul className="tle-list">
+              {TEXT_STYLES.map((t) => (
+                <li key={t.style_key} className={`tle-list-row${editable ? '' : ' is-disabled'}`}>
+                  <button type="button" className="tle-btn tle-btn-small" disabled={!editable}
+                    onClick={() => onPlace?.({ kind: 'caption', id: t.style_key, label: t.label, style_key: t.style_key, layout: t.layout })}>
+                    <CirclePlus size={14} aria-hidden="true" /> Add {t.label.toLowerCase()}
+                  </button>
+                  <span className="tle-muted"> {t.hint}</span>
+                </li>
+              ))}
+            </ul>
+            <p className="tle-empty">Added at the playhead for {TEXT_MS / 1000} seconds on the Captions lane. Move and resize it in the preview; change its words, style and length in the inspector.</p>
+            <p className="tle-empty tle-pending">The render draws them from the same text, place and style (D4): it waits for the render host (Gates 3–6).</p>
+          </>
+        )}
 
         {tab === 'transitions' && (
           <>

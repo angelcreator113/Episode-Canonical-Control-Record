@@ -8,9 +8,15 @@
  * pixels at 1920×1080, decibels. A take's trim and level live on its Voice
  * Studio revision. Controls with no place in the edit model are shown
  * disabled with the reason.
+ *
+ * Gate 2a (D3, D4, D5): a Lala or guest clip's start, source in and out,
+ * place, opacity and layer; a caption's words, style, start, length, place
+ * and opacity; Prime's opacity; and on the beat card the beat's visual mode
+ * and its timed mode changes.
  */
 import React, { useEffect, useRef, useState } from 'react';
-import { Gamepad2, Lock } from 'lucide-react';
+import { Gamepad2, Clapperboard, Lock, X } from 'lucide-react';
+import { DEFAULT_LAYOUT } from '../../lib/editTimeline';
 import { timecode, beatLabel, findingText } from '../../lib/editorModel';
 
 const TABS = [['clip', 'Clip'], ['audio', 'Audio'], ['effects', 'Effects']];
@@ -54,6 +60,56 @@ function NumberField({ label, value, unit, min, max, step = 1, onCommit, disable
   );
 }
 
+/** Stored text, saved on blur or Ctrl+Enter; Escape puts the stored text back. An empty text is not saved. */
+function TextField({ label, value, max, onCommit, disabled }) {
+  const [text, setText] = useState(value ?? '');
+  const sent = useRef(null);
+  useEffect(() => { setText(value ?? ''); sent.current = null; }, [value]);
+  const commit = () => {
+    const t = text.trim();
+    if (t === (value ?? '') || t === sent.current) return;
+    if (!t) { setText(value ?? ''); return; }
+    sent.current = t;
+    onCommit(t);
+  };
+  const id = `f-${label.replace(/\W+/g, '-').toLowerCase()}`;
+  return (
+    <div className="tle-field tle-field-wide">
+      <label className="tle-field-label" htmlFor={id}>{label}</label>
+      <textarea id={id} className="tle-input tle-textarea" rows={2} maxLength={max} value={text} disabled={disabled} aria-label={label}
+        onChange={(e) => setText(e.target.value)} onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); commit(); } else if (e.key === 'Escape') setText(value ?? '');
+        }} />
+    </div>
+  );
+}
+
+const STYLE_NAMES = { caption: 'Caption', title: 'Title', lower_third: 'Lower third' };
+const pctOf = (o) => Math.round((o == null ? 1 : Number(o)) * 100);
+
+/** Place and size at 1920×1080, and opacity (D5); rotation is deferred. onLayout gets the whole new layout. */
+function Transform({ layout, can, onLayout, what }) {
+  const l = layout || DEFAULT_LAYOUT;
+  return (
+    <>
+      <h4 className="tle-insp-h">Transform <span className="tle-muted">(px at 1920×1080)</span></h4>
+      {['x', 'y', 'w', 'h'].map((k) => {
+        const name = { x: 'Position X', y: 'Position Y', w: 'Width', h: 'Height' }[k];
+        return can
+          ? <NumberField key={k} label={name} value={layout ? layout[k] : null} min={k === 'w' || k === 'h' ? 1 : -1920} max={3840}
+              onCommit={(v) => onLayout({ ...l, [k]: Math.round(v) })} note={`Also drag ${what} in the preview`} />
+          : <Field key={k} label={name} value={layout ? layout[k] : 'default'} />;
+      })}
+      {can
+        ? <NumberField label="Opacity" unit="%" value={pctOf(layout?.opacity)} min={0} max={100}
+            onCommit={(v) => onLayout({ ...l, opacity: Math.round(v) / 100 })} note="0 is invisible, 100 is fully opaque" />
+        : <Field label="Opacity" value={`${pctOf(layout?.opacity)}%`} />}
+      <Pending label="Rotation" value="0°" reason="Deferred (D5)" />
+    </>
+  );
+}
+
 function Pending({ label, value, reason }) {
   return (
     <div className="tle-field is-pending">
@@ -75,7 +131,7 @@ function ClipTab({ block, layout, editable, act }) {
       {block.kind === 'segment' && can
         ? <NumberField label="Start" unit="ms" value={Math.round(block.start)} step={33} onCommit={(v) => act.move(block, v)} note="Where it starts on the edit clock" />
         : <Field label="Start time" value={timecode(block.start)} />}
-      {(block.kind === 'dialogue' || block.kind === 'audio_item') && can && <NumberField label="Start" unit="ms" value={Math.round(block.start)} step={33} onCommit={(v) => act.move(block, v)} />}
+      {['dialogue', 'audio_item', 'performer_clip', 'caption'].includes(block.kind) && can && <NumberField label="Start" unit="ms" value={Math.round(block.start)} step={33} onCommit={(v) => act.move(block, v)} />}
       <Field label="End time" value={timecode(block.end)} />
       <Field label="Duration" value={timecode(block.end - block.start)} />
 
@@ -119,19 +175,54 @@ function ClipTab({ block, layout, editable, act }) {
               <Field label="Source out" value={ms(row.source_out_ms)} />
             </>
           )}
-          <h4 className="tle-insp-h">Transform <span className="tle-muted">(px at 1920×1080)</span></h4>
-          {['x', 'y', 'w', 'h'].map((k) => {
-            const name = { x: 'Position X', y: 'Position Y', w: 'Width', h: 'Height' }[k];
-            return can
-              ? <NumberField key={k} label={name} value={layout ? layout[k] : null} min={k === 'w' || k === 'h' ? 1 : -1920} max={3840}
-                  onCommit={(v) => act.layout(block, { ...layout, [k]: Math.round(v) })} note="Also drag Prime in the preview" />
-              : <Field key={k} label={name} value={layout ? layout[k] : 'default'} />;
-          })}
+          <Transform layout={layout} can={can} onLayout={(l) => act.layout(block, l)} what="Prime" />
           {can && row.layout && <button type="button" className="tle-btn tle-btn-small" onClick={() => act.layout(block, null)}>Use the episode's default place</button>}
-          <Pending label="Rotation" value="0°" reason="Deferred (D5)" />
-          <Pending label="Opacity" value="100%" reason="Gate 2 (D5)" />
           <Field label="Anchor" value={`${row.anchor_kind}${row.anchor_beat ? ` ${row.anchor_beat}` : ''} + ${row.offset_ms || 0} ms`} />
           <Field label="Status" value={row.status} />
+        </>
+      )}
+      {block.kind === 'performer_clip' && (
+        <>
+          {can ? (
+            <>
+              <NumberField label="Source in" unit="ms" value={row.values?.source_in_ms} min={0} onCommit={(v) => act.item(block, { values: { source_in_ms: Math.round(v) } }, 'Trim performer clip')} />
+              <NumberField label="Source out" unit="ms" value={row.values?.source_out_ms} min={1} onCommit={(v) => act.item(block, { values: { source_out_ms: Math.round(v) } }, 'Trim performer clip')} />
+              <NumberField label="Layer" value={row.values?.layer ?? 0} min={0} max={99} onCommit={(v) => act.item(block, { values: { layer: Math.round(v) } }, 'Change layer')}
+                note="Higher layers are drawn in front; all performers are under Prime" />
+            </>
+          ) : (
+            <>
+              <Field label="Source in" value={ms(row.values?.source_in_ms)} />
+              <Field label="Source out" value={ms(row.values?.source_out_ms)} />
+              <Field label="Layer" value={row.values?.layer ?? 0} />
+            </>
+          )}
+          <Transform layout={layout} can={can} onLayout={(l) => act.itemLayout(block, l)} what="the clip" />
+          {block.note && <p className="tle-insp-note">{block.note}</p>}
+        </>
+      )}
+      {block.kind === 'caption' && (
+        <>
+          {can ? (
+            <>
+              <TextField label="Text" value={row.values?.text} max={500} onCommit={(t) => act.item(block, { values: { text: t } }, 'Change caption text')} />
+              <div className="tle-field">
+                <label className="tle-field-label" htmlFor="f-caption-style">Style</label>
+                <select id="f-caption-style" className="tle-input tle-select" value={row.values?.style_key || 'caption'}
+                  onChange={(e) => act.item(block, { values: { style_key: e.target.value } }, 'Change caption style')}>
+                  {Object.entries(STYLE_NAMES).map(([k, n]) => <option key={k} value={k}>{n}</option>)}
+                </select>
+              </div>
+              <NumberField label="Length" unit="ms" value={row.duration_ms} min={33} step={33} onCommit={(v) => act.item(block, { duration_ms: Math.round(v) }, 'Change caption length')} />
+            </>
+          ) : (
+            <>
+              <Field label="Text" value={row.values?.text} />
+              <Field label="Style" value={STYLE_NAMES[row.values?.style_key] || row.values?.style_key} />
+              <Field label="Length" value={ms(row.duration_ms)} />
+            </>
+          )}
+          <Transform layout={layout} can={can} onLayout={(l) => act.itemLayout(block, l)} what="the caption" />
         </>
       )}
       {block.kind === 'dialogue' && block.problem && <p className="tle-insp-warn">This take will not play: {block.problem.replace(/_/g, ' ')}.</p>}
@@ -146,7 +237,7 @@ function ClipTab({ block, layout, editable, act }) {
           <Field label="Source out" value={ms(row.source_out_ms)} />
         </>
       ))}
-      <Pending label="Speed" value="1.0×" reason="Not supported: one clock (R8.4)" />
+      {block.kind !== 'caption' && <Pending label="Speed" value="1.0×" reason="Not supported: one clock (R8.4)" />}
     </>
   );
 }
@@ -212,12 +303,14 @@ function AudioTab({ block, editable, act }) {
   return <p className="tle-insp-note">This clip has no sound of its own.</p>;
 }
 
-function BeatCard({ beat, readiness, editable, act, beatPlan, pipHidden }) {
+function BeatCard({ beat, readiness, editable, act, beatPlan, pipHidden, modeMarks = [], playhead = 0, c1b = true }) {
   const [length, setLength] = useState('');
   useEffect(() => { setLength(beat ? String(beat.end - beat.start) : ''); }, [beat?.beat, beat?.start, beat?.end]);
   if (!beat) return <p className="tle-insp-note">No beat at the playhead.</p>;
   const r = readiness || { findings: [] };
   const plan = beatPlan && beatPlan.beat === beat.beat ? beatPlan : null;
+  const marks = modeMarks.filter((m) => m.at >= beat.start && m.at < beat.end);
+  const inside = playhead > beat.start && playhead < beat.end;
   return (
     <div className="tle-beatcard" data-testid="beat-card">
       <h3 className="tle-beatcard-title">Beat {beat.beat}: {beat.name}</h3>
@@ -239,7 +332,38 @@ function BeatCard({ beat, readiness, editable, act, beatPlan, pipHidden }) {
             ? <button type="button" className="tle-btn tle-btn-small" onClick={() => act.showPip(beat, pipHidden)}>Show Prime again</button>
             : <button type="button" className="tle-btn tle-btn-small" onClick={() => act.hidePip(beat)} title="Hides her picture; her commentary still plays">Hide Prime in this beat</button>)}
         </dd>
-        <dt>Visual mode</dt><dd><Gamepad2 size={14} aria-hidden="true" /> Gameplay <span className="tle-muted">(the default; modes arrive with Gate 2)</span></dd>
+        <dt>Visual mode</dt>
+        <dd>
+          {editable && c1b ? (
+            <select className="tle-input tle-select" aria-label={`Visual mode of beat ${beat.beat}`} value={beat.visual_mode_set || ''}
+              onChange={(e) => act.visualMode(beat, e.target.value || null)}>
+              <option value="">Not chosen (plays as gameplay)</option>
+              <option value="gameplay">Gameplay</option>
+              <option value="cinematic">Cinematic</option>
+            </select>
+          ) : (
+            <>{beat.visual_mode === 'cinematic' ? <Clapperboard size={14} aria-hidden="true" /> : <Gamepad2 size={14} aria-hidden="true" />} {beat.visual_mode === 'cinematic' ? 'Cinematic' : 'Gameplay'}
+              {!beat.visual_mode_set && <span className="tle-muted"> (not chosen)</span>}</>
+          )}
+          {marks.length > 0 && (
+            <ul className="tle-mode-list" aria-label={`Mode changes in beat ${beat.beat}`}>
+              {marks.map((m) => (
+                <li key={m.id}>
+                  {m.mode === 'cinematic' ? 'Cinematic' : 'Gameplay'} from {timecode(m.at)}
+                  {editable && <button type="button" className="tle-icon-btn" onClick={() => act.removeModeChange(m)} aria-label={`Remove the change to ${m.mode} at ${timecode(m.at)}`}><X size={13} /></button>}
+                </li>
+              ))}
+            </ul>
+          )}
+          {editable && c1b && inside && (
+            <div className="tle-row">
+              {['gameplay', 'cinematic'].map((m) => (
+                <button key={m} type="button" className="tle-btn tle-btn-small" onClick={() => act.addModeChange(beat, m)}
+                  title={`From the playhead (${timecode(playhead)}) to the end of the beat, or the next change`}>Switch to {m} at the playhead</button>
+              ))}
+            </div>
+          )}
+        </dd>
         <dt>Length</dt><dd>{timecode(beat.end - beat.start)} {beat.locked ? <span className="tle-locked"><Lock size={12} aria-hidden="true" /> locked</span> : <span className="tle-muted">draft timing</span>}</dd>
         <dt>Starts</dt><dd>{timecode(beat.start)}</dd>
       </dl>
@@ -273,16 +397,22 @@ function BeatCard({ beat, readiness, editable, act, beatPlan, pipHidden }) {
         </ul>
       )}
       {editable && <button type="button" className="tle-btn tle-btn-small" onClick={() => act.lockTiming()} title="Stores every beat's length now, so later clip changes never move the clock">Lock timing for all 14 beats</button>}
-      <p className="tle-insp-note">Approving a beat arrives with Gate 2.</p>
+      {!c1b && <p className="tle-insp-note">Visual modes need the C1b migration on this server (Gate 2a), which has not been run here.</p>}
+      <p className="tle-insp-note">Approving a beat arrives with Gate 2b.</p>
     </div>
   );
 }
 
-export default function EditorInspector({ block, beat, readiness, editable = false, act = {}, liveLayout, beatPlan, pipHidden }) {
+export default function EditorInspector({
+  block, beat, readiness, editable = false, act = {}, liveLayout, beatPlan, pipHidden, modeMarks, playhead, c1b,
+}) {
   const [tab, setTab] = useState('clip');
-  const layout = block?.kind === 'segment'
-    ? (liveLayout && liveLayout.segmentId === block.id ? liveLayout.layout : (block.row?.layout || block.layout || null))
-    : null;
+  const stored = block?.kind === 'segment' ? (block.row?.layout || block.layout || null)
+    : (block?.kind === 'performer_clip' || block?.kind === 'caption') ? (block.row?.values?.layout || block.layout || null) : null;
+  // While a box is dragged in the preview, its place follows the drag; its stored opacity stays.
+  const layout = stored !== undefined && liveLayout && liveLayout.id === block?.id
+    ? { ...liveLayout.layout, ...(stored?.opacity != null ? { opacity: stored.opacity } : {}) }
+    : stored;
   return (
     <section className="tle-panel tle-inspector" aria-label="Inspector">
       <div className="tle-tabs" role="tablist">
@@ -291,7 +421,7 @@ export default function EditorInspector({ block, beat, readiness, editable = fal
         ))}
       </div>
       <div className="tle-insp-body">
-        {!block && <BeatCard beat={beat} readiness={readiness} editable={editable} act={act} beatPlan={beatPlan} pipHidden={pipHidden} />}
+        {!block && <BeatCard beat={beat} readiness={readiness} editable={editable} act={act} beatPlan={beatPlan} pipHidden={pipHidden} modeMarks={modeMarks} playhead={playhead} c1b={c1b !== false} />}
         {block && (
           <>
             <div className="tle-insp-head">

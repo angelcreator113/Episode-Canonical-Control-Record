@@ -378,3 +378,26 @@ video.tle-monitor-scene { background: #000; }
 .tle-beat-length .tle-input { width: 120px; }
 .tle-plan { padding: 8px 10px; border: 1px solid var(--tle-line); border-radius: 6px; background: var(--tle-panel-2); font-size: 12px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .tle-plan p { margin: 0 0 4px; flex-basis: 100%; }
+
+/* ── Gate 2a: performers, captions, opacity, visual modes ───────────── */
+.tle-monitor { container-type: inline-size; }
+.tle-monitor-performer { background: #1b1b1b; }
+.tle-monitor-performer.is-cutout { background: transparent; border-color: transparent; }
+.tle-monitor-performer.is-cutout .tle-monitor-pip-hit video { object-fit: contain; }
+.tle-monitor-caption { background: transparent; border-color: transparent; }
+.tle-monitor-caption.is-selected, .tle-monitor-caption.can-arrange { border: 1px dashed rgba(255, 255, 255, 0.5); }
+.tle-monitor-caption .tle-monitor-pip-hit { display: flex; align-items: center; justify-content: center; color: #fff; }
+.tle-caption-text { display: block; max-width: 100%; line-height: 1.15; white-space: pre-wrap; overflow-wrap: anywhere; pointer-events: none; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.85); }
+.tle-monitor-caption.is-caption .tle-caption-text { padding: 0.15em 0.5em; border-radius: 0.2em; background: rgba(0, 0, 0, 0.6); font-family: 'DM Mono', ui-monospace, monospace; text-align: center; }
+.tle-monitor-caption.is-title .tle-caption-text { font-family: 'Lora', Georgia, serif; font-weight: 600; text-align: center; }
+.tle-monitor-caption.is-lower-third .tle-monitor-pip-hit { justify-content: flex-start; background: rgba(20, 20, 20, 0.78); border-left: 0.35em solid #B8962E; }
+.tle-monitor-caption.is-lower-third .tle-caption-text { padding: 0 0.6em; font-family: 'Lora', Georgia, serif; text-align: left; }
+.tle-monitor-mode { position: absolute; top: 10px; left: 10px; padding: 3px 8px; border-radius: 4px; background: rgba(184, 150, 46, 0.9); color: #111; font-size: 12px; }
+.tle-mode-mark { position: absolute; top: 0; bottom: 0; width: 0; border-left: 2px solid var(--tle-accent); z-index: 2; }
+.tle-mode-mark::after { content: ''; position: absolute; top: 0; left: -5px; border: 4px solid transparent; border-top: 6px solid var(--tle-accent); }
+.tle-mode-mark.is-cinematic { border-left-color: #B8962E; }
+.tle-mode-mark.is-cinematic::after { border-top-color: #B8962E; }
+.tle-mode-list { list-style: none; margin: 6px 0; padding: 0; font-size: 12px; }
+.tle-mode-list li { display: flex; align-items: center; gap: 6px; }
+.tle-textarea { resize: vertical; min-height: 44px; font-family: inherit; }
+.tle-field-wide { grid-column: 1 / -1; }

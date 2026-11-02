@@ -3,7 +3,7 @@ import { describe, test, expect } from 'vitest';
 import { mixPlan, DEFAULT_LAYOUT } from './editTimeline';
 import { mediaIndex } from './editorModel';
 import {
-  snapToFrame, dbToLinear, isSafari, primeVideo, framePlan, eventVolume, mixAt,
+  snapToFrame, dbToLinear, isSafari, primeVideo, performerVideo, framePlan, eventVolume, mixAt,
 } from './previewPlan';
 
 const media = mediaIndex({
@@ -91,6 +91,32 @@ describe('framePlan', () => {
   });
   test('in Safari, Prime shows from her original file', () => {
     expect(framePlan(EDIT, 2000, media, { safari: true }).pip).toMatchObject({ url: 'https://cdn/r1.mp4', cutout: false });
+  });
+});
+
+describe('C1b layers (D3, D4, D5)', () => {
+  const lala = { id: 'r9', performer: 'lala', label: 'Lala twirl', url_raw: 'https://cdn/r9.mp4', url_cutout: 'https://cdn/r9-cut.webm', key_status: 'done' };
+  test("Lala shows in her cutout once its key is done; else her original, saying why", () => {
+    expect(performerVideo(lala, false)).toEqual({ url: 'https://cdn/r9-cut.webm', cutout: true, note: null });
+    expect(performerVideo({ ...lala, key_status: 'pending' }, false)).toMatchObject({ url: 'https://cdn/r9.mp4', cutout: false, note: expect.stringMatching(/cutout isn't ready/) });
+    expect(performerVideo(lala, true)).toMatchObject({ url: 'https://cdn/r9.mp4', cutout: false, note: expect.stringMatching(/transparent/) });
+    expect(performerVideo({ id: 'g', performer: 'guest', guest_name: 'Maya', url_raw: 'u' }, false).note).toMatch(/^Maya's cutout/);
+  });
+  test('a performer over the scene at her source time, captions on top, Prime keeps her opacity', () => {
+    const m = mediaIndex({ rawClips: [...media.clips.values(), lala], sceneSets: [], takes: [] });
+    m.angles = media.angles;
+    const edit = { ...EDIT, segments: [{ ...EDIT.segments[0], layout: { x: 1300, y: 700, w: 540, h: 304, opacity: 0.5 } }], items: [
+      { id: 'p1', kind: 'performer_clip', anchor_kind: 'beat_start', anchor_beat: 1, anchor_ref: null, offset_ms: 1000, duration_ms: 2000,
+        values: { raw_clip_id: 'r9', source_in_ms: 300, source_out_ms: 2300, layout: { x: 0, y: 0, w: 1920, h: 1080, opacity: 0.75 }, layer: 0 } },
+      { id: 'k1', kind: 'caption', anchor_kind: 'edit_start', anchor_beat: null, anchor_ref: null, offset_ms: 0, duration_ms: 3000,
+        values: { text: 'Hello', style_key: 'lower_third', layout: { x: 100, y: 900, w: 800, h: 120 } } },
+    ] };
+    const f = framePlan(edit, 1500, m, { safari: false });
+    expect(f.performers).toEqual([expect.objectContaining({ item_id: 'p1', url: 'https://cdn/r9-cut.webm', cutout: true, source_time_ms: 800, opacity: 0.75, layout: { x: 0, y: 0, w: 1920, h: 1080 }, name: 'Lala twirl' })]);
+    expect(f.captions).toEqual([{ item_id: 'k1', text: 'Hello', style_key: 'lower_third', layout: { x: 100, y: 900, w: 800, h: 120 }, opacity: 1 }]);
+    expect(f.pip).toMatchObject({ opacity: 0.5, layout: { x: 1300, y: 700, w: 540, h: 304 } });
+    expect(f.mode).toBe('gameplay');
+    expect(framePlan(edit, 3500, m, { safari: false })).toMatchObject({ performers: [], captions: [] });
   });
 });
 
