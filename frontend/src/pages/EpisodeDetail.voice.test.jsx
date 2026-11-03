@@ -135,7 +135,7 @@ describe('Production → Voice', () => {
 
   test('an admin with Voice Studio on: Voice after Files; clicking it shows Voice Studio for this episode, in the tab', async () => {
     renderAt('/episodes/ep-1?tab=files');
-    await waitFor(() => expect(makePills()).toEqual(['Scenes', 'Files', 'Voice']));
+    await waitFor(() => expect(makePills()).toEqual(['Scenes', 'Files', 'Voice', 'Edit']));
     fireEvent.click(screen.getByRole('button', { name: 'Voice' }));
     expect(screen.getByTestId('where').textContent).toBe('/episodes/ep-1?tab=voice');
     expect((await screen.findByTestId('voice-studio-body')).textContent).toBe('ep-1 embedded');
@@ -147,13 +147,13 @@ describe('Production → Voice', () => {
     on = false;
     renderAt('/episodes/ep-1?tab=files');
     await waitFor(() => expect(vi.mocked(api.get)).toHaveBeenCalledWith('/api/v1/voice-studio/status'));
-    await waitFor(() => expect(makePills()).toEqual(['Scenes', 'Files']));
+    await waitFor(() => expect(makePills()).toEqual(['Scenes', 'Files', 'Edit']));
   });
 
   test('not an admin: no Voice pill, and the switch is not asked', async () => {
     who.user = { groups: ['editor'] };
     renderAt('/episodes/ep-1?tab=files');
-    await waitFor(() => expect(makePills()).toEqual(['Scenes', 'Files']));
+    await waitFor(() => expect(makePills()).toEqual(['Scenes', 'Files', 'Edit']));
     expect(vi.mocked(api.get)).not.toHaveBeenCalledWith('/api/v1/voice-studio/status');
   });
 

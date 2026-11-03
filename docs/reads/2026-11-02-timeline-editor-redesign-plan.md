@@ -930,3 +930,37 @@ Every write returned 200, and the revision went 0 → 9. The database held:
 - a `visual_mode` item `gameplay` at offset 1000.
 
 At 375 px there is no horizontal scroll.
+
+---
+
+## 17. The Edit pill on the episode page (2026-11-03)
+
+Evoni asked for the editor as a tab on the episode page. She chose a launcher pill over embedding the editor, which is a full-screen workspace with page-wide shortcuts (Space, Delete, Ctrl+Z) that must not fire while the rest of the episode page is in use. She also asked to relabel the old editor's button.
+
+**What changed (frontend only):**
+
+| Where | Change |
+|---|---|
+| `episodeTabs` `EP_TABS` | A Production pill **Edit** (`edit`, group Make, after Voice). Not gated: where the episode edit is off, the pill says so. `?tab=edit` opens it |
+| `EpisodeEditTab` (new) | Reads `GET /edit`, `/edit/findings` and `/edit/versions`, and writes nothing. It shows the edit's length and revision, the latest saved draft, the findings counts, how many of the 14 beats are ready, warned, blocked or empty, what the edit holds, and **Open the editor** (`/episodes/:id/editor`). With `EPISODE_EDIT` off it says so and offers only the legacy timeline; without C1b it says which features need the migration; for a viewer who is not an admin it says changes are refused |
+| `EpisodeProductionHeader` | **Open Editor** (the old Timeline Editor) is now **Legacy timeline**, beside **New editor**. The old editor stays until the new one passes testing (ruling 14) |
+| `EpisodeEditor` | The back arrow, and the full-page error states' "Back to the episode", return to `?tab=edit` |
+
+**Not changed:** the production strip's "Edit & Assemble" step (`productionSteps`) still opens the legacy timeline.
+
+---
+
+## 18. Make last, sliding tab rows, the old editor deleted, the editor hub (2026-11-03)
+
+Evoni's four asks, after §17, with her answers to the three questions:
+- **The Make group last.**
+- **Tab rows that slide sideways.** Her words: "Usually I can move it side to side but I can't. I have to click it."
+- **The old Timeline Editor deleted completely.** This is her ruling and supersedes ruling 14, which kept it until the new editor passed testing.
+- **A page between the Sidebar and the editor,** to "see all of the different episodes that's being created … not just immediately on the editor".
+
+| Ask | What changed |
+|---|---|
+| Make last | `episodeTabs` `EP_TABS`: Production's pills run Look, On screen, Track, Make. Production still opens on Scenes: `opens: 'scenes'`, read by `findEpisodeTab` |
+| Sliding rows | `useSideScroll` (new hook) and `sideScroll.css`. A tab row can be dragged with the mouse (a short press is still a click, and a drag never picks a tab), moved with the wheel while it has room, or swiped. A fade at an edge shows there is more. It is used on the episode page's main tabs and Production pills, and on Producer Mode's tab bar and sub-tabs. The Production pills are one sliding line instead of wrapping, which cut groups off at phone width |
+| Old editor deleted | `pages/TimelineEditor.jsx` and what only it used: `components/Timeline/*`, `SaveIndicator`, `ExportDropdown`, `LandscapeRequired`, `useSaveManager`, `utils/sceneIds`, and their tests. Also the Sidebar's "Timeline Editor" row, `StudioTimelinePage` and `StudioPickerPage.css`. `/episodes/:id/timeline` and `/studio/timeline` (with `?episode_id=`) land on the editor (`LegacyTimelineRedirect`). Every link that opened the old editor opens the new one; "Edit & Assemble" opens Production › Edit. The production strip has one **Open Editor** button. **Kept:** the backend `/save` and `/timeline-data` routes, with P0's save guard; removing an API is a separate decision |
+| Editor hub | `EditorHub` at `/studio/editor` (Sidebar → Editor). It lists every episode by show, with a show filter and a search box. For each episode it shows the edit revision or "Not started", the blocking findings and how many of the 14 beats they touch, and the warnings. Each has **Open** and **Details** (the Edit pill). It reads `/edit/findings` per episode, four at a time and each once, and writes nothing. The last episode opened is marked "Last opened", not jumped into. With `EPISODE_EDIT` off it says so once and stops asking. `?episode_id=` still opens that episode's editor |

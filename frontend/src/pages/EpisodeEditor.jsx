@@ -22,9 +22,9 @@
  *
  * What is not built yet is shown disabled with what unlocks it:
  * render and export (the render host, Gates 3–6), and the
- * phone, gameplay and overlay lanes (Gate 2b, their state model). The legacy
- * Timeline Editor (/episodes/:id/timeline) stays until this one passes
- * testing (ruling 14).
+ * phone, gameplay and overlay lanes (Gate 2b, their state model). The old
+ * Timeline Editor was deleted (Evoni, 2026-11-03): /episodes/:id/timeline
+ * lands here (App LegacyTimelineRedirect).
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
@@ -98,8 +98,7 @@ function FullPage({ title, children, episodeId }) {
         <h1>{title}</h1>
         {children}
         <p className="tle-full-links">
-          {episodeId && <Link to={`/episodes/${episodeId}`}>← Back to the episode</Link>}
-          {episodeId && <Link to={`/episodes/${episodeId}/timeline`}>Open the legacy Timeline Editor</Link>}
+          {episodeId && <Link to={`/episodes/${episodeId}?tab=edit`}>← Back to the episode</Link>}
         </p>
       </div>
     </div>
@@ -537,7 +536,7 @@ export default function EpisodeEditor() {
       return (
         <FullPage title="The episode edit is switched off" episodeId={episodeId}>
           <p>This editor works on the episode edit (C1), which is switched off on this server (<code>EPISODE_EDIT</code>). Nothing was changed.</p>
-          <p>The legacy Timeline Editor is still available.</p>
+          <p>Turning it on is a server setting; nothing else is needed.</p>
         </FullPage>
       );
     }
@@ -555,7 +554,7 @@ export default function EpisodeEditor() {
     <div className="tle" style={{ '--tle-left': `${leftW}px`, '--tle-right': `${rightW}px`, '--tle-upper': upper }}>
       <header className="tle-top">
         <nav className="tle-crumbs" aria-label="Breadcrumb">
-          <Link to={`/episodes/${episodeId}`} className="tle-icon-btn" aria-label="Back to the episode"><ArrowLeft size={18} /></Link>
+          <Link to={`/episodes/${episodeId}?tab=edit`} className="tle-icon-btn" aria-label="Back to the episode" title="Back to the episode's Edit pill"><ArrowLeft size={18} /></Link>
           <Link to={ep?.show_id ? `/shows/${ep.show_id}` : '/shows'}>Episodes</Link>
           <ChevronRight size={14} aria-hidden="true" />
           <Link to={`/episodes/${episodeId}`}>{ep?.episode_number ? `Episode ${ep.episode_number}` : 'Episode'}</Link>
@@ -585,7 +584,6 @@ export default function EpisodeEditor() {
                 <button type="button" role="menuitem" onClick={() => { setUpper(0.62); setMenuOpen(false); }}>Layout: preview focus</button>
                 <button type="button" role="menuitem" onClick={() => { setUpper(0.36); setMenuOpen(false); }}>Layout: timeline focus</button>
                 <button type="button" role="menuitem" onClick={() => { resetLeft(); resetRight(); resetUpper(); setMenuOpen(false); }}>Reset layout</button>
-                <Link role="menuitem" to={`/episodes/${episodeId}/timeline`}>Open the legacy Timeline Editor</Link>
               </div>
             )}
           </div>

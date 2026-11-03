@@ -29,7 +29,7 @@ describe('productionSteps', () => {
     expect(steps.map((s) => s.label)).toEqual(['Event & Brief', 'Script', 'Scenes', 'Files', 'Edit & Assemble', 'Thumbnail', 'Review & Publish']);
     expect(steps.every((s) => !s.done)).toBe(true);
     expect(steps.filter((s) => s.current).map((s) => s.key)).toEqual(['brief']);
-    expect(steps.find((s) => s.key === 'edit').open).toEqual({ href: '/episodes/ep-1/timeline' });
+    expect(steps.find((s) => s.key === 'edit').open).toEqual({ tab: 'edit' }); // Production › Edit (2026-11-03)
     expect(steps.find((s) => s.key === 'thumbnail').open).toEqual({ href: '/template-studio/youtube?episode=ep-1' });
     expect(steps.find((s) => s.key === 'publish').open).toEqual({ tab: 'distribution' });
   });

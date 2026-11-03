@@ -45,8 +45,8 @@ export function EpisodeTimeline({ episodeId, lookReady, lookBeat = null, version
       <div className="ckh-timeline-head">
         <h2 className="ckh-card-title">Episode timeline</h2>
         <span className="ckh-timeline-sub">What each beat has so far.{grid && grid.covered != null ? ` ${grid.covered} of ${grid.total} beats covered.` : ''}</span>
-        <Link className="ckh-timeline-open" to={`/episodes/${episodeId}/timeline`} data-testid="episode-timeline-open">
-          Open in Timeline Editor <ArrowRight size={14} aria-hidden="true" />
+        <Link className="ckh-timeline-open" to={`/episodes/${episodeId}/editor`} data-testid="episode-timeline-open">
+          Open in the editor <ArrowRight size={14} aria-hidden="true" />
         </Link>
       </div>
       {!grid ? (

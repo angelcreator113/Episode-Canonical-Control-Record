@@ -3520,7 +3520,9 @@
 .ed-subpill.is-active { background: var(--studio-magenta); border-color: var(--studio-magenta); color: var(--text-inverse); font-weight: 600; }
 /* The pills in their groups (Evoni, 2026-10-22 layout list), each with a
    small label; the Checklist pill counts what is done. */
-.ed-subpills.is-grouped { gap: 6px 18px; flex-wrap: wrap; overflow-x: visible; }
+/* One line that slides sideways (useSideScroll, Evoni 2026-11-03): wrapped, the
+   groups were cut off at phone width and could not be reached. */
+.ed-subpills.is-grouped { gap: 6px 18px; flex-wrap: nowrap; overflow-x: auto; }
 .ed-subgroup { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
 .ed-subgroup-label { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--studio-ink-muted); }
 .ed-subpill-count { margin-left: 6px; padding: 0 6px; border-radius: 999px; background: var(--studio-magenta-soft); color: var(--studio-magenta); font-size: 12px; font-weight: 700; }

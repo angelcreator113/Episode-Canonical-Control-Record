@@ -44,6 +44,7 @@ import RealWorldFields from '../components/Wardrobe/RealWorldFields';
 import { realDraftFrom, realChanges, realWorldErrorText } from '../lib/wardrobeRealWorld';
 import { fetchAllEpisodes, partialNote } from '../lib/fetchAllPages';
 import './WorldAdmin.css';
+import useSideScroll from '../hooks/useSideScroll';
 import '../styles/wardrobe-backdrop.css';
 
 // Track 6 CP13 module-scope helpers — page structural shape, file-local
@@ -535,6 +536,9 @@ function WorldAdmin() {
     startIds: lookEpisode && lookEpisode.id === lookEpisodeParam ? lookStartIds : null,
   });
   const lookKeywords = dressCodeKeywords(look.event);
+  // The tab rows slide sideways: drag, swipe or wheel (Evoni, 2026-11-03).
+  const [tabBarRef, , tabBarScroll] = useSideScroll();
+  const [subTabsRef, , subTabsScroll] = useSideScroll();
 
   if (loading) return (
     <div style={S.page}>
@@ -664,7 +668,7 @@ function WorldAdmin() {
         // waiting on approval, under World.
         const counts = { world: feedWaiting || 0 };
         return (
-          <nav className="wa-tab-bar" aria-label="Producer Mode">
+          <nav className={`wa-tab-bar ${tabBarScroll}`} ref={tabBarRef} aria-label="Producer Mode">
             {TABS.map(t => {
               const n = counts[t.key] || 0;
               // Season is a page of its own, so its entry is a link.
@@ -692,7 +696,7 @@ function WorldAdmin() {
         const currentTab = TABS.find(t => t.key === activeTab);
         if (!currentTab?.subs) return null;
         return (
-          <div className="wa-subtabs">
+          <div className={`wa-subtabs ${subTabsScroll}`} ref={subTabsRef}>
             {currentTab.subs.map(s => (
               <button key={s.key} type="button" onClick={() => { setSubTab(s.key); setSearchParams({ tab: s.key }); }} aria-current={subTab === s.key ? 'page' : undefined} className={`wa-subtab${subTab === s.key ? ' active' : ''}`}>
                 {s.label}

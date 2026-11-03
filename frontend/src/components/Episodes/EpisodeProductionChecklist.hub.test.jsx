@@ -54,7 +54,7 @@ describe('Checklist hub', () => {
     expect(await states('character')).toEqual(['unused', 'untracked']);
     expect(await states('interface')).toEqual(['unused', 'ready']);
     expect(await states('look')).toEqual(['unused', 'missing']);
-    expect(screen.getByTestId('episode-timeline-open').getAttribute('href')).toBe('/episodes/ep-1/timeline');
+    expect(screen.getByTestId('episode-timeline-open').getAttribute('href')).toBe('/episodes/ep-1/editor');
     expect(screen.getByTestId('checklist-section-wardrobe').textContent).toContain("Lala's closet and her look for the event. Beat 8 needs it.");
   });
 

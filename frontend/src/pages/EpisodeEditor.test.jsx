@@ -79,11 +79,12 @@ describe('EpisodeEditor: reading the edit (P1) and the working preview (P2)', ()
   });
   afterEach(() => vi.restoreAllMocks());
 
-  test('with the episode edit switched off it says so, links the legacy editor, and writes nothing', async () => {
+  test('with the episode edit switched off it says so, links back to the episode, and writes nothing', async () => {
     answer({ [`/api/v1/episodes/${EP}/edit`]: () => fail(404, { success: false, code: 'EPISODE_EDIT_OFF' }) });
     renderAt();
     expect((await screen.findByRole('alert')).textContent).toContain('The episode edit is switched off');
-    expect(screen.getByRole('link', { name: 'Open the legacy Timeline Editor' }).getAttribute('href')).toBe(`/episodes/${EP}/timeline`);
+    expect(screen.getByRole('link', { name: '← Back to the episode' }).getAttribute('href')).toBe(`/episodes/${EP}?tab=edit`);
+    expect(screen.queryByRole('link', { name: /Timeline Editor/ })).toBeNull();
     noWrites();
   });
 
@@ -99,6 +100,8 @@ describe('EpisodeEditor: reading the edit (P1) and the working preview (P2)', ()
     renderAt();
     expect(await screen.findByText('Episode 3: A New Alliance')).toBeTruthy();
     expect(screen.getByText('Edit revision 7')).toBeTruthy();
+    // The back arrow returns to the episode's Edit pill (Evoni, 2026-11-03).
+    expect(screen.getByRole('link', { name: 'Back to the episode' }).getAttribute('href')).toMatch(/\/episodes\/[^/?]+\?tab=edit$/);
     await waitFor(() => expect(screen.getByText('2 blocking · 0 warnings')).toBeTruthy());
     const rail = screen.getByTestId('beat-rail');
     expect(within(rail).getAllByRole('button', { pressed: false }).length).toBe(14);
