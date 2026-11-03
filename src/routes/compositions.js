@@ -20,7 +20,7 @@ const { models } = require('../models');
 const { requireAuth } = require('../middleware/auth');
 const { authenticateJWT, requireGroup } = require('../middleware/jwtAuth');
 const { S3Client, GetObjectCommand, PutObjectCommand } = require('@aws-sdk/client-s3');
-const { fromIni, fromEnv } = require('@aws-sdk/credential-providers');
+const { fromIni } = require('@aws-sdk/credential-providers');
 
 // Configure AWS SDK v3 with credential chain - lazy load to avoid test errors
 let s3Client = null;
@@ -35,18 +35,17 @@ const getS3Client = async () => {
     };
   }
 
-  const credentials = process.env.AWS_PROFILE
-    ? await fromIni({ profile: process.env.AWS_PROFILE })()
-    : await fromEnv()();
-
-  s3Client = new S3Client({
-    region: process.env.AWS_REGION || 'us-east-1',
-    credentials,
-  });
+  // A named profile when AWS_PROFILE is set (laptop); otherwise the SDK's default
+  // chain (env keys, then the EC2 instance role), like every other S3 client here.
+  const config = { region: process.env.AWS_REGION || 'us-east-1' };
+  if (process.env.AWS_PROFILE) {
+    config.credentials = fromIni({ profile: process.env.AWS_PROFILE });
+  }
+  s3Client = new S3Client(config);
 
   console.log(
     '✅ AWS SDK v3 configured with credentials from',
-    process.env.AWS_PROFILE ? `profile: ${process.env.AWS_PROFILE}` : 'environment'
+    process.env.AWS_PROFILE ? `profile: ${process.env.AWS_PROFILE}` : 'the default chain'
   );
 
   return s3Client;
@@ -548,9 +547,12 @@ router.post('/:id/generate-thumbnails', requireAuth, async (req, res) => {
     const { id } = req.params;
     console.log(`🎬 Generating thumbnails for composition: ${id}`);
 
-    // Ensure s3Client is ready
-    if (!s3Client) {
-      console.error('❌ S3Client not initialized');
+    // Create the S3 client now if nothing has yet (it is lazy, so on a fresh
+    // process the module-level s3Client is still null here).
+    try {
+      await getS3Client();
+    } catch (err) {
+      console.error('❌ S3Client could not be created:', err);
       return res.status(500).json({ error: 'AWS SDK not properly initialized' });
     }
 
