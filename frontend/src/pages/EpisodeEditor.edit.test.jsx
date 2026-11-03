@@ -529,7 +529,7 @@ describe('EpisodeEditor: Existing work (B1)', () => {
   });
 });
 
-// On a phone (Evoni, 2026-11-03): held upright, turn it; sideways, the compact editor with drawers.
+// On a phone (Evoni, 2026-11-03): always landscape. Rotation-locked in portrait, the page draws itself turned.
 describe('EpisodeEditor: on a phone', () => {
   let portrait;
   let listeners;
@@ -565,20 +565,65 @@ describe('EpisodeEditor: on a phone', () => {
     vi.restoreAllMocks();
   });
 
-  test('held upright it asks to be turned (the editor stays loaded); turned sideways the editor shows, timeline and all', async () => {
+  test('held in portrait (rotation locked), the editor opens already in landscape: drawn turned to fill the screen, timeline and all', async () => {
     setupServer();
     renderAt();
     await opened();
-    const rotate = screen.getByTestId('editor-rotate');
-    expect(within(rotate).getByRole('heading', { name: 'Turn your phone sideways' })).toBeTruthy();
-    expect(within(rotate).getByRole('link', { name: /Back to the episode/ }).getAttribute('href')).toBe(`/episodes/${EP}?tab=edit`);
-    expect(document.querySelector('.tle').className).toMatch(/\bis-phone-portrait\b/);
-    turn(false);
-    expect(screen.queryByTestId('editor-rotate')).toBeNull();
-    expect(document.querySelector('.tle').className).toMatch(/\bis-phone\b/);
-    expect(document.querySelector('.tle').className).not.toMatch(/is-phone-portrait/);
+    const root = screen.getByTestId('editor-root');
+    expect(root.className).toMatch(/\bis-phone\b/);
+    expect(root.className).toMatch(/\bis-rotated\b/);
+    // As wide as the screen is tall, as tall as it is wide.
+    expect(root.style.getPropertyValue('--tle-rot-w')).toBe(`${window.innerHeight}px`);
+    expect(root.style.getPropertyValue('--tle-rot-h')).toBe(`${window.innerWidth}px`);
+    expect(screen.queryByText(/Turn your phone/)).toBeNull();
     expect(screen.getByTestId('editor-timeline')).toBeTruthy();
+    turn(false);
+    expect(screen.getByTestId('editor-root').className).not.toMatch(/is-rotated/);
     expect(server.writes).toHaveLength(0);
+  });
+
+  test('turned, a finger moving down the screen drags a block along the timeline (its own axis)', async () => {
+    setupServer();
+    renderAt();
+    await opened();
+    const block = within(screen.getByTestId('editor-timeline')).getByRole('button', { name: /^Music: Bed/ });
+    const px = parseFloat(block.style.width) / 4000;
+    fireEvent.pointerDown(block, { button: 0, clientX: 200, clientY: 10, pointerId: 5 });
+    fireEvent.pointerMove(block, { clientX: 200, clientY: 10 + px * 1000, pointerId: 5 });
+    fireEvent.pointerUp(block, { clientX: 200, clientY: 10 + px * 1000, pointerId: 5 });
+    await waitFor(() => expect(server.writes).toHaveLength(1));
+    expect(lastWrite()).toMatchObject({ method: 'patch', path: '/audio-items/m1', body: { anchor_kind: 'edit_start' } });
+    expect(Math.abs(lastWrite().body.offset_ms - 1000)).toBeLessThanOrEqual(34);
+  });
+
+  test('turned, a sideways finger move is not a timeline drag', async () => {
+    setupServer();
+    renderAt();
+    await opened();
+    const block = within(screen.getByTestId('editor-timeline')).getByRole('button', { name: /^Music: Bed/ });
+    fireEvent.pointerDown(block, { button: 0, clientX: 300, clientY: 10, pointerId: 6 });
+    fireEvent.pointerMove(block, { clientX: 150, clientY: 10, pointerId: 6 });
+    fireEvent.pointerUp(block, { clientX: 150, clientY: 10, pointerId: 6 });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(server.writes).toHaveLength(0);
+  });
+
+  test("the first tap asks for full screen locked to landscape; if the browser refuses, it doesn't ask again and the turned page stays", async () => {
+    const requestFullscreen = vi.fn(() => Promise.resolve());
+    const lock = vi.fn(() => Promise.reject(new Error('not supported')));
+    document.documentElement.requestFullscreen = requestFullscreen;
+    Object.defineProperty(window, 'screen', { configurable: true, value: { width: 390, height: 844, orientation: { lock, unlock: vi.fn() } } });
+    setupServer();
+    renderAt();
+    await opened();
+    fireEvent.click(screen.getByTestId('editor-timeline'));
+    await waitFor(() => expect(lock).toHaveBeenCalledWith('landscape'));
+    expect(requestFullscreen).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByTestId('editor-timeline'));
+    await new Promise((r) => setTimeout(r, 10));
+    expect(requestFullscreen).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId('editor-root').className).toMatch(/is-rotated/);
+    delete document.documentElement.requestFullscreen;
   });
 
   test('sideways, the media panel and the inspector open as drawers, one at a time; Escape closes them', async () => {
@@ -588,35 +633,25 @@ describe('EpisodeEditor: on a phone', () => {
     await opened();
     const tle = () => document.querySelector('.tle').className;
     fireEvent.click(screen.getByRole('button', { name: 'Media panel' }));
-    expect(tle()).toMatch(/has-drawer-media/);
+    expect(tle()).toMatch(/shows-media/);
     expect(screen.getByRole('button', { name: 'Media panel' }).getAttribute('aria-pressed')).toBe('true');
     fireEvent.click(screen.getByRole('button', { name: 'Inspector' }));
-    expect(tle()).toMatch(/has-drawer-inspector/);
-    expect(tle()).not.toMatch(/has-drawer-media/);
+    expect(tle()).toMatch(/shows-inspector/);
+    expect(tle()).not.toMatch(/shows-media/);
     fireEvent.keyDown(window, { key: 'Escape' });
-    expect(tle()).not.toMatch(/has-drawer/);
+    expect(tle()).not.toMatch(/shows-(media|inspector)/);
+    // An app-wide [class*="-drawer"] rule forces 100vw: the editor's classes never name a "-drawer".
+    fireEvent.click(screen.getByRole('button', { name: 'Inspector' }));
+    expect(tle()).not.toMatch(/-drawer/);
   });
 
-  test('turning the phone upright while it plays stops the playback', async () => {
-    portrait = false;
-    setupServer();
-    renderAt();
-    await opened();
-    const play = () => document.querySelector('.tle-play');
-    fireEvent.click(play());
-    await waitFor(() => expect(play().getAttribute('aria-label')).toBe('Pause'));
-    turn(true);
-    await waitFor(() => expect(play().getAttribute('aria-label')).toBe('Play'));
-  });
-
-  test('on a desktop there is no rotate card and no drawer buttons', async () => {
+  test('on a desktop the editor is not turned and has no drawer buttons', async () => {
     window.matchMedia = vi.fn(() => ({ matches: false, addEventListener: () => {}, removeEventListener: () => {} }));
     setupServer();
     renderAt();
     await opened();
-    expect(screen.queryByTestId('editor-rotate')).toBeNull();
     expect(screen.queryByRole('button', { name: 'Media panel' })).toBeNull();
-    expect(document.querySelector('.tle').className).toBe('tle');
+    expect(screen.getByTestId('editor-root').className).toBe('tle');
   });
 });
 

@@ -26,14 +26,14 @@
  * Timeline Editor was deleted (Evoni, 2026-11-03): /episodes/:id/timeline
  * lands here (App LegacyTimelineRedirect).
  */
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { isAdmin } from '../utils/authGroups';
 import {
   ArrowLeft, ChevronRight, Pencil, Save, MonitorPlay, Upload, MoreVertical,
   Undo2, Redo2, SquareSplitHorizontal, Scissors, Copy, ClipboardPaste, Trash2, ZoomIn, ZoomOut, Maximize2, Magnet, X,
-  Smartphone, RotateCw, PanelLeft, PanelRight,
+  PanelLeft, PanelRight,
 } from 'lucide-react';
 import { episodeEditApi, readFailure } from '../lib/episodeEditApi';
 import {
@@ -52,6 +52,7 @@ import EditorTimeline, { LABEL_W } from '../components/EpisodeEditor/EditorTimel
 import BeatRail from '../components/EpisodeEditor/BeatRail';
 import useStoredSize, { readStored, writeStored } from '../components/EpisodeEditor/useStoredSize';
 import usePhoneOrientation from '../components/EpisodeEditor/usePhoneOrientation';
+import { setEditorRotated } from '../lib/editorRotation';
 import './EpisodeEditor.css';
 
 const FRAME_MS = 1000 / 30;
@@ -152,10 +153,13 @@ export default function EpisodeEditor() {
   const [railCollapsed, setRailCollapsed] = useState(() => Boolean(readStored('tle-rail-collapsed', false)));
   const [leftW, , dragLeft, resetLeft] = useStoredSize('tle-left-w', 400, { min: 280, max: 520 });
   const [rightW, , dragRight, resetRight] = useStoredSize('tle-right-w', 324, { min: 280, max: 420 });
-  // A phone (Evoni, 2026-11-03): held upright it asks to be turned; sideways it shows the compact
-  // editor, with the media panel and the inspector as drawers over the preview, and its own
-  // preview/timeline split (more room for the timeline), kept apart from the desktop one.
-  const { phone, portrait } = usePhoneOrientation();
+  // A phone (Evoni, 2026-11-03) always gets the editor in landscape: the compact editor, with the
+  // media panel and the inspector as drawers and its own preview/timeline split. Held (or
+  // rotation-locked) in portrait, the page draws itself turned a quarter turn (`rotated`), and its
+  // first tap asks Chrome for real full-screen landscape (no button: "I want to enter the page and
+  // I want the page to be in landscape").
+  const { phone, portrait, width: screenW, height: screenH } = usePhoneOrientation();
+  const rotated = phone && portrait;
   const deskUpper = useStoredSize('tle-upper-ratio', 0.52, { min: 0.25, max: 0.75 });
   const phoneUpper = useStoredSize('tle-upper-ratio-phone', 0.4, { min: 0.25, max: 0.75 });
   const [upper, setUpper, dragUpper, resetUpper] = phone ? phoneUpper : deskUpper;
@@ -236,10 +240,42 @@ export default function EpisodeEditor() {
     player.restartAt(at);
   }, [model, player]);
 
-  // A phone turned upright covers the editor: its playback stops rather than play unseen.
+  // Drags read the pointer in the editor's own axes while it is drawn turned (lib/editorRotation).
+  useLayoutEffect(() => {
+    setEditorRotated(rotated);
+    return () => setEditorRotated(false);
+  }, [rotated]);
+
+  // On a phone in portrait, the first tap anywhere asks for full screen locked to landscape
+  // (Chrome on Android allows both only from a tap, and the lock overrides the phone's rotation
+  // lock). Then the screen really is landscape and the page stops turning itself. Where either
+  // is refused (another browser), the turned page stays. Leaving the editor gives the phone back.
   useEffect(() => {
-    if (portrait && player.playing) player.pause();
-  }, [portrait, player.playing, player.pause]);
+    if (!phone) return undefined;
+    const doc = document;
+    let refused = false;
+    const toLandscape = async () => {
+      if (refused || doc.fullscreenElement || !window.matchMedia?.('(orientation: portrait)').matches) return;
+      try {
+        if (!doc.documentElement.requestFullscreen || !window.screen?.orientation?.lock) { refused = true; return; }
+        await doc.documentElement.requestFullscreen({ navigationUI: 'hide' });
+        await window.screen.orientation.lock('landscape');
+      } catch (err) {
+        refused = true;
+        console.warn('[EpisodeEditor] full-screen landscape was refused; the editor stays drawn turned:', err?.message);
+      }
+    };
+    doc.addEventListener('click', toLandscape, true);
+    return () => {
+      doc.removeEventListener('click', toLandscape, true);
+      try {
+        window.screen?.orientation?.unlock?.();
+        if (doc.fullscreenElement) doc.exitFullscreen?.().catch((err) => console.warn('[EpisodeEditor] leaving full screen failed:', err?.message));
+      } catch (err) {
+        console.warn('[EpisodeEditor] giving the screen back failed:', err?.message);
+      }
+    };
+  }, [phone]);
 
   // While playing, the timeline keeps the playhead in view.
   useEffect(() => {
@@ -587,18 +623,13 @@ export default function EpisodeEditor() {
   const height = bodyRef.current?.clientHeight || 800;
 
   return (
-    <div className={`tle${phone ? ' is-phone' : ''}${portrait ? ' is-phone-portrait' : ''}${phone && drawer ? ` has-drawer-${drawer}` : ''}`}
-      style={{ '--tle-left': `${leftW}px`, '--tle-right': `${rightW}px`, '--tle-upper': upper }}>
-      {portrait && (
-        <div className="tle-rotate" role="dialog" aria-modal="true" aria-labelledby="tle-rotate-title" data-testid="editor-rotate">
-          <div className="tle-rotate-card">
-            <span className="tle-rotate-icon" aria-hidden="true"><Smartphone size={44} /><RotateCw size={22} /></span>
-            <h1 id="tle-rotate-title">Turn your phone sideways</h1>
-            <p>The editor works in landscape on a phone, so the preview and the timeline fit side by side with room to edit. Nothing is lost while you turn it.</p>
-            <Link to={`/episodes/${episodeId}?tab=edit`} className="tle-rotate-back">← Back to the episode</Link>
-          </div>
-        </div>
-      )}
+    <div className={`tle${phone ? ' is-phone' : ''}${rotated ? ' is-rotated' : ''}${phone && drawer ? ` shows-${drawer}` : ''}`}
+      data-testid="editor-root"
+      style={{
+        '--tle-left': `${leftW}px`, '--tle-right': `${rightW}px`, '--tle-upper': upper,
+        // Turned: the page is as wide as the screen is tall, and as tall as it is wide.
+        ...(rotated ? { '--tle-rot-w': `${screenH}px`, '--tle-rot-h': `${screenW}px` } : {}),
+      }}>
       <header className="tle-top">
         <nav className="tle-crumbs" aria-label="Breadcrumb">
           <Link to={`/episodes/${episodeId}?tab=edit`} className="tle-icon-btn" aria-label="Back to the episode" title="Back to the episode's Edit pill"><ArrowLeft size={18} /></Link>
