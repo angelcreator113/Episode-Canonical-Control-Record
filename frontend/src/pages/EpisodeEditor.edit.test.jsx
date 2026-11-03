@@ -475,6 +475,8 @@ describe('EpisodeEditor: Existing work (B1)', () => {
     const media = screen.getByRole('region', { name: 'Media' });
     fireEvent.click(await within(media).findByRole('button', { name: 'See Existing work' }));
     expect(within(media).getByRole('tab', { name: 'Existing work' }).getAttribute('aria-selected')).toBe('true');
+    // Six tabs are wider than the panel: the row slides sideways (useSideScroll).
+    expect(within(media).getByTestId('media-tabs').className).toMatch(/\bside-scroll\b/);
     expect(within(work()).getByLabelText('Scene plan summary').textContent).toMatch(/3 of 14 beats planned.*1 ready.*1 set not linked.*1 missing.*4 clips \(1 with no beat\)/);
     const beat1 = within(work()).getByRole('region', { name: /^Beat 1:/ });
     expect(beat1.textContent).toMatch(/Closet · WIDE/);

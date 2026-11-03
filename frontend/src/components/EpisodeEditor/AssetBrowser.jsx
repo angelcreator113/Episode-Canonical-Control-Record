@@ -24,6 +24,7 @@ import { Link } from 'react-router-dom';
 import { Plus, ChevronDown, Search, Video, Image as ImageIcon, AudioLines, CirclePlus } from 'lucide-react';
 import { beatLabel } from '../../lib/editorModel';
 import ExistingWork from './ExistingWork';
+import useSideScroll from '../../hooks/useSideScroll';
 
 const TABS = [
   { key: 'assets', label: 'Assets' },
@@ -107,6 +108,8 @@ export default function AssetBrowser({
 }) {
   const place = { editable, onPlace, onDragAsset };
   const [tab, setTab] = useState('assets');
+  // Six tabs are wider than the panel: the row slides with a drag, the wheel or a swipe (B1, 2026-11-03).
+  const [tabsRef, , tabsScroll] = useSideScroll();
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState('all');
   const q = query.trim().toLowerCase();
@@ -140,7 +143,7 @@ export default function AssetBrowser({
 
   return (
     <section className="tle-panel tle-browser" aria-label="Media">
-      <div className="tle-tabs" role="tablist">
+      <div className={`tle-tabs ${tabsScroll}`} role="tablist" ref={tabsRef} data-testid="media-tabs">
         {TABS.map((t) => (
           <button key={t.key} type="button" role="tab" aria-selected={tab === t.key} className={`tle-tab${tab === t.key ? ' is-active' : ''}`} onClick={() => setTab(t.key)}>{t.label}</button>
         ))}

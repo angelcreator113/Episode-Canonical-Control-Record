@@ -114,7 +114,7 @@ function ClipItem({ clip, beat, how, editable, onPlace, onDragAsset }) {
     <Row asset={asset} editable={editable} onPlace={onPlace} onDragAsset={onDragAsset}>
       <span className="tle-work-thumb" aria-hidden="true">{clip.thumbnail_url ? <img src={clip.thumbnail_url} alt="" loading="lazy" /> : <Video size={16} />}</span>
       <span className="tle-work-text">
-        <span className="tle-work-name">{starred && <Star size={12} className="tle-star" aria-label="Your pick" />} {label}</span>
+        <span className="tle-work-name">{starred && <Star size={12} className="tle-star" aria-label="Your pick" />}<span>{label}</span></span>
         <span className="tle-muted"> {bits.join(' · ')}</span>
       </span>
     </Row>

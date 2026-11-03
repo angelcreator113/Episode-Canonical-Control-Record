@@ -423,7 +423,8 @@ video.tle-monitor-scene { background: #000; }
 .tle-work-thumb { flex: none; width: 44px; height: 26px; display: grid; place-items: center; border-radius: 4px; overflow: hidden; background: var(--tle-bg); color: var(--tle-muted); }
 .tle-work-thumb img { width: 100%; height: 100%; object-fit: cover; }
 .tle-work-text { min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; }
-.tle-work-name { font-weight: 600; overflow-wrap: anywhere; }
+.tle-work-name { display: inline-flex; align-items: center; gap: 4px; font-weight: 600; overflow-wrap: anywhere; }
+.tle-work-name .tle-star { flex: none; }
 .tle-work-status { display: inline-flex; align-items: center; gap: 3px; padding: 0 6px; border-radius: 999px; border: 1px solid currentColor; font-size: 11px; }
 .tle-work-status.is-ready, .tle-work-status.is-placed { color: var(--tle-ok); }
 .tle-work-status.is-link { color: var(--tle-warn); }
