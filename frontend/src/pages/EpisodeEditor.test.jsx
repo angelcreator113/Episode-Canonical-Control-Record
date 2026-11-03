@@ -99,6 +99,8 @@ describe('EpisodeEditor: reading the edit (P1) and the working preview (P2)', ()
     renderAt();
     expect(await screen.findByText('Episode 3: A New Alliance')).toBeTruthy();
     expect(screen.getByText('Edit revision 7')).toBeTruthy();
+    // The back arrow returns to the episode's Edit pill (Evoni, 2026-11-03).
+    expect(screen.getByRole('link', { name: 'Back to the episode' }).getAttribute('href')).toMatch(/\/episodes\/[^/?]+\?tab=edit$/);
     await waitFor(() => expect(screen.getByText('2 blocking · 0 warnings')).toBeTruthy());
     const rail = screen.getByTestId('beat-rail');
     expect(within(rail).getAllByRole('button', { pressed: false }).length).toBe(14);

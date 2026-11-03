@@ -125,11 +125,11 @@ describe('Episode header and tabs (redesign part 1)', () => {
   // sit under it, the checklist last.
   // Evoni, 2026-10-22 (Production layout): in four groups, and Beat Plan is
   // Scenes' Plan view, not a pill.
-  test('the Production pills run Scenes, Files | Wardrobe, Style Page | Phone, Overlays | Money, Checklist; the chosen one is marked', async () => {
+  test('the Production pills run Scenes, Files, Edit | Wardrobe, Style Page | Phone, Overlays | Money, Checklist; the chosen one is marked', async () => {
     renderAt('/episodes/ep-1?tab=wardrobe');
     const row = await screen.findByTestId('ed-subtabs');
     // The pill's own label (the Checklist pill also counts what is done).
-    expect([...row.querySelectorAll('button')].map((b) => b.childNodes[0].textContent)).toEqual(['Scenes', 'Files', 'Wardrobe', 'Style Page', 'Phone', 'Overlays', 'Money', 'Checklist']);
+    expect([...row.querySelectorAll('button')].map((b) => b.childNodes[0].textContent)).toEqual(['Scenes', 'Files', 'Edit', 'Wardrobe', 'Style Page', 'Phone', 'Overlays', 'Money', 'Checklist']);
     expect([...row.querySelectorAll('[role="group"]')].map((g) => g.getAttribute('aria-label'))).toEqual(['Make', 'Look', 'On screen', 'Track']);
     const chosen = row.querySelector('[aria-current="page"]');
     expect(chosen.textContent).toBe('Wardrobe');

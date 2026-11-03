@@ -20,6 +20,7 @@ import SceneLibraryPicker from '../components/SceneLibraryPicker';
 // fetched when the user clicks into the tab. PhonePreviewMode is lazy
 // because the player overlay only mounts when "Preview Phone" is clicked.
 const EpisodeFilesTab = lazy(() => import('../components/Episodes/EpisodeFilesTab'));
+const EpisodeEditTab = lazy(() => import('../components/Episodes/EpisodeEditTab'));
 const VoiceStudio = lazy(() => import('./VoiceStudio'));
 const EpisodeTodoList = lazy(() => import('../components/Episodes/EpisodeTodoList'));
 const EpisodeSceneWorkspace = lazy(() => import('../components/Episodes/EpisodeSceneWorkspace'));
@@ -1148,6 +1149,9 @@ const EpisodeDetail = () => {
 
         {/* Voice: Voice Studio, the episode's line takes and approvals (Evoni, 2026-10-30). */}
         {tabKey === 'production.voice' && <VoiceStudio episodeId={episode.id} embedded />}
+
+        {/* Edit: where the episode's edit stands, and Open the editor (full screen; Evoni, 2026-11-03). */}
+        {tabKey === 'production.edit' && <EpisodeEditTab episodeId={episode.id} admin={admin} />}
 
         {/* Scenes has two views (Evoni, 2026-10-22: Beat Plan "is the same
             as scenes"): the Workspace and the Plan, the full plan editor. */}

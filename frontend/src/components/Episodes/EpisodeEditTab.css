@@ -1,0 +1,123 @@
+/* Production → Edit: where the episode's edit stands, and the way into the editor (2026-11-03). */
+
+.eet {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px;
+  color: var(--lala-ink);
+}
+
+.eet-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.eet-title {
+  margin: 0 0 4px;
+  font-family: 'Lora', Georgia, serif;
+  font-size: 20px;
+}
+
+.eet-muted { color: var(--lala-ink-muted); font-size: 13px; margin: 0; }
+
+.eet-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 40px;
+  padding: 8px 14px;
+  border: 1px solid var(--lala-parchment-3);
+  border-radius: var(--lala-radius, 8px);
+  background: var(--lala-surface);
+  color: var(--lala-ink);
+  font-family: 'DM Mono', monospace;
+  font-size: 13px;
+  text-decoration: none;
+}
+
+.eet-btn.is-primary {
+  background: var(--lala-gold);
+  border-color: var(--lala-gold);
+  color: #fff;
+}
+
+.eet-note {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--warning-border);
+  border-radius: var(--lala-radius, 8px);
+  background: var(--warning-bg);
+  font-size: 13px;
+}
+
+.eet-cards {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.eet-card {
+  padding: 12px 14px;
+  border: 1px solid var(--lala-parchment-3);
+  border-radius: var(--lala-radius, 8px);
+  background: var(--lala-surface);
+}
+
+.eet-card-h {
+  margin: 0 0 8px;
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--lala-ink-muted);
+}
+
+.eet-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: 14px; }
+.eet-list li { display: flex; align-items: center; gap: 6px; }
+.eet-list .is-blocked { color: var(--danger-text); }
+.eet-list .is-warning { color: var(--lala-gold-text); }
+.eet-list .is-clear { color: var(--success-text); }
+
+.eet-dl { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; margin: 0; font-size: 14px; }
+.eet-dl dt { color: var(--lala-ink-muted); }
+.eet-dl dd { margin: 0; font-family: 'DM Mono', monospace; text-align: right; }
+
+.eet-rail {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.eet-beat {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 6px 8px;
+  border: 1px solid var(--lala-parchment-3);
+  border-left-width: 4px;
+  border-radius: var(--lala-radius, 8px);
+  background: var(--lala-parchment-2);
+  font-size: 12px;
+}
+.eet-beat.is-clear { border-left-color: var(--success-border); }
+.eet-beat.is-warning { border-left-color: var(--lala-gold); }
+.eet-beat.is-blocked { border-left-color: var(--danger-border); }
+.eet-beat.is-empty { border-left-color: var(--lala-parchment-3); color: var(--lala-ink-muted); }
+.eet-beat-n { font-family: 'DM Mono', monospace; font-weight: 600; }
+.eet-beat-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.eet-foot { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+
+@media (max-width: 720px) {
+  .eet-cards { grid-template-columns: minmax(0, 1fr); }
+  .eet-rail { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .eet-btn.is-primary { width: 100%; justify-content: center; }
+}

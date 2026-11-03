@@ -55,11 +55,11 @@ describe('the tab layout', () => {
     expect(EP_TABS.map((t) => t.label)).toEqual(['Overview', 'Script', 'Production', 'Results']);
     const production = EP_TABS.find((t) => t.key === 'production');
     expect(production.subs.map((s) => s.label))
-      .toEqual(['Scenes', 'Plan', 'Files', 'Voice', 'Wardrobe', 'Style Page', 'Phone', 'Overlays', 'Money', 'Checklist']);
+      .toEqual(['Scenes', 'Plan', 'Files', 'Voice', 'Edit', 'Wardrobe', 'Style Page', 'Phone', 'Overlays', 'Money', 'Checklist']);
     // Evoni, 2026-10-22: Beat Plan is Scenes' Plan view; the pills in four groups.
-    expect(pillsOf(production).map((s) => s.label)).toEqual(['Scenes', 'Files', 'Voice', 'Wardrobe', 'Style Page', 'Phone', 'Overlays', 'Money', 'Checklist']);
+    expect(pillsOf(production).map((s) => s.label)).toEqual(['Scenes', 'Files', 'Voice', 'Edit', 'Wardrobe', 'Style Page', 'Phone', 'Overlays', 'Money', 'Checklist']);
     expect(pillGroups(production).map((g) => [g.group, g.pills.map((p) => p.key)])).toEqual([
-      ['Make', ['scenes', 'files', 'voice']], ['Look', ['wardrobe', 'lookbook']], ['On screen', ['phone', 'overlays']], ['Track', ['money', 'checklist']],
+      ['Make', ['scenes', 'files', 'voice', 'edit']], ['Look', ['wardrobe', 'lookbook']], ['On screen', ['phone', 'overlays']], ['Track', ['money', 'checklist']],
     ]);
     expect(pillFor(production, 'beatplan')).toBe('scenes');
     expect(pillFor(production, 'files')).toBe('files');
@@ -78,11 +78,19 @@ describe('Production → Voice (Evoni, 2026-10-30)', () => {
   });
   test('the pill shows only where its gate is open (an admin, Voice Studio on)', () => {
     const make = (tab) => pillGroups(tab).find((g) => g.group === 'Make').pills.map((p) => p.key);
-    expect(make(gatedTab(production, { voiceStudio: true }))).toEqual(['scenes', 'files', 'voice']);
-    expect(make(gatedTab(production, {}))).toEqual(['scenes', 'files']);
-    expect(make(gatedTab(production))).toEqual(['scenes', 'files']);
+    expect(make(gatedTab(production, { voiceStudio: true }))).toEqual(['scenes', 'files', 'voice', 'edit']);
+    expect(make(gatedTab(production, {}))).toEqual(['scenes', 'files', 'edit']);
+    expect(make(gatedTab(production))).toEqual(['scenes', 'files', 'edit']);
     // A tab with nothing gated is returned as it is.
     const results = EP_TABS.find((t) => t.key === 'results');
     expect(gatedTab(results)).toBe(results);
+  });
+});
+
+describe('Production → Edit (Evoni, 2026-11-03)', () => {
+  test('?tab=edit opens the Edit pill under Production, after Voice; it is not gated', () => {
+    expect(resolveEpisodeTab('edit')).toEqual({ main: 'production', sub: 'edit', key: 'production.edit' });
+    const subs = EP_TABS.find((t) => t.key === 'production').subs;
+    expect(subs.find((s) => s.key === 'edit')).toEqual({ key: 'edit', label: 'Edit', group: 'Make' });
   });
 });

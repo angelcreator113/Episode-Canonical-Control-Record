@@ -85,7 +85,8 @@ export default function EpisodeProductionHeader({ episode, checks = null, sectio
       </button>
 
       <div className="eph-actions">
-        <Link className="eph-btn" to={`/episodes/${episodeId}/timeline`}><Clapperboard size={16} aria-hidden /> Open Editor</Link>
+        {/* The old Timeline Editor, kept until the new editor passes testing (ruling 14); relabelled so the two are told apart (Evoni, 2026-11-03). */}
+        <Link className="eph-btn" to={`/episodes/${episodeId}/timeline`}><Clapperboard size={16} aria-hidden /> Legacy timeline</Link>
         <Link className="eph-btn" to={`/episodes/${episodeId}/editor`}><Film size={16} aria-hidden /> New editor</Link>
         {canMarkReady(episode) ? (
           <button type="button" className="eph-btn is-primary" onClick={onMarkReady} disabled={statusSaving} data-testid="eph-mark-ready">

@@ -66,6 +66,14 @@ describe('EpisodeProductionHeader', () => {
     await waitFor(() => expect(rawClipsApi.list).toHaveBeenCalledWith('ep-1'));
   });
 
+  test('the two editors are told apart: Legacy timeline (the old editor) and New editor (Evoni, 2026-11-03)', async () => {
+    renderHeader();
+    expect(screen.getByRole('link', { name: 'Legacy timeline' }).getAttribute('href')).toBe('/episodes/ep-1/timeline');
+    expect(screen.getByRole('link', { name: 'New editor' }).getAttribute('href')).toBe('/episodes/ep-1/editor');
+    expect(screen.queryByRole('link', { name: 'Open Editor' })).toBeNull();
+    await waitFor(() => expect(rawClipsApi.list).toHaveBeenCalledWith('ep-1'));
+  });
+
   test('a current thumbnail in the editor\'s saved list finishes the Thumbnail step', async () => {
     vi.mocked(api.get).mockResolvedValue({ data: { success: true, data: [{ id: 2, url: 'https://b.s3.amazonaws.com/t.png', isPrimary: true }] } });
     renderHeader();

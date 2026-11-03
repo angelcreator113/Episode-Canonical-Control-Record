@@ -33,6 +33,11 @@ export const EP_TABS = [
     // on (gatedTab). ?tab=voice opens it either way; the page says why it
     // can't load. /episodes/:id/voice lands here.
     { key: 'voice', label: 'Voice', group: 'Make', gate: 'voiceStudio' },
+    // Evoni, 2026-11-03: the episode editor as a pill, after Voice. A
+    // launcher, not the editor itself: it says where the edit stands and
+    // opens /episodes/:id/editor full screen (EpisodeEditTab). Not gated: where
+    // the episode edit is off, the pill says so.
+    { key: 'edit', label: 'Edit', group: 'Make' },
     { key: 'wardrobe', label: 'Wardrobe', group: 'Look' },
     // The Style Page (was Lookbook; Task #2876): the style sheet as its
     // own editor. The key stays 'lookbook' so links keep working.

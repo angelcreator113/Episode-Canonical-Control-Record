@@ -930,3 +930,20 @@ Every write returned 200, and the revision went 0 → 9. The database held:
 - a `visual_mode` item `gameplay` at offset 1000.
 
 At 375 px there is no horizontal scroll.
+
+---
+
+## 17. The Edit pill on the episode page (2026-11-03)
+
+Evoni asked for the editor as a tab on the episode page. She chose a launcher pill over embedding the editor, which is a full-screen workspace with page-wide shortcuts (Space, Delete, Ctrl+Z) that must not fire while the rest of the episode page is in use. She also asked to relabel the old editor's button.
+
+**What changed (frontend only):**
+
+| Where | Change |
+|---|---|
+| `episodeTabs` `EP_TABS` | A Production pill **Edit** (`edit`, group Make, after Voice). Not gated: where the episode edit is off, the pill says so. `?tab=edit` opens it |
+| `EpisodeEditTab` (new) | Reads `GET /edit`, `/edit/findings` and `/edit/versions`, and writes nothing. It shows the edit's length and revision, the latest saved draft, the findings counts, how many of the 14 beats are ready, warned, blocked or empty, what the edit holds, and **Open the editor** (`/episodes/:id/editor`). With `EPISODE_EDIT` off it says so and offers only the legacy timeline; without C1b it says which features need the migration; for a viewer who is not an admin it says changes are refused |
+| `EpisodeProductionHeader` | **Open Editor** (the old Timeline Editor) is now **Legacy timeline**, beside **New editor**. The old editor stays until the new one passes testing (ruling 14) |
+| `EpisodeEditor` | The back arrow, and the full-page error states' "Back to the episode", return to `?tab=edit` |
+
+**Not changed:** the production strip's "Edit & Assemble" step (`productionSteps`) still opens the legacy timeline.
