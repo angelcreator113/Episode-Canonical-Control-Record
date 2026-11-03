@@ -47,7 +47,7 @@ The table below separates the four failure kinds asked for: **missing data**, **
 
 | Source | Data exists? | Linked to the episode? | Editor fetches it? | Why it may not appear |
 |---|---|---|---|---|
-| **Scene planning** (`scene_plans`: each beat's set and angle label; `chosen_by_user`, `locked`, `sort_order`) | Yes: 70 rows | Yes, by `episode_id` + `beat_number` | **No** | **Missing UI discovery.** The editor never reads `scene_plans`, so your beat-by-beat scene choices are invisible. The old Timeline Editor read them through `scenes.scene_angle_id` (ruling L12), and deleting it in #3683 dropped that path. The plan also names its angle by **label**, not id, so a renamed angle no longer matches. |
+| **Scene planning** (`scene_plans`: each beat's set and angle label; `chosen_by_user`, `locked`; **one row per beat**, unique index `idx_scene_plans_episode_beat`) | Yes: 70 rows | Yes, by `episode_id` + `beat_number` | **No** | **Missing UI discovery.** The editor never reads `scene_plans`, so your beat-by-beat scene choices are invisible. The old Timeline Editor read them through `scenes.scene_angle_id` (ruling L12), and deleting it in #3683 dropped that path. The plan also names its angle by **label**, not id, so a renamed angle no longer matches. |
 | **Scene sets and angles** (`scene_set_episodes` → `scene_sets` → `scene_angles`) | Yes: 26 sets, 121 angles | Only through `scene_set_episodes` (20 links), which has **no beat column** | Yes, linked sets only, in link `sort_order` | **Missing link:** a set chosen in the scene plan but not linked in `scene_set_episodes` never shows (the plan and the link are separate rows). **Missing data:** an angle with no still and no video shows "no media yet" and cannot be placed. Not placed: shown as tiles, never on the timeline. |
 | **Files / raw footage** (`episode_raw_clips`) | 9 clips in total | `episode_id`, `beat_number`, `end_beat_number`, `beat_marks`, `is_favorite` (★), `start_line` | Yes, every live clip | **Missing UI discovery:** with a beat focused, a clip with no `beat_number` (for example a whole-episode take with only beat marks) is hidden (`AssetBrowser` `inBeat`). ★ and beat marks are ignored by the editor. **Missing data:** a clip with no measured `duration_seconds` is refused (`NO_DURATION`). Older uploads in `assets` (169) are never read. |
 | **Background removal** (`episode_raw_clips.key_status`, `url_cutout`) | On the same row | Same row | Yes | **Missing data:** the cutout is used only when `key_status = 'done'`; queued, processing or failed shows the original. Safari always shows the original (no VP9 alpha). A Lala clip placed on the **Scene** lane always plays its original; only the **Lala & guests** lane uses the cutout. |
@@ -74,7 +74,7 @@ A button in the editor's top bar, **Prepare From Existing Work**. It reads every
    - Current Voice Studio approvals with their line associations.
    - Script beats.
    - The edit as it stands.
-2. **Scene order:** within a beat, scenes follow the plan's `sort_order`, then the angle's `sort_order`. A plan row the producer chose or locked (`chosen_by_user`, `locked`) is **confirmed**; one the planner suggested is **suggested**.
+2. **Scene order:** the plan holds one set and angle per beat (a unique index), so the beats' order is the order; inside a beat the proposal adds the plan's angle first, then any footage. A plan row the producer chose or locked (`chosen_by_user`, `locked`) is **confirmed**; one the planner suggested is **suggested**.
 3. **Lala and Prime footage:**
    - A clip matches a beat only through its own metadata: `beat_number`/`end_beat_number`, `beat_marks`, ★ for that beat.
    - **An uploaded clip is never assumed to belong at a timestamp.**
@@ -160,7 +160,7 @@ No migration for C1–C3.
 |---|---|---|
 | **A (this PR)** | Editor reliability: undo and redo identity, restore, commentary, inspector, consistent reads, admin-only, legacy writes closed, cancelled drags | Code only; no migration, no flag change |
 | **B0** | A fixed Diagnostics check `edit-sources` (read only, counts per episode, no rows), or working task-scoped AWS credentials, so per-episode facts can be confirmed | Workflow and script change only |
-| **B1** | Discovery fixes without assembly: an **Existing work** tab in the media panel showing the scene plan per beat (with "set not linked" and "no media" said plainly), ★ and beat marks on clip tiles, and unassigned clips listed instead of hidden when a beat is focused | Reads only |
+| **B1** (built 2026-11-03) | Discovery fixes without assembly: an **Existing work** tab in the media panel showing the scene plan per beat (with "set not linked" and "no media" said plainly), ★ and beat marks on clip tiles, and unassigned clips listed instead of hidden when a beat is focused. `GET /edit/sources` (`editSourcesService.existingWork`) reads the plan with the planner's own angle rule (`rowAngleStatus`), not `planWithAngles`, whose look reads can write. Placing a ready angle from the tab puts it in its planned beat, by hand, as one undoable change | Reads only (placing is the existing manual place) |
 | **C1** | `editSourcesService`, `assemblyPlan.proposeAssembly`, `GET /edit/proposal`, with unit tests on every rule in C.2 and an integration test on a seeded episode | Reads only |
 | **C2** | The review sheet (read only): summary, beats, evidence, ghost blocks | Reads only |
 | **C3** | Apply: version before and after, one transaction, conflicts never applied without Replace, regression tests that nothing existing is deleted or moved | Writes the edit (needs Evoni's approval to ship) |
@@ -168,7 +168,7 @@ No migration for C1–C3.
 
 ### C.7 Open questions for Evoni
 
-1. When a beat's scene plan has two scenes, should both be proposed in plan order, or only the first?
+1. ~~When a beat's scene plan has two scenes, should both be proposed?~~ Answered by the schema (B1, 2026-11-03): `scene_plans` holds one row per beat.
 2. Should a dialogue line with no timing marks be offered "in order at the start of its beat" as a suggestion, or only listed as needing timing?
 3. Prime's take with beat marks: one segment per beat (cut at each mark, as Files › Footage's cue sheet does), or one long segment?
 4. The 169 rows in the older `assets` table: is any of it episode footage that should be brought into Files › Footage first?

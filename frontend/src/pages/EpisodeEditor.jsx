@@ -33,6 +33,7 @@ import { isAdmin } from '../utils/authGroups';
 import {
   ArrowLeft, ChevronRight, Pencil, Save, MonitorPlay, Upload, MoreVertical,
   Undo2, Redo2, SquareSplitHorizontal, Scissors, Copy, ClipboardPaste, Trash2, ZoomIn, ZoomOut, Maximize2, Magnet, X,
+  Smartphone, RotateCw, PanelLeft, PanelRight,
 } from 'lucide-react';
 import { episodeEditApi, readFailure } from '../lib/episodeEditApi';
 import {
@@ -50,6 +51,7 @@ import EditorInspector from '../components/EpisodeEditor/EditorInspector';
 import EditorTimeline, { LABEL_W } from '../components/EpisodeEditor/EditorTimeline';
 import BeatRail from '../components/EpisodeEditor/BeatRail';
 import useStoredSize, { readStored, writeStored } from '../components/EpisodeEditor/useStoredSize';
+import usePhoneOrientation from '../components/EpisodeEditor/usePhoneOrientation';
 import './EpisodeEditor.css';
 
 const FRAME_MS = 1000 / 30;
@@ -115,6 +117,8 @@ export default function EpisodeEditor() {
   const rawClips = useRead(() => episodeEditApi.rawClips(episodeId), [episodeId]);
   const sceneSets = useRead(() => episodeEditApi.sceneSets(episodeId), [episodeId]);
   const takes = useRead(() => episodeEditApi.takes(episodeId), [episodeId]);
+  // Prepare From Existing Work, B1: the scene plan, beat by beat (reads only).
+  const sources = useRead(() => episodeEditApi.sources(episodeId), [episodeId]);
 
   // Takes: Voice Studio's playable list, and (P4) the URL each take the edit names carries in GET /edit.
   const media = useMemo(() => {
@@ -126,6 +130,16 @@ export default function EpisodeEditor() {
     return mediaIndex({ rawClips: rawClips.data || [], sceneSets: sceneSets.data || [], takes: [...listed, ...fromEdit] });
   }, [rawClips.data, sceneSets.data, takes.data, edit.data]);
   const model = useMemo(() => (edit.data ? buildTimeline(edit.data.edit, media) : null), [edit.data, media]);
+  // Which angles each beat already has on the edit (Existing work says "On the edit").
+  const placedAngles = useMemo(() => {
+    const out = new Map();
+    for (const c of edit.data?.edit?.sceneClips || []) {
+      if (c.source_kind !== 'angle_still' && c.source_kind !== 'angle_video') continue;
+      if (!out.has(c.beat_number)) out.set(c.beat_number, new Set());
+      out.get(c.beat_number).add(c.source_id);
+    }
+    return out;
+  }, [edit.data]);
   const readiness = useMemo(() => (model && findings.data ? beatReadiness(model, findings.data.findings) : null), [model, findings.data]);
 
   const [playhead, setPlayhead] = useState(0);
@@ -138,7 +152,13 @@ export default function EpisodeEditor() {
   const [railCollapsed, setRailCollapsed] = useState(() => Boolean(readStored('tle-rail-collapsed', false)));
   const [leftW, , dragLeft, resetLeft] = useStoredSize('tle-left-w', 400, { min: 280, max: 520 });
   const [rightW, , dragRight, resetRight] = useStoredSize('tle-right-w', 324, { min: 280, max: 420 });
-  const [upper, setUpper, dragUpper, resetUpper] = useStoredSize('tle-upper-ratio', 0.52, { min: 0.25, max: 0.75 });
+  // A phone (Evoni, 2026-11-03): held upright it asks to be turned; sideways it shows the compact
+  // editor, with the media panel and the inspector as drawers over the preview, and its own
+  // preview/timeline split (more room for the timeline), kept apart from the desktop one.
+  const { phone, portrait } = usePhoneOrientation();
+  const deskUpper = useStoredSize('tle-upper-ratio', 0.52, { min: 0.25, max: 0.75 });
+  const phoneUpper = useStoredSize('tle-upper-ratio-phone', 0.4, { min: 0.25, max: 0.75 });
+  const [upper, setUpper, dragUpper, resetUpper] = phone ? phoneUpper : deskUpper;
   const scrollRef = useRef(null);
   const bodyRef = useRef(null);
   const [draggingAsset, setDraggingAsset] = useState(null);
@@ -146,6 +166,8 @@ export default function EpisodeEditor() {
   const [liveLayout, setLiveLayout] = useState(null);
   const [beatPlan, setBeatPlan] = useState(null);
   const [versions, setVersions] = useState(null);
+  const [drawer, setDrawer] = useState(null); // null | 'media' | 'inspector'
+  const toggleDrawer = (which) => setDrawer((cur) => (cur === which ? null : which));
 
   // ── Saving changes (P3) ─────────────────────────────────────────────
   const editRef = useRef(null);
@@ -213,6 +235,11 @@ export default function EpisodeEditor() {
     setPlayhead(at);
     player.restartAt(at);
   }, [model, player]);
+
+  // A phone turned upright covers the editor: its playback stops rather than play unseen.
+  useEffect(() => {
+    if (portrait && player.playing) player.pause();
+  }, [portrait, player.playing, player.pause]);
 
   // While playing, the timeline keeps the playhead in view.
   useEffect(() => {
@@ -287,7 +314,8 @@ export default function EpisodeEditor() {
     }
     if (['angle_still', 'angle_video', 'scene_clip_source'].includes(asset.kind)) {
       if (refuseLocked('scene', 'Place scene')) return;
-      const beat = focusBeat ?? ops.beatForDrop(model.beats, at, model.duration);
+      // From Existing work an angle goes into the beat its plan names (asset.beat).
+      const beat = asset.beat ?? focusBeat ?? ops.beatForDrop(model.beats, at, model.duration);
       const body = { beat_number: beat, source_kind: asset.source_kind, source_id: asset.id };
       if (asset.source_kind === 'angle_still') body.duration_ms = 5000;
       editor.run(ops.placeSceneClip(body, `Place ${asset.label} in beat ${beat}`));
@@ -528,7 +556,7 @@ export default function EpisodeEditor() {
       else if (e.key === 'ArrowRight') { e.preventDefault(); seek(playhead + (e.shiftKey ? 1000 : FRAME_MS)); }
       else if (e.key === 'Home') { e.preventDefault(); seek(0); }
       else if (e.key === 'End') { e.preventDefault(); seek(model?.duration || 0); }
-      else if (e.key === 'Escape') { setSelectedId(null); setMenuOpen(false); }
+      else if (e.key === 'Escape') { setSelectedId(null); setMenuOpen(false); setDrawer(null); }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -559,7 +587,18 @@ export default function EpisodeEditor() {
   const height = bodyRef.current?.clientHeight || 800;
 
   return (
-    <div className="tle" style={{ '--tle-left': `${leftW}px`, '--tle-right': `${rightW}px`, '--tle-upper': upper }}>
+    <div className={`tle${phone ? ' is-phone' : ''}${portrait ? ' is-phone-portrait' : ''}${phone && drawer ? ` has-drawer-${drawer}` : ''}`}
+      style={{ '--tle-left': `${leftW}px`, '--tle-right': `${rightW}px`, '--tle-upper': upper }}>
+      {portrait && (
+        <div className="tle-rotate" role="dialog" aria-modal="true" aria-labelledby="tle-rotate-title" data-testid="editor-rotate">
+          <div className="tle-rotate-card">
+            <span className="tle-rotate-icon" aria-hidden="true"><Smartphone size={44} /><RotateCw size={22} /></span>
+            <h1 id="tle-rotate-title">Turn your phone sideways</h1>
+            <p>The editor works in landscape on a phone, so the preview and the timeline fit side by side with room to edit. Nothing is lost while you turn it.</p>
+            <Link to={`/episodes/${episodeId}?tab=edit`} className="tle-rotate-back">← Back to the episode</Link>
+          </div>
+        </div>
+      )}
       <header className="tle-top">
         <nav className="tle-crumbs" aria-label="Breadcrumb">
           <Link to={`/episodes/${episodeId}?tab=edit`} className="tle-icon-btn" aria-label="Back to the episode" title="Back to the episode's Edit pill"><ArrowLeft size={18} /></Link>
@@ -570,6 +609,14 @@ export default function EpisodeEditor() {
           <span className="tle-crumb-here" aria-current="page">Editor</span>
         </nav>
         <div className="tle-top-actions">
+          {phone && (
+            <>
+              <button type="button" className={`tle-btn tle-btn-square${drawer === 'media' ? ' is-on' : ''}`} onClick={() => toggleDrawer('media')}
+                aria-pressed={drawer === 'media'} aria-label="Media panel" title="Media"><PanelLeft size={16} aria-hidden="true" /></button>
+              <button type="button" className={`tle-btn tle-btn-square${drawer === 'inspector' ? ' is-on' : ''}`} onClick={() => toggleDrawer('inspector')}
+                aria-pressed={drawer === 'inspector'} aria-label="Inspector" title="Inspector"><PanelRight size={16} aria-hidden="true" /></button>
+            </>
+          )}
           <button type="button" className="tle-btn" onClick={saveDraft} disabled={!editable} title="Save the edit as a named draft you can restore"><Save size={16} aria-hidden="true" /> Save Draft</button>
           <button type="button" className="tle-btn" disabled aria-disabled="true" title={PENDING.render} aria-label={`Preview Render (${PENDING.render})`}><MonitorPlay size={16} aria-hidden="true" /> Preview Render</button>
           <button type="button" className="tle-btn tle-btn-primary" disabled aria-disabled="true" title={PENDING.render} aria-label={`Export Video (${PENDING.render})`}><Upload size={16} aria-hidden="true" /> Export Video</button>
@@ -624,7 +671,7 @@ export default function EpisodeEditor() {
       <div className="tle-body" ref={bodyRef}>
         <div className="tle-upper">
           <AssetBrowser episodeId={episodeId} rawClips={{ ...rawClips, error: messageOf(rawClips.error) }} sceneSets={{ ...sceneSets, error: messageOf(sceneSets.error) }}
-            takes={{ ...takes, error: messageOf(takes.error) }} focusBeat={focusBeat}
+            takes={{ ...takes, error: messageOf(takes.error) }} sources={{ ...sources, error: messageOf(sources.error) }} placedAngles={placedAngles} focusBeat={focusBeat}
             editable={editable} onPlace={(asset) => placeAsset(asset, playhead)} onDragAsset={setDraggingAsset} />
           <div className="tle-split-v" role="separator" aria-orientation="vertical" aria-label="Resize the media panel" onPointerDown={(e) => dragLeft(e, { axis: 'x' })} onDoubleClick={resetLeft} />
           <EditorPreview frame={frame} duration={model.duration} selectedId={selectedId} onSelect={setSelectedId} onPrevEdit={prevEdit} onNextEdit={nextEdit} hidden={hidden}
