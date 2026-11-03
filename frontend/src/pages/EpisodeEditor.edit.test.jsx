@@ -45,12 +45,13 @@ const refuse = (status, code, error) => Promise.reject(Object.assign(new Error(c
 const PRIME_CLIP = { id: 'r1', performer: 'justawoman', label: 'Prime take', url_raw: 'https://cdn/r1.mp4', duration_seconds: 6, beat_number: 1 };
 const LALA_CLIP = { id: 'r2', performer: 'lala', label: 'Lala twirl', url_raw: 'https://cdn/r2.mp4', url_cutout: 'https://cdn/r2-cut.webm', key_status: 'done', duration_seconds: 4, beat_number: 1 };
 
-function setupServer({ refuseNext = null, c1b = true, edit = editWith(), clips = [PRIME_CLIP] } = {}) {
-  server = { rev: 7, edit, writes: [], refuseNext, c1b, clips };
+function setupServer({ refuseNext = null, c1b = true, edit = editWith(), clips = [PRIME_CLIP], sources = null } = {}) {
+  server = { rev: 7, edit, writes: [], refuseNext, c1b, clips, sources };
   vi.mocked(api.get).mockImplementation((url) => {
     if (url === `/api/v1/episodes/${EP}`) return Promise.resolve({ data: { data: { id: EP, episode_number: 3, title: 'A New Alliance' } } });
     if (url === BASE) return ok({ edit_revision: String(server.rev), c1b: server.c1b, rows: {}, edit: server.edit });
     if (url === `${BASE}/findings`) return ok({ ready: true, counts: { blocking: 0, warning: 0 }, findings: [] });
+    if (url === `${BASE}/sources`) return server.sources ? ok(server.sources) : refuse(404, 'NOT_FOUND', 'not found');
     if (url === `${BASE}/versions`) return ok([{ id: 'v1', name: 'Before the split', edit_revision: '5', created_at: '2026-11-02T10:00:00Z' }]);
     if (url === `/api/v1/episode-clips/${EP}`) return ok(server.clips);
     if (url === `/api/v1/episodes/${EP}/scene-sets`) return ok([{ id: 'set1', name: 'Closet', angles: [{ id: 'a1', angle_label: 'Wide', still_image_url: 'https://cdn/a1.jpg' }] }]);
@@ -433,6 +434,189 @@ describe('EpisodeEditor: reliability (audit 2026-11-03)', () => {
     await new Promise((r) => setTimeout(r, 20));
     expect(server.writes).toHaveLength(0);
     expect(within(inspector()).getByLabelText('Position X').value).toBe('1300');
+  });
+});
+
+// Prepare From Existing Work, B1 (2026-11-03): what the episode already has, beat by beat.
+describe('EpisodeEditor: Existing work (B1)', () => {
+  const SOURCES = {
+    plan: [
+      { id: 'p1', beat_number: 1, sort_order: 0, chosen_by_user: true, locked: false, scene_set: { id: 'set1', name: 'Closet' }, linked: true,
+        angle_label: 'WIDE', angle: { id: 'a1', label: 'WIDE', still_image_url: 'https://cdn/a1.jpg', video_clip_url: null }, status: 'ready', text: 'Ready to place', place: { still: true, video: false } },
+      { id: 'p3', beat_number: 3, sort_order: 0, chosen_by_user: false, locked: false, scene_set: { id: 'set2', name: 'Cafe' }, linked: false,
+        angle_label: 'WIDE', angle: { id: 'a9', label: 'WIDE', still_image_url: 'https://cdn/a9.jpg', video_clip_url: null }, status: 'not_linked',
+        text: "This set isn't linked to the episode, so the editor can't place it. Link it on the episode's Overview.", place: null },
+      { id: 'p4', beat_number: 4, sort_order: 0, chosen_by_user: true, locked: false, scene_set: { id: 'set1', name: 'Closet' }, linked: true,
+        angle_label: 'TOP', angle: null, status: 'missing', text: 'Top angle missing', place: null },
+    ],
+    summary: { plan_rows: 3, beats_planned: 3, ready: 1, not_linked: 1, missing: 1, no_set: 0, set_removed: 0, set_picture: 0 },
+  };
+  const WHOLE = { id: 'r7', performer: 'justawoman', label: 'Whole episode take', url_raw: 'https://cdn/r7.mp4', duration_seconds: 300, beat_number: null,
+    beat_marks: [{ beat: 3, t: 41 }, { beat: 4, t: 67 }] };
+  const LOOSE = { id: 'r8', performer: 'lala', label: 'Loose clip', url_raw: 'https://cdn/r8.mp4', duration_seconds: 5, beat_number: null };
+  const STARRED = { ...PRIME_CLIP, id: 'r9', label: 'Best take', is_favorite: true, beat_number: 3 };
+  const work = () => screen.getByTestId('existing-work');
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    localStorage.clear();
+    auth.user = { id: 'u1', groups: ['admin'] };
+    vi.spyOn(window.HTMLMediaElement.prototype, 'play').mockImplementation(function play() { return Promise.resolve(); });
+    vi.spyOn(window.HTMLMediaElement.prototype, 'pause').mockImplementation(function pause() {});
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+  });
+  afterEach(() => vi.restoreAllMocks());
+
+  test('the media panel points to the scene plan; the tab lists each beat with its plan, its footage and why something cannot be placed', async () => {
+    setupServer({ sources: SOURCES, clips: [PRIME_CLIP, WHOLE, LOOSE, STARRED] });
+    renderAt();
+    await opened();
+    const media = screen.getByRole('region', { name: 'Media' });
+    fireEvent.click(await within(media).findByRole('button', { name: 'See Existing work' }));
+    expect(within(media).getByRole('tab', { name: 'Existing work' }).getAttribute('aria-selected')).toBe('true');
+    // Six tabs are wider than the panel: the row slides sideways (useSideScroll).
+    expect(within(media).getByTestId('media-tabs').className).toMatch(/\bside-scroll\b/);
+    expect(within(work()).getByLabelText('Scene plan summary').textContent).toMatch(/3 of 14 beats planned.*1 ready.*1 set not linked.*1 missing.*4 clips \(1 with no beat\)/);
+    const beat1 = within(work()).getByRole('region', { name: /^Beat 1:/ });
+    expect(beat1.textContent).toMatch(/Closet · WIDE/);
+    expect(beat1.textContent).toMatch(/On the edit/); // c1 is angle a1 in beat 1
+    expect(beat1.textContent).toMatch(/Chosen by you/);
+    const beat3 = within(work()).getByRole('region', { name: /^Beat 3:/ });
+    expect(beat3.textContent).toMatch(/Set not linked/);
+    expect(beat3.textContent).toMatch(/isn't linked to the episode/);
+    expect(beat3.textContent).toMatch(/Suggested by the planner/);
+    expect(within(beat3).queryByRole('button', { name: /Place Cafe/ })).toBeNull();
+    // The whole-episode take shows in the beats it marks, with the mark; the ★ take is first.
+    expect(beat3.textContent).toMatch(/Whole episode take.*marked at 00:41/);
+    expect(within(beat3).getByLabelText('Your pick')).toBeTruthy();
+    expect(beat3.textContent.indexOf('Best take')).toBeLessThan(beat3.textContent.indexOf('Whole episode take'));
+    expect(within(work()).getByRole('region', { name: /^Beat 4:/ }).textContent).toMatch(/Top angle missing/);
+    expect(within(work()).getByRole('region', { name: /^Beat 2:/ }).textContent).toMatch(/No scene planned for this beat/);
+    expect(within(work()).getByRole('region', { name: 'Clips not assigned to a beat' }).textContent).toMatch(/Loose clip/);
+    expect(server.writes).toHaveLength(0);
+  });
+
+  test("a ready planned angle is placed into its own beat with its +, whatever the playhead or Beat Focus", async () => {
+    setupServer({ sources: { ...SOURCES, plan: [{ ...SOURCES.plan[0], id: 'p6', beat_number: 6 }] } });
+    renderAt();
+    await opened();
+    fireEvent.click(within(screen.getByRole('region', { name: 'Media' })).getByRole('tab', { name: 'Existing work' }));
+    fireEvent.click(await within(work()).findByRole('button', { name: 'Place Closet · WIDE (still)' }));
+    await waitFor(() => expect(server.writes).toHaveLength(1));
+    expect(lastWrite()).toMatchObject({ method: 'post', path: '/scene-clips', body: { beat_number: 6, source_kind: 'angle_still', source_id: 'a1', duration_ms: 5000 } });
+  });
+
+  test('Beat Focus no longer hides a clip with no beat: it is listed and says "No beat"; a tile says ★ and beat marks', async () => {
+    setupServer({ clips: [PRIME_CLIP, WHOLE, LOOSE, { ...STARRED, beat_number: 9 }] });
+    renderAt();
+    await opened();
+    fireEvent.click(screen.getAllByRole('button', { name: /^Beat 1:/ })[0]);
+    const media = screen.getByRole('region', { name: 'Media' });
+    expect(media.textContent).toMatch(/Loose clip/);
+    expect(media.textContent).toMatch(/Whole episode take/);
+    expect(media.textContent).toMatch(/Prime · No beat · 2 beat marks/);
+    expect(media.textContent).not.toMatch(/Best take/); // beat 9, not this beat
+  });
+
+  test('when the scene plan cannot be read, the tab says so and the rest of the editor works', async () => {
+    setupServer();
+    renderAt();
+    await opened();
+    fireEvent.click(within(screen.getByRole('region', { name: 'Media' })).getByRole('tab', { name: 'Existing work' }));
+    expect((await within(work()).findByRole('alert')).textContent).toMatch(/scene plan could not be read/);
+    expect(screen.getByText('Edit revision 7')).toBeTruthy();
+  });
+});
+
+// On a phone (Evoni, 2026-11-03): held upright, turn it; sideways, the compact editor with drawers.
+describe('EpisodeEditor: on a phone', () => {
+  let portrait;
+  let listeners;
+  const media = () => {
+    listeners = [];
+    window.matchMedia = vi.fn((q) => ({
+      get matches() { return q === '(pointer: coarse)' ? true : q === '(orientation: portrait)' ? portrait : false; },
+      addEventListener: (_e, fn) => listeners.push(fn),
+      removeEventListener: () => {},
+    }));
+    Object.defineProperty(window, 'screen', { configurable: true, value: { width: 390, height: 844 } });
+  };
+  const turn = (upright) => { portrait = upright; act(() => { for (const fn of listeners) fn(); }); };
+  let savedMatch;
+  let savedScreen;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    localStorage.clear();
+    auth.user = { id: 'u1', groups: ['admin'] };
+    savedMatch = window.matchMedia;
+    savedScreen = Object.getOwnPropertyDescriptor(window, 'screen');
+    portrait = true;
+    media();
+    vi.spyOn(window.HTMLMediaElement.prototype, 'play').mockImplementation(function play() { return Promise.resolve(); });
+    vi.spyOn(window.HTMLMediaElement.prototype, 'pause').mockImplementation(function pause() {});
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+  });
+  afterEach(() => {
+    window.matchMedia = savedMatch;
+    if (savedScreen) Object.defineProperty(window, 'screen', savedScreen);
+    vi.restoreAllMocks();
+  });
+
+  test('held upright it asks to be turned (the editor stays loaded); turned sideways the editor shows, timeline and all', async () => {
+    setupServer();
+    renderAt();
+    await opened();
+    const rotate = screen.getByTestId('editor-rotate');
+    expect(within(rotate).getByRole('heading', { name: 'Turn your phone sideways' })).toBeTruthy();
+    expect(within(rotate).getByRole('link', { name: /Back to the episode/ }).getAttribute('href')).toBe(`/episodes/${EP}?tab=edit`);
+    expect(document.querySelector('.tle').className).toMatch(/\bis-phone-portrait\b/);
+    turn(false);
+    expect(screen.queryByTestId('editor-rotate')).toBeNull();
+    expect(document.querySelector('.tle').className).toMatch(/\bis-phone\b/);
+    expect(document.querySelector('.tle').className).not.toMatch(/is-phone-portrait/);
+    expect(screen.getByTestId('editor-timeline')).toBeTruthy();
+    expect(server.writes).toHaveLength(0);
+  });
+
+  test('sideways, the media panel and the inspector open as drawers, one at a time; Escape closes them', async () => {
+    portrait = false;
+    setupServer();
+    renderAt();
+    await opened();
+    const tle = () => document.querySelector('.tle').className;
+    fireEvent.click(screen.getByRole('button', { name: 'Media panel' }));
+    expect(tle()).toMatch(/has-drawer-media/);
+    expect(screen.getByRole('button', { name: 'Media panel' }).getAttribute('aria-pressed')).toBe('true');
+    fireEvent.click(screen.getByRole('button', { name: 'Inspector' }));
+    expect(tle()).toMatch(/has-drawer-inspector/);
+    expect(tle()).not.toMatch(/has-drawer-media/);
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(tle()).not.toMatch(/has-drawer/);
+  });
+
+  test('turning the phone upright while it plays stops the playback', async () => {
+    portrait = false;
+    setupServer();
+    renderAt();
+    await opened();
+    const play = () => document.querySelector('.tle-play');
+    fireEvent.click(play());
+    await waitFor(() => expect(play().getAttribute('aria-label')).toBe('Pause'));
+    turn(true);
+    await waitFor(() => expect(play().getAttribute('aria-label')).toBe('Play'));
+  });
+
+  test('on a desktop there is no rotate card and no drawer buttons', async () => {
+    window.matchMedia = vi.fn(() => ({ matches: false, addEventListener: () => {}, removeEventListener: () => {} }));
+    setupServer();
+    renderAt();
+    await opened();
+    expect(screen.queryByTestId('editor-rotate')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Media panel' })).toBeNull();
+    expect(document.querySelector('.tle').className).toBe('tle');
   });
 });
 

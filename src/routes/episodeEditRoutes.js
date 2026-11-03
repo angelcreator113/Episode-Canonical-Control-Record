@@ -81,6 +81,9 @@ router.get('/', requireAuth, handle('read the edit', (req) => edit.loadEdit(s(),
 router.get('/layout', requireAuth, handle('layout', (req) => edit.layoutAtTime(s(), { episodeId: req.params.episodeId, t: req.query.t })));
 router.get('/mix', requireAuth, handle('mix plan', (req) => edit.mixPlanOf(s(), { episodeId: req.params.episodeId })));
 router.get('/findings', requireAuth, handle('findings', (req) => edit.reviewReadiness(s(), { episodeId: req.params.episodeId })));
+// Prepare From Existing Work, B1 (2026-11-03): the episode's scene plan, each beat's angle and
+// whether the editor can place it. Reads only (services/editSourcesService).
+router.get('/sources', requireAuth, handle('existing work', (req) => require('../services/editSourcesService').existingWork(s(), { episodeId: req.params.episodeId })));
 router.get('/versions', requireAuth, handle('list versions', (req) => edit.listVersions(s(), { episodeId: req.params.episodeId })));
 router.get('/versions/:versionId', requireAuth, handle('read version', (req) => edit.getVersion(s(), { episodeId: req.params.episodeId, versionId: req.params.versionId })));
 

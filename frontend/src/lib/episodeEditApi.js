@@ -61,6 +61,12 @@ export const episodeEditApi = {
     if (!d || !Array.isArray(d.findings)) throw new Error('unrecognised findings response');
     return d;
   }),
+  /** The scene plan as the editor can use it (B1): { plan: [{ beat_number, scene_set, angle, status, text, place }], summary }. */
+  sources: (episodeId) => api.get(`${editBase(episodeId)}/sources`).then((r) => {
+    const d = dataOf(r);
+    if (!d || !Array.isArray(d.plan)) throw new Error('unrecognised existing-work response');
+    return d;
+  }),
   /** The episode's raw clips (Lala, guests, Prime), each with url_raw, url_cutout, thumbnail_url. */
   rawClips: (episodeId) => api.get(`/api/v1/episode-clips/${enc(episodeId)}`).then((r) => (Array.isArray(r?.data?.data) ? r.data.data : [])),
   /** The scene sets linked to the episode, each with its angles. */
