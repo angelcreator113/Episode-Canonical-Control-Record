@@ -97,6 +97,23 @@ function scenesToRemove(existing, keptIds, removedIds, sentCount, confirmRemoveA
   return removed;
 }
 
+/**
+ * The legacy Timeline Editor's writes (POST /episodes/:id/save, PUT
+ * /episodes/:id/timeline-data) are closed (Evoni, 2026-11-03): the editor that
+ * sent them was deleted in #3683 and no page calls them, so a stray request
+ * must not replace an episode's scenes or timeline row. They answer 410 unless
+ * the server sets LEGACY_TIMELINE_WRITES=on, and even then only for an admin
+ * (the routes add authorize(['ADMIN']) after this).
+ */
+function legacyTimelineWritesOpen(req, res, next) {
+  if (process.env.LEGACY_TIMELINE_WRITES === 'on') return next();
+  return res.status(410).json({
+    error: 'The old Timeline Editor was retired, and its save is closed. Edit the episode in the episode editor; nothing was changed.',
+    code: 'LEGACY_TIMELINE_RETIRED',
+  });
+}
+
 module.exports = {
+  legacyTimelineWritesOpen,
   TIMELINE_FIELDS, stableJson, timelineBasis, timelineHasContent, checkTimelineWrite, scenesToRemove, SaveConflict,
 };

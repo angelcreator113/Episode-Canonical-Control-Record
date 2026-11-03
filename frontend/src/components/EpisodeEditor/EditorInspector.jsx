@@ -14,12 +14,38 @@
  * and opacity; Prime's opacity; and on the beat card the beat's visual mode
  * and its timed mode changes.
  */
-import React, { useEffect, useRef, useState } from 'react';
+import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { Gamepad2, Clapperboard, Lock, X } from 'lucide-react';
 import { DEFAULT_LAYOUT } from '../../lib/editTimeline';
 import { timecode, beatLabel, findingText } from '../../lib/editorModel';
 
 const TABS = [['clip', 'Clip'], ['audio', 'Audio'], ['effects', 'Effects']];
+
+/**
+ * True while a change is being saved (2026-11-03). The fields stay on screen
+ * and read only, so the one being typed in keeps focus; swapping them for
+ * plain text dropped focus to the page on every save.
+ */
+const SavingContext = createContext(false);
+
+/**
+ * Keeps a field's text honest after a commit: once the save is over (or never
+ * started, because it was refused before sending) the field shows what is
+ * stored, so a refused or snapped value never sits there looking saved, and
+ * the same value can be sent again.
+ */
+function useSettle(value, toText, setText, sent) {
+  const saving = useContext(SavingContext);
+  const pending = useRef(false);
+  useEffect(() => {
+    if (pending.current && !saving) {
+      pending.current = false;
+      sent.current = null;
+      setText(toText(value));
+    }
+  });
+  return { saving, mark: () => { pending.current = true; } };
+}
 
 function Field({ label, value, note }) {
   return (
@@ -31,12 +57,16 @@ function Field({ label, value, note }) {
 }
 
 /** A stored number, saved on blur or Enter; Escape puts the stored value back. */
+const numText = (v) => (v == null ? '' : String(v));
+
 function NumberField({ label, value, unit, min, max, step = 1, onCommit, disabled, note }) {
-  const [text, setText] = useState(value == null ? '' : String(value));
+  const [text, setText] = useState(numText(value));
   // What this field last saved: Enter then leaving the field saves once, not twice.
   const sent = useRef(null);
-  useEffect(() => { setText(value == null ? '' : String(value)); sent.current = null; }, [value]);
+  useEffect(() => { setText(numText(value)); sent.current = null; }, [value]);
+  const { saving, mark } = useSettle(value, numText, setText, sent);
   const commit = () => {
+    if (saving) return;
     if (text === (value == null ? '' : String(value)) || text === sent.current) return;
     const n = Number(text);
     if (text.trim() === '' || !Number.isFinite(n) || (min != null && n < min) || (max != null && n > max)) {
@@ -44,6 +74,7 @@ function NumberField({ label, value, unit, min, max, step = 1, onCommit, disable
       return;
     }
     sent.current = text;
+    mark();
     onCommit(n);
   };
   const id = `f-${label.replace(/\W+/g, '-').toLowerCase()}`;
@@ -51,7 +82,7 @@ function NumberField({ label, value, unit, min, max, step = 1, onCommit, disable
     <div className="tle-field">
       <label className="tle-field-label" htmlFor={id}>{label}{unit ? <span className="tle-muted"> ({unit})</span> : null}</label>
       <input id={id} className="tle-input" type="number" inputMode="decimal" value={text} min={min} max={max} step={step} disabled={disabled}
-        aria-label={label} title={note}
+        readOnly={saving} aria-busy={saving || undefined} aria-label={label} title={note}
         onChange={(e) => setText(e.target.value)} onBlur={commit}
         onKeyDown={(e) => {
           if (e.key === 'Enter') { e.preventDefault(); commit(); } else if (e.key === 'Escape') setText(value == null ? '' : String(value));
@@ -61,22 +92,28 @@ function NumberField({ label, value, unit, min, max, step = 1, onCommit, disable
 }
 
 /** Stored text, saved on blur or Ctrl+Enter; Escape puts the stored text back. An empty text is not saved. */
+const strText = (v) => v ?? '';
+
 function TextField({ label, value, max, onCommit, disabled }) {
   const [text, setText] = useState(value ?? '');
   const sent = useRef(null);
   useEffect(() => { setText(value ?? ''); sent.current = null; }, [value]);
+  const { saving, mark } = useSettle(value, strText, setText, sent);
   const commit = () => {
+    if (saving) return;
     const t = text.trim();
     if (t === (value ?? '') || t === sent.current) return;
     if (!t) { setText(value ?? ''); return; }
     sent.current = t;
+    mark();
     onCommit(t);
   };
   const id = `f-${label.replace(/\W+/g, '-').toLowerCase()}`;
   return (
     <div className="tle-field tle-field-wide">
       <label className="tle-field-label" htmlFor={id}>{label}</label>
-      <textarea id={id} className="tle-input tle-textarea" rows={2} maxLength={max} value={text} disabled={disabled} aria-label={label}
+      <textarea id={id} className="tle-input tle-textarea" rows={2} maxLength={max} value={text} disabled={disabled}
+        readOnly={saving} aria-busy={saving || undefined} aria-label={label}
         onChange={(e) => setText(e.target.value)} onBlur={commit}
         onKeyDown={(e) => {
           if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); commit(); } else if (e.key === 'Escape') setText(value ?? '');
@@ -404,7 +441,7 @@ function BeatCard({ beat, readiness, editable, act, beatPlan, pipHidden, modeMar
 }
 
 export default function EditorInspector({
-  block, beat, readiness, editable = false, act = {}, liveLayout, beatPlan, pipHidden, modeMarks, playhead, c1b,
+  block, beat, readiness, editable = false, saving = false, act = {}, liveLayout, beatPlan, pipHidden, modeMarks, playhead, c1b,
 }) {
   const [tab, setTab] = useState('clip');
   const stored = block?.kind === 'segment' ? (block.row?.layout || block.layout || null)
@@ -414,7 +451,8 @@ export default function EditorInspector({
     ? { ...liveLayout.layout, ...(stored?.opacity != null ? { opacity: stored.opacity } : {}) }
     : stored;
   return (
-    <section className="tle-panel tle-inspector" aria-label="Inspector">
+    <SavingContext.Provider value={saving}>
+    <section className="tle-panel tle-inspector" aria-label="Inspector" aria-busy={saving || undefined}>
       <div className="tle-tabs" role="tablist">
         {TABS.map(([k, label]) => (
           <button key={k} type="button" role="tab" aria-selected={tab === k} className={`tle-tab${tab === k ? ' is-active' : ''}`} onClick={() => setTab(k)} disabled={!block} aria-disabled={!block}>{label}</button>
@@ -445,5 +483,6 @@ export default function EditorInspector({
         )}
       </div>
     </section>
+    </SavingContext.Provider>
   );
 }

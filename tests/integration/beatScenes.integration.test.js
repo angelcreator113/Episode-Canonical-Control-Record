@@ -69,12 +69,14 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
   const planId = async (ep, b) => (await rows('SELECT id FROM scene_plans WHERE episode_id = :ep AND beat_number = :b AND deleted_at IS NULL', { ep, b }))[0].id;
 
   beforeAll(async () => {
+    // The legacy save is closed unless the server opens it, and then only for an admin (audit 2026-11-03, A7).
+    process.env.LEGACY_TIMELINE_WRITES = 'on';
     const qi = sequelize.getQueryInterface();
     for (const m of [junctionMigration, sortOrderMigration, rolesMigration, venueLookMigration, kindMigration, looksMigration, chosenMigration, lookAnglesMigration, planIdMigration]) {
       await m.up(qi, Sequelize);
     }
     token = TokenService.generateTokenPair({
-      id: 'test-user-beat-scenes', email: 'user@beatscenes.dev', name: 'Editor', groups: ['USER', 'EDITOR'], role: 'USER',
+      id: 'test-user-beat-scenes', email: 'user@beatscenes.dev', name: 'Editor', groups: ['ADMIN'], role: 'ADMIN',
     }).accessToken;
     await run(`INSERT INTO shows (id, name, slug, metadata, created_at, updated_at) VALUES (:show, :name, :slug, '{}', NOW(), NOW())`,
       { show, name: `Beat scenes ${show.slice(0, 8)}`, slug: `beat-scenes-${show.slice(0, 8)}` });

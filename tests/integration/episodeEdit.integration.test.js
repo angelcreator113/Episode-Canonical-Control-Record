@@ -788,4 +788,69 @@ const SCRIPT = [
     await expectRefusal(svc.loadEdit(sequelize, { episodeId: w.ep }), 404);
     await expectRefusal(svc.setBeatMode(sequelize, { episodeId: w.ep, editRevision: '0', userId: USER, beatNumber: 1, primeMode: 'required' }), 404);
   });
+
+  // ── The editor audit of 2026-11-03 (Part A) ─────────────────────────────
+
+  test('A2 restore after a reorder: the saved order comes back (the place index no longer refuses it)', async () => {
+    const w = await world();
+    for (const ms of [3000, 4000, 5000]) {
+      await svc.placeSceneClip(sequelize, await as(w.ep, { body: { beat_number: 1, source_kind: 'angle_still', source_id: w.a.still, duration_ms: ms } }));
+    }
+    const order = async () => (await svc.loadEdit(sequelize, { episodeId: w.ep })).edit.sceneClips.filter((c) => c.beat_number === 1)
+      .sort((a, b) => a.position - b.position).map((c) => [c.id, c.position]);
+    const saved = await order();
+    const v = await svc.createVersion(sequelize, await as(w.ep, { name: 'Order A' }));
+    await svc.reorderSceneClip(sequelize, await as(w.ep, { clipId: saved[2][0], body: { index: 0 } }));
+    await svc.reorderSceneClip(sequelize, await as(w.ep, { clipId: saved[0][0], body: { index: 2 } }));
+    expect((await order()).map(([id]) => id)).not.toEqual(saved.map(([id]) => id));
+    await svc.restoreVersion(sequelize, await as(w.ep, { versionId: v.version_id }));
+    expect(await order()).toEqual(saved);
+  });
+
+  test('A1/A3 a deleted clip is put back by index after the beat was reordered: never POSITION_TAKEN', async () => {
+    const w = await world();
+    for (const ms of [3000, 4000, 5000]) {
+      await svc.placeSceneClip(sequelize, await as(w.ep, { body: { beat_number: 2, source_kind: 'angle_still', source_id: w.a.still, duration_ms: ms } }));
+    }
+    const ids = async () => (await svc.loadEdit(sequelize, { episodeId: w.ep })).edit.sceneClips.filter((c) => c.beat_number === 2)
+      .sort((a, b) => a.position - b.position);
+    const [a, b, c] = await ids();
+    await svc.removeRow(sequelize, await as(w.ep, { what: 'scene_clip', id: b.id }));
+    await svc.reorderSceneClip(sequelize, await as(w.ep, { clipId: c.id, body: { index: 0 } }));
+    await svc.reorderSceneClip(sequelize, await as(w.ep, { clipId: c.id, body: { index: 1 } }));
+    // The old way (its stored position, 1) is taken now.
+    await expectRefusal(svc.placeSceneClip(sequelize, await as(w.ep, { body: { beat_number: 2, source_kind: 'angle_still', source_id: w.a.still, duration_ms: 4000, position: 1 } })), 409, 'POSITION_TAKEN');
+    const back = await svc.placeSceneClip(sequelize, await as(w.ep, { body: { beat_number: 2, source_kind: 'angle_still', source_id: w.a.still, duration_ms: 4000, index: 1 } }));
+    const now = await ids();
+    expect(now.map((x) => x.id)).toEqual([a.id, back.scene_clip_id, c.id]);
+    expect(now.map((x) => x.position)).toEqual([0, 1, 2]);
+    // An index past the end goes last.
+    const last = await svc.placeSceneClip(sequelize, await as(w.ep, { body: { beat_number: 2, source_kind: 'angle_still', source_id: w.a.still, duration_ms: 1000, index: 99 } }));
+    expect((await ids()).map((x) => x.id).at(-1)).toBe(last.scene_clip_id);
+  });
+
+  test('A3 a stretch placed with no_commentary has none, and keeps her mute and gain', async () => {
+    const w = await world();
+    await fillBeats(w, 5000);
+    const { segment_id: id } = await place(w, { source_out_ms: 6000, no_commentary: true, audio_muted: true, audio_gain_db: -4, audio_fade_in_ms: 200 });
+    const seg = (await svc.loadEdit(sequelize, { episodeId: w.ep })).edit.segments.find((x) => x.id === id);
+    expect(seg).toMatchObject({ audio_in_ms: null, audio_out_ms: null, audio_muted: true, audio_gain_db: -4, audio_fade_in_ms: 0, audio_fade_out_ms: 0 });
+    const plain = await place(w, { source_out_ms: 6000 });
+    const seg2 = (await svc.loadEdit(sequelize, { episodeId: w.ep })).edit.segments.find((x) => x.id === plain.segment_id);
+    expect(seg2).toMatchObject({ audio_in_ms: 0, audio_out_ms: 6000 });
+  });
+
+  test('A5 a read sees one committed state: a write landing mid-read is either wholly in it or wholly out', async () => {
+    const w = await world();
+    await fillBeats(w, 5000);
+    // Hold a write's transaction open with the beat changed, then read while it commits.
+    const before = await svc.loadEdit(sequelize, { episodeId: w.ep });
+    const reading = svc.loadEdit(sequelize, { episodeId: w.ep });
+    await svc.setBeatMode(sequelize, await as(w.ep, { beatNumber: 4, primeMode: 'gameplay_only' }));
+    const after = await svc.loadEdit(sequelize, { episodeId: w.ep });
+    const mid = await reading;
+    const mode = (r) => r.edit.beatModes?.[4] ?? null;
+    if (mid.edit_revision === before.edit_revision) expect(mode(mid)).toEqual(mode(before));
+    else expect([mid.edit_revision, mode(mid)]).toEqual([after.edit_revision, mode(after)]);
+  });
 });

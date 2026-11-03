@@ -93,6 +93,13 @@ export default function EditorTimeline({
     if (mode === 'move') onMoveBlock?.(block, block.start + delta);
     else onTrimBlock?.(block, mode, mode === 'start' ? block.start + delta : block.end + delta);
   };
+  // A gesture the browser or system takes over (a touch turned into a scroll, a lost capture)
+  // ends with no change: the block goes back to where it is stored.
+  const cancelDrag = (e) => {
+    if (!drag) return;
+    e?.stopPropagation?.();
+    setDrag(null);
+  };
   const shown = (b) => {
     if (!drag || drag.id !== b.id) return { left: at(b.start), width: Math.max(4, at(b.end) - at(b.start)) };
     if (drag.mode === 'move') return { left: at(b.start) + drag.dx, width: Math.max(4, at(b.end) - at(b.start)) };
@@ -175,7 +182,7 @@ export default function EditorTimeline({
                     onClick={(e) => { e.stopPropagation(); if (justDragged.current) { justDragged.current = false; return; } onSelect(b.id); }}
                     onPointerDown={(e) => startDrag(e, b, lane.key, 'move')}
                     onPointerMove={moveDrag}
-                    onPointerUp={endDrag}
+                    onPointerUp={endDrag} onPointerCancel={cancelDrag} onLostPointerCapture={cancelDrag}
                     aria-pressed={selected}
                     aria-label={`${lane.name}: ${b.label}, ${timecode(b.start)} to ${timecode(b.end)}`}
                     title={`${b.label} · ${timecode(b.start)}–${timecode(b.end)}${b.muted ? ' · muted in the episode' : ''}${b.problem ? ` · will not play (${b.problem})` : ''}${canMove ? ' · drag to move' : ''}`}
@@ -185,7 +192,7 @@ export default function EditorTimeline({
                     <span className="tle-block-label">{b.linked && <Link2 size={11} aria-hidden="true" />} {b.label}</span>
                     {edges.map((edge) => (
                       <span key={edge} className={`tle-trim tle-trim-${edge}`} role="presentation" aria-hidden="true" data-testid={`trim-${edge}-${b.id}`}
-                        onPointerDown={(e) => startDrag(e, b, lane.key, edge)} onPointerMove={moveDrag} onPointerUp={endDrag} />
+                        onPointerDown={(e) => startDrag(e, b, lane.key, edge)} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={cancelDrag} onLostPointerCapture={cancelDrag} />
                     ))}
                   </button>
                 );

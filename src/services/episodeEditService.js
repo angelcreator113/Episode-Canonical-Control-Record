@@ -361,8 +361,25 @@ async function voiceTakesFor(sequelize, episodeId, live, t = null) {
   return out;
 }
 
+/**
+ * Runs a read on one snapshot (REPEATABLE READ), so the rows and the
+ * edit_revision it reports belong to the same committed state; inside a
+ * write's transaction it uses that one. Without it a write committing between
+ * two of the read's statements paired new revision numbers with old rows, and
+ * the page's next write passed the revision check over a change it never saw.
+ */
+function snapshotRead(sequelize, t, fn) {
+  if (t) return fn(t);
+  const { Transaction } = require('sequelize');
+  return sequelize.transaction({ isolationLevel: Transaction.ISOLATION_LEVELS.REPEATABLE_READ }, fn);
+}
+
 /** The live edit: { edit_revision, c1b, rows, edit } (with the voice takes it may play). */
 async function loadEdit(sequelize, { episodeId }, t = null) {
+  return snapshotRead(sequelize, t, (tx) => loadEditIn(sequelize, episodeId, tx));
+}
+
+async function loadEditIn(sequelize, episodeId, t) {
   await episodeRow(sequelize, episodeId, t);
   const live = await liveRows(sequelize, episodeId, t);
   const takes = await voiceTakesFor(sequelize, episodeId, live, t);
@@ -555,7 +572,12 @@ function sceneRange(kind, sourceDuration, body, base = null) {
   return { source_in_ms: sin, source_out_ms: sout };
 }
 
-/** Places a scene clip in a beat (at the end of the beat unless a position is given). */
+/**
+ * Places a scene clip in a beat: at the end of the beat, at a free `position`,
+ * or at `index` among the beat's clips (clamped to the end; the others keep
+ * their order and the beat is renumbered). Undo puts a deleted clip back by
+ * index, so a reorder or split since the delete never makes its place "taken".
+ */
 async function placeSceneClip(sequelize, { episodeId, editRevision, userId, batch, body }) {
   const beat = beatOf(body.beat_number);
   const kind = body.source_kind;
@@ -565,8 +587,10 @@ async function placeSceneClip(sequelize, { episodeId, editRevision, userId, batc
     const { source_duration_ms: sourceDuration } = await sceneSource(sequelize, episodeId, kind, body.source_id, t, probed);
     const range = sceneRange(kind, sourceDuration, body);
     const duration = int(body.duration_ms ?? (kind === 'angle_still' ? undefined : range.source_out_ms - range.source_in_ms), 'duration_ms', { min: 1 });
-    let position = body.position == null ? null : int(body.position, 'position', { max: 10000 });
-    if (position == null) {
+    const index = body.index == null ? null : int(body.index, 'index', { max: 10000 });
+    let position = body.position == null || index != null ? null : int(body.position, 'position', { max: 10000 });
+    if (index != null) position = SCRATCH_POSITION * 2;
+    else if (position == null) {
       const last = await one(sequelize, `SELECT COALESCE(max(position) + 1, 0) AS p FROM episode_scene_clips
         WHERE episode_id = :episodeId AND beat_number = :beat AND deleted_at IS NULL`, { episodeId, beat }, t);
       position = Number(last.p);
@@ -580,6 +604,11 @@ async function placeSceneClip(sequelize, { episodeId, editRevision, userId, batc
       episodeId, beat, position, kind, sourceId: body.source_id, sin: range.source_in_ms, sout: range.source_out_ms,
       sdur: sourceDuration, duration, userId,
     }, t);
+    if (index != null) {
+      const order = (await beatClipIds(sequelize, episodeId, beat, t)).filter((id) => id !== row.id);
+      order.splice(Math.min(index, order.length), 0, row.id);
+      await renumberBeat(sequelize, episodeId, beat, order, t);
+    }
     return { scene_clip_id: row.id, source_duration_ms: sourceDuration };
   });
 }
@@ -678,7 +707,7 @@ async function insertSegment(sequelize, episodeId, v, userId, t) {
   return row.id;
 }
 
-/** Places a stretch of Prime's take. The commentary defaults to the whole video range. */
+/** Places a stretch of Prime's take. The commentary defaults to the whole video range (none with no_commentary). */
 async function placeSegment(sequelize, { episodeId, editRevision, userId, batch, body }) {
   const a = anchorOf(body);
   return withEdit(sequelize, { episodeId, editRevision, userId, batch }, async (t) => {
@@ -687,9 +716,13 @@ async function placeSegment(sequelize, { episodeId, editRevision, userId, batch,
     const sin = int(body.source_in_ms ?? 0, 'source_in_ms');
     const sout = int(body.source_out_ms ?? duration, 'source_out_ms');
     if (sout > duration) fail(400, 'BAD_RANGE', `Out must be within the take (0–${duration} ms)`);
-    const ain = body.audio_in_ms == null ? sin : int(body.audio_in_ms, 'audio_in_ms');
-    const aout = body.audio_out_ms == null ? sout : int(body.audio_out_ms, 'audio_out_ms');
+    // no_commentary: this stretch carries none of her voice (a split's outer half, put back or
+    // pasted as it was). Without it the commentary is the whole video range unless given.
+    const none = body.no_commentary === true || body.no_commentary === 'true';
+    const ain = none ? null : body.audio_in_ms == null ? sin : int(body.audio_in_ms, 'audio_in_ms');
+    const aout = none ? null : body.audio_out_ms == null ? sout : int(body.audio_out_ms, 'audio_out_ms');
     const v = { raw_clip_id: body.raw_clip_id, source_in_ms: sin, source_out_ms: sout, ...a, layout: layoutOf(body.layout), audio_in_ms: ain, audio_out_ms: aout, ...audioSettings(body) };
+    if (none) Object.assign(v, { audio_fade_in_ms: 0, audio_fade_out_ms: 0 });
     return { segment_id: await insertSegment(sequelize, episodeId, v, userId, t) };
   });
 }
@@ -1128,6 +1161,11 @@ async function restoreVersion(sequelize, { episodeId, editRevision, userId, batc
       await q(sequelize, `UPDATE ${spec.table} SET deleted_at = NOW(), updated_at = NOW() WHERE episode_id = :episodeId AND ${spec.where}${keep.length ? ' AND id NOT IN (:keep)' : ''}`,
         { episodeId, keep }, t);
     }
+    // The kept scene clips are written back at their saved places. A reorder since the save may
+    // have one of them where another is going, and the place index is checked row by row, so the
+    // live ones step aside first (as renumberBeat does).
+    await q(sequelize, `UPDATE episode_scene_clips SET position = position + ${SCRATCH_POSITION}
+      WHERE episode_id = :episodeId AND deleted_at IS NULL AND position < ${SCRATCH_POSITION}`, { episodeId }, t);
     for (const [key, spec] of Object.entries(spec0)) {
       for (const r of v.snapshot[key] || []) {
         const cols = spec.cols;
@@ -1159,7 +1197,7 @@ async function restoreVersion(sequelize, { episodeId, editRevision, userId, batc
  * finding.
  */
 async function reviewReadiness(sequelize, { episodeId }) {
-  return sequelize.transaction(async (t) => {
+  return snapshotRead(sequelize, null, async (t) => {
     const ep = await episodeRow(sequelize, episodeId, t);
     const live = await liveRows(sequelize, episodeId, t);
     const takes = await voiceTakesFor(sequelize, episodeId, live, t);

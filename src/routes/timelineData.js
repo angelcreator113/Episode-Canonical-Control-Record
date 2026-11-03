@@ -1,7 +1,9 @@
 const express = require('express');
 const router = express.Router();
 const { asyncHandler } = require('../middleware/errorHandler');
-const { requireAuth } = require('../middleware/auth');
+const { requireAuth, authorize } = require('../middleware/auth');
+const { legacyTimelineWritesOpen } = require('../utils/timelineSaveGuard');
+const { validateUUIDParam } = require('../middleware/requestValidation');
 
 /**
  * Timeline Data Routes
@@ -13,34 +15,27 @@ const { requireAuth } = require('../middleware/auth');
 
 // GET /api/v1/episodes/:episodeId/timeline-data
 // Returns timeline data for an episode (creates default if none exists)
-router.get('/:episodeId/timeline-data', requireAuth, asyncHandler(async (req, res) => {
+router.get('/:episodeId/timeline-data', validateUUIDParam('episodeId'), requireAuth, asyncHandler(async (req, res) => {
   const { episodeId } = req.params;
   const { TimelineData } = require('../models');
 
-  let timelineData = await TimelineData.findOne({
+  const timelineData = await TimelineData.findOne({
     where: { episode_id: episodeId }
   });
 
-  // Auto-create default if not found
-  if (!timelineData) {
-    timelineData = await TimelineData.create({
-      episode_id: episodeId,
-      beats: [],
-      markers: [],
-      audio_clips: [],
-      character_clips: []
-    });
-  }
-
-  // `basis`: the fingerprint the Timeline Editor sends back with its next
-  // save, so the save never replaces a timeline it did not load.
+  // A read writes nothing (2026-11-03): with no row it answers the empty
+  // timeline and basis null, instead of creating a row.
   const { timelineBasis } = require('../utils/timelineSaveGuard');
+  if (!timelineData) {
+    return res.json({ id: null, episode_id: episodeId, beats: [], markers: [], audio_clips: [], character_clips: [], keyframes: [], basis: null });
+  }
   res.json({ ...timelineData.toJSON(), basis: timelineBasis(timelineData) });
 }));
 
 // PUT /api/v1/episodes/:episodeId/timeline-data
 // Update timeline data (upsert)
-router.put('/:episodeId/timeline-data', requireAuth, asyncHandler(async (req, res) => {
+// Closed with the old Timeline Editor (2026-11-03): 410 unless LEGACY_TIMELINE_WRITES=on, then admin only.
+router.put('/:episodeId/timeline-data', validateUUIDParam('episodeId'), requireAuth, legacyTimelineWritesOpen, authorize(['ADMIN']), asyncHandler(async (req, res) => {
   const { episodeId } = req.params;
   const { beats, markers, audio_clips, audioClips, character_clips, characterClips, keyframes } = req.body;
   const { TimelineData } = require('../models');
