@@ -1655,17 +1655,47 @@ router.post('/:id/finalize', requireAuth, authorize(['ADMIN']), guardJustAWomanR
 
 // ── POST /:id/cross ─────────────────────────────────────────────────────────
 // Promotes a social profile into a world character — auto-creates RegistryCharacter
-router.post('/:id/cross', requireAuth, authorize(['ADMIN']), guardJustAWomanRecord, async (req, res) => {
-  const db = req.app.locals.db || require('../models');
-  const { crossing_note, registry_id, show_id } = req.body;
-  try {
-    const profile = await db.SocialProfile.findByPk(req.params.id);
-    if (!profile) return res.status(404).json({ error: 'Not found' });
+
+/**
+ * The crossing itself, in one transaction (Task #3209): the profile's
+ * character is made, linked or restored, and the profile marked crossed,
+ * together, or neither happens. Resolves { refused: { status, body } } when
+ * nothing changed, else { profile, registryCharacter, alreadyCrossed,
+ * restored }.
+ */
+async function crossProfile(db, profileId, { crossing_note, registry_id, show_id }) {
+  const { Op } = require('sequelize');
+  return db.sequelize.transaction(async (transaction) => {
+    // Locked, so two Crosses of one profile run one after the other.
+    const profile = await db.SocialProfile.findByPk(profileId, { transaction, lock: transaction.LOCK.UPDATE });
+    if (!profile) return { refused: { status: 404, body: { error: 'Not found' } } };
     // A profile crossed before Cross made characters (finding 6b) has no
-    // character: Cross makes it now. Only a crossed profile with one is done.
+    // character: Cross makes it now. Only a crossed profile with a live
+    // character is done. One whose character was archived reads "No character
+    // yet" (the link skips archived characters) and is crossed again.
     const alreadyCrossed = profile.status === 'crossed';
-    if (alreadyCrossed && await linkedCharacter(db, profile.id)) {
-      return res.status(409).json({ error: 'Already crossed into world.' });
+    let registryCharacter = await linkedCharacter(db, profile.id);
+    if (alreadyCrossed && registryCharacter) {
+      return { refused: { status: 409, body: { error: 'Already crossed into world.' } } };
+    }
+
+    // An archived character linked to this profile comes back. Archiving is a
+    // soft delete that keeps everything written about them, so it is restored,
+    // as the Cast page's Restore does (POST /cast/characters/:id/restore),
+    // rather than replaced by a new one.
+    let restored = false;
+    if (!registryCharacter && db.RegistryCharacter) {
+      const archived = await db.RegistryCharacter.findOne({
+        where: { feed_profile_id: profile.id, deleted_at: { [Op.ne]: null } },
+        paranoid: false,
+        order: [['updated_at', 'DESC']],
+        transaction,
+      });
+      if (archived) {
+        await archived.restore({ transaction });
+        registryCharacter = archived;
+        restored = true;
+      }
     }
 
     // Auto-create registry character from social profile, in the registry
@@ -1675,10 +1705,9 @@ router.post('/:id/cross', requireAuth, authorize(['ADMIN']), guardJustAWomanReco
     // docs/reads/2026-10-06-lalaverse-wiring-map.md). The link is the
     // registry entry's feed_profile_id (ruling C3; utils/registryLink): a
     // profile already linked keeps its character.
-    let registryCharacter = await linkedCharacter(db, profile.id);
     let registryNote = null;
     if (!registryCharacter) {
-      const newest = { order: [['created_at', 'DESC']] };
+      const newest = { order: [['created_at', 'DESC']], transaction };
       // show_id is a UUID column; anything else is ignored, not a 500.
       const showId = typeof show_id === 'string' && /^[0-9a-f-]{36}$/i.test(show_id) ? show_id : null;
       const targetRegistry = !db.CharacterRegistry ? null
@@ -1691,13 +1720,20 @@ router.post('/:id/cross', requireAuth, authorize(['ADMIN']), guardJustAWomanReco
         registryNote = 'No character registry to add this profile to yet.';
       } else {
         const charKey = profile.handle.replace(/^@/, '').toLowerCase().replace(/[^a-z0-9_]/g, '_');
-        // (registry_id, character_key) is unique: a character already under
-        // this key is the same person unless another profile holds it.
-        const existing = await db.RegistryCharacter.findOne({ where: { registry_id: targetRegistry, character_key: charKey } });
+        // (registry_id, character_key) is unique, archived rows included: a
+        // character already under this key, live or archived, is the same
+        // person unless another profile holds it.
+        const existing = await db.RegistryCharacter.findOne({
+          where: { registry_id: targetRegistry, character_key: charKey }, paranoid: false, transaction,
+        });
         if (existing && existing.feed_profile_id && String(existing.feed_profile_id) !== String(profile.id)) {
           registryNote = `The registry already has a character "${charKey}" linked to another profile; none was created.`;
         } else if (existing) {
-          registryCharacter = await existing.update({ feed_profile_id: profile.id });
+          if (existing.isSoftDeleted()) {
+            await existing.restore({ transaction });
+            restored = true;
+          }
+          registryCharacter = await existing.update({ feed_profile_id: profile.id }, { transaction });
         } else registryCharacter = await db.RegistryCharacter.create({
           registry_id: targetRegistry,
           character_key: charKey,
@@ -1708,7 +1744,7 @@ router.post('/:id/cross', requireAuth, authorize(['ADMIN']), guardJustAWomanReco
           selected_name: profile.creator_name || null,
           world: profile.feed_layer === 'lalaverse' ? 'lalaverse' : 'book-1',
           social_presence: true,
-          icon: '\uD83D\uDCF1',
+          icon: '📱',
           role_type: 'pressure',
           status: 'accepted',
           writer_notes: crossedWriterNotes(profile),
@@ -1717,8 +1753,19 @@ router.post('/:id/cross', requireAuth, authorize(['ADMIN']), guardJustAWomanReco
           // Made from the feed (registry_characters has no metadata column, so
           // the old metadata.source was dropped; Evoni, 2026-10-19).
           created_from: 'feed_cross',
-        });
+        }, { transaction });
       }
+    }
+
+    // No character, no crossing: the profile stays as it was and the reason
+    // goes back, so Cross can be tried again once it is resolved.
+    if (!registryCharacter) {
+      return {
+        refused: {
+          status: 422,
+          body: { error: registryNote, registry_note: registryNote, crossed: false, profile, code: 'NO_CHARACTER_CREATED' },
+        },
+      };
     }
 
     await profile.update({
@@ -1726,7 +1773,19 @@ router.post('/:id/cross', requireAuth, authorize(['ADMIN']), guardJustAWomanReco
       world_exists: true,
       crossed_at: new Date(),
       crossing_trigger: crossing_note || profile.crossing_trigger,
-    });
+    }, { transaction });
+
+    return { profile, registryCharacter, alreadyCrossed, restored };
+  });
+}
+
+router.post('/:id/cross', requireAuth, authorize(['ADMIN']), guardJustAWomanRecord, async (req, res) => {
+  const db = req.app.locals.db || require('../models');
+  const { crossing_note } = req.body;
+  try {
+    const crossed = await crossProfile(db, req.params.id, req.body);
+    if (crossed.refused) return res.status(crossed.refused.status).json(crossed.refused.body);
+    const { profile, registryCharacter, alreadyCrossed, restored } = crossed;
 
     // Someone who came from the feed follows Lala, one way (services/pulseFollows;
     // Evoni, 2026-10-19). Never fails the crossing.
@@ -1740,32 +1799,32 @@ router.post('/:id/cross', requireAuth, authorize(['ADMIN']), guardJustAWomanReco
         event_description: `Creator ${profile.handle} (${platformLabel(profile.platform)}) enters the story via: ${profile.crossing_mechanism || 'direct encounter'}. Trigger: ${crossing_note || profile.crossing_trigger || 'story need'}`,
         event_type: 'character',
         impact_level: profile.lala_relevance_score >= 7 ? 'major' : 'moderate',
-        characters_involved: registryCharacter ? [registryCharacter.id] : [],
+        characters_involved: [registryCharacter.id],
       });
     } catch { /* WorldTimelineEvent table may not exist yet */ }
 
     // Sync social intelligence into registry character
     let syncResult = null;
-    if (registryCharacter) {
-      try {
-        const registrySync = require('../services/registrySyncService');
-        const refreshed = await db.SocialProfile.findByPk(profile.id);
-        syncResult = await registrySync.syncProfileToRegistry(refreshed, db);
-        console.log(`[Cross] Registry sync: ${syncResult.synced ? 'OK' : syncResult.reason}`);
-      } catch (syncErr) {
-        console.warn('[Cross] Registry sync failed (non-blocking):', syncErr.message);
-      }
+    try {
+      const registrySync = require('../services/registrySyncService');
+      const refreshed = await db.SocialProfile.findByPk(profile.id);
+      syncResult = await registrySync.syncProfileToRegistry(refreshed, db);
+      console.log(`[Cross] Registry sync: ${syncResult.synced ? 'OK' : syncResult.reason}`);
+    } catch (syncErr) {
+      console.warn('[Cross] Registry sync failed (non-blocking):', syncErr.message);
     }
 
     return res.json({
       profile,
       registry_character: registryCharacter,
-      registry_note: registryNote,
+      registry_note: null,
+      restored,
       crossed: true,
       followed_lala: followedLala,
       social_leverage: syncResult?.socialLeverage || null,
     });
   } catch (err) {
+    console.error('[Cross] POST /:id/cross failed:', err);
     return res.status(500).json({ error: err.message });
   }
 });

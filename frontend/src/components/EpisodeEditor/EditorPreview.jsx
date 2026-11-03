@@ -22,6 +22,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { SkipBack, Play, Pause, SkipForward, Volume2, VolumeX, Maximize } from 'lucide-react';
 import { FRAME_W, FRAME_H, timecode } from '../../lib/editorModel';
 import { HANDLES, dragLayout, sameLayout } from '../../lib/pipGeometry';
+import { pointerXY } from '../../lib/editorRotation';
 
 const pct = (v, of) => `${(v / of) * 100}%`;
 
@@ -80,13 +81,15 @@ function ArrangeBox({
     e.stopPropagation();
     e.preventDefault();
     e.currentTarget.setPointerCapture?.(e.pointerId);
-    setDrag({ handle, x0: e.clientX, y0: e.clientY, start: layout, live: layout, moved: false });
+    const p = pointerXY(e);
+    setDrag({ handle, x0: p.x, y0: p.y, start: layout, live: layout, moved: false });
   };
   const move = (e) => {
     if (!drag) return;
     e.stopPropagation();
     const k = scale();
-    const live = dragLayout(drag.start, drag.handle, (e.clientX - drag.x0) * k, (e.clientY - drag.y0) * k, { free: e.shiftKey });
+    const p = pointerXY(e); // the editor's own axes, also when it is drawn turned on a phone
+    const live = dragLayout(drag.start, drag.handle, (p.x - drag.x0) * k, (p.y - drag.y0) * k, { free: e.shiftKey });
     setDrag({ ...drag, live, moved: drag.moved || !sameLayout(live, drag.start) });
     onDrag?.({ id, layout: live });
   };
