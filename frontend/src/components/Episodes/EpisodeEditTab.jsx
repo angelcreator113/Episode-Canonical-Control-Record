@@ -60,7 +60,6 @@ export default function EpisodeEditTab({ episodeId, admin = false }) {
   const model = useMemo(() => (state.data ? buildTimeline(state.data.edit, mediaIndex()) : null), [state.data]);
   const readiness = useMemo(() => (model && state.findings ? beatReadiness(model, state.findings.findings) : null), [model, state.findings]);
   const editorHref = `/episodes/${episodeId}/editor`;
-  const legacyHref = `/episodes/${episodeId}/timeline`;
 
   if (state.loading) return <section className="eet" aria-busy="true"><p className="eet-muted">Reading the episode's edit…</p></section>;
 
@@ -72,10 +71,9 @@ export default function EpisodeEditTab({ episodeId, admin = false }) {
         {why.kind === 'off' ? (
           <>
             <p>The episode editor works on the episode edit, which is switched off on this server (<code>EPISODE_EDIT</code>). Nothing was changed.</p>
-            <p className="eet-muted">The legacy timeline is still available.</p>
+            <p className="eet-muted">Turning it on is a server setting.</p>
           </>
         ) : <p role="alert">{why.message}</p>}
-        <p><Link className="eet-btn" to={legacyHref}>Legacy timeline</Link></p>
       </section>
     );
   }
@@ -150,8 +148,7 @@ export default function EpisodeEditTab({ episodeId, admin = false }) {
       )}
 
       <p className="eet-foot eet-muted">
-        <History size={14} aria-hidden="true" /> Every change in the editor is saved when it is made. The legacy timeline stays until the new editor passes testing:{' '}
-        <Link to={legacyHref}>Legacy timeline</Link>.
+        <History size={14} aria-hidden="true" /> Every change in the editor is saved when it is made.
       </p>
     </section>
   );

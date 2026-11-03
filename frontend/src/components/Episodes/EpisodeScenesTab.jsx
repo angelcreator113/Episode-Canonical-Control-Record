@@ -372,8 +372,8 @@ const EpisodeScenesTab = ({ episode, onToast, sourceEvent = null }) => {
           <Link className="est-btn est-btn-outline est-btn-sm" to={`/episodes/${episodeId}/plan`} data-testid="est-open-beat-plan">
             <Film size={14} /> Beat Plan (full screen)
           </Link>
-          <Link className="est-btn est-btn-outline est-btn-sm" to={`/studio/timeline?episode_id=${episodeId}`}>
-            <Clapperboard size={14} /> Timeline
+          <Link className="est-btn est-btn-outline est-btn-sm" to={`/episodes/${episodeId}/editor`}>
+            <Clapperboard size={14} /> Editor
           </Link>
         </div>
       </div>

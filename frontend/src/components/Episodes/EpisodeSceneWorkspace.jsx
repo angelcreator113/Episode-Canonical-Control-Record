@@ -294,7 +294,7 @@ export default function EpisodeSceneWorkspace({ episode, onOpenTab, onToast }) {
             </button>
             <button type="button" className="esw-action" onClick={() => onOpenTab?.('files')}><FolderOpen size={20} aria-hidden /> Link a clip</button>
             <button type="button" className="esw-action" onClick={() => onOpenTab?.('beatplan')}><Pencil size={20} aria-hidden /> Edit in the Plan</button>
-            <Link className="esw-action" to={`/episodes/${episodeId}/timeline`}><Clapperboard size={20} aria-hidden /> Open timeline</Link>
+            <Link className="esw-action" to={`/episodes/${episodeId}/editor`}><Clapperboard size={20} aria-hidden /> Open the editor</Link>
           </div>
         </section>
       </aside>

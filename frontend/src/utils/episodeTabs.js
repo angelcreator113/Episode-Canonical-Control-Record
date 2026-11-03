@@ -20,7 +20,18 @@ export const EP_TABS = [
   // pill with two views, Workspace ('scenes') and Plan ('beatplan', the
   // full plan editor). `view` marks a sub-tab that is a view of another
   // pill, not a pill of its own.
-  { key: 'production', icon: '🎬', label: 'Production', subs: [
+  // Evoni, 2026-11-03: the Make group last (Look, On screen, Track, Make).
+  // Production still opens on Scenes (`opens`), as it did when Make was first.
+  { key: 'production', icon: '🎬', label: 'Production', opens: 'scenes', subs: [
+    { key: 'wardrobe', label: 'Wardrobe', group: 'Look' },
+    // The Style Page (was Lookbook; Task #2876): the style sheet as its
+    // own editor. The key stays 'lookbook' so links keep working.
+    { key: 'lookbook', label: 'Style Page', group: 'Look' },
+    { key: 'phone', label: 'Phone', group: 'On screen' },
+    // P15: every on-screen piece of the episode.
+    { key: 'overlays', label: 'Overlays', group: 'On screen' },
+    { key: 'money', label: 'Money', group: 'Track' },
+    { key: 'checklist', label: 'Checklist', group: 'Track' },
     { key: 'scenes', label: 'Scenes', group: 'Make' },
     { key: 'beatplan', label: 'Plan', group: 'Make', view: 'scenes' },
     // Evoni, 2026-10-17: Files is the episode's raw video clips
@@ -38,15 +49,6 @@ export const EP_TABS = [
     // opens /episodes/:id/editor full screen (EpisodeEditTab). Not gated: where
     // the episode edit is off, the pill says so.
     { key: 'edit', label: 'Edit', group: 'Make' },
-    { key: 'wardrobe', label: 'Wardrobe', group: 'Look' },
-    // The Style Page (was Lookbook; Task #2876): the style sheet as its
-    // own editor. The key stays 'lookbook' so links keep working.
-    { key: 'lookbook', label: 'Style Page', group: 'Look' },
-    { key: 'phone', label: 'Phone', group: 'On screen' },
-    // P15: every on-screen piece of the episode.
-    { key: 'overlays', label: 'Overlays', group: 'On screen' },
-    { key: 'money', label: 'Money', group: 'Track' },
-    { key: 'checklist', label: 'Checklist', group: 'Track' },
   ]},
   // Evoni's Episode mock (2026-10-05): Results is one page, its Summary;
   // Evaluation, Story and Distribution stay (her ruling); Evaluation became
@@ -81,7 +83,7 @@ const ALIASES = {
 function findEpisodeTab(tab) {
   for (const t of EP_TABS) {
     if (t.key === tab) {
-      const sub = t.subs?.[0]?.key || null;
+      const sub = t.opens || t.subs?.[0]?.key || null;
       return { main: t.key, sub, key: sub ? `${t.key}.${sub}` : t.key };
     }
     const sub = t.subs?.find((s) => s.key === tab);

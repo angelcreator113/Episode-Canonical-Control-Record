@@ -49,6 +49,7 @@ import { checklistProgress, coinsLabel } from '../lib/episodeShell';
 import { isScreen } from '../lib/overlayUtils';
 import { beatOrder } from '../lib/storyClock';
 import './EpisodeDetail.css';
+import useSideScroll from '../hooks/useSideScroll';
 
 // Track 6 CP14 module-scope helpers — page structural shape; partial-
 // migration extension per v2.20 §9.11 (file already partial-migrated
@@ -125,6 +126,9 @@ const EpisodeDetail = () => {
   const { isAuthenticated, loading: authLoading, user } = useAuth();
   // Production → Voice shows for an admin while Voice Studio is switched on.
   const [voiceStudio, setVoiceStudio] = useState(false);
+  // The tab and pill rows slide sideways: drag, swipe or wheel (Evoni, 2026-11-03).
+  const [tabsRef, , tabsScroll] = useSideScroll();
+  const [pillsRef, , pillsScroll] = useSideScroll();
   const admin = isAdmin(user);
   useEffect(() => {
     let live = true;
@@ -1034,7 +1038,7 @@ const EpisodeDetail = () => {
       <div className="ed-wrap">
 
         {/* Main Tabs: a white bar, the chosen tab a magenta pill (the mockup's "Script"). */}
-        <div className="ed-tabs-modern" data-testid="ed-tabs">
+        <div className={`ed-tabs-modern ${tabsScroll}`} ref={tabsRef} data-testid="ed-tabs">
           {EP_TABS.map(t => {
             const Icon = TAB_ICONS[t.key];
             return (
@@ -1067,7 +1071,7 @@ const EpisodeDetail = () => {
             // lines at phone width and threw the row out of line).
             // Pills (Evoni's Episode mock): raspberry when chosen; in their
             // groups, each with a small label (Evoni, 2026-10-22 layout list).
-            <div data-testid="ed-subtabs" className={`ed-subpills${groups.some((g) => g.group) ? ' is-grouped' : ''}`}>
+            <div data-testid="ed-subtabs" ref={pillsRef} className={`ed-subpills${groups.some((g) => g.group) ? ' is-grouped' : ''} ${pillsScroll}`}>
               {groups.map((g) => (
                 <div key={g.group || 'all'} className="ed-subgroup" role={g.group ? 'group' : undefined} aria-label={g.group || undefined}>
                   {g.group && <span className="ed-subgroup-label" aria-hidden="true">{g.group}</span>}

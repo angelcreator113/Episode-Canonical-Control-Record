@@ -947,3 +947,20 @@ Evoni asked for the editor as a tab on the episode page. She chose a launcher pi
 | `EpisodeEditor` | The back arrow, and the full-page error states' "Back to the episode", return to `?tab=edit` |
 
 **Not changed:** the production strip's "Edit & Assemble" step (`productionSteps`) still opens the legacy timeline.
+
+---
+
+## 18. Make last, sliding tab rows, the old editor deleted, the editor hub (2026-11-03)
+
+Evoni's four asks, after §17, with her answers to the three questions:
+- **The Make group last.**
+- **Tab rows that slide sideways.** Her words: "Usually I can move it side to side but I can't. I have to click it."
+- **The old Timeline Editor deleted completely.** This is her ruling and supersedes ruling 14, which kept it until the new editor passed testing.
+- **A page between the Sidebar and the editor,** to "see all of the different episodes that's being created … not just immediately on the editor".
+
+| Ask | What changed |
+|---|---|
+| Make last | `episodeTabs` `EP_TABS`: Production's pills run Look, On screen, Track, Make. Production still opens on Scenes: `opens: 'scenes'`, read by `findEpisodeTab` |
+| Sliding rows | `useSideScroll` (new hook) and `sideScroll.css`. A tab row can be dragged with the mouse (a short press is still a click, and a drag never picks a tab), moved with the wheel while it has room, or swiped. A fade at an edge shows there is more. It is used on the episode page's main tabs and Production pills, and on Producer Mode's tab bar and sub-tabs. The Production pills are one sliding line instead of wrapping, which cut groups off at phone width |
+| Old editor deleted | `pages/TimelineEditor.jsx` and what only it used: `components/Timeline/*`, `SaveIndicator`, `ExportDropdown`, `LandscapeRequired`, `useSaveManager`, `utils/sceneIds`, and their tests. Also the Sidebar's "Timeline Editor" row, `StudioTimelinePage` and `StudioPickerPage.css`. `/episodes/:id/timeline` and `/studio/timeline` (with `?episode_id=`) land on the editor (`LegacyTimelineRedirect`). Every link that opened the old editor opens the new one; "Edit & Assemble" opens Production › Edit. The production strip has one **Open Editor** button. **Kept:** the backend `/save` and `/timeline-data` routes, with P0's save guard; removing an API is a separate decision |
+| Editor hub | `EditorHub` at `/studio/editor` (Sidebar → Editor). It lists every episode by show, with a show filter and a search box. For each episode it shows the edit revision or "Not started", the blocking findings and how many of the 14 beats they touch, and the warnings. Each has **Open** and **Details** (the Edit pill). It reads `/edit/findings` per episode, four at a time and each once, and writes nothing. The last episode opened is marked "Last opened", not jumped into. With `EPISODE_EDIT` off it says so once and stops asking. `?episode_id=` still opens that episode's editor |

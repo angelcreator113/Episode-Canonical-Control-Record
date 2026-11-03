@@ -169,7 +169,7 @@ export function pipelineSteps({ episode = {}, checks = null, sections = null, cl
     { key: 'planning', label: 'Planning', done: p.brief.done, href: `/episodes/${id}` },
     { key: 'script', label: 'Script', done: p.script.done, href: `/episodes/${id}?tab=scripts` },
     { key: 'production', label: 'Production', done: p.scenes.done && p.files.done, href: `/episodes/${id}?tab=scenes` },
-    { key: 'edit', label: 'Edit', done: p.edit.done, href: `/episodes/${id}/timeline` },
+    { key: 'edit', label: 'Edit', done: p.edit.done, href: `/episodes/${id}?tab=edit` },
     { key: 'thumbnail', label: 'Thumbnail', done: p.thumbnail.done || Boolean(episode.thumbnail_url), href: thumbnailStudioHref({ episodeId: id }) },
     { key: 'review', label: 'Review', done: ['in_review', 'scheduled', 'published'].includes(status), href: `/episodes/${id}?tab=distribution` },
     { key: 'release', label: 'Release', done: ['scheduled', 'published'].includes(status) || episode.evaluation_status === 'accepted', href: `/episodes/${id}?tab=distribution` },

@@ -75,7 +75,7 @@ describe('Production → Edit', () => {
     const box = await screen.findByTestId('eet-unavailable');
     expect(within(box).getByText(/switched off on this server/)).toBeTruthy();
     expect(screen.queryByTestId('eet-open')).toBeNull();
-    expect(within(box).getByRole('link', { name: 'Legacy timeline' }).getAttribute('href')).toBe('/episodes/ep-1/timeline');
+    expect(within(box).queryByRole('link')).toBeNull(); // the old Timeline Editor was deleted (2026-11-03)
   });
 
   test('a server without C1b, and a viewer who is not an admin, are told what they can do', async () => {

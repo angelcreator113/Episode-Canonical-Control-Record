@@ -23,7 +23,9 @@ describe('episode page layout at phone width', () => {
   });
 
   test('the Production sub-tabs keep one line each and scroll sideways (in their groups, on a phone)', () => {
-    expect(page).toMatch(/data-testid="ed-subtabs" className=\{`ed-subpills\$\{groups\.some\(\(g\) => g\.group\) \? ' is-grouped' : ''\}`\}/);
+    // One sliding line (Evoni, 2026-11-03): dragged, swiped or wheeled (useSideScroll).
+    expect(page).toMatch(/data-testid="ed-subtabs" ref=\{pillsRef\} className=\{`ed-subpills\$\{groups\.some\(\(g\) => g\.group\) \? ' is-grouped' : ''\} \$\{pillsScroll\}`\}/);
+    expect(css).toMatch(/\.ed-subpills\.is-grouped \{ gap: 6px 18px; flex-wrap: nowrap; overflow-x: auto; \}/);
     expect(css).toMatch(/\.ed-subpills \{[^}]*overflow-x: auto;/);
     expect(css).toMatch(/\.ed-page\.ed-studio \.ed-subpills\.is-grouped \{ flex-wrap: nowrap; overflow-x: auto; \}/);
     expect(css).toMatch(/\.ed-subpill \{[^}]*flex-shrink: 0;\s*white-space: nowrap;/);

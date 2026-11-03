@@ -22,9 +22,9 @@
  *
  * What is not built yet is shown disabled with what unlocks it:
  * render and export (the render host, Gates 3–6), and the
- * phone, gameplay and overlay lanes (Gate 2b, their state model). The legacy
- * Timeline Editor (/episodes/:id/timeline) stays until this one passes
- * testing (ruling 14).
+ * phone, gameplay and overlay lanes (Gate 2b, their state model). The old
+ * Timeline Editor was deleted (Evoni, 2026-11-03): /episodes/:id/timeline
+ * lands here (App LegacyTimelineRedirect).
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
@@ -99,7 +99,6 @@ function FullPage({ title, children, episodeId }) {
         {children}
         <p className="tle-full-links">
           {episodeId && <Link to={`/episodes/${episodeId}?tab=edit`}>← Back to the episode</Link>}
-          {episodeId && <Link to={`/episodes/${episodeId}/timeline`}>Open the legacy Timeline Editor</Link>}
         </p>
       </div>
     </div>
@@ -537,7 +536,7 @@ export default function EpisodeEditor() {
       return (
         <FullPage title="The episode edit is switched off" episodeId={episodeId}>
           <p>This editor works on the episode edit (C1), which is switched off on this server (<code>EPISODE_EDIT</code>). Nothing was changed.</p>
-          <p>The legacy Timeline Editor is still available.</p>
+          <p>Turning it on is a server setting; nothing else is needed.</p>
         </FullPage>
       );
     }
@@ -585,7 +584,6 @@ export default function EpisodeEditor() {
                 <button type="button" role="menuitem" onClick={() => { setUpper(0.62); setMenuOpen(false); }}>Layout: preview focus</button>
                 <button type="button" role="menuitem" onClick={() => { setUpper(0.36); setMenuOpen(false); }}>Layout: timeline focus</button>
                 <button type="button" role="menuitem" onClick={() => { resetLeft(); resetRight(); resetUpper(); setMenuOpen(false); }}>Reset layout</button>
-                <Link role="menuitem" to={`/episodes/${episodeId}/timeline`}>Open the legacy Timeline Editor</Link>
               </div>
             )}
           </div>

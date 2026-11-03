@@ -75,9 +75,11 @@ function WorldHubRedirect({ tab }) {
 const TemplateDesigner = lazy(() => import('./pages/TemplateDesigner'));
 const YouTubeThumbnailStudio = lazy(() => import('./pages/YouTubeThumbnailStudio'));
 const DecisionAnalyticsDashboard = lazy(() => import('./pages/DecisionAnalyticsDashboard'));
-const TimelineEditor = lazy(() => import('./pages/TimelineEditor'));
 // The episode's multitrack editor on the C1 edit (Timeline Editor redesign P1, D2).
 const EpisodeEditor = lazy(() => import('./pages/EpisodeEditor'));
+
+// The old Timeline Editor's URLs land on the episode editor (deleted, Evoni 2026-11-03).
+const LegacyTimelineRedirect = lazy(() => import('./pages/LegacyTimelineRedirect'));
 const BeatGeneration = lazy(() => import('./pages/BeatGeneration'));
 const EpisodeReview = lazy(() => import('./pages/EpisodeReview'));
 const EvaluateEpisode = lazy(() => import('./pages/EvaluateEpisode'));
@@ -152,7 +154,8 @@ const RecycleBin = lazy(() => import('./pages/RecycleBin'));
 const ChapterJourney = lazy(() => import('./pages/ChapterJourney'));
 const ChapterStructureEditor = lazy(() => import('./pages/ChapterStructureEditor'));
 const QuickEpisodeCreator = lazy(() => import('./components/QuickEpisodeCreator'));
-const StudioTimelinePage = lazy(() => import('./pages/StudioTimelinePage'));
+// Sidebar → Editor: every episode and where its edit stands (2026-11-03).
+const EditorHub = lazy(() => import('./pages/EditorHub'));
 // New Episode (episode creation step 4): "What starts this episode?", each
 // way in leading to the Event Package. Its creator path is Lala's Feed in
 // choose-host mode (Task #1628).
@@ -317,9 +320,9 @@ function AppContent() {
     );
   }
 
-  // Check if current route is Timeline Editor, Scene Composer, Export, Storyteller, or WriteMode (full-screen modes)
+  // Check if current route is the episode editor, Scene Composer, Export, Storyteller, or WriteMode (full-screen modes)
   // Only match episode-scoped URLs for full-screen (not /studio/* picker pages)
-  const isTimelineEditor = /\/episodes\/[^/]+\/(timeline|editor)(\/|$)/.test(location.pathname);
+  const isTimelineEditor = /\/episodes\/[^/]+\/editor(\/|$)/.test(location.pathname);
   const isExportPage = location.pathname.includes('/export');
   const isReadingMode = location.pathname.includes('/books/') && location.pathname.includes('/read');
   const isWriteMode = location.pathname.startsWith('/write/');
@@ -403,8 +406,9 @@ function AppContent() {
           <Route path="/shows/:showId/events/:eventId" element={<EventPackagePage />} />
           <Route path="/shows/:id/settings" element={<ShowSettingsRedirect />} />
           {/* Studio — universe-level entry points */}
-          <Route path="/studio/timeline" element={<StudioTimelinePage />} />
-          <Route path="/studio/editor" element={<StudioTimelinePage target="editor" />} />
+          {/* The old Timeline Editor was deleted (Evoni, 2026-11-03): its links land on the editor. */}
+          <Route path="/studio/timeline" element={<LegacyTimelineRedirect />} />
+          <Route path="/studio/editor" element={<EditorHub />} />
           <Route path="/teleprompter" element={<Teleprompter />} />
 
           {/* Scene Studio (Canva-like visual editor) */}
@@ -423,8 +427,8 @@ function AppContent() {
           {/* Beat Generation */}
           <Route path="/episodes/:episodeId/beats" element={<BeatGeneration />} />
           
-          {/* Timeline Editor */}
-          <Route path="/episodes/:episodeId/timeline" element={<TimelineEditor />} />
+          {/* The episode editor. /timeline was the old Timeline Editor (deleted 2026-11-03): it lands here. */}
+          <Route path="/episodes/:episodeId/timeline" element={<LegacyTimelineRedirect />} />
           <Route path="/episodes/:episodeId/editor" element={<EpisodeEditor />} />
           <Route path="/episodes/:episodeId/icon-cues" element={<IconCueTimeline />} />
           

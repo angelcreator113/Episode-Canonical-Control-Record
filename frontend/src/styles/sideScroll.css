@@ -1,0 +1,21 @@
+/* Tab rows that slide sideways (useSideScroll, 2026-11-03): a fade at an edge
+   says there is more that way; a mouse can drag the row. */
+.side-scroll {
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+}
+.side-scroll.can-right {
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 36px), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - 36px), transparent);
+}
+.side-scroll.can-left {
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 36px);
+  mask-image: linear-gradient(to right, transparent, #000 36px);
+}
+.side-scroll.can-left.can-right {
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 36px, #000 calc(100% - 36px), transparent);
+  mask-image: linear-gradient(to right, transparent, #000 36px, #000 calc(100% - 36px), transparent);
+}
+.side-scroll.is-dragging { cursor: grabbing; user-select: none; }
+.side-scroll.is-dragging * { cursor: grabbing; }

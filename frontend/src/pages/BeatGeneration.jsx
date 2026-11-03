@@ -87,7 +87,7 @@ export default function BeatGeneration() {
   return (
     <div className="page-wrapper" style={{ padding: 32, maxWidth: 900, margin: '0 auto' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 24 }}>
-        <Link to={`/episodes/${episodeId}/timeline`} style={{ color: '#aaa', textDecoration: 'none' }}>&larr; Timeline</Link>
+        <Link to={`/episodes/${episodeId}/editor`} style={{ color: '#aaa', textDecoration: 'none' }}>&larr; Editor</Link>
         <h1 style={{ margin: 0 }}>Beat Generation</h1>
       </div>
 

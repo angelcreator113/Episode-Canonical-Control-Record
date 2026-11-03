@@ -133,7 +133,7 @@ describe('EpisodeSceneWorkspace', () => {
     expect(screen.getByText('This scene has no location yet. Choose one in the Plan.')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: /Edit in the Plan/ }));
     expect(onOpenTab).toHaveBeenCalledWith('beatplan');
-    expect(screen.getByRole('link', { name: /Open timeline/ }).getAttribute('href')).toBe('/episodes/ep-1/timeline');
+    expect(screen.getByRole('link', { name: /Open the editor/ }).getAttribute('href')).toBe('/episodes/ep-1/editor');
   });
 
   test('no plan yet sends to the Beat Plan', async () => {

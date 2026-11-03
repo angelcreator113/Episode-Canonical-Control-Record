@@ -333,8 +333,8 @@ function ExportPage() {
       {/* Header */}
       <header className="export-header">
         <div className="header-left">
-          <button className="back-btn" onClick={() => navigate(`/episodes/${episodeId}/timeline`)}>
-            ← Back to Timeline
+          <button className="back-btn" onClick={() => navigate(`/episodes/${episodeId}/editor`)}>
+            ← Back to the editor
           </button>
           <div className="page-title">
             <h1>Export Episode</h1>

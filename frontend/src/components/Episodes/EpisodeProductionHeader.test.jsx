@@ -62,15 +62,17 @@ describe('EpisodeProductionHeader', () => {
     fireEvent.click(within(screen.getByTestId('eph-step-files')).getByRole('button'));
     expect(onOpenTab).toHaveBeenCalledWith('files');
     expect(within(screen.getByTestId('eph-step-thumbnail')).getByRole('link').getAttribute('href')).toBe('/template-studio/youtube?episode=ep-1');
-    expect(within(screen.getByTestId('eph-step-edit')).getByRole('link').getAttribute('href')).toBe('/episodes/ep-1/timeline');
+    // Edit & Assemble opens Production › Edit (the old Timeline Editor was deleted, 2026-11-03).
+    fireEvent.click(within(screen.getByTestId('eph-step-edit')).getByRole('button'));
+    expect(onOpenTab).toHaveBeenCalledWith('edit');
     await waitFor(() => expect(rawClipsApi.list).toHaveBeenCalledWith('ep-1'));
   });
 
-  test('the two editors are told apart: Legacy timeline (the old editor) and New editor (Evoni, 2026-11-03)', async () => {
+  test('one editor: Open Editor opens the episode editor; the old Timeline Editor is gone (Evoni, 2026-11-03)', async () => {
     renderHeader();
-    expect(screen.getByRole('link', { name: 'Legacy timeline' }).getAttribute('href')).toBe('/episodes/ep-1/timeline');
-    expect(screen.getByRole('link', { name: 'New editor' }).getAttribute('href')).toBe('/episodes/ep-1/editor');
-    expect(screen.queryByRole('link', { name: 'Open Editor' })).toBeNull();
+    expect(screen.getByRole('link', { name: 'Open Editor' }).getAttribute('href')).toBe('/episodes/ep-1/editor');
+    expect(screen.queryByRole('link', { name: /Legacy timeline|New editor/ })).toBeNull();
+    expect(document.querySelector('a[href$="/timeline"]')).toBeNull();
     await waitFor(() => expect(rawClipsApi.list).toHaveBeenCalledWith('ep-1'));
   });
 

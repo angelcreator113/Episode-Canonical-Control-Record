@@ -11,7 +11,7 @@
  *                     its stat: "Takes: n of 14 beats", the beats with at least
  *                     one take (a raw clip linked to beat 1-14, or a beat marked
  *                     in a full-episode take; Teleprompter batch 2)
- *   5 Edit & Assemble every scene has a clip linked to it            → the timeline editor
+ *   5 Edit & Assemble every scene has a clip linked to it            → Production › Edit (2026-11-03)
  *   6 Thumbnail       the episode has a primary thumbnail            → Templates › YouTube thumbnails
  *   7 Review & Publish status In review, Scheduled or Published      → Results › Distribution
  */
@@ -90,7 +90,7 @@ export function productionSteps({ episode = {}, checks = null, sections = null, 
     { key: 'script', label: 'Script', done: scriptDone, detail: !scriptDone && written && approved < SCENE_COUNT ? `${approved} of ${SCENE_COUNT} beats approved` : null, open: { tab: 'scripts' } },
     { key: 'scenes', label: 'Scenes', done: sectionDone(sections, checks, 'scene'), open: { tab: 'scenes' } },
     { key: 'files', label: 'Files', done: (clips || []).length > 0, detail: (clips || []).length ? `${clips.length} ${clips.length === 1 ? 'clip' : 'clips'}` : null, stat: takesStat(clips), open: { tab: 'files' } },
-    { key: 'edit', label: 'Edit & Assemble', done: linked >= SCENE_COUNT, detail: linked ? `${linked} of ${SCENE_COUNT} scenes have a clip` : null, open: { href: `/episodes/${id}/timeline` } },
+    { key: 'edit', label: 'Edit & Assemble', done: linked >= SCENE_COUNT, detail: linked ? `${linked} of ${SCENE_COUNT} scenes have a clip` : null, open: { tab: 'edit' } },
     { key: 'thumbnail', label: 'Thumbnail', done: Boolean(hasThumbnail), open: { href: thumbnailStudioHref({ episodeId: id }) } },
     { key: 'publish', label: 'Review & Publish', done: READY.includes(status), open: { tab: 'distribution' } },
   ];

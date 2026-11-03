@@ -1,0 +1,71 @@
+/* Sidebar → Editor: every episode and where its edit stands (2026-11-03). */
+
+.ehub {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 24px 16px 48px;
+  color: var(--lala-ink);
+}
+
+.ehub-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+.ehub-title { display: flex; align-items: center; gap: 8px; margin: 0 0 4px; font-family: 'Lora', Georgia, serif; font-size: 26px; }
+.ehub-sub, .ehub-muted { margin: 0; color: var(--lala-ink-muted); font-size: 14px; }
+
+.ehub-search {
+  display: flex; align-items: center; gap: 6px; min-width: 240px;
+  padding: 8px 12px; border: 1px solid var(--lala-parchment-3); border-radius: var(--lala-radius, 8px); background: var(--lala-surface);
+}
+.ehub-search input { flex: 1; min-width: 0; border: 0; outline: none; background: transparent; font: inherit; font-size: 14px; color: inherit; }
+
+.ehub-note {
+  margin: 0 0 16px; padding: 10px 12px; font-size: 14px;
+  border: 1px solid var(--warning-border); border-radius: var(--lala-radius, 8px); background: var(--warning-bg);
+}
+.ehub-note.is-error { border-color: var(--danger-border); background: var(--danger-bg); }
+
+.ehub-shows { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; }
+.ehub-chip {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 6px 14px;
+  border: 1px solid var(--lala-parchment-3); border-radius: 999px; background: var(--lala-surface);
+  color: var(--lala-ink); font: inherit; font-size: 13px; cursor: pointer;
+}
+.ehub-chip.is-on { background: var(--lala-gold); border-color: var(--lala-gold); color: #fff; }
+.ehub-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+
+.ehub-show { margin-bottom: 24px; }
+.ehub-show-name { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; font-family: 'DM Mono', monospace; font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--lala-ink-muted); }
+
+.ehub-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.ehub-row {
+  display: grid; grid-template-columns: 48px minmax(0, 1fr) auto; align-items: center; gap: 12px;
+  padding: 12px 14px; border: 1px solid var(--lala-parchment-3); border-radius: var(--lala-radius, 8px); background: var(--lala-surface);
+}
+.ehub-row.is-working { border-color: var(--lala-gold); box-shadow: 0 0 0 1px var(--lala-gold) inset; }
+.ehub-num { font-family: 'DM Mono', monospace; font-size: 20px; font-weight: 600; text-align: center; color: var(--lala-gold-text); }
+.ehub-info { min-width: 0; }
+.ehub-ep-title { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-weight: 600; font-size: 15px; }
+.ehub-badge { padding: 1px 8px; border-radius: 999px; background: var(--lala-gold-soft); color: var(--lala-gold-text); font-family: 'DM Mono', monospace; font-size: 11px; font-weight: 500; }
+.ehub-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin-top: 4px; font-size: 13px; color: var(--lala-ink-muted); }
+.ehub-status { padding: 1px 8px; border-radius: 999px; background: var(--lala-parchment-2); text-transform: capitalize; }
+.ehub-state { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; }
+.ehub-state > span { display: inline-flex; align-items: center; gap: 4px; }
+.ehub-state .is-blocked, .ehub-state.is-error { color: var(--danger-text); }
+.ehub-state .is-warning { color: var(--lala-gold-text); }
+.ehub-state .is-clear { color: var(--success-text); }
+.ehub-state.is-loading { font-style: italic; }
+
+.ehub-actions { display: flex; gap: 8px; }
+.ehub-btn {
+  display: inline-flex; align-items: center; justify-content: center; min-height: 40px; padding: 8px 14px;
+  border: 1px solid var(--lala-parchment-3); border-radius: var(--lala-radius, 8px); background: var(--lala-surface);
+  color: var(--lala-ink); font-family: 'DM Mono', monospace; font-size: 13px; text-decoration: none;
+}
+.ehub-btn.is-primary { background: var(--lala-gold); border-color: var(--lala-gold); color: #fff; }
+.ehub-empty { padding: 32px 16px; text-align: center; }
+
+@media (max-width: 640px) {
+  .ehub-search { min-width: 0; width: 100%; }
+  .ehub-row { grid-template-columns: 36px minmax(0, 1fr); }
+  .ehub-actions { grid-column: 1 / -1; }
+  .ehub-actions .ehub-btn { flex: 1; }
+}

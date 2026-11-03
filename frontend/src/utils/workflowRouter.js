@@ -48,7 +48,7 @@ export const STATUS_CONFIG = {
     color: '#f59e0b',
     bgColor: '#fef3c7',
     icon: '🎬',
-    route: (id) => `/episodes/${id}/timeline`,
+    route: (id) => `/episodes/${id}/editor`,
     nextSteps: [
       'Arrange scenes on timeline',
       'Add transitions and markers',

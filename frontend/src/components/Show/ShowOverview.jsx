@@ -379,7 +379,7 @@ function NowProducing({ showId, episodes, episode, onPick, checksState }) {
               <Link role="menuitem" to={`/episodes/${episode.id}?tab=overview`} onClick={() => setMenu(false)}>Episode overview</Link>
               <Link role="menuitem" to={`/episodes/${episode.id}?tab=scenes`} onClick={() => setMenu(false)}>Scenes</Link>
               <Link role="menuitem" to={`/episodes/${episode.id}?tab=wardrobe`} onClick={() => setMenu(false)}>Wardrobe</Link>
-              <Link role="menuitem" to={`/episodes/${episode.id}/timeline`} onClick={() => setMenu(false)}>Timeline editor</Link>
+              <Link role="menuitem" to={`/episodes/${episode.id}/editor`} onClick={() => setMenu(false)}>Editor</Link>
             </div>
           )}
         </div>
