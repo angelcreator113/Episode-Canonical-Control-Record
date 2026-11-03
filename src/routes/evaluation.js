@@ -29,6 +29,7 @@ const {
 } = require('../utils/evaluationFormula');
 
 const { requireAuth, authorize } = require('../middleware/auth');
+const { episodeEventTerms } = require('../utils/episodeEventSql');
 const { InsufficientCoinsError, insufficientCoinsBody } = require('../services/coinBalanceGuard');
 
 
@@ -290,17 +291,27 @@ router.post('/episodes/:id/evaluate', requireAuth, async (req, res) => {
       return res.status(409).json({ error: 'This episode is completed: its evaluation was accepted and is not computed again.', code: 'EPISODE_ALREADY_ACCEPTED' });
     }
 
-    // Parse event from script
+    // The episode's event: its linked event (the one rule, Task #1917), with
+    // an [EVENT:] tag in the script overriding the values the tag states
+    // (Task #3608). Inject no longer writes the tag into an empty script, so
+    // a linked event with no tag is the normal case.
     const scriptContent = episode.script_content || '';
-    const event = parseEventTag(scriptContent);
+    const tagEvent = parseEventTag(scriptContent);
     const intent = use_episode_intent ? parseIntentTag(scriptContent) : null;
+    let linkedEvent = null;
+    try {
+      linkedEvent = await episodeEventTerms(models.sequelize, id);
+    } catch (err) {
+      console.error('[evaluate] linked event read failed:', err);
+    }
 
-    if (!event) {
+    if (!linkedEvent && !tagEvent) {
       return res.status(422).json({
-        error: 'No [EVENT:] tag found in script',
-        hint: 'Add an [EVENT: name="..." prestige=7 cost=150 strictness=6 deadline="high"] tag to your script.',
+        error: 'This episode has no event: no event is linked to it and the script has no [EVENT:] tag',
+        hint: 'Attach an event to the episode from the Event Library, or add an [EVENT: name="..." prestige=7 cost=150 strictness=6 deadline="high"] tag to the script.',
       });
     }
+    const event = { ...(linkedEvent || {}), ...(tagEvent || {}) };
 
     // Get character state
     const showId = episode.show_id;
