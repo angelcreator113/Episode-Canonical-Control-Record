@@ -4,6 +4,7 @@
  * falls back to the default). Timeline Editor redesign P1, plan §3.1.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { pointerXY } from '../../lib/editorRotation';
 
 const clamp = (v, min, max) => Math.min(max, Math.max(min, v));
 
@@ -49,10 +50,10 @@ export default function useStoredSize(key, initial, { min, max }) {
 
   const startDrag = useCallback((event, { axis = 'x', sign = 1, scale = 1 } = {}) => {
     event.preventDefault();
-    const from = axis === 'x' ? event.clientX : event.clientY;
+    const from = pointerXY(event)[axis === 'x' ? 'x' : 'y'];
     const start = sizeRef.current;
     const move = (e) => {
-      const now = axis === 'x' ? e.clientX : e.clientY;
+      const now = pointerXY(e)[axis === 'x' ? 'x' : 'y'];
       setSizeState(clamp(start + (now - from) * sign * scale, min, max));
     };
     const up = () => {

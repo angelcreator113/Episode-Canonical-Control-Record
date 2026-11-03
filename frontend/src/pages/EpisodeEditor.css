@@ -322,11 +322,11 @@ video.tle-monitor-scene { background: #000; }
   .tle:not(.is-phone) .tle-desktop-only { display: block; margin: 0; color: var(--tle-muted); font-size: 12px; }
 }
 @media (max-width: 480px) {
-  .tle-top-actions .tle-btn { padding: 0 10px; }
-  .tle-field { grid-template-columns: 1fr; }
-  .tle-rail-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .tle-transport { grid-template-columns: 1fr auto; padding: 0 10px; }
-  .tle-transport-end { display: none; }
+  .tle:not(.is-phone) .tle-top-actions .tle-btn { padding: 0 10px; }
+  .tle:not(.is-phone) .tle-field { grid-template-columns: 1fr; }
+  .tle:not(.is-phone) .tle-rail-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .tle:not(.is-phone) .tle-transport { grid-template-columns: 1fr auto; padding: 0 10px; }
+  .tle:not(.is-phone) .tle-transport-end { display: none; }
 }
 
 /* ── Editing (P3) ──────────────────────────────────────────────────── */
@@ -438,23 +438,19 @@ video.tle-monitor-scene { background: #000; }
 
 /* ── Phones (Evoni, 2026-11-03: landscape on a phone) ─────────────────
    usePhoneOrientation sets .is-phone on a touch screen whose short side is
-   under 600 px. Held upright, .is-phone-portrait shows only the rotate card
-   (the editor stays mounted underneath). Sideways, the editor keeps its
-   timeline: compact bars, the preview full width, and the media panel and
-   the inspector as drawers (.has-drawer-media / .has-drawer-inspector). */
-.tle.is-phone-portrait > :not(.tle-rotate) { display: none !important; }
-.tle-rotate {
-  position: absolute; inset: 0; z-index: 50; display: grid; place-items: center; padding: 24px;
-  background: var(--tle-bg);
+   under 600 px. A phone always gets the editor in landscape (.is-rotated
+   when the screen is in portrait): compact bars, the preview full width, and
+   the media panel and the inspector as drawers (.shows-media /
+   .shows-inspector). Never a class with "-drawer" in it: an app-wide
+   [class*="-drawer"] rule forces width: 100vw !important, which squeezed the
+   turned editor to the phone's narrow side. */
+/* Held (or rotation-locked) in portrait, the page draws itself a quarter turn clockwise, so the
+   phone is held with its right edge up; lib/editorRotation turns pointer positions to match. */
+.tle.is-rotated {
+  inset: auto; top: 0; left: 0;
+  width: var(--tle-rot-w, 100vh); height: var(--tle-rot-h, 100vw);
+  transform-origin: 0 0; transform: translateX(var(--tle-rot-h, 100vw)) rotate(90deg);
 }
-.tle-rotate-card { max-width: 340px; text-align: center; }
-.tle-rotate-card h1 { margin: 16px 0 8px; font-size: 20px; }
-.tle-rotate-card p { margin: 0 0 20px; color: var(--tle-muted); line-height: 1.5; }
-.tle-rotate-icon { display: inline-flex; align-items: flex-start; gap: 4px; color: var(--tle-gold); }
-.tle-rotate-icon svg:first-child { animation: tle-turn 2.4s ease-in-out infinite; }
-@keyframes tle-turn { 0%, 30% { transform: rotate(0deg); } 60%, 100% { transform: rotate(-90deg); } }
-@media (prefers-reduced-motion: reduce) { .tle-rotate-icon svg:first-child { animation: none; transform: rotate(-90deg); } }
-.tle-rotate-back { display: inline-block; padding: 10px 16px; border: 1px solid var(--tle-line); border-radius: 8px; color: #9fc0ff; text-decoration: none; }
 
 .tle.is-phone { font-size: 12px; }
 .tle.is-phone .tle-top { flex-basis: 44px; padding: 0 8px 0 max(4px, env(safe-area-inset-left)); gap: 8px; }
@@ -474,12 +470,12 @@ video.tle-monitor-scene { background: #000; }
 .tle.is-phone .tle-split-v { display: none; }
 .tle.is-phone .tle-browser, .tle.is-phone .tle-inspector {
   /* Over the whole body (preview and timeline) while open, so a drawer has the phone's full height. */
-  display: none; position: absolute; top: 4px; bottom: max(4px, env(safe-area-inset-bottom)); z-index: 20; width: min(360px, 50vw);
+  display: none; position: absolute; top: 4px; bottom: max(4px, env(safe-area-inset-bottom)); z-index: 20; width: min(360px, 50%); /* of the editor, not the screen (vw is the narrow side when it is drawn turned) */
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55);
 }
 .tle.is-phone .tle-browser { left: max(8px, env(safe-area-inset-left)); }
 .tle.is-phone .tle-inspector { right: max(8px, env(safe-area-inset-right)); }
-.tle.is-phone.has-drawer-media .tle-browser, .tle.is-phone.has-drawer-inspector .tle-inspector { display: flex; }
+.tle.is-phone.shows-media .tle-browser, .tle.is-phone.shows-inspector .tle-inspector { display: flex; }
 .tle.is-phone .tle-transport { flex-basis: 40px; }
 .tle.is-phone .tle-toolbar { overflow-x: auto; }
 .tle.is-phone .tle-desktop-only { display: none; }
@@ -502,7 +498,6 @@ video.tle-monitor-scene { background: #000; }
   .tle.is-phone button, .tle.is-phone [role="button"], .tle.is-phone a, .tle.is-phone select { min-height: 0; min-width: 0; }
   .tle.is-phone .tle-titlebar .tle-title { font-size: 14px !important; }
 }
-.tle.is-phone .tle-rotate-card h1 { font-size: 20px !important; }
 /* A tab keeps its words' width; the row slides instead (useSideScroll). Without the touch rule's
    min-width a tab could shrink under its label. */
 .tle-tabs > .tle-tab { flex: 0 0 auto; }
