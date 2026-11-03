@@ -529,6 +529,97 @@ describe('EpisodeEditor: Existing work (B1)', () => {
   });
 });
 
+// On a phone (Evoni, 2026-11-03): held upright, turn it; sideways, the compact editor with drawers.
+describe('EpisodeEditor: on a phone', () => {
+  let portrait;
+  let listeners;
+  const media = () => {
+    listeners = [];
+    window.matchMedia = vi.fn((q) => ({
+      get matches() { return q === '(pointer: coarse)' ? true : q === '(orientation: portrait)' ? portrait : false; },
+      addEventListener: (_e, fn) => listeners.push(fn),
+      removeEventListener: () => {},
+    }));
+    Object.defineProperty(window, 'screen', { configurable: true, value: { width: 390, height: 844 } });
+  };
+  const turn = (upright) => { portrait = upright; act(() => { for (const fn of listeners) fn(); }); };
+  let savedMatch;
+  let savedScreen;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    localStorage.clear();
+    auth.user = { id: 'u1', groups: ['admin'] };
+    savedMatch = window.matchMedia;
+    savedScreen = Object.getOwnPropertyDescriptor(window, 'screen');
+    portrait = true;
+    media();
+    vi.spyOn(window.HTMLMediaElement.prototype, 'play').mockImplementation(function play() { return Promise.resolve(); });
+    vi.spyOn(window.HTMLMediaElement.prototype, 'pause').mockImplementation(function pause() {});
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+  });
+  afterEach(() => {
+    window.matchMedia = savedMatch;
+    if (savedScreen) Object.defineProperty(window, 'screen', savedScreen);
+    vi.restoreAllMocks();
+  });
+
+  test('held upright it asks to be turned (the editor stays loaded); turned sideways the editor shows, timeline and all', async () => {
+    setupServer();
+    renderAt();
+    await opened();
+    const rotate = screen.getByTestId('editor-rotate');
+    expect(within(rotate).getByRole('heading', { name: 'Turn your phone sideways' })).toBeTruthy();
+    expect(within(rotate).getByRole('link', { name: /Back to the episode/ }).getAttribute('href')).toBe(`/episodes/${EP}?tab=edit`);
+    expect(document.querySelector('.tle').className).toMatch(/\bis-phone-portrait\b/);
+    turn(false);
+    expect(screen.queryByTestId('editor-rotate')).toBeNull();
+    expect(document.querySelector('.tle').className).toMatch(/\bis-phone\b/);
+    expect(document.querySelector('.tle').className).not.toMatch(/is-phone-portrait/);
+    expect(screen.getByTestId('editor-timeline')).toBeTruthy();
+    expect(server.writes).toHaveLength(0);
+  });
+
+  test('sideways, the media panel and the inspector open as drawers, one at a time; Escape closes them', async () => {
+    portrait = false;
+    setupServer();
+    renderAt();
+    await opened();
+    const tle = () => document.querySelector('.tle').className;
+    fireEvent.click(screen.getByRole('button', { name: 'Media panel' }));
+    expect(tle()).toMatch(/has-drawer-media/);
+    expect(screen.getByRole('button', { name: 'Media panel' }).getAttribute('aria-pressed')).toBe('true');
+    fireEvent.click(screen.getByRole('button', { name: 'Inspector' }));
+    expect(tle()).toMatch(/has-drawer-inspector/);
+    expect(tle()).not.toMatch(/has-drawer-media/);
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(tle()).not.toMatch(/has-drawer/);
+  });
+
+  test('turning the phone upright while it plays stops the playback', async () => {
+    portrait = false;
+    setupServer();
+    renderAt();
+    await opened();
+    const play = () => document.querySelector('.tle-play');
+    fireEvent.click(play());
+    await waitFor(() => expect(play().getAttribute('aria-label')).toBe('Pause'));
+    turn(true);
+    await waitFor(() => expect(play().getAttribute('aria-label')).toBe('Play'));
+  });
+
+  test('on a desktop there is no rotate card and no drawer buttons', async () => {
+    window.matchMedia = vi.fn(() => ({ matches: false, addEventListener: () => {}, removeEventListener: () => {} }));
+    setupServer();
+    renderAt();
+    await opened();
+    expect(screen.queryByTestId('editor-rotate')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Media panel' })).toBeNull();
+    expect(document.querySelector('.tle').className).toBe('tle');
+  });
+});
+
 describe('EpisodeEditor: Gate 2a (D3, D4, D5)', () => {
   const CAPTION = { id: 'k1', kind: 'caption', anchor_kind: 'edit_start', anchor_beat: null, anchor_ref: null, offset_ms: 0, duration_ms: 3000,
     values: { text: 'Hello', style_key: 'lower_third', layout: { x: 100, y: 850, w: 800, h: 120, opacity: 0.5 } } };
