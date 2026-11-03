@@ -10,6 +10,12 @@
 // another profile holds it. The link is the registry entry's
 // feed_profile_id, the one link (Evoni's ruling C3; 2026-10-08): nothing
 // writes social_profiles.registry_character_id.
+//
+// Task #3209: the character and the crossing go together, in one
+// transaction. With no character made (no registry, or the key held by
+// another profile) nothing is marked: 422 with the reason, the profile as it
+// was. A profile whose character was archived is crossed again and gets that
+// character back (restored, not replaced: archiving is a soft delete).
 
 jest.mock('../../../src/middleware/auth', () => ({
   requireAuth: (req, res, next) => next(),
@@ -27,7 +33,11 @@ function crossHandler() {
 
 const SHOW_A = '11111111-1111-1111-1111-111111111111';
 
-const updatable = (row) => Object.assign(row, { async update(v) { Object.assign(this, v); return this; } });
+const updatable = (row) => Object.assign(row, {
+  async update(v) { Object.assign(this, v); return this; },
+  isSoftDeleted() { return this.deleted_at != null; },
+  async restore() { this.deleted_at = null; return this; },
+});
 
 function fakeDb({ registries = [], characters = [] } = {}) {
   const profile = updatable({
@@ -46,11 +56,18 @@ function fakeDb({ registries = [], characters = [] } = {}) {
         return regs.sort((a, b) => b.created_at - a.created_at)[0] || null;
       },
     },
+    // The crossing runs in one transaction; the fake just runs it.
+    sequelize: { transaction: async (fn) => fn({ LOCK: { UPDATE: 'UPDATE' } }) },
     RegistryCharacter: {
-      // By the link (feed_profile_id) or by registry and key.
-      findOne: async ({ where }) => ('feed_profile_id' in where
-        ? rows.find((c) => c.feed_profile_id === where.feed_profile_id)
-        : rows.find((c) => c.registry_id === where.registry_id && c.character_key === where.character_key)) || null,
+      // By the link (feed_profile_id) or by registry and key. Archived rows
+      // (deleted_at set) are skipped unless paranoid: false; a where on
+      // deleted_at asks for archived ones only.
+      findOne: async ({ where, paranoid = true }) => {
+        const live = rows.filter((c) => ('deleted_at' in where ? c.deleted_at != null : (!paranoid || c.deleted_at == null)));
+        return ('feed_profile_id' in where
+          ? live.find((c) => c.feed_profile_id === where.feed_profile_id)
+          : live.find((c) => c.registry_id === where.registry_id && c.character_key === where.character_key)) || null;
+      },
       create: async (v) => { const row = updatable({ id: `rc-${created.length + 1}`, ...v }); created.push(row); rows.push(row); return row; },
     },
     WorldTimelineEvent: { create: async () => ({}) },
@@ -108,16 +125,46 @@ describe('POST /:id/cross registry character', () => {
     r = await cross(db, { show_id: SHOW_A });
     expect(db.created).toHaveLength(0);
     expect(db.characters[0].feed_profile_id).toBe(99);
-    expect(r.out.registry_character).toBeNull();
-    expect(r.out.registry_note).toMatch(/linked to another profile/);
-    expect(db.profile.status).toBe('crossed');
+    expect(r.code).toBe(422);
+    expect(r.out).toMatchObject({ crossed: false, code: 'NO_CHARACTER_CREATED' });
+    expect(r.out.error).toMatch(/linked to another profile/);
+    expect(r.out.registry_note).toBe(r.out.error);
+    expect(db.profile.status).toBe('finalized'); // not crossed: no character
   });
 
-  test('with no registry at all it still crosses and says why no character was made', async () => {
+  test('with no registry at all nothing is crossed, and it says why (422)', async () => {
     const db = fakeDb({ registries: [] });
-    const { out } = await cross(db, { show_id: SHOW_A });
+    const timeline = jest.spyOn(db.WorldTimelineEvent, 'create');
+    const { out, code } = await cross(db, { show_id: SHOW_A });
+    expect(code).toBe(422);
     expect(db.created).toHaveLength(0);
-    expect(out).toMatchObject({ crossed: true, registry_character: null, registry_note: 'No character registry to add this profile to yet.' });
+    expect(out).toMatchObject({ crossed: false, registry_note: 'No character registry to add this profile to yet.' });
+    expect(db.profile.status).toBe('finalized');
+    expect(db.profile.crossed_at).toBeUndefined();
+    expect(timeline).not.toHaveBeenCalled();
+  });
+
+  test('a crossed profile whose character was archived is crossed again and gets that character back', async () => {
+    const db = fakeDb({ registries: REGISTRIES, characters: [{ id: 'rc-archived', registry_id: 'reg-old-a', character_key: 'sable_studio', feed_profile_id: 7, deleted_at: new Date() }] });
+    db.profile.status = 'crossed';
+    const { out, code } = await cross(db, { show_id: SHOW_A });
+    expect(code).toBeUndefined();
+    expect(db.created).toHaveLength(0);
+    expect(out).toMatchObject({ crossed: true, restored: true });
+    expect(out.registry_character.id).toBe('rc-archived');
+    expect(db.characters[0].deleted_at).toBeNull();
+
+    const again = await cross(db, { show_id: SHOW_A });
+    expect(again.code).toBe(409); // restored, so crossed with a live character
+  });
+
+  test('an archived, unlinked character under the same key is restored and linked, not a duplicate key', async () => {
+    const db = fakeDb({ registries: REGISTRIES, characters: [{ id: 'rc-old', registry_id: 'reg-new-a', character_key: 'sable_studio', feed_profile_id: null, deleted_at: new Date() }] });
+    const { out, code } = await cross(db, { show_id: SHOW_A });
+    expect(code).toBeUndefined();
+    expect(db.created).toHaveLength(0);
+    expect(out).toMatchObject({ crossed: true, restored: true });
+    expect(db.characters[0]).toMatchObject({ feed_profile_id: 7, deleted_at: null });
   });
 
   test('a profile already linked (a registry entry\'s feed_profile_id) keeps its character', async () => {
