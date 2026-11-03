@@ -403,3 +403,31 @@ video.tle-monitor-scene { background: #000; }
 .tle-mode-list li { display: flex; align-items: center; gap: 6px; }
 .tle-textarea { resize: vertical; min-height: 44px; font-family: inherit; }
 .tle-field-wide { grid-column: 1 / -1; }
+
+/* Existing work (Prepare From Existing Work, B1): the scene plan, footage and takes beat by beat. */
+.tle-linkbtn { padding: 0; border: 0; background: none; color: inherit; font: inherit; text-decoration: underline; cursor: pointer; }
+.tle-linkbtn:focus-visible { outline: 2px solid var(--tle-accent); outline-offset: 2px; }
+.tle-work-summary { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 10px; padding: 0; list-style: none; font-size: 12px; }
+.tle-work-summary li { padding: 2px 8px; border: 1px solid var(--tle-line); border-radius: 999px; background: var(--tle-panel-2); }
+.tle-work-summary .is-ready { border-color: var(--tle-ok); }
+.tle-work-summary .is-link { border-color: var(--tle-warn); }
+.tle-work-summary .is-missing { border-color: var(--tle-danger); }
+.tle-work-beat { margin-bottom: 12px; }
+.tle-work-list { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; }
+.tle-work-row { display: flex; align-items: flex-start; gap: 6px; padding: 6px; border: 1px solid var(--tle-line); border-radius: 6px; background: var(--tle-panel-2); font-size: 12px; }
+.tle-work-row.is-sub { margin-left: 16px; }
+.tle-work-row.is-empty { border-style: dashed; background: transparent; }
+.tle-work-row.is-placeable { cursor: grab; }
+.tle-work-row .tle-tile-place { position: static; flex: none; opacity: 1; }
+.tle-work-row-body { display: flex; gap: 8px; min-width: 0; flex: 1; }
+.tle-work-thumb { flex: none; width: 44px; height: 26px; display: grid; place-items: center; border-radius: 4px; overflow: hidden; background: var(--tle-bg); color: var(--tle-muted); }
+.tle-work-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.tle-work-text { min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; }
+.tle-work-name { font-weight: 600; overflow-wrap: anywhere; }
+.tle-work-status { display: inline-flex; align-items: center; gap: 3px; padding: 0 6px; border-radius: 999px; border: 1px solid currentColor; font-size: 11px; }
+.tle-work-status.is-ready, .tle-work-status.is-placed { color: var(--tle-ok); }
+.tle-work-status.is-link { color: var(--tle-warn); }
+.tle-work-status.is-missing { color: var(--tle-danger); }
+.tle-work-status.is-none { color: var(--tle-muted); }
+.tle-work-why { flex-basis: 100%; color: var(--tle-muted); }
+.tle-star { color: var(--tle-gold); vertical-align: -1px; }

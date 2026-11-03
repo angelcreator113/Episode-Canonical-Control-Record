@@ -115,6 +115,8 @@ export default function EpisodeEditor() {
   const rawClips = useRead(() => episodeEditApi.rawClips(episodeId), [episodeId]);
   const sceneSets = useRead(() => episodeEditApi.sceneSets(episodeId), [episodeId]);
   const takes = useRead(() => episodeEditApi.takes(episodeId), [episodeId]);
+  // Prepare From Existing Work, B1: the scene plan, beat by beat (reads only).
+  const sources = useRead(() => episodeEditApi.sources(episodeId), [episodeId]);
 
   // Takes: Voice Studio's playable list, and (P4) the URL each take the edit names carries in GET /edit.
   const media = useMemo(() => {
@@ -126,6 +128,16 @@ export default function EpisodeEditor() {
     return mediaIndex({ rawClips: rawClips.data || [], sceneSets: sceneSets.data || [], takes: [...listed, ...fromEdit] });
   }, [rawClips.data, sceneSets.data, takes.data, edit.data]);
   const model = useMemo(() => (edit.data ? buildTimeline(edit.data.edit, media) : null), [edit.data, media]);
+  // Which angles each beat already has on the edit (Existing work says "On the edit").
+  const placedAngles = useMemo(() => {
+    const out = new Map();
+    for (const c of edit.data?.edit?.sceneClips || []) {
+      if (c.source_kind !== 'angle_still' && c.source_kind !== 'angle_video') continue;
+      if (!out.has(c.beat_number)) out.set(c.beat_number, new Set());
+      out.get(c.beat_number).add(c.source_id);
+    }
+    return out;
+  }, [edit.data]);
   const readiness = useMemo(() => (model && findings.data ? beatReadiness(model, findings.data.findings) : null), [model, findings.data]);
 
   const [playhead, setPlayhead] = useState(0);
@@ -287,7 +299,8 @@ export default function EpisodeEditor() {
     }
     if (['angle_still', 'angle_video', 'scene_clip_source'].includes(asset.kind)) {
       if (refuseLocked('scene', 'Place scene')) return;
-      const beat = focusBeat ?? ops.beatForDrop(model.beats, at, model.duration);
+      // From Existing work an angle goes into the beat its plan names (asset.beat).
+      const beat = asset.beat ?? focusBeat ?? ops.beatForDrop(model.beats, at, model.duration);
       const body = { beat_number: beat, source_kind: asset.source_kind, source_id: asset.id };
       if (asset.source_kind === 'angle_still') body.duration_ms = 5000;
       editor.run(ops.placeSceneClip(body, `Place ${asset.label} in beat ${beat}`));
@@ -624,7 +637,7 @@ export default function EpisodeEditor() {
       <div className="tle-body" ref={bodyRef}>
         <div className="tle-upper">
           <AssetBrowser episodeId={episodeId} rawClips={{ ...rawClips, error: messageOf(rawClips.error) }} sceneSets={{ ...sceneSets, error: messageOf(sceneSets.error) }}
-            takes={{ ...takes, error: messageOf(takes.error) }} focusBeat={focusBeat}
+            takes={{ ...takes, error: messageOf(takes.error) }} sources={{ ...sources, error: messageOf(sources.error) }} placedAngles={placedAngles} focusBeat={focusBeat}
             editable={editable} onPlace={(asset) => placeAsset(asset, playhead)} onDragAsset={setDraggingAsset} />
           <div className="tle-split-v" role="separator" aria-orientation="vertical" aria-label="Resize the media panel" onPointerDown={(e) => dragLeft(e, { axis: 'x' })} onDoubleClick={resetLeft} />
           <EditorPreview frame={frame} duration={model.duration} selectedId={selectedId} onSelect={setSelectedId} onPrevEdit={prevEdit} onNextEdit={nextEdit} hidden={hidden}

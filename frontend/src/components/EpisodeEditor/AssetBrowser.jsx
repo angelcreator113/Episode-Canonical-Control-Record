@@ -13,14 +13,21 @@
  * Performer lane (their +), or are dragged onto the Scene lane to be the
  * background. Other raw clips are scene clips. The Text tab adds captions,
  * titles and lower thirds at the playhead.
+ *
+ * Prepare From Existing Work, B1 (2026-11-03): the Existing work tab lists the
+ * scene plan, footage and approved takes beat by beat (ExistingWork). Clips
+ * with no beat stay listed when a beat is focused (marked "No beat"), and a
+ * tile says the producer's ★ and a whole-episode take's beat marks.
  */
 import React, { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Plus, ChevronDown, Search, Video, Image as ImageIcon, AudioLines, CirclePlus } from 'lucide-react';
 import { beatLabel } from '../../lib/editorModel';
+import ExistingWork from './ExistingWork';
 
 const TABS = [
   { key: 'assets', label: 'Assets' },
+  { key: 'work', label: 'Existing work' },
   { key: 'scenes', label: 'Scenes' },
   { key: 'audio', label: 'Audio' },
   { key: 'text', label: 'Text' },
@@ -91,7 +98,13 @@ function Tile({ image, label, badge, meta, kind, asset, editable, onPlace, onDra
   );
 }
 
-export default function AssetBrowser({ episodeId, rawClips, sceneSets, takes, focusBeat, editable = false, onPlace, onDragAsset }) {
+const noBeat = (c) => !(Number.isInteger(Number(c.beat_number)) && Number(c.beat_number) >= 1);
+const markCount = (c) => (Array.isArray(c.beat_marks) ? c.beat_marks.length : 0);
+const NO_SOURCES = { loading: false, data: null, error: null };
+
+export default function AssetBrowser({
+  episodeId, rawClips, sceneSets, takes, sources = NO_SOURCES, placedAngles, focusBeat, editable = false, onPlace, onDragAsset,
+}) {
   const place = { editable, onPlace, onDragAsset };
   const [tab, setTab] = useState('assets');
   const [query, setQuery] = useState('');
@@ -100,14 +113,17 @@ export default function AssetBrowser({ episodeId, rawClips, sceneSets, takes, fo
   const matches = (text) => !q || String(text || '').toLowerCase().includes(q);
 
   const angles = useMemo(() => (sceneSets.data || []).flatMap((set) => (set.angles || []).map((a) => ({ ...a, set_name: set.name }))), [sceneSets.data]);
-  const clips = (rawClips.data || []).filter((c) => inBeat(c, focusBeat));
+  // A clip with no beat is never hidden by Beat Focus: it may belong anywhere (B1).
+  const clips = (rawClips.data || []).filter((c) => inBeat(c, focusBeat) || noBeat(c));
   const stills = angles.filter((a) => a.still_image_url);
   const angleVideos = angles.filter((a) => a.video_clip_url);
   const takeList = (takes.data?.takes || []).filter((t) => focusBeat == null || t.beat_number === focusBeat);
 
   const assetItems = [
     ...clips.map((c) => ({ key: `c${c.id}`, kind: 'video', asset: assetOfClip(c), image: c.thumbnail_url, label: c.label || c.original_filename || 'Untitled clip',
-      badge: duration(c.duration_seconds), meta: [PERFORMER[c.performer] || c.performer, c.beat_number ? `Beat ${c.beat_number}` : null, c.key_status === 'done' ? 'cutout' : null].filter(Boolean).join(' · ') })),
+      badge: duration(c.duration_seconds),
+      meta: [c.is_favorite ? '★' : null, PERFORMER[c.performer] || c.performer, noBeat(c) ? 'No beat' : `Beat ${c.beat_number}`,
+        markCount(c) ? `${markCount(c)} beat mark${markCount(c) === 1 ? '' : 's'}` : null, c.key_status === 'done' ? 'cutout' : null].filter(Boolean).join(' · ') })),
     ...angleVideos.map((a) => ({ key: `v${a.id}`, kind: 'video', asset: assetOfAngle(a, 'angle_video'), image: a.thumbnail_url || a.still_image_url, label: `${a.set_name || 'Scene'} · ${a.angle_label || a.angle_name}`, meta: 'Angle video' })),
     ...stills.map((a) => ({ key: `s${a.id}`, kind: 'image', asset: assetOfAngle(a, 'angle_still'), image: a.thumbnail_url || a.still_image_url, label: `${a.set_name || 'Scene'} · ${a.angle_label || a.angle_name}`, meta: 'Angle still' })),
   ];
@@ -141,6 +157,12 @@ export default function AssetBrowser({ episodeId, rawClips, sceneSets, takes, fo
         <input type="search" placeholder="Search assets…" value={query} onChange={(e) => setQuery(e.target.value)} aria-label="Search assets" />
       </label>
       {focusBeat != null && <p className="tle-browser-note">Showing beat {focusBeat}: {beatLabel(focusBeat)}</p>}
+      {tab !== 'work' && sources.data?.summary?.plan_rows > 0 && (
+        <p className="tle-browser-note">
+          This episode has a scene plan for {sources.data.summary.beats_planned} {sources.data.summary.beats_planned === 1 ? 'beat' : 'beats'}.{' '}
+          <button type="button" className="tle-linkbtn" onClick={() => setTab('work')}>See Existing work</button>
+        </p>
+      )}
 
       <div className="tle-browser-body">
         {tab === 'assets' && (
@@ -167,6 +189,11 @@ export default function AssetBrowser({ episodeId, rawClips, sceneSets, takes, fo
               ))}
             </ul>
           </>
+        )}
+
+        {tab === 'work' && (
+          <ExistingWork episodeId={episodeId} sources={sources} rawClips={rawClips} takes={takes} placedAngles={placedAngles}
+            focusBeat={focusBeat} {...place} />
         )}
 
         {tab === 'scenes' && (
