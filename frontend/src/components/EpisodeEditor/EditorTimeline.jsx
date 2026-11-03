@@ -23,6 +23,7 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { Eye, EyeOff, Lock, Unlock, Volume2, VolumeX, Link2 } from 'lucide-react';
 import { LANES, timecode } from '../../lib/editorModel';
+import { pointerXY, pointerIn } from '../../lib/editorRotation';
 
 export const LABEL_W = 190;
 
@@ -65,8 +66,7 @@ export default function EditorTimeline({
   const area = useRef(null);
 
   const seekFromEvent = (e) => {
-    const rect = area.current.getBoundingClientRect();
-    const x = e.clientX - rect.left;
+    const { x } = pointerIn(e, area.current);
     onSeek(Math.max(0, Math.min(model.duration, Math.round(x / pxPerMs))));
   };
   const at = (ms) => Math.round(ms * pxPerMs);
@@ -77,15 +77,15 @@ export default function EditorTimeline({
     if (mode === 'move' && !MOVABLE.has(b.kind)) return;
     e.stopPropagation();
     e.currentTarget.setPointerCapture?.(e.pointerId);
-    setDrag({ id: b.id, mode, x0: e.clientX, dx: 0, block: b });
+    setDrag({ id: b.id, mode, x0: pointerXY(e).x, dx: 0, block: b });
   };
   // A trim handle sits inside its block: its events stop there, so one gesture is one change.
-  const moveDrag = (e) => { if (!drag) return; e.stopPropagation(); setDrag({ ...drag, dx: e.clientX - drag.x0 }); };
+  const moveDrag = (e) => { if (!drag) return; e.stopPropagation(); setDrag({ ...drag, dx: pointerXY(e).x - drag.x0 }); };
   const endDrag = (e) => {
     if (!drag) return;
     e.stopPropagation();
     const { block, mode } = drag;
-    const dx = e.clientX - drag.x0;
+    const dx = pointerXY(e).x - drag.x0;
     setDrag(null);
     if (Math.abs(dx) < 3) return;
     justDragged.current = true;
@@ -109,8 +109,7 @@ export default function EditorTimeline({
 
   const takes = (laneKey) => laneTakes(laneKey, draggingAsset) && !locked(laneKey);
   const timeFromEvent = (e) => {
-    const rect = area.current.getBoundingClientRect();
-    return Math.max(0, Math.round((e.clientX - rect.left) / pxPerMs));
+    return Math.max(0, Math.round(pointerIn(e, area.current).x / pxPerMs));
   };
 
   return (
