@@ -172,10 +172,13 @@ router.put(
 // ==================== UNIFIED SAVE ENDPOINT ====================
 
 // POST /api/v1/episodes/:id/save - Atomic save for Scene Composer & Timeline Editor
+// Closed with the old Timeline Editor (2026-11-03): 410 unless LEGACY_TIMELINE_WRITES=on, then admin only.
 router.post(
   '/:id/save',
   validateUUIDParam('id'),
   requireAuth,
+  require('../utils/timelineSaveGuard').legacyTimelineWritesOpen,
+  authorize(['ADMIN']),
   asyncHandler(async (req, res) => {
     const { Episode, Scene, TimelineData } = require('../models');
     const { checkTimelineWrite, scenesToRemove, timelineBasis, SaveConflict } = require('../utils/timelineSaveGuard');

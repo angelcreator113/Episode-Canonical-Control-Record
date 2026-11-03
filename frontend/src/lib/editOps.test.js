@@ -18,8 +18,12 @@ describe('commands and their inverses', () => {
     expect(undo.undo().requests[0]).toEqual({ method: 'post', path: '/scene-clips', body: { beat_number: 3, source_kind: 'angle_still', source_id: 'a1', duration_ms: 5000 } });
   });
 
-  test('deleting a scene clip is undone by placing it at its own position with its own trim', () => {
-    expect(ops.removeSceneClip(clip).undo().requests[0].body).toEqual({ beat_number: 3, source_kind: 'angle_video', source_id: 'a2', duration_ms: 4000, source_in_ms: 0, source_out_ms: 4000, position: 1 });
+  test('deleting a scene clip is undone by putting it back at its place in the beat (by index) with its own trim', () => {
+    const back = ops.removeSceneClip(clip).undo();
+    expect(back.requests[0].body).toEqual({ beat_number: 3, source_kind: 'angle_video', source_id: 'a2', duration_ms: 4000, source_in_ms: 0, source_out_ms: 4000, index: 1 });
+    // The put back stands for the deleted row from then on.
+    expect(back.replaces).toBe('c1');
+    expect(back.newId([{ scene_clip_id: 'c9' }])).toBe('c9');
   });
 
   test('a trim is undone with the stored values, only the fields it changed', () => {
@@ -73,7 +77,7 @@ describe('commands and their inverses', () => {
   test('deleting a segment is undone by placing the same take, range, place, commentary and level', () => {
     const back = ops.removeSegment(seg).undo().requests[0];
     expect(back).toEqual({ method: 'post', path: '/segments', body: {
-      raw_clip_id: 'r1', source_in_ms: 1000, source_out_ms: 9000, anchor_kind: 'beat_start', anchor_beat: 2, anchor_ref: null, offset_ms: 500,
+      raw_clip_id: 'r1', source_in_ms: 1000, source_out_ms: 9000, anchor_kind: 'beat_start', anchor_beat: 2, offset_ms: 500,
       layout: null, audio_in_ms: 2000, audio_out_ms: 8000, audio_gain_db: -3, audio_muted: false, audio_fade_in_ms: 200, audio_fade_out_ms: 300,
     } });
   });

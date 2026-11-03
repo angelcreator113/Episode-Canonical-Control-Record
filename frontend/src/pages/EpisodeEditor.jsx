@@ -28,6 +28,8 @@
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
+import { isAdmin } from '../utils/authGroups';
 import {
   ArrowLeft, ChevronRight, Pencil, Save, MonitorPlay, Upload, MoreVertical,
   Undo2, Redo2, SquareSplitHorizontal, Scissors, Copy, ClipboardPaste, Trash2, ZoomIn, ZoomOut, Maximize2, Magnet, X,
@@ -152,8 +154,13 @@ export default function EpisodeEditor() {
     await edit.reload();
     findings.reload().catch((err) => console.error('[EpisodeEditor] findings reload failed:', err?.message));
   }, [edit.reload, findings.reload]);
-  const editor = useEditOps({ episodeId, getRevision: () => editRef.current?.edit_revision, reload: reloadAll });
-  const editable = Boolean(edit.data) && !editor.busy;
+  // Editing is an admin's (the server refuses anyone else's writes): others get the editor read
+  // only, and useEditOps sends nothing for them, whatever starts the change (a key, a drop, a field).
+  const { user } = useAuth();
+  const admin = isAdmin(user);
+  const editor = useEditOps({ episodeId, getRevision: () => editRef.current?.edit_revision, reload: reloadAll, canWrite: admin });
+  const canEdit = Boolean(edit.data) && admin;
+  const editable = canEdit && !editor.busy;
 
   const toggleView = useCallback((lane, key) => {
     setView((cur) => {
@@ -388,9 +395,10 @@ export default function EpisodeEditor() {
     const { kind, row, label } = clipboard;
     if (kind === 'segment') {
       if (refuseLocked('prime', 'Paste')) return;
-      const body = { raw_clip_id: row.raw_clip_id, source_in_ms: row.source_in_ms, source_out_ms: row.source_out_ms, anchor_kind: 'edit_start', offset_ms: at,
-        layout: row.layout || null, audio_gain_db: row.audio_gain_db, audio_muted: row.audio_muted };
-      if (row.audio_in_ms != null) Object.assign(body, { audio_in_ms: row.audio_in_ms, audio_out_ms: row.audio_out_ms, audio_fade_in_ms: row.audio_fade_in_ms, audio_fade_out_ms: row.audio_fade_out_ms });
+      // As it is stored (her commentary range, or none, her gain and mute), at the playhead.
+      const body = { ...ops.segmentPlaceBody(row), anchor_kind: 'edit_start', offset_ms: at, layout: row.layout || null };
+      delete body.anchor_beat;
+      delete body.anchor_ref;
       editor.run(ops.placeSegment(body, `Paste ${label}`));
     } else if (kind === 'scene_clip') {
       if (refuseLocked('scene', 'Paste')) return;
@@ -599,9 +607,15 @@ export default function EpisodeEditor() {
         <span className="tle-muted" title="Every change is saved when it is made">Edit revision {edit.data.edit_revision}</span>
         {counts && <span className={`tle-counts${counts.blocking ? ' is-blocked' : ''}`}>{counts.blocking} blocking · {counts.warning} {counts.warning === 1 ? 'warning' : 'warnings'}</span>}
         {findings.error && <span className="tle-counts is-blocked" role="status">Findings could not be loaded: {messageOf(findings.error)}</span>}
+        {edit.data && !admin && (
+          <span className="tle-notice is-info" role="status" data-testid="editor-read-only">Read only: editing needs an admin account.</span>
+        )}
         {editor.notice && (
           <span className={`tle-notice is-${editor.notice.kind}`} role={editor.notice.kind === 'error' ? 'alert' : 'status'} data-testid="editor-notice">
             {editor.notice.text}
+            {editor.notice.action && (
+              <button type="button" className="tle-notice-action" onClick={editor.notice.action.run} data-testid="editor-notice-action">{editor.notice.action.label}</button>
+            )}
             <button type="button" className="tle-icon-btn" onClick={editor.clearNotice} aria-label="Dismiss"><X size={13} /></button>
           </span>
         )}
@@ -628,7 +642,7 @@ export default function EpisodeEditor() {
             }} />
           <div className="tle-split-v" role="separator" aria-orientation="vertical" aria-label="Resize the inspector" onPointerDown={(e) => dragRight(e, { axis: 'x', sign: -1 })} onDoubleClick={resetRight} />
           <EditorInspector block={selected} beat={cardBeat} readiness={readiness?.beats.find((r) => r.beat === cardBeat?.beat)}
-            editable={editable} act={act} liveLayout={liveLayout} beatPlan={beatPlan} pipHidden={pipHiddenRule}
+            editable={canEdit} saving={editor.busy} act={act} liveLayout={liveLayout} beatPlan={beatPlan} pipHidden={pipHiddenRule}
             modeMarks={model.modeMarks} playhead={playhead} c1b={c1b} />
         </div>
 

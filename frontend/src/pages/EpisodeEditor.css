@@ -335,6 +335,8 @@ video.tle-monitor-scene { background: #000; }
 .tle-notice.is-error { border-color: rgba(229, 72, 77, 0.6); color: #f6b3b5; }
 .tle-notice.is-ok { border-color: rgba(63, 182, 123, 0.5); color: #a9e5c4; }
 .tle-notice .tle-icon-btn { width: 22px; height: 22px; }
+.tle-notice-action { flex: none; padding: 2px 8px; border-radius: 4px; border: 1px solid currentColor; background: transparent; color: inherit; font: inherit; cursor: pointer; }
+.tle-notice-action:focus-visible { outline: 2px solid var(--tle-accent, #B8962E); outline-offset: 1px; }
 .tle-menu-versions { display: flex; flex-direction: column; max-height: 300px; overflow: auto; }
 .tle-menu-versions > * { padding: 8px 10px; text-align: left; background: none; border: 0; color: var(--tle-text); font: inherit; border-radius: 6px; cursor: pointer; }
 .tle-menu-versions > button:hover { background: var(--tle-panel-2); }

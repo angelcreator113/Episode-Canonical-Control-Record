@@ -98,12 +98,20 @@ function ArrangeBox({
     onDrag?.(null);
     if (moved && !sameLayout(live, start)) onCommit?.(id, live);
   };
+  // Taken over by the browser or system (pointercancel, a lost capture): nothing is saved, and the
+  // page's live layout is cleared so the inspector shows the stored place again.
+  const cancel = (e) => {
+    if (!drag) return;
+    e?.stopPropagation?.();
+    setDrag(null);
+    onDrag?.(null);
+  };
   return (
     <div
       className={`${className}${selected ? ' is-selected' : ''}${canArrange ? ' can-arrange' : ''}`}
       style={{ left: pct(shown.x, FRAME_W), top: pct(shown.y, FRAME_H), width: pct(shown.w, FRAME_W), height: pct(shown.h, FRAME_H), opacity }}
       data-testid={testid}
-      onPointerDown={(e) => begin(e, 'move')} onPointerMove={move} onPointerUp={end}
+      onPointerDown={(e) => begin(e, 'move')} onPointerMove={move} onPointerUp={end} onPointerCancel={cancel} onLostPointerCapture={cancel}
     >
       <button type="button" className="tle-monitor-pip-hit" onClick={() => onSelect(id)} aria-label={label} aria-pressed={selected}
         title={canArrange ? 'Drag to move; drag a handle to resize (Shift frees the proportions)' : title}>
@@ -111,7 +119,7 @@ function ArrangeBox({
       </button>
       {canArrange && HANDLES.map((h) => (
         <span key={h} className={`tle-pip-handle h-${h}`} data-testid={`${handlePrefix}-handle-${h}`} aria-hidden="true"
-          onPointerDown={(e) => begin(e, h)} onPointerMove={move} onPointerUp={end} />
+          onPointerDown={(e) => begin(e, h)} onPointerMove={move} onPointerUp={end} onPointerCancel={cancel} onLostPointerCapture={cancel} />
       ))}
       {drag && <span className="tle-pip-readout" aria-hidden="true">{shown.x}, {shown.y} · {shown.w}×{shown.h}</span>}
     </div>

@@ -8,8 +8,12 @@
  */
 import React from 'react';
 import { vi, describe, beforeEach, afterEach, test, expect } from 'vitest';
-import { render, screen, fireEvent, within, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, within, waitFor, act } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
+
+// An admin is signed in unless a test says otherwise (editing is an admin's).
+const auth = vi.hoisted(() => ({ user: { id: 'u1', groups: ['admin'] } }));
+vi.mock('../contexts/AuthContext', () => ({ useAuth: () => auth }));
 
 vi.mock('../services/api', () => ({
   default: { get: vi.fn(), post: vi.fn(), put: vi.fn(), patch: vi.fn(), delete: vi.fn() },
@@ -162,7 +166,7 @@ describe('EpisodeEditor: editing (P3)', () => {
     fireEvent.click(screen.getByRole('button', { name: /^Undo$/ }));
     await waitFor(() => expect(server.writes).toHaveLength(2));
     expect(lastWrite()).toEqual({ method: 'post', path: '/segments', body: {
-      raw_clip_id: 'r1', source_in_ms: 0, source_out_ms: 6000, anchor_kind: 'beat_start', anchor_beat: 1, anchor_ref: null, offset_ms: 0,
+      raw_clip_id: 'r1', source_in_ms: 0, source_out_ms: 6000, anchor_kind: 'beat_start', anchor_beat: 1, offset_ms: 0,
       layout: { x: 1300, y: 700, w: 540, h: 304 }, audio_in_ms: 0, audio_out_ms: 6000, audio_gain_db: -2, audio_muted: false, audio_fade_in_ms: 0, audio_fade_out_ms: 0,
       edit_revision: '8',
     } });
@@ -308,6 +312,127 @@ describe('EpisodeEditor: editing (P3)', () => {
     await waitFor(() => expect(server.writes).toHaveLength(1));
     expect(lastWrite()).toMatchObject({ method: 'patch', path: '/audio-items/m1', body: { anchor_kind: 'edit_start', edit_revision: '7' } });
     expect(Math.abs(lastWrite().body.offset_ms - 1000)).toBeLessThanOrEqual(34);
+  });
+});
+
+// The audit of 2026-11-03 (Part A): each confirmed problem, kept fixed.
+describe('EpisodeEditor: reliability (audit 2026-11-03)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    localStorage.clear();
+    auth.user = { id: 'u1', groups: ['admin'] };
+    vi.spyOn(window.HTMLMediaElement.prototype, 'play').mockImplementation(function play() { return Promise.resolve(); });
+    vi.spyOn(window.HTMLMediaElement.prototype, 'pause').mockImplementation(function pause() {});
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+  });
+  afterEach(() => { auth.user = { id: 'u1', groups: ['admin'] }; vi.restoreAllMocks(); });
+
+  test('A4: while a field saves, the inspector keeps its fields (read only), so the next field keeps focus', async () => {
+    setupServer();
+    let release;
+    const post = vi.mocked(api.post).getMockImplementation();
+    vi.mocked(api.post).mockImplementationOnce((...a) => new Promise((res) => { release = () => res(post(...a)); }));
+    renderAt();
+    await opened();
+    selectPrime();
+    const x = within(inspector()).getByLabelText('Position X');
+    const y = within(inspector()).getByLabelText('Position Y');
+    x.focus();
+    fireEvent.change(x, { target: { value: '1200' } });
+    y.focus();
+    fireEvent.blur(x);
+    await waitFor(() => expect(release).toBeTypeOf('function'));
+    // Saving: the same input is still there, read only, and still focused.
+    expect(within(inspector()).getByLabelText('Position Y')).toBe(y);
+    expect(y.readOnly).toBe(true);
+    expect(document.activeElement).toBe(y);
+    await act(async () => { release(); });
+    await waitFor(() => expect(screen.getByText('Edit revision 8')).toBeTruthy());
+    expect(y.readOnly).toBe(false);
+    expect(document.activeElement).toBe(y);
+  });
+
+  test('A4: a refused value does not stay in its field; the stored one comes back and the same value can be sent again', async () => {
+    setupServer({ refuseNext: [400, 'BAD_RANGE', 'Out must be within the take (0–6000 ms)'] });
+    renderAt();
+    await opened();
+    selectPrime();
+    const out = within(inspector()).getByLabelText('Source out');
+    fireEvent.change(out, { target: { value: '9000' } });
+    fireEvent.keyDown(out, { key: 'Enter' });
+    expect((await screen.findByTestId('editor-notice')).textContent).toMatch(/Out must be within the take/);
+    await waitFor(() => expect(within(inspector()).getByLabelText('Source out').value).toBe('6000'));
+    fireEvent.change(within(inspector()).getByLabelText('Source out'), { target: { value: '9000' } });
+    fireEvent.keyDown(within(inspector()).getByLabelText('Source out'), { key: 'Enter' });
+    await waitFor(() => expect(server.writes).toHaveLength(2));
+  });
+
+  test('A3: a Prime stretch with no commentary is put back, and pasted, with none (and her mute kept)', async () => {
+    const quiet = { ...SEG, audio_in_ms: null, audio_out_ms: null, audio_muted: true };
+    setupServer({ edit: editWith({ segments: [quiet] }) });
+    renderAt();
+    await opened();
+    selectPrime();
+    fireEvent.keyDown(window, { key: 'c', ctrlKey: true });
+    fireEvent.keyDown(window, { key: 'Delete' });
+    await waitFor(() => expect(server.writes).toHaveLength(1));
+    fireEvent.click(screen.getByRole('button', { name: /^Undo$/ }));
+    await waitFor(() => expect(server.writes).toHaveLength(2));
+    expect(lastWrite().path).toBe('/segments');
+    expect(lastWrite().body).toMatchObject({ no_commentary: true, audio_muted: true, audio_gain_db: -2 });
+    expect(lastWrite().body).not.toHaveProperty('audio_in_ms');
+    await waitFor(() => expect(screen.getByRole('button', { name: /Paste/ }).disabled).toBe(false));
+    fireEvent.keyDown(window, { key: 'v', ctrlKey: true });
+    await waitFor(() => expect(server.writes).toHaveLength(3));
+    expect(lastWrite().body).toMatchObject({ no_commentary: true, audio_muted: true, anchor_kind: 'edit_start' });
+    expect(lastWrite().body).not.toHaveProperty('audio_in_ms');
+  });
+
+  test('A6: someone who is not an admin gets the editor read only, and nothing is sent', async () => {
+    auth.user = { id: 'u2', groups: ['viewer'] };
+    setupServer();
+    renderAt();
+    await opened();
+    expect(screen.getByTestId('editor-read-only').textContent).toMatch(/editing needs an admin account/i);
+    selectPrime();
+    expect(screen.getByRole('button', { name: /^Delete$/ }).disabled).toBe(true);
+    fireEvent.keyDown(window, { key: 'Delete' });
+    expect(within(inspector()).getByLabelText('Position X').readOnly).toBe(true);
+    expect(within(inspector()).getByText('Read only.')).toBeTruthy();
+    await new Promise((r) => setTimeout(r, 20));
+    expect(server.writes).toHaveLength(0);
+  });
+
+  test('A8: a drag the system takes over (pointercancel) changes nothing and puts the block back', async () => {
+    setupServer();
+    renderAt();
+    await opened();
+    const block = within(screen.getByTestId('editor-timeline')).getByRole('button', { name: /^Music: Bed/ });
+    const left = block.style.left;
+    const px = parseFloat(block.style.width) / 4000;
+    fireEvent.pointerDown(block, { button: 0, clientX: 10, pointerId: 3 });
+    fireEvent.pointerMove(block, { clientX: 10 + px * 1000, pointerId: 3 });
+    expect(block.style.left).not.toBe(left);
+    fireEvent.pointerCancel(block, { pointerId: 3 });
+    expect(block.style.left).toBe(left);
+    fireEvent.pointerUp(block, { clientX: 10 + px * 1000, pointerId: 3 });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(server.writes).toHaveLength(0);
+  });
+
+  test('A8: Prime dragged in the preview and then cancelled saves nothing; the inspector shows her stored place', async () => {
+    setupServer();
+    renderAt();
+    await opened();
+    selectPrime();
+    const pip = screen.getByTestId('preview-pip');
+    fireEvent.pointerDown(pip, { button: 0, clientX: 100, clientY: 100, pointerId: 4 });
+    fireEvent.pointerMove(pip, { clientX: 140, clientY: 100, pointerId: 4 });
+    fireEvent.lostPointerCapture(pip, { pointerId: 4 });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(server.writes).toHaveLength(0);
+    expect(within(inspector()).getByLabelText('Position X').value).toBe('1300');
   });
 });
 

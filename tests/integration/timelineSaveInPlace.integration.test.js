@@ -57,6 +57,8 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
                               WHERE episode_id = :ep AND deleted_at IS NULL ORDER BY scene_number`, { ep });
 
   beforeAll(async () => {
+    // The legacy save is closed unless the server opens it, and then only for an admin (audit 2026-11-03, A7).
+    process.env.LEGACY_TIMELINE_WRITES = 'on';
     // The studio is admin-only (SEC-6 put export behind ADMIN, 2026-10-29).
     token = TokenService.generateTokenPair({
       id: 'test-user-timeline', email: 'user@timeline.dev', name: 'Admin', groups: ['ADMIN'], role: 'ADMIN',

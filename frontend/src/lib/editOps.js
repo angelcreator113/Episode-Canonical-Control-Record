@@ -23,6 +23,26 @@ const ANCHOR = ['anchor_kind', 'anchor_beat', 'anchor_ref', 'offset_ms'];
 const anchorOfRow = (row) => pick(row, ANCHOR);
 const barrier = (label, why) => () => ({ barrier: true, label, why });
 
+/**
+ * A request with every row id it names (path segments, batch step ids, an
+ * item anchor) resolved to the row that stands for it now. A put back or a
+ * redone place makes a new row; the commands further down the undo and redo
+ * stacks still name the old one (useEditOps keeps the map).
+ */
+export function resolveRequest(req, resolve) {
+  const path = req.path.split('/').map((part) => (part ? resolve(part) : part)).join('/');
+  let body = req.body;
+  if (body && Array.isArray(body.steps)) {
+    body = { ...body, steps: body.steps.map((st) => ({ ...st, ...(st.id ? { id: resolve(st.id) } : {}), ...(st.body?.anchor_ref ? { body: { ...st.body, anchor_ref: resolve(st.body.anchor_ref) } } : {}) })) };
+  } else if (body && body.anchor_ref) {
+    body = { ...body, anchor_ref: resolve(body.anchor_ref) };
+  }
+  return { ...req, path, ...(req.body === undefined ? {} : { body }) };
+}
+
+/** A place that puts back (or redoes) `replaces`: the new row stands for it from then on. */
+const standsFor = (cmd, replaces, key) => (replaces ? { ...cmd, replaces, newId: ([r]) => r?.[key] } : cmd);
+
 /** Several steps as one request: POST /ops { steps: [{ op, id?, body? }] } (P4). */
 export const batchRequest = (steps) => ({ method: 'post', path: '/ops', body: { steps } });
 
@@ -42,25 +62,31 @@ export function writeFailure(err) {
 
 // ── Scene clips ─────────────────────────────────────────────────────────
 
-/** body: { beat_number, source_kind, source_id, duration_ms?, source_in_ms?, source_out_ms?, position? } */
-export function placeSceneClip(body, label = 'Place scene clip') {
-  return {
+/** body: { beat_number, source_kind, source_id, duration_ms?, source_in_ms?, source_out_ms?, position? | index? } */
+export function placeSceneClip(body, label = 'Place scene clip', { replaces = null } = {}) {
+  return standsFor({
     label,
     requests: [{ method: 'post', path: '/scene-clips', body }],
     undo: ([r]) => removeSceneClip({ ...body, id: r.scene_clip_id }, `Undo: ${label.toLowerCase()}`),
-  };
+  }, replaces, 'scene_clip_id');
 }
 
+/**
+ * Deletes a scene clip; undo puts it back at its place among the beat's clips
+ * by index (the server inserts it there and renumbers), so a reorder or split
+ * since the delete never leaves its old position "taken".
+ */
 export function removeSceneClip(clip, label = 'Delete scene clip') {
+  const index = clip.index ?? clip.position;
   const back = {
     beat_number: clip.beat_number, source_kind: clip.source_kind, source_id: clip.source_id, duration_ms: clip.duration_ms,
     ...(clip.source_kind === 'angle_still' ? {} : { source_in_ms: clip.source_in_ms, source_out_ms: clip.source_out_ms }),
-    ...(clip.position != null ? { position: clip.position } : {}),
+    ...(index != null ? { index } : {}),
   };
   return {
     label,
     requests: [{ method: 'delete', path: `/scene-clips/${clip.id}` }],
-    undo: () => placeSceneClip(back, 'Put back scene clip'),
+    undo: () => placeSceneClip(back, 'Put back scene clip', { replaces: clip.id }),
   };
 }
 
@@ -110,20 +136,40 @@ const SEGMENT_PLACE = ['raw_clip_id', 'source_in_ms', 'source_out_ms', ...ANCHOR
   'audio_gain_db', 'audio_muted', 'audio_fade_in_ms', 'audio_fade_out_ms'];
 
 /** body: { raw_clip_id, anchor_kind, anchor_beat?, offset_ms, source_in_ms?, source_out_ms?, layout?, ... } */
-export function placeSegment(body, label = 'Place Prime segment') {
-  return {
+export function placeSegment(body, label = 'Place Prime segment', { replaces = null } = {}) {
+  return standsFor({
     label,
     requests: [{ method: 'post', path: '/segments', body }],
     undo: ([r]) => removeSegment({ ...body, id: r.segment_id }, `Undo: ${label.toLowerCase()}`),
-  };
+  }, replaces, 'segment_id');
+}
+
+/**
+ * The body that places a segment as `seg` stores it. A stretch with no
+ * commentary (audio range null, e.g. a split's outer half) says so with
+ * no_commentary: without it the server gives the whole video range her voice.
+ * Her gain and mute go with it.
+ */
+export function segmentPlaceBody(seg) {
+  const body = Object.fromEntries(Object.entries(pick(seg, SEGMENT_PLACE)).filter(([, v]) => v !== undefined));
+  if (seg.no_commentary || seg.audio_in_ms == null || seg.audio_out_ms == null) {
+    delete body.audio_in_ms;
+    delete body.audio_out_ms;
+    delete body.audio_fade_in_ms;
+    delete body.audio_fade_out_ms;
+    body.no_commentary = true;
+  }
+  if (body.anchor_ref == null) delete body.anchor_ref;
+  if (body.anchor_beat == null) delete body.anchor_beat;
+  return body;
 }
 
 export function removeSegment(seg, label = 'Delete Prime segment') {
-  const back = Object.fromEntries(Object.entries(pick(seg, SEGMENT_PLACE)).filter(([, v]) => v !== undefined));
+  const back = segmentPlaceBody(seg);
   return {
     label,
     requests: [{ method: 'delete', path: `/segments/${seg.id}` }],
-    undo: () => placeSegment(back, 'Put back Prime segment'),
+    undo: () => placeSegment(back, 'Put back Prime segment', { replaces: seg.id }),
   };
 }
 
@@ -191,12 +237,12 @@ export function splitSegment(seg, atSourceMs) {
 // ── Dialogue ────────────────────────────────────────────────────────────
 
 /** body: { approval_id, association_id, anchor_kind: 'beat_start' | 'edit_start', anchor_beat?, offset_ms } */
-export function placeDialogue(body, label = 'Place dialogue') {
-  return {
+export function placeDialogue(body, label = 'Place dialogue', { replaces = null } = {}) {
+  return standsFor({
     label,
     requests: [{ method: 'post', path: '/dialogue', body }],
     undo: ([r]) => removeDialogue({ id: r.item_id, voice_approval_id: body.approval_id, voice_association_id: body.association_id, ...pick(body, ANCHOR) }, `Undo: ${label.toLowerCase()}`),
-  };
+  }, replaces, 'item_id');
 }
 
 export function removeDialogue(item, label = 'Delete dialogue') {
@@ -204,7 +250,7 @@ export function removeDialogue(item, label = 'Delete dialogue') {
   return {
     label,
     requests: [{ method: 'delete', path: `/dialogue/${item.id}` }],
-    undo: () => placeDialogue(back, 'Put back dialogue'),
+    undo: () => placeDialogue(back, 'Put back dialogue', { replaces: item.id }),
   };
 }
 
@@ -221,12 +267,12 @@ export function moveDialogue(item, anchor, label = 'Move dialogue') {
 
 const AUDIO_PLACE = ['track', 'asset_ref', 'slot', 'source_in_ms', 'source_out_ms', ...ANCHOR, 'gain_db', 'fade_in_ms', 'fade_out_ms', 'duck_under_dialogue_db'];
 
-export function addAudioItem(body, label = 'Place sound') {
-  return {
+export function addAudioItem(body, label = 'Place sound', { replaces = null } = {}) {
+  return standsFor({
     label,
     requests: [{ method: 'post', path: '/audio-items', body }],
     undo: ([r]) => removeAudioItem({ ...body, id: r.audio_item_id }, `Undo: ${label.toLowerCase()}`),
-  };
+  }, replaces, 'audio_item_id');
 }
 
 export function removeAudioItem(item, label = 'Delete sound') {
@@ -234,7 +280,7 @@ export function removeAudioItem(item, label = 'Delete sound') {
   return {
     label,
     requests: [{ method: 'delete', path: `/audio-items/${item.id}` }],
-    undo: () => addAudioItem(back, 'Put back sound'),
+    undo: () => addAudioItem(back, 'Put back sound', { replaces: item.id }),
   };
 }
 
@@ -264,12 +310,12 @@ const itemName = (kind) => ITEM_NAMES[kind] || 'item';
  * A performer clip's length is its source in to out (the server measures it);
  * a caption's is duration_ms; a mode change has none.
  */
-export function addItem(body, label = `Place ${itemName(body.kind)}`) {
-  return {
+export function addItem(body, label = `Place ${itemName(body.kind)}`, { replaces = null } = {}) {
+  return standsFor({
     label,
     requests: [{ method: 'post', path: '/items', body }],
     undo: ([r]) => removeItem({ ...body, id: r.item_id, duration_ms: r.duration_ms ?? body.duration_ms ?? null }, `Undo: ${label.toLowerCase()}`),
-  };
+  }, replaces, 'item_id');
 }
 
 export function removeItem(item, label = `Delete ${itemName(item.kind)}`) {
@@ -280,7 +326,7 @@ export function removeItem(item, label = `Delete ${itemName(item.kind)}`) {
   return {
     label,
     requests: [{ method: 'delete', path: `/items/${item.id}` }],
-    undo: () => addItem(back, `Put back ${itemName(item.kind)}`),
+    undo: () => addItem(back, `Put back ${itemName(item.kind)}`, { replaces: item.id }),
   };
 }
 
@@ -341,19 +387,19 @@ export function lockTiming() {
 }
 
 /** Hides (or shows) Prime for one beat: a visibility rule, which never mutes her commentary. */
-export function setBeatPipVisible(beat, visible) {
-  return {
+export function setBeatPipVisible(beat, visible, { replaces = null } = {}) {
+  return standsFor({
     label: `Beat ${beat}: ${visible ? 'show' : 'hide'} Prime`,
     requests: [{ method: 'post', path: '/visibility', body: { scope: 'beat', beat_number: beat, visible } }],
     undo: ([r]) => removeVisibility({ id: r.rule_id, scope: 'beat', beat_number: beat, visible }),
-  };
+  }, replaces, 'rule_id');
 }
 
 export function removeVisibility(rule) {
   return {
     label: `Beat ${rule.beat_number}: remove the Prime ${rule.visible ? 'show' : 'hide'} rule`,
     requests: [{ method: 'delete', path: `/visibility/${rule.id}` }],
-    undo: () => setBeatPipVisible(rule.beat_number, rule.visible),
+    undo: () => setBeatPipVisible(rule.beat_number, rule.visible, { replaces: rule.id }),
   };
 }
 

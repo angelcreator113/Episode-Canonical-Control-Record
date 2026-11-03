@@ -14,6 +14,10 @@ import { vi, describe, beforeEach, afterEach, test, expect } from 'vitest';
 import { render, screen, fireEvent, within, waitFor } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 
+// An admin is signed in unless a test says otherwise (editing is an admin's).
+const auth = vi.hoisted(() => ({ user: { id: 'u1', groups: ['admin'] } }));
+vi.mock('../contexts/AuthContext', () => ({ useAuth: () => auth }));
+
 vi.mock('../services/api', () => ({
   default: { get: vi.fn(), post: vi.fn(), put: vi.fn(), patch: vi.fn(), delete: vi.fn() },
 }));
