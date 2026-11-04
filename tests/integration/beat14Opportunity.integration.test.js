@@ -325,7 +325,9 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
       expect(await beat14.resolveAtCompletion(models, { episodeId: ep3, event: { id: ev3, name: 'First Gala' }, tierFinal: undefined })).toMatchObject({ id: id2, status: 'offered' });
     });
 
-    test('Schedule as Event now offers and books it, with its event, in one step', async () => {
+    // Scheduling accepts nothing (Evoni's ruling): a held one is offered with
+    // its event, not booked; Lala's answer is still to come.
+    test('Schedule as Event now offers it, with its event, in one step, and does not book it', async () => {
       const id = await holdOne('Sable Schedule Early');
       // No connector, so no draft and no guest selection (no model calls).
       await run('UPDATE opportunities SET connector_profile_id = NULL WHERE id = :id', { id });
@@ -336,22 +338,22 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
       expect(res.status).toBe(200);
       expect(res.body.data).toMatchObject({ offered_early: true });
       const after = await row(id);
-      expect(after).toMatchObject({ status: 'booked', event_id: res.body.data.event_id, offered_in_episode_id: ep3 });
+      expect(after).toMatchObject({ status: 'offered', event_id: res.body.data.event_id, offered_in_episode_id: ep3 });
       expect(after.offer_date).not.toBeNull();
       expect(after.status_history.slice(-2)).toEqual([
         expect.objectContaining({ status: 'offered', note: 'Scheduled before its episode was completed', tier: null, released: true, source_event_id: ev3 }),
-        expect.objectContaining({ status: 'booked', note: 'Scheduled as event' }),
+        expect.objectContaining({ status: 'offered', note: 'Scheduled as event; status unchanged', event_id: res.body.data.event_id }),
       ]);
       const [event] = await rows('SELECT name, opportunity_id, deleted_at FROM world_events WHERE id = :e', { e: res.body.data.event_id });
       expect(event).toEqual({ name: 'Sable Schedule Early', opportunity_id: id, deleted_at: null });
-      // Still beat 14's invitation for the writers; completion leaves it booked.
+      // Still beat 14's invitation for the writers; completion leaves it offered.
       const b14 = await auth(request(app).get(url(ep3)));
-      expect(b14.body.data.opportunity).toMatchObject({ id, status: 'booked', completion_status: 'offered' });
-      expect(await beat14.resolveAtCompletion(models, { episodeId: ep3, event: { id: ev3, name: 'First Gala' }, tierFinal: 'pass' })).toMatchObject({ id, status: 'booked' });
-      expect((await row(id)).status).toBe('booked');
+      expect(b14.body.data.opportunity).toMatchObject({ id, status: 'offered', completion_status: 'offered' });
+      expect(await beat14.resolveAtCompletion(models, { episodeId: ep3, event: { id: ev3, name: 'First Gala' }, tierFinal: 'pass' })).toMatchObject({ id, status: 'offered' });
+      expect((await row(id)).status).toBe('offered');
     });
 
-    test('a failed schedule leaves it held and removes the event it made', async () => {
+    test('a failed schedule leaves it held and rolls back the event it made', async () => {
       const id = await holdOne('Sable Schedule Fails');
       await run('UPDATE opportunities SET connector_profile_id = NULL WHERE id = :id', { id });
       const realQuery = sequelize.query.bind(sequelize);
@@ -368,13 +370,13 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
       expect(res.status).toBe(500);
       const after = await row(id);
       expect(after).toMatchObject({ status: 'held', event_id: null, offer_date: null });
+      // One transaction: no event row is left behind at all.
       const events = await rows("SELECT deleted_at FROM world_events WHERE show_id = :show AND name = 'Sable Schedule Fails'", { show });
-      expect(events.length).toBe(1);
-      expect(events[0].deleted_at).not.toBeNull();
-      // A second try goes through: the removed event does not block the name.
+      expect(events.length).toBe(0);
+      // A second try goes through.
       const retry = await auth(request(app).post(`/api/v1/feed-pipeline/${show}/schedule/${id}`));
       expect(retry.status).toBe(200);
-      expect((await row(id)).status).toBe('booked');
+      expect((await row(id)).status).toBe('offered');
     });
 
     test('the unused to-event route refuses a held one', async () => {

@@ -17,6 +17,7 @@ const { requireAuth } = require('../../middleware/auth');
 const { aiRateLimiter } = require('../../middleware/aiRateLimiter');
 const { eventEpisodeConflictBody, EVENT_EPISODE_CONFLICT_CODE } = require('../../utils/eventEpisodeLink');
 const { dealPriceRequiredBody, DEAL_PRICE_REQUIRED_CODE } = require('../../services/dealPricingService');
+const { offerDecisionBody, OFFER_DECISION_CODES } = require('../../services/startOfferDecision');
 const { loadScopedEvent } = require('../../utils/eventScope');
 const { getModels } = require('./helpers');
 
@@ -57,6 +58,10 @@ router.post('/world/:showId/events/:eventId/generate-episode', requireAuth, aiRa
       // Locations step; absent, the show's defaults and the event's set.
       locations: req.body?.locations,
       idempotencyKey: idem.key,
+      // The explicit offer decision (services/startOfferDecision): asked for
+      // with 409 OFFER_DECISION_REQUIRED when the event's opportunity is
+      // still open; accept, negotiate, decline or proceed_unaccepted.
+      offerDecision: req.body?.offer_decision,
     });
 
     // The same Start, retried: its episode, as a fresh Start answers, with
@@ -130,6 +135,10 @@ router.post('/world/:showId/events/:eventId/generate-episode', requireAuth, aiRa
     if (error.code === DEAL_PRICE_REQUIRED_CODE) {
       console.warn('Generate episode refused:', error.message);
       return res.status(409).json(dealPriceRequiredBody(error));
+    }
+    if (OFFER_DECISION_CODES.includes(error.code)) {
+      console.warn('Generate episode refused:', error.message);
+      return res.status(error.status).json(offerDecisionBody(error));
     }
     if (error instanceof require('../../services/episodeLocationsService').EpisodeLocationsError) {
       console.warn('Generate episode refused:', error.message);

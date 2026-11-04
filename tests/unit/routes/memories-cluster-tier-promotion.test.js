@@ -27,7 +27,9 @@ describe('Step 3 CP7 — memories cluster Tier 1 sweep + AI POST PROMOTE', () =>
         const SRC = readSrc(file);
 
         test('imports requireAuth from middleware/auth', () => {
-          expect(SRC).toMatch(/const\s*\{\s*requireAuth\s*\}\s*=\s*require\(['"]\.\.\/\.\.\/middleware\/auth['"]\)/);
+          // assistant.js also imports authorize: its Recycle Bin routes are
+          // ADMIN only (P0 #3706).
+          expect(SRC).toMatch(/const\s*\{\s*requireAuth(?:\s*,\s*authorize)?\s*\}\s*=\s*require\(['"]\.\.\/\.\.\/middleware\/auth['"]\)/);
         });
 
         test('imports aiRateLimiter', () => {
