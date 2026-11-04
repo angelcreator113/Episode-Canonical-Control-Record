@@ -1052,3 +1052,55 @@ Only `gameplay` (from Complete) and approved `story_effective_adjustment` rows e
 ### 22.11 What Evoni runs
 
 `continuity-export.sql` (read-only, same SSH and getv pattern) → copy back `~/continuity-export.txt` → I run the local replay and publish the Episodes 1–2 preview here. Nothing is migrated.
+
+### 22.12 Episodes 1–2 continuity preview: results (production export, 2026-11-04)
+
+The export was read-only (14 sections, `default_transaction_read_only`, no errors). The replay ran locally with the repo's own `orderEntries`, `precedingEpisodes`, `applyDeltas` and defaults. Nothing was written anywhere.
+
+**Story order** (`seasonStoryOrder` on production rows): one arc ("Soft Luxury Ascension", S1), 24 weekly slots, three bonus specials after slot 3.
+
+| Pos | Entry | Episode | Accepted | Continuity |
+|---|---|---|---|---|
+| 1 | S1 · slot 1 | "I Designed My Outfit for a Fashion Studio Experiment" (8b9301a6) | **no** | canonical |
+| 2 | S1 · slot 2 | none yet (event a5b66dca pencilled) | — | canonical |
+| 3 | S1 · slot 3 | none yet | — | canonical |
+| 4–6 | three bonuses after slot 3 | none | — | **order ambiguous** (`same_slot`) |
+| 7… | slots 4–24 | none | — | canonical |
+
+- **No unslotted live episodes.** The only order issue is `same_slot`: three bonus rows after slot 3, all for the same release (2026-12-02 10:00), created within 45 seconds on 2026-10-26. They are almost certainly accidental duplicates. Excluded from carry-over; Evoni should review them.
+
+**Opening states:**
+
+| | Episode 1: canonical | Episode 2: canonical | Episode 2: simulated (if Episode 1 were accepted) | Live state today (what scripts read) |
+|---|---|---|---|---|
+| Coins | **1,900** | **1,900** | 768 | 768 |
+| Reputation | 1 | 1 | 1 | **8** |
+| Brand trust | 1 | 1 | 1 | **7** |
+| Influence | 1 | 1 | 1 | **7** |
+| Stress | 0 | 0 | 0 | **2** |
+| Relationship changes carried | 0 | 0 | 0 | all current rows |
+| Approved story records carried | 0 | 0 | 0 | — |
+
+### 22.13 Findings from the preview
+
+1. **Live stats are contaminated by deleted test episodes.** Today's reputation 8 / brand trust 7 / influence 7 / stress 2 come from February test episodes, all deleted on 2026-09-21. The live row's `last_applied_episode_id` is "The Velour Throne" (4d54e35d), deleted. The live stats were never reset.
+   - The canonical opening state for Episode 1 is the baseline (1 / 1 / 1 / 0), because nothing before it in story order is accepted.
+   - **Any script generated today for Episode 1 or 2 reads stats Lala has not earned in the canonical story.** This confirms the Episode 1 integrity audit and is the strongest argument for the continuity view.
+2. **Coins are correct in the ledger.** Live 768 = 1,900 seed − Episode 1's own five confirmed purchases (120 + 85 + 32 + 95 + 800 = 1,132).
+   - Excluded correctly: four earlier purchase rows are `voided` (three with no episode, one on a deleted episode).
+   - Under ruling 4 these five are Episode 1's own confirmed purchases. They belong to Episode 1, not to its opening state, so Episode 1 opens at 1,900.
+   - **Episode 2 opens at 1,900 while Episode 1 is unaccepted, and at 768 once it is accepted** (the simulated column).
+3. **No stat history is carried.** All 21 `computed` rows belong to deleted test episodes or the undated "The Comeback Garden". Three `manual` World Admin edits and two `wardrobe_purchase` history rows are administrative (ruling 2).
+   - Episode 1 has no `computed` row because it hasn't been completed.
+4. **Episode 1 has no frozen money plan** (`money_plan` null). Only `season_context` was snapshotted at Start (2026-10-02). The episode's creation time stood in as its Start time.
+   - Its `season_context.story_purpose` still says "Lala discovers her authentic design voice…", which conflicts with Evoni's correction that Lala is not becoming a designer. That is a known Episode 1 integrity item and is not changed here.
+5. **Wardrobe ownership likely disagrees with the ledger.** 13 owned items; 9 have a purchase row. 9 = Episode 1's 5 executed purchases + the 4 **voided** ones, which suggests up to four items are still marked owned although their purchases were voided.
+   - A read-only follow-up (owned items vs executed purchase rows) would confirm it. Not changed.
+6. **Nothing else carries.** No relationship events are tied to any episode. There are no `pulse_followers` rows. Episode 1's story record is still a draft.
+7. **`seasonStoryOrder` works on real data.** It placed every slot, found no unslotted live episode, and flagged the duplicate bonuses as ambiguous rather than ordering them silently.
+
+**Readiness for the migration request (G2):** the replay, sources and exclusions behave as designed on production data. Requesting the `episode_continuity_snapshots` migration still waits on:
+- Evoni's review of this preview;
+- the "confirmed purchase" decision (§22.9);
+- the story-effective adjustment fields (§22.8);
+- the duplicate bonus review.
