@@ -148,6 +148,25 @@ WORLD › World home (time moves on; events continue without her)
 - "Open in …" links to the owner record;
 - the workspace switcher in the sidebar.
 
+## 7a. The Pulse as a living social simulation: connections (2026-11-04)
+
+Source: `docs/reads/2026-11-04-pulse-social-simulation-audit.md`. These are design connections only; nothing here is implemented.
+
+| Where | What it shows or does | Principle | Owner record | Links |
+|---|---|---|---|---|
+| **WORLD › The Pulse** | The feed as the world lives it: posts, comments, DMs, polls, by city and person. Brand accounts are marked as brands. | 🌆 world | `feed_posts`, `feed_comments`, `social_profiles` | → person (Registry), → brand page, → event |
+| **WORLD › Pulse Review** (today Admin › Pulse › Review) | Drafts waiting. Anything about Lala, money, deals or secrets always waits here. | 🧭 she decides | `feed_posts.gate_json`, `pulseTrust` | → post, → source event or storyline |
+| **WORLD › Brands › brand page** | Official account, representatives (with authority), founder (a person), events hosted, offers, brand voice | 🌆 world | `lalaverse_brands` (+ brand account) | → founder's Registry page, → Opportunities |
+| **WORLD › Characters › Voice & Photos** (Registry tabs) | The resolved Voice & Behavior Profile (read-only view of its layers, with major changes awaiting approval); identity reference vs profile picture; photo style | 🌆 world / 🧭 she decides (approvals) | Registry (identity), `pulse_voices`, `media_asset_links` | → The Pulse as that person |
+| **SEASON › Social Storyline Review** (new) | What the world did socially that could become story: relationship drift, rumours, conflicts, reputation signals, brand moves, story suggestions. Accept sends each into its existing owner flow; nothing is written to canon from here. | 🧭 she decides | proposals (`seasonArcProposals` extended) | → Story Record, → relationship confirm, → Opportunities, → slot |
+| **SEASON › Opportunities & Deals** | Offers drafted from the feed or by brands arrive as `offered` with their company linked | 🧭 she decides | `opportunities` | → brand page |
+| **EPISODE › Script / Production** | Event-tied posts as script context; phone moments; Pulse posts drafted from `[UI:POST]` lines | 🛠 production | `feed_posts`, `feed_moments` | → Pulse Review |
+| **EPISODE › Story record** | The only gate where social developments become accepted canon (relationships, secrets, follow-ups, twists) | 🧭 she decides | `episode_story_records` | → Social Storyline Review (source) |
+| **LALA › Phone and Pulse** | The Pulse as Lala sees it at a beat; her followers (ledger); who she is close to. The numbers never move her money. | 💳 afford (followers, standing) | `pulse_followers`, `pulse_closeness` | → Money (separate), → Relationships |
+| **SYSTEM › Pulse Engine** (admin) | Switches, queue state, failed jobs with Retry, request caps and budget lanes. No worker starts without Evoni's yes. | 🛠 production | `shows.metadata.pulse_engine`, `pulse_queue` | → cost page |
+
+**Journey addition:** world event → Pulse reactions (gated, may run on their own if Evoni allows) → closeness / reputation proposals → **Social Storyline Review** (JustAWoman decides) → slot or Story Record → accepted canon. Money moves only through the ledger at Complete.
+
 ## 8. Transition plan (no implementation yet)
 
 1. **Fixes first.** P0 fixes A–D land, then #3702 and #3703 after review.
