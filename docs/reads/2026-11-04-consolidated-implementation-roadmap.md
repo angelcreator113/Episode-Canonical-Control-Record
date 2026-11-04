@@ -429,6 +429,8 @@ Every PR is small, has a failing-first test, and only narrows behaviour. None ha
 | **3.2 brain records wait for review (D7, ruling 2)** | Completion's narrative-result rows are written `pending_review`; a "Brain records waiting" list with per-item approve (ADMIN). The **character-state snapshot row stays as today** until the continuity view (§17) replaces it, so no consumer loses state. | 1.1 (activate-all ADMIN) | Integration: after Complete, the result row is `pending_review` and is not injected; after approve it is injected; the stats snapshot behaviour is unchanged. |
 | **3.3 continuity view (design approval first)** | Implements §17 after Evoni approves the design | §17 approval; 3.1 | defined with the design |
 | **3.4 `createEpisode` air date validation** | Reuse `parseAirDate` | #3708 | Integration: a bad date gets 400 and no row. |
+| **3.5 admin reset leaves a trail** | `POST /admin/reset-character-stats` writes a reversing history row and lists what it leaves behind (design first; ADMIN already) | — | Integration: after reset, a history row exists and the ledger is unchanged unless explicitly voided. |
+| **3.6 balance fallback** | `getCurrentBalance` stops querying the nonexistent `character_state_history.deleted_at` | — | Unit/integration: the fallback returns the latest `state_after_json` coins with no SQL error. |
 
 ### Priority 4: voice protection, cost accuracy
 
@@ -438,19 +440,321 @@ Every PR is small, has a failing-first test, and only narrows behaviour. None ha
 | **4.2 cost-tracker accuracy** | Haiku 4.5 at $1/$5; undated aliases; the cache accounting fix (`input_tokens` already excludes cache); the 80% warning surfaced (Daily Update / CFO page) | — | Unit: `calculateCost` against hand-computed fixtures (with and without cache; each model). |
 | **4.3 test hygiene** | `seasonRevealPlan` tie-break | — | The test is stable over 20 repeated runs. |
 
-**Merge order:** 1.1 → 1.2 → 1.3 → 1.4 → 2.1 → 2.3 → 2.4 → 2.2 → 2.5 → 2.6 → 3.1 → 3.2 → 3.4 → 4.1 → 4.2 → 4.3. Then 3.3 after its design is approved.
+**Merge order:** 1.1 → 1.2 → 1.3 → 1.4 → 2.1 → 2.3 → 2.4 → 2.2 → 2.5 → 2.6 → 3.1 → 3.6 → 3.2 → 3.4 → 3.5 → 4.1 → 4.2 → 4.3. Then 3.3 (continuity view, §17) after its design and migration are approved.
 
 ---
 
 ## 17. Two state views: current state vs episode continuity state
 
-*(The audit of state history, `seasonStoryOrder`, acceptance rules and consumers is in progress; this section will be completed with its findings and a proposal for approval.)*
+Read-only audit at origin/main `2ebacc78`, with a design for approval. *(verified)* marks claims I re-read myself.
+
+### 17.1 Findings
+
+**Bottom line.** No store today can rebuild "state as of episode N" by story order. Every script-context reader pulls the **present**, so regenerating an old episode's script today uses later state.
+
+**State stores:**
+- **`character_state`.** One live row per show for Lala, updated in place, with no history or story position.
+  - **Writers:** Complete, the ledger coin sync, `changeCoins`, the manual state edit, and the admin reset.
+  - **The admin reset** zeroes stats and sets episodes back to draft, but writes no history row and leaves ledger, history and brain rows in place.
+- **`character_state_history`.** Append-only in practice. Rows: `computed` (Complete), a second `computed` coins-only row (finalize), `override` (followers), `manual` (no episode), `wardrobe_purchase` (no episode).
+  - **`state_after_json` is the live state at completion time,** so episodes completed out of story order build on each other in completion order.
+  - It has **no `deleted_at`**, yet `financialTransactionService.getCurrentBalance`'s fallback filters on it *(verified: the column does not exist; CI database logs show the error)*.
+- **Ledger (`financial_transactions`).** Has `episode_id` and balance before/after.
+  - **Balance** = counted rows, else the seed.
+  - **Not strictly append-only:** voiding and reseed soft-delete are recorded on the row.
+  - **Exactly once:** `finalizeEpisodeFinancials` returns `already_finalized` with no summary or balances, so Complete then computes 0/0 and adds stress (C1). This is the reset-then-recomplete path.
+  - **Wardrobe purchases** book ledger rows during setup, before Complete.
+- **Overwritten in place:**
+  - `wardrobe.is_owned` (no episode or time);
+  - `character_relationships` (`approveRecord` updates in place, but `relationship_events` keeps an event per pair per episode with `metadata.episode_id`);
+  - secrets and twists (current state with episode provenance).
+- **`episode_story_records`.** Draft or approved, with an `applied` record so each item is written once.
+- **`franchise_knowledge`.** No `episode_id`; Complete writes both rows `active`.
+
+**Story time is defined three ways:**
+1. `episode_number` via `storyClock.orderOf` (`n*10+phase`), used by `lalaStats`, `scriptPulsePosts`, `pulseKnowledge.knowsAt`, `pulseReveals`, `factHistory`, `pulseFollowers.countAt`;
+2. `episode_number <` in `storyCarryForward`;
+3. **`seasonStoryOrder`** (season → arc → slot, bonus after its slot, two-parts in their own slots, `precedingEpisodes` returning accepted canonical predecessors). **It has no callers** *(verified)*.
+
+**Acceptance.** The marker is `episodes.evaluation_status='accepted'`, set by Complete.
+- Two-parters complete Part 1 with all state, and Part 2 gets no history row.
+- **Unaccepted episodes still write state:** wardrobe purchases (ledger, coins, ownership) and the Story Record Save (no acceptance check).
+
+**Consumers reading live state when working on a specific episode:**
+- `episodeScriptWriterService.loadScriptContext`: live balance, live `character_state`, injected brain rules incl. the state snapshot row, the newest world snapshot, carry-forward by number;
+- `groundedScriptGeneratorService`;
+- `scriptMoneyContext.balanceBefore` ("now minus this episode", so it includes later episodes);
+- `episodeBriefRoutes.herGoalForEpisode`;
+- the event script skeleton;
+- `episodePitchService`;
+- Complete's own evaluation input.
+
+**Frozen at Start today:** only `season_context` and `money_plan` (`{taken_at, balance, lines}`). `episode_briefs.lala_state_snapshot` exists but **nothing captures it** (client PUT only) and nothing reads it.
+
+**Reusable:**
+- `seasonStoryOrder` / `precedingEpisodes`;
+- ledger rows by episode;
+- per-episode `deltas_json`;
+- `relationship_events` by episode;
+- `money_plan`, `season_context`;
+- the story-ordered ledgers `pulse_followers`, `pulse_closeness`, `character_fact_changes` (pattern);
+- `lalaStats` (template).
+
+### 17.2 Proposal: two views
+
+**(a) Current Dream Cities state.**
+- **Owners stay:** `character_state` (cache), the ledger (coins), ownership, relationships, secrets, latest followers.
+- **One read helper** `currentState(showId)` replaces raw SELECTs.
+- **Readers:** world and character dashboards, the Pulse "now", pitching, and planning a future episode before Start.
+
+**(b) Episode continuity state, `continuityState(episodeId)`.**
+- **Boundary:** P = `precedingEpisodes(seasonStoryOrder(show), E)`, meaning accepted, canonical, unambiguous episodes before E in **story order**. State = baseline + the effects of P, applied in story order.
+
+| Part of state | How it is rebuilt |
+|---|---|
+| Coins | seed + episode-less rows dated before E's Start + counted rows of P. E's own and later or unaccepted episodes' rows are excluded. |
+| Stats | baseline + Σ P's `computed` **deltas**, clamped per step. **Replayed from deltas, not `state_after_json`,** which carries completion-order contamination. Manual adjustments count only with an explicit effective point (to decide). |
+| Relationships | latest `relationship_events` stage per pair within P |
+| Ownership | baseline basics + P's `wardrobe_purchase` rows + episode-less purchases before E's Start |
+| Secrets and twists | provenance within P |
+| Followers | accepted `pulse_followers` up to P's last After |
+| Story records | approved records of P only |
+| Two-parters | one unit (Part 2's boundary = P(Part 1), sharing Part 1's Start snapshot) |
+| Bonus episodes | by slot |
+| Specials marked `needs_review` | excluded and reported |
+| E's own planned spending | from `money_plan`, not inherited |
+
+**Reproducible, never silently changing:**
+- **At Start Episode,** `continuityState` is computed and **stored** with its inputs (episode ids and positions, ledger and history row ids, story-order version) and an `inputs_hash`.
+- **Writers for that episode read the stored snapshot.**
+- **Recompute only on an explicit request.** If the hash differs (an earlier episode re-accepted or reset, or order data changed), the UI shows "continuity changed since Start" with a diff. Nothing updates silently. Later episodes' snapshots are flagged **stale**, not rewritten.
+- **Previews** of unaccepted predecessors are stored as `simulated`, never canonical.
+
+**Storage (migration, G2):** a new append-only table `episode_continuity_snapshots`:
+- columns: id, show_id, episode_id, kind (`start` | `recomputed` | `preview`), state_json, inputs_json, inputs_hash, simulated, created_at, created_by, deleted_at;
+- a unique index on (episode_id, kind, inputs_hash).
+
+The unused `lala_state_snapshot` is left alone until formally retired.
+
+**Consumers that switch to (b):**
+- `loadScriptContext` (balance, stats, carry-forward → P's last approved record, secrecy, world snapshot → none or snapshot);
+- `groundedScriptGeneratorService` and `scriptMoneyContext.balanceBefore`;
+- `herGoalForEpisode`;
+- the script skeleton;
+- **Complete's evaluation input** (the Start snapshot; the outcome is still applied once to the live row and ledger);
+- `statsPanelService` / `lalaStats` (story order instead of `episode_number`);
+- the Phone "as of beat";
+- Pulse drafting for an episode;
+- `storyCarryForward`.
+
+Pitching and dashboards stay on (a).
+
+**Mechanical outcomes vs interpretations (ruling 2):**
+- **Mechanical outcomes** (ledger rows, stat deltas, follower decisions, ownership) are applied once at Complete through their owners. Exactly once: C1 is fixed in PR 3.1.
+- **Interpretations** (the franchise-brain episode-result row, story notes) are written `pending_review` (the enum value already exists, no migration) and approved per item (PR 3.2).
+
+**Retiring the brain "Character State after Episode N" row**, in order:
+1. Writers read the continuity snapshot (this design).
+2. **Stop inserting** the always-inject snapshot.
+3. **Fix `frontend/src/lib/cultureYear.js`,** which reads `episode-completion` rows only when `active`. Point it at `episodes.evaluation_json` and the ledger, or at reviewed rows, or Culture Year loses its entries.
+4. Archive existing `active` snapshot rows **only with Evoni's yes** (a data change, G3). This changes `selectInjectedRules` output for the script writers and briefs.
+
+**Related fixes:**
+- **The admin reset:** writes a reversing history row and voids its own derived rows explicitly (design first).
+- **The balance fallback:** stop querying a nonexistent `character_state_history.deleted_at`.
+
+These join Stage 1 priority 3 as PR 3.5 (reset audit trail) and PR 3.6 (balance fallback).
+
+### 17.3 Decisions
+
+1. Approve the boundary (accepted, canonical predecessors in `seasonStoryOrder`) and replay-from-deltas.
+2. Do manual adjustments count in continuity: only with an explicit effective episode, or by date before Start?
+3. Approve the `episode_continuity_snapshots` migration design (G2) and freezing at Start.
+4. Should unaccepted episodes keep writing state during setup (wardrobe purchases)? Or should setup spending stay in `money_plan` until Complete?
+
 
 ---
 
 ## 18. Relationship model (person–person, person–brand, brand–brand)
 
-*(Table design, compatibility plan, historical mapping, migration and rollback are being prepared; this section will be completed for separate approval. Nothing is migrated.)*
+For separate approval. Nothing is migrated or rewritten. This is a read-only design against origin/main `2ebacc78`.
+
+### 18.1 Where `character_relationships` is used today
+
+**Schema.**
+- `character_id_a/b` are NOT NULL, FK `registry_characters`, ON DELETE CASCADE (migration `20260223100000`).
+- The unique index `idx_char_rel_unique_pair_type` (a, b, type) deliberately ignores `deleted_at`. Four writers revive soft-deleted rows with `ON CONFLICT … DO UPDATE SET deleted_at = NULL`: `episodeStoryRecord`, `familyTies`, `relationshipSeeds`, `relationships.js`.
+- `relationship_events` cascades from it.
+- `social_profile_relationships.character_relationship_id` is set NULL on delete.
+
+**Readers and writers by purpose:**
+- **Story truth:** `relationships.js` CRUD, `episodeStoryRecord.applyRelationship`, `familyTies`, `relationshipSeeds`, `relationshipTypeTidy`, `relationshipTruth.applyDriftFix`, `relationshipKnowers`, `familyHeritage`, World Studio relationship CRUD and seeding, the character generator, `memories/engine`, `tierFeatures`, `families.js`, the cast merge.
+- **Pulse mirror:** `relationshipTruth` (`linkStoryAndPulse`, `syncStoryPair`, `driftReport`…), `familyTies.linkPulseFamily`, `pulseKnowledge`, `storyRipples`.
+- **Season planning:** `seasonCast`, `seasonNeeds`, `relationshipSeeds` context, `episodeStoryRecord.relationshipsOf`, `worldTemperatureService`, `sceneEligibilityService`.
+- **Script and prompts:** `episodeScriptWriterService` (incl. `lalaRomances`), `relationshipTruth.confirmedBetween`, `relationshipKnowers`, `characterFile`, `characterAI`, `memories/*`, story evaluation, scene proposal, `tierFeatures`, `characterRegistry`.
+- **UI:** the `relationships.js` GETs, World Studio, `families`, `personPage`, the frontend `RelationshipEngine/*`, `WorldStudio.jsx`, `RelationshipDrift`, `SeasonNeeds`.
+
+**Every one assumes both parties are characters.**
+- **Readers that inner-join both sides drop brand rows safely** (no change needed).
+- **Readers that would see NULL on one side and need a people-only filter:** `characterAI`, `memories/engine` (~l.1578), `sceneProposeRoute`, `worldTemperatureService`, `amberSessionRoutes` counts, `relationships.js GET /`, and frontend `pairKey` callers.
+
+### 18.2 Existing company stand-ins (`extra_fields.company_id`), to be frozen
+
+| Code | Under the new model |
+|---|---|
+| `companyCharacters` (`linkCharacter`, `refusePair`, `lookAlikes`…) | `linkCharacter` refuses **new** stand-ins (ruling). `refusePair` becomes "pair kind refuses this type". `lookAlikes` feeds remap proposals. |
+| `relationships.js` company fields / `refusePair` | brand party fields + `relationshipTypes.validateForPair` |
+| `relationshipTypeTidy` | decided by party kind; stand-in pairs go to remap, not tidy |
+| `relationshipTruth` `company_pair` | still skipped; brand parties get their own Pulse mapping |
+| `familyHeritage`, `familyTies` | unchanged (family is person–person only, now also enforced in the database) |
+| `relationshipSeeds` | pair kind; never offers a stand-in as a party |
+| `brandProfile.peopleOf` / `characterOf` | also reads person–brand rows (represents, employee, founder, ambassador), with `extra_fields` as fallback until remapped. A stand-in is shown as "legacy". |
+| `seasonNeeds.companyFacts`, `characterTalk.brandBlock` | brand parties from `brand_id_*`, reps from person–brand rows (later) |
+
+### 18.3 Table design (recommended: option A, extend `character_relationships`)
+
+**Why option A:**
+- Real FKs on both party kinds.
+- The four `ON CONFLICT` writers, `relationship_events`, Pulse mirror ids, `known_by` / `public_state`, seeds and drift keeps all keep working.
+- Brand rows drop out of most readers automatically.
+
+**Rejected options:**
+- **B** (polymorphic table + compatibility view): no real FK, `ON CONFLICT` breaks against a view, events must be re-pointed.
+- **C** (separate `brand_relationships`): splits a person's ties across stores and duplicates event and secrecy history.
+
+**Columns** (all additive, no row rewrite):
+- `party_a_kind`, `party_b_kind`: `VARCHAR(10) NOT NULL DEFAULT 'character'` (`'character'` | `'brand'`).
+- `brand_id_a`, `brand_id_b`: `UUID NULL` FK `lalaverse_brands(id)` **ON DELETE RESTRICT** (brands are soft-deleted; history must never vanish on a hard delete).
+- `character_id_a/b`: drop NOT NULL.
+- `remapped_from_id`: `UUID NULL` FK self, ON DELETE SET NULL (remap provenance).
+- `created_by`: `VARCHAR(255) NULL`.
+- `seed_*` apply to every pair kind.
+
+**Checks:**
+
+| Check | Rule |
+|---|---|
+| one id per side | `character_id` xor `brand_id`, matching the side's kind |
+| order | person–brand rows always put the person on side A (types read "A is B's ___") |
+| no brand self-pair | the two brand ids differ |
+| romance and family are person–person only | `is_romantic`, family fields and blood relation are allowed only when both sides are characters |
+
+**Uniqueness:**
+- The existing index stays.
+- New partial unique indexes: (character_id_a, brand_id_b, type) for person→brand; (brand_id_a, brand_id_b, type) for brand→brand.
+- Like today's index, they ignore `deleted_at`, so revive still works.
+
+**Types**, in `relationshipTypes.js` (`pairKind(row)`, `TYPES_BY_PAIR`, `validateForPair`; checked in the app, so the list can grow without migrations):
+
+| Pair | Types |
+|---|---|
+| person–person | today's types and family roles, unchanged |
+| person–brand (the person's view) | founder, owner, employee, represents, ambassador, client, sponsored_by, collaborator, press, critic, fan, former_employee |
+| brand–brand | client_partner, sponsor (A sponsors B), rival_brand, collab, owns, stockist, press |
+
+**How the flags apply:**
+- `confirmed`, `public_state` and `known_by` apply to all pairs (a secret sponsorship is real story).
+- `lala_connection` describes the person side; it stays `none` for brand–brand.
+
+**A brand's regard for Lala (ruling 8):**
+- The brand's **standing attitude** stays in `personality.how_treats_lala` (identity, read by prompts).
+- A **real, changing tie** (client, sponsor, ambassador, critic) is a person–brand row with **Lala on side A**. Its tension, situation and events carry the change.
+- This is separate from the founder's personal row with Lala.
+- No automatic row per brand.
+
+### 18.4 Compatibility
+
+- **Writers:** unchanged (they insert character ids; kinds default to `character`).
+- **Model:** `allowNull` on `character_id_*`, the new attributes, and a model `validate` mirroring the checks.
+- **People-only filters:** added to the readers listed in 18.1.
+- **API:** responses only gain fields (`party_a_kind`, `party_b_kind`, `brand_id_a/b`, and later `party_a` / `party_b` = `{kind, id, name, slug}`).
+- **Pulse mirroring** (`syncStoryPair`):
+  - A brand party maps to its account (`full_profile.lalaverse_brand_id`).
+  - **Only business kinds mirror for brand pairs.**
+  - **Personal kinds (romance, ex, family, friend) never mirror if either profile is a brand account.** This keeps Sable's ties off @studiobysable (ruling 7).
+  - Stand-in pairs are still skipped; nothing mirrors while a remap is open.
+
+### 18.5 Historical mapping (proposals only; nothing rewritten)
+
+`relationshipRemap.proposals(db)` is computed, read-only and deterministic. It reads live rows where a side is a stand-in or a **merged person/brand**. A merged person is one whose display name matches a brand, looks like a company, or whose feed profile is a brand account.
+
+**Rules:**
+1. Both sides plain people: keep.
+2. Stand-in + company type: re-point the stand-in side to its brand.
+3. Stand-in + romance or family: **flag** (invalid for a brand).
+4. Merged person + personal type: **keep on the person; never touch `confirmed`.**
+5. Merged person + brand-pair type: propose brand–brand.
+6. Merged person + represents, employee or founder: propose person–brand.
+7. Contradictory business types for the same pair: **flag both**.
+8. No brand row exists: flag "create or pick a company". Never created automatically.
+9. Unconfirmed seeds: same rules, low priority. Deleted rows are ignored.
+
+**Applying one proposal** (later; one at a time; each with Evoni's yes; one transaction):
+1. Insert the brand-party row with `remapped_from_id`.
+2. Add a `remapped` event on both rows.
+3. Soft-delete the original as `Superseded` (its events stay on it).
+
+**Undo:** restore the original (`POST /:relId/restore`) and soft-delete the new row.
+
+**Studio by Sable** (all 10 registry rows from Evoni's production read; @studiobysable is the business account per ruling 7):
+
+| # | Row (Sable, person, `c4931651`) | Proposal |
+|---|---|---|
+| 1 | love_interest slowsift | **keep** person–person; stays unconfirmed (R5); never mirrored to @studiobysable |
+| 2 | love_interest velvetcore | **keep**, as #1 |
+| 3 | friend velvetcore | **keep** person–person; not mirrored |
+| 4 | rival thriftveil (Declan Ferris, a person) | **keep** person–person (her professional view) |
+| 5 | collaborator Lala | **keep** person–person (a later option: a person–brand row with Lala as the studio's collaborator) |
+| 6 | rival_brand First Light Studio | **propose** brand–brand Studio by Sable vs First Light Studio; needs the Studio by Sable brand row (else flag, rule 8) |
+| 7 | client_partner Velour Atelier | **propose** brand–brand client_partner (or person–brand "client"; Evoni chooses) |
+| 8 | rival SHOWROOM.LUX | **flag**: business or personal rival, depending on whether SHOWROOM.LUX is a brand account (follow-up Q4) |
+| 9 | represents Ori Beauty | **flag** with #10 (rule 7); unresolved per R6 |
+| 10 | rival_brand Ori Beauty | **flag** with #9 |
+
+### 18.6 Migration (schema only) and rollback
+
+- **File:** proposed `src/migrations/<timestamp>-add-relationship-parties.js`.
+- **Shape:** one transaction, guarded so it can run twice.
+  - It adds the six columns, drops NOT NULL on `character_id_a/b`, and adds the seven checks and four indexes.
+  - **No data step.** Every existing row reads `character`/`character`.
+- **Down:**
+  - It **refuses while any row uses a brand party or a remap**, so rollback cannot destroy brand relationships silently.
+  - Otherwise it drops the indexes, checks and columns and restores NOT NULL.
+- The full proposed code is kept with the design notes for review; nothing is in `src/migrations` yet.
+
+**Deploy order:**
+1. The migration (Deploy workflow, snapshot first; no behaviour change).
+2. The model, people-only filters, pair validation, `syncStoryPair` brand mapping and the brand-account guard.
+3. Brand-party API and UI writers.
+4. `linkCharacter` stops accepting new stand-ins.
+5. The read-only remap proposals page.
+6. Per-item applies, each approved.
+
+**Read-only verification, before and after:**
+- `count(*)` plus an md5 of `id||updated_at` over `character_relationships` must be identical (no row rewritten).
+- The kinds group-by returns only character/character.
+- The new constraints are present, and `idx_char_rel_unique_pair_type` is still there.
+
+### 18.7 Tests and risks
+
+**Tests:**
+- Migration up, up again, down, then up; down refuses with a brand row.
+- Each check rejects its case.
+- The four `ON CONFLICT` writers still insert and revive.
+- `validateForPair` per pair kind.
+- `syncStoryPair`: business kinds land on the brand account, personal kinds never do, stand-ins are skipped.
+- The six people-only readers survive a NULL `character_id_b`.
+- A Sable fixture gives the table in 18.5.
+- Frontend `RelationshipEngine` tests with a brand row.
+
+**Risks:**
+- `pairKey` / `Set` code keyed on `character_id_*` colliding on NULL.
+- `SELECT cr.*` responses gain columns (additive).
+- Person–brand ties live in two places until remap: `extra_fields` reps vs new rows; `founder` text vs founder rows. `peopleOf` must merge them without double counting.
+- Brand FKs are RESTRICT while character FKs are CASCADE (deliberate).
+- The drift report and `linkStoryAndPulse` need extending for brand pairs.
+- The cast merge must leave `brand_id_*` alone.
+
 
 ---
 
