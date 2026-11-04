@@ -599,3 +599,104 @@ Each PR is one issue, opened for review, never merged by the session. No migrati
   - (a) keep them in `shows.metadata`, written by a dedicated per-key route under a row lock, and change `EditShow` to re-read before saving as `ShowSettings` does (recommended; no migration);
   - (b) or move them to their own storage (a migration).
 - **G4. A draft preview's scope.** Recommended: `?preview=1` simulates the unaccepted earlier episodes in continuity order, shown as simulated, while the default read uses accepted episodes only. Is that the right default for the Script tab and the Phone preview?
+
+## 22. Rulings on §21 (Evoni, 2026-11-04)
+
+Recorded as given. No code, migration, merge, deployment or production data change is approved by them.
+
+- **G1, episode order (approved with refinement).**
+  - Carry-over uses the season's actual story-slot order, specials and two-parters included, not `episode_number` alone.
+  - One authoritative resolver is created or reused, with no duplicated ordering rules.
+  - The story clock, career history and deal chronology are not changed by the device work. Inconsistencies are reported separately.
+- **G2, special-episode continuity (refined).** Three explicit classes:
+  - **Canonical**: persistent changes carry into later episodes.
+  - **Standalone**: does not change the main storyline's inherited state.
+  - **Recap**: replays established events and creates no new canonical changes.
+  
+  Weekly episodes and established two-parters keep their current canonical behaviour. Existing specials with no clear designation are flagged for Evoni's review, never assumed. Verify whether existing episode or special data can store this safely before proposing a migration.
+- **G3, settings protection (approved).**
+  - Dedicated, narrowly scoped updates for phone settings.
+  - General show settings protected from stale writes by revision-based or equivalent optimistic concurrency; a re-read alone is not enough.
+  - Edit Show and Show Settings cannot overwrite newer phone settings or unrelated metadata.
+  - A data-safety prerequisite to the Phone Settings editor.
+- **G4, draft previews (opt-in).**
+  - The normal preview uses accepted canonical episodes only.
+  - An optional **Preview Draft Continuity** mode includes preceding unfinished episodes as a simulation, clearly labelled with its source episodes.
+  - It never writes canonical state, changes approvals, modifies scripts or affects the regular preview.
+
+## 23. The rulings against the models (origin/main `3bb080aa`, 2026-11-04)
+
+**G1: no single story-slot resolver exists.** MEASURED.
+- **Weekly episodes** are `season_slots` (`season_number`, `slot_number`, `arc_id`, `episode_id`; `src/models/SeasonSlot.js:15-28`).
+- **Specials and two-parters** are `season_specials`:
+  - `kind` is CHECK-limited to `bonus`, `special` or `two_part`;
+  - a bonus or special sits `after_slot_number`, with its `episode_id`;
+  - a two-parter holds `part_one_slot_id` / `part_two_slot_id`, both of which are weekly slots (`src/services/seasonSpecials.js:1-40, 243-262`; table columns read from the migrated schema).
+- **Two orderings already exist, each for its own use:**
+  - `releaseSchedule.specialsOf` places a special at `after_slot_number + 0.5` for the **release** view (`src/services/releaseSchedule.js:397-427`);
+  - `seasonFullSpecials` checks a special against its **story position** (`at_story_position`, `src/services/seasonFullSpecials.js:313`), so a release placement and a story position can differ.
+- Neither is a story-continuity resolver. Two specials after the same slot have no defined order between them (both sort at `n + 0.5`; INFERRED from `:425`).
+- **Recommended:** one read-only `seasonStoryOrder(sequelize, showId)` beside the specials service, which owns the slot data. It orders by season number, then slot number, with each bonus or special immediately after its `after_slot_number` and two-part halves in their own slots. It returns `[{ episode_id, kind, slot_number, after_slot_number, continuity }]`. The phone-state carry-over is its first user. The release view, the story clock and the Career list are left as they are (G1).
+
+**G1: inconsistencies to report separately** (not changed here; INFERRED from the code paths):
+- The story clock is `episode_number × 10 + phase` (`src/services/storyClock.js:5-35`), and the Career list orders counted episodes by `episode_number` (`src/services/careerListService.js:77-83`). A special's `episode_number` is whatever its episode was made with, not its slot position. Where they differ, those two and the new resolver will disagree.
+- Recommended: a separate read of how specials' episode numbers are assigned, before anyone relies on `episode_number` for chronology.
+
+**G2: existing data cannot store the class safely; this needs a migration.** MEASURED.
+- **`season_specials`** has no JSON column. Its columns: `id, show_id, arc_id, kind, after_slot_number, special_type, title, event_id, episode_id, release_date, release_time, part_one_slot_id, part_two_slot_id, locked_at, accepted_at, actual_outcome, actual_pressure`, timestamps. `kind` and `special_type` are locked by CHECK constraints (`season_specials_kind_check`; `season_specials_type_check`: holiday, recap, reunion or other).
+- **`episodes`** JSON fields all have other owners: `season_context` (a snapshot taken at Start Episode), `money_plan`, `setup_status`, `script_locked_beats`, `script_line_keys`, `evaluation_json`, `distribution_metadata`, `browse_pool_json`, `title_overlay_style` (`src/models/Episode.js`).
+- **`shows.metadata`** keyed by special id would have no referential integrity and sits in the G3 risk.
+- **Proposed (not run):**
+  - add `season_specials.continuity`, a nullable string with a CHECK of `canonical`, `standalone` or `recap`, under `src/migrations/` with `deleted_at` kept;
+  - `NULL` on a `special` means **Needs review**: excluded from carry-over and listed for Evoni;
+  - weekly slots and `two_part` are canonical by rule, with no stored value.
+  - Open: bonus episodes (N2) and the existing `special_type = 'recap'` rows (N3).
+
+**G3: an equivalent version check already exists for events.** MEASURED.
+- `src/utils/eventVersion.js` and the event PUT (`src/routes/worldEvents/update.js`) take the row's `updated_at` as read (`expected_updated_at`). They compare it with the stored row inside the write's transaction, with the row locked (`SELECT … FOR UPDATE`), and refuse with 409 `EVENT_CHANGED` when the stored row is newer. Precision is handled as whole milliseconds.
+- The frontend side is `frontend/src/utils/eventSaveVersion.js`.
+- Shows have `timestamps: true` (`src/models/Show.js:143`), so `shows.updated_at` can be the version.
+- **The one difference to settle (N4):** for events the key is optional, and a save without it is last-write-wins (Task #1788). For show metadata, G3 needs it **required** whenever `metadata` is sent.
+- **Proposed (not built):**
+  - a show version check reusing that utility (generalised, not copied);
+  - required on `PUT /shows/:id` when `metadata` is in the body;
+  - `EditShow` and `ShowSettings` sending the version they read;
+  - dedicated per-key phone-settings routes that lock the row and change only their key.
+  
+  A phone-settings write moves `updated_at`, so an open Edit Show gets a 409 and a reload, never an overwrite.
+
+**G4.** Fits PR 1 as an opt-in query flag. The regular read never includes unaccepted episodes. A simulation result carries `simulated: true` and its source episode ids, and nothing is written in either mode.
+
+## 24. The device track, updated (plan; nothing started)
+
+Each PR is one issue, opened for review and never merged by the session. No production data, setting, feature-flag or worker change.
+
+0. **PR 0, the story-slot resolver** (new, read-only; no migration). `seasonStoryOrder`, as in §23, with tests:
+   - weekly order;
+   - a bonus after slot n;
+   - two specials after one slot (N1);
+   - two-part halves;
+   - across seasons;
+   - episodes not in any slot.
+1. **PR 1, cues and state at a beat** (no migration). As in §20, with carry-over from the preceding **accepted** episodes in `seasonStoryOrder`.
+   - Specials with no continuity class are excluded and reported (`needs_review`), never assumed, until the G2 migration lands.
+   - `?preview=draft` is the Preview Draft Continuity mode (G4).
+2. **PR 2, the status bar, battery and DND, cracked glass.** Unchanged.
+3. **PR 3, wallpaper.** Unchanged.
+4. **PR 4, the lock screen.** Unchanged.
+
+**Separate, each needing its own approval:**
+5. **G2 migration and review list:** `season_specials.continuity` and a "Specials needing a continuity decision" list. After it lands, PR 1's carry-over reads the class.
+6. **G3 data-safety PR:** the show version check, required for metadata saves, and the dedicated phone-settings routes. A prerequisite of item 7.
+7. **The Phone Settings editor** (B2).
+8. **Phone Hub cue authoring.**
+9. **B3, isolating the server renderer.**
+
+PRs 0 to 4 need no migration and depend on nothing outside the device track. Items 5 and 6 can be done in parallel once approved.
+
+## 25. New blockers
+
+- **N1. Two specials after the same slot.** Their story order has no field. Order them by release date and time, then creation? Or add an explicit position (a migration, which could join item 5's)?
+- **N2. Bonus episodes.** G2 names weekly episodes and two-parters as canonical, but not bonus episodes (an event between two Sundays, which counts in goal coverage). Canonical by rule like two-parters, or flagged for review like specials?
+- **N3. Existing specials typed `recap`.** Their `special_type` already says recap. Pre-select Recap and still list them for confirmation, or flag them with no suggestion?
+- **N4. The show version check.** Required (refuse with 409) on every `PUT /shows/:id` that carries `metadata`, while saves without metadata stay as they are? And should the check use `updated_at`, the events' equivalent, or a dedicated revision column (a migration)?
