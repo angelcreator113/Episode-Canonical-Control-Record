@@ -151,3 +151,116 @@ Each one is a single phone-reviewable PR. None of them is opened by this read.
 - **D6: the production Hub gaps** (3.6: no Bank or Mail screen; The Pulse and Call miswired). Fix them before P3, or let P3 flag them? Fixing them is a production data change and needs its own approval.
 - **D7: the skeleton's "Bestie…" lines** for Lala (7.3). Should she keep them as in-world talk to the viewer-as-bestie, or does Rule 5 make them Prime's?
 - **D8: decline.** Does "declines <offer>" need its own state in `[LEARNS]`, or is a missing accept enough?
+
+## 12. Rulings on §11 (Evoni, 2026-11-04)
+
+Recorded as given. These are documentation decisions only. They do not approve any migration, production data change, merge or deploy.
+
+- **D1: Prime's outro library.**
+  - It starts with 12 reusable Prime outro lines.
+  - AI may draft suggestions; Evoni reviews and approves the actual lines.
+  - The lines sound like a real streamer reacting to gameplay: humour, emotion, commentary and anticipation, not generic YouTube sign-offs.
+- **D2: library storage.**
+  - It is kept in show settings at first, with a validated structure and stable line ids.
+  - A line used in the previous six episodes gets a warning. Repetition is never prohibited automatically, and an approved line is never rewritten.
+  - The library is protected against stale metadata saves under phase 7 N4.
+- **D3: Previously on…** It is off by default for new episodes, and is an optional opening segment for episodes that need context. It is never added to every episode automatically.
+- **D4: the six-beat skeleton.**
+  - The existing 14-beat structure stays the canonical production model.
+  - The six-beat skeleton may be offered at Start Episode as an optional high-level writing template, and it must map into the 14 beats.
+  - The Script tab is not renumbered, the phone-up window is not changed, the closet beat is not moved, and no existing episode, scene or asset assignment breaks.
+  - **The six-to-fourteen mapping is shown to Evoni before it is built** (§14).
+- **D5: timing estimates.** The existing phone-action durations stay, as optional Timeline Editor estimates. They are not authoritative script timings. They never force a clip duration or override manual editing. Existing scripts stay compatible.
+- **D6: Phone Hub wiring.**
+  - The Bank and Mail screens must exist and be connected correctly. The Pulse must not open Perfume, and Call must not open Home.
+  - First the existing screen assets and intended destinations are audited. Then a separately reviewable production-data correction is prepared, with a before/after mapping and a rollback plan.
+  - No production data is changed without separate approval.
+  - The phone path check must detect these problems, and readiness cannot pass while required navigation is broken.
+- **D7: Lala and Prime dialogue.**
+  - Prime/JustAWoman addresses the real audience as the streamer playing *Styling Adventures with Lala*.
+  - Lala speaks as an in-world character. Her "Bestie" is allowed when she addresses another in-world character. Direct audience commentary and calls to action belong to Prime.
+  - Existing approved scripts are not rewritten automatically; questionable lines are flagged for Evoni's review.
+- **D8: declining an offer.**
+  - An explicit decline exists, separate from ignored, expired or never-accepted offers.
+  - It is an opportunity-linked decline cue or equivalent structured script action, with the opportunity id and an optional reason.
+  - Declining follows the approved opportunity state flow.
+  - Gameplay consequences and brand reactions are proposed for Evoni's review, never committed automatically.
+
+## 13. The D rulings against existing rules and code (origin/main `80fd08cd`)
+
+| # | Check | Result |
+|---|---|---|
+| 13.1 | **D8 against the phase 4 deal rules.** Phase 4 ruling 4: Prime Studios confirms acceptance or rejection on the offer record, and script cues represent story actions, not final business-state changes. Ruling 9: brand consequences are proposals. The status flow already has `declined`, reachable from `offered`, `considering` and `negotiating`; `expired` is a separate status. | **No conflict** if the decline cue only portrays the decline and is validated against the record: the id exists, the offer belongs to the episode, and its status is `declined` or one that may move to it. The cue never sets the status. MEASURED `src/routes/opportunityRoutes.js` `STATUS_FLOW` :32-44; `docs/reads/2026-10-14-phone-phase4-read.md` §6 rulings 4 and 9. The phase 4 `decision` column (its issue 2, a migration) is not built yet. Until it is, the cue validates against `status`. |
+| 13.2 | **D8 and `[OFFER: id]`.** The phase 4 offer cue (its issue 3) is not built. | INFERRED: the decline cue is its sibling (`[DECLINE: <opportunity id> <optional reason>]`) and is built after it, the same way. |
+| 13.3 | **D4: the 14 beats are canon in code.** The names and numbers are in `canonicalBeats`. The script header is `## BEAT: <n> · <name>`, which "does not invent its own beats"; text before the first header is not a beat. | MEASURED `frontend/src/lib/canonicalBeats.js` :9-22; `src/utils/canonicalScriptBeats.js` :3-18, :28-36 |
+| 13.4 | **D4: the spec's six-beat order cannot be kept literally.** §7 puts Getting ready before The brand deal arrives, and Prime's outro before Travel. In the 14 beats the offer arrives at 4-5, getting ready is at 8, travel at 10 and the end at 14. | **Conflict, resolved by D4:** the 14-beat order wins, and the six template beats are placed in it (§14). |
+| 13.5 | **D4: fixed points kept.** The phone is up from beat 2 to 10, the reveal is beat 5, the cutscene is 11-13, and the shopping list is read at beat 9. | MEASURED `scriptMoments.js` :251-252, `EXPECTED_ON_SCREEN` :342-360; `scriptShowRules.js` `REVEAL_BEAT` :46, `CUTSCENE_FROM`/`UNTIL` :50-51. The §14 mapping moves none of them. |
+| 13.6 | **D2: "the previous six episodes" is in story order** (phase 7 G1, `seasonStoryOrder`, merged in #3697), not by `episode_number`. | INFERRED, from G1 |
+| 13.7 | **D2: the library's metadata is overwritten by the general show save today.** `PUT /shows/:id` replaces the whole row from the body. | MEASURED `src/routes/shows.js` :1711-1722. The phase 7 N4 safety PR must land before the library (phase 7 read §27). |
+| 13.8 | **D3: "opening segment" means inside a beat.** It is placed in beat 3 (Welcome), where Prime speaks, because text before beat 1 is ignored (13.3). | INFERRED, §14 |
+| 13.9 | **D5: who reads the durations.** `UI_ACTION_DURATIONS` is used only inside the parser; no other server code reads it. Whether the Timeline Editor reads the parsed durations as clip lengths is not measured here. | MEASURED grep at `80fd08cd` (`src`); the Timeline Editor is to be measured in P9 |
+| 13.10 | **D7 against the skeleton.** The legacy skeleton's Lala "Bestie…" lines are spoken to the audience (opening ritual, transformation, travel). Prime's "Besties... did she slay? Rate this look" is Prime's, so it is allowed. | MEASURED `src/utils/scriptSkeletonGenerator.js` :75-79, :131, :206, :247-249, :264. Under D7 these are flagged for review, not rewritten; the new template does not write them. |
+| 13.11 | **D6: the wiring was measured on 2026-10-14** (phone hub read :241-250), not since. | The audit must re-read production (read only) before the correction is drafted. |
+
+## 14. Proposed six-to-fourteen mapping (for Evoni's review; not built)
+
+The template places each of its beats inside the canonical beats. It adds no beat, renumbers nothing, keeps the phone-up window (2-10), the reveal (5), the closet (8) and the cutscene (11-13), and writes `## BEAT: <n> · <name>` headers only.
+
+| Canonical beat | Six-beat template | What the template pre-places |
+|---|---|---|
+| 1 Opening Ritual | — | unchanged |
+| 2 Login Sequence | — | unchanged |
+| 3 Welcome | **1 Previously on…** (opt-in, D3) | Prime's recap from the last accepted canonical episode in story order: key Pulse post, decisions, result |
+| 4 Interruption Pulse 1 | **3 The brand deal arrives** | the notification arrives; Lala reacts out loud (Rule 5) |
+| 5 Reveal | **3 The brand deal arrives** (cont.) | the offer opened (the Partnership Agreement, OFFER, as the overlay shows it on beat 5) |
+| 6 Strategic Reaction | **4 The career moment**, the decision | Lala accepts or declines (`[DECLINE: id]` per D8; acceptance confirmed on the record, phase 4 ruling 4) |
+| 7 Interruption Pulse 2 | — | unchanged |
+| 8 Transformation Loop | **2 Getting ready** | `[WEAR: id]` per locked-look piece, each followed by an empty Lala line slot |
+| 9 Reminder/Deadline | **2 Getting ready** (cont.) and **4 The career moment**, the list | Shopping list crossed off; then `[TODO_MODE: career]`, the Career list with the real "spent so far" |
+| 10 Event Travel | **6 Travel** | Prime taps Location; travel to the venue (the transition is phase 6) |
+| 11 The Event | **6 Travel** (cont.) | arrival |
+| 12 Fashion Challenge | — | unchanged |
+| 13 Recap Panel | — | unchanged |
+| 14 Cliffhanger | **5 Prime's outro** | Prime's outro from the library (repeat warning, D2), optional tease from a planted storyline |
+
+**Open on the mapping ([decide]):**
+
+- **M1. Where the offer arrives.** Beats 4-5 already carry the event's invitation.
+  - **Suggested:** when the deal is the episode's event, its offer is that reveal (4-5).
+  - When the episode has an invitation and a separate offer, the offer arrives at beat 7 (Interruption Pulse 2), and its decision moves to 7 as well.
+- **M2. The career moment is split.** The decision is at beat 6, right after the reveal. The Career list with "spent so far" is at beat 9, since spending happens at 8. Or should both go at 9?
+- **M3. Previously on** in beat 3 (Welcome), or at the start of beat 1 (Opening Ritual)?
+
+## 15. Phone navigation correction (D6): the plan, nothing started
+
+1. **Audit (read only).**
+   - Read the show's Phone Hub rows in production: screens, icons, `opens_screen`, pictures.
+   - Read the screen assets they point at.
+   - Report a table: icon → opens now → intended destination → asset found or missing.
+   - This is a production read; it runs only on Evoni's go (F-Tools-5).
+2. **Correction (a separate PR, not run).** A script or migration with:
+   - the before/after mapping;
+   - the Bank and Mail screens made (or linked to existing assets);
+   - The Pulse → `the_pulse_page` and Call → `phone_call_list`, as the hub read suggests, to be confirmed by the audit;
+   - a rollback that restores the before mapping;
+   - a dry run that prints the changes.
+   It needs Evoni's approval before it runs, through the Deploy workflow.
+3. **Readiness.** P3's path check marks a missing required screen, or a miswired required icon, as blocking. "Ready to film" cannot pass while one exists.
+
+## 16. Phase 5 plan, updated with the rulings (nothing started)
+
+| # | Issue | Change from §10 |
+|---|---|---|
+| P1 | Cue vocabulary as one list | adds the decline cue (D8) |
+| P2 | The picker offers exactly the §8 cues | unchanged |
+| P3 | Phone path check against the fixed names | broken required navigation **blocks readiness** (D6) |
+| P3b | Phone Hub correction (§15) | **new**; production data; its own approval |
+| P4 | Six-beat writing template | **opt-in template mapped into the 14 beats** (§14), after Evoni approves the mapping; the legacy skeleton is kept |
+| P5 | Previously on | **opt-in, off by default** (D3), inside beat 3; story order (#3697) |
+| P6 | Prime's outro library | **show settings, stable ids, 12 seed lines AI-drafted then approved, a warning for the previous six episodes in story order** (D1-D2); after the N4 safety PR; no migration |
+| P7 | Dialogue check | **Lala's audience address and calls to action flagged, never rewritten**; "Bestie" to an in-world character allowed (D7) |
+| P8 | Lala line AI draft | unchanged |
+| P9 | Durations | **kept, labelled as optional Timeline Editor estimates; never a clip length** (D5); measure the Timeline Editor first |
+| P10 | `[DECLINE: <opportunity id> <reason>]` | **new** (D8): portrays only; validated against the offer's status; consequences proposed for review; after the phase 4 `[OFFER]` cue |
+
+**Order:** the phase 7 N4 safety PR → P1 → P2 → P3 → (P3b on approval) → P4 (after §14 is approved) → P7 → P5 → P6 → P8 → P9 → P10 (after phase 4's offer cue).

@@ -700,3 +700,54 @@ PRs 0 to 4 need no migration and depend on nothing outside the device track. Ite
 - **N2. Bonus episodes.** G2 names weekly episodes and two-parters as canonical, but not bonus episodes (an event between two Sundays, which counts in goal coverage). Canonical by rule like two-parters, or flagged for review like specials?
 - **N3. Existing specials typed `recap`.** Their `special_type` already says recap. Pre-select Recap and still list them for confirmation, or flag them with no suggestion?
 - **N4. The show version check.** Required (refuse with 409) on every `PUT /shows/:id` that carries `metadata`, while saves without metadata stay as they are? And should the check use `updated_at`, the events' equivalent, or a dedicated revision column (a migration)?
+
+## 26. Rulings on §25 (Evoni, 2026-11-04)
+
+Recorded as given. These are documentation decisions only. They do not approve any migration, production data change, merge or deploy.
+
+- **N1: A.** Several specials after the same weekly slot are ordered by release date and time, then by creation order. An ambiguous order is still reported. It is never silently used to establish canonical carry-over. An explicit position field is revisited only if needed.
+- **N2: A, with an exception.**
+  - Story-connected bonus episodes are canonical by default, including those that count toward goal coverage.
+  - Explicitly standalone bonuses do not affect continuity.
+  - Canonical carry-over still requires an accepted evaluation.
+- **N3: A.** Existing specials typed `recap` are pre-selected as Recap but listed for Evoni's confirmation.
+- **N4: yes to (a); `updated_at` for (b).**
+  - Metadata-changing show saves reject stale writes with 409 Conflict.
+  - Saves that omit metadata keep the unrelated metadata.
+  - Every relevant writer must advance `updated_at`.
+  - The conflict check and the update must be atomic.
+  - Newer settings are never silently overwritten.
+
+## 27. The N rulings against the code (origin/main `80fd08cd`, 2026-11-04)
+
+| # | Check | Result |
+|---|---|---|
+| 27.1 | **N1 against `seasonStoryOrder`** (merged in #3697) | **Agrees.** Specials after one slot sort by release date, release time, `created_at`, then id. Both are marked `order_ambiguous` with a `same_slot` issue. MEASURED `src/services/seasonStoryOrder.js` `orderEntries` :125, :143-147. One gap: `precedingEpisodes` excludes an ambiguous special today only because specials are `needs_review`. If such a special later becomes canonical (G2 class), ambiguity must exclude it on its own. Add that to the G2 PR. INFERRED |
+| 27.2 | **N2 against `seasonStoryOrder`** | **Conflicts; needs a code change.** Every bonus is `needs_review` today, so it is excluded from carry-over. MEASURED :120, :135. Under N2 a bonus is canonical unless explicitly standalone. Nothing can mark one standalone until the G2 continuity-class migration. So, until then, every bonus is canonical and still needs `accepted`. Specials stay `needs_review`. Proposed as **PR 0b** below. |
+| 27.3 | **N3** | **No conflict.** It is part of the G2 migration and review list (§24 item 5); `special_type` CHECK already includes `recap`. |
+| 27.4 | **N4: the writers.** `PUT /shows/:id` replaces the whole row from the body with no check. | MEASURED `src/routes/shows.js` :1711-1722 (`show.update(req.body)`). A save without `metadata` already leaves metadata alone (Sequelize updates only the given fields). |
+| 27.5 | **N4: writers that do not advance `updated_at`.** Of the raw `UPDATE shows SET metadata` writers in services and routes, one does not set `updated_at`: `postRelease` (her learned posting hour, `pulse_release`). The model writers (`show.update`, `timestamps: true`) advance it. | MEASURED `src/services/postRelease.js` :445-446; `src/models/Show.js` :143; the other raw writers set `updated_at = NOW()` (sceneSetUsesService :174, financialTransactionService :215, worldMoments :250, pulseQueue :114, episodeLocationsService :291, seasonWrapUp :363, youtubeThumbnailService :412/:424/:674, characterPlacesService :181, seasonAiHelpers :591, bookFromShowRoutes :609). The `shows.js` setting routes (:459, :498, :536) use `show.update`. |
+| 27.6 | **N4: false conflicts.** Background writers update one key each (`jsonb_set`) and advance `updated_at`. Examples: the Pulse queue, world moments, thumbnails. A settings form loaded before such a write gets a 409 on save, even if it changed a different key. That is the safe outcome under N4 (no silent overwrite), but it may happen often. | INFERRED from 27.5; **[decide] N5** below |
+| 27.7 | **N4: atomic.** The events' pattern locks the row (`FOR UPDATE`), compares `expected_updated_at`, then updates in one transaction, or refuses with 409. | MEASURED `eventVersion.js` (phase 7 read §23) |
+
+### Updated plan (nothing started)
+
+- **PR 0b, fix(season): bonus episodes canonical by default (N2).**
+  - `seasonStoryOrder.orderEntries`: a bonus is `canonical`; a special stays `needs_review`.
+  - An ambiguous `same_slot` entry is never carried as canonical (27.1).
+  - Tests: the unit and integration tests for #3697, updated.
+  - No migration.
+- **G3 safety PR (N4).**
+  - `PUT /shows/:id` with `metadata` requires `expected_updated_at`, then locks, compares and updates in one transaction, or refuses with 409 and the current row. Without `metadata` it is unchanged.
+  - `postRelease` :445 also sets `updated_at`.
+  - The four `shows.js` setting routes (:444, :487, :527, :565) also follow N4. They change metadata.
+  - Tests: a stale save is refused; a fresh save passes; a save without metadata keeps unrelated keys; two saves at once, one of them wins and one gets 409.
+  - No migration.
+- The G2 migration (continuity class, N3 review list) stays a separate approval.
+
+### Open
+
+- **N5 [decide]. Background writes and 409s (27.6).**
+  - **(A) Strict:** any change since load refuses the save, and the form reloads while keeping Evoni's unsaved edits.
+  - **(B) Per key:** refuse only when a key the save changes was itself changed since load. This needs the form to send only the keys it changed, and the server to merge them under the lock. Still no migration.
+  - Suggested: (B) for the settings editor, (A) for the general `PUT /shows/:id`.
