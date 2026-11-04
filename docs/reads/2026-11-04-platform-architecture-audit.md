@@ -570,3 +570,13 @@ So money, stats, goals and continuity are applied by **`completeEpisode` alone**
 - `/accept` → a thin alias that returns `already_completed` (with the beat 14 retry), then removed.
 
 **Must be preserved:** the single transaction; the episode lock; ledger-derived coins; payout deduplication; the below-zero and reopened-terms refusals; accepted history never overwritten; drafts (story record, follower change) needing Evoni's approval.
+
+---
+
+## 13. Correction (2026-11-04, from P0 fix A, #3706)
+
+§1.1 and §4 row 6 said that CFO, AI Costs, Site Organizer, Design Agent, Decision analytics and the Recycle bin have "no admin check". **For the server, that was partly wrong.**
+
+- **Already admin-only on the server** (only their *pages* lacked a check): CFO, AI Costs, Decision Analytics, Site Organizer, Design Agent, Audit Logs and the Website admin writes.
+- **The real server gaps** were the **Recycle Bin** (list, restore, permanent delete) and the **Amber diagnostic engine** (scan, approve, execute Claude Code, queue). #3706 makes both admin-only and adds an "Admins only" page wrapper.
+- **The debug and seed routes** are handled in #3705.
