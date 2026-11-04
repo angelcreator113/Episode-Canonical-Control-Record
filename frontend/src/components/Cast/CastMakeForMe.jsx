@@ -8,6 +8,13 @@
  * again and Edit. Nothing is saved until Keep (POST .../cast/keep), which
  * makes the character and, in the LalaVerse, their Pulse profile. Edit hands
  * the proposal to the page's own New character form, prefilled.
+ *
+ * Who the story needs (Task #3200): in the LalaVerse the proposals fill the
+ * story's gaps (services/castStoryGaps: unfilled archetypes, empty Dream
+ * Cities, open threads, storylines with no face, the next event's host and
+ * guests). The panel lists the gaps it read, and each proposal says which it
+ * fills (its reason). A kept LalaVerse character starts at Active, so their
+ * voice is built for Evoni to approve.
  */
 
 import React, { useState } from 'react';
@@ -28,6 +35,7 @@ export default function CastMakeForMe({ registries = [], registryId = null, onCl
   const [chosenId, setChosenId] = useState(registryId || (registries.length === 1 ? registries[0].id : null));
   const [idea, setIdea] = useState('');
   const [proposals, setProposals] = useState([]);
+  const [gaps, setGaps] = useState([]); // what the story needs, as the last Make read it
   const [busy, setBusy] = useState(null); // 'make' | index being kept
   const [lastCount, setLastCount] = useState(1);
   const [error, setError] = useState(null);
@@ -39,6 +47,7 @@ export default function CastMakeForMe({ registries = [], registryId = null, onCl
     try {
       const res = await api.post('/api/v1/character-generation/cast/propose', { registry_id: registry.id, idea: idea.trim(), count });
       setProposals(res.data?.proposals || []);
+      setGaps(Array.isArray(res.data?.gaps) ? res.data.gaps : []);
     } catch (err) {
       console.error('[CastMakeForMe] propose failed:', err);
       setError(err?.response?.status === 403 ? 'Only an admin can make characters.' : errorText(err, 'Nothing could be made. Try again.'));
@@ -79,7 +88,7 @@ export default function CastMakeForMe({ registries = [], registryId = null, onCl
             <label className="cast-label" htmlFor="cmfm-idea">An idea (optional)</label>
             <input id="cmfm-idea" data-testid="cmfm-idea" className="cast-input" maxLength={200} value={idea}
               onChange={(e) => setIdea(e.target.value)} placeholder="a rival stylist in Dazzle District" />
-            <p className="cast-note cmfm-hint">Leave it empty and the cast&apos;s gaps decide. One AI call per click; nothing is saved until you keep one.</p>
+            <p className="cast-note cmfm-hint">Leave it empty and what the story needs decides. One AI call per click; nothing is saved until you keep one.</p>
           </div>
           <div className="cmfm-make">
             <button type="button" className="cast-btn-primary" data-testid="cmfm-make-1" disabled={busy !== null || !registry} onClick={() => make(1)}>
@@ -91,6 +100,13 @@ export default function CastMakeForMe({ registries = [], registryId = null, onCl
           </div>
           {error && <p role="alert" className="cmfm-error" data-testid="cmfm-error">{error}</p>}
         </div>
+
+        {proposals.length > 0 && gaps.length > 0 && (
+          <details className="cmfm-gaps" data-testid="cmfm-gaps">
+            <summary>What the story needs ({gaps.length})</summary>
+            <ul>{gaps.map((g, i) => <li key={`${g.kind}-${i}`}>{g.label}</li>)}</ul>
+          </details>
+        )}
 
         {proposals.length > 0 && (
           <ul className="cmfm-list" data-testid="cmfm-proposals">
@@ -109,6 +125,7 @@ export default function CastMakeForMe({ registries = [], registryId = null, onCl
                   {p.current_city && <span className="cast-chip is-green">{CITY_LABELS[p.current_city] || p.current_city}</span>}
                   {p.pulse?.handle && <span className="cast-chip is-lavender">{atHandle(p.pulse.handle)}</span>}
                 </div>
+                {p.reason && <p className="cmfm-reason" data-testid="cmfm-reason"><span>Why them:</span> {p.reason}</p>}
                 {p.description && <p className="cmfm-summary">{p.description}</p>}
                 <dl className="cmfm-traits">
                   {p.signature_trait && <><dt>Trait</dt><dd>{p.signature_trait}</dd></>}

@@ -54,6 +54,25 @@ describe('castGenerate shaping', () => {
     expect(noIdea).toContain('fill a gap in the cast');
   });
 
+  it('keeps the reason a proposal gives, trimmed; none is null (Task #3200)', () => {
+    expect(cg.shapeProposal({ ...raw, reason: '  No one lives in Maverick Harbor; she runs its night market. ' }, 'lalaverse').reason)
+      .toBe('No one lives in Maverick Harbor; she runs its night market.');
+    expect(cg.shapeProposal(raw, 'lalaverse').reason).toBeNull();
+  });
+
+  it('with the story\'s gaps the prompt names them and asks for who the story needs most; it asks every proposal for a reason (Task #3200)', () => {
+    const cast = { rows: [], roles: {}, cities: {} };
+    const gaps = [{ kind: 'city', label: 'No one lives in Maverick Harbor' }, { kind: 'storyline', label: 'The storyline "The feud" has no face yet' }];
+    const prompt = cg.promptFor({ world: 'lalaverse', cast, idea: '', count: 1, brain: null, gaps });
+    expect(prompt).toContain('WHAT THE STORY NEEDS:\n- No one lives in Maverick Harbor\n- The storyline "The feud" has no face yet');
+    expect(prompt).toContain('the story needs most');
+    expect(prompt).toContain('"reason"');
+    const withIdea = cg.promptFor({ world: 'lalaverse', cast, idea: 'a florist', count: 1, brain: null, gaps });
+    expect(withIdea).toContain('a florist');
+    expect(withIdea).toContain('filling a need above where it fits');
+    expect(cg.promptFor({ world: 'lalaverse', cast, idea: '', count: 1, brain: null })).not.toContain('WHAT THE STORY NEEDS');
+  });
+
   it('a registry reads as Before Lala by its book tag, else the LalaVerse', () => {
     expect(cg.worldOf({ book_tag: 'Book 1: Before Lala' })).toBe('book-1');
     expect(cg.worldOf({ book_tag: null })).toBe('lalaverse');
