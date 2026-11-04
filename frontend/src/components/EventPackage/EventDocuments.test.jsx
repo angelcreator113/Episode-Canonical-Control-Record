@@ -127,6 +127,44 @@ describe('EventDocuments', () => {
     expect(letter.textContent).toContain('Sable Moreau · Founder, Studio by Sable');
   });
 
+  // Task 3206 (the phone spec §13): the letter is the Creator Partnership
+  // Agreement, from the server's offer_agreement.
+  const AGREEMENT = {
+    title: 'Creator Partnership Agreement · Studio Session', brand: 'Studio by Sable',
+    colours: { head: '#6A1B4D', rule: '#E8C66A' },
+    clauses: [
+      { number: 1, key: 'engagement', title: 'The engagement', lines: [{ label: 'Studio by Sable engages Lala (the Creator) for Studio Session on November 12, 2026.', detail: null, amount: null }] },
+      ...TERMS.map((t, i) => ({ number: i + 2, ...t })),
+    ],
+    status: 'offer', label: 'OFFER', colour: '#6A1B4D', episode_id: null,
+  };
+
+  test('the agreement: title, Brand and Creator, numbered clauses from 1 The engagement, the event colours, OFFER', async () => {
+    api.get.mockResolvedValue({ data: { success: true, data: { shopping_list: null, offer_letter: OFFER, ...DEAL, offer_agreement: AGREEMENT } } });
+    renderDocs();
+    const letter = await screen.findByTestId('evd-offer-letter');
+    expect(screen.getByTestId('evd-agreement-title').textContent).toBe('Creator Partnership Agreement · Studio Session');
+    expect(letter.textContent).toContain('BrandStudio by Sable');
+    expect(letter.textContent).toContain('CreatorLala');
+    expect(within(letter).getByTestId('evd-offer-section-engagement').textContent).toMatch(/^1\. The engagement/);
+    expect(within(letter).getByTestId('evd-offer-section-fees').textContent).toMatch(/^2\. /);
+    expect(screen.getByTestId('evd-agreement-stamp').textContent).toBe('OFFER');
+    expect(screen.getByTestId('evd-agreement-creator-sign').textContent).toBe('');
+    expect(letter.style.getPropertyValue('--evd-agree-head')).toBe('#6A1B4D');
+    expect(letter.style.getPropertyValue('--evd-agree-rule')).toBe('#E8C66A');
+    expect(letter.className).not.toContain('is-executed');
+  });
+
+  test('once the event has started an episode the agreement reads EXECUTED, signed by Lala', async () => {
+    const executed = { ...AGREEMENT, status: 'executed', label: 'EXECUTED', colour: '#2E6B3F', episode_id: 'ep-1' };
+    api.get.mockResolvedValue({ data: { success: true, data: { shopping_list: null, offer_letter: OFFER, ...DEAL, offer_agreement: executed } } });
+    renderDocs();
+    const letter = await screen.findByTestId('evd-offer-letter');
+    expect(screen.getByTestId('evd-agreement-stamp').textContent).toBe('EXECUTED');
+    expect(screen.getByTestId('evd-agreement-creator-sign').textContent).toBe('Lala');
+    expect(letter.className).toContain('is-executed');
+  });
+
   test('an event with no deal gets no offer letter: the card says so and offers no Draft', async () => {
     api.get.mockResolvedValue({ data: { success: true, data: { shopping_list: null, offer_letter: null, offer_eligible: false, offer_terms: [] } } });
     renderDocs();
@@ -235,7 +273,7 @@ describe('EventDocuments', () => {
     fireEvent.click(within(plan).getByTestId('evd-redraft-offer_letter'));
     await waitFor(() => expect(api.post).toHaveBeenCalledWith(`${BASE}/offer_letter/draft`, {}));
     expect(confirmSpy).not.toHaveBeenCalled();
-    expect(within(plan).getByTestId('evd-undo-offer_letter').textContent).toContain('Redrafted the offer letter');
+    expect(within(plan).getByTestId('evd-undo-offer_letter').textContent).toContain('Redrafted the partnership agreement');
     expect(within(shop).queryByTestId('evd-undo-shopping_list')).toBeNull();
 
     fireEvent.click(within(plan).getByRole('button', { name: /Edit/ }));
