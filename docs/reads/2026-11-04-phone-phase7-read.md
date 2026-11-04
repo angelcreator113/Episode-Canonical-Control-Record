@@ -500,3 +500,102 @@ Each PR is one issue, branched from `origin/main`, with no migration, no product
 - **B4. Which earlier episodes carry the cracked state.** Recommended: every live episode of the show with a lower `episode_number`, in number order, whatever its status. Or only completed or published ones?
 - **B5. The day-change form.** Recommended: `[TIME: HH:MM day=+1]`, with `+n` days from the episode's opening day, display only. Or a separate `[DAY: next]` cue?
 - **B6. Battery and DND with no configured default.** Recommended: full battery and DND off, as today, so nothing visible changes until defaults are set. Or hide the battery entirely? The time follows R6 and shows unset.
+
+## 18. Rulings on §17 (Evoni, 2026-11-04)
+
+Recorded as given. No code, merge, deployment, migration, production setting or script change is approved by them.
+
+- **B1, wallpaper placement (approved).**
+  - A designer-controlled wallpaper content area on compatible phone screens.
+  - Existing flat-image screens stay visually unchanged unless Evoni configures a wallpaper area.
+  - Wallpaper previews for the Home Screen and the Lock Screen, from approved image assets, never duplicating source images.
+- **B2, phone defaults (approved with refinement).**
+  - A small **Phone Settings editor** as a separate, approval-gated PR after the read-only stages.
+  - It manages show defaults, arc wallpaper choices and episode opening settings through the same canonical configuration and script-cue workflow, with no competing source of truth.
+  - Episode script cues take precedence over defaults.
+  - The UI shows whether each value is inherited, explicitly configured, or changed by a cue.
+- **B3, the unused server renderer (keep and isolate).**
+  - Not deleted yet.
+  - Confirm whether any current or planned render or export path uses it, document the findings, and remove the real-world clock dependence before any reuse.
+  - Kept separate from the device PRs.
+- **B4, cracked-screen carry-over (refined).**
+  - Persistent conditions carry forward only from preceding, canonically committed episodes in the same story continuity, not from every lower-numbered draft or unfinished episode.
+  - Draft previews may simulate uncommitted carry-over but never modify canonical state.
+  - An explicit repair or reset clears the condition.
+  - Identify the existing status or approval mechanism that defines canonical continuity. If there is none, report the gap rather than invent a rule.
+- **B5, day changes (approved).**
+  - `[TIME: HH:MM day=+1]` for explicit day transitions, relative to established story time.
+  - A plain `[TIME: HH:MM]` never implies a new day.
+  - The display clock never changes the canonical episode and beat order used by deals, payments or career history.
+- **B6, defaults (approved).** With no explicit battery or DND setting, show battery 100% and DND off. These are presentation defaults, kept distinguishable from explicit scripted values.
+
+## 19. Findings for B2, B3 and B4 (origin/main `3bb080aa`, 2026-11-04)
+
+**B4: the canonical-commit marker exists.** MEASURED.
+- Completing an episode (`episodeCompletionService`, the one-call Complete flow) sets `episodes.evaluation_status = 'accepted'` (`src/services/episodeCompletionService.js:601`) and writes the state snapshot to `character_state_history`.
+- That is already the "counted, canonical" test elsewhere:
+  - the Career list's counted episodes, `WHERE show_id = :showId AND deleted_at IS NULL AND evaluation_status = 'accepted' AND COALESCE(episode_number, 0) < :below ORDER BY COALESCE(episode_number, 0)` (`src/services/careerListService.js:77-83`);
+  - the world dashboard (`src/routes/world.js:130, 155`);
+  - Pulse event posting (`src/services/pulseEventPosting.js:259`).
+- An accepted evaluation is not computed again (`src/routes/evaluation.js`, the 409 `EPISODE_ALREADY_ACCEPTED`). Only the admin stats reset clears it (`evaluation_status: null`, `src/routes/evaluation.js:178`).
+- `episodes.status` is a free string, default `draft` (`src/models/Episode.js:78-82`), with no "committed" meaning. It is not used.
+- **So, for the carry-over:** the show's live episodes with `evaluation_status = 'accepted'`, before the current one, as the Career list reads them. A draft preview (`?preview=1`) may also simulate unaccepted earlier episodes, labelled simulated. Nothing is stored either way: the state is computed, never written.
+
+**B4: two gaps in "same story continuity"** (G1 and G2 below). MEASURED.
+- **"Preceding" is not always `episode_number`.** Special episodes (`season_specials`: `bonus` and `special`) are linked by `episode_id` and placed by `after_slot_number`, beside the weekly slots (`src/services/seasonSpecials.js:1-40, 121-143`). A bonus "after E7" is ordered by its slot, not by its own episode number. The Career list's `episode_number` order, and the story clock's `episode_number × 10 + phase`, may not place it right.
+- **Nothing marks an episode as outside continuity.** A stand-alone `special` (holiday, recap, reunion) "counts toward no part and no goal" (`:12-15`). Whether its events, a cracked screen among them, are canon for the next weekly episode is not recorded anywhere.
+
+**B2: where the settings live.** MEASURED.
+- **Show defaults and arc and episode wallpaper** fit in `shows.metadata` (`src/models/Show.js:89`, type **JSON**, not JSONB), as `phone_defaults` and `phone_wallpapers`, beside `lala_home`, `style_designs`, `career_hidden_brands` and `logo`. The dedicated routes write one key and keep the rest (`src/routes/shows.js:456-459, 497-498`, the `lala-home` PUT "keeps every other metadata key").
+- **Episode opening settings are the opening beat's cues** (T1): `[TIME: …]` and `[PHONE: …]` on beat 1. Writing them is a script save, through the existing versioned save (`saveEpisodeScript`, with script revision and locked beats). That is the Phone Hub gate.
+- **Provenance for the editor:** PR 1's state service returns each value with its source: `presentation_default` (B6), `show_default`, `opening_cue`, `cue`, `carried` (with the episode it came from) or `simulated`. The editor shows inherited, configured or changed-by-cue from that, with no second store.
+- **A risk to these keys** (G3). The general `PUT /shows/:id` runs `show.update(req.body)` (`src/routes/shows.js:1711-1722`), and both show editors send the **whole** metadata object back:
+  - `ShowSettings` re-reads the show before saving (`frontend/src/pages/ShowSettings.jsx:101-103`, `lib/showSettings.settingsUpdate`);
+  - `EditShow` builds it from the show as loaded (`frontend/src/pages/EditShow.jsx:91`, `lib/showEdit.showUpdate`).
+  
+  A phone setting saved while `EditShow` is open would be dropped by its next save. This is the same read-modify-write pattern, for every metadata key, already exposed today.
+
+**B3: the server renderer is unused.** MEASURED.
+- `renderPhoneScreen` (`src/services/phoneScreenRenderer.js:36`, export `:298`) has no caller in `src/`, `frontend/src`, `scripts/` or `tests/`.
+- It is listed dead in `PROJECT_CONTEXT.md:325`, unreached in `docs/audit/F-Tools-1_UnreachedExportsSweep_2026-09-15.md:189`, and "no callers" in `docs/reads/2026-10-26-production-system-audit.md:354`.
+- It draws the server's wall-clock time (`:62-68`).
+- **Planned use:** the only candidate is the spec's §11 Timeline export (phone moments as overlay clips, phase 6, `docs/design/2026-10-lalas-phone.md:75-76`), which nothing builds yet. INFERRED: any reuse there must take story time from PR 1, not `new Date()`.
+- Left untouched by the device PRs.
+
+## 20. The device track, updated (plan; nothing started)
+
+Each PR is one issue, opened for review, never merged by the session. No migration, production setting, feature flag, worker change or script write.
+
+1. **PR 1, cues and state at a beat.**
+   - `[PHONE: battery= dnd= cracked=]` with `reset` and `repaired`, and `[TIME: HH:MM]` with `day=+n`, parsed and registered (`APP_TAG`, `scriptHealth`, `scriptMoments`).
+   - The state at `{ beat, line }`, each value with its source (§19).
+   - Battery and DND from the episode's opening cue, else `shows.metadata.phone_defaults`, else the presentation default (100%, off).
+   - Cracked carried from the preceding accepted episodes (B4), in the order G1 settles; `?preview=1` simulates unaccepted ones, labelled.
+   - Time unset without a cue (R6).
+   - Read-only `GET /episodes/:episodeId/phone-state/at`.
+2. **PR 2, the status bar, battery and DND, cracked glass.** As in §16. The presentation default shows the same as today, and the source is exposed for tests.
+3. **PR 3, wallpaper.**
+   - `wallpaperAt` resolution as in §16.
+   - A designer-placed `wallpaper` content area (B1): opt-in, and only on screens where it is placed, so existing screens are unchanged.
+   - Previews on Home and Lock Screen from approved assets by id.
+4. **PR 4, the lock screen.** As in §16, with the wallpaper area and the story time with its day.
+
+**After, each with its own approval:**
+5. **The Phone Settings editor** (B2): show defaults, arc and episode wallpaper, tags on approved assets, and the episode opening cues through the versioned script save. Values are shown as inherited, configured or changed by cue. Its storage waits on G3.
+6. **Phone Hub cue authoring** (the earlier gate).
+7. **B3, isolating the server renderer**: story time instead of the wall clock, before any reuse.
+
+## 21. Remaining blockers
+
+- **G1. Continuity order with specials.**
+  - For carry-over, is "preceding" the season's slot order (weekly slots, with bonus and special episodes placed after their `after_slot_number`), or `episode_number`?
+  - Recommended: the slot order, since that is how the season is laid out. Episodes not in a season's slots fall back to `episode_number`.
+  - This also affects the story clock, which uses `episode_number`, so it may need its own decision (INFERRED).
+- **G2. Which specials are in continuity.**
+  - Do stand-alone specials (holiday, recap, reunion) carry or pass on persistent conditions?
+  - Recommended: bonus episodes and two-parters are in continuity. Stand-alone specials are out (they neither carry in nor pass on), unless Evoni marks one in.
+  - Marking needs a place, e.g. `season_specials` already has `special_type`, and a per-special flag would be a new field (a migration) or a value in an existing JSON. To be settled before it is built.
+- **G3. Protecting the phone settings in `shows.metadata`.** The general show PUT and `EditShow` can overwrite them (§19). Before the Phone Settings editor:
+  - (a) keep them in `shows.metadata`, written by a dedicated per-key route under a row lock, and change `EditShow` to re-read before saving as `ShowSettings` does (recommended; no migration);
+  - (b) or move them to their own storage (a migration).
+- **G4. A draft preview's scope.** Recommended: `?preview=1` simulates the unaccepted earlier episodes in continuity order, shown as simulated, while the default read uses accepted episodes only. Is that the right default for the Script tab and the Phone preview?
