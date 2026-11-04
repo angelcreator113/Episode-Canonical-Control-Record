@@ -111,6 +111,9 @@ describe('EventPackagePage money warnings (§8(gg) MB4)', () => {
     fireEvent.click(screen.getByTestId('start-anyway'));
     // Then the Episode Locations step (L3, §8(hh)); Confirm starts it.
     fireEvent.click(await screen.findByTestId('els-confirm'));
+    // "Who's new" (Task #3202) follows the locations; No one new starts as before.
+    fireEvent.click(await screen.findByTestId('wn-none'));
+    fireEvent.click(screen.getByTestId('wn-start'));
     await waitFor(() => expect(api.post).toHaveBeenCalledWith(START_URL, { draft_script: false, locations: [] }));
   });
 
@@ -122,6 +125,9 @@ describe('EventPackagePage money warnings (§8(gg) MB4)', () => {
     expect(screen.queryByTestId('money-warnings')).toBeNull();
     fireEvent.click(start);
     fireEvent.click(await screen.findByTestId('els-confirm'));
+    // "Who's new" (Task #3202) follows the locations; No one new starts as before.
+    fireEvent.click(await screen.findByTestId('wn-none'));
+    fireEvent.click(screen.getByTestId('wn-start'));
     await waitFor(() => expect(api.post).toHaveBeenCalledWith(START_URL, { draft_script: false, locations: [] }));
     expect(screen.queryByTestId('start-confirm')).toBeNull();
   });
