@@ -6,6 +6,10 @@
  *     following Lala (it was not made from the feed)
  *   - the same name again is refused; ADMIN only; the budget is a 429; the AI
  *     down is a 502 with a plain message
+ *   - who the story needs (Task #3200): propose reads the story's gaps
+ *     (services/castStoryGaps) into the prompt and returns them; each
+ *     proposal carries its reason; a kept LalaVerse character starts at
+ *     Active with its profile, the condition the hourly voice queue reads
  */
 jest.unmock('uuid');
 
@@ -55,6 +59,8 @@ const reply = (obj) => ({ content: [{ text: JSON.stringify(obj) }], usage: { inp
   });
 
   afterAll(async () => {
+    await run('DELETE FROM pulse_storylines WHERE show_id = :show', ids);
+    await run('DELETE FROM show_story_threads WHERE show_id = :show', ids);
     const rows = await inRegistry();
     const feed = rows.map((r) => r.feed_profile_id).filter(Boolean);
     if (feed.length) await run('DELETE FROM social_profiles WHERE id IN (:feed)', { feed });
@@ -94,10 +100,38 @@ const reply = (obj) => ({ content: [{ text: JSON.stringify(obj) }], usage: { inp
     const [c] = await inRegistry();
     expect(c).toMatchObject({ display_name: name, selected_name: 'Sienna Okafor-Vale', role_type: 'shadow', current_city: 'dazzle_district', world: 'lalaverse', social_presence: true });
     expect(c.extra_fields.made_by).toBe('cast_generate');
+    // Active with a feed profile: what queueVoiceBuilds (services/pulseVoices) builds a voice for (Task #3200).
+    expect(c.depth_level).toBe('active');
+    const queued = await q(`SELECT rc.id FROM registry_characters rc
+      WHERE rc.id = :id AND rc.depth_level::text IN ('active', 'alive') AND rc.feed_profile_id IS NOT NULL AND rc.deleted_at IS NULL`, { id: c.id });
+    expect(queued).toHaveLength(1);
     const [profile] = await q('SELECT * FROM social_profiles WHERE id = :id', { id: c.feed_profile_id });
     expect(profile).toMatchObject({ handle: `@${handle}`, platform: 'pulse', feed_layer: 'lalaverse', city: 'dazzle_district', display_name: name });
     const follows = await q('SELECT * FROM social_profile_followers WHERE character_key = :key', { key: c.character_key });
     expect(follows).toHaveLength(0);
+  });
+
+  it('reads what the story needs into the prompt, returns it, and carries each proposal\'s reason (Task #3200)', async () => {
+    await run(`INSERT INTO show_story_threads (show_id, title, status, source) VALUES (:show, :t, 'open', 'evoni'), (:show, :closed, 'closed', 'evoni')`,
+      { show: ids.show, t: `The missing invitation ${tag}`, closed: `Settled ${tag}` });
+    await run(`INSERT INTO pulse_storylines (show_id, title, status) VALUES (:show, :t, 'planned'), (:show, :done, 'paid_off')`,
+      { show: ids.show, t: `The feud at the gala ${tag}`, done: `Old news ${tag}` });
+    const reason = `The storyline "The feud at the gala ${tag}" has no face yet; she starts it`;
+    mockCreate.mockResolvedValue(reply([proposal({ display_name: `Needed ${tag}`, reason, pulse: { handle: `needed_${tag}`, bio: 'x', follower_count: 900 } })]));
+    const res = await post('propose', { registry_id: ids.reg, count: 1 });
+    expect(res.status).toBe(200);
+    const labels = res.body.gaps.map((g) => g.label);
+    expect(labels).toContain(`The story thread "The missing invitation ${tag}" is still open`);
+    expect(labels).toContain(`The storyline "The feud at the gala ${tag}" has no face yet`);
+    expect(labels.join(' ')).not.toContain(`Settled ${tag}`);
+    expect(labels.join(' ')).not.toContain(`Old news ${tag}`);
+    expect(res.body.gaps.every((g) => g.kind && g.label)).toBe(true);
+    const prompt = mockCreate.mock.calls[0][0].messages[0].content;
+    expect(prompt).toContain('WHAT THE STORY NEEDS');
+    expect(prompt).toContain(`The feud at the gala ${tag}`);
+    expect(prompt).toContain('"reason"');
+    expect(res.body.proposals[0].reason).toBe(reason);
+    expect(await q('SELECT id FROM registry_characters WHERE registry_id = :reg AND display_name = :n', { reg: ids.reg, n: `Needed ${tag}` })).toHaveLength(0);
   });
 
   it('the same name again is refused, and nothing more is written', async () => {

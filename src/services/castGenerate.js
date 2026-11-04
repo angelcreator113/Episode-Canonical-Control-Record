@@ -61,17 +61,25 @@ async function castOf(db, registryId) {
   return { rows, roles: tally('role_type'), cities: tally('current_city') };
 }
 
-function promptFor({ world, cast, idea, count, brain }) {
+function promptFor({ world, cast, idea, count, brain, gaps = [] }) {
   const lala = world !== 'book-1';
   const { DREAM_CITIES } = require('../utils/lalaHome');
   const worldLine = require('./characterGenerationService').worldLineFor({ world });
   const names = cast.rows.map((r) => [r.display_name, r.role_label].filter(Boolean).join(' — ')).slice(0, 80);
+  // What the story needs (Task #3200; services/castStoryGaps): the gaps each
+  // proposal fills, named in its reason.
+  const needs = gaps.length ? `WHAT THE STORY NEEDS:\n${gaps.map((g) => `- ${g.label}`).join('\n')}\n` : '';
+  const ask = idea
+    ? `EVONI'S IDEA: "${idea}". Build ${count === 1 ? 'the character' : 'each character'} from it${gaps.length ? ', filling a need above where it fits' : ''}.`
+    : gaps.length
+      ? `No idea was given: build ${count === 1 ? 'the person' : 'people'} the story needs most from the list above, each filling a different need.`
+      : 'No idea was given: fill a gap in the cast (a role, a city or a kind of person it lacks), each one different.';
   return `You are adding ${count === 1 ? 'one new character' : `${count} new characters`} to the cast of a story.
 ${worldLine}
 ${brain ? `${brain}\n` : ''}${lala ? require('../utils/pulsePlatform').pulsePromptRules('lalaverse') : ''}
 THE CAST ALREADY (${cast.rows.length}): ${names.join('; ') || 'nobody yet'}
 Roles so far: ${JSON.stringify(cast.roles)}. Cities so far: ${JSON.stringify(cast.cities)}.
-${idea ? `EVONI'S IDEA: "${idea}". Build ${count === 1 ? 'the character' : 'each character'} from it.` : 'No idea was given: fill a gap in the cast (a role, a city or a kind of person it lacks), each one different.'}
+${needs}${ask}
 
 Rules:
 - Each is a specific person with a contradiction, not a type. Never reuse a name above.
@@ -80,7 +88,7 @@ Rules:
 ${lala ? `- city is one of: ${DREAM_CITIES.join(', ')}.\n- pulse is their profile on The Pulse: a handle without @, a bio of 1-2 sentences in their voice, and a whole-number follower_count fitting who they are.` : '- city is "outside_lalaverse". pulse is null.'}
 
 Answer with JSON only, an array of exactly ${count}:
-[{"display_name": "the name they go by", "real_name": "their full legal name", "role": "...", "role_label": "a few words, e.g. rival stylist", "summary": "2-3 sentences: who they are and the tension they bring", "city": "...", "age": 0, "gender": "...", "pronouns": "...", "signature_trait": "one line", "core_desire": "one line", "core_fear": "one line", "icon": "one emoji", "pulse": {"handle": "...", "bio": "...", "follower_count": 0}}]`;
+[{"display_name": "the name they go by", "real_name": "their full legal name", "reason": "one short line: which need they fill and why, e.g. No one lives in Maverick Harbor; she runs its night market", "role": "...", "role_label": "a few words, e.g. rival stylist", "summary": "2-3 sentences: who they are and the tension they bring", "city": "...", "age": 0, "gender": "...", "pronouns": "...", "signature_trait": "one line", "core_desire": "one line", "core_fear": "one line", "icon": "one emoji", "pulse": {"handle": "...", "bio": "...", "follower_count": 0}}]`;
 }
 
 /** One proposal as the AI gave it, checked; null when there is nothing to keep. */
@@ -98,6 +106,8 @@ function shapeProposal(raw, world) {
   return {
     display_name: displayName,
     selected_name: text(raw.real_name, 120) || null,
+    // Why this person, in the story's terms (Task #3200). Shown, not saved.
+    reason: text(raw.reason, 240) || null,
     role_type: ROLES.includes(raw.role) ? raw.role : 'pressure',
     role_label: text(raw.role_label, 80) || null,
     description: text(raw.summary, 1200) || null,
@@ -137,10 +147,12 @@ async function propose(db, { registryId, idea = '', count = 1 } = {}) {
   const world = worldOf(registry);
   const cast = await castOf(db, registry.id);
   let brain = null;
+  let gaps = [];
   if (world !== 'book-1') {
     brain = (await require('./brainRules').loadBrainContext(db, { showId: registry.show_id || null, label: 'castGenerate' })).block;
+    gaps = await require('./castStoryGaps').castStoryGaps(db, { showId: registry.show_id || null });
   }
-  const prompt = promptFor({ world, cast, idea: text(idea, IDEA_MAX), count: n, brain });
+  const prompt = promptFor({ world, cast, idea: text(idea, IDEA_MAX), count: n, brain, gaps });
   let message;
   for (const model of MODELS) {
     try {
@@ -157,7 +169,7 @@ async function propose(db, { registryId, idea = '', count = 1 } = {}) {
   const taken = new Set(cast.rows.map((r) => keyFor(r.display_name)));
   const proposals = parseProposals(message?.content?.[0]?.text, world).filter((p) => !taken.has(keyFor(p.display_name)));
   if (!proposals.length) throw new CastGenerateError(502, 'The AI answered with nothing usable. Nothing was saved; try again.');
-  return { world, proposals: proposals.slice(0, n) };
+  return { world, proposals: proposals.slice(0, n), gaps };
 }
 
 async function keep(db, { registryId, proposal, by = null } = {}) {
@@ -206,7 +218,10 @@ async function keep(db, { registryId, proposal, by = null } = {}) {
         follower_count_approx: p.pulse.follower_count ? formatCount(p.pulse.follower_count) : null,
         follower_tier: p.pulse.follower_count ? require('./pulseAudience').tierFor(p.pulse.follower_count).key : null,
       }, { transaction });
-      await character.update({ feed_profile_id: profile.id, social_presence: true }, { transaction });
+      // Active with a Pulse profile (Task #3200): the hourly queueVoiceBuilds
+      // (services/pulseVoices) builds their Voice Profile, which still waits
+      // for Evoni's approval before anything is posted in it.
+      await character.update({ feed_profile_id: profile.id, social_presence: true, depth_level: 'active' }, { transaction });
       // The follow system (branch claude/pulse-follows) plugs in here: a character made here is not from the feed, so no follow of Lala is made.
     }
     return { character, profile };
