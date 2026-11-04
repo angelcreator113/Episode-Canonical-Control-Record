@@ -278,3 +278,29 @@ Evoni supplied the wording that replaces the stale "discovers her authentic desi
 | Frozen `episodes.season_context` (Start snapshot, 2026-10-02) | the old slot text | **unchanged.** A correction note is appended (old text kept, new text, reason "Lala is not becoming a fashion designer", by Evoni, date) | needs a small code path or a one-off approved write (G-T1, method). Until then, readers prefer the brief and slot. |
 
 **Effect on continuity:** none. Wording is not state. The continuity preview figures are unchanged.
+
+
+## 13. Decisions answered (Evoni, 2026-11-04)
+
+The report's open decisions (§8 C1–C5) are answered. **Answering a decision approves its design, not any production change.**
+
+| # | Decision | Answer (Evoni, 2026-11-04) | Design approved? | Production change authorized? |
+|---|---|---|---|---|
+| D1 | Episode 1 Lock charges (1,012 coins) | Keep as valid historical purchases, classified **legacy Lock-origin purchases**. No refunds, no duplicate charges. | yes | **not needed** (no data change; classification is read from `metadata.flow`) |
+| D2 | Four test-voided items still owned | Remove ownership that exists **only** because of voided test purchases, after exact IDs, dependencies and a reversible plan | yes (plan: prepared-corrections §4.1) | **no**: waits for the W2 dependency read and a separate yes |
+| D3 | Necklace, pumps, blouse | **Provisionally pre-owned** for continuity planning, pending acquisition-history verification. Not charged; not marked verified. | yes | **no** (no data change; a continuity rule) |
+| D4 | Plaid vest dress | Ownership **unresolved**; excluded from canonical wardrobe availability pending verification | yes | **no** (no data change; a continuity rule) |
+| D5 | Three bonus specials | Preserved as **distinct stories**; order and release times pending review; no delete, merge or auto-reschedule | yes | **no** (nothing to change) |
+| D6 | Episode 1 narrative purpose, dilemma, lesson | Wording approved (readiness report §12); edits 1 and 2 prepared for review | yes (wording + guarded narrow update; prepared-corrections §2) | **no**: waits for the E1 before-values and a separate yes |
+| D7 | Frozen Start snapshot | Preserve the original; an append-only correction note is prepared, not written | yes (prepared-corrections §3) | **no** |
+| D8 | Narrative purpose ownership | Recommendation: slot before Start, **Episode Brief from Start** (Roadmap shows it read-through) | **awaiting Evoni** | n/a (later PR) |
+| D9 | Purchases (earlier ruling) | Only an authoritative Purchase charges; Lock finalizes and never charges | yes | code PR not yet written (gate G-P2) |
+
+**Effect on continuity:**
+- Episode 1's purchases stand (768 after Episode 1 once accepted).
+- Necklace, pumps and blouse count as provisionally owned before Episode 1 (no charge).
+- The vest is excluded.
+- The four test items are treated as not owned once D2 is applied; until then they are flagged.
+- The bonus specials stay excluded.
+
+Episode 2's opening balance remains **diagnostic** (ruling 7). Prepared changes: `2026-11-04-prepared-corrections.md`.

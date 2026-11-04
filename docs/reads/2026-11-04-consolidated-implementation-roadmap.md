@@ -1106,3 +1106,24 @@ The export was read-only (14 sections, `default_transaction_read_only`, no error
 - the review of the three same-time bonus specials.
 
 See `2026-11-04-continuity-readiness-report.md` for the purchase-path audit, wardrobe reconciliation, Episode 1 wording proposal, gates and tests.
+
+
+---
+
+## 23. Answered decisions (Evoni, 2026-11-04): design approval vs production authorization
+
+"Design approved" means the approach may be specified, prepared and tested. "Production change authorized" means a specific write may run. **No production write, migration, merge, deployment or historical correction is authorized by this table.** Each one still needs its own explicit yes.
+
+| # | Decision | Answer (Evoni, 2026-11-04) | Design approved? | Production change authorized? |
+|---|---|---|---|---|
+| D1 | Episode 1 Lock charges (1,012 coins) | Keep as valid historical purchases, classified **legacy Lock-origin purchases**. No refunds, no duplicate charges. | yes | **not needed** (no data change; classification is read from `metadata.flow`) |
+| D2 | Four test-voided items still owned | Remove ownership that exists **only** because of voided test purchases, after exact IDs, dependencies and a reversible plan | yes (plan: prepared-corrections §4.1) | **no**: waits for the W2 dependency read and a separate yes |
+| D3 | Necklace, pumps, blouse | **Provisionally pre-owned** for continuity planning, pending acquisition-history verification. Not charged; not marked verified. | yes | **no** (no data change; a continuity rule) |
+| D4 | Plaid vest dress | Ownership **unresolved**; excluded from canonical wardrobe availability pending verification | yes | **no** (no data change; a continuity rule) |
+| D5 | Three bonus specials | Preserved as **distinct stories**; order and release times pending review; no delete, merge or auto-reschedule | yes | **no** (nothing to change) |
+| D6 | Episode 1 narrative purpose, dilemma, lesson | Wording approved (readiness report §12); edits 1 and 2 prepared for review | yes (wording + guarded narrow update; prepared-corrections §2) | **no**: waits for the E1 before-values and a separate yes |
+| D7 | Frozen Start snapshot | Preserve the original; an append-only correction note is prepared, not written | yes (prepared-corrections §3) | **no** |
+| D8 | Narrative purpose ownership | Recommendation: slot before Start, **Episode Brief from Start** (Roadmap shows it read-through) | **awaiting Evoni** | n/a (later PR) |
+| D9 | Purchases (earlier ruling) | Only an authoritative Purchase charges; Lock finalizes and never charges | yes | code PR not yet written (gate G-P2) |
+
+Prepared changes, existing values, undo and the read-only dependency query: `2026-11-04-prepared-corrections.md`.
