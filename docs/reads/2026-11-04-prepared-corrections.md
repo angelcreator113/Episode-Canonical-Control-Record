@@ -427,7 +427,7 @@ A and B remain **unexecuted**. Next: #3709 CI green â†’ Evoni's merge approval â
 - **The log is owned by `postgres`**, like the rest of the schema.
 - **#3709 gives the app user nothing on the log.** Production's default privileges (`F-Deploy-1_Fix_Plan_v1.34.md`) would otherwise have given it SELECT, INSERT, UPDATE and DELETE, enough to forge a record or mark a real one undone. The revised migration revokes them.
 - **A, B and both undos therefore run with the migration credential.** Each stops unless its login owns the log and no role except the owner and `prime_readonly` holds a privilege on it.
-- **Every script, including the read-only ones, pins `search_path = pg_catalog, public`.** The app user has CREATE on the database, so it could create a schema named `postgres`, which comes first in `postgres`'s default search path, and plant same-named tables there. Locally, an unpinned verify script read the planted table.
+- **Every script, including the read-only ones, pins `search_path = pg_catalog, pg_temp` and names every table `public.x`** (revised from `pg_catalog, public` the same day: an operator the app user planted in `public` still ran with `postgres`'s rights through the script's own `correction_key = 'â€¦'` comparison). The app user has CREATE on the database, so it could create a schema named `postgres`, which comes first in `postgres`'s default search path, and plant same-named tables there. Locally, an unpinned verify script read the planted table.
 - **`00-preflight.sql` now also prints:**
   - the log's owner and access list (expect `postgres` and `{postgres=arwdDxt/postgres}`, plus `prime_readonly=r/postgres`);
   - whether `episode_app_dev` has any privilege on it (expect `f`);
@@ -440,4 +440,14 @@ A and B remain **unexecuted**. Next: #3709 CI green â†’ Evoni's merge approval â
   - every log row stamped `postgres`;
   - the app user reading the log: "permission denied".
 - **No dedicated corrections role is needed.** `postgres` (`rds_superuser`) can take over any non-superuser role, so a new role would not separate anything from it. The separation that matters, from the application role, now holds.
+- **Final pre-merge check (2026-11-04):**
+  - The migration and its trigger function now also resolve names in `pg_catalog` only (#3709).
+  - The preflight additionally prints the guard function's pinned path (expect `{"search_path=pg_catalog, pg_temp"}`) and any function or operator outside the system schemas owned by a role other than `postgres` or `rdsadmin` (expect no row).
+  - **Re-tested on the fixture with both attacks planted:** a planted operator `=(varchar, varchar)` in `public` that would grant the app user the log, and a `postgres` schema with decoy `season_slots`, `wardrobe` and `data_correction_log`.
+  - **Results:**
+    - A: committed, verified, rerun stopped, undone, second undo stopped;
+    - B: the same results;
+    - A run as the app user: stopped;
+    - the planted code ran 0 times, and the log's grants stayed `{postgres=arwdDxt/postgres}`;
+    - the preflight listed both planted objects.
 
