@@ -106,7 +106,7 @@ Core dilemma: How much should Lala invest in being seen before she knows whether
 
 Creator lesson: Looking successful and building a sustainable creator career aren't always the same thing.$p$,
        updated_at = NOW()
- WHERE episode_id = '8b9301a6-2d99-45a7-8488-4fe40504dd55' AND deleted_at IS NULL AND status = 'draft'
+ WHERE id = '661234d3-bf88-4c8f-b253-8352261185da' AND episode_id = '8b9301a6-2d99-45a7-8488-4fe40504dd55' AND deleted_at IS NULL AND status = 'draft'
 RETURNING id, left(narrative_purpose, 80);
 COMMIT;
 ```
@@ -116,14 +116,27 @@ COMMIT;
 The undo restores the exact before values. `story_purposes` and `intention_source` are filled in from the E1 read (§5) before approval, and the brief text from the E1 `narrative_purpose`. It is guarded the same way: it runs only while the records still hold the new values.
 
 ```sql
+-- Undo of edits 1 and 2 (exact before values from E1, 2026-11-04). Runs only while the new values are in place.
 BEGIN;
-UPDATE season_slots SET story_purpose = $o$Lala discovers her authentic design voice by immersing herself in experimental fashion, setting the tone for her luxury career journey.$o$,
-       story_purposes = '<E1 story_purposes, verbatim>'::jsonb, intention_source = '<E1 intention_source>', updated_at = NOW()
+UPDATE season_slots
+   SET story_purpose = $o$Lala discovers her authentic design voice by immersing herself in experimental fashion, setting the tone for her luxury career journey.$o$,
+       story_purposes = $j$[{"text": "Lala discovers her authentic design voice by immersing herself in experimental fashion, setting the tone for her luxury career journey.", "source": "auto-drafted", "primary": true, "story_thread_id": null}]$j$::jsonb,
+       intention_source = 'auto-drafted', updated_at = NOW()
  WHERE id = '3e9a5200-161e-4369-b596-a915a268cd43' AND intention_source = 'edited' AND story_purpose LIKE 'Lala enters Studio by Sable%';
-UPDATE episode_briefs SET narrative_purpose = $o$<E1 narrative_purpose, verbatim>$o$, updated_at = NOW()
- WHERE episode_id = '8b9301a6-2d99-45a7-8488-4fe40504dd55' AND deleted_at IS NULL AND narrative_purpose LIKE 'Lala enters Studio by Sable%';
+UPDATE episode_briefs
+   SET narrative_purpose = $o$Wearable Experiments Studio Session — Step into STUDIO BY SABLE's workspace for an evening dedicated to celebrating independent design innovation. This showcase brings together wearable art—from conceptual sculptural pieces to documentary-driven collections—created by emerging designers working at the intersection of fashion and fine art. Move freely through the studio's gallery-like setting, examine pieces in intimate detail, and speak directly with creators about their inspirations and techniques. Expect a thoughtfully curated evening that honors craft, experimentation, and the stories behind each garment.$o$,
+       updated_at = NOW()
+ WHERE id = '661234d3-bf88-4c8f-b253-8352261185da' AND narrative_purpose LIKE 'Lala enters Studio by Sable%';
 COMMIT;
 ```
+
+**E1 before values (production, 2026-11-04), confirmed:**
+
+| Record | Value |
+|---|---|
+| slot `3e9a5200…` | `story_purpose` = the "design voice" sentence; `story_purposes` = one auto-drafted primary entry; `intention_source` = `auto-drafted`; career focus "Build the Portfolio, First Impressions", pressure Low, outcome safe–pass (all unchanged by the edit); `updated_at` 2026-10-02 06:23:32 |
+| brief `661234d3-bf88-4c8f-b253-8352261185da` | draft; `narrative_purpose` = the event description; `updated_at` 2026-10-27 21:37:50 |
+| frozen `season_context` | `snapshotted_at` 2026-10-02T06:23:32.276Z; `story_purpose` = the "design voice" sentence (kept as is) |
 
 ## 3. Frozen Start snapshot: append-only correction note (prepared, NOT written)
 
@@ -174,6 +187,43 @@ The note would be **appended** under a new key, `corrections`:
    - nothing is deleted.
 4. **Undo:** `UPDATE wardrobe SET is_owned = true WHERE id IN (…manifest…) AND is_owned = false`.
 5. **Effect:** the four items become "for sale" again at their coin cost. The balance does not change (their rows were already voided).
+
+**W2 dependency results (production, 2026-11-04):** each item has exactly two references, and nothing else:
+- one `episode_wardrobe` link to the **deleted** test episode "I Got Invited to the Underground's Most Exclusive Night" (approved): link ids `129ceb3c…` (earrings), `8e5ae4e7…` (sandal), `8a72dfad…` (corset midi), `cd862526…` (polka dot dress);
+- its **voided** ledger row (reason "Test data, not story purchases (Evoni, 2026-09-29)").
+
+There are no lookbook images, brand tags, order lines, event outfit pieces, polls, reveals or posts. All four are owned (`is_owned = true`); three were last touched in one action at 2026-09-26 02:26:33 and the dress at 00:39:29.
+
+**Prepared un-own (NOT run; requires approval; app credentials):**
+
+```sql
+-- Remove ownership that exists only because of voided test purchases (D2). Guarded; leaves links and ledger rows as history.
+BEGIN;
+CREATE TEMP TABLE d2_undo ON COMMIT DROP AS
+  SELECT id, is_owned, updated_at FROM wardrobe
+   WHERE id IN ('051d2cac-3723-404b-b481-5274dcb88957','ee7a7e6b-6583-4f2f-8c73-a44785a77c34','46967b7a-6a9a-4453-b75a-aa5eb7806031','a173120e-2618-4da2-bed1-e6ace3a4d867');
+SELECT * FROM d2_undo;   -- copy this output: it is the undo manifest
+UPDATE wardrobe w SET is_owned = false, updated_at = NOW()
+ WHERE w.id IN ('051d2cac-3723-404b-b481-5274dcb88957','ee7a7e6b-6583-4f2f-8c73-a44785a77c34','46967b7a-6a9a-4453-b75a-aa5eb7806031','a173120e-2618-4da2-bed1-e6ace3a4d867')
+   AND w.is_owned = true AND w.deleted_at IS NULL
+   AND NOT EXISTS (SELECT 1 FROM financial_transactions ft
+                    WHERE ft.source_id::text = w.id::text AND ft.status = 'executed' AND ft.deleted_at IS NULL)
+RETURNING w.id, w.name, w.is_owned;   -- expect exactly 4 rows; if not, ROLLBACK
+COMMIT;
+```
+
+**Undo:**
+
+```sql
+UPDATE wardrobe SET is_owned = true, updated_at = NOW()
+ WHERE id IN ('051d2cac-3723-404b-b481-5274dcb88957','ee7a7e6b-6583-4f2f-8c73-a44785a77c34','46967b7a-6a9a-4453-b75a-aa5eb7806031','a173120e-2618-4da2-bed1-e6ace3a4d867')
+   AND is_owned = false;
+```
+
+**Effect:**
+- The four pieces become available to buy again at their coin cost.
+- The balance is unchanged (their rows were already voided).
+- The deleted test episode's links stay as history.
 
 ### 4.2 Necklace, pumps, blouse: provisionally pre-owned (no write)
 
