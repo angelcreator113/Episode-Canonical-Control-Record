@@ -8,6 +8,7 @@
 \pset pager off
 BEGIN ISOLATION LEVEL SERIALIZABLE;
 SET LOCAL lock_timeout = '10s';
+SET LOCAL search_path = pg_catalog, public;  -- no planted schema can shadow a table
 SELECT 1 FROM shows WHERE id = '9bd0655f-0426-4da4-95b8-44cdfd608b2b' FOR NO KEY UPDATE;
 SELECT 1 FROM wardrobe WHERE id IN ('051d2cac-3723-404b-b481-5274dcb88957','ee7a7e6b-6583-4f2f-8c73-a44785a77c34','46967b7a-6a9a-4453-b75a-aa5eb7806031','a173120e-2618-4da2-bed1-e6ace3a4d867') FOR UPDATE;
 DO $g$
@@ -15,6 +16,13 @@ DECLARE owned int; legit int; refs int; voided int;
 BEGIN
   IF to_regclass('public.data_correction_log') IS NULL THEN
     RAISE EXCEPTION 'B STOPPED: data_correction_log does not exist (its migration has not run); nothing changed';
+  END IF;
+  IF (SELECT pg_get_userbyid(relowner) FROM pg_class WHERE oid = 'public.data_correction_log'::regclass) <> session_user THEN
+    RAISE EXCEPTION 'B STOPPED: run with the migration credential (~/.episode-migrate.env), the owner of data_correction_log; nothing changed';
+  END IF;
+  IF EXISTS (SELECT 1 FROM pg_class c, aclexplode(c.relacl) a WHERE c.oid = 'public.data_correction_log'::regclass
+       AND a.grantee <> c.relowner AND a.grantee IS DISTINCT FROM (SELECT oid FROM pg_roles WHERE rolname = 'prime_readonly')) THEN
+    RAISE EXCEPTION 'B STOPPED: a role other than the owner and prime_readonly holds a privilege on data_correction_log; nothing changed';
   END IF;
   SELECT count(*) INTO owned FROM wardrobe WHERE id IN ('051d2cac-3723-404b-b481-5274dcb88957','ee7a7e6b-6583-4f2f-8c73-a44785a77c34','46967b7a-6a9a-4453-b75a-aa5eb7806031','a173120e-2618-4da2-bed1-e6ace3a4d867') AND is_owned = true AND deleted_at IS NULL AND show_id = '9bd0655f-0426-4da4-95b8-44cdfd608b2b';
   IF owned <> 4 THEN RAISE EXCEPTION 'B STOPPED: expected 4 owned items, found %; nothing changed', owned; END IF;

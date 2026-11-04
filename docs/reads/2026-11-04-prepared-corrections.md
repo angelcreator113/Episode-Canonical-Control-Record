@@ -314,14 +314,14 @@ The files live in `docs/reads/2026-11-04-corrections/`:
 | B with an extra reference | `B STOPPED: expected the 8 reviewed references…, found 9` (ownership unchanged) |
 | B undo | ownership restored |
 
-**On the box** (writes need the **app** database user from `~/episode-metadata/.env`; no value is printed):
+**On the box.** The host and database come from the app `.env`. The **login is the migration credential** `~/.episode-migrate.env`: `postgres`, the owner of `data_correction_log`. The app user has no privilege on the log (§8.2), and A and B stop with "run with the migration credential" if run as anyone but the owner. No value is printed:
 
 ```
 getv(){ grep -E "^$1=" "$2" | tail -1 | cut -d= -f2- | sed -e "s/^[\"']//" -e "s/[\"']\$//"; }
-APP=~/episode-metadata/.env
+APP=~/episode-metadata/.env; MIG=~/.episode-migrate.env
 export PGHOST="$(getv DB_HOST $APP)" PGDATABASE="$(getv DB_NAME $APP)" PGPORT="$(getv DB_PORT $APP)"
 [ -z "$PGDATABASE" ] && export PGDATABASE="$(getv DB_DATABASE $APP)"; export PGPORT="${PGPORT:-5432}" PGSSLMODE=require
-export PGUSER="$(getv DB_USER $APP)" PGPASSWORD="$(getv DB_PASSWORD $APP)"
+export PGUSER="$(getv DB_USER $MIG)" PGPASSWORD="$(getv DB_PASSWORD $MIG)"
 # A (independent):
 psql -X -f ~/A-episode1-purpose.sql; echo "exit $?"
 psql -X -f ~/A-verify.sql
@@ -412,3 +412,32 @@ A and B stay independent and each has its own undo.
 | deleting a log row | refused ("append-only: DELETE is not allowed") |
 
 A and B remain **unexecuted**. Next: #3709 CI green → Evoni's merge approval → Evoni's deploy approval (the Deploy workflow snapshots RDS before migrating) → read-only preflight (four fingerprints) → separate confirmation of the A/B execution procedure.
+
+### 8.2 Role design after the production role check (2026-11-04)
+
+**Evoni's read-only role check:**
+- PostgreSQL 17.9; database owner `postgres`.
+- `postgres` owns 233 public tables; `episode_app_dev` owns 1.
+- `postgres`: LOGIN, CREATEROLE, CREATEDB, member of `rds_superuser`.
+- `episode_app_dev`: LOGIN, no CREATEROLE, no CREATEDB, no memberships.
+- `prime_readonly`: LOGIN, NOINHERIT, nothing elevated.
+
+**What follows:**
+- **Migrations run as `postgres`**, through the Deploy workflow's migration credential `~/.episode-migrate.env`. The app runs as `episode_app_dev`, so the two are already separate roles.
+- **The log is owned by `postgres`**, like the rest of the schema.
+- **#3709 gives the app user nothing on the log.** Production's default privileges (`F-Deploy-1_Fix_Plan_v1.34.md`) would otherwise have given it SELECT, INSERT, UPDATE and DELETE, enough to forge a record or mark a real one undone. The revised migration revokes them.
+- **A, B and both undos therefore run with the migration credential.** Each stops unless its login owns the log and no role except the owner and `prime_readonly` holds a privilege on it.
+- **Every script, including the read-only ones, pins `search_path = pg_catalog, public`.** The app user has CREATE on the database, so it could create a schema named `postgres`, which comes first in `postgres`'s default search path, and plant same-named tables there. Locally, an unpinned verify script read the planted table.
+- **`00-preflight.sql` now also prints:**
+  - the log's owner and access list (expect `postgres` and `{postgres=arwdDxt/postgres}`, plus `prime_readonly=r/postgres`);
+  - whether `episode_app_dev` has any privilege on it (expect `f`);
+  - any schema named `postgres` or `episode_app_dev` (expect no row).
+- **Re-tested locally (2026-11-04):**
+  - the fixture with the production values, a stand-in `episode_app_dev` with the production grants, and a planted `postgres` schema holding shadow `season_slots`, `wardrobe` and `data_correction_log`;
+  - A as the app user: stopped;
+  - A: committed, verified, rerun stopped, undone, second undo stopped;
+  - B: the same results;
+  - every log row stamped `postgres`;
+  - the app user reading the log: "permission denied".
+- **No dedicated corrections role is needed.** `postgres` (`rds_superuser`) can take over any non-superuser role, so a new role would not separate anything from it. The separation that matters, from the application role, now holds.
+

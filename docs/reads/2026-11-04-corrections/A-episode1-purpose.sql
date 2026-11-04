@@ -7,6 +7,7 @@
 \pset pager off
 BEGIN ISOLATION LEVEL SERIALIZABLE;
 SET LOCAL lock_timeout = '10s';
+SET LOCAL search_path = pg_catalog, public;  -- no planted schema can shadow a table
 SELECT 1 FROM season_slots   WHERE id = '3e9a5200-161e-4369-b596-a915a268cd43'  FOR UPDATE;
 SELECT 1 FROM episode_briefs WHERE id = '661234d3-bf88-4c8f-b253-8352261185da' FOR UPDATE;
 SELECT 1 FROM episodes       WHERE id = '8b9301a6-2d99-45a7-8488-4fe40504dd55'    FOR UPDATE;
@@ -14,6 +15,13 @@ DO $g$
 BEGIN
   IF to_regclass('public.data_correction_log') IS NULL THEN
     RAISE EXCEPTION 'A STOPPED: data_correction_log does not exist (its migration has not run); nothing changed';
+  END IF;
+  IF (SELECT pg_get_userbyid(relowner) FROM pg_class WHERE oid = 'public.data_correction_log'::regclass) <> session_user THEN
+    RAISE EXCEPTION 'A STOPPED: run with the migration credential (~/.episode-migrate.env), the owner of data_correction_log; nothing changed';
+  END IF;
+  IF EXISTS (SELECT 1 FROM pg_class c, aclexplode(c.relacl) a WHERE c.oid = 'public.data_correction_log'::regclass
+       AND a.grantee <> c.relowner AND a.grantee IS DISTINCT FROM (SELECT oid FROM pg_roles WHERE rolname = 'prime_readonly')) THEN
+    RAISE EXCEPTION 'A STOPPED: a role other than the owner and prime_readonly holds a privilege on data_correction_log; nothing changed';
   END IF;
   IF NOT EXISTS (SELECT 1 FROM season_slots WHERE id = '3e9a5200-161e-4369-b596-a915a268cd43'
        AND story_purpose = $t$Lala discovers her authentic design voice by immersing herself in experimental fashion, setting the tone for her luxury career journey.$t$

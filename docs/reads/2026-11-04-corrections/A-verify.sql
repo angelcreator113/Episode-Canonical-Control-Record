@@ -1,6 +1,7 @@
 -- A verification (read only): exact comparisons.
 \pset pager off
 SET default_transaction_read_only = on;
+SET search_path = pg_catalog, public;  -- no planted schema can shadow a table
 SELECT (story_purpose = $p$Lala enters Studio by Sable's experimental fashion event, hoping to make connections, create compelling content and establish herself in Dream Cities' competitive creator scene. She must balance the cost of showing up with the opportunity to gain attention, strengthen relationships and secure future opportunities.$p$) AS slot_purpose_exact,
        (story_purposes = $j$[{"text": "Lala enters Studio by Sable's experimental fashion event, hoping to make connections, create compelling content and establish herself in Dream Cities' competitive creator scene. She must balance the cost of showing up with the opportunity to gain attention, strengthen relationships and secure future opportunities.", "source": "edited", "primary": true, "story_thread_id": null}]$j$::jsonb) AS slot_purposes_exact,
        intention_source FROM season_slots WHERE id = '3e9a5200-161e-4369-b596-a915a268cd43';
