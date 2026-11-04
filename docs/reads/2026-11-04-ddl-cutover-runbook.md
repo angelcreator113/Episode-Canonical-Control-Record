@@ -40,38 +40,65 @@ as_app() { PGUSER="$(getv DB_USER $APP)" PGPASSWORD="$(getv DB_PASSWORD $APP)" p
 as_mig() { PGUSER="$(getv DB_USER $MIG)" PGPASSWORD="$(getv DB_PASSWORD $MIG)" psql -X -q -f "$1"; }
 ```
 
-**Precondition:** #3711 and #3709 are both merged (approval for each). The commit to deploy is the head of `main` that contains both.
+**Preconditions:**
+- #3711 and #3709 are both merged, each with its own approval. The commit to deploy is the head of `main` that contains both.
+- **A maintenance window is declared** (start time and expected end) before step 2, and runs until step 6 passes (§3). It is mandatory.
+
+**Three separate authorizations, each given in the session for that step alone:**
+1. the guarded drop (step 2);
+2. the privilege revoke (step 3);
+3. the Deploy run (step 5).
+
+None implies another. Approving the drop does not approve the revoke.
 
 | # | Who | Command | Expect | If not |
 |---|---|---|---|---|
 | 1 | read-only | `as_ro ~/cutover/10-precheck.sql` | **P1** `t \| episode_app_dev \| 0`. **P2** no row. **P3** `episode_app_dev t`, `prime_readonly f`. **P4**: T1 `public \| episode_app_dev`; T2 `brain_documents`; T3 exactly `brain_documents`, `brain_documents_id_seq`, `brain_documents_pkey`, `_brain_documents`, all `episode_app_dev`. | **Stop.** Any extra row, especially a new app-owned table such as `chapter_versions` (created if someone opened version history), needs its own plan first. |
-| 2 | app user, *approval* | `as_app ~/cutover/20-drop-brain-documents.sql` | `STEP 2 DONE` | `STEP 2 STOPPED …` or a lock timeout: nothing changed. Re-run step 1 and read why. |
-| 3 | migration user, *approval* | `as_mig ~/cutover/30-revoke-create.sql` | `STEP 3 DONE` | `STEP 3 STOPPED`: nothing changed. |
+| 2 | app user, *authorization 1 of 3*, inside the window | `as_app ~/cutover/20-drop-brain-documents.sql` | `STEP 2 DONE` | `STEP 2 STOPPED …` or a lock timeout: nothing changed. Re-run step 1 and read why. |
+| 3 | migration user, *authorization 2 of 3* | `as_mig ~/cutover/30-revoke-create.sql` | `STEP 3 DONE` | `STEP 3 STOPPED`: nothing changed. |
 | 4 | read-only | `as_ro ~/cutover/10-precheck.sql` | **P1** `f`. **P3** `episode_app_dev f`. **P4**: no row in T1, T2 or T3. This is exactly what the Deploy trust check will find. | **Do not start the Deploy.** Fix the finding; never by re-granting. |
-| 5 | Evoni, *approval* | GitHub, Actions, Deploy, **Run workflow** on `main`, then approve the production environment | Plan, snapshot, Migrate (`[migration-trust] OK`, then `20261104170000` and `20261104200000` migrated), Deploy, Restart, health | Section 4 |
+| 5 | Evoni, *authorization 3 of 3* | GitHub, Actions, Deploy, **Run workflow** on `main`, then approve the production environment | Plan, snapshot, Migrate (`[migration-trust] OK`, then `20261104170000` and `20261104200000` migrated), Deploy, Restart, health | Section 4 |
 | 6 | read-only | `as_ro ~/cutover/50-postcheck.sql` | **Q1** every table present and owned by `postgres`. **Q2** `t t t t t f f`. **Q3** no row. | Section 4, F4 |
 
 Steps 2 to 5 run back to back. The window between them is §3. The A/B corrections come only after step 6, with the A/B preflight and Evoni's confirmation.
 
-## 3. Requests during the transition
+## 3. The maintenance window, and requests during the transition
 
-**What fails, and for how long.** From step 2 until the Deploy's restart (minutes), the **old** code runs without CREATE and without `brain_documents`. Rehearsed (§6):
+**The window is mandatory.**
+- **Opens:** when Evoni declares it, before step 2.
+- **Closes:** when step 6 passes.
+- **Inside it, do not use:**
+  - Show Bible document ingest and the Documents tab;
+  - chapter version history (BookEditor);
+  - the video compositions list (it has no frontend caller).
+- Everything else stays usable.
+- Run the steps as one sitting, at a quiet time.
+- **No `pm2 stop`:** the application has no maintenance mode, and stopping the API would add its own restart risk for features nobody is using.
 
-| Route | Status |
-|---|---|
-| chapter version history GET and POST | 500 `permission denied for schema public`. Never used in production: the table has never existed. |
-| video compositions list | 500. **Already 500 in production today** (the old code's index statement on a table it does not own); no frontend caller. |
-| Show Bible documents list | 500 until the migration recreates the table. 0 documents. |
-| An ingest's document row | not saved (logged, not raised) |
-| Continuity, World Studio previews, scene-set jobs, generation worker, franchise brain | unaffected |
+**Before the window,** avoid opening chapter version history. The old code would create `chapter_versions` as an application-owned table. Step 1 stops if it has.
 
-**Protection: a controlled window instead of a code change.** The application has no maintenance mode, and every affected route is unused or already failing.
-1. Run steps 1 to 6 at a quiet time, as one sitting.
-2. Between step 2 and the restart, **do not use** Show Bible document ingest, the Documents tab, or chapter version history.
-3. The scene and feed workers need nothing; their tables are untouched.
-4. **Until cutover day,** avoid opening chapter version history. The old code would create `chapter_versions` as an application-owned table. Step 1 detects that and stops.
+### 3a. Two kinds of recovery
 
-A full outage (`pm2 stop` of the API) is not needed: nothing the window affects is in use. It would also add its own restart risk.
+**Database recovery** puts the schema and privileges into a state from which the cutover can continue or wait safely, with no data lost. There is one command, **R1**: it recreates the empty `brain_documents` as the migration role.
+
+**Restoring application functionality** is a separate matter:
+- **R1 restores** the Show Bible documents list and ingest's document row, even on the old code.
+- **Two routes stay unavailable until the new application version has started successfully** (step 5's Restart, confirmed by step 6). No database command restores them, because the old code needs CREATE for them and CREATE is not given back (§4):
+  - `GET` and `POST /api/v1/story-health/versions/chapter/:id` (chapter version history: "permission denied for schema public"; never used in production);
+  - `GET /api/v1/episodes/:id/video-compositions` (500; **already 500 in production today**, no frontend caller).
+- **Never available again:** the admin test route `GET /api/v1/admin/create-video-compositions-table` is removed by #3711.
+
+### 3b. What the old code serves between step 2 and the restart
+
+Rehearsed (§6):
+
+| Route | Before R1 | After R1 (old code) | New code |
+|---|---|---|---|
+| chapter version history GET/POST | 500 (permission denied) | 500 | 200 |
+| video compositions list | 500 (as today) | 500 | 200 |
+| Show Bible documents list | 500 (no table) | 200 | 200 |
+| an ingest's document row | not saved (logged) | saved | saved |
+| continuity, World Studio previews, scene-set jobs, generation worker, franchise brain | 200 | 200 | 200 |
 
 ## 4. If the Deploy fails
 
@@ -86,6 +113,8 @@ The only database recovery command is **R1** (`as_mig ~/cutover/R1-recreate-brai
 - the default privileges give the application its access back;
 - it changes nothing if the table exists;
 - it runs as the migration user and needs approval.
+
+**The "app (old code)" column below is application functionality, not database state.** See §3a for which routes return only with the new version.
 
 | Failure point | Deploy steps | Database after | The app (old code) | Recovery |
 |---|---|---|---|---|
@@ -108,6 +137,8 @@ The only database recovery command is **R1** (`as_mig ~/cutover/R1-recreate-brai
 - Rehearsed: P4 matched the real trust check every time.
   - Before steps 2 and 3, both showed the same 6 findings: the CREATE grant, the TRIGGER grant on `brain_documents`, and its 4 objects.
   - After, both showed none, and the real check printed `OK`.
+
+**Known limitation of the check.** If the migration login were a true superuser, Postgres would report it as a member of every role, so the check would trust every role and both it and P4 would find nothing. Production's `postgres` is not a superuser: it is CREATEROLE, CREATEDB and a member of `rds_superuser` (Evoni's role check), with no membership in `episode_app_dev` (D10). The rehearsal used a non-superuser migration role for exactly this reason.
 
 **Both PRs in one Deploy:**
 - **Order:** `20261104170000` (#3709) runs before `20261104200000` (#3711). Each pins its own search path and names its objects with `public.`.
@@ -139,6 +170,22 @@ The production-only tables use production's definitions. **"Old code"** is `orig
 | F3b #3711 fails at its last table (injected) | #3709 recorded, #3711 rolled back whole (`chapter_versions` absent); R1, and the old code's routes 200 (Documents included); re-run migrated #3711 only |
 | F4 migrated, no restart | old code: as the window, but Documents 200; ledger `0 pending`; the restart is then only the new code (7/7) |
 | F4b ledger rows deleted after commit | re-run: both migrations ran again cleanly; same end state |
+
+### 6a. The box commands themselves (dry run)
+
+The §2 block was copied verbatim from this file into a script and run unchanged, with a temporary `HOME` holding a clone of the repository and three `.env` files in the box's format (the read-only password quoted, to exercise `getv`). The only substitutions:
+- before the merge, `origin/main` was replaced by the PR branch (`FETCH_HEAD`);
+- locally, `PGSSLMODE=disable`.
+
+The roles were renamed to production's names (`episode_app_dev`, `prime_readonly`), so the scripts ran with their built-in defaults and no `-v`. Everything was owned by `postgres` (locally a superuser; see §5 for why P4 then shows nothing).
+
+Results:
+- the archive unpacked the 9 files;
+- steps 1 to 4 exited 0 with `STEP 2 DONE` and `STEP 3 DONE`;
+- step 5 (the migrate phase as `postgres`): trust check `OK`, both migrations migrated;
+- step 6: Q1 all `postgres`, Q2 `t t t t t f f`, Q3 empty;
+- a mistaken second step 2: `STEP 2 STOPPED: … not owned by this login`, exit 3;
+- a mistaken R1 after success: no change.
 
 ## 7. Out of scope (unchanged)
 
