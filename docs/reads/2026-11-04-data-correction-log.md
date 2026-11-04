@@ -21,9 +21,9 @@ The proposal named 16 columns. `show_id` was added so every record is traceable 
 | 9 | `approved_by` | VARCHAR(255) | no | e.g. `Evoni` |
 | 10 | `approval_ref` | TEXT | no | where the approval is recorded; CHECK not blank |
 | 11 | `applied_at` | TIMESTAMPTZ | no | **set by the database** (`NOW()`) on insert, whatever the insert says |
-| 12 | `applied_by` | VARCHAR(255) | no | **set by the database** (`current_user`) on insert |
+| 12 | `applied_by` | VARCHAR(255) | no | **set by the database** (`session_user`, the login, which `SET ROLE` cannot change) on insert |
 | 13 | `undone_at` | TIMESTAMPTZ | yes | set only by the undo transition (database `NOW()`) |
-| 14 | `undone_by` | VARCHAR(255) | yes | set only by the undo transition (database `current_user`); CHECK set exactly when `undone_at` is |
+| 14 | `undone_by` | VARCHAR(255) | yes | set only by the undo transition (database `session_user`); CHECK set exactly when `undone_at` is |
 | 15 | `created_at` | TIMESTAMPTZ | no | set by the database on insert |
 | 16 | `updated_at` | TIMESTAMPTZ | no | set by the database on insert and on the undo transition |
 | 17 | `deleted_at` | TIMESTAMPTZ | yes | present by the project convention; **can never be set** |
@@ -43,12 +43,12 @@ The proposal named 16 columns. `show_id` was added so every record is traceable 
 | `data_correction_log_row_guard` | BEFORE DELETE | refuses |
 | `data_correction_log_truncate_guard` | BEFORE TRUNCATE | refuses |
 
-**Privileges:**
-- `REVOKE ALL ON data_correction_log FROM PUBLIC`;
-- `REVOKE ALL ON FUNCTION data_correction_log_guard() FROM PUBLIC`;
-- `GRANT SELECT` to the read-only reviewer role `prime_readonly`, only if that role exists.
-
-No other grants are added.
+**Ownership and privileges** (revised 2026-11-04 after the production role check):
+- **Owner:** the role that runs the migration. In production that is `postgres`, through the Deploy workflow's migration credential `~/.episode-migrate.env`. It is the same owner as the other 233 public tables. The application role `episode_app_dev` never owns it.
+- **Taking back default grants:** production's default privileges give `episode_app_dev` SELECT, INSERT, UPDATE and DELETE on every new table that `postgres` creates (`F-Deploy-1_Fix_Plan_v1.34.md`, the GRANT leg). The migration reads the table's own access list and revokes every grant from every role except the owner. No role is named, so the same code works in test, dev and production.
+- `REVOKE ALL ... FROM PUBLIC` on the table and the function.
+- `GRANT SELECT` to `prime_readonly`, only if that role exists.
+- **Net result:** only the owner can write the table, and only `prime_readonly` can read it.
 
 ## 2. Rollback
 
@@ -63,7 +63,13 @@ Append-only, enforced **in the database**, not by convention:
 - the database itself stamps who and when on insert and on undo, so the actor and times cannot be forged;
 - exactly one undo transition per row, then the row is frozen.
 
-**Limitation, stated plainly:** the **table owner** can still deliberately `ALTER TABLE … DISABLE TRIGGER` or drop the table, which needs DDL rights. In production the owner is the role that runs migrations: the application's database user from the box's `.env`, the same role the Deploy workflow uses. The triggers stop application code and accidental statements, not a deliberate act by the owner. Full separation would need a dedicated role (§5), which is a separate decision.
+**Separation from the application role.** The application connects as `episode_app_dev`. It has no CREATEROLE and no memberships, and after this migration it has no privilege at all on the table. Checked locally, with a role given the same default privileges as production:
+- before the revoke, the app role could insert a forged record and mark a real one undone;
+- after it, SELECT, INSERT, UPDATE, DELETE and TRUNCATE all give "permission denied";
+- disabling or dropping the triggers, altering the table and replacing the function all give "must be owner";
+- `SET ROLE postgres`, granting itself `postgres`, and `session_replication_role` are all denied.
+
+**Remaining limitation, stated plainly:** `postgres` (the owner, a member of `rds_superuser`) can still deliberately disable the triggers or drop the table. That is the database administrator. A dedicated role would not remove this, because `rds_superuser` can take over any non-superuser role. The triggers stop accidents and application code; independent evidence of the log is the export committed after each correction (§5).
 
 ## 4. Traceability, exact values, duplicates (requirements 4 and 5)
 
@@ -71,22 +77,32 @@ Append-only, enforced **in the database**, not by convention:
 - the **show** (`show_id`);
 - the **affected record** (`record_table`, `record_id`, `field`);
 - the **approved change** (`before_value` → `after_value`, `approved_by`, `approval_ref`, `correction_key`);
-- the **database actor** (`applied_by`, `undone_by`, from `current_user`);
+- the **database actor** (`applied_by`, `undone_by`, from `session_user`: `postgres` for the scripts, so a record made any other way would show a different login);
 - the **timestamps** (`applied_at`, `undone_at`).
 
 **Exact values.** `before_value` and `after_value` hold the exact values (JSONB). The prepared undo restores `before_value` only while the record still equals `after_value` exactly, then marks the row undone.
 
 **Duplicates.** `data_correction_log_once` refuses a second application. A second undo is refused by the trigger.
 
-## 5. Which role writes it (requirement 7)
+## 5. Which role writes it (requirement 7, revised 2026-11-04)
 
-- **Who inserts records:** only the reviewed correction scripts, run by Evoni on the box as the **application database user** (from `~/episode-metadata/.env`; the read-only `prime_readonly` cannot write). There is no other database role today.
+- **Who writes records:** only the reviewed correction scripts, run by Evoni on the box with the **migration credential** (`~/.episode-migrate.env`, mode 600, which is `postgres`, the table owner). They do not use the application user from `.env`, because after the revoke it cannot write the table.
+- **Minimum privileges the scripts need on the log** (the owner has them all):
+  - `INSERT` on the nine supplied columns;
+  - `SELECT`, for the guards, the undo's reads and the verify scripts;
+  - `UPDATE (undone_at, undone_by, updated_at)` for the undo, which is also what its `FOR UPDATE` lock needs.
+- **Corrected rows:**
+  - A needs `UPDATE` on `season_slots` and `episode_briefs` and a `FOR UPDATE` lock on `episodes`;
+  - B needs `UPDATE` on `wardrobe`, a `FOR NO KEY UPDATE` lock on `shows`, and `SELECT` on `financial_transactions`, `episode_wardrobe` and the other referencing tables;
+  - `postgres` owns all of them.
+- **Search path:** the scripts pin `SET LOCAL search_path = pg_catalog, public`. The application role has CREATE on the database (v1.34), so it could create a schema named `postgres`, which comes first in `postgres`'s default search path, and put a same-named table there. Checked locally: unpinned, `data_correction_log` resolved to the planted `postgres.data_correction_log`; pinned, to `public`.
 - **How it is restricted:**
   1. **No application code reads or writes the table.** `tests/unit/dataCorrectionLogNotASourceOfTruth.test.js` fails if any file under `src/` or `frontend/src/` other than this migration names it.
   2. **No API route exposes it.**
-  3. **The triggers bind every role**, including the owner unless it deliberately disables them.
-  4. **PUBLIC has no privileges.**
-- **Possible later hardening** (needs its own approval: a database role change): a dedicated `prime_corrections` role with only `INSERT` and `UPDATE (undone_at, undone_by, updated_at)`, with ownership kept by a role the application does not use.
+  3. **The application role has no privilege on it** (the integration test checks this with a stand-in role).
+  4. **The triggers bind every role**, including the owner unless it deliberately disables them.
+  5. **PUBLIC has no privileges.**
+- **A dedicated corrections role is not needed.** Separation from the application already exists (`postgres` and `episode_app_dev` are distinct; the app has no CREATEROLE and no memberships), and a new role could not be protected from `rds_superuser` anyway. The earlier plan for a `prime_corrections` role is withdrawn.
 
 ## 6. Audit and undo only, not a source of truth (requirement 6)
 
@@ -130,8 +146,8 @@ Sources: `.github/workflows/deploy.yml` and `docs/runbooks/deploy-workflow.md`.
 
 ## 8. Tests
 
-**`tests/integration/dataCorrectionLog.integration.test.js`** runs against the test database inside one rolled-back transaction, with savepoints. It checks:
-- the database stamps the actor and time;
+**`tests/integration/dataCorrectionLog.integration.test.js`** (9 tests) runs against the test database inside one rolled-back transaction, with savepoints. It checks:
+- the database stamps the actor (`session_user`) and time;
 - duplicate application is refused;
 - inserting as undone or deleted is refused;
 - a no-change row is refused;
@@ -140,6 +156,7 @@ Sources: `.github/workflows/deploy.yml` and `docs/runbooks/deploy-workflow.md`.
 - DELETE and TRUNCATE are refused;
 - exactly one undo, stamped by the database, then frozen;
 - no PUBLIC grants;
+- every grant is taken back from a non-owner role standing in for the app; that role cannot insert, mark undone or disable the triggers;
 - after running twice there is one table, both triggers and the unique index.
 
 **`tests/unit/dataCorrectionLogNotASourceOfTruth.test.js`** checks that no application code names the table.

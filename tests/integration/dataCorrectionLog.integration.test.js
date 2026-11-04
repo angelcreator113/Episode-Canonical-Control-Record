@@ -39,9 +39,19 @@ const shouldSkip = !url || url.includes('amazonaws.com') || !url.includes('episo
     }
   };
 
+  // Stands in for the application role: production's default privileges give
+  // it SELECT, INSERT, UPDATE and DELETE on every new table (F-Deploy-1 v1.34).
+  const APP_ROLE = 'dcl_test_app_role';
+
   beforeAll(async () => {
-    // Twice: the migration is guarded, so a second run changes nothing.
+    // Twice: the migration is guarded, so a second run changes nothing. Between
+    // the runs the stand-in app role is given every table privilege, as default
+    // privileges would; the second run must take all of it back.
     await migration.up(models.sequelize.getQueryInterface());
+    await models.sequelize.query(`DO $r$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '${APP_ROLE}') THEN CREATE ROLE ${APP_ROLE} NOLOGIN; END IF;
+    END $r$`);
+    await models.sequelize.query(`GRANT ALL ON data_correction_log TO ${APP_ROLE}`);
     await migration.up(models.sequelize.getQueryInterface());
     db = new Client({ connectionString: url });
     await db.connect();
@@ -53,12 +63,17 @@ const shouldSkip = !url || url.includes('amazonaws.com') || !url.includes('episo
       await db.query('ROLLBACK');
       await db.end();
     }
+    await models.sequelize.query(`DO $r$ BEGIN
+      IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '${APP_ROLE}') THEN
+        REVOKE ALL ON data_correction_log FROM ${APP_ROLE}; DROP ROLE ${APP_ROLE};
+      END IF;
+    END $r$`);
     await models.sequelize.close();
   });
 
   it('records the database actor and time itself, whatever the insert says', async () => {
     const { rows: [row] } = await insertRow();
-    const { rows: [{ me }] } = await db.query('SELECT current_user AS me');
+    const { rows: [{ me }] } = await db.query('SELECT session_user AS me');
     expect(row.applied_by).toBe(me);
     expect(new Date(row.applied_at).getFullYear()).toBeGreaterThan(2000);
     expect(row.undone_at).toBeNull();
@@ -105,11 +120,35 @@ const shouldSkip = !url || url.includes('amazonaws.com') || !url.includes('episo
     const { rows: [row] } = await db.query(
       `UPDATE data_correction_log SET undone_at = '2000-01-01', undone_by = 'forged' WHERE correction_key = $1 RETURNING *`, [key],
     );
-    const { rows: [{ me }] } = await db.query('SELECT current_user AS me');
+    const { rows: [{ me }] } = await db.query('SELECT session_user AS me');
     expect(row.undone_by).toBe(me);
     expect(new Date(row.undone_at).getFullYear()).toBeGreaterThan(2000);
     expect(await refused(`UPDATE data_correction_log SET undone_at = NOW(), undone_by = 'x' WHERE correction_key = $1`, [key]))
       .toMatch(/already undone and cannot change/);
+  });
+
+  it('takes back every grant from roles other than the owner, so the application role cannot write or read it', async () => {
+    const { rows: [acl] } = await db.query(
+      `SELECT pg_get_userbyid(c.relowner) AS owner,
+              ARRAY(SELECT DISTINCT a.grantee::regrole::text FROM aclexplode(c.relacl) a WHERE a.grantee <> c.relowner ORDER BY 1) AS others
+         FROM pg_class c WHERE c.oid = 'public.data_correction_log'::regclass`,
+    );
+    expect(acl.others.filter((r) => r !== 'prime_readonly')).toEqual([]);
+    for (const p of ['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'TRUNCATE', 'TRIGGER']) {
+      const { rows: [{ ok }] } = await db.query(`SELECT has_table_privilege('${APP_ROLE}', 'public.data_correction_log', '${p}') AS ok`);
+      expect([p, ok]).toEqual([p, false]);
+    }
+    await db.query(`SET ROLE ${APP_ROLE}`);
+    const insert = await refused(
+      `INSERT INTO data_correction_log (correction_key, show_id, record_table, record_id, field, before_value, after_value, approved_by, approval_ref)
+       VALUES ('APP-1', $1, 'wardrobe', 'x', 'is_owned', 'true'::jsonb, 'false'::jsonb, 'Evoni', 'forged')`, [showId],
+    );
+    const undo = await refused(`UPDATE data_correction_log SET undone_at = NOW(), undone_by = 'x' WHERE correction_key = $1`, [key]);
+    const disable = await refused('ALTER TABLE data_correction_log DISABLE TRIGGER ALL');
+    await db.query('RESET ROLE');
+    expect(insert).toMatch(/permission denied/);
+    expect(undo).toMatch(/permission denied/);
+    expect(disable).toMatch(/must be owner/);
   });
 
   it('grants nothing to PUBLIC', async () => {

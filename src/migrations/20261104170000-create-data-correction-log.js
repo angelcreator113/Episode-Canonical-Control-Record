@@ -17,18 +17,26 @@
  * never read from here, and no application code reads or writes it (a test
  * keeps it that way). It is written only by the reviewed correction scripts.
  *
- * Tamper resistance, enforced in the database for every role that is not the
- * table owner, and for the owner unless it deliberately drops the triggers:
+ * Ownership and privileges: the table belongs to the role that runs the
+ * migration (production: postgres, from ~/.episode-migrate.env, the same
+ * owner as the other tables), never to the application role. The migration
+ * takes back every grant on it from every role but the owner, including the
+ * application role's default-privilege grants, so ordinary application
+ * connections cannot read, write, alter or disable it. Only the owner writes
+ * it: the reviewed correction scripts run with the migration credential.
+ * SELECT only for the read-only reviewer role (prime_readonly) where it exists.
+ *
+ * Tamper resistance, enforced in the database for every role, including the
+ * owner unless it deliberately drops or disables the triggers:
  *   - INSERT: applied_at, applied_by and created_at are set by the database
- *     (NOW(), current_user); a row cannot be inserted as already undone or
- *     deleted.
+ *     (NOW(), session_user: the login, which SET ROLE cannot change); a row
+ *     cannot be inserted as already undone or deleted.
  *   - UPDATE: only the one undo transition is allowed: undone_at from NULL to
- *     a time, with undone_by and updated_at set by the database. Every other
- *     column is immutable, and an undone row cannot change again.
+ *     a time, with undone_by (session_user) and updated_at set by the
+ *     database. Every other column is immutable, and an undone row cannot
+ *     change again.
  *   - DELETE and TRUNCATE are refused.
  *   - deleted_at exists by the project convention but can never be set.
- * Privileges: nothing for PUBLIC; SELECT only for the read-only reviewer role
- * (prime_readonly) where that role exists.
  *
  * A new table only; no existing table changes. Guarded so it can run twice.
  * down refuses while the table holds any record (export them first).
@@ -54,7 +62,7 @@ module.exports = {
         approved_by VARCHAR(255) NOT NULL,
         approval_ref TEXT NOT NULL CONSTRAINT data_correction_log_approval_ref CHECK (length(btrim(approval_ref)) > 0),
         applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        applied_by VARCHAR(255) NOT NULL DEFAULT current_user,
+        applied_by VARCHAR(255) NOT NULL DEFAULT session_user,
         undone_at TIMESTAMPTZ NULL,
         undone_by VARCHAR(255) NULL,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -75,7 +83,7 @@ module.exports = {
               RAISE EXCEPTION '${TABLE}: a record cannot be inserted as undone or deleted';
             END IF;
             NEW.applied_at := NOW();
-            NEW.applied_by := current_user;
+            NEW.applied_by := session_user;
             NEW.created_at := NOW();
             NEW.updated_at := NOW();
             RETURN NEW;
@@ -96,7 +104,7 @@ module.exports = {
               RAISE EXCEPTION '${TABLE}: recorded values are immutable';
             END IF;
             NEW.undone_at := NOW();
-            NEW.undone_by := current_user;
+            NEW.undone_by := session_user;
             NEW.updated_at := NOW();
             RETURN NEW;
           ELSE
@@ -115,6 +123,24 @@ module.exports = {
 
       await q(`REVOKE ALL ON ${TABLE} FROM PUBLIC`);
       await q(`REVOKE ALL ON FUNCTION ${FN}() FROM PUBLIC`);
+      // Default privileges hand every new table to the application role
+      // (production: ALTER DEFAULT PRIVILEGES ... GRANT SELECT, INSERT,
+      // UPDATE, DELETE ON TABLES TO the app user, F-Deploy-1 v1.34). Take
+      // back every grant on this table from every role but its owner, by
+      // reading the table's own ACL, so no role is named here. Only the
+      // owner (the migration role) can then write it.
+      await q(`DO $acl$
+        DECLARE g text;
+        BEGIN
+          FOR g IN SELECT DISTINCT a.grantee::regrole::text
+                     FROM pg_class c, aclexplode(c.relacl) a
+                    WHERE c.oid = 'public.${TABLE}'::regclass
+                      AND a.grantee <> 0 AND a.grantee <> c.relowner
+          LOOP
+            EXECUTE format('REVOKE ALL ON public.${TABLE} FROM %s', g);
+          END LOOP;
+        END
+      $acl$`);
       await q(`DO $grant$
         BEGIN
           IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'prime_readonly') THEN
