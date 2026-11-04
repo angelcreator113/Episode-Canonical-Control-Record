@@ -30,10 +30,11 @@ function fn(name) {
 }
 const STAGE_PATHS_LINE = /^STAGE_PATHS=\(.*\)$/m.exec(SCRIPT_TEXT)[0];
 const LOCK_TIMEOUT_LINE = /^MIGRATE_LOCK_TIMEOUT=.*$/m.exec(SCRIPT_TEXT)[0];
+const SEARCH_PATH_LINE = /^MIGRATE_SEARCH_PATH=.*$/m.exec(SCRIPT_TEXT)[0];
 const VOICE_WORKER_LINE = /^VOICE_WORKER_APP=.*$/m.exec(SCRIPT_TEXT)[0];
 const BACKUP_KEEP_LINE = /^BACKUP_KEEP=.*$/m.exec(SCRIPT_TEXT)[0];
 
-const MIGRATE_FNS = ['die', 'redact', 'require_clean_tree', 'pending_check', 'processes_using', 'remove_stage',
+const MIGRATE_FNS = ['die', 'redact', 'scrub_credential', 'require_clean_tree', 'pending_check', 'processes_using', 'remove_stage',
   'clean_stages', 'stage_release', 'verify_stage', 'finish_migrate', 'phase_migrate', 'require_migrated'];
 const RESTART_FNS = ['die', 'redact', 'require_at_target', 'require_migrated', 'verify_stage', 'pending_check',
   'processes_using', 'remove_stage', 'pm2_state', 'pm2_status', 'prune_backups', 'phase_restart'];
@@ -98,6 +99,21 @@ for f in "$mig"/*.js; do n="$(basename "$f")"; grep -qxF "$n" "$LEDGER" 2>/dev/n
 echo '== 20261026000002-add-b: migrated'
 `;
 
+// The migration trust check, as the box runs it: records how it was started,
+// then passes, fails or cannot connect.
+const TRUST = `const fs = require('fs');
+fs.appendFileSync(process.env.CALLS, 'trust cwd=' + process.cwd() + ' args=' + process.argv.slice(2).join(' ')
+  + ' node_env=' + process.env.NODE_ENV + ' user=' + process.env.DB_USER + ' pgoptions=' + (process.env.PGOPTIONS || '') + '\\n');
+if (process.env.STUB_TRUST === 'fail') {
+  console.log('[migration-trust] UNTRUSTED: role episode_app_dev can CREATE in schema public, which is on the migration search path');
+  console.log('[migration-trust] UNTRUSTED: operator public.= is owned by role episode_app_dev');
+  console.log('[migration-trust] FAIL: 2 finding(s); the migration must not run. password=' + process.env.DB_PASSWORD);
+  process.exit(1);
+}
+if (process.env.STUB_TRUST === 'error') { console.log('[migration-trust] ERROR: could not connect: timeout'); process.exit(2); }
+console.log('[migration-trust] OK: search_path is "public"; only trusted roles can create or own objects on it.');
+`;
+
 let OLD; let TARGET; let PKG; let SIDE;
 
 beforeEach(() => {
@@ -118,6 +134,7 @@ beforeEach(() => {
   write('src/migrations/20261026000001-add-a.js', 'module.exports = { up() {} }; // a\n');
   write('src/models/x.js', 'old model\n');
   write('scripts/check-pending-migrations.js', CHECK);
+  write('scripts/deploy/migration-trust-check.js', TRUST);
   write('docs/notes.md', 'not staged\n');
   OLD = commit('old');
   write('src/migrations/20261026000002-add-b.js', 'module.exports = { up() {} }; // b at target\n');
@@ -184,6 +201,7 @@ function run(body, { fns = MIGRATE_FNS, target = TARGET, env = {} } = {}) {
     'DEPLOY_MARKER="$HOME/.episode-deploy-unfinished"; STAGE_ROOT="$HOME/.episode-stage"',
     STAGE_PATHS_LINE,
     LOCK_TIMEOUT_LINE,
+    SEARCH_PATH_LINE,
     VOICE_WORKER_LINE,
     BACKUP_KEEP_LINE,
     'cd "$APP_DIR"',
@@ -223,8 +241,14 @@ describe('the migrate phase runs from the staged target; the live directory neve
     // With the live .env and node_modules (links, not copies), the migration user and NODE_ENV.
     expect(res.calls).toContain(`cli env=LIVE_ENV_MARKER=1 link=${app}/.env modules=${app}/node_modules node_env=production user=migrator\n`);
     // Every lock it takes is waited for at most 30 s (Deploy run 176), and the log says so.
-    expect(res.calls).toContain('cli pgoptions=-c lock_timeout=30s\n');
+    // ...and resolves names only through the trusted search path (Evoni, 2026-11-04).
+    expect(res.calls).toContain('cli pgoptions=-c lock_timeout=30s -c search_path=public\n');
     expect(res.out).toContain('lock_timeout 30s');
+    expect(res.out).toContain('search_path public');
+    // The trust check ran first, from the stage, as the migration user, with the same PGOPTIONS.
+    expect(res.calls).toContain(`trust cwd=${s} args=--config ${s}/src/config/sequelize.js node_env=production user=migrator pgoptions=-c lock_timeout=30s -c search_path=public\n`);
+    expect(res.calls.indexOf('trust cwd=')).toBeLessThan(res.calls.indexOf('cli cwd='));
+    expect(res.out).toContain('[migration-trust] OK');
     // The ledger was checked from the stage, before and after.
     expect(res.calls.match(new RegExp(`^check cwd=${s} env=LIVE_ENV_MARKER=1$`, 'gm'))).toHaveLength(2);
     // Node, started in the stage, resolved the staged config and the live .env and sequelize.
@@ -252,7 +276,7 @@ describe('the migrate phase runs from the staged target; the live directory neve
     const res = migrate();
     expect(res.status).toBe(0);
     expect(res.calls).toContain('cli b=module.exports = { up() {} }; // b at target model=new model, needs b\n');
-    expect(res.out).toMatch(new RegExp(`Staged ${TARGET} at ~/\\.episode-stage/${TARGET}: 7 files, each matching the commit\\.`));
+    expect(res.out).toMatch(new RegExp(`Staged ${TARGET} at ~/\\.episode-stage/${TARGET}: 8 files, each matching the commit\\.`));
     // Only STAGE_PATHS and the two links: no docs/, no .gitignore, no copy of .env.
     expect(res.calls).toContain('cli staged=.env .sequelizerc node_modules package.json scripts src \n');
   });
@@ -837,3 +861,39 @@ describe('a migration that cannot get its lock stops at the lock timeout, not at
     expect(RUNBOOK).toContain('pg_stat_activity');
   });
 });
+
+describe('the migration runs only on a trusted search path (Evoni, 2026-11-04)', () => {
+  test.each([['fail', 1], ['error', 2]])('trust check %s: no migration runs, nothing is recorded, the live directory is unchanged', (mode, code) => {
+    fs.writeFileSync(ledger, '20261026000001-add-a.js\n');
+    const before = snapshot();
+    const res = migrate({ env: { STUB_TRUST: mode } });
+    expect(res.status).not.toBe(0);
+    expect(res.calls).toContain('trust cwd=');
+    expect(res.calls).not.toContain('cli cwd=');
+    expect(fs.readFileSync(ledger, 'utf8')).toBe('20261026000001-add-a.js\n');
+    expect(migrated()).toBeNull();
+    expect(snapshot()).toBe(before);
+    expect(res.err).toContain(`the migration trust check exited ${code}`);
+    expect(res.err).toContain('No migration was run; nothing was changed.');
+    expect(res.out).not.toMatch(/^MIGRATE_RAN=/m);
+  });
+
+  test('the trust check\'s findings are shown, with the migration password removed', () => {
+    const res = migrate({ env: { STUB_TRUST: 'fail' } });
+    expect(res.out).toContain('UNTRUSTED: role episode_app_dev can CREATE in schema public');
+    expect(res.out).toContain('UNTRUSTED: operator public.= is owned by role episode_app_dev');
+    expect(res.out).toContain('password=[redacted]');
+    expect(res.out + res.err).not.toContain('password=pw');
+  });
+
+  test('the script pins the path in one place and passes the same PGOPTIONS to the trust check and to db:migrate', () => {
+    expect(SEARCH_PATH_LINE).toBe('MIGRATE_SEARCH_PATH=public');
+    const body = fn('phase_migrate');
+    expect(body).toContain('local pgoptions="-c lock_timeout=$MIGRATE_LOCK_TIMEOUT -c search_path=$MIGRATE_SEARCH_PATH"');
+    expect(body.match(/PGOPTIONS="\$pgoptions"/g)).toHaveLength(2);
+    expect(body).not.toMatch(/PGOPTIONS="-c/);
+    expect(body.indexOf('migration-trust-check.js')).toBeLessThan(body.indexOf('sequelize-cli" db:migrate'));
+    expect(STAGE_PATHS_LINE).toContain('scripts/deploy/migration-trust-check.js');
+  });
+});
+
