@@ -205,3 +205,66 @@ Each is sized for one phone-reviewable PR. "No migration" means every column tou
 - **D5. Does exclusivity block or warn?** Should accepting an offer that breaks an active exclusivity be refused (with an override), or only warned?
 - **D6. The agent or manager.** One recurring character, or chosen when unlocked? Does the agent take a cut of the pay (a Bank row)?
 - **D7. Order against phase 4.** Rival brands (issue 10) waits on phase 4's per-brand trust and brand deals, which are not built yet. Should phase 7 start with the device items (issues 1–4) while phase 4 is built?
+
+## 7. Rulings (Evoni, 2026-11-04)
+
+Recorded as given. Approving these rules does not approve merging, deploying, migrating or starting all ten issues.
+
+- **D1. Career unlocks.** Use the existing six audience tiers plus Influence:
+  - choose between offers: Tier 2 + Influence 2;
+  - counter-offers: Tier 3 + Influence 3;
+  - exclusive partnerships: Tier 4 + Influence 5;
+  - talent agent: Tier 5 + Influence 7.
+  
+  All start locked. Once earned, an unlock stays available for the season. Use the existing audience-tier definitions and do not invent follower counts. Check whether the existing Influence scale and historical state support these thresholds before implementation.
+- **D2. Lock-screen time.** An optional story-time cue with an actual hour and minute, carried forward until changed. Never the viewer's device clock. The scene set's time of day is supporting context, not the authoritative clock.
+- **D3. Phone states.** Script cues are the canonical source; the Phone Hub provides a visual authoring interface. Battery, DND and cracked glass persist until changed or explicitly reset. Define episode carryover and reset behaviour before coding.
+- **D4. Wallpaper.** Defaults by season arc, with optional episode-specific overrides. Reuse existing approved wallpaper assets.
+- **D5. Exclusivity.** Block acceptance of conflicting deals while enforceable exclusivity is active. Show the conflict, its duration and the affected brands. A resolution, or an explicitly authorized and recorded override, is required. Never silently accept a conflicting deal.
+- **D6. Agent.** One recurring talent-agent character.
+  - Proposed commission: 10% of eligible negotiated deal payments, recorded as a separate Prime Bank ledger entry.
+  - No commission on ordinary gameplay rewards.
+  - Agent recommendations and negotiated offers need Evoni's approval.
+  - The agent's identity and personality are not invented yet: character options come to Evoni before the character is created.
+- **D7. Order.** Phase 7 starts with device issues 1–4 while phase 4 continues. Rival-brand consequences (issue 10) stay blocked until their phase 4 dependencies are complete.
+
+## 8. The rulings against the code (checked 2026-11-04, same basis)
+
+**Fits as ruled (MEASURED):**
+- **D1, Influence can reach every threshold.**
+  - `applyDeltas` rounds diminished gains up (`Math.ceil`, `src/utils/evaluationFormula.js:386-400`), so +1 stays +1 at 5–7 and 8–9, and gains stop only at 10.
+  - Influence moves at most about one step per episode (`computeStatDeltas`, `:280-335`) and starts at 1 (`src/models/CharacterState.js:28`).
+  - So Influence 5 takes at least 4 net successful episodes and Influence 7 at least 6. INFERRED: the agent unlock is an end-of-season goal on the current formula.
+- **D1, the history supports "earned".** Followers are a ledger with story order (`pulse_followers`), and Influence has per-episode history (`character_state_history`, read by `pulseGrowth.influenceOf`, `src/services/pulseGrowth.js:37-57`). So "earned at any point this season" can be computed from history, with nothing new stored. INFERRED.
+- **D4, season arcs exist.** `ShowArc` has `season_number`, `episode_start` and `episode_end` (`src/models/ShowArc.js:21-36`), so an episode's arc is the one whose range contains its number.
+- **D6, the ledger needs no migration.** `financial_transactions` has string `type`, `category`, `source_type` and `status` and a JSONB `metadata` (read from the migrated test schema). An `agent_commission` row fits. Phase 4 ruling 5's pending and paid states apply to it.
+
+**Conflicts with existing code or canon:**
+- **C1. The tiers are not numbered anywhere** (`src/services/pulseAudience.js:19-26` has keys and labels only). Two tier systems exist:
+  - the six computed tiers (Emerging, Nano, Micro, Mid-tier, Macro, Mega);
+  - the stored four-value `social_profiles.follower_tier` ENUM (micro, mid, macro, mega; `docs/reads/2026-10-12-pulse-decisions-read.md:50`).
+  
+  "Tier 2" is Nano if Emerging is Tier 1, or Micro if Emerging is Tier 0, and the agent's "Tier 5" is Macro or Mega accordingly. See Q1.
+- **C2. Every opportunity must pass through `negotiating` to be booked** (`STATUS_FLOW`, `src/routes/opportunityRoutes.js:32-44`: considering → negotiating → booked). With counter-offers locked until Tier 3, every accepted offer still "negotiates" today. See Q2.
+- **C3. Influence is not per season today.** Evaluation passes `seasonId = null` (`src/routes/evaluation.js:318`, a standing TODO), so `character_state` has one row per show, and `standingAt` / `influenceOf` read it with `LIMIT 1`. "For the season" therefore has to come from the episodes' arc (`ShowArc`), not from `character_state.season_id`. See Q3.
+- **C4. There are no wallpaper assets.** No asset type, tag or screen uses "wallpaper" (grep over models, routes, services, constants and the phone components). `[UI:set_background]` is only a parser alias with no reader (`src/utils/scriptBeatParser.js:541`). Assets carry an `approval_status` (`src/models/Asset.js:115`). "Existing approved wallpaper assets" therefore has no pool yet. See Q4.
+- **C5. Exclusivity is free text** (`Opportunity.exclusivity`, `src/models/Opportunity.js:67`), with no brands, category or duration, so nothing is "enforceable" yet. Event-hosted deals are accepted at Start Episode (the terms lock), not through an opportunity. See Q5.
+
+## 9. Implementation decisions still open (before building)
+
+- **Q1 (D1) — tier numbering.** Is Emerging Tier 1, making Tier 2 = Nano (1k) and the agent's Tier 5 = Macro (250k)? Or is it Tier 0, making Tier 2 = Micro (10k) and Tier 5 = Mega (1M)?
+- **Q2 (D1, C2) — the negotiating step.** While counter-offers are locked, should an offer go considering → booked directly, with `negotiating` reachable only once unlocked? Or should `negotiating` stay as a plain "discussing" step and counter-offer rounds be gated separately?
+- **Q3 (D1, C3) — what "the season" is.** Is it `ShowArc.season_number`, with the episodes in that season's arcs? And should a new season start every unlock locked again?
+- **Q4 (D4, C4) — which assets can be wallpaper.** With no wallpaper assets: should any approved image asset be choosable, with "wallpaper" recorded as a tag in its metadata? Or should a wallpaper asset type be added (a string, no migration)?
+- **Q5 (D5, C5) — enforceable exclusivity.**
+  - Its shape: the brands or category it excludes, and its duration in story time (episodes) or by date.
+  - Where the block applies: accepting an opportunity (`advance` to booked), Start Episode for an event-hosted deal, or both.
+  - Who may override, and where the record lives (the opportunity's JSON with the reason, the time and who).
+- **Q6 (D2) — the time cue.** Its form (e.g. `[TIME: 21:40]`), and whether it carries across episodes or resets at each episode's start.
+- **Q7 (D3) — carryover and reset.** The ruling asks for this before coding. For example:
+  - battery and DND reset to full and off at each episode start, while a cracked screen carries until a `[PHONE: repaired]` cue;
+  - or everything carries until changed;
+  - plus the explicit reset cue's form.
+  
+  Does the Phone Hub's visual authoring write the cue into the script (so the script stays canonical)?
+- **Q8 (D6) — eligible payments.** Which payments are "negotiated": the deals the agent negotiated (counter-offer rounds), or every brand deal once the agent is unlocked? Is commission booked when the deal is paid (the pending → paid ledger state), and is it refunded if the deal is reversed?
