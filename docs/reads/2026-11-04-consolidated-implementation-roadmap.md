@@ -1067,7 +1067,7 @@ The export was read-only (14 sections, `default_transaction_read_only`, no error
 | 4–6 | three bonuses after slot 3 | none | — | **order ambiguous** (`same_slot`) |
 | 7… | slots 4–24 | none | — | canonical |
 
-- **No unslotted live episodes.** The only order issue is `same_slot`: three bonus rows after slot 3, all for the same release (2026-12-02 10:00), created within 45 seconds on 2026-10-26. They are almost certainly accidental duplicates. Excluded from carry-over; Evoni should review them.
+- **No unslotted live episodes.** The only order issue is `same_slot`: three bonus rows after slot 3, all for the same release (2026-12-02 10:00), created within 45 seconds on 2026-10-26. **Correction (continuity-readiness report §5): they are three distinct bonus candidates with different titles and events, not duplicates.** They are ambiguous only because they share a suggested release time. Excluded from carry-over pending Evoni's individual review.
 
 **Opening states:**
 
@@ -1103,4 +1103,6 @@ The export was read-only (14 sections, `default_transaction_read_only`, no error
 - Evoni's review of this preview;
 - the "confirmed purchase" decision (§22.9);
 - the story-effective adjustment fields (§22.8);
-- the duplicate bonus review.
+- the review of the three same-time bonus specials.
+
+See `2026-11-04-continuity-readiness-report.md` for the purchase-path audit, wardrobe reconciliation, Episode 1 wording proposal, gates and tests.
