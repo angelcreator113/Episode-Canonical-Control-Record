@@ -5,7 +5,7 @@ const Anthropic = require('@anthropic-ai/sdk');
 const rateLimit = require('express-rate-limit');
 
 // Auth middleware
-const { requireAuth } = require('../../middleware/auth');
+const { requireAuth, authorize } = require('../../middleware/auth');
 const { aiRateLimiter } = require('../../middleware/aiRateLimiter');
 
 const db = require('../../models');
@@ -1586,8 +1586,14 @@ Return ONLY valid JSON:
 
 
 // ── RECYCLE BIN — List deleted items ────────────────────────────────────────
+//
+// The recycle bin is an admin tool (Admin › Tools), admin only on the server
+// (Evoni: "Enforce permissions on the server, not only the frontend"). It
+// lists, restores and permanently deletes soft-deleted rows across every
+// user's books, chapters, lines, characters and beats, so requireAuth alone
+// let any signed-in user purge them.
 
-router.get('/recycle-bin', requireAuth, async (req, res) => {
+router.get('/recycle-bin', requireAuth, authorize(['ADMIN']), async (req, res) => {
   const sequelize = db.sequelize;
 
   try {
@@ -1640,7 +1646,7 @@ router.get('/recycle-bin', requireAuth, async (req, res) => {
 
 // ── RECYCLE BIN — Restore item ──────────────────────────────────────────────
 
-router.post('/recycle-bin/restore', requireAuth, async (req, res) => {
+router.post('/recycle-bin/restore', requireAuth, authorize(['ADMIN']), async (req, res) => {
   const { type, id } = req.body;
   const sequelize = db.sequelize;
 
@@ -1672,7 +1678,7 @@ router.post('/recycle-bin/restore', requireAuth, async (req, res) => {
 
 // ── RECYCLE BIN — Permanent delete (manual only) ────────────────────────────
 
-router.delete('/recycle-bin/:type/:id', requireAuth, async (req, res) => {
+router.delete('/recycle-bin/:type/:id', requireAuth, authorize(['ADMIN']), async (req, res) => {
   const { type, id } = req.params;
   const sequelize = db.sequelize;
 
