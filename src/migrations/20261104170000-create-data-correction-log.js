@@ -44,13 +44,24 @@
 
 const TABLE = 'data_correction_log';
 const FN = 'data_correction_log_guard';
+// Every object is named with its schema, and the migration and the trigger
+// function resolve names in pg_catalog only. The migration runs as postgres;
+// the application role can create objects in public (and a schema named
+// postgres, first in postgres's default search path), so an unpinned name or
+// operator could resolve to an object the application role planted and run
+// its code with postgres's rights (CVE-2018-1058 class; shown locally,
+// docs/reads/2026-11-04-data-correction-log.md §3).
+const QT = `public.${TABLE}`;
+const QFN = `public.${FN}`;
+const PIN = 'SET LOCAL search_path = pg_catalog, pg_temp';
 
 module.exports = {
   async up(queryInterface) {
     const { sequelize } = queryInterface;
     await sequelize.transaction(async (transaction) => {
       const q = (sql) => sequelize.query(sql, { transaction });
-      await q(`CREATE TABLE IF NOT EXISTS ${TABLE} (
+      await q(PIN);
+      await q(`CREATE TABLE IF NOT EXISTS ${QT} (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         correction_key VARCHAR(100) NOT NULL CONSTRAINT data_correction_log_key_format CHECK (correction_key ~ '^[A-Za-z0-9][A-Za-z0-9._-]{2,99}$'),
         show_id UUID NOT NULL,
@@ -72,11 +83,12 @@ module.exports = {
         CONSTRAINT data_correction_log_undo_pair CHECK ((undone_at IS NULL) = (undone_by IS NULL))
       )`);
       await q(`CREATE UNIQUE INDEX IF NOT EXISTS data_correction_log_once
-        ON ${TABLE} (correction_key, record_table, record_id, field)`);
+        ON ${QT} (correction_key, record_table, record_id, field)`);
       await q(`CREATE INDEX IF NOT EXISTS data_correction_log_show_record
-        ON ${TABLE} (show_id, record_table, record_id)`);
+        ON ${QT} (show_id, record_table, record_id)`);
 
-      await q(`CREATE OR REPLACE FUNCTION ${FN}() RETURNS trigger LANGUAGE plpgsql AS $fn$
+      await q(`CREATE OR REPLACE FUNCTION ${QFN}() RETURNS trigger LANGUAGE plpgsql
+        SET search_path = pg_catalog, pg_temp AS $fn$
         BEGIN
           IF TG_OP = 'INSERT' THEN
             IF NEW.undone_at IS NOT NULL OR NEW.undone_by IS NOT NULL OR NEW.deleted_at IS NOT NULL THEN
@@ -112,17 +124,17 @@ module.exports = {
           END IF;
         END
       $fn$`);
-      await q(`DROP TRIGGER IF EXISTS data_correction_log_row_guard ON ${TABLE}`);
+      await q(`DROP TRIGGER IF EXISTS data_correction_log_row_guard ON ${QT}`);
       await q(`CREATE TRIGGER data_correction_log_row_guard
-        BEFORE INSERT OR UPDATE OR DELETE ON ${TABLE}
-        FOR EACH ROW EXECUTE FUNCTION ${FN}()`);
-      await q(`DROP TRIGGER IF EXISTS data_correction_log_truncate_guard ON ${TABLE}`);
+        BEFORE INSERT OR UPDATE OR DELETE ON ${QT}
+        FOR EACH ROW EXECUTE FUNCTION ${QFN}()`);
+      await q(`DROP TRIGGER IF EXISTS data_correction_log_truncate_guard ON ${QT}`);
       await q(`CREATE TRIGGER data_correction_log_truncate_guard
-        BEFORE TRUNCATE ON ${TABLE}
-        FOR EACH STATEMENT EXECUTE FUNCTION ${FN}()`);
+        BEFORE TRUNCATE ON ${QT}
+        FOR EACH STATEMENT EXECUTE FUNCTION ${QFN}()`);
 
-      await q(`REVOKE ALL ON ${TABLE} FROM PUBLIC`);
-      await q(`REVOKE ALL ON FUNCTION ${FN}() FROM PUBLIC`);
+      await q(`REVOKE ALL ON ${QT} FROM PUBLIC`);
+      await q(`REVOKE ALL ON FUNCTION ${QFN}() FROM PUBLIC`);
       // Default privileges hand every new table to the application role
       // (production: ALTER DEFAULT PRIVILEGES ... GRANT SELECT, INSERT,
       // UPDATE, DELETE ON TABLES TO the app user, F-Deploy-1 v1.34). Take
@@ -144,7 +156,7 @@ module.exports = {
       await q(`DO $grant$
         BEGIN
           IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'prime_readonly') THEN
-            EXECUTE 'GRANT SELECT ON ${TABLE} TO prime_readonly';
+            EXECUTE 'GRANT SELECT ON ${QT} TO prime_readonly';
           END IF;
         END
       $grant$`);
@@ -155,15 +167,16 @@ module.exports = {
     const { sequelize } = queryInterface;
     await sequelize.transaction(async (transaction) => {
       const q = (sql) => sequelize.query(sql, { transaction });
+      await q(PIN);
       const [[exists]] = await q(`SELECT to_regclass('public.${TABLE}') IS NOT NULL AS present`);
       if (exists.present) {
-        const [[{ n }]] = await q(`SELECT count(*)::int AS n FROM ${TABLE}`);
+        const [[{ n }]] = await q(`SELECT count(*)::int AS n FROM ${QT}`);
         if (n > 0) {
           throw new Error(`[20261104170000] ${TABLE} holds ${n} undo record(s); export them before rolling back`);
         }
-        await q(`DROP TABLE ${TABLE}`);
+        await q(`DROP TABLE ${QT}`);
       }
-      await q(`DROP FUNCTION IF EXISTS ${FN}()`);
+      await q(`DROP FUNCTION IF EXISTS ${QFN}()`);
     });
   },
 };

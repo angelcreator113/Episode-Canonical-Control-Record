@@ -168,4 +168,13 @@ const shouldSkip = !url || url.includes('amazonaws.com') || !url.includes('episo
     );
     expect(idx.indexdef).toMatch(/UNIQUE INDEX .*\(correction_key, record_table, record_id, field\)/);
   });
+
+  it('pins the trigger function to pg_catalog, so no operator or function another role plants can run inside it', async () => {
+    const { rows: [fn] } = await db.query(
+      `SELECT n.nspname, p.proconfig FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+        WHERE p.oid = 'public.data_correction_log_guard()'::regprocedure`,
+    );
+    expect(fn.nspname).toBe('public');
+    expect(fn.proconfig).toEqual(['search_path=pg_catalog, pg_temp']);
+  });
 });

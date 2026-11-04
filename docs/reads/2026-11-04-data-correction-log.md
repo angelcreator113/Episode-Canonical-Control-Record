@@ -69,7 +69,23 @@ Append-only, enforced **in the database**, not by convention:
 - disabling or dropping the triggers, altering the table and replacing the function all give "must be owner";
 - `SET ROLE postgres`, granting itself `postgres`, and `session_replication_role` are all denied.
 
-**Remaining limitation, stated plainly:** `postgres` (the owner, a member of `rds_superuser`) can still deliberately disable the triggers or drop the table. That is the database administrator. A dedicated role would not remove this, because `rds_superuser` can take over any non-superuser role. The triggers stop accidents and application code; independent evidence of the log is the export committed after each correction (§5).
+**Name resolution (search path), checked 2026-11-04.** The application role can create objects in `public`, and a schema named `postgres`, which `postgres`'s default search path (`"$user", public`) reads first. CVE-2018-1058 describes this class of attack. Two problems were shown locally at the previous head:
+- **Planted operator.** An operator `=(varchar, varchar)` planted in `public` by the app role ran with `postgres`'s rights during an ordinary correction insert and undo, and granted the app role every privilege on the log.
+- **Look-alike schema.** With a usable `postgres` schema planted, the migration created its table there; its explicit `public.` check then failed and the whole migration rolled back. That is safe, but the deploy fails.
+
+**Fix, in the migration itself; the Deploy workflow is unchanged:**
+- every statement names `public.data_correction_log` and `public.data_correction_log_guard()`;
+- the migration runs `SET LOCAL search_path = pg_catalog, pg_temp`;
+- the trigger function is declared `SET search_path = pg_catalog, pg_temp`, so its row comparisons use built-in operators whoever fires it.
+
+**Re-tested locally with both attacks planted:**
+- the migration creates everything in `public` and leaves the decoys untouched;
+- A, B and both undos run as designed, now that they also pin `pg_catalog, pg_temp`;
+- the planted code never runs (0 hits), and the log's grants stay `{postgres=arwdDxt/postgres}`.
+
+The Deploy workflow's own `sequelize-cli` session (`SequelizeMeta` reads and writes) is still unpinned. Hardening it is a separate security task. Before deploying this migration, the read-only preflight shows whether anything is planted: no `postgres` or `episode_app_dev` schema, and no function or operator owned by another role.
+
+ `postgres` (the owner, a member of `rds_superuser`) can still deliberately disable the triggers or drop the table. That is the database administrator. A dedicated role would not remove this, because `rds_superuser` can take over any non-superuser role. The triggers stop accidents and application code; independent evidence of the log is the export committed after each correction (§5).
 
 ## 4. Traceability, exact values, duplicates (requirements 4 and 5)
 
