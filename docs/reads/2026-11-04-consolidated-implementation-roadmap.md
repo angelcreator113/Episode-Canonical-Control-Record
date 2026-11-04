@@ -1,5 +1,10 @@
 # Consolidated implementation roadmap (2026-11-04)
 
+**Update, second set of rulings (Evoni, 2026-11-04):** see §15–§21. They supersede earlier text where they conflict:
+- §9 (b) "scripts read live state" is withdrawn (§17).
+- §10's $30/$8 split is not activated (§20).
+- S2.4 is replaced by the relationship model (§18).
+
 **Status:** a design for approval. Nothing here is implemented. No worker is activated, no image or character is regenerated, no production data changes, no migration runs, and no PR is merged or deployed without Evoni's separate approval.
 
 **Combines:**
@@ -341,3 +346,200 @@ Post images add up to `PULSE_POST_IMAGES_PER_DAY` (default 20) × the per-image 
 5. **Budget:** approve two lanes at $30 interactive / $8 background as a starting point, after reviewing the spend query?
 6. **Back-linking old money posts to Lala (D1):** wanted, or leave history as is?
 7. **Sable:** D1 of the separation plan (Sable's link to @studiobysable), now that D2 (stand-in) is ruled out.
+
+
+---
+
+## 15. Second set of rulings (Evoni, 2026-11-04)
+
+1. **Stage 1 priorities, in order:**
+   1. security, authorization and destructive-operation safety;
+   2. Pulse identity integrity, cross-show isolation, quality gates and unsafe autonomous publishing;
+   3. episode completion, authoritative state and story continuity;
+   4. character voice protection and accurate AI cost accounting.
+
+   Open PRs keep moving through their review process. **No new merges or deployments are authorized.**
+2. **Complete and the franchise brain.**
+   - Mechanical outcomes and story interpretations have different approval requirements.
+   - Approved outcomes are recorded through the authoritative state and financial systems, **exactly once**.
+   - Franchise-brain narrative interpretations and story notes wait for review.
+   - **Historical episode scripts must not read unrestricted live character state.**
+   - Design two views:
+     - **current Dream Cities state**;
+     - **episode-specific continuity state**, reconstructed from accepted canonical history up to the right story-time boundary. It must be reproducible and must not silently change when later world activity occurs.
+   - Audit state history, `seasonStoryOrder`, acceptance rules and consumers first.
+   - Bulk franchise-brain activation becomes ADMIN-only.
+3. **Relationships.**
+   - A proper model for person–person, person–brand and brand–brand.
+   - **No fake Registry characters for businesses.**
+   - Table design, compatibility plan, historical mapping, migration and rollback are for separate approval. No production rewrite.
+4. **Creative Notes.**
+   - A dedicated field on the existing Episode Brief.
+   - Intent uses `narrative_purpose`.
+   - The smallest migration and compatibility plan, for review; not run.
+5. **AI budgets.**
+   - The $30/$8 split is **not** activated.
+   - First collect actual spend, reconcile logged costs against current pricing and caching, and find expensive scheduler paths.
+   - Then propose separate hard limits; background can never consume the interactive reserve.
+   - No workers; no scheduled AI.
+6. **Historical money posts.** A read-only preview of exact, ambiguous and unmatched links to Lala, with consequences. No backfill.
+7. **Sable's Pulse identity.**
+   - @studiobysable is the business account; Sable Okonkwo-Reyes is a separate person in the Registry.
+   - No mirroring of her romances, friendships or personal ties onto the studio account.
+   - Posts and history are preserved; the separation is prepared for review before any production change.
+8. **Existing PRs.**
+   - #3708: keep investigating CI and verifying the internal-field protection.
+   - #3701 stays on hold.
+   - #3702, #3703, #3705, #3706 and #3707 each need a separate final review and merge approval.
+   - #3704 stays documentation-only.
+   - **Record:** #3706 was merged (`2ebacc78`) under the earlier instruction "Merge #3706 and #3707", before this message arrived. #3707 was updated with main but **not** merged, and will not be merged without a new approval.
+
+---
+
+## 16. Stage 1 PR sequence (proposed)
+
+Every PR is small, has a failing-first test, and only narrows behaviour. None has a migration unless marked. None activates a worker. Each needs its own review and merge approval (G1).
+
+### Priority 1: security, authorization, destructive operations
+
+| PR | Scope | Depends on | Tests |
+|---|---|---|---|
+| **1.1 franchise-brain guards** | ADMIN on `POST /franchise-brain/seed` (its `force` hard-deletes all canon) and `POST /franchise-brain/activate-all` | — | Route tests: a non-admin gets 403 on both; an admin passes; no other franchise-brain route changes. The new tests fail against main. |
+| **1.2 money-changing routes** | ADMIN on `POST /characters/:key/state/update` (manual coin adjustment), `POST /shows/:id/seed-balance`, `PUT /shows/:id/financial-config` | — | 403 non-admin, 200 admin, and no ledger row written on a 403 (integration). |
+| **1.3 destructive replace and bulk** | ADMIN for `generate-events` with `replace_existing`; ADMIN for `wardrobe/seed` with `clear_existing`; `wardrobe/bulk/sync-coin-costs` refuses without `show_id` unless admin | #3702 merged (link-safe replace) | Integration: a non-admin replace is refused and no events are deleted; an admin replace keeps used and linked events (the #3702 rule). |
+| **1.4 scheduler config and AI fan-out** | ADMIN + value bounds on `PUT /feed-scheduler/config`; `aiRateLimiter` + ADMIN on overlay `generate-all`; a cap (e.g. 10) on `memories/batch-generate*`; `jobs` list/retry/cancel scoped to the owner or ADMIN | — | Unit route tests per rule; the scheduler config rejects out-of-range values; a batch above the cap gets 400. |
+| (open) | #3705 debug/seed opt-in, #3702 safe delete, #3707 Registry guard | review + approval | as in their PRs |
+
+### Priority 2: Pulse identity, isolation, gates, unsafe publishing
+
+| PR | Scope | Depends on | Tests |
+|---|---|---|---|
+| **2.1 brand-account guards (D6)** | `isBrandAccount` helper. Guards in `crossProfile`, `syncStoryPair` / `linkStoryAndPulse` / `driftReport` (personal kinds never mirrored onto a brand account; existing rows listed as "personal tie on a brand account"), voice eligibility, `pickReactors`, ripples, `pulseDms.assertMaySend`, `pulseCloseness`, `friendsOfLala`, `lookAlikes`. No data change. | — | Unit tests per guard with a brand-marked fixture. **Integration:** a confirmed romance on a person whose `feed_profile_id` is a brand account creates no Pulse row; crossing a brand account gets 409; a person account is unchanged (regression). |
+| **2.2 viral ripples to safe drafts (D2)** | Reactors scoped to the post's show and feed layer, brand accounts excluded; ripples saved as **drafts**; no randomised numbers; a dedupe key (post, reactor, kind). Not activated. | 2.1 (brand filter) | Integration: no reactor from another show; nothing goes live; a repeat call creates no duplicates; numbers stay at zero. |
+| **2.3 money posts link to Lala (D1)** | `financialFeedService` uses `lalaFeedProfile`; no silent catch; the post carries Lala's profile id. **New posts only;** history is untouched (§19). | — | Integration with a show that has Lala's registry link: the new money post's `social_profile_id` equals her profile. Without a profile: a logged warning, the post is still a draft, and no crash. Fails on main (`show_id` error swallowed). |
+| **2.4 reads never write (D4)** | The event outfit GET and the momentum GET become read-only; their writes move to explicit POSTs or are dropped; the silent catch is fixed | — | A GET leaves `world_events` and `canon_consequences` unchanged (row hash before and after); `lint-silent-catches` count drops. |
+| **2.5 world-moment producer/consumer (D3)** | `worldMoments` enqueues only when the queue consumer runs; otherwise it records "skipped: engine off" on the Engine page | — | Unit: with the engine off, no jobs are inserted and a skip is recorded; with it on, unchanged. |
+| **2.6 autonomy categories (ruling 1)** | `pulseGate.reviewReasons` adds always-review for money, contracts or deals, secrets, major accusations and canonical relationship changes, on top of Lala. Release honours it (ruling 2: review-required content never releases on schedule without approval). Existing release history and idempotency are kept. | 2.1 | Category fixtures each land in Review; an ordinary non-Lala post still auto-publishes when the engine is on; a scheduled review-required post is not released by `releaseDue`. |
+
+### Priority 3: completion, authoritative state, continuity
+
+| PR | Scope | Depends on | Tests |
+|---|---|---|---|
+| **3.1 exactly-once completion (C1)** | `already_finalized` returns the stored summary and balance; no repeated stress or stat deltas | — | Integration: complete twice gives the same totals, one ledger set, and stress applied once. |
+| **3.2 brain records wait for review (D7, ruling 2)** | Completion's narrative-result rows are written `pending_review`; a "Brain records waiting" list with per-item approve (ADMIN). The **character-state snapshot row stays as today** until the continuity view (§17) replaces it, so no consumer loses state. | 1.1 (activate-all ADMIN) | Integration: after Complete, the result row is `pending_review` and is not injected; after approve it is injected; the stats snapshot behaviour is unchanged. |
+| **3.3 continuity view (design approval first)** | Implements §17 after Evoni approves the design | §17 approval; 3.1 | defined with the design |
+| **3.4 `createEpisode` air date validation** | Reuse `parseAirDate` | #3708 | Integration: a bad date gets 400 and no row. |
+
+### Priority 4: voice protection, cost accuracy
+
+| PR | Scope | Depends on | Tests |
+|---|---|---|---|
+| **4.1 voice rebuild never overwrites edits (D5)** | `buildVoice` refuses an `edited` voice unless confirmed; the rebuild is saved as a proposal; untouched AI posts are excluded from rebuild sources | — | Integration: an edited voice is unchanged after a rebuild and a proposal row exists; a built voice still rebuilds. |
+| **4.2 cost-tracker accuracy** | Haiku 4.5 at $1/$5; undated aliases; the cache accounting fix (`input_tokens` already excludes cache); the 80% warning surfaced (Daily Update / CFO page) | — | Unit: `calculateCost` against hand-computed fixtures (with and without cache; each model). |
+| **4.3 test hygiene** | `seasonRevealPlan` tie-break | — | The test is stable over 20 repeated runs. |
+
+**Merge order:** 1.1 → 1.2 → 1.3 → 1.4 → 2.1 → 2.3 → 2.4 → 2.2 → 2.5 → 2.6 → 3.1 → 3.2 → 3.4 → 4.1 → 4.2 → 4.3. Then 3.3 after its design is approved.
+
+---
+
+## 17. Two state views: current state vs episode continuity state
+
+*(The audit of state history, `seasonStoryOrder`, acceptance rules and consumers is in progress; this section will be completed with its findings and a proposal for approval.)*
+
+---
+
+## 18. Relationship model (person–person, person–brand, brand–brand)
+
+*(Table design, compatibility plan, historical mapping, migration and rollback are being prepared; this section will be completed for separate approval. Nothing is migrated.)*
+
+---
+
+## 19. Historical money posts: read-only preview
+
+**How money posts are identified.** `financialFeedService.writeFeedPost` writes:
+- `social_profile_id` NULL (its lookup always fails, see D1);
+- poster `lala` / `Lala`;
+- `ai_generated` true;
+- `narrative_function` `flex` or `bts`;
+- one of nine fixed template texts.
+
+**How Lala is resolved.** As `lalaFeedProfile` does: her registry character's `feed_profile_id` (per show, via `character_registries.show_id`); otherwise the one LalaVerse profile whose handle is exactly `lala`.
+
+**Query:** `money-posts-preview.sql`. It is read-only and has no temp objects; it was validated on the test database with `default_transaction_read_only = on` (5 statements).
+
+| Section | What it shows |
+|---|---|
+| P1 | Lala's profile resolution per show that has money posts: linked profiles, `@lala` profiles |
+| P2 | Counts by class (**exact: her registry link / exact: the one @lala profile / ambiguous / unmatched / not a money template**) × status × deleted, with first and last dates |
+| P3 | Every candidate post with the profile it **would** link to, and its text |
+| P4 | **Consequences** per show: posts on that profile now, and how many live and draft money posts would join its timeline |
+
+**Consequences of a backfill** (not authorised):
+- Live money posts would appear on Lala's profile timeline and count toward her profile's post totals.
+- They become eligible for `pulseNumbers` / `pulseCloseness` proposals only if those run on link (they run on release, not on link, so no automatic numbers).
+- Drafts would show under her profile in Review.
+- Deleted posts stay deleted.
+- Any backfill is G3: snapshot, one show at a time, with an undo list of post ids.
+
+---
+
+## 20. AI budgets: collect, reconcile, then propose (ruling 5)
+
+1. **Collect.** Evoni runs `ai-spend.sql` (read-only).
+   - **S1:** daily spend over 30 days.
+   - **S2:** by provider and model, **logged cost vs list-price cost recomputed with correct cache accounting**.
+   - **S3:** top 40 routes.
+   - **S4:** monthly totals.
+2. **Reconcile.**
+   - The S2 gap shows the Haiku under-count and the cache under-count in dollars.
+   - S3 separates interactive routes (named route handlers) from background ones (queue, scheduler, completion-time AI) and finds the expensive scheduler paths. `feedScheduler` is expected to dominate if it has ever been on.
+3. **Propose limits.**
+   - Two hard limits sized from the real numbers: an **interactive reserve** and a **background ceiling**.
+   - Enforced in `aiCostTracker` by a lane tag on each call. A background call is refused when the background lane is spent, **or when spending would cut into the interactive reserve**.
+   - No worker or scheduled AI is turned on (G6).
+
+---
+
+## 21. Creative Notes: smallest migration and compatibility plan (not run)
+
+**Migration** (proposed file `src/migrations/<timestamp>-add-episode-brief-production-notes.js`, following the `describeTable` + guarded `addColumn` pattern in `20260806000000-episode-brief-event-snapshot-fields.js`):
+
+```js
+'use strict';
+// Creative Notes on the Episode Brief (Evoni, 2026-11-04): tone, direction,
+// things to remember for production. Not story canon; never sent to the
+// script writer unless a later ruling says so.
+module.exports = {
+  up: async (queryInterface, Sequelize) => {
+    const cols = await queryInterface.describeTable('episode_briefs').catch(() => ({}));
+    if (!cols.creative_notes) {
+      await queryInterface.addColumn('episode_briefs', 'creative_notes', {
+        type: Sequelize.TEXT, allowNull: true,
+        comment: 'Creative Notes from the episode Overview (production, not canon)',
+      });
+    }
+  },
+  down: async (queryInterface) => {
+    const cols = await queryInterface.describeTable('episode_briefs').catch(() => ({}));
+    if (cols.creative_notes) await queryInterface.removeColumn('episode_briefs', 'creative_notes');
+  },
+};
+```
+
+**Design notes:**
+- The column is named `creative_notes`, after the field Evoni named (the earlier proposal said `production_notes`).
+- It is nullable with no default; existing briefs read null.
+- `episode_briefs` already has `deleted_at`.
+
+**Compatibility:**
+- **Model:** `EpisodeBrief` gains `creative_notes` (TEXT, nullable). Code deployed **before** the migration must not select it. Read it with `describeTable` guarding, or deploy migration then code through the Deploy workflow, which runs migrations first.
+- **API:** `PUT /api/v1/episode-brief/:episodeId` adds `creative_notes` to `updatable`.
+  - **Proposal:** Creative Notes stay editable while the brief is locked, as cover-marks already are, because they are production notes, not story. This needs Evoni's yes; otherwise the lock applies.
+- **Intent:** the Overview's Intent reads and writes `narrative_purpose` through the same route (locked briefs refuse edits, as today). The UI says that editing it steers script generation.
+- **Overview:** the two "Not saved yet" notes from #3708 become real fields once the column exists and the route accepts them. The form sends them to the brief route, not the episode route.
+- **No backfill:** nothing was ever saved, so there is no history to migrate.
+- **Rollback:** `down` drops the column (data in it is lost; G2 makes that explicit) and the code reverts.
+- **Tests:**
+  - Integration: the PUT writes and returns `creative_notes`; Intent writes `narrative_purpose`; locked-brief behaviour as ruled.
+  - Migration up/down on the test database.
+  - Overview vitest: it saves through the brief route.
