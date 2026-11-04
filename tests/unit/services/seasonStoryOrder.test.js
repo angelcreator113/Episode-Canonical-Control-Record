@@ -24,7 +24,7 @@ describe('orderEntries', () => {
     expect(out.issues).toEqual([]);
   });
 
-  test('a bonus sits right after the slot it follows, whatever its episode_number; it needs a continuity review', () => {
+  test('a bonus sits right after the slot it follows, whatever its episode_number; it is canonical (N2)', () => {
     const out = orderEntries({
       arcs: [ARC1],
       slots: [slot('s1', 1, 'e1'), slot('s2', 2, 'e2')],
@@ -33,8 +33,8 @@ describe('orderEntries', () => {
     });
     expect(ids(out)).toEqual(['e1', 'e-bonus', 'e2']);
     const bonus = out.entries[1];
-    expect(bonus).toMatchObject({ kind: 'bonus', after_slot_number: 1, continuity: 'needs_review', order_ambiguous: false });
-    expect(out.issues).toEqual([{ code: 'continuity_needs_review', special_id: 'sp-b', kind: 'bonus', episode_id: 'e-bonus' }]);
+    expect(bonus).toMatchObject({ kind: 'bonus', after_slot_number: 1, continuity: 'canonical', order_ambiguous: false });
+    expect(out.issues).toEqual([]);
   });
 
   test('a special after 0 comes before the first slot; its special_type passes through as information', () => {
@@ -130,6 +130,37 @@ describe('precedingEpisodes', () => {
     const out = precedingEpisodes(order, 'e4', { includeUnaccepted: true });
     expect(out.episodes.map((e) => [e.episode_id, e.simulated])).toEqual([['e1', false], ['e2', true], ['e3', false]]);
     expect(out.excluded).toEqual([{ episode_id: 'e-sp', position: 2, reason: 'needs_review' }]);
+  });
+
+  test('an accepted bonus carries like a weekly episode (N2); an unaccepted one is excluded as not accepted', () => {
+    const withBonus = orderEntries({
+      arcs: [ARC1],
+      slots: [slot('s1', 1, 'e1'), slot('s2', 2, 'e2'), slot('s3', 3, 'e3')],
+      specials: [
+        { id: 'b-ok', arc_id: 'arc-1', kind: 'bonus', after_slot_number: 1, episode_id: 'e-b1' },
+        { id: 'b-draft', arc_id: 'arc-1', kind: 'bonus', after_slot_number: 2, episode_id: 'e-b2' },
+      ],
+      episodes: [ep('e1', 1), ep('e-b1', 40), ep('e2', 2), ep('e-b2', 41, false), ep('e3', 3)],
+    });
+    const out = precedingEpisodes(withBonus, 'e3');
+    expect(out.episodes.map((e) => e.episode_id)).toEqual(['e1', 'e-b1', 'e2']);
+    expect(out.excluded).toEqual([{ episode_id: 'e-b2', position: 4, reason: 'not_accepted' }]);
+  });
+
+  test('two bonuses after one slot are never carried while their order is ambiguous (N1)', () => {
+    const tied = orderEntries({
+      arcs: [ARC1],
+      slots: [slot('s1', 1, 'e1'), slot('s2', 2, 'e2')],
+      specials: [
+        { id: 'b-1', arc_id: 'arc-1', kind: 'bonus', after_slot_number: 1, episode_id: 'e-b1' },
+        { id: 'b-2', arc_id: 'arc-1', kind: 'bonus', after_slot_number: 1, episode_id: 'e-b2' },
+      ],
+      episodes: [ep('e1', 1), ep('e-b1', 40), ep('e-b2', 41), ep('e2', 2)],
+    });
+    const out = precedingEpisodes(tied, 'e2');
+    expect(out.episodes.map((e) => e.episode_id)).toEqual(['e1']);
+    expect(out.excluded.map((x) => [x.episode_id, x.reason]).sort()).toEqual([['e-b1', 'order_ambiguous'], ['e-b2', 'order_ambiguous']]);
+    expect(precedingEpisodes(tied, 'e2', { includeUnaccepted: true }).episodes.map((e) => e.episode_id)).toEqual(['e1']);
   });
 
   test('the first episode carries nothing; an episode not in the order is not found', () => {

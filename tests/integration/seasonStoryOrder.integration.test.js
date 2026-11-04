@@ -1,6 +1,6 @@
 /**
  * The season's story order read from the database (services/seasonStoryOrder;
- * Lala's Phone phase 7 ruling G1, PR 0): arcs, weekly slots, a bonus and a
+ * Lala's Phone phase 7 rulings G1 and N2, PRs 0 and 0b): arcs, weekly slots, a bonus and a
  * two-parter in season_specials, an unslotted episode. Read only: the test
  * checks nothing is written. Against the test database.
  */
@@ -57,23 +57,23 @@ const q = (sql, replacements = {}) => sequelize.query(sql, { replacements, type:
     const order = await seasonStoryOrder(sequelize, show);
     expect(order.entries.map((e) => [e.episode_id, e.kind, e.part, e.continuity])).toEqual([
       [ep.w1, 'weekly', null, 'canonical'],
-      [ep.bonus, 'bonus', null, 'needs_review'],
+      [ep.bonus, 'bonus', null, 'canonical'],
       [ep.w2, 'weekly', null, 'canonical'],
       [ep.p1, 'two_part', 1, 'canonical'],
       [ep.p2, 'two_part', 2, 'canonical'],
     ]);
     expect(order.unslotted.map((u) => u.episode_id)).toEqual([ep.free]);
-    expect(order.issues.map((i) => i.code).sort()).toEqual(['continuity_needs_review', 'unslotted']);
+    expect(order.issues.map((i) => i.code).sort()).toEqual(['unslotted']);
     // Read only: nothing was written.
     const after = (await q('SELECT updated_at FROM episodes WHERE show_id = :show ORDER BY id', { show })).map((r) => String(r.updated_at));
     expect(after).toEqual(before);
   });
 
-  it('Part 2 carries from the accepted canonical episodes before it; the bonus needs review; a draft preview adds nothing more here', async () => {
+  it('Part 2 carries from the accepted canonical episodes before it, the accepted bonus included (N2); a draft preview adds nothing more here', async () => {
     const order = await seasonStoryOrder(sequelize, show);
     const carry = precedingEpisodes(order, ep.p2);
-    expect(carry.episodes.map((e) => e.episode_id)).toEqual([ep.w1, ep.w2, ep.p1]);
-    expect(carry.excluded).toEqual([{ episode_id: ep.bonus, position: 2, reason: 'needs_review' }]);
-    expect(precedingEpisodes(order, ep.p2, { includeUnaccepted: true }).episodes.map((e) => e.episode_id)).toEqual([ep.w1, ep.w2, ep.p1]);
+    expect(carry.episodes.map((e) => e.episode_id)).toEqual([ep.w1, ep.bonus, ep.w2, ep.p1]);
+    expect(carry.excluded).toEqual([]);
+    expect(precedingEpisodes(order, ep.p2, { includeUnaccepted: true }).episodes.map((e) => e.episode_id)).toEqual([ep.w1, ep.bonus, ep.w2, ep.p1]);
   });
 });
