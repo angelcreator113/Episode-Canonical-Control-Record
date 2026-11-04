@@ -847,3 +847,208 @@ module.exports = {
   - Integration: the PUT writes and returns `creative_notes`; Intent writes `narrative_purpose`; locked-brief behaviour as ruled.
   - Migration up/down on the test database.
   - Overview vitest: it saves through the brief route.
+
+---
+
+## 22. Third set of rulings and the Episodes 1–2 continuity preview (Evoni, 2026-11-04)
+
+### 22.1 Rulings
+
+1. **Continuity boundary.**
+   - Canonical **story order**, not production or completion order.
+   - An episode's opening state reflects accepted, story-effective events before it in the canonical timeline.
+   - Use `seasonStoryOrder` where appropriate, after verifying its integration and rules.
+   - A frozen snapshot never silently changes when later episodes complete or Dream Cities keeps running.
+   - **A read-only preview for Episodes 1 and 2 comes before any migration request.**
+2. **Manual stat adjustments.**
+   - Administrative adjustments never enter continuity automatically.
+   - Only **approved, story-effective** adjustments count. Each carries:
+     - a reason and source;
+     - the affected character;
+     - the effective story position;
+     - before/after values;
+     - an audit record;
+     - protection against duplicate application.
+   - Administrative corrections and test activity are kept distinct from canonical gameplay.
+3. **Continuity snapshot migration.**
+   - The architecture direction is approved; **the migration is not**.
+   - Before implementation, show: the replay algorithm, the source records, integration points (script writer, scene planner, state readers, every other consumer), handling of missing history, tests and rollback.
+4. **Episode spending.**
+   - Hypothetical purchases and expenses stay in the episode **money plan**.
+   - **Actual confirmed purchases enter Prime Bank immediately and exactly once, with a story-effective position.**
+   - Genuine purchases are not deferred to Complete; **planning an outfit deducts nothing**.
+   - Brand income distinguishes **offered, earned, pending approval and actually paid**.
+   - Cancelling an episode never erases legitimate financial history.
+5. **Creative Notes.**
+   - Editable while the brief is locked: production notes, not canon.
+   - Separate permissions and audit history.
+   - They never silently change narrative purpose, approved dialogue or locked outcomes.
+   - The column migration still needs separate approval.
+6. **Relationship model.**
+   - Approved in principle (§18).
+   - Before migration: authoritative columns, reader compatibility, constraints, historical mapping and rollback.
+   - No fake Registry characters for brands.
+   - **No automatic move or rewrite of Sable's history.** Ambiguous relationships stay pending Evoni's individual review.
+
+**Also:**
+- The safety PRs stay separate from these designs.
+- **#3706's merge authorizes nothing else.**
+- #3701 stays on hold pending portfolio scoring.
+- **#3707 and every other PR need fresh approval.**
+- No continuity migration, no financial rewrite, no production relationship change, no workers, no deploys.
+
+### 22.2 `seasonStoryOrder`: verification of rules and integration
+
+| Rule (from the code) | Verified |
+|---|---|
+| Order: seasons by number; arcs by `arc_number`; slots by `slot_number`; a bonus or special right after `after_slot_number` (0 = before the first); two-part halves are their own slots | read, and exercised on fixtures by the preview |
+| A slot whose arc is missing sorts **last** in its season and is reported `arc_missing` | read |
+| Two specials after the same slot are ordered by release date/time, then creation, and **both** marked `order_ambiguous` (never carried) | read |
+| Bonus = canonical (N2). Special = `needs_review` (excluded from carry-over until the G2 continuity-class migration) | read |
+| Accepted = `episodes.evaluation_status = 'accepted'` only | read |
+| Deleted arcs, slots, specials and episodes are ignored | read |
+| An episode in two places is reported `episode_in_two_places` | read |
+
+**Integration gaps:**
+1. **Nothing calls it yet.**
+2. An **unslotted** episode returns `found: false`: it has no continuity at all, and the preview reports such episodes.
+3. A two-parter's Part 2 is accepted with no history row of its own; its effects live on Part 1.
+4. The rest of the app still uses `storyClock` (`episode_number × 10 + phase`), so the two orders can disagree. Disagreements are to be **reported, not fixed** (G1).
+
+### 22.3 The preview (read-only)
+
+1. **Export.** `continuity-export.sql` reads every source record for the show into one JSON line per section:
+   - show, arcs, slots, specials, episodes (with money plan and season context);
+   - the full ledger;
+   - stat history, current state;
+   - relationship events by episode, follower changes, story records;
+   - a wardrobe ownership summary, brief snapshot flags.
+
+   It writes nothing. It was validated on the test database under `default_transaction_read_only`.
+2. **Replay.** `continuity-preview.js` runs **locally on the exported file** (it never touches a database). It uses the repo's own `orderEntries` and `precedingEpisodes`, `applyDeltas` (`evaluationFormula`), `DEFAULT_LALA_STATE` and `DEFAULT_STARTING_BALANCE`, so the rules cannot drift from production code.
+
+   **Output:** the story order (positions, accepted, continuity, ambiguity, unslotted and other issues), then for **Episode 1 and Episode 2** (the first two weekly slots, even if a slot has no episode yet):
+   - carried and excluded predecessors, with reasons;
+   - a table of opening coins and stats, relationship changes, follower changes and approved story records, in three columns:
+     - **canonical** (accepted only);
+     - **simulated** (as if unaccepted predecessors were accepted; never canonical);
+     - **live state now** (what scripts read today);
+   - every ledger row with its treatment (counted / excluded / **flag**) and reason;
+   - stat history used and not used.
+
+   **Tested on fixtures:**
+   - Episode 1 unaccepted: Episode 2 opens at the 1,900 baseline; simulated it would open at 2,050, reputation 3, stress 3.
+   - Episode 1 accepted: Episode 2 opens at 1,900 − 250 + 400 = 2,050, reputation 3, stress 3.
+   - In both, the manual adjustment and a later episode's rows are excluded, and an episode-less purchase is flagged.
+3. **Why it can't drift.** The opening state depends only on: story-order rows, earlier episodes' acceptance, their counted ledger rows, their `computed` deltas, their relationship events, accepted follower changes before the boundary, and their approved records. Completing a later episode or Dream Cities activity with no story position changes none of these inputs.
+
+### 22.4 Replay algorithm (proposed for the continuity view)
+
+For target episode E (or an empty slot boundary):
+
+1. `order = seasonStoryOrder(show)`. P = `precedingEpisodes(order, E)`: canonical, unambiguous, accepted entries before E. Excluded entries are kept with their reason. If E is unslotted, return "no continuity" (no fallback to `episode_number`).
+2. **Coins.**
+   - Start from the seed row (`seed` / `show_init`), else the show's `starting_balance`, else `DEFAULT_STARTING_BALANCE`.
+   - Add counted ledger rows (executed, not deleted, episode live) whose episode is in P.
+   - **Episode-less rows:**
+     - seed: counted;
+     - **administrative** (`manual`, `manual_adjustment`): excluded (ruling 2);
+     - any other episode-less row: **flagged as "needs a story-effective position"** and excluded until it has one (ruling 4).
+   - E's own rows belong to E's money plan and its own confirmed purchases, not its opening state.
+3. **Stats.** `DEFAULT_LALA_STATE` (non-coin) → for each e in P in story order, apply e's `computed` history `deltas_json` (coins removed) with `applyDeltas` (same caps and diminishing returns as Complete).
+   - `manual`, `override`, `wardrobe_purchase` and `financial` sources are not stat changes for continuity unless approved as story-effective (ruling 2).
+   - **Replay from deltas, never copy `state_after_json`** (it carries completion-order contamination).
+4. **Relationships:** the latest `relationship_events` stage per relationship whose `metadata.episode_id` ∈ P.
+5. **Followers:** accepted `pulse_followers` with `story_order` before E's boundary.
+6. **Story records:** approved records of P.
+7. **Ownership:** baseline owned items, plus purchase rows of P, plus positioned episode-less purchases before the boundary.
+8. **Snapshot.** The result plus inputs (P ids and positions, ledger row ids, history ids, story-order rows hash, code version) and an `inputs_hash`, stored at Start (once migrated). Recompute only on request; show a diff if the hash changed.
+
+### 22.5 Source records
+
+| Source | Used for | Notes |
+|---|---|---|
+| `show_arcs`, `season_slots`, `season_specials`, `episodes` | order, acceptance | via `seasonStoryOrder` |
+| `financial_transactions` | coins | `countedLedgerRows` semantics + the classification above |
+| `character_state_history` (`computed`) | stats | deltas only |
+| `relationship_events` (`metadata.episode_id`) | relationships | current `character_relationships` is **not** used for past episodes |
+| `pulse_followers` (accepted, `story_order`) | followers | |
+| `episode_story_records` (approved) | story facts | |
+| `wardrobe` + purchase rows | ownership | items owned with no purchase row are baseline basics |
+| `episodes.money_plan` | E's own plan (not opening state) | already frozen at Start |
+
+### 22.6 Integration points (consumers)
+
+| Consumer | Today | Under the design |
+|---|---|---|
+| `episodeScriptWriterService.loadScriptContext` | live balance, live stats, injected brain rows incl. the state snapshot, the newest world snapshot, carry-forward by number | **E's snapshot**: balance, stats, relationships, carry-forward = P's last approved record; no live world snapshot |
+| `groundedScriptGeneratorService` | same family | E's snapshot |
+| `scriptMoneyContext.balanceBefore` | "now minus E's rows" (includes later episodes) | snapshot coins |
+| `episodeBriefRoutes.herGoalForEpisode` | live state + current balance | snapshot |
+| `worldEvents/scriptAndBulk` skeleton | live state | snapshot |
+| **Scene planner** (`scenePlannerService`) | **reads no character state** (brief fields only) | no change; it inherits continuity only through the brief |
+| `episodeCompletionService` evaluation input | live state | **E's Start snapshot** for evaluation; the outcome is still applied once to the live state and ledger |
+| `statsPanelService` / `lalaStats` | story-bounded by `episode_number` | story order (`seasonStoryOrder`) |
+| Phone "as of beat", Pulse drafting for an episode, `storyCarryForward` | `storyClock` / number | story order and E's snapshot |
+| **Stay on current state:** pitching (`episodePitchService`), career goals, affordability, next suggestions, deal pricing, financial pressure, wardrobe purchase guard, season arc proposals, dashboards | live | `currentState(showId)` (planning the future, not replaying the past) |
+
+### 22.7 Missing history
+
+| Case | Handling |
+|---|---|
+| An accepted predecessor with no `computed` row (legacy, two-part Part 2) | zero stat deltas, **flagged** |
+| An unslotted episode | no continuity; flagged; never placed by number |
+| A special (`needs_review`) or ambiguous order | excluded, listed |
+| Episode-less ledger rows without a story position | excluded, **flagged** for positioning (ruling 4) |
+| Administrative or test adjustments | excluded (ruling 2) |
+| Deleted episodes | excluded (as the balance already does) |
+| No seed row | show `starting_balance`, else the code default; the report says which |
+| An earlier episode reset or re-completed | later snapshots are marked stale by hash, never rewritten |
+
+### 22.8 Story-effective adjustments (ruling 2), for the migration request
+
+Proposal: extend `character_state_history`, and give ledger rows the same marking through `metadata` or new columns:
+- `kind`: `gameplay` | `administrative` | `test` | `story_effective_adjustment`;
+- `reason`;
+- `source`;
+- `effective_episode_id` and `effective_story_position`;
+- `before_json` / `after_json`;
+- `approved_by` / `approved_at`;
+- `idempotency_key` (UNIQUE).
+
+Only `gameplay` (from Complete) and approved `story_effective_adjustment` rows enter continuity. Existing `manual` rows are read as `administrative`.
+
+### 22.9 Spending (ruling 4): current behaviour to correct (finding)
+
+- `POST /wardrobe/select` **auto-buys an unowned piece when it is selected** for an episode, and `POST /wardrobe/lock-outfit-atomic` also books a purchase.
+- Under ruling 4, **choosing an outfit is planning and must not deduct coins**. Only a confirmed purchase books a ledger row (once, with a story-effective position).
+- **Decision for Evoni:** which action is "confirmed purchase": the explicit `/purchase`, the outfit lock, or both?
+- Brand income states (offered / earned / pending approval / paid) map onto the existing opportunity status flow, deal deliverables and `dealPayoutService` (paid = ledger row). They are to be confirmed in the continuity design.
+
+### 22.10 Tests and rollback (for the later migration request)
+
+**Tests:**
+- **Replay:**
+  - accepted vs unaccepted predecessors;
+  - a bonus after a slot;
+  - a special excluded;
+  - ambiguous specials excluded;
+  - an unslotted target;
+  - a two-parter;
+  - deleted episode rows;
+  - administrative rows excluded;
+  - episode-less purchases flagged;
+  - diminishing returns at high stats.
+- **Stability:**
+  - completing a later episode leaves E's snapshot hash unchanged;
+  - accepting an earlier one marks it stale.
+- **Consumers:** the script context for an old episode reads its snapshot, not live state.
+- **Migration:** up / down / up.
+
+**Rollback:**
+- The snapshot table is append-only and additive; `down` drops it only when empty, or after export.
+- Consumers fall back to today's reads behind a switch, so turning the switch off restores current behaviour.
+
+### 22.11 What Evoni runs
+
+`continuity-export.sql` (read-only, same SSH and getv pattern) → copy back `~/continuity-export.txt` → I run the local replay and publish the Episodes 1–2 preview here. Nothing is migrated.
