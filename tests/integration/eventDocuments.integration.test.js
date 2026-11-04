@@ -174,4 +174,31 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     // Never stored in a document.
     expect((await stored(ids)).documents).toBeUndefined();
   });
+
+  // Task 3206: the letter as the Creator Partnership Agreement. OFFER until
+  // the event starts an episode (the terms lock), EXECUTED after; the
+  // event's colours; numbered clauses from 1 The engagement.
+  it('GET carries the agreement: the event colours, numbered clauses, OFFER then EXECUTED once an episode is started', async () => {
+    const ids = await seed();
+    const none = await auth(request(app).get(`${base(ids)}/documents`));
+    expect(none.body.data.offer_agreement).toBeNull();
+    await makeDeal(ids);
+    await run(`UPDATE world_events SET host_brand = 'Studio by Sable', color_palette = :p::jsonb WHERE id = :event`,
+      { ...ids, p: JSON.stringify(['#6A1B4D', '#E8C66A']) });
+    const offer = (await auth(request(app).get(`${base(ids)}/documents`))).body.data.offer_agreement;
+    expect(offer).toMatchObject({
+      title: 'Creator Partnership Agreement · Studio Session', brand: 'Studio by Sable',
+      colours: { head: '#6A1B4D', rule: '#E8C66A', from_event: true }, status: 'offer', label: 'OFFER', episode_id: null,
+    });
+    expect(offer.clauses.map((c) => [c.number, c.key])).toEqual([[1, 'engagement'], [2, 'fees']]);
+    expect(offer.clauses[0].lines[0].label).toBe('Studio by Sable engages Lala (the Creator) for Studio Session.');
+
+    const ep = uuid();
+    await run(`INSERT INTO episodes (id, show_id, title, episode_number, status, created_at, updated_at) VALUES (:ep, :show, 'Ep', 1, 'draft', NOW(), NOW())`, { ep, show: ids.show });
+    await run('UPDATE world_events SET used_in_episode_id = :ep WHERE id = :event', { ep, event: ids.event });
+    const executed = (await auth(request(app).get(`${base(ids)}/documents`))).body.data.offer_agreement;
+    expect(executed).toMatchObject({ status: 'executed', label: 'EXECUTED', episode_id: ep });
+    await run('UPDATE world_events SET used_in_episode_id = NULL WHERE id = :event', ids);
+    await run('DELETE FROM episodes WHERE id = :ep', { ep });
+  });
 });

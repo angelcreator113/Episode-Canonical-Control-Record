@@ -369,12 +369,37 @@ async function getDocuments(models, { showId, eventId }) {
  */
 async function offerState(sequelize, event, doc) {
   const { isOfferEvent, termsKey } = require('./offerLetterService');
-  if (!isOfferEvent(event)) return { offer_eligible: false, offer_terms: [], offer_terms_changed: false };
+  if (!isOfferEvent(event)) return { offer_eligible: false, offer_terms: [], offer_terms_changed: false, offer_agreement: null };
   const terms = await offerTermsOf(sequelize, event);
   return {
     offer_eligible: true,
     offer_terms: terms,
     offer_terms_changed: Boolean(doc && typeof doc.terms_key === 'string' && doc.terms_key !== termsKey(terms)),
+    offer_agreement: await offerAgreement(sequelize, event, terms),
+  };
+}
+
+/**
+ * The letter as the Creator Partnership Agreement (Task #3206; utils/
+ * partnershipAgreement): its title, the brand, the event's colours, the
+ * numbered clauses and OFFER or EXECUTED (executed once the event has
+ * started an episode: the terms lock, her acceptance).
+ */
+async function offerAgreement(sequelize, event, terms) {
+  const pa = require('../utils/partnershipAgreement');
+  const colours = pa.agreementColours(event);
+  let lock = null;
+  try {
+    lock = await require('../utils/eventTermsLock').findTermsLockEpisode(sequelize, event.id);
+  } catch (err) {
+    console.error('[eventDocuments] the agreement status could not be read:', err.message);
+  }
+  return {
+    title: pa.agreementTitle(event),
+    brand: pa.agreementBrand(event),
+    colours,
+    clauses: pa.agreementClauses(event, terms),
+    ...pa.agreementStatus(lock, colours),
   };
 }
 
