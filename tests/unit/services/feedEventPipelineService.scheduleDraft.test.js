@@ -75,11 +75,14 @@ function makeModels({ opp = opportunity(), profile = PROFILE } = {}) {
     findByPk,
     models: {
       sequelize: {
+        // The insert and the opportunity update share one transaction.
+        transaction: jest.fn(async (a, b) => (typeof a === 'function' ? a : b)({})),
         query: jest.fn(async (sql, opts) => {
           if (/FROM opportunities WHERE id/.test(sql)) return [[opp]];
           if (/FROM world_events WHERE show_id/.test(sql)) return [[]];
           if (/INSERT INTO world_events/.test(sql)) { inserts.push({ sql, replacements: opts.replacements }); return [[]]; }
-          if (/UPDATE opportunities SET event_id/.test(sql)) return [[]];
+          if (/UPDATE opportunities SET event_id/.test(sql)) return [[{ id: opp.id }]];
+          if (/FROM world_events WHERE id = :eventId/.test(sql)) return [[]]; // deal-type draft: skipped
           throw new Error(`Unexpected query in test: ${sql}`);
         }),
       },

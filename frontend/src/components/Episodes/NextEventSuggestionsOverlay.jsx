@@ -2,6 +2,8 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../../services/api';
+import useOfferDecision from '../../hooks/useOfferDecision';
+import OfferDecisionDialog from '../OfferDecisionDialog';
 
 /**
  * NextEventSuggestionsOverlay — "what's next?" modal.
@@ -28,6 +30,8 @@ function NextEventSuggestionsOverlay({ episode, showId, onClose, onPickEvent }) 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [generating, setGenerating] = useState(null); // event id while spawning episode
+  // An offer not accepted yet is asked about before the episode starts.
+  const offerDecision = useOfferDecision();
 
   useEffect(() => {
     if (!episode?.id || !showId) return;
@@ -54,10 +58,12 @@ function NextEventSuggestionsOverlay({ episode, showId, onClose, onPickEvent }) 
     if (!showId || !eventId) return;
     setGenerating(eventId);
     try {
-      const { data: res } = await api.post(
+      // 409 OFFER_DECISION_REQUIRED opens OfferDecisionDialog; the choice is
+      // sent again as offer_decision (hooks/useOfferDecision).
+      const { data: res } = await offerDecision.run((decision) => api.post(
         `/api/v1/world/${showId}/events/generate-episode-from-many`,
-        { event_ids: [eventId] }
-      );
+        { event_ids: [eventId], ...(decision ? { offer_decision: decision } : {}) }
+      ));
       const newId = res?.data?.episode?.id || res?.data?.id;
       if (newId) {
         if (typeof onPickEvent === 'function') onPickEvent(newId);
@@ -66,6 +72,7 @@ function NextEventSuggestionsOverlay({ episode, showId, onClose, onPickEvent }) 
         alert('Episode generated but no ID returned. Refresh to find it.');
       }
     } catch (err) {
+      if (err?.offerDecisionCancelled) return;
       alert('Failed to generate episode: ' + (err?.response?.data?.error || err.message));
     } finally {
       setGenerating(null);
@@ -261,6 +268,8 @@ function NextEventSuggestionsOverlay({ episode, showId, onClose, onPickEvent }) 
           <button style={S.ghostBtn} onClick={closeAndMarkShown}>Close</button>
         </div>
       </div>
+      <OfferDecisionDialog pending={offerDecision.pending} busy={offerDecision.busy}
+        onChoose={offerDecision.choose} onCancel={offerDecision.cancel} />
     </div>
   );
 }
