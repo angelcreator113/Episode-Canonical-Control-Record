@@ -92,7 +92,7 @@ describe('safer steps', () => {
     const move = await screen.findByTestId('opp-move-o2');
     expect(move.textContent).toBe('Move to completed');
     fireEvent.click(move);
-    expect(confirm).toHaveBeenCalledWith('Mark Runway Walk completed? This also checks career goals and can unlock new opportunities.');
+    expect(confirm).toHaveBeenCalledWith("Mark Runway Walk completed? Career goals do not change here; they follow Lala's ledger and stats when an episode is completed.");
     expect(api.post).not.toHaveBeenCalled();
   });
 

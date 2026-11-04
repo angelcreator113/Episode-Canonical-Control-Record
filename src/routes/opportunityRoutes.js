@@ -248,7 +248,9 @@ router.post('/opportunities/:showId/:id/advance', requireAuth, authorize(['ADMIN
 
     await opp.update(updates);
 
-    // Career pipeline: cascade to career goals on completion/payment
+    // Career pipeline on completion/payment. It writes no goal progress:
+    // goals move only from the ledger and character_state (completeEpisode
+    // step 17, goal sync); pipeline.note says so.
     let pipelineResult = null;
     if (['completed', 'paid'].includes(to_status)) {
       try {

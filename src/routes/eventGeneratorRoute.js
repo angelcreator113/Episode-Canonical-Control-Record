@@ -19,6 +19,7 @@ const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 const { withAutoScheduledDate } = require('../utils/eventDateDefault');
 const { syncDraftedDealType } = require('../services/dealTypeDraftService');
 const { loadBrainContext, recordRuleUse } = require('../services/brainRules');
+const { softDeleteUnusedUnlinkedEvents } = require('../utils/worldEventSafeDelete');
 
 const client = new Anthropic();
 
@@ -42,7 +43,7 @@ router.post('/generate-events', requireAuth, aiRateLimiter, async (req, res) => 
     // Check existing
     if (!replace_existing) {
       const existing = await db.sequelize.query(
-        `SELECT COUNT(*) as count FROM world_events WHERE show_id = :show_id`,
+        `SELECT COUNT(*) as count FROM world_events WHERE show_id = :show_id AND deleted_at IS NULL`,
         { replacements: { show_id }, type: db.sequelize.QueryTypes.SELECT }
       );
       const count = parseInt(existing[0]?.count || 0);
@@ -114,28 +115,35 @@ Respond ONLY with a valid JSON array. No preamble, no markdown, no explanation.`
       updated_at: now,
     }));
 
-    if (replace_existing) {
-      await db.sequelize.query(
-        `DELETE FROM world_events WHERE show_id = :show_id`,
-        { replacements: { show_id } }
-      );
-    }
+    // One transaction: soft-delete the replaceable events and insert the new
+    // ones, or neither.
+    let replaced = null;
+    await db.sequelize.transaction(async (transaction) => {
+      if (replace_existing) {
+        // Only unused, unlinked events go, softly (utils/worldEventSafeDelete).
+        replaced = await softDeleteUnusedUnlinkedEvents(db.sequelize, { showId: show_id, transaction });
+      }
 
-    // Bulk insert via raw SQL matching actual table schema
+      // Bulk insert via raw SQL matching actual table schema
+      for (const ev of toInsert) {
+        await db.sequelize.query(
+          `INSERT INTO world_events
+             (id, show_id, name, event_type, host_brand, description,
+              prestige, cost_coins, strictness, dress_code,
+              dress_code_keywords, location_hint, event_date, canon_consequences, status, created_at, updated_at)
+           VALUES
+             (:id, :show_id, :name, :event_type, :host_brand, :description,
+              :prestige, :cost_coins, :strictness, :dress_code,
+              :dress_code_keywords::jsonb, :location_hint, :event_date, :canon_consequences::jsonb, :status, :created_at, :updated_at)
+           ON CONFLICT DO NOTHING`,
+          { replacements: ev, transaction }
+        );
+      }
+    });
+
+    // The deal type's first draft (Task #2330; dealTypeDraftService). It opens
+    // its own transaction, so it runs once the inserts are committed.
     for (const ev of toInsert) {
-      await db.sequelize.query(
-        `INSERT INTO world_events
-           (id, show_id, name, event_type, host_brand, description,
-            prestige, cost_coins, strictness, dress_code,
-            dress_code_keywords, location_hint, event_date, canon_consequences, status, created_at, updated_at)
-         VALUES
-           (:id, :show_id, :name, :event_type, :host_brand, :description,
-            :prestige, :cost_coins, :strictness, :dress_code,
-            :dress_code_keywords::jsonb, :location_hint, :event_date, :canon_consequences::jsonb, :status, :created_at, :updated_at)
-         ON CONFLICT DO NOTHING`,
-        { replacements: ev }
-      );
-      // The deal type's first draft (Task #2330; dealTypeDraftService).
       await syncDraftedDealType(db.sequelize, ev.id, { initial: true });
     }
 
@@ -148,6 +156,14 @@ Respond ONLY with a valid JSON array. No preamble, no markdown, no explanation.`
       generated: events.length,
       breakdown,
       events,
+      ...(replaced ? {
+        replaced: {
+          soft_deleted: replaced.softDeleted.length,
+          soft_deleted_ids: replaced.softDeleted.map(e => e.id),
+          kept: replaced.kept.length,
+          kept_events: replaced.kept,
+        },
+      } : {}),
     });
   } catch (err) {
     console.error('generate-events error:', err);

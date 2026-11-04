@@ -2,9 +2,8 @@
  * careerPipelineService — spawnGoalUnlocks refactor and onEpisodeCompleted
  * scope (Task #1817). Models are mocked; no DB.
  *
- *  - onOpportunityAdvanced (manual Advance) is behaviour-identical after the
- *    unlock-spawning logic moved into spawnGoalUnlocks: it still increments
- *    goals by kind and spawns unlocks for goals it completes.
+ *  - onOpportunityAdvanced (manual Advance) writes no goal progress: goals
+ *    move only from the ledger and character_state (step 17, goal sync).
  *  - onEpisodeCompleted completes the opportunity only.
  */
 
@@ -41,56 +40,30 @@ function makeModels({ opp, goals = [] }) {
   };
 }
 
-describe('onOpportunityAdvanced after the spawnGoalUnlocks refactor', () => {
+describe('onOpportunityAdvanced writes no goal progress', () => {
   beforeEach(() => jest.spyOn(console, 'warn').mockImplementation(() => {}));
   afterEach(() => jest.restoreAllMocks());
 
-  it('still increments goals by kind for a prestige-7 brand_deal paying 500', async () => {
+  // Goals move only from the ledger (coins) and character_state (stats), in
+  // completeEpisode's step 17 and goal sync. Advance used to add the payment
+  // and guessed stat bumps straight into career_goals.current_value.
+  it.each(['completed', 'paid'])('a prestige-7 brand_deal paying 500 advanced to %s changes no goal', async (status) => {
     const opp = { id: 'opp-1', show_id: SHOW_ID, opportunity_type: 'brand_deal', prestige: 7, payment_amount: 500 };
     const goals = [
-      makeGoal({ id: 'g-coins', title: 'Coins', target_metric: 'coins', current_value: 100, target_value: 10000 }),
-      makeGoal({ id: 'g-rep', title: 'Rep', target_metric: 'reputation', current_value: 3, target_value: 10 }),
+      makeGoal({ id: 'g-coins', title: 'Coins', target_metric: 'coins', current_value: 9800, target_value: 10000, unlocks_on_complete: ['Next deal'] }),
+      makeGoal({ id: 'g-rep', title: 'Rep', target_metric: 'reputation', current_value: 9, target_value: 10 }),
       makeGoal({ id: 'g-inf', title: 'Inf', target_metric: 'influence', current_value: 2, target_value: 10 }),
       makeGoal({ id: 'g-bt', title: 'Trust', target_metric: 'brand_trust', current_value: 1, target_value: 10 }),
-      makeGoal({ id: 'g-port', title: 'Portfolio', target_metric: 'portfolio_strength', current_value: 1, target_value: 10 }),
     ];
     const models = makeModels({ opp, goals });
 
-    const result = await onOpportunityAdvanced('opp-1', 'completed', models);
+    const result = await onOpportunityAdvanced('opp-1', status, models);
 
-    expect(result.goals_updated.map(g => [g.id, g.added, g.new_value])).toEqual([
-      ['g-coins', 500, 600],
-      ['g-rep', 2, 5],
-      ['g-inf', 2, 4],
-      ['g-bt', 2, 3],
-    ]);
-    expect(goals[4].update).not.toHaveBeenCalled(); // brand_deal adds nothing to portfolio
-    expect(result.goals_completed).toEqual([]);
-    expect(result.unlocks).toEqual([]);
+    expect(result).toEqual({ goals_updated: [], goals_completed: [], unlocks: [], note: expect.stringMatching(/not changed/) });
+    for (const g of goals) expect(g.update).not.toHaveBeenCalled();
+    expect(goals.map(g => g.current_value)).toEqual([9800, 9, 2, 1]);
+    expect(models.sequelize.query).not.toHaveBeenCalled();
     expect(models.Opportunity.create).not.toHaveBeenCalled();
-  });
-
-  it('still completes a goal that reaches target and spawns its unlocks (array or JSON string)', async () => {
-    const opp = { id: 'opp-1', show_id: SHOW_ID, opportunity_type: 'podcast', prestige: 8 };
-    const goals = [
-      makeGoal({ id: 'g-inf', title: 'Influence 10', priority: 1, target_metric: 'influence', current_value: 9, target_value: 10,
-        unlocks_on_complete: ['Keynote invite'] }),
-      makeGoal({ id: 'g-rep', title: 'Reputation 10', target_metric: 'reputation', current_value: 8, target_value: 10,
-        unlocks_on_complete: JSON.stringify([{ type: 'award_show', description: 'Gala nomination', prestige: 9 }]) }),
-    ];
-    const models = makeModels({ opp, goals });
-
-    const result = await onOpportunityAdvanced('opp-1', 'paid', models);
-
-    expect(goals[0].update).toHaveBeenCalledWith({ status: 'completed', completed_at: expect.any(Date) });
-    expect(goals[1].update).toHaveBeenCalledWith({ status: 'completed', completed_at: expect.any(Date) });
-    expect(result.goals_completed).toEqual([{ id: 'g-inf', title: 'Influence 10' }, { id: 'g-rep', title: 'Reputation 10' }]);
-    const created = models.Opportunity.create.mock.calls.map(c => c[0]);
-    expect(created.map(o => [o.name, o.opportunity_type, o.prestige, o.career_goal_id])).toEqual([
-      ['Keynote invite', 'brand_deal', 7, 'g-inf'],
-      ['Gala nomination', 'award_show', 9, 'g-rep'],
-    ]);
-    expect(result.unlocks.map(u => u.source_goal)).toEqual(['Influence 10', 'Reputation 10']);
   });
 
   it('ignores non-completion statuses', async () => {

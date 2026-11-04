@@ -65,12 +65,12 @@ export default function OpportunitiesTab({ showId, api, S, setToast, loadData, e
     } catch (err) { console.error('[OpportunitiesTab] create failed:', err); setToast('Failed: ' + (err.response?.data?.error || err.message)); }
   };
 
-  // Ask before the steps that do more than move a status (Evoni,
-  // 2026-10-19: a click meant to set one up marked it complete): completed
-  // and paid run the career pipeline.
+  // Ask before completed and paid (Evoni, 2026-10-19: a click meant to set
+  // one up marked it complete). Advance no longer changes career goals: they
+  // move only from the ledger and Lala's stats (Complete step 17, goal sync).
   const advanceOpp = async (opp, toStatus) => {
     if (['completed', 'paid'].includes(toStatus)
-      && !window.confirm(`Mark ${opp.name} ${toStatus}? This also checks career goals and can unlock new opportunities.`)) return;
+      && !window.confirm(`Mark ${opp.name} ${toStatus}? Career goals do not change here; they follow Lala's ledger and stats when an episode is completed.`)) return;
     try {
       const res = await api.post(`/api/v1/opportunities/${showId}/${opp.id}/advance`, { to_status: toStatus });
       if (res.data.success) { setOpps(prev => prev.map(o => o.id === opp.id ? res.data.opportunity : o)); setToast(`${opp.name} → ${toStatus}`); }
