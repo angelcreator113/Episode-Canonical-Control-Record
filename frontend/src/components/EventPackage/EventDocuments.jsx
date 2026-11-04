@@ -54,7 +54,7 @@ const coins = (n) => Number(n || 0).toLocaleString();
 
 const DOCS = [
   { type: 'shopping_list', title: 'Shopping list', from: 'From the look: the pieces to find, and what the ones still to buy cost' },
-  { type: 'offer_letter', title: 'Offer letter', from: 'The brand\'s formal offer after the invitation: the opportunity, then the terms from the deal' },
+  { type: 'offer_letter', title: 'Partnership agreement', from: 'The brand\'s offer after the invitation, as its Creator Partnership Agreement: the opportunity, then the deal as numbered clauses' },
 ];
 
 // A to-do list (Evoni, 2026-10-11): she crosses lines off in the show, so the
@@ -114,46 +114,76 @@ function ShoppingPaper({ doc, event, outfitPieces, closet = {}, onRedraftLine = 
 // A terms line's amount, as the letter states it.
 const primeCoins = (n) => `${Number(n).toLocaleString('en-US')} Prime Coins`;
 
-// The offer letter on letterhead: from the brand (or host), the date, the
-// letter's words, THE TERMS from the deal (live), then what happens next,
-// the closing and the signature.
-function OfferLetter({ doc, event, terms = [] }) {
+// The offer letter as the Creator Partnership Agreement (Task 3206; the
+// phone spec §13, "In-world documents"): the brand's letterhead in the
+// event's colours, the title, Brand and Creator boxes, the letter's words,
+// the deal as numbered clauses (1 The engagement, then the terms, live from
+// the deal), signature lines, and an OFFER stamp that reads EXECUTED once
+// the event has started an episode (she accepted). The server sends it as
+// offer_agreement (utils/partnershipAgreement); without it, the terms are
+// numbered as they come and the stamp reads OFFER.
+function OfferLetter({ doc, event, terms = [], agreement = null }) {
   const L = doc?.letter || {};
-  const org = (event?.host_brand || event?.host || 'The host').trim();
+  const org = (agreement?.brand || event?.host_brand || event?.host || 'The host').trim();
   const byline = documentByline(event).replace(/^for [^·]*·?\s*/, '');
+  const c = agreement?.colours || {};
+  const clauses = agreement?.clauses || terms.map((sec, i) => ({ number: i + 1, ...sec }));
+  const executed = agreement?.status === 'executed';
+  const dealClauses = clauses.filter((cl) => cl.key !== 'engagement');
+  const style = {
+    ...(c.head ? { '--evd-agree-head': c.head } : {}),
+    ...(c.rule ? { '--evd-agree-rule': c.rule } : {}),
+    ...(agreement?.colour ? { '--evd-agree-stamp': agreement.colour } : {}),
+  };
   return (
-    <div className="evd-offer" data-testid="evd-offer-letter">
+    <div className={`evd-offer evd-agreement${executed ? ' is-executed' : ''}`} style={style} data-testid="evd-offer-letter">
+      <div className="evd-agree-stamp" data-testid="evd-agreement-stamp" aria-label={executed ? 'Executed' : 'Offer'}>
+        {executed ? 'EXECUTED' : 'OFFER'}
+      </div>
       <div className="evd-offer-org">{org}</div>
-      <div className="evd-offer-by">Offer of partnership{byline ? ` · ${byline}` : ''}</div>
+      <div className="evd-agree-title" data-testid="evd-agreement-title">{agreement?.title || `Creator Partnership Agreement${event?.name ? ` · ${event.name}` : ''}`}</div>
+      {byline && <div className="evd-offer-by">{byline}</div>}
+      <div className="evd-agree-parties">
+        <div className="evd-agree-party"><span>Brand</span><strong>{org}</strong></div>
+        <div className="evd-agree-party"><span>Creator</span><strong>Lala</strong></div>
+      </div>
       {L.greeting && <p className="evd-offer-p">{L.greeting}</p>}
       {L.opening && <p className="evd-offer-p">{L.opening}</p>}
       {L.opportunity && <p className="evd-offer-p">{L.opportunity}</p>}
       <div className="evd-offer-terms" data-testid="evd-offer-terms">
         <div className="evd-offer-terms-title">The terms</div>
-        {terms.length === 0 && <p className="evd-muted">No terms set yet. Set the deal in Terms.</p>}
-        {terms.map((sec) => (
-          <div key={sec.key} className="evd-offer-section" data-testid={`evd-offer-section-${sec.key}`}>
-            <div className="evd-offer-section-title">{sec.title}</div>
-            <ul>
-              {sec.lines.map((l, i) => (
-                <li key={`${sec.key}-${i}`}>
-                  <span className="evd-offer-line">
-                    {l.label}
-                    {l.detail && <span className="evd-offer-detail">{l.detail}</span>}
-                  </span>
-                  {l.amount != null && <span className="evd-offer-amount">{primeCoins(l.amount)}</span>}
-                </li>
-              ))}
-            </ul>
-          </div>
-        ))}
+        {dealClauses.length === 0 && <p className="evd-muted">No terms set yet. Set the deal in Terms.</p>}
+        <ol className="evd-agree-clauses">
+          {clauses.map((sec) => (
+            <li key={sec.key} className="evd-offer-section" data-testid={`evd-offer-section-${sec.key}`}>
+              <div className="evd-offer-section-title"><span className="evd-agree-num">{sec.number}.</span> {sec.title}</div>
+              <ul>
+                {sec.lines.map((l, i) => (
+                  <li key={`${sec.key}-${i}`}>
+                    <span className="evd-offer-line">
+                      {l.label}
+                      {l.detail && <span className="evd-offer-detail">{l.detail}</span>}
+                    </span>
+                    {l.amount != null && <span className="evd-offer-amount">{primeCoins(l.amount)}</span>}
+                  </li>
+                ))}
+              </ul>
+            </li>
+          ))}
+        </ol>
       </div>
       {L.next_steps && <p className="evd-offer-p">{L.next_steps}</p>}
       {L.closing && <p className="evd-offer-p">{L.closing}</p>}
-      {L.sender_name && <div className="evd-offer-sign">{L.sender_name}</div>}
-      {(L.sender_name || L.sender_title) && (
-        <div className="evd-offer-sender">{[L.sender_name, L.sender_title].filter(Boolean).join(' · ')}</div>
-      )}
+      <div className="evd-agree-signatures" data-testid="evd-agreement-signatures">
+        <div className="evd-agree-sigline">
+          <div className="evd-offer-sign">{L.sender_name || ''}</div>
+          <div className="evd-offer-sender">{[L.sender_name, L.sender_title].filter(Boolean).join(' · ') || `For ${org}`}</div>
+        </div>
+        <div className="evd-agree-sigline">
+          <div className="evd-offer-sign" data-testid="evd-agreement-creator-sign">{executed ? 'Lala' : ''}</div>
+          <div className="evd-offer-sender">Lala · Creator</div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -245,7 +275,7 @@ function LetterEditor({ doc, onCancel, onSave, saving }) {
 }
 
 // What GET answers beside the documents, read again after a change.
-const DERIVED_KEYS = ['look_changed', 'closet', 'look', 'balance', 'offer_eligible', 'offer_terms', 'offer_terms_changed'];
+const DERIVED_KEYS = ['look_changed', 'closet', 'look', 'balance', 'offer_eligible', 'offer_terms', 'offer_terms_changed', 'offer_agreement'];
 
 const SOURCE_LABELS = { draft: 'drafted', edited: 'edited', restored: 'restored', line_redraft: 'one line re-worded' };
 const when = (v) => {
@@ -467,7 +497,7 @@ export default function EventDocuments({ showId, eventId, event, outfitPieces = 
                     <ShoppingPaper doc={doc} event={event} outfitPieces={listPieces} closet={ro ? {} : (docs.closet || {})} onRedraftLine={onLine} lineBusy={busyLine} />
                   )}
                   {doc && editing !== type && type === 'offer_letter' && (
-                    <OfferLetter doc={doc} event={event} terms={docs.offer_terms || []} />
+                    <OfferLetter doc={doc} event={event} terms={docs.offer_terms || []} agreement={docs.offer_agreement || null} />
                   )}
                 </div>
                 {doc && note && (

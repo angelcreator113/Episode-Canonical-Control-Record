@@ -120,6 +120,9 @@ describe('EventPackagePage — Start Episode lands on the Overview', () => {
     fireEvent.click(start);
     fireEvent.click(await screen.findByTestId('start-anyway'));
     fireEvent.click(await screen.findByTestId('els-confirm'));
+    // "Who's new" (Task #3202) follows the locations; No one new starts as before.
+    fireEvent.click(await screen.findByTestId('wn-none'));
+    fireEvent.click(screen.getByTestId('wn-start'));
 
     await waitFor(() => expect(screen.getByTestId('landed').textContent).toBe('/episodes/ep-9?tab=overview'));
     expect(api.post).toHaveBeenCalledWith(START_URL, {
@@ -135,6 +138,9 @@ describe('EventPackagePage — Start Episode lands on the Overview', () => {
 
     fireEvent.click(start);
     fireEvent.click(await screen.findByTestId('els-confirm'));
+    // "Who's new" (Task #3202) follows the locations; No one new starts as before.
+    fireEvent.click(await screen.findByTestId('wn-none'));
+    fireEvent.click(screen.getByTestId('wn-start'));
 
     await waitFor(() => expect(screen.getByTestId('landed').textContent).toBe('/episodes/ep-9?tab=overview'));
     expect(screen.queryByTestId('start-confirm')).toBeNull();
@@ -210,6 +216,9 @@ describe('EventPackagePage — the Episode Locations step at Start Episode', () 
     fireEvent.change(screen.getByLabelText('Extra location 1 name'), { target: { value: 'Car' } });
 
     fireEvent.click(screen.getByTestId('els-confirm'));
+    // "Who's new" (Task #3202) follows the locations; No one new starts as before.
+    fireEvent.click(await screen.findByTestId('wn-none'));
+    fireEvent.click(screen.getByTestId('wn-start'));
     await waitFor(() => expect(screen.getByTestId('landed').textContent).toBe('/episodes/ep-9?tab=overview'));
     expect(api.post).toHaveBeenCalledWith(START_URL, {
       draft_script: false,
@@ -243,7 +252,15 @@ describe('EventPackagePage — the Episode Locations step at Start Episode', () 
     renderPage();
     fireEvent.click(await readyStart());
     fireEvent.click(await screen.findByTestId('els-confirm'));
+    // "Who's new" (Task #3202) follows the locations; No one new starts as before.
+    fireEvent.click(await screen.findByTestId('wn-none'));
+    fireEvent.click(screen.getByTestId('wn-start'));
     await screen.findByText('This scene set belongs to another show');
+    // "Who's new" stays open; Back returns to the locations step as it was.
+    expect(screen.getByTestId('whos-new-step')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+    expect(screen.queryByTestId('whos-new-step')).toBeNull();
+    expect(screen.getByTestId('locations-step-wrap').hidden).toBe(false);
     expect(screen.getByTestId('episode-locations-step')).toBeTruthy();
   });
 
@@ -297,5 +314,111 @@ describe('EventPackagePage — the Episode Locations step at Start Episode', () 
     fireEvent.click(screen.getByTestId('els-change-event'));
     fireEvent.click(await screen.findByTestId('els-option-set-loft'));
     expect(screen.queryByTestId('els-gap-event')).toBeNull();
+  });
+});
+
+// "Who's new in Lala's life this episode?" (Task #3202; the cast read §8d):
+// between the locations step and generate-episode, three answers.
+describe('EventPackagePage — Who\'s new at Start Episode', () => {
+  // The featured guest in COMPLETE_EVENT has no Feed profile id, so nothing is excluded.
+  const CLOSE_URL = '/api/v1/social-profiles/lala/close-friends?show_id=show-1';
+  const REGISTRIES_URL = '/api/v1/character-registry/registries?show_id=show-1';
+  const PROPOSE_URL = '/api/v1/character-generation/cast/propose';
+  const KEEP_URL = '/api/v1/character-generation/cast/keep';
+  const NOVA = { display_name: 'Nova Reyes', role_label: 'gallery assistant', reason: 'No one lives in Echo Park', description: 'Hands out the programmes.', pulse: { handle: 'nova_r' } };
+  const guestPuts = () => vi.mocked(api.put).mock.calls.filter(([url]) => url === EVENT_URL);
+  const revealPuts = () => vi.mocked(api.put).mock.calls.filter(([url]) => url === '/api/v1/pulse-reveals');
+
+  beforeEach(() => {
+    Object.values(api).forEach((fn) => fn?.mockReset?.());
+    stored = JSON.parse(JSON.stringify(COMPLETE_EVENT));
+    vi.mocked(api.get).mockImplementation(async (url) => {
+      if (url === EVENT_URL) {
+        return { data: {
+          success: true, event: stored, sourceProfile: null, startedFromProfile: null,
+          sceneSet: null, venueLocation: null, invitationAsset: null, usedInEpisode: null,
+        } };
+      }
+      if (url === LOCATIONS_URL) {
+        return { data: { success: true, data: {
+          locations: [{ role: 'home', scene_set_id: HOME.id, name: null, scene_set: HOME }],
+          missing: ['event', 'closet'], defaults: { home_set_id: HOME.id, closet_set_id: null },
+        } } };
+      }
+      if (url === SETS_URL) return { data: { success: true, data: [HOME] } };
+      if (url === CLOSE_URL) return { data: { data: { lala_profile_id: 1, friends: [{ id: 41, handle: '@mira', display_name: 'Mira', closeness: 0.8, friend: true }, { id: 42, handle: '@jo', display_name: 'Jo', closeness: 0.2, friend: false }] } } };
+      if (url === REGISTRIES_URL) return { data: { success: true, registries: [{ id: 'reg-1', show_id: 'show-1' }] } };
+      return { data: { success: true, deliverables: [], locked: false } };
+    });
+    vi.mocked(api.post).mockImplementation(async (url) => {
+      if (url === START_URL) return { data: { success: true, data: { episode: { id: 'ep-9' } } } };
+      if (url === PROPOSE_URL) return { data: { success: true, proposals: [NOVA] } };
+      if (url === KEEP_URL) return { data: { success: true, character: { id: 'rc-1' }, profile: { id: 77, handle: '@nova_r', display_name: 'Nova Reyes' } } };
+      return { data: { success: true } };
+    });
+    vi.mocked(api.put).mockImplementation(async (url, body) => {
+      if (url === EVENT_URL) { stored = { ...stored, ...body }; return { data: { success: true, event: stored } }; }
+      return { data: { success: true } };
+    });
+  });
+
+  async function toWhosNew() {
+    renderPage();
+    fireEvent.click(await readyStart());
+    fireEvent.click(await screen.findByTestId('els-confirm'));
+    return screen.findByTestId('whos-new-step');
+  }
+
+  test('it is asked after the locations and before generate-episode, with three answers', async () => {
+    const step = await toWhosNew();
+    expect(step.textContent).toContain("Who's new in Lala's life this episode?");
+    for (const key of ['new', 'feature', 'none']) expect(screen.getByTestId(`wn-${key}`)).toBeTruthy();
+    expect(vi.mocked(api.post).mock.calls.some(([url]) => url === START_URL)).toBe(false);
+    expect(screen.getByTestId('locations-step-wrap').hidden).toBe(true);
+  });
+
+  test('No one new changes nothing: no guest save, no reveal, only generate-episode', async () => {
+    await toWhosNew();
+    fireEvent.click(screen.getByTestId('wn-none'));
+    fireEvent.click(screen.getByTestId('wn-start'));
+    await waitFor(() => expect(screen.getByTestId('landed').textContent).toBe('/episodes/ep-9?tab=overview'));
+    expect(guestPuts()).toHaveLength(0);
+    expect(revealPuts()).toHaveLength(0);
+    expect(vi.mocked(api.post).mock.calls.map(([url]) => url)).toEqual([START_URL]);
+  });
+
+  test('Feature existing friends: the closest are offered, the chosen join the guests featured, then the episode starts', async () => {
+    await toWhosNew();
+    fireEvent.click(screen.getByTestId('wn-feature'));
+    const mira = await screen.findByTestId('wn-friend-41');
+    expect(screen.getByTestId('wn-feature-body').textContent).toContain('Up to 4 more can be featured (1/5 now)');
+    fireEvent.click(mira);
+    fireEvent.click(screen.getByTestId('wn-start'));
+    await waitFor(() => expect(screen.getByTestId('landed').textContent).toBe('/episodes/ep-9?tab=overview'));
+    expect(guestPuts()).toHaveLength(1);
+    const guests = guestPuts()[0][1].canon_consequences.automation.guest_profiles;
+    expect(guests).toEqual([{ id: 'g1', featured: true }, { profile_id: 41, handle: '@mira', display_name: 'Mira', featured: true, story_role: null }]);
+    expect(revealPuts()).toHaveLength(0);
+    const order = vi.mocked(api.put).mock.invocationCallOrder[0] < vi.mocked(api.post).mock.invocationCallOrder.at(-1);
+    expect(order).toBe(true); // guests saved before generate-episode
+  });
+
+  test('Introduce a new friend: proposed from this event, kept, added as a guest, and revealed in the new episode', async () => {
+    await toWhosNew();
+    fireEvent.click(screen.getByTestId('wn-new'));
+    const card = await screen.findByTestId('wn-proposal');
+    expect(card.textContent).toContain('Nova Reyes');
+    expect(card.textContent).toContain('No one lives in Echo Park');
+    const propose = vi.mocked(api.post).mock.calls.find(([url]) => url === PROPOSE_URL);
+    expect(propose[1]).toMatchObject({ registry_id: 'reg-1', count: 1 });
+    expect(propose[1].idea).toContain('Velour Awards Night');
+    fireEvent.click(screen.getByTestId('wn-start'));
+    await waitFor(() => expect(screen.getByTestId('landed').textContent).toBe('/episodes/ep-9?tab=overview'));
+    expect(vi.mocked(api.post).mock.calls.find(([url]) => url === KEEP_URL)[1]).toEqual({ registry_id: 'reg-1', proposal: NOVA });
+    const guests = guestPuts()[0][1].canon_consequences.automation.guest_profiles;
+    expect(guests).toContainEqual({ profile_id: 77, handle: '@nova_r', display_name: 'Nova Reyes', featured: false, story_role: null });
+    expect(revealPuts()).toEqual([['/api/v1/pulse-reveals', {
+      show_id: 'show-1', item_type: 'character', item_id: '77', episode_id: 'ep-9', moment: 'lala_arrives', mode: 'hidden',
+    }]]);
   });
 });
