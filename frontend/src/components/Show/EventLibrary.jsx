@@ -803,7 +803,7 @@ The revised event should feel like a completely different experience from the si
                             const res = await api.post(`/api/v1/world/${showId}/events/bulk-delete`, { delete_all_drafts: true });
                             setToast(`Deleted ${res.data.deleted} draft events${res.data.kept ? `, kept ${res.data.kept} linked` : ''}`);
                             loadData();
-                          } catch (err) { setToast('Failed: ' + (err.response?.data?.error || err.message)); }
+                          } catch (err) { setToast(err.response?.status === 403 ? 'Only an admin can delete events in bulk' : 'Failed: ' + (err.response?.data?.error || err.message)); }
                         }} style={{ ...S.menuItem, color: 'var(--danger)' }}>Delete Drafts</button>
                         <button onClick={async () => {
                           setEventsHeaderMenuOpen(false);
@@ -813,7 +813,7 @@ The revised event should feel like a completely different experience from the si
                             const res = await api.post(`/api/v1/world/${showId}/events/bulk-delete`, { delete_all: true });
                             setToast(`Deleted ${res.data.deleted} events${res.data.kept ? `, kept ${res.data.kept} used or linked` : ''}`);
                             loadData();
-                          } catch (err) { setToast('Failed: ' + (err.response?.data?.error || err.message)); }
+                          } catch (err) { setToast(err.response?.status === 403 ? 'Only an admin can delete events in bulk' : 'Failed: ' + (err.response?.data?.error || err.message)); }
                         }} style={{ ...S.menuItem, color: 'var(--danger)' }}>Delete All</button>
                     </div>
                   </>

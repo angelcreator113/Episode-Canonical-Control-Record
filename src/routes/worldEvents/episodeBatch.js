@@ -14,7 +14,7 @@
 const express = require('express');
 const router = express.Router();
 
-const { requireAuth } = require('../../middleware/auth');
+const { requireAuth, authorize } = require('../../middleware/auth');
 const { aiRateLimiter } = require('../../middleware/aiRateLimiter');
 const { eventEpisodeConflictBody, EVENT_EPISODE_CONFLICT_CODE } = require('../../utils/eventEpisodeLink');
 const { findMissingPrices, dealPriceRequiredError, dealPriceRequiredBody, DEAL_PRICE_REQUIRED_CODE } = require('../../services/dealPricingService');
@@ -239,8 +239,8 @@ router.post('/world/:showId/events/:eventId/regenerate-episode', requireAuth, ai
 // and not linked from another table (utils/worldEventSafeDelete); used or
 // linked events are kept and listed in kept_events, never deleted. A named id
 // that is used or linked is refused (refused_ids). `deleted` is the count the
-// Event Library toast reads.
-router.post('/world/:showId/events/bulk-delete', requireAuth, async (req, res) => {
+// Event Library toast reads. ADMIN only (403 AUTH_GROUP_REQUIRED otherwise).
+router.post('/world/:showId/events/bulk-delete', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { showId } = req.params;
     const { ids, delete_all_drafts, delete_all } = req.body || {};
