@@ -325,24 +325,9 @@ function getPreview(previewId, requesterId = null) {
   return entry.data;
 }
 
-// Persistent preview storage in DB
-async function ensurePreviewsTable() {
-  await sequelize.query(`
-    CREATE TABLE IF NOT EXISTS ecosystem_previews (
-      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      preview_id VARCHAR(255) UNIQUE NOT NULL,
-      world_tag VARCHAR(100) NOT NULL DEFAULT 'lalaverse',
-      characters JSONB NOT NULL DEFAULT '[]',
-      generation_notes TEXT DEFAULT '',
-      status VARCHAR(50) DEFAULT 'pending',
-      created_at TIMESTAMP DEFAULT NOW(),
-      updated_at TIMESTAMP DEFAULT NOW()
-    )
-  `).catch(e => console.warn('[world-studio] ecosystem_previews table create error:', e?.message));
-}
-let previewsTableReady = false;
+// Persistent preview storage in DB: ecosystem_previews is created by migration
+// 20261104200000; the application never creates tables at runtime (Evoni, 2026-11-04).
 async function persistPreviewToDB(previewId, data, _ownerId = null) {
-  if (!previewsTableReady) { await ensurePreviewsTable(); previewsTableReady = true; }
   await sequelize.query(`
     INSERT INTO ecosystem_previews (preview_id, world_tag, characters, generation_notes, status)
     VALUES (:previewId, :worldTag, :characters, :notes, 'pending')
@@ -361,7 +346,6 @@ async function persistPreviewToDB(previewId, data, _ownerId = null) {
 // Cleanup orphaned previews older than 1 hour (fire once on startup, then hourly)
 async function cleanupOrphanedPreviews() {
   try {
-    await ensurePreviewsTable();
     const [result] = await sequelize.query(
       `DELETE FROM ecosystem_previews WHERE status = 'pending' AND created_at < NOW() - INTERVAL '1 hour' RETURNING preview_id`,
       { type: sequelize.QueryTypes.SELECT }
@@ -2479,7 +2463,6 @@ router.get('/world/preview/:previewId', optionalAuth, async (req, res) => {
 
   // Fall back to DB
   try {
-    if (!previewsTableReady) { await ensurePreviewsTable(); previewsTableReady = true; }
     const [row] = await Q(req,
       `SELECT * FROM ecosystem_previews WHERE preview_id = :pid AND status = 'pending'`,
       { replacements: { pid: req.params.previewId } }
@@ -2499,7 +2482,6 @@ router.get('/world/preview/:previewId', optionalAuth, async (req, res) => {
 // PUBLIC: World cluster read; published catalog data with no creator attribution per Item 15 lock
 router.get('/world/previews', optionalAuth, async (req, res) => {
   try {
-    if (!previewsTableReady) { await ensurePreviewsTable(); previewsTableReady = true; }
     const rows = await Q(req,
       `SELECT preview_id, world_tag, generation_notes, status, created_at,
               jsonb_array_length(characters) AS character_count
@@ -2517,7 +2499,6 @@ router.get('/world/previews', optionalAuth, async (req, res) => {
  */
 router.delete('/world/previews/:previewId', requireAuth, async (req, res) => {
   try {
-    if (!previewsTableReady) { await ensurePreviewsTable(); previewsTableReady = true; }
     await sequelize.query(
       `DELETE FROM ecosystem_previews WHERE preview_id = :pid`,
       { replacements: { pid: req.params.previewId }, type: sequelize.QueryTypes.DELETE }

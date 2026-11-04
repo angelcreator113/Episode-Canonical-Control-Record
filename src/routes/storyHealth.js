@@ -239,18 +239,7 @@ router.get('/versions/chapter/:chapterId', requireAuth, async (req, res) => {
     if (!db) return res.json({ versions: [] });
     const { sequelize } = db;
 
-    // Ensure version table exists
-    await sequelize.query(`
-      CREATE TABLE IF NOT EXISTS chapter_versions (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        chapter_id UUID NOT NULL,
-        version_number INT NOT NULL DEFAULT 1,
-        content TEXT,
-        word_count INT DEFAULT 0,
-        snapshot_reason VARCHAR(100) DEFAULT 'manual',
-        created_at TIMESTAMPTZ DEFAULT NOW()
-      )
-    `);
+    // chapter_versions is created by migration 20261104200000 (Evoni, 2026-11-04).
 
     const [versions] = await sequelize.query(`
       SELECT id, version_number, word_count, snapshot_reason, created_at
@@ -272,17 +261,7 @@ router.post('/versions/chapter/:chapterId', requireAuth, async (req, res) => {
     if (!db) return res.status(500).json({ error: 'Models not loaded' });
     const { sequelize } = db;
 
-    await sequelize.query(`
-      CREATE TABLE IF NOT EXISTS chapter_versions (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        chapter_id UUID NOT NULL,
-        version_number INT NOT NULL DEFAULT 1,
-        content TEXT,
-        word_count INT DEFAULT 0,
-        snapshot_reason VARCHAR(100) DEFAULT 'manual',
-        created_at TIMESTAMPTZ DEFAULT NOW()
-      )
-    `);
+    // chapter_versions is created by migration 20261104200000 (Evoni, 2026-11-04).
 
     const { content, reason } = req.body;
 

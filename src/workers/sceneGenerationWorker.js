@@ -272,13 +272,9 @@ async function start() {
   if (running) return;
   running = true;
   console.log(`🎬 [GenWorker] Started — polling every ${POLL_INTERVAL_MS}ms, concurrency ${CONCURRENCY}`);
-  // Ensure the generation_jobs table exists before polling
-  try {
-    await GenerationJob.sync();
-    console.log('🎬 [GenWorker] generation_jobs table ready');
-  } catch (err) {
-    console.error('🎬 [GenWorker] Failed to sync generation_jobs table:', err.message);
-  }
+  // generation_jobs is created by migration 20260323000000; the worker never
+  // creates tables (Evoni, 2026-11-04). A missing table shows up in the
+  // recovery and poll errors below.
   recoverStuckJobs().then(() => pollLoop());
 }
 
