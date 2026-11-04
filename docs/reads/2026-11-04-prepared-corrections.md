@@ -276,3 +276,70 @@ All three are preserved as distinct stories:
 - `e8a5fcff…` the LalaVerse Halloween talent show.
 
 Story order and release times stay pending Evoni's review. They stay excluded from continuity carry-over (ambiguous same-slot order). No deletion, merge or rescheduling.
+
+## 7. Execution procedure for A and B (approved by Evoni 2026-11-04; run only after this procedure is confirmed)
+
+The files live in `docs/reads/2026-11-04-corrections/`:
+
+| File | Purpose |
+|---|---|
+| `A-episode1-purpose.sql` | the change |
+| `A-verify.sql` | read-only check |
+| `A-undo.sql` | rollback |
+| `B-unown-test-items.sql` | the change |
+| `B-verify.sql` | read-only check |
+| `B-undo.sql` | rollback |
+
+**A** is the §2.4 SQL with `ON_ERROR_STOP`, plus a post-update check inside the transaction that confirms the frozen snapshot is unchanged.
+
+**B** is the §4.1 SQL with the manual "expect exactly 4 rows" turned into automatic guards. Inside one transaction, it stops (nothing changed) unless:
+- exactly 4 of the items are owned;
+- 0 valid purchases exist for them;
+- exactly the 8 reviewed references exist (4 test-episode links + 4 voided rows);
+- exactly 4 ownership changes result;
+- the Prime Bank ledger sum and row count are unchanged.
+
+**Local test against a fixture mirroring the production rows (2026-11-04):**
+
+| Test | Result |
+|---|---|
+| A run | `UPDATE 1`, `UPDATE 1`, `COMMIT`, `A COMMITTED` |
+| A verify | slot `edited` / `edited` / "Lala enters Studio by Sable…"; brief draft with the dilemma and lesson; snapshot `2026-10-02T06:23:32.276Z`, the original text, no `corrections` key |
+| A rerun | `A STOPPED: slot 1 is not the reviewed value; nothing changed` (exit 3) |
+| A undo | exact before values restored |
+| B run | 4-row manifest, `UPDATE 4`, `COMMIT`, `B COMMITTED` |
+| B verify | 4 items not owned; voided rows kept (4); test-episode links kept (4) |
+| B rerun | `B STOPPED: expected 4 owned items, found 0` |
+| B with a valid purchase present | `B STOPPED: 1 valid purchase(s) now exist` |
+| B with an extra reference | `B STOPPED: expected the 8 reviewed references…, found 9` (ownership unchanged) |
+| B undo | ownership restored |
+
+**On the box** (writes need the **app** database user from `~/episode-metadata/.env`; no value is printed):
+
+```
+getv(){ grep -E "^$1=" "$2" | tail -1 | cut -d= -f2- | sed -e "s/^[\"']//" -e "s/[\"']\$//"; }
+APP=~/episode-metadata/.env
+export PGHOST="$(getv DB_HOST $APP)" PGDATABASE="$(getv DB_NAME $APP)" PGPORT="$(getv DB_PORT $APP)"
+[ -z "$PGDATABASE" ] && export PGDATABASE="$(getv DB_DATABASE $APP)"; export PGPORT="${PGPORT:-5432}" PGSSLMODE=require
+export PGUSER="$(getv DB_USER $APP)" PGPASSWORD="$(getv DB_PASSWORD $APP)"
+# A (independent):
+psql -X -f ~/A-episode1-purpose.sql; echo "exit $?"
+psql -X -f ~/A-verify.sql
+# B (independent):
+psql -X -f ~/B-unown-test-items.sql; echo "exit $?"
+psql -X -f ~/B-verify.sql
+unset PGPASSWORD
+```
+
+**Expected success:**
+
+| Step | Expected |
+|---|---|
+| A | `UPDATE 1` twice, `DO`, `COMMIT`, `A COMMITTED`, `exit 0` |
+| A verify | slot `edited` / `edited` / "Lala enters Studio by Sable's…"; brief `draft`, `has_dilemma t`, `has_lesson t`; frozen snapshot `2026-10-02T06:23:32.276Z`, "Lala discovers her authentic design voice…", `has_corrections f` |
+| B | manifest of 4 rows (all `is_owned t`), `UPDATE 4`, `DO`, `COMMIT`, `B COMMITTED`, `exit 0` |
+| B verify | the 4 items `is_owned f`; `voided 4` and no `executed` row; `test_episode_links_kept 4`; `lala_coins 768` (unchanged); `owned_items 9` (was 13) |
+
+**Any `A STOPPED` or `B STOPPED` (exit 3):** nothing was changed. Stop, paste the output, and do not retry or adjust.
+
+**Undo** (only on Evoni's request): `psql -X -f ~/A-undo.sql` and/or `psql -X -f ~/B-undo.sql`.
