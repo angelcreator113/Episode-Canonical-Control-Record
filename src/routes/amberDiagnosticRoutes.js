@@ -22,9 +22,13 @@ const path      = require('path');
 const fs        = require('fs').promises;
 const { execFileSync } = require('child_process');
 const db        = require('../models');
-const { requireAuth } = require('../middleware/auth');
+const { requireAuth, authorize } = require('../middleware/auth');
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 
+// Every route is ADMIN only (Evoni: "Enforce permissions on the server, not
+// only the frontend"). They scan the codebase, approve findings and run
+// Claude Code against CLAUDE_CODE_PROJECT_DIR (execute); requireAuth alone let
+// any signed-in user drive that.
 const client     = new Anthropic();
 const PROJECT_DIR = process.env.CLAUDE_CODE_PROJECT_DIR || '';
 
@@ -379,7 +383,7 @@ Respond with ONLY the code change, wrapped in a diff block. No explanation.`,
 // ─────────────────────────────────────────────────────────────────────────────
 
 // POST /api/v1/amber/diagnostic/scan
-router.post('/scan', requireAuth, async (req, res) => {
+router.post('/scan', requireAuth, authorize(['ADMIN']), async (req, res) => {
   const trigger = req.body.trigger || 'manual';
   try {
     const result = await runDiagnosticScan(trigger);
@@ -390,7 +394,7 @@ router.post('/scan', requireAuth, async (req, res) => {
 });
 
 // GET /api/v1/amber/diagnostic/findings
-router.get('/findings', requireAuth, async (req, res) => {
+router.get('/findings', requireAuth, authorize(['ADMIN']), async (req, res) => {
   const where = {};
   if (req.query.status) {
     where.status = req.query.status.includes(',')
@@ -417,7 +421,7 @@ router.get('/findings', requireAuth, async (req, res) => {
 
 // GET /api/v1/amber/diagnostic/urgent
 // Used by Amber chat to surface critical findings in conversation
-router.get('/urgent', requireAuth, async (req, res) => {
+router.get('/urgent', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const findings = await db.AmberFinding.findAll({
       where: {
@@ -444,7 +448,7 @@ router.get('/urgent', requireAuth, async (req, res) => {
 });
 
 // POST /api/v1/amber/diagnostic/findings/:id/approve
-router.post('/findings/:id/approve', requireAuth, async (req, res) => {
+router.post('/findings/:id/approve', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const finding = await db.AmberFinding.findByPk(req.params.id);
     if (!finding) return res.status(404).json({ error: 'Finding not found' });
@@ -476,7 +480,7 @@ router.post('/findings/:id/approve', requireAuth, async (req, res) => {
 });
 
 // POST /api/v1/amber/diagnostic/findings/:id/execute
-router.post('/findings/:id/execute', requireAuth, aiRateLimiter, async (req, res) => {
+router.post('/findings/:id/execute', requireAuth, authorize(['ADMIN']), aiRateLimiter, async (req, res) => {
   try {
     const finding = await db.AmberFinding.findByPk(req.params.id);
     if (!finding) return res.status(404).json({ error: 'Finding not found' });
@@ -534,7 +538,7 @@ In 1-2 sentences, did it work? What changed? Be specific.`,
 });
 
 // POST /api/v1/amber/diagnostic/findings/:id/dismiss
-router.post('/findings/:id/dismiss', requireAuth, async (req, res) => {
+router.post('/findings/:id/dismiss', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const finding = await db.AmberFinding.findByPk(req.params.id);
     if (!finding) return res.status(404).json({ error: 'Finding not found' });
@@ -546,7 +550,7 @@ router.post('/findings/:id/dismiss', requireAuth, async (req, res) => {
 });
 
 // GET /api/v1/amber/diagnostic/queue
-router.get('/queue', requireAuth, async (req, res) => {
+router.get('/queue', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const tasks = await db.AmberTaskQueue.findAll({
       where:  { status: { [Op.in]: ['backlog', 'ready', 'in_progress'] } },
@@ -559,7 +563,7 @@ router.get('/queue', requireAuth, async (req, res) => {
 });
 
 // POST /api/v1/amber/diagnostic/queue
-router.post('/queue', requireAuth, async (req, res) => {
+router.post('/queue', requireAuth, authorize(['ADMIN']), async (req, res) => {
   const { title, description, type, priority, source } = req.body;
   if (!title) return res.status(400).json({ error: 'title required' });
 
