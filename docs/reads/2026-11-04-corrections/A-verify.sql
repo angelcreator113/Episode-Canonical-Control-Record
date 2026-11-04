@@ -1,12 +1,13 @@
--- A verification (read only).
+-- A verification (read only): exact comparisons.
 \pset pager off
 SET default_transaction_read_only = on;
-SELECT 'slot' AS record, intention_source, story_purposes->0->>'source' AS purposes_source, left(story_purpose, 60) AS purpose_start, updated_at
-  FROM season_slots WHERE id = '3e9a5200-161e-4369-b596-a915a268cd43';
-SELECT 'brief' AS record, status, left(narrative_purpose, 60) AS purpose_start,
-       (narrative_purpose LIKE '%Core dilemma: How much should Lala invest%') AS has_dilemma,
-       (narrative_purpose LIKE '%Creator lesson: Looking successful%') AS has_lesson, updated_at
-  FROM episode_briefs WHERE id = '661234d3-bf88-4c8f-b253-8352261185da';
-SELECT 'frozen snapshot' AS record, season_context->>'snapshotted_at' AS snapshotted_at, left(season_context->>'story_purpose', 60) AS purpose_start,
-       (season_context ? 'corrections') AS has_corrections
-  FROM episodes WHERE id = '8b9301a6-2d99-45a7-8488-4fe40504dd55';
+SELECT (story_purpose = $p$Lala enters Studio by Sable's experimental fashion event, hoping to make connections, create compelling content and establish herself in Dream Cities' competitive creator scene. She must balance the cost of showing up with the opportunity to gain attention, strengthen relationships and secure future opportunities.$p$) AS slot_purpose_exact,
+       (story_purposes = $j$[{"text": "Lala enters Studio by Sable's experimental fashion event, hoping to make connections, create compelling content and establish herself in Dream Cities' competitive creator scene. She must balance the cost of showing up with the opportunity to gain attention, strengthen relationships and secure future opportunities.", "source": "edited", "primary": true, "story_thread_id": null}]$j$::jsonb) AS slot_purposes_exact,
+       intention_source FROM season_slots WHERE id = '3e9a5200-161e-4369-b596-a915a268cd43';
+SELECT status, (narrative_purpose = $p$Lala enters Studio by Sable's experimental fashion event, hoping to make connections, create compelling content and establish herself in Dream Cities' competitive creator scene. She must balance the cost of showing up with the opportunity to gain attention, strengthen relationships and secure future opportunities.
+
+Core dilemma: How much should Lala invest in being seen before she knows whether the opportunity will pay off?
+
+Creator lesson: Looking successful and building a sustainable creator career aren't always the same thing.$p$) AS brief_intent_exact FROM episode_briefs WHERE id = '661234d3-bf88-4c8f-b253-8352261185da';
+SELECT (season_context = $j${"label": "S1 · E1", "phase": {"title": "Foundation", "number": 1, "tagline": "Prove you belong", "emotional_arc": "curiosity → first stumble → finding her footing"}, "arc_id": "f5607805-cba1-45a8-85d5-9560eafc58c9", "arc_title": "Soft Luxury Ascension", "slot_number": 1, "career_focus": "Build the Portfolio, First Impressions", "story_thread": null, "outcome_range": {"max": "pass", "min": "safe"}, "season_number": 1, "story_purpose": "Lala discovers her authentic design voice by immersing herself in experimental fashion, setting the tone for her luxury career journey.", "snapshotted_at": "2026-10-02T06:23:32.276Z", "story_purposes": [{"text": "Lala discovers her authentic design voice by immersing herself in experimental fashion, setting the tone for her luxury career journey.", "primary": true, "story_thread": null}], "desired_pressure": "Low", "position_in_phase": 1}$j$::jsonb) AS frozen_snapshot_unchanged FROM episodes WHERE id = '8b9301a6-2d99-45a7-8488-4fe40504dd55';
+SELECT field, applied_at, applied_by, undone_at FROM data_correction_log WHERE correction_key = 'A-2026-11-04' ORDER BY field;

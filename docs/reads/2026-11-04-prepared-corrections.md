@@ -343,3 +343,49 @@ unset PGPASSWORD
 **Any `A STOPPED` or `B STOPPED` (exit 3):** nothing was changed. Stop, paste the output, and do not retry or adjust.
 
 **Undo** (only on Evoni's request): `psql -X -f ~/A-undo.sql` and/or `psql -X -f ~/B-undo.sql`.
+
+## 8. Version 2: the three safeguards (Evoni's review question, 2026-11-04)
+
+**Answer to the review question about version 1:** none of the three safeguards was in place.
+1. **Exact full-value comparisons:** no. The old brief Intent and the after-checks used `LIKE` prefixes (v1 `A-episode1-purpose.sql` lines 17 and 39–43).
+2. **Concurrency protection:** no. There were no row locks, no isolation level, and no show lock in B.
+3. **Durable, conditional undo:** no. B's manifest was a temporary table plus console output; the undo files used hard-coded values and prefix matches.
+
+**Version 2** replaces every file in `2026-11-04-corrections/`. Nothing has been executed.
+
+| Safeguard | Implemented in v2 |
+|---|---|
+| **1. Exact full values** | A compares the slot `story_purpose` and `story_purposes` (jsonb equality), `intention_source`, the brief `narrative_purpose` (all 615 characters) and the frozen `season_context` (jsonb equality) with `=` before the change. After the change it checks every new value with `=` and the snapshot again. `00-preflight.sql` prints md5 fingerprints that must match before anything runs: slot purpose `3bdba32fcc61f942ea888962f2e112f8`, slot purposes `37c3bc219a3c36bc2c63ced52c4fa560`, brief `7ee5fbf79bc60eeb6d03531f8cb3f76e` (length 615), snapshot `87af8a60b96fae7b3d7419f1fa72e6cb`. |
+| **2. Concurrency** | Both run `BEGIN ISOLATION LEVEL SERIALIZABLE` with `lock_timeout 10s`. **A** locks the slot, brief and episode rows `FOR UPDATE` before its guards. **B** takes the **same show lock that purchases take** (`shows … FOR NO KEY UPDATE`, as `coinLedgerSync.lockedLedgerBalance` does), so no purchase, Lock or Complete charge can interleave. It also locks the four wardrobe rows `FOR UPDATE` (blocking ownership edits and FK-linked references), then re-checks purchases, the exact four voided row ids, all eight references and that the four links point to the deleted test episode. Serializable isolation aborts anything the locks do not cover. |
+| **3. Durable, conditional undo** | A new table **`data_correction_log`**: one row per corrected field with the exact before/after values, `approved_by`, `approval_ref`, `applied_at`/`applied_by`, `undone_at`/`undone_by`, and `UNIQUE (correction_key, record_table, record_id, field)`, so a correction cannot be applied twice. No API route reads it, and `REVOKE ALL … FROM PUBLIC`. A and B write their undo rows **inside** their transactions. Each undo restores the **logged** before-values only while every record still holds the **logged** after-value, then marks the rows undone; a second undo stops. **This needs a migration**, which is the one thing v2 requires beyond the A and B approvals (proposed file: `proposed-migration-create-data-correction-log.js`, kept outside `src/migrations` so it cannot run). |
+
+**Local test on a fixture with the exact production values (2026-11-04):**
+
+| # | Test | Result |
+|---|---|---|
+| 1 | A | `A COMMITTED` |
+| 2 | A verify | all exact checks `t`; 4 log rows |
+| 3 | A rerun | stopped: "slot 1 does not hold the exact reviewed values" |
+| 4 | A undo | `A UNDONE`; slot, purposes, source, brief and snapshot fingerprints all restored exactly |
+| 5 | A undo again | stopped: "no complete, not-yet-undone A record" |
+| 6 | A after an undo | stopped by the unique key (re-applying needs a new correction key) |
+| 7–8 | B, B verify | `B COMMITTED`; 4 items not owned, 4 voided rows kept, 4 links kept, 4 log rows (true → false) |
+| 9 | B rerun | stopped: "expected 4 owned items, found 0" |
+| 10 | B undo | `B UNDONE`, 4 owned again |
+| 11 | B undo again | stopped |
+| 12 | valid purchase present | B stopped |
+| 13 | new dependency | B stopped ("found 9") |
+| 14 | a reviewed voided row changed | B stopped |
+| 15–16 | log table missing | A and B stopped |
+| 17 | a purchase holding the show lock | B cancelled by lock timeout; nothing changed |
+| 18 | the slot being edited | A cancelled by lock timeout; nothing changed |
+
+The migration (up, guarded re-run, down when empty, up) also passed locally. The fixture and the test table were removed afterwards.
+
+**Revised order (each step needs Evoni's go-ahead):**
+1. **Approve the `data_correction_log` migration** (G2). It goes into `src/migrations` through a PR and runs through the Deploy workflow, which snapshots first. Not authorized yet.
+2. Run `00-preflight.sql` read-only; the four fingerprints must match.
+3. Run A, then `A-verify.sql`.
+4. Run B, then `B-verify.sql`.
+
+A and B stay independent and each has its own undo.
