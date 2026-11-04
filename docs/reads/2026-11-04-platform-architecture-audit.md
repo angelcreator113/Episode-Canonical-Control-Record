@@ -580,3 +580,91 @@ So money, stats, goals and continuity are applied by **`completeEpisode` alone**
 - **Already admin-only on the server** (only their *pages* lacked a check): CFO, AI Costs, Decision Analytics, Site Organizer, Design Agent, Audit Logs and the Website admin writes.
 - **The real server gaps** were the **Recycle Bin** (list, restore, permanent delete) and the **Amber diagnostic engine** (scan, approve, execute Claude Code, queue). #3706 makes both admin-only and adds an "Admins only" page wrapper.
 - **The debug and seed routes** are handled in #3705.
+
+## 14. Studio by Sable: the representative brand case (read only, 2026-11-04)
+
+Evoni ran the read-only query on production (`SET default_transaction_read_only = on`, exit 0, 9 sections) and pasted the output. Nothing was changed: no split, no post reassignment and no relationship edit.
+
+### What exists
+
+| Record | Rows | What it says |
+|---|---|---|
+| Pulse profile `social_profiles` | 447 live, 446 deleted 2026-09-25 | Both are `@studiobysable`. Live 447 is "STUDIO BY SABLE", creator Sable Okonkwo-Reyes, `crossed`, home Echo Park, Los Angeles. Deleted 446 was creator Sable Orin Voss in the Dazzle District. Neither has `account` or `lalaverse_brand_id` in `full_profile`, and `public_persona` is empty. |
+| Registry character | c4931651 (`studiobysable`, accepted, LalaVerse registry, feed_profile_id 447) | `display_name` is the studio ("STUDIO BY SABLE"); `selected_name` is the person ("Sable Okonkwo-Reyes"). No `company_id` or `brand_id`. The description calls her an Instagram creator and designer. |
+| Brand registry `lalaverse_brands` | none | The studio has no brand record. |
+| World character `world_characters` | none | Sable is not a Dream Cities resident. |
+| Locations | showroom cccb4abe live (city "Echo Park", boutique); studio cc428e69 deleted 2026-10-04 (Dazzle District) | |
+| Scene sets | 7 rows, 2 live | One live "STUDIO BY SABLE's Studio" is linked to the showroom. One live "Sable Okonkwo-Reyes's Place of work" is linked to no location. Its 4 deleted duplicates were all deleted on 2026-10-23 within 80 seconds. |
+| Events | 9 rows, 5 live | See below. |
+| Opportunities | 1 | "Spring Capsule Campaign Model", booked, offered in Episode 1 (8b9301a6). |
+| Pulse posts | 5, all on 2026-10-17 | 2 other posts mention Sable. |
+| Relationships | 6 Pulse rows, 10 registry rows | See below. |
+
+### Events
+
+| Event | Status | Date | Host text | source_profile_id | Note |
+|---|---|---|---|---|---|
+| Wearable Experiments Studio Session | used, Episode 1 | 11-12 | STUDIO BY SABLE | 447 | |
+| Fabric and Form | draft | 11-12 | STUDIO BY SABLE | 447 | Same day as the used event. |
+| Fit Check with Stable | draft | 11-09 | STUDIO BY SABLE | none | "Stable" is a typo. |
+| Spring Capsule Campaign Model | ready | 12-09 | @studiobysable | none | Linked to the booked opportunity. |
+| STUDIO BY SABLE — follow-up | draft | 12-10 | STUDIO BY SABLE | 447 | |
+| Wearable Visions Preview | used, deleted | 11-12 | STUDIO BY SABLE | 447 | Used in a since-deleted episode. |
+| Studio Sable Style Sessions | used, deleted | 11-09 | velvetcore | 448 | Hosted by Marisol Vega's account. |
+| Event with studio by sable ×2 | draft, deleted | 11-09 | none | none | |
+
+No event uses `host_brand`. The host is free text in three spellings, and two live events have no profile link.
+
+### Relationships
+
+**Pulse** (`social_profile_relationships`, all mutual, all "From the story"):
+- rival: firstlightstudio, @showroom.lux, @thriftveil (Declan Ferris);
+- mentor: oribeauty;
+- couple: @slowsift **and** @velvetcore (Marisol Vega).
+
+**Registry** (`character_relationships`, all Active):
+- rival_brand: First Light Studio;
+- client_partner: Velour Atelier;
+- rival: SHOWROOM.LUX, thriftveil;
+- love_interest: slowsift and velvetcore;
+- friend: velvetcore;
+- represents: Ori Beauty, **and also** rival_brand: Ori Beauty;
+- collaborator: Lala.
+
+### Findings
+
+- **S1. Person and studio are one record.**
+  - The registry character carries the studio's name and the person's name in two fields.
+  - Company relationships (`rival_brand`, `client_partner`, `represents`) and personal ones (`love_interest`, `friend`) hang off the same row.
+  - There is no brand record to own the studio's events, opportunity, showroom or rivals. This is the merged-identity case named in §5.
+- **S2. Contradictory relationships.**
+  - Ori Beauty is a mentor (Pulse), a client she represents, and a rival brand (registry), all at once.
+  - velvetcore is couple, love_interest and friend.
+  - Two partners are both marked romantic and active.
+  - The Pulse side says Lala is only `aware`; the registry says `collaborator`.
+- **S3. Two Sables in history.**
+  - Orin Voss in the Dazzle District was deleted and replaced by Okonkwo-Reyes in Echo Park, LA, with the same handle.
+  - The live home and showroom are a real-world neighbourhood, not a Dream Cities district.
+- **S4. Event hosting is text, not a link.**
+  - There are three host spellings, `host_brand` is never used, and 2 of 5 live events have no `source_profile_id`.
+  - A brand page could not list "her events" reliably today.
+- **S5. The booked opportunity has no company and pays 0.00.**
+  - `brand_or_company` and `company_id` are empty, and the contact is the person.
+  - Whether 0.00 is intended (gifted, or exposure only) is not recorded.
+- **S6. Scene-set clutter.** One live "Place of work" is unlinked to any location, and 4 duplicates were deleted.
+
+### Proposed target shape (not implemented)
+
+- **Person:** registry character Sable Okonkwo-Reyes, keeping c4931651 so history stays attached. Its `display_name` would become the person's name, but only on Evoni's word.
+- **Brand:** a new `lalaverse_brands` row for "Studio by Sable", with `founder` linked to the person, the showroom and studio as its locations, and `host_brand` set on its events going forward.
+- **Pulse 447:** recorded as either the studio's account or her personal account (Evoni decides). If it is the studio's account, the posts stay where they are; only the account kind is recorded.
+- **Relationships:** company relationships would be re-pointed to the brand, and personal ones stay on the person. Each move is listed and approved one by one; historical rows are kept, not rewritten.
+
+### Questions for Evoni
+
+1. Is `@studiobysable` the studio's account or Sable's own?
+2. Which romance is canon: slowsift, velvetcore, both, or neither?
+3. What is Ori Beauty to her: mentor, client or rival?
+4. Is her home Echo Park, LA (as live) or the Dazzle District (as first written)?
+5. Is the Spring Capsule booking meant to pay 0.00?
+6. Should "Fit Check with Stable" read "Sable", and should Fabric and Form stay a draft on the same day as the used Episode 1 event?
