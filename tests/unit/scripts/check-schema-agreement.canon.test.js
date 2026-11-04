@@ -11,8 +11,15 @@
  * Task #2087: a live migration now creates episode_wardrobe
  * (20260927000000-create-episode-wardrobe.js), so EpisodeWardrobe is compared
  * with the migration tree, not the capture. The comparison's behaviour is
- * pinned on ContinuityBeat, which the live tree still only alters (it adds
- * deleted_at) and which the capture lists.
+ * pinned on ContinuityBeat, which the capture lists.
+ *
+ * Runtime DDL removal (#3711, 2026-11-04): migration 20261104200000 now
+ * creates continuity_beats, so in the live tree ContinuityBeat is compared
+ * with the migration tree too (last test). The canon comparison is still
+ * pinned on ContinuityBeat, against a fixture root: the live tree without
+ * that one migration, where ContinuityBeat is only altered (it adds
+ * deleted_at). No other model the capture lists declares a column a live
+ * migration adds, so none could stand in for it.
  *
  * Runs the checker with --json. Static read: no database.
  */
@@ -33,20 +40,35 @@ function run(extra, name) {
   return JSON.parse(fs.readFileSync(out, 'utf8')).step2;
 }
 
-let canon; let withoutNotes; let withoutDeletedAt; let off;
+// The live tree without 20261104200000 (links, no copies): src/ as it is,
+// src/migrations/ without the one file that creates the continuity tables.
+const FIXTURE = path.join(TMP, 'root-before-3711');
+fs.mkdirSync(path.join(FIXTURE, 'src', 'migrations'), { recursive: true });
+for (const e of fs.readdirSync(path.join(ROOT, 'src'))) {
+  if (e !== 'migrations') fs.symlinkSync(path.join(ROOT, 'src', e), path.join(FIXTURE, 'src', e));
+}
+for (const f of fs.readdirSync(path.join(ROOT, 'src', 'migrations'))) {
+  if (f !== '20261104200000-create-runtime-created-tables.js') {
+    fs.symlinkSync(path.join(ROOT, 'src', 'migrations', f), path.join(FIXTURE, 'src', 'migrations', f));
+  }
+}
+const atFixture = (extra) => ['--root', FIXTURE, '--step2-capture', CAPTURE, ...extra];
+
+let canon; let withoutNotes; let withoutDeletedAt; let off; let live;
 beforeAll(() => {
-  canon = run([], 'canon');
+  live = run([], 'live');
+  canon = run(atFixture([]), 'canon');
   // The same capture with continuity_beats.note taken out.
   const trimmed = path.join(TMP, 'capture-without-note.txt');
   fs.writeFileSync(trimmed, fs.readFileSync(CAPTURE, 'utf8').split('\n')
     .filter((l) => !/^\s*continuity_beats\s*\|\s*note\s*\|/.test(l)).join('\n'));
-  withoutNotes = run(['--step2-capture', trimmed], 'without-note');
+  withoutNotes = run(['--root', FIXTURE, '--step2-capture', trimmed], 'without-note');
   // The same capture with continuity_beats.deleted_at taken out: a live
   // migration adds that column, so it must still count as present.
   const trimmedDeleted = path.join(TMP, 'capture-without-deleted-at.txt');
   fs.writeFileSync(trimmedDeleted, fs.readFileSync(CAPTURE, 'utf8').split('\n')
     .filter((l) => !/^\s*continuity_beats\s*\|\s*deleted_at\s*\|/.test(l)).join('\n'));
-  withoutDeletedAt = run(['--step2-capture', trimmedDeleted], 'without-deleted-at');
+  withoutDeletedAt = run(['--root', FIXTURE, '--step2-capture', trimmedDeleted], 'without-deleted-at');
   off = run(['--step2-capture', 'none'], 'off');
 }, 120000);
 
@@ -68,10 +90,17 @@ test('a column a live migration adds counts as present even when the capture lac
 });
 
 test('EpisodeWardrobe: a live migration creates its table (Task #2087), so it is compared with the migration tree, and nothing is missing', () => {
-  expect(canon.canonCompared.map((x) => x.model)).not.toContain('EpisodeWardrobe');
-  expect(canon.noTable.map((x) => x.model)).not.toContain('EpisodeWardrobe');
-  expect(canon.alteredOnly.map((x) => x.model)).not.toContain('EpisodeWardrobe');
-  expect(canon.missing.filter((x) => x.model === 'EpisodeWardrobe')).toEqual([]);
+  expect(live.canonCompared.map((x) => x.model)).not.toContain('EpisodeWardrobe');
+  expect(live.noTable.map((x) => x.model)).not.toContain('EpisodeWardrobe');
+  expect(live.alteredOnly.map((x) => x.model)).not.toContain('EpisodeWardrobe');
+  expect(live.missing.filter((x) => x.model === 'EpisodeWardrobe')).toEqual([]);
+});
+
+test('ContinuityBeat in the live tree: 20261104200000 creates its table (#3711), so it is compared with the migration tree, and nothing is missing', () => {
+  expect(live.canonCompared.map((x) => x.model)).not.toContain('ContinuityBeat');
+  expect(live.noTable.map((x) => x.model)).not.toContain('ContinuityBeat');
+  expect(live.alteredOnly.map((x) => x.model)).not.toContain('ContinuityBeat');
+  expect(live.missing.filter((x) => x.model === 'ContinuityBeat')).toEqual([]);
 });
 
 test('--step2-capture none turns the comparison off', () => {
