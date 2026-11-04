@@ -5,7 +5,9 @@
  *
  * Orchestrates the full career lifecycle:
  *   Career Goal (active) → auto-generate Opportunity → convert to Event → Episode → completion
- *   → advance Opportunity status → update Goal progress → check Goal completion → spawn unlocks
+ *   → advance Opportunity status. Goal progress, completion and unlocks come
+ *   from the ledger and character_state (completeEpisode step 17, goal sync),
+ *   never from an opportunity's advance.
  *
  * Called from:
  *   - Opportunity advance route (status changes)
@@ -33,90 +35,28 @@ const _METRIC_OPP_TYPES = { // eslint-disable-line no-unused-vars
   engagement_rate:    ['brand_deal', 'podcast'],
 };
 
-// ── 1. OPPORTUNITY COMPLETION → GOAL PROGRESS ────────────────────────────────
+// ── 1. OPPORTUNITY ADVANCE → NO GOAL WRITE ────────────────────────────────────
 
 /**
- * When an opportunity reaches 'completed' or 'paid', update linked career goals.
- * Returns { goals_updated, goals_completed, unlocks }
+ * Called by the manual Advance route when an opportunity reaches 'completed'
+ * or 'paid'. It writes nothing.
+ *
+ * It used to add opp.payment_amount to coins goals and guessed stat bumps to
+ * reputation / brand_trust / influence / portfolio / followers goals, writing
+ * career_goals.current_value directly with no ledger row and no
+ * character_state change, so goal progress claimed money and stats Lala never
+ * received (and completed → paid added the payment twice). Goals now move
+ * only from what they measure: the ledger for coins and character_state for
+ * stats, in completeEpisode's step 17 (which also completes goals and spawns
+ * their unlocks) and POST /goals/sync (which also completes goals).
+ *
+ * The return shape is kept for the route's response (`pipeline`); the
+ * arrays are always empty. Returns { goals_updated, goals_completed, unlocks, note }.
  */
-async function onOpportunityAdvanced(opportunityId, newStatus, models) {
-  const { Opportunity, CareerGoal, sequelize } = models;
+async function onOpportunityAdvanced(opportunityId, newStatus, _models) { // eslint-disable-line no-unused-vars
   const result = { goals_updated: [], goals_completed: [], unlocks: [] };
-
-  // Only act on meaningful status changes
   if (!['completed', 'paid'].includes(newStatus)) return result;
-
-  const opp = Opportunity
-    ? await Opportunity.findByPk(opportunityId)
-    : null;
-  if (!opp) return result;
-
-  const showId = opp.show_id;
-
-  // Load active goals for this show
-  let goals = [];
-  if (CareerGoal) {
-    goals = await CareerGoal.findAll({ where: { show_id: showId, status: 'active' } });
-  } else {
-    const [rows] = await sequelize.query(
-      `SELECT * FROM career_goals WHERE show_id = :showId AND status = 'active'`,
-      { replacements: { showId } }
-    );
-    goals = rows || [];
-  }
-
-  for (const goal of goals) {
-    const g = goal.toJSON ? goal.toJSON() : goal;
-    let increment = 0;
-
-    // Calculate how much this opportunity contributes to the goal
-    if (g.target_metric === 'coins' && opp.payment_amount) {
-      increment = parseFloat(opp.payment_amount) || 0;
-    } else if (g.target_metric === 'reputation' && opp.prestige) {
-      increment = opp.prestige >= 7 ? 2 : opp.prestige >= 5 ? 1 : 0;
-    } else if (g.target_metric === 'brand_trust' && opp.opportunity_type === 'brand_deal') {
-      increment = opp.prestige >= 5 ? 2 : 1;
-    } else if (g.target_metric === 'influence') {
-      increment = opp.prestige >= 6 ? 2 : 1;
-    } else if (g.target_metric === 'portfolio_strength' && ['editorial', 'modeling', 'runway'].includes(opp.opportunity_type)) {
-      increment = 1;
-    } else if (g.target_metric === 'followers' && opp.social_boost) {
-      increment = opp.social_boost;
-    }
-
-    if (increment <= 0) continue;
-
-    const newValue = (g.current_value || 0) + increment;
-
-    if (CareerGoal && goal.update) {
-      await goal.update({ current_value: newValue });
-    } else {
-      await sequelize.query(
-        `UPDATE career_goals SET current_value = :val, updated_at = NOW() WHERE id = :id`,
-        { replacements: { val: newValue, id: g.id } }
-      );
-    }
-
-    result.goals_updated.push({ id: g.id, title: g.title, metric: g.target_metric, added: increment, new_value: newValue });
-
-    // Check if goal is now complete (direction-aware: stress completes at or below its target)
-    if (require('../utils/goalLadders').goalReached(g, newValue)) {
-      if (CareerGoal && goal.update) {
-        await goal.update({ status: 'completed', completed_at: new Date() });
-      } else {
-        await sequelize.query(
-          `UPDATE career_goals SET status = 'completed', completed_at = NOW(), updated_at = NOW() WHERE id = :id`,
-          { replacements: { id: g.id } }
-        );
-      }
-      result.goals_completed.push({ id: g.id, title: g.title });
-
-      // Process unlocks
-      const spawned = await spawnGoalUnlocks(g, showId, models);
-      result.unlocks.push(...spawned);
-    }
-  }
-
+  result.note = 'Career goals are not changed by advancing an opportunity; they are measured from the ledger and Lala\'s stats when an episode is completed or goals are synced.';
   return result;
 }
 
@@ -124,8 +64,8 @@ async function onOpportunityAdvanced(opportunityId, newStatus, models) {
 
 /**
  * Spawn a just-completed goal's unlocks_on_complete as new opportunities.
- * Shared by onOpportunityAdvanced (manual Advance) and completeEpisode's
- * step 17 (Task #1817) so both completion paths spawn the same way.
+ * Used by completeEpisode's step 17 (Task #1817). Manual Advance no longer
+ * completes goals, so it no longer calls this.
  *
  * goal: plain object with id, title, priority, unlocks_on_complete
  *       (array, or a JSON string). Returns the spawned list (possibly empty).
@@ -310,10 +250,11 @@ async function convertOpportunityToEvent(opportunityId, showId, models) {
  *
  * Task #1817 (Evoni's ruling, option 1): this hook completes the opportunity
  * ONLY. It no longer cascades into onOpportunityAdvanced and no longer
- * credits episode.total_income to coins goals — completeEpisode's step 17
- * (+1 per active goal) is the single goal advance on completion, and it
- * spawns unlocks for goals it completes. Manual Advance still goes through
- * onOpportunityAdvanced unchanged.
+ * credits episode.total_income to coins goals. completeEpisode's step 17 is
+ * the single goal update on completion: it sets each goal from what it
+ * measures (coins from the ledger, other stats from character_state; Season
+ * Arc §8(ff) Q11) and spawns unlocks for goals it completes. Manual Advance
+ * no longer writes goals either (onOpportunityAdvanced).
  *
  * Returns { opportunities_advanced }.
  */
