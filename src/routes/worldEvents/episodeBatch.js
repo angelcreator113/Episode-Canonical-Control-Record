@@ -20,6 +20,7 @@ const { eventEpisodeConflictBody, EVENT_EPISODE_CONFLICT_CODE } = require('../..
 const { findMissingPrices, dealPriceRequiredError, dealPriceRequiredBody, DEAL_PRICE_REQUIRED_CODE } = require('../../services/dealPricingService');
 const { takePriceSnapshot } = require('../../services/dealPriceSnapshot');
 const { getModels } = require('./helpers');
+const { softDeleteUnusedUnlinkedEvents } = require('../../utils/worldEventSafeDelete');
 
 // POST /world/:showId/events/generate-episode-from-many
 //
@@ -232,43 +233,45 @@ router.post('/world/:showId/events/:eventId/regenerate-episode', requireAuth, ai
 });
 
 // POST /world/:showId/events/bulk-delete — Delete multiple events at once
+//
+// Body: { delete_all } | { delete_all_drafts } | { ids: [uuid, ...] }
+// Every mode soft-deletes (deleted_at) only events never used in an episode
+// and not linked from another table (utils/worldEventSafeDelete); used or
+// linked events are kept and listed in kept_events, never deleted. A named id
+// that is used or linked is refused (refused_ids). `deleted` is the count the
+// Event Library toast reads.
 router.post('/world/:showId/events/bulk-delete', requireAuth, async (req, res) => {
   try {
     const { showId } = req.params;
-    const { ids, delete_all_drafts, delete_all } = req.body;
+    const { ids, delete_all_drafts, delete_all } = req.body || {};
     const models = await getModels();
     if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
 
-    let deleted = 0;
-    if (delete_all) {
-      // Delete ALL events for this show
-      const [result] = await models.sequelize.query(
-        'DELETE FROM world_events WHERE show_id = :showId',
-        { replacements: { showId } }
-      );
-      deleted = result?.rowCount || 0;
-    } else if (delete_all_drafts) {
-      // Delete all draft events
-      const [result] = await models.sequelize.query(
-        "DELETE FROM world_events WHERE show_id = :showId AND status = 'draft'",
-        { replacements: { showId } }
-      );
-      deleted = result?.rowCount || 0;
-    } else if (ids && Array.isArray(ids)) {
-      // Delete specific IDs
-      for (const id of ids) {
-        try {
-          await models.sequelize.query(
-            'DELETE FROM world_events WHERE id = :id AND show_id = :showId',
-            { replacements: { id, showId } }
-          );
-          deleted++;
-        } catch { /* skip */ }
-      }
-    }
+    let scope;
+    if (delete_all) scope = { mode: 'delete_all' };
+    else if (delete_all_drafts) scope = { mode: 'delete_all_drafts', status: 'draft' };
+    else if (Array.isArray(ids) && ids.length > 0) scope = { mode: 'ids', ids };
+    else return res.status(400).json({ success: false, error: 'delete_all, delete_all_drafts or a non-empty ids array required' });
 
-    return res.json({ success: true, deleted });
+    const result = await models.sequelize.transaction((transaction) =>
+      softDeleteUnusedUnlinkedEvents(models.sequelize, {
+        showId, ids: scope.ids || null, status: scope.status || null, transaction,
+      }));
+
+    return res.json({
+      success: true,
+      mode: scope.mode,
+      deleted: result.softDeleted.length,
+      soft_deleted_ids: result.softDeleted.map(e => e.id),
+      kept: result.kept.length,
+      kept_events: result.kept,
+      ...(scope.mode === 'ids' ? {
+        refused_ids: result.kept.map(e => e.id),
+        not_found_ids: result.notFound,
+      } : {}),
+    });
   } catch (err) {
+    console.error('Bulk delete events error:', err.message);
     return res.status(500).json({ success: false, error: err.message });
   }
 });
