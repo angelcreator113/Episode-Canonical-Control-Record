@@ -14,6 +14,14 @@ Living-doc rule: code is cited by stable name, with `file:line` where it helps.
 
 The open P0 PRs #3701, #3702 and #3703 are **not** merged. Findings they fix are marked *(fixed in #370x, unmerged)*.
 
+**Status as of 2026-11-04 (later the same day):**
+- **Merged:** #3700 (season story order, bonus episodes canonical by default).
+- **Unmerged:**
+  - #3701 is on hold (CI, plus a measured source for portfolio and follower goals).
+  - #3702 and #3703 are waiting for a final CI and diff review on their current heads.
+  - #3704 (this read) is documentation only.
+- **Evoni's rulings on §10** are recorded in §11. The screen-level blueprint is in `docs/reads/2026-11-04-navigation-ownership-blueprint.md`.
+
 ---
 
 ## 0. Summary
@@ -479,3 +487,86 @@ Each one needs its own approval and a rollback.
 6. **#3701:** define portfolio strength's measured source. Followers come from the Pulse follower ledger.
 7. **Retire or hide** the orphan and unreachable pages in §1.3, after one review pass.
 8. **Order:** approve P0 items 4–7 of §9 as small focused PRs before any redesign work.
+
+---
+
+## 11. Evoni's rulings on §10 (2026-11-04)
+
+Recorded as given. **They approve a direction, not a rebuild or a migration.**
+
+1. **Target workspaces:** WORLD, SHOWS, SEASON, EPISODE, LALA, WRITE and an admin-only SYSTEM.
+2. **Producer Mode stays for now as a transitional hub.** It is not dissolved until the replacement workflows are verified.
+3. **One authoritative episode Complete workflow is to be designed.** It must preserve accepted history, financial integrity and explicit approval. Completion behaviour is not consolidated yet; a read-only comparison of the two paths comes first.
+4. **The Character Registry owns character identity.** World Studio must not overwrite Registry fields through broad saves.
+5. **Brands get authoritative records** with explicit relationships to characters, Pulse profiles, events, opportunities and contracts. Studio by Sable is investigated as a representative case. No automatic splitting, post reassignment or changes to historical relationships.
+6. **Portfolio strength derives from approved qualifying creative work.** Follower growth stays a separate metric. Scoring rules and source records are to be proposed before implementation.
+7. **No page is deleted or hidden** until dependency and usage checks are complete.
+8. **Focused P0 fixes may be prepared,** each with its own review and merge approval:
+   - A: server-side admin authorisation;
+   - B: debug route exposure;
+   - C: World Studio → Registry overwrites;
+   - D: the Episode Air Date edit.
+
+---
+
+## 12. Episode completion: the two paths compared (read only, 2026-11-04)
+
+Requested by ruling 3. **Nothing about completion was changed.**
+
+### Both paths run the same pipeline (V)
+
+- **Path 1:** the event card's EventDetailsModal **Complete** → `POST /world/:showId/episodes/:episodeId/complete` (`routes/worldEvents/ledger.js`) → `episodeCompletionService.completeEpisode`.
+- **Path 2:** `/episodes/:id/evaluate` → `/override` → `/accept` (`routes/evaluation.js`). **`/accept` only calls `completeEpisode`.**
+
+So money, stats, goals and continuity are applied by **`completeEpisode` alone**.
+
+**What `completeEpisode` does, in one transaction:**
+- locks the episode and re-checks for `accepted` (this is the guard against running twice);
+- locks the ledger;
+- finalizes financials: entry, wardrobe, deal cost, spending lines, event payment, content revenue, totals;
+- books deal payouts, deduplicated;
+- syncs coins from the ledger, and refuses if the balance would go below zero;
+- applies financial-mood stress and the stat changes;
+- writes two history rows;
+- sets the evaluation to `accepted`;
+- sets the event to `filmed`.
+
+**After the commit:**
+- franchise knowledge;
+- career goals measured (step 17) with unlocks;
+- slot outcome and the next-slot draft;
+- the story record **draft** (it counts only after approval);
+- thread seeds;
+- the opportunity completed (accepted offers only);
+- host and guest outcomes, and beat 14;
+- a follower change **proposal**;
+- Pulse posts, once.
+
+**Touched by neither path:** `event_deliverables` (content fees are booked when a deliverable is approved) and `episodes.status`.
+
+### Differences and risks (V unless marked)
+
+| # | Finding | Effect |
+|---|---|---|
+| C1 | **Finalize Financials, then Complete, corrupts the results.** Finalize returns `already_finalized` with no summary or balance, so Complete writes **0** to `total_income`/`total_expenses` and computes stress from a 0 balance: **+2 "going broke"**, possibly +2 more from the threshold rule. The ledger itself is not double-booked. `financialTransactionService` ~428-436; `episodeCompletionService` 489-524, 602-609 | Wrong episode totals, stress and slot money. **Do not press Finalize Financials before Complete on Episode 1** until this is fixed |
+| C2 | Finalize Financials is shown whenever the event has an episode, with no completion-state check | Path to C1 |
+| C3 | Path 2's `/evaluate` uses a different scoring (outfit ×0.25 vs ×0.35; no self-talk, social, wardrobe or money effects). `/accept` **ignores** the stored preview and any `/override` | The tier shown or overridden may not be the tier accepted |
+| C4 | Path 2 blocks a repeat call with 400 before the beat 14 held-offer retry; Path 1 retries | Beat 14 recovery only works from Path 1 |
+| C5 | **Admin reset** (`evaluation.js` ~139-198, admin only) resets evaluation and status for **every episode of a show**, and the four stats. With no `showId` it falls back to a **hard-coded production show id**. It doesn't reverse ledger rows, slots, goals, opportunities, story records or the Pulse; completing again re-applies stats, goals and outcomes, and hits C1 | Partial, irreversible state loss |
+| C6 | Two-parters: Part 2 is set accepted from Part 1 outside a transaction; post-commit steps run for Part 1's id only (I: safe to retry) | Continuity is recorded on Part 1 |
+
+### Recommendation (ruling 3; not implemented)
+
+**One authoritative workflow:** `POST …/episodes/:episodeId/complete` → `completeEpisode`, shown as the **Complete** tab on the episode page, with the existing confirm and money warning.
+
+**Before consolidating, fix in the service, each as its own reviewed PR:**
+- **C1:** when finalize returns `already_finalized`, rebuild the summary and balances from the existing ledger rows.
+- **C2:** hide Finalize Financials once the episode is accepted, or remove it.
+- **C5:** replace the show-wide reset with a per-episode reversal that books reversing ledger rows, or restrict it, and remove the hard-coded fallback.
+
+**Then Path 2 becomes:**
+- `/evaluate` → a read-only **preview** using the same scoring code (a dry run);
+- `/override` → removed, or an explicit input that `completeEpisode` honours;
+- `/accept` → a thin alias that returns `already_completed` (with the beat 14 retry), then removed.
+
+**Must be preserved:** the single transaction; the episode lock; ledger-derived coins; payout deduplication; the below-zero and reopened-terms refusals; accepted history never overwritten; drafts (story record, follower change) needing Evoni's approval.
