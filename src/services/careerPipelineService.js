@@ -20,6 +20,7 @@ const { withAutoScheduledDate } = require('../utils/eventDateDefault');
 const { careerTierFromReputation } = require('../utils/careerTiers');
 const { EPISODE_EVENT_ID_SQL } = require('../utils/episodeEventSql');
 const { syncDraftedDealType } = require('./dealTypeDraftService');
+const { isOpenOffer } = require('./startOfferDecision');
 const {
   deliverablesFromOpportunity, restrictionsFromOpportunity, compensationFromOpportunity, insertEventDeliverables,
 } = require('./eventTermsService');
@@ -256,11 +257,13 @@ async function convertOpportunityToEvent(opportunityId, showId, models) {
  * Arc §8(ff) Q11) and spawns unlocks for goals it completes. Manual Advance
  * no longer writes goals either (onOpportunityAdvanced).
  *
- * Returns { opportunities_advanced }.
+ * Returns { opportunities_advanced, opportunities_unaccepted }: the second
+ * lists a linked opportunity still open (offered, considering, negotiating,
+ * held), left as it is for review.
  */
 async function onEpisodeCompleted(episodeId, showId, models) {
   const { Episode, Opportunity, sequelize } = models;
-  const result = { opportunities_advanced: [] };
+  const result = { opportunities_advanced: [], opportunities_unaccepted: [] };
 
   const episode = await Episode.findByPk(episodeId);
   if (!episode) return result;
@@ -300,6 +303,12 @@ async function onEpisodeCompleted(episodeId, showId, models) {
 
     await opp.update({ status: 'completed', status_history: history, episode_id: episodeId });
     result.opportunities_advanced.push({ id: opp.id, name: opp.name, from: history[history.length - 1].from, to: 'completed' });
+  } else if (opp && isOpenOffer(opp.status)) {
+    // Still open (never accepted, declined or closed): scheduling and Start
+    // Episode never accept by themselves (services/startOfferDecision), so
+    // it is not completed here either. Reported and logged for review.
+    result.opportunities_unaccepted.push({ id: opp.id, name: opp.name, status: opp.status });
+    console.warn(`[CareerPipeline] Episode ${episodeId} completed; its opportunity "${opp.name}" (${opp.id}) is still ${opp.status}, not accepted, and was left as it is.`);
   }
 
   return result;

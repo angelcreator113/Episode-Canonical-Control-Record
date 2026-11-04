@@ -162,9 +162,13 @@ function pipelineModels({ opportunity, parent } = {}) {
     queries,
     models: {
       sequelize: {
+        // scheduleOpportunityAsEvent: the insert and the opportunity update
+        // share one transaction, and the guarded update returns its row.
+        transaction: jest.fn(async (a, b) => (typeof a === 'function' ? a : b)({})),
         query: jest.fn(async (sql, opts) => {
           queries.push({ sql, opts });
           if (/FROM opportunities WHERE id/.test(sql)) return [[opportunity]];
+          if (/UPDATE opportunities SET event_id/.test(sql)) return [[{ id: opportunity.id }]];
           if (/SELECT \* FROM world_events WHERE id/.test(sql)) return [[parent]];
           return [[]];
         }),

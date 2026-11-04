@@ -19,6 +19,7 @@ const { aiRateLimiter } = require('../../middleware/aiRateLimiter');
 const { eventEpisodeConflictBody, EVENT_EPISODE_CONFLICT_CODE } = require('../../utils/eventEpisodeLink');
 const { findMissingPrices, dealPriceRequiredError, dealPriceRequiredBody, DEAL_PRICE_REQUIRED_CODE } = require('../../services/dealPricingService');
 const { takePriceSnapshot } = require('../../services/dealPriceSnapshot');
+const { offerDecisionBody, OFFER_DECISION_CODES } = require('../../services/startOfferDecision');
 const { getModels } = require('./helpers');
 const { softDeleteUnusedUnlinkedEvents } = require('../../utils/worldEventSafeDelete');
 
@@ -31,7 +32,9 @@ const { softDeleteUnusedUnlinkedEvents } = require('../../utils/worldEventSafeDe
 // locations, dress codes, narrative stakes, and outfits all show on the
 // episode page through the existing read-through patterns.
 //
-// Body: { event_ids: [uuid, ...], draft_script?: bool }
+// Body: { event_ids: [uuid, ...], draft_script?: bool, offer_decision?: string }
+// offer_decision is the anchor's (services/startOfferDecision): asked for
+// with 409 OFFER_DECISION_REQUIRED when the anchor's opportunity is open.
 router.post('/world/:showId/events/generate-episode-from-many', requireAuth, aiRateLimiter, async (req, res) => {
   try {
     const { showId } = req.params;
@@ -79,7 +82,7 @@ router.post('/world/:showId/events/generate-episode-from-many', requireAuth, aiR
 
     const episodeGenerator = require('../../services/episodeGeneratorService');
     const wardrobeItems = await episodeGenerator.loadFinancialWardrobeItems(models.sequelize, showId, { event: anchor });
-    const result = await episodeGenerator.generateEpisodeFromEvent(anchor, models, { showId, wardrobeItems });
+    const result = await episodeGenerator.generateEpisodeFromEvent(anchor, models, { showId, wardrobeItems, offerDecision: req.body?.offer_decision });
     const newEpisodeId = result?.episode?.id;
 
     // Link the extra events to the same episode. Skip ones that already
@@ -162,6 +165,10 @@ router.post('/world/:showId/events/generate-episode-from-many', requireAuth, aiR
     if (error.code === DEAL_PRICE_REQUIRED_CODE) {
       console.warn('Multi-event generate refused:', error.message);
       return res.status(409).json(dealPriceRequiredBody(error));
+    }
+    if (OFFER_DECISION_CODES.includes(error.code)) {
+      console.warn('Multi-event generate refused:', error.message);
+      return res.status(error.status).json(offerDecisionBody(error));
     }
     console.error('Multi-event generate error:', error.message, error.stack?.slice(0, 500));
     return res.status(500).json({ success: false, error: error.message });

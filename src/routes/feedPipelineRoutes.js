@@ -39,8 +39,10 @@ router.post('/:showId/schedule/:opportunityId', requireAuth, aiRateLimiter, asyn
     const result = await scheduleOpportunityAsEvent(req.params.opportunityId, req.params.showId, models, { userId: req.user?.id || null });
     return res.json({ success: true, data: result });
   } catch (err) {
-    // A held one that changed while it was scheduled is a 409 (Evoni,
-    // 2026-10-23; services/feedEventPipelineService scheduleHeldEarly).
+    // One that changed while it was scheduled, already has an event, is
+    // closed or finished (declined, expired, cancelled, archived, completed,
+    // paid), or would repeat an event name in the show is a 409; not found
+    // is a 404 (services/feedEventPipelineService scheduleOpportunityAsEvent).
     console.error('[FeedPipeline] schedule failed:', err.message);
     return res.status(err.status || 500).json({ success: false, error: err.message });
   }

@@ -29,19 +29,8 @@ async function getModels(req) {
 }
 
 // ─── STATUS PIPELINE ────────────────────────────────────────────────────────
-const STATUS_FLOW = {
-  offered: ['considering', 'declined'],
-  considering: ['negotiating', 'declined'],
-  negotiating: ['booked', 'declined'],
-  booked: ['preparing', 'cancelled'],
-  preparing: ['active', 'cancelled'],
-  active: ['completed'],
-  completed: ['paid', 'archived'],
-  paid: ['archived'],
-  declined: ['archived'],
-  expired: ['archived'],
-  cancelled: ['archived'],
-};
+// services/opportunityStatusFlow, shared with Start Episode's offer decision.
+const { STATUS_FLOW } = require('../services/opportunityStatusFlow');
 
 // ─── TYPE CONFIGS (wardrobe + content requirements) ─────────────────────────
 const TYPE_DEFAULTS = {

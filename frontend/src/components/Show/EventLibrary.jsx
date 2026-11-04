@@ -44,6 +44,8 @@ import EventDetailsModal from './EventDetailsModal';
 import EventIdeasDrawer from './EventIdeasDrawer';
 import EpisodeBlueprintModal from './EpisodeBlueprintModal';
 import './EventLibrary.css';
+import useOfferDecision from '../../hooks/useOfferDecision';
+import OfferDecisionDialog from '../OfferDecisionDialog';
 import { packageHref } from '../../lib/eventFlow';
 
 export default function EventLibrary({ showId, scope = null, cardExtra = null, onChanged = null, data = null, packageFrom = null }) {
@@ -92,6 +94,9 @@ export default function EventLibrary({ showId, scope = null, cardExtra = null, o
   const [sceneSetReconnect, setSceneSetReconnect] = useState(null);
   const [reconnecting, setReconnecting] = useState(false);
   const [toast, setToast] = useState(null);
+  // Generate from the selected events: an anchor offer not accepted yet is
+  // asked about first (hooks/useOfferDecision, OfferDecisionDialog).
+  const offerDecision = useOfferDecision();
   // Ideas' quick "+ New Opportunity" form.
   const [oppQuickForm, setOppQuickForm] = useState(null);
   // The outfit picker the card menu and the modal open (Task #2376).
@@ -841,10 +846,11 @@ The revised event should feel like a completely different experience from the si
                   const ids = Array.from(selectedEvents);
                   try {
                     setToast(`🎬 Generating episode from ${ids.length} event${ids.length === 1 ? '' : 's'}...`);
-                    const res = await api.post(`/api/v1/world/${showId}/events/generate-episode-from-many`, {
+                    const res = await offerDecision.run((decision) => api.post(`/api/v1/world/${showId}/events/generate-episode-from-many`, {
                       event_ids: ids,
                       draft_script: draftScriptOnGenerate,
-                    });
+                      ...(decision ? { offer_decision: decision } : {}),
+                    }));
                     if (res.data.success) {
                       setEpisodeBlueprint(res.data.data);
                       const ep = res.data.data.episode;
@@ -861,7 +867,7 @@ The revised event should feel like a completely different experience from the si
                       setToast(res.data.error || 'Failed');
                     }
                   } catch (err) {
-                    setToast('Multi-event generate failed: ' + (err.response?.data?.error || err.message));
+                    setToast(err?.offerDecisionCancelled ? err.message : 'Multi-event generate failed: ' + (err.response?.data?.error || err.message));
                   }
                   setTimeout(() => setToast(null), 6000);
                 }} style={{ padding: '4px 12px', fontSize: 11, fontWeight: 700, borderRadius: 6, border: 'none', background: 'var(--lala-lavender)', color: 'var(--text-inverse)', cursor: 'pointer' }}>
@@ -1221,6 +1227,10 @@ The revised event should feel like a completely different experience from the si
       )}
 
       {episodeBlueprint && <EpisodeBlueprintModal lib={lib} />}
+
+      {/* The anchor's offer is not accepted yet: an explicit decision before Generate. */}
+      <OfferDecisionDialog pending={offerDecision.pending} busy={offerDecision.busy}
+        onChoose={offerDecision.choose} onCancel={offerDecision.cancel} />
 
       {/* ═══ FLOATING TOAST NOTIFICATION ═══ */}
       {toast && (
