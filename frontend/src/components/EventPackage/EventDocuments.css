@@ -352,3 +352,27 @@
   .evd-line-redraft { width: 36px; height: 36px; }
   .evd-history li { flex-wrap: wrap; }
 }
+
+/* The Creator Partnership Agreement (Task 3206): the offer letter in the
+   event's colours (--evd-agree-head, --evd-agree-rule from the server's
+   offer_agreement; the house lavender and gold otherwise), numbered
+   clauses, Brand and Creator boxes, signature lines and the stamp. */
+.evd-agreement { position: relative; border-top: 4px solid var(--evd-agree-rule, var(--lala-gold)); }
+.evd-agreement .evd-offer-org { color: var(--evd-agree-head, var(--lala-lavender-text)); border-bottom-color: var(--evd-agree-rule, var(--lala-gold)); padding-right: 84px; overflow-wrap: anywhere; }
+.evd-agreement .evd-offer-terms-title,
+.evd-agreement .evd-offer-sign { color: var(--evd-agree-head, var(--lala-lavender-text)); }
+.evd-agree-title { margin-top: 8px; font-family: var(--font-prose); font-size: 15px; font-weight: 700; color: var(--lala-ink); overflow-wrap: anywhere; }
+.evd-agree-stamp {
+  position: absolute; top: 14px; right: 14px; padding: 3px 8px; border: 2px solid var(--evd-agree-stamp, var(--lala-gold));
+  border-radius: 4px; color: var(--evd-agree-stamp, var(--lala-gold)); font-family: var(--font-ui); font-size: 11px; font-weight: 700;
+  letter-spacing: 0.12em; transform: rotate(-6deg); background: rgba(250, 247, 240, 0.85);
+}
+.evd-agree-parties { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 10px 0 12px; }
+.evd-agree-party { min-width: 0; padding: 6px 8px; border: 1px solid var(--evd-agree-rule, var(--lala-gold-line)); border-radius: 4px; overflow-wrap: anywhere; }
+.evd-agree-party span { display: block; font-family: var(--font-ui); font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--lala-ink-muted); }
+.evd-agree-party strong { font-size: 13px; }
+.evd-agree-clauses { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.evd-agree-num { font-style: normal; font-weight: 700; color: var(--evd-agree-head, var(--lala-lavender-text)); }
+.evd-agree-signatures { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
+.evd-agree-sigline { min-width: 0; border-top: 1px solid var(--lala-ink-muted); padding-top: 2px; overflow-wrap: anywhere; }
+.evd-agree-sigline .evd-offer-sign { min-height: 30px; margin-top: 0; }

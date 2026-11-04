@@ -226,41 +226,64 @@ function drawShoppingList(ctx, H, { doc, event, pieces }) {
 }
 
 /** Draws the plan at height H; returns where its writing ends. */
-// The offer letter (Evoni, 2026-10-24): a formal letter on cream
-// letterhead from the brand or host, then THE TERMS from the deal, then
-// what happens next, the closing and a signature.
-const OFFER = Object.freeze({
-  paper: '#FAF7F0', // --lala-parchment
-  rule: '#B8962E', // --lala-gold
-  ink: '#2C2C2C', // --lala-ink
-  muted: '#6B6B6B',
-  head: '#4A3B7A', // --lala-lavender-text
-});
+// The offer letter (Evoni, 2026-10-24), drawn as the Creator Partnership
+// Agreement (Task #3206; the phone spec §13; utils/partnershipAgreement):
+// the brand's letterhead in the event's colours, the title, Brand and
+// Creator boxes, the letter's words, the deal as numbered clauses, then
+// what happens next, the closing and two signature lines. The overlay is
+// the document as it arrives in the episode (beat 5, after the invitation),
+// so its stamp reads OFFER; the Event Package card shows EXECUTED once the
+// event has started an episode.
 const offerAmount = (n) => `${coins(n)} Prime Coins`;
 
-/** Draws the letter at height H; returns where its writing ends. */
+/** Draws the agreement at height H; returns where its writing ends. */
 function drawOfferLetter(ctx, H, { doc, event, terms = [] }) {
+  const pa = require('../utils/partnershipAgreement');
+  const OFFER = pa.agreementColours(event);
   const L = doc?.letter || {};
   const left = 80;
   const width = WIDTH - 160;
   ctx.fillStyle = OFFER.paper;
   ctx.fillRect(0, 0, WIDTH, H);
+  ctx.fillStyle = OFFER.rule;
+  ctx.fillRect(28, 28, WIDTH - 56, 14);
   ctx.strokeStyle = OFFER.rule; ctx.lineWidth = 3;
   ctx.strokeRect(28, 28, WIDTH - 56, H - 56);
 
-  // Letterhead: who it is from, a rule, the date and the event.
-  const org = (event?.host_brand || event?.host || 'The Host').trim();
+  // Letterhead: the brand, a rule, the agreement's title and the event.
+  const org = pa.agreementBrand(event);
   ctx.textBaseline = 'alphabetic';
   ctx.fillStyle = OFFER.head;
   ctx.font = 'bold 54px CormorantGaramond';
-  ctx.fillText(org.toUpperCase(), left, 122);
+  const [orgLine] = wrap(ctx, org.toUpperCase(), width - 230, 1);
+  ctx.fillText(orgLine, left, 130);
+  // The OFFER stamp, turned a little, top right.
+  ctx.save();
+  ctx.translate(WIDTH - left - 100, 104); ctx.rotate(-0.1);
+  ctx.strokeStyle = OFFER.head; ctx.lineWidth = 4; ctx.strokeRect(-92, -34, 184, 60);
+  ctx.fillStyle = OFFER.head; ctx.font = 'bold 34px LibreBaskerville';
+  const stampW = ctx.measureText('OFFER').width;
+  ctx.fillText('OFFER', -stampW / 2, 10);
+  ctx.restore();
   ctx.strokeStyle = OFFER.rule; ctx.lineWidth = 2;
-  ctx.beginPath(); ctx.moveTo(left, 146); ctx.lineTo(WIDTH - left, 146); ctx.stroke();
-  ctx.fillStyle = OFFER.muted;
-  ctx.font = 'normal 22px LibreBaskerville';
-  ctx.fillText(`Offer of partnership · ${documentByline(event).replace(/^for [^·]*·?\s*/, '') || (event?.name || '')}`.trim(), left, 182);
+  ctx.beginPath(); ctx.moveTo(left, 156); ctx.lineTo(WIDTH - left, 156); ctx.stroke();
+  ctx.fillStyle = OFFER.ink; ctx.font = 'bold 26px LibreBaskerville';
+  const [title] = wrap(ctx, pa.agreementTitle(event), width, 1);
+  ctx.fillText(title, left, 196);
+  const byline = documentByline(event).replace(/^for [^·]*·?\s*/, '');
+  if (byline) { ctx.fillStyle = OFFER.muted; ctx.font = 'normal 20px LibreBaskerville'; ctx.fillText(byline, left, 228); }
 
-  let y = 240;
+  // Brand and Creator boxes.
+  const boxW = (width - 24) / 2;
+  [['BRAND', org], ['CREATOR', 'Lala']].forEach(([label, name], i) => {
+    const x = left + i * (boxW + 24);
+    ctx.strokeStyle = OFFER.rule; ctx.lineWidth = 1.5; ctx.strokeRect(x, 252, boxW, 74);
+    ctx.fillStyle = OFFER.muted; ctx.font = 'normal 15px LibreBaskerville'; ctx.fillText(label, x + 16, 278);
+    ctx.fillStyle = OFFER.ink; ctx.font = 'bold 22px LibreBaskerville';
+    ctx.fillText(wrap(ctx, name, boxW - 32, 1)[0] || '', x + 16, 310);
+  });
+
+  let y = 372;
   const para = (text, size = 25, lineH = 36, maxLines = 6) => {
     if (!text) return;
     ctx.fillStyle = OFFER.ink; ctx.font = `normal ${size}px LibreBaskerville`;
@@ -268,62 +291,71 @@ function drawOfferLetter(ctx, H, { doc, event, terms = [] }) {
     lines.forEach((line, n) => ctx.fillText(line, left, y + n * lineH));
     y += lineH * lines.length + 18;
   };
-  para(L.greeting, 25, 36, 1);
-  para(L.opening, 25, 36, 3);
-  para(L.opportunity, 25, 36, 7);
+  para(L.greeting, 24, 34, 1);
+  para(L.opening, 24, 34, 3);
+  para(L.opportunity, 24, 34, 6);
 
-  // THE TERMS, from the deal.
-  if (terms.length) {
-    ctx.fillStyle = OFFER.head; ctx.font = 'bold 22px LibreBaskerville';
-    ctx.fillText('THE TERMS', left, y + 10);
-    y += 46;
-    let shown = 0;
-    const total = terms.reduce((n, sec) => n + sec.lines.length, 0);
-    // The terms stop where the room the closing and signature need begins
-    // (FOOT), and what is left out is counted, never dropped without a word.
-    const FOOT = 330;
-    for (const sec of terms) {
-      if (y + 32 + 30 > H - FOOT) break;
-      ctx.fillStyle = OFFER.muted; ctx.font = 'italic 21px LibreBaskerville';
-      ctx.fillText(sec.title, left, y);
-      y += 32;
-      for (const line of sec.lines) {
-        if (y + 30 > H - FOOT) break;
-        ctx.fillStyle = OFFER.ink; ctx.font = 'normal 23px LibreBaskerville';
-        const amount = line.amount != null ? offerAmount(line.amount) : '';
-        const amountW = amount ? ctx.measureText(amount).width + 20 : 0;
-        const [first] = wrap(ctx, line.label, width - amountW - 24, 1);
-        ctx.fillText(`· ${first}`, left + 8, y);
-        if (amount) ctx.fillText(amount, WIDTH - left - ctx.measureText(amount).width, y);
-        y += 30;
-        if (line.detail) {
-          ctx.fillStyle = OFFER.muted; ctx.font = 'normal 18px LibreBaskerville';
-          const [d] = wrap(ctx, line.detail, width - 24, 1);
-          ctx.fillText(d, left + 28, y);
-          y += 28;
-        }
-        shown += 1;
+  // THE TERMS: numbered clauses, 1 The engagement, then the deal's sections.
+  const clauses = pa.agreementClauses(event, terms);
+  ctx.fillStyle = OFFER.head; ctx.font = 'bold 22px LibreBaskerville';
+  ctx.fillText('THE TERMS', left, y + 10);
+  y += 46;
+  let shown = 0;
+  const total = clauses.reduce((n, sec) => n + sec.lines.length, 0);
+  // The clauses stop where the room the closing and signatures need begins
+  // (FOOT) on the tallest letter, and what is left out is counted, never
+  // dropped without a word. Measured against the maximum height, not H:
+  // the second pass is sized to fit what the first pass drew, so a short
+  // letter must not lose a clause to its own fitted height.
+  const FOOT = 360;
+  const bottom = Math.max(H, MAX_HEIGHTS.offer_letter) - FOOT;
+  for (const sec of clauses) {
+    if (y + 32 + 30 > bottom) break;
+    ctx.fillStyle = OFFER.head; ctx.font = 'bold 21px LibreBaskerville';
+    ctx.fillText(`${sec.number}. ${sec.title}`, left, y);
+    y += 32;
+    for (const line of sec.lines) {
+      if (y + 30 > bottom) break;
+      ctx.fillStyle = OFFER.ink; ctx.font = 'normal 22px LibreBaskerville';
+      const amount = line.amount != null ? offerAmount(line.amount) : '';
+      const amountW = amount ? ctx.measureText(amount).width + 20 : 0;
+      const wrapped = wrap(ctx, line.label, width - amountW - 32, sec.key === 'engagement' ? 3 : 1);
+      wrapped.forEach((ln, n) => ctx.fillText(ln, left + 32, y + n * 30));
+      if (amount) ctx.fillText(amount, WIDTH - left - ctx.measureText(amount).width, y);
+      y += 30 * wrapped.length;
+      if (line.detail) {
+        ctx.fillStyle = OFFER.muted; ctx.font = 'normal 18px LibreBaskerville';
+        const [d] = wrap(ctx, line.detail, width - 32, 1);
+        ctx.fillText(d, left + 32, y);
+        y += 28;
       }
-      y += 10;
+      shown += 1;
     }
-    if (shown < total) {
-      ctx.fillStyle = OFFER.muted; ctx.font = 'italic 20px LibreBaskerville';
-      ctx.fillText(`+ ${total - shown} more in the terms`, left + 8, y);
-      y += 32;
-    }
-    y += 12;
+    y += 10;
   }
+  if (shown < total) {
+    ctx.fillStyle = OFFER.muted; ctx.font = 'italic 20px LibreBaskerville';
+    ctx.fillText(`+ ${total - shown} more in the terms`, left + 32, y);
+    y += 32;
+  }
+  y += 12;
 
-  para(L.next_steps, 24, 34, 3);
-  para(L.closing, 24, 34, 1);
-  // The signature in her hand's font; the name and title under it.
-  ctx.fillStyle = OFFER.head; ctx.font = '46px Caveat';
-  ctx.fillText(L.sender_name || '', left, y + 34);
-  y += 60;
-  ctx.fillStyle = OFFER.muted; ctx.font = 'normal 20px LibreBaskerville';
-  if (L.sender_name) { ctx.fillText(L.sender_name, left, y); y += 28; }
-  if (L.sender_title) { ctx.fillText(L.sender_title, left, y); y += 28; }
-  return y + 20;
+  para(L.next_steps, 23, 33, 3);
+  para(L.closing, 23, 33, 1);
+  // Two signature lines: the brand's sender (in her hand's font), and the
+  // Creator's, blank on the offer.
+  const sigW = (width - 40) / 2;
+  ctx.fillStyle = OFFER.head; ctx.font = '44px Caveat';
+  ctx.fillText(wrap(ctx, L.sender_name || '', sigW, 1)[0] || '', left, y + 40);
+  ctx.strokeStyle = OFFER.muted; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.moveTo(left, y + 56); ctx.lineTo(left + sigW, y + 56); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(left + sigW + 40, y + 56); ctx.lineTo(WIDTH - left, y + 56); ctx.stroke();
+  y += 84;
+  ctx.fillStyle = OFFER.muted; ctx.font = 'normal 18px LibreBaskerville';
+  const brandSig = [L.sender_name, L.sender_title].filter(Boolean).join(' · ') || `For ${org}`;
+  ctx.fillText(wrap(ctx, brandSig, sigW, 1)[0] || '', left, y);
+  ctx.fillText('Lala · Creator', left + sigW + 40, y);
+  return y + 40;
 }
 
 const SHOPPING_ROWS = 16;
