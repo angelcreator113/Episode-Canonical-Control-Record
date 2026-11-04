@@ -395,3 +395,108 @@ Recorded as given. They answer Q1–Q8. No implementation, migration, merge, dep
 - **T4. Chronology (K1).** Confirm the rule: story order orders everything; `[TIME]` and day changes are display only. Exclusivity's start and end are story orders, with real-world dates kept as information.
 - **T5. Reversal shape (K4).** The compensating commission entry follows the payment-reversal shape phase 4 issue 5 sets. Should phase 4 issue 5 define reversals for all deal payments first?
 - **T6. Commission rounding (K5).** Charge cumulatively, so that on each payment the commission is 10% of everything received so far minus commission already charged (no drift; recommended)? Or round per payment row?
+
+## 14. Rulings on §13 (Evoni, 2026-11-04)
+
+Recorded as given. They approve the **device track's read and display stages only** (§16 stages 1–4). Phone Hub script-writing is a separate, later gate. The deal track, migrations, production writes, feature-flag and worker changes are not approved.
+
+- **T1, episode defaults (approved with refinement).**
+  - Show-wide phone defaults are the fallback. Explicit opening-beat script cues are episode overrides, and later cues change things within the episode.
+  - Persistent physical conditions (cracked glass) carry over from the previous episode unless explicitly repaired or reset. Temporary conditions (battery, DND) reset to the episode defaults.
+  - No time is invented when none is configured.
+  - The script is the canonical source for story-time and phone-state changes, with no conflicting second editor.
+- **T2, structured deal terms (approved provisionally).**
+  - A validated, versioned structured schema for exclusivity, exceptions and agent assignment.
+  - The original contracting brand is kept separately from the event host.
+  - Contractual overrides have an auditable, append-only history. If the existing audit infrastructure cannot support that, the smallest additional storage is proposed before overrides are built.
+  - Legacy free-text terms are kept and marked Needs Terms Review.
+  - No migration yet.
+- **T3, wallpaper (approved).** Existing show settings hold the arc defaults and the episode overrides. They reference approved asset ids, never duplicated files. Unavailable or revoked assets are handled safely.
+- **T4, chronology (approved).** Episode and beat order are authoritative for story chronology. Phone clock time is display only and never decides deal, payment or career-event order.
+- **T5, reversals (approved).** Wait for phase 4 to establish payment states and reversible ledger accounting. Agent commissions use those same rules, with no separate commission-only reversal mechanism.
+- **T6, commission rounding (approved).**
+  - Commission due = round_half_up(10% × cumulative eligible paid amount) − commission already charged, per eligible agreement.
+  - Partial payments, reversals and idempotency use stable payment identities and the existing Prime Bank rounding (`wholeCoins`).
+
+## 15. The device stages: verified code boundaries (origin/main `3bb080aa`, 2026-11-04)
+
+All MEASURED at `3bb080aa` unless marked.
+
+- **Cues are parsed in one place.** `parseScript` matches each own-line tag with its own regex branch and collects the cues: `[WEAR:]`, `[DELIVER:]`, `[TODO_MODE:]`, `[LEARNS:]` (`src/utils/scriptBeatParser.js:343-367`). `[PHONE:]` and `[TIME:]` follow the same pattern.
+- **The frontend keeps its own list of app tags.**
+  - `APP_TAG` in `frontend/src/lib/scriptImport.js:187` lists every app cue (`UI|WEAR|STAT|…|TODO_MODE|LEARNS|…`). A cue missing from it is treated as script text on import.
+  - `frontend/src/lib/scriptHealth.js:139` flags cues that do nothing.
+  - `frontend/src/lib/scriptMoments.js:620-628` reads cues for the Script tab.
+  
+  New cues are registered in all three.
+- **State at a position already has a pattern.**
+  - `lalaKnowledge.knowledgeTimeline` (`src/utils/lalaKnowledge.js:95-140`) turns cues into state at a `{ beat, line }` position, with `comparePositions` (`:60`) and an `issues` list for invalid cues.
+  - The script is split by `scriptBeats` (`src/utils/scriptWear.js:44`).
+  - `getTodoAt` (`src/services/dealChecklistService.js:62`) serves state at a beat and line, behind `GET /episodes/:episodeId/todo/at?beat=&line=` (`src/routes/todoListRoutes.js:47`).
+- **The phone already knows the beat.** `PhoneDevice` takes `episodeId`, `storyAt` and `beat` (`frontend/src/components/phone/PhoneDevice.jsx:19-20, 147-148, 191-193`).
+- **The status bar.**
+  - `PhonePreviewMode.jsx:404-418` draws "9:41" and a fixed `BatteryFull`.
+  - `PhoneDevice.jsx` draws no status bar: its built-in frame has the Dynamic Island, and a custom frame image carries its own chrome (`:215-245`).
+- **The server canvas uses the real clock, but nothing calls it.** `src/services/phoneScreenRenderer.js:62-68` draws the server's wall-clock time and "5G 🔋". No file in `src/`, `frontend/src` or `tests/` references `phoneScreenRenderer`. Stage 2 therefore leaves it alone. Removing or fixing a dead module is a separate cleanup (B3).
+- **Screens are flat images.** `PhoneDevice` draws the screen as one `<img src={phoneScreen.url}>` (`:166-185`), with content areas over it. There is no background layer for a wallpaper to sit in (B1).
+- **Approval.** `assets.approval_status` takes `approved`, `pending` or `rejected`, and rejection also soft-deletes (`deleted_at = NOW()`). `assets.metadata` is JSONB (`src/models/Asset.js:115, 126`). "Revoked or unavailable" therefore means not `approved`, or `deleted_at` set, or missing.
+- **Arcs.** `ShowArc` has `season_number`, `episode_start` and `episode_end` (`src/models/ShowArc.js:21-36`).
+- **Event times are not the device clock.** `ScreenContentRenderer.jsx:1408` formats an event's own `start_datetime`, so it is not affected.
+
+**Regression tests in reach:**
+- Parser: `tests/unit/utils/scriptParser.test.js`, `scriptBeatParser.phoneMessages.test.js`, `scriptBeatParser.boldSpeakers.test.js`, `scriptChecks.test.js`, `scriptTodo.test.js`, `scriptWearCue.test.js`.
+- Timelines: `tests/unit/utils/lalaKnowledge.test.js`.
+- Frontend script libraries: `frontend/src/lib/scriptExport.test.js`, `scriptMoments.deal.test.js`.
+- Phone: `frontend/src/components/phone/PhoneDevice.test.jsx`, `PhoneDevice.contentProps.test.jsx`, `ContentAreaPicker.test.jsx`, the eight `PhonePreviewMode.*.test.jsx`, and the `ScreenContentRenderer.*.test.jsx` files (16 phone and renderer tests in all).
+- Runtime: `tests/unit/services/phoneRuntime*.test.js`, `storyClock.test.js`.
+
+## 16. Proposed PRs (device track, read and display only; none started)
+
+Each PR is one issue, branched from `origin/main`, with no migration, no production write, no feature flag or worker change, and no script writes. Each is opened for review and never merged by the session.
+
+- **PR 1. Cues and state at a beat** (backend and the frontend cue libraries).
+  - `[PHONE: battery=<0-100> dnd=on|off cracked=on|off]`, with `[PHONE: reset]` (battery and DND back to the episode defaults) and `[PHONE: repaired]` (cracked off).
+  - `[TIME: HH:MM]`, with an optional day change `[TIME: HH:MM day=+1]` (B5). In-world local time, display only (T4).
+  - Parsed in `scriptBeatParser` and registered in `APP_TAG`, `scriptHealth` and `scriptMoments`.
+  - A new pure `src/utils/phoneStateTimeline.js`, after `knowledgeTimeline`: cues, episode defaults and the carried cracked state give the state at `{ beat, line }`, plus `issues`.
+  - A new `src/services/phoneStateService.js`:
+    - the episode's script;
+    - `shows.metadata.phone_defaults` (B2);
+    - the cracked state carried from earlier episodes in `episode_number` order (B4);
+    - time unset when nothing is configured.
+  - A read-only `GET /episodes/:episodeId/phone-state/at?beat=&line=` (`requireAuth`), registered so `validate-routes` sees it.
+  - Tests: unit tests for the parser and the timeline (carry-over, reset, repair, episode boundary, day change, unset time, invalid cues), and an integration test for cracked carry across two episodes (Postgres). The parser, `lalaKnowledge` and script-library tests above are the regression set.
+- **PR 2. The status bar, battery and DND, cracked glass** (frontend). Depends on PR 1.
+  - A `usePhoneStateAt(episodeId, beat)` hook.
+  - `PhonePreviewMode`: the status bar shows the beat's story time, or a blank unset slot, never the device clock; the battery level (low below 20%); and a DND moon.
+  - `PhoneDevice`: a cracked-glass layer over the screen, on both frames.
+  - One new CSS file, no device clock, tested at 375px.
+  - Tests: new `PhoneDevice.chrome.test.jsx` and `PhonePreviewMode.statusBar.test.jsx`. The eight `PhonePreviewMode.*` and two `PhoneDevice.*` tests are the regression set.
+  - The dead server canvas is not touched (B3).
+- **PR 3. Wallpaper resolution** (backend, plus a display area). Depends on B1.
+  - `wallpaperAt(models, showId, episodeNumber)` in a new `src/services/phoneWallpaper.js`:
+    - the episode override, else the arc default (`ShowArc` by episode range), from `shows.metadata.phone_wallpapers` `{ arcs: { <arcId>: <assetId> }, episodes: { <n>: <assetId> } }`;
+    - only an approved, live, image asset tagged `metadata.phone_wallpaper`;
+    - otherwise the next fallback, else none, with the reason.
+  - Read-only `GET /shows/:showId/phone-wallpaper?episode=`.
+  - Display as B1 decides.
+  - Tests: unit tests for resolution (override over arc, revoked, deleted, untagged and missing assets fall back), and vitest for the display.
+  - Setting defaults and tagging assets are writes, so they are not in this PR (B2).
+- **PR 4. The lock screen** (frontend). Depends on PRs 1 and 3.
+  - A `lock_screen` content type in `ScreenContentRenderer` (registry and `ContentZoneRenderer`) and `ContentAreaPicker`.
+  - It shows the story time from PR 1 (or the unset state), the day if it changed, the story label, the wallpaper from PR 3, and notification previews from the existing `notifications` / `feed_notifications` sources. It renders the `style: 'lockscreen'` the AI fill already asks for.
+  - Tests: new `ScreenContentRenderer.lockScreen.test.jsx`, `ContentAreaPicker.test.jsx`, and an episode-opener case (beat 1). The `ScreenContentRenderer.*` tests are the regression set.
+
+## 17. Blockers and decisions before the device PRs
+
+- **B1. How a wallpaper shows on flat screens** (blocks PR 3's display and PR 4's wallpaper). Screens are single images with no background layer. Options:
+  - (a) a `wallpaper` content area a designer places on a screen, full-bleed under its other areas (recommended: no change to existing screens, and opt-in per screen);
+  - (b) the wallpaper drawn behind every screen, which only shows through transparent screen art;
+  - (c) only the lock screen shows it.
+- **B2. Who sets the show-wide defaults and the wallpaper tags.**
+  - The device stages only read `shows.metadata.phone_defaults` / `phone_wallpapers` and `assets.metadata.phone_wallpaper`. Today nothing writes them, so the stages will show "unset" (time) and today's look (full battery, DND off, no crack, no wallpaper) until something does.
+  - A small settings editor is a write. Should it be a separate approval, alongside the Phone Hub gate, or be included in PR 1 and PR 3?
+- **B3. The unused server canvas.** `src/services/phoneScreenRenderer.js` draws the real clock but has no callers. Leave it, delete it, or fix it in a separate cleanup?
+- **B4. Which earlier episodes carry the cracked state.** Recommended: every live episode of the show with a lower `episode_number`, in number order, whatever its status. Or only completed or published ones?
+- **B5. The day-change form.** Recommended: `[TIME: HH:MM day=+1]`, with `+n` days from the episode's opening day, display only. Or a separate `[DAY: next]` cue?
+- **B6. Battery and DND with no configured default.** Recommended: full battery and DND off, as today, so nothing visible changes until defaults are set. Or hide the battery entirely? The time follows R6 and shows unset.
