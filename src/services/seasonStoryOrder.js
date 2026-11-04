@@ -23,11 +23,16 @@
  * order, and each is marked `order_ambiguous` with a `same_slot` issue,
  * never silently treated as settled.
  *
- * Continuity (ruling G2): weekly slots and two-parters are canonical. A
- * bonus (blocker N2) or a special has no stored class yet (the
- * season_specials migration is a separate approval), so each is
- * `needs_review`: excluded from canonical carry-over and reported. A
- * special's special_type is passed through as information only (N3).
+ * Continuity (rulings G2 and N2): weekly slots, two-parters and bonus
+ * episodes are canonical. A bonus is canonical by default (N2, Evoni
+ * 2026-11-04; phase 7 read §26); one explicitly marked standalone will not
+ * be, once the G2 continuity-class migration can mark it (a separate
+ * approval). A special has no stored class yet, so it is `needs_review`:
+ * excluded from canonical carry-over and reported. A special's
+ * special_type is passed through as information only (N3).
+ *
+ * An entry whose order is ambiguous (two after one slot, N1) is never
+ * carried as canonical: precedingEpisodes excludes it as `order_ambiguous`.
  *
  * Episodes no slot or special holds are `unslotted`, listed apart and
  * never placed by episode_number.
@@ -132,7 +137,7 @@ function orderEntries({ arcs = [], slots = [], specials = [], episodes = [] } = 
       slot_number: null,
       after_slot_number: after,
       special_type: sp.special_type || null,
-      continuity: NEEDS_REVIEW,
+      continuity: sp.kind === 'bonus' ? CANONICAL : NEEDS_REVIEW,
       order_ambiguous: false,
       ...episodeView(sp.episode_id),
     };
@@ -184,12 +189,12 @@ async function seasonStoryOrder(sequelize, showId, { transaction } = {}) {
 }
 
 /**
- * What carries state into an episode: the entries before it, canonical, and
- * accepted (or, with includeUnaccepted, also the unaccepted ones, marked
+ * What carries state into an episode: the entries before it, canonical,
+ * unambiguously ordered and accepted (or, with includeUnaccepted, also the unaccepted ones, marked
  * simulated). Pure; never writes.
  * @returns {{ found, episodes, excluded }}
  *   episodes  [{ ...entry, simulated }] in story order
- *   excluded  [{ episode_id, position, reason: 'needs_review' | 'not_accepted' }]
+ *   excluded  [{ episode_id, position, reason: 'needs_review' | 'order_ambiguous' | 'not_accepted' }]
  */
 function precedingEpisodes(order, episodeId, { includeUnaccepted = false } = {}) {
   const entries = order?.entries || [];
@@ -201,6 +206,7 @@ function precedingEpisodes(order, episodeId, { includeUnaccepted = false } = {})
     if (e.position >= at.position) break;
     if (!e.episode_id) continue;
     if (e.continuity !== CANONICAL) { excluded.push({ episode_id: e.episode_id, position: e.position, reason: e.continuity }); continue; }
+    if (e.order_ambiguous) { excluded.push({ episode_id: e.episode_id, position: e.position, reason: 'order_ambiguous' }); continue; }
     if (!e.accepted && !includeUnaccepted) { excluded.push({ episode_id: e.episode_id, position: e.position, reason: 'not_accepted' }); continue; }
     carried.push({ ...e, simulated: !e.accepted });
   }
