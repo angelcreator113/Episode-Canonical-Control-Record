@@ -30,14 +30,28 @@ const { strictSocialProfileRelationship } = require('../helpers/strictSocialProf
 // Task #1814: the event also carries the opportunity's terms. The only new
 // statement is INSERT INTO event_deliverables (when the opportunity has
 // deliverables); `failDeliverables` makes it throw.
-function makeModels({ opportunity, guests = [], relationships = [], related = [], failDeliverables = false } = {}) {
+//
+// The event, its deliverables and the opportunity UPDATE run in one
+// transaction (the deliverables in a savepoint); the fake records each
+// transaction() call. The UPDATE answers RETURNING id unless `raced`
+// (the opportunity changed meanwhile). The deal-type draft's SELECT after
+// the commit finds no event here and is skipped.
+function makeModels({ opportunity, guests = [], relationships = [], related = [], failDeliverables = false, raced = false } = {}) {
   const queries = [];
   const profileCalls = { related: [], pool: [] };
+  const transactions = [];
   return {
     queries,
     profileCalls,
+    transactions,
     models: {
       sequelize: {
+        transaction: jest.fn(async (a, b) => {
+          const cb = typeof a === 'function' ? a : b;
+          const t = { id: `tx${transactions.length + 1}`, parent: typeof a === 'function' ? null : a.transaction };
+          transactions.push(t);
+          return cb(t);
+        }),
         query: jest.fn(async (sql, opts) => {
           queries.push({ sql, opts });
           if (/FROM opportunities WHERE id/.test(sql)) {
@@ -54,7 +68,10 @@ function makeModels({ opportunity, guests = [], relationships = [], related = []
             return [[]];
           }
           if (/UPDATE opportunities SET event_id/.test(sql)) {
-            return [[]];
+            return raced ? [[]] : [[{ id: opportunity.id }]];
+          }
+          if (/FROM world_events WHERE id = :eventId/.test(sql)) {
+            return [[]]; // the deal-type draft after the commit: skipped
           }
           throw new Error(`Unexpected query in test: ${sql}`);
         }),
@@ -280,7 +297,7 @@ describe('scheduleOpportunityAsEvent carries the opportunity terms (Task #1814)'
     expect(result.deliverables).toBe(0);
   });
 
-  it('a failed deliverable insert is logged and the event is still created and booked', async () => {
+  it('a failed deliverable insert is logged and the event is still created and linked', async () => {
     const error = jest.spyOn(console, 'error').mockImplementation(() => {});
     const { models, queries } = makeModels({ opportunity: termsOpportunity(), failDeliverables: true });
     const result = await scheduleOpportunityAsEvent('opp-1', 'show-1', models);
@@ -292,6 +309,75 @@ describe('scheduleOpportunityAsEvent carries the opportunity terms (Task #1814)'
     );
     expect(queries.filter(q => /UPDATE opportunities SET event_id/.test(q.sql))).toHaveLength(1);
     error.mockRestore();
+  });
+
+  it('deliverables go in a savepoint of the schedule transaction', async () => {
+    const { models, queries, transactions } = makeModels({ opportunity: termsOpportunity() });
+    await scheduleOpportunityAsEvent('opp-1', 'show-1', models);
+    const outer = transactions[0];
+    const savepoint = transactions.find(t => t.parent === outer);
+    expect(savepoint).toBeTruthy();
+    expect(queries.find(q => /INSERT INTO event_deliverables/.test(q.sql)).opts.transaction).toBe(savepoint);
+  });
+});
+
+// Evoni's ruling: an opportunity is accepted only by an explicit decision.
+// Scheduling it as an event links the event and notes it in the history; it
+// never moves the status (the Spring Capsule offer became booked this way).
+describe('scheduling never accepts the opportunity', () => {
+  const originalApiKey = process.env.ANTHROPIC_API_KEY;
+  beforeEach(() => { delete process.env.ANTHROPIC_API_KEY; });
+  afterEach(() => {
+    if (originalApiKey !== undefined) process.env.ANTHROPIC_API_KEY = originalApiKey;
+  });
+
+  const withStatus = (status) => ({ ...baseOpportunity(), connector_profile_id: null, status });
+  const updateOf = (queries) => queries.find(q => /UPDATE opportunities SET event_id/.test(q.sql));
+
+  it.each(['offered', 'considering', 'negotiating', 'booked', 'preparing', 'active'])(
+    "'%s' keeps its status; the event is linked and the history notes it",
+    async (status) => {
+      const { models, queries, transactions } = makeModels({ opportunity: withStatus(status) });
+      const result = await scheduleOpportunityAsEvent('opp-1', 'show-1', models);
+      const update = updateOf(queries);
+      expect(update.sql).not.toMatch(/'booked'/);
+      expect(update.sql).toMatch(/status = :nextStatus/);
+      expect(update.sql).toMatch(/WHERE id = :oppId AND status = :readStatus AND event_id IS NULL AND deleted_at IS NULL/);
+      const r = update.opts.replacements;
+      expect(r).toMatchObject({ nextStatus: status, readStatus: status, eventId: result.event_id, oppId: 'opp-1' });
+      const history = JSON.parse(r.historyEntry);
+      expect(history).toEqual([
+        expect.objectContaining({ status, note: 'Scheduled as event; status unchanged', event_id: result.event_id }),
+      ]);
+      expect(result.opportunity).toMatchObject({ status, event_id: result.event_id });
+      // The event insert and the opportunity update share one transaction.
+      const insert = queries.find(q => /INSERT INTO world_events/.test(q.sql));
+      expect(insert.opts.transaction).toBe(transactions[0]);
+      expect(update.opts.transaction).toBe(transactions[0]);
+    }
+  );
+
+  it.each(['declined', 'expired', 'cancelled', 'archived'])(
+    "'%s' is refused with a 409 before anything is written or drafted",
+    async (status) => {
+      const { models, queries } = makeModels({ opportunity: withStatus(status) });
+      await expect(scheduleOpportunityAsEvent('opp-1', 'show-1', models))
+        .rejects.toMatchObject({ status: 409, message: `This opportunity is ${status}; a closed opportunity cannot be scheduled as an event.` });
+      expect(queries.filter(q => /INSERT INTO world_events|UPDATE opportunities/.test(q.sql))).toHaveLength(0);
+      expect(models.sequelize.transaction).not.toHaveBeenCalled();
+    }
+  );
+
+  it('one that already has an event is refused with a 409', async () => {
+    const { models, queries } = makeModels({ opportunity: { ...withStatus('offered'), event_id: 'ev-old' } });
+    await expect(scheduleOpportunityAsEvent('opp-1', 'show-1', models))
+      .rejects.toMatchObject({ status: 409, message: 'This opportunity already has an event scheduled' });
+    expect(queries.filter(q => /INSERT INTO world_events/.test(q.sql))).toHaveLength(0);
+  });
+
+  it('one that changed meanwhile (the guarded UPDATE matches nothing) throws 409 inside the transaction', async () => {
+    const { models } = makeModels({ opportunity: withStatus('offered'), raced: true });
+    await expect(scheduleOpportunityAsEvent('opp-1', 'show-1', models)).rejects.toMatchObject({ status: 409 });
   });
 });
 

@@ -99,12 +99,13 @@ export default function OpportunitiesTab({ showId, api, S, setToast, loadData, e
 
   const toEvent = async (opp) => {
     const early = opp.status === 'held';
-    if (!window.confirm(early ? scheduleEarlyText(opp) : `Schedule ${opp.name} as an event? This creates a world event for it and marks it booked.`)) return;
+    // Scheduling accepts nothing: the status stays until Lala decides (Evoni's ruling).
+    if (!window.confirm(early ? scheduleEarlyText(opp) : `Schedule ${opp.name} as an event? This creates a world event for it; its status (${opp.status}) does not change, and accepting it is still a separate decision.`)) return;
     try {
       setToast(`Scheduling "${opp.name}" as event...`);
       const res = await api.post(`/api/v1/feed-pipeline/${showId}/schedule/${opp.id}`);
       if (res.data.success) {
-        setOpps(prev => prev.map(o => o.id === opp.id ? { ...o, event_id: res.data.data.event_id, status: 'booked' } : o));
+        setOpps(prev => prev.map(o => o.id === opp.id ? { ...o, event_id: res.data.data.event_id, status: res.data.data.opportunity?.status || o.status } : o));
         loadData();
         setToast(`"${opp.name}" scheduled — event created with ${res.data.data.guests || 0} guests`);
       }
