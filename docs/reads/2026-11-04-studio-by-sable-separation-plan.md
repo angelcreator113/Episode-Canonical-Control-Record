@@ -1,5 +1,7 @@
 # Studio by Sable: brand/character separation plan (2026-11-04)
 
+**Update (Evoni, 2026-11-04, Pulse rulings 8–9):** @studiobysable is the brand's account; Sable's personal relationships are **not** mirrored onto it; **no Registry character is created for the brand** (I6 / D2 below is withdrawn: business relationships attach to the brand record instead, see `2026-11-04-consolidated-implementation-roadmap.md` S2.4); the brand tracks its own regard for Lala, separate from Sable's personal tie.
+
 **Status:** a proposal only. No production record has been created, edited or deleted. Each step in §8 needs Evoni's separate approval before it runs.
 **Basis:**
 - The production read of 2026-11-04 (audit `2026-11-04-platform-architecture-audit.md` §14).
@@ -55,7 +57,7 @@
 | I3 | Pulse profile 447 `@studiobysable` | Live, `crossed`, creator Sable Okonkwo-Reyes, no account marker | **The studio's official account.** Its `full_profile` gains `account:'brand'`, `lalaverse_brand_id` and `lalaverse_brand_slug`. `display_name` and `creator_name` stay (creator = the founder behind it). Handle, posts and status stay. | jsonb update (no endpoint attaches an existing profile; G2) | R1, R4 |
 | I4 | Pulse profile 446 (deleted 2026-09-25, Sable Orin Voss, Dazzle District) | Deleted | Untouched; kept as history | n/a | R4 |
 | I5 | Link between person and account | `c4931651.feed_profile_id = 447` | **Decision D1:** keep the link until Sable has a personal profile, or clear it. See the note below. | Registry edit | R1, R2 |
-| I6 | Company stand-in character (optional) | none | **Decision D2:** only if brand-to-brand relationships (rival_brand, client_partner) are to be recorded under the brand. That is how the system records a company party today (G6). Not proposed until §5 is reviewed. | `companyCharacters.linkCharacter` | R3, R6 |
+| I6 | ~~Company stand-in character (optional)~~ **Withdrawn (ruling 9)** | none | **Decision D2:** only if brand-to-brand relationships (rival_brand, client_partner) are to be recorded under the brand. That is how the system records a company party today (G6). Not proposed until §5 is reviewed. | `companyCharacters.linkCharacter` | R3, R6 |
 
 **Note on I5.** While 447 is linked as her `feed_profile_id`, code that treats a character's linked profile as her own voice will speak as the studio. That code is `syncStoryPair`, which mirrors her story relationships onto 447, plus the Pulse voice and character talk. That is acceptable for business relationships and wrong for personal ones such as romances. Two clean options:
 - Clear the link and later give Sable a personal profile.
