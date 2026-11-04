@@ -78,6 +78,27 @@ describe('CharacterRegistryPage: the chosen registry', () => {
     expect(api.post.mock.calls[0][1]).toMatchObject({ display_name: 'Jules', character_key: 'jules' });
   });
 
+  // Task #3203 (cast read §8e): the five roles are no longer a choice. The
+  // form keeps registry, name and icon; role_type is left to the server's
+  // default and stays in the data.
+  test('the New character form has no role choice and sends no role', async () => {
+    rememberShow('show-b');
+    renderAt();
+    await waitFor(() => expect(cardNames()).toEqual(['Marcus', 'Nadia']));
+    fireEvent.click(screen.getByTestId('new-character'));
+    const dialog = screen.getByRole('dialog');
+    expect(within(dialog).queryByText('Role')).toBeNull();
+    for (const label of ['Pressure', 'Mirror', 'Support', 'Shadow', 'Special']) {
+      expect(within(dialog).queryByRole('button', { name: new RegExp(label) })).toBeNull();
+    }
+    expect(within(dialog).getByLabelText('Name')).toBeTruthy();
+    expect(within(dialog).getByRole('button', { name: 'Icon 👤' })).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Jules' } });
+    fireEvent.click(screen.getByTestId('create-submit'));
+    await waitFor(() => expect(api.post).toHaveBeenCalledTimes(1));
+    expect(api.post.mock.calls[0][1]).not.toHaveProperty('role_type');
+  });
+
   test('switching registries changes the view, the URL and the create target', async () => {
     rememberShow('show-b');
     renderAt();

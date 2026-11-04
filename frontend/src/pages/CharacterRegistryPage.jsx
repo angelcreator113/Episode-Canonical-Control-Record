@@ -71,7 +71,10 @@ export default function CharacterRegistryPage() {
   const [review, setReview] = useState(null);
   const [crossingId, setCrossingId] = useState(null); // the feed person whose character is being made
   const [showCreate, setShowCreate] = useState(false);
-  const [createForm, setCreateForm] = useState({ display_name: '', role_type: 'pressure', icon: '👤' });
+  // The New character form has no role choice (Task #3203, cast read §8e):
+  // role_type stays in the data, set by the server's default or by a "Make
+  // one for me" proposal handed to Edit, and is never picked here.
+  const [createForm, setCreateForm] = useState({ display_name: '', icon: '👤' });
   const [creating, setCreating] = useState(false);
   // "Make one for me" (Evoni, 2026-10-19; components/Cast/CastMakeForMe):
   // an ADMIN's button only; the server refuses anyone else too.
@@ -176,7 +179,7 @@ export default function CharacterRegistryPage() {
         ...createForm, character_key: characterKeyFor(createForm.display_name),
       });
       setShowCreate(false);
-      setCreateForm({ display_name: '', role_type: 'pressure', icon: '👤' });
+      setCreateForm({ display_name: '', icon: '👤' });
       loadCharacters();
       showToast(`Character created in ${createRegistry.title}`);
     } catch (err) { showToast('Failed: ' + (err.response?.data?.error || err.message)); }
@@ -379,7 +382,7 @@ export default function CharacterRegistryPage() {
             const { pulse: _pulse, world: _world, ...fields } = p;
             setShowMake(false);
             setCreateRegistryId(reg?.id || registryId);
-            setCreateForm({ role_type: 'pressure', icon: '👤', ...fields });
+            setCreateForm({ icon: '👤', ...fields });
             setShowCreate(true);
           }}
         />
@@ -412,16 +415,6 @@ export default function CharacterRegistryPage() {
                     {duplicate.display_name} already exists in {createRegistry.title}. <button type="button" className="cast-dup-open" onClick={() => navigate(`/character/${duplicate.id}`)}>Open it →</button>
                   </div>
                 )}
-              </div>
-              <div>
-                <span className="cast-label">Role</span>
-                <div className="cast-pick-row">
-                  {Object.entries(ROLE_CONFIG).filter(([k]) => k !== 'protagonist').map(([key, cfg]) => (
-                    <button key={key} type="button" aria-pressed={createForm.role_type === key}
-                      className={`cast-pick${createForm.role_type === key ? ' is-on' : ''}`}
-                      onClick={() => setCreateForm({ ...createForm, role_type: key })}>{cfg.icon} {cfg.label}</button>
-                  ))}
-                </div>
               </div>
               <div>
                 <span className="cast-label">Icon</span>
