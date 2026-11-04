@@ -100,6 +100,8 @@ describe('Route Health — App exports Express app', () => {
   let app;
 
   beforeAll(() => {
+    // /api/v1/debug/routes is opt-in and ADMIN-only (debug/seed opt-in fix).
+    process.env.ENABLE_DEBUG_ROUTES = 'true';
     try {
       app = require('../../src/app');
     } catch (err) {
@@ -124,9 +126,19 @@ describe('Route Health — App exports Express app', () => {
   test('no critical routes failed to load', async () => {
     if (!app) return;
     const request = require('supertest');
-    const res = await request(app).get('/api/v1/debug/routes');
+    // tokenService needs a 32+ character secret; this file's 'test-secret' is shorter.
+    const savedSecret = process.env.JWT_SECRET;
+    process.env.JWT_SECRET = 'route-health-secret-at-least-32-characters';
+    let res;
+    try {
+      const TokenService = require('../../src/services/tokenService');
+      const token = TokenService.generateTokenPair({ id: 'route-health', email: 'rh@test.dev', name: 'RH', groups: ['ADMIN'], role: 'ADMIN' }).accessToken;
+      res = await request(app).get('/api/v1/debug/routes').set('Authorization', `Bearer ${token}`);
+    } finally {
+      process.env.JWT_SECRET = savedSecret;
+    }
     if (res.status !== 200) {
-      console.warn('Debug routes endpoint not available (production mode?)');
+      console.warn('Debug routes endpoint not available (ENABLE_DEBUG_ROUTES unset or production mode?)');
       return;
     }
 
