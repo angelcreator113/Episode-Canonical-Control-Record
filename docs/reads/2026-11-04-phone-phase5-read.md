@@ -264,3 +264,11 @@ The template places each of its beats inside the canonical beats. It adds no bea
 | P10 | `[DECLINE: <opportunity id> <reason>]` | **new** (D8): portrays only; validated against the offer's status; consequences proposed for review; after the phase 4 `[OFFER]` cue |
 
 **Order:** the phase 7 N4 safety PR → P1 → P2 → P3 → (P3b on approval) → P4 (after §14 is approved) → P7 → P5 → P6 → P8 → P9 → P10 (after phase 4's offer cue).
+
+## 17. Rulings on the mapping (Evoni, 2026-11-04)
+
+- **M1:** the event invitation stays at beats 4-5. A separate offer goes at beat 7 only when an actual distinct opportunity exists. No offer is invented to fill the beat.
+- **M2:** the career decision stays at beat 6. The updated Career list and the spending consequences are at beat 9. The same decision is not repeated.
+- **M3:** the optional Previously on belongs at the **beginning of beat 1**, not beat 3. It stays off by default and adds no new canonical beat.
+
+This supersedes the beat-3 placement in §13.8, §14 and §16 (P5). In the §14 table, Previously on moves from beat 3 to the start of beat 1 (Opening Ritual). It is still inside a beat, so it is not text before the first header (13.3).

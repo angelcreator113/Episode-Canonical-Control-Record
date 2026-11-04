@@ -751,3 +751,10 @@ Recorded as given. These are documentation decisions only. They do not approve a
   - **(A) Strict:** any change since load refuses the save, and the form reloads while keeping Evoni's unsaved edits.
   - **(B) Per key:** refuse only when a key the save changes was itself changed since load. This needs the form to send only the keys it changed, and the server to merge them under the lock. Still no migration.
   - Suggested: (B) for the settings editor, (A) for the general `PUT /shows/:id`.
+
+## 28. Ruling on N5 (Evoni, 2026-11-04)
+
+- **N5: B for dedicated settings editing, A for general show metadata saves.**
+  - The settings editor uses per-key conflict detection: a save is refused only when a key it changes was itself changed since load.
+  - The general show metadata save (`PUT /shows/:id` with `metadata`) uses strict protection: any change since load refuses it with 409.
+  - Neither path ever silently overwrites newer settings.
