@@ -113,6 +113,7 @@ import { BASICS_FIELDS, CONTINUE_BASICS, FOLDABLE, fmtBasicsValue } from '../lib
 import EventDocuments from '../components/EventPackage/EventDocuments';
 import EventOutfitPicker from '../components/EventOutfitPicker';
 import EpisodeLocationsStep from '../components/EpisodeLocationsStep';
+import WhosNewStep from '../components/EventPackage/WhosNewStep';
 import PackageHero from '../components/EventPackage/PackageHero';
 import ReadinessDetails from '../components/EventPackage/ReadinessDetails';
 import ShortcutsHelp from '../components/EventPackage/ShortcutsHelp';
@@ -320,7 +321,7 @@ function EventPackageBody({ pkg }) {
   const picker = useOrganizerPicker({ event, used, organizer, sourceProfile, putEvent, load, setToast, undoChange, loadedEventRef });
   const guests = useGuests({ event, guestList, putEvent, load, setToast, undoChange, loadedEventRef });
   const place = usePlacePickers({ showId, event, putEvent, load, setToast });
-  const start = useStartEpisode({ showId, eventId, gatesMet, used, moneyPending, readiness, moneyWarnings, setToast, navigate });
+  const start = useStartEpisode({ showId, eventId, gatesMet, used, moneyPending, readiness, moneyWarnings, setToast, navigate, joinFromWhosNew: guests.joinFromWhosNew });
   const actions = useEventActions({ showId, eventId, reloadTick });
   const fill = useFillMissing({ showId, eventId, event, basics, used, startedFrom, organizer, putEvent, load, setToast });
   // The Event section's pointer to Fill what's missing: up to the strip,
@@ -589,10 +590,12 @@ function EventPackageBody({ pkg }) {
       )}
 
       {start.locationsStep && gatesMet && !used && (
+        // Hidden, not closed, while "Who's new" is asked: Back returns to it as edited.
+        <div hidden={Boolean(start.whosNewStep)} data-testid="locations-step-wrap">
         <EpisodeLocationsStep
           showId={showId}
           title="Episode locations"
-          confirmLabel="Start Episode"
+          confirmLabel="Next"
           initial={start.locationsStep.locations}
           missing={start.locationsStep.missing}
           removed={start.locationsStep.removed || []}
@@ -601,6 +604,19 @@ function EventPackageBody({ pkg }) {
           busy={start.starting} intro={copies}
           onConfirm={start.confirmStartEpisode}
           onCancel={() => start.setLocationsStep(null)}
+        />
+        </div>
+      )}
+
+      {/* "Who's new in Lala's life this episode?" (Task #3202), between the locations and generate-episode. */}
+      {start.whosNewStep && gatesMet && !used && (
+        <WhosNewStep
+          showId={showId}
+          event={event}
+          guestList={guestList}
+          busy={start.starting}
+          onFinish={start.finishStartEpisode}
+          onCancel={() => start.setWhosNewStep(null)}
         />
       )}
 
