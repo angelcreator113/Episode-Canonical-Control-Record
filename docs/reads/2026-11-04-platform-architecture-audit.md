@@ -668,3 +668,47 @@ No event uses `host_brand`. The host is free text in three spellings, and two li
 4. Is her home Echo Park, LA (as live) or the Dazzle District (as first written)?
 5. Is the Spring Capsule booking meant to pay 0.00?
 6. Should "Fit Check with Stable" read "Sable", and should Fabric and Form stay a draft on the same day as the used Episode 1 event?
+
+## 15. Sensitive routes still without a role check (read only, PR #3706 head 9d389bbd, 2026-11-04)
+
+**Method.**
+- Every `router|app.(get|post|put|patch|delete)` call (2017 routes) was parsed with its middleware chain, including file-level `router.use` and mount-level guards.
+- Of these, 319 are role-guarded, 1503 need sign-in only, 64 use optionalAuth, and 131 had no recognised guard. All 131 were then read by hand: 113 use a spread `admin` array, 10 use other guard forms, and 8 are public by design.
+- Handler bodies were scanned for `DELETE FROM`, `TRUNCATE`, `force`, ledger writes, scheduler, budget and queue calls.
+- The six High rows were re-read against the #3706 head.
+
+**Already correct** (not findings):
+- the evaluation admin reset;
+- CFO, budget and scheduler start/stop/run;
+- `admin.js`, `seed.js`, audit logs, AI usage and queue monitor;
+- `/search/reindex` (group check in the handler);
+- after #3706, the Recycle Bin and Amber.
+- No unauthenticated route writes data or calls paid AI, apart from login/refresh, the rate-limited poll vote and the token-checked teleprompter remote.
+
+**High** (destructive, ledger or paid AI; only sign-in required):
+
+| Route | File | What it can do | Proposed |
+|---|---|---|---|
+| POST `/api/v1/franchise-brain/seed` | `franchiseBrainRoutes.js` | `force` runs an unscoped hard `DELETE FROM franchise_knowledge` (all canon) and re-seeds | ADMIN |
+| POST `/api/v1/world/:showId/events/bulk-delete` | `worldEvents/episodeBatch.js` | hard-deletes a show's events | **Already ADMIN in #3702** |
+| POST `/api/v1/memories/generate-events` | `eventGeneratorRoute.js` | `replace_existing` replaces every world event of the show, plus a paid AI call | #3702 makes the replace link-safe; ADMIN for `replace_existing` is proposed |
+| PUT `/api/v1/feed-scheduler/config` | `feedSchedulerRoutes.js` | sets the interval and batch size unchecked and restarts the paid-AI scheduler (start/stop are already ADMIN) | ADMIN + bounds |
+| POST `/api/v1/characters/:key/state/update` | `evaluation.js` | manual coin adjustment written to the ledger | ADMIN |
+| POST `/api/v1/shows/:id/seed-balance` | `shows.js` | `force` replaces the seed transactions and starting balance | ADMIN |
+
+**Medium:**
+- PUT `/shows/:id/financial-config`: starting balance and goal rewards.
+- POST `/franchise-brain/activate-all`: activates every pending canon entry without review; these feed AI prompts.
+- GET `/jobs`, POST `/jobs/:id/retry`, POST `/jobs/:id/cancel`: every user's jobs, unscoped.
+- POST `/wardrobe/bulk/sync-coin-costs`: every show when `show_id` is absent.
+- POST `/ui-overlays/:showId/generate-all`: bulk paid image generation, and no `aiRateLimiter`.
+- POST `/memories/batch-generate` and `/batch-generate-background`: no cap on the number of briefs.
+- POST `/wardrobe/seed`: `clear_existing` hard-deletes.
+
+**Low:**
+- Soft bulk deletes: `/assets/bulk/delete`, `/scripts/bulk-delete`.
+- Per-domain restore-from-trash routes (feed posts, arc twists, event documents), running in parallel with the now-ADMIN Recycle Bin. Evoni decides whether they follow it.
+- GET `/scene-sets/generation-check`: provider-key presence, booleans only.
+- GET `/api/v1/debug/routes`: **#3705 already closes it** (off by default, ADMIN).
+
+None of these files is touched by #3706. Each fix would be a separate, reviewable PR on Evoni's approval.
