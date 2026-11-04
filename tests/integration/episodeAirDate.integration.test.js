@@ -1,0 +1,131 @@
+/**
+ * Integration Tests - the episode update's air date (P0; Evoni's ruling on
+ * the Overview Air Date edit: "Fix field mapping, add validation and
+ * regression tests").
+ *
+ * Against the test database, through the app (PUT /api/v1/episodes/:id):
+ * a day as YYYY-MM-DD is saved as that day; an unreadable date is a 400 and
+ * nothing is written; empty or null clears it; a key the update does not
+ * keep (the Overview's old publish_date, episode_intent, creative_notes) is
+ * not written and is named in ignored_fields.
+ */
+jest.unmock('uuid');
+
+const request = require('supertest');
+const crypto = require('crypto');
+const app = require('../../src/app');
+const TokenService = require('../../src/services/tokenService');
+const models = require('../../src/models');
+
+const { sequelize } = models;
+
+const shouldSkip =
+  !process.env.DATABASE_URL ||
+  process.env.DATABASE_URL?.includes('amazonaws.com') ||
+  !process.env.DATABASE_URL?.includes('episode_metadata_test');
+
+const uuid = () => crypto.randomUUID();
+const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
+const one = async (sql, replacements = {}) =>
+  (await sequelize.query(sql, { replacements, type: sequelize.QueryTypes.SELECT }))[0];
+
+(shouldSkip ? describe.skip : describe)('PUT /episodes/:id air_date', () => {
+  const shows = [];
+  let token;
+
+  beforeAll(() => {
+    token = TokenService.generateTokenPair({
+      id: 'test-user-air-date', email: 'test@air-date.dev', name: 'Air Date',
+      groups: ['USER', 'EDITOR'], role: 'USER',
+    }).accessToken;
+  });
+
+  afterAll(async () => {
+    if (shows.length) {
+      await run('DELETE FROM episodes WHERE show_id IN (:shows)', { shows });
+      await run('DELETE FROM shows WHERE id IN (:shows)', { shows });
+    }
+  });
+
+  async function seed({ air = null } = {}) {
+    const ids = { show: uuid(), ep: uuid(), air };
+    shows.push(ids.show);
+    await run(`INSERT INTO shows (id, name, slug, created_at, updated_at) VALUES (:show, :name, :slug, NOW(), NOW())`,
+      { ...ids, name: `Air ${ids.show.slice(0, 8)}`, slug: `air-${ids.show.slice(0, 8)}` });
+    await run(`INSERT INTO episodes (id, show_id, title, episode_number, status, air_date, created_at, updated_at)
+               VALUES (:ep, :show, 'Gala Night', 3, 'draft', CAST(:air AS timestamptz), NOW(), NOW())`, ids);
+    return ids;
+  }
+
+  const put = (ep, body) => request(app).put(`/api/v1/episodes/${ep}`).set('Authorization', `Bearer ${token}`).send(body);
+  const dayOf = async (ep) =>
+    (await one(`SELECT to_char(air_date AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS day FROM episodes WHERE id = :ep`, { ep })).day;
+
+  test('a day as YYYY-MM-DD is saved as that day and returned', async () => {
+    const ids = await seed();
+    const res = await put(ids.ep, { air_date: '2026-12-01' });
+    expect(res.status).toBe(200);
+    expect(await dayOf(ids.ep)).toBe('2026-12-01');
+    expect(String(res.body.data.air_date).slice(0, 10)).toBe('2026-12-01');
+    expect(res.body).not.toHaveProperty('ignored_fields');
+
+    // GET reads back the same day.
+    const got = await request(app).get(`/api/v1/episodes/${ids.ep}`).set('Authorization', `Bearer ${token}`);
+    expect(got.status).toBe(200);
+    expect(String((got.body.data || got.body).air_date).slice(0, 10)).toBe('2026-12-01');
+  });
+
+  test('a full ISO timestamp is still kept (existing callers)', async () => {
+    const ids = await seed();
+    const res = await put(ids.ep, { air_date: '2026-11-01T00:00:00.000Z' });
+    expect(res.status).toBe(200);
+    expect(await dayOf(ids.ep)).toBe('2026-11-01');
+  });
+
+  test.each([
+    ['not-a-date'],
+    ['2026-02-30'],
+    ['2026-13-01'],
+    ['12/01/2026'],
+    [20261201],
+    [{ day: '2026-12-01' }],
+  ])('an unreadable air date (%p) is a 400 and nothing is written', async (bad) => {
+    const ids = await seed({ air: '2026-10-10T00:00:00Z' });
+    const res = await put(ids.ep, { air_date: bad, title: 'Should not save' });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('air_date: a date as YYYY-MM-DD, or empty to clear it.');
+    const row = await one('SELECT title FROM episodes WHERE id = :ep', ids);
+    expect(row.title).toBe('Gala Night');
+    expect(await dayOf(ids.ep)).toBe('2026-10-10');
+  });
+
+  test.each([[''], [null]])('an empty air date (%p) clears it to null', async (empty) => {
+    const ids = await seed({ air: '2026-10-10T00:00:00Z' });
+    const res = await put(ids.ep, { air_date: empty });
+    expect(res.status).toBe(200);
+    const row = await one('SELECT air_date FROM episodes WHERE id = :ep', ids);
+    expect(row.air_date).toBeNull();
+    expect(res.body.data.air_date).toBeNull();
+  });
+
+  test('an update without air_date leaves it as it was', async () => {
+    const ids = await seed({ air: '2026-10-10T00:00:00Z' });
+    const res = await put(ids.ep, { title: 'Renamed' });
+    expect(res.status).toBe(200);
+    expect(await dayOf(ids.ep)).toBe('2026-10-10');
+  });
+
+  test('keys the update does not keep are not written and are named in ignored_fields', async () => {
+    const ids = await seed({ air: '2026-10-10T00:00:00Z' });
+    // What the Overview form sent before this fix.
+    const res = await put(ids.ep, {
+      title: 'Gala Night II', description: 'Synopsis.', publish_date: '2026-12-25',
+      episode_intent: 'Win the room', creative_notes: 'Soft gold', show_id: uuid(),
+    });
+    expect(res.status).toBe(200);
+    expect(res.body.ignored_fields).toEqual(['publish_date', 'episode_intent', 'creative_notes', 'show_id']);
+    const row = await one(`SELECT title, description, show_id, to_char(air_date AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS day
+                             FROM episodes WHERE id = :ep`, ids);
+    expect(row).toEqual({ title: 'Gala Night II', description: 'Synopsis.', show_id: ids.show, day: '2026-10-10' });
+  });
+});
