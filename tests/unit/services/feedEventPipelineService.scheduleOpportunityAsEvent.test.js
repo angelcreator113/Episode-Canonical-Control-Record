@@ -34,9 +34,10 @@ const { strictSocialProfileRelationship } = require('../helpers/strictSocialProf
 // The event, its deliverables and the opportunity UPDATE run in one
 // transaction (the deliverables in a savepoint); the fake records each
 // transaction() call. The UPDATE answers RETURNING id unless `raced`
-// (the opportunity changed meanwhile). The deal-type draft's SELECT after
+// (the opportunity changed meanwhile). `duplicateName`: an event of the
+// opportunity's name already exists. The deal-type draft's SELECT after
 // the commit finds no event here and is skipped.
-function makeModels({ opportunity, guests = [], relationships = [], related = [], failDeliverables = false, raced = false } = {}) {
+function makeModels({ opportunity, guests = [], relationships = [], related = [], failDeliverables = false, raced = false, duplicateName = false } = {}) {
   const queries = [];
   const profileCalls = { related: [], pool: [] };
   const transactions = [];
@@ -58,7 +59,7 @@ function makeModels({ opportunity, guests = [], relationships = [], related = []
             return [[opportunity]];
           }
           if (/FROM world_events WHERE show_id/.test(sql)) {
-            return [[]]; // no name collision
+            return duplicateName ? [[{ id: 'event-dupe', name: opportunity.name }]] : [[]]; // a name collision only when asked
           }
           if (/INSERT INTO world_events/.test(sql)) {
             return [[]];
@@ -357,16 +358,27 @@ describe('scheduling never accepts the opportunity', () => {
     }
   );
 
-  it.each(['declined', 'expired', 'cancelled', 'archived'])(
+  // A finished deal (completed, paid) is refused too: the work is done.
+  it.each(['declined', 'expired', 'cancelled', 'archived', 'completed', 'paid'])(
     "'%s' is refused with a 409 before anything is written or drafted",
     async (status) => {
       const { models, queries } = makeModels({ opportunity: withStatus(status) });
       await expect(scheduleOpportunityAsEvent('opp-1', 'show-1', models))
-        .rejects.toMatchObject({ status: 409, message: `This opportunity is ${status}; a closed opportunity cannot be scheduled as an event.` });
+        .rejects.toMatchObject({ status: 409, message: `This opportunity is ${status}; a closed or finished opportunity cannot be scheduled as an event.` });
       expect(queries.filter(q => /INSERT INTO world_events|UPDATE opportunities/.test(q.sql))).toHaveLength(0);
       expect(models.sequelize.transaction).not.toHaveBeenCalled();
     }
   );
+
+  it('an event of the same name already in the show is a 409 with a clear message, not a 500', async () => {
+    const { models, queries } = makeModels({ opportunity: withStatus('offered'), duplicateName: true });
+    await expect(scheduleOpportunityAsEvent('opp-1', 'show-1', models)).rejects.toMatchObject({
+      status: 409,
+      message: 'An event named "Test Opportunity Event" already exists in this show. Rename the opportunity or that event, then schedule it again.',
+    });
+    expect(queries.filter(q => /INSERT INTO world_events|UPDATE opportunities/.test(q.sql))).toHaveLength(0);
+    expect(models.sequelize.transaction).not.toHaveBeenCalled();
+  });
 
   it('one that already has an event is refused with a 409', async () => {
     const { models, queries } = makeModels({ opportunity: { ...withStatus('offered'), event_id: 'ev-old' } });

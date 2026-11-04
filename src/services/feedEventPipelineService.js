@@ -388,8 +388,9 @@ function opportunityGuestCategory(category) {
 const DRAFT_VENUE_MAX = 200;
 
 // Closed opportunities are never scheduled as an event (routes/opportunityRoutes
-// STATUS_FLOW: these only go on to archived). The route answers err.status.
-const SCHEDULE_CLOSED_STATUSES = ['declined', 'expired', 'cancelled', 'archived'];
+// STATUS_FLOW: these only go on to archived), nor a finished deal (completed
+// or paid: the work is done). The route answers err.status.
+const SCHEDULE_CLOSED_STATUSES = ['declined', 'expired', 'cancelled', 'archived', 'completed', 'paid'];
 const scheduleError = (status, message) => Object.assign(new Error(message), { status });
 
 // userId (Task #2156) is the requesting user, the creation draft's rate-limit
@@ -409,7 +410,7 @@ async function scheduleOpportunityAsEvent(opportunityId, showId, models, { userI
   if (opp.event_id) throw scheduleError(409, 'This opportunity already has an event scheduled');
   // A closed one is refused before any model call.
   if (SCHEDULE_CLOSED_STATUSES.includes(opp.status)) {
-    throw scheduleError(409, `This opportunity is ${opp.status}; a closed opportunity cannot be scheduled as an event.`);
+    throw scheduleError(409, `This opportunity is ${opp.status}; a closed or finished opportunity cannot be scheduled as an event.`);
   }
 
   // One held for an episode's beat 14 is scheduled early (Evoni,
@@ -428,7 +429,9 @@ async function scheduleOpportunityAsEvent(opportunityId, showId, models, { userI
     `SELECT id, name FROM world_events WHERE show_id = :showId AND name = :name AND deleted_at IS NULL LIMIT 1`,
     { replacements: { showId, name: opp.name } }
   );
-  if (dupeCheck?.length > 0) throw new Error(`An event named "${opp.name}" already exists`);
+  if (dupeCheck?.length > 0) {
+    throw scheduleError(409, `An event named "${opp.name}" already exists in this show. Rename the opportunity or that event, then schedule it again.`);
+  }
 
   const config = EVENT_TYPE_CONFIGS[opp.opportunity_type] || EVENT_TYPE_CONFIGS.social_event;
   const wardrobe = typeof opp.wardrobe_brief === 'string' ? JSON.parse(opp.wardrobe_brief) : (opp.wardrobe_brief || {});

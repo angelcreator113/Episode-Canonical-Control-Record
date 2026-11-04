@@ -98,9 +98,31 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
     const id = await makeOpp('Declined Gala', 'declined');
     const res = await schedule(id);
     expect(res.status).toBe(409);
-    expect(res.body.error).toBe('This opportunity is declined; a closed opportunity cannot be scheduled as an event.');
+    expect(res.body.error).toBe('This opportunity is declined; a closed or finished opportunity cannot be scheduled as an event.');
     expect(await row(id)).toMatchObject({ status: 'declined', event_id: null });
     expect(await eventsNamed('Declined Gala')).toEqual([]);
+  });
+
+  test('a finished deal (completed, paid) is refused with a 409, and no event is made', async () => {
+    for (const status of ['completed', 'paid']) {
+      const id = await makeOpp(`Finished ${status}`, status);
+      const res = await schedule(id);
+      expect(res.status).toBe(409);
+      expect(res.body.error).toBe(`This opportunity is ${status}; a closed or finished opportunity cannot be scheduled as an event.`);
+      expect(await row(id)).toMatchObject({ status, event_id: null });
+      expect(await eventsNamed(`Finished ${status}`)).toEqual([]);
+    }
+  });
+
+  test('a second opportunity with the name of an existing event is a 409 with a clear message, not a 500', async () => {
+    const first = await makeOpp('Twin Gala', 'offered');
+    expect((await schedule(first)).status).toBe(200);
+    const second = await makeOpp('Twin Gala', 'considering');
+    const res = await schedule(second);
+    expect(res.status).toBe(409);
+    expect(res.body.error).toMatch(/^An event named ".*Twin Gala.*" already exists in this show\. Rename the opportunity or that event, then schedule it again\.$/);
+    expect(await row(second)).toMatchObject({ status: 'considering', event_id: null });
+    expect(await eventsNamed('Twin Gala')).toHaveLength(1);
   });
 
   test('a failure after the event insert leaves no event behind (one transaction)', async () => {
