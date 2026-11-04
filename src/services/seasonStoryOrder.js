@@ -151,7 +151,7 @@ function orderEntries({ arcs = [], slots = [], specials = [], episodes = [] } = 
 
   rows.sort((a, b) => compareKeys(a.key, b.key));
   const seen = new Map();
-  const entries = rows.map(({ key, ...row }, i) => {
+  const entries = rows.map(({ key: _key, ...row }, i) => {
     const entry = { position: i + 1, ...row };
     if (entry.episode_id) {
       const k = str(entry.episode_id);
