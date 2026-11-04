@@ -97,4 +97,22 @@ describe('EpisodeOverviewTab Air Date edit', () => {
     openEdit();
     expect(screen.getByLabelText('Air Date').value).toBe('');
   });
+
+  test('Intent and Creative Notes are read-only notes and are never sent', async () => {
+    // They have no storage yet (Evoni, 2026-11-04): not an input until they save.
+    const onUpdate = vi.fn().mockResolvedValue({ data: { ...EPISODE, title: 'Gala Night II' } });
+    render(<MemoryRouter><EpisodeOverviewTab episode={EPISODE} show={{ id: 'show-1' }} onUpdate={onUpdate} /></MemoryRouter>);
+    openEdit();
+    expect(screen.queryByLabelText('Intent')).toBeNull();
+    expect(screen.queryByLabelText('Creative Notes')).toBeNull();
+    expect(screen.getByTestId('eov-pending-episode_intent').textContent).toMatch(/Not saved yet/);
+    expect(screen.getByTestId('eov-pending-creative_notes').textContent).toMatch(/Not saved yet/);
+
+    fireEvent.change(screen.getByDisplayValue('Gala Night'), { target: { value: 'Gala Night II' } });
+    fireEvent.click(screen.getByText('Save'));
+    await waitFor(() => expect(onUpdate).toHaveBeenCalledTimes(1));
+    const payload = onUpdate.mock.calls[0][0];
+    expect(payload).not.toHaveProperty('episode_intent');
+    expect(payload).not.toHaveProperty('creative_notes');
+  });
 });

@@ -42,6 +42,7 @@ const one = async (sql, replacements = {}) =>
 
   afterAll(async () => {
     if (shows.length) {
+      await run('DELETE FROM feed_posts WHERE show_id IN (:shows)', { shows });
       await run('DELETE FROM episodes WHERE show_id IN (:shows)', { shows });
       await run('DELETE FROM shows WHERE id IN (:shows)', { shows });
     }
@@ -127,5 +128,59 @@ const one = async (sql, replacements = {}) =>
     const row = await one(`SELECT title, description, show_id, to_char(air_date AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS day
                              FROM episodes WHERE id = :ep`, ids);
     expect(row).toEqual({ title: 'Gala Night II', description: 'Synopsis.', show_id: ids.show, day: '2026-10-10' });
+  });
+
+  // Scheduled posts follow an Air Date only through the existing rule
+  // (services/postRelease shiftForAirDate, called by updateEpisode): a stored
+  // date that moves to another stored date moves the episode's scheduled
+  // drafts by the same amount. A first date, a cleared date, a refused date
+  // and a save without air_date move nothing (Evoni, 2026-11-04: "verify that
+  // changing an Air Date affects scheduled posts only through the intended
+  // existing scheduling rules").
+  describe('scheduled posts', () => {
+    const DAY = 24 * 60 * 60 * 1000;
+    const dayOf = (d) => d.toISOString().slice(0, 10);
+    const future = (days) => { const d = new Date(Date.now() + days * DAY); d.setUTCHours(0, 0, 0, 0); return d; };
+    const scheduled = (show, releaseAt, storyOrder = 31) => models.FeedPost.create({
+      show_id: show, poster_handle: `air${show.slice(0, 6)}`, poster_display_name: 'Air', poster_platform: 'lalaverse',
+      post_type: 'post', content_text: 'soon.', status: 'draft', release_state: 'scheduled', release_at: releaseAt,
+      story_order: storyOrder, likes: 0, comments_count: 0, shares: 0, sample_comments: [], sort_order: 0,
+    });
+    beforeAll(() => jest.spyOn(console, 'log').mockImplementation(() => {}));
+
+    it('a day from the Overview moves the episode\'s scheduled posts by exactly the change; other episodes stay', async () => {
+      const air = future(20);
+      const ids = await seed({ air: air.toISOString() });
+      const before = new Date(air.getTime() - 2 * DAY + 18 * 60 * 60 * 1000);
+      const mine = await scheduled(ids.show, before);
+      const other = await scheduled(ids.show, before, 41);
+      const res = await put(ids.ep, { air_date: dayOf(future(23)) });
+      expect(res.status).toBe(200);
+      expect(res.body.release_shift).toEqual({ shifted: [mine.id], held: [] });
+      await mine.reload(); await other.reload();
+      expect(mine.release_at.getTime()).toBe(before.getTime() + 3 * DAY);
+      expect(other.release_at.getTime()).toBe(before.getTime());
+    });
+
+    it('a first date, a cleared date, a refused date and an unrelated save move nothing', async () => {
+      const blank = await seed();
+      const at = new Date(future(10).getTime() + 12 * 60 * 60 * 1000);
+      const p = await scheduled(blank.show, at);
+      const first = await put(blank.ep, { air_date: dayOf(future(12)) });
+      expect(first.status).toBe(200);
+      expect(first.body.release_shift).toBeUndefined();
+
+      const refused = await put(blank.ep, { air_date: '12/01/2026' });
+      expect(refused.status).toBe(400);
+      const untouched = await put(blank.ep, { title: 'Gala Night II' });
+      expect(untouched.body.release_shift).toBeUndefined();
+      const cleared = await put(blank.ep, { air_date: '' });
+      expect(cleared.status).toBe(200);
+      expect(cleared.body.release_shift).toBeUndefined();
+
+      await p.reload();
+      expect(p.release_at.getTime()).toBe(at.getTime());
+      expect(p.release_state).toBe('scheduled');
+    });
   });
 });

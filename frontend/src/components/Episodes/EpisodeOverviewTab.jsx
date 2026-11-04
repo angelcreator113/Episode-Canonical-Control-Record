@@ -100,8 +100,9 @@ function lookTile(locked, planned) {
 // `air_date`, the key the episode update keeps (it was `publish_date`, which
 // the server dropped), and shown as the day a date input takes: the stored
 // air_date is a timestamp ('2026-12-01T00:00:00.000Z'), its day in UTC as
-// the release board reads it. episode_intent and creative_notes have no
-// column yet; the server names them in ignored_fields.
+// the release board reads it. Intent and Creative Notes are not in the form:
+// they have no storage yet (Evoni, 2026-11-04: keep them, but do not present
+// either as an editable control until it saves; see PENDING_FIELDS).
 function editFormFrom(episode) {
   const air = episode?.air_date ? String(episode.air_date).slice(0, 10) : '';
   return {
@@ -110,10 +111,18 @@ function editFormFrom(episode) {
     // old `logline` key was not in the PUT whitelist, so edits were dropped.
     description: episode?.description || '',
     air_date: /^\d{4}-\d{2}-\d{2}$/.test(air) ? air : '',
-    episode_intent: episode?.episode_intent || '',
-    creative_notes: episode?.creative_notes || '',
   };
 }
+
+// Fields the Overview keeps a place for but cannot save yet. They were
+// inputs sent as episode_intent / creative_notes, which no table stores, so
+// every edit was lost. They show as read-only notes until a home is approved:
+// Intent on the Episode Brief, Creative Notes in the episode's production
+// planning (Evoni's ruling, 2026-11-04).
+const PENDING_FIELDS = [
+  { key: 'episode_intent', label: 'Intent', note: 'Not saved yet. It will live on the Episode Brief once that is approved.' },
+  { key: 'creative_notes', label: 'Creative Notes', note: 'Not saved yet. Its home in production planning is still being decided.' },
+];
 
 function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null, balance = null }) {
   const navigate = useNavigate();
@@ -531,8 +540,6 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
           { key: 'title', label: 'Title', type: 'input', placeholder: 'Episode title...' },
           { key: 'description', label: 'Synopsis (internal)', type: 'textarea', placeholder: 'What happens in this episode (production only; viewers see the teaser)...', rows: 3 },
           { key: 'air_date', label: 'Air Date', type: 'date' },
-          { key: 'episode_intent', label: 'Intent', type: 'input', placeholder: 'Internal goal for this episode...' },
-          { key: 'creative_notes', label: 'Creative Notes', type: 'textarea', placeholder: 'Tone, direction, things to remember...', rows: 4 },
         ].map(f => (
           <div key={f.key} className="eov-edit-field">
             <label className="eov-field-label" htmlFor={`eov-edit-${f.key}`}>{f.label}</label>
@@ -543,6 +550,12 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
               <input id={`eov-edit-${f.key}`} className="eov-input" type={f.type || 'text'} value={formData[f.key] || ''} onChange={e => setFormData({ ...formData, [f.key]: e.target.value })}
                 placeholder={f.placeholder} />
             )}
+          </div>
+        ))}
+        {PENDING_FIELDS.map(f => (
+          <div key={f.key} className="eov-edit-field is-pending" data-testid={`eov-pending-${f.key}`}>
+            <span className="eov-field-label">{f.label}</span>
+            <p className="eov-field-pending">{f.note}</p>
           </div>
         ))}
       </div>
