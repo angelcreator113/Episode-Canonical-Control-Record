@@ -258,3 +258,23 @@ Every production write: snapshot first, one record set at a time, with an undo l
 **Production preview regression:** the replay of the 2026-11-04 export reproduces §22.12 (Episode 1: 1,900 / 1 / 1 / 1 / 0; Episode 2 diagnostic 1,900 or 768).
 
 **Migration:** up / down / up on the test database; down refuses while snapshots exist (or after an export).
+
+## 12. Episode 1 narrative purpose: Evoni's wording (2026-11-04)
+
+Evoni supplied the wording that replaces the stale "discovers her authentic design voice" text (C4, the text part of gate G-T1):
+
+> **Narrative purpose:** Lala enters Studio by Sable's experimental fashion event, hoping to make connections, create compelling content and establish herself in Dream Cities' competitive creator scene. She must balance the cost of showing up with the opportunity to gain attention, strengthen relationships and secure future opportunities.
+>
+> **Core dilemma:** How much should Lala invest in being seen before she knows whether the opportunity will pay off?
+>
+> **Creator lesson:** Looking successful and building a sustainable creator career aren't always the same thing.
+
+**Where it would go (not yet applied; a production write, so it waits for Evoni's go-ahead on the method):**
+
+| Record | Today | Proposed | How |
+|---|---|---|---|
+| Season slot 1 `story_purpose` + `story_purposes[0]` (auto-drafted) | "Lala discovers her authentic design voice…" | the **Narrative purpose** paragraph, with `source: "Evoni, 2026-11-04"` | the Season Roadmap slot editor (an app edit, so it is audited like any slot edit) |
+| Episode Brief `narrative_purpose` (Episode Intent; draft brief) | the event's marketing description | all three parts: purpose, **Core dilemma**, **Creator lesson** | the Episode Brief edit (`PUT /episode-brief/:episodeId`; the brief is a draft, so it is editable). The script writer and scene planner read this field, so new scripts will follow it. |
+| Frozen `episodes.season_context` (Start snapshot, 2026-10-02) | the old slot text | **unchanged.** A correction note is appended (old text kept, new text, reason "Lala is not becoming a fashion designer", by Evoni, date) | needs a small code path or a one-off approved write (G-T1, method). Until then, readers prefer the brief and slot. |
+
+**Effect on continuity:** none. Wording is not state. The continuity preview figures are unchanged.
