@@ -24,6 +24,30 @@ const proposed = (list) => ({ data: { success: true, world: 'lalaverse', proposa
 describe('CastMakeForMe', () => {
   beforeEach(() => { vi.mocked(api.post).mockReset(); });
 
+  // Who the story needs (Task #3200): the gaps the proposals were made for,
+  // and each proposal's reason.
+  test('shows what the story needs and why each proposal fills it', async () => {
+    const gaps = [{ kind: 'city', label: 'No one lives in Maverick Harbor' }, { kind: 'storyline', label: 'The storyline "The feud" has no face yet' }];
+    vi.mocked(api.post).mockResolvedValueOnce({ data: { ...proposed([{ ...SIENNA, reason: 'No one lives in Maverick Harbor; she runs its night market' }]).data, gaps } });
+    render(<CastMakeForMe registries={[REG]} registryId="r-1" />);
+    fireEvent.click(screen.getByTestId('cmfm-make-1'));
+    const reason = await screen.findByTestId('cmfm-reason');
+    expect(reason.textContent).toBe('Why them: No one lives in Maverick Harbor; she runs its night market');
+    const needs = screen.getByTestId('cmfm-gaps');
+    expect(needs.textContent).toContain('What the story needs (2)');
+    expect(needs.textContent).toContain('No one lives in Maverick Harbor');
+    expect(needs.textContent).toContain('The storyline "The feud" has no face yet');
+  });
+
+  test('with no gaps and no reason it shows neither', async () => {
+    vi.mocked(api.post).mockResolvedValueOnce(proposed([SIENNA]));
+    render(<CastMakeForMe registries={[REG]} registryId="r-1" />);
+    fireEvent.click(screen.getByTestId('cmfm-make-1'));
+    await screen.findByTestId('cmfm-proposal');
+    expect(screen.queryByTestId('cmfm-gaps')).toBeNull();
+    expect(screen.queryByTestId('cmfm-reason')).toBeNull();
+  });
+
   test('Make 1 sends the idea and shows the proposal with name, role, city, handle and traits', async () => {
     vi.mocked(api.post).mockResolvedValueOnce(proposed([SIENNA]));
     render(<CastMakeForMe registries={[REG]} registryId="r-1" />);
