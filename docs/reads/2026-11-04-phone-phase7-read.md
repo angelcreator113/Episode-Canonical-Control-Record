@@ -268,3 +268,130 @@ Recorded as given. Approving these rules does not approve merging, deploying, mi
   
   Does the Phone Hub's visual authoring write the cue into the script (so the script stays canonical)?
 - **Q8 (D6) — eligible payments.** Which payments are "negotiated": the deals the agent negotiated (counter-offer rounds), or every brand deal once the agent is unlocked? Is commission booked when the deal is paid (the pending → paid ledger state), and is it refunded if the deal is reversed?
+
+## 10. Rulings on §9, round two (Evoni, 2026-11-04)
+
+Recorded as given. They answer Q1–Q8. No implementation, migration, merge, deployment or production write is approved by them.
+
+- **R1. Audience tiers.**
+  - Emerging is Tier 1, Nano 2, Micro 3, Mid-tier 4, Macro 5, Mega 6.
+  - The six-tier follower scale (`pulseAudience.tierFor`) is authoritative, not the older four-tier `follower_tier` field.
+  - Each ability needs both its tier and its Influence:
+
+    | Ability | Tier | Influence |
+    |---|---|---|
+    | Choose offers | 2 (Nano) | 2 |
+    | Counter-offers | 3 (Micro) | 3 |
+    | Exclusive partnerships | 4 (Mid-tier) | 5 |
+    | Talent-agent services | 5 (Macro) | 7 |
+
+  - An agent character may appear earlier in the story without providing representation services.
+- **R2. Negotiation.**
+  - considering → booked is allowed when Lala accepts an offer's existing terms.
+  - `negotiating` is required only when terms are changed or countered.
+  - Every acceptance path still enforces permissions, deal conflicts and required approval.
+- **R3. Seasons.**
+  - The season is `ShowArc.season_number`.
+  - Unlocks are earned from qualifying follower and Influence history and stay available once earned, into later seasons. They never reset at a season boundary.
+  - Global Influence is not confused with a season-specific record.
+- **R4. Wallpaper.**
+  - Existing approved image assets can be tagged for phone-wallpaper use, with no duplicate files and no new asset type unless a technical constraint forces one.
+  - Defaults by season arc, with episode overrides.
+- **R5. Exclusivity.**
+  - Structured terms:
+    - brand or category scope;
+    - named competitors where they apply;
+    - a story start and end;
+    - optional real-world dates;
+    - the source agreement;
+    - approved exceptions.
+  - Validated at opportunity acceptance and at Start Episode for event-hosted deals.
+  - Only Admin/Prime approves an override, with an explicit reason and an auditable record.
+  - Legacy free-text restrictions are kept as **Needs Terms Review** until reviewed, never silently converted or ignored.
+- **R6. Story time.**
+  - `[TIME: HH:MM]` is in-world local story time.
+  - It carries across beats and resets to the episode's configured opening time at each episode.
+  - With none, the lock screen shows an unset state; no time is invented.
+  - Explicit day changes are supported.
+- **R7. Phone state.**
+  - `[PHONE: battery=12 dnd=on cracked=on]`, with explicit reset cues.
+  - Battery and DND persist within the episode, then return to the next episode's configured defaults.
+  - A cracked screen persists across episodes until repaired or explicitly cleared.
+  - Wallpaper follows arc defaults with episode overrides.
+  - The Phone Hub visually authors and validates the same canonical script cues. It is not a second state source, and it respects script versioning and the approval rules.
+- **R8. Agent commission.**
+  - 10% of eligible brand-partnership payments, on agreements where the agent was assigned before finalization.
+  - Includes eligible appearance fees and paid deliverables. Excludes gameplay rewards, gifts and unrelated earnings.
+  - Recorded only when payment is received.
+  - Partial payments are handled proportionally.
+  - A reversal posts a compensating ledger entry; history is never deleted.
+  - Duplicate charges are prevented.
+
+## 11. Round two against the code and the phase 4 rulings (checked 2026-11-04)
+
+**Consistent (MEASURED unless marked):**
+- **R1.** `tierFor` (`src/services/pulseAudience.js:28-36`) already returns the six tiers in order. The tier number is the index + 1, with nothing stored.
+- **R1/R3, Influence.** Influence reaches 2, 3, 5 and 7 under the current formula (§8): at least 1, 2, 4 and 6 net successful episodes from the default of 1. INFERRED: at about one step per episode, the agent's Influence 7 is mid-to-late season at the earliest.
+- **R1/R3, "earned".** Followers (`pulse_followers`, by story order) and Influence (`character_state_history`, per episode) are both history, so "first reached tier T and Influence I" is computed, and "never resets" needs nothing stored. INFERRED.
+- **R2.** Matches phase 4 ruling 4 (Prime confirms acceptance on the offer record). The change is one edge in `STATUS_FLOW` (`src/routes/opportunityRoutes.js:32-44`) plus a check on the `advance` route (`:235`).
+- **R4.** `assets.metadata` is JSONB (`src/models/Asset.js:126`) and `approval_status` is a string (`:115`). A `metadata.phone_wallpaper` tag needs no new type and no migration. `ShowArc` gives the arc by episode range (`src/models/ShowArc.js:21-36`).
+- **R8, coin rounding.** Prime Coins are whole, rounded half away from zero (`src/utils/wholeCoins.js`), so 10% of 25 is 3.
+- **R8, de-duplication.** Payouts already de-duplicate by `category` + `source_id` (`src/services/dealPayoutService.js:153`). A commission can do the same against the payment row it is charged on.
+
+**Contradictions and gaps:**
+- **K1. Chronology: clock time and day are not story order.**
+  - Story order is `episode × 10 + phase` (`src/services/storyClock.js:5-35`). Everything that is "as of" (followers, reveals, comments) and R5's story start and end sit on that order.
+  - `[TIME: HH:MM]` and day changes (R6) would be a second, finer clock that orders nothing.
+  - INFERRED: keep them as display (the lock screen) and never as an ordering key. Exclusivity's story start and end are story orders (episode and phase), not clock times.
+  - Otherwise a TIME cue earlier in the day, later in the script, would contradict the story order. Recommended rule: the clock never orders events; the story order does.
+- **K2. "Configured" opening time and phone defaults have no home.**
+  - Episodes have no settings field for them. The JSON fields are snapshots or other things: `season_context`, `money_plan`, `setup_status`, `script_locked_beats`, `script_line_keys`, `evaluation_json`, `distribution_metadata`, `browse_pool_json`, `title_overlay_style` (`src/models/Episode.js`).
+  - R7 also says the script cues are canonical.
+  - INFERRED, recommended: the configured value *is* a cue on the episode's opening beat (`[TIME: 08:30]`, `[PHONE: battery=100 dnd=off]`), with a show-wide default in `shows.metadata` for episodes without one. No migration, and a single source. See T1.
+- **K3. "When payment is received" needs phase 4's pending and paid rows.**
+  - Today every payout is booked straight to `executed` at approval or at Complete (`src/services/dealPayoutService.js:154-164`). Nothing writes `pending` (phase 4 read §2.4).
+  - Phase 4 ruling 5 (real pending and paid rows) is unbuilt.
+  - Until it is, "received" can only mean "booked". The commission issue therefore depends on phase 4 issue 5.
+- **K4. Reversals have no mechanism.** The ledger has no reversal or compensating-entry path today: grep `revers|refund|compensat` in `financialTransactionService` / `dealPayoutService` finds none. The commission's compensating entry would be the first. It should follow a shape phase 4 issue 5 sets for payment reversals, not invent its own. See T5.
+- **K5. Partial payments and rounding drift.** Each fee and deliverable payout is its own ledger row, so a deal is "paid" in parts. Rounding 10% per row can drift from 10% of the whole: three rows of 5 coins give 1+1+1 = 3, not 2. See T6.
+- **K6. Structured exclusivity and the agent assignment have no field.**
+  - `Opportunity.exclusivity` is TEXT (`src/models/Opportunity.js:67`).
+  - The model's JSONB columns all have other meanings: `status_history`, `deliverables`, `wardrobe_brief`, `content_requirements`, `unlocks`, `feed_reactions`, `content_generated` (`:36-100`).
+  - The event side keeps `world_events.restrictions` (JSON).
+  - R5's structured terms, its exceptions and overrides, and R8's "agent assigned before finalization" need a home on the agreement. See T2.
+- **K7. The source agreement.**
+  - R5's "source agreement" is either the opportunity, or the event's offer letter / partnership agreement (`canon_consequences.documents.offer_letter`, #3695).
+  - Phase 4 ruling 2 says deals belong to brands and events keep their hosts. But the current `to-event` route makes the brand the event's host (`careerPipelineService.js:213-216`, phase 4 read §1).
+  - Exclusivity validation at Start Episode reads the event's deal as it is today. Phase 4 issues 1–3 will change where a brand deal lives, so the event-side check may need revisiting then.
+- **K8. Unlocks at a beat.** Influence changes only at an episode's "after" moment (order n×10+7, `src/services/lalaStats.js:9-12`). An ability can open mid-episode on followers, but its Influence half only between episodes. This is consistent with R1, noted so the phone shows it right.
+
+## 12. Two tracks and their order (plan; nothing started)
+
+**Device track** (phase 7 issues 1–4). No phase 4 dependency, and no migration on the recommendations below.
+1. **Cues and story state.** `[PHONE: …]` with reset and repair cues, and `[TIME: HH:MM]` with a day change, parsed and validated. Then `phoneStateAt` / `storyTimeAt`:
+   - battery and DND per episode, from the opening-beat cue or the show default (T1);
+   - cracked carried across episodes in episode order until repaired or cleared;
+   - time carried across beats, reset per episode, unset when none.
+   - Tests: carry-over, reset, the episode boundary, unset.
+2. **The chrome.** Battery, DND and cracked glass on `PhoneDevice` / `PhonePreviewMode` and the server canvas, read from item 1. Never the device clock.
+3. **Wallpaper.** Approved image assets tagged `metadata.phone_wallpaper`. Arc defaults keyed to `ShowArc` and episode overrides (where they are stored is T3). A picker in the Phone Hub.
+4. **The lock screen.** A `lock_screen` content type: the story time (or unset), the wallpaper, and notification previews.
+5. **Phone Hub authoring** of the item 1 cues, writing into the script through the existing script save, so it respects versions, locks and approval. Ordered last because it writes scripts.
+
+**Deal track** (phase 7 issues 5–9).
+1. **The unlock read** (`unlocksAt`): R1 thresholds on tier number and Influence history. No migration. Can start once approved; it changes nothing by itself.
+2. **considering → booked (R2)** with the permission check on `advance`. No migration. Needs item 1 for the "choose offers" gate.
+3. **Structured exclusivity (R5)**: terms, Needs Terms Review for legacy text, the block at acceptance and at Start Episode, the Admin override record. **Needs a migration** under T2. After item 1, and alongside phase 4 issues 1–3 (K7).
+4. **Choosing between offers.** After items 1–2.
+5. **Counter-offers.** The `opportunity_negotiations` table: **migration**. After item 2.
+6. **The agent.** Character options brought to Evoni first; nothing created before she chooses. Assignment on the agreement (T2). **Commission waits for phase 4 issue 5** (pending and paid rows, K3) and the reversal shape (K4).
+7. **Rival brands (issue 10).** Blocked until phase 4 issues 1–3, 7 and 9 are done (D7).
+
+## 13. Technical decisions still open
+
+- **T1. Episode defaults (K2).** Is the "configured" opening time and phone default the opening beat's cue, with a show-wide default in `shows.metadata` (recommended; no migration, script canonical)? Or a per-episode settings field (a migration)?
+- **T2. Where deal terms live (K6).** One new JSONB column on `opportunities`, e.g. `deal_terms`, holding the structured exclusivity, approved exceptions, overrides and the agent assignment. The TEXT `exclusivity` stays as the legacy value marked Needs Terms Review. This is a migration (recommended), versus overloading an existing JSONB column (not recommended). Event-hosted deals keep `world_events.restrictions`, extended to the same shape.
+- **T3. Where wallpaper defaults live.** `shows.metadata.phone_wallpapers` (arc id → asset, and episode number → asset), recommended, no migration. Or a field on `ShowArc` and on episodes (migrations).
+- **T4. Chronology (K1).** Confirm the rule: story order orders everything; `[TIME]` and day changes are display only. Exclusivity's start and end are story orders, with real-world dates kept as information.
+- **T5. Reversal shape (K4).** The compensating commission entry follows the payment-reversal shape phase 4 issue 5 sets. Should phase 4 issue 5 define reversals for all deal payments first?
+- **T6. Commission rounding (K5).** Charge cumulatively, so that on each payment the commission is 10% of everything received so far minus commission already charged (no drift; recommended)? Or round per payment row?
