@@ -10,7 +10,7 @@
 |---|---|---|---|---|---|---|---|
 | 1 | `src/routes/sceneSetRoutes.js` `ensureGenerationJobsTable` | Request: five routes (angle still regenerate check `refuseWhileVideoRuns`, `POST /:id/angles/:angleId/generate-video`, `POST /:id/cascade-regenerate`, `GET /jobs/set/:setId`, `GET /jobs/:jobId`); first call per process | `generation_jobs` | yes, `20260323000000` (and two later ones) | yes (the job queue) | Nothing changes where the table exists. If it were missing, the reads fail as they do today after the sync fails: `GET /jobs/set` returns `[]`, the others 500. | No |
 | 2 | `src/workers/sceneGenerationWorker.js` `start` | Background: the `episode-worker` pm2 process starts it (`src/workers/start.js`); the dev server embeds it outside production | `generation_jobs` | yes | yes | Nothing changes. The sync failure was already caught and only logged; without CREATE it would have logged an error on every worker start. | No |
-| 3 | `src/routes/continuityEngine.js` `ensureTables` | Request: the first `GET /api/v1/continuity/timelines` per process, and only when `continuity_timelines` is missing | `continuity_timelines`, `continuity_characters`, `continuity_beats`, `continuity_beat_characters`, type `enum_continuity_timelines_status` | **no** (new: `20261104200000`) | yes (user content) | Tables come from the migration. Before it runs, a missing table makes the continuity routes 500. Before this PR, any other continuity route used first also failed. | No, once the migration has run |
+| 3 | `src/routes/continuityEngine.js` `ensureTables` | Request: the first `GET /api/v1/continuity/timelines` per process, and only when `continuity_timelines` is missing | `continuity_timelines`, `continuity_characters`, `continuity_beats`, `continuity_beat_characters`, type `enum_continuity_timelines_status` | **no** (new: `20261104200000`) | yes (user content) | Tables come from the migration (they already exist in production). Before it runs, a missing table makes the continuity routes 500. Before this PR, any other continuity route used first also failed. | No, once the migration has run |
 | 4 | `src/routes/franchiseBrainRoutes.js` `POST /franchise-brain/seed` | Request (manual seeding), only when `FranchiseKnowledge.count()` fails | `franchise_knowledge` | yes, `20260307210000` | yes (Show Brain) | Returns 503 "could not be read (has its migration run?)" instead of trying to create the table. The table exists and many services read it. | No |
 | 5 | `src/routes/storyHealth.js` `GET /versions/chapter/:chapterId` | Request (BookEditor version history) | `chapter_versions` | **no** (new) | yes (version history) | Table comes from the migration; before it runs, 500. | No, once the migration has run |
 | 6 | `src/routes/storyHealth.js` `POST /versions/chapter/:chapterId` | Request (saving a version) | `chapter_versions` | **no** (new) | yes | Same as 5 | No, once the migration has run |
@@ -36,28 +36,29 @@
 - **franchise_knowledge:** its seed route answers 503 instead of creating the table.
 
 **Migration `20261104200000-create-runtime-created-tables.js`:**
-- **Definitions:** the exact runtime definitions. For the continuity tables, they were captured from what `Model.sync()` sends; for the other three, from the raw SQL.
+- **Definitions:** **production's own**, read from its catalog (§4a, D3/D4): the four continuity tables and their indexes, `ecosystem_previews`, and `video_compositions` with its indexes. Also `chapter_versions`, absent in production, with its runtime definition; and `brain_documents`, with its migration's definition (§5).
 - **Create only what is missing:**
-  - every table is `CREATE TABLE IF NOT EXISTS`, and the enum is created only if missing;
-  - each index is created only when missing **and** the migration role may index that table. On a table another role owns (production: the app-created table, §4), the index is skipped with a notice, because `CREATE INDEX` there is refused for a non-superuser even with `IF NOT EXISTS`.
+  - every table is `CREATE TABLE IF NOT EXISTS`;
+  - each index is created only when missing **and** the migration role may index that table. On a table another role owns, the index is skipped with a notice, because `CREATE INDEX` there is refused for a non-superuser even with `IF NOT EXISTS`.
 - **Name resolution:** schema-qualified names, and a `pg_catalog`-only search path inside the transaction.
 - **`down`:** does nothing. The tables may predate the migration and hold data.
-- **Convention exception:** `chapter_versions`, `ecosystem_previews` and `video_compositions` have **no `deleted_at`**, because production's tables have none. Adding it is a separate change after the ownership transfer.
+- **Convention exception:** `chapter_versions`, `ecosystem_previews`, `video_compositions` and `continuity_beat_characters` have **no `deleted_at`**, as in production. Adding it is a separate change.
 
 **Tests:**
 - **`scriptWriteGuard`:** registers the migration.
 - **CP10 admin test:** now asserts the route is gone.
-- **Step-2 schema baseline:** loses its four continuity entries, which no longer occur.
+- **Step-2 schema baseline:** the three continuity "no table" entries go. `ContinuityBeatCharacter`'s missing `deleted_at` stays, re-labelled `paranoid-no-deleted_at`.
 
 **Verified locally (Postgres 16):**
-- **Same schema as the old runtime DDL.** On a fresh database, `pg_dump -s` of the seven tables created by the migration is identical to that created by the old runtime DDL (sync plus raw SQL).
+- **Same schema as production.** On a fresh database built from all 397 migrations, the D3/D4 output for these tables is identical to production's, line for line (84 lines).
 - **Runs once.** A second run applies nothing.
-- **Production-like role.** Run as a non-superuser migration role while another role owns `chapter_versions`, `video_compositions` and one of its indexes, it:
+- **Production-like role** (first version of the migration). Run as a non-superuser migration role while another role owns `chapter_versions`, `video_compositions` and one of its indexes, it:
   - creates the missing tables;
   - leaves the app-owned ones untouched;
   - skips the missing index with its notice;
   - succeeds.
 - **Whole history under the pin.** All 397 migrations run from scratch under #3710's pinned path.
+- **The production sequence** (§5): rehearsed end to end with #3710's trust check.
 
 ## 3. Regression tests
 
@@ -100,66 +101,87 @@
 3. Run `psql -X -f ~/2026-11-04-runtime-ddl-check.sql > ~/runtime-ddl-check.txt 2>&1`.
 4. Send `runtime-ddl-check.txt`.
 
-## 5. Transferring the app-owned table to `postgres`: impact (for the separate approval)
+### 4a. Results (Evoni ran it, 2026-11-04; all ten sections)
 
-Written generally here; the exact commands follow once D2, D5 and D10 name the table, its dependents and the memberships.
+| Finding | Result |
+|---|---|
+| D1 | `generation_jobs` (141 rows), `franchise_knowledge` (605 rows), the four continuity tables, `ecosystem_previews` and `video_compositions` (all empty) **exist, owned by `postgres`**. **`chapter_versions` does not exist**, so the version history routes have never run in production (they would have created it). |
+| D2, D7 | **The one app-owned table is `brain_documents`**: 0 rows, 16 kB, with its sequence `brain_documents_id_seq`, its primary key index and its row type. ACL: `episode_app_dev` everything, `prime_readonly` SELECT. |
+| D3, D4 | Production's continuity tables differ from what `Model.sync()` creates: `varchar(20)` plus a CHECK instead of an enum, database defaults, extra indexes, and no `updated_at`/`deleted_at` on `continuity_beat_characters`. **The migration was rewritten to production's definitions.** On a fresh database built from all migrations, the D3/D4 output for these tables is **identical to production's, line for line** (84 lines). `ecosystem_previews` and `video_compositions` already matched. |
+| D5, D6 | Nothing depends on `brain_documents` except its own default values and sequence. No foreign key points at it or from it. |
+| D8 | `episode_app_dev` has CREATE on `public`, granted explicitly; it cannot create schemas. PUBLIC has only USAGE. Default privileges for tables `postgres` creates: `episode_app_dev` gets `arwd`, `prime_readonly` gets `r`; on sequences `episode_app_dev` gets `rU`. |
+| D9 | The legacy `shows_name_key` and `shows_slug_key` constraints are **gone**, so the `server.js` repair block only runs its SELECT and does nothing. **`idx_scenes_episode_scene_number` exists, owned by `postgres`.** As `episode_app_dev`, the scene-delete renumbering cannot drop it, so every scene delete's renumbering fails and rolls back after the soft delete. This is an existing production bug, for a separate fix. |
+| D10 | `episode_app_dev` has no role memberships in either direction. **`postgres` has no ADMIN on it.** |
 
-**What changes:**
-- **Owner:** the table, and with it its indexes and any sequence it owns, gets owner `postgres`. No data is rewritten; it is a catalog change.
-- **The app's privileges:** the app keeps only what is **granted explicitly**.
-  - An owner's implicit privileges go, and default privileges don't apply to an existing table, so the transfer must `GRANT SELECT, INSERT, UPDATE, DELETE` on it (and USAGE, SELECT on an owned sequence) to `episode_app_dev` **in the same transaction**. Otherwise the feature that writes it breaks.
-  - The app also loses DDL on it (ALTER, DROP, CREATE INDEX, TRUNCATE). That is the point, and nothing in the code needs it once this PR is in.
+## 5. Making `brain_documents` owned by `postgres`
 
-**Lock:** a moment of ACCESS EXCLUSIVE on that one table, so queries on it wait for the commit (milliseconds).
+**Why not `ALTER TABLE ... OWNER TO postgres`.** That needs the role running it to act as the current owner. `postgres` has no membership in `episode_app_dev` (D10), and on Postgres 16 and later a CREATEROLE role can grant itself that membership only with ADMIN on the role, which it does not have. `episode_app_dev` cannot hand its table to `postgres` either.
 
-**Who can run it:** the role running it must be able to act as the current owner and as the new one.
-- `postgres` is not a member of `episode_app_dev` with SET (D10 confirms).
-- It can grant itself temporary membership, because it created the role and so holds ADMIN on it. Then it transfers ownership and takes the membership back.
+**Instead (the table is empty): drop and recreate.**
+1. **`episode_app_dev` drops its own empty table.** It is the owner, so it may. A guard refuses unless the table is empty and owned by the login running it. This drops 0 rows, and its sequence, index and row type go with it.
+2. **This PR's migration recreates it, as `postgres`.** It uses `20261008100000`'s definition and runs in the Deploy migrate phase.
+3. **Production's default privileges then give access automatically:** `episode_app_dev` gets `arwd` on the table and `rU` on its sequence, and `prime_readonly` gets `r`. That is the access it has today, minus ownership.
 
-**Draft** (not to be run; for review once D2 and D10 are known):
+**Rehearsed locally**, with a non-superuser migration role, production's grants and default privileges, and the app-owned table:
+- **Before:** #3710's trust check fails with 6 findings (CREATE, TRIGGER, the table, its sequence, index and row type).
+- **Steps:** the app drops the table (guarded), the migration role revokes CREATE, and the trust check prints `OK`.
+- **The migration:** it recreates `brain_documents` and `chapter_versions` owned by the migration role, with the ACLs above.
+- **Afterwards:** the app inserts into and reads both tables, and `prime_readonly` reads. The app's `CREATE TABLE` is refused ("permission denied for schema public").
+
+**The commands** (a separate approval). Run on the box with the **app** user from `.env`; nothing is printed:
 
 ```sql
 BEGIN;
-GRANT episode_app_dev TO postgres;                 -- temporary: lets postgres act as the current owner
-ALTER TABLE public.<table> OWNER TO postgres;
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.<table> TO episode_app_dev;
-GRANT SELECT ON public.<table> TO prime_readonly;
-REVOKE episode_app_dev FROM postgres;
+DO $g$ BEGIN
+  IF (SELECT count(*) FROM public.brain_documents) <> 0 THEN RAISE EXCEPTION 'STOPPED: brain_documents is not empty; nothing changed'; END IF;
+  IF (SELECT pg_get_userbyid(relowner) FROM pg_class WHERE oid = 'public.brain_documents'::regclass) <> session_user THEN RAISE EXCEPTION 'STOPPED: not run as the owner; nothing changed'; END IF;
+END $g$;
+DROP TABLE public.brain_documents;
 COMMIT;
 ```
 
-**Undo:** the same with the owners swapped. Data is never touched either way.
+Then, with the migration user from `~/.episode-migrate.env`:
 
-**Then the privilege change itself** (a separate approval): `REVOKE CREATE ON SCHEMA public FROM episode_app_dev`, plus `FROM PUBLIC` if D8 shows PUBLIC holds it. Undo: `GRANT CREATE ON SCHEMA public TO episode_app_dev`.
+```sql
+REVOKE CREATE ON SCHEMA public FROM episode_app_dev;
+```
+
+**What is lost:** nothing; the table holds no rows (the guard enforces it).
+
+**Undo:**
+- Before the Deploy: the app user re-creates the table with `20261008100000`'s definition.
+- The revoke: `GRANT CREATE ON SCHEMA public TO episode_app_dev`.
 
 ## 6. Order (each step separately approved)
 
-**The constraint.** #3710's trust check refuses to run a migration while `episode_app_dev` can create in `public`. This PR brings a migration. So the Deploy that ships this code can only migrate **after** the revoke. Between the revoke and that Deploy's restart, the **old** code still runs in production without CREATE.
+**The constraint.** #3710's trust check refuses to migrate until `episode_app_dev` can no longer create in `public` and owns nothing there. So the drop and the revoke come **before** the Deploy that ships this code, and the **old** code runs without CREATE until that Deploy restarts the API.
 
-**What fails in that window** (from §1):
-- **Version history:** saving and listing chapter versions (routes 5 and 6) return 500.
-- **Video compositions:** the list (route 9) returns 500; nothing in the frontend calls it.
-- **Admin test route:** returns 500; nothing calls it.
-- **Nothing else:**
-  - World Studio's create errors were already swallowed, so its routes keep working;
-  - the generation-jobs syncs were already non-fatal;
-  - continuity and franchise create only when a table is missing, which D1 checks.
+**What the old code does in that window,** with production's state (§4a):
 
-**How long:** from the revoke to the end of one Deploy run (snapshot, migrate, deploy, restart): minutes.
+| Path | In the window |
+|---|---|
+| 1, 2 generation jobs | sync fails, caught and logged; the jobs work (the table exists) |
+| 3 continuity | the tables exist, so no create runs; works |
+| 4 franchise brain seed | the count works, so no create runs; works |
+| 5, 6 chapter version history | **500**; never used in production (the table has never existed) |
+| 7 World Studio previews | the create error is swallowed; works |
+| 8 admin test route | 500; no caller |
+| 9 video compositions list | 500; no frontend caller |
+| brain documents | an ingest's document row is not saved (logged); the Documents tab errors; it holds no documents |
+
+**User-visible effect:** effectively none, for minutes.
 
 **Recommended sequence:**
-1. Run the §4 read-only check. Confirm D1 (the tables exist), the app-owned table (D2), its dependents (D5) and the memberships (D10).
-2. Merge this PR, then #3709.
-3. The ownership transfer (§5), as its own approval. It changes no behaviour while the app keeps CREATE.
-4. **Right before starting the Deploy run:** revoke CREATE on `public` from `episode_app_dev` (approval). Then start the Deploy of the commit containing both PRs.
-   - The trust check must print `OK`, then: snapshot, both migrations, restart.
-   - The window above lasts until the restart.
-5. Run the A/B preflight, confirm the procedure, then run A and B.
+1. Merge this PR, then #3709.
+2. **Right before starting the Deploy run** (approval): the guarded `brain_documents` drop as the app user, then the revoke as the migration user (§5).
+3. **The Deploy run** of the commit with both PRs (approval). The trust check must print `OK`. Then: the snapshot, this PR's migration and #3709's, and the restart onto the new code.
+4. After the restart, re-run the read-only check (§4). Expect: D1 all present, D2 empty, D8 `create_in_public` `f` for `episode_app_dev`.
+5. The A/B preflight, then your confirmation, then A and B.
 
-**Zero-window alternative, if D1 shows every table already exists in production:**
-1. Split this PR's migration into a follow-up PR.
-2. Deploy the code alone. With no migration pending, the trust check is not reached.
-3. Then do the ownership transfer and the revoke; nothing breaks, because the new code needs no CREATE.
-4. Then merge the migration PR and #3709 and run one Deploy.
+**If the trust check refuses at step 3:**
+- nothing is migrated or changed, and the old code keeps running;
+- the window simply lasts until the cause is fixed. Undo with the §5 grant if needed.
 
-**Cost of the alternative:** two Deploy runs instead of one. The behavioural test must also move with the migration, since CI builds its database from migrations.
+**Separate fixes found by this work** (not in this PR):
+- the scene-delete renumbering (D9);
+- the `ContinuityBeatCharacter` model is soft-delete, but its table has no `deleted_at`, in production as in the migration. This is recorded in the step-2 schema baseline as `paranoid-no-deleted_at`; before, it was recorded as `canon-missing-column`.

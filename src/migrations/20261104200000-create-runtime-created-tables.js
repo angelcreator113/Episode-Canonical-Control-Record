@@ -6,17 +6,18 @@
  * runs DDL: these are created here, by a reviewed migration, and only where
  * they do not exist yet.
  *
- * Each definition is the one the runtime code created, unchanged, so an
- * environment where the application already created the table and a fresh
- * one end up alike:
+ * Each definition is production's own (read from its catalog, 2026-11-04), so
+ * a fresh database matches production:
  *   - continuity_timelines, continuity_characters, continuity_beats,
- *     continuity_beat_characters (and the enum enum_continuity_timelines_status):
- *     what ContinuityTimeline/Character/Beat/BeatCharacter.sync() created
- *     (src/routes/continuityEngine.js ensureTables), captured from Sequelize.
- *   - chapter_versions: src/routes/storyHealth.js.
- *   - ecosystem_previews: src/routes/worldStudio.js ensurePreviewsTable.
- *   - video_compositions and its two indexes: src/controllers/videoCompositionController.js
- *     and src/routes/admin.js.
+ *     continuity_beat_characters and their indexes (src/routes/continuityEngine.js
+ *     ensureTables used to sync them);
+ *   - ecosystem_previews (src/routes/worldStudio.js ensurePreviewsTable);
+ *   - video_compositions and its two indexes (src/controllers/videoCompositionController.js,
+ *     src/routes/admin.js);
+ *   - chapter_versions (src/routes/storyHealth.js), absent in production;
+ *   - brain_documents, with its own migration's definition (20261008100000),
+ *     so production's application-owned copy can be replaced by one the
+ *     migration role owns.
  * generation_jobs (20260323000000) and franchise_knowledge (20260307210000)
  * already have migrations.
  *
@@ -25,9 +26,9 @@
  * index is created only when no relation of that name exists and this role
  * may index the table (CREATE INDEX on a table another role owns is refused,
  * even with IF NOT EXISTS; such an index is skipped with a notice).
- * chapter_versions, ecosystem_previews and video_compositions keep their
- * runtime definitions without deleted_at, so a fresh database matches
- * production; adding it is a separate, reviewed change.
+ * chapter_versions, ecosystem_previews, video_compositions and
+ * continuity_beat_characters have no deleted_at, as in production; adding it is
+ * a separate, reviewed change.
  *
  * Every name is schema-qualified, and the transaction resolves names in
  * pg_catalog only (the pattern of 20261104170000).
@@ -36,30 +37,39 @@
  * dropping them is never automatic.
  */
 
+// Definitions copied from production (Evoni's read-only catalog check,
+// docs/reads/2026-11-04-runtime-ddl-inventory.md §4, D3/D4), which is the
+// reference: where a table exists there, a fresh database gets the same columns,
+// defaults, constraints and indexes. chapter_versions does not exist in
+// production; it gets the definition storyHealth.js created. brain_documents
+// gets the definition of its own migration (20261008100000), so that the
+// application-owned copy in production can be replaced by one the migration
+// role owns (inventory §5).
 const TABLES = [
   ['continuity_timelines', `CREATE TABLE IF NOT EXISTS public.continuity_timelines (
-    id UUID, show_id UUID REFERENCES public.shows (id) ON DELETE SET NULL ON UPDATE CASCADE,
+    id UUID NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
+    show_id UUID REFERENCES public.shows (id) ON DELETE SET NULL,
     title VARCHAR(255) NOT NULL DEFAULT 'Untitled Timeline', description TEXT, season_tag VARCHAR(100),
-    status public.enum_continuity_timelines_status DEFAULT 'draft',
-    created_at TIMESTAMP WITH TIME ZONE NOT NULL, updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
-    deleted_at TIMESTAMP WITH TIME ZONE, PRIMARY KEY (id))`],
+    status VARCHAR(20) DEFAULT 'draft'
+      CONSTRAINT continuity_timelines_status_check CHECK (status IN ('draft', 'active', 'locked')),
+    created_at TIMESTAMPTZ DEFAULT now(), updated_at TIMESTAMPTZ DEFAULT now(), deleted_at TIMESTAMPTZ)`],
   ['continuity_characters', `CREATE TABLE IF NOT EXISTS public.continuity_characters (
-    id UUID, timeline_id UUID NOT NULL REFERENCES public.continuity_timelines (id) ON DELETE CASCADE ON UPDATE CASCADE,
+    id UUID NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
+    timeline_id UUID NOT NULL REFERENCES public.continuity_timelines (id) ON DELETE CASCADE,
     character_key VARCHAR(100) NOT NULL, name VARCHAR(255) NOT NULL, role VARCHAR(255),
     color VARCHAR(20) NOT NULL DEFAULT '#5b7fff', sort_order INTEGER DEFAULT 0,
-    created_at TIMESTAMP WITH TIME ZONE NOT NULL, updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
-    deleted_at TIMESTAMP WITH TIME ZONE, PRIMARY KEY (id))`],
+    created_at TIMESTAMPTZ DEFAULT now(), updated_at TIMESTAMPTZ DEFAULT now(), deleted_at TIMESTAMPTZ)`],
   ['continuity_beats', `CREATE TABLE IF NOT EXISTS public.continuity_beats (
-    id UUID, timeline_id UUID NOT NULL REFERENCES public.continuity_timelines (id) ON DELETE CASCADE ON UPDATE CASCADE,
+    id UUID NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
+    timeline_id UUID NOT NULL REFERENCES public.continuity_timelines (id) ON DELETE CASCADE,
     beat_number INTEGER NOT NULL DEFAULT 1, name VARCHAR(500) NOT NULL, location VARCHAR(500) NOT NULL,
     time_tag VARCHAR(255), note TEXT, sort_order INTEGER DEFAULT 0,
-    created_at TIMESTAMP WITH TIME ZONE NOT NULL, updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
-    deleted_at TIMESTAMP WITH TIME ZONE, PRIMARY KEY (id))`],
+    created_at TIMESTAMPTZ DEFAULT now(), updated_at TIMESTAMPTZ DEFAULT now(), deleted_at TIMESTAMPTZ)`],
   ['continuity_beat_characters', `CREATE TABLE IF NOT EXISTS public.continuity_beat_characters (
-    id UUID, beat_id UUID NOT NULL REFERENCES public.continuity_beats (id) ON DELETE CASCADE ON UPDATE CASCADE,
-    character_id UUID NOT NULL REFERENCES public.continuity_characters (id) ON DELETE CASCADE ON UPDATE CASCADE,
-    created_at TIMESTAMP WITH TIME ZONE NOT NULL, deleted_at TIMESTAMP WITH TIME ZONE,
-    UNIQUE (beat_id, character_id), PRIMARY KEY (id))`],
+    id UUID NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
+    beat_id UUID NOT NULL REFERENCES public.continuity_beats (id) ON DELETE CASCADE,
+    character_id UUID NOT NULL REFERENCES public.continuity_characters (id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ DEFAULT now())`],
   ['chapter_versions', `CREATE TABLE IF NOT EXISTS public.chapter_versions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(), chapter_id UUID NOT NULL,
     version_number INT NOT NULL DEFAULT 1, content TEXT, word_count INT DEFAULT 0,
@@ -73,14 +83,29 @@ const TABLES = [
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     episode_id UUID NOT NULL REFERENCES public.episodes (id) ON DELETE CASCADE,
     name VARCHAR(255) NOT NULL,
-    status VARCHAR(50) DEFAULT 'draft' CHECK (status IN ('draft', 'processing', 'complete', 'error')),
+    status VARCHAR(50) DEFAULT 'draft' CHECK (status::text = ANY (ARRAY['draft'::varchar, 'processing'::varchar, 'complete'::varchar, 'error'::varchar]::text[])),
     scenes JSONB DEFAULT '[]'::jsonb, assets JSONB DEFAULT '[]'::jsonb, settings JSONB DEFAULT '{}'::jsonb,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(), updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW())`],
+  ['brain_documents', `CREATE TABLE IF NOT EXISTS public.brain_documents (
+    id SERIAL PRIMARY KEY, source_name VARCHAR(300) NOT NULL, document_text TEXT NOT NULL,
+    entries_created INTEGER DEFAULT 0, ingested_by VARCHAR(100) DEFAULT 'manual',
+    ingested_at TIMESTAMPTZ DEFAULT NOW(), created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), deleted_at TIMESTAMPTZ)`],
 ];
 
+// [index name, table, definition]
 const INDEXES = [
-  ['idx_video_compositions_episode_id', 'CREATE INDEX idx_video_compositions_episode_id ON public.video_compositions (episode_id)'],
-  ['idx_video_compositions_status', 'CREATE INDEX idx_video_compositions_status ON public.video_compositions (status)'],
+  ['idx_continuity_timelines_show', 'continuity_timelines', 'CREATE INDEX idx_continuity_timelines_show ON public.continuity_timelines (show_id)'],
+  ['idx_continuity_characters_timeline', 'continuity_characters', 'CREATE INDEX idx_continuity_characters_timeline ON public.continuity_characters (timeline_id)'],
+  ['idx_continuity_characters_timeline_key', 'continuity_characters', 'CREATE UNIQUE INDEX idx_continuity_characters_timeline_key ON public.continuity_characters (timeline_id, character_key)'],
+  ['continuity_beats_deleted_at_idx', 'continuity_beats', 'CREATE INDEX continuity_beats_deleted_at_idx ON public.continuity_beats (deleted_at) WHERE deleted_at IS NULL'],
+  ['idx_continuity_beats_timeline', 'continuity_beats', 'CREATE INDEX idx_continuity_beats_timeline ON public.continuity_beats (timeline_id)'],
+  ['idx_continuity_beats_timeline_num', 'continuity_beats', 'CREATE INDEX idx_continuity_beats_timeline_num ON public.continuity_beats (timeline_id, beat_number)'],
+  ['idx_continuity_bc_beat', 'continuity_beat_characters', 'CREATE INDEX idx_continuity_bc_beat ON public.continuity_beat_characters (beat_id)'],
+  ['idx_continuity_bc_char', 'continuity_beat_characters', 'CREATE INDEX idx_continuity_bc_char ON public.continuity_beat_characters (character_id)'],
+  ['idx_continuity_bc_unique', 'continuity_beat_characters', 'CREATE UNIQUE INDEX idx_continuity_bc_unique ON public.continuity_beat_characters (beat_id, character_id)'],
+  ['idx_video_compositions_episode_id', 'video_compositions', 'CREATE INDEX idx_video_compositions_episode_id ON public.video_compositions (episode_id)'],
+  ['idx_video_compositions_status', 'video_compositions', 'CREATE INDEX idx_video_compositions_status ON public.video_compositions (status)'],
 ];
 
 module.exports = {
@@ -92,24 +117,20 @@ module.exports = {
     await sequelize.transaction(async (transaction) => {
       const q = (sql, replacements) => sequelize.query(sql, { transaction, replacements });
       await q('SET LOCAL search_path = pg_catalog, pg_temp');
-      await q(`DO $t$ BEGIN
-        CREATE TYPE public.enum_continuity_timelines_status AS ENUM ('draft', 'active', 'locked');
-      EXCEPTION WHEN duplicate_object THEN NULL; END $t$`);
       for (const [, sql] of TABLES) await q(sql);
       // An index is added only where this role may: CREATE INDEX needs the
       // table's owner (or a member of that role). On a table another role
-      // owns (production: one the application created), it is skipped with a
-      // notice and can be added after the ownership is transferred.
-      for (const [name, sql] of INDEXES) {
+      // owns, it is skipped with a notice and can be added later.
+      for (const [name, table, sql] of INDEXES) {
         const [[row]] = await q(
           `SELECT to_regclass(:index) IS NOT NULL AS present,
                   pg_catalog.pg_has_role(current_user, c.relowner, 'USAGE') AS may
-             FROM pg_catalog.pg_class c WHERE c.oid = 'public.video_compositions'::regclass`,
-          { index: `public.${name}` },
+             FROM pg_catalog.pg_class c WHERE c.oid = to_regclass(:table)`,
+          { index: `public.${name}`, table: `public.${table}` },
         );
         if (row.present) continue;
         if (row.may) await q(sql);
-        else console.log(`[20261104200000] ${name} not created: public.video_compositions is owned by another role (add it after the ownership transfer).`);
+        else console.log(`[20261104200000] ${name} not created: public.${table} is owned by another role.`);
       }
     });
   },

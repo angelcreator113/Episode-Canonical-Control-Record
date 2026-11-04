@@ -76,7 +76,7 @@ describe('no runtime DDL in the application', () => {
 
     const migration = require(path.join(ROOT, 'src/migrations/20261104200000-create-runtime-created-tables.js'));
     expect(migration.TABLES.map(([t]) => t).sort()).toEqual([
-      'chapter_versions', 'continuity_beat_characters', 'continuity_beats', 'continuity_characters',
+      'brain_documents', 'chapter_versions', 'continuity_beat_characters', 'continuity_beats', 'continuity_characters',
       'continuity_timelines', 'ecosystem_previews', 'video_compositions',
     ]);
     const all = fs.readdirSync(path.join(ROOT, 'src/migrations')).map((f) => fs.readFileSync(path.join(ROOT, 'src/migrations', f), 'utf8')).join('\n');

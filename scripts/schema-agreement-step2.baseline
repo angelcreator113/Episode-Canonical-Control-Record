@@ -23,6 +23,7 @@ CompositionOutput	error_message	canon-missing-column
 CompositionOutput	file_size	canon-missing-column
 CompositionOutput	generated_at	canon-missing-column
 CompositionOutput	generated_by	canon-missing-column
+ContinuityBeatCharacter	deleted_at	paranoid-no-deleted_at
 EditMap	deleted_at	paranoid-no-deleted_at
 EditingDecision	-	no-table
 EpisodeAsset	display_order	missing-column
