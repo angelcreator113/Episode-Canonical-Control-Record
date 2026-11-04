@@ -73,6 +73,8 @@ describe('GET /world/:showId/events — returns event_date (Task #1646)', () => 
 
     jest.doMock('../../../src/middleware/auth', () => ({
       requireAuth: (req, res, next) => { req.user = { id: 'test-user' }; next(); },
+      // The bulk-delete route is ADMIN only (P0 #3702); this test reads events.
+      authorize: () => (req, res, next) => next(),
     }));
 
     findAllMock = jest.fn(async ({ attributes }) => {
