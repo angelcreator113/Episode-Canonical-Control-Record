@@ -24,6 +24,14 @@ const client = new Anthropic();
 
 const MODELS = ['claude-sonnet-4-6'];
 
+// Tables whose event_id points at a world_events row. replace_existing never
+// removes an event one of these still points at (2026-11-04: it used to hard
+// DELETE every event of the show, used and linked ones included).
+const EVENT_LINK_TABLES = [
+  'season_slots', 'season_specials', 'opportunities', 'episode_briefs',
+  'feed_posts', 'event_deliverables', 'event_costs',
+];
+
 // POST /generate-events
 router.post('/generate-events', requireAuth, aiRateLimiter, async (req, res) => {
   const { show_id, replace_existing = false } = req.body;
@@ -42,7 +50,7 @@ router.post('/generate-events', requireAuth, aiRateLimiter, async (req, res) => 
     // Check existing
     if (!replace_existing) {
       const existing = await db.sequelize.query(
-        `SELECT COUNT(*) as count FROM world_events WHERE show_id = :show_id`,
+        `SELECT COUNT(*) as count FROM world_events WHERE show_id = :show_id AND deleted_at IS NULL`,
         { replacements: { show_id }, type: db.sequelize.QueryTypes.SELECT }
       );
       const count = parseInt(existing[0]?.count || 0);
@@ -114,28 +122,34 @@ Respond ONLY with a valid JSON array. No preamble, no markdown, no explanation.`
       updated_at: now,
     }));
 
-    if (replace_existing) {
-      await db.sequelize.query(
-        `DELETE FROM world_events WHERE show_id = :show_id`,
-        { replacements: { show_id } }
-      );
-    }
+    // One transaction: soft-delete the replaceable events and insert the new
+    // ones, or neither.
+    let replaced = null;
+    await db.sequelize.transaction(async (transaction) => {
+      if (replace_existing) {
+        replaced = await softDeleteReplaceableEvents(db.sequelize, show_id, transaction);
+      }
 
-    // Bulk insert via raw SQL matching actual table schema
+      // Bulk insert via raw SQL matching actual table schema
+      for (const ev of toInsert) {
+        await db.sequelize.query(
+          `INSERT INTO world_events
+             (id, show_id, name, event_type, host_brand, description,
+              prestige, cost_coins, strictness, dress_code,
+              dress_code_keywords, location_hint, event_date, canon_consequences, status, created_at, updated_at)
+           VALUES
+             (:id, :show_id, :name, :event_type, :host_brand, :description,
+              :prestige, :cost_coins, :strictness, :dress_code,
+              :dress_code_keywords::jsonb, :location_hint, :event_date, :canon_consequences::jsonb, :status, :created_at, :updated_at)
+           ON CONFLICT DO NOTHING`,
+          { replacements: ev, transaction }
+        );
+      }
+    });
+
+    // The deal type's first draft (Task #2330; dealTypeDraftService). It opens
+    // its own transaction, so it runs once the inserts are committed.
     for (const ev of toInsert) {
-      await db.sequelize.query(
-        `INSERT INTO world_events
-           (id, show_id, name, event_type, host_brand, description,
-            prestige, cost_coins, strictness, dress_code,
-            dress_code_keywords, location_hint, event_date, canon_consequences, status, created_at, updated_at)
-         VALUES
-           (:id, :show_id, :name, :event_type, :host_brand, :description,
-            :prestige, :cost_coins, :strictness, :dress_code,
-            :dress_code_keywords::jsonb, :location_hint, :event_date, :canon_consequences::jsonb, :status, :created_at, :updated_at)
-         ON CONFLICT DO NOTHING`,
-        { replacements: ev }
-      );
-      // The deal type's first draft (Task #2330; dealTypeDraftService).
       await syncDraftedDealType(db.sequelize, ev.id, { initial: true });
     }
 
@@ -148,12 +162,74 @@ Respond ONLY with a valid JSON array. No preamble, no markdown, no explanation.`
       generated: events.length,
       breakdown,
       events,
+      ...(replaced ? {
+        replaced: {
+          soft_deleted: replaced.softDeleted.length,
+          soft_deleted_ids: replaced.softDeleted.map(e => e.id),
+          kept: replaced.kept.length,
+          kept_events: replaced.kept,
+        },
+      } : {}),
     });
   } catch (err) {
     console.error('generate-events error:', err);
     res.status(500).json({ error: err.message });
   }
 });
+
+// ── replace_existing ─────────────────────────────────────────────────────
+
+// Soft-deletes (deleted_at = NOW()) the show's live events that are safe to
+// replace: never used in an episode (status not used/filmed, no
+// used_in_episode_id, times_used 0 or null) and not pointed at by any
+// EVENT_LINK_TABLES row. Every other event is kept and reported.
+// Returns { softDeleted: [{ id, name }], kept: [{ id, name, status, used, linked_by }] }.
+async function softDeleteReplaceableEvents(sequelize, showId, transaction) {
+  const present = await sequelize.query(
+    `SELECT DISTINCT table_name FROM information_schema.columns
+      WHERE table_schema = current_schema() AND column_name = 'event_id'
+        AND table_name IN (:tables)`,
+    { replacements: { tables: EVENT_LINK_TABLES }, type: sequelize.QueryTypes.SELECT, transaction }
+  );
+  // Names come from the EVENT_LINK_TABLES constant, never from the request.
+  const linkTables = EVENT_LINK_TABLES.filter(t => present.some(r => r.table_name === t));
+  const linkedBy = linkTables.length
+    ? `ARRAY_REMOVE(ARRAY[${linkTables.map(t =>
+      `CASE WHEN EXISTS (SELECT 1 FROM ${t} l WHERE l.event_id = we.id) THEN '${t}' END`).join(', ')}], NULL)`
+    : 'ARRAY[]::text[]';
+
+  const rows = await sequelize.query(
+    `SELECT we.id, we.name, we.status,
+            (COALESCE(we.status, '') IN ('used', 'filmed')
+              OR we.used_in_episode_id IS NOT NULL
+              OR COALESCE(we.times_used, 0) > 0) AS used,
+            ${linkedBy} AS linked_by
+       FROM world_events we
+      WHERE we.show_id = :showId AND we.deleted_at IS NULL
+      FOR UPDATE OF we`,
+    { replacements: { showId }, type: sequelize.QueryTypes.SELECT, transaction }
+  );
+
+  const softDeleted = [];
+  const kept = [];
+  for (const row of rows) {
+    const linked = Array.isArray(row.linked_by) ? row.linked_by : [];
+    if (row.used || linked.length > 0) {
+      kept.push({ id: row.id, name: row.name, status: row.status, used: !!row.used, linked_by: linked });
+    } else {
+      softDeleted.push({ id: row.id, name: row.name });
+    }
+  }
+
+  if (softDeleted.length > 0) {
+    await sequelize.query(
+      `UPDATE world_events SET deleted_at = NOW(), updated_at = NOW()
+        WHERE id IN (:ids) AND show_id = :showId AND deleted_at IS NULL`,
+      { replacements: { ids: softDeleted.map(e => e.id), showId }, transaction }
+    );
+  }
+  return { softDeleted, kept };
+}
 
 // ── Prompt ────────────────────────────────────────────────────────────────
 
@@ -226,3 +302,4 @@ Return a JSON array of exactly 24 objects. No other text.`;
 
 module.exports = router;
 module.exports.buildEventPrompt = buildEventPrompt;
+module.exports.softDeleteReplaceableEvents = softDeleteReplaceableEvents;
