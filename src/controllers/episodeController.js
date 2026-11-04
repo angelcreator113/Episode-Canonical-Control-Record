@@ -642,9 +642,12 @@ module.exports = {
       // Keys this update does not write are named in the response, so a
       // form sending a field the server does not keep is not told it saved
       // (the Overview's Air Date was sent as publish_date and dropped).
-      // script_revision and restored_from steer the script save.
+      // script_revision and restored_from steer the script save. Internal
+      // attributes (script_line_keys, A1b) are never named in a response.
+      const internal = new Set(Episode.INTERNAL_ATTRIBUTES || []);
       const ignoredFields = Object.keys(updates).filter(
-        (field) => !allowedFields[field] && field !== 'script_revision' && field !== 'restored_from');
+        (field) => !allowedFields[field] && field !== 'script_revision' && field !== 'restored_from'
+          && !internal.has(field));
       return { episode, oldValues, updateData, lockedKept, lockedMoved, scriptRevision, ignoredFields };
     }).catch((err) => {
       const { ScriptSaveError } = require('../services/scriptSave');

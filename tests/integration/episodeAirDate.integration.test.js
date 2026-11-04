@@ -125,6 +125,10 @@ const one = async (sql, replacements = {}) =>
     });
     expect(res.status).toBe(200);
     expect(res.body.ignored_fields).toEqual(['publish_date', 'episode_intent', 'creative_notes', 'show_id']);
+    // An internal attribute is neither written nor named (A1b).
+    const internal = await put(ids.ep, { title: 'Gala Night II', script_line_keys: { x: 'ln_1' } });
+    expect(internal.status).toBe(200);
+    expect(JSON.stringify(internal.body)).not.toContain('script_line_keys');
     const row = await one(`SELECT title, description, show_id, to_char(air_date AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS day
                              FROM episodes WHERE id = :ep`, ids);
     expect(row).toEqual({ title: 'Gala Night II', description: 'Synopsis.', show_id: ids.show, day: '2026-10-10' });
