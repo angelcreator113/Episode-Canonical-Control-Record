@@ -3,15 +3,21 @@
  * any gate item is missing; with warnings open it asks first (Start Anyway,
  * Task #1775); with none it starts directly. Then the Episode Locations step
  * (L3, §8(hh)): the proposal shown before anything is created (null while
- * closed).
+ * closed). Then "Who's new in Lala's life this episode?" (Task #3202; the
+ * cast read §8d): a new friend, existing friends featured, or no one new,
+ * before generate-episode. A new friend joins the guests and, once the
+ * episode exists, is revealed in it (pulse_reveals, item_type character,
+ * hidden until Lala arrives).
  */
 import { useState } from 'react';
 import api from '../../services/api';
 
-export default function useStartEpisode({ showId, eventId, gatesMet, used, moneyPending, readiness, moneyWarnings, setToast, navigate }) {
+export default function useStartEpisode({ showId, eventId, gatesMet, used, moneyPending, readiness, moneyWarnings, setToast, navigate, joinFromWhosNew }) {
   const [starting, setStarting] = useState(false);
   const [startConfirmOpen, setStartConfirmOpen] = useState(false);
   const [locationsStep, setLocationsStep] = useState(null);
+  // The locations confirmed, waiting on "Who's new" (null while closed).
+  const [whosNewStep, setWhosNewStep] = useState(null);
 
   // After the warnings (if any), the Episode Locations step (L3; Evoni,
   // 2026-10-02): home, closet, the event's set and any extras, each
@@ -37,14 +43,48 @@ export default function useStartEpisode({ showId, eventId, gatesMet, used, money
     else handleStartEpisode();
   };
 
-  const confirmStartEpisode = async (locations) => {
+  // Locations confirmed: ask who's new before anything is created. The
+  // locations step stays mounted (hidden), so Back returns to it as edited.
+  const confirmStartEpisode = (locations) => {
     if (!gatesMet || used || starting) return;
+    setWhosNewStep({ locations });
+  };
+
+  // "Who's new" answered (Task #3202). feature: profiles to feature; add:
+  // a new friend's profile to add as a guest; reveal: that profile, revealed
+  // in the new episode. "No one new" passes nothing and changes nothing.
+  const finishStartEpisode = async ({ feature = [], add = [], reveal = null } = {}) => {
+    if (!gatesMet || used || starting || !whosNewStep) return;
+    const { locations } = whosNewStep;
     setStarting(true);
     try {
+      if ((feature.length || add.length) && joinFromWhosNew) {
+        try {
+          await joinFromWhosNew({ feature, add });
+        } catch (err) {
+          console.error('[EventPackage] who\'s new guests save failed:', err);
+          setToast(err.response?.data?.error || err.message || 'The guests could not be saved, so the episode was not started.');
+          return;
+        }
+      }
       const res = await api.post(`/api/v1/world/${showId}/events/${eventId}/generate-episode`, { draft_script: false, locations });
       if (res.data.success) {
         const ep = res.data.data.episode;
+        setWhosNewStep(null);
         setLocationsStep(null);
+        // The new friend is revealed in this episode: hidden on The Pulse
+        // until Lala arrives at the event (pulseReveals, moment lala_arrives).
+        // The episode exists either way; a failed reveal is said, not undone.
+        if (reveal?.id && ep?.id) {
+          try {
+            await api.put('/api/v1/pulse-reveals', {
+              show_id: showId, item_type: 'character', item_id: String(reveal.id), episode_id: ep.id, moment: 'lala_arrives', mode: 'hidden',
+            });
+          } catch (err) {
+            console.error('[EventPackage] new friend reveal failed:', err);
+            setToast(`The episode was started, but ${reveal.display_name || 'the new friend'} could not be set to be revealed in it. Set it in Admin › The Pulse.`);
+          }
+        }
         // Start Episode lands on the Overview, whose Planning card shows what
         // the episode inherited and the next decision (Evoni, 2026-10-03,
         // episode creation step 2). This replaces Production -> Assets
@@ -65,6 +105,7 @@ export default function useStartEpisode({ showId, eventId, gatesMet, used, money
 
   return {
     starting, startConfirmOpen, setStartConfirmOpen, locationsStep, setLocationsStep,
-    requestStartEpisode, handleStartEpisode, confirmStartEpisode,
+    whosNewStep, setWhosNewStep,
+    requestStartEpisode, handleStartEpisode, confirmStartEpisode, finishStartEpisode,
   };
 }

@@ -3166,6 +3166,28 @@ router.get('/lala/sidebar', requireAuth, async (req, res) => {
   }
 });
 
+// GET /api/v1/social-profiles/lala/close-friends?show_id=[&exclude=1,2] — the
+// people closest to Lala on The Pulse, closest first, each with its
+// closeness at the show's present (services/lalaCloseFriends). Start
+// Episode's "Who's new" step suggests them as featured guests (Task #3202).
+// Reads only. Before /:id.
+router.get('/lala/close-friends', requireAuth, async (req, res) => {
+  const { show_id: showId } = req.query;
+  if (typeof showId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(showId)) {
+    return res.status(400).json({ error: 'show_id must be a UUID' });
+  }
+  try {
+    const db = req.app.locals.db || require('../models');
+    const exclude = String(req.query.exclude || '').split(',').map((s) => s.trim()).filter((s) => /^\d+$/.test(s));
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 12, 1), 50);
+    const { lalaCloseFriends } = require('../services/lalaCloseFriends');
+    return res.json({ data: await lalaCloseFriends(db, showId, { limit, exclude }) });
+  } catch (err) {
+    console.error('[SocialProfiles] Lala close friends error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 router.get('/lala', requireAuth, async (req, res) => {
   const { show_id: showId } = req.query;
   if (typeof showId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(showId)) {

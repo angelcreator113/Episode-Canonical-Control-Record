@@ -145,9 +145,26 @@ export default function useGuests({ event, guestList, putEvent, load, setToast, 
     saveGuestProfiles(updated, `${rec.display_name} featured as ${rec.role}`, { undoable: true });
   };
 
+  // Start Episode's "Who's new" step (Task #3202): the friends chosen to
+  // feature (invited ones featured in place, the rest added featured) and
+  // a new friend added as a guest, in one save. The featured cap holds:
+  // only as many as there are free slots are featured. Throws on a failed
+  // save, so the episode is not started without them.
+  const joinFromWhosNew = async ({ feature = [], add = [] } = {}) => {
+    const freeSlots = Math.max(0, MAX_FEATURED_GUESTS - guestList.filter((g) => g.featured).length);
+    const toFeature = feature.slice(0, freeSlots);
+    let list = guestList.map((g) => (toFeature.some((p) => String(p.id) === String(g.profile_id)) ? { ...g, featured: true } : g));
+    const entry = (p, featured) => ({ profile_id: p.id, handle: p.handle, display_name: p.display_name || p.handle, featured, story_role: null });
+    for (const p of toFeature) if (!list.some((g) => String(g.profile_id) === String(p.id))) list = [...list, entry(p, true)];
+    for (const p of add) if (!list.some((g) => String(g.profile_id) === String(p.id))) list = [...list, entry(p, false)];
+    if (!toFeature.length && list.length === guestList.length) return;
+    await putEvent(guestBody(list));
+    await load();
+  };
+
   return {
     fullGuestListOpen, setFullGuestListOpen, guestSaving,
     guestFeedPickerOpen, setGuestFeedPickerOpen, guestFeedSearch, setGuestFeedSearch, guestFeedResults, guestFeedSearching,
-    toggleFeatured, setGuestStoryRole, addGuestFromFeed, featureRecommended,
+    toggleFeatured, setGuestStoryRole, addGuestFromFeed, featureRecommended, joinFromWhosNew,
   };
 }
