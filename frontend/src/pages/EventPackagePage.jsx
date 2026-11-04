@@ -114,6 +114,7 @@ import EventDocuments from '../components/EventPackage/EventDocuments';
 import EventOutfitPicker from '../components/EventOutfitPicker';
 import EpisodeLocationsStep from '../components/EpisodeLocationsStep';
 import WhosNewStep from '../components/EventPackage/WhosNewStep';
+import OfferDecisionDialog from '../components/OfferDecisionDialog';
 import PackageHero from '../components/EventPackage/PackageHero';
 import ReadinessDetails from '../components/EventPackage/ReadinessDetails';
 import ShortcutsHelp from '../components/EventPackage/ShortcutsHelp';
@@ -619,6 +620,10 @@ function EventPackageBody({ pkg }) {
           onCancel={() => start.setWhosNewStep(null)}
         />
       )}
+
+      {/* The offer is not accepted yet: an explicit decision before the episode starts (OfferDecisionDialog). */}
+      <OfferDecisionDialog pending={start.offerDecision.pending} busy={start.offerDecision.busy}
+        onChoose={start.offerDecision.choose} onCancel={start.offerDecision.cancel} />
 
       {stakesDraft && !used && <StakesDialog stakesEditor={stakesEditor} />}
       {picker.organizerPickerOpen && !used && <OrganizerPicker event={event} organizer={organizer} picker={picker} />}

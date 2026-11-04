@@ -721,7 +721,7 @@ ${narrativeLines.short || ''}`,
   // balance (synced in step 11). Passive goals ("never drop below") and
   // metrics Lala's state does not carry are left unchanged too. Goals this
   // step completes spawn their unlocks_on_complete (Task #1817).
-  const careerSummary = { goals_completed: [], goals_measured: [], unlocks: [], opportunities_advanced: [], goals_activated: [] };
+  const careerSummary = { goals_completed: [], goals_measured: [], unlocks: [], opportunities_advanced: [], opportunities_unaccepted: [], goals_activated: [] };
   try {
     const goals = await sequelize.query(
       `SELECT id, title, type, priority, target_metric, current_value, target_value, unlocks_on_complete, created_at FROM career_goals
@@ -825,6 +825,8 @@ ${narrativeLines.short || ''}`,
     const { onEpisodeCompleted } = require('./careerPipelineService');
     const oppResult = await onEpisodeCompleted(episodeId, showId, require('../models'));
     careerSummary.opportunities_advanced.push(...(oppResult?.opportunities_advanced || []));
+    // One still open (never accepted) is left as it is, listed for review.
+    careerSummary.opportunities_unaccepted.push(...(oppResult?.opportunities_unaccepted || []));
   } catch (oppErr) {
     console.error('[EpisodeCompletion] Opportunity completion failed (non-blocking):', oppErr?.message);
   }
