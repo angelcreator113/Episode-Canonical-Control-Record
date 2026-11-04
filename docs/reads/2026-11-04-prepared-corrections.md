@@ -389,3 +389,26 @@ The migration (up, guarded re-run, down when empty, up) also passed locally. The
 4. Run B, then `B-verify.sql`.
 
 A and B stay independent and each has its own undo.
+
+### 8.1 Update (2026-11-04): migration PR #3709
+
+- **The migration is PR #3709** (`src/migrations/20261104170000-create-data-correction-log.js`).
+  - Approved by Evoni for implementation, subject to review.
+  - Not approved to merge or deploy.
+  - The schema gained `show_id` (17 columns) for show traceability. A and B now record it.
+- **Re-tested against the real migration and its triggers:**
+
+| Test | Result |
+|---|---|
+| preflight | the four fingerprints match |
+| A | `A COMMITTED`; verify all exact; 4 log rows stamped by the database |
+| A rerun | stopped |
+| A undo | `A UNDONE` |
+| A undo again | stopped |
+| B | `B COMMITTED`; 4 log rows with `show_id`, `true` → `false` |
+| B rerun | stopped |
+| B undo | `B UNDONE`, 4 owned again |
+| B undo again | stopped |
+| deleting a log row | refused ("append-only: DELETE is not allowed") |
+
+A and B remain **unexecuted**. Next: #3709 CI green → Evoni's merge approval → Evoni's deploy approval (the Deploy workflow snapshots RDS before migrating) → read-only preflight (four fingerprints) → separate confirmation of the A/B execution procedure.

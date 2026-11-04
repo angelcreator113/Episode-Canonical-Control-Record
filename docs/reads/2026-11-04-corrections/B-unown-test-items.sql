@@ -41,8 +41,8 @@ END $g$;
 CREATE TEMP TABLE b_ledger ON COMMIT DROP AS
   SELECT count(*) AS n, COALESCE(SUM(amount), 0) AS total, md5(string_agg(id::text || status || amount::text, ',' ORDER BY id)) AS h
     FROM financial_transactions WHERE show_id = '9bd0655f-0426-4da4-95b8-44cdfd608b2b';
-INSERT INTO data_correction_log (correction_key, record_table, record_id, field, before_value, after_value, approved_by, approval_ref)
-SELECT 'B-2026-11-04', 'wardrobe', id::text, 'is_owned', to_jsonb(is_owned), to_jsonb(false), 'Evoni', $r$Evoni, 2026-11-04: YES TO A / YES TO B (docs/reads/2026-11-04-prepared-corrections.md)$r$
+INSERT INTO data_correction_log (correction_key, show_id, record_table, record_id, field, before_value, after_value, approved_by, approval_ref)
+SELECT 'B-2026-11-04', show_id, 'wardrobe', id::text, 'is_owned', to_jsonb(is_owned), to_jsonb(false), 'Evoni', $r$Evoni, 2026-11-04: YES TO A / YES TO B (docs/reads/2026-11-04-prepared-corrections.md)$r$
   FROM wardrobe WHERE id IN ('051d2cac-3723-404b-b481-5274dcb88957','ee7a7e6b-6583-4f2f-8c73-a44785a77c34','46967b7a-6a9a-4453-b75a-aa5eb7806031','a173120e-2618-4da2-bed1-e6ace3a4d867');
 UPDATE wardrobe SET is_owned = false, updated_at = NOW() WHERE id IN ('051d2cac-3723-404b-b481-5274dcb88957','ee7a7e6b-6583-4f2f-8c73-a44785a77c34','46967b7a-6a9a-4453-b75a-aa5eb7806031','a173120e-2618-4da2-bed1-e6ace3a4d867') AND is_owned = true;
 DO $g$
