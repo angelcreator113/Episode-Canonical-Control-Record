@@ -43,4 +43,35 @@ async function episodeEventId(sequelize, episodeId) {
   return rows?.[0]?.id || null;
 }
 
-module.exports = { EPISODE_EVENT_ID_SQL, episodeEventIdSql, episodeEventId };
+/**
+ * The episode's event by the same rule, in the shape an [EVENT:] tag states
+ * it, with the names inject writes into the tag (cost = cost_coins,
+ * deadline = deadline_type). Readers that used to need the tag (evaluation,
+ * the outfit browse pool; Task #3608) start from this and spread the parsed
+ * tag over it, so the tag overrides only the values it states. Fields the
+ * event leaves empty are left out. Resolves null when the episode has no
+ * event.
+ */
+async function episodeEventTerms(sequelize, episodeId) {
+  const [rows] = await sequelize.query(
+    `SELECT name, prestige, cost_coins, strictness, deadline_type, dress_code
+       FROM world_events WHERE id = ${EPISODE_EVENT_ID_SQL}`,
+    { replacements: { episodeId } }
+  );
+  const we = rows?.[0];
+  if (!we) return null;
+  const terms = {
+    name: we.name,
+    prestige: we.prestige,
+    cost: we.cost_coins,
+    strictness: we.strictness,
+    deadline: we.deadline_type,
+    dress_code: we.dress_code,
+  };
+  for (const [k, v] of Object.entries(terms)) {
+    if (v === null || v === undefined || v === '') delete terms[k];
+  }
+  return terms;
+}
+
+module.exports = { EPISODE_EVENT_ID_SQL, episodeEventIdSql, episodeEventId, episodeEventTerms };
