@@ -18,6 +18,7 @@ const { requireAuth } = require('../middleware/auth');
 // The browse pool is in-world and is stored on the episode: never with a
 // piece's real-world source (Task #3020).
 const { allWithoutRealFields } = require('../utils/wardrobeInWorld');
+const { episodeEventTerms } = require('../utils/episodeEventSql');
 
 async function getModels() {
   try { return require('../models'); } catch (e) { console.error('Failed to load models:', e.message); return null; }
@@ -207,10 +208,17 @@ router.post('/world/:showId/browse-pool', requireAuth, async (req, res) => {
       } catch (e2) { /* no wardrobe */ }
     }
 
-    // Get episode event data
+    // Get episode event data: the episode's linked event (the one rule, Task
+    // #1917), with an [EVENT:] tag in the script overriding the values it
+    // states (Task #3608).
     const event = {};
     const selectedOutfit = {};
     if (episode_id) {
+      try {
+        Object.assign(event, (await episodeEventTerms(models.sequelize, episode_id)) || {});
+      } catch (err) {
+        console.error('[browse-pool] linked event read failed:', err);
+      }
       const episode = await models.Episode.findByPk(episode_id);
       if (episode?.script_content) {
         const eventMatch = episode.script_content.match(/\[EVENT:\s*(.+?)\]/i);
