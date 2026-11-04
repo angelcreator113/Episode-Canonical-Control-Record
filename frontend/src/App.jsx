@@ -188,6 +188,7 @@ import LoadingSkeleton from './components/LoadingSkeleton';
 import AppAssistant from './components/AppAssistant';
 import PullToRefresh from './components/PullToRefresh';
 import CommandPalette from './components/CommandPalette';
+import AdminOnly from './components/AdminOnly';
 
 import './App.css';
 
@@ -573,12 +574,13 @@ function AppContent() {
           {/* Search */}
           <Route path="/search" element={<SearchResults />} />
           
-          {/* Analytics */}
-          <Route path="/analytics/decisions" element={<DecisionAnalyticsDashboard />} />
-          <Route path="/ai-costs" element={<AICostTracker />} />
-          <Route path="/cfo" element={<CFOAgent />} />
-          <Route path="/site-organizer" element={<SiteOrganizer />} />
-          <Route path="/design-agent" element={<DesignAgent />} />
+          {/* Analytics and the admin tools (Admin › Tools): AdminOnly shows
+              non-admins an "Admins only" note; their APIs are ADMIN-only. */}
+          <Route path="/analytics/decisions" element={<AdminOnly><DecisionAnalyticsDashboard /></AdminOnly>} />
+          <Route path="/ai-costs" element={<AdminOnly><AICostTracker /></AdminOnly>} />
+          <Route path="/cfo" element={<AdminOnly><CFOAgent /></AdminOnly>} />
+          <Route path="/site-organizer" element={<AdminOnly><SiteOrganizer /></AdminOnly>} />
+          <Route path="/design-agent" element={<AdminOnly><DesignAgent /></AdminOnly>} />
           
           {/* Admin */}
           <Route path="/admin" element={<AdminPanel />} />
@@ -587,13 +589,13 @@ function AppContent() {
           {/* Diagnostics */}
 
           {/* Amber Command Center */}
-          <Route path="/amber" element={<AmberCommandCenter />} />
+          <Route path="/amber" element={<AdminOnly><AmberCommandCenter /></AdminOnly>} />
 
           {/* Settings */}
           <Route path="/settings" element={<SettingsPage />} />
           
           {/* Recycle Bin */}
-          <Route path="/recycle-bin" element={<RecycleBin />} />
+          <Route path="/recycle-bin" element={<AdminOnly><RecycleBin /></AdminOnly>} />
 
           {/* World View — the LalaVerse hub's State tab */}
           <Route path="/world" element={<Navigate to="/universe?tab=state" replace />} />
