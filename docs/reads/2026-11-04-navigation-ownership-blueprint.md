@@ -23,6 +23,19 @@
 - **Context, not copies:** a page shows a few fields from another record plus a "Open in …" link.
 - **Phone width:** every page works at 375px.
 
+**The governing principle** (Evoni, 2026-11-04): *Dream Cities creates life, Lala has to afford that life, and JustAWoman decides how she navigates it.* Every screen below answers to one of these three. A page that blurs them is redesigned, not patched.
+
+| Principle | Where it lives | What it means for a screen | What a screen must never do |
+|---|---|---|---|
+| **Dream Cities creates life** | WORLD (and the world side of SEASON's Event Board) | Places, people, brands, events, prices and opportunities exist and move on the world's own calendar, whether or not Lala takes part. A WORLD page shows what is out there and what it costs. | Shape the world around Lala's plans, or hide something because she can't afford it. |
+| **Lala has to afford that life** | LALA (wallet, obligations, standing, wardrobe, goals), echoed on every offer | Any choice the world offers shows its price next to what she has: balance, obligations due, and what the choice would earn or cost. Money moves only through the ledger. | Make something free that the world prices; change a balance outside the ledger; count money that hasn't been earned. |
+| **JustAWoman decides how she navigates it** | The decision points: accept, negotiate or decline an offer; start or skip an event; spend; dress; complete an episode | Each decision is an explicit, named control with its consequence shown first. The system proposes; she chooses. Nothing is accepted, paid, completed or reassigned automatically. | Auto-accept, auto-complete or auto-correct on her behalf; turn a proposal into canon without her yes. |
+
+Each page table below therefore marks its **primary action** as one of three kinds:
+- *observe the world*;
+- *see what it costs Lala*;
+- *JustAWoman decides*.
+
 ---
 
 ## 1. WORLD (Dream Cities: what exists, independent of Lala)
