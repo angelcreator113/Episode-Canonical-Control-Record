@@ -70,8 +70,8 @@ function parseJson(value, fallback) {
 /**
  * The same shape generateEpisodeFromEvent returns, read back for an episode
  * already started: { episode, brief, scenePlan, todoList, financials,
- * socialTasks, beats, feedPosts, feedMoments, feedMomentSave, replayed:
- * true }. Nothing is written. feedPosts and feedMoments are what the first
+ * socialTasks, beats, feedPosts, feedMoments, feedMomentSave, offerDecisions,
+ * replayed: true }. Nothing is written. feedPosts and feedMoments are what the first
  * Start made at the time and are not stored as such: [] and {}.
  */
 async function loadStartReplay(models, episodeId, { beats = [] } = {}) {
@@ -104,6 +104,9 @@ async function loadStartReplay(models, episodeId, { beats = [] } = {}) {
     feedPosts: [],
     feedMoments: {},
     feedMomentSave: meta.feed_moment_save || { attempted: 0, saved: 0, failed: [] },
+    // The offer decision was the first Start's (in the opportunity's
+    // status_history); a replay decides nothing again.
+    offerDecisions: [],
     replayed: true,
   };
 }

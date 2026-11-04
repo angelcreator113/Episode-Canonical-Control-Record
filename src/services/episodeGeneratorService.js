@@ -462,6 +462,18 @@ async function generateEpisodeFromEvent(event, models, options = {}) {
   const [blocker] = await findStartBlockers(models.sequelize, eventId, { replacingEpisodeId, stopAtFirst: true });
   if (blocker) throw startRefusalError(blocker);
 
+  // The offer decision (services/startOfferDecision; Evoni's ruling): an
+  // event whose opportunity is still open starts only with an explicit
+  // options.offerDecision, asked before any model call (409
+  // OFFER_DECISION_REQUIRED) and applied in the transaction below. Never
+  // accepted by itself. A regenerate re-makes an episode already started,
+  // so it is not asked again.
+  const offerDecision = replacingEpisodeId ? null : (options.offerDecision ?? null);
+  if (!replacingEpisodeId) {
+    const { findOpenOffers, assertOfferDecision } = require('./startOfferDecision');
+    assertOfferDecision(await findOpenOffers(models.sequelize, eventId), offerDecision);
+  }
+
   // Get next episode number from active episodes only. Soft-deleted
   // regenerate history should not inflate visible episode numbering.
   let nextNumber = 1;
@@ -793,10 +805,15 @@ Return ONLY JSON.` }],
     // a later rate card edit never reaches them (Evoni, 2026-10-19;
     // services/dealPriceSnapshot).
     await takePriceSnapshot(models.sequelize, eventId, { transaction, reason: 'start_episode' });
-    return { episode, brief };
+    // The offer decision, in the same commit as the episode: the open
+    // offers locked and checked again, each step in their status_history
+    // with this event and episode. None open: nothing is written.
+    const offerDecisions = replacingEpisodeId ? [] : await require('./startOfferDecision')
+      .applyOfferDecision(models.sequelize, { eventId, episodeId: episode.id, decision: offerDecision, transaction });
+    return { episode, brief, offerDecisions };
   });
   if (started.replayId) return loadStartReplay(models, started.replayId, { beats: BEAT_TEMPLATES });
-  const { episode, brief } = started;
+  const { episode, brief, offerDecisions } = started;
 
   // Season Arc (§8(ff) Q5, A7): the episode takes the slot its event is
   // pencilled into, else the earliest open slot, and the slot locks. Logged,
@@ -1203,6 +1220,8 @@ Return ONLY JSON.` }],
     feedPosts,
     feedMoments,
     feedMomentSave,
+    // What Start Episode's offer decision did: [{ id, name, decision, from, to }].
+    offerDecisions,
   };
 }
 

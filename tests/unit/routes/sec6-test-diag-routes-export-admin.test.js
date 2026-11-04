@@ -5,7 +5,8 @@
  *     and schema details) are removed; nothing in the app called them.
  *   - Export is admin only in every environment; it was optionalAuth
  *     whenever NODE_ENV was not 'production'.
- *   - The /api/v1/debug routes mount only when NODE_ENV is development or test.
+ *   - The /api/v1/debug routes mount only when ENABLE_DEBUG_ROUTES=true outside
+ *     production (P0 #3705; was: NODE_ENV development or test), ADMIN only.
  */
 jest.mock('../../../src/queues/videoQueue', () => ({ addExportJob: jest.fn(async () => ({ id: 'job-1' })), getExportJob: jest.fn(async () => null) }));
 jest.mock('../../../src/models', () => ({ sequelize: { query: jest.fn(async () => [[]]) } }));
@@ -32,8 +33,12 @@ describe('SEC-6: test and diagnostic routes are gone', () => {
     expect(scenes).not.toMatch(/['"]\/test-direct\/:id['"]/);
   });
 
-  test('the debug routes mount only for NODE_ENV development or test, never by default', () => {
-    expect(read('app.js')).toMatch(/if \(\['development', 'test'\]\.includes\(process\.env\.NODE_ENV\)\) \{\n\s*app\.get\('\/api\/v1\/debug\/env'/);
+  // P0 #3705 (Evoni, 2026-11-04: off by default, explicit authorization)
+  // replaces the NODE_ENV development/test gate: the debug routes mount only
+  // when ENABLE_DEBUG_ROUTES=true outside production (utils/diagnosticRoutes,
+  // covered in debug-seed-routes-opt-in.test.js), and each is ADMIN only.
+  test('the debug routes mount only when explicitly enabled, never by default, and are ADMIN only', () => {
+    expect(read('app.js')).toMatch(/if \(DEBUG_ROUTES_ENABLED\) \{\n(?:\s*console\.warn\([^\n]*\n)?\s*app\.get\('\/api\/v1\/debug\/env', requireAuth, authorize\(\['ADMIN'\]\)/);
   });
 });
 
