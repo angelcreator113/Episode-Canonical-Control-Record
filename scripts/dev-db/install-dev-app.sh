@@ -65,6 +65,13 @@ print(" ".join(a["name"] for a in apps if a["name"] in ("episode-api","episode-w
 [ -z "$RUNNING" ] || { echo "refusing: online: $RUNNING" >&2; exit 1; }
 echo "ok; disk: $(free); node: $(as_app 'node -v'), npm: $(as_app 'npm -v')"
 
+# At most two app trees on disk at any time (the box has ~1.5 GB free): the
+# rollback tree from the PREVIOUS install goes first. The live tree stays
+# untouched until the swap, so a failed install still leaves it running.
+step "free the previous rollback tree"
+[ -d "$PREV" ] && { rm -rf "$PREV"; echo "removed $PREV"; } || echo "none"
+echo "disk: $(free)"
+
 step "clone ${REF:0:12} into ${STAGE}"
 rm -rf "$STAGE"
 as_app "git init -q '$STAGE' && cd '$STAGE' && git remote add origin '$REPO_URL' && git fetch -q --depth 1 origin '$REF' && git -c advice.detachedHead=false checkout -q FETCH_HEAD"
