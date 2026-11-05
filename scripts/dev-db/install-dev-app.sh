@@ -3,13 +3,20 @@
 # wired to the box's local database. Run as root on the dev box (via SSM).
 # It does not start the app (see docs/runbooks/dev-environment.md).
 #
-#   sudo REF=<full commit sha> bash scripts/dev-db/install-dev-app.sh
+#   sudo REF=<full commit sha> DIST_TARBALL=/path/dist.tar.gz DIST_SHA256=<sha256> \
+#     bash scripts/dev-db/install-dev-app.sh
+#
+# The frontend is built OFF the box (same commit, `npx vite build` in
+# frontend/, then `tar -C dist -czf dist.tar.gz .`) and handed in as
+# DIST_TARBALL. Building it on this 2 GB box exhausted memory and hung the
+# instance on 2026-11-05.
 #
 # 1. Clones the public repository at REF into a staging folder and checks
 #    the checked-out SHA equals REF.
 # 2. npm ci (all dependencies: migrations need sequelize-cli; sharp and canvas
-#    need their install scripts), then builds frontend/dist with the
-#    frontend's own dependencies, which are removed after the build.
+#    need their install scripts), then unpacks DIST_TARBALL into
+#    frontend/dist after checking its sha256. Refuses with less than
+#    MIN_MEM_MIB of RAM + swap (default 2800).
 # 3. Writes ~/.config/episode-dev/dev.env (mode 600): the preserved app
 #    settings (app.env), the local database login (local-db.env),
 #    DB_SSL=false and HOST=127.0.0.1. The app's .env is a symlink to it.
@@ -31,6 +38,9 @@ STAGE="${HOME_DIR}/episode-metadata.next"
 PREV="${HOME_DIR}/episode-metadata.prev"
 CONF="${HOME_DIR}/.config/episode-dev"
 DEV_ENV="${CONF}/dev.env"
+DIST_TARBALL="${DIST_TARBALL:?set DIST_TARBALL to a frontend/dist tarball built off the box}"
+DIST_SHA256="${DIST_SHA256:?set DIST_SHA256 to the sha256 of the tarball}"
+MIN_MEM_MIB="${MIN_MEM_MIB:-2800}"
 
 step() { echo "== $*"; }
 as_app() { sudo -u "$APP_USER" -H bash -lc "$1"; }
@@ -38,7 +48,13 @@ free() { df -h / | awk 'NR==2{print $4" free ("$5" used)"}'; }
 
 [ "$(id -u)" -eq 0 ] || { echo "must run as root" >&2; exit 1; }
 [[ "$REF" =~ ^[0-9a-f]{40}$ ]] || { echo "REF must be a full 40-character commit sha" >&2; exit 1; }
-for f in "$CONF/app.env" "$CONF/local-db.env"; do [ -s "$f" ] || { echo "missing $f" >&2; exit 1; }; done
+for f in "$CONF/app.env" "$CONF/local-db.env" "$DIST_TARBALL"; do [ -s "$f" ] || { echo "missing $f" >&2; exit 1; }; done
+echo "$DIST_SHA256  $DIST_TARBALL" | sha256sum -c --quiet - || { echo "DIST_TARBALL sha256 mismatch" >&2; exit 1; }
+
+step "memory guard (RAM + swap >= ${MIN_MEM_MIB} MiB)"
+MEM_MIB=$(awk '/^MemTotal:/{m=$2} /^SwapTotal:/{s=$2} END{print int((m+s)/1024)}' /proc/meminfo)
+echo "RAM+swap: ${MEM_MIB} MiB"
+[ "$MEM_MIB" -ge "$MIN_MEM_MIB" ] || { echo "refusing: ${MEM_MIB} MiB < ${MIN_MEM_MIB} MiB; add swap first (docs/runbooks/dev-environment.md)" >&2; exit 1; }
 
 step "dev app must be stopped"
 RUNNING="$(as_app 'pm2 jlist 2>/dev/null' | python3 -c '
@@ -61,12 +77,11 @@ T0=$(date +%s)
 as_app "cd '$STAGE' && npm ci --no-audit --no-fund --loglevel=error"
 echo "done in $(( $(date +%s) - T0 ))s; node_modules $(du -sh "$STAGE/node_modules" | cut -f1); disk: $(free)"
 
-step "frontend build"
-T0=$(date +%s)
-as_app "cd '$STAGE/frontend' && npm ci --no-audit --no-fund --loglevel=error && NODE_OPTIONS=--max-old-space-size=1280 npx vite build --logLevel warn"
-rm -rf "$STAGE/frontend/node_modules"
-[ -s "$STAGE/frontend/dist/index.html" ] || { echo "frontend/dist/index.html missing after build" >&2; exit 1; }
-echo "built in $(( $(date +%s) - T0 ))s; dist $(du -sh "$STAGE/frontend/dist" | cut -f1); frontend deps removed; disk: $(free)"
+step "frontend/dist from the off-box build"
+rm -rf "$STAGE/frontend/dist"; install -d -o "$APP_USER" -g "$APP_USER" "$STAGE/frontend/dist"
+as_app "tar -C '$STAGE/frontend/dist' -xzf '$DIST_TARBALL'"
+[ -s "$STAGE/frontend/dist/index.html" ] || { echo "frontend/dist/index.html missing after unpack" >&2; exit 1; }
+echo "dist $(du -sh "$STAGE/frontend/dist" | cut -f1); disk: $(free)"
 
 step "dev.env (local database; loopback; values not printed)"
 umask 077
