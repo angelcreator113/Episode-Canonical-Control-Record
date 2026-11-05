@@ -191,3 +191,19 @@ Results:
 
 - **The scene-delete renumbering bug.** It drops and recreates an index the app does not own (inventory §4a, D9). A separate suggested task.
 - **`ContinuityBeatCharacter`.** Its model is soft-delete; production's table has no `deleted_at`. Recorded in the step-2 schema baseline.
+
+## 8. Production cutover record (2026-11-05)
+
+Run by Evoni on the box. Each step's authorization was given in the session, for that step alone. The maintenance window was opened before step 1 and closed after step 6.
+
+| Step | Result |
+|---|---|
+| Deploy #195 (run 41961591667, `1d256cbb`; before steps 1–4) | **Stopped at Migrate by the trust check, as designed:** the 6 findings of §2 step 1 (`episode_app_dev` CREATE on `public`, TRIGGER on `brain_documents`, and the 4 `brain_documents` objects). "No migration was run; nothing was changed." The live tree stayed `80fd08cd`; snapshot `deploy-1d256cbbf3e6-41961591667-1`. This is failure point F2; no recovery needed. |
+| 1. Pre-check | P1 `t \| episode_app_dev \| 0`; P2 no row; P3 `episode_app_dev t`, `prime_readonly f`; P4 exactly the 6 expected findings |
+| 2. Guarded drop (authorization 1) | `STEP 2 DONE: the empty brain_documents (and its sequence) dropped`, exit 0 |
+| 3. Revoke (authorization 2) | `STEP 3 DONE: the application role can no longer create in public`, exit 0 |
+| 4. Pre-check | P1 `f`; P2 no row; P3 `episode_app_dev f`, `prime_readonly f`; P4 empty in T1–T3 |
+| 5. Deploy #196 (run 42003170484, `1d256cbb`; authorization 3) | **Success:** plan, snapshot, Migrate (trust check OK; `20261104170000` and `20261104200000` migrated), Deploy `80fd08cd` → `1d256cbb`, Restart and on-box health, public health |
+| 6. Post-check | Q1 all 11 tables present, owned by `postgres`; Q2 `t t t t t f f`; Q3 empty in T1–T3 |
+
+The application role now owns nothing in `public` and can create nothing there. The migration trust check passes for future Deploys.
