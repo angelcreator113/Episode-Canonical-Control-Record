@@ -170,7 +170,7 @@ aws ssm create-document --name EpisodeDevRefresh --document-type Command --docum
 }
 ```
 
-3. **GitHub environment `dev-refresh`** (Settings → Environments). Add yourself as a required reviewer, so every run waits for your approval, and restrict deployment branches to `main`.
+3. **GitHub environment `dev-refresh`** (Settings → Environments). Deployment branches: **`main` only**. **No required reviewers** (Evoni's choice, 2026-11-05): anyone who can dispatch workflows on `main` can start a refresh, and the refresh is read-only against production.
 
 Undo: delete the role, the SSM document (`aws ssm delete-document --name EpisodeDevRefresh`) and the environment. Nothing else depends on them.
 
