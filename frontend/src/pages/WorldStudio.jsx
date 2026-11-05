@@ -13,7 +13,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef, lazy, Suspense, Fragment } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import apiClient from '../services/api';
 import { TENSION } from '../components/RelationshipEngine/tokens';
 import { DREAM_CITIES } from '../data/dreamCities';
@@ -390,6 +390,32 @@ function DepthPanel({ registryCharId, onRefresh }) {
 ═══════════════════════════════════════════════════════════════════════ */
 // A registry character's city: one of the five DREAM cities, or outside
 // the LalaVerse (registry_characters.current_city).
+/**
+ * After a World Studio save or deepen, the registry fields that were not
+ * copied to the Character Registry because they were edited there (the
+ * Registry owns a character's identity; services/registryWriteGuard).
+ * `conflicts` is the response's registry_conflicts.
+ */
+export function RegistryConflictNotice({ conflicts, registryCharacterId, onDismiss }) {
+  if (!conflicts?.length) return null;
+  const fields = [...new Set(conflicts.map((c) => c.field))];
+  return (
+    <div className="ws4-registry-conflicts" role="status">
+      <span>
+        These fields were not copied to the Character Registry because they were edited there: {fields.join(', ')}.
+      </span>
+      {registryCharacterId && (
+        <Link className="ws4-registry-conflicts-link" to={`/character-registry?highlight=${registryCharacterId}`}>
+          Open the registry character
+        </Link>
+      )}
+      {onDismiss && (
+        <button type="button" className="ws4-registry-conflicts-dismiss" aria-label="Dismiss" onClick={onDismiss}>✕</button>
+      )}
+    </div>
+  );
+}
+
 export const CITY_LABELS = {
   ...Object.fromEntries(DREAM_CITIES.map((d) => [d.key, d.name])),
   outside_lalaverse: 'Outside LalaVerse',
@@ -689,6 +715,7 @@ export default function WorldStudio() {
   const [editMode,      setEditMode]      = useState(false);
   const [editForm,      setEditForm]      = useState({});
   const [saving,        setSaving]        = useState(false);
+  const [registryConflicts, setRegistryConflicts] = useState(null);
   const [generating,    setGenerating]    = useState(false);
   const [confirming,    setConfirming]    = useState(false);
   const [previewChars,  setPreviewChars]  = useState([]);
@@ -878,6 +905,8 @@ export default function WorldStudio() {
       const d = r.data;
       if (d.character) {
         flash('Saved'); setEditMode(false);
+        setRegistryConflicts(d.registry_conflicts?.length
+          ? { charId: selectedChar, conflicts: d.registry_conflicts, registryCharacterId: d.registry_character_id } : null);
         loadCharDetail(selectedChar); loadCharacters();
       } else flash(d.error || 'Save failed', 'error');
     } catch (e) {
@@ -1028,7 +1057,11 @@ export default function WorldStudio() {
     try {
       const r = await apiClient.post(`/api/v1/world/characters/${charId}/deepen`);
       const d = r.data;
-      if (d.character) { flash('Character deepened with AI'); loadCharDetail(charId); }
+      if (d.character) {
+        flash('Character deepened with AI'); loadCharDetail(charId);
+        setRegistryConflicts(d.registry_conflicts?.length
+          ? { charId, conflicts: d.registry_conflicts, registryCharacterId: d.registry_character_id } : null);
+      }
       else flash(d.error || 'Deepening failed', 'error');
     } catch (e) {
       flash(e.response?.data?.error || e.message, 'error');
@@ -1599,6 +1632,14 @@ export default function WorldStudio() {
                   )}
                 </div>
               </div>
+
+              {registryConflicts?.charId === charDetail.id && (
+                <RegistryConflictNotice
+                  conflicts={registryConflicts.conflicts}
+                  registryCharacterId={registryConflicts.registryCharacterId || charDetail.registry_character_id}
+                  onDismiss={() => setRegistryConflicts(null)}
+                />
+              )}
 
               {/* Death notice */}
               {charDetail.is_alive === false && (
