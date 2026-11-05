@@ -14,12 +14,14 @@
 const express = require('express');
 const router = express.Router();
 
-const { requireAuth } = require('../../middleware/auth');
+const { requireAuth, authorize } = require('../../middleware/auth');
 const { aiRateLimiter } = require('../../middleware/aiRateLimiter');
 const { eventEpisodeConflictBody, EVENT_EPISODE_CONFLICT_CODE } = require('../../utils/eventEpisodeLink');
 const { findMissingPrices, dealPriceRequiredError, dealPriceRequiredBody, DEAL_PRICE_REQUIRED_CODE } = require('../../services/dealPricingService');
 const { takePriceSnapshot } = require('../../services/dealPriceSnapshot');
+const { offerDecisionBody, OFFER_DECISION_CODES } = require('../../services/startOfferDecision');
 const { getModels } = require('./helpers');
+const { softDeleteUnusedUnlinkedEvents } = require('../../utils/worldEventSafeDelete');
 
 // POST /world/:showId/events/generate-episode-from-many
 //
@@ -30,7 +32,9 @@ const { getModels } = require('./helpers');
 // locations, dress codes, narrative stakes, and outfits all show on the
 // episode page through the existing read-through patterns.
 //
-// Body: { event_ids: [uuid, ...], draft_script?: bool }
+// Body: { event_ids: [uuid, ...], draft_script?: bool, offer_decision?: string }
+// offer_decision is the anchor's (services/startOfferDecision): asked for
+// with 409 OFFER_DECISION_REQUIRED when the anchor's opportunity is open.
 router.post('/world/:showId/events/generate-episode-from-many', requireAuth, aiRateLimiter, async (req, res) => {
   try {
     const { showId } = req.params;
@@ -78,7 +82,7 @@ router.post('/world/:showId/events/generate-episode-from-many', requireAuth, aiR
 
     const episodeGenerator = require('../../services/episodeGeneratorService');
     const wardrobeItems = await episodeGenerator.loadFinancialWardrobeItems(models.sequelize, showId, { event: anchor });
-    const result = await episodeGenerator.generateEpisodeFromEvent(anchor, models, { showId, wardrobeItems });
+    const result = await episodeGenerator.generateEpisodeFromEvent(anchor, models, { showId, wardrobeItems, offerDecision: req.body?.offer_decision });
     const newEpisodeId = result?.episode?.id;
 
     // Link the extra events to the same episode. Skip ones that already
@@ -162,6 +166,10 @@ router.post('/world/:showId/events/generate-episode-from-many', requireAuth, aiR
       console.warn('Multi-event generate refused:', error.message);
       return res.status(409).json(dealPriceRequiredBody(error));
     }
+    if (OFFER_DECISION_CODES.includes(error.code)) {
+      console.warn('Multi-event generate refused:', error.message);
+      return res.status(error.status).json(offerDecisionBody(error));
+    }
     console.error('Multi-event generate error:', error.message, error.stack?.slice(0, 500));
     return res.status(500).json({ success: false, error: error.message });
   }
@@ -232,43 +240,45 @@ router.post('/world/:showId/events/:eventId/regenerate-episode', requireAuth, ai
 });
 
 // POST /world/:showId/events/bulk-delete — Delete multiple events at once
-router.post('/world/:showId/events/bulk-delete', requireAuth, async (req, res) => {
+//
+// Body: { delete_all } | { delete_all_drafts } | { ids: [uuid, ...] }
+// Every mode soft-deletes (deleted_at) only events never used in an episode
+// and not linked from another table (utils/worldEventSafeDelete); used or
+// linked events are kept and listed in kept_events, never deleted. A named id
+// that is used or linked is refused (refused_ids). `deleted` is the count the
+// Event Library toast reads. ADMIN only (403 AUTH_GROUP_REQUIRED otherwise).
+router.post('/world/:showId/events/bulk-delete', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { showId } = req.params;
-    const { ids, delete_all_drafts, delete_all } = req.body;
+    const { ids, delete_all_drafts, delete_all } = req.body || {};
     const models = await getModels();
     if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
 
-    let deleted = 0;
-    if (delete_all) {
-      // Delete ALL events for this show
-      const [result] = await models.sequelize.query(
-        'DELETE FROM world_events WHERE show_id = :showId',
-        { replacements: { showId } }
-      );
-      deleted = result?.rowCount || 0;
-    } else if (delete_all_drafts) {
-      // Delete all draft events
-      const [result] = await models.sequelize.query(
-        "DELETE FROM world_events WHERE show_id = :showId AND status = 'draft'",
-        { replacements: { showId } }
-      );
-      deleted = result?.rowCount || 0;
-    } else if (ids && Array.isArray(ids)) {
-      // Delete specific IDs
-      for (const id of ids) {
-        try {
-          await models.sequelize.query(
-            'DELETE FROM world_events WHERE id = :id AND show_id = :showId',
-            { replacements: { id, showId } }
-          );
-          deleted++;
-        } catch { /* skip */ }
-      }
-    }
+    let scope;
+    if (delete_all) scope = { mode: 'delete_all' };
+    else if (delete_all_drafts) scope = { mode: 'delete_all_drafts', status: 'draft' };
+    else if (Array.isArray(ids) && ids.length > 0) scope = { mode: 'ids', ids };
+    else return res.status(400).json({ success: false, error: 'delete_all, delete_all_drafts or a non-empty ids array required' });
 
-    return res.json({ success: true, deleted });
+    const result = await models.sequelize.transaction((transaction) =>
+      softDeleteUnusedUnlinkedEvents(models.sequelize, {
+        showId, ids: scope.ids || null, status: scope.status || null, transaction,
+      }));
+
+    return res.json({
+      success: true,
+      mode: scope.mode,
+      deleted: result.softDeleted.length,
+      soft_deleted_ids: result.softDeleted.map(e => e.id),
+      kept: result.kept.length,
+      kept_events: result.kept,
+      ...(scope.mode === 'ids' ? {
+        refused_ids: result.kept.map(e => e.id),
+        not_found_ids: result.notFound,
+      } : {}),
+    });
   } catch (err) {
+    console.error('Bulk delete events error:', err.message);
     return res.status(500).json({ success: false, error: err.message });
   }
 });

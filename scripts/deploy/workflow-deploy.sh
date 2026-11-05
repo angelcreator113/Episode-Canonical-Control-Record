@@ -84,6 +84,17 @@ MIGRATE_ENV="$HOME/.episode-migrate.env"
 # A lock that is not free in this time stops the migration with "canceling
 # statement due to lock timeout" (a migration in one transaction rolls back whole).
 MIGRATE_LOCK_TIMEOUT=30s
+# The search path every migration connection gets at connect, through the
+# same PGOPTIONS (Evoni, 2026-11-04; docs/reads/2026-11-04-deploy-migration-trusted-path.md).
+# Without it the migration role's default path ("$user", public) puts a schema
+# named after it first, which any role with CREATE on the database can make.
+# scripts/deploy/migration-trust-check.js checks, before db:migrate, that the
+# connection really has this path and that no role but trusted ones can create
+# or owns anything on it, so nothing another role plants can run as the
+# migration role. Only public: pg_catalog is always searched first anyway,
+# and new objects must go into public (listing pg_catalog first would send an
+# unqualified CREATE TABLE there, which is refused).
+MIGRATE_SEARCH_PATH=public
 # "<from> <to>" while a deploy that moved the tree has not yet restarted the
 # API; removed by a successful restart (Task #2948).
 DEPLOY_MARKER="$HOME/.episode-deploy-unfinished"
@@ -97,7 +108,7 @@ DEPLOY_MIGRATED="$HOME/.episode-deploy-migrated"
 STAGE_ROOT="$HOME/.episode-stage"
 # What a staged release holds: everything sequelize-cli and the ledger check
 # load. No file in src/ requires one outside it (checked at ab1d74e3).
-STAGE_PATHS=(.sequelizerc package.json src scripts/check-pending-migrations.js)
+STAGE_PATHS=(.sequelizerc package.json src scripts/check-pending-migrations.js scripts/deploy/migration-trust-check.js)
 # The longest the on-box vite build may run, in seconds. A healthy build takes
 # about 4 minutes (Deploy run 79); the SSM document gives the whole deploy
 # phase 1800 s, so a hung build ends here with a message, not as TimedOut.
@@ -169,6 +180,18 @@ require_at_target() {
   if [ "$head" != "$TARGET" ]; then
     die "the tree is at $head, not $TARGET." "The deploy phase has not completed for this commit."
   fi
+}
+
+# Copies stdin to stdout with the migration user's name ($1) and password ($2)
+# replaced by [redacted].
+scrub_credential() {
+  MIG_USER="$1" MIG_PASS="$2" awk '
+    function scrub(line, s,   i) {
+      if (s == "") return line
+      while ((i = index(line, s)) > 0) line = substr(line, 1, i - 1) "[redacted]" substr(line, i + length(s))
+      return line
+    }
+    { print scrub(scrub($0, ENVIRON["MIG_PASS"]), ENVIRON["MIG_USER"]) }'
 }
 
 # Runs the read-only ledger check against the migration files of the tree in
@@ -725,25 +748,40 @@ phase_migrate() {
     die "$MIGRATE_ENV needs a DB_USER= line and a DB_PASSWORD= line." "No migration was run."
   fi
 
+  # Every connection the migration opens gets these at connect: pg reads
+  # PGOPTIONS, and every process the migration starts inherits it.
+  local pgoptions="-c lock_timeout=$MIGRATE_LOCK_TIMEOUT -c search_path=$MIGRATE_SEARCH_PATH"
+
   # Checked again right before it runs, and again after.
   verify_stage
-  echo "Running sequelize-cli db:migrate from the staged release (NODE_ENV=production, the migration user from $MIGRATE_ENV, lock_timeout $MIGRATE_LOCK_TIMEOUT)..."
+  # The migration runs only on a trusted search path (Evoni, 2026-11-04).
+  echo "Checking the migration session's search path ($MIGRATE_SEARCH_PATH) and who can create or owns objects on it..."
+  local trust trust_rc
+  set +e
+  trust="$(cd "$STAGE" && DB_USER="$mig_user" DB_PASSWORD="$mig_pass" NODE_ENV=production PGOPTIONS="$pgoptions" \
+    node "$STAGE/scripts/deploy/migration-trust-check.js" --config "$STAGE/src/config/sequelize.js" 2>&1)"
+  trust_rc=$?
+  set -e
+  printf '%s\n' "$trust" | scrub_credential "$mig_user" "$mig_pass" | redact
+  unset trust
+  if [ "$trust_rc" -ne 0 ]; then
+    unset mig_user mig_pass
+    die "the migration trust check exited $trust_rc: the migration session's search path is not trusted (see the lines above)." \
+      "No migration was run; nothing was changed. The live tree ($live) and the running API are unchanged." \
+      "A role that can create objects on the migration's search path could make the migration role run its code. See docs/reads/2026-11-04-deploy-migration-trusted-path.md."
+  fi
+
+  echo "Running sequelize-cli db:migrate from the staged release (NODE_ENV=production, the migration user from $MIGRATE_ENV, lock_timeout $MIGRATE_LOCK_TIMEOUT, search_path $MIGRATE_SEARCH_PATH)..."
   local out rc lock_hit=0
   set +e
   out="$(cd "$STAGE" && DB_USER="$mig_user" DB_PASSWORD="$mig_pass" NODE_ENV=production \
-    PGOPTIONS="-c lock_timeout=$MIGRATE_LOCK_TIMEOUT" \
+    PGOPTIONS="$pgoptions" \
     "$STAGE/node_modules/.bin/sequelize-cli" db:migrate \
     --config "$STAGE/src/config/sequelize.js" --migrations-path "$STAGE/src/migrations" 2>&1)"
   rc=$?
   set -e
   # Print the output with the migration user's name and password removed.
-  printf '%s\n' "$out" | MIG_USER="$mig_user" MIG_PASS="$mig_pass" awk '
-    function scrub(line, s,   i) {
-      if (s == "") return line
-      while ((i = index(line, s)) > 0) line = substr(line, 1, i - 1) "[redacted]" substr(line, i + length(s))
-      return line
-    }
-    { print scrub(scrub($0, ENVIRON["MIG_PASS"]), ENVIRON["MIG_USER"]) }' | redact
+  printf '%s\n' "$out" | scrub_credential "$mig_user" "$mig_pass" | redact
   case "$out" in *"lock timeout"*) lock_hit=1 ;; esac
   unset mig_user mig_pass out
   echo "db:migrate exit $rc"

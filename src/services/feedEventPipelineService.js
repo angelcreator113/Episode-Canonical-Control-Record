@@ -387,6 +387,12 @@ function opportunityGuestCategory(category) {
 // input, capped. It is an AI-written description, not a place name.
 const DRAFT_VENUE_MAX = 200;
 
+// Closed opportunities are never scheduled as an event (routes/opportunityRoutes
+// STATUS_FLOW: these only go on to archived), nor a finished deal (completed
+// or paid: the work is done). The route answers err.status.
+const SCHEDULE_CLOSED_STATUSES = ['declined', 'expired', 'cancelled', 'archived', 'completed', 'paid'];
+const scheduleError = (status, message) => Object.assign(new Error(message), { status });
+
 // userId (Task #2156) is the requesting user, the creation draft's rate-limit
 // key; the schedule route passes req.user's id.
 async function scheduleOpportunityAsEvent(opportunityId, showId, models, { userId = null } = {}) {
@@ -398,18 +404,22 @@ async function scheduleOpportunityAsEvent(opportunityId, showId, models, { userI
     { replacements: { id: opportunityId, showId } }
   );
   const opp = oppRows?.[0];
-  if (!opp) throw new Error('Opportunity not found');
+  if (!opp) throw scheduleError(404, 'Opportunity not found');
 
   // Check if this opportunity already has an event
-  if (opp.event_id) throw new Error(`This opportunity already has an event scheduled`);
+  if (opp.event_id) throw scheduleError(409, 'This opportunity already has an event scheduled');
+  // A closed one is refused before any model call.
+  if (SCHEDULE_CLOSED_STATUSES.includes(opp.status)) {
+    throw scheduleError(409, `This opportunity is ${opp.status}; a closed or finished opportunity cannot be scheduled as an event.`);
+  }
 
   // One held for an episode's beat 14 is scheduled early (Evoni,
-  // 2026-10-23: "I can't turn it into an event"): offered first, as
-  // services/beat14Opportunity releaseHeld does, then booked, in the one
-  // UPDATE at the end, and only while it is still held. Until then it
-  // stays held: a failure on the way, or a completion that settled it
-  // meanwhile, removes the event made here and leaves the opportunity as
-  // it was.
+  // 2026-10-23: "I can't turn it into an event"): offered, as
+  // services/beat14Opportunity releaseHeld does, in the one UPDATE at the
+  // end, and only while it is still held; it is not booked (scheduling
+  // accepts nothing, below). Until then it stays held: a failure on the
+  // way, or a completion that settled it meanwhile, rolls back the event
+  // made here and leaves the opportunity as it was.
   const early = opp.status === 'held';
   const beat14 = early ? require('./beat14Opportunity') : null;
   const earlyEventId = early ? await beat14.episodeEventId(sequelize, opp.offered_in_episode_id) : null;
@@ -419,7 +429,9 @@ async function scheduleOpportunityAsEvent(opportunityId, showId, models, { userI
     `SELECT id, name FROM world_events WHERE show_id = :showId AND name = :name AND deleted_at IS NULL LIMIT 1`,
     { replacements: { showId, name: opp.name } }
   );
-  if (dupeCheck?.length > 0) throw new Error(`An event named "${opp.name}" already exists`);
+  if (dupeCheck?.length > 0) {
+    throw scheduleError(409, `An event named "${opp.name}" already exists in this show. Rename the opportunity or that event, then schedule it again.`);
+  }
 
   const config = EVENT_TYPE_CONFIGS[opp.opportunity_type] || EVENT_TYPE_CONFIGS.social_event;
   const wardrobe = typeof opp.wardrobe_brief === 'string' ? JSON.parse(opp.wardrobe_brief) : (opp.wardrobe_brief || {});
@@ -601,51 +613,69 @@ async function scheduleOpportunityAsEvent(opportunityId, showId, models, { userI
   const extraColumns = Object.keys(draftedColumns);
   const extraCols = extraColumns.map((c) => `, ${c}`).join('');
   const extraVals = extraColumns.map((c) => (c === 'dress_code_keywords' ? `, :${c}::jsonb` : `, :${c}`)).join('');
-  if (early) {
-    return scheduleHeldEarly({ sequelize, opp, eventData, extraCols, extraVals, deliverableRows, guestProfiles, earlyEventId, beat14 });
-  }
-
-  await sequelize.query(
-    `INSERT INTO world_events (id, show_id, name, event_type, host, host_brand, description,
-     prestige, cost_coins, strictness, deadline_type, dress_code, location_hint,
-     narrative_stakes, event_date, canon_consequences, restrictions, is_paid, payment_amount, opportunity_id${extraCols},
-     status, created_at, updated_at)
-     VALUES (:id, :show_id, :name, :event_type, :host, :host_brand, :description,
-     :prestige, :cost_coins, :strictness, :deadline_type, :dress_code, :location_hint,
-     :narrative_stakes, :event_date, :canon_consequences, :restrictions, :is_paid, :payment_amount, :opportunity_id${extraVals},
-     :status, NOW(), NOW())`,
-    { replacements: eventData }
-  );
-
-  // Deliverables (Task #1814). The event already exists, so a failure here
-  // is logged and the event stands without them, the same as a failed
-  // guest selection above; they can be added in the Event Package.
+  // The event, its deliverables and the opportunity's link are one
+  // transaction: a failure anywhere leaves no event and the opportunity as
+  // it was. The UPDATE runs only while the opportunity still has the status
+  // read above and no event, so a decision or a schedule made meanwhile is
+  // a 409, not overwritten.
+  //
+  // Scheduling does not accept it (Evoni's ruling: an opportunity is
+  // accepted only by an explicit decision; the Spring Capsule offer became
+  // booked this way though Lala never answered). The status stays as it is,
+  // with a history entry noting the event. One held for beat 14 is offered
+  // (services/beat14Opportunity releaseHeld), still not booked.
+  const nowIso = new Date().toISOString();
+  const nextStatus = early ? 'offered' : opp.status;
+  const historyEntries = [
+    ...(early ? [beat14.releasedEntry({ note: 'Scheduled before its episode was completed', eventId: earlyEventId, episodeId: opp.offered_in_episode_id })] : []),
+    { status: nextStatus, date: nowIso, note: 'Scheduled as event; status unchanged', event_id: eventId },
+  ];
   let deliverablesCarried = 0;
-  if (deliverableRows.length > 0) {
-    try {
-      deliverablesCarried = await insertEventDeliverables(sequelize, eventId, deliverableRows);
-    } catch (err) {
-      console.error('[FeedPipeline] Deliverable carry failed (event created without deliverables):', err.message);
+  await sequelize.transaction(async (transaction) => {
+    await sequelize.query(WORLD_EVENT_INSERT(extraCols, extraVals), { replacements: eventData, transaction });
+
+    // Deliverables (Task #1814). In a savepoint, so a failed carry undoes
+    // only itself: it is logged and the event stands without them, the
+    // same as a failed guest selection above; they can be added in the
+    // Event Package.
+    if (deliverableRows.length > 0) {
+      try {
+        deliverablesCarried = await sequelize.transaction({ transaction }, (savepoint) =>
+          insertEventDeliverables(sequelize, eventId, deliverableRows, { transaction: savepoint }));
+      } catch (err) {
+        console.error('[FeedPipeline] Deliverable carry failed (event created without deliverables):', err.message);
+      }
     }
-  }
-  // The deal type's first draft (Task #2330; dealTypeDraftService).
-  // After the deliverables, so a brand-owed one can count.
+
+    const [updated] = await sequelize.query(
+      `UPDATE opportunities SET event_id = :eventId, status = :nextStatus${early ? ', offer_date = :today' : ''},
+       status_history = COALESCE(status_history, '[]'::jsonb) || :historyEntry::jsonb,
+       updated_at = NOW()
+       WHERE id = :oppId AND status = :readStatus AND event_id IS NULL AND deleted_at IS NULL
+       RETURNING id`,
+      {
+        replacements: {
+          eventId, oppId: opp.id, nextStatus, readStatus: opp.status,
+          today: nowIso.slice(0, 10), historyEntry: JSON.stringify(historyEntries),
+        },
+        transaction,
+      }
+    );
+    if (!updated?.length) {
+      throw scheduleError(409, 'It changed while it was being scheduled (its status moved, or it was already scheduled): read it again.');
+    }
+  });
+
+  // The deal type's first draft (Task #2330; dealTypeDraftService), after
+  // the commit: it opens its own transaction (it takes none) and would not
+  // see the uncommitted event. It logs its own failure and never throws;
+  // the event stands without a drafted deal type, as before.
   await syncDraftedDealType(sequelize, eventId, { initial: true });
 
-  // Update opportunity with event link
-  await sequelize.query(
-    `UPDATE opportunities SET event_id = :eventId, status = 'booked',
-     status_history = status_history || :historyEntry::jsonb,
-     updated_at = NOW() WHERE id = :oppId`,
-    { replacements: {
-      eventId, oppId: opp.id,
-      historyEntry: JSON.stringify([{ status: 'booked', date: new Date().toISOString(), note: 'Scheduled as event' }]),
-    } }
-  );
-
   return {
-    event_id: eventId, opportunity: opp, event_data: eventData,
+    event_id: eventId, opportunity: { ...opp, status: nextStatus, event_id: eventId }, event_data: eventData,
     guests: guestProfiles.length, deliverables: deliverablesCarried,
+    ...(early ? { offered_early: true } : {}),
   };
 }
 
@@ -657,55 +687,6 @@ const WORLD_EVENT_INSERT = (extraCols, extraVals) => `INSERT INTO world_events (
      :prestige, :cost_coins, :strictness, :deadline_type, :dress_code, :location_hint,
      :narrative_stakes, :event_date, :canon_consequences, :restrictions, :is_paid, :payment_amount, :opportunity_id${extraVals},
      :status, NOW(), NOW())`;
-
-/**
- * The end of scheduleOpportunityAsEvent for one held for beat 14: the event,
- * its deliverables and deal draft as for any other, then one UPDATE that
- * offers and books it while it is still held. When anything after the event
- * is made throws, or it is no longer held, the event is removed (soft
- * delete, so the name is free again) and the opportunity stays as it was.
- */
-async function scheduleHeldEarly({ sequelize, opp, eventData, extraCols, extraVals, deliverableRows, guestProfiles, earlyEventId, beat14 }) {
-  const eventId = eventData.id;
-  await sequelize.query(WORLD_EVENT_INSERT(extraCols, extraVals), { replacements: eventData });
-  let deliverablesCarried = 0;
-  try {
-    if (deliverableRows.length > 0) {
-      try {
-        deliverablesCarried = await insertEventDeliverables(sequelize, eventId, deliverableRows);
-      } catch (err) {
-        console.error('[FeedPipeline] Deliverable carry failed (event created without deliverables):', err.message);
-      }
-    }
-    await syncDraftedDealType(sequelize, eventId, { initial: true });
-    const entries = [
-      beat14.releasedEntry({ note: 'Scheduled before its episode was completed', eventId: earlyEventId, episodeId: opp.offered_in_episode_id }),
-      { status: 'booked', date: new Date().toISOString(), note: 'Scheduled as event' },
-    ];
-    const [updated] = await sequelize.query(
-      `UPDATE opportunities SET event_id = :eventId, status = 'booked', offer_date = :today,
-       status_history = COALESCE(status_history, '[]'::jsonb) || :historyEntry::jsonb,
-       updated_at = NOW() WHERE id = :oppId AND status = 'held' AND event_id IS NULL AND deleted_at IS NULL
-       RETURNING id`,
-      { replacements: { eventId, oppId: opp.id, today: new Date().toISOString().slice(0, 10), historyEntry: JSON.stringify(entries) } }
-    );
-    if (!updated?.length) {
-      throw new beat14.Beat14Error(409, 'It changed while it was being scheduled (its episode settled it, or it was already scheduled): read it again.');
-    }
-  } catch (err) {
-    console.error('[FeedPipeline] Early schedule of a held opportunity failed; removing its event:', err.message);
-    try {
-      await sequelize.query('UPDATE world_events SET deleted_at = NOW() WHERE id = :eventId', { replacements: { eventId } });
-    } catch (cleanupErr) {
-      console.error('[FeedPipeline] The event made for it could not be removed:', cleanupErr.message);
-    }
-    throw err;
-  }
-  return {
-    event_id: eventId, opportunity: { ...opp, status: 'booked', event_id: eventId }, event_data: eventData,
-    guests: guestProfiles.length, deliverables: deliverablesCarried, offered_early: true,
-  };
-}
 
 // ── AI-SUGGEST EVENTS BASED ON NARRATIVE STATE ──────────────────────────────
 

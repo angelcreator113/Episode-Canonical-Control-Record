@@ -29,19 +29,8 @@ async function getModels(req) {
 }
 
 // ─── STATUS PIPELINE ────────────────────────────────────────────────────────
-const STATUS_FLOW = {
-  offered: ['considering', 'declined'],
-  considering: ['negotiating', 'declined'],
-  negotiating: ['booked', 'declined'],
-  booked: ['preparing', 'cancelled'],
-  preparing: ['active', 'cancelled'],
-  active: ['completed'],
-  completed: ['paid', 'archived'],
-  paid: ['archived'],
-  declined: ['archived'],
-  expired: ['archived'],
-  cancelled: ['archived'],
-};
+// services/opportunityStatusFlow, shared with Start Episode's offer decision.
+const { STATUS_FLOW } = require('../services/opportunityStatusFlow');
 
 // ─── TYPE CONFIGS (wardrobe + content requirements) ─────────────────────────
 const TYPE_DEFAULTS = {
@@ -259,7 +248,9 @@ router.post('/opportunities/:showId/:id/advance', requireAuth, authorize(['ADMIN
 
     await opp.update(updates);
 
-    // Career pipeline: cascade to career goals on completion/payment
+    // Career pipeline on completion/payment. It writes no goal progress:
+    // goals move only from the ledger and character_state (completeEpisode
+    // step 17, goal sync); pipeline.note says so.
     let pipelineResult = null;
     if (['completed', 'paid'].includes(to_status)) {
       try {

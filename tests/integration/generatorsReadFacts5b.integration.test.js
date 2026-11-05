@@ -5,8 +5,8 @@
  * decided yet; linked to a world character whose occupation says otherwise.
  * - depth dimensions, the character AI profile builder, the legacy deep
  *   profile and the writer paragraph get the FACTS block;
- * - World Studio "deepen" gets it, and its re-sync keeps the decided
- *   occupation instead of the world character's.
+ * - World Studio "deepen" gets it, and its re-sync never writes the world
+ *   character's occupation, which the facts overrule.
  */
 jest.unmock('uuid');
 
@@ -116,9 +116,13 @@ const promptsSent = () => mockCreate.mock.calls.map(([arg]) => [
     expect(res.status).toBe(200);
     expectFacts();
     const [[row]] = await run('SELECT career_status, description, subtitle FROM registry_characters WHERE id = :char', ids);
-    expect(row.career_status.profession).toBe('Slow-fashion creator');
-    expect(row.description).toMatch(/^Slow-fashion creator/);
-    expect(row.subtitle).toContain('Slow-fashion creator');
-    expect(row.subtitle).not.toContain('Runway model');
+    // The re-sync writes only the registry fields deepen changed (World
+    // Studio no longer overwrites Character Registry fields, 2026-11-04):
+    // the generated career goal arrives; the world character's occupation,
+    // which the facts overrule, never does.
+    expect(row.career_status.career_goal).toBe('Own a linen house.');
+    expect(row.career_status.profession ?? null).not.toBe('Runway model');
+    expect(row.description ?? '').not.toContain('Runway model');
+    expect(row.subtitle ?? '').not.toContain('Runway model');
   });
 });

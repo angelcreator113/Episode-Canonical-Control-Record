@@ -1,0 +1,18 @@
+/* OfferDecisionDialog: the offer decision before an episode starts. Above every dialog that can start an episode (the Start steps at 1000, the What's next overlay at 9999). */
+.odd-backdrop { position: fixed; inset: 0; background: rgba(44, 44, 44, 0.45); display: flex; align-items: center; justify-content: center; padding: 16px; z-index: 10000; }
+.odd-dialog { background: var(--lala-surface); color: var(--lala-ink); border-radius: 10px; width: 100%; max-width: 420px; max-height: 88vh; overflow-y: auto; padding: 14px 16px; box-sizing: border-box; }
+.odd-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.odd-header h3 { margin: 0; font-size: 15px; display: inline-flex; align-items: center; gap: 6px; }
+.odd-close { min-width: 44px; min-height: 44px; border: none; background: transparent; color: inherit; cursor: pointer; }
+.odd-offer { display: grid; gap: 2px; margin: 8px 0; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--lala-parchment-3); overflow-wrap: anywhere; }
+.odd-offer strong { font-family: 'Lora', serif; font-size: 15px; }
+.odd-offer span, .odd-ask { font-size: 12px; color: var(--lala-ink-muted); }
+.odd-ask { margin: 0 0 8px; }
+.odd-choices { display: grid; gap: 8px; }
+.odd-choice { display: grid; gap: 2px; text-align: left; min-height: 44px; padding: 10px 12px; border-radius: 10px; border: 1.5px solid var(--lala-parchment-3); background: var(--surface-card); color: inherit; cursor: pointer; font: inherit; }
+.odd-choice:hover:not(:disabled), .odd-choice:focus-visible { border-color: var(--lala-gold); }
+.odd-choice strong { font-size: 14px; }
+.odd-choice span { font-size: 12px; color: var(--lala-ink-muted); }
+.odd-choice:disabled, .odd-cancel:disabled { opacity: 0.6; cursor: not-allowed; }
+.odd-actions { display: flex; justify-content: flex-end; margin-top: 10px; }
+.odd-cancel { min-height: 44px; padding: 0 14px; border-radius: 8px; border: 1px solid var(--lala-parchment-3); background: transparent; color: inherit; cursor: pointer; font: inherit; }

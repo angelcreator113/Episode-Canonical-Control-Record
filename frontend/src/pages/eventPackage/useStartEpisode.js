@@ -7,10 +7,12 @@
  * cast read §8d): a new friend, existing friends featured, or no one new,
  * before generate-episode. A new friend joins the guests and, once the
  * episode exists, is revealed in it (pulse_reveals, item_type character,
- * hidden until Lala arrives).
+ * hidden until Lala arrives). When the event's offer is not accepted yet,
+ * the server asks for an explicit offer decision (OfferDecisionDialog).
  */
 import { useState } from 'react';
 import api from '../../services/api';
+import useOfferDecision from '../../hooks/useOfferDecision';
 
 export default function useStartEpisode({ showId, eventId, gatesMet, used, moneyPending, readiness, moneyWarnings, setToast, navigate, joinFromWhosNew }) {
   const [starting, setStarting] = useState(false);
@@ -18,6 +20,9 @@ export default function useStartEpisode({ showId, eventId, gatesMet, used, money
   const [locationsStep, setLocationsStep] = useState(null);
   // The locations confirmed, waiting on "Who's new" (null while closed).
   const [whosNewStep, setWhosNewStep] = useState(null);
+  // The explicit offer decision, asked only when the server says the event's
+  // offer is not accepted yet (hooks/useOfferDecision).
+  const offerDecision = useOfferDecision();
 
   // After the warnings (if any), the Episode Locations step (L3; Evoni,
   // 2026-10-02): home, closet, the event's set and any extras, each
@@ -67,7 +72,12 @@ export default function useStartEpisode({ showId, eventId, gatesMet, used, money
           return;
         }
       }
-      const res = await api.post(`/api/v1/world/${showId}/events/${eventId}/generate-episode`, { draft_script: false, locations });
+      // An offer not accepted yet is asked about (409 OFFER_DECISION_REQUIRED;
+      // OfferDecisionDialog), then only the start is sent again, with the
+      // decision; the guests above are not saved twice.
+      const res = await offerDecision.run((decision) => api.post(`/api/v1/world/${showId}/events/${eventId}/generate-episode`, {
+        draft_script: false, locations, ...(decision ? { offer_decision: decision } : {}),
+      }));
       if (res.data.success) {
         const ep = res.data.data.episode;
         setWhosNewStep(null);
@@ -96,6 +106,8 @@ export default function useStartEpisode({ showId, eventId, gatesMet, used, money
         setToast(res.data.error || 'Failed to start episode');
       }
     } catch (err) {
+      // Cancelled at the offer decision: nothing was started; the step stays open.
+      if (err?.offerDecisionCancelled) return;
       console.error('[EventPackage] start episode failed:', err);
       setToast(err.response?.data?.error || err.message || 'Failed to start episode');
     } finally {
@@ -105,7 +117,7 @@ export default function useStartEpisode({ showId, eventId, gatesMet, used, money
 
   return {
     starting, startConfirmOpen, setStartConfirmOpen, locationsStep, setLocationsStep,
-    whosNewStep, setWhosNewStep,
+    whosNewStep, setWhosNewStep, offerDecision,
     requestStartEpisode, handleStartEpisode, confirmStartEpisode, finishStartEpisode,
   };
 }
