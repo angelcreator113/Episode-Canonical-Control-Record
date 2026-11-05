@@ -20,6 +20,7 @@ const NotificationService = require('../services/NotificationService');
 const PresenceService = require('../services/PresenceService');
 const SocketService = require('../services/SocketService');
 const { normalizeTeaser } = require('../utils/episodeTeaser');
+const { parseAirDate } = require('../utils/episodeAirDate');
 /* eslint-enable no-unused-vars */
 
 /**
@@ -535,6 +536,16 @@ module.exports = {
 
       const updateData = {};
 
+      // The air date is checked before anything is written (Evoni's ruling
+      // on the Overview Air Date edit: "Fix field mapping, add validation and
+      // regression tests"): a day as YYYY-MM-DD or empty to clear it, never
+      // an unreadable value stored as an invalid date.
+      let airDate;
+      if (Object.prototype.hasOwnProperty.call(updates, 'air_date')) {
+        airDate = parseAirDate(updates.air_date);
+        if (airDate.error) return { refused: airDate.error };
+      }
+
       // Process each field in the updates
       Object.keys(updates).forEach((field) => {
         if (allowedFields[field]) {
@@ -542,7 +553,7 @@ module.exports = {
           if (field === 'episode_number' || field === 'season_number') {
             updateData[field] = parseInt(updates[field]);
           } else if (field === 'air_date') {
-            updateData.air_date = updates[field] ? new Date(updates[field]) : null;
+            updateData.air_date = airDate.value;
           } else if (field === 'teaser') {
             // Trimmed and capped like the draft; empty clears it. The event
             // description is not compared here: an edit is Evoni's call.
@@ -628,7 +639,16 @@ module.exports = {
       } else {
         await episode.update(rest, { transaction });
       }
-      return { episode, oldValues, updateData, lockedKept, lockedMoved, scriptRevision };
+      // Keys this update does not write are named in the response, so a
+      // form sending a field the server does not keep is not told it saved
+      // (the Overview's Air Date was sent as publish_date and dropped).
+      // script_revision and restored_from steer the script save. Internal
+      // attributes (script_line_keys, A1b) are never named in a response.
+      const internal = new Set(Episode.INTERNAL_ATTRIBUTES || []);
+      const ignoredFields = Object.keys(updates).filter(
+        (field) => !allowedFields[field] && field !== 'script_revision' && field !== 'restored_from'
+          && !internal.has(field));
+      return { episode, oldValues, updateData, lockedKept, lockedMoved, scriptRevision, ignoredFields };
     }).catch((err) => {
       const { ScriptSaveError } = require('../services/scriptSave');
       if (err instanceof ScriptSaveError) return { scriptRefusal: err };
@@ -636,7 +656,7 @@ module.exports = {
     });
     if (result.scriptRefusal) return res.status(result.scriptRefusal.status).json(result.scriptRefusal.body);
     if (result.refused) return res.status(400).json({ error: result.refused });
-    const { episode, oldValues, updateData, lockedKept, lockedMoved, scriptRevision } = result;
+    const { episode, oldValues, updateData, lockedKept, lockedMoved, scriptRevision, ignoredFields } = result;
 
     // A moved air date moves the episode's scheduled Pulse posts with it
     // (services/postRelease shiftForAirDate); one that would land in the
@@ -715,6 +735,7 @@ module.exports = {
       ...(lockedKept.length ? { locked_beats_kept: lockedKept } : {}),
       ...(lockedMoved.length ? { locked_beats_moved: lockedMoved } : {}),
       ...(releaseShift && (releaseShift.shifted.length || releaseShift.held.length) ? { release_shift: releaseShift } : {}),
+      ...(ignoredFields.length ? { ignored_fields: ignoredFields } : {}),
     });
   },
 

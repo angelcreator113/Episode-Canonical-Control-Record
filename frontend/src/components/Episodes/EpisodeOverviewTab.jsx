@@ -96,6 +96,34 @@ function lookTile(locked, planned) {
   return { value: planned.length ? n(planned.length) : 'Not chosen', tone: planned.length ? null : 'warn' };
 }
 
+// The Edit episode form's fields from an episode. The Air Date is sent as
+// `air_date`, the key the episode update keeps (it was `publish_date`, which
+// the server dropped), and shown as the day a date input takes: the stored
+// air_date is a timestamp ('2026-12-01T00:00:00.000Z'), its day in UTC as
+// the release board reads it. Intent and Creative Notes are not in the form:
+// they have no storage yet (Evoni, 2026-11-04: keep them, but do not present
+// either as an editable control until it saves; see PENDING_FIELDS).
+function editFormFrom(episode) {
+  const air = episode?.air_date ? String(episode.air_date).slice(0, 10) : '';
+  return {
+    title: episode?.title || '',
+    // The internal synopsis (P13, Task #2386). Saved as `description`: the
+    // old `logline` key was not in the PUT whitelist, so edits were dropped.
+    description: episode?.description || '',
+    air_date: /^\d{4}-\d{2}-\d{2}$/.test(air) ? air : '',
+  };
+}
+
+// Fields the Overview keeps a place for but cannot save yet. They were
+// inputs sent as episode_intent / creative_notes, which no table stores, so
+// every edit was lost. They show as read-only notes until a home is approved:
+// Intent on the Episode Brief, Creative Notes in the episode's production
+// planning (Evoni's ruling, 2026-11-04).
+const PENDING_FIELDS = [
+  { key: 'episode_intent', label: 'Intent', note: 'Not saved yet. It will live on the Episode Brief once that is approved.' },
+  { key: 'creative_notes', label: 'Creative Notes', note: 'Not saved yet. Its home in production planning is still being decided.' },
+];
+
 function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null, balance = null }) {
   const navigate = useNavigate();
   const [isEditing, setIsEditing] = useState(false);
@@ -145,15 +173,13 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
   // Which column a phone shows: 'story' | 'style'.
   const [phoneCol, setPhoneCol] = useState('story');
   const [applyBusy, setApplyBusy] = useState(false);
-  const [formData, setFormData] = useState({
-    title: episode.title || '',
-    // The internal synopsis (P13, Task #2386). Saved as `description`: the
-    // old `logline` key was not in the PUT whitelist, so edits were dropped.
-    description: episode.description || '',
-    publish_date: episode.air_date || '',
-    episode_intent: episode.episode_intent || '',
-    creative_notes: episode.creative_notes || '',
-  });
+  const [formData, setFormData] = useState(() => editFormFrom(episode));
+  // A reloaded episode (after a save, or a date set on the release board)
+  // refills the form while it is closed, so Edit opens on the stored values.
+  useEffect(() => {
+    if (!isEditing) setFormData(editFormFrom(episode));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [episode]);
 
   const showId = show?.id || episode?.show_id;
 
@@ -432,8 +458,24 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
     { key: 'look', label: "Lala's look", ...lookTile(outfit, outfitPieces), link: { label: 'Open Wardrobe', tab: 'wardrobe' } },
   ];
 
+  // The form shows what the server saved: the update's reply (or, without
+  // one, the episode as the page has it) refills it, so an Air Date the
+  // server did not keep does not stay on screen as if it had.
   const handleSave = async () => {
-    try { await onUpdate(formData); setIsEditing(false); } catch { alert('Failed to save'); }
+    try {
+      // An unchanged Air Date is not sent: the input holds only the day, and
+      // sending it back would reset a stored time to 00:00 UTC and move the
+      // episode's scheduled posts with it (postRelease shiftForAirDate).
+      const payload = { ...formData };
+      if (payload.air_date === editFormFrom(episode).air_date) delete payload.air_date;
+      const res = await onUpdate(payload);
+      const saved = res?.data && typeof res.data === 'object' ? res.data : null;
+      if (saved) setFormData(editFormFrom({ ...episode, ...saved }));
+      setIsEditing(false);
+    } catch (err) {
+      console.error('[EpisodeOverviewTab] save failed:', err);
+      alert(err?.response?.data?.error || 'Failed to save');
+    }
   };
 
   // AI scene-set suggester, in the next-step card (Evoni, 2026-10-22
@@ -497,9 +539,7 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
         {[
           { key: 'title', label: 'Title', type: 'input', placeholder: 'Episode title...' },
           { key: 'description', label: 'Synopsis (internal)', type: 'textarea', placeholder: 'What happens in this episode (production only; viewers see the teaser)...', rows: 3 },
-          { key: 'publish_date', label: 'Air Date', type: 'date' },
-          { key: 'episode_intent', label: 'Intent', type: 'input', placeholder: 'Internal goal for this episode...' },
-          { key: 'creative_notes', label: 'Creative Notes', type: 'textarea', placeholder: 'Tone, direction, things to remember...', rows: 4 },
+          { key: 'air_date', label: 'Air Date', type: 'date' },
         ].map(f => (
           <div key={f.key} className="eov-edit-field">
             <label className="eov-field-label" htmlFor={`eov-edit-${f.key}`}>{f.label}</label>
@@ -510,6 +550,12 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
               <input id={`eov-edit-${f.key}`} className="eov-input" type={f.type || 'text'} value={formData[f.key] || ''} onChange={e => setFormData({ ...formData, [f.key]: e.target.value })}
                 placeholder={f.placeholder} />
             )}
+          </div>
+        ))}
+        {PENDING_FIELDS.map(f => (
+          <div key={f.key} className="eov-edit-field is-pending" data-testid={`eov-pending-${f.key}`}>
+            <span className="eov-field-label">{f.label}</span>
+            <p className="eov-field-pending">{f.note}</p>
           </div>
         ))}
       </div>

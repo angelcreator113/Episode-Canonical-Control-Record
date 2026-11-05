@@ -536,9 +536,12 @@ const EpisodeDetail = () => {
 
   const handleUpdateEpisode = async (updates) => {
     try {
-      await episodeService.updateEpisode(episode.id, updates);
+      const res = await episodeService.updateEpisode(episode.id, updates);
       // Refresh episode data
       await fetchEpisode();
+      // The update's reply ({ data: episode, ignored_fields? }) goes back to
+      // the tab that saved, so it can show what the server kept.
+      return res;
     } catch (error) {
       console.error('Error updating episode:', error);
       throw error;

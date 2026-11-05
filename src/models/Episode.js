@@ -307,6 +307,10 @@ module.exports = (sequelize) => {
 
   // No response carries script_line_keys, even from an instance that loaded
   // it (create returns every attribute).
+  // Exposed so a response that names keys (the update's ignored_fields)
+  // can leave these out too.
+  Episode.INTERNAL_ATTRIBUTES = INTERNAL_ATTRIBUTES;
+
   Episode.prototype.toJSON = function toJSON() {
     const values = Model.prototype.toJSON.call(this);
     for (const name of INTERNAL_ATTRIBUTES) delete values[name];
