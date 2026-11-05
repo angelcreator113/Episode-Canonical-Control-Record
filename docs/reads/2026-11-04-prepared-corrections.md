@@ -1,5 +1,7 @@
 # Prepared corrections for review (2026-11-04)
 
+> **Update (2026-11-05): Corrections A (§2) and B (§4.1) were applied and verified on production.** See `docs/reads/2026-11-05-corrections-a-b-record.md` (log keys `A-2026-11-04`, `B-2026-11-04`). The rest of this document is unchanged; §3 and §4.2–4.4 were not part of A or B and remain unwritten.
+
 **Status:** prepared, **not applied**. No production write, migration, merge or deployment has happened. Each block below needs Evoni's separate, explicit approval before it runs. All SQL here is for review; the only thing to run now is the read-only `wardrobe-dependencies.sql` (§5), which confirms the "before" values.
 
 ## 1. Which record owns an episode's narrative purpose (architecture)
