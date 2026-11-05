@@ -96,7 +96,7 @@ describe('onEpisodeCompleted completes the opportunity only', () => {
 
     const result = await onEpisodeCompleted('episode-1', SHOW_ID, models);
 
-    expect(result).toEqual({ opportunities_advanced: [{ id: 'opp-1', name: 'Deal', from: 'booked', to: 'completed' }] });
+    expect(result).toEqual({ opportunities_advanced: [{ id: 'opp-1', name: 'Deal', from: 'booked', to: 'completed' }], opportunities_unaccepted: [] });
     expect(opp.update).toHaveBeenCalledTimes(1);
     expect(models.CareerGoal.findAll).not.toHaveBeenCalled();
     // no income credit: the only raw SQL is the world_events fallback lookup
@@ -110,7 +110,38 @@ describe('onEpisodeCompleted completes the opportunity only', () => {
 
     const result = await onEpisodeCompleted('episode-1', SHOW_ID, models);
 
-    expect(result).toEqual({ opportunities_advanced: [] });
+    expect(result).toEqual({ opportunities_advanced: [], opportunities_unaccepted: [] });
+    expect(opp.update).not.toHaveBeenCalled();
+  });
+
+  // Scheduling and Start Episode never accept an offer by themselves, so an
+  // episode can complete with its offer still open. It is not completed
+  // (only accepted ones are) but reported and logged for review.
+  it.each(['offered', 'considering', 'negotiating', 'held'])(
+    "reports a linked opportunity still '%s' as unaccepted and leaves it as it is",
+    async (status) => {
+      const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+      const opp = { id: 'opp-1', name: 'Deal', show_id: SHOW_ID, status, status_history: [] };
+      opp.update = jest.fn();
+      const models = makeModels({ opp });
+
+      const result = await onEpisodeCompleted('episode-1', SHOW_ID, models);
+
+      expect(result).toEqual({
+        opportunities_advanced: [],
+        opportunities_unaccepted: [{ id: 'opp-1', name: 'Deal', status }],
+      });
+      expect(opp.update).not.toHaveBeenCalled();
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining(`is still ${status}, not accepted`));
+      warn.mockRestore();
+    }
+  );
+
+  it('a declined one is a decision, not left open: neither completed nor reported', async () => {
+    const opp = { id: 'opp-1', name: 'Deal', show_id: SHOW_ID, status: 'declined', status_history: [] };
+    opp.update = jest.fn();
+    const result = await onEpisodeCompleted('episode-1', SHOW_ID, makeModels({ opp }));
+    expect(result).toEqual({ opportunities_advanced: [], opportunities_unaccepted: [] });
     expect(opp.update).not.toHaveBeenCalled();
   });
 });

@@ -1543,3 +1543,29 @@
 }
 .ws4-feed-layer--active { color: var(--ws4-pink); border-color: var(--ws4-pink); }
 @media (max-width: 680px) { .ws4-feed-layers { padding: 10px 16px 0; } }
+
+/* ── REGISTRY CONFLICTS (fields the Character Registry kept) ──────────── */
+.ws4-registry-conflicts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin: 12px 0;
+  padding: 10px 14px;
+  background: var(--ws4-gold-light);
+  border: 1px solid #e8d0a0;
+  border-radius: var(--ws4-radius-sm);
+  font-size: var(--text-sm);
+  color: var(--ws4-text);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.ws4-registry-conflicts > span { flex: 1 1 220px; min-width: 0; }
+.ws4-registry-conflicts-link { color: var(--ws4-gold); font-weight: 600; white-space: nowrap; }
+.ws4-registry-conflicts-dismiss {
+  background: none;
+  border: none;
+  color: var(--ws4-muted);
+  cursor: pointer;
+  padding: 2px 4px;
+}

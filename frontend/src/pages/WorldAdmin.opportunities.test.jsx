@@ -109,7 +109,9 @@ describe('safer steps', () => {
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
     renderTab();
     fireEvent.click((await screen.findAllByText(/Schedule as Event/))[0]);
-    expect(confirm.mock.calls[0][0]).toMatch(/marks it booked/);
+    // Scheduling accepts nothing (Evoni's ruling): the confirm says the status stays.
+    expect(confirm.mock.calls[0][0]).toBe('Schedule Velour Cover as an event? This creates a world event for it; its status (negotiating) does not change, and accepting it is still a separate decision.');
+    expect(confirm.mock.calls[0][0]).not.toMatch(/booked/);
     expect(api.post).not.toHaveBeenCalled();
   });
 

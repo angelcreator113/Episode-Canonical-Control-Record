@@ -411,11 +411,21 @@ app.get('/_diag/health', async (req, res) => {
 // Alias so /api/v1/health also works (nginx only proxies /api to backend)
 app.get('/api/v1/health', (req, res) => res.redirect('/health'));
 
-// Debug endpoints: only when NODE_ENV says development or test (SEC-6,
-// 2026-10-29). They were mounted whenever NODE_ENV was not 'production', so a
-// server started without it exposed its environment summary and route list.
-if (['development', 'test'].includes(process.env.NODE_ENV)) {
-  app.get('/api/v1/debug/env', (req, res) => {
+// Debug and seed endpoints are off unless explicitly enabled, and admin-only
+// when they are (Evoni: "Disable by default and require explicit authorization
+// for any diagnostic access"). SEC-6 (2026-10-29) gated /debug/env and
+// /debug/data-check on NODE_ENV, but /debug/routes and /seed still mounted
+// whenever NODE_ENV was not 'production', so a server started without it
+// exposed the route list and route load errors. Now: ENABLE_DEBUG_ROUTES=true
+// or ENABLE_SEED_ROUTES=true is required, NODE_ENV=production refuses both
+// regardless, and every mounted route needs requireAuth + authorize(['ADMIN']).
+const { diagnosticRoutesEnabled } = require('./utils/diagnosticRoutes');
+const DEBUG_ROUTES_ENABLED = diagnosticRoutesEnabled('ENABLE_DEBUG_ROUTES');
+const SEED_ROUTES_ENABLED = diagnosticRoutesEnabled('ENABLE_SEED_ROUTES');
+
+if (DEBUG_ROUTES_ENABLED) {
+  console.warn('⚠️  Debug routes mounted at /api/v1/debug (ENABLE_DEBUG_ROUTES=true; ADMIN only)');
+  app.get('/api/v1/debug/env', requireAuth, authorize(['ADMIN']), (req, res) => {
     res.json({
       NODE_ENV: process.env.NODE_ENV,
       PORT: process.env.PORT,
@@ -431,7 +441,7 @@ if (['development', 'test'].includes(process.env.NODE_ENV)) {
   });
 
   // Data diagnostic — check row counts across key tables
-  app.get('/api/v1/debug/data-check', async (req, res) => {
+  app.get('/api/v1/debug/data-check', requireAuth, authorize(['ADMIN']), async (req, res) => {
     try {
       const tables = [
         'shows', 'episodes', 'scenes', 'assets', 'wardrobe',
@@ -480,8 +490,8 @@ function trackRouteLoad(name, loadFn) {
   }
 }
 
-if (process.env.NODE_ENV !== 'production') {
-  app.get('/api/v1/debug/routes', (req, res) => {
+if (DEBUG_ROUTES_ENABLED) {
+  app.get('/api/v1/debug/routes', requireAuth, authorize(['ADMIN']), (req, res) => {
     const failed = Object.entries(routeLoadResults).filter(([,v]) => v.status === 'error');
     res.json({
       total: Object.keys(routeLoadResults).length,
@@ -607,7 +617,7 @@ try {
 let seedRoutes;
 try {
   seedRoutes = require('./routes/seed');
-  console.log('✓ Seed routes loaded (development only)');
+  console.log('✓ Seed routes loaded (mounted only with ENABLE_SEED_ROUTES=true)');
 } catch (e) {
   console.error('✗ Failed to load seed routes:', e.message);
   seedRoutes = (req, res) => res.status(500).json({ error: 'Routes not available' });
@@ -1182,10 +1192,12 @@ try {
   console.error('✗ Failed to load youtube routes:', e.message);
 }
 
-// Development seed routes — F-AUTH-1 Step 3 CP10 Item 7: Tier 5 env-gated mount
-// (combined with Tier 2 inside seed.js handlers per locked plan).
-if (process.env.NODE_ENV !== 'production') {
-  app.use('/api/v1/seed', seedRoutes);
+// Development seed routes — F-AUTH-1 Step 3 CP10 Item 7: Tier 5 env-gated mount,
+// now opt-in: ENABLE_SEED_ROUTES=true and never NODE_ENV=production (see the
+// debug-routes block). ADMIN at the mount line as well as inside seed.js.
+if (SEED_ROUTES_ENABLED) {
+  console.warn('⚠️  Seed routes mounted at /api/v1/seed (ENABLE_SEED_ROUTES=true; ADMIN only)');
+  app.use('/api/v1/seed', requireAuth, authorize(['ADMIN']), seedRoutes);
 }
 
 // Icon Cue Timeline System routes (Week 4 - Production System)
