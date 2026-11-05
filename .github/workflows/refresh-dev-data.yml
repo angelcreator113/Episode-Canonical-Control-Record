@@ -1,0 +1,95 @@
+name: Refresh dev data
+
+# ═══════════════════════════════════════════════════════════════════════════
+# One-tap refresh of the dev box's local database from production (Task #3717).
+#
+# WHAT IT DOES: runs the SSM document EpisodeDevRefresh on the dev box
+# (tag Name=episode-dev-backend). The document takes NO parameters and runs
+# scripts/dev-db/refresh-dev-box.sh from the deployed tree: stop the dev app,
+# pg_dump production as the read-only role dev_refresh_ro, restore locally,
+# clear session/token tables, compare row counts, swap, restart, verify.
+#
+# PUBLIC REPOSITORY, PUBLIC LOGS:
+#   • No credential reaches the runner. The box reads its read-only login
+#     from Secrets Manager (episode-metadata/dev/refresh-readonly) itself.
+#   • No data reaches the log: the on-box script prints step names, exit
+#     codes and match yes/no only (no table names, row counts or hostnames).
+#   • No artifacts are uploaded.
+#
+# AWS: OIDC → role episode-gha-refresh-dev (environment dev-refresh). Its only
+# command permission is ssm:SendCommand for document EpisodeDevRefresh on the
+# dev instance, so it cannot run anything else there. Policy and trust are in
+# docs/runbooks/dev-environment.md ("Refresh workflow").
+#
+# TRIGGER: workflow_dispatch only. Shares the concurrency group with
+# deploy-dev.yml so a refresh and a deploy never overlap on the box.
+# ═══════════════════════════════════════════════════════════════════════════
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-dev
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  AWS_REGION: us-east-1
+  INSTANCE_TAG: episode-dev-backend
+  SSM_DOCUMENT: EpisodeDevRefresh
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment:
+      name: dev-refresh
+
+    steps:
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::637423256673:role/episode-gha-refresh-dev
+          aws-region: us-east-1
+
+      - name: Preflight — dev box Online in SSM
+        id: preflight
+        run: |
+          INSTANCE_ID=$(aws ssm describe-instance-information \
+            --filters "Key=tag:Name,Values=${INSTANCE_TAG}" \
+            --query "InstanceInformationList[?PingStatus=='Online'].InstanceId | [0]" --output text)
+          if [ -z "$INSTANCE_ID" ] || [ "$INSTANCE_ID" = "None" ]; then
+            echo "::error title=Preflight failed::the dev box is not Online in SSM"
+            exit 1
+          fi
+          echo "instance_id=$INSTANCE_ID" >> "$GITHUB_OUTPUT"
+          echo "dev box Online"
+
+      - name: Refresh (SSM document, no parameters)
+        env:
+          INSTANCE_ID: ${{ steps.preflight.outputs.instance_id }}
+        run: |
+          CID=$(aws ssm send-command \
+            --instance-ids "$INSTANCE_ID" \
+            --document-name "$SSM_DOCUMENT" \
+            --comment "refresh-dev-data run ${{ github.run_id }}" \
+            --timeout-seconds 600 \
+            --query "Command.CommandId" --output text)
+          STATUS=Pending
+          for i in $(seq 1 100); do
+            sleep 15
+            STATUS=$(aws ssm get-command-invocation --command-id "$CID" --instance-id "$INSTANCE_ID" \
+              --query Status --output text 2>/dev/null || echo Pending)
+            case "$STATUS" in Success|Failed|Cancelled|TimedOut) break ;; esac
+          done
+          echo "─── on-box summary ───"
+          aws ssm get-command-invocation --command-id "$CID" --instance-id "$INSTANCE_ID" \
+            --query StandardOutputContent --output text
+          echo "SSM status: $STATUS"
+          echo "## Dev data refresh" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Result: $STATUS" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Full output is on the dev box only (/var/log/dev-refresh/)" >> "$GITHUB_STEP_SUMMARY"
+          [ "$STATUS" = Success ] || { echo "::error title=Refresh failed::SSM command ended $STATUS"; exit 1; }

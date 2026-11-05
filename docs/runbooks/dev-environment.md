@@ -105,6 +105,75 @@ Today nothing on the box listens publicly except sshd (22). The security group `
 
 The app keeps listening on `127.0.0.1` throughout. nginx is the only public entry point.
 
+## Refresh workflow (Task #3717)
+
+`.github/workflows/refresh-dev-data.yml` (Actions → *Refresh dev data* → Run workflow) refreshes the local database from production in one tap. It runs the SSM document `EpisodeDevRefresh`, which takes no parameters and runs `scripts/dev-db/refresh-dev-box.sh` from the deployed tree:
+
+1. Stop the dev app.
+2. Run `refresh-dev-db.sh` (dump as `dev_refresh_ro`, restore, clear, compare, swap).
+3. Start the app and verify loopback-only and healthy.
+4. `pm2 save`.
+
+**Public logs.** The repository is public. The runner never sees a credential (the box reads `episode-metadata/dev/refresh-readonly` itself), and no artifacts are uploaded. The workflow log shows only the on-box summary: step names, exit code, *tables match* / *rows match* yes/no, and how many session/token tables were cleared. The full refresh output stays on the box in `/var/log/dev-refresh/` (root, mode 600, last 10 kept).
+
+The refresh script must be in the **deployed** tree. It ships once this lands on `main` and the dev box is redeployed.
+
+### One-time AWS / GitHub setup (Evoni; gated)
+
+1. **SSM document** (us-east-1), from this repository's file:
+
+```bash
+aws ssm create-document --name EpisodeDevRefresh --document-type Command --document-format JSON --content file://scripts/dev-db/ssm/EpisodeDevRefresh.json
+```
+
+   Later changes: `aws ssm update-document … --document-version '$LATEST'`, then `aws ssm update-document-default-version`.
+
+2. **IAM role `episode-gha-refresh-dev`.** Trust: GitHub OIDC, this repository's `dev-refresh` environment only.
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [{
+    "Effect": "Allow",
+    "Principal": { "Federated": "arn:aws:iam::637423256673:oidc-provider/token.actions.githubusercontent.com" },
+    "Action": "sts:AssumeRoleWithWebIdentity",
+    "Condition": { "StringEquals": {
+      "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
+      "token.actions.githubusercontent.com:sub": "repo:angelcreator113/Episode-Canonical-Control-Record:environment:dev-refresh"
+    } }
+  }]
+}
+```
+
+   Inline permissions. It can run **only** `EpisodeDevRefresh`, **only** on the dev box. It has no S3, no secrets and no `AWS-RunShellScript`.
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "RunOnlyTheRefreshDocumentOnTheDevBox",
+      "Effect": "Allow",
+      "Action": "ssm:SendCommand",
+      "Resource": [
+        "arn:aws:ec2:us-east-1:637423256673:instance/i-016395bb5f7a51a0b",
+        "arn:aws:ssm:us-east-1:637423256673:document/EpisodeDevRefresh"
+      ]
+    },
+    {
+      "Sid": "ReadCommandResultsAndFindTheBox",
+      "Effect": "Allow",
+      "Action": ["ssm:GetCommandInvocation", "ssm:ListCommandInvocations", "ssm:DescribeInstanceInformation"],
+      "Resource": "*"
+    }
+  ]
+}
+```
+
+3. **GitHub environment `dev-refresh`** (Settings → Environments). Deployment branches: **`main` only**. **No required reviewers** (Evoni's choice, 2026-11-05): anyone who can dispatch workflows on `main` can start a refresh, and the refresh is read-only against production.
+
+Undo: delete the role, the SSM document (`aws ssm delete-document --name EpisodeDevRefresh`) and the environment. Nothing else depends on them.
+
 ## Checks
 
 ```bash
