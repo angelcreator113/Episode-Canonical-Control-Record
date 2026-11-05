@@ -63,7 +63,11 @@ module.exports = {
       env: {
         ...sharedEnv,
         PORT: 3002,
-        HOST: '0.0.0.0',
+        // Loopback only (Task #3716): the dev box holds a full copy of
+        // production data and dev auth is not set up, so the API must not
+        // listen on a public interface. nginx reaches it on 127.0.0.1.
+        // To listen elsewhere, set HOST explicitly.
+        HOST: process.env.HOST || '127.0.0.1',
         API_VERSION: 'v1',
         APP_NAME: 'Episode Metadata API (Development)',
         ALLOWED_ORIGINS: 'https://dev.episodes.primestudios.dev,http://localhost:3000,http://localhost:3002,http://localhost:5173,http://127.0.0.1:3002,http://127.0.0.1:5173,https://dev.primepisodes.com',
