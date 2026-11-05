@@ -226,7 +226,9 @@ async function dependencyAudit() {
     // Run npm outdated
     let outdatedOutput = '';
     try {
-      execSync('npm outdated --json 2>nul', { cwd: rootDir, encoding: 'utf-8', timeout: 30000 });
+      // stderr is discarded through stdio, not a shell redirect: `2>nul` is
+      // Windows syntax and on Linux wrote a file named `nul` into the app root.
+      outdatedOutput = execSync('npm outdated --json', { cwd: rootDir, encoding: 'utf-8', timeout: 30000, stdio: ['ignore', 'pipe', 'ignore'] });
     } catch (e) {
       // npm outdated exits with code 1 when there ARE outdated packages
       outdatedOutput = e.stdout || '';
@@ -270,7 +272,7 @@ async function dependencyAudit() {
     // Run npm audit
     let auditOutput = '';
     try {
-      auditOutput = execSync('npm audit --json 2>nul', { cwd: rootDir, encoding: 'utf-8', timeout: 30000 });
+      auditOutput = execSync('npm audit --json', { cwd: rootDir, encoding: 'utf-8', timeout: 30000, stdio: ['ignore', 'pipe', 'ignore'] });
     } catch (e) {
       auditOutput = e.stdout || '';
     }
