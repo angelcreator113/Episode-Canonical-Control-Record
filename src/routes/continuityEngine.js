@@ -24,30 +24,8 @@ try {
   thresholdDetection = require('../services/thresholdDetection');
 } catch { thresholdDetection = null; }
 
-/* ------------------------------------------------------------------ */
-/*  Auto-create continuity tables if missing (runs once)               */
-/* ------------------------------------------------------------------ */
-let tablesChecked = false;
-async function ensureTables() {
-  if (tablesChecked) return;
-  try {
-    const m = getModels();
-    const qi = m.sequelize.getQueryInterface();
-    const tables = await qi.showAllTables();
-    const tableSet = new Set(tables.map(t => (typeof t === 'string' ? t : t.tablename || t)));
-    if (!tableSet.has('continuity_timelines')) {
-      console.log('[ContinuityEngine] Creating continuity tables...');
-      await m.ContinuityTimeline.sync();
-      await m.ContinuityCharacter.sync();
-      await m.ContinuityBeat.sync();
-      if (m.ContinuityBeatCharacter) await m.ContinuityBeatCharacter.sync();
-      console.log('[ContinuityEngine] ✅ Continuity tables created');
-    }
-  } catch (err) {
-    console.error('[ContinuityEngine] Table check/create warning:', err.message);
-  }
-  tablesChecked = true;
-}
+/* The continuity tables are created by migration 20261104200000; the
+   application never creates tables at runtime (Evoni, 2026-11-04). */
 
 /* ================================================================== */
 /*  TIMELINES                                                          */
@@ -56,7 +34,6 @@ async function ensureTables() {
 /** GET /timelines — list all timelines */
 router.get('/timelines', requireAuth, async (req, res) => {
   try {
-    await ensureTables();
     const { ContinuityTimeline, ContinuityBeat, ContinuityCharacter } = getModels();
     const timelines = await ContinuityTimeline.findAll({
       include: [

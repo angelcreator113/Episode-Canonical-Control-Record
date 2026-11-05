@@ -18,8 +18,9 @@ describe('Step 3 CP10 — admin.js', () => {
     expect(SRC).toMatch(/router\.post\('\/query',\s*requireAuth,\s*authorize\(\['admin'\]\),\s*queryLimiter,/);
   });
 
-  test('GET /create-video-compositions-table carries requireAuth + authorize lowercase admin', () => {
-    expect(SRC).toMatch(/router\.get\('\/create-video-compositions-table',\s*requireAuth,\s*authorize\(\['admin'\]\),/);
+  test('GET /create-video-compositions-table is removed: a request never creates tables (Evoni, 2026-11-04)', () => {
+    expect(SRC).not.toMatch(/router\.\w+\('\/create-video-compositions-table'/);
+    expect(SRC).not.toMatch(/CREATE TABLE/);
   });
 
   test('queryLimiter rate-limiter preserved', () => {

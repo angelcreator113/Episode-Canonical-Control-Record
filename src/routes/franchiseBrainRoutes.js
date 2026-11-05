@@ -88,13 +88,10 @@ router.post('/franchise-brain/seed', requireAuth, async (req, res) => {
     try {
       existing = await db.FranchiseKnowledge.count();
     } catch (tableErr) {
-      // Table doesn't exist — try to sync it
-      try {
-        await db.FranchiseKnowledge.sync();
-        existing = 0;
-      } catch (syncErr) {
-        return res.status(500).json({ error: 'franchise_knowledge table could not be created: ' + syncErr.message });
-      }
+      // franchise_knowledge is created by migration 20260307210000; the
+      // application never creates tables at runtime (Evoni, 2026-11-04).
+      console.error('franchise-brain/seed: franchise_knowledge could not be read:', tableErr.message);
+      return res.status(503).json({ error: 'franchise_knowledge could not be read (has its migration run?): ' + tableErr.message });
     }
 
     if (existing > 0 && !force) {

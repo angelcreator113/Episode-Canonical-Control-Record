@@ -150,7 +150,6 @@ function refuseWhileGenerating(res, row, what) {
  */
 async function refuseWhileVideoRuns(res, angle) {
   if (!GenerationJob) return false;
-  await ensureGenerationJobsTable();
   const running = await GenerationJob.findOne({
     where: { job_type: 'generate_angle_video', scene_angle_id: angle.id, status: ['queued', 'processing'] },
   });
@@ -214,22 +213,8 @@ async function claimGeneration(res, kind, id, what) {
   return false;
 }
 
-// Ensure generation_jobs table exists (safe to call multiple times)
-let generationJobsSynced = false;
-async function ensureGenerationJobsTable() {
-  if (generationJobsSynced || !GenerationJob) return;
-  try {
-    // Add timeout to prevent sync from hanging
-    await Promise.race([
-      GenerationJob.sync(),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('Sync timeout')), 5000)),
-    ]);
-    generationJobsSynced = true;
-  } catch (err) {
-    console.warn('[SceneSets] GenerationJob sync failed (non-fatal):', err.message);
-    generationJobsSynced = true; // Don't retry — accept it's unavailable
-  }
-}
+// generation_jobs is created by migration 20260323000000; the application
+// never creates tables at runtime (Evoni, 2026-11-04; docs/reads/2026-11-04-runtime-ddl-inventory.md).
 
 // ─── GET /  — list all scene sets ─────────────────────────────────────────────
 // Audit TRUTH-02 (2026-10-03): a failed read is a failed read. Both queries
@@ -1825,7 +1810,6 @@ router.post('/:id/angles/:angleId/generate-video', validateUUIDParam('id'), requ
       });
     }
 
-    await ensureGenerationJobsTable();
     // A second click while this angle's video is still queued or running
     // gets that job back, not another paid one.
     const running = await GenerationJob.findOne({
@@ -2503,7 +2487,6 @@ router.post('/:id/cascade-regenerate', validateUUIDParam('id'), requireAuth, aiR
       if (req.body.canonical_description !== undefined) {
         await set.update({ canonical_description: req.body.canonical_description });
       }
-      await ensureGenerationJobsTable();
       // S2: the base takes the overrides; its angles inherit them from the
       // base's brief. S3: likewise the event chosen on the brief.
       const payload = { force: true };
@@ -2539,7 +2522,6 @@ router.post('/:id/cascade-regenerate', validateUUIDParam('id'), requireAuth, aiR
 router.get('/jobs/set/:setId', requireAuth, validateUUIDParam('setId'), async (req, res) => {
   try {
     if (!GenerationJob) return res.json({ success: true, data: [] });
-    await ensureGenerationJobsTable();
     const jobs = await GenerationJob.findAll({
       where: {
         scene_set_id: req.params.setId,
@@ -2563,7 +2545,6 @@ router.get('/jobs/:jobId', requireAuth, validateUUIDParam('jobId'), async (req, 
     if (!GenerationJob) {
       return res.status(404).json({ success: false, error: 'Generation jobs not available' });
     }
-    await ensureGenerationJobsTable();
     const job = await GenerationJob.findByPk(req.params.jobId);
     if (!job) return res.status(404).json({ success: false, error: 'Job not found' });
 
