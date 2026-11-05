@@ -1,0 +1,17 @@
+{
+  "schemaVersion": "2.2",
+  "description": "Episode dev box: refresh the local database from production (read-only) and restart the dev app. No parameters. Task #3717; see docs/runbooks/dev-environment.md.",
+  "mainSteps": [
+    {
+      "action": "aws:runShellScript",
+      "name": "refreshDevData",
+      "precondition": { "StringEquals": ["platformType", "Linux"] },
+      "inputs": {
+        "timeoutSeconds": "1200",
+        "runCommand": [
+          "bash /home/ubuntu/episode-metadata/scripts/dev-db/refresh-dev-box.sh"
+        ]
+      }
+    }
+  ]
+}
