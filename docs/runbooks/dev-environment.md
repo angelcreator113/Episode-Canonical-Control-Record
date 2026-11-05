@@ -2,7 +2,7 @@
 
 The dev box (`episode-dev-backend`, `i-016395bb5f7a51a0b`) runs its own PostgreSQL holding a restored copy of production's `episode_metadata`. Production and RDS are only ever read. Set up under Task #3715 (2026-11-05).
 
-Pointing the dev app at this database, and removing the production credentials from the box, is Task #3716. A one-tap refresh workflow is Task #3717. Until #3716 lands, the dev app (`episode-api`, `episode-worker`) stays **stopped**, and saved stopped in pm2, because its pm2 env still points at production RDS.
+Task #3716 (2026-11-05) pointed the dev app at this database, removed every stored production credential from the box, and installed current `main`. A one-tap refresh workflow is Task #3717. The dev app runs **local-only** until dev auth is set up: see *Dev app* and *Reopening the dev app* below.
 
 ## What is on the box
 
@@ -30,7 +30,7 @@ sudo bash /home/ubuntu/dev-db/bin/install-local-postgres.sh
 ### `scripts/dev-db/refresh-dev-db.sh` (root)
 
 1. Refuses to run if `episode-api` or `episode-worker` is online in pm2.
-2. Reads the RDS connection from Secrets Manager `episode-metadata/dev/database` through the app's own loader, `scripts/print-db-env.js`, into the process environment only. Today that secret resolves to the production RDS instance `episode-control-dev` as `episode_app_dev`.
+2. Reads the RDS connection from Secrets Manager `episode-metadata/dev/refresh-readonly` (override with `DB_SECRET_ID`) through the app's own loader, `scripts/print-db-env.js`, into the process environment only. That secret holds the read-only role `dev_refresh_ro` (`scripts/dev-db/sql/dev-refresh-ro-role.sql`, Task #3716). It has SELECT on every table and sequence except `data_correction_log`, no write privilege, read-only sessions and a connection limit of 2. The dev box role reads it through the inline policy `dev-refresh-readonly-secret-read`. Until 2026-11-05 the refresh used the application's login (`episode-metadata/dev/database`, `episode_app_dev`).
 3. Runs `pg_dump -Fc --no-owner --no-acl`, which reads in a read-only transaction, excluding `public.data_correction_log`. The application role has no SELECT on that table by design (#3709). It is recreated **empty** from its own migration, and its `SequelizeMeta` row comes across in the dump.
 4. Restores into a fresh `episode_metadata_restore`, as `episode_dev`.
 5. Clears the session/token tables in `CLEAR_TABLES`. That is `teleprompter_remote_sessions` today: it has `token_hash` and is cleared on every restore. Auth is Cognito, so the database has no user, session or refresh-token tables. The other name matches (`session_briefs`, `therapy_pending_sessions`, `character_secrets`, the `*secret_connections` columns, the `ai_usage_logs.*_tokens` counts) are story or app data and are kept (Evoni, 2026-11-05).
@@ -55,6 +55,55 @@ Over SSM, run it with `bash -c '…'` if you add pipes, because `AWS-RunShellScr
 | Row counts | 235 of 235 tables match (the 236th is `data_correction_log`, recreated empty); 5814 rows on both sides |
 | Cleared | `teleprompter_remote_sessions`: 0 → 0 |
 | Local database | `episode_metadata`, 37 MB, owner `episode_dev` |
+
+## Dev app
+
+| Thing | Where / value |
+|---|---|
+| App tree | `/home/ubuntu/episode-metadata`, a git checkout of the installed commit (`git -C … rev-parse HEAD`). The July tarball tree is kept as `/home/ubuntu/episode-metadata.prev` for rollback. |
+| Settings | `/home/ubuntu/episode-metadata/.env` is a symlink to `/home/ubuntu/.config/episode-dev/dev.env` (mode 600), written by `install-dev-app.sh`: the preserved app settings (`app.env`), the local DB login, `DB_SSL=false`, `HOST=127.0.0.1`. |
+| Processes | pm2 `episode-api` (port 3002, **bound to 127.0.0.1**) and `episode-worker`, from `ecosystem.dev.config.js`; saved with `pm2 save`. |
+| Database | local `episode_metadata` as `episode_dev` over `127.0.0.1` only. The box holds no production database credential. Its only production access is `episode-metadata/dev/refresh-readonly` (read-only `dev_refresh_ro`), used by the refresh. |
+| nginx | **stopped and disabled.** The site file `/etc/nginx/sites-enabled/episode` (server `dev.primepisodes.com`, proxy to `localhost:3002`) is unchanged. |
+| Memory | 1.9 GiB RAM + 1 GiB swap (`/swapfile`, in `/etc/fstab`). |
+| Not configured | Cognito (`COGNITO_USER_POOL_ID`, `COGNITO_CLIENT_ID` empty), `JWT_SECRET`, every AI/media API key, S3 buckets, Redis. Logins fail; `requireAuth` routes refuse; AI features return 503. |
+
+### Installing a commit
+
+The frontend is **built off the box**. Building it on the box hung the 2 GB instance on 2026-11-05.
+
+```bash
+# off the box, at the commit to install
+cd frontend && npm ci && npx vite build && tar -C dist -czf ../dist.tar.gz . && sha256sum ../dist.tar.gz
+```
+
+Copy the tarball to the box (e.g. `/home/ubuntu/dev-db/dist-<sha>.tar.gz`, owned by `ubuntu`), then:
+
+```bash
+sudo REF=<full sha> DIST_TARBALL=/home/ubuntu/dev-db/dist-<sha>.tar.gz DIST_SHA256=<sha256> \
+  bash /home/ubuntu/dev-db/bin/install-dev-app.sh
+```
+
+The installer refuses while the app is online or with under 2.8 GiB RAM+swap. It applies pending migrations to the local database only, then swaps trees. Start afterwards:
+
+```bash
+sudo -u ubuntu -H bash -lc 'cd ~/episode-metadata && pm2 start ecosystem.dev.config.js --only episode-api,episode-worker && pm2 save'
+ss -ltn | grep 3002   # expect 127.0.0.1:3002 only
+```
+
+Rollback: stop both, `mv episode-metadata episode-metadata.bad && mv episode-metadata.prev episode-metadata`, start.
+
+## Reopening the dev app (once dev auth works)
+
+Today nothing on the box listens publicly except sshd (22). The security group `episode-dev-backend-sg` also refuses 22/80/443/3002/5432 from outside, as probed from another public IP on 2026-11-05. In order:
+
+1. **Auth first.** Give dev its own Cognito user pool and app client (recommended), or at least its own app client. Set `COGNITO_USER_POOL_ID`, `COGNITO_CLIENT_ID` (and `COGNITO_CLIENT_SECRET` if the client has one) in `~/.config/episode-dev/app.env`, reinstall or restart with `--update-env`, and prove a login and a `requireAuth` call locally (`curl 127.0.0.1:3002/...`). Leave `JWT_SECRET` empty unless dev needs HS256 tokens; if set, use a dev-only value of 32+ characters.
+2. **DNS.** `dev.primepisodes.com` currently resolves to the **prod** box (54.163.229.144), where it returns 502. Point it at the dev box's EIP `54.87.253.45`.
+3. **nginx.** Change `proxy_pass http://localhost:3002` to `http://127.0.0.1:3002` in `/etc/nginx/sites-enabled/episode` (the app listens on IPv4 loopback only). Then `nginx -t && systemctl enable --now nginx`. Renew the certificate if it has lapsed: `certbot --nginx -d dev.primepisodes.com`.
+4. **Security group.** Open 443 (and 80 for the redirect and ACME), first **to your own IP only**, not `0.0.0.0/0`. Never 3002 or 5432.
+5. **Check from outside**: `https://dev.primepisodes.com/health` 200 from your IP, a login works, and 3002/5432 still time out.
+
+The app keeps listening on `127.0.0.1` throughout. nginx is the only public entry point.
 
 ## Checks
 

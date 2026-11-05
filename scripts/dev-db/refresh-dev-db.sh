@@ -7,6 +7,9 @@
 # 1. Refuses to run while the dev app (pm2 episode-api / episode-worker) is online.
 # 2. Reads the RDS connection from Secrets Manager through the app's own
 #    loader (scripts/print-db-env.js) into this process's environment only.
+#    The secret is $DB_SECRET_ID, by default episode-metadata/dev/refresh-readonly:
+#    the read-only role dev_refresh_ro (scripts/dev-db/sql/dev-refresh-ro-role.sql),
+#    which has SELECT on every table and sequence except data_correction_log.
 # 3. pg_dump (custom format, read-only transaction) of episode_metadata,
 #    excluding data_correction_log: the application role has no SELECT on it
 #    by design (#3709); it is recreated empty from its own migration.
@@ -32,6 +35,8 @@ EXCLUDE_TABLE="public.data_correction_log"
 DCL_MIGRATION_NAME="20261104170000-create-data-correction-log.js"
 # Session/token tables emptied after every restore (Evoni, 2026-11-05, #3715).
 CLEAR_TABLES="${CLEAR_TABLES:-teleprompter_remote_sessions}"
+# Read-only login for the dump (Task #3716). Not the application's login.
+DB_SECRET_ID="${DB_SECRET_ID:-episode-metadata/dev/refresh-readonly}"
 
 step() { echo "== $*"; }
 as_app() { sudo -u "$APP_USER" -H "$@"; }
@@ -55,8 +60,8 @@ print(" ".join(a["name"] for a in apps if a["name"] in ("episode-api","episode-w
 if [ -n "$RUNNING" ]; then echo "refusing: online: $RUNNING" >&2; exit 1; fi
 echo "ok: episode-api and episode-worker not online"
 
-step "RDS connection from Secrets Manager (not printed)"
-DB_ENV="$(cd "$APP_DIR" && as_app node scripts/print-db-env.js)"
+step "RDS connection from Secrets Manager ${DB_SECRET_ID} (not printed)"
+DB_ENV="$(cd "$APP_DIR" && as_app env DB_SECRET_ID="$DB_SECRET_ID" node scripts/print-db-env.js)"
 eval "$DB_ENV"; unset DB_ENV
 export PGHOST="$DB_HOST" PGPORT="${DB_PORT:-5432}" PGDATABASE="$DB_NAME" PGUSER="$DB_USER" PGPASSWORD="$DB_PASSWORD"
 export PGSSLMODE=require PGCONNECT_TIMEOUT=15 PGAPPNAME=dev-db-refresh
