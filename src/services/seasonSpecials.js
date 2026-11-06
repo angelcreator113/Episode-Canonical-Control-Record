@@ -54,6 +54,8 @@
  * No AI call.
  */
 
+const { lockEpisodes, assertEpisodesLocked, requireTransaction, RetryableConflictError } = require('../utils/episodeLocks');
+
 const TABLE = 'season_specials';
 const KINDS = Object.freeze(['bonus', 'special']);
 const SPECIAL_TYPES = Object.freeze(['holiday', 'recap', 'reunion', 'other']);
@@ -371,11 +373,11 @@ async function insertSpecial(sequelize, { showId, arcId, kind, after, specialTyp
   return row.id;
 }
 
-async function lockSpecial(sequelize, showId, specialId, transaction) {
+async function lockSpecial(sequelize, showId, specialId, transaction, { lock = true } = {}) {
   if (!UUID_RE.test(String(specialId))) throw new SpecialsError('Special not found.', 404, 'SEASON_SPECIAL_NOT_FOUND');
   const [[row]] = await sequelize.query(
     `SELECT sp.*, a.season_number FROM ${TABLE} sp JOIN show_arcs a ON a.id = sp.arc_id
-      WHERE sp.id = :specialId AND sp.show_id = :showId AND sp.deleted_at IS NULL FOR UPDATE OF sp`,
+      WHERE sp.id = :specialId AND sp.show_id = :showId AND sp.deleted_at IS NULL${lock ? ' FOR UPDATE OF sp' : ''}`,
     { replacements: { specialId, showId }, transaction });
   if (!row) throw new SpecialsError('Special not found.', 404, 'SEASON_SPECIAL_NOT_FOUND');
   return row;
@@ -389,7 +391,11 @@ async function lockSpecial(sequelize, showId, specialId, transaction) {
 async function updateSpecial(sequelize, showId, specialId, body = {}) {
   return sequelize.transaction(async (transaction) => {
     await assertReady(sequelize, transaction);
+    // A1.1: the special's episode (snapshotted below) is locked before the special.
+    const seen = await lockSpecial(sequelize, showId, specialId, transaction, { lock: false });
+    await lockEpisodes(sequelize, [seen.episode_id], { transaction });
     const row = await lockSpecial(sequelize, showId, specialId, transaction);
+    if (row.episode_id) assertEpisodesLocked(transaction, [row.episode_id]);
     if (!KINDS.includes(row.kind)) throw new SpecialsError('A two-parter is changed from its slots.', 400, 'SEASON_SPECIAL_INVALID');
     const set = {};
     if (body.title !== undefined) set.title = readTitle(body.title);
@@ -456,6 +462,9 @@ async function mirrorAirDate(sequelize, { showId, episodeId, day, transaction })
 
 // ── The season snapshot of a special's episode (as seasonSlotService.snapshotEpisode for a slot) ──
 async function snapshotSpecialEpisode(sequelize, { specialId, episodeId, transaction }) {
+  // A1.1: inside the caller's transaction, the episode locked first.
+  requireTransaction(transaction, 'snapshotSpecialEpisode');
+  await lockEpisodes(sequelize, [episodeId], { transaction });
   const [[sp]] = await sequelize.query(
     `SELECT sp.*, a.id AS arc_id, a.title AS arc_title, a.tagline AS arc_tagline, a.logline AS arc_logline,
             a.description AS arc_description, a.phases, COALESCE(a.season_number, 1) AS season_number
@@ -500,6 +509,8 @@ async function snapshotSpecialEpisode(sequelize, { specialId, episodeId, transac
 
 /** A two-parter's part on its episode's snapshot: the label and the part, kept with the slot's own context. */
 async function stampTwoPart(sequelize, { episodeId, slotNumber, part, otherSlotNumber, transaction }) {
+  requireTransaction(transaction, 'stampTwoPart');
+  await lockEpisodes(sequelize, [episodeId], { transaction });
   await sequelize.query(
     `UPDATE episodes
         SET season_context = COALESCE(season_context, '{}'::jsonb)
@@ -515,6 +526,8 @@ async function stampTwoPart(sequelize, { episodeId, slotNumber, part, otherSlotN
 
 /** A part's episode no longer in a two-parter: its plain slot label back, the part dropped. */
 async function unstampTwoPart(sequelize, { episodeId, slotNumber, transaction }) {
+  requireTransaction(transaction, 'unstampTwoPart');
+  await lockEpisodes(sequelize, [episodeId], { transaction });
   await sequelize.query(
     `UPDATE episodes
         SET season_context = (COALESCE(season_context, '{}'::jsonb) - 'two_part')
@@ -548,6 +561,13 @@ async function createTwoParter(sequelize, showId, body = {}) {
     for (const s of [one, two]) {
       if (await twoPartOfSlot(sequelize, s.id, { transaction })) throw new SpecialsError(`E${s.slot_number} is already in a two-parter.`, 409, 'SEASON_TWO_PART_REFUSED');
     }
+    // A1.1: Part 1's episode (stamped below) is locked before the slots are
+    // written; its slot is read again under the lock, in case it started since.
+    await lockEpisodes(sequelize, [one.episode_id], { transaction });
+    const [[oneNow]] = await sequelize.query('SELECT episode_id FROM season_slots WHERE id = :id FOR UPDATE', { replacements: { id: one.id }, transaction });
+    if (String(oneNow?.episode_id || '') !== String(one.episode_id || '')) {
+      throw new RetryableConflictError('This episode slot changed while it was being saved. Nothing was saved: try again.', 'SEASON_CHANGED_RETRY');
+    }
     await sequelize.query('UPDATE season_slots SET event_id = :eventId, updated_at = NOW() WHERE id = :id', { replacements: { eventId, id: two.id }, transaction });
     // The event leaves any bonus or special it was in (it cannot be: the weekly pencil took it out; kept safe).
     await clearEventFromSpecials(sequelize, { arcId: one.arc_id, eventId, transaction });
@@ -560,7 +580,7 @@ async function createTwoParter(sequelize, showId, body = {}) {
   });
 }
 
-async function lockTwoParter(sequelize, showId, id, transaction) {
+async function lockTwoParter(sequelize, showId, id, transaction, { lock = true } = {}) {
   if (!UUID_RE.test(String(id))) throw new SpecialsError('Two-parter not found.', 404, 'SEASON_TWO_PART_NOT_FOUND');
   const [[row]] = await sequelize.query(
     `SELECT tp.id, tp.event_id, tp.part_one_slot_id, tp.part_two_slot_id,
@@ -572,9 +592,22 @@ async function lockTwoParter(sequelize, showId, id, transaction) {
        JOIN season_slots two ON two.id = tp.part_two_slot_id
        JOIN show_arcs a ON a.id = tp.arc_id
       WHERE tp.id = :id AND tp.show_id = :showId AND tp.kind = 'two_part' AND tp.deleted_at IS NULL
-      FOR UPDATE OF tp`,
+      ${lock ? 'FOR UPDATE OF tp' : ''}`,
     { replacements: { id, showId }, transaction });
   if (!row) throw new SpecialsError('Two-parter not found.', 404, 'SEASON_TWO_PART_NOT_FOUND');
+  return row;
+}
+
+/**
+ * A1.1: Part 1's episode (stamped or copied below) is locked before the
+ * two-parter row (episode-first); Part 2's new episode is made by this
+ * transaction, so no one else can hold it.
+ */
+async function lockTwoParterEpisodeFirst(sequelize, showId, id, transaction) {
+  const seen = await lockTwoParter(sequelize, showId, id, transaction, { lock: false });
+  await lockEpisodes(sequelize, [seen.one_episode_id], { transaction });
+  const row = await lockTwoParter(sequelize, showId, id, transaction);
+  if (row.one_episode_id) assertEpisodesLocked(transaction, [row.one_episode_id]);
   return row;
 }
 
@@ -590,7 +623,7 @@ const liveEpisode = async (sequelize, id, transaction) => {
 async function removeTwoParter(sequelize, showId, id) {
   return sequelize.transaction(async (transaction) => {
     await assertReady(sequelize, transaction);
-    const row = await lockTwoParter(sequelize, showId, id, transaction);
+    const row = await lockTwoParterEpisodeFirst(sequelize, showId, id, transaction);
     if (await liveEpisode(sequelize, row.two_episode_id, transaction)) {
       throw new SpecialsError(`Part 2 (E${row.two_number}) has its episode: the two-parter stays.`, 409, 'SEASON_TWO_PART_LOCKED');
     }
@@ -617,7 +650,7 @@ const BRIEF_SKIP = new Set(['id', 'episode_id', 'status', 'created_at', 'updated
 async function startPartTwo(sequelize, showId, id) {
   return sequelize.transaction(async (transaction) => {
     await assertReady(sequelize, transaction);
-    const row = await lockTwoParter(sequelize, showId, id, transaction);
+    const row = await lockTwoParterEpisodeFirst(sequelize, showId, id, transaction);
     const one = await liveEpisode(sequelize, row.one_episode_id, transaction);
     if (!one) throw new SpecialsError(`Start Part 1 (E${row.one_number}) from its event first: Part 2 is made from it.`, 409, 'SEASON_TWO_PART_REFUSED');
     if (await liveEpisode(sequelize, row.two_episode_id, transaction)) {
@@ -845,6 +878,8 @@ module.exports = {
   removeTwoParter,
   startPartTwo,
   snapshotSpecialEpisode,
+  stampTwoPart,
+  unstampTwoPart,
   assignSpecialOnStart,
   recordSpecialOutcome,
   twoPartRole,

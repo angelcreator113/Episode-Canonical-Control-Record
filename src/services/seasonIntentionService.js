@@ -36,6 +36,7 @@
 const Anthropic = require('@anthropic-ai/sdk');
 const { PRESSURE_LEVELS } = require('./seasonSlotService');
 const { loadSeason } = require('./seasonLoader');
+const { lockEpisodes, RetryableConflictError } = require('../utils/episodeLocks');
 const { fromArc, seasonLines } = require('./seasonLine');
 const {
   seasonAiContext, askModel, isBudgetRefusal, bullets, phaseLine, threadLine, goalLine, debtLines,
@@ -180,7 +181,7 @@ function outcomeRangeToBrief(range) {
  * whose episode is still a draft. It locks for good once the episode is
  * accepted.
  */
-async function loadEditableSlot(sequelize, showId, slotId, transaction) {
+async function loadEditableSlot(sequelize, showId, slotId, transaction, { lock = false } = {}) {
   const [[slot]] = await sequelize.query(
     `SELECT s.id, s.arc_id, s.slot_number, s.phase, s.season_number, s.episode_id, s.event_id, s.locked_at, s.accepted_at,
             s.intention_source, s.story_purpose, s.story_purposes, s.story_thread_id,
@@ -188,7 +189,7 @@ async function loadEditableSlot(sequelize, showId, slotId, transaction) {
             ep.id AS live_episode_id, ep.evaluation_status
        FROM season_slots s
        LEFT JOIN episodes ep ON ep.id = s.episode_id AND ep.deleted_at IS NULL
-      WHERE s.id = :slotId AND s.show_id = :showId AND s.deleted_at IS NULL`,
+      WHERE s.id = :slotId AND s.show_id = :showId AND s.deleted_at IS NULL${lock ? ' FOR UPDATE OF s' : ''}`,
     { replacements: { slotId, showId }, transaction });
   if (!slot) throw new SeasonIntentionError('Slot not found', 404, 'SEASON_SLOT_NOT_FOUND');
   if (slot.accepted_at || slot.evaluation_status === 'accepted') {
@@ -198,6 +199,21 @@ async function loadEditableSlot(sequelize, showId, slotId, transaction) {
     throw new SeasonIntentionError(`E${slot.slot_number} has started: its intention is locked with it`, 409, 'SEASON_SLOT_LOCKED');
   }
   slot.started = Boolean(slot.live_episode_id);
+  return slot;
+}
+
+/**
+ * A1.1: the slot again, inside the write's transaction, its episode locked
+ * first and then the slot (episode-first). pre is the slot read before the
+ * transaction (and before any AI call); if its episode changed since, the
+ * write stops (409 SEASON_CHANGED_RETRY) and nothing is saved.
+ */
+async function lockEditableSlot(sequelize, showId, slotId, pre, transaction) {
+  if (pre.live_episode_id) await lockEpisodes(sequelize, [pre.live_episode_id], { transaction });
+  const slot = await loadEditableSlot(sequelize, showId, slotId, transaction, { lock: true });
+  if (String(slot.live_episode_id || '') !== String(pre.live_episode_id || '')) {
+    throw new RetryableConflictError('This episode slot changed while it was being saved. Nothing was saved: try again.', 'SEASON_CHANGED_RETRY');
+  }
   return slot;
 }
 
@@ -263,12 +279,21 @@ async function saveIntention(sequelize, showId, slotId, body) {
     const { assertThreadChoosable } = require('./storyThreadService');
     for (const id of threadIds) await assertThreadChoosable(sequelize, showId, id);
   }
-  const purposes = await writeIntention(sequelize, slotId, intention, SOURCES.EDITED);
-  let seasonContext = null;
-  if (slot.started) {
-    const { snapshotEpisode } = require('./seasonSlotService');
-    seasonContext = await snapshotEpisode(sequelize, { slotId, episodeId: slot.live_episode_id });
-  }
+  // A1.1: the slot's intention, the episode's snapshot and the brief's
+  // intent are written together or not at all.
+  return sequelize.transaction(async (transaction) => {
+    const locked = await lockEditableSlot(sequelize, showId, slotId, slot, transaction);
+    const purposes = await writeIntention(sequelize, slotId, intention, SOURCES.EDITED, transaction);
+    let seasonContext = null;
+    if (locked.started) {
+      const { snapshotEpisode } = require('./seasonSlotService');
+      seasonContext = await snapshotEpisode(sequelize, { slotId, episodeId: locked.live_episode_id, transaction });
+    }
+    return savedIntention(locked, seasonContext, intention, purposes);
+  });
+}
+
+function savedIntention(slot, seasonContext, intention, purposes) {
   return {
     slot_number: slot.slot_number,
     started: slot.started,
@@ -493,7 +518,7 @@ function mergeStartedDraft(slot, intention) {
   };
 }
 
-async function writeStartedDraft(sequelize, slot, intention) {
+async function writeStartedDraft(sequelize, slot, intention, transaction) {
   const merged = mergeStartedDraft(slot, intention);
   const primary = merged.purposes[0] || null;
   const range = typeof merged.outcome_range === 'string' ? merged.outcome_range : (merged.outcome_range ? JSON.stringify(merged.outcome_range) : null);
@@ -512,7 +537,7 @@ async function writeStartedDraft(sequelize, slot, intention) {
       outcome_range: range,
       source: merged.source,
       slotId: slot.id,
-    } });
+    }, transaction });
   return merged;
 }
 
@@ -543,10 +568,23 @@ async function draftIntention(sequelize, showId, slotId, { force = false, anthro
     if (isBudgetRefusal(err)) throw new SeasonIntentionError(`${err.message} Nothing was drafted.`, 429, 'AI_BUDGET_EXCEEDED');
     throw new SeasonIntentionError(`Drafting failed: ${err.message || 'unknown error'}`, 502, 'SEASON_INTENTION_DRAFT_FAILED');
   }
+  // A1.1: the model is asked outside any transaction (no lock is held while
+  // it answers); then the slot is read again under its episode's lock and
+  // the draft, the snapshot and the brief are written together.
+  return sequelize.transaction(async (transaction) => {
+    const locked = await lockEditableSlot(sequelize, showId, slotId, slot, transaction);
+    if (!locked.started && locked.intention_source === SOURCES.EDITED && !force) {
+      throw new SeasonIntentionError(`E${locked.slot_number}'s intention was edited; redrafting would replace it`, 409, 'SEASON_INTENTION_EDITED');
+    }
+    return writeDraft(sequelize, locked, slotId, intention, transaction);
+  });
+}
+
+async function writeDraft(sequelize, slot, slotId, intention, transaction) {
   if (slot.started) {
-    const merged = await writeStartedDraft(sequelize, slot, intention);
+    const merged = await writeStartedDraft(sequelize, slot, intention, transaction);
     const { snapshotEpisode } = require('./seasonSlotService');
-    const seasonContext = await snapshotEpisode(sequelize, { slotId, episodeId: slot.live_episode_id });
+    const seasonContext = await snapshotEpisode(sequelize, { slotId, episodeId: slot.live_episode_id, transaction });
     return {
       slot_number: slot.slot_number,
       started: true,
@@ -563,7 +601,7 @@ async function draftIntention(sequelize, showId, slotId, { force = false, anthro
       },
     };
   }
-  await writeIntention(sequelize, slotId, intention, SOURCES.DRAFTED);
+  await writeIntention(sequelize, slotId, intention, SOURCES.DRAFTED, transaction);
   return { slot_number: slot.slot_number, intention: { ...intention, source: SOURCES.DRAFTED } };
 }
 

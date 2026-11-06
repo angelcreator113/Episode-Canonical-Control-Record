@@ -115,6 +115,7 @@ const router = express.Router();
 
 const { requireAuth, authorize } = require('../middleware/auth');
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');
+const { asRetryable } = require('../utils/episodeLocks');
 
 /**
  * ?season=N (the Season page's season switcher, 2026-10-25): that season's
@@ -367,6 +368,8 @@ router.get('/world/:showId/season/insights', requireAuth, async (req, res) => {
 });
 
 function sendSlotError(res, err, label) {
+  // A1.1: a deadlock or a lock wait that timed out rolled everything back: a 409 to retry.
+  err = asRetryable(err);
   // A refusal (409, 400 …) is expected; it is logged as a warning, never dropped.
   if (err.status && err.code) {
     console.warn(`[ArcRoutes] ${label} refused (${err.code}):`, err.message);

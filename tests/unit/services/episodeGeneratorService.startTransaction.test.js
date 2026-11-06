@@ -122,7 +122,9 @@ describe('generateEpisodeFromEvent — transactional Start (Task #1906)', () => 
     const result = await generateEpisodeFromEvent(EVENT, models, { showId: 'show-1' });
 
     expect(result.episode.id).toBe('ep-new');
-    expect(log.transactions).toHaveLength(1);
+    // The Start's own transaction, then (A1.1) the season slot assignment's,
+    // opened only after the Start has committed.
+    expect(log.transactions).toHaveLength(2);
     const [t] = log.transactions;
     expect(t.state).toBe('committed');
     expect(models.Episode.create.mock.calls[0][1]).toEqual({ transaction: t });
@@ -205,9 +207,10 @@ describe('generateEpisodeFromEvent — transactional Start (Task #1906)', () => 
 
     await generateEpisodeFromEvent(EVENT, models, { showId: 'show-1', locations: LOCATIONS });
 
-    expect(log.transactions).toHaveLength(2);
+    // Start, then the season slot assignment (A1.1), then the locations.
+    expect(log.transactions).toHaveLength(3);
     expect(apply).toHaveBeenCalledTimes(1);
-    expect(apply.mock.calls[0][1]).toEqual({ episodeId: 'ep-new', locations: LOCATIONS, transaction: log.transactions[1] });
+    expect(apply.mock.calls[0][1]).toEqual({ episodeId: 'ep-new', locations: LOCATIONS, transaction: log.transactions[2] });
     expect(models.Episode.create.mock.calls[0][1]).toEqual({ transaction: log.transactions[0] });
   });
 
@@ -222,5 +225,37 @@ describe('generateEpisodeFromEvent — transactional Start (Task #1906)', () => 
     expect(store.episodes).toHaveLength(1);
     expect(store.events['ev-1'].used_in_episode_id).toBe('ep-new');
     expect(console.error).toHaveBeenCalledWith(expect.stringContaining('Episode locations link failed for ep-new'), 'link boom');
+  });
+
+  // A1.1: the season slot assignment never fails the Start, and is never
+  // silent: a failure is a failed setup step the checklist shows.
+  const setupStatusOf = (models) => {
+    const call = models.sequelize.query.mock.calls.find(([sql]) => /UPDATE episodes SET setup_status/.test(sql));
+    return call ? JSON.parse(call[1].replacements.status) : null;
+  };
+
+  test('a season slot assignment that fails is logged, recorded as a failed setup step, and does not fail the Start', async () => {
+    const { models, store } = makeWorld();
+    const seasonSlots = require('../../../src/services/seasonSlotService');
+    jest.spyOn(seasonSlots, 'assignOnStart').mockRejectedValue(new Error('slot boom'));
+
+    const result = await generateEpisodeFromEvent(EVENT, models, { showId: 'show-1' });
+
+    expect(result.episode.id).toBe('ep-new');
+    expect(store.episodes).toHaveLength(1);
+    expect(console.error).toHaveBeenCalledWith('[EpisodeGenerator] Season slot assignment failed (non-blocking):', 'slot boom');
+    const status = setupStatusOf(models);
+    expect(status.complete).toBe(false);
+    expect(status.steps.season_slot).toEqual({ status: 'failed', reason: expect.stringMatching(/in no season slot yet \(slot boom\)\. Place it from the Season Roadmap\./) });
+  });
+
+  test('a season slot assignment that works is a complete setup step with the slot it took', async () => {
+    const { models } = makeWorld();
+    const seasonSlots = require('../../../src/services/seasonSlotService');
+    jest.spyOn(seasonSlots, 'assignOnStart').mockResolvedValue(3);
+
+    await generateEpisodeFromEvent(EVENT, models, { showId: 'show-1' });
+
+    expect(setupStatusOf(models).steps.season_slot).toEqual({ status: 'complete', slot: 3 });
   });
 });
