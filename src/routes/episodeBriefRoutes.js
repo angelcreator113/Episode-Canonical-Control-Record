@@ -15,11 +15,12 @@ const { generateScenePlan, getScenePlanForScriptGenerator } = require('../servic
 const { scriptOverwriteBlocked, scriptOverwriteRefusalBody } = require('../utils/scriptOverwriteGuard');
 const { missingFeedMomentBeats, retryMissingFeedMoments } = require('../services/feedMomentSaveService');
 const { selectInjectedRules } = require('../services/brainRules');
-const { lockEpisodes } = require('../utils/episodeLocks');
+const { lockEpisodes, RetryableConflictError } = require('../utils/episodeLocks');
 const {
   snapshotFrozen, peekFrozen, isFreezeError, changedFields, startRecordError, intentPendingAuditError,
   START_RECORD_FIELDS, FROZEN_INTENT_FIELDS,
 } = require('../utils/snapshotFreeze');
+const { assertEventRelinkAllowed, isFrozenEpisodeError } = require('../utils/frozenEpisode');
 
 const SHOW_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -126,16 +127,27 @@ router.put('/:episodeId', requireAuth, async (req, res) => {
     // arc_number, position_in_arc: 409 START_RECORD_FROZEN) or the intent
     // (designed_intent, allowed_outcomes: 409 INTENT_EDIT_PENDING_AUDIT until
     // A1.2b's audited editor is deployed). Sending a value unchanged is
-    // accepted, and nothing in a refused request is written. Only a request
-    // that sends one of these fields takes the episode lock; every other
-    // field, and every unfiltered episode, saves as before.
+    // accepted, and nothing in a refused request is written.
+    // A1.2c relink guard: naming an event on a brief that has none links the
+    // event to this episode; an event whose filmed episode was deleted never
+    // joins another episode (409 EVENT_EPISODE_FROZEN). Its check locks the
+    // event's linked episodes and this one first, then the event.
+    // Both run, with the save, in one transaction. A request that does
+    // neither saves as before, without the extra locks.
     const guarded = [...START_RECORD_FIELDS.episode_briefs, ...FROZEN_INTENT_FIELDS];
-    if (guarded.some((f) => updates[f] !== undefined)) {
+    const linking = Boolean(updates.event_id && !brief.event_id);
+    if (linking || guarded.some((f) => updates[f] !== undefined)) {
       const { sequelize } = models;
       const saved = await sequelize.transaction(async (transaction) => {
+        if (linking) await assertEventRelinkAllowed(sequelize, updates.event_id, { transaction, episodeIds: [episodeId] });
         const held = await lockEpisodes(sequelize, [episodeId], { transaction });
         const fresh = await EpisodeBrief.findOne({ where: { id: brief.id }, transaction, lock: transaction.LOCK.UPDATE });
-        if (fresh.status === 'locked') return { locked: true };
+        if (fresh.status === 'locked') return { refused: { status: 409, body: { error: 'Brief is locked. Unlock before editing.' } } };
+        if (linking && fresh.event_id && String(fresh.event_id) !== String(updates.event_id)) {
+          return { refused: { status: 409, body: {
+            error: "This episode was started from an event, so its source event can't change. Its terms and episode link are locked.",
+            code: 'EVENT_TERMS_LOCKED', fields: ['event_id'] } } };
+        }
         const freeze = held.length
           ? await snapshotFrozen(sequelize, episodeId, { transaction })
           : await peekFrozen(sequelize, episodeId, { transaction });
@@ -149,16 +161,16 @@ router.put('/:episodeId', requireAuth, async (req, res) => {
         await fresh.update(updates, { transaction });
         return { brief: fresh };
       });
-      if (saved.locked) return res.status(409).json({ error: 'Brief is locked. Unlock before editing.' });
+      if (saved.refused) return res.status(saved.refused.status).json(saved.refused.body);
       return res.json({ data: saved.brief });
     }
 
     await brief.update(updates);
     return res.json({ data: brief });
   } catch (err) {
-    if (isFreezeError(err)) {
+    if (isFreezeError(err) || isFrozenEpisodeError(err) || err instanceof RetryableConflictError) {
       console.warn(`[EpisodeBrief] PUT refused (${err.code}):`, err.message);
-      return res.status(409).json(err.toJSON());
+      return res.status(409).json(err instanceof RetryableConflictError ? { success: false, error: err.message, code: err.code } : err.toJSON());
     }
     console.error('[EpisodeBrief] PUT error:', err);
     return res.status(500).json({ error: err.message });

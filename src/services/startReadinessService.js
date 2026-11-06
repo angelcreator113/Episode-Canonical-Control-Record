@@ -13,6 +13,10 @@
  *   episode_exists  — the event is linked to a live episode (one event, one
  *                     episode; Task #1751) → 409 EVENT_ALREADY_HAS_EPISODE.
  *                     A Regenerate's own episode does not block.
+ *   episode_frozen  — the event's episode was filmed and later deleted
+ *                     (A1.2c, Q-7 Layer 2; utils/frozenEpisode) → 409
+ *                     EVENT_EPISODE_FROZEN. Not asked on a Regenerate,
+ *                     which replaces a live episode.
  *   prices_missing  — a deal price Start Episode needs is missing (Deal PR 3
  *                     ruling, point 6; findMissingPrices) → 409
  *                     DEAL_PRICE_REQUIRED. Not asked on a Regenerate.
@@ -33,14 +37,16 @@ const {
 } = require('../utils/eventEpisodeLink');
 const { findMissingPrices, dealPriceRequiredError } = require('./dealPricingService');
 
-const BLOCKER_KEYS = Object.freeze({ EPISODE_EXISTS: 'episode_exists', PRICES_MISSING: 'prices_missing' });
+const { findFrozenDeletedEpisode, restartRefusal } = require('../utils/frozenEpisode');
+
+const BLOCKER_KEYS = Object.freeze({ EPISODE_EXISTS: 'episode_exists', EPISODE_FROZEN: 'episode_frozen', PRICES_MISSING: 'prices_missing' });
 
 /**
  * The blockers for what has been read: `liveEpisode` (findLiveLinkedEpisode,
  * or null), `missing` (findMissingPrices, or undefined when not asked).
  * Pure.
  */
-function startBlockersFrom({ liveEpisode = null, missing, replacingEpisodeId = null } = {}) {
+function startBlockersFrom({ liveEpisode = null, frozenDeleted = null, eventId = null, missing, replacingEpisodeId = null } = {}) {
   const blockers = [];
   if (liveEpisode && !(replacingEpisodeId && liveEpisode.id === replacingEpisodeId)) {
     blockers.push({
@@ -48,6 +54,16 @@ function startBlockersFrom({ liveEpisode = null, missing, replacingEpisodeId = n
       label: 'This event already started an episode',
       detail: eventEpisodeConflictMessage(liveEpisode),
       episode: liveEpisode,
+    });
+  }
+  // A1.2c (Q-7 Layer 2): an event whose filmed episode was deleted never starts again.
+  if (frozenDeleted && !replacingEpisodeId) {
+    blockers.push({
+      key: BLOCKER_KEYS.EPISODE_FROZEN,
+      label: 'This event\'s filmed episode was deleted',
+      detail: restartRefusal(eventId, frozenDeleted).message,
+      episode: frozenDeleted,
+      event_id: eventId,
     });
   }
   if (Array.isArray(missing) && missing.length) {
@@ -76,19 +92,22 @@ async function findStartBlockers(sequelize, eventId, { replacingEpisodeId = null
     // Column may not exist, skip check
     console.warn('[EpisodeGenerator] used-event check skipped:', checkErr.message);
   }
-  const first = startBlockersFrom({ liveEpisode, replacingEpisodeId });
+  // A1.2c: a deleted, filmed episode of this event (never on a Regenerate).
+  const frozenDeleted = replacingEpisodeId ? null : await findFrozenDeletedEpisode(sequelize, eventId, tx);
+  const first = startBlockersFrom({ liveEpisode, frozenDeleted, eventId, replacingEpisodeId });
   if (first.length && stopAtFirst) return first;
   // A regenerate replaces an episode whose terms are already locked, so its
   // prices are not asked again.
   if (replacingEpisodeId) return first;
   const missing = await findMissingPrices(sequelize, eventId, tx);
-  return startBlockersFrom({ liveEpisode, missing, replacingEpisodeId });
+  return startBlockersFrom({ liveEpisode, frozenDeleted, eventId, missing, replacingEpisodeId });
 }
 
 /** The error Start Episode throws for a blocker; routes map it to 409. */
 function startRefusalError(blocker) {
   if (blocker.key === BLOCKER_KEYS.EPISODE_EXISTS) return eventEpisodeConflictError(blocker.episode);
   if (blocker.key === BLOCKER_KEYS.PRICES_MISSING) return dealPriceRequiredError(blocker.missing);
+  if (blocker.key === BLOCKER_KEYS.EPISODE_FROZEN) return restartRefusal(blocker.event_id, blocker.episode);
   return new Error(blocker.detail || blocker.label);
 }
 

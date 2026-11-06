@@ -46,6 +46,7 @@ import {
   ClipboardList, Clapperboard, Scissors, MonitorPlay,
 } from 'lucide-react';
 import './ShowEpisodesBoard.css';
+import { deleteFailureText } from '../../lib/frozenEpisode';
 
 const STATUS_ICON = { draft: '✏️', scripted: '📜', in_build: '🎬', in_review: '👀', published: '✅', archived: '📦' };
 // The glyph is text: each tier's text twin (the fills were 1.4:1 to 4.5:1 short on white).
@@ -428,13 +429,17 @@ export default function ShowEpisodesBoard({ showId, episodes = [], total = null,
       console.error('[ShowEpisodesBoard] status change failed:', err);
     }
   };
+  // A1.2c: a refused delete (a filmed episode, 409) says why, in the page.
+  const [removeError, setRemoveError] = useState(null);
   const remove = async (episodeId) => {
     if (!window.confirm('Are you sure you want to delete this episode?')) return;
+    setRemoveError(null);
     try {
       await episodeService.deleteEpisode(episodeId);
       onChanged?.();
     } catch (err) {
       console.error('[ShowEpisodesBoard] delete failed:', err);
+      setRemoveError(deleteFailureText(err));
     }
   };
 
@@ -444,6 +449,12 @@ export default function ShowEpisodesBoard({ showId, episodes = [], total = null,
   const phoneStage = phoneStagePicked || (hero ? stageOf(hero) : null) || columns.find((c) => c.count > 0)?.key || 'planning';
   return (
     <div className="show-episodes-board" data-testid="show-episodes-board">
+      {removeError && (
+        <p className="seb-remove-error" role="alert" data-testid="seb-remove-error" style={{ margin: '0 0 12px', padding: '8px 12px', borderRadius: 8, background: 'var(--danger-bg)', color: 'var(--danger-text)', fontSize: 13, overflowWrap: 'anywhere' }}>
+          {removeError}{' '}
+          <button type="button" onClick={() => setRemoveError(null)} style={{ background: 'none', border: 0, padding: 0, color: 'inherit', textDecoration: 'underline', cursor: 'pointer', font: 'inherit' }}>Dismiss</button>
+        </p>
+      )}
       {hero && <NowProducing showId={showId} episode={hero} checks={checks} panel={panel} onTagsSaved={onChanged} />}
 
       <section className="seb-pipeline" aria-labelledby="seb-pipeline-title">

@@ -11,6 +11,8 @@ const {
   EpisodeAsset,
 } = models;
 const { NotFoundError, ValidationError, asyncHandler } = require('../middleware/errorHandler');
+// A1.2c: a filmed episode is not deleted (utils/frozenEpisode).
+const { filmedAt, deleteRefusal, isFrozenEpisodeError } = require('../utils/frozenEpisode');
 const { logger } = require('../middleware/auditLog');
 const AuditLogger = require('../services/AuditLogger');
 
@@ -846,17 +848,34 @@ module.exports = {
 
     const oldValues = episode.toJSON();
 
-    if (hard === 'true' && process.env.NODE_ENV !== 'production') {
-      // The episode's ledger rows stop counting (§8(aa) M6), so Lala's coins
-      // are synced in the same transaction (Task #2284). softDelete does the
-      // same.
-      const { syncCoinsAfterEpisodeChange } = require('../services/coinLedgerSync');
+    // A1.2c (Q-7, Layer 1): a filmed episode (any raw clip, removed ones
+    // too) is never deleted, by anyone, admins included, ?hard=true too. The
+    // check and the delete are one transaction under the episode lock, so a
+    // clip attaching at the same moment (FOR SHARE) takes its turn: either
+    // the delete is refused, or the clip finds the episode deleted.
+    const hardDelete = hard === 'true' && process.env.NODE_ENV !== 'production';
+    try {
       await Episode.sequelize.transaction(async (transaction) => {
-        await episode.destroy({ force: true, transaction });
-        await syncCoinsAfterEpisodeChange(Episode.sequelize, episode.show_id, { transaction });
+        await require('../utils/episodeLocks').lockEpisodes(Episode.sequelize, [episode.id], { transaction });
+        const frozenAt = await filmedAt(Episode.sequelize, episode.id, { transaction });
+        if (frozenAt) throw deleteRefusal(episode.id, frozenAt);
+        if (hardDelete) {
+          // The episode's ledger rows stop counting (§8(aa) M6), so Lala's coins
+          // are synced in the same transaction (Task #2284). softDelete does the
+          // same.
+          const { syncCoinsAfterEpisodeChange } = require('../services/coinLedgerSync');
+          await episode.destroy({ force: true, transaction });
+          await syncCoinsAfterEpisodeChange(Episode.sequelize, episode.show_id, { transaction });
+        } else {
+          await episode.softDelete({ transaction });
+        }
       });
-    } else {
-      await episode.softDelete();
+    } catch (err) {
+      if (isFrozenEpisodeError(err)) {
+        console.warn(`[episodeController] delete refused (${err.code}):`, err.message);
+        return res.status(409).json(err.toJSON());
+      }
+      throw err;
     }
 
     // Log activity - wrapped in try-catch to prevent failures

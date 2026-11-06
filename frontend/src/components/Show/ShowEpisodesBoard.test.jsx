@@ -83,6 +83,22 @@ describe('ShowEpisodesBoard', () => {
     expect(onChanged).toHaveBeenCalled();
     ask.mockRestore();
   });
+
+  test('a refused delete (a filmed episode, A1.2c) says why in the page, and reloads nothing', async () => {
+    const ask = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const reason = 'This episode has been filmed (since 2026-10-23), so it cannot be deleted: its Start record and footage are history. Nothing was changed.';
+    vi.mocked(episodeService.deleteEpisode).mockRejectedValue({ message: 'Request failed with status code 409', response: { status: 409, data: { code: 'EPISODE_SNAPSHOT_FROZEN', error: reason } } });
+    const onChanged = renderIt();
+    fireEvent.click(screen.getByRole('button', { name: 'Grid' }));
+    fireEvent.click(screen.getAllByTitle('Delete')[0]);
+    const alert = await screen.findByTestId('seb-remove-error');
+    expect(alert.getAttribute('role')).toBe('alert');
+    expect(alert.textContent).toContain(reason);
+    expect(onChanged).not.toHaveBeenCalled();
+    fireEvent.click(within(alert).getByRole('button', { name: 'Dismiss' }));
+    expect(screen.queryByTestId('seb-remove-error')).toBeNull();
+    ask.mockRestore();
+  });
 });
 
 describe('ShowEpisodesBoard — Now producing and the pipeline (Evoni\'s mock, 2026-10-07)', () => {

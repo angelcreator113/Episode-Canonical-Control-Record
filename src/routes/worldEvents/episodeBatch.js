@@ -23,6 +23,7 @@ const { isFreezeError } = require('../../utils/snapshotFreeze');
 const { takePriceSnapshot } = require('../../services/dealPriceSnapshot');
 const { offerDecisionBody, OFFER_DECISION_CODES } = require('../../services/startOfferDecision');
 const { getModels } = require('./helpers');
+const { isFrozenEpisodeError } = require('../../utils/frozenEpisode');
 const { softDeleteUnusedUnlinkedEvents } = require('../../utils/worldEventSafeDelete');
 
 // POST /world/:showId/events/generate-episode-from-many
@@ -171,6 +172,11 @@ router.post('/world/:showId/events/generate-episode-from-many', requireAuth, aiR
     if (OFFER_DECISION_CODES.includes(error.code)) {
       console.warn('Multi-event generate refused:', error.message);
       return res.status(error.status).json(offerDecisionBody(error));
+    }
+    // A1.2c (Q-7): the event's filmed episode was deleted; it never starts again.
+    if (isFrozenEpisodeError(error)) {
+      console.warn('Multi-event generate refused:', error.message);
+      return res.status(409).json(error.toJSON());
     }
     console.error('Multi-event generate error:', error.message, error.stack?.slice(0, 500));
     return res.status(500).json({ success: false, error: error.message });

@@ -17,6 +17,7 @@ const { requireAuth } = require('../../middleware/auth');
 const { findTermsLockEpisode, termsLockedBody, episodeLabel } = require('../../utils/eventTermsLock');
 const { loadScopedEvent } = require('../../utils/eventScope');
 const { getModels } = require('./helpers');
+const { findFrozenDeletedEpisode, restartRefusal, isFrozenEpisodeError } = require('../../utils/frozenEpisode');
 
 const TAG_RE = /\[(?:EVENT|LOCATION_HINT):[^\]]*\]/i;
 const HEADER_LINE_RE = /^\s*##\s*BEAT:\s*(.*)$/i;
@@ -149,6 +150,15 @@ router.post('/world/:showId/events/:eventId/inject', requireAuth, async (req, re
         `This event started ${episodeLabel(lockEpisode)}, so it can't be moved to another episode. Its terms and episode link are locked.`));
     }
 
+    // A1.2c (Q-7 Layer 2): the event of a filmed episode that was deleted
+    // is never attached to another episode. Asked again under the event lock below.
+    const frozenDeleted = await findFrozenDeletedEpisode(models.sequelize, eventId);
+    if (frozenDeleted) {
+      const refusal = restartRefusal(eventId, frozenDeleted);
+      console.warn(`[inject] refused (${refusal.code}):`, refusal.message);
+      return res.status(409).json(refusal.toJSON());
+    }
+
     // Build [EVENT:] tag
     const parts = [`name="${event.name}"`];
     if (event.prestige) parts.push(`prestige=${event.prestige}`);
@@ -192,6 +202,10 @@ router.post('/world/:showId/events/:eventId/inject', requireAuth, async (req, re
             return script === null ? { script: typeof row.script_content === 'string' ? row.script_content : '', extra: { tagged: false } } : { script, extra: { tagged: true } };
           },
         });
+        // A1.2c: the event row locked (after the episode's, episode-first), then asked again.
+        await models.sequelize.query('SELECT id FROM world_events WHERE id = :eventId FOR UPDATE', { replacements: { eventId }, transaction: t });
+        const frozenNow = await findFrozenDeletedEpisode(models.sequelize, eventId, { transaction: t });
+        if (frozenNow) throw restartRefusal(eventId, frozenNow);
         await models.sequelize.query(
           `UPDATE world_events SET used_in_episode_id = :episodeId, times_used = COALESCE(times_used, 0) + 1, status = 'used', updated_at = NOW() WHERE id = :eventId`,
           { replacements: { episodeId: episode_id, eventId }, transaction: t }
@@ -208,6 +222,10 @@ router.post('/world/:showId/events/:eventId/inject', requireAuth, async (req, re
       });
     } catch (err) {
       if (sendScriptSaveError(res, err)) return undefined;
+      if (isFrozenEpisodeError(err)) {
+        console.warn(`[inject] refused (${err.code}):`, err.message);
+        return res.status(409).json(err.toJSON());
+      }
       throw err;
     }
     const sceneSetLinked = sceneSet.status === STATUS.LINKED;

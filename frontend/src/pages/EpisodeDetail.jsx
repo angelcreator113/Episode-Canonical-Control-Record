@@ -50,6 +50,7 @@ import { isScreen } from '../lib/overlayUtils';
 import { beatOrder } from '../lib/storyClock';
 import './EpisodeDetail.css';
 import useSideScroll from '../hooks/useSideScroll';
+import { deleteFailureText } from '../lib/frozenEpisode';
 
 // Track 6 CP14 module-scope helpers — page structural shape; partial-
 // migration extension per v2.20 §9.11 (file already partial-migrated
@@ -996,7 +997,8 @@ const EpisodeDetail = () => {
                             navigate('/episodes');
                           } catch (err) {
                             console.error('[EpisodeDetail] delete failed:', err);
-                            toast.showError(err.message || 'Failed to delete episode');
+                            // A1.2c: a filmed episode is refused (409) with its reason.
+                            toast.showError(deleteFailureText(err));
                           }
                         }
                         setShowMoreActions(false);
