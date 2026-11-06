@@ -61,16 +61,15 @@ const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
  *     the note documents it.
  *   - S -> P: takeEvent (make, create and update special) clears the event's
  *     pencil from its slot, then from other specials; pencilEventIn writes
- *     its slots, then clears the event from specials. Make, create, update
- *     special and the swap all lock the event (W) first, so on the same
- *     event they take turns there. pencilEventIn takes no event lock: the
- *     swap against a pencil of the same event is the one pair that can
- *     cycle (P -> S against S -> P), measured in lockOrderMatrix and listed
- *     as a residual in the lock-order note.
+ *     its slots, then clears the event from specials. Every one of them
+ *     locks the event (W) first (pencilEventIn since C4c), so on one event
+ *     they take turns there; createTwoParter takes S -> P with no W, and
+ *     the special it clears cannot exist (an event is in a slot or a
+ *     special, never both).
  */
 const KNOWN = [
   { from: 'A', to: 'S', why: 'season setup: arc, then slots (F3); no transaction takes S then A' },
-  { from: 'S', to: 'P', why: 'takeEvent and pencilEventIn clear specials after slots; same-event writers take W first (pencil excepted: residual)' },
+  { from: 'S', to: 'P', why: 'takeEvent and pencilEventIn clear specials after slots, all under the event lock (W) taken first' },
 ];
 
 (shouldSkip ? describe.skip : describe)('A1.3-0: every traced transaction takes its locks in the canonical order', () => {
@@ -250,8 +249,9 @@ const KNOWN = [
     await slots.pencilEvent(sequelize, show, await slotId(arcId, 9), ev);
     const s4 = await slotId(arcId, 4);
     const pencil = expectCanonical(await traced(() => slots.pencilEvent(sequelize, show, s4, ev)), 'pencilEvent');
-    // C4: the two slots are locked together, in id order.
+    // C4: the two slots are locked together, in id order; C4c: the event first.
     expect(pencil.flat().filter((x) => x === 'S:season_slots:update').length).toBeGreaterThan(0);
+    expect(pencil[0][0]).toBe('W:world_events:update');
 
     const episodeId = await addEpisode(show);
     const sid = await slotId(arcId, 1);
@@ -297,5 +297,25 @@ const KNOWN = [
     const del = await traced(() => auth(request(app).delete(`/api/v1/episodes/${a}`)).then((r) => expect([200, 204]).toContain(r.status)));
     expectCanonical(del, 'episode delete');
     expect(evLinked).toBeTruthy();
+  });
+  test('applyPlacement (episodes and events) and createTwoParter', async () => {
+    const { show, arcId } = await seedShow();
+    const ev = await addEvent(show, 'Trace Apply');
+    await specials.createSpecial(sequelize, show, { kind: 'bonus', event_id: ev, after_slot_number: 3 });
+    const ep = await addEpisode(show);
+    const sEp = await slotId(arcId, 6);
+    const sEv = await slotId(arcId, 11);
+    const apply = expectCanonical(await traced(() => setup.applyPlacement(sequelize, show, [{ slot_id: sEp, episode_id: ep }, { slot_id: sEv, event_id: ev }])), 'applyPlacement');
+    // C4c: E (the episode) -> W (the events, before any slot) -> S -> P.
+    const flat = apply.flat();
+    expect(flat[0]).toBe('E:episodes:update');
+    expect(flat).toContain('W:world_events:update');
+    expect(flat.indexOf('W:world_events:update')).toBeLessThan(flat.findIndex((x) => x.startsWith('S:')));
+
+    const ev2 = await addEvent(show, 'Trace Two-parter');
+    const s14 = await slotId(arcId, 14);
+    await slots.pencilEvent(sequelize, show, s14, ev2);
+    const two = expectCanonical(await traced(() => specials.createTwoParter(sequelize, show, { slot_id: s14 })), 'createTwoParter');
+    expect(two.flat().filter((x) => x.startsWith('W:'))).toEqual([]);
   });
 });

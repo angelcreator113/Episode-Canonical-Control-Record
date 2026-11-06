@@ -171,7 +171,9 @@ The slot assignment is now one transaction, so a failure leaves no slot half-ass
 | Swap (`swapIntoSlot`), move to next season | E → W → P → S |
 | Make or create special (`takeEvent`) | W → S (clear the pencil) → P (clear other specials) |
 | Update special, event change | E → W → P → S (`takeEvent`) → P |
-| Pencil (`pencilEventIn`) | S, S (one statement, id order) → P (clear specials) |
+| Pencil (`pencilEventIn`) | W (the event, C4c) → S, S (one statement, id order) → P (clear specials) |
+| Apply placement (`applyPlacement`) | E (placed episodes) → W (pencilled events, id order, C4c) → S → X (snapshot Brief) → S → P |
+| Two-parter (`createTwoParter`) | E (Part 1) → S, S (id order) → S UPDATE → P (clear, insert) |
 | Season setup (`updateSetup`) | E (started drafts) → A → S (every slot, id order) → E snapshots (held) |
 | Placement, intention save | E → S → X |
 | Event `PUT` relink (A1.2c) | E (linked and target) → W → X |
@@ -180,14 +182,21 @@ The slot assignment is now one transaction, so a failure leaves no slot half-ass
 | Episode delete (A1.2c) | E → E UPDATE → L |
 | Inject (A1.2c) | E (script save) → W → W UPDATE → X |
 
-**Known deviations (no cycle, except the residual):**
+**C4c (authorized 2026-11-06, the reproduced swap-against-pencil deadlock):**
+- **Before:** the swap took W(event) → P(its special) → S(target slot); a pencil of the same event into the same slot took S(target) → S(holder) → P (clearing the event from its special). Each held what the other needed: `40P01` in both orders (reproduced on `bb8450eb`). Apply placement had the same cycle against the swap, through its own pencils.
+- **Now:** `pencilEventIn` locks the event (W) first: W → S → P. The swap, the move to the next season, and making, creating or updating a special all lock the event first too, so writers of one event queue on it. In the swap and the move, the event is already held.
+- **Apply placement** (`seasonSetupService.applyPlacement`) locks all the events it pencils, in id order, before any slot. Without this, an episode's slot placed first would be held while its pencil waited on an event the swap held (S → W against W → S). Measured: with the pencil change alone, that race still gave `40P01`.
+- **Unchanged:** a pencil of an event that has started, or is archived, is refused as before. It now waits for an in-flight Start, inject or relink of that event, then is refused. The A1.2a and A1.2c guards lock E before W and never wait on a slot or special, so they form no cycle with the pencil.
+
+**Known deviations (no cycle):**
 - **A → S** in season setup: the arc, then its slots. No transaction takes a slot, then an arc.
-- **S → P** in `takeEvent` and `pencilEventIn`: they clear the event from its slot, then from specials. Make, create and update special, and the swap, all lock the event (W) first, so on one event they take turns there.
-- **Residual, not changed by A1.3-0:** `pencilEventIn` takes **no event lock**, so **the swap against a pencil of the same event into the same slot** can cycle (the swap P → S, the pencil S → P). Measured on `main` and on this change: one side commits; the other gets `40P01`, rolls back whole, and the routes answer 409 `RETRY`. Nothing is half-written. The likely fix (pencil locks the event first) needs its own approval.
+- **S → P** in `takeEvent`, `pencilEventIn` and `createTwoParter`: they write slots, then clear the event from specials. Every one except `createTwoParter` takes the event (W) first, so on one event they take turns there. `createTwoParter` takes E → S (both slots, id order) → P with no event lock. The special it would clear cannot exist, because an event is in a slot or a special, never both. Read-only check: no cycle found; it is now in the lock trace.
+- **Specials multi-row lock:** `seasonSpecials.specialRows({ lock: true })` (`FOR UPDATE OF sp ORDER BY after_slot_number`) has **no caller** that passes `lock: true`. It cannot deadlock today. If it is ever used, it must lock by id first.
+- **The move to the next season** updates the slot it leaves, then pencils the next season's open slot: two slots, in two statements, not in id order. Read-only check: no transaction locks the next season's slot and then this season's, so no cycle found. Not changed.
 
 **How the order is proven (C6):**
 - **`tests/helpers/lockTrace.js`** wraps `sequelize.query` for a test. It records each statement with its Sequelize transaction id (with `START TRANSACTION`, `COMMIT` and `ROLLBACK`), explicit row locks by table (including `FOR UPDATE OF <alias>`), every `UPDATE` and `DELETE` as an implicit row lock, and for a multi-row lock the ids it returned. Model writes are captured too: they also go through `sequelize.query`.
-- **`tests/integration/lockOrderTrace.integration.test.js`** runs each real path (Start, regenerate, swap, make, create and update special, pencil, placement, intention, setup, clip attach, and the delete, event `PUT`, Brief `PUT` and inject routes) and checks every transaction against the order above. Rows a transaction inserted, and rows it already holds, are left out. Every multi-row lock must be `ORDER BY id`.
+- **`tests/integration/lockOrderTrace.integration.test.js`** runs each real path (Start, regenerate, swap, make, create and update special, pencil, placement, intention, setup, clip attach, and the delete, event `PUT`, Brief `PUT` and inject routes) and checks every transaction against the order above. Rows a transaction inserted, rows it already holds, and X rows keyed by an episode it holds FOR UPDATE (every writer of those locks the episode first) are left out. Every multi-row lock must be `ORDER BY id`.
 - **What the trace cannot see:** locks taken by triggers; `FOR KEY SHARE` locks from foreign-key checks; the order Postgres takes rows inside one statement (so a multi-row lock without `ORDER BY id` is flagged); other processes; and SQL outside Sequelize (a static check finds none in the traced files).
-- **`tests/integration/lockOrderMatrix.integration.test.js`** holds one transaction just after its lock, starts the other, then lets the first go: T5–T8a, the residual, and Start against each writer, in both orders. No `40P01` or `55P03`, and the season stays consistent.
+- **`tests/integration/lockOrderMatrix.integration.test.js`** holds one transaction just after its lock, starts the other, then lets the first go: T5–T8a, T9 and T9a (C4c), and Start against each writer, in both orders. No `40P01` or `55P03`, and the season stays consistent.
 - **`tests/unit/guards/lockOrderStatic.test.js`** is a coarse ratchet over where `src/` locks these tables. It is not the proof.

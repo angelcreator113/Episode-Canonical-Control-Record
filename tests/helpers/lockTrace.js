@@ -168,8 +168,9 @@ function install(sequelize) {
 /**
  * Checks one transaction's records against the canonical order
  * E -> W -> P -> S -> A -> X -> L. Rows the transaction inserted itself (E*)
- * are excluded, as are writes whose values name such a row. Locks on a class
- * already held are free. Every multi-row lock must be ORDER BY id and return
+ * are excluded, as are writes whose values name such a row. Locks on a row
+ * already held are free, and so are writes to X rows keyed by an episode
+ * the transaction holds (every writer of those locks the episode first). Every multi-row lock must be ORDER BY id and return
  * its ids ascending. Returns a list of violations (empty when it conforms).
  * allow: [{ from, to, why }] known, documented deviations (from -> to classes).
  */
@@ -202,6 +203,11 @@ function checkOrder(records, { allow = [] } = {}) {
       }
     }
     const rank = RANK[r.cls];
+    // A write to an X row keyed by an episode this transaction holds FOR
+    // UPDATE (its Brief, its snapshot rows) is guarded by that episode lock:
+    // every writer of those rows locks the episode first. No new class.
+    const heldEpisodes = held.get('E');
+    if (r.kind === 'write' && r.cls === 'X' && heldEpisodes && (r.values || []).some((v) => heldEpisodes.has(v))) continue;
     // A row this transaction already holds is no new wait.
     if (rank < highest && !holds(r)) {
       const ok = allow.some((a) => a.from === highestCls && a.to === r.cls);

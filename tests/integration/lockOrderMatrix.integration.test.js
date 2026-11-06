@@ -19,6 +19,8 @@
  *   T7   the swap against an update re-setting a special's own event (C3);
  *   T8   two pencils swapping events between two slots (C4);
  *   T8a  season setup against a pencil and against a Start's assignment (C4b);
+ *   T9   the swap against a pencil of the same event into the same slot, and
+ *   T9a  apply placement against the swap of the event it pencils (C4c);
  * and the Start pairs (swap, make and create special, placement, setup,
  * intention, event and Brief relinks, inject, clip attach on a regenerate,
  * delete, Start of the same event), each in both orders.
@@ -74,7 +76,6 @@ async function outcome(fn) {
   }
 }
 
-const RESIDUAL = [];
 const isFirstLock = (r) => Boolean(r.txId) && (r.kind === 'lock' || r.kind === 'write') && !r.error;
 
 (shouldSkip ? describe.skip : describe)('A1.3-0: lock-order races on the real schema', () => {
@@ -174,8 +175,6 @@ const isFirstLock = (r) => Boolean(r.txId) && (r.kind === 'lock' || r.kind === '
     jest.restoreAllMocks();
   });
   afterAll(async () => {
-    // eslint-disable-next-line no-console
-    if (RESIDUAL.length) process.stdout.write(`[lock-matrix residual] ${JSON.stringify(RESIDUAL)}\n`);
     await wait(800); // Start's after-commit work
     expect(mockCreate).not.toHaveBeenCalled();
     for (const show of shows) {
@@ -353,14 +352,14 @@ const isFirstLock = (r) => Boolean(r.txId) && (r.kind === 'lock' || r.kind === '
     });
   });
 
-  describe('residual (not changed by A1.3-0): the swap against a pencil of the same event', () => {
-    // pencilEventIn takes no event lock and clears the event from specials
-    // after its slots (S -> P); the swap takes the event, the special, then
-    // the slot (W -> P -> S). Measured here; the outcome is reported, and a
-    // lock conflict must roll its side back whole (a retryable 409 at the routes).
-    test.each([['swap', 'pencil'], ['pencil', 'swap']])('%s held', async (held) => {
+  describe('C4c: the swap against a pencil of the same event (the pencil locks the event first)', () => {
+    // Before: the pencil took the slot, then cleared the event from its
+    // special (S -> P); the swap took the event, the special, then the slot
+    // (W -> P -> S): 40P01 in both orders (reproduced on bb8450eb). Now the
+    // pencil locks the event first (W -> S -> P), so the two queue on it.
+    test.each([['swap', 'pencil'], ['pencil', 'swap']])('T9: %s held: no deadlock, the slot ends with the event', async (held) => {
       const { show, arcId } = await seedShow();
-      const ev = await addEvent(show, 'Residual');
+      const ev = await addEvent(show, 'Pencil vs swap');
       await specials.createSpecial(sequelize, show, { kind: 'bonus', event_id: ev, after_slot_number: 3 });
       const target = await slotId(arcId, 10);
       const ops = { swap: () => full.swapIntoSlot(sequelize, show, ev, target), pencil: () => slots.pencilEvent(sequelize, show, target, ev) };
@@ -369,11 +368,37 @@ const isFirstLock = (r) => Boolean(r.txId) && (r.kind === 'lock' || r.kind === '
         ? (r) => r.kind === 'lock' && r.table === 'season_specials'
         : (r) => r.kind === 'lock' && r.table === 'season_slots';
       const [ra, rb] = await race(ops[held], ops[other], { gateOn });
-      RESIDUAL.push({ held, [held]: ra.lock || ra.code || 'ok', [other]: rb.lock || rb.code || 'ok' });
-      expect([ra, rb].filter((o) => o.ok).length).toBeGreaterThanOrEqual(1);
+      expectNoLockConflict(ra, rb);
+      expectOk(ra);
+      // The second either lands too, or is refused by its own rule after the first: nothing half-written.
+      if (!rb.ok) expect(rb.status).toBe(409);
       await expectConsistent(show);
       const [slot] = await rows('SELECT event_id FROM season_slots WHERE id = :target', { target });
       expect(slot.event_id).toBe(ev);
+      const live = await rows('SELECT id FROM season_specials WHERE show_id = :show AND event_id = :ev AND deleted_at IS NULL', { show, ev });
+      expect(live).toHaveLength(0); // the event is in the slot, not also in a special
+    });
+
+    test.each([['placement', 'swap'], ['swap', 'placement']])('T9a: apply placement (an episode, then the event) against the swap of that event (%s held)', async (held) => {
+      const { show, arcId } = await seedShow();
+      const ev = await addEvent(show, 'Placement vs swap');
+      await specials.createSpecial(sequelize, show, { kind: 'bonus', event_id: ev, after_slot_number: 3 });
+      const ep = await addEpisode(show);
+      const sEp = await slotId(arcId, 6);
+      const sEv = await slotId(arcId, 11);
+      const ops = {
+        placement: () => setup.applyPlacement(sequelize, show, [{ slot_id: sEp, episode_id: ep }, { slot_id: sEv, event_id: ev }]),
+        swap: () => full.swapIntoSlot(sequelize, show, ev, sEp),
+      };
+      const other = held === 'placement' ? 'swap' : 'placement';
+      const gateOn = held === 'placement'
+        ? (r) => r.kind === 'lock' && r.table === 'season_slots'
+        : (r) => r.kind === 'lock' && r.table === 'season_specials';
+      const [ra, rb] = await race(ops[held], ops[other], { gateOn });
+      expectNoLockConflict(ra, rb);
+      expectOk(ra);
+      if (!rb.ok) expect(rb.status).toBe(409);
+      await expectConsistent(show);
     });
   });
 

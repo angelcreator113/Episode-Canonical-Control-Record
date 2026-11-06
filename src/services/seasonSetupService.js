@@ -678,6 +678,17 @@ async function applyPlacement(sequelize, showId, items) {
   return sequelize.transaction(async (transaction) => {
     // A1.1: the episodes being placed, locked first (episode-first).
     await lockEpisodes(sequelize, items.filter((x) => x.episode_id).map((x) => x.episode_id), { transaction });
+    // A1.3-0: the events being pencilled (W), locked together in id order
+    // before any slot, as pencilEventIn locks its event before its slots;
+    // otherwise an episode's slot placed first would be held while waiting
+    // on an event a swap holds (S -> W against W -> S).
+    const eventIds = [...new Set(items.filter((x) => x.event_id).map((x) => String(x.event_id)))]
+      .filter((id) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id));
+    if (eventIds.length) {
+      await sequelize.query(
+        'SELECT id FROM world_events WHERE id IN (:eventIds) AND show_id = :showId AND deleted_at IS NULL ORDER BY id FOR UPDATE',
+        { replacements: { eventIds, showId }, transaction });
+    }
     const [[arc]] = await sequelize.query(
       `SELECT id FROM show_arcs WHERE show_id = :showId AND status = 'active' AND deleted_at IS NULL
         ORDER BY arc_number ASC LIMIT 1`,

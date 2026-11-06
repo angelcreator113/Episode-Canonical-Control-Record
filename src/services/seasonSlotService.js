@@ -36,6 +36,7 @@ const { lockEpisodes, requireTransaction, inTransaction, RetryableConflictError 
 const { snapshotFrozen, frozenSkip, frozenError, lateContextError } = require('../utils/snapshotFreeze');
 
 const SLOTS_PER_SEASON = 24;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const DEFAULT_PHASES = [
   { phase: 1, title: 'Foundation', episode_start: 1, episode_end: 8 },
   { phase: 2, title: 'Ascension', episode_start: 9, episode_end: 16 },
@@ -567,6 +568,16 @@ async function pencilEventIn(sequelize, showId, slotId, eventId, transaction) {
   // locked together, in id order (the one order for multi-slot locks), so
   // two pencils swapping events between two slots never deadlock. Read first
   // without a lock, then locked; the holder is checked again below.
+  // The event itself (W) is locked first: the swap, making, creating and
+  // updating a special all lock it before its special and slots, so a pencil
+  // of the same event queues there instead of taking the slot first (the swap
+  // against a pencil of one event into one slot deadlocked: S -> P against
+  // P -> S). Held already when the swap or the move calls this.
+  if (eventId && UUID_RE.test(String(eventId))) {
+    await sequelize.query(
+      'SELECT id FROM world_events WHERE id = :eventId AND show_id = :showId AND deleted_at IS NULL FOR UPDATE',
+      { replacements: { eventId, showId }, transaction });
+  }
   const otherSeen = eventId ? await slotHoldingEvent(sequelize, { showId, slotId, eventId, transaction }) : null;
   if (otherSeen) {
     await sequelize.query(

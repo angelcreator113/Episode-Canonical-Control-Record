@@ -40,7 +40,8 @@ const PINNED = {
   'src/services/seasonGoalCoverage.js': { traced: false, locks: { world_events: 1 } },
   'src/services/seasonIntentionService.js': { traced: true, locks: { season_slots: 1 } },
   'src/services/seasonLoader.js': { traced: true, locks: { show_arcs: 1, season_slots: 1 } },
-  'src/services/seasonSlotService.js': { traced: true, locks: { season_slots: 4 } },
+  'src/services/seasonSetupService.js': { traced: true, locks: { world_events: 1 } }, // C4c: applyPlacement's events, id order
+  'src/services/seasonSlotService.js': { traced: true, locks: { season_slots: 4, world_events: 1 } }, // C4c: pencilEventIn's event first
   'src/services/seasonSpecials.js': { traced: true, locks: { world_events: 2, season_slots: 1 } },
   'src/services/startOfferDecision.js': { traced: true, locks: { world_events: 1 } },
   'src/services/termsReopenService.js': { traced: false, locks: { episodes: 1, world_events: 1 } },
