@@ -23,6 +23,8 @@ const { syncDraftedDealType } = require('../../services/dealTypeDraftService');
 const { DEAL_TYPES, CATEGORY_VALUES, FORMAT_VALUES } = require('../../models/WorldEvent');
 const { loadScopedEvent } = require('../../utils/eventScope');
 const { getModels } = require('./helpers');
+const { assertEventRelinkAllowed, isFrozenEpisodeError } = require('../../utils/frozenEpisode');
+const { RetryableConflictError } = require('../../utils/episodeLocks');
 
 // Every status an event row carries: draft | ready | used | archived
 // (WorldEvent.js) plus the values the server's own writers set — filmed
@@ -483,7 +485,27 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), req
     // value (Task #1747), and the row is written — no other writer can land
     // between the checks and the write. A refusal throws EventPutRefusal,
     // which rolls the transaction back.
+    const assertRelinkUnlessStored = async (transaction, linkTo) => {
+      const [[current]] = await models.sequelize.query(
+        'SELECT used_in_episode_id FROM world_events WHERE id = :eventId AND show_id = :showId',
+        { replacements: { eventId, showId }, transaction });
+      if (current && String(current.used_in_episode_id || '') === String(linkTo)) return;
+      try {
+        await assertEventRelinkAllowed(models.sequelize, eventId, { transaction, episodeIds: [linkTo] });
+      } catch (err) {
+        if (isFrozenEpisodeError(err)) throw new EventPutRefusal(409, err.toJSON());
+        if (err instanceof RetryableConflictError) throw new EventPutRefusal(409, { success: false, error: err.message, code: err.code });
+        throw err;
+      }
+    };
     const lockAndCheck = async (transaction) => {
+      // A1.2c relink guard: an event whose filmed episode was deleted never
+      // joins another episode. A save that links it to an episode first locks
+      // the event's linked episodes and the target (episode-first), then the
+      // event, and refuses 409 EVENT_EPISODE_FROZEN; nothing in the request
+      // is written. Re-sending the stored link, and clearing it, are as before.
+      const linkTo = replacements.used_in_episode_id;
+      if (linkTo) await assertRelinkUnlessStored(transaction, linkTo);
       const stored = await loadScopedEvent(models.sequelize, { showId, eventId, transaction, lock: true });
       if (!stored) throw new EventPutRefusal(404, { success: false, error: 'Event not found' });
       if (expected.present && !versionMatches(stored.updated_at, expected.ms)) {

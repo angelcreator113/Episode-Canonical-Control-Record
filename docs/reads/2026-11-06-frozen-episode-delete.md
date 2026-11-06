@@ -30,6 +30,28 @@ Sometimes a filmed episode is deleted outside the app, by SQL. Its event then ne
 
 **Regenerate** replaces a live episode and is not asked this. A1.2a refuses regenerating a filmed episode.
 
+## Relink guards (merge-readiness audit, 2026-11-06)
+
+Two edits could still attach such an event to another episode. Both now refuse it with 409 `EVENT_EPISODE_FROZEN`, and a refused request writes nothing:
+
+- **The event edit:** `PUT /world/:showId/events/:eventId` with `used_in_episode_id`. The terms lock protects the link only while the event's episode is live.
+- **The brief edit:** `PUT /episode-brief/:episodeId` naming `event_id` on a brief that has none.
+
+**How the check runs** (`assertEventRelinkAllowed` in `src/utils/frozenEpisode.js`), in the save's own transaction:
+1. It locks every episode the event is linked to, plus the target episode, FOR UPDATE in id order (episode-first).
+2. Then it locks the event row.
+3. If a link appeared in between, it stops with a retryable 409 (`EVENT_LINK_CHANGED_RETRY`).
+
+A clip attaching (FOR SHARE) or a delete in progress on one of those episodes therefore takes turns with the check. This matters because an upload that began before an unfilmed episode was deleted can still attach its clip afterwards.
+
+**Not refused:**
+- re-sending the stored link;
+- clearing the link;
+- an unfilmed history;
+- any unrelated edit.
+
+**Not changed:** the schema, the unique index on `world_events.used_in_episode_id`, and the event–episode relationship.
+
 ## The pages
 
 The Episodes board and the episode page show the server's reason when a delete is refused. They do not pre-disable Delete, because the list does not carry the filmed state. The server is the authority in either case.

@@ -75,6 +75,51 @@ async function findFrozenDeletedEpisode(sequelize, eventId, { transaction } = {}
   return row ? { id: row.id, title: row.title, episode_number: row.episode_number, frozen_at: iso(row.frozen_at) } : null;
 }
 
+/**
+ * The episodes an event is linked to (its used_in_episode_id, and every
+ * brief naming it, removed ones too), read without a lock.
+ */
+async function linkedEpisodeIds(sequelize, eventId, { transaction } = {}) {
+  const [rows] = await sequelize.query(
+    `SELECT used_in_episode_id AS id FROM world_events WHERE id = :eventId AND used_in_episode_id IS NOT NULL
+     UNION SELECT episode_id AS id FROM episode_briefs WHERE event_id = :eventId`,
+    { replacements: { eventId }, transaction });
+  return (rows || []).map((r) => String(r.id));
+}
+
+/**
+ * Concurrency-safe check before an event is linked to another episode
+ * (A1.2c relink guards). In the caller's transaction, episode-first (A1.1):
+ *   1. locks FOR UPDATE, in id order, every episode the event is linked to
+ *      plus `episodeIds` (the episode it is being linked to). A clip attach
+ *      (FOR SHARE) or a delete (FOR UPDATE) on any of them takes turns with
+ *      this check, so "deleted and filmed" cannot change before the commit;
+ *   2. locks the event row FOR UPDATE;
+ *   3. reads the linked episodes again: one that appeared after step 1 was
+ *      not locked, so it stops with a retryable 409 (nothing written);
+ *   4. throws EVENT_EPISODE_FROZEN when a deleted, filmed episode is linked.
+ * Returns nothing when the link may go ahead.
+ */
+async function assertEventRelinkAllowed(sequelize, eventId, { transaction, episodeIds = [] } = {}) {
+  const { lockEpisodes, holdsEpisode, requireTransaction, RetryableConflictError } = require('./episodeLocks');
+  requireTransaction(transaction, 'assertEventRelinkAllowed');
+  const before = await linkedEpisodeIds(sequelize, eventId, { transaction });
+  await lockEpisodes(sequelize, [...before, ...episodeIds.filter(Boolean).map(String)], { transaction });
+  await sequelize.query('SELECT id FROM world_events WHERE id = :eventId FOR UPDATE', { replacements: { eventId }, transaction });
+  const after = await linkedEpisodeIds(sequelize, eventId, { transaction });
+  const existing = after.filter((id) => !before.includes(id));
+  if (existing.length) {
+    // A link that appeared between the read and the lock: its row may exist
+    // without being held. Locking it now would break the order; retry.
+    const [rows] = await sequelize.query('SELECT id FROM episodes WHERE id IN (:ids)', { replacements: { ids: existing }, transaction });
+    if ((rows || []).some((r) => !holdsEpisode(transaction, r.id))) {
+      throw new RetryableConflictError('This event\'s episode link changed while it was being saved. Nothing was saved: try again.', 'EVENT_LINK_CHANGED_RETRY');
+    }
+  }
+  const frozen = await findFrozenDeletedEpisode(sequelize, eventId, { transaction });
+  if (frozen) throw restartRefusal(eventId, frozen);
+}
+
 const label = (ep) => `${ep?.episode_number != null ? `Episode ${ep.episode_number} ` : 'An episode '}${ep?.title ? `"${ep.title}" ` : ''}`;
 
 /** Q-7 Layer 1: deleting a filmed episode, for every role. */
@@ -98,6 +143,7 @@ module.exports = {
   isFrozenEpisodeError,
   filmedAt,
   findFrozenDeletedEpisode,
+  assertEventRelinkAllowed,
   deleteRefusal,
   restartRefusal,
 };
