@@ -16,6 +16,7 @@
 const { v4: uuidv4 } = require('uuid');
 const { CANONICAL_BEATS } = require('../constants/canonicalBeats');
 const { findLiveLinkedEpisode, eventEpisodeConflictError } = require('../utils/eventEpisodeLink');
+const { lockEpisodes, RetryableConflictError } = require('../utils/episodeLocks');
 const { findStartBlockers, startBlockersFrom, startRefusalError } = require('./startReadinessService');
 const { findIdempotentStart, loadStartReplay, META_KEY: IDEMPOTENCY_META_KEY } = require('./startEpisodeIdempotency');
 const { takePriceSnapshot } = require('./dealPriceSnapshot');
@@ -659,9 +660,16 @@ Return ONLY JSON.` }],
   // and leaves no episode and no brief behind. Everything after this block
   // is non-blocking by design, runs after the commit, and logs its own
   // failures.
+  // A1.1 (episode-first): a regenerate notes the episode it replaces as the
+  // event links it now, before any lock, to check it again under the locks.
+  const replacedBefore = replacingEpisodeId ? await findLiveLinkedEpisode(models.sequelize, eventId) : null;
   const started = await models.sequelize.transaction(async (transaction) => {
+    // A1.1: a regenerate locks the episode it replaces before the event
+    // (episode-first, as a terms reopen, the special swap and the move to
+    // the next season do), so it never waits on them in the opposite order.
+    if (replacingEpisodeId) await lockEpisodes(models.sequelize, [replacingEpisodeId], { transaction });
     // Start Episode runs once per event (audit High, 2026-10-23): the event
-    // row is locked first, and the one-event-one-episode guard above is
+    // row is locked, and the one-event-one-episode guard above is
     // asked again under the lock. A second Start that raced the first waits
     // here, then finds the first one's episode and is refused with 409
     // (EVENT_ALREADY_HAS_EPISODE) before it creates anything.
@@ -679,6 +687,16 @@ Return ONLY JSON.` }],
         if (replayId) return { replayId };
       }
       throw startRefusalError(lockedBlocker);
+    }
+    // A1.1: the episode being replaced was the event's live episode when this
+    // regenerate began; under the locks it must still be, in this show.
+    // Otherwise someone deleted or unlinked it meanwhile: nothing is created
+    // and nothing is changed (409, reload and try again).
+    if (replacingEpisodeId && String(replacedBefore?.id || '') === String(replacingEpisodeId)
+        && (String(liveUnderLock?.id || '') !== String(replacingEpisodeId) || String(liveUnderLock?.show_id || '') !== String(showId))) {
+      throw new RetryableConflictError(
+        'The episode being regenerated changed while it was being replaced. Nothing was changed: reload and try again.',
+        'START_TARGET_CHANGED');
     }
 
     const episode = await Episode.create({

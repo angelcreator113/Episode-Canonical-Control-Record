@@ -42,6 +42,7 @@ Every transaction that writes an episode's Start snapshot (`episodes.season_cont
 | `seasonSpecials.updateSpecial` | was special, then episode; **now** episode first | reordered |
 | `seasonSpecials.createTwoParter` | Part 1's episode is now locked before the slots are written, and its slot read again under the lock | reordered |
 | `seasonSpecials.removeTwoParter`, `startPartTwo` | was two-parter, then episode; **now** Part 1's episode first. Part 2's new episode is made by the transaction itself. | reordered |
+| `episodeGeneratorService.generateEpisodeFromEvent` (Start) | was the event, then (regenerate) the replaced episode; **now** the replaced episode first, re-checked under the locks; a first Start is unchanged | reordered (follow-up) |
 | `rawClipsService.createClip` | was a single INSERT, no lock; **now** the episode `FOR SHARE`, then `INSERT … ON CONFLICT (id) DO NOTHING` | new |
 
 ## How a reordered transaction checks itself
@@ -55,22 +56,34 @@ A transaction that only learns its episode from rows it locks later:
 
 If someone moved it in between, the transaction stops with 409 `SEASON_CHANGED_RETRY` before writing anything.
 
-## Known separate risk: Start regeneration (not changed by A1.1)
+## Start regeneration (A1.1 completion, follow-up PR)
 
-Start Episode's own transaction (`episodeGeneratorService.generateEpisodeFromEvent`) locks the source world event first (`FOR UPDATE`). When it regenerates an episode, it then soft-deletes the replaced episode (`UPDATE episodes … deleted_at`). That is event first, then episode: the opposite of the episode-first order.
+Start Episode's own transaction (`episodeGeneratorService.generateEpisodeFromEvent`) used to lock the source world event first (`FOR UPDATE`). On a regenerate, it then soft-deleted the replaced episode (`UPDATE episodes … deleted_at`), which is event first, then episode.
 
-**Before A1.1:** `swapIntoSlot` and `moveToNextSeason` also locked the event before the episode. They could deadlock with a terms reopen (episode, then event), but not with Start.
+- **Before A1.1,** `swapIntoSlot` and `moveToNextSeason` also locked event before episode. They could deadlock with a terms reopen, but not with Start.
+- **With A1.1's first PR (#3725),** they lock episode first, so the conflict moved: they could deadlock with Start regeneration of the same special's episode. A local test reproduced it (`40P01`).
 
-**After A1.1:** they lock the episode first. They no longer deadlock with a terms reopen, but they **can** deadlock with Start regeneration. This needs a regenerate of a special's started episode from its event, at the same moment as that special is swapped into a weekly slot or moved to the next season. A local test reproduced it (`40P01` on the swap).
+**Now:**
+- **The order:** a regenerate locks the episode it replaces **before** the event (episode-first). Then it re-checks, under both locks, that the episode is still the event's live episode, in the same show.
+- **If not:** if it was live and linked when the regenerate began but has been deleted or unlinked since, the regenerate stops with 409 `START_TARGET_CHANGED`. Nothing is created or changed.
+- **Already deleted before the regenerate began:** the behaviour is the same as before.
+- **A second regenerate of the same episode** waits on the first, then is refused, as before.
+- **Errors:** the regenerate route answers a retryable conflict (`START_TARGET_CHANGED`, a deadlock or a lock timeout) with 409 instead of 500.
+- **Unchanged:** a first Start (no replaced episode), episode generation, snapshot contents, scoring and rewards.
 
-**What happens when it does:**
-- Postgres detects the deadlock and rolls one transaction back whole; no data is half-written.
-- If the swap or move is the one rolled back, it answers 409 `RETRY`.
-- If Start is the one rolled back, Start fails as a whole, since its writes are one transaction.
+## Paths checked with these changes
 
-**The fix:** lock the replaced episode before the event in Start's transaction (episode-first). It needs its own approval and is not part of A1.1.
+| Pair | Order now | Result |
+|---|---|---|
+| Start regenerate against the swap or the move | both take the replaced/special episode first | no cycle (tested; `40P01` before) |
+| Start regenerate against a terms reopen | episode, then event, on both | no cycle |
+| Start regenerate against completion of the same episode | both lock the episode first; completion then takes the ledger, then the event, Start the event, then the ledger | the episode lock excludes the other entirely: no cycle |
+| Start regenerate against setup, placement, intention saves, clip attachment | the episode first on every one | no cycle |
+| Ledger writers (`bookContentFee`, the manual coin edit, episode delete or restore) | the ledger, then rows in `financial_transactions` (no foreign key to `episodes`) or the episode first | no episode lock taken after the ledger: no cycle |
 
-The other Start-adjacent risks noted in the A1.1 review are also separate follow-ups:
+**Foreign-key inserts:** an INSERT into a table with a foreign key to `episodes` takes a key-share lock on the episode row, and that conflicts with `FOR UPDATE`. On the paths above, those inserts are for the transaction's own new episode, or happen in transactions that hold no slot, event or ledger lock first, so they only wait; they do not form a cycle.
+
+**Still open, as separate follow-ups:**
 - re-keying green screen when a multipart retry finds its clip;
 - duplicate clips from a re-sent one-request upload.
 
@@ -111,6 +124,14 @@ The slot assignment is now one transaction, so a failure leaves no slot half-ass
   - Start's assignment rolling back, and the setup step being cleared.
 
   The swap test reproduces a `40P01` deadlock on the code before A1.1, and the move test on the PR's first commit (`91cfa7d3`).
+- **`tests/integration/startRegenerateLocks.integration.test.js`:**
+  - Start regeneration against the swap and against the move, with the real Start held inside its transaction;
+  - two regenerates of the same episode;
+  - an episode deleted while its regenerate waited;
+  - a forced failure rolling back;
+  - a plain regenerate of a special's episode, and a first Start.
+
+  On the code before the Start fix (`e88978e9`), both deadlock tests give `40P01`, and the deleted-episode test sees the regenerate go ahead.
 - **Unit tests:**
   - `tests/unit/utils/episodeLocks.test.js`: the helper's rules;
   - `tests/unit/services/rawClipsService.test.js`: the share lock, retries and identity;
