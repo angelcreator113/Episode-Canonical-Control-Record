@@ -36,6 +36,7 @@ const {
 const { episodeEventIdSql } = require('../utils/episodeEventSql');
 const { loadSeason } = require('./seasonLoader');
 const { lockEpisodes, assertEpisodesLocked } = require('../utils/episodeLocks');
+const { isFrozenSkip, skipEntry } = require('../utils/snapshotFreeze');
 const { fromArc, seasonLines } = require('./seasonLine');
 const {
   seasonAiContext, careerGoals, askModel, isBudgetRefusal, bullets, phaseLine, threadLine, goalLine, debtLines,
@@ -411,10 +412,16 @@ async function updateSetup(sequelize, showId, body) {
     // A started draft's season snapshot carries the part's name and tagline.
     const drafts = slots.filter((s) => s.episode_id && !s.accepted_at && s.evaluation_status !== 'accepted');
     assertEpisodesLocked(transaction, drafts.map((s) => s.episode_id));
+    // A1.2a (W5, Q-4): a filmed episode keeps its Start snapshot; it is
+    // skipped and listed, and the season's own change still saves.
+    const snapshotSkipped = [];
     for (const sl of drafts) {
-      await snapshotEpisode(sequelize, { slotId: sl.id, episodeId: sl.episode_id, transaction });
+      const result = await snapshotEpisode(sequelize, { slotId: sl.id, episodeId: sl.episode_id, transaction });
+      if (isFrozenSkip(result)) {
+        snapshotSkipped.push(skipEntry(sl.episode_id, result.frozen_at, result.context?.label || `E${sl.slot_number}`));
+      }
     }
-    return { arc_id: arc.id, season_number: arc.season_number || 1, moved, phases: nextPhases };
+    return { arc_id: arc.id, season_number: arc.season_number || 1, moved, phases: nextPhases, snapshot_skipped: snapshotSkipped };
   });
 }
 

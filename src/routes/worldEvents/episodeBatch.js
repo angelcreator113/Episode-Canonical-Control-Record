@@ -19,6 +19,7 @@ const { aiRateLimiter } = require('../../middleware/aiRateLimiter');
 const { eventEpisodeConflictBody, EVENT_EPISODE_CONFLICT_CODE } = require('../../utils/eventEpisodeLink');
 const { findMissingPrices, dealPriceRequiredError, dealPriceRequiredBody, DEAL_PRICE_REQUIRED_CODE } = require('../../services/dealPricingService');
 const { asRetryable, RetryableConflictError } = require('../../utils/episodeLocks');
+const { isFreezeError } = require('../../utils/snapshotFreeze');
 const { takePriceSnapshot } = require('../../services/dealPriceSnapshot');
 const { offerDecisionBody, OFFER_DECISION_CODES } = require('../../services/startOfferDecision');
 const { getModels } = require('./helpers');
@@ -240,6 +241,11 @@ router.post('/world/:showId/events/:eventId/regenerate-episode', requireAuth, ai
     if (error.code === EVENT_EPISODE_CONFLICT_CODE) {
       console.warn('Regenerate episode refused:', error.message);
       return res.status(409).json(eventEpisodeConflictBody(error.episode));
+    }
+    // A1.2a (W4): a filmed episode is never regenerated (refused before any model call).
+    if (isFreezeError(error)) {
+      console.warn(`Regenerate episode refused (${error.code}):`, error.message);
+      return res.status(409).json(error.toJSON());
     }
     // A1.1: the replaced episode changed meanwhile, or a lock conflict
     // rolled the regenerate back whole: nothing was changed; try again.

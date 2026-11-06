@@ -15,8 +15,12 @@ const { generateScenePlan, getScenePlanForScriptGenerator } = require('../servic
 const { scriptOverwriteBlocked, scriptOverwriteRefusalBody } = require('../utils/scriptOverwriteGuard');
 const { missingFeedMomentBeats, retryMissingFeedMoments } = require('../services/feedMomentSaveService');
 const { selectInjectedRules } = require('../services/brainRules');
+const { lockEpisodes, RetryableConflictError } = require('../utils/episodeLocks');
+const {
+  snapshotFrozen, peekFrozen, isFreezeError, changedFields, startRecordError, intentPendingAuditError,
+  START_RECORD_FIELDS, FROZEN_INTENT_FIELDS,
+} = require('../utils/snapshotFreeze');
 const { assertEventRelinkAllowed, isFrozenEpisodeError } = require('../utils/frozenEpisode');
-const { RetryableConflictError } = require('../utils/episodeLocks');
 
 const SHOW_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -118,21 +122,41 @@ router.put('/:episodeId', requireAuth, async (req, res) => {
       if (req.body[field] !== undefined) updates[field] = req.body[field];
     }
 
+    // A1.2a (spec v5 §6 and §7; B-1 = b, B-3, V-1): once filming began, an
+    // ordinary edit may not change the Start record (event_difficulty,
+    // arc_number, position_in_arc: 409 START_RECORD_FROZEN) or the intent
+    // (designed_intent, allowed_outcomes: 409 INTENT_EDIT_PENDING_AUDIT until
+    // A1.2b's audited editor is deployed). Sending a value unchanged is
+    // accepted, and nothing in a refused request is written.
     // A1.2c relink guard: naming an event on a brief that has none links the
-    // event to this episode. An event whose filmed episode was deleted never
-    // joins another episode: the check (event's linked episodes and this one
-    // locked first, then the event) and the whole save are one transaction,
-    // and a refusal (409 EVENT_EPISODE_FROZEN) writes nothing.
-    if (updates.event_id && !brief.event_id) {
+    // event to this episode; an event whose filmed episode was deleted never
+    // joins another episode (409 EVENT_EPISODE_FROZEN). Its check locks the
+    // event's linked episodes and this one first, then the event.
+    // Both run, with the save, in one transaction. A request that does
+    // neither saves as before, without the extra locks.
+    const guarded = [...START_RECORD_FIELDS.episode_briefs, ...FROZEN_INTENT_FIELDS];
+    const linking = Boolean(updates.event_id && !brief.event_id);
+    if (linking || guarded.some((f) => updates[f] !== undefined)) {
       const { sequelize } = models;
       const saved = await sequelize.transaction(async (transaction) => {
-        await assertEventRelinkAllowed(sequelize, updates.event_id, { transaction, episodeIds: [episodeId] });
+        if (linking) await assertEventRelinkAllowed(sequelize, updates.event_id, { transaction, episodeIds: [episodeId] });
+        const held = await lockEpisodes(sequelize, [episodeId], { transaction });
         const fresh = await EpisodeBrief.findOne({ where: { id: brief.id }, transaction, lock: transaction.LOCK.UPDATE });
         if (fresh.status === 'locked') return { refused: { status: 409, body: { error: 'Brief is locked. Unlock before editing.' } } };
-        if (fresh.event_id && String(fresh.event_id) !== String(updates.event_id)) {
+        if (linking && fresh.event_id && String(fresh.event_id) !== String(updates.event_id)) {
           return { refused: { status: 409, body: {
             error: "This episode was started from an event, so its source event can't change. Its terms and episode link are locked.",
             code: 'EVENT_TERMS_LOCKED', fields: ['event_id'] } } };
+        }
+        const freeze = held.length
+          ? await snapshotFrozen(sequelize, episodeId, { transaction })
+          : await peekFrozen(sequelize, episodeId, { transaction });
+        if (freeze.frozen) {
+          const current = fresh.toJSON();
+          const start = changedFields(current, updates, START_RECORD_FIELDS.episode_briefs);
+          if (start.length) throw startRecordError(episodeId, freeze.frozen_at, start);
+          const intent = changedFields(current, updates, FROZEN_INTENT_FIELDS);
+          if (intent.length) throw intentPendingAuditError(episodeId, freeze.frozen_at, intent);
         }
         await fresh.update(updates, { transaction });
         return { brief: fresh };
@@ -144,9 +168,9 @@ router.put('/:episodeId', requireAuth, async (req, res) => {
     await brief.update(updates);
     return res.json({ data: brief });
   } catch (err) {
-    if (isFrozenEpisodeError(err) || err instanceof RetryableConflictError) {
+    if (isFreezeError(err) || isFrozenEpisodeError(err) || err instanceof RetryableConflictError) {
       console.warn(`[EpisodeBrief] PUT refused (${err.code}):`, err.message);
-      return res.status(409).json(isFrozenEpisodeError(err) ? err.toJSON() : { success: false, error: err.message, code: err.code });
+      return res.status(409).json(err instanceof RetryableConflictError ? { success: false, error: err.message, code: err.code } : err.toJSON());
     }
     console.error('[EpisodeBrief] PUT error:', err);
     return res.status(500).json({ error: err.message });
