@@ -30,8 +30,10 @@ const getPool = () => {
       baseConfig.host = process.env.DB_HOST || '127.0.0.1';
       baseConfig.port = parseInt(process.env.DB_PORT || '5432', 10);
       baseConfig.database = process.env.DB_NAME || 'episode_metadata';
-      baseConfig.user = process.env.DB_USER || 'postgres';
-      baseConfig.password = process.env.DB_PASSWORD || '';
+      // No built-in login: an unset DB_USER / DB_PASSWORD is left to pg's
+      // own defaults (PGUSER / PGPASSWORD), never a guessed account.
+      baseConfig.user = process.env.DB_USER || undefined;
+      baseConfig.password = process.env.DB_PASSWORD || undefined;
     }
 
     pool = new Pool(baseConfig);
