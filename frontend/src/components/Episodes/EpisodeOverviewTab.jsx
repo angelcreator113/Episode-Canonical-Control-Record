@@ -13,6 +13,7 @@ import EpisodeStyleBoard from './EpisodeStyleBoard';
 import { NextStepBanner, OverviewTiles, StoryBriefCard, FromEventCard } from './EpisodeOverviewSummary';
 import { episodePlanning } from '../../utils/episodePlanning';
 import { fromEventItems, nextStep, coinsAfterPlan } from '../../lib/episodeOverview';
+import { isFreezeRefusal } from '../../lib/snapshotFreeze';
 import './EpisodeOverviewSections.css';
 
 // EpisodeBrief enums — kept module-level so the chip rows don't re-create
@@ -276,6 +277,10 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
       const { data } = await api.put(`/api/v1/episode-brief/${episode.id}`, { [field]: value });
       setBrief(data?.data || brief);
     } catch (err) {
+      // A1.2a: a filmed episode's Start record and intent are refused (409);
+      // the field shows its saved value again, so the page never shows an
+      // unsaved change as if it were kept.
+      if (isFreezeRefusal(err)) setDraft((d) => ({ ...d, [field]: brief[field] ?? (field === 'allowed_outcomes' ? [] : '') }));
       alert('Save failed: ' + (err?.response?.data?.error || err.message));
     } finally {
       setSavingBrief(false);

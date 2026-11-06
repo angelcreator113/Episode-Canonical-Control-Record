@@ -37,6 +37,7 @@ const Anthropic = require('@anthropic-ai/sdk');
 const { PRESSURE_LEVELS } = require('./seasonSlotService');
 const { loadSeason } = require('./seasonLoader');
 const { lockEpisodes, RetryableConflictError } = require('../utils/episodeLocks');
+const { isFrozenSkip, contextOf, skipEntry } = require('../utils/snapshotFreeze');
 const { fromArc, seasonLines } = require('./seasonLine');
 const {
   seasonAiContext, askModel, isBudgetRefusal, bullets, phaseLine, threadLine, goalLine, debtLines,
@@ -285,11 +286,15 @@ async function saveIntention(sequelize, showId, slotId, body) {
     const locked = await lockEditableSlot(sequelize, showId, slotId, slot, transaction);
     const purposes = await writeIntention(sequelize, slotId, intention, SOURCES.EDITED, transaction);
     let seasonContext = null;
+    const snapshotSkipped = [];
     if (locked.started) {
       const { snapshotEpisode } = require('./seasonSlotService');
-      seasonContext = await snapshotEpisode(sequelize, { slotId, episodeId: locked.live_episode_id, transaction });
+      // A1.2a (W6): a filmed episode keeps its Start snapshot; the slot saves.
+      const result = await snapshotEpisode(sequelize, { slotId, episodeId: locked.live_episode_id, transaction });
+      seasonContext = contextOf(result);
+      if (isFrozenSkip(result)) snapshotSkipped.push(skipEntry(locked.live_episode_id, result.frozen_at, result.context?.label || null));
     }
-    return savedIntention(locked, seasonContext, intention, purposes);
+    return { ...savedIntention(locked, seasonContext, intention, purposes), snapshot_skipped: snapshotSkipped };
   });
 }
 
@@ -584,8 +589,11 @@ async function writeDraft(sequelize, slot, slotId, intention, transaction) {
   if (slot.started) {
     const merged = await writeStartedDraft(sequelize, slot, intention, transaction);
     const { snapshotEpisode } = require('./seasonSlotService');
-    const seasonContext = await snapshotEpisode(sequelize, { slotId, episodeId: slot.live_episode_id, transaction });
+    // A1.2a (W7): a filmed episode keeps its Start snapshot; the slot's draft saves.
+    const result = await snapshotEpisode(sequelize, { slotId, episodeId: slot.live_episode_id, transaction });
+    const seasonContext = contextOf(result);
     return {
+      snapshot_skipped: isFrozenSkip(result) ? [skipEntry(slot.live_episode_id, result.frozen_at, result.context?.label || null)] : [],
       slot_number: slot.slot_number,
       started: true,
       placed: merged.placed,

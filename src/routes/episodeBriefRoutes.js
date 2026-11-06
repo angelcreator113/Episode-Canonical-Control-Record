@@ -15,6 +15,11 @@ const { generateScenePlan, getScenePlanForScriptGenerator } = require('../servic
 const { scriptOverwriteBlocked, scriptOverwriteRefusalBody } = require('../utils/scriptOverwriteGuard');
 const { missingFeedMomentBeats, retryMissingFeedMoments } = require('../services/feedMomentSaveService');
 const { selectInjectedRules } = require('../services/brainRules');
+const { lockEpisodes } = require('../utils/episodeLocks');
+const {
+  snapshotFrozen, peekFrozen, isFreezeError, changedFields, startRecordError, intentPendingAuditError,
+  START_RECORD_FIELDS, FROZEN_INTENT_FIELDS,
+} = require('../utils/snapshotFreeze');
 
 const SHOW_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -116,9 +121,45 @@ router.put('/:episodeId', requireAuth, async (req, res) => {
       if (req.body[field] !== undefined) updates[field] = req.body[field];
     }
 
+    // A1.2a (spec v5 §6 and §7; B-1 = b, B-3, V-1): once filming began, an
+    // ordinary edit may not change the Start record (event_difficulty,
+    // arc_number, position_in_arc: 409 START_RECORD_FROZEN) or the intent
+    // (designed_intent, allowed_outcomes: 409 INTENT_EDIT_PENDING_AUDIT until
+    // A1.2b's audited editor is deployed). Sending a value unchanged is
+    // accepted, and nothing in a refused request is written. Only a request
+    // that sends one of these fields takes the episode lock; every other
+    // field, and every unfiltered episode, saves as before.
+    const guarded = [...START_RECORD_FIELDS.episode_briefs, ...FROZEN_INTENT_FIELDS];
+    if (guarded.some((f) => updates[f] !== undefined)) {
+      const { sequelize } = models;
+      const saved = await sequelize.transaction(async (transaction) => {
+        const held = await lockEpisodes(sequelize, [episodeId], { transaction });
+        const fresh = await EpisodeBrief.findOne({ where: { id: brief.id }, transaction, lock: transaction.LOCK.UPDATE });
+        if (fresh.status === 'locked') return { locked: true };
+        const freeze = held.length
+          ? await snapshotFrozen(sequelize, episodeId, { transaction })
+          : await peekFrozen(sequelize, episodeId, { transaction });
+        if (freeze.frozen) {
+          const current = fresh.toJSON();
+          const start = changedFields(current, updates, START_RECORD_FIELDS.episode_briefs);
+          if (start.length) throw startRecordError(episodeId, freeze.frozen_at, start);
+          const intent = changedFields(current, updates, FROZEN_INTENT_FIELDS);
+          if (intent.length) throw intentPendingAuditError(episodeId, freeze.frozen_at, intent);
+        }
+        await fresh.update(updates, { transaction });
+        return { brief: fresh };
+      });
+      if (saved.locked) return res.status(409).json({ error: 'Brief is locked. Unlock before editing.' });
+      return res.json({ data: saved.brief });
+    }
+
     await brief.update(updates);
     return res.json({ data: brief });
   } catch (err) {
+    if (isFreezeError(err)) {
+      console.warn(`[EpisodeBrief] PUT refused (${err.code}):`, err.message);
+      return res.status(409).json(err.toJSON());
+    }
     console.error('[EpisodeBrief] PUT error:', err);
     return res.status(500).json({ error: err.message });
   }

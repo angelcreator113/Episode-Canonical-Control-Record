@@ -55,6 +55,7 @@
  */
 
 const { lockEpisodes, assertEpisodesLocked, requireTransaction, RetryableConflictError } = require('../utils/episodeLocks');
+const { snapshotFrozen, frozenSkip, frozenError, isFrozenSkip, skipEntry, sameValue } = require('../utils/snapshotFreeze');
 
 const TABLE = 'season_specials';
 const KINDS = Object.freeze(['bonus', 'special']);
@@ -428,13 +429,17 @@ async function updateSpecial(sequelize, showId, specialId, body = {}) {
     const assignments = keys.map((k) => (k === 'release_date' ? `${k} = CAST(:${k} AS date)` : `${k} = :${k}`)).join(', ');
     await sequelize.query(`UPDATE ${TABLE} SET ${assignments}, updated_at = NOW() WHERE id = :specialId`,
       { replacements: { ...set, specialId }, transaction });
+    const snapshotSkipped = [];
     if (row.episode_id && !row.accepted_at) {
       if (set.release_date !== undefined) await mirrorAirDate(sequelize, { showId, episodeId: row.episode_id, day: set.release_date, transaction });
       if (set.after_slot_number !== undefined || set.special_type !== undefined || set.title !== undefined) {
-        await snapshotSpecialEpisode(sequelize, { specialId, episodeId: row.episode_id, transaction });
+        // A1.2a (W10): a filmed special keeps its Start snapshot; the special
+        // itself is saved, and the skip is reported.
+        const result = await snapshotSpecialEpisode(sequelize, { specialId, episodeId: row.episode_id, transaction });
+        if (isFrozenSkip(result)) snapshotSkipped.push(skipEntry(row.episode_id, result.frozen_at, result.context?.label || null));
       }
     }
-    return { id: specialId, moved_from: movedFrom };
+    return { id: specialId, moved_from: movedFrom, snapshot_skipped: snapshotSkipped };
   });
 }
 
@@ -465,6 +470,9 @@ async function snapshotSpecialEpisode(sequelize, { specialId, episodeId, transac
   // A1.1: inside the caller's transaction, the episode locked first.
   requireTransaction(transaction, 'snapshotSpecialEpisode');
   await lockEpisodes(sequelize, [episodeId], { transaction });
+  // A1.2a (W10): the guard is inside the writer, so no caller can skip it.
+  const freeze = await snapshotFrozen(sequelize, episodeId, { transaction });
+  if (freeze.frozen) return frozenSkip(episodeId, freeze.frozen_at, await currentContext(sequelize, episodeId, transaction));
   const [[sp]] = await sequelize.query(
     `SELECT sp.*, a.id AS arc_id, a.title AS arc_title, a.tagline AS arc_tagline, a.logline AS arc_logline,
             a.description AS arc_description, a.phases, COALESCE(a.season_number, 1) AS season_number
@@ -507,10 +515,43 @@ async function snapshotSpecialEpisode(sequelize, { specialId, episodeId, transac
   return context;
 }
 
+/** An episode's season_context as stored (null when none). */
+async function currentContext(sequelize, episodeId, transaction) {
+  const [[ep]] = await sequelize.query('SELECT season_context FROM episodes WHERE id = :episodeId',
+    { replacements: { episodeId }, transaction });
+  const sc = ep?.season_context;
+  if (typeof sc !== 'string') return sc || null;
+  try { return JSON.parse(sc); } catch (err) {
+    console.error('[seasonSpecials] season_context is not JSON:', err.message);
+    return null;
+  }
+}
+
+/**
+ * A1.2a (W9, Q-5): a stamp on a frozen episode is allowed only when it would
+ * change nothing (Part 1 re-stamped as it already is, when Part 2 starts).
+ * Returns true when the episode is frozen and the stamp is already there
+ * (the caller writes nothing); throws EPISODE_SNAPSHOT_FROZEN when it would
+ * change; false when the episode is not frozen.
+ */
+async function frozenStampUnchanged(sequelize, episodeId, expected, transaction) {
+  const freeze = await snapshotFrozen(sequelize, episodeId, { transaction });
+  if (!freeze.frozen) return false;
+  const sc = await currentContext(sequelize, episodeId, transaction);
+  const label = sc ? `S${sc.season_number ?? '1'} · ${expected.label}` : null;
+  const same = sc && sc.label === label && sameValue(sc.two_part ?? null, expected.two_part);
+  if (same) return true;
+  throw frozenError(episodeId, freeze.frozen_at,
+    `This episode has been filmed (since ${String(freeze.frozen_at).slice(0, 10)}): its Start snapshot keeps its two-parter label as it is. Nothing was changed.`);
+}
+
 /** A two-parter's part on its episode's snapshot: the label and the part, kept with the slot's own context. */
 async function stampTwoPart(sequelize, { episodeId, slotNumber, part, otherSlotNumber, transaction }) {
   requireTransaction(transaction, 'stampTwoPart');
   await lockEpisodes(sequelize, [episodeId], { transaction });
+  if (await frozenStampUnchanged(sequelize, episodeId, {
+    label: partLabel(slotNumber, part), two_part: { part, of: 2, other_slot_number: otherSlotNumber },
+  }, transaction)) return;
   await sequelize.query(
     `UPDATE episodes
         SET season_context = COALESCE(season_context, '{}'::jsonb)
@@ -528,6 +569,7 @@ async function stampTwoPart(sequelize, { episodeId, slotNumber, part, otherSlotN
 async function unstampTwoPart(sequelize, { episodeId, slotNumber, transaction }) {
   requireTransaction(transaction, 'unstampTwoPart');
   await lockEpisodes(sequelize, [episodeId], { transaction });
+  if (await frozenStampUnchanged(sequelize, episodeId, { label: `E${slotNumber}`, two_part: null }, transaction)) return;
   await sequelize.query(
     `UPDATE episodes
         SET season_context = (COALESCE(season_context, '{}'::jsonb) - 'two_part')
