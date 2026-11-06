@@ -316,6 +316,44 @@ function fakeClient(json, onAsk = () => {}) {
     }
   });
 
+  test('a started special\'s move to the next season and a transaction locking episode then event (a terms reopen) never deadlock', async () => {
+    for (let i = 0; i < 5; i += 1) {
+      const { show, arcId } = await seedShow();
+      const arc2 = uuid();
+      await run(`INSERT INTO show_arcs (id, show_id, arc_number, title, season_number, episode_start, episode_end, phases, current_phase, status, created_at, updated_at)
+                 VALUES (:arc2, :show, 2, 'Season 2', 2, 1, 24, '[]'::jsonb, 1, 'planned', NOW(), NOW())`, { arc2, show });
+      await slots.ensureSeasonSlots(sequelize, { id: arc2, show_id: show, season_number: 2, phases: [] });
+      const episodeId = await addEpisode(show, 40 + i);
+      const eventId = uuid();
+      await run(`INSERT INTO world_events (id, show_id, name, event_type, status, prestige, strictness, cost_coins, used_in_episode_id, canon_consequences, created_at, updated_at)
+                 VALUES (:eventId, :show, 'Encore', 'invite', 'used', 5, 5, 0, :episodeId, '{}'::jsonb, NOW(), NOW())`, { eventId, show, episodeId });
+      await run(`INSERT INTO season_specials (id, show_id, arc_id, kind, event_id, episode_id, after_slot_number, locked_at, created_at, updated_at)
+                 VALUES (:id, :show, :arcId, 'bonus', :eventId, :episodeId, 4, NOW(), NOW(), NOW())`, { id: uuid(), show, arcId, eventId, episodeId });
+
+      // The "reopen": episode first, then (after the move has begun) the event.
+      const t1 = await sequelize.transaction();
+      await sequelize.query('SELECT id FROM episodes WHERE id = :episodeId FOR UPDATE', { replacements: { episodeId }, transaction: t1 });
+      const move = track(full.moveToNextSeason(sequelize, show, eventId));
+      await wait(400);
+      let reopenErr = null;
+      try {
+        await sequelize.query('SELECT id FROM world_events WHERE id = :eventId FOR UPDATE', { replacements: { eventId }, transaction: t1 });
+        await t1.commit();
+      } catch (err) {
+        reopenErr = err;
+        await t1.rollback().catch(() => {});
+      }
+      let moveErr = null;
+      await move.promise.catch((err) => { moveErr = err; });
+      expect(reopenErr && isLockConflict(reopenErr) ? reopenErr.original?.code : null).toBeNull();
+      expect(moveErr && isLockConflict(moveErr) ? moveErr.original?.code : null).toBeNull();
+      expect(moveErr).toBeNull();
+      expect(move.value).toMatchObject({ season_number: 2, slot_number: 1, label: 'S2 · E1' });
+      expect(await slotRow(await slotId(arc2, 1))).toMatchObject({ episode_id: episodeId });
+      expect((await episodeRow(episodeId)).season_context.label).toBe('S2 · E1');
+    }
+  });
+
   test('a season edit and an intention save on the same started draft take turns: both land, no deadlock', async () => {
     const { show, episodeId, sid } = await startedSlot();
     const body = { title: 'Season edited', tagline: 'Edited',

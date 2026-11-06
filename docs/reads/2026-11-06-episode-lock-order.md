@@ -38,9 +38,11 @@ Every transaction that writes an episode's Start snapshot (`episodes.season_cont
 | `seasonSetupService.updateSetup` | was arc and slots, then episodes; **now** the started drafts' episodes first | reordered |
 | `seasonSetupService.applyPlacement` | **now** the placed episodes first | reordered |
 | `seasonFullSpecials.swapIntoSlot` | was world event, special, slot, then episode (the opposite of a terms reopen: a deadlock); **now** episode first | reordered |
+| `seasonFullSpecials.moveToNextSeason` | was world event, special, then the special's episode (`unmirror`, then `placeEpisodeIn`): the opposite of a terms reopen; **now** episode first | reordered (amendment) |
 | `seasonSpecials.updateSpecial` | was special, then episode; **now** episode first | reordered |
 | `seasonSpecials.createTwoParter` | Part 1's episode is now locked before the slots are written, and its slot read again under the lock | reordered |
 | `seasonSpecials.removeTwoParter`, `startPartTwo` | was two-parter, then episode; **now** Part 1's episode first. Part 2's new episode is made by the transaction itself. | reordered |
+| `episodeGeneratorService.generateEpisodeFromEvent` (Start) | was the event, then (regenerate) the replaced episode; **now** the replaced episode first, re-checked under the locks; a first Start is unchanged | reordered (follow-up) |
 | `rawClipsService.createClip` | was a single INSERT, no lock; **now** the episode `FOR SHARE`, then `INSERT … ON CONFLICT (id) DO NOTHING` | new |
 
 ## How a reordered transaction checks itself
@@ -53,6 +55,37 @@ A transaction that only learns its episode from rows it locks later:
 4. checks that the episode it now finds is one it locked (`assertEpisodesLocked`).
 
 If someone moved it in between, the transaction stops with 409 `SEASON_CHANGED_RETRY` before writing anything.
+
+## Start regeneration (A1.1 completion, follow-up PR)
+
+Start Episode's own transaction (`episodeGeneratorService.generateEpisodeFromEvent`) used to lock the source world event first (`FOR UPDATE`). On a regenerate, it then soft-deleted the replaced episode (`UPDATE episodes … deleted_at`), which is event first, then episode.
+
+- **Before A1.1,** `swapIntoSlot` and `moveToNextSeason` also locked event before episode. They could deadlock with a terms reopen, but not with Start.
+- **With A1.1's first PR (#3725),** they lock episode first, so the conflict moved: they could deadlock with Start regeneration of the same special's episode. A local test reproduced it (`40P01`).
+
+**Now:**
+- **The order:** a regenerate locks the episode it replaces **before** the event (episode-first). Then it re-checks, under both locks, that the episode is still the event's live episode, in the same show.
+- **If not:** if it was live and linked when the regenerate began but has been deleted or unlinked since, the regenerate stops with 409 `START_TARGET_CHANGED`. Nothing is created or changed.
+- **Already deleted before the regenerate began:** the behaviour is the same as before.
+- **A second regenerate of the same episode** waits on the first, then is refused, as before.
+- **Errors:** the regenerate route answers a retryable conflict (`START_TARGET_CHANGED`, a deadlock or a lock timeout) with 409 instead of 500.
+- **Unchanged:** a first Start (no replaced episode), episode generation, snapshot contents, scoring and rewards.
+
+## Paths checked with these changes
+
+| Pair | Order now | Result |
+|---|---|---|
+| Start regenerate against the swap or the move | both take the replaced/special episode first | no cycle (tested; `40P01` before) |
+| Start regenerate against a terms reopen | episode, then event, on both | no cycle |
+| Start regenerate against completion of the same episode | both lock the episode first; completion then takes the ledger, then the event, Start the event, then the ledger | the episode lock excludes the other entirely: no cycle |
+| Start regenerate against setup, placement, intention saves, clip attachment | the episode first on every one | no cycle |
+| Ledger writers (`bookContentFee`, the manual coin edit, episode delete or restore) | the ledger, then rows in `financial_transactions` (no foreign key to `episodes`) or the episode first | no episode lock taken after the ledger: no cycle |
+
+**Foreign-key inserts:** an INSERT into a table with a foreign key to `episodes` takes a key-share lock on the episode row, and that conflicts with `FOR UPDATE`. On the paths above, those inserts are for the transaction's own new episode, or happen in transactions that hold no slot, event or ledger lock first, so they only wait; they do not form a cycle.
+
+**Still open, as separate follow-ups:**
+- re-keying green screen when a multipart retry finds its clip;
+- duplicate clips from a re-sent one-request upload.
 
 ## Raw-clip identity
 
@@ -86,11 +119,19 @@ The slot assignment is now one transaction, so a failure leaves no slot half-ass
   - a clip and a save in both orders;
   - two uploads, and a clip waiting for a held episode;
   - clip identity;
-  - the swap-against-reopen deadlock;
+  - the swap-against-reopen and move-to-next-season-against-reopen deadlocks;
   - setup edits against intention saves;
   - Start's assignment rolling back, and the setup step being cleared.
 
-  The swap test reproduces a `40P01` deadlock on the code before A1.1.
+  The swap test reproduces a `40P01` deadlock on the code before A1.1, and the move test on the PR's first commit (`91cfa7d3`).
+- **`tests/integration/startRegenerateLocks.integration.test.js`:**
+  - Start regeneration against the swap and against the move, with the real Start held inside its transaction;
+  - two regenerates of the same episode;
+  - an episode deleted while its regenerate waited;
+  - a forced failure rolling back;
+  - a plain regenerate of a special's episode, and a first Start.
+
+  On the code before the Start fix (`e88978e9`), both deadlock tests give `40P01`, and the deleted-episode test sees the regenerate go ahead.
 - **Unit tests:**
   - `tests/unit/utils/episodeLocks.test.js`: the helper's rules;
   - `tests/unit/services/rawClipsService.test.js`: the share lock, retries and identity;

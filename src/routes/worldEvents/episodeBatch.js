@@ -18,6 +18,7 @@ const { requireAuth, authorize } = require('../../middleware/auth');
 const { aiRateLimiter } = require('../../middleware/aiRateLimiter');
 const { eventEpisodeConflictBody, EVENT_EPISODE_CONFLICT_CODE } = require('../../utils/eventEpisodeLink');
 const { findMissingPrices, dealPriceRequiredError, dealPriceRequiredBody, DEAL_PRICE_REQUIRED_CODE } = require('../../services/dealPricingService');
+const { asRetryable, RetryableConflictError } = require('../../utils/episodeLocks');
 const { takePriceSnapshot } = require('../../services/dealPriceSnapshot');
 const { offerDecisionBody, OFFER_DECISION_CODES } = require('../../services/startOfferDecision');
 const { getModels } = require('./helpers');
@@ -233,6 +234,13 @@ router.post('/world/:showId/events/:eventId/regenerate-episode', requireAuth, ai
     if (error.code === EVENT_EPISODE_CONFLICT_CODE) {
       console.warn('Regenerate episode refused:', error.message);
       return res.status(409).json(eventEpisodeConflictBody(error.episode));
+    }
+    // A1.1: the replaced episode changed meanwhile, or a lock conflict
+    // rolled the regenerate back whole: nothing was changed; try again.
+    const retry = asRetryable(error);
+    if (retry instanceof RetryableConflictError) {
+      console.warn(`Regenerate episode refused (${retry.code}):`, retry.message);
+      return res.status(409).json({ success: false, error: retry.message, code: retry.code });
     }
     console.error('Regenerate episode error:', error.message, error.stack?.slice(0, 500));
     return res.status(500).json({ success: false, error: error.message });
