@@ -21,6 +21,7 @@ import { slotTitle, slotThreads, defaultSlotId } from '../../lib/seasonArc';
 import { eventCardDetails } from '../../utils/eventCardSummary';
 import '../../pages/WorldAdmin.css';
 import { packageHref } from '../../lib/eventFlow';
+import { withSkippedNote } from '../../lib/snapshotFreeze';
 
 // ─── SEASON TAB COMPONENT ───────────────────────────────────────────────────
 // Planning Insights (§8(ff) A8, Q13, Q15): per slot the plan beside the
@@ -356,13 +357,19 @@ export function SlotIntentionEditor({ slot, S, api, showId, onSaved, onClose, se
   const save = async () => {
     setBusy('save'); setError(null);
     try {
-      await api.put(`/api/v1/world/${showId}/season/slots/${slot.id}/intention`, {
+      const res = await api.put(`/api/v1/world/${showId}/season/slots/${slot.id}/intention`, {
         story_purposes: purposes.map((p) => ({ text: p.text, primary: p.primary, story_thread_id: p.story_thread_id || null })),
         career_focus: form.career_focus,
         desired_pressure: form.desired_pressure || null,
         outcome_range: form.min || form.max ? { min: form.min || form.max, max: form.max || form.min } : null,
       });
-      if (setToast) setToast(started ? `${slot.label} intention saved; the episode's season position is updated` : `${slot.label} intention saved`);
+      // A1.2a: a filmed episode keeps its Start snapshot; the slot still saves.
+      const skipped = res?.data?.snapshot_skipped || [];
+      if (setToast) {
+        setToast(skipped.length
+          ? withSkippedNote(`${slot.label} intention saved.`, skipped)
+          : started ? `${slot.label} intention saved; the episode's season position is updated` : `${slot.label} intention saved`);
+      }
       if (onSaved) await onSaved();
       onClose();
     } catch (err) {
@@ -381,9 +388,9 @@ export function SlotIntentionEditor({ slot, S, api, showId, onSaved, onClose, se
       const d = res?.data?.data || res?.data || {};
       const kept = d.kept_edited || 0;
       if (setToast) {
-        setToast(started
+        setToast(withSkippedNote(started
           ? `${slot.label} intention drafted from its episode${kept ? `; ${kept} edited purpose${kept === 1 ? '' : 's'} kept` : ''}${d.placed === null && kept ? ' (no room for the drafted purpose)' : ''}`
-          : `${slot.label} intention drafted`);
+          : `${slot.label} intention drafted`, res?.data?.snapshot_skipped));
       }
       if (onSaved) await onSaved();
       onClose();
@@ -932,7 +939,10 @@ export function useSeasonPlan({ showId, api, setToast, season = null }) {
   const handleEdit = async (body) => {
     const r = await api.put(`/api/v1/world/${showId}/arc/setup`, body);
     setPanel(null);
-    setSetupNote(r.data.moved ? `Season saved; ${r.data.moved} ${r.data.moved === 1 ? 'slot moved' : 'slots moved'} to a new part.` : 'Season saved.');
+    // A1.2a (Q-4): filmed episodes keep their Start snapshots; they are named here.
+    setSetupNote(withSkippedNote(
+      r.data.moved ? `Season saved; ${r.data.moved} ${r.data.moved === 1 ? 'slot moved' : 'slots moved'} to a new part.` : 'Season saved.',
+      r.data.snapshot_skipped, { applies: 'the season' }));
     await loadArc();
   };
   const seedGoals = async () => {

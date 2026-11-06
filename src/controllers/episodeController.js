@@ -21,6 +21,8 @@ const PresenceService = require('../services/PresenceService');
 const SocketService = require('../services/SocketService');
 const { normalizeTeaser } = require('../utils/episodeTeaser');
 const { parseAirDate } = require('../utils/episodeAirDate');
+const { lockEpisodes } = require('../utils/episodeLocks');
+const { snapshotFrozen, isFreezeError, sameValue, startRecordError } = require('../utils/snapshotFreeze');
 /* eslint-enable no-unused-vars */
 
 /**
@@ -564,6 +566,16 @@ module.exports = {
         }
       });
 
+      // A1.2a (B-2, spec v5 §6): season_number is part of a filmed episode's
+      // Start record. Changing it once filming began is refused (409
+      // START_RECORD_FROZEN) and nothing in this request is written; sending
+      // the value it already has is accepted. Requests without it are as before.
+      if ('season_number' in updateData && !sameValue(oldValues.season_number, updateData.season_number)) {
+        await lockEpisodes(Episode.sequelize, [episode.id], { transaction });
+        const freeze = await snapshotFrozen(Episode.sequelize, episode.id, { transaction });
+        if (freeze.frozen) throw startRecordError(episode.id, freeze.frozen_at, ['season_number']);
+      }
+
       // A changed title is no longer the approved one (Task #2386, ruling P11):
       // the approval is cleared so the new title is approved again, and a card
       // designed for the old title reads as outdated (title_card_title no longer
@@ -652,9 +664,11 @@ module.exports = {
     }).catch((err) => {
       const { ScriptSaveError } = require('../services/scriptSave');
       if (err instanceof ScriptSaveError) return { scriptRefusal: err };
+      if (isFreezeError(err)) return { freezeRefusal: err };
       throw err;
     });
     if (result.scriptRefusal) return res.status(result.scriptRefusal.status).json(result.scriptRefusal.body);
+    if (result.freezeRefusal) return res.status(409).json(result.freezeRefusal.toJSON());
     if (result.refused) return res.status(400).json({ error: result.refused });
     const { episode, oldValues, updateData, lockedKept, lockedMoved, scriptRevision, ignoredFields } = result;
 

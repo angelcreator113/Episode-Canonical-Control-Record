@@ -44,7 +44,7 @@ function fail(res, err, where) {
   err = asRetryable(err);
   if (err instanceof specials.SpecialsError || (err?.status && err?.code)) {
     console.warn(`[seasonSpecials] ${where} refused (${err.code}):`, err.message);
-    return res.status(err.status).json({ success: false, error: err.message, code: err.code });
+    return res.status(err.status).json({ success: false, error: err.message, code: err.code, ...(err.details || {}) });
   }
   console.error(`[seasonSpecials] ${where} failed:`, err);
   return res.status(500).json({ success: false, error: err.message });

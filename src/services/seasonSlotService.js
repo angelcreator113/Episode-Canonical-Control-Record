@@ -33,6 +33,7 @@
 
 const { loadSeason } = require('./seasonLoader');
 const { lockEpisodes, requireTransaction, inTransaction } = require('../utils/episodeLocks');
+const { snapshotFrozen, frozenSkip, frozenError, lateContextError } = require('../utils/snapshotFreeze');
 
 const SLOTS_PER_SEASON = 24;
 const DEFAULT_PHASES = [
@@ -409,6 +410,15 @@ async function snapshotEpisode(sequelize, { slotId, episodeId, transaction }) {
   // when the caller already holds it, as every caller does).
   requireTransaction(transaction, 'snapshotEpisode');
   await lockEpisodes(sequelize, [episodeId], { transaction });
+  // A1.2a (W1): a frozen episode's snapshot is history. Nothing is written:
+  // not the context, not season_number, not the brief's intent, arc number,
+  // position or purpose. The caller gets the context as it stands, marked.
+  const freeze = await snapshotFrozen(sequelize, episodeId, { transaction });
+  if (freeze.frozen) {
+    const [[ep]] = await sequelize.query('SELECT season_context FROM episodes WHERE id = :episodeId',
+      { replacements: { episodeId }, transaction });
+    return frozenSkip(episodeId, freeze.frozen_at, parseJson(ep?.season_context, null));
+  }
   const [[slot]] = await sequelize.query(
     `SELECT s.slot_number, s.season_number, s.phase, s.story_purpose, s.story_purposes, s.story_thread_id,
             s.career_focus, s.desired_pressure, s.show_id,
@@ -614,6 +624,17 @@ async function placeEpisodeIn(sequelize, showId, slotId, episodeId, transaction)
     'SELECT slot_number FROM season_slots WHERE episode_id = :episodeId AND deleted_at IS NULL',
     { replacements: { episodeId }, transaction });
   if (placed) throw new SeasonSlotError(`"${episode.title}" is already in E${placed.slot_number}`, 409, 'SEASON_EPISODE_PLACED');
+  // A1.2a (W3, Q-3; §8a): a frozen episode is never moved into another slot,
+  // and one with no context never gets one written here as if it were its
+  // Start snapshot (late context is A1.3's one-time, labelled path).
+  const freeze = await snapshotFrozen(sequelize, episodeId, { transaction });
+  if (freeze.frozen) {
+    const [[ctx]] = await sequelize.query(
+      'SELECT season_context IS NULL AS empty FROM episodes WHERE id = :episodeId', { replacements: { episodeId }, transaction });
+    if (ctx && ctx.empty) throw lateContextError(episodeId, freeze.frozen_at);
+    throw frozenError(episodeId, freeze.frozen_at,
+      `"${episode.title}" has been filmed (since ${String(freeze.frozen_at).slice(0, 10)}): it keeps its Start snapshot and cannot move to E${slot.slot_number}. Nothing was changed.`);
+  }
 
   const [[event]] = await sequelize.query(
     `SELECT ${require('../utils/episodeEventSql').EPISODE_EVENT_ID_SQL} AS id`,

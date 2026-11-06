@@ -55,6 +55,7 @@
 
 const specials = require('./seasonSpecials');
 const { lockEpisodes, assertEpisodesLocked } = require('../utils/episodeLocks');
+const { assertNotFrozen } = require('../utils/snapshotFreeze');
 
 const { SpecialsError, specialLabel } = specials;
 const ISO = /^(\d{4})-(\d{2})-(\d{2})/;
@@ -385,6 +386,11 @@ async function swapIntoSlot(sequelize, showId, eventId, slotId) {
     const own = await specialOfEvent(sequelize, pic.arc.id, ev, { transaction, lock: true });
     if (own?.episode_id) assertEpisodesLocked(transaction, [own.episode_id]);
     if (own?.accepted_at) throw new SpecialsError(`"${ev.name}" is done as ${specialLabel(own)}: it stays where it aired.`, 409, 'SEASON_SWAP_REFUSED');
+    // A1.2a (W12, Q-3): a filmed special's episode keeps its Start snapshot and its place.
+    if (own?.episode_id) {
+      await assertNotFrozen(sequelize, own.episode_id, { transaction,
+        message: `"${ev.name}" has been filmed as ${specialLabel(own)}: it keeps its Start snapshot and cannot move into a weekly slot. Nothing was changed.` });
+    }
     if (ev.used_in_episode_id && !own?.episode_id) {
       throw new SpecialsError(`"${ev.name}" has started an episode outside the season: place the episode from the Roadmap.`, 409, 'SEASON_SWAP_REFUSED');
     }
@@ -450,8 +456,9 @@ async function moveToStory(sequelize, showId, specialId) {
   const place = placeFor(pic, sp.event_date);
   const body = { after_slot_number: place.after };
   if (place.release?.date) Object.assign(body, { release_date: place.release.date, release_time: place.release.time || null });
-  await specials.updateSpecial(sequelize, showId, specialId, body);
-  return { id: specialId, label: place.label, after_slot_number: place.after, by: place.by, release: place.release };
+  const saved = await specials.updateSpecial(sequelize, showId, specialId, body);
+  return { id: specialId, label: place.label, after_slot_number: place.after, by: place.by, release: place.release,
+    snapshot_skipped: saved?.snapshot_skipped || [] };
 }
 
 /**
@@ -475,6 +482,11 @@ async function moveToNextSeason(sequelize, showId, eventId) {
     const own = await specialOfEvent(sequelize, pic.arc.id, ev, { transaction, lock: true });
     if (own?.episode_id) assertEpisodesLocked(transaction, [own.episode_id]);
     if (own?.accepted_at) throw new SpecialsError(`"${ev.name}" is done as ${specialLabel(own)}: it stays where it aired.`, 409, 'SEASON_SPECIAL_LOCKED');
+    // A1.2a (W12, Q-3): checked before anything is written (placeEpisodeIn refuses it too).
+    if (own?.episode_id) {
+      await assertNotFrozen(sequelize, own.episode_id, { transaction,
+        message: `"${ev.name}" has been filmed as ${specialLabel(own)}: it keeps its Start snapshot and cannot move to the next season. Nothing was changed.` });
+    }
     const slotService = require('./seasonSlotService');
     if (own?.episode_id) {
       await sequelize.query(`UPDATE ${specials.TABLE} SET episode_id = NULL, event_id = NULL, deleted_at = NOW(), updated_at = NOW() WHERE id = :id`,

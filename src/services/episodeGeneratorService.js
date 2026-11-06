@@ -17,6 +17,11 @@ const { v4: uuidv4 } = require('uuid');
 const { CANONICAL_BEATS } = require('../constants/canonicalBeats');
 const { findLiveLinkedEpisode, eventEpisodeConflictError } = require('../utils/eventEpisodeLink');
 const { lockEpisodes, RetryableConflictError } = require('../utils/episodeLocks');
+const { snapshotFrozen, peekFrozen, frozenError } = require('../utils/snapshotFreeze');
+
+/** A1.2a (W4): regenerating would replace a filmed episode and its Start snapshot. */
+const regenerateFrozenError = (episodeId, frozenAt) => frozenError(episodeId, frozenAt,
+  `This episode has been filmed (since ${String(frozenAt).slice(0, 10)}): it keeps its Start snapshot and cannot be regenerated. Nothing was changed and nothing was charged.`);
 const { findStartBlockers, startBlockersFrom, startRefusalError } = require('./startReadinessService');
 const { findIdempotentStart, loadStartReplay, META_KEY: IDEMPOTENCY_META_KEY } = require('./startEpisodeIdempotency');
 const { takePriceSnapshot } = require('./dealPriceSnapshot');
@@ -463,6 +468,14 @@ async function generateEpisodeFromEvent(event, models, options = {}) {
   const [blocker] = await findStartBlockers(models.sequelize, eventId, { replacingEpisodeId, stopAtFirst: true });
   if (blocker) throw startRefusalError(blocker);
 
+  // A1.2a (W4, D-13 = A): a filmed episode is never regenerated. Asked here,
+  // read-only, before any model call is paid for; asked again under the
+  // episode lock in the transaction below (a clip may arrive in between).
+  if (replacingEpisodeId) {
+    const peek = await peekFrozen(models.sequelize, replacingEpisodeId);
+    if (peek.frozen) throw regenerateFrozenError(replacingEpisodeId, peek.frozen_at);
+  }
+
   // The offer decision (services/startOfferDecision; Evoni's ruling): an
   // event whose opportunity is still open starts only with an explicit
   // options.offerDecision, asked before any model call (409
@@ -667,7 +680,17 @@ Return ONLY JSON.` }],
     // A1.1: a regenerate locks the episode it replaces before the event
     // (episode-first, as a terms reopen, the special swap and the move to
     // the next season do), so it never waits on them in the opposite order.
-    if (replacingEpisodeId) await lockEpisodes(models.sequelize, [replacingEpisodeId], { transaction });
+    if (replacingEpisodeId) {
+      const held = await lockEpisodes(models.sequelize, [replacingEpisodeId], { transaction });
+      // A1.2a (W4): the authoritative check, under the lock, before anything
+      // is written. An episode row that no longer exists cannot be locked (or
+      // filmed meanwhile); it is read plainly and the target check below
+      // answers 409 START_TARGET_CHANGED as before.
+      const freeze = held.length
+        ? await snapshotFrozen(models.sequelize, replacingEpisodeId, { transaction })
+        : await peekFrozen(models.sequelize, replacingEpisodeId, { transaction });
+      if (freeze.frozen) throw regenerateFrozenError(replacingEpisodeId, freeze.frozen_at);
+    }
     // Start Episode runs once per event (audit High, 2026-10-23): the event
     // row is locked, and the one-event-one-episode guard above is
     // asked again under the lock. A second Start that raced the first waits

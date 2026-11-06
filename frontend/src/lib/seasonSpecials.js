@@ -23,6 +23,7 @@
 import { useCallback, useState } from 'react';
 import { allSlots } from './seasonPage';
 import { formatDay, formatTime, errorText } from './releaseSchedule';
+import { withSkippedNote } from './snapshotFreeze';
 
 export const SPECIAL_KINDS = [
   { key: 'bonus', label: 'Bonus episode', hint: 'An event between two Sundays: its own episode and its own release day.' },
@@ -218,7 +219,7 @@ export function useSeasonSpecials({ api, showId, onChanged = null, setToast = nu
     error,
     clearError: () => setError(null),
     add: (body) => act(() => api.post(`${base}/specials`, body), (d) => `${d?.label || 'Special'} added${d?.moved_from ? ` (the event left E${d.moved_from})` : ''}.`),
-    update: (id, body) => act(() => api.patch(`${base}/specials/${id}`, body), 'Saved.'),
+    update: (id, body) => act(() => api.patch(`${base}/specials/${id}`, body), (d) => withSkippedNote('Saved.', d?.snapshot_skipped, { applies: 'the special' })),
     remove: (id) => act(() => api.delete(`${base}/specials/${id}`), 'Special removed; its event is back in the library.'),
     makeTwoParter: (slotId) => act(() => api.post(`${base}/two-parters`, { slot_id: slotId }), (d) => `Two-parter: ${d?.part_one || 'Part 1'} and ${d?.part_two || 'Part 2'}.`),
     undoTwoParter: (id) => act(() => api.delete(`${base}/two-parters/${id}`), 'Two-parter undone; Part 2\'s slot is open again.'),
