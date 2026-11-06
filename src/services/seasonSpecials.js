@@ -395,6 +395,14 @@ async function updateSpecial(sequelize, showId, specialId, body = {}) {
     // A1.1: the special's episode (snapshotted below) is locked before the special.
     const seen = await lockSpecial(sequelize, showId, specialId, transaction, { lock: false });
     await lockEpisodes(sequelize, [seen.episode_id], { transaction });
+    // A1.3-0 (C3): a new event (W) is locked before the special (P), so an
+    // event change takes the canonical order E -> W -> P; takeEvent's own
+    // FOR UPDATE below then finds the event already held.
+    if (body.event_id && UUID_RE.test(String(body.event_id))) {
+      await sequelize.query(
+        'SELECT id FROM world_events WHERE id = :eventId AND show_id = :showId AND deleted_at IS NULL FOR UPDATE',
+        { replacements: { eventId: body.event_id, showId }, transaction });
+    }
     const row = await lockSpecial(sequelize, showId, specialId, transaction);
     if (row.episode_id) assertEpisodesLocked(transaction, [row.episode_id]);
     if (!KINDS.includes(row.kind)) throw new SpecialsError('A two-parter is changed from its slots.', 400, 'SEASON_SPECIAL_INVALID');
@@ -606,7 +614,9 @@ async function createTwoParter(sequelize, showId, body = {}) {
     // A1.1: Part 1's episode (stamped below) is locked before the slots are
     // written; its slot is read again under the lock, in case it started since.
     await lockEpisodes(sequelize, [one.episode_id], { transaction });
-    const [[oneNow]] = await sequelize.query('SELECT episode_id FROM season_slots WHERE id = :id FOR UPDATE', { replacements: { id: one.id }, transaction });
+    // A1.3-0 (C4b): both parts' slots locked together, in id order.
+    await sequelize.query('SELECT id FROM season_slots WHERE id IN (:ids) ORDER BY id FOR UPDATE', { replacements: { ids: [one.id, two.id] }, transaction });
+    const [[oneNow]] = await sequelize.query('SELECT episode_id FROM season_slots WHERE id = :id', { replacements: { id: one.id }, transaction });
     if (String(oneNow?.episode_id || '') !== String(one.episode_id || '')) {
       throw new RetryableConflictError('This episode slot changed while it was being saved. Nothing was saved: try again.', 'SEASON_CHANGED_RETRY');
     }

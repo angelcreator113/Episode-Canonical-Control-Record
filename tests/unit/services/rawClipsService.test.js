@@ -5,6 +5,13 @@
  */
 
 const clips = require('../../../src/services/rawClipsService');
+// A1.3-0 (C1): the attach reads the upload's own row first (none here), then
+// the episode's deleted_at (live here), then inserts.
+const attachDefault = (sql) => {
+  if (/FROM episode_raw_clips WHERE id = :id/.test(sql)) return [[]];
+  if (/SELECT deleted_at FROM episodes/.test(sql)) return [[{ deleted_at: null }]];
+  return [[{ id: 'ep' }]];
+};
 
 const seq = (...results) => {
   const query = jest.fn();
@@ -278,7 +285,7 @@ describe('Teleprompter audit 8 and 14 (2026-10-24): take fields with the upload'
 
   test('createClip inserts beat_number with the row', async () => {
     // A1.1: the INSERT runs in its own transaction, after the episode's share lock.
-    const query = jest.fn(async (sql) => (/INSERT INTO episode_raw_clips/.test(sql) ? [[{ id: 'c1', beat_number: 4 }]] : [[{ id: 'ep' }]]));
+    const query = jest.fn(async (sql) => (/INSERT INTO episode_raw_clips/.test(sql) ? [[{ id: 'c1', beat_number: 4 }]] : attachDefault(sql)));
     const db = { query, transaction: async (fn) => fn({}) };
     await clips.createClip(db, { id: 'c1', episode_id: 'ep', performer: 'lala', s3_key_raw: 'k', beat_number: 4 });
     const inserts = () => query.mock.calls.filter(([sql]) => /INSERT INTO episode_raw_clips/.test(sql));
@@ -570,12 +577,15 @@ describe('A1.1: a clip attaches under its episode\'s share lock, once per upload
   afterEach(() => { jest.useRealTimers(); jest.restoreAllMocks(); });
 
   test('the share lock comes first, then the INSERT ... ON CONFLICT (id) DO NOTHING', async () => {
-    const query = jest.fn(async (sql) => (/INSERT INTO episode_raw_clips/.test(sql) ? [[{ id: 'c1' }]] : [[{ id: 'ep' }]]));
+    const query = jest.fn(async (sql) => (/INSERT INTO episode_raw_clips/.test(sql) ? [[{ id: 'c1' }]] : attachDefault(sql)));
     await clips.createClip(db(query), clip);
     const sqls = query.mock.calls.map(([sql]) => sql);
     expect(sqls[0]).toMatch(/SET LOCAL lock_timeout/);
     expect(sqls[1]).toMatch(/FROM episodes WHERE id IN \(:ids\) ORDER BY id FOR SHARE/);
-    expect(sqls[2]).toMatch(/ON CONFLICT \(id\) DO NOTHING/);
+    // A1.3-0 (C1): the same upload's row first, then the episode's deleted check, then the insert.
+    expect(sqls[2]).toMatch(/FROM episode_raw_clips WHERE id = :id/);
+    expect(sqls[3]).toMatch(/SELECT deleted_at FROM episodes WHERE id = :episodeId/);
+    expect(sqls[4]).toMatch(/ON CONFLICT \(id\) DO NOTHING/);
   });
 
   test('a lock wait that times out is tried again with the same id; it attaches on a later try', async () => {
@@ -586,7 +596,7 @@ describe('A1.1: a clip attaches under its episode\'s share lock, once per upload
         if (tries < 3) throw lockTimeout();
         return [[{ id: opts.replacements.id }]];
       }
-      return [[{ id: 'ep' }]];
+      return attachDefault(sql);
     });
     const pending = clips.createClip(db(query), clip);
     await jest.runAllTimersAsync();
@@ -596,7 +606,7 @@ describe('A1.1: a clip attaches under its episode\'s share lock, once per upload
   });
 
   test('still busy after three tries: a 503 that says the file is uploaded; no other error is retried', async () => {
-    const busy = jest.fn(async (sql) => { if (/INSERT INTO episode_raw_clips/.test(sql)) throw lockTimeout(); return [[{ id: 'ep' }]]; });
+    const busy = jest.fn(async (sql) => { if (/INSERT INTO episode_raw_clips/.test(sql)) throw lockTimeout(); return attachDefault(sql); });
     const pending = clips.createClip(db(busy), clip);
     const outcome = expect(pending).rejects.toMatchObject({ status: 503, message: expect.stringMatching(/file is uploaded: tap Retry/) });
     await jest.runAllTimersAsync();
@@ -604,7 +614,7 @@ describe('A1.1: a clip attaches under its episode\'s share lock, once per upload
     expect(busy.mock.calls.filter(([sql]) => /INSERT INTO/.test(sql))).toHaveLength(3);
 
     const checkErr = Object.assign(new Error('violates check constraint'), { original: { code: '23514' } });
-    const bad = jest.fn(async (sql) => { if (/INSERT INTO/.test(sql)) throw checkErr; return [[{ id: 'ep' }]]; });
+    const bad = jest.fn(async (sql) => { if (/INSERT INTO/.test(sql)) throw checkErr; return attachDefault(sql); });
     await expect(clips.createClip(db(bad), clip)).rejects.toBe(checkErr);
     expect(bad.mock.calls.filter(([sql]) => /INSERT INTO/.test(sql))).toHaveLength(1);
   });
@@ -613,7 +623,7 @@ describe('A1.1: a clip attaches under its episode\'s share lock, once per upload
     const taken = (row) => jest.fn(async (sql) => {
       if (/INSERT INTO episode_raw_clips/.test(sql)) return [[]];
       if (/FROM episode_raw_clips WHERE id = :id/.test(sql)) return [[row]];
-      return [[{ id: 'ep' }]];
+      return attachDefault(sql);
     });
     const same = await clips.createClip(db(taken({ id: 'c1', episode_id: 'ep', attached_key: clip.s3_key_raw, attached_deleted_at: null })), clip);
     expect(same).toMatchObject({ id: 'c1' });
@@ -624,5 +634,38 @@ describe('A1.1: a clip attaches under its episode\'s share lock, once per upload
       .rejects.toMatchObject({ status: 409 });
     await expect(clips.createClip(db(taken({ id: 'c1', episode_id: 'ep', attached_key: clip.s3_key_raw, attached_deleted_at: '2026-11-06' })), clip))
       .rejects.toMatchObject({ status: 409, message: expect.stringMatching(/removed/) });
+  });
+});
+
+describe('A1.3-0 (C1): an episode deleted while the take uploaded', () => {
+  const clip = { id: 'c1', episode_id: 'ep', performer: 'lala', s3_key_raw: 'episodes/ep/raw-clips/c1/original.mp4' };
+  const db = (query) => ({ query, transaction: async (fn) => fn({}) });
+  beforeEach(() => {
+    jest.spyOn(console, 'warn').mockImplementation(() => {});
+    jest.spyOn(console, 'error').mockImplementation(() => {});
+  });
+  afterEach(() => jest.restoreAllMocks());
+
+  test('a deleted (or missing) episode refuses the take with CLIP_EPISODE_DELETED; nothing is inserted', async () => {
+    for (const episodeRows of [[{ deleted_at: '2026-11-06T10:00:00Z' }], []]) {
+      const query = jest.fn(async (sql) => {
+        if (/FROM episode_raw_clips WHERE id = :id/.test(sql)) return [[]];
+        if (/SELECT deleted_at FROM episodes/.test(sql)) return [episodeRows];
+        return [[{ id: 'ep' }]];
+      });
+      await expect(clips.createClip(db(query), clip)).rejects.toMatchObject({ status: 409, code: clips.CLIP_EPISODE_DELETED });
+      expect(query.mock.calls.filter(([sql]) => /INSERT INTO/.test(sql))).toHaveLength(0);
+    }
+  });
+
+  test('the same upload\'s row is returned before the deleted check: an attached clip is never refused', async () => {
+    const query = jest.fn(async (sql) => {
+      if (/FROM episode_raw_clips WHERE id = :id/.test(sql)) return [[{ id: 'c1', episode_id: 'ep', attached_key: clip.s3_key_raw, attached_deleted_at: null }]];
+      if (/SELECT deleted_at FROM episodes/.test(sql)) return [[{ deleted_at: '2026-11-06T10:00:00Z' }]];
+      return [[{ id: 'ep' }]];
+    });
+    expect(await clips.createClip(db(query), clip)).toMatchObject({ id: 'c1' });
+    expect(query.mock.calls.some(([sql]) => /SELECT deleted_at FROM episodes/.test(sql))).toBe(false);
+    expect(query.mock.calls.filter(([sql]) => /INSERT INTO/.test(sql))).toHaveLength(0);
   });
 });
