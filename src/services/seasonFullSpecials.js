@@ -462,11 +462,18 @@ async function moveToStory(sequelize, showId, specialId) {
 async function moveToNextSeason(sequelize, showId, eventId) {
   return sequelize.transaction(async (transaction) => {
     const pic = await activePicture(sequelize, showId, transaction);
+    // A1.1: a started special's episode (moved and snapshotted below) is
+    // locked before the event and the special (episode-first; a terms
+    // reopen locks the episode, then its event).
+    const seen = await eventRow(sequelize, showId, eventId, { transaction });
+    const seenOwn = await specialOfEvent(sequelize, pic.arc.id, seen, { transaction });
+    await lockEpisodes(sequelize, [seenOwn?.episode_id], { transaction });
     const ev = await eventRow(sequelize, showId, eventId, { transaction, lock: true });
     const next = await nextSeason(sequelize, pic.arc, { transaction });
     if (!next) throw new SpecialsError('There is no next season yet: set it up from the Season page first.', 409, 'SEASON_NEXT_NOT_FOUND');
     if (!next.open_slot_id) throw new SpecialsError(`Season ${next.season_number} has no open episode: every slot has an event or an episode.`, 409, 'SEASON_NEXT_FULL');
     const own = await specialOfEvent(sequelize, pic.arc.id, ev, { transaction, lock: true });
+    if (own?.episode_id) assertEpisodesLocked(transaction, [own.episode_id]);
     if (own?.accepted_at) throw new SpecialsError(`"${ev.name}" is done as ${specialLabel(own)}: it stays where it aired.`, 409, 'SEASON_SPECIAL_LOCKED');
     const slotService = require('./seasonSlotService');
     if (own?.episode_id) {

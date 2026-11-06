@@ -38,6 +38,7 @@ Every transaction that writes an episode's Start snapshot (`episodes.season_cont
 | `seasonSetupService.updateSetup` | was arc and slots, then episodes; **now** the started drafts' episodes first | reordered |
 | `seasonSetupService.applyPlacement` | **now** the placed episodes first | reordered |
 | `seasonFullSpecials.swapIntoSlot` | was world event, special, slot, then episode (the opposite of a terms reopen: a deadlock); **now** episode first | reordered |
+| `seasonFullSpecials.moveToNextSeason` | was world event, special, then the special's episode (`unmirror`, then `placeEpisodeIn`): the opposite of a terms reopen; **now** episode first | reordered (amendment) |
 | `seasonSpecials.updateSpecial` | was special, then episode; **now** episode first | reordered |
 | `seasonSpecials.createTwoParter` | Part 1's episode is now locked before the slots are written, and its slot read again under the lock | reordered |
 | `seasonSpecials.removeTwoParter`, `startPartTwo` | was two-parter, then episode; **now** Part 1's episode first. Part 2's new episode is made by the transaction itself. | reordered |
@@ -53,6 +54,25 @@ A transaction that only learns its episode from rows it locks later:
 4. checks that the episode it now finds is one it locked (`assertEpisodesLocked`).
 
 If someone moved it in between, the transaction stops with 409 `SEASON_CHANGED_RETRY` before writing anything.
+
+## Known separate risk: Start regeneration (not changed by A1.1)
+
+Start Episode's own transaction (`episodeGeneratorService.generateEpisodeFromEvent`) locks the source world event first (`FOR UPDATE`). When it regenerates an episode, it then soft-deletes the replaced episode (`UPDATE episodes … deleted_at`). That is event first, then episode: the opposite of the episode-first order.
+
+**Before A1.1:** `swapIntoSlot` and `moveToNextSeason` also locked the event before the episode. They could deadlock with a terms reopen (episode, then event), but not with Start.
+
+**After A1.1:** they lock the episode first. They no longer deadlock with a terms reopen, but they **can** deadlock with Start regeneration. This needs a regenerate of a special's started episode from its event, at the same moment as that special is swapped into a weekly slot or moved to the next season. A local test reproduced it (`40P01` on the swap).
+
+**What happens when it does:**
+- Postgres detects the deadlock and rolls one transaction back whole; no data is half-written.
+- If the swap or move is the one rolled back, it answers 409 `RETRY`.
+- If Start is the one rolled back, Start fails as a whole, since its writes are one transaction.
+
+**The fix:** lock the replaced episode before the event in Start's transaction (episode-first). It needs its own approval and is not part of A1.1.
+
+The other Start-adjacent risks noted in the A1.1 review are also separate follow-ups:
+- re-keying green screen when a multipart retry finds its clip;
+- duplicate clips from a re-sent one-request upload.
 
 ## Raw-clip identity
 
@@ -86,11 +106,11 @@ The slot assignment is now one transaction, so a failure leaves no slot half-ass
   - a clip and a save in both orders;
   - two uploads, and a clip waiting for a held episode;
   - clip identity;
-  - the swap-against-reopen deadlock;
+  - the swap-against-reopen and move-to-next-season-against-reopen deadlocks;
   - setup edits against intention saves;
   - Start's assignment rolling back, and the setup step being cleared.
 
-  The swap test reproduces a `40P01` deadlock on the code before A1.1.
+  The swap test reproduces a `40P01` deadlock on the code before A1.1, and the move test on the PR's first commit (`91cfa7d3`).
 - **Unit tests:**
   - `tests/unit/utils/episodeLocks.test.js`: the helper's rules;
   - `tests/unit/services/rawClipsService.test.js`: the share lock, retries and identity;
