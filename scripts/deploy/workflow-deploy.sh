@@ -98,6 +98,11 @@ MIGRATE_SEARCH_PATH=public
 # "<from> <to>" while a deploy that moved the tree has not yet restarted the
 # API; removed by a successful restart (Task #2948).
 DEPLOY_MARKER="$HOME/.episode-deploy-unfinished"
+# "<from> <to>" written by a successful restart: the API was restarted on
+# <to>, healthy on the box, coming from <from> (D-21, 2026-11-06). The plan
+# reports it so a re-run at <to> is checked against what actually happened,
+# not against the commit alone.
+DEPLOY_FINISHED="$HOME/.episode-deploy-finished"
 # The target whose migrate phase succeeded, ledger re-checked; the deploy and
 # restart phases refuse any other. Removed when a migrate phase starts and by
 # a successful restart.
@@ -317,6 +322,41 @@ unfinished_deploy_of() {
     if [ -d "$backup" ]; then echo "the deploy's frontend backup ~/${backup#"$HOME"/}"; return 0; fi
   done
   return 1
+}
+
+# Prints "<stage> <from>" for the box's current commit $1 (D-21, 2026-11-06):
+#   unfinished <from>  a workflow deploy moved the tree to $1 and its restart
+#                      has not succeeded; the API still runs <from>'s code
+#   finished <from>    a workflow restart on $1 succeeded (healthy on the box),
+#                      coming from <from>
+#   none -             no workflow record names $1 (moved by hand, or before
+#                      these records existed)
+# Reads the two records only; changes nothing.
+box_stage_of() {
+  local head="$1" from to
+  if [ -f "$DEPLOY_MARKER" ]; then
+    read -r from to <"$DEPLOY_MARKER" 2>/dev/null || true
+    if [ "${to:-}" = "$head" ] && printf '%s' "${from:-}" | grep -qE '^[0-9a-f]{40}$'; then
+      echo "unfinished $from"; return 0
+    fi
+  fi
+  if [ -f "$DEPLOY_FINISHED" ]; then
+    from=""; to=""
+    read -r from to <"$DEPLOY_FINISHED" 2>/dev/null || true
+    if [ "${to:-}" = "$head" ] && printf '%s' "${from:-}" | grep -qE '^[0-9a-f]{40}$'; then
+      echo "finished $from"; return 0
+    fi
+  fi
+  echo "none -"
+}
+
+# The commit the API last ran before the deploy that moves the tree from $1:
+# $1 itself, unless an unfinished deploy put the tree at $1, in which case the
+# API still runs that deploy's <from> (D-21). Changes nothing.
+marker_from_for() {
+  local head="$1" stage from
+  read -r stage from < <(box_stage_of "$head")
+  if [ "$stage" = "unfinished" ]; then echo "$from"; else echo "$head"; fi
 }
 
 # Prints the pm2 restart count and status of one app, nothing else.
@@ -567,6 +607,12 @@ phase_plan() {
   local old
   old="$(git rev-parse HEAD)"
   echo "PLAN_OLD_SHA=$old"
+  # D-21: what the workflow records say put the box at $old. The deploy job
+  # checks it against the release summary's base before any snapshot.
+  local box_stage box_from
+  read -r box_stage box_from < <(box_stage_of "$old")
+  echo "PLAN_BOX_STAGE=$box_stage"
+  if [ "$box_from" != "-" ]; then echo "PLAN_BOX_FROM=$box_from"; fi
   if [ "$old" = "$TARGET" ]; then
     # A re-run after a stop past the fast-forward, or a box already moved by
     # hand: carry on so the migrate and restart phases finish the job.
@@ -652,8 +698,10 @@ phase_deploy() {
     if ! git merge --ff-only --quiet "$TARGET"; then
       die "git merge --ff-only $TARGET was refused." "The tree was not moved."
     fi
-    # Unfinished until the restart phase succeeds (Task #2948).
-    printf '%s %s\n' "$head" "$TARGET" >"$DEPLOY_MARKER"
+    # Unfinished until the restart phase succeeds (Task #2948). <from> is the
+    # commit the API still runs: kept across a chain of unfinished deploys (D-21).
+    printf '%s %s\n' "$(marker_from_for "$head")" "$TARGET" >"$DEPLOY_MARKER.new"
+    mv -f "$DEPLOY_MARKER.new" "$DEPLOY_MARKER"
     echo "Fast-forwarded $head -> $TARGET ($(git diff --name-only "$head" "$TARGET" | wc -l | tr -d ' ') files)."
   fi
 
@@ -886,7 +934,13 @@ phase_restart() {
   echo "VOICE_WORKER_AFTER=$(pm2_status "$VOICE_WORKER_APP")"
   echo "RESTART_HEAD=$(git rev-parse HEAD)"
   # The deploy is finished: the API runs the tree's code (Task #2948), and a
-  # later deploy phase needs its own run's migrate phase.
+  # later deploy phase needs its own run's migrate phase. Recorded first, so
+  # a re-run of this run can show what happened (D-21).
+  local stage from
+  read -r stage from < <(box_stage_of "$TARGET")
+  if [ "$stage" = "none" ]; then from="$TARGET"; fi
+  printf '%s %s\n' "$from" "$TARGET" >"$DEPLOY_FINISHED.new"
+  mv -f "$DEPLOY_FINISHED.new" "$DEPLOY_FINISHED"
   rm -f "$DEPLOY_MARKER" "$DEPLOY_MIGRATED"
   remove_stage "$STAGE" || echo "The next migrate phase removes it."
   prune_backups
