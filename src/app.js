@@ -1183,14 +1183,22 @@ try {
   console.error('✗ Failed to load layers routes:', e.message);
 }
 
-// YouTube Training routes
-try {
-  const youtubeRoutes = require('./routes/youtube');
-  app.use('/api/youtube', youtubeRoutes);
-  console.log('✓ YouTube training routes loaded');
-} catch (e) {
-  console.error('✗ Failed to load youtube routes:', e.message);
-}
+// YouTube Training routes: disabled (P0-0 security containment, 2026-11-06).
+// youtubeService passed the request's URL into a shell command (decision
+// pack SAFETY-TRIAGE S1), and nothing in the app calls these routes. Every
+// /api/youtube request, signed in or not, is answered 410 here, so neither
+// routes/youtube.js nor youtubeService is loaded. Both files, the
+// AITrainingData model and its rows stay as they are; turning the API back
+// on is a revert of this block. YouTube distribution metadata and
+// thumbnails are separate routes (worldEvents/distribution, /api/v1/youtube-thumbnails).
+app.use('/api/youtube', (req, res) => {
+  res.status(410).json({
+    error: 'Gone',
+    code: 'YOUTUBE_TRAINING_DISABLED',
+    message: 'The YouTube training API is disabled.',
+  });
+});
+console.log('✓ YouTube training routes disabled (410)');
 
 // Development seed routes — F-AUTH-1 Step 3 CP10 Item 7: Tier 5 env-gated mount,
 // now opt-in: ENABLE_SEED_ROUTES=true and never NODE_ENV=production (see the
