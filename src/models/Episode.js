@@ -322,21 +322,24 @@ module.exports = (sequelize) => {
    * §8(aa) M6 a deleted episode's ledger rows leave her balance, and a
    * restored one's come back (Task #2284).
    */
-  async function setDeletedAt(episode, deletedAt) {
+  async function setDeletedAt(episode, deletedAt, { transaction: outer } = {}) {
     const { syncCoinsAfterEpisodeChange } = require('../services/coinLedgerSync');
-    return sequelize.transaction(async (transaction) => {
+    // In the caller's transaction when it gives one (A1.2c: the delete runs
+    // under the episode lock, after the filmed check), else in its own.
+    const work = async (transaction) => {
       episode.deleted_at = deletedAt;
       await episode.save({ transaction });
       await syncCoinsAfterEpisodeChange(sequelize, episode.show_id, { transaction });
       return episode;
-    });
+    };
+    return outer ? work(outer) : sequelize.transaction(work);
   }
 
   /**
    * Mark episode as deleted (soft delete)
    */
-  Episode.prototype.softDelete = async function () {
-    return setDeletedAt(this, new Date());
+  Episode.prototype.softDelete = async function (options = {}) {
+    return setDeletedAt(this, new Date(), options);
   };
 
   /**

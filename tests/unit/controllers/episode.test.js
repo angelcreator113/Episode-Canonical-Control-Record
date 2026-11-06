@@ -343,6 +343,43 @@ describe('Episode Controller - Real Tests', () => {
   });
 
   describe('deleteEpisode()', () => {
+    // A1.2c: the delete runs in a transaction under the episode lock, after
+    // the filmed check (frozenAt null here: no raw clips).
+    let frozenAt = null;
+    beforeEach(() => {
+      frozenAt = null;
+      let n = 0;
+      models.Episode.sequelize = {
+        transaction: jest.fn(async (fn) => fn({ id: `tx-${(n += 1)}`, LOCK: { UPDATE: 'UPDATE' } })),
+        query: jest.fn(async (sql, opts = {}) => {
+          if (/FROM episodes WHERE id IN/.test(sql)) return [opts.replacements.ids.map((id) => ({ id }))];
+          if (/episode_raw_clips/.test(sql)) return [[{ frozen_at: frozenAt }]];
+          return [[]];
+        }),
+      };
+    });
+
+    test('a filmed episode is refused (409 EPISODE_SNAPSHOT_FROZEN) and nothing is deleted (A1.2c)', async () => {
+      frozenAt = new Date('2026-10-23T20:23:51Z');
+      const mockEpisode = {
+        id: 1,
+        toJSON: jest.fn().mockReturnValue({ id: 1 }),
+        destroy: jest.fn().mockResolvedValue(true),
+        softDelete: jest.fn().mockResolvedValue(true),
+      };
+      models.Episode.findByPk = jest.fn().mockResolvedValue(mockEpisode);
+      mockReq.params = { id: '1' };
+      mockReq.query = { hard: 'true' };
+
+      await episodeController.deleteEpisode(mockReq, mockRes);
+
+      expect(mockRes.status).toHaveBeenCalledWith(409);
+      expect(mockRes.json).toHaveBeenCalledWith(expect.objectContaining({ code: 'EPISODE_SNAPSHOT_FROZEN' }));
+      expect(mockEpisode.softDelete).not.toHaveBeenCalled();
+      expect(mockEpisode.destroy).not.toHaveBeenCalled();
+      mockReq.query = {};
+    });
+
     test('should delete episode', async () => {
       const mockEpisode = {
         id: 1,
@@ -357,7 +394,7 @@ describe('Episode Controller - Real Tests', () => {
 
       await episodeController.deleteEpisode(mockReq, mockRes);
 
-      expect(mockEpisode.softDelete).toHaveBeenCalled();
+      expect(mockEpisode.softDelete).toHaveBeenCalledWith({ transaction: expect.anything() });
       expect(mockRes.json).toHaveBeenCalledWith(
         expect.objectContaining({
           message: expect.stringContaining('deleted'),

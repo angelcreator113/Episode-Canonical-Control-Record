@@ -18,6 +18,7 @@ const { CANONICAL_BEATS } = require('../constants/canonicalBeats');
 const { findLiveLinkedEpisode, eventEpisodeConflictError } = require('../utils/eventEpisodeLink');
 const { lockEpisodes, RetryableConflictError } = require('../utils/episodeLocks');
 const { findStartBlockers, startBlockersFrom, startRefusalError } = require('./startReadinessService');
+const { findFrozenDeletedEpisode } = require('../utils/frozenEpisode');
 const { findIdempotentStart, loadStartReplay, META_KEY: IDEMPOTENCY_META_KEY } = require('./startEpisodeIdempotency');
 const { takePriceSnapshot } = require('./dealPriceSnapshot');
 const { eventCreatorOrganizer } = require('../utils/eventOrganizer');
@@ -678,7 +679,9 @@ Return ONLY JSON.` }],
       { replacements: { eventId }, transaction }
     );
     const liveUnderLock = await findLiveLinkedEpisode(models.sequelize, eventId, { transaction });
-    const [lockedBlocker] = startBlockersFrom({ liveEpisode: liveUnderLock, replacingEpisodeId });
+    // A1.2c (Q-7 Layer 2): asked again under the event lock.
+    const frozenUnderLock = replacingEpisodeId ? null : await findFrozenDeletedEpisode(models.sequelize, eventId, { transaction });
+    const [lockedBlocker] = startBlockersFrom({ liveEpisode: liveUnderLock, frozenDeleted: frozenUnderLock, eventId, replacingEpisodeId });
     if (lockedBlocker) {
       // A retry that raced its own first attempt (same Idempotency-Key)
       // finds that attempt's episode here and answers with it.

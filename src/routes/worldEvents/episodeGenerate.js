@@ -20,6 +20,7 @@ const { dealPriceRequiredBody, DEAL_PRICE_REQUIRED_CODE } = require('../../servi
 const { offerDecisionBody, OFFER_DECISION_CODES } = require('../../services/startOfferDecision');
 const { loadScopedEvent } = require('../../utils/eventScope');
 const { getModels } = require('./helpers');
+const { isFrozenEpisodeError } = require('../../utils/frozenEpisode');
 
 // ═══════════════════════════════════════════════════════════════════════
 // POST /world/:showId/events/:eventId/generate-episode
@@ -139,6 +140,11 @@ router.post('/world/:showId/events/:eventId/generate-episode', requireAuth, aiRa
     if (OFFER_DECISION_CODES.includes(error.code)) {
       console.warn('Generate episode refused:', error.message);
       return res.status(error.status).json(offerDecisionBody(error));
+    }
+    // A1.2c (Q-7): the event's filmed episode was deleted; it never starts again.
+    if (isFrozenEpisodeError(error)) {
+      console.warn('Generate episode refused:', error.message);
+      return res.status(409).json(error.toJSON());
     }
     if (error instanceof require('../../services/episodeLocationsService').EpisodeLocationsError) {
       console.warn('Generate episode refused:', error.message);
