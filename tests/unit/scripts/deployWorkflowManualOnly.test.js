@@ -28,7 +28,13 @@ function block(key) {
 
 describe('the Deploy workflow is manual only', () => {
   test('its only trigger is Run workflow (workflow_dispatch); a push or merge queues nothing', () => {
-    expect(block('on')).toEqual(['  workflow_dispatch:']);
+    // Only one trigger key at the top of `on:`. Since D-21 (2026-11-06) the
+    // dispatch carries inputs (the pinned commit), so lines below it are its
+    // inputs, indented under workflow_dispatch, never another trigger.
+    const on = block('on');
+    expect(on[0]).toBe('  workflow_dispatch:');
+    expect(on.filter((l) => /^ {2}\S/.test(l))).toEqual(['  workflow_dispatch:']);
+    expect(on.slice(1).every((l) => /^ {4}/.test(l))).toBe(true);
   });
 
   test('its job still runs only on main, only when DEPLOY_ENABLED, in the production environment', () => {

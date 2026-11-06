@@ -37,7 +37,7 @@ const BACKUP_KEEP_LINE = /^BACKUP_KEEP=.*$/m.exec(SCRIPT_TEXT)[0];
 const MIGRATE_FNS = ['die', 'redact', 'scrub_credential', 'require_clean_tree', 'pending_check', 'processes_using', 'remove_stage',
   'clean_stages', 'stage_release', 'verify_stage', 'finish_migrate', 'phase_migrate', 'require_migrated'];
 const RESTART_FNS = ['die', 'redact', 'require_at_target', 'require_migrated', 'verify_stage', 'pending_check',
-  'processes_using', 'remove_stage', 'pm2_state', 'pm2_status', 'prune_backups', 'phase_restart'];
+  'processes_using', 'remove_stage', 'pm2_state', 'pm2_status', 'prune_backups', 'box_stage_of', 'phase_restart'];
 
 const GIT_ENV = {
   GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@t', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@t',
@@ -198,7 +198,7 @@ function run(body, { fns = MIGRATE_FNS, target = TARGET, env = {} } = {}) {
     `PHASE=migrate; TARGET=${target}; APP_DIR="${app}"; export PHASE_PID=$$`,
     'API_APP=episode-api-prod-hotfix; WORKER_APP=episode-worker; HEALTH_URL=http://localhost:3000/health',
     'MIGRATE_ENV="$HOME/.episode-migrate.env"; DEPLOY_MIGRATED="$HOME/.episode-deploy-migrated"',
-    'DEPLOY_MARKER="$HOME/.episode-deploy-unfinished"; STAGE_ROOT="$HOME/.episode-stage"',
+    'DEPLOY_MARKER="$HOME/.episode-deploy-unfinished"; DEPLOY_FINISHED="$HOME/.episode-deploy-finished"; STAGE_ROOT="$HOME/.episode-stage"',
     STAGE_PATHS_LINE,
     LOCK_TIMEOUT_LINE,
     SEARCH_PATH_LINE,
@@ -319,7 +319,7 @@ describe('a failed migration leaves the live directory unchanged and blocks the 
     // The deploy phase then refuses before touching anything.
     const deploy = run('PHASE=deploy; phase_deploy', {
       fns: ['die', 'redact', 'require_migrated', 'require_clean_tree', 'build_heap_mb', 'running_vite_builds',
-        'memory_lines', 'fetch_artifact', 'install_artifact', 'phase_deploy'],
+        'memory_lines', 'fetch_artifact', 'install_artifact', 'box_stage_of', 'marker_from_for', 'phase_deploy'],
       env: { ARTIFACT_URL: 'none', ARTIFACT_SHA256: 'none' },
     });
     expect(deploy.status).toBe(1);
@@ -362,7 +362,7 @@ describe('the target must stay the approved commit', () => {
     git('merge', '-q', '--ff-only', TARGET);
     fs.writeFileSync(path.join(bin, 'pm2'), `#!/usr/bin/env bash\necho "pm2 $*" >>"${calls}"\n`, { mode: 0o755 });
     const res = run('PHASE=restart; phase_restart', {
-      fns: ['die', 'redact', 'require_at_target', 'require_migrated', 'pm2_state', 'pm2_status', 'phase_restart'],
+      fns: ['die', 'redact', 'require_at_target', 'require_migrated', 'pm2_state', 'pm2_status', 'box_stage_of', 'phase_restart'],
     });
     expect(res.status).toBe(1);
     expect(res.err).toMatch(/STOPPED \(restart\): the migrate phase has not succeeded/);

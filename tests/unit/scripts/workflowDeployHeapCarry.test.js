@@ -114,7 +114,9 @@ describe('the phases call them where they must', () => {
 
   test('deploy marks the deploy unfinished right after the fast-forward, and builds with the explicit heap', () => {
     const deploy = phase('deploy');
-    expect(deploy.indexOf('printf \'%s %s\\n\' "$head" "$TARGET" >"$DEPLOY_MARKER"')).toBeGreaterThan(deploy.indexOf('git merge --ff-only --quiet "$TARGET"'));
+    // D-21: <from> is the commit the API still runs (kept across unfinished deploys), written whole.
+    expect(deploy.indexOf('printf \'%s %s\\n\' "$(marker_from_for "$head")" "$TARGET" >"$DEPLOY_MARKER.new"')).toBeGreaterThan(deploy.indexOf('git merge --ff-only --quiet "$TARGET"'));
+    expect(deploy).toMatch(/mv -f "\$DEPLOY_MARKER\.new" "\$DEPLOY_MARKER"/);
     expect(deploy).toMatch(/heap="\$\(build_heap_mb\)"/);
     expect(deploy).toMatch(/NODE_OPTIONS="--max-old-space-size=\$\{heap\}" timeout -k 30 "\$BUILD_TIMEOUT_S" npx vite build/);
     expect(deploy).not.toMatch(/\(cd frontend && npx vite build\)/);
@@ -176,8 +178,8 @@ exit 1
     fs.writeFileSync(path.join(bin, 'pgrep'), '#!/usr/bin/env bash\necho "pgrep $*" >>"$HOME/pgrep.log"\nif [ -n "$STUB_KEYING" ]; then printf "%s\\n" $STUB_KEYING; exit 0; fi\nexit 1\n', { mode: 0o755 });
     const res = spawnSync('bash', ['-c', [
       'set -euo pipefail',
-      ['die', 'redact', 'require_clean_tree', 'pending_check', 'unfinished_deploy_of', 'running_green_removals', 'phase_plan'].map(fn).join('\n'),
-      `PHASE=plan; TARGET=${TARGET}; DEPLOY_MARKER="$HOME/.episode-deploy-unfinished"`,
+      ['die', 'redact', 'require_clean_tree', 'pending_check', 'unfinished_deploy_of', 'running_green_removals', 'box_stage_of', 'phase_plan'].map(fn).join('\n'),
+      `PHASE=plan; TARGET=${TARGET}; DEPLOY_MARKER="$HOME/.episode-deploy-unfinished"; DEPLOY_FINISHED="$HOME/.episode-deploy-finished"`,
       `cd "${app}"`,
       'phase_plan',
     ].join('\n')], { env: { PATH: `${bin}:/usr/bin:/bin`, HOME: tmp, ...env }, encoding: 'utf8' });

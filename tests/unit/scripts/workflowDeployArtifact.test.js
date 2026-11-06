@@ -116,8 +116,8 @@ cp "$STUB_PACK" "$out"
     const res = spawnSync('bash', ['-c', [
       'set -euo pipefail',
       ['die', 'redact', 'require_clean_tree', 'build_heap_mb', 'running_vite_builds', 'memory_lines',
-        'fetch_artifact', 'install_artifact', 'phase_deploy'].map(fn).join('\n'),
-      `PHASE=deploy; TARGET=${TARGET}; BUILD_TIMEOUT_S=1200; MEMINFO=/nonexistent; DEPLOY_MARKER="$HOME/.episode-deploy-unfinished"`,
+        'fetch_artifact', 'install_artifact', 'box_stage_of', 'marker_from_for', 'phase_deploy'].map(fn).join('\n'),
+      `PHASE=deploy; TARGET=${TARGET}; BUILD_TIMEOUT_S=1200; MEMINFO=/nonexistent; DEPLOY_MARKER="$HOME/.episode-deploy-unfinished"; DEPLOY_FINISHED="$HOME/.episode-deploy-finished"`,
       // The migrate-record and ledger guard passes here; workflowDeployStagedMigrate tests it.
       'require_migrated() { :; }',
       `cd "${app}"`,

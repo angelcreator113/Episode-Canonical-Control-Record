@@ -12,6 +12,8 @@
 
 It runs only when Evoni starts it: **Run workflow** on the Actions tab, on `main` (browser; GitHub Mobile cannot start it). A merge no longer queues a run (Evoni, 2026-10-12): before that, each merge queued one, and a newer merge cancelled the one waiting for approval. A run deploys the head of `main` at the moment it starts. The job waits in the `production` environment until Evoni approves it. A running deploy is never cancelled.
 
+**Pinned to a commit (D-21, Evoni 2026-11-06).** Run workflow asks for **`expected_sha`**: the full 40-character commit from the deploy preparation note. The run stops before building anything, and again before taking any production credential, if `main` is anywhere else. That is what happened in Deploy #198, where a PR merged after preparation shipped too. An optional **`expected_prs`** (for example `3727,3730`) makes it stop if the range holds any other PR, or misses one. Before approval, the build job's **release summary** on the run page lists every commit and PR since the last successful deploy, plus the new migrations and whether the frontend changed. After approval, the run checks that production is at the commit that summary started from, before any snapshot is touched. Both checks **fail closed** (D-21 review, 2026-11-06): a baseline the run cannot find stops it before building (§4, "Baseline unknown"), and a box already at the target passes only when its own deploy record says a Deploy run from that baseline put it there (§4, "Box at the target without a record"). The box keeps two one-line records for this: `~/.episode-deploy-unfinished` ("<from> <to>": the tree moved, the restart has not succeeded; `<from>` is the commit the API still runs) and `~/.episode-deploy-finished` ("<from> <to>": a restart on `<to>` succeeded). The plan reports them as `PLAN_BOX_STAGE` and `PLAN_BOX_FROM`. A third input, **`baseline_sha`**, stays empty except in that one recovery.
+
 **Which merges queue a run (#2862).** A merge whose changed files are *all* docs (`docs/**`, or any `.md` file anywhere) queues no run, so it needs no approval. A merge that touches anything else queues one: code, a migration, a package file, a script, or the workflow itself, even alongside docs. Docs-only changes reach the box with the next code deploy, because each deploy fast-forwards to its commit. **Queue:**
 - At most one run waits for approval.
 - At most one, the newest, is pending behind it. A newer push cancels the older pending run.
@@ -275,7 +277,7 @@ If a run starts after #2863 merges but before step 1, it stops at **Check config
 ### 2.4 Turn it on and approve the first run
 
 1. Add the variable `DEPLOY_ENABLED` = `true`.
-2. Start a run: Actions → **Deploy** → **Run workflow** on `main` (browser). Merging a PR does not start one.
+2. Start a run: Actions → **Deploy** → **Run workflow** on `main` (browser). Paste the full commit SHA into **expected_sha** (and, if wanted, the PR numbers into **expected_prs**). Leave **baseline_sha** empty (§4, "Baseline unknown"). Merging a PR does not start one.
 3. Approve it (§3) and watch the steps. **Evoni's approval of this first run is when the Rule 7 decision takes effect** (decision item 7).
 
 To turn the workflow off at any time, set `DEPLOY_ENABLED` to anything but `true`, or delete it.
@@ -362,7 +364,7 @@ Each run waits at **Deploy to production** with "Waiting for review". GitHub not
 2. Tap **Review deployments**, tick **production**, then **Approve and deploy** (or **Reject**).
 3. If GitHub Mobile does not show the review button, use the browser. The page and buttons are the same.
 
-Before approving, check the run's commit: it is the one you merged. A run left waiting expires after 30 days. A newer push replaces a waiting run.
+Before approving, open the run's **Release summary** (the build job's summary): the target is the commit you pinned, and the list of commits, PRs and migrations is exactly what you mean to ship. If anything is unexpected, **Reject**. A run left waiting expires after 30 days. A newer push replaces a waiting run.
 
 ---
 
@@ -380,6 +382,19 @@ Read the step's log: the on-box output says where it stopped and what had alread
 | Deploy, after Migrate succeeded | Database migrated; the live tree is old or fast-forwarded and the API still runs the old code | See "Migrate succeeded, Deploy or Restart did not" below |
 | Restart | New code, possibly unhealthy; a worker that was online may not be restarted (a stopped one is never started); the database is migrated | Look at `pm2 logs` by hand; roll back the code (§6) or fix forward. See "Migrate succeeded, Deploy or Restart did not" below. "the migrate phase has not succeeded for …", "the staged release of … is gone", "does not hold exactly … files" or "the ledger check for … exited …": Deploy or Restart refused before changing anything, or before any `pm2` call. Start a new run; its Migrate applies anything missing |
 | Public health | On-box `/health` was fine; the public URL is not | Check the load balancer and target group; the box itself is up |
+
+**Baseline unknown (D-21).** The build job's release summary step stops with "Production's baseline is unknown" when the GitHub API lookup of the last successful Deploy run failed or found none. Nothing was built and nothing on the box changed. It never guesses.
+- **Lookup failed** (a GitHub outage, or the `actions: read` permission missing): start a new run later, unchanged.
+- **No successful run found**, or the lookup keeps failing: read the commit production runs, read-only. Use the last Deploy record, or on the box `git -C /home/ubuntu/episode-metadata rev-parse HEAD`. Then start a new run with that full commit as **`baseline_sha`**. The release summary labels it as given by you, not as the last successful deploy. Approve only if the list is what you mean to ship. The deploy job still stops before any snapshot if the box is not at that commit.
+- `baseline_sha` is refused when it contradicts a successful run the lookup did find. It cannot override a known baseline.
+
+**Box at the target without a record (D-21).** "The box is already at …, but no Deploy record on it says a deploy put it there": the box is at the commit this run would deploy, and neither record names it. Nothing was changed. An equal commit is not proof: the box may have been moved by hand, and the API may not run that code, or may run it without its migrations.
+1. Find out how the box got there: the Deploy run logs, and on the box `git reflog -5` and `pm2 status` (read-only).
+2. If a Deploy run did it, the record should be there. Do not go on until you know why it is not.
+3. If it was a hand deploy you mean to keep: finish it by hand (`DEVELOPMENT_WORKFLOW.md` §7.1: the migrations, a restart, `/health`). Then record it on the box, as one line: `printf '%s %s\n' <baseline> <target> > ~/.episode-deploy-finished`, where `<baseline>` is the commit the release summary started from. That is an explicit owner action; note it in the deploy record. A new run then passes as "finished" and verifies the deploy again (migrate check, restart, health).
+4. Otherwise roll the box back to the baseline by hand (§6). The next run then passes normally.
+
+The same message with "coming from …, not from the release summary's base" means the record names a different starting point than the summary. Work out which is right in the same way.
 
 **Migrate succeeded, Deploy or Restart did not.** The database already has the new schema. The old code keeps running on it, which is safe for the additive migrations this order assumes (§1, "Migrate before Deploy").
 - **Nothing needs undoing.** Never run the migration's `down` because of this, and do not restore the snapshot. Neither is a fix for a code failure, and both lose data once the new columns are in use.

@@ -38,7 +38,25 @@ on:
   # She starts each deploy herself with Run workflow on main (browser), so a
   # run is never queued behind, or cancelled by, the next merge. It deploys
   # the head of main at that moment, and still waits for her approval.
+  # Pinned (D-21, Evoni 2026-11-06): the run must be given the exact commit it
+  # is meant to deploy, and stops before building or touching production if
+  # main is anywhere else (Deploy #198 shipped a PR merged after the deploy
+  # was prepared). Before approval the build job lists every commit, PR and
+  # migration in the range; expected_prs, when given, must match it exactly.
   workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: "Exact 40-character commit to deploy (from the deploy preparation note)"
+        required: true
+        type: string
+      expected_prs:
+        description: "Optional: comma-separated PR numbers expected in the range, e.g. 3727,3730"
+        required: false
+        type: string
+      baseline_sha:
+        description: "Leave empty. Only when a run stopped with 'baseline unknown': the commit production runs (runbook §4)"
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -69,14 +87,55 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: read
+      # Reads the last successful Deploy run, for the release summary's base.
+      # A failed or empty lookup stops the run (fails closed; D-21 review).
+      actions: read
     outputs:
       sha256: ${{ steps.pack.outputs.sha256 }}
+      base_sha: ${{ steps.release.outputs.base_sha }}
     steps:
       - name: Check out the commit
         uses: actions/checkout@v4
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
+          # Full history: the release summary lists the range since production.
+          fetch-depth: 0
+
+      # D-21: before anything is built. Inputs reach the shell only through
+      # env, never interpolated into the script.
+      - name: Check the pinned commit
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+        run: bash scripts/deploy/check-pin.sh pin "$EXPECTED_SHA" "$GITHUB_SHA"
+
+      - name: Release summary (what this run will ship)
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_PRS: ${{ inputs.expected_prs }}
+          BASELINE_SHA: ${{ inputs.baseline_sha }}
+        run: |
+          # The lookup's failure is kept, never mistaken for "no earlier run".
+          lookup_ok=1
+          found="$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/deploy.yml/runs?branch=main&status=success&per_page=1" \
+            --jq '.workflow_runs[0].head_sha // empty')" || { lookup_ok=0; found=""; }
+          bash scripts/deploy/check-pin.sh resolve "$lookup_ok" "$found" "$BASELINE_SHA" >"$RUNNER_TEMP/resolve.out" || {
+            cat "$RUNNER_TEMP/resolve.out"
+            echo "**Stopped: production's baseline is unknown.** Nothing was built. See the runbook, §4 'Baseline unknown'." >>"$GITHUB_STEP_SUMMARY"
+            exit 1
+          }
+          grep -E '^::' "$RUNNER_TEMP/resolve.out" || true
+          base="$(grep -E '^BASE=[0-9a-f]{40}$' "$RUNNER_TEMP/resolve.out" | cut -d= -f2)"
+          source="$(grep -E '^SOURCE=(deploy-run|given)$' "$RUNNER_TEMP/resolve.out" | cut -d= -f2)"
+          set +e
+          bash scripts/deploy/release-summary.sh "$base" "$GITHUB_SHA" "$EXPECTED_PRS" "$source" >"$RUNNER_TEMP/release.md"
+          rc=$?
+          set -e
+          grep -vE '^(RELEASE_BASE=|::)' "$RUNNER_TEMP/release.md" >>"$GITHUB_STEP_SUMMARY" || true
+          grep -E '^::' "$RUNNER_TEMP/release.md" || true
+          echo "base_sha=$(grep -E '^RELEASE_BASE=[0-9a-f]*$' "$RUNNER_TEMP/release.md" | tail -1 | cut -d= -f2)" >>"$GITHUB_OUTPUT"
+          exit "$rc"
 
       - name: Set up Node 20
         uses: actions/setup-node@v4
@@ -124,6 +183,18 @@ jobs:
       SSM_DOCUMENT: PrimeStudios-Deploy
       RUNBOOK: docs/runbooks/deploy-workflow.md
     steps:
+      # D-21: the same pin, first in this job too, before any production
+      # credential is taken (a re-run or a restructure cannot skip it).
+      - name: Check the pinned commit
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+        run: |
+          if ! printf '%s' "$EXPECTED_SHA" | grep -qE '^[0-9a-f]{40}$' || [ "$EXPECTED_SHA" != "$GITHUB_SHA" ] || [ "$TARGET_SHA" != "$GITHUB_SHA" ]; then
+            echo "::error::Pinned commit mismatch: expected '${EXPECTED_SHA}', run ${GITHUB_SHA}, target ${TARGET_SHA}. Nothing was changed."
+            exit 1
+          fi
+          echo "Pinned commit confirmed: ${TARGET_SHA}."
+
       - name: Check configuration
         env:
           # An environment secret (production), so the log masks it (#2863).
@@ -186,6 +257,8 @@ jobs:
             echo "commits=$(get PLAN_COMMITS)"
             echo "migrations=$(get PLAN_MIGRATIONS)"
             echo "ok=$(get PLAN_OK)"
+            echo "box_stage=$(get PLAN_BOX_STAGE)"
+            echo "box_from=$(get PLAN_BOX_FROM)"
           } >>"$GITHUB_OUTPUT"
           grep -E '^PLAN_MIGRATION=[0-9A-Za-z._-]+\.js$' "$OUT" | cut -d= -f2- >"$RUNNER_TEMP/migrations.txt" || true
           # Files pending from a deploy that did not finish, carried into this run (Task #2948).
@@ -194,6 +267,19 @@ jobs:
             echo "::error::The plan did not finish (no PLAN_OK line). Nothing was changed."
             exit 1
           fi
+
+      # D-21: production must be at the commit the pre-approval release
+      # summary was computed from, so what was listed is what ships. Before any
+      # snapshot is removed or taken. A box already at the target passes only
+      # when its own deploy records say a workflow deploy from that base put it
+      # there (unfinished or finished); an equal commit alone is not enough.
+      - name: Check production is at the release summary's base
+        env:
+          BOX_SHA: ${{ steps.plan.outputs.old_sha }}
+          BASE_SHA: ${{ needs.build.outputs.base_sha }}
+          BOX_STAGE: ${{ steps.plan.outputs.box_stage }}
+          BOX_FROM: ${{ steps.plan.outputs.box_from }}
+        run: bash scripts/deploy/check-pin.sh base "$BOX_SHA" "$BASE_SHA" "$TARGET_SHA" "${BOX_STAGE:-none}" "$BOX_FROM"
 
       # RDS allows 100 manual snapshots, and each run keeps one (runs #145 and
       # #146 stopped at the snapshot on 2026-10-22). Keeps the newest
@@ -344,6 +430,7 @@ jobs:
           JOB_STATUS: ${{ job.status }}
           OLD_SHA: ${{ steps.plan.outputs.old_sha }}
           RESUME: ${{ steps.plan.outputs.resume }}
+          BOX_STAGE: ${{ steps.plan.outputs.box_stage }}
           COMMITS: ${{ steps.plan.outputs.commits }}
           MIGRATIONS: ${{ steps.plan.outputs.migrations }}
           SNAP: ${{ steps.snapshot.outputs.name }}
@@ -371,7 +458,7 @@ jobs:
             echo "| Commit | \`${TARGET_SHA}\` |"
             echo "| Box before | \`${OLD_SHA:-not read}\` |"
             if [ "$RESUME" = "1" ]; then
-              echo "| Mode | resumed: the box was already at this commit |"
+              echo "| Mode | resumed: the box was already at this commit (its deploy record: ${BOX_STAGE:-none}) |"
             fi
             echo "| Commits in range | ${COMMITS:-?} |"
             case "$PRUNE_NOTE" in
