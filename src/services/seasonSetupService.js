@@ -35,6 +35,7 @@ const {
 } = require('./seasonSlotService');
 const { episodeEventIdSql } = require('../utils/episodeEventSql');
 const { loadSeason } = require('./seasonLoader');
+const { lockEpisodes, assertEpisodesLocked } = require('../utils/episodeLocks');
 const { fromArc, seasonLines } = require('./seasonLine');
 const {
   seasonAiContext, careerGoals, askModel, isBudgetRefusal, bullets, phaseLine, threadLine, goalLine, debtLines,
@@ -323,6 +324,14 @@ async function nextNumbers(sequelize, showId, transaction) {
 
 const started = (slot) => Boolean(slot.episode_id || slot.locked_at || slot.accepted_at);
 
+/** The episodes of the season's started, not accepted slots: the ones updateSetup snapshots again. */
+function startedDraftEpisodeIds(season) {
+  if (!season) return [];
+  return season.slots
+    .filter((s) => s.episode_id && !s.accepted_at && s.episode_evaluation_status !== 'accepted')
+    .map((s) => s.episode_id);
+}
+
 /**
  * "Edit season": the title, tagline, part names, taglines and moods (emotional
  * arc, feed tone), and the split.
@@ -334,7 +343,9 @@ async function updateSetup(sequelize, showId, body) {
   const setup = normaliseSetup(body);
   const ranges = rangesOf(setup.split);
   return sequelize.transaction(async (transaction) => {
-    // The season in progress and its slots, locked for the edit.
+    // A1.1: the started drafts' episodes are locked first (episode-first),
+    // then the season in progress and its slots, locked for the edit.
+    await lockEpisodes(sequelize, startedDraftEpisodeIds(await loadSeason(sequelize, showId, { transaction })), { transaction });
     const season = await loadSeason(sequelize, showId, { transaction, lock: true });
     if (!season) throw new SeasonSetupError('This show has no season in progress to edit.', 404, 'SEASON_NOT_FOUND');
     const { arc } = season;
@@ -398,7 +409,9 @@ async function updateSetup(sequelize, showId, body) {
       }
     }
     // A started draft's season snapshot carries the part's name and tagline.
-    for (const sl of slots.filter((s) => s.episode_id && !s.accepted_at && s.evaluation_status !== 'accepted')) {
+    const drafts = slots.filter((s) => s.episode_id && !s.accepted_at && s.evaluation_status !== 'accepted');
+    assertEpisodesLocked(transaction, drafts.map((s) => s.episode_id));
+    for (const sl of drafts) {
       await snapshotEpisode(sequelize, { slotId: sl.id, episodeId: sl.episode_id, transaction });
     }
     return { arc_id: arc.id, season_number: arc.season_number || 1, moved, phases: nextPhases };
@@ -656,6 +669,8 @@ async function applyPlacement(sequelize, showId, items) {
     thingsSeen.add(thing);
   }
   return sequelize.transaction(async (transaction) => {
+    // A1.1: the episodes being placed, locked first (episode-first).
+    await lockEpisodes(sequelize, items.filter((x) => x.episode_id).map((x) => x.episode_id), { transaction });
     const [[arc]] = await sequelize.query(
       `SELECT id FROM show_arcs WHERE show_id = :showId AND status = 'active' AND deleted_at IS NULL
         ORDER BY arc_number ASC LIMIT 1`,

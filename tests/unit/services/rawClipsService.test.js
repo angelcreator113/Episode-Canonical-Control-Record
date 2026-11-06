@@ -277,13 +277,16 @@ describe('Teleprompter audit 8 and 14 (2026-10-24): take fields with the upload'
   const missing = (col) => Object.assign(new Error(`column "${col}" of relation "episode_raw_clips" does not exist`), { original: { code: '42703' } });
 
   test('createClip inserts beat_number with the row', async () => {
-    const query = jest.fn(async () => [[{ id: 'c1', beat_number: 4 }]]);
-    await clips.createClip({ query }, { id: 'c1', episode_id: 'ep', performer: 'lala', s3_key_raw: 'k', beat_number: 4 });
-    const [sql, { replacements }] = query.mock.calls[0];
+    // A1.1: the INSERT runs in its own transaction, after the episode's share lock.
+    const query = jest.fn(async (sql) => (/INSERT INTO episode_raw_clips/.test(sql) ? [[{ id: 'c1', beat_number: 4 }]] : [[{ id: 'ep' }]]));
+    const db = { query, transaction: async (fn) => fn({}) };
+    await clips.createClip(db, { id: 'c1', episode_id: 'ep', performer: 'lala', s3_key_raw: 'k', beat_number: 4 });
+    const inserts = () => query.mock.calls.filter(([sql]) => /INSERT INTO episode_raw_clips/.test(sql));
+    const [sql, { replacements }] = inserts()[0];
     expect(sql).toMatch(/label, beat_number, original_filename/);
     expect(replacements.beatNumber).toBe(4);
-    await clips.createClip({ query }, { id: 'c2', episode_id: 'ep', performer: 'lala', s3_key_raw: 'k' });
-    expect(query.mock.calls[1][1].replacements.beatNumber).toBeNull();
+    await clips.createClip(db, { id: 'c2', episode_id: 'ep', performer: 'lala', s3_key_raw: 'k' });
+    expect(inserts()[1][1].replacements.beatNumber).toBeNull();
   });
 
   test('storeTakeExtras keeps each field in its own UPDATE and reports one whose column is missing; never throws', async () => {
@@ -551,5 +554,75 @@ describe('green removal stops early when it cannot finish in time (Evoni, 2026-1
     // Stopped at 3.7 hours: never reads as under the limit.
     expect(errors.friendlyKeyError(new clips.KeyTooSlowError(3.7 * 3600))).toMatch(/^At this pace removing the green would take about 4 hours, too close to the four-hour limit, so it was stopped\./);
     expect(errors.friendlyKeyError(new clips.KeyTooSlowError(null))).toMatch(/^Removing the green made no progress in ten minutes, so it was stopped\. Nothing was changed/);
+  });
+});
+
+describe('A1.1: a clip attaches under its episode\'s share lock, once per upload id', () => {
+  const lockTimeout = () => Object.assign(new Error('canceling statement due to lock timeout'), { original: { code: '55P03' } });
+  const clip = { id: 'c1', episode_id: 'ep', performer: 'lala', s3_key_raw: 'episodes/ep/raw-clips/c1/original.mp4' };
+  const db = (query) => ({ query, transaction: async (fn) => fn({}) });
+
+  beforeEach(() => {
+    jest.useFakeTimers({ doNotFake: ['nextTick', 'setImmediate'] });
+    jest.spyOn(console, 'warn').mockImplementation(() => {});
+    jest.spyOn(console, 'error').mockImplementation(() => {});
+  });
+  afterEach(() => { jest.useRealTimers(); jest.restoreAllMocks(); });
+
+  test('the share lock comes first, then the INSERT ... ON CONFLICT (id) DO NOTHING', async () => {
+    const query = jest.fn(async (sql) => (/INSERT INTO episode_raw_clips/.test(sql) ? [[{ id: 'c1' }]] : [[{ id: 'ep' }]]));
+    await clips.createClip(db(query), clip);
+    const sqls = query.mock.calls.map(([sql]) => sql);
+    expect(sqls[0]).toMatch(/SET LOCAL lock_timeout/);
+    expect(sqls[1]).toMatch(/FROM episodes WHERE id IN \(:ids\) ORDER BY id FOR SHARE/);
+    expect(sqls[2]).toMatch(/ON CONFLICT \(id\) DO NOTHING/);
+  });
+
+  test('a lock wait that times out is tried again with the same id; it attaches on a later try', async () => {
+    let tries = 0;
+    const query = jest.fn(async (sql, opts) => {
+      if (/INSERT INTO episode_raw_clips/.test(sql)) {
+        tries += 1;
+        if (tries < 3) throw lockTimeout();
+        return [[{ id: opts.replacements.id }]];
+      }
+      return [[{ id: 'ep' }]];
+    });
+    const pending = clips.createClip(db(query), clip);
+    await jest.runAllTimersAsync();
+    expect(await pending).toMatchObject({ id: 'c1' });
+    const ids = query.mock.calls.filter(([sql]) => /INSERT INTO episode_raw_clips/.test(sql)).map(([, o]) => o.replacements.id);
+    expect(ids).toEqual(['c1', 'c1', 'c1']);
+  });
+
+  test('still busy after three tries: a 503 that says the file is uploaded; no other error is retried', async () => {
+    const busy = jest.fn(async (sql) => { if (/INSERT INTO episode_raw_clips/.test(sql)) throw lockTimeout(); return [[{ id: 'ep' }]]; });
+    const pending = clips.createClip(db(busy), clip);
+    const outcome = expect(pending).rejects.toMatchObject({ status: 503, message: expect.stringMatching(/file is uploaded: tap Retry/) });
+    await jest.runAllTimersAsync();
+    await outcome;
+    expect(busy.mock.calls.filter(([sql]) => /INSERT INTO/.test(sql))).toHaveLength(3);
+
+    const checkErr = Object.assign(new Error('violates check constraint'), { original: { code: '23514' } });
+    const bad = jest.fn(async (sql) => { if (/INSERT INTO/.test(sql)) throw checkErr; return [[{ id: 'ep' }]]; });
+    await expect(clips.createClip(db(bad), clip)).rejects.toBe(checkErr);
+    expect(bad.mock.calls.filter(([sql]) => /INSERT INTO/.test(sql))).toHaveLength(1);
+  });
+
+  test('the id taken by the same upload returns that row; by another upload (key or episode) it is refused', async () => {
+    const taken = (row) => jest.fn(async (sql) => {
+      if (/INSERT INTO episode_raw_clips/.test(sql)) return [[]];
+      if (/FROM episode_raw_clips WHERE id = :id/.test(sql)) return [[row]];
+      return [[{ id: 'ep' }]];
+    });
+    const same = await clips.createClip(db(taken({ id: 'c1', episode_id: 'ep', attached_key: clip.s3_key_raw, attached_deleted_at: null })), clip);
+    expect(same).toMatchObject({ id: 'c1' });
+    expect(same).not.toHaveProperty('attached_key');
+    await expect(clips.createClip(db(taken({ id: 'c1', episode_id: 'ep', attached_key: 'other/key.mp4', attached_deleted_at: null })), clip))
+      .rejects.toMatchObject({ status: 409 });
+    await expect(clips.createClip(db(taken({ id: 'c1', episode_id: 'ep-2', attached_key: clip.s3_key_raw, attached_deleted_at: null })), clip))
+      .rejects.toMatchObject({ status: 409 });
+    await expect(clips.createClip(db(taken({ id: 'c1', episode_id: 'ep', attached_key: clip.s3_key_raw, attached_deleted_at: '2026-11-06' })), clip))
+      .rejects.toMatchObject({ status: 409, message: expect.stringMatching(/removed/) });
   });
 });

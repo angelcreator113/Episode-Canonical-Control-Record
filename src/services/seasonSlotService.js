@@ -32,6 +32,7 @@
  */
 
 const { loadSeason } = require('./seasonLoader');
+const { lockEpisodes, requireTransaction, inTransaction } = require('../utils/episodeLocks');
 
 const SLOTS_PER_SEASON = 24;
 const DEFAULT_PHASES = [
@@ -404,6 +405,10 @@ async function roadmapOf(sequelize, season) {
  * phase) where they are empty, so the grounded script reads them.
  */
 async function snapshotEpisode(sequelize, { slotId, episodeId, transaction }) {
+  // A1.1: inside the caller's transaction, the episode locked first (a no-op
+  // when the caller already holds it, as every caller does).
+  requireTransaction(transaction, 'snapshotEpisode');
+  await lockEpisodes(sequelize, [episodeId], { transaction });
   const [[slot]] = await sequelize.query(
     `SELECT s.slot_number, s.season_number, s.phase, s.story_purpose, s.story_purposes, s.story_thread_id,
             s.career_focus, s.desired_pressure, s.show_id,
@@ -596,6 +601,9 @@ async function placeEpisode(sequelize, showId, slotId, episodeId) {
 
 /** placeEpisode inside a caller's transaction (the season setup's Save). */
 async function placeEpisodeIn(sequelize, showId, slotId, episodeId, transaction) {
+  // A1.1: the episode first, then its slot (the episode-first order).
+  requireTransaction(transaction, 'placeEpisodeIn');
+  await lockEpisodes(sequelize, [episodeId], { transaction });
   const slot = await lockSlot(sequelize, showId, slotId, transaction);
   assertFuture(slot);
   const [[episode]] = await sequelize.query(
@@ -622,7 +630,37 @@ async function placeEpisodeIn(sequelize, showId, slotId, episodeId, transaction)
       WHERE id = :slotId`,
     { replacements: { episodeId, eventId, slotId }, transaction });
   await snapshotEpisode(sequelize, { slotId, episodeId, transaction });
+  await clearSlotSetupFailure(sequelize, episodeId, transaction);
   return { slot_number: slot.slot_number, episode_id: episodeId, event_id: eventId };
+}
+
+/**
+ * An episode whose Start could not take a season slot carries a failed
+ * season_slot step in its setup_status (A1.1): placing it from the Roadmap
+ * marks that step complete, so the checklist's "Setup did not finish" goes
+ * away once the episode is in its slot. Nothing else in setup_status changes.
+ */
+let setupStatusColumn = null;
+async function clearSlotSetupFailure(sequelize, episodeId, transaction) {
+  // Before the setup_status migration the column is absent: nothing to clear.
+  if (setupStatusColumn === null) {
+    const [[col]] = await sequelize.query(
+      `SELECT 1 AS ok FROM information_schema.columns
+        WHERE table_schema = current_schema() AND table_name = 'episodes' AND column_name = 'setup_status'`,
+      { transaction });
+    setupStatusColumn = Boolean(col);
+  }
+  if (!setupStatusColumn) return;
+  await sequelize.query(
+    `UPDATE episodes
+        SET setup_status = jsonb_set(
+              jsonb_set(setup_status, '{steps,season_slot}', '{"status": "complete", "placed_from": "roadmap"}'::jsonb),
+              '{complete}',
+              to_jsonb(NOT EXISTS (
+                SELECT 1 FROM jsonb_each(setup_status->'steps') st
+                 WHERE st.key <> 'season_slot' AND st.value->>'status' IS DISTINCT FROM 'complete')))
+      WHERE id = :episodeId AND setup_status->'steps'->'season_slot'->>'status' = 'failed'`,
+    { replacements: { episodeId }, transaction });
 }
 
 /**
@@ -641,6 +679,16 @@ async function placeEpisodeIn(sequelize, showId, slotId, episodeId, transaction)
  * active season or no open slot (and, before the specials' migration, a full one).
  */
 async function assignOnStart(sequelize, { showId, eventId, episodeId, replacingEpisodeId = null, transaction }) {
+  // A1.1: one transaction (Start calls this without one), the new episode
+  // locked first; every write below is in it, so a failure leaves no slot
+  // half-assigned.
+  return inTransaction(sequelize, transaction, async (t) => {
+    await lockEpisodes(sequelize, [episodeId], { transaction: t });
+    return assignOnStartIn(sequelize, { showId, eventId, episodeId, replacingEpisodeId, transaction: t });
+  });
+}
+
+async function assignOnStartIn(sequelize, { showId, eventId, episodeId, replacingEpisodeId, transaction }) {
   if (replacingEpisodeId) {
     const [rows] = await sequelize.query(
       `UPDATE season_slots SET episode_id = :episodeId, updated_at = NOW()

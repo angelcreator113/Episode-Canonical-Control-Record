@@ -818,11 +818,21 @@ Return ONLY JSON.` }],
   // Season Arc (§8(ff) Q5, A7): the episode takes the slot its event is
   // pencilled into, else the earliest open slot, and the slot locks. Logged,
   // never fatal: an episode left in no slot is listed on the roadmap to place.
+  // A1.1: the assignment is one transaction, so a failure leaves no slot
+  // half-assigned; it is still never fatal, and never silent either: it is
+  // a failed setup step (the checklist's "Setup did not finish"), cleared
+  // when the episode is placed from the Roadmap.
+  let seasonSlotStep;
   try {
     const { assignOnStart } = require('./seasonSlotService');
-    await assignOnStart(models.sequelize, { showId, eventId, episodeId: episode.id, replacingEpisodeId });
+    const placedIn = await assignOnStart(models.sequelize, { showId, eventId, episodeId: episode.id, replacingEpisodeId });
+    seasonSlotStep = { status: 'complete', slot: placedIn ?? null };
   } catch (slotErr) {
     console.error('[EpisodeGenerator] Season slot assignment failed (non-blocking):', slotErr.message);
+    seasonSlotStep = {
+      status: 'failed',
+      reason: `the episode is in no season slot yet (${slotErr.message}). Place it from the Season Roadmap.`,
+    };
   }
 
   // Stamp the episode on the event's deliverables (Task #1814). Logged,
@@ -886,7 +896,7 @@ Return ONLY JSON.` }],
   // access is resilient even if a scope mutation slips in later edits.
   const scenePlanResult = await createScenePlanRows(episode, event, models, locations);
   const { scenePlanRows } = scenePlanResult;
-  const setupSteps = { scene_plan: scenePlanStep(scenePlanResult) };
+  const setupSteps = { scene_plan: scenePlanStep(scenePlanResult), season_slot: seasonSlotStep };
 
   // ── 3b. The approved invitation is this episode's invitation overlay ──
   // P10 (Evoni, 2026-09-30; Task #2386): approved before Start, it is

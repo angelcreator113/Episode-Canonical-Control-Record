@@ -632,6 +632,7 @@ export default function EpisodeProductionChecklist({ episode, showId, onScriptGe
                 {coverage && !coverage.complete ? coverage.text : null}
                 {setupStatus?.steps?.scene_plan?.failed?.length ? ` · ${setupStatus.steps.scene_plan.failed.map((f) => `beat ${f.beat}: ${f.reason}`).join('; ')}` : ''}
                 {setupStatus?.steps?.locations?.status === 'failed' ? ` · locations: ${setupStatus.steps.locations.reason}` : ''}
+                {setupStatus?.steps?.season_slot?.status === 'failed' ? ` · season slot: ${setupStatus.steps.season_slot.reason}` : ''}
               </span>
               <button type="button" onClick={resumeSetup} disabled={resuming || loading} data-testid="setup-resume" style={{ padding: '4px 10px', borderRadius: 6, border: 'none', background: 'var(--lala-lavender)', color: 'var(--text-inverse)', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>
                 {resuming ? 'Resuming…' : 'Resume setup'}

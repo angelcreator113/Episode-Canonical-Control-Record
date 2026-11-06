@@ -63,6 +63,8 @@ const STALE_MESSAGE = 'Stopped before it finished (the server restarted). The or
 // Stopped with the Stop button (Evoni, 2026-10-31).
 const CANCELLED_MESSAGE = 'Stopped. The original and any earlier cut-out are unchanged. Press Retry to start again.';
 
+const { lockEpisodes, isLockConflict } = require('../utils/episodeLocks');
+
 class RawClipError extends Error {
   constructor(status, message) {
     super(message);
@@ -274,6 +276,34 @@ async function createClip(sequelize, clip) {
     thumbKey: clip.thumbnail_key || null, thumbUrl: clip.thumbnail_url || null,
     keyStatus: clip.key_status || 'none', keyStrength: clip.key_strength || 'medium',
   };
+  // A1.1: the clip attaches under a share lock on its episode, so it takes
+  // turns with a Start snapshot write (which locks the episode for update)
+  // while two uploads to one episode never wait on each other. The S3
+  // upload is long done by now: no lock is held during any transfer.
+  // The clip's own id (made once per upload) is its identity: a retry with
+  // the same id finds the row it already made instead of a second one, and
+  // an id that belongs to a different upload is refused, never reused.
+  const attach = (transaction) => attachClip(sequelize, clip, replacements, transaction);
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      return await sequelize.transaction(attach);
+    } catch (err) {
+      if (!isLockConflict(err)) throw err;
+      if (attempt >= ATTACH_ATTEMPTS) {
+        console.error(`[rawClips] clip ${clip.id} not attached after ${attempt} tries: ${err.message}`);
+        throw new RawClipError(503, 'The episode was busy, so the clip was not saved yet. Its file is uploaded: tap Retry.');
+      }
+      console.warn(`[rawClips] clip ${clip.id} attach waited too long (try ${attempt}); trying again`);
+      await new Promise((resolve) => setTimeout(resolve, ATTACH_BACKOFF_MS * attempt));
+    }
+  }
+}
+
+const ATTACH_ATTEMPTS = 3;
+const ATTACH_BACKOFF_MS = 250;
+
+async function attachClip(sequelize, clip, replacements, transaction) {
+  await lockEpisodes(sequelize, [clip.episode_id], { transaction, mode: 'share' });
   const [[row]] = await sequelize.query(
     `INSERT INTO episode_raw_clips
        (id, episode_id, show_id, performer, guest_name, label, beat_number, original_filename, content_type,
@@ -282,9 +312,23 @@ async function createClip(sequelize, clip) {
      VALUES (:id, :episodeId, :showId, :performer, :guestName, :label, :beatNumber, :originalFilename, :contentType,
         :size, :duration, :width, :height, :keyRaw, :urlRaw, :thumbKey, :thumbUrl,
         :keyStatus, :keyStrength, NOW(), NOW())
+     ON CONFLICT (id) DO NOTHING
      RETURNING ${COLUMNS}`,
-    { replacements });
-  return shapeRow(row);
+    { replacements, transaction });
+  if (row) return shapeRow(row);
+  // The id is taken: the same upload's row (a retry after its answer was
+  // lost) is returned as it is; anything else is refused.
+  const [[existing]] = await sequelize.query(
+    `SELECT ${COLUMNS}, s3_key_raw AS attached_key, deleted_at AS attached_deleted_at FROM episode_raw_clips WHERE id = :id`,
+    { replacements: { id: clip.id }, transaction });
+  const same = existing && String(existing.episode_id) === String(clip.episode_id) && existing.attached_key === clip.s3_key_raw;
+  if (!same) {
+    console.error(`[rawClips] clip id ${clip.id} belongs to another upload; nothing was saved`);
+    throw new RawClipError(409, 'This upload could not be saved as a new clip. Nothing was saved: start the upload again.');
+  }
+  if (existing.attached_deleted_at) throw new RawClipError(409, 'This clip was removed while it was being saved. Upload it again to keep it.');
+  const { attached_key: _key, attached_deleted_at: _deleted, ...kept } = existing;
+  return shapeRow(kept);
 }
 
 /**

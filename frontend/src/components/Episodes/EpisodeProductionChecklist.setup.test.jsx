@@ -50,6 +50,18 @@ describe('Resume setup', () => {
     await waitFor(() => expect(api.get).toHaveBeenCalledWith('/api/v1/episode-brief/ep-1/plan'));
   });
 
+  test('a Start that could not take a season slot says so, with where to fix it (A1.1)', async () => {
+    plan = Array.from({ length: 14 }, (_, i) => ({ beat_number: i + 1, locked: false }));
+    coverage = { complete: true, present: 14, expected: 14, missing: [], duplicates: [], unknown: 0, text: '14 of 14 beats' };
+    renderChecklist({ id: 'ep-1', show_id: 'show-1', setup_status: { complete: false, steps: {
+      scene_plan: { status: 'complete' },
+      season_slot: { status: 'failed', reason: 'the episode is in no season slot yet (slot boom). Place it from the Season Roadmap.' },
+    } } });
+    const banner = await screen.findByTestId('setup-incomplete');
+    expect(banner.textContent).toContain('Setup did not finish.');
+    expect(banner.textContent).toContain('season slot: the episode is in no season slot yet (slot boom). Place it from the Season Roadmap.');
+  });
+
   test('a complete episode shows no repair', async () => {
     plan = Array.from({ length: 14 }, (_, i) => ({ beat_number: i + 1, locked: false }));
     coverage = { complete: true, present: 14, expected: 14, missing: [], duplicates: [], unknown: 0, text: '14 of 14 beats' };

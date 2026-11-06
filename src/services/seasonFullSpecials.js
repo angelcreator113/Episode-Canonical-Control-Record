@@ -54,6 +54,7 @@
  */
 
 const specials = require('./seasonSpecials');
+const { lockEpisodes, assertEpisodesLocked } = require('../utils/episodeLocks');
 
 const { SpecialsError, specialLabel } = specials;
 const ISO = /^(\d{4})-(\d{2})-(\d{2})/;
@@ -367,6 +368,12 @@ async function unmirror(sequelize, { episodeId, day, transaction }) {
 async function swapIntoSlot(sequelize, showId, eventId, slotId) {
   return sequelize.transaction(async (transaction) => {
     const pic = await activePicture(sequelize, showId, transaction);
+    // A1.1: the episode a special's swap moves (and snapshots) is locked
+    // before the event and the special (episode-first; a terms reopen locks
+    // the episode, then its event).
+    const seen = await eventRow(sequelize, showId, eventId, { transaction });
+    const seenOwn = await specialOfEvent(sequelize, pic.arc.id, seen, { transaction });
+    await lockEpisodes(sequelize, [seenOwn?.episode_id], { transaction });
     const ev = await eventRow(sequelize, showId, eventId, { transaction, lock: true });
     const slot = pic.slots.find((s) => String(s.id) === String(slotId || ''));
     if (!slot) throw new SpecialsError('That episode is not in the season in progress.', 404, 'SEASON_SLOT_NOT_FOUND');
@@ -376,6 +383,7 @@ async function swapIntoSlot(sequelize, showId, eventId, slotId) {
       || (ev.used_in_episode_id && String(s.live_episode_id || '') === String(ev.used_in_episode_id)));
     if (elsewhere) throw new SpecialsError(`"${ev.name}" is E${elsewhere.slot_number}'s: move it from the Roadmap instead.`, 409, 'SEASON_SWAP_REFUSED');
     const own = await specialOfEvent(sequelize, pic.arc.id, ev, { transaction, lock: true });
+    if (own?.episode_id) assertEpisodesLocked(transaction, [own.episode_id]);
     if (own?.accepted_at) throw new SpecialsError(`"${ev.name}" is done as ${specialLabel(own)}: it stays where it aired.`, 409, 'SEASON_SWAP_REFUSED');
     if (ev.used_in_episode_id && !own?.episode_id) {
       throw new SpecialsError(`"${ev.name}" has started an episode outside the season: place the episode from the Roadmap.`, 409, 'SEASON_SWAP_REFUSED');

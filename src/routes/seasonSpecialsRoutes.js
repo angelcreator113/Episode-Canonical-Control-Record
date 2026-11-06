@@ -29,6 +29,7 @@ const express = require('express');
 const { requireAuth } = require('../middleware/auth');
 const specials = require('../services/seasonSpecials');
 const full = require('../services/seasonFullSpecials');
+const { asRetryable } = require('../utils/episodeLocks');
 
 const router = express.Router();
 const modelsOf = (req) => req.app?.get?.('models') || require('../models');
@@ -39,6 +40,8 @@ for (const name of ['showId', 'specialId', 'twoPartId', 'eventId']) {
 }
 
 function fail(res, err, where) {
+  // A1.1: a deadlock or a lock wait that timed out rolled everything back: a 409 to retry.
+  err = asRetryable(err);
   if (err instanceof specials.SpecialsError || (err?.status && err?.code)) {
     console.warn(`[seasonSpecials] ${where} refused (${err.code}):`, err.message);
     return res.status(err.status).json({ success: false, error: err.message, code: err.code });
