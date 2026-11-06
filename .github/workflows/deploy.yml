@@ -53,6 +53,10 @@ on:
         description: "Optional: comma-separated PR numbers expected in the range, e.g. 3727,3730"
         required: false
         type: string
+      baseline_sha:
+        description: "Leave empty. Only when a run stopped with 'baseline unknown': the commit production runs (runbook §4)"
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -84,6 +88,7 @@ jobs:
     permissions:
       contents: read
       # Reads the last successful Deploy run, for the release summary's base.
+      # A failed or empty lookup stops the run (fails closed; D-21 review).
       actions: read
     outputs:
       sha256: ${{ steps.pack.outputs.sha256 }}
@@ -109,11 +114,22 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           EXPECTED_PRS: ${{ inputs.expected_prs }}
+          BASELINE_SHA: ${{ inputs.baseline_sha }}
         run: |
-          base="$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/deploy.yml/runs?branch=main&status=success&per_page=1" \
-            --jq '.workflow_runs[0].head_sha // empty' 2>/dev/null || true)"
+          # The lookup's failure is kept, never mistaken for "no earlier run".
+          lookup_ok=1
+          found="$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/deploy.yml/runs?branch=main&status=success&per_page=1" \
+            --jq '.workflow_runs[0].head_sha // empty')" || { lookup_ok=0; found=""; }
+          bash scripts/deploy/check-pin.sh resolve "$lookup_ok" "$found" "$BASELINE_SHA" >"$RUNNER_TEMP/resolve.out" || {
+            cat "$RUNNER_TEMP/resolve.out"
+            echo "**Stopped: production's baseline is unknown.** Nothing was built. See the runbook, §4 'Baseline unknown'." >>"$GITHUB_STEP_SUMMARY"
+            exit 1
+          }
+          grep -E '^::' "$RUNNER_TEMP/resolve.out" || true
+          base="$(grep -E '^BASE=[0-9a-f]{40}$' "$RUNNER_TEMP/resolve.out" | cut -d= -f2)"
+          source="$(grep -E '^SOURCE=(deploy-run|given)$' "$RUNNER_TEMP/resolve.out" | cut -d= -f2)"
           set +e
-          bash scripts/deploy/release-summary.sh "$base" "$GITHUB_SHA" "$EXPECTED_PRS" >"$RUNNER_TEMP/release.md"
+          bash scripts/deploy/release-summary.sh "$base" "$GITHUB_SHA" "$EXPECTED_PRS" "$source" >"$RUNNER_TEMP/release.md"
           rc=$?
           set -e
           grep -vE '^(RELEASE_BASE=|::)' "$RUNNER_TEMP/release.md" >>"$GITHUB_STEP_SUMMARY" || true
@@ -241,6 +257,8 @@ jobs:
             echo "commits=$(get PLAN_COMMITS)"
             echo "migrations=$(get PLAN_MIGRATIONS)"
             echo "ok=$(get PLAN_OK)"
+            echo "box_stage=$(get PLAN_BOX_STAGE)"
+            echo "box_from=$(get PLAN_BOX_FROM)"
           } >>"$GITHUB_OUTPUT"
           grep -E '^PLAN_MIGRATION=[0-9A-Za-z._-]+\.js$' "$OUT" | cut -d= -f2- >"$RUNNER_TEMP/migrations.txt" || true
           # Files pending from a deploy that did not finish, carried into this run (Task #2948).
@@ -252,13 +270,16 @@ jobs:
 
       # D-21: production must be at the commit the pre-approval release
       # summary was computed from, so what was listed is what ships. Before any
-      # snapshot is removed or taken.
+      # snapshot is removed or taken. A box already at the target passes only
+      # when its own deploy records say a workflow deploy from that base put it
+      # there (unfinished or finished); an equal commit alone is not enough.
       - name: Check production is at the release summary's base
         env:
           BOX_SHA: ${{ steps.plan.outputs.old_sha }}
           BASE_SHA: ${{ needs.build.outputs.base_sha }}
-          RESUME: ${{ steps.plan.outputs.resume }}
-        run: bash scripts/deploy/check-pin.sh base "$BOX_SHA" "$BASE_SHA" "$TARGET_SHA" "${RESUME:-0}"
+          BOX_STAGE: ${{ steps.plan.outputs.box_stage }}
+          BOX_FROM: ${{ steps.plan.outputs.box_from }}
+        run: bash scripts/deploy/check-pin.sh base "$BOX_SHA" "$BASE_SHA" "$TARGET_SHA" "${BOX_STAGE:-none}" "$BOX_FROM"
 
       # RDS allows 100 manual snapshots, and each run keeps one (runs #145 and
       # #146 stopped at the snapshot on 2026-10-22). Keeps the newest
@@ -409,6 +430,7 @@ jobs:
           JOB_STATUS: ${{ job.status }}
           OLD_SHA: ${{ steps.plan.outputs.old_sha }}
           RESUME: ${{ steps.plan.outputs.resume }}
+          BOX_STAGE: ${{ steps.plan.outputs.box_stage }}
           COMMITS: ${{ steps.plan.outputs.commits }}
           MIGRATIONS: ${{ steps.plan.outputs.migrations }}
           SNAP: ${{ steps.snapshot.outputs.name }}
@@ -436,7 +458,7 @@ jobs:
             echo "| Commit | \`${TARGET_SHA}\` |"
             echo "| Box before | \`${OLD_SHA:-not read}\` |"
             if [ "$RESUME" = "1" ]; then
-              echo "| Mode | resumed: the box was already at this commit |"
+              echo "| Mode | resumed: the box was already at this commit (its deploy record: ${BOX_STAGE:-none}) |"
             fi
             echo "| Commits in range | ${COMMITS:-?} |"
             case "$PRUNE_NOTE" in

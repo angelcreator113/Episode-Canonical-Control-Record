@@ -67,12 +67,21 @@ test('a base that is not an ancestor of the target fails (exit 1)', () => {
   expect(run(target, mid).code).toBe(1);
 });
 
-test('an unknown base lists the recent commits; with expected_prs it fails as unverifiable', () => {
+test('an unknown base fails closed (exit 4); the recent commits are listed for context only', () => {
   const r = run('', target);
-  expect(r.code).toBe(0);
-  expect(r.out).toMatch(/Production now:\*\* unknown/);
+  expect(r.code).toBe(4);
+  expect(r.out).toMatch(/Production now:\*\* unknown\. \*\*This run stops/);
+  expect(r.out).toMatch(/::error::Production's baseline is unknown/);
   expect(r.out.trim().split('\n').pop()).toBe('RELEASE_BASE=');
-  expect(run('', target, '3730').code).toBe(3);
+  expect(run('', target, '3730').code).toBe(4);
+});
+
+test('a base given as baseline_sha is labelled as given, not as the last successful Deploy', () => {
+  const r = run(base, target, '', 'given');
+  expect(r.code).toBe(0);
+  expect(r.out).toMatch(/Production now \(baseline_sha, given by the person starting the run/);
+  expect(r.out).not.toMatch(/last successful Deploy/);
+  expect(run(base, target).out).toMatch(/Production now \(last successful Deploy\)/);
 });
 
 test('a target that is not a commit fails (exit 1)', () => {

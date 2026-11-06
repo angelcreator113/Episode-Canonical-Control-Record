@@ -5,23 +5,25 @@
 # (base) to the pinned target: every commit and its PR, the migrations, and
 # whether the frontend changes. Written for $GITHUB_STEP_SUMMARY.
 #
-#   release-summary.sh <base_sha|""> <target_sha> [expected_prs]
+#   release-summary.sh <base_sha|""> <target_sha> [expected_prs] [base_source]
 #
-#   base_sha      the head of the last successful Deploy run; "" if unknown
+#   base_sha      production's baseline from check-pin.sh resolve: the head of
+#                 the last successful Deploy run, or baseline_sha
 #   target_sha    the pinned commit (already checked by check-pin.sh pin)
 #   expected_prs  optional, comma-separated PR numbers (e.g. "3727,3730").
 #                 When given, the run fails if the range holds a PR that is not
-#                 listed, or a listed PR is not in the range, or the base is
-#                 unknown (the list cannot then be verified).
+#                 listed, or a listed PR is not in the range.
+#   base_source   "deploy-run" (default) or "given" (baseline_sha), for the label
 #
 # Reads git only (run in a full-history checkout). Changes nothing.
-# Exit 0 = summary written; 3 = expected_prs mismatch or unverifiable;
+# Exit 0 = summary written; 3 = expected_prs mismatch; 4 = baseline unknown
+# (fails closed: the recent commits are listed for context only);
 # 1 = bad input (target missing, base not an ancestor of target).
 # Prints "RELEASE_BASE=<sha or empty>" as its last line for the workflow.
 # =============================================================================
 set -euo pipefail
 
-base="${1:-}"; target="${2:-}"; expected="${3:-}"
+base="${1:-}"; target="${2:-}"; expected="${3:-}"; source="${4:-deploy-run}"
 is_sha() { printf '%s' "${1:-}" | grep -qE '^[0-9a-f]{40}$'; }
 
 if ! is_sha "$target" || ! git cat-file -e "${target}^{commit}" 2>/dev/null; then
@@ -44,7 +46,11 @@ if [ -n "$base" ] && is_sha "$base" && git cat-file -e "${base}^{commit}" 2>/dev
     echo "::error::The last deployed commit ${base} is not an ancestor of ${target}. Nothing was built or changed."
     exit 1
   fi
-  echo "- **Production now (last successful Deploy):** \`${base}\`"
+  if [ "$source" = "given" ]; then
+    echo "- **Production now (baseline_sha, given by the person starting the run; checked against the box before any change):** \`${base}\`"
+  else
+    echo "- **Production now (last successful Deploy):** \`${base}\`"
+  fi
   range="${base}..${target}"
   count="$(git rev-list --count "$range")"
   echo "- **Commits:** ${count}"
@@ -86,16 +92,13 @@ if [ -n "$base" ] && is_sha "$base" && git cat-file -e "${base}^{commit}" 2>/dev
   fi
   echo "RELEASE_BASE=${base}"
 else
-  echo "- **Production now:** unknown (no earlier successful Deploy run was found)."
+  echo "- **Production now:** unknown. **This run stops:** what it would ship cannot be listed."
   echo
-  echo "Last 20 commits up to the target:"
+  echo "For context only, the last 20 commits up to the target:"
   echo
   git log -20 --format='- `%h` %s' "$target" | tr '|' '/'
-  if [ -n "$expected" ]; then
-    echo
-    echo "::error::expected_prs was given but the base is unknown, so the PR list cannot be verified. Nothing was built or changed."
-    echo "RELEASE_BASE="
-    exit 3
-  fi
+  echo
+  echo "::error::Production's baseline is unknown, so what this run would ship cannot be listed. Nothing was built or changed. See docs/runbooks/deploy-workflow.md, §4 'Baseline unknown'."
   echo "RELEASE_BASE="
+  exit 4
 fi
