@@ -99,11 +99,13 @@ async function syncBeatScenes(sequelize, episodeId) {
       continue;
     }
     // A concurrent sync may have made it: one live scene per beat (unique index).
+    // Production's scenes table has no `status` column (production_status is
+    // the scene's status), so the row names only columns both schemas have.
     const [created] = await sequelize.query(
       `INSERT INTO scenes (id, episode_id, scene_plan_id, scene_number, title, location, background_url, scene_set_id, scene_angle_id,
-                           duration_seconds, characters, ui_elements, dialogue_clips, scene_type, status, production_status, created_at, updated_at)
+                           duration_seconds, characters, ui_elements, dialogue_clips, scene_type, production_status, created_at, updated_at)
        VALUES (gen_random_uuid(), :episodeId, :scene_plan_id, :scene_number, :title, :location, :background_url, :scene_set_id, :scene_angle_id,
-               5.0, '[]', '[]', '[]', 'main', 'draft', 'draft', NOW(), NOW())
+               5.0, '[]', '[]', '[]', 'main', 'draft', NOW(), NOW())
        ON CONFLICT (scene_plan_id) WHERE deleted_at IS NULL AND scene_plan_id IS NOT NULL DO NOTHING
        RETURNING id`,
       { replacements: { episodeId, ...want, title: beat.beat_name || `Beat ${beat.beat_number}`, location: beat.set_name || null } });
