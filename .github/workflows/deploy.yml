@@ -38,7 +38,21 @@ on:
   # She starts each deploy herself with Run workflow on main (browser), so a
   # run is never queued behind, or cancelled by, the next merge. It deploys
   # the head of main at that moment, and still waits for her approval.
+  # Pinned (D-21, Evoni 2026-11-06): the run must be given the exact commit it
+  # is meant to deploy, and stops before building or touching production if
+  # main is anywhere else (Deploy #198 shipped a PR merged after the deploy
+  # was prepared). Before approval the build job lists every commit, PR and
+  # migration in the range; expected_prs, when given, must match it exactly.
   workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: "Exact 40-character commit to deploy (from the deploy preparation note)"
+        required: true
+        type: string
+      expected_prs:
+        description: "Optional: comma-separated PR numbers expected in the range, e.g. 3727,3730"
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -69,14 +83,43 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: read
+      # Reads the last successful Deploy run, for the release summary's base.
+      actions: read
     outputs:
       sha256: ${{ steps.pack.outputs.sha256 }}
+      base_sha: ${{ steps.release.outputs.base_sha }}
     steps:
       - name: Check out the commit
         uses: actions/checkout@v4
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
+          # Full history: the release summary lists the range since production.
+          fetch-depth: 0
+
+      # D-21: before anything is built. Inputs reach the shell only through
+      # env, never interpolated into the script.
+      - name: Check the pinned commit
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+        run: bash scripts/deploy/check-pin.sh pin "$EXPECTED_SHA" "$GITHUB_SHA"
+
+      - name: Release summary (what this run will ship)
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_PRS: ${{ inputs.expected_prs }}
+        run: |
+          base="$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/deploy.yml/runs?branch=main&status=success&per_page=1" \
+            --jq '.workflow_runs[0].head_sha // empty' 2>/dev/null || true)"
+          set +e
+          bash scripts/deploy/release-summary.sh "$base" "$GITHUB_SHA" "$EXPECTED_PRS" >"$RUNNER_TEMP/release.md"
+          rc=$?
+          set -e
+          grep -vE '^(RELEASE_BASE=|::)' "$RUNNER_TEMP/release.md" >>"$GITHUB_STEP_SUMMARY" || true
+          grep -E '^::' "$RUNNER_TEMP/release.md" || true
+          echo "base_sha=$(grep -E '^RELEASE_BASE=[0-9a-f]*$' "$RUNNER_TEMP/release.md" | tail -1 | cut -d= -f2)" >>"$GITHUB_OUTPUT"
+          exit "$rc"
 
       - name: Set up Node 20
         uses: actions/setup-node@v4
@@ -124,6 +167,18 @@ jobs:
       SSM_DOCUMENT: PrimeStudios-Deploy
       RUNBOOK: docs/runbooks/deploy-workflow.md
     steps:
+      # D-21: the same pin, first in this job too, before any production
+      # credential is taken (a re-run or a restructure cannot skip it).
+      - name: Check the pinned commit
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+        run: |
+          if ! printf '%s' "$EXPECTED_SHA" | grep -qE '^[0-9a-f]{40}$' || [ "$EXPECTED_SHA" != "$GITHUB_SHA" ] || [ "$TARGET_SHA" != "$GITHUB_SHA" ]; then
+            echo "::error::Pinned commit mismatch: expected '${EXPECTED_SHA}', run ${GITHUB_SHA}, target ${TARGET_SHA}. Nothing was changed."
+            exit 1
+          fi
+          echo "Pinned commit confirmed: ${TARGET_SHA}."
+
       - name: Check configuration
         env:
           # An environment secret (production), so the log masks it (#2863).
@@ -194,6 +249,16 @@ jobs:
             echo "::error::The plan did not finish (no PLAN_OK line). Nothing was changed."
             exit 1
           fi
+
+      # D-21: production must be at the commit the pre-approval release
+      # summary was computed from, so what was listed is what ships. Before any
+      # snapshot is removed or taken.
+      - name: Check production is at the release summary's base
+        env:
+          BOX_SHA: ${{ steps.plan.outputs.old_sha }}
+          BASE_SHA: ${{ needs.build.outputs.base_sha }}
+          RESUME: ${{ steps.plan.outputs.resume }}
+        run: bash scripts/deploy/check-pin.sh base "$BOX_SHA" "$BASE_SHA" "$TARGET_SHA" "${RESUME:-0}"
 
       # RDS allows 100 manual snapshots, and each run keeps one (runs #145 and
       # #146 stopped at the snapshot on 2026-10-22). Keeps the newest
