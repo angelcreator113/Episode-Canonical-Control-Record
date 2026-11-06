@@ -11,6 +11,8 @@ const {
   EpisodeAsset,
 } = models;
 const { NotFoundError, ValidationError, asyncHandler } = require('../middleware/errorHandler');
+// A1.2c: a filmed episode is not deleted (utils/frozenEpisode).
+const { filmedAt, deleteRefusal, isFrozenEpisodeError } = require('../utils/frozenEpisode');
 const { logger } = require('../middleware/auditLog');
 const AuditLogger = require('../services/AuditLogger');
 
@@ -21,8 +23,6 @@ const PresenceService = require('../services/PresenceService');
 const SocketService = require('../services/SocketService');
 const { normalizeTeaser } = require('../utils/episodeTeaser');
 const { parseAirDate } = require('../utils/episodeAirDate');
-const { lockEpisodes } = require('../utils/episodeLocks');
-const { filmedAt, deleteRefusal, isFrozenEpisodeError } = require('../utils/frozenEpisode');
 /* eslint-enable no-unused-vars */
 
 /**
@@ -842,7 +842,7 @@ module.exports = {
     const hardDelete = hard === 'true' && process.env.NODE_ENV !== 'production';
     try {
       await Episode.sequelize.transaction(async (transaction) => {
-        await lockEpisodes(Episode.sequelize, [episode.id], { transaction });
+        await require('../utils/episodeLocks').lockEpisodes(Episode.sequelize, [episode.id], { transaction });
         const frozenAt = await filmedAt(Episode.sequelize, episode.id, { transaction });
         if (frozenAt) throw deleteRefusal(episode.id, frozenAt);
         if (hardDelete) {
