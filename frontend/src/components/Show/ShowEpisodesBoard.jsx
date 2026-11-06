@@ -450,7 +450,7 @@ export default function ShowEpisodesBoard({ showId, episodes = [], total = null,
   return (
     <div className="show-episodes-board" data-testid="show-episodes-board">
       {removeError && (
-        <p className="seb-remove-error" role="alert" data-testid="seb-remove-error" style={{ margin: '0 0 12px', padding: '8px 12px', borderRadius: 8, background: 'var(--danger-soft, #FDECEA)', color: 'var(--danger-text, #8A1C1C)', fontSize: 13, overflowWrap: 'anywhere' }}>
+        <p className="seb-remove-error" role="alert" data-testid="seb-remove-error" style={{ margin: '0 0 12px', padding: '8px 12px', borderRadius: 8, background: 'var(--danger-bg)', color: 'var(--danger-text)', fontSize: 13, overflowWrap: 'anywhere' }}>
           {removeError}{' '}
           <button type="button" onClick={() => setRemoveError(null)} style={{ background: 'none', border: 0, padding: 0, color: 'inherit', textDecoration: 'underline', cursor: 'pointer', font: 'inherit' }}>Dismiss</button>
         </p>
