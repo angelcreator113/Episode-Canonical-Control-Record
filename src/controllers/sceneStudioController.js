@@ -1694,53 +1694,142 @@ exports.segmentObject = async (req, res) => {
 };
 
 // ── Scene Animation (Runway Image-to-Video) ──
+//
+// POST /api/v1/scenes/:id/animate (#3714 R1). Until this change the route
+// could not reach Runway (startImageToVideo was never exported), so it
+// failed on every call. It now:
+//   - runs only when SCENE_ANIMATE_ENABLED is exactly "true" (default off:
+//     a paid path that has never run stays off until it is switched on);
+//   - animates only an image recorded on this scene: its background, its
+//     angle's still or its scene set's base still (never a URL from the
+//     request that is not one of those);
+//   - takes duration 5 or 10 (the model's lengths), a prompt of at most
+//     1000 characters and a known camera motion;
+//   - submits through imageCostService.runImageCall: the daily budget gate
+//     and one ai_usage_logs row (Runway has no price yet, so the row is
+//     unpriced and the call is refused only once a cap is reached);
+//   - never submits twice: an ambiguous failure answers 502
+//     PROVIDER_OUTCOME_UNKNOWN (retryable: false), with the Runway task id
+//     when there is one, so the person checks before trying again.
+
+const ANIMATE_DURATIONS = Object.freeze([5, 10]);
+const ANIMATE_PROMPT_MAX = 1000;
+// The camera motions this codebase already sends to Runway
+// (sceneGenerationService CAMERA_MOTION_MAP); nothing else is forwarded.
+const ANIMATE_CAMERA_MOTIONS = Object.freeze(['static', 'slow_pan_right', 'slow_dolly_in', 'slow_zoom_out', 'dynamic_tracking']);
+
+function animateEnabled(env = process.env) {
+  return String(env.SCENE_ANIMATE_ENABLED || '').trim().toLowerCase() === 'true';
+}
+
+/** The images recorded on this scene that may be animated, by URL. */
+async function animationSources(scene) {
+  const sources = new Map();
+  const bg = scene.get ? scene.get('background_url') : scene.background_url;
+  if (bg) sources.set(bg, 'background');
+  const angleId = scene.get ? scene.get('scene_angle_id') : scene.scene_angle_id;
+  if (angleId) {
+    const angle = await SceneAngle.findByPk(angleId, { attributes: ['id', 'still_image_url'] });
+    if (angle && angle.still_image_url) sources.set(angle.still_image_url, 'angle_still');
+  }
+  const setId = scene.get ? scene.get('scene_set_id') : scene.scene_set_id;
+  if (setId) {
+    const set = await SceneSet.findByPk(setId, { attributes: ['id', 'base_still_url'] });
+    if (set && set.base_still_url) sources.set(set.base_still_url, 'set_base');
+  }
+  return sources;
+}
+
+function readAnimateInput(body = {}) {
+  const prompt = typeof body.prompt === 'string' ? body.prompt.trim() : '';
+  if (!prompt) return { error: 'Animation prompt is required' };
+  if (prompt.length > ANIMATE_PROMPT_MAX) return { error: `The animation prompt is limited to ${ANIMATE_PROMPT_MAX} characters` };
+  const duration = body.duration === undefined || body.duration === null || body.duration === '' ? 5 : Number(body.duration);
+  if (!ANIMATE_DURATIONS.includes(duration)) return { error: `Duration must be one of ${ANIMATE_DURATIONS.join(' or ')} seconds` };
+  const cameraMotion = body.camera_motion === undefined || body.camera_motion === null || body.camera_motion === '' ? 'static' : String(body.camera_motion);
+  if (!ANIMATE_CAMERA_MOTIONS.includes(cameraMotion)) return { error: `Unknown camera motion "${cameraMotion.slice(0, 40)}"` };
+  const imageUrl = typeof body.image_url === 'string' && body.image_url.trim() ? body.image_url.trim() : null;
+  return { prompt, duration, cameraMotion, imageUrl };
+}
+
+const OUTCOME_UNKNOWN_MESSAGE = 'Runway may have started this animation, but no definitive answer came back. It was not sent again. Check before trying again: a second try may be charged as a new animation.';
 
 exports.animateScene = async (req, res) => {
   try {
-    const { id } = req.params;
-    const { image_url, prompt, duration, camera_motion } = req.body;
-
-    if (!prompt) {
-      return res.status(400).json({ success: false, error: 'Animation prompt is required' });
+    if (!animateEnabled()) {
+      return res.status(503).json({ success: false, code: 'ANIMATE_DISABLED', error: 'Scene animation is switched off on this server.' });
     }
+    const input = readAnimateInput(req.body);
+    if (input.error) return res.status(400).json({ success: false, code: 'INVALID_ANIMATE_REQUEST', error: input.error });
 
-    const scene = await Scene.findByPk(id, { attributes: ['id', 'background_url', 'description'] });
+    const { id } = req.params;
+    const cols = await sequelize.getQueryInterface().describeTable('scenes');
+    const attributes = ['id', 'background_url', 'description'].concat(['scene_set_id', 'scene_angle_id'].filter((c) => cols[c]));
+    const scene = await Scene.findByPk(id, { attributes });
     if (!scene) {
       return res.status(404).json({ success: false, error: 'Scene not found' });
     }
 
-    const sourceUrl = image_url || scene.background_url;
+    const sources = await animationSources(scene);
+    const sourceUrl = input.imageUrl || scene.get('background_url');
     if (!sourceUrl) {
-      return res.status(400).json({ success: false, error: 'No source image to animate' });
+      return res.status(400).json({ success: false, code: 'NO_SOURCE_IMAGE', error: 'No source image to animate' });
+    }
+    if (!sources.has(sourceUrl)) {
+      return res.status(400).json({ success: false, code: 'SOURCE_NOT_ALLOWED', error: 'Only an image recorded on this scene (its background, its angle\'s still or its scene set\'s base) can be animated.' });
     }
 
     const sceneGenService = require('../services/sceneGenerationService');
-    const { jobId } = await sceneGenService.startImageToVideo(prompt, sourceUrl, {
-      duration: duration || 5,
-      cameraMotion: camera_motion || 'static',
-    });
+    const imageCost = require('../services/imageCostService');
+    // The budget gate and the usage row cover the submission, where the
+    // spend happens; the free status polls run after it.
+    const { jobId } = await imageCost.runImageCall(
+      { model: sceneGenService.VIDEO_MODEL, provider: 'runway', routeName: 'scenes-animate' },
+      () => sceneGenService.startImageToVideo(input.prompt, sourceUrl, { duration: input.duration, cameraMotion: input.cameraMotion }),
+    );
 
-    // Poll for completion
     const result = await sceneGenService.pollTask(jobId);
-
     if (result.status === 'SUCCEEDED' && result.outputUrl) {
-      res.json({
+      return res.json({
         success: true,
-        data: {
-          video_url: result.outputUrl,
-          duration: duration || 5,
-          job_id: jobId,
-        },
+        data: { video_url: result.outputUrl, duration: input.duration, job_id: jobId },
       });
-    } else {
-      res.status(500).json({ success: false, error: result.error || 'Animation failed' });
     }
+    if (result.status === 'FAILED') {
+      return res.status(502).json({ success: false, code: 'ANIMATION_FAILED', job_id: jobId, error: result.error || 'Runway reported that the animation failed.' });
+    }
+    // TIMEOUT or UNKNOWN: Runway accepted the task; how it ends is not known.
+    return res.status(502).json({
+      success: false,
+      code: 'PROVIDER_OUTCOME_UNKNOWN',
+      retryable: false,
+      job_id: jobId,
+      error: `Runway accepted this animation (task ${jobId}) but it had not finished when we stopped checking. It was not sent again; do not start it again until you have checked it.`,
+    });
   } catch (error) {
-    console.error('Scene Studio animateScene error:', error);
-    const status = error.message.includes('limit') || error.message.includes('429') ? 429 : 500;
-    res.status(status).json({ success: false, error: error.message });
+    if (isBudgetError(error)) {
+      return res.status(429).json({ success: false, code: error.code, error: error.message });
+    }
+    if (error && error.code === 'PROVIDER_OUTCOME_UNKNOWN') {
+      console.error('Scene Studio animateScene: outcome unknown:', error.message);
+      return res.status(502).json({ success: false, code: 'PROVIDER_OUTCOME_UNKNOWN', retryable: false, job_id: error.taskId || null, error: OUTCOME_UNKNOWN_MESSAGE });
+    }
+    const providerStatus = error && error.response ? error.response.status : undefined;
+    console.error('Scene Studio animateScene error:', error && error.message);
+    if (providerStatus === 429) {
+      return res.status(429).json({ success: false, code: 'PROVIDER_RATE_LIMITED', error: 'Runway is refusing new animations right now. Nothing was started; try again later.' });
+    }
+    if (providerStatus >= 400 && providerStatus < 500) {
+      return res.status(502).json({ success: false, code: 'PROVIDER_REJECTED', error: 'Runway refused this animation request. Nothing was started.' });
+    }
+    if (error && ['ENOTFOUND', 'EAI_AGAIN', 'ECONNREFUSED'].includes(error.code)) {
+      return res.status(502).json({ success: false, code: 'PROVIDER_UNREACHABLE', error: 'Runway could not be reached. Nothing was started; try again later.' });
+    }
+    return res.status(500).json({ success: false, error: 'The animation could not be started.' });
   }
 };
+
+exports._animate = { ANIMATE_DURATIONS, ANIMATE_PROMPT_MAX, ANIMATE_CAMERA_MOTIONS, animateEnabled, readAnimateInput, animationSources };
 
 // ── Depth Estimation (Scenes) ──
 

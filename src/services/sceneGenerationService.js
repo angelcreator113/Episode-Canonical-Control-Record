@@ -261,6 +261,53 @@ async function storeStillBuffer(buffer, sceneSetId, suffix = 'still') {
 // The image-to-video model startImageToVideo calls.
 const VIDEO_MODEL = 'gen3a_turbo';
 
+// Errors raised while resolving the host or opening the connection, before
+// a single request byte is written: proof that Runway never received the
+// request, so it can be sent again without risking a second paid task.
+const NOT_SENT_ERROR_CODES = new Set(['ENOTFOUND', 'EAI_AGAIN', 'ECONNREFUSED']);
+
+/**
+ * A paid request that may have reached the provider, with no definitive
+ * answer: a timeout, a reset, a 5xx, a reply without a task id, or a poll
+ * that could not find out how the task ended. The provider may have
+ * accepted (and billed) it, so it is never sent again automatically; the
+ * caller reports it and a person checks before trying again (#3714 R1).
+ */
+class ProviderOutcomeUnknownError extends Error {
+  constructor(message, { provider = 'runway', taskId = null, cause = null } = {}) {
+    super(message);
+    this.name = 'ProviderOutcomeUnknownError';
+    this.code = 'PROVIDER_OUTCOME_UNKNOWN';
+    this.status = 502;
+    this.provider = provider;
+    this.taskId = taskId;
+    if (cause) this.cause = cause;
+  }
+}
+
+/**
+ * How a failed submission ended:
+ *   'not_sent'  never reached Runway (NOT_SENT_ERROR_CODES): safe to retry;
+ *   'rejected'  Runway answered 429, refusing it: nothing was created;
+ *   'failed'    Runway answered 4xx (other than 429): a definitive refusal;
+ *   'unknown'   anything else (timeout, reset, 5xx, no answer): it may
+ *               have been accepted.
+ */
+function classifySubmitError(err) {
+  const status = err && err.response ? err.response.status : undefined;
+  if (status === undefined) return NOT_SENT_ERROR_CODES.has(err && err.code) ? 'not_sent' : 'unknown';
+  if (status === 429) return 'rejected';
+  if (status >= 400 && status < 500) return 'failed';
+  return 'unknown';
+}
+
+/**
+ * Submit one image-to-video task. Sent again only when the earlier attempt
+ * provably never reached Runway, or Runway refused it with 429; any
+ * ambiguous failure throws ProviderOutcomeUnknownError instead of risking a
+ * second paid task (#3714 R1). Callers: sceneStudioController.animateScene
+ * (POST /api/v1/scenes/:id/animate) and generateAngleVideo (the worker).
+ */
 async function startImageToVideo(prompt, imageUrl, options = {}) {
   const { seed, duration = 5, cameraMotion } = options;
   const parsedSeed = seed != null && /^\d+$/.test(String(seed)) ? Number(seed) : undefined;
@@ -274,27 +321,42 @@ async function startImageToVideo(prompt, imageUrl, options = {}) {
     ...(cameraMotion ? { cameraMotion } : {}),
   };
 
-  const MAX_RETRIES = 3;
-  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+  const MAX_ATTEMPTS = 3;
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    let response;
     try {
-      const response = await axios.post(
+      response = await axios.post(
         `${RUNWAY_API_BASE}/image_to_video`,
         payload,
         { headers: runwayHeaders(), timeout: 30000 }
       );
-      return { jobId: response.data.id };
     } catch (err) {
-      const status = err.response?.status;
-      const retryable = !status || status === 429 || status >= 500;
+      const kind = classifySubmitError(err);
       if (err.response) {
-        console.error(`[SceneGen] image_to_video API error (attempt ${attempt}/${MAX_RETRIES}):`, JSON.stringify(err.response.data, null, 2));
+        console.error(`[SceneGen] image_to_video API error (attempt ${attempt}/${MAX_ATTEMPTS}, ${kind}):`, JSON.stringify(err.response.data, null, 2));
+      } else {
+        console.error(`[SceneGen] image_to_video request error (attempt ${attempt}/${MAX_ATTEMPTS}, ${kind}): ${err.code || err.message}`);
       }
-      if (!retryable || attempt === MAX_RETRIES) throw err;
+      if (kind === 'unknown') {
+        throw new ProviderOutcomeUnknownError(
+          'Runway may have started this video: the request was sent but no definitive answer came back. It was not sent again.',
+          { cause: err },
+        );
+      }
+      if (kind === 'failed' || attempt === MAX_ATTEMPTS) throw err;
       const backoff = attempt * 2000;
-      console.log(`[SceneGen] Retrying image_to_video in ${backoff}ms...`);
+      console.log(`[SceneGen] image_to_video ${kind === 'not_sent' ? 'never reached Runway' : 'was refused (429)'}; retrying in ${backoff}ms...`);
       await sleep(backoff);
+      continue;
     }
+    const jobId = response && response.data ? response.data.id : undefined;
+    if (!jobId) {
+      throw new ProviderOutcomeUnknownError('Runway answered without a task id, so whether the video was started is unknown. It was not sent again.');
+    }
+    return { jobId };
   }
+  // Unreachable: every path above returns or throws.
+  throw new Error('image_to_video: no attempt made');
 }
 
 // ─── DALL-E 3 STILL GENERATION ──────────────────────────────────────────────
@@ -726,7 +788,8 @@ async function pollTask(jobId, maxWaitMs = 180000) {
       consecutiveErrors++;
       console.warn(`  [RunwayML] Poll error for ${jobId} (${consecutiveErrors}/${MAX_CONSECUTIVE_ERRORS}): ${pollErr.message}`);
       if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
-        return { status: 'FAILED', error: `Polling failed after ${MAX_CONSECUTIVE_ERRORS} consecutive errors: ${pollErr.message}` };
+        // Not a task failure: the task's outcome is unknown (#3714 R1).
+        return { status: 'UNKNOWN', error: `Polling failed after ${MAX_CONSECUTIVE_ERRORS} consecutive errors: ${pollErr.message}` };
       }
       continue; // Retry on next interval
     }
@@ -2534,6 +2597,9 @@ async function generateAngleVideo(sceneAngle, sceneSet, models) {
         cameraMotion,
       });
       const task = await pollTask(jobId);
+      if (task.status === 'TIMEOUT' || task.status === 'UNKNOWN') {
+        throw new ProviderOutcomeUnknownError(`Runway task ${jobId} was accepted but its outcome is not known yet (${task.error}). It was not sent again.`, { taskId: jobId });
+      }
       if (task.status !== 'SUCCEEDED') throw new Error(`Angle video failed: ${task.error}`);
       return task;
     }
@@ -2677,6 +2743,11 @@ module.exports = {
   generateBestVariation,
   extractFirstFrame,
   pollTask,
+  startImageToVideo,
+  ProviderOutcomeUnknownError,
+  classifySubmitError,
+  NOT_SENT_ERROR_CODES,
+  VIDEO_MODEL,
   storeInS3,
   NEGATIVE_PROMPT,
   CAMERA_MOTION_MAP,
