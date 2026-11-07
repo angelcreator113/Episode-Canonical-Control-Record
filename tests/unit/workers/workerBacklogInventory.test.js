@@ -73,6 +73,67 @@ describe('redactError', () => {
     expect(inv.redactError('x'.repeat(500)).length).toBeLessThanOrEqual(120);
     expect(inv.redactError(null)).toBe('');
   });
+
+  // Each entry: an error in an unusual format, and the secrets that must not survive.
+  test.each([
+    ['presigned S3 URL', 'GET https://bucket.s3.us-east-1.amazonaws.com/scene.jpg?X-Amz-Algorithm=AWS4&X-Amz-Credential=AKIAABCDEFGHIJKLMNOP%2F2026&X-Amz-Signature=deadbeefcafe0123456789 403', ['AKIAABCDEF', 'deadbeefcafe', 'bucket.s3']],
+    ['scheme-less signed path', 'fetch failed for bucket.s3.amazonaws.com/a.jpg?X-Amz-Signature=abc123def456ghi789', ['abc123def456', 'bucket.s3']],
+    ['connection string', 'connect failed postgres://episode_worker:hunter2pass@db.internal.example:5432/episode_metadata', ['hunter2pass', 'db.internal']],
+    ['user:pass@host without scheme', 'auth error at admin:S3cr3tPw@10.0.4.12:6379', ['S3cr3tPw', '10.0.4.12']],
+    ['JSON body', '{"error":{"message":"bad","api_key":"fal_live_9f8e7d6c5b4a","Authorization":"Key abc:def"}}', ['fal_live_9f8e', 'abc:def']],
+    ['header dump', 'headers: { authorization: "Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.c2lnbmF0dXJl", cookie: sid=XYZ987 }', ['eyJhbGci', 'XYZ987']],
+    ['multi-line stack', 'Error: boom\n    at x (/home/ubuntu/app.js:1)\n token: tok_live_ABCDEF123456', ['tok_live_ABCDEF']],
+    ['e-mail and IP', 'user evoni.example@gmail.com from 54.163.229.144 refused', ['evoni.example@gmail.com', '54.163.229.144']],
+    ['AWS key id alone', 'InvalidAccessKeyId AKIAIOSFODNN7EXAMPLE', ['AKIAIOSFODNN7EXAMPLE']],
+    ['query string pairs', 'retry ?sig=Zm9vYmFy123&expires=1730000000&session_id=s_abc123def', ['Zm9vYmFy', '1730000000', 's_abc123def']],
+    ['object, not a string', { message: 'x', token: 'obj_secret_7788aa99' }, ['obj_secret_7788']],
+  ])('%s', (_label, input, secrets) => {
+    const out = inv.redactError(input, 1000);
+    for (const sec of secrets) expect(out).not.toContain(sec);
+    expect(out).not.toMatch(/[\r\n]/);
+  });
+
+  test('keeps job and scene UUIDs and plain wording', () => {
+    const id = '3f6c1a2e-9b7d-4c1e-8a2f-0d9e8c7b6a51';
+    expect(inv.redactError(`Scene set ${id} not found`)).toBe(`Scene set ${id} not found`);
+    expect(inv.redactError('Angle video failed: THROTTLED')).toBe('Angle video failed: THROTTLED');
+  });
+});
+
+describe('an incomplete inventory is unmistakable', () => {
+  const base = { at: NOW, budgets: { total: 50, image: 10 } };
+  test('a section not read gives a banner at the top and bottom, UNKNOWN wording, and RESULT: INCOMPLETE', () => {
+    const text = inv.formatReport({ ...base, complete: false, dbError: 'query failed: 42501 permission denied',
+      incompleteSections: [{ section: 'database', reason: 'query failed: 42501 permission denied' }, { section: 'redis video-export queue', reason: 'skipped by --no-redis' }],
+      redisSkipped: true });
+    const lines = text.split('\n');
+    expect(lines[1]).toMatch(/^\*\*\* INCOMPLETE INVENTORY/);
+    expect(text.match(/INCOMPLETE INVENTORY/g)).toHaveLength(2);
+    expect(text).toMatch(/is NOT zero/);
+    expect(text).toMatch(/NOT READ \(query failed: 42501 permission denied\): these counts are UNKNOWN, not zero/);
+    expect(text).toMatch(/NOT READ \(skipped by --no-redis\): these counts are UNKNOWN, not zero/);
+    expect(text).not.toMatch(/would run: 0/);
+    expect(lines[lines.length - 1]).toBe('RESULT: INCOMPLETE (nothing was written)');
+  });
+
+  test('a queue with no Bull keys at all says its zeros are unverified', () => {
+    const redis = { counts: { wait: 0, active: 0, paused: 0, delayed: 0, priority: 0, failed: 0, completed: 0, stalled: 0 }, queuePaused: false, wouldProcessOnEnable: 0, keysFound: 0 };
+    expect(inv.formatReport({ ...base, complete: false, incompleteSections: [{ section: 'redis video-export queue', reason: 'no Bull keys found' }], redis, dbError: 'x' }))
+      .toMatch(/NO KEYS FOUND for this queue: the zeros above are UNVERIFIED/);
+  });
+});
+
+describe('importing the inventory loads nothing that can work', () => {
+  test('no model, worker, queue, Redis/Bull library, renderer, service or AI SDK is loaded by requiring it', () => {
+    jest.isolateModules(() => {
+      const before = new Set(Object.keys(require.cache));
+      require('../../../scripts/worker/backlog-inventory');
+      const added = Object.keys(require.cache).filter((f) => !before.has(f));
+      const forbidden = [/src[\\/]models/, /src[\\/]workers[\\/](?!workerDbGrants|workerCredentials)/, /src[\\/]queues/, /src[\\/]services/,
+        /src[\\/]config[\\/](aws|redis|sequelize)/, /src[\\/]sockets/, /node_modules[\\/](bull|ioredis|redis|sequelize|@anthropic-ai|openai|@fal-ai|replicate|@aws-sdk|axios|fluent-ffmpeg)[\\/]/];
+      for (const re of forbidden) expect(added.filter((f) => re.test(f))).toEqual([]);
+    });
+  });
 });
 
 describe('the read-only Redis client', () => {
@@ -128,7 +189,7 @@ describe('the read-only Redis client', () => {
           if (args[0] === 'AUTH' || args[0] === 'PING') sock.write('+OK\r\n');
           else if (args[0] === 'LLEN' && args[1].endsWith(':wait')) sock.write(':7\r\n');
           else if (args[0] === 'ZCARD' && args[1].endsWith(':failed')) sock.write(':2\r\n');
-          else if (args[0] === 'EXISTS') sock.write(':0\r\n');
+          else if (args[0] === 'EXISTS') sock.write(args.length > 2 ? ':3\r\n' : ':0\r\n');
           else sock.write(':0\r\n');
         }
       });
@@ -141,6 +202,7 @@ describe('the read-only Redis client', () => {
       expect(out.counts).toMatchObject({ wait: 7, failed: 2, active: 0, delayed: 0 });
       expect(out.wouldProcessOnEnable).toBe(7);
       expect(out.queuePaused).toBe(false);
+      expect(out.keysFound).toBe(3);
       expect(new Set(received)).toEqual(new Set(['AUTH', 'PING', 'LLEN', 'ZCARD', 'SCARD', 'EXISTS']));
       const text = inv.formatReport({ at: NOW, complete: true, redis: out, db: null, dbError: 'x' });
       expect(text).not.toContain('redis-pass-77');

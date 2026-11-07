@@ -150,11 +150,13 @@ const TABLES = ['generation_jobs', 'scene_sets', 'scene_angles', 'ai_usage_logs'
     const after = await tableHash();
 
     expect(res.err).toBe('');
-    expect(res.code).toBe(0);
+    // --no-redis leaves a section unread: incomplete (exit 1), never "complete".
+    expect(res.code).toBe(1);
     expect(after).toEqual(before);
     expect(res.out.includes(PASSWORD)).toBe(false);
     const inv = JSON.parse(res.out);
-    expect(inv.complete).toBe(true);
+    expect(inv.complete).toBe(false);
+    expect(inv.incompleteSections).toEqual([{ section: 'redis video-export queue', reason: 'skipped by --no-redis' }]);
     expect(inv.redisSkipped).toBe(true);
 
     const byId = Object.fromEntries(inv.db.open.rows.map((r) => [r.id, r]));
@@ -185,12 +187,26 @@ const TABLES = ['generation_jobs', 'scene_sets', 'scene_angles', 'ai_usage_logs'
 
   test('the text report names the open jobs and what would happen, and prints no password', async () => {
     const res = await runMain(['--no-redis', '--limit', '5000'], envFor());
-    expect(res.code).toBe(0);
+    expect(res.code).toBe(1);
     expect(res.out).toContain(ids.jobs.staleCascade);
     expect(res.out).toMatch(/If GENERATION_WORKER_ENABLED were true now:/);
-    expect(res.out).toMatch(/RESULT: COMPLETE \(nothing was written\)/);
+    expect(res.out).toMatch(/redis video-export queue: skipped by --no-redis/);
+    expect(res.out).toMatch(/RESULT: INCOMPLETE \(nothing was written\)/);
     expect(res.out.includes(PASSWORD)).toBe(false);
     expect(res.out).not.toContain(new URL(ADMIN_URL).hostname);
+  });
+
+  test('a truncated list never lowers the counts: they come from every open row', async () => {
+    const full = JSON.parse((await runMain(['--json', '--no-redis', '--limit', '5000'], envFor())).out);
+    const cut = await runMain(['--json', '--no-redis', '--limit', '1'], envFor());
+    const inv = JSON.parse(cut.out);
+    expect(inv.db.open.listed).toBe(1);
+    expect(inv.db.open.truncated).toBe(true);
+    expect(inv.db.ifEnabled).toEqual(full.db.ifEnabled);
+    expect(inv.db.totals.legacyOpen).toBe(full.db.totals.legacyOpen);
+    expect(inv.db.ifEnabled.wouldRun).toBeGreaterThanOrEqual(5);
+    const text = (await runMain(['--no-redis', '--limit', '1'], envFor())).out;
+    expect(text).toMatch(/LIST TRUNCATED by --limit/);
   });
 
   test('the session the inventory uses refuses writes (25006), even though the role holds UPDATE', async () => {
@@ -216,6 +232,7 @@ const TABLES = ['generation_jobs', 'scene_sets', 'scene_angles', 'ai_usage_logs'
     expect(noRedis.out).toMatch(/RESULT: INCOMPLETE/);
     const noDb = await runMain(['--no-redis'], envFor({ DB_PORT: String(free) }));
     expect(noDb.code).toBe(2);
+    expect(noDb.err).toMatch(/INVENTORY NOT PRODUCED/);
     expect(noDb.err.includes(PASSWORD)).toBe(false);
   });
 
@@ -242,6 +259,19 @@ const TABLES = ['generation_jobs', 'scene_sets', 'scene_angles', 'ai_usage_logs'
         try { if (cli('PING').trim() === 'PONG') break; } catch { /* starting */ }
         await new Promise((r) => setTimeout(r, 100));
       }
+    });
+    afterAll(() => { if (redisProc) redisProc.kill('SIGKILL'); });
+
+    test('an empty Redis (no Bull keys at all) is INCOMPLETE: its zeros are unverified', async () => {
+      const res = await runMain(['--json', '--limit', '5000'], envFor({ REDIS_HOST: '127.0.0.1', REDIS_PORT: String(port), REDIS_PASSWORD }));
+      expect(res.code).toBe(1);
+      const inv = JSON.parse(res.out);
+      expect(inv.complete).toBe(false);
+      expect(inv.redis.keysFound).toBe(0);
+      expect(inv.incompleteSections.map((m) => m.section)).toEqual(['redis video-export queue']);
+    });
+
+    test('seeded Bull keys', () => {
       cli('RPUSH', 'bull:video-export:wait', '41', '42', '43');
       cli('RPUSH', 'bull:video-export:active', '40');
       cli('ZADD', 'bull:video-export:delayed', '1', '44', '2', '45');
@@ -249,8 +279,8 @@ const TABLES = ['generation_jobs', 'scene_sets', 'scene_angles', 'ai_usage_logs'
       cli('ZADD', 'bull:video-export:completed', '1', '30', '2', '31', '3', '32', '4', '33');
       cli('SADD', 'bull:video-export:stalled', '40');
       cli('HSET', 'bull:video-export:41', 'name', 'export-video', 'data', '{"episodeId":"x"}', 'attemptsMade', '0');
+      expect(cli('DBSIZE').trim()).toBe('7');
     });
-    afterAll(() => { if (redisProc) redisProc.kill('SIGKILL'); });
 
     test('counts every Bull list and set, changes no key, and the server saw only read-only commands', async () => {
       const before = snapshot();
@@ -260,6 +290,7 @@ const TABLES = ['generation_jobs', 'scene_sets', 'scene_angles', 'ai_usage_logs'
       const after = snapshot();
 
       expect(res.code).toBe(0);
+      expect(JSON.parse(res.out).complete).toBe(true);
       expect(after).toEqual(before);
       const seen = [...stats.matchAll(/^cmdstat_([a-z|]+):/gm)].map((m) => m[1].toUpperCase()).filter((c) => !['INFO', 'CONFIG|RESETSTAT', 'CONFIG'].includes(c));
       expect(seen.length).toBeGreaterThan(0);
@@ -269,6 +300,32 @@ const TABLES = ['generation_jobs', 'scene_sets', 'scene_angles', 'ai_usage_logs'
       expect(inv.redis.wouldProcessOnEnable).toBe(6);
       expect(res.out.includes(REDIS_PASSWORD)).toBe(false);
       expect(res.out.includes(PASSWORD)).toBe(false);
+    });
+
+    test('run as a command, it loads no model, worker, queue library, service or AI SDK, and changes nothing', async () => {
+      const traceOut = path.join(dir, 'trace.json');
+      const before = await tableHash();
+      const redisBefore = snapshot();
+      const code = await new Promise((resolve) => {
+        const child = spawn(process.execPath, ['-r', path.join(__dirname, '../helpers/traceRequires.js'), path.join(__dirname, '../../scripts/worker/backlog-inventory.js'), '--limit', '50'], {
+          cwd: dir,
+          env: { PATH: process.env.PATH, TRACE_REQUIRES_OUT: traceOut, ...envFor({ REDIS_HOST: '127.0.0.1', REDIS_PORT: String(port), REDIS_PASSWORD }) },
+          stdio: ['ignore', 'pipe', 'pipe'],
+        });
+        let out = '';
+        child.stdout.on('data', (d) => { out += d; });
+        child.stderr.on('data', (d) => { out += d; });
+        child.on('exit', (c) => { expect(out.includes(PASSWORD) || out.includes(REDIS_PASSWORD)).toBe(false); resolve(c); });
+      });
+      expect(code).toBe(0);
+      const loaded = JSON.parse(fs.readFileSync(traceOut, 'utf8'));
+      fs.rmSync(traceOut);
+      const forbidden = [/src[\\/]models/, /src[\\/]workers[\\/](?!workerDbGrants|workerCredentials)/, /src[\\/]queues/, /src[\\/]services/,
+        /src[\\/]config[\\/](aws|redis|sequelize)/, /src[\\/]sockets/, /node_modules[\\/](bull|ioredis|redis|sequelize|@anthropic-ai|openai|@fal-ai|replicate|@aws-sdk|axios|fluent-ffmpeg)[\\/]/];
+      for (const re of forbidden) expect(loaded.filter((f) => re.test(f))).toEqual([]);
+      expect(loaded.some((f) => /node_modules[\\/]pg[\\/]/.test(f))).toBe(true);
+      expect(await tableHash()).toEqual(before);
+      expect(snapshot()).toEqual(redisBefore);
     });
 
     test('a wrong Redis password is reported as incomplete, without the password', async () => {

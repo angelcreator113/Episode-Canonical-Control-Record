@@ -24,9 +24,16 @@
  * Output: counts, job and scene ids, types, ages, attempts, scene states and
  * spend figures. Never a password, a host, a payload or a raw error message
  * (errors are shortened with URLs and token-like strings removed).
- * Exit codes: 0 the inventory is complete; 1 a section could not be read
- * (Redis unreachable, a query failed); 2 the settings or the database
- * connection failed.
+ * Complete means every section was read. A section not read (a query
+ * failed, Redis unreachable or skipped with --no-redis, or no Bull keys at
+ * all) makes the report INCOMPLETE, with a banner at the top and bottom
+ * naming it: a missing section is never shown as zero.
+ * Exit codes: 0 complete; 1 incomplete; 2 the settings or the database
+ * connection failed (no report is produced).
+ *
+ * Importing this file loads only net, pg (in main) and the preflight's
+ * settings helpers: no model, worker, queue, Bull, Redis client library,
+ * renderer or AI SDK (tested).
  */
 'use strict';
 
@@ -69,8 +76,15 @@ const INVENTORY_QUERIES = Object.freeze({
      WHERE j.deleted_at IS NULL AND j.status IN ('queued', 'processing')
      ORDER BY j.priority DESC, j.created_at ASC
      LIMIT $1`,
-  openCount: `
-    SELECT count(*)::int AS n FROM generation_jobs
+  fates: `
+    SELECT count(*)::int AS total,
+           count(*) FILTER (WHERE status = 'queued' AND attempts < max_attempts)::int AS would_run,
+           count(*) FILTER (WHERE status = 'processing' AND attempts < max_attempts)::int AS requeued_then_run,
+           count(*) FILTER (WHERE status = 'processing' AND attempts >= max_attempts)::int AS marked_failed,
+           count(*) FILTER (WHERE status = 'queued' AND attempts >= max_attempts)::int AS never_claimed,
+           count(*) FILTER (WHERE status = 'processing')::int AS uncertain_paid,
+           count(*) FILTER (WHERE NOT (job_type::text = ANY($1::text[])) OR max_attempts > 1)::int AS legacy_open
+      FROM generation_jobs
      WHERE deleted_at IS NULL AND status IN ('queued', 'processing')`,
   failed: `
     SELECT j.id, j.job_type::text AS job_type, j.attempts, j.max_attempts, j.created_at, j.completed_at,
@@ -126,13 +140,37 @@ function classifyJob(row, now = new Date()) {
   return { ageMinutes: ageMin === null ? null : Math.round(ageMin), ifEnabled, flags };
 }
 
-/** A failed job's error, shortened, with URLs and token-like strings removed. */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const SENSITIVE_KEY = '(?:x-amz-[a-z-]+|signature|sig|access[_-]?token|refresh[_-]?token|id[_-]?token|token|api[_-]?key|apikey|key|client[_-]?secret|secret|password|passwd|pwd|pass|authorization|auth|credentials?|session(?:[_-]?id)?|cookie|set-cookie|expires)';
+
+/**
+ * Error text shortened, with anything that could identify or unlock
+ * something removed: URLs (signed ones included), user:password@ strings,
+ * key=value / "key":"value" / header pairs with a sensitive key, bearer and
+ * basic credentials, JWTs, AWS key ids, e-mail addresses, host names, IP
+ * addresses and long token-like strings (UUIDs are kept: they are job and
+ * scene ids). Control characters and line breaks are flattened first, and
+ * non-string values are stringified, so an unusual format is still covered.
+ */
 function redactError(text, max = 120) {
-  if (!text) return '';
-  const s = String(text)
-    .replace(/\b[a-z][a-z0-9+.-]*:\/\/\S+/gi, '<url>')
-    .replace(/\b(bearer|token|key|password|secret|authorization)\b\s*[:=]?\s*\S+/gi, '$1 <redacted>')
-    .replace(/[A-Za-z0-9_\-+/=]{24,}/g, '<redacted>')
+  if (text === null || text === undefined) return '';
+  let s;
+  if (typeof text === 'string') s = text;
+  else {
+    try { s = JSON.stringify(text); } catch { s = String(text); }
+  }
+  s = String(s)
+    .replace(/[\u0000-\u001f\u007f]+/g, ' ')
+    .replace(/\b[a-z][a-z0-9+.-]*:\/\/[^\s"'<>]+/gi, '<url>')
+    .replace(/[^\s"'<>]+:[^\s"'<>@]+@[^\s"'<>]+/g, '<credential>')
+    .replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g, '<email>')
+    .replace(new RegExp(`(["']?)\\b${SENSITIVE_KEY}\\1\\s*[:=]\\s*(?:"(?:[^"\\\\]|\\\\.)*"|'(?:[^'\\\\]|\\\\.)*'|[^\\s"',;&}]+)`, 'gi'), '<redacted>')
+    .replace(/\b(bearer|basic|token|key)\s+[^\s"',;]+/gi, '$1 <redacted>')
+    .replace(/\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g, '<redacted>')
+    .replace(/\b(?:AKIA|ASIA)[A-Z0-9]{16}\b/g, '<redacted>')
+    .replace(/\b(?:[a-z0-9-]+\.)+(?:com|net|org|io|ai|dev|run|cloud|app|co|internal|local|amazonaws\.com)(?::\d+)?(?:\/[^\s"'<>]*)?/gi, '<host>')
+    .replace(/\b\d{1,3}(?:\.\d{1,3}){3}(?::\d+)?\b/g, '<ip>')
+    .replace(/[A-Za-z0-9_\-+/=]{20,}/g, (m) => (UUID_RE.test(m) || !/\d/.test(m) || !/[A-Za-z]/.test(m) ? m : '<redacted>'))
     .replace(/\s+/g, ' ')
     .trim();
   return s.length > max ? `${s.slice(0, max - 1)}…` : s;
@@ -148,10 +186,10 @@ function utcDaysBack(now, days) {
  * (main(); the integration test does the same).
  */
 async function collectDbInventory(client, { now = new Date(), limit = 200, failedLimit = 20 } = {}) {
-  const [summary, open, openCount, failed, spend] = [
+  const [summary, open, fates, failed, spend] = [
     await client.query(INVENTORY_QUERIES.summary),
     await client.query(INVENTORY_QUERIES.open, [limit]),
-    await client.query(INVENTORY_QUERIES.openCount),
+    await client.query(INVENTORY_QUERIES.fates, [CURRENT_JOB_TYPES]),
     await client.query(INVENTORY_QUERIES.failed, [failedLimit]),
     await client.query(INVENTORY_QUERIES.spend, [utcDaysBack(now, 6)]),
   ];
@@ -166,15 +204,16 @@ async function collectDbInventory(client, { now = new Date(), limit = 200, faile
       failed: count((r) => r.status === 'failed'),
       completed: count((r) => r.status === 'completed'),
       softDeleted: summary.rows.filter((r) => r.deleted).reduce((a, r) => a + r.n, 0),
-      legacyOpen: openRows.filter((r) => r.flags.includes('legacy')).length,
+      legacyOpen: fates.rows[0].legacy_open,
     },
-    open: { total: openCount.rows[0].n, listed: openRows.length, rows: openRows },
+    open: { total: fates.rows[0].total, listed: openRows.length, truncated: openRows.length < fates.rows[0].total, rows: openRows },
+    // Counted over every open job in SQL, never from the (limited) listed rows.
     ifEnabled: {
-      wouldRun: openRows.filter((r) => r.ifEnabled === 'would run').length,
-      requeuedThenRun: openRows.filter((r) => r.ifEnabled.startsWith('re-queued')).length,
-      markedFailed: openRows.filter((r) => r.ifEnabled.startsWith('marked failed')).length,
-      neverClaimed: openRows.filter((r) => r.ifEnabled.startsWith('never claimed')).length,
-      uncertainPaid: openRows.filter((r) => r.flags.includes('uncertain-paid')).length,
+      wouldRun: fates.rows[0].would_run,
+      requeuedThenRun: fates.rows[0].requeued_then_run,
+      markedFailed: fates.rows[0].marked_failed,
+      neverClaimed: fates.rows[0].never_claimed,
+      uncertainPaid: fates.rows[0].uncertain_paid,
     },
     failed: failed.rows.map((r) => ({
       id: r.id, job_type: r.job_type, attempts: r.attempts, max_attempts: r.max_attempts,
@@ -295,8 +334,13 @@ async function collectRedisInventory(redis, { prefix = 'bull', queue = 'video-ex
     counts[suffix] = Number(await redis.command(cmd, `${prefix}:${queue}:${suffix}`)) || 0;
   }
   const paused = Number(await redis.command('EXISTS', `${prefix}:${queue}:meta-paused`)) === 1;
+  // Bull creates :id when the first job is ever added. No key at all means
+  // the queue was never used, or the prefix, name or database is not the one
+  // the app uses: zero cannot be told apart from "looked in the wrong place".
+  const keysFound = Number(await redis.command('EXISTS', ...[...BULL_KEYS.map(([k]) => k), 'id', 'meta-paused'].map((k) => `${prefix}:${queue}:${k}`))) || 0;
   return {
     queue,
+    keysFound,
     counts,
     queuePaused: paused,
     wouldProcessOnEnable: counts.wait + counts.delayed + counts.priority + counts.active,
@@ -309,7 +353,14 @@ function formatReport(inv) {
   const out = [];
   const iso = (t) => (t ? new Date(t).toISOString().replace('.000Z', 'Z') : '-');
   const age = (m) => (m === null || m === undefined ? '-' : m < 120 ? `${m}m` : m < 48 * 60 ? `${Math.round(m / 60)}h` : `${Math.round(m / 1440)}d`);
+  const banner = () => {
+    if (inv.complete) return;
+    out.push('*** INCOMPLETE INVENTORY. Not read:');
+    for (const m of inv.incompleteSections || []) out.push(`***   ${m.section}: ${m.reason}`);
+    out.push('*** A section that was not read is NOT zero. Do not use this report to approve activation. ***');
+  };
   out.push(`EPISODE WORKER BACKLOG INVENTORY (read-only)  at ${iso(inv.at)}`);
+  banner();
   if (inv.db) {
     const t = inv.db.totals;
     out.push('', 'generation_jobs totals (not soft-deleted):');
@@ -323,6 +374,7 @@ function formatReport(inv) {
     out.push(`  would run: ${e.wouldRun} | re-queued by recovery then run: ${e.requeuedThenRun} | marked failed by recovery: ${e.markedFailed} | never claimed: ${e.neverClaimed}`);
     out.push(`  uncertain paid (left processing): ${e.uncertainPaid} | legacy open: ${t.legacyOpen}`);
     out.push('', `Open jobs (queued / processing), in claim order: ${inv.db.open.listed} listed of ${inv.db.open.total}`);
+    if (inv.db.open.truncated) out.push(`  LIST TRUNCATED by --limit: ${inv.db.open.total - inv.db.open.listed} open jobs not listed; the counts above cover all ${inv.db.open.total}.`);
     for (const r of inv.db.open.rows) {
       out.push(`  ${r.id}  ${r.status.padEnd(10)} ${r.job_type.padEnd(22)} attempts ${r.attempts}/${r.max_attempts}  prio ${r.priority}  age ${age(r.ageMinutes)}`);
       out.push(`      set ${r.scene_set_id} (${r.set_missing ? 'missing' : `${r.set_deleted ? 'deleted, ' : ''}${r.set_status || 'no status'}, base ${r.set_has_base ? 'yes' : 'no'}`})` +
@@ -340,17 +392,20 @@ function formatReport(inv) {
     }
     if (inv.budgets) out.push(`  caps as the worker would read them: AI_DAILY_BUDGET_USD $${inv.budgets.total}  AI_DAILY_IMAGE_BUDGET_USD $${inv.budgets.image}  (Runway calls are unpriced: they add $0)`);
   } else {
-    out.push('', `generation_jobs: NOT READ (${inv.dbError})`);
+    out.push('', `generation_jobs, scenes and AI spend: NOT READ (${inv.dbError}): these counts are UNKNOWN, not zero`);
   }
   out.push('', 'Redis video-export queue:');
   if (inv.redis) {
     const c = inv.redis.counts;
     out.push(`  wait ${c.wait} | active ${c.active} | delayed ${c.delayed} | priority ${c.priority} | paused ${c.paused} | failed ${c.failed} | completed ${c.completed} | stalled ${c.stalled}`);
     out.push(`  queue paused: ${inv.redis.queuePaused ? 'yes' : 'no'} | would be picked up when the worker loads: ${inv.redis.wouldProcessOnEnable}`);
+    if (!inv.redis.keysFound) out.push('  NO KEYS FOUND for this queue: the zeros above are UNVERIFIED (never used, or a different prefix or database).');
   } else {
-    out.push(`  ${inv.redisSkipped ? 'skipped (--no-redis)' : `NOT READ (${inv.redisError})`}`);
+    out.push(`  NOT READ (${inv.redisSkipped ? 'skipped by --no-redis' : inv.redisError}): these counts are UNKNOWN, not zero`);
   }
-  out.push('', inv.complete ? 'RESULT: COMPLETE (nothing was written)' : 'RESULT: INCOMPLETE (nothing was written)');
+  out.push('');
+  banner();
+  out.push(inv.complete ? 'RESULT: COMPLETE (nothing was written)' : 'RESULT: INCOMPLETE (nothing was written)');
   return out.join('\n');
 }
 
@@ -377,7 +432,8 @@ async function main(argv = process.argv.slice(2), { env = process.env, log = con
   const settings = loadSettings(settingsEnv, readCredentials(settingsEnv));
   if (settings.error) { err(`FAIL settings: ${settings.error}`); return 2; }
 
-  const inv = { at: new Date(), complete: true };
+  const inv = { at: new Date(), complete: true, incompleteSections: [] };
+  const incomplete = (section, reason) => { inv.complete = false; inv.incompleteSections.push({ section, reason }); };
   inv.budgets = {
     total: parseFloat(settingsEnv.AI_DAILY_BUDGET_USD) || 50,
     image: parseFloat(settingsEnv.AI_DAILY_IMAGE_BUDGET_USD) || 10,
@@ -388,7 +444,8 @@ async function main(argv = process.argv.slice(2), { env = process.env, log = con
   try {
     await client.connect();
   } catch (e) {
-    err(`FAIL connect: as ${settings.user} to ${settings.database}: ${e.message}`);
+    err(`FAIL connect: as ${settings.user}: ${e.code || ''} ${redactError(e.message, 160)}`.trim());
+    err('INVENTORY NOT PRODUCED: the database could not be reached, so nothing below it is known.');
     return 2;
   }
   try {
@@ -401,22 +458,24 @@ async function main(argv = process.argv.slice(2), { env = process.env, log = con
       await client.query('ROLLBACK');
     }
   } catch (e) {
-    inv.complete = false;
-    inv.dbError = `query failed: ${e.code || ''} ${redactError(e.message, 160)}`.trim();
+    inv.dbError = `query failed: ${e.code || ''} ${redactError(e.message, 160)}`.replace(/\s+/g, ' ').trim();
+    incomplete('database', inv.dbError);
   } finally {
     await client.end().catch((e) => err(`[backlog-inventory] close failed: ${e.message}`));
   }
 
   if (!opts.redis) {
     inv.redisSkipped = true;
+    incomplete('redis video-export queue', 'skipped by --no-redis');
   } else {
     const redis = new ReadOnlyRedis({ host: settingsEnv.REDIS_HOST || '127.0.0.1', port: Number(settingsEnv.REDIS_PORT) || 6379 });
     try {
       await redis.open();
       inv.redis = await collectRedisInventory(redis, { password: settingsEnv.REDIS_PASSWORD || undefined });
+      if (!inv.redis.keysFound) incomplete('redis video-export queue', 'no Bull keys found (never used, or a different prefix or database): zero is unverified');
     } catch (e) {
-      inv.complete = false;
-      inv.redisError = e.message;
+      inv.redisError = redactError(e.message, 160);
+      incomplete('redis video-export queue', inv.redisError);
     } finally {
       redis.close();
     }
@@ -434,7 +493,7 @@ if (require.main === module) {
 }
 
 module.exports = {
-  INVENTORY_QUERIES, LEGACY_JOB_TYPES, CURRENT_JOB_TYPES, ALLOWED_REDIS_COMMANDS, BULL_KEYS,
+  INVENTORY_QUERIES, UUID_RE, LEGACY_JOB_TYPES, CURRENT_JOB_TYPES, ALLOWED_REDIS_COMMANDS, BULL_KEYS,
   classifyJob, redactError, collectDbInventory, collectRedisInventory, formatReport, parseArgs, parseReply,
   encodeCommand, ReadOnlyRedis, main,
 };
