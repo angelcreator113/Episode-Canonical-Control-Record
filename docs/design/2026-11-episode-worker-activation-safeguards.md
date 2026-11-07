@@ -1,6 +1,6 @@
 # Episode worker: activation safeguards (design proposal, #3714)
 
-**Status:** revision 2, 2026-11-07, after Evoni's review of revision 1. This is a design direction only; nothing here is implemented. Every production step stays separately gated (`docs/runbooks/episode-worker-db.md` §6). The read-only inventory (`scripts/worker/backlog-inventory.js`) is the only code in this change.
+**Status:** revision 3, 2026-11-07. Evoni accepted revision 2 as the working design, not as authorization to implement. Revision 3 answers her final questions A–D (the section "Revision 3" below), and supersedes revision 2 where they conflict. Revision 2 came after her review of revision 1. This is a design direction only; nothing here is implemented. Every production step stays separately gated (`docs/runbooks/episode-worker-db.md` §6). The read-only inventory (`scripts/worker/backlog-inventory.js`) is the only code in this change.
 
 **What changed from revision 1.** Revision 1 leaned on a single pm2 worker, a shutdown grace period and in-memory counters. None of those is a financial safety boundary: a process can crash or be killed at any instant, pm2 can restart it, and a second process can start by mistake. Revision 2 moves every limit and every paid-call fact into the database, written **before** the money is committed.
 
@@ -279,6 +279,253 @@ These must be answered from each provider's documentation, or by Evoni from her 
 | Q5 | fal | Is the request-status endpoint free, and how long are results kept? | S2 `check` for stills |
 | Q6 | OpenAI images | `Idempotency-Key` support on image generation, and billing of client-timed-out requests | S3 if the OpenAI base model is used |
 | Q7 | Anthropic | Billing when the client times out, and whether a duplicate request can be detected | Claude reservation and settlement (S3, S7) |
+
+---
+
+## Revision 3: the final design questions (A–D)
+
+**What it supersedes in revision 2.**
+- The API pause is a database control acknowledged by the API, not an environment flag (C).
+- The worker's mutations go through fixed `SECURITY DEFINER` functions instead of column-level UPDATE grants (D).
+- The ledger states are the ones defined in A.
+
+### A. The paid-call lifecycle
+
+Every paid provider call the worker makes has one `worker_paid_calls` row. Its `phase` moves only along the arrows below. Each move is a committed database transaction, made by a fixed function (D).
+
+| Phase | Meaning | Committed when | Request sent? |
+|---|---|---|---|
+| `reserved` | Budget reserved; request key generated | T1: the reservation transaction (B) commits, **before** any network activity | No: the send is reached only after T2 commits |
+| `submitting` | About to send | T2: committed immediately before the request is written to the socket. If T2 fails, nothing is sent | Maybe |
+| `accepted` | The provider returned a task id (Runway, fal queue) | T3: as soon as the response is parsed | Yes |
+| `provider_succeeded` | The provider reports success; the output reference (URL) is recorded | T4: before the asset is downloaded or stored | Yes |
+| `succeeded` | Confirmed success: the asset is stored in S3 and the job or scene row points to it | T5: the same transaction as the job or scene update, after the S3 write | Yes |
+| `not_sent` | Provably never sent | Set by recovery for a row still `reserved`, or by the worker for a pre-send error (below) | No |
+| `failed_confirmed` | The provider definitively reported failure, or rejected the request (4xx validation) | When the response is received | Yes |
+| `unknown` | Sent, or possibly sent, with no definitive answer: timeout, reset, 5xx, crash | Set by the worker on such an error, or by recovery for any row left in `submitting`, `accepted` or `provider_succeeded` | Maybe |
+| `abandoned` | Reconciled, but the outcome could not be established | Only by reconciliation | Maybe |
+
+Synchronous providers, such as the Flux sync endpoint, go straight from `submitting` to `provider_succeeded` or `failed_confirmed`.
+
+**The rule that makes A work.** The code path that sends the request can be reached only after T2 has committed and returned. This is tested by killing the process at every boundary (SIGKILL injection) and checking the provider stub's request count.
+
+**The four cases asked about:**
+1. **A crash between reservation and submission.**
+   - The row is `reserved` with no `submitting` commit.
+   - Recovery moves it to `not_sent` and releases its reservation.
+   - The job still goes to `needs_reconciliation`, because an earlier call of the same job (for example, a cascade's base) may have been paid. The row itself is clean evidence that **this** call was not sent.
+2. **A successful submission whose task id was not persisted.**
+   - The row is `submitting`. Recovery moves it to `unknown`, and **the reservation stays**.
+   - Reconciliation looks it up by the request key, if the provider supports idempotency keys (Q1), or in the provider's task list for that time window (Q2). Otherwise Evoni checks the provider dashboard or billing.
+   - Found: the task id is recorded, and the row continues to `accepted` and then to asset recovery.
+   - Not found: the row becomes `abandoned` with billed `unknown`, and the estimate stays counted as spent.
+3. **A completed provider task whose asset was not saved.**
+   - The row is `accepted` (task id known) or `provider_succeeded` (output URL known).
+   - Recovery leaves the phase as it is, marks it `unknown` only if it was `submitting`, and sends the job to `needs_reconciliation`.
+   - `reconcile.js recover-asset` reads the task status by id and downloads the output. Both are GET requests on an allowlist; neither is a paid request (Q2, Q8). It then stores the asset and commits `succeeded` with the job or scene update.
+   - If the output has expired (Q8), the row becomes `failed_confirmed` with billed `yes`.
+4. **What evidence allows a retry.** A new paid request for the same work is allowed only on one of these:
+   - the row is `not_sent`;
+   - a pre-send error class was recorded: DNS failure (`ENOTFOUND` / `EAI_AGAIN`), `ECONNREFUSED`, or a TLS handshake failure. These are raised by the HTTP client before any request bytes are written, classified by error code and covered by tests;
+   - the provider definitively states that no task exists for this request key. This is possible only once Q1 or Q2 confirms such a lookup.
+
+   **Only the first two allow an automatic retry, within the same call.** Anything else needs an explicit resolution, then a new job and a new activation approval.
+
+**How reconciliation moves states without paying.**
+- `scripts/worker/reconcile.js` imports no submit function. Its provider client is a GET-only allowlist (task status, output download), like the inventory's Redis client.
+- A test traces its requires and its HTTP methods: no model service, no `imageCostService`, no SDK, no POST.
+- Every `--apply` calls one function, `reconcile_paid_call(call_id, new_phase, billed, actual_usd, evidence)`, which:
+  - permits only these moves: `unknown` → `accepted`, `succeeded`, `failed_confirmed` or `abandoned`; `accepted` or `provider_succeeded` → `succeeded` or `failed_confirmed`; and a billing settlement on a terminal row;
+  - never inserts a ledger row;
+  - writes the `worker_reconciliations` audit row in the same transaction.
+
+**Tests:**
+- SIGKILL at T1/T2, T2/send, send/T3, T3/T4 and T4/T5. Each leaves the stated phase, gives zero second requests at the stub, and recovers to the stated state.
+- Pre-send errors retry; post-send errors never do.
+- `reconcile_paid_call` rejects every move not listed above.
+
+### B. Budget reservations
+
+- **Uncertain calls keep consuming their estimated maximum.** A row in `reserved`, `submitting`, `accepted`, `provider_succeeded` or `unknown` keeps its `estimate_usd` in the activation's `reserved_usd` until reconciled. An `abandoned` row's estimate moves to `spent_usd` permanently.
+- **The estimate is an upper bound, by rule:**
+  - images: the per-image price at the requested size and quality;
+  - Runway: duration × price per second;
+  - Claude: `max_tokens` at the output price, plus the prompt's token count (counted locally) at the input price.
+
+  A model without a price cannot form an estimate, so it is refused.
+- **Actual cost replaces the estimate.** On a terminal outcome, one transaction moves `estimate_usd` out of `reserved_usd` and adds `actual_usd` to `spent_usd`.
+  - `actual_usd` is the provider-reported or rate-table cost. When it is not known, the estimate is used.
+  - Should an actual exceed its estimate, which means the estimate rule is wrong and a test should have caught it, the true figure is recorded and the activation becomes `exhausted`. The overshoot is bounded by that one call's difference.
+- **Releases:**
+  - `not_sent`: the full estimate is released.
+  - `failed_confirmed` with billed `no`, on evidence (a provider status or a refund record): released.
+  - Billed `unknown`: the estimate moves to `spent_usd`.
+  - A later refund: `reconcile_paid_call` with evidence lowers `spent_usd`, audited and never below 0. It does **not** reopen an exhausted activation; more work needs a new activation.
+- **Concurrency.**
+  - Every reservation runs in `worker_reserve_call(...)`: `SELECT … FROM worker_activations WHERE id = $1 FOR UPDATE`, then a check that `spent_usd + reserved_usd + estimate <= budget_usd`, then the ledger insert and the counter update, then commit.
+  - The row lock serializes every reserver: any number of worker processes, and reconciliation.
+  - `CHECK (reserved_usd >= 0 AND spent_usd >= 0)` is a backstop.
+  - Isolation is READ COMMITTED; the row lock gives the ordering.
+  - **Test:** 20 parallel reservations against a budget that fits 7 commit exactly 7.
+
+### C. The paid API pause
+
+**Mechanism.** A singleton row in `paid_generation_controls`:
+- `version` and `api_paused`, with `changed_at`, `changed_by` and `note`;
+- acknowledgement columns written by the API: `api_ack_version`, `api_ack_paused`, `api_ack_at`, `api_in_flight`, `api_tracker_patched`.
+
+Rules:
+- Only an admin script changes `api_paused`.
+- Each API process re-reads the row at most every 5 s, and writes its acknowledgement every 5 s.
+- The guard refuses when the row says paused, or when the row cannot be read (fail closed while paused). The last value read stays in force for at most 5 s.
+
+**Where it is enforced.** The two choke points, plus each path that bypasses them:
+
+| Path | How |
+|---|---|
+| Every `imageCost.runImageCall` and `trackReplicate` call. This covers the image, video and background-removal routes in the appendix below: the Flux and OpenAI stills, the Runway angle video, remove.bg, Replicate, and `mediaVariations` (camera roll, post media, feed-post pictures) | A guard at the top of `runImageCall`: refuse with `PAID_GENERATION_PAUSED` before the provider is called |
+| Every Anthropic SDK call: 50 route files that use the SDK directly, the services they reach, and `messages.stream` | A guard in the `aiCostTracker` `Messages.create` patch. The patch can fail to install (it logs and continues), so the acknowledgement carries `api_tracker_patched`, and verification refuses when it is false |
+| **Bypass:** `POST /api/v1/scenes/:id/animate` (`sceneStudioController.animateScene`, a direct Runway `startImageToVideo`) | An explicit guard. **Separately, this route has no budget gate today: a live defect, reported below** |
+| **Bypass:** `POST /api/v1/amber/speak` and `POST /api/v1/amber/read-story` (ElevenLabs) | An explicit guard |
+| **Bypass:** `POST /api/v1/amber/diagnostic/findings/:id/execute` (the `claude` CLI in a child process) | An explicit guard |
+| **Bypass:** `POST /api/v1/assets/:id/enhance` and `POST /api/v1/scene-sets/:id/angles/:angleId/post-process` (Cloudinary) | An explicit guard |
+| Background: `postRelease` (every minute, **with no on/off switch today**), `postPictures.afterRelease` / `runWaiting`, the Pulse schedulers (`PULSE_ENGINE_ENABLED`), `feedScheduler` (`FEED_SCHEDULER_ENABLED`) and its HTTP run-now routes, `worldMoments`, and work started with `setImmediate` (`postPictures.afterApproval`, the `episodePoseMedia` queue, `sceneModelComparison`) | Their paid calls hit the choke-point guards. Each must treat `PAID_GENERATION_PAUSED` as **"wait and retry on a later tick"**, never as a permanent failure. The implementation checks this per path, with a test that runs each tick under the pause and finds its items still waiting |
+| The refinement queue (`sceneRefinementQueue`) | No processor is registered anywhere, so nothing runs. Jobs added by `auto-refine` wait in Redis. The inventory should count them (a later addition) |
+
+The exact route list for the choke-point paths is in the appendix. Enforcement does not depend on that list being complete: the guard sits at the calls themselves. The acceptance test drives every route in the appendix, plus the bypasses, under the pause and asserts 503 with zero provider-stub calls.
+
+**What users see.**
+- Paid actions return **503 `PAID_GENERATION_PAUSED`**: "Paid generation is paused while maintenance runs. Nothing was charged; try again later." The existing pages already show the API's error message (the `sendFail` pattern).
+- Read, edit, upload and every non-paid route work normally.
+- Scheduled and background items stay queued, or keep waiting.
+- No new UI is needed. A Diagnostics banner can come later.
+
+**Paid requests already running.**
+- The guard runs at the start of each paid call. A call already past it finishes; it is spend already committed.
+- The choke points and the bypass guards keep an in-process `api_in_flight` count (incremented before the provider call, decremented in `finally`), published in the acknowledgement.
+
+**Verifying the pause before activation.** `activation.js create` refuses unless all of the following hold, checked by reading the database:
+- `api_paused = true`;
+- every API process has acknowledged the current version (`api_ack_version = version`, `api_ack_paused = true`) within the last 15 s, with `api_in_flight = 0` and `api_tracker_patched = true`;
+- the pause has been in force for at least the longest paid call's duration (10 minutes; the Runway poll alone is up to 180 s);
+- no `ai_usage_logs` row from the API has been written since `changed_at` + 10 minutes.
+
+Recommended, but not required: Evoni tries one paid action in the UI and sees the 503.
+
+The worker re-checks the pause and the acknowledgement's freshness inside `worker_reserve_call`. **If the pause is lifted, or the API stops acknowledging, the worker's next reservation is refused.**
+
+**Restoring the API.** `paid_generation_controls.js resume` refuses unless:
+- no activation is `active`;
+- no worker ledger row is in `reserved`, `submitting`, `accepted` or `provider_succeeded`. Rows in `unknown` are reconciliation, not in-flight work, and do not block.
+
+It then sets `api_paused = false` (a new version) and waits until the API acknowledges `api_ack_paused = false`. Background items resume on their next tick.
+
+**Why lifting the pause cannot enable the worker.**
+- The pause grants nothing; it is only a precondition.
+- To process anything, the worker separately needs all three of:
+  1. its master switch and the scene-jobs switch, set in `.env` and applied by a pm2 restart;
+  2. an `active` activation, created only by `activation.js create`, which refuses unless the pause is verified;
+  3. a successful `worker_reserve_call`, which itself requires the pause to be in force.
+- Lifting the pause removes (2)'s and (3)'s precondition. The worker then fails closed and makes no further paid calls.
+
+### D. Activation ownership
+
+- **The worker cannot write the control tables directly.** `episode_worker` gets SELECT on `worker_activations`, `worker_paid_calls` and `paid_generation_controls`, and no INSERT, UPDATE or DELETE on any of them.
+- **Fixed functions do all of its writes.** It gets EXECUTE on: `worker_claim_job`, `worker_reserve_call`, `worker_mark_submitting`, `worker_record_response` and `worker_settle_call`.
+  - They are `SECURITY DEFINER`, owned by a `NOLOGIN` role (`episode_worker_ledger_owner`), with `SET search_path = pg_catalog, pg_temp` and fully qualified names, as the repo's migrations already do.
+  - They perform only the transitions in A and B. None can change `job_ids`, `job_types`, `max_jobs`, `budget_usd`, `expires_at` or `basis`, or set a status back to `active`.
+- **Activations are immutable.** A trigger on `worker_activations` rejects, for **every** role including admin:
+  - any UPDATE of those columns, or of `approved_by` and `approved_at`;
+  - any status move other than `active` → `exhausted`, `expired` or `revoked`.
+
+  There is no widen and no renew: a change is a revoke plus a new activation.
+- **Only an admin creates one.** `activation.js create` is the only INSERT path. Evoni runs it with an admin login, never `episode_worker`, as a separately approved step. It refuses unless the pause is verified (C), no job from an earlier activation is unresolved, and every listed job is `queued` with its basis captured (S6).
+- **At most one active activation**, enforced by a partial unique index on `(status) WHERE status = 'active'`.
+- **The role setup is gated DDL.** `episode_worker` is not a member of the owner or admin roles, and stays `NOINHERIT`. Creating the owner role and the grants is role DDL, so it goes in the gated role SQL file (as `episode_worker` does), not in an automatic migration.
+- **Tests, as `episode_worker`:**
+  - INSERT or UPDATE on `worker_activations` or `worker_paid_calls` is refused (42501);
+  - `worker_claim_job` beyond `max_jobs`, after `expires_at`, or for an id that isn't listed is refused;
+  - `worker_reserve_call` past the budget, or without the pause, is refused;
+  - the trigger blocks an admin widening (`job_ids`, budget, expiry) and blocks reactivation;
+  - the preflight is extended to check that none of these privileges is present.
+
+### Migration and setup list (not implemented)
+
+**Migrations** (each needs its own approval, applied through the Deploy workflow):
+- the tables `worker_activations`, `worker_paid_calls`, `worker_reconciliations` and `paid_generation_controls`, each with `deleted_at`;
+- the `needs_reconciliation` enum value (forward-only);
+- `generation_jobs.claim_token` and `activation_id`;
+- `scene_sets.generation_claim_job_id`;
+- the definer functions, the immutability trigger and the partial unique index.
+
+**Gated role SQL:** the `NOLOGIN` owner role, its ownership of the functions, and the new grants.
+
+### Live defects found (outside the worker; not fixed here)
+
+- **`POST /api/v1/scenes/:id/animate`** calls Runway `image_to_video` directly. It skips `runImageCall`, so it has **no budget gate and no usage log row**, and it re-submits on timeouts (the S3 rule). This affects the API today, whether or not the worker runs.
+- **`postRelease`** (`app.js` starts it every minute outside tests) has no environment switch. Its picture step makes OpenAI image edits, budget-gated through `runImageCall`.
+- **ElevenLabs** (`/amber/speak`, `/amber/read-story`), **Cloudinary** (`/assets/:id/enhance`, `post-process`) and the **`claude` CLI** route are untracked by cost logging. This was already known for ElevenLabs and Cloudinary (`PROJECT_CONTEXT.md`).
+
+### More provider questions
+
+| # | Provider | Question |
+|---|---|---|
+| Q8 | Runway, fal | How long does a task's output URL stay downloadable? This decides how long asset recovery (A, case 3) remains possible |
+| Q9 | Runway | Does a task cancelled after submission still bill? |
+
+### Appendix: API routes that reach a paid image, video or background call, all through `runImageCall`
+
+Under the pause, every one of these returns 503 with zero provider calls. The list was traced from the code on 2026-11-07; the acceptance test is the authority.
+
+- **`/api/v1/scene-sets`:**
+  - `POST /:id/generate-base`
+  - `/:id/angles/:angleId/generate`
+  - `/:id/generate-all-angles`
+  - `/:id/angles/:angleId/regenerate`
+  - `/model-comparison`
+  - `/:id/look-variants/:kind/:value/generate`
+  - `/:id/generate-object`
+  - `/:id/transform-object`
+  - `/:id/regenerate-background`
+  - `/:id/angles/:angleId/generate-depth`
+
+  Two more only queue work: `/:id/angles/:angleId/generate-video` and `/:id/cascade-regenerate` create `generation_jobs` rows for the worker, and `/:id/angles/:angleId/auto-refine` adds a refinement-queue job that nothing processes.
+- **`/api/v1/scenes`:** `POST /:id/generate-object`, `/:id/transform-object`, `/:id/regenerate-background`, `/:id/inpaint`, `/:id/segment` and `/:id/generate-depth`. (Also `/:id/animate`, the bypass in C.)
+- **`/api/v1/world`:**
+  - `POST /:showId/events/:eventId/generate-venue`
+  - `…/events/:eventId/look/generate`
+  - `…/events/:eventId/generate-invitation`
+  - `…/reroll-invitation-background`
+  - `…/reroll-invitation-text`
+  - `/:showId/events/batch-generate-invitations`
+  - `/:showId/events/:eventId/animate-invitation`
+  - `/:showId/episodes/:episodeId/generate-title-overlay`
+- **`/api/v1/episode-brief`:** `POST /:episodeId/dressed-angles/:angleId/generate`
+- **`/api/v1/media`:** `POST /:id/variations`
+- **Camera roll:** `POST /moments/:id/make` and `/characters/:id/make-kept`.
+- **Post media:** `POST /posts/:postId/suggestions/run` and `/posts/:postId/picture`.
+- **Feed posts:** `PUT /:postId`, `POST /release-plan` and `PUT /:postId/release-time`, through `postPictures.afterApproval`.
+- **`/api/v1/ui-overlays`:** `POST /:showId/generate-all`, `/:showId/generate/:overlayType` and `/:showId/remove-bg/:assetId`.
+- **`/api/v1/wardrobe`:**
+  - `POST /`
+  - `/:id/process-background`
+  - `/:id/regenerate-product-shot`
+  - `/:id/upscale`
+  - `/bulk/upscale`
+- **`/api/v1/wardrobe-library`:** `POST /`
+- **`/api/v1/assets`:**
+  - `POST /:id/remove-background`
+  - `/bulk/process-background`
+  - `PUT /:id/process`
+  - `POST /:id/process-background`
+  - `/process`
+- **`/api/v1/episode-poses`:** `POST /:episodeId`, `/:episodeId/from-lookbook` and `/:episodeId/:poseId/reprocess`.
+- **`/api/v1/youtube-thumbnails`:** `POST /episodes/:episodeId/pictures/cut-out` and `/episodes/:episodeId/backgrounds/ai`.
+- **`/api/v1/cast`:** `POST /characters/:id/appearance/portrait`
+- **`/api/v1/episodes`:** `POST /:id/title-card` and `/:id/title-overlay/flourish`.
+- **`/api/v1/shows`:** `POST /:id/seed-finance-apps` and `/:id/redecorate-finance-app`.
+
+**Claude routes are not listed one by one.** 50 route files import the SDK directly, and up to 37 more reach SDK-using services. The guard sits in the SDK patch, so it covers them without a list, and the acceptance test enumerates them by driving each route with the SDK stubbed.
 
 ---
 
