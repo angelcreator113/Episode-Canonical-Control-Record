@@ -5,6 +5,7 @@ const sceneStudioController = require('../controllers/sceneStudioController');
 const { asyncHandler } = require('../middleware/errorHandler');
 const { validateUUIDParam } = require('../middleware/requestValidation');
 const { requireAuth } = require('../middleware/auth');
+const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 
 console.log('🔵 SCENES ROUTES FILE LOADING... [TIMESTAMP:', new Date().toISOString(), ']');
 console.log('🆕 SCENES.JS VERSION: 2026-02-10-05:20 - Routes reordered with /:id LAST');
@@ -191,6 +192,7 @@ router.post(
   '/:id/animate',
   validateUUIDParam('id'),
   requireAuth,
+  aiRateLimiter,
   asyncHandler(sceneStudioController.animateScene)
 );
 

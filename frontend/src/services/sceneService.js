@@ -5,6 +5,12 @@
 
 import api from './api';
 
+// Scene animation (#3714 R1): requests in flight, and scenes whose last
+// animation ended with an unknown outcome at Runway.
+const animateInFlight = new Set();
+const animateOutcomeUnknown = new Map();
+
+
 const sceneService = {
   // List scenes for an episode (from episode_scenes table)
   async getScenes(episodeId, params = {}) {
@@ -462,15 +468,44 @@ const sceneService = {
   /**
    * Animate scene via Runway image-to-video
    * POST /api/v1/scenes/:id/animate
+   *
+   * A paid request that must never be sent twice by accident (#3714 R1):
+   *   - one request per scene at a time: a second call while one is in
+   *     flight is refused here, without calling the server;
+   *   - when the server answers PROVIDER_OUTCOME_UNKNOWN (Runway may have
+   *     started it), the error thrown has code PROVIDER_OUTCOME_UNKNOWN,
+   *     retryable false and the Runway task id, and the next call for that
+   *     scene is refused until the caller passes confirmAfterUnknown: true
+   *     (after the person has checked).
    */
-  animateScene: async (sceneId, { imageUrl, prompt, duration, cameraMotion } = {}) => {
-    const { data } = await api.post(`/api/v1/scenes/${sceneId}/animate`, {
-      image_url: imageUrl,
-      prompt,
-      duration,
-      camera_motion: cameraMotion,
-    });
-    return data;
+  animateScene: async (sceneId, { imageUrl, prompt, duration, cameraMotion, confirmAfterUnknown = false } = {}) => {
+    if (animateInFlight.has(sceneId)) {
+      throw Object.assign(new Error('An animation for this scene is already being started. Wait for it to finish.'), { code: 'ANIMATE_IN_FLIGHT', retryable: false });
+    }
+    const unknown = animateOutcomeUnknown.get(sceneId);
+    if (unknown && !confirmAfterUnknown) {
+      throw Object.assign(new Error('The last animation for this scene may already have started at Runway. Check it before starting another; a second one may be charged again.'), { code: 'PROVIDER_OUTCOME_UNKNOWN', retryable: false, jobId: unknown.jobId });
+    }
+    animateInFlight.add(sceneId);
+    try {
+      const { data } = await api.post(`/api/v1/scenes/${sceneId}/animate`, {
+        image_url: imageUrl,
+        prompt,
+        duration,
+        camera_motion: cameraMotion,
+      });
+      animateOutcomeUnknown.delete(sceneId);
+      return data;
+    } catch (err) {
+      const body = err && err.response && err.response.data;
+      if (body && body.code === 'PROVIDER_OUTCOME_UNKNOWN') {
+        animateOutcomeUnknown.set(sceneId, { jobId: body.job_id || null, at: Date.now() });
+        throw Object.assign(new Error(body.error || 'Runway may have started this animation. Check before trying again.'), { code: 'PROVIDER_OUTCOME_UNKNOWN', retryable: false, jobId: body.job_id || null });
+      }
+      throw err;
+    } finally {
+      animateInFlight.delete(sceneId);
+    }
   },
 
   // ============================================================================
