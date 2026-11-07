@@ -273,6 +273,20 @@ const sleep = (ms) => new Promise((r) => { setTimeout(r, ms); });
       expect(job.asset_ids).toHaveLength(1);
     });
 
+    test('the scheduler never resubmits an uncertain job: runWaiting, a release and approval leave it as it is (switch on)', async () => {
+      process.env.POST_PICTURES_AUTO_ENABLED = 'true';
+      const live = await post({ job: { state: 'uncertain', count: 1, error: 'may already have been made', queued_at: ago(60) } });
+      const scheduled = await post({ status: 'draft', scheduled: true, job: { state: 'uncertain', count: 1, error: 'may already have been made' } });
+      await postPictures.runWaiting(models);
+      await postRelease.releaseDue(models);
+      await postPictures.afterApproval(models, (await models.FeedPost.findByPk(live)), { by: 'test' });
+      await sleep(300);
+      expect(imageCalls()).toEqual([]);
+      expect(await jobOf(live)).toMatchObject({ state: 'uncertain' });
+      expect(await jobOf(scheduled)).toMatchObject({ state: 'uncertain' });
+      expect(await statusOf(scheduled)).toBe('live');
+    });
+
     test('dismiss refuses a job that is not interrupted or uncertain', async () => {
       const id = await post({ job: { state: 'made', count: 1 } });
       const r = await as(request(app).post(`/api/v1/post-media/posts/${id}/picture/dismiss`)).send({});
