@@ -41,6 +41,29 @@
  *   run(db, postId, { by, makeNow })  reuse or make, and put the pictures on the post
  *   runWaiting(db)                    the waiting ones, while the day's count allows
  *   statusOf(db, postId)              its job, the estimate, and photos that could be reused
+ *   dismiss(db, postId, { by })       an interrupted or uncertain job resolved by hand, without making
+ *
+ * Automatic pictures and paid outcomes (#3714 R2):
+ *   - POST_PICTURES_AUTO_ENABLED must be exactly "true" for pictures to be
+ *     made without Evoni's click: a post that goes live on its own
+ *     (afterRelease: a scheduled release, the engine's release) and the
+ *     release timer's runWaiting. Off (the default), scheduled posts are
+ *     still published; their picture waits ('waiting_auto_off', Make now).
+ *     Approving in Review, scheduling it herself, Make now and Retry are
+ *     hers and unchanged.
+ *   - Not submitted vs possibly submitted: 'pending' and 'waiting_*' have
+ *     made no paid call (the image call starts only after claim() sets
+ *     'making'). A 'making' job older than STALE_MINUTES was interrupted
+ *     ('interrupted'), and a run that failed in a way that may have reached
+ *     the image service ('uncertain') may already have been made and
+ *     charged. Neither is ever made again on its own, and claim() no
+ *     longer takes over a stale 'making' by itself. Evoni either makes it
+ *     again knowingly (run with confirmUnknown: true) or dismisses it
+ *     (dismiss): nothing is silently marked failed.
+ *   - 'failed' is kept for runs that sent no paid request at all (the
+ *     budget or our own checks refused it first): Retry as before. Once a
+ *     request was sent (mediaVariations.editImage onAttempt), any failure,
+ *     a blocked (blank) picture included, is 'uncertain'.
  */
 
 const media = require('./mediaLibrary');
@@ -51,6 +74,28 @@ const ROUTE = 'pulse-post-picture';
 const PER_DAY_DEFAULT = 20;
 const COUNT = Object.freeze({ post: 1, carousel: 3 });
 const STALE_MINUTES = 15;
+// Jobs whose paid image call may already have happened: never made again
+// without confirmUnknown (#3714 R2).
+const UNKNOWN_STATES = Object.freeze(['interrupted', 'uncertain']);
+
+/** Automatic (unclicked) pictures: only when POST_PICTURES_AUTO_ENABLED is exactly "true". */
+function autoEnabled(env = process.env) {
+  return String(env.POST_PICTURES_AUTO_ENABLED || '').trim().toLowerCase() === 'true';
+}
+
+/**
+ * How a failed run ended, from whether any paid image request was sent
+ * (#3714 R2). 'definite' only when none was: every failure happened before
+ * the call (the budget refused it, or our own checks did), so nothing was
+ * charged and Retry is safe. Once a request has been sent ('attempts' > 0),
+ * the provider may have accepted and charged it, whatever came back: a
+ * timeout, a 5xx, a blank (blocked) picture, a reply without an image, a
+ * failure storing the picture, or an earlier picture of a carousel already
+ * made. That is 'uncertain', and it is never made again without a check.
+ */
+function outcomeOf(err, { attempts = 0 } = {}) {
+  return attempts > 0 ? 'uncertain' : 'definite';
+}
 const SELF = /\b(selfie|outfit|look|fit|ootd|wearing|mirror|my face|hair|makeup|me)\b/i;
 const MIRROR = /\b(mirror|outfit|ootd|fit|wearing)\b/i;
 const ALBUM_WORDS = [
@@ -231,7 +276,7 @@ async function momentFor(db, post, character, { index = 1, of = 1, hasHeadshot =
 }
 
 /** One product or campaign shot for a brand's post: no person in it. */
-async function brandShot(db, post, brand, { index, of, by }) {
+async function brandShot(db, post, brand, { index, of, by, onAttempt = null }) {
   const variations = require('./mediaVariations');
   const prompt = [
     `A product or campaign photo posted on The Pulse by ${brand.name}, an original fictional ${brand.category || 'fashion'} house in LalaWorld.`,
@@ -242,7 +287,7 @@ async function brandShot(db, post, brand, { index, of, by }) {
     'Natural light, real surroundings, editorial but believable. No text, no letters, no logos, no brand names, no watermark.',
   ].filter(Boolean).join(' ');
   let cost = null;
-  const buffer = await variations.editImage(prompt, [], { routeName: ROUTE, size: BRAND_SIZE, onLogged: (l) => { cost = l.costUsd; } });
+  const buffer = await variations.editImage(prompt, [], { routeName: ROUTE, size: BRAND_SIZE, onLogged: (l) => { cost = l.costUsd; }, onAttempt });
   const { isBlank } = require('./characterAppearance');
   if (await isBlank(buffer)) throw new PostPictureError(422, 'The image service blocked this picture (a black picture comes back when its filter flags one). Nothing was saved.');
   const { storePulseImage } = require('./pulseImageService');
@@ -258,13 +303,21 @@ async function brandShot(db, post, brand, { index, of, by }) {
   return { assetId: created.asset.id, cost: typeof cost === 'number' ? cost : estimate(1, { brand: true }) };
 }
 
-/** Claim the post for making, so two runs never make it twice. */
-async function claim(db, postId) {
+/**
+ * Claim the post for making, so two runs never make it twice. A job that
+ * may already have been made ('making', 'interrupted', 'uncertain') is
+ * claimed only with confirmUnknown, Evoni having checked (#3714 R2): a
+ * stale 'making' is no longer taken over on its own.
+ */
+async function claim(db, postId, { confirmUnknown = false } = {}) {
   const [rows] = await db.sequelize.query(
     `UPDATE feed_posts SET picture_job = COALESCE(picture_job, '{}'::jsonb) || jsonb_build_object('state', 'making', 'claimed_at', NOW()), updated_at = NOW()
-      WHERE id = :id AND (COALESCE(picture_job->>'state', '') <> 'making'
-        OR (picture_job->>'claimed_at')::timestamptz < NOW() - INTERVAL '${STALE_MINUTES} minutes')
-      RETURNING id`, { replacements: { id: postId } });
+      WHERE id = :id AND (
+        COALESCE(picture_job->>'state', '') NOT IN ('making', 'interrupted', 'uncertain')
+        OR (:confirm AND picture_job->>'state' IN ('interrupted', 'uncertain'))
+        OR (:confirm AND picture_job->>'state' = 'making'
+            AND (picture_job->>'claimed_at')::timestamptz < NOW() - INTERVAL '${STALE_MINUTES} minutes'))
+      RETURNING id`, { replacements: { id: postId, confirm: Boolean(confirmUnknown) } });
   return rows.length > 0;
 }
 
@@ -272,13 +325,19 @@ async function queue(db, postOrId) {
   const post = typeof postOrId === 'object' ? postOrId : await postMedia.loadPost(db, postOrId);
   const n = wanted(post);
   if (!n || !approved(post)) return null;
-  if (['made', 'making'].includes(post.picture_job?.state)) return post.picture_job;
+  if (['made', 'making', ...UNKNOWN_STATES].includes(post.picture_job?.state)) return post.picture_job;
   return setJob(post, { state: 'pending', count: n, estimate_usd: estimate(n), queued_at: new Date().toISOString(), error: null });
 }
 
-async function run(db, postId, { by = null, makeNow = false } = {}) {
+async function run(db, postId, { by = null, makeNow = false, confirmUnknown = false } = {}) {
   let post = await postMedia.loadPost(db, postId);
   if (!approved(post)) throw new PostPictureError(409, 'Pictures are made only for posts you approved.');
+  const before = post.picture_job || {};
+  const staleMaking = before.state === 'making' && before.claimed_at
+    && Date.now() - new Date(before.claimed_at).getTime() > STALE_MINUTES * 60 * 1000;
+  if ((UNKNOWN_STATES.includes(before.state) || staleMaking) && !confirmUnknown) {
+    throw Object.assign(new PostPictureError(409, 'This picture may already have been made and charged (its last run was interrupted or ended without a clear answer). Check the camera roll and the library first; then make it again knowingly, or dismiss it.'), { code: 'PICTURE_OUTCOME_UNKNOWN' });
+  }
   const n = wanted(post);
   if (!n) {
     const done = postMedia.urlsOf(post).length > 0;
@@ -303,16 +362,19 @@ async function run(db, postId, { by = null, makeNow = false } = {}) {
       reason: `Today's post-picture limit (${cap}) is reached; it will be made tomorrow, or press Make now.`,
     });
   }
-  if (!(await claim(db, post.id))) throw new PostPictureError(409, 'A picture for this post is being made right now.');
+  if (!(await claim(db, post.id, { confirmUnknown }))) throw new PostPictureError(409, 'A picture for this post is being made right now.');
   post = await postMedia.loadPost(db, post.id);
 
   const assetIds = [];
   const momentIds = [];
   let cost = 0;
+  // Paid image requests sent in this run (mediaVariations.editImage onAttempt).
+  let attempts = 0;
+  const onAttempt = () => { attempts += 1; };
   try {
     if (poster.kind === 'brand') {
       for (let i = 1; i <= n; i += 1) {
-        const shot = await brandShot(db, post, poster.brand, { index: i, of: n, by });
+        const shot = await brandShot(db, post, poster.brand, { index: i, of: n, by, onAttempt });
         assetIds.push(shot.assetId);
         cost += shot.cost || 0;
       }
@@ -327,7 +389,7 @@ async function run(db, postId, { by = null, makeNow = false } = {}) {
           event_id: event?.id || null, episode_id: post.episode_id || event?.used_in_episode_id || null, created_by: by,
         });
         momentIds.push(row.id);
-        const out = await cameraRoll.make(db, row.id, { by, routeName: ROUTE, wearing });
+        const out = await cameraRoll.make(db, row.id, { by, routeName: ROUTE, wearing, onAttempt });
         assetIds.push(out.photo.asset_id);
         await row.reload();
         cost += Number(row.cost) || 0;
@@ -335,13 +397,21 @@ async function run(db, postId, { by = null, makeNow = false } = {}) {
     }
   } catch (err) {
     const budget = err.code === 'AI_BUDGET_EXCEEDED';
-    console.error(`[postPictures] the picture for post ${post.id} was not made:`, err.message);
+    const outcome = outcomeOf(err, { attempts });
+    console.error(`[postPictures] the picture for post ${post.id} was not made (${outcome}):`, err.message);
     post = await postMedia.loadPost(db, post.id);
     await setJob(post, {
-      state: 'failed', count: n, moment_ids: momentIds, asset_ids: assetIds, cost_usd: Math.round(cost * 1e4) / 1e4,
-      error: budget ? 'Today\'s image budget is used up, so the picture was not made. Retry when it resets.' : (err.message || 'The picture could not be made.'),
+      state: outcome === 'uncertain' ? 'uncertain' : 'failed',
+      count: n, moment_ids: momentIds, asset_ids: assetIds, cost_usd: Math.round(cost * 1e4) / 1e4,
+      error: outcome === 'uncertain'
+        ? `${attempts} paid image request${attempts === 1 ? ' was' : 's were'} sent and the run then failed (${err.message || 'no clear answer came back'}), so a picture may already have been made and charged. Check the camera roll and the library, then make it again knowingly or dismiss it.`
+        : budget
+          ? 'Today\'s image budget is used up, so the picture was not made. Retry when it resets.'
+          : (err.message || 'The picture could not be made.'),
+      ...(outcome === 'uncertain' ? { uncertain_at: new Date().toISOString(), paid_attempts: attempts } : {}),
     });
-    if (budget) throw err;
+    if (budget && outcome === 'definite') throw err;
+    if (outcome === 'uncertain') throw Object.assign(new PostPictureError(502, 'A paid image request was sent and the run then failed; the picture may already have been made and charged. Check before making it again.'), { code: 'PICTURE_OUTCOME_UNKNOWN' });
     throw new PostPictureError(err.status && err.status < 500 ? err.status : 502, err.message || 'The picture could not be made.');
   }
   // attachPictures tags each picture with the post in the library.
@@ -350,6 +420,7 @@ async function run(db, postId, { by = null, makeNow = false } = {}) {
   return setJob(post, {
     state: 'made', count: n, reused: false, moment_ids: momentIds, asset_ids: assetIds,
     cost_usd: Math.round(cost * 1e4) / 1e4, made_at: new Date().toISOString(), make_now: Boolean(makeNow), error: null, reason: null,
+    ...(confirmUnknown && (UNKNOWN_STATES.includes(before.state) || staleMaking) ? { remade_after: before.state === 'making' ? 'interrupted' : before.state, uncertain_at: null } : {}),
   });
 }
 
@@ -382,10 +453,16 @@ async function afterApproval(db, post, { by = null } = {}) {
  * failure is never retried on its own. Never throws: the release never fails
  * on its picture.
  */
-async function afterRelease(db, post, { by = 'auto release' } = {}) {
+async function afterRelease(db, post, { by = 'auto release', env = process.env } = {}) {
   try {
     const fresh = await postMedia.loadPost(db, post.id);
     if (fresh.picture_job?.state) return fresh.picture_job;
+    if (!autoEnabled(env)) {
+      // Off: published without its picture; nothing paid starts on its own.
+      const n = wanted(fresh);
+      if (!n || !approved(fresh)) return null;
+      return setJob(fresh, { state: 'waiting_auto_off', count: n, estimate_usd: estimate(n), error: null, reason: 'Automatic post pictures are off on this server; press Make now to make it.' });
+    }
     return await afterApproval(db, fresh, { by });
   } catch (err) {
     console.error(`[postPictures] post ${post?.id}'s picture after its release:`, err.message);
@@ -395,11 +472,28 @@ async function afterRelease(db, post, { by = 'auto release' } = {}) {
 
 let running = false;
 /** The waiting ones (and any left pending by a restart), oldest first, while today's count allows. */
-async function runWaiting(db, { limit = 10 } = {}) {
+async function runWaiting(db, { limit = 10, env = process.env } = {}) {
   if (running) return [];
   running = true;
   const done = [];
   try {
+    // A run left 'making' past the window was interrupted: it may already
+    // have been made, so it is marked for Evoni's check, never re-run (#3714 R2).
+    await db.sequelize.query(
+      `UPDATE feed_posts SET picture_job = picture_job || jsonb_build_object('state', 'interrupted', 'interrupted_at', NOW(),
+          'error', 'Its picture was interrupted while it was being made; it may already have been made and charged. Check the camera roll and the library, then make it again knowingly or dismiss it.'),
+          updated_at = NOW()
+        WHERE deleted_at IS NULL AND picture_job->>'state' = 'making'
+          AND (picture_job->>'claimed_at')::timestamptz < NOW() - INTERVAL '${STALE_MINUTES} minutes'`);
+    if (!autoEnabled(env)) {
+      // Off: a pending job left by a restart made no paid call; it waits for Make now.
+      await db.sequelize.query(
+        `UPDATE feed_posts SET picture_job = picture_job || jsonb_build_object('state', 'waiting_auto_off',
+            'reason', 'Automatic post pictures are off on this server; press Make now to make it.'), updated_at = NOW()
+          WHERE deleted_at IS NULL AND picture_job->>'state' = 'pending'
+            AND (picture_job->>'queued_at')::timestamptz < NOW() - INTERVAL '${STALE_MINUTES} minutes'`);
+      return done;
+    }
     const [rows] = await db.sequelize.query(
       `SELECT id, COALESCE((picture_job->>'count')::int, 1) AS n FROM feed_posts
         WHERE deleted_at IS NULL AND (status = 'live' OR release_state = 'scheduled')
@@ -420,6 +514,26 @@ async function runWaiting(db, { limit = 10 } = {}) {
     running = false;
   }
   return done;
+}
+
+/**
+ * Resolve an interrupted or uncertain job by hand without making anything
+ * (#3714 R2): Evoni checked, and wants no picture made now. The job keeps
+ * what happened ('dismissed_from', who, when); Retry/Make now later makes a
+ * new one as usual.
+ */
+async function dismiss(db, postId, { by = null, note = null } = {}) {
+  const post = await postMedia.loadPost(db, postId);
+  const job = post.picture_job || {};
+  const staleMaking = job.state === 'making' && job.claimed_at
+    && Date.now() - new Date(job.claimed_at).getTime() > STALE_MINUTES * 60 * 1000;
+  if (!UNKNOWN_STATES.includes(job.state) && !staleMaking) {
+    throw new PostPictureError(409, 'Only an interrupted or uncertain picture can be dismissed.');
+  }
+  return setJob(post, {
+    state: 'skipped', dismissed_from: staleMaking ? 'interrupted' : job.state, dismissed_by: by, dismissed_at: new Date().toISOString(),
+    reason: note ? String(note).slice(0, 300) : 'Dismissed after a check: no picture made now.', error: null,
+  });
 }
 
 async function statusOf(db, postId) {
@@ -448,5 +562,6 @@ async function statusOf(db, postId) {
 module.exports = {
   PostPictureError, ROUTE, COUNT, PER_DAY_DEFAULT,
   dailyCap, wanted, estimate, madeToday, posterFor, reusable, episodeWardrobe, momentFor,
-  queue, run, afterApproval, afterRelease, runWaiting, statusOf,
+  queue, run, afterApproval, afterRelease, runWaiting, statusOf, dismiss,
+  autoEnabled, outcomeOf, claim, UNKNOWN_STATES, STALE_MINUTES,
 };
