@@ -417,9 +417,20 @@ async function updateMoment(db, momentId, fields = {}) {
   for (const k of given) patch[k] = merged[k];
   if (!made && !given.includes('outfit') && (given.includes('purpose') || given.includes('album'))) patch.outfit = merged.outfit;
   if (!made && given.includes('taken_by')) patch.taken_by = merged.taken_by;
-  await moment.update(patch);
+  await writeIfUnchanged(db, moment, patch);
   if (made && moment.asset_id) await syncPhoto(db, moment);
   return momentOut(moment);
+}
+
+// An ordinary edit or status change writes only while the photo still has
+// the status it was read with: a Make that claimed it meanwhile ('making'),
+// or a result that made it 'uncertain' or 'made', is never overwritten (#3714).
+async function writeIfUnchanged(db, moment, patch) {
+  const [count] = await db.CameraRollMoment.update(patch, { where: { id: moment.id, status: moment.status } });
+  if (!count) {
+    throw Object.assign(new CameraRollError(409, 'That photo changed while it was being changed (it may be being made); look again.'), { code: 'PHOTO_CHANGED' });
+  }
+  await moment.reload();
 }
 
 /** A made photo follows its moment: public only when posted, and its camera-roll record. */
@@ -446,7 +457,7 @@ async function setStatus(db, momentId, status) {
     const target = await targetFor(db, character, registry);
     if (live.length >= target) throw new CameraRollError(409, `Their camera roll already has ${target} photos planned.`);
   }
-  await moment.update({ status, error: status === 'kept' ? null : moment.error });
+  await writeIfUnchanged(db, moment, { status, error: status === 'kept' ? null : moment.error });
   return momentOut(moment);
 }
 
