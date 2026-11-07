@@ -165,7 +165,7 @@ describe('the request', () => {
 });
 
 describe('retries and unknown outcomes', () => {
-  test.each([['a timeout', netErr('ECONNABORTED')], ['a reset', netErr('ECONNRESET')], ['a 503', Object.assign(new Error('503'), { response: { status: 503, data: {} } })]])(
+  test.each([['a timeout', netErr('ECONNABORTED')], ['a reset', netErr('ECONNRESET')], ['a 503', Object.assign(new Error('503'), { response: { status: 503, data: {} } })], ['a 429', Object.assign(new Error('429'), { response: { status: 429, data: {} } })]])(
     '%s after sending: exactly one request, 502 PROVIDER_OUTCOME_UNKNOWN, retryable false',
     async (_l, err) => {
       axios.post.mockRejectedValueOnce(err);

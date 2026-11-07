@@ -2,8 +2,8 @@
  * #3714 R1: startImageToVideo (the one Runway image-to-video submission,
  * shared by POST /api/v1/scenes/:id/animate and the worker's
  * generateAngleVideo) is sent again only when the earlier attempt provably
- * never reached Runway, or Runway refused it with 429. Every ambiguous
- * failure throws ProviderOutcomeUnknownError after exactly one send.
+ * never reached Runway. Every ambiguous failure, a 429 included, throws
+ * ProviderOutcomeUnknownError after exactly one send.
  */
 jest.mock('axios', () => ({ post: jest.fn(), get: jest.fn() }));
 jest.mock('@aws-sdk/client-s3', () => ({
@@ -72,9 +72,15 @@ describe('startImageToVideo', () => {
     expect(axios.post).toHaveBeenCalledTimes(3);
   });
 
-  test('a 429 (Runway refused it) is retried', async () => {
+  test('a 429 is an unknown outcome: exactly one send, PROVIDER_OUTCOME_UNKNOWN, never retried', async () => {
     axios.post.mockRejectedValueOnce(httpErr(429)).mockResolvedValueOnce({ data: { id: 'task-3' } });
-    await expect(sceneGen.startImageToVideo('p', 'https://img')).resolves.toEqual({ jobId: 'task-3' });
+    await expect(sceneGen.startImageToVideo('p', 'https://img')).rejects.toMatchObject({ code: 'PROVIDER_OUTCOME_UNKNOWN', status: 502 });
+    expect(axios.post).toHaveBeenCalledTimes(1);
+  });
+
+  test('a 429 after a never-reached attempt: two sends in all, then PROVIDER_OUTCOME_UNKNOWN', async () => {
+    axios.post.mockRejectedValueOnce(netErr('ECONNREFUSED')).mockRejectedValueOnce(httpErr(429)).mockResolvedValueOnce({ data: { id: 'task-x' } });
+    await expect(sceneGen.startImageToVideo('p', 'https://img')).rejects.toMatchObject({ code: 'PROVIDER_OUTCOME_UNKNOWN' });
     expect(axios.post).toHaveBeenCalledTimes(2);
   });
 
@@ -87,7 +93,7 @@ describe('startImageToVideo', () => {
   test('classifySubmitError', () => {
     expect(sceneGen.classifySubmitError(netErr('ECONNREFUSED'))).toBe('not_sent');
     expect(sceneGen.classifySubmitError(netErr('ECONNRESET'))).toBe('unknown');
-    expect(sceneGen.classifySubmitError(httpErr(429))).toBe('rejected');
+    expect(sceneGen.classifySubmitError(httpErr(429))).toBe('unknown');
     expect(sceneGen.classifySubmitError(httpErr(403))).toBe('failed');
     expect(sceneGen.classifySubmitError(httpErr(503))).toBe('unknown');
   });
@@ -108,6 +114,16 @@ describe('the worker path (generateAngleVideo) under the shared change', () => {
     const imageCost = require('../../../src/services/imageCostService');
     jest.spyOn(imageCost, 'runImageCall').mockImplementation(async (_plan, fn) => fn());
     axios.post.mockRejectedValueOnce(netErr('ECONNABORTED'));
+    const m = models();
+    await expect(sceneGen.generateAngleVideo(angle, { id: 's1' }, m)).rejects.toMatchObject({ code: 'PROVIDER_OUTCOME_UNKNOWN' });
+    expect(axios.post).toHaveBeenCalledTimes(1);
+    expect(m.SceneAngle.update).not.toHaveBeenCalled();
+  });
+
+  test('a submit 429: one Runway request, PROVIDER_OUTCOME_UNKNOWN, no clip written', async () => {
+    const imageCost = require('../../../src/services/imageCostService');
+    jest.spyOn(imageCost, 'runImageCall').mockImplementation(async (_plan, fn) => fn());
+    axios.post.mockRejectedValueOnce(httpErr(429)).mockResolvedValueOnce({ data: { id: 'task-y' } });
     const m = models();
     await expect(sceneGen.generateAngleVideo(angle, { id: 's1' }, m)).rejects.toMatchObject({ code: 'PROVIDER_OUTCOME_UNKNOWN' });
     expect(axios.post).toHaveBeenCalledTimes(1);

@@ -1816,8 +1816,10 @@ exports.animateScene = async (req, res) => {
     }
     const providerStatus = error && error.response ? error.response.status : undefined;
     console.error('Scene Studio animateScene error:', error && error.message);
+    // startImageToVideo turns a Runway 429 into PROVIDER_OUTCOME_UNKNOWN; a
+    // 429 reaching here is still never reported as "nothing was started".
     if (providerStatus === 429) {
-      return res.status(429).json({ success: false, code: 'PROVIDER_RATE_LIMITED', error: 'Runway is refusing new animations right now. Nothing was started; try again later.' });
+      return res.status(502).json({ success: false, code: 'PROVIDER_OUTCOME_UNKNOWN', retryable: false, job_id: null, error: OUTCOME_UNKNOWN_MESSAGE });
     }
     if (providerStatus >= 400 && providerStatus < 500) {
       return res.status(502).json({ success: false, code: 'PROVIDER_REJECTED', error: 'Runway refused this animation request. Nothing was started.' });

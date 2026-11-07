@@ -288,24 +288,28 @@ class ProviderOutcomeUnknownError extends Error {
 /**
  * How a failed submission ended:
  *   'not_sent'  never reached Runway (NOT_SENT_ERROR_CODES): safe to retry;
- *   'rejected'  Runway answered 429, refusing it: nothing was created;
  *   'failed'    Runway answered 4xx (other than 429): a definitive refusal;
- *   'unknown'   anything else (timeout, reset, 5xx, no answer): it may
+ *   'unknown'   anything else (timeout, reset, 429, 5xx, no answer): it may
  *               have been accepted.
+ *
+ * A 429 is 'unknown', not a refusal: no Runway documentation recorded in
+ * this repository establishes that a 429 means no paid task was created, so
+ * it is never sent again automatically (Evoni, AI Operations Center review,
+ * 2026-11-07, Q7/R6).
  */
 function classifySubmitError(err) {
   const status = err && err.response ? err.response.status : undefined;
   if (status === undefined) return NOT_SENT_ERROR_CODES.has(err && err.code) ? 'not_sent' : 'unknown';
-  if (status === 429) return 'rejected';
+  if (status === 429) return 'unknown';
   if (status >= 400 && status < 500) return 'failed';
   return 'unknown';
 }
 
 /**
  * Submit one image-to-video task. Sent again only when the earlier attempt
- * provably never reached Runway, or Runway refused it with 429; any
- * ambiguous failure throws ProviderOutcomeUnknownError instead of risking a
- * second paid task (#3714 R1). Callers: sceneStudioController.animateScene
+ * provably never reached Runway; any ambiguous failure, a 429 included,
+ * throws ProviderOutcomeUnknownError instead of risking a second paid task
+ * (#3714 R1). Callers: sceneStudioController.animateScene
  * (POST /api/v1/scenes/:id/animate) and generateAngleVideo (the worker).
  */
 async function startImageToVideo(prompt, imageUrl, options = {}) {
@@ -345,7 +349,7 @@ async function startImageToVideo(prompt, imageUrl, options = {}) {
       }
       if (kind === 'failed' || attempt === MAX_ATTEMPTS) throw err;
       const backoff = attempt * 2000;
-      console.log(`[SceneGen] image_to_video ${kind === 'not_sent' ? 'never reached Runway' : 'was refused (429)'}; retrying in ${backoff}ms...`);
+      console.log(`[SceneGen] image_to_video never reached Runway; retrying in ${backoff}ms...`);
       await sleep(backoff);
       continue;
     }
