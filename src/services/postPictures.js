@@ -60,8 +60,10 @@
  *     longer takes over a stale 'making' by itself. Evoni either makes it
  *     again knowingly (run with confirmUnknown: true) or dismisses it
  *     (dismiss): nothing is silently marked failed.
- *   - 'failed' stays for definite outcomes: refused by the budget or by
- *     our own checks, or a picture the service blocked; Retry as before.
+ *   - 'failed' is kept for runs that sent no paid request at all (the
+ *     budget or our own checks refused it first): Retry as before. Once a
+ *     request was sent (mediaVariations.editImage onAttempt), any failure,
+ *     a blocked (blank) picture included, is 'uncertain'.
  */
 
 const media = require('./mediaLibrary');
@@ -81,24 +83,18 @@ function autoEnabled(env = process.env) {
   return String(env.POST_PICTURES_AUTO_ENABLED || '').trim().toLowerCase() === 'true';
 }
 
-// Raised before any request byte is sent: the call never reached the service.
-const NOT_SENT_ERROR_CODES = new Set(['ENOTFOUND', 'EAI_AGAIN', 'ECONNREFUSED']);
-
 /**
- * How a failed run ended: 'definite' (the budget or our own checks refused
- * it, the call provably never left, or the service blocked the picture:
- * Retry as before) or 'uncertain' (it may have reached the image service
- * and been charged: a timeout, a 5xx, or a failure after the call, such as
- * storing the picture).
+ * How a failed run ended, from whether any paid image request was sent
+ * (#3714 R2). 'definite' only when none was: every failure happened before
+ * the call (the budget refused it, or our own checks did), so nothing was
+ * charged and Retry is safe. Once a request has been sent ('attempts' > 0),
+ * the provider may have accepted and charged it, whatever came back: a
+ * timeout, a 5xx, a blank (blocked) picture, a reply without an image, a
+ * failure storing the picture, or an earlier picture of a carousel already
+ * made. That is 'uncertain', and it is never made again without a check.
  */
-function outcomeOf(err) {
-  if (!err) return 'uncertain';
-  if (err.code === 'AI_BUDGET_EXCEEDED') return 'definite';
-  const code = err.code || (err.cause && err.cause.code);
-  if (!err.response && !err.status && NOT_SENT_ERROR_CODES.has(code)) return 'definite';
-  const status = err.status || (err.response && err.response.status);
-  if (status && status >= 400 && status < 500 && status !== 408) return 'definite';
-  return 'uncertain';
+function outcomeOf(err, { attempts = 0 } = {}) {
+  return attempts > 0 ? 'uncertain' : 'definite';
 }
 const SELF = /\b(selfie|outfit|look|fit|ootd|wearing|mirror|my face|hair|makeup|me)\b/i;
 const MIRROR = /\b(mirror|outfit|ootd|fit|wearing)\b/i;
@@ -280,7 +276,7 @@ async function momentFor(db, post, character, { index = 1, of = 1, hasHeadshot =
 }
 
 /** One product or campaign shot for a brand's post: no person in it. */
-async function brandShot(db, post, brand, { index, of, by }) {
+async function brandShot(db, post, brand, { index, of, by, onAttempt = null }) {
   const variations = require('./mediaVariations');
   const prompt = [
     `A product or campaign photo posted on The Pulse by ${brand.name}, an original fictional ${brand.category || 'fashion'} house in LalaWorld.`,
@@ -291,7 +287,7 @@ async function brandShot(db, post, brand, { index, of, by }) {
     'Natural light, real surroundings, editorial but believable. No text, no letters, no logos, no brand names, no watermark.',
   ].filter(Boolean).join(' ');
   let cost = null;
-  const buffer = await variations.editImage(prompt, [], { routeName: ROUTE, size: BRAND_SIZE, onLogged: (l) => { cost = l.costUsd; } });
+  const buffer = await variations.editImage(prompt, [], { routeName: ROUTE, size: BRAND_SIZE, onLogged: (l) => { cost = l.costUsd; }, onAttempt });
   const { isBlank } = require('./characterAppearance');
   if (await isBlank(buffer)) throw new PostPictureError(422, 'The image service blocked this picture (a black picture comes back when its filter flags one). Nothing was saved.');
   const { storePulseImage } = require('./pulseImageService');
@@ -372,10 +368,13 @@ async function run(db, postId, { by = null, makeNow = false, confirmUnknown = fa
   const assetIds = [];
   const momentIds = [];
   let cost = 0;
+  // Paid image requests sent in this run (mediaVariations.editImage onAttempt).
+  let attempts = 0;
+  const onAttempt = () => { attempts += 1; };
   try {
     if (poster.kind === 'brand') {
       for (let i = 1; i <= n; i += 1) {
-        const shot = await brandShot(db, post, poster.brand, { index: i, of: n, by });
+        const shot = await brandShot(db, post, poster.brand, { index: i, of: n, by, onAttempt });
         assetIds.push(shot.assetId);
         cost += shot.cost || 0;
       }
@@ -390,7 +389,7 @@ async function run(db, postId, { by = null, makeNow = false, confirmUnknown = fa
           event_id: event?.id || null, episode_id: post.episode_id || event?.used_in_episode_id || null, created_by: by,
         });
         momentIds.push(row.id);
-        const out = await cameraRoll.make(db, row.id, { by, routeName: ROUTE, wearing });
+        const out = await cameraRoll.make(db, row.id, { by, routeName: ROUTE, wearing, onAttempt });
         assetIds.push(out.photo.asset_id);
         await row.reload();
         cost += Number(row.cost) || 0;
@@ -398,20 +397,21 @@ async function run(db, postId, { by = null, makeNow = false, confirmUnknown = fa
     }
   } catch (err) {
     const budget = err.code === 'AI_BUDGET_EXCEEDED';
-    const outcome = outcomeOf(err);
+    const outcome = outcomeOf(err, { attempts });
     console.error(`[postPictures] the picture for post ${post.id} was not made (${outcome}):`, err.message);
     post = await postMedia.loadPost(db, post.id);
     await setJob(post, {
       state: outcome === 'uncertain' ? 'uncertain' : 'failed',
       count: n, moment_ids: momentIds, asset_ids: assetIds, cost_usd: Math.round(cost * 1e4) / 1e4,
-      error: budget
-        ? 'Today\'s image budget is used up, so the picture was not made. Retry when it resets.'
-        : outcome === 'uncertain'
-          ? `The image service may already have made (and charged for) this picture: ${err.message || 'no clear answer came back'}. Check the camera roll and the library, then make it again knowingly or dismiss it.`
+      error: outcome === 'uncertain'
+        ? `${attempts} paid image request${attempts === 1 ? ' was' : 's were'} sent and the run then failed (${err.message || 'no clear answer came back'}), so a picture may already have been made and charged. Check the camera roll and the library, then make it again knowingly or dismiss it.`
+        : budget
+          ? 'Today\'s image budget is used up, so the picture was not made. Retry when it resets.'
           : (err.message || 'The picture could not be made.'),
-      ...(outcome === 'uncertain' ? { uncertain_at: new Date().toISOString() } : {}),
+      ...(outcome === 'uncertain' ? { uncertain_at: new Date().toISOString(), paid_attempts: attempts } : {}),
     });
-    if (budget) throw err;
+    if (budget && outcome === 'definite') throw err;
+    if (outcome === 'uncertain') throw Object.assign(new PostPictureError(502, 'A paid image request was sent and the run then failed; the picture may already have been made and charged. Check before making it again.'), { code: 'PICTURE_OUTCOME_UNKNOWN' });
     throw new PostPictureError(err.status && err.status < 500 ? err.status : 502, err.message || 'The picture could not be made.');
   }
   // attachPictures tags each picture with the post in the library.

@@ -211,7 +211,7 @@ const sleep = (ms) => new Promise((r) => { setTimeout(r, ms); });
       const first = await as(request(app).post(`/api/v1/post-media/posts/${id}/picture`)).send({ make_now: true });
       expect(first.status).toBeGreaterThanOrEqual(500);
       const job = await jobOf(id);
-      expect(job).toMatchObject({ state: 'uncertain', error: expect.stringMatching(/may already have made/) });
+      expect(job).toMatchObject({ state: 'uncertain', paid_attempts: 1, error: expect.stringMatching(/may already have been made and charged/) });
       expect(imageCalls()).toHaveLength(1);
 
       const retry = await as(request(app).post(`/api/v1/post-media/posts/${id}/picture`)).send({ make_now: false });
@@ -226,6 +226,51 @@ const sleep = (ms) => new Promise((r) => { setTimeout(r, ms); });
       expect(dismissed.status).toBe(200);
       expect(dismissed.body.job).toMatchObject({ state: 'skipped', dismissed_from: 'uncertain', reason: 'Checked: not in the roll' });
       expect(imageCalls()).toHaveLength(1);
+    });
+
+    test.each([
+      ['a blank (blocked) picture comes back', 'blank'],
+      ['storing the picture fails after the call', 'store'],
+      ['the image service replies without an image', 'empty'],
+    ])('%s: uncertain (the request was sent and may be charged), and neither Make now nor Retry re-sends it', async (_label, kind) => {
+      const id = await post({ status: 'live' });
+      const appearance = require('../../src/services/characterAppearance');
+      if (kind === 'blank') jest.spyOn(appearance, 'isBlank').mockResolvedValueOnce(true);
+      if (kind === 'store') pulseImage.storePulseImage.mockRejectedValueOnce(Object.assign(new Error('Upload refused: too large'), { status: 413 }));
+      if (kind === 'empty') axios.post.mockImplementationOnce(async () => ({ data: { data: [{}] } }));
+      const first = await as(request(app).post(`/api/v1/post-media/posts/${id}/picture`)).send({ make_now: true });
+      expect(first.status).toBeGreaterThanOrEqual(400);
+      expect(await jobOf(id)).toMatchObject({ state: 'uncertain', paid_attempts: 1 });
+      expect(imageCalls()).toHaveLength(1);
+      for (const body of [{ make_now: true }, { make_now: false }]) {
+        const again = await as(request(app).post(`/api/v1/post-media/posts/${id}/picture`)).send(body);
+        expect(again.status).toBe(409);
+        expect(again.body.code).toBe('PICTURE_OUTCOME_UNKNOWN');
+      }
+      expect(imageCalls()).toHaveLength(1);
+    });
+
+    test('a carousel that fails on its second picture (the first made and paid) is uncertain, not failed', async () => {
+      const id = uuid();
+      await run(`INSERT INTO feed_posts (id, show_id, poster_handle, social_profile_id, content_text, status, post_format, posted_at, created_at, updated_at)
+                 VALUES (:id, :show, :handle, :pid, 'three looks from the market', 'live', 'carousel', NOW(), NOW(), NOW())`,
+      { id, show: ids.show, handle: `safe${tag}`, pid: pids.maren });
+      posts.push(id);
+      let n = 0;
+      axios.post.mockImplementation(async () => {
+        n += 1;
+        if (n === 2) throw Object.assign(new Error('socket hang up'), { code: 'ECONNRESET' });
+        return { data: { data: [{ b64_json: 'iVBORw0KGgo=' }] } };
+      });
+      try {
+        const r = await as(request(app).post(`/api/v1/post-media/posts/${id}/picture`)).send({ make_now: true });
+        expect(r.status).toBeGreaterThanOrEqual(400);
+      } finally {
+        axios.post.mockImplementation(async () => ({ data: { data: [{ b64_json: 'iVBORw0KGgo=' }] } }));
+      }
+      const job = await jobOf(id);
+      expect(job).toMatchObject({ state: 'uncertain', paid_attempts: 2 });
+      expect(job.asset_ids).toHaveLength(1);
     });
 
     test('dismiss refuses a job that is not interrupted or uncertain', async () => {

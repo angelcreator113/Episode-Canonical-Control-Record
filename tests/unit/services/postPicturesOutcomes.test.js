@@ -12,28 +12,45 @@ describe('autoEnabled (POST_PICTURES_AUTO_ENABLED)', () => {
   );
 });
 
-describe('outcomeOf: definite vs possibly submitted', () => {
+describe('outcomeOf: definite only when no paid request was sent', () => {
   const e = (props) => Object.assign(new Error('x'), props);
   test.each([
-    ['a budget refusal', e({ code: 'AI_BUDGET_EXCEEDED', status: 429 }), 'definite'],
-    ['our own check (409, no headshot)', e({ status: 409 }), 'definite'],
-    ['a blocked (blank) picture', e({ status: 422 }), 'definite'],
-    ['a provider 400', e({ response: { status: 400 } }), 'definite'],
-    ['never reached the service (ECONNREFUSED)', e({ code: 'ECONNREFUSED' }), 'definite'],
-    ['never reached the service (ENOTFOUND, in cause)', e({ cause: { code: 'ENOTFOUND' } }), 'definite'],
-    ['a timeout', e({ code: 'ECONNABORTED' }), 'uncertain'],
-    ['a reset', e({ code: 'ECONNRESET' }), 'uncertain'],
-    ['a 502 from the image tool (cameraRoll wraps every failure so)', e({ status: 502 }), 'uncertain'],
-    ['a provider 500', e({ response: { status: 500 } }), 'uncertain'],
-    ['a 408', e({ status: 408 }), 'uncertain'],
-    ['storing the picture failed after the call', e({ message: 'S3 put failed' }), 'uncertain'],
-    ['nothing', null, 'uncertain'],
-  ])('%s', (_label, err, expected) => {
-    expect(postPictures.outcomeOf(err)).toBe(expected);
+    ['a budget refusal before any request', e({ code: 'AI_BUDGET_EXCEEDED', status: 429 }), 0, 'definite'],
+    ['our own check before the request (409, no headshot)', e({ status: 409 }), 0, 'definite'],
+    ['a database error before the request', e({ message: 'connection reset' }), 0, 'definite'],
+    ['a blank (blocked) picture after the request', e({ status: 422 }), 1, 'uncertain'],
+    ['a provider 400 after the request', e({ response: { status: 400 } }), 1, 'uncertain'],
+    ['a timeout after the request', e({ code: 'ECONNABORTED' }), 1, 'uncertain'],
+    ['ECONNREFUSED from the storage upload after the request', e({ code: 'ECONNREFUSED' }), 1, 'uncertain'],
+    ['a storage 413 after the request', e({ status: 413 }), 1, 'uncertain'],
+    ['a reply without an image', e({ status: 502 }), 1, 'uncertain'],
+    ['a carousel failing on its second picture (the first made)', e({ code: 'AI_BUDGET_EXCEEDED', status: 429 }), 1, 'uncertain'],
+  ])('%s', (_label, err, attempts, expected) => {
+    expect(postPictures.outcomeOf(err, { attempts })).toBe(expected);
   });
 
   test('interrupted and uncertain are the states that need a check', () => {
     expect([...postPictures.UNKNOWN_STATES].sort()).toEqual(['interrupted', 'uncertain']);
+  });
+});
+
+describe('mediaVariations.editImage onAttempt', () => {
+  afterEach(() => jest.restoreAllMocks());
+  test('fires once, after the budget gate and before the provider request; never when the gate refuses', async () => {
+    process.env.OPENAI_API_KEY = process.env.OPENAI_API_KEY || 'test-key';
+    const imageCost = require('../../../src/services/imageCostService');
+    const axios = require('axios');
+    const order = [];
+    jest.spyOn(axios, 'post').mockImplementation(async () => { order.push('request'); return { data: { data: [{ b64_json: 'aGk=' }] } }; });
+    jest.spyOn(imageCost, 'runImageCall').mockImplementation(async (_plan, fn) => { order.push('gate'); return fn(); });
+    const { editImage } = require('../../../src/services/mediaVariations');
+    await editImage('a prompt', [], { onAttempt: () => order.push('attempt') });
+    expect(order).toEqual(['gate', 'attempt', 'request']);
+
+    order.length = 0;
+    imageCost.runImageCall.mockImplementation(async () => { order.push('gate'); throw Object.assign(new Error('budget'), { code: 'AI_BUDGET_EXCEEDED' }); });
+    await expect(editImage('a prompt', [], { onAttempt: () => order.push('attempt') })).rejects.toMatchObject({ code: 'AI_BUDGET_EXCEEDED' });
+    expect(order).toEqual(['gate']);
   });
 });
 
