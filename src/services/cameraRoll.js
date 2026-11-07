@@ -433,11 +433,16 @@ async function writeIfUnchanged(db, moment, patch) {
   await moment.reload();
 }
 
-/** A made photo follows its moment: public only when posted, and its camera-roll record. */
+/**
+ * A made photo follows its moment: public only when posted, and its
+ * camera-roll record. Merged, never replaced: the record keeps the claim
+ * token and storage key that tie the image to its attempt (#3714 recovery).
+ */
 async function syncPhoto(db, moment) {
   await db.sequelize.query(
     `UPDATE media_assets SET visibility = :visibility,
-            generation = jsonb_set(COALESCE(generation, '{}'::jsonb), '{camera_roll}', CAST(:roll AS JSONB)), updated_at = NOW()
+            generation = jsonb_set(COALESCE(generation, '{}'::jsonb), '{camera_roll}',
+              COALESCE(generation->'camera_roll', '{}'::jsonb) || CAST(:roll AS JSONB)), updated_at = NOW()
       WHERE id = :id AND deleted_at IS NULL`,
     { replacements: { id: moment.asset_id, visibility: moment.purpose === 'posted' ? 'public' : 'private', roll: JSON.stringify(rollRecord(moment)) } });
 }
@@ -758,6 +763,29 @@ async function make(db, momentId, { by = null, routeName = ROUTE, wearing = null
 }
 
 /**
+ * One locked read-modify-write of a photo's status and make_resolution:
+ * SELECT ... FOR UPDATE, decide(row) returns { status, resolution, set? } or
+ * throws, then the UPDATE, in one transaction. Anything else that writes the
+ * row (a claim, an attempt marker, another resolve or attach) waits for it.
+ * decide may return null to change nothing.
+ */
+async function lockedUpdate(db, momentId, decide) {
+  return db.sequelize.transaction(async (transaction) => {
+    const [row] = await db.sequelize.query(
+      'SELECT id, status, asset_id, make_resolution FROM camera_roll_moments WHERE id = :id AND deleted_at IS NULL FOR UPDATE',
+      { replacements: { id: momentId }, type: db.sequelize.QueryTypes.SELECT, transaction });
+    if (!row) throw new CameraRollError(404, 'That photo was not found.');
+    const change = await decide(row);
+    if (!change) return row;
+    const extra = change.set ? `, ${change.set}` : '';
+    await db.sequelize.query(
+      `UPDATE camera_roll_moments SET status = :status, make_resolution = CAST(:resolution AS JSONB)${extra}, updated_at = NOW() WHERE id = :id`,
+      { replacements: { ...(change.replacements || {}), id: momentId, status: change.status, resolution: JSON.stringify(change.resolution) }, transaction });
+    return row;
+  });
+}
+
+/**
  * Evoni's resolution of an uncertain photo (#3714). None of these sends a
  * paid request, and none returns it to 'kept':
  *   acknowledge  it stays 'uncertain' (seen, not made again); any unused
@@ -776,28 +804,22 @@ async function resolve(db, momentId, { action, by = null, note = null, assetId =
   if (action === 'attach') return attach(db, momentId, { by, note, assetId, storageKey });
   let moment = await momentWithCharacter(db, momentId);
   if (moment.status === 'making' && await reconcileStale(db, moment.id)) moment = await db.CameraRollMoment.findByPk(moment.id);
-  if (moment.status !== 'uncertain') throw new CameraRollError(409, 'Only an uncertain photo is resolved this way.');
-  const now = new Date();
-  const prev = moment.make_resolution || {};
-  const entry = { action, by, at: now.toISOString(), note: note ? String(note).slice(0, 300) : null };
-  const history = [...(Array.isArray(prev.history) ? prev.history : []), entry];
-  let resolution;
-  let status = 'uncertain';
-  if (action === 'acknowledge') {
-    resolution = { ...prev, acknowledged: entry, authorization: null, history };
-  } else if (action === 'authorize') {
-    const authorization = { id: crypto.randomUUID(), by, at: entry.at, expires_at: new Date(now.getTime() + AUTHORIZATION_HOURS * 3600 * 1000).toISOString(), used_at: null, note: entry.note };
-    resolution = { ...prev, authorization, history };
-  } else {
-    status = 'dropped';
-    resolution = { ...prev, abandoned: entry, authorization: null, history };
-  }
-  // Only while it is still uncertain: a concurrent resolve or make loses cleanly.
-  const [rows] = await db.sequelize.query(
-    `UPDATE camera_roll_moments SET status = :status, make_resolution = CAST(:resolution AS JSONB), updated_at = NOW()
-      WHERE id = :id AND status = 'uncertain' RETURNING id`,
-    { replacements: { id: moment.id, status, resolution: JSON.stringify(resolution) } });
-  if (!rows.length) throw new CameraRollError(409, 'That photo changed while it was being resolved; look again.');
+  // Read and write under one row lock: a concurrent resolve, attach or
+  // authorized attempt waits, so nobody overwrites another's state, history
+  // or recorded attempts (#3714).
+  await lockedUpdate(db, moment.id, (row) => {
+    if (row.status !== 'uncertain') throw new CameraRollError(409, 'Only an uncertain photo is resolved this way.');
+    const now = new Date();
+    const prev = row.make_resolution || {};
+    const entry = { action, by, at: now.toISOString(), note: note ? String(note).slice(0, 300) : null };
+    const history = [...(Array.isArray(prev.history) ? prev.history : []), entry];
+    if (action === 'acknowledge') return { status: 'uncertain', resolution: { ...prev, acknowledged: entry, authorization: null, history } };
+    if (action === 'authorize') {
+      const authorization = { id: crypto.randomUUID(), by, at: entry.at, expires_at: new Date(now.getTime() + AUTHORIZATION_HOURS * 3600 * 1000).toISOString(), used_at: null, note: entry.note };
+      return { status: 'uncertain', resolution: { ...prev, authorization, history } };
+    }
+    return { status: 'dropped', resolution: { ...prev, abandoned: entry, authorization: null, history } };
+  });
   moment = await db.CameraRollMoment.findByPk(moment.id);
   return momentOut(moment);
 }
@@ -931,24 +953,28 @@ async function attach(db, momentId, { by = null, note = null, assetId = null, st
   }
   if (storageKey) await checkTagOf(db, moment, asset);
 
-  const now = new Date();
-  const prev = moment.make_resolution || {};
-  const entry = { action: 'attach', by, at: now.toISOString(), note: note ? String(note).slice(0, 300) : null, asset_id: asset.id };
-  const resolution = { ...prev, attached: entry, authorization: null, history: [...(Array.isArray(prev.history) ? prev.history : []), entry] };
-  // Only while it is still uncertain and no other photo took the image meanwhile.
-  const [rows] = await db.sequelize.query(
-    `UPDATE camera_roll_moments SET status = 'made', asset_id = :asset, error = NULL,
-            make_resolution = CAST(:resolution AS JSONB), updated_at = NOW()
-      WHERE id = :id AND status = 'uncertain'
-        AND NOT EXISTS (SELECT 1 FROM camera_roll_moments o WHERE o.asset_id = :asset AND o.id <> :id)
-      RETURNING id`,
-    { replacements: { id: moment.id, asset: asset.id, resolution: JSON.stringify(resolution) } });
+  // The write, under the row lock: decided from the row as it is now, so a
+  // concurrent resolve or attach can neither be overwritten nor overwrite.
+  let outcome = 'attached';
+  await lockedUpdate(db, moment.id, async (row) => {
+    if (row.status === 'made' && String(row.asset_id) === String(asset.id)) { outcome = 'already_attached'; return null; }
+    if (row.status !== 'uncertain') throw new CameraRollError(409, 'That photo changed while it was being attached; look again.');
+    const roll = generationOf(asset).camera_roll || {};
+    if (!attemptsOf({ make_resolution: row.make_resolution }).some((a) => a.claim_token === roll.claim_token)) {
+      throw conflict('That image is not from one of this photo\'s own attempts.');
+    }
+    const [owners] = await db.sequelize.query(
+      'SELECT id FROM camera_roll_moments WHERE asset_id = :a AND id <> :m LIMIT 1', { replacements: { a: asset.id, m: moment.id } });
+    if (owners.length) throw conflict('Another photo already has that image.');
+    const prev = row.make_resolution || {};
+    const entry = { action: 'attach', by, at: new Date().toISOString(), note: note ? String(note).slice(0, 300) : null, asset_id: asset.id };
+    return {
+      status: 'made', set: 'asset_id = :asset, error = NULL', replacements: { asset: asset.id },
+      resolution: { ...prev, attached: entry, authorization: null, history: [...(Array.isArray(prev.history) ? prev.history : []), entry] },
+    };
+  });
   moment = await db.CameraRollMoment.findByPk(moment.id);
-  if (!rows.length) {
-    if (moment.status === 'made' && String(moment.asset_id) === String(asset.id)) return { ...momentOut(moment), attach: 'already_attached' };
-    throw new CameraRollError(409, 'That photo changed while it was being attached; look again.');
-  }
-  return { ...momentOut(moment), attach: 'attached' };
+  return { ...momentOut(moment), attach: outcome };
 }
 
 async function makeKept(db, characterId, { by = null } = {}) {

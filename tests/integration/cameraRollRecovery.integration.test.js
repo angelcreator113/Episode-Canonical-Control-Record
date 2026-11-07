@@ -376,6 +376,145 @@ const OK_IMAGE = async () => ({ data: { data: [{ b64_json: 'iVBORw0KGgo=' }] } }
     });
   });
 
+  const tokensOf = async (id) => (await rowOf(id)).make_resolution.attempts.map((a) => a.claim_token);
+  // An uncertain photo with two stored attempts (the first, then one authorized attempt), neither recorded.
+  const twoAttempts = async () => {
+    const { id, attempt: a1 } = await storedThenFailed();
+    const auth = (await cameraRoll.resolve(models, id, { action: 'authorize', by: 'test' })).make_resolution.authorization;
+    jest.spyOn(mediaLibrary, 'createAsset').mockRejectedValueOnce(Object.assign(new Error('library down'), { status: 500 }));
+    const r = await viaService(() => cameraRoll.make(models, id, { by: 'test', authorizationId: auth.id }), 201);
+    expect(r.body.code).toBe('PHOTO_OUTCOME_UNKNOWN');
+    const attempts = (await rowOf(id)).make_resolution.attempts;
+    expect(attempts.map((a) => a.claim_token)[0]).toBe(a1.claim_token);
+    expect(attempts).toHaveLength(2);
+    return { id, a1: attempts[0], a2: attempts[1] };
+  };
+
+  describe('concurrent resolutions and attempts (races)', () => {
+    // Holds the first locked resolve or attach write just before its UPDATE,
+    // starts `competitor` while the row lock is held, and waits; then lets the
+    // write go. Returns a function that gives the competitor's outcome.
+    const raceAtLockedWrite = (competitor, wait = 200) => {
+      const real = sequelize.query.bind(sequelize);
+      let pending = null;
+      const spy = jest.spyOn(sequelize, 'query').mockImplementation(async (sql, opts) => {
+        if (!pending && typeof sql === 'string' && sql.startsWith('UPDATE camera_roll_moments SET status = :status, make_resolution')) {
+          pending = Promise.resolve().then(competitor).then((value) => ({ value }), (error) => ({ error }));
+          await sleep(wait);
+        }
+        return real(sql, opts);
+      });
+      return async () => { const out = pending ? await pending : null; spy.mockRestore(); return out; };
+    };
+    test('an attempt recorded while a resolve holds the photo is kept: the resolve does not overwrite it', async () => {
+      const { id, attempt: a1 } = await storedThenFailed();
+      const outcome = raceAtLockedWrite(() => run(`UPDATE camera_roll_moments SET make_resolution = jsonb_set(make_resolution, '{attempts}',
+          make_resolution->'attempts' || jsonb_build_array(jsonb_build_object('claim_token', 'A2', 'storage_key', 'K2', 'at', NOW()::text))) WHERE id = :id`, { id }));
+      await cameraRoll.resolve(models, id, { action: 'acknowledge', by: 'test' });
+      const competitor = await outcome();
+      expect(competitor.error).toBeUndefined();
+      expect(await tokensOf(id)).toEqual([a1.claim_token, 'A2']);
+      expect((await rowOf(id)).make_resolution.history.map((h) => h.action)).toEqual(['acknowledge']);
+    });
+
+    test('acknowledge and authorize at once: both are recorded, in the order they ran', async () => {
+      const { id } = await storedThenFailed();
+      const outcome = raceAtLockedWrite(() => cameraRoll.resolve(models, id, { action: 'authorize', by: 'second' }));
+      await cameraRoll.resolve(models, id, { action: 'acknowledge', by: 'first' });
+      expect((await outcome()).error).toBeUndefined();
+      const res = (await rowOf(id)).make_resolution;
+      expect(res.history.map((h) => [h.action, h.by])).toEqual([['acknowledge', 'first'], ['authorize', 'second']]);
+      expect(res.authorization).toMatchObject({ by: 'second', used_at: null });
+    });
+
+    test('attach, then a conflicting abandon at the same moment: made with the image; the abandon is refused', async () => {
+      const { id, attempt } = await storedThenFailed();
+      const outcome = raceAtLockedWrite(() => cameraRoll.resolve(models, id, { action: 'abandon', by: 'test' }));
+      const r = await attach(id, { storageKey: attempt.storage_key });
+      expect(r.body.data.attach).toBe('attached');
+      const competitor = await outcome();
+      expect(competitor.error?.status).toBe(409);
+      const row = await rowOf(id);
+      expect(row.status).toBe('made');
+      expect(row.make_resolution.history.map((h) => h.action)).toEqual(['attach']);
+    });
+
+    test('abandon, then a conflicting attach at the same moment: dropped; the attach is refused and the photo gets no image', async () => {
+      const { id, attempt } = await storedThenFailed();
+      const outcome = raceAtLockedWrite(() => cameraRoll.resolve(models, id, { action: 'attach', by: 'test', storageKey: attempt.storage_key }));
+      await cameraRoll.resolve(models, id, { action: 'abandon', by: 'test' });
+      const competitor = await outcome();
+      expect(competitor.error?.status).toBe(409);
+      const row = await rowOf(id);
+      expect(row).toMatchObject({ status: 'dropped', asset_id: null });
+      expect(row.make_resolution.history.map((h) => h.action)).toEqual(['abandon']);
+      // Its attempts are still on record.
+      expect(await tokensOf(id)).toEqual([attempt.claim_token]);
+    });
+
+    test('two attaches of two different attempts at once: the first wins, the second is refused, nothing is replaced', async () => {
+      const { id, a1, a2 } = await twoAttempts();
+      const outcome = raceAtLockedWrite(() => cameraRoll.resolve(models, id, { action: 'attach', by: 'test', storageKey: a2.storage_key }));
+      const r = await attach(id, { storageKey: a1.storage_key });
+      expect(r.body.data.attach).toBe('attached');
+      expect((await outcome()).error?.status).toBe(409);
+      const row = await rowOf(id);
+      expect((await assetOf(row.asset_id)).storage_key).toBe(a1.storage_key);
+      expect(row.make_resolution.history.map((h) => h.action)).toEqual(['authorize', 'attach']);
+      // A later attach of the other attempt does not replace the image.
+      expect((await attach(id, { storageKey: a2.storage_key })).status).toBe(409);
+      expect((await rowOf(id)).asset_id).toBe(row.asset_id);
+    });
+  });
+
+  describe('the attempt history outlives every later step', () => {
+    test('authorize, a failed authorized attempt, a budget refusal, reconciliation, acknowledge and abandon all keep every attempt', async () => {
+      const { id, a1, a2 } = await twoAttempts();
+      const both = [a1.claim_token, a2.claim_token];
+      const auth = (await cameraRoll.resolve(models, id, { action: 'authorize', by: 't' })).make_resolution.authorization;
+      const saved = process.env.AI_DAILY_IMAGE_BUDGET_USD;
+      process.env.AI_DAILY_IMAGE_BUDGET_USD = '0.01';
+      try { expect((await viaService(() => cameraRoll.make(models, id, { by: 't', authorizationId: auth.id }), 201)).status).toBe(429); } finally {
+        if (saved === undefined) delete process.env.AI_DAILY_IMAGE_BUDGET_USD; else process.env.AI_DAILY_IMAGE_BUDGET_USD = saved;
+      }
+      expect(await tokensOf(id)).toEqual(both);
+      const auth2 = (await cameraRoll.resolve(models, id, { action: 'authorize', by: 't' })).make_resolution.authorization;
+      expect(await cameraRoll.claimForMake(models, id, { authorizationId: auth2.id })).toBeTruthy();
+      await run("UPDATE camera_roll_moments SET make_attempted_at = NOW(), make_claimed_at = NOW() - INTERVAL '20 minutes' WHERE id = :id", { id });
+      expect(await cameraRoll.reconcileStale(models, id)).toBe('uncertain');
+      await cameraRoll.resolve(models, id, { action: 'acknowledge', by: 't' });
+      await cameraRoll.resolve(models, id, { action: 'acknowledge', by: 't' });
+      expect(await tokensOf(id)).toEqual(both);
+      await cameraRoll.resolve(models, id, { action: 'abandon', by: 't' });
+      expect(await tokensOf(id)).toEqual(both);
+    });
+
+    test('a successful authorized re-make keeps the earlier attempt, and records its own', async () => {
+      const { id, attempt: a1 } = await storedThenFailed();
+      const auth = (await cameraRoll.resolve(models, id, { action: 'authorize', by: 't' })).make_resolution.authorization;
+      expect((await viaService(() => cameraRoll.make(models, id, { by: 't', authorizationId: auth.id }), 201)).status).toBe(201);
+      const row = await rowOf(id);
+      expect(row.status).toBe('made');
+      const tokens = row.make_resolution.attempts.map((a) => a.claim_token);
+      expect(tokens).toHaveLength(2);
+      expect(tokens[0]).toBe(a1.claim_token);
+      const asset = await assetOf(row.asset_id);
+      expect(asset.generation.camera_roll.claim_token).toBe(tokens[1]);
+      // The first attempt's stored image is still traceable by its key.
+      expect(bucket.get(a1.storage_key).metadata['claim-token']).toBe(a1.claim_token);
+    });
+
+    test('editing a made photo keeps the claim token and storage key on its library record (syncPhoto merges)', async () => {
+      const id = await moment();
+      expect((await make(id)).status).toBe(201);
+      const { asset_id: assetId } = await rowOf(id);
+      const before = (await assetOf(assetId)).generation.camera_roll;
+      expect((await viaService(() => cameraRoll.updateMoment(models, id, { album: 'work', purpose: 'posted' }), 200)).status).toBe(200);
+      const after = (await assetOf(assetId)).generation.camera_roll;
+      expect(after).toMatchObject({ claim_token: before.claim_token, storage_key: before.storage_key, album: 'work', purpose: 'posted', moment_id: id });
+    });
+  });
+
   describe('the route', () => {
     test('ADMIN only; attach by storage key through POST /moments/:id/resolve', async () => {
       const { id, attempt } = await storedThenFailed();
