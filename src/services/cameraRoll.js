@@ -467,6 +467,12 @@ function rollRecord(m) {
   return { moment_id: m.id, purpose: m.purpose, taken_by: m.taken_by, album: m.album, story_date: m.story_date || null };
 }
 
+// The storage key of one attempt's photo: the photo and the claim, so it is
+// found by its photo even if no library record was written (#3714 recovery).
+function photoStorageKey(characterId, momentId, claimToken) {
+  return `characters/${characterId}/camera-roll/${momentId}/${claimToken}.jpg`;
+}
+
 /** The image prompt: a candid phone photo of this moment, never a studio portrait. */
 function photoPrompt(character, m, { look = '', referenced = false, wearing: outfitText = null } = {}) {
   const a = character.appearance && typeof character.appearance === 'object' ? character.appearance : {};
@@ -619,9 +625,19 @@ async function make(db, momentId, { by = null, routeName = ROUTE, wearing = null
   // The durable attempt marker: committed before the request is sent. It
   // runs inside the image budget's call (mediaVariations.editImage
   // onAttempt), so a budget refusal never sets it.
+  // Where this attempt's photo will be stored, decided before the request:
+  // the key names the photo and this claim, and the attempt is recorded with
+  // the marker, so a photo stored before a crash can always be found and
+  // attached without making it again (resolve 'attach').
+  const storageKey = photoStorageKey(character.id, moment.id, token);
   let marked = false;
   const markAttempt = async () => {
-    const ok = await fencedUpdate(db, moment.id, token, 'make_attempted_at = NOW()');
+    const ok = await fencedUpdate(db, moment.id, token,
+      `make_attempted_at = NOW(),
+       make_resolution = jsonb_set(COALESCE(make_resolution, '{}'::jsonb), '{attempts}',
+         COALESCE(make_resolution->'attempts', '[]'::jsonb)
+           || jsonb_build_array(jsonb_build_object('claim_token', CAST(:token AS TEXT), 'storage_key', CAST(:key AS TEXT), 'at', NOW()::text)))`,
+      { key: storageKey });
     if (!ok) throw Object.assign(new CameraRollError(409, 'This make no longer holds the photo; nothing was sent.'), { code: 'CLAIM_LOST' });
     marked = true;
     if (typeof onAttempt === 'function') await onAttempt();
@@ -664,7 +680,10 @@ async function make(db, momentId, { by = null, routeName = ROUTE, wearing = null
     }
 
     const { storePulseImage } = require('./pulseImageService');
-    const stored = await storePulseImage({ buffer, mimetype: 'image/png' }, { keyPrefix: `characters/${character.id}/camera-roll`, label: 'The photo' });
+    const stored = await storePulseImage({ buffer, mimetype: 'image/png' }, {
+      keyPrefix: `characters/${character.id}/camera-roll`, label: 'The photo', key: storageKey,
+      metadata: { 'moment-id': String(moment.id), 'claim-token': String(token), 'character-id': String(character.id) },
+    });
     const media = require('./mediaLibrary');
     const links = [{ entity_type: 'character', entity_id: String(character.id), role: moment.shows_face ? 'pictured' : 'owner' }];
     if (moment.place_ref?.type === 'scene_set' && UUID_RE.test(String(moment.place_ref.id))) links.push({ entity_type: 'scene_set', entity_id: String(moment.place_ref.id), role: 'location' });
@@ -688,7 +707,7 @@ async function make(db, momentId, { by = null, routeName = ROUTE, wearing = null
         visibility: moment.purpose === 'posted' ? 'public' : 'private',
         details: { notes: `${moment.purpose} · taken by ${moment.taken_by}` },
         generation: {
-          camera_roll: rollRecord(moment), prompt, model: IMAGE_MODEL, made_at: new Date().toISOString(), id: crypto.randomUUID(),
+          camera_roll: { ...rollRecord(moment), claim_token: token, storage_key: stored.key }, prompt, model: IMAGE_MODEL, made_at: new Date().toISOString(), id: crypto.randomUUID(),
           references: refs.length ? [headshot.asset_id, ...others.map((p) => ({ character_id: p.character_id }))].slice(0, refs.length) : [],
         },
         links: kept, by,
@@ -702,7 +721,7 @@ async function make(db, momentId, { by = null, routeName = ROUTE, wearing = null
         caption: moment.moment, source: 'generated', status: 'approved',
         visibility: moment.purpose === 'posted' ? 'public' : 'private',
         details: { notes: `${moment.purpose} · taken by ${moment.taken_by}` },
-        generation: { camera_roll: rollRecord(moment), prompt, model: IMAGE_MODEL, made_at: new Date().toISOString(), id: crypto.randomUUID() },
+        generation: { camera_roll: { ...rollRecord(moment), claim_token: token, storage_key: stored.key }, prompt, model: IMAGE_MODEL, made_at: new Date().toISOString(), id: crypto.randomUUID() },
         links: [links[0]], by,
       });
     }
@@ -737,10 +756,13 @@ async function make(db, momentId, { by = null, routeName = ROUTE, wearing = null
  *                passes its id; it replaces any unused one. make-kept and
  *                post pictures never pass one
  *   abandon      'dropped', and it cannot be kept again (setStatus)
+ *   attach       'made' with an image that already exists (asset_id, or
+ *                the storage_key of one of its own attempts); see attach()
  */
-async function resolve(db, momentId, { action, by = null, note = null } = {}) {
-  const ACTIONS = ['acknowledge', 'authorize', 'abandon'];
+async function resolve(db, momentId, { action, by = null, note = null, assetId = null, storageKey = null } = {}) {
+  const ACTIONS = ['acknowledge', 'authorize', 'abandon', 'attach'];
   if (!ACTIONS.includes(action)) throw new CameraRollError(400, `Say what to do: ${ACTIONS.join(', ')}.`);
+  if (action === 'attach') return attach(db, momentId, { by, note, assetId, storageKey });
   let moment = await momentWithCharacter(db, momentId);
   if (moment.status === 'making' && await reconcileStale(db, moment.id)) moment = await db.CameraRollMoment.findByPk(moment.id);
   if (moment.status !== 'uncertain') throw new CameraRollError(409, 'Only an uncertain photo is resolved this way.');
@@ -767,6 +789,155 @@ async function resolve(db, momentId, { action, by = null, note = null } = {}) {
   if (!rows.length) throw new CameraRollError(409, 'That photo changed while it was being resolved; look again.');
   moment = await db.CameraRollMoment.findByPk(moment.id);
   return momentOut(moment);
+}
+
+// ── Attach: a photo that was already made, found and checked by Evoni ─────
+//
+// resolve(..., { action: 'attach', assetId | storageKey }) marks an uncertain
+// photo made with an image that already exists (#3714 recovery). It never
+// calls an image service and never changes or deletes an existing image or
+// storage object. What it checks before anything is written:
+//   - the photo is uncertain (or already made with this same image: then it
+//     answers as before and changes nothing, so repeating Attach is safe);
+//   - the image belongs to this photo and to one of its own recorded attempts
+//     (make_resolution.attempts, written with the attempt marker): a library
+//     record's generation.camera_roll names the photo and that claim, or the
+//     storage key is that attempt's key and its stored metadata agree;
+//   - no other photo already has the image.
+// Evoni looks at the image first: these checks prove whose it is, not what
+// it shows.
+const ATTACH_CONFLICT = 'ATTACH_CONFLICT';
+const conflict = (message) => Object.assign(new CameraRollError(409, message), { code: ATTACH_CONFLICT });
+
+function attemptsOf(moment) {
+  const list = moment.make_resolution && Array.isArray(moment.make_resolution.attempts) ? moment.make_resolution.attempts : [];
+  return list.filter((a) => a && typeof a.claim_token === 'string' && typeof a.storage_key === 'string');
+}
+
+function generationOf(asset) {
+  let g = asset.generation;
+  if (typeof g === 'string') {
+    try { g = JSON.parse(g); } catch (err) {
+      console.error('[cameraRoll] an image\'s generation is not JSON:', err.message);
+      return {};
+    }
+  }
+  return g && typeof g === 'object' ? g : {};
+}
+
+async function assetRow(db, where, replacements) {
+  const [rows] = await db.sequelize.query(
+    `SELECT id, url, storage_key, generation FROM media_assets WHERE ${where} AND deleted_at IS NULL LIMIT 2`, { replacements });
+  return rows;
+}
+
+// Checks that an existing library record belongs to this photo and one of
+// its attempts, and that no other photo has it.
+async function checkClaimOf(db, moment, asset, attempts) {
+  const roll = generationOf(asset).camera_roll || {};
+  if (String(roll.moment_id || '') !== String(moment.id)) throw conflict('That image was made for a different photo.');
+  const attempt = attempts.find((a) => a.claim_token === roll.claim_token);
+  if (!attempt) throw conflict('That image is not from one of this photo\'s own attempts.');
+  if (asset.storage_key !== attempt.storage_key) throw conflict('That image is not stored where this photo\'s attempt stores it.');
+  const [owners] = await db.sequelize.query(
+    'SELECT id FROM camera_roll_moments WHERE asset_id = :a AND id <> :m LIMIT 1', { replacements: { a: asset.id, m: moment.id } });
+  if (owners.length) throw conflict('Another photo already has that image.');
+}
+
+// Checks that the record is tagged to the photo's character.
+async function checkTagOf(db, moment, asset) {
+  const [links] = await db.sequelize.query(
+    `SELECT 1 FROM media_asset_links WHERE asset_id = :a AND entity_type = 'character' AND entity_id = :c AND deleted_at IS NULL LIMIT 1`,
+    { replacements: { a: asset.id, c: String(moment.character_id) } });
+  if (!links.length) throw conflict('That image is not tagged to this photo\'s character.');
+}
+
+async function attach(db, momentId, { by = null, note = null, assetId = null, storageKey = null } = {}) {
+  if (Boolean(assetId) === Boolean(storageKey)) throw new CameraRollError(400, 'Attach needs exactly one of asset_id or storage_key.');
+  if (assetId && !UUID_RE.test(String(assetId))) throw new CameraRollError(400, 'asset_id is not a valid id.');
+  let moment = await momentWithCharacter(db, momentId);
+  if (moment.status === 'making' && await reconcileStale(db, moment.id)) moment = await db.CameraRollMoment.findByPk(moment.id);
+  const attempts = attemptsOf(moment);
+
+  // The image asked for: an existing library record, or the storage key of one of this photo's attempts.
+  let asset = null;
+  let attempt = null;
+  if (assetId) {
+    [asset] = await assetRow(db, 'id = :id', { id: assetId });
+    if (!asset) throw new CameraRollError(404, 'That image is not in the library.');
+  } else {
+    attempt = attempts.find((a) => a.storage_key === storageKey);
+    if (!attempt || photoStorageKey(moment.character_id, moment.id, attempt.claim_token) !== storageKey) {
+      throw conflict('That storage key is not one of this photo\'s own attempts.');
+    }
+    const existing = await assetRow(db, 'storage_key = :k', { k: storageKey });
+    if (existing.length > 1) throw conflict('More than one library record uses that storage key; look at them first.');
+    [asset] = existing;
+  }
+
+  // Repeating an Attach that already happened changes nothing.
+  if (moment.status === 'made' && asset && String(moment.asset_id) === String(asset.id)) return { ...momentOut(moment), attach: 'already_attached' };
+  if (moment.status !== 'uncertain') throw new CameraRollError(409, 'Only an uncertain photo is attached this way.');
+
+  const media = require('./mediaLibrary');
+  const tag = { entity_type: 'character', entity_id: String(moment.character_id), role: moment.shows_face ? 'pictured' : 'owner' };
+  let object = null;
+  if (assetId) {
+    await checkClaimOf(db, moment, asset, attempts);
+    await checkTagOf(db, moment, asset);
+  } else {
+    // By storage key: the object itself must say whose it is.
+    const { storedImage } = require('./pulseImageService');
+    object = await storedImage(storageKey);
+    if (!object) throw new CameraRollError(404, 'Nothing is stored under that key.');
+    const meta = object.metadata || {};
+    if (meta['moment-id'] !== String(moment.id) || meta['claim-token'] !== attempt.claim_token) {
+      throw conflict('The stored image does not say it belongs to this photo and attempt.');
+    }
+  }
+  if (storageKey && asset) {
+    // A record for this key already exists (an earlier make, or another
+    // attach that is still tagging it): its claim decides; then make sure it
+    // carries the photo's own character tag (adding a tag never changes the image).
+    await checkClaimOf(db, moment, asset, attempts);
+    await media.linkAsset(db, asset.id, tag, { by });
+  } else if (storageKey) {
+    // Stored before a crash, with no library record: record it.
+    const created = await media.createAsset(db, {
+      url: object.url, storageKey, caption: moment.moment, source: 'generated', status: 'approved',
+      visibility: moment.purpose === 'posted' ? 'public' : 'private',
+      details: { notes: `${moment.purpose} · taken by ${moment.taken_by}` },
+      generation: {
+        camera_roll: { ...rollRecord(moment), claim_token: attempt.claim_token, storage_key: storageKey },
+        model: IMAGE_MODEL, recovered: { by, at: new Date().toISOString(), from: 'storage' },
+      },
+      links: [tag], by,
+    });
+    // created.reused: the url was already in the library (another attach got
+    // there first, or an unrelated record): that record's own claim decides.
+    [asset] = await assetRow(db, 'id = :id', { id: created.asset.id });
+    await checkClaimOf(db, moment, asset, attempts);
+  }
+  if (storageKey) await checkTagOf(db, moment, asset);
+
+  const now = new Date();
+  const prev = moment.make_resolution || {};
+  const entry = { action: 'attach', by, at: now.toISOString(), note: note ? String(note).slice(0, 300) : null, asset_id: asset.id };
+  const resolution = { ...prev, attached: entry, authorization: null, history: [...(Array.isArray(prev.history) ? prev.history : []), entry] };
+  // Only while it is still uncertain and no other photo took the image meanwhile.
+  const [rows] = await db.sequelize.query(
+    `UPDATE camera_roll_moments SET status = 'made', asset_id = :asset, error = NULL,
+            make_resolution = CAST(:resolution AS JSONB), updated_at = NOW()
+      WHERE id = :id AND status = 'uncertain'
+        AND NOT EXISTS (SELECT 1 FROM camera_roll_moments o WHERE o.asset_id = :asset AND o.id <> :id)
+      RETURNING id`,
+    { replacements: { id: moment.id, asset: asset.id, resolution: JSON.stringify(resolution) } });
+  moment = await db.CameraRollMoment.findByPk(moment.id);
+  if (!rows.length) {
+    if (moment.status === 'made' && String(moment.asset_id) === String(asset.id)) return { ...momentOut(moment), attach: 'already_attached' };
+    throw new CameraRollError(409, 'That photo changed while it was being attached; look again.');
+  }
+  return { ...momentOut(moment), attach: 'attached' };
 }
 
 async function makeKept(db, characterId, { by = null } = {}) {
@@ -877,6 +1048,6 @@ async function rollFor(db, characterId, { audience = 'member' } = {}) {
 module.exports = {
   CameraRollError, PhotoOutcomeError, STATUSES, MAKEABLE, MAKE_STALE_MINUTES, AUTHORIZATION_HOURS, PURPOSES, TAKERS, OUTFITS, ALBUMS, ALBUM_LABELS, TARGETS, EDITABLE,
   normalizeMoment, normalizePlan, photoPrompt, promptFor, parseMoments, refusalFor, targetFor,
-  rollFor, setHeadshot, headshotOf, plan, updateMoment, keep, drop, make, makeKept, resolve, reconcileStale, claimForMake,
+  rollFor, setHeadshot, headshotOf, plan, updateMoment, keep, drop, make, makeKept, resolve, reconcileStale, claimForMake, photoStorageKey,
   load, nameOf, momentOut, photoOut, IMAGE_MODEL, PHONE_SIZE,
 };

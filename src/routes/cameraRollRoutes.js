@@ -119,10 +119,15 @@ router.post('/moments/:id/make', ...admin, aiRateLimiter, async (req, res) => {
 });
 
 // An uncertain photo (a paid request was sent and the make then failed):
-// acknowledge, authorize one new attempt, or abandon. Nothing is sent (#3714).
+// acknowledge, authorize one new attempt, abandon, or attach an image that
+// was already made (asset_id or storage_key). Nothing is sent (#3714).
 router.post('/moments/:id/resolve', ...admin, async (req, res) => {
   try {
-    const moment = await roll().resolve(models(), req.params.id, { action: req.body?.action, by: byOf(req), note: req.body?.note || null });
+    const body = req.body || {};
+    const str = (v) => (typeof v === 'string' && v ? v : null);
+    const moment = await roll().resolve(models(), req.params.id, {
+      action: body.action, by: byOf(req), note: body.note || null, assetId: str(body.asset_id), storageKey: str(body.storage_key),
+    });
     res.json({ success: true, data: { moment } });
   } catch (err) {
     sendError(res, err, 'POST /moments/:id/resolve');
