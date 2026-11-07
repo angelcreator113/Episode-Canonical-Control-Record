@@ -159,6 +159,60 @@ const OK_IMAGE = async () => ({ data: { data: [{ b64_json: 'iVBORw0KGgo=' }] } }
     });
   });
 
+  describe('make-kept reports each photo\'s outcome', () => {
+    test('made, failed before anything was sent, uncertain (needs a check) and skipped are told apart', async () => {
+      // Only this test's kept photos are in the run.
+      await run("UPDATE camera_roll_moments SET status = 'dropped' WHERE character_id = :maren AND status = 'kept'", ids);
+      const waiting = await moment({ status: 'uncertain', extra: "make_attempted_at = NOW() - INTERVAL '1 hour'" });
+      const made = await moment();
+      const notSent = await moment();
+      const unsure = await moment();
+      const taken = await moment();
+      const stolen = await moment();
+      const real = variations.editImage;
+      let calls = 0;
+      const spy = jest.spyOn(variations, 'editImage').mockImplementation(async (...args) => {
+        calls += 1;
+        if (calls === 2) {
+          // Another make claims a later photo while this run is going.
+          await run("UPDATE camera_roll_moments SET status = 'making', make_claim_token = gen_random_uuid(), make_claimed_at = NOW(), make_previous_status = 'kept' WHERE id = :id", { id: taken });
+          // Refused before the request: onAttempt never ran, nothing was sent.
+          throw Object.assign(new Error('refused before sending'), { status: 500 });
+        }
+        return real(...args);
+      });
+      const ok = async () => { stored += 1; return { url: `https://cdn.test/${tag}/made-${stored}.jpg`, key: `crs/${tag}-${stored}.jpg`, width: 1024, height: 1536 }; };
+      pulseImage.storePulseImage
+        .mockImplementationOnce(ok)
+        .mockImplementationOnce(async () => { throw Object.assign(new Error('Upload refused'), { status: 413 }); })
+        .mockImplementationOnce(async () => {
+          // A newer claim takes the photo after it was made and paid for.
+          await run('UPDATE camera_roll_moments SET make_claim_token = gen_random_uuid() WHERE id = :id', { id: stolen });
+          return ok();
+        });
+      let r;
+      try { r = await makeKept(); } finally { spy.mockRestore(); }
+      expect(r.status).toBe(200);
+      const out = r.body.data;
+      expect(out).toMatchObject({ made: 1, failed: 1, uncertain: 2, skipped: 1, stopped_for_budget: false });
+      expect(out.already_uncertain).toBeGreaterThanOrEqual(1);
+      const by = Object.fromEntries(out.results.map((x) => [x.id, x]));
+      expect(by[made].outcome).toBe('made');
+      expect(by[notSent]).toMatchObject({ outcome: 'failed' });
+      expect(by[unsure]).toMatchObject({ outcome: 'uncertain', code: 'PHOTO_OUTCOME_UNKNOWN' });
+      expect(by[taken]).toMatchObject({ outcome: 'skipped', code: 'PHOTO_BEING_MADE' });
+      expect(by[stolen]).toMatchObject({ outcome: 'uncertain', code: 'CLAIM_LOST' });
+      expect(by[waiting]).toBeUndefined();
+      expect((await rowOf(made)).status).toBe('made');
+      expect(await rowOf(notSent)).toMatchObject({ status: 'kept', make_attempted_at: null, make_claim_token: null });
+      expect((await rowOf(unsure)).status).toBe('uncertain');
+      expect((await rowOf(taken)).status).toBe('making');
+      expect((await rowOf(waiting)).status).toBe('uncertain');
+      // Requests: the made one, the uncertain one and the stolen one; none for the refused, the taken or the waiting.
+      expect(imageCalls()).toHaveLength(3);
+    });
+  });
+
   describe('after a paid request: uncertain, never made again on its own', () => {
     test.each([
       ['storage fails after the call', () => pulseImage.storePulseImage.mockRejectedValueOnce(Object.assign(new Error('Upload refused: too large'), { status: 413 }))],
@@ -270,11 +324,23 @@ const OK_IMAGE = async () => ({ data: { data: [{ b64_json: 'iVBORw0KGgo=' }] } }
         await run('UPDATE camera_roll_moments SET make_claim_token = gen_random_uuid() WHERE id = :id', { id });
         return real(...args);
       });
+      const imageCost = require('../../src/services/imageCostService');
+      const before = await imageCost.readTodaySpend();
+      const startedAt = (await q('SELECT NOW() AS t'))[0].t;
       const r = await make(id);
       spy.mockRestore();
       expect(r.status).toBe(409);
       expect(r.body.code).toBe('CLAIM_LOST');
       expect(imageCalls()).toEqual([]);
+      // The usage log: one error row at no cost (the model is priced), so
+      // today's image spend, which the budget reads, does not move.
+      const logged = await q("SELECT cost_usd, is_error FROM ai_usage_logs WHERE route_name = 'camera-roll' AND created_at >= :t", { t: startedAt });
+      expect(logged).toHaveLength(1);
+      expect(logged[0].is_error).toBe(true);
+      expect(Number(logged[0].cost_usd)).toBe(0);
+      const after = await imageCost.readTodaySpend();
+      expect(after.image).toBe(before.image);
+      expect(after.imageCalls).toBe(before.imageCalls + 1);
     });
 
     test('an older Make cannot overwrite a newer claim: its result is not written', async () => {
@@ -359,6 +425,40 @@ const OK_IMAGE = async () => ({ data: { data: [{ b64_json: 'iVBORw0KGgo=' }] } }
       expect(imageCalls()).toEqual([]);
       const history = (await rowOf(id)).make_resolution.history.map((h) => h.action);
       expect(history).toEqual(['authorize', 'authorize']);
+    });
+
+    test('the authorization is used by the claim itself: ten simultaneous claims with the same id, exactly one wins and uses it', async () => {
+      const id = await uncertain();
+      const authorization = (await resolve(id, 'authorize')).body.data.moment.make_resolution.authorization;
+      const tokens = await Promise.all(Array.from({ length: 10 }, () => cameraRoll.claimForMake(models, id, { authorizationId: authorization.id })));
+      const won = tokens.filter(Boolean);
+      expect(won).toHaveLength(1);
+      const row = await rowOf(id);
+      // One statement did both: the claim is held and the authorization is used.
+      expect(row).toMatchObject({ status: 'making', make_claim_token: won[0], make_previous_status: 'uncertain', make_attempted_at: null });
+      expect(row.make_resolution.authorization.used_at).not.toBeNull();
+      expect(await cameraRoll.claimForMake(models, id, { authorizationId: authorization.id })).toBeNull();
+      expect(imageCalls()).toEqual([]);
+    });
+
+    test('an authorization belongs to its photo: used on another uncertain photo it is refused and neither is changed', async () => {
+      const mine = await uncertain();
+      const other = await uncertain();
+      const authorization = (await resolve(mine, 'authorize')).body.data.moment.make_resolution.authorization;
+      const otherAuth = (await resolve(other, 'authorize')).body.data.moment.make_resolution.authorization;
+      expect(await cameraRoll.claimForMake(models, other, { authorizationId: authorization.id })).toBeNull();
+      const r = await make(other, { authorization_id: authorization.id });
+      expect(r.body.code).toBe('AUTHORIZATION_INVALID');
+      expect(imageCalls()).toEqual([]);
+      const a = await rowOf(mine);
+      const b = await rowOf(other);
+      expect(a).toMatchObject({ status: 'uncertain', make_claim_token: null });
+      expect(b).toMatchObject({ status: 'uncertain', make_claim_token: null });
+      expect(a.make_resolution.authorization).toMatchObject({ id: authorization.id, used_at: null });
+      expect(b.make_resolution.authorization).toMatchObject({ id: otherAuth.id, used_at: null });
+      // Each is still usable on its own photo.
+      expect((await make(mine, { authorization_id: authorization.id })).status).toBe(201);
+      expect(imageCalls()).toHaveLength(1);
     });
 
     test('make-kept never consumes an authorization', async () => {

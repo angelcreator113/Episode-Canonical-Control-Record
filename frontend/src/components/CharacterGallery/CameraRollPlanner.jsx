@@ -41,6 +41,22 @@ const OUTFIT_WORDS = { at_home: 'At home', going_out: 'Going out', work: 'Work',
 const STATUS_WORDS = { proposed: 'Proposed', kept: 'Kept', failed: 'Not made', made: 'Made', making: 'Being made', uncertain: 'Check' };
 
 /** An unused, unexpired one-time authorization to make an uncertain photo once more (#3714). */
+// make-kept's result in words: made; failed (nothing paid was sent, try
+// again); uncertain (may already be made and charged: check each one);
+// skipped (being made elsewhere, or not makeable now).
+export function makeKeptSummary(r = {}) {
+  const n = (k) => Number(r[k]) || 0;
+  const photos = (c) => `${c} photo${c === 1 ? '' : 's'}`;
+  const parts = [`${photos(n('made'))} made`];
+  if (n('failed')) parts.push(`${n('failed')} failed before anything was sent (try again)`);
+  if (n('uncertain')) parts.push(`${n('uncertain')} need${n('uncertain') === 1 ? 's' : ''} a check: may already be made and charged`);
+  if (n('skipped')) parts.push(`${n('skipped')} skipped (being made elsewhere or no longer kept)`);
+  if (n('already_making')) parts.push(`${n('already_making')} already being made`);
+  if (n('already_uncertain')) parts.push(`${n('already_uncertain')} already waiting for a check`);
+  if (r.stopped_for_budget) parts.push('stopped at the daily image budget');
+  return `${parts.join('; ')}.`;
+}
+
 export function pendingAuthorization(moment) {
   const a = moment?.make_resolution?.authorization;
   if (!a || a.used_at || !a.expires_at || new Date(a.expires_at).getTime() <= Date.now()) return null;
@@ -244,10 +260,7 @@ export default function CameraRollPlanner({ characterId, name, target, moments =
   const makeKept = () => run(async () => {
     const { data } = await api.post(`/api/v1/camera-roll/characters/${characterId}/make-kept`);
     const r = data?.data || {};
-    const parts = [`${r.made || 0} photo${r.made === 1 ? '' : 's'} made`];
-    if (r.failed) parts.push(`${r.failed} not made`);
-    if (r.stopped_for_budget) parts.push('stopped at the daily image budget');
-    return `${parts.join(', ')}.`;
+    return makeKeptSummary(r);
   }, 'The photos could not be made. Try again.');
 
   return (

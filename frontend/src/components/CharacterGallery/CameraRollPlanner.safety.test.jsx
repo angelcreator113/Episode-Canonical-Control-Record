@@ -11,7 +11,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 vi.mock('../../services/api', () => ({ default: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn(), patch: vi.fn() } }));
 
 import api from '../../services/api';
-import CameraRollPlanner, { pendingAuthorization } from './CameraRollPlanner';
+import CameraRollPlanner, { pendingAuthorization, makeKeptSummary } from './CameraRollPlanner';
 
 const base = { moment: 'Coffee on the step', purpose: 'private', taken_by: 'friend', shows_face: false, outfit: 'none', album: 'everyday', people: [] };
 const later = () => new Date(Date.now() + 3600 * 1000).toISOString();
@@ -23,6 +23,21 @@ describe('pendingAuthorization', () => {
     expect(pendingAuthorization({ make_resolution: { authorization: { id: 'x', used_at: null, expires_at: later() } } })).toMatchObject({ id: 'x' });
     expect(pendingAuthorization({ make_resolution: { authorization: { id: 'x', used_at: 'now', expires_at: later() } } })).toBeNull();
     expect(pendingAuthorization({ make_resolution: { authorization: { id: 'x', used_at: null, expires_at: new Date(Date.now() - 1000).toISOString() } } })).toBeNull();
+  });
+});
+
+describe('makeKeptSummary', () => {
+  test('tells made, failed before sending, needs a check and skipped apart', () => {
+    expect(makeKeptSummary({ made: 1 })).toBe('1 photo made.');
+    const all = makeKeptSummary({ made: 2, failed: 1, uncertain: 1, skipped: 1, already_making: 1, already_uncertain: 2, stopped_for_budget: true });
+    expect(all).toMatch(/^2 photos made/);
+    expect(all).toMatch(/1 failed before anything was sent/);
+    expect(all).toMatch(/1 needs a check: may already be made and charged/);
+    expect(all).toMatch(/1 skipped/);
+    expect(all).toMatch(/1 already being made/);
+    expect(all).toMatch(/2 already waiting for a check/);
+    expect(all).toMatch(/stopped at the daily image budget/);
+    expect(makeKeptSummary({ made: 0, uncertain: 2 })).toMatch(/2 need a check/);
   });
 });
 

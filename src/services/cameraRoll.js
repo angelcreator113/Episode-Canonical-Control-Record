@@ -25,7 +25,8 @@
  *       (pulseImageService) and saved in the library: approved, public when
  *       the moment was posted, private otherwise.
  *   makeKept(db, characterId, { by })   every kept moment, one by one,
- *       stopping at a budget refusal.
+ *       stopping at a budget refusal; reports made, failed (nothing sent),
+ *       uncertain (needs a check) and skipped, one outcome per photo.
  *
  * The rules: a photo has a reason (purpose) and whoever would plausibly take
  * it (taken_by); at most a third show their face; a photographer only for
@@ -516,7 +517,7 @@ async function reconcileStale(db, momentId) {
         make_claim_token = NULL, make_claimed_at = NULL,
         make_previous_status = CASE WHEN make_attempted_at IS NULL THEN NULL ELSE make_previous_status END,
         updated_at = NOW()
-      WHERE id = :id AND status = 'making' AND make_claimed_at < NOW() - make_interval(mins => :stale)
+      WHERE id = :id AND status = 'making' AND make_claimed_at < NOW() - (:stale * INTERVAL '1 minute')
       RETURNING status`,
     { replacements: { id: momentId, stale: MAKE_STALE_MINUTES } });
   return rows.length ? rows[0].status : null;
@@ -713,7 +714,7 @@ async function make(db, momentId, { by = null, routeName = ROUTE, wearing = null
       "status = 'made', asset_id = :asset, prompt = :prompt, error = NULL, cost = :cost, make_claim_token = NULL, make_claimed_at = NULL, make_previous_status = NULL",
       { asset: created.asset.id, prompt, cost: typeof actual === 'number' ? actual : estimate.usd });
     if (!done) {
-      throw Object.assign(new CameraRollError(409, `The photo was made (library asset ${created.asset.id}) but this make no longer holds it, so it was not recorded on the photo.`), { code: 'CLAIM_LOST' });
+      throw Object.assign(new CameraRollError(409, `The photo was made (library asset ${created.asset.id}) but this make no longer holds it, so it was not recorded on the photo.`), { code: 'CLAIM_LOST', sent: true, asset_id: created.asset.id });
     }
     moment = await db.CameraRollMoment.findByPk(moment.id);
     return { moment: momentOut(moment, created.asset.url), photo: photoOut(created.asset) };
@@ -770,23 +771,52 @@ async function resolve(db, momentId, { action, by = null, note = null } = {}) {
 
 async function makeKept(db, characterId, { by = null } = {}) {
   await eligible(db, characterId);
-  const kept = await db.CameraRollMoment.findAll({ where: { character_id: characterId, status: 'kept' }, order: [['created_at', 'ASC']] });
-  let made = 0;
-  let failed = 0;
+  const [kept, before] = await Promise.all([
+    db.CameraRollMoment.findAll({ where: { character_id: characterId, status: 'kept' }, order: [['created_at', 'ASC']] }),
+    db.CameraRollMoment.findAll({ where: { character_id: characterId, status: ['making', 'uncertain'] }, attributes: ['id', 'status'] }),
+  ]);
+  // Each photo ends in exactly one of: made; failed (nothing paid was sent,
+  // so it can be tried again); uncertain (a paid request was sent and the
+  // make then failed, or the photo was made but another make holds it: check
+  // it); skipped (another make holds it, or it is not makeable from where it
+  // stands; nothing was sent).
+  const results = [];
   let stoppedForBudget = false;
   for (const m of kept) {
     try {
       await make(db, m.id, { by });
-      made += 1;
+      results.push({ id: m.id, outcome: 'made' });
     } catch (err) {
       if (err.code === 'AI_BUDGET_EXCEEDED') { stoppedForBudget = true; break; }
       // A face shot with no headshot stops the run: every face shot would fail the same way.
       if (err instanceof CameraRollError && err.status === 409 && /headshot/.test(err.message)) throw err;
       console.error(`[cameraRoll] photo ${m.id} was not made:`, err.message);
-      failed += 1;
+      results.push({ id: m.id, outcome: makeKeptOutcome(err), code: err.code || null, message: err.message });
     }
   }
-  return { made, failed, stopped_for_budget: stoppedForBudget };
+  const count = (o) => results.filter((r) => r.outcome === o).length;
+  return {
+    made: count('made'),
+    failed: count('failed'),
+    uncertain: count('uncertain'),
+    skipped: count('skipped'),
+    stopped_for_budget: stoppedForBudget,
+    // Not tried at all: already being made, or already waiting for Evoni's check.
+    already_making: before.filter((m) => m.status === 'making').length,
+    already_uncertain: before.filter((m) => m.status === 'uncertain').length,
+    results,
+  };
+}
+
+// How makeKept reports one photo's failed make (see make: PhotoOutcomeError
+// only when the attempt marker was set; CLAIM_LOST with sent when the photo
+// was made but another make now holds it).
+function makeKeptOutcome(err) {
+  if (err instanceof PhotoOutcomeError) return 'uncertain';
+  if (err.code === 'CLAIM_LOST') return err.sent ? 'uncertain' : 'skipped';
+  if (['PHOTO_BEING_MADE', 'PHOTO_ABANDONED'].includes(err.code)) return 'skipped';
+  if (err instanceof CameraRollError && err.status === 409 && /cannot be made from where it stands/.test(err.message)) return 'skipped';
+  return 'failed';
 }
 
 // ── Reading ────────────────────────────────────────────────────────────────
