@@ -11,7 +11,7 @@ module.exports = (sequelize, DataTypes) => {
   CameraRollMoment.init({
     id:           { type: DataTypes.UUID, primaryKey: true, defaultValue: DataTypes.UUIDV4 },
     character_id: { type: DataTypes.UUID, allowNull: false, references: { model: 'registry_characters', key: 'id' } },
-    status:       { type: DataTypes.STRING(12), allowNull: false, defaultValue: 'proposed' }, // proposed | kept | dropped | made | failed
+    status:       { type: DataTypes.STRING(12), allowNull: false, defaultValue: 'proposed' }, // proposed | kept | dropped | made | failed | making | uncertain
     moment:       { type: DataTypes.TEXT, allowNull: false },
     purpose:      { type: DataTypes.STRING(12), allowNull: false, defaultValue: 'private' }, // posted | private | sent | work | memory | screenshot
     taken_by:     { type: DataTypes.STRING(16), allowNull: false, defaultValue: 'friend' }, // selfie | mirror | friend | timer | photographer
@@ -31,6 +31,13 @@ module.exports = (sequelize, DataTypes) => {
     // The Pulse post this photo was made for (migration 20261019230001, services/postPictures).
     post_id:      { type: DataTypes.UUID, allowNull: true },
     created_by:   { type: DataTypes.STRING(255), allowNull: true },
+    // One paid Make at a time, fenced, and paid outcomes never re-made on
+    // their own (migration 20261107150000-camera-roll-make-claims; services/cameraRoll make, resolve).
+    make_claim_token:     { type: DataTypes.UUID, allowNull: true },
+    make_claimed_at:      { type: DataTypes.DATE, allowNull: true },
+    make_previous_status: { type: DataTypes.STRING(12), allowNull: true },
+    make_attempted_at:    { type: DataTypes.DATE, allowNull: true },
+    make_resolution:      { type: DataTypes.JSONB, allowNull: true },
   }, {
     sequelize, modelName: 'CameraRollMoment',
     tableName: 'camera_roll_moments', underscored: true,
