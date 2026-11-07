@@ -17,6 +17,10 @@
  */
 jest.unmock('uuid');
 
+// #3714 R2: POST_PICTURES_AUTO_ENABLED is off by default; the release timer (runWaiting) makes waiting pictures only with the switch on
+// (the off behaviour: tests/integration/postPicturesSafety.integration.test.js).
+process.env.POST_PICTURES_AUTO_ENABLED = 'true';
+
 const mockCreate = jest.fn();
 jest.mock('@anthropic-ai/sdk', () => jest.fn().mockImplementation(() => ({ messages: { create: mockCreate } })));
 

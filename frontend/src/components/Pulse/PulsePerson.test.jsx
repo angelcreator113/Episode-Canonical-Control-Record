@@ -61,6 +61,10 @@ describe('orderPosts and pictureLine', () => {
     expect(pictureLine({ state: 'failed', error: 'Budget used up.' })).toEqual({ short: 'Failed', text: 'Budget used up.', action: 'retry' });
     expect(pictureLine({ state: 'made', cost_usd: 0.2 })).toEqual({ short: '$0.20', text: 'Picture made, $0.20.' });
     expect(pictureLine({ state: 'made', reused: true })).toMatchObject({ short: 'From roll', text: expect.stringMatching(/no cost/) });
+    // #3714 R2: automatic pictures off, and a picture that may already have been made.
+    expect(pictureLine({ state: 'waiting_auto_off' })).toMatchObject({ short: 'Not made', action: 'make_now' });
+    expect(pictureLine({ state: 'interrupted', error: 'It may already have been made.' })).toEqual({ short: 'Check', text: 'It may already have been made.', action: 'check_unknown' });
+    expect(pictureLine({ state: 'uncertain' })).toMatchObject({ short: 'Check', action: 'check_unknown', text: expect.stringMatching(/may already have been made and charged/) });
   });
 });
 
@@ -173,6 +177,29 @@ describe('PulsePerson', () => {
     await waitFor(() => expect(api.put).toHaveBeenCalledWith('/api/v1/pulse-follows/posts/a/pin'));
     fireEvent.click(screen.getByTestId('pp-make-now'));
     await waitFor(() => expect(api.post).toHaveBeenCalledWith('/api/v1/post-media/posts/w/picture', { make_now: true }));
+  });
+
+  test('a picture that may already have been made: Make again asks first and sends confirm_unknown; Dismiss makes nothing (#3714 R2)', async () => {
+    feed = [{ id: 'u', content_text: 'Window light', picture_job: { state: 'uncertain', error: 'The image service may already have made (and charged for) this picture.' } }];
+    vi.mocked(api.post).mockResolvedValue({ data: { success: true, job: { state: 'made' } } });
+    const confirm = vi.spyOn(window, 'confirm');
+    renderIt({ admin: true });
+    await screen.findAllByTestId('pp-post');
+    expect(screen.queryByTestId('pp-retry')).toBeNull();
+
+    confirm.mockReturnValueOnce(false);
+    fireEvent.click(screen.getByTestId('pp-remake-unknown'));
+    expect(confirm).toHaveBeenCalledTimes(1);
+    expect(api.post).not.toHaveBeenCalled();
+
+    confirm.mockReturnValueOnce(true);
+    fireEvent.click(screen.getByTestId('pp-remake-unknown'));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/api/v1/post-media/posts/u/picture', { make_now: true, confirm_unknown: true }));
+
+    vi.mocked(api.post).mockClear();
+    fireEvent.click(await screen.findByTestId('pp-dismiss'));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/api/v1/post-media/posts/u/picture/dismiss', {}));
+    confirm.mockRestore();
   });
 
   test('a refused pin is said plainly', async () => {

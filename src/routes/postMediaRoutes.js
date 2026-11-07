@@ -59,7 +59,7 @@ function sendError(res, err, label) {
   const { MediaError } = require('../services/mediaLibrary');
   const { PostPictureError } = require('../services/postPictures');
   const { CameraRollError } = require('../services/cameraRoll');
-  if (err instanceof PostPictureError || err instanceof CameraRollError) return res.status(err.status).json({ success: false, error: err.message });
+  if (err instanceof PostPictureError || err instanceof CameraRollError) return res.status(err.status).json({ success: false, error: err.message, ...(err.code ? { code: err.code } : {}) });
   if (err instanceof MediaError) {
     return res.status(err.status).json({ success: false, error: err.message, ...(err.pictures ? { code: 'pictures_not_public', pictures: err.pictures } : {}) });
   }
@@ -176,10 +176,24 @@ router.get('/posts/:postId/picture', ...admin, async (req, res) => {
 
 router.post('/posts/:postId/picture', ...admin, aiRateLimiter, async (req, res) => {
   try {
-    const job = await require('../services/postPictures').run(models(), req.params.postId, { by: byOf(req), makeNow: req.body?.make_now === true });
+    // confirm_unknown: true makes again a picture whose last run may already
+    // have been made and charged (interrupted or uncertain; #3714 R2).
+    const job = await require('../services/postPictures').run(models(), req.params.postId, {
+      by: byOf(req), makeNow: req.body?.make_now === true, confirmUnknown: req.body?.confirm_unknown === true,
+    });
     return res.json({ success: true, job });
   } catch (err) {
     return sendError(res, err, 'POST /posts/:postId/picture');
+  }
+});
+
+// An interrupted or uncertain picture resolved by hand, without making one (#3714 R2).
+router.post('/posts/:postId/picture/dismiss', ...admin, async (req, res) => {
+  try {
+    const job = await require('../services/postPictures').dismiss(models(), req.params.postId, { by: byOf(req), note: req.body?.note || null });
+    return res.json({ success: true, job });
+  } catch (err) {
+    return sendError(res, err, 'POST /posts/:postId/picture/dismiss');
   }
 });
 
