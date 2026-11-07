@@ -171,6 +171,7 @@ The other options considered (A: `.env` → pm2 env; C: Secrets Manager read at 
 5. Remove the stale pm2 saved entry (§7). This also leaves the worker saved stopped with the new config.
 6. **Optional:** start the worker still disabled (`pm2 start ecosystem.config.js --only episode-worker --env production`, then `pm2 save`). It should print "Generation worker is disabled" and open no session.
 7. **Later, and only after a read-only count of `generation_jobs` by status:**
+   - **Mandatory precondition:** Do not enable episode-worker job processing until the §7 credential-cleanliness check reports CLEAN for both dump.pm2 and dump.pm2.bak. If either check fails, stop the rollout and complete the separately approved cleanup procedure before continuing.
    - set `GENERATION_WORKER_ENABLED=true` in `.env`;
    - `pm2 restart episode-worker --update-env`, then `pm2 save`;
    - watch `pm2 logs episode-worker` for 5 minutes.
@@ -181,13 +182,13 @@ The other options considered (A: `.env` → pm2 env; C: Secrets Manager read at 
 
 **Why.** pm2's saved entry for `episode-worker` (`~/.pm2/dump.pm2`, its `.bak`, and the env pm2 reloads it with) still holds the env from before #3714, including the old `postgres` password. `pm2 restart --update-env` does **not** clear it: pm2 merges the new env into the saved one, and keeps any key the new config no longer sets. That was checked on pm2 6.0.14. Only deleting the entry and starting it fresh from the new config does. Each step below is Evoni's, run as `ubuntu` on the box. **Nothing here has been done.**
 
-**Detect (presence only, prints no value):**
+**Detect: the credential-cleanliness check.** It prints exactly one line per file, `dump.pm2: CLEAN` or `dump.pm2: STALE`, then the same for `dump.pm2.bak`. It never prints a credential value, a key name or any other env content. STALE means the worker's saved entry has a non-empty `DB_PASSWORD`, `WORKER_DB_PASSWORD`, `DATABASE_URL` or `PGPASSWORD`, or that the file is missing or unreadable (it fails closed).
 
 ```
-cd ~ && node -e 'const f=process.argv[1];for(const n of [f,f+".bak"]){let d;try{d=JSON.parse(require("fs").readFileSync(n,"utf8"))}catch(e){console.log(n+": "+(e.code||"unreadable"));continue}const bad=["DB_PASSWORD","WORKER_DB_PASSWORD","DATABASE_URL","PGPASSWORD"];for(const p of d){if(p.name!=="episode-worker")continue;const e=Object.assign({},p.env||{},p);const hit=bad.filter(k=>typeof e[k]==="string"&&e[k]!=="");console.log(n+" "+p.name+": "+(hit.length?"STALE "+hit.join(","):"clean"))}}' ~/.pm2/dump.pm2
+cd ~ && node -e 'const fs=require("fs");const bad=["DB_PASSWORD","WORKER_DB_PASSWORD","DATABASE_URL","PGPASSWORD"];for(const n of [process.argv[1],process.argv[1]+".bak"]){let ok=false;try{const d=JSON.parse(fs.readFileSync(n,"utf8"));ok=Array.isArray(d)&&d.filter(p=>p&&p.name==="episode-worker").every(p=>{const e=Object.assign({},p.env||{},p);return bad.every(k=>e[k]===undefined||e[k]===null||e[k]==="")})}catch(e){ok=false}console.log(require("path").basename(n)+": "+(ok?"CLEAN":"STALE"))}' ~/.pm2/dump.pm2
 ```
 
-Expect `STALE DB_PASSWORD` today. Check also `pm2 jlist` the same way if the worker is in the live list.
+Expect `dump.pm2: STALE` today. Do not inspect the dump any other way (`cat`, `grep` for values, `pm2 env`): those print credentials.
 
 **Remove (only with Evoni's yes, after §6 steps 1–4):**
 1. `pm2 describe episode-worker | grep -E 'status|restarts'`. It must be `stopped`; if it is online, stop here and ask.
@@ -195,7 +196,7 @@ Expect `STALE DB_PASSWORD` today. Check also `pm2 jlist` the same way if the wor
 3. `pm2 start ecosystem.config.js --only episode-worker --env production`. This starts it fresh from the new config: disabled, no password in its env, so it does nothing.
 4. `pm2 stop episode-worker`.
 5. `pm2 save`, then `pm2 save` again. The second save overwrites `dump.pm2.bak`, which otherwise keeps the stale copy.
-6. Run the detector again. Expect `clean` for both `dump.pm2` and `dump.pm2.bak`.
+6. Run the credential-cleanliness check again. It must report `dump.pm2: CLEAN` and `dump.pm2.bak: CLEAN`. If either is `STALE`, stop the rollout here (§6 step 7 must not proceed).
 
 **If step 3 refuses** (exit 78, "a database password is in the worker's environment"), the password is coming from `.env` or the shell, not from pm2. Find the key named in the message, remove that line from `.env`, then repeat from step 3.
 
