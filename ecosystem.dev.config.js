@@ -90,6 +90,10 @@ module.exports = {
       log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
       env: {
         ...sharedEnv,
+        // Issue #3714: the worker does nothing unless this is "true". The dev
+        // box keeps it running as before, on its local database copy and the
+        // shared dev login (WORKER_DB_* are required only in production).
+        GENERATION_WORKER_ENABLED: process.env.GENERATION_WORKER_ENABLED || 'true',
         EXPORT_TEMP_DIR: '/home/ubuntu/episode-metadata/exports-temp',
         EXPORT_MAX_CONCURRENT_JOBS: '1',
       },

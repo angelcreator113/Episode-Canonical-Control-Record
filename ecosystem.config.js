@@ -62,6 +62,21 @@ const sharedEnv = {
   REMOVEBG_API_KEY: process.env.REMOVEBG_API_KEY || '',
 };
 
+// The worker's own settings (issue #3714). It never carries the API's
+// database login: DB_USER / DB_PASSWORD are blanked, and the worker connects
+// only as WORKER_DB_USER (its least-privilege role), with no fallback. It does
+// no work unless GENERATION_WORKER_ENABLED is "true" (default false). Its pool
+// stays under the role's CONNECTION LIMIT 5.
+const workerEnv = {
+  DB_USER: '',
+  DB_PASSWORD: '',
+  WORKER_DB_REQUIRED: 'true',
+  WORKER_DB_USER: process.env.WORKER_DB_USER || '',
+  WORKER_DB_PASSWORD: process.env.WORKER_DB_PASSWORD || '',
+  GENERATION_WORKER_ENABLED: process.env.GENERATION_WORKER_ENABLED === 'true' ? 'true' : 'false',
+  DB_POOL_MAX: '4',
+};
+
 module.exports = {
   apps: [
     // === PRODUCTION app (port 3000) — serves primepisodes.com / www ===
@@ -114,13 +129,18 @@ module.exports = {
       error_file: '/home/ubuntu/episode-metadata/logs/worker-error.log',
       out_file: '/home/ubuntu/episode-metadata/logs/worker-out.log',
       log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
+      // Refused for its settings (exit 78, src/workers/workerStartup.js): not
+      // restarted in a loop.
+      stop_exit_codes: [78],
       env: {
         ...sharedEnv,
+        ...workerEnv,
         EXPORT_TEMP_DIR: '/home/ubuntu/episode-metadata/exports-temp',
         EXPORT_MAX_CONCURRENT_JOBS: '1',
       },
       env_production: {
         ...sharedEnv,
+        ...workerEnv,
         NODE_ENV: 'production',
         EXPORT_TEMP_DIR: '/home/ubuntu/episode-metadata/exports-temp',
         EXPORT_MAX_CONCURRENT_JOBS: '1',

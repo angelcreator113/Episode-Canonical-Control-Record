@@ -144,6 +144,12 @@ const test = {
  * could silently override the correct RDS connection.
  * Also includes read-replica support when DB_READ_REPLICA_HOST is configured.
  */
+/** The production pool size: DB_POOL_MAX when it is a whole number from 1 to 30, else 30. */
+function poolMax(env = process.env) {
+  const n = Number(env.DB_POOL_MAX);
+  return Number.isInteger(n) && n >= 1 && n <= 30 ? n : 30;
+}
+
 const production = {
   ...baseConfig,
   username: process.env.DB_USER || process.env.DB_USERNAME,
@@ -153,8 +159,11 @@ const production = {
   port: parseInt(process.env.DB_PORT || '5432'),
   logging: false,
   pool: {
-    max: 30,
-    min: 10,
+    // DB_POOL_MAX is set only for the episode worker (ecosystem.config.js,
+    // #3714): its login has CONNECTION LIMIT 5, so its pool stays below that.
+    // The API sets no DB_POOL_MAX and keeps 30 / 10.
+    max: poolMax(),
+    min: Math.min(10, poolMax()),
     acquire: 60000, // Longer timeout in production
     idle: 10000,
   },
@@ -207,6 +216,7 @@ module.exports = {
  */
 const env = process.env.NODE_ENV || 'development';
 module.exports.default = module.exports[env];
+module.exports.poolMax = poolMax;
 
 // Validate configuration on load
 if (!module.exports[env]) {
