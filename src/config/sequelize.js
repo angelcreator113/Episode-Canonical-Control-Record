@@ -144,17 +144,36 @@ const test = {
  * could silently override the correct RDS connection.
  * Also includes read-replica support when DB_READ_REPLICA_HOST is configured.
  */
+/** The production pool size: DB_POOL_MAX when it is a whole number from 1 to 30, else 30. */
+function poolMax(env = process.env) {
+  const n = Number(env.DB_POOL_MAX);
+  return Number.isInteger(n) && n >= 1 && n <= 30 ? n : 30;
+}
+
+/** The production login: the worker's held one when set, else DB_USER / DB_PASSWORD. */
+function productionLogin() {
+  const held = require('./dbCredentials').getDbCredentials();
+  if (held) return { username: held.user, password: held.password };
+  return { username: process.env.DB_USER || process.env.DB_USERNAME, password: process.env.DB_PASSWORD };
+}
+
 const production = {
   ...baseConfig,
-  username: process.env.DB_USER || process.env.DB_USERNAME,
-  password: process.env.DB_PASSWORD,
+  // The episode worker's login is held in memory (src/config/dbCredentials.js,
+  // #3714), never in process.env; read when the models connect. Every other
+  // process sets nothing there and keeps DB_USER / DB_PASSWORD.
+  get username() { return productionLogin().username; },
+  get password() { return productionLogin().password; },
   database: process.env.DB_NAME || process.env.DB_DATABASE,
   host: process.env.DB_HOST,
   port: parseInt(process.env.DB_PORT || '5432'),
   logging: false,
   pool: {
-    max: 30,
-    min: 10,
+    // DB_POOL_MAX is set only for the episode worker (ecosystem.config.js,
+    // #3714): its login has CONNECTION LIMIT 5, so its pool stays below that.
+    // The API sets no DB_POOL_MAX and keeps 30 / 10.
+    max: poolMax(),
+    min: Math.min(10, poolMax()),
     acquire: 60000, // Longer timeout in production
     idle: 10000,
   },
@@ -178,15 +197,15 @@ if (process.env.DB_READ_REPLICA_HOST) {
     read: [
       {
         host: process.env.DB_READ_REPLICA_HOST,
-        username: process.env.DB_USER || process.env.DB_USERNAME,
-        password: process.env.DB_PASSWORD,
+        get username() { return productionLogin().username; },
+        get password() { return productionLogin().password; },
         port: parseInt(process.env.DB_PORT || '5432'),
       },
     ],
     write: {
       host: process.env.DB_HOST,
-      username: process.env.DB_USER || process.env.DB_USERNAME,
-      password: process.env.DB_PASSWORD,
+      get username() { return productionLogin().username; },
+      get password() { return productionLogin().password; },
       port: parseInt(process.env.DB_PORT || '5432'),
     },
   };
@@ -207,6 +226,7 @@ module.exports = {
  */
 const env = process.env.NODE_ENV || 'development';
 module.exports.default = module.exports[env];
+module.exports.poolMax = poolMax;
 
 // Validate configuration on load
 if (!module.exports[env]) {

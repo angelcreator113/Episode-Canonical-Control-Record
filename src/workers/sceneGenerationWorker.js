@@ -283,4 +283,6 @@ function stop() {
   console.log('🎬 [GenWorker] Stopping...');
 }
 
-module.exports = { start, stop, processJob };
+// recoverStuckJobs and claimNextJob are exported for the restricted-role
+// tests (#3714); start() remains the only caller in production.
+module.exports = { start, stop, processJob, recoverStuckJobs, claimNextJob };

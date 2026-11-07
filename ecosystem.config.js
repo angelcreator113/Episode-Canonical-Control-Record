@@ -62,6 +62,26 @@ const sharedEnv = {
   REMOVEBG_API_KEY: process.env.REMOVEBG_API_KEY || '',
 };
 
+// The worker's own settings (issue #3714, Option B). It never carries a
+// database password in its environment: DB_USER / DB_PASSWORD are blanked
+// (the API's login never reaches it), WORKER_DB_USER / WORKER_DB_PASSWORD are
+// not passed at all, and the worker reads its least-privilege login from the
+// mode-600 file named here, holding it in memory only. pm2 keeps the path,
+// never the password, in its saved list (~/.pm2/dump.pm2). The worker refuses
+// to start (exit 78) if a password is in its environment, the file is unsafe
+// or missing, or the login is postgres. It does no work unless
+// GENERATION_WORKER_ENABLED is "true" (default false). Its pool stays under
+// the role's CONNECTION LIMIT 5.
+const workerEnv = {
+  NODE_ENV: 'production',
+  DB_USER: '',
+  DB_PASSWORD: '',
+  WORKER_DB_REQUIRED: 'true',
+  WORKER_DB_CREDENTIALS_FILE: '/home/ubuntu/.episode-worker-db.env',
+  GENERATION_WORKER_ENABLED: process.env.GENERATION_WORKER_ENABLED === 'true' ? 'true' : 'false',
+  DB_POOL_MAX: '4',
+};
+
 module.exports = {
   apps: [
     // === PRODUCTION app (port 3000) — serves primepisodes.com / www ===
@@ -114,13 +134,18 @@ module.exports = {
       error_file: '/home/ubuntu/episode-metadata/logs/worker-error.log',
       out_file: '/home/ubuntu/episode-metadata/logs/worker-out.log',
       log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
+      // Refused for its settings (exit 78, src/workers/workerStartup.js): not
+      // restarted in a loop.
+      stop_exit_codes: [78],
       env: {
         ...sharedEnv,
+        ...workerEnv,
         EXPORT_TEMP_DIR: '/home/ubuntu/episode-metadata/exports-temp',
         EXPORT_MAX_CONCURRENT_JOBS: '1',
       },
       env_production: {
         ...sharedEnv,
+        ...workerEnv,
         NODE_ENV: 'production',
         EXPORT_TEMP_DIR: '/home/ubuntu/episode-metadata/exports-temp',
         EXPORT_MAX_CONCURRENT_JOBS: '1',
