@@ -32,6 +32,20 @@ const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 const client     = new Anthropic();
 const PROJECT_DIR = process.env.CLAUDE_CODE_PROJECT_DIR || '';
 
+// Running Claude Code (POST /findings/:id/execute) starts a separately billed
+// `claude` process outside the app's AI budget gate. It is OFF unless
+// AMBER_CLI_EXECUTION_ENABLED is exactly the string "true" (no trimming, no
+// other spelling), read on every request. The auto-approve flags below only
+// mark findings approved; they never turn this on (Evoni, AI Operations
+// Center review, 2026-11-07).
+const CLI_EXECUTION_DISABLED = {
+  error: 'Running Claude Code from the diagnostic engine is switched off (AMBER_CLI_EXECUTION_ENABLED is not "true"). Nothing was run.',
+  code: 'CLI_EXECUTION_DISABLED',
+};
+function cliExecutionEnabled() {
+  return process.env.AMBER_CLI_EXECUTION_ENABLED === 'true';
+}
+
 // ── Level 2 auto-approve categories (locked off until you unlock them) ────────
 // To unlock a category: set AMBER_AUTO_APPROVE_<CATEGORY>=true in .env
 const AUTO_APPROVE_CATEGORIES = {
@@ -307,6 +321,10 @@ async function runDiagnosticScan(trigger = 'manual') {
 
 // ── Claude Code bridge ────────────────────────────────────────────────────────
 async function executeFixViaClaudeCode(finding) {
+  // Second line of defence: no caller can start the CLI while it is off.
+  if (!cliExecutionEnabled()) {
+    return { success: false, output: '', error: CLI_EXECUTION_DISABLED.error, code: CLI_EXECUTION_DISABLED.code };
+  }
   if (!PROJECT_DIR) {
     throw new Error('CLAUDE_CODE_PROJECT_DIR not configured. Set this env var to your project root.');
   }
@@ -481,6 +499,10 @@ router.post('/findings/:id/approve', requireAuth, authorize(['ADMIN']), async (r
 
 // POST /api/v1/amber/diagnostic/findings/:id/execute
 router.post('/findings/:id/execute', requireAuth, authorize(['ADMIN']), aiRateLimiter, async (req, res) => {
+  // Before the finding is read or its status touched.
+  if (!cliExecutionEnabled()) {
+    return res.status(403).json(CLI_EXECUTION_DISABLED);
+  }
   try {
     const finding = await db.AmberFinding.findByPk(req.params.id);
     if (!finding) return res.status(404).json({ error: 'Finding not found' });
@@ -580,3 +602,4 @@ router.post('/queue', requireAuth, authorize(['ADMIN']), async (req, res) => {
 
 module.exports = router;
 module.exports.runDiagnosticScan = runDiagnosticScan;
+module.exports.executeFixViaClaudeCode = executeFixViaClaudeCode;
