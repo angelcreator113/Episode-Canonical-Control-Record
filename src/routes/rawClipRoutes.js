@@ -115,8 +115,56 @@ const sendError = (res, err, what) => {
   // A refused request is logged too (Teleprompter audit 9): a 4xx is not silent.
   if (status < 500) console.warn(`[RawClips] ${what} refused (${status}):`, err.message);
   else console.error(`[RawClips] ${what} failed (${status}):`, err.code || err.name || '', err.message);
-  return res.status(status).json({ success: false, error: message });
+  // A refusal with its own code (A1.3-0: CLIP_EPISODE_DELETED) says which.
+  const code = err instanceof clips.RawClipError && typeof err.code === 'string' ? err.code : null;
+  return res.status(status).json({ success: false, error: message, ...(code ? { code } : {}) });
 };
+
+/**
+ * A1.3-0 (C1): after a take was refused because its episode was deleted while
+ * it uploaded, its own stored files are deleted, best effort:
+ *   - only keys under this upload's own prefix (episodes/<episode>/raw-clips/<clip>/),
+ *     which the upload minted (its clip id is new at upload start);
+ *   - only when no raw clip row (removed ones too) references the clip id or
+ *     the keys. An attached clip's files are never touched;
+ *   - one exact key at a time, never a prefix or a listing.
+ * A failure is logged as one [raw-clip-orphan] line per key, for the
+ * read-only report (scripts/maintenance/list-raw-clip-orphans.js); it never
+ * hides the 409. Returns { deleted, kept, failed }.
+ */
+async function cleanupRefusedUpload({ episodeId, clipId, keys }) {
+  const prefix = `${media.clipPrefix(episodeId, clipId)}/`;
+  const own = [...new Set((keys || []).filter((k) => typeof k === 'string' && k.startsWith(prefix) && k.length > prefix.length))];
+  const out = { deleted: [], kept: [], failed: [] };
+  if (!own.length) return out;
+  const orphan = (key, reason) => {
+    out.failed.push(key);
+    console.error(`[raw-clip-orphan] ${JSON.stringify({ episode_id: episodeId, clip_id: clipId, key, reason, at: new Date().toISOString() })}`);
+  };
+  let referenced;
+  try {
+    referenced = await clips.storedKeysReferenced(models.sequelize, { clipId, keys: own });
+  } catch (err) {
+    for (const key of own) orphan(key, `reference check failed: ${err.message}`);
+    return out;
+  }
+  if (referenced) {
+    console.warn(`[RawClips] refused take ${clipId}: a clip row references its files; nothing deleted`);
+    out.kept.push(...own);
+    return out;
+  }
+  for (const key of own) {
+    try {
+      await media.deleteStoredObject(key);
+      out.deleted.push(key);
+    } catch (err) {
+      orphan(key, `delete failed: ${err.name || ''} ${err.message}`.trim());
+    }
+  }
+  return out;
+}
+
+const isEpisodeDeletedRefusal = (err) => err instanceof clips.RawClipError && err.code === clips.CLIP_EPISODE_DELETED;
 
 // Room the one-request upload needs on the disk: the file, plus a margin
 // (nginx buffers the body to disk as well, and the thumbnail is made there).
@@ -222,6 +270,8 @@ router.put('/:episodeId/uploads/:uploadId/parts/:partNumber', requireAuth, (req,
 
 /** Joins the parts, stores the thumbnail and creates the clip row; the 201 body. */
 async function completeUpload(entry, thumbnailB64) {
+  // A1.3-0 (C1): refused once (its episode was deleted): the same answer, no second clean-up.
+  if (entry.refusal) throw entry.refusal;
   const f = entry.fields;
   // Joined once: a retry after a later step failed does not join it again.
   if (!entry.urlRaw) entry.urlRaw = await parts.finish(entry);
@@ -262,15 +312,24 @@ async function completeUpload(entry, thumbnailB64) {
   if (f.start_line !== undefined) extras.start_line = f.start_line;
   if (f.beat_marks !== undefined) extras.beat_marks = f.beat_marks;
   if (f.end_beat_number !== undefined) extras.end_beat_number = f.end_beat_number;
-  let row = await clips.createClip(models.sequelize, {
-    id: entry.clipId, episode_id: entry.episodeId, show_id: entry.showId,
-    performer: f.performer, guest_name: f.guest_name, label: f.label ?? clips.readFields({ label: entry.filename }).label,
-    original_filename: entry.filename, content_type: entry.contentType, file_size_bytes: entry.size,
-    beat_number: f.beat_number ?? null,
-    duration_seconds: info?.duration_seconds ?? f.seconds ?? null, width: info?.width ?? f.width ?? null, height: info?.height ?? f.height ?? null,
-    s3_key_raw: entry.key, url_raw: urlRaw, thumbnail_key: thumbUrl ? thumbKey : null, thumbnail_url: thumbUrl,
-    key_status: f.greenScreen ? 'queued' : 'none', key_strength: f.strength,
-  });
+  let row;
+  try {
+    row = await clips.createClip(models.sequelize, {
+      id: entry.clipId, episode_id: entry.episodeId, show_id: entry.showId,
+      performer: f.performer, guest_name: f.guest_name, label: f.label ?? clips.readFields({ label: entry.filename }).label,
+      original_filename: entry.filename, content_type: entry.contentType, file_size_bytes: entry.size,
+      beat_number: f.beat_number ?? null,
+      duration_seconds: info?.duration_seconds ?? f.seconds ?? null, width: info?.width ?? f.width ?? null, height: info?.height ?? f.height ?? null,
+      s3_key_raw: entry.key, url_raw: urlRaw, thumbnail_key: thumbUrl ? thumbKey : null, thumbnail_url: thumbUrl,
+      key_status: f.greenScreen ? 'queued' : 'none', key_strength: f.strength,
+    });
+  } catch (err) {
+    if (isEpisodeDeletedRefusal(err)) {
+      entry.refusal = err;
+      await cleanupRefusedUpload({ episodeId: entry.episodeId, clipId: entry.clipId, keys: [entry.key, thumbUrl ? thumbKey : null] });
+    }
+    throw err;
+  }
   // No copy on this disk: the green-removal job reads the original from S3.
   // Not enough room to remove the green: the clip is saved and says so at
   // once, instead of failing when the job starts (Evoni, 2026-10-31).
@@ -414,15 +473,21 @@ router.post('/:episodeId', requireAuth, async (req, res) => {
         thumbUrl = await media.uploadFile(thumbPath, thumbKey, 'image/jpeg');
       }
 
-      let row = await clips.createClip(models.sequelize, {
-        id, episode_id: episode.id, show_id: episode.show_id,
-        performer: fields.performer, guest_name: fields.guest_name, label: fields.label ?? clips.readFields({ label: file.originalname }).label,
-        original_filename: file.originalname, content_type: file.mimetype, file_size_bytes: file.size,
-        beat_number: fields.beat_number ?? null,
-        duration_seconds: info.duration_seconds ?? seconds, width: info.width ?? width, height: info.height ?? height,
-        s3_key_raw: s3KeyRaw, url_raw: urlRaw, thumbnail_key: thumbKey, thumbnail_url: thumbUrl,
-        key_status: greenScreen ? 'queued' : 'none', key_strength: strength,
-      });
+      let row;
+      try {
+        row = await clips.createClip(models.sequelize, {
+          id, episode_id: episode.id, show_id: episode.show_id,
+          performer: fields.performer, guest_name: fields.guest_name, label: fields.label ?? clips.readFields({ label: file.originalname }).label,
+          original_filename: file.originalname, content_type: file.mimetype, file_size_bytes: file.size,
+          beat_number: fields.beat_number ?? null,
+          duration_seconds: info.duration_seconds ?? seconds, width: info.width ?? width, height: info.height ?? height,
+          s3_key_raw: s3KeyRaw, url_raw: urlRaw, thumbnail_key: thumbKey, thumbnail_url: thumbUrl,
+          key_status: greenScreen ? 'queued' : 'none', key_strength: strength,
+        });
+      } catch (err) {
+        if (isEpisodeDeletedRefusal(err)) await cleanupRefusedUpload({ episodeId: episode.id, clipId: id, keys: [s3KeyRaw, thumbKey] });
+        throw err;
+      }
       if (greenScreen) {
         handedToJob = media.enqueueKey(models.sequelize, { clipId: id, episodeId: episode.id, s3KeyRaw, strength, localPath: file.path, durationSeconds: info.duration_seconds ?? seconds });
       }
@@ -508,3 +573,4 @@ router.delete('/:episodeId/:clipId', requireAuth, async (req, res) => {
 });
 
 module.exports = router;
+module.exports.cleanupRefusedUpload = cleanupRefusedUpload;

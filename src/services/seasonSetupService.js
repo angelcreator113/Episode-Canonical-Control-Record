@@ -657,7 +657,12 @@ async function previewPlacement(sequelize, showId) {
 
 /**
  * Save: applies Evoni's list in one transaction. Each item is
- * { slot_id, episode_id } or { slot_id, event_id }. Episodes are placed
+ * { slot_id, episode_id } or { slot_id, event_id }, with an optional
+ * expected_event_id: the event the slot held when it was reviewed (absent:
+ * reviewed empty, as the preview offers only open slots). Under the locks,
+ * a slot that started, or holds an event other than the item's own or the
+ * reviewed one, or an event pencilled into another slot since, refuses the
+ * whole Save (409 SEASON_SLOT_CHANGED; nothing written). Episodes are placed
  * first (placeEpisode's rules: the slot locks to it and takes its event),
  * then events are pencilled (pencilEvent's rules). Any refusal undoes all.
  */
@@ -678,21 +683,71 @@ async function applyPlacement(sequelize, showId, items) {
   return sequelize.transaction(async (transaction) => {
     // A1.1: the episodes being placed, locked first (episode-first).
     await lockEpisodes(sequelize, items.filter((x) => x.episode_id).map((x) => x.episode_id), { transaction });
+    // A1.3-0: the events being pencilled (W), locked together in id order
+    // before any slot, as pencilEventIn locks its event before its slots;
+    // otherwise an episode's slot placed first would be held while waiting
+    // on an event a swap holds (S -> W against W -> S).
+    const eventIds = [...new Set(items.filter((x) => x.event_id).map((x) => String(x.event_id)))]
+      .filter((id) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id));
+    if (eventIds.length) {
+      await sequelize.query(
+        'SELECT id FROM world_events WHERE id IN (:eventIds) AND show_id = :showId AND deleted_at IS NULL ORDER BY id FOR UPDATE',
+        { replacements: { eventIds, showId }, transaction });
+    }
     const [[arc]] = await sequelize.query(
       `SELECT id FROM show_arcs WHERE show_id = :showId AND status = 'active' AND deleted_at IS NULL
         ORDER BY arc_number ASC LIMIT 1`,
       { replacements: { showId }, transaction });
     if (!arc) throw new SeasonSetupError('Set up the season first.', 409, 'SEASON_NOT_FOUND');
-    const [slotRows] = await sequelize.query(
-      'SELECT id, slot_number, event_id FROM season_slots WHERE id IN (:ids) AND arc_id = :arcId AND deleted_at IS NULL',
-      { replacements: { ids: [...slotsSeen], arcId: arc.id }, transaction });
-    const byId = new Map(slotRows.map((r) => [String(r.id), r]));
+    // A1.3-0 (C4d): the placement is checked against the season as it is
+    // under the locks, never against the preview's unlocked read.
+    // 1. Each placed episode's own event (read under its E lock: a Brief or
+    //    link change locks the episode first).
+    const ownEvent = new Map();
+    for (const it of items.filter((x) => x.episode_id)) {
+      const [[own]] = await sequelize.query(`SELECT ${episodeEventIdSql(':episodeId')} AS id`,
+        { replacements: { episodeId: it.episode_id }, transaction });
+      ownEvent.set(String(it.episode_id), own?.id ? String(own.id) : null);
+    }
+    const ownOf = (it) => (it.event_id ? String(it.event_id) : ownEvent.get(String(it.episode_id)) || null);
+    const relevant = [...new Set(items.map(ownOf).filter(Boolean))];
+    // 2. The target slots and the slots that hold those events now, locked
+    //    together in id order (S, after E and W), then the holders read again
+    //    under the locks: one that appeared meanwhile refuses the Save.
+    const holderIds = async () => {
+      if (!relevant.length) return [];
+      const [held] = await sequelize.query(
+        'SELECT id FROM season_slots WHERE arc_id = :arcId AND event_id IN (:relevant) AND deleted_at IS NULL',
+        { replacements: { arcId: arc.id, relevant }, transaction });
+      return held.map((r) => String(r.id));
+    };
+    const wanted = [...new Set([...[...slotsSeen].map(String), ...(await holderIds())])];
+    const [lockedRows] = await sequelize.query(
+      `SELECT id, arc_id, slot_number, event_id, episode_id, locked_at FROM season_slots
+        WHERE id IN (:wanted) AND deleted_at IS NULL ORDER BY id FOR UPDATE`,
+      { replacements: { wanted }, transaction });
+    const byId = new Map(lockedRows.map((r) => [String(r.id), r]));
+    const changed = (message) => new SeasonSetupError(`${message} Nothing was placed: open the preview again.`, 409, 'SEASON_SLOT_CHANGED');
+    if ((await holderIds()).some((id) => !byId.has(id))) throw changed('The season changed while this was being saved.');
+    // 3. Each placement against the locked rows. A slot is taken as reviewed
+    //    empty (the preview offers only open slots) unless the item names the
+    //    event it was reviewed with (expected_event_id): replacing that one is
+    //    intended; any other event found there was pencilled since.
     for (const it of items) {
       const row = byId.get(String(it.slot_id));
-      if (!row) throw new SeasonSetupError('A slot in the list is not in this season.', 404, 'SEASON_SLOT_NOT_FOUND');
-      // The preview only offers empty slots; one filled since is not overwritten.
-      if (it.event_id && row.event_id && String(row.event_id) !== String(it.event_id)) {
-        throw new SeasonSetupError(`E${row.slot_number} has had an event pencilled since the preview; open the preview again.`, 409, 'SEASON_SLOT_CHANGED');
+      if (!row || String(row.arc_id) !== String(arc.id)) throw new SeasonSetupError('A slot in the list is not in this season.', 404, 'SEASON_SLOT_NOT_FOUND');
+      if (row.episode_id || row.locked_at) throw changed(`E${row.slot_number} has started since the preview.`);
+      const own = ownOf(it);
+      const reviewed = Object.prototype.hasOwnProperty.call(it, 'expected_event_id') ? it.expected_event_id : null;
+      const now = row.event_id ? String(row.event_id) : null;
+      if (now && now !== own && now !== (reviewed == null ? null : String(reviewed))) {
+        throw changed(`E${row.slot_number} has had another event pencilled since the preview.`);
+      }
+      // An event the preview offered was in no slot of this season; one
+      // pencilled into another slot since is not moved out of it.
+      if (it.event_id) {
+        const elsewhere = lockedRows.find((r) => String(r.event_id || '') === String(it.event_id) && String(r.id) !== String(it.slot_id));
+        if (elsewhere) throw changed(`That event has been pencilled into E${elsewhere.slot_number} since the preview.`);
       }
     }
     let episodes = 0;

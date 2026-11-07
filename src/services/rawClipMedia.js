@@ -32,7 +32,7 @@ const fsp = require('fs').promises;
 const os = require('os');
 const path = require('path');
 const { pipeline } = require('stream/promises');
-const { S3Client, PutObjectCommand, GetObjectCommand, HeadObjectCommand } = require('@aws-sdk/client-s3');
+const { S3Client, PutObjectCommand, GetObjectCommand, HeadObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
 const clips = require('./rawClipsService');
 const { openSource } = require('./rawClipSource');
 const { KeyNoRoomError, friendlyKeyError } = require('./rawClipErrors');
@@ -149,6 +149,16 @@ async function uploadFile(localPath, key, contentType) {
     body.destroy();
   }
   return publicUrl(key);
+}
+
+/**
+ * Deletes one stored object by its exact key (A1.3-0, C1: a refused upload's
+ * own files). Never a prefix, never a listing. Deleting a key that is not
+ * there succeeds (S3 answers 204), so a repeat is harmless.
+ */
+async function deleteStoredObject(key) {
+  if (!key || typeof key !== 'string' || key.endsWith('/')) throw new Error('deleteStoredObject needs one exact key');
+  await getS3().send(new DeleteObjectCommand({ Bucket: requireAssetBucket(), Key: key }));
 }
 
 const headObject = (key) => getS3().send(new HeadObjectCommand({ Bucket: requireAssetBucket(), Key: key }));
@@ -517,6 +527,6 @@ async function freeBytes(dir = TMP_DIR) {
 
 module.exports = {
   BUCKET, TMP_DIR, TMP_MAX_AGE_MS, FFMPEG, FFPROBE, publicUrl, clipPrefix, tmpPath, removeFile, getS3, openStoredFile,
-  run, uploadFile, downloadFile, inspect, enqueueKey, cancelKey, activeIds, keyProgress, startedAt, storeRetry, paceCheck, roomToKey, keyClip,
+  run, uploadFile, downloadFile, deleteStoredObject, inspect, enqueueKey, cancelKey, activeIds, keyProgress, startedAt, storeRetry, paceCheck, roomToKey, keyClip,
   sweepTmp, startTmpSweeper, freeBytes,
 };

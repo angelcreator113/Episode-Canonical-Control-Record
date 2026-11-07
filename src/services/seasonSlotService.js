@@ -32,10 +32,11 @@
  */
 
 const { loadSeason } = require('./seasonLoader');
-const { lockEpisodes, requireTransaction, inTransaction } = require('../utils/episodeLocks');
+const { lockEpisodes, requireTransaction, inTransaction, RetryableConflictError } = require('../utils/episodeLocks');
 const { snapshotFrozen, frozenSkip, frozenError, lateContextError } = require('../utils/snapshotFreeze');
 
 const SLOTS_PER_SEASON = 24;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const DEFAULT_PHASES = [
   { phase: 1, title: 'Foundation', episode_start: 1, episode_end: 8 },
   { phase: 2, title: 'Ascension', episode_start: 9, episode_end: 16 },
@@ -526,6 +527,17 @@ function purposesWithThreads(slot, threadById) {
   });
 }
 
+/** The other slot of the target's season pencilled with this event, read without a lock (C4). */
+async function slotHoldingEvent(sequelize, { showId, slotId, eventId, transaction }) {
+  const [[row]] = await sequelize.query(
+    `SELECT o.id FROM season_slots t
+       JOIN season_slots o ON o.arc_id = t.arc_id AND o.event_id = :eventId AND o.id <> t.id AND o.deleted_at IS NULL
+      WHERE t.id = :slotId AND t.show_id = :showId AND t.deleted_at IS NULL
+      LIMIT 1`,
+    { replacements: { showId, slotId, eventId }, transaction });
+  return row || null;
+}
+
 async function lockSlot(sequelize, showId, slotId, transaction) {
   const [[slot]] = await sequelize.query(
     `SELECT id, arc_id, slot_number, event_id, episode_id, locked_at
@@ -552,6 +564,26 @@ async function pencilEvent(sequelize, showId, slotId, eventId) {
 
 /** pencilEvent inside a caller's transaction (the season setup's Save applies many at once). */
 async function pencilEventIn(sequelize, showId, slotId, eventId, transaction) {
+  // A1.3-0 (C4): the target slot and the slot that holds the event now are
+  // locked together, in id order (the one order for multi-slot locks), so
+  // two pencils swapping events between two slots never deadlock. Read first
+  // without a lock, then locked; the holder is checked again below.
+  // The event itself (W) is locked first: the swap, making, creating and
+  // updating a special all lock it before its special and slots, so a pencil
+  // of the same event queues there instead of taking the slot first (the swap
+  // against a pencil of one event into one slot deadlocked: S -> P against
+  // P -> S). Held already when the swap or the move calls this.
+  if (eventId && UUID_RE.test(String(eventId))) {
+    await sequelize.query(
+      'SELECT id FROM world_events WHERE id = :eventId AND show_id = :showId AND deleted_at IS NULL FOR UPDATE',
+      { replacements: { eventId, showId }, transaction });
+  }
+  const otherSeen = eventId ? await slotHoldingEvent(sequelize, { showId, slotId, eventId, transaction }) : null;
+  if (otherSeen) {
+    await sequelize.query(
+      'SELECT id FROM season_slots WHERE id IN (:ids) AND deleted_at IS NULL ORDER BY id FOR UPDATE',
+      { replacements: { ids: [slotId, otherSeen.id] }, transaction });
+  }
   const slot = await lockSlot(sequelize, showId, slotId, transaction);
   assertFuture(slot);
   const replaced = slot.event_id && slot.event_id !== eventId ? slot.event_id : null;
@@ -578,6 +610,11 @@ async function pencilEventIn(sequelize, showId, slotId, eventId, transaction) {
       `SELECT id, slot_number FROM season_slots
         WHERE arc_id = :arcId AND event_id = :eventId AND id <> :slotId AND deleted_at IS NULL FOR UPDATE`,
       { replacements: { arcId: slot.arc_id, eventId, slotId }, transaction });
+    // A1.3-0 (C4): the holder must be the one locked above; another slot
+    // took the event in between: nothing is written, try again.
+    if (String(other?.id || '') !== String(otherSeen?.id || '')) {
+      throw new RetryableConflictError('The season changed while this was being saved. Nothing was saved: try again.', 'SEASON_CHANGED_RETRY');
+    }
     if (other) {
       if (await specials.twoPartOfSlot(sequelize, other.id, { transaction })) {
         throw new SeasonSlotError(`"${event.name}" is the two-parter in E${other.slot_number}: undo the two-parter to move it.`, 409, 'SEASON_SLOT_TWO_PART');
@@ -727,6 +764,12 @@ async function assignOnStartIn(sequelize, { showId, eventId, episodeId, replacin
   const season = await loadSeason(sequelize, showId, { slots: false, transaction });
   if (!season) return null;
   const { arc } = season;
+  // A1.3-0 (C2, measured): under contention this is already correct. With
+  // LIMIT, Postgres locks rows until the limit is met (Limit over LockRows):
+  // a slot another Start filled while this one waited fails the re-check
+  // after the wait and is skipped, and the next open slot is locked and
+  // returned. null is therefore decided under the lock: no slot is open
+  // (tests/integration/lockOrderMatrix T5, T5b, T6).
   const [[slot]] = await sequelize.query(
     `SELECT id, slot_number FROM season_slots
       WHERE arc_id = :arcId AND deleted_at IS NULL AND episode_id IS NULL AND locked_at IS NULL

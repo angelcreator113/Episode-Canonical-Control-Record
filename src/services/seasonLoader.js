@@ -60,6 +60,14 @@ async function loadArc(sequelize, showId, { transaction, lock = false, arcId = n
 }
 
 async function loadSlots(sequelize, arcId, { transaction, lock = false, scripts = false } = {}) {
+  // A1.3-0 (C4b): an edit locks the season's slots in id order, the one order
+  // for every multi-slot lock (Start's pick and pencil take the same), then
+  // reads them in slot order as before. The rows read are the locked rows.
+  if (lock) {
+    await sequelize.query(
+      'SELECT id FROM season_slots WHERE arc_id = :arcId AND deleted_at IS NULL ORDER BY id FOR UPDATE',
+      { replacements: { arcId }, transaction });
+  }
   const [rows] = await sequelize.query(
     `SELECT s.id, s.show_id, s.arc_id, s.season_number, s.slot_number, s.phase, s.episode_id, s.event_id, s.locked_at,
             s.story_purpose, s.story_purposes, s.story_thread_id, s.career_focus, s.desired_pressure, s.outcome_range,
@@ -74,7 +82,7 @@ async function loadSlots(sequelize, arcId, { transaction, lock = false, scripts 
        LEFT JOIN world_events ev ON ev.id = s.event_id AND ev.deleted_at IS NULL
        LEFT JOIN show_story_threads st ON st.id = s.story_thread_id AND st.deleted_at IS NULL
       WHERE s.arc_id = :arcId AND s.deleted_at IS NULL
-      ORDER BY s.slot_number ASC${lock ? ' FOR UPDATE OF s' : ''}`,
+      ORDER BY s.slot_number ASC`,
     { replacements: { arcId }, transaction });
   return rows;
 }

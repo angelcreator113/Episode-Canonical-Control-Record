@@ -66,11 +66,16 @@ const CANCELLED_MESSAGE = 'Stopped. The original and any earlier cut-out are unc
 const { lockEpisodes, isLockConflict } = require('../utils/episodeLocks');
 
 class RawClipError extends Error {
-  constructor(status, message) {
+  constructor(status, message, code = null) {
     super(message);
     this.status = status;
+    // A refusal's own code (e.g. CLIP_EPISODE_DELETED), sent with the 409.
+    if (code) this.code = code;
   }
 }
+
+/** A1.3-0 (C1): the take was attached to an episode deleted while it uploaded. */
+const CLIP_EPISODE_DELETED = 'CLIP_EPISODE_DELETED';
 
 /**
  * A row as the API sends it: is_favorite (boolean) and start_line (a whole
@@ -304,6 +309,23 @@ const ATTACH_BACKOFF_MS = 250;
 
 async function attachClip(sequelize, clip, replacements, transaction) {
   await lockEpisodes(sequelize, [clip.episode_id], { transaction, mode: 'share' });
+  // A1.3-0 (C1), in this order:
+  // 1. The same upload's row already exists (a retry after its answer was
+  //    lost): returned as it is, before anything else. An attached clip is
+  //    never refused, and its stored file never cleaned up.
+  const replay = await existingAttach(sequelize, clip, transaction);
+  if (replay) return replay;
+  // 2. An episode deleted while the take uploaded refuses it (409
+  //    CLIP_EPISODE_DELETED); nothing is inserted. The episode row is held
+  //    FOR SHARE above: a delete (FOR UPDATE) either committed before this
+  //    read, and is seen, or waits until this attach commits, then finds the
+  //    clip and refuses (A1.2c). An episode never becomes deleted and filmed.
+  const [[episodeRow]] = await sequelize.query(
+    'SELECT deleted_at FROM episodes WHERE id = :episodeId',
+    { replacements: { episodeId: clip.episode_id }, transaction });
+  if (!episodeRow || episodeRow.deleted_at) {
+    throw new RawClipError(409, 'This episode was deleted while the take was uploading. The take was not saved.', CLIP_EPISODE_DELETED);
+  }
   const [[row]] = await sequelize.query(
     `INSERT INTO episode_raw_clips
        (id, episode_id, show_id, performer, guest_name, label, beat_number, original_filename, content_type,
@@ -316,12 +338,24 @@ async function attachClip(sequelize, clip, replacements, transaction) {
      RETURNING ${COLUMNS}`,
     { replacements, transaction });
   if (row) return shapeRow(row);
-  // The id is taken: the same upload's row (a retry after its answer was
-  // lost) is returned as it is; anything else is refused.
+  // The id was taken between step 1 and the insert: the same rule.
+  const raced = await existingAttach(sequelize, clip, transaction);
+  if (raced) return raced;
+  console.error(`[rawClips] clip id ${clip.id} could not be inserted and has no row; nothing was saved`);
+  throw new RawClipError(409, 'This upload could not be saved as a new clip. Nothing was saved: start the upload again.');
+}
+
+/**
+ * The row an upload's clip id already has: returned (shaped) when it is the
+ * same upload's (same episode, same original key); a refusal when the id
+ * belongs to another upload or the clip was removed; null when there is none.
+ */
+async function existingAttach(sequelize, clip, transaction) {
   const [[existing]] = await sequelize.query(
     `SELECT ${COLUMNS}, s3_key_raw AS attached_key, deleted_at AS attached_deleted_at FROM episode_raw_clips WHERE id = :id`,
     { replacements: { id: clip.id }, transaction });
-  const same = existing && String(existing.episode_id) === String(clip.episode_id) && existing.attached_key === clip.s3_key_raw;
+  if (!existing) return null;
+  const same = String(existing.episode_id) === String(clip.episode_id) && existing.attached_key === clip.s3_key_raw;
   if (!same) {
     console.error(`[rawClips] clip id ${clip.id} belongs to another upload; nothing was saved`);
     throw new RawClipError(409, 'This upload could not be saved as a new clip. Nothing was saved: start the upload again.');
@@ -329,6 +363,22 @@ async function attachClip(sequelize, clip, replacements, transaction) {
   if (existing.attached_deleted_at) throw new RawClipError(409, 'This clip was removed while it was being saved. Upload it again to keep it.');
   const { attached_key: _key, attached_deleted_at: _deleted, ...kept } = existing;
   return shapeRow(kept);
+}
+
+/**
+ * True when any raw clip row (removed ones too) uses this clip id or one of
+ * these stored keys. A1.3-0 (C1): a refused upload's stored files are
+ * deleted only when no row references them. Read-only.
+ */
+async function storedKeysReferenced(sequelize, { clipId, keys = [] }) {
+  const list = keys.filter(Boolean);
+  const [[row]] = await sequelize.query(
+    `SELECT EXISTS (
+       SELECT 1 FROM episode_raw_clips
+        WHERE id = :clipId${list.length ? ' OR s3_key_raw IN (:keys) OR thumbnail_key IN (:keys) OR s3_key_cutout IN (:keys)' : ''}
+     ) AS used`,
+    { replacements: { clipId, keys: list } });
+  return Boolean(row && row.used);
 }
 
 /**
@@ -773,4 +823,5 @@ module.exports = {
   KEY_MB_PER_SECOND, KEY_MIN_BYTES, KEY_MARGIN_BYTES, KEY_UNKNOWN_SECONDS, keyRoomNeeded, cutoutKeyFor, netInputArgs, CutoutIncompleteError, cutoutComplete,
   KEY_MAX_FPS, pickKeyColor, chromakeyArgs, progressSeconds, progressView, sampleFrameArgs,
   KEY_PACE_MIN_SECONDS, KEY_NO_PROGRESS_SECONDS, KEY_PACE_SHARE, keyPaceVerdict, KeyTooSlowError, thumbnailArgs, probeArgs, readProbe, readFrameRate,
+  CLIP_EPISODE_DELETED, storedKeysReferenced,
 };
