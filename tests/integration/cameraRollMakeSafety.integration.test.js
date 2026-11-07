@@ -290,6 +290,91 @@ const OK_IMAGE = async () => ({ data: { data: [{ b64_json: 'iVBORw0KGgo=' }] } }
     });
   });
 
+  describe('ordinary changes never overwrite a claimed or uncertain photo (races)', () => {
+    // Runs `competitor` at the exact moment the ordinary change writes: after
+    // it read the photo, before its UPDATE reaches the database.
+    const raceWithWrite = (competitor) => {
+      const real = sequelize.query.bind(sequelize);
+      let fired = false;
+      const spy = jest.spyOn(sequelize, 'query').mockImplementation(async (sql, opts) => {
+        const text = typeof sql === 'string' ? sql : (sql && sql.query) || '';
+        if (!fired && /^UPDATE "camera_roll_moments" SET/.test(text)) {
+          fired = true;
+          spy.mockImplementation(real);
+          await competitor();
+        }
+        return real(sql, opts);
+      });
+      return () => { spy.mockRestore(); return fired; };
+    };
+    const claimAndMark = async (id) => {
+      const token = await cameraRoll.claimForMake(models, id);
+      expect(token).toBeTruthy();
+      await run('UPDATE camera_roll_moments SET make_attempted_at = NOW() WHERE id = :id', { id });
+      return token;
+    };
+
+    test('Drop versus Make: the Drop that read "kept" is refused once a Make claimed the photo and sent its request', async () => {
+      const id = await moment();
+      let token;
+      const done = raceWithWrite(async () => { token = await claimAndMark(id); });
+      const r = await setStatus(id, 'drop');
+      expect(done()).toBe(true);
+      expect(r.status).toBe(409);
+      expect(r.body.code).toBe('PHOTO_CHANGED');
+      const row = await rowOf(id);
+      expect(row).toMatchObject({ status: 'making', make_claim_token: token });
+      expect(row.make_attempted_at).not.toBeNull();
+      // And Keep cannot bring it back into make-kept while it is being made.
+      expect((await setStatus(id, 'keep')).status).toBe(409);
+    });
+
+    test('Keep versus Make: a proposed photo claimed meanwhile is not overwritten by Keep', async () => {
+      const id = await moment({ status: 'proposed' });
+      let token;
+      const done = raceWithWrite(async () => { token = await claimAndMark(id); });
+      const r = await setStatus(id, 'keep');
+      expect(done()).toBe(true);
+      expect(r.status).toBe(409);
+      expect(await rowOf(id)).toMatchObject({ status: 'making', make_claim_token: token });
+    });
+
+    test('Edit versus Make: an edit that read "kept" changes nothing once a Make claimed the photo', async () => {
+      const id = await moment();
+      const before = (await q('SELECT moment FROM camera_roll_moments WHERE id = :id', { id }))[0].moment;
+      const done = raceWithWrite(async () => { await claimAndMark(id); });
+      const r = await edit(id, { moment: 'something else entirely' });
+      expect(done()).toBe(true);
+      expect(r.status).toBe(409);
+      const after = await q('SELECT moment, status FROM camera_roll_moments WHERE id = :id', { id });
+      expect(after[0]).toMatchObject({ moment: before, status: 'making' });
+    });
+
+    test('a Make that turns the photo uncertain meanwhile: Drop and Edit are refused and it stays uncertain', async () => {
+      for (const act of [(id) => setStatus(id, 'drop'), (id) => edit(id, { album: 'work' })]) {
+        const id = await moment();
+        const done = raceWithWrite(async () => {
+          await claimAndMark(id);
+          await run(`UPDATE camera_roll_moments SET status = 'uncertain', make_claim_token = NULL, make_claimed_at = NULL,
+                      error = 'a paid image request was sent and the make then failed' WHERE id = :id`, { id });
+        });
+        const r = await act(id);
+        expect(done()).toBe(true);
+        expect(r.status).toBe(409);
+        expect((await rowOf(id)).status).toBe('uncertain');
+      }
+    });
+
+    test('after an uncertain outcome, Keep, Drop and Edit are refused without any race', async () => {
+      const id = await moment({ status: 'uncertain', extra: "make_attempted_at = NOW() - INTERVAL '1 hour'" });
+      for (const r of [await setStatus(id, 'keep'), await setStatus(id, 'drop'), await edit(id, { album: 'work' })]) {
+        expect(r.status).toBe(409);
+        expect(r.body.code).toBe('PHOTO_OUTCOME_UNKNOWN');
+      }
+      expect((await rowOf(id)).status).toBe('uncertain');
+    });
+  });
+
   describe('restarts, stale claims and fencing', () => {
     test('a stale making photo with no attempt marker (nothing sent) is restored when acted on, then made by that explicit Make', async () => {
       const id = await moment({ status: 'making', extra: "make_claim_token = gen_random_uuid(), make_claimed_at = NOW() - INTERVAL '30 minutes', make_previous_status = 'kept'" });
