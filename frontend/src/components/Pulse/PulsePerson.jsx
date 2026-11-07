@@ -47,6 +47,10 @@ export function pictureLine(job) {
     case 'pending':
     case 'making': return { short: 'Making…', text: 'Its picture is being made.' };
     case 'waiting_cap': return { short: 'Waiting', text: job.reason || "Today's post-picture limit is reached; it will be made tomorrow.", action: 'make_now' };
+    case 'waiting_auto_off': return { short: 'Not made', text: job.reason || 'Automatic post pictures are off; press Make now to make it.', action: 'make_now' };
+    // It may already have been made and charged (#3714 R2): never a one-click retry.
+    case 'interrupted':
+    case 'uncertain': return { short: 'Check', text: job.error || 'This picture may already have been made and charged. Check the camera roll and the library first.', action: 'check_unknown' };
     case 'failed': return { short: 'Failed', text: job.error || 'The picture could not be made.', action: 'retry' };
     case 'made': return job.reused
       ? { short: 'From roll', text: 'A photo already in their camera roll (no cost).' }
@@ -144,15 +148,32 @@ export default function PulsePerson({ show, handle, viewAt = null, admin = false
     } finally { setBusy(false); }
   };
 
-  const makePicture = async (post, makeNow) => {
+  const makePicture = async (post, makeNow, confirmUnknown = false) => {
     setBusy(true); setError(null);
     try {
-      await api.post(`/api/v1/post-media/posts/${post.id}/picture`, { make_now: makeNow });
+      await api.post(`/api/v1/post-media/posts/${post.id}/picture`, confirmUnknown ? { make_now: makeNow, confirm_unknown: true } : { make_now: makeNow });
       setReload((n) => n + 1);
     } catch (err) {
       console.error('[ThePulse] the post picture could not be made:', err.response?.status || err.message);
       setError(err.response?.data?.error || 'The picture could not be made.');
       setReload((n) => n + 1);
+    } finally { setBusy(false); }
+  };
+
+  // A picture that may already have been made and charged: made again only
+  // after an explicit confirmation, or dismissed without making (#3714 R2).
+  const remakeUnknown = (post) => {
+    if (!window.confirm('This picture may already have been made and charged. Have you checked the camera roll and the library? Making it again may be charged a second time.')) return;
+    makePicture(post, true, true);
+  };
+  const dismissPicture = async (post) => {
+    setBusy(true); setError(null);
+    try {
+      await api.post(`/api/v1/post-media/posts/${post.id}/picture/dismiss`, {});
+      setReload((n) => n + 1);
+    } catch (err) {
+      console.error('[ThePulse] the post picture could not be dismissed:', err.response?.status || err.message);
+      setError(err.response?.data?.error || 'The picture could not be dismissed.');
     } finally { setBusy(false); }
   };
 
@@ -262,6 +283,14 @@ export default function PulsePerson({ show, handle, viewAt = null, admin = false
                             )}
                             {line.action === 'retry' && (
                               <button type="button" className="pp-picture-btn" disabled={busy} onClick={() => makePicture(p, false)} data-testid="pp-retry">Retry</button>
+                            )}
+                            {line.action === 'check_unknown' && (
+                              <>
+                                <button type="button" className="pp-picture-btn" disabled={busy} onClick={() => remakeUnknown(p)}
+                                  title="It may already have been made and charged: check first" data-testid="pp-remake-unknown">Make again…</button>
+                                <button type="button" className="pp-picture-btn" disabled={busy} onClick={() => dismissPicture(p)}
+                                  title="Mark it checked and make nothing now" data-testid="pp-dismiss">Dismiss</button>
+                              </>
                             )}
                           </span>
                         )}

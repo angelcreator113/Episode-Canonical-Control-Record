@@ -188,7 +188,7 @@ async function addedCharacter(db, characterId) {
  * the library's landscape SIZE (the camera roll asks for a phone's portrait);
  * onLogged, when given, receives the logged cost ({ costUsd, estimateUsd, usageLogId }).
  */
-async function editImage(prompt, images, { routeName = 'media-variation', size = SIZE, onLogged = null } = {}) {
+async function editImage(prompt, images, { routeName = 'media-variation', size = SIZE, onLogged = null, onAttempt = null } = {}) {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) throw new MediaError(503, 'The image tool is not set up (OPENAI_API_KEY).');
   const text = prompt.length > 4000 ? `${prompt.slice(0, 3997)}...` : prompt;
@@ -215,7 +215,11 @@ async function editImage(prompt, images, { routeName = 'media-variation', size =
       { model: MODEL, prompt: text, n: 1, size: `${size.width}x${size.height}`, quality: 'high' },
       { headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' }, timeout: 180000 });
   }
-  const response = await imageCost.runImageCall(plan, call);
+  // onAttempt: called once, after the budget gate and immediately before the
+  // provider request is sent, so a caller knows a paid request may have
+  // been accepted (#3714 R2). Never called when the gate refuses.
+  const send = typeof onAttempt === 'function' ? () => { onAttempt(); return call(); } : call;
+  const response = await imageCost.runImageCall(plan, send);
   const item = response?.data?.data?.[0];
   if (item?.b64_json) return Buffer.from(item.b64_json, 'base64');
   if (item?.url) return (await imageBytes(item.url)).buffer;

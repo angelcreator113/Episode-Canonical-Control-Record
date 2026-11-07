@@ -476,7 +476,7 @@ function photoPrompt(character, m, { look = '', referenced = false, wearing: out
   ].filter(Boolean).join(' ');
 }
 
-async function make(db, momentId, { by = null, routeName = ROUTE, wearing = null } = {}) {
+async function make(db, momentId, { by = null, routeName = ROUTE, wearing = null, onAttempt = null } = {}) {
   const moment = await momentWithCharacter(db, momentId);
   if (moment.status === 'made') throw new CameraRollError(409, 'That photo is already made.');
   if (moment.status === 'dropped') throw new CameraRollError(409, 'That photo was dropped; keep it first.');
@@ -513,7 +513,7 @@ async function make(db, momentId, { by = null, routeName = ROUTE, wearing = null
   let buffer;
   let actual = null;
   try {
-    buffer = await variations.editImage(prompt, refs, { routeName, size: PHONE_SIZE, onLogged: (l) => { actual = l.costUsd; } });
+    buffer = await variations.editImage(prompt, refs, { routeName, size: PHONE_SIZE, onLogged: (l) => { actual = l.costUsd; }, onAttempt });
   } catch (err) {
     if (err.code === 'AI_BUDGET_EXCEEDED') throw err;
     const status = err.status && err.status < 500 ? err.status : 502;
