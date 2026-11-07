@@ -172,7 +172,7 @@ The slot assignment is now one transaction, so a failure leaves no slot half-ass
 | Make or create special (`takeEvent`) | W → S (clear the pencil) → P (clear other specials) |
 | Update special, event change | E → W → P → S (`takeEvent`) → P |
 | Pencil (`pencilEventIn`) | W (the event, C4c) → S, S (one statement, id order) → P (clear specials) |
-| Apply placement (`applyPlacement`) | E (placed episodes) → W (pencilled events, id order, C4c) → S → X (snapshot Brief) → S → P |
+| Apply placement (`applyPlacement`) | E (placed episodes) → W (pencilled events, id order, C4c) → S (targets and holders, id order, C4d) → X (snapshot Brief) → P |
 | Two-parter (`createTwoParter`) | E (Part 1) → S, S (id order) → S UPDATE → P (clear, insert) |
 | Season setup (`updateSetup`) | E (started drafts) → A → S (every slot, id order) → E snapshots (held) |
 | Placement, intention save | E → S → X |
@@ -187,6 +187,22 @@ The slot assignment is now one transaction, so a failure leaves no slot half-ass
 - **Now:** `pencilEventIn` locks the event (W) first: W → S → P. The swap, the move to the next season, and making, creating or updating a special all lock the event first too, so writers of one event queue on it. In the swap and the move, the event is already held.
 - **Apply placement** (`seasonSetupService.applyPlacement`) locks all the events it pencils, in id order, before any slot. Without this, an episode's slot placed first would be held while its pencil waited on an event the swap held (S → W against W → S). Measured: with the pencil change alone, that race still gave `40P01`.
 - **Unchanged:** a pencil of an event that has started, or is archived, is refused as before. It now waits for an in-flight Start, inject or relink of that event, then is refused. The A1.2a and A1.2c guards lock E before W and never wait on a slot or special, so they form no cycle with the pencil.
+
+**C4d (authorized 2026-11-06, apply placement's stale selection):**
+- **Before:** `applyPlacement` checked "a slot filled since the preview is not overwritten" (`SEASON_SLOT_CHANGED`) on an **unlocked** read, before any slot lock. A pencil of another event that committed between that read and the slot lock was silently replaced (reproduced on `main` and `d9a57ff6`). An episode placement had no such check at all and overwrote the slot's newer event.
+- **Now**, in one transaction:
+  1. E: the placed episodes.
+  2. W: the pencilled events, in id order.
+  3. The placed episodes' own events, read under their E locks.
+  4. S: the target slots, plus every slot that holds one of those events, in one statement, in id order.
+  5. The holders read again under the locks; one that appeared meanwhile refuses the Save.
+- **The checks under the locks:**
+  - a target slot that started since the preview is refused;
+  - a target holding an event that is neither the item's own nor the reviewed one is refused;
+  - an event item whose event was pencilled into another slot since is refused.
+  - Each of these returns 409 `SEASON_SLOT_CHANGED`, and the whole Save rolls back.
+- **Reviewed replacements:** an item may carry `expected_event_id`, the event the slot held when it was reviewed. Replacing that event is intended and allowed. Without it, the slot is taken as reviewed empty, which is all the preview offers today.
+- **Unchanged:** an episode's own event elsewhere is still cleared, as before. Archived or started events are still refused by `pencilEventIn`'s own rules.
 
 **Known deviations (no cycle):**
 - **A → S** in season setup: the arc, then its slots. No transaction takes a slot, then an arc.
