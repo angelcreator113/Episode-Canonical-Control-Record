@@ -62,7 +62,7 @@ Over SSM, run it with `bash -c '…'` if you add pipes, because `AWS-RunShellScr
 |---|---|
 | App tree | `/home/ubuntu/episode-metadata`, a git checkout of the installed commit (`git -C … rev-parse HEAD`). The July tarball tree is kept as `/home/ubuntu/episode-metadata.prev` for rollback. |
 | Settings | `/home/ubuntu/episode-metadata/.env` is a symlink to `/home/ubuntu/.config/episode-dev/dev.env` (mode 600), written by `install-dev-app.sh`: the preserved app settings (`app.env`), the local DB login, `DB_SSL=false`, `HOST=127.0.0.1`. |
-| Processes | pm2 `episode-api` (port 3002, **bound to 127.0.0.1**) and `episode-worker`, from `ecosystem.dev.config.js`; saved with `pm2 save`. |
+| Processes | pm2 `episode-api` (port 3002, **bound to 127.0.0.1**) and `episode-worker`, from `ecosystem.dev.config.js`; saved with `pm2 save`. **The dev worker is off by default** (issue #3714): it prints "Generation worker is disabled" and does nothing unless the dev `.env` sets `GENERATION_WORKER_ENABLED=true` (exactly `true`) and it is restarted with `pm2 restart episode-worker --update-env`. Switched on, it uses the local `episode_dev` login; the production worker's credential file is not used on the dev box. |
 | Database | local `episode_metadata` as `episode_dev` over `127.0.0.1` only. The box holds no production database credential. Its only production access is `episode-metadata/dev/refresh-readonly` (read-only `dev_refresh_ro`), used by the refresh. |
 | nginx | **stopped and disabled.** The site file `/etc/nginx/sites-enabled/episode` (server `dev.primepisodes.com`, proxy to `localhost:3002`) is unchanged. |
 | Memory | 1.9 GiB RAM + 1 GiB swap (`/swapfile`, in `/etc/fstab`). |

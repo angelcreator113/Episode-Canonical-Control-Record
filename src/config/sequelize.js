@@ -150,10 +150,20 @@ function poolMax(env = process.env) {
   return Number.isInteger(n) && n >= 1 && n <= 30 ? n : 30;
 }
 
+/** The production login: the worker's held one when set, else DB_USER / DB_PASSWORD. */
+function productionLogin() {
+  const held = require('./dbCredentials').getDbCredentials();
+  if (held) return { username: held.user, password: held.password };
+  return { username: process.env.DB_USER || process.env.DB_USERNAME, password: process.env.DB_PASSWORD };
+}
+
 const production = {
   ...baseConfig,
-  username: process.env.DB_USER || process.env.DB_USERNAME,
-  password: process.env.DB_PASSWORD,
+  // The episode worker's login is held in memory (src/config/dbCredentials.js,
+  // #3714), never in process.env; read when the models connect. Every other
+  // process sets nothing there and keeps DB_USER / DB_PASSWORD.
+  get username() { return productionLogin().username; },
+  get password() { return productionLogin().password; },
   database: process.env.DB_NAME || process.env.DB_DATABASE,
   host: process.env.DB_HOST,
   port: parseInt(process.env.DB_PORT || '5432'),
@@ -187,15 +197,15 @@ if (process.env.DB_READ_REPLICA_HOST) {
     read: [
       {
         host: process.env.DB_READ_REPLICA_HOST,
-        username: process.env.DB_USER || process.env.DB_USERNAME,
-        password: process.env.DB_PASSWORD,
+        get username() { return productionLogin().username; },
+        get password() { return productionLogin().password; },
         port: parseInt(process.env.DB_PORT || '5432'),
       },
     ],
     write: {
       host: process.env.DB_HOST,
-      username: process.env.DB_USER || process.env.DB_USERNAME,
-      password: process.env.DB_PASSWORD,
+      get username() { return productionLogin().username; },
+      get password() { return productionLogin().password; },
       port: parseInt(process.env.DB_PORT || '5432'),
     },
   };

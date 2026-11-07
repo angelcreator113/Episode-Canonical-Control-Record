@@ -85,15 +85,19 @@ module.exports = {
       autorestart: true,
       watch: false,
       max_memory_restart: '2G',
+      // A worker refused for its settings (exit 78) is not restarted in a loop.
+      stop_exit_codes: [78],
       error_file: '/home/ubuntu/episode-metadata/logs/worker-error.log',
       out_file: '/home/ubuntu/episode-metadata/logs/worker-out.log',
       log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
       env: {
         ...sharedEnv,
-        // Issue #3714: the worker does nothing unless this is "true". The dev
-        // box keeps it running as before, on its local database copy and the
-        // shared dev login (WORKER_DB_* are required only in production).
-        GENERATION_WORKER_ENABLED: process.env.GENERATION_WORKER_ENABLED || 'true',
+        // Issue #3714: the worker does nothing unless this is "true", and it is
+        // off by default here too. To run it on the dev box, set
+        // GENERATION_WORKER_ENABLED=true in the dev box's .env and restart it
+        // with --update-env; it then uses the shared dev login (the worker's
+        // own login and credential file are required only in production).
+        GENERATION_WORKER_ENABLED: process.env.GENERATION_WORKER_ENABLED === 'true' ? 'true' : 'false',
         EXPORT_TEMP_DIR: '/home/ubuntu/episode-metadata/exports-temp',
         EXPORT_MAX_CONCURRENT_JOBS: '1',
       },

@@ -30,13 +30,18 @@ Traced from `src/workers/start.js` through every processor and helper it can rea
 
 ## 2. Switching it on, and why it stays off
 
-`GENERATION_WORKER_ENABLED` must be exactly `true` (case and surrounding spaces ignored) for the worker to do anything. The production config passes `false` unless `.env` says `true`.
+`GENERATION_WORKER_ENABLED` must be exactly `true` (case and surrounding spaces ignored) for the worker to do anything. Both pm2 configs pass `false` unless `.env` says `true`: the production config (`ecosystem.config.js`) and the dev box's (`ecosystem.dev.config.js`, `docs/runbooks/dev-environment.md`).
+
+In production (`WORKER_DB_REQUIRED=true`, set by the production config, or `NODE_ENV=production`):
 
 | State | What happens |
 |---|---|
-| Disabled (the default) | It prints one line and waits for a signal. It loads no model, no Bull consumer and no AI SDK, so it runs no boot recovery, polls nothing, opens no database session and makes no paid call. pm2 shows it online. |
-| Enabled, but no worker login (`WORKER_DB_USER` / `WORKER_DB_PASSWORD` missing, or `postgres`) | It refuses before loading anything and exits with code 78. The production config lists 78 in `stop_exit_codes`, so pm2 does not restart it in a loop. |
-| Enabled, with the worker login | It runs as before, connected as `episode_worker`. |
+| A database password in its environment (`DB_PASSWORD`, `WORKER_DB_PASSWORD`, `DATABASE_URL` or `PGPASSWORD` non-empty), **enabled or not** | It refuses before loading anything and exits with code 78. This is what a stale pm2 saved env (§7) or a password line in `.env` produces. |
+| Disabled (the default) | It prints one line and waits for a signal. It loads no model, no Bull consumer and no AI SDK, so it runs no boot recovery, polls nothing, opens no database session and makes no paid call. It does not read the credential file. pm2 shows it online. |
+| Enabled, but the credential file is missing, unsafe (§5), incomplete or names `postgres` | It refuses before loading anything and exits with code 78. |
+| Enabled, with a good credential file | It runs as before, connected as `episode_worker`. |
+
+Exit 78 is listed in `stop_exit_codes` in both configs, so pm2 marks the worker stopped and does not restart it in a loop (checked with pm2 6.0.14, the version in production).
 
 **Starting it is never a no-op once enabled.** On every start it first runs `recoverStuckJobs`, which re-queues or fails any job left `processing`. It then claims queued jobs, and each one makes paid image calls (capped daily by `AI_DAILY_IMAGE_BUDGET_USD`).
 
@@ -47,7 +52,7 @@ Traced from `src/workers/start.js` through every processor and helper it can rea
 - `pm2 restart all`;
 - `pm2 restart episode-worker`.
 
-Even then, it stays disabled until `GENERATION_WORKER_ENABLED=true`.
+Even then, it stays disabled until `GENERATION_WORKER_ENABLED=true`. In production today, `pm2 restart episode-worker` without `--update-env` would start it with its stale saved env, which still holds the old `postgres` password. With this PR deployed, it then refuses with exit 78 and stays stopped (§7).
 
 ## 3. The role (Evoni, gated)
 
@@ -73,7 +78,11 @@ then, in psql:  \password episode_worker
 node scripts/worker/check-db-access.js
 ```
 
-- **Settings:** it reads `WORKER_DB_USER`, `WORKER_DB_PASSWORD`, `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_SSL` and `DB_SSL_REJECT_UNAUTHORIZED`, from the environment or the repo's `.env`. It never uses `DB_USER` / `DB_PASSWORD`.
+- **Settings:**
+  - The login comes only from the credential file (`WORKER_DB_CREDENTIALS_FILE`, default `/home/ubuntu/.episode-worker-db.env`). It is read with the worker's own loader and checked the same way (§5).
+  - `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_SSL` and `DB_SSL_REJECT_UNAUTHORIZED` come from the environment, else from the repo's `.env`. The `.env` is parsed, not loaded into the environment.
+  - It never uses `DB_USER` / `DB_PASSWORD`.
+  - A `WORKER_DB_PASSWORD` in the environment or `.env` is a stale copy and fails the settings.
 - **The session:** it connects once in a read-only session (`default_transaction_read_only`, inside a `READ ONLY` transaction that it rolls back).
 - **What it checks:**
   - who it is;
@@ -87,67 +96,152 @@ node scripts/worker/check-db-access.js
 - **Output:** PASS / FAIL / WARN lines, never the password or the host. Exit 0 means all passed; 1 means a check failed; 2 means the settings or the connection failed.
 - **In production it is still a production query** (catalog reads only), so it runs with Evoni's approval.
 
-## 5. Where the password lives, and how it is loaded
+## 5. Where the password lives (Option B, chosen 2026-11-07)
 
-**Today's shape (this PR):**
-- `WORKER_DB_USER` / `WORKER_DB_PASSWORD` live in the box's `.env`.
-- `ecosystem.config.js` passes them into the worker's pm2 environment. It blanks `DB_USER` / `DB_PASSWORD` for the worker, so the API's login never reaches it.
-- `src/workers/start.js` maps them to the database settings before anything loads.
+**The file.** The password is in `/home/ubuntu/.episode-worker-db.env` and nowhere else on the box. The file holds two lines:
 
-**The source of truth** should be a Secrets Manager entry (for example `episode-metadata/prod/worker-db`), from which Evoni copies the value into `.env` (mode 600).
+```
+WORKER_DB_USER=episode_worker
+WORKER_DB_PASSWORD=<the password>
+```
 
-**Open decision: how the worker gets the password at run time.** Not selected in this PR.
+The production pm2 config gives the worker only the file's path (`WORKER_DB_CREDENTIALS_FILE`). It blanks `DB_USER` / `DB_PASSWORD`, so the API's login never reaches the worker, and it passes no `WORKER_DB_USER` / `WORKER_DB_PASSWORD`.
 
-| Option | Password at rest | Rotation | Changes needed | Risks |
-|---|---|---|---|---|
-| A. `.env` → pm2 env (as built) | `.env` (600) **and** pm2's saved list `~/.pm2/dump.pm2` (plain text; keep it 600) and the live process env (`pm2 env`) | change `.env` → `pm2 restart episode-worker --update-env` → `pm2 save` → §7.2 SAME/DIFFERENT check | none | a stale saved password after a reboot (the 2026-09-26 outage; the worker's current stale `postgres` password is the same failure) |
-| B. A separate file the worker reads at start (like `~/.episode-migrate.env`, mode 600), pm2 holding only its path | that one file only; not in pm2's saved list | edit the file → restart (no `--update-env` or save needed) | a few lines in `start.js` and the preflight to read the file | the file's permissions and backup; a restart is still needed |
-| C. Secrets Manager read at start (instance role) | Secrets Manager only; in memory while running | rotate in Secrets Manager → restart | the SDK call at start, plus an IAM grant `secretsmanager:GetSecretValue` on that one secret to the box's role (an IAM change) | the start depends on AWS; any process on the box with the instance role can read it |
-| D. RDS IAM authentication (15-minute tokens) | no password | none | the role `rds_iam`, `rds-db:connect` IAM, a token-refreshing pool | the biggest change; the pool must refresh tokens |
+**How it is loaded.**
+1. `src/workers/start.js` → `workerStartup.decideStartup` → `workerCredentials.readCredentialFile` reads the file at start, and only when the worker is enabled.
+2. It holds the login in memory (`src/config/dbCredentials.js`).
+3. `config/sequelize.js` reads it from there when the models connect.
 
-**Recommendation for the next step:** B. It takes the password out of pm2's saved list (the failure behind the 2026-09-26 outage and #3714 itself) with no AWS or IAM change. C or D can follow later.
+The password is never written to `process.env`. FFmpeg, through `execFile` and fluent-ffmpeg's `spawn`, and any other child process therefore inherit none.
 
-**Rotation under any option:**
-1. Set the new password with `\password episode_worker`.
-2. Update the store (Secrets Manager, then `.env` or the file).
-3. Restart the worker (with `--update-env` and `pm2 save` under option A).
-4. Run the preflight.
+**What the loader requires** (checked on the opened file descriptor, so the path cannot be swapped between the check and the read):
+- not a symlink (it uses `lstat`, then opens with `O_NOFOLLOW`);
+- a regular file;
+- the same device and inode as the path named;
+- owned by the user the worker runs as (`ubuntu`);
+- permission bits exactly `600`;
+- no larger than 4 KiB;
+- both keys present, and not `postgres` / `rdsadmin`.
+
+Errors name the rule that failed, never the contents.
+
+**Creating it (Evoni, gated; step 3 of §6).** Use an editor, so the password never appears in a command line or shell history:
+
+```
+sudo -u ubuntu -H bash -lc 'install -m 600 /dev/null ~/.episode-worker-db.env && ${EDITOR:-nano} ~/.episode-worker-db.env'
+sudo -u ubuntu -H stat -c '%a %U %F' /home/ubuntu/.episode-worker-db.env   # expect: 600 ubuntu regular file
+```
+
+**The source of truth** is a Secrets Manager entry (for example `episode-metadata/prod/worker-db`), from which Evoni copies the value into the file. Do **not** put `WORKER_DB_PASSWORD` in `.env`. The worker and the preflight both refuse it there.
+
+**Rotation:**
+1. Set the new password with `\password episode_worker` (psql as the admin user).
+2. Update Secrets Manager, then edit `/home/ubuntu/.episode-worker-db.env` in place with the editor. Check `stat` still shows `600 ubuntu`.
+3. If the worker is online, `pm2 restart episode-worker`. No `--update-env` or `pm2 save` is needed: pm2 holds only the path.
+4. Run the preflight (§4).
 
 Polls fail for the few seconds between steps 1 and 3 and retry; no job is lost.
+
+**Where the password still exists (remaining exposure paths):**
+- **The file itself**, mode 600, owned by `ubuntu`. Anything running as `ubuntu` or root on the box can read it: the API, the voice worker, an SSH session. The same holds for `.env` and `~/.episode-migrate.env` today.
+- **The worker's memory** while it runs: the held login and the `pg` connection settings. A root or same-user `ptrace` or core dump could read it.
+- **Box-level backups:** EBS snapshots and AMIs of the instance's volume contain the file. The Deploy workflow's backups contain `frontend/dist` only, and its diagnostics print filtered `pm2 jlist` fields, not env values.
+- **Secrets Manager**, as the source of truth.
+- **Stale copies from before Option B:** the worker's pm2 saved entry still holds the old `postgres` password (§7). That predates this PR and is removed by the gated procedure in §7.
+
+**Not in:**
+- `.env`;
+- the worker's pm2 env;
+- `~/.pm2/dump.pm2` or `dump.pm2.bak`;
+- `pm2 jlist` / `pm2 env`;
+- `/proc/<pid>/environ`;
+- any child process's environment;
+- the worker's logs or pm2's own log.
+
+All of these were verified on a local pm2 6.0.14 sandbox with a marker password, alongside an Option A control that the same check did detect. The integration test covers the same ground (§9).
+
+The other options considered (A: `.env` → pm2 env; C: Secrets Manager read at start; D: RDS IAM authentication) were set aside. A kept the password in pm2's saved list, which caused the 2026-09-26 outage and #3714. C and D need IAM changes and can follow later.
 
 ## 6. Switching over (each step a separate approval)
 
 1. Merge and deploy this PR. The worker stays stopped; the deploy leaves it so.
 2. Run the role SQL as the admin user, then `\password`.
-3. Store the password, then write `WORKER_DB_USER=episode_worker` and `WORKER_DB_PASSWORD` (or the chosen option in §5).
+3. Store the password in Secrets Manager, then create the credential file (§5).
 4. Run the preflight; expect `RESULT: PASS`.
-5. **Optional:** start the worker still disabled (`pm2 restart episode-worker --update-env`, `pm2 save`). It should print "Generation worker is disabled" and open no session.
-6. **Later, and only after a read-only count of `generation_jobs` by status:** set `GENERATION_WORKER_ENABLED=true`, restart with `--update-env`, `pm2 save`, and watch `pm2 logs episode-worker` for 5 minutes. Expect no `password authentication failed` and no `permission denied`.
+5. Remove the stale pm2 saved entry (§7). This also leaves the worker saved stopped with the new config.
+6. **Optional:** start the worker still disabled (`pm2 start ecosystem.config.js --only episode-worker --env production`, then `pm2 save`). It should print "Generation worker is disabled" and open no session.
+7. **Later, and only after a read-only count of `generation_jobs` by status:**
+   - set `GENERATION_WORKER_ENABLED=true` in `.env`;
+   - `pm2 restart episode-worker --update-env`, then `pm2 save`;
+   - watch `pm2 logs episode-worker` for 5 minutes.
 
-## 7. Rolling back
+   Expect "Database login: the worker's own (credential file)", no `password authentication failed` and no `permission denied`.
 
-- **Any failure at steps 4–6:** `pm2 stop episode-worker && pm2 save`. That is the state production is in today. The API is not affected at any step: its login, pool and config are unchanged.
-- **Do not** put the old `postgres` values back.
+## 7. Stale worker credentials in pm2's saved state (gated; not done)
+
+**Why.** pm2's saved entry for `episode-worker` (`~/.pm2/dump.pm2`, its `.bak`, and the env pm2 reloads it with) still holds the env from before #3714, including the old `postgres` password. `pm2 restart --update-env` does **not** clear it: pm2 merges the new env into the saved one, and keeps any key the new config no longer sets. That was checked on pm2 6.0.14. Only deleting the entry and starting it fresh from the new config does. Each step below is Evoni's, run as `ubuntu` on the box. **Nothing here has been done.**
+
+**Detect (presence only, prints no value):**
+
+```
+cd ~ && node -e 'const f=process.argv[1];for(const n of [f,f+".bak"]){let d;try{d=JSON.parse(require("fs").readFileSync(n,"utf8"))}catch(e){console.log(n+": "+(e.code||"unreadable"));continue}const bad=["DB_PASSWORD","WORKER_DB_PASSWORD","DATABASE_URL","PGPASSWORD"];for(const p of d){if(p.name!=="episode-worker")continue;const e=Object.assign({},p.env||{},p);const hit=bad.filter(k=>typeof e[k]==="string"&&e[k]!=="");console.log(n+" "+p.name+": "+(hit.length?"STALE "+hit.join(","):"clean"))}}' ~/.pm2/dump.pm2
+```
+
+Expect `STALE DB_PASSWORD` today. Check also `pm2 jlist` the same way if the worker is in the live list.
+
+**Remove (only with Evoni's yes, after §6 steps 1–4):**
+1. `pm2 describe episode-worker | grep -E 'status|restarts'`. It must be `stopped`; if it is online, stop here and ask.
+2. `pm2 delete episode-worker`. This removes the stale entry from the live list. It is undone by step 3.
+3. `pm2 start ecosystem.config.js --only episode-worker --env production`. This starts it fresh from the new config: disabled, no password in its env, so it does nothing.
+4. `pm2 stop episode-worker`.
+5. `pm2 save`, then `pm2 save` again. The second save overwrites `dump.pm2.bak`, which otherwise keeps the stale copy.
+6. Run the detector again. Expect `clean` for both `dump.pm2` and `dump.pm2.bak`.
+
+**If step 3 refuses** (exit 78, "a database password is in the worker's environment"), the password is coming from `.env` or the shell, not from pm2. Find the key named in the message, remove that line from `.env`, then repeat from step 3.
+
+**Rollback:** the worker stays stopped either way. Before step 2, nothing has changed.
+
+**Then rotate the old `postgres` password** (a separate, gated decision): it sat in plain text in pm2's saved list.
+
+## 8. Rolling back
+
+- **Any failure at steps 4–7:** `pm2 stop episode-worker && pm2 save`. That is the state production is in today. The API is not affected at any step: its login, pool and config are unchanged.
+- **Do not** put the old `postgres` values back, and do not put a password in `.env`.
 - **The role** can stay unused, or be removed with the undo in the SQL file (gated).
+- **The credential file** can be removed (`shred -u`) once the role is removed.
 - **Jobs the worker processed** keep their results. The pre-deploy RDS snapshot is the backstop.
 
-## 8. Tests
+## 9. Tests
 
-- **`tests/integration/workerRestrictedRole.integration.test.js`:** on the migrated test database, as a role with exactly these grants:
+- **`tests/integration/workerRestrictedRole.integration.test.js`:** on the migrated local test database only (it skips unless the URL names `episode_metadata_test` and is not RDS), as a role with exactly these grants:
   - boot recovery, the claim, job completion and failure, the cascade with its angle claims;
   - the service statements, and the image-cost budget read and usage row, with providers stubbed;
   - 15 prohibited operations refused (42501);
   - the preflight passing, and failing for an extra privilege or the admin login;
   - the pool under the limit;
   - a disabled process loading no model, pg, Bull, renderer or AI SDK and opening no session;
-  - a refused process exiting 78.
+  - a refused process exiting 78: a password in the env (enabled or disabled), no file, mode 644, `postgres`;
+  - **an enabled worker process** reading a mode-600 file. Every non-loopback connection is refused (`tests/helpers/workerEnvProbe.js`) and Redis points at `127.0.0.1:1`, so no image provider, AI SDK, S3 or queue is reachable. It checks that the worker connects as the role. It checks that `/proc/<pid>/environ`, `process.env`, every child process it starts, and the environment FFmpeg actually receives through `execFile` and fluent-ffmpeg carry no password; nor does its log. It asserts booleans only and deletes every file it made.
 
-  Removing any one grant from the list fails the test that uses it.
-- **`tests/unit/workers/workerStartup.test.js`:** the switch and the fail-closed login rule.
+  Removing any one grant from the list fails the test that uses it. Writing the password into `process.env` fails the enabled-worker test.
+- **`tests/unit/workers/workerCredentials.test.js`:** the file loader:
+  - modes 644/640/660/400/700/604/601;
+  - a symlink, a directory, another owner, a missing file;
+  - a path swapped after `lstat` (inode check) and a symlink planted after `lstat` (`O_NOFOLLOW`);
+  - over 4 KiB, missing keys, `postgres` / `rdsadmin`;
+  - no contents in any error.
+- **`tests/unit/workers/workerStartup.test.js`:**
+  - the switch;
+  - the env-password refusal, enabled or not;
+  - the file refusals;
+  - the in-memory login reaching no env key;
+  - the `config/sequelize.js` fallback to `DB_USER` / `DB_PASSWORD` for the API and migrations.
 - **`tests/unit/workers/workerDbGrants.test.js`:** the SQL file grants exactly the list, and nothing broader.
 - **`tests/unit/workers/workerProcessConfig.test.js`:**
-  - both pm2 configs;
+  - the production worker carries only the file path, with no password (not even from a `.env` `WORKER_DB_PASSWORD`);
+  - the dev worker is off by default;
+  - `stop_exit_codes: [78]` in both;
   - the API unchanged;
   - the deploy script still restarting only a worker that was online;
   - the pool size.
-- **`tests/unit/workers/workerCheckDbAccess.test.js`:** the preflight's settings.
+- **`tests/unit/workers/workerCheckDbAccess.test.js`:** the preflight's settings: the file loader, a stale `WORKER_DB_PASSWORD` refused, `.env` parsed without loading.

@@ -1,33 +1,61 @@
 'use strict';
 
 /**
- * Issue #3714: whether the episode worker may run, decided from its
- * environment alone, before any module that touches the database, Redis or
- * an AI provider is loaded.
+ * Issue #3714: whether the episode worker may run, decided before any module
+ * that touches the database, Redis or an AI provider is loaded.
  *
- *   GENERATION_WORKER_ENABLED  must be exactly "true" for the worker to run.
- *                              Unset or anything else: disabled. A disabled
- *                              worker loads no model, runs no boot recovery,
- *                              polls nothing, registers no Bull consumer and
- *                              makes no AI call; it only waits for a signal.
- *   WORKER_DB_USER /           the worker's own database login. Required when
- *   WORKER_DB_PASSWORD         WORKER_DB_REQUIRED is "true" (the production
- *                              ecosystem sets it) or NODE_ENV is production.
- *                              There is no fallback to the API's DB_USER /
- *                              DB_PASSWORD or to postgres: missing values,
- *                              or the postgres login, refuse to start (exit
- *                              code 78). Outside production, when they are
- *                              not set, the existing DB_* settings are used
- *                              as before (local development, the dev box).
+ *   GENERATION_WORKER_ENABLED  must be exactly "true" (case and surrounding
+ *                              spaces ignored) for the worker to run. Unset or
+ *                              anything else: disabled. A disabled worker
+ *                              loads no model, runs no boot recovery, polls
+ *                              nothing, registers no Bull consumer and makes
+ *                              no AI call; it only waits for a signal.
+ *
+ * Production (WORKER_DB_REQUIRED is "true", which the production ecosystem
+ * sets, or NODE_ENV is production), Option B:
+ *   - no database password may be in the environment (WORKER_DB_PASSWORD,
+ *     DB_PASSWORD, DATABASE_URL, PGPASSWORD). One there means a stale pm2
+ *     saved env or .env line: refuse (exit 78), even when disabled, so it is
+ *     noticed and removed;
+ *   - when enabled, the login is read from WORKER_DB_CREDENTIALS_FILE
+ *     (src/workers/workerCredentials.js: regular file, no symlink, owned by
+ *     the worker's user, mode 600). Missing, unsafe, incomplete or the
+ *     postgres login: refuse (exit 78). There is no fallback to the API's
+ *     login or to postgres;
+ *   - NODE_ENV must be production, the only config that reads the held login.
+ * The login is returned to start.js, which holds it in memory
+ * (src/config/dbCredentials.js); it is never written to process.env, so no
+ * child process (FFmpeg) inherits it.
+ *
+ * Outside production the worker keeps using the existing DB_* settings.
  */
+
+const { readCredentialFile, CredentialFileError, DEFAULT_CREDENTIALS_FILE } = require('./workerCredentials');
 
 // EX_CONFIG (sysexits.h). The production ecosystem lists it in
 // stop_exit_codes, so pm2 does not restart a worker refused for its settings.
 const EXIT_CONFIG = 78;
 
-const MASTER_LOGINS = new Set(['postgres', 'rdsadmin']);
+// Environment keys that must not carry a database login in production.
+const FORBIDDEN_ENV_SECRETS = ['WORKER_DB_PASSWORD', 'DB_PASSWORD', 'DATABASE_URL', 'PGPASSWORD'];
 
-function decideStartup(env = process.env) {
+function isRequired(env) {
+  return String(env.WORKER_DB_REQUIRED || '').trim().toLowerCase() === 'true' || env.NODE_ENV === 'production';
+}
+
+function decideStartup(env = process.env, opts = {}) {
+  const required = isRequired(env);
+
+  if (required) {
+    const present = FORBIDDEN_ENV_SECRETS.filter((k) => String(env[k] || '') !== '');
+    if (present.length) {
+      return {
+        action: 'refuse',
+        message: `Refusing to start: a database password is in the worker's environment (${present.join(', ')}). In production the worker's login is read only from its credential file; remove the value from .env / the pm2 saved env (docs/runbooks/episode-worker-db.md §6).`,
+      };
+    }
+  }
+
   if (String(env.GENERATION_WORKER_ENABLED || '').trim().toLowerCase() !== 'true') {
     return {
       action: 'disabled',
@@ -35,41 +63,37 @@ function decideStartup(env = process.env) {
     };
   }
 
-  const required = String(env.WORKER_DB_REQUIRED || '').trim().toLowerCase() === 'true' || env.NODE_ENV === 'production';
-  const user = String(env.WORKER_DB_USER || '').trim();
-  const password = env.WORKER_DB_PASSWORD || '';
-
-  if (!user || !password) {
-    if (required) {
-      return {
-        action: 'refuse',
-        message: `Refusing to start: WORKER_DB_USER and WORKER_DB_PASSWORD must both be set (missing: ${[!user && 'WORKER_DB_USER', !password && 'WORKER_DB_PASSWORD'].filter(Boolean).join(', ')}). The worker never falls back to the API's or the postgres login.`,
-      };
-    }
+  if (!required) {
     // Development: the worker keeps using DB_* as before.
-    return { action: 'run', identity: 'shared', dbEnv: null };
+    return { action: 'run', identity: 'shared', credentials: null };
   }
 
-  if (MASTER_LOGINS.has(user.toLowerCase())) {
-    return { action: 'refuse', message: `Refusing to start: WORKER_DB_USER is the master login (${user}); the worker runs as its own least-privilege role.` };
+  if (env.NODE_ENV !== 'production') {
+    return { action: 'refuse', message: 'Refusing to start: the worker\'s own login is used only with NODE_ENV=production.' };
   }
 
-  return {
-    action: 'run',
-    identity: 'worker',
-    // Applied to process.env before the models load: config/sequelize.js
-    // reads DB_USER / DB_PASSWORD. DATABASE_URL is removed so no other login
-    // can be picked up by a non-production config.
-    dbEnv: { DB_USER: user, DB_PASSWORD: password },
-  };
+  const file = String(env.WORKER_DB_CREDENTIALS_FILE || '').trim() || DEFAULT_CREDENTIALS_FILE;
+  let credentials;
+  try {
+    credentials = readCredentialFile(file, { uid: opts.uid, fs: opts.fs });
+  } catch (err) {
+    if (!(err instanceof CredentialFileError)) {
+      console.error('[workerStartup] credential file check failed unexpectedly:', err.code || err.name);
+      return { action: 'refuse', message: 'Refusing to start: the credential file could not be read.' };
+    }
+    return { action: 'refuse', message: `Refusing to start: ${err.message}.` };
+  }
+
+  return { action: 'run', identity: 'worker', credentials };
 }
 
-function applyDbEnv(env, dbEnv) {
-  if (!dbEnv) return;
-  env.DB_USER = dbEnv.DB_USER;
-  env.DB_PASSWORD = dbEnv.DB_PASSWORD;
-  delete env.DB_USERNAME;
-  delete env.DATABASE_URL;
+/**
+ * Remove every database login key from the worker's environment (all empty
+ * by now in production; this drops even the empty keys, so a child process
+ * sees none of them).
+ */
+function scrubDbEnv(env) {
+  for (const k of [...FORBIDDEN_ENV_SECRETS, 'DB_USER', 'DB_USERNAME', 'WORKER_DB_USER']) delete env[k];
 }
 
-module.exports = { decideStartup, applyDbEnv, EXIT_CONFIG };
+module.exports = { decideStartup, scrubDbEnv, isRequired, EXIT_CONFIG, FORBIDDEN_ENV_SECRETS };

@@ -12,11 +12,17 @@
  * catalog read or a SELECT ... LIMIT 0 that returns no rows. It never runs
  * the worker's boot recovery, polls nothing and calls no AI provider.
  *
- * Settings, from the environment, else from the repo's .env (dotenv never
- * overrides what is already set): WORKER_DB_USER, WORKER_DB_PASSWORD,
- * DB_HOST, DB_PORT (5432), DB_NAME, DB_SSL ("false" turns TLS off),
- * DB_SSL_REJECT_UNAUTHORIZED. It never uses DB_USER / DB_PASSWORD (the
- * API's login): without WORKER_DB_* it stops.
+ * Settings (issue #3714, Option B):
+ *   - the login (WORKER_DB_USER, WORKER_DB_PASSWORD) only from the worker's
+ *     credential file, WORKER_DB_CREDENTIALS_FILE (default
+ *     /home/ubuntu/.episode-worker-db.env), checked by the same loader the
+ *     worker uses (src/workers/workerCredentials.js: regular file, no
+ *     symlink, owned by the user running this, mode 600, no postgres);
+ *   - DB_HOST, DB_PORT (5432), DB_NAME, DB_SSL ("false" turns TLS off),
+ *     DB_SSL_REJECT_UNAUTHORIZED from the environment, else from the repo's
+ *     .env, which is parsed, not loaded into the environment.
+ * It never uses DB_USER / DB_PASSWORD (the API's login). A WORKER_DB_PASSWORD
+ * in the environment or in .env is a stale copy and fails the settings.
  *
  * Prints PASS / FAIL / WARN lines and never the password or the host.
  * Exit codes: 0 every check passed; 1 a check failed; 2 the settings are
@@ -29,12 +35,23 @@ const { TABLE_GRANTS, SEQUENCE_GRANTS, TABLE_PRIVILEGES, CONNECTION_LIMIT } = re
 
 const MASTER_LOGINS = new Set(['postgres', 'rdsadmin']);
 
-/** The connection settings, or { error } naming what is missing. */
-function loadSettings(env = process.env) {
-  const missing = ['WORKER_DB_USER', 'WORKER_DB_PASSWORD', 'DB_HOST', 'DB_NAME'].filter((k) => !String(env[k] || '').trim());
-  if (missing.length) return { error: `missing: ${missing.join(', ')} (the worker's own login is required; DB_USER / DB_PASSWORD are never used)` };
-  const user = String(env.WORKER_DB_USER).trim();
-  if (MASTER_LOGINS.has(user.toLowerCase())) return { error: `WORKER_DB_USER is the master login (${user}); the worker runs as its own role` };
+/**
+ * The connection settings, or { error } naming what is wrong (never a value).
+ * @param {object} env          DB_HOST / DB_NAME / DB_PORT / DB_SSL* (environment, then .env)
+ * @param {object} credentials  { user, password } from the credential file, or { error }
+ */
+function loadSettings(env = process.env, credentials) {
+  if (String(env.WORKER_DB_PASSWORD || '') !== '') {
+    return { error: 'WORKER_DB_PASSWORD is set in the environment or .env; the worker\'s password lives only in its credential file, so remove that copy' };
+  }
+  if (!credentials || credentials.error) {
+    return { error: `credential file: ${credentials ? credentials.error : 'not read'}` };
+  }
+  const missing = ['DB_HOST', 'DB_NAME'].filter((k) => !String(env[k] || '').trim());
+  if (missing.length) return { error: `missing: ${missing.join(', ')}` };
+  const user = String(credentials.user || '').trim();
+  if (!user || !credentials.password) return { error: 'credential file: missing WORKER_DB_USER or WORKER_DB_PASSWORD' };
+  if (MASTER_LOGINS.has(user.toLowerCase())) return { error: `the credential file names the master login (${user}); the worker runs as its own role` };
   const ssl = String(env.DB_SSL || 'true').toLowerCase() === 'false'
     ? false
     : { rejectUnauthorized: String(env.DB_SSL_REJECT_UNAUTHORIZED || '').toLowerCase() === 'true' };
@@ -46,13 +63,35 @@ function loadSettings(env = process.env) {
       port: Number(env.DB_PORT) || 5432,
       database: String(env.DB_NAME).trim(),
       user,
-      password: env.WORKER_DB_PASSWORD,
+      password: credentials.password,
       ssl,
       connectionTimeoutMillis: 10000,
       query_timeout: 15000,
       application_name: 'episode-worker-preflight',
     },
   };
+}
+
+/** The repo's .env parsed (not loaded), overlaid by the environment. */
+function readSettingsEnv(env = process.env, envFile = path.join(__dirname, '..', '..', '.env')) {
+  let fromFile = {};
+  try {
+    fromFile = require('dotenv').parse(require('fs').readFileSync(envFile));
+  } catch (err) {
+    if (err.code !== 'ENOENT') console.error(`WARN settings: .env could not be read (${err.code || 'error'})`);
+  }
+  return { ...fromFile, ...env };
+}
+
+/** The worker's credentials from its file, or { error } (never the contents). */
+function readCredentials(env, opts = {}) {
+  const { readCredentialFile, DEFAULT_CREDENTIALS_FILE } = require('../../src/workers/workerCredentials');
+  const file = String(env.WORKER_DB_CREDENTIALS_FILE || '').trim() || DEFAULT_CREDENTIALS_FILE;
+  try {
+    return readCredentialFile(file, opts);
+  } catch (err) {
+    return { error: err.message };
+  }
 }
 
 /**
@@ -142,8 +181,8 @@ async function checkWorkerDbAccess(client, { expectedUser, tableGrants = TABLE_G
 }
 
 async function main() {
-  require('dotenv').config({ path: path.join(__dirname, '..', '..', '.env'), quiet: true });
-  const settings = loadSettings(process.env);
+  const env = readSettingsEnv(process.env);
+  const settings = loadSettings(env, readCredentials(env));
   if (settings.error) {
     console.error(`FAIL settings: ${settings.error}`);
     return 2;
@@ -181,4 +220,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { loadSettings, checkWorkerDbAccess };
+module.exports = { loadSettings, readSettingsEnv, readCredentials, checkWorkerDbAccess };

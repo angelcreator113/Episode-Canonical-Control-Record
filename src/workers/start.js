@@ -7,16 +7,20 @@
  *   npm run dev:worker      (development with auto-reload)
  *
  * Issue #3714: the worker runs only when GENERATION_WORKER_ENABLED is "true",
- * and in production only as its own database login (WORKER_DB_USER /
- * WORKER_DB_PASSWORD), with no fallback (src/workers/workerStartup.js). The
- * decision is made before the video renderer (Bull/Redis) or the scene
- * worker (models, boot recovery, polling, AI cost tracking) is loaded, so a
- * disabled or refused worker touches none of them.
+ * and in production only as its own database login, read from its mode-600
+ * credential file (Option B), with no fallback and no password in the
+ * environment (src/workers/workerStartup.js). The login is held in memory
+ * (src/config/dbCredentials.js) and never written to process.env, so FFmpeg
+ * and every other child process inherit no database password. The decision
+ * is made before the video renderer (Bull/Redis) or the scene worker (models,
+ * boot recovery, polling, AI cost tracking) is loaded, so a disabled or
+ * refused worker touches none of them.
  */
 
 require('dotenv').config();
 
-const { decideStartup, applyDbEnv, EXIT_CONFIG } = require('./workerStartup');
+const { decideStartup, scrubDbEnv, EXIT_CONFIG } = require('./workerStartup');
+const { setDbCredentials } = require('../config/dbCredentials');
 
 const defaultDeps = {
   loadRenderer: () => require('./videoRenderer'),
@@ -51,8 +55,12 @@ function main(env = process.env, deps = defaultDeps) {
     return { action: 'refuse' };
   }
 
-  applyDbEnv(env, decision.dbEnv);
-  d.log(`   Database login: ${decision.identity === 'worker' ? 'the worker\'s own (WORKER_DB_USER)' : 'shared DB_* settings (development)'}`);
+  if (decision.identity === 'worker') {
+    // In memory only; config/sequelize.js reads it when the models connect.
+    setDbCredentials(decision.credentials);
+    scrubDbEnv(env);
+  }
+  d.log(`   Database login: ${decision.identity === 'worker' ? 'the worker\'s own (credential file)' : 'shared DB_* settings (development)'}`);
   d.log(`   Redis: ${env.REDIS_HOST || '127.0.0.1'}:${env.REDIS_PORT || 6379}`);
   d.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 

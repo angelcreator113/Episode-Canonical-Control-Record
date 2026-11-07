@@ -19,7 +19,16 @@
  *   - a pool of 4 serves many concurrent queries under CONNECTION LIMIT 5,
  *     and the limit is enforced (53300) beyond it;
  *   - a disabled worker process loads no model, pg, Bull, renderer or AI SDK
- *     and opens no database session; one refused for its settings exits 78.
+ *     and opens no database session; one refused for its settings (a
+ *     password in its environment, a missing or unsafe credential file, the
+ *     postgres login) exits 78;
+ *   - an enabled worker process (Option B), on this local test database with
+ *     every non-loopback connection refused and Redis pointed where nothing
+ *     listens, reads its login from a mode-600 file, connects as the role,
+ *     and its own environment (/proc/<pid>/environ and process.env), every
+ *     child it starts, and the environment FFmpeg actually receives through
+ *     execFile and fluent-ffmpeg carry no password; nor does its log. The
+ *     test asserts booleans only and deletes every file it made.
  */
 jest.unmock('uuid');
 
@@ -369,10 +378,20 @@ const worker = shouldSkip ? {} : {
   describe('the worker process', () => {
     const START = path.join(__dirname, '../../src/workers/start.js');
     const TRACE = path.join(__dirname, '../helpers/traceRequires.js');
+    const PROBE = path.join(__dirname, '../helpers/workerEnvProbe.js');
     const FORBIDDEN = [/src[\\/]models[\\/]index\.js$/, /sceneGenerationWorker\.js$/, /videoRenderer\.js$/, /aiCostTracker\.js$/,
       /node_modules[\\/]bull[\\/]/, /node_modules[\\/]pg[\\/]/, /node_modules[\\/]@anthropic-ai[\\/]/, /node_modules[\\/]sequelize[\\/]/];
+    const sessions = async () => (await admin.query('SELECT count(*)::int AS n FROM pg_stat_activity WHERE usename = $1', [ROLE])).rows[0].n;
 
-    function run(env, { killAfterMs = null } = {}) {
+    // A credential file in its own directory (deleted after each run).
+    function credentialFile(dir, { user = ROLE, password = PASSWORD, mode = 0o600 } = {}) {
+      const p = path.join(dir, 'worker-db.env');
+      fs.writeFileSync(p, `WORKER_DB_USER=${user}\nWORKER_DB_PASSWORD=${password}\n`, { mode });
+      fs.chmodSync(p, mode);
+      return p;
+    }
+
+    function run(makeEnv, { killAfterMs = null, preload = [], whileRunning = null } = {}) {
       const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'ew-'));
       const traceOut = path.join(cwd, 'trace.json');
       const u = new URL(ADMIN_URL);
@@ -380,47 +399,111 @@ const worker = shouldSkip ? {} : {
         PATH: process.env.PATH,
         NODE_ENV: 'production',
         WORKER_DB_REQUIRED: 'true',
-        DB_HOST: u.hostname, DB_PORT: u.port || '5432', DB_NAME: dbName(), DB_SSL: 'false',
+        DB_USER: '', DB_PASSWORD: '',
+        DB_HOST: u.hostname, DB_PORT: u.port || '5432', DB_NAME: dbName(), DB_SSL: 'false', DB_POOL_MAX: '4',
         REDIS_HOST: '127.0.0.1', REDIS_PORT: '1',
         TRACE_REQUIRES_OUT: traceOut,
-        ...env,
+        ...makeEnv(cwd),
       };
       return new Promise((resolve) => {
-        const child = spawn(process.execPath, ['-r', TRACE, START], { cwd, env: childEnv });
+        const args = ['-r', TRACE, ...preload.flatMap((f) => ['-r', f]), START];
+        const child = spawn(process.execPath, args, { cwd, env: childEnv });
         let out = '';
         child.stdout.on('data', (d) => { out += d; });
         child.stderr.on('data', (d) => { out += d; });
+        const during = whileRunning ? whileRunning(child, cwd) : Promise.resolve(null);
         const timer = killAfterMs ? setTimeout(() => child.kill('SIGTERM'), killAfterMs) : null;
-        child.on('exit', (code) => {
+        child.on('exit', async (code) => {
           if (timer) clearTimeout(timer);
+          const seen = await during;
           const loaded = fs.existsSync(traceOut) ? JSON.parse(fs.readFileSync(traceOut, 'utf8')) : null;
+          const files = {};
+          for (const f of fs.readdirSync(cwd)) files[f] = fs.readFileSync(path.join(cwd, f));
           fs.rmSync(cwd, { recursive: true, force: true });
-          resolve({ code, out, loaded });
+          resolve({ code, out, loaded, seen, files });
         });
       });
     }
 
     test('disabled (the default): stays up, loads nothing that works, opens no session; ends cleanly on SIGTERM', async () => {
-      const sessions = async () => (await admin.query('SELECT count(*)::int AS n FROM pg_stat_activity WHERE usename = $1', [ROLE])).rows[0].n;
       const before = await sessions();
-      const res = await run({ WORKER_DB_USER: ROLE, WORKER_DB_PASSWORD: PASSWORD }, { killAfterMs: 2000 });
+      const res = await run((dir) => ({ WORKER_DB_CREDENTIALS_FILE: credentialFile(dir) }), { killAfterMs: 2000 });
       expect(res.out).toMatch(/Generation worker is disabled/);
       expect(res.code).toBe(0);
       expect(res.loaded).not.toBeNull();
       for (const re of FORBIDDEN) expect(res.loaded.filter((f) => re.test(f))).toEqual([]);
       expect(await sessions()).toBe(before);
-      expect(res.out).not.toContain(PASSWORD);
+      expect(res.out.includes(PASSWORD)).toBe(false);
     });
 
     test.each([
-      ['no worker login', { GENERATION_WORKER_ENABLED: 'true', DB_USER: 'episode_app_dev', DB_PASSWORD: 'api-secret' }],
-      ['the postgres login', { GENERATION_WORKER_ENABLED: 'true', WORKER_DB_USER: 'postgres', WORKER_DB_PASSWORD: 'x' }],
-    ])('enabled with %s: refused with exit 78 before anything loads', async (_label, env) => {
-      const res = await run(env);
+      ['the API login in its environment, enabled', () => ({ GENERATION_WORKER_ENABLED: 'true', DB_USER: 'episode_app_dev', DB_PASSWORD: 'api-secret' })],
+      ['the API login in its environment, disabled (a stale pm2 saved env)', () => ({ DB_USER: 'postgres', DB_PASSWORD: 'api-secret' })],
+      ['a worker password in its environment (the old Option A)', (dir) => ({ GENERATION_WORKER_ENABLED: 'true', WORKER_DB_USER: ROLE, WORKER_DB_PASSWORD: 'api-secret', WORKER_DB_CREDENTIALS_FILE: credentialFile(dir) })],
+      ['no credential file', (dir) => ({ GENERATION_WORKER_ENABLED: 'true', WORKER_DB_CREDENTIALS_FILE: path.join(dir, 'missing.env') })],
+      ['a credential file with mode 644', (dir) => ({ GENERATION_WORKER_ENABLED: 'true', WORKER_DB_CREDENTIALS_FILE: credentialFile(dir, { mode: 0o644 }) })],
+      ['a credential file naming postgres', (dir) => ({ GENERATION_WORKER_ENABLED: 'true', WORKER_DB_CREDENTIALS_FILE: credentialFile(dir, { user: 'postgres' }) })],
+    ])('%s: refused with exit 78 before anything loads', async (_label, makeEnv) => {
+      const res = await run(makeEnv);
       expect(res.code).toBe(78);
       expect(res.out).toMatch(/Refusing to start/);
       for (const re of FORBIDDEN) expect(res.loaded.filter((f) => re.test(f))).toEqual([]);
-      expect(res.out).not.toContain('api-secret');
+      expect(res.out.includes('api-secret')).toBe(false);
+      expect(res.out.includes(PASSWORD)).toBe(false);
+    });
+
+    test('enabled, on the local test database with the network blocked: connects as the role from the file; no environment, child process or log carries the password', async () => {
+      const fakeBin = fs.mkdtempSync(path.join(os.tmpdir(), 'ew-bin-'));
+      // A stand-in ffmpeg that records the environment it really received.
+      fs.writeFileSync(path.join(fakeBin, 'ffmpeg'), '#!/bin/sh\n/usr/bin/env > "$PROBE_DIR/ffmpeg-env-$$.txt"\nexit 0\n', { mode: 0o700 });
+      const u = new URL(ADMIN_URL);
+      try {
+        const res = await run((dir) => ({
+          GENERATION_WORKER_ENABLED: 'true',
+          WORKER_DB_CREDENTIALS_FILE: credentialFile(dir),
+          PATH: `${fakeBin}:${process.env.PATH}`,
+          PROBE_DIR: dir,
+          PROBE_ALLOW_HOST: u.hostname,
+          PROBE_AFTER_MS: '2500',
+        }), {
+          preload: [PROBE],
+          killAfterMs: 7000,
+          whileRunning: (child) => new Promise((resolve) => setTimeout(async () => {
+            let environHasPassword = null;
+            try { environHasPassword = fs.readFileSync(`/proc/${child.pid}/environ`).includes(PASSWORD); } catch (err) { console.error('[test] /proc environ unreadable:', err.code); }
+            resolve({ environHasPassword, roleSessions: await sessions() });
+          }, 4500)),
+        });
+
+        // It really ran: the scene worker started and connected as the role.
+        expect(res.out).toMatch(/Database login: the worker's own \(credential file\)/);
+        expect(res.out).toMatch(/Scene generation worker started/);
+        expect(res.loaded.some((f) => /src[\\/]models[\\/]index\.js$/.test(f))).toBe(true);
+        expect(res.seen.roleSessions).toBeGreaterThan(0);
+        expect(res.out).not.toMatch(/permission denied/i);
+
+        // The worker's own environment, as the kernel holds it and as Node sees it.
+        expect(res.seen.environHasPassword).toBe(false);
+        expect(res.files['worker-env.json']).toBeDefined();
+        const workerEnv = JSON.parse(res.files['worker-env.json']);
+        expect(JSON.stringify(workerEnv).includes(PASSWORD)).toBe(false);
+        for (const k of ['DB_PASSWORD', 'WORKER_DB_PASSWORD', 'DB_USER', 'WORKER_DB_USER', 'DATABASE_URL']) expect(Object.keys(workerEnv)).not.toContain(k);
+
+        // Every child the worker started, and what FFmpeg actually received
+        // through execFile and through fluent-ffmpeg's spawn.
+        const children = JSON.parse(res.files['children.json']);
+        expect(children.filter((c) => /ffmpeg$/.test(String(c.file))).length).toBeGreaterThanOrEqual(2);
+        expect(children.every((c) => Array.isArray(c.envPairs) && !c.envPairs.some((p) => p.includes(PASSWORD)))).toBe(true);
+        const ffmpegEnvs = Object.keys(res.files).filter((f) => /^ffmpeg-env-\d+\.txt$/.test(f)).map((f) => res.files[f]);
+        expect(ffmpegEnvs.length).toBeGreaterThanOrEqual(2);
+        expect(ffmpegEnvs.every((b) => b.includes('PROBE_DIR=') && !b.includes(PASSWORD))).toBe(true);
+
+        // Nothing it logged, nothing left on disk.
+        expect(res.out.includes(PASSWORD)).toBe(false);
+        expect(res.files['probe-error.json']).toBeUndefined();
+      } finally {
+        fs.rmSync(fakeBin, { recursive: true, force: true });
+      }
     });
   });
 });
