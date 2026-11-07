@@ -159,8 +159,11 @@ function redactError(text, max = 120) {
   else {
     try { s = JSON.stringify(text); } catch { s = String(text); }
   }
-  s = String(s)
-    .replace(/[\u0000-\u001f\u007f]+/g, ' ')
+  // Control characters are matched on purpose: they are flattened so a
+  // multi-line or binary error cannot hide text from the patterns below.
+  // eslint-disable-next-line no-control-regex
+  s = String(s).replace(/[\u0000-\u001f\u007f]+/g, ' ');
+  s = s
     .replace(/\b[a-z][a-z0-9+.-]*:\/\/[^\s"'<>]+/gi, '<url>')
     .replace(/[^\s"'<>]+:[^\s"'<>@]+@[^\s"'<>]+/g, '<credential>')
     .replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g, '<email>')
