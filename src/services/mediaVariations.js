@@ -217,8 +217,11 @@ async function editImage(prompt, images, { routeName = 'media-variation', size =
   }
   // onAttempt: called once, after the budget gate and immediately before the
   // provider request is sent, so a caller knows a paid request may have
-  // been accepted (#3714 R2). Never called when the gate refuses.
-  const send = typeof onAttempt === 'function' ? () => { onAttempt(); return call(); } : call;
+  // been accepted (#3714 R2). Never called when the gate refuses. It is
+  // awaited: a caller that records the attempt durably (cameraRoll.make's
+  // attempt marker) does so before the request starts, and if it throws,
+  // nothing is sent.
+  const send = typeof onAttempt === 'function' ? async () => { await onAttempt(); return call(); } : call;
   const response = await imageCost.runImageCall(plan, send);
   const item = response?.data?.data?.[0];
   if (item?.b64_json) return Buffer.from(item.b64_json, 'base64');
