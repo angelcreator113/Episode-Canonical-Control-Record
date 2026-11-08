@@ -373,7 +373,9 @@ async function getTitleOverlayVariants(models, episodeId) {
   };
 }
 
-async function uploadPng(buffer, key, contentType = 'image/png') {
+// metadata: optional S3 user metadata (lower-case keys, string values), e.g.
+// the camera roll's moment-id and claim-token (#3714 recovery).
+async function uploadPng(buffer, key, contentType = 'image/png', { metadata = null } = {}) {
   const S3_BUCKET = process.env.S3_PRIMARY_BUCKET || process.env.AWS_S3_BUCKET;
   if (!S3_BUCKET) return `data:${contentType};base64,${buffer.toString('base64')}`;
   const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
@@ -381,6 +383,7 @@ async function uploadPng(buffer, key, contentType = 'image/png') {
   const s3 = new S3Client({ region: AWS_REGION });
   await s3.send(new PutObjectCommand({
     Bucket: S3_BUCKET, Key: key, Body: buffer, ContentType: contentType, CacheControl: 'max-age=31536000',
+    ...(metadata ? { Metadata: metadata } : {}),
   }));
   return `https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${key}`;
 }
