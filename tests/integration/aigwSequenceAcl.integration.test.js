@@ -96,15 +96,100 @@ const trustFindings = async (t) => {
     }
   });
 
-  test('idempotent, and a no-op where the ledger does not exist', async () => {
+  test('every way in is closed: PUBLIC, direct grants and grants through a role the application login is a member of (inherited or by SET ROLE); currval too', async () => {
+    const t = await createAigwTestDb({ poolMax: 1, productionDefaultPrivileges: true });
+    const grp = `aigw_seqgrp_${t.tag}`;
+    const app2 = `aigw_seqapp2_${t.tag}`;
+    t.roles.seqgrp = grp; // removed with the test's roles at close
+    t.roles.seqapp2 = app2;
+    try {
+      await t.su.query(`CREATE ROLE ${ident(grp)} NOLOGIN`);
+      await t.su.query(`CREATE ROLE ${ident(app2)} LOGIN INHERIT PASSWORD '${t.password}'`);
+      await t.su.query(`GRANT CONNECT ON DATABASE ${ident(t.dbName)} TO ${ident(app2)}`);
+      await t.su.query(`GRANT USAGE ON SCHEMA public TO ${ident(grp)}, ${ident(app2)}`);
+      await t.su.query(`GRANT ${ident(grp)} TO ${ident(app2)}, ${ident(t.roles.app)}`);
+      for (const s of followUp.SEQUENCES) {
+        await t.su.query(`GRANT ALL ON SEQUENCE public.${s} TO PUBLIC`);
+        await t.su.query(`GRANT ALL ON SEQUENCE public.${s} TO ${ident(grp)}`);
+        await t.su.query(`GRANT ALL ON SEQUENCE public.${s} TO ${ident(t.roles.app)}`);
+      }
+      const u2 = new URL(t.url('app'));
+      u2.username = app2;
+      const as = async (url, sqls) => {
+        const c = new Client({ connectionString: url });
+        await c.connect();
+        const out = [];
+        try { for (const s of sqls) out.push(await c.query(s).then(() => 'allowed', (e) => e.code)); } finally { await c.end(); }
+        return out;
+      };
+      const probes = (s, viaRole) => [
+        ...(viaRole ? [`SET ROLE ${ident(grp)}`] : []),
+        `SELECT nextval('public.${s}')`, `SELECT currval('public.${s}')`, `SELECT setval('public.${s}', 1)`, `SELECT last_value FROM public.${s}`];
+
+      // before: every path works
+      expect(await as(u2.toString(), probes('aigw_audit_id_seq', false))).toEqual(['allowed', 'allowed', 'allowed', 'allowed']);
+
+      await followUp.up(t.sequelize.getQueryInterface(), Sequelize);
+
+      expect(await nonOwnerSeqGrants(t)).toEqual([]);
+      for (const s of followUp.SEQUENCES) {
+        // the application login directly, an inheriting member of the group, and the login switching into the group
+        expect([s, 'app', await as(t.url('app'), probes(s, false))]).toEqual([s, 'app', ['42501', '42501', '42501', '42501']]);
+        expect([s, 'member', await as(u2.toString(), probes(s, false))]).toEqual([s, 'member', ['42501', '42501', '42501', '42501']]);
+        expect([s, 'set role', await as(t.url('app'), probes(s, true))]).toEqual([s, 'set role', ['allowed', '42501', '42501', '42501', '42501']]);
+        for (const p of ['SELECT', 'USAGE', 'UPDATE']) {
+          const { rows: [r] } = await t.su.query(`SELECT has_sequence_privilege($1, $2, $3) AS app, has_sequence_privilege($4, $2, $3) AS member,
+            has_sequence_privilege($5, $2, $3) AS grp, has_sequence_privilege($6, $2, $3) AS owner`, [t.roles.app, `public.${s}`, p, app2, grp, t.roles.migrator]);
+          expect([s, p, r]).toEqual([s, p, { app: false, member: false, grp: false, owner: true }]);
+        }
+      }
+      // the migration login is not a member of anything the application login holds, and vice versa
+      const { rows: [m] } = await t.su.query("SELECT pg_has_role($1, $2, 'MEMBER') AS app_in_owner", [t.roles.app, t.roles.migrator]);
+      expect(m.app_in_owner).toBe(false);
+    } finally {
+      await t.su.query('SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE usename = ANY($1)', [[app2, t.roles.app]]).catch((e) => console.error(`[aigw test] ${e.message}`));
+      await t.close();
+    }
+  });
+
+  test('right after both migrations on a fresh database: the gateway is STOPPED with both caps NULL and empty history', async () => {
     const t = await createAigwTestDb({ poolMax: 1, productionDefaultPrivileges: true, extraMigrations: [followUp] });
     try {
-      const before = (await t.su.query(SEQ_ACL, [followUp.SEQUENCES])).rows;
-      await followUp.up(t.sequelize.getQueryInterface(), Sequelize);
-      expect((await t.su.query(SEQ_ACL, [followUp.SEQUENCES])).rows).toEqual(before);
-      await expect(followUp.down(t.sequelize.getQueryInterface(), Sequelize)).resolves.toBeUndefined();
-      expect((await t.su.query(SEQ_ACL, [followUp.SEQUENCES])).rows).toEqual(before);
+      const { rows: [c] } = await t.su.query('SELECT global_state, version::int AS version, daily_cap_micros, image_daily_cap_micros, changed_by FROM aigw_control');
+      expect(c).toEqual({ global_state: 'STOPPED', version: 1, daily_cap_micros: null, image_daily_cap_micros: null, changed_by: 'migration' });
+      const { rows: [n] } = await t.su.query(`SELECT (SELECT count(*) FROM aigw_permits)::int AS p, (SELECT count(*) FROM aigw_permit_events)::int AS e,
+        (SELECT count(*) FROM aigw_reconciliations)::int AS r, (SELECT count(*) FROM aigw_audit)::int AS a, (SELECT count(*) FROM aigw_operations)::int AS o`);
+      expect(n).toEqual({ p: 0, e: 0, r: 0, a: 0, o: 9 });
+      const { rows: [v] } = await t.su.query("SELECT current_setting('server_version_num')::int AS v");
+      console.log(`[aigw test] PostgreSQL server_version_num ${v.v}`);
+    } finally {
+      await t.close();
+    }
+  });
 
+  test('running the follow-up again changes no permission and no data; down changes nothing', async () => {
+    const t = await createAigwTestDb({ poolMax: 2, productionDefaultPrivileges: true, extraMigrations: [followUp] });
+    try {
+      // some history first, so there is data to compare
+      const ledger = createPgLedger({ caller: t.port('caller'), gateway: t.port('gateway'), instance: 'gw-seq2', limits: withLimits({ permitTtlMs: 5000 }) });
+      const admin = createPgAdmin({ admin: t.port('admin') });
+      await admin.setCaps({ dailyMicros: 1000, imageDailyMicros: 1000, actor: 'evoni', reason: 'rerun test' });
+      await admin.stop('evoni', 'rerun test');
+      expect((await ledger.authorize(anthropicCall({ logicalKey: 'rerun' }).authorizeInput)).code).toBe('STOPPED');
+      const state = async () => ({
+        acl: (await t.su.query(`SELECT relname, COALESCE(relacl::text, '') AS acl FROM pg_class WHERE relname LIKE 'aigw\\_%' ORDER BY 1`)).rows,
+        fnacl: (await t.su.query(`SELECT p.oid::regprocedure::text AS f, COALESCE(p.proacl::text, '') AS acl FROM pg_proc p WHERE p.proname LIKE 'aigw\\_%' ORDER BY 1`)).rows,
+        control: (await t.su.query('SELECT * FROM aigw_control')).rows,
+        counts: (await t.su.query(`SELECT (SELECT count(*) FROM aigw_permits)::int AS p, (SELECT count(*) FROM aigw_permit_events)::int AS e,
+          (SELECT count(*) FROM aigw_audit)::int AS a, (SELECT count(*) FROM aigw_operations)::int AS o`)).rows,
+        seq: (await t.su.query(`SELECT 'e' AS s, last_value::text, is_called FROM aigw_permit_events_id_seq UNION ALL
+          SELECT 'r', last_value::text, is_called FROM aigw_reconciliations_id_seq UNION ALL SELECT 'a', last_value::text, is_called FROM aigw_audit_id_seq`)).rows,
+      });
+      const before = await state();
+      await followUp.up(t.sequelize.getQueryInterface(), Sequelize);
+      expect(await state()).toEqual(before);
+      await expect(followUp.down(t.sequelize.getQueryInterface(), Sequelize)).resolves.toBeUndefined();
+      expect(await state()).toEqual(before);
     } finally {
       await t.close();
     }
