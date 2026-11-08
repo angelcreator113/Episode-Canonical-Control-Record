@@ -62,13 +62,48 @@ Values are compared as HMAC-SHA256 digests under a random key made for each run 
 - **Write anything:** no files, temporary files, logs, network calls or environment reads.
 - **Run other commands:** child processes are limited to `sudo -n -u <user> test -r <path>`, `id -nG <user>` and `sudo -n -l -U <user>`, and only when run as root.
 
-Every report passes a final guard. If any 6-character piece of any non-placeholder value read appears in the report, after removing known non-secret strings (paths, file and variable names, dates, the report's fixed wording), nothing is printed and the exit code is 3.
+## Output guard (fails closed)
+
+Every report, text or JSON, passes a guard over **the exact text that would be printed**. If the guard finds a hit, nothing goes to stdout, stderr shows only `REDACTION_GUARD_TRIPPED: output withheld`, and the exit code is 3. If formatting or the guard itself fails, stdout is empty, stderr shows `ERROR <name>`, and the exit code is 1.
+
+**What is guarded.** Every nonempty value of a credential-like variable, **including placeholders**. A `${NAME}` reference is cut out of a value, because it names another variable and holds no secret. The literal pieces around it stay guarded, unless a piece is punctuation only.
+
+**What counts as a hit.** Matching is case-sensitive and is checked in the raw, NFC and NFD forms of both the value and the report.
+
+| Value length | Hit when |
+|---|---|
+| 6 characters or more | the value, or any 6-character piece of it, appears anywhere |
+| 1 to 5 characters | the value appears as a standalone token: no Unicode letter, digit or underscore directly before or after it |
+
+For short values, a punctuation edge on the value, or a combining mark beside the match, counts as standalone, so ambiguous cases fail closed. **Known limitation:** a short value that only appears embedded inside a longer word is not detected. For example, a 3-character value `ers` inside `readers` does not trip the guard.
+
+**Nothing is exempted.** A value that equals, or shares a 6-character piece with, a path, file name, variable name, pm2 app name, label or the report's own wording withholds the report.
+
+**Names that could carry a secret are not printed:**
+- variable names are printed only if they match `^[A-Z][A-Z0-9_]{0,63}$`; others are counted as `(+N unprintable names)`, and their values stay guarded;
+- pm2 app names and AWS profile names are printed only if they match `^[a-z0-9][a-z0-9._-]{0,63}$`; others appear as `appN` or `profileN`, and the original name is guarded;
+- JSON output gives each source its relative label only, never an absolute file path.
+
+There is no diagnostic mode. The tool never says which value caused a hit.
+
+### Troubleshooting exit 3
+
+1. **Treat it as a possible leak:** keep the output withheld. Do not edit the tool to exempt anything, and do not copy credential files elsewhere to investigate.
+2. **Check the usual benign cause:** a value shares 6 characters with text the report prints.
+   - Placeholders and templates in tracked files are the most common case. For example, a `DATABASE_URL` example whose host name contains the application's directory name, such as `episode-metadata`.
+   - Other common overlaps are user names (`ubuntu`, `www-data`) and pm2 app names.
+3. **Narrow it down without reading values,** using the tool's own arguments (read-only):
+   - Run with `--home` pointing at an empty directory to check only the app directory's `.env*` files.
+   - Run with `--app-dir` pointing at an empty directory to check only the home-directory sources.
+   - Use `--no-readers` to drop the readers column and host facts from the report.
+4. **If the cause is a placeholder** that shares text with the report, the fix belongs in that file (a neutral placeholder such as `<db-host>`), through normal review. It never belongs in the guard.
+5. **If you can't explain it,** stop and report "the guard withheld the inventory", with the exit code only.
 
 ## Tests
 
-`tests/unit/ops/credentialInventory.test.js` (15 cases) builds a synthetic host in a temporary directory from random values, runs the tool, and removes the directory. It checks:
+`tests/unit/ops/credentialInventory.test.js` (T1–T22) builds a synthetic host in a temporary directory from random values, runs the tool, and removes the directory. It checks:
 - labels;
-- the leak guard;
+- the leak guard (exact matches, 6-character overlaps, short standalone values and their Unicode boundaries, templates, malformed input, fail-closed errors);
 - parser and error redaction;
 - no writes, network or extra commands;
 - unreadable, oversized and symlinked files;

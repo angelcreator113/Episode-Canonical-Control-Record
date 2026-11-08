@@ -21,9 +21,23 @@
  *     ever printed or returned.
  *   - Errors are reported by code or name only. Parser messages are never
  *     printed: JSON.parse messages quote part of their input.
- *   - Every report passes a guard before it is written. If any 6-character
- *     piece of any value read appears in it, nothing is printed and the exit
- *     code is 3.
+ *   - Every report passes a fail-closed guard over the exact text to be
+ *     written. Every nonempty value of a credential-like variable is guarded,
+ *     placeholders included; `${NAME}` references are cut out and the literal
+ *     pieces around them stay guarded. A hit means nothing is printed and the
+ *     exit code is 3. Nothing is exempted for matching a path, name, label or
+ *     the report's own wording. Matching (case-sensitive; raw, NFC and NFD):
+ *       - 6+ characters: the value, or any 6-character piece of it;
+ *       - 1-5 characters: the value as a standalone token (no Unicode letter,
+ *         digit or underscore directly before or after it). A short value
+ *         embedded inside a longer word is NOT detected (known limitation);
+ *         an edge that is punctuation, or a combining mark beside the match,
+ *         counts as standalone (fails closed).
+ *   - Only names that cannot carry a secret are printed: variables matching
+ *     ^[A-Z][A-Z0-9_]{0,63}$, pm2 apps and AWS profiles matching
+ *     ^[a-z0-9][a-z0-9._-]{0,63}$. Others are counted (variables) or renamed
+ *     (appN, profileN); rejected app and profile names are guarded, and the
+ *     values of rejected variables are guarded.
  *   - No file writes, temporary files, network, or environment reads. Child
  *     processes only when run as root, and only `sudo -n -u <user> test -r
  *     <path>`, `id -nG <user>` and `sudo -n -l -U <user>`.
@@ -48,15 +62,11 @@ const NOT_OPENED_FILES = ['.git-credentials', '.npmrc', '.docker/config.json', '
 const LEGEND = 'labels: L = same as live (.env; AWS: ~/.aws/credentials [default]); Hn = other value; P = placeholder/empty';
 const USAGE = 'usage: credential-inventory.js --app-dir <dir> --home <dir> [--users a,b] [--json] [--no-readers]';
 const GUARD_MESSAGE = 'REDACTION_GUARD_TRIPPED: output withheld';
-// Fixed wording of the report and JSON keys: never secret, removed before the guard scans.
-const FIXED_TEXT = [
-  LEGEND, 'credential-inventory', 'host-user', 'app-dir', '== sources', 'readers:', 'not checked', 'needs root',
-  'others not checked', 'symlink', 'unreadable', 'too large', 'skipped (not a regular file)', 'same labels as',
-  'profiles:', '== not opened (existence only)', '== summary by variable (sources holding each label)',
-  '== host facts', '(not collected: needs root and readers)', 'NOPASSWD:ALL', 'limited', 'groups=', 'sudo=',
-  'version', 'hostUser', 'appDir', 'sources', 'notOpened', 'summary', 'hostFacts', 'exitCode', 'modified',
-  'readers', 'status', 'profiles', 'labels', 'owner',
-];
+const VAR_PRINTABLE = /^[A-Z][A-Z0-9_]{0,63}$/;
+const NAME_PRINTABLE = /^[a-z0-9][a-z0-9._-]{0,63}$/;
+const TEMPLATE_REF = /\$\{[A-Za-z_][A-Za-z0-9_]*\}/g;
+const WORD_CHAR = /[\p{L}\p{N}_]/u;
+const ALNUM = /[\p{L}\p{N}]/u;
 
 /** Error code or name only; never a message (messages can quote input). */
 function errLabel(err) {
@@ -91,16 +101,18 @@ function parseEnvText(text) {
 function parseAwsText(text) {
   const profiles = [];
   const vars = new Map();
+  const orphans = [];
   let current = null;
   for (const line of text.split(/\r?\n/)) {
     const section = /^\s*\[([^\]]{1,64})\]\s*$/.exec(line);
     if (section) { current = section[1].trim(); profiles.push(current); continue; }
     const kv = /^\s*(aws_access_key_id|aws_secret_access_key|aws_session_token)\s*=\s*(.*?)\s*$/i.exec(line);
-    if (!kv || current === null) continue;
+    if (!kv) continue;
+    if (current === null) { orphans.push(kv[2]); continue; }
     const group = kv[1].toUpperCase();
-    vars.set(current === 'default' ? group : `${group}[${current}]`, { group, value: kv[2] });
+    vars.set(current === 'default' ? group : `${group}[${current}]`, { group, profile: current, value: kv[2] });
   }
-  return { profiles, vars };
+  return { profiles, vars, orphans };
 }
 
 function pm2AppVars(app) {
@@ -148,12 +160,17 @@ function collect(options = {}) {
   const hmacKey = crypto.randomBytes(32);
   const digest = (v) => crypto.createHmac('sha256', hmacKey).update(v).digest('hex');
   const guardValues = new Set();
-  const safe = new Set([appDir, home, ...users, ...FIXED_TEXT]);
   let partial = false;
+  // Every nonempty value of a credential-like variable, as guarded pieces.
+  const guard = (value) => {
+    const v = String(value == null ? '' : value);
+    if (!v) return;
+    const pieces = v.includes('${') ? v.split(TEMPLATE_REF).filter((x) => ALNUM.test(x)) : [v];
+    for (const x of pieces) if (x) guardValues.add(x);
+  };
 
   let hostUser;
   try { hostUser = os.userInfo().username; } catch (err) { hostUser = `uid-${typeof process.getuid === 'function' ? process.getuid() : '?'}`; }
-  safe.add(hostUser);
 
   const probeReaders = (file) => {
     if (!readers) return 'not checked';
@@ -174,15 +191,13 @@ function collect(options = {}) {
   const sources = [];
   const describe = (name, file) => {
     const src = { name, file, status: 'ok', vars: new Map(), extra: null };
-    safe.add(name); safe.add(file);
     try {
       const lst = fs.lstatSync(file);
-      if (lst.isSymbolicLink()) { src.symlink = fs.readlinkSync(file); safe.add(src.symlink); }
+      if (lst.isSymbolicLink()) { src.symlink = fs.readlinkSync(file); }
       const st = fs.statSync(file);
       src.mode = (st.mode & 0o777).toString(8);
       src.owner = ownerOf(st);
       src.modified = st.mtime.toISOString().slice(0, 10);
-      safe.add(src.owner); safe.add(src.modified);
       if (!st.isFile()) { src.status = 'skipped (not a regular file)'; return src; }
       if (st.size > MAX_BYTES) { src.status = 'too large'; partial = true; return src; }
       src.readers = probeReaders(file);
@@ -202,7 +217,15 @@ function collect(options = {}) {
     }
   };
   const keepCredentialVars = (src, map) => {
-    for (const [k, v] of map) if (CREDENTIAL_NAME.test(k)) src.vars.set(k, { group: k, value: v });
+    for (const [k, v] of map) {
+      if (!CREDENTIAL_NAME.test(k)) continue;
+      if (VAR_PRINTABLE.test(k)) { src.vars.set(k, { group: k, value: v }); continue; }
+      // Counted, never printed. The name itself is not guarded: it shares its
+      // uppercase stem (e.g. API_KEY_) with printable names and would withhold
+      // every report; it is kept out of the output structurally instead.
+      src.unprintable = (src.unprintable || 0) + 1;
+      guard(v);
+    }
   };
 
   // App-dir .env files.
@@ -243,9 +266,10 @@ function collect(options = {}) {
       base.status = `unreadable (${errLabel(err)})`; partial = true; sources.push(base); continue;
     }
     apps.forEach((app, i) => {
-      const appName = app && typeof app.name === 'string' && /^[A-Za-z0-9_.-]{1,64}$/.test(app.name) ? app.name : `app${i + 1}`;
+      const rawName = app && typeof app.name === 'string' ? app.name : '';
+      const appName = NAME_PRINTABLE.test(rawName) ? rawName : `app${i + 1}`;
+      if (appName !== rawName) guard(rawName);
       const src = { ...base, name: `${f} [${appName}]`, vars: new Map() };
-      safe.add(src.name); safe.add(appName);
       keepCredentialVars(src, pm2AppVars(app));
       sources.push(src);
     });
@@ -259,9 +283,17 @@ function collect(options = {}) {
     if (text !== null) {
       try {
         const parsed = parseAwsText(text);
-        src.extra = { profiles: parsed.profiles.filter((p) => /^[A-Za-z0-9_.-]{1,64}$/.test(p)) };
-        src.extra.profiles.forEach((p) => safe.add(p));
-        src.vars = parsed.vars;
+        const shown = new Map();
+        parsed.profiles.forEach((p, i) => {
+          if (!shown.has(p)) shown.set(p, NAME_PRINTABLE.test(p) ? p : `profile${i + 1}`);
+          if (shown.get(p) !== p) guard(p);
+        });
+        parsed.orphans.forEach(guard);
+        src.extra = { profiles: [...new Set(shown.values())] };
+        for (const [display, entry] of parsed.vars) {
+          const name = entry.profile === 'default' ? display : `${entry.group}[${shown.get(entry.profile)}]`;
+          src.vars.set(name, entry);
+        }
       } catch (err) { src.status = `unreadable (${errLabel(err)})`; partial = true; }
     }
     sources.push(src);
@@ -274,8 +306,8 @@ function collect(options = {}) {
   const groupMap = (g) => { if (!labelsByGroup.has(g)) labelsByGroup.set(g, new Map()); return labelsByGroup.get(g); };
   for (const s of sources) {
     for (const [display, { group, value }] of s.vars) {
+      guard(value);
       if (isPlaceholder(value)) continue;
-      guardValues.add(value);
       if ((s.live && !group.startsWith('AWS_')) || (s.liveAws && display === group)) {
         const m = groupMap(group);
         const d = digest(value);
@@ -295,10 +327,8 @@ function collect(options = {}) {
         label = m.get(d);
       }
       s.labels[display] = label;
-      safe.add(display);
     }
     delete s.vars; // values and digests go no further
-    safe.add(s.status);
   }
 
   // Never-opened paths: existence, mode, owner.
@@ -308,7 +338,6 @@ function collect(options = {}) {
     try {
       const st = fs.lstatSync(file);
       const entry = { name: `~/${rel}`, mode: (st.mode & 0o777).toString(8), owner: ownerOf(st).split(':')[0] };
-      safe.add(entry.name); safe.add(entry.owner);
       notOpened.push(entry);
     } catch (err) { /* absent: nothing to report */ }
   };
@@ -329,7 +358,6 @@ function collect(options = {}) {
       const sudo = /NOPASSWD:\s*ALL/.test(out) ? 'NOPASSWD:ALL'
         : /\(ALL(\s*:\s*ALL)?\)\s*ALL/.test(out) ? 'ALL'
           : /may run the following/.test(out) ? 'limited' : 'none';
-      groups.forEach((g) => safe.add(g));
       hostFacts.push({ user: u, groups: groups.length ? groups : ['unknown'], sudo });
     }
   }
@@ -351,17 +379,16 @@ function collect(options = {}) {
     appDir,
     home,
     sources: sources.map((s) => ({
-      name: s.name, file: s.file, mode: s.mode || null, owner: s.owner || null, modified: s.modified || null,
+      name: s.name, mode: s.mode || null, owner: s.owner || null, modified: s.modified || null,
       symlink: s.symlink || null, readers: s.readers || null, status: s.status,
-      profiles: s.extra ? s.extra.profiles : undefined, labels: s.labels,
+      profiles: s.extra ? s.extra.profiles : undefined, labels: s.labels, unprintableNames: s.unprintable || 0,
     })),
     notOpened,
     summary,
     hostFacts: readers && isRoot ? hostFacts : null,
     exitCode: partial ? 2 : 0,
   };
-  safe.add(result.run);
-  return { result, guardValues, safe };
+  return { result, guardValues };
 }
 
 /** Public API: the report object only (no values, no digests). */
@@ -381,7 +408,9 @@ function formatText(r) {
     const tail = s.status === 'ok' ? `  readers: ${s.readers}` : `  ${s.status}`;
     lines.push(`${s.name.padEnd(36)}${meta}${link}${tail}`);
     const labelText = Object.keys(s.labels).sort().map((k) => `${k}=${s.labels[k]}`).join(' ');
-    const body = (s.profiles ? `profiles: ${s.profiles.join(' ')}   ` : '') + labelText;
+    const n = s.unprintableNames;
+    const extraNote = n ? `${labelText ? '  ' : ''}(+${n} unprintable name${n > 1 ? 's' : ''})` : '';
+    const body = (s.profiles ? `profiles: ${s.profiles.join(' ')}   ` : '') + labelText + extraNote;
     if (!body) continue;
     if (!s.profiles && seen.has(body)) lines.push(`  (same labels as ${seen.get(body)})`);
     else { lines.push(`  ${body}`); if (!s.profiles) seen.set(body, s.name); }
@@ -404,19 +433,47 @@ function formatText(r) {
   return `${lines.join('\n')}\n`;
 }
 
-/** True when any GUARD_MIN-character piece of any value appears in text. */
-function leaks(text, values, safe) {
-  let scan = text;
-  // Remove known non-secret strings (paths, names, dates) so a value that
-  // happens to share them cannot trip the guard; the report is unchanged.
-  for (const s of [...safe].filter((x) => typeof x === 'string' && x.length >= GUARD_MIN).sort((a, b) => b.length - a.length)) {
-    scan = scan.split(s).join(' ');
+const codePoints = (x) => Array.from(x);
+
+/** True when short value v appears in text with no letter, digit or underscore beside it. */
+function occursStandalone(text, v) {
+  const cps = codePoints(v);
+  const needLeft = WORD_CHAR.test(cps[0]);
+  const needRight = WORD_CHAR.test(cps[cps.length - 1]);
+  let from = 0;
+  for (;;) {
+    const i = text.indexOf(v, from);
+    if (i < 0) return false;
+    const before = codePoints(text.slice(Math.max(0, i - 2), i)).pop() || '';
+    const after = codePoints(text.slice(i + v.length, i + v.length + 2))[0] || '';
+    const leftOk = !needLeft || !before || !WORD_CHAR.test(before);
+    const rightOk = !needRight || !after || !WORD_CHAR.test(after);
+    if (leftOk && rightOk) return true;
+    from = i + 1;
   }
-  if (/\b[0-9a-f]{64}\b/i.test(scan)) return true;
-  for (const v of values) {
-    if (v.length < GUARD_MIN) continue;
-    for (let i = 0; i + GUARD_MIN <= v.length; i += 1) {
-      if (scan.includes(v.slice(i, i + GUARD_MIN))) return true;
+}
+
+/**
+ * Fail-closed redaction guard over the exact text to be written. True on any
+ * hit; nothing is exempted. See the header for the matching rules.
+ */
+function leaks(text, values, hooks = {}) {
+  if (hooks.inGuard) hooks.inGuard();
+  if (/\b[0-9a-f]{64}\b/i.test(text)) return true;
+  const forms = [[text, (v) => v], [text.normalize('NFC'), (v) => v.normalize('NFC')], [text.normalize('NFD'), (v) => v.normalize('NFD')]];
+  for (const raw of values) {
+    for (const [t, norm] of forms) {
+      const v = norm(raw);
+      if (!v) continue;
+      const cps = codePoints(v);
+      if (cps.length < GUARD_MIN) {
+        if (occursStandalone(t, v)) return true;
+        continue;
+      }
+      if (t.includes(v)) return true;
+      for (let i = 0; i + GUARD_MIN <= cps.length; i += 1) {
+        if (t.includes(cps.slice(i, i + GUARD_MIN).join(''))) return true;
+      }
     }
   }
   return false;
@@ -448,10 +505,10 @@ function run(argv, extra = {}) {
   try {
     const opts = parseArgs(argv);
     if (!opts) return { code: 1, stdout: '', stderr: `${USAGE}\n` };
-    const { result, guardValues, safe } = collect({ ...opts, ...extra });
+    const { result, guardValues } = collect({ ...opts, ...extra });
     let text = opts.json ? `${JSON.stringify(result, null, 2)}\n` : formatText(result);
     if (extra.hooks && extra.hooks.beforeGuard) text = extra.hooks.beforeGuard(text);
-    if (leaks(text, guardValues, safe)) return { code: 3, stdout: '', stderr: `${GUARD_MESSAGE}\n` };
+    if (leaks(text, guardValues, extra.hooks || {})) return { code: 3, stdout: '', stderr: `${GUARD_MESSAGE}\n` };
     return { code: result.exitCode, stdout: text, stderr: '' };
   } catch (err) {
     return { code: 1, stdout: '', stderr: `ERROR ${errLabel(err)}\n` };
@@ -465,4 +522,4 @@ if (require.main === module) {
   process.exitCode = out.code;
 }
 
-module.exports = { run, inventory, formatText, isPlaceholder, parseEnvText, parseAwsText, errLabel, leaks, GUARD_MESSAGE };
+module.exports = { run, inventory, formatText, isPlaceholder, parseEnvText, parseAwsText, errLabel, leaks, occursStandalone, GUARD_MESSAGE };

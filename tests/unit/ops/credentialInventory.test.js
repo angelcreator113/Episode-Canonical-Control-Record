@@ -298,6 +298,8 @@ describe('S-1 credential inventory', () => {
     };
     walk(r, '');
     expect(bad).toEqual([]);
+    // JSON sources carry relative labels only, never an absolute file path.
+    expect(r.sources.filter((s) => 'file' in s || path.isAbsolute(s.name)).length).toBe(0);
   });
 
   test('T15 source hygiene: no console, environment, network modules or extra commands; no committed fixtures', () => {
@@ -305,6 +307,8 @@ describe('S-1 credential inventory', () => {
     expect(src.includes('console.')).toBe(false);
     expect(src.includes('process.env')).toBe(false);
     expect(/require\('(net|http|https|dns|tls|dgram)'\)/.test(src)).toBe(false);
+    // The guard scans the exact text: no exemption list, no scrubbing of the scan copy.
+    expect(/FIXED_TEXT|safe\.add|new Set\(\[appDir|\.split\(s\)\.join/.test(src)).toBe(false);
     const commands = [...src.matchAll(/spawn\('([^']+)'/g)].map((m) => m[1]);
     expect([...new Set(commands)].sort()).toEqual(['id', 'sudo']);
     const tracked = childProcess.execFileSync('git', ['ls-files', 'tests'], { encoding: 'utf8', cwd: path.resolve(__dirname, '../../..') });
@@ -312,5 +316,140 @@ describe('S-1 credential inventory', () => {
     const self = fs.readFileSync(__filename, 'utf8');
     const highEntropy = (self.match(/[A-Za-z0-9_-]{24,}/g) || []).filter((w) => /[a-z]/.test(w) && /[A-Z]/.test(w) && /[0-9]/.test(w));
     expect(highEntropy).toEqual([]);
+  });
+});
+
+describe('S-1 output guard: fail closed, no exemptions', () => {
+  const hex = (n) => crypto.randomBytes(n).toString('hex');
+  const alnum = () => crypto.randomBytes(24).toString('base64url').replace(/[-_]/g, '');
+
+  /** A minimal synthetic layout: one app directory and one home directory. */
+  function mini({ dirName = 'app', env = '', files = {}, homeFiles = {} } = {}) {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'credinv-'));
+    roots.push(root);
+    const app = path.join(root, dirName);
+    const home = path.join(root, 'home');
+    fs.mkdirSync(app, { recursive: true });
+    fs.mkdirSync(home, { recursive: true });
+    put(path.join(app, '.env'), env);
+    for (const [rel, text] of Object.entries(files)) put(path.join(app, rel), text);
+    for (const [rel, text] of Object.entries(homeFiles)) put(path.join(home, rel), text);
+    return { root, app, home };
+  }
+  const runMini = (m, args = [], extra = {}) => inv.run(['--app-dir', m.app, '--home', m.home, '--no-readers', ...args],
+    { isRoot: false, ...extra });
+  const withheld = (out) => out.code === 3 && out.stdout === '' && out.stderr === `${inv.GUARD_MESSAGE}\n`;
+
+  test.each([
+    ['a path component', () => { const d = `zpath-${hex(4)}`; return mini({ dirName: d, env: `DB_PASSWORD=${d}\n` }); }],
+    ['a file name', () => mini({ env: 'DB_PASSWORD=.env.bak\n', files: { '.env.bak': 'PORT=1\n' } })],
+    ['a variable name', () => mini({ env: `ANTHROPIC_API_KEY=${rnd('')}\nDB_PASSWORD=ANTHROPIC_API_KEY\n` })],
+    ['fixed report wording', () => mini({ env: 'DB_PASSWORD=readers\n' })],
+    ['a pm2 app name', () => mini({ homeFiles: { '.pm2/dump.pm2': JSON.stringify([{ name: 'svc-alpha-01', ANTHROPIC_API_KEY: 'svc-alpha-01' }]) } })],
+  ])('T16 a value exactly matching %s is withheld (text and JSON)', (_, make) => {
+    const m = make();
+    expect(withheld(runMini(m))).toBe(true);
+    expect(withheld(runMini(m, ['--json']))).toBe(true);
+  });
+
+  test('T17 a shared 6-character piece is withheld at start, middle and end; 5 characters is not', () => {
+    // "holder" is printed in the legend ("placeholder/empty"); hex never contains "h" or "/".
+    for (const v of [`holder${hex(10)}`, `${hex(10)}holder${hex(10)}`, `${hex(10)}holder`]) {
+      expect(withheld(runMini(mini({ env: `DB_PASSWORD=${v}\n` })))).toBe(true);
+    }
+    const five = runMini(mini({ env: `DB_PASSWORD=${hex(10)}older${hex(10)}\n` }));
+    expect(five.code).toBe(0);
+  });
+
+  test('T18 short values: standalone tokens are withheld, embedded ones are a documented miss', () => {
+    // 1 character: the printed label "=L".
+    expect(withheld(runMini(mini({ env: `ANTHROPIC_API_KEY=${rnd('')}\nDB_PASSWORD=L\n` })))).toBe(true);
+    // 3 characters: a path segment "/q7z ".
+    expect(withheld(runMini(mini({ dirName: 'q7z', env: 'DB_PASSWORD=q7z\n' })))).toBe(true);
+    // Embedded only ("readers", "sources"): not detected, by design.
+    expect(runMini(mini({ env: 'DB_PASSWORD=ers\n' })).code).toBe(0);
+    // 5 characters, never printed.
+    expect(runMini(mini({ env: 'DB_PASSWORD=a1b2c\n' })).code).toBe(0);
+    // Punctuation inside the value, and a punctuation edge (fails closed on that side).
+    expect(withheld(runMini(mini({ dirName: 'q-7', env: 'DB_PASSWORD=q-7\n' })))).toBe(true);
+    expect(withheld(runMini(mini({ dirName: 'x-ab', env: 'DB_PASSWORD=-ab\n' })))).toBe(true);
+    // Punctuation-only values match anywhere.
+    expect(withheld(runMini(mini({ env: 'DB_PASSWORD===\n' })))).toBe(true);
+    expect(withheld(runMini(mini({ env: 'DB_PASSWORD=:\n' })))).toBe(true);
+    // Unicode boundaries, directly against the guard.
+    const L = (t, v) => inv.leaks(t, new Set([v]));
+    expect(L('dir=\u00ab\u00e91\u00bb end', '\u00e91')).toBe(true); // guillemets are punctuation
+    expect(L('dir=\u0436\u00e91 end', '\u00e91')).toBe(false); // a letter before (Cyrillic, no decomposition): embedded
+    expect(L('dir=\u00f1\u00e91 end', '\u00e91')).toBe(true); // an accented letter decomposes to a mark under NFD: fails closed
+    expect(L('x \u00e91\u0663 y', '\u00e91')).toBe(false); // an Arabic-Indic digit after: embedded
+    expect(L('ab\u0301 x', 'ab')).toBe(true); // a combining mark beside the match fails closed
+    expect(L('path/caf\u00e9 x', 'cafe\u0301')).toBe(true); // NFD value, NFC text
+    expect(L('x \u{1D49C}b y', '\u{1D49C}b')).toBe(true); // astral letter, standalone
+    expect(L('x a\u{1D49C}b y', '\u{1D49C}b')).toBe(false); // astral letter, embedded
+    // End to end: a decomposed value against a composed directory name.
+    expect(withheld(runMini(mini({ dirName: '\u00e91', env: 'DB_PASSWORD=e\u03011\n' })))).toBe(true);
+  });
+
+  test('T19 malformed input: no crash, correct status, no leak', () => {
+    const v = {
+      a: rnd(''), j: rnd(''), d: rnd(''), o: rnd(''), r: rnd(''), k0: rnd('AKIA'), k1: rnd('AKIA'), k2: rnd(''),
+      k3: rnd('AKIA'), n: alnum(), a2: rnd(''), big: crypto.randomBytes(75000).toString('base64url'),
+    };
+    const env = Buffer.concat([
+      Buffer.from(`ANTHROPIC_API_KEY=${v.a}\u0000\u0001bin\r\nJWT_SECRET=${v.j}\r\nDB_PASSWORD="${v.d}\n`),
+      Buffer.from(`OPENAI_API_KEY=first-value-1\nOPENAI_API_KEY=${v.o}\nthis line has no equals\nFAL_KEY=${v.big}\n`),
+      Buffer.from([0xff, 0xfe, 0x0a]), Buffer.from(`REPLICATE_API_TOKEN=${v.r}\n`),
+    ]);
+    const nested = JSON.parse(`${'['.repeat(2000)}${']'.repeat(2000)}`);
+    const m = mini({
+      homeFiles: {
+        '.aws/credentials': `aws_access_key_id = ${v.k0}\n[prof ile!@#]\naws_access_key_id = ${v.k1}\n[${'p'.repeat(80)}]\n`
+          + `aws_secret_access_key = ${v.k2}\n[default]\naws_access_key_id = ${v.k3}\n`,
+        '.pm2/dump.pm2': JSON.stringify({ name: 'x', ANTHROPIC_API_KEY: v.a }),
+        '.pm2/dump.pm2.bak': JSON.stringify([{ name: v.n, ANTHROPIC_API_KEY: v.a2 }, nested]),
+      },
+    });
+    fs.writeFileSync(path.join(m.app, '.env'), env);
+    const text = runMini(m);
+    const json = runMini(m, ['--json']);
+    expect(text.code).toBe(2);
+    expect(text.stdout).toMatch(/dump\.pm2\s+\d{3} \S+ \d{4}-\d{2}-\d{2}\s+unreadable \(TypeError\)/);
+    expect(text.stdout).toContain('dump.pm2.bak [app1]');
+    expect(text.stdout).toContain('profiles: profile1 default');
+    const secrets = Object.entries(v).map(([k, x]) => (k === 'big' ? x.slice(0, 3000) : x));
+    expect(leakCount(text.stdout + text.stderr, secrets)).toBe(0);
+    expect(leakCount(json.stdout + json.stderr, secrets)).toBe(0);
+    expect(json.code).toBe(2);
+  });
+
+  test('T20 template references are cut out; their literal pieces stay guarded', () => {
+    expect(runMini(mini({ env: `ANTHROPIC_API_KEY=${rnd('')}\nDB_PASSWORD=\${DB_PASSWORD}\n` })).code).toBe(0);
+    const lit = rnd('');
+    const m = mini({ env: `JWT_SECRET=\${JWT_SECRET}${lit}\n` });
+    expect(runMini(m).code).toBe(0);
+    expect(withheld(runMini(m, [], { hooks: { beforeGuard: (t) => `${t}${lit}\n` } }))).toBe(true);
+    expect(withheld(runMini(mini({ env: 'DATABASE_URL=postgresql://${DB_USER}@readers-host/db\n' })))).toBe(true);
+  });
+
+  test('T21 variable names that could carry a secret are counted, never printed', () => {
+    const name = `API_KEY_${alnum()}`;
+    const val = rnd('');
+    const m = mini({ env: `${name}=${val}\nANTHROPIC_API_KEY=${rnd('')}\n` });
+    const out = runMini(m);
+    expect(out.code).toBe(0);
+    expect(out.stdout).toContain('(+1 unprintable name)');
+    expect(leakCount(out.stdout, [name.slice(8), val])).toBe(0);
+    const r = inv.inventory({ appDir: m.app, home: m.home, readers: false, isRoot: false });
+    expect(r.sources[0].unprintableNames).toBe(1);
+    expect(Object.keys(r.sources[0].labels)).toEqual(['ANTHROPIC_API_KEY']);
+  });
+
+  test('T22 an exception in formatting or in the guard prints nothing to stdout', () => {
+    const m = mini({ env: `ANTHROPIC_API_KEY=${rnd('')}\n` });
+    const secret = rnd('');
+    const inGuard = runMini(m, [], { hooks: { inGuard: () => { throw new Error(secret); } } });
+    expect(inGuard).toEqual({ code: 1, stdout: '', stderr: 'ERROR Error\n' });
+    const inFormat = runMini(m, [], { hooks: { beforeGuard: () => { throw new TypeError(secret); } } });
+    expect(inFormat).toEqual({ code: 1, stdout: '', stderr: 'ERROR TypeError\n' });
   });
 });
