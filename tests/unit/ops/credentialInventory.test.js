@@ -22,7 +22,15 @@ const dns = require('dns');
 const TOOL = path.resolve(__dirname, '../../../scripts/ops/credential-inventory.js');
 const inv = require(TOOL);
 
-const rnd = (prefix) => prefix + crypto.randomBytes(24).toString('base64url');
+// Synthetic secret-like values. About 1 in 1,000 random strings contains "xxx", "here" or "your"
+// and would be labelled P by the tool's shape heuristic, making label assertions intermittent, so
+// those are redrawn: fixtures must look like real values.
+const rnd = (prefix) => {
+  for (;;) {
+    const v = prefix + crypto.randomBytes(24).toString('base64url');
+    if (!inv.isPlaceholder(v)) return v;
+  }
+};
 const roots = [];
 
 function put(file, text) {
