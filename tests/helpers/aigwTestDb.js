@@ -75,49 +75,64 @@ async function createAigwTestDb({ poolMax = 10 } = {}) {
   };
   const server = new Client({ connectionString: ADMIN_URL });
   await server.connect();
-  await server.query(`CREATE DATABASE ${ident(dbName)}`);
-
-  const su = new Client({ connectionString: urlFor(dbName) });
-  await su.connect();
-  // Like production's migration login (`postgres` on RDS): not a superuser,
-  // CREATEROLE, and the owner of the database (so pg_database_owner, which
-  // owns schema public).
-  await su.query(`CREATE ROLE ${ident(roles.migrator)} LOGIN NOSUPERUSER NOCREATEDB CREATEROLE NOINHERIT PASSWORD '${password}'`);
-  await su.query(`ALTER DATABASE ${ident(dbName)} OWNER TO ${ident(roles.migrator)}`);
-
-  const sequelize = new Sequelize(urlFor(dbName, roles.migrator, password), { logging: false, pool: { max: 2 } });
-  await migration.up(sequelize.getQueryInterface(), Sequelize);
-
-  const migrator = new Client({ connectionString: urlFor(dbName, roles.migrator, password) });
-  await migrator.connect();
-  for (const kind of [...KINDS, 'app']) {
-    await su.query(`CREATE ROLE ${ident(roles[kind])} LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT PASSWORD '${password}'`);
-    if (kind === 'app') {
-      await migrator.query(`GRANT CONNECT ON DATABASE ${ident(dbName)} TO ${ident(roles.app)}`);
-      await migrator.query(`GRANT USAGE ON SCHEMA public TO ${ident(roles.app)}`);
-    } else {
-      // granted by the owning migration login, as the role script is run
-      for (const sql of grants.grantStatements(kind, roles[kind], dbName)) await migrator.query(sql);
-    }
-  }
-
+  let su = null;
+  let sequelize = null;
+  let migrator = null;
   const pools = {};
-  for (const kind of [...KINDS, 'app']) {
-    pools[kind] = new Pool({ connectionString: urlFor(dbName, roles[kind], password), max: poolMax });
-    pools[kind].on('error', (err) => console.error(`[aigw test] pool ${kind}: ${err.message}`));
-  }
 
   async function close() {
     await Promise.all(Object.values(pools).map((p) => p.end().catch((err) => console.error(`[aigw test] pool end: ${err.message}`))));
-    await migrator.end().catch((err) => console.error(`[aigw test] migrator end: ${err.message}`));
-    await su.end().catch((err) => console.error(`[aigw test] su end: ${err.message}`));
-    await sequelize.close().catch((err) => console.error(`[aigw test] sequelize close: ${err.message}`));
+    if (migrator) await migrator.end().catch((err) => console.error(`[aigw test] migrator end: ${err.message}`));
+    if (su) await su.end().catch((err) => console.error(`[aigw test] su end: ${err.message}`));
+    if (sequelize) await sequelize.close().catch((err) => console.error(`[aigw test] sequelize close: ${err.message}`));
     await server.query('SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = $1 AND pid <> pg_backend_pid()', [dbName]);
     await server.query(`DROP DATABASE IF EXISTS ${ident(dbName)}`);
     for (const r of Object.values(roles)) {
       await server.query(`DROP ROLE IF EXISTS ${ident(r)}`).catch((err) => console.error(`[aigw test] could not drop ${r}: ${err.message}`));
     }
     await server.end();
+  }
+
+  try {
+    await server.query(`CREATE DATABASE ${ident(dbName)}`);
+    su = new Client({ connectionString: urlFor(dbName) });
+    await su.connect();
+    // Like production's migration login (`postgres` on RDS): not a superuser,
+    // CREATEROLE, and the owner of the database and of schema public.
+    await su.query(`CREATE ROLE ${ident(roles.migrator)} LOGIN NOSUPERUSER NOCREATEDB CREATEROLE NOINHERIT PASSWORD '${password}'`);
+    await su.query(`ALTER DATABASE ${ident(dbName)} OWNER TO ${ident(roles.migrator)}`);
+    // Schema public's owner depends on the server's template (pg_database_owner
+    // on a fresh PG15+ initdb; the CI server's is not). Set it explicitly, as
+    // tests/integration/deployMigrationTrustedPath.integration.test.js does, so
+    // the migration login can create in it and grant USAGE on it.
+    await su.query(`ALTER SCHEMA public OWNER TO ${ident(roles.migrator)}`);
+    await su.query('REVOKE CREATE ON SCHEMA public FROM PUBLIC');
+
+    sequelize = new Sequelize(urlFor(dbName, roles.migrator, password), { logging: false, pool: { max: 2 } });
+    await migration.up(sequelize.getQueryInterface(), Sequelize);
+
+    migrator = new Client({ connectionString: urlFor(dbName, roles.migrator, password) });
+    await migrator.connect();
+    for (const kind of [...KINDS, 'app']) {
+      await su.query(`CREATE ROLE ${ident(roles[kind])} LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT PASSWORD '${password}'`);
+      if (kind === 'app') {
+        await migrator.query(`GRANT CONNECT ON DATABASE ${ident(dbName)} TO ${ident(roles.app)}`);
+        await migrator.query(`GRANT USAGE ON SCHEMA public TO ${ident(roles.app)}`);
+      } else {
+        // granted by the owning migration login, as the role script is run
+        for (const sql of grants.grantStatements(kind, roles[kind], dbName)) await migrator.query(sql);
+      }
+    }
+
+    for (const kind of [...KINDS, 'app']) {
+      pools[kind] = new Pool({ connectionString: urlFor(dbName, roles[kind], password), max: poolMax });
+      pools[kind].on('error', (err) => console.error(`[aigw test] pool ${kind}: ${err.message}`));
+    }
+  } catch (err) {
+    // a setup that fails part-way still removes its database and roles
+    console.error(`[aigw test] setup failed, cleaning up ${dbName}: ${err.message}`);
+    await close().catch((e) => console.error(`[aigw test] cleanup after failed setup: ${e.message}`));
+    throw err;
   }
 
   return {
