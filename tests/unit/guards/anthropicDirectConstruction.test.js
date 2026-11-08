@@ -30,6 +30,9 @@ const { scanSource, inventory, EXEMPT } = require('../../../scripts/aigw/anthrop
 
 const ROOT = path.resolve(__dirname, '..', '..', '..');
 const BASELINE_FILE = path.join(__dirname, 'anthropicDirectConstruction.baseline.json');
+// The only place the provider host may be named: the gateway's own operation catalogue.
+const HOST_ALLOWED_DIR = 'src/aiGateway/';
+const outsideGateway = (refs) => Object.fromEntries(Object.entries(refs).filter(([f]) => !f.startsWith(HOST_ALLOWED_DIR)));
 
 // Measured at 46c613d7. These only ever go down; never raise them.
 const CEILING = Object.freeze({ constructions: 146, constructionFiles: 120, sdkImports: 140, sdkImportFiles: 120 });
@@ -77,7 +80,7 @@ describe('direct Anthropic SDK use is ratcheted toward the client factory', () =
   });
 
   test('no string names the provider host outside src/aiGateway (no raw HTTP around the SDK)', () => {
-    expect(inv.hostRefs).toEqual({});
+    expect(outsideGateway(inv.hostRefs)).toEqual({});
   });
 
   test('only the factory, aiCostTracker and aiResponseCache are exempt, and all three exist', () => {
@@ -160,10 +163,10 @@ describe('the detector', () => {
     expect(scan(src)).toMatchObject({ constructions: 0, sdkImports: 0, hostRefs: 0 });
   });
 
-  test('reports the provider host outside src/aiGateway only, with line numbers', () => {
+  test('reports the provider host with line numbers; the guard exempts only src/aiGateway', () => {
     const host = ['api', 'anthropic', 'com'].join('.');
     const src = `const a = 1;\naxios.post('https://${host}/v1/messages', {});`;
     expect(scan(src, 'src/services/x.js')).toMatchObject({ hostRefs: 1, lines: { hostRefs: [2] } });
-    expect(scan(src, 'src/aiGateway/operationCatalog.js').hostRefs).toBe(0);
+    expect(outsideGateway({ 'src/aiGateway/operationCatalog.js': 1, 'src/services/x.js': 1 })).toEqual({ 'src/services/x.js': 1 });
   });
 });

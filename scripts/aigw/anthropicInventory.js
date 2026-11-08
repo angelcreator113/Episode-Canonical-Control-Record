@@ -26,7 +26,9 @@
  * and an SDK constructor passed through function arguments.
  *
  * Also reported: string literals naming the provider host api.anthropic.com
- * outside src/aiGateway (a raw HTTP path around the SDK).
+ * (a raw HTTP path around the SDK). The scanner reports them in every file;
+ * the guard test exempts only the gateway's own operation catalogue
+ * directory, so this file does not need to name it.
  *
  * Usage: node scripts/aigw/anthropicInventory.js [--json]
  * The guard tests/unit/guards/anthropicDirectConstruction.test.js runs the
@@ -53,8 +55,6 @@ const EXEMPT = Object.freeze([
   'src/services/aiResponseCache.js', // wraps the same prototype method (Redis cache)
 ]);
 
-/** Where the provider host may be named: the gateway's own operation catalogue. */
-const HOST_ALLOWED_DIR = 'src/aiGateway/';
 const HOST = ['api', 'anthropic', 'com'].join('.'); // built, so this file does not report itself
 const SDK_PREFIX = '@anthropic-ai/';
 
@@ -185,11 +185,9 @@ function scanSource(source, file = '') {
       add('constructions', n); // the module export builds a client when called without `new`
     }
 
-    if (!file.startsWith(HOST_ALLOWED_DIR)) {
-      const s = n.type === 'Literal' && typeof n.value === 'string' ? n.value
-        : (n.type === 'TemplateElement' ? n.value.cooked : null);
-      if (s && s.includes(HOST)) add('hostRefs', n);
-    }
+    const s = n.type === 'Literal' && typeof n.value === 'string' ? n.value
+      : (n.type === 'TemplateElement' ? n.value.cooked : null);
+    if (s && s.includes(HOST)) add('hostRefs', n);
   });
   return result;
 }
@@ -239,7 +237,7 @@ if (require.main === module) {
   } else {
     process.stdout.write(`Direct Anthropic constructions: ${inv.totals.constructions} in ${inv.totals.constructionFiles} files\n`);
     process.stdout.write(`Direct SDK imports: ${inv.totals.sdkImports} in ${inv.totals.sdkImportFiles} files\n`);
-    process.stdout.write(`Raw ${HOST} references outside ${HOST_ALLOWED_DIR}: ${inv.totals.hostRefs}\n`);
+    process.stdout.write(`String literals naming ${HOST}: ${inv.totals.hostRefs} (${Object.keys(inv.hostRefs).join(', ') || 'none'})\n`);
     process.stdout.write(`Exempt SDK infrastructure present: ${inv.exemptFound.join(', ') || '(none)'}\n`);
     if (inv.parseErrors.length) {
       process.stdout.write(`Parse errors (${inv.parseErrors.length}):\n${inv.parseErrors.map((e) => `  ${e.file}: ${e.message}`).join('\n')}\n`);

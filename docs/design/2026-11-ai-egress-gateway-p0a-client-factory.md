@@ -42,7 +42,20 @@ Baseline at `46c613d7`: **146 constructions in 120 files; 140 SDK imports in 120
 
 Limits: `require()` with a computed name, code under `tests/` or `node_modules/`, and a constructor passed as a function argument are not detected.
 
+The scanner itself never names the gateway directory. The G1 purity test (`tests/unit/aiGateway/inert.test.js`) fails any scanned file outside `src/aiGateway/` that mentions it, so the host-string exemption for the gateway's own operation catalogue lives in the guard test, under `tests/`.
+
+The baseline can only be raised by a reviewed change. Raising it means editing both the baseline file and the frozen ceilings in the guard test, so the increase shows in the PR diff. Nothing technical stops a PR from making that edit; review does.
+
 Regenerate the counts with `node scripts/aigw/anthropicInventory.js --json`. A migration PR lowers the baseline in the same commit.
+
+## Finding retained for G4: usage rows count calls, not network attempts
+
+`aiCostTracker` patches `Messages.prototype.create`, so it writes **one `ai_usage_logs` row per `create()` call**. The SDK retries inside that call. With the default `maxRetries: 2`, one call can send up to 3 HTTP requests (a test in `tests/unit/services/anthropicClient.test.js` shows a 529 retried twice producing one row). App-level retry loops add further calls on top.
+
+Gateway accounting must **not** assume that one tracked invocation equals one network attempt. In G4:
+- each network attempt needs its own permit;
+- the factory sets `maxRetries: 0` in gateway mode, so retries become explicit, separately permitted calls;
+- reconciliation between `ai_usage_logs` and the gateway ledger has to expect today's rows to under-count attempts.
 
 ## Migration slices (each its own PR, behaviour-preserving, `[skip-automerge]`)
 
