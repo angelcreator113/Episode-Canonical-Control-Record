@@ -268,7 +268,7 @@ function collect(options = {}) {
     try {
       const lst = fs.lstatSync(file);
       const meta = (st) => {
-        src.mode = (st.mode & 0o777).toString(8);
+        src.mode = (st.mode & 0o777).toString(8).padStart(3, '0');
         src.owner = ownerOf(st);
         src.modified = st.mtime.toISOString().slice(0, 10);
       };
@@ -430,7 +430,7 @@ function collect(options = {}) {
     const file = path.join(home, rel);
     try {
       const st = fs.lstatSync(file);
-      const entry = { name: `~/${rel}`, mode: (st.mode & 0o777).toString(8), owner: ownerOf(st).split(':')[0] };
+      const entry = { name: `~/${rel}`, mode: (st.mode & 0o777).toString(8).padStart(3, '0'), owner: ownerOf(st).split(':')[0] };
       notOpened.push(entry);
     } catch (err) { /* absent: nothing to report */ }
   };
