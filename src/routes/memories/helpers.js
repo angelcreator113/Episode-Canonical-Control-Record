@@ -5,9 +5,9 @@
  * Extracted during the route split to reduce merge conflicts.
  */
 
-const Anthropic = require('@anthropic-ai/sdk');
+const { createAnthropicClient } = require('../../services/anthropicClient');
 require('dotenv').config({ override: !process.env.ANTHROPIC_API_KEY });
-const _anthropic = new Anthropic();
+const _anthropic = createAnthropicClient();
 
 const db = require('../../models');
 const { storyBrief } = require('../../services/characterStoryBrief');

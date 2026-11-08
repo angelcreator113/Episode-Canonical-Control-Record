@@ -1,7 +1,7 @@
 'use strict';
 const express = require('express');
 const router = express.Router();
-const Anthropic = require('@anthropic-ai/sdk');
+const { createAnthropicClient } = require('../../services/anthropicClient');
 const rateLimit = require('express-rate-limit');
 
 // Auth middleware
@@ -24,7 +24,7 @@ try {
 } catch { _buildArcContext = null; _buildArcContextPromptSection = null; _updateArcTracking = null; }
 
 require('dotenv').config({ override: !process.env.ANTHROPIC_API_KEY });
-const anthropic = new Anthropic();
+const anthropic = createAnthropicClient();
 
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -932,8 +932,8 @@ async function executeAssistantAction(action, params = {}, context = {}) {
           },
         };
 
-        const Anthropic = require('@anthropic-ai/sdk');
-        const seedAnthro = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+        const { createAnthropicClient } = require('../../services/anthropicClient');
+        const seedAnthro = createAnthropicClient({ apiKey: process.env.ANTHROPIC_API_KEY });
 
         for (const w of worldTargets) {
           const cfg = WORLD_CONFIGS[w];
@@ -1125,8 +1125,8 @@ Return ONLY valid JSON:
         const trimmed = documentText.slice(0, 50000);
 
         // Run through AI ingest
-        const Anthropic = require('@anthropic-ai/sdk');
-        const brainClient = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+        const { createAnthropicClient } = require('../../services/anthropicClient');
+        const brainClient = createAnthropicClient({ apiKey: process.env.ANTHROPIC_API_KEY });
 
         const ingestPrompt = `You are the Franchise Knowledge Extractor for Prime Studios (LalaVerse).
 
@@ -1230,8 +1230,8 @@ DOCUMENT:\n${trimmed}\n\nCATEGORIES: character, narrative, locked_decision, fran
           ? '\nFRANCHISE LAWS (never violate):\n' + laws.map(l => `- ${l.title}: ${l.content.slice(0, 200)}`).join('\n')
           : '';
 
-        const Anthropic = require('@anthropic-ai/sdk');
-        const devClient = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+        const { createAnthropicClient } = require('../../services/anthropicClient');
+        const devClient = createAnthropicClient({ apiKey: process.env.ANTHROPIC_API_KEY });
 
         const devPrompt = `You are the World Development Engine for Prime Studios (LalaVerse).
 
@@ -1521,8 +1521,8 @@ Respond ONLY in valid JSON:
 
         // Trigger extraction for each line (using existing extraction pipeline)
         let extracted = 0;
-        const Anthropic = require('@anthropic-ai/sdk');
-        const memClient = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+        const { createAnthropicClient } = require('../../services/anthropicClient');
+        const memClient = createAnthropicClient({ apiKey: process.env.ANTHROPIC_API_KEY });
 
         for (const line of lines) {
           try {
