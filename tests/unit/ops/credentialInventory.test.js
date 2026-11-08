@@ -264,11 +264,14 @@ describe('S-1 credential inventory', () => {
     expect(inv.isPlaceholder(rnd('sk-ant-api03-'))).toBe(false);
   });
 
-  test('T12 a symlinked .env file is reported with its target and labelled', () => {
+  test('T12 a symlinked .env file is reported by where it resolves, and labelled', () => {
     const out = runInv(fx);
-    expect(out.stdout).toMatch(/\.env\.link\s+.*symlink -> \.env/);
+    expect(out.stdout).toMatch(/\.env\.link\s+.*symlink -> \.\/\.env /);
     const r = inv.inventory({ appDir: fx.app, home: fx.home, readersProbe: probe, isRoot: false });
-    expect(find(r, '.env.link').labels).toEqual({ ANTHROPIC_API_KEY: 'L', OPENAI_API_KEY: 'L', JWT_SECRET: 'L', DB_PASSWORD: 'L' });
+    const link = find(r, '.env.link');
+    expect(link.link).toEqual({ where: 'app-dir', path: '.env' });
+    expect('symlink' in link).toBe(false);
+    expect(link.labels).toEqual({ ANTHROPIC_API_KEY: 'L', OPENAI_API_KEY: 'L', JWT_SECRET: 'L', DB_PASSWORD: 'L' });
   });
 
   test('T13 a file over 1 MiB is reported as too large and not read', () => {
@@ -451,5 +454,219 @@ describe('S-1 output guard: fail closed, no exemptions', () => {
     expect(inGuard).toEqual({ code: 1, stdout: '', stderr: 'ERROR Error\n' });
     const inFormat = runMini(m, [], { hooks: { beforeGuard: () => { throw new TypeError(secret); } } });
     expect(inFormat).toEqual({ code: 1, stdout: '', stderr: 'ERROR TypeError\n' });
+  });
+});
+
+describe('S-1 final corrections: report integrity, templates, symlinks, names, errors', () => {
+  const alnum = () => crypto.randomBytes(24).toString('base64url').replace(/[-_]/g, '');
+  const tmpRoot = () => { const r = fs.mkdtempSync(path.join(os.tmpdir(), 'credinv-')); roots.push(r); return r; };
+  const runAt = (app, home, args = [], extra = {}) => inv.run(['--app-dir', app, '--home', home, '--no-readers', ...args],
+    { isRoot: false, ...extra });
+  const withheld = (out) => out.code === 3 && out.stdout === '' && out.stderr === `${inv.GUARD_MESSAGE}\n`;
+  const nonPrintable = /[^\x20-\x7e\n]/;
+
+  test('T23 file-system names are escaped: no forged lines or fields; JSON is ASCII and round-trips', () => {
+    const root = tmpRoot();
+    const app = path.join(root, 'app\nFORGED_HEADER readers: root');
+    const home = path.join(root, 'home');
+    fs.mkdirSync(app, { recursive: true });
+    fs.mkdirSync(path.join(home, '.ssh'), { recursive: true });
+    put(path.join(app, '.env'), `ANTHROPIC_API_KEY=${rnd('')}\n`);
+    const names = [
+      '.env.nl\nFORGED_LINE ANTHROPIC_API_KEY=L', '.env.cr\rFORGED_CR', '.env.tab\tX', '.env.bs\\x',
+      '.env.rlo\u202eelpmaxe', '.env.zw\u200bx', '.env.\u00e9', '.env.sp  600 root:root 2026-01-01  readers: root',
+    ];
+    for (const n of names) put(path.join(app, n), 'PORT=1\n');
+    put(path.join(home, '.ssh', 'k\nFORGED_SSH'), 'x');
+    fs.symlinkSync('.env', path.join(app, '.env.lnk\nFORGED_LINK'));
+    const out = runAt(app, home);
+    expect(out.code).toBe(0);
+    const lines = out.stdout.split('\n');
+    expect(lines.filter((l) => l.startsWith('FORGED')).length).toBe(0);
+    expect(nonPrintable.test(out.stdout)).toBe(false);
+    for (const e of ['.env.nl\\u{A}FORGED_LINE\\u{20}ANTHROPIC_API_KEY=L', '.env.cr\\u{D}FORGED_CR', '.env.tab\\u{9}X',
+      '.env.bs\\\\x', '.env.rlo\\u{202E}elpmaxe', '.env.zw\\u{200B}x', '.env.\\u{E9}', 'app\\u{A}FORGED_HEADER\\u{20}readers:',
+      '.env.sp\\u{20}\\u{20}600\\u{20}root:root', '~/.ssh/k\\u{A}FORGED_SSH', '.env.lnk\\u{A}FORGED_LINK']) {
+      expect(out.stdout).toContain(e);
+    }
+    // One line per source, each starting with an escaped name; no extra source-like lines.
+    const section = lines.slice(lines.indexOf('== sources') + 1, lines.indexOf('== not opened (existence only)'));
+    const sourceLines = section.filter((l) => l !== '' && !l.startsWith('  '));
+    expect(sourceLines.length).toBe(names.length + 2); // the names, .env, and the symlink
+    const json = runAt(app, home, ['--json']);
+    expect([...json.stdout].some((c) => c.charCodeAt(0) > 0x7f)).toBe(false);
+    const parsed = JSON.parse(json.stdout);
+    const jsonNames = parsed.sources.map((s) => s.name);
+    for (const n of names) expect(jsonNames).toContain(n);
+  });
+
+  test('T24 symlinks: resolved location only; nothing outside the inventory is read', () => {
+    const root = tmpRoot();
+    const app = path.join(root, 'app');
+    const home = path.join(root, 'home');
+    const outside = path.join(root, 'outside');
+    for (const d of [app, path.join(home, '.ssh'), path.join(outside, 'awsdir')]) fs.mkdirSync(d, { recursive: true });
+    const S = { live: rnd(''), mig: rnd(''), key: rnd(''), out: rnd(''), aws: rnd('AKIA') };
+    put(path.join(app, '.env'), `ANTHROPIC_API_KEY=${S.live}\n`);
+    put(path.join(home, '.episode-x.env'), `DB_PASSWORD=${S.mig}\n`);
+    put(path.join(home, '.ssh', 'id_ed25519'), `PRIVATE_KEY=${S.key}\n`);
+    put(path.join(outside, 'secret.env'), `ANTHROPIC_API_KEY=${S.out}\n`);
+    put(path.join(outside, 'awsdir', 'credentials'), `[default]\naws_access_key_id = ${S.aws}\n`);
+    fs.symlinkSync('.env', path.join(app, '.env.app'));
+    fs.symlinkSync('../home/.episode-x.env', path.join(app, '.env.home'));
+    fs.symlinkSync('../home/.ssh/id_ed25519', path.join(app, '.env.key'));
+    fs.symlinkSync('../outside/secret.env', path.join(app, '.env.out'));
+    fs.symlinkSync('nowhere\n\u202eFORGED_TARGET', path.join(app, '.env.dang'));
+    fs.symlinkSync('../outside/awsdir', path.join(home, '.aws'));
+    const reads = jest.spyOn(fs, 'readFileSync');
+    let out;
+    let json;
+    try {
+      out = runAt(app, home);
+      json = JSON.parse(runAt(app, home, ['--json']).stdout);
+      const readPaths = reads.mock.calls.map(([p]) => String(p));
+      for (const forbidden of ['id_ed25519', 'secret.env', 'awsdir']) {
+        expect(readPaths.filter((p) => p.includes(forbidden)).length).toBe(0);
+      }
+    } finally {
+      reads.mockRestore();
+    }
+    expect(out.code).toBe(0);
+    expect(out.stdout).toMatch(/\.env\.app\s+.*symlink -> \.\/\.env /);
+    expect(out.stdout).toMatch(/\.env\.home\s+.*symlink -> ~\/\.episode-x\.env /);
+    expect(out.stdout).toMatch(/\.env\.key\s+.*symlink -> ~\/\.ssh\/id_ed25519\s+skipped \(resolves outside the inventory\)/);
+    expect(out.stdout).toMatch(/\.env\.out\s+.*symlink -> \(outside inventoried directories\)\s+skipped/);
+    expect(out.stdout).toMatch(/\.env\.dang\s+.*symlink -> \(dangling\)\s+skipped \(dangling link\)/);
+    expect(out.stdout).toMatch(/~\/\.aws\/credentials\s+.*skipped \(resolves outside the inventory\)/);
+    expect(out.stdout).not.toContain('nowhere');
+    expect(out.stdout).not.toContain('FORGED');
+    expect(out.stdout).not.toContain('outside/');
+    expect(leakCount(out.stdout, [S.key, S.out, S.aws, S.live, S.mig])).toBe(0);
+    const byName = Object.fromEntries(json.sources.map((s) => [s.name, s]));
+    expect(byName['.env.home'].link).toEqual({ where: 'home', path: '.episode-x.env' });
+    expect(byName['.env.home'].labels).toEqual({ DB_PASSWORD: 'H1' });
+    expect(byName['.env.out'].link).toEqual({ where: 'outside' });
+    expect(byName['.env.dang'].link).toEqual({ where: 'dangling' });
+  });
+
+  test('T25 secret-bearing profile, app and variable names never reach text, JSON or errors', () => {
+    const root = tmpRoot();
+    const app = path.join(root, 'app');
+    const home = path.join(root, 'home');
+    fs.mkdirSync(app, { recursive: true });
+    const S = { prof: alnum(), app: alnum(), rej: alnum(), v1: rnd(''), v2: rnd('') };
+    put(path.join(app, '.env'), `ANTHROPIC_API_KEY=${rnd('')}\nApi_Key_${S.rej}=${S.v1}\nanthropic_api_key=${S.v2}\n`);
+    put(path.join(home, '.aws', 'credentials'), `[${S.prof}]\naws_access_key_id = ${rnd('AKIA')}\n[default]\naws_access_key_id = ${rnd('AKIA')}\n`);
+    put(path.join(home, '.pm2', 'dump.pm2'), JSON.stringify([{ name: S.app, ANTHROPIC_API_KEY: rnd('') }, { name: 'ok-app', JWT_SECRET: rnd('') }]));
+    const text = runAt(app, home);
+    const json = runAt(app, home, ['--json']);
+    const secrets = [S.prof, S.app, S.rej, S.v1, S.v2];
+    for (const o of [text, json]) {
+      expect(o.code).toBe(0);
+      expect(leakCount(o.stdout + o.stderr, secrets)).toBe(0);
+      expect(o.stdout.includes('anthropic_api_key')).toBe(false);
+    }
+    const parsed = JSON.parse(json.stdout);
+    expect(parsed.sources.map((s) => s.name)).toEqual(expect.arrayContaining(['dump.pm2 [app1]', 'dump.pm2 [ok-app]']));
+    expect(parsed.sources.find((s) => s.name === '~/.aws/credentials').profiles).toEqual(['profile1', 'default']);
+    // Error channel: an error whose code and name carry those names prints only "Error".
+    const err = runAt(app, home, [], { hooks: { beforeParse: () => { const e = new Error(S.v1); e.code = S.app; e.name = S.prof; throw e; } } });
+    expect(leakCount(err.stdout + err.stderr, secrets)).toBe(0);
+    expect(err.stdout).toMatch(/\.env\s+\d{3} \S+ \d{4}-\d{2}-\d{2}\s+unreadable \(Error\)/);
+  });
+
+  test('T26 template files: never live; only explicit placeholders unguarded; real-looking values guarded and flagged', () => {
+    const live = rnd('');
+    const real = rnd('');
+    const make = (dirName, env, example, extra = {}) => {
+      const root = tmpRoot();
+      const app = path.join(root, dirName);
+      const home = path.join(root, 'home');
+      fs.mkdirSync(home, { recursive: true });
+      if (env !== null) put(path.join(app, '.env'), env);
+      put(path.join(app, '.env.example'), example);
+      for (const [n, t] of Object.entries(extra)) put(path.join(app, n), t);
+      return { app, home };
+    };
+    // Explicit placeholders in a template are labelled P, unflagged, and not guarded:
+    // the app directory is literally named "changeme", which a guarded value would trip on.
+    const a = make('changeme', `ANTHROPIC_API_KEY=${live}\n`, [
+      'DB_PASSWORD=changeme', 'JWT_SECRET=<jwt-secret>', 'OPENAI_API_KEY=${OPENAI_API_KEY}', 'FAL_KEY=xxxxxxxx', 'RUNWAY_ML_API_KEY=',
+      'REPLICATE_API_TOKEN=your-token-here', `ANTHROPIC_API_KEY=${live}`, `ELEVENLABS_API_KEY=${real}`,
+    ].join('\n'), { '.env.production.template': 'JWT_SECRET=<x>\n', '.env.sample': '', '.env.local.example': '', '.env.examples': '', '.env.example.bak': '' });
+    const out = runAt(a.app, a.home);
+    expect(out.code).toBe(0);
+    expect(out.stdout).toMatch(/\.env\.example\s+\d{3} \S+ \d{4}-\d{2}-\d{2}\s+\[template\]/);
+    for (const n of ['.env.production.template', '.env.sample', '.env.local.example']) {
+      expect(out.stdout).toMatch(new RegExp(`${n.replace(/\./g, '\\.')}\\s+\\d{3} \\S+ \\d{4}-\\d{2}-\\d{2}\\s+\\[template\\]`));
+    }
+    for (const n of ['.env.examples', '.env.example.bak']) {
+      expect(out.stdout).not.toMatch(new RegExp(`${n.replace(/\./g, '\\.')}\\s+\\d{3} \\S+ \\d{4}-\\d{2}-\\d{2}\\s+\\[template\\]`));
+    }
+    expect(out.stdout).toContain('ANTHROPIC_API_KEY=L! DB_PASSWORD=P ELEVENLABS_API_KEY=H1! FAL_KEY=P JWT_SECRET=P OPENAI_API_KEY=P REPLICATE_API_TOKEN=H1! RUNWAY_ML_API_KEY=P');
+    expect(leakCount(out.stdout, [live, real])).toBe(0);
+    const r = JSON.parse(runAt(a.app, a.home, ['--json']).stdout);
+    const ex = r.sources.find((s) => s.name === '.env.example');
+    expect(ex.template).toBe(true);
+    expect(ex.flagged.sort()).toEqual(['ANTHROPIC_API_KEY', 'ELEVENLABS_API_KEY', 'REPLICATE_API_TOKEN']);
+    expect(ex.labels.ANTHROPIC_API_KEY).toBe('L');
+    // The same explicit placeholder outside a template is guarded.
+    expect(withheld(runAt(...Object.values(make('changeme', 'DB_PASSWORD=changeme\n', ''))))).toBe(true);
+    // A broad "placeholder-looking" value in a template stays guarded.
+    expect(withheld(runAt(...Object.values(make('your-token-here', null, 'REPLICATE_API_TOKEN=your-token-here\n'))))).toBe(true);
+    // A real-looking template value is guarded too (forced into the report by a hook).
+    const b = make('app', null, `ELEVENLABS_API_KEY=${real}\n`);
+    expect(withheld(runAt(b.app, b.home, [], { hooks: { beforeGuard: (t) => `${t}${real}\n` } }))).toBe(true);
+    // Templates are never live: with no .env, a template value is Hn!, not L.
+    expect(runAt(b.app, b.home).stdout).toContain('ELEVENLABS_API_KEY=H1!');
+    // A production-shaped DATABASE_URL example is not an explicit placeholder: it stays guarded.
+    const prodShape = make('episode-metadata', null,
+      'DATABASE_URL=postgresql://postgres:password@episode-metadata-db-dev.xxxxx.us-east-1.rds.amazonaws.com:5432/postgres\n');
+    expect(withheld(runAt(prodShape.app, prodShape.home))).toBe(true);
+  });
+
+  test('T27 credential names are found case-insensitively; non-uppercase names are counted, never printed', () => {
+    const root = tmpRoot();
+    const app = path.join(root, 'app');
+    const home = path.join(root, 'home');
+    fs.mkdirSync(home, { recursive: true });
+    const v = { lower: rnd(''), mixed: rnd(''), upper: rnd('') };
+    put(path.join(app, '.env'), `anthropic_api_key=${v.lower}\nDb_Password=${v.mixed}\nANTHROPIC_API_KEY=${v.upper}\nport=3000\n`);
+    const text = runAt(app, home);
+    const json = runAt(app, home, ['--json']);
+    expect(text.code).toBe(0);
+    expect(text.stdout).toContain('ANTHROPIC_API_KEY=L  (+2 unprintable names)');
+    expect(JSON.parse(json.stdout).sources[0].unprintableNames).toBe(2);
+    for (const o of [text, json]) {
+      expect(o.stdout.includes('anthropic_api_key') || o.stdout.includes('Db_Password')).toBe(false);
+      expect(leakCount(o.stdout, Object.values(v))).toBe(0);
+    }
+    for (const value of [v.lower, v.mixed]) {
+      expect(withheld(runAt(app, home, [], { hooks: { beforeGuard: (t) => `${t}${value}\n` } }))).toBe(true);
+    }
+  });
+
+  test('T28 error identifiers come from a strict allowlist', () => {
+    const secret = rnd('');
+    const cases = [
+      [{ code: 'EACCES' }, 'EACCES'], [{ code: 'ENOENT', name: 'Error' }, 'ENOENT'], [{ code: 'ELOOP' }, 'ELOOP'],
+      [new SyntaxError('x'), 'SyntaxError'], [new TypeError('x'), 'TypeError'],
+      [{ code: 'ERR_INVALID_ARG_TYPE', name: 'TypeError' }, 'TypeError'], [{ code: 'ERR_INVALID_ARG_TYPE' }, 'Error'],
+      [{ code: 'EACCESX' }, 'Error'], [{ code: secret }, 'Error'], [{ name: secret }, 'Error'],
+      [{ name: 'Error\nFORGED' }, 'Error'], [{ code: 12 }, 'Error'], [null, 'Error'], [undefined, 'Error'], ['EACCES', 'Error'],
+    ];
+    for (const [e, want] of cases) expect(inv.errLabel(e)).toBe(want);
+    const root = tmpRoot();
+    const app = path.join(root, 'app');
+    const home = path.join(root, 'home');
+    fs.mkdirSync(home, { recursive: true });
+    put(path.join(app, '.env'), `ANTHROPIC_API_KEY=${rnd('')}\n`);
+    const crafted = { code: `E${secret.toUpperCase()}`, name: `${secret}Error`, message: secret };
+    const parse = runAt(app, home, [], { hooks: { beforeParse: () => { throw crafted; } } });
+    expect(parse.code).toBe(2);
+    expect(parse.stdout).toMatch(/unreadable \(Error\)/);
+    expect(leakCount(parse.stdout + parse.stderr, [secret, secret.toUpperCase()])).toBe(0);
+    const guardErr = runAt(app, home, [], { hooks: { inGuard: () => { throw crafted; } } });
+    expect(guardErr).toEqual({ code: 1, stdout: '', stderr: 'ERROR Error\n' });
   });
 });

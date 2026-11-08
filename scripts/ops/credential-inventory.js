@@ -33,6 +33,24 @@
  *         embedded inside a longer word is NOT detected (known limitation);
  *         an edge that is punctuation, or a combining mark beside the match,
  *         counts as standalone (fails closed).
+ *   - Report integrity: every file-system-derived string in the text report
+ *     is escaped. Backslash becomes \\; any character outside printable
+ *     ASCII 0x21-0x7E (space, control characters, non-ASCII, Unicode format
+ *     controls) becomes \u{HEX}. No name can add a line or pose as a field.
+ *     JSON output escapes every non-ASCII character as \uXXXX.
+ *   - Template files (.env.example, .env.sample, .env.template and any .env.*
+ *     name ending in .example, .sample or .template) are their own class: never
+ *     live; only explicit placeholder forms (empty, ${NAME}, <name>, a run of
+ *     one mask character x X * #, "...", or a fixed placeholder word as the
+ *     whole value) are left out of the guard and labelled P. Every other value
+ *     in a template is guarded, labelled, and flagged "!" (potentially real).
+ *   - Symlinks: a source is read only if its resolved path is itself an
+ *     inventory source. The report shows where a link resolves (a name inside
+ *     the app directory, ~/<path> inside home, "(outside inventoried
+ *     directories)" or "(dangling)"), never the raw link text.
+ *   - Credential-like names are detected case-insensitively.
+ *   - Error identifiers come from a strict allowlist (Node errno codes and
+ *     built-in error names); anything else is reported as "Error".
  *   - Only names that cannot carry a secret are printed: variables matching
  *     ^[A-Z][A-Z0-9_]{0,63}$, pm2 apps and AWS profiles matching
  *     ^[a-z0-9][a-z0-9._-]{0,63}$. Others are counted (variables) or renamed
@@ -55,11 +73,12 @@ const childProcess = require('child_process');
 const VERSION = 1;
 const MAX_BYTES = 1024 * 1024;
 const GUARD_MIN = 6;
-const CREDENTIAL_NAME = /(KEY|TOKEN|SECRET|PASSWORD|PASS$|CREDENTIAL|PRIVATE|DATABASE_URL|_DSN$)/;
+const CREDENTIAL_NAME = /(KEY|TOKEN|SECRET|PASSWORD|PASS$|CREDENTIAL|PRIVATE|DATABASE_URL|_DSN$)/i;
 const USER_NAME = /^[A-Za-z_][A-Za-z0-9_-]{0,31}\$?$/;
 const DEFAULT_USERS = ['ubuntu', 'ssm-user', 'www-data', 'nobody'];
 const NOT_OPENED_FILES = ['.git-credentials', '.npmrc', '.docker/config.json', '.netrc'];
-const LEGEND = 'labels: L = same as live (.env; AWS: ~/.aws/credentials [default]); Hn = other value; P = placeholder/empty';
+const LEGEND = 'labels: L = same as live (.env; AWS: ~/.aws/credentials [default]); Hn = other value; P = placeholder/empty;'
+  + ' ! = template value that is not an explicit placeholder (potentially real); [template] = never live';
 const USAGE = 'usage: credential-inventory.js --app-dir <dir> --home <dir> [--users a,b] [--json] [--no-readers]';
 const GUARD_MESSAGE = 'REDACTION_GUARD_TRIPPED: output withheld';
 const VAR_PRINTABLE = /^[A-Z][A-Z0-9_]{0,63}$/;
@@ -67,11 +86,47 @@ const NAME_PRINTABLE = /^[a-z0-9][a-z0-9._-]{0,63}$/;
 const TEMPLATE_REF = /\$\{[A-Za-z_][A-Za-z0-9_]*\}/g;
 const WORD_CHAR = /[\p{L}\p{N}_]/u;
 const ALNUM = /[\p{L}\p{N}]/u;
+const TEMPLATE_FILE = /^\.env(?:\.[A-Za-z0-9_-]+)*\.(?:example|sample|template)$/;
+const PLACEHOLDER_WORDS = new Set(['changeme', 'change_me', 'change-me', 'replaceme', 'replace_me', 'replace-me',
+  'placeholder', 'redacted', 'todo', 'tbd', 'none', 'null', 'example']);
+const ERRNO_CODES = new Set(Object.keys(os.constants.errno));
+const ERROR_NAMES = new Set(['Error', 'TypeError', 'SyntaxError', 'RangeError', 'ReferenceError', 'URIError',
+  'EvalError', 'AggregateError']);
 
-/** Error code or name only; never a message (messages can quote input). */
+/** Allowlisted error identifier only: a Node errno code or a built-in error name, else "Error". */
 function errLabel(err) {
-  const v = (err && (err.code || err.name)) || 'Error';
-  return /^[A-Za-z_][A-Za-z0-9_]{0,40}$/.test(String(v)) ? String(v) : 'Error';
+  const code = err && typeof err.code === 'string' ? err.code : null;
+  if (code && ERRNO_CODES.has(code)) return code;
+  const name = err && typeof err.name === 'string' ? err.name : null;
+  if (name && ERROR_NAMES.has(name)) return name;
+  return 'Error';
+}
+
+/** Narrow, explicit placeholder forms; whole-value matches only, no substring rules. */
+function isExplicitPlaceholder(value) {
+  const v = String(value == null ? '' : value).trim();
+  if (v === '') return true;
+  if (/^\$\{[A-Za-z_][A-Za-z0-9_]*\}$/.test(v)) return true;
+  if (/^<[A-Za-z0-9 _.-]{1,64}>$/.test(v)) return true;
+  if (/^(?:x+|X+|\*+|#+|\.{3,})$/.test(v)) return true;
+  return PLACEHOLDER_WORDS.has(v.toLowerCase());
+}
+
+/** Text-report escaping: backslash -> \\; anything outside 0x21-0x7E -> \u{HEX}. */
+function esc(x) {
+  let out = '';
+  for (const ch of String(x)) {
+    const cp = ch.codePointAt(0);
+    if (ch === '\\') out += '\\\\';
+    else if (cp >= 0x21 && cp <= 0x7e) out += ch;
+    else out += `\\u{${cp.toString(16).toUpperCase()}}`;
+  }
+  return out;
+}
+
+/** JSON escaping of every non-ASCII code unit, so the JSON is plain ASCII. */
+function jsonAscii(text) {
+  return text.replace(/[\u007f-\uffff]/g, (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, '0')}`);
 }
 
 function isPlaceholder(value) {
@@ -157,6 +212,25 @@ function collect(options = {}) {
   const accounts = loadAccounts(readFile);
   const ownerOf = (st) => `${accounts.users.get(st.uid) || st.uid}:${accounts.groups.get(st.gid) || st.gid}`;
 
+  const realOr = (p) => { try { return fs.realpathSync(p); } catch (err) { return p; } };
+  const appReal = realOr(appDir);
+  const homeReal = realOr(home);
+  const within = (root, p) => { const rel = path.relative(root, p); return rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel); };
+  const isInventoryPath = (real) => {
+    const dir = path.dirname(real);
+    const base = path.basename(real);
+    return (dir === appReal && base.startsWith('.env'))
+      || (dir === homeReal && /^\.episode-.*\.env$/.test(base))
+      || real === path.join(homeReal, '.aws', 'credentials')
+      || real === path.join(homeReal, '.pm2', 'dump.pm2')
+      || real === path.join(homeReal, '.pm2', 'dump.pm2.bak');
+  };
+  const relation = (real) => {
+    if (within(appReal, real)) return { where: 'app-dir', path: path.relative(appReal, real) };
+    if (within(homeReal, real)) return { where: 'home', path: path.relative(homeReal, real) };
+    return { where: 'outside' };
+  };
+
   const hmacKey = crypto.randomBytes(32);
   const digest = (v) => crypto.createHmac('sha256', hmacKey).update(v).digest('hex');
   const guardValues = new Set();
@@ -184,7 +258,7 @@ function collect(options = {}) {
     }
     let self = false;
     try { fs.accessSync(file, fs.constants.R_OK); self = true; } catch (err) { self = false; }
-    return `${self ? `self(${hostUser})` : 'not self'}; others not checked (needs root)`;
+    return `${self ? `self(${esc(hostUser)})` : 'not self'}; others not checked (needs root)`;
   };
 
   // Collect sources. Each: { name, file, kind, meta, status, vars: Map(display -> {group, value}) }.
@@ -193,14 +267,30 @@ function collect(options = {}) {
     const src = { name, file, status: 'ok', vars: new Map(), extra: null };
     try {
       const lst = fs.lstatSync(file);
-      if (lst.isSymbolicLink()) { src.symlink = fs.readlinkSync(file); }
-      const st = fs.statSync(file);
-      src.mode = (st.mode & 0o777).toString(8);
-      src.owner = ownerOf(st);
-      src.modified = st.mtime.toISOString().slice(0, 10);
+      const meta = (st) => {
+        src.mode = (st.mode & 0o777).toString(8);
+        src.owner = ownerOf(st);
+        src.modified = st.mtime.toISOString().slice(0, 10);
+      };
+      // Resolve before any stat or read that would follow a link.
+      let real;
+      try { real = fs.realpathSync(file); } catch (err) {
+        meta(lst);
+        if (lst.isSymbolicLink()) { src.link = { where: 'dangling' }; src.status = 'skipped (dangling link)'; return src; }
+        throw err;
+      }
+      if (lst.isSymbolicLink()) src.link = relation(real);
+      if (!isInventoryPath(real)) {
+        meta(lst);
+        src.status = 'skipped (resolves outside the inventory)';
+        return src;
+      }
+      const st = fs.statSync(real);
+      meta(st);
+      src.real = real;
       if (!st.isFile()) { src.status = 'skipped (not a regular file)'; return src; }
       if (st.size > MAX_BYTES) { src.status = 'too large'; partial = true; return src; }
-      src.readers = probeReaders(file);
+      src.readers = probeReaders(real);
     } catch (err) {
       src.status = `unreadable (${errLabel(err)})`; partial = true;
     }
@@ -210,7 +300,7 @@ function collect(options = {}) {
     if (src.status !== 'ok') return null;
     try {
       if (hooks.beforeParse) hooks.beforeParse(kind, src.file);
-      return readFile(src.file, 'utf8');
+      return readFile(src.real, 'utf8');
     } catch (err) {
       src.status = `unreadable (${errLabel(err)})`; partial = true;
       return null;
@@ -234,6 +324,7 @@ function collect(options = {}) {
   for (const f of appEntries) {
     const src = describe(f, path.join(appDir, f));
     src.live = f === '.env';
+    src.template = TEMPLATE_FILE.test(f);
     const text = readText(src, 'env');
     if (text !== null) {
       try { keepCredentialVars(src, parseEnvText(text)); } catch (err) { src.status = `unreadable (${errLabel(err)})`; partial = true; }
@@ -269,7 +360,7 @@ function collect(options = {}) {
       const rawName = app && typeof app.name === 'string' ? app.name : '';
       const appName = NAME_PRINTABLE.test(rawName) ? rawName : `app${i + 1}`;
       if (appName !== rawName) guard(rawName);
-      const src = { ...base, name: `${f} [${appName}]`, vars: new Map() };
+      const src = { ...base, name: `${f} [${appName}]`, dump: f, app: appName, vars: new Map() };
       keepCredentialVars(src, pm2AppVars(app));
       sources.push(src);
     });
@@ -306,8 +397,8 @@ function collect(options = {}) {
   const groupMap = (g) => { if (!labelsByGroup.has(g)) labelsByGroup.set(g, new Map()); return labelsByGroup.get(g); };
   for (const s of sources) {
     for (const [display, { group, value }] of s.vars) {
-      guard(value);
-      if (isPlaceholder(value)) continue;
+      if (!(s.template && isExplicitPlaceholder(value))) guard(value);
+      if (s.template || isPlaceholder(value)) continue;
       if ((s.live && !group.startsWith('AWS_')) || (s.liveAws && display === group)) {
         const m = groupMap(group);
         const d = digest(value);
@@ -317,10 +408,12 @@ function collect(options = {}) {
   }
   for (const s of sources) {
     s.labels = {};
+    s.flagged = [];
     for (const [display, { group, value }] of s.vars) {
       let label;
-      if (isPlaceholder(value)) label = 'P';
+      if (s.template ? isExplicitPlaceholder(value) : isPlaceholder(value)) label = 'P';
       else {
+        if (s.template) s.flagged.push(display);
         const m = groupMap(group);
         const d = digest(value);
         if (!m.has(d)) m.set(d, `H${[...m.values()].filter((l) => l !== 'L').length + 1}`);
@@ -368,7 +461,8 @@ function collect(options = {}) {
     for (const [display, label] of Object.entries(s.labels)) {
       const name = display.replace(/\[.*\]$/, '');
       summary[name] = summary[name] || {};
-      summary[name][label] = (summary[name][label] || 0) + 1;
+      const key = s.flagged.includes(display) ? `${label}!` : label;
+      summary[name][key] = (summary[name][key] || 0) + 1;
     }
   }
 
@@ -379,9 +473,10 @@ function collect(options = {}) {
     appDir,
     home,
     sources: sources.map((s) => ({
-      name: s.name, mode: s.mode || null, owner: s.owner || null, modified: s.modified || null,
-      symlink: s.symlink || null, readers: s.readers || null, status: s.status,
-      profiles: s.extra ? s.extra.profiles : undefined, labels: s.labels, unprintableNames: s.unprintable || 0,
+      name: s.name, dump: s.dump, app: s.app, mode: s.mode || null, owner: s.owner || null, modified: s.modified || null,
+      link: s.link || null, readers: s.readers || null, status: s.status, template: Boolean(s.template),
+      profiles: s.extra ? s.extra.profiles : undefined, labels: s.labels, flagged: s.flagged,
+      unprintableNames: s.unprintable || 0,
     })),
     notOpened,
     summary,
@@ -398,36 +493,43 @@ function inventory(options = {}) {
 
 function formatText(r) {
   const lines = [];
-  lines.push(`credential-inventory v${r.version}  host-user=${r.hostUser}  run=${r.run}`);
-  lines.push(`app-dir=${r.appDir}  home=${r.home}`);
+  lines.push(`credential-inventory v${r.version}  host-user=${esc(r.hostUser)}  run=${r.run}`);
+  lines.push(`app-dir=${esc(r.appDir)}  home=${esc(r.home)}`);
   lines.push(LEGEND, '', '== sources');
   const seen = new Map();
+  const shownName = (s) => (s.app ? `${esc(s.dump)} [${esc(s.app)}]` : esc(s.name));
   for (const s of r.sources) {
-    const meta = s.mode ? `${s.mode} ${s.owner} ${s.modified}` : '';
-    const link = s.symlink ? `  symlink -> ${s.symlink}` : '';
+    const meta = s.mode ? `${s.mode} ${esc(s.owner)} ${s.modified}` : '';
+    const where = s.link && ({ 'app-dir': `./${esc(s.link.path)}`, home: `~/${esc(s.link.path)}`,
+      outside: '(outside inventoried directories)', dangling: '(dangling)' })[s.link.where];
+    const link = where ? `  symlink -> ${where}` : '';
+    const tpl = s.template ? '  [template]' : '';
+    // readers and status are built by this tool from allowlisted parts (user names, error identifiers).
     const tail = s.status === 'ok' ? `  readers: ${s.readers}` : `  ${s.status}`;
-    lines.push(`${s.name.padEnd(36)}${meta}${link}${tail}`);
-    const labelText = Object.keys(s.labels).sort().map((k) => `${k}=${s.labels[k]}`).join(' ');
+    lines.push(`${shownName(s).padEnd(36)}${meta}${tpl}${link}${tail}`);
+    const labelText = Object.keys(s.labels).sort()
+      .map((k) => `${esc(k)}=${s.labels[k]}${s.flagged.includes(k) ? '!' : ''}`).join(' ');
     const n = s.unprintableNames;
     const extraNote = n ? `${labelText ? '  ' : ''}(+${n} unprintable name${n > 1 ? 's' : ''})` : '';
-    const body = (s.profiles ? `profiles: ${s.profiles.join(' ')}   ` : '') + labelText + extraNote;
+    const body = (s.profiles ? `profiles: ${s.profiles.map(esc).join(' ')}   ` : '') + labelText + extraNote;
     if (!body) continue;
     if (!s.profiles && seen.has(body)) lines.push(`  (same labels as ${seen.get(body)})`);
-    else { lines.push(`  ${body}`); if (!s.profiles) seen.set(body, s.name); }
+    else { lines.push(`  ${body}`); if (!s.profiles) seen.set(body, shownName(s)); }
   }
   lines.push('', '== not opened (existence only)');
-  lines.push(r.notOpened.length ? r.notOpened.map((e) => `${e.name} ${e.mode} ${e.owner}`).join('  ') : '(none)');
+  lines.push(r.notOpened.length ? r.notOpened.map((e) => `${esc(e.name)} ${e.mode} ${esc(e.owner)}`).join('  ') : '(none)');
   lines.push('', '== summary by variable (sources holding each label)');
   for (const name of Object.keys(r.summary).sort()) {
     const counts = r.summary[name];
     const order = Object.keys(counts).sort((a, b) => {
-      const rank = (l) => (l === 'L' ? 0 : l === 'P' ? 1e6 : Number(l.slice(1)));
+      const base = (l) => l.replace(/!$/, '');
+      const rank = (l) => (base(l) === 'L' ? 0 : base(l) === 'P' ? 1e6 : Number(base(l).slice(1))) + (l.endsWith('!') ? 0.5 : 0);
       return rank(a) - rank(b);
     });
     lines.push(`${name.padEnd(28)}${order.map((l) => `${l}: ${counts[l]}`).join('   ')}`);
   }
   lines.push('', '== host facts');
-  if (r.hostFacts) r.hostFacts.forEach((h) => lines.push(`${h.user}: groups=${h.groups.join(',')}  sudo=${h.sudo}`));
+  if (r.hostFacts) r.hostFacts.forEach((h) => lines.push(`${esc(h.user)}: groups=${h.groups.map(esc).join(',')}  sudo=${h.sudo}`));
   else lines.push('(not collected: needs root and readers)');
   lines.push(`exit ${r.exitCode}`);
   return `${lines.join('\n')}\n`;
@@ -460,7 +562,12 @@ function occursStandalone(text, v) {
 function leaks(text, values, hooks = {}) {
   if (hooks.inGuard) hooks.inGuard();
   if (/\b[0-9a-f]{64}\b/i.test(text)) return true;
-  const forms = [[text, (v) => v], [text.normalize('NFC'), (v) => v.normalize('NFC')], [text.normalize('NFD'), (v) => v.normalize('NFD')]];
+  const jsonForm = (v) => jsonAscii(JSON.stringify(v).slice(1, -1));
+  const forms = [
+    [text, (v) => v], [text.normalize('NFC'), (v) => v.normalize('NFC')], [text.normalize('NFD'), (v) => v.normalize('NFD')],
+    [text, (v) => esc(v)], [text, (v) => esc(v.normalize('NFC'))], [text, (v) => esc(v.normalize('NFD'))],
+    [text, (v) => jsonForm(v)], [text, (v) => jsonForm(v.normalize('NFC'))], [text, (v) => jsonForm(v.normalize('NFD'))],
+  ];
   for (const raw of values) {
     for (const [t, norm] of forms) {
       const v = norm(raw);
@@ -506,7 +613,7 @@ function run(argv, extra = {}) {
     const opts = parseArgs(argv);
     if (!opts) return { code: 1, stdout: '', stderr: `${USAGE}\n` };
     const { result, guardValues } = collect({ ...opts, ...extra });
-    let text = opts.json ? `${JSON.stringify(result, null, 2)}\n` : formatText(result);
+    let text = opts.json ? `${jsonAscii(JSON.stringify(result, null, 2))}\n` : formatText(result);
     if (extra.hooks && extra.hooks.beforeGuard) text = extra.hooks.beforeGuard(text);
     if (leaks(text, guardValues, extra.hooks || {})) return { code: 3, stdout: '', stderr: `${GUARD_MESSAGE}\n` };
     return { code: result.exitCode, stdout: text, stderr: '' };
@@ -522,4 +629,7 @@ if (require.main === module) {
   process.exitCode = out.code;
 }
 
-module.exports = { run, inventory, formatText, isPlaceholder, parseEnvText, parseAwsText, errLabel, leaks, occursStandalone, GUARD_MESSAGE };
+module.exports = {
+  run, inventory, formatText, isPlaceholder, isExplicitPlaceholder, esc, parseEnvText, parseAwsText, errLabel, leaks,
+  occursStandalone, GUARD_MESSAGE,
+};
