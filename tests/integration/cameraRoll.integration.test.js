@@ -319,10 +319,10 @@ const PLAN = [
     jest.spyOn(imageCost, 'runImageCall').mockRejectedValueOnce(refusal());
     const batch = await as(request(app).post(`/api/v1/camera-roll/characters/${ids.maren}/make-kept`)).send({});
     expect(batch.status).toBe(200);
-    expect(batch.body.data).toEqual({ made: 0, failed: 0, stopped_for_budget: true });
+    expect(batch.body.data).toMatchObject({ made: 0, failed: 0, uncertain: 0, skipped: 0, stopped_for_budget: true, results: [] });
 
     const again = await as(request(app).post(`/api/v1/camera-roll/characters/${ids.maren}/make-kept`)).send({});
-    expect(again.body.data).toEqual({ made: 1, failed: 0, stopped_for_budget: false });
+    expect(again.body.data).toMatchObject({ made: 1, failed: 0, uncertain: 0, skipped: 0, stopped_for_budget: false });
   });
 
   it('the AI down is a 502 with nothing saved; a budget refusal on the plan is a 429', async () => {

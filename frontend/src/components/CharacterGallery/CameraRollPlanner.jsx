@@ -38,7 +38,30 @@ export const ALBUMS = [
   { key: 'objects', label: 'Objects & Details' },
 ];
 const OUTFIT_WORDS = { at_home: 'At home', going_out: 'Going out', work: 'Work', event: 'Event', none: 'Not in it' };
-const STATUS_WORDS = { proposed: 'Proposed', kept: 'Kept', failed: 'Not made', made: 'Made' };
+const STATUS_WORDS = { proposed: 'Proposed', kept: 'Kept', failed: 'Not made', made: 'Made', making: 'Being made', uncertain: 'Check' };
+
+/** An unused, unexpired one-time authorization to make an uncertain photo once more (#3714). */
+// make-kept's result in words: made; failed (nothing paid was sent, try
+// again); uncertain (may already be made and charged: check each one);
+// skipped (being made elsewhere, or not makeable now).
+export function makeKeptSummary(r = {}) {
+  const n = (k) => Number(r[k]) || 0;
+  const photos = (c) => `${c} photo${c === 1 ? '' : 's'}`;
+  const parts = [`${photos(n('made'))} made`];
+  if (n('failed')) parts.push(`${n('failed')} failed before anything was sent (try again)`);
+  if (n('uncertain')) parts.push(`${n('uncertain')} need${n('uncertain') === 1 ? 's' : ''} a check: may already be made and charged`);
+  if (n('skipped')) parts.push(`${n('skipped')} skipped (being made elsewhere or no longer kept)`);
+  if (n('already_making')) parts.push(`${n('already_making')} already being made`);
+  if (n('already_uncertain')) parts.push(`${n('already_uncertain')} already waiting for a check`);
+  if (r.stopped_for_budget) parts.push('stopped at the daily image budget');
+  return `${parts.join('; ')}.`;
+}
+
+export function pendingAuthorization(moment) {
+  const a = moment?.make_resolution?.authorization;
+  if (!a || a.used_at || !a.expires_at || new Date(a.expires_at).getTime() <= Date.now()) return null;
+  return a;
+}
 
 const errorText = (err, fallback) => err?.response?.data?.error || fallback;
 
@@ -140,7 +163,24 @@ function MomentCard({ moment, busy, onAction, onEdited }) {
             {when && <div><dt>When</dt><dd>{when}</dd></div>}
             {moment.outfit && moment.outfit !== 'none' && <div><dt>Wearing</dt><dd>{OUTFIT_WORDS[moment.outfit] || moment.outfit}</dd></div>}
           </dl>
-          {moment.status === 'failed' && moment.error && <p className="gal-error" role="alert">{moment.error}</p>}
+          {(moment.status === 'failed' || moment.status === 'uncertain') && moment.error && <p className="gal-error" role="alert">{moment.error}</p>}
+          {moment.status === 'uncertain' ? (
+            // A paid request was sent and the make then failed: never a one-click retry (#3714).
+            <div className="cr-actions" data-testid="cr-uncertain">
+              {moment.make_resolution?.acknowledged && <p className="gal-muted">Acknowledged; not made again.</p>}
+              <button type="button" className="cr-btn is-quiet" disabled={busy} onClick={() => onAction(moment, 'acknowledge')} data-testid="cr-acknowledge">Acknowledge</button>
+              {pendingAuthorization(moment) ? (
+                <button type="button" className="cr-btn" disabled={busy} onClick={() => onAction(moment, 'make_authorized')} data-testid="cr-make-authorized">
+                  <Camera size={14} aria-hidden /> Make once more (authorized)
+                </button>
+              ) : (
+                <button type="button" className="cr-btn" disabled={busy} onClick={() => onAction(moment, 'authorize')} data-testid="cr-authorize">Authorize one new attempt…</button>
+              )}
+              <button type="button" className="cr-btn is-quiet" disabled={busy} onClick={() => onAction(moment, 'abandon')} data-testid="cr-abandon"><X size={14} aria-hidden /> Abandon</button>
+            </div>
+          ) : moment.status === 'making' ? (
+            <p className="gal-muted" data-testid="cr-making">This photo is being made.</p>
+          ) : (
           <div className="cr-actions">
             {moment.status === 'proposed' && (
               <button type="button" className="cr-btn" disabled={busy} onClick={() => onAction(moment, 'keep')}><Check size={14} aria-hidden /> Keep</button>
@@ -153,6 +193,7 @@ function MomentCard({ moment, busy, onAction, onEdited }) {
             <button type="button" className="cr-btn is-quiet" disabled={busy} onClick={() => setEditing(true)}><Pencil size={14} aria-hidden /> Edit</button>
             <button type="button" className="cr-btn is-quiet" disabled={busy} onClick={() => onAction(moment, 'drop')}><X size={14} aria-hidden /> Drop</button>
           </div>
+          )}
         </>
       )}
     </li>
@@ -164,7 +205,7 @@ export default function CameraRollPlanner({ characterId, name, target, moments =
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const [note, setNote] = useState(null);
-  const open = moments.filter((m) => ['proposed', 'kept', 'failed'].includes(m.status));
+  const open = moments.filter((m) => ['proposed', 'kept', 'failed', 'making', 'uncertain'].includes(m.status));
   // Their camera-roll photos; a moment made into a photo is one of them.
   const made = Math.max(photoCount, moments.filter((m) => m.status === 'made').length);
   const kept = moments.filter((m) => m.status === 'kept').length;
@@ -192,18 +233,34 @@ export default function CameraRollPlanner({ characterId, name, target, moments =
     return `${n} moment${n === 1 ? '' : 's'} proposed. Keep the ones that belong in their life.`;
   }, 'The moments could not be planned. Try again.');
 
-  const act = (moment, action) => run(async () => {
-    await api.post(`/api/v1/camera-roll/moments/${moment.id}/${action}`);
-    return action === 'make' ? 'The photo was made.' : null;
-  }, action === 'make' ? 'The photo could not be made. Try again.' : 'That did not work. Try again.');
+  const act = (moment, action) => {
+    // An uncertain photo (#3714): resolve it; a new paid attempt needs an
+    // explicit, confirmed authorization and then its own explicit Make.
+    if (['acknowledge', 'authorize', 'abandon'].includes(action)) {
+      if (action === 'authorize' && !window.confirm('This photo may already have been made and charged. Authorize exactly one new attempt (it may be charged again)? The authorization expires in 24 hours.')) return undefined;
+      return run(async () => {
+        await api.post(`/api/v1/camera-roll/moments/${moment.id}/resolve`, { action });
+        return { acknowledge: 'Acknowledged; it will not be made again.', authorize: 'One new attempt is authorized. Press Make once more to use it.', abandon: 'Abandoned.' }[action];
+      }, 'That did not work. Try again.');
+    }
+    if (action === 'make_authorized') {
+      const auth = pendingAuthorization(moment);
+      if (!auth || !window.confirm('Make this photo once more? It may be charged again.')) return undefined;
+      return run(async () => {
+        await api.post(`/api/v1/camera-roll/moments/${moment.id}/make`, { authorization_id: auth.id });
+        return 'The photo was made.';
+      }, 'The photo could not be made.');
+    }
+    return run(async () => {
+      await api.post(`/api/v1/camera-roll/moments/${moment.id}/${action}`);
+      return action === 'make' ? 'The photo was made.' : null;
+    }, action === 'make' ? 'The photo could not be made. Try again.' : 'That did not work. Try again.');
+  };
 
   const makeKept = () => run(async () => {
     const { data } = await api.post(`/api/v1/camera-roll/characters/${characterId}/make-kept`);
     const r = data?.data || {};
-    const parts = [`${r.made || 0} photo${r.made === 1 ? '' : 's'} made`];
-    if (r.failed) parts.push(`${r.failed} not made`);
-    if (r.stopped_for_budget) parts.push('stopped at the daily image budget');
-    return `${parts.join(', ')}.`;
+    return makeKeptSummary(r);
   }, 'The photos could not be made. Try again.');
 
   return (

@@ -24,6 +24,8 @@ const later = require('../../src/migrations/20261019160000-picture-suggestions')
 const cameraRoll = require('../../src/migrations/20261019220000-camera-roll');
 // A post's camera-roll moment (post_id) sits on that table: undone before it, redone after it.
 const postPictures = require('../../src/migrations/20261019230001-post-pictures');
+// Dropping camera_roll_moments drops this migration's columns with it, so it is re-applied last.
+const makeClaims = require('../../src/migrations/20261107150000-camera-roll-make-claims');
 
 const shouldSkip =
   !process.env.DATABASE_URL ||
@@ -200,10 +202,13 @@ const q = (sql, replacements = {}) => sequelize.query(sql, { replacements, type:
     await later.up(qi, sequelize.constructor);
     await cameraRoll.up(qi, sequelize.constructor);
     await postPictures.up(qi, sequelize.constructor);
+    await makeClaims.up(qi, sequelize.constructor);
     const back = await q("SELECT to_regclass('public.media_assets') AS a, to_regclass('public.media_asset_links') AS l, to_regclass('public.media_asset_sources') AS s, to_regclass('public.camera_roll_moments') AS c");
     expect(back[0].a).toBeTruthy();
     expect(back[0].l).toBeTruthy();
     expect(back[0].s).toBeTruthy();
     expect(back[0].c).toBeTruthy();
+    const cols = await q("SELECT count(*)::int AS n FROM information_schema.columns WHERE table_name = 'camera_roll_moments' AND column_name LIKE 'make_%'");
+    expect(cols[0].n).toBe(5);
   });
 });
