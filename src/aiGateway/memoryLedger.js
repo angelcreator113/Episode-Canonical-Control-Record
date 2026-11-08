@@ -7,7 +7,8 @@
  *
  * Steps (each one atomic; `yieldFn` simulates database latency between them
  * so tests can interleave concurrent callers):
- *   authorize  T1  Stop gate, prior-unknown-attempt gate, budget gate, permit
+ *   authorize  T1  Stop gate, prior-attempt gate (retry only after not_sent or
+ *                  failed_confirmed), budget gate, permit
  *   dispatch   T2  single use: authorized -> dispatching, if unexpired, same
  *                  operation and still allowed by the safety state
  *   recordOutcome  T3  dispatching/accepted/... -> classified outcome
@@ -30,6 +31,9 @@ const TRANSITIONS = Object.freeze({
   unknown: ['accepted', 'provider_succeeded', 'succeeded', 'failed_confirmed', 'abandoned'], // reconciliation only
   succeeded: [], failed_confirmed: [], not_sent: [], abandoned: [],
 });
+
+// Phases after which another attempt of the same logical request may start.
+const RETRYABLE_AFTER = new Set(['not_sent', 'failed_confirmed']);
 
 class LedgerRefusal extends Error {
   constructor(code) {
@@ -75,13 +79,20 @@ function createReferenceLedger({
     const safety = readSafety();
     if (!safety || !safety.state || safety.state.allowSubmissions !== true) return { ok: false, code: 'STOPPED' };
     const job = input.job || {};
-    for (const r of rows.values()) {
-      if (r.permit.job.logicalKey === job.logicalKey && r.phase === 'unknown') return { ok: false, code: 'PRIOR_ATTEMPT_UNKNOWN' };
-    }
+    // A new attempt only when every earlier attempt of the logical request is
+    // provably not sent or confirmed failed (G2 rule; the Postgres ledger
+    // applies the same one under the logical-key lock).
+    const prior = [...rows.values()].filter((r) => r.permit.job.logicalKey === job.logicalKey);
+    if (prior.some((r) => r.permit.job.attempt === job.attempt)) return { ok: false, code: 'ATTEMPT_EXISTS' };
+    if (prior.some((r) => r.phase === 'unknown')) return { ok: false, code: 'PRIOR_ATTEMPT_UNKNOWN' };
+    if (prior.some((r) => !RETRYABLE_AFTER.has(r.phase))) return { ok: false, code: 'PRIOR_ATTEMPT_NOT_RETRYABLE' };
     const op = operationById(input.operation);
     if (!op || op.cls !== 'submission') return { ok: false, code: 'NOT_A_SUBMISSION' };
     const reservation = input.reservation || {};
     const strict = reservation.strict === true;
+    // Recorded limitation: a multipart body is bound by its hash only; its
+    // billing fields are not parsed, so strict multipart work is refused.
+    if (strict && op.bodyKind === 'multipart') return { ok: false, code: 'MULTIPART_FIELDS_UNVERIFIED' };
     const estimate = reservation.estimateMicros == null ? null : reservation.estimateMicros;
     const price = reservation.priceCatalogId ? priceOf(reservation.priceCatalogId) : null;
     const today = dayRows(reservation.day);
@@ -154,6 +165,8 @@ function createReferenceLedger({
     await yieldFn();
     const row = rows.get(id);
     if (!row) return { ok: false, code: 'PERMIT_UNKNOWN' };
+    // Uncertainty is kept: unknown leaves only through reconcile, with evidence.
+    if (row.phase === 'unknown') throw new LedgerRefusal('UNKNOWN_REQUIRES_RECONCILIATION');
     transition(row, phase, 'outcome', { preSendProof });
     if (taskId) row.taskId = String(taskId);
     if (Number.isInteger(confirmedMicros)) row.confirmedMicros = confirmedMicros;
@@ -211,4 +224,4 @@ function createReferenceLedger({
   };
 }
 
-module.exports = { createReferenceLedger, TRANSITIONS, LedgerRefusal };
+module.exports = { createReferenceLedger, TRANSITIONS, RETRYABLE_AFTER, LedgerRefusal };
