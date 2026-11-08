@@ -1,7 +1,7 @@
 'use strict';
 const express = require('express');
 const router = express.Router();
-const Anthropic = require('@anthropic-ai/sdk');
+const { createAnthropicClient } = require('../../services/anthropicClient');
 
 // Auth middleware
 const { requireAuth } = require('../../middleware/auth');
@@ -12,7 +12,7 @@ const { StorytellerMemory, StorytellerLine, StorytellerBook: _StorytellerBook, S
 const { buildUniverseContext } = require('../../utils/universeContext');
 
 require('dotenv').config({ override: !process.env.ANTHROPIC_API_KEY });
-const anthropic = new Anthropic();
+const anthropic = createAnthropicClient();
 
 // The Character Voice Session (POST /character-voice-session) was retired
 // 2026-10-18 (Evoni: "retire the two you suggested"); the Talk tab
