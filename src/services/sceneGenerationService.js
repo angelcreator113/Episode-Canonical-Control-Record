@@ -24,6 +24,7 @@ const sharp = require('sharp');
 const artifactDetection = require('./artifactDetectionService');
 const sceneSpecService = require('./sceneSpecService');
 const imageCost = require('./imageCostService');
+const providerOutcome = require('./providerSubmitOutcome');
 const Anthropic = require('@anthropic-ai/sdk');
 
 const RUNWAY_API_BASE    = 'https://api.dev.runwayml.com/v1';
@@ -205,14 +206,24 @@ async function startTextToImage(prompt, options = {}) {
         console.error(`[SceneGen] Flux still refused: ${err.message}`);
         throw err; // budget refusal: never retried
       }
-      const status = err.response?.status;
-      const retryable = !status || status === 429 || status >= 500;
+      // Sent again only when the attempt provably never reached fal. A 429,
+      // 5xx, timeout, reset or a reply without an image may already be a
+      // paid still, so it is never resubmitted (AI Operations Center, Q7).
+      const kind = providerOutcome.classifySubmitError(err);
       if (err.response) {
-        console.error(`[SceneGen] Flux still error (attempt ${attempt}/${MAX_RETRIES}):`, JSON.stringify(err.response.data, null, 2));
+        console.error(`[SceneGen] Flux still error (attempt ${attempt}/${MAX_RETRIES}, ${kind}):`, JSON.stringify(err.response.data, null, 2));
+      } else {
+        console.error(`[SceneGen] Flux still error (attempt ${attempt}/${MAX_RETRIES}, ${kind}): ${err.code || err.message}`);
       }
-      if (!retryable || attempt === MAX_RETRIES) throw err;
+      if (kind === 'unknown') {
+        throw new providerOutcome.ProviderOutcomeUnknownError(
+          'fal may have made this still: the request was sent but no usable answer came back. It was not sent again.',
+          { provider: 'fal', cause: err },
+        );
+      }
+      if (kind === 'failed' || attempt === MAX_RETRIES) throw err;
       const backoff = attempt * 2000;
-      console.log(`[SceneGen] Retrying Flux still in ${backoff}ms...`);
+      console.log(`[SceneGen] Flux still never reached fal; retrying in ${backoff}ms...`);
       await sleep(backoff);
     }
   }
@@ -2698,4 +2709,6 @@ module.exports = {
   generateGptImageStill,
   cropAndOutpaint,
   cropHasPixels,
+  // Exported for its submit-safety tests (fal stills, AI Operations Center Q7).
+  startTextToImage,
 };
