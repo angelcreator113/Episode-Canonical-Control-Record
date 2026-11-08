@@ -42,6 +42,17 @@
  *   E4 keys: several active keys; revoked keys are refused; each key keeps
  *      its own sequence counter; roles separate 'control' (stop/release)
  *      from 'recover'.
+ *   Cross-key ordering: per-key counters cannot order commands from
+ *      different keys, so the signed issuedAt does. The gateway keeps a
+ *      stop floor (persisted as stopIssuedAt): the highest issuedAt of any
+ *      applied stop or RECOVER. A release is applied only when its issuedAt
+ *      is strictly later than the stop floor; a stop is always applied, even
+ *      a delayed one, and only ever raises the floor. RECOVER computes the
+ *      floor as the highest of its own issuedAt, the stops the log still
+ *      records and verified stops refused since the state became untrusted;
+ *      the floors it carries are sequence floors only and cannot lower it.
+ *      Signer clocks matter here: a release signed on a clock running behind
+ *      the stop signer's is refused (fail closed) and must be re-signed.
  *   Durability: stop is applied in memory first, then logged and
  *   persisted; release is logged and persisted first, then applied. A
  *   persistence failure leaves the gateway stopped and untrusted.
@@ -78,6 +89,18 @@ function verifyLogChain(entries) {
 }
 
 const isSeq = (n) => Number.isSafeInteger(n) && n >= 0;
+const isTime = (t) => Number.isFinite(t) && t >= 0;
+
+/** Highest issuedAt of any stop or recover the log records (0 when none). */
+function knownStopFloor(entries) {
+  let floor = 0;
+  for (const e of entries) {
+    if (!e || typeof e !== 'object' || (e.action !== 'stop' && e.action !== 'recover')) continue;
+    const t = isTime(e.issuedAt) ? e.issuedAt : e.at;
+    if (isTime(t) && t > floor) floor = t;
+  }
+  return floor;
+}
 
 /** Highest command sequence (or recovery floor) the log records for each key. */
 function knownSequences(entries) {
@@ -95,7 +118,8 @@ function validState(d) {
   return Boolean(d && typeof d === 'object' && d.version === STATE_VERSION && typeof d.stopped === 'boolean'
     && typeof d.target === 'string' && d.lastSeq && typeof d.lastSeq === 'object'
     && Object.entries(d.lastSeq).every(([fp, n]) => FINGERPRINT.test(fp) && isSeq(n))
-    && d.logHead && Number.isSafeInteger(d.logHead.seq) && d.logHead.seq >= 0 && HASH.test(d.logHead.hash));
+    && d.logHead && Number.isSafeInteger(d.logHead.seq) && d.logHead.seq >= 0 && HASH.test(d.logHead.hash)
+    && isTime(d.stopIssuedAt));
 }
 
 function createEmergencyControl({
@@ -111,7 +135,7 @@ function createEmergencyControl({
 
   const mem = {
     loaded: false, trusted: false, recoverable: false, condition: 'not_loaded', stopped: true,
-    since: null, reason: null, lastSeq: {}, known: {}, logHead: { seq: 0, hash: GENESIS_HASH },
+    since: null, reason: null, lastSeq: {}, known: {}, stopFloor: 0, logHead: { seq: 0, hash: GENESIS_HASH },
     challenge: null, loadedAt: null,
   };
 
@@ -138,10 +162,10 @@ function createEmergencyControl({
     mem.challenge = { value, id: sha256Hex(value).slice(0, 16), expiresAt: clock.now() + limits.recoveryChallengeTtlMs };
   }
 
-  function untrusted(condition, { head, known = {}, recoverable = true } = {}) {
+  function untrusted(condition, { head, known = {}, stopFloor = 0, recoverable = true } = {}) {
     Object.assign(mem, {
       loaded: true, trusted: false, recoverable, condition, stopped: true, since: null, reason: condition,
-      lastSeq: {}, known, logHead: head || mem.logHead, challenge: null, loadedAt: clock.now(),
+      lastSeq: {}, known, stopFloor, logHead: head || mem.logHead, challenge: null, loadedAt: clock.now(),
     });
     if (recoverable) issueChallenge();
     console.error(`[aiGateway] emergency state untrusted (${condition}); treating as stopped`);
@@ -160,29 +184,33 @@ function createEmergencyControl({
     const last = log[log.length - 1];
     const head = last ? { seq: last.seq, hash: last.hash } : { seq: 0, hash: GENESIS_HASH };
     const known = knownSequences(log);
+    const logStopFloor = knownStopFloor(log);
+    const fromLog = { head, known, stopFloor: logStopFloor };
 
     let s;
     try {
       s = store.readState();
     } catch (err) {
-      return untrusted('state_corrupt', { head, known });
+      return untrusted('state_corrupt', fromLog);
     }
-    if (!s || s.exists !== true) return untrusted(log.length ? 'state_lost' : 'state_missing', { head, known });
+    if (!s || s.exists !== true) return untrusted(log.length ? 'state_lost' : 'state_missing', fromLog);
     const d = s.data;
-    if (!d || d.version !== STATE_VERSION) return untrusted('state_unknown_version', { head, known });
-    if (!validState(d)) return untrusted('state_corrupt', { head, known });
+    if (!d || d.version !== STATE_VERSION) return untrusted('state_unknown_version', fromLog);
+    if (!validState(d)) return untrusted('state_corrupt', fromLog);
     // Floors must also respect whatever the (untrusted) state still claims.
     const knownWithState = { ...known };
     for (const [fp, n] of Object.entries(d.lastSeq)) if (!(knownWithState[fp] >= n)) knownWithState[fp] = n;
-    if (d.target !== targetId) return untrusted('state_target_mismatch', { head, known: knownWithState });
-    if (d.logHead.seq !== head.seq || d.logHead.hash !== head.hash) return untrusted('state_inconsistent', { head, known: knownWithState });
+    const withState = { head, known: knownWithState, stopFloor: Math.max(logStopFloor, d.stopIssuedAt) };
+    if (d.target !== targetId) return untrusted('state_target_mismatch', withState);
+    if (d.logHead.seq !== head.seq || d.logHead.hash !== head.hash) return untrusted('state_inconsistent', withState);
     for (const [fp, n] of Object.entries(known)) {
-      if (!(d.lastSeq[fp] >= n)) return untrusted('state_inconsistent', { head, known: knownWithState });
+      if (!(d.lastSeq[fp] >= n)) return untrusted('state_inconsistent', withState);
     }
+    if (d.stopIssuedAt < logStopFloor) return untrusted('state_inconsistent', withState);
     Object.assign(mem, {
       loaded: true, trusted: true, recoverable: false, condition: 'ok', stopped: d.stopped,
       since: d.since || null, reason: d.reason || null, lastSeq: { ...d.lastSeq }, known: knownWithState,
-      logHead: head, challenge: null, loadedAt: clock.now(),
+      stopFloor: d.stopIssuedAt, logHead: head, challenge: null, loadedAt: clock.now(),
     });
     return snapshot();
   }
@@ -199,7 +227,7 @@ function createEmergencyControl({
     if (!mem.challenge || clock.now() > mem.challenge.expiresAt) issueChallenge();
     return Object.freeze({
       challenge: mem.challenge.value, challengeId: mem.challenge.id, expiresAt: mem.challenge.expiresAt,
-      target: targetId, condition: mem.condition, knownFloors: Object.freeze({ ...mem.known }),
+      target: targetId, condition: mem.condition, knownFloors: Object.freeze({ ...mem.known }), stopFloor: mem.stopFloor,
     });
   }
 
@@ -213,7 +241,7 @@ function createEmergencyControl({
   function persist() {
     store.writeState({
       version: STATE_VERSION, target: targetId, stopped: mem.stopped, since: mem.since, reason: mem.reason,
-      lastSeq: { ...mem.lastSeq }, logHead: { ...mem.logHead },
+      lastSeq: { ...mem.lastSeq }, stopIssuedAt: mem.stopFloor, logHead: { ...mem.logHead },
     });
   }
 
@@ -251,12 +279,14 @@ function createEmergencyControl({
     const lastSeq = { ...p.floors };
     lastSeq[sig.signer] = Math.max(lastSeq[sig.signer] || 0, p.seq);
     const challengeId = mem.challenge.id;
+    // Computed, never supplied: the sequence floors cannot lower it.
+    const stopFloor = Math.max(mem.stopFloor, p.issuedAt);
     try {
       appendAudit({
         at: now, action: 'recover', target: targetId, commandSeq: p.seq, commandId: p.commandId, signer: sig.signer,
-        reason: p.reason, challengeId, floors: { ...p.floors }, priorCondition: prior,
+        issuedAt: p.issuedAt, reason: p.reason, challengeId, floors: { ...p.floors }, priorCondition: prior,
       });
-      Object.assign(mem, { lastSeq, stopped: true, since: now, reason: p.reason });
+      Object.assign(mem, { lastSeq, stopFloor, stopped: true, since: now, reason: p.reason });
       persist();
     } catch (err) {
       persistenceFailed(err);
@@ -292,14 +322,22 @@ function createEmergencyControl({
     if (p.action === 'recover') return recover(p, sig, now);
 
     if (!sig.roles.includes('control')) return { ok: false, code: 'KEY_NOT_AUTHORIZED' };
-    if (!mem.trusted) return { ok: false, code: 'RECOVERY_REQUIRED' };
+    if (!mem.trusted) {
+      // Already stopped; the stop is refused, but a later RECOVER must not
+      // open the way for a release older than it (this process only).
+      if (p.action === 'stop') mem.stopFloor = Math.max(mem.stopFloor, p.issuedAt);
+      return { ok: false, code: 'RECOVERY_REQUIRED' };
+    }
     if (p.seq <= (mem.lastSeq[sig.signer] || 0)) return { ok: false, code: 'SEQ_STALE' };
+    if (p.action === 'release' && !(p.issuedAt > mem.stopFloor)) return { ok: false, code: 'RELEASE_PREDATES_STOP' };
 
     const audit = {
-      at: now, action: p.action, target: targetId, commandSeq: p.seq, commandId: p.commandId, signer: sig.signer, reason: p.reason,
+      at: now, action: p.action, target: targetId, commandSeq: p.seq, commandId: p.commandId, signer: sig.signer,
+      issuedAt: p.issuedAt, reason: p.reason,
     };
     if (p.action === 'stop') {
       Object.assign(mem, { stopped: true, since: now, reason: p.reason }); // restrict first
+      mem.stopFloor = Math.max(mem.stopFloor, p.issuedAt);
       mem.lastSeq[sig.signer] = p.seq;
       try {
         appendAudit(audit);
@@ -330,4 +368,6 @@ function createEmergencyControl({
   return { load, touch, apply, recoveryChallenge, status: snapshot };
 }
 
-module.exports = { createEmergencyControl, verifyLogChain, chainHash, knownSequences, GENESIS_HASH, STATE_VERSION };
+module.exports = {
+  createEmergencyControl, verifyLogChain, chainHash, knownSequences, knownStopFloor, GENESIS_HASH, STATE_VERSION,
+};

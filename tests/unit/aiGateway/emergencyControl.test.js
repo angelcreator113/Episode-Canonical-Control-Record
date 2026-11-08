@@ -44,12 +44,15 @@ describe('local emergency control (E1-E4, challenge-bound recovery)', () => {
   ], { revoked });
   const make = (opts = {}) => createEmergencyControl({ store, verifier: keySet(opts.revoked), clock, targetId: TARGET, ...opts.extra });
   const at = () => clock.now();
+  /** Each signed command is issued one tick after the previous one, as in real use. */
+  const tick = () => { clock.advance(1); return clock.now(); };
   const floors = (a = 0, b = 0, r = 0) => ({ [fp(A)]: a, [fp(B)]: b, [fp(R)]: r });
-  const recover = (ec, { seq = 1, fl = floors(), key = R, target = TARGET, challenge } = {}) => {
+  const recover = (ec, { seq = 1, fl = floors(), key = R, target = TARGET, challenge, issuedAt } = {}) => {
     const ch = challenge !== undefined ? challenge : (ec.recoveryChallenge() || {}).challenge;
-    return ec.apply(sign(key, { action: 'recover', seq, issuedAt: at(), challenge: ch, floors: fl, target }));
+    const t = issuedAt !== undefined ? issuedAt : tick();
+    return ec.apply(sign(key, { action: 'recover', seq, issuedAt: t, challenge: ch, floors: fl, target }));
   };
-  const cmd = (key, action, seq, extra = {}) => sign(key, { action, seq, issuedAt: at(), ...extra });
+  const cmd = (key, action, seq, extra = {}) => sign(key, { action, seq, issuedAt: tick(), ...extra });
   /** A trusted gateway: recovered from an empty store, then released. */
   const established = () => {
     const ec = make();
@@ -302,5 +305,137 @@ describe('local emergency control (E1-E4, challenge-bound recovery)', () => {
     expect(ec.status().stopped).toBe(false);
     const dbStopped = { readable: true, state: 'STOPPED', version: 10, readAt: at(), pauses: {} };
     expect(effectiveState({ db: dbStopped, local: ec.status(), ack: { version: 10 }, now: at() })).toMatchObject({ effective: 'STOPPED', allowSubmissions: false });
+  });
+
+  describe('cross-key ordering (a Release never undoes a newer Stop from another control key)', () => {
+    const MIN = 60_000;
+    const stateFile = () => path.join(dir, 'emergency.json');
+
+    test('a delayed release from B after a newer Stop from A is refused, equal issuedAt included, and stays refused after restart', () => {
+      const ec = established();
+      const t0 = at();
+      const delayedB = cmd(B, 'release', 1, { issuedAt: t0 + 1 * MIN });
+      clock.set(t0 + 2 * MIN);
+      expect(ec.apply(cmd(A, 'stop', 5, { issuedAt: t0 + 2 * MIN })).ok).toBe(true);
+      clock.set(t0 + 3 * MIN); // B's release arrives late, still inside the skew window
+      expect(ec.apply(delayedB)).toEqual({ ok: false, code: 'RELEASE_PREDATES_STOP' });
+      expect(ec.status().stopped).toBe(true);
+      expect(ec.apply(cmd(B, 'release', 2, { issuedAt: t0 + 2 * MIN })).code).toBe('RELEASE_PREDATES_STOP'); // a tie goes to Stop
+      expect(JSON.parse(fs.readFileSync(stateFile(), 'utf8')).stopIssuedAt).toBe(t0 + 2 * MIN);
+
+      const restarted = make();
+      expect(restarted.load()).toMatchObject({ condition: 'ok', stopped: true });
+      expect(restarted.apply(delayedB).code).toBe('RELEASE_PREDATES_STOP');
+      expect(restarted.status().stopped).toBe(true);
+      expect(restarted.apply(cmd(B, 'release', 3, { issuedAt: t0 + 2 * MIN + 1 })).ok).toBe(true); // a newer B release works
+      expect(restarted.status().stopped).toBe(false);
+      const log = store.readLog();
+      expect(log[log.length - 1]).toMatchObject({ action: 'release', signer: fp(B), commandSeq: 3, issuedAt: t0 + 2 * MIN + 1 });
+    });
+
+    test('a delayed Stop older than the current release still stops and never lowers the stop floor', () => {
+      const ec = established();
+      const t0 = at();
+      clock.set(t0 + 2 * MIN);
+      expect(ec.apply(cmd(A, 'stop', 5, { issuedAt: t0 + 2 * MIN })).ok).toBe(true);
+      expect(ec.apply(cmd(B, 'release', 1, { issuedAt: t0 + 3 * MIN })).ok).toBe(true);
+      expect(ec.apply(cmd(B, 'stop', 2, { issuedAt: t0 + 1 * MIN })).ok).toBe(true); // older, delayed: fail safe
+      expect(ec.status().stopped).toBe(true);
+      expect(ec.apply(cmd(A, 'release', 6, { issuedAt: t0 + 2 * MIN - 1 })).code).toBe('RELEASE_PREDATES_STOP');
+      expect(ec.apply(cmd(A, 'release', 7, { issuedAt: t0 + 2 * MIN + 1 })).ok).toBe(true);
+    });
+
+    test('RECOVER cannot weaken ordering: the stop floor is computed from the log and its own issuedAt, never from the floors it carries', () => {
+      const ec = established();
+      const t0 = at();
+      const delayedB = cmd(B, 'release', 50, { issuedAt: t0 + 1 * MIN }); // seq far above any floor
+      clock.set(t0 + 2 * MIN);
+      expect(ec.apply(cmd(A, 'stop', 5, { issuedAt: t0 + 2 * MIN })).ok).toBe(true);
+      fs.rmSync(stateFile());
+
+      const lost = make();
+      expect(lost.load()).toMatchObject({ condition: 'state_lost', stopped: true });
+      expect(lost.recoveryChallenge().stopFloor).toBe(t0 + 2 * MIN);
+      // A RECOVER signed before the stop, with B's sequence floor left at 0.
+      expect(recover(lost, { seq: 2, fl: floors(5, 0, 1), issuedAt: t0 + 90_000 }).ok).toBe(true);
+      expect(lost.apply(delayedB).code).toBe('RELEASE_PREDATES_STOP');
+      expect(lost.apply(cmd(B, 'release', 51, { issuedAt: t0 + 100_000 })).code).toBe('RELEASE_PREDATES_STOP');
+      const restarted = make();
+      expect(restarted.load()).toMatchObject({ condition: 'ok', stopped: true });
+      expect(restarted.apply(delayedB).code).toBe('RELEASE_PREDATES_STOP');
+      expect(restarted.apply(cmd(B, 'release', 52, { issuedAt: t0 + 2 * MIN + 1 })).ok).toBe(true);
+    });
+
+    test('after RECOVER, any release issued before the RECOVER is refused even with a sequence above the floor', () => {
+      const ec = make();
+      ec.load();
+      const t0 = at();
+      const early = cmd(A, 'release', 9, { issuedAt: t0 });
+      expect(recover(ec, { issuedAt: t0 + 1 }).ok).toBe(true);
+      expect(ec.apply(early).code).toBe('RELEASE_PREDATES_STOP');
+      expect(ec.apply(cmd(A, 'release', 10, { issuedAt: t0 + 1 })).code).toBe('RELEASE_PREDATES_STOP');
+      expect(ec.apply(cmd(A, 'release', 11, { issuedAt: t0 + 2 })).ok).toBe(true);
+    });
+
+    test('a Stop refused while untrusted still raises the baseline the next RECOVER starts from', () => {
+      established();
+      fs.rmSync(stateFile());
+      const lost = make();
+      lost.load();
+      const t0 = at();
+      clock.set(t0 + 2 * MIN);
+      expect(lost.apply(cmd(A, 'stop', 5, { issuedAt: t0 + 2 * MIN })).code).toBe('RECOVERY_REQUIRED');
+      expect(lost.recoveryChallenge().stopFloor).toBe(t0 + 2 * MIN);
+      expect(recover(lost, { seq: 2, fl: floors(1, 0, 1), issuedAt: t0 + 1 * MIN }).ok).toBe(true);
+      expect(lost.apply(cmd(B, 'release', 1, { issuedAt: t0 + 90_000 })).code).toBe('RELEASE_PREDATES_STOP');
+      expect(lost.apply(cmd(B, 'release', 2, { issuedAt: t0 + 2 * MIN + 1 })).ok).toBe(true);
+    });
+
+    test('state whose stop floor is missing or below the log is untrusted, and recovery keeps the higher floor', () => {
+      const ec = established();
+      const t0 = at();
+      expect(ec.apply(cmd(A, 'stop', 5, { issuedAt: t0 + 1 * MIN })).ok).toBe(true);
+      const good = JSON.parse(fs.readFileSync(stateFile(), 'utf8'));
+      const { stopIssuedAt, ...noFloor } = good;
+      expect(stopIssuedAt).toBe(t0 + 1 * MIN);
+      fs.writeFileSync(stateFile(), JSON.stringify(noFloor));
+      expect(make().load()).toMatchObject({ readable: false, stopped: true, condition: 'state_corrupt' });
+      fs.writeFileSync(stateFile(), JSON.stringify({ ...good, stopIssuedAt: t0 }));
+      const lowered = make();
+      expect(lowered.load()).toMatchObject({ readable: false, stopped: true, condition: 'state_inconsistent' });
+      expect(lowered.recoveryChallenge().stopFloor).toBe(t0 + 1 * MIN);
+      fs.writeFileSync(stateFile(), JSON.stringify({ ...good, stopIssuedAt: t0 + 4 * MIN })); // a higher floor only restricts further
+      const raised = make();
+      expect(raised.load()).toMatchObject({ condition: 'ok', stopped: true });
+      expect(raised.apply(cmd(B, 'release', 1, { issuedAt: t0 + 3 * MIN })).code).toBe('RELEASE_PREDATES_STOP');
+    });
+
+    test('rotation and revocation: a revoked B is refused, a new key C is ordered by the same stop floor', () => {
+      const C = gen();
+      established();
+      const t0 = at();
+      clock.set(t0 + 2 * MIN);
+      const before = createEmergencyControl({ store, verifier: keySet(), clock, targetId: TARGET });
+      before.load();
+      expect(before.apply(cmd(A, 'stop', 5, { issuedAt: t0 + 2 * MIN })).ok).toBe(true);
+      const rotated = createEmergencyControl({
+        store,
+        verifier: createEd25519KeySet([
+          { publicKeyPem: A.pem, roles: ['control'] },
+          { publicKeyPem: B.pem, roles: ['control'] },
+          { publicKeyPem: C.pem, roles: ['control'] },
+          { publicKeyPem: R.pem, roles: ['recover'] },
+        ], { revoked: [fp(B)] }),
+        clock,
+        targetId: TARGET,
+      });
+      expect(rotated.load()).toMatchObject({ condition: 'ok', stopped: true });
+      expect(rotated.apply(cmd(B, 'release', 9, { issuedAt: t0 + 3 * MIN })).code).toBe('KEY_REVOKED');
+      expect(rotated.apply(cmd(C, 'release', 1, { issuedAt: t0 + 1 * MIN })).code).toBe('RELEASE_PREDATES_STOP');
+      expect(rotated.apply(cmd(C, 'release', 2, { issuedAt: t0 + 2 * MIN + 1 })).ok).toBe(true);
+      expect(rotated.status().stopped).toBe(false);
+      expect(rotated.apply(cmd(A, 'stop', 6)).ok).toBe(true); // emergency Stop by the other key still works
+      expect(rotated.status().stopped).toBe(true);
+    });
   });
 });

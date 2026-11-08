@@ -95,31 +95,40 @@ These tighten addendum E. Everything above still holds unless stated here.
 - **E1, ordering.**
   - `seq` must be higher than the last sequence applied for the signing key, and each key has its own counter.
   - Counters are persisted, so replay protection survives restarts.
-  - A delayed `release` can never override a newer `stop`.
+  - A delayed `release` can never override a newer `stop` from the same key.
   - `seq` replaces the earlier nonce list.
+- **Cross-key ordering.** Per-key counters cannot order commands signed by different keys, so the signed `issuedAt` does.
+  - The gateway keeps a **stop floor**: the highest `issuedAt` of any applied `stop` or `recover`. It is persisted as `stopIssuedAt` in the state file and recorded in every log entry.
+  - A `release` is applied only when its `issuedAt` is **strictly later** than the stop floor; otherwise it is refused with `RELEASE_PREDATES_STOP`. A tie goes to the stop.
+  - A `stop` is always applied, even a delayed one, and only ever raises the floor.
+  - So a delayed `release` from key B cannot undo a newer `stop` from key A, including after a restart, a key rotation or a revocation.
+  - **Clock dependency.** The rule trusts the signers' clocks (each `issuedAt` is still bounded by the ±5-minute skew). If a release is signed on a clock running behind the stop signer's clock, it is refused and must be signed again later. This fails closed.
 - **E2, target.** `target` must equal the gateway's target id exactly. The id is assigned at provisioning and passed in explicitly; it is never hardcoded or derived.
 - **E3, state.** The gateway is **stopped and untrusted** when its state file is:
   - missing;
   - corrupt;
   - of an unknown version;
   - written for another target;
-  - inconsistent with the log (head or per-key sequences);
+  - inconsistent with the log (head, per-key sequences, or a stop floor below the latest logged `stop` or `recover`);
   
   or when the log is unreadable. In that condition `stop` and `release` are refused, and **a normal release never initializes state**.
 - **Recovery (Option A).** Initialization and recovery use a separately authorized signed `recover` command.
   - **Challenge.** It must carry the current challenge: 32 fresh random bytes, held in memory only, so it dies with the process. A challenge expires after 15 minutes and is single-use.
   - **Key.** It must be signed by a key with the `recover` role.
   - **Floors.** It must carry a sequence floor for every active key, taken from the signing authority's durable records. No floor may be lower than any sequence the gateway still knows from its log or state.
+  - **Stop floor.** `recover` does not carry a stop floor; the gateway computes it. The floor is the highest of: the recover command's own `issuedAt`; every `stop` and `recover` the log still records; the state file's floor, when the state is readable; and any verified `stop` refused while the state was untrusted, in this process. The sequence floors cannot lower it. So a `release` issued before the `recover`, or before a known `stop`, is refused, whatever its sequence.
   - **Effect.** `recover` leaves the gateway **stopped** and never authorizes dispatch. A newly signed `release`, with a sequence above the floor, is required afterwards.
   - **Corrupt log.** A log whose hash chain is broken blocks recovery. The files must first be archived out of band, by a manual, separately authorized procedure.
 - **E4, keys.**
   - Several active public keys are allowed, each with roles: `control` for stop and release, `recover` for recovery. An ordinary key has no recovery authority.
   - Revoked keys are listed by fingerprint and refused.
   - There is no key expiry in this slice.
-- **Audit.** Every applied command records its `target`, command `seq`, signer fingerprint and `commandId`. `recover` also records the challenge id, the floors and the prior condition.
+- **Audit.** Every applied command records its `target`, command `seq`, signer fingerprint, `commandId` and `issuedAt`. `recover` also records the challenge id, the floors and the prior condition.
 - **Limitation.** The state file and the hash-chained log are writable by the gateway's own account. They detect edits and inconsistencies, but they cannot prove that no history was deleted: removing both files looks like a new gateway. Two things limit the damage:
   - nothing initializes without a fresh challenge, so replay fails;
   - the floors come from the signing authority, not from the gateway.
+
+  For the same reason, when history was deleted, the stop floor can only reflect the stops the gateway still knows. A `stop` refused while the state was untrusted is remembered only until the process restarts, because writing it would need trusted state. Such a stop was answered with `RECOVERY_REQUIRED`, never reported as applied, and the gateway stays stopped until a recovery operator signs `recover`. An operator who needs that stop to hold should send it again after recovery.
 
 ## 6. Dispatch and Stop acknowledgement (`dispatcher`)
 
