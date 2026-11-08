@@ -57,10 +57,12 @@ describe('no automatic retry', () => {
     expect((await dispatcher.handleSubmission(call.request(a.permit, a.secret))).code).toBe('PERMIT_USED');
     expect(calls).toBe(1);
 
-    // a new attempt needs a new permit; for an unknown outcome it is refused outright
+    // a new attempt needs a new permit, and is allowed only after a provably
+    // unsent or confirmed-failed attempt; an unknown outcome refuses outright
     const retry = await ledger.authorize(anthropicCall({ logicalKey: 'L1', attempt: 2 }).authorizeInput);
     if (phase === 'unknown') expect(retry.code).toBe('PRIOR_ATTEMPT_UNKNOWN');
-    else expect(retry.ok).toBe(true);
+    else if (phase === 'not_sent' || phase === 'failed_confirmed') expect(retry.ok).toBe(true);
+    else expect(retry.code).toBe('PRIOR_ATTEMPT_NOT_RETRYABLE');
   });
 });
 
