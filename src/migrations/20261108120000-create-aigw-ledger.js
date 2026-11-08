@@ -20,10 +20,13 @@
  *   aigw_audit            append-only administrative actions
  *
  * Access is only through SECURITY DEFINER functions (search_path pinned,
- * every name schema-qualified). This migration grants EXECUTE to nobody; the
- * hand-run role script (scripts/aigw/sql/aigw-roles.sql) grants each role
- * exactly its functions (aigwDbGrants.js, beside the G1 core) and moves
- * ownership to a NOLOGIN owner role, so the application login owns nothing.
+ * every name schema-qualified). Every table and function stays owned by the
+ * login that runs this migration: the Deploy workflow's trusted migration
+ * login, separate from the application's login (Evoni, 2026-11-08, Option A;
+ * scripts/deploy/migration-trust-check.js). This migration grants EXECUTE to
+ * nobody; the hand-run role script (scripts/aigw/sql/aigw-roles.sql) grants
+ * each runtime role exactly its functions (aigwDbGrants.js, beside the G1
+ * core) and moves no ownership.
  *
  * Lock order (every function takes a subset, always in this order):
  *   L1 the control row (FOR SHARE to read, UPDATE to change)

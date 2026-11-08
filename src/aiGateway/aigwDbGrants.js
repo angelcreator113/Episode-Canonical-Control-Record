@@ -9,10 +9,15 @@
  *   - the integration tests, which build the same roles in a throwaway
  *     database and check every grant and every refusal.
  *
- * The tables and functions are created by the migration
- * 20261108120000-create-aigw-ledger.js, which grants EXECUTE to nobody.
- * All access goes through SECURITY DEFINER functions; no role but the
- * inspector reads a table, and no role writes one directly.
+ * Ownership (Evoni, 2026-11-08, Option A): the tables and functions stay
+ * owned by the trusted migration login that runs the migration
+ * 20261108120000-create-aigw-ledger.js (the Deploy workflow's own login, not
+ * the application's). Nothing moves them to another owner, so the deploy's
+ * migration trust check (scripts/deploy/migration-trust-check.js) keeps
+ * passing. The migration grants EXECUTE to nobody. Runtime access is granted
+ * to the roles below and nothing else: no role but the inspector reads a
+ * table, and no role writes one directly; every write is a SECURITY DEFINER
+ * function.
  *
  * The existing application login gets NO administrative function: Stop,
  * Resume, pauses, caps and reconciliation belong to aigw_admin only. When G3
@@ -21,15 +26,17 @@
  * else.
  *
  * Roles (all NOLOGIN group roles; logins are a G3 decision):
- *   aigw_owner      owns the tables and functions; nothing is granted to it
- *                   and nobody is made a member of it
  *   aigw_caller     the services that ask for a permit (API, worker, scripts)
  *   aigw_gateway    the gateway process: dispatch, outcomes, cleanup, ack
  *   aigw_admin      Stop, Resume, pauses, caps, reconciliation
  *   aigw_inspector  read-only inspection and audit
+ *
+ * The role script runs as the migration login. It can do all of it: it has
+ * CREATEROLE, owns the database (pg_database_owner, so it may grant USAGE on
+ * schema public) and owns every aigw object (so it may grant on them).
+ * Per docs/reads/2026-11-04-deploy-migration-trusted-path.md that login is
+ * `postgres`; the application connects as `episode_app_dev`.
  */
-
-const OWNER_ROLE = 'aigw_owner';
 
 const ROLES = Object.freeze({
   caller: 'aigw_caller',
@@ -99,17 +106,22 @@ const ADMIN_ONLY = Object.freeze([
 
 const q = (id) => `"${String(id).replace(/"/g, '""')}"`;
 
-/** The statements giving `role` exactly the privileges of `kind`. */
+/**
+ * The statements giving `role` exactly the privileges of `kind`. Run by the
+ * migration login, which owns the database and every aigw object. CONNECT is
+ * included only when a database is named (the tests' logins need it; the
+ * production group roles are NOLOGIN).
+ */
 function grantStatements(kind, role, database) {
   if (!FUNCTION_GRANTS[kind]) throw new Error(`aigw grants: unknown role kind ${kind}`);
-  const out = [];
-  if (database) out.push(`GRANT CONNECT ON DATABASE ${q(database)} TO ${q(role)}`);
-  out.push(`GRANT USAGE ON SCHEMA public TO ${q(role)}`);
-  for (const t of TABLE_GRANTS[kind]) out.push(`GRANT SELECT ON TABLE public.${t} TO ${q(role)}`);
-  for (const f of FUNCTION_GRANTS[kind]) out.push(`GRANT EXECUTE ON FUNCTION public.${f} TO ${q(role)}`);
-  return out;
+  return [
+    ...(database ? [`GRANT CONNECT ON DATABASE ${q(database)} TO ${q(role)}`] : []),
+    `GRANT USAGE ON SCHEMA public TO ${q(role)}`,
+    ...TABLE_GRANTS[kind].map((t) => `GRANT SELECT ON TABLE public.${t} TO ${q(role)}`),
+    ...FUNCTION_GRANTS[kind].map((f) => `GRANT EXECUTE ON FUNCTION public.${f} TO ${q(role)}`),
+  ];
 }
 
 module.exports = {
-  OWNER_ROLE, ROLES, TABLES, FUNCTION_GRANTS, TABLE_GRANTS, ADMIN_ONLY, grantStatements,
+  ROLES, TABLES, FUNCTION_GRANTS, TABLE_GRANTS, ADMIN_ONLY, grantStatements,
 };

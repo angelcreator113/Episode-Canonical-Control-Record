@@ -338,7 +338,7 @@ d('AI gateway G2 ledger on Postgres', () => {
   });
 
   test('down on an empty ledger removes every table and function; up restores the seed', async () => {
-    const t = await createAigwTestDb({ poolMax: 1, ownership: false });
+    const t = await createAigwTestDb({ poolMax: 1 });
     try {
       // the seed's control row is not a history row; an unused ledger may be rolled back
       await migration.down(t.sequelize.getQueryInterface(), Sequelize);

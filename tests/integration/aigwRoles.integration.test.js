@@ -12,7 +12,8 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const { Client } = require('pg');
-const { shouldSkip, createAigwTestDb, ident } = require('../helpers/aigwTestDb');
+const { shouldSkip, createAigwTestDb, rejectedOwnershipStatements, ident } = require('../helpers/aigwTestDb');
+const { check: trustCheck } = require('../../scripts/deploy/migration-trust-check');
 const grants = require('../../src/aiGateway/aigwDbGrants');
 const migration = require('../../src/migrations/20261108120000-create-aigw-ledger');
 const { anthropicCall, DAY } = require('../unit/aiGateway/_harness');
@@ -41,6 +42,25 @@ const PROBES = {
   'aigw_gateway_ack(jsonb)': "SELECT public.aigw_gateway_ack('{}'::jsonb)",
 };
 const INTERNAL = migration.FUNCTIONS.filter((f) => !(f in PROBES));
+
+const OWNERS_SQL = `SELECT DISTINCT pg_get_userbyid(relowner) AS o FROM pg_class WHERE relname LIKE 'aigw\\_%' AND relkind IN ('r', 'S', 'i')
+  UNION SELECT DISTINCT pg_get_userbyid(proowner) FROM pg_proc WHERE proname LIKE 'aigw\\_%'
+  UNION SELECT DISTINCT pg_get_userbyid(typowner) FROM pg_type WHERE typname LIKE 'aigw\\_%'`;
+
+/**
+ * The deploy's own trust check, unchanged (scripts/deploy/migration-trust-check.js
+ * check()), connected as production's migrate phase connects: the migration
+ * login with PGOPTIONS pinning search_path to public.
+ */
+async function trustFindings(url) {
+  const c = new Client({ connectionString: url, options: '-c search_path=public' });
+  await c.connect();
+  try {
+    return await trustCheck(c);
+  } finally {
+    await c.end();
+  }
+}
 
 (shouldSkip ? describe.skip : describe)('AI gateway G2 roles', () => {
   jest.setTimeout(60000);
@@ -120,14 +140,52 @@ const INTERNAL = migration.FUNCTIONS.filter((f) => !(f in PROBES));
     }
   });
 
-  test('the owner role cannot log in and nobody is a member of it', async () => {
-    const { rows } = await t.su.query('SELECT rolcanlogin FROM pg_roles WHERE rolname = $1', [t.roles.owner]);
-    expect(rows).toEqual([{ rolcanlogin: false }]);
-    const { rows: members } = await t.su.query('SELECT 1 FROM pg_auth_members m JOIN pg_roles r ON r.oid = m.roleid WHERE r.rolname = $1', [t.roles.owner]);
-    expect(members).toEqual([]);
-    const { rows: owned } = await t.su.query(`SELECT DISTINCT pg_get_userbyid(relowner) AS o FROM pg_class WHERE relname LIKE 'aigw\\_%' AND relkind = 'r'
-      UNION SELECT DISTINCT pg_get_userbyid(proowner) FROM pg_proc WHERE proname LIKE 'aigw\\_%'`);
-    expect(owned).toEqual([{ o: t.roles.owner }]);
+  test('Option A: every aigw object is owned by the migration login (not a superuser, none of the runtime logins); no runtime login is a member of it', async () => {
+    const { rows: owned } = await t.su.query(OWNERS_SQL);
+    expect(owned).toEqual([{ o: t.roles.migrator }]);
+    const { rows: [m] } = await t.su.query('SELECT rolsuper FROM pg_roles WHERE rolname = $1', [t.roles.migrator]);
+    expect(m.rolsuper).toBe(false);
+    for (const kind of KINDS) {
+      const { rows: [r] } = await t.su.query("SELECT pg_has_role($1, $2, 'MEMBER') AS member", [t.roles[kind], t.roles.migrator]);
+      expect([kind, r.member]).toEqual([kind, false]);
+    }
+  });
+
+  test('PUBLIC has no EXECUTE on any aigw function and no privilege on any aigw table or sequence', async () => {
+    const acl = async (sql) => (await t.su.query(sql)).rows;
+    expect(await acl(`SELECT p.oid::regprocedure::text AS f FROM pg_proc p, aclexplode(p.proacl) a WHERE p.proname LIKE 'aigw\\_%' AND a.grantee = 0`)).toEqual([]);
+    expect(await acl("SELECT proname FROM pg_proc WHERE proname LIKE 'aigw\\_%' AND proacl IS NULL")).toEqual([]); // NULL = the default EXECUTE to PUBLIC
+    expect(await acl(`SELECT c.relname FROM pg_class c, aclexplode(c.relacl) a WHERE c.relname LIKE 'aigw\\_%' AND a.grantee = 0`)).toEqual([]);
+    expect(await acl("SELECT relname FROM pg_class WHERE relname LIKE 'aigw\\_%' AND relkind IN ('r', 'S') AND relacl IS NULL")).toEqual([]);
+    // and in effect: a login with no aigw grant (PUBLIC's rights only) reaches nothing
+    const { rows: fns } = await t.su.query(`SELECT p.oid::regprocedure::text AS f FROM pg_proc p
+      WHERE p.proname LIKE 'aigw\\_%' AND has_function_privilege($1, p.oid, 'EXECUTE')`, [t.roles.app]);
+    expect(fns).toEqual([]);
+    const { rows: rels } = await t.su.query(`SELECT c.relname, x.priv FROM pg_class c
+      CROSS JOIN unnest(ARRAY['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'TRUNCATE', 'REFERENCES', 'TRIGGER']) AS x(priv)
+      WHERE c.relname LIKE 'aigw\\_%' AND c.relkind = 'r' AND has_table_privilege($1, c.oid, x.priv)`, [t.roles.app]);
+    expect(rels).toEqual([]);
+    const { rows: seqs } = await t.su.query(`SELECT c.relname FROM pg_class c
+      WHERE c.relname LIKE 'aigw\\_%' AND c.relkind = 'S' AND (has_sequence_privilege($1, c.oid, 'USAGE') OR has_sequence_privilege($1, c.oid, 'SELECT') OR has_sequence_privilege($1, c.oid, 'UPDATE'))`, [t.roles.app]);
+    expect(seqs).toEqual([]);
+  });
+
+  test('the deploy migration trust check (unchanged) accepts this database, run as the migration login with the pinned search path', async () => {
+    expect(await trustFindings(t.url('migrator'))).toEqual([]);
+  });
+
+  test('gateway and caller roles cannot reach budgets, Resume, Stop or pauses, and cannot write the ledger past its functions', async () => {
+    for (const kind of ['caller', 'gateway', 'inspector']) {
+      for (const f of grants.ADMIN_ONLY) expect([kind, f, await tryAs(kind, PROBES[f])]).toEqual([kind, f, '42501']);
+      for (const sql of ["INSERT INTO public.aigw_permits (id) VALUES (gen_random_uuid())", "UPDATE public.aigw_control SET daily_cap_micros = 1",
+        "UPDATE public.aigw_control SET global_state = 'RELEASED'", 'DELETE FROM public.aigw_permit_events']) {
+        expect([kind, sql, await tryAs(kind, sql)]).toEqual([kind, sql, '42501']);
+      }
+    }
+    // the gateway cannot mint a permit, and cannot dispatch without one
+    expect(await tryAs('gateway', PROBES['aigw_authorize(jsonb)'])).toBe('42501');
+    const d = await t.pools.gateway.query("SELECT public.aigw_dispatch('00000000-0000-4000-8000-000000000000', 'anthropic.messages', 'gw') AS r");
+    expect(d.rows[0].r).toEqual({ ok: false, code: 'PERMIT_UNKNOWN' });
   });
 
   test('the application login, even made a member of the caller role (the G3 shape), cannot stop, resume, set caps, pause or reconcile', async () => {
@@ -156,36 +214,82 @@ const INTERNAL = migration.FUNCTIONS.filter((f) => !(f in PROBES));
     }
   });
 
-  test('the hand-run role file applies cleanly to a throwaway database and leaves the same matrix (test server only)', async () => {
-    const fixed = [grants.OWNER_ROLE, ...Object.values(grants.ROLES)];
+  test('the hand-run role script, run as the non-superuser migration login on a fresh migrated database: ownership kept, trust check passes, exact matrix, app login refused (test server only)', async () => {
+    const fixed = Object.values(grants.ROLES);
     const { rows: present } = await t.su.query('SELECT rolname FROM pg_roles WHERE rolname = ANY($1)', [fixed]);
     if (present.length > 0) {
-      console.warn(`[aigw test] skipping the role-file run: ${present.map((r) => r.rolname).join(', ')} already exist on this server`);
+      console.warn(`[aigw test] skipping the role-script run: ${present.map((r) => r.rolname).join(', ')} already exist on this server`);
       return;
     }
-    const fresh = await createAigwTestDb({ poolMax: 1, ownership: false });
+    const fresh = await createAigwTestDb({ poolMax: 1 });
     const sqlText = fs.readFileSync(path.join(__dirname, '../../scripts/aigw/sql/aigw-roles.sql'), 'utf8')
       .split('\n').filter((l) => !l.trim().startsWith('\\')).join('\n');
+    const app2 = `aigw_app2_${fresh.tag}`;
     try {
-      await fresh.su.query(sqlText); // one simple-protocol call: BEGIN ... COMMIT as written
+      // 1. the migration created every object under the migration login
+      expect((await fresh.su.query(OWNERS_SQL)).rows).toEqual([{ o: fresh.roles.migrator }]);
+      expect(await trustFindings(fresh.url('migrator'))).toEqual([]);
+
+      // 2. the script, as written, by the migration login (one simple-protocol call: BEGIN ... COMMIT)
+      await fresh.migrator.query(sqlText);
+
+      // 3. ownership preserved; the trust check still passes
+      expect((await fresh.su.query(OWNERS_SQL)).rows).toEqual([{ o: fresh.roles.migrator }]);
+      expect(await trustFindings(fresh.url('migrator'))).toEqual([]);
+
+      // 4. each role has exactly its EXECUTE and table grants; none can log in or is a member of anything
       for (const kind of ['caller', 'gateway', 'admin', 'inspector']) {
-        const { rows } = await fresh.su.query(`SELECT p.oid::regprocedure::text AS f FROM pg_proc p
-          WHERE p.proname LIKE 'aigw\\_%' AND has_function_privilege($1, p.oid, 'EXECUTE')`, [grants.ROLES[kind]]);
-        expect(rows.map((r) => r.f.replace(/\s/g, '')).sort()).toEqual(grants.FUNCTION_GRANTS[kind].map((f) => f.replace(/\s/g, '')).sort());
+        const role = grants.ROLES[kind];
+        const { rows: fns } = await fresh.su.query(`SELECT p.oid::regprocedure::text AS f FROM pg_proc p
+          WHERE p.proname LIKE 'aigw\\_%' AND has_function_privilege($1, p.oid, 'EXECUTE')`, [role]);
+        expect([kind, fns.map((r) => r.f.replace(/\s/g, '')).sort()]).toEqual([kind, grants.FUNCTION_GRANTS[kind].map((f) => f.replace(/\s/g, '')).sort()]);
+        const { rows: tabs } = await fresh.su.query(`SELECT c.relname, x.priv FROM pg_class c
+          CROSS JOIN unnest(ARRAY['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'TRUNCATE', 'REFERENCES', 'TRIGGER']) AS x(priv)
+          WHERE c.relname LIKE 'aigw\\_%' AND c.relkind = 'r' AND has_table_privilege($1, c.oid, x.priv) ORDER BY 1, 2`, [role]);
+        expect([kind, tabs]).toEqual([kind, grants.TABLE_GRANTS[kind].map((tb) => ({ relname: tb, priv: 'SELECT' })).sort((a, b) => a.relname.localeCompare(b.relname))]);
+        const { rows: [r] } = await fresh.su.query(`SELECT rolcanlogin, rolsuper, rolcreaterole, rolcreatedb,
+          (SELECT count(*)::int FROM pg_auth_members m WHERE m.member = pg_roles.oid) AS memberships FROM pg_roles WHERE rolname = $1`, [role]);
+        expect([kind, r]).toEqual([kind, { rolcanlogin: false, rolsuper: false, rolcreaterole: false, rolcreatedb: false, memberships: 0 }]);
       }
-      const { rows: owners } = await fresh.su.query(`SELECT DISTINCT pg_get_userbyid(relowner) AS o FROM pg_class WHERE relname LIKE 'aigw\\_%' AND relkind = 'r'
-        UNION SELECT DISTINCT pg_get_userbyid(proowner) FROM pg_proc WHERE proname LIKE 'aigw\\_%'`);
-      expect(owners).toEqual([{ o: grants.OWNER_ROLE }]);
-      const { rows: members } = await fresh.su.query('SELECT 1 FROM pg_auth_members m JOIN pg_roles r ON r.oid = m.roleid WHERE r.rolname = $1', [grants.OWNER_ROLE]);
-      expect(members).toEqual([]);
-      const { rows: logins } = await fresh.su.query('SELECT rolname FROM pg_roles WHERE rolname = ANY($1) AND rolcanlogin', [fixed]);
-      expect(logins).toEqual([]);
+
+      // 5. an ordinary application login, even a member of aigw_caller, cannot invoke an admin function
+      await fresh.su.query(`CREATE ROLE ${ident(app2)} LOGIN INHERIT PASSWORD '${fresh.password}'`);
+      await fresh.migrator.query(`GRANT CONNECT ON DATABASE ${ident(fresh.dbName)} TO ${ident(app2)}`);
+      const u = new URL(fresh.url('app'));
+      u.username = app2;
+      const run = async (sql) => {
+        const c = new Client({ connectionString: u.toString() });
+        await c.connect();
+        try { return await c.query(sql).then(() => 'allowed', (err) => err.code); } finally { await c.end(); }
+      };
+      for (const f of grants.ADMIN_ONLY) expect([f, await run(PROBES[f])]).toEqual([f, '42501']);
+      await fresh.su.query(`GRANT ${ident(grants.ROLES.caller)} TO ${ident(app2)}`);
+      expect(await run(PROBES['aigw_read_control()'])).toBe('allowed');
+      for (const f of grants.ADMIN_ONLY) expect([f, await run(PROBES[f])]).toEqual([f, '42501']);
+      await fresh.su.query(`REVOKE ${ident(grants.ROLES.caller)} FROM ${ident(app2)}`);
+
       // a second run fails as a whole (the roles exist) and changes nothing
-      await expect(fresh.su.query(sqlText)).rejects.toMatchObject({ code: '42710' });
-      await fresh.su.query('ROLLBACK');
+      await expect(fresh.migrator.query(sqlText)).rejects.toMatchObject({ code: '42710' });
+      await fresh.migrator.query('ROLLBACK');
+      expect(await trustFindings(fresh.url('migrator'))).toEqual([]);
     } finally {
       await fresh.close();
-      for (const r of fixed) await t.su.query(`DROP ROLE IF EXISTS ${ident(r)}`).catch((err) => console.error(`[aigw test] could not drop ${r}: ${err.message}`));
+      for (const r of [app2, ...fixed]) await t.su.query(`DROP ROLE IF EXISTS ${ident(r)}`).catch((err) => console.error(`[aigw test] could not drop ${r}: ${err.message}`));
+    }
+  });
+
+  test('control: the rejected design (ownership moved to a NOLOGIN owner role) makes the unchanged trust check refuse', async () => {
+    const fresh = await createAigwTestDb({ poolMax: 1 });
+    const owner = `aigw_rejected_owner_${fresh.tag}`;
+    try {
+      await fresh.su.query(`CREATE ROLE ${ident(owner)} NOLOGIN`);
+      for (const sql of rejectedOwnershipStatements(owner)) await fresh.su.query(sql);
+      const findings = await trustFindings(fresh.url('migrator'));
+      expect(findings.length).toBeGreaterThanOrEqual(migration.TABLES.length);
+      expect(findings).toEqual(expect.arrayContaining([`relation public.aigw_permits is owned by role ${owner}`]));
+    } finally {
+      await fresh.close();
+      await t.su.query(`DROP ROLE IF EXISTS ${ident(owner)}`).catch((err) => console.error(`[aigw test] could not drop ${owner}: ${err.message}`));
     }
   });
 

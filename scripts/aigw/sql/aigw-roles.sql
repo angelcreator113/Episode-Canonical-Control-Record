@@ -1,16 +1,26 @@
--- scripts/aigw/sql/aigw-roles.sql: the AI egress gateway ledger's database
--- roles (phase G2). NOT RUN BY G2. Nothing here runs by itself: this file is
--- reviewed in a PR and run by Evoni, once, by hand, only when G3 is approved.
--- It creates roles and changes ownership on the production database, so it
--- is gated (F-Tools-5 section 4): an explicit yes for this exact run first.
+-- scripts/aigw/sql/aigw-roles.sql: the AI egress gateway ledger's runtime
+-- database roles (phase G2). NOT RUN BY G2. Nothing here runs by itself:
+-- this file is reviewed in a PR and run by Evoni, once, by hand, only when
+-- G3 is approved. It creates roles and grants privileges on the production
+-- database, so it is gated (F-Tools-5 section 4): an explicit yes for this
+-- exact run first.
+--
+-- Ownership (Evoni, 2026-11-08, Option A): the aigw tables and functions
+-- stay owned by the trusted migration login that ran the migration
+-- 20261108120000-create-aigw-ledger. Per
+-- docs/reads/2026-11-04-deploy-migration-trusted-path.md that is `postgres`
+-- (the Deploy workflow's credential in ~/.episode-migrate.env); the
+-- application connects as `episode_app_dev` and runs no migration. This
+-- file moves no ownership and makes no role a member of another, so the
+-- deploy's migration trust check (scripts/deploy/migration-trust-check.js)
+-- keeps passing. Migration ownership and runtime permissions stay separate:
+-- the owner is the migration login; runtime access is only the grants below.
 --
 -- The list is src/aiGateway/aigwDbGrants.js; tests/unit/aiGateway/aigwDbGrants.test.js
--- checks this file against it, and the G2 integration tests build the same
--- roles in a throwaway database and prove every grant and every refusal.
+-- checks this file against it, and tests/integration/aigwRoles.integration.test.js
+-- runs it on a throwaway database as a non-superuser migration login and
+-- then runs the trust check.
 --
---   aigw_owner      NOLOGIN; owns every aigw table and function, so the
---                   application login that ran the migration owns nothing.
---                   Nothing is granted to it; nobody stays a member of it.
 --   aigw_caller     authorize, abandon an unused permit, read the Stop state
 --   aigw_gateway    read a permit, dispatch, outcomes, cleanup, task lookup,
 --                   acknowledge the Stop state, read exposure
@@ -18,69 +28,26 @@
 --                   reconciliation, read the Stop state and exposure
 --   aigw_inspector  SELECT on the six tables; read the Stop state and exposure
 --
--- All are NOLOGIN group roles. The existing application login is NOT made a
--- member of aigw_admin, aigw_gateway or aigw_inspector by this file (and
--- never of aigw_admin). Which logins join which role is a G3 decision.
--- No default privileges, no CREATE on the schema, no table writes for anyone:
--- every write is a SECURITY DEFINER function owned by aigw_owner.
+-- All four are NOLOGIN group roles. The existing application login is not
+-- made a member of any of them here (and never of aigw_admin); which logins
+-- join which role is a G3 decision. No default privileges, no CREATE on the
+-- schema, no table writes for anyone: every write is a SECURITY DEFINER
+-- function owned by the migration login.
 --
--- Run as the admin database user, after the migration
--- 20261108120000-create-aigw-ledger has run (it grants EXECUTE to nobody),
--- with psql's -f option pointing at this file.
+-- Run as the migration login, with psql's -f option pointing at this file.
+-- It needs only what that login already has: CREATEROLE, ownership of the
+-- database (to grant USAGE on schema public) and of the aigw objects (to
+-- grant on them).
 --
--- ALTER ... OWNER needs the running user to own the objects (or be a member
--- of their owner) and to be able to SET ROLE aigw_owner: the temporary
--- membership below gives the second and is revoked before COMMIT. On RDS the
--- master user is not a superuser; confirm who owns the aigw objects first
--- (SELECT relowner::regrole FROM pg_class WHERE relname = 'aigw_control').
---
--- Undo (also gated): reassign the aigw objects back to the migration login,
--- revoke the grants below, then remove the five roles.
-
+-- Undo (also gated, as the migration login): revoke the grants below, then
+-- remove the four roles.
 \set ON_ERROR_STOP on
 BEGIN;
 -- Fails (and rolls back) if a role already exists: they are created once, on purpose.
-CREATE ROLE aigw_owner NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS;
 CREATE ROLE aigw_caller NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS;
 CREATE ROLE aigw_gateway NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS;
 CREATE ROLE aigw_admin NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS;
 CREATE ROLE aigw_inspector NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS;
-
--- Ownership: the application login keeps nothing.
-GRANT aigw_owner TO CURRENT_USER;
-ALTER TABLE public.aigw_operations OWNER TO aigw_owner;
-ALTER TABLE public.aigw_control OWNER TO aigw_owner;
-ALTER TABLE public.aigw_permits OWNER TO aigw_owner;
-ALTER TABLE public.aigw_permit_events OWNER TO aigw_owner;
-ALTER TABLE public.aigw_reconciliations OWNER TO aigw_owner;
-ALTER TABLE public.aigw_audit OWNER TO aigw_owner;
-ALTER FUNCTION public.aigw_transition_allowed(text, text) OWNER TO aigw_owner;
-ALTER FUNCTION public.aigw_actor(text) OWNER TO aigw_owner;
-ALTER FUNCTION public.aigw_exposure_internal(date, text) OWNER TO aigw_owner;
-ALTER FUNCTION public.aigw_permit_json(public.aigw_permits) OWNER TO aigw_owner;
-ALTER FUNCTION public.aigw_event(uuid, text, text, text, text) OWNER TO aigw_owner;
-ALTER FUNCTION public.aigw_permits_guard() OWNER TO aigw_owner;
-ALTER FUNCTION public.aigw_append_only_guard() OWNER TO aigw_owner;
-ALTER FUNCTION public.aigw_control_guard() OWNER TO aigw_owner;
-ALTER FUNCTION public.aigw_authorize(jsonb) OWNER TO aigw_owner;
-ALTER FUNCTION public.aigw_get_permit(uuid) OWNER TO aigw_owner;
-ALTER FUNCTION public.aigw_dispatch(uuid, text, text) OWNER TO aigw_owner;
-ALTER FUNCTION public.aigw_abandon_authorized(uuid, text) OWNER TO aigw_owner;
-ALTER FUNCTION public.aigw_mark_not_forwarded(uuid, text, text) OWNER TO aigw_owner;
-ALTER FUNCTION public.aigw_record_outcome(uuid, jsonb) OWNER TO aigw_owner;
-ALTER FUNCTION public.aigw_sweep(interval, integer) OWNER TO aigw_owner;
-ALTER FUNCTION public.aigw_find_by_task(text, text) OWNER TO aigw_owner;
-ALTER FUNCTION public.aigw_reconcile(uuid, jsonb) OWNER TO aigw_owner;
-ALTER FUNCTION public.aigw_exposure(date, text) OWNER TO aigw_owner;
-ALTER FUNCTION public.aigw_read_control() OWNER TO aigw_owner;
-ALTER FUNCTION public.aigw_stop(text, text) OWNER TO aigw_owner;
-ALTER FUNCTION public.aigw_request_resume(jsonb) OWNER TO aigw_owner;
-ALTER FUNCTION public.aigw_confirm_resume(jsonb) OWNER TO aigw_owner;
-ALTER FUNCTION public.aigw_cancel_resume(text, text) OWNER TO aigw_owner;
-ALTER FUNCTION public.aigw_set_pause(text, boolean, text, text) OWNER TO aigw_owner;
-ALTER FUNCTION public.aigw_set_caps(jsonb) OWNER TO aigw_owner;
-ALTER FUNCTION public.aigw_gateway_ack(jsonb) OWNER TO aigw_owner;
-REVOKE aigw_owner FROM CURRENT_USER;
 
 -- aigw_caller: callers: authorize and give up an unused permit
 GRANT USAGE ON SCHEMA public TO aigw_caller;
