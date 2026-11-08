@@ -46,8 +46,12 @@
  *      different keys, so the signed issuedAt does. The gateway keeps a
  *      stop floor (persisted as stopIssuedAt): the highest issuedAt of any
  *      applied stop or RECOVER. A release is applied only when its issuedAt
- *      is strictly later than the stop floor; a stop is always applied, even
- *      a delayed one, and only ever raises the floor. RECOVER computes the
+ *      is strictly later than the stop floor. Time never blocks a stop: a
+ *      stop with a fresh seq for its key is applied even when it is older
+ *      than a release from another key, and it only ever raises the floor.
+ *      A delayed stop whose seq is at or below its own key's counter is
+ *      refused as SEQ_STALE (E1): that key has since signed a later command,
+ *      which supersedes it. RECOVER computes the
  *      floor as the highest of its own issuedAt, the stops the log still
  *      records and verified stops refused since the state became untrusted;
  *      the floors it carries are sequence floors only and cannot lower it.

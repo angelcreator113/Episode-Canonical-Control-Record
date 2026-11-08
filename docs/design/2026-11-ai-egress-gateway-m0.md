@@ -100,7 +100,9 @@ These tighten addendum E. Everything above still holds unless stated here.
 - **Cross-key ordering.** Per-key counters cannot order commands signed by different keys, so the signed `issuedAt` does.
   - The gateway keeps a **stop floor**: the highest `issuedAt` of any applied `stop` or `recover`. It is persisted as `stopIssuedAt` in the state file and recorded in every log entry.
   - A `release` is applied only when its `issuedAt` is **strictly later** than the stop floor; otherwise it is refused with `RELEASE_PREDATES_STOP`. A tie goes to the stop.
-  - A `stop` is always applied, even a delayed one, and only ever raises the floor.
+  - Time never blocks a `stop`, and a `stop` only ever raises the floor. Two cases differ:
+    - **An older stop from another key.** It is applied when it carries a fresh sequence for its own key, even if it was issued before a release that another key already applied. This fails safe.
+    - **A stale stop from the same key.** A delayed stop whose `seq` is at or below the last sequence applied for its key is refused with `SEQ_STALE` (E1). That key has since signed a later command, which supersedes the stop.
   - So a delayed `release` from key B cannot undo a newer `stop` from key A, including after a restart, a key rotation or a revocation.
   - **Clock dependency.** The rule trusts the signers' clocks (each `issuedAt` is still bounded by the ±5-minute skew). If a release is signed on a clock running behind the stop signer's clock, it is refused and must be signed again later. This fails closed.
 - **E2, target.** `target` must equal the gateway's target id exactly. The id is assigned at provisioning and passed in explicitly; it is never hardcoded or derived.
