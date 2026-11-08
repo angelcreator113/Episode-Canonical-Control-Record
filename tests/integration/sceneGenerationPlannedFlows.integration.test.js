@@ -427,4 +427,196 @@ const table = (kind) => (kind === 'set' ? 'scene_sets' : 'scene_angles');
       expect((await target('angle', angle.id)).status).toBe('complete');
     });
   });
+  // ── Correction checks (Evoni, 2026-11-08: correction approved) ────────────
+  describe('a confirmed replacement that was never sent is not freely retryable', () => {
+    async function returnedRow() {
+      const set = await makeSet({ base_still_url: 'https://bucket.example/base.jpg' });
+      const angle = await makeAngle(set, { generation_status: 'pending' });
+      const u = await makeUncertain('angle', angle, set.id);
+      const token = await issue(u);
+      const r = await confirmedClaim('angle', angle, set.id, token);
+      await run("UPDATE scene_generation_attempts SET state = 'not_sent', finished_at = NOW(), error_code = 'ECONNREFUSED' WHERE id = :a", { a: r.next });
+      return { set, angle, u, token, replacement: r.next };
+    }
+
+    test('back to uncertain: legacy claim, a claim without confirmation, a reset and the old token are all refused', async () => {
+      const { set, angle, token, replacement } = await returnedRow();
+      await run("UPDATE scene_angles SET generation_status = 'uncertain' WHERE id = :id", { id: angle.id });
+      await expect(generationClaim.claimRow(sequelize, 'angle', angle.id)).rejects.toThrow(GUARD);
+      await expect(sequelize.transaction((transaction) => claim('angle', angle, set.id, { supersedes: replacement, transaction }))).rejects.toThrow(/needs a confirmation/);
+      for (const st of ['failed', 'pending']) {
+        await expect(run('UPDATE scene_angles SET generation_status = :st WHERE id = :id', { st, id: angle.id })).rejects.toThrow(GUARD);
+      }
+      // The consumed token cannot be used again.
+      expect(await confirmedClaim('angle', angle, set.id, token)).toMatchObject({ ok: false });
+      // Another user's confirmation on the replacement is refused at consumption.
+      const other = await issue(replacement, 'admin-2');
+      expect(await confirmedClaim('angle', angle, set.id, other, 'admin-1')).toMatchObject({ ok: false });
+      expect((await target('angle', angle.id))).toMatchObject({ status: 'uncertain', current_attempt_id: replacement });
+      expect(falCalls()).toBe(0);
+    });
+
+    test('a crash left the row generating after the replacement was recorded not_sent: no restamp, no reset, even when stale', async () => {
+      const { angle } = await returnedRow();
+      await age('angle', angle.id, 20);
+      await expect(generationClaim.claimRow(sequelize, 'angle', angle.id)).rejects.toThrow(GUARD);
+      await expect(models.SceneAngle.update({ generation_status: 'generating' }, { where: { id: angle.id } })).rejects.toThrow(GUARD);
+      await expect(run("UPDATE scene_angles SET generation_status = 'failed' WHERE id = :id", { id: angle.id })).rejects.toThrow(GUARD);
+      // The reconciler's move is allowed.
+      await run("UPDATE scene_angles SET generation_status = 'uncertain' WHERE id = :id", { id: angle.id });
+    });
+
+    test('no second paid request through any route without a new confirmation (0 fal calls)', async () => {
+      const { set, angle } = await returnedRow();
+      await run("UPDATE scene_angles SET generation_status = 'uncertain' WHERE id = :id", { id: angle.id });
+      const app = require('../../src/app');
+      const auth = `Bearer ${require('../../src/services/tokenService').generateTokenPair({
+        id: 'test-user-flows', email: 'u@flows.dev', name: 'Editor', groups: ['USER', 'EDITOR'], role: 'USER' }).accessToken}`;
+      const gen = await request(app).post(`/api/v1/scene-sets/${set.id}/angles/${angle.id}/generate`).set('Authorization', auth).send({});
+      expect([gen.status, gen.body.error]).toEqual([500, expect.stringMatching(GUARD)]);
+      const refine = await request(app).post(`/api/v1/scene-sets/${set.id}/angles/${angle.id}/regenerate`).set('Authorization', auth).send({ categories: ['SOFT_FOCUS'] });
+      expect([refine.status, refine.body.error]).toEqual([500, expect.stringMatching(GUARD)]);
+      const all = await request(app).post(`/api/v1/scene-sets/${set.id}/generate-all-angles`).set('Authorization', auth).send({ angle_ids: [angle.id] });
+      expect(all.body.angle_ids).toEqual([]);
+      const reset = await request(app).patch(`/api/v1/scene-sets/${set.id}/angles/${angle.id}`).set('Authorization', auth).send({ generation_status: 'pending' });
+      expect(reset.status).toBe(500);
+      await new Promise((r) => setTimeout(r, 200));
+      expect(falCalls()).toBe(0);
+      expect((await rows('SELECT id FROM scene_generation_attempts WHERE target_id = :t', { t: angle.id }))).toHaveLength(2);
+    });
+
+    test('a new confirmation (bound to one user) can be issued on it, and four concurrent uses create exactly one further attempt', async () => {
+      const { set, angle, u, replacement } = await returnedRow();
+      await run("UPDATE scene_angles SET generation_status = 'uncertain' WHERE id = :id", { id: angle.id });
+      const token = await issue(replacement, 'admin-1');
+      expect(await attempt(replacement)).toMatchObject({ state: 'not_sent', confirm_user_id: 'admin-1', confirm_consumed_at: null });
+      const results = await Promise.all([0, 1, 2, 3].map(() => confirmedClaim('angle', angle, set.id, token, 'admin-1', { pauseMs: 40 })));
+      const winners = results.filter((r) => r.ok);
+      expect(winners).toHaveLength(1);
+      const all = await rows('SELECT id, state, supersedes_attempt_id FROM scene_generation_attempts WHERE target_id = :t ORDER BY claimed_at', { t: angle.id });
+      expect(all).toHaveLength(3);
+      expect(all.filter((a) => a.supersedes_attempt_id === replacement)).toEqual([expect.objectContaining({ id: winners[0].next, state: 'claimed' })]);
+      expect(await target('angle', angle.id)).toMatchObject({ status: 'generating', current_attempt_id: winners[0].next });
+      // The chain of evidence is intact and unchanged.
+      expect(await attempt(u)).toMatchObject({ state: 'uncertain', confirm_consumed_by_attempt_id: replacement });
+      expect(await attempt(replacement)).toMatchObject({ state: 'not_sent', confirm_consumed_by_attempt_id: winners[0].next });
+      // That one further attempt may be dispatched once.
+      expect(await dispatch(winners[0].next)).toBe(true);
+      expect(await dispatch(winners[0].next)).toBe(false);
+      expect(falCalls()).toBe(0);
+    });
+
+    test('the same holds for an uncertain or stored_failed attempt left behind a generating row', async () => {
+      const set = await makeSet();
+      const angle = await makeAngle(set, { generation_status: 'pending' });
+      const a = await claim('angle', angle, set.id);
+      await dispatch(a);
+      await run("UPDATE scene_generation_attempts SET state = 'uncertain', finished_at = NOW() WHERE id = :a", { a });
+      await expect(run("UPDATE scene_angles SET generation_status = 'failed' WHERE id = :id", { id: angle.id })).rejects.toThrow(GUARD);
+      await expect(run("UPDATE scene_angles SET generation_status = 'generating' WHERE id = :id", { id: angle.id })).rejects.toThrow(GUARD);
+      await run("UPDATE scene_angles SET generation_status = 'uncertain' WHERE id = :id", { id: angle.id });
+    });
+  });
+
+  describe('rollback compatibility: the current application with PR B attempts in flight', () => {
+    const app = () => require('../../src/app');
+    const bearer = () => `Bearer ${require('../../src/services/tokenService').generateTokenPair({
+      id: 'test-user-flows', email: 'u@flows.dev', name: 'Editor', groups: ['USER', 'EDITOR'], role: 'USER' }).accessToken}`;
+
+    test('fresh in flight: Generate is 409, Generate All skips it, claimRow reports busy, no fal request', async () => {
+      const set = await makeSet({ base_still_url: 'https://bucket.example/base.jpg' });
+      const angle = await makeAngle(set, { generation_status: 'pending' });
+      const a = await claim('angle', angle, set.id);
+      await dispatch(a);
+      const g = await request(app()).post(`/api/v1/scene-sets/${set.id}/angles/${angle.id}/generate`).set('Authorization', bearer()).send({});
+      expect([g.status, g.body.code]).toEqual([409, 'ALREADY_GENERATING']);
+      const all = await request(app()).post(`/api/v1/scene-sets/${set.id}/generate-all-angles`).set('Authorization', bearer()).send({ angle_ids: [angle.id] });
+      expect(all.body.angle_ids).toEqual([]);
+      expect(await generationClaim.claimRow(sequelize, 'angle', angle.id)).toBe(false);
+      await new Promise((r) => setTimeout(r, 200));
+      expect(falCalls()).toBe(0);
+      expect(await attempt(a)).toMatchObject({ state: 'dispatch_started' });
+    });
+
+    test('fresh in flight: the base paths (generate-base, generateBaseScene) cannot send', async () => {
+      const set = await makeSet();
+      await claim('set', set, set.id);
+      const b = await request(app()).post(`/api/v1/scene-sets/${set.id}/generate-base`).set('Authorization', bearer()).send({ force: true });
+      expect(b.status).toBe(409);
+      await expect(sceneGen.generateBaseScene(await models.SceneSet.findByPk(set.id), models, {})).rejects.toThrow(GUARD);
+      expect(falCalls()).toBe(0);
+    });
+
+    test('stale in flight: Generate, generate-base and claimRow are refused by the guard, no fal request', async () => {
+      const set = await makeSet({ base_still_url: 'https://bucket.example/base.jpg' });
+      const angle = await makeAngle(set, { generation_status: 'pending' });
+      await dispatch(await claim('angle', angle, set.id));
+      await age('angle', angle.id, 20);
+      const g = await request(app()).post(`/api/v1/scene-sets/${set.id}/angles/${angle.id}/generate`).set('Authorization', bearer()).send({});
+      expect([g.status, g.body.error]).toEqual([500, expect.stringMatching(GUARD)]);
+      const set2 = await makeSet();
+      await dispatch(await claim('set', set2, set2.id));
+      await age('set', set2.id, 20);
+      const b = await request(app()).post(`/api/v1/scene-sets/${set2.id}/generate-base`).set('Authorization', bearer()).send({ force: true });
+      expect([b.status, b.body.error]).toEqual([500, expect.stringMatching(GUARD)]);
+      await expect(generationClaim.claimRow(sequelize, 'angle', angle.id)).rejects.toThrow(GUARD);
+      await new Promise((r) => setTimeout(r, 200));
+      expect(falCalls()).toBe(0);
+    });
+  });
+
+  describe('normal generation is not restricted by the correction', () => {
+    test('a row with no attempt: restamping generating, resets and generateBaseScene work as before (one fal request)', async () => {
+      const set = await makeSet();
+      await models.SceneSet.update({ generation_status: 'generating' }, { where: { id: set.id } });
+      await models.SceneSet.update({ generation_status: 'generating' }, { where: { id: set.id } });
+      await run("UPDATE scene_sets SET generation_status = 'pending' WHERE id = :id", { id: set.id });
+      await sceneGen.generateBaseScene(await models.SceneSet.findByPk(set.id), models, {}).catch(() => {});
+      expect(falCalls()).toBe(1);
+    });
+
+    test('a row whose attempt finished normally (stored, refused, not_sent unconfirmed) generates again as before', async () => {
+      for (const end of ['stored', 'refused', 'not_sent']) {
+        const set = await makeSet();
+        const angle = await makeAngle(set, { generation_status: 'pending' });
+        const a = await claim('angle', angle, set.id);
+        if (end !== 'not_sent') await dispatch(a);
+        await run('UPDATE scene_generation_attempts SET state = :end, finished_at = NOW() WHERE id = :a', { end, a });
+        await run('UPDATE scene_angles SET generation_status = :st WHERE id = :id', { st: end === 'stored' ? 'complete' : 'failed', id: angle.id });
+        // Legacy claim, a status restamp, resets: all as before.
+        expect(await generationClaim.claimRow(sequelize, 'angle', angle.id)).toBe(true);
+        await models.SceneAngle.update({ generation_status: 'generating' }, { where: { id: angle.id } });
+        await run("UPDATE scene_angles SET generation_status = 'pending' WHERE id = :id", { id: angle.id });
+        // A new attempt needs no confirmation.
+        await claim('angle', angle, set.id);
+      }
+    });
+
+    test('after Upload resolved an uncertain row, its normal edits (reset to pending, failed) work', async () => {
+      const set = await makeSet();
+      const angle = await makeAngle(set, { generation_status: 'pending' });
+      await makeUncertain('angle', angle, set.id);
+      await run("UPDATE scene_angles SET generation_status = 'complete', still_image_url = 'https://bucket.example/up.jpg' WHERE id = :id", { id: angle.id });
+      await run("UPDATE scene_angles SET generation_status = 'pending' WHERE id = :id", { id: angle.id });
+      await run("UPDATE scene_angles SET generation_status = 'failed' WHERE id = :id", { id: angle.id });
+      expect(await generationClaim.claimRow(sequelize, 'angle', angle.id)).toBe(true);
+    });
+
+    test('TRUNCATE is still possible when nothing is uncertain or in flight (inside a transaction that is rolled back)', async () => {
+      const t = await sequelize.transaction();
+      try {
+        const opts = { transaction: t };
+        // Clear, within this transaction only, what would make it refuse.
+        await run('SET LOCAL session_replication_role = replica', {}, opts);
+        await run("UPDATE scene_angles SET generation_status = 'failed' WHERE generation_status::text = 'uncertain'", {}, opts);
+        await run("UPDATE scene_sets SET generation_status = 'failed' WHERE generation_status::text = 'uncertain'", {}, opts);
+        await run("UPDATE scene_generation_attempts SET state = 'abandoned_unsent' WHERE state IN ('claimed', 'dispatch_started')", {}, opts);
+        await run('SET LOCAL session_replication_role = origin', {}, opts);
+        await expect(run('TRUNCATE scene_angles CASCADE', {}, opts)).resolves.toBeTruthy();
+      } finally {
+        await t.rollback();
+      }
+      expect((await one('SELECT count(*)::int AS n FROM scene_angles')).n).toBeGreaterThan(0);
+    });
+  });
 });

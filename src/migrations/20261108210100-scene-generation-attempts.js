@@ -49,7 +49,9 @@
  *        generation_status without taking a new attempt is refused, even
  *        when it leaves the value 'generating' (the code before PR B marks a
  *        base generating with a plain UPDATE and then calls fal: during a
- *        rollback it would send a second request for a run in flight).
+ *        rollback it would send a second request for a run in flight). The
+ *        same restamp to 'generating' is refused while the current attempt
+ *        holds an unknown outcome, and so is 'failed' or 'pending'.
  *   An attempt "holds an unknown outcome" when it is uncertain or
  *   stored_failed, or when it is a confirmed replacement (its predecessor's
  *   confirmation was consumed by it) that ended abandoned_unsent or not_sent:
@@ -62,6 +64,21 @@
  *        before it expires, by the user it was issued to, for an attempt
  *        that supersedes it.
  *   one attempt in flight per target (unique partial index).
+ *
+ * The confirmation order PR B / PR C must use (the guards refuse any other),
+ * in ONE transaction, committed together:
+ *   1. lock the target row (SELECT ... FOR UPDATE); check it is 'uncertain'
+ *      with the expected current_attempt_id;
+ *   2. INSERT the replacement attempt ('claimed', supersedes_attempt_id =
+ *      that current attempt);
+ *   3. consume the confirmation conditionally (UPDATE ... SET
+ *      confirm_consumed_* WHERE hash, user, not consumed, not expired);
+ *      0 rows: roll back, nothing is sent;
+ *   4. switch the target: current_attempt_id = the replacement, 'generating';
+ *   5. commit.
+ * Consuming before the insert is refused: a confirmation is consumed only by
+ * an existing claimed attempt that supersedes it. The reconciler also locks
+ * the target first, then its attempt.
  *
  * Down refuses while any attempt row exists (evidence) or any row is
  * uncertain; it never converts anything into a retryable status.
@@ -87,8 +104,10 @@ CREATE OR REPLACE FUNCTION public.scene_generation_status_write_guard() RETURNS 
 BEGIN
   IF OLD.current_attempt_id IS NOT NULL AND NEW.current_attempt_id IS NOT DISTINCT FROM OLD.current_attempt_id
      AND NEW.generation_status IS NOT DISTINCT FROM OLD.generation_status
-     AND EXISTS (SELECT 1 FROM public.scene_generation_attempts a
-                  WHERE a.id = OLD.current_attempt_id AND a.state IN ('claimed', 'dispatch_started')) THEN
+     AND (EXISTS (SELECT 1 FROM public.scene_generation_attempts a
+                   WHERE a.id = OLD.current_attempt_id AND a.state IN ('claimed', 'dispatch_started'))
+          OR (OLD.generation_status::text = 'generating' AND NEW.generation_status::text = 'generating'
+              AND public.scene_generation_unknown_outcome(OLD.current_attempt_id))) THEN
     RAISE EXCEPTION 'scene generation guard: % % has an attempt in flight; another generation cannot start',
       CASE TG_TABLE_NAME WHEN 'scene_sets' THEN 'set' ELSE 'angle' END, OLD.id USING ERRCODE = '23514';
   END IF;
@@ -201,10 +220,13 @@ BEGIN
     RAISE EXCEPTION 'scene generation guard: % % has an uncertain outcome and cannot become %', kind, NEW.id, new_status USING ERRCODE = '23514';
   END IF;
 
-  -- A confirmed replacement that was never sent: the original is still unknown.
-  IF OLD.current_attempt_id IS NOT NULL AND cur.state IN ('abandoned_unsent', 'not_sent') AND new_status IN ('failed', 'pending')
+  -- The current attempt still holds an unknown outcome (uncertain, a failed
+  -- store, or a confirmed replacement that was never sent): never retryable.
+  -- Only from 'generating': a row already resolved by Upload ('complete')
+  -- keeps its normal edits.
+  IF OLD.current_attempt_id IS NOT NULL AND old_status = 'generating' AND new_status IN ('failed', 'pending')
      AND public.scene_generation_unknown_outcome(cur.id) THEN
-    RAISE EXCEPTION 'scene generation guard: % % had a confirmed replacement that was never sent; it returns to uncertain, not %', kind, NEW.id, new_status USING ERRCODE = '23514';
+    RAISE EXCEPTION 'scene generation guard: % % still has an unknown outcome (a confirmed replacement that was never sent leaves the original unknown); it returns to uncertain, not %', kind, NEW.id, new_status USING ERRCODE = '23514';
   END IF;
 
   -- G4: entering uncertain.
