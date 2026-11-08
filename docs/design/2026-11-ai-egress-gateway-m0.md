@@ -82,8 +82,44 @@ Socket permissions are an **additional** boundary only; authorization is the per
   - a stop takes effect in memory first, then is persisted;
   - a release is persisted first, then applied (if it cannot be persisted, the gateway stays stopped);
   - writes are atomic (temporary file, fsync, rename);
-  - on boot, a missing file means not stopped, while an unreadable or corrupt file means **stopped**.
+  - on boot, a missing file means not stopped, while an unreadable or corrupt file means **stopped**. *(Superseded by E3 below: a missing file now means stopped.)*
 - **Audit:** an append-only, hash-chained, fsynced log (`verifyLogChain`), copied to the operations audit when the database is reachable.
+
+### 5.1 Corrections E1–E4 (G3 v1.0 decision D-D; recovery per Option A, approved 2026-11-08)
+
+These tighten addendum E. Everything above still holds unless stated here.
+
+- **Command format.** Every command is an Ed25519-signed `{action, reason, target, seq, commandId, issuedAt}`, where `action` is `stop`, `release` or `recover`.
+  - `commandId` is recorded for audit traceability only; it is not a replay control.
+  - The ±5-minute `issuedAt` skew still applies.
+- **E1, ordering.**
+  - `seq` must be higher than the last sequence applied for the signing key, and each key has its own counter.
+  - Counters are persisted, so replay protection survives restarts.
+  - A delayed `release` can never override a newer `stop`.
+  - `seq` replaces the earlier nonce list.
+- **E2, target.** `target` must equal the gateway's target id exactly. The id is assigned at provisioning and passed in explicitly; it is never hardcoded or derived.
+- **E3, state.** The gateway is **stopped and untrusted** when its state file is:
+  - missing;
+  - corrupt;
+  - of an unknown version;
+  - written for another target;
+  - inconsistent with the log (head or per-key sequences);
+  
+  or when the log is unreadable. In that condition `stop` and `release` are refused, and **a normal release never initializes state**.
+- **Recovery (Option A).** Initialization and recovery use a separately authorized signed `recover` command.
+  - **Challenge.** It must carry the current challenge: 32 fresh random bytes, held in memory only, so it dies with the process. A challenge expires after 15 minutes and is single-use.
+  - **Key.** It must be signed by a key with the `recover` role.
+  - **Floors.** It must carry a sequence floor for every active key, taken from the signing authority's durable records. No floor may be lower than any sequence the gateway still knows from its log or state.
+  - **Effect.** `recover` leaves the gateway **stopped** and never authorizes dispatch. A newly signed `release`, with a sequence above the floor, is required afterwards.
+  - **Corrupt log.** A log whose hash chain is broken blocks recovery. The files must first be archived out of band, by a manual, separately authorized procedure.
+- **E4, keys.**
+  - Several active public keys are allowed, each with roles: `control` for stop and release, `recover` for recovery. An ordinary key has no recovery authority.
+  - Revoked keys are listed by fingerprint and refused.
+  - There is no key expiry in this slice.
+- **Audit.** Every applied command records its `target`, command `seq`, signer fingerprint and `commandId`. `recover` also records the challenge id, the floors and the prior condition.
+- **Limitation.** The state file and the hash-chained log are writable by the gateway's own account. They detect edits and inconsistencies, but they cannot prove that no history was deleted: removing both files looks like a new gateway. Two things limit the damage:
+  - nothing initializes without a fresh challenge, so replay fails;
+  - the floors come from the signing authority, not from the gateway.
 
 ## 6. Dispatch and Stop acknowledgement (`dispatcher`)
 

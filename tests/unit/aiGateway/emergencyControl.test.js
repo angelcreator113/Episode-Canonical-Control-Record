@@ -1,115 +1,306 @@
 'use strict';
 
+/**
+ * Local emergency Stop with the G3 corrections E1-E4 and challenge-bound
+ * RECOVER (Option A). Keys and stores are synthetic and per test.
+ */
+
 const crypto = require('crypto');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { createEmergencyControl, verifyLogChain } = require('../../../src/aiGateway/emergencyControl');
-const { createEd25519Verifier } = require('../../../src/aiGateway/signature');
+const { createEmergencyControl, verifyLogChain, STATE_VERSION } = require('../../../src/aiGateway/emergencyControl');
+const { createEd25519KeySet, fingerprintPem } = require('../../../src/aiGateway/signature');
 const { createFsEmergencyStore } = require('../../../src/aiGateway/fsStores');
 const { effectiveState } = require('../../../src/aiGateway/stopState');
+const { DEFAULT_LIMITS } = require('../../../src/aiGateway/constants');
 const { makeClock } = require('./_harness');
 
-const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
-const pubPem = publicKey.export({ type: 'spki', format: 'pem' });
-const other = crypto.generateKeyPairSync('ed25519');
+const TARGET = 'aigw-test-1';
+const gen = () => {
+  const k = crypto.generateKeyPairSync('ed25519');
+  return { privateKey: k.privateKey, pem: k.publicKey.export({ type: 'spki', format: 'pem' }) };
+};
+const A = gen(); // control
+const B = gen(); // control (backup)
+const R = gen(); // recovery only
+const X = gen(); // unknown to the gateway
+const fp = (k) => fingerprintPem(k.pem);
 
-let nonceN = 0;
-function command(action, { at, key = privateKey, reason = 'test reason', nonce } = {}) {
-  const payload = JSON.stringify({ action, reason, issuedAt: at, nonce: nonce || `nonce-${(nonceN += 1)}-${'x'.repeat(16)}` });
-  return { payload, signature: crypto.sign(null, Buffer.from(payload), key).toString('base64') };
+let idN = 0;
+function sign(key, fields) {
+  const payload = JSON.stringify({ reason: 'test reason', target: TARGET, commandId: `cmd-${(idN += 1)}-abcdef0123456789`, ...fields });
+  return { payload, signature: crypto.sign(null, Buffer.from(payload), key.privateKey).toString('base64') };
 }
 
-describe('local emergency control', () => {
+describe('local emergency control (E1-E4, challenge-bound recovery)', () => {
   let dir;
   let clock;
   let store;
-  const make = () => createEmergencyControl({ store, verifier: createEd25519Verifier(pubPem), clock });
+  const keySet = (revoked = []) => createEd25519KeySet([
+    { publicKeyPem: A.pem, roles: ['control'] },
+    { publicKeyPem: B.pem, roles: ['control'] },
+    { publicKeyPem: R.pem, roles: ['recover'] },
+  ], { revoked });
+  const make = (opts = {}) => createEmergencyControl({ store, verifier: keySet(opts.revoked), clock, targetId: TARGET, ...opts.extra });
+  const at = () => clock.now();
+  const floors = (a = 0, b = 0, r = 0) => ({ [fp(A)]: a, [fp(B)]: b, [fp(R)]: r });
+  const recover = (ec, { seq = 1, fl = floors(), key = R, target = TARGET, challenge } = {}) => {
+    const ch = challenge !== undefined ? challenge : (ec.recoveryChallenge() || {}).challenge;
+    return ec.apply(sign(key, { action: 'recover', seq, issuedAt: at(), challenge: ch, floors: fl, target }));
+  };
+  const cmd = (key, action, seq, extra = {}) => sign(key, { action, seq, issuedAt: at(), ...extra });
+  /** A trusted gateway: recovered from an empty store, then released. */
+  const established = () => {
+    const ec = make();
+    ec.load();
+    expect(recover(ec).ok).toBe(true);
+    expect(ec.apply(cmd(A, 'release', 1)).ok).toBe(true);
+    return ec;
+  };
+  let errSpy;
   beforeEach(() => {
     dir = fs.mkdtempSync(path.join(os.tmpdir(), 'aigw-emerg-'));
     clock = makeClock();
     store = createFsEmergencyStore(dir);
+    errSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
   });
-  afterEach(() => fs.rmSync(dir, { recursive: true, force: true }));
+  afterEach(() => {
+    errSpy.mockRestore();
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
 
-  test('boot: no state file means not stopped; a signed stop stops and survives a restart', () => {
+  test('construction requires an explicit target id and a key set that lists its keys', () => {
+    expect(() => createEmergencyControl({ store, verifier: keySet(), clock })).toThrow(/target id/);
+    expect(() => createEmergencyControl({ store, verifier: { verify: () => ({}) }, clock, targetId: TARGET })).toThrow(/active keys/);
+  });
+
+  test('missing state: STOPPED and untrusted; an old signed release cannot initialize it', () => {
     const ec = make();
-    expect(ec.load()).toMatchObject({ readable: true, stopped: false });
-    expect(ec.apply(command('stop', { at: clock.now() }))).toMatchObject({ ok: true, stopped: true, persisted: true });
-    const again = make();
-    expect(again.load()).toMatchObject({ readable: true, stopped: true, reason: 'test reason' });
+    expect(ec.load()).toMatchObject({ readable: false, stopped: true, condition: 'state_missing' });
+    expect(ec.apply(cmd(A, 'release', 1)).code).toBe('RECOVERY_REQUIRED');
+    expect(ec.apply(cmd(A, 'stop', 2)).code).toBe('RECOVERY_REQUIRED');
+    expect(ec.status()).toMatchObject({ stopped: true, readable: false });
+    expect(fs.existsSync(path.join(dir, 'emergency.json'))).toBe(false); // nothing initialized
+    const db = { readable: true, state: 'RELEASED', version: 1, readAt: at(), pauses: {} };
+    expect(effectiveState({ db, local: ec.status(), ack: { version: 1 }, now: at() }).effective).toBe('STOPPED');
   });
 
-  test('release: signed, persisted, survives a restart', () => {
+  test('RECOVER initializes a new gateway but leaves it STOPPED; a new, correctly sequenced release is required', () => {
     const ec = make();
     ec.load();
-    ec.apply(command('stop', { at: clock.now() }));
-    expect(ec.apply(command('release', { at: clock.now() }))).toMatchObject({ ok: true, stopped: false });
-    expect(make().load()).toMatchObject({ stopped: false });
+    const r = recover(ec, { seq: 1, fl: floors(4, 0, 0) });
+    expect(r).toMatchObject({ ok: true, recovered: true, stopped: true });
+    expect(ec.status()).toMatchObject({ readable: true, stopped: true, condition: 'ok' });
+    const db = { readable: true, state: 'RELEASED', version: 1, readAt: at(), pauses: {} };
+    expect(effectiveState({ db, local: ec.status(), ack: { version: 1 }, now: at() }).effective).toBe('STOPPED');
+    expect(ec.apply(cmd(A, 'release', 4)).code).toBe('SEQ_STALE'); // at the floor: refused
+    expect(ec.apply(cmd(A, 'release', 5))).toMatchObject({ ok: true, stopped: false });
+    expect(make().load()).toMatchObject({ readable: true, stopped: false, condition: 'ok' }); // survives restart
   });
 
-  test('refused: wrong key, tampered payload, stale or future command, replayed nonce, no reason', () => {
+  test('replaying an old RECOVER fails: while trusted, after the same process reloads, and after a restart', () => {
     const ec = make();
     ec.load();
-    expect(ec.apply(command('stop', { at: clock.now(), key: other.privateKey })).code).toBe('SIGNATURE_INVALID');
-    const c = command('stop', { at: clock.now() });
-    expect(ec.apply({ payload: c.payload.replace('stop', 'release'), signature: c.signature }).code).toBe('SIGNATURE_INVALID');
-    expect(ec.apply(command('stop', { at: clock.now() - 6 * 60_000 })).code).toBe('COMMAND_STALE');
-    expect(ec.apply(command('stop', { at: clock.now() + 6 * 60_000 })).code).toBe('COMMAND_STALE');
-    expect(ec.apply(command('stop', { at: clock.now(), reason: '  ' })).code).toBe('REASON_REQUIRED');
-    const once = command('stop', { at: clock.now() });
-    expect(ec.apply(once).ok).toBe(true);
-    expect(ec.apply(once).code).toBe('NONCE_REPLAYED');
-    // a replay is refused after a restart too
+    const ch = ec.recoveryChallenge().challenge;
+    const original = sign(R, { action: 'recover', seq: 1, issuedAt: at(), challenge: ch, floors: floors() });
+    expect(ec.apply(original).ok).toBe(true);
+    expect(ec.apply(original).code).toBe('RECOVERY_NOT_NEEDED');
+    fs.rmSync(path.join(dir, 'emergency.json'));
+    expect(ec.load()).toMatchObject({ condition: 'state_lost' }); // same process: a new challenge
+    expect(ec.apply(original).code).toBe('CHALLENGE_INVALID');   // a reused challenge
     const restarted = make();
     restarted.load();
-    expect(restarted.apply(once).code).toBe('NONCE_REPLAYED');
+    expect(restarted.apply(original).code).toBe('CHALLENGE_INVALID'); // a restarted process
   });
 
-  test('a corrupt or unreadable state file means stopped (fail closed)', () => {
-    fs.writeFileSync(path.join(dir, 'emergency.json'), '{corrupt');
-    const errSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
-    expect(make().load()).toMatchObject({ readable: false, stopped: true });
-    fs.writeFileSync(path.join(dir, 'emergency.json'), JSON.stringify({ stopped: 'no' }));
-    expect(make().load()).toMatchObject({ readable: false, stopped: true });
-    errSpy.mockRestore();
+  test('challenge rules: unpredictable, wrong target, expired, restarted process', () => {
+    const one = make(); one.load();
+    const two = make(); two.load();
+    const c1 = one.recoveryChallenge();
+    expect(c1.challenge).toMatch(/^[0-9a-f]{64}$/);
+    expect(two.recoveryChallenge().challenge).not.toBe(c1.challenge);
+    expect(recover(one, { target: 'aigw-other' }).code).toBe('TARGET_MISMATCH');
+    expect(recover(one, { challenge: c1.challenge.replace(/.$/, (c) => (c === '0' ? '1' : '0')) }).code).toBe('CHALLENGE_INVALID');
+    clock.advance(DEFAULT_LIMITS.recoveryChallengeTtlMs + 1);
+    expect(recover(one, { challenge: c1.challenge }).code).toBe('CHALLENGE_EXPIRED');
+    const fresh = one.recoveryChallenge(); // a fresh challenge after expiry
+    expect(fresh.challenge).not.toBe(c1.challenge);
+    expect(recover(one, { challenge: fresh.challenge }).ok).toBe(true);
   });
 
-  test('stop takes effect before it is persisted; release only after', () => {
-    const failing = { readState: () => ({ exists: false }), writeState: () => { throw new Error('disk full'); }, appendLog: () => {}, readLog: () => [] };
-    const errSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
-    const ec = createEmergencyControl({ store: failing, verifier: createEd25519Verifier(pubPem), clock });
+  test('RECOVER needs the recovery role; control keys cannot recover and the recovery key cannot stop or release', () => {
+    const ec = make();
     ec.load();
-    expect(ec.apply(command('stop', { at: clock.now() }))).toMatchObject({ ok: true, stopped: true, persisted: false });
+    expect(recover(ec, { key: A }).code).toBe('KEY_NOT_AUTHORIZED');
+    expect(recover(ec, { key: X }).code).toBe('SIGNATURE_INVALID');
+    expect(recover(ec).ok).toBe(true);
+    expect(ec.apply(cmd(R, 'release', 5)).code).toBe('KEY_NOT_AUTHORIZED');
+    expect(ec.apply(cmd(R, 'stop', 6)).code).toBe('KEY_NOT_AUTHORIZED');
+  });
+
+  test('RECOVER floors: every active key, never below known history; the recovery key sequence also advances', () => {
+    const ec = established();
+    expect(ec.apply(cmd(A, 'stop', 6)).ok).toBe(true);
+    expect(ec.apply(cmd(B, 'release', 3)).ok).toBe(true);
+    fs.rmSync(path.join(dir, 'emergency.json'));
+    const lost = make();
+    expect(lost.load()).toMatchObject({ condition: 'state_lost', stopped: true }); // history not silently reset
+    expect(lost.recoveryChallenge().knownFloors).toMatchObject({ [fp(A)]: 6, [fp(B)]: 3, [fp(R)]: 1 });
+    expect(recover(lost, { seq: 2, fl: floors(5, 3, 1) }).code).toBe('FLOOR_TOO_LOW');
+    expect(recover(lost, { seq: 2, fl: { [fp(A)]: 6, [fp(B)]: 3 } }).code).toBe('FLOORS_INCOMPLETE');
+    expect(recover(lost, { seq: 2, fl: { ...floors(6, 3, 1), [fp(X)]: 0 } }).code).toBe('FLOORS_INVALID');
+    expect(recover(lost, { seq: 1, fl: floors(6, 3, 1) }).code).toBe('SEQ_STALE');
+    expect(recover(lost, { seq: 2, fl: floors(6, 3, 1) }).ok).toBe(true);
+    expect(lost.status()).toMatchObject({ stopped: true, readable: true });
+    expect(lost.apply(cmd(A, 'release', 6)).code).toBe('SEQ_STALE'); // old release still refused
+    expect(lost.apply(cmd(A, 'release', 7)).ok).toBe(true);
+  });
+
+  test('E1: a delayed release cannot override a newer Stop; counters are per key and survive restarts', () => {
+    const ec = established();
+    const delayedRelease = cmd(A, 'release', 10);
+    expect(ec.apply(cmd(A, 'stop', 11)).ok).toBe(true);
+    expect(ec.apply(delayedRelease).code).toBe('SEQ_STALE');
     expect(ec.status().stopped).toBe(true);
-    expect(ec.apply(command('release', { at: clock.now() }))).toMatchObject({ ok: false, code: 'RELEASE_NOT_PERSISTED' });
-    expect(ec.status().stopped).toBe(true); // still stopped
-    errSpy.mockRestore();
+    expect(ec.apply(cmd(B, 'release', 1)).ok).toBe(true); // B's counter is independent
+    const once = cmd(A, 'stop', 12);
+    expect(ec.apply(once).ok).toBe(true);
+    expect(ec.apply(once).code).toBe('SEQ_STALE');
+    const restarted = make();
+    expect(restarted.load()).toMatchObject({ condition: 'ok', stopped: true });
+    expect(restarted.apply(once).code).toBe('SEQ_STALE'); // replay refused after restart
+    expect(restarted.apply(cmd(B, 'release', 1)).code).toBe('SEQ_STALE');
   });
 
-  test('the audit log is hash-chained; any edit is detected', () => {
+  test('E2: a command for another target, or with no target, is refused', () => {
+    const ec = established();
+    expect(ec.apply(cmd(A, 'stop', 5, { target: 'aigw-other' })).code).toBe('TARGET_MISMATCH');
+    const noTarget = (() => {
+      const payload = JSON.stringify({ action: 'stop', reason: 'r', seq: 6, commandId: 'cmd-no-target-0123456789', issuedAt: at() });
+      return { payload, signature: crypto.sign(null, Buffer.from(payload), A.privateKey).toString('base64') };
+    })();
+    expect(ec.apply(noTarget).code).toBe('TARGET_MISMATCH');
+    expect(ec.status().stopped).toBe(false);
+  });
+
+  test('E4: several active keys; revoked and unknown keys are refused; signer fingerprints are recorded', () => {
+    established();
+    const ec = make({ revoked: [fp(B)] });
+    ec.load();
+    expect(ec.apply(cmd(B, 'stop', 5)).code).toBe('KEY_REVOKED');
+    expect(ec.apply(cmd(X, 'stop', 5)).code).toBe('SIGNATURE_INVALID');
+    const c = cmd(A, 'stop', 5);
+    expect(ec.apply({ payload: c.payload.replace('stop', 'release'), signature: c.signature }).code).toBe('SIGNATURE_INVALID');
+    expect(ec.apply(c).ok).toBe(true);
+    expect(store.readLog().map((e) => e.signer)).toEqual([fp(R), fp(A), fp(A)]);
+  });
+
+  test('malformed, stale and reasonless commands are refused without echoing input; apply needs load', () => {
+    expect(make().apply(cmd(A, 'stop', 1)).code).toBe('NOT_LOADED');
+    const ec = established();
+    const raw = { payload: '{"action": FAKE_SECRET_VALUE}', signature: crypto.sign(null, Buffer.from('{"action": FAKE_SECRET_VALUE}'), A.privateKey).toString('base64') };
+    expect(ec.apply(raw)).toEqual({ ok: false, code: 'COMMAND_MALFORMED' });
+    expect(ec.apply(cmd(A, 'stop', 0)).code).toBe('COMMAND_MALFORMED');
+    expect(ec.apply(cmd(A, 'stop', 5, { commandId: 'short' })).code).toBe('COMMAND_MALFORMED');
+    expect(ec.apply(cmd(A, 'stop', 5, { reason: '  ' })).code).toBe('REASON_REQUIRED');
+    expect(ec.apply(cmd(A, 'stop', 5, { issuedAt: at() - 6 * 60_000 })).code).toBe('COMMAND_STALE');
+    expect(ec.apply(cmd(A, 'stop', 5, { issuedAt: at() + 6 * 60_000 })).code).toBe('COMMAND_STALE');
+    expect(ec.apply(cmd(A, 'fly', 5)).code).toBe('COMMAND_MALFORMED');
+  });
+
+  test('fail closed: corrupt, unknown-version, wrong-target and inconsistent state; history cannot be reset by normal commands', () => {
+    established();
+    const stateFile = path.join(dir, 'emergency.json');
+    const good = JSON.parse(fs.readFileSync(stateFile, 'utf8'));
+    const cases = [
+      ['{corrupt', 'state_corrupt'],
+      [JSON.stringify({ ...good, version: 1 }), 'state_unknown_version'],
+      [JSON.stringify({ ...good, version: STATE_VERSION + 1 }), 'state_unknown_version'],
+      [JSON.stringify({ ...good, stopped: 'no' }), 'state_corrupt'],
+      [JSON.stringify({ ...good, target: 'aigw-other' }), 'state_target_mismatch'],
+      [JSON.stringify({ ...good, logHead: { ...good.logHead, seq: good.logHead.seq - 1 } }), 'state_inconsistent'],
+      [JSON.stringify({ ...good, lastSeq: { ...good.lastSeq, [fp(A)]: 0 } }), 'state_inconsistent'],
+    ];
+    for (const [text, condition] of cases) {
+      fs.writeFileSync(stateFile, text);
+      const ec = make();
+      expect(ec.load()).toMatchObject({ readable: false, stopped: true, condition });
+      expect(ec.apply(cmd(A, 'release', 99)).code).toBe('RECOVERY_REQUIRED');
+      expect(ec.status().stopped).toBe(true);
+    }
+  });
+
+  test('a broken log chain blocks recovery until the files are archived out of band', () => {
+    established();
+    const logFile = path.join(dir, 'emergency.log');
+    const lines = fs.readFileSync(logFile, 'utf8').trim().split('\n');
+    const first = JSON.parse(lines[0]);
+    first.reason = 'edited';
+    fs.writeFileSync(logFile, `${[JSON.stringify(first), ...lines.slice(1)].join('\n')}\n`);
+    const ec = make();
+    expect(ec.load()).toMatchObject({ condition: 'log_corrupt', stopped: true, recovery: { possible: false } });
+    expect(ec.recoveryChallenge()).toBeNull();
+    expect(recover(ec, { challenge: 'a'.repeat(64) }).code).toBe('RECOVERY_BLOCKED');
+    expect(ec.apply(cmd(A, 'release', 99)).code).toBe('RECOVERY_REQUIRED');
+  });
+
+  test('audit entries record target, command sequence, key fingerprint and command id; RECOVER also records challenge id and floors', () => {
     const ec = make();
     ec.load();
-    ec.apply(command('stop', { at: clock.now() }));
-    ec.apply(command('release', { at: clock.now() }));
-    ec.apply(command('stop', { at: clock.now() }));
+    const chId = ec.recoveryChallenge().challengeId;
+    recover(ec, { seq: 1, fl: floors(2, 0, 0) });
+    ec.apply(cmd(A, 'release', 3));
+    ec.apply(cmd(B, 'stop', 1));
     const log = store.readLog();
-    expect(log).toHaveLength(3);
     expect(verifyLogChain(log)).toEqual({ ok: true });
+    expect(log[0]).toMatchObject({ action: 'recover', target: TARGET, commandSeq: 1, signer: fp(R), challengeId: chId, floors: floors(2, 0, 0), priorCondition: 'state_missing' });
+    for (const e of log) {
+      expect(e.target).toBe(TARGET);
+      expect(Number.isSafeInteger(e.commandSeq)).toBe(true);
+      expect(e.signer).toMatch(/^[0-9a-f]{16}$/);
+      expect(e.commandId).toMatch(/^cmd-\d+-abcdef0123456789$/);
+    }
     const tampered = log.map((e) => ({ ...e }));
-    tampered[1].reason = 'edited';
+    tampered[1].commandSeq = 99;
     expect(verifyLogChain(tampered)).toEqual({ ok: false, at: 1 });
-    expect(verifyLogChain([log[0], log[2]])).toEqual({ ok: false, at: 1 }); // a deleted entry
-    expect(log.every((e) => typeof e.signer === 'string' && e.signer.length === 16)).toBe(true);
+    expect(verifyLogChain([log[0], log[2]])).toEqual({ ok: false, at: 1 });
   });
 
-  test('a database Resume cannot clear an active local stop', () => {
-    const ec = make();
+  test('durability: stop applies before it is persisted; a failed release persists nothing and stays stopped', () => {
+    established();
+    let failWrites = false;
+    const flaky = {
+      readState: () => store.readState(),
+      readLog: () => store.readLog(),
+      appendLog: (e) => store.appendLog(e),
+      writeState: (d) => { if (failWrites) throw new Error('disk full'); store.writeState(d); },
+    };
+    const ec = createEmergencyControl({ store: flaky, verifier: keySet(), clock, targetId: TARGET });
     ec.load();
-    ec.apply(command('stop', { at: clock.now() }));
-    const db = { readable: true, state: 'RELEASED', version: 9, readAt: clock.now(), pauses: {} };
-    const r = effectiveState({ db, local: ec.status(), ack: { version: 9 }, now: clock.now() });
-    expect(r.effective).toBe('STOPPED');
-    expect(r.allowSubmissions).toBe(false);
+    failWrites = true;
+    expect(ec.apply(cmd(A, 'stop', 5))).toMatchObject({ ok: true, stopped: true, persisted: false });
+    expect(ec.status()).toMatchObject({ stopped: true, readable: false, condition: 'persist_failed' });
+    expect(ec.apply(cmd(A, 'release', 6)).code).toBe('RECOVERY_REQUIRED');
+    failWrites = false;
+    expect(make().load()).toMatchObject({ stopped: true, readable: false, condition: 'state_inconsistent' });
+
+    const ec2 = createEmergencyControl({ store: flaky, verifier: keySet(), clock, targetId: TARGET });
+    ec2.load();
+    expect(recover(ec2, { seq: 2, fl: floors(5, 0, 1) }).ok).toBe(true);
+    failWrites = true;
+    expect(ec2.apply(cmd(A, 'release', 6))).toMatchObject({ ok: false, code: 'RELEASE_NOT_PERSISTED' });
+    expect(ec2.status().stopped).toBe(true);
+  });
+
+  test('a database Resume never clears a local Stop; a local release never clears a database Stop', () => {
+    const ec = established();
+    ec.apply(cmd(A, 'stop', 5));
+    const dbReleased = { readable: true, state: 'RELEASED', version: 9, readAt: at(), pauses: {} };
+    expect(effectiveState({ db: dbReleased, local: ec.status(), ack: { version: 9 }, now: at() })).toMatchObject({ effective: 'STOPPED', allowSubmissions: false });
+    ec.apply(cmd(A, 'release', 6));
+    expect(ec.status().stopped).toBe(false);
+    const dbStopped = { readable: true, state: 'STOPPED', version: 10, readAt: at(), pauses: {} };
+    expect(effectiveState({ db: dbStopped, local: ec.status(), ack: { version: 10 }, now: at() })).toMatchObject({ effective: 'STOPPED', allowSubmissions: false });
   });
 });

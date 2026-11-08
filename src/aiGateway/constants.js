@@ -19,6 +19,7 @@ const DEFAULT_LIMITS = Object.freeze({
   bodyReadDeadlineMs: 60_000,            // a slow body cannot hold a slot forever
   stateStaleMs: 3_000,                   // 3 x the 1 s state poll
   emergencyClockSkewMs: 5 * 60_000,      // signed emergency commands: +/- 5 min
+  recoveryChallengeTtlMs: 15 * 60_000,   // a RECOVER challenge expires after 15 min
 });
 
 function withLimits(overrides = {}) {
