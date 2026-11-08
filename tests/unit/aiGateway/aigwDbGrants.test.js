@@ -13,6 +13,7 @@ const path = require('path');
 const grants = require('../../../src/aiGateway/aigwDbGrants');
 const migration = require('../../../src/migrations/20261108120000-create-aigw-ledger');
 const { OPERATIONS } = require('../../../src/aiGateway/operationCatalog');
+const { ownershipStatements } = require('../../helpers/aigwTestDb');
 
 const SQL = fs.readFileSync(path.join(__dirname, '../../../scripts/aigw/sql/aigw-roles.sql'), 'utf8');
 const statements = SQL.split('\n').filter((l) => l.trim() && !l.trim().startsWith('--') && !l.trim().startsWith('\\')).join('\n')
@@ -61,7 +62,7 @@ describe('AI gateway roles: the hand-run SQL file', () => {
 
   test('moves every table and function to the owner role, with a membership revoked in the same transaction', () => {
     const owns = statements.filter((s) => / OWNER TO /.test(s)).sort();
-    expect(owns).toEqual(grants.ownershipStatements(grants.OWNER_ROLE, migration.FUNCTIONS).map(norm).sort());
+    expect(owns).toEqual(ownershipStatements(grants.OWNER_ROLE, migration.FUNCTIONS).map(norm).sort());
     const i = statements.indexOf(`GRANT ${grants.OWNER_ROLE} TO CURRENT_USER`);
     const j = statements.indexOf(`REVOKE ${grants.OWNER_ROLE} FROM CURRENT_USER`);
     expect(i).toBeGreaterThan(0);

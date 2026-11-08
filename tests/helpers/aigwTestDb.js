@@ -33,6 +33,18 @@ function urlFor(dbName, role, password) {
   return u.toString();
 }
 
+/**
+ * The ownership move the role script makes: every aigw table and function to
+ * the owner role. Kept here, not in src/, so the application source holds no
+ * DDL text (tests/unit/guards/noRuntimeDdl.test.js).
+ */
+function ownershipStatements(owner, functions = migration.FUNCTIONS) {
+  return [
+    ...grants.TABLES.map((t) => `ALTER TABLE public.${t} OWNER TO ${ident(owner)}`),
+    ...functions.map((f) => `ALTER FUNCTION public.${f} OWNER TO ${ident(owner)}`),
+  ];
+}
+
 const portOf = (pool) => (sql, params) => pool.query(sql, params).then((r) => r.rows);
 
 /**
@@ -62,7 +74,7 @@ async function createAigwTestDb({ poolMax = 10, ownership = true } = {}) {
   const su = new Client({ connectionString: urlFor(dbName) });
   await su.connect();
   await su.query(`CREATE ROLE ${ident(roles.owner)} NOLOGIN`);
-  if (ownership) for (const sql of grants.ownershipStatements(roles.owner, migration.FUNCTIONS)) await su.query(sql);
+  if (ownership) for (const sql of ownershipStatements(roles.owner)) await su.query(sql);
   for (const kind of ['caller', 'gateway', 'admin', 'inspector', 'app']) {
     await su.query(`CREATE ROLE ${ident(roles[kind])} LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT PASSWORD '${password}'`);
     if (kind === 'app') {
@@ -99,4 +111,4 @@ async function createAigwTestDb({ poolMax = 10, ownership = true } = {}) {
   };
 }
 
-module.exports = { ADMIN_URL, shouldSkip, createAigwTestDb, urlFor, ident };
+module.exports = { ADMIN_URL, shouldSkip, createAigwTestDb, ownershipStatements, urlFor, ident };

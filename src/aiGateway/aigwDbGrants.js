@@ -99,14 +99,6 @@ const ADMIN_ONLY = Object.freeze([
 
 const q = (id) => `"${String(id).replace(/"/g, '""')}"`;
 
-/** Move every table and function to the owner role (run by a superuser or a member of it). */
-function ownershipStatements(owner, functions) {
-  return [
-    ...TABLES.map((t) => `ALTER TABLE public.${t} OWNER TO ${q(owner)}`),
-    ...functions.map((f) => `ALTER FUNCTION public.${f} OWNER TO ${q(owner)}`),
-  ];
-}
-
 /** The statements giving `role` exactly the privileges of `kind`. */
 function grantStatements(kind, role, database) {
   if (!FUNCTION_GRANTS[kind]) throw new Error(`aigw grants: unknown role kind ${kind}`);
@@ -119,5 +111,5 @@ function grantStatements(kind, role, database) {
 }
 
 module.exports = {
-  OWNER_ROLE, ROLES, TABLES, FUNCTION_GRANTS, TABLE_GRANTS, ADMIN_ONLY, ownershipStatements, grantStatements,
+  OWNER_ROLE, ROLES, TABLES, FUNCTION_GRANTS, TABLE_GRANTS, ADMIN_ONLY, grantStatements,
 };

@@ -879,7 +879,7 @@ function privilegeSql() {
   for (const t of TABLES) {
     out.push(`REVOKE ALL ON public.${t} FROM PUBLIC`);
     // Take back default-privilege grants from every role but the owner
-    // (the data_correction_log pattern): no application role can touch them.
+    // (the append-only log migration pattern of 2026-11-04): no application role can touch them.
     out.push(`DO $acl$
       DECLARE g text;
       BEGIN
