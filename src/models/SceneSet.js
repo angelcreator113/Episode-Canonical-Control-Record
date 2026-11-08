@@ -89,10 +89,16 @@ module.exports = (sequelize) => {
     negative_prompt: { type: DataTypes.TEXT, allowNull: true },
     variation_count: { type: DataTypes.INTEGER, allowNull: true, defaultValue: 1 },
     generation_status: {
-      type: DataTypes.ENUM('pending', 'generating', 'complete', 'failed'),
+      // 'uncertain' (#3748): a paid request may have been sent and no usable
+      // answer came back; never retried, reclassified or deleted (database
+      // guards, migration 20261108210100-scene-generation-attempts).
+      type: DataTypes.ENUM('pending', 'generating', 'complete', 'failed', 'uncertain'),
       allowNull: false,
       defaultValue: 'pending',
     },
+    // The latest paid generation attempt (scene_generation_attempts, #3748).
+    // Written only through the attempt service (PR B); NULL until then.
+    current_attempt_id: { type: DataTypes.UUID, allowNull: true },
     generation_cost: { type: DataTypes.DECIMAL(10, 4), allowNull: true, defaultValue: 0 },
     tier_requirement: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
     is_franchise_asset: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
