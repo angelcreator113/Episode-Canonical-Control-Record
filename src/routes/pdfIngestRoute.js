@@ -17,7 +17,7 @@
 
 const express  = require('express');
 const multer   = require('multer');
-const Anthropic = require('@anthropic-ai/sdk');
+const { createAnthropicClient } = require('../services/anthropicClient');
 const router   = express.Router();
 const db       = require('../models');
 const { requireAuth } = require('../middleware/auth');
@@ -35,7 +35,7 @@ if (typeof globalThis.DOMMatrix === 'undefined') {
   };
 }
 
-const client = new Anthropic();
+const client = createAnthropicClient();
 
 // Memory storage — we never write the file to disk, just buffer it
 const ALLOWED_MIMETYPES = [

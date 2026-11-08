@@ -127,8 +127,8 @@ Return ONLY valid JSON:
 // ─── POST /start ──────────────────────────────────────────────────────────────
 router.post('/start', requireAuth, async (req, res) => {
   try {
-    const Anthropic = require('@anthropic-ai/sdk');
-    const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+    const { createAnthropicClient } = require('../services/anthropicClient');
+    const anthropic = createAnthropicClient({ apiKey: process.env.ANTHROPIC_API_KEY });
 
     const systemPrompt = buildWizardSystemPrompt(1, [], {});
 
@@ -187,8 +187,8 @@ router.post('/respond', requireAuth, async (req, res) => {
   if (!creator_message) return res.status(400).json({ error: 'creator_message required' });
 
   try {
-    const Anthropic = require('@anthropic-ai/sdk');
-    const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+    const { createAnthropicClient } = require('../services/anthropicClient');
+    const anthropic = createAnthropicClient({ apiKey: process.env.ANTHROPIC_API_KEY });
 
     const systemPrompt = buildWizardSystemPrompt(
       current_beat || 1,
