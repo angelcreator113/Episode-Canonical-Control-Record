@@ -60,8 +60,11 @@ const portOf = (pool) => (sql, params) => pool.query(sql, params).then((r) => r.
  * superuser, CREATEROLE, owner of the database) that runs the migration. Then one
  * login per runtime role kind, plus `app`: a login with no aigw grant,
  * standing in for the existing application role.
+ *   productionDefaultPrivileges  give the migration login the default
+ *                                privileges production has (2026-11-08)
+ *   extraMigrations              migration modules applied after the ledger's
  */
-async function createAigwTestDb({ poolMax = 10 } = {}) {
+async function createAigwTestDb({ poolMax = 10, productionDefaultPrivileges = false, extraMigrations = [] } = {}) {
   const tag = crypto.randomBytes(4).toString('hex');
   const dbName = `aigw_t_${tag}`;
   const password = `pw-${crypto.randomBytes(12).toString('hex')}`;
@@ -108,13 +111,25 @@ async function createAigwTestDb({ poolMax = 10 } = {}) {
     await su.query(`ALTER SCHEMA public OWNER TO ${ident(roles.migrator)}`);
     await su.query('REVOKE CREATE ON SCHEMA public FROM PUBLIC');
 
+    // The logins exist before the migration, so default privileges can name them.
+    for (const kind of [...KINDS, 'app']) {
+      await su.query(`CREATE ROLE ${ident(roles[kind])} LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT PASSWORD '${password}'`);
+    }
+    if (productionDefaultPrivileges) {
+      // As read from production on 2026-11-08 (pg_default_acl for the migration
+      // login, schema public): sequences SELECT, USAGE and tables SELECT,
+      // INSERT, UPDATE, DELETE to the application login.
+      await su.query(`ALTER DEFAULT PRIVILEGES FOR ROLE ${ident(roles.migrator)} IN SCHEMA public GRANT SELECT, USAGE ON SEQUENCES TO ${ident(roles.app)}`);
+      await su.query(`ALTER DEFAULT PRIVILEGES FOR ROLE ${ident(roles.migrator)} IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO ${ident(roles.app)}`);
+    }
+
     sequelize = new Sequelize(urlFor(dbName, roles.migrator, password), { logging: false, pool: { max: 2 } });
     await migration.up(sequelize.getQueryInterface(), Sequelize);
+    for (const m of extraMigrations) await m.up(sequelize.getQueryInterface(), Sequelize);
 
     migrator = new Client({ connectionString: urlFor(dbName, roles.migrator, password) });
     await migrator.connect();
     for (const kind of [...KINDS, 'app']) {
-      await su.query(`CREATE ROLE ${ident(roles[kind])} LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT PASSWORD '${password}'`);
       if (kind === 'app') {
         await migrator.query(`GRANT CONNECT ON DATABASE ${ident(dbName)} TO ${ident(roles.app)}`);
         await migrator.query(`GRANT USAGE ON SCHEMA public TO ${ident(roles.app)}`);

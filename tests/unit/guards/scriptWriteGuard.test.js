@@ -132,6 +132,7 @@ describe('A1c R1 static guards', () => {
       'src/migrations/20261104200000-create-runtime-created-tables.js': 'Runtime DDL removal (Evoni, 2026-11-04: PR approved for preparation): the tables the application used to create at runtime, only where missing',
       'src/migrations/20261107150000-camera-roll-make-claims.js': 'Camera Roll make safety (Evoni, 2026-11-07: migration and its five columns approved, #3714): the status CHECK and five columns on camera_roll_moments only',
       'src/migrations/20261108120000-create-aigw-ledger.js': 'AI egress gateway G2 (Evoni, 2026-11-08: implementation authorized, draft PR only): new aigw_* tables and functions only',
+      'src/migrations/20261108140000-aigw-sequence-acl.js': 'AI egress gateway G2 follow-up (Evoni, 2026-11-08: propose the smallest correction in a separate PR): revokes non-owner grants on the three aigw_ sequences only',
     };
     const migrations = files('src/migrations').filter((f) => /\/2026102[7-9]|\/20261[1-2]|\/2027/.test(f));
     expect(migrations.sort()).toEqual(Object.keys(LATER).sort());
