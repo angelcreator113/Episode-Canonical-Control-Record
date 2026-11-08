@@ -43,7 +43,19 @@
  *     G4 'uncertain' may be entered only when the current attempt is
  *        'uncertain' or 'stored_failed'.
  *     G5 an uncertain row cannot be deleted or soft-deleted; nor can a set
- *        while one of its live angles is uncertain.
+ *        while one of its live angles is uncertain. TRUNCATE of either table
+ *        is refused while any row is uncertain or any attempt is in flight.
+ *     G7 while the current attempt is in flight, an UPDATE that names
+ *        generation_status without taking a new attempt is refused, even
+ *        when it leaves the value 'generating' (the code before PR B marks a
+ *        base generating with a plain UPDATE and then calls fal: during a
+ *        rollback it would send a second request for a run in flight).
+ *   An attempt "holds an unknown outcome" when it is uncertain or
+ *   stored_failed, or when it is a confirmed replacement (its predecessor's
+ *   confirmation was consumed by it) that ended abandoned_unsent or not_sent:
+ *   the replacement was never sent, so the original is still unknown. Such a
+ *   row returns to 'uncertain' (never 'failed' or 'pending'), and a new
+ *   confirmation is issued on, and supersedes, that replacement.
  *   scene_generation_attempts
  *     G6 no DELETE or TRUNCATE; identity and evidence columns write-once;
  *        only the state transitions above; a confirmation is consumed once,
@@ -56,6 +68,44 @@
  */
 const PIN = 'SET LOCAL search_path = pg_catalog, pg_temp';
 const STALE_MINUTES = 15; // generationClaimService.GENERATION_STALE_MINUTES
+
+const UNKNOWN_OUTCOME = `
+CREATE OR REPLACE FUNCTION public.scene_generation_unknown_outcome(p_id uuid) RETURNS boolean
+  LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS $fn$
+  SELECT EXISTS (
+    SELECT 1 FROM public.scene_generation_attempts a
+     WHERE a.id = p_id
+       AND (a.state IN ('uncertain', 'stored_failed')
+            OR (a.state IN ('abandoned_unsent', 'not_sent')
+                AND EXISTS (SELECT 1 FROM public.scene_generation_attempts p
+                             WHERE p.id = a.supersedes_attempt_id AND p.confirm_consumed_by_attempt_id = a.id))))
+$fn$`;
+
+const STATUS_WRITE_GUARD = `
+CREATE OR REPLACE FUNCTION public.scene_generation_status_write_guard() RETURNS trigger
+  LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS $fn$
+BEGIN
+  IF OLD.current_attempt_id IS NOT NULL AND NEW.current_attempt_id IS NOT DISTINCT FROM OLD.current_attempt_id
+     AND NEW.generation_status IS NOT DISTINCT FROM OLD.generation_status
+     AND EXISTS (SELECT 1 FROM public.scene_generation_attempts a
+                  WHERE a.id = OLD.current_attempt_id AND a.state IN ('claimed', 'dispatch_started')) THEN
+    RAISE EXCEPTION 'scene generation guard: % % has an attempt in flight; another generation cannot start',
+      CASE TG_TABLE_NAME WHEN 'scene_sets' THEN 'set' ELSE 'angle' END, OLD.id USING ERRCODE = '23514';
+  END IF;
+  RETURN NEW;
+END $fn$`;
+
+const TARGET_TRUNCATE_GUARD = `
+CREATE OR REPLACE FUNCTION public.scene_generation_target_truncate_guard() RETURNS trigger
+  LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS $fn$
+BEGIN
+  IF EXISTS (SELECT 1 FROM public.scene_sets WHERE generation_status::text = 'uncertain')
+     OR EXISTS (SELECT 1 FROM public.scene_angles WHERE generation_status::text = 'uncertain')
+     OR EXISTS (SELECT 1 FROM public.scene_generation_attempts WHERE state IN ('claimed', 'dispatch_started')) THEN
+    RAISE EXCEPTION 'scene generation guard: % is refused while a scene set or angle is uncertain or an attempt is in flight', TG_TABLE_NAME USING ERRCODE = '23514';
+  END IF;
+  RETURN NULL;
+END $fn$`;
 
 const TARGET_GUARD = `
 CREATE OR REPLACE FUNCTION public.scene_generation_target_guard() RETURNS trigger
@@ -151,8 +201,14 @@ BEGIN
     RAISE EXCEPTION 'scene generation guard: % % has an uncertain outcome and cannot become %', kind, NEW.id, new_status USING ERRCODE = '23514';
   END IF;
 
+  -- A confirmed replacement that was never sent: the original is still unknown.
+  IF OLD.current_attempt_id IS NOT NULL AND cur.state IN ('abandoned_unsent', 'not_sent') AND new_status IN ('failed', 'pending')
+     AND public.scene_generation_unknown_outcome(cur.id) THEN
+    RAISE EXCEPTION 'scene generation guard: % % had a confirmed replacement that was never sent; it returns to uncertain, not %', kind, NEW.id, new_status USING ERRCODE = '23514';
+  END IF;
+
   -- G4: entering uncertain.
-  IF new_status = 'uncertain' AND (NEW.current_attempt_id IS NULL OR cur.state NOT IN ('uncertain', 'stored_failed')) THEN
+  IF new_status = 'uncertain' AND (NEW.current_attempt_id IS NULL OR NOT public.scene_generation_unknown_outcome(cur.id)) THEN
     RAISE EXCEPTION 'scene generation guard: % % becomes uncertain only through an attempt recorded as uncertain', kind, NEW.id USING ERRCODE = '23514';
   END IF;
 
@@ -184,7 +240,7 @@ BEGIN
     IF NEW.supersedes_attempt_id IS NOT NULL THEN
       SELECT * INTO prev FROM public.scene_generation_attempts WHERE id = NEW.supersedes_attempt_id;
       IF NOT FOUND OR prev.target_kind <> NEW.target_kind OR prev.target_id <> NEW.target_id
-         OR prev.state NOT IN ('uncertain', 'stored_failed') THEN
+         OR NOT public.scene_generation_unknown_outcome(prev.id) THEN
         RAISE EXCEPTION 'scene generation guard: an attempt may only supersede an uncertain attempt of the same target' USING ERRCODE = '23514';
       END IF;
     END IF;
@@ -236,7 +292,7 @@ BEGIN
   -- supersedes this one.
   IF NEW.confirm_token_hash IS DISTINCT FROM OLD.confirm_token_hash OR NEW.confirm_user_id IS DISTINCT FROM OLD.confirm_user_id
      OR NEW.confirm_expires_at IS DISTINCT FROM OLD.confirm_expires_at THEN
-    IF OLD.state NOT IN ('uncertain', 'stored_failed') OR OLD.confirm_consumed_at IS NOT NULL OR NEW.confirm_consumed_at IS NOT NULL THEN
+    IF NOT public.scene_generation_unknown_outcome(OLD.id) OR OLD.confirm_consumed_at IS NOT NULL OR NEW.confirm_consumed_at IS NOT NULL THEN
       RAISE EXCEPTION 'scene generation guard: a confirmation is issued only for an uncertain attempt not yet confirmed' USING ERRCODE = '23514';
     END IF;
   END IF;
@@ -257,12 +313,17 @@ BEGIN
 
   -- Mark reviewed: only an uncertain attempt.
   IF (NEW.reviewed_at IS DISTINCT FROM OLD.reviewed_at OR NEW.reviewed_by IS DISTINCT FROM OLD.reviewed_by)
-     AND OLD.state NOT IN ('uncertain', 'stored_failed') THEN
+     AND NOT public.scene_generation_unknown_outcome(OLD.id) THEN
     RAISE EXCEPTION 'scene generation guard: only an uncertain attempt is marked reviewed' USING ERRCODE = '23514';
   END IF;
 
   RETURN NEW;
 END $fn$`;
+
+const FUNCTIONS = [
+  'scene_generation_unknown_outcome(uuid)', 'scene_generation_target_guard()', 'scene_generation_status_write_guard()',
+  'scene_generation_target_truncate_guard()', 'scene_generation_attempt_guard()',
+];
 
 module.exports = {
   async up(queryInterface) {
@@ -321,13 +382,19 @@ module.exports = {
                    ADD COLUMN current_attempt_id UUID NULL REFERENCES public.scene_generation_attempts(id)`);
       }
 
+      await q(UNKNOWN_OUTCOME);
       await q(TARGET_GUARD);
+      await q(STATUS_WRITE_GUARD);
+      await q(TARGET_TRUNCATE_GUARD);
       await q(ATTEMPT_GUARD);
-      await q('REVOKE ALL ON FUNCTION public.scene_generation_target_guard() FROM PUBLIC');
-      await q('REVOKE ALL ON FUNCTION public.scene_generation_attempt_guard() FROM PUBLIC');
+      for (const fn of FUNCTIONS) await q(`REVOKE ALL ON FUNCTION public.${fn} FROM PUBLIC`);
       for (const table of ['scene_sets', 'scene_angles']) {
         await q(`CREATE TRIGGER scene_generation_target_guard BEFORE UPDATE OR DELETE ON public.${table}
                    FOR EACH ROW EXECUTE FUNCTION public.scene_generation_target_guard()`);
+        await q(`CREATE TRIGGER scene_generation_status_write_guard BEFORE UPDATE OF generation_status ON public.${table}
+                   FOR EACH ROW EXECUTE FUNCTION public.scene_generation_status_write_guard()`);
+        await q(`CREATE TRIGGER scene_generation_target_truncate_guard BEFORE TRUNCATE ON public.${table}
+                   FOR EACH STATEMENT EXECUTE FUNCTION public.scene_generation_target_truncate_guard()`);
       }
       await q(`CREATE TRIGGER scene_generation_attempt_guard BEFORE INSERT OR UPDATE OR DELETE ON public.scene_generation_attempts
                  FOR EACH ROW EXECUTE FUNCTION public.scene_generation_attempt_guard()`);
@@ -348,12 +415,16 @@ module.exports = {
         throw new Error(`Refusing to remove the scene generation safeguards: ${attempts} recorded attempt(s) and ${uncertain} uncertain scene set(s) or angle(s). The attempts are evidence of paid requests and the uncertain rows may already have been charged; nothing is converted into a retryable status. Nothing was changed.`);
       }
       for (const table of ['scene_sets', 'scene_angles']) {
-        await q(`DROP TRIGGER IF EXISTS scene_generation_target_guard ON public.${table}`);
+        for (const trg of ['scene_generation_target_guard', 'scene_generation_status_write_guard', 'scene_generation_target_truncate_guard']) {
+          await q(`DROP TRIGGER IF EXISTS ${trg} ON public.${table}`);
+        }
         await q(`ALTER TABLE public.${table} DROP COLUMN IF EXISTS current_attempt_id`);
       }
       await q('DROP TABLE IF EXISTS public.scene_generation_attempts');
-      await q('DROP FUNCTION IF EXISTS public.scene_generation_target_guard()');
-      await q('DROP FUNCTION IF EXISTS public.scene_generation_attempt_guard()');
+      for (const fn of ['scene_generation_target_guard()', 'scene_generation_status_write_guard()', 'scene_generation_target_truncate_guard()',
+        'scene_generation_attempt_guard()', 'scene_generation_unknown_outcome(uuid)']) {
+        await q(`DROP FUNCTION IF EXISTS public.${fn}`);
+      }
     });
   },
 };

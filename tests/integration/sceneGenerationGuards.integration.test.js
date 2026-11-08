@@ -112,12 +112,14 @@ const sha = (s) => crypto.createHash('sha256').update(s).digest('hex');
         await attemptsMigration.down(sequelize.getQueryInterface(), Sequelize);
         expect((await one("SELECT to_regclass('public.scene_generation_attempts') AS t")).t).toBeNull();
         expect((await one(`SELECT count(*)::int AS n FROM pg_trigger WHERE tgname LIKE 'scene_generation%'`)).n).toBe(0);
+        expect((await one(`SELECT count(*)::int AS n FROM pg_proc WHERE proname LIKE 'scene_generation%'`)).n).toBe(0);
         await statusMigration.down(sequelize.getQueryInterface(), Sequelize); // no uncertain rows: a no-op
         await statusMigration.up(sequelize.getQueryInterface(), Sequelize); // IF NOT EXISTS: idempotent
         await attemptsMigration.up(sequelize.getQueryInterface(), Sequelize);
       }
       expect((await one("SELECT to_regclass('public.scene_generation_attempts') AS t")).t).toBe('scene_generation_attempts');
-      expect((await one(`SELECT count(*)::int AS n FROM pg_trigger WHERE tgname LIKE 'scene_generation%' AND NOT tgisinternal`)).n).toBe(4);
+      expect((await one(`SELECT count(*)::int AS n FROM pg_trigger WHERE tgname LIKE 'scene_generation%' AND NOT tgisinternal`)).n).toBe(8);
+      expect((await one(`SELECT count(*)::int AS n FROM pg_proc WHERE proname LIKE 'scene_generation%'`)).n).toBe(5);
       expect((await one(`SELECT string_agg(enumlabel, ',' ORDER BY enumsortorder) AS v FROM pg_enum
                            WHERE enumtypid = 'enum_scene_sets_generation_status'::regtype`)).v).toBe('pending,generating,complete,failed,uncertain');
 
@@ -127,7 +129,8 @@ const sha = (s) => crypto.createHash('sha256').update(s).digest('hex');
       await expect(attemptsMigration.down(sequelize.getQueryInterface(), Sequelize)).rejects.toThrow(/Refusing to remove the scene generation safeguards/);
       await expect(statusMigration.down(sequelize.getQueryInterface(), Sequelize)).rejects.toThrow(/Refusing to undo the 'uncertain' generation status/);
       expect((await target('set', set.id)).status).toBe('uncertain');
-      expect((await one(`SELECT count(*)::int AS n FROM pg_trigger WHERE tgname LIKE 'scene_generation%' AND NOT tgisinternal`)).n).toBe(4);
+      expect((await one(`SELECT count(*)::int AS n FROM pg_trigger WHERE tgname LIKE 'scene_generation%' AND NOT tgisinternal`)).n).toBe(8);
+      expect((await one(`SELECT count(*)::int AS n FROM pg_proc WHERE proname LIKE 'scene_generation%'`)).n).toBe(5);
     });
 
     test('why two files: a new enum value cannot be used in the transaction that adds it', async () => {
@@ -254,7 +257,7 @@ const sha = (s) => crypto.createHash('sha256').update(s).digest('hex');
       await run("UPDATE scene_sets SET updated_at = NOW() - INTERVAL '20 minutes' WHERE id = :id", { id: set.id });
       await expect(run(`UPDATE scene_sets SET generation_status = 'generating', updated_at = NOW()
                          WHERE id = :id AND (generation_status IS DISTINCT FROM 'generating' OR updated_at < NOW() - make_interval(mins => 15))`, { id: set.id }))
-        .rejects.toThrow(/stale attempt in flight/);
+        .rejects.toThrow(/stale attempt in flight|another generation cannot start/);
       expect(await target('set', set.id)).toMatchObject({ status: 'generating', current_attempt_id: first });
     });
   });
