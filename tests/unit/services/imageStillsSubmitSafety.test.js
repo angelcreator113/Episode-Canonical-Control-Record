@@ -52,6 +52,7 @@ beforeEach(() => {
 afterEach(() => jest.restoreAllMocks());
 
 const AMBIGUOUS = [
+  ['a 408 (Request Timeout)', httpErr(408)],
   ['a 429', httpErr(429)],
   ['a 500', httpErr(500)],
   ['a 502', httpErr(502)],
@@ -136,13 +137,35 @@ describe('OpenAI gpt-image-1.5 stills: no automatic resend (pinned)', () => {
 });
 
 describe('classifySubmitError', () => {
-  test('only pre-send network errors are "not_sent"; 429 and 5xx are "unknown"; other 4xx "failed"', () => {
+  test('only pre-send network errors are "not_sent"; 408, 429 and 5xx are "unknown"; other 4xx "failed"', () => {
     expect(outcome.classifySubmitError(netErr('ECONNREFUSED'))).toBe('not_sent');
     expect(outcome.classifySubmitError(netErr('ENOTFOUND'))).toBe('not_sent');
     expect(outcome.classifySubmitError(netErr('ECONNRESET'))).toBe('unknown');
     expect(outcome.classifySubmitError(new Error('no code'))).toBe('unknown');
+    expect(outcome.classifySubmitError(httpErr(408))).toBe('unknown');
     expect(outcome.classifySubmitError(httpErr(429))).toBe('unknown');
     expect(outcome.classifySubmitError(httpErr(500))).toBe('unknown');
     expect(outcome.classifySubmitError(httpErr(403))).toBe('failed');
+    expect(outcome.classifySubmitError(httpErr(400))).toBe('failed');
+  });
+});
+
+describe('an uncertain outcome is never followed by a second paid fal request', () => {
+  const PATHS = [
+    ['text-to-image', () => sceneGen.startTextToImage('a cafe at dusk')],
+    ['Kontext', () => sceneGen.startTextToImage('a cafe at dusk', { referenceImage: 'https://bucket.example/base.jpg' })],
+  ];
+  test.each(PATHS)('%s: never reached, then a 408: two requests in all, then PROVIDER_OUTCOME_UNKNOWN, no third', async (_l, run) => {
+    axios.post.mockRejectedValueOnce(netErr('EAI_AGAIN')).mockRejectedValueOnce(httpErr(408)).mockResolvedValue(FLUX_OK);
+    await expect(run()).rejects.toMatchObject({ code: 'PROVIDER_OUTCOME_UNKNOWN' });
+    expect(falPosts()).toBe(2);
+  });
+  test.each(PATHS)('%s: every ambiguous outcome, each in its own call, sends exactly once', async (_l, run) => {
+    for (const [, err] of AMBIGUOUS) {
+      axios.post.mockReset();
+      axios.post.mockRejectedValueOnce(err).mockResolvedValue(FLUX_OK);
+      await expect(run()).rejects.toMatchObject({ code: 'PROVIDER_OUTCOME_UNKNOWN' });
+      expect(falPosts()).toBe(1);
+    }
   });
 });
