@@ -1,6 +1,6 @@
 # Jest network guard
 
-Status: **Stage 1 (report-only)**, approved by Evoni on 2026-11-09. Stages 2 to 4 each need their own approval.
+Status: **Stage 2**, approved by Evoni on 2026-11-09 (Stage 1 merged in #3760). Still report-only. Stages 3 and 4 each need their own approval.
 
 ## Why
 
@@ -48,7 +48,9 @@ Otherwise it is **incomplete**, and CI fails, even though Stage 1 never fails on
 ## Rollout
 
 1. **Stage 1 (this):** report-only, with the CI step summary and an artifact. The test results are unchanged.
-2. **Stage 2:** fix the attempts Stage 1 finds. Known: `episodeTitleOverlay.integration.test.js` calls the flourish route without its `axios` mock, which reaches `img.test`. Done when the report is empty in at least 2 CI runs.
+2. **Stage 2 (this):** fix the attempts Stage 1 found, still report-only. Done when the report is empty in at least 2 CI runs.
+   - `episodeTitleOverlay.integration.test.js` asked for a flourish in its delete test without mocking the image download, so it fetched an `img.test` placeholder for real. Both flourish tests now mock the download, check it is called once with the generated URL, and check the flourish asset exists before the delete and is gone after it.
+   - Source lines: the core-module hooks are installed once per worker, by the first test file, so attempts in later files had their stack built by that first file's `Error` and showed transformed line numbers. `setup.js` now registers a stack builder in every test file, so lines are mapped with the current file's source maps. A self-test runs three files in one worker, with coverage, and checks each line.
 3. **Stage 3:** enforce by default. An attempt fails its test; a late attempt fails the run.
 4. **Stage 4 (separate design review first):** child `node` processes, which are not covered by Stages 1 to 3.
 
@@ -57,3 +59,4 @@ Otherwise it is **incomplete**, and CI fails, even though Stage 1 never fails on
 - **Child processes** started by tests are not instrumented until Stage 4.
 - **Late attempts:** an attempt made after its test file ended (a fire-and-forget call) is attributed to the file that is running at the time.
 - **Frontend tests:** the guard covers backend Jest only. The frontend Vitest suite is out of scope.
+- **Proxies:** the guard classifies the destination a request names, not the proxy it travels through, so a request through a loopback proxy (such as a cloud session's agent proxy) is still recorded under its real host. The independent tripwire used for local validation allows loopback, so local full-suite runs unset the proxy variables to keep such a request from leaving.

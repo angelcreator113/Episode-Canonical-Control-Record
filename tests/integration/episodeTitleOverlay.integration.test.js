@@ -10,6 +10,9 @@
  *   - the AI flourish is the one image call, keyed to transparency;
  *   - a changed title marks the overlay outdated; the framed card stays.
  * The image provider is mocked; with no S3 bucket the PNG is a data URL.
+ * The flourish download (axios.get of the generated image URL) is mocked in
+ * every test that asks for a flourish: the img.test URLs are placeholders
+ * and must never be fetched (Jest network guard, Stage 2).
  */
 jest.unmock('uuid');
 
@@ -83,6 +86,21 @@ async function pngInfo(dataUrl) {
   const liveOverlays = (ids) => sequelize.query(
     `SELECT id, metadata, s3_url_processed FROM assets
       WHERE episode_id = :ep AND asset_role = 'UI.OVERLAY.EPISODE_TITLE_TEXT' AND deleted_at IS NULL`,
+    { replacements: ids, type: sequelize.QueryTypes.SELECT },
+  );
+
+  // A black ornament with a gold bar, as the image provider would return it.
+  function ornamentPng() {
+    const { createCanvas } = require('canvas');
+    const ornament = createCanvas(400, 225);
+    const octx = ornament.getContext('2d');
+    octx.fillStyle = '#000'; octx.fillRect(0, 0, 400, 225);
+    octx.fillStyle = '#E8C766'; octx.fillRect(20, 100, 360, 25);
+    return ornament.toBuffer('image/png');
+  }
+  const mockFlourishDownload = () => jest.spyOn(axios, 'get').mockResolvedValue({ data: ornamentPng() });
+  const liveFlourishes = (ids) => sequelize.query(
+    `SELECT id FROM assets WHERE episode_id = :ep AND asset_role = 'UI.OVERLAY.EPISODE_TITLE_FLOURISH' AND deleted_at IS NULL`,
     { replacements: ids, type: sequelize.QueryTypes.SELECT },
   );
 
@@ -168,17 +186,17 @@ async function pngInfo(dataUrl) {
     await approve(ids);
     expect((await auth(request(app).post(`/api/v1/episodes/${ids.ep}/title-overlay/flourish`))).body.code).toBe('NO_TITLE_OVERLAY');
     await save(ids, { variant: 'classic', band: { enabled: false } });
-    const { createCanvas } = require('canvas');
-    const ornament = createCanvas(400, 225);
-    const octx = ornament.getContext('2d');
-    octx.fillStyle = '#000'; octx.fillRect(0, 0, 400, 225);
-    octx.fillStyle = '#E8C766'; octx.fillRect(20, 100, 360, 25);
-    jest.spyOn(axios, 'get').mockResolvedValue({ data: ornament.toBuffer('image/png') });
+    const download = mockFlourishDownload();
     const res = await auth(request(app).post(`/api/v1/episodes/${ids.ep}/title-overlay/flourish`));
     expect(res.status).toBe(200);
     expect(genSpy).toHaveBeenCalledTimes(1);
     expect(genSpy.mock.calls[0][0]).toMatch(/flourish ornament.*pure solid black background.*No text/);
+    // The generated image is downloaded once, through the mock, from the URL the provider returned.
+    expect(download).toHaveBeenCalledTimes(1);
+    expect(download.mock.calls[0][0]).toBe(await genSpy.mock.results[0].value);
+    expect(download.mock.calls[0][1]).toMatchObject({ responseType: 'arraybuffer' });
     expect(res.body.data.style.flourish).toMatchObject({ asset_id: expect.any(String) });
+    expect((await liveFlourishes(ids)).map((r) => r.id)).toEqual([res.body.data.style.flourish.asset_id]);
     expect((await pngInfo(res.body.data.image_url)).cornerAlpha).toBe(0);
     const removed = await save(ids, { flourish: false });
     expect(removed.body.data.style.flourish).toBeNull();
@@ -232,15 +250,23 @@ async function pngInfo(dataUrl) {
     const ids = await seed();
     await approve(ids);
     await save(ids, { variant: 'classic', band: { enabled: false } });
-    await auth(request(app).post(`/api/v1/episodes/${ids.ep}/title-overlay/flourish`));
+    // Before Stage 2 this call had no download mock: it fetched the img.test
+    // placeholder for real, failed, and the test then deleted an overlay that
+    // had no flourish. Now the flourish really exists before the delete.
+    const download = mockFlourishDownload();
+    const flourish = await auth(request(app).post(`/api/v1/episodes/${ids.ep}/title-overlay/flourish`));
+    expect(flourish.status).toBe(200);
+    expect(download).toHaveBeenCalledTimes(1);
+    const flourishId = flourish.body.data.style.flourish.asset_id;
+    expect((await liveFlourishes(ids)).map((r) => r.id)).toEqual([flourishId]);
+    expect(await liveOverlays(ids)).toHaveLength(1);
     const res = await auth(request(app).delete(`/api/v1/episodes/${ids.ep}/title-overlay`));
     expect(res.status).toBe(200);
-    expect(res.body.data.deleted).toBeGreaterThanOrEqual(1);
+    expect(res.body.data.deleted).toBe(2); // the overlay and its flourish
     expect(await liveOverlays(ids)).toHaveLength(0);
-    const flourishes = await sequelize.query(
-      `SELECT id FROM assets WHERE episode_id = :ep AND asset_role = 'UI.OVERLAY.EPISODE_TITLE_FLOURISH' AND deleted_at IS NULL`,
-      { replacements: ids, type: sequelize.QueryTypes.SELECT });
-    expect(flourishes).toHaveLength(0);
+    expect(await liveFlourishes(ids)).toHaveLength(0);
+    const gone = await one(`SELECT deleted_at FROM assets WHERE id = :id`, { id: flourishId });
+    expect(gone.deleted_at).not.toBeNull();
     const st = (await state(ids)).body.data;
     expect(st.overlay).toBeNull();
     expect(st.approved).toBe(true);
