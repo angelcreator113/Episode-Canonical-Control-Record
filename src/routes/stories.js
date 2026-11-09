@@ -33,6 +33,7 @@ const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const { requireAuth } = require('../middleware/auth');
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');
+const { createAnthropicClient } = require('../services/anthropicClient');
 
 let Anthropic;
 try {
@@ -263,7 +264,7 @@ router.post('/social/import', requireAuth, aiRateLimiter, async (req, res) => {
     let aiResult = null;
     if (Anthropic && process.env.ANTHROPIC_API_KEY) {
       try {
-        const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+        const client = createAnthropicClient({ apiKey: process.env.ANTHROPIC_API_KEY });
 
         const analysisPrompt = `Analyze this social media content from ${platform} for a fictional character study.
 The character is "${character_key}" from the Prime Studios universe.
@@ -388,7 +389,7 @@ router.post('/social/:id/detect-lala', requireAuth, aiRateLimiter, async (req, r
       return res.status(503).json({ error: 'AI service not available' });
     }
 
-    const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+    const client = createAnthropicClient({ apiKey: process.env.ANTHROPIC_API_KEY });
 
     const lalaPrompt = `You are the Lala Emergence Detection Engine for Prime Studios.
 

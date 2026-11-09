@@ -6,14 +6,14 @@
 
 const express   = require('express');
 const crypto    = require('crypto');
-const Anthropic = require('@anthropic-ai/sdk');
+const { createAnthropicClient } = require('../services/anthropicClient');
 const router    = express.Router();
 const db        = require('../models');
 const { requireAuth } = require('../middleware/auth');
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 const { Op }    = require('sequelize');
 
-const client = new Anthropic();
+const client = createAnthropicClient();
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 

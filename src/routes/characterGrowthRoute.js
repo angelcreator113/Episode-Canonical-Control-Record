@@ -6,14 +6,14 @@
 
 const express = require('express');
 const router = express.Router();
-const Anthropic = require('@anthropic-ai/sdk');
+const { createAnthropicClient } = require('../services/anthropicClient');
 const { requireAuth } = require('../middleware/auth');
 const { userInGroup } = require('../middleware/auth'); // separate line: CP6 test locks the import above
 const { AUTHOR_ONLY_FIELDS } = require('../middleware/authorOnlyFields');
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 const db = require('../models');
 
-const client = new Anthropic();
+const client = createAnthropicClient();
 
 // ─────────────────────────────────────────────────────────────────────────────
 // FIELDS THAT GROW SILENTLY vs FIELDS THAT FLAG CONTRADICTIONS

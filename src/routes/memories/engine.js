@@ -1,7 +1,7 @@
 'use strict';
 const express = require('express');
 const router = express.Router();
-const Anthropic = require('@anthropic-ai/sdk');
+const { createAnthropicClient } = require('../../services/anthropicClient');
 const { v4: _uuidv4 } = require('uuid');
 
 // Auth middleware
@@ -29,7 +29,7 @@ try {
 } catch { buildArcContext = null; buildArcContextPromptSection = null; updateArcTracking = null; }
 
 require('dotenv').config({ override: !process.env.ANTHROPIC_API_KEY });
-const anthropic = new Anthropic();
+const anthropic = createAnthropicClient();
 
 
 router.post('/generate-living-state', requireAuth, aiRateLimiter, async (req, res) => {
@@ -642,8 +642,8 @@ router.post('/generate-relationship-web', requireAuth, aiRateLimiter, async (req
 
     const manuscriptExcerpt = lines.map((l) => l.text || l.content).join('\n');
 
-    const Anthropic = require('@anthropic-ai/sdk');
-    const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+    const { createAnthropicClient } = require('../../services/anthropicClient');
+    const anthropic = createAnthropicClient({ apiKey: process.env.ANTHROPIC_API_KEY });
 
     const response = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',

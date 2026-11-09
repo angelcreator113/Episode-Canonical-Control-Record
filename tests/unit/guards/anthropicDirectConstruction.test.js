@@ -34,8 +34,10 @@ const BASELINE_FILE = path.join(__dirname, 'anthropicDirectConstruction.baseline
 const HOST_ALLOWED_DIR = 'src/aiGateway/';
 const outsideGateway = (refs) => Object.fromEntries(Object.entries(refs).filter(([f]) => !f.startsWith(HOST_ALLOWED_DIR)));
 
-// Measured at 46c613d7. These only ever go down; never raise them.
-const CEILING = Object.freeze({ constructions: 146, constructionFiles: 120, sdkImports: 140, sdkImportFiles: 120 });
+// The P0a-3b inventory (after the remaining WriteMode routes moved to the
+// factory): 106 constructions in 87 files, 102 SDK imports in 88 files.
+// These only ever go down; never raise them.
+const CEILING = Object.freeze({ constructions: 106, constructionFiles: 87, sdkImports: 102, sdkImportFiles: 88 });
 
 const sum = (m) => Object.values(m).reduce((a, b) => a + b, 0);
 

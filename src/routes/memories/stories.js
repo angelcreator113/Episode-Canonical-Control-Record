@@ -1,7 +1,7 @@
 'use strict';
 const express = require('express');
 const router = express.Router();
-const Anthropic = require('@anthropic-ai/sdk');
+const { createAnthropicClient } = require('../../services/anthropicClient');
 
 // Auth middleware
 const { requireAuth } = require('../../middleware/auth');
@@ -17,7 +17,7 @@ try {
 } catch { _buildArcContext = null; _buildArcContextPromptSection = null; _updateArcTracking = null; }
 
 require('dotenv').config({ override: !process.env.ANTHROPIC_API_KEY });
-const anthropic = new Anthropic();
+const anthropic = createAnthropicClient();
 
 const { getCharacterVoiceContext } = require('./helpers');
 const { loadWriteModeContext, buildWriteModeContextBlock } = require('./engine');

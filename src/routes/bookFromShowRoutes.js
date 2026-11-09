@@ -69,7 +69,7 @@
 
 const express = require('express');
 const { v4: uuidv4 } = require('uuid');
-const Anthropic = require('@anthropic-ai/sdk');
+const { createAnthropicClient } = require('../services/anthropicClient');
 const { requireAuth } = require('../middleware/auth');
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 const { EPISODE_EVENT_ID_SQL } = require('../utils/episodeEventSql');
@@ -84,7 +84,7 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 const STORY_LIMIT = 14000;   // characters of the short story a prompt carries
 
 let client = null;
-const getClient = () => { if (!client) client = new Anthropic(); return client; };
+const getClient = () => { if (!client) client = createAnthropicClient(); return client; };
 const getDb = (req) => req.app.locals.db || require('../models');
 
 const CANON = `CANON (docs/CANON.md):
