@@ -2,7 +2,7 @@
 
 /**
  * Jest `setupFiles` entry: installs the network guard in this worker before
- * each test file (so it is back after a worker is recycled). Stage 1 is
+ * each test file (so it is back after a worker is recycled). Stages 1 and 2 are
  * report-only: attempts are recorded and the call proceeds unchanged.
  * NETWORK_GUARD=off disables it locally; globalSetup refuses that in CI.
  */
@@ -12,7 +12,7 @@ const path = require('path');
 const core = require('./core');
 
 const requested = String(process.env.NETWORK_GUARD || 'report').toLowerCase();
-const mode = requested === 'off' ? 'off' : 'report'; // Stage 1: report-only, whatever else is requested
+const mode = requested === 'off' ? 'off' : 'report'; // Stages 1 and 2: report-only, whatever else is requested
 const runDir = process.env.NETWORK_GUARD_RUN_DIR || null;
 const state = core.getState();
 

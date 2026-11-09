@@ -185,7 +185,7 @@ function appFrames(stack) {
  * installed once per worker, by the first test file, so a plain `new Error()`
  * here belongs to that first file's (by then torn-down) environment: its
  * source maps don't cover later files, which showed transformed line numbers
- * (P0a Stage 1 finding). setup.js re-registers state.captureStack in every
+ * (a Stage 1 finding). setup.js re-registers state.captureStack in every
  * test file, so the stack is built by the current file's Error, which Jest
  * maps with the current file's source maps.
  */
