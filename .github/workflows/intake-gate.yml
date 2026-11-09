@@ -1,0 +1,64 @@
+name: Observe Claude intake label
+
+on:
+  issues:
+    types: [labeled]
+
+permissions: {}
+
+jobs:
+  verify-owner-label:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify the owner-labeled intake event
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+
+          const EXPECTED_REPOSITORY = 'angelcreator113/Episode-Canonical-Control-Record';
+          const EXPECTED_LABEL = 'claude-intake-approved';
+          const OWNER_ID = 212567798;
+          const OWNER_LOGIN = 'angelcreator113';
+          const isRecord = value => value !== null && typeof value === 'object' && !Array.isArray(value);
+
+          function verifyEvent() {
+            if (process.env.GITHUB_EVENT_NAME !== 'issues') {
+              throw new Error('unexpected_event');
+            }
+
+            let event;
+            try {
+              event = JSON.parse(fs.readFileSync(process.env.GITHUB_EVENT_PATH, 'utf8'));
+            } catch {
+              throw new Error('malformed_payload');
+            }
+
+            if (!isRecord(event)) {
+              throw new Error('malformed_payload');
+            }
+            if (event.action !== 'labeled') {
+              throw new Error('unexpected_action');
+            }
+            if (!isRecord(event.repository) || event.repository.full_name !== EXPECTED_REPOSITORY) {
+              throw new Error('unexpected_repository');
+            }
+            if (!isRecord(event.label) || event.label.name !== EXPECTED_LABEL) {
+              throw new Error('unexpected_label');
+            }
+            if (
+              !isRecord(event.sender) ||
+              event.sender.id !== OWNER_ID ||
+              event.sender.login !== OWNER_LOGIN
+            ) {
+              throw new Error('unauthorized_sender');
+            }
+          }
+
+          try {
+            verifyEvent();
+            console.log('Owner intake label event verified; no action was dispatched.');
+          } catch (error) {
+            console.error(`Intake verification failed: ${error.message}`);
+            process.exitCode = 1;
+          }
+          NODE
