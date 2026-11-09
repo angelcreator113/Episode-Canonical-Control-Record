@@ -29,6 +29,9 @@ function writeLine(obj) {
 }
 
 state.writeLine = writeLine;
+// Built in this test file's environment, so Jest maps it with this file's
+// source maps (see core.captureStack).
+state.captureStack = () => new Error().stack;
 state.runDir = runDir;
 state.requestedMode = requested;
 state.jestMode = mode;

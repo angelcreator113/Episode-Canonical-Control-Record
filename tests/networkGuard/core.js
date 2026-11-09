@@ -180,6 +180,22 @@ function appFrames(stack) {
     .map((l) => l.trim().replace(/^at\s+/, '').replace(/.*?[\\/]((?:src|tests)[\\/])/, '$1'));
 }
 
+/**
+ * The stack at the attempt, mapped to source lines. The core-module hooks are
+ * installed once per worker, by the first test file, so a plain `new Error()`
+ * here belongs to that first file's (by then torn-down) environment: its
+ * source maps don't cover later files, which showed transformed line numbers
+ * (P0a Stage 1 finding). setup.js re-registers state.captureStack in every
+ * test file, so the stack is built by the current file's Error, which Jest
+ * maps with the current file's source maps.
+ */
+function captureStack(state) {
+  if (typeof state.captureStack === 'function') {
+    try { return state.captureStack(); } catch (err) { /* fall back to this realm's stack below */ }
+  }
+  return new Error().stack;
+}
+
 function getState() {
   if (!net[STATE]) {
     Object.defineProperty(net, STATE, {
@@ -201,7 +217,7 @@ function record(transport, target, extra = {}) {
     type: 'attempt', transport, host: c.host, port: target && target.port ? Number(target.port) : null,
     action: block ? 'blocked' : 'reported', mode: state.mode,
     testPath: state.context.testPath, testName: state.context.testName,
-    frames: appFrames(new Error().stack), pid: process.pid, at: Date.now(), ...extra,
+    frames: appFrames(captureStack(state)), pid: process.pid, at: Date.now(), ...extra,
   };
   state.events.push(event);
   const key = state.context.testPath || '(no test file)';
