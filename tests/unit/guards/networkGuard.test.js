@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * Self-tests for the Jest network guard (tests/networkGuard/, Stage 1).
+ * Self-tests for the Jest network guard (tests/networkGuard/, Stages 1 and 2).
  *
  * No test here reaches a non-loopback destination from this Jest worker:
  * every probe of a destination the guard must stop runs in a child process
@@ -378,5 +378,57 @@ describe('the guard cannot be bypassed silently', () => {
     expect(tests).toMatch(/- name: Check the network guard report\n\s+if: always\(\)\n\s+run: node tests\/networkGuard\/verify\.js/);
     expect(tests).toMatch(/uses: actions\/upload-artifact@v4[\s\S]*path: tmp\/network-guard\/[\s\S]*if-no-files-found: error/);
     expect(workflow).not.toMatch(/NETWORK_GUARD:\s*off/i);
+  });
+});
+
+describe('source-line attribution across test files (nested Jest run, under the tripwire)', () => {
+  // The core-module hooks are installed once per worker, by the first test
+  // file. Stage 1 built each attempt's stack with that first file's Error, so
+  // later files showed transformed line numbers (CI: a 694-line file
+  // reported at line 10166). Three files run in one worker, with coverage
+  // (as `npm test` runs), and each must report its own source lines.
+  test('every file reports the real line of the call and of its own test', () => {
+    const dir = tmpDir();
+    fs.mkdirSync(path.join(dir, 'src'));
+    fs.mkdirSync(path.join(dir, 'tests'));
+    const q = JSON.stringify;
+    fs.writeFileSync(path.join(dir, 'jest.config.js'), `module.exports = { rootDir: ${q(dir)}, testEnvironment: 'node',
+      setupFiles: [${q(path.join(GUARD_DIR, 'setup.js'))}], setupFilesAfterEnv: [${q(path.join(GUARD_DIR, 'afterEnv.js'))}],
+      globalSetup: ${q(path.join(GUARD_DIR, 'globalSetup.js'))}, reporters: [${q(path.join(GUARD_DIR, 'reporter.js'))}],
+      collectCoverage: true, coverageReporters: ['none'], cacheDirectory: ${q(path.join(dir, '.cache'))} };\n`);
+    // A reserved .invalid name: the tripwire (loaded first) stops it before any lookup.
+    const caller = [
+      ...Array.from({ length: 30 }, (_, i) => `const pad${i} = ${i} > 100 ? 'a' : 'b';`),
+      'function call() {',
+      '  return new Promise((resolve) => {',
+      "    const req = require('http').request({ host: 'example.invalid', port: 80 }); // CALL",
+      "    req.on('error', () => resolve()); req.end();",
+      '  });',
+      '}',
+      'module.exports = call;',
+    ];
+    fs.writeFileSync(path.join(dir, 'src/caller.js'), `${caller.join('\n')}\n`);
+    const callLine = caller.findIndex((l) => l.includes('// CALL')) + 1;
+    const testLine = {};
+    ['a', 'b', 'c'].forEach((n, i) => {
+      const body = ["const call = require('../src/caller');", ...Array(3 + i * 4).fill('// pad'), `test('${n}', async () => { await call(); });`];
+      testLine[`tests/${n}.test.js`] = body.length;
+      fs.writeFileSync(path.join(dir, `tests/${n}.test.js`), `${body.join('\n')}\n`);
+    });
+    execFileSync(process.execPath, ['-r', path.join(GUARD_DIR, 'probe/tripwire.js'), path.join(ROOT, 'node_modules/jest/bin/jest.js'),
+      '--config', path.join(dir, 'jest.config.js'), '--runInBand'], {
+      cwd: dir, env: { PATH: process.env.PATH, HOME: process.env.HOME }, encoding: 'utf8', timeout: 120000, stdio: 'pipe',
+    });
+    const base = path.join(dir, 'tmp', 'network-guard');
+    expect(JSON.parse(fs.readFileSync(path.join(base, 'report.json'), 'utf8')).status).toBe('complete');
+    const runDir = path.join(base, fs.readdirSync(base).find((n) => n.startsWith('run-')));
+    const attempts = fs.readdirSync(runDir).flatMap((f) => fs.readFileSync(path.join(runDir, f), 'utf8').trim().split('\n'))
+      .map((l) => JSON.parse(l)).filter((l) => l.type === 'attempt');
+    expect(new Set(attempts.map((a) => a.testPath))).toEqual(new Set(Object.keys(testLine)));
+    for (const a of attempts) {
+      const at = (file) => (a.frames.find((f) => f.startsWith(`${file}:`)) || '').split(':')[1];
+      expect({ file: a.testPath, transport: a.transport, call: at('src/caller.js'), test: at(a.testPath) })
+        .toEqual({ file: a.testPath, transport: a.transport, call: String(callLine), test: String(testLine[a.testPath]) });
+    }
   });
 });

@@ -125,7 +125,7 @@ function verifyReport({ start, report, env = {} }) {
 }
 
 function renderSummary(report, verdict) {
-  const out = ['## Jest network guard (Stage 1: report-only)', ''];
+  const out = ['## Jest network guard (report-only)', ''];
   if (!report) {
     out.push('**No report.** The run did not finish or the reporter did not run, so the attempt count is unknown.');
   } else {
