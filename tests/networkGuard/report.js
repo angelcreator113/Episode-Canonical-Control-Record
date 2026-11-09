@@ -7,7 +7,12 @@
  *   complete    every executed test file has a heartbeat (with every hook in
  *               place) and a file-end whose count matches its recorded
  *               attempts, the start marker matches this run, and no line
- *               was unreadable;
+ *               was unreadable. A file in which Jest skipped every test
+ *               never runs afterAll, so it has no file-end; it is exempt
+ *               from that one check only when the reporter lists it in
+ *               allSkippedFiles (Jest: skipped, no failure, no exec error).
+ *               It still needs its heartbeat and hooks, and any attempt it
+ *               made (its module body still runs) is still counted;
  *   incomplete  any of that is missing: the run's attempt count cannot be
  *               trusted, so it must never be read as "zero attempts";
  *   disabled    the guard was switched off (NETWORK_GUARD=off).
@@ -27,7 +32,7 @@ function isCI(env = {}) {
   return Boolean((env.CI && env.CI !== 'false' && env.CI !== '0') || env.GITHUB_ACTIONS === 'true');
 }
 
-function buildReport({ start, envRunId, runDirExists, lines = [], malformedLines = 0, executedFiles = [], finishedAt = new Date().toISOString() }) {
+function buildReport({ start, envRunId, runDirExists, lines = [], malformedLines = 0, executedFiles = [], allSkippedFiles = [], finishedAt = new Date().toISOString() }) {
   const heartbeats = new Map();
   const fileEnds = new Map();
   const attempts = [];
@@ -50,6 +55,8 @@ function buildReport({ start, envRunId, runDirExists, lines = [], malformedLines
   const lostEvents = [];
   const lateAttempts = [];
   const reinstalled = [];
+  const allSkipped = [];
+  const skippedSet = new Set(allSkippedFiles);
   for (const f of executedFiles) {
     const hb = heartbeats.get(f);
     if (!hb) { missingHeartbeats.push(f); continue; }
@@ -59,7 +66,11 @@ function buildReport({ start, envRunId, runDirExists, lines = [], malformedLines
     }
     if (hb.reinstalled && hb.reinstalled.length) reinstalled.push({ file: f, hooks: hb.reinstalled });
     const end = fileEnds.get(f);
-    if (!end) { missingFileEnds.push(f); continue; }
+    if (!end) {
+      if (skippedSet.has(f)) allSkipped.push(f);
+      else missingFileEnds.push(f);
+      continue;
+    }
     const recorded = attempts.filter((a) => a.testPath === f).length;
     if (recorded < end.events) lostEvents.push({ file: f, counted: end.events, recorded });
     else if (recorded > end.events) lateAttempts.push({ file: f, afterFileEnd: recorded - end.events });
@@ -96,7 +107,7 @@ function buildReport({ start, envRunId, runDirExists, lines = [], malformedLines
     issues,
     executedFiles: executedFiles.length,
     instrumentedFiles: executedFiles.length - missingHeartbeats.length,
-    details: { missingHeartbeats, missingHooks, missingFileEnds, lostEvents, lateAttempts, reinstalled },
+    details: { missingHeartbeats, missingHooks, missingFileEnds, lostEvents, lateAttempts, reinstalled, allSkipped },
     attempts: { total: attempts.length, hosts },
   };
 }
@@ -120,6 +131,8 @@ function renderSummary(report, verdict) {
   } else {
     out.push(`- Status: **${report.status}** (${report.instrumentedFiles}/${report.executedFiles} test files instrumented)`);
     out.push(`- Mode: ${report.mode}`);
+    const skipped = (report.details && report.details.allSkipped) || [];
+    if (skipped.length) out.push(`- Files where every test was skipped (no file-end expected): ${skipped.map((f) => `\`${f}\``).join(', ')}`);
     out.push(`- External attempts recorded: **${report.status === 'complete' ? report.attempts.total : `${report.attempts.total} (count not trustworthy: run incomplete)`}**`);
     if (report.issues.length) out.push('', '**Integrity issues:**', ...report.issues.map((i) => `- ${i}`));
     if (report.attempts.hosts.length) {

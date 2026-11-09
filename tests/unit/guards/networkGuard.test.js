@@ -130,6 +130,54 @@ describe('report integrity: missing data is never "zero attempts"', () => {
     expect(renderSummary(report, verdict)).toMatch(/count not trustworthy/);
   });
 
+  test('a file where Jest skipped every test needs no file-end, but only when the reporter lists it', () => {
+    const lines = [hb('a.test.js'), end('a.test.js'), hb('b.test.js'), attempt('b.test.js', 'load.example')];
+    const report = buildReport({ ...base, lines, allSkippedFiles: ['b.test.js'] });
+    expect(report.status).toBe('complete');
+    expect(report.details.allSkipped).toEqual(['b.test.js']);
+    expect(report.details.missingFileEnds).toEqual([]);
+    expect(report.attempts.total).toBe(1);
+    expect(renderSummary(report)).toMatch(/every test was skipped.*b\.test\.js/);
+    // Not listed as all-skipped: still incomplete.
+    expect(buildReport({ ...base, lines, allSkippedFiles: ['a.test.js'] }).status).toBe('incomplete');
+    // Listed, but no heartbeat or a hook missing: still incomplete.
+    expect(buildReport({ ...base, lines: [hb('a.test.js'), end('a.test.js')], allSkippedFiles: ['b.test.js'] }).issues.join()).toMatch(/no heartbeat/);
+    expect(buildReport({ ...base, lines: [hb('a.test.js'), end('a.test.js'), hb('b.test.js', { hooks: { ...HOOKS, 'http.get': false } })], allSkippedFiles: ['b.test.js'] }).issues.join()).toMatch(/hook missing/);
+  });
+
+  test('the reporter exempts only clean all-skipped files (not a file that failed to load or failed a test)', () => {
+    const Reporter = require('../../networkGuard/reporter');
+    const root = tmpDir();
+    const base2 = path.join(root, 'tmp', 'network-guard');
+    const runDir = path.join(base2, 'run-x');
+    fs.mkdirSync(runDir, { recursive: true });
+    fs.writeFileSync(path.join(base2, 'start.json'), JSON.stringify({ runId: 'x', startedAt: 't0', mode: 'report' }));
+    const files = ['skipped.test.js', 'broken.test.js', 'failed.test.js'];
+    fs.writeFileSync(path.join(runDir, 'events-1.jsonl'), `${files.map((f) => JSON.stringify(hb(f))).join('\n')}\n`);
+    const result = (f, over) => ({ testFilePath: path.join(root, f), skipped: true, testExecError: undefined, numFailingTests: 0, numPassingTests: 0, ...over });
+    const results = { testResults: [
+      result('skipped.test.js'),
+      result('broken.test.js', { testExecError: { message: 'load fail' } }),
+      result('failed.test.js', { numFailingTests: 1 }),
+    ] };
+    const saved = { dir: process.env.NETWORK_GUARD_RUN_DIR, id: process.env.NETWORK_GUARD_RUN_ID };
+    const spy = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    try {
+      process.env.NETWORK_GUARD_RUN_DIR = runDir;
+      process.env.NETWORK_GUARD_RUN_ID = 'x';
+      new Reporter({ rootDir: root }).onRunComplete(null, results);
+    } finally {
+      spy.mockRestore();
+      for (const [k, v] of [['NETWORK_GUARD_RUN_DIR', saved.dir], ['NETWORK_GUARD_RUN_ID', saved.id]]) {
+        if (v === undefined) delete process.env[k]; else process.env[k] = v;
+      }
+    }
+    const report = JSON.parse(fs.readFileSync(path.join(base2, 'report.json'), 'utf8'));
+    expect(report.details.allSkipped).toEqual(['skipped.test.js']);
+    expect(report.details.missingFileEnds).toEqual(['broken.test.js', 'failed.test.js']);
+    expect(report.status).toBe('incomplete');
+  });
+
   test('late attempts after a file ended are listed, not treated as lost', () => {
     const report = buildReport({ ...base, lines: [hb('a.test.js'), end('a.test.js', 0), attempt('a.test.js', 'late.example'), hb('b.test.js'), end('b.test.js')] });
     expect(report.status).toBe('complete');

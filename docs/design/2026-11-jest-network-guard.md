@@ -39,7 +39,7 @@ The hooks are plain assignments, so `jest.restoreAllMocks()` cannot remove them.
 
 A run is **complete** only when all of these hold:
 - every executed test file has a heartbeat, with every hook in place;
-- every test file has a file-end record whose count matches its recorded attempts;
+- every test file has a file-end record whose count matches its recorded attempts. The one exception is a file in which Jest skipped every test (for example a `describe.skip` chosen by an environment check): Jest never runs its `afterAll`, so it cannot write a file-end. The reporter exempts such a file only when Jest reports it as skipped with no failure and no load error. It still needs its heartbeat with every hook in place, any attempt it makes is still counted, and the summary lists it;
 - the start marker matches this run;
 - no event line was unreadable.
 

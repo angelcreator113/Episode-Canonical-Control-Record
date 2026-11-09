@@ -43,7 +43,13 @@ class NetworkGuardReporter {
         }
       }
       const executedFiles = results.testResults.map((r) => path.relative(this.rootDir, r.testFilePath));
-      const report = buildReport({ start, envRunId: process.env.NETWORK_GUARD_RUN_ID, runDirExists, lines, malformedLines, executedFiles });
+      // Files in which Jest skipped every test: afterAll never runs there, so
+      // they have no file-end. Only a clean all-skipped result qualifies; a
+      // file that failed to load or failed a test is never exempt.
+      const allSkippedFiles = results.testResults
+        .filter((r) => r.skipped === true && !r.testExecError && r.numFailingTests === 0 && r.numPassingTests === 0)
+        .map((r) => path.relative(this.rootDir, r.testFilePath));
+      const report = buildReport({ start, envRunId: process.env.NETWORK_GUARD_RUN_ID, runDirExists, lines, malformedLines, executedFiles, allSkippedFiles });
       fs.mkdirSync(base, { recursive: true });
       writeAtomic(path.join(base, 'report.json'), `${JSON.stringify(report, null, 2)}\n`);
       writeAtomic(path.join(base, 'summary.md'), renderSummary(report));
