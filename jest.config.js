@@ -75,7 +75,14 @@ module.exports = {
   transformIgnorePatterns: [
     'node_modules/(?!(uuid)/)',
   ],
-  setupFilesAfterEnv: ['<rootDir>/tests/setup.js'],
+  // Jest network guard (tests/networkGuard/, Stage 1: report-only). setupFiles installs it in
+  // every worker before each test file; afterEnv (first) attributes attempts and writes the
+  // heartbeat and file-end records; globalSetup and the reporter frame the run and write
+  // tmp/network-guard/report.json, which CI verifies (.github/workflows/validate.yml).
+  setupFiles: ['<rootDir>/tests/networkGuard/setup.js'],
+  setupFilesAfterEnv: ['<rootDir>/tests/networkGuard/afterEnv.js', '<rootDir>/tests/setup.js'],
+  globalSetup: '<rootDir>/tests/networkGuard/globalSetup.js',
+  reporters: ['default', '<rootDir>/tests/networkGuard/reporter.js'],
   detectOpenHandles: false,
   // One worker, so test files still run one at a time against the shared
   // test database. The worker is restarted once it holds more than this
