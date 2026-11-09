@@ -36,7 +36,7 @@ function sendError(res, err, label) {
   const { PulseImageError } = require('../services/pulseImageService');
   if (err instanceof CameraRollError || err instanceof MediaError || err instanceof PulseImageError) {
     console.error(`[CameraRoll] ${label}:`, err.message);
-    return res.status(err.status).json({ success: false, error: err.message });
+    return res.status(err.status).json({ success: false, error: err.message, ...(err.code ? { code: err.code } : {}) });
   }
   console.error(`[CameraRoll] ${label} error:`, err);
   return res.status(500).json({ success: false, error: 'That could not be done; nothing was saved.' });
@@ -108,10 +108,29 @@ router.post('/moments/:id/drop', ...admin, async (req, res) => {
 
 router.post('/moments/:id/make', ...admin, aiRateLimiter, async (req, res) => {
   try {
-    const data = await roll().make(models(), req.params.id, { by: byOf(req) });
+    // authorization_id: the one-time authorization from resolve 'authorize',
+    // to make an uncertain photo once more (#3714).
+    const authorizationId = typeof req.body?.authorization_id === 'string' && req.body.authorization_id ? req.body.authorization_id : null;
+    const data = await roll().make(models(), req.params.id, { by: byOf(req), authorizationId });
     res.status(201).json({ success: true, data });
   } catch (err) {
     sendError(res, err, 'POST /moments/:id/make');
+  }
+});
+
+// An uncertain photo (a paid request was sent and the make then failed):
+// acknowledge, authorize one new attempt, abandon, or attach an image that
+// was already made (asset_id or storage_key). Nothing is sent (#3714).
+router.post('/moments/:id/resolve', ...admin, async (req, res) => {
+  try {
+    const body = req.body || {};
+    const str = (v) => (typeof v === 'string' && v ? v : null);
+    const moment = await roll().resolve(models(), req.params.id, {
+      action: body.action, by: byOf(req), note: body.note || null, assetId: str(body.asset_id), storageKey: str(body.storage_key),
+    });
+    res.json({ success: true, data: { moment } });
+  } catch (err) {
+    sendError(res, err, 'POST /moments/:id/resolve');
   }
 });
 

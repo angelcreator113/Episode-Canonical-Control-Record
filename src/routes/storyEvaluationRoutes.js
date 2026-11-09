@@ -17,10 +17,10 @@
 
 const express = require('express');
 const router = express.Router();
-const Anthropic = require('@anthropic-ai/sdk');
+const { createAnthropicClient } = require('../services/anthropicClient');
 const db = require('../models');
 
-const anthropic = new Anthropic();
+const anthropic = createAnthropicClient();
 const { buildArcContext, buildArcContextPromptSection } = require('../services/arcTrackingService');
 const { enrichAfterWriteBack } = require('../services/storyEnrichmentService');
 const { storyBrief } = require('../services/characterStoryBrief');

@@ -15,10 +15,10 @@
 
 const express = require('express');
 const router = express.Router();
-const Anthropic = require('@anthropic-ai/sdk');
+const { createAnthropicClient } = require('../services/anthropicClient');
 const db = require('../models');
 
-const anthropic = new Anthropic();
+const anthropic = createAnthropicClient();
 
 const { requireAuth } = require('../middleware/auth');
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');

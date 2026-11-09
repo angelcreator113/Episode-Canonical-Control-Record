@@ -85,7 +85,11 @@ describe('P0: the Recycle Bin and Amber diagnostics are admin only', () => {
     expect((await send(AMBER[1], admin)).status).toBe(200); // findings
     expect((await send(AMBER[2], admin)).status).toBe(200); // urgent
     expect((await send(AMBER[3], admin)).status).toBe(404); // approve: no such finding
-    expect((await send(AMBER[4], admin)).status).toBe(404); // execute: no such finding
+    // execute: switched off by default (AMBER_CLI_EXECUTION_ENABLED unset),
+    // refused before the finding is read.
+    const exec = await send(AMBER[4], admin);
+    expect(exec.status).toBe(403);
+    expect(exec.body.code).toBe('CLI_EXECUTION_DISABLED');
     expect((await send(AMBER[5], admin)).status).toBe(404); // dismiss: no such finding
     expect((await send(AMBER[6], admin)).status).toBe(200); // queue
     expect((await send(AMBER[7], admin)).status).toBe(200); // add to queue
