@@ -86,6 +86,6 @@ async function allowedProbes() {
   for (const [name, run] of Object.entries(BLOCKED)) blocked[name] = await withTimeout(run());
   const tripwireAfterBlocked = globalThis.__tripwire.length;
   const allowed = await allowedProbes();
-  const guardEvents = core ? core.getState().events.map((e) => ({ transport: e.transport, host: e.host, action: e.action })) : [];
+  const guardEvents = core ? core.getState().events.map((e) => ({ type: e.type, kind: e.kind, transport: e.transport, host: e.host, action: e.action })) : [];
   process.stdout.write(`${JSON.stringify({ mode, blocked, allowed, guardEvents, tripwire: globalThis.__tripwire, tripwireAfterBlocked })}\n`, () => process.exit(0));
 })().catch((e) => { process.stdout.write(`${JSON.stringify({ fatal: e.message })}\n`); process.exitCode = 1; });

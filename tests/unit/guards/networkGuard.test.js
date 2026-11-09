@@ -24,6 +24,7 @@ const GUARD_DIR = path.join(ROOT, 'tests/networkGuard');
 const core = require('../../networkGuard/core');
 const { buildReport, verifyReport, renderSummary, REQUIRED_HOOKS } = require('../../networkGuard/report');
 const { prepare, isCI } = require('../../networkGuard/globalSetup');
+const { trustTestServer, trustTestSocket } = require('../../networkGuard/registry');
 
 const tmpDir = () => fs.mkdtempSync(path.join(os.tmpdir(), 'ng-test-'));
 
@@ -102,8 +103,15 @@ describe('report integrity: missing data is never "zero attempts"', () => {
   const base = { start: START, envRunId: 'r1', runDirExists: true, executedFiles: ['a.test.js', 'b.test.js'] };
 
   test('complete: every file instrumented, counts match; attempts are listed, not failed (report-only)', () => {
-    const report = buildReport({ ...base, lines: [hb('a.test.js'), end('a.test.js', 1), attempt('a.test.js', 'img.test'), hb('b.test.js'), end('b.test.js')] });
-    expect(report).toMatchObject({ status: 'complete', finalized: true, executedFiles: 2, instrumentedFiles: 2, attempts: { total: 1 } });
+    // Stage 3a: verification also needs the canaries (see networkGuardStage3a.test.js).
+    const canary = {
+      canaryManifest: { file: 'c.test.js', canaries: [{ id: 'k', transports: ['socket'], events: 1, host: '0.0.0.0' }] },
+      canaryWitness: { file: 'c.test.js', connections: 0, datagrams: 0, unixConnections: 0, observed: [{ id: 'k', code: 'ERR_TEST_NETWORK_BLOCKED' }] },
+      fileResults: { 'c.test.js': { passed: 2, failed: 0, skipped: 0 } },
+    };
+    const canaryLines = [hb('c.test.js'), { type: 'attempt', canary: 'k', testPath: 'c.test.js', action: 'blocked', transport: 'socket', host: '0.0.0.0' }, end('c.test.js', 1)];
+    const report = buildReport({ ...base, ...canary, executedFiles: [...base.executedFiles, 'c.test.js'], lines: [hb('a.test.js'), end('a.test.js', 1), attempt('a.test.js', 'img.test'), hb('b.test.js'), end('b.test.js'), ...canaryLines] });
+    expect(report).toMatchObject({ status: 'complete', finalized: true, executedFiles: 3, instrumentedFiles: 3, attempts: { total: 1 } });
     expect(report.attempts.hosts[0]).toMatchObject({ host: 'img.test', count: 1, files: ['a.test.js'] });
     expect(verifyReport({ start: START, report })).toEqual({ ok: true, problems: [] });
     expect(renderSummary(report)).toMatch(/img\.test/);
@@ -273,11 +281,12 @@ describe('the guard installed in this Jest worker', () => {
     expect(r).toEqual(expect.objectContaining({ address: expect.any(String), family: expect.any(Number) }));
   });
 
-  test('loopback and Unix sockets work through it and are not recorded: http, fetch, supertest', async () => {
+  test('registered loopback servers and Unix sockets work through it and are not recorded: http, fetch, supertest', async () => {
     const before = core.getState().events.length;
     const server = http.createServer((q, s) => s.end('ok'));
     await new Promise((r) => server.listen(0, '127.0.0.1', r));
     const { port } = server.address();
+    trustTestServer(server); // Stage 3a: a listener this file opened is trusted only once registered
     try {
       const body = await new Promise((resolve, reject) => {
         http.get(`http://127.0.0.1:${port}/`, (res) => { let d = ''; res.on('data', (c) => { d += c; }); res.on('end', () => resolve(d)); }).on('error', reject);
@@ -295,6 +304,7 @@ describe('the guard installed in this Jest worker', () => {
     const sock = path.join(tmpDir(), 's.sock');
     const unix = net.createServer((c) => c.end('u'));
     await new Promise((r) => unix.listen(sock, r));
+    trustTestSocket(sock);
     try {
       const got = await new Promise((resolve, reject) => {
         const c = net.connect({ path: sock }); let d = ''; c.on('data', (x) => { d += x; }); c.on('end', () => resolve(d)); c.on('error', reject);
@@ -326,7 +336,9 @@ describe('blocked destinations, under an independent blocking tripwire (child pr
     for (const [k, v] of Object.entries(r.blocked)) expect({ k, code: v.code }).toEqual({ k, code: 'ERR_TEST_NETWORK_BLOCKED' });
     const hosts = new Set(r.guardEvents.map((e) => e.host));
     for (const h of ['example.invalid', '203.0.113.10', '0.0.0.0', '0:0:0:0:0:0:0:0']) expect(hosts.has(h)).toBe(true);
-    expect(r.guardEvents.every((e) => e.action === 'blocked')).toBe(true);
+    // Attempts are blocked in enforce mode; Stage 3a findings (the probe's own unregistered loopback servers) are reported only.
+    expect(r.guardEvents.filter((e) => e.type === 'attempt').every((e) => e.action === 'blocked')).toBe(true);
+    expect(r.guardEvents.filter((e) => e.type === 'finding').every((e) => e.action === 'reported')).toBe(true);
     const transports = new Set(r.guardEvents.map((e) => e.transport));
     for (const t of ['socket', 'http', 'https', 'fetch', 'dns.lookup', 'dns.promises.lookup', 'dns.resolve4', 'dns.promises.resolve4', 'dns.reverse']) expect({ t, seen: transports.has(t) }).toEqual({ t, seen: true });
   });
@@ -340,14 +352,21 @@ describe('blocked destinations, under an independent blocking tripwire (child pr
     for (const h of ['example.invalid', '203.0.113.10', '0.0.0.0', '0:0:0:0:0:0:0:0']) expect(recorded.has(h)).toBe(true);
   });
 
-  test.each(['none', 'enforce', 'report'])('%s: loopback, localhost and Unix sockets are allowed and not recorded', (mode) => {
+  test.each(['none', 'enforce', 'report'])('%s: loopback, localhost and Unix sockets still work; unregistered ones are findings, never attempts or blocks', (mode) => {
     const r = run(mode);
     expect(r.allowed['http.get 127.0.0.1']).toMatchObject({ outcome: 'response', status: 200 });
     expect(r.allowed['fetch 127.0.0.1']).toMatchObject({ outcome: 'response', status: 200 });
     expect(r.allowed['dns.lookup localhost'].outcome).toBe('resolved');
     expect(r.allowed['net.connect unix socket'].outcome).toBe('connected');
     expect(r.tripwire.length).toBe(mode === 'enforce' ? 0 : BLOCKED_COUNT); // nothing more after the blocked probes
-    expect(r.guardEvents.some((e) => core.isLoopback(e.host))).toBe(false);
+    const attempts = r.guardEvents.filter((e) => e.type === 'attempt');
+    expect(attempts.some((e) => core.isLoopback(e.host))).toBe(false);
+    if (mode !== 'none') {
+      // Stage 3a: the probe's own servers are not in the endpoint registry, so they are reported as findings (not blocked).
+      const findings = r.guardEvents.filter((e) => e.type === 'finding');
+      expect(findings.map((e) => e.kind).sort()).toEqual(expect.arrayContaining(['loopback-unregistered', 'unix-unregistered']));
+      expect(findings.every((e) => e.action === 'reported')).toBe(true);
+    }
   });
 });
 
