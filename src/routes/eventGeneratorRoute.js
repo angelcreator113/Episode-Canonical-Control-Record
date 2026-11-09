@@ -13,7 +13,7 @@
 
 const express = require('express');
 const router = express.Router();
-const Anthropic = require('@anthropic-ai/sdk');
+const { createAnthropicClient } = require('../services/anthropicClient');
 const { requireAuth } = require('../middleware/auth');
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 const { withAutoScheduledDate } = require('../utils/eventDateDefault');
@@ -21,7 +21,7 @@ const { syncDraftedDealType } = require('../services/dealTypeDraftService');
 const { loadBrainContext, recordRuleUse } = require('../services/brainRules');
 const { softDeleteUnusedUnlinkedEvents } = require('../utils/worldEventSafeDelete');
 
-const client = new Anthropic();
+const client = createAnthropicClient();
 
 const MODELS = ['claude-sonnet-4-6'];
 

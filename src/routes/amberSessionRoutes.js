@@ -13,12 +13,12 @@
 
 const express    = require('express');
 const router     = express.Router();
-const Anthropic  = require('@anthropic-ai/sdk');
+const { createAnthropicClient } = require('../services/anthropicClient');
 const rateLimit  = require('express-rate-limit');
 const { requireAuth } = require('../middleware/auth');
 const db = require('../models');
 
-const client = new Anthropic();
+const client = createAnthropicClient();
 
 const ELEVENLABS_API_KEY  = process.env.ELEVENLABS_API_KEY;
 const ELEVENLABS_VOICE_ID = process.env.ELEVENLABS_VOICE_ID || '21m00Tcm4TlvDq8ikWAM';

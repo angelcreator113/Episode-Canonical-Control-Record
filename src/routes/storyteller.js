@@ -23,10 +23,10 @@
 const express = require('express');
 const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
-const Anthropic = require('@anthropic-ai/sdk');
+const { createAnthropicClient } = require('../services/anthropicClient');
 const { detectLalaFromLine, logLalaEmergence } = require('./lala-scene-detection');
 
-const anthropic = new Anthropic();
+const anthropic = createAnthropicClient();
 
 let thresholdDetection;
 try {
