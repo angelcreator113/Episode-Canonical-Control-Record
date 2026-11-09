@@ -16,7 +16,7 @@
 const express   = require('express');
 const router    = express.Router();
 const { v4: uuidv4 } = require('uuid');
-const Anthropic = require('@anthropic-ai/sdk');
+const { createAnthropicClient } = require('../services/anthropicClient');
 const { Op }    = require('sequelize');
 const path      = require('path');
 const fs        = require('fs').promises;
@@ -29,7 +29,7 @@ const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 // only the frontend"). They scan the codebase, approve findings and run
 // Claude Code against CLAUDE_CODE_PROJECT_DIR (execute); requireAuth alone let
 // any signed-in user drive that.
-const client     = new Anthropic();
+const client     = createAnthropicClient();
 const PROJECT_DIR = process.env.CLAUDE_CODE_PROJECT_DIR || '';
 
 // Running Claude Code (POST /findings/:id/execute) starts a separately billed

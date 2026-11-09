@@ -20,7 +20,7 @@
 
 const express  = require('express');
 const router   = express.Router();
-const Anthropic = require('@anthropic-ai/sdk');
+const { createAnthropicClient } = require('../services/anthropicClient');
 
 // ── Auth — mirrors existing PNOS routes (no auth) ────────────────────────
 const { requireAuth } = require('../middleware/auth');
@@ -31,7 +31,7 @@ const db = require('../models');
 const { StorytellerBook, StorytellerChapter, StorytellerLine, RegistryCharacter } = db;
 
 // ── Anthropic client ──────────────────────────────────────────────────────
-const anthropic = new Anthropic();
+const anthropic = createAnthropicClient();
 
 // ── Lala tone helper ──────────────────────────────────────────────────────
 // ── Consciousness extraction (from character writer_notes) ───────────

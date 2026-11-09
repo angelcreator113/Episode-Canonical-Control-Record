@@ -8,14 +8,14 @@
 
 const express = require('express');
 const router = express.Router();
-const Anthropic = require('@anthropic-ai/sdk');
+const { createAnthropicClient } = require('../services/anthropicClient');
 const { requireAuth } = require('../middleware/auth');
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 const db = require('../models');
 const { Op } = require('sequelize');
 const { factsOf } = require('../services/worldFacts');
 
-const client = new Anthropic();
+const client = createAnthropicClient();
 
 // ─────────────────────────────────────────────────────────────────────────────
 // BOOK 1 FRANCHISE INTELLIGENCE

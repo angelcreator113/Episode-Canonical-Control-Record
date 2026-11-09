@@ -42,7 +42,8 @@ jest.mock('../../../src/services/anthropicClient', () => {
   const actual = jest.requireActual('../../../src/services/anthropicClient');
   return {
     createAnthropicClient: (...args) => {
-      const caller = (new Error().stack.match(/routes[\\/]memories[\\/](\w+)\.js/) || [])[1] || 'other';
+      // The nearest route frame: franchiseBrainRoutes is loaded from inside assistant.js.
+      const caller = (new Error().stack.match(/routes[\\/](?:memories[\\/])?([\w-]+)\.js/) || [])[1] || 'other';
       mockFactoryCalls.push({ caller, args });
       mockState.inFactory = true;
       try {
@@ -105,20 +106,22 @@ describe('memories hub: module-level clients', () => {
     loadHub();
     const byFile = {};
     for (const c of mockFactoryCalls) byFile[c.caller] = (byFile[c.caller] || 0) + 1;
-    expect(byFile).toEqual(Object.fromEntries(HUB.map((f) => [f, 1])));
+    expect(byFile).toEqual({ ...Object.fromEntries(HUB.map((f) => [f, 1])), franchiseBrainRoutes: 1 });
     for (const c of mockFactoryCalls) expect(c.args).toHaveLength(0);
-    const viaFactory = mockConstructed.filter((c) => c.viaFactory);
+    const viaFactory = mockConstructed.filter((c) => c.viaFactory && HUB.includes(c.caller));
     expect(viaFactory).toHaveLength(9);
     for (const c of viaFactory) expect(c.args).toHaveLength(0);
-    // assistant.js also loads franchiseBrainRoutes (P0a-3b, not migrated yet), which still builds its own.
-    expect(mockConstructed.filter((c) => !c.viaFactory).map((c) => c.caller)).toEqual(['franchiseBrainRoutes']);
+    // assistant.js also loads franchiseBrainRoutes, which builds its own client through the factory
+    // too since P0a-3b. Nothing loaded here builds a client directly any more.
+    expect(mockConstructed.filter((c) => !c.viaFactory)).toEqual([]);
+    expect(mockConstructed.filter((c) => c.caller === 'franchiseBrainRoutes').map((c) => c.viaFactory)).toEqual([true]);
   });
 
   test('construction still follows each file’s dotenv line: a key supplied by .env is the key the client sees', () => {
     delete process.env.ANTHROPIC_API_KEY;
     mockDotenvKey = 'key-from-dotenv';
     loadHub();
-    const viaFactory = mockConstructed.filter((c) => c.viaFactory);
+    const viaFactory = mockConstructed.filter((c) => c.viaFactory && HUB.includes(c.caller));
     expect(viaFactory).toHaveLength(9);
     for (const c of viaFactory) expect(c.envKeyAtConstruction).toBe('key-from-dotenv');
   });
