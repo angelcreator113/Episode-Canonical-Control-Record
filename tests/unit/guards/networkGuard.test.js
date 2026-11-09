@@ -107,7 +107,7 @@ describe('report integrity: missing data is never "zero attempts"', () => {
     const canary = {
       canaryManifest: { file: 'c.test.js', canaries: [{ id: 'k', transports: ['socket'], events: 1, host: '0.0.0.0' }] },
       canaryWitness: { file: 'c.test.js', connections: 0, datagrams: 0, unixConnections: 0, observed: [{ id: 'k', code: 'ERR_TEST_NETWORK_BLOCKED' }] },
-      fileResults: { 'c.test.js': { passed: 2, failed: 0, skipped: 0 } },
+      fileResults: { 'c.test.js': { passed: 3, failed: 0, skipped: 0 } },
     };
     const canaryLines = [hb('c.test.js'), { type: 'attempt', canary: 'k', testPath: 'c.test.js', action: 'blocked', transport: 'socket', host: '0.0.0.0' }, end('c.test.js', 1)];
     const report = buildReport({ ...base, ...canary, executedFiles: [...base.executedFiles, 'c.test.js'], lines: [hb('a.test.js'), end('a.test.js', 1), attempt('a.test.js', 'img.test'), hb('b.test.js'), end('b.test.js'), ...canaryLines] });

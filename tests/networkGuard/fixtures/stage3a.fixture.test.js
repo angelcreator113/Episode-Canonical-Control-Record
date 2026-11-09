@@ -53,6 +53,19 @@ if (MODE === 'registry') {
       const res = await request((q, s) => s.end('ok')).get('/');
       return res.text;
     });
+    // 1b. Twenty concurrent supertest requests (each starts its own server): no finding, no race.
+    await step('supertest-concurrent', async () => {
+      const request = require(path.join(REPO, 'node_modules', 'supertest'));
+      const texts = await Promise.all(Array.from({ length: 20 }, (_, i) => request((q, s) => s.end(`ok${i}`)).get('/').then((r) => r.text)));
+      return texts.filter((t, i) => t === `ok${i}`).length;
+    });
+    // 1c. After their servers close, no supertest entry is still trusted.
+    await step('supertest-stale', async () => {
+      await new Promise((r) => setTimeout(r, 50));
+      const reg = require(path.join(GUARD, 'core')).getState().registry;
+      return [...reg.servers.values()].filter((e) => e.id === 'supertest' && !(e.server && e.server.listening)).length
+        + [...reg.servers.values()].filter((e) => e.id === 'supertest').length;
+    });
     // 2. A look-alike serverAddress() elsewhere: not the installed supertest, so not registered.
     const fake = http.createServer((q, s) => s.end('fake'));
     await step('fake-supertest', async () => {

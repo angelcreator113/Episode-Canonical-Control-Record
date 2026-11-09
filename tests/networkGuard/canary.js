@@ -40,6 +40,7 @@ function loadManifest(file = MANIFEST) {
     if (!Array.isArray(c.transports) || !c.transports.length) throw new Error(`canary manifest: ${c.id} needs "transports"`);
     if (c.host !== undefined && !NEVER_LEAVE_HOSTS.has(c.host)) throw new Error(`canary manifest: ${c.id} names ${c.host}, which is not a never-leave destination`);
     if (c.host === undefined && !NEVER_LEAVE_KINDS.has(c.kind)) throw new Error(`canary manifest: ${c.id} needs a never-leave host or kind`);
+    if (c.sdk !== undefined && (typeof c.sdk.module !== 'string' || typeof c.sdk.version !== 'string')) throw new Error(`canary manifest: ${c.id} has a bad "sdk"`);
   }
   return m;
 }

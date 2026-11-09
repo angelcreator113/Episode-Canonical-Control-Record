@@ -185,7 +185,7 @@ describe('canary verification (pure)', () => {
   const manifest = { file: 'c.test.js', canaries: [{ id: 'a', transports: ['socket'], events: 1, host: '0.0.0.0' }, { id: 'b', transports: ['fetch'], events: 2, host: '0.0.0.0' }] };
   const ev = (id, extra = {}) => ({ type: 'attempt', canary: id, testPath: 'c.test.js', action: 'blocked', transport: id === 'a' ? 'socket' : 'fetch', host: '0.0.0.0', ...extra });
   const witness = { file: 'c.test.js', connections: 0, datagrams: 0, unixConnections: 0, observed: [{ id: 'a', code: 'ERR_TEST_NETWORK_BLOCKED' }, { id: 'b', code: 'ERR_TEST_NETWORK_BLOCKED' }] };
-  const base = { manifest, witness, events: [ev('a'), ev('b'), ev('b')], executedFiles: ['c.test.js'], fileResults: { 'c.test.js': { passed: 3, failed: 0, skipped: 0 } } };
+  const base = { manifest, witness, events: [ev('a'), ev('b'), ev('b')], executedFiles: ['c.test.js'], fileResults: { 'c.test.js': { passed: 4, failed: 0, skipped: 0 } } };
 
   test('verified when ids, destinations, counts, results and the witness all match', () => {
     expect(verifyCanary(base)).toMatchObject({ ok: true, issues: [] });
@@ -200,7 +200,7 @@ describe('canary verification (pure)', () => {
     ['a wrong transport', { events: [ev('a', { transport: 'http' }), ev('b'), ev('b')] }, /unexpected transport/],
     ['a canary event from another file', { events: [ev('a', { testPath: 'other.test.js' }), ev('b'), ev('b')] }, /event from other/],
     ['a skipped canary file', { fileResults: { 'c.test.js': { passed: 0, failed: 0, skipped: 3, suiteSkipped: true } } }, /skipped, failed or changed/],
-    ['a failed canary test', { fileResults: { 'c.test.js': { passed: 2, failed: 1, skipped: 0 } } }, /skipped, failed or changed/],
+    ['a failed canary test', { fileResults: { 'c.test.js': { passed: 3, failed: 1, skipped: 0 } } }, /skipped, failed or changed/],
     ['a canary file that did not run', { executedFiles: [] }, /did not run/],
     ['a missing witness record', { witness: null }, /witness record missing/],
     ['a connection that reached a witness', { witness: { ...witness, connections: 1 } }, /reached a canary witness/],
@@ -248,7 +248,7 @@ describe('report: findings, canaries and integrity (pure)', () => {
   const base = {
     start: START, envRunId: 'r1', runDirExists: true, executedFiles: ['a.test.js', 'c.test.js'], canaryManifest: manifest,
     canaryWitness: { file: 'c.test.js', connections: 0, datagrams: 0, unixConnections: 0, observed: [{ id: 'a', code: 'ERR_TEST_NETWORK_BLOCKED' }] },
-    fileResults: { 'c.test.js': { passed: 2, failed: 0, skipped: 0 } },
+    fileResults: { 'c.test.js': { passed: 3, failed: 0, skipped: 0 } },
   };
 
   test('canary events are kept out of the attempts; findings are grouped by kind; both count toward the file-end', () => {
@@ -335,6 +335,8 @@ describe('nested runs (fixture, under the tripwire)', () => {
     expect(o).toBeTruthy();
     const s = o.steps;
     expect(s.supertest).toEqual({ ok: true, value: 'ok' });
+    expect(s['supertest-concurrent']).toEqual({ ok: true, value: 20 });
+    expect(s['supertest-stale']).toEqual({ ok: true, value: 0 }); // every supertest entry ended with its server
     expect(s['fake-supertest']).toEqual({ ok: true, value: 'fake' }); // report-only: it works, as a finding
     expect(s['trust-server']).toEqual({ ok: true, value: 'trusted' });
     expect(s['refuse-any-address'].error).toMatch(/not on a loopback address/);

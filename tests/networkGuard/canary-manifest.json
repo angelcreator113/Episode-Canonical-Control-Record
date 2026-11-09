@@ -112,7 +112,12 @@
         "fetch"
       ],
       "events": 1,
-      "host": "0.0.0.0"
+      "host": "0.0.0.0",
+      "sdk": {
+        "module": "@anthropic-ai/sdk",
+        "version": "0.74.0"
+      },
+      "note": "Measured with maxRetries 0: 1 blocked fetch. The canary file fails if the installed version changes."
     },
     {
       "id": "provider-replicate-sdk",
@@ -121,7 +126,11 @@
       ],
       "events": 6,
       "host": "0.0.0.0",
-      "note": "Replicate retries a failed request 5 times (withAutomaticRetries, maxRetries 5): 6 blocked fetches."
+      "note": "Measured, not an SDK contract: replicate 1.4.0 retries a failed request (withAutomaticRetries, maxRetries 5), so 6 blocked fetches. The canary file fails if the installed version changes, so the count is re-measured and reviewed then; verification fails on any other count.",
+      "sdk": {
+        "module": "replicate",
+        "version": "1.4.0"
+      }
     }
   ]
 }

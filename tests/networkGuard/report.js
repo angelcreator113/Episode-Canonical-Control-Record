@@ -66,8 +66,8 @@ function verifyCanary({ manifest, manifestError, witness, events = [], executedF
   if (!executedFiles.includes(file)) issues.push(`canary file ${file} did not run`);
   const fr = fileResults[file];
   if (!fr) issues.push('no test results for the canary file');
-  else if (fr.suiteSkipped || fr.skipped > 0 || fr.failed > 0 || fr.passed !== ids.length + 1) {
-    issues.push(`canary file skipped, failed or changed: ${fr.passed} passed, ${fr.failed} failed, ${fr.skipped} skipped (expected ${ids.length + 1} passed)`);
+  else if (fr.suiteSkipped || fr.skipped > 0 || fr.failed > 0 || fr.passed !== ids.length + 2) {
+    issues.push(`canary file skipped, failed or changed: ${fr.passed} passed, ${fr.failed} failed, ${fr.skipped} skipped (expected ${ids.length + 2} passed: one per canary, the SDK-version check and the witness check)`);
   }
   for (const c of manifest.canaries) {
     const evs = events.filter((e) => e.canary === c.id);

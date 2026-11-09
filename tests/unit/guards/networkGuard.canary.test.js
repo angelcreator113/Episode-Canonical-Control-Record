@@ -112,6 +112,15 @@ describe('network guard canaries (always blocked; nothing can leave the machine)
     return client.models.get('canary', 'canary');
   }));
 
+  test('the provider SDKs are the versions the canary counts were measured with', () => {
+    // A provider canary's event count is measured SDK behaviour (retries), not a contract:
+    // when an SDK changes version, re-measure the count and review the manifest.
+    for (const c of manifest.canaries.filter((x) => x.sdk)) {
+      const installed = JSON.parse(fs.readFileSync(path.join(__dirname, '../../../node_modules', c.sdk.module, 'package.json'), 'utf8')).version;
+      expect({ canary: c.id, module: c.sdk.module, installed }).toEqual({ canary: c.id, module: c.sdk.module, installed: c.sdk.version });
+    }
+  });
+
   test('the witnesses received nothing, and every manifest canary ran', () => {
     expect({ connections: witness.connections, datagrams: witness.datagrams, unixConnections: witness.unixConnections })
       .toEqual({ connections: 0, datagrams: 0, unixConnections: 0 });
