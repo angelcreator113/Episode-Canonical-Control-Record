@@ -1,0 +1,4 @@
+{
+  "_readme": "Reviewed exceptions to the Jest network guard. Loopback and Unix sockets are always allowed and need no entry. Each entry is { \"host\": exact host, \"reason\": why a test must reach it, \"files\": [test files] }. Paid AI and media providers can never be listed (the loader refuses them). Stage 1: empty.",
+  "hosts": []
+}
