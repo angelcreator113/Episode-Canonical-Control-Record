@@ -37,10 +37,16 @@ module.exports = (sequelize) => {
     runway_seed: { type: DataTypes.STRING, allowNull: true },
     runway_job_id: { type: DataTypes.STRING, allowNull: true },
     generation_status: {
-      type: DataTypes.ENUM('pending', 'generating', 'complete', 'failed'),
+      // 'uncertain' (#3748): a paid request may have been sent and no usable
+      // answer came back; never retried, reclassified or deleted (database
+      // guards, migration 20261108210100-scene-generation-attempts).
+      type: DataTypes.ENUM('pending', 'generating', 'complete', 'failed', 'uncertain'),
       allowNull: false,
       defaultValue: 'pending',
     },
+    // The latest paid generation attempt (scene_generation_attempts, #3748).
+    // Written only through the attempt service (PR B); NULL until then.
+    current_attempt_id: { type: DataTypes.UUID, allowNull: true },
     generation_cost: { type: DataTypes.DECIMAL(10, 4), allowNull: true, defaultValue: 0 },
     still_image_url: { type: DataTypes.TEXT, allowNull: true },
     video_clip_url: { type: DataTypes.TEXT, allowNull: true },
