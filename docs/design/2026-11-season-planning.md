@@ -289,7 +289,7 @@ The PostgreSQL ruling of 2026-11-10 names "K1–K16". Two tests were added later
 3. **Preserve the original SQLSTATE.** The code reads `err.original.code` (falling back to `err.parent.code`, then `err.code`) and keeps it on the error it raises and in the `console.error` log line. `23P01` is never rewritten as a lock conflict: `episodeLocks.isLockConflict` is false for it (K14), so it is never offered as "try again".
 4. **Return the right error to the person.** `23P01` at commit maps to 409 `SEASON_PLACEMENT_INTEGRITY`. The message says that nothing was changed and that a fresh preview is needed. It does not show the SQLSTATE, a constraint name or any row value. `40P01` and `55P03` map to 409 `SEASON_PLACEMENT_BUSY` (K17). A stale expected state, where a guarded update changes 0 rows, maps to 409 `SEASON_PLACEMENT_STALE` (K11).
 
-**Test owed with the placement service:** one that provokes a commit-time `23P01` through the real service and asserts all four points, including that the next request succeeds on a new connection.
+**Test owed with the placement service:** one that provokes a commit-time `23P01` through the real service and asserts all four points. It also asserts that a subsequent request succeeds on a valid database connection from the pool. It checks the outcome only (the next request works and its transaction commits), not which physical connection served it: it must not depend on a backend process id or on a particular pool slot.
 
 ## 5. Rulings C4, C5, C7, C8 and G1-D1 to G1-D5 (RULED, verbatim)
 
