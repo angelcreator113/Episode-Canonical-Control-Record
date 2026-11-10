@@ -276,8 +276,12 @@ const KNOWN = [
     const seqs = expectCanonical(await traced(() => slots.placeEpisode(sequelize, show, target, episodeId,
       { confirmPencils: [{ slot_id: holder, event_id: own }] })), 'placeEpisode (holder)');
     const flat = seqs.flat();
-    expect(flat[0]).toMatch(/^E:episodes:/);
-    expect(flat.filter((x) => x === 'S:season_slots:update').length).toBeGreaterThanOrEqual(2);
+    const locks = flat.filter((x) => !x.endsWith(':write'));
+    // The episode lock comes first, and every slot lock after it: the new
+    // statement (target and holder together), then the target's own lock.
+    // Without the new statement there is one slot lock, not two.
+    expect(locks[0]).toMatch(/^E:episodes:/);
+    expect(locks.slice(1)).toEqual(['S:season_slots:update', 'S:season_slots:update']);
     expect(flat.some((x) => x.startsWith('W:') && !x.endsWith(':write'))).toBe(false);
     const [h] = await rows('SELECT event_id FROM season_slots WHERE id = :holder', { holder });
     const [t] = await rows('SELECT event_id, episode_id FROM season_slots WHERE id = :target', { target });
