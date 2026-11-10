@@ -2,7 +2,14 @@
 
 **Status:** read only. Nothing was changed. Task #3785. Measured 2026-11-10, 21:26 to 21:28 UTC, from a laptop session (`aws elbv2`, `aws ec2`, `aws route53`, `curl`) and over SSM on the prod box (`episode-backend`). `origin/main` was `91fbf6533`.
 
-> **Later the same day (2026-11-10, verified 21:38 UTC).** Evoni applied step 1 of the recommendation and deleted the port 80 `/assets/*` rule. The port 80 default action is now a 301 redirect to HTTPS, and no rule on either listener points at `primepisodes-frontend`: its two targets report `unused`. Measured after the change: plain HTTP `/`, `/login`, `/api/v1/assets` and `/assets/*` return 301 to `https://`; plain HTTP `/health` and `/diagnostics` still return 200 from the app through their rules; HTTPS `/`, `/health` and `/api/v1/assets` return 200. Still to do: step 2 for the three remaining port 80 rules, and step 3. Everything below describes the state at 21:26 UTC, before that change.
+> **Later the same day (2026-11-10).** Evoni applied the whole recommendation, and stopped the `episode-frontend` instance. Verified 21:45 UTC:
+>
+> - **Port 80 listener:** no rules; the default action is a 301 redirect to HTTPS. Plain HTTP `/`, `/login`, `/api/`, `/api/v1/assets`, `/assets/*`, `/health` and `/diagnostics` each returned 301 to the same path on `https://`, three requests out of three. `www`, `api` and `staging.primepisodes.com` redirect the same way.
+> - **HTTPS listener:** unchanged. `/`, `/health`, `/api/v1/assets`, `/login` and `/diagnostics` returned 200.
+> - **Target groups:** `primepisodes-frontend` no longer exists. `primepisodes-backend` is the only group, and its one target (the app on port 3000) is healthy.
+> - **`episode-frontend`** (`i-0005b67a477eb904f`): stopped, "User initiated (2026-11-10 21:44:40 GMT)". Its port 80 no longer answers.
+>
+> The steps were applied in two parts: at 21:38 UTC the redirect and the `/assets/*` rule, then the three remaining rules and the target group. Everything below describes the state at 21:26 UTC, before any of it. Section 6's other notes still stand, except those about `episode-frontend` serving on port 80.
 
 ## Answer first
 
