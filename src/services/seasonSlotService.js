@@ -568,6 +568,19 @@ function readConfirmedPencils(list) {
   return confirmed;
 }
 
+/**
+ * Whether a confirmation is exactly the pencils a change affects, as they are
+ * under the locks: 'ok', 'needs' (pencils affected, none named) or 'changed'
+ * (named, but not these). confirmed: readConfirmedPencils' Map; affected:
+ * [{ slot_id, event: { id } }]. Place and the specials' swap both ask this.
+ */
+function pencilConfirmation(confirmed, affected) {
+  const current = new Map(affected.map((a) => [String(a.slot_id).toLowerCase(), String(a.event.id).toLowerCase()]));
+  const matches = confirmed.size === current.size && [...current].every(([s, e]) => confirmed.get(s) === e);
+  if (matches) return 'ok';
+  return confirmed.size ? 'changed' : 'needs';
+}
+
 async function lockSlot(sequelize, showId, slotId, transaction) {
   const [[slot]] = await sequelize.query(
     `SELECT id, arc_id, slot_number, event_id, episode_id, locked_at
@@ -770,14 +783,13 @@ async function placeEpisodeIn(sequelize, showId, slotId, episodeId, transaction,
     }
     affected.push({ slot_id: h.id, slot_number: h.slot_number, event: ownEvent, change: 'cleared' });
   }
-  const current = new Map(affected.map((a) => [String(a.slot_id).toLowerCase(), String(a.event.id).toLowerCase()]));
-  const matches = confirmed.size === current.size && [...current].every(([s, e]) => confirmed.get(s) === e);
-  if (!matches) {
+  const verdict = pencilConfirmation(confirmed, affected);
+  if (verdict !== 'ok') {
     const details = {
       slot_id: slot.id, slot_number: slot.slot_number, episode: { id: episode.id, title: episode.title },
       episode_event: ownEvent, affected_pencils: affected,
     };
-    if (!confirmed.size) {
+    if (verdict === 'needs') {
       const lines = affected.map((a) => (a.change === 'replaced'
         ? `"${a.event.name}" pencilled in E${a.slot_number} would be replaced`
         : `"${a.event.name || 'its event'}" would be cleared from E${a.slot_number}`));
@@ -918,6 +930,9 @@ module.exports = {
   pencilEventIn,
   placeEpisode,
   placeEpisodeIn,
+  lockSlot,
+  readConfirmedPencils,
+  pencilConfirmation,
   arcPhases,
   phaseFor,
   assignOnStart,
