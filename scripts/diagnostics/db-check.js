@@ -17,7 +17,13 @@
 // columns dropped and every value bounded. Table and column names come from
 // the catalog and pass ident(); nothing comes from input.
 //
-// Usage: node db-check.js <db|db-schema|db-counts|self-test|snapshot>
+// season-integrity (Gate 2, docs/design/2026-11-season-planning.md §8): Season
+// Planning counts in three classes (integrity violations, protected records,
+// planning conditions), from one read-only transaction that is rolled back.
+// Dispatch only; never scheduled. COMPLETE needs every metric and the
+// rollback to succeed, and the report ends with an END line.
+//
+// Usage: node db-check.js <db|db-schema|db-counts|self-test|snapshot|season-integrity>
 // Needs: APP_DIR (default /home/ubuntu/episode-metadata), HOME.
 // Exit: 0 ok; 1 a check failed; 2 bad usage or missing configuration.
 
@@ -28,7 +34,7 @@ const path = require('path');
 
 const APP_DIR = process.env.APP_DIR || '/home/ubuntu/episode-metadata';
 const RO_ENV = process.env.RO_ENV || path.join(process.env.HOME || '/home/ubuntu', '.episode-readonly.env');
-const MODES = ['db', 'db-schema', 'db-counts', 'self-test', 'snapshot'];
+const MODES = ['db', 'db-schema', 'db-counts', 'self-test', 'snapshot', 'season-integrity'];
 
 // Exact counts for the tables a production question usually turns on. Missing
 // tables are reported as missing, not as errors.
@@ -265,6 +271,290 @@ async function selfTest(client, say) {
   return ok;
 }
 
+// ── season-integrity (Gate 2; docs/design/2026-11-season-planning.md §8 item 2) ──
+// Counts only. Every statement is a fixed string in SEASON_METRICS; nothing
+// comes from input. Each metric has one class, set here and never inferred
+// from its value:
+//   A  integrity violations: a non-zero count is a defect. `a2: true` marks
+//      the P1, P2, P3 and P6 counts the A2 migration needs at 0 (§8 item 3).
+//   B  protected records: valid states Move/Swap or intention sync must
+//      refuse or preserve. Counts, not defects.
+//   C  planning conditions: informational.
+// "Live" means deleted_at IS NULL. Filmed means any episode_raw_clips row,
+// soft-deleted rows included (src/utils/snapshotFreeze.js).
+const SEASON_METRICS = Object.freeze([
+  { id: 'A1', cls: 'A', a2: true, name: 'weekly_episode_in_multiple_slots',
+    sql: 'SELECT count(*) AS n FROM (SELECT episode_id FROM season_slots WHERE deleted_at IS NULL AND episode_id IS NOT NULL '
+      + 'GROUP BY episode_id HAVING count(*) > 1) d' },
+  { id: 'A2', cls: 'A', a2: true, name: 'weekly_episode_also_special',
+    sql: 'SELECT count(DISTINCT s.episode_id) AS n FROM season_slots s JOIN season_specials sp ON sp.episode_id = s.episode_id '
+      + "AND sp.deleted_at IS NULL AND sp.kind IN ('bonus', 'special') WHERE s.deleted_at IS NULL" },
+  { id: 'A3', cls: 'A', a2: true, name: 'slot_episode_missing_or_deleted',
+    sql: 'SELECT count(*) AS n FROM season_slots s LEFT JOIN episodes e ON e.id = s.episode_id AND e.deleted_at IS NULL '
+      + 'WHERE s.deleted_at IS NULL AND s.episode_id IS NOT NULL AND e.id IS NULL' },
+  { id: 'A4', cls: 'A', a2: true, name: 'slot_locked_without_episode',
+    sql: 'SELECT count(*) AS n FROM season_slots WHERE deleted_at IS NULL AND locked_at IS NOT NULL AND episode_id IS NULL' },
+  { id: 'A5', cls: 'A', a2: true, name: 'slot_accepted_without_episode',
+    sql: 'SELECT count(*) AS n FROM season_slots WHERE deleted_at IS NULL AND accepted_at IS NOT NULL AND episode_id IS NULL' },
+  { id: 'A6', cls: 'A', a2: false, name: 'special_episode_missing_or_deleted',
+    sql: 'SELECT count(*) AS n FROM season_specials sp LEFT JOIN episodes e ON e.id = sp.episode_id AND e.deleted_at IS NULL '
+      + "WHERE sp.deleted_at IS NULL AND sp.kind IN ('bonus', 'special') AND sp.episode_id IS NOT NULL AND e.id IS NULL" },
+  { id: 'A7', cls: 'A', a2: false, name: 'special_locked_without_episode',
+    sql: "SELECT count(*) AS n FROM season_specials WHERE deleted_at IS NULL AND kind IN ('bonus', 'special') "
+      + 'AND locked_at IS NOT NULL AND episode_id IS NULL' },
+  { id: 'A8', cls: 'A', a2: false, name: 'special_accepted_without_episode',
+    sql: "SELECT count(*) AS n FROM season_specials WHERE deleted_at IS NULL AND kind IN ('bonus', 'special') "
+      + 'AND accepted_at IS NOT NULL AND episode_id IS NULL' },
+  { id: 'A9', cls: 'A', a2: false, name: 'two_part_slot_link_missing_or_deleted',
+    sql: 'SELECT count(*) AS n FROM season_specials tp '
+      + 'LEFT JOIN season_slots one ON one.id = tp.part_one_slot_id AND one.deleted_at IS NULL AND one.arc_id = tp.arc_id '
+      + 'LEFT JOIN season_slots two ON two.id = tp.part_two_slot_id AND two.deleted_at IS NULL AND two.arc_id = tp.arc_id '
+      + "WHERE tp.deleted_at IS NULL AND tp.kind = 'two_part' AND (one.id IS NULL OR two.id IS NULL)" },
+  { id: 'A10', cls: 'A', a2: true, name: 'arc_slot_count_not_24',
+    sql: 'SELECT count(*) AS n FROM (SELECT s.arc_id FROM season_slots s JOIN show_arcs a ON a.id = s.arc_id AND a.deleted_at IS NULL '
+      + 'WHERE s.deleted_at IS NULL GROUP BY s.arc_id HAVING count(*) <> 24) d' },
+  { id: 'A11', cls: 'A', a2: true, name: 'slot_number_out_of_range',
+    sql: 'SELECT count(*) AS n FROM season_slots WHERE deleted_at IS NULL AND (slot_number < 1 OR slot_number > 24)' },
+  { id: 'A12', cls: 'A', a2: true, name: 'duplicate_live_slot_number',
+    sql: 'SELECT count(*) AS n FROM (SELECT arc_id, slot_number FROM season_slots WHERE deleted_at IS NULL '
+      + 'GROUP BY arc_id, slot_number HAVING count(*) > 1) d' },
+  { id: 'A13', cls: 'A', a2: true, name: 'slot_season_number_mismatch',
+    sql: 'SELECT count(*) AS n FROM season_slots s JOIN show_arcs a ON a.id = s.arc_id AND a.deleted_at IS NULL '
+      + 'WHERE s.deleted_at IS NULL AND s.season_number <> COALESCE(a.season_number, 1)' },
+  // A two-parter writes its event to both of its slots (seasonSpecials.js,
+  // the part-two pencil), so that one pair is not a duplicate.
+  { id: 'A14', cls: 'A', a2: false, name: 'event_in_two_live_slots_of_arc',
+    sql: 'SELECT count(*) AS n FROM season_slots s1 JOIN season_slots s2 ON s2.arc_id = s1.arc_id AND s2.event_id = s1.event_id '
+      + 'AND s2.id > s1.id AND s2.deleted_at IS NULL WHERE s1.deleted_at IS NULL AND s1.event_id IS NOT NULL '
+      + "AND NOT EXISTS (SELECT 1 FROM season_specials tp WHERE tp.deleted_at IS NULL AND tp.kind = 'two_part' "
+      + 'AND ((tp.part_one_slot_id = s1.id AND tp.part_two_slot_id = s2.id) OR (tp.part_one_slot_id = s2.id AND tp.part_two_slot_id = s1.id)))' },
+  { id: 'A15', cls: 'A', a2: false, name: 'slot_event_differs_from_brief_event',
+    sql: 'SELECT count(*) AS n FROM season_slots s JOIN episode_briefs b ON b.episode_id = s.episode_id AND b.deleted_at IS NULL '
+      + 'WHERE s.deleted_at IS NULL AND s.event_id IS NOT NULL AND b.event_id IS NOT NULL AND s.event_id <> b.event_id' },
+
+  { id: 'B1', cls: 'B', name: 'placed_episode_filmed',
+    sql: 'SELECT count(DISTINCT s.episode_id) AS n FROM season_slots s WHERE s.deleted_at IS NULL AND s.episode_id IS NOT NULL '
+      + 'AND EXISTS (SELECT 1 FROM episode_raw_clips r WHERE r.episode_id = s.episode_id)' },
+  { id: 'B2', cls: 'B', name: 'placed_slot_accepted',
+    sql: 'SELECT count(*) AS n FROM season_slots WHERE deleted_at IS NULL AND episode_id IS NOT NULL AND accepted_at IS NOT NULL' },
+  { id: 'B3', cls: 'B', name: 'placed_episode_published',
+    sql: 'SELECT count(DISTINCT s.episode_id) AS n FROM season_slots s JOIN episodes e ON e.id = s.episode_id AND e.deleted_at IS NULL '
+      + "WHERE s.deleted_at IS NULL AND e.status::text = 'published'" },
+  { id: 'B4', cls: 'B', name: 'placed_episode_has_air_date',
+    sql: 'SELECT count(DISTINCT s.episode_id) AS n FROM season_slots s JOIN episodes e ON e.id = s.episode_id AND e.deleted_at IS NULL '
+      + 'WHERE s.deleted_at IS NULL AND e.air_date IS NOT NULL' },
+  { id: 'B5', cls: 'B', name: 'two_part_protected',
+    sql: 'SELECT count(*) AS n FROM season_specials tp '
+      + 'JOIN season_slots one ON one.id = tp.part_one_slot_id AND one.deleted_at IS NULL '
+      + 'JOIN season_slots two ON two.id = tp.part_two_slot_id AND two.deleted_at IS NULL '
+      + "WHERE tp.deleted_at IS NULL AND tp.kind = 'two_part' "
+      + 'AND (one.episode_id IS NOT NULL OR one.locked_at IS NOT NULL OR two.episode_id IS NOT NULL OR two.locked_at IS NOT NULL)' },
+  { id: 'B6', cls: 'B', name: 'slotted_brief_locked',
+    sql: 'SELECT count(DISTINCT s.episode_id) AS n FROM season_slots s JOIN episode_briefs b ON b.episode_id = s.episode_id '
+      + "AND b.deleted_at IS NULL WHERE s.deleted_at IS NULL AND b.status::text = 'locked'" },
+
+  { id: 'C1', cls: 'C', name: 'shows_with_multiple_active_arcs',
+    sql: "SELECT count(*) AS n FROM (SELECT show_id FROM show_arcs WHERE deleted_at IS NULL AND status = 'active' "
+      + 'GROUP BY show_id HAVING count(*) > 1) d' },
+  // season_context is never cleared when a slot is released; a special's
+  // episode has one too, so only episodes in neither table are counted.
+  { id: 'C2', cls: 'C', name: 'season_context_without_live_slot',
+    sql: 'SELECT count(*) AS n FROM episodes e WHERE e.deleted_at IS NULL AND e.season_context IS NOT NULL '
+      + 'AND NOT EXISTS (SELECT 1 FROM season_slots s WHERE s.episode_id = e.id AND s.deleted_at IS NULL) '
+      + 'AND NOT EXISTS (SELECT 1 FROM season_specials sp WHERE sp.episode_id = e.id AND sp.deleted_at IS NULL)' },
+  { id: 'C3', cls: 'C', name: 'empty_slot_pencilled',
+    sql: 'SELECT count(*) AS n FROM season_slots WHERE deleted_at IS NULL AND episode_id IS NULL AND event_id IS NOT NULL' },
+  { id: 'C4', cls: 'C', name: 'empty_slot_pencil_event_used_by_episode',
+    sql: 'SELECT count(*) AS n FROM season_slots s JOIN world_events w ON w.id = s.event_id AND w.deleted_at IS NULL '
+      + 'WHERE s.deleted_at IS NULL AND s.episode_id IS NULL AND w.used_in_episode_id IS NOT NULL' },
+  { id: 'C5', cls: 'C', name: 'episode_air_date_outside_weekly_slot',
+    sql: 'SELECT count(*) AS n FROM episodes e WHERE e.deleted_at IS NULL AND e.air_date IS NOT NULL '
+      + 'AND NOT EXISTS (SELECT 1 FROM season_slots s WHERE s.episode_id = e.id AND s.deleted_at IS NULL)' },
+  { id: 'C6', cls: 'C', name: 'intention_source', fields: ['auto_drafted', 'edited', 'unset', 'other'],
+    sql: "SELECT count(*) FILTER (WHERE intention_source = 'auto-drafted') AS auto_drafted, "
+      + "count(*) FILTER (WHERE intention_source = 'edited') AS edited, count(*) FILTER (WHERE intention_source IS NULL) AS unset, "
+      + "count(*) FILTER (WHERE intention_source NOT IN ('auto-drafted', 'edited')) AS other FROM season_slots WHERE deleted_at IS NULL" },
+  // The statement depends on air_date's type, read in the same transaction.
+  { id: 'C7', cls: 'C', name: 'air_date_not_utc_midnight',
+    probe: 'SELECT data_type AS v FROM information_schema.columns '
+      + "WHERE table_schema = current_schema() AND table_name = 'episodes' AND column_name = 'air_date'",
+    variants: {
+      'timestamp with time zone': "SELECT count(*) AS n FROM episodes WHERE deleted_at IS NULL AND air_date IS NOT NULL AND (air_date AT TIME ZONE 'UTC')::time <> '00:00'",
+      'timestamp without time zone': "SELECT count(*) AS n FROM episodes WHERE deleted_at IS NULL AND air_date IS NOT NULL AND air_date::time <> '00:00'",
+      date: null,
+    } },
+  { id: 'C8', cls: 'C', name: 'server_default_timezone', text: 'tz', suffix: ' (app sessions set their own)',
+    sql: "SELECT current_setting('TimeZone') AS tz" },
+  { id: 'C9', cls: 'C', name: 'activity_logs_by_age', fields: ['last_1d', 'last_7d', 'last_30d', 'older', 'unset'],
+    probe: 'SELECT column_name AS v FROM information_schema.columns WHERE table_schema = current_schema() '
+      + "AND table_name = 'activity_logs' AND column_name IN ('timestamp', 'created_at') ORDER BY column_name DESC LIMIT 1",
+    optional: true,
+    variants: {
+      timestamp: 'SELECT count(*) FILTER (WHERE "timestamp" >= now() - interval \'1 day\') AS last_1d, '
+        + 'count(*) FILTER (WHERE "timestamp" >= now() - interval \'7 days\') AS last_7d, '
+        + 'count(*) FILTER (WHERE "timestamp" >= now() - interval \'30 days\') AS last_30d, '
+        + 'count(*) FILTER (WHERE "timestamp" < now() - interval \'30 days\') AS older, '
+        + 'count(*) FILTER (WHERE "timestamp" IS NULL) AS unset FROM activity_logs',
+      created_at: "SELECT count(*) FILTER (WHERE created_at >= now() - interval '1 day') AS last_1d, "
+        + "count(*) FILTER (WHERE created_at >= now() - interval '7 days') AS last_7d, "
+        + "count(*) FILTER (WHERE created_at >= now() - interval '30 days') AS last_30d, "
+        + "count(*) FILTER (WHERE created_at < now() - interval '30 days') AS older, "
+        + 'count(*) FILTER (WHERE created_at IS NULL) AS unset FROM activity_logs',
+    } },
+  // Existing labels only; which labels the #1948 repair needs is not settled here.
+  { id: 'C10', cls: 'C', name: 'activity_logs_enum_labels', labels: true,
+    sql: 'SELECT a.attname AS col, string_agg(e.enumlabel, \',\' ORDER BY e.enumsortorder) AS labels '
+      + 'FROM pg_attribute a JOIN pg_enum e ON e.enumtypid = a.atttypid '
+      + "WHERE a.attrelid = to_regclass('activity_logs') AND a.attnum > 0 AND NOT a.attisdropped GROUP BY a.attname ORDER BY a.attname" },
+]);
+const SEASON_CLASSES = [
+  ['A', 'Integrity violations (expected 0)'],
+  ['B', 'Protected records (counts, not defects)'],
+  ['C', 'Planning conditions (informational)'],
+];
+const SEASON_PREAMBLE = [
+  'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY',
+  "SET LOCAL statement_timeout = '10s'",
+  "SET LOCAL lock_timeout = '2s'",
+  "SET LOCAL idle_in_transaction_session_timeout = '15s'",
+];
+const SEASON_BUDGET_MS = 60000;
+
+const COUNT_RE = /^\d{1,20}$/;
+/** A server error carries a SQLSTATE; a client or socket error does not. */
+function sqlState(err) {
+  return err && typeof err.severity === 'string' && /^[0-9A-Z]{5}$/.test(String(err.code)) ? err.code : null;
+}
+class Broken extends Error {}
+
+/** One metric's value as printed, or throws when the result is not what the metric defines. */
+function seasonValue(m, rows) {
+  const bad = (why) => { throw Object.assign(new Error(why), { malformed: true }); };
+  if (m.labels) {
+    if (!rows.length) return 'none';
+    return rows.map((r) => {
+      const labels = String(r.labels).split(',');
+      if (!/^[A-Za-z_][A-Za-z0-9_]{0,62}$/.test(String(r.col)) || !labels.every((l) => /^[A-Za-z0-9_ .-]{1,63}$/.test(l))) bad('label');
+      return `${r.col}=${labels.join(',')}`;
+    }).join('; ');
+  }
+  if (rows.length !== 1) bad('rows');
+  const row = rows[0];
+  if (m.text) {
+    const v = String(row[m.text]);
+    if (!/^[A-Za-z0-9_+/:-]{1,64}$/.test(v)) bad('text');
+    return `${v}${m.suffix || ''}`;
+  }
+  const fields = m.fields || ['n'];
+  const vals = fields.map((f) => (row[f] === null || row[f] === undefined ? '' : String(row[f])));
+  if (!vals.every((v) => COUNT_RE.test(v))) bad('count');
+  return fields.length === 1 ? vals[0] : fields.map((f, i) => `${f}=${vals[i]}`).join(' ');
+}
+
+/**
+ * The season-integrity report. Read-only: one REPEATABLE READ READ ONLY
+ * transaction, rolled back. COMPLETE only when BEGIN, every metric and the
+ * ROLLBACK succeed; anything else is INCOMPLETE and returns false (exit 1).
+ * A client or socket error (no SQLSTATE) stops at once without another
+ * statement: the connection's state is unknown, and main() closes it, which
+ * ends the transaction on the server.
+ */
+async function checkSeasonIntegrity(client, say, { now = Date.now, budgetMs = SEASON_BUDGET_MS } = {}) {
+  const t0 = now();
+  const results = new Map();
+  const reasons = [];
+  let began = false;
+  let broken = false;
+  const run = async (sql) => {
+    try {
+      return await client.query(sql);
+    } catch (err) {
+      if (!sqlState(err)) { broken = true; throw new Broken(); }
+      throw err;
+    }
+  };
+  try {
+    for (const sql of SEASON_PREAMBLE) {
+      await run(sql);
+      began = true;
+    }
+    for (const m of SEASON_METRICS) {
+      if (now() - t0 > budgetMs) { reasons.push('time budget exceeded'); break; }
+      await run('SAVEPOINT season_metric');
+      try {
+        let rows;
+        let variantKey;
+        if (m.probe) {
+          const p = (await run(m.probe)).rows;
+          if (!p.length && m.optional) {
+            results.set(m.id, 'not applicable (no timestamp or created_at column)');
+            await run('RELEASE SAVEPOINT season_metric');
+            continue;
+          }
+          if (p.length !== 1) throw Object.assign(new Error('probe'), { malformed: true });
+          variantKey = String(p[0].v);
+          if (!Object.prototype.hasOwnProperty.call(m.variants, variantKey)) throw Object.assign(new Error('type'), { malformed: true });
+          if (m.variants[variantKey] === null) {
+            results.set(m.id, `not applicable (${variantKey})`);
+            await run('RELEASE SAVEPOINT season_metric');
+            continue;
+          }
+          rows = (await run(m.variants[variantKey])).rows;
+        } else {
+          rows = (await run(m.sql)).rows;
+        }
+        results.set(m.id, seasonValue(m, rows));
+        await run('RELEASE SAVEPOINT season_metric');
+      } catch (err) {
+        if (err instanceof Broken) throw err;
+        results.set(m.id, err.malformed ? 'failed (malformed result)' : `failed (${sqlState(err) || 'error'})`);
+        await run('ROLLBACK TO SAVEPOINT season_metric');
+      }
+    }
+  } catch (err) {
+    if (err instanceof Broken) reasons.push('connection error (no SQLSTATE); nothing more was sent');
+    else reasons.push(began ? `statement failed (${sqlState(err) || 'unknown'})` : `could not start the transaction (${sqlState(err) || 'unknown'})`);
+  } finally {
+    if (began && !broken) {
+      try {
+        await client.query('ROLLBACK');
+      } catch (err) {
+        reasons.push(`rollback failed (${sqlState(err) || 'no SQLSTATE'})`);
+      }
+    }
+  }
+
+  const ok = (id) => results.has(id) && !String(results.get(id)).startsWith('failed');
+  const reported = SEASON_METRICS.filter((m) => ok(m.id)).length;
+  if (SEASON_METRICS.some((m) => results.has(m.id) && !ok(m.id))) reasons.unshift('a metric failed');
+  const complete = reasons.length === 0 && reported === SEASON_METRICS.length;
+  const nonZero = (ms) => ms.filter((m) => ok(m.id) && results.get(m.id) !== '0').length;
+  const integrity = SEASON_METRICS.filter((m) => m.cls === 'A');
+  const blockers = integrity.filter((m) => m.a2);
+
+  say(`season-integrity: ${complete ? 'COMPLETE' : 'INCOMPLETE'}`);
+  for (const r of reasons) say(`reason: ${r}`);
+  say('snapshot: one repeatable-read, read-only transaction, rolled back');
+  for (const [cls, title] of SEASON_CLASSES) {
+    say('');
+    say(`## ${cls}. ${title}`);
+    for (const m of SEASON_METRICS.filter((x) => x.cls === cls)) {
+      const v = results.has(m.id) ? results.get(m.id) : 'not run';
+      say(`- ${m.id} ${m.name}: ${v}${m.a2 ? ' [blocks A2]' : ''}`);
+    }
+  }
+  say('');
+  if (complete) {
+    say(`integrity violations: ${nonZero(integrity)} of ${integrity.length} metrics non-zero`);
+    say(`A2 migration blockers: ${nonZero(blockers)} of ${blockers.length} metrics non-zero`);
+  } else {
+    say('integrity violations: not determined (incomplete)');
+    say('A2 migration blockers: not determined (incomplete)');
+  }
+  say(`season-integrity: END ${reported}/${SEASON_METRICS.length}`);
+  return complete;
+}
+
 /** The daily snapshot (Amendment 1 §2): schema, exact counts, allowlisted samples, as Markdown. */
 async function snapshot(client, say) {
   const started = new Date();
@@ -374,7 +664,10 @@ async function main(mode, say = (l) => process.stdout.write(`${l}\n`)) {
     return 1;
   }
   try {
-    const run = { db: checkDb, 'db-schema': checkSchema, 'db-counts': checkCounts, 'self-test': selfTest, snapshot }[mode];
+    const run = {
+      db: checkDb, 'db-schema': checkSchema, 'db-counts': checkCounts, 'self-test': selfTest, snapshot,
+      'season-integrity': checkSeasonIntegrity,
+    }[mode];
     return (await run(client, say)) ? 0 : 1;
   } catch (err) {
     say(`error: ${err.code || 'unknown'}: ${String(err.message).slice(0, 200)}`);
@@ -387,6 +680,7 @@ async function main(mode, say = (l) => process.stdout.write(`${l}\n`)) {
 module.exports = {
   parseEnvFile, connectionConfig, main, snapshot, COUNT_TABLES, MODES,
   SAMPLE_TABLES, NEVER_TABLES, isNeverTable, dropColumn, boundValue, indexSummary, allocateSamples, ident, countSql, sampleSql, SAMPLE_ROWS, VALUE_MAX, SAMPLES_MAX_BYTES,
+  checkSeasonIntegrity, SEASON_METRICS, SEASON_PREAMBLE, SEASON_BUDGET_MS,
 };
 
 if (require.main === module) {

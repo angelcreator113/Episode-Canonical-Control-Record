@@ -38,6 +38,8 @@ checks:
   db              database connectivity, read-only proof, migrations
   db-schema       tables and column counts
   db-counts       row counts
+  db-season-integrity  Season Planning counts: integrity violations, protected
+                  records, planning conditions (read-only; dispatch only)
   aws-infra       EC2, RDS, SSM, SQS and alarm status
   s3-config       bucket settings and listing summaries (never object contents)
   cognito-config  user pool settings, app clients, groups (no users, no secrets)
@@ -52,7 +54,7 @@ if [ -n "${CLAUDECODE:-}" ]; then
   exit 2
 fi
 case "$CHECK" in
-  overview|health|deploy-state|app-logs|worker-logs|nginx-logs|db|db-schema|db-counts|aws-infra|s3-config|cognito-config|self-test|db-snapshot) ;;
+  overview|health|deploy-state|app-logs|worker-logs|nginx-logs|db|db-schema|db-counts|db-season-integrity|aws-infra|s3-config|cognito-config|self-test|db-snapshot) ;;
   *) echo "REFUSED: unknown check '$CHECK'."; usage; exit 2 ;;
 esac
 # Amendment 1 §2: the snapshot, with its content samples, comes only from the
@@ -333,7 +335,7 @@ echo "run ${GITHUB_RUN_ID:-local}; scripts at ${TARGET_SHA}; $(date -u '+%Y-%m-%
 case "$CHECK" in
   overview) public_health; aws_infra; box health; box deploy-state; box db ;;
   health) public_health; box health ;;
-  deploy-state|app-logs|worker-logs|nginx-logs|db|db-schema|db-counts) box "$CHECK" ;;
+  deploy-state|app-logs|worker-logs|nginx-logs|db|db-schema|db-counts|db-season-integrity) box "$CHECK" ;;
   aws-infra) aws_infra ;;
   s3-config) s3_config ;;
   cognito-config) cognito_config ;;
