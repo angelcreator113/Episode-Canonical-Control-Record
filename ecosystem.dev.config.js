@@ -62,12 +62,14 @@ module.exports = {
       log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
       env: {
         ...sharedEnv,
-        // Always production for the API, whatever .env says: with any other
-        // NODE_ENV the app returns stack traces in error responses, skips the
-        // login and refresh rate limits and sets cookies without Secure. The
-        // box is reachable through nginx and uses production's Cognito pool,
-        // so none of that is acceptable here. The worker keeps sharedEnv's
-        // NODE_ENV: as production it refuses a DB password in its environment.
+        // Always production for the API: with any other NODE_ENV the app
+        // returns stack traces in error responses, skips the login and
+        // refresh rate limits and sets cookies without Secure. The box is
+        // reachable through nginx and uses production's Cognito pool, so none
+        // of that is acceptable here. This line alone is not enough: with no
+        // ANTHROPIC_API_KEY, src/routes/memories/*.js re-read .env with
+        // override, so install-dev-app.sh also writes NODE_ENV=production
+        // into the box's .env, and deploy-dev-box.sh checks /health for it.
         NODE_ENV: 'production',
         // The production database config opens up to 30 connections (10 kept
         // open) unless DB_POOL_MAX says otherwise, and the box's local
@@ -104,6 +106,12 @@ module.exports = {
       log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
       env: {
         ...sharedEnv,
+        // Never production here, although the box's .env says so for the API:
+        // as production the worker refuses to start with a database password
+        // in its environment (workerStartup.js), and the dev worker uses the
+        // shared dev login. The worker does not load the memories routes, so
+        // nothing re-reads .env over this.
+        NODE_ENV: 'development',
         // Issue #3714: the worker does nothing unless this is "true", and it is
         // off by default here too. To run it on the dev box, set
         // GENERATION_WORKER_ENABLED=true in the dev box's .env and restart it

@@ -96,6 +96,18 @@ describe('ecosystem.dev.config.js (dev box)', () => {
     expect(app(config, 'episode-api').env).toMatchObject({ NODE_ENV: 'production', HOST: '127.0.0.1', PORT: 3002, DB_POOL_MAX: '10' });
     expect(app(config, 'episode-worker').env.NODE_ENV).not.toBe('production');
   });
+
+  test('when the box .env says production (the installer writes it), the dev worker still does not run as production', () => {
+    const saved = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'production';
+    let config;
+    try { config = loadConfig('ecosystem.dev.config.js', { DB_USER: 'episode_dev', DB_PASSWORD: 'dev' }); } finally { process.env.NODE_ENV = saved; }
+    expect(app(config, 'episode-api').env.NODE_ENV).toBe('production');
+    expect(app(config, 'episode-worker').env.NODE_ENV).toBe('development');
+    const installer = fs.readFileSync(path.join(ROOT, 'scripts/dev-db/install-dev-app.sh'), 'utf8');
+    expect(installer).toMatch(/^\s*echo "NODE_ENV=production"$/m);
+    expect(installer).toContain("grep -vE '^(#|$|DB_|DATABASE_URL|HOST=|NODE_ENV=)'");
+  });
 });
 
 describe('the Deploy workflow leaves a stopped worker stopped (unchanged)', () => {
