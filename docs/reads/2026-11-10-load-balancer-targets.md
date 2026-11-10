@@ -2,6 +2,8 @@
 
 **Status:** read only. Nothing was changed. Task #3785. Measured 2026-11-10, 21:26 to 21:28 UTC, from a laptop session (`aws elbv2`, `aws ec2`, `aws route53`, `curl`) and over SSM on the prod box (`episode-backend`). `origin/main` was `91fbf6533`.
 
+> **Later the same day (2026-11-10, verified 21:38 UTC).** Evoni applied step 1 of the recommendation and deleted the port 80 `/assets/*` rule. The port 80 default action is now a 301 redirect to HTTPS, and no rule on either listener points at `primepisodes-frontend`: its two targets report `unused`. Measured after the change: plain HTTP `/`, `/login`, `/api/v1/assets` and `/assets/*` return 301 to `https://`; plain HTTP `/health` and `/diagnostics` still return 200 from the app through their rules; HTTPS `/`, `/health` and `/api/v1/assets` return 200. Still to do: step 2 for the three remaining port 80 rules, and step 3. Everything below describes the state at 21:26 UTC, before that change.
+
 ## Answer first
 
 - **Can traffic reach `primepisodes-frontend` today? Yes.** Every plain `http://` request to the load balancer that is not exactly `/health`, `/api/` or `/diagnostics` is forwarded to it. That includes `http://primepisodes.com/`, `http://primepisodes.com/login` and `http://primepisodes.com/api/v1/...`.
