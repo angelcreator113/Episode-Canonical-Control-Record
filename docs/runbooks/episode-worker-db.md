@@ -4,7 +4,7 @@ The production `episode-worker` (pm2; `src/workers/start.js`) runs scene generat
 
 **Who does what.** Every step that touches the production database, `.env`, pm2 or Secrets Manager is Evoni's, and each is a separate approval. Agent sessions prepare and review the code only. They never create the role, set or read the password, start the worker or run the preflight in production without Evoni's explicit yes in that session.
 
-**Status.** Code only (this runbook's PR). The worker is **stopped and saved stopped** in production, as before. Nothing below has been done in production yet. The role, the credential file, the preflight and an enabled worker were proved on the dev box on 2026-11-10 (§10).
+**Status (2026-11-10).** In production the role exists, the credential file is in place, the preflight passed and pm2's stale saved entry is gone (§12). The worker is **not started**: it is no longer in pm2's list, and it stays out until Evoni says so. Still to do: the Secrets Manager copy of the password (§5), rotating the old `postgres` password (§7), and any start of the worker (§6 steps 6 and 7). The role, the credential file, the preflight and an enabled worker were proved on the dev box on 2026-11-10 (§10).
 
 The voice worker (`episode-voice-worker`, `docs/runbooks/voice-footage-worker.md`) is a separate process and is not affected.
 
@@ -344,3 +344,28 @@ This differs from §7's steps 3 and 4, which start the worker disabled and stop 
 **Undo.** Steps 1 and 2: the `REVOKE` and `DROP ROLE` lines in the role file's header, run with the same connection as step 1. Step 3: `shred -u ~/.episode-worker-db.env`. Step 5: nothing to put back; the deleted entry held only the old `postgres` password, which no longer works.
 
 **Starting the worker later** is its own approval: `pm2 start ecosystem.config.js --only episode-worker --env production`, which starts it disabled, and separately `GENERATION_WORKER_ENABLED=true` (§6 step 7).
+
+## 12. Done in production (2026-11-10)
+
+Evoni ran §11's five steps on the prod box as `ubuntu`, from a Session Manager session, and reported: role created, password set, credential file at mode 600, preflight PASS, worker deleted from pm2 and saved twice.
+
+Read on the box afterwards by an agent session, 22:51 UTC, with no database query:
+
+```
+dump.pm2: CLEAN
+dump.pm2.bak: CLEAN
+```
+
+| Checked | Result |
+|---|---|
+| pm2's saved files | both hold `episode-api-prod-hotfix` only; both modified 2026-11-10 22:50 UTC |
+| pm2's live list | `episode-api-prod-hotfix online`; no `episode-worker` |
+| Worker processes running | 0 |
+| `/home/ubuntu/.episode-worker-db.env` | `600 ubuntu regular file`, two lines, keys `WORKER_DB_USER` and `WORKER_DB_PASSWORD` |
+| `.env` | no `GENERATION_WORKER_ENABLED` line, no `WORKER_DB_PASSWORD` line |
+| The API | healthy, database connected; `https://primepisodes.com/health` 200 |
+
+The role's existence and the preflight's PASS are as Evoni reported them; the agent session did not query the production database.
+
+A first attempt the same evening changed nothing on the box (both files still STALE, no credential file): the commands had not run as `ubuntu`. In Session Manager, `sudo -iu ubuntu` comes first.
+
