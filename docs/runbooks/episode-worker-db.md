@@ -4,7 +4,7 @@ The production `episode-worker` (pm2; `src/workers/start.js`) runs scene generat
 
 **Who does what.** Every step that touches the production database, `.env`, pm2 or Secrets Manager is Evoni's, and each is a separate approval. Agent sessions prepare and review the code only. They never create the role, set or read the password, start the worker or run the preflight in production without Evoni's explicit yes in that session.
 
-**Status.** Code only (this runbook's PR). The worker is **stopped and saved stopped** in production, as before. Nothing below has been done in production yet.
+**Status.** Code only (this runbook's PR). The worker is **stopped and saved stopped** in production, as before. Nothing below has been done in production yet. The role, the credential file, the preflight and an enabled worker were proved on the dev box on 2026-11-10 (§10).
 
 The voice worker (`episode-voice-worker`, `docs/runbooks/voice-footage-worker.md`) is a separate process and is not affected.
 
@@ -246,3 +246,44 @@ Expect `dump.pm2: STALE` today. Do not inspect the dump any other way (`cat`, `g
   - the deploy script still restarting only a worker that was online;
   - the pool size.
 - **`tests/unit/workers/workerCheckDbAccess.test.js`:** the preflight's settings: the file loader, a stale `WORKER_DB_PASSWORD` refused, `.env` parsed without loading.
+
+## 10. Proved on the dev box (2026-11-10)
+
+Done on `episode-dev-backend` against its local PostgreSQL, a copy of production's `episode_metadata` (`docs/runbooks/dev-environment.md`), at commit `91fbf65`. Nothing was done in production.
+
+**What was set up, and stays on the dev box:**
+- the role, from `scripts/worker/sql/episode-worker-role.sql`, unchanged;
+- a random password generated on the box and never printed, set on the role and written to `/home/ubuntu/.episode-worker-db.env` (`600 ubuntu regular file`).
+
+**The preflight** (`node scripts/worker/check-db-access.js`): `RESULT: PASS (nothing was written)`. Every line was PASS except one WARN, "TEMP on the database: granted (normally through PUBLIC)".
+
+**An enabled worker, run by hand as production runs it.** `NODE_ENV=production`, `WORKER_DB_REQUIRED=true`, `GENERATION_WORKER_ENABLED=true`, the credential file's path, `DB_POOL_MAX=4`; started from an empty folder with a clean environment, so no `.env` and no provider key reached it, and with Redis pointed at a closed port. The pm2 `episode-worker` on the dev box was left as it is (development mode, disabled).
+
+One test job was queued first (`generate_base` for an existing scene set, `max_attempts` 1). The worker's log:
+
+```
+   Environment: production
+   Database login: the worker's own (credential file)
+ [GenWorker] Started  polling every 3000ms, concurrency 1
+ [GenWorker] No stuck jobs found
+ [GenWorker] Processing job 2433a277-...  generate_base
+[SceneGen] Starting base still for: The honey Table (flux-dev, 1024x576)
+ [GenWorker] Job 2433a277-... failed: FAL_KEY not configured
+```
+
+| Checked | Result |
+|---|---|
+| Sessions in `pg_stat_activity` while it ran | 2 as `episode_worker` from `127.0.0.1` |
+| The job afterwards | `failed`, attempts 1, `started_at` and `completed_at` set, error `FAL_KEY not configured` |
+| The scene set afterwards | `generation_status` `failed`, `base_runway_prompt` written |
+| `ai_usage_logs` rows | 1072 before and after: no call was made, nothing was spent |
+| `password authentication failed`, `permission denied`, `Poll error` in the log | 0, 0, 0 |
+| Password-like keys in the worker's `/proc/<pid>/environ` | 0 |
+| A second run, 75 seconds with nothing queued | polled with 0 errors and processed nothing |
+
+**What that covers.** As `episode_worker` the worker ran boot recovery, claimed the job (`SELECT … FOR UPDATE SKIP LOCKED` and the update to `processing`), read the scene set and its brief, wrote the set's status and prompt, read today's image spend, and wrote the job's failure. **What it does not cover:** a job that completes. The dev box has no provider key, so the picture was never made; the completed path's writes (the result, the angle rows, the `ai_usage_logs` row) are covered by `tests/integration/workerRestrictedRole.integration.test.js` with the providers stubbed (§9).
+
+**Dev's data was put back:** the test job was deleted and the scene set's three changed fields were restored from a copy taken before the run. `generation_jobs` is `completed` 94, `failed` 47, as before.
+
+**After a dev data refresh the grants are gone.** `scripts/dev-db/refresh-dev-db.sh` drops and recreates the database and restores without ACLs, so `episode_worker` keeps its login but loses every table grant, and the preflight fails until the `GRANT` lines of the role file are run again on the dev box. The role file as a whole cannot be re-run: it fails on `CREATE ROLE` when the role exists.
+
