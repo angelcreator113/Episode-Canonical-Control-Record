@@ -4,7 +4,7 @@ The production `episode-worker` (pm2; `src/workers/start.js`) runs scene generat
 
 **Who does what.** Every step that touches the production database, `.env`, pm2 or Secrets Manager is Evoni's, and each is a separate approval. Agent sessions prepare and review the code only. They never create the role, set or read the password, start the worker or run the preflight in production without Evoni's explicit yes in that session.
 
-**Status (2026-11-10).** In production the role exists, the credential file is in place, the preflight passed and pm2's stale saved entry is gone (§12). The worker is **not started**: it is no longer in pm2's list, and it stays out until Evoni says so. Still to do: the Secrets Manager copy of the password (§5), rotating the old `postgres` password (§7), and any start of the worker (§6 steps 6 and 7). The role, the credential file, the preflight and an enabled worker were proved on the dev box on 2026-11-10 (§10).
+**Status (2026-11-10).** In production the role exists, the credential file is in place, the preflight passed and pm2's stale saved entry is gone (§12). The worker is **not started**: it is no longer in pm2's list, and it stays out until Evoni says so. The password is also in Secrets Manager (§5). The old `postgres` password in pm2's saved list was not the current one, so no rotation followed (§12). Still to do: any start of the worker (§6 steps 6 and 7). The role, the credential file, the preflight and an enabled worker were proved on the dev box on 2026-11-10 (§10).
 
 The voice worker (`episode-voice-worker`, `docs/runbooks/voice-footage-worker.md`) is a separate process and is not affected.
 
@@ -132,7 +132,7 @@ sudo -u ubuntu -H bash -lc 'install -m 600 /dev/null ~/.episode-worker-db.env &&
 sudo -u ubuntu -H stat -c '%a %U %F' /home/ubuntu/.episode-worker-db.env   # expect: 600 ubuntu regular file
 ```
 
-**The source of truth** is a Secrets Manager entry (for example `episode-metadata/prod/worker-db`), from which Evoni copies the value into the file. Do **not** put `WORKER_DB_PASSWORD` in `.env`. The worker and the preflight both refuse it there.
+**The source of truth** is the Secrets Manager entry `episode-metadata/prod/worker-db` (created by Evoni, 2026-11-10; keys `username` and `password`; rotation off). The file on the box holds the same password; nothing reads the secret at run time, and the box needs no permission to it. Do **not** put `WORKER_DB_PASSWORD` in `.env`. The worker and the preflight both refuse it there.
 
 **Rotation:**
 1. Set the new password with `\password episode_worker` (psql as the admin user).
@@ -315,7 +315,7 @@ Use letters and digits only, 24 or more: the credential file is read as a `.env`
 ( umask 077; read -r -s -p 'episode_worker password: ' P; echo; printf 'WORKER_DB_USER=episode_worker\nWORKER_DB_PASSWORD=%s\n' "$P" > ~/.episode-worker-db.env; chmod 600 ~/.episode-worker-db.env; stat -c '%a %U %F' ~/.episode-worker-db.env )
 ```
 
-Expect `600 ubuntu regular file`. Keep the password in Secrets Manager as well (§5); that is done from the console, not here.
+Expect `600 ubuntu regular file`. The password also goes in Secrets Manager, in `episode-metadata/prod/worker-db` (§5); that is done from the console, not here.
 
 **4. Preflight** (read-only):
 
@@ -368,4 +368,15 @@ dump.pm2.bak: CLEAN
 The role's existence and the preflight's PASS are as Evoni reported them; the agent session did not query the production database.
 
 A first attempt the same evening changed nothing on the box (both files still STALE, no credential file): the commands had not run as `ubuntu`. In Session Manager, `sudo -iu ubuntu` comes first.
+
+**Afterwards, the same evening:**
+
+- **Secrets Manager.** Evoni stored the password as `episode-metadata/prod/worker-db` (keys `username`, `password`; rotation off). Its metadata shows it created 2026-11-10 22:59 UTC with one version. No session read its value.
+- **No rotation of `postgres`** (Evoni's rule: none needed if the stale copy was not the current password). The deleted entry itself could no longer be compared, since both saves had overwritten it. What was checked, with nothing printed:
+  - the worker's error log holds 58,660 lines of `password authentication failed for user "postgres"`, from 2026-10-10 to 2026-11-05 13:38 UTC, when it was stopped;
+  - `~/.episode-migrate.env` has not changed since 2026-10-10, and its login worked for the 2026-11-08 deploy's migration and for step 1 above;
+  - RDS reports no master credential reset in the 14 days before 2026-11-10.
+
+  So the copy in pm2's saved list was already being refused while the current password was in force.
+- **Two older pm2 dump copies stay on the box:** `~/.pm2/dump.pm2.bak-0624-preFD38` and `~/capture-20260621-prereconcile/dump.pm2.fd45-evidence-20260704`. Each holds a worker `postgres` password that differs from the current one (compared by hash, nothing printed). Both are cited as preserved evidence in `docs/audit/` (`Audit_Handoff_Delta_2026-07-04_id3_Window.md`, `Audit_Handoff_Delta_2026-07-06_FD38_save.md`, `F-Deploy-1_Fix_Plan_v1.20.md`, `F-Deploy-1_Fix_Plan_v1.21.md`), so they were not deleted. §7's cleanliness check does not look at them.
 
