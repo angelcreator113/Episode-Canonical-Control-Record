@@ -27,8 +27,10 @@ name: Deploy to Development
 #     database, swaps trees; start; verify (:3002 on 127.0.0.1 only, /health
 #     healthy + connected, an authenticated route refuses without a token);
 #     pm2 save. A failed verify puts the previous tree back and restarts it.
-#     The deploy never touches nginx: the dev app is local-only until dev
-#     auth exists (runbook, "Reopening the dev app").
+#     The deploy never touches nginx. Since 2026-11-10 (Task #3781) nginx
+#     serves frontend/dist from the app tree and proxies /api/ and /health
+#     to 127.0.0.1:3002 (runbook, "The public dev site"); verify also needs
+#     /health to report "environment":"production".
 #     --only episode-api,episode-worker stays as config hygiene (RF-1).
 #
 # TRIGGER POSTURE:
