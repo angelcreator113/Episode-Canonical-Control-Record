@@ -28,7 +28,10 @@ const models = require('../../src/models');
 const slotsMigration = require('../../src/migrations/20261001230000-create-season-slots');
 const specialsMigration = require('../../src/migrations/20261026150000-create-season-specials');
 const { seedArc } = require('../../src/services/arcProgressionService');
-const { ensureSeasonSlots } = require('../../src/services/seasonSlotService');
+const slots = require('../../src/services/seasonSlotService');
+const full = require('../../src/services/seasonFullSpecials');
+const lockTrace = require('../helpers/lockTrace');
+const { ensureSeasonSlots } = slots;
 
 const { sequelize } = models;
 
@@ -63,7 +66,15 @@ const addDays = (iso, n) => new Date(Date.parse(`${iso}T00:00:00Z`) + n * 864000
        FROM season_specials WHERE arc_id = :arcId AND deleted_at IS NULL AND kind = 'bonus' ORDER BY created_at`, { arcId });
   const choice = async (show, ev) => (await auth(request(app).get(`/api/v1/world/${show}/season/full/events/${ev}`))).body;
   const make = (show, ev) => auth(request(app).post(`/api/v1/world/${show}/season/full/events/${ev}/special`)).send({});
-  const swap = (show, ev, slot_id) => auth(request(app).post(`/api/v1/world/${show}/season/full/events/${ev}/swap`)).send({ slot_id });
+  // A swap over a pencilled event needs that pencil named (Evoni, 2026-11-10;
+  // the same rule as Place). swapRaw sends exactly the body given; swap is
+  // what the panel does: ask, then confirm the pencils the server listed.
+  const swapRaw = (show, ev, body) => auth(request(app).post(`/api/v1/world/${show}/season/full/events/${ev}/swap`)).send(body);
+  const swap = async (show, ev, slot_id) => {
+    const asked = await swapRaw(show, ev, { slot_id });
+    if (asked.status !== 409 || asked.body.code !== 'SEASON_PLACE_NEEDS_CONFIRMATION') return asked;
+    return swapRaw(show, ev, { slot_id, confirm_pencils: asked.body.affected_pencils.map((p) => ({ slot_id: p.slot_id, event_id: p.event.id })) });
+  };
   const roadmap = async (show) => (await auth(request(app).get(`/api/v1/world/${show}/season/roadmap`))).body.roadmap;
   const startEpisode = (show, eventId) => auth(request(app).post(`/api/v1/world/${show}/events/${eventId}/generate-episode`)).send({ draft_script: false });
   const context = async (show, ev) => (await auth(request(app).get(`/api/v1/world/${show}/season/event/${ev}`))).body.context;
@@ -196,6 +207,261 @@ const addDays = (iso, n) => new Date(Date.parse(`${iso}T00:00:00Z`) + n * 864000
     expect((await live(arcId)).map((s) => s.after_slot_number)).toEqual([4, 4]);
     // The weekly slots are untouched.
     expect((await slot(arcId, 5)).event_id).toBe(events[5]);
+  });
+
+  // ── The pencil a swap replaces is named, and checked under the lock ─────
+  describe('a swap over a pencilled event asks first (the same rule as Place)', () => {
+    // Through the service, in the route's response shape: the app allows 60
+    // writes a minute per IP, and this file already makes most of them. The
+    // route itself is covered by the last test of this block and by the two
+    // route tests after it.
+    const viaService = async (show, ev, body) => {
+      try {
+        const data = await full.swapIntoSlot(sequelize, show, ev, body.slot_id, { confirmPencils: body.confirm_pencils });
+        return { status: 200, body: { success: true, data } };
+      } catch (err) {
+        if (!err.status || !err.code) throw err;
+        return { status: err.status, body: { success: false, error: err.message, code: err.code, ...(err.details || {}) } };
+      }
+    };
+    const quiet = { twoParter: false, schedule: null };
+    const snapshotOf = async (arcId) => JSON.stringify({
+      slots: await rows('SELECT slot_number, event_id, episode_id, locked_at FROM season_slots WHERE arc_id = :arcId ORDER BY slot_number', { arcId }),
+      specials: await rows('SELECT id, kind, event_id, episode_id, after_slot_number, deleted_at IS NULL AS live FROM season_specials WHERE arc_id = :arcId ORDER BY id', { arcId }),
+    });
+
+    test('without a confirmation: 409 that names the slot and its pencil; nothing is written', async () => {
+      const { show, arcId, events } = await fullSeason(quiet);
+      const ev = await addEvent(show, 'Rooftop Launch', '2026-03-27');
+      const e5 = await slotId(arcId, 5);
+      const before = await snapshotOf(arcId);
+
+      const res = await viaService(show, ev, { slot_id: e5 });
+
+      expect(res.status).toBe(409);
+      expect(res.body).toMatchObject({
+        code: 'SEASON_PLACE_NEEDS_CONFIRMATION', slot_id: e5, slot_number: 5,
+        incoming_event: { id: ev, name: 'Rooftop Launch' },
+        affected_pencils: [{ slot_id: e5, slot_number: 5, event: { id: events[5], name: 'Week 5 event' }, change: 'replaced' }],
+      });
+      expect(res.body.error).toContain('Week 5 event');
+      expect(await snapshotOf(arcId)).toBe(before);
+    });
+
+    test('a flag is not a confirmation (400); naming another event is stale (409); nothing is written', async () => {
+      const { show, arcId, events } = await fullSeason(quiet);
+      const ev = await addEvent(show, 'Rooftop Launch', '2026-03-27');
+      const e5 = await slotId(arcId, 5);
+      const before = await snapshotOf(arcId);
+
+      const flag = await viaService(show, ev, { slot_id: e5, confirm_pencils: true, confirm: true, force: true });
+      expect(flag.status).toBe(400);
+      expect(flag.body.code).toBe('SEASON_PLACE_INVALID');
+
+      const stale = await viaService(show, ev, { slot_id: e5, confirm_pencils: [{ slot_id: e5, event_id: events[6] }] });
+      expect(stale.status).toBe(409);
+      expect(stale.body.code).toBe('SEASON_SLOT_CHANGED');
+      expect(stale.body.affected_pencils).toEqual([{ slot_id: e5, slot_number: 5, event: { id: events[5], name: 'Week 5 event' }, change: 'replaced' }]);
+
+      const wrongSlot = await viaService(show, ev, { slot_id: e5, confirm_pencils: [{ slot_id: await slotId(arcId, 6), event_id: events[5] }] });
+      expect(wrongSlot.status).toBe(409);
+      expect(wrongSlot.body.code).toBe('SEASON_SLOT_CHANGED');
+      expect(await snapshotOf(arcId)).toBe(before);
+    });
+
+    test('the pencil changed after the dialog: refused, the newer pencil kept, and no special made for either event', async () => {
+      const { show, arcId, events } = await fullSeason(quiet);
+      const ev = await addEvent(show, 'Rooftop Launch', '2026-03-27');
+      const newer = await addEvent(show, 'Pencilled since', '2026-04-01');
+      const e5 = await slotId(arcId, 5);
+      const asked = await viaService(show, ev, { slot_id: e5 });
+      const confirm_pencils = asked.body.affected_pencils.map((p) => ({ slot_id: p.slot_id, event_id: p.event.id }));
+      // Someone re-pencils E5 while the dialog is open.
+      await slots.pencilEvent(sequelize, show, e5, newer);
+      const before = await snapshotOf(arcId);
+
+      const res = await viaService(show, ev, { slot_id: e5, confirm_pencils });
+
+      expect(res.status).toBe(409);
+      expect(res.body.code).toBe('SEASON_SLOT_CHANGED');
+      expect(res.body.affected_pencils[0].event).toEqual({ id: newer, name: 'Pencilled since' });
+      expect((await slot(arcId, 5)).event_id).toBe(newer);
+      expect(await live(arcId)).toEqual([]);
+      expect(await snapshotOf(arcId)).toBe(before);
+      expect(events[5]).not.toBe(newer);
+    });
+
+    test('the pencil was cleared after the dialog: still refused; an empty slot needs no confirmation', async () => {
+      const { show, arcId, events } = await fullSeason(quiet);
+      const ev = await addEvent(show, 'Rooftop Launch', '2026-03-27');
+      const e5 = await slotId(arcId, 5);
+      await slots.pencilEvent(sequelize, show, e5, null);
+
+      const stale = await viaService(show, ev, { slot_id: e5, confirm_pencils: [{ slot_id: e5, event_id: events[5] }] });
+      expect(stale.status).toBe(409);
+      expect(stale.body.code).toBe('SEASON_SLOT_CHANGED');
+      expect((await slot(arcId, 5)).event_id).toBeNull();
+
+      const plain = await viaService(show, ev, { slot_id: e5 });
+      expect(plain.status).toBe(200);
+      expect(plain.body.data).toMatchObject({ slot_number: 5, replaced: null });
+      expect((await slot(arcId, 5)).event_id).toBe(ev);
+    });
+
+    test('a slot that points to a deleted event: an integrity refusal, not overwritten, confirmation or not', async () => {
+      const { show, arcId, events } = await fullSeason(quiet);
+      const ev = await addEvent(show, 'Rooftop Launch', '2026-03-27');
+      const e5 = await slotId(arcId, 5);
+      await run('UPDATE world_events SET deleted_at = NOW() WHERE id = :id', { id: events[5] });
+      const before = await snapshotOf(arcId);
+
+      for (const body of [{ slot_id: e5 }, { slot_id: e5, confirm_pencils: [{ slot_id: e5, event_id: events[5] }] }]) {
+        const res = await viaService(show, ev, body);
+        expect(res.status).toBe(409);
+        expect(res.body).toMatchObject({ code: 'SEASON_SLOT_EVENT_ORPHANED', slot_id: e5, slot_number: 5 });
+      }
+      expect(await snapshotOf(arcId)).toBe(before);
+    });
+
+    test('confirmed by name: the swap and the handoff happen together, and the replaced event is the one handed the special', async () => {
+      const { show, arcId, events } = await fullSeason(quiet);
+      const ev = await addEvent(show, 'Rooftop Launch', '2026-03-27');
+      const e5 = await slotId(arcId, 5);
+
+      const res = await viaService(show, ev, { slot_id: e5, confirm_pencils: [{ slot_id: e5, event_id: events[5] }] });
+
+      expect(res.status).toBe(200);
+      expect(res.body.data).toMatchObject({ slot_number: 5, event: { id: ev }, replaced: { id: events[5], name: 'Week 5 event', special: { after_slot_number: 5 } } });
+      expect((await slot(arcId, 5)).event_id).toBe(ev);
+      expect(await live(arcId)).toEqual([expect.objectContaining({ event_id: events[5], after_slot_number: 5 })]);
+    });
+
+    test('Swap back names the pencil the swap put there; if that has changed, it is refused and nothing is overwritten', async () => {
+      const { show, arcId, events } = await fullSeason(quiet);
+      const ev = await addEvent(show, 'Rooftop Launch', '2026-03-27');
+      const other = await addEvent(show, 'Pencilled since', '2026-04-01');
+      const e5 = await slotId(arcId, 5);
+      const done = await viaService(show, ev, { slot_id: e5, confirm_pencils: [{ slot_id: e5, event_id: events[5] }] });
+      expect(done.status).toBe(200);
+      // What the panel's "Swap back" sends: the replaced event into the same slot, naming this event as the pencil.
+      const backBody = { slot_id: done.body.data.slot_id, confirm_pencils: [{ slot_id: done.body.data.slot_id, event_id: done.body.data.event.id }] };
+
+      // The slot is re-pencilled before Swap back is pressed.
+      await slots.pencilEvent(sequelize, show, e5, other);
+      const before = await snapshotOf(arcId);
+      const stale = await viaService(show, events[5], backBody);
+      expect(stale.status).toBe(409);
+      expect(stale.body.code).toBe('SEASON_SLOT_CHANGED');
+      expect(await snapshotOf(arcId)).toBe(before);
+
+      // Put back as the swap left it: Swap back then works, with the same body.
+      await slots.pencilEvent(sequelize, show, e5, ev);
+      const back = await viaService(show, events[5], backBody);
+      expect(back.status).toBe(200);
+      expect((await slot(arcId, 5)).event_id).toBe(events[5]);
+    });
+
+    test("the started-episode branch: the special's episode needs the pencil named too, and a stale name writes nothing", async () => {
+      const { show, arcId, events } = await fullSeason(quiet);
+      // A special whose episode has started, as Start Episode leaves it on a
+      // full season (built directly: the Start route is rate-limited, and the
+      // test above this block covers the real Start, then the swap).
+      const ev = await addEvent(show, 'Surprise Premiere', '2026-03-27');
+      const episodeId = uuid();
+      await run(`INSERT INTO episodes (id, show_id, title, episode_number, status, created_at, updated_at)
+                 VALUES (:episodeId, :show, 'Surprise Premiere', 40, 'draft', NOW(), NOW())`, { episodeId, show });
+      await run(`INSERT INTO episode_briefs (id, episode_id, show_id, event_id, status, created_at, updated_at)
+                 VALUES (:id, :episodeId, :show, :ev, 'draft', NOW(), NOW())`, { id: uuid(), episodeId, show, ev });
+      await run("UPDATE world_events SET used_in_episode_id = :episodeId, status = 'used' WHERE id = :ev", { episodeId, ev });
+      await run(`INSERT INTO season_specials (id, show_id, arc_id, kind, event_id, episode_id, after_slot_number, locked_at, created_at, updated_at)
+                 VALUES (:id, :show, :arcId, 'bonus', :ev, :episodeId, 4, NOW(), NOW(), NOW())`, { id: uuid(), show, arcId, ev, episodeId });
+      const e7 = await slotId(arcId, 7);
+      const before = await snapshotOf(arcId);
+      const [ctxBefore] = await rows('SELECT season_context::text AS c, air_date FROM episodes WHERE id = :id', { id: episodeId });
+
+      const asked = await viaService(show, ev, { slot_id: e7 });
+      expect(asked.status).toBe(409);
+      expect(asked.body.code).toBe('SEASON_PLACE_NEEDS_CONFIRMATION');
+      expect(asked.body.affected_pencils).toEqual([{ slot_id: e7, slot_number: 7, event: { id: events[7], name: 'Week 7 event' }, change: 'replaced' }]);
+      const stale = await viaService(show, ev, { slot_id: e7, confirm_pencils: [{ slot_id: e7, event_id: events[8] }] });
+      expect(stale.status).toBe(409);
+      expect(stale.body.code).toBe('SEASON_SLOT_CHANGED');
+      expect(await snapshotOf(arcId)).toBe(before);
+      expect((await rows('SELECT season_context::text AS c, air_date FROM episodes WHERE id = :id', { id: episodeId }))[0]).toEqual(ctxBefore);
+
+      const res = await viaService(show, ev, { slot_id: e7, confirm_pencils: [{ slot_id: e7, event_id: events[7] }] });
+      expect(res.status).toBe(200);
+      const row = await slot(arcId, 7);
+      expect(row).toMatchObject({ event_id: ev, episode_id: episodeId });
+      expect(row.locked_at).not.toBeNull();
+      // The handoff: the same special row, now E7's replaced event's, with no episode.
+      expect(await live(arcId)).toEqual([expect.objectContaining({ event_id: events[7], episode_id: null })]);
+    });
+
+    test('a started slot and a two-parter still refuse, whatever is confirmed', async () => {
+      const { show, arcId, events } = await fullSeason({ schedule: null });
+      const ev = await addEvent(show, 'Rooftop Launch', '2026-03-27');
+      const e2 = await slotId(arcId, 2);
+      const e10 = await slotId(arcId, 10);
+      // E2 has started (built directly; the Start route is rate-limited). E10 is Part 1 of the two-parter.
+      const startedEpisode = uuid();
+      await run(`INSERT INTO episodes (id, show_id, title, episode_number, status, created_at, updated_at)
+                 VALUES (:id, :show, 'Started in E2', 2, 'draft', NOW(), NOW())`, { id: startedEpisode, show });
+      await run('UPDATE season_slots SET episode_id = :ep, locked_at = NOW() WHERE id = :e2', { ep: startedEpisode, e2 });
+      const before = await snapshotOf(arcId);
+      for (const [id, n] of [[e2, 2], [e10, 10]]) {
+        const res = await viaService(show, ev, { slot_id: id, confirm_pencils: [{ slot_id: id, event_id: events[n] }] });
+        expect(res.status).toBe(409);
+        expect(res.body.code).toBe('SEASON_SWAP_REFUSED');
+      }
+      expect(await snapshotOf(arcId)).toBe(before);
+    });
+  
+    test('a pencil committed while the swap waits: the confirmation is checked under the slot lock, and the newer pencil is kept', async () => {
+      const { show, arcId, events } = await fullSeason(quiet);
+      const ev = await addEvent(show, 'Rooftop Launch', '2026-03-27');
+      const raced = await addEvent(show, 'Raced in', '2026-04-01');
+      const e5 = await slotId(arcId, 5);
+      const before = await live(arcId);
+      const trace = lockTrace.install(sequelize);
+      // The swap is held at its event lock, before it reads the slot under lock.
+      const g = trace.gate((r) => r.kind === 'lock' && r.table === 'world_events');
+      let res;
+      let pencil;
+      try {
+        const swapping = viaService(show, ev, { slot_id: e5, confirm_pencils: [{ slot_id: e5, event_id: events[5] }] });
+        await Promise.race([g.reached, swapping]);
+        pencil = await slots.pencilEvent(sequelize, show, e5, raced).then(() => 'ok', (e) => e.code || 'failed');
+        g.open();
+        res = await swapping;
+      } finally {
+        g.open();
+        trace.uninstall();
+      }
+      expect(pencil).toBe('ok');
+      expect(res.status).toBe(409);
+      expect(res.body.code).toBe('SEASON_SLOT_CHANGED');
+      expect((await slot(arcId, 5)).event_id).toBe(raced);
+      expect(await live(arcId)).toEqual(before);
+    });
+
+    test('through the route: 409 with the pencil to confirm, a flag refused, then the named pencil swaps it in', async () => {
+      const { show, arcId, events } = await fullSeason(quiet);
+      const ev = await addEvent(show, 'Rooftop Launch', '2026-03-27');
+      const e5 = await slotId(arcId, 5);
+      const asked = await swapRaw(show, ev, { slot_id: e5 });
+      expect(asked.status).toBe(409);
+      expect(asked.body).toMatchObject({
+        success: false, code: 'SEASON_PLACE_NEEDS_CONFIRMATION', slot_number: 5,
+        affected_pencils: [{ slot_id: e5, slot_number: 5, event: { id: events[5], name: 'Week 5 event' }, change: 'replaced' }],
+      });
+      const flag = await swapRaw(show, ev, { slot_id: e5, confirm_pencils: true });
+      expect(flag.status).toBe(400);
+      expect((await slot(arcId, 5)).event_id).toBe(events[5]);
+      const done = await swapRaw(show, ev, { slot_id: e5, confirm_pencils: [{ slot_id: e5, event_id: events[5] }] });
+      expect(done.status).toBe(200);
+      expect((await slot(arcId, 5)).event_id).toBe(ev);
+    });
   });
 
   test('Swap it into E5: E5\'s event becomes a special at its own story position, and Swap back undoes it', async () => {
