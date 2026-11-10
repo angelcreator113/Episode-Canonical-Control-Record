@@ -312,9 +312,7 @@ Use letters and digits only, 24 or more: the credential file is read as a `.env`
 **3. Write the credential file** (the same password once more, not shown):
 
 ```bash
-( umask 077; read -r -s -p 'episode_worker password: ' P; echo; printf 'WORKER_DB_USER=episode_worker
-WORKER_DB_PASSWORD=%s
-' "$P" > ~/.episode-worker-db.env; chmod 600 ~/.episode-worker-db.env; stat -c '%a %U %F' ~/.episode-worker-db.env )
+( umask 077; read -r -s -p 'episode_worker password: ' P; echo; printf 'WORKER_DB_USER=episode_worker\nWORKER_DB_PASSWORD=%s\n' "$P" > ~/.episode-worker-db.env; chmod 600 ~/.episode-worker-db.env; stat -c '%a %U %F' ~/.episode-worker-db.env )
 ```
 
 Expect `600 ubuntu regular file`. Keep the password in Secrets Manager as well (§5); that is done from the console, not here.
