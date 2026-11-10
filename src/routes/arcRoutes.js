@@ -394,14 +394,18 @@ router.put('/world/:showId/season/slots/:slotId/event', requireAuth, async (req,
 });
 
 // PUT /world/:showId/season/slots/:slotId/episode — place an existing episode (§8(ff) Q4)
-// Body: { episode_id }. Only an open slot; the slot then locks to the episode (A7).
+// Body: { episode_id, confirm_pencils? }. Only an open slot; the slot then locks to the
+// episode (A7). A pencilled event it would replace or clear needs confirm_pencils:
+// [{ slot_id, event_id }] naming each one (409 SEASON_PLACE_NEEDS_CONFIRMATION lists them;
+// 409 SEASON_SLOT_CHANGED when they are no longer as confirmed). Nothing is written on a 409.
 router.put('/world/:showId/season/slots/:slotId/episode', requireAuth, async (req, res) => {
   try {
     const episodeId = req.body?.episode_id;
     if (!episodeId) return res.status(400).json({ error: 'episode_id is required' });
     const models = require('../models');
     const { placeEpisode } = require('../services/seasonSlotService');
-    const result = await placeEpisode(models.sequelize, req.params.showId, req.params.slotId, episodeId);
+    const result = await placeEpisode(models.sequelize, req.params.showId, req.params.slotId, episodeId,
+      { confirmPencils: req.body?.confirm_pencils });
     return res.json({ success: true, ...result });
   } catch (err) {
     return sendSlotError(res, err, 'place episode');

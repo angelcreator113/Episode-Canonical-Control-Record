@@ -4672,6 +4672,18 @@ through the existing source field, after checking its consumers." The K-A
 rulings narrow A1.2-SPEC-v5's A1-e for weekly-slot episodes (see the
 amendments file), and K-B states the scope of its D-22.
 
+**(jj) Place asks before it changes a pencilled event (Evoni, 2026-11-10).** Ruling: "Place must require explicit confirmation before replacing a pencilled event, including when the incoming episode references the same event", and "whenever Place would replace a pencilled event in the target slot OR clear the incoming episode's event pencil from another slot."
+
+As built (`seasonSlotService.placeEpisodeIn`, the one Place for the Roadmap's "Place in…", the season setup's Save and the specials' move):
+
+- **Two pencils can change.** The target slot's own pencil is replaced by the episode's event, or removed when the episode has none. The episode's event pencilled in another slot of the season is cleared there, because the event goes with its episode.
+- **The confirmation names each pencil.** `PUT /world/:showId/season/slots/:slotId/episode` takes `confirm_pencils: [{ slot_id, event_id }]`, one entry per pencil. A yes/no flag is refused (400 `SEASON_PLACE_INVALID`).
+- **Asked first.** With a pencil affected and none named: 409 `SEASON_PLACE_NEEDS_CONFIRMATION`, listing every affected slot, its pencilled event and the change (`affected_pencils`). The Roadmap shows them in its confirm dialog (`useRoadmapControls` `place`) and sends them back only on a yes.
+- **Checked under the locks.** The episode, then the target slot and the slots holding the episode's event (together, in id order), are locked before the check. The list must be exactly the pencils as they are then. Changed, cleared, missing or extra: 409 `SEASON_SLOT_CHANGED`. Nothing is written, nothing is applied in part, and nothing is retried.
+- **Not a pencil, not overwritten.** A slot that points to a deleted or missing event is refused (409 `SEASON_SLOT_EVENT_ORPHANED`). A started slot that shares the episode's event keeps it (409 `SEASON_SLOT_LOCKED`); a two-parter's event is not taken from its slot (409 `SEASON_SLOT_TWO_PART`).
+- **The setup's Save** (`seasonSetupService.applyPlacement`) passes the event a slot was reviewed with (`expected_event_id`) as that slot's confirmation, and an item's own `confirm_pencils` for another slot. Without them it is refused whole, and the message sends the person to the Roadmap, which asks.
+- **Unchanged:** filmed episodes, started or accepted slots, episodes already in a slot, and slot intentions. Who may place (ADMIN-only endpoints) stays its own piece of work.
+
 ---
 
 ## 9. Owed before enforcement
