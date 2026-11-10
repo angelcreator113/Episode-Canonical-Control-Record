@@ -149,7 +149,9 @@ certbot renew --dry-run --cert-name dev.primepisodes.com
 
 The prod box's nginx had a `dev.primepisodes.com` site in `/etc/nginx/sites-enabled/episode`. Evoni had it retired on 2026-11-10: the file was moved, whole, to `/etc/nginx/sites-available/episode.retired-dev-20261110T212130Z`, and nginx there no longer listens on 443.
 
-That file also held the port 80 catch-all that answers 404 to any other host name. It is kept as `/etc/nginx/sites-enabled/default-404`, and it must stay: the load balancer's `primepisodes-frontend` target group points at the prod box's port 80 with a health check on `/`, and is unhealthy because of that 404. Without the catch-all, `episode-prod` would answer `/` with 200 from `/var/www/html`, the target would turn healthy, and the load balancer could send production traffic to nginx and not to the app on port 3000.
+That file also held the port 80 catch-all that answers 404 to any other host name. It is kept as `/etc/nginx/sites-enabled/default-404`. Keep it: the prod box's security group allows port 80 from anywhere, and without the catch-all `episode-prod` would become the default site and answer every host name from `/var/www/html`, a frontend build from September 2026.
+
+When the file was retired, the load balancer still had a `primepisodes-frontend` target group pointing at this port, unhealthy because of that 404. Evoni removed the group the same day and made the load balancer's port 80 listener redirect to HTTPS (`docs/reads/2026-11-10-load-balancer-targets.md`), so the load balancer no longer sends anything to the prod box's port 80.
 
 ## Refresh workflow (Task #3717)
 
