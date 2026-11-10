@@ -263,6 +263,32 @@ const KNOWN = [
     expect(seqs.flat()).toContain('S:season_slots:update');
   });
 
+  test("placeEpisode with the episode's event pencilled in another slot: the episode, then both slots together", async () => {
+    // Place pencil protection (2026-11-10): the target and the slot that
+    // holds the episode's event are locked in one statement, in id order.
+    const { show, arcId } = await seedShow();
+    const own = await addEvent(show, 'Trace Place Holder');
+    const episodeId = await addEpisode(show);
+    await run('UPDATE episode_briefs SET event_id = :own WHERE episode_id = :episodeId', { own, episodeId });
+    const holder = await slotId(arcId, 12);
+    await slots.pencilEvent(sequelize, show, holder, own);
+    const target = await slotId(arcId, 2);
+    const seqs = expectCanonical(await traced(() => slots.placeEpisode(sequelize, show, target, episodeId,
+      { confirmPencils: [{ slot_id: holder, event_id: own }] })), 'placeEpisode (holder)');
+    const flat = seqs.flat();
+    const locks = flat.filter((x) => !x.endsWith(':write'));
+    // The episode lock comes first, and every slot lock after it: the new
+    // statement (target and holder together), then the target's own lock.
+    // Without the new statement there is one slot lock, not two.
+    expect(locks[0]).toMatch(/^E:episodes:/);
+    expect(locks.slice(1)).toEqual(['S:season_slots:update', 'S:season_slots:update']);
+    expect(flat.some((x) => x.startsWith('W:') && !x.endsWith(':write'))).toBe(false);
+    const [h] = await rows('SELECT event_id FROM season_slots WHERE id = :holder', { holder });
+    const [t] = await rows('SELECT event_id, episode_id FROM season_slots WHERE id = :target', { target });
+    expect(h.event_id).toBeNull();
+    expect(t).toEqual({ event_id: own, episode_id: episodeId });
+  });
+
   test('clip attach: the episode FOR SHARE, then the clip', async () => {
     const { show } = await seedShow();
     const episodeId = await addEpisode(show);

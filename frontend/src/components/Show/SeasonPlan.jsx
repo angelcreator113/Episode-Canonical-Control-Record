@@ -640,11 +640,48 @@ export function useRoadmapControls({ roadmap, api, showId, onChanged, setToast }
     const eventId = value === '__clear__' ? null : value;
     save(slot.id, 'event', { event_id: eventId }, eventId ? `Pencilled into ${slot.label}` : `${slot.label} cleared`);
   };
-  const place = (episode, slotId) => {
+  // Placing can replace the slot's pencilled event and clear the episode's
+  // own event from another slot (Evoni, 2026-11-10). The server lists every
+  // pencil it would change (409 SEASON_PLACE_NEEDS_CONFIRMATION); they are
+  // shown, and only a yes sends them back by name. A pencil that changed
+  // since (409 SEASON_SLOT_CHANGED) is said in the page and never sent again.
+  const place = async (episode, slotId) => {
     if (!slotId) return;
     const slot = openSlots.find((sl) => sl.id === slotId);
-    if (!window.confirm(`Place "${episode.title || 'this episode'}" in ${slot?.label}? The slot then locks to it.`)) return;
-    save(slotId, 'episode', { episode_id: episode.id }, `Placed in ${slot?.label}`);
+    const title = episode.title || 'this episode';
+    if (!window.confirm(`Place "${title}" in ${slot?.label}? The slot then locks to it.`)) return;
+    const url = `/api/v1/world/${showId}/season/slots/${slotId}/episode`;
+    setBusySlot(slotId); setSlotError(null);
+    try {
+      try {
+        await api.put(url, { episode_id: episode.id });
+      } catch (err) {
+        const asked = err.response?.data;
+        const pencils = asked?.code === 'SEASON_PLACE_NEEDS_CONFIRMATION' && Array.isArray(asked.affected_pencils) ? asked.affected_pencils : [];
+        if (!pencils.length) throw err;
+        const labelOf = (p) => allSlots.find((sl) => sl.id === p.slot_id)?.label || `E${p.slot_number}`;
+        const own = asked.episode_event;
+        const lines = pencils.map((p) => {
+          const name = `"${p.event?.name || 'its event'}"`;
+          if (p.change === 'cleared') return `${labelOf(p)}: ${name} is cleared from this slot (it goes with the episode to ${slot?.label}).`;
+          if (own && own.id === p.event?.id) return `${labelOf(p)}: ${name} stays, and is now locked to this episode.`;
+          return `${labelOf(p)}: ${name} is replaced by ${own ? `"${own.name || 'the episode\'s event'}", the episode's own event` : 'nothing (this episode has no event)'}.`;
+        });
+        if (!window.confirm(`Placing "${title}" in ${slot?.label} changes pencilled events:\n\n${lines.join('\n')}\n\nMake these changes?`)) {
+          setBusySlot(null);
+          return;
+        }
+        await api.put(url, { episode_id: episode.id, confirm_pencils: pencils.map((p) => ({ slot_id: p.slot_id, event_id: p.event?.id })) });
+      }
+      if (setToast) setToast(`Placed in ${slot?.label}`);
+      if (onChanged) await onChanged();
+    } catch (err) {
+      console.error('[SeasonRoadmap] episode save failed:', err);
+      setSlotError({ where: 'episode', slotId, text: err.response?.data?.error || err.message || 'That was not saved.' });
+      // The pencils are not as they were shown: show the season as it is now.
+      if (err.response?.data?.code === 'SEASON_SLOT_CHANGED' && onChanged) await onChanged();
+    }
+    setBusySlot(null);
   };
   // Opening a slot: on a phone the panel opens as a sheet; between a phone
   // and a desktop, where it sits above the parts, it scrolls into view.
