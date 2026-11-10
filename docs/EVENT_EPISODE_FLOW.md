@@ -4684,6 +4684,19 @@ As built (`seasonSlotService.placeEpisodeIn`, the one Place for the Roadmap's "P
 - **The setup's Save** (`seasonSetupService.applyPlacement`) passes the event a slot was reviewed with (`expected_event_id`) as that slot's confirmation, and an item's own `confirm_pencils` for another slot. Without them it is refused whole, and the message sends the person to the Roadmap, which asks.
 - **Unchanged:** filmed episodes, started or accepted slots, episodes already in a slot, and slot intentions. Who may place (ADMIN-only endpoints) stays its own piece of work.
 
+**(kk) The specials' swap asks before it replaces a pencilled event (Evoni, 2026-11-10).** Ruling: "Bring `swapIntoSlot` under the same exact-pencil confirmation and stale-state protection as Place", with the existing event handoff preserved.
+
+As built (`seasonFullSpecials.swapIntoSlot`, behind the Event Package's "full season" panel, `FullSeasonChoice`):
+
+- **The handoff is unchanged.** The event pencilled in the weekly slot is not discarded: it becomes a bonus special at its own story position. It takes the incoming event's special row when there is one, or a new row. With no event in the slot, the incoming event's own special is set aside.
+- **The same confirmation as Place, not a second one.** `POST /world/:showId/season/full/events/:eventId/swap` takes `confirm_pencils: [{ slot_id, event_id }]`, read by the same `readConfirmedPencils` and compared by the same `pencilConfirmation` (`seasonSlotService`). None named with a pencil in the slot: 409 `SEASON_PLACE_NEEDS_CONFIRMATION` listing it. Not the pencil that is there: 409 `SEASON_SLOT_CHANGED`. A flag: 400 `SEASON_PLACE_INVALID`. An empty slot needs none.
+- **Checked under the slot lock.** After the episode, the event and the special (the canonical order), the target slot is locked with `lockSlot` and read again. The refusals (started, two-parter, already its event) and the event handed to a special come from that locked row, not from the unlocked picture the page was built from.
+- **Not a pencil, not overwritten.** A slot that points to a deleted or missing event is refused (409 `SEASON_SLOT_EVENT_ORPHANED`).
+- **A started special's episode** moves into the slot through `placeEpisodeIn` itself, under Place's own rules. The slot must end with the swapped event, or nothing is written.
+- **Atomic.** The slot change and the handoff are one transaction: a refusal at any point writes neither.
+- **Swap back** (the toast's undo) sends the pencil the swap just put in the slot. If the slot has changed since, it is refused like any stale confirmation.
+- **The panel** (`lib/seasonFull.js` `swapRequest`) shows the slot and its pencilled event in a confirm dialog and sends them back only on a yes. A stale refusal is shown, the choice is read again, and nothing is sent again.
+
 ---
 
 ## 9. Owed before enforcement

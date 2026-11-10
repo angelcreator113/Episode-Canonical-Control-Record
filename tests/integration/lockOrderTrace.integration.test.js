@@ -243,6 +243,32 @@ const KNOWN = [
     expectCanonical(await traced(() => full.swapIntoSlot(sequelize, show, swapEv, target)), 'swapIntoSlot');
   });
 
+  test('swapIntoSlot over a pencilled event, confirmed by name: the event, the special, then the slot', async () => {
+    // Specials pencil protection (2026-11-10): the target slot is locked and
+    // read again before the pencil in it is handed to a special.
+    const { show, arcId } = await seedShow();
+    const pencilled = await addEvent(show, 'Trace Pencilled');
+    const target = await slotId(arcId, 14);
+    await slots.pencilEvent(sequelize, show, target, pencilled);
+    const incoming = await addEvent(show, 'Trace Incoming');
+    await specials.createSpecial(sequelize, show, { kind: 'bonus', event_id: incoming, after_slot_number: 9 });
+    const seqs = expectCanonical(await traced(() => full.swapIntoSlot(sequelize, show, incoming, target,
+      { confirmPencils: [{ slot_id: target, event_id: pencilled }] })), 'swapIntoSlot (pencil)');
+    const locks = seqs.flat().filter((x) => !x.endsWith(':write'));
+    const first = (cls) => locks.findIndex((x) => x.startsWith(`${cls}:`));
+    expect(first('W')).toBeGreaterThanOrEqual(0);
+    expect(first('P')).toBeGreaterThan(first('W'));
+    expect(first('S')).toBeGreaterThan(first('P'));
+    const [row] = await rows('SELECT event_id FROM season_slots WHERE id = :target', { target });
+    expect(row.event_id).toBe(incoming);
+    // The handoff: the pencilled event now has the special.
+    const [sp] = await rows("SELECT event_id FROM season_specials WHERE arc_id = :arcId AND deleted_at IS NULL AND kind = 'bonus'", { arcId });
+    expect(sp.event_id).toBe(pencilled);
+    // And without the confirmation the same swap is refused before any write.
+    const again = await addEvent(show, 'Trace Unconfirmed');
+    await expect(full.swapIntoSlot(sequelize, show, again, target)).rejects.toMatchObject({ status: 409, code: 'SEASON_PLACE_NEEDS_CONFIRMATION' });
+  });
+
   test('pencilEvent (moving an event between slots), placeEpisode, saveIntention, updateSetup', async () => {
     const { show, arcId } = await seedShow();
     const ev = await addEvent(show, 'Trace Pencil');

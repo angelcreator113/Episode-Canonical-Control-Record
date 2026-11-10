@@ -80,7 +80,7 @@ describe('FullSeasonChoice: Will be a special', () => {
     const reload = vi.fn(async () => {});
     const setToast = vi.fn();
     vi.mocked(api.post).mockImplementation(async (url) => (url.endsWith('/swap')
-      ? { data: { data: { slot_id: 's5', slot_number: 5, replaced: { id: 'w5', name: 'Week 5 event', special: { label: 'Special · after E5' } } } } }
+      ? { data: { data: { slot_id: 's5', slot_number: 5, event: { id: 'ev', name: 'Rooftop Launch' }, replaced: { id: 'w5', name: 'Week 5 event', special: { label: 'Special · after E5' } } } } }
       : { data: { data: { label: 'Special · after E4' } } }));
     wrap(<FullSeasonChoice showId="show" eventId="ev" context={CONTEXT} reload={reload} setToast={setToast} />);
     fireEvent.click(await screen.findByTestId('fsc-make'));
@@ -93,8 +93,72 @@ describe('FullSeasonChoice: Will be a special', () => {
     expect(api.post).toHaveBeenCalledWith('/api/v1/world/show/season/full/events/ev/swap', { slot_id: 's5' });
     const [text, opts] = setToast.mock.calls[1];
     expect(text).toBe('Swapped into E5. “Week 5 event” is now Special · after E5.');
+    // Swap back names the pencil the swap just put in the slot, so a slot that changed since is refused, not overwritten.
     await opts.undo();
-    expect(api.post).toHaveBeenLastCalledWith('/api/v1/world/show/season/full/events/w5/swap', { slot_id: 's5' });
+    expect(api.post).toHaveBeenLastCalledWith('/api/v1/world/show/season/full/events/w5/swap',
+      { slot_id: 's5', confirm_pencils: [{ slot_id: 's5', event_id: 'ev' }] });
+  });
+
+  // Specials pencil protection (Evoni, 2026-11-10): the same rule as Place.
+  const NEEDS = { response: { status: 409, data: {
+    success: false, code: 'SEASON_PLACE_NEEDS_CONFIRMATION', error: 'Swapping "Rooftop Launch" into E5 replaces "Week 5 event".',
+    slot_id: 's5', slot_number: 5, incoming_event: { id: 'ev', name: 'Rooftop Launch' },
+    affected_pencils: [{ slot_id: 's5', slot_number: 5, event: { id: 'w5', name: 'Week 5 event' }, change: 'replaced' }],
+  } } };
+  const SWAP_URL = '/api/v1/world/show/season/full/events/ev/swap';
+  const swapCalls = () => vi.mocked(api.post).mock.calls.filter(([url]) => url === SWAP_URL);
+
+  test('a swap over a pencilled event: the slot and its event are shown, and a yes sends the pencil back by name', async () => {
+    answer(CHOICE);
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const setToast = vi.fn();
+    vi.mocked(api.post).mockRejectedValueOnce(NEEDS).mockResolvedValueOnce(
+      { data: { data: { slot_id: 's5', slot_number: 5, event: { id: 'ev', name: 'Rooftop Launch' }, replaced: { id: 'w5', name: 'Week 5 event', special: { label: 'Special · after E5' } } } } });
+    wrap(<FullSeasonChoice showId="show" eventId="ev" context={CONTEXT} setToast={setToast} />);
+    fireEvent.click(await screen.findByTestId('fsc-swap'));
+
+    await waitFor(() => expect(swapCalls()).toHaveLength(2));
+    expect(swapCalls()[0][1]).toEqual({ slot_id: 's5' });
+    expect(swapCalls()[1][1]).toEqual({ slot_id: 's5', confirm_pencils: [{ slot_id: 's5', event_id: 'w5' }] });
+    expect(confirm).toHaveBeenCalledTimes(1);
+    const asked = confirm.mock.calls[0][0];
+    expect(asked).toContain('Swapping into E5');
+    expect(asked).toContain('E5: “Week 5 event” is replaced by “Rooftop Launch”, and becomes a special.');
+    await waitFor(() => expect(setToast).toHaveBeenCalledTimes(1));
+    confirm.mockRestore();
+  });
+
+  test('a swap over a pencilled event, cancelled: nothing more is sent, and no error is shown', async () => {
+    answer(CHOICE);
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    const setToast = vi.fn();
+    vi.mocked(api.post).mockRejectedValueOnce(NEEDS);
+    wrap(<FullSeasonChoice showId="show" eventId="ev" context={CONTEXT} setToast={setToast} />);
+    fireEvent.click(await screen.findByTestId('fsc-swap'));
+
+    await waitFor(() => expect(confirm).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.getByTestId('fsc-swap').disabled).toBe(false));
+    expect(swapCalls()).toHaveLength(1);
+    expect(setToast).not.toHaveBeenCalled();
+    expect(screen.queryByText(/replaces "Week 5 event"/)).toBeNull();
+    confirm.mockRestore();
+  });
+
+  test('the pencil changed after the confirmation: the refusal is shown, the choice is read again, nothing is sent again', async () => {
+    answer(CHOICE);
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const changed = { response: { status: 409, data: { success: false, code: 'SEASON_SLOT_CHANGED', error: 'The pencilled event in E5 changed since this was confirmed.' } } };
+    vi.mocked(api.post).mockRejectedValueOnce(NEEDS).mockRejectedValueOnce(changed);
+    wrap(<FullSeasonChoice showId="show" eventId="ev" context={CONTEXT} />);
+    const button = await screen.findByTestId('fsc-swap');
+    const loadsBefore = vi.mocked(api.get).mock.calls.length;
+    fireEvent.click(button);
+
+    expect(await screen.findByText(/changed since this was confirmed/)).toBeTruthy();
+    await waitFor(() => expect(vi.mocked(api.get).mock.calls.length).toBeGreaterThan(loadsBefore));
+    expect(swapCalls()).toHaveLength(2);
+    expect(confirm).toHaveBeenCalledTimes(1);
+    confirm.mockRestore();
   });
 
   test('no date yet: after the part in progress, "place it when you know"', async () => {
