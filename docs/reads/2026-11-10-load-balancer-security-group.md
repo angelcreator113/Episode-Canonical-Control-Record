@@ -6,7 +6,7 @@
 >
 > - **`primepisodes-alb-sg`** (new): in 443 and 80 from anywhere; out 3000 to `episode-backend-sg`; nothing else. The load balancer and its three network interfaces are in this group only.
 > - **`episode-backend-sg`** (the prod box): in 22 from Evoni's address and 3000 from `primepisodes-alb-sg`; the 3000 rule from `default` is gone.
-> - **`default`**: no members. Its own rules are unchanged (section 5).
+> - **`default`**: no members. At 23:49 UTC Evoni also removed all five of its inbound rules, after a read showed no member and no rule or resource referring to it. It now has no inbound rule, and its one outbound rule is unchanged. Section 5's first item is done.
 > - **Production through every step:** the `primepisodes-backend` target stayed `healthy`; `https://primepisodes.com/`, `/health` and `/api/v1/assets` returned 200 and `http://` returned 301 on every read, including three reads 35 seconds apart after the last step. Ports 80, 443 and 3000 on the prod box do not connect from outside. SSM shows both boxes online.
 >
 > Two steps had to be run twice: the first attempts at steps 2 and 4 changed nothing (the read-back showed the old state), and the second attempts applied. Reading each step back before the next is what caught it; step 4 without step 2 would have cut the load balancer off from the app.
