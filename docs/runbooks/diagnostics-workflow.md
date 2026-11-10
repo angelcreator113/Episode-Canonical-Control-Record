@@ -45,11 +45,42 @@ The public run log shows only step names, "Collected N bytes; checks exit X", an
 | `db` | box | connected, round trip, user, read-only, size, connections, migrations applied/pending |
 | `db-schema` | box | table names and column counts |
 | `db-counts` | box | exact counts for a fixed table list, estimated rows for the 25 largest |
+| `db-season-integrity` | box | Season Planning counts in three classes (integrity violations, protected records, planning conditions), from one read-only transaction; **dispatch only**. Not usable until its SSM document version is registered; see below |
 | `aws-infra` | runner | instance state and status checks, database status, free storage, events, snapshots, SSM agent, queue depths, alarms |
 | `s3-config` | runner | per bucket: block-public-access, policy and policy status, ownership, versioning, encryption, CORS/lifecycle counts, object counts and sizes per top folder (no key names, no contents) |
 | `cognito-config` | runner | pool settings, app client names, groups (no users, no client secret) |
 | `self-test` | both | §5 |
 | `db-snapshot` | box | **schedule only, never dispatched.** The daily database snapshot: full schema, exact counts for every table, allowlisted content samples. See `docs/runbooks/prod-db-snapshot.md` (F-Tools-2 Amendment 1). |
+
+### `db-season-integrity` (Season Planning, Gate 2)
+
+This check is for the Season Planning design (`docs/design/2026-11-season-planning.md`, §8 "Outstanding gates"). The statements are the fixed list `SEASON_METRICS` in `scripts/diagnostics/db-check.js`, run by `checkSeasonIntegrity` as `prime_readonly`. The check is never scheduled and is not part of the daily snapshot.
+
+**What it prints.** Every metric belongs to one class, fixed in code and never inferred from its value. Metrics are counts, apart from:
+- a few `yes`/`no` or `not applicable (…)` values;
+- one timezone name;
+- the `activity_logs` enum labels.
+
+There are no ids, titles, dates or row content.
+
+| Class | Meaning | How to read a non-zero value |
+|---|---|---|
+| **A. Integrity violations** (A1–A15) | Occupancy, slot shape, special and two-parter links, event duplicates, and slot/brief event drift | A defect. Lines marked `[blocks A2]` (A1–A5, A10–A13: the P1, P2, P3 and P6 counts) must be 0 before the A2 migration. The other A lines are defects, but they do not block A2. A two-parter's shared event across its own two slots is valid and is not counted. |
+| **B. Protected records** (B1–B6) | Placed episodes that are filmed (any raw clip, deleted or not), accepted, published or have an air date; protected two-parters; locked briefs of slotted episodes | Not a defect. These are the records Move/Swap or intention sync must refuse or preserve. |
+| **C. Planning conditions** (C1–C10) | Pencils, stale `season_context`, `intention_source` buckets, `air_date` values that are not at UTC midnight, the server's default TimeZone (app sessions set their own), `activity_logs` counts by age, and the existing enum labels | Informational only. The labels are reported as found; this check does not decide which labels the audit-log repair (#1948) needs. |
+
+**COMPLETE or INCOMPLETE.**
+- The first line is `season-integrity: COMPLETE` or `season-integrity: INCOMPLETE`. The last line is `season-integrity: END <n>/31`.
+- **COMPLETE** means the transaction began, all 31 metrics returned well-formed values, and the transaction rolled back. The check then exits 0, **even when integrity counts are non-zero**: findings are not failures.
+- **INCOMPLETE** means any query error, timeout, malformed result, an exceeded 60 s budget, or a failed rollback. Each affected metric reads `failed (<SQLSTATE>)`, `failed (malformed result)` or `not run`. The A2 blocker line reads `not determined (incomplete)`, and the check exits 1, so the run shows problems.
+- An error with no SQLSTATE, such as a client read timeout, stops the check at once: no further statement is sent, and closing the connection ends the transaction.
+- **A report with no END line, or with END below 31/31, is incomplete.** Do not cite its numbers as a clean result.
+
+**Approvals.** Two separate approvals are needed, and merging this check grants neither.
+1. **SSM registration.** The check works only after Evoni creates a new `PrimeStudios-Diagnostics` document version from `scripts/diagnostics/ssm-document.json` and sets it as the default (§3 step 7). Until then the registered document's `allowedValues` refuse the name.
+2. **Production dispatch.** A session dispatches `db-season-integrity` only when Evoni asks for that run in the conversation (`docs/audit/F-Tools-5_AgentProductionAccess_Ruling_2026-10-31.md`). It is not one of the checks a session starts unprompted under §4.
+
+Repairing any finding is a separate, named action with its own approval.
 
 Adding or changing a check is a reviewed PR: the workflow's `options`, `runner.sh`, `on-box.sh`, and (for a box check) the SSM document's `allowedValues` must agree, which `tests/unit/scripts/diagnostics.test.js` enforces. A new box check also needs Evoni to update the SSM document (§3 step 7).
 

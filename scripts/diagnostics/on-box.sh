@@ -25,6 +25,8 @@
 #   db            database connectivity, read-only proof, migration state
 #   db-schema     table list with column counts
 #   db-counts     row counts (fixed table list) and largest tables
+#   db-season-integrity  Season Planning counts in three classes, from one
+#                 read-only transaction; ends with an END line (dispatch only)
 #   self-test     runs as ubuntu, file modes, redaction works, database refuses writes
 #   db-snapshot   the daily database snapshot (F-Tools-2 Amendment 1), in pages:
 #                 on-box.sh db-snapshot <sha> <page> <run>. Page 0 builds the
@@ -52,7 +54,7 @@ if [ -n "${CLAUDECODE:-}" ]; then
   refuse "CLAUDECODE is set, so this is a Claude Code session. Only the Diagnostics workflow runs this, on the box."
 fi
 case "$CHECK" in
-  health|deploy-state|app-logs|worker-logs|nginx-logs|db|db-schema|db-counts|self-test|db-snapshot) ;;
+  health|deploy-state|app-logs|worker-logs|nginx-logs|db|db-schema|db-counts|db-season-integrity|self-test|db-snapshot) ;;
   *) refuse "unknown check '$CHECK'." ;;
 esac
 if ! printf '%s' "$TARGET" | grep -qE '^[0-9a-f]{40}$'; then
@@ -265,6 +267,7 @@ trap 'rm -f "$OUT_FILE"' EXIT
     db) run_db db ;;
     db-schema) run_db db-schema ;;
     db-counts) run_db db-counts ;;
+    db-season-integrity) run_db season-integrity ;;
     self-test) check_self_test ;;
   esac
   echo
