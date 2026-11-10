@@ -93,10 +93,49 @@ describe('FullSeasonChoice: Will be a special', () => {
     expect(api.post).toHaveBeenCalledWith('/api/v1/world/show/season/full/events/ev/swap', { slot_id: 's5' });
     const [text, opts] = setToast.mock.calls[1];
     expect(text).toBe('Swapped into E5. “Week 5 event” is now Special · after E5.');
-    // Swap back names the pencil the swap just put in the slot, so a slot that changed since is refused, not overwritten.
+    // Swap back asks first, naming the slot, the incoming event and the pencil it replaces.
+    const writesBefore = vi.mocked(api.post).mock.calls.length;
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false);
     await opts.undo();
+    expect(confirm).toHaveBeenCalledTimes(1);
+    const asked = confirm.mock.calls[0][0];
+    expect(asked).toContain('Swapping into E5');
+    expect(asked).toContain('E5: “Rooftop Launch” is replaced by “Week 5 event”, and becomes a special.');
+    // Cancelled: no write request at all, and no error shown.
+    expect(vi.mocked(api.post).mock.calls.length).toBe(writesBefore);
+    expect(setToast).toHaveBeenCalledTimes(2);
+
+    // Confirmed: one request, carrying the exact pencil identity (the event the swap put in the slot).
+    confirm.mockReturnValueOnce(true);
+    await opts.undo();
+    expect(confirm).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(api.post).mock.calls.length).toBe(writesBefore + 1);
     expect(api.post).toHaveBeenLastCalledWith('/api/v1/world/show/season/full/events/w5/swap',
       { slot_id: 's5', confirm_pencils: [{ slot_id: 's5', event_id: 'ev' }] });
+    confirm.mockRestore();
+  });
+
+  test('Swap back when the slot changed since: the server refuses the named pencil, the refusal is shown, nothing is sent again', async () => {
+    answer(CHOICE);
+    const setToast = vi.fn();
+    const changed = { response: { status: 409, data: { success: false, code: 'SEASON_SLOT_CHANGED', error: 'The pencilled event in E5 changed since this was confirmed.' } } };
+    vi.mocked(api.post)
+      .mockResolvedValueOnce({ data: { data: { slot_id: 's5', slot_number: 5, event: { id: 'ev', name: 'Rooftop Launch' }, replaced: { id: 'w5', name: 'Week 5 event', special: { label: 'Special · after E5' } } } } })
+      .mockRejectedValueOnce(changed);
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    wrap(<FullSeasonChoice showId="show" eventId="ev" context={CONTEXT} setToast={setToast} />);
+    fireEvent.click(await screen.findByTestId('fsc-swap'));
+    await waitFor(() => expect(setToast).toHaveBeenCalledTimes(1));
+    const [, opts] = setToast.mock.calls[0];
+
+    await act(async () => { await opts.undo(); });
+
+    expect(api.post).toHaveBeenLastCalledWith('/api/v1/world/show/season/full/events/w5/swap',
+      { slot_id: 's5', confirm_pencils: [{ slot_id: 's5', event_id: 'ev' }] });
+    expect(vi.mocked(api.post).mock.calls.length).toBe(2);
+    expect(await screen.findByText(/changed since this was confirmed/)).toBeTruthy();
+    expect(setToast).toHaveBeenCalledTimes(1);
+    confirm.mockRestore();
   });
 
   // Specials pencil protection (Evoni, 2026-11-10): the same rule as Place.

@@ -4694,7 +4694,7 @@ As built (`seasonFullSpecials.swapIntoSlot`, behind the Event Package's "full se
 - **Not a pencil, not overwritten.** A slot that points to a deleted or missing event is refused (409 `SEASON_SLOT_EVENT_ORPHANED`).
 - **A started special's episode** moves into the slot through `placeEpisodeIn` itself, under Place's own rules. The slot must end with the swapped event, or nothing is written.
 - **Atomic.** The slot change and the handoff are one transaction: a refusal at any point writes neither.
-- **Swap back** (the toast's undo) sends the pencil the swap just put in the slot. If the slot has changed since, it is refused like any stale confirmation.
+- **Swap back** (the toast's undo) asks first, in the same dialog, naming the slot, the event coming back and the event it replaces (the one the swap just put there). A no sends nothing. A yes sends that pencil by name. If the slot has changed since, it is refused like any stale confirmation.
 - **The panel** (`lib/seasonFull.js` `swapRequest`) shows the slot and its pencilled event in a confirm dialog and sends them back only on a yes. A stale refusal is shown, the choice is read again, and nothing is sent again.
 
 ---
