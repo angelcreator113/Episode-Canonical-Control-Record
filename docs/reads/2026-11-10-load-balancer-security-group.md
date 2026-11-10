@@ -2,6 +2,17 @@
 
 **Status:** draft. Nothing was changed. Task #3788. Measured 2026-11-10, 22:17 UTC, from a laptop session with read-only `aws ec2`, `aws elbv2` and `aws rds` calls. Evoni runs the commands in section 3 after she says go.
 
+> **Applied the same evening (2026-11-10, 23:00 to 23:36 UTC).** Evoni ran the five steps from CloudShell, one at a time, and each was read back before the next. The end state, as AWS reported it at 23:36 UTC:
+>
+> - **`primepisodes-alb-sg`** (new): in 443 and 80 from anywhere; out 3000 to `episode-backend-sg`; nothing else. The load balancer and its three network interfaces are in this group only.
+> - **`episode-backend-sg`** (the prod box): in 22 from Evoni's address and 3000 from `primepisodes-alb-sg`; the 3000 rule from `default` is gone.
+> - **`default`**: no members. Its own rules are unchanged (section 5).
+> - **Production through every step:** the `primepisodes-backend` target stayed `healthy`; `https://primepisodes.com/`, `/health` and `/api/v1/assets` returned 200 and `http://` returned 301 on every read, including three reads 35 seconds apart after the last step. Ports 80, 443 and 3000 on the prod box do not connect from outside. SSM shows both boxes online.
+>
+> Two steps had to be run twice: the first attempts at steps 2 and 4 changed nothing (the read-back showed the old state), and the second attempts applied. Reading each step back before the next is what caught it; step 4 without step 2 would have cut the load balancer off from the app.
+>
+> Everything below is the draft as written before the change.
+
 ## Answer first
 
 - `primepisodes-alb` is in the VPC's **`default`** security group, and nothing else is.
