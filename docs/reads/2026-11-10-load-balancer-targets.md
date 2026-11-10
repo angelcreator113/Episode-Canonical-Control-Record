@@ -9,7 +9,7 @@
 > - **Target groups:** `primepisodes-frontend` no longer exists. `primepisodes-backend` is the only group, and its one target (the app on port 3000) is healthy.
 > - **`episode-frontend`** (`i-0005b67a477eb904f`): stopped, "User initiated (2026-11-10 21:44:40 GMT)". Its port 80 no longer answers.
 >
-> The steps were applied in two parts: at 21:38 UTC the redirect and the `/assets/*` rule, then the three remaining rules and the target group. Everything below describes the state at 21:26 UTC, before any of it. Section 6's other notes still stand, except those about `episode-frontend` serving on port 80.
+> The steps were applied in two parts: at 21:38 UTC the redirect and the `/assets/*` rule, then the three remaining rules and the target group. Everything below describes the state at 21:26 UTC, before any of it. At 22:02 UTC she also removed the prod box security group's inbound rules for 80 and 443: the box now accepts only 3000 from the load balancer's security group and 22 from her address, and 80, 443 and 3000 do not connect from outside. Section 6's other notes still stand, except those about `episode-frontend` serving on port 80 and about the prod box's ports 80 and 443 being open.
 
 ## Answer first
 
