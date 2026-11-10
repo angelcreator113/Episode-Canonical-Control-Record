@@ -88,6 +88,14 @@ describe('ecosystem.dev.config.js (dev box)', () => {
       expect(app(loadConfig('ecosystem.dev.config.js', { GENERATION_WORKER_ENABLED: value }), 'episode-worker').env.GENERATION_WORKER_ENABLED).toBe(expected);
     }
   });
+
+  test('the dev API always runs as production and on loopback; the dev worker does not run as production', () => {
+    // NODE_ENV is 'test' here, standing in for a dev .env that says 'development'.
+    const config = loadConfig('ecosystem.dev.config.js', { DB_USER: 'episode_dev', DB_PASSWORD: 'dev' });
+    expect(process.env.NODE_ENV).not.toBe('production');
+    expect(app(config, 'episode-api').env).toMatchObject({ NODE_ENV: 'production', HOST: '127.0.0.1', PORT: 3002, DB_POOL_MAX: '10' });
+    expect(app(config, 'episode-worker').env.NODE_ENV).not.toBe('production');
+  });
 });
 
 describe('the Deploy workflow leaves a stopped worker stopped (unchanged)', () => {

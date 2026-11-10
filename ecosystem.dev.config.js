@@ -62,10 +62,22 @@ module.exports = {
       log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
       env: {
         ...sharedEnv,
+        // Always production for the API, whatever .env says: with any other
+        // NODE_ENV the app returns stack traces in error responses, skips the
+        // login and refresh rate limits and sets cookies without Secure. The
+        // box is reachable through nginx and uses production's Cognito pool,
+        // so none of that is acceptable here. The worker keeps sharedEnv's
+        // NODE_ENV: as production it refuses a DB password in its environment.
+        NODE_ENV: 'production',
+        // The production database config opens up to 30 connections (10 kept
+        // open) unless DB_POOL_MAX says otherwise, and the box's local
+        // PostgreSQL allows 30 in total. 10 leaves room for psql and the
+        // refresh. DB_SSL=false (dev.env) keeps the main pool off TLS.
+        DB_POOL_MAX: '10',
         PORT: 3002,
         // Loopback only (Task #3716): the dev box holds a full copy of
-        // production data and dev auth is not set up, so the API must not
-        // listen on a public interface. nginx reaches it on 127.0.0.1.
+        // production data, so the API must not listen on a public
+        // interface. nginx reaches it on 127.0.0.1.
         // To listen elsewhere, set HOST explicitly.
         HOST: process.env.HOST || '127.0.0.1',
         API_VERSION: 'v1',
