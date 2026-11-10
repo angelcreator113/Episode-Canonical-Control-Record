@@ -272,6 +272,25 @@ The PostgreSQL ruling of 2026-11-10 names "K1–K16". Two tests were added later
 | K16 | B | Migration down, then up again, on the test database | Both clean |
 | K11-R | Placement service | Re-sending an unexpired token after `SEASON_PLACEMENT_BUSY` with unchanged state | Fully re-validated, then applied atomically or refused. Documents, and does not prevent, the replay limitation |
 
+### 4.7 A deferred-constraint failure at COMMIT: what Sequelize does, and what Move/Swap must do (Evoni, 2026-11-10)
+
+**Observed (Stage A tests, K14, on PostgreSQL 15, 16 and 17; `tests/integration/seasonReleasePositionConstraints.integration.test.js`, PR #3778).** When a deferred exclusion rule is violated, every statement in the transaction succeeds and PostgreSQL refuses the `COMMIT` itself with SQLSTATE `23P01`. Through Sequelize's managed transaction (`sequelize.transaction(async (t) => …)`):
+
+- the promise rejects, and the SQLSTATE is on the error as `err.original.code` (also `err.parent.code`);
+- nothing is written: PostgreSQL has rolled the transaction back;
+- Sequelize logs a warning, "Committing transaction … failed with error … We are killing its connection as it is now in an undetermined state", and **discards that database connection**. The pool opens another when it needs one.
+
+**The warning and the discarded connection are the expected consequence of a deferred-constraint failure. They are not a second fault,** and they are not to be silenced or worked around.
+
+**Requirements for the future Move/Swap code** (not built; this section authorizes nothing):
+
+1. **Handle the failure cleanly.** A commit rejection is caught at the placement service's boundary and becomes one refusal. Nothing is written, and there is no partial state to repair.
+2. **Never reuse a failed transaction.** After any error inside the transaction, or a rejected commit, that transaction object and its connection are finished. No further statement is sent on it, and no retry is made inside it. A later attempt is a new request, with a fresh impact preview (§4.2, "No automatic retries").
+3. **Preserve the original SQLSTATE.** The code reads `err.original.code` (falling back to `err.parent.code`, then `err.code`) and keeps it on the error it raises and in the `console.error` log line. `23P01` is never rewritten as a lock conflict: `episodeLocks.isLockConflict` is false for it (K14), so it is never offered as "try again".
+4. **Return the right error to the person.** `23P01` at commit maps to 409 `SEASON_PLACEMENT_INTEGRITY`. The message says that nothing was changed and that a fresh preview is needed. It does not show the SQLSTATE, a constraint name or any row value. `40P01` and `55P03` map to 409 `SEASON_PLACEMENT_BUSY` (K17). A stale expected state, where a guarded update changes 0 rows, maps to 409 `SEASON_PLACEMENT_STALE` (K11).
+
+**Test owed with the placement service:** one that provokes a commit-time `23P01` through the real service and asserts all four points. It also asserts that a subsequent request succeeds on a valid database connection from the pool. It checks the outcome only (the next request works and its transaction commits), not which physical connection served it: it must not depend on a backend process id or on a particular pool slot.
+
 ## 5. Rulings C4, C5, C7, C8 and G1-D1 to G1-D5 (RULED, verbatim)
 
 > C4 — Specials: Preserve each special's story anchor. Block a placement change that would invalidate its release window. Do not automatically reschedule the special.
