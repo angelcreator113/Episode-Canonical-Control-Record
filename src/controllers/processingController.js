@@ -34,10 +34,7 @@ module.exports = {
     });
 
     // Log activity
-    await logger.logAction(req.user?.id || 'anonymous', 'view', 'processing', 'all', {
-      ipAddress: req.ip,
-      userAgent: req.get('user-agent'),
-    });
+    // Viewing is not audited (Evoni, 2026-11-11: no page-view entries).
 
     res.json({
       data: rows,
@@ -78,10 +75,7 @@ module.exports = {
     }
 
     // Log activity
-    await logger.logAction(req.user?.id || 'anonymous', 'view', 'processing', id, {
-      ipAddress: req.ip,
-      userAgent: req.get('user-agent'),
-    });
+    // Viewing is not audited (Evoni, 2026-11-11: no page-view entries).
 
     res.json({ data: job });
   },
@@ -129,8 +123,6 @@ module.exports = {
         jobType,
         status: 'pending',
       },
-      ipAddress: req.ip,
-      userAgent: req.get('user-agent'),
     });
 
     res.status(201).json({
@@ -180,8 +172,6 @@ module.exports = {
     await logger.logAction(req.user?.id, 'edit', 'processing', id, {
       oldValues: { status: oldValues.status, errorMessage: oldValues.errorMessage },
       newValues: { status: job.status, errorMessage: job.errorMessage },
-      ipAddress: req.ip,
-      userAgent: req.get('user-agent'),
     });
 
     res.json({
@@ -223,8 +213,6 @@ module.exports = {
         status: job.status,
         retryCount: job.retryCount,
       },
-      ipAddress: req.ip,
-      userAgent: req.get('user-agent'),
     });
 
     res.json({
@@ -260,8 +248,6 @@ module.exports = {
     // Log activity
     await logger.logAction(req.user?.id, 'delete', 'processing', id, {
       oldValues,
-      ipAddress: req.ip,
-      userAgent: req.get('user-agent'),
     });
 
     res.json({

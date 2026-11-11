@@ -38,10 +38,7 @@ module.exports = {
       });
 
       // Log activity
-      await logger.logAction(req.user?.id || 'anonymous', 'view', 'metadata', 'all', {
-        ipAddress: req.ip,
-        userAgent: req.get('user-agent'),
-      });
+      // Viewing is not audited (Evoni, 2026-11-11: no page-view entries).
 
       res.json({
         data: rows,
@@ -79,10 +76,7 @@ module.exports = {
     }
 
     // Log activity
-    await logger.logAction(req.user?.id || 'anonymous', 'view', 'metadata', id, {
-      ipAddress: req.ip,
-      userAgent: req.get('user-agent'),
-    });
+    // Viewing is not audited (Evoni, 2026-11-11: no page-view entries).
 
     res.json({ data: metadata });
   },
@@ -170,8 +164,6 @@ module.exports = {
         tags,
         categories,
       },
-      ipAddress: req.ip,
-      userAgent: req.get('user-agent'),
     });
 
     res.status(201).json({
@@ -249,8 +241,6 @@ module.exports = {
         visualObjects: metadata.visualObjects ? 'present' : null,
         transcription: metadata.transcription ? 'present' : null,
       },
-      ipAddress: req.ip,
-      userAgent: req.get('user-agent'),
     });
 
     res.json({
@@ -277,8 +267,6 @@ module.exports = {
     // Log activity
     await logger.logAction(req.user?.id, 'delete', 'metadata', id, {
       oldValues,
-      ipAddress: req.ip,
-      userAgent: req.get('user-agent'),
     });
 
     res.json({
@@ -309,8 +297,6 @@ module.exports = {
     await logger.logAction(req.user?.id, 'edit', 'metadata', id, {
       oldValues: { tags: oldTags },
       newValues: { tags: metadata.tags },
-      ipAddress: req.ip,
-      userAgent: req.get('user-agent'),
     });
 
     res.json({
@@ -351,8 +337,6 @@ module.exports = {
         processingDurationSeconds: duration,
         sceneCount: scenes.length,
       },
-      ipAddress: req.ip,
-      userAgent: req.get('user-agent'),
     });
 
     res.json({

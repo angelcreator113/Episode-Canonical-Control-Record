@@ -9,7 +9,8 @@ const { ProcessingQueue } = require('../models');
 const QueueService = require('../services/QueueService');
 const ErrorRecovery = require('../services/ErrorRecovery');
 const logger = require('../utils/logger');
-const ActivityService = require('../services/ActivityService');
+// The audit trail (activity_logs): one logAction call per operation (issue #1948).
+const { logger: audit } = require('../middleware/auditLog');
 const NotificationService = require('../services/NotificationService');
 const SocketService = require('../services/SocketService');
 
@@ -67,14 +68,8 @@ class JobController {
         episodeId,
       });
 
-      // Phase 3A Integration: Activity Logging (non-blocking)
-      ActivityService.logActivity({
-        userId: req.user?.id,
-        action: 'CREATE',
-        resourceType: 'job',
-        resourceId: job.id,
-        metadata: { jobType: job.job_type, episodeId, payload: job.payload },
-      }).catch((err) => console.error('Activity logging error:', err));
+      // The audit entry (activity_logs; not awaited: logAction never rejects)
+      audit.logAction(req.user?.id, 'create', 'job', job.id, { jobType: job.job_type, episodeId, payload: job.payload });
 
       // Phase 3A Integration: WebSocket broadcast (non-blocking)
       SocketService.broadcastMessage({
@@ -234,14 +229,8 @@ class JobController {
         retryCount: job.retry_count + 1,
       });
 
-      // Phase 3A Integration: Activity Logging (non-blocking)
-      ActivityService.logActivity({
-        userId: req.user?.id,
-        action: 'RETRY',
-        resourceType: 'job',
-        resourceId: jobId,
-        metadata: { retryCount: job.retry_count + 1, jobType: job.job_type },
-      }).catch((err) => console.error('Activity logging error:', err));
+      // The audit entry (activity_logs; not awaited: logAction never rejects)
+      audit.logAction(req.user?.id, 'retry', 'job', jobId, { retryCount: job.retry_count + 1, jobType: job.job_type });
 
       // Phase 3A Integration: WebSocket broadcast (non-blocking)
       SocketService.broadcastMessage({
@@ -292,14 +281,8 @@ class JobController {
 
       logger.info('Job cancelled', { jobId });
 
-      // Phase 3A Integration: Activity Logging (non-blocking)
-      ActivityService.logActivity({
-        userId: req.user?.id,
-        action: 'CANCEL',
-        resourceType: 'job',
-        resourceId: jobId,
-        metadata: { jobType: job.job_type },
-      }).catch((err) => console.error('Activity logging error:', err));
+      // The audit entry (activity_logs; not awaited: logAction never rejects)
+      audit.logAction(req.user?.id, 'cancel', 'job', jobId, { jobType: job.job_type });
 
       // Phase 3A Integration: WebSocket broadcast (non-blocking)
       SocketService.broadcastMessage({

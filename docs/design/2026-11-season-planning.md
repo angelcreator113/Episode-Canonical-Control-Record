@@ -435,7 +435,7 @@ Each gate is approved separately.
 
 ---
 
-## 9. Audit log: Option C target architecture (PENDING; production schema change needs separate authorization)
+## 9. Audit log: Option C target architecture (code as built in §9.1; the production migration needs separate authorization)
 
 - **One authoritative writer.** `ActivityLog.logActivity({ userId, actionType, resourceType, resourceId, changes }, { transaction })`.
 - **One table.** The existing `activity_logs`, in production's shape: `user_id`, `action`, `resource_type`, `resource_id`, `changes` (JSONB), `created_at`. `resource_id` is widened to varchar so it can hold UUIDs.
@@ -443,6 +443,58 @@ Each gate is approved separately.
 - **No page-view logging, no IP addresses or user agents, no duplicate general-purpose audit table.** Existing rows are preserved.
 - **Scope (K-B, RULED).** `activity_logs` is the authoritative *general* administrative audit trail, including Move/Swap. D-22's dedicated `episode_intent_audit` (A1.2-SPEC-v5) is kept for its own narrowly scoped future workflow: audited intent corrections on frozen episodes. It is not implemented or migrated here.
 - **The production schema change (rename and widen) is authorized separately.**
+
+---
+
+### 9.1 The audit log as built (issue #1948; Evoni, 2026-11-11: Step 5)
+
+**The defect.** Nothing had ever been written to `activity_logs`. Production, the model and migration `20240101000005` described three different tables, `resource_id` was an integer, and each of the three loggers hid the failed insert.
+
+**Migration `20261111230000-converge-activity-logs`** (one transaction, guarded) brings every starting shape to one:
+
+| Column | Type |
+|---|---|
+| `id` | integer, serial primary key |
+| `user_id` | varchar(255), nullable (nobody signed in is NULL) |
+| `action` | varchar(100), nullable |
+| `resource_type` | varchar(100), nullable |
+| `resource_id` | varchar(255), nullable |
+| `changes` | jsonb, nullable |
+| `created_at` | timestamp without time zone, default `now()` |
+
+plus the index `activity_logs_resource (resource_type, resource_id)`.
+
+- **On production and the dev box** it changes two things: `resource_id` integer to varchar(255), and the index.
+- **On CI and fresh databases** it also renames the camelCase columns, replaces the two enums with varchar, folds old and new values into `changes`, and drops the IP-address and user-agent columns.
+- **Rows are kept from every shape.** Only IP-address and user-agent values are dropped, by ruling; production never had them.
+- **`down` refuses once any row exists.** A UUID cannot go back into an integer column, and audit history is not deleted to make a rollback possible. After the first entry there is no rollback of this migration.
+
+**One writer.** `ActivityLog.logActivity({ userId, action, resourceType, resourceId, changes }, { transaction })`.
+- It throws when the entry cannot be written.
+- With a transaction, the entry commits or rolls back with the caller's work.
+- It refuses a `view`. Placeholder user ids (`anonymous`, `unknown`) are stored as NULL.
+
+**`changes`.** `{ before?, after?, meta? }`: the old values, the new values, and anything else the caller passed. Empty is NULL.
+
+**One call per operation.** The controllers call `logger.logAction` (in `middleware/auditLog.js`), which calls the one writer. It never fails the request: a failed entry is logged as `[audit] NOT RECORDED` and the request goes on.
+
+| Controller | Audited operations |
+|---|---|
+| `episodeController` | create, update, delete, enqueue |
+| `metadataController` | create, update, delete, add tags, set scenes |
+| `processingController` | create, update, retry, cancel |
+| `fileController` | upload, download, delete |
+| `jobController` | create, retry, cancel |
+
+- **Removed duplicates.** Episode create, update and delete each also called `ActivityService.logActivity` and `AuditLogger.log`; those calls are gone. `services/AuditLogger.js` is deleted.
+- **Removed page views.** No list or read handler writes an entry.
+- **Removed:** the unmounted request-logging middleware `auditLog`.
+
+**Readers.** `GET /api/v1/audit-logs` (ADMIN; the page at `/admin/audit`) and `ActivityIndexService` read the real columns.
+
+**Not changed.** `/api/v1/activity` (`activityController`) was already broken: it calls `ActivityService` methods that do not exist. Nothing in the frontend calls it. `ActivityService` itself only keeps entries in memory and is no longer called by any audited operation.
+
+**For Move/Swap (not built).** It calls `ActivityLog.logActivity` itself, inside its transaction, so a failed entry rolls the placement back. `tests/unit/guards/auditSingleWriter.test.js` lists the callers of the writer; the Move/Swap caller is added there with its own approval. No existing Season Planning action writes an entry.
 
 ---
 

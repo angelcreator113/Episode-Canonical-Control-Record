@@ -1,89 +1,20 @@
 const { models } = require('../models');
-const { ActivityLog } = models;
 
 /**
- * Audit Logging Middleware
- * Automatically logs all user activities for compliance and security
+ * The audit call the controllers use (issue #1948; Evoni, 2026-11-11).
+ *
+ * logger.logAction is the ONE call per audited operation. It writes through
+ * the one writer, ActivityLog.logActivity, into activity_logs. It never
+ * throws: for the controllers that use it, a failed audit entry is logged
+ * loudly and the request goes on. (An operation that must not happen without
+ * its entry calls ActivityLog.logActivity itself, inside its transaction.)
+ *
+ * Not here any more: the request-logging middleware `auditLog` (never
+ * mounted; it logged every request, page views included, with the caller's
+ * IP address and user agent) and its helpers. Page views are not audited.
  */
 
-/**
- * Determine action type from HTTP method
- */
-const getActionType = (method) => {
-  const actionMap = {
-    GET: 'view',
-    POST: 'create',
-    PUT: 'edit',
-    PATCH: 'edit',
-    DELETE: 'delete',
-  };
-  return actionMap[method] || 'view';
-};
-
-/**
- * Extract resource information from request
- */
-const getResourceInfo = (req) => {
-  const path = req.path;
-  const parts = path.split('/').filter((p) => p);
-
-  // Parse route: /api/v1/{resource}/{id}/{action}
-  // Examples:
-  // /api/v1/episodes -> resource: episodes, id: null
-  // /api/v1/episodes/123 -> resource: episodes, id: 123
-  // /api/v1/episodes/123/enqueue -> resource: episodes, id: 123, action: enqueue
-
-  let resource = 'unknown';
-  let resourceId = null;
-  let action = null;
-
-  if (parts.length >= 3) {
-    resource = parts[2]; // episodes, thumbnails, metadata, etc.
-
-    if (parts.length >= 4) {
-      // Check if next part is an ID (numeric) or action name
-      if (/^\d+$/.test(parts[3])) {
-        resourceId = parts[3];
-        if (parts.length >= 5) {
-          action = parts[4];
-        }
-      } else {
-        action = parts[3];
-      }
-    }
-  }
-
-  return {
-    resource,
-    resourceId,
-    action,
-  };
-};
-
-/**
- * Extract change information from request/response
- */
-const getChangeInfo = (req, res) => {
-  const oldValues = req.body?.oldValues || null;
-  const newValues = req.body?.newValues || res.locals?.responseData || null;
-
-  // For relevant HTTP methods
-  if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) {
-    return {
-      oldValues,
-      newValues,
-    };
-  }
-
-  return {
-    oldValues: null,
-    newValues: null,
-  };
-};
-
-/**
- * Capture response data for audit logging
- */
+/** Keep what the response sent, for handlers that read res.locals.responseData. */
 const captureResponseData = (req, res, next) => {
   const originalJson = res.json;
 
@@ -95,166 +26,82 @@ const captureResponseData = (req, res, next) => {
   next();
 };
 
-/**
- * Audit logging middleware
- * Logs user actions to activity_logs table
- */
-const auditLog = async (req, res, next) => {
-  // Skip non-mutation operations for now, or log all based on config
-  // Current implementation logs all requests
+const NOT_STORED = new Set(['oldValues', 'newValues', 'ipAddress', 'userAgent']);
 
-  const originalSend = res.send;
+/** { before?, after?, meta? } from a logAction options object; null when empty. */
+function changesFrom(options = {}) {
+  const changes = {};
+  if (options.oldValues !== null && options.oldValues !== undefined) changes.before = options.oldValues;
+  if (options.newValues !== null && options.newValues !== undefined) changes.after = options.newValues;
+  const meta = Object.fromEntries(Object.entries(options).filter(([k, v]) => !NOT_STORED.has(k) && v !== undefined));
+  if (Object.keys(meta).length) changes.meta = meta;
+  return Object.keys(changes).length ? changes : null;
+}
 
-  res.send = function (data) {
-    // Log activity after response is sent
-    setImmediate(() => {
-      logActivity(req, res, data).catch((err) => {
-        console.error('Error logging activity:', err.message);
-      });
-    });
-
-    return originalSend.call(this, data);
-  };
-
-  next();
-};
-
-/**
- * Log activity to database
- */
-const logActivity = async (req, res, _responseData) => {
-  try {
-    // Skip logging for certain paths
-    const skipPaths = ['/health', '/api/v1'];
-    if (skipPaths.some((p) => req.path.startsWith(p))) {
-      return;
-    }
-
-    // Skip logging if database not available
-    if (!ActivityLog) {
-      return;
-    }
-
-    const { resource, resourceId, _action } = getResourceInfo(req);
-    const actionType = getActionType(req.method);
-    const { oldValues, newValues } = getChangeInfo(req, res);
-
-    // Log to database
-    await ActivityLog.logActivity({
-      userId: req.user?.id || 'anonymous',
-      actionType,
-      resourceType: resource,
-      resourceId: resourceId?.toString() || 'batch',
-      oldValues,
-      newValues,
-      ipAddress: req.ip,
-      userAgent: req.get('user-agent'),
-    });
-  } catch (error) {
-    // Don't fail the request if audit logging fails
-    console.error('Audit log error:', error);
-  }
-};
-
-/**
- * Activity logger service
- * Direct access to activity logging
- */
 const logger = {
   /**
-   * Log a user action
+   * Record one action: (userId, action, resourceType, resourceId, { oldValues,
+   * newValues, …anything else, kept under changes.meta }). Resolves to the
+   * entry, or to null when it was not written; never rejects. A 'view' is
+   * not an audited action and writes nothing.
    */
-  logAction: async (userId, actionType, resourceType, resourceId, options = {}) => {
+  logAction: async (userId, action, resourceType, resourceId, options = {}) => {
+    if (String(action || '').toLowerCase() === 'view') return null;
     try {
-      if (!ActivityLog) {
-        return null;
-      }
-
+      const { ActivityLog } = models;
+      if (!ActivityLog) throw new Error('the ActivityLog model is not loaded');
       return await ActivityLog.logActivity({
-        userId,
-        actionType,
-        resourceType,
-        resourceId: resourceId?.toString() || null,
-        oldValues: options.oldValues || null,
-        newValues: options.newValues || null,
-        ipAddress: options.ipAddress || null,
-        userAgent: options.userAgent || null,
+        userId, action, resourceType, resourceId, changes: changesFrom(options || {}),
       });
     } catch (error) {
-      console.error('Error logging action:', error);
+      console.error(`[audit] NOT RECORDED: ${action} ${resourceType} ${resourceId ?? ''}:`, error.message);
       return null;
     }
   },
 
-  /**
-   * Get user activity history
-   */
-  getUserHistory: async (userId, options = {}) => {
+  /** A user's entries, newest first ([] when they cannot be read). */
+  getUserHistory: async (userId, limit) => {
     try {
-      if (!ActivityLog) {
-        return [];
-      }
-
-      return await ActivityLog.getUserHistory(userId, options);
+      return await models.ActivityLog.getUserHistory(userId, limit);
     } catch (error) {
-      console.error('Error fetching user history:', error);
+      console.error('[audit] user history could not be read:', error.message);
       return [];
     }
   },
 
-  /**
-   * Get resource activity history
-   */
+  /** A resource's entries, newest first ([] when they cannot be read). */
   getResourceHistory: async (resourceType, resourceId) => {
     try {
-      if (!ActivityLog) {
-        return [];
-      }
-
-      return await ActivityLog.getResourceHistory(resourceType, resourceId);
+      return await models.ActivityLog.getResourceHistory(resourceType, resourceId);
     } catch (error) {
-      console.error('Error fetching resource history:', error);
+      console.error('[audit] resource history could not be read:', error.message);
       return [];
     }
   },
 
-  /**
-   * Get full audit trail
-   */
-  getAuditTrail: async (options = {}) => {
+  /** Entries between two dates ([] when they cannot be read). */
+  getAuditTrail: async (startDate, endDate, filters) => {
     try {
-      if (!ActivityLog) {
-        return [];
-      }
-
-      return await ActivityLog.getAuditTrail(options);
+      return await models.ActivityLog.getAuditTrail(startDate, endDate, filters);
     } catch (error) {
-      console.error('Error fetching audit trail:', error);
+      console.error('[audit] the audit trail could not be read:', error.message);
       return [];
     }
   },
 
-  /**
-   * Get activity statistics
-   */
-  getStats: async (timeRange = '7d') => {
+  /** Counts by action over the last `days` days ([] when they cannot be read). */
+  getStats: async (days) => {
     try {
-      if (!ActivityLog) {
-        return {};
-      }
-
-      return await ActivityLog.getStats(timeRange);
+      return await models.ActivityLog.getStats(days);
     } catch (error) {
-      console.error('Error fetching stats:', error);
-      return {};
+      console.error('[audit] the audit statistics could not be read:', error.message);
+      return [];
     }
   },
 };
 
 module.exports = {
-  auditLog,
   captureResponseData,
   logger,
-  getActionType,
-  getResourceInfo,
+  changesFrom,
 };

@@ -16,17 +16,11 @@ jest.mock('../../../src/middleware/auditLog', () => ({
 }));
 
 // Mock all services that are dynamically required
-jest.mock('../../../src/services/ActivityService', () => ({
-  logActivity: jest.fn().mockResolvedValue({}),
-}));
 jest.mock('../../../src/services/SocketService', () => ({
   broadcastMessage: jest.fn().mockResolvedValue({}),
 }));
 jest.mock('../../../src/services/NotificationService', () => ({
   create: jest.fn().mockResolvedValue({}),
-}));
-jest.mock('../../../src/services/AuditLogger', () => ({
-  log: jest.fn().mockResolvedValue({}),
 }));
 
 const episodeController = require('../../../src/controllers/episodeController');

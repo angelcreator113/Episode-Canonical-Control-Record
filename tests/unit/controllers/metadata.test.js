@@ -98,21 +98,17 @@ describe('Metadata Controller', () => {
       );
     });
 
-    test('should log metadata view activity', async () => {
+    // Evoni, 2026-11-11: viewing does not create an audit entry (issue #1948).
+    test('viewing the metadata list writes no audit entry', async () => {
       models.MetadataStorage.findAndCountAll = jest.fn().mockResolvedValue({
         count: 0,
         rows: [],
       });
+      logger.logAction.mockClear();
 
       await metadataController.listMetadata(mockReq, mockRes);
 
-      expect(logger.logAction).toHaveBeenCalledWith(
-        'user-123',
-        'view',
-        'metadata',
-        'all',
-        expect.any(Object)
-      );
+      expect(logger.logAction).not.toHaveBeenCalled();
     });
   });
 
