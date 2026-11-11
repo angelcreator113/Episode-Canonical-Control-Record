@@ -29,18 +29,97 @@ const captureResponseData = (req, res, next) => {
 
 const NOT_STORED = new Set(['oldValues', 'newValues', 'ipAddress', 'userAgent']);
 
-/** { before?, after?, meta? } from a logAction options object; null when empty. */
+// What an entry may hold, whoever calls (Evoni, 2026-11-11): bounded, and
+// with nothing that looks like a credential.
+/** A text longer than this is recorded by its length and SHA-256, not copied into the entry. */
+const LONG_TEXT = 2000;
+/** A list longer than this keeps its first items and the count of the rest. */
+const MAX_ITEMS = 50;
+/** An object keeps at most this many keys. */
+const MAX_KEYS = 60;
+/** Nesting deeper than this is replaced by a marker. */
+const MAX_DEPTH = 6;
+/** before, after and meta are each replaced by a marker past this many characters of JSON. */
+const MAX_SECTION = 20000;
+/** Keys whose values are never recorded. */
+const SENSITIVE_KEY = /pass(word|wd)?$|passphrase|secret|token|authori[sz]ation|api[_-]?key|access[_-]?key|private[_-]?key|credential|cookie|signature|presigned|session[_-]?id/i;
+const REMOVED = '[removed]';
+
+/** A long text as an entry keeps it: its length and digest, never its words. */
+const digestOf = (text) => ({ long_text: true, length: text.length, sha256: crypto.createHash('sha256').update(text).digest('hex') });
+
+/** A value cut to what an entry may hold: long texts digested, lists and objects bounded, credential-like keys removed. */
+function limited(value, depth = 0) {
+  if (value === undefined || value === null) return null;
+  if (typeof value === 'string') return value.length > LONG_TEXT ? digestOf(value) : value;
+  if (typeof value === 'number' || typeof value === 'boolean') return value;
+  if (value instanceof Date) return value.toISOString();
+  if (typeof value !== 'object') return String(value);
+  if (depth >= MAX_DEPTH) return '[nested]';
+  if (Array.isArray(value)) {
+    const kept = value.slice(0, MAX_ITEMS).map((item) => limited(item, depth + 1));
+    return value.length > MAX_ITEMS ? [...kept, { more_items: value.length - MAX_ITEMS }] : kept;
+  }
+  const plain = typeof value.toJSON === 'function' ? value.toJSON() : value;
+  const entries = Object.entries(plain);
+  const out = {};
+  for (const [key, inner] of entries.slice(0, MAX_KEYS)) {
+    out[key] = SENSITIVE_KEY.test(key) && inner !== null && inner !== undefined ? REMOVED : limited(inner, depth + 1);
+  }
+  if (entries.length > MAX_KEYS) out.more_keys = entries.length - MAX_KEYS;
+  return out;
+}
+
+/** One of before / after / meta, bounded as a whole. */
+function section(value) {
+  const kept = limited(value);
+  const size = JSON.stringify(kept).length;
+  if (size <= MAX_SECTION) return kept;
+  return { too_large: true, characters: size, keys: kept && typeof kept === 'object' && !Array.isArray(kept) ? Object.keys(kept).slice(0, MAX_KEYS) : [] };
+}
+
+/**
+ * { before?, after?, meta? } from a logAction options object; null when
+ * empty. Every part passes through the limits above, so no caller can put a
+ * script, an unbounded list or a credential-like field into the trail.
+ */
 function changesFrom(options = {}) {
   const changes = {};
-  if (options.oldValues !== null && options.oldValues !== undefined) changes.before = options.oldValues;
-  if (options.newValues !== null && options.newValues !== undefined) changes.after = options.newValues;
+  if (options.oldValues !== null && options.oldValues !== undefined) changes.before = section(options.oldValues);
+  if (options.newValues !== null && options.newValues !== undefined) changes.after = section(options.newValues);
   const meta = Object.fromEntries(Object.entries(options).filter(([k, v]) => !NOT_STORED.has(k) && v !== undefined));
-  if (Object.keys(meta).length) changes.meta = meta;
+  if (Object.keys(meta).length) changes.meta = section(meta);
   return Object.keys(changes).length ? changes : null;
 }
 
-/** A text longer than this is recorded by its length and SHA-256, not copied into the entry. */
-const LONG_TEXT = 2000;
+/**
+ * What an entry says about an episode when it is created or deleted:
+ * enough to identify it and its state, and never its script or the rest of
+ * the row (Evoni, 2026-11-11).
+ */
+function episodeSummary(row = {}) {
+  const e = row && typeof row.toJSON === 'function' ? row.toJSON() : row || {};
+  const script = typeof e.script_content === 'string' ? e.script_content : '';
+  return {
+    id: e.id ?? null,
+    show_id: e.show_id ?? null,
+    title: e.title ?? null,
+    episode_number: e.episode_number ?? null,
+    season_number: e.season_number ?? null,
+    status: e.status ?? null,
+    air_date: e.air_date ?? null,
+    categories: Array.isArray(e.categories) ? e.categories : null,
+    has_script: script.trim().length > 0,
+    script_length: script.length,
+  };
+}
+
+/** The named keys of a row, and nothing else: an explicit allowlist for an entry. */
+function only(row, keys) {
+  const plain = row && typeof row.toJSON === 'function' ? row.toJSON() : row || {};
+  return Object.fromEntries(keys.filter((key) => plain[key] !== undefined).map((key) => [key, plain[key]]));
+}
+
 /** Fields that change on every save and say nothing about what was edited. */
 const NOT_A_CHANGE = new Set(['updated_at', 'updatedAt']);
 
@@ -48,9 +127,7 @@ const comparable = (value) => JSON.stringify(value === undefined ? null : value)
 
 /** A value as an entry keeps it: itself, or for a long text its length and digest. */
 function recorded(value) {
-  if (typeof value === 'string' && value.length > LONG_TEXT) {
-    return { long_text: true, length: value.length, sha256: crypto.createHash('sha256').update(value).digest('hex') };
-  }
+  if (typeof value === 'string' && value.length > LONG_TEXT) return digestOf(value);
   return value === undefined ? null : value;
 }
 
@@ -147,5 +224,8 @@ module.exports = {
   logger,
   changesFrom,
   fieldChanges,
+  episodeSummary,
+  only,
+  limited,
   LONG_TEXT,
 };

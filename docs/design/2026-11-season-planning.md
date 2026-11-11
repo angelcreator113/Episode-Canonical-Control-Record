@@ -482,9 +482,24 @@ plus the index `activity_logs_resource (resource_type, resource_id)`.
 **An episode update records only what changed** (`fieldChanges` in `middleware/auditLog.js`; Evoni, 2026-11-11).
 - `before` and `after` hold only the fields whose value differs, and `meta.changedFields` names them. Unchanged fields are left out, so a title edit does not copy the script.
 - `updated_at` is never counted as a change.
-- **A long text** (over 2,000 characters; in practice the script) that did change is recorded on both sides as `{ long_text: true, length, sha256 }`, not copied. That says that it changed, when, by whom, and identifies the exact text; the words are in the script's own versions.
+- **A long text** (over 2,000 characters; in practice the script) that did change is recorded on both sides as `{ long_text: true, length, sha256 }`, not copied. That says that it changed, when, by whom, and identifies the exact text.
+- **Where the words are, and for how long.** The entry never holds them. The current script is on the episode. Each save keeps the script it replaces in `episode_script_versions` (`services/scriptVersions.js`), which is pruned to the newest 50 saved versions and the newest 10 generated ones per episode. A text older than that exists nowhere; its fingerprint in the audit entry still proves what it was, but cannot bring it back.
 - An update that changed nothing still writes its one entry, with an empty `changedFields`.
-- Episode create and delete still record the whole row, as before.
+
+**Episode create and delete record a summary** (`episodeSummary`; Evoni, 2026-11-11): `id`, `show_id`, `title`, `episode_number`, `season_number`, `status`, `air_date`, `categories`, `has_script`, `script_length`. Never the rest of the row, never the script.
+- A delete also records `meta.deleteType`: `soft` or `permanent`, as it actually happened. `?hard=true` is a soft delete in production and is recorded as one.
+- **What a delete leaves.** A soft delete (the only kind in production) sets `deleted_at`; the row, its script and its script versions stay in the database. **No route or screen restores a deleted episode**: `Episode.restore` exists on the model and nothing calls it, so getting one back is a manual database action. A permanent delete (outside production only) removes the row and, by cascade, its script versions; nothing of the script remains.
+- **A delete that did not happen writes nothing.** The entry is written after the delete's transaction commits. A filmed episode's refusal (409), an episode that is not found, and a database failure all return or throw before it.
+
+**Limits on every entry** (`changesFrom`, whoever calls; Evoni, 2026-11-11). `before`, `after` and `meta` each pass through the same limits:
+- a text over 2,000 characters becomes `{ long_text, length, sha256 }`;
+- a key that looks like a credential (password, secret, token, authorization, API key, access key, private key, credential, cookie, signature, pre-signed, session id) keeps its name and has its value replaced by `[removed]`, at any depth;
+- a list keeps its first 50 items and the count of the rest; an object its first 60 keys; nesting stops at 6 levels;
+- a section over 20,000 characters of JSON is replaced by `{ too_large, characters, keys }`.
+
+**Jobs record an allowlist** (`jobController.createJob`): `jobType`, `episodeId`, `fileId`, `maxRetries`, `hasPayload`. The payload is never recorded. Deleting a processing-queue row records `id`, episode id, job type, status and retry count only.
+
+**Metadata** (`metadataSummary` in `metadataController`): ids, `tags`, `categories`, the processing time, and for each of the five analysis fields only `present` or nothing. An update records only what changed, plus `meta.sentFields` (the fields the request set); a delete records the summary.
 
 **File downloads.** `fileController.getPreSignedUrl` writes one `download` entry after the link has been made and the access count saved. A file that is not found, a link that cannot be made, or any other failure writes none. The entry holds the file name, type and episode id: never the link, the bucket or the key. Listing files and reading a file's details are views and write nothing.
 

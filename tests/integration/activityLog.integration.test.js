@@ -250,6 +250,86 @@ const entriesFor = (resourceId) => select(
       expect(rows[0].changes.before.title).toBe('Before');
       expect(rows[0].changes.meta.deleteType).toBe('soft');
     });
+
+    // Evoni, 2026-11-11: creation and deletion record identifying and
+    // operational metadata, not the complete row or the script.
+    const SUMMARY_KEYS = ['air_date', 'categories', 'episode_number', 'has_script', 'id', 'script_length', 'season_number', 'show_id', 'status', 'title'];
+
+    it('creating an episode records its summary: not the row, never the script', async () => {
+      const { show } = await seedEpisode();
+      const script = 'INT. STUDIO - DAY\nLALA\nA created script.\n'.repeat(100);
+      const res = await as(editor, request(app).post('/api/v1/episodes'))
+        .send({ show_id: show, title: 'Created', episode_number: 7, description: 'A PRIVATE DESCRIPTION', script_content: script });
+      expect(res.status).toBe(201);
+      const id = res.body.data.id;
+      // The entry is written without holding the response: wait for it.
+      let rows = [];
+      for (let i = 0; i < 50 && !rows.length; i += 1) {
+        rows = await entriesFor(id);
+        if (!rows.length) await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({ user_id: USER, action: 'create', resource_type: 'episode', resource_id: id });
+      expect(Object.keys(rows[0].changes)).toEqual(['after']);
+      expect(Object.keys(rows[0].changes.after).sort()).toEqual(SUMMARY_KEYS);
+      expect(rows[0].changes.after).toMatchObject({ id, show_id: show, title: 'Created', episode_number: 7, status: 'draft' });
+      const [{ script_content: stored }] = await select('SELECT script_content FROM episodes WHERE id = :id', { id });
+      expect(rows[0].changes.after.has_script).toBe(Boolean(stored && stored.trim()));
+      expect(rows[0].changes.after.script_length).toBe((stored || '').length);
+      expect(JSON.stringify(rows[0].changes)).not.toMatch(/INT\. STUDIO|A created script|PRIVATE DESCRIPTION/);
+    });
+
+    it('deleting an episode records its summary and what kind of delete it was: not the row, never the script', async () => {
+      const { ep } = await seedEpisode();
+      const script = 'INT. STUDIO - DAY\nLALA\nA deleted script.\n'.repeat(100);
+      await run('UPDATE episodes SET script_content = :script, description = :description WHERE id = :ep', { ep, script, description: 'A PRIVATE DESCRIPTION' });
+      expect((await as(admin, request(app).delete(`/api/v1/episodes/${ep}`))).status).toBe(200);
+
+      const rows = await entriesFor(ep);
+      expect(rows).toHaveLength(1);
+      expect(Object.keys(rows[0].changes).sort()).toEqual(['before', 'meta']);
+      expect(Object.keys(rows[0].changes.before).sort()).toEqual(SUMMARY_KEYS);
+      expect(rows[0].changes.before).toMatchObject({ id: ep, title: 'Before', episode_number: 1, status: 'draft', has_script: true, script_length: script.length });
+      expect(rows[0].changes.meta).toEqual({ deleteType: 'soft' });
+      expect(JSON.stringify(rows[0].changes)).not.toMatch(/INT\. STUDIO|A deleted script|PRIVATE DESCRIPTION/);
+      expect(JSON.stringify(rows[0].changes).length).toBeLessThan(600);
+      // What a soft delete leaves: the row, with its script, marked deleted.
+      const [kept] = await select('SELECT deleted_at, script_content FROM episodes WHERE id = :ep', { ep });
+      expect(kept.deleted_at).not.toBeNull();
+      expect(kept.script_content).toBe(script);
+    });
+
+    it('a refused delete (a filmed episode) and a delete of nothing leave no entry', async () => {
+      const { ep, show } = await seedEpisode();
+      const clip = uuid();
+      await run(`INSERT INTO episode_raw_clips (id, episode_id, show_id, performer, s3_key_raw, key_status, key_strength, created_at, updated_at)
+                 VALUES (:clip, :ep, :show, 'lala', :key, 'none', 'medium', NOW(), NOW())`, { clip, ep, show, key: `episodes/${ep}/raw-clips/x/original.mp4` });
+      try {
+        const refused = await as(admin, request(app).delete(`/api/v1/episodes/${ep}`));
+        expect(refused.status).toBe(409);
+        expect(await entriesFor(ep)).toEqual([]);
+        const [still] = await select('SELECT deleted_at FROM episodes WHERE id = :ep', { ep });
+        expect(still.deleted_at).toBeNull();
+      } finally {
+        await run('DELETE FROM episode_raw_clips WHERE id = :clip', { clip });
+      }
+
+      const nothing = uuid();
+      expect((await as(admin, request(app).delete(`/api/v1/episodes/${nothing}`))).status).toBe(404);
+      expect(await entriesFor(nothing)).toEqual([]);
+    });
+
+    it('a delete that fails in the database leaves no entry and the episode as it was', async () => {
+      const { ep } = await seedEpisode();
+      const failing = jest.spyOn(models.Episode.prototype, 'softDelete').mockRejectedValue(new Error('connection lost'));
+      jest.spyOn(console, 'error').mockImplementation(() => {});
+      const res = await as(admin, request(app).delete(`/api/v1/episodes/${ep}`));
+      expect(failing).toHaveBeenCalled();
+      expect(res.status).toBe(500);
+      expect(await entriesFor(ep)).toEqual([]);
+      const [still] = await select('SELECT deleted_at FROM episodes WHERE id = :ep', { ep });
+      expect(still.deleted_at).toBeNull();
+    });
   });
 
   describe('the readers: GET /api/v1/audit-logs (ADMIN only)', () => {

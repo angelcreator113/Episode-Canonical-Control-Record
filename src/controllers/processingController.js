@@ -1,7 +1,7 @@
 const { models } = require('../models');
 const { Episode, ProcessingQueue } = models;
 const { NotFoundError, ValidationError } = require('../middleware/errorHandler');
-const { logger } = require('../middleware/auditLog');
+const { logger, only } = require('../middleware/auditLog');
 
 /**
  * Processing Queue Controller
@@ -246,8 +246,9 @@ module.exports = {
     await job.destroy();
 
     // Log activity
+    // An allowlist: a job row can carry whatever its creator put in it.
     await logger.logAction(req.user?.id, 'delete', 'processing', id, {
-      oldValues,
+      oldValues: only(oldValues, ['id', 'episodeId', 'episode_id', 'jobType', 'job_type', 'status', 'retryCount', 'retry_count']),
     });
 
     res.json({

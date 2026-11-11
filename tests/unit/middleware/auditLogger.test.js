@@ -18,7 +18,7 @@ afterEach(() => jest.restoreAllMocks());
 
 describe('what the module is', () => {
   test('it exports the logger and the response capture; the request-logging middleware is gone', () => {
-    expect(Object.keys(auditLog).sort()).toEqual(['LONG_TEXT', 'captureResponseData', 'changesFrom', 'fieldChanges', 'logger']);
+    expect(Object.keys(auditLog).sort()).toEqual(['LONG_TEXT', 'captureResponseData', 'changesFrom', 'episodeSummary', 'fieldChanges', 'limited', 'logger', 'only']);
     expect(auditLog.auditLog).toBeUndefined();
   });
 
@@ -47,6 +47,88 @@ describe('changesFrom: the changes JSON', () => {
   test('nothing to record is null', () => {
     expect(changesFrom()).toBeNull();
     expect(changesFrom({ oldValues: null, newValues: undefined })).toBeNull();
+  });
+});
+
+describe('what an entry may hold, whoever calls (Evoni, 2026-11-11)', () => {
+  const { episodeSummary, only, limited } = auditLog;
+  const SCRIPT = 'INT. STUDIO - DAY\nLALA\nWe begin.\n'.repeat(120);
+
+  test('a long text anywhere in an entry is its length and SHA-256, never its words', () => {
+    const changes = changesFrom({ newValues: { title: 'T', script_content: SCRIPT }, note: SCRIPT, nested: { deep: [SCRIPT] } });
+    expect(changes.after.title).toBe('T');
+    expect(changes.after.script_content).toEqual({ long_text: true, length: SCRIPT.length, sha256: expect.stringMatching(/^[0-9a-f]{64}$/) });
+    expect(changes.meta.note.long_text).toBe(true);
+    expect(changes.meta.nested.deep[0].long_text).toBe(true);
+    expect(JSON.stringify(changes)).not.toContain('INT. STUDIO');
+  });
+
+  test('a credential-like key keeps its name and loses its value, at any depth', () => {
+    const changes = changesFrom({
+      newValues: { title: 'T', password: 'hunter2', apiKey: 'sk-live-1', api_key: 'k', accessToken: 'eyJ', refresh_token: 'r',
+        Authorization: 'Bearer x', client_secret: 's', cookie: 'c', presignedUrl: 'https://signed', nested: { s3: { secretAccessKey: 'aws' } }, empty_token: null },
+      sessionId: 'abc',
+    });
+    const text = JSON.stringify(changes);
+    for (const value of ['hunter2', 'sk-live-1', 'eyJ', 'Bearer x', 'https://signed', '"aws"', '"abc"']) expect(text).not.toContain(value);
+    expect(changes.after).toMatchObject({ title: 'T', password: '[removed]', apiKey: '[removed]', api_key: '[removed]', accessToken: '[removed]',
+      refresh_token: '[removed]', Authorization: '[removed]', client_secret: '[removed]', cookie: '[removed]', presignedUrl: '[removed]', empty_token: null });
+    expect(changes.after.nested.s3.secretAccessKey).toBe('[removed]');
+    expect(changes.meta.sessionId).toBe('[removed]');
+  });
+
+  test('ordinary fields that merely resemble one are kept', () => {
+    const changes = changesFrom({ newValues: { title: 'Pass the mic', status: 'draft', tags: ['secretly-good'], episode_number: 3 } });
+    expect(changes.after).toEqual({ title: 'Pass the mic', status: 'draft', tags: ['secretly-good'], episode_number: 3 });
+  });
+
+  test('a long list keeps its first 50 items and the count of the rest; useful tags survive', () => {
+    const tags = Array.from({ length: 80 }, (_, i) => `tag-${i}`);
+    expect(changesFrom({ newValues: { tags: ['fashion', 'finale'] } }).after.tags).toEqual(['fashion', 'finale']);
+    const kept = changesFrom({ newValues: { tags } }).after.tags;
+    expect(kept).toHaveLength(51);
+    expect(kept.slice(0, 50)).toEqual(tags.slice(0, 50));
+    expect(kept[50]).toEqual({ more_items: 30 });
+  });
+
+  test('deep nesting, many keys and an oversized section are bounded', () => {
+    let deep = 'leaf';
+    for (let i = 0; i < 12; i += 1) deep = { inner: deep };
+    expect(JSON.stringify(changesFrom({ newValues: deep }))).toContain('[nested]');
+    expect(JSON.stringify(changesFrom({ newValues: deep }))).not.toContain('leaf');
+
+    const wide = Object.fromEntries(Array.from({ length: 100 }, (_, i) => [`k${i}`, i]));
+    const keptWide = changesFrom({ newValues: wide }).after;
+    expect(Object.keys(keptWide)).toHaveLength(61);
+    expect(keptWide.more_keys).toBe(40);
+
+    // 40 fields of 1,900 characters each: every one is under the long-text line, the section is not.
+    const heavy = Object.fromEntries(Array.from({ length: 40 }, (_, i) => [`field${i}`, 'x'.repeat(1900)]));
+    const keptHeavy = changesFrom({ newValues: heavy }).after;
+    expect(keptHeavy).toMatchObject({ too_large: true, characters: expect.any(Number) });
+    expect(keptHeavy.keys).toContain('field0');
+    expect(JSON.stringify(keptHeavy).length).toBeLessThan(2000);
+  });
+
+  test('dates and model rows are stored as plain values', () => {
+    const when = new Date('2026-11-11T10:00:00Z');
+    expect(limited({ at: when, row: { toJSON: () => ({ id: 1, token: 't' }) } })).toEqual({ at: '2026-11-11T10:00:00.000Z', row: { id: 1, token: '[removed]' } });
+  });
+
+  test('episodeSummary: what identifies an episode and its state, never the script or the rest of the row', () => {
+    const row = { id: UUID, show_id: 's', title: 'Pilot', episode_number: 1, season_number: 2, status: 'draft', air_date: '2026-12-01', categories: ['a'],
+      script_content: SCRIPT, description: 'A long description', evaluation_json: { score: 9 }, thumbnail_url: 'https://x', created_at: 'now' };
+    const summary = episodeSummary({ toJSON: () => row });
+    expect(summary).toEqual({ id: UUID, show_id: 's', title: 'Pilot', episode_number: 1, season_number: 2, status: 'draft', air_date: '2026-12-01',
+      categories: ['a'], has_script: true, script_length: SCRIPT.length });
+    expect(JSON.stringify(summary)).not.toMatch(/INT\. STUDIO|description|evaluation_json|thumbnail/);
+    expect(episodeSummary({ id: UUID, script_content: '   ' })).toMatchObject({ id: UUID, title: null, has_script: false, script_length: 3 });
+    expect(episodeSummary(null)).toMatchObject({ id: null, has_script: false, script_length: 0 });
+  });
+
+  test('only: the named keys and nothing else', () => {
+    expect(only({ id: 1, status: 'failed', data: { anything: true }, errorMessage: 'x' }, ['id', 'status', 'jobType'])).toEqual({ id: 1, status: 'failed' });
+    expect(only(null, ['id'])).toEqual({});
   });
 });
 

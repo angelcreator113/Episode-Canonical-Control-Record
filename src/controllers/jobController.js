@@ -69,7 +69,16 @@ class JobController {
       });
 
       // The audit entry (activity_logs; not awaited: logAction never rejects)
-      audit.logAction(req.user?.id, 'create', 'job', job.id, { jobType: job.job_type, episodeId, payload: job.payload });
+      // An explicit allowlist (Evoni, 2026-11-11): the payload is whatever the
+      // caller sent and is never recorded; an id that is not a plain id is dropped.
+      const plainId = (value) => (typeof value === 'string' && value.length <= 64) || Number.isInteger(value) ? value : null;
+      audit.logAction(req.user?.id, 'create', 'job', job.id, {
+        jobType,
+        episodeId: plainId(episodeId),
+        fileId: plainId(fileId),
+        maxRetries: Number.isInteger(maxRetries) ? maxRetries : 3,
+        hasPayload: Boolean(payload),
+      });
 
       // Phase 3A Integration: WebSocket broadcast (non-blocking)
       SocketService.broadcastMessage({

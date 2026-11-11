@@ -13,7 +13,7 @@ const {
 const { NotFoundError, ValidationError, asyncHandler } = require('../middleware/errorHandler');
 // A1.2c: a filmed episode is not deleted (utils/frozenEpisode).
 const { filmedAt, deleteRefusal, isFrozenEpisodeError } = require('../utils/frozenEpisode');
-const { logger, fieldChanges } = require('../middleware/auditLog');
+const { logger, fieldChanges, episodeSummary } = require('../middleware/auditLog');
 
 // Phase 3A Services
 const NotificationService = require('../services/NotificationService');
@@ -325,7 +325,8 @@ module.exports = {
 
       // The audit entry (activity_logs; non-blocking: logAction never rejects).
       if (logger && typeof logger.logAction === 'function') {
-        logger.logAction(req.user?.id, 'create', 'episode', episode.id, { newValues: episode.toJSON() });
+        // What identifies the episode and its state: not the row, never the script.
+        logger.logAction(req.user?.id, 'create', 'episode', episode.id, { newValues: episodeSummary(episode) });
       }
 
       // ✅ SAFE: Phase 3A Integration with proper checks
@@ -781,10 +782,14 @@ module.exports = {
       throw err;
     }
 
-    // The audit entry (activity_logs): the ONE entry for this delete.
+    // The audit entry (activity_logs): the ONE entry for this delete, written
+    // only after the delete committed (a refused or failed delete returned or
+    // threw above). It identifies the episode; it does not copy the row or the
+    // script. deleteType is what actually happened: ?hard=true is a soft
+    // delete in production.
     await logger.logAction(req.user?.id, 'delete', 'episode', id, {
-      oldValues,
-      deleteType: hard === 'true' ? 'permanent' : 'soft',
+      oldValues: episodeSummary(oldValues),
+      deleteType: hardDelete ? 'permanent' : 'soft',
     });
 
     // Phase 3A Integration: Broadcast WebSocket Event (non-blocking)
