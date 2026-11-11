@@ -9,6 +9,7 @@ const crypto = require('crypto');
 const {
   CognitoIdentityProviderClient,
   InitiateAuthCommand,
+  RevokeTokenCommand,
 } = require('@aws-sdk/client-cognito-identity-provider');
 
 let _client = null;
@@ -136,4 +137,29 @@ const refreshWithCognito = async (refreshToken) => {
   };
 };
 
-module.exports = { initiatePasswordAuth, computeSecretHash, refreshWithCognito };
+/**
+ * Revoke a Cognito refresh token (RevokeToken), so it can no longer be
+ * exchanged at /refresh. Ruled 2026-11-11
+ * (docs/audit/F-AUTH-1_LogoutRevocation_Ruling_2026-11-11.md): logout ends
+ * this session only, so this is RevokeToken on the one token the browser
+ * held, never GlobalSignOut.
+ *
+ * It needs the app client to have token revocation enabled. Unlike a refresh,
+ * RevokeToken takes the client secret itself (not a per-user SECRET_HASH), so
+ * a configured secret is passed through.
+ *
+ * What it does not do: an access or ID token already issued from this refresh
+ * token still passes this API's local signature check until it expires.
+ *
+ * Throws the raw Cognito SDK error; the caller logs its name only.
+ */
+const revokeRefreshToken = async (refreshToken) => {
+  const { clientId, clientSecret } = getCognitoEnv();
+
+  const input = { Token: refreshToken, ClientId: clientId };
+  if (clientSecret) input.ClientSecret = clientSecret;
+
+  await getClient().send(new RevokeTokenCommand(input));
+};
+
+module.exports = { initiatePasswordAuth, computeSecretHash, refreshWithCognito, revokeRefreshToken };
