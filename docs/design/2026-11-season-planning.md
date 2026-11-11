@@ -467,7 +467,10 @@ plus the index `activity_logs_resource (resource_type, resource_id)`.
 - **On production and the dev box** it changes two things: `resource_id` integer to varchar(255), and the index.
 - **On CI and fresh databases** it also renames the camelCase columns, replaces the two enums with varchar, folds old and new values into `changes`, and drops the IP-address and user-agent columns.
 - **Rows are kept from every shape.** Only IP-address and user-agent values are dropped, by ruling; production never had them.
-- **`down` refuses once any row exists.** A UUID cannot go back into an integer column, and audit history is not deleted to make a rollback possible. After the first entry there is no rollback of this migration.
+- **`down` undoes what the migration did to production's table, and nothing more.** `resource_id` goes back to integer and the index is dropped.
+  - It does **not** rebuild the table migration `20240101000005` created. On CI or a fresh database, `down` leaves production's earlier shape: no camelCase columns, no enums, no IP-address or user-agent columns, none of the four old indexes. The chain can still be undone past that point (the older migration's `down` drops the table) and run up again.
+  - It **refuses once any row exists.** A UUID cannot go back into an integer column, and audit history is not deleted to make a rollback possible. After the first entry there is no rollback; the way back is a new migration.
+- **Existing objects.** The primary key and the `id` sequence are untouched. If a view selects `resource_id`, PostgreSQL refuses the type change and the whole migration rolls back, changing nothing.
 
 **One writer.** `ActivityLog.logActivity({ userId, action, resourceType, resourceId, changes }, { transaction })`.
 - It throws when the entry cannot be written.
@@ -475,6 +478,15 @@ plus the index `activity_logs_resource (resource_type, resource_id)`.
 - It refuses a `view`. Placeholder user ids (`anonymous`, `unknown`) are stored as NULL.
 
 **`changes`.** `{ before?, after?, meta? }`: the old values, the new values, and anything else the caller passed. Empty is NULL.
+
+**An episode update records only what changed** (`fieldChanges` in `middleware/auditLog.js`; Evoni, 2026-11-11).
+- `before` and `after` hold only the fields whose value differs, and `meta.changedFields` names them. Unchanged fields are left out, so a title edit does not copy the script.
+- `updated_at` is never counted as a change.
+- **A long text** (over 2,000 characters; in practice the script) that did change is recorded on both sides as `{ long_text: true, length, sha256 }`, not copied. That says that it changed, when, by whom, and identifies the exact text; the words are in the script's own versions.
+- An update that changed nothing still writes its one entry, with an empty `changedFields`.
+- Episode create and delete still record the whole row, as before.
+
+**File downloads.** `fileController.getPreSignedUrl` writes one `download` entry after the link has been made and the access count saved. A file that is not found, a link that cannot be made, or any other failure writes none. The entry holds the file name, type and episode id: never the link, the bucket or the key. Listing files and reading a file's details are views and write nothing.
 
 **One call per operation.** The controllers call `logger.logAction` (in `middleware/auditLog.js`), which calls the one writer. It never fails the request: a failed entry is logged as `[audit] NOT RECORDED` and the request goes on.
 

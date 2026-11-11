@@ -18,7 +18,7 @@ afterEach(() => jest.restoreAllMocks());
 
 describe('what the module is', () => {
   test('it exports the logger and the response capture; the request-logging middleware is gone', () => {
-    expect(Object.keys(auditLog).sort()).toEqual(['captureResponseData', 'changesFrom', 'logger']);
+    expect(Object.keys(auditLog).sort()).toEqual(['LONG_TEXT', 'captureResponseData', 'changesFrom', 'fieldChanges', 'logger']);
     expect(auditLog.auditLog).toBeUndefined();
   });
 
@@ -96,5 +96,68 @@ describe('the readers fall back to nothing, with a logged reason', () => {
     models.ActivityLog[name] = jest.fn().mockRejectedValue(new Error('down'));
     await expect(logger[name](...args)).resolves.toEqual([]);
     expect(error).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('fieldChanges: what an update entry holds (Evoni, 2026-11-11)', () => {
+  const { fieldChanges, LONG_TEXT } = auditLog;
+  const sha = (text) => require('crypto').createHash('sha256').update(text).digest('hex');
+  const SCRIPT = 'INT. STUDIO - DAY\n'.repeat(400);
+
+  test('only the fields that changed, each with its before and after value', () => {
+    const before = { id: UUID, title: 'Before', status: 'draft', episode_number: 3, script_content: SCRIPT, categories: ['a'] };
+    const after = { ...before, title: 'After', status: 'scripted' };
+    expect(fieldChanges(before, after)).toEqual({
+      oldValues: { status: 'draft', title: 'Before' },
+      newValues: { status: 'scripted', title: 'After' },
+      changedFields: ['status', 'title'],
+    });
+  });
+
+  test('an unrelated edit does not copy the script, or any unchanged field, into the entry', () => {
+    const before = { title: 'Before', script_content: SCRIPT, description: 'same', season_context: { slot_number: 4 } };
+    const entry = changesFrom(fieldChanges(before, { ...before, title: 'After' }));
+    expect(entry).toEqual({ before: { title: 'Before' }, after: { title: 'After' }, meta: { changedFields: ['title'] } });
+    expect(JSON.stringify(entry)).not.toContain('INT. STUDIO');
+    expect(JSON.stringify(entry)).not.toMatch(/description|season_context|script_content/);
+  });
+
+  test('a script edit is recorded by length and SHA-256 on both sides, not copied', () => {
+    const edited = `${SCRIPT}LALA\nA new line.\n`;
+    const { oldValues, newValues, changedFields } = fieldChanges({ title: 't', script_content: SCRIPT }, { title: 't', script_content: edited });
+    expect(changedFields).toEqual(['script_content']);
+    expect(oldValues.script_content).toEqual({ long_text: true, length: SCRIPT.length, sha256: sha(SCRIPT) });
+    expect(newValues.script_content).toEqual({ long_text: true, length: edited.length, sha256: sha(edited) });
+    expect(oldValues.script_content.sha256).not.toBe(newValues.script_content.sha256);
+    expect(JSON.stringify({ oldValues, newValues })).not.toContain('INT. STUDIO');
+  });
+
+  test('a first script, a cleared script and a short text keep what a reader needs', () => {
+    expect(fieldChanges({ script_content: null }, { script_content: SCRIPT })).toMatchObject({
+      oldValues: { script_content: null }, newValues: { script_content: { long_text: true, length: SCRIPT.length } },
+    });
+    expect(fieldChanges({ script_content: SCRIPT }, { script_content: null }).newValues).toEqual({ script_content: null });
+    const short = 'x'.repeat(LONG_TEXT);
+    expect(fieldChanges({ description: 'old' }, { description: short }).newValues).toEqual({ description: short });
+    expect(fieldChanges({ description: 'old' }, { description: `${short}x` }).newValues.description).toMatchObject({ long_text: true, length: LONG_TEXT + 1 });
+  });
+
+  test('dates, lists and objects are compared by value; a field that appears or disappears is a change', () => {
+    const at = new Date('2026-11-01T10:00:00Z');
+    expect(fieldChanges({ air_date: at, categories: ['a', 'b'], evaluation_json: { score: 1 } },
+      { air_date: new Date(at.getTime()), categories: ['a', 'b'], evaluation_json: { score: 1 } }).changedFields).toEqual([]);
+    expect(fieldChanges({ categories: ['a'] }, { categories: ['a', 'b'] })).toMatchObject({
+      oldValues: { categories: ['a'] }, newValues: { categories: ['a', 'b'] }, changedFields: ['categories'],
+    });
+    expect(fieldChanges({ a: 1 }, { a: 1, thumbnail_url: 'u' })).toMatchObject({ oldValues: { thumbnail_url: null }, newValues: { thumbnail_url: 'u' } });
+    expect(fieldChanges({ a: 1, gone: 'x' }, { a: 1 })).toMatchObject({ oldValues: { gone: 'x' }, newValues: { gone: null }, changedFields: ['gone'] });
+  });
+
+  test('nothing changed (only updated_at moved): no before or after, an empty list of fields', () => {
+    const row = { title: 'Same', updated_at: new Date('2026-11-01T00:00:00Z') };
+    expect(fieldChanges(row, { title: 'Same', updated_at: new Date('2026-11-02T00:00:00Z') }))
+      .toEqual({ oldValues: null, newValues: null, changedFields: [] });
+    expect(changesFrom(fieldChanges(row, row))).toEqual({ meta: { changedFields: [] } });
+    expect(fieldChanges(undefined, undefined).changedFields).toEqual([]);
   });
 });

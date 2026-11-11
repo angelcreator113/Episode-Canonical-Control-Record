@@ -9,10 +9,8 @@ jest.mock('../../../src/middleware/auditLog', () => ({
   logger: {
     logAction: jest.fn().mockResolvedValue({}),
   },
-  auditLog: jest.fn(),
+  fieldChanges: jest.fn(() => ({ oldValues: null, newValues: null, changedFields: [] })),
   captureResponseData: jest.fn(),
-  getActionType: jest.fn(),
-  getResourceInfo: jest.fn(),
 }));
 
 // Mock all services that are dynamically required

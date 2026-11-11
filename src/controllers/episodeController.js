@@ -13,7 +13,7 @@ const {
 const { NotFoundError, ValidationError, asyncHandler } = require('../middleware/errorHandler');
 // A1.2c: a filmed episode is not deleted (utils/frozenEpisode).
 const { filmedAt, deleteRefusal, isFrozenEpisodeError } = require('../utils/frozenEpisode');
-const { logger } = require('../middleware/auditLog');
+const { logger, fieldChanges } = require('../middleware/auditLog');
 
 // Phase 3A Services
 const NotificationService = require('../services/NotificationService');
@@ -624,13 +624,12 @@ module.exports = {
     // They wait under the Feed page's Requests, "posts to approve", until
     // each is approved (PUT /feed-posts/:id { status: 'live' }).
 
-    // The audit entry (activity_logs): the ONE entry for this update. A
-    // failure to write it is logged by logAction and does not fail the save.
-    await logger.logAction(req.user?.id, 'edit', 'episode', id, {
-      oldValues,
-      newValues: episode.toJSON(),
-      changedFields: Object.keys(updateData),
-    });
+    // The audit entry (activity_logs): the ONE entry for this update, holding
+    // only the fields that changed, each with its before and after value
+    // (Evoni, 2026-11-11). A long text such as the script is recorded by
+    // length and SHA-256, not copied. A failure to write the entry is logged
+    // by logAction and does not fail the save.
+    await logger.logAction(req.user?.id, 'edit', 'episode', id, fieldChanges(oldValues, episode.toJSON()));
 
     // Phase 3A Integration: Broadcast WebSocket Event (non-blocking)
     SocketService.broadcastMessage({

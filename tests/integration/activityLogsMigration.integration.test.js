@@ -214,4 +214,86 @@ const TARGET_INDEXES = [
     await up();
     await expectTarget();
   });
+
+  // The rollback contract, stated exactly (Evoni, 2026-11-11): down undoes what
+  // this migration did to PRODUCTION's table. It does not rebuild the table
+  // migration 20240101000005 created, whatever shape up started from.
+  it('down after converging the migration chain\'s shape does NOT restore that shape: only resource_id and the index go back', async () => {
+    await original.up(scratch.getQueryInterface(), Sequelize);
+    const chain = (await columns()).map((c) => c.column_name);
+    expect(chain).toEqual(expect.arrayContaining(['userId', 'actionType', 'oldValues', 'ipAddress', 'timestamp']));
+
+    await up();
+    await down();
+
+    const after = await columns();
+    // Production's earlier table, column for column.
+    expect(after.map((c) => [c.column_name, c.data_type])).toEqual([
+      ['action', 'character varying'], ['changes', 'jsonb'], ['created_at', 'timestamp without time zone'], ['id', 'integer'],
+      ['resource_id', 'integer'], ['resource_type', 'character varying'], ['user_id', 'character varying'],
+    ]);
+    // Not rebuilt: the camelCase columns, the enums, the four old indexes.
+    for (const gone of ['userId', 'actionType', 'resourceType', 'resourceId', 'oldValues', 'newValues', 'ipAddress', 'userAgent', 'timestamp']) {
+      expect(after.map((c) => c.column_name)).not.toContain(gone);
+    }
+    expect(await enums()).toEqual([]);
+    expect(await indexes()).toEqual([TARGET_INDEXES[1]]);
+
+    // The chain can still be undone to the bottom, and brought back up.
+    await original.down(scratch.getQueryInterface(), Sequelize);
+    expect(await q("SELECT to_regclass('public.activity_logs') AS reg")).toEqual([{ reg: null }]);
+    await original.up(scratch.getQueryInterface(), Sequelize);
+    await up();
+    await expectTarget();
+  });
+
+  it('existing constraints and the id sequence survive: the primary key holds and ids continue', async () => {
+    await db.query(`CREATE TABLE activity_logs (
+      id SERIAL PRIMARY KEY, user_id VARCHAR(255), action VARCHAR(100), resource_type VARCHAR(100),
+      resource_id INTEGER, changes JSONB, created_at TIMESTAMP DEFAULT NOW())`);
+    await db.query("INSERT INTO activity_logs (action, resource_type, resource_id) VALUES ('create', 'job', 1), ('create', 'job', 2)");
+    const constraintsBefore = await q(
+      "SELECT conname, contype, pg_get_constraintdef(oid) AS def FROM pg_constraint WHERE conrelid = 'public.activity_logs'::regclass ORDER BY conname");
+    expect(constraintsBefore).toEqual([{ conname: 'activity_logs_pkey', contype: 'p', def: 'PRIMARY KEY (id)' }]);
+
+    await up();
+
+    expect(await q(
+      "SELECT conname, contype, pg_get_constraintdef(oid) AS def FROM pg_constraint WHERE conrelid = 'public.activity_logs'::regclass ORDER BY conname"))
+      .toEqual(constraintsBefore);
+    const [next] = await q("INSERT INTO activity_logs (action, resource_type, resource_id) VALUES ('edit', 'episode', $1) RETURNING id", [UUID]);
+    expect(next.id).toBe(3);
+    await expect(db.query('INSERT INTO activity_logs (id, action) VALUES (3, $1)', ['edit'])).rejects.toMatchObject({ code: '23505' });
+    // The sequence still belongs to the column, so it is dropped with the table and nothing is left behind.
+    expect(await q("SELECT pg_get_serial_sequence('public.activity_logs', 'id') AS seq")).toEqual([{ seq: 'public.activity_logs_id_seq' }]);
+  });
+
+  it('an index already named activity_logs_resource, and a view over the table, do not break it or get lost', async () => {
+    await db.query(`CREATE TABLE activity_logs (
+      id SERIAL PRIMARY KEY, user_id VARCHAR(255), action VARCHAR(100), resource_type VARCHAR(100),
+      resource_id VARCHAR(255), changes JSONB, created_at TIMESTAMP DEFAULT NOW())`);
+    await db.query('CREATE INDEX activity_logs_resource ON activity_logs (resource_type, resource_id)');
+    await db.query('CREATE VIEW recent_activity AS SELECT id, action, created_at FROM activity_logs');
+    try {
+      await up();
+      await expectTarget();
+      expect(await q('SELECT COUNT(*)::int AS n FROM recent_activity')).toEqual([{ n: 0 }]);
+    } finally {
+      await db.query('DROP VIEW IF EXISTS recent_activity');
+    }
+  });
+
+  it('a view that reads resource_id blocks the type change: the migration fails whole and changes nothing', async () => {
+    await db.query(`CREATE TABLE activity_logs (
+      id SERIAL PRIMARY KEY, user_id VARCHAR(255), action VARCHAR(100), resource_type VARCHAR(100),
+      resource_id INTEGER, changes JSONB, created_at TIMESTAMP DEFAULT NOW())`);
+    await db.query('CREATE VIEW activity_by_resource AS SELECT resource_id, COUNT(*) AS n FROM activity_logs GROUP BY resource_id');
+    const before = { columns: await columns(), indexes: await indexes() };
+    try {
+      await expect(up()).rejects.toMatchObject({ original: { code: '0A000' } });
+      expect({ columns: await columns(), indexes: await indexes() }).toEqual(before);
+    } finally {
+      await db.query('DROP VIEW IF EXISTS activity_by_resource');
+    }
+  });
 });

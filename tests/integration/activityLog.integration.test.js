@@ -189,13 +189,47 @@ const entriesFor = (resourceId) => select(
       const rows = await entriesFor(ep);
       expect(rows).toHaveLength(1);
       expect(rows[0]).toMatchObject({ user_id: USER, action: 'edit', resource_type: 'episode', resource_id: ep });
-      expect(rows[0].changes.before.title).toBe('Before');
-      expect(rows[0].changes.after.title).toBe('After');
-      expect(rows[0].changes.meta.changedFields).toContain('title');
+      // Only what changed, with its before and after value (Evoni, 2026-11-11).
+      expect(rows[0].changes).toEqual({ before: { title: 'Before' }, after: { title: 'After' }, meta: { changedFields: ['title'] } });
 
       // A second update is a second operation: two entries, not four or six.
       await as(editor, request(app).put(`/api/v1/episodes/${ep}`)).send({ title: 'After again' });
       expect(await entriesFor(ep)).toHaveLength(2);
+    });
+
+    it('an unrelated edit does not copy the script into the entry; a script edit is recorded by length and SHA-256', async () => {
+      const { ep } = await seedEpisode();
+      const script = 'INT. STUDIO - DAY\nLALA\nWe begin.\n'.repeat(120);
+      await run('UPDATE episodes SET script_content = :script, description = :description WHERE id = :ep', { ep, script, description: 'An unchanged description.' });
+
+      // 1. The title changes; the script and the description do not.
+      expect((await as(editor, request(app).put(`/api/v1/episodes/${ep}`)).send({ title: 'Retitled' })).status).toBe(200);
+      let rows = await entriesFor(ep);
+      expect(rows).toHaveLength(1);
+      expect(rows[0].changes).toEqual({ before: { title: 'Before' }, after: { title: 'Retitled' }, meta: { changedFields: ['title'] } });
+      expect(JSON.stringify(rows[0].changes)).not.toMatch(/INT\. STUDIO|script_content|An unchanged description/);
+
+      // 2. The script changes: named, with length and digest on both sides, its words in neither.
+      const edited = `${script}A NEW CLOSING LINE.\n`;
+      // (A script save names the revision it was written against; reading the episode gives it, and is not audited.)
+      const page = await as(editor, request(app).get(`/api/v1/episodes/${ep}`));
+      const saved200 = await as(editor, request(app).put(`/api/v1/episodes/${ep}`)).send({ script_content: edited, script_revision: page.body.script_revision });
+      expect(saved200.status).toBe(200);
+      rows = await entriesFor(ep);
+      expect(rows).toHaveLength(2);
+      const { before, after, meta } = rows[1].changes;
+      expect(meta.changedFields).toContain('script_content');
+      expect(meta.changedFields).not.toContain('title');
+      const sha = (text) => crypto.createHash('sha256').update(text).digest('hex');
+      expect(before.script_content).toEqual({ long_text: true, length: script.length, sha256: sha(script) });
+      expect(after.script_content).toMatchObject({ long_text: true, sha256: expect.stringMatching(/^[0-9a-f]{64}$/) });
+      expect(after.script_content.sha256).not.toBe(before.script_content.sha256);
+      // The digest is of what was actually saved.
+      const [{ script_content: saved }] = await select('SELECT script_content FROM episodes WHERE id = :ep', { ep });
+      expect(after.script_content).toEqual({ long_text: true, length: saved.length, sha256: sha(saved) });
+      expect(JSON.stringify(rows[1].changes)).not.toMatch(/INT\. STUDIO|A NEW CLOSING LINE/);
+      // The whole entry is small.
+      expect(JSON.stringify(rows[1].changes).length).toBeLessThan(2000);
     });
 
     it('reading an episode or the episode list leaves no entry', async () => {

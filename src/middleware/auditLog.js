@@ -1,3 +1,4 @@
+const crypto = require('crypto');
 const { models } = require('../models');
 
 /**
@@ -36,6 +37,47 @@ function changesFrom(options = {}) {
   const meta = Object.fromEntries(Object.entries(options).filter(([k, v]) => !NOT_STORED.has(k) && v !== undefined));
   if (Object.keys(meta).length) changes.meta = meta;
   return Object.keys(changes).length ? changes : null;
+}
+
+/** A text longer than this is recorded by its length and SHA-256, not copied into the entry. */
+const LONG_TEXT = 2000;
+/** Fields that change on every save and say nothing about what was edited. */
+const NOT_A_CHANGE = new Set(['updated_at', 'updatedAt']);
+
+const comparable = (value) => JSON.stringify(value === undefined ? null : value);
+
+/** A value as an entry keeps it: itself, or for a long text its length and digest. */
+function recorded(value) {
+  if (typeof value === 'string' && value.length > LONG_TEXT) {
+    return { long_text: true, length: value.length, sha256: crypto.createHash('sha256').update(value).digest('hex') };
+  }
+  return value === undefined ? null : value;
+}
+
+/**
+ * What an update changed: only the fields whose value differs between the
+ * row before and the row after, each with its before and after value.
+ * Unchanged fields are left out, so an edit to a title does not copy the
+ * episode's script into the audit trail. A long text (a script) that did
+ * change is recorded by length and SHA-256 on both sides: enough to say that
+ * it changed, when, by whom and to which exact text, without storing it
+ * twice (the script's own versions hold the words).
+ *
+ * Returns { oldValues, newValues, changedFields }, ready for logAction;
+ * oldValues and newValues are null when nothing changed.
+ */
+function fieldChanges(before = {}, after = {}) {
+  const was = before || {};
+  const is = after || {};
+  const changedFields = [...new Set([...Object.keys(was), ...Object.keys(is)])]
+    .filter((field) => !NOT_A_CHANGE.has(field) && comparable(was[field]) !== comparable(is[field]))
+    .sort();
+  if (!changedFields.length) return { oldValues: null, newValues: null, changedFields };
+  return {
+    oldValues: Object.fromEntries(changedFields.map((field) => [field, recorded(was[field])])),
+    newValues: Object.fromEntries(changedFields.map((field) => [field, recorded(is[field])])),
+    changedFields,
+  };
 }
 
 const logger = {
@@ -104,4 +146,6 @@ module.exports = {
   captureResponseData,
   logger,
   changesFrom,
+  fieldChanges,
+  LONG_TEXT,
 };

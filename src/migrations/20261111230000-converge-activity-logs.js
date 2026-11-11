@@ -36,10 +36,23 @@
  * Guarded: every step looks before it changes, so a re-run changes nothing.
  * One transaction: all of it applies, or none.
  *
- * down narrows resource_id back to INTEGER and drops the index: production's
- * shape before this migration. It REFUSES while the table holds any row: a
- * UUID cannot become an integer, and audit history is never deleted to make a
- * rollback possible. Once the first entry is written, there is no down.
+ * down: what it is, and what it is not.
+ *   - It undoes what this migration did to PRODUCTION's table: resource_id
+ *     goes back to INTEGER and the index is dropped. Nothing else.
+ *   - It does NOT rebuild the table migration 20240101000005 created. On a
+ *     database that started in that shape (CI, a fresh database), down leaves
+ *     production's earlier shape, not the camelCase columns, the two enums,
+ *     the IP address and user agent columns or the four old indexes. Those
+ *     are not coming back: no code reads them. The chain can still be undone
+ *     past this point (20240101000005's down drops the table) and run up
+ *     again.
+ *   - It REFUSES while the table holds any row: a UUID cannot become an
+ *     integer, and audit history is never deleted to make a rollback
+ *     possible. Once the first entry is written, there is no down; the way
+ *     back is forward, with a new migration.
+ * If another object depends on resource_id's type (a view that selects it),
+ * PostgreSQL refuses the type change and the whole migration rolls back,
+ * changing nothing.
  */
 
 const TABLE = 'activity_logs';
