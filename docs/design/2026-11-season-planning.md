@@ -51,7 +51,7 @@ Evoni, 2026-11-10, the approved Season Planning design, verbatim:
 
 | # | Question (Season Planning audit §10.1) | Outcome (RULED; Evoni's 2026-11-10 statement, quoted) | Implementation |
 |---|---|---|---|
-| R-1 | Release dates on Move | "R-1 — Preserve release dates" (Phase 0 heading). Mechanism: "Choose A2: nullable 'season_slots.release_position', subject to integrity verification and separate migration approval." | PENDING (A2 migration, §4) |
+| R-1 | Release dates on Move | "R-1 — Preserve release dates" (Phase 0 heading). Mechanism: "Choose A2: nullable 'season_slots.release_position', subject to integrity verification and separate migration approval." | Migration written (§4.8); nothing writes the column yet. Move/Swap PENDING |
 | R-2 | Filmed and published episodes | "R-2 — Separate production freeze from placement" (Phase 0 heading). Refinement: "Adopt narrowly scoped A7-x and freeze amendments for placement-only operations." | PENDING (A7-x, Amendment 1, §6). Published episodes excluded at first (§7). |
 | R-3 | Episode Home source | "R-3 — Current placement versus historical context" (Phase 0 heading). Refinement: "Historical context uses the existing working/filmed snapshot semantics, not a new at-Start record." | PENDING (read-only display) |
 | R-4 | Who edits special release dates | "Special-date editing belongs in Producer Mode → Release." | PENDING. Today the Roadmap special card also edits them (`SeasonSpecials` `AddSpecialForm` and `SpecialEditor`, PATCH `/season/specials/:id`). Those inputs become read-only, linking to Release (`SpecialReleaseDates`). |
@@ -290,6 +290,44 @@ The PostgreSQL ruling of 2026-11-10 names "K1–K16". Two tests were added later
 4. **Return the right error to the person.** `23P01` at commit maps to 409 `SEASON_PLACEMENT_INTEGRITY`. The message says that nothing was changed and that a fresh preview is needed. It does not show the SQLSTATE, a constraint name or any row value. `40P01` and `55P03` map to 409 `SEASON_PLACEMENT_BUSY` (K17). A stale expected state, where a guarded update changes 0 rows, maps to 409 `SEASON_PLACEMENT_STALE` (K11).
 
 **Test owed with the placement service:** one that provokes a commit-time `23P01` through the real service and asserts all four points. It also asserts that a subsequent request succeeds on a valid database connection from the pool. It checks the outcome only (the next request works and its transaction commits), not which physical connection served it: it must not depend on a backend process id or on a particular pool slot.
+
+### 4.8 The A2 migration as built (Evoni, 2026-11-10: Step 3)
+
+**Status.** §4.2's "unverified" note is superseded: the Stage A tests (K1–K14, K17) passed on PostgreSQL 15, 16 and 17 (PRs #3778, #3779), and the migration below was then written with the proposed rules unchanged.
+
+**Migration** `src/migrations/20261110230000-add-season-slot-release-position.js`, one transaction:
+
+| Step | SQL |
+|---|---|
+| Column | `ALTER TABLE season_slots ADD COLUMN release_position INTEGER` (nullable, no default) |
+| `season_slots_release_position_range` | `CHECK (release_position IS NULL OR release_position BETWEEN 1 AND 24)` |
+| `season_slots_effective_position_live` | `EXCLUDE USING btree (arc_id WITH =, (COALESCE(release_position, slot_number)) WITH =) WHERE (deleted_at IS NULL) DEFERRABLE INITIALLY DEFERRED` |
+| `season_slots_episode_live` | `EXCLUDE USING btree (episode_id WITH =) WHERE (deleted_at IS NULL AND episode_id IS NOT NULL) DEFERRABLE INITIALLY DEFERRED` |
+
+- It writes no `release_position` and changes no existing row.
+- `up` refuses, changing nothing, when an episode is already in more than one live slot (a count is reported, never a row). Diagnostics `db-season-integrity` reads the same condition beforehand.
+- `down` drops the three rules and the column. It refuses while any slot has a release position.
+- Each step is skipped when already done.
+
+**Readers (§4.3), as built.** `computeDates` keeps every output keyed by slot number and changes only the order in which release days are handed out (`COALESCE(release_position, slot_number)`, then slot number). So the four readers §4.3 lists already read slot-keyed rows and needed no change:
+
+- `fe/lib/releaseSchedule.js` `slotRow`;
+- `seasonFullSpecials.loadPicture`;
+- `releaseSchedule.suggestSpecialDate`;
+- `buildView`'s two-parter labels.
+
+An episode in no slot keeps its stored slot number (`season_context`, else `episode_number` in the first season) as its story number, and takes that slot number's place in the release order.
+
+**K15 and K16 (Stage B), as built.**
+
+| ID | Where | What runs |
+|---|---|---|
+| K15 | `seasonReleasePosition.integration.test.js`, Tests job (PostgreSQL 15, the whole migration chain) | The migrated `season_slots` has the column and the three rules beside `season_slots_arc_slot_live`; the existing season suites stay green |
+| K15, K16 | `seasonReleasePositionMigration.integration.test.js`, Tests job (15) and "A2 constraints (PostgreSQL 17)" job | On a scratch database: the real create-season-slots migration, then this migration up, down and up again. Rows are compared before and after each step. Both refusals are exercised |
+
+PostgreSQL 17 coverage is narrow by ruling: the two migrations that define `season_slots` and its rules, not the whole chain.
+
+**Not built here:** any writer of `release_position`, Move/Swap, the placement service and its error codes (§4.2, §4.7), the effective-position Diagnostics metric, and "Back to story order" (§4.5).
 
 ## 5. Rulings C4, C5, C7, C8 and G1-D1 to G1-D5 (RULED, verbatim)
 
