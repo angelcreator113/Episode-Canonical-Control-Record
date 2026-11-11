@@ -146,12 +146,15 @@ jobs:
 
   # A2 readiness (docs/design/2026-11-season-planning.md §4.2, §4.6; Evoni,
   # 2026-11-10): production runs PostgreSQL 17, and the Tests job above runs
-  # 15. This job runs ONLY the A2 constraint tests (K1-K14, K17), on 17, so
-  # the proposed release-position rules are proven on production's major
-  # version as well. It adds to the Tests job and replaces nothing there.
+  # 15. This job runs ONLY the A2 constraint tests (K1-K14, K17) and the A2
+  # migration's own up/down/up test (K15, K16), on 17, so the release-position
+  # rules and their migration are proven on production's major version as
+  # well. It adds to the Tests job and replaces nothing there.
   # It cannot pass without proving something: it fails when the server is not
-  # 17, when the test file is missing, or when any test is skipped or none ran.
-  # The tests need no migration: they build their own throwaway schema.
+  # 17, when a test file is missing, or when any test is skipped or none ran.
+  # The whole migration chain is not run here: the constraint tests build a
+  # throwaway schema, and the migration test builds a scratch database and
+  # runs only the two migrations that define season_slots and its rules.
   a2-constraints-pg17:
     name: A2 constraints (PostgreSQL 17)
     runs-on: ubuntu-latest
@@ -173,6 +176,10 @@ jobs:
 
     env:
       A2_TEST_FILE: tests/integration/seasonReleasePositionConstraints.integration.test.js
+      # K15/K16: the real create-season-slots and A2 migrations, up, down and
+      # up again, on a scratch database the test creates. Not the whole
+      # migration chain (Evoni, 2026-11-10: narrow PostgreSQL 17 coverage).
+      A2_MIGRATION_TEST_FILE: tests/integration/seasonReleasePositionMigration.integration.test.js
 
     steps:
       - uses: actions/checkout@v4
@@ -199,10 +206,12 @@ jobs:
             17.*) ;;
             *) echo "::error::Expected PostgreSQL 17, found ${VERSION}."; exit 1 ;;
           esac
-          test -f "${A2_TEST_FILE}" || { echo "::error::${A2_TEST_FILE} is missing: nothing to prove."; exit 1; }
+          for f in "${A2_TEST_FILE}" "${A2_MIGRATION_TEST_FILE}"; do
+            test -f "${f}" || { echo "::error::${f} is missing: nothing to prove."; exit 1; }
+          done
 
-      - name: Run the A2 constraint tests (this file only)
-        run: npx jest "${A2_TEST_FILE}" --runInBand --coverage=false --verbose --forceExit --json --outputFile=tmp/a2-constraints-pg17.json
+      - name: Run the A2 constraint and migration tests (these two files only)
+        run: npx jest "${A2_TEST_FILE}" "${A2_MIGRATION_TEST_FILE}" --runInBand --coverage=false --verbose --forceExit --json --outputFile=tmp/a2-constraints-pg17.json
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/episode_metadata_test
           TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/episode_metadata_test
@@ -220,9 +229,9 @@ jobs:
             const line = `suites ${r.numTotalTestSuites}; tests ${r.numTotalTests}; passed ${r.numPassedTests}; failed ${r.numFailedTests}; skipped ${r.numPendingTests}`;
             console.log(line);
             for (const s of r.testResults) for (const t of s.assertionResults) console.log(`${t.status}: ${t.title}`);
-            const ok = r.success && r.numTotalTestSuites === 1 && r.numTotalTests > 0
+            const ok = r.success && r.numTotalTestSuites === 2 && r.numTotalTests > 0
               && r.numPassedTests === r.numTotalTests && r.numFailedTests === 0 && r.numPendingTests === 0;
-            if (!ok) { console.log("::error::The A2 constraint tests did not all run and pass on PostgreSQL 17: " + line); process.exit(1); }
+            if (!ok) { console.log("::error::The A2 constraint and migration tests did not all run and pass on PostgreSQL 17: " + line); process.exit(1); }
           '
       # The same network guard check as the Tests job.
       - name: Check the network guard report
