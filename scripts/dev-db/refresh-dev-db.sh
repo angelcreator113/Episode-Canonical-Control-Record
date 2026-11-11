@@ -14,8 +14,10 @@
 #    excluding data_correction_log: the application role has no SELECT on it
 #    by design (#3709); it is recreated empty from its own migration.
 # 4. Restores into a fresh local database, clears session/token tables,
-#    compares per-table row counts with RDS, then swaps it into place. A
-#    failure before the swap leaves the existing local database untouched.
+#    compares per-table row counts with RDS, puts back the grants of the
+#    worker's role (episode_worker, #3714) when that role exists on the box,
+#    then swaps it into place. A failure before the swap leaves the existing
+#    local database untouched.
 #
 # Prints step names, sizes, counts and table names only: never a credential,
 # hostname or row of data. Runbook: docs/runbooks/dev-environment.md
@@ -37,6 +39,8 @@ DCL_MIGRATION_NAME="20261104170000-create-data-correction-log.js"
 CLEAR_TABLES="${CLEAR_TABLES:-teleprompter_remote_sessions}"
 # Read-only login for the dump (Task #3716). Not the application's login.
 DB_SECRET_ID="${DB_SECRET_ID:-episode-metadata/dev/refresh-readonly}"
+# The worker's least-privilege role (#3714); its grants are put back after a restore.
+WORKER_ROLE_SQL="${WORKER_ROLE_SQL:-$APP_DIR/scripts/worker/sql/episode-worker-role.sql}"
 
 step() { echo "== $*"; }
 as_app() { sudo -u "$APP_USER" -H "$@"; }
@@ -133,6 +137,23 @@ for t in ("shows", "episodes", "social_profiles", "registry_characters", "scene_
     if t in rd: print(f"  {t}: rds={rd[t]} local={lo.get(t)}")
 sys.exit(1 if diff or len(lo) != len(rd) else 0)
 PY
+
+step "episode_worker grants (issue #3714), when the role exists on this box"
+# The restore is --no-acl into a new database, so the worker's role keeps its
+# login and loses every grant. Only the role file's GRANT / REVOKE lines are
+# run: its CREATE ROLE fails on a role that exists. Before the swap, so a
+# failure here leaves the existing local database untouched.
+if [ "$(lpsql -d postgres -c "select count(*) from pg_roles where rolname = 'episode_worker'")" = "1" ]; then
+  [ -f "$WORKER_ROLE_SQL" ] || { echo "the episode_worker role exists but $WORKER_ROLE_SQL is missing" >&2; exit 1; }
+  grep -E '^(GRANT|REVOKE) ' "$WORKER_ROLE_SQL" > "$WORK/worker-grants.sql"
+  [ -s "$WORK/worker-grants.sql" ] || { echo "no GRANT lines found in $WORKER_ROLE_SQL" >&2; exit 1; }
+  chgrp postgres "$WORK" "$WORK/worker-grants.sql"; chmod 750 "$WORK"; chmod 640 "$WORK/worker-grants.sql"
+  lpsql -d "$RESTORE_DB" -v dbname="$RESTORE_DB" --single-transaction -f "$WORK/worker-grants.sql"
+  chmod 700 "$WORK"; rm -f "$WORK/worker-grants.sql"
+  lpsql -d "$RESTORE_DB" -c "select 'episode_worker: ' || count(*) || ' privileges on ' || count(distinct table_name) || ' tables' from information_schema.role_table_grants where grantee = 'episode_worker'"
+else
+  echo "no episode_worker role here: skipped"
+fi
 
 step "swap ${RESTORE_DB} -> ${LOCAL_DB}"
 lpsql -d postgres -c "select count(pg_terminate_backend(pid)) from pg_stat_activity where datname in ('$LOCAL_DB', '$RESTORE_DB') and pid <> pg_backend_pid()" >/dev/null
