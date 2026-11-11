@@ -4697,6 +4697,24 @@ As built (`seasonFullSpecials.swapIntoSlot`, behind the Event Package's "full se
 - **Swap back** (the toast's undo) asks first, in the same dialog, naming the slot, the event coming back and the event it replaces (the one the swap just put there). A no sends nothing. A yes sends that pencil by name. If the slot has changed since, it is refused like any stale confirmation.
 - **The panel** (`lib/seasonFull.js` `swapRequest`) shows the slot and its pencilled event in a confirm dialog and sends them back only on a yes. A stale refusal is shown, the choice is read again, and nothing is sent again.
 
+**(ll) A2: a season slot's release position (Evoni, 2026-11-10).** Ruling R-1: "Choose A2: nullable 'season_slots.release_position'". Design: `docs/design/2026-11-season-planning.md` §4.
+
+As built (migration `20261110230000-add-season-slot-release-position`, model `SeasonSlot`, `releaseSchedule.computeDates` and `loadInputs`):
+
+- **The column.** `season_slots.release_position`, a nullable integer. A slot's place in the release order is `COALESCE(release_position, slot_number)`. NULL means "its own slot number".
+- **`slot_number` is still the story slot.** Episode labels ("Episode 5" is slot 5), story order, intentions, pencils, specials' anchors (`after_slot_number`) and an episode's `season_context` keep their meaning. An episode in no slot still falls back to its stored slot number.
+- **Three rules, in the database.**
+  - `season_slots_release_position_range`: 1 to 24, or NULL.
+  - `season_slots_effective_position_live`: within a season, no two live slots share an effective position.
+  - `season_slots_episode_live`: an episode is in at most one live slot.
+
+  The last two are checked at COMMIT, so two slots can trade positions or occupants inside one transaction. A violation fails the COMMIT with SQLSTATE `23P01`. The existing unique index `season_slots_arc_slot_live` is unchanged.
+- **One reader changed.** `releaseSchedule.loadInputs` reads each season's positions (`seasons[].positions`, `{ slot_number: release_position }`, only for slots that have one). `computeDates` hands out the release days in release-position order. Its output is still keyed by slot number (`numbers`, `slots`, `seasons[].slots`, each row's `number`), so the roadmap, the Release board, two-parter labels and `suggestSpecialDate` read it as before.
+- **Nothing writes it yet.** There is no route, service or screen that sets a release position. Every row is NULL, so every release date is what it was. Move/Swap is a later, separately authorized change.
+- **A database without the column** (before the migration, or after its `down`): `loadInputs` logs once per read and keeps story order. `SeasonSlot` model reads would fail there, so the code and the migration deploy together (the Deploy workflow migrates before it restarts).
+- **`down`** drops the three rules and the column. It refuses while any slot has a release position, because dropping the column then would move release dates without saying so.
+- **Tests.** `seasonReleasePositionMigration.integration.test.js` (K15, K16: the real migrations up, down and up again on a scratch database; PostgreSQL 15 and 17), `seasonReleasePosition.integration.test.js` (the migrated schema, the identity rule, a trade of two positions), and the "release positions (A2)" block of `tests/unit/services/releaseSchedule.test.js`.
+
 ---
 
 ## 9. Owed before enforcement

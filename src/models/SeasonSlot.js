@@ -16,7 +16,10 @@ module.exports = (sequelize) => {
     show_id: { type: DataTypes.UUID, allowNull: false },
     arc_id: { type: DataTypes.UUID, allowNull: false },
     season_number: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 1 },
-    slot_number: { type: DataTypes.INTEGER, allowNull: false },
+    slot_number: { type: DataTypes.INTEGER, allowNull: false }, // the story slot (labels, story order)
+    // A2 (migration 20261110230000): the slot's release number when it is not
+    // its slot_number; NULL means "its slot_number". 1–24. Nothing writes it yet.
+    release_position: { type: DataTypes.INTEGER, allowNull: true, validate: { min: 1, max: 24 } },
     phase: { type: DataTypes.INTEGER, allowNull: false },
 
     event_id: { type: DataTypes.UUID, allowNull: true },
