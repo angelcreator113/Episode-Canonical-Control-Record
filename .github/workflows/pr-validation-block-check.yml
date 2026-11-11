@@ -6,7 +6,8 @@ name: PR Validation Block Check
 # no such heading passes unaffected — this does not require every PR to
 # paste validation output, only that a claimed one is real.
 #
-# Per FD-29 (see .github/workflows/auto-merge-to-dev.yml header): the PR body
+# Per FD-29 (recorded in the header of the retired auto-merge-to-dev.yml; see
+# git history, removed in #3774): the PR body
 # is user-influenceable, so it is passed to the script via `env:`, never
 # inlined into the `run:` block via ${{ ... }} template substitution.
 
