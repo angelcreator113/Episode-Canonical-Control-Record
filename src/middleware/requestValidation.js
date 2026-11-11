@@ -104,6 +104,27 @@ const validateRefreshRequest = (req, res, next) => {
   }
 };
 
+// POST /logout carries an optional refreshToken. Logout must never fail on
+// its body (ruled 2026-11-11: it answers success once the browser's copies
+// are cleared), so this never rejects. It sets req.logoutRefreshToken to the
+// token when it is a plausible one, else null, and req.logoutRefreshTokenState
+// to 'present', 'absent' or 'malformed' for the handler's log line.
+const LOGOUT_REFRESH_TOKEN_MAX = 8192;
+const validateLogoutRequest = (req, res, next) => {
+  const value = req.body && typeof req.body === 'object' ? req.body.refreshToken : undefined;
+  if (value === undefined || value === null || value === '') {
+    req.logoutRefreshToken = null;
+    req.logoutRefreshTokenState = 'absent';
+  } else if (typeof value !== 'string' || value.length < 50 || value.length > LOGOUT_REFRESH_TOKEN_MAX) {
+    req.logoutRefreshToken = null;
+    req.logoutRefreshTokenState = 'malformed';
+  } else {
+    req.logoutRefreshToken = value;
+    req.logoutRefreshTokenState = 'present';
+  }
+  next();
+};
+
 const validateTokenRequest = (req, res, next) => {
   try {
     const { token } = req.body;
@@ -328,6 +349,7 @@ module.exports = {
   sanitizeString,
   validateLoginRequest,
   validateRefreshRequest,
+  validateLogoutRequest,
   validateTokenRequest,
   validateEpisodeQuery,
   validateUUIDParam,
