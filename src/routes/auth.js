@@ -14,6 +14,7 @@ const { optionalAuth } = require('../middleware/auth');
 const {
   validateLoginRequest,
   validateRefreshRequest,
+  validateLogoutRequest,
   validateTokenRequest,
 } = require('../middleware/requestValidation');
 
@@ -271,23 +272,49 @@ router.post('/refresh', optionalAuth, refreshLimiter, validateRefreshRequest, as
   }
 });
 
+// One fixed prefix for a logout whose Cognito session could not be ended, so
+// it can be found in the logs. Only the exception's name follows it: never the
+// token, never the raw error.
+const LOGOUT_REVOKE_FAILED = '[logout] COGNITO_REVOKE_FAILED';
+
 /**
  * POST /api/v1/auth/logout
- * Logout user by revoking token
- * Requires valid authentication token
+ * Ends this session. Requires a valid access token.
+ *
+ * What it revokes (F-AUTH-1_LogoutRevocation_Ruling_2026-11-11.md):
+ *   - the Cognito refresh token in the body (`refreshToken`), at Cognito, with
+ *     RevokeToken: it can no longer be exchanged at /refresh. This session
+ *     only; the user's other devices stay signed in.
+ *   - a local HS256 access token, in this process's in-memory blacklist.
+ * What it does not revoke: a Cognito access or ID token already issued. This
+ * API verifies those locally, so a copy stays accepted until it expires.
+ *
+ * It answers success whether or not Cognito could be reached: the browser has
+ * cleared its copies either way. A Cognito failure is logged under
+ * LOGOUT_REVOKE_FAILED. The response is unchanged by the revocation.
  */
-router.post('/logout', authenticateJWT, (req, res) => {
+router.post('/logout', authenticateJWT, validateLogoutRequest, async (req, res) => {
   try {
     const { authorization } = req.headers;
 
     if (authorization) {
       const token = authorization.split(' ')[1];
-      // Revoke the token
+      // Local HS256 tokens only: a Cognito token's jti is never looked up again.
       try {
         TokenService.revokeToken(token);
       } catch (err) {
         console.log('Token revocation skipped (invalid token):', err.message);
       }
+    }
+
+    if (req.logoutRefreshToken) {
+      try {
+        await cognitoPasswordAuthService.revokeRefreshToken(req.logoutRefreshToken);
+      } catch (err) {
+        console.error(LOGOUT_REVOKE_FAILED, (err && (err.name || err.code)) || 'UnknownError');
+      }
+    } else {
+      console.warn(`[logout] no usable refresh token in the request (${req.logoutRefreshTokenState}): the Cognito session was not revoked`);
     }
 
     // Clear refresh token cookie if set
