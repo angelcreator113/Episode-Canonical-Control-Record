@@ -4,7 +4,10 @@ on:
   issues:
     types: [labeled]
 
-permissions: {}
+# issues: read only, for the advisory step's read of this issue's events.
+# No write permission, no checkout, no secrets, no dispatch.
+permissions:
+  issues: read
 
 jobs:
   verify-owner-label:
@@ -62,3 +65,88 @@ jobs:
             process.exitCode = 1;
           }
           NODE
+
+      # ADVISORY (#3774): agents acting with the owner's token appear as the
+      # owner, so sender.id cannot tell Evoni from an app. This step reads the
+      # issue's events and checks that the latest application of the label was
+      # made by the owner and not through a GitHub App
+      # (performed_via_github_app is null). Until a disposable-issue test after
+      # merge shows connector-applied labels are marked as app-applied, it only
+      # reports: every outcome exits 0. Setting ADVISORY to false makes it
+      # fail closed.
+      - name: Check the label was applied directly, not through an app (advisory)
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          node <<'ADVISORY_CHECK'
+          const fs = require('node:fs');
+
+          const ADVISORY = true;
+          const EXPECTED_REPOSITORY = 'angelcreator113/Episode-Canonical-Control-Record';
+          const EXPECTED_LABEL = 'claude-intake-approved';
+          const OWNER_ID = 212567798;
+          const PER_PAGE = 100;
+          const MAX_PAGES = 10;
+          const isRecord = value => value !== null && typeof value === 'object' && !Array.isArray(value);
+
+          async function latestLabelEvent(issueNumber) {
+            const token = process.env.GITHUB_TOKEN;
+            if (!token) throw new Error('api_error');
+            const api = process.env.GITHUB_API_URL || 'https://api.github.com';
+            let latest = null;
+            for (let page = 1; page <= MAX_PAGES; page += 1) {
+              let response;
+              try {
+                response = await fetch(`${api}/repos/${EXPECTED_REPOSITORY}/issues/${issueNumber}/events?per_page=${PER_PAGE}&page=${page}`, {
+                  headers: { Accept: 'application/vnd.github+json', Authorization: `Bearer ${token}`, 'X-GitHub-Api-Version': '2022-11-28' },
+                });
+              } catch {
+                throw new Error('api_error');
+              }
+              if (!response.ok) throw new Error('api_error');
+              let events;
+              try {
+                events = await response.json();
+              } catch {
+                throw new Error('malformed_events');
+              }
+              if (!Array.isArray(events)) throw new Error('malformed_events');
+              for (const item of events) {
+                if (isRecord(item) && item.event === 'labeled' && isRecord(item.label) && item.label.name === EXPECTED_LABEL) {
+                  latest = item;
+                }
+              }
+              if (events.length < PER_PAGE) return latest;
+            }
+            throw new Error('too_many_events');
+          }
+
+          async function check() {
+            let event;
+            try {
+              event = JSON.parse(fs.readFileSync(process.env.GITHUB_EVENT_PATH, 'utf8'));
+            } catch {
+              throw new Error('malformed_payload');
+            }
+            if (!isRecord(event) || !isRecord(event.issue) || !Number.isInteger(event.issue.number) || event.issue.number < 1) {
+              throw new Error('malformed_payload');
+            }
+            const latest = await latestLabelEvent(event.issue.number);
+            if (!latest) throw new Error('no_label_event');
+            if (!isRecord(latest.actor) || latest.actor.id !== OWNER_ID) throw new Error('unexpected_actor');
+            if (latest.performed_via_github_app !== null) throw new Error('app_applied');
+          }
+
+          check().then(
+            () => console.log('Advisory: the label was applied by the owner directly, not through an app.'),
+            (error) => {
+              const reason = /^[a-z_]+$/.test(String(error && error.message)) ? error.message : 'check_error';
+              if (ADVISORY) {
+                console.log(`::warning::Advisory intake check: ${reason} (not enforced yet).`);
+              } else {
+                console.error(`Intake app check failed: ${reason}`);
+                process.exitCode = 1;
+              }
+            },
+          );
+          ADVISORY_CHECK
