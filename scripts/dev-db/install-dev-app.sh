@@ -22,7 +22,9 @@
 #    DB_SSL=false, HOST=127.0.0.1 and NODE_ENV=production (app.env's own
 #    NODE_ENV is ignored). The app's .env is a symlink to it.
 #    Nothing in it is printed.
-# 4. Applies pending migrations to the LOCAL database only.
+# 4. Applies pending migrations to the LOCAL database only
+#    (scripts/dev-db/migrate-local-db.sh). If a migration fails, or anything
+#    is still pending afterwards, it stops here: nothing is swapped.
 # 5. Swaps the staging tree into /home/ubuntu/episode-metadata. The previous
 #    tree is kept beside it as episode-metadata.prev for rollback.
 #
@@ -111,10 +113,18 @@ echo "keys: $(sed -nE 's/^([A-Z_]+)=.*/\1/p' "$DEV_ENV" | tr '\n' ' ')"
 echo "DB_HOST=$(sed -n 's/^DB_HOST=//p' "$DEV_ENV")  DB_NAME=$(sed -n 's/^DB_NAME=//p' "$DEV_ENV")  DB_USER=$(sed -n 's/^DB_USER=//p' "$DEV_ENV")"
 
 step "pending migrations against the LOCAL database"
-as_app "cd '$STAGE' && set -a && . '$DEV_ENV' && set +a && case \"\$DB_HOST\" in 127.0.0.1|localhost) ;; *) echo 'refusing: DB_HOST is not local' >&2; exit 1;; esac && \
-  NODE_ENV=development npx sequelize db:migrate:status 2>/dev/null | grep -c '^down' | sed 's/^/pending before: /' || true; \
-  NODE_ENV=development npx sequelize db:migrate 2>&1 | grep -E '^== |migrated|ERROR' | tail -20; \
-  NODE_ENV=development npx sequelize db:migrate:status 2>/dev/null | grep -c '^down' | sed 's/^/pending after: /' || true"
+# Before the swap, and it must succeed: scripts/dev-db/migrate-local-db.sh
+# (from the commit being installed) exits non-zero when db:migrate fails, when
+# anything is still pending afterwards, or when the ledger cannot be read. The
+# live tree and the running app are untouched at this point, so stopping here
+# leaves them as they were; deploy-dev-box.sh restarts the existing tree and
+# fails the deploy. The staged tree is kept for diagnosis until the next run.
+[ -f "$STAGE/scripts/dev-db/migrate-local-db.sh" ] || { echo "== MIGRATION FAILED: ${REF:0:12} has no scripts/dev-db/migrate-local-db.sh, so its migrations cannot be checked. Not installed; the live tree was not changed." >&2; exit 1; }
+if ! as_app "bash '$STAGE/scripts/dev-db/migrate-local-db.sh' '$STAGE' '$DEV_ENV'"; then
+  echo "== MIGRATION FAILED: ${REF:0:12} is NOT installed. The live tree at $APP_DIR was not changed (see the MIGRATION line above)."
+  echo "MIGRATION FAILED: ${REF:0:12} is not installed; the live tree was not changed" >&2
+  exit 1
+fi
 
 step "swap trees"
 rm -rf "$PREV"

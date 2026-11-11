@@ -86,7 +86,13 @@ sudo REF=<full sha> DIST_TARBALL=/home/ubuntu/dev-db/dist-<sha>.tar.gz DIST_SHA2
   bash /home/ubuntu/dev-db/bin/install-dev-app.sh
 ```
 
-The installer refuses while the app is online or with under 2.8 GiB RAM+swap. It applies pending migrations to the local database only, then swaps trees. Start afterwards:
+The installer refuses while the app is online or with under 2.8 GiB RAM+swap. It applies pending migrations to the local database only, then swaps trees.
+
+**A failed migration installs nothing.** The migration step is `scripts/dev-db/migrate-local-db.sh`, run on the staged tree before the swap. It reads the ledger with `scripts/check-pending-migrations.js` (the check the production Deploy workflow uses), runs `db:migrate` when files are pending, and reads the ledger again. If `db:migrate` fails, if anything is still pending, or if the ledger cannot be read, the installer exits 1 before the swap: the live tree and the running app are as they were, `deploy-dev-box.sh` restarts the existing tree, and the Deploy to Development run fails. The log has a `MIGRATION FAILED` or `MIGRATION INCOMPLETE` line and sequelize's own `ERROR` line; a good run has `MIGRATIONS OK`. A healthy `/health` says nothing about migrations.
+
+- A migration that runs in one transaction is rolled back whole. Migrations that finished before the failing one stay applied, under the old code.
+- The staged tree stays at `episode-metadata.next` until the next install removes it.
+- The rollback tree (`episode-metadata.prev`) is removed at the start of every install, before the clone, because the disk holds only two trees. So after a failed migration the live tree is intact but there is no `.prev` to roll back to; redeploy an earlier commit instead. Start afterwards:
 
 ```bash
 sudo -u ubuntu -H bash -lc 'cd ~/episode-metadata && pm2 start ecosystem.dev.config.js --only episode-api,episode-worker && pm2 save'
