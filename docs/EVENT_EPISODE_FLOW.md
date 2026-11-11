@@ -4080,6 +4080,98 @@ follows A9 choice 5.
    confirm before replacing an Edited intention. Refused once the episode is
    accepted.
 
+**Season Arc ruling A7-x (adopted by Evoni, 2026-11-10).** Wording drafted in
+the Gate 1 review and adopted by Evoni on 2026-11-10 ("I accept the
+consolidated design direction, including A7-x, A9-r, Amendment 1, A1-e, D-22,
+the Event Package pencil safeguard, and the dedicated placement-preview
+signing design"). The quoted text is that adopted wording, not a quotation of
+an earlier ruling. It refines A7, which stands for every other change to a
+started slot, and leaves Q2 unchanged. Nothing in it is implemented yet.
+
+> A7-x. A started episode may change slot only through the Season page's
+> explicitly confirmed, placement-only Move or Swap, available to admins. That
+> operation changes only: which slot holds the episode; each affected slot's
+> event, to follow its own episode's Event Package; and the affected slots'
+> release positions, so that every episode keeps its effective release date.
+>
+> An occupied slot's event is derived from its episode's authoritative Event
+> Package; an empty slot's pencilled event is an independent planning
+> commitment. Before it is confirmed, the impact preview shows, for both slots,
+> the pencilled event and each episode's Event Package before and after. The
+> operation never overwrites, discards or silently reassigns an unrelated
+> pencil: if the destination holds a pencilled event that is not the moving
+> episode's own, or if any slot's event disagrees with its episode's Event
+> Package, confirmation is blocked until the conflict is resolved with the
+> existing pencil and event tools. The episode's primary Event Package,
+> accepted terms, deliverables and offer decisions are never changed.
+>
+> Each confirmed Move or Swap writes one entry to the existing audit log
+> (`activity_logs`: who, when, the episodes and slots, the before and after
+> positions and events) in the same transaction; if that entry cannot be
+> written, nothing is changed. Writing the entry is not a change to any
+> production record. Confirmations stay unavailable until the audit log records
+> reliably (issue #1948).
+>
+> The operation never changes the episode's production record, its snapshot
+> once filmed, or any produced script, scene, footage, voice, wardrobe or
+> result, and it regenerates nothing. A moved episode takes the destination
+> slot's part and intention. Moves across Parts within the season are allowed;
+> moves between seasons are deferred, not prohibited. Excluded until ruled
+> otherwise: accepted episodes and slots; published or released episodes;
+> two-parter slots; specials' episodes; slots in a completed part or season;
+> and any move that would newly invalidate a special's release window (§8(ii)
+> C4, G1-D1).
+>
+> Initially eligible: an episode that has started (it occupies a weekly slot of
+> the season in progress) and has not been filmed, moving into an empty weekly
+> slot of the same season or swapping with another eligible episode there,
+> within a Part or across Parts. A filmed episode becomes eligible only as A1.2
+> Amendment 1 allows, after unfilmed episodes have shipped. Unstarted and
+> unslotted episodes use the existing Place, not Move or Swap.
+>
+> Every confirmation is bound to the impact preview it came from. A failed
+> confirmation — refused by a domain guard, stale, blocked by a lock conflict
+> (deadlock or lock timeout), stopped by the integrity check, or unable to
+> write its audit entry — writes nothing, and the Season page invalidates that
+> preview; Confirm stays disabled until a fresh impact preview is successfully
+> generated. No confirmation is ever retried automatically.
+>
+> On every confirmation the server checks, under the required locks and on
+> authoritative state, the confirmation token (signed with the dedicated
+> placement-preview secret; algorithm, issuer, audience, header type and
+> purpose pinned; at most five minutes old; its subject the authenticated
+> user), ADMIN authorization on the request itself, and then two separate
+> mandatory checks: placement eligibility, including the event pencils, the
+> release positions and the applicable production restrictions; and the
+> canonical expected-state digest. Passing one never substitutes for the
+> other. The placement changes and their audit entry are one transaction; any
+> failure rolls back all of it. If the dedicated secret is unavailable, the
+> Season page still shows the full read-only impact preview, no token is
+> issued, and Confirm is disabled with an explanation.
+>
+> The server keeps no record of token use. A previously failed but otherwise
+> valid token can therefore be replayed while the expected database state is
+> unchanged and the token has not expired, and the server would validate and
+> may apply it. The server cannot always distinguish a fresh preview from a
+> replayed token; that distinction is enforced by the Season page. The A1.2
+> freeze and every accepted production record are unchanged by any attempt.
+
+**Season Arc ruling A9-r (adopted by Evoni, 2026-11-10).** Wording drafted in
+the Gate 1 review and adopted by Evoni on 2026-11-10, alongside A7-x; it refines
+A9 choice 5 and item 5 of the build choices of 2026-10-02 for started slots
+whose episode has production commitments, and leaves them unchanged otherwise.
+
+> A9-r. Saving or AI-drafting a started slot's intention still updates the
+> episode's season snapshot and the brief's intent and allowed outcomes while
+> the episode is unfilmed. A locked brief is never written by intention
+> synchronization; the slot saves and the brief is reported as kept. When the
+> episode has approved script beats, an approved or locked script, or a locked
+> beat-plan beat, and the save would change what they were written against,
+> the change is shown for explicit review and applies only when confirmed; the
+> beats, script and plan are never changed. Nothing is regenerated. A filmed
+> episode keeps its snapshot (A1.2). Episode Home shows where the current slot
+> planning differs from the episode's preserved production records.
+
 **(gg) Episode Money, Phase B (Evoni, 2026-10-01).** Recorded verbatim.
 Nothing is built yet. Phase B of §8(aa) M5; it builds on M1–M6 and the
 event spending ruling (§8(aa), §8(cc)). The design note, reading today's
@@ -4497,6 +4589,113 @@ As built, S9 (d) (the Beat Plan page re-plans only):
 - **The walkthrough of (d):** the page was rendered in a browser with a 14-beat sample at 1280px and 375px.
   - Its only buttons were Board, List, Save Brief and Generate Scene Plan, with 14 "Change in Scenes →" links, and no page scrolled sideways.
   - It found the links drawn at button size; they now have their own small style.
+
+**(ii) Season Planning (Evoni, 2026-11-09 to 2026-11-10).** Recorded verbatim.
+The design is `docs/design/2026-11-season-planning.md`. A1.2-SPEC-v5 and its
+amendments are `docs/design/2026-11-a1-2-start-snapshot-freeze-spec-v5.md` and
+`docs/design/2026-11-a1-2-spec-v5-amendments.md`. Additions to §8(ff) (A7-x,
+A9-r) are recorded there. The quotations are Evoni's words, unchanged. Where her
+messages used lists or line breaks, the items appear joined into running text
+in their original order. The text outside quotation marks is explanatory.
+
+**The approved Season Planning design:**
+
+> "The proposed page has three primary views: Roadmap — Default arc-grouped presentation · Optional compact episode list · Selectable season slots · Contextual slot panel · Lightweight planning before episode creation · Move and Swap Episode actions. Story & Arc — Existing arc goals and story progression · Links to authoritative story tools · No duplicate script or Story Thread editor. Schedule — Existing release dates and scheduling context · Scheduling conflicts and discrepancies · Links to the authoritative scheduling workflow · No second publishing scheduler."
+> "An empty slot can contain lightweight planning without creating an episode. Existing planning records and fields must be reused. Creating an episode uses the existing canonical creation workflow. Slot-owned planning notes remain with their existing authority. Episode Home references the current slot's planning information rather than creating another editable copy. Selecting a slot never automatically creates an episode."
+> "Move an episode into an empty slot. Offer an explicit Swap when the destination contains another episode. Allow movement between arcs. Preserve episode identities and production records. Preserve story plans with their authoritative owners. Preserve release dates unless separately changed through the existing scheduling authority. Permit published episodes to move or swap with enhanced impact review. Review both episodes and affected slots during a swap. Prevent partial updates, duplicate occupancy, and stale confirmations. Never automatically regenerate scripts, scenes, footage, voice, wardrobe, or gameplay results."
+> "A placement change must not automatically change an episode's primary Event Package or accepted commitments. Event-driven and non-event episodes must both be supported without requiring unnecessary Event Packages."
+
+**R-1 to R-11.** R-1 to R-3 are given as the headings Evoni stated on
+2026-11-10. R-4 to R-11 are her 2026-11-10 statements of the approved
+outcomes. They are not quotations of an earlier "Season Planning Design
+Specification", which is not in the repository. R-8 and R-9 are recorded in
+A7-x and in the build choices below.
+
+> R-1 — Preserve release dates
+> R-2 — Separate production freeze from placement
+> R-3 — Current placement versus historical context
+> R-4: Special-date editing belongs in Producer Mode → Release.
+> R-5: The Pulse scheduling changes only when effective release dates change, with explicit review; published posts remain unchanged.
+> R-6: Preserve "episode_number"; slot order drives Roadmap.
+> R-7: Reuse existing "ShowArc.phases" Parts.
+> R-10: No new free-text planning column.
+> R-11: Support canonical non-event episode creation with inherited slot context.
+
+**Build choices accepted (Evoni, 2026-11-10)**, verbatim:
+
+> Choose A2: nullable "season_slots.release_position", subject to integrity verification and separate migration approval.
+> Preserve "releaseSchedule.computeDates" as the sole release-date authority.
+> Adopt narrowly scoped A7-x and freeze amendments for placement-only operations.
+> Initially exclude accepted, published, and protected two-parter episodes.
+> Roll out eligible unfilmed episodes before filmed, unaccepted, unpublished episodes.
+> For slotted episodes, "narrative_purpose" is read-only and reflects authoritative slot planning. Preserve genuinely independent unslotted-episode editing.
+> Episode Home's season-thread editor becomes read-only with a deep link to Season Planning.
+> Historical context uses the existing working/filmed snapshot semantics, not a new at-Start record.
+> Completed seasons receive server-side write protection; investigate non-current seasons separately.
+> Distinguish AI-accepted intentions through the existing source field, after checking its consumers.
+> New placement endpoints require ADMIN authorization.
+
+"The architecture is approved, including A2, subject to database constraint
+verification and separate migration approval" (Evoni, 2026-11-10, verbatim).
+
+**Further rulings (Evoni, 2026-11-10)**, verbatim:
+
+> C4 — Specials: Preserve each special's story anchor. Block a placement change that would invalidate its release window. Do not automatically reschedule the special.
+> G1-D1: Block newly introduced invalid special-release windows; report pre-existing invalid windows.
+> C5 — Episode creation: Automatic empty-slot selection follows story order, not release order. Display the effective release date and relevant discrepancies.
+> C7 — AI intention provenance: Do not introduce a new "intention_source" value until all guard and consumer implications are resolved. Preserve existing semantics.
+> C8 — Stale planning inputs: Current slot planning is authoritative for new prompts. Preserve historical and frozen inputs. Flag stale unfilmed copies for explicit review; never silently regenerate content.
+> G1-D2: Current slot planning drives new prompts for unfilmed episodes only. Preserve filmed snapshots.
+> G1-D3: Preserve authoritative slot-to-brief synchronization for unfilmed episodes, but require explicit review when started production commitments would change.
+> G1-D4: Prepare a new consolidated Season Planning specification from the approved conversation rulings. Do not represent it as a recovered historical document.
+> G1-D5: Repair the existing audit-log mechanism under issue #1948 before enabling Move/Swap confirmations. Do not introduce a parallel audit system.
+> K-A = Option A
+> For slotted episodes, "narrative_purpose" belongs to authoritative season-slot planning. Episode Home displays it read-only, and the server enforces that ownership.
+> Unslotted episodes retain independent editing.
+> Preserve historical and filmed production values. Add an explicit, dated refinement to A1-e without rewriting the original ruling.
+> K-B = Option A
+> Preserve D-22's dedicated "episode_intent_audit" for its narrowly scoped future frozen-episode intent correction workflow.
+> The existing "activity_logs", repaired under issue #1948, remains the authoritative general administrative audit trail, including Move/Swap.
+> Do not create duplicate general-purpose audit infrastructure. Do not implement or migrate D-22.
+> Event-pencil conflicts: Before a Move/Swap, inspect both affected slots' pencilled events and the episodes' authoritative Event Packages. Show the before-and-after relationships in the impact preview. Do not silently overwrite, discard or reassign an unrelated pencilled event. Block unresolved conflicts. Preserve the episode's primary Event Package, accepted terms, deliverables and offer decisions. Reuse the existing event and slot ownership systems.
+> K-A1 ruling: Special episodes do not count as slotted for narrative-purpose ownership. Weekly season-slot episodes use the authoritative slot purpose. Specials and unslotted episodes retain brief-owned narrative purpose. Existing freeze and production protections remain applicable.
+> Narrative-purpose synchronization: Do not infer that a stored brief value is safe to overwrite merely because it resembles current planning. Only synchronize when the existing provenance or previous authoritative value can be established reliably. Otherwise preserve the brief and display the discrepancy for review. Never overwrite locked briefs or filmed production history.
+> PostgreSQL verification: Keep K1–K16 as proposed tests, but treat constraint feasibility as unproven until isolated PostgreSQL 15 testing. Distinguish: stale-state conflicts; exclusion violations; deadlocks and lock timeouts; retryable failures versus conflicts requiring a fresh preview. Do not automatically retry an invalid placement.
+> Error handling: For "SEASON_PLACEMENT_BUSY", a deadlock or lock timeout must invalidate the current confirmation attempt. The user must obtain a fresh impact preview before confirming again. Apply this same fresh-preview requirement after stale-state errors, integrity failures once repaired, and domain validation conflicts once resolved. Do not automatically retry Move/Swap confirmations. Preserve the existing A1.2 freeze and all accepted production records.
+> G1-E1 = Option A, with explicit enforcement boundaries. Use the existing Season page and placement validation architecture. Do not introduce server-side token-use storage or a separate confirmation system. Every failed Move/Swap confirmation invalidates the current preview in the Season page. Confirm remains disabled until a fresh impact preview is successfully generated. The server must validate the signed confirmation token, expiration, ADMIN authorization, expected placement state, event pencils, release positions and applicable production restrictions under the required locks. No automatic confirmation retry is permitted. All placement changes and their audit entry must be atomic. Any failure rolls back the entire transaction. Enforcement limitation: Without server-side token-use tracking, a previously failed but otherwise valid token may be replayed while the expected database state remains unchanged. This is an acknowledged limitation of G1-E1 A, not a guarantee of server-side single-use enforcement. Do not claim that the server can always distinguish a fresh preview from a replayed token. Preserve the A1.2 freeze and all accepted production records.
+> Token Signing Decision: Outcome B — Dedicated signing secret. Use the existing jsonwebtoken library and environment configuration infrastructure. Do not introduce a separate authentication service or token database. Requirements: 1. Use a dedicated placement-preview signing secret, separate from JWT_SECRET. 2. Pin the signing algorithm, issuer, audience and token purpose/type. 3. Enforce a maximum five-minute token lifetime. 4. Require the existing authenticated ADMIN authorization independently of the preview token. 5. Bind the token subject to the authenticated user. 6. Include only necessary identifiers, operation details and a digest of the expected state. 7. Recompute and validate authoritative expected state under transaction locks. 8. Include all placement-relevant state and dependencies in the expected-state validation. 9. Never log token values, secret values or sensitive Event Package contents. 10. Fail closed when the dedicated secret is missing or invalid: disable Move/Swap confirmations without disrupting unrelated application functionality. 11. Preserve G1-E1 Option A's acknowledged replay limitation. No server-side single-use guarantee. 12. No automatic confirmation retries; every failed confirmation requires a fresh impact preview in the Season page.
+> Final token wording: Clarify that when the dedicated signing secret is unavailable, the Season page continues to provide a useful, read-only Move/Swap impact preview, including affected records and conflicts, but issues no confirmation token and disables Confirm with a clear explanation. Clarify that server-side placement eligibility checks and canonical expected-state digest verification are separate mandatory checks, both performed using authoritative state under the required locks. Specify the exact JWT header/payload location for the placement token type and require verification of that location. Do not rely on an ambiguous "typ" check.
+> A1.2 baseline: The recovered A1.2-SPEC-v5 specification has been confirmed as the authoritative historical baseline.
+
+*Explanatory note (consolidated wording, not a quotation):* C7 governs the timing of the build choice "Distinguish AI-accepted intentions
+through the existing source field, after checking its consumers." The K-A
+rulings narrow A1.2-SPEC-v5's A1-e for weekly-slot episodes (see the
+amendments file), and K-B states the scope of its D-22.
+
+**(jj) Place asks before it changes a pencilled event (Evoni, 2026-11-10).** Ruling: "Place must require explicit confirmation before replacing a pencilled event, including when the incoming episode references the same event", and "whenever Place would replace a pencilled event in the target slot OR clear the incoming episode's event pencil from another slot."
+
+As built (`seasonSlotService.placeEpisodeIn`, the one Place for the Roadmap's "Place in…", the season setup's Save and the specials' move):
+
+- **Two pencils can change.** The target slot's own pencil is replaced by the episode's event, or removed when the episode has none. The episode's event pencilled in another slot of the season is cleared there, because the event goes with its episode.
+- **The confirmation names each pencil.** `PUT /world/:showId/season/slots/:slotId/episode` takes `confirm_pencils: [{ slot_id, event_id }]`, one entry per pencil. A yes/no flag is refused (400 `SEASON_PLACE_INVALID`).
+- **Asked first.** With a pencil affected and none named: 409 `SEASON_PLACE_NEEDS_CONFIRMATION`, listing every affected slot, its pencilled event and the change (`affected_pencils`). The Roadmap shows them in its confirm dialog (`useRoadmapControls` `place`) and sends them back only on a yes.
+- **Checked under the locks.** The episode, then the target slot and the slots holding the episode's event (together, in id order), are locked before the check. The list must be exactly the pencils as they are then. Changed, cleared, missing or extra: 409 `SEASON_SLOT_CHANGED`. Nothing is written, nothing is applied in part, and nothing is retried.
+- **Not a pencil, not overwritten.** A slot that points to a deleted or missing event is refused (409 `SEASON_SLOT_EVENT_ORPHANED`). A started slot that shares the episode's event keeps it (409 `SEASON_SLOT_LOCKED`); a two-parter's event is not taken from its slot (409 `SEASON_SLOT_TWO_PART`).
+- **The setup's Save** (`seasonSetupService.applyPlacement`) passes the event a slot was reviewed with (`expected_event_id`) as that slot's confirmation, and an item's own `confirm_pencils` for another slot. Without them it is refused whole, and the message sends the person to the Roadmap, which asks.
+- **Unchanged:** filmed episodes, started or accepted slots, episodes already in a slot, and slot intentions. Who may place (ADMIN-only endpoints) stays its own piece of work.
+
+**(kk) The specials' swap asks before it replaces a pencilled event (Evoni, 2026-11-10).** Ruling: "Bring `swapIntoSlot` under the same exact-pencil confirmation and stale-state protection as Place", with the existing event handoff preserved.
+
+As built (`seasonFullSpecials.swapIntoSlot`, behind the Event Package's "full season" panel, `FullSeasonChoice`):
+
+- **The handoff is unchanged.** The event pencilled in the weekly slot is not discarded: it becomes a bonus special at its own story position. It takes the incoming event's special row when there is one, or a new row. With no event in the slot, the incoming event's own special is set aside.
+- **The same confirmation as Place, not a second one.** `POST /world/:showId/season/full/events/:eventId/swap` takes `confirm_pencils: [{ slot_id, event_id }]`, read by the same `readConfirmedPencils` and compared by the same `pencilConfirmation` (`seasonSlotService`). None named with a pencil in the slot: 409 `SEASON_PLACE_NEEDS_CONFIRMATION` listing it. Not the pencil that is there: 409 `SEASON_SLOT_CHANGED`. A flag: 400 `SEASON_PLACE_INVALID`. An empty slot needs none.
+- **Checked under the slot lock.** After the episode, the event and the special (the canonical order), the target slot is locked with `lockSlot` and read again. The refusals (started, two-parter, already its event) and the event handed to a special come from that locked row, not from the unlocked picture the page was built from.
+- **Not a pencil, not overwritten.** A slot that points to a deleted or missing event is refused (409 `SEASON_SLOT_EVENT_ORPHANED`).
+- **A started special's episode** moves into the slot through `placeEpisodeIn` itself, under Place's own rules. The slot must end with the swapped event, or nothing is written.
+- **Atomic.** The slot change and the handoff are one transaction: a refusal at any point writes neither.
+- **Swap back** (the toast's undo) asks first, in the same dialog, naming the slot, the event coming back and the event it replaces (the one the swap just put there). A no sends nothing. A yes sends that pencil by name. If the slot has changed since, it is refused like any stale confirmation.
+- **The panel** (`lib/seasonFull.js` `swapRequest`) shows the slot and its pencilled event in a confirm dialog and sends them back only on a yes. A stale refusal is shown, the choice is read again, and nothing is sent again.
 
 ---
 

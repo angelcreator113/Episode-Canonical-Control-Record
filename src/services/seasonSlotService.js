@@ -538,6 +538,49 @@ async function slotHoldingEvent(sequelize, { showId, slotId, eventId, transactio
   return row || null;
 }
 
+/** Every other slot of the target's season that holds this event, read without a lock (ids in order). */
+async function slotsHoldingEvent(sequelize, { showId, slotId, eventId, transaction }) {
+  const [held] = await sequelize.query(
+    `SELECT o.id FROM season_slots t
+       JOIN season_slots o ON o.arc_id = t.arc_id AND o.event_id = :eventId AND o.id <> t.id AND o.deleted_at IS NULL
+      WHERE t.id = :slotId AND t.show_id = :showId AND t.deleted_at IS NULL
+      ORDER BY o.id`,
+    { replacements: { showId, slotId, eventId }, transaction });
+  return held.map((r) => String(r.id));
+}
+
+/**
+ * The pencils a Place was confirmed for (Evoni, 2026-11-10): a list of
+ * { slot_id, event_id }, one per pencil the person saw and agreed to change.
+ * Returns Map(slot id -> event id). A yes/no flag is never accepted.
+ */
+function readConfirmedPencils(list) {
+  const confirmed = new Map();
+  if (list === undefined || list === null) return confirmed;
+  const invalid = () => new SeasonSlotError('confirm_pencils: a list of { slot_id, event_id }, one per pencil the placement changes.', 400, 'SEASON_PLACE_INVALID');
+  if (!Array.isArray(list) || list.length > SLOTS_PER_SEASON) throw invalid();
+  for (const it of list) {
+    const slotId = it && typeof it.slot_id === 'string' ? it.slot_id.toLowerCase() : '';
+    const eventId = it && typeof it.event_id === 'string' ? it.event_id.toLowerCase() : '';
+    if (!UUID_RE.test(slotId) || !UUID_RE.test(eventId) || confirmed.has(slotId)) throw invalid();
+    confirmed.set(slotId, eventId);
+  }
+  return confirmed;
+}
+
+/**
+ * Whether a confirmation is exactly the pencils a change affects, as they are
+ * under the locks: 'ok', 'needs' (pencils affected, none named) or 'changed'
+ * (named, but not these). confirmed: readConfirmedPencils' Map; affected:
+ * [{ slot_id, event: { id } }]. Place and the specials' swap both ask this.
+ */
+function pencilConfirmation(confirmed, affected) {
+  const current = new Map(affected.map((a) => [String(a.slot_id).toLowerCase(), String(a.event.id).toLowerCase()]));
+  const matches = confirmed.size === current.size && [...current].every(([s, e]) => confirmed.get(s) === e);
+  if (matches) return 'ok';
+  return confirmed.size ? 'changed' : 'needs';
+}
+
 async function lockSlot(sequelize, showId, slotId, transaction) {
   const [[slot]] = await sequelize.query(
     `SELECT id, arc_id, slot_number, event_id, episode_id, locked_at
@@ -641,16 +684,42 @@ async function pencilEventIn(sequelize, showId, slotId, eventId, transaction) {
 /**
  * Places an existing episode that is in no slot into an open slot, and locks
  * the slot to it (Q4, A7). The slot keeps the episode's own event, if any.
+ *
+ * Pencils (Evoni, 2026-11-10): a pencilled event is never replaced or cleared
+ * without a confirmation that names it. Two pencils can change: the target
+ * slot's own (replaced by the episode's event, or removed), and the episode's
+ * event pencilled in another slot of the season (cleared, since the event
+ * goes with its episode). options.confirmPencils lists each as
+ * { slot_id, event_id }. With none given and a pencil affected: 409
+ * SEASON_PLACE_NEEDS_CONFIRMATION, with what would change. With a list that
+ * is not exactly the pencils as they are now, under the locks: 409
+ * SEASON_SLOT_CHANGED. Either way nothing is written.
  */
-async function placeEpisode(sequelize, showId, slotId, episodeId) {
-  return sequelize.transaction((transaction) => placeEpisodeIn(sequelize, showId, slotId, episodeId, transaction));
+async function placeEpisode(sequelize, showId, slotId, episodeId, options = {}) {
+  return sequelize.transaction((transaction) => placeEpisodeIn(sequelize, showId, slotId, episodeId, transaction, options));
 }
 
 /** placeEpisode inside a caller's transaction (the season setup's Save). */
-async function placeEpisodeIn(sequelize, showId, slotId, episodeId, transaction) {
+async function placeEpisodeIn(sequelize, showId, slotId, episodeId, transaction, { confirmPencils = null } = {}) {
   // A1.1: the episode first, then its slot (the episode-first order).
   requireTransaction(transaction, 'placeEpisodeIn');
+  const confirmed = readConfirmedPencils(confirmPencils);
   await lockEpisodes(sequelize, [episodeId], { transaction });
+  // The episode's own event, read under its lock (a Brief or link change
+  // locks the episode first), and the other slots that hold it now. They are
+  // locked together with the target, in id order (the one order for
+  // multi-slot locks, as pencilEventIn and the setup's Save), then read again
+  // under the locks below.
+  const [[event]] = await sequelize.query(
+    `SELECT ${require('../utils/episodeEventSql').EPISODE_EVENT_ID_SQL} AS id`,
+    { replacements: { episodeId }, transaction });
+  const eventId = event?.id || null;
+  const holdersSeen = eventId ? await slotsHoldingEvent(sequelize, { showId, slotId, eventId, transaction }) : [];
+  if (holdersSeen.length) {
+    await sequelize.query(
+      'SELECT id FROM season_slots WHERE id IN (:ids) AND deleted_at IS NULL ORDER BY id FOR UPDATE',
+      { replacements: { ids: [slotId, ...holdersSeen] }, transaction });
+  }
   const slot = await lockSlot(sequelize, showId, slotId, transaction);
   assertFuture(slot);
   const [[episode]] = await sequelize.query(
@@ -673,15 +742,68 @@ async function placeEpisodeIn(sequelize, showId, slotId, episodeId, transaction)
       `"${episode.title}" has been filmed (since ${String(freeze.frozen_at).slice(0, 10)}): it keeps its Start snapshot and cannot move to E${slot.slot_number}. Nothing was changed.`);
   }
 
-  const [[event]] = await sequelize.query(
-    `SELECT ${require('../utils/episodeEventSql').EPISODE_EVENT_ID_SQL} AS id`,
-    { replacements: { episodeId }, transaction });
-  const eventId = event?.id || null;
-  if (eventId) {
+  // The pencils this placement would change, as they are under the locks.
+  const refuse = (message, code, details) => Object.assign(new SeasonSlotError(message, 409, code), { details });
+  const eventName = async (id) => {
+    const [[row]] = await sequelize.query(
+      'SELECT id, name FROM world_events WHERE id = :id AND show_id = :showId AND deleted_at IS NULL',
+      { replacements: { id, showId }, transaction });
+    return row || null;
+  };
+  const ownEvent = eventId ? { id: eventId, name: (await eventName(eventId))?.name || null } : null;
+  const affected = [];
+  if (slot.event_id) {
+    const pencil = await eventName(slot.event_id);
+    // A reference to an event that is deleted or gone is not a pencil anyone
+    // can review, and it is not overwritten quietly either.
+    if (!pencil) {
+      throw refuse(`E${slot.slot_number} points to an event that no longer exists. Nothing was changed: clear the slot's event first.`,
+        'SEASON_SLOT_EVENT_ORPHANED', { slot_id: slot.id, slot_number: slot.slot_number });
+    }
+    affected.push({ slot_id: slot.id, slot_number: slot.slot_number, event: { id: pencil.id, name: pencil.name }, change: 'replaced' });
+  }
+  const [holders] = eventId
+    ? await sequelize.query(
+      `SELECT id, slot_number, episode_id, locked_at FROM season_slots
+        WHERE arc_id = :arcId AND event_id = :eventId AND id <> :slotId AND deleted_at IS NULL ORDER BY id`,
+      { replacements: { arcId: slot.arc_id, eventId, slotId }, transaction })
+    : [[]];
+  // A holder that appeared or left between the read and the locks was never
+  // locked here or reviewed: nothing is written.
+  if (holders.map((h) => String(h.id)).join() !== holdersSeen.join()) {
+    throw refuse('The season changed while this was being saved. Nothing was changed: check the roadmap and place it again.', 'SEASON_SLOT_CHANGED');
+  }
+  const specials = require('./seasonSpecials');
+  for (const h of holders) {
+    if (h.episode_id || h.locked_at) {
+      throw refuse(`"${episode.title}" shares its event with E${h.slot_number}, which has started and keeps it. Nothing was changed.`, 'SEASON_SLOT_LOCKED');
+    }
+    if (await specials.twoPartOfSlot(sequelize, h.id, { transaction })) {
+      throw refuse(`"${episode.title}"'s event is the two-parter in E${h.slot_number}: undo the two-parter first. Nothing was changed.`, 'SEASON_SLOT_TWO_PART');
+    }
+    affected.push({ slot_id: h.id, slot_number: h.slot_number, event: ownEvent, change: 'cleared' });
+  }
+  const verdict = pencilConfirmation(confirmed, affected);
+  if (verdict !== 'ok') {
+    const details = {
+      slot_id: slot.id, slot_number: slot.slot_number, episode: { id: episode.id, title: episode.title },
+      episode_event: ownEvent, affected_pencils: affected,
+    };
+    if (verdict === 'needs') {
+      const lines = affected.map((a) => (a.change === 'replaced'
+        ? `"${a.event.name}" pencilled in E${a.slot_number} would be replaced`
+        : `"${a.event.name || 'its event'}" would be cleared from E${a.slot_number}`));
+      throw refuse(`Placing "${episode.title}" in E${slot.slot_number} changes pencilled events: ${lines.join('; ')}. Nothing was changed: confirm it first.`,
+        'SEASON_PLACE_NEEDS_CONFIRMATION', details);
+    }
+    throw refuse(`The pencilled events changed since this was confirmed. Nothing was changed: check the roadmap and place "${episode.title}" again.`,
+      'SEASON_SLOT_CHANGED', details);
+  }
+
+  if (holders.length) {
     await sequelize.query(
-      `UPDATE season_slots SET event_id = NULL, updated_at = NOW()
-        WHERE arc_id = :arcId AND event_id = :eventId AND id <> :slotId AND deleted_at IS NULL`,
-      { replacements: { arcId: slot.arc_id, eventId, slotId }, transaction });
+      'UPDATE season_slots SET event_id = NULL, updated_at = NOW() WHERE id IN (:ids) AND deleted_at IS NULL',
+      { replacements: { ids: holders.map((h) => h.id) }, transaction });
   }
   await sequelize.query(
     `UPDATE season_slots SET episode_id = :episodeId, event_id = :eventId, locked_at = NOW(), updated_at = NOW()
@@ -689,7 +811,11 @@ async function placeEpisodeIn(sequelize, showId, slotId, episodeId, transaction)
     { replacements: { episodeId, eventId, slotId }, transaction });
   await snapshotEpisode(sequelize, { slotId, episodeId, transaction });
   await clearSlotSetupFailure(sequelize, episodeId, transaction);
-  return { slot_number: slot.slot_number, episode_id: episodeId, event_id: eventId };
+  return {
+    slot_number: slot.slot_number, episode_id: episodeId, event_id: eventId,
+    replaced_event_id: slot.event_id && String(slot.event_id) !== String(eventId || '') ? slot.event_id : null,
+    cleared_from: holders.map((h) => h.slot_number),
+  };
 }
 
 /**
@@ -804,6 +930,9 @@ module.exports = {
   pencilEventIn,
   placeEpisode,
   placeEpisodeIn,
+  lockSlot,
+  readConfirmedPencils,
+  pencilConfirmation,
   arcPhases,
   phaseFor,
   assignOnStart,

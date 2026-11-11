@@ -144,6 +144,91 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  # A2 readiness (docs/design/2026-11-season-planning.md §4.2, §4.6; Evoni,
+  # 2026-11-10): production runs PostgreSQL 17, and the Tests job above runs
+  # 15. This job runs ONLY the A2 constraint tests (K1-K14, K17), on 17, so
+  # the proposed release-position rules are proven on production's major
+  # version as well. It adds to the Tests job and replaces nothing there.
+  # It cannot pass without proving something: it fails when the server is not
+  # 17, when the test file is missing, or when any test is skipped or none ran.
+  # The tests need no migration: they build their own throwaway schema.
+  a2-constraints-pg17:
+    name: A2 constraints (PostgreSQL 17)
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: episode_metadata_test
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    env:
+      A2_TEST_FILE: tests/integration/seasonReleasePositionConstraints.integration.test.js
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Setup test database
+        run: |
+          PGPASSWORD=postgres psql -h localhost -U postgres -c "DROP DATABASE IF EXISTS episode_metadata_test;"
+          PGPASSWORD=postgres psql -h localhost -U postgres -c "CREATE DATABASE episode_metadata_test;"
+
+      - name: Confirm the server is PostgreSQL 17 and the test file exists
+        run: |
+          VERSION="$(PGPASSWORD=postgres psql -h localhost -U postgres -d episode_metadata_test -Atc 'SHOW server_version')"
+          echo "server_version: ${VERSION}"
+          case "${VERSION}" in
+            17.*) ;;
+            *) echo "::error::Expected PostgreSQL 17, found ${VERSION}."; exit 1 ;;
+          esac
+          test -f "${A2_TEST_FILE}" || { echo "::error::${A2_TEST_FILE} is missing: nothing to prove."; exit 1; }
+
+      - name: Run the A2 constraint tests (this file only)
+        run: npx jest "${A2_TEST_FILE}" --runInBand --coverage=false --verbose --forceExit --json --outputFile=tmp/a2-constraints-pg17.json
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/episode_metadata_test
+          TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/episode_metadata_test
+          JWT_SECRET: test-secret-key-minimum-32-characters-long
+          NODE_ENV: test
+          NETWORK_GUARD: report
+
+      # A green run with skipped tests would prove nothing (the suite skips
+      # itself when the database is not the isolated test database).
+      - name: Every test ran and passed (none skipped)
+        if: always()
+        run: |
+          node -e '
+            const r = require("./tmp/a2-constraints-pg17.json");
+            const line = `suites ${r.numTotalTestSuites}; tests ${r.numTotalTests}; passed ${r.numPassedTests}; failed ${r.numFailedTests}; skipped ${r.numPendingTests}`;
+            console.log(line);
+            for (const s of r.testResults) for (const t of s.assertionResults) console.log(`${t.status}: ${t.title}`);
+            const ok = r.success && r.numTotalTestSuites === 1 && r.numTotalTests > 0
+              && r.numPassedTests === r.numTotalTests && r.numFailedTests === 0 && r.numPendingTests === 0;
+            if (!ok) { console.log("::error::The A2 constraint tests did not all run and pass on PostgreSQL 17: " + line); process.exit(1); }
+          '
+      # The same network guard check as the Tests job.
+      - name: Check the network guard report
+        if: always()
+        run: node tests/networkGuard/verify.js
+
   frontend-tests:
     name: Frontend Tests
     runs-on: ubuntu-latest

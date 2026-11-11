@@ -9,7 +9,9 @@
 # Verification after start (all must hold, or the previous tree is put back
 # and restarted):
 #   * :3002 is bound to 127.0.0.1 only (the dev API is never public);
-#   * GET /health is 200 with "database":"connected";
+#   * GET /health is 200 with "database":"connected" and
+#     "environment":"production" (ecosystem.dev.config.js pins it for the API:
+#     any other value exposes stack traces and switches off the login limit);
 #   * GET /api/v1/shows without a token is refused (401/403): auth is enforced.
 # It never touches nginx, the security group, or any secret. Task #3716.
 set -euo pipefail
@@ -32,8 +34,8 @@ verify() {
   echo "   :3002 bound on: ${bound:-nothing}"
   [ "$bound" = "127.0.0.1:3002 " ] || { echo "   FAIL: not loopback-only"; return 1; }
   body="$(curl -s -m 10 http://127.0.0.1:3002/health || true)"
-  echo "$body" | python3 -c 'import json,sys; d=json.load(sys.stdin); print("   /health:", d.get("status"), "| database:", d.get("database"), "| environment:", d.get("environment")); sys.exit(0 if d.get("status")=="healthy" and d.get("database")=="connected" else 1)' \
-    || { echo "   FAIL: /health not healthy+connected"; return 1; }
+  echo "$body" | python3 -c 'import json,sys; d=json.load(sys.stdin); print("   /health:", d.get("status"), "| database:", d.get("database"), "| environment:", d.get("environment")); sys.exit(0 if d.get("status")=="healthy" and d.get("database")=="connected" and d.get("environment")=="production" else 1)' \
+    || { echo "   FAIL: /health not healthy+connected, or the API is not running as production"; return 1; }
   code="$(curl -s -m 10 -o /dev/null -w '%{http_code}' http://127.0.0.1:3002/api/v1/shows)"
   echo "   GET /api/v1/shows without a token -> $code"
   case "$code" in 401|403) ;; *) echo "   FAIL: an authenticated route answered without a token"; return 1;; esac

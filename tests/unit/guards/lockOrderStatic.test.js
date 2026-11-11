@@ -41,7 +41,7 @@ const PINNED = {
   'src/services/seasonIntentionService.js': { traced: true, locks: { season_slots: 1 } },
   'src/services/seasonLoader.js': { traced: true, locks: { show_arcs: 1, season_slots: 1 } },
   'src/services/seasonSetupService.js': { traced: true, locks: { world_events: 1, season_slots: 1 } }, // C4c events, C4d target and holder slots, id order
-  'src/services/seasonSlotService.js': { traced: true, locks: { season_slots: 4, world_events: 1 } }, // C4c: pencilEventIn's event first
+  'src/services/seasonSlotService.js': { traced: true, locks: { season_slots: 5, world_events: 1 } }, // C4c: pencilEventIn's event first. 5th season_slots lock (2026-11-10): placeEpisodeIn's "WHERE id IN (:ids) ... ORDER BY id FOR UPDATE" on the target and the slots holding the episode's event; traced by lockOrderTrace "placeEpisode with the episode's event pencilled in another slot"
   'src/services/seasonSpecials.js': { traced: true, locks: { world_events: 2, season_slots: 1 } },
   'src/services/startOfferDecision.js': { traced: true, locks: { world_events: 1 } },
   'src/services/termsReopenService.js': { traced: false, locks: { episodes: 1, world_events: 1 } },

@@ -662,7 +662,10 @@ async function previewPlacement(sequelize, showId) {
  * reviewed empty, as the preview offers only open slots). Under the locks,
  * a slot that started, or holds an event other than the item's own or the
  * reviewed one, or an event pencilled into another slot since, refuses the
- * whole Save (409 SEASON_SLOT_CHANGED; nothing written). Episodes are placed
+ * whole Save (409 SEASON_SLOT_CHANGED; nothing written). An episode's own
+ * event found in its slot, or pencilled in another slot, is a pencil Place
+ * changes only when named (expected_event_id for the slot; confirm_pencils
+ * for another slot): otherwise 409 SEASON_PLACE_NEEDS_CONFIRMATION. Episodes are placed
  * first (placeEpisode's rules: the slot locks to it and takes its event),
  * then events are pencilled (pencilEvent's rules). Any refusal undoes all.
  */
@@ -753,7 +756,21 @@ async function applyPlacement(sequelize, showId, items) {
     let episodes = 0;
     let events = 0;
     for (const it of items.filter((x) => x.episode_id)) {
-      await placeEpisodeIn(sequelize, showId, it.slot_id, it.episode_id, transaction);
+      // Place asks for each pencil it changes by name (2026-11-10). The event
+      // the slot was reviewed with (expected_event_id) is that confirmation
+      // for the target; confirm_pencils carries any other, in Place's form.
+      const given = it.confirm_pencils == null ? [] : it.confirm_pencils;
+      const confirmPencils = Array.isArray(given) && it.expected_event_id != null
+        && !given.some((c) => String(c?.slot_id) === String(it.slot_id))
+        ? [...given, { slot_id: String(it.slot_id), event_id: String(it.expected_event_id) }] : given;
+      try {
+        await placeEpisodeIn(sequelize, showId, it.slot_id, it.episode_id, transaction, { confirmPencils });
+      } catch (err) {
+        if (err?.code === 'SEASON_PLACE_NEEDS_CONFIRMATION') {
+          err.message = `${err.message} Nothing was placed: leave that episode out here and place it from the Roadmap, which asks first.`;
+        }
+        throw err;
+      }
       episodes += 1;
     }
     for (const it of items.filter((x) => x.event_id)) {
