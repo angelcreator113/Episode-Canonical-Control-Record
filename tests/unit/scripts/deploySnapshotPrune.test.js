@@ -1,7 +1,8 @@
 // ============================================================================
-// The Deploy workflow removes older deploy-* snapshots before taking its own
-// (Evoni, 2026-10-22: runs #145 and #146 stopped at the snapshot with
-// SnapshotQuotaExceeded, "cannot create more than 100 manual snapshots").
+// The Deploy workflow removes older deploy-* snapshots only AFTER its own
+// snapshot is available (Evoni, 2026-11-11: an old recovery point is never
+// removed before the new one exists). Until then it removed them first
+// (2026-10-22: runs #145 and #146 had stopped with SnapshotQuotaExceeded).
 // ============================================================================
 // scripts/deploy/prune-snapshots.sh is run here against a fake `aws` on PATH
 // that records its calls; no AWS account, host or database is touched. The
@@ -55,7 +56,13 @@ const snaps = (n, { start = 0 } = {}) => Array.from({ length: n }, (_, i) => ({
 const ids = (list) => list.map((x) => x.id);
 const shuffle = (list) => [...list].reverse();
 
-function prune(list, env = {}) {
+// The snapshot the run has just taken. Every listing below holds it, as RDS's
+// would once the workflow has waited for it, unless a test says otherwise.
+const NEW = 'deploy-ffffffffffff-777777-1';
+const newSnap = (over = {}) => ({ id: NEW, created: new Date(NOW - 60 * 1000).toISOString(), tags: [], ...over });
+
+function prune(list, env = {}, { withNew = true } = {}) {
+  if (Array.isArray(list) && withNew) list = [newSnap(), ...list];
   const calls = path.join(tmp, 'calls');
   const output = path.join(tmp, 'github_output');
   fs.rmSync(calls, { force: true });
@@ -68,6 +75,7 @@ function prune(list, env = {}) {
       GITHUB_OUTPUT: output,
       NOW_EPOCH: String(NOW / 1000),
       DRY_RUN: '0',
+      NEW_SNAPSHOT: NEW,
       FAKE_JSON: typeof list === 'string' ? list : JSON.stringify(list),
       ...env,
     },
@@ -176,6 +184,7 @@ test('a listing that looks wrong removes nothing: not JSON, not a list, a name t
   }
   const all = snaps(14);
   const twice = prune([...all, all[12]]);
+  expect(twice.calls.filter((l) => l.includes('delete-db-snapshot'))).toEqual([]);
   expect(twice.deleted).toEqual([]);
   expect(twice.note).toBe('list-suspect');
   const failed = prune(all, { FAKE_LIST_FAIL: '1' });
@@ -205,15 +214,107 @@ test('a failed removal is a warning and the rest go; three failures stop the run
   expect(three.stdout).toContain('Three removals failed, so no more were tried this run.');
 });
 
+describe('the new snapshot comes first (Evoni, 2026-11-11)', () => {
+  test('nothing is removed unless the run names its new snapshot', () => {
+    const all = snaps(14);
+    for (const name of [undefined, '', 'deploy-before-gala', 'episode-control-dev', `${NEW} extra`]) {
+      const res = prune(all, { NEW_SNAPSHOT: name });
+      expect(res.status).toBe(0);
+      expect(res.deleted).toEqual([]);
+      expect(res.note).toBe('no-new-snapshot');
+      expect(res.output).toContain('removed=0');
+    }
+    // Not named: RDS is not even asked for the list.
+    expect(prune(all, { NEW_SNAPSHOT: '' }).calls).toEqual([]);
+  });
+
+  test('nothing is removed when the new snapshot is not among the available ones', () => {
+    const all = snaps(14);
+    // The listing holds available snapshots only: one still being made, or one that failed, is not in it.
+    const res = prune(all, {}, { withNew: false });
+    expect(res.status).toBe(0);
+    expect(res.deleted).toEqual([]);
+    expect(res.note).toBe('no-new-snapshot');
+    expect(res.stdout).toContain(`This run's new snapshot ${NEW} is not among the available deploy snapshots, so no older snapshot was removed.`);
+    // A dry run says the same and lists nothing as removable.
+    const dry = prune(all, { DRY_RUN: '1' }, { withNew: false });
+    expect(dry.note).toBe('no-new-snapshot');
+    expect(dry.stdout).not.toContain('Would remove');
+  });
+
+  test('the new snapshot is never removed, whatever its age, the counts or the limits', () => {
+    // Made to look as old as possible, with the smallest KEEP and the largest batch.
+    const all = [newSnap({ created: '2020-01-01T00:00:00Z' }), ...snaps(30)];
+    const res = prune(all, { KEEP: '3', MAX_DELETE: '20', MIN_AGE_DAYS: '1' }, { withNew: false });
+    expect(res.deleted).not.toContain(NEW);
+    expect(res.deleted).toHaveLength(20);
+    expect(res.stdout).toContain(`This run's new snapshot ${NEW} is available. It is kept and does not count toward the newest 3.`);
+    // Alone in the listing: nothing to remove.
+    expect(prune([]).deleted).toEqual([]);
+  });
+
+  test('the number of older snapshots kept is unchanged: the new one does not count toward KEEP', () => {
+    const all = snaps(14);
+    // Before this change a run kept the newest 10 and then added its own: 11. It still leaves 10 older ones.
+    const res = prune(all);
+    expect(res.deleted).toEqual(ids(all.slice(10)).reverse());
+    expect(res.output).toBe('kept=10\nremoved=4\nwould_remove=0\nprotected=0\nnote=ok\n');
+    // Exactly 10 older ones and the new one: nothing goes.
+    expect(prune(snaps(10)).deleted).toEqual([]);
+  });
+
+  test('keep=true and the seven-day minimum hold as before', () => {
+    const all = snaps(14);
+    all[13].tags = [{ Key: 'keep', Value: 'true' }];
+    const res = prune(all);
+    expect(res.deleted).toEqual(ids(all.slice(10, 13)).reverse());
+    expect(res.stdout).toContain(`Kept ${all[13].id}: tagged keep=true.`);
+    // Fourteen snapshots all younger than seven days: none is old enough.
+    const young = Array.from({ length: 14 }, (_, i) => ({ id: `deploy-${i.toString(16).padStart(12, '0')}-${8000 - i}-1`, created: new Date(NOW - (i + 1) * 3600 * 1000).toISOString(), tags: [] }));
+    expect(prune(young).deleted).toEqual([]);
+  });
+
+  test('every snapshot selected is named, with when it was made, before the first removal', () => {
+    const all = snaps(13);
+    const res = prune(all);
+    const lines = res.stdout.split('\n');
+    const header = lines.indexOf('Selected for removal (3, oldest first):');
+    expect(header).toBeGreaterThan(-1);
+    expect(lines.slice(header + 1, header + 4)).toEqual(all.slice(10).reverse().map((x) => `  ${x.id}  created ${x.created}`));
+    expect(lines.findIndex((l) => l.startsWith('Removed '))).toBeGreaterThan(header + 3);
+    // A dry run names the same ones and removes none.
+    const dry = prune(all, { DRY_RUN: '1' });
+    expect(dry.stdout).toContain('Selected for removal (3, oldest first):');
+    expect(dry.deleted).toEqual([]);
+    expect(prune(snaps(4)).stdout).toContain('Selected for removal: none.');
+  });
+});
+
 describe('the workflow', () => {
-  test('runs the script after the plan and before the snapshot, with DEPLOY_SNAPSHOTS_KEEP', () => {
+  test('runs the script only after the snapshot is taken and available, and before the migration', () => {
     const plan = WORKFLOW.indexOf('- name: Plan (read-only, on the box)');
+    const snapshot = WORKFLOW.indexOf('- name: Snapshot the database');
+    const wait = WORKFLOW.indexOf('- name: Wait for the snapshot to be available');
     const step = WORKFLOW.indexOf('- name: Remove older deploy snapshots (keeps the newest few)');
-    const snap = WORKFLOW.indexOf('- name: Snapshot the database');
+    const snap = WORKFLOW.indexOf('- name: Migrate (on the box, from the staged commit, if pending)');
     expect(plan).toBeGreaterThan(-1);
-    expect(step).toBeGreaterThan(plan);
+    expect(snapshot).toBeGreaterThan(plan);
+    expect(wait).toBeGreaterThan(snapshot);
+    expect(step).toBeGreaterThan(wait);
     expect(snap).toBeGreaterThan(step);
+    // One removal step, and none before the snapshot.
+    expect(WORKFLOW.split('scripts/deploy/prune-snapshots.sh').length - 1).toBe(1);
+    expect(WORKFLOW.slice(0, wait)).not.toContain('delete-db-snapshot');
     const block = WORKFLOW.slice(step, snap);
+    // It is handed the snapshot this run took, and has no condition that lets it run after a failed step.
+    expect(block).toContain('NEW_SNAPSHOT: ${{ steps.snapshot.outputs.name }}');
+    expect(block).not.toMatch(/\n\s+if:/);
+    // The wait stops the run on anything but "available", so a failed snapshot never reaches the removal or the migration.
+    const waitBlock = WORKFLOW.slice(wait, step);
+    expect(waitBlock).toContain('available) exit 0 ;;');
+    expect(waitBlock).toMatch(/\*\) echo "::error::Snapshot \$\{SNAP\} is \$\{STATUS\}\. Nothing on the box was changed\."; exit 1 ;;/);
+    expect(waitBlock).not.toContain('continue-on-error');
+    expect(WORKFLOW.slice(snapshot, wait)).not.toContain('continue-on-error');
     expect(block).toContain('KEEP: ${{ vars.DEPLOY_SNAPSHOTS_KEEP }}');
     expect(block).toContain('DRY_RUN: ${{ vars.DEPLOY_SNAPSHOTS_PRUNE_DRY_RUN }}');
     expect(block).toContain('MAX_DELETE: ${{ vars.DEPLOY_SNAPSHOTS_MAX_DELETE }}');
@@ -226,6 +327,7 @@ describe('the workflow', () => {
     expect(WORKFLOW).toContain('PRUNE_WOULD: ${{ steps.prune.outputs.would_remove }}');
     expect(WORKFLOW).toMatch(/dry-run\) echo "\| Older deploy snapshots removed \| none: dry run, \$\{PRUNE_WOULD:-0\} would be removed/);
     expect(WORKFLOW).toContain('list-suspect) echo');
+    expect(WORKFLOW).toContain("no-new-snapshot) echo \"| Older deploy snapshots removed | none: this run's new snapshot was not confirmed available");
   });
 
   test('a full snapshot quota stops the run with what to do', () => {

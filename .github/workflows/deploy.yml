@@ -281,23 +281,6 @@ jobs:
           BOX_FROM: ${{ steps.plan.outputs.box_from }}
         run: bash scripts/deploy/check-pin.sh base "$BOX_SHA" "$BASE_SHA" "$TARGET_SHA" "${BOX_STAGE:-none}" "$BOX_FROM"
 
-      # RDS allows 100 manual snapshots, and each run keeps one (runs #145 and
-      # #146 stopped at the snapshot on 2026-10-22). Keeps the newest
-      # DEPLOY_SNAPSHOTS_KEEP (default 10, at least 3) deploy-* snapshots and
-      # never stops the run: without the delete permission it only warns.
-      # A dry run unless DEPLOY_SNAPSHOTS_PRUNE_DRY_RUN is 0; at most
-      # DEPLOY_SNAPSHOTS_MAX_DELETE (default 5) removals per run, none newer
-      # than DEPLOY_SNAPSHOTS_MIN_AGE_DAYS (default 7); keep=true is never
-      # removed (runbook §7, 2026-10-28).
-      - name: Remove older deploy snapshots (keeps the newest few)
-        id: prune
-        env:
-          KEEP: ${{ vars.DEPLOY_SNAPSHOTS_KEEP }}
-          DRY_RUN: ${{ vars.DEPLOY_SNAPSHOTS_PRUNE_DRY_RUN }}
-          MAX_DELETE: ${{ vars.DEPLOY_SNAPSHOTS_MAX_DELETE }}
-          MIN_AGE_DAYS: ${{ vars.DEPLOY_SNAPSHOTS_MIN_AGE_DAYS }}
-        run: bash scripts/deploy/prune-snapshots.sh
-
       - name: Snapshot the database
         id: snapshot
         run: |
@@ -308,7 +291,7 @@ jobs:
             --query "DBSnapshot.[DBSnapshotIdentifier,Status]" --output text 2>&1)"; then
             echo "$OUT"
             if printf '%s' "$OUT" | grep -q SnapshotQuotaExceeded; then
-              echo "::error::RDS already holds its limit of manual snapshots. Nothing on the box was changed. Remove old deploy-* snapshots in RDS → Snapshots → Manual, or give the role the delete permission so the run removes them ($RUNBOOK, §2.1 and §7), then start a new run."
+              echo "::error::RDS already holds its limit of manual snapshots. Nothing on the box was changed. No snapshot was removed: a run removes older ones only after its own snapshot is available. Remove old deploy-* snapshots in RDS → Snapshots → Manual ($RUNBOOK, §7), then start a new run."
             fi
             exit 1
           fi
@@ -335,6 +318,30 @@ jobs:
           done
           echo "::error::Snapshot ${SNAP} was not available within 60 minutes. Nothing on the box was changed."
           exit 1
+
+      # After this run's own snapshot is available, never before (Evoni,
+      # 2026-11-11): an older recovery point is not removed until the new one
+      # exists. NEW_SNAPSHOT names it; the script removes nothing unless that
+      # snapshot is in the listing of available ones, never removes it, and
+      # does not count it toward the newest DEPLOY_SNAPSHOTS_KEEP (default 10,
+      # at least 3), so as many older snapshots stay as before. It names every
+      # snapshot it selects before removing any, and never stops the run:
+      # without the delete permission it only warns. A dry run unless
+      # DEPLOY_SNAPSHOTS_PRUNE_DRY_RUN is 0; at most
+      # DEPLOY_SNAPSHOTS_MAX_DELETE (default 5) removals per run, none newer
+      # than DEPLOY_SNAPSHOTS_MIN_AGE_DAYS (default 7); keep=true is never
+      # removed (runbook §7, 2026-10-28). RDS allows 100 manual snapshots: a
+      # run that finds the quota full stops at its snapshot, before this step
+      # and with nothing removed (runs #145 and #146, 2026-10-22).
+      - name: Remove older deploy snapshots (keeps the newest few)
+        id: prune
+        env:
+          NEW_SNAPSHOT: ${{ steps.snapshot.outputs.name }}
+          KEEP: ${{ vars.DEPLOY_SNAPSHOTS_KEEP }}
+          DRY_RUN: ${{ vars.DEPLOY_SNAPSHOTS_PRUNE_DRY_RUN }}
+          MAX_DELETE: ${{ vars.DEPLOY_SNAPSHOTS_MAX_DELETE }}
+          MIN_AGE_DAYS: ${{ vars.DEPLOY_SNAPSHOTS_MIN_AGE_DAYS }}
+        run: bash scripts/deploy/prune-snapshots.sh
 
       # Before Deploy (Evoni, 2026-10-26): runs from a staged copy of the
       # commit; the live tree and the API stay on the old code. A failure
@@ -468,6 +475,7 @@ jobs:
               some-failed) echo "| Older deploy snapshots removed | ${PRUNE_REMOVED}; some could not be removed (see the step's log) |" ;;
               dry-run) echo "| Older deploy snapshots removed | none: dry run, ${PRUNE_WOULD:-0} would be removed (the step's log names them; ${PRUNE_PROTECTED:-0} protected) |" ;;
               list-suspect) echo "| Older deploy snapshots removed | none: the listing looked wrong (see the step's log) |" ;;
+              no-new-snapshot) echo "| Older deploy snapshots removed | none: this run's new snapshot was not confirmed available (see the step's log) |" ;;
               *) echo "| Older deploy snapshots removed | not reached |" ;;
             esac
             echo "| Snapshot | \`${SNAP:-none taken}\` |"
