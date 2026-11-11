@@ -19,6 +19,8 @@ const ROOT = path.resolve(__dirname, '../../..');
 const SQL_FILE = path.join(ROOT, 'scripts', 'dev-db', 'sql', 'dev-refresh-ro-role.sql');
 const PG_URL = process.env.TEST_DATABASE_URL;
 const ROLE = 'dev_refresh_ro';
+const LEDGER_TABLES = ['aigw_operations', 'aigw_control', 'aigw_permits', 'aigw_permit_events', 'aigw_reconciliations', 'aigw_audit'];
+const LEDGER_SEQUENCES = ['aigw_permit_events_id_seq', 'aigw_reconciliations_id_seq', 'aigw_audit_id_seq'];
 
 test('the role file names the grants it needs and keeps data_correction_log out', () => {
   const sql = fs.readFileSync(SQL_FILE, 'utf8');
@@ -28,6 +30,10 @@ test('the role file names the grants it needs and keeps data_correction_log out'
   expect(sql).toContain('REVOKE ALL ON public.data_correction_log FROM dev_refresh_ro;');
   expect(sql).toContain("ALTER ROLE dev_refresh_ro SET default_transaction_read_only = on;");
   expect(sql).not.toMatch(/\bPASSWORD\s+'/i);
+  // The AI gateway ledger's tables and sequences, whose own migrations take
+  // this role's grants away: named here so read access is put back.
+  for (const name of LEDGER_TABLES.concat(LEDGER_SEQUENCES)) expect(sql).toContain(`'${name}'`);
+  expect(sql).toContain("EXECUTE format('GRANT SELECT ON public.%I TO dev_refresh_ro', r);");
   // Only SELECT/USAGE/CONNECT are ever granted.
   for (const m of sql.matchAll(/^\s*(?:ALTER DEFAULT PRIVILEGES[^;]*?)?GRANT ([A-Z, ]+?) ON /gm)) {
     expect(['SELECT', 'USAGE', 'CONNECT']).toContain(m[1].trim());
@@ -61,6 +67,12 @@ test('the role file names the grants it needs and keeps data_correction_log out'
     await d.query("INSERT INTO shows (name) VALUES ('Styling Adventures'), ('Before Lala')");
     await d.query('CREATE TABLE data_correction_log (id serial PRIMARY KEY, note text)');
     await d.query("INSERT INTO data_correction_log (note) VALUES ('undo record')");
+    // Two of the ledger's tables, one with a sequence. The other four do not
+    // exist here, which the role file must tolerate.
+    await d.query('CREATE TABLE aigw_operations (name text PRIMARY KEY)');
+    await d.query("INSERT INTO aigw_operations (name) VALUES ('image.generate')");
+    await d.query('CREATE TABLE aigw_audit (id serial PRIMARY KEY, action text)');
+    await d.query("INSERT INTO aigw_audit (action) VALUES ('stop')");
     // psql meta-commands (\set) are for the operator's psql run, not for pg.
     const sql = fs.readFileSync(SQL_FILE, 'utf8')
       .split('\n').filter((l) => !l.startsWith('\\')).join('\n')
@@ -99,6 +111,38 @@ test('the role file names the grants it needs and keeps data_correction_log out'
     expect((await ro.query('SELECT last_value::int AS v FROM episodes_id_seq')).rows[0].v).toBe(1);
     const s = (await ro.query("SELECT current_user AS u, current_setting('default_transaction_read_only') AS ro, (SELECT rolsuper FROM pg_roles WHERE rolname = current_user) AS su")).rows[0];
     expect(s).toEqual({ u: ROLE, ro: 'on', su: false });
+  });
+
+  test('reads the gateway ledger, and reads it again after the ledger migration sweeps the grants away', async () => {
+    expect((await ro.query('SELECT count(*)::int AS n FROM aigw_operations')).rows[0].n).toBe(1);
+    expect((await ro.query('SELECT last_value::int AS v FROM aigw_audit_id_seq')).rows[0].v).toBe(1);
+
+    const admin = new Client({ connectionString: urlFor(DB) });
+    await admin.connect();
+    try {
+      // What the ledger's migrations do to every non-owner grantee.
+      await admin.query(`REVOKE ALL ON aigw_operations, aigw_audit FROM ${ROLE}`);
+      await admin.query(`REVOKE ALL ON SEQUENCE aigw_audit_id_seq FROM ${ROLE}`);
+      expect(await refused('SELECT count(*) FROM aigw_operations')).toBe('42501');
+      expect(await refused('SELECT last_value FROM aigw_audit_id_seq')).toBe('42501');
+
+      // The role file's ledger block alone puts read access back, and skips
+      // the ledger tables this database does not have.
+      const sql = fs.readFileSync(SQL_FILE, 'utf8');
+      const start = sql.indexOf('DO $ledger$');
+      const end = sql.indexOf('$ledger$;', start + 1);
+      expect(start).toBeGreaterThan(-1);
+      expect(end).toBeGreaterThan(start);
+      const block = sql.slice(start, end + '$ledger$;'.length);
+      await admin.query(block);
+      await admin.query(block); // again: changes nothing
+    } finally {
+      await admin.end();
+    }
+    expect((await ro.query('SELECT count(*)::int AS n FROM aigw_operations')).rows[0].n).toBe(1);
+    expect((await ro.query('SELECT count(*)::int AS n FROM aigw_audit')).rows[0].n).toBe(1);
+    expect((await ro.query('SELECT last_value::int AS v FROM aigw_audit_id_seq')).rows[0].v).toBe(1);
+    expect(await refused("INSERT INTO aigw_audit (action) VALUES ('x')")).toBe('25006');
   });
 
   test('refuses data_correction_log, writes, nextval and DDL', async () => {
