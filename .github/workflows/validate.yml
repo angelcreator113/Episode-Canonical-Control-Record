@@ -155,6 +155,8 @@ jobs:
   # The whole migration chain is not run here: the constraint tests build a
   # throwaway schema, and the migration test builds a scratch database and
   # runs only the two migrations that define season_slots and its rules.
+  # Since issue #1948 it also runs the activity_logs converging migration's
+  # own test (a scratch database again; two migration files).
   a2-constraints-pg17:
     name: A2 constraints (PostgreSQL 17)
     runs-on: ubuntu-latest
@@ -180,6 +182,9 @@ jobs:
       # up again, on a scratch database the test creates. Not the whole
       # migration chain (Evoni, 2026-11-10: narrow PostgreSQL 17 coverage).
       A2_MIGRATION_TEST_FILE: tests/integration/seasonReleasePositionMigration.integration.test.js
+      # Issue #1948: the activity_logs converging migration, from each starting
+      # shape, on a scratch database the test creates (production is 17).
+      AUDIT_MIGRATION_TEST_FILE: tests/integration/activityLogsMigration.integration.test.js
 
     steps:
       - uses: actions/checkout@v4
@@ -206,12 +211,12 @@ jobs:
             17.*) ;;
             *) echo "::error::Expected PostgreSQL 17, found ${VERSION}."; exit 1 ;;
           esac
-          for f in "${A2_TEST_FILE}" "${A2_MIGRATION_TEST_FILE}"; do
+          for f in "${A2_TEST_FILE}" "${A2_MIGRATION_TEST_FILE}" "${AUDIT_MIGRATION_TEST_FILE}"; do
             test -f "${f}" || { echo "::error::${f} is missing: nothing to prove."; exit 1; }
           done
 
-      - name: Run the A2 constraint and migration tests (these two files only)
-        run: npx jest "${A2_TEST_FILE}" "${A2_MIGRATION_TEST_FILE}" --runInBand --coverage=false --verbose --forceExit --json --outputFile=tmp/a2-constraints-pg17.json
+      - name: Run the A2 constraint and migration tests and the activity_logs migration test (these three files only)
+        run: npx jest "${A2_TEST_FILE}" "${A2_MIGRATION_TEST_FILE}" "${AUDIT_MIGRATION_TEST_FILE}" --runInBand --coverage=false --verbose --forceExit --json --outputFile=tmp/a2-constraints-pg17.json
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/episode_metadata_test
           TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/episode_metadata_test
@@ -229,9 +234,9 @@ jobs:
             const line = `suites ${r.numTotalTestSuites}; tests ${r.numTotalTests}; passed ${r.numPassedTests}; failed ${r.numFailedTests}; skipped ${r.numPendingTests}`;
             console.log(line);
             for (const s of r.testResults) for (const t of s.assertionResults) console.log(`${t.status}: ${t.title}`);
-            const ok = r.success && r.numTotalTestSuites === 2 && r.numTotalTests > 0
+            const ok = r.success && r.numTotalTestSuites === 3 && r.numTotalTests > 0
               && r.numPassedTests === r.numTotalTests && r.numFailedTests === 0 && r.numPendingTests === 0;
-            if (!ok) { console.log("::error::The A2 constraint and migration tests did not all run and pass on PostgreSQL 17: " + line); process.exit(1); }
+            if (!ok) { console.log("::error::The PostgreSQL 17 migration tests did not all run and pass: " + line); process.exit(1); }
           '
       # The same network guard check as the Tests job.
       - name: Check the network guard report

@@ -12,7 +12,6 @@ const mockStub = () => new Proxy({}, { get: (_t, key) => (key === '__esModule' ?
 jest.mock('../../../src/services/cfoAgent', () => mockStub());
 jest.mock('../../../src/services/siteOrganizerAgent', () => mockStub());
 jest.mock('../../../src/services/designAgent', () => mockStub());
-jest.mock('../../../src/services/AuditLogger', () => mockStub());
 jest.mock('../../../src/models', () => ({ models: mockStub() }));
 
 const express = require('express');

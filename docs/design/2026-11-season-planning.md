@@ -435,7 +435,7 @@ Each gate is approved separately.
 
 ---
 
-## 9. Audit log: Option C target architecture (PENDING; production schema change needs separate authorization)
+## 9. Audit log: Option C target architecture (code as built in §9.1; the production migration needs separate authorization)
 
 - **One authoritative writer.** `ActivityLog.logActivity({ userId, actionType, resourceType, resourceId, changes }, { transaction })`.
 - **One table.** The existing `activity_logs`, in production's shape: `user_id`, `action`, `resource_type`, `resource_id`, `changes` (JSONB), `created_at`. `resource_id` is widened to varchar so it can hold UUIDs.
@@ -443,6 +443,85 @@ Each gate is approved separately.
 - **No page-view logging, no IP addresses or user agents, no duplicate general-purpose audit table.** Existing rows are preserved.
 - **Scope (K-B, RULED).** `activity_logs` is the authoritative *general* administrative audit trail, including Move/Swap. D-22's dedicated `episode_intent_audit` (A1.2-SPEC-v5) is kept for its own narrowly scoped future workflow: audited intent corrections on frozen episodes. It is not implemented or migrated here.
 - **The production schema change (rename and widen) is authorized separately.**
+
+---
+
+### 9.1 The audit log as built (issue #1948; Evoni, 2026-11-11: Step 5)
+
+**The defect.** Nothing had ever been written to `activity_logs`. Production, the model and migration `20240101000005` described three different tables, `resource_id` was an integer, and each of the three loggers hid the failed insert.
+
+**Migration `20261111230000-converge-activity-logs`** (one transaction, guarded) brings every starting shape to one:
+
+| Column | Type |
+|---|---|
+| `id` | integer, serial primary key |
+| `user_id` | varchar(255), nullable (nobody signed in is NULL) |
+| `action` | varchar(100), nullable |
+| `resource_type` | varchar(100), nullable |
+| `resource_id` | varchar(255), nullable |
+| `changes` | jsonb, nullable |
+| `created_at` | timestamp without time zone, default `now()` |
+
+plus the index `activity_logs_resource (resource_type, resource_id)`.
+
+- **On production and the dev box** it changes two things: `resource_id` integer to varchar(255), and the index.
+- **On CI and fresh databases** it also renames the camelCase columns, replaces the two enums with varchar, folds old and new values into `changes`, and drops the IP-address and user-agent columns.
+- **Rows are kept from every shape.** Only IP-address and user-agent values are dropped, by ruling; production never had them.
+- **`down` undoes what the migration did to production's table, and nothing more.** `resource_id` goes back to integer and the index is dropped.
+  - It does **not** rebuild the table migration `20240101000005` created. On CI or a fresh database, `down` leaves production's earlier shape: no camelCase columns, no enums, no IP-address or user-agent columns, none of the four old indexes. The chain can still be undone past that point (the older migration's `down` drops the table) and run up again.
+  - It **refuses once any row exists.** A UUID cannot go back into an integer column, and audit history is not deleted to make a rollback possible. After the first entry there is no rollback; the way back is a new migration.
+- **Existing objects.** The primary key and the `id` sequence are untouched. If a view selects `resource_id`, PostgreSQL refuses the type change and the whole migration rolls back, changing nothing.
+
+**One writer.** `ActivityLog.logActivity({ userId, action, resourceType, resourceId, changes }, { transaction })`.
+- It throws when the entry cannot be written.
+- With a transaction, the entry commits or rolls back with the caller's work.
+- It refuses a `view`. Placeholder user ids (`anonymous`, `unknown`) are stored as NULL.
+
+**`changes`.** `{ before?, after?, meta? }`: the old values, the new values, and anything else the caller passed. Empty is NULL.
+
+**An episode update records only what changed** (`fieldChanges` in `middleware/auditLog.js`; Evoni, 2026-11-11).
+- `before` and `after` hold only the fields whose value differs, and `meta.changedFields` names them. Unchanged fields are left out, so a title edit does not copy the script.
+- `updated_at` is never counted as a change.
+- **A long text** (over 2,000 characters; in practice the script) that did change is recorded on both sides as `{ long_text: true, length, sha256 }`, not copied. That says that it changed, when, by whom, and identifies the exact text.
+- **Where the words are, and for how long.** The entry never holds them. The current script is on the episode. Each save keeps the script it replaces in `episode_script_versions` (`services/scriptVersions.js`), which is pruned to the newest 50 saved versions and the newest 10 generated ones per episode. A text older than that exists nowhere; its fingerprint in the audit entry still proves what it was, but cannot bring it back.
+- An update that changed nothing still writes its one entry, with an empty `changedFields`.
+
+**Episode create and delete record a summary** (`episodeSummary`; Evoni, 2026-11-11): `id`, `show_id`, `title`, `episode_number`, `season_number`, `status`, `air_date`, `categories`, `has_script`, `script_length`. Never the rest of the row, never the script.
+- A delete also records `meta.deleteType`: `soft` or `permanent`, as it actually happened. `?hard=true` is a soft delete in production and is recorded as one.
+- **What a delete leaves.** A soft delete (the only kind in production) sets `deleted_at`; the row, its script and its script versions stay in the database. **No route or screen restores a deleted episode**: `Episode.restore` exists on the model and nothing calls it, so getting one back is a manual database action. A permanent delete (outside production only) removes the row and, by cascade, its script versions; nothing of the script remains.
+- **A delete that did not happen writes nothing.** The entry is written after the delete's transaction commits. A filmed episode's refusal (409), an episode that is not found, and a database failure all return or throw before it.
+
+**Limits on every entry** (`changesFrom`, whoever calls; Evoni, 2026-11-11). `before`, `after` and `meta` each pass through the same limits:
+- a text over 2,000 characters becomes `{ long_text, length, sha256 }`;
+- a key that looks like a credential (password, secret, token, authorization, API key, access key, private key, credential, cookie, signature, pre-signed, session id) keeps its name and has its value replaced by `[removed]`, at any depth;
+- a list keeps its first 50 items and the count of the rest; an object its first 60 keys; nesting stops at 6 levels;
+- a section over 20,000 characters of JSON is replaced by `{ too_large, characters, keys }`.
+
+**Jobs record an allowlist** (`jobController.createJob`): `jobType`, `episodeId`, `fileId`, `maxRetries`, `hasPayload`. The payload is never recorded. Deleting a processing-queue row records `id`, episode id, job type, status and retry count only.
+
+**Metadata** (`metadataSummary` in `metadataController`): ids, `tags`, `categories`, the processing time, and for each of the five analysis fields only `present` or nothing. An update records only what changed, plus `meta.sentFields` (the fields the request set); a delete records the summary.
+
+**File downloads.** `fileController.getPreSignedUrl` writes one `download` entry after the link has been made and the access count saved. A file that is not found, a link that cannot be made, or any other failure writes none. The entry holds the file name, type and episode id: never the link, the bucket or the key. Listing files and reading a file's details are views and write nothing.
+
+**One call per operation.** The controllers call `logger.logAction` (in `middleware/auditLog.js`), which calls the one writer. It never fails the request: a failed entry is logged as `[audit] NOT RECORDED` and the request goes on.
+
+| Controller | Audited operations |
+|---|---|
+| `episodeController` | create, update, delete, enqueue |
+| `metadataController` | create, update, delete, add tags, set scenes |
+| `processingController` | create, update, retry, cancel |
+| `fileController` | upload, download, delete |
+| `jobController` | create, retry, cancel |
+
+- **Removed duplicates.** Episode create, update and delete each also called `ActivityService.logActivity` and `AuditLogger.log`; those calls are gone. `services/AuditLogger.js` is deleted.
+- **Removed page views.** No list or read handler writes an entry.
+- **Removed:** the unmounted request-logging middleware `auditLog`.
+
+**Readers.** `GET /api/v1/audit-logs` (ADMIN; the page at `/admin/audit`) and `ActivityIndexService` read the real columns.
+
+**Not changed.** `/api/v1/activity` (`activityController`) was already broken: it calls `ActivityService` methods that do not exist. Nothing in the frontend calls it. `ActivityService` itself only keeps entries in memory and is no longer called by any audited operation.
+
+**For Move/Swap (not built).** It calls `ActivityLog.logActivity` itself, inside its transaction, so a failed entry rolls the placement back. `tests/unit/guards/auditSingleWriter.test.js` lists the callers of the writer; the Move/Swap caller is added there with its own approval. No existing Season Planning action writes an entry.
 
 ---
 

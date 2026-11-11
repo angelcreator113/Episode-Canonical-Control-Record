@@ -1,14 +1,6 @@
 AIEditPlan	-	no-table
 AIRevision	-	no-table
 AITrainingData	-	no-table
-ActivityLog	action_type	missing-column
-ActivityLog	ip_address	missing-column
-ActivityLog	new_values	missing-column
-ActivityLog	old_values	missing-column
-ActivityLog	resource_id	missing-column
-ActivityLog	resource_type	missing-column
-ActivityLog	user_agent	missing-column
-ActivityLog	user_id	missing-column
 Asset	processing_metadata	missing-column
 Asset	s3_url_enhanced	missing-column
 Asset	s3_url_no_bg	missing-column

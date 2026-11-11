@@ -5,7 +5,6 @@
  */
 
 const ActivityIndexService = require('../services/ActivityIndexService');
-const _ActivityService = require('../services/ActivityService');
 const logger = require('../services/Logger');
 const { userInGroup } = require('../middleware/auth');
 const { getPool } = require('../config/database');
