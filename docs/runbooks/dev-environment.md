@@ -2,7 +2,7 @@
 
 The dev box (`episode-dev-backend`, `i-016395bb5f7a51a0b`) runs its own PostgreSQL holding a restored copy of production's `episode_metadata`. Production and RDS are only ever read. Set up under Task #3715 (2026-11-05).
 
-Task #3716 (2026-11-05) pointed the dev app at this database, removed every stored production credential from the box, and installed current `main`. A one-tap refresh workflow is Task #3717. The dev app runs **local-only** until dev auth is set up: see *Dev app* and *Reopening the dev app* below.
+Task #3716 (2026-11-05) pointed the dev app at this database, removed every stored production credential from the box, and installed current `main`. A one-tap refresh workflow is Task #3717. Task #3781 (2026-11-10) reopened the app at `https://dev.primepisodes.com` behind nginx and TLS, signing in against production's Cognito pool: see *Dev app* and *The public dev site* below.
 
 ## What is on the box
 
@@ -61,12 +61,14 @@ Over SSM, run it with `bash -c '…'` if you add pipes, because `AWS-RunShellScr
 | Thing | Where / value |
 |---|---|
 | App tree | `/home/ubuntu/episode-metadata`, a git checkout of the installed commit (`git -C … rev-parse HEAD`). The July tarball tree is kept as `/home/ubuntu/episode-metadata.prev` for rollback. |
-| Settings | `/home/ubuntu/episode-metadata/.env` is a symlink to `/home/ubuntu/.config/episode-dev/dev.env` (mode 600), written by `install-dev-app.sh`: the preserved app settings (`app.env`), the local DB login, `DB_SSL=false`, `HOST=127.0.0.1`. |
+| Settings | `/home/ubuntu/episode-metadata/.env` is a symlink to `/home/ubuntu/.config/episode-dev/dev.env` (mode 600), written by `install-dev-app.sh`: the preserved app settings (`app.env`), the local DB login, `DB_SSL=false`, `HOST=127.0.0.1` and `NODE_ENV=production`. `ecosystem.dev.config.js` also pins the API to `NODE_ENV=production` with `DB_POOL_MAX=10`, and the worker to `development`. |
 | Processes | pm2 `episode-api` (port 3002, **bound to 127.0.0.1**) and `episode-worker`, from `ecosystem.dev.config.js`; saved with `pm2 save`. **The dev worker is off by default** (issue #3714): it prints "Generation worker is disabled" and does nothing unless the dev `.env` sets `GENERATION_WORKER_ENABLED=true` (exactly `true`) and it is restarted with `pm2 restart episode-worker --update-env`. Switched on, it uses the local `episode_dev` login; the production worker's credential file is not used on the dev box. |
 | Database | local `episode_metadata` as `episode_dev` over `127.0.0.1` only. The box holds no production database credential. Its only production access is `episode-metadata/dev/refresh-readonly` (read-only `dev_refresh_ro`), used by the refresh. |
-| nginx | **stopped and disabled.** The site file `/etc/nginx/sites-enabled/episode` (server `dev.primepisodes.com`, proxy to `localhost:3002`) is unchanged. |
+| nginx | **enabled.** Sites `dev-site-http.conf` (80: certificate challenge and redirect) and `dev-site-https.conf` (443: `frontend/dist`, and `/api/` and `/health` proxied to `127.0.0.1:3002`), installed from `scripts/dev-db/nginx/` by `scripts/dev-db/setup-dev-nginx.sh`. The July site file is kept, out of use, as `/etc/nginx/sites-available/episode.retired-20261110T204009Z`. |
 | Memory | 1.9 GiB RAM + 1 GiB swap (`/swapfile`, in `/etc/fstab`). |
-| Not configured | Cognito (`COGNITO_USER_POOL_ID`, `COGNITO_CLIENT_ID` empty), `JWT_SECRET`, every AI/media API key, S3 buckets, Redis. Logins fail; `requireAuth` routes refuse; AI features return 503. |
+| Cognito | `COGNITO_USER_POOL_ID`, `COGNITO_CLIENT_ID` and `COGNITO_REGION` in `app.env` are **production's** pool and app client (Evoni, 2026-11-10; no dev pool). The client has no secret, so the box holds none. Login is server-side `InitiateAuth` (`USER_PASSWORD_AUTH`): there are no callback URLs to register. |
+| Not configured | Every AI/media API key, S3 bucket names, email. AI features return 503. `JWT_SECRET` is a dev-only value. |
+| AWS access | The box role `episode-dev-backend-role` can read (`s3:GetObject`, `s3:ListBucket`) the five `-dev` buckets and cannot write or delete in them (Evoni, 2026-11-10). Production keeps its media in `episode-metadata-storage-dev` and `episode-metadata-thumbnails-dev`, so uploads, generated thumbnails and media deletes fail on dev with `AccessDenied`; reading existing media works. |
 
 ### Installing a commit
 
@@ -93,17 +95,63 @@ ss -ltn | grep 3002   # expect 127.0.0.1:3002 only
 
 Rollback: stop both, `mv episode-metadata episode-metadata.bad && mv episode-metadata.prev episode-metadata`, start.
 
-## Reopening the dev app (once dev auth works)
+## The public dev site (Task #3781, 2026-11-10)
 
-Today nothing on the box listens publicly except sshd (22). The security group `episode-dev-backend-sg` also refuses 22/80/443/3002/5432 from outside, as probed from another public IP on 2026-11-05. In order:
+`https://dev.primepisodes.com` is the dev box. nginx is the only public way in; the app keeps listening on `127.0.0.1:3002`.
 
-1. **Auth first.** Give dev its own Cognito user pool and app client (recommended), or at least its own app client. Set `COGNITO_USER_POOL_ID`, `COGNITO_CLIENT_ID` (and `COGNITO_CLIENT_SECRET` if the client has one) in `~/.config/episode-dev/app.env`, reinstall or restart with `--update-env`, and prove a login and a `requireAuth` call locally (`curl 127.0.0.1:3002/...`). Leave `JWT_SECRET` empty unless dev needs HS256 tokens; if set, use a dev-only value of 32+ characters.
-2. **DNS.** `dev.primepisodes.com` currently resolves to the **prod** box (54.163.229.144), where it returns 502. Point it at the dev box's EIP `54.87.253.45`.
-3. **nginx.** Change `proxy_pass http://localhost:3002` to `http://127.0.0.1:3002` in `/etc/nginx/sites-enabled/episode` (the app listens on IPv4 loopback only). Then `nginx -t && systemctl enable --now nginx`. Renew the certificate if it has lapsed: `certbot --nginx -d dev.primepisodes.com`.
-4. **Security group.** Open 443 (and 80 for the redirect and ACME), first **to your own IP only**, not `0.0.0.0/0`. Never 3002 or 5432.
-5. **Check from outside**: `https://dev.primepisodes.com/health` 200 from your IP, a login works, and 3002/5432 still time out.
+| Thing | Value |
+|---|---|
+| DNS | Route 53 zone `primepisodes.com`: `dev.primepisodes.com` A record to the dev box's Elastic IP (TTL 300). Before 2026-11-10 it pointed at the prod box and returned 502. |
+| Security group | `episode-dev-backend-sg`: inbound 80 and 443 from `0.0.0.0/0`, 22 from Evoni's IP. **Never 3002 or 5432.** |
+| Certificate | Let's Encrypt, HTTP-01 through `/var/www/certbot`, account registered without an email address. `certbot.timer` renews it; `/etc/letsencrypt/renewal-hooks/deploy/reload-nginx.sh` reloads nginx afterwards. The self-signed certificate from July is kept at `/etc/letsencrypt/not-certbot-dev.primepisodes.com-20261110T205050Z`. |
+| Reachable paths | `/` and `/assets/` from `frontend/dist`; `/api/` and `/health` from the app. Every other path gets `index.html`: the app's `/uploads`, `/ping`, `/_diag/health` and `/admin/queues` are not proxied. |
+| Who can sign in | Every user of production's Cognito pool (self sign-up is off). |
 
-The app keeps listening on `127.0.0.1` throughout. nginx is the only public entry point.
+### Why the API must run as production
+
+With any other `NODE_ENV` the app returns stack traces in error responses to anyone, skips the login and refresh rate limits (`loginLimiter`, `refreshLimiter` in `src/routes/auth.js`), and sets cookies without `Secure`. Three things keep it at production:
+
+1. `install-dev-app.sh` writes `NODE_ENV=production` into `dev.env`. The value in pm2's env is not enough by itself: the box has no `ANTHROPIC_API_KEY`, and `src/routes/memories/*.js` call dotenv with `override` when that key is unset, so `.env` replaces pm2's value during startup.
+2. `ecosystem.dev.config.js` pins `NODE_ENV: 'production'` for `episode-api`.
+3. `deploy-dev-box.sh` fails a deploy, and `setup-dev-nginx.sh` refuses to run, unless `/health` reports `"environment":"production"`.
+
+The worker stays `development`: as production it refuses to start with a database password in its environment (`src/workers/workerStartup.js`).
+
+As production the API uses the production database config. `DB_POOL_MAX=10` keeps its pool under the local PostgreSQL's 30 connections, `DB_SSL=false` keeps the main pool off TLS, and `scriptsService` connects with TLS to the same local server.
+
+### Setting it up again
+
+```bash
+# on the box, as root, from a checkout or copy of scripts/dev-db/
+bash setup-dev-nginx.sh                                    # port 80 only, or 80 + 443 when the certificate exists
+ISSUE_CERT=1 CERTBOT_AGREE_TOS=yes bash setup-dev-nginx.sh # first certificate on a box with no Let's Encrypt account
+```
+
+The first certificate needs DNS pointing at the box and port 80 open. `CERTBOT_AGREE_TOS=yes` agrees to Let's Encrypt's Subscriber Agreement, which is Evoni's decision.
+
+### Checks
+
+```bash
+# from another public address
+curl -s https://dev.primepisodes.com/health                # 200, "environment":"production"
+curl -s -o /dev/null -w '%{http_code}\n' https://dev.primepisodes.com/api/v1/shows   # 401 without a token
+timeout 6 bash -c 'echo > /dev/tcp/<dev box address>/3002' # must fail; the same for 5432
+# on the box
+ss -ltn | grep -E ':(3002|5432) '                          # 127.0.0.1 only
+certbot renew --dry-run --cert-name dev.primepisodes.com
+```
+
+### Closing it again
+
+`systemctl disable --now nginx` on the box stops the public site and leaves the app running on loopback. Removing the 80 and 443 rules from the security group closes it at the network.
+
+### The prod box's old dev site (retired 2026-11-10)
+
+The prod box's nginx had a `dev.primepisodes.com` site in `/etc/nginx/sites-enabled/episode`. Evoni had it retired on 2026-11-10: the file was moved, whole, to `/etc/nginx/sites-available/episode.retired-dev-20261110T212130Z`, and nginx there no longer listens on 443.
+
+That file also held the port 80 catch-all that answers 404 to any other host name. It is kept as `/etc/nginx/sites-enabled/default-404`. Keep it: without the catch-all, `episode-prod` would become the default site and answer every host name from `/var/www/html`, a frontend build from September 2026.
+
+When the file was retired, the load balancer still had a `primepisodes-frontend` target group pointing at this port, unhealthy because of that 404. Evoni removed the group the same day and made the load balancer's port 80 listener redirect to HTTPS (`docs/reads/2026-11-10-load-balancer-targets.md`), so the load balancer no longer sends anything to the prod box's port 80. She also removed the prod box security group's inbound rules for 80 and 443 (22:02 UTC): the box accepts only 3000 from the load balancer's security group and 22 from her address, so its nginx is not reachable from outside at all.
 
 ## Refresh workflow (Task #3717)
 
