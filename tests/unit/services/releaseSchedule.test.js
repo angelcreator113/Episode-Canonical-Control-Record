@@ -258,3 +258,95 @@ describe('seasons (Evoni, 2026-10-25: each season counts its own episodes and ca
     expect(c.byEpisode.e1.date).toBe('2026-11-15');
   });
 });
+
+/**
+ * A2 release positions (migration 20261110230000): a slot's place in the
+ * release order is COALESCE(release_position, slot_number). Numbers stay
+ * story numbers; only the order the release days are handed out in changes.
+ */
+describe('release positions (A2)', () => {
+  const S = sched(); // one schedule: normalize stamps updated_at
+  const season = (over = {}) => [{ season_number: 1, slot_count: 6, starts_on: null, ...over }];
+  const slotted = (n, over = {}) => ep(n, { season_number: 1, slot_number: n, ...over });
+  const eps = () => [slotted(1), slotted(2), slotted(3, { air_date: '2026-11-22' }), slotted(4), slotted(5)];
+  const view = (seasons, over = {}) => rs.buildView({
+    schedule: S, episodes: eps(), seasons, currentSeason: 1, now: NOW,
+    specials: [{ id: 'sp1', kind: 'bonus', label: 'Bonus', season_number: 1, after_slot_number: 4, event_date: '2026-12-02' }],
+    twoParts: [{ season_number: 1, one_number: 4, two_number: 5 }],
+    ...over,
+  });
+
+  test('with no release position the whole view is identical: absent, empty, and every slot at its own number', () => {
+    const base = view(season());
+    expect(view(season({ positions: {} }))).toEqual(base);
+    expect(view(season({ positions: { 1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 6 } }))).toEqual(base);
+    expect(view(season({ positions: { 2: null, 4: undefined } }))).toEqual(base);
+    const c = rs.computeDates({ schedule: S, episodes: eps(), seasons: season(), currentSeason: 1, now: NOW });
+    expect(rs.computeDates({ schedule: S, episodes: eps(), seasons: season({ positions: {} }), currentSeason: 1, now: NOW })).toEqual(c);
+  });
+
+  test('two slots that trade release positions trade dates; numbers stay story numbers and every output stays keyed by slot', () => {
+    const base = view(season());
+    const swapped = view(season({ positions: { 2: 5, 5: 2 } }));
+    // Slot-keyed dates: 2 and 5 trade, the rest keep theirs.
+    expect(swapped.slots[2].date).toBe(base.slots[5].date);
+    expect(swapped.slots[5].date).toBe(base.slots[2].date);
+    for (const n of [1, 3, 4, 6]) expect(swapped.slots[n]).toEqual(base.slots[n]);
+    // The episodes keep their slots and their story numbers.
+    expect(swapped.slots[2].episode_id).toBe('e2');
+    expect(swapped.slots[5].episode_id).toBe('e5');
+    const row = (v, id) => v.episodes.find((r) => r.episode_id === id);
+    expect(row(swapped, 'e2')).toMatchObject({ number: 2, date: base.slots[5].date, source: 'schedule' });
+    expect(row(swapped, 'e5')).toMatchObject({ number: 5, date: base.slots[2].date, source: 'schedule' });
+    // The hand-set date is untouched, and nothing became hand-set.
+    expect(row(swapped, 'e3')).toMatchObject({ number: 3, date: '2026-11-22', source: 'hand' });
+    expect(swapped.episodes.filter((r) => r.source === 'hand').map((r) => r.episode_id)).toEqual(['e3']);
+    // The same set of dates is used: a permutation, none dropped.
+    const all = (v) => Object.values(v.slots).map((s) => s.date).sort();
+    expect(all(swapped)).toEqual(all(base));
+    // Two-parter labels read story numbers.
+    expect(row(swapped, 'e4').two_part).toEqual({ part: 1, of: 2, other_number: 5 });
+    expect(row(swapped, 'e5').two_part).toEqual({ part: 2, of: 2, other_number: 4 });
+    // The season list is slot-keyed too.
+    expect(swapped.seasons[0].slots[2].date).toBe(base.slots[5].date);
+  });
+
+  test('an empty slot with a release position takes that place in the order', () => {
+    const base = rs.computeDates({ schedule: S, episodes: [slotted(1), slotted(2)], seasons: season({ slot_count: 4 }), currentSeason: 1, now: NOW });
+    const moved = rs.computeDates({ schedule: S, episodes: [slotted(1), slotted(2)], seasons: season({ slot_count: 4, positions: { 2: 4, 4: 2 } }), currentSeason: 1, now: NOW });
+    expect(moved.numbers[4]).toMatchObject({ number: 4, episode_id: null, date: base.numbers[2].date });
+    expect(moved.numbers[2]).toMatchObject({ number: 2, episode_id: 'e2', date: base.numbers[4].date });
+  });
+
+  test('an episode with no slot keeps its stored number and follows that slot number\'s place in the order', () => {
+    // e7 has no slot: it falls back to its stored number (first season: episode_number 3).
+    const loose = [slotted(1), slotted(2), ep(3, { id: 'e7', season_number: 1 })];
+    const base = rs.computeDates({ schedule: S, episodes: loose, seasons: season({ slot_count: 3 }), currentSeason: 1, now: NOW });
+    expect(base.byEpisode.e7).toMatchObject({ number: 3, date: '2026-11-15' });
+    const moved = rs.computeDates({ schedule: S, episodes: loose, seasons: season({ slot_count: 3, positions: { 1: 3, 3: 1 } }), currentSeason: 1, now: NOW });
+    expect(moved.byEpisode.e7).toMatchObject({ number: 3, date: '2026-11-01' });
+    expect(moved.byEpisode.e1).toMatchObject({ number: 1, date: '2026-11-15' });
+  });
+
+  test('a special\'s suggested date reads the slot-keyed dates around its story anchor', () => {
+    const base = view(season());
+    expect(base.specials[0].suggested).toEqual(rs.suggestSpecialDate(
+      { kind: 'bonus', after_slot_number: 4, event_date: '2026-12-02' }, base.seasons[0].slots, S));
+    const swapped = view(season({ positions: { 2: 5, 5: 2 } }));
+    expect(swapped.specials[0].suggested).toEqual(rs.suggestSpecialDate(
+      { kind: 'bonus', after_slot_number: 4, event_date: '2026-12-02' }, swapped.seasons[0].slots, S));
+  });
+
+  test('positions in one season leave another season\'s dates alone', () => {
+    const two = (positions) => [
+      { season_number: 1, slot_count: 3, starts_on: null, ...(positions ? { positions } : {}) },
+      { season_number: 2, slot_count: 3, starts_on: null },
+    ];
+    const episodes = [slotted(1), slotted(2), slotted(3), ep(4, { season_number: 2, slot_number: 1 }), ep(5, { season_number: 2, slot_number: 2 })];
+    const schedule = sched({ seasons: { 2: { first_release: '2027-01-03' } } });
+    const base = rs.computeDates({ schedule, episodes, seasons: two(null), currentSeason: 1, now: NOW });
+    const moved = rs.computeDates({ schedule, episodes, seasons: two({ 1: 2, 2: 1 }), currentSeason: 1, now: NOW });
+    expect(moved.seasons[2]).toEqual(base.seasons[2]);
+    expect(moved.byEpisode.e1.date).toBe(base.byEpisode.e2.date);
+  });
+});
