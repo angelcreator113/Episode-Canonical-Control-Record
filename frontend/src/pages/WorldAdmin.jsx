@@ -25,7 +25,7 @@ import { rememberShow } from '../utils/activeShow';
 import WorldMomentsTab from '../components/WorldMoments/WorldMomentsTab';
 import RateCardTab from '../components/RateCard/RateCardTab';
 import { S, STAT_ICONS, isFailureToast } from '../components/Show/producerStyles';
-import ShowOverview, { episodesInProduction } from '../components/Show/ShowOverview';
+import ShowOverview, { episodesInProduction, episodeIdentity } from '../components/Show/ShowOverview';
 import { useLookDraft, LookBuilderPanel, RecentlyWorn } from '../components/Show/LookBuilder';
 import { LalaStatsCard, DecisionLogCard, StoryThreadsStrip, CastRow } from '../components/Show/CastContinuity';
 import { matchesDressCode, dressCodeKeywords, setPiecesOf, setSlotClashes } from '../lib/lookBuilder';
@@ -618,15 +618,14 @@ function WorldAdmin() {
                   </>
                 )}
               </span>
-              {/* Both pills are links (Evoni, 2026-10-25): the season to its page, the episode in production to its own. */}
+              {/* The season pill is a label (Evoni, 2026-11-12): the Season tab below is the one way in.
+                  The episode pill names the episode in production exactly as the Now producing card does. */}
               {season ? (
-                <Link className="wa-chip wa-chip-season" to={seasonPageHref(showId)} data-testid="wa-chip-season">
-                  Season {season} <ArrowRight size={13} aria-hidden="true" />
-                </Link>
+                <span className="wa-chip wa-chip-season" data-testid="wa-chip-season">Season {season}</span>
               ) : null}
               {producing ? (
-                <Link className="wa-chip wa-chip-producing" to={`/episodes/${producing.id}`} data-testid="wa-chip-producing">
-                  Producing Episode {producing.episode_number ?? ''} <ArrowRight size={13} aria-hidden="true" />
+                <Link className="wa-chip wa-chip-producing" to={`/episodes/${producing.id}?tab=overview`} data-testid="wa-chip-producing" title={`Producing ${episodeIdentity(producing)}`}>
+                  <span className="wa-chip-text">Producing {episodeIdentity(producing)}</span> <ArrowRight size={13} aria-hidden="true" />
                 </Link>
               ) : null}
             </div>

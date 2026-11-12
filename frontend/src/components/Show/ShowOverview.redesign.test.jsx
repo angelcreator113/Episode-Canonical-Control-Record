@@ -74,7 +74,9 @@ describe('ShowOverview, an episode in production', () => {
     await waitFor(() => expect(thumb.querySelector('img').getAttribute('src')).toBe('https://b.s3.amazonaws.com/thumb.png'));
     expect(thumb.textContent).toContain('Edit Thumbnail');
     const href = (name) => within(card).getByRole('link', { name }).getAttribute('href');
-    expect(href('Continue Episode')).toBe('/episodes/ep-1?tab=production');
+    // The episode has no script, so the primary action is the script (the same next step its Overview names).
+    expect(href('Generate Script')).toBe('/episodes/ep-1?tab=scripts');
+    expect(within(card).queryByRole('link', { name: 'Continue Episode' })).toBeNull();
     expect(href('Open Script')).toBe('/episodes/ep-1?tab=scripts');
     expect(href("Lala's Phone")).toBe('/episodes/ep-1?tab=phone');
     expect(href('Open Files')).toBe('/episodes/ep-1?tab=files');
@@ -98,7 +100,10 @@ describe('ShowOverview, an episode in production', () => {
     fireEvent.change(within(card).getByLabelText('Episode'), { target: { value: 'ep-2' } });
     await waitFor(() => expect(card.textContent).toContain('Second Look'));
     expect(card.textContent).toContain('Published');
-    expect(within(card).getByRole('link', { name: 'Continue Episode' }).getAttribute('href')).toBe('/episodes/ep-2?tab=production');
+    // A picked episode that is not the one in production is only being viewed.
+    expect(within(card).getByTestId('sov-producing-chip').textContent).toBe('Viewing');
+    expect(within(card).getByTestId('sov-primary').getAttribute('href')).toBe('/episodes/ep-2?tab=overview');
+    expect(within(card).getByTestId('sov-primary').textContent).toContain('Open Episode');
     fireEvent.change(within(card).getByLabelText('Season'), { target: { value: '2' } });
     await waitFor(() => expect(card.textContent).toContain('New Season'));
   });

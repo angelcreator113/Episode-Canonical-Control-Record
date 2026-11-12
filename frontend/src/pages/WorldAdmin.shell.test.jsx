@@ -56,14 +56,16 @@ describe('Producer Mode show card and tab counts', () => {
     events = [{ id: 'ev-1', name: 'Fabric and Form', status: 'draft' }];
     drafts = [{ id: 'p1', episode_id: null }, { id: 'p2', episode_id: 'ep-2' }];
     renderIt();
-    // Both header pills are links (2026-10-25): the episode in production to its page, the season to the Season page.
-    const producing = await screen.findByRole('link', { name: 'Producing Episode 2' });
-    expect(producing.getAttribute('href')).toBe('/episodes/ep-2');
+    // The episode pill names the episode in production by its code and title, and opens its Overview (2026-11-12).
+    const producing = await screen.findByRole('link', { name: 'Producing S1 E2 · Two' });
+    expect(producing.getAttribute('href')).toBe('/episodes/ep-2?tab=overview');
     // The header's season chip (the Overview's season switcher also says Season 1).
     const season = document.querySelector('.wa-chip-season');
     expect(season.textContent.trim()).toBe('Season 1');
-    expect(season.tagName).toBe('A');
-    expect(season.getAttribute('href')).toBe('/shows/show-1/season');
+    // A label, not a link: the Season tab is the one way to the Season page (2026-11-12).
+    expect(season.tagName).toBe('SPAN');
+    expect(season.getAttribute('href')).toBeNull();
+    expect((await screen.findByTestId('wa-tab-season')).getAttribute('href')).toBe('/shows/show-1/season');
     // The one count left on the banner: Lala's post drafts waiting, under World.
     await waitFor(() => expect(count('World')).toBe('1'));
     expect(count('Overview')).toBeNull();
