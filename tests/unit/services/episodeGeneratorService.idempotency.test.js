@@ -53,10 +53,10 @@ function makeWorld() {
       const r = opts.replacements || {};
       const ev = store.events[r.eventId];
       const stale = world.stale && !opts.transaction;
-      if (/^SELECT used_in_episode_id FROM world_events WHERE id = :eventId FOR UPDATE$/.test(sql)) {
+      if (/^SELECT id, used_in_episode_id, deleted_at FROM world_events WHERE id = :eventId FOR UPDATE$/.test(sql)) {
         return [ev ? [{ used_in_episode_id: ev.used_in_episode_id }] : []];
       }
-      if (/^SELECT used_in_episode_id FROM world_events/.test(sql)) {
+      if (/^SELECT (id, )?used_in_episode_id(, deleted_at)? FROM world_events/.test(sql)) {
         if (stale) return [[{ used_in_episode_id: null }]];
         return [ev ? [{ used_in_episode_id: ev.used_in_episode_id }] : []];
       }

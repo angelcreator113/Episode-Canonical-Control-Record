@@ -562,7 +562,8 @@ async function specialOnFullStart(sequelize, { showId, eventId, episodeId, trans
   const work = async (t) => {
     const pic = await loadPicture(sequelize, showId, { transaction: t });
     if (!pic || !pic.full || !eventId) return null;
-    const [[ev]] = await sequelize.query('SELECT id, name, event_date FROM world_events WHERE id = :eventId AND show_id = :showId',
+    // A live event only: a special never points at a deleted event (Evoni, 2026-11-12).
+    const [[ev]] = await sequelize.query('SELECT id, name, event_date FROM world_events WHERE id = :eventId AND show_id = :showId AND deleted_at IS NULL',
       { replacements: { eventId, showId }, transaction: t });
     if (!ev) return null;
     const place = placeFor(pic, ev.event_date);

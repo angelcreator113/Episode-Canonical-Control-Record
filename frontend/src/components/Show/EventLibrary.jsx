@@ -417,10 +417,38 @@ export default function EventLibrary({ showId, scope = null, cardExtra = null, o
     finally { setSavingEvent(false); }
   };
 
+  // One event (Evoni, 2026-11-12). The server decides: an event an episode,
+  // the season plan or another record uses is kept (409 EVENT_IN_USE), and
+  // the banner says what holds it, with a way there. An unused draft goes
+  // with its own untouched cost lines and deliverables; there is no restore
+  // screen, so the question says so.
   const deleteEvent = async (eventId) => {
-    if (!window.confirm('Delete this event?')) return;
-    try { await api.delete(`/api/v1/world/${showId}/events/${eventId}`); setWorldEvents(p => p.filter(e => e.id !== eventId)); setSuccessMsg('Deleted'); }
-    catch (err) { setError(err.response?.data?.error || err.message); }
+    if (!window.confirm('Delete this event?\n\nIt will no longer appear anywhere in the app, together with its own cost lines and deliverables that nothing else uses yet. There is no undo here.\n\nAn event that an episode or the season plan uses is never deleted.')) return;
+    try {
+      const res = await api.delete(`/api/v1/world/${showId}/events/${eventId}`);
+      setWorldEvents(p => p.filter(e => e.id !== eventId));
+      setSuccessMsg(res?.data?.message || 'Deleted');
+    } catch (err) {
+      const body = err.response?.data;
+      if (body?.code === 'EVENT_IN_USE' && Array.isArray(body.blocked_by)) {
+        const linkWords = { episode: 'Open the episode', season_slots: 'Open the season plan', season_specials: 'Open the season plan' };
+        setError(
+          <span data-testid="event-in-use">
+            “{body.event?.name || 'This event'}” can’t be deleted.{' '}
+            {body.blocked_by.map((b, i) => (
+              <span key={`${b.kind}-${i}`}>
+                {b.label}
+                {b.link ? <> (<a href={b.link} onClick={(e) => { e.preventDefault(); navigate(b.link); }}>{linkWords[b.kind] || 'Open'}</a>)</> : null}
+                .{' '}
+              </span>
+            ))}
+            Nothing was deleted.
+          </span>
+        );
+      } else {
+        setError(body?.error || err.message);
+      }
+    }
   };
 
   const copyEvent = (ev) => {
