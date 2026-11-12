@@ -7,7 +7,7 @@
  * admin tools), then the user avatar, which also opens Settings.
  * Props: isOpen (mobile drawer), onClose (close drawer)
  */
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { ScrollText } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
@@ -104,9 +104,13 @@ function useShows() {
   const [shows, setShows] = useState([]);
   // The list did not load: said as that, with Retry, never as "No shows yet" (Evoni, 2026-11-12).
   const [failed, setFailed] = useState(false);
+  // The newest read wins: an older answer or failure never replaces a newer one.
+  const seqRef = useRef(0);
   const load = useCallback(() => {
+    const seq = ++seqRef.current;
     showService.getAllShows()
       .then(data => {
+        if (seq !== seqRef.current) return;
         setShows((data || []).map(s => ({
           id: s.id,
           name: s.name || s.title || 'Untitled Show',
@@ -114,7 +118,8 @@ function useShows() {
         })));
         setFailed(false);
       })
-      .catch((err) => { console.error('[Sidebar] shows load failed:', err); setShows([]); setFailed(true); });
+      // A failed re-read keeps the shows already listed, and says it failed.
+      .catch((err) => { console.error('[Sidebar] shows load failed:', err); if (seq === seqRef.current) setFailed(true); });
   }, []);
   useEffect(() => { load(); }, [load]);
   return { shows, showsFailed: failed, retryShows: load };

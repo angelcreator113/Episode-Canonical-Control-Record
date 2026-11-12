@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import api from '../../services/api';
 import SocialTaskBadge from '../SocialTaskBadge';
 import { isSocialTaskRequired } from '../../utils/socialTaskSource';
@@ -41,9 +41,13 @@ export default function EpisodeTodoList({ episodeId, showId, onAllRequiredComple
   const [loadFailed, setLoadFailed] = useState(false);
   const [showAsset, setShowAsset] = useState(false);
 
+  // The newest read wins: an older answer or failure never replaces a newer one.
+  const todoSeq = useRef(0);
   const fetchTodoList = useCallback(async () => {
+    const seq = ++todoSeq.current;
     try {
       const res = await api.get(`/api/v1/episodes/${episodeId}/todo`);
+      if (seq !== todoSeq.current) return;
       setTodoList(res.data.data);
       setLoadFailed(false);
       if (res.data.data?.completion?.all_required_done && onAllRequiredComplete) {
@@ -51,9 +55,10 @@ export default function EpisodeTodoList({ episodeId, showId, onAllRequiredComple
       }
     } catch (err) {
       console.error('[TodoList] fetch error:', err);
+      if (seq !== todoSeq.current) return;
       setLoadFailed(true);
     } finally {
-      setLoading(false);
+      if (seq === todoSeq.current) setLoading(false);
     }
   }, [episodeId]);
   const retryLoad = () => { setLoading(true); fetchTodoList(); };

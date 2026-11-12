@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import api from '../services/api';
 import { sceneSetPath } from '../utils/sceneSets';
@@ -238,24 +238,33 @@ export default function ScenePlannerPage() {
     setTimeout(() => setToast(null), 4000);
   };
 
+  // The newest read of the brief and plan wins: an older answer or failure
+  // never replaces a newer one.
+  const loadSeq = useRef(0);
   const fetchAll = useCallback(async () => {
+    const seq = ++loadSeq.current;
     try {
       const [briefRes, planRes] = await Promise.all([
         api.get(`/api/v1/episode-brief/${episodeId}`),
         api.get(`/api/v1/episode-brief/${episodeId}/plan`),
       ]);
-      setBrief(briefRes.data.data);
-      setPlan(planRes.data.data || []);
-      setReadiness(planRes.data.readiness || null);
-      setLoadFailed(false);
+      if (seq === loadSeq.current) {
+        setBrief(briefRes.data.data);
+        setPlan(planRes.data.data || []);
+        setReadiness(planRes.data.readiness || null);
+        setLoadFailed(false);
+      }
     } catch (err) {
       console.error('[BeatPlan] load failed:', err);
-      // Said on the page, with Retry: a failed read is not "no plan yet", and
-      // Generate is not offered in answer to it (Evoni, 2026-11-12).
-      setLoadFailed(true);
-      showToast('Failed to load the beat plan', 'error');
+      if (seq === loadSeq.current) {
+        // Said on the page, with Retry: a failed read is not "no plan yet", and
+        // Generate is not offered in answer to it. A plan from an earlier read
+        // stays below, said to be possibly out of date (Evoni, 2026-11-12).
+        setLoadFailed(true);
+        showToast('Failed to load the beat plan', 'error');
+      }
     } finally {
-      setLoading(false);
+      if (seq === loadSeq.current) setLoading(false);
     }
     // The short story's beat 11 piece (book-from-show); a failed read
     // leaves beat 11 without it.
@@ -350,8 +359,12 @@ export default function ScenePlannerPage() {
 
       {!loading && loadFailed && (
         <div className="scene-planner-empty" role="alert" data-testid="beat-plan-load-failed">
-          <p className="scene-planner-empty-title">Couldn't load the beat plan</p>
-          <p className="scene-planner-empty-text">The brief and the plan didn't load. Nothing was changed.</p>
+          <p className="scene-planner-empty-title">{plan.length > 0 ? "Couldn't refresh the beat plan" : "Couldn't load the beat plan"}</p>
+          <p className="scene-planner-empty-text">
+            {plan.length > 0
+              ? "The plan below is from the last successful load and may be out of date. Nothing was changed."
+              : "The brief and the plan didn't load. Nothing was changed."}
+          </p>
           <button type="button" className="scene-planner-btn primary" onClick={() => { setLoading(true); fetchAll(); }}>Retry</button>
         </div>
       )}

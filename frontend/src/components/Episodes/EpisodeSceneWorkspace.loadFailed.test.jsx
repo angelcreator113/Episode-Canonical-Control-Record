@@ -5,7 +5,7 @@
  * none. Successful empty reads are as before.
  */
 import { vi, describe, beforeEach, test, expect } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 
 vi.mock('../../services/api', () => ({ default: { get: vi.fn(), put: vi.fn(), post: vi.fn() } }));
@@ -68,5 +68,42 @@ describe('EpisodeSceneWorkspace: a failed read is not an empty episode', () => {
     renderWs();
     expect(await screen.findByText(/This episode has no scenes yet/)).toBeTruthy();
     expect(screen.queryByTestId('esw-load-failed')).toBeNull();
+  });
+
+  // A clips read that fails after the clips loaded (review follow-up, 2026-11-12):
+  // the chosen scene still shows its clip, and the page says the clips could not be read.
+  test('a later clips read fails while the chosen scene has a clip: the error and Retry show, the clip stays, and "No clip linked" is not said', async () => {
+    const CLIP = { id: 'c1', beat_number: 1, label: 'Take 1', duration_seconds: 12, url_raw: 'https://x/t1.mp4', created_at: '2026-10-17T01:00:00Z' };
+    planOk(PLAN);
+    vi.mocked(rawClipsApi.list).mockResolvedValue([CLIP]);
+    vi.mocked(api.post).mockResolvedValue({ data: { success: true } });
+    renderWs();
+    expect((await screen.findByTestId('esw-video')).getAttribute('src')).toBe('https://x/t1.mp4');
+    expect(screen.queryByTestId('esw-clips-failed')).toBeNull();
+
+    // Locking the scene re-reads the plan and the clips; this time the clips read fails.
+    vi.mocked(rawClipsApi.list).mockRejectedValue(new Error('Network Error'));
+    fireEvent.click(screen.getByTestId('esw-lock'));
+    const note = await screen.findByTestId('esw-clips-failed');
+    expect(note.getAttribute('role')).toBe('alert');
+    expect(note.textContent).toContain("Couldn't load this episode's clips.");
+    expect(note.textContent).toContain('from the last successful load and may be out of date');
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy();
+    expect(screen.getByTestId('esw-video').getAttribute('src')).toBe('https://x/t1.mp4');
+    expect(screen.queryByText(/No clip linked to this scene/)).toBeNull();
+
+    // Retry reads again; a good answer clears the note and keeps the clip.
+    vi.mocked(rawClipsApi.list).mockResolvedValue([CLIP]);
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    await waitFor(() => expect(screen.queryByTestId('esw-clips-failed')).toBeNull());
+    expect(screen.getByTestId('esw-video')).toBeTruthy();
+  });
+
+  test('a first clips read that fails for a scene with no clip: the error with Retry, and no "may be out of date" wording', async () => {
+    planOk(PLAN);
+    vi.mocked(rawClipsApi.list).mockRejectedValue(new Error('Network Error'));
+    renderWs();
+    const note = await screen.findByTestId('esw-clips-failed');
+    expect(note.textContent).not.toContain('out of date');
   });
 });

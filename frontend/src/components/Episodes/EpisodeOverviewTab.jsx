@@ -1,5 +1,5 @@
 // frontend/src/components/Episodes/EpisodeOverviewTab.jsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { CalendarHeart, Tv, Globe, Link2, Briefcase, Zap, Trophy, RefreshCw, X, Sparkles, ArrowRight, ListOrdered, Package } from 'lucide-react';
 import api from '../../services/api';
@@ -136,6 +136,11 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
   // failed read is not "no events linked", "no script" or an empty brief.
   const [loadFailed, setLoadFailed] = useState({});
   const failedRead = (key, label, err) => { console.error(`[EpisodeOverview] ${label} load failed:`, err); setLoadFailed((f) => ({ ...f, [key]: label })); };
+  // Each run of loadContext has a number. Only the newest run's answers and
+  // failures are applied, so a slow earlier read (a Retry pressed twice, or
+  // another episode's) never overwrites newer results or brings back an
+  // error a newer read cleared.
+  const loadRun = useRef(0);
   const [linkBusy, setLinkBusy] = useState(false);
   // A refused link or unlink, in the server's words (e.g. the terms lock, §8(x) D4)
   const [linkError, setLinkError] = useState(null);
@@ -202,44 +207,51 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
   }, [episode?.id]);
 
   const loadContext = async () => {
+    const run = ++loadRun.current;
+    const live = () => run === loadRun.current;
+    const failed = (key, label) => (err) => { if (live()) failedRead(key, label, err); else console.error(`[EpisodeOverview] an earlier ${label} read failed:`, err); };
     setLoadFailed({});
     // The episode's own events (Task #1906): the brief's source event
     // first, then any additional linked events.
     getEpisodeEvents(episode.id).then((data) => {
+      if (!live()) return;
       setLinkedEvents(data?.events || []);
-    }).catch((err) => failedRead('events', "this episode's events", err));
+    }).catch(failed('events', "this episode's events"));
     if (showId) {
       // The show's event list feeds only the linker dropdown (events not
       // yet linked anywhere). It is not how this episode finds its events.
       api.get(`/api/v1/world/${showId}/events`).then(({ data }) => {
+        if (!live()) return;
         setAllEvents(data?.events || []);
-      }).catch((err) => failedRead('eventList', "the show's events", err));
+      }).catch(failed('eventList', "the show's events"));
       // Episode-scoped ledger. Skipping when no showId — the endpoint
       // requires it, and a draft episode without a show wouldn't have
       // transactions anyway.
       api.get(`/api/v1/world/${showId}/episodes/${episode.id}/money`)
-        .then((r) => setMoney(r?.data?.data || false))
-        .catch((err) => { console.error('[EpisodeOverview] money plan load failed:', err); setMoney(false); });
+        .then((r) => { if (live()) setMoney(r?.data?.data || false); })
+        .catch((err) => { console.error('[EpisodeOverview] money plan load failed:', err); if (live()) setMoney(false); });
       api.get(`/api/v1/world/${showId}/financial-ledger?episode_id=${episode.id}&limit=50`)
         .then(({ data }) => {
           // Only the rows that count toward Lala's balance: a voided row
           // stays in the ledger as history but is not money (Task #2273).
           const txs = (data?.data?.transactions || []).filter(t => t.counted !== false);
-          setLedger({ transactions: txs, loading: false });
+          if (live()) setLedger({ transactions: txs, loading: false });
         })
-        .catch(() => setLedger({ transactions: [], loading: false }));
+        .catch((err) => { console.error('[EpisodeOverview] ledger load failed:', err); if (live()) setLedger({ transactions: [], loading: false }); });
     } else {
       setLedger({ transactions: [], loading: false });
     }
-    api.get(`/api/v1/episodes/${episode.id}/scene-sets`).then(({ data }) => setSceneSets(data?.data || []))
+    api.get(`/api/v1/episodes/${episode.id}/scene-sets`).then(({ data }) => { if (live()) setSceneSets(data?.data || []); })
       .catch((err) => console.error('[EpisodeOverviewTab] scene sets load failed:', err));
     api.get(`/api/v1/episodes/${episode.id}/scripts?includeAllVersions=false`).then(({ data }) => {
+      if (!live()) return;
       const scripts = data?.data || data?.scripts || [];
       if (scripts.length > 0) setScriptInfo({ exists: true, wordCount: scripts[0].content?.split(/\s+/).length || 0 });
-    }).catch((err) => failedRead('script', 'the script check', err));
+    }).catch(failed('script', 'the script check'));
     // EpisodeBrief — drives the merged Identity/Source/Stakes/Reference
     // sections. Auto-creates if missing (the GET handler does that).
     api.get(`/api/v1/episode-brief/${episode.id}`).then(({ data }) => {
+      if (!live()) return;
       const b = data?.data || null;
       setBrief(b);
       setDraft({
@@ -253,21 +265,21 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
       });
       if (b?.event_id && showId) {
         api.get(`/api/v1/world/${showId}/events/${b.event_id}`)
-          .then((res) => setSource(res.data || null))
-          .catch((err) => { console.error('[Episode] source event load failed:', err); setSource(null); });
+          .then((res) => { if (live()) setSource(res.data || null); })
+          .catch((err) => { console.error('[Episode] source event load failed:', err); if (live()) setSource(null); });
         api.get(`/api/v1/wardrobe/outfit/${episode.id}`)
-          .then((res) => setOutfit(Array.isArray(res.data?.items) ? res.data.items : undefined))
-          .catch((err) => { console.error('[Episode] locked outfit load failed:', err); setOutfit(undefined); });
+          .then((res) => { if (live()) setOutfit(Array.isArray(res.data?.items) ? res.data.items : undefined); })
+          .catch((err) => { console.error('[Episode] locked outfit load failed:', err); if (live()) setOutfit(undefined); });
       }
       // Resolve narrative_chain.parent_event_id → event name for the Source band.
       const parentId = b?.narrative_chain?.parent_event_id;
       if (parentId && showId) {
         api.get(`/api/v1/world/${showId}/events`).then(({ data: ev }) => {
           const events = ev?.events || [];
-          setParentEvent(events.find(e => e.id === parentId) || null);
+          if (live()) setParentEvent(events.find(e => e.id === parentId) || null);
         }).catch((err) => console.error('[EpisodeOverview] parent event load failed:', err));
       }
-    }).catch((err) => failedRead('brief', 'the story brief', err));
+    }).catch(failed('brief', 'the story brief'));
   };
 
   // ── Brief edit helpers ─────────────────────────────────────────────────

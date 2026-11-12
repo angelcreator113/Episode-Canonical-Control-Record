@@ -14,7 +14,7 @@
  * The full plan editor is Scenes' other view, the Plan (Beat Plan until
  * Evoni folded it into Scenes, 2026-10-22).
  */
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Clapperboard, Lock, LockOpen, Film, FolderOpen, Pencil, MapPin, Clock, Sun, Plus, ImageOff, CircleCheck, Circle, Save,
@@ -62,8 +62,11 @@ export default function EpisodeSceneWorkspace({ episode, onOpenTab, onToast }) {
 
   const toast = useCallback((msg, type = 'info') => { if (onToast) onToast(msg, type); }, [onToast]);
 
+  // The newest load wins: an older answer or failure never replaces a newer one.
+  const loadSeq = useRef(0);
   const load = useCallback(async () => {
     if (!episodeId) return;
+    const seq = ++loadSeq.current;
     try {
       // The clips read on its own: when it fails the scenes still show, and
       // the page says the clips didn't load, not that there are none.
@@ -71,17 +74,21 @@ export default function EpisodeSceneWorkspace({ episode, onOpenTab, onToast }) {
         getPlanApi(episodeId),
         Promise.resolve().then(() => rawClipsApi.list(episodeId)).catch((err) => { console.error('[Scenes] clips load failed:', err); return null; }),
       ]);
+      if (seq !== loadSeq.current) return;
       const beats = Array.isArray(planRes?.data?.data) ? [...planRes.data.data].sort((a, b) => a.beat_number - b.beat_number) : [];
       setPlan(beats);
+      // Clips that failed to load: the ones from the last successful read
+      // stay (they are not thrown away as "none"), and the page says so.
       setClipsFailed(clipRows === null);
-      setClips(Array.isArray(clipRows) ? clipRows : []);
+      if (Array.isArray(clipRows)) setClips(clipRows);
       setSelected((cur) => (cur && beats.some((b) => b.beat_number === cur) ? cur : beats[0]?.beat_number ?? null));
       setError(null);
     } catch (err) {
       console.error('[Scenes] plan load failed:', err);
+      if (seq !== loadSeq.current) return;
       setError('Could not load the scenes.');
     } finally {
-      setLoading(false);
+      if (seq === loadSeq.current) setLoading(false);
     }
   }, [episodeId]);
 
@@ -225,9 +232,12 @@ export default function EpisodeSceneWorkspace({ episode, onOpenTab, onToast }) {
             ))}
           </div>
         )}
-        {!clip && clipsFailed && (
+        {/* Shown whatever the chosen scene holds: with a clip on screen it
+            is from the last successful read, and that is said. */}
+        {clipsFailed && (
           <p className="esw-hint" role="alert" data-testid="esw-clips-failed">
-            Couldn't load this episode's clips. <button type="button" className="esw-link" onClick={() => load()}>Retry</button>
+            Couldn't load this episode's clips.{clips.length > 0 ? ' The clips shown are from the last successful load and may be out of date.' : ''}{' '}
+            <button type="button" className="esw-link" onClick={() => load()}>Retry</button>
           </p>
         )}
         {!clip && !clipsFailed && (
