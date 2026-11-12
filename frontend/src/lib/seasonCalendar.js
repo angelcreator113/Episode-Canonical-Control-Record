@@ -22,6 +22,7 @@
  */
 import { allSlots } from './seasonPage';
 import { slotRow, episodeNumberOf, formatDay } from './releaseSchedule';
+import { slotEvent } from './seasonSlotEvent';
 
 export const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 export const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -53,7 +54,7 @@ export function calendarItems({ release = null, roadmap = null, events = [], opp
     if (date) {
       const n = (slot.episode && episodeNumberOf(row)) || slot.slot_number;
       const preview = row.source === 'preview';
-      const name = slot.episode?.title || slot.event?.name || null;
+      const name = slot.episode?.title || slotEvent(slot)?.name || null;
       items.push({
         key: `release-${slot.id}`, date, kind: 'release', slot_number: slot.slot_number,
         title: `${preview ? 'Would release' : 'Releases'} ${slot.two_part ? slot.two_part.label : `E${n}`}`,
@@ -61,11 +62,12 @@ export function calendarItems({ release = null, roadmap = null, events = [], opp
         tone: row.due === 'overdue' ? 'overdue' : row.due === 'soon' ? 'soon' : preview ? 'preview' : 'calm',
       });
     }
-    if (slot.event) {
-      const ev = byId.get(slot.event.id) || slot.event;
+    const shown = slotEvent(slot);
+    if (shown) {
+      const ev = byId.get(shown.id) || shown;
       const at = dayOf(ev.event_date);
       if (at) {
-        items.push({ key: `event-${slot.event.id}`, date: at, kind: 'event', slot_number: slot.slot_number, title: ev.name || 'Event', detail: `In-world · E${slot.slot_number}`, tone: 'calm' });
+        items.push({ key: `event-${shown.id}`, date: at, kind: 'event', slot_number: slot.slot_number, title: ev.name || 'Event', detail: `In-world · E${slot.slot_number}`, tone: 'calm' });
       } else if (ev.event_date) {
         undated += 1;
       }

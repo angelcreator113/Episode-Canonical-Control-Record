@@ -6,6 +6,7 @@
  * not hold is null, and the page says so.
  */
 import { slotTitle } from './seasonArc';
+import { slotEvent } from './seasonSlotEvent';
 
 /**
  * The page's tabs, in order; `?tab=` holds the key. Each has a one-line
@@ -143,7 +144,8 @@ export const arcPart = (arc, phase) => (arc?.phases || []).find((p) => Number(p.
 export function slotPicture(slot, { episodes = [], events = [], arc = null } = {}) {
   const ep = slot?.episode ? episodes.find((e) => e.id === slot.episode.id) : null;
   if (ep?.thumbnail_url) return ep.thumbnail_url;
-  const ev = slot?.event ? events.find((e) => e.id === slot.event.id) : null;
+  const shown = slotEvent(slot);
+  const ev = shown ? events.find((e) => e.id === shown.id) : null;
   if (ev?.invitation_url) return ev.invitation_url;
   return arcPart(arc, slot?.phase)?.picture_url || null;
 }
@@ -185,8 +187,8 @@ export function revealMatrix(plan) {
 /** The events in the season's slots, in slot order, with the event row when the show's list has it. */
 export function slotEvents(roadmap, events = []) {
   return allSlots(roadmap)
-    .filter((s) => s.event)
-    .map((s) => ({ slot: s, event: events.find((e) => e.id === s.event.id) || s.event }));
+    .filter((s) => slotEvent(s))
+    .map((s) => ({ slot: s, event: events.find((e) => e.id === slotEvent(s).id) || slotEvent(s) }));
 }
 
 /** "In Production" chip text plus a count line for the Episode Slots card. */
