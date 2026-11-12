@@ -150,13 +150,18 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
       expect((await eventRow(f.free)).used_in_episode_id).toBe(f.draft);
     });
 
-    test('an episode that was never filmed takes an event beside its brief\'s source event, as before', async () => {
-      // stamp: false: the database allows one event's own link per episode
-      // (world_events_used_in_episode_unique), so the source event's link is left unset here.
+    test('an episode that was never filmed: being unfilmed is not what refuses another event; its own source event still links', async () => {
+      // stamp: false: the source event's own link is unset (the brief names it).
       const f = await seed({ film: false, stamp: false });
+      // Another event beside the source event is a second event, off by default
+      // (services/episodeSecondaryEvents, 2026-11-12): refused for that reason, not as filmed.
       const res = await putEvent(f.show, f.free, { used_in_episode_id: f.filmed });
-      expect(res.status).toBe(200);
-      expect((await eventRow(f.free)).used_in_episode_id).toBe(f.filmed);
+      expect(res.status).toBe(409);
+      expect(res.body.code).toBe('SECONDARY_EVENTS_NOT_ENABLED');
+      expect((await eventRow(f.free)).used_in_episode_id).toBeNull();
+      // The brief's own source event is linked as before.
+      expect((await putEvent(f.show, f.source, { used_in_episode_id: f.filmed })).status).toBe(200);
+      expect((await eventRow(f.source)).used_in_episode_id).toBe(f.filmed);
     });
 
     test('a removed (soft-deleted) clip still counts as filmed', async () => {

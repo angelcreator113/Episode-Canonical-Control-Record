@@ -601,6 +601,8 @@ router.post('/episodes/:id/accept', requireAuth, async (req, res) => {
     // Task #2378: nothing books while the event's terms are reopened.
     const { TermsReopenedError, termsReopenedBody } = require('../utils/eventTermsLock');
     if (error instanceof TermsReopenedError) return res.status(error.status).json(termsReopenedBody(error));
+    // A second event with commitments that second events do not carry yet: nothing was written.
+    if (require('../services/episodeSecondaryEvents').isSecondaryEventError(error)) return res.status(error.status).json(error.toJSON());
     // A two-parter's Part 1 is "to be continued": the event completes with Part 2 (seasonSpecials).
     if (error instanceof require('../services/seasonSpecials').SpecialsError) {
       return res.status(error.status).json({ error: error.message, code: error.code });

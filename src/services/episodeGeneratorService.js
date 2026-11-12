@@ -459,6 +459,9 @@ async function generateEpisodeFromEvent(event, models, options = {}) {
   // the same key answers with that episode, before any refusal and without
   // creating anything. Without a key, nothing here runs.
   const idempotencyKey = options.idempotencyKey || null;
+  // The episode's other events, linked in the Start's own transaction. The
+  // caller has checked them (assertSecondaryCandidates); never with a regenerate.
+  const secondaryEvents = options.replacingEpisodeId ? [] : (options.secondaryEvents || []).filter((e) => e && String(e.id) !== String(eventId));
   if (idempotencyKey && !replacingEpisodeId) {
     const replayId = await findIdempotentStart(models.sequelize, eventId, idempotencyKey);
     if (replayId) return loadStartReplay(models, replayId, { beats: BEAT_TEMPLATES });
@@ -705,7 +708,15 @@ Return ONLY JSON.` }],
     // The same lock a delete takes (utils/worldEventSafeDelete): an event
     // deleted while this Start waited is refused here (EVENT_DELETED), before
     // anything is created (Evoni, 2026-11-12).
-    await lockLiveEvent(models.sequelize, eventId, { transaction });
+    // Its other events (options.secondaryEvents, services/episodeSecondaryEvents):
+    // every event row is locked in one order (by id), so two Starts that
+    // share events never wait on each other in opposite orders.
+    for (const id of [eventId, ...secondaryEvents.map((e) => e.id)].map(String).sort()) {
+      await lockLiveEvent(models.sequelize, id, { transaction });
+    }
+    if (replacingEpisodeId) {
+      await require('./episodeSecondaryEvents').assertRegenerateHasNoSecondary(models.sequelize, { episodeId: replacingEpisodeId, eventId, transaction });
+    }
     const liveUnderLock = await findLiveLinkedEpisode(models.sequelize, eventId, { transaction });
     // A1.2c (Q-7 Layer 2): asked again under the event lock.
     const frozenUnderLock = replacingEpisodeId ? null : await findFrozenDeletedEpisode(models.sequelize, eventId, { transaction });
@@ -854,15 +865,24 @@ Return ONLY JSON.` }],
     // a later rate card edit never reaches them (Evoni, 2026-10-19;
     // services/dealPriceSnapshot).
     await takePriceSnapshot(models.sequelize, eventId, { transaction, reason: 'start_episode' });
+    // The episode's other events, in this commit: each is asked again under
+    // its lock and linked, or the whole Start rolls back and nothing is
+    // created. None asked for (every single-event Start): nothing happens.
+    const linkedSecondary = [];
+    for (const ev of secondaryEvents) {
+      linkedSecondary.push(await require('./episodeSecondaryEvents').attachSecondaryInStart(models.sequelize, {
+        event: ev, episodeId: episode.id, transaction, stampEventUsed, takePriceSnapshot,
+      }));
+    }
     // The offer decision, in the same commit as the episode: the open
     // offers locked and checked again, each step in their status_history
     // with this event and episode. None open: nothing is written.
     const offerDecisions = replacingEpisodeId ? [] : await require('./startOfferDecision')
       .applyOfferDecision(models.sequelize, { eventId, episodeId: episode.id, decision: offerDecision, transaction });
-    return { episode, brief, offerDecisions };
+    return { episode, brief, offerDecisions, linkedSecondary };
   });
   if (started.replayId) return loadStartReplay(models, started.replayId, { beats: BEAT_TEMPLATES });
-  const { episode, brief, offerDecisions } = started;
+  const { episode, brief, offerDecisions, linkedSecondary } = started;
 
   // Season Arc (§8(ff) Q5, A7): the episode takes the slot its event is
   // pencilled into, else the earliest open slot, and the slot locks. Logged,
@@ -886,11 +906,16 @@ Return ONLY JSON.` }],
 
   // Stamp the episode on the event's deliverables (Task #1814). Logged,
   // never fatal: the snapshot above already holds them.
+  // What happened is reported (postCommit below): a failure here leaves the
+  // episode committed, and the answer says so.
+  let deliverableStampStep = { status: 'not_needed' };
   if (eventDeliverables.length > 0) {
     try {
       await stampDeliverablesEpisode(models.sequelize, eventId, episode.id);
+      deliverableStampStep = { status: 'complete', count: eventDeliverables.length };
     } catch (stampErr) {
       console.error('[EpisodeGenerator] Deliverable episode stamp failed (non-blocking):', stampErr.message);
+      deliverableStampStep = { status: 'failed', reason: `the event's deliverables do not name this episode yet (${stampErr.message}).` };
     }
   }
 
@@ -1281,6 +1306,11 @@ Return ONLY JSON.` }],
     feedMomentSave,
     // What Start Episode's offer decision did: [{ id, name, decision, from, to }].
     offerDecisions,
+    // The other events linked in the same commit as the episode: [{ id, name }].
+    linkedSecondaryEvents: linkedSecondary || [],
+    // The two steps that run after the commit and never undo it: the season
+    // slot and the primary event's deliverables naming the episode.
+    postCommit: { season_slot: seasonSlotStep, deliverable_stamp: deliverableStampStep },
   };
 }
 

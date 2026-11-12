@@ -162,6 +162,8 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
   const [linkBusy, setLinkBusy] = useState(false);
   // A refused link or unlink, in the server's words (e.g. the terms lock, §8(x) D4)
   const [linkError, setLinkError] = useState(null);
+  // { allowed, reason, restore_event_id } from GET /episodes/:id/events, or null when the server did not say.
+  const [addEvent, setAddEvent] = useState(null);
   // World locations for the show — needed to resolve venue_location_id on
   // each linked event into a name + thumbnail. Locations don't propagate
   // to the episode directly; the Locations card reads them through the
@@ -234,6 +236,8 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
     getEpisodeEvents(episode.id).then((data) => {
       if (!live()) return;
       setLinkedEvents(data?.events || []);
+      // Whether another event can be linked now (the server's word; absent from an older server).
+      setAddEvent(data?.add_event || null);
     }).catch(failed('events', "this episode's events"));
     if (showId) {
       // The show's event list feeds only the linker dropdown (events not
@@ -365,7 +369,10 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
     // A first link needs no question. Adding an event to an episode that
     // already has one is a reassociation the server will not undo (an event
     // stays with the episode it is linked to), so it says what will change.
-    if (linkedEvents.length > 0) {
+    // Linking the source event again (the repair the server names) changes
+    // nothing else, so it asks nothing either.
+    const restoring = Boolean(restoreId && eventId === restoreId);
+    if (linkedEvents.length > 0 && !restoring) {
       const adding = allEvents.find((e) => e.id === eventId);
       const source = linkedEvents.find((e) => e.link?.anchor) || linkedEvents[0];
       const ok = window.confirm(
@@ -382,9 +389,14 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
       await api.put(`/api/v1/world/${showId}/events/${eventId}`, { used_in_episode_id: episode.id });
       const ev = allEvents.find(e => e.id === eventId);
       if (ev) {
-        setLinkedEvents(prev => [...prev, { ...ev, used_in_episode_id: episode.id }]);
+        if (!restoring) setLinkedEvents(prev => [...prev, { ...ev, used_in_episode_id: episode.id }]);
         setAllEvents(prev => prev.map(e => e.id === eventId ? { ...e, used_in_episode_id: episode.id } : e));
       }
+      // The episode's events as the server has them now, and whether another can still be added.
+      getEpisodeEvents(episode.id).then((data) => {
+        if (restoring) setLinkedEvents(data?.events || []);
+        setAddEvent(data?.add_event || null);
+      }).catch((err) => console.error('[Episode] events refresh after a link failed:', err));
     } catch (err) {
       console.error('[Episode] Failed to link event:', err);
       setLinkError(`Could not link the event: ${err.response?.data?.error || err.message || 'request failed'}`);
@@ -416,7 +428,13 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
       setLinkBusy(false);
     }
   };
-  const linkableEvents = allEvents.filter(e => !e.used_in_episode_id);
+  // When the server says no other event can be added, the control is shown
+  // disabled with its reason, never enabled to fail. The one exception is the
+  // repair it names: the source event whose own link is missing.
+  const addBlocked = Boolean(addEvent && addEvent.allowed === false);
+  const restoreId = addBlocked ? (addEvent.restore_event_id || null) : null;
+  const linkableEvents = allEvents.filter(e => !e.used_in_episode_id && (!addBlocked || (restoreId && e.id === restoreId)));
+  const addBlockedReason = addBlocked ? (addEvent.reason || 'No other event can be added to this episode now.') : null;
 
   // Regenerate this episode from one of its linked events. The backend
   // soft-deletes the current episode and re-runs the generator on the
@@ -790,13 +808,20 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
             aria-label="Link an event"
             value=""
             disabled={linkBusy || linkableEvents.length === 0 || Boolean(loadFailed.events || loadFailed.eventList)}
+            aria-describedby={addBlockedReason ? 'overview-add-event-blocked' : undefined}
             onChange={(e) => { if (e.target.value) linkEvent(e.target.value); e.target.value = ''; }}
           >
-            <option value="">{loadFailed.events || loadFailed.eventList ? "Events didn't load" : linkableEvents.length === 0 ? 'No unlinked events available' : '+ Link an event…'}</option>
+            <option value="">{loadFailed.events || loadFailed.eventList ? "Events didn't load"
+              : restoreId && linkableEvents.length > 0 ? '+ Link the source event again…'
+                : addBlocked ? 'No event can be added now'
+                  : linkableEvents.length === 0 ? 'No unlinked events available' : '+ Link an event…'}</option>
             {linkableEvents.map(ev => (
               <option key={ev.id} value={ev.id}>{ev.name}{ev.event_type ? ` (${ev.event_type})` : ''}</option>
             ))}
           </select>
+          {addBlockedReason && (
+            <p id="overview-add-event-blocked" className="eov-protected-note" data-testid="overview-add-event-blocked">{addBlockedReason}</p>
+          )}
         </div>
 
         {/* Season Position — the season context snapshotted at Start Episode

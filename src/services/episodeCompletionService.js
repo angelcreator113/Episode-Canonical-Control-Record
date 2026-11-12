@@ -254,6 +254,14 @@ async function completeEpisode(episodeId, showId, sequelize, { eventPiecesFallba
     return { already_completed: true, message: 'Episode already completed', evaluation: episode.evaluation_json, ...(beat14 ? { beat14_opportunity: beat14 } : {}) };
   }
 
+  // A second event with commitments is not paid, charged or delivered by
+  // this pipeline yet (services/episodeSecondaryEvents), so an episode that
+  // has one is not completed: refused before any write, whatever the attach
+  // switch says. Asked here, before the two-parter hand-off, so each part is
+  // asked for itself (Part 2 here; Part 1 when completeTwoPart comes back in
+  // for it). Finalize checks again under the episode lock.
+  await require('./episodeSecondaryEvents').assertNoUnsupportedSecondaryObligations(sequelize, episodeId, { doing: 'be completed' });
+
   // A two-parter's event completes once, with Part 2 (seasonSpecials, 2026-10-26).
   const twoPart = twoPartOne ? null : await twoPartOf(sequelize, episodeId);
   if (twoPart) {

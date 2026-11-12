@@ -16,11 +16,11 @@ const router = express.Router();
 
 const { requireAuth, authorize } = require('../../middleware/auth');
 const { aiRateLimiter } = require('../../middleware/aiRateLimiter');
-const { eventEpisodeConflictBody, EVENT_EPISODE_CONFLICT_CODE, eventDeletedError, eventDeletedBody, EVENT_DELETED_CODE } = require('../../utils/eventEpisodeLink');
+const { eventEpisodeConflictBody, EVENT_EPISODE_CONFLICT_CODE, eventDeletedBody, EVENT_DELETED_CODE, isEpisodeEventLinkConflict, episodeEventLinkTakenBody, EPISODE_EVENT_LINK_TAKEN_CODE } = require('../../utils/eventEpisodeLink');
+const secondaryEvents = require('../../services/episodeSecondaryEvents');
 const { findMissingPrices, dealPriceRequiredError, dealPriceRequiredBody, DEAL_PRICE_REQUIRED_CODE } = require('../../services/dealPricingService');
 const { asRetryable, RetryableConflictError } = require('../../utils/episodeLocks');
 const { isFreezeError } = require('../../utils/snapshotFreeze');
-const { takePriceSnapshot } = require('../../services/dealPriceSnapshot');
 const { offerDecisionBody, OFFER_DECISION_CODES } = require('../../services/startOfferDecision');
 const { getModels } = require('./helpers');
 const { isFrozenEpisodeError } = require('../../utils/frozenEpisode');
@@ -31,9 +31,13 @@ const { softDeleteUnusedUnlinkedEvents } = require('../../utils/worldEventSafeDe
 // Generate a single episode from multiple events. The first event in the
 // list is the "anchor" — it drives title generation, outfit, and brief
 // fields the way the single-event generator does. The remaining events
-// are linked to the same episode via used_in_episode_id, so their
-// locations, dress codes, narrative stakes, and outfits all show on the
-// episode page through the existing read-through patterns.
+// are the episode's other events (services/episodeSecondaryEvents), linked
+// via used_in_episode_id in the same transaction as the episode: every
+// chosen event is linked, or no episode is created. Nothing is skipped.
+// More than one event needs MULTI_EVENT_ATTACH_ENABLED (default off); one
+// event is the ordinary Start and is unaffected by it.
+// Optional Idempotency-Key header, as Start Episode: a retry of the same
+// request (same key, same events in the same order) gets its episode back.
 //
 // Body: { event_ids: [uuid, ...], draft_script?: bool, offer_decision?: string }
 // offer_decision is the anchor's (services/startOfferDecision): asked for
@@ -44,6 +48,10 @@ router.post('/world/:showId/events/generate-episode-from-many', requireAuth, aiR
     const { event_ids: eventIds = [], draft_script: draftScript = false } = req.body || {};
     if (!Array.isArray(eventIds) || eventIds.length === 0) {
       return res.status(400).json({ success: false, error: 'event_ids array required' });
+    }
+    // The same event twice is not two events: refused before anything is asked or created.
+    if (new Set(eventIds.map(String)).size !== eventIds.length) {
+      return res.status(400).json({ success: false, code: 'DUPLICATE_EVENT_IDS', error: 'The same event was chosen more than once. Choose each event once.' });
     }
     const models = await getModels();
     if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
@@ -77,17 +85,43 @@ router.post('/world/:showId/events/generate-episode-from-many', requireAuth, aiR
     const anchor = ordered[0];
     const extras = ordered.slice(1);
 
+    const { readIdempotencyKey, INVALID_KEY_CODE } = require('../../services/startEpisodeIdempotency');
+    const idem = readIdempotencyKey(req.get('Idempotency-Key'));
+    if (idem.error) return res.status(400).json({ success: false, error: idem.error, code: INVALID_KEY_CODE });
+    // The key names this request: the same key with other events is another request.
+    const idempotencyKey = idem.key
+      ? `many:${require('crypto').createHash('sha256').update(`${idem.key}\n${ordered.map((e) => e.id).join(',')}`).digest('hex')}`
+      : null;
+
+    const episodeGenerator = require('../../services/episodeGeneratorService');
+    if (idempotencyKey) {
+      const { findIdempotentStart } = require('../../services/startEpisodeIdempotency');
+      const replayId = await findIdempotentStart(models.sequelize, anchor.id, idempotencyKey);
+      if (replayId) {
+        const replay = await episodeGenerator.generateEpisodeFromEvent(anchor, models, { showId, idempotencyKey });
+        return res.status(200).json({
+          success: true, data: replay, replayed: true, anchor_event_id: anchor.id,
+          linked_extras: replay.linkedSecondaryEvents || [], skipped_extras: [], script_drafted: false,
+          message: `Episode "${replay.episode?.title}" was already created by this request. Nothing was created again.`,
+        });
+      }
+    }
+
     // Anchor must not already have a live episode. generateEpisodeFromEvent
     // enforces that (Task #1751) and the catch below maps its refusal to
-    // 409; a link to a deleted episode does not block. Extras that are
-    // already linked to other episodes are skipped with a warning.
+    // 409; a link to a deleted episode does not block.
+
+    // Every other event must be attachable before anything is created (the
+    // switch, no live episode, no obligations), and is asked again inside
+    // the Start's transaction under its lock. An event that cannot be
+    // attached refuses the request: it is never skipped.
+    await secondaryEvents.assertSecondaryCandidates(models.sequelize, extras);
 
     // The extras' terms lock with the episode too, so each deal's price must
     // be complete first (Deal PR 3 ruling, point 6; Task #2341). The anchor
     // is checked inside generateEpisodeFromEvent.
     const extrasMissing = [];
     for (const ev of extras) {
-      if (ev.used_in_episode_id) continue;
       const missing = await findMissingPrices(models.sequelize, ev.id);
       extrasMissing.push(...missing.map((m) => ({ ...m, event_id: ev.id, label: `${ev.name}: ${m.label}` })));
     }
@@ -97,39 +131,18 @@ router.post('/world/:showId/events/generate-episode-from-many', requireAuth, aiR
       return res.status(409).json(dealPriceRequiredBody(refusal));
     }
 
-    const episodeGenerator = require('../../services/episodeGeneratorService');
     const wardrobeItems = await episodeGenerator.loadFinancialWardrobeItems(models.sequelize, showId, { event: anchor });
-    const result = await episodeGenerator.generateEpisodeFromEvent(anchor, models, { showId, wardrobeItems, offerDecision: req.body?.offer_decision });
+    const result = await episodeGenerator.generateEpisodeFromEvent(anchor, models, {
+      showId, wardrobeItems, offerDecision: req.body?.offer_decision, secondaryEvents: extras, idempotencyKey,
+    });
     const newEpisodeId = result?.episode?.id;
-
-    // Link the extra events to the same episode. Skip ones that already
-    // link somewhere (they'd violate the partial unique index anyway).
-    const linkedExtras = [];
+    const linkedExtras = result?.linkedSecondaryEvents || [];
+    // Kept in the answer for its readers; always empty now.
     const skippedExtras = [];
-    for (const ev of extras) {
-      if (ev.used_in_episode_id) {
-        skippedExtras.push({ id: ev.id, name: ev.name, reason: 'already linked elsewhere' });
-        continue;
-      }
-      try {
-        // Linked, its terms lock: the link and its frozen prices commit
-        // together (services/dealPriceSnapshot).
-        await models.sequelize.transaction(async (transaction) => {
-          // A live event only: one deleted since the list was checked above
-          // is not linked, and is named in skipped_extras with why.
-          const [linked] = await models.sequelize.query(
-            `UPDATE world_events SET used_in_episode_id = :episodeId, status = 'used', updated_at = NOW()
-              WHERE id = :evId AND deleted_at IS NULL RETURNING id`,
-            { replacements: { episodeId: newEpisodeId, evId: ev.id }, transaction }
-          );
-          if (!linked?.length) throw eventDeletedError(ev.id);
-          await takePriceSnapshot(models.sequelize, ev.id, { transaction, reason: 'linked_episode' });
-        });
-        linkedExtras.push({ id: ev.id, name: ev.name });
-      } catch (linkErr) {
-        skippedExtras.push({ id: ev.id, name: ev.name, reason: linkErr.message });
-      }
-    }
+    // The steps after the commit (season slot, the anchor's deliverables
+    // naming the episode) never undo the episode; a failed one is said here.
+    const postCommit = result?.postCommit || {};
+    const failedAfterCommit = Object.entries(postCommit).filter(([, step]) => step?.status === 'failed').map(([name, step]) => ({ step: name, reason: step.reason }));
 
     let scriptDrafted = false;
     let scriptRevision = null;
@@ -176,9 +189,28 @@ router.post('/world/:showId/events/generate-episode-from-many', requireAuth, aiR
       skipped_extras: skippedExtras,
       script_drafted: scriptDrafted,
       ...(scriptRevision ? { script_revision: scriptRevision } : {}),
-      message: `Episode "${result.episode.title}" created from ${1 + linkedExtras.length} event${linkedExtras.length === 0 ? '' : 's'}${skippedExtras.length ? ` (${skippedExtras.length} skipped)` : ''}`,
+      post_commit: postCommit,
+      partial: failedAfterCommit.length > 0,
+      ...(failedAfterCommit.length ? { unfinished_steps: failedAfterCommit } : {}),
+      message: `Episode "${result.episode.title}" created from ${1 + linkedExtras.length} event${linkedExtras.length === 0 ? '' : 's'}`
+        + (failedAfterCommit.length ? `. Not finished: ${failedAfterCommit.map((f) => f.reason).join(' ')}` : ''),
     });
   } catch (error) {
+    // A second event could not be attached (the switch, its obligations, it
+    // already has an episode): nothing was created.
+    if (secondaryEvents.isSecondaryEventError(error)) {
+      console.warn(`Multi-event generate refused (${error.code}):`, error.message);
+      return res.status(error.status).json(error.toJSON());
+    }
+    // The database allows one linked event per episode for now: the Start
+    // rolled back whole, so no episode, brief or link was created.
+    if (isEpisodeEventLinkConflict(error)) {
+      console.warn(`Multi-event generate refused (${EPISODE_EVENT_LINK_TAKEN_CODE}): the database allows one linked event per episode`);
+      return res.status(409).json({
+        ...episodeEventLinkTakenBody({}),
+        error: 'An episode cannot take a second linked event yet: the database still allows one per episode. No episode was created and no event was changed.',
+      });
+    }
     if (error.code === EVENT_EPISODE_CONFLICT_CODE) {
       console.warn('Multi-event generate refused:', error.message);
       return res.status(409).json(eventEpisodeConflictBody(error.episode));
@@ -268,6 +300,10 @@ router.post('/world/:showId/events/:eventId/regenerate-episode', requireAuth, ai
     if (error.code === EVENT_DELETED_CODE) {
       console.warn('Regenerate episode refused:', error.message);
       return res.status(409).json(eventDeletedBody(error));
+    }
+    if (secondaryEvents.isSecondaryEventError(error)) {
+      console.warn(`Regenerate episode refused (${error.code}):`, error.message);
+      return res.status(error.status).json(error.toJSON());
     }
     // A1.2a (W4): a filmed episode is never regenerated (refused before any model call).
     if (isFreezeError(error)) {
