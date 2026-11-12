@@ -9,9 +9,10 @@
  *
  * node tests/networkGuard/verify.js --focused
  * For a job that runs a fixed few test files, so the canary file is not in
- * the run. It waives only the requirement that the canaries ran; a recorded
- * external attempt fails it. The flag is the only way in (no environment
- * variable), and any other argument is refused.
+ * the run. It waives only the requirement that the canaries ran; recorded
+ * attempts are listed, not failed, as in the full run (Stage 3a is
+ * report-only). The flag is the only way in (no environment variable), and
+ * any other argument is refused.
  */
 
 const fs = require('fs');

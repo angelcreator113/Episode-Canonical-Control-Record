@@ -315,14 +315,30 @@ describe('report: findings, canaries and integrity (pure)', () => {
       expect(renderSummary(r, { ok: false, problems: [] })).toMatch(/Canaries: \*\*FAILED\*\*/);
     });
 
-    test('focused mode fails on an unexpected external attempt; strict mode with canaries stays report-only for attempts', () => {
-      const r = focusedRun([attempt]);
-      expect(r.attempts.total).toBe(1);
-      const v = verifyReport({ start: START, report: r, focused: true });
-      expect(v.ok).toBe(false);
-      expect(v.problems).toEqual(['a focused run recorded 1 unexpected external attempt(s)']);
+    test('Stage 3a is report-only in both modes: an unexpected external attempt is listed in the summary and does not fail verification', () => {
+      const focused = focusedRun([attempt]);
+      expect(focused.attempts.total).toBe(1);
+      expect(verifyReport({ start: START, report: focused, focused: true })).toEqual({ ok: true, problems: [] });
       const full = buildReport({ ...base, lines: [...canaryLines, hb('a.test.js'), attempt, end('a.test.js', 1)] });
+      expect(full.attempts.total).toBe(1);
       expect(verifyReport({ start: START, report: full })).toEqual({ ok: true, problems: [] });
+      for (const [r, opts] of [[focused, { focused: true }], [full, {}]]) {
+        const text = renderSummary(r, { ok: true, problems: [] }, opts);
+        expect(text).toMatch(/Unexpected external attempts: \*\*1\*\*/);
+        expect(text).toMatch(/`203\.0\.113\.9`/);
+      }
+      // Many attempts are still only reported.
+      const many = focusedRun([attempt, { ...attempt, host: '198.51.100.7' }, attempt]);
+      expect(many.attempts.total).toBe(3);
+      expect(verifyReport({ start: START, report: many, focused: true }).ok).toBe(true);
+    });
+
+    test('a report with no attempt count is malformed in both modes', () => {
+      const good = focusedRun();
+      for (const attempts of [undefined, null, {}, { total: '0' }, { total: 1.5 }]) {
+        expect(verifyReport({ start: START, report: { ...good, attempts }, focused: true }).problems).toContain('network guard report has no attempt count');
+        expect(verifyReport({ start: START, report: { ...good, attempts } }).problems).toContain('network guard report has no attempt count');
+      }
     });
 
     test('focused mode waives nothing when the canary file ran: a failed or partial canary still fails', () => {

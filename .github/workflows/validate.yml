@@ -240,8 +240,9 @@ jobs:
           '
       # The network guard check for a focused job: this job runs three test
       # files, so the canary file is not in the run and --focused waives only
-      # that. An external attempt, or a missing, stale, unfinalized or
-      # incomplete report, still fails. The Tests job keeps the strict check.
+      # that. A missing, stale, unfinalized, incomplete or malformed report
+      # still fails; recorded attempts are listed, not failed, as in the Tests
+      # job (Stage 3a is report-only). The Tests job keeps the canary check.
       - name: Check the network guard report
         if: always()
         run: node tests/networkGuard/verify.js --focused

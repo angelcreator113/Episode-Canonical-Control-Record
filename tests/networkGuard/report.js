@@ -235,8 +235,9 @@ function buildReport({
 /**
  * focused: a job that runs a fixed few test files (CI's PostgreSQL 17 job),
  * so the canary file is not in the run. It waives exactly one requirement,
- * that the canaries ran; every other check stays, and a recorded external
- * attempt fails it. The full test run never passes focused.
+ * that the canaries ran; every other check stays. Like the full run it is
+ * report-only for recorded attempts (Stage 3a). The full test run never
+ * passes focused.
  */
 function verifyReport({ start, report, env = {}, focused = false }) {
   const problems = [];
@@ -252,12 +253,11 @@ function verifyReport({ start, report, env = {}, focused = false }) {
       : Array.isArray(report.canary.issues) ? report.canary.issues.join('; ') : 'malformed canary section';
     problems.push(`network guard canary verification failed: ${why}`);
   }
-  // A focused run has no canaries to prove the hooks block, so an external
-  // attempt it records is a failure there, not a line in the summary.
-  if (focused && report && report.status !== 'disabled') {
-    const total = report.attempts ? report.attempts.total : undefined;
-    if (!Number.isInteger(total)) problems.push('network guard report has no attempt count');
-    else if (total > 0) problems.push(`a focused run recorded ${total} unexpected external attempt(s)`);
+  // Stage 3a is report-only in both modes: recorded attempts are listed in
+  // the summary and never fail verification. A report with no attempt count
+  // is malformed, and that does.
+  if (report && report.status !== 'disabled' && !(report.attempts && Number.isInteger(report.attempts.total))) {
+    problems.push('network guard report has no attempt count');
   }
   return { ok: problems.length === 0, problems };
 }
