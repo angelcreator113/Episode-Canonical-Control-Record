@@ -22,6 +22,7 @@ import { eventCardDetails } from '../../utils/eventCardSummary';
 import '../../pages/WorldAdmin.css';
 import { packageHref } from '../../lib/eventFlow';
 import { withSkippedNote } from '../../lib/snapshotFreeze';
+import { slotEvent, slotEventNote, NO_PRIMARY_EVENT } from '../../lib/seasonSlotEvent';
 
 // ─── SEASON TAB COMPONENT ───────────────────────────────────────────────────
 // Planning Insights (§8(ff) A8, Q13, Q15): per slot the plan beside the
@@ -506,7 +507,7 @@ export function SlotPanel({ slot, showId, available, busy, episode, event, onPen
 
       <dl className="wa-arc-facts">
         {/* A started slot with no event linked to it has an event (the episode's); "None pencilled" is for a slot nothing has started in. */}
-        <div><dt>Event</dt><dd data-testid={`season-slot-event-${slot.slot_number}`}>{slot.event?.name || (slot.episode ? 'Not linked to this slot' : 'None pencilled')}</dd></div>
+        <div><dt>Event</dt><dd data-testid={`season-slot-event-${slot.slot_number}`}>{slotEvent(slot)?.name || (slot.episode ? (slot.event_view ? NO_PRIMARY_EVENT : 'Not linked to this slot') : 'None pencilled')}{slotEvent(slot) && slotEventNote(slot) ? ` · ${slotEventNote(slot).label}` : ''}</dd></div>
         {deal && <div><dt>Deal{deal.label ? ` · ${deal.label}` : ''}</dt><dd>{deal.pays}</dd></div>}
       </dl>
 
@@ -547,11 +548,13 @@ export function SlotPanel({ slot, showId, available, busy, episode, event, onPen
             {slot.state === 'done' ? 'Open episode' : 'Continue episode'}
           </Link>
           {/* A started slot keeps the way to its event package. When the event is not linked to the slot, it says exactly that: the episode has its events (2026-11-12). */}
-          {slot.event ? (
-            <Link className="wa-arc-secondary" to={packageHref(showId, slot.event.id, { kind: 'roadmap', slot: slot.slot_number })} data-testid={`season-slot-package-${slot.slot_number}`}>Open the event package</Link>
-          ) : (
+          {slotEvent(slot) && (
+            <Link className="wa-arc-secondary" to={packageHref(showId, slotEvent(slot).id, { kind: 'roadmap', slot: slot.slot_number })} data-testid={`season-slot-package-${slot.slot_number}`}>Open the event package</Link>
+          )}
+          {/* What is left to say about a started slot's event: none linked, or an association that needs review (lib/seasonSlotEvent). */}
+          {slotEventNote(slot) && (
             <p className="szn-muted" data-testid={`season-slot-no-event-${slot.slot_number}`}>
-              Event not linked to this season slot. <Link to={`/episodes/${slot.episode.id}?tab=overview`}>View the episode's events.</Link>
+              {slotEventNote(slot).label}{slotEventNote(slot).reasons ? `: ${slotEventNote(slot).reasons}` : ''}. <Link to={`/episodes/${slot.episode.id}?tab=overview`}>View the episode's events.</Link>
             </p>
           )}
         </>

@@ -31,7 +31,7 @@
  *   or leave unslotted".
  */
 
-const { loadSeason } = require('./seasonLoader');
+const { loadSeason, slotEventView } = require('./seasonLoader');
 const { lockEpisodes, requireTransaction, inTransaction, RetryableConflictError } = require('../utils/episodeLocks');
 const { snapshotFrozen, frozenSkip, frozenError, lateContextError } = require('../utils/snapshotFreeze');
 
@@ -285,7 +285,12 @@ async function roadmapOf(sequelize, season) {
       state: slotState({ episode, event }),
       locked: Boolean(r.locked_at) || Boolean(episode),
       episode,
+      // The raw pencil (season_slots.event_id), as before: what the pencil
+      // controls and the specials read. What a slot SHOWS is event_view.
       event,
+      // Derived on read (seasonLoader.slotEventView): an empty slot's pencil,
+      // an occupied slot's episode's canonical event, and whether they agree.
+      event_view: slotEventView(r),
       intention: {
         story_purpose: r.story_purpose,
         career_focus: r.career_focus,

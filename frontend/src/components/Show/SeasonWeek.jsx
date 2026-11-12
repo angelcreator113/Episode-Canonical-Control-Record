@@ -15,6 +15,7 @@ import { deadlineWarning } from '../../lib/releaseSchedule';
 import { slotCardTitle } from '../../lib/seasonPage';
 import { weekAhead, weekWhen, stageText, stillNeeds } from '../../lib/seasonWeek';
 import './SeasonWeek.css';
+import { slotEvent } from '../../lib/seasonSlotEvent';
 
 /** The episode's full row (the list leaves out its thumbnail, title approval and copy) and its Pulse posts. */
 function useEpisodeReadiness(api, episodeId) {
@@ -43,7 +44,8 @@ function WeekItem({ item, api, showId, events, moves, onOpen }) {
   const ready = episode ? readiness(episode, posts, row) : null;
   const needs = ready ? stillNeeds(ready) : null;
   const warning = row ? deadlineWarning(row, posts == null ? null : ready) : null;
-  const ev = slot.event ? (events || []).find((e) => e.id === slot.event.id) || slot.event : null;
+  const shown = slotEvent(slot);
+  const ev = shown ? (events || []).find((e) => e.id === shown.id) || shown : null;
   const n = slot.slot_number;
   return (
     <li className={`szw-item is-${slot.state || 'needs_event'}`} data-testid={`szw-item-${n}`}>

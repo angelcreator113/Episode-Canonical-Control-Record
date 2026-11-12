@@ -281,6 +281,85 @@ describe('a started slot\'s links', () => {
   });
 });
 
+describe('a slot\'s event is derived on read (event_view beside the raw pencil)', () => {
+  const openMenu = async (n) => { fireEvent.click(await screen.findByTestId(`szn-slot-menu-${n}`)); return screen.getByRole('menu'); };
+  const view = (over = {}) => ({ event: null, source: 'none', pencilled_event: null, needs_review: false, review_reasons: [], pencil_disagrees: false, ...over });
+  const E1_EVENT = { id: 'ev-1', name: 'Wearable Experiments Studio Session', status: 'used' };
+  // Episode 1's exact shape: the slot holds the episode, is locked, and stores NO event (event: null);
+  // the server derives the episode's own event beside it.
+  const EPISODE_ONE = slot(1, 1, { state: 'in_production', locked: true, episode: { id: 'ep-1', title: 'Wearable Experiments' }, event: null, event_view: view({ event: E1_EVENT, source: 'episode' }) });
+  const withView = (first, rest = {}) => [
+    first,
+    slot(2, 1, { state: 'in_production', locked: true, episode: { id: 'ep-2', title: 'Second Look' }, event: { id: 'ev-2', name: 'Atelier Visit' }, event_view: view({ event: { id: 'ev-2', name: 'Atelier Visit' }, source: 'episode', pencilled_event: { id: 'ev-2', name: 'Atelier Visit' } }) }),
+    slot(3, 2, { state: 'event_ready', event: { id: 'ev-3', name: 'Charity Gala' }, event_view: view({ event: { id: 'ev-3', name: 'Charity Gala' }, source: 'pencil', pencilled_event: { id: 'ev-3', name: 'Charity Gala' } }), ...rest }),
+    slot(4, 2, { event_view: view() }), slot(5, 3, { event_view: view() }), slot(6, 3, { event_view: view() }),
+  ];
+
+  test('Episode 1: the slot shows its episode\'s event and its package link; nothing says "not linked"', async () => {
+    slots = withView(EPISODE_ONE);
+    renderAt('/shows/show-1/season?tab=roadmap');
+    const menu = await openMenu(1);
+    const pkg = within(menu).getByTestId('szn-slot-package-1');
+    expect(pkg.textContent).toBe('Open the event package');
+    expect(pkg.getAttribute('href')).toMatch(/^\/shows\/show-1\/events\/ev-1\?/);
+    expect(within(menu).queryByTestId('szn-slot-no-event-1')).toBeNull();
+    expect(menu.textContent).not.toMatch(/not linked|needs review|no primary/i);
+  });
+
+  test('Episode 1: the slot panel names the event and links its package', async () => {
+    slots = withView(EPISODE_ONE);
+    renderAt('/shows/show-1/season?tab=roadmap&slot=1');
+    await waitFor(() => expect(screen.getByTestId('season-slot-event-1').textContent).toBe('Wearable Experiments Studio Session'));
+    expect(screen.getByTestId('season-slot-package-1').getAttribute('href')).toMatch(/\/events\/ev-1\?/);
+    expect(screen.queryByTestId('season-slot-no-event-1')).toBeNull();
+  });
+
+  test('an empty future slot: its pencilled event is shown; one with nothing says None pencilled; the pencil control is unchanged', async () => {
+    slots = withView(EPISODE_ONE);
+    renderAt('/shows/show-1/season?tab=roadmap&slot=3');
+    await waitFor(() => expect(screen.getByTestId('season-slot-event-3').textContent).toBe('Charity Gala'));
+    fireEvent.click(await screen.findByTestId('szn-slot-menu-3'));
+    expect(within(screen.getByRole('menu')).getByTestId('szn-slot-package-3').getAttribute('href')).toMatch(/\/events\/ev-3\?/);
+  });
+
+  test('an empty slot with nothing pencilled says None pencilled', async () => {
+    slots = withView(EPISODE_ONE);
+    renderAt('/shows/show-1/season?tab=roadmap&slot=4');
+    await waitFor(() => expect(screen.getByTestId('season-slot-event-4').textContent).toBe('None pencilled'));
+    expect(screen.queryByTestId('season-slot-no-event-4')).toBeNull();
+  });
+
+  test('a started slot whose episode has no event: "No primary event linked", pointing at the episode\'s events; no package link is made up', async () => {
+    slots = withView(slot(1, 1, { state: 'in_production', locked: true, episode: { id: 'ep-1', title: 'Wearable Experiments' }, event: null, event_view: view() }));
+    renderAt('/shows/show-1/season?tab=roadmap&slot=1');
+    await waitFor(() => expect(screen.getByTestId('season-slot-event-1').textContent).toBe('No primary event linked'));
+    const none = screen.getByTestId('season-slot-no-event-1');
+    expect(none.textContent).toBe("No primary event linked. View the episode's events.");
+    expect(within(none).getByRole('link', { name: "View the episode's events." }).getAttribute('href')).toBe('/episodes/ep-1?tab=overview');
+    expect(screen.queryByTestId('season-slot-package-1')).toBeNull();
+  });
+
+  test('an association that disagrees: the event is still shown, marked Needs review with why', async () => {
+    slots = withView(slot(1, 1, { state: 'in_production', locked: true, episode: { id: 'ep-1', title: 'Wearable Experiments' }, event: null,
+      event_view: view({ event: E1_EVENT, source: 'episode', needs_review: true, review_reasons: ['primary_link_missing', 'other_event_linked'] }) }));
+    renderAt('/shows/show-1/season?tab=roadmap&slot=1');
+    await waitFor(() => expect(screen.getByTestId('season-slot-event-1').textContent).toBe('Wearable Experiments Studio Session · Needs review'));
+    expect(screen.getByTestId('season-slot-no-event-1').textContent).toBe("Needs review: the event's own link to this episode is missing; another event is linked to this episode. View the episode's events.");
+    expect(screen.getByTestId('season-slot-package-1').getAttribute('href')).toMatch(/\/events\/ev-1\?/);
+    fireEvent.click(await screen.findByTestId('szn-slot-menu-1'));
+    expect(within(screen.getByRole('menu')).getByTestId('szn-slot-no-event-1').textContent).toMatch(/^Needs review\. /);
+  });
+
+  test('a stored pencil that is not the episode\'s event: the episode\'s event is shown, and the pencil is named, not replaced', async () => {
+    slots = withView(slot(1, 1, { state: 'in_production', locked: true, episode: { id: 'ep-1', title: 'Wearable Experiments' }, event: { id: 'ev-old', name: 'Pencilled Event' },
+      event_view: view({ event: E1_EVENT, source: 'episode', pencilled_event: { id: 'ev-old', name: 'Pencilled Event' }, pencil_disagrees: true }) }));
+    renderAt('/shows/show-1/season?tab=roadmap&slot=1');
+    await waitFor(() => expect(screen.getByTestId('season-slot-event-1').textContent).toBe('Wearable Experiments Studio Session · Needs review'));
+    expect(screen.getByTestId('season-slot-no-event-1').textContent).toBe('Needs review: this slot was pencilled for "Pencilled Event", which is not the episode\'s event. View the episode\'s events.');
+    expect(screen.getByTestId('season-slot-package-1').getAttribute('href')).toMatch(/\/events\/ev-1\?/);
+  });
+});
+
 describe('labels that say what they do', () => {
   test('the Overview\'s buttons that only open another tab are named for that tab', async () => {
     renderAt('/shows/show-1/season?tab=overview');

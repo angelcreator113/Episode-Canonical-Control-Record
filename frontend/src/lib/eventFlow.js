@@ -16,6 +16,7 @@
 import { describeMissing } from '../utils/eventReadinessSections';
 import { seasonPageHref, allSlots } from './seasonPage';
 import { EVENT_SHOWS } from './eventLibrary';
+import { slotEvent } from './seasonSlotEvent';
 
 // ── Stages ────────────────────────────────────────────────────────────
 
@@ -250,13 +251,13 @@ export function returnLink(origin, { showId, done = false } = {}) {
 export function slotNeighbours(roadmap, slotNumber) {
   if (slotNumber == null) return { prev: null, next: null };
   const slots = allSlots(roadmap);
-  const filled = slots.filter((s) => s.event?.id || s.episode?.id);
+  const filled = slots.filter((s) => slotEvent(s)?.id || s.episode?.id);
   const ref = (s) => (s ? {
     slot_number: s.slot_number,
     code: `E${s.slot_number}`,
-    name: s.event?.name || s.episode?.title || null,
-    eventId: s.event?.id || null,
-    episodeId: s.event?.id ? null : (s.episode?.id || null),
+    name: slotEvent(s)?.name || s.episode?.title || null,
+    eventId: slotEvent(s)?.id || null,
+    episodeId: slotEvent(s)?.id ? null : (s.episode?.id || null),
   } : null);
   const before = filled.filter((s) => s.slot_number < slotNumber);
   const after = filled.filter((s) => s.slot_number > slotNumber);
