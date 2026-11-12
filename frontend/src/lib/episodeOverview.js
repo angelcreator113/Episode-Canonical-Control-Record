@@ -70,7 +70,8 @@ export function nextStep({ hasScript, brief = null, plan = null, checks = null }
     key: 'production',
     title: 'Work through production',
     why: left != null ? `${left} production check${left === 1 ? '' : 's'} left.${lookLater}` : `The script is written.${lookLater}`,
-    action: 'Open Production',
+    // The button names where it goes: Production › Checklist (2026-11-12; it said "Open Production").
+    action: 'Open Checklist',
     tab: 'checklist',
   };
 }
