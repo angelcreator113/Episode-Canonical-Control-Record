@@ -299,7 +299,9 @@ function lalaState(sequelize, showId) {
 
 /**
  * Everything computeCoverage reads, for the show's active season: its parts,
- * its slots each with its event (pencilled, else its episode's), the active
+ * its slots each with its event (an occupied slot's is its episode's
+ * canonical event; an empty slot's is its pencilled one: the same rule as
+ * seasonLoader.slotEventView), the active
  * goals and Lala's stats. null when the show has no active season.
  * Options (the season wrap-up, 2026-10-26): arcId reads that season instead,
  * and goals replaces the active goals (a finished season's reached ones too).
@@ -313,7 +315,9 @@ async function loadCoverageInputs(sequelize, showId, { arcId = null, goals: give
   const [eventRows] = await sequelize.query(
     `SELECT s.id AS slot_id, ${EVENT_COLUMNS}
        FROM season_slots s
-       JOIN world_events ev ON ev.id = COALESCE(s.event_id, ${episodeEventIdSql('s.episode_id')}) AND ev.deleted_at IS NULL
+       LEFT JOIN episodes ep ON ep.id = s.episode_id AND ep.deleted_at IS NULL
+       JOIN world_events ev ON ev.deleted_at IS NULL
+            AND ev.id = CASE WHEN ep.id IS NOT NULL THEN ${episodeEventIdSql('ep.id')} ELSE s.event_id END
       WHERE s.arc_id = :arcId AND s.deleted_at IS NULL`,
     { replacements: { arcId: arc.id } });
   const eventBySlot = new Map(eventRows.map(({ slot_id: slotId, ...ev }) => [String(slotId), ev]));
