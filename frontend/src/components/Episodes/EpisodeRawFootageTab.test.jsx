@@ -124,6 +124,31 @@ describe('EpisodeRawFootageTab', () => {
     await waitFor(() => expect(within(lane('guest')).getByText('Intro')).toBeTruthy());
   });
 
+  // A take something still uses is kept (Evoni, 2026-11-12): the server's own
+  // words are shown, the card stays, and a non-admin is told why.
+  test('Delete refused because the take is in use: the server\'s reason is shown and the card stays', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const reason = '"Intro" can\'t be deleted. The edit uses it for 1 Prime segment (beat 1). Nothing was deleted.';
+    rawClipsApi.remove.mockRejectedValue(Object.assign(new Error('in use'), { response: { status: 409, data: { success: false, code: 'CLIP_IN_USE', error: reason, blocked_by: [{ kind: 'prime_segment', count: 1 }] } } }));
+    render(<EpisodeRawFootageTab episode={{ id: 'ep-1' }} />);
+    await waitFor(() => expect(screen.getAllByTestId('erf-clip')).toHaveLength(3));
+    fireEvent.click(screen.getByLabelText('Delete Intro'));
+    expect(await screen.findByText(reason)).toBeTruthy();
+    expect(screen.getAllByTestId('erf-clip')).toHaveLength(3);
+  });
+
+  test('Delete refused for someone who is not an admin: said plainly, and the card stays', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    rawClipsApi.remove.mockRejectedValue(Object.assign(new Error('forbidden'), { response: { status: 403, data: { error: 'Forbidden' } } }));
+    render(<EpisodeRawFootageTab episode={{ id: 'ep-1' }} />);
+    await waitFor(() => expect(screen.getAllByTestId('erf-clip')).toHaveLength(3));
+    fireEvent.click(screen.getByLabelText('Delete Intro'));
+    expect(await screen.findByText('Only an admin can delete a take. Nothing was deleted.')).toBeTruthy();
+    expect(screen.getAllByTestId('erf-clip')).toHaveLength(3);
+  });
+
   test('Delete asks first and removes the card', async () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true);
     rawClipsApi.remove.mockResolvedValue(true);

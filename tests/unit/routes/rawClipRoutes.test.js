@@ -306,10 +306,36 @@ describe('stopping green removal (Evoni, 2026-10-31)', () => {
     expect(missing.status).toBe(404);
   });
 
+  // The service is the unit here: what it asks before removing a take is in
+  // tests/integration/rawClipDeleteSafe.integration.test.js.
   test('deleting a clip stops its green removal', async () => {
-    mockQuery.mockImplementation(async (sql) => (/deleted_at = NOW\(\)/.test(sql) ? [[{ id: 'c1' }]] : [[]]));
+    const clips = require('../../../src/services/rawClipsService');
+    const removeClip = jest.spyOn(clips, 'removeClip').mockResolvedValue(true);
     const res = await request(app).delete('/api/v1/episode-clips/ep-1/c1');
     expect(res.status).toBe(200);
+    expect(removeClip).toHaveBeenCalledWith(expect.anything(), 'ep-1', 'c1');
     expect(media.cancelKey).toHaveBeenCalledWith('c1');
+    removeClip.mockRestore();
+  });
+
+  test('a take in use: 409 CLIP_IN_USE with blocked_by, and its green removal is not stopped', async () => {
+    const clips = require('../../../src/services/rawClipsService');
+    const inUse = new clips.RawClipError(409, '"Intro" can\'t be deleted. The edit uses it for 1 Prime segment. Nothing was deleted.', clips.CLIP_IN_USE);
+    inUse.blocked_by = [{ kind: 'prime_segment', count: 1, label: 'The edit uses it for 1 Prime segment' }];
+    inUse.clip = { id: 'c1', label: 'Intro' };
+    const removeClip = jest.spyOn(clips, 'removeClip').mockRejectedValue(inUse);
+    media.cancelKey.mockClear();
+    const res = await request(app).delete('/api/v1/episode-clips/ep-1/c1').send({ force: true });
+    expect(res.status).toBe(409);
+    expect(res.body).toEqual({ success: false, code: 'CLIP_IN_USE', error: inUse.message, clip: inUse.clip, blocked_by: inUse.blocked_by });
+    expect(media.cancelKey).not.toHaveBeenCalled();
+    removeClip.mockRestore();
+  });
+
+  test('the delete route is ADMIN only; a take\'s other routes keep requireAuth alone', () => {
+    const src = require('fs').readFileSync(require('path').join(__dirname, '../../../src/routes/rawClipRoutes.js'), 'utf8');
+    expect(src).toMatch(/router\.delete\('\/:episodeId\/:clipId', requireAuth, authorize\(\['ADMIN'\]\), /);
+    expect(src).toMatch(/router\.patch\('\/:episodeId\/:clipId', requireAuth, async /);
+    expect(src.match(/authorize\(/g)).toHaveLength(1);
   });
 });

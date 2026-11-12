@@ -256,11 +256,22 @@ async function createExtractedSource(sequelize, { episodeId, rawClipId, localPat
 
   await media().upload(localPath, key, contentType);
   try {
-    const [created] = await rows(sequelize, `INSERT INTO voice_source_assets
-      (episode_id, source_kind, s3_key, sha256, content_type, file_size_bytes, duration_ms, sample_rate, channels,
-       source_raw_clip_id, source_in_ms, source_out_ms, created_by)
-      VALUES (:episodeId, 'extracted', :key, :sha, :type, :size, :duration, :rate, :channels, :rawClipId, 0, :duration, :userId) RETURNING *`, {
-      episodeId, key, sha, type: contentType, size, duration: probe.duration_ms, rate: probe.sample_rate, channels: probe.channels, rawClipId, userId,
+    // The take is read again, held FOR SHARE, as the row is written (Evoni,
+    // 2026-11-12): the file took time to probe and upload, and a take
+    // removed meanwhile gets no source. Its removal (rawClipsService
+    // .removeClip) holds the take FOR UPDATE and asks for this row, so the
+    // two take turns: the source is there and holds the take, or the take is
+    // gone and this stops.
+    const created = await sequelize.transaction(async (t) => {
+      const still = await one(sequelize, 'SELECT id, deleted_at FROM episode_raw_clips WHERE id = :rawClipId AND episode_id = :episodeId FOR SHARE', { rawClipId, episodeId }, t);
+      if (!still || still.deleted_at) fail(404, 'NOT_FOUND', 'Clip not found');
+      const [row] = await rows(sequelize, `INSERT INTO voice_source_assets
+        (episode_id, source_kind, s3_key, sha256, content_type, file_size_bytes, duration_ms, sample_rate, channels,
+         source_raw_clip_id, source_in_ms, source_out_ms, created_by)
+        VALUES (:episodeId, 'extracted', :key, :sha, :type, :size, :duration, :rate, :channels, :rawClipId, 0, :duration, :userId) RETURNING *`, {
+        episodeId, key, sha, type: contentType, size, duration: probe.duration_ms, rate: probe.sample_rate, channels: probe.channels, rawClipId, userId,
+      }, t);
+      return row;
     });
     return { source: created, existed: false };
   } catch (err) {
@@ -268,6 +279,23 @@ async function createExtractedSource(sequelize, { episodeId, rawClipId, localPat
     console.error(`[voiceStudio] extracted source row not written; ${key} is in S3 without a row:`, err.message);
     throw err;
   }
+}
+
+/**
+ * What in Voice Studio was made from one take (Evoni, 2026-11-12), for the
+ * take's removal to ask: its live extracted sources, with how many live
+ * takes of a line were cut from each and how many approvals of those are in
+ * force. Resolves [{ source_id, takes, approved }], empty when none.
+ */
+async function rawClipVoiceUses(sequelize, { episodeId, clipId }, t) {
+  const found = await rows(sequelize, `SELECT s.id AS source_id,
+      (SELECT COUNT(*) FROM line_voice_candidates c WHERE c.source_asset_id = s.id AND c.deleted_at IS NULL)::int AS takes,
+      (SELECT COUNT(*) FROM line_voice_approvals a JOIN line_voice_candidates c ON c.id = a.candidate_id
+        WHERE c.source_asset_id = s.id AND c.deleted_at IS NULL AND a.deleted_at IS NULL
+          AND a.superseded_at IS NULL AND a.invalidated_at IS NULL AND a.revoked_at IS NULL)::int AS approved
+    FROM voice_source_assets s
+    WHERE s.episode_id = :episodeId AND s.source_raw_clip_id = :clipId AND s.deleted_at IS NULL ORDER BY s.created_at, s.id`, { episodeId, clipId }, t);
+  return found.map((r) => ({ source_id: r.source_id, takes: Number(r.takes), approved: Number(r.approved) }));
 }
 
 // ── Candidates and their revisions ───────────────────────────────────────────
@@ -905,6 +933,6 @@ async function importLegacy(sequelize, { episodeId, userId = null }) {
 module.exports = {
   VoiceStudioError, STATE_REASONS, STATES, AUDIO_EXTS, MAX_SECONDS, isPlayable,
   setMedia, readAudioProbe, readSettings, settingsHash, episodeState,
-  createSource, createExtractedSource, createCandidate, reviseCandidate, associate, approve, resolveApproval, revokeApproval,
+  createSource, createExtractedSource, rawClipVoiceUses, createCandidate, reviseCandidate, associate, approve, resolveApproval, revokeApproval,
   summary, playableApprovals, approvalHistory, reconfirm, removeCandidate, listTakes, importLegacy, studioView,
 };
