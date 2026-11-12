@@ -318,7 +318,16 @@ router.get('/:id/events', validateUUIDParam('id'), requireAuth, async (req, res)
     }
     const { listEpisodeEvents } = require('../services/episodeEventsService');
     const data = await listEpisodeEvents(models, episode.id);
-    return res.json({ success: true, ...data });
+    // Whether another event can be linked now, so the Events card does not
+    // offer an action the server will refuse (services/episodeSecondaryEvents).
+    // Read-only and additive: a failed read leaves it out, and the list stands.
+    let addEvent;
+    try {
+      addEvent = await require('../services/episodeSecondaryEvents').addEventAvailability(models.sequelize, episode.id);
+    } catch (availabilityErr) {
+      console.error('[Episodes] GET /:id/events: add-event availability could not be read:', availabilityErr.message);
+    }
+    return res.json({ success: true, ...data, ...(addEvent ? { add_event: addEvent } : {}) });
   } catch (error) {
     console.error('[Episodes] GET /:id/events failed:', error.message);
     return res.status(500).json({ success: false, error: 'Failed to load episode events' });

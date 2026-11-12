@@ -28,7 +28,9 @@ const ALLOWED = {
   'src/services/episodeGeneratorService.js': 'the Start Episode write of the stamp',
   // worldEvents.js until Task #54 split it into src/routes/worldEvents/.
   'src/routes/worldEvents/inject.js': 'the inject write',
-  'src/routes/worldEvents/episodeBatch.js': 'the generate-from-many write',
+  // The generate-from-many write moved into the generator's transaction (2026-11-12).
+  'src/services/episodeSecondaryEvents.js': 'the episode\'s OTHER events: every event whose own link names the episode, less the brief\'s primary; and the detach write',
+  'src/utils/eventEpisodeLink.js': 'findEpisodeLinkHolder: names the event holding the link in the 409 EPISODE_EVENT_LINK_TAKEN body, not the episode\'s event',
   'src/routes/worldEvents/overlays.js': 'the stale-link cleanup of a deleted episode',
   'src/services/sceneSetUsesService.js': 'scene-set uses: every linked event\'s scene set, not the episode\'s one event',
   'src/utils/eventTermsLock.js': 'the reopen guard: any stamped or brief event of the episode with reopened terms',

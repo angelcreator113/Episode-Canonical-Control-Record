@@ -400,6 +400,9 @@ async function finalizeEpisodeFinancials(episodeId, showId, sequelize, { dryRun 
     if (!dryRun) {
       const { assertEpisodeTermsNotReopened } = require('../utils/eventTermsLock');
       await assertEpisodeTermsNotReopened(rootSequelize, episodeId, { transaction });
+      // A second event with commitments is not booked by this pipeline yet
+      // (services/episodeSecondaryEvents): nothing books for the episode.
+      await require('./episodeSecondaryEvents').assertNoUnsupportedSecondaryObligations(rootSequelize, episodeId, { transaction, doing: 'be finalized' });
     }
     // Then the show (D1, Task #2247): episode before show, the order every
     // ledger writer keeps. This also seeds an unseeded ledger, so the
