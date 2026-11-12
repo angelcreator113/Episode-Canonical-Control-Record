@@ -45,7 +45,7 @@ describe('the pieces', () => {
       attention: [{ tone: 'calm' }], today: '2026-10-26',
     });
     expect(h.tone).toBe('attention');
-    expect(h.text).toBe('Needs attention · Part 1 is 3 of 4 ready · 2 goals behind · next release Sun, Nov 1');
+    expect(h.text).toBe('Needs attention · Phase 1 is 3 of 4 ready · 2 goals behind · next release Sun, Nov 1');
   });
 
   test('on track with no goals behind; an overdue episode says when it was due', () => {
@@ -54,9 +54,9 @@ describe('the pieces', () => {
       release: release({ episode_id: 'e', season_number: 1, number: 3, date: '2026-10-25', source: 'schedule', due: 'overdue' }),
       attention: [{ tone: 'overdue' }], today: '2026-10-26',
     });
-    expect(h.text).toBe('Behind · Part 1 is 3 of 4 ready · no goals behind · E3 was due Sun, Oct 25');
+    expect(h.text).toBe('Behind · Phase 1 is 3 of 4 ready · no goals behind · E3 was due Sun, Oct 25');
     expect(seasonHealth({ arc, roadmap, coverage: { parts: [] }, release: release(null), attention: [], today: '2026-10-26' }).text)
-      .toBe('On track · Part 1 is 3 of 4 ready · no goals behind · not releasing yet');
+      .toBe('On track · Phase 1 is 3 of 4 ready · no goals behind · not releasing yet');
   });
 
   test('a past season: no goals (they are the show\'s), its episodes done, and Season complete', () => {

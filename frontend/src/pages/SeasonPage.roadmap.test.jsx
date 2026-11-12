@@ -94,8 +94,8 @@ describe('Season Arc roadmap on the Season page (§8(ff) PR 1)', () => {
     renderAt('roadmap');
 
     const roadmap = await screen.findByTestId('szn-roadmap');
-    expect(within(roadmap).getByRole('region', { name: 'Part 1: Foundation' })).toBeTruthy();
-    expect(within(roadmap).getByRole('region', { name: 'Part 3: Legacy' })).toBeTruthy();
+    expect(within(roadmap).getByRole('region', { name: 'Phase 1: Foundation' })).toBeTruthy();
+    expect(within(roadmap).getByRole('region', { name: 'Phase 3: Legacy' })).toBeTruthy();
     expect([...roadmap.querySelectorAll('[data-testid^="szn-slot-"]')].filter((el) => /^szn-slot-\d+$/.test(el.dataset.testid))).toHaveLength(24);
 
     const first = screen.getByTestId('szn-slot-1');
@@ -278,8 +278,8 @@ describe('Season Arc roadmap on the Season page (§8(ff) PR 1)', () => {
     });
     renderAt('roadmap');
 
-    expect(within(await screen.findByTestId('szn-slot-2')).getByText('Next')).toBeTruthy();
-    expect(within(screen.getByTestId('szn-slot-3')).queryByText('Next')).toBeNull();
+    expect(within(await screen.findByTestId('szn-slot-2')).getByText('Next open slot')).toBeTruthy();
+    expect(within(screen.getByTestId('szn-slot-3')).queryByText('Next open slot')).toBeNull();
   });
 
   test('at a phase boundary it shows the summary and asks before advancing (Q6)', async () => {

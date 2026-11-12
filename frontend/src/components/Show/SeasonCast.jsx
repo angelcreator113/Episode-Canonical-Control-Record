@@ -71,8 +71,8 @@ export default function SeasonCast({ api, showId, season = null, reloadKey = nul
           <div className="scast-parts">
             {parts.map((p) => (
               <div key={p.phase} className="scast-part" data-testid={`szn-cast-part-${p.phase}`}>
-                <h3 className="scast-part-title">Part {p.phase}{p.title ? ` · ${p.title}` : ''} <span className="szn-muted">E{p.episode_start} – E{p.episode_end}</span></h3>
-                {p.changes.length === 0 ? <p className="szn-muted">No relationship change saved in this part yet.</p> : (
+                <h3 className="scast-part-title">Phase {p.phase}{p.title ? ` · ${p.title}` : ''} <span className="szn-muted">E{p.episode_start} – E{p.episode_end}</span></h3>
+                {p.changes.length === 0 ? <p className="szn-muted">No relationship change saved in this phase yet.</p> : (
                   <ul className="scast-changes">
                     {p.changes.map((c, i) => (
                       <li key={`${c.slot_number}-${i}`}>

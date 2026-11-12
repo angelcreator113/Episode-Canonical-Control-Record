@@ -200,11 +200,11 @@ describe('FullSeasonChoice: Will be a special', () => {
     confirm.mockRestore();
   });
 
-  test('no date yet: after the part in progress, "place it when you know"', async () => {
+  test('no date yet: after the phase in progress, "place it when you know"', async () => {
     answer({ ...CHOICE, event: { ...CHOICE.event, event_date: null, has_date: false }, special_place: { ...CHOICE.special_place, after: 8, label: 'Special · after E8', by: 'no_date' } });
     wrap(<FullSeasonChoice showId="show" eventId="ev" context={CONTEXT} />);
     expect((await screen.findByTestId('fsc-place-reason')).textContent)
-      .toBe('No date yet: place it when you know. For now it follows E8, the last episode of Part 1: Foundation.');
+      .toBe('No date yet: place it when you know. For now it follows E8, the last episode of Phase 1: Foundation.');
   });
 
   test('a special: Move it, Move it to its story position once it has a date, Swap, Season 2, Remove', async () => {

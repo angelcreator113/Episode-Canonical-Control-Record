@@ -82,8 +82,10 @@ function Where() {
   return <span data-testid="where">{loc.pathname}{loc.search}</span>;
 }
 function renderPage(search = '') {
+  // These tests are about a named tab. With no ?tab= the page picks its own default (SeasonPage.defaultTab.test.jsx), so the Overview is named here.
+  const at = /[?&]tab=/.test(search) ? search : `${search ? `${search}&` : '?'}tab=overview`;
   return render(
-    <MemoryRouter initialEntries={[`/shows/show-1/season${search}`]}>
+    <MemoryRouter initialEntries={[`/shows/show-1/season${at}`]}>
       <Routes>
         <Route path="/shows/:showId/season" element={<><SeasonPage /><Where /></>} />
         <Route path="*" element={<Where />} />
@@ -230,7 +232,8 @@ describe('The season switcher', () => {
     expect(screen.getByTestId('szn-season-2').getAttribute('aria-pressed')).toBe('true');
     expect(screen.getByTestId('szn-edit-season')).toBeTruthy();
     fireEvent.click(screen.getByTestId('szn-season-1'));
-    expect(screen.getByTestId('where').textContent).toBe('/shows/show-1/season?season=1');
+    // The tab that was open stays open across the switch.
+    expect(screen.getByTestId('where').textContent).toBe('/shows/show-1/season?tab=overview&season=1');
     await waitFor(() => expect(screen.getByTestId('szn-past-season')).toBeTruthy());
     expect(vi.mocked(api.get).mock.calls.map(([u]) => u)).toEqual(expect.arrayContaining([
       '/api/v1/world/show-1/arc?season=1', '/api/v1/world/show-1/season/roadmap?season=1', '/api/v1/world/show-1/season/insights?season=1',
@@ -242,7 +245,7 @@ describe('The season switcher', () => {
     // A tab link keeps the season.
     expect(screen.getByTestId('szn-stat-slots').getAttribute('href')).toBe('/shows/show-1/season?tab=roadmap&season=1');
     fireEvent.click(screen.getByTestId('szn-past-season-back'));
-    expect(screen.getByTestId('where').textContent).toBe('/shows/show-1/season');
+    expect(screen.getByTestId('where').textContent).toBe('/shows/show-1/season?tab=overview');
   });
 
   test('a past season keeps its episodes on the Episodes tab', async () => {

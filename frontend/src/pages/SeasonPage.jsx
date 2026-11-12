@@ -84,7 +84,8 @@ import OpportunitiesTab from '../components/Show/OpportunitiesTab';
 import { S as PRODUCER_S } from '../components/Show/producerStyles';
 import CareerGoals, { NarrativeDebt, SeasonPhasesHistory } from '../components/Show/CareerGoals';
 import CareerBrands from '../components/Career/CareerBrands';
-import { SEASON_TABS, tabFrom, seasonStats, heroChips, slotsLine, goalsLine, eventsLine, seasonPageHref } from '../lib/seasonPage';
+import { SEASON_TABS, tabForAddress, seasonStats, heroChips, slotsLine, goalsLine, eventsLine, seasonPageHref } from '../lib/seasonPage';
+import { episodesInProduction } from '../components/Show/ShowOverview';
 import { useReleaseSchedule, nextReleaseOf } from '../lib/releaseSchedule';
 import { useGoalCoverage } from '../lib/goalCoverage';
 import { attentionItems, tabBadges, seasonEpisodes, showsAllSeasons, ALL_SEASONS_PARAM } from '../lib/seasonAttention';
@@ -340,12 +341,14 @@ export function SeasonHero({ arc, roadmap, showName, nextSeason, onEdit, onPick,
 export default function SeasonPage() {
   const { showId } = useParams();
   const [params, setParams] = useSearchParams();
-  const tab = tabFrom(params.get('tab'));
+  const tabParam = params.get('tab');
   // ?season=N: another season of the show (the switcher); absent is the one in progress.
   const season = /^[1-9]\d{0,2}$/.test(params.get('season') || '') ? params.get('season') : null;
   const [toast, setToast] = useState(null);
   const plan = useSeasonPlan({ showId, api, setToast, season });
   const { arc, roadmap, goals, insights, panel, setPanel, setupNote, setSetupNote, loading, nextSeason, isCurrent } = plan;
+  // The tab the address names; with none, the Roadmap once the season has a planned or started slot, else the Overview.
+  const tab = tabForAddress(tabParam, roadmap);
   const [showName, setShowName] = useState(null);
   const [episodes, setEpisodes] = useState([]);
   const [episodesTotal, setEpisodesTotal] = useState(null);
@@ -474,6 +477,8 @@ export default function SeasonPage() {
     reloadShowData: loadShowData,
     onEdit: () => openPanel('edit'), onPanel: openPanel,
     release, attention, hrefFor, readOnly: !isCurrent,
+    // The show's episode in production (Producer Mode's rule), once the episodes have been read; null when unknown.
+    producingEpisodeId: showData.loaded && !showData.failed.includes('episodes') ? (episodesInProduction(episodes)[0]?.id || null) : null,
     // The season shown (null: the one in progress), for the reads that follow the switcher; the deals for the calendar's deadlines.
     season, opps,
   };
@@ -526,7 +531,7 @@ export default function SeasonPage() {
             <>
               <section className="szn-empty" data-testid="szn-empty">
                 <h1 className="szn-empty-title">No season set up yet</h1>
-                <p>Name the season and its three parts, then place the episodes and events you already have.</p>
+                <p>Name the season and its three phases, then place the episodes and events you already have.</p>
               </section>
               <SeasonSetupForm mode="create" showId={showId} seasonNumber={nextSeason} onSubmit={plan.handleSeed} />
             </>

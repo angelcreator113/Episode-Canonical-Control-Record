@@ -14,8 +14,8 @@ import { slotTitle } from './seasonArc';
  * here, so the Season page is where the season is run).
  */
 export const SEASON_TABS = [
-  { key: 'overview', label: 'Overview', note: 'The season at a glance: its parts, key events, story threads, secrets and goals.' },
-  { key: 'roadmap', label: 'Roadmap', note: "The season's episode slots, part by part: what each one is for and what fills it." },
+  { key: 'overview', label: 'Overview', note: 'The season at a glance: its phases, key events, story threads, secrets and goals.' },
+  { key: 'roadmap', label: 'Roadmap', note: "The season's episode slots, phase by phase: what each one is for and what fills it." },
   // The production board (components/Show/ShowEpisodesBoard), from Producer Mode's Episodes tab.
   { key: 'episodes', label: 'Episodes', note: 'Every episode this season and where it is in production.' },
   // The event library (components/Show/EventLibrary), from Producer Mode's ?tab=events (2026-10-25).
@@ -24,7 +24,7 @@ export const SEASON_TABS = [
   { key: 'opportunities', label: 'Opportunities', note: 'Offers and bookings from brands, from the first offer to paid.' },
   { key: 'story', label: 'Story', note: 'The threads, twists and reveals the season is building, and what the story still needs.' },
   // Who's in this season (components/Show/SeasonCast; Evoni, 2026-10-26, round 3).
-  { key: 'cast', label: 'Cast', note: "Who is in which episode, and which relationships changed in each part." },
+  { key: 'cast', label: 'Cast', note: "Who is in which episode, and which relationships changed in each phase." },
   // The plant tracker (components/Show/SeasonPlants, 2026-10-25).
   { key: 'plants', label: 'Plants', note: 'Every detail a script plants for later: where each one pays off, and the ones that never do.' },
   // Lala's career goals and the brands she has worked with (Evoni, 2026-10-25:
@@ -42,13 +42,29 @@ export const tabFrom = (value) => {
 };
 
 /**
+ * The tab the Season page opens on when its address names none (Evoni,
+ * 2026-11-12): the Roadmap once any slot is planned or started (an event
+ * pencilled, an episode in production or done), else the Overview. A
+ * `?tab=` in the address always wins; this is only for its absence.
+ */
+export function defaultSeasonTab(roadmap) {
+  const slots = (roadmap?.phases || []).flatMap((p) => p.slots || []);
+  return slots.some((s) => ['event_ready', 'in_production', 'done'].includes(s?.state)) ? 'roadmap' : 'overview';
+}
+
+/** The tab for an address: the one it names, else the default for this season. */
+export const tabForAddress = (value, roadmap) => (value ? tabFrom(value) : defaultSeasonTab(roadmap));
+
+/**
  * The Season page, on one of its tabs: every in-app link to the season goes
  * through here. `extra` adds query values after the tab (e.g. deal_with
  * for the Opportunities tab's new-deal form).
  */
 export function seasonPageHref(showId, tab = null, extra = null) {
   const q = new URLSearchParams();
-  if (tab && tab !== 'overview') q.set('tab', tab);
+  // The Overview is named too: an address with no tab opens the season's
+  // default tab (defaultSeasonTab), which may be the Roadmap.
+  if (tab) q.set('tab', tab);
   for (const [k, v] of Object.entries(extra || {})) if (v != null && v !== '') q.set(k, String(v));
   const qs = q.toString();
   return `/shows/${encodeURIComponent(showId)}/season${qs ? `?${qs}` : ''}`;
@@ -180,7 +196,7 @@ export const eventsLine = (stats) => `${stats.events.scheduled} scheduled · ${s
 
 /** The hero's chips: "24 Episodes", "3 Parts", the dates when set. */
 export function heroChips({ roadmap, arc }) {
-  const chips = [plural(roadmap?.slot_count ?? 24, 'Episode', 'Episodes'), plural((arc?.phases || []).length || 3, 'Part', 'Parts')];
+  const chips = [plural(roadmap?.slot_count ?? 24, 'Episode', 'Episodes'), plural((arc?.phases || []).length || 3, 'Phase', 'Phases')];
   const dates = dateRange(arc?.starts_on, arc?.ends_on);
   if (dates) chips.push(dates);
   return chips;

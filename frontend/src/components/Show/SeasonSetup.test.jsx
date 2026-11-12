@@ -23,8 +23,8 @@ describe('the split', () => {
     expect(splitProblem([8, 8, 8])).toBeNull();
     expect(splitProblem([6, 10, 8])).toBeNull();
     expect(splitProblem([8, 8, 7])).toBe('These add up to 23; the season has 24 episodes.');
-    expect(splitProblem([0, 12, 12])).toBe('Each part needs at least one episode.');
-    expect(splitProblem(['', 12, 12])).toBe('Each part takes a whole number of episodes.');
+    expect(splitProblem([0, 12, 12])).toBe('Each phase needs at least one episode.');
+    expect(splitProblem(['', 12, 12])).toBe('Each phase takes a whole number of episodes.');
     expect(splitRanges([6, 10, 8])).toEqual(['E1–E6', 'E7–E16', 'E17–E24']);
   });
   test('defaults, and a season read back for Edit', () => {
@@ -70,8 +70,8 @@ describe("each part's moods (2026-10-25)", () => {
     const form = formFromArc(ARC);
     expect(form.phases.map((p) => [p.emotional_arc, p.feed_tone])).toEqual([['wonder → doubt', 'Loud and new.'], ['', ''], ['', '']]);
     expect(moodProblem(form.phases)).toBeNull();
-    expect(moodProblem([{ emotional_arc: 'x'.repeat(MOOD_MAX.emotional_arc + 1) }])).toBe("Part 1's emotional arc is longer than 300 characters.");
-    expect(moodProblem([{}, { feed_tone: 'y'.repeat(MOOD_MAX.feed_tone + 1) }])).toBe("Part 2's feed tone is longer than 500 characters.");
+    expect(moodProblem([{ emotional_arc: 'x'.repeat(MOOD_MAX.emotional_arc + 1) }])).toBe("Phase 1's emotional arc is longer than 300 characters.");
+    expect(moodProblem([{}, { feed_tone: 'y'.repeat(MOOD_MAX.feed_tone + 1) }])).toBe("Phase 2's feed tone is longer than 500 characters.");
   });
 
   test('Edit season shows each part\'s moods, the default as the hint, and sends what she writes (empty for the default)', async () => {
@@ -95,7 +95,7 @@ describe("each part's moods (2026-10-25)", () => {
   test('a mood too long to save blocks Save and says why', () => {
     const arc = { ...ARC, phases: [{ ...ARC.phases[0], emotional_arc: 'x'.repeat(301) }, ARC.phases[1], ARC.phases[2]] };
     render(<SeasonSetupForm mode="edit" seasonNumber={2} initial={formFromArc(arc)} onSubmit={vi.fn()} />);
-    expect(screen.getByTestId('sst-missing').textContent).toBe("Part 1's emotional arc is longer than 300 characters.");
+    expect(screen.getByTestId('sst-missing').textContent).toBe("Phase 1's emotional arc is longer than 300 characters.");
     expect(screen.getByTestId('sst-submit').disabled).toBe(true);
   });
 });
@@ -129,21 +129,21 @@ describe('Set up the season form', () => {
   test('a part with no episodes, or no name, cannot be sent', () => {
     render(<SeasonSetupForm onSubmit={vi.fn()} />);
     fireEvent.change(screen.getByTestId('sst-split-3'), { target: { value: '0' } });
-    expect(screen.getByTestId('sst-split-note').textContent).toBe('Each part needs at least one episode.');
+    expect(screen.getByTestId('sst-split-note').textContent).toBe('Each phase needs at least one episode.');
     fireEvent.change(screen.getByTestId('sst-split-3'), { target: { value: '8' } });
     fireEvent.change(screen.getByTestId('sst-part-title-3'), { target: { value: ' ' } });
-    expect(screen.getByTestId('sst-missing').textContent).toBe('Part 3 needs a name.');
+    expect(screen.getByTestId('sst-missing').textContent).toBe('Phase 3 needs a name.');
     expect(screen.getByTestId('sst-submit').disabled).toBe(true);
   });
 
   test('Edit: the server’s refusal is shown in the form, in words', async () => {
-    const onSubmit = vi.fn().mockRejectedValue({ response: { data: { error: 'This split would move a started episode to another part: E7 ("The Gallery") has started in Part 2 (Rooms).' } } });
+    const onSubmit = vi.fn().mockRejectedValue({ response: { data: { error: 'This split would move a started episode to another part: E7 ("The Gallery") has started in Phase 2 (Rooms).' } } });
     render(<SeasonSetupForm mode="edit" seasonNumber={1} initial={{ ...defaultForm(1), split: [6, 10, 8] }} onSubmit={onSubmit} onCancel={vi.fn()} />);
     expect(screen.getByRole('heading', { name: /Edit Season 1/ })).toBeTruthy();
     fireEvent.change(screen.getByTestId('sst-split-1'), { target: { value: '8' } });
     fireEvent.change(screen.getByTestId('sst-split-2'), { target: { value: '8' } });
     fireEvent.click(screen.getByTestId('sst-submit'));
-    expect((await screen.findByTestId('sst-error')).textContent).toContain('E7 ("The Gallery") has started in Part 2');
+    expect((await screen.findByTestId('sst-error')).textContent).toContain('E7 ("The Gallery") has started in Phase 2');
   });
 });
 
@@ -175,8 +175,8 @@ describe("Edit season: the Season page's fields (2026-10-25)", () => {
     expect(within(list).getAllByRole('button').map((b) => b.getAttribute('aria-label'))).toEqual(['Use Rooftop dusk for the cover', 'Use Atelier for the cover']);
     fireEvent.click(within(list).getByLabelText('Use Rooftop dusk for the cover'));
     expect(screen.getByAltText('Cover: chosen').getAttribute('src')).toBe('https://cdn.example.com/rooftop.jpg');
-    fireEvent.click(screen.getByTestId('sst-picture-open-Part 2 picture'));
-    fireEvent.click(within(await screen.findByTestId('sst-picture-list-Part 2 picture')).getByLabelText('Use Atelier for the part 2 picture'));
+    fireEvent.click(screen.getByTestId('sst-picture-open-Phase 2 picture'));
+    fireEvent.click(within(await screen.findByTestId('sst-picture-list-Phase 2 picture')).getByLabelText('Use Atelier for the phase 2 picture'));
     fireEvent.click(screen.getByTestId('sst-submit'));
     await waitFor(() => expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
       logline: 'Lala earns her place in the luxury tier.', description: 'From bold fits to bigger opportunities.',
@@ -294,7 +294,7 @@ describe('Draft the season', () => {
     const onSaved = vi.fn();
     render(<SeasonDraft showId="show-1" api={api} phases={PHASES} onSaved={onSaved} onClose={vi.fn()} />);
     fireEvent.click(screen.getByTestId('sst-scope-2'));
-    expect(screen.getByTestId('sst-draft-go').textContent).toContain('Draft Part 2: Rooms');
+    expect(screen.getByTestId('sst-draft-go').textContent).toContain('Draft Phase 2: Rooms');
     fireEvent.click(screen.getByTestId('sst-draft-go'));
     await screen.findByTestId('sst-drafts');
     expect(api.post).toHaveBeenCalledWith('/api/v1/world/show-1/season/draft', { phase: 2 });
