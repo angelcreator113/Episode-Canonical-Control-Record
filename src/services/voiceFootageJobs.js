@@ -273,7 +273,14 @@ async function statusForEpisode(sequelize, episodeId) {
 /** A name for this worker process in job rows (host and pid). */
 const workerName = () => `${os.hostname()}:${process.pid}`.slice(0, 120);
 
+/** A take's jobs that are waiting or running now (Evoni, 2026-11-12), for the take's removal to ask. */
+async function activeJobsForClip(sequelize, clipId, transaction = null) {
+  return rows(sequelize, `SELECT id, kind, status FROM voice_footage_jobs
+    WHERE raw_clip_id = :clipId AND status IN ('queued', 'running') AND deleted_at IS NULL ORDER BY created_at, id`, { clipId }, transaction);
+}
+
 module.exports = {
+  activeJobsForClip,
   KIND_EXTRACT, HEARTBEAT_MS, STALE_MS, MAX_ATTEMPTS, RETRY_DELAYS_MS, ELIGIBLE_PERFORMERS,
   FootageJobError, enabled, footageExtractionEnabledFor, extractKey,
   enqueueExtract, onClipUploaded, prepare, claimNext, recoverStale, heartbeat, succeed, fail, statusForEpisode, workerName,

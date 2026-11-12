@@ -1,426 +1,104 @@
-/* eslint-disable no-unused-vars */
 /**
- * ActivityLog Model Unit Tests
+ * ActivityLog: the one audit writer (issue #1948; Evoni, 2026-11-11). The
+ * model itself, with no database: what an entry becomes, what is refused, and
+ * what reaches ActivityLog.create. tests/integration/activityLog… writes real
+ * rows.
  */
+const { Sequelize } = require('sequelize');
+const defineActivityLog = require('../../../src/models/ActivityLog');
 
-jest.mock('../../../src/models', () => ({
-  ActivityLog: {},
-}));
+const sequelize = new Sequelize('postgres://user:pass@127.0.0.1:1/none', { logging: false });
+const ActivityLog = defineActivityLog(sequelize);
+const UUID = '0b0f6a1e-6f0e-4f0e-9d53-3d5f3b9d7c11';
 
-const { ActivityLog: ActivityLogModel } = require('../../../src/models');
+afterEach(() => jest.restoreAllMocks());
 
-describe('ActivityLog Model', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
+describe('the model is the table production has', () => {
+  test('six columns besides id, all nullable, with production\'s names', () => {
+    const fields = Object.fromEntries(Object.entries(ActivityLog.rawAttributes).map(([k, a]) => [k, a.field]));
+    expect(fields).toEqual({
+      id: 'id', userId: 'user_id', action: 'action', resourceType: 'resource_type', resourceId: 'resource_id',
+      changes: 'changes', createdAt: 'created_at',
+    });
+    for (const name of ['userId', 'action', 'resourceType', 'resourceId', 'changes', 'createdAt']) {
+      expect(ActivityLog.rawAttributes[name].allowNull).toBe(true);
+    }
+    expect(ActivityLog.tableName).toBe('activity_logs');
+    expect(ActivityLog.options.timestamps).toBe(false);
   });
 
-  describe('Model Methods', () => {
-    test('should have logActivity method', () => {
-      ActivityLogModel.logActivity = jest.fn().mockResolvedValue({ id: 1 });
+  test('nothing about IP addresses, user agents, old or new value columns, or enums', () => {
+    const names = Object.values(ActivityLog.rawAttributes).map((a) => a.field);
+    for (const gone of ['ip_address', 'user_agent', 'old_values', 'new_values', 'action_type', 'timestamp']) {
+      expect(names).not.toContain(gone);
+    }
+    expect(Object.values(ActivityLog.rawAttributes).some((a) => a.type.key === 'ENUM')).toBe(false);
+  });
+});
 
-      expect(typeof ActivityLogModel.logActivity).toBe('function');
-    });
+describe('normalizeEntry: what an entry becomes', () => {
+  const n = ActivityLog.normalizeEntry;
 
-    test('should have getUserHistory method', () => {
-      ActivityLogModel.getUserHistory = jest.fn().mockResolvedValue([]);
-
-      expect(typeof ActivityLogModel.getUserHistory).toBe('function');
-    });
-
-    test('should have getResourceHistory method', () => {
-      ActivityLogModel.getResourceHistory = jest.fn().mockResolvedValue([]);
-
-      expect(typeof ActivityLogModel.getResourceHistory).toBe('function');
-    });
-
-    test('should have getAuditTrail method', () => {
-      ActivityLogModel.getAuditTrail = jest.fn().mockResolvedValue([]);
-
-      expect(typeof ActivityLogModel.getAuditTrail).toBe('function');
-    });
-
-    test('should have getStats method', () => {
-      ActivityLogModel.getStats = jest.fn().mockResolvedValue({});
-
-      expect(typeof ActivityLogModel.getStats).toBe('function');
-    });
-
-    test('should have create method (standard Sequelize)', () => {
-      ActivityLogModel.create = jest.fn().mockResolvedValue({ id: 1 });
-
-      expect(typeof ActivityLogModel.create).toBe('function');
-    });
-
-    test('should have findAll method (standard Sequelize)', () => {
-      ActivityLogModel.findAll = jest.fn().mockResolvedValue([]);
-
-      expect(typeof ActivityLogModel.findAll).toBe('function');
-    });
-
-    test('should have findByPk method (standard Sequelize)', () => {
-      ActivityLogModel.findByPk = jest.fn().mockResolvedValue({ id: 1 });
-
-      expect(typeof ActivityLogModel.findByPk).toBe('function');
-    });
+  test('a UUID resource id is kept as text; action and resource type are lower-cased', () => {
+    expect(n({ userId: 'user-1', action: 'EDIT', resourceType: 'Episode', resourceId: UUID, changes: { before: { a: 1 }, after: { a: 2 } } }))
+      .toEqual({ userId: 'user-1', action: 'edit', resourceType: 'episode', resourceId: UUID, changes: { before: { a: 1 }, after: { a: 2 } } });
+    expect(n({ action: 'create', resourceType: 'job', resourceId: 42 }).resourceId).toBe('42');
   });
 
-  describe('logActivity Method', () => {
-    test('should log activity with required fields', async () => {
-      ActivityLogModel.logActivity = jest.fn().mockResolvedValue({ id: 1 });
-
-      const result = await ActivityLogModel.logActivity({
-        userId: 'user-123',
-        actionType: 'create',
-        resourceType: 'episode',
-        resourceId: 1,
-      });
-
-      expect(result.id).toBe(1);
-      expect(ActivityLogModel.logActivity).toHaveBeenCalledWith(
-        expect.objectContaining({
-          userId: 'user-123',
-          actionType: 'create',
-          resourceType: 'episode',
-          resourceId: 1,
-        })
-      );
-    });
-
-    test('should log activity with optional fields', async () => {
-      ActivityLogModel.logActivity = jest.fn().mockResolvedValue({ id: 1 });
-
-      await ActivityLogModel.logActivity({
-        userId: 'user-456',
-        actionType: 'edit',
-        resourceType: 'thumbnail',
-        resourceId: 2,
-        oldValues: { status: 'draft' },
-        newValues: { status: 'published' },
-        ipAddress: '192.168.1.1',
-        userAgent: 'Mozilla/5.0',
-      });
-
-      expect(ActivityLogModel.logActivity).toHaveBeenCalled();
-    });
-
-    test('should support different action types', async () => {
-      ActivityLogModel.logActivity = jest.fn().mockResolvedValue({ id: 1 });
-
-      const actions = ['view', 'create', 'edit', 'delete', 'download', 'upload'];
-
-      for (const action of actions) {
-        ActivityLogModel.logActivity = jest.fn().mockResolvedValue({ id: 1 });
-
-        await ActivityLogModel.logActivity({
-          userId: 'user-123',
-          actionType: action,
-          resourceType: 'episode',
-          resourceId: 1,
-        });
-
-        expect(ActivityLogModel.logActivity).toHaveBeenCalled();
-      }
-    });
-
-    test('should support different resource types', async () => {
-      const resources = ['episode', 'thumbnail', 'metadata', 'processing'];
-
-      for (const resource of resources) {
-        ActivityLogModel.logActivity = jest.fn().mockResolvedValue({ id: 1 });
-
-        await ActivityLogModel.logActivity({
-          userId: 'user-123',
-          actionType: 'view',
-          resourceType: resource,
-          resourceId: 1,
-        });
-
-        expect(ActivityLogModel.logActivity).toHaveBeenCalled();
-      }
-    });
-
-    test('should handle database errors', async () => {
-      ActivityLogModel.logActivity = jest.fn().mockRejectedValue(new Error('DB Error'));
-
-      try {
-        await ActivityLogModel.logActivity({
-          userId: 'user-123',
-          actionType: 'view',
-          resourceType: 'episode',
-          resourceId: 1,
-        });
-        fail('Should have thrown error');
-      } catch (error) {
-        expect(error.message).toBe('DB Error');
-      }
-    });
+  test.each([undefined, null, '', 'anonymous', 'Anonymous', 'unknown', 'system'])('user id %p is stored as NULL, never as a placeholder', (userId) => {
+    expect(n({ userId, action: 'create', resourceType: 'file', resourceId: UUID }).userId).toBeNull();
   });
 
-  describe('getUserHistory Method', () => {
-    test('should retrieve user activity history', async () => {
-      const mockLogs = [
-        { id: 1, userId: 'user-123', actionType: 'view' },
-        { id: 2, userId: 'user-123', actionType: 'create' },
-      ];
-
-      ActivityLogModel.getUserHistory = jest.fn().mockResolvedValue(mockLogs);
-
-      const result = await ActivityLogModel.getUserHistory('user-123');
-
-      expect(result.length).toBe(2);
-      expect(result[0].userId).toBe('user-123');
-    });
-
-    test('should support pagination options', async () => {
-      ActivityLogModel.getUserHistory = jest.fn().mockResolvedValue([]);
-
-      await ActivityLogModel.getUserHistory('user-123', { limit: 50, offset: 0 });
-
-      expect(ActivityLogModel.getUserHistory).toHaveBeenCalledWith(
-        'user-123',
-        expect.objectContaining({ limit: 50, offset: 0 })
-      );
-    });
-
-    test('should return empty array when no records found', async () => {
-      ActivityLogModel.getUserHistory = jest.fn().mockResolvedValue([]);
-
-      const result = await ActivityLogModel.getUserHistory('user-nonexistent');
-
-      expect(result).toEqual([]);
-    });
-
-    test('should handle database errors', async () => {
-      ActivityLogModel.getUserHistory = jest.fn().mockRejectedValue(new Error('DB Error'));
-
-      try {
-        await ActivityLogModel.getUserHistory('user-123');
-        fail('Should have thrown error');
-      } catch (error) {
-        expect(error.message).toBe('DB Error');
-      }
-    });
+  test('no resource id and no changes are NULL', () => {
+    expect(n({ userId: 'u', action: 'delete', resourceType: 'metadata' })).toMatchObject({ resourceId: null, changes: null });
+    expect(n({ userId: 'u', action: 'delete', resourceType: 'metadata', changes: {} }).changes).toBeNull();
   });
 
-  describe('getResourceHistory Method', () => {
-    test('should retrieve resource activity history', async () => {
-      const mockLogs = [
-        { id: 1, resourceId: 1, resourceType: 'episode' },
-        { id: 2, resourceId: 1, resourceType: 'episode' },
-      ];
-
-      ActivityLogModel.getResourceHistory = jest.fn().mockResolvedValue(mockLogs);
-
-      const result = await ActivityLogModel.getResourceHistory('episode', 1);
-
-      expect(result.length).toBe(2);
-      expect(result[0].resourceId).toBe(1);
-    });
-
-    test('should support different resource types', async () => {
-      ActivityLogModel.getResourceHistory = jest.fn().mockResolvedValue([]);
-
-      const resources = ['episode', 'thumbnail', 'metadata', 'processing'];
-
-      for (const resource of resources) {
-        ActivityLogModel.getResourceHistory = jest.fn().mockResolvedValue([]);
-
-        await ActivityLogModel.getResourceHistory(resource, 1);
-
-        expect(ActivityLogModel.getResourceHistory).toHaveBeenCalled();
-      }
-    });
-
-    test('should return empty array on error', async () => {
-      ActivityLogModel.getResourceHistory = jest.fn().mockRejectedValue(new Error('Error'));
-
-      try {
-        await ActivityLogModel.getResourceHistory('episode', 1);
-        fail('Should have thrown error');
-      } catch (error) {
-        expect(error.message).toBe('Error');
-      }
-    });
+  test.each([
+    [undefined, /takes one object/],
+    ['user-1', /takes one object/],
+    [{ resourceType: 'episode' }, /action is required/],
+    [{ action: 'edit' }, /resourceType is required/],
+    [{ action: 'edit', resourceType: 'episode', changes: 'title' }, /changes is an object or null/],
+    [{ action: 'edit', resourceType: 'episode', changes: [1] }, /changes is an object or null/],
+  ])('refuses %j', (entry, message) => {
+    expect(() => n(entry)).toThrow(message);
   });
 
-  describe('getAuditTrail Method', () => {
-    test('should retrieve full audit trail', async () => {
-      const mockTrail = [
-        { id: 1, userId: 'user-123', actionType: 'view' },
-        { id: 2, userId: 'user-456', actionType: 'edit' },
-      ];
+  test('a page view is refused: views are not audited', () => {
+    expect(() => n({ userId: 'u', action: 'view', resourceType: 'episode', resourceId: UUID })).toThrow(/page views are not audited/);
+    expect(() => n({ userId: 'u', action: 'VIEW', resourceType: 'episode' })).toThrow(/page views are not audited/);
+  });
+});
 
-      ActivityLogModel.getAuditTrail = jest.fn().mockResolvedValue(mockTrail);
+describe('logActivity: one insert, the caller\'s transaction, and no swallowed failure', () => {
+  const entry = { userId: 'user-1', action: 'edit', resourceType: 'episode', resourceId: UUID, changes: { after: { title: 'x' } } };
 
-      const result = await ActivityLogModel.getAuditTrail({ limit: 10 });
-
-      expect(result.length).toBe(2);
-    });
-
-    test('should support filtering options', async () => {
-      ActivityLogModel.getAuditTrail = jest.fn().mockResolvedValue([]);
-
-      await ActivityLogModel.getAuditTrail({
-        actionType: 'delete',
-        limit: 50,
-        startDate: '2024-01-01',
-      });
-
-      expect(ActivityLogModel.getAuditTrail).toHaveBeenCalled();
-    });
-
-    test('should return empty array on error', async () => {
-      ActivityLogModel.getAuditTrail = jest.fn().mockRejectedValue(new Error('Error'));
-
-      try {
-        await ActivityLogModel.getAuditTrail();
-        fail('Should have thrown error');
-      } catch (error) {
-        expect(error.message).toBe('Error');
-      }
-    });
+  test('writes exactly the five columns; created_at is left to the database', async () => {
+    const create = jest.spyOn(ActivityLog, 'create').mockResolvedValue({ id: 7 });
+    await expect(ActivityLog.logActivity(entry)).resolves.toEqual({ id: 7 });
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(create).toHaveBeenCalledWith(
+      { userId: 'user-1', action: 'edit', resourceType: 'episode', resourceId: UUID, changes: { after: { title: 'x' } } },
+      { fields: ['userId', 'action', 'resourceType', 'resourceId', 'changes'] });
   });
 
-  describe('getStats Method', () => {
-    test('should retrieve activity statistics', async () => {
-      const mockStats = {
-        totalActions: 100,
-        byType: { view: 50, create: 30, edit: 20 },
-      };
-
-      ActivityLogModel.getStats = jest.fn().mockResolvedValue(mockStats);
-
-      const result = await ActivityLogModel.getStats('7d');
-
-      expect(result.totalActions).toBe(100);
-      expect(result.byType.view).toBe(50);
-    });
-
-    test('should support different time ranges', async () => {
-      ActivityLogModel.getStats = jest.fn().mockResolvedValue({});
-
-      const ranges = ['1d', '7d', '30d', '90d'];
-
-      for (const range of ranges) {
-        ActivityLogModel.getStats = jest.fn().mockResolvedValue({});
-
-        await ActivityLogModel.getStats(range);
-
-        expect(ActivityLogModel.getStats).toHaveBeenCalledWith(range);
-      }
-    });
-
-    test('should return empty object on error', async () => {
-      ActivityLogModel.getStats = jest.fn().mockRejectedValue(new Error('Error'));
-
-      try {
-        await ActivityLogModel.getStats('7d');
-        fail('Should have thrown error');
-      } catch (error) {
-        expect(error.message).toBe('Error');
-      }
-    });
+  test('passes the caller\'s transaction through', async () => {
+    const create = jest.spyOn(ActivityLog, 'create').mockResolvedValue({ id: 8 });
+    const transaction = { id: 'tx' };
+    await ActivityLog.logActivity(entry, { transaction });
+    expect(create.mock.calls[0][1]).toEqual({ fields: ['userId', 'action', 'resourceType', 'resourceId', 'changes'], transaction });
   });
 
-  describe('Standard Sequelize Methods', () => {
-    test('should support create', async () => {
-      ActivityLogModel.create = jest.fn().mockResolvedValue({ id: 1, userId: 'user-123' });
-
-      const result = await ActivityLogModel.create({
-        userId: 'user-123',
-        actionType: 'view',
-        resourceType: 'episode',
-        resourceId: 1,
-      });
-
-      expect(result.id).toBe(1);
-    });
-
-    test('should support findAll', async () => {
-      ActivityLogModel.findAll = jest.fn().mockResolvedValue([
-        { id: 1, userId: 'user-123' },
-        { id: 2, userId: 'user-456' },
-      ]);
-
-      const result = await ActivityLogModel.findAll();
-
-      expect(result.length).toBe(2);
-    });
-
-    test('should support findByPk', async () => {
-      ActivityLogModel.findByPk = jest.fn().mockResolvedValue({ id: 1, userId: 'user-123' });
-
-      const result = await ActivityLogModel.findByPk(1);
-
-      expect(result.id).toBe(1);
-    });
-
-    test('should support findOne', async () => {
-      ActivityLogModel.findOne = jest.fn().mockResolvedValue({ id: 1, userId: 'user-123' });
-
-      const result = await ActivityLogModel.findOne({ where: { userId: 'user-123' } });
-
-      expect(result.id).toBe(1);
-    });
-
-    test('should support update', async () => {
-      const mockLog = { id: 1, userId: 'user-123', update: jest.fn() };
-      mockLog.update.mockResolvedValue(mockLog);
-
-      const result = await mockLog.update({ userAgent: 'Chrome' });
-
-      expect(result.id).toBe(1);
-    });
-
-    test('should support destroy', async () => {
-      const mockLog = { id: 1, destroy: jest.fn() };
-
-      await mockLog.destroy();
-
-      expect(mockLog.destroy).toHaveBeenCalled();
-    });
+  test('a database failure rejects: the writer never hides it', async () => {
+    jest.spyOn(ActivityLog, 'create').mockRejectedValue(new Error('column "userId" does not exist'));
+    await expect(ActivityLog.logActivity(entry)).rejects.toThrow('column "userId" does not exist');
   });
 
-  describe('Sequelize Association Support', () => {
-    test('should support hasMany', () => {
-      ActivityLogModel.hasMany = jest.fn();
-
-      ActivityLogModel.hasMany({
-        model: 'Episode',
-        foreignKey: 'episodeId',
-      });
-
-      expect(ActivityLogModel.hasMany).toHaveBeenCalled();
-    });
-
-    test('should support belongsTo', () => {
-      ActivityLogModel.belongsTo = jest.fn();
-
-      ActivityLogModel.belongsTo('User', { foreignKey: 'userId' });
-
-      expect(ActivityLogModel.belongsTo).toHaveBeenCalled();
-    });
-  });
-
-  describe('Hook Support', () => {
-    test('should support beforeCreate hook', () => {
-      ActivityLogModel.beforeCreate = jest.fn();
-
-      ActivityLogModel.beforeCreate((log) => {
-        log.timestamp = new Date();
-      });
-
-      expect(ActivityLogModel.beforeCreate).toHaveBeenCalled();
-    });
-
-    test('should support beforeValidate hook', () => {
-      ActivityLogModel.beforeValidate = jest.fn();
-
-      ActivityLogModel.beforeValidate((log) => {
-        // normalize data
-      });
-
-      expect(ActivityLogModel.beforeValidate).toHaveBeenCalled();
-    });
+  test('a bad entry rejects before anything is sent', async () => {
+    const create = jest.spyOn(ActivityLog, 'create').mockResolvedValue({});
+    await expect(ActivityLog.logActivity({ action: 'view', resourceType: 'episode' })).rejects.toThrow(/page views/);
+    await expect(ActivityLog.logActivity('user-1', 'edit', 'episode', UUID)).rejects.toThrow(/takes one object/);
+    expect(create).not.toHaveBeenCalled();
   });
 });

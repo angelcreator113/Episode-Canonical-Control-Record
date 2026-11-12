@@ -139,6 +139,8 @@ describe("Start's copy of the event's pieces (generateEpisodeFromEvent)", () => 
         QueryTypes: { SELECT: 'SELECT' },
         query: jest.fn(async (sql, opts = {}) => {
           if (/MAX\(episode_number\)/.test(sql)) return [[{ next_num: 4 }]];
+          // Start's lock on the event, which also asks that it is not deleted (lockLiveEvent).
+          if (/^SELECT id, used_in_episode_id, deleted_at FROM world_events WHERE id = :eventId FOR UPDATE$/.test(sql)) return [[{ id: opts.replacements.eventId, used_in_episode_id: null, deleted_at: null }]];
           if (/^UPDATE world_events SET status = 'used'/.test(sql)) return [[{ id: opts.replacements.eventId }]];
           if (/INSERT INTO episode_todo_lists/.test(sql)) return [[{ id: 'todo-1' }]];
           return [[]];

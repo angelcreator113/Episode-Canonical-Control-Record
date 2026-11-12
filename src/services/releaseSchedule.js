@@ -50,6 +50,14 @@
  * skip a holiday and the rest follow it) and never landing on or before the
  * episode before it.
  *
+ * Release order (A2, migration 20261110230000): a season slot's place in the
+ * release order is COALESCE(release_position, slot_number). The numbers above
+ * stay story numbers (the slot number: "Episode 5" is always slot 5), and
+ * every output here stays keyed by them; only the order the release days are
+ * handed out in follows the release positions. With no release position set
+ * (the case until Move/Swap exists) that order is 1, 2, 3 … and every date
+ * is what it was.
+ *
  * Time zones: the release time is a wall-clock time in Evoni's zone
  * ("10:00 her time stays 10:00 across DST"). Dates and times are shown as
  * stored, never converted. The instant (for "releases in 2 days" and
@@ -216,8 +224,10 @@ function seasonStart(schedule, season, first) {
 /**
  * Each episode's release date. episodes: [{ id, episode_number, air_date,
  * status, season_number?, slot_number? }]; seasons: [{ season_number,
- * slot_count, starts_on }] (the show's seasons, so an empty slot has a date
- * too); without it, one season of slotCount slots starting baseDate.
+ * slot_count, starts_on, positions? }] (the show's seasons, so an empty slot
+ * has a date too; positions is { slot_number: release_position } for the
+ * slots that have one); without it, one season of slotCount slots starting
+ * baseDate.
  * An entry is { number, season_number, episode_id, date, time, source: 'hand'|'schedule'|'preview' }.
  */
 function computeDates({ schedule = null, episodes = [], slotCount = 0, baseDate = null, now = new Date(), seasons = null, currentSeason = null } = {}) {
@@ -280,9 +290,17 @@ function computeDates({ schedule = null, episodes = [], slotCount = 0, baseDate 
     const source = sState === 'active' ? 'schedule' : 'preview';
     const last = Math.max(0, Number(info.get(season)?.slot_count) || 0, ...byNumber.keys());
 
+    // The order the release days are handed out in: by release position
+    // (a slot's own number unless it has one), then by number. 1, 2, 3 …
+    // when no slot has a release position.
+    const positions = info.get(season)?.positions || {};
+    const positionOf = (n) => posInt(positions[n]) || n;
+    const inReleaseOrder = Array.from({ length: last }, (_, i) => i + 1)
+      .sort((a, b) => positionOf(a) - positionOf(b) || a - b);
+
     let cursor = onOrAfter(from, schedule.day);
     let prev = null;
-    for (let n = 1; n <= last; n += 1) {
+    for (const n of inReleaseOrder) {
       const ep = byNumber.get(n) || null;
       const set = ep ? hand.get(ep.id) : null;
       if (set) {
@@ -500,6 +518,22 @@ async function loadInputs(sequelize, showId) {
   } catch (err) {
     console.error('[releaseSchedule] the seasons could not be read (dates go without them):', err.message);
   }
+  // A2: the slots released out of story order ({ slot_number: release_position } per season).
+  // Read on its own, so a database without the column (before migration
+  // 20261110230000) keeps every date in story order.
+  try {
+    const rows = await sequelize.query(
+      `SELECT s.arc_id, s.slot_number, s.release_position
+         FROM season_slots s
+        WHERE s.show_id = :showId AND s.deleted_at IS NULL AND s.release_position IS NOT NULL`,
+      { replacements: { showId }, type: sequelize.QueryTypes.SELECT });
+    for (const arc of arcs) {
+      const mine = rows.filter((r) => String(r.arc_id) === String(arc.arc_id));
+      if (mine.length) arc.positions = Object.fromEntries(mine.map((r) => [r.slot_number, r.release_position]));
+    }
+  } catch (err) {
+    console.error('[releaseSchedule] the release positions could not be read (dates stay in story order):', err.message);
+  }
   let episodes;
   try {
     // An episode's season and number: its slot's, else its season_context's, else its own season_number.
@@ -540,7 +574,7 @@ async function loadInputs(sequelize, showId) {
     episodes,
     baseDate: current?.starts_on || null,
     slotCount: current?.slot_count || 0,
-    seasons: arcs.length ? arcs.map(({ arc_id, title, season_number, starts_on, slot_count }) => ({ arc_id, title, season_number, starts_on, slot_count })) : null,
+    seasons: arcs.length ? arcs.map(({ arc_id, title, season_number, starts_on, slot_count, positions }) => ({ arc_id, title, season_number, starts_on, slot_count, ...(positions ? { positions } : {}) })) : null,
     currentSeason: current ? current.season_number : null,
   };
 }

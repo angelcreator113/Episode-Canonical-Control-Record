@@ -2,7 +2,24 @@
 const { models } = require('../models');
 const { Episode, MetadataStorage } = models;
 const { NotFoundError, ValidationError } = require('../middleware/errorHandler');
-const { logger } = require('../middleware/auditLog');
+const { logger, fieldChanges } = require('../middleware/auditLog');
+
+const ANALYSIS_FIELDS = ['extractedText', 'scenesDetected', 'sentimentAnalysis', 'visualObjects', 'transcription'];
+/**
+ * A metadata row as an audit entry keeps it: its ids, tags, categories and
+ * processing time, and for each analysis field only whether it is present.
+ */
+function metadataSummary(row) {
+  const m = row && typeof row.toJSON === 'function' ? row.toJSON() : row || {};
+  return {
+    id: m.id ?? null,
+    episodeId: m.episodeId ?? m.episode_id ?? null,
+    tags: m.tags ?? null,
+    categories: m.categories ?? null,
+    processingDurationSeconds: m.processingDurationSeconds ?? null,
+    ...Object.fromEntries(ANALYSIS_FIELDS.map((field) => [field, m[field] ? 'present' : null])),
+  };
+}
 
 /**
  * Metadata Storage Controller
@@ -38,10 +55,7 @@ module.exports = {
       });
 
       // Log activity
-      await logger.logAction(req.user?.id || 'anonymous', 'view', 'metadata', 'all', {
-        ipAddress: req.ip,
-        userAgent: req.get('user-agent'),
-      });
+      // Viewing is not audited (Evoni, 2026-11-11: no page-view entries).
 
       res.json({
         data: rows,
@@ -79,10 +93,7 @@ module.exports = {
     }
 
     // Log activity
-    await logger.logAction(req.user?.id || 'anonymous', 'view', 'metadata', id, {
-      ipAddress: req.ip,
-      userAgent: req.get('user-agent'),
-    });
+    // Viewing is not audited (Evoni, 2026-11-11: no page-view entries).
 
     res.json({ data: metadata });
   },
@@ -170,8 +181,6 @@ module.exports = {
         tags,
         categories,
       },
-      ipAddress: req.ip,
-      userAgent: req.get('user-agent'),
     });
 
     res.status(201).json({
@@ -232,25 +241,13 @@ module.exports = {
     await metadata.update(updateData);
 
     // Log activity
+    // Only what changed. The five analysis fields are large and are recorded
+    // as present or not; tags and categories are kept (bounded by the logger).
+    // sentFields names what the request set: an analysis field replaced by
+    // another value is "present" on both sides and would otherwise not show.
     await logger.logAction(req.user?.id, 'edit', 'metadata', id, {
-      oldValues: {
-        ...oldValues,
-        extractedText: oldValues.extractedText ? 'present' : null,
-        scenesDetected: oldValues.scenesDetected ? 'present' : null,
-        sentimentAnalysis: oldValues.sentimentAnalysis ? 'present' : null,
-        visualObjects: oldValues.visualObjects ? 'present' : null,
-        transcription: oldValues.transcription ? 'present' : null,
-      },
-      newValues: {
-        ...metadata.toJSON(),
-        extractedText: metadata.extractedText ? 'present' : null,
-        scenesDetected: metadata.scenesDetected ? 'present' : null,
-        sentimentAnalysis: metadata.sentimentAnalysis ? 'present' : null,
-        visualObjects: metadata.visualObjects ? 'present' : null,
-        transcription: metadata.transcription ? 'present' : null,
-      },
-      ipAddress: req.ip,
-      userAgent: req.get('user-agent'),
+      ...fieldChanges(metadataSummary(oldValues), metadataSummary(metadata)),
+      sentFields: allowedFields.filter((field) => field in updates),
     });
 
     res.json({
@@ -275,11 +272,7 @@ module.exports = {
     await metadata.destroy();
 
     // Log activity
-    await logger.logAction(req.user?.id, 'delete', 'metadata', id, {
-      oldValues,
-      ipAddress: req.ip,
-      userAgent: req.get('user-agent'),
-    });
+    await logger.logAction(req.user?.id, 'delete', 'metadata', id, { oldValues: metadataSummary(oldValues) });
 
     res.json({
       message: `Metadata ${id} deleted successfully`,
@@ -309,8 +302,6 @@ module.exports = {
     await logger.logAction(req.user?.id, 'edit', 'metadata', id, {
       oldValues: { tags: oldTags },
       newValues: { tags: metadata.tags },
-      ipAddress: req.ip,
-      userAgent: req.get('user-agent'),
     });
 
     res.json({
@@ -351,8 +342,6 @@ module.exports = {
         processingDurationSeconds: duration,
         sceneCount: scenes.length,
       },
-      ipAddress: req.ip,
-      userAgent: req.get('user-agent'),
     });
 
     res.json({

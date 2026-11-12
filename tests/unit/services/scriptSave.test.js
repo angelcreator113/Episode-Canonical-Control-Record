@@ -17,12 +17,12 @@ const SCRIPT = '## BEAT: 1 · Opening Ritual\nLala: "Hi besties."\n\n## BEAT: 2 
 const VID = '11111111-2222-4333-8444-555555555555';
 
 // An episode row, its versions and a transaction that rolls back on a throw.
-function recorder(initial = {}, { versionFails = false } = {}) {
+function recorder(initial = {}, { versionFails = false, filmedAt = null } = {}) {
   const db = {
     episode: { id: 'ep-1', script_content: SCRIPT, script_locked_beats: [], script_line_keys: null, script_seq: '0', ...initial },
     versions: [],
   };
-  const calls = { findByPk: [], updates: [], logs: [], seq: [] };
+  const calls = { findByPk: [], updates: [], logs: [], seq: [], filmed: [] };
   const rowOf = () => {
     const data = db.episode;
     return {
@@ -53,8 +53,13 @@ function recorder(initial = {}, { versionFails = false } = {}) {
       const t = { LOCK: { UPDATE: 'UPDATE' }, afterCommit: () => {} };
       try { return await fn(t); } catch (err) { Object.assign(db, before); throw err; }
     },
-    // The one query the save runs itself: the save number.
+    // The queries the save runs itself: whether the episode is filmed (asked
+    // only of an episode that has a script), and the save number.
     async query(sql, { replacements, transaction }) {
+      if (sql === 'SELECT MIN(created_at) AS frozen_at FROM episode_raw_clips WHERE episode_id = :episodeId') {
+        calls.filmed.push({ id: replacements.episodeId, transaction: transaction || null });
+        return [[{ frozen_at: filmedAt }], 1];
+      }
       if (!/^UPDATE episodes SET script_seq = script_seq \+ 1 WHERE id = :episodeId RETURNING script_seq::text AS script_seq$/.test(sql)) throw new Error(`unexpected query: ${sql}`);
       calls.seq.push({ id: replacements.episodeId, transaction });
       db.episode.script_seq = (BigInt(db.episode.script_seq) + 1n).toString();
@@ -333,5 +338,129 @@ describe('saveEpisodeScript', () => {
     expect(order).toEqual(['lock:UPDATE', 'compose']);
     expect(calls.findByPk).toHaveLength(1);
   });
-});
 
+  // A filmed episode's script (Evoni, 2026-11-12).
+  describe('a filmed episode', () => {
+    const FILMED = '2026-11-01T10:00:00.000Z';
+    const gen = (models, opts = {}) => saveEpisodeScript(models, 'ep-1', { writer: 'W10', source: 'generate', guard: { confirmOverwrite: true }, compose: () => ({ script: 'generated' }), ...opts });
+    const edit = (models, opts = {}) => saveEpisodeScript(models, 'ep-1', { writer: 'W1', source: 'save', compose: () => ({ script: 'edited by hand' }), ...opts });
+
+    test('a generator is refused, whatever the request confirms; nothing is written, kept or numbered', async () => {
+      const { models, db, calls } = recorder({}, { filmedAt: FILMED });
+      for (const opts of [{}, { filmedConfirm: 'ep-1' }, { guard: { confirmOverwrite: true, confirm_filmed_edit: 'ep-1' } }, { expectRevision: scriptRevision(SCRIPT) }]) {
+        // eslint-disable-next-line no-await-in-loop
+        const err = await refusalOf(gen(models, opts));
+        expect(err.status).toBe(409);
+        expect(err.body).toMatchObject({ success: false, code: 'FILMED_SCRIPT_PROTECTED', episode_id: 'ep-1', filmed_at: FILMED, saved: false });
+      }
+      expect(db.episode.script_content).toBe(SCRIPT);
+      expect(db.versions).toEqual([]);
+      expect(calls.updates).toEqual([]);
+      expect(calls.seq).toEqual([]);
+    });
+
+    test('the generator is refused before its compose runs, and the filmed question is asked under the row lock', async () => {
+      const { models, calls } = recorder({}, { filmedAt: FILMED });
+      const compose = jest.fn(() => ({ script: 'generated' }));
+      await refusalOf(gen(models, { compose }));
+      expect(compose).not.toHaveBeenCalled();
+      expect(calls.findByPk).toHaveLength(1);
+      expect(calls.findByPk[0].lock).toBe('UPDATE');
+      expect(calls.filmed).toHaveLength(1);
+      expect(calls.filmed[0].transaction).toBeTruthy();
+    });
+
+    test("a person's edit needs this episode's own confirmation: none, another episode's, true and 'true' are all refused", async () => {
+      const { models, db } = recorder({}, { filmedAt: FILMED });
+      for (const filmedConfirm of [null, undefined, 'ep-2', true, 'true', '', 'EP-1']) {
+        // eslint-disable-next-line no-await-in-loop
+        const err = await refusalOf(edit(models, { filmedConfirm }));
+        expect(err.status).toBe(409);
+        expect(err.body).toMatchObject({ code: 'FILMED_SCRIPT_CONFIRMATION_REQUIRED', episode_id: 'ep-1', filmed_at: FILMED, current_revision: scriptRevision(SCRIPT) });
+      }
+      expect(db.episode.script_content).toBe(SCRIPT);
+      expect(db.versions).toEqual([]);
+    });
+
+    test('with it, the edit is saved, the replaced script is kept as a version, and the next save must bring it again', async () => {
+      const { models, db } = recorder({}, { filmedAt: FILMED });
+      const out = await edit(models, { filmedConfirm: 'ep-1' });
+      expect(out.script_content).toBe('edited by hand');
+      expect(db.episode.script_content).toBe('edited by hand');
+      expect(db.versions).toHaveLength(1);
+      expect(db.versions[0].script_content).toBe(SCRIPT);
+      expect(out.script_seq).toBe('1');
+      // Nothing was remembered: the same save without the value is refused.
+      const err = await refusalOf(saveEpisodeScript(models, 'ep-1', { writer: 'W1', source: 'save', compose: () => ({ script: 'a second edit' }) }));
+      expect(err.body.code).toBe('FILMED_SCRIPT_CONFIRMATION_REQUIRED');
+      expect(db.episode.script_content).toBe('edited by hand');
+    });
+
+    test('a lock alone, and a save of the same text, change no words and need no confirmation', async () => {
+      const { models, db } = recorder({}, { filmedAt: FILMED });
+      const out = await saveEpisodeScript(models, 'ep-1', { writer: 'W2', source: 'lock', compose: (row) => ({ script: row.script_content, lockedBeats: [1] }) });
+      expect(out.script_seq).toBeNull();
+      expect(db.episode.script_locked_beats).toEqual([1]);
+      expect(db.episode.script_content).toBe(SCRIPT);
+    });
+
+    test("the Script Writer's Lock (manualApply) is a person's edit: confirmation required, then saved; without manualApply it is a generator", async () => {
+      const { models, db } = recorder({}, { filmedAt: FILMED });
+      const lock = (opts) => saveEpisodeScript(models, 'ep-1', { writer: 'W4', source: 'generate', guard: { confirmOverwrite: true }, compose: () => ({ script: 'a reviewed draft' }), ...opts });
+      expect((await refusalOf(lock({}))).body.code).toBe('FILMED_SCRIPT_PROTECTED');
+      expect((await refusalOf(lock({ manualApply: true }))).body.code).toBe('FILMED_SCRIPT_CONFIRMATION_REQUIRED');
+      expect((await refusalOf(lock({ manualApply: true, filmedConfirm: 'ep-2' }))).body.code).toBe('FILMED_SCRIPT_CONFIRMATION_REQUIRED');
+      expect(db.episode.script_content).toBe(SCRIPT);
+      const out = await lock({ manualApply: true, filmedConfirm: 'ep-1' });
+      expect(out.script_content).toBe('a reviewed draft');
+      expect(out.version_source).toBe('generate');
+    });
+
+    test('manualApply does not skip the overwrite guard or the revision', async () => {
+      const { models } = recorder({}, { filmedAt: FILMED });
+      const base = { writer: 'W4', source: 'generate', manualApply: true, filmedConfirm: 'ep-1', compose: () => ({ script: 'a reviewed draft' }) };
+      expect((await refusalOf(saveEpisodeScript(models, 'ep-1', { ...base, guard: {} }))).body.code).toBe('SCRIPT_OVERWRITE_CONFIRMATION_REQUIRED');
+      expect((await refusalOf(saveEpisodeScript(models, 'ep-1', { ...base, guard: { confirmOverwrite: true }, requireRevision: true, revision: scriptRevision('stale') }))).body.code).toBe('SCRIPT_CHANGED');
+    });
+
+    test('a filmed episode with no script yet: a generator may write its first one, and the filmed question is not asked', async () => {
+      for (const script_content of [null, '', '   \n']) {
+        const { models, db, calls } = recorder({ script_content }, { filmedAt: FILMED });
+        // eslint-disable-next-line no-await-in-loop
+        const out = await gen(models);
+        expect(out.script_content).toBe('generated');
+        expect(db.episode.script_content).toBe('generated');
+        expect(calls.filmed).toEqual([]);
+      }
+    });
+
+    test('an episode that is not filmed: generators and edits save as before, with no confirmation', async () => {
+      const a = recorder();
+      expect((await gen(a.models)).script_content).toBe('generated');
+      const b = recorder();
+      expect((await edit(b.models)).script_content).toBe('edited by hand');
+      // A confirmation sent for an unfilmed episode changes nothing.
+      const c = recorder();
+      expect((await edit(c.models, { filmedConfirm: 'ep-2' })).script_content).toBe('edited by hand');
+    });
+
+    test('skipIfScript still leaves a filmed script alone without an error (Start with no confirmOverwrite)', async () => {
+      const { models, db } = recorder({}, { filmedAt: FILMED });
+      const out = await gen(models, { guard: null, skipIfScript: true });
+      expect(out.skipped).toBe(true);
+      expect(db.episode.script_content).toBe(SCRIPT);
+    });
+
+    test('filmedScriptRefusal (the routes\' check before a model is asked) and filmedConfirmOf', async () => {
+      const { filmedScriptRefusal, filmedConfirmOf } = require('../../../src/services/scriptSave');
+      const filmed = recorder({}, { filmedAt: FILMED });
+      expect(await filmedScriptRefusal(filmed.models.sequelize, { id: 'ep-1', script_content: SCRIPT }))
+        .toEqual({ success: false, code: 'FILMED_SCRIPT_PROTECTED', error: expect.stringMatching(/filmed/), episode_id: 'ep-1', filmed_at: FILMED, saved: false });
+      expect(await filmedScriptRefusal(filmed.models.sequelize, { id: 'ep-1', script_content: '' })).toBeNull();
+      expect(await filmedScriptRefusal(recorder().models.sequelize, { id: 'ep-1', script_content: SCRIPT })).toBeNull();
+      expect(await filmedScriptRefusal(filmed.models.sequelize, null)).toBeNull();
+      expect(filmedConfirmOf({ confirm_filmed_edit: 'ep-1' })).toBe('ep-1');
+      for (const body of [null, undefined, {}, { confirm_filmed_edit: true }, { confirm_filmed_edit: 1 }, { confirmFilmedEdit: 'ep-1' }]) expect(filmedConfirmOf(body)).toBeNull();
+    });
+  });
+});

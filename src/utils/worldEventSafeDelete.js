@@ -14,8 +14,24 @@
  * Removal is a soft delete (deleted_at = NOW()); every other event is kept
  * and reported with why (linked_by).
  *
- * Callers: eventGeneratorRoute (replace_existing) and
- * worldEvents/episodeBatch (bulk-delete).
+ * Lock, then look (Evoni, 2026-11-12): the events are locked first, and what
+ * uses them is read by a second statement in the same transaction. A delete
+ * that waited behind a pencil, a Start or a link therefore judges the event
+ * as it is after that work committed, not as it was when the delete began.
+ * Every writer that points something at an event locks the event row first
+ * (seasonSlotService, seasonSpecials, the terms routes, Start Episode), so
+ * the two take turns on that one lock.
+ *
+ * allowOwnedPreparation (single delete only; bulk delete and replace do not
+ * pass it, and behave as before): an event's own untouched preparation does
+ * not hold it. That is its cost lines, and its deliverables that no episode
+ * and no post has been tied to and that are still pending. Those rows are
+ * soft-deleted with the event, in the same transaction. A deliverable an
+ * episode or a post is tied to still holds the event, as does every link
+ * from an independent record.
+ *
+ * Callers: eventGeneratorRoute (replace_existing), worldEvents/episodeBatch
+ * (bulk-delete) and worldEvents/update (DELETE one event).
  */
 
 'use strict';
@@ -34,6 +50,21 @@ const NON_WORLD_EVENT_COLUMNS = new Set([
 const EVENT_LINK_COLUMN_NAMES = ['event_id', 'world_event_id'];
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// An event's own preparation (both reference it ON DELETE CASCADE; every
+// other link is an independent record). With allowOwnedPreparation a row of
+// these holds its event only while the SQL here is true of it; null: never.
+const OWNED_PREPARATION = Object.freeze({
+  event_costs: Object.freeze({ key: 'costs', touched: null }),
+  event_deliverables: Object.freeze({
+    key: 'deliverables',
+    touched: ({ posts, postsParanoid }) => [
+      'l.episode_id IS NOT NULL',
+      "COALESCE(l.status, 'pending') <> 'pending'",
+      ...(posts ? [`EXISTS (SELECT 1 FROM deliverable_posts dp WHERE dp.deliverable_id = l.id${postsParanoid ? ' AND dp.deleted_at IS NULL' : ''})`] : []),
+    ].join(' OR '),
+  }),
+});
 
 // Identifiers come only from the catalog; still quoted, never interpolated raw.
 const ident = (name) => `"${String(name).replace(/"/g, '""')}"`;
@@ -112,13 +143,30 @@ async function selfLinkShape(sequelize, transaction) {
   };
 }
 
+// Whether deliverable_posts is in this schema, and soft-deletable.
+async function deliverablePostsShape(sequelize, transaction) {
+  const rows = await sequelize.query(
+    `SELECT column_name FROM information_schema.columns
+      WHERE table_schema = current_schema() AND table_name = 'deliverable_posts' AND column_name IN ('deliverable_id', 'deleted_at')`,
+    { type: sequelize.QueryTypes.SELECT, transaction }
+  );
+  const has = (c) => rows.some(r => r.column_name === c);
+  return { posts: has('deliverable_id'), postsParanoid: has('deleted_at') };
+}
+
 // One CASE per link: the link's label when a live link row exists, else NULL.
-function linkedByExpression(links, self) {
-  const cases = links.map(({ table, column, isUuid, paranoid, label }) => {
+// owned: null (every link row holds its event), or the deliverable_posts
+// shape (an event's own untouched preparation does not).
+function linkedByExpression(links, self, owned = null) {
+  const cases = [];
+  for (const { table, column, isUuid, paranoid, label } of links) {
+    const mine = owned && column === 'event_id' ? OWNED_PREPARATION[table] : null;
+    if (mine && !mine.touched) continue;
     const col = `l.${ident(column)}`;
     const match = isUuid ? `${col} = we.id` : `${col}::text = we.id::text`;
-    return `CASE WHEN EXISTS (SELECT 1 FROM ${ident(table)} l WHERE ${match}${paranoid ? ' AND l.deleted_at IS NULL' : ''}) THEN ${literal(label)} END`;
-  });
+    const touched = mine ? ` AND (${mine.touched(owned)})` : '';
+    cases.push(`CASE WHEN EXISTS (SELECT 1 FROM ${ident(table)} l WHERE ${match}${paranoid ? ' AND l.deleted_at IS NULL' : ''}${touched}) THEN ${literal(label)} END`);
+  }
   if (self.parentEventId) {
     cases.push(`CASE WHEN EXISTS (SELECT 1 FROM world_events c WHERE c.parent_event_id = we.id AND c.deleted_at IS NULL) THEN 'child_events' END`);
   }
@@ -136,10 +184,13 @@ function linkedByExpression(links, self) {
  * @param {string} opts.showId
  * @param {string[]} [opts.ids]     only these events (others of the show are untouched)
  * @param {string} [opts.status]    only events with this status (e.g. 'draft')
+ * @param {boolean} [opts.allowOwnedPreparation]  see the header; default false
  * @param opts.transaction          required: the caller's transaction
- * @returns {{ softDeleted: {id,name}[], kept: {id,name,status,used,linked_by}[], notFound: string[] }}
+ * @returns {{ softDeleted: {id,name}[], kept: {id,name,status,used,linked_by}[], notFound: string[],
+ *             ownedRemoved: { [eventId]: { deliverables: number, costs: number } } }}
+ *   ownedRemoved has an entry per soft-deleted event, and only with allowOwnedPreparation.
  */
-async function softDeleteUnusedUnlinkedEvents(sequelize, { showId, ids = null, status = null, transaction }) {
+async function softDeleteUnusedUnlinkedEvents(sequelize, { showId, ids = null, status = null, allowOwnedPreparation = false, transaction }) {
   if (!transaction) throw new Error('softDeleteUnusedUnlinkedEvents needs a transaction');
 
   let notFound = [];
@@ -148,27 +199,38 @@ async function softDeleteUnusedUnlinkedEvents(sequelize, { showId, ids = null, s
     wantedIds = [...new Set(ids.map(String))];
     notFound = wantedIds.filter(id => !UUID_RE.test(id));
     wantedIds = wantedIds.filter(id => UUID_RE.test(id));
-    if (wantedIds.length === 0) return { softDeleted: [], kept: [], notFound };
+    if (wantedIds.length === 0) return { softDeleted: [], kept: [], notFound, ownedRemoved: {} };
   }
 
   // Table and column names come from the catalog, never from the request.
   const links = await discoverEventLinkColumns(sequelize, transaction);
-  const linkedBy = linkedByExpression(links, await selfLinkShape(sequelize, transaction));
+  const owned = allowOwnedPreparation ? await deliverablePostsShape(sequelize, transaction) : null;
+  const linkedBy = linkedByExpression(links, await selfLinkShape(sequelize, transaction), owned);
 
   const where = ['we.show_id = :showId', 'we.deleted_at IS NULL'];
   if (wantedIds) where.push('we.id IN (:ids)');
   if (status) where.push('we.status = :status');
 
-  const rows = await sequelize.query(
+  // 1. Lock, in id order (one order for every multi-event lock here). A row
+  //    another transaction holds is waited for; when that transaction
+  //    commits, a row it deleted or moved out of the filter is left out.
+  const locked = await sequelize.query(
+    `SELECT we.id FROM world_events we WHERE ${where.join(' AND ')} ORDER BY we.id FOR UPDATE OF we`,
+    { replacements: { showId, ids: wantedIds, status }, type: sequelize.QueryTypes.SELECT, transaction }
+  );
+  const lockedIds = locked.map(r => r.id);
+
+  // 2. Look, with the rows held: a new statement, so it reads what was
+  //    committed while step 1 waited (a pencil, a Start, a link).
+  const rows = lockedIds.length === 0 ? [] : await sequelize.query(
     `SELECT we.id, we.name, we.status,
             (COALESCE(we.status, '') IN ('used', 'filmed')
               OR we.used_in_episode_id IS NOT NULL
               OR COALESCE(we.times_used, 0) > 0) AS used,
             ${linkedBy} AS linked_by
        FROM world_events we
-      WHERE ${where.join(' AND ')}
-      FOR UPDATE OF we`,
-    { replacements: { showId, ids: wantedIds, status }, type: sequelize.QueryTypes.SELECT, transaction }
+      WHERE we.id IN (:lockedIds) AND we.show_id = :showId AND we.deleted_at IS NULL`,
+    { replacements: { showId, lockedIds }, type: sequelize.QueryTypes.SELECT, transaction }
   );
 
   if (wantedIds) {
@@ -187,14 +249,32 @@ async function softDeleteUnusedUnlinkedEvents(sequelize, { showId, ids = null, s
     }
   }
 
+  const ownedRemoved = {};
   if (softDeleted.length > 0) {
+    const deletedIds = softDeleted.map(e => e.id);
     await sequelize.query(
       `UPDATE world_events SET deleted_at = NOW(), updated_at = NOW()
         WHERE id IN (:ids) AND show_id = :showId AND deleted_at IS NULL`,
-      { replacements: { ids: softDeleted.map(e => e.id), showId }, transaction }
+      { replacements: { ids: deletedIds, showId }, transaction }
     );
+    if (owned) {
+      // The event's own preparation goes with it. Only rows that did not
+      // hold it are left by now (a touched deliverable kept the event), and
+      // nothing can add one: the terms routes lock the event row first.
+      for (const id of deletedIds) ownedRemoved[id] = { deliverables: 0, costs: 0 };
+      for (const { table, column, paranoid } of links) {
+        const mine = column === 'event_id' ? OWNED_PREPARATION[table] : null;
+        if (!mine || !paranoid) continue;
+        const removed = await sequelize.query(
+          `UPDATE ${ident(table)} SET deleted_at = NOW(), updated_at = NOW()
+            WHERE event_id IN (:ids) AND deleted_at IS NULL RETURNING event_id`,
+          { replacements: { ids: deletedIds }, type: sequelize.QueryTypes.SELECT, transaction }
+        );
+        for (const row of removed) if (ownedRemoved[row.event_id]) ownedRemoved[row.event_id][mine.key] += 1;
+      }
+    }
   }
-  return { softDeleted, kept, notFound };
+  return { softDeleted, kept, notFound, ownedRemoved };
 }
 
-module.exports = { NON_WORLD_EVENT_COLUMNS, discoverEventLinkColumns, softDeleteUnusedUnlinkedEvents };
+module.exports = { NON_WORLD_EVENT_COLUMNS, OWNED_PREPARATION, discoverEventLinkColumns, softDeleteUnusedUnlinkedEvents };

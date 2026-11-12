@@ -135,6 +135,8 @@ describe('A1c R1 static guards', () => {
       'src/migrations/20261108140000-aigw-sequence-acl.js': 'AI egress gateway G2 follow-up (Evoni, 2026-11-08: propose the smallest correction in a separate PR): revokes non-owner grants on the three aigw_ sequences only',
       'src/migrations/20261108210000-scene-generation-uncertain-status.js': 'Scene Sets uncertain outcomes PR A (Evoni, 2026-11-08: PR A implementation approved, #3748): an uncertain value on the two scene generation status enums only',
       'src/migrations/20261108210100-scene-generation-attempts.js': 'Scene Sets uncertain outcomes PR A (Evoni, 2026-11-08: PR A implementation approved, #3748): scene_generation_attempts, current_attempt_id on scene_sets and scene_angles, and their guard triggers only',
+      'src/migrations/20261110230000-add-season-slot-release-position.js': 'Season Planning A2 (Evoni, 2026-11-10: Step 3, the release-position migration PR authorized): release_position and its three rules on season_slots only',
+      'src/migrations/20261111230000-converge-activity-logs.js': 'Audit logger repair, issue #1948 (Evoni, 2026-11-11: Step 5 authorized): activity_logs brought to production\'s shape, resource_id widened to text, one index; activity_logs only',
     };
     const migrations = files('src/migrations').filter((f) => /\/2026102[7-9]|\/20261[1-2]|\/2027/.test(f));
     expect(migrations.sort()).toEqual(Object.keys(LATER).sort());

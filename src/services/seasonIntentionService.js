@@ -16,6 +16,11 @@
  *   there's one source."
  *   Q12 (accepted). "draft only the next open slot, on acceptance and on
  *   demand, not all 24 at once."
+ *   Q12 as amended (Evoni, 2026-11-12; it supersedes the rule this file
+ *   kept until then, "empty or still Auto-drafted"): the automatic draft on
+ *   acceptance "may fill only a genuinely empty intention". An intention is
+ *   empty only when all six of its fields are (intentionOccupied). On demand
+ *   (the Draft button, its confirm over an edit, Accept drafts) is as before.
  *
  * The story thread (A3) is chosen from the show's threads that are not
  * closed (storyThreadService, build PR 7); a draft never changes it.
@@ -175,6 +180,45 @@ function outcomeRangeToBrief(range) {
   const lo = OUTCOME_TIERS.indexOf(range.min);
   const hi = OUTCOME_TIERS.indexOf(range.max);
   return { designed_intent: range.max, allowed_outcomes: OUTCOME_TIERS.slice(lo, hi + 1) };
+}
+
+/** A stored JSON value, read; undefined when it is text that is not JSON. */
+function storedJson(value) {
+  if (typeof value !== 'string') return value;
+  try { return JSON.parse(value); } catch (err) {
+    console.error('[seasonIntention] a stored intention value is not JSON, so the slot is treated as written:', err.message);
+    return undefined;
+  }
+}
+
+const SIX_FIELDS = ['story_purpose', 'story_purposes', 'story_thread_id', 'career_focus', 'desired_pressure', 'outcome_range'];
+
+/**
+ * Q12 as amended (Evoni, 2026-11-12): whether a slot's intention holds
+ * anything, for the automatic draft to ask. Empty is all six fields empty:
+ * the primary purpose, the purposes (a secondary one included), the story
+ * thread, the career focus, the pressure and the outcome range. A source
+ * label on a slot with nothing else, and a stored value that cannot be read,
+ * also count as written: when in doubt the slot is someone's, and is left.
+ * Reads a season_slots row with those columns and intention_source.
+ */
+function intentionOccupied(slot) {
+  if (!slot) return true;
+  const blank = (v) => v === null || v === undefined || (typeof v === 'string' && v.trim() === '');
+  if (!blank(slot.intention_source)) return true;
+  for (const field of ['story_purpose', 'story_thread_id', 'career_focus', 'desired_pressure']) {
+    if (!blank(slot[field])) return true;
+  }
+  if (!blank(slot.story_purposes)) {
+    const purposes = storedJson(slot.story_purposes);
+    if (!Array.isArray(purposes) || purposes.length > 0) return true;
+  }
+  if (!blank(slot.outcome_range)) {
+    const range = storedJson(slot.outcome_range);
+    const emptyObject = range && typeof range === 'object' && !Array.isArray(range) && Object.keys(range).length === 0;
+    if (range !== null && !emptyObject) return true;
+  }
+  return false;
 }
 
 /**
@@ -553,9 +597,24 @@ async function writeStartedDraft(sequelize, slot, intention, transaction) {
  * is a draft (A9, as changed 2026-10-01): drafted from its episode's event
  * and script, never overwriting purposes Evoni edited, and the episode's
  * season snapshot is updated. Refused once the episode is accepted.
+ *
+ * onlyIfEmpty (the automatic draft, draftNextSlot; Q12 as amended): the slot
+ * is drafted only while it has not started and its intention is empty
+ * (intentionOccupied). Asked before the model is called, so a written slot
+ * costs nothing, and again under the slot's lock before the write, so an
+ * intention saved while the model answered is kept and the draft discarded.
+ * Resolves { slot_number, skipped: 'occupied' | 'started' } when it leaves
+ * the slot alone. force does not lift it.
  */
-async function draftIntention(sequelize, showId, slotId, { force = false, anthropic = null } = {}) {
+async function draftIntention(sequelize, showId, slotId, { force = false, onlyIfEmpty = false, anthropic = null } = {}) {
   const slot = await loadEditableSlot(sequelize, showId, slotId);
+  const leftAlone = (s) => {
+    if (!onlyIfEmpty) return null;
+    if (s.started || s.episode_id || s.locked_at) return { slot_number: s.slot_number, skipped: 'started' };
+    return intentionOccupied(s) ? { slot_number: s.slot_number, skipped: 'occupied' } : null;
+  };
+  const before = leftAlone(slot);
+  if (before) return before;
   if (!slot.started && slot.intention_source === SOURCES.EDITED && !force) {
     throw new SeasonIntentionError(`E${slot.slot_number}'s intention was edited; redrafting would replace it`, 409, 'SEASON_INTENTION_EDITED');
   }
@@ -578,6 +637,9 @@ async function draftIntention(sequelize, showId, slotId, { force = false, anthro
   // the draft, the snapshot and the brief are written together.
   return sequelize.transaction(async (transaction) => {
     const locked = await lockEditableSlot(sequelize, showId, slotId, slot, transaction);
+    // Written, or started, while the model answered: the slot is kept as it is now.
+    const now = leftAlone(locked);
+    if (now) return now;
     if (!locked.started && locked.intention_source === SOURCES.EDITED && !force) {
       throw new SeasonIntentionError(`E${locked.slot_number}'s intention was edited; redrafting would replace it`, 409, 'SEASON_INTENTION_EDITED');
     }
@@ -614,20 +676,23 @@ async function writeDraft(sequelize, slot, slotId, intention, transaction) {
 }
 
 /**
- * Q12: on acceptance, draft the next open slot only, and only when its
- * intention is empty or still Auto-drafted. Returns the slot number drafted,
- * or null.
+ * Q12 as amended (Evoni, 2026-11-12): on acceptance, draft the next open
+ * slot only, and only when its intention is empty (intentionOccupied: all
+ * six fields, and no source label). A slot that holds anything, an earlier
+ * Auto-draft included, is left exactly as it is, and no later slot is
+ * drafted in its place. The model is not asked for a slot that is left.
+ * Returns the slot number drafted, or null.
  */
 async function draftNextSlot(sequelize, showId, { anthropic = null } = {}) {
   const [[next]] = await sequelize.query(
-    `SELECT s.id, s.intention_source FROM season_slots s
+    `SELECT s.id, s.intention_source, ${SIX_FIELDS.map((f) => `s.${f}`).join(', ')} FROM season_slots s
        JOIN show_arcs a ON a.id = s.arc_id AND a.status = 'active' AND a.deleted_at IS NULL
       WHERE s.show_id = :showId AND s.deleted_at IS NULL AND s.episode_id IS NULL AND s.locked_at IS NULL
       ORDER BY s.slot_number ASC LIMIT 1`,
     { replacements: { showId } });
-  if (!next || next.intention_source === SOURCES.EDITED) return null;
-  const result = await draftIntention(sequelize, showId, next.id, { anthropic });
-  return result.slot_number;
+  if (!next || intentionOccupied(next)) return null;
+  const result = await draftIntention(sequelize, showId, next.id, { onlyIfEmpty: true, anthropic });
+  return result.skipped ? null : result.slot_number;
 }
 
 /**
@@ -686,6 +751,7 @@ module.exports = {
   normaliseIntention,
   normalisePurposes,
   purposesOf,
+  intentionOccupied,
   outcomeRangeToBrief,
   saveIntention,
   draftIntention,
