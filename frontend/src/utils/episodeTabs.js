@@ -63,8 +63,12 @@ export const EP_TABS = [
   ]},
 ];
 
-/** Where the page opens with no ?tab=, and where an unknown one lands. */
-export const DEFAULT_EP_TAB = 'production';
+/**
+ * Where the page opens with no ?tab=, and where an unknown one lands: the
+ * Overview (Evoni, 2026-11-12; it was Production › Scenes). A ?tab= in the
+ * address always wins, so ?tab=production still opens Scenes.
+ */
+export const DEFAULT_EP_TAB = 'overview';
 
 // Old ?tab= values, kept working.
 const ALIASES = {

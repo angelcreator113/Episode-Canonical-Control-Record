@@ -133,12 +133,13 @@ describe('EpisodeDetail — Track 6 CP14 module-scope helpers', () => {
   });
 
   // Evoni, 2026-10-17: a bare URL opens Production on its Scenes workspace.
-  test('rendering with no tab shows the Scenes workspace', async () => {
+  test('rendering with no tab shows the Overview (Evoni, 2026-11-12; it was the Scenes workspace)', async () => {
     renderEpisodeDetail();
 
-    await waitFor(() => expect(screen.getByTestId('episode-scenes')).toBeTruthy());
-    expect(screen.queryByTestId('episode-overview')).toBeNull();
-    expect(screen.getByTitle('Production').className).toContain('ed-tab-active');
+    await waitFor(() => expect(screen.getByTestId('episode-overview')).toBeTruthy());
+    expect(screen.queryByTestId('episode-scenes')).toBeNull();
+    expect(screen.getByTitle('Overview').className).toContain('ed-tab-active');
+    expect(screen.getByTitle('Production').className).not.toContain('ed-tab-active');
   });
 
   test('explicit overview tab still shows the Overview body', async () => {
