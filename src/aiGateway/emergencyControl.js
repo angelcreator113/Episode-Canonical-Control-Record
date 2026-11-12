@@ -174,6 +174,9 @@ function evaluate(state, p, signer, roles) {
     next.initialized = true;
   } else if (p.action === 'revoke') {
     if (typeof p.key !== 'string' || !FINGERPRINT.test(p.key) || state.revoked[p.key] !== undefined) return { ok: false, code: 'REVOKE_INVALID' };
+    // A key cannot revoke itself: a compromised recovery key is revoked by
+    // another one, and the last recovery key cannot lock recovery out.
+    if (p.key === signer) return { ok: false, code: 'REVOKE_INVALID' };
     next.revoked[p.key] = state.head.seq + 1;
     next.lastSeq[signer] = p.seq;
   } else {
