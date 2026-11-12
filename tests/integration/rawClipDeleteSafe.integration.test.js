@@ -395,6 +395,21 @@ const EDIT_TABLES = ['edit_versions', 'timeline_audio_items', 'timeline_items', 
       await expectRemoved(w, w.lala);
     });
 
+    // Evoni, 2026-11-12: any live source holds its take, with no takes of a
+    // line and no approved line; a job that failed or was cancelled, before
+    // or after the source was made, does not open a way round it.
+    test('a live source still holds the take when its jobs failed or were cancelled; only removing the source row itself releases it', async () => {
+      const w = await world();
+      const sourceId = await source(w);
+      await job(w, w.lala, 'failed');
+      await job(w, w.lala, 'cancelled');
+      const res = await expectKept(w, w.lala, ['voice_source']);
+      expect(res.body.blocked_by[0]).toMatchObject({ kind: 'voice_source', count: 1, takes: 0, approved: 0 });
+      // A source that is no longer live (nothing in the app removes one today) is the only thing that would not hold it.
+      await run('UPDATE voice_source_assets SET deleted_at = NOW() WHERE id = :id', { id: sourceId });
+      await expectRemoved(w, w.lala);
+    });
+
     test('a finished job leaves its source, and the source holds the take', async () => {
       const w = await world();
       const sourceId = await source(w);
