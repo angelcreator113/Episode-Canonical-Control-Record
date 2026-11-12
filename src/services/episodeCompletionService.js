@@ -798,7 +798,9 @@ ${narrativeLines.short || ''}`,
   // ── 17c. Ready the next slot (A6; Q12: "draft only the next open slot, on
   // acceptance and on demand") ──
   // An AI call: not awaited, so it never slows or blocks completion; a
-  // failure is logged and the slot can be drafted on demand.
+  // failure is logged and the slot can be drafted on demand. It fills an
+  // empty intention only (Q12 as amended, Evoni, 2026-11-12): a next slot
+  // that holds anything is left as it is, and nothing is asked of the model.
   if (season) {
     const { draftNextSlot } = require('./seasonIntentionService');
     draftNextSlot(sequelize, showId).catch((draftErr) => {
