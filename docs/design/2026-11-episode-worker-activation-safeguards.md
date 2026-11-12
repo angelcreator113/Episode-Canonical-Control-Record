@@ -1,6 +1,8 @@
 # Episode worker: activation safeguards (design proposal, #3714)
 
-**Status:** revision 3, 2026-11-07. Evoni accepted revision 2 as the working design, not as authorization to implement. Revision 3 answers her final questions A–D (the section "Revision 3" below), and supersedes revision 2 where they conflict. Revision 2 came after her review of revision 1. This is a design direction only; nothing here is implemented. Every production step stays separately gated (`docs/runbooks/episode-worker-db.md` §6). The read-only inventory (`scripts/worker/backlog-inventory.js`) is the only code in this change.
+**Status:** revision 4, 2026-11-09 (documentation only). **Revision 4, at the end of this file, supersedes revisions 1 to 3 wherever they conflict.** It reuses the AI egress gateway's G2 ledger and the Scene Sets attempt record (#3757) instead of building a worker ledger, pause or reconciliation of its own (Evoni's decisions 1–5, 2026-11-09). Read revision 4 first; the earlier sections remain as the reasoning it builds on.
+
+**Earlier status (revision 3, 2026-11-07):** Evoni accepted revision 2 as the working design, not as authorization to implement. Revision 3 answers her final questions A–D (the section "Revision 3" below), and supersedes revision 2 where they conflict. Revision 2 came after her review of revision 1. This is a design direction only; nothing here is implemented. Every production step stays separately gated (`docs/runbooks/episode-worker-db.md` §6). The read-only inventory (`scripts/worker/backlog-inventory.js`) is the only code in this change.
 
 **What changed from revision 1.** Revision 1 leaned on a single pm2 worker, a shutdown grace period and in-memory counters. None of those is a financial safety boundary: a process can crash or be killed at any instant, pm2 can restart it, and a second process can start by mistake. Revision 2 moves every limit and every paid-call fact into the database, written **before** the money is committed.
 
@@ -548,3 +550,166 @@ Under the pause, every one of these returns 503 with zero provider calls. The li
 - **Redis on the box.** Whether Redis runs there, and its password, are unknown.
 - **The production `.env`.** The database settings come from it; the preflight checks the same settings.
 - **A superuser login.** If the credential file named a superuser despite the loader's refusal of `postgres` and `rdsadmin`, the session would still be read-only. Only the preflight's role-attribute check proves the role is the restricted one.
+
+---
+
+## Revision 4: reuse the gateway ledger and the Scene Sets protections (2026-11-09)
+
+**Documentation only.** Nothing here is implemented, migrated or switched on. It applies Evoni's decisions of 2026-11-09:
+1. **One financial ledger.** The AI egress gateway's G2 ledger (`aigw_permits`, migration `20261108120000-create-aigw-ledger`, #3746, merged, not wired) is the only authoritative record of paid generation. No `worker_paid_calls`, no second pause or control table, no separate financial reconciliation. `scene_generation_attempts` (#3757) stays the domain record for scene sets and angles.
+2. **Activations integrate with the gateway.** Worker-specific records only where genuinely needed; nothing that duplicates permits, controls or reconciliation.
+3. **M0 is preserved.** The worker receives no provider key and never bypasses the gateway. Paid worker generation waits for G3 and G4, implemented and verified.
+4. **This revision** (step 1) is approved; the worker-safety implementation (step 3) is designed in R4.10 and not approved.
+5. **#3737** is reviewed read-only in R4.11.
+
+### R4.0 What revision 4 supersedes
+
+| Revision 2 / 3 | Revision 4 |
+|---|---|
+| `worker_paid_calls` and its phases (A) | `aigw_permits`, whose phases are the same set: `authorized`, `dispatching`, `accepted`, `provider_succeeded`, `succeeded`, `failed_confirmed`, `unknown`, `abandoned`, `not_sent` |
+| Budget reservations on the activation row (B, S7) | Gateway exposure (reserved + confirmed + uncertain) under the gateway's day lock, plus an activation budget in the gateway (R4.3) |
+| `paid_generation_controls` and the API pause (C) | `aigw_control`: Stop, per-category pause, caps, acknowledgement |
+| `worker_reconciliations`, `reconcile_paid_call` | `aigw_reconciliations` and `aigw_reconcile` (evidence and the admin role required) |
+| The worker's own definer functions for the ledger (D) | The gateway's functions and roles (`aigwDbGrants.js`); the worker would be caller class `worker` |
+| The worker calling providers itself | Every paid call through the gateway (M0); the worker holds no key |
+| A Runway "live" budget bypass on `POST /scenes/:id/animate` | **Latent, not live:** `startImageToVideo` is not exported on `main`, so the route fails before any request (#3737's finding, checked on `152893c5`). Still high priority: see R4.11 |
+
+Unchanged and still required: per-job approval (S1), stale-basis checks (S6), the bounded job count (S8), separate switches (S4), fencing and the single-session check (S5), and the provider questions Q1–Q9.
+
+### R4.1 Who owns which state
+
+| State | Owner (single source of truth) | Never stored elsewhere as truth |
+|---|---|---|
+| Money: estimate, reservation, billed, exposure, caps, Stop, pause, provider task id, financial reconciliation | **Gateway** (`aigw_permits`, `aigw_control`, `aigw_reconciliations`, `aigw_permit_events`) | `scene_generation_attempts.estimate_usd` and `usage_log_id` become informational copies (or stay NULL) once the gateway is wired; `ai_usage_logs` stays the reporting log |
+| A scene set's or angle's still: in flight, stored, uncertain, confirmation to regenerate, the provider image URL kept for a failed store | **`scene_generation_attempts`** plus `scene_sets` / `scene_angles` (`generation_status`, `current_attempt_id`) and their guards | — |
+| A worker job: queued, claimed, done, failed, needs reconciliation; its claim token | **`generation_jobs`** | — |
+| An angle video's result | `generation_jobs` (the job) and the angle's video fields; its money in the gateway | Not a `scene_generation_attempts` row (R4.6) |
+| What Evoni approved: job ids, job count, expiry, basis | **`worker_activations`** (worker-specific, non-financial; R4.3) | Its budget lives in the gateway |
+
+### R4.2 Logical keys and permit associations
+
+The gateway's `logical_key` plus `attempt` is unique (`aigw_permits_attempt_once`), and a new attempt of a key is refused unless every earlier one is `not_sent` or `failed_confirmed` (`PRIOR_ATTEMPT_UNKNOWN`, `PRIOR_ATTEMPT_NOT_RETRYABLE`, `ATTEMPT_EXISTS`). So **the logical key is what makes "the same operation" impossible to charge twice.** Keys:
+
+| Paid operation | `logical_key` | Other permit fields |
+|---|---|---|
+| A set or angle still (route or worker) | `sga:<scene_generation_attempts.id>` | `job_id` = the `generation_jobs` id when the worker runs it, else NULL; `job_type`; `activation_id` for worker work |
+| An angle video (worker) | `gjob:<generation_jobs.id>:video` | `job_id`, `job_type = generate_angle_video`, `activation_id` |
+| A Claude call inside a worker job | `gjob:<generation_jobs.id>:claude:<step>` (step fixed by the job's code path, not a counter) | `job_id`, `activation_id` |
+| `POST /scenes/:id/animate` (if ever enabled) | `scene-animate:<scene id>:<request id>` | caller class `api` |
+
+- **One domain attempt, at most one sent permit.** A still's permits all share `sga:<attempt id>`, so a pre-send retry is `attempt` 2 of the same key, and a third permit after an unknown outcome is refused by the gateway itself.
+- **The association needs no new column on `scene_generation_attempts`.** The key is derived from the attempt id; a permit is found from the attempt by key, and from the job by `job_id`. A link column (`aigw_permit_id`) is optional; if it is added later it must be write-once in the attempt guard (R4.9).
+- **A user's confirmed regenerate** after an uncertain still is a **new** `scene_generation_attempts` row (it supersedes the old one, #3757 G1/G3), so it gets a new key. The old key's permit stays `unknown` until reconciled; the gateway never sees the second request as a retry of the first.
+
+### R4.3 Activation budgets and limits
+
+- **`worker_activations` (worker-specific, non-financial):** `id`, `job_ids`, `job_types`, `max_jobs`, `jobs_started`, `expires_at`, `basis` (S6), `status` (`active`, `exhausted`, `expired`, `revoked`), `approved_by`, `approved_at`, `deleted_at`. Immutable except the counter and status, by trigger (revision 3, D). At most one active row (partial unique index). **No money columns.**
+- **The budget is a gateway object:** a gateway activation budget keyed by the same `activation_id` (budget in micro-dollars, expiry, status), created and closed only by `aigw_admin`. `aigw_authorize` refuses a `worker` caller unless `activation_id` names an open activation, and refuses when the activation's exposure (the sum over its permits: reserved + confirmed + uncertain) plus the estimate would pass its budget. M0 §10 already lists "activation budget" among the exposure limits; G2 stores `activation_id` on every permit but enforces nothing yet.
+- **Existing gateway rules do the rest:** daily caps and the image cap (`CAP_UNAVAILABLE` when unset), Stop and pause, and **strict work needs a verified price** (`PRICE_NOT_VERIFIED`). Worker work is strict (M0 §10), so **Runway and every unpriced model stay refused** until a verified price exists (Q3). No price is invented.
+- **Creation:** one admin step (`scripts/worker/activation.js create`, gated) writes the `worker_activations` row and opens the gateway budget under the same id, in that order. If the second step fails, the activation row is revoked by the same script; the worker refuses an activation whose gateway budget is not open, so a half-created activation can never run anything.
+- **No API pause is needed for the first activation.** Revision 2's operational pause existed because the API and worker shared a non-atomic daily cap. With both going through the gateway, the daily cap is atomic under the day lock. (The gateway's pause stays available if Evoni wants one.)
+
+### R4.4 Claim, fencing and crash recovery (the worker side)
+
+- **Claim:** one transaction on the active `worker_activations` row (`FOR UPDATE`): status, expiry, `jobs_started < max_jobs`, the job id listed, the type allowed; then `jobs_started + 1` and the job claimed with `status = 'processing'`, `claim_token = gen_random_uuid()`, `activation_id`, with the existing `FOR UPDATE SKIP LOCKED` on the job.
+- **Fencing:** every later job write is `WHERE id = :id AND claim_token = :mine AND status = 'processing'`; 0 rows means another process took over, and the worker stops that job without writing.
+- **Single session:** the worker sets `application_name = 'episode-worker:<boot id>'`; recovery and claiming refuse while another live `episode-worker:*` session of the same role exists (`pg_stat_activity`, no extra grant).
+- **Recovery never re-queues:** every `processing` job becomes `needs_reconciliation`, with a reason. Nothing is sent. Money state is recovered by the **gateway's** sweep (`aigw_sweep`: stale `dispatching` → `unknown`, expired `authorized` → `not_sent`), not by the worker.
+- **A finished job is not re-run:** a job is never set back to `queued` by the worker, for any error. A pre-send failure of the whole job (nothing authorized) ends `failed`; anything after a permit was dispatched ends `needs_reconciliation` unless the gateway recorded a terminal outcome for every permit of the job.
+
+### R4.5 Uncertain outcomes and reconciliation
+
+1. **The gateway decides the money.** An `unknown` permit leaves that state only through `aigw_reconcile` (admin, evidence, reason). Its estimate stays counted as uncertain exposure until then (M0 §10), so it keeps consuming the daily cap and the activation budget.
+2. **The domain follows the money, never the reverse:**
+   - a still's attempt goes `dispatch_started` → `uncertain` (Scene Sets guards keep the set or angle out of `failed` and `pending`); a person regenerates only through the single-use confirmation (#3748 PR C), which creates a new attempt and a new key (R4.2);
+   - a reconciled `succeeded` permit with the output known lets the asset be recovered (download only, no paid call) and the attempt end `stored`;
+   - `failed_confirmed` with evidence ends the attempt `refused`, or lets a confirmed new attempt follow.
+3. **The job follows both:** `scripts/worker/reconcile.js` (read-mostly, gated `--apply`) reads the job's permits (by `job_id`) and its scene attempts, and moves the job from `needs_reconciliation` to `completed` or `failed` only when every permit is terminal and every attempt is out of flight. It writes no money and calls no paid endpoint; a reconciliation of money is `aigw_reconcile`, done first.
+4. **Retry evidence** is the gateway's alone: a permit `not_sent` (expiry, or the dispatching instance's `aigw_mark_not_forwarded` after a pre-send error class), or `failed_confirmed`. The worker's own classifier (`providerSubmitOutcome.classifySubmitError`) only decides what to report; it is never evidence by itself.
+
+### R4.6 Why the angle video gets no Scene Sets attempt (and no new table)
+
+- `scene_generation_attempts_one_in_flight` allows **one** attempt in flight per `(target_kind, target_id)`. A video attempt on target `angle` would block regenerating that angle's still for as long as the video runs (up to the 180 s poll), and an uncertain video would hold the angle's still workflow hostage.
+- The target guard ties `complete` to a newly stored **image** column (G1), and the status guards (G2, G7) act on `generation_status`, which describes the still. The angle stays `complete` while its video is made (`generateAngleVideo`).
+- `target_kind` is checked to `('set', 'angle')`; widening it means editing guard functions that already protect live rows.
+- **The gateway already models the money of a video:** `runway.image_to_video` is in `aigw_operations`; `accepted` and `provider_succeeded` cover the asynchronous task; `aigw_find_by_task` finds it by Runway task id.
+
+So the video's domain state stays on `generation_jobs` plus the angle's video fields, and its money in the gateway. **A separate video-attempt table is not necessary.** It would become necessary only if a video ever needed its own user-facing confirmation flow on the angle (as stills have); that is not proposed.
+
+### R4.7 Partially completed database operations
+
+Each step is its own short transaction (the gateway's rule R1: no transaction is held across a provider call). The order below makes every crash point recoverable without guessing:
+
+| # | Step (one commit each) | If the process dies right after it |
+|---|---|---|
+| 1 | Domain: insert the still's attempt (`claimed`) and switch the target to it (`generating`) | An attempt `claimed` with no permit for its key. Recovery: `claimed` → `abandoned_unsent` (nothing can have been sent: no permit exists) |
+| 2 | Gateway: `aigw_authorize` (key `sga:<id>`, attempt 1), budget reserved | The permit expires `authorized` → `not_sent` (sweep); the attempt goes `abandoned_unsent`; the reservation is released by the gateway |
+| 3 | Domain: attempt `claimed` → `dispatch_started` | Permit still `authorized`, so nothing sent: it expires `not_sent`, and the attempt follows to `not_sent` |
+| 4 | Gateway: `aigw_dispatch` (`authorized` → `dispatching`) | Possibly sent. The sweep makes the permit `unknown`; the attempt goes `uncertain`; the job `needs_reconciliation` |
+| 5 | Send once; then `aigw_record_outcome` | Same as 4 until the outcome is recorded |
+| 6 | Store the asset; attempt `stored` (or `stored_failed` with the provider URL kept); target `complete` | `stored_failed`: only the store is retried, never the generation (#3748) |
+| 7 | Job: `completed`, under its claim token | A job `processing` with all permits terminal and its attempt `stored`. Recovery: `needs_reconciliation`, which reconciles to `completed` with no paid call |
+
+- **The domain write always precedes the gateway authorization,** so a permit never exists without a domain record that names its key.
+- **A refusal at step 2** (`STOPPED`, `SERVICE_PAUSED`, `CAP_UNAVAILABLE`, `PRICE_NOT_VERIFIED`, budget) ends the attempt `not_sent` and the job `failed` with the gateway's code. Nothing was sent.
+- **For a video (or a Claude step)** there is no step 1, 3 or 6 on Scene Sets: the job's claim stands in for step 1, and the result is written to the job and the angle at step 7.
+
+### R4.8 Stale-job approval checks
+
+Unchanged from S6 in substance. `activation.js create` records each job's basis (set `updated_at`, a hash of the canonical description, the base still and its approval, the angle's `updated_at` and still, the event's existence). At claim time the worker recomputes it; any difference fails the job `STALE_BASIS` **before step 1 of R4.7**, so no attempt and no permit exist. A set busy with an attempt in flight is refused by the Scene Sets one-in-flight index and status guards themselves (`SET_BUSY`), which replaces revision 2's `generation_claim_job_id` column: **that column is dropped from the plan.**
+
+### R4.9 Dependencies, migrations and rollback
+
+**Order of dependencies:**
+1. **#3737** (merged and corrected, R4.11): no blind Runway resubmits in either caller.
+2. **Worker safety, step 3 (R4.10):** independent of the gateway; makes the stopped worker safe to start in a later phase.
+3. **#3748 PR B, wired at the service level** (`generateBaseScene`, `generateAngle`, the variation path), so worker jobs and routes both write attempts and both pass the guards. Wired only in routes, a worker cascade would be refused by guard G7 while an attempt is in flight.
+4. **Gateway G3** (server, sockets, forwarding, A1–A16) and **G4** (application and worker wiring, caller class `worker`), each verified.
+5. **The gateway activation budget** (a gateway migration and conformance update), then **`worker_activations`** and `activation.js`.
+6. **A verified price** for each model a first activation would use (gateway price catalogue); until then strict worker work is refused.
+7. **Production facts, read-only, by Evoni:** disk free space, `generation_jobs` by status, the deployed commit, the pm2 cleanliness check (runbook §7).
+
+**Migrations (each separately approved; all forward-only and additive):**
+- `generation_jobs`: enum value `needs_reconciliation` (its own file, as #3757 did for `uncertain`); `claim_token UUID NULL`, `activation_id UUID NULL`. Rollback: the columns can be dropped by a down that refuses while any job is `needs_reconciliation`; the enum value cannot be dropped (it stays unused).
+- `worker_activations` with `deleted_at`, its trigger and partial unique index. Rollback: down refuses while any row exists.
+- **Gateway activation budget:** a new gateway table plus a replaced `aigw_authorize` (a SECURITY DEFINER function owned by the migration login). The in-memory reference ledger (`memoryLedger.js`) and the shared conformance contract must change in the same PR. Rollback: restoring the previous function body; down refuses while any open activation budget exists.
+- **Not needed:** `worker_paid_calls`, `paid_generation_controls`, `worker_reconciliations`, `scene_sets.generation_claim_job_id`. An optional `scene_generation_attempts.aigw_permit_id` is not needed (R4.2); if ever added, the attempt guard must make it write-once in the same migration, or it would be the only unguarded evidence column.
+
+**Compatibility risks to existing Scene Sets behaviour:**
+- **Video guards read only `queued` and `processing`:** `refuseWhileVideoRuns` and the duplicate-click check in the angle video route (`sceneSetRoutes.js`) would let a new paid video start while an earlier job sits in `needs_reconciliation`. Step 3 must add `needs_reconciliation` to both (and to the set's job list, `GET /jobs/set/:setId`).
+- **Readers of job status** must map `needs_reconciliation` to a "check before retrying" state, never to `failed` with a Regenerate button.
+- **The Scene Sets guards stay inert** until #3748 PR B sets `current_attempt_id`; nothing above changes that.
+- **Deployment state is unknown** for #3735, #3746 and #3757; none of them is active until wired, so this ordering holds whichever are live.
+
+### R4.10 Step 3 (designed, not approved): worker safety with no money involved
+
+Purpose: remove the activation blocker named in M0 §13, #3737 and #3748 (the worker re-queues unknown outcomes), while the worker stays off and calls nothing.
+
+1. **Migration:** `generation_jobs.status` gains `needs_reconciliation`; `claim_token`, `activation_id` (NULL until R4.3 exists).
+2. **`recoverStuckJobs`:** `processing` → `needs_reconciliation` with the reason; never `queued`, never `failed`. Refuses (and the poll loop does not start) while another `episode-worker:*` session is live.
+3. **`claimNextJob`:** sets the claim token and `application_name`; later writes are fenced on it.
+4. **`processJob` error path:** never `queued`. `ProviderOutcomeUnknownError` (or any error after a paid call may have started) → `needs_reconciliation`; an error before any paid call → `failed`. The cascade and angle clean-up that today runs only on a final failure moves accordingly.
+5. **Routes:** the two video guards and the job list treat `needs_reconciliation` as blocking and visible.
+6. **Tests (stubs only, the worker module loaded but not started):** recovery moves `processing` to `needs_reconciliation` with zero provider-stub calls; a second session refuses; a fenced write with a wrong token updates 0 rows; no error path re-queues; a `needs_reconciliation` video job blocks a new video request (409); the restricted-role test covers the new columns and the enum.
+7. **Not in step 3:** activations, the gateway, any paid call, any switch change. `GENERATION_WORKER_ENABLED` stays off.
+
+### R4.11 #3737 review (read-only, 2026-11-09, head `cde74e9e`)
+
+**What it protects, confirmed from its diff:**
+- **The latent animate endpoint:** behind `SCENE_ANIMATE_ENABLED` (exactly `true`, default off; 503 `ANIMATE_DISABLED` before anything is read), `aiRateLimiter`, sources limited to images recorded on the scene, validated inputs, `runImageCall` (budget gate and one usage row), and no resubmit after an ambiguous send. It also **exports `startImageToVideo`**, which makes the route reachable for the first time; the default-off switch is what keeps it inert, so the two must ship together.
+- **The worker's Runway path** (`generateAngleVideo`): one send after a timeout, reset, 429 or 5xx (today up to three); `pollTask` reports `UNKNOWN` instead of `FAILED`; a poll that ends unknown throws `PROVIDER_OUTCOME_UNKNOWN` with the task id. **Not covered** (as #3737 says): the worker still re-queues that error; step 3 closes it.
+
+**Compatibility with the gateway:** compatible in direction. Its "send again only on `ENOTFOUND`, `EAI_AGAIN`, `ECONNREFUSED`" rule is the gateway's pre-send rule (`aigw_mark_not_forwarded`), and the task id it carries is what `aigw_find_by_task` needs. Once G4 routes Runway through the gateway, the retry decision moves to the permit; `startImageToVideo`'s own loop then sees only the gateway's answer.
+
+**Blockers found before it can merge (not fixed; #3737 is not modified):**
+1. **A divergent copy of the outcome rules.** `main` now has `src/services/providerSubmitOutcome.js` (#3742), the shared classifier, which treats **408 and 429** as unknown (`AMBIGUOUS_4XX`, Evoni 2026-11-08). #3737 defines its own `classifySubmitError`, `ProviderOutcomeUnknownError` and `NOT_SENT_ERROR_CODES` inside `sceneGenerationService.js`, in which **a Runway 408 is a definitive failure.** Merged as it stands, the file would hold two classifiers with different rules and two error classes. #3737 should use the shared module (extended with an optional `taskId`), not a copy.
+2. **Merge conflicts** in `.env.example` and `.env.production.template` (both sides added lines). `sceneGenerationService.js` merges cleanly and parses.
+3. **Unpriced Runway:** with animate switched on, `runImageCall` logs Runway unpriced, so the daily cap counts nothing for it; the rate limiter is the only bound. That is a reason to keep the switch off until a verified price exists, not a code defect in #3737.
+
+### R4.12 Open decisions
+
+1. **Where the activation budget lives:** a new gateway table (recommended, R4.3), or `activation_id` budgets inside `aigw_control`'s caps.
+2. **Whether a pause is wanted during first activations** anyway (the gateway's pause), although the atomic daily cap no longer requires it.
+3. **#3737:** approve a narrow correction to use `providerSubmitOutcome` (with `taskId`) and resolve the `.env` conflicts, then review for merge with the switch off.
+4. **Job-status presentation:** how the Scene Sets UI shows `needs_reconciliation` (a "check before retrying" state).
+5. **Who reconciles, with what evidence:** the gateway's G2 dependency 4 (admin-only provider status reads), shared by API and worker.
