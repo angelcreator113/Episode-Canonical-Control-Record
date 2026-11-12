@@ -282,6 +282,39 @@ async function classifyLink(sequelize, { eventId, episodeId, transaction } = {})
   return { kind: 'secondary', primaryId, briefNamesPrimary };
 }
 
+/**
+ * Whether another event can be linked to this episode now, for the episode's
+ * Events card (read-only; the writes decide again under their locks):
+ *   { allowed, reason, restore_event_id }
+ * allowed            a first event, or (switch on) a second event
+ * restore_event_id   the brief's own event when its link is missing and no
+ *                    other event holds the episode's link: linking that one
+ *                    again is the repair, and is always allowed
+ * reason             plain words when not allowed (null otherwise)
+ */
+async function addEventAvailability(sequelize, episodeId, { env = process.env } = {}) {
+  const link = await episodeLinkState(sequelize, episodeId);
+  if (link.state === 'none') return { allowed: true, reason: null, restore_event_id: null };
+  if (!link.consistent) {
+    if (link.state === 'primary_link_missing' && !link.strays.length) {
+      return { allowed: false, restore_event_id: link.primaryId,
+        reason: 'This episode\'s source event is not linked to it. Link the source event again; no other event can be added until then.' };
+    }
+    return { allowed: false, restore_event_id: null,
+      reason: 'This episode\'s brief and its linked events do not agree, so no event can be added until that is repaired.' };
+  }
+  if (!attachEnabled(env)) {
+    return { allowed: false, restore_event_id: null,
+      reason: 'This episode already has its event. Adding a second event to an episode is not switched on yet.' };
+  }
+  if (link.state === 'unbriefed') {
+    return { allowed: false, restore_event_id: null, reason: 'This episode\'s brief names no source event yet, so no other event can be added.' };
+  }
+  const frozenAt = await filmedAt(sequelize, episodeId);
+  if (frozenAt) return { allowed: false, restore_event_id: null, reason: 'This episode has been filmed, so no other event can be added.' };
+  return { allowed: true, reason: null, restore_event_id: null };
+}
+
 function notEnabledError() {
   return new SecondaryEventError(409, CODES.NOT_ENABLED,
     'This episode already has its event, and linking a second event to an episode is not switched on yet. Nothing was changed.');
@@ -417,14 +450,18 @@ async function unsupportedSecondaryObligations(sequelize, episodeId, { transacti
 async function assertNoUnsupportedSecondaryObligations(sequelize, episodeId, { transaction, doing = 'be completed' } = {}) {
   const link = await episodeLinkState(sequelize, episodeId, { transaction });
   const found = await unsupportedSecondaryObligations(sequelize, episodeId, { transaction, link });
-  if (!found.length) return;
-  // Not an intended second event: the brief and the links disagree, and the
-  // other linked event carries commitments nothing would book. Said as that.
-  if (!link.consistent) {
-    const err = inconsistentError(episodeId, link, `One of them carries commitments, so the episode cannot ${doing} until that is repaired.`);
-    err.details.events = found;
+  // An unexplained link: the brief names one event and another event's link
+  // points at the episode. No current workflow leaves one (it is what an
+  // older reassign left), so the episode is not filmed or completed until it
+  // is repaired, whether or not that event carries commitments (Evoni,
+  // 2026-11-12: fail closed). A source event whose own link is merely
+  // missing, with no other event linked, is not this and is not refused.
+  if (!link.consistent && link.strays.length) {
+    const err = inconsistentError(episodeId, link, `The episode cannot ${doing} until that is repaired.`);
+    err.details.events = link.strays.map((e) => ({ id: e.id, name: e.name ?? null, obligations: found.find((f) => f.id === e.id)?.obligations || [] }));
     throw err;
   }
+  if (!found.length) return;
   const names = found.map((e) => `"${e.name || 'an event'}"`).join(', ');
   throw new SecondaryEventError(409, CODES.UNSUPPORTED_OBLIGATIONS,
     `This episode has a second event with commitments that are not handled for second events yet (${names}), so it cannot ${doing}. Nothing was changed. Remove the event from the episode, or wait until its commitments are supported.`,
@@ -598,6 +635,7 @@ module.exports = {
   secondaryEventsOf,
   classifyLink,
   episodeLinkState,
+  addEventAvailability,
   assertNoObligations,
   obligationsError,
   assertSecondaryAttach,

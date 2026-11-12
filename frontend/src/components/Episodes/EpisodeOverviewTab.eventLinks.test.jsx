@@ -226,6 +226,78 @@ describe('a filmed episode', () => {
   });
 });
 
+describe('adding an event when the server says it cannot be done (second events are off by default)', () => {
+  const OFF = { allowed: false, restore_event_id: null, reason: 'This episode already has its event. Adding a second event to an episode is not switched on yet.' };
+  const select = () => screen.getByLabelText('Link an event');
+
+  test('the control is shown, off, with the reason in words beside it; nothing can be sent and nothing is asked', async () => {
+    vi.mocked(getEpisodeEvents).mockImplementation(async () => ({ events: linked, add_event: OFF }));
+    renderTab();
+    const note = await screen.findByTestId('overview-add-event-blocked');
+    expect(note.textContent).toBe(OFF.reason);
+    expect(select().disabled).toBe(true);
+    expect(select().getAttribute('aria-describedby')).toBe('overview-add-event-blocked');
+    expect(within(select()).getByText('No event can be added now')).toBeTruthy();
+    expect(within(select()).queryByText(/Charity Gala/)).toBeNull();
+    fireEvent.change(select(), { target: { value: 'ev-9' } });
+    expect(confirmSpy).not.toHaveBeenCalled();
+    expect(writes()).toBe(0);
+  });
+
+  test('the Event Package link and the rest of the card are untouched', async () => {
+    vi.mocked(getEpisodeEvents).mockImplementation(async () => ({ events: linked, add_event: OFF }));
+    renderTab();
+    await screen.findByTestId('overview-add-event-blocked');
+    expect(screen.getByTestId('overview-event-package-ev-1').textContent).toMatch(/Open the event package/);
+    expect(screen.getByTestId('overview-event-unlink-ev-1').disabled).toBe(true);
+  });
+
+  test('an episode with no event: the first link is offered as before', async () => {
+    linked = [];
+    vi.mocked(getEpisodeEvents).mockImplementation(async () => ({ events: [], add_event: { allowed: true, reason: null, restore_event_id: null } }));
+    renderTab();
+    await waitFor(() => expect(within(select()).getByText(/Charity Gala/)).toBeTruthy());
+    expect(select().disabled).toBe(false);
+    expect(screen.queryByTestId('overview-add-event-blocked')).toBeNull();
+  });
+
+  test('a server that does not say (an older one): the control behaves as before', async () => {
+    renderTab();
+    await card();
+    await waitFor(() => expect(within(select()).getByText(/Charity Gala/)).toBeTruthy());
+    expect(select().disabled).toBe(false);
+    expect(screen.queryByTestId('overview-add-event-blocked')).toBeNull();
+  });
+
+  test('the repair the server names: only the source event whose link is missing is offered, it asks nothing, and sends the one request', async () => {
+    linked = [SOURCE_UNSTAMPED];
+    const REPAIR = { allowed: false, restore_event_id: 'ev-1', reason: 'This episode\'s source event is not linked to it. Link the source event again; no other event can be added until then.' };
+    vi.mocked(getEpisodeEvents).mockImplementation(async () => ({ events: linked, add_event: REPAIR }));
+    vi.mocked(api.put).mockResolvedValue({ data: { success: true } });
+    renderTab();
+    expect((await screen.findByTestId('overview-add-event-blocked')).textContent).toBe(REPAIR.reason);
+    await waitFor(() => expect(within(select()).getByText('+ Link the source event again…')).toBeTruthy());
+    expect(select().disabled).toBe(false);
+    expect(within(select()).getByText(/Studio Session/)).toBeTruthy();
+    expect(within(select()).queryByText(/Charity Gala/)).toBeNull();
+    fireEvent.change(select(), { target: { value: 'ev-1' } });
+    await waitFor(() => expect(vi.mocked(api.put)).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(api.put).mock.calls[0]).toEqual(['/api/v1/world/show-1/events/ev-1', { used_in_episode_id: 'ep-1' }]);
+    expect(confirmSpy).not.toHaveBeenCalled();
+  });
+
+  test('a refusal that still arrives is shown in the server\'s words, on the card', async () => {
+    vi.mocked(api.put).mockRejectedValue({ response: { status: 409, data: { error: 'This episode already has its event, and linking a second event to an episode is not switched on yet. Nothing was changed.', code: 'SECONDARY_EVENTS_NOT_ENABLED' } } });
+    confirmSpy.mockReturnValue(true);
+    renderTab();
+    await card();
+    await waitFor(() => expect(within(select()).getByText(/Charity Gala/)).toBeTruthy());
+    fireEvent.change(select(), { target: { value: 'ev-9' } });
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toBe('Could not link the event: This episode already has its event, and linking a second event to an episode is not switched on yet. Nothing was changed.');
+  });
+});
+
 describe('one wording, one route, for the Event Package', () => {
   test('every event row says "Open the event package" and keeps its route', async () => {
     linked = [SOURCE, SECOND];

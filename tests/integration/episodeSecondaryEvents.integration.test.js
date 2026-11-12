@@ -231,6 +231,65 @@ describe('reopen eligibility, pure', () => {
     expect(def.indexdef).toMatch(/UNIQUE INDEX world_events_used_in_episode_unique ON .*world_events .*\(used_in_episode_id\) WHERE \(used_in_episode_id IS NOT NULL\)/);
   });
 
+  // ── What the Events card is told (GET /episodes/:id/events add_event) ───
+  describe('whether another event can be added, for the Events card', () => {
+    const events = (episode) => auth(request(app).get(`/api/v1/episodes/${episode}/events`));
+
+    test('an episode with no event: allowed (the first link), switch off', async () => {
+      const f = await seed();
+      const res = await events(f.empty);
+      expect(res.status).toBe(200);
+      expect(res.body.add_event).toEqual({ allowed: true, reason: null, restore_event_id: null });
+    });
+
+    test('an episode that has its event, switch off: not allowed, with the reason; the list itself is unchanged', async () => {
+      const f = await seed();
+      const res = await events(f.episode);
+      expect(res.body.add_event).toEqual({ allowed: false, restore_event_id: null, reason: 'This episode already has its event. Adding a second event to an episode is not switched on yet.' });
+      expect(res.body.anchor_event_id).toBe(f.first);
+      expect(res.body.events.map((e) => e.id)).toEqual([f.first]);
+    });
+
+    test('switch on: allowed for an unfilmed episode whose brief names its primary; not once filmed', async () => {
+      const f = await seed();
+      on();
+      expect((await events(f.episode)).body.add_event).toEqual({ allowed: true, reason: null, restore_event_id: null });
+      await film(f.show, f.episode);
+      expect((await events(f.episode)).body.add_event).toMatchObject({ allowed: false, reason: 'This episode has been filmed, so no other event can be added.' });
+    });
+
+    test('the source event\'s own link is missing and nothing else holds it (Episode 1\'s shape): the repair is named, switch off or on', async () => {
+      const f = await seed();
+      await run('UPDATE world_events SET used_in_episode_id = NULL WHERE id = :id', { id: f.first });
+      for (const set of [off, on]) {
+        set();
+        const { add_event: a } = (await events(f.episode)).body;
+        expect(a).toMatchObject({ allowed: false, restore_event_id: f.first });
+        expect(a.reason).toMatch(/Link the source event again/);
+      }
+      // And the repair it names is accepted by the event edit, with the switch off.
+      off();
+      expect((await putEvent(f.show, f.first, { used_in_episode_id: f.episode })).status).toBe(200);
+      expect((await events(f.episode)).body.add_event.restore_event_id).toBeNull();
+    });
+
+    test('another event holds the link of an episode whose brief names a different one: not allowed, no repair offered from here', async () => {
+      const f = await seed();
+      await run('UPDATE world_events SET used_in_episode_id = NULL WHERE id = :id', { id: f.first });
+      await run(`UPDATE world_events SET used_in_episode_id = :episode, status = 'used' WHERE id = :id`, { episode: f.episode, id: f.second });
+      expect((await events(f.episode)).body.add_event).toMatchObject({ allowed: false, restore_event_id: null, reason: expect.stringMatching(/do not agree/) });
+    });
+
+    test('if it cannot be read, the events are still listed and the field is left out', async () => {
+      const f = await seed();
+      jest.spyOn(secondary, 'addEventAvailability').mockRejectedValue(new Error('unavailable'));
+      const res = await events(f.episode);
+      expect(res.status).toBe(200);
+      expect(res.body.events.map((e) => e.id)).toEqual([f.first]);
+      expect(res.body.add_event).toBeUndefined();
+    });
+  });
+
   // ── The obligations gate ───────────────────────────────────────────────
   describe('what counts as a commitment (reusing the records that hold it)', () => {
     const kinds = async (eventId) => (await secondary.eventObligations(sequelize, eventId)).obligations.map((o) => o.kind).sort();
@@ -895,10 +954,27 @@ describe('reopen eligibility, pure', () => {
         expect(await linkOf(third)).toBeNull();
       });
 
-      test('with no commitment on the other event, completion and filming are not refused for this', async () => {
+      test('an unexplained link refuses completion and the first take even when the other event carries no commitment (fail closed)', async () => {
         const f = await disagreeing();
         expect(await secondary.unsupportedSecondaryObligations(sequelize, f.episode)).toEqual([]);
+        const res = await auth(request(app).post(`/api/v1/world/${f.show}/episodes/${f.episode}/complete`)).send({});
+        expect(res.status).toBe(409);
+        expect(res.body).toMatchObject({ code: 'EPISODE_EVENT_LINK_INCONSISTENT', events: [{ id: f.second, name: 'Charity Gala', obligations: [] }] });
+        const take = await auth(request(app).post(`/api/v1/episode-clips/${f.episode}/uploads`)).send({ performer: 'lala', filename: 'take.mp4', content_type: 'video/mp4', size: 1024 });
+        expect(take.status).toBe(409);
+        expect(take.body.code).toBe('EPISODE_EVENT_LINK_INCONSISTENT');
+        // Repaired (the other event removed, the source event linked again), it is no longer refused for this.
+        expect((await detach(f.show, f.second)).body.detached).toBe(true);
         await expect(secondary.assertNoUnsupportedSecondaryObligations(sequelize, f.episode)).resolves.toBeUndefined();
+      });
+
+      test('a source event whose own link is missing, with no other event linked (Episode 1\'s shape), is not refused', async () => {
+        const f = await seed();
+        await run('UPDATE world_events SET used_in_episode_id = NULL WHERE id = :id', { id: f.first });
+        expect(await secondary.episodeLinkState(sequelize, f.episode)).toMatchObject({ state: 'primary_link_missing', consistent: false, strays: [] });
+        await expect(secondary.assertNoUnsupportedSecondaryObligations(sequelize, f.episode)).resolves.toBeUndefined();
+        const clips = require('../../src/services/rawClipsService');
+        await expect(clips.assertFirstTakeAllowed(sequelize, f.episode)).resolves.toBeUndefined();
       });
 
       test('with a commitment on the other event, completion is refused as an inconsistency, not as a second event', async () => {
