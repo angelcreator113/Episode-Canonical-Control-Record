@@ -59,9 +59,13 @@
  *     configuration still lists as active is a mismatch (untrusted).
  *   RECOVER: only when untrusted and recoverable; needs the single-use
  *     in-memory challenge and a floor for every active key, none below what
- *     the log proves, and an issuedAt later than any stop this process
- *     refused while untrusted. It keeps the counters of keys that are no
- *     longer active. It leaves the gateway STOPPED.
+ *     the log proves. It keeps the counters of keys that are no longer
+ *     active. It leaves the gateway STOPPED.
+ *   A stop while untrusted: when the log is sound (the recoverable
+ *     conditions) the stop is appended to the log, the state file left
+ *     alone. It therefore survives a restart; a RECOVER signed before it no
+ *     longer matches the head, and its stop floor binds later releases. A
+ *     stop may be the first entry of a log, before any RECOVER.
  *
  * What signatures cannot show: removal of the newest entries. A log cut back
  * to an earlier, genuine prefix replays cleanly, and if the removed entry was
@@ -77,7 +81,12 @@
  *            file, anchor. No later failure can undo it.
  *   release  validate; log; state file; anchor confirmed; only then
  *            RELEASED. A release whose anchor write is not confirmed stays
- *            stopped (RELEASE_PENDING_ANCHOR) until refresh() confirms it.
+ *            stopped (RELEASE_PENDING_ANCHOR) until refresh() confirms it in
+ *            the same process. After a restart it is never confirmed: log
+ *            entries a process finds past the anchor are an unconfirmed
+ *            tail, the anchor is not moved over them, and the gateway stays
+ *            stopped until a fresh release, signed over the current head, is
+ *            applied.
  *            A stop that arrives meanwhile holds the gateway stopped and is
  *            logged after the release.
  *   recover, revoke   as release; both end STOPPED.
@@ -150,7 +159,9 @@ function parsePayload(payload, targetId) {
 function evaluate(state, p, signer, roles) {
   if (state.revoked[signer] !== undefined) return { ok: false, code: 'KEY_REVOKED' };
   if (!roles.includes(ROLE_FOR[p.action])) return { ok: false, code: 'KEY_NOT_AUTHORIZED' };
-  if (!state.initialized && p.action !== 'recover') return { ok: false, code: 'RECOVERY_REQUIRED' };
+  // Before the first RECOVER only a stop (which changes nothing but the
+  // floor and its key's counter) or the RECOVER itself can be recorded.
+  if (!state.initialized && p.action !== 'recover' && p.action !== 'stop') return { ok: false, code: 'RECOVERY_REQUIRED' };
   if (HEAD_BOUND.has(p.action) && p.head !== state.head.hash) return { ok: false, code: 'HEAD_MISMATCH' };
   if (p.seq <= (state.lastSeq[signer] || 0)) return { ok: false, code: 'SEQ_STALE' };
 
@@ -258,8 +269,11 @@ function createEmergencyControl({
     state: initialState(), hashes: [],
     // Stops received but not yet in the log: each holds the gateway stopped.
     urgentStops: 0,
-    // Raised by a stop refused while untrusted; this process only, restricts only.
-    volatileStopFloor: 0,
+    // The log head this process found at load, and whether it has since
+    // applied a command itself. Entries it found past the anchor are an
+    // unconfirmed tail: it never pushes the anchor over them on its own.
+    inheritedSeq: 0,
+    committedLive: false,
     pendingRevocations: new Set(),
     anchor: { status: 'unread', seq: null, hash: null, checkedAt: null },
     challenge: null,
@@ -310,7 +324,7 @@ function createEmergencyControl({
    * forward, one linked step at a time, is safe. Returns true when the anchor
    * now equals the local head.
    */
-  async function anchorSync() {
+  async function anchorSync({ precheck = false } = {}) {
     const head = mem.state.head;
     let a;
     try {
@@ -333,6 +347,14 @@ function createEmergencyControl({
       mem.anchor = { ...cur, status: 'fork', checkedAt: clock.now() };
       untrusted('anchor_fork', { recoverable: false });
       return false;
+    }
+    // Entries this process found in the files past the anchor were never
+    // confirmed by it. They may be a release that was logged just before a
+    // crash, or one written into the files; either way the anchor is not
+    // moved over them until this process has applied a command of its own.
+    if (cur.seq < mem.inheritedSeq && !mem.committedLive) {
+      mem.anchor = { ...cur, status: 'unconfirmed', checkedAt: clock.now() };
+      return precheck;
     }
     while (cur.seq < head.seq) {
       const to = { seq: cur.seq + 1, hash: mem.hashes[cur.seq] };
@@ -397,6 +419,8 @@ function createEmergencyControl({
     }
     mem.state = replay.state;
     mem.hashes = replay.hashes;
+    mem.inheritedSeq = replay.state.head.seq;
+    mem.committedLive = false;
 
     // Revocations: the log is the boundary; the configuration must agree.
     const configRevoked = new Set(verifier.revoked());
@@ -468,7 +492,7 @@ function createEmergencyControl({
     return Object.freeze({
       challenge: mem.challenge.value, challengeId: mem.challenge.id, expiresAt: mem.challenge.expiresAt,
       target: targetId, condition: mem.condition, head: mem.state.head.hash,
-      knownFloors: Object.freeze({ ...mem.state.lastSeq }), stopFloor: Math.max(mem.state.stopFloor, mem.volatileStopFloor),
+      knownFloors: Object.freeze({ ...mem.state.lastSeq }), stopFloor: mem.state.stopFloor,
     });
   }
 
@@ -483,7 +507,7 @@ function createEmergencyControl({
    * appended the in-memory state follows it, whatever happens to the state
    * file. Throws on failure, after marking the gateway untrusted.
    */
-  function commit(command, next, now) {
+  function commit(command, next, now, { writeState = true } = {}) {
     const rest = { seq: mem.state.head.seq + 1, prevHash: mem.state.head.hash, at: now, payload: command.payload, signature: command.signature };
     const hash = chainHash(mem.state.head.hash, rest);
     try {
@@ -494,6 +518,8 @@ function createEmergencyControl({
     }
     mem.state = { ...next, since: next.stopped ? now : null, head: { seq: rest.seq, hash } };
     mem.hashes.push(hash);
+    mem.committedLive = true;
+    if (!writeState) return;
     try {
       store.writeState(stateDocument(mem.state, targetId));
     } catch (err) {
@@ -502,27 +528,27 @@ function createEmergencyControl({
     }
   }
 
-  function liveState() {
-    // A live command also respects stops this process refused while untrusted.
-    return { ...mem.state, stopFloor: Math.max(mem.state.stopFloor, mem.volatileStopFloor) };
-  }
-
   async function applyStop(command, p, sig, now) {
     try {
-      if (!mem.trusted) {
-        // Already stopped. A later RECOVER must not open the way for a release older than this stop.
-        mem.volatileStopFloor = Math.max(mem.volatileStopFloor, p.issuedAt);
-        return { ok: false, code: mem.recoverable ? 'RECOVERY_REQUIRED' : 'RECOVERY_BLOCKED' };
-      }
+      // Untrusted and not recoverable: the log itself cannot be relied on or
+      // written (insecure, unverifiable, truncated, or its last write failed).
+      // The gateway is stopped and stays so until the manual procedure.
+      if (!mem.trusted && !mem.recoverable) return { ok: false, code: 'RECOVERY_BLOCKED' };
       const r = evaluate(mem.state, p, sig.signer, sig.roles);
       if (!r.ok) return { ok: false, code: r.code };
+      // Untrusted but recoverable: the log is sound, only the state file is
+      // not. The stop is recorded in the log (the state file is left alone),
+      // so it survives a restart: the RECOVER that follows must be signed
+      // over it, and the stop floor it raises binds every later release.
+      const recoveryRequired = !mem.trusted;
       try {
-        commit(command, r.next, now);
+        commit(command, r.next, now, { writeState: !recoveryRequired });
       } catch (err) {
         return { ok: true, stopped: true, persisted: false, anchored: false };
       }
       const anchored = await anchorSync();
-      return { ok: true, stopped: true, persisted: true, anchored };
+      return recoveryRequired ? { ok: true, stopped: true, persisted: true, anchored, recoveryRequired: true }
+        : { ok: true, stopped: true, persisted: true, anchored };
     } finally {
       mem.urgentStops -= 1;
     }
@@ -531,12 +557,14 @@ function createEmergencyControl({
   async function applyRelease(command, p, sig, now) {
     if (!mem.trusted) return { ok: false, code: mem.recoverable ? 'RECOVERY_REQUIRED' : 'RECOVERY_BLOCKED' };
     if (mem.pendingRevocations.size > 0) return { ok: false, code: 'REVOCATION_PENDING' };
-    const r = evaluate(liveState(), p, sig.signer, sig.roles);
+    const r = evaluate(mem.state, p, sig.signer, sig.roles);
     if (!r.ok) return { ok: false, code: r.code };
-    // The anchor must confirm the head this release was signed over, now.
-    if (!(await anchorSync())) return { ok: false, code: mem.trusted ? 'ANCHOR_NOT_VERIFIED' : 'RECOVERY_BLOCKED' };
+    // The anchor must be reachable and agree with this log, now: equal to the
+    // head, or behind it only by an unconfirmed tail this fresh release was
+    // signed over.
+    if (!(await anchorSync({ precheck: true }))) return { ok: false, code: mem.trusted ? 'ANCHOR_NOT_VERIFIED' : 'RECOVERY_BLOCKED' };
     try {
-      commit(command, { ...r.next, stopFloor: mem.state.stopFloor }, now);
+      commit(command, r.next, now);
     } catch (err) {
       return { ok: false, code: 'RELEASE_NOT_PERSISTED' };
     }
@@ -560,12 +588,9 @@ function createEmergencyControl({
     const activeFps = new Set(active.map((k) => k.fingerprint));
     for (const fp of Object.keys(p.floors)) if (!activeFps.has(fp)) return { ok: false, code: 'FLOORS_INVALID' };
     for (const { fingerprint } of active) if (!isSeq(p.floors[fingerprint])) return { ok: false, code: 'FLOORS_INCOMPLETE' };
-    // A stop this process refused while untrusted is not in the log, so the
-    // RECOVER itself must be later than it: its issuedAt becomes the floor.
-    if (!(p.issuedAt > mem.volatileStopFloor)) return { ok: false, code: 'RECOVERY_PREDATES_STOP' };
     const r = evaluate(mem.state, p, sig.signer, sig.roles);
     if (!r.ok) return { ok: false, code: r.code };
-    if (!(await anchorSync())) return { ok: false, code: mem.recoverable ? 'ANCHOR_NOT_VERIFIED' : 'RECOVERY_BLOCKED' };
+    if (!(await anchorSync({ precheck: true }))) return { ok: false, code: mem.recoverable ? 'ANCHOR_NOT_VERIFIED' : 'RECOVERY_BLOCKED' };
     const challengeId = mem.challenge.id;
     mem.challenge = null; // single use, whatever happens next
     try {
@@ -585,7 +610,7 @@ function createEmergencyControl({
     if (!r.ok) return { ok: false, code: r.code };
     const known = new Set([...verifier.active().map((k) => k.fingerprint), ...verifier.revoked()]);
     if (!known.has(p.key)) return { ok: false, code: 'REVOKE_INVALID' };
-    if (!(await anchorSync())) return { ok: false, code: mem.trusted ? 'ANCHOR_NOT_VERIFIED' : 'RECOVERY_BLOCKED' };
+    if (!(await anchorSync({ precheck: true }))) return { ok: false, code: mem.trusted ? 'ANCHOR_NOT_VERIFIED' : 'RECOVERY_BLOCKED' };
     try {
       commit(command, r.next, now);
     } catch (err) {
@@ -620,7 +645,7 @@ function createEmergencyControl({
       if (!sig.roles.includes('control')) return refuse('KEY_NOT_AUTHORIZED');
       if (mem.state.revoked[sig.signer] !== undefined) return refuse('KEY_REVOKED');
       // A stale replay must not hold the gateway stopped even briefly.
-      if (mem.trusted && p.seq <= (mem.state.lastSeq[sig.signer] || 0)) return refuse('SEQ_STALE');
+      if ((mem.trusted || mem.recoverable) && p.seq <= (mem.state.lastSeq[sig.signer] || 0)) return refuse('SEQ_STALE');
       mem.urgentStops += 1; // restrict first, before anything is awaited
       return serial(() => applyStop(cmd, p, sig, clock.now())).catch(() => ({ ok: true, stopped: true, persisted: false, anchored: false }));
     }

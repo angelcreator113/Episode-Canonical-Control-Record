@@ -150,14 +150,17 @@ describe('local emergency control', () => {
       expect(() => createEmergencyControl(ok)).not.toThrow();
     });
 
-    test('missing state: STOPPED and untrusted; a signed release or stop cannot initialize it', async () => {
+    test('missing state: STOPPED and untrusted; a signed release cannot initialize it, and a stop is recorded without initializing it', async () => {
       const ec = make();
       expect(await ec.apply(cmd(ec, A, 'stop', 1))).toEqual({ ok: false, code: 'NOT_LOADED' });
       expect(await ec.load()).toMatchObject({ readable: false, stopped: true, condition: 'state_missing', recovery: { possible: true } });
       expect(await ec.apply(cmd(ec, A, 'release', 1))).toEqual({ ok: false, code: 'RECOVERY_REQUIRED' });
-      expect(await ec.apply(cmd(ec, A, 'stop', 2))).toEqual({ ok: false, code: 'RECOVERY_REQUIRED' });
-      expect(fs.existsSync(stateFile())).toBe(false);
       expect(fs.existsSync(logFile())).toBe(false);
+      expect(await ec.apply(cmd(ec, A, 'stop', 2))).toEqual({ ok: true, stopped: true, persisted: true, anchored: true, recoveryRequired: true });
+      expect(ec.status()).toMatchObject({ readable: false, stopped: true, condition: 'state_missing', recovery: { possible: true } });
+      expect(fs.existsSync(stateFile())).toBe(false); // the state file is written by RECOVER only
+      expect(await ec.apply(cmd(ec, A, 'release', 3))).toEqual({ ok: false, code: 'RECOVERY_REQUIRED' });
+      expect((await restart()).status()).toMatchObject({ readable: false, stopped: true, condition: 'state_lost' });
     });
 
     test('RECOVER initializes a new gateway but leaves it STOPPED; a new, head-bound release is required', async () => {
@@ -286,15 +289,21 @@ describe('local emergency control', () => {
       expect(replayLog(readLog(), { verifier: keySet(), targetId: TARGET }).state.stopFloor).toBe(floorBefore);
     });
 
-    test('a Stop refused while untrusted means the RECOVER must be issued after it', async () => {
+    test('a Stop while untrusted is recorded: a RECOVER signed before it no longer matches the head, and its floor binds later releases', async () => {
       const ec = make();
       await ec.load();
+      const earlyRecover = cmd(ec, R, 'recover', 1, { challenge: ec.recoveryChallenge().challenge, floors: floors() });
       const before = tick();
       clock.advance(10);
-      expect(await ec.apply(cmd(ec, A, 'stop', 1))).toEqual({ ok: false, code: 'RECOVERY_REQUIRED' });
-      expect(await recover(ec, { issuedAt: before })).toEqual({ ok: false, code: 'RECOVERY_PREDATES_STOP' });
-      expect((await recover(ec)).ok).toBe(true);
+      const stop = cmd(ec, A, 'stop', 1);
+      expect(await ec.apply(stop)).toMatchObject({ ok: true, stopped: true, persisted: true, recoveryRequired: true });
+      expect(await ec.apply(earlyRecover)).toEqual({ ok: false, code: 'HEAD_MISMATCH' });
+      expect(await recover(ec, { fl: floors(0, 0, 0) })).toEqual({ ok: false, code: 'FLOOR_TOO_LOW' }); // A's stop is known
+      // Even a RECOVER whose signer's clock is behind the stop cannot lower the floor.
+      expect((await recover(ec, { fl: floors(1, 0, 0), issuedAt: before })).ok).toBe(true);
       expect(await ec.apply(cmd(ec, B, 'release', 1, { issuedAt: before }))).toEqual({ ok: false, code: 'RELEASE_PREDATES_STOP' });
+      expect(await ec.apply(cmd(ec, B, 'release', 1, { issuedAt: JSON.parse(stop.payload).issuedAt }))).toEqual({ ok: false, code: 'RELEASE_PREDATES_STOP' });
+      expect((await ec.apply(cmd(ec, B, 'release', 1))).ok).toBe(true);
     });
 
     test('after RECOVER, a release issued before the RECOVER is refused even with a fresh sequence', async () => {
@@ -543,9 +552,11 @@ describe('local emergency control', () => {
         await expectRejected(rechain([log[0], log[1], { ...wrongRole, at: clock.now() }]), 'KEY_NOT_AUTHORIZED');
       });
 
-      test('a log that does not start with RECOVER, a command for another target, and a RECOVER whose floors go below the log', async () => {
+      test('a log that starts with a release, a command for another target, and a RECOVER whose floors go below the log', async () => {
         const log = await history();
-        await expectRejected(rechain([log[2]]), 'RECOVERY_REQUIRED');
+        await expectRejected(rechain([log[1]]), 'RECOVERY_REQUIRED'); // a release first
+        // A stop may come first (recorded while untrusted); it initializes nothing.
+        expect(replayLog(rechain([log[2]]), { verifier: keySet(), targetId: TARGET })).toMatchObject({ ok: true, state: { initialized: false, stopped: true } });
         const other = sign(A, { action: 'stop', seq: 3, issuedAt: tick(), target: 'aigw-other' });
         await expectRejected(rechain([...log, { ...other, at: clock.now() }]), 'TARGET_MISMATCH');
         const low = sign(R, { action: 'recover', seq: 2, issuedAt: tick(), head: log[3].hash, challenge: 'a'.repeat(64), floors: floors(1, 1, 1) });
@@ -758,18 +769,24 @@ describe('local emergency control', () => {
       expect(await ec.refresh()).toMatchObject({ readable: true, stopped: false, anchor: 'verified' });
     });
 
-    test('restart with an anchor write pending: stopped while the anchor is unreachable, released only once it has caught up', async () => {
+    test('restart with an anchor write pending: the unanchored release never becomes effective; a fresh release is required', async () => {
       const ec = await established();
       expect((await ec.apply(cmd(ec, A, 'stop', 2))).ok).toBe(true);
       anchor.failAdvance = true;
       expect((await ec.apply(cmd(ec, A, 'release', 3))).code).toBe('RELEASE_PENDING_ANCHOR');
+      anchor.failAdvance = false; // the anchor is healthy again, but the process that received the release is gone
+      for (let i = 0; i < 2; i += 1) {
+        const again = await restart();
+        expect(again.status()).toMatchObject({ readable: false, stopped: true, condition: 'ok', anchor: 'unconfirmed' });
+        expect(await again.refresh()).toMatchObject({ readable: false, stopped: true, anchor: 'unconfirmed' });
+        expect(anchor.peek().seq).toBe(3); // never moved over the unconfirmed release
+      }
       const ec2 = await restart();
-      expect(ec2.status()).toMatchObject({ readable: false, stopped: true, condition: 'ok', anchor: 'behind' });
-      expect(anchor.peek().seq).toBe(3);
-      anchor.failAdvance = false;
-      const ec3 = await restart();
-      expect(ec3.status()).toMatchObject({ readable: true, stopped: false, anchor: 'verified' });
-      expect(anchor.peek()).toEqual(ec3.status().head);
+      // The lost release itself cannot be sent again; a new one, signed over the current head, is needed.
+      expect(await ec2.apply(cmd(ec2, A, 'release', 3))).toEqual({ ok: false, code: 'SEQ_STALE' });
+      expect(await ec2.apply(cmd(ec2, A, 'release', 4))).toEqual({ ok: true, stopped: false, persisted: true, anchored: true });
+      expect(anchor.peek()).toEqual(ec2.status().head);
+      expect((await restart()).status()).toMatchObject({ readable: true, stopped: false, anchor: 'verified' });
     });
 
     test('a Stop never waits for the anchor, and a failed anchor write cannot make it RELEASED', async () => {
@@ -936,43 +953,112 @@ describe('local emergency control', () => {
     };
 
     describe('1. STOP while untrusted, then RECOVER, RELEASE and restart', () => {
-      test('the refused Stop bounds what follows: RECOVER must be later, an earlier release stays refused, and the floor survives the restart', async () => {
+      test('the Stop is recorded and survives a restart before the RECOVER: an earlier RECOVER, an earlier release and a backdated RECOVER all fail to get past it', async () => {
         const ec = await established();
         const preStopRelease = cmd(ec, B, 'release', 1); // signed before anything went wrong
         fs.rmSync(stateFile());
         const ec2 = await restart();
+        const earlyRecover = cmd(ec2, R, 'recover', 2, { challenge: ec2.recoveryChallenge().challenge, floors: floors(1, 0, 1) });
+        const before = tick();
         clock.advance(50);
         const stop = cmd(ec2, A, 'stop', 2);
         const stopAt = JSON.parse(stop.payload).issuedAt;
-        expect(await ec2.apply(stop)).toEqual({ ok: false, code: 'RECOVERY_REQUIRED' });
-        expect(ec2.status().stopped).toBe(true);
-        expect(readLog()).toHaveLength(2); // the refused stop was not logged
-        expect(await recover(ec2, { seq: 2, fl: floors(1, 0, 1), issuedAt: stopAt })).toEqual({ ok: false, code: 'RECOVERY_PREDATES_STOP' });
-        expect((await recover(ec2, { seq: 2, fl: floors(1, 0, 1) })).ok).toBe(true);
-        expect(await ec2.apply(preStopRelease)).toEqual({ ok: false, code: 'HEAD_MISMATCH' });
-        expect(await ec2.apply(cmd(ec2, B, 'release', 1, { issuedAt: stopAt }))).toEqual({ ok: false, code: 'RELEASE_PREDATES_STOP' });
-        // The refused stop itself, sent again, is applied: stopping twice is safe.
-        expect(await ec2.apply(stop)).toMatchObject({ ok: true, stopped: true });
-        expect((await ec2.apply(cmd(ec2, B, 'release', 1))).ok).toBe(true);
-        const ec3 = await restart();
-        expect(ec3.status()).toMatchObject({ readable: true, stopped: false });
-        expect(replayLog(readLog(), { verifier: keySet(), targetId: TARGET }).state.stopFloor).toBeGreaterThan(stopAt);
-        expect(await ec3.apply(cmd(ec3, A, 'release', 3, { issuedAt: stopAt }))).toEqual({ ok: false, code: 'RELEASE_PREDATES_STOP' });
+        const stateMissing = () => expect(fs.existsSync(stateFile())).toBe(false);
+        expect(await ec2.apply(stop)).toEqual({ ok: true, stopped: true, persisted: true, anchored: true, recoveryRequired: true });
+        stateMissing(); // recorded in the log; the state file is not written
+        expect(JSON.parse(readLog().pop().payload)).toMatchObject({ action: 'stop', seq: 2 });
+        expect(ec2.status()).toMatchObject({ readable: false, stopped: true, condition: 'state_lost' });
+        expect(await ec2.apply(earlyRecover)).toEqual({ ok: false, code: 'HEAD_MISMATCH' });
+
+        const ec3 = await restart(); // the process that saw the stop is gone
+        expect(ec3.status()).toMatchObject({ readable: false, stopped: true, condition: 'state_lost' });
+        expect(ec3.recoveryChallenge().stopFloor).toBe(stopAt);
+        expect(ec3.recoveryChallenge().knownFloors[fp(A)]).toBe(2);
+        expect(await ec3.apply(earlyRecover)).toEqual({ ok: false, code: 'CHALLENGE_INVALID' });
+        expect(await recover(ec3, { seq: 2, fl: floors(1, 0, 1) })).toEqual({ ok: false, code: 'FLOOR_TOO_LOW' });
+        expect((await recover(ec3, { seq: 2, fl: floors(2, 0, 1), issuedAt: before })).ok).toBe(true); // a slow clock cannot lower the floor
+        expect(await ec3.apply(preStopRelease)).toEqual({ ok: false, code: 'HEAD_MISMATCH' });
+        expect(await ec3.apply(cmd(ec3, B, 'release', 1, { issuedAt: before }))).toEqual({ ok: false, code: 'RELEASE_PREDATES_STOP' });
+        expect(await ec3.apply(cmd(ec3, B, 'release', 1, { issuedAt: stopAt }))).toEqual({ ok: false, code: 'RELEASE_PREDATES_STOP' });
+        expect(await ec3.apply(stop)).toEqual({ ok: false, code: 'SEQ_STALE' }); // already recorded
+        expect((await ec3.apply(cmd(ec3, B, 'release', 1))).ok).toBe(true);
+        const ec4 = await restart();
+        expect(ec4.status()).toMatchObject({ readable: true, stopped: false });
+        expect(await ec4.apply(cmd(ec4, A, 'release', 3, { issuedAt: stopAt }))).toEqual({ ok: false, code: 'RELEASE_PREDATES_STOP' });
       });
 
-      test('limitation: a restart before the RECOVER forgets the refused Stop; a release signed before it is still refused, by its head', async () => {
+      test('each untrusted-but-recoverable condition records the Stop; several Stops from different keys all count', async () => {
+        const breakers = {
+          state_lost: () => fs.rmSync(stateFile()),
+          state_corrupt: () => fs.writeFileSync(stateFile(), 'not json', { mode: 0o600 }),
+          state_unknown_version: () => fs.writeFileSync(stateFile(), JSON.stringify({ version: 2 }), { mode: 0o600 }),
+          state_target_mismatch: () => fs.writeFileSync(stateFile(), JSON.stringify({ ...JSON.parse(fs.readFileSync(stateFile(), 'utf8')), target: 'aigw-other' }), { mode: 0o600 }),
+          state_inconsistent: () => fs.writeFileSync(stateFile(), JSON.stringify({ ...JSON.parse(fs.readFileSync(stateFile(), 'utf8')), stopIssuedAt: 0 }), { mode: 0o600 }),
+        };
+        let seqA = 1;
+        let seqB = 0;
+        let seqR = 1;
+        const ec0 = await established();
+        expect(ec0.status().stopped).toBe(false);
+        for (const [condition, breakIt] of Object.entries(breakers)) {
+          breakIt();
+          const stateBefore = fs.existsSync(stateFile()) ? fs.readFileSync(stateFile(), 'utf8') : null;
+          const ec = await restart();
+          expect(ec.status()).toMatchObject({ readable: false, stopped: true, condition });
+          const n = readLog().length;
+          expect(await ec.apply(cmd(ec, A, 'stop', (seqA += 1)))).toMatchObject({ ok: true, persisted: true, recoveryRequired: true });
+          expect(await ec.apply(cmd(ec, B, 'stop', (seqB += 1)))).toMatchObject({ ok: true, persisted: true, recoveryRequired: true });
+          expect(readLog()).toHaveLength(n + 2);
+          expect(fs.existsSync(stateFile()) ? fs.readFileSync(stateFile(), 'utf8') : null).toBe(stateBefore);
+          const ec2 = await restart();
+          expect(ec2.status()).toMatchObject({ readable: false, stopped: true });
+          expect(ec2.recoveryChallenge().knownFloors).toMatchObject({ [fp(A)]: seqA, [fp(B)]: seqB });
+          expect((await recover(ec2, { seq: (seqR += 1), fl: floors(seqA, seqB, seqR - 1) })).ok).toBe(true);
+          expect((await ec2.apply(cmd(ec2, A, 'release', (seqA += 1)))).ok).toBe(true);
+        }
+        expect(replayLog(readLog(), { verifier: keySet(), targetId: TARGET }).ok).toBe(true);
+      });
+
+      test('a replayed or unauthorized Stop is not recorded while untrusted either', async () => {
         const ec = await established();
-        const preStopRelease = cmd(ec, B, 'release', 1);
+        const used = cmd(ec, A, 'stop', 1);
         fs.rmSync(stateFile());
         const ec2 = await restart();
-        const before = tick();
-        clock.advance(50);
-        expect(await ec2.apply(cmd(ec2, A, 'stop', 2))).toEqual({ ok: false, code: 'RECOVERY_REQUIRED' });
-        const ec3 = await restart(); // the refused stop lived in memory only
-        expect(ec3.recoveryChallenge().stopFloor).toBeLessThan(before);
-        expect((await recover(ec3, { seq: 2, fl: floors(1, 0, 1), issuedAt: before })).ok).toBe(true); // accepted: nothing remembers the stop
-        expect(ec3.status().stopped).toBe(true); // RECOVER never releases
-        expect(await ec3.apply(preStopRelease)).toEqual({ ok: false, code: 'HEAD_MISMATCH' });
+        expect(await ec2.apply(used)).toEqual({ ok: false, code: 'SEQ_STALE' });
+        expect(await ec2.apply(cmd(ec2, R, 'stop', 5))).toEqual({ ok: false, code: 'KEY_NOT_AUTHORIZED' });
+        expect(await ec2.apply(cmd(ec2, X, 'stop', 5))).toEqual({ ok: false, code: 'SIGNATURE_INVALID' });
+        expect(readLog()).toHaveLength(2);
+      });
+
+      test('a Stop recorded while untrusted whose log write fails: stopped, and blocked until the files are read again', async () => {
+        await established();
+        fs.rmSync(stateFile());
+        const ecF = await restart({ store: failing('appendLog') });
+        expect(await ecF.apply(cmd(ecF, A, 'stop', 2))).toEqual({ ok: true, stopped: true, persisted: false, anchored: false });
+        expect(ecF.status()).toMatchObject({ readable: false, stopped: true, condition: 'persist_failed', recovery: { possible: false } });
+        expect(await recover(ecF, { seq: 2, challenge: 'a'.repeat(64) })).toEqual({ ok: false, code: 'RECOVERY_BLOCKED' });
+      });
+
+      test('limitation: when the log itself cannot be relied on, the Stop is not recorded; the gateway is stopped and only the manual procedure, then a new RECOVER with a new challenge, leads out', async () => {
+        const ec = await established();
+        const earlyRelease = cmd(ec, B, 'release', 1);
+        anchor.adminSet({ seq: 5, hash: 'e'.repeat(64) }); // the anchor says newer entries were removed
+        const ec2 = await restart();
+        expect(ec2.status()).toMatchObject({ condition: 'anchor_ahead', recovery: { possible: false } });
+        const n = readLog().length;
+        expect(await ec2.apply(cmd(ec2, A, 'stop', 2))).toEqual({ ok: false, code: 'RECOVERY_BLOCKED' });
+        expect(readLog()).toHaveLength(n);
+        expect(ec2.status().stopped).toBe(true);
+        // Manual procedure: archive the files, the anchor's administrator resets it, restart.
+        fs.rmSync(stateFile());
+        fs.rmSync(logFile());
+        anchor.adminSet({ seq: 0, hash: GENESIS_HASH });
+        const ec3 = await restart();
+        expect(await ec3.apply(earlyRelease)).toEqual({ ok: false, code: 'RECOVERY_REQUIRED' });
+        expect((await recover(ec3, { seq: 2, fl: floors(2, 1, 1) })).ok).toBe(true);
+        expect(ec3.status().stopped).toBe(true);
+        expect(await ec3.apply(earlyRelease)).toEqual({ ok: false, code: 'HEAD_MISMATCH' }); // signed over a head that no longer exists
+        expect(await ec3.apply(sign(B, { ...JSON.parse(earlyRelease.payload), head: ec3.status().head.hash }))).toEqual({ ok: false, code: 'SEQ_STALE' }); // and the floors from the signing authority cover its sequence
       });
 
       test('a Stop sent while the state is blocked (not recoverable) is answered RECOVERY_BLOCKED and the gateway stays stopped', async () => {
@@ -1026,16 +1112,51 @@ describe('local emergency control', () => {
         return r;
       };
 
-      test('limitation: an undelivered release signed over the current head is applied at the next start, skipping the clock-skew check', async () => {
+      test('an undelivered release written into the files is never honoured: not at the next start, not after refresh, not after many restarts', async () => {
         const ec = await established();
         expect((await ec.apply(cmd(ec, A, 'stop', 2))).ok).toBe(true);
         const undelivered = cmd(ec, A, 'release', 3); // signed for exactly this head, never sent
         clock.advance(DEFAULT_LIMITS.emergencyClockSkewMs + 60_000);
         expect(await ec.apply(undelivered)).toEqual({ ok: false, code: 'COMMAND_STALE' }); // too old to deliver now
-        expect(insert(undelivered).ok).toBe(true);
+        expect(insert(undelivered)).toMatchObject({ ok: true, state: { stopped: false } }); // the files now say released
+        for (let i = 0; i < 3; i += 1) {
+          const again = await restart();
+          expect(again.status()).toMatchObject({ readable: false, stopped: true, anchor: 'unconfirmed' });
+          expect(await again.refresh()).toMatchObject({ readable: false, stopped: true });
+          clock.advance(DEFAULT_LIMITS.anchorStaleMs + 1);
+          expect(again.status().stopped).toBe(true);
+        }
+        expect(anchor.peek().seq).toBe(3); // the anchor was never moved over it
+      });
+
+      test('after an unconfirmed tail only a fresh command moves on: a Stop keeps it stopped, a fresh release releases', async () => {
+        const ec = await established();
+        expect((await ec.apply(cmd(ec, A, 'stop', 2))).ok).toBe(true);
+        expect(insert(cmd(ec, A, 'release', 3)).ok).toBe(true);
         const ec2 = await restart();
-        expect(ec2.status()).toMatchObject({ readable: true, stopped: false });
-        expect(anchor.peek().seq).toBe(4);
+        expect(await ec2.apply(cmd(ec2, B, 'stop', 1))).toEqual({ ok: true, stopped: true, persisted: true, anchored: true });
+        expect(ec2.status()).toMatchObject({ readable: true, stopped: true, anchor: 'verified' });
+        expect(anchor.peek().seq).toBe(5);
+        expect((await restart()).status()).toMatchObject({ readable: true, stopped: true });
+        // Again, this time answered with a fresh release signed over the head that includes the inserted one.
+        const ec3 = await restart();
+        expect(insert(cmd(ec3, A, 'release', 4)).ok).toBe(true);
+        const ec4 = await restart();
+        expect(ec4.status()).toMatchObject({ readable: false, stopped: true, anchor: 'unconfirmed' });
+        expect(await ec4.apply(cmd(ec4, B, 'release', 2))).toEqual({ ok: true, stopped: false, persisted: true, anchored: true });
+        expect((await restart()).status()).toMatchObject({ readable: true, stopped: false });
+      });
+
+      test('with the anchor unreachable at start, an unconfirmed tail is found by the first read and is still not honoured', async () => {
+        const ec = await established();
+        expect((await ec.apply(cmd(ec, A, 'stop', 2))).ok).toBe(true);
+        expect(insert(cmd(ec, A, 'release', 3)).ok).toBe(true);
+        anchor.down = true;
+        const ec2 = await restart();
+        expect(ec2.status()).toMatchObject({ readable: false, stopped: true, anchor: 'unavailable' });
+        anchor.down = false;
+        expect(await ec2.refresh()).toMatchObject({ readable: false, stopped: true, anchor: 'unconfirmed' });
+        expect(anchor.peek().seq).toBe(3);
       });
 
       test('it is void as soon as any other command is logged first: the head it was signed over is gone', async () => {
@@ -1068,9 +1189,9 @@ describe('local emergency control', () => {
         const head = readLog().pop().hash;
         const rec = sign(R, { action: 'recover', seq: 2, issuedAt: tick(), head, challenge: 'a'.repeat(64), floors: floors(3, 0, 1) });
         expect(insert(rec)).toMatchObject({ ok: true, state: { stopped: true } });
-        expect((await restart()).status()).toMatchObject({ readable: true, stopped: true });
+        expect((await restart()).status()).toMatchObject({ readable: false, stopped: true, anchor: 'unconfirmed' });
         expect(insert(sign(B, { action: 'stop', seq: 1, issuedAt: tick() }))).toMatchObject({ ok: true, state: { stopped: true } });
-        expect((await restart()).status()).toMatchObject({ readable: true, stopped: true });
+        expect((await restart()).status()).toMatchObject({ readable: false, stopped: true, anchor: 'unconfirmed' });
       });
 
       test('an insertion without a matching state file is fail closed (the file is not rewritten to fit)', async () => {

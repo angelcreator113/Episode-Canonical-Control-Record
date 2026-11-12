@@ -157,7 +157,7 @@ These tighten 5.1. Where they differ, 5.2 holds. Nothing here is wired or activa
   An entry that a live gateway would have refused makes the log `log_unverifiable`: stopped, RECOVER blocked.
 - **Why head binding.** The hash chain is unkeyed, so whoever can write the file can recompute it. Without head binding a Stop could be cut out from before a later, genuine release. With it, that release was signed over the Stop and no longer verifies. A stop carries no head, so nothing must be read before stopping. To sign a release, the operator reads the current head from the gateway's status.
 - **The state file can only restrict.** It must equal the replayed state exactly. If it is missing, corrupt, of another version or differs in any field, the gateway is stopped and untrusted, and the file is left as it is; only a signed RECOVER writes it again. The clock-skew check is not replayable (it needs the time of receipt) and is a live check only.
-- **A stop refused while untrusted** is not in the log. A RECOVER must be issued later than it (`RECOVERY_PREDATES_STOP`), so the RECOVER's own `issuedAt` becomes the floor. This replaces the in-memory floor described in 5.1.
+- **A stop while untrusted is recorded** (ruling of 2026-11-12). When the log is sound and only the state file is not (missing, lost, corrupt, unknown version, another target, inconsistent), a valid stop is appended to the log and the state file is left alone; the answer is `ok` with `recoveryRequired: true`. It survives a restart: a RECOVER signed before it no longer matches the head, the floors of the next RECOVER cannot go below its sequence, and the stop floor it raises binds every later release, whatever the RECOVER's `issuedAt`. A stop may be the first entry of a log, before any RECOVER; it initializes nothing. When the log itself cannot be relied on or written (`store_insecure`, `log_corrupt`, `log_unverifiable`, `log_unreadable`, `anchor_ahead`, `anchor_fork`, `revocation_mismatch`, `persist_failed`) the stop is answered `RECOVERY_BLOCKED`; the gateway is stopped, and the only way out is the manual procedure followed by a RECOVER carrying a new challenge. This replaces the in-memory floor described in 5.1.
 
 **Revocation: the rotation boundary is a log entry.**
 - A key is revoked by `revoke`: signed by a `recover` key, head-bound, naming the key's fingerprint. It leaves the gateway **stopped** and raises the stop floor.
@@ -176,15 +176,16 @@ These tighten 5.1. Where they differ, 5.2 holds. Nothing here is wired or activa
   |---|---|---|
   | read recently, equal to the local head | as replayed | n/a |
   | unavailable, or last read too long ago | not readable (submissions refused) | by itself, on the next successful read that is equal |
-  | behind the local head (a write not yet confirmed) | not RELEASED | when the pending write is confirmed (`refresh`, or the next start) |
+  | behind the local head, by entries this process applied itself | not RELEASED | when the pending write is confirmed (`refresh`) |
+  | behind the local head, by entries this process found in the files at start (`unconfirmed`) | not RELEASED, and the anchor is not moved | only by a fresh command applied by this process: a stop keeps it stopped; a release signed over the current head releases |
   | ahead of the local head | `anchor_ahead`: stopped, untrusted, RECOVER blocked | files archived out of band, anchor reset by its administrator, restart, RECOVER |
   | another hash at the same position | `anchor_fork`: the same | the same |
 
-- Entries past the anchor are pushed forward only after the replay has verified them. Residual: a validly signed, head-matching command that was never delivered could be appended by a local writer and would then be applied, which is what its signer authorized for exactly that head.
+- **An unanchored release found after a restart never becomes effective by itself** (ruling of 2026-11-12). Entries a process finds past the anchor may be a release logged just before a crash, or one written into the files; it cannot tell. It does not move the anchor over them and stays stopped until it applies a fresh command itself. So a validly signed, undelivered release written into the files is not honoured, and an ordinary crash during an anchor write also needs a new release.
 
 **Order of persistence.** Commands are applied one at a time.
 - **stop:** stopped in memory before anything is awaited; then log, state file, anchor. No later failure can undo it, and it never waits for the anchor.
-- **release:** validate (signature, sequence, head, stop floor, and the anchor confirming the current head); log; state file; anchor write confirmed; only then RELEASED. An unconfirmed anchor write is `RELEASE_PENDING_ANCHOR`: the release is in the log and the gateway stays stopped until the anchor confirms it.
+- **release:** validate (signature, sequence, head, stop floor, and the anchor confirming the current head); log; state file; anchor write confirmed; only then RELEASED. An unconfirmed anchor write is `RELEASE_PENDING_ANCHOR`: the release is in the log and the gateway stays stopped until the anchor confirms it in the same process; after a restart it is not confirmed and a fresh release is required.
 - **recover, revoke:** as release; both end stopped.
 - **A Stop racing a Release.** A stop that arrives while a release is in flight holds the gateway stopped from that instant and is logged after the release, so the log ends stopped. A release queued behind a stop was signed over the earlier head and is refused (`HEAD_MISMATCH`).
 - A failed log or state write is `persist_failed`: stopped and untrusted until the files are read again.
@@ -201,21 +202,25 @@ On the dev box Postgres runs on the same host, so root there controls both the f
 Each line is covered by a test in `tests/unit/aiGateway/emergencyControl.test.js` ("adversarial review").
 
 **Confirmed**
-- **A Stop while the state is untrusted** is refused (`RECOVERY_REQUIRED`, or `RECOVERY_BLOCKED` when recovery is blocked) and the gateway is stopped either way. In that process a RECOVER must be issued later than the Stop; a release signed before the trouble is refused by its head; the resulting stop floor survives a restart.
+- **A Stop while the state is untrusted** is recorded in the log in every recoverable condition, and the gateway is stopped either way. Across a restart, an earlier RECOVER (head, challenge), a RECOVER backdated by a slow clock (the floor comes from the logged stop), and a release signed or dated before the stop (head, stop floor) all fail.
 - **Anchor freshness.** RELEASED lasts `anchorStaleMs` from the last successful read and no longer; a clock set back does not extend it; an anchor that answers with anything but a position and hash is unavailable; an anchor found ahead withdraws RELEASED for good in that process.
-- **Insertion into the local files.** A forged command, a command already applied, a command signed over an older head, and any insertion without a matching state file are all refused or fail closed. An inserted release cannot pass a pending revocation. An inserted Stop, RECOVER or revoke only ever ends stopped.
+- **Insertion into the local files.** A forged command, a command already applied, a command signed over an older head, and any insertion without a matching state file are all refused or fail closed. A genuine but undelivered release, inserted with a matching state file, is never honoured: not at the next start, not on refresh, not after repeated restarts, and not when the anchor was unreachable at start. An inserted release cannot pass a pending revocation. An inserted Stop, RECOVER or revoke only ever ends stopped.
 - **A Stop racing a release** holds the gateway stopped at every observed instant, whether the release is waiting to read the anchor or to write it, and when the anchor write then fails; the log ends with the Stop.
 - **Revocation set in the configuration first** survives state loss, RECOVER and restarts as `revocation_pending`; each pending key needs its own revoke entry; undoing the configuration change before any revoke entry restores the key. A key cannot revoke itself.
 - **A failure at any persistence stage** (log append, state write, anchor write refused, anchor write failed, anchor answer lost, process death between log and state, a torn final log line), for stop, release, RECOVER and revoke, never yields RELEASED.
 
-**Limitations (accepted or for decision)**
-1. **A Stop refused while untrusted is remembered only by that process.** After a restart nothing records it, so a RECOVER issued before it is accepted. RECOVER still leaves the gateway stopped, and a release signed before the RECOVER still fails its head check; a release signed afterwards is a new decision by its signer.
-2. **An undelivered, validly signed release for the current head can be written into the files by a local writer** and takes effect at the next start, without the clock-skew check and without the anchor having been verified before it was logged. It is void once any other command is logged. A stricter rule is possible (after a restart, a release found past the anchor is not honoured until a fresh release arrives); it would also require a new release after an ordinary crash during an anchor write.
-3. **E1 in a race.** A Stop from a key is superseded by a later-numbered command from the same key that is applied first; from any other key the same Stop always stops.
-4. **A torn final log line** needs the manual archive procedure; RECOVER cannot clear it.
-5. **A RECOVER's challenge cannot be re-checked in a replay** (it lives in memory). A RECOVER written into the files is authenticated by its signature, role, sequence and head only, and ends stopped.
-6. **The anchor's own guarantees are assumed**: atomic, conditional, forward-only, and answering with current data. The real anchor and its grants are not built or verified.
-7. **The consumer must poll** `refresh()` more often than `anchorStaleMs`, or the gateway reports not readable (fail closed).
+**Resolved on 2026-11-12 (rulings after this review)**
+- A stop while untrusted is now recorded in the log whenever the log is sound, so it survives a restart (above).
+- An unanchored release found after a restart is never honoured; a fresh release is required (above).
+
+**Limitations that remain**
+1. **When the log itself cannot be relied on or written, a stop is not recorded.** The gateway is stopped and blocked. After the manual procedure a RECOVER needs a new challenge and every later release must be signed over the new head, so nothing signed earlier can be used; what is lost is the stop's `issuedAt` as a floor.
+2. **E1 in a race.** A Stop from a key is superseded by a later-numbered command from the same key that is applied first; from any other key the same Stop always stops.
+3. **A torn final log line** needs the manual archive procedure; RECOVER cannot clear it.
+4. **A RECOVER's challenge cannot be re-checked in a replay** (it lives in memory). A RECOVER written into the files is authenticated by its signature, role, sequence and head only; it ends stopped and, being past the anchor, leaves the gateway unconfirmed.
+5. **The anchor's own guarantees are assumed**: atomic, conditional, forward-only, and answering with current data. The real anchor and its grants are not built or verified.
+6. **The consumer must poll** `refresh()` more often than `anchorStaleMs`, or the gateway reports not readable (fail closed).
+7. **A crash during an anchor write costs a new release**, by the stricter rule.
 
 ## 6. Dispatch and Stop acknowledgement (`dispatcher`)
 
