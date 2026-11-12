@@ -449,7 +449,7 @@ const EpisodeScenesTab = ({ episode, onToast, sourceEvent = null }) => {
                 <span className="est-location-name">{l.scene_set?.name || 'Scene set'}</span>
                 <span className="est-location-meta">{views ? `Base image and ${views} more ${views === 1 ? 'view' : 'views'}` : 'Base image only'}</span>
                 <span className="est-location-links">
-                  {showId && <Link to={sceneSetPath(showId, l.scene_set_id, { from: `/episodes/${episodeId}?tab=production.beatplan`, fromLabel: scenesFromLabel })}>Open in Scene Sets</Link>}
+                  {showId && <Link to={sceneSetPath(showId, l.scene_set_id, { from: `/episodes/${episodeId}?tab=beatplan`, fromLabel: scenesFromLabel })}>Open in Scene Sets</Link>}
                   {l.role === 'event' && sourceEvent?.id && (sourceEvent.show_id || showId) && (
                     <Link to={`/shows/${sourceEvent.show_id || showId}/events/${sourceEvent.id}`}>Open Event Package</Link>
                   )}

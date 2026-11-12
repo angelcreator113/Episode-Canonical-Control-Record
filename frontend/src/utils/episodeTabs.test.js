@@ -21,8 +21,10 @@ describe('resolveEpisodeTab (audit LINK-04)', () => {
   });
 
   test('no tab, an unknown tab and the old brief link all land somewhere with a body', () => {
-    expect(resolveEpisodeTab(null)).toEqual({ main: 'production', sub: 'scenes', key: 'production.scenes' });
-    expect(resolveEpisodeTab('nope')).toEqual({ main: 'production', sub: 'scenes', key: 'production.scenes' });
+    // The Overview is the default (Evoni, 2026-11-12; it was Production › Scenes).
+    expect(resolveEpisodeTab(null)).toEqual({ main: 'overview', sub: null, key: 'overview' });
+    expect(resolveEpisodeTab('nope')).toEqual({ main: 'overview', sub: null, key: 'overview' });
+    expect(resolveEpisodeTab('')).toEqual({ main: 'overview', sub: null, key: 'overview' });
     expect(resolveEpisodeTab('brief')).toEqual({ main: 'overview', sub: null, key: 'overview' });
   });
 
@@ -100,6 +102,7 @@ describe('the Make group last (Evoni, 2026-11-03)', () => {
     const production = EP_TABS.find((t) => t.key === 'production');
     expect(pillGroups(production).map((g) => g.group)).toEqual(['Look', 'On screen', 'Track', 'Make']);
     expect(resolveEpisodeTab('production')).toEqual({ main: 'production', sub: 'scenes', key: 'production.scenes' });
-    expect(resolveEpisodeTab(null)).toEqual({ main: 'production', sub: 'scenes', key: 'production.scenes' });
+    // The page's default is the Overview now; Production, asked for by name, is unchanged.
+    expect(resolveEpisodeTab(null)).toEqual({ main: 'overview', sub: null, key: 'overview' });
   });
 });

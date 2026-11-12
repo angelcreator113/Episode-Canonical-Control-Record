@@ -31,9 +31,13 @@ describe('EpisodeOverviewTab and the terms lock', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(api.get).mockResolvedValue({ data: {} });
+    // A listed event the server's rule does not lock (neither the source nor linked by its own link): Unlink is
+    // off for every locked row (EpisodeOverviewTab.eventLinks.test.jsx), so only such a row can still be pressed.
     vi.mocked(getEpisodeEvents).mockResolvedValue({
-      events: [{ id: 'ev-1', name: 'The Gala', used_in_episode_id: 'ep-1', link: { anchor: true, stamped: true } }],
+      events: [{ id: 'ev-1', name: 'The Gala', used_in_episode_id: null, link: { anchor: false, stamped: false } }],
     });
+    // Unlink asks first (2026-11-12); here the answer is yes.
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
   });
 
   test('a refused unlink is shown in the server\'s words and the event stays linked', async () => {
@@ -68,6 +72,6 @@ describe('EpisodeOverviewTab and the terms lock', () => {
 
     const link = await screen.findByTestId('overview-event-package-ev-1');
     expect(link.getAttribute('href')).toBe('/shows/show-1/events/ev-1');
-    expect(link.textContent).toContain('View Event Package');
+    expect(link.textContent).toContain('Open the event package');
   });
 });
