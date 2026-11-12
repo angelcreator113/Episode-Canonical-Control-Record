@@ -101,19 +101,62 @@ export function useFullSeasonChoice({ api, showId, eventId, enabled = true, relo
       if (setToast && done) setToast(typeof done === 'function' ? done(out) : done, undo ? { undo: () => undo(out) } : undefined);
       return out;
     } catch (err) {
+      // Saying no to a confirmation is not a failure: nothing was sent.
+      if (err?.cancelled) return null;
       console.error('[seasonFull] action failed:', err);
       setError(err?.response?.data?.code === MIGRATION_CODE ? NEEDS_MIGRATION_TEXT : errorText(err));
+      // The pencil is not as it was shown: read the choice as it is now.
+      if (err?.response?.data?.code === 'SEASON_SLOT_CHANGED') await load();
       return null;
     } finally {
       setBusy(false);
     }
   }, [load, onChanged, setToast]);
 
+  // A swap replaces the pencilled event in the slot (Evoni, 2026-11-10; the
+  // same rule as Place). The server lists the pencil it would replace
+  // (409 SEASON_PLACE_NEEDS_CONFIRMATION); it is shown, and only a yes sends
+  // it back by name. A pencil that changed since (409 SEASON_SLOT_CHANGED) is
+  // said in the panel, the choice is read again, and nothing is sent again.
+  /**
+   * The one confirmation for a swap: names the slot, the incoming event and
+   * each pencilled event it replaces. A yes returns the pencils to send, by
+   * name; a no throws `cancelled`, and nothing is sent.
+   */
+  const confirmSwap = (slotNumber, incomingName, affected) => {
+    const lines = affected.map((p) => `E${p.slot_number}: “${p.event?.name || 'its event'}” is replaced by “${incomingName || 'this event'}”, and becomes a special.`);
+    if (!window.confirm(`Swapping into E${slotNumber} changes a pencilled event:\n\n${lines.join('\n')}\n\nMake this change?`)) {
+      throw Object.assign(new Error('cancelled'), { cancelled: true });
+    }
+    return affected.map((p) => ({ slot_id: p.slot_id, event_id: p.event?.id }));
+  };
+  const swapRequest = async (ofEventId, slotId) => {
+    const url = `${base}/full/events/${ofEventId}/swap`;
+    try {
+      return await api.post(url, { slot_id: slotId });
+    } catch (err) {
+      const asked = err?.response?.data;
+      const affected = asked?.code === 'SEASON_PLACE_NEEDS_CONFIRMATION' && Array.isArray(asked.affected_pencils) ? asked.affected_pencils : [];
+      if (!affected.length) throw err;
+      return api.post(url, { slot_id: slotId, confirm_pencils: confirmSwap(asked.slot_number, asked.incoming_event?.name, affected) });
+    }
+  };
+  /**
+   * Swap back: the replaced event into the same slot. The pencil it replaces
+   * is the event the swap just put there, so it is asked about first, with
+   * the same dialog, before anything is sent; then sent by name. If the slot
+   * has changed since, the server refuses (SEASON_SLOT_CHANGED).
+   */
+  const swapBackRequest = async (d) => {
+    const pencils = confirmSwap(d.slot_number, d.replaced.name,
+      [{ slot_id: d.slot_id, slot_number: d.slot_number, event: { id: d.event?.id, name: d.event?.name } }]);
+    return api.post(`${base}/full/events/${d.replaced.id}/swap`, { slot_id: d.slot_id, confirm_pencils: pencils });
+  };
   const swap = (slotId) => act(
-    () => api.post(`${base}/full/events/${eventId}/swap`, { slot_id: slotId }),
+    () => swapRequest(eventId, slotId),
     (d) => `Swapped into E${d?.slot_number}.${d?.replaced ? ` “${d.replaced.name}” is now ${d.replaced.special?.label || 'a special'}.` : ''}`,
-    // Swap back: the replaced event into the same slot (this event becomes a special again).
-    (d) => (d?.replaced ? act(() => api.post(`${base}/full/events/${d.replaced.id}/swap`, { slot_id: d.slot_id }), 'Swapped back.') : null),
+    // Swap back (this event becomes a special again): asked about, then sent by name.
+    (d) => (d?.replaced ? act(() => swapBackRequest(d), 'Swapped back.') : null),
   );
   return {
     data,

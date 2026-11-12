@@ -16,7 +16,7 @@ const router = express.Router();
 
 const { requireAuth, authorize } = require('../../middleware/auth');
 const { aiRateLimiter } = require('../../middleware/aiRateLimiter');
-const { eventEpisodeConflictBody, EVENT_EPISODE_CONFLICT_CODE } = require('../../utils/eventEpisodeLink');
+const { eventEpisodeConflictBody, EVENT_EPISODE_CONFLICT_CODE, eventDeletedError, eventDeletedBody, EVENT_DELETED_CODE } = require('../../utils/eventEpisodeLink');
 const { findMissingPrices, dealPriceRequiredError, dealPriceRequiredBody, DEAL_PRICE_REQUIRED_CODE } = require('../../services/dealPricingService');
 const { asRetryable, RetryableConflictError } = require('../../utils/episodeLocks');
 const { isFreezeError } = require('../../utils/snapshotFreeze');
@@ -49,14 +49,28 @@ router.post('/world/:showId/events/generate-episode-from-many', requireAuth, aiR
     if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
 
     // Load every requested event in one query so we can validate up front.
+    // Live events only (Evoni, 2026-11-12): a deleted event never starts or
+    // joins an episode.
     const [rows] = await models.sequelize.query(
-      `SELECT * FROM world_events WHERE show_id = :showId AND id IN (:eventIds)`,
+      `SELECT * FROM world_events WHERE show_id = :showId AND id IN (:eventIds) AND deleted_at IS NULL`,
       { replacements: { showId, eventIds } }
     );
     if (!rows || rows.length === 0) {
       return res.status(404).json({ success: false, error: 'No matching events found' });
     }
     const eventsById = new Map(rows.map(r => [r.id, r]));
+    // Every chosen event must be there, or nothing is created: an event that
+    // was deleted or is not in this show is never dropped from the list
+    // silently (it used to be).
+    const missingIds = [...new Set(eventIds.map(String))].filter((id) => !eventsById.has(id));
+    if (missingIds.length) {
+      return res.status(404).json({
+        success: false,
+        code: 'EVENTS_NOT_FOUND',
+        missing_event_ids: missingIds,
+        error: `${missingIds.length} of the ${new Set(eventIds.map(String)).size} chosen events ${missingIds.length === 1 ? 'was' : 'were'} deleted or ${missingIds.length === 1 ? 'is' : 'are'} not in this show. No episode was created: refresh the Event Library and choose again.`,
+      });
+    }
     // Order the events list to match the input order so the first ID is
     // the anchor regardless of DB return order.
     const ordered = eventIds.map(id => eventsById.get(id)).filter(Boolean);
@@ -101,10 +115,14 @@ router.post('/world/:showId/events/generate-episode-from-many', requireAuth, aiR
         // Linked, its terms lock: the link and its frozen prices commit
         // together (services/dealPriceSnapshot).
         await models.sequelize.transaction(async (transaction) => {
-          await models.sequelize.query(
-            `UPDATE world_events SET used_in_episode_id = :episodeId, status = 'used', updated_at = NOW() WHERE id = :evId`,
+          // A live event only: one deleted since the list was checked above
+          // is not linked, and is named in skipped_extras with why.
+          const [linked] = await models.sequelize.query(
+            `UPDATE world_events SET used_in_episode_id = :episodeId, status = 'used', updated_at = NOW()
+              WHERE id = :evId AND deleted_at IS NULL RETURNING id`,
             { replacements: { episodeId: newEpisodeId, evId: ev.id }, transaction }
           );
+          if (!linked?.length) throw eventDeletedError(ev.id);
           await takePriceSnapshot(models.sequelize, ev.id, { transaction, reason: 'linked_episode' });
         });
         linkedExtras.push({ id: ev.id, name: ev.name });
@@ -164,6 +182,11 @@ router.post('/world/:showId/events/generate-episode-from-many', requireAuth, aiR
     if (error.code === EVENT_EPISODE_CONFLICT_CODE) {
       console.warn('Multi-event generate refused:', error.message);
       return res.status(409).json(eventEpisodeConflictBody(error.episode));
+    }
+    // The anchor was deleted while this waited for it: nothing was created.
+    if (error.code === EVENT_DELETED_CODE) {
+      console.warn('Multi-event generate refused:', error.message);
+      return res.status(409).json(eventDeletedBody(error));
     }
     if (error.code === DEAL_PRICE_REQUIRED_CODE) {
       console.warn('Multi-event generate refused:', error.message);
@@ -241,6 +264,10 @@ router.post('/world/:showId/events/:eventId/regenerate-episode', requireAuth, ai
     if (error.code === EVENT_EPISODE_CONFLICT_CODE) {
       console.warn('Regenerate episode refused:', error.message);
       return res.status(409).json(eventEpisodeConflictBody(error.episode));
+    }
+    if (error.code === EVENT_DELETED_CODE) {
+      console.warn('Regenerate episode refused:', error.message);
+      return res.status(409).json(eventDeletedBody(error));
     }
     // A1.2a (W4): a filmed episode is never regenerated (refused before any model call).
     if (isFreezeError(error)) {

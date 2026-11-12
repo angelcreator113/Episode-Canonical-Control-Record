@@ -70,3 +70,48 @@ describe('buildSeasonPositionBlock (A10)', () => {
     expect(block).not.toContain('primary first');
   });
 });
+
+// Q12 as amended (Evoni, 2026-11-12): what the automatic draft treats as an
+// empty intention. All six fields empty and no source label; when in doubt,
+// the slot is written.
+describe('intentionOccupied', () => {
+  const { intentionOccupied } = require('../../../src/services/seasonIntentionService');
+  const EMPTY = { story_purpose: null, story_purposes: null, story_thread_id: null, career_focus: null, desired_pressure: null, outcome_range: null, intention_source: null };
+
+  test('an untouched slot is empty, and so are blank text, an empty list and an empty or null range', () => {
+    expect(intentionOccupied(EMPTY)).toBe(false);
+    expect(intentionOccupied({})).toBe(false);
+    for (const over of [
+      { story_purpose: '   ' }, { career_focus: '' }, { desired_pressure: '' }, { intention_source: ' ' },
+      { story_purposes: [] }, { story_purposes: '[]' }, { outcome_range: {} }, { outcome_range: '{}' }, { outcome_range: 'null' },
+    ]) expect([over, intentionOccupied({ ...EMPTY, ...over })]).toEqual([over, false]);
+  });
+
+  test('each of the six fields alone makes it written', () => {
+    for (const over of [
+      { story_purpose: 'Mine' },
+      { story_purposes: [{ text: 'A side story', primary: false }] },
+      { story_purposes: JSON.stringify([{ text: '', story_thread_id: 't1' }]) },
+      { story_thread_id: 't1' },
+      { career_focus: 'reputation' },
+      { desired_pressure: 'High' },
+      { outcome_range: { min: 'pass', max: 'slay' } },
+      { outcome_range: '{"min":"pass","max":"slay"}' },
+    ]) expect([over, intentionOccupied({ ...EMPTY, ...over })]).toEqual([over, true]);
+  });
+
+  test('a source label alone, of any kind, makes it written', () => {
+    for (const source of ['auto-drafted', 'edited', 'imported', 'AUTO-DRAFTED']) expect(intentionOccupied({ ...EMPTY, intention_source: source })).toBe(true);
+  });
+
+  test('when in doubt it is written: no slot, purposes that are not a list, values that cannot be read', () => {
+    jest.spyOn(console, 'error').mockImplementation(() => {});
+    expect(intentionOccupied(null)).toBe(true);
+    expect(intentionOccupied(undefined)).toBe(true);
+    for (const over of [
+      { story_purposes: { text: 'odd' } }, { story_purposes: '{"text":"odd"}' }, { story_purposes: 'not json' }, { story_purposes: 7 },
+      { outcome_range: 'not json' }, { outcome_range: [] }, { outcome_range: 'pass' }, { outcome_range: 0 },
+    ]) expect([over, intentionOccupied({ ...EMPTY, ...over })]).toEqual([over, true]);
+    jest.restoreAllMocks();
+  });
+});

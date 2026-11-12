@@ -210,11 +210,16 @@ const table = (kind) => (kind === 'set' ? 'scene_sets' : 'scene_angles');
       const [r, d] = await Promise.all([reconcile('angle', angle.id).catch((e) => e.message), dispatch(a).catch((e) => e.message)]);
       const st = (await attempt(a)).state;
       if (d === true) {
-        expect(st).toBe('dispatch_started');
-        expect(r).toMatch(/guard|settled|uncertain/);
+        // The dispatch marker won: the request may have been sent, and the
+        // claim is stale, so the reconciler then records it as uncertain
+        // (dispatch_started -> uncertain), the same as a stale dispatch above.
+        expect(st).toBe('uncertain');
+        expect(r).toBe('uncertain');
+        expect((await target('angle', angle.id)).status).toBe('uncertain');
       } else {
         expect(st).toBe('abandoned_unsent');
         expect(r).toBe('abandoned_unsent');
+        expect((await target('angle', angle.id)).status).toBe('failed');
       }
     });
 

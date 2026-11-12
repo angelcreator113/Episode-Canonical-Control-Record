@@ -13,11 +13,9 @@ const {
 const { NotFoundError, ValidationError, asyncHandler } = require('../middleware/errorHandler');
 // A1.2c: a filmed episode is not deleted (utils/frozenEpisode).
 const { filmedAt, deleteRefusal, isFrozenEpisodeError } = require('../utils/frozenEpisode');
-const { logger } = require('../middleware/auditLog');
-const AuditLogger = require('../services/AuditLogger');
+const { logger, fieldChanges, episodeSummary } = require('../middleware/auditLog');
 
 // Phase 3A Services
-const ActivityService = require('../services/ActivityService');
 const NotificationService = require('../services/NotificationService');
 const PresenceService = require('../services/PresenceService');
 const SocketService = require('../services/SocketService');
@@ -125,20 +123,7 @@ module.exports = {
         }));
       }
 
-      // Log activity (wrapped in try-catch to prevent failures)
-      // TEMPORARILY DISABLED DUE TO AUDIT LOG ERRORS
-      /*
-      try {
-        await logger.logAction(req.user?.id, 'view', 'episode', 'all', {
-          count,
-          filters: { status, sort },
-          ipAddress: req.ip,
-          userAgent: req.get('user-agent'),
-        });
-      } catch (logError) {
-        console.warn('⚠️ Failed to log activity:', logError.message);
-      }
-      */
+      // Viewing is not audited (Evoni, 2026-11-11: no page-view entries).
 
       res.json({
         data: rows,
@@ -182,19 +167,7 @@ module.exports = {
         });
       }
 
-      // Log viewing activity (wrapped in try-catch to prevent failures)
-      // TEMPORARILY DISABLED DUE TO AUDIT LOG ERRORS
-      /*
-      try {
-        await logger.logAction(req.user?.id, 'view', 'episode', id, {
-          episodeTitle: episode.title,
-          ipAddress: req.ip,
-          userAgent: req.get('user-agent'),
-        });
-      } catch (logError) {
-        console.warn('⚠️ Failed to log activity:', logError.message);
-      }
-      */
+      // Viewing is not audited (Evoni, 2026-11-11: no page-view entries).
 
       // The script's revision (A1c R1): the page sends it back with its next
       // script write, so it never overwrites a newer script.
@@ -350,42 +323,15 @@ module.exports = {
         throw createError; // Re-throw to be caught by outer catch
       }
 
-      // Log creation activity (fully non-blocking, won't affect response)
+      // The audit entry (activity_logs; non-blocking: logAction never rejects).
       if (logger && typeof logger.logAction === 'function') {
-        logger
-          .logAction(req.user?.id, 'create', 'episode', episode.id, {
-            newValues: episode.toJSON(),
-            ipAddress: req.ip,
-            userAgent: req.get('user-agent'),
-          })
-          .catch((logError) => {
-            console.warn('⚠️ Failed to log activity:', logError.message);
-          });
+        // What identifies the episode and its state: not the row, never the script.
+        logger.logAction(req.user?.id, 'create', 'episode', episode.id, { newValues: episodeSummary(episode) });
       }
 
       // ✅ SAFE: Phase 3A Integration with proper checks
       const userId = req.user?.id || 'anonymous';
       const userEmail = req.user?.email || 'anonymous';
-
-      // Phase 3A Integration: Activity Logging (non-blocking, safe)
-      try {
-        const ActivityServiceModule = require('../services/ActivityService');
-        if (ActivityServiceModule && typeof ActivityServiceModule.logActivity === 'function') {
-          ActivityServiceModule.logActivity({
-            userId,
-            action: 'CREATE',
-            resourceType: 'episode',
-            resourceId: episode.id,
-            metadata: {
-              title: finalTitle,
-              categories: categories,
-              status: finalStatus,
-            },
-          }).catch((err) => console.error('Activity logging error:', err));
-        }
-      } catch (err) {
-        // Service not available, skip silently
-      }
 
       // Phase 3A Integration: Broadcast WebSocket Event (non-blocking, safe)
       try {
@@ -428,22 +374,8 @@ module.exports = {
         // Service not available, skip silently
       }
 
-      // Log audit event (non-blocking, safe)
-      try {
-        const AuditLoggerModule = require('../services/AuditLogger');
-        if (AuditLoggerModule && typeof AuditLoggerModule.log === 'function') {
-          AuditLoggerModule.log({
-            userId,
-            action: 'CREATE',
-            resource: 'Episode',
-            resourceId: episode.id,
-            resourceName: finalTitle,
-            username: userEmail,
-          }).catch((err) => console.error('Audit log error:', err));
-        }
-      } catch (err) {
-        // Service not available, skip silently
-      }
+      // The audit entry for this creation is the one logger.logAction call
+      // above (issue #1948): one entry per operation.
 
       // The initial-write contract (A1c R1, Evoni, 2026-10-27): the new
       // episode's script revision, which its creator sends with the first
@@ -631,6 +563,7 @@ module.exports = {
           revision: updates.script_revision,
           requireRevision: true,
           restoredFrom: updates.restored_from ?? null,
+          filmedConfirm: require('../services/scriptSave').filmedConfirmOf(updates),
           userId: req.user?.id,
           transaction,
           compose: (row) => {
@@ -656,11 +589,11 @@ module.exports = {
       // Keys this update does not write are named in the response, so a
       // form sending a field the server does not keep is not told it saved
       // (the Overview's Air Date was sent as publish_date and dropped).
-      // script_revision and restored_from steer the script save. Internal
+      // script_revision, restored_from and confirm_filmed_edit steer the script save. Internal
       // attributes (script_line_keys, A1b) are never named in a response.
       const internal = new Set(Episode.INTERNAL_ATTRIBUTES || []);
       const ignoredFields = Object.keys(updates).filter(
-        (field) => !allowedFields[field] && field !== 'script_revision' && field !== 'restored_from'
+        (field) => !allowedFields[field] && field !== 'script_revision' && field !== 'restored_from' && field !== 'confirm_filmed_edit'
           && !internal.has(field));
       return { episode, oldValues, updateData, lockedKept, lockedMoved, scriptRevision, ignoredFields };
     }).catch((err) => {
@@ -693,30 +626,12 @@ module.exports = {
     // They wait under the Feed page's Requests, "posts to approve", until
     // each is approved (PUT /feed-posts/:id { status: 'live' }).
 
-    // Log activity (existing logger) - wrapped in try-catch to prevent failures
-    try {
-      await logger.logAction(req.user?.id, 'edit', 'episode', id, {
-        oldValues,
-        newValues: episode.toJSON(),
-        ipAddress: req.ip,
-        userAgent: req.get('user-agent'),
-      });
-    } catch (logError) {
-      console.warn('⚠️ Failed to log activity:', logError.message);
-    }
-
-    // Phase 3A Integration: Activity Logging (non-blocking)
-    ActivityService.logActivity({
-      userId: req.user?.id,
-      action: 'UPDATE',
-      resourceType: 'episode',
-      resourceId: id,
-      metadata: {
-        title: episode.title,
-        changedFields: Object.keys(updateData),
-        changes: updateData,
-      },
-    }).catch((err) => console.error('Activity logging error:', err));
+    // The audit entry (activity_logs): the ONE entry for this update, holding
+    // only the fields that changed, each with its before and after value
+    // (Evoni, 2026-11-11). A long text such as the script is recorded by
+    // length and SHA-256, not copied. A failure to write the entry is logged
+    // by logAction and does not fail the save.
+    await logger.logAction(req.user?.id, 'edit', 'episode', id, fieldChanges(oldValues, episode.toJSON()));
 
     // Phase 3A Integration: Broadcast WebSocket Event (non-blocking)
     SocketService.broadcastMessage({
@@ -733,16 +648,6 @@ module.exports = {
         timestamp: new Date(),
       },
     }).catch((err) => console.error('WebSocket broadcast error:', err));
-
-    // Log audit event (non-blocking)
-    AuditLogger.log({
-      userId: req.user?.id || 'unknown',
-      action: 'UPDATE',
-      resource: 'Episode',
-      resourceId: id,
-      resourceName: episode.title,
-      username: req.user?.email || 'unknown',
-    }).catch((err) => console.error('Audit log error:', err));
 
     res.json({
       data: episode,
@@ -793,6 +698,7 @@ module.exports = {
         source: 'lock',
         revision: req.body?.script_revision,
         requireRevision: true,
+        filmedConfirm: require('../services/scriptSave').filmedConfirmOf(req.body),
         userId: req.user?.id,
         compose: (row) => {
           before = normalizeLockedBeats(row.script_locked_beats);
@@ -878,28 +784,15 @@ module.exports = {
       throw err;
     }
 
-    // Log activity - wrapped in try-catch to prevent failures
-    try {
-      await logger.logAction(req.user?.id, 'delete', 'episode', id, {
-        oldValues,
-        ipAddress: req.ip,
-        userAgent: req.get('user-agent'),
-      });
-    } catch (logError) {
-      console.warn('⚠️ Failed to log activity:', logError.message);
-    }
-
-    // Phase 3A Integration: Activity Logging (non-blocking)
-    ActivityService.logActivity({
-      userId: req.user?.id,
-      action: 'DELETE',
-      resourceType: 'episode',
-      resourceId: id,
-      metadata: {
-        title: oldValues.title,
-        deleteType: hard === 'true' ? 'permanent' : 'soft',
-      },
-    }).catch((err) => console.error('Activity logging error:', err));
+    // The audit entry (activity_logs): the ONE entry for this delete, written
+    // only after the delete committed (a refused or failed delete returned or
+    // threw above). It identifies the episode; it does not copy the row or the
+    // script. deleteType is what actually happened: ?hard=true is a soft
+    // delete in production.
+    await logger.logAction(req.user?.id, 'delete', 'episode', id, {
+      oldValues: episodeSummary(oldValues),
+      deleteType: hardDelete ? 'permanent' : 'soft',
+    });
 
     // Phase 3A Integration: Broadcast WebSocket Event (non-blocking)
     SocketService.broadcastMessage({
@@ -924,16 +817,6 @@ module.exports = {
         deleteType: hard === 'true' ? 'permanent' : 'soft',
       },
     }).catch((err) => console.error('Notification error:', err));
-
-    // Log audit event (non-blocking)
-    AuditLogger.log({
-      userId: req.user?.id || 'unknown',
-      action: 'DELETE',
-      resource: 'Episode',
-      resourceId: id,
-      resourceName: oldValues.title,
-      username: req.user?.email || 'unknown',
-    }).catch((err) => console.error('Audit log error:', err));
 
     res.json({
       message: `Episode ${id} deleted successfully`,
@@ -984,16 +867,10 @@ module.exports = {
     // Update episode status
     await episode.update({ status: 'processing' });
 
-    // Log activity - wrapped in try-catch to prevent failures
-    try {
-      await logger.logAction(req.user?.id, 'create', 'processing', id, {
-        newValues: { jobTypes, count: jobs.length },
-        ipAddress: req.ip,
-        userAgent: req.get('user-agent'),
-      });
-    } catch (logError) {
-      console.warn('⚠️ Failed to log activity:', logError.message);
-    }
+    // The audit entry (activity_logs).
+    await logger.logAction(req.user?.id, 'create', 'processing', id, {
+      newValues: { jobTypes, count: jobs.length },
+    });
 
     res.json({
       data: jobs,

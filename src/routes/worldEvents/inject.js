@@ -16,6 +16,7 @@ const router = express.Router();
 const { requireAuth } = require('../../middleware/auth');
 const { findTermsLockEpisode, termsLockedBody, episodeLabel } = require('../../utils/eventTermsLock');
 const { loadScopedEvent } = require('../../utils/eventScope');
+const { lockLiveEvent, eventDeletedBody, EVENT_DELETED_CODE } = require('../../utils/eventEpisodeLink');
 const { getModels } = require('./helpers');
 const { findFrozenDeletedEpisode, restartRefusal, isFrozenEpisodeError } = require('../../utils/frozenEpisode');
 
@@ -127,7 +128,7 @@ router.post('/world/:showId/events/:eventId/inject', requireAuth, async (req, re
 
     // Get event
     const [events] = await models.sequelize.query(
-      `SELECT * FROM world_events WHERE id = :eventId AND show_id = :showId`,
+      `SELECT * FROM world_events WHERE id = :eventId AND show_id = :showId AND deleted_at IS NULL`,
       { replacements: { eventId, showId } }
     );
 
@@ -203,11 +204,12 @@ router.post('/world/:showId/events/:eventId/inject', requireAuth, async (req, re
           },
         });
         // A1.2c: the event row locked (after the episode's, episode-first), then asked again.
-        await models.sequelize.query('SELECT id FROM world_events WHERE id = :eventId FOR UPDATE', { replacements: { eventId }, transaction: t });
+        // The same lock a delete takes: an event deleted meanwhile is refused (EVENT_DELETED), nothing linked.
+        await lockLiveEvent(models.sequelize, eventId, { transaction: t });
         const frozenNow = await findFrozenDeletedEpisode(models.sequelize, eventId, { transaction: t });
         if (frozenNow) throw restartRefusal(eventId, frozenNow);
         await models.sequelize.query(
-          `UPDATE world_events SET used_in_episode_id = :episodeId, times_used = COALESCE(times_used, 0) + 1, status = 'used', updated_at = NOW() WHERE id = :eventId`,
+          `UPDATE world_events SET used_in_episode_id = :episodeId, times_used = COALESCE(times_used, 0) + 1, status = 'used', updated_at = NOW() WHERE id = :eventId AND deleted_at IS NULL`,
           { replacements: { episodeId: episode_id, eventId }, transaction: t }
         );
         // If this event has an approved invitation, stamp the episode_id on the asset
@@ -225,6 +227,10 @@ router.post('/world/:showId/events/:eventId/inject', requireAuth, async (req, re
       if (isFrozenEpisodeError(err)) {
         console.warn(`[inject] refused (${err.code}):`, err.message);
         return res.status(409).json(err.toJSON());
+      }
+      if (err.code === EVENT_DELETED_CODE) {
+        console.warn(`[inject] refused (${err.code}):`, err.message);
+        return res.status(409).json(eventDeletedBody(err));
       }
       throw err;
     }

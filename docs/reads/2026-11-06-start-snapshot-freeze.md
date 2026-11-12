@@ -2,6 +2,8 @@
 
 **Status:** a living note on how the freeze works in code. The rulings are Evoni's of 2026-11-06 (A1-a to A1-e, D-13 = A, Q-1 to Q-8, B-1 = b, B-2, B-3, V-1). The design is A1.2-SPEC-v5.
 
+**2026-11-10 (Evoni):** A1.2-SPEC-v5 is filed byte-identical as `docs/design/2026-11-a1-2-start-snapshot-freeze-spec-v5.md`. Evoni confirmed it on 2026-11-10 as the authoritative historical baseline. Its amendments are in `docs/design/2026-11-a1-2-spec-v5-amendments.md`: Amendment 1 allows the A7-x placement-only Move or Swap for filmed episodes, with the snapshot skipped rather than rewritten. That operation is **not implemented**, and the tables below describe the code as it stands.
+
 ## When an episode is frozen
 
 An episode is **frozen** once `episode_raw_clips` holds any row for it, including removed (soft-deleted) clips. `frozen_at` is the earliest of those rows' `created_at`. The first clip upload is what freezes it, and uploads are never blocked.

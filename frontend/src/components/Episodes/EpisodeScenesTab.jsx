@@ -147,6 +147,7 @@ const EpisodeScenesTab = ({ episode, onToast, sourceEvent = null }) => {
 
   // Beats whose feed moment was not saved at generation (§8(w) P5, Task #2216)
   const [feedMomentCheck, setFeedMomentCheck] = useState({ missing: [], error: null });
+  const [planFailed, setPlanFailed] = useState(false);
   // Retry for just those beats (Task #2220): { running, note } — note is a plain-words outcome
   const [feedMomentRetry, setFeedMomentRetry] = useState({ running: false, note: null });
 
@@ -167,6 +168,7 @@ const EpisodeScenesTab = ({ episode, onToast, sourceEvent = null }) => {
       if (seq !== planSeq.current) return;
       const data = res.data || {};
       setPlan(Array.isArray(data.data) ? data.data : []);
+      setPlanFailed(false);
       setReadiness(data.readiness || null);
       setFeedMomentCheck({
         missing: Array.isArray(data.feed_moment_missing) ? data.feed_moment_missing : [],
@@ -174,9 +176,17 @@ const EpisodeScenesTab = ({ episode, onToast, sourceEvent = null }) => {
       });
     } catch (err) {
       console.error('Failed to load the beats:', err);
-      setFeedMomentCheck({ missing: [], error: err.message || 'request failed' });
+      // An older request's failure never marks a newer answer as failed.
+      if (seq !== planSeq.current) return;
+      // The plan did not load: said as that, never as "no beat plan yet", and
+      // not as a Pulse-moments warning (that check comes inside a plan that
+      // loaded: data.feed_moment_check_error). Beats from an earlier read
+      // stay on the page, marked as possibly out of date. Evoni, 2026-11-12.
+      setPlanFailed(true);
+      setFeedMomentCheck({ missing: [], error: null });
     } finally {
-      setLoadingPlan(false);
+      // Only the newest request ends the loading state.
+      if (seq === planSeq.current) setLoadingPlan(false);
     }
   }, [episodeId]);
 
@@ -483,8 +493,21 @@ const EpisodeScenesTab = ({ episode, onToast, sourceEvent = null }) => {
             </label>
           )}
         </div>
+        {/* A refresh that failed while beats from an earlier read are showing:
+            said, with Retry; the beats below are not passed off as current. */}
+        {!loadingPlan && planFailed && total > 0 && (
+          <p className="est-empty-hint" role="alert" data-testid="est-plan-stale">
+            Couldn't refresh this episode's beats. What's shown is from the last successful load and may be out of date.{' '}
+            <button type="button" className="est-link-btn" onClick={() => { setLoadingPlan(true); loadPlan(); }}>Retry</button>
+          </p>
+        )}
         {loadingPlan ? (
           <div className="est-loading">Loading the beats…</div>
+        ) : planFailed && total === 0 ? (
+          <p className="est-empty-hint" role="alert" data-testid="est-plan-failed">
+            Couldn't load this episode's beats. Nothing was changed.{' '}
+            <button type="button" className="est-link-btn" onClick={() => { setLoadingPlan(true); loadPlan(); }}>Retry</button>
+          </p>
         ) : total === 0 ? (
           <p className="est-empty-hint">No beat plan yet. <Link to={`/episodes/${episodeId}/plan`}>Make the beat plan</Link> to map the 14 beats to the locations.</p>
         ) : (grouped ? groups : [{ key: 'story', title: null, beats: storyOrder }]).map((g) => (

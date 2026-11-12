@@ -15,7 +15,7 @@ const router = express.Router();
 
 const { requireAuth } = require('../../middleware/auth');
 const { aiRateLimiter } = require('../../middleware/aiRateLimiter');
-const { eventEpisodeConflictBody, EVENT_EPISODE_CONFLICT_CODE } = require('../../utils/eventEpisodeLink');
+const { eventEpisodeConflictBody, EVENT_EPISODE_CONFLICT_CODE, eventDeletedBody, EVENT_DELETED_CODE } = require('../../utils/eventEpisodeLink');
 const { dealPriceRequiredBody, DEAL_PRICE_REQUIRED_CODE } = require('../../services/dealPricingService');
 const { offerDecisionBody, OFFER_DECISION_CODES } = require('../../services/startOfferDecision');
 const { loadScopedEvent } = require('../../utils/eventScope');
@@ -132,6 +132,11 @@ router.post('/world/:showId/events/:eventId/generate-episode', requireAuth, aiRa
     if (error.code === EVENT_EPISODE_CONFLICT_CODE) {
       console.warn('Generate episode refused:', error.message);
       return res.status(409).json(eventEpisodeConflictBody(error.episode));
+    }
+    // The event was deleted while this Start waited for it: nothing was created.
+    if (error.code === EVENT_DELETED_CODE) {
+      console.warn('Generate episode refused:', error.message);
+      return res.status(409).json(eventDeletedBody(error));
     }
     if (error.code === DEAL_PRICE_REQUIRED_CODE) {
       console.warn('Generate episode refused:', error.message);

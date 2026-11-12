@@ -7,7 +7,8 @@ const S3Service = require('../services/S3Service');
 const FileValidationService = require('../services/FileValidationService');
 const JobQueueService = require('../services/JobQueueService');
 const logger = require('../utils/logger');
-const ActivityService = require('../services/ActivityService');
+// The audit trail (activity_logs): one logAction call per operation (issue #1948).
+const { logger: audit } = require('../middleware/auditLog');
 const NotificationService = require('../services/NotificationService');
 const SocketService = require('../services/SocketService');
 
@@ -95,14 +96,8 @@ class FileController {
         jobId: job.jobId,
       });
 
-      // Phase 3A Integration: Activity Logging (non-blocking)
-      ActivityService.logActivity({
-        userId: req.user?.id,
-        action: 'CREATE',
-        resourceType: 'file',
-        resourceId: fileStorage.id,
-        metadata: { fileName: req.file.originalname, fileType, episodeId, fileSize: req.file.size },
-      }).catch((err) => console.error('Activity logging error:', err));
+      // The audit entry (activity_logs; not awaited: logAction never rejects)
+      audit.logAction(req.user?.id, 'create', 'file', fileStorage.id, { fileName: req.file.originalname, fileType, episodeId, fileSize: req.file.size });
 
       // Phase 3A Integration: WebSocket broadcast (non-blocking)
       SocketService.broadcastMessage({
@@ -172,14 +167,8 @@ class FileController {
         last_accessed_at: new Date(),
       });
 
-      // Phase 3A Integration: Activity Logging (non-blocking)
-      ActivityService.logActivity({
-        userId: req.user?.id,
-        action: 'DOWNLOAD',
-        resourceType: 'file',
-        resourceId: fileId,
-        metadata: { fileName: fileStorage.file_name, fileType: fileStorage.file_type, episodeId },
-      }).catch((err) => console.error('Activity logging error:', err));
+      // The audit entry (activity_logs; not awaited: logAction never rejects)
+      audit.logAction(req.user?.id, 'download', 'file', fileId, { fileName: fileStorage.file_name, fileType: fileStorage.file_type, episodeId });
 
       // Phase 3A Integration: WebSocket broadcast (non-blocking)
       SocketService.broadcastMessage({
@@ -229,14 +218,8 @@ class FileController {
 
       logger.info('File deleted', { episodeId, fileId });
 
-      // Phase 3A Integration: Activity Logging (non-blocking)
-      ActivityService.logActivity({
-        userId: req.user?.id,
-        action: 'DELETE',
-        resourceType: 'file',
-        resourceId: fileId,
-        metadata: { fileName: fileStorage.file_name, fileType: fileStorage.file_type, episodeId },
-      }).catch((err) => console.error('Activity logging error:', err));
+      // The audit entry (activity_logs; not awaited: logAction never rejects)
+      audit.logAction(req.user?.id, 'delete', 'file', fileId, { fileName: fileStorage.file_name, fileType: fileStorage.file_type, episodeId });
 
       // Phase 3A Integration: WebSocket broadcast (non-blocking)
       SocketService.broadcastMessage({

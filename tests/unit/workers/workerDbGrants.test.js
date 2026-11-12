@@ -48,3 +48,24 @@ describe('the worker role SQL file', () => {
     expect(grants.POOL_MAX).toBeLessThan(grants.CONNECTION_LIMIT);
   });
 });
+
+describe('the dev data refresh puts the role\'s grants back (scripts/dev-db/refresh-dev-db.sh)', () => {
+  const refresh = fs.readFileSync(path.join(__dirname, '../../../scripts/dev-db/refresh-dev-db.sh'), 'utf8');
+  const lineGrep = /^(GRANT|REVOKE) /;
+
+  test('it takes the GRANT / REVOKE lines of the role file with a line grep, before the swap', () => {
+    expect(refresh).toContain("grep -E '^(GRANT|REVOKE) ' \"$WORKER_ROLE_SQL\"");
+    expect(refresh).toContain('scripts/worker/sql/episode-worker-role.sql');
+    expect(refresh.indexOf("grep -E '^(GRANT|REVOKE) '")).toBeLessThan(refresh.indexOf('step "swap '));
+    expect(refresh).toMatch(/-v dbname="\$RESTORE_DB" --single-transaction -f "\$WORK\/worker-grants\.sql"/);
+  });
+
+  test('that grep takes every grant in the file, and nothing that creates or alters the role', () => {
+    const taken = SQL.split('\n').filter((l) => lineGrep.test(l)).map((l) => l.replace(/;\s*$/, '').replace(/\s+/g, ' ').trim());
+    const allGrants = statements.filter((s) => /^(GRANT|REVOKE)\b/i.test(s));
+    // Each grant is one whole line starting in column 0, so a line grep misses none.
+    expect(taken).toEqual(allGrants);
+    expect(taken.length).toBeGreaterThanOrEqual(grants.grantStatements(grants.WORKER_ROLE, 'x').filter((s) => / ON (TABLE|SEQUENCE) /.test(s)).length + 2);
+    expect(taken.join('\n')).not.toMatch(/CREATE ROLE|ALTER ROLE|PASSWORD/i);
+  });
+});

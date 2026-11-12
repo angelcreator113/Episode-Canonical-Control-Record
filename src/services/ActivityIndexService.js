@@ -194,10 +194,9 @@ class ActivityIndexService {
       // Get all activities from database
       const result = await this.db.query(`
         SELECT 
-          id, user_id, action_type, resource_type, resource_id,
-          old_values, new_values, timestamp
+          id, user_id, action AS action_type, resource_type, resource_id, changes->'before' AS old_values, changes->'after' AS new_values, created_at AS timestamp
         FROM activity_logs 
-        ORDER BY timestamp DESC
+        ORDER BY created_at DESC
       `);
 
       const activities = result.rows.map((row) => ({
@@ -330,13 +329,13 @@ class ActivityIndexService {
   async dbFallback(query = '', filters = {}) {
     try {
       let sql =
-        'SELECT id, user_id, action_type, resource_type, resource_id, old_values, new_values, timestamp FROM activity_logs WHERE 1=1';
+        "SELECT id, user_id, action AS action_type, resource_type, resource_id, changes->'before' AS old_values, changes->'after' AS new_values, created_at AS timestamp FROM activity_logs WHERE 1=1";
       const params = [];
       let paramIndex = 1;
 
       // Text search on action_type, resource_type, resource_id, and JSON data
       if (query && query.trim().length > 0) {
-        sql += ` AND (action_type ILIKE $${paramIndex} OR resource_type ILIKE $${paramIndex} OR resource_id ILIKE $${paramIndex} OR CAST(new_values AS TEXT) ILIKE $${paramIndex})`;
+        sql += ` AND (action ILIKE $${paramIndex} OR resource_type ILIKE $${paramIndex} OR resource_id ILIKE $${paramIndex} OR CAST(changes AS TEXT) ILIKE $${paramIndex})`;
         params.push(`%${query}%`);
         paramIndex++;
       }
@@ -350,7 +349,7 @@ class ActivityIndexService {
 
       // Action type filter
       if (filters.action_type) {
-        sql += ` AND action_type = $${paramIndex}`;
+        sql += ` AND action = $${paramIndex}`;
         params.push(filters.action_type);
         paramIndex++;
       }
@@ -371,19 +370,19 @@ class ActivityIndexService {
 
       // Date range filters
       if (filters.from_date) {
-        sql += ` AND timestamp >= $${paramIndex}`;
+        sql += ` AND created_at >= $${paramIndex}`;
         params.push(filters.from_date);
         paramIndex++;
       }
 
       if (filters.to_date) {
-        sql += ` AND timestamp <= $${paramIndex}`;
+        sql += ` AND created_at <= $${paramIndex}`;
         params.push(filters.to_date);
         paramIndex++;
       }
 
       // Sorting and pagination
-      sql += ` ORDER BY timestamp DESC`;
+      sql += ` ORDER BY created_at DESC`;
       const limit = Math.min(parseInt(filters.limit) || 20, 100);
       const offset = parseInt(filters.offset) || 0;
 
@@ -400,7 +399,7 @@ class ActivityIndexService {
       let countIndex = 1;
 
       if (query && query.trim().length > 0) {
-        countSql += ` AND (action_type ILIKE $${countIndex} OR resource_type ILIKE $${countIndex} OR resource_id ILIKE $${countIndex} OR CAST(new_values AS TEXT) ILIKE $${countIndex})`;
+        countSql += ` AND (action ILIKE $${countIndex} OR resource_type ILIKE $${countIndex} OR resource_id ILIKE $${countIndex} OR CAST(changes AS TEXT) ILIKE $${countIndex})`;
         countParams.push(`%${query}%`);
         countIndex++;
       }
@@ -410,7 +409,7 @@ class ActivityIndexService {
         countIndex++;
       }
       if (filters.action_type) {
-        countSql += ` AND action_type = $${countIndex}`;
+        countSql += ` AND action = $${countIndex}`;
         countParams.push(filters.action_type);
         countIndex++;
       }
@@ -425,12 +424,12 @@ class ActivityIndexService {
         countIndex++;
       }
       if (filters.from_date) {
-        countSql += ` AND timestamp >= $${countIndex}`;
+        countSql += ` AND created_at >= $${countIndex}`;
         countParams.push(filters.from_date);
         countIndex++;
       }
       if (filters.to_date) {
-        countSql += ` AND timestamp <= $${countIndex}`;
+        countSql += ` AND created_at <= $${countIndex}`;
         countParams.push(filters.to_date);
         countIndex++;
       }
@@ -540,9 +539,9 @@ class ActivityIndexService {
       // Fall back to database
       const result = await this.db.query(
         `
-        SELECT DISTINCT action_type, resource_type
+        SELECT DISTINCT action AS action_type, resource_type
         FROM activity_logs 
-        WHERE action_type ILIKE $1 OR resource_type ILIKE $1
+        WHERE action ILIKE $1 OR resource_type ILIKE $1
         ORDER BY action_type
         LIMIT $2
         `,
@@ -590,9 +589,9 @@ class ActivityIndexService {
       // Fall back to database statistics
       const result = await this.db.query(`
         SELECT 
-          COUNT(DISTINCT action_type) as total_action_types,
+          COUNT(DISTINCT action) as total_action_types,
           COUNT(DISTINCT user_id) as unique_users,
-          COUNT(DISTINCT episode_id) as unique_episodes
+          COUNT(DISTINCT resource_id) FILTER (WHERE resource_type = 'episode') as unique_episodes
         FROM activity_logs
       `);
 

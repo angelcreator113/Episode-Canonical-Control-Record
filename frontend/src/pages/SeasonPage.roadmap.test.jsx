@@ -188,6 +188,88 @@ describe('Season Arc roadmap on the Season page (§8(ff) PR 1)', () => {
     confirm.mockRestore();
   });
 
+  // Place pencil protection (Evoni, 2026-11-10): every pencil the placement
+  // changes is shown, and only a yes sends them back by name.
+  const NEEDS = {
+    response: { status: 409, data: {
+      error: 'Placing "Pilot Test" in E2 changes pencilled events.',
+      code: 'SEASON_PLACE_NEEDS_CONFIRMATION',
+      slot_id: 'slot-2', slot_number: 2,
+      episode: { id: 'ep-old', title: 'Pilot Test' },
+      episode_event: { id: 'ev-own', name: 'Harbor Dinner' },
+      affected_pencils: [
+        { slot_id: 'slot-2', slot_number: 2, event: { id: 'ev-2', name: 'Rooftop Launch' }, change: 'replaced' },
+        { slot_id: 'slot-5', slot_number: 5, event: { id: 'ev-own', name: 'Harbor Dinner' }, change: 'cleared' },
+      ],
+    } },
+  };
+  const PLACE_URL = '/api/v1/world/show-1/season/slots/slot-2/episode';
+  const placeCalls = () => vi.mocked(api.put).mock.calls.filter(([url]) => url === PLACE_URL);
+  const roadmapLoads = () => vi.mocked(api.get).mock.calls.filter(([url]) => url === '/api/v1/world/show-1/season/roadmap').length;
+
+  test('placing over pencilled events: both pencils are shown, and a yes sends each back by name', async () => {
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    vi.mocked(api.put).mockRejectedValueOnce(NEEDS).mockResolvedValueOnce({ data: { success: true } });
+    renderAt('roadmap');
+    fireEvent.change(await screen.findByTestId('season-place-ep-old'), { target: { value: 'slot-2' } });
+
+    await waitFor(() => expect(placeCalls()).toHaveLength(2));
+    expect(placeCalls()[0][1]).toEqual({ episode_id: 'ep-old' });
+    expect(placeCalls()[1][1]).toEqual({
+      episode_id: 'ep-old',
+      confirm_pencils: [{ slot_id: 'slot-2', event_id: 'ev-2' }, { slot_id: 'slot-5', event_id: 'ev-own' }],
+    });
+    expect(confirm).toHaveBeenCalledTimes(2);
+    const asked = confirm.mock.calls[1][0];
+    expect(asked).toContain('Pilot Test');
+    expect(asked).toContain('S1 · E2: "Rooftop Launch" is replaced by "Harbor Dinner"');
+    expect(asked).toContain('S1 · E5: "Harbor Dinner" is cleared from this slot');
+    confirm.mockRestore();
+  });
+
+  test('placing over a pencil, cancelled: nothing more is sent and no error is shown', async () => {
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(true).mockReturnValueOnce(false);
+    vi.mocked(api.put).mockRejectedValueOnce(NEEDS);
+    renderAt('roadmap');
+    fireEvent.change(await screen.findByTestId('season-place-ep-old'), { target: { value: 'slot-2' } });
+
+    await waitFor(() => expect(confirm).toHaveBeenCalledTimes(2));
+    expect(placeCalls()).toHaveLength(1);
+    expect(screen.queryByTestId('season-place-error')).toBeNull();
+    confirm.mockRestore();
+  });
+
+  test('the same event pencilled in the slot still asks, and says it stays', async () => {
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const same = { response: { status: 409, data: { ...NEEDS.response.data,
+      episode_event: { id: 'ev-2', name: 'Rooftop Launch' },
+      affected_pencils: [NEEDS.response.data.affected_pencils[0]] } } };
+    vi.mocked(api.put).mockRejectedValueOnce(same).mockResolvedValueOnce({ data: { success: true } });
+    renderAt('roadmap');
+    fireEvent.change(await screen.findByTestId('season-place-ep-old'), { target: { value: 'slot-2' } });
+
+    await waitFor(() => expect(placeCalls()).toHaveLength(2));
+    expect(confirm.mock.calls[1][0]).toContain('S1 · E2: "Rooftop Launch" stays, and is now locked to this episode.');
+    expect(placeCalls()[1][1].confirm_pencils).toEqual([{ slot_id: 'slot-2', event_id: 'ev-2' }]);
+    confirm.mockRestore();
+  });
+
+  test('a pencil that changed after the confirmation: the refusal is shown, the roadmap reloads, nothing is sent again', async () => {
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const changed = { response: { status: 409, data: { error: 'The pencilled events changed since this was confirmed.', code: 'SEASON_SLOT_CHANGED' } } };
+    vi.mocked(api.put).mockRejectedValueOnce(NEEDS).mockRejectedValueOnce(changed);
+    renderAt('roadmap');
+    const select = await screen.findByTestId('season-place-ep-old');
+    const before = roadmapLoads();
+    fireEvent.change(select, { target: { value: 'slot-2' } });
+
+    expect((await screen.findByTestId('season-place-error')).textContent).toContain('changed since this was confirmed');
+    await waitFor(() => expect(roadmapLoads()).toBeGreaterThan(before));
+    expect(placeCalls()).toHaveLength(2);
+    expect(confirm).toHaveBeenCalledTimes(2);
+    confirm.mockRestore();
+  });
+
   test('marks the next open slot (A6)', async () => {
     vi.mocked(api.get).mockImplementation(async (url) => {
       if (url === '/api/v1/world/show-1/arc') return { data: { arc: ARC } };

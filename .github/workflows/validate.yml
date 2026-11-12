@@ -144,6 +144,105 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  # A2 readiness (docs/design/2026-11-season-planning.md §4.2, §4.6; Evoni,
+  # 2026-11-10): production runs PostgreSQL 17, and the Tests job above runs
+  # 15. This job runs ONLY the A2 constraint tests (K1-K14, K17) and the A2
+  # migration's own up/down/up test (K15, K16), on 17, so the release-position
+  # rules and their migration are proven on production's major version as
+  # well. It adds to the Tests job and replaces nothing there.
+  # It cannot pass without proving something: it fails when the server is not
+  # 17, when a test file is missing, or when any test is skipped or none ran.
+  # The whole migration chain is not run here: the constraint tests build a
+  # throwaway schema, and the migration test builds a scratch database and
+  # runs only the two migrations that define season_slots and its rules.
+  # Since issue #1948 it also runs the activity_logs converging migration's
+  # own test (a scratch database again; two migration files).
+  a2-constraints-pg17:
+    name: A2 constraints (PostgreSQL 17)
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: episode_metadata_test
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    env:
+      A2_TEST_FILE: tests/integration/seasonReleasePositionConstraints.integration.test.js
+      # K15/K16: the real create-season-slots and A2 migrations, up, down and
+      # up again, on a scratch database the test creates. Not the whole
+      # migration chain (Evoni, 2026-11-10: narrow PostgreSQL 17 coverage).
+      A2_MIGRATION_TEST_FILE: tests/integration/seasonReleasePositionMigration.integration.test.js
+      # Issue #1948: the activity_logs converging migration, from each starting
+      # shape, on a scratch database the test creates (production is 17).
+      AUDIT_MIGRATION_TEST_FILE: tests/integration/activityLogsMigration.integration.test.js
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Setup test database
+        run: |
+          PGPASSWORD=postgres psql -h localhost -U postgres -c "DROP DATABASE IF EXISTS episode_metadata_test;"
+          PGPASSWORD=postgres psql -h localhost -U postgres -c "CREATE DATABASE episode_metadata_test;"
+
+      - name: Confirm the server is PostgreSQL 17 and the test file exists
+        run: |
+          VERSION="$(PGPASSWORD=postgres psql -h localhost -U postgres -d episode_metadata_test -Atc 'SHOW server_version')"
+          echo "server_version: ${VERSION}"
+          case "${VERSION}" in
+            17.*) ;;
+            *) echo "::error::Expected PostgreSQL 17, found ${VERSION}."; exit 1 ;;
+          esac
+          for f in "${A2_TEST_FILE}" "${A2_MIGRATION_TEST_FILE}" "${AUDIT_MIGRATION_TEST_FILE}"; do
+            test -f "${f}" || { echo "::error::${f} is missing: nothing to prove."; exit 1; }
+          done
+
+      - name: Run the A2 constraint and migration tests and the activity_logs migration test (these three files only)
+        run: npx jest "${A2_TEST_FILE}" "${A2_MIGRATION_TEST_FILE}" "${AUDIT_MIGRATION_TEST_FILE}" --runInBand --coverage=false --verbose --forceExit --json --outputFile=tmp/a2-constraints-pg17.json
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/episode_metadata_test
+          TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/episode_metadata_test
+          JWT_SECRET: test-secret-key-minimum-32-characters-long
+          NODE_ENV: test
+          NETWORK_GUARD: report
+
+      # A green run with skipped tests would prove nothing (the suite skips
+      # itself when the database is not the isolated test database).
+      - name: Every test ran and passed (none skipped)
+        if: always()
+        run: |
+          node -e '
+            const r = require("./tmp/a2-constraints-pg17.json");
+            const line = `suites ${r.numTotalTestSuites}; tests ${r.numTotalTests}; passed ${r.numPassedTests}; failed ${r.numFailedTests}; skipped ${r.numPendingTests}`;
+            console.log(line);
+            for (const s of r.testResults) for (const t of s.assertionResults) console.log(`${t.status}: ${t.title}`);
+            const ok = r.success && r.numTotalTestSuites === 3 && r.numTotalTests > 0
+              && r.numPassedTests === r.numTotalTests && r.numFailedTests === 0 && r.numPendingTests === 0;
+            if (!ok) { console.log("::error::The PostgreSQL 17 migration tests did not all run and pass: " + line); process.exit(1); }
+          '
+      # The same network guard check as the Tests job.
+      - name: Check the network guard report
+        if: always()
+        run: node tests/networkGuard/verify.js
+
   frontend-tests:
     name: Frontend Tests
     runs-on: ubuntu-latest

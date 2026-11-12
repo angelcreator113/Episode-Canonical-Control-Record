@@ -1,6 +1,16 @@
 /**
- * ActivityService - Safe Activity Logger
- * Logs user activities with graceful fallback
+ * ActivityService: an in-memory activity list. NOT the audit trail.
+ *
+ * It keeps entries in this process's memory only; nothing here reaches
+ * activity_logs. Since issue #1948 (Evoni, 2026-11-11) no audited operation
+ * calls it: the audit trail is written by logger.logAction
+ * (middleware/auditLog) through ActivityLog.logActivity.
+ *
+ * Its one remaining user is controllers/activityController
+ * (/api/v1/activity), which calls methods this class does not have
+ * (getActivityFeed, getTeamActivity …) and so answers 500. That route is
+ * broken, has no caller in the frontend, and was left out of the #1948
+ * repair on purpose.
  */
 
 class ActivityService {

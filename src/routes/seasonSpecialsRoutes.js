@@ -21,6 +21,9 @@
  *                                                                  episode it could swap into
  *   POST   /world/:showId/season/full/events/:eventId/special      Make it a special (at its story position)
  *   POST   /world/:showId/season/full/events/:eventId/swap         Swap it into E_n { slot_id }; E_n's event becomes a special
+ *                                                                  { confirm_pencils: [{ slot_id, event_id }] } names the pencil it
+ *                                                                  replaces (409 SEASON_PLACE_NEEDS_CONFIRMATION lists it; 409
+ *                                                                  SEASON_SLOT_CHANGED when it is no longer the one confirmed)
  *   POST   /world/:showId/season/full/events/:eventId/next-season  Move to the next season instead (its first open slot)
  *   POST   /world/:showId/season/specials/:specialId/story-position  Move a special to its story position
  */
@@ -124,7 +127,8 @@ router.post('/world/:showId/season/full/events/:eventId/special', requireAuth, a
 
 router.post('/world/:showId/season/full/events/:eventId/swap', requireAuth, async (req, res) => {
   try {
-    const data = await full.swapIntoSlot(modelsOf(req).sequelize, req.params.showId, req.params.eventId, req.body?.slot_id);
+    const data = await full.swapIntoSlot(modelsOf(req).sequelize, req.params.showId, req.params.eventId, req.body?.slot_id,
+      { confirmPencils: req.body?.confirm_pencils });
     return res.json({ success: true, data });
   } catch (err) {
     return fail(res, err, 'swap it into a weekly episode');

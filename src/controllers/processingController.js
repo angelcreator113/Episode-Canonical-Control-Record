@@ -1,7 +1,7 @@
 const { models } = require('../models');
 const { Episode, ProcessingQueue } = models;
 const { NotFoundError, ValidationError } = require('../middleware/errorHandler');
-const { logger } = require('../middleware/auditLog');
+const { logger, only } = require('../middleware/auditLog');
 
 /**
  * Processing Queue Controller
@@ -34,10 +34,7 @@ module.exports = {
     });
 
     // Log activity
-    await logger.logAction(req.user?.id || 'anonymous', 'view', 'processing', 'all', {
-      ipAddress: req.ip,
-      userAgent: req.get('user-agent'),
-    });
+    // Viewing is not audited (Evoni, 2026-11-11: no page-view entries).
 
     res.json({
       data: rows,
@@ -78,10 +75,7 @@ module.exports = {
     }
 
     // Log activity
-    await logger.logAction(req.user?.id || 'anonymous', 'view', 'processing', id, {
-      ipAddress: req.ip,
-      userAgent: req.get('user-agent'),
-    });
+    // Viewing is not audited (Evoni, 2026-11-11: no page-view entries).
 
     res.json({ data: job });
   },
@@ -129,8 +123,6 @@ module.exports = {
         jobType,
         status: 'pending',
       },
-      ipAddress: req.ip,
-      userAgent: req.get('user-agent'),
     });
 
     res.status(201).json({
@@ -180,8 +172,6 @@ module.exports = {
     await logger.logAction(req.user?.id, 'edit', 'processing', id, {
       oldValues: { status: oldValues.status, errorMessage: oldValues.errorMessage },
       newValues: { status: job.status, errorMessage: job.errorMessage },
-      ipAddress: req.ip,
-      userAgent: req.get('user-agent'),
     });
 
     res.json({
@@ -223,8 +213,6 @@ module.exports = {
         status: job.status,
         retryCount: job.retryCount,
       },
-      ipAddress: req.ip,
-      userAgent: req.get('user-agent'),
     });
 
     res.json({
@@ -258,10 +246,9 @@ module.exports = {
     await job.destroy();
 
     // Log activity
+    // An allowlist: a job row can carry whatever its creator put in it.
     await logger.logAction(req.user?.id, 'delete', 'processing', id, {
-      oldValues,
-      ipAddress: req.ip,
-      userAgent: req.get('user-agent'),
+      oldValues: only(oldValues, ['id', 'episodeId', 'episode_id', 'jobType', 'job_type', 'status', 'retryCount', 'retry_count']),
     });
 
     res.json({

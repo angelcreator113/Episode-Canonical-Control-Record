@@ -77,6 +77,10 @@ class RawClipError extends Error {
 /** A1.3-0 (C1): the take was attached to an episode deleted while it uploaded. */
 const CLIP_EPISODE_DELETED = 'CLIP_EPISODE_DELETED';
 
+/** A take that something still uses is not removed (Evoni, 2026-11-12). */
+const CLIP_IN_USE = 'CLIP_IN_USE';
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 /**
  * A row as the API sends it: is_favorite (boolean) and start_line (a whole
  * number or null) only when those columns exist; beat_marks (an array, or
@@ -551,14 +555,90 @@ async function setKeyState(sequelize, clipId, status, extra = {}) {
   return shapeRow((rows || [])[0]) || null;
 }
 
-/** Soft-deletes one of the episode's clips (its files stay in S3). True when one was removed. */
+const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+const inBeats = (beats) => (beats && beats.length ? ` (beat${beats.length === 1 ? '' : 's'} ${beats.join(', ')})` : '');
+
+/** blocked_by: each thing that uses a take, in a person's words. */
+function describeClipUses({ edit, voice, jobs }) {
+  const blockedBy = [];
+  for (const use of edit) {
+    if (use.kind === 'prime_segment') blockedBy.push({ kind: use.kind, count: use.count, label: `The edit uses it for ${plural(use.count, 'Prime segment', 'Prime segments')}${inBeats(use.beats)}` });
+    if (use.kind === 'scene_clip') blockedBy.push({ kind: use.kind, count: use.count, label: `The edit uses it as ${plural(use.count, 'scene clip', 'scene clips')}${inBeats(use.beats)}` });
+    if (use.kind === 'performer_clip') blockedBy.push({ kind: use.kind, count: use.count, label: `The edit places it on the timeline ${use.count === 1 ? 'once' : `${use.count} times`}${inBeats(use.beats)}` });
+    if (use.kind === 'edit_version') {
+      const names = use.versions.slice(0, 3).map((v) => `"${v.name}"`).join(', ');
+      blockedBy.push({
+        kind: use.kind, count: use.versions.length, versions: use.versions,
+        label: `${plural(use.versions.length, 'saved version of the edit uses', 'saved versions of the edit use')} it: ${names}${use.versions.length > 3 ? ` and ${use.versions.length - 3} more` : ''}`,
+      });
+    }
+  }
+  if (voice.length) {
+    const takes = voice.reduce((n, s) => n + s.takes, 0);
+    const approved = voice.reduce((n, s) => n + s.approved, 0);
+    const detail = approved ? `, with ${plural(approved, 'approved line', 'approved lines')}` : takes ? `, with ${plural(takes, 'take of a line', 'takes of lines')}` : '';
+    blockedBy.push({ kind: 'voice_source', count: voice.length, takes, approved, label: `Its sound is a Voice Studio source${detail}` });
+  }
+  if (jobs.length) {
+    const running = jobs.some((j) => j.status === 'running');
+    blockedBy.push({ kind: 'voice_job', count: jobs.length, status: running ? 'running' : 'queued', label: `Its voice is ${running ? 'being prepared now' : 'waiting to be prepared'}` });
+  }
+  return blockedBy;
+}
+
+/**
+ * Soft-deletes one of the episode's clips (its files stay in S3). True when
+ * one was removed; false when there is no such live clip.
+ *
+ * A take that something still uses is kept (Evoni, 2026-11-12): refused with
+ * 409 CLIP_IN_USE and blocked_by naming each use; nothing is removed,
+ * detached or replaced, and no option forces it. What holds a take:
+ *   - the live edit: a Prime segment, a scene clip or a timeline placement
+ *     (episodeEditService.rawClipUses, by the edit's own live filters: a
+ *     superseded segment does not hold it);
+ *   - a saved version of the edit (it can be restored);
+ *   - a Voice Studio source made from its sound (voiceStudioService);
+ *   - a voice job waiting or running for it (voiceFootageJobs).
+ * One transaction: the edit's lock first (episodeEditService.lockEdit, the
+ * row every edit write, restore and version save takes), then the take's row
+ * FOR UPDATE (a segment or a placement reads it FOR SHARE, and so does a
+ * voice source as it is written), then the questions, then the delete. A
+ * placement, a restore or a new source therefore lands wholly before this
+ * (and holds the take) or wholly after (and finds the take gone).
+ */
 async function removeClip(sequelize, episodeId, clipId) {
-  const [rows] = await sequelize.query(
-    `UPDATE episode_raw_clips SET deleted_at = NOW(), updated_at = NOW()
-      WHERE id = :clipId AND episode_id = :episodeId AND deleted_at IS NULL
-      RETURNING id`,
+  if (!UUID_RE.test(String(episodeId || '')) || !UUID_RE.test(String(clipId || ''))) return false;
+  const editService = require('./episodeEditService');
+  // No such live clip of this episode: nothing to lock or ask (and no edit
+  // state is made for an episode that is not there).
+  const [[there]] = await sequelize.query(
+    'SELECT id FROM episode_raw_clips WHERE id = :clipId AND episode_id = :episodeId AND deleted_at IS NULL',
     { replacements: { episodeId, clipId } });
-  return (rows || []).length > 0;
+  if (!there) return false;
+  return sequelize.transaction(async (transaction) => {
+    await editService.lockEdit(sequelize, episodeId, transaction);
+    const [[clip]] = await sequelize.query(
+      'SELECT id, label FROM episode_raw_clips WHERE id = :clipId AND episode_id = :episodeId AND deleted_at IS NULL FOR UPDATE',
+      { replacements: { episodeId, clipId }, transaction });
+    if (!clip) return false;
+    const blockedBy = describeClipUses({
+      edit: await editService.rawClipUses(sequelize, { episodeId, clipId }, transaction),
+      voice: await require('./voiceStudioService').rawClipVoiceUses(sequelize, { episodeId, clipId }, transaction),
+      jobs: await require('./voiceFootageJobs').activeJobsForClip(sequelize, clipId, transaction),
+    });
+    if (blockedBy.length) {
+      const err = new RawClipError(409, `"${clip.label || 'This take'}" can't be deleted. ${blockedBy.map((b) => b.label).join('. ')}. Nothing was deleted.`, CLIP_IN_USE);
+      err.blocked_by = blockedBy;
+      err.clip = { id: clip.id, label: clip.label || null };
+      throw err;
+    }
+    const [rows] = await sequelize.query(
+      `UPDATE episode_raw_clips SET deleted_at = NOW(), updated_at = NOW()
+        WHERE id = :clipId AND episode_id = :episodeId AND deleted_at IS NULL
+        RETURNING id`,
+      { replacements: { episodeId, clipId }, transaction });
+    return (rows || []).length > 0;
+  });
 }
 
 // ── Green removal: pure pieces ─────────────────────────────────────────────
@@ -819,7 +899,7 @@ module.exports = {
   PERFORMERS, KEY_STATUSES, KEY_STRENGTHS, STALE_HOURS, STALE_MESSAGE, CANCELLED_MESSAGE, DEFAULT_KEY_COLOR, STRENGTH_SIMILARITY,
   TAKE_FIELDS, TAKE_FIELDS_MISSING, BEAT_MARKS_MISSING, END_BEAT_MISSING, MAX_BEAT_MARKS, MAX_MARK_SECONDS,
   UPLOAD_EXTRAS, RawClipError, readFields, readBeatMarks, readStrength, readTakeSeconds, readVideoSize, truthy, findEpisode, shapeRow,
-  listClips, getClip, createClip, updateClip, storeTakeExtras, setKeyState, removeClip,
+  listClips, getClip, createClip, updateClip, storeTakeExtras, setKeyState, removeClip, CLIP_IN_USE,
   KEY_MB_PER_SECOND, KEY_MIN_BYTES, KEY_MARGIN_BYTES, KEY_UNKNOWN_SECONDS, keyRoomNeeded, cutoutKeyFor, netInputArgs, CutoutIncompleteError, cutoutComplete,
   KEY_MAX_FPS, pickKeyColor, chromakeyArgs, progressSeconds, progressView, sampleFrameArgs,
   KEY_PACE_MIN_SECONDS, KEY_NO_PROGRESS_SECONDS, KEY_PACE_SHARE, keyPaceVerdict, KeyTooSlowError, thumbnailArgs, probeArgs, readProbe, readFrameRate,
