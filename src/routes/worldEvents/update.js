@@ -26,7 +26,7 @@ const { getModels } = require('./helpers');
 const { assertEventRelinkAllowed, isFrozenEpisodeError } = require('../../utils/frozenEpisode');
 const { RetryableConflictError, asRetryable } = require('../../utils/episodeLocks');
 const { softDeleteUnusedUnlinkedEvents } = require('../../utils/worldEventSafeDelete');
-const { findLiveLinkedEpisode } = require('../../utils/eventEpisodeLink');
+const { findLiveLinkedEpisode, isEpisodeEventLinkConflict, episodeEventLinkTakenBody, EPISODE_EVENT_LINK_TAKEN_CODE } = require('../../utils/eventEpisodeLink');
 
 // Every status an event row carries: draft | ready | used | archived
 // (WorldEvent.js) plus the values the server's own writers set — filmed
@@ -590,6 +590,24 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), req
     } catch (updateErr) {
       if (updateErr instanceof EventPutRefusal) return res.status(updateErr.status).json(updateErr.body);
       if (updateErr.staleSave) return refuseStale();
+      // The one known conflict: the database lets one event's own link point
+      // at an episode, and this save asked for a second. The transaction has
+      // rolled back, so nothing in the request was saved. Answered 409, not
+      // 500. Every other database error goes on as before.
+      if (isEpisodeEventLinkConflict(updateErr)) {
+        const episodeId = replacements.used_in_episode_id || null;
+        let holder = null;
+        try {
+          const [rows] = await models.sequelize.query(
+            'SELECT id, name FROM world_events WHERE used_in_episode_id = :episodeId AND id <> :eventId AND deleted_at IS NULL LIMIT 1',
+            { replacements: { episodeId, eventId } });
+          holder = rows?.[0] || null;
+        } catch (lookupErr) {
+          console.error('[WorldEvents] could not read the event already linked to the episode:', lookupErr.message);
+        }
+        console.warn(`[WorldEvents] PUT refused (${EPISODE_EVENT_LINK_TAKEN_CODE}): episode ${episodeId} already has a linked event`);
+        return res.status(409).json(episodeEventLinkTakenBody({ episodeId, holder }));
+      }
       const errMsg = String(updateErr.message || '');
       if (!(errMsg.includes('does not exist') || errMsg.includes('column'))) throw updateErr;
 
