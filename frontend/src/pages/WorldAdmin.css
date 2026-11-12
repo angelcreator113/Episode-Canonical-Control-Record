@@ -279,9 +279,13 @@
 }
 .wa-chip-show { background: var(--lala-lavender); color: var(--text-inverse); }
 .wa-chip-season { background: var(--lala-parchment-2); border: 1px solid var(--lala-parchment-3); color: var(--text-primary); gap: 4px; }
-.wa-chip-season:hover { border-color: var(--lala-gold-line); background: var(--lala-gold-soft); }
+/* The season pill is a label, not a link: the Season tab is the way in. */
 .wa-chip-producing { background: var(--surface-card); border: 1px solid var(--lala-lavender); color: var(--lala-lavender-text); gap: 4px; }
 .wa-chip-producing:hover { background: var(--lala-lavender-soft); }
+/* The episode's code and title: one line that shortens, never wider than the screen. */
+.wa-chip-producing { max-width: 100%; min-width: 0; }
+.wa-chip-producing .wa-chip-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wa-chip-producing svg { flex: none; }
 .wa-hero-links { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 6px 18px; margin-top: 12px; }
 .wa-hero-link { font-size: 13px; color: var(--lala-lavender-text); text-decoration: none; }
 .wa-hero-link:hover { text-decoration: underline; }

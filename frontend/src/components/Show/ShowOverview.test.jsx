@@ -89,10 +89,11 @@ describe('ShowOverview', () => {
     vi.mocked(api.get).mockResolvedValue({ data: { roadmap: ROADMAP } });
     const goTo = renderIt({ episodes: [], events: [{ id: 'x', status: 'used', used_in_episode_id: 'e' }] });
     const slot = await screen.findByTestId('sov-next-slot');
-    await waitFor(() => expect(slot.textContent).toContain('Next slot: S1 · E7'));
+    await waitFor(() => expect(slot.textContent).toContain('Next open slot: S1 · E7'));
     expect(slot.textContent).toContain('Her first real setback');
-    expect(within(slot).getByRole('link').getAttribute('href')).toBe('/shows/show-1/season?tab=roadmap');
-    expect(within(screen.getByTestId('sov-next')).getByRole('link', { name: 'View Plan' }).getAttribute('href')).toBe('/shows/show-1/season');
+    // The slot's own place on the Roadmap; the Season tab is the one general way in (2026-11-12).
+    expect(within(slot).getByRole('link').getAttribute('href')).toBe('/shows/show-1/season?tab=roadmap&slot=7');
+    expect(within(screen.getByTestId('sov-next')).queryByRole('link', { name: 'View Plan' })).toBeNull();
     expect(goTo).not.toHaveBeenCalled();
     expect(screen.getByTestId('sov-producing').textContent).toContain('Nothing in production');
     expect(screen.getByTestId('sov-attention').textContent).toContain('Nothing needs attention.');
@@ -114,7 +115,7 @@ describe('ShowOverview', () => {
     const slot = await screen.findByTestId('sov-next-slot');
     await waitFor(() => expect(slot.textContent).toContain("Couldn't load the season."));
     fireEvent.click(within(slot).getByRole('button', { name: 'Retry' }));
-    await waitFor(() => expect(slot.textContent).toContain('Next slot: S1 · E7'));
+    await waitFor(() => expect(slot.textContent).toContain('Next open slot: S1 · E7'));
   });
 
   test('a new show sees its first steps; Lala\'s stats are cards linking to her history', async () => {
