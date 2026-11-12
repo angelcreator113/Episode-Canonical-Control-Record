@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # =============================================================================
-# Removes the RDS instance's older deploy-* snapshots, AFTER a Deploy run has
-# taken its own snapshot and seen it become available (Evoni, 2026-11-11: an
-# old recovery point is never removed before the new one exists). Until then
+# Removes the RDS instance's older deploy-* snapshots as the LAST thing a
+# Deploy run does: after its own snapshot is available and after the
+# migration, the deploy, the restart and the public health check succeeded
+# (Evoni, 2026-11-11 and 2026-11-12: an old recovery point is never removed
+# before the new one exists, and never by a release that failed). Until then
 # it ran before the snapshot (2026-10-22: runs #145 and #146 had stopped with
 # SnapshotQuotaExceeded, "cannot create more than 100 manual snapshots").
 #

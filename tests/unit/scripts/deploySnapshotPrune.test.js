@@ -1,8 +1,10 @@
 // ============================================================================
-// The Deploy workflow removes older deploy-* snapshots only AFTER its own
-// snapshot is available (Evoni, 2026-11-11: an old recovery point is never
-// removed before the new one exists). Until then it removed them first
-// (2026-10-22: runs #145 and #146 had stopped with SnapshotQuotaExceeded).
+// The Deploy workflow removes older deploy-* snapshots LAST: only after its
+// own snapshot is available and the migration, deploy, restart and public
+// health check succeeded (Evoni, 2026-11-11 and 2026-11-12: an old recovery
+// point is never removed before the new one exists, nor by a failed
+// release). Until then it removed them first (2026-10-22: runs #145 and #146
+// had stopped with SnapshotQuotaExceeded).
 // ============================================================================
 // scripts/deploy/prune-snapshots.sh is run here against a fake `aws` on PATH
 // that records its calls; no AWS account, host or database is touched. The
@@ -291,43 +293,156 @@ describe('the new snapshot comes first (Evoni, 2026-11-11)', () => {
 });
 
 describe('the workflow', () => {
-  test('runs the script only after the snapshot is taken and available, and before the migration', () => {
-    const plan = WORKFLOW.indexOf('- name: Plan (read-only, on the box)');
-    const snapshot = WORKFLOW.indexOf('- name: Snapshot the database');
-    const wait = WORKFLOW.indexOf('- name: Wait for the snapshot to be available');
-    const step = WORKFLOW.indexOf('- name: Remove older deploy snapshots (keeps the newest few)');
-    const snap = WORKFLOW.indexOf('- name: Migrate (on the box, from the staged commit, if pending)');
-    expect(plan).toBeGreaterThan(-1);
-    expect(snapshot).toBeGreaterThan(plan);
-    expect(wait).toBeGreaterThan(snapshot);
-    expect(step).toBeGreaterThan(wait);
-    expect(snap).toBeGreaterThan(step);
-    // One removal step, and none before the snapshot.
+  const yaml = require('js-yaml');
+  const STEPS = yaml.load(WORKFLOW).jobs.deploy.steps;
+  const NAMES = STEPS.map((x) => x.name || x.uses);
+  const at = (name) => NAMES.indexOf(name);
+  const PRUNE = 'Remove older deploy snapshots (after a healthy deploy; keeps the newest few)';
+  const pruneStep = STEPS[at(PRUNE)];
+
+  test('removal is the last thing a healthy deploy does: after the snapshot, the migration, the deploy, the restart and the public health check', () => {
+    expect(at(PRUNE)).toBeGreaterThan(-1);
+    for (const earlier of ['Snapshot the database', 'Wait for the snapshot to be available',
+      'Migrate (on the box, from the staged commit, if pending)', 'Deploy (fast-forward and the frontend, on the box)',
+      'Restart and health check (on the box)', 'Public health check']) {
+      expect(at(earlier)).toBeGreaterThan(-1);
+      expect(at(earlier)).toBeLessThan(at(PRUNE));
+    }
+    // Directly after the final health gate, not merely after the restart; only the reporting steps follow.
+    expect(at(PRUNE)).toBe(at('Public health check') + 1);
+    expect(NAMES.slice(at(PRUNE) + 1)).toEqual(['Summary', 'Point to the snapshot and the runbook']);
+    // One removal step in the whole workflow, and nothing before it deletes a snapshot.
     expect(WORKFLOW.split('scripts/deploy/prune-snapshots.sh').length - 1).toBe(1);
-    expect(WORKFLOW.slice(0, wait)).not.toContain('delete-db-snapshot');
-    const block = WORKFLOW.slice(step, snap);
-    // It is handed the snapshot this run took, and has no condition that lets it run after a failed step.
-    expect(block).toContain('NEW_SNAPSHOT: ${{ steps.snapshot.outputs.name }}');
-    expect(block).not.toMatch(/\n\s+if:/);
-    // The wait stops the run on anything but "available", so a failed snapshot never reaches the removal or the migration.
-    const waitBlock = WORKFLOW.slice(wait, step);
-    expect(waitBlock).toContain('available) exit 0 ;;');
-    expect(waitBlock).toMatch(/\*\) echo "::error::Snapshot \$\{SNAP\} is \$\{STATUS\}\. Nothing on the box was changed\."; exit 1 ;;/);
-    expect(waitBlock).not.toContain('continue-on-error');
-    expect(WORKFLOW.slice(snapshot, wait)).not.toContain('continue-on-error');
-    expect(block).toContain('KEEP: ${{ vars.DEPLOY_SNAPSHOTS_KEEP }}');
-    expect(block).toContain('DRY_RUN: ${{ vars.DEPLOY_SNAPSHOTS_PRUNE_DRY_RUN }}');
-    expect(block).toContain('MAX_DELETE: ${{ vars.DEPLOY_SNAPSHOTS_MAX_DELETE }}');
-    expect(block).toContain('MIN_AGE_DAYS: ${{ vars.DEPLOY_SNAPSHOTS_MIN_AGE_DAYS }}');
-    expect(block).toContain('run: bash scripts/deploy/prune-snapshots.sh');
-    expect(block).not.toContain('continue-on-error');
+    expect(NAMES.filter((n) => /Remove older deploy snapshots/.test(n))).toHaveLength(1);
+    expect(WORKFLOW.slice(0, WORKFLOW.indexOf(`- name: ${PRUNE}`))).not.toContain('delete-db-snapshot');
+  });
+
+  test('a failed migration, deploy, restart or health check leaves older snapshots untouched', () => {
+    // The step runs only when every earlier step succeeded AND the public health check itself did.
+    expect(pruneStep.if).toBe("${{ success() && steps.health.outcome == 'success' }}");
+    expect(STEPS[at('Public health check')].id).toBe('health');
+    expect(pruneStep.if).not.toMatch(/always\(\)|failure\(\)|cancelled\(\)/);
+    // None of the gates before it may fail without failing the job.
+    for (const gate of ['Snapshot the database', 'Wait for the snapshot to be available',
+      'Migrate (on the box, from the staged commit, if pending)', 'Deploy (fast-forward and the frontend, on the box)',
+      'Restart and health check (on the box)', 'Public health check']) {
+      expect(STEPS[at(gate)]['continue-on-error']).toBeUndefined();
+    }
+    // The health check fails the job when production is not healthy with its database connected.
+    const health = STEPS[at('Public health check')].run;
+    expect(health).toContain('"status":"healthy"');
+    expect(health).toContain('"database":"connected"');
+    expect(health.trim().endsWith('exit 1')).toBe(true);
+    // The snapshot wait stops the run on anything but "available".
+    const wait = STEPS[at('Wait for the snapshot to be available')].run;
+    expect(wait).toContain('available) exit 0 ;;');
+    expect(wait).toMatch(/\*\) echo "::error::Snapshot \$\{SNAP\} is \$\{STATUS\}\. Nothing on the box was changed\."; exit 1 ;;/);
+  });
+
+  test('it is handed the snapshot this run took, and the retention settings', () => {
+    expect(pruneStep.id).toBe('prune');
+    expect(pruneStep.env).toEqual({
+      NEW_SNAPSHOT: '${{ steps.snapshot.outputs.name }}',
+      KEEP: '${{ vars.DEPLOY_SNAPSHOTS_KEEP }}',
+      DRY_RUN: '${{ vars.DEPLOY_SNAPSHOTS_PRUNE_DRY_RUN }}',
+      MAX_DELETE: '${{ vars.DEPLOY_SNAPSHOTS_MAX_DELETE }}',
+      MIN_AGE_DAYS: '${{ vars.DEPLOY_SNAPSHOTS_MIN_AGE_DAYS }}',
+    });
+    expect(pruneStep.run).toContain('bash scripts/deploy/prune-snapshots.sh');
+    expect(pruneStep['continue-on-error']).toBeUndefined();
+  });
+
+  // The step's own shell, run for real (GitHub runs it with bash -e), with a stand-in for the script.
+  const runPruneStep = (scriptBody) => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'deploy-prune-step-'));
+    fs.mkdirSync(path.join(dir, 'scripts', 'deploy'), { recursive: true });
+    fs.writeFileSync(path.join(dir, 'scripts', 'deploy', 'prune-snapshots.sh'), `#!/usr/bin/env bash\n${scriptBody}\n`);
+    const output = path.join(dir, 'out');
+    fs.writeFileSync(output, '');
+    const res = spawnSync('bash', ['-e', '-c', pruneStep.run], { cwd: dir, encoding: 'utf8', env: { PATH: process.env.PATH, GITHUB_OUTPUT: output, RUNBOOK: 'docs/runbooks/deploy-workflow.md' } });
+    const out = { status: res.status, stdout: res.stdout + res.stderr, output: fs.readFileSync(output, 'utf8') };
+    fs.rmSync(dir, { recursive: true, force: true });
+    return out;
+  };
+
+  test('a retention step that stops unexpectedly is a warning: the step still succeeds, so the deploy is not reported as failed', () => {
+    const crashed = runPruneStep('echo "partway"; exit 3');
+    expect(crashed.status).toBe(0);
+    expect(crashed.stdout).toContain('::warning title=Snapshot retention::The retention step stopped unexpectedly. The deployment succeeded and is not affected.');
+    expect(crashed.stdout).not.toContain('::error');
+    expect(crashed.output).toBe('note=stopped\n');
+    // The ordinary case: the script reports for itself and nothing is added.
+    const fine = runPruneStep('echo "note=ok" >>"$GITHUB_OUTPUT"; exit 0');
+    expect(fine.status).toBe(0);
+    expect(fine.stdout).not.toContain('::warning');
+    expect(fine.output).toBe('note=ok\n');
+  });
+
+  // The Summary step's own shell, run for real with the values a run would hand it.
+  const summary = (env) => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'deploy-summary-'));
+    const file = path.join(dir, 'summary.md');
+    const res = spawnSync('bash', ['-e', '-c', STEPS[at('Summary')].run], {
+      encoding: 'utf8',
+      env: { PATH: process.env.PATH, GITHUB_STEP_SUMMARY: file, RUNNER_TEMP: dir, TARGET_SHA: 'a'.repeat(40), RUNBOOK: 'docs/runbooks/deploy-workflow.md',
+        OLD_SHA: 'b'.repeat(40), COMMITS: '6', MIGRATIONS: '1', SNAP: 'deploy-aaaaaaaaaaaa-1-1', ...env },
+    });
+    const text = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '';
+    fs.rmSync(dir, { recursive: true, force: true });
+    return { status: res.status, text, err: res.stderr };
+  };
+  const HEALTHY = { JOB_STATUS: 'success', MIGRATE_RAN: '1', RESTART_OUTCOME: 'success', HEALTH_OUTCOME: 'success' };
+
+  test('the summary: a healthy deploy with snapshots removed, and with a dry run', () => {
+    const ok = summary({ ...HEALTHY, PRUNE_NOTE: 'ok', PRUNE_REMOVED: '4', PRUNE_KEPT: '10' });
+    expect(ok.status).toBe(0);
+    expect(ok.text).toContain('## Deploy success');
+    expect(ok.text).toContain('| Older deploy snapshots removed | 4 (the newest 10 kept) |');
+    expect(ok.text).not.toMatch(/Retention warning|Stopped/);
+    // The retention row comes after the health row: it is the last thing that happened.
+    expect(ok.text.indexOf('| Public health | success |')).toBeLessThan(ok.text.indexOf('| Older deploy snapshots removed |'));
+    const dry = summary({ ...HEALTHY, PRUNE_NOTE: 'dry-run', PRUNE_WOULD: '4', PRUNE_PROTECTED: '2' });
+    expect(dry.text).toContain("| Older deploy snapshots removed | none: dry run, 4 would be removed (the step's log names them; 2 protected) |");
+    expect(dry.text).not.toMatch(/Retention warning|Stopped/);
+  });
+
+  test('the summary: a retention problem after a healthy deploy is a retention warning, never a deployment failure', () => {
+    for (const [note, words] of [['not-permitted', 'the role may not delete them'], ['list-failed', 'they could not be listed'],
+      ['some-failed', 'some could not be removed'], ['list-suspect', 'the listing looked wrong'],
+      ['no-new-snapshot', "this run's new snapshot was not confirmed available"], ['stopped', 'the retention step stopped unexpectedly']]) {
+      const res = summary({ ...HEALTHY, PRUNE_NOTE: note, PRUNE_REMOVED: '2' });
+      expect(res.status).toBe(0);
+      expect(res.text).toContain('## Deploy success');
+      expect(res.text).toContain('| Public health | success |');
+      expect(res.text).toMatch(new RegExp(`\\| Older deploy snapshots removed \\| retention warning: [^|]*${words}`));
+      expect(res.text).toContain('**Retention warning, not a deployment failure.** The deployment and its health checks succeeded.');
+      expect(res.text).not.toContain('**Stopped.**');
+      expect(res.text).not.toContain('rolling back');
+    }
+  });
+
+  test('the summary: a failed release says no older snapshot was removed', () => {
+    for (const failed of [
+      { MIGRATE_RAN: '', RESTART_OUTCOME: '', HEALTH_OUTCOME: '' }, // stopped at the migration
+      { MIGRATE_RAN: '1', RESTART_OUTCOME: 'failure', HEALTH_OUTCOME: '' }, // stopped at the restart
+      { MIGRATE_RAN: '1', RESTART_OUTCOME: 'success', HEALTH_OUTCOME: 'failure' }, // unhealthy
+    ]) {
+      const res = summary({ JOB_STATUS: 'failure', PRUNE_NOTE: '', ...failed });
+      expect(res.status).toBe(0);
+      expect(res.text).toContain('## Deploy failure');
+      expect(res.text).toContain('| Older deploy snapshots removed | none: they are removed only after a successful deployment and public health check |');
+      expect(res.text).toContain('**Stopped.** No automatic rollback was attempted.');
+      expect(res.text).toContain('The database snapshot taken before any migration is `deploy-aaaaaaaaaaaa-1-1`.');
+      expect(res.text).not.toContain('Retention warning');
+    }
   });
 
   test('the summary says when it was a dry run and how many it would remove', () => {
     expect(WORKFLOW).toContain('PRUNE_WOULD: ${{ steps.prune.outputs.would_remove }}');
     expect(WORKFLOW).toMatch(/dry-run\) echo "\| Older deploy snapshots removed \| none: dry run, \$\{PRUNE_WOULD:-0\} would be removed/);
-    expect(WORKFLOW).toContain('list-suspect) echo');
-    expect(WORKFLOW).toContain("no-new-snapshot) echo \"| Older deploy snapshots removed | none: this run's new snapshot was not confirmed available");
+    expect(WORKFLOW).toContain('list-suspect) RETENTION_WARNING=');
+    expect(WORKFLOW).toContain('no-new-snapshot) RETENTION_WARNING=');
+    expect(WORKFLOW).toContain('stopped) RETENTION_WARNING=');
   });
 
   test('a full snapshot quota stops the run with what to do', () => {

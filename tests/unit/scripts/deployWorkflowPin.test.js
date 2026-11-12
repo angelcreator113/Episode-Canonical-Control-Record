@@ -74,8 +74,9 @@ describe('Deploy is pinned to an expected commit (D-21)', () => {
     const at = n.indexOf("Check production is at the release summary's base");
     expect(at).toBe(n.indexOf('Plan (read-only, on the box)') + 1);
     expect(at).toBeLessThan(n.indexOf('Snapshot the database'));
-    // Older snapshots are removed only after this run's own exists (Evoni, 2026-11-11).
+    // Older snapshots are removed only after this run's own exists and production is healthy (Evoni, 2026-11-12).
     expect(n.indexOf('Snapshot the database')).toBeLessThan(n.findIndex((x) => /Remove older deploy snapshots/.test(x)));
+    expect(n.indexOf('Public health check')).toBeLessThan(n.findIndex((x) => /Remove older deploy snapshots/.test(x)));
     const s = step('deploy', "Check production is at the release summary's base");
     expect(s.env).toMatchObject({
       BOX_SHA: '${{ steps.plan.outputs.old_sha }}',
