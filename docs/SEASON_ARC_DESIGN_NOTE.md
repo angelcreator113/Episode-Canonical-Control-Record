@@ -191,3 +191,13 @@ accepted, as written:
 > Q15 Season-health score: fold it into Planning Insights as one line, using the slot outcome ranges instead of the fixed 1/4/2/1 targets.
 
 Every question in the design note is now answered.
+
+### Q12, amended (Evoni, 2026-11-12)
+
+The answer above stands as it was given. Until 2026-11-12 the build read it as "on acceptance, draft the next open slot when its intention is empty or still Auto-drafted", so accepting an episode replaced an earlier draft of the next slot. Evoni's ruling of 2026-11-12 supersedes that reading:
+
+> Automatic next-slot drafting may fill only a genuinely empty intention.
+>
+> An intention is empty only when all six existing intention fields are empty. A slot with a primary purpose, secondary purpose, career focus, pressure, outcome range, or story thread must not be overwritten automatically.
+
+A source label on an otherwise empty slot, and a stored value that cannot be read, count as written. An occupied next slot is not skipped to draft a later one. Drafting on demand (the Draft button and its confirm over an edit, Accept drafts, accepting a proposal) is unchanged. In code: `intentionOccupied` and `draftNextSlot` in `src/services/seasonIntentionService.js`.
