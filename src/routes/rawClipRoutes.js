@@ -76,7 +76,7 @@ const express = require('express');
 const multer = require('multer');
 const path = require('path');
 const { v4: uuidv4 } = require('uuid');
-const { requireAuth } = require('../middleware/auth');
+const { requireAuth, authorize } = require('../middleware/auth');
 const models = require('../models');
 const clips = require('../services/rawClipsService');
 const media = require('../services/rawClipMedia');
@@ -560,7 +560,11 @@ router.post('/:episodeId/:clipId/stop-green', requireAuth, async (req, res) => {
   }
 });
 
-router.delete('/:episodeId/:clipId', requireAuth, async (req, res) => {
+// ADMIN only, and only a take nothing uses (Evoni, 2026-11-12): a take the
+// edit, a saved version of it, Voice Studio or a voice job uses is kept,
+// 409 CLIP_IN_USE with blocked_by (rawClipsService.removeClip). No option
+// forces it. Uploading, starring and relabelling a take are as before.
+router.delete('/:episodeId/:clipId', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const removed = await clips.removeClip(models.sequelize, req.params.episodeId, req.params.clipId);
     if (!removed) return res.status(404).json({ success: false, error: 'Clip not found' });
@@ -568,6 +572,10 @@ router.delete('/:episodeId/:clipId', requireAuth, async (req, res) => {
     media.cancelKey(req.params.clipId);
     return res.json({ success: true });
   } catch (err) {
+    if (err instanceof clips.RawClipError && err.code === clips.CLIP_IN_USE) {
+      console.warn('[RawClips] delete refused (409):', err.message);
+      return res.status(409).json({ success: false, code: clips.CLIP_IN_USE, error: err.message, clip: err.clip, blocked_by: err.blocked_by });
+    }
     return sendError(res, err, 'delete');
   }
 });

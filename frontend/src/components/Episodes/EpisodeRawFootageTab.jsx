@@ -529,7 +529,12 @@ export default function EpisodeRawFootageTab({ episode, onCount }) {
         setClips((c) => c.filter((x) => x.id !== clip.id));
       } catch (err) {
         console.error('[RawFootage] delete failed:', err);
-        setError('Could not delete the clip.');
+        // A take something still uses is kept, and the server says what uses it (409 CLIP_IN_USE);
+        // deleting is for an admin (403).
+        const d = err?.response?.data;
+        if (err?.response?.status === 409 && d?.code === 'CLIP_IN_USE') setError(d.error || 'This take is in use, so it was not deleted.');
+        else if (err?.response?.status === 403) setError('Only an admin can delete a take. Nothing was deleted.');
+        else setError('Could not delete the clip.');
       } finally {
         setBusyId(null);
       }
