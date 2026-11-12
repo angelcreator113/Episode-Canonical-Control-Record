@@ -58,6 +58,7 @@ const CODES = Object.freeze({
   REASON_REQUIRED: 'DETACH_REASON_REQUIRED',
   INJECT_UNSUPPORTED: 'SECONDARY_EVENT_INJECT_UNSUPPORTED',
   REGENERATE_UNSUPPORTED: 'EPISODE_HAS_SECONDARY_EVENTS',
+  LINK_INCONSISTENT: 'EPISODE_EVENT_LINK_INCONSISTENT',
 });
 
 class SecondaryEventError extends Error {
@@ -182,10 +183,16 @@ async function eventObligations(sequelize, eventOrId, { transaction } = {}) {
   return { known, obligations, event };
 }
 
-/** The episode's primary event id: the one its live brief names, or null. */
+/**
+ * The episode's primary event id: the live event its live brief names, or
+ * null. A brief naming a deleted event names none, as in the one rule every
+ * reader keeps (utils/episodeEventSql): the oldest linked event is then the
+ * episode's event.
+ */
 async function primaryEventId(sequelize, episodeId, { transaction } = {}) {
   const [rows] = await sequelize.query(
-    'SELECT event_id FROM episode_briefs WHERE episode_id = :episodeId AND deleted_at IS NULL LIMIT 1',
+    `SELECT b.event_id FROM episode_briefs b JOIN world_events w ON w.id = b.event_id AND w.deleted_at IS NULL
+      WHERE b.episode_id = :episodeId AND b.deleted_at IS NULL LIMIT 1`,
     { replacements: { episodeId }, ...tx(transaction) });
   return rows?.[0]?.event_id || null;
 }
@@ -203,6 +210,62 @@ async function secondaryEventsOf(sequelize, episodeId, { transaction } = {}) {
   const linked = rows || [];
   const primaryId = primary || linked[0]?.id || null;
   return { primaryId, briefNamesPrimary: Boolean(primary), secondary: linked.filter((e) => e.id !== primaryId) };
+}
+
+/**
+ * Whether the episode's brief and its events' own links agree. This is what
+ * tells an intended second event from a leftover of an older reassign:
+ * a second event is only ever attached to an episode whose primary is in
+ * place (assertSecondaryAttach), so an event linked to an episode whose
+ * primary is NOT in place was not attached as a second event.
+ *
+ *   state 'none'                 no brief event and no linked event
+ *         'unbriefed'            no brief event; one linked event (it is the primary)
+ *         'ok'                   the brief's event is linked to this episode
+ *         'two_part'             the brief's event is linked to another live episode whose brief names it too
+ *         'unbriefed_many'       no brief event and several linked events          (inconsistent)
+ *         'primary_link_missing' the brief's event is not linked to this episode    (inconsistent)
+ *   consistent   false for the last two (a brief naming a deleted event names none: 'unbriefed')
+ *   secondary    the other linked events, when consistent (intended second events)
+ *   strays       the other linked events, when not consistent (unexplained links)
+ */
+async function episodeLinkState(sequelize, episodeId, { transaction } = {}) {
+  const briefEventId = await primaryEventId(sequelize, episodeId, { transaction });
+  const [rows] = await sequelize.query(
+    `SELECT ${EVENT_FIELDS} FROM world_events WHERE used_in_episode_id = :episodeId AND deleted_at IS NULL ORDER BY created_at ASC, id ASC`,
+    { replacements: { episodeId }, ...tx(transaction) });
+  const linked = rows || [];
+  const result = (state, primaryId, others) => {
+    const consistent = !['unbriefed_many', 'primary_link_missing'].includes(state);
+    return { state, consistent, primaryId, briefEventId, secondary: consistent ? others : [], strays: consistent ? [] : others };
+  };
+  if (!briefEventId) {
+    if (!linked.length) return result('none', null, []);
+    if (linked.length === 1) return result('unbriefed', linked[0].id, []);
+    return result('unbriefed_many', linked[0].id, linked.slice(1));
+  }
+  const others = linked.filter((e) => String(e.id) !== String(briefEventId));
+  if (others.length < linked.length) return result('ok', briefEventId, others);
+  const [primaryRows] = await sequelize.query(
+    `SELECT w.id,
+            EXISTS (SELECT 1 FROM episodes e JOIN episode_briefs b ON b.episode_id = e.id AND b.deleted_at IS NULL AND b.event_id = w.id
+                     WHERE e.id = w.used_in_episode_id AND e.deleted_at IS NULL) AS two_part
+       FROM world_events w WHERE w.id = :briefEventId AND w.deleted_at IS NULL`,
+    { replacements: { briefEventId }, ...tx(transaction) });
+  const primary = primaryRows?.[0];
+  if (primary && (primary.two_part === true || primary.two_part === 't')) return result('two_part', briefEventId, others);
+  return result('primary_link_missing', briefEventId, others);
+}
+
+function inconsistentError(episodeId, link, doing) {
+  const names = link.strays.map((e) => `"${e.name || 'an event'}"`).join(', ');
+  const why = {
+    unbriefed_many: 'it has several linked events and its brief names none of them as its primary',
+    primary_link_missing: 'its brief names one event while that event is not linked to it',
+  }[link.state];
+  return new SecondaryEventError(409, CODES.LINK_INCONSISTENT,
+    `This episode's events do not agree: ${why}${names ? ` (also linked: ${names})` : ''}. ${doing} Restore the link of the event its brief names, or remove the other event from the episode, first. Nothing was changed.`,
+    { episode_id: episodeId, link_state: link.state, primary_event_id: link.primaryId, events: link.strays.map((e) => ({ id: e.id, name: e.name ?? null })) });
 }
 
 /**
@@ -243,6 +306,15 @@ function alreadyLinkedError(ev, live) {
  * affected.
  */
 async function assertRegenerateHasNoSecondary(sequelize, { episodeId, eventId, transaction } = {}) {
+  // Regenerating from an event that is not the episode's primary would
+  // replace the episode under its primary and leave the primary's brief and
+  // link on the replaced one.
+  const briefEventId = await primaryEventId(sequelize, episodeId, { transaction });
+  if (briefEventId && String(briefEventId) !== String(eventId)) {
+    throw new SecondaryEventError(409, CODES.REGENERATE_UNSUPPORTED,
+      'This episode\'s brief names another event as its primary, so it is not regenerated from this one: that would replace the episode under its primary event. Nothing was changed.',
+      { episode_id: episodeId, primary_event_id: briefEventId, events: [] });
+  }
   const [rows] = await sequelize.query(
     'SELECT id, name FROM world_events WHERE used_in_episode_id = :episodeId AND id <> :eventId AND deleted_at IS NULL ORDER BY created_at ASC',
     { replacements: { episodeId, eventId }, ...tx(transaction) });
@@ -275,6 +347,9 @@ async function assertSecondaryAttach(sequelize, { eventId, episodeId, transactio
       'This episode\'s brief names no source event yet. Name its primary event first; then other events can be linked to it. Nothing was changed.',
       { episode_id: episodeId });
   }
+  // A second event joins only an episode whose primary is in place.
+  const state = await episodeLinkState(sequelize, episodeId, { transaction });
+  if (!state.consistent) throw inconsistentError(episodeId, state, 'No other event can be linked to it until that is repaired.');
   const frozenAt = await filmedAt(sequelize, episodeId, { transaction });
   if (frozenAt) {
     throw new SecondaryEventError(409, CODES.EPISODE_FILMED,
@@ -329,10 +404,10 @@ async function attachSecondaryInStart(sequelize, { event, episodeId, transaction
  * carry an obligation, or cannot be classified. Empty for an episode with
  * no secondary event, which is every single-event episode.
  */
-async function unsupportedSecondaryObligations(sequelize, episodeId, { transaction } = {}) {
-  const { secondary } = await secondaryEventsOf(sequelize, episodeId, { transaction });
+async function unsupportedSecondaryObligations(sequelize, episodeId, { transaction, link = null } = {}) {
+  const state = link || await episodeLinkState(sequelize, episodeId, { transaction });
   const found = [];
-  for (const ev of secondary) {
+  for (const ev of [...state.secondary, ...state.strays]) {
     const { obligations } = await eventObligations(sequelize, ev, { transaction });
     if (obligations.length) found.push({ id: ev.id, name: ev.name ?? null, obligations });
   }
@@ -340,8 +415,16 @@ async function unsupportedSecondaryObligations(sequelize, episodeId, { transacti
 }
 
 async function assertNoUnsupportedSecondaryObligations(sequelize, episodeId, { transaction, doing = 'be completed' } = {}) {
-  const found = await unsupportedSecondaryObligations(sequelize, episodeId, { transaction });
+  const link = await episodeLinkState(sequelize, episodeId, { transaction });
+  const found = await unsupportedSecondaryObligations(sequelize, episodeId, { transaction, link });
   if (!found.length) return;
+  // Not an intended second event: the brief and the links disagree, and the
+  // other linked event carries commitments nothing would book. Said as that.
+  if (!link.consistent) {
+    const err = inconsistentError(episodeId, link, `One of them carries commitments, so the episode cannot ${doing} until that is repaired.`);
+    err.details.events = found;
+    throw err;
+  }
   const names = found.map((e) => `"${e.name || 'an event'}"`).join(', ');
   throw new SecondaryEventError(409, CODES.UNSUPPORTED_OBLIGATIONS,
     `This episode has a second event with commitments that are not handled for second events yet (${names}), so it cannot ${doing}. Nothing was changed. Remove the event from the episode, or wait until its commitments are supported.`,
@@ -412,28 +495,32 @@ async function downstreamReferences(sequelize, { event, episodeId, transaction }
  * Refused, with what blocks it: the primary event; a filmed episode;
  * reopened terms; any obligation; anything in production that still depends
  * on it (the impact review, in depends_on). Nothing is deleted: on success
- * the event's link is cleared, its status returns to 'draft' and its price
- * snapshot is closed.
+ * the event's link is cleared and its price snapshot is closed. Its status
+ * is left as it is, as the event edit leaves it when a link is cleared: what
+ * it was before it was linked is not recorded, so it is not guessed.
  */
 async function detachSecondaryEvent(sequelize, models, { eventId, showId, userId = null, reason } = {}) {
   const why = typeof reason === 'string' ? reason.trim().slice(0, 500) : '';
-  if (!why) throw new SecondaryEventError(400, CODES.REASON_REQUIRED, 'Say why this event is being removed from the episode.');
 
-  const log = async (changes, transaction = null) => {
-    try {
-      await models.ActivityLog.logActivity({
-        userId, action: 'detach_secondary_event', resourceType: 'world_event', resourceId: eventId, changes: { reason: why, ...changes },
-      }, transaction ? { transaction } : {});
-    } catch (err) {
-      if (transaction) throw err; // a detach that cannot be audited does not happen
-      console.error('[secondaryEvents] detach outcome could not be logged:', err.message);
-    }
-  };
+  // Through the one audit call (middleware/auditLog logger). The detach
+  // itself is written inside its transaction and fails with it: a detach
+  // that cannot be audited does not happen. A refusal or a no-op changed
+  // nothing, so its entry is written after, and never fails the answer.
+  const { logger } = require('../middleware/auditLog');
+  const ACTION = 'detach_secondary_event';
+  const log = (changes, transaction = null) => (transaction
+    ? logger.logActionInTransaction(transaction, userId, ACTION, 'world_event', eventId, { reason: why, ...changes })
+    : logger.logAction(userId, ACTION, 'world_event', eventId, { reason: why, ...changes }));
+
+  if (!why) {
+    await logger.logAction(userId, ACTION, 'world_event', eventId, { outcome: 'refused', code: CODES.REASON_REQUIRED });
+    throw new SecondaryEventError(400, CODES.REASON_REQUIRED, 'Say why this event is being removed from the episode.');
+  }
 
   let refusal = null;
   let episodeIdSeen = null;
   const result = await sequelize.transaction(async (transaction) => {
-    const [seen] = await sequelize.query(`SELECT used_in_episode_id FROM world_events WHERE id = :eventId AND show_id = :showId AND deleted_at IS NULL`,
+    const [seen] = await sequelize.query('SELECT used_in_episode_id FROM world_events WHERE id = :eventId AND show_id = :showId AND deleted_at IS NULL',
       { replacements: { eventId, showId }, transaction });
     if (!seen?.[0]) throw new SecondaryEventError(404, 'EVENT_NOT_FOUND', 'Event not found');
     const episodeId = seen[0].used_in_episode_id;
@@ -453,7 +540,10 @@ async function detachSecondaryEvent(sequelize, models, { eventId, showId, userId
     }
     const refuse = (code, message, details = {}) => { refusal = new SecondaryEventError(409, code, message, { event_id: eventId, episode_id: episodeId, ...details }); return null; };
 
-    const { primaryId } = await secondaryEventsOf(sequelize, episodeId, { transaction });
+    // The primary stays. Any other linked event may go where it is safe: an
+    // intended second event, or the unexplained link of an episode whose
+    // brief and links disagree (removing it is how that is repaired).
+    const { primaryId } = await episodeLinkState(sequelize, episodeId, { transaction });
     if (String(primaryId) === String(eventId)) {
       return refuse(CODES.IS_PRIMARY, 'This is the episode\'s primary event: it stays with its episode. Nothing was changed.');
     }
@@ -476,12 +566,17 @@ async function detachSecondaryEvent(sequelize, models, { eventId, showId, userId
     }
 
     await sequelize.query(
-      `UPDATE world_events SET used_in_episode_id = NULL, status = 'draft', updated_at = NOW() WHERE id = :eventId AND used_in_episode_id = :episodeId`,
+      'UPDATE world_events SET used_in_episode_id = NULL, updated_at = NOW() WHERE id = :eventId AND used_in_episode_id = :episodeId',
       { replacements: { eventId, episodeId }, transaction });
     await sequelize.query('UPDATE deal_price_snapshots SET deleted_at = NOW(), updated_at = NOW() WHERE event_id = :eventId AND deleted_at IS NULL',
       { replacements: { eventId }, transaction });
-    await log({ episode_id: episodeId, outcome: 'detached', previous_status: event.status ?? null }, transaction);
-    return { success: true, detached: true, already: false, event_id: eventId, episode_id: episodeId, status: 'draft' };
+    await log({ episode_id: episodeId, outcome: 'detached', status_kept: event.status ?? null }, transaction);
+    return { success: true, detached: true, already: false, event_id: eventId, episode_id: episodeId, status: event.status ?? null };
+  }).catch(async (err) => {
+    // Rolled back: an unknown or deleted event, a lock that could not be
+    // taken, an entry that could not be written. Nothing changed; said so.
+    await log({ episode_id: episodeIdSeen, outcome: 'failed', code: err?.code || err?.name || 'ERROR' });
+    throw err;
   });
 
   if (refusal) {
@@ -502,7 +597,9 @@ module.exports = {
   primaryEventId,
   secondaryEventsOf,
   classifyLink,
+  episodeLinkState,
   assertNoObligations,
+  obligationsError,
   assertSecondaryAttach,
   assertSecondaryCandidates,
   attachSecondaryInStart,

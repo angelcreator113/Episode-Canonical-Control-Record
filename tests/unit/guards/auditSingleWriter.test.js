@@ -31,11 +31,7 @@ describe('one writer into activity_logs', () => {
   test('ActivityLog.logActivity is called from one place: logger.logAction', () => {
     // A future caller that must write inside its own transaction (Move/Swap)
     // is added here by name, with the change that approves it.
-    // episodeSecondaryEvents (Evoni, 2026-11-12: "use the existing activity
-    // log for detach"): removing a second event from its episode writes its
-    // entry inside the detach's own transaction, so a detach that cannot be
-    // audited does not happen.
-    expect(using(/ActivityLog\.logActivity\(/)).toEqual(['src/middleware/auditLog.js', 'src/services/episodeSecondaryEvents.js']);
+    expect(using(/ActivityLog\.logActivity\(/)).toEqual(['src/middleware/auditLog.js']);
   });
 
   test('the second and third loggers are gone', () => {

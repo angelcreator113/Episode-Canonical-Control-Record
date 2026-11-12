@@ -490,6 +490,17 @@ describe('reopen eligibility, pure', () => {
       expect(await linkOf(a)).toBe(res.body.data.episode.id);
     });
 
+    test('the same event chosen twice is refused 400 before anything is asked or created', async () => {
+      const show = await addShow();
+      on();
+      const a = await addEvent(show, 'Anchor');
+      const b = await addEvent(show, 'Extra');
+      const res = await startMany(show, [a, b, b]);
+      expect(res.status).toBe(400);
+      expect(res.body.code).toBe('DUPLICATE_EVENT_IDS');
+      expect(await episodesOf(show)).toEqual([]);
+    });
+
     test('switch off: several events are refused 409 SECONDARY_EVENTS_NOT_ENABLED before anything is created', async () => {
       const show = await addShow();
       const a = await addEvent(show, 'Anchor');
@@ -772,6 +783,34 @@ describe('reopen eligibility, pure', () => {
         expect(await rows('SELECT id FROM episode_raw_clips WHERE episode_id = :episode', f)).toEqual([]);
       });
 
+      test('a two-parter: Part 2 with such a second event is not completed (asked before the two-part hand-off)', async () => {
+        const show = await addShow();
+        const part1 = await addEpisode(show, 1);
+        const event = await addEvent(show, 'The Finale', { episodeId: part1 });
+        await addBrief(show, part1, event);
+        const part2 = await addEpisode(show, 2);
+        await addBrief(show, part2, event);
+        const extra = await addEvent(show, 'Paid Extra', { episodeId: part2, set: { is_paid: true, payment_amount: 400 } });
+        const res = await auth(request(app).post(`/api/v1/world/${show}/episodes/${part2}/complete`)).send({});
+        expect(res.status).toBe(409);
+        expect(res.body.code).toBe('UNSUPPORTED_SECONDARY_OBLIGATIONS');
+        expect(res.body.events.map((e) => e.id)).toEqual([extra]);
+        expect(await rows('SELECT id FROM financial_transactions WHERE show_id = :show', { show })).toEqual([]);
+        expect(await rows(`SELECT id FROM episodes WHERE show_id = :show AND evaluation_status = 'accepted'`, { show })).toEqual([]);
+      });
+
+      test('a linked second event cannot gain a commitment by an edit the terms lock does not cover (the entry cost)', async () => {
+        const f = await seed();
+        await run(`UPDATE world_events SET used_in_episode_id = :episode, status = 'used' WHERE id = :id`, { episode: f.episode, id: f.second });
+        const res = await putEvent(f.show, f.second, { cost_coins: 200, description: 'Sent with it' });
+        expect(res.status).toBe(409);
+        expect(res.body).toMatchObject({ code: 'SECONDARY_EVENT_HAS_OBLIGATIONS', obligations: [{ kind: 'cost', detail: 'entry cost set' }] });
+        expect((await rows('SELECT cost_coins, description FROM world_events WHERE id = :id', { id: f.second }))[0]).toEqual({ cost_coins: 0, description: null });
+        // An edit that adds no commitment still saves; the primary's entry cost is its own and still editable.
+        expect((await putEvent(f.show, f.second, { description: 'Just words' })).status).toBe(200);
+        expect((await putEvent(f.show, f.first, { cost_coins: 150 })).status).toBe(200);
+      });
+
       test('an episode already filmed keeps taking takes: only the first is asked', async () => {
         const f = await committed();
         await film(f.show, f.episode);
@@ -792,6 +831,93 @@ describe('reopen eligibility, pure', () => {
         const f = await seed();
         await run('UPDATE world_events SET is_paid = true, payment_amount = 900 WHERE id = :id', { id: f.first });
         expect(await secondary.unsupportedSecondaryObligations(sequelize, f.episode)).toEqual([]);
+      });
+    });
+
+    // ── The brief and the links disagree: told apart from an intended second event ──
+    describe('an episode whose brief and links disagree', () => {
+      /** The brief names `first`, which is not linked to the episode; `second` holds a link to it (a leftover of an older reassign). */
+      async function disagreeing({ paid = false } = {}) {
+        const f = await seed();
+        await run('UPDATE world_events SET used_in_episode_id = NULL WHERE id = :id', { id: f.first });
+        await run(`UPDATE world_events SET used_in_episode_id = :episode, status = 'used'${paid ? ', is_paid = true, payment_amount = 400' : ''} WHERE id = :id`, { episode: f.episode, id: f.second });
+        return f;
+      }
+
+      test('episodeLinkState tells each case apart', async () => {
+        const ok = await seed();
+        expect(await secondary.episodeLinkState(sequelize, ok.episode)).toMatchObject({ state: 'ok', consistent: true, primaryId: ok.first, secondary: [], strays: [] });
+        expect(await secondary.episodeLinkState(sequelize, ok.empty)).toMatchObject({ state: 'none', consistent: true, primaryId: null });
+        const unbriefed = await seed({ brief: false });
+        expect(await secondary.episodeLinkState(sequelize, unbriefed.episode)).toMatchObject({ state: 'unbriefed', consistent: true, primaryId: unbriefed.first });
+
+        const intended = await seed();
+        await run(`UPDATE world_events SET used_in_episode_id = :episode, status = 'used' WHERE id = :id`, { episode: intended.episode, id: intended.second });
+        const a = await secondary.episodeLinkState(sequelize, intended.episode);
+        expect(a).toMatchObject({ state: 'ok', consistent: true, strays: [] });
+        expect(a.secondary.map((e) => e.id)).toEqual([intended.second]);
+
+        const d = await disagreeing();
+        const b = await secondary.episodeLinkState(sequelize, d.episode);
+        expect(b).toMatchObject({ state: 'primary_link_missing', consistent: false, primaryId: d.first, secondary: [] });
+        expect(b.strays.map((e) => e.id)).toEqual([d.second]);
+
+        // A brief naming a deleted event names none (the one rule of utils/episodeEventSql):
+        // the linked event is the episode's event, and nothing is refused for it.
+        const gone = await disagreeing({ paid: true });
+        await run('UPDATE world_events SET deleted_at = NOW() WHERE id = :id', { id: gone.first });
+        expect(await secondary.episodeLinkState(sequelize, gone.episode)).toMatchObject({ state: 'unbriefed', consistent: true, primaryId: gone.second, secondary: [], strays: [] });
+        expect(await secondary.unsupportedSecondaryObligations(sequelize, gone.episode)).toEqual([]);
+
+        const many = await seed({ brief: false });
+        await run(`UPDATE world_events SET used_in_episode_id = :episode, status = 'used' WHERE id = :id`, { episode: many.episode, id: many.second });
+        expect(await secondary.episodeLinkState(sequelize, many.episode)).toMatchObject({ state: 'unbriefed_many', consistent: false });
+      });
+
+      test('a two-parter is consistent: Part 2\'s primary is linked to Part 1, whose brief names it too', async () => {
+        const show = await addShow();
+        const part1 = await addEpisode(show, 1);
+        const event = await addEvent(show, 'The Finale', { episodeId: part1 });
+        await addBrief(show, part1, event);
+        const part2 = await addEpisode(show, 2);
+        await addBrief(show, part2, event);
+        expect(await secondary.episodeLinkState(sequelize, part2)).toMatchObject({ state: 'two_part', consistent: true, primaryId: event });
+        expect(await secondary.episodeLinkState(sequelize, part1)).toMatchObject({ state: 'ok', consistent: true });
+      });
+
+      test('no other event is attached to it until it is repaired (409 EPISODE_EVENT_LINK_INCONSISTENT)', async () => {
+        const f = await disagreeing();
+        on();
+        const third = await addEvent(f.show, 'Third');
+        const res = await putEvent(f.show, third, { used_in_episode_id: f.episode });
+        expect(res.status).toBe(409);
+        expect(res.body).toMatchObject({ code: 'EPISODE_EVENT_LINK_INCONSISTENT', link_state: 'primary_link_missing', primary_event_id: f.first });
+        expect(await linkOf(third)).toBeNull();
+      });
+
+      test('with no commitment on the other event, completion and filming are not refused for this', async () => {
+        const f = await disagreeing();
+        expect(await secondary.unsupportedSecondaryObligations(sequelize, f.episode)).toEqual([]);
+        await expect(secondary.assertNoUnsupportedSecondaryObligations(sequelize, f.episode)).resolves.toBeUndefined();
+      });
+
+      test('with a commitment on the other event, completion is refused as an inconsistency, not as a second event', async () => {
+        const f = await disagreeing({ paid: true });
+        const res = await auth(request(app).post(`/api/v1/world/${f.show}/episodes/${f.episode}/complete`)).send({});
+        expect(res.status).toBe(409);
+        expect(res.body).toMatchObject({ code: 'EPISODE_EVENT_LINK_INCONSISTENT', link_state: 'primary_link_missing', primary_event_id: f.first });
+        expect(res.body.events.map((e) => e.id)).toEqual([f.second]);
+        expect(res.body.error).toMatch(/Restore the link of the event its brief names, or remove the other event/);
+        expect(await rows('SELECT id FROM financial_transactions WHERE episode_id = :episode', f)).toEqual([]);
+      });
+
+      test('regenerate from an event that is not the episode\'s primary is refused: the primary is not left behind', async () => {
+        const f = await disagreeing();
+        const res = await auth(request(app).post(`/api/v1/world/${f.show}/events/${f.second}/regenerate-episode`)).send({});
+        expect(res.status).toBe(409);
+        expect(res.body).toMatchObject({ code: 'EPISODE_HAS_SECONDARY_EVENTS', primary_event_id: f.first });
+        expect((await rows('SELECT deleted_at FROM episodes WHERE id = :episode', f))[0].deleted_at).toBeNull();
+        expect(await linkOf(f.second)).toBe(f.episode);
       });
     });
 
@@ -873,14 +999,15 @@ describe('reopen eligibility, pure', () => {
         const f = await attached();
         const res = await detach(f.show, f.second, { reason: 'Moved to next week' });
         expect(res.status).toBe(200);
-        expect(res.body).toEqual({ success: true, detached: true, already: false, event_id: f.second, episode_id: f.episode, status: 'draft' });
-        expect(await eventRow(f.second)).toMatchObject({ used_in_episode_id: null, status: 'draft', name: 'Charity Gala' });
+        // Its status is left as it was (as the event edit leaves it when a link is cleared): not reset.
+        expect(res.body).toEqual({ success: true, detached: true, already: false, event_id: f.second, episode_id: f.episode, status: 'used' });
+        expect(await eventRow(f.second)).toMatchObject({ used_in_episode_id: null, status: 'used', name: 'Charity Gala' });
         expect(await linkOf(f.first)).toBe(f.episode);
         const log = await audit(f.second);
         expect(log).toHaveLength(1);
         expect(log[0]).toMatchObject({
           user_id: 'test-user-secondary', action: 'detach_secondary_event', resource_type: 'world_event', resource_id: f.second,
-          changes: { reason: 'Moved to next week', episode_id: f.episode, outcome: 'detached', previous_status: 'used' },
+          changes: { meta: { reason: 'Moved to next week', episode_id: f.episode, outcome: 'detached', status_kept: 'used' } },
         });
         expect(log[0].created_at).toBeTruthy();
       });
@@ -897,7 +1024,7 @@ describe('reopen eligibility, pure', () => {
         const again = await detach(f.show, f.second);
         expect(again.status).toBe(200);
         expect(again.body).toMatchObject({ success: true, detached: false, already: true, episode_id: null });
-        expect((await audit(f.second)).map((l) => l.changes.outcome)).toEqual(['detached', 'nothing_to_do']);
+        expect((await audit(f.second)).map((l) => l.changes.meta.outcome)).toEqual(['detached', 'nothing_to_do']);
       });
 
       test('two removals at once: one removes, the other finds nothing to do', async () => {
@@ -914,7 +1041,11 @@ describe('reopen eligibility, pure', () => {
         expect(res.status).toBe(400);
         expect(res.body.code).toBe('DETACH_REASON_REQUIRED');
         expect(await linkOf(f.second)).toBe(f.episode);
-        expect((await detach(f.show, uuid())).status).toBe(404);
+        const unknown = uuid();
+        expect((await detach(f.show, unknown)).status).toBe(404);
+        // Refusals of this kind are entries too: nothing about a detach goes unrecorded.
+        expect((await audit(f.second)).map((l) => l.changes.meta)).toEqual([{ outcome: 'refused', code: 'DETACH_REASON_REQUIRED' }]);
+        expect((await audit(unknown)).map((l) => l.changes.meta)).toEqual([{ reason: 'Picked by mistake', episode_id: null, outcome: 'failed', code: 'EVENT_NOT_FOUND' }]);
       });
 
       const refused = async (f, code) => {
@@ -923,7 +1054,7 @@ describe('reopen eligibility, pure', () => {
         expect(res.body.code).toBe(code);
         expect(await linkOf(f.second)).toBe(f.episode);
         const log = await audit(f.second);
-        expect(log[log.length - 1].changes).toMatchObject({ outcome: 'refused', code, episode_id: f.episode });
+        expect(log[log.length - 1].changes.meta).toMatchObject({ outcome: 'refused', code, episode_id: f.episode });
         return res;
       };
 
@@ -976,6 +1107,17 @@ describe('reopen eligibility, pure', () => {
         expect(await linkOf(f.second)).toBe(f.episode);
       });
 
+      test('the entry goes through the one audit call (logger), inside the detach\'s transaction', async () => {
+        const f = await attached();
+        const { logger } = require('../../src/middleware/auditLog');
+        const inTx = jest.spyOn(logger, 'logActionInTransaction');
+        expect((await detach(f.show, f.second)).body.detached).toBe(true);
+        expect(inTx).toHaveBeenCalledTimes(1);
+        expect(inTx.mock.calls[0][0]).toBeTruthy(); // the transaction
+        expect(inTx.mock.calls[0].slice(1, 5)).toEqual(['test-user-secondary', 'detach_secondary_event', 'world_event', f.second]);
+        await expect(logger.logActionInTransaction(null, 'u', 'a', 'world_event', f.second)).rejects.toThrow(/needs the caller's transaction/);
+      });
+
       test('a detach that cannot be audited does not happen', async () => {
         const f = await attached();
         jest.spyOn(models.ActivityLog, 'logActivity').mockRejectedValue(new Error('audit unavailable'));
@@ -990,6 +1132,52 @@ describe('reopen eligibility, pure', () => {
         expect((await putEvent(f.show, f.second, { used_in_episode_id: f.empty })).status).toBe(200);
         expect(await linkOf(f.second)).toBe(f.empty);
       });
+    });
+  });
+
+  // ── The repair path, with the index in place (as production is today) ───
+  describe('repairing an episode whose brief and links disagree (index in place)', () => {
+    const inject = (show, eventId, episode) => auth(request(app).post(`/api/v1/world/${show}/events/${eventId}/inject`)).send({ episode_id: episode });
+
+    test('the other event is removed, then the brief\'s own event is linked again; inject never attaches the other event', async () => {
+      expect(await indexThere()).toBe(true);
+      const f = await seed();
+      await run('UPDATE world_events SET used_in_episode_id = NULL WHERE id = :id', { id: f.first });
+      await run(`UPDATE world_events SET used_in_episode_id = :episode, status = 'used' WHERE id = :id`, { episode: f.episode, id: f.second });
+      const third = await addEvent(f.show, 'Third');
+
+      // Inject does not attach another event, switch off or on.
+      expect((await inject(f.show, third, f.episode)).body.code).toBe('SECONDARY_EVENTS_NOT_ENABLED');
+      on();
+      expect((await inject(f.show, third, f.episode)).body.code).toBe('SECONDARY_EVENT_INJECT_UNSUPPORTED');
+      off();
+      expect(await linkOf(third)).toBeNull();
+
+      // The primary cannot take its link back while the other event holds it: said plainly (409), not a 500.
+      const blocked = await inject(f.show, f.first, f.episode);
+      expect(blocked.status).toBe(409);
+      expect(blocked.body).toMatchObject({ code: 'EPISODE_EVENT_LINK_TAKEN', linked_event: { id: f.second, name: 'Charity Gala' } });
+      expect(await linkOf(f.first)).toBeNull();
+
+      // Step 1: remove the other event (safe: no commitment, nothing depends on it, not filmed).
+      const removed = await detach(f.show, f.second, { reason: 'Left by an old reassign' });
+      expect(removed.status).toBe(200);
+      expect(removed.body.detached).toBe(true);
+      // Step 2: the brief's own event is linked again.
+      const restored = await inject(f.show, f.first, f.episode);
+      expect(restored.status).toBe(200);
+      expect(await linkOf(f.first)).toBe(f.episode);
+      expect(await secondary.episodeLinkState(sequelize, f.episode)).toMatchObject({ state: 'ok', consistent: true, primaryId: f.first, secondary: [], strays: [] });
+    });
+
+    test('the other event is not removed when it carries a commitment: the repair is refused, and says why', async () => {
+      const f = await seed();
+      await run('UPDATE world_events SET used_in_episode_id = NULL WHERE id = :id', { id: f.first });
+      await run(`UPDATE world_events SET used_in_episode_id = :episode, status = 'used', is_paid = true WHERE id = :id`, { episode: f.episode, id: f.second });
+      const res = await detach(f.show, f.second, { reason: 'Left by an old reassign' });
+      expect(res.status).toBe(409);
+      expect(res.body.code).toBe('SECONDARY_EVENT_IN_USE');
+      expect(await linkOf(f.second)).toBe(f.episode);
     });
   });
 

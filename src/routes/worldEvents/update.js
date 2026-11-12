@@ -492,10 +492,30 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), req
     // the gate is then asked again after the row is written, so a commitment
     // sent in the same save as the link is refused with it.
     let secondaryAttach = false;
+    // An event already linked to an episode as other than its primary (a
+    // second event, or the unexplained link of an episode whose brief and
+    // links disagree) may not GAIN a commitment by a save either: fields the
+    // terms lock does not cover (the entry cost) would otherwise add one
+    // after the gate. What it already carried is not a new refusal.
+    let carriedBefore = null;
+    const noteNonPrimary = async (stored, transaction) => {
+      carriedBefore = null;
+      if (secondaryAttach || !stored?.used_in_episode_id) return;
+      const link = await secondaryEvents.classifyLink(models.sequelize, { eventId, episodeId: stored.used_in_episode_id, transaction });
+      if (link.kind !== 'linked') return;
+      const { obligations } = await secondaryEvents.eventObligations(models.sequelize, eventId, { transaction });
+      carriedBefore = new Set(obligations.map((o) => `${o.kind}:${o.detail}`));
+    };
     const assertStillNoObligations = async (transaction) => {
-      if (!secondaryAttach) return;
+      if (!secondaryAttach && !carriedBefore) return;
       try {
-        await secondaryEvents.assertNoObligations(models.sequelize, eventId, { transaction });
+        if (secondaryAttach) {
+          await secondaryEvents.assertNoObligations(models.sequelize, eventId, { transaction });
+          return;
+        }
+        const { obligations, event } = await secondaryEvents.eventObligations(models.sequelize, eventId, { transaction });
+        const gained = obligations.filter((o) => !carriedBefore.has(`${o.kind}:${o.detail}`));
+        if (gained.length) throw secondaryEvents.obligationsError(event, gained);
       } catch (err) {
         if (secondaryEvents.isSecondaryEventError(err)) throw new EventPutRefusal(err.status, err.toJSON());
         throw err;
@@ -604,6 +624,7 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), req
             mergeCanonConsequences(stored.canon_consequences, ccIncoming)
           );
         }
+        await noteNonPrimary(stored, transaction);
         await models.sequelize.query(updateSql, { replacements, transaction });
         await assertStillNoObligations(transaction);
         await followSceneSet(stored, transaction);
@@ -662,6 +683,7 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), req
       try {
         await models.sequelize.transaction(async (transaction) => {
           const stored = await lockAndCheck(transaction);
+          await noteNonPrimary(stored, transaction);
           if (ccIncoming !== undefined || hasStash) {
             let cc;
             if (ccIncoming !== undefined) cc = mergeCanonConsequences(stored.canon_consequences, ccIncoming);

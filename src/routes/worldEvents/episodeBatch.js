@@ -49,6 +49,10 @@ router.post('/world/:showId/events/generate-episode-from-many', requireAuth, aiR
     if (!Array.isArray(eventIds) || eventIds.length === 0) {
       return res.status(400).json({ success: false, error: 'event_ids array required' });
     }
+    // The same event twice is not two events: refused before anything is asked or created.
+    if (new Set(eventIds.map(String)).size !== eventIds.length) {
+      return res.status(400).json({ success: false, code: 'DUPLICATE_EVENT_IDS', error: 'The same event was chosen more than once. Choose each event once.' });
+    }
     const models = await getModels();
     if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
 
