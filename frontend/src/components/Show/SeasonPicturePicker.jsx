@@ -6,7 +6,7 @@
  * Style page's "Choose from Files" reads an episode's Files instead; this is
  * the same button and grid for the show. Uploading happens in Assets.
  *
- * Props: showId, label ("Cover", "Part 1 picture"), value (the URL or null),
+ * Props: showId, label ("Cover", "Phase 1 picture"; the test ids are built from it), value (the URL or null),
  * onChange(url | null), disabled.
  */
 import { useEffect, useState } from 'react';
