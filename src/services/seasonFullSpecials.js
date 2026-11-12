@@ -362,11 +362,15 @@ async function unmirror(sequelize, { episodeId, day, transaction }) {
 
 /**
  * Swap it into E_n: the event takes weekly slot slotId, and the event that
- * was there becomes a special at its own story position. An event already
+ * was there becomes a special at its own story position. That event is
+ * replaced only when the request names it (confirmPencils, Place's own
+ * contract), checked against the slot as it is under its lock. An event already
  * a special (also one whose episode started on a full season) hands that
  * special to the replaced event; its episode, if any, moves into the slot.
  */
-async function swapIntoSlot(sequelize, showId, eventId, slotId) {
+async function swapIntoSlot(sequelize, showId, eventId, slotId, { confirmPencils = null } = {}) {
+  const slotService = require('./seasonSlotService');
+  const confirmed = slotService.readConfirmedPencils(confirmPencils);
   return sequelize.transaction(async (transaction) => {
     const pic = await activePicture(sequelize, showId, transaction);
     // A1.1: the episode a special's swap moves (and snapshots) is locked
@@ -376,10 +380,8 @@ async function swapIntoSlot(sequelize, showId, eventId, slotId) {
     const seenOwn = await specialOfEvent(sequelize, pic.arc.id, seen, { transaction });
     await lockEpisodes(sequelize, [seenOwn?.episode_id], { transaction });
     const ev = await eventRow(sequelize, showId, eventId, { transaction, lock: true });
-    const slot = pic.slots.find((s) => String(s.id) === String(slotId || ''));
-    if (!slot) throw new SpecialsError('That episode is not in the season in progress.', 404, 'SEASON_SLOT_NOT_FOUND');
-    const refusal = swapRefusal(pic, slot, ev.id);
-    if (refusal) throw new SpecialsError(refusal, 409, 'SEASON_SWAP_REFUSED');
+    const seenSlot = pic.slots.find((s) => String(s.id) === String(slotId || ''));
+    if (!seenSlot) throw new SpecialsError('That episode is not in the season in progress.', 404, 'SEASON_SLOT_NOT_FOUND');
     const elsewhere = pic.slots.find((s) => String(s.live_event_id || '') === String(ev.id)
       || (ev.used_in_episode_id && String(s.live_episode_id || '') === String(ev.used_in_episode_id)));
     if (elsewhere) throw new SpecialsError(`"${ev.name}" is E${elsewhere.slot_number}'s: move it from the Roadmap instead.`, 409, 'SEASON_SWAP_REFUSED');
@@ -394,23 +396,64 @@ async function swapIntoSlot(sequelize, showId, eventId, slotId) {
     if (ev.used_in_episode_id && !own?.episode_id) {
       throw new SpecialsError(`"${ev.name}" has started an episode outside the season: place the episode from the Roadmap.`, 409, 'SEASON_SWAP_REFUSED');
     }
-    const replaced = slot.live_event_id ? { id: slot.live_event_id, name: slot.event_name, date: pic.dateOf.get(String(slot.live_event_id)) || null } : null;
+    // The pencil it replaces (Evoni, 2026-11-10; the same rule as Place): the
+    // slot is locked (after the episode, the event and the special: E, W, P,
+    // then S) and read as it is now, not as the unlocked picture saw it. The
+    // event found there is the one handed to a special below, and it is
+    // replaced only when the request names it (confirm_pencils).
+    const locked = await slotService.lockSlot(sequelize, showId, seenSlot.id, transaction);
+    let pencil = null;
+    if (locked.event_id) {
+      const [[row]] = await sequelize.query(
+        'SELECT id, name, event_date FROM world_events WHERE id = :id AND show_id = :showId AND deleted_at IS NULL',
+        { replacements: { id: locked.event_id, showId }, transaction });
+      // A reference to a deleted or missing event is not a pencil, and is not overwritten quietly.
+      if (!row) {
+        throw Object.assign(new SpecialsError(
+          `E${locked.slot_number} points to an event that no longer exists. Nothing was changed: clear the slot's event first.`, 409, 'SEASON_SLOT_EVENT_ORPHANED'),
+        { details: { slot_id: locked.id, slot_number: Number(locked.slot_number) } });
+      }
+      pencil = row;
+    }
+    const slot = {
+      ...seenSlot, locked_at: locked.locked_at, live_episode_id: locked.episode_id || null,
+      live_event_id: pencil ? pencil.id : null, event_name: pencil ? pencil.name : null,
+    };
+    const refusal = swapRefusal(pic, slot, ev.id);
+    if (refusal) throw new SpecialsError(refusal, 409, 'SEASON_SWAP_REFUSED');
+    const replaced = pencil ? { id: pencil.id, name: pencil.name, date: isoDay(pencil.event_date) } : null;
+    const affected = replaced
+      ? [{ slot_id: slot.id, slot_number: Number(slot.slot_number), event: { id: replaced.id, name: replaced.name }, change: 'replaced' }]
+      : [];
+    const verdict = slotService.pencilConfirmation(confirmed, affected);
+    if (verdict !== 'ok') {
+      const details = {
+        slot_id: slot.id, slot_number: Number(slot.slot_number), incoming_event: { id: ev.id, name: ev.name },
+        episode: own?.episode_id ? { id: own.episode_id } : null, episode_event: { id: ev.id, name: ev.name },
+        affected_pencils: affected,
+      };
+      throw Object.assign(verdict === 'needs'
+        ? new SpecialsError(`Swapping "${ev.name}" into E${slot.slot_number} replaces "${replaced.name}", which becomes a special. Nothing was changed: confirm it first.`, 409, 'SEASON_PLACE_NEEDS_CONFIRMATION')
+        : new SpecialsError(`The pencilled event in E${slot.slot_number} changed since this was confirmed. Nothing was changed: check the season and swap "${ev.name}" again.`, 409, 'SEASON_SLOT_CHANGED'),
+      { details });
+    }
 
     if (own?.episode_id) {
-      // Its episode started as a special: the episode moves into the weekly slot, locked to it.
-      await sequelize.query(
-        'UPDATE season_slots SET episode_id = :episodeId, event_id = :eventId, locked_at = NOW(), updated_at = NOW() WHERE id = :slotId',
-        { replacements: { episodeId: own.episode_id, eventId: ev.id, slotId: slot.id }, transaction });
+      // Its episode started as a special: the episode moves into the weekly
+      // slot, locked to it, through Place itself (its locks, its freeze and
+      // confirmation rules, its snapshot). Place writes the episode's own
+      // event; it must be this event, or nothing is written.
+      const placed = await slotService.placeEpisodeIn(sequelize, showId, slot.id, own.episode_id, transaction, { confirmPencils });
+      if (String(placed.event_id || '') !== String(ev.id)) {
+        throw new SpecialsError(`"${ev.name}" is not the event its episode carries. Nothing was changed: check the episode's Event Package.`, 409, 'SEASON_SWAP_REFUSED');
+      }
       await unmirror(sequelize, { episodeId: own.episode_id, day: own.release_day, transaction });
       await sequelize.query(
         `UPDATE ${specials.TABLE} SET episode_id = NULL, event_id = NULL, locked_at = NULL, updated_at = NOW() WHERE id = :id`,
         { replacements: { id: own.id }, transaction });
-      const { snapshotEpisode } = require('./seasonSlotService');
-      await snapshotEpisode(sequelize, { slotId: slot.id, episodeId: own.episode_id, transaction });
     } else {
       // The weekly pencil: the event takes the slot (and leaves its special, which keeps its row for the replaced event).
-      const { pencilEventIn } = require('./seasonSlotService');
-      await pencilEventIn(sequelize, showId, slot.id, ev.id, transaction);
+      await slotService.pencilEventIn(sequelize, showId, slot.id, ev.id, transaction);
     }
 
     let becomes = null;
@@ -519,7 +562,8 @@ async function specialOnFullStart(sequelize, { showId, eventId, episodeId, trans
   const work = async (t) => {
     const pic = await loadPicture(sequelize, showId, { transaction: t });
     if (!pic || !pic.full || !eventId) return null;
-    const [[ev]] = await sequelize.query('SELECT id, name, event_date FROM world_events WHERE id = :eventId AND show_id = :showId',
+    // A live event only: a special never points at a deleted event (Evoni, 2026-11-12).
+    const [[ev]] = await sequelize.query('SELECT id, name, event_date FROM world_events WHERE id = :eventId AND show_id = :showId AND deleted_at IS NULL',
       { replacements: { eventId, showId }, transaction: t });
     if (!ev) return null;
     const place = placeFor(pic, ev.event_date);

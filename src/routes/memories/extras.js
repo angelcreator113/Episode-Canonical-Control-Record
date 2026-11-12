@@ -2,7 +2,7 @@
 
 const router = require('express').Router();
 
-const Anthropic = require('@anthropic-ai/sdk');
+const { createAnthropicClient } = require('../../services/anthropicClient');
 const { v4: uuidv4 } = require('uuid');
 
 // Auth middleware
@@ -14,7 +14,7 @@ const { StorytellerMemory, StorytellerLine: _StorytellerLine, StorytellerBook: _
 const { buildUniverseContext: _buildUniverseContext } = require('../../utils/universeContext');
 
 require('dotenv').config({ override: !process.env.ANTHROPIC_API_KEY });
-const anthropic = new Anthropic();
+const anthropic = createAnthropicClient();
 
 // ─── Prose style anchor cache ────────────────────────────────────────────────
 // Stores author's prose sample per world/universe for voice matching

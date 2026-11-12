@@ -56,6 +56,7 @@ on:
           - db
           - db-schema
           - db-counts
+          - db-season-integrity
           - aws-infra
           - s3-config
           - cognito-config

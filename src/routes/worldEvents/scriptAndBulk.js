@@ -62,6 +62,12 @@ router.post('/world/:showId/events/:eventId/generate-script', requireAuth, aiRat
       if (!episodeForGuard || String(episodeForGuard.show_id) !== String(showId)) {
         return res.status(404).json({ success: false, error: 'Episode not found in this show' });
       }
+      // A filmed episode's script is never replaced by a generator (Evoni, 2026-11-12).
+      const filmed = await require('../../services/scriptSave').filmedScriptRefusal(models.sequelize, episodeForGuard);
+      if (filmed) {
+        console.warn(`[ScriptSkeleton] Refused for episode ${episode_id}: filmed, its script is kept.`);
+        return res.status(409).json(filmed);
+      }
       if (scriptOverwriteBlocked(episodeForGuard?.script_content, req.body)) {
         console.warn(`[ScriptSkeleton] Refused overwrite for episode ${episode_id}: existing script_content present, no confirmOverwrite flag.`);
         return res.status(409).json(scriptOverwriteRefusalBody());

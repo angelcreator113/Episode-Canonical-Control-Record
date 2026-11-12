@@ -82,4 +82,32 @@ describe('Script Writer: Lock and the episode\'s script revision', () => {
     expect(await screen.findByText(/was not locked or saved over it/)).toBeTruthy();
     expect(vi.mocked(api.post).mock.calls[0][1]).toEqual({ script_revision: null });
   });
+
+  // A filmed episode (Evoni, 2026-11-12): Lock is a person's own step, so it
+  // is asked about, each time, and answered with this episode's id.
+  test('a filmed episode: Lock asks, then sends this episode\'s confirmation with the overwrite answer', async () => {
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const filmed = Object.assign(new Error('filmed'), { response: { status: 409, data: { code: 'FILMED_SCRIPT_CONFIRMATION_REQUIRED', error: 'This episode has been filmed.', episode_id: 'ep-1' } } });
+    vi.mocked(api.post)
+      .mockRejectedValueOnce(refusal('SCRIPT_OVERWRITE_CONFIRMATION_REQUIRED', 'This episode already has a script.'))
+      .mockRejectedValueOnce(filmed)
+      .mockResolvedValueOnce({ data: { data: { ...SCRIPT_ROW, status: 'locked' }, script_revision: REV2 } });
+    renderPage();
+    await waitForRevision();
+    fireEvent.click(await lockButton());
+    await waitFor(() => expect(api.post).toHaveBeenCalledTimes(3));
+    expect(confirm).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(api.post).mock.calls[2]).toEqual(['/api/v1/episode-scripts/s-1/lock', { script_revision: REV1, confirmOverwrite: true, confirm_filmed_edit: 'ep-1' }]);
+  });
+
+  test('a filmed episode: "no" locks nothing and says so', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(false);
+    vi.mocked(api.post).mockRejectedValueOnce(Object.assign(new Error('filmed'), { response: { status: 409, data: { code: 'FILMED_SCRIPT_CONFIRMATION_REQUIRED', error: 'This episode has been filmed.', episode_id: 'ep-1' } } }));
+    renderPage();
+    await waitForRevision();
+    fireEvent.click(await lockButton());
+    expect(await screen.findByText(/Not locked\. The filmed episode's script is unchanged\./)).toBeTruthy();
+    expect(api.post).toHaveBeenCalledTimes(1);
+    expect(await lockButton()).toBeTruthy();
+  });
 });

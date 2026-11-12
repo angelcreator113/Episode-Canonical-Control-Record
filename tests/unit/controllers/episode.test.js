@@ -9,24 +9,17 @@ jest.mock('../../../src/middleware/auditLog', () => ({
   logger: {
     logAction: jest.fn().mockResolvedValue({}),
   },
-  auditLog: jest.fn(),
+  fieldChanges: jest.fn(() => ({ oldValues: null, newValues: null, changedFields: [] })),
+  episodeSummary: jest.fn((row) => ({ id: row?.id ?? null, summarised: true })),
   captureResponseData: jest.fn(),
-  getActionType: jest.fn(),
-  getResourceInfo: jest.fn(),
 }));
 
 // Mock all services that are dynamically required
-jest.mock('../../../src/services/ActivityService', () => ({
-  logActivity: jest.fn().mockResolvedValue({}),
-}));
 jest.mock('../../../src/services/SocketService', () => ({
   broadcastMessage: jest.fn().mockResolvedValue({}),
 }));
 jest.mock('../../../src/services/NotificationService', () => ({
   create: jest.fn().mockResolvedValue({}),
-}));
-jest.mock('../../../src/services/AuditLogger', () => ({
-  log: jest.fn().mockResolvedValue({}),
 }));
 
 const episodeController = require('../../../src/controllers/episodeController');
@@ -377,7 +370,79 @@ describe('Episode Controller - Real Tests', () => {
       expect(mockRes.json).toHaveBeenCalledWith(expect.objectContaining({ code: 'EPISODE_SNAPSHOT_FROZEN' }));
       expect(mockEpisode.softDelete).not.toHaveBeenCalled();
       expect(mockEpisode.destroy).not.toHaveBeenCalled();
+      // A refused delete is not in the audit trail (Evoni, 2026-11-11).
+      expect(logger.logAction).not.toHaveBeenCalled();
       mockReq.query = {};
+    });
+
+    describe('the audit entry says what happened, and only when it happened (Evoni, 2026-11-11)', () => {
+      const SCRIPT = 'INT. STUDIO - DAY. A SCRIPT THAT MUST NOT BE COPIED.';
+      const episodeRow = (over = {}) => ({
+        id: 7,
+        toJSON: jest.fn().mockReturnValue({ id: 7, title: 'Gone', script_content: SCRIPT }),
+        destroy: jest.fn().mockResolvedValue(true),
+        softDelete: jest.fn().mockResolvedValue(true),
+        ...over,
+      });
+      const env = process.env.NODE_ENV;
+      afterEach(() => { process.env.NODE_ENV = env; mockReq.query = {}; });
+
+      test('a delete that fails in the database throws and writes no entry', async () => {
+        const row = episodeRow({ softDelete: jest.fn().mockRejectedValue(new Error('connection lost')) });
+        models.Episode.findByPk = jest.fn().mockResolvedValue(row);
+        mockReq.params = { id: '7' };
+        await expect(episodeController.deleteEpisode(mockReq, mockRes)).rejects.toThrow('connection lost');
+        expect(logger.logAction).not.toHaveBeenCalled();
+        expect(mockRes.json).not.toHaveBeenCalled();
+      });
+
+      test('a transaction that fails to commit throws and writes no entry', async () => {
+        models.Episode.findByPk = jest.fn().mockResolvedValue(episodeRow());
+        models.Episode.sequelize.transaction = jest.fn(async (fn) => { await fn({ id: 'tx' }); throw new Error('commit failed'); });
+        mockReq.params = { id: '7' };
+        await expect(episodeController.deleteEpisode(mockReq, mockRes)).rejects.toThrow('commit failed');
+        expect(logger.logAction).not.toHaveBeenCalled();
+      });
+
+      test('an episode that does not exist writes no entry', async () => {
+        models.Episode.findByPk = jest.fn().mockResolvedValue(null);
+        mockReq.params = { id: '999' };
+        await expect(episodeController.deleteEpisode(mockReq, mockRes)).rejects.toThrow();
+        expect(logger.logAction).not.toHaveBeenCalled();
+      });
+
+      test('a successful delete writes one entry holding the summary, not the row or the script', async () => {
+        models.Episode.findByPk = jest.fn().mockResolvedValue(episodeRow());
+        mockReq.params = { id: '7' };
+        await episodeController.deleteEpisode(mockReq, mockRes);
+        expect(logger.logAction).toHaveBeenCalledTimes(1);
+        const [, action, type, id, options] = logger.logAction.mock.calls[0];
+        expect([action, type, id]).toEqual(['delete', 'episode', '7']);
+        expect(options).toEqual({ oldValues: { id: 7, summarised: true }, deleteType: 'soft' });
+        expect(JSON.stringify(options)).not.toContain('SCRIPT');
+      });
+
+      test('?hard=true outside production is recorded as permanent', async () => {
+        const row = episodeRow();
+        models.Episode.findByPk = jest.fn().mockResolvedValue(row);
+        mockReq.params = { id: '7' };
+        mockReq.query = { hard: 'true' };
+        await episodeController.deleteEpisode(mockReq, mockRes);
+        expect(row.destroy).toHaveBeenCalled();
+        expect(logger.logAction.mock.calls[0][4].deleteType).toBe('permanent');
+      });
+
+      test('?hard=true in production is a soft delete, and is recorded as one', async () => {
+        process.env.NODE_ENV = 'production';
+        const row = episodeRow();
+        models.Episode.findByPk = jest.fn().mockResolvedValue(row);
+        mockReq.params = { id: '7' };
+        mockReq.query = { hard: 'true' };
+        await episodeController.deleteEpisode(mockReq, mockRes);
+        expect(row.destroy).not.toHaveBeenCalled();
+        expect(row.softDelete).toHaveBeenCalled();
+        expect(logger.logAction.mock.calls[0][4].deleteType).toBe('soft');
+      });
     });
 
     test('should delete episode', async () => {

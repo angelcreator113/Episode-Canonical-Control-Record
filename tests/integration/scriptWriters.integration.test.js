@@ -958,4 +958,253 @@ const SCHEMA = `a1c_r1_${crypto.randomUUID().slice(0, 8)}`;
       expect(res.body.script_revision).toBe(scriptRevision(row.script_content));
     });
   });
+  // A filmed episode's script (Evoni, 2026-11-12): generators never replace
+  // it; a person's own edit needs that episode's confirmation, sent with the
+  // request and stored nowhere.
+  describe('a filmed episode\'s script', () => {
+    const filmedEpisodes = [];
+    // Filmed as the snapshot freeze defines it: a row in episode_raw_clips.
+    const film = async (ep, { removed = false } = {}) => {
+      filmedEpisodes.push(ep);
+      const id = uuid();
+      await run(`INSERT INTO episode_raw_clips (id, episode_id, show_id, performer, label, s3_key_raw, beat_number, is_favorite, deleted_at, created_at, updated_at)
+                 VALUES (:id, :ep, :show, 'justawoman', 'Take 1', :key, 1, true, ${removed ? 'NOW()' : 'NULL'}, NOW(), NOW())`,
+      { id, ep, show, key: `episodes/${ep}/raw-clips/${id}/original.mp4` });
+      return id;
+    };
+    const state = async (ep) => ({
+      row: await episodeRow(ep),
+      versions: await versionRows(ep),
+      clips: await rows('SELECT * FROM episode_raw_clips WHERE episode_id = :ep ORDER BY id', { ep }),
+      briefs: await rows('SELECT * FROM episode_briefs WHERE episode_id = :ep ORDER BY id', { ep }),
+    });
+    afterAll(async () => {
+      if (filmedEpisodes.length) await run('DELETE FROM episode_raw_clips WHERE episode_id IN (:eps)', { eps: filmedEpisodes }).catch((err) => console.error('[cleanup] episode_raw_clips:', err.message));
+    });
+
+    const GENERATORS = WRITERS.filter((w) => ['W3', 'W5', 'W7', 'W9', 'W10'].includes(w.id));
+
+    test.each(GENERATORS)('$id: refused with FILMED_SCRIPT_PROTECTED; the script, its locks, versions, save number, footage and brief are unchanged; no model is asked', async (w) => {
+      const ctx = await prepare(w);
+      await film(ctx.ep);
+      const before = await state(ctx.ep);
+      const scriptsBefore = await scriptRows(ctx.ep);
+      const res = await w.drive(ctx);
+      expect(res.status).toBe(409);
+      expect(res.body).toMatchObject({ success: false, code: 'FILMED_SCRIPT_PROTECTED', episode_id: ctx.ep, saved: false });
+      expect(res.body.error).toMatch(/filmed/);
+      expect(await state(ctx.ep)).toEqual(before);
+      expect(before.row.script_content).toBe(FIXTURE);
+      expect(mockCreate).not.toHaveBeenCalled();
+      expect(mockGrounded).not.toHaveBeenCalled();
+      // The Script Writer kept no new draft, and inject linked nothing.
+      expect(await scriptRows(ctx.ep)).toEqual(scriptsBefore);
+      if (ctx.ev) expect((await rows('SELECT used_in_episode_id, status FROM world_events WHERE id = :ev', { ev: ctx.ev }))[0]).toEqual({ used_in_episode_id: null, status: 'ready' });
+    });
+
+    test.each(GENERATORS.filter((w) => w.guarded))('$id: no flag lifts it: confirmOverwrite and the episode\'s own confirmation together are still refused', async (w) => {
+      const ctx = await prepare(w);
+      await film(ctx.ep);
+      const res = await w.drive(ctx, { confirmOverwrite: true, confirm_filmed_edit: ctx.ep });
+      expect(res.status).toBe(409);
+      expect(res.body.code).toBe('FILMED_SCRIPT_PROTECTED');
+      expect((await episodeRow(ctx.ep)).script_content).toBe(FIXTURE);
+    });
+
+    test('the generators\' routes say filmed before they ask "replace the script?"', async () => {
+      for (const w of GENERATORS.filter((g) => ['W3', 'W7', 'W10'].includes(g.id))) {
+        // eslint-disable-next-line no-await-in-loop
+        const ctx = await prepare(w);
+        // eslint-disable-next-line no-await-in-loop
+        await film(ctx.ep);
+        // eslint-disable-next-line no-await-in-loop
+        const res = await w.drive(ctx, {});
+        expect([w.id, res.status, res.body.code]).toEqual([w.id, 409, 'FILMED_SCRIPT_PROTECTED']);
+      }
+    });
+
+    test('a removed take still means filmed: the generator is refused', async () => {
+      const w = WRITERS.find((x) => x.id === 'W10');
+      const ctx = await prepare(w);
+      await film(ctx.ep, { removed: true });
+      const res = await w.drive(ctx);
+      expect(res.status).toBe(409);
+      expect(res.body.code).toBe('FILMED_SCRIPT_PROTECTED');
+      expect(mockGrounded).not.toHaveBeenCalled();
+    });
+
+    test('a filmed episode with no script yet: a generator writes its first script', async () => {
+      const w = WRITERS.find((x) => x.id === 'W9');
+      const ctx = await prepare(w, { episode: { script: '', locks: [] } });
+      await film(ctx.ep);
+      const res = await w.drive(ctx, {});
+      expect(res.status).toBe(200);
+      expect((await episodeRow(ctx.ep)).script_content).toMatch(/## BEAT:/);
+    });
+
+    const save = (ep, body) => auth(request(app).put(`/api/v1/episodes/${ep}`)).send(body);
+
+    test('W1 Save: refused without the confirmation, with another episode\'s, and with true; saved with its own; the next save must bring it again', async () => {
+      const ep = await makeEpisode();
+      const other = await makeEpisode();
+      await film(ep);
+      const before = await state(ep);
+      const revision = await revisionOf(ep);
+      for (const confirm of [undefined, other, true, 'true']) {
+        // eslint-disable-next-line no-await-in-loop
+        const res = await save(ep, { script_content: EDITED, script_revision: revision, ...(confirm === undefined ? {} : { confirm_filmed_edit: confirm }) });
+        expect(res.status).toBe(409);
+        expect(res.body).toMatchObject({ success: false, code: 'FILMED_SCRIPT_CONFIRMATION_REQUIRED', episode_id: ep, current_revision: revision });
+      }
+      expect(await state(ep)).toEqual(before);
+
+      const ok = await save(ep, { script_content: EDITED, script_revision: revision, confirm_filmed_edit: ep });
+      expect(ok.status).toBe(200);
+      expect(ok.body.ignored_fields || []).not.toContain('confirm_filmed_edit');
+      const after = await state(ep);
+      expect(after.row.script_content).toBe(scriptKeepingLocks(fixtureRow, EDITED, { keepExtras: true }).script);
+      expect(BigInt(after.row.script_seq)).toBe(BigInt(before.row.script_seq) + 1n);
+      // The script it replaced is kept as a version; footage and brief are untouched.
+      expect(after.versions).toHaveLength(before.versions.length + 1);
+      expect(after.versions[0]).toMatchObject({ source: 'save', script_content: FIXTURE });
+      expect(after.clips).toEqual(before.clips);
+      expect(after.briefs).toEqual(before.briefs);
+
+      // Nothing was remembered on the server: the same page, saving again without it, is asked again.
+      const again = await save(ep, { script_content: FIXTURE, script_revision: ok.body.script_revision });
+      expect(again.status).toBe(409);
+      expect(again.body.code).toBe('FILMED_SCRIPT_CONFIRMATION_REQUIRED');
+      expect((await episodeRow(ep)).script_content).toBe(after.row.script_content);
+    });
+
+    test('one episode\'s confirmation does not save another filmed episode', async () => {
+      const a = await makeEpisode();
+      const b = await makeEpisode();
+      await film(a);
+      await film(b);
+      expect((await save(a, { script_content: EDITED, script_revision: await revisionOf(a), confirm_filmed_edit: a })).status).toBe(200);
+      const res = await save(b, { script_content: EDITED, script_revision: await revisionOf(b), confirm_filmed_edit: a });
+      expect(res.status).toBe(409);
+      expect(res.body).toMatchObject({ code: 'FILMED_SCRIPT_CONFIRMATION_REQUIRED', episode_id: b });
+      expect((await episodeRow(b)).script_content).toBe(FIXTURE);
+    });
+
+    test('W1 Save of fields other than the script, and of the same script text, needs no confirmation', async () => {
+      const ep = await makeEpisode();
+      await film(ep);
+      expect((await save(ep, { title: 'Gala Night, retitled' })).status).toBe(200);
+      const same = await save(ep, { script_content: FIXTURE, script_revision: await revisionOf(ep) });
+      expect(same.status).toBe(200);
+      expect((await episodeRow(ep)).script_content).toBe(FIXTURE);
+    });
+
+    test('W1 Restore of an earlier version is a person\'s edit: confirmation required, then restored', async () => {
+      const ep = await makeEpisode();
+      await film(ep);
+      const first = await save(ep, { script_content: EDITED, script_revision: await revisionOf(ep), confirm_filmed_edit: ep });
+      expect(first.status).toBe(200);
+      const [version] = await rows('SELECT id FROM episode_script_versions WHERE episode_id = :ep ORDER BY created_at DESC, id DESC LIMIT 1', { ep });
+      const refused = await save(ep, { script_content: FIXTURE, restored_from: version.id, script_revision: first.body.script_revision });
+      expect(refused.status).toBe(409);
+      expect(refused.body.code).toBe('FILMED_SCRIPT_CONFIRMATION_REQUIRED');
+      const ok = await save(ep, { script_content: FIXTURE, restored_from: version.id, script_revision: first.body.script_revision, confirm_filmed_edit: ep });
+      expect(ok.status).toBe(200);
+      expect((await episodeRow(ep)).script_content).toBe(FIXTURE);
+    });
+
+    test('W2 Approve: a lock alone needs no confirmation; a lock that also changes the text does', async () => {
+      const ep = await makeEpisode();
+      await film(ep);
+      const locks = (body) => auth(request(app).put(`/api/v1/episodes/${ep}/script-locks`)).send(body);
+      const alone = await locks({ locked_beats: [1, 8], script_revision: await revisionOf(ep) });
+      expect(alone.status).toBe(200);
+      expect((await episodeRow(ep)).script_locked_beats).toEqual([1, 8]);
+      const revision = await revisionOf(ep);
+      const withText = await locks({ locked_beats: [1, 8], script_content: FIXTURE.replace('This is the one.', 'This is the one, edited.'), script_revision: revision });
+      expect(withText.status).toBe(409);
+      expect(withText.body.code).toBe('FILMED_SCRIPT_CONFIRMATION_REQUIRED');
+      expect((await episodeRow(ep)).script_content).toBe(FIXTURE);
+      const ok = await locks({ locked_beats: [1, 8], script_content: FIXTURE.replace('This is the one.', 'This is the one, edited.'), script_revision: revision, confirm_filmed_edit: ep });
+      expect(ok.status).toBe(200);
+      expect((await episodeRow(ep)).script_content).toContain('This is the one, edited.');
+    });
+
+    test('W4 the Script Writer\'s Lock: both questions are asked, the draft stays a draft until answered, then it is locked and saved', async () => {
+      const ep = await makeEpisode();
+      const other = await makeEpisode();
+      await film(ep);
+      const id = await makeScriptRow(ep);
+      const revision = await revisionOf(ep);
+      const lock = (body) => auth(request(app).post(`/api/v1/episode-scripts/${id}/lock`)).send({ script_revision: revision, ...body });
+      const draft = async () => (await scriptRows(ep)).find((r) => r.id === id).status;
+
+      const first = await lock({});
+      expect([first.status, first.body.code]).toEqual([409, 'SCRIPT_OVERWRITE_CONFIRMATION_REQUIRED']);
+      for (const body of [{ confirmOverwrite: true }, { confirmOverwrite: true, confirm_filmed_edit: other }, { confirm_filmed_edit: ep }]) {
+        // eslint-disable-next-line no-await-in-loop
+        const res = await lock(body);
+        expect(res.status).toBe(409);
+        expect(res.body.code).toBe(body.confirmOverwrite ? 'FILMED_SCRIPT_CONFIRMATION_REQUIRED' : 'SCRIPT_OVERWRITE_CONFIRMATION_REQUIRED');
+        // eslint-disable-next-line no-await-in-loop
+        expect(await draft()).toBe('draft');
+      }
+      expect((await episodeRow(ep)).script_content).toBe(FIXTURE);
+
+      const ok = await lock({ confirmOverwrite: true, confirm_filmed_edit: ep });
+      expect(ok.status).toBe(200);
+      expect(await draft()).toBe('locked');
+      expect((await episodeRow(ep)).script_content).toBe(scriptKeepingLocks(fixtureRow, GENERATED).script);
+      expect((await versionRows(ep))[0]).toMatchObject({ source: 'generate', script_content: FIXTURE });
+    });
+
+    test('the two suggestion routes return text and save nothing, filmed or not (regenerate-beat, rewrite-line)', async () => {
+      const ep = await makeEpisode();
+      await film(ep);
+      const before = await state(ep);
+      mockCreate.mockResolvedValue({ content: [{ text: '## BEAT: 6 · Strategic Reaction\nPrime: "A suggested line."' }], usage: { input_tokens: 1, output_tokens: 1 } });
+      mockGrounded.mockResolvedValue({ script: '## BEAT: 6 · Strategic Reaction\nPrime: "A suggested line."' });
+      const beatRes = await auth(request(app).post(`/api/v1/episode-brief/${ep}/regenerate-beat`)).send({ showId: show, beatNumber: 6, script: FIXTURE });
+      const lineRes = await auth(request(app).post(`/api/v1/episode-brief/${ep}/rewrite-line`)).send({ showId: show, beatNumber: 6, line: 'Prime: "This is the one."', speaker: 'Prime' });
+      // Each asked its model and answered with a suggestion; neither wrote the episode.
+      expect([beatRes.status, lineRes.status]).toEqual([200, 200]);
+      expect(mockCreate).toHaveBeenCalled();
+      expect(await state(ep)).toEqual(before);
+    });
+
+    // A first take and a generator at once take turns on the episode row
+    // (the take's attach holds it FOR SHARE; the save FOR UPDATE).
+    describe('a first take and a generator at the same moment', () => {
+      const w9 = () => WRITERS.find((x) => x.id === 'W9');
+      test('the take commits first: the generator waited for it and is refused', async () => {
+        const ctx = await prepare(w9());
+        filmedEpisodes.push(ctx.ep);
+        const t = await sequelize.transaction();
+        await sequelize.query('SELECT id FROM episodes WHERE id = :ep FOR SHARE', { replacements: { ep: ctx.ep }, transaction: t });
+        await sequelize.query(`INSERT INTO episode_raw_clips (id, episode_id, show_id, performer, s3_key_raw, created_at, updated_at)
+          VALUES (:id, :ep, :show, 'lala', 'k', NOW(), NOW())`, { replacements: { id: uuid(), ep: ctx.ep, show }, transaction: t });
+        let committed = false;
+        const pending = w9().drive(ctx).then((res) => ({ res, sawCommit: committed }));
+        await sleep(500);
+        committed = true;
+        await t.commit();
+        const { res, sawCommit } = await pending;
+        expect(sawCommit).toBe(true);
+        expect([res.status, res.body.code]).toEqual([409, 'FILMED_SCRIPT_PROTECTED']);
+        expect((await episodeRow(ctx.ep)).script_content).toBe(FIXTURE);
+      });
+
+      test('the generator commits first: the episode was not filmed yet, so it saved; the take then attaches, and the next generator is refused', async () => {
+        const ctx = await prepare(w9());
+        const first = await w9().drive(ctx);
+        expect(first.status).toBe(200);
+        const saved = (await episodeRow(ctx.ep)).script_content;
+        expect(saved).not.toBe(FIXTURE);
+        await film(ctx.ep);
+        const second = await w9().drive(ctx);
+        expect([second.status, second.body.code]).toEqual([409, 'FILMED_SCRIPT_PROTECTED']);
+        expect((await episodeRow(ctx.ep)).script_content).toBe(saved);
+      });
+    });
+  });
 });
+

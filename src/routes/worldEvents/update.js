@@ -13,7 +13,7 @@
 const express = require('express');
 const router = express.Router();
 
-const { requireAuth } = require('../../middleware/auth');
+const { requireAuth, authorize } = require('../../middleware/auth');
 const { mergeCanonConsequences } = require('../../utils/canonConsequencesMerge');
 const { parseExpectedVersion, versionMatches, staleSaveBody } = require('../../utils/eventVersion');
 const { normalizeRestrictions } = require('../../services/eventTermsService');
@@ -24,7 +24,9 @@ const { DEAL_TYPES, CATEGORY_VALUES, FORMAT_VALUES } = require('../../models/Wor
 const { loadScopedEvent } = require('../../utils/eventScope');
 const { getModels } = require('./helpers');
 const { assertEventRelinkAllowed, isFrozenEpisodeError } = require('../../utils/frozenEpisode');
-const { RetryableConflictError } = require('../../utils/episodeLocks');
+const { RetryableConflictError, asRetryable } = require('../../utils/episodeLocks');
+const { softDeleteUnusedUnlinkedEvents } = require('../../utils/worldEventSafeDelete');
+const { findLiveLinkedEpisode } = require('../../utils/eventEpisodeLink');
 
 // Every status an event row carries: draft | ready | used | archived
 // (WorldEvent.js) plus the values the server's own writers set — filmed
@@ -710,21 +712,120 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), req
 // DELETE /api/v1/world/:showId/events/:eventId
 // ═══════════════════════════════════════════
 
-router.delete('/world/:showId/events/:eventId', requireAuth, async (req, res) => {
+//
+// One event, by the same rule bulk delete uses (utils/worldEventSafeDelete;
+// Evoni, 2026-11-12). Until then this route soft-deleted any event, an
+// episode's source included. Now, ADMIN only:
+//   - an event no episode ever used and nothing independent points at is
+//     soft-deleted, with its own untouched preparation (cost lines, and
+//     deliverables no episode or post is tied to), in one transaction;
+//   - any other event is kept: 409 EVENT_IN_USE, with blocked_by naming what
+//     holds it (a link only to a record of this show);
+//   - an unknown, already deleted or other show's event: 404;
+//   - a lock conflict (a Start or a pencil of the same event at the same
+//     moment): 409 with the retry code, nothing deleted.
+// Soft delete only: the row is never hard-deleted (audit Low, 2026-10-23).
+
+// What holds an event, in a person's words, by the helper's link label.
+const HELD_BY_WORDS = {
+  episode_briefs: 'an episode brief names it as its source',
+  season_slots: 'it is pencilled into the season plan',
+  season_specials: 'a season special or bonus uses it',
+  opportunity: 'the opportunity it was made for is still open',
+  child_events: 'other events were made from it',
+  event_deliverables: 'it has deliverables an episode or a post is already tied to',
+  feed_posts: 'posts are tied to it',
+  episode_spending_lines: 'an episode\'s spending is recorded against it',
+};
+
+/** blocked_by for one kept event: each thing that holds it, with a link when it is in this show. */
+async function describeHolders(sequelize, { showId, kept, transaction }) {
+  const blockedBy = [];
+  const seasonHref = `/shows/${showId}/season?tab=roadmap`;
+  if (kept.used) {
+    const episode = await findLiveLinkedEpisode(sequelize, kept.id, { transaction });
+    if (episode) {
+      const number = episode.episode_number !== null && episode.episode_number !== undefined ? `Episode ${episode.episode_number}` : 'An episode';
+      const sameShow = String(episode.show_id) === String(showId);
+      blockedBy.push({
+        kind: 'episode',
+        label: sameShow ? `${number}${episode.title ? ` "${episode.title}"` : ''} was started from it` : 'An episode in another show was started from it',
+        ...(sameShow ? { link: `/episodes/${episode.id}`, episode_id: episode.id } : {}),
+      });
+    } else {
+      blockedBy.push({ kind: 'episode_deleted', label: 'It was used by an episode that has since been deleted, so it is kept as the record of that episode' });
+    }
+  }
+  for (const label of kept.linked_by) {
+    if (label === 'season_slots') {
+      const [slots] = await sequelize.query(
+        `SELECT s.slot_number, s.season_number FROM season_slots s
+          WHERE s.event_id = :eventId AND s.show_id = :showId AND s.deleted_at IS NULL ORDER BY s.season_number, s.slot_number LIMIT 5`,
+        { replacements: { eventId: kept.id, showId }, transaction });
+      const where = (slots || []).map((s) => `S${s.season_number} · E${s.slot_number}`).join(', ');
+      blockedBy.push({ kind: label, label: where ? `It is in the season plan at ${where}` : HELD_BY_WORDS[label], link: seasonHref });
+    } else if (label === 'episode_briefs' && kept.used) {
+      // Already said by the episode line above.
+    } else {
+      blockedBy.push({
+        kind: label,
+        label: HELD_BY_WORDS[label] ? HELD_BY_WORDS[label][0].toUpperCase() + HELD_BY_WORDS[label].slice(1) : `Other records point at it (${label.replace(/_/g, ' ')})`,
+        ...(label === 'season_specials' ? { link: seasonHref } : {}),
+      });
+    }
+  }
+  return blockedBy;
+}
+
+router.delete('/world/:showId/events/:eventId', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { showId, eventId } = req.params;
     const models = await getModels();
     if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
 
-    // Soft delete only (paranoid mode). A failure is a 500; the row is never
-    // hard-deleted as a fallback (audit Low, 2026-10-23).
-    await models.sequelize.query(
-      `UPDATE world_events SET deleted_at = NOW() WHERE id = :eventId AND show_id = :showId`,
-      { replacements: { showId, eventId } }
-    );
+    const outcome = await models.sequelize.transaction(async (transaction) => {
+      const result = await softDeleteUnusedUnlinkedEvents(models.sequelize, {
+        showId, ids: [eventId], allowOwnedPreparation: true, transaction,
+      });
+      const kept = result.kept[0] || null;
+      return {
+        deleted: result.softDeleted[0] || null,
+        kept,
+        removed: result.ownedRemoved[eventId] || { deliverables: 0, costs: 0 },
+        blockedBy: kept ? await describeHolders(models.sequelize, { showId, kept, transaction }) : [],
+      };
+    });
 
-    return res.json({ success: true, deleted: eventId });
+    if (outcome.kept) {
+      return res.status(409).json({
+        success: false,
+        code: 'EVENT_IN_USE',
+        event: { id: outcome.kept.id, name: outcome.kept.name, status: outcome.kept.status },
+        blocked_by: outcome.blockedBy,
+        error: `"${outcome.kept.name}" can't be deleted. ${outcome.blockedBy.map((b) => b.label).join('. ')}. Nothing was deleted.`,
+      });
+    }
+    if (!outcome.deleted) return res.status(404).json({ success: false, error: 'Event not found' });
+
+    const { deliverables, costs } = outcome.removed;
+    const prep = [
+      deliverables ? `${deliverables} deliverable${deliverables === 1 ? '' : 's'}` : null,
+      costs ? `${costs} cost line${costs === 1 ? '' : 's'}` : null,
+    ].filter(Boolean);
+    return res.json({
+      success: true,
+      deleted: eventId,
+      also_removed: { deliverables, costs },
+      message: prep.length
+        ? `"${outcome.deleted.name}" was deleted, with its ${prep.join(' and ')}. They no longer appear anywhere in the app.`
+        : `"${outcome.deleted.name}" was deleted. It no longer appears anywhere in the app.`,
+    });
   } catch (error) {
+    const retry = asRetryable(error);
+    if (retry instanceof RetryableConflictError) {
+      console.warn(`Delete event refused (${retry.code}):`, retry.message);
+      return res.status(409).json({ success: false, error: retry.message, code: retry.code });
+    }
     console.error('Delete event error:', error);
     return res.status(500).json({ success: false, error: 'Failed to delete event' });
   }

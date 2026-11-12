@@ -36,6 +36,7 @@ import ScriptImport from './ScriptImport';
 import EpisodeStoryRecord from './EpisodeStoryRecord';
 import ScriptHistory from './ScriptHistory';
 import useScriptDraft from '../../hooks/useScriptDraft';
+import { withFilmedConfirm, FILMED_DECLINED_NOTE } from '../../lib/filmedScriptConfirm';
 import useDialogLayer from '../../hooks/useDialogLayer';
 import VoiceRecordPanel, { VoiceBadge, VoiceMicButton } from '../Teleprompter/VoiceRecord';
 import { voiceClipsApi, isNotReady as voiceNotReady, VOICE_NOT_READY, clipsByLine, lineKey, withClip } from '../../lib/voiceClipsApi';
@@ -2337,6 +2338,10 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
     .filter((m) => m && typeof m === 'object' && m.from != null && m.to != null)
     .map((m) => `Beat ${m.from} is approved, so your new beat was kept as beat ${m.to}.`).join(' ');
 
+  // A filmed episode's script: the episodes confirmed while this tab is open
+  // (lib/filmedScriptConfirm). In memory only; a reload asks again.
+  const filmedConfirmed = useRef(new Set());
+
   const handleSave = useCallback(async () => {
     // A save waits for a lock on its way (Script page audit 3, 2026-10-19).
     if (busy || locking) return;
@@ -2346,7 +2351,9 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
     try {
       // The revision of the saved script these edits were made on (A1c R1).
       const revision = await revisionFor(savedRef.current);
-      const res = await api.put(`/api/v1/episodes/${episodeId}`, { script_content: scriptText, script_revision: revision, ...(from ? { restored_from: from } : {}) });
+      const res = await withFilmedConfirm(filmedConfirmed.current, episodeId, (confirm) => api.put(`/api/v1/episodes/${episodeId}`, {
+        script_content: scriptText, script_revision: revision, ...(from ? { restored_from: from } : {}), ...confirm,
+      }));
       const stored = typeof res?.data?.data?.script_content === 'string' ? res.data.data.script_content : scriptText;
       noteRevision(stored, res?.data?.script_revision);
       setConflict(null);
@@ -2366,8 +2373,9 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
       console.error('[EpisodeScript] save failed:', err);
       // Refused, not failed: the page keeps its text and says what to do (A1c R1).
       const refused = conflictOf(err);
-      if (refused) setConflict(refused);
-      else flash('Save failed', 'error');
+      if (err?.filmedDeclined) flash(FILMED_DECLINED_NOTE, 'error', 6000);
+      else if (refused) setConflict(refused);
+      else flash(err.response?.data?.code === 'FILMED_SCRIPT_CONFIRMATION_REQUIRED' ? (err.response.data.error || 'Save failed') : 'Save failed', 'error');
     }
     finally { setSaving(false); }
   }, [busy, locking, episodeId, scriptText, syncPostDrafts, restoredFrom]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -2667,7 +2675,9 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
     try {
       // A lock, with or without text, is sent against the saved script's revision (A1c R1).
       const revision = await revisionFor(savedScript);
-      const res = await api.put(`/api/v1/episodes/${episodeId}/script-locks`, { locked_beats: next, script_revision: revision, ...(sendText ? { script_content: text } : {}) });
+      const res = await withFilmedConfirm(filmedConfirmed.current, episodeId, (confirm) => api.put(`/api/v1/episodes/${episodeId}/script-locks`, {
+        locked_beats: next, script_revision: revision, ...(sendText ? { script_content: text } : {}), ...confirm,
+      }));
       const data = res?.data?.data || {};
       const nowLocks = Array.isArray(data.script_locked_beats) ? data.script_locked_beats : next;
       setLockedBeats(nowLocks);
@@ -2687,7 +2697,8 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
     } catch (err) {
       console.error('[EpisodeScript] lock failed:', err);
       const refused = conflictOf(err);
-      if (refused) setConflict(refused);
+      if (err?.filmedDeclined) flash(FILMED_DECLINED_NOTE, 'error', 6000);
+      else if (refused) setConflict(refused);
       else flash(err.response?.data?.error || (beat.approved ? 'Could not unlock the beat' : 'Could not approve the beat'), 'error');
     } finally { setLocking(false); }
   };

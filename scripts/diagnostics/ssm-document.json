@@ -5,7 +5,7 @@
     "check": {
       "type": "String",
       "description": "One check from the fixed list",
-      "allowedValues": ["health", "deploy-state", "app-logs", "worker-logs", "nginx-logs", "db", "db-schema", "db-counts", "self-test", "db-snapshot"]
+      "allowedValues": ["health", "deploy-state", "app-logs", "worker-logs", "nginx-logs", "db", "db-schema", "db-counts", "db-season-integrity", "self-test", "db-snapshot"]
     },
     "sha": {
       "type": "String",

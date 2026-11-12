@@ -92,7 +92,11 @@ export const authService = {
       // adds Authorization automatically — no explicit Bearer construction needed.
       if (this.getToken()) {
         try {
-          await api.post('/api/v1/auth/logout', {});
+          // The refresh token goes with the request so the backend can end
+          // this session at Cognito (ruled 2026-11-11). It is read before the
+          // finally block below clears it.
+          const refreshToken = this.getRefreshToken();
+          await api.post('/api/v1/auth/logout', refreshToken ? { refreshToken } : {});
         } catch (err) {
           console.warn('Backend logout failed (continuing with local logout):', err.message);
         }

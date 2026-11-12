@@ -221,6 +221,20 @@ async function withEdit(sequelize, { episodeId, editRevision, userId, batch = nu
   });
 }
 
+/**
+ * The edit's lock, for a check that is not an edit (a take's removal,
+ * rawClipsService.removeClip): the same row every edit write, every restore
+ * (FOR UPDATE) and every version save (FOR SHARE) takes first, made if the
+ * episode has none yet, as withEdit makes it. Held to the end of `t`, so
+ * nothing can place, restore or save a version of the edit meanwhile. The
+ * revision is not advanced: nothing in the edit changed.
+ */
+async function lockEdit(sequelize, episodeId, t) {
+  if (!t) throw new Error('lockEdit needs the caller\'s transaction');
+  await q(sequelize, 'INSERT INTO episode_edit_state (episode_id) VALUES (:episodeId) ON CONFLICT (episode_id) DO NOTHING', { episodeId }, t);
+  await one(sequelize, 'SELECT episode_id FROM episode_edit_state WHERE episode_id = :episodeId FOR UPDATE', { episodeId }, t);
+}
+
 // The live rows of each table, as the edit and the snapshot hold them (no timestamps).
 const LIVE = {
   beat_production: {
@@ -279,6 +293,55 @@ const requireC1b = async (sequelize, t, what) => {
 const liveSpec = (c1b) => (c1b
   ? Object.fromEntries(Object.entries(LIVE).map(([k, s]) => [k, C1B_COLS[k] ? { ...s, cols: [...s.cols, ...C1B_COLS[k]] } : s]))
   : LIVE);
+
+// The three ways an edit row names a take (episode_raw_clips), as SQL over
+// one live table's alias `r`, and over one saved version's snapshot `v`.
+const RAW_CLIP_REFS = {
+  segments: { kind: 'prime_segment', row: 'r.raw_clip_id = :clipId', snap: "e->>'raw_clip_id' = :clipText" },
+  scene_clips: { kind: 'scene_clip', row: "r.source_kind = 'raw_clip' AND r.source_id = :clipId", snap: "e->>'source_kind' = 'raw_clip' AND e->>'source_id' = :clipText" },
+  items: { kind: 'performer_clip', row: "r.kind = 'performer_clip' AND r.\"values\"->>'raw_clip_id' = :clipText", snap: "e->>'kind' = 'performer_clip' AND e->'values'->>'raw_clip_id' = :clipText" },
+};
+
+/** The takes a saved version's snapshot names, by the same three ways. */
+function snapshotRawClipIds(snapshot) {
+  const s = snapshot && typeof snapshot === 'object' ? snapshot : {};
+  const list = (k) => (Array.isArray(s[k]) ? s[k] : []);
+  const ids = [
+    ...list('segments').map((r) => r?.raw_clip_id),
+    ...list('scene_clips').filter((r) => r?.source_kind === 'raw_clip').map((r) => r.source_id),
+    ...list('items').filter((r) => r?.kind === 'performer_clip').map((r) => r?.values?.raw_clip_id),
+  ];
+  return [...new Set(ids.filter((id) => UUID_RE.test(String(id || ''))).map(String))];
+}
+
+/**
+ * What in an episode's editing work uses one take (Evoni, 2026-11-12), for
+ * the take's removal to ask: the live edit's rows, by the edit's own live
+ * filters (LIVE: a superseded segment and a removed row are not live), and
+ * every saved version whose snapshot names the take (a version can be
+ * restored, and Restore makes its rows live again). Resolves
+ * [{ kind: 'prime_segment' | 'scene_clip' | 'performer_clip', count, beats }
+ *  | { kind: 'edit_version', versions: [{ id, name }] }], empty when unused.
+ * Call it holding lockEdit, so the answer still stands when the caller writes.
+ */
+async function rawClipUses(sequelize, { episodeId, clipId }, t) {
+  const out = [];
+  const replacements = { episodeId, clipId, clipText: String(clipId) };
+  for (const [key, ref] of Object.entries(RAW_CLIP_REFS)) {
+    const spec = LIVE[key];
+    const beat = key === 'scene_clips' ? 'r.beat_number' : 'r.anchor_beat';
+    // eslint-disable-next-line no-await-in-loop
+    const found = await rows(sequelize, `SELECT r.id, ${beat} AS beat FROM ${spec.table} r
+      WHERE r.episode_id = :episodeId AND ${spec.where.replace(/\b(deleted_at|superseded_at)\b/g, 'r.$1')} AND ${ref.row} ORDER BY r.created_at, r.id`, replacements, t);
+    if (found.length) out.push({ kind: ref.kind, count: found.length, beats: [...new Set(found.map((r) => r.beat).filter((b) => b != null))].sort((a, b) => a - b) });
+  }
+  const inSnapshot = Object.entries(RAW_CLIP_REFS).map(([key, ref]) => `EXISTS (SELECT 1 FROM jsonb_array_elements(
+      CASE WHEN jsonb_typeof(v.snapshot->'${key}') = 'array' THEN v.snapshot->'${key}' ELSE '[]'::jsonb END) e WHERE ${ref.snap})`).join(' OR ');
+  const versions = await rows(sequelize, `SELECT v.id, v.name FROM edit_versions v
+    WHERE v.episode_id = :episodeId AND v.deleted_at IS NULL AND (${inSnapshot}) ORDER BY v.created_at DESC, v.id DESC`, replacements, t);
+  if (versions.length) out.push({ kind: 'edit_version', versions: versions.map((v) => ({ id: v.id, name: v.name })) });
+  return out;
+}
 
 /** Every live row, per table, ordered (the order rules apply in: created, then id). */
 async function liveRows(sequelize, episodeId, t) {
@@ -1154,6 +1217,17 @@ const getVersion = (sequelize, { episodeId, versionId }) => versionRow(sequelize
 async function restoreVersion(sequelize, { episodeId, editRevision, userId, batch, versionId }) {
   return withEdit(sequelize, { episodeId, editRevision, userId, batch }, async (t) => {
     const v = await versionRow(sequelize, episodeId, versionId, t);
+    // A version whose take was removed (before removal asked what uses a
+    // take; Evoni, 2026-11-12) is not restored: its rows would name a take
+    // that is gone. Nothing is changed.
+    const named = snapshotRawClipIds(v.snapshot);
+    if (named.length) {
+      const here = await rows(sequelize, 'SELECT id FROM episode_raw_clips WHERE id IN (:named) AND episode_id = :episodeId AND deleted_at IS NULL', { named, episodeId }, t);
+      const gone = named.filter((id) => !here.some((r) => String(r.id) === id));
+      if (gone.length) {
+        fail(409, 'VERSION_SOURCE_REMOVED', `This version uses ${gone.length === 1 ? 'a take that was' : `${gone.length} takes that were`} removed from the episode, so it was not restored. Nothing was changed.`, { missing_raw_clip_ids: gone });
+      }
+    }
     // C1b's columns are restored once it has run; a version saved before C1b gives them null.
     const spec0 = liveSpec(await c1bReady(sequelize, t));
     for (const [key, spec] of Object.entries(spec0)) {
@@ -1499,5 +1573,6 @@ module.exports = {
   setPipSettings, addVisibilityRule, addItem, addAudioItem, removeRow,
   updateItem, updateAudioItem, updateVisibility, splitSceneClip, reorderSceneClip, batchOps, BATCH_STEPS,
   createVersion, listVersions, getVersion, restoreVersion,
+  lockEdit, rawClipUses, snapshotRawClipIds,
   reviewReadiness, layoutAtTime, mixPlanOf,
 };

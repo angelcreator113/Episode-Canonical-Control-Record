@@ -383,6 +383,16 @@ Routines run with no permission prompts, so give them the fewest connectors poss
 
 Message Dispatch from the phone ("open a Code session and do issue 123"); it spawns a local Desktop Code session on the laptop and pushes a notification when done. The laptop must be on with Claude Desktop running. Same skills apply.
 
+### 8.4 `claude-intake-approved` (observational only)
+
+The `intake-gate.yml` workflow runs on `issues.labeled` with one permission, `issues: read`, and no checkout, repository secrets or follow-on dispatch. It only reports; it changes nothing.
+
+- **Event check (enforced within the workflow).** The platform event's repository, action, label and sender must match: only `angelcreator113` (GitHub user ID `212567798`) applying this repository's exact `claude-intake-approved` label passes. Anything else fails the run.
+- **App check (advisory, #3774).** Agents acting with the owner's token appear on GitHub as `angelcreator113`, so the sender check cannot tell Evoni from an app. A second step reads the issue's events and checks that the latest application of the label was by the owner and not through a GitHub App (`performed_via_github_app` is null). Until a disposable-issue test after merge shows that labels applied through the Claude, Copilot and ChatGPT connectors are marked as app-applied, it only warns (`ADVISORY = true`); every outcome exits 0. Setting it to `false` makes it fail closed, and needs its own review.
+
+**This is not an authorization gate for the independent Claude Scheduled Task and does not start implementation or coding.** Applying the label is read-only metadata only. Owner-only future approval is the intent; implementation authorization and idempotency are not enabled, and Phase 2 deduplication is not implemented. The Scheduled Task remains unchanged and read-only; for any check to control it, the Scheduled Task must run the check itself. Implementation still requires an explicitly invoked, reviewed development workflow; merge and deploy remain separate decisions.
+
+**Auto-merge to `dev` is retired (#3774, Evoni 2026-11-11).** `auto-merge-to-dev.yml` merged every `claude/**` push into `dev` unless the commit carried `[skip-automerge]`. It had been `disabled_manually` since 2026-06-27, and the remote no longer has a `dev` branch; it was deleted rather than hardened. Pushing a branch merges nothing. Changes reach `main` only through a reviewed PR, and production only through the Deploy workflow. Keep `[skip-automerge]` in commit subjects as the convention.
 ---
 
 ## 9. Troubleshooting and hazards

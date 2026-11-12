@@ -1,6 +1,6 @@
 # Episode Canonical Control Record — guidelines for coding agents
 
-Rewritten 2026-11-05 (Task #3722). The authorities are `CLAUDE.md` (rules) and `PROJECT_CONTEXT.md` (current state). If this file disagrees with them, they win.
+Rewritten 2026-11-05 (Task #3722); production and dev section updated 2026-11-11 (Task #3801). The authorities are `CLAUDE.md` (rules) and `PROJECT_CONTEXT.md` (current state). If this file disagrees with them, they win.
 
 ## What this is
 
@@ -18,7 +18,7 @@ Solo-operator "franchise OS" for the LalaVerse (owner: Evoni, `angelcreator113`)
   - Fonts: Lora for prose, DM Mono for UI.
   - Icons: lucide-react.
 - **AI:** `@anthropic-ai/sdk`, primary model `claude-sonnet-4-6`, with Haiku 4.5 for side calls. Every call is logged and budget-gated by `src/services/aiCostTracker.js`.
-- **Hosting:** pm2 on EC2. Production is served through an ALB, which forwards to the prod box on port 3000.
+- **Hosting:** pm2 on EC2. Production is served through an ALB, which forwards HTTPS to the prod box on port 3000 and redirects plain HTTP to HTTPS.
 
 ## Layout
 
@@ -57,21 +57,29 @@ node scripts/validate-routes.js && bash scripts/lint-silent-catches.sh && bash s
 
 A PR body's "Validation run" block must list those four commands **in that order**, each followed by `EXIT: 0` (`scripts/check-pr-validation-block.js`).
 
-## Production and dev (2026-11-05)
+## Production and dev (2026-11-11)
 
 - **Production access (F-Tools-5, `docs/audit/F-Tools-5_AgentProductionAccess_Ruling_2026-10-31.md`):** agent sessions may operate production for what Evoni asks in the conversation.
   - **Explicit yes first:** anything that deletes or irreversibly changes data or infrastructure needs her explicit yes in that session.
   - **Secrets:** never printed, committed or put in chat.
   - **Deploys and migrations:** go through the *Deploy* workflow (`.github/workflows/deploy.yml`).
   - **Cloud sessions:** their AWS identity is the IAM user `claude-code-ops`, which can use SSM only. Evoni makes IAM, secret and EC2 changes.
-- **Prod box** `episode-backend`: `episode-api-prod-hotfix` on port 3000. `episode-worker` is **stopped, pending #3714**, which moves it off the `postgres` login.
+- **Load balancer** `primepisodes-alb`: HTTPS forwards to the prod box on port 3000; port 80 redirects to HTTPS. It has its own security group, `primepisodes-alb-sg`. The `primepisodes-frontend` target group is deleted, the `episode-frontend` instance is stopped, and the VPC default security group has no inbound rules.
+- **Prod box** `episode-backend`: `episode-api-prod-hotfix` on port 3000, the only pm2 process.
+  - **Security group:** 3000 from the load balancer's group and 22 from Evoni's address, nothing else.
+  - **Worker:** `episode-worker` is **not running and not in pm2**. Its own login, `episode_worker`, is set up (credential file on the box, secret `episode-metadata/prod/worker-db`). Starting it is Evoni's call (#3714).
+  - **Deploy snapshots:** each *Deploy* run removes older `deploy-*` snapshots before taking its own.
+- **Sign-in (Cognito):** one pool and client for production and dev. Access and ID tokens last 15 minutes; the frontend refreshes silently. Logging out revokes the refresh token at Cognito (`POST /logout` takes `refreshToken` in the body).
 - **Dev box** `episode-dev-backend` (runbook `docs/runbooks/dev-environment.md`):
+  - **Public site:** `https://dev.primepisodes.com`, through nginx with a Let's Encrypt certificate. nginx serves the built frontend and proxies only `/api/` and `/health`.
+  - **Exposure:** the app still listens on **`127.0.0.1:3002` only**. The security group opens 80 and 443, and 22 to Evoni's address. **Never open 3002 or 5432.**
+  - **Mode:** the API runs as `NODE_ENV=production`; the deploy and nginx scripts refuse anything else.
+  - **Sign-in:** production's Cognito pool, so production users can sign in to dev.
   - **Database:** its own local PostgreSQL 17, a copy of production refreshed through the read-only role `dev_refresh_ro`. No production credential is on the box.
-  - **Exposure:** the app listens on **`127.0.0.1:3002` only**, and nginx is off until dev gets its own Cognito pool.
+  - **S3:** read-only on the two dev buckets. Uploads and thumbnail generation fail there by design.
   - **Also on the box:** 1 GiB swap, loopback-only Redis, and a dev-only `JWT_SECRET` for local test tokens.
-  - **Deployed by** *Deploy to Development* (`deploy-dev.yml`). The frontend is built on the runner; **never build it on the 2 GB box.**
-  - **Refreshed by** *Refresh dev data* (`refresh-dev-data.yml`, a parameterless SSM document). The repo is public, so its logs show match yes/no only.
-- **DNS:** `dev.primepisodes.com` still points at the **prod** box and returns 502. The dev box has no DNS name yet.
+  - **Deployed by** *Deploy to Development* (`deploy-dev.yml`). It skips its tests when CI already passed them for the same commit. The frontend is built on the runner; **never build it on the 2 GB box.**
+  - **Refreshed by** *Refresh dev data* (`refresh-dev-data.yml`, a parameterless SSM document). The repo is public, so its logs show match yes/no only. `dev_refresh_ro` can read the AI gateway ledger tables, and the refresh re-applies `episode_worker`'s grants.
 
 ## Do not follow
 

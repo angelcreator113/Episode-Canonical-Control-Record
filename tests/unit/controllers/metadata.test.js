@@ -8,6 +8,8 @@ jest.mock('../../../src/middleware/auditLog', () => ({
   logger: {
     logAction: jest.fn().mockResolvedValue(null),
   },
+  // The real comparison: the controller's entry is what these tests read.
+  fieldChanges: jest.requireActual('../../../src/middleware/auditLog').fieldChanges,
   auditLog: jest.fn(),
   captureResponseData: jest.fn(),
   getActionType: jest.fn(),
@@ -98,21 +100,17 @@ describe('Metadata Controller', () => {
       );
     });
 
-    test('should log metadata view activity', async () => {
+    // Evoni, 2026-11-11: viewing does not create an audit entry (issue #1948).
+    test('viewing the metadata list writes no audit entry', async () => {
       models.MetadataStorage.findAndCountAll = jest.fn().mockResolvedValue({
         count: 0,
         rows: [],
       });
+      logger.logAction.mockClear();
 
       await metadataController.listMetadata(mockReq, mockRes);
 
-      expect(logger.logAction).toHaveBeenCalledWith(
-        'user-123',
-        'view',
-        'metadata',
-        'all',
-        expect.any(Object)
-      );
+      expect(logger.logAction).not.toHaveBeenCalled();
     });
   });
 
@@ -165,6 +163,61 @@ describe('Metadata Controller', () => {
 
       expect(mockMeta.update).toHaveBeenCalled();
       expect(mockRes.json).toHaveBeenCalledWith(expect.objectContaining({ data: mockMeta }));
+    });
+  });
+
+  describe('what the audit entries hold (Evoni, 2026-11-11)', () => {
+    const TRANSCRIPT = 'A LONG TRANSCRIPT THAT MUST NOT BE COPIED. '.repeat(200);
+    const row = (values) => {
+      const state = { ...values };
+      return {
+        ...state,
+        toJSON: () => ({ ...state }),
+        update: jest.fn(async (changes) => { Object.assign(state, changes); }),
+        destroy: jest.fn().mockResolvedValue(true),
+      };
+    };
+
+    test('an update records only what changed; an analysis field is "present", never its content', async () => {
+      const meta = row({ id: 4, episodeId: 9, tags: ['a'], categories: ['x'], transcription: null, extractedText: 'kept text', processingDurationSeconds: 3 });
+      models.MetadataStorage.findByPk = jest.fn().mockResolvedValue(meta);
+      mockReq.params = { id: 4 };
+      mockReq.body = { tags: ['a', 'b'], transcription: TRANSCRIPT };
+      await metadataController.updateMetadata(mockReq, mockRes);
+
+      expect(logger.logAction).toHaveBeenCalledTimes(1);
+      const options = logger.logAction.mock.calls[0][4];
+      expect(options).toEqual({
+        oldValues: { tags: ['a'], transcription: null },
+        newValues: { tags: ['a', 'b'], transcription: 'present' },
+        changedFields: ['tags', 'transcription'],
+        sentFields: ['transcription', 'tags'],
+      });
+      expect(JSON.stringify(options)).not.toMatch(/TRANSCRIPT|kept text/);
+    });
+
+    test('a delete records the identifying summary, with tags and categories, not the row', async () => {
+      const meta = row({ id: 4, episodeId: 9, tags: ['a'], categories: ['x'], transcription: TRANSCRIPT, visualObjects: { faces: 3 }, secretNote: 'never' });
+      models.MetadataStorage.findByPk = jest.fn().mockResolvedValue(meta);
+      mockReq.params = { id: 4 };
+      await metadataController.deleteMetadata(mockReq, mockRes);
+
+      expect(logger.logAction).toHaveBeenCalledTimes(1);
+      expect(logger.logAction.mock.calls[0][4]).toEqual({
+        oldValues: {
+          id: 4, episodeId: 9, tags: ['a'], categories: ['x'], processingDurationSeconds: null,
+          extractedText: null, scenesDetected: null, sentimentAnalysis: null, visualObjects: 'present', transcription: 'present',
+        },
+      });
+    });
+
+    test('a delete that fails writes no entry', async () => {
+      const meta = row({ id: 4 });
+      meta.destroy = jest.fn().mockRejectedValue(new Error('connection lost'));
+      models.MetadataStorage.findByPk = jest.fn().mockResolvedValue(meta);
+      mockReq.params = { id: 4 };
+      await expect(metadataController.deleteMetadata(mockReq, mockRes)).rejects.toThrow('connection lost');
+      expect(logger.logAction).not.toHaveBeenCalled();
     });
   });
 

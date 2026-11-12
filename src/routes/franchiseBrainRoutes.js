@@ -13,7 +13,7 @@
 
 const express = require('express');
 const router = express.Router();
-const Anthropic = require('@anthropic-ai/sdk');
+const { createAnthropicClient } = require('../services/anthropicClient');
 // F-AUTH-1 Step 3 CP7: mixed Tier 1+4 within single file (per v2.31 §5.21,
 // 3rd cumulative instance after worldStudio.js at CP3 + universe.js at CP6).
 // Writes require authentication (Tier 1); GETs are public catalog reads with
@@ -26,7 +26,7 @@ const { guardItems, itemOfWarning } = require('../services/guardItems');
 const { AMBER_NOTE_PREFIX } = require('../services/franchiseKnowledgeValues');
 const { selectRules, recordRuleUse, CRITICAL_OR_ALWAYS_INJECT } = require('../services/brainRules');
 
-const client = new Anthropic();
+const client = createAnthropicClient();
 
 // ─────────────────────────────────────────────────────────────────────────────
 // LIST ENTRIES

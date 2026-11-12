@@ -150,8 +150,8 @@ async function savePillars(db, name, pillars) {
 let client = null;
 function getClient() {
   if (!client) {
-    const Anthropic = require('@anthropic-ai/sdk');
-    client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+    const { createAnthropicClient } = require('./anthropicClient');
+    client = createAnthropicClient({ apiKey: process.env.ANTHROPIC_API_KEY });
   }
   return client;
 }

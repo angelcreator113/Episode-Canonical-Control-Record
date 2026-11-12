@@ -281,23 +281,6 @@ jobs:
           BOX_FROM: ${{ steps.plan.outputs.box_from }}
         run: bash scripts/deploy/check-pin.sh base "$BOX_SHA" "$BASE_SHA" "$TARGET_SHA" "${BOX_STAGE:-none}" "$BOX_FROM"
 
-      # RDS allows 100 manual snapshots, and each run keeps one (runs #145 and
-      # #146 stopped at the snapshot on 2026-10-22). Keeps the newest
-      # DEPLOY_SNAPSHOTS_KEEP (default 10, at least 3) deploy-* snapshots and
-      # never stops the run: without the delete permission it only warns.
-      # A dry run unless DEPLOY_SNAPSHOTS_PRUNE_DRY_RUN is 0; at most
-      # DEPLOY_SNAPSHOTS_MAX_DELETE (default 5) removals per run, none newer
-      # than DEPLOY_SNAPSHOTS_MIN_AGE_DAYS (default 7); keep=true is never
-      # removed (runbook §7, 2026-10-28).
-      - name: Remove older deploy snapshots (keeps the newest few)
-        id: prune
-        env:
-          KEEP: ${{ vars.DEPLOY_SNAPSHOTS_KEEP }}
-          DRY_RUN: ${{ vars.DEPLOY_SNAPSHOTS_PRUNE_DRY_RUN }}
-          MAX_DELETE: ${{ vars.DEPLOY_SNAPSHOTS_MAX_DELETE }}
-          MIN_AGE_DAYS: ${{ vars.DEPLOY_SNAPSHOTS_MIN_AGE_DAYS }}
-        run: bash scripts/deploy/prune-snapshots.sh
-
       - name: Snapshot the database
         id: snapshot
         run: |
@@ -308,7 +291,7 @@ jobs:
             --query "DBSnapshot.[DBSnapshotIdentifier,Status]" --output text 2>&1)"; then
             echo "$OUT"
             if printf '%s' "$OUT" | grep -q SnapshotQuotaExceeded; then
-              echo "::error::RDS already holds its limit of manual snapshots. Nothing on the box was changed. Remove old deploy-* snapshots in RDS → Snapshots → Manual, or give the role the delete permission so the run removes them ($RUNBOOK, §2.1 and §7), then start a new run."
+              echo "::error::RDS already holds its limit of manual snapshots. Nothing on the box was changed. No snapshot was removed: a run removes older ones only after its own snapshot is available. Remove old deploy-* snapshots in RDS → Snapshots → Manual ($RUNBOOK, §7), then start a new run."
             fi
             exit 1
           fi
@@ -424,6 +407,40 @@ jobs:
           echo "::error::${HEALTH_URL} did not report healthy with the database connected. Last response: ${BODY:-(none)}"
           exit 1
 
+      # Older deploy snapshots are removed LAST: only after the migration, the
+      # deploy, the restart and the public health check above all succeeded
+      # (Evoni, 2026-11-11 and 2026-11-12). A release that fails anywhere
+      # leaves every older recovery point where it was. NEW_SNAPSHOT names the
+      # snapshot this run took; the script removes nothing unless that snapshot
+      # is in the listing of available ones, never removes it, and does not
+      # count it toward the newest DEPLOY_SNAPSHOTS_KEEP (default 10, at least
+      # 3), so as many older snapshots stay as before. It names every snapshot
+      # it selects before removing any. A dry run unless
+      # DEPLOY_SNAPSHOTS_PRUNE_DRY_RUN is 0; at most
+      # DEPLOY_SNAPSHOTS_MAX_DELETE (default 5) removals per run, none newer
+      # than DEPLOY_SNAPSHOTS_MIN_AGE_DAYS (default 7); keep=true is never
+      # removed (runbook §7, 2026-10-28).
+      # Retention is not the deployment: this step never fails the run. The
+      # script warns and exits 0; if it stops unexpectedly, that too is a
+      # warning here, and the summary reports it as a retention warning beside
+      # a successful deploy. RDS allows 100 manual snapshots: a run that finds
+      # the quota full stops at its snapshot, long before this step and with
+      # nothing removed (runs #145 and #146, 2026-10-22).
+      - name: Remove older deploy snapshots (after a healthy deploy; keeps the newest few)
+        id: prune
+        if: ${{ success() && steps.health.outcome == 'success' }}
+        env:
+          NEW_SNAPSHOT: ${{ steps.snapshot.outputs.name }}
+          KEEP: ${{ vars.DEPLOY_SNAPSHOTS_KEEP }}
+          DRY_RUN: ${{ vars.DEPLOY_SNAPSHOTS_PRUNE_DRY_RUN }}
+          MAX_DELETE: ${{ vars.DEPLOY_SNAPSHOTS_MAX_DELETE }}
+          MIN_AGE_DAYS: ${{ vars.DEPLOY_SNAPSHOTS_MIN_AGE_DAYS }}
+        run: |
+          if ! bash scripts/deploy/prune-snapshots.sh; then
+            echo "::warning title=Snapshot retention::The retention step stopped unexpectedly. The deployment succeeded and is not affected. Look at this step's log and at RDS → Snapshots → Manual ($RUNBOOK, §7)."
+            echo "note=stopped" >>"$GITHUB_OUTPUT"
+          fi
+
       - name: Summary
         if: always()
         env:
@@ -461,15 +478,6 @@ jobs:
               echo "| Mode | resumed: the box was already at this commit (its deploy record: ${BOX_STAGE:-none}) |"
             fi
             echo "| Commits in range | ${COMMITS:-?} |"
-            case "$PRUNE_NOTE" in
-              ok) echo "| Older deploy snapshots removed | ${PRUNE_REMOVED} (the newest ${PRUNE_KEPT} kept) |" ;;
-              not-permitted) echo "| Older deploy snapshots removed | none: the role may not delete them (runbook §2.1) |" ;;
-              list-failed) echo "| Older deploy snapshots removed | none: they could not be listed |" ;;
-              some-failed) echo "| Older deploy snapshots removed | ${PRUNE_REMOVED}; some could not be removed (see the step's log) |" ;;
-              dry-run) echo "| Older deploy snapshots removed | none: dry run, ${PRUNE_WOULD:-0} would be removed (the step's log names them; ${PRUNE_PROTECTED:-0} protected) |" ;;
-              list-suspect) echo "| Older deploy snapshots removed | none: the listing looked wrong (see the step's log) |" ;;
-              *) echo "| Older deploy snapshots removed | not reached |" ;;
-            esac
             echo "| Snapshot | \`${SNAP:-none taken}\` |"
             echo "| New migration files | ${MIGRATIONS:-?} |"
             case "$MIGRATE_RAN" in
@@ -498,6 +506,27 @@ jobs:
               echo "| Older frontend backups removed | ${BACKUPS_REMOVED} (the newest 3 kept) |"
             fi
             echo "| Public health | ${HEALTH_OUTCOME:-not reached} |"
+            # Retention is reported apart from the deployment's own result.
+            RETENTION_WARNING=""
+            case "$PRUNE_NOTE" in
+              ok) echo "| Older deploy snapshots removed | ${PRUNE_REMOVED} (the newest ${PRUNE_KEPT} kept) |" ;;
+              dry-run) echo "| Older deploy snapshots removed | none: dry run, ${PRUNE_WOULD:-0} would be removed (the step's log names them; ${PRUNE_PROTECTED:-0} protected) |" ;;
+              not-permitted) RETENTION_WARNING="the role may not delete them (runbook §2.1)" ;;
+              list-failed) RETENTION_WARNING="they could not be listed" ;;
+              some-failed) RETENTION_WARNING="${PRUNE_REMOVED} removed; some could not be removed (see the step's log)" ;;
+              list-suspect) RETENTION_WARNING="the listing looked wrong (see the step's log)" ;;
+              no-new-snapshot) RETENTION_WARNING="this run's new snapshot was not confirmed available (see the step's log)" ;;
+              stopped) RETENTION_WARNING="the retention step stopped unexpectedly (see the step's log)" ;;
+              *)
+                if [ "$JOB_STATUS" = "success" ]; then
+                  echo "| Older deploy snapshots removed | not reached |"
+                else
+                  echo "| Older deploy snapshots removed | none: they are removed only after a successful deployment and public health check |"
+                fi ;;
+            esac
+            if [ -n "$RETENTION_WARNING" ]; then
+              echo "| Older deploy snapshots removed | retention warning: ${RETENTION_WARNING} |"
+            fi
             if [ -s "$RUNNER_TEMP/migrations.txt" ]; then
               echo
               echo "Migration files in the range:"
@@ -507,6 +536,10 @@ jobs:
               echo
               echo "Carried from a deploy that did not finish (pending on the box's tree before this run):"
               while IFS= read -r m; do echo "- \`${m}\`"; done <"$RUNNER_TEMP/carried.txt"
+            fi
+            if [ -n "$RETENTION_WARNING" ]; then
+              echo
+              echo "**Retention warning, not a deployment failure.** The deployment and its health checks succeeded. Older deploy snapshots were not all removed: ${RETENTION_WARNING}. Nothing needs undoing; see \`${RUNBOOK}\`, §7."
             fi
             if [ "$JOB_STATUS" != "success" ]; then
               echo

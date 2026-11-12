@@ -27,8 +27,10 @@ name: Deploy to Development
 #     database, swaps trees; start; verify (:3002 on 127.0.0.1 only, /health
 #     healthy + connected, an authenticated route refuses without a token);
 #     pm2 save. A failed verify puts the previous tree back and restarts it.
-#     The deploy never touches nginx: the dev app is local-only until dev
-#     auth exists (runbook, "Reopening the dev app").
+#     The deploy never touches nginx. Since 2026-11-10 (Task #3781) nginx
+#     serves frontend/dist from the app tree and proxies /api/ and /health
+#     to 127.0.0.1:3002 (runbook, "The public dev site"); verify also needs
+#     /health to report "environment":"production".
 #     --only episode-api,episode-worker stays as config hygiene (RF-1).
 #
 # TRIGGER POSTURE:
@@ -79,7 +81,48 @@ env:
   INSTANCE_TAG: episode-dev-backend
 
 jobs:
+  # Has CI already passed the test suite for this exact commit? (Task #3790)
+  # The Validate workflow runs on every push to main, and its "Tests" job runs
+  # the same suite as the test job below, on the same Postgres. When that job
+  # succeeded for this commit, the test job is skipped: it was most of a
+  # 30-minute run. Anything else (no such run, still running, failed, a commit
+  # that is not on main, or this lookup failing) means the tests run here.
+  ci-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read
+    outputs:
+      passed: ${{ steps.lookup.outputs.passed }}
+    steps:
+      - name: Look for a successful Tests job on main for this commit
+        id: lookup
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+        run: |
+          passed=false
+          run_ids="$(gh api "repos/${REPO}/actions/runs?head_sha=${SHA}&branch=main&event=push&per_page=100" \
+            --jq '.workflow_runs[] | select(.path == ".github/workflows/validate.yml") | .id' || true)"
+          for id in $run_ids; do
+            conclusion="$(gh api "repos/${REPO}/actions/runs/${id}/jobs?per_page=100" \
+              --jq '[.jobs[] | select(.name == "Tests")] | if length == 1 then .[0].conclusion else "" end' || true)"
+            echo "Validate run ${id}: Tests job conclusion: ${conclusion:-none}"
+            if [ "$conclusion" = "success" ]; then passed=true; fi
+          done
+          [ -n "$run_ids" ] || echo "No Validate push run on main for ${SHA}."
+          echo "passed=${passed}" >> "$GITHUB_OUTPUT"
+          if [ "$passed" = "true" ]; then
+            echo "CI already passed Tests for \`${SHA}\` on main: the test job is skipped." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "No successful CI Tests job for \`${SHA}\` on main: the test job runs." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
   test:
+    needs: ci-tests
+    # always(): the tests also run when the lookup job itself failed.
+    if: ${{ always() && needs.ci-tests.outputs.passed != 'true' }}
     runs-on: ubuntu-latest
 
     services:
@@ -131,7 +174,10 @@ jobs:
           NODE_ENV: test
 
   build:
-    needs: test
+    needs: [ci-tests, test]
+    # Runs after the tests passed here, or after they were skipped because CI
+    # had passed them. A failed or cancelled test job stops the deploy.
+    if: ${{ !cancelled() && (needs.test.result == 'success' || (needs.test.result == 'skipped' && needs.ci-tests.outputs.passed == 'true')) }}
     runs-on: ubuntu-latest
     outputs:
       dist_sha256: ${{ steps.pack.outputs.dist_sha256 }}
@@ -175,6 +221,8 @@ jobs:
 
   deploy:
     needs: build
+    # Explicit, because a job downstream of a skipped job is skipped by default.
+    if: ${{ !cancelled() && needs.build.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
     environment:

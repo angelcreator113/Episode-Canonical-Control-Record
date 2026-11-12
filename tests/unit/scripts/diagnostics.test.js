@@ -36,12 +36,12 @@ const dbCheck = require('../../../scripts/diagnostics/db-check');
 
 const SHA = 'a'.repeat(40);
 const NODE_DIR = path.dirname(process.execPath);
-const BOX_CHECKS = ['health', 'deploy-state', 'app-logs', 'worker-logs', 'nginx-logs', 'db', 'db-schema', 'db-counts', 'self-test',
-  'db-snapshot'];
+const BOX_CHECKS = ['health', 'deploy-state', 'app-logs', 'worker-logs', 'nginx-logs', 'db', 'db-schema', 'db-counts',
+  'db-season-integrity', 'self-test', 'db-snapshot'];
 // What a session may dispatch. db-snapshot is schedule-only (F-Tools-2 Amendment 1 §2), so it is a
 // runner check but never a dispatch option.
 const ALL_CHECKS = ['overview', 'health', 'deploy-state', 'app-logs', 'worker-logs', 'nginx-logs', 'db', 'db-schema',
-  'db-counts', 'aws-infra', 's3-config', 'cognito-config', 'self-test'];
+  'db-counts', 'db-season-integrity', 'aws-infra', 's3-config', 'cognito-config', 'self-test'];
 const RUNNER_CHECKS = [...ALL_CHECKS, 'db-snapshot'];
 // Values in the shapes the masking must catch. None may appear in any output.
 const SECRET_KEY_ID = `AKIA${'Q'.repeat(16)}`;
@@ -662,6 +662,258 @@ describe('db-check.js', () => {
     const built = [...src.matchAll(/client\.query\(([a-zA-Z]+)\(/g)].map((m) => m[1]);
     expect(new Set(built)).toEqual(new Set(['countSql', 'sampleSql']));
     expect(src).toMatch(/for \(const t of COUNT_TABLES\)/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// db-season-integrity (Gate 2, docs/design/2026-11-season-planning.md §8):
+// fixed SQL, three classes, COMPLETE only when everything succeeded.
+describe('db-season-integrity: the metrics', () => {
+  const { SEASON_METRICS, SEASON_PREAMBLE } = dbCheck;
+  const statements = (m) => [m.sql, m.probe, ...Object.values(m.variants || {})].filter(Boolean);
+
+  test('31 metrics, unique ids, one class each, in class order A, B, C', () => {
+    expect(SEASON_METRICS).toHaveLength(31);
+    expect(new Set(SEASON_METRICS.map((m) => m.id)).size).toBe(31);
+    const classes = SEASON_METRICS.map((m) => m.cls);
+    expect(classes.every((c) => ['A', 'B', 'C'].includes(c))).toBe(true);
+    expect(classes.join('')).toBe(`${'A'.repeat(15)}${'B'.repeat(6)}${'C'.repeat(10)}`);
+    expect(Object.isFrozen(SEASON_METRICS)).toBe(true);
+  });
+
+  test('only the P1, P2, P3 and P6 integrity counts are A2 migration blockers (design §8 item 3)', () => {
+    expect(SEASON_METRICS.filter((m) => m.a2).map((m) => m.id)).toEqual(['A1', 'A2', 'A3', 'A4', 'A5', 'A10', 'A11', 'A12', 'A13']);
+    expect(SEASON_METRICS.filter((m) => m.a2).every((m) => m.cls === 'A')).toBe(true);
+  });
+
+  test('every statement is a fixed read: SELECT or WITH, no interpolation, no second statement, no write words', () => {
+    const banned = /\b(INSERT|UPDATE|DELETE|CREATE|ALTER|DROP|GRANT|REVOKE|COPY|SET|TRUNCATE|CALL|DO|LOCK|VACUUM)\b/i;
+    for (const m of SEASON_METRICS) {
+      const sqls = statements(m);
+      expect(sqls.length).toBeGreaterThan(0);
+      for (const sql of sqls) {
+        expect(typeof sql).toBe('string');
+        expect(sql).toMatch(/^(SELECT|WITH) /);
+        expect(sql).not.toContain('${');
+        expect(sql).not.toContain(';');
+        expect(sql).not.toMatch(banned);
+        expect(sql).not.toMatch(/release_position/);
+      }
+    }
+    expect(SEASON_PREAMBLE[0]).toBe('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+  });
+
+  test('specials are kind bonus or special; filmed counts soft-deleted clips; the two-parter shares its event', () => {
+    const sql = (id) => SEASON_METRICS.find((m) => m.id === id).sql;
+    expect(sql('A2')).toContain("sp.kind IN ('bonus', 'special')");
+    expect(sql('B1')).toContain('EXISTS (SELECT 1 FROM episode_raw_clips r WHERE r.episode_id = s.episode_id)');
+    expect(sql('B1')).not.toMatch(/r\.deleted_at/);
+    expect(sql('A14')).toContain("tp.kind = 'two_part'");
+    expect(SEASON_METRICS.find((m) => m.id === 'C6').sql).toContain("'auto-drafted'");
+  });
+
+  test('a new mode, dispatch only: in MODES, never in the schedule or the snapshot', () => {
+    expect(dbCheck.MODES).toContain('season-integrity');
+    expect(WORKFLOW).toContain("      CHECK: ${{ github.event_name == 'schedule' && 'db-snapshot' || inputs.check }}");
+    expect(ONBOX).toContain('    db-season-integrity) run_db season-integrity ;;');
+    expect(dbCheck.COUNT_TABLES).not.toContain('activity_logs');
+  });
+});
+
+describe('db-season-integrity: the report', () => {
+  const { SEASON_METRICS, SEASON_PREAMBLE, checkSeasonIntegrity } = dbCheck;
+  const pgErr = (code) => Object.assign(new Error('server error'), { code, severity: 'ERROR' });
+  const LINE = [
+    /^season-integrity: (COMPLETE|INCOMPLETE)$/,
+    /^reason: [A-Za-z0-9 ();,-]+$/,
+    /^snapshot: one repeatable-read, read-only transaction, rolled back$/,
+    /^$/,
+    /^## [ABC]\. [A-Za-z ,()0-9]+$/,
+    /^- [ABC]\d{1,2} [a-z0-9_]+: (\d{1,20}|([a-z0-9_]+=\d{1,20} ?)+|not run|failed \((malformed result|[0-9A-Z]{5}|error)\)|not applicable \([a-z ]+\)|[A-Za-z0-9_+/:-]{1,64} \(app sessions set their own\)|none|([A-Za-z_][A-Za-z0-9_]*=[A-Za-z0-9_ .,-]+(; )?)+)( \[blocks A2\])?$/,
+    /^integrity violations: (\d+ of 15 metrics non-zero|not determined \(incomplete\))$/,
+    /^A2 migration blockers: (\d+ of 9 metrics non-zero|not determined \(incomplete\))$/,
+    /^season-integrity: END \d+\/31$/,
+  ];
+
+  /** A fake pg client: answers each metric's statement, records what was sent. */
+  function seasonClient({ answer = {}, failOn = {} } = {}) {
+    const byStmt = new Map();
+    for (const m of SEASON_METRICS) {
+      if (m.sql) byStmt.set(m.sql, `${m.id}:sql`);
+      if (m.probe) byStmt.set(m.probe, `${m.id}:probe`);
+      for (const v of Object.values(m.variants || {})) if (v) byStmt.set(v, `${m.id}:variant`);
+    }
+    const defaults = (key) => {
+      const [id] = key.split(':');
+      const m = SEASON_METRICS.find((x) => x.id === id);
+      if (key === 'C7:probe') return [{ v: 'timestamp with time zone' }];
+      if (key === 'C9:probe') return [{ v: 'timestamp' }];
+      if (id === 'C8') return [{ tz: 'UTC' }];
+      if (id === 'C10') return [{ col: 'actionType', labels: 'view,create,edit' }];
+      return [Object.fromEntries((m.fields || ['n']).map((f) => [f, '0']))];
+    };
+    const sent = [];
+    return {
+      sent,
+      async query(sql) {
+        sent.push(sql);
+        const key = byStmt.get(sql) || sql;
+        if (failOn[key]) throw failOn[key]();
+        if (!byStmt.has(sql)) return { rows: [] };
+        return { rows: key in answer ? answer[key] : defaults(key) };
+      },
+    };
+  }
+  async function report(client, opts) {
+    const lines = [];
+    const ok = await checkSeasonIntegrity(client, (l) => lines.push(l), opts);
+    const values = Object.fromEntries(lines.filter((l) => /^- [ABC]\d/.test(l))
+      .map((l) => l.match(/^- ([ABC]\d{1,2}) [a-z0-9_]+: (.*?)( \[blocks A2\])?$/)).map((x) => [x[1], x[2]]));
+    return { ok, lines, values, text: lines.join('\n') };
+  }
+  const grammar = (lines) => lines.forEach((l) => expect(LINE.some((re) => re.test(l))).toBe(true));
+
+  test('all metrics read and rolled back: COMPLETE first, END 31/31 last, true', async () => {
+    const client = seasonClient();
+    const r = await report(client);
+    expect(r.ok).toBe(true);
+    expect(r.lines[0]).toBe('season-integrity: COMPLETE');
+    expect(r.lines[r.lines.length - 1]).toBe('season-integrity: END 31/31');
+    expect(r.text).toContain('integrity violations: 0 of 15 metrics non-zero');
+    expect(r.text).toContain('A2 migration blockers: 0 of 9 metrics non-zero');
+    expect(r.text).toContain('- C8 server_default_timezone: UTC (app sessions set their own)');
+    expect(r.text).toContain('- C10 activity_logs_enum_labels: actionType=view,create,edit');
+    expect(r.text).toContain('- C6 intention_source: auto_drafted=0 edited=0 unset=0 other=0');
+    expect(r.text).toContain('- A1 weekly_episode_in_multiple_slots: 0 [blocks A2]');
+    expect(r.text).toContain('- A14 event_in_two_live_slots_of_arc: 0\n');
+    expect(r.text.indexOf('## A.')).toBeLessThan(r.text.indexOf('## B.'));
+    expect(r.text.indexOf('## B.')).toBeLessThan(r.text.indexOf('## C.'));
+    grammar(r.lines);
+    expect(client.sent.slice(0, 4)).toEqual(SEASON_PREAMBLE);
+    expect(client.sent[client.sent.length - 1]).toBe('ROLLBACK');
+    expect(client.sent.filter((s) => s === 'SAVEPOINT season_metric')).toHaveLength(31);
+    expect(client.sent.filter((s) => s === 'RELEASE SAVEPOINT season_metric')).toHaveLength(31);
+    expect(client.sent).not.toContain('ROLLBACK TO SAVEPOINT season_metric');
+  });
+
+  test('non-zero integrity counts are findings: still COMPLETE and true; only A2 blockers count as blockers', async () => {
+    const r = await report(seasonClient({ answer: { 'A1:sql': [{ n: '2' }], 'A14:sql': [{ n: '1' }] } }));
+    expect(r.ok).toBe(true);
+    expect(r.lines[0]).toBe('season-integrity: COMPLETE');
+    expect(r.text).toContain('integrity violations: 2 of 15 metrics non-zero');
+    expect(r.text).toContain('A2 migration blockers: 1 of 9 metrics non-zero');
+    const b = await report(seasonClient({ answer: { 'B1:sql': [{ n: '7' }], 'C3:sql': [{ n: '4' }] } }));
+    expect(b.ok).toBe(true);
+    expect(b.text).toContain('integrity violations: 0 of 15 metrics non-zero');
+  });
+
+  test('a server error in one metric: that metric failed, its savepoint rolled back, the rest still read, INCOMPLETE, false', async () => {
+    const client = seasonClient({ failOn: { 'A3:sql': () => pgErr('57014') } });
+    const r = await report(client);
+    expect(r.ok).toBe(false);
+    expect(r.lines[0]).toBe('season-integrity: INCOMPLETE');
+    expect(r.lines).toContain('reason: a metric failed');
+    expect(r.values.A3).toBe('failed (57014)');
+    expect(r.values.B1).toBe('0');
+    expect(client.sent).toContain('ROLLBACK TO SAVEPOINT season_metric');
+    expect(client.sent[client.sent.length - 1]).toBe('ROLLBACK');
+    expect(r.text).toContain('A2 migration blockers: not determined (incomplete)');
+    expect(r.lines[r.lines.length - 1]).toBe('season-integrity: END 30/31');
+    grammar(r.lines);
+  });
+
+  test('an error with no SQLSTATE (a client read timeout): nothing more is sent, not even ROLLBACK; INCOMPLETE, false', async () => {
+    const client = seasonClient({ failOn: { 'A3:sql': () => new Error('Query read timeout') } });
+    const r = await report(client);
+    expect(r.ok).toBe(false);
+    expect(r.lines[0]).toBe('season-integrity: INCOMPLETE');
+    expect(client.sent[client.sent.length - 1]).toBe(SEASON_METRICS.find((m) => m.id === 'A3').sql);
+    expect(client.sent).not.toContain('ROLLBACK');
+    expect(r.lines).toContain('reason: connection error (no SQLSTATE); nothing more was sent');
+    expect(r.values.B1).toBe('not run');
+    grammar(r.lines);
+  });
+
+  test('a socket error code that is not a SQLSTATE is still a connection error', async () => {
+    const client = seasonClient({ failOn: { 'A2:sql': () => Object.assign(new Error('write EPIPE'), { code: 'EPIPE' }) } });
+    const r = await report(client);
+    expect(r.ok).toBe(false);
+    expect(client.sent).not.toContain('ROLLBACK');
+  });
+
+  test('BEGIN fails: no metric runs and nothing is rolled back; INCOMPLETE, false', async () => {
+    for (const fail of [() => pgErr('25001'), () => new Error('Connection terminated')]) {
+      const client = seasonClient({ failOn: { [SEASON_PREAMBLE[0]]: fail } });
+      const r = await report(client);
+      expect(r.ok).toBe(false);
+      expect(client.sent).toEqual([SEASON_PREAMBLE[0]]);
+      expect(r.lines[0]).toBe('season-integrity: INCOMPLETE');
+      expect(r.lines[r.lines.length - 1]).toBe('season-integrity: END 0/31');
+    }
+  });
+
+  test('a SET LOCAL fails: no metric runs, the transaction is rolled back; INCOMPLETE, false', async () => {
+    const client = seasonClient({ failOn: { [SEASON_PREAMBLE[2]]: () => pgErr('42501') } });
+    const r = await report(client);
+    expect(r.ok).toBe(false);
+    expect(client.sent).toEqual([...SEASON_PREAMBLE.slice(0, 3), 'ROLLBACK']);
+  });
+
+  test('the final ROLLBACK fails: INCOMPLETE, false, even with every metric read', async () => {
+    const r = await report(seasonClient({ failOn: { ROLLBACK: () => pgErr('08006') } }));
+    expect(r.ok).toBe(false);
+    expect(r.lines[0]).toBe('season-integrity: INCOMPLETE');
+    expect(r.lines).toContain('reason: rollback failed (08006)');
+    expect(r.text).toContain('A2 migration blockers: not determined (incomplete)');
+  });
+
+  test('malformed results fail the metric: two rows, a non-count, a null, an unsafe timezone or label, an unknown type', async () => {
+    const cases = [
+      ['A1', { 'A1:sql': [{ n: '0' }, { n: '0' }] }],
+      ['A2', { 'A2:sql': [{ n: 'abc' }] }],
+      ['B2', { 'B2:sql': [{ n: null }] }],
+      ['A4', { 'A4:sql': [] }],
+      ['C6', { 'C6:sql': [{ auto_drafted: '1', edited: '1', unset: '1' }] }],
+      ['C8', { 'C8:sql': [{ tz: 'UTC; x=1' }] }],
+      ['C10', { 'C10:sql': [{ col: 'actionType', labels: 'view,<b>' }] }],
+      ['C7', { 'C7:probe': [{ v: 'text' }] }],
+      ['C7', { 'C7:probe': [] }],
+    ];
+    for (const [id, answer] of cases) {
+      const r = await report(seasonClient({ answer }));
+      expect(r.ok).toBe(false);
+      expect(r.values[id]).toBe('failed (malformed result)');
+      expect(r.lines[0]).toBe('season-integrity: INCOMPLETE');
+    }
+  });
+
+  test('air_date of type date and activity_logs with no time column are reported as not applicable, still COMPLETE', async () => {
+    const r = await report(seasonClient({ answer: { 'C7:probe': [{ v: 'date' }], 'C9:probe': [], 'C10:sql': [] } }));
+    expect(r.ok).toBe(true);
+    expect(r.values.C7).toBe('not applicable (date)');
+    expect(r.values.C9).toBe('not applicable (no timestamp or created_at column)');
+    expect(r.values.C10).toBe('none');
+  });
+
+  test('the time budget: the remaining metrics are not run, INCOMPLETE, false, and the transaction still rolls back', async () => {
+    let t = 0;
+    const now = () => { t += 10000; return t; };
+    const client = seasonClient();
+    const r = await report(client, { now, budgetMs: 60000 });
+    expect(r.ok).toBe(false);
+    expect(r.lines).toContain('reason: time budget exceeded');
+    expect(Object.values(r.values)).toContain('not run');
+    expect(client.sent[client.sent.length - 1]).toBe('ROLLBACK');
+  });
+
+  test('the report stays small: under 6 KB with 20-digit counts', async () => {
+    const big = '9'.repeat(20);
+    const answer = {};
+    for (const m of SEASON_METRICS) if (!m.probe && !m.text && !m.labels) answer[`${m.id}:sql`] = [Object.fromEntries((m.fields || ['n']).map((f) => [f, big]))];
+    const r = await report(seasonClient({ answer }));
+    expect(r.ok).toBe(true);
+    expect(Buffer.byteLength(r.text)).toBeLessThan(6 * 1024);
+    grammar(r.lines);
   });
 });
 

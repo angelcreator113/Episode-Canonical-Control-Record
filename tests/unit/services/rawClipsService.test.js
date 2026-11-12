@@ -232,11 +232,118 @@ describe('database calls', () => {
     await expect(clips.setKeyState(s, 'c1', 'nope')).rejects.toBeInstanceOf(clips.RawClipError);
   });
 
-  test('removeClip is a soft delete', async () => {
-    const s = seq([[{ id: 'c1' }]], [[]]);
-    await expect(clips.removeClip(s, 'ep', 'c1')).resolves.toBe(true);
-    expect(s.query.mock.calls[0][0]).toMatch(/SET deleted_at = NOW\(\)/);
-    await expect(clips.removeClip(s, 'ep', 'gone')).resolves.toBe(false);
+  // removeClip (Evoni, 2026-11-12): what it asks, in what order, and that it
+  // only ever soft-deletes. The Postgres behaviour (every use, both lock
+  // orders) is in tests/integration/rawClipDeleteSafe.integration.test.js.
+  describe('removeClip', () => {
+    const EP = '11111111-1111-4111-8111-111111111111';
+    const CLIP = '22222222-2222-4222-8222-222222222222';
+    // A recorder: answers each statement by what it is; `uses` puts rows where a use is asked for.
+    const db = ({ live = true, uses = {} } = {}) => {
+      const calls = [];
+      const answer = (sql) => {
+        if (/^SELECT id FROM episode_raw_clips WHERE id = :clipId AND episode_id = :episodeId AND deleted_at IS NULL$/.test(sql)) return live ? [{ id: CLIP }] : [];
+        if (/^INSERT INTO episode_edit_state/.test(sql)) return [];
+        if (/FROM episode_edit_state WHERE episode_id = :episodeId FOR UPDATE$/.test(sql)) return [{ episode_id: EP }];
+        if (/^SELECT id, label FROM episode_raw_clips .* FOR UPDATE$/.test(sql)) return live ? [{ id: CLIP, label: 'Intro' }] : [];
+        if (/FROM episode_prime_segments r/.test(sql)) return uses.segments || [];
+        if (/FROM episode_scene_clips r/.test(sql)) return uses.sceneClips || [];
+        if (/FROM timeline_items r/.test(sql)) return uses.items || [];
+        if (/FROM edit_versions v/.test(sql)) return uses.versions || [];
+        if (/FROM voice_source_assets s/.test(sql)) return uses.sources || [];
+        if (/FROM voice_footage_jobs/.test(sql)) return uses.jobs || [];
+        if (/^UPDATE episode_raw_clips SET deleted_at = NOW\(\), updated_at = NOW\(\)/.test(sql)) return [{ id: CLIP }];
+        throw new Error(`unexpected query: ${sql}`);
+      };
+      const sequelize = {
+        query: jest.fn(async (sql, opts = {}) => {
+          const text = sql.replace(/\s+/g, ' ').trim();
+          calls.push({ sql: text, transaction: opts.transaction || null });
+          return [answer(text), 1];
+        }),
+        transaction: jest.fn(async (fn) => fn('tx')),
+      };
+      return { sequelize, calls };
+    };
+    const writes = (calls) => calls.filter((c) => /^(UPDATE|DELETE)\b/.test(c.sql));
+
+    test('an unused take: the edit is locked, then the take, then every use is asked, then one soft delete, all in one transaction', async () => {
+      const { sequelize, calls } = db();
+      await expect(clips.removeClip(sequelize, EP, CLIP)).resolves.toBe(true);
+      const order = calls.map((c) => c.sql);
+      const at = (re) => order.findIndex((q) => re.test(q));
+      const lock = at(/FROM episode_edit_state .* FOR UPDATE$/);
+      const take = at(/^SELECT id, label FROM episode_raw_clips .* FOR UPDATE$/);
+      const asked = [/FROM episode_prime_segments r/, /FROM episode_scene_clips r/, /FROM timeline_items r/, /FROM edit_versions v/, /FROM voice_source_assets s/, /FROM voice_footage_jobs/].map(at);
+      const removed = at(/^UPDATE episode_raw_clips SET deleted_at = NOW\(\)/);
+      expect(lock).toBeGreaterThan(0);
+      expect(take).toBeGreaterThan(lock);
+      for (const i of asked) { expect(i).toBeGreaterThan(take); expect(i).toBeLessThan(removed); }
+      // Everything after the first look runs in the one transaction.
+      expect(calls.slice(1).every((c) => c.transaction === 'tx')).toBe(true);
+      expect(sequelize.transaction).toHaveBeenCalledTimes(1);
+      // Soft only: one UPDATE of the take, no DELETE anywhere.
+      expect(writes(calls).map((c) => c.sql)).toEqual([expect.stringMatching(/^UPDATE episode_raw_clips SET deleted_at = NOW\(\), updated_at = NOW\(\) WHERE id = :clipId AND episode_id = :episodeId AND deleted_at IS NULL RETURNING id$/)]);
+    });
+
+    test('the live edit\'s rows are asked for by the edit\'s own live filters: a superseded or removed row is not a use', async () => {
+      const { sequelize, calls } = db();
+      await clips.removeClip(sequelize, EP, CLIP);
+      const sql = (re) => calls.find((c) => re.test(c.sql)).sql;
+      expect(sql(/FROM episode_prime_segments r/)).toMatch(/r\.deleted_at IS NULL AND r\.superseded_at IS NULL AND r\.raw_clip_id = :clipId/);
+      expect(sql(/FROM episode_scene_clips r/)).toMatch(/r\.deleted_at IS NULL AND r\.source_kind = 'raw_clip' AND r\.source_id = :clipId/);
+      expect(sql(/FROM timeline_items r/)).toMatch(/r\.deleted_at IS NULL AND r\.kind = 'performer_clip'/);
+      expect(sql(/FROM edit_versions v/)).toMatch(/v\.deleted_at IS NULL/);
+      expect(sql(/FROM voice_source_assets s/)).toMatch(/s\.source_raw_clip_id = :clipId AND s\.deleted_at IS NULL/);
+      expect(sql(/FROM voice_footage_jobs/)).toMatch(/status IN \('queued', 'running'\) AND deleted_at IS NULL/);
+    });
+
+    test.each([
+      ['a Prime segment', { segments: [{ id: 's1', beat: 1 }] }, 'prime_segment'],
+      ['a scene clip', { sceneClips: [{ id: 'sc1', beat: 2 }] }, 'scene_clip'],
+      ['a timeline placement', { items: [{ id: 'i1', beat: 3 }] }, 'performer_clip'],
+      ['a saved version', { versions: [{ id: 'v1', name: 'First cut' }] }, 'edit_version'],
+      ['a voice source', { sources: [{ source_id: 'vs1', takes: 2, approved: 1 }] }, 'voice_source'],
+      ['a voice job', { jobs: [{ id: 'j1', kind: 'extract', status: 'running' }] }, 'voice_job'],
+    ])('%s holds the take: CLIP_IN_USE with blocked_by, and nothing is written', async (_name, uses, kind) => {
+      const { sequelize, calls } = db({ uses });
+      const err = await clips.removeClip(sequelize, EP, CLIP).then(() => null, (e) => e);
+      expect(err).toBeInstanceOf(clips.RawClipError);
+      expect(err).toMatchObject({ status: 409, code: 'CLIP_IN_USE', clip: { id: CLIP, label: 'Intro' } });
+      expect(err.blocked_by.map((b) => b.kind)).toEqual([kind]);
+      expect(err.message).toMatch(/^"Intro" can't be deleted\. .+\. Nothing was deleted\.$/);
+      expect(writes(calls)).toEqual([]);
+    });
+
+    test('every use at once: all six are named, in a person\'s words', async () => {
+      const { sequelize } = db({ uses: {
+        segments: [{ id: 's1', beat: 1 }, { id: 's2', beat: 4 }], sceneClips: [{ id: 'sc1', beat: 2 }], items: [{ id: 'i1', beat: null }],
+        versions: [{ id: 'v1', name: 'A' }, { id: 'v2', name: 'B' }, { id: 'v3', name: 'C' }, { id: 'v4', name: 'D' }],
+        sources: [{ source_id: 'vs1', takes: 0, approved: 0 }], jobs: [{ id: 'j1', kind: 'extract', status: 'queued' }],
+      } });
+      const err = await clips.removeClip(sequelize, EP, CLIP).then(() => null, (e) => e);
+      expect(err.blocked_by.map((b) => b.label)).toEqual([
+        'The edit uses it for 2 Prime segments (beats 1, 4)',
+        'The edit uses it as 1 scene clip (beat 2)',
+        'The edit places it on the timeline once',
+        '4 saved versions of the edit use it: "A", "B", "C" and 1 more',
+        'Its sound is a Voice Studio source',
+        'Its voice is waiting to be prepared',
+      ]);
+    });
+
+    test('no such live take, or ids that are not ids: false, with no lock taken and nothing written', async () => {
+      const gone = db({ live: false });
+      await expect(clips.removeClip(gone.sequelize, EP, CLIP)).resolves.toBe(false);
+      expect(gone.sequelize.transaction).not.toHaveBeenCalled();
+      expect(gone.calls).toHaveLength(1);
+      for (const [ep, id] of [['ep', CLIP], [EP, 'gone'], [EP, null], [undefined, CLIP]]) {
+        const d = db();
+        // eslint-disable-next-line no-await-in-loop
+        await expect(clips.removeClip(d.sequelize, ep, id)).resolves.toBe(false);
+        expect(d.calls).toEqual([]);
+      }
+    });
   });
 });
 

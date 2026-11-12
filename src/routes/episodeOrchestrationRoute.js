@@ -16,12 +16,12 @@
 
 const express = require('express');
 const router = express.Router();
-const Anthropic = require('@anthropic-ai/sdk');
+const { createAnthropicClient } = require('../services/anthropicClient');
 const { requireAuth } = require('../middleware/auth');
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 const { isForSale } = require('../services/wardrobeReach');
 
-const client = new Anthropic();
+const client = createAnthropicClient();
 
 // ── Browse-pool scoring (inlined from wardrobeRoutes.js logic) ────────────
 

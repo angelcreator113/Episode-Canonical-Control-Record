@@ -4,7 +4,7 @@ The production `episode-worker` (pm2; `src/workers/start.js`) runs scene generat
 
 **Who does what.** Every step that touches the production database, `.env`, pm2 or Secrets Manager is Evoni's, and each is a separate approval. Agent sessions prepare and review the code only. They never create the role, set or read the password, start the worker or run the preflight in production without Evoni's explicit yes in that session.
 
-**Status.** Code only (this runbook's PR). The worker is **stopped and saved stopped** in production, as before. Nothing below has been done in production yet.
+**Status (2026-11-10).** In production the role exists, the credential file is in place, the preflight passed and pm2's stale saved entry is gone (§12). The worker is **not started**: it is no longer in pm2's list, and it stays out until Evoni says so. The password is also in Secrets Manager (§5). The old `postgres` password in pm2's saved list was not the current one, so no rotation followed (§12). Still to do: any start of the worker (§6 steps 6 and 7). The role, the credential file, the preflight and an enabled worker were proved on the dev box on 2026-11-10 (§10).
 
 The voice worker (`episode-voice-worker`, `docs/runbooks/voice-footage-worker.md`) is a separate process and is not affected.
 
@@ -132,7 +132,7 @@ sudo -u ubuntu -H bash -lc 'install -m 600 /dev/null ~/.episode-worker-db.env &&
 sudo -u ubuntu -H stat -c '%a %U %F' /home/ubuntu/.episode-worker-db.env   # expect: 600 ubuntu regular file
 ```
 
-**The source of truth** is a Secrets Manager entry (for example `episode-metadata/prod/worker-db`), from which Evoni copies the value into the file. Do **not** put `WORKER_DB_PASSWORD` in `.env`. The worker and the preflight both refuse it there.
+**The source of truth** is the Secrets Manager entry `episode-metadata/prod/worker-db` (created by Evoni, 2026-11-10; keys `username` and `password`; rotation off). The file on the box holds the same password; nothing reads the secret at run time, and the box needs no permission to it. Do **not** put `WORKER_DB_PASSWORD` in `.env`. The worker and the preflight both refuse it there.
 
 **Rotation:**
 1. Set the new password with `\password episode_worker` (psql as the admin user).
@@ -246,3 +246,137 @@ Expect `dump.pm2: STALE` today. Do not inspect the dump any other way (`cat`, `g
   - the deploy script still restarting only a worker that was online;
   - the pool size.
 - **`tests/unit/workers/workerCheckDbAccess.test.js`:** the preflight's settings: the file loader, a stale `WORKER_DB_PASSWORD` refused, `.env` parsed without loading.
+
+## 10. Proved on the dev box (2026-11-10)
+
+Done on `episode-dev-backend` against its local PostgreSQL, a copy of production's `episode_metadata` (`docs/runbooks/dev-environment.md`), at commit `91fbf65`. Nothing was done in production.
+
+**What was set up, and stays on the dev box:**
+- the role, from `scripts/worker/sql/episode-worker-role.sql`, unchanged;
+- a random password generated on the box and never printed, set on the role and written to `/home/ubuntu/.episode-worker-db.env` (`600 ubuntu regular file`).
+
+**The preflight** (`node scripts/worker/check-db-access.js`): `RESULT: PASS (nothing was written)`. Every line was PASS except one WARN, "TEMP on the database: granted (normally through PUBLIC)".
+
+**An enabled worker, run by hand as production runs it.** `NODE_ENV=production`, `WORKER_DB_REQUIRED=true`, `GENERATION_WORKER_ENABLED=true`, the credential file's path, `DB_POOL_MAX=4`; started from an empty folder with a clean environment, so no `.env` and no provider key reached it, and with Redis pointed at a closed port. The pm2 `episode-worker` on the dev box was left as it is (development mode, disabled).
+
+One test job was queued first (`generate_base` for an existing scene set, `max_attempts` 1). The worker's log:
+
+```
+   Environment: production
+   Database login: the worker's own (credential file)
+ [GenWorker] Started  polling every 3000ms, concurrency 1
+ [GenWorker] No stuck jobs found
+ [GenWorker] Processing job 2433a277-...  generate_base
+[SceneGen] Starting base still for: The honey Table (flux-dev, 1024x576)
+ [GenWorker] Job 2433a277-... failed: FAL_KEY not configured
+```
+
+| Checked | Result |
+|---|---|
+| Sessions in `pg_stat_activity` while it ran | 2 as `episode_worker` from `127.0.0.1` |
+| The job afterwards | `failed`, attempts 1, `started_at` and `completed_at` set, error `FAL_KEY not configured` |
+| The scene set afterwards | `generation_status` `failed`, `base_runway_prompt` written |
+| `ai_usage_logs` rows | 1072 before and after: no call was made, nothing was spent |
+| `password authentication failed`, `permission denied`, `Poll error` in the log | 0, 0, 0 |
+| Password-like keys in the worker's `/proc/<pid>/environ` | 0 |
+| A second run, 75 seconds with nothing queued | polled with 0 errors and processed nothing |
+
+**What that covers.** As `episode_worker` the worker ran boot recovery, claimed the job (`SELECT … FOR UPDATE SKIP LOCKED` and the update to `processing`), read the scene set and its brief, wrote the set's status and prompt, read today's image spend, and wrote the job's failure. **What it does not cover:** a job that completes. The dev box has no provider key, so the picture was never made; the completed path's writes (the result, the angle rows, the `ai_usage_logs` row) are covered by `tests/integration/workerRestrictedRole.integration.test.js` with the providers stubbed (§9).
+
+**Dev's data was put back:** the test job was deleted and the scene set's three changed fields were restored from a copy taken before the run. `generation_jobs` is `completed` 94, `failed` 47, as before.
+
+**A dev data refresh and the grants.** `scripts/dev-db/refresh-dev-db.sh` drops and recreates the database and restores without ACLs, so `episode_worker` keeps its login but loses every table grant. The refresh puts them back from the role file's `GRANT` / `REVOKE` lines before it swaps the database in (PR #3793). On a box whose refresh script is older than that, the preflight fails after a refresh until those lines are run again by hand. The role file as a whole cannot be re-run: it fails on `CREATE ROLE` when the role exists.
+
+## 11. The production steps from a phone (Session Manager)
+
+The same steps as §3, §5 and §7, written so that nothing has to be typed except the new password, three times. Each is Evoni's and each is a separate approval (§6). On the prod box, as `ubuntu` (in Session Manager, `sudo -iu ubuntu` first). **None of this starts the worker.**
+
+Each command runs in a subshell, so the admin login it reads from `~/.episode-migrate.env` is gone when the command ends. That matters: the preflight and the worker refuse to run with a `PGPASSWORD` in the environment.
+
+**1. Create the role** (connects with the migration login; no connection string to type):
+
+```bash
+cd ~/episode-metadata && ( set +x; export PGHOST="$(sed -n 's/^DB_HOST=//p' .env | head -1)" PGPORT=5432 PGDATABASE=episode_metadata PGSSLMODE=require PGUSER="$(sed -n 's/^DB_USER=//p' ~/.episode-migrate.env | head -1)" PGPASSWORD="$(sed -n 's/^DB_PASSWORD=//p' ~/.episode-migrate.env | head -1)"; psql -X -v dbname=episode_metadata -f scripts/worker/sql/episode-worker-role.sql )
+```
+
+Expect `CREATE ROLE`, a `REVOKE`, nine `GRANT`s, `ALTER ROLE` and `COMMIT`. It fails and changes nothing if the role already exists.
+
+**2. Set its password** (asked for twice, not shown, sent as a hash):
+
+```bash
+cd ~/episode-metadata && ( set +x; export PGHOST="$(sed -n 's/^DB_HOST=//p' .env | head -1)" PGPORT=5432 PGDATABASE=episode_metadata PGSSLMODE=require PGUSER="$(sed -n 's/^DB_USER=//p' ~/.episode-migrate.env | head -1)" PGPASSWORD="$(sed -n 's/^DB_PASSWORD=//p' ~/.episode-migrate.env | head -1)"; psql -X -c '\password episode_worker' )
+```
+
+Use letters and digits only, 24 or more: the credential file is read as a `.env` file, where quotes, `#`, backslashes and spaces change the value.
+
+**3. Write the credential file** (the same password once more, not shown):
+
+```bash
+( umask 077; read -r -s -p 'episode_worker password: ' P; echo; printf 'WORKER_DB_USER=episode_worker\nWORKER_DB_PASSWORD=%s\n' "$P" > ~/.episode-worker-db.env; chmod 600 ~/.episode-worker-db.env; stat -c '%a %U %F' ~/.episode-worker-db.env )
+```
+
+Expect `600 ubuntu regular file`. The password also goes in Secrets Manager, in `episode-metadata/prod/worker-db` (§5); that is done from the console, not here.
+
+**4. Preflight** (read-only):
+
+```bash
+cd ~/episode-metadata && node scripts/worker/check-db-access.js
+```
+
+Expect `RESULT: PASS (nothing was written)`. A login failure means the password typed in step 3 is not the one set in step 2: repeat both.
+
+**5. Remove pm2's stale saved entry, without starting the worker** (Evoni, 2026-11-10: delete and save twice; the worker is not started and stays out of pm2's list until she says so).
+
+```bash
+pm2 describe episode-worker | grep -E 'status'
+```
+
+It must say `stopped`. Then:
+
+```bash
+pm2 delete episode-worker && pm2 save && pm2 save
+```
+
+The second save overwrites `dump.pm2.bak`. Then run the credential-cleanliness check from §7; it must print `dump.pm2: CLEAN` and `dump.pm2.bak: CLEAN`.
+
+This differs from §7's steps 3 and 4, which start the worker disabled and stop it again so that it stays in pm2's list. With the entry deleted, a deploy leaves the missing worker alone (§2), and a reboot restores a list without it.
+
+**Undo.** Steps 1 and 2: the `REVOKE` and `DROP ROLE` lines in the role file's header, run with the same connection as step 1. Step 3: `shred -u ~/.episode-worker-db.env`. Step 5: nothing to put back; the deleted entry held only the old `postgres` password, which no longer works.
+
+**Starting the worker later** is its own approval: `pm2 start ecosystem.config.js --only episode-worker --env production`, which starts it disabled, and separately `GENERATION_WORKER_ENABLED=true` (§6 step 7).
+
+## 12. Done in production (2026-11-10)
+
+Evoni ran §11's five steps on the prod box as `ubuntu`, from a Session Manager session, and reported: role created, password set, credential file at mode 600, preflight PASS, worker deleted from pm2 and saved twice.
+
+Read on the box afterwards by an agent session, 22:51 UTC, with no database query:
+
+```
+dump.pm2: CLEAN
+dump.pm2.bak: CLEAN
+```
+
+| Checked | Result |
+|---|---|
+| pm2's saved files | both hold `episode-api-prod-hotfix` only; both modified 2026-11-10 22:50 UTC |
+| pm2's live list | `episode-api-prod-hotfix online`; no `episode-worker` |
+| Worker processes running | 0 |
+| `/home/ubuntu/.episode-worker-db.env` | `600 ubuntu regular file`, two lines, keys `WORKER_DB_USER` and `WORKER_DB_PASSWORD` |
+| `.env` | no `GENERATION_WORKER_ENABLED` line, no `WORKER_DB_PASSWORD` line |
+| The API | healthy, database connected; `https://primepisodes.com/health` 200 |
+
+The role's existence and the preflight's PASS are as Evoni reported them; the agent session did not query the production database.
+
+A first attempt the same evening changed nothing on the box (both files still STALE, no credential file): the commands had not run as `ubuntu`. In Session Manager, `sudo -iu ubuntu` comes first.
+
+**Afterwards, the same evening:**
+
+- **Secrets Manager.** Evoni stored the password as `episode-metadata/prod/worker-db` (keys `username`, `password`; rotation off). Its metadata shows it created 2026-11-10 22:59 UTC with one version. No session read its value.
+- **No rotation of `postgres`** (Evoni's rule: none needed if the stale copy was not the current password). The deleted entry itself could no longer be compared, since both saves had overwritten it. What was checked, with nothing printed:
+  - the worker's error log holds 58,660 lines of `password authentication failed for user "postgres"`, from 2026-10-10 to 2026-11-05 13:38 UTC, when it was stopped;
+  - `~/.episode-migrate.env` has not changed since 2026-10-10, and its login worked for the 2026-11-08 deploy's migration and for step 1 above;
+  - RDS reports no master credential reset in the 14 days before 2026-11-10.
+
+  So the copy in pm2's saved list was already being refused while the current password was in force.
+- **Two older pm2 dump copies stay on the box:** `~/.pm2/dump.pm2.bak-0624-preFD38` and `~/capture-20260621-prereconcile/dump.pm2.fd45-evidence-20260704`. Each holds a worker `postgres` password that differs from the current one (compared by hash, nothing printed). Both are cited as preserved evidence in `docs/audit/` (`Audit_Handoff_Delta_2026-07-04_id3_Window.md`, `Audit_Handoff_Delta_2026-07-06_FD38_save.md`, `F-Deploy-1_Fix_Plan_v1.20.md`, `F-Deploy-1_Fix_Plan_v1.21.md`), so they were not deleted. §7's cleanliness check does not look at them.
+

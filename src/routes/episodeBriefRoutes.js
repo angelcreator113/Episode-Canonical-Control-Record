@@ -686,6 +686,13 @@ router.post('/:episodeId/generate-script', requireAuth, aiRateLimiter, async (re
     if (episodeForGuard.show_id && String(episodeForGuard.show_id) !== String(showId)) {
       return res.status(400).json({ error: 'showId is not this episode\'s show' });
     }
+    // A filmed episode's script is never replaced by a generator (Evoni,
+    // 2026-11-12): refused here, before the model is asked or charged.
+    const filmed = await require('../services/scriptSave').filmedScriptRefusal(Episode.sequelize, episodeForGuard);
+    if (filmed) {
+      console.warn(`[ScriptGen] Refused for episode ${episodeId}: filmed, its script is kept.`);
+      return res.status(409).json(filmed);
+    }
     if (scriptOverwriteBlocked(episodeForGuard?.script_content, req.body)) {
       console.warn(`[ScriptGen] Refused overwrite for episode ${episodeId}: existing script_content present, no confirmOverwrite flag.`);
       return res.status(409).json(scriptOverwriteRefusalBody());
