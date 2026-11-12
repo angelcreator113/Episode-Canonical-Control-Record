@@ -64,6 +64,18 @@ describe('EpisodeScenesTab feed moment warning', () => {
   });
 
   test('says so when the check itself fails, rather than showing nothing', async () => {
+    // The plan loaded; its Pulse-moment check could not be made (the server says so in the plan's answer).
+    planResponse({ feed_moment_missing: [], feed_moment_check_error: 'Network Error' });
+
+    renderTab();
+
+    expect((await screen.findByRole('alert')).textContent)
+      .toContain("Could not check whether this episode's Pulse moments were saved: Network Error");
+  });
+
+  // The plan request itself failing is a different thing (2026-11-12): the
+  // page says the beats didn't load, with Retry, and shows no Pulse warning.
+  test('a plan that did not load is said as that, not as a Pulse-moments warning', async () => {
     vi.mocked(apiClient.get).mockImplementation((url) => {
       if (url.endsWith('/plan')) return Promise.reject(new Error('Network Error'));
       return Promise.resolve({ data: { success: true, data: [] } });
@@ -71,8 +83,8 @@ describe('EpisodeScenesTab feed moment warning', () => {
 
     renderTab();
 
-    expect((await screen.findByRole('alert')).textContent)
-      .toContain("Could not check whether this episode's Pulse moments were saved: Network Error");
+    expect((await screen.findByRole('alert')).textContent).toContain("Couldn't load this episode's beats.");
+    expect(screen.queryByText(/Could not check whether this episode's Pulse moments were saved/)).toBeNull();
   });
 
   describe('Retry Pulse moments (Task #2220)', () => {
