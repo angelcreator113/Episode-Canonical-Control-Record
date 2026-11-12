@@ -741,7 +741,8 @@ const SCRIPT = [
     const d = await approvedTake(w.ep, 2, 1);
     const { item_id: pd } = await placeLine(w, d, { anchor_kind: 'beat_start', anchor_beat: 2, offset_ms: 4000 });
     expect((await dialogueOf(w.ep)).map((x) => x.item_id)).toEqual([pd]);
-    await saveEpisodeScript(models, w.ep, { writer: 'test', compose: async () => ({ script: `${VOICE_SCRIPT}\n\n## BEAT: 3 · Later\nLala: "New."` }) });
+    // The episode has takes, so it is filmed: a person's edit, with that episode's confirmation (services/scriptSave).
+    await saveEpisodeScript(models, w.ep, { writer: 'test', filmedConfirm: w.ep, compose: async () => ({ script: `${VOICE_SCRIPT}\n\n## BEAT: 3 · Later\nLala: "New."` }) });
     expect(await dialogueOf(w.ep)).toEqual([]);
     expect((await findingsOf(w.ep)).find((f) => f.ref === pd)).toMatchObject({ code: 'dialogue_take_not_current', state: 'needs_review' });
     // Re-confirmed by a person: the same placement plays again, the same approval.
