@@ -232,7 +232,13 @@ function buildReport({
   };
 }
 
-function verifyReport({ start, report, env = {} }) {
+/**
+ * focused: a job that runs a fixed few test files (CI's PostgreSQL 17 job),
+ * so the canary file is not in the run. It waives exactly one requirement,
+ * that the canaries ran; every other check stays, and a recorded external
+ * attempt fails it. The full test run never passes focused.
+ */
+function verifyReport({ start, report, env = {}, focused = false }) {
   const problems = [];
   if (!report) problems.push('network guard report missing: the test run did not finish, or the reporter did not run');
   if (!start) problems.push('network guard start marker missing: globalSetup did not run');
@@ -241,13 +247,36 @@ function verifyReport({ start, report, env = {} }) {
   if (report && report.status === 'incomplete') problems.push(`network guard report is incomplete: ${report.issues.join('; ')}`);
   if (report && report.status === 'disabled' && isCI(env)) problems.push('the network guard was disabled in CI');
   if (report && !['complete', 'incomplete', 'disabled'].includes(report.status)) problems.push(`unknown report status "${report.status}"`);
-  if (report && report.status !== 'disabled' && (!report.canary || report.canary.ok !== true)) {
-    problems.push(`network guard canary verification failed: ${report.canary ? report.canary.issues.join('; ') : 'no canary section'}`);
+  if (report && report.status !== 'disabled' && (!report.canary || report.canary.ok !== true) && !(focused && canaryAbsent(report))) {
+    const why = !report.canary ? 'no canary section'
+      : Array.isArray(report.canary.issues) ? report.canary.issues.join('; ') : 'malformed canary section';
+    problems.push(`network guard canary verification failed: ${why}`);
+  }
+  // A focused run has no canaries to prove the hooks block, so an external
+  // attempt it records is a failure there, not a line in the summary.
+  if (focused && report && report.status !== 'disabled') {
+    const total = report.attempts ? report.attempts.total : undefined;
+    if (!Number.isInteger(total)) problems.push('network guard report has no attempt count');
+    else if (total > 0) problems.push(`a focused run recorded ${total} unexpected external attempt(s)`);
   }
   return { ok: problems.length === 0, problems };
 }
 
-function renderSummary(report, verdict) {
+/**
+ * True only when the canary file was not part of the run at all: it is not
+ * among the executed files, it has no test results and not one canary event
+ * was recorded. A canary file that ran and failed, or a report with no canary
+ * section, is never "absent".
+ */
+function canaryAbsent(report) {
+  const c = report && report.canary;
+  if (!c || typeof c !== 'object' || !Array.isArray(c.issues)) return false;
+  const observed = Object.values(c.observed || {}).reduce((n, v) => n + v, 0);
+  return observed === 0 && c.issues.some((i) => /^canary file \S+ did not run$/.test(i))
+    && c.issues.includes('no test results for the canary file');
+}
+
+function renderSummary(report, verdict, { focused = false } = {}) {
   const out = ['## Jest network guard (report-only)', ''];
   if (!report) {
     out.push('**No report.** The run did not finish or the reporter did not run, so the attempt count is unknown.');
@@ -261,11 +290,13 @@ function renderSummary(report, verdict) {
     if (report.canary) {
       const exp = (report.canary.expected || []).reduce((n, c) => n + c.events, 0);
       const obs = Object.values(report.canary.observed || {}).reduce((n, c) => n + c, 0);
-      out.push(`- Canaries: **${report.canary.ok ? 'verified' : 'FAILED'}** (${(report.canary.expected || []).length} canaries, ${obs}/${exp} blocked events)`);
+      const waived = focused && !report.canary.ok && canaryAbsent(report);
+      out.push(waived ? '- Canaries: **not required** (focused run: the canary file is not part of this job)'
+        : `- Canaries: **${report.canary.ok ? 'verified' : 'FAILED'}** (${(report.canary.expected || []).length} canaries, ${obs}/${exp} blocked events)`);
     }
     if (report.proxy) out.push(`- Proxy settings removed at start: ${report.proxy.removedAtStart.length ? report.proxy.removedAtStart.map((n) => `\`${n}\``).join(', ') : 'none'}`);
     if (report.issues.length) out.push('', '**Integrity issues:**', ...report.issues.map((i) => `- ${i}`));
-    if (report.canary && report.canary.issues && report.canary.issues.length) out.push('', '**Canary issues:**', ...report.canary.issues.map((i) => `- ${i}`));
+    if (report.canary && report.canary.issues && report.canary.issues.length && !(focused && canaryAbsent(report))) out.push('', '**Canary issues:**', ...report.canary.issues.map((i) => `- ${i}`));
     if (report.attempts.hosts.length) {
       out.push('', '| Host | Attempts | Transports | Files | First app frame |', '|---|---|---|---|---|');
       for (const h of report.attempts.hosts) out.push(`| \`${h.host}\` | ${h.count} | ${h.transports.join(', ')} | ${h.files.join('<br>')} | ${(h.frames[0] || '').replace(/\|/g, '\\|')} |`);
@@ -281,4 +312,4 @@ function renderSummary(report, verdict) {
   return `${out.join('\n')}\n`;
 }
 
-module.exports = { REQUIRED_HOOKS, FINDING_KINDS, isCI, verifyCanary, buildReport, verifyReport, renderSummary };
+module.exports = { REQUIRED_HOOKS, FINDING_KINDS, isCI, verifyCanary, canaryAbsent, buildReport, verifyReport, renderSummary };

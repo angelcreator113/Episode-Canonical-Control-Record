@@ -23,7 +23,7 @@ const core = require('../../networkGuard/core');
 const registry = require('../../networkGuard/registry');
 const proxyEnv = require('../../networkGuard/proxyEnv');
 const canaryHelper = require('../../networkGuard/canary');
-const { buildReport, verifyReport, verifyCanary, REQUIRED_HOOKS } = require('../../networkGuard/report');
+const { buildReport, verifyReport, verifyCanary, canaryAbsent, renderSummary, REQUIRED_HOOKS } = require('../../networkGuard/report');
 const { configProblems } = require('../../networkGuard/reporter');
 
 const tmpDir = () => fs.mkdtempSync(path.join(os.tmpdir(), 'ng3a-'));
@@ -295,6 +295,103 @@ describe('report: findings, canaries and integrity (pure)', () => {
     const v = verifyReport({ start: START, report: r });
     expect(v.ok).toBe(false);
     expect(v.problems.join(' ')).toMatch(/canary verification failed/);
+  });
+
+  describe('focused mode (a job that runs a fixed few files, without the canary file)', () => {
+    const attempt = { type: 'attempt', transport: 'socket', host: '203.0.113.9', port: 443, testPath: 'a.test.js' };
+    const noCanaryFile = { ...base, executedFiles: ['a.test.js'], fileResults: { 'a.test.js': { passed: 1, failed: 0, skipped: 0 } } };
+    const focusedRun = (extra = []) => buildReport({ ...noCanaryFile, lines: [hb('a.test.js'), ...extra, end('a.test.js', extra.length)] });
+
+    test('strict mode still fails a run without the canary file; focused mode accepts it and says so', () => {
+      const r = focusedRun();
+      expect(r.status).toBe('complete');
+      expect(canaryAbsent(r)).toBe(true);
+      expect(verifyReport({ start: START, report: r }).ok).toBe(false);
+      expect(verifyReport({ start: START, report: r, focused: false }).problems.join(' ')).toMatch(/canary verification failed/);
+      expect(verifyReport({ start: START, report: r, focused: true })).toEqual({ ok: true, problems: [] });
+      const text = renderSummary(r, { ok: true, problems: [] }, { focused: true });
+      expect(text).toMatch(/Canaries: \*\*not required\*\* \(focused run/);
+      expect(text).not.toMatch(/Canary issues/);
+      expect(renderSummary(r, { ok: false, problems: [] })).toMatch(/Canaries: \*\*FAILED\*\*/);
+    });
+
+    test('focused mode fails on an unexpected external attempt; strict mode with canaries stays report-only for attempts', () => {
+      const r = focusedRun([attempt]);
+      expect(r.attempts.total).toBe(1);
+      const v = verifyReport({ start: START, report: r, focused: true });
+      expect(v.ok).toBe(false);
+      expect(v.problems).toEqual(['a focused run recorded 1 unexpected external attempt(s)']);
+      const full = buildReport({ ...base, lines: [...canaryLines, hb('a.test.js'), attempt, end('a.test.js', 1)] });
+      expect(verifyReport({ start: START, report: full })).toEqual({ ok: true, problems: [] });
+    });
+
+    test('focused mode waives nothing when the canary file ran: a failed or partial canary still fails', () => {
+      // The canary file ran but recorded no blocked event.
+      const ranNoEvents = buildReport({ ...base, lines: [hb('c.test.js'), end('c.test.js'), hb('a.test.js'), end('a.test.js')] });
+      expect(canaryAbsent(ranNoEvents)).toBe(false);
+      expect(verifyReport({ start: START, report: ranNoEvents, focused: true }).problems.join(' ')).toMatch(/canary verification failed/);
+      // The canary file is not in the run, yet a canary event was recorded.
+      const stray = buildReport({ ...noCanaryFile, lines: [hb('a.test.js'), { ...canaryLines[1], testPath: 'a.test.js' }, end('a.test.js', 1)] });
+      expect(canaryAbsent(stray)).toBe(false);
+      expect(verifyReport({ start: START, report: stray, focused: true }).ok).toBe(false);
+    });
+
+    test('focused mode still rejects a missing, stale, unfinalized, incomplete, disabled-in-CI or malformed report', () => {
+      const good = focusedRun();
+      const f = (over) => verifyReport({ start: START, report: good, focused: true, ...over });
+      expect(f({ report: null }).problems.join(' ')).toMatch(/report missing/);
+      expect(f({ start: null }).problems.join(' ')).toMatch(/start marker missing/);
+      expect(f({ start: { ...START, runId: 'older' } }).problems.join(' ')).toMatch(/stale/);
+      expect(f({ report: { ...good, finalized: false } }).problems.join(' ')).toMatch(/not finalized/);
+      expect(f({ report: { ...good, status: 'weird' } }).problems.join(' ')).toMatch(/unknown report status/);
+      expect(f({ report: { ...good, attempts: undefined } }).problems.join(' ')).toMatch(/no attempt count/);
+      expect(f({ report: { ...good, canary: undefined } }).problems.join(' ')).toMatch(/no canary section/);
+      expect(f({ report: { ...good, canary: { ok: false } } }).ok).toBe(false);
+      // A file that never reported its end makes the run incomplete in both modes.
+      const incomplete = buildReport({ ...noCanaryFile, lines: [hb('a.test.js')] });
+      expect(incomplete.status).toBe('incomplete');
+      expect(verifyReport({ start: START, report: incomplete, focused: true }).ok).toBe(false);
+      const offStart = { ...START, mode: 'off' };
+      const off = buildReport({ ...noCanaryFile, start: offStart, lines: [hb('a.test.js', { mode: 'off' }), end('a.test.js')] });
+      expect(verifyReport({ start: offStart, report: off, env: { CI: 'true' }, focused: true }).ok).toBe(false);
+    });
+
+    test('the CLI: --focused is the only way in, any other argument is refused, and no environment variable turns it on', () => {
+      const { main } = require('../../networkGuard/verify');
+      const root = tmpDir();
+      const dir = path.join(root, 'tmp', 'network-guard');
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(path.join(dir, 'start.json'), JSON.stringify(START));
+      fs.writeFileSync(path.join(dir, 'report.json'), JSON.stringify(focusedRun()));
+      const out = jest.spyOn(process.stdout, 'write').mockImplementation(() => true);
+      const err = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
+      try {
+        expect(main(root, {}, [])).toBe(1);
+        expect(main(root, { NETWORK_GUARD_FOCUSED: 'true', FOCUSED: '1' }, [])).toBe(1);
+        expect(main(root, {}, ['--focused'])).toBe(0);
+        expect(main(root, {}, ['--focused', '--skip-canaries'])).toBe(1);
+        expect(main(root, {}, ['--focussed'])).toBe(1);
+        fs.writeFileSync(path.join(dir, 'report.json'), '{ not json');
+        expect(main(root, {}, ['--focused'])).toBe(1);
+      } finally {
+        out.mockRestore();
+        err.mockRestore();
+      }
+    });
+
+    test('CI: the Tests job verifies strictly; only the PostgreSQL 17 job passes --focused', () => {
+      const workflow = fs.readFileSync(path.join(ROOT, '.github/workflows/validate.yml'), 'utf8');
+      const job = (from, to) => workflow.slice(workflow.indexOf(from), workflow.indexOf(to));
+      const tests = job('\n  tests:', '\n  a2-constraints-pg17:');
+      const a2 = job('\n  a2-constraints-pg17:', '\n  frontend-tests:');
+      expect(tests.length).toBeGreaterThan(100);
+      expect(a2.length).toBeGreaterThan(100);
+      expect(tests).toMatch(/run: node tests\/networkGuard\/verify\.js\n/);
+      expect(tests).not.toMatch(/--focused/);
+      expect(a2).toMatch(/run: node tests\/networkGuard\/verify\.js --focused\n/);
+      expect(workflow.match(/verify\.js --focused/g)).toHaveLength(1);
+      expect(workflow.match(/networkGuard\/verify\.js/g)).toHaveLength(2);
+    });
   });
 });
 
