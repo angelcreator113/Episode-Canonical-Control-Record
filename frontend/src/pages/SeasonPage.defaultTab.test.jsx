@@ -234,12 +234,14 @@ describe('a started slot\'s links', () => {
     expect(within(menu).queryByTestId('szn-slot-no-event-2')).toBeNull();
   });
 
-  test('with no event recorded on the slot (Episode 1): it says so and points at the episode\'s own events; no package link is made up', async () => {
+  test('the event is not linked to the slot (Episode 1): it says exactly that and points at the episode\'s own events; no package link is made up', async () => {
     renderAt('/shows/show-1/season?tab=roadmap');
     const menu = await openMenu(1);
     expect(within(menu).getByRole('menuitem', { name: 'Open the episode' }).getAttribute('href')).toBe('/episodes/ep-1');
     const none = within(menu).getByTestId('szn-slot-no-event-1');
-    expect(none.textContent).toBe("No event on this slot: check the episode's events");
+    expect(none.textContent).toBe("Event not linked to this season slot. View the episode's events.");
+    // It is the slot's link that is missing: nothing may say the event or its package does not exist.
+    expect(menu.textContent).not.toMatch(/no event|no package|none pencilled/i);
     expect(none.getAttribute('href')).toBe('/episodes/ep-1?tab=overview');
     expect(within(menu).queryByText('Open the event package')).toBeNull();
     expect([...menu.querySelectorAll('a')].some((a) => /\/events\//.test(a.getAttribute('href')))).toBe(false);
@@ -248,9 +250,23 @@ describe('a started slot\'s links', () => {
   test('the slot panel says the same: package link with an event, the plain statement without', async () => {
     renderAt('/shows/show-1/season?tab=roadmap&slot=1');
     const none = await screen.findByTestId('season-slot-no-event-1');
-    expect(none.textContent).toContain('No event is recorded on this slot.');
-    expect(within(none).getByRole('link', { name: "Check the episode's events" }).getAttribute('href')).toBe('/episodes/ep-1?tab=overview');
+    expect(none.textContent).toBe("Event not linked to this season slot. View the episode's events.");
+    expect(none.textContent).not.toMatch(/no event|no package/i);
+    // The panel's Event line agrees: not "None pencilled", which is for a slot nothing has started in.
+    expect(screen.getByTestId('season-slot-event-1').textContent).toBe('Not linked to this slot');
+    expect(document.querySelector('.szn-drawer, [data-testid="szn-roadmap"]').textContent).not.toMatch(/E1[^E]*None pencilled/);
+    expect(within(none).getByRole('link', { name: "View the episode's events." }).getAttribute('href')).toBe('/episodes/ep-1?tab=overview');
     expect(screen.queryByTestId('season-slot-package-1')).toBeNull();
+  });
+
+  test('an open slot still says None pencilled, and a slot with its event names it', async () => {
+    renderAt('/shows/show-1/season?tab=roadmap&slot=4');
+    await waitFor(() => expect(screen.getByTestId('season-slot-event-4').textContent).toBe('None pencilled'));
+  });
+
+  test('a started slot with its event names the event', async () => {
+    renderAt('/shows/show-1/season?tab=roadmap&slot=2');
+    await waitFor(() => expect(screen.getByTestId('season-slot-event-2').textContent).toBe('Atelier Visit'));
   });
 
   test('a pencilled slot keeps its one package link; an open slot has neither', async () => {

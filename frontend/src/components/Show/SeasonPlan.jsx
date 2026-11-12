@@ -505,7 +505,8 @@ export function SlotPanel({ slot, showId, available, busy, episode, event, onPen
       )}
 
       <dl className="wa-arc-facts">
-        <div><dt>Event</dt><dd>{slot.event?.name || 'None pencilled'}</dd></div>
+        {/* A started slot with no event linked to it has an event (the episode's); "None pencilled" is for a slot nothing has started in. */}
+        <div><dt>Event</dt><dd data-testid={`season-slot-event-${slot.slot_number}`}>{slot.event?.name || (slot.episode ? 'Not linked to this slot' : 'None pencilled')}</dd></div>
         {deal && <div><dt>Deal{deal.label ? ` · ${deal.label}` : ''}</dt><dd>{deal.pays}</dd></div>}
       </dl>
 
@@ -545,12 +546,12 @@ export function SlotPanel({ slot, showId, available, busy, episode, event, onPen
           <Link className="wa-arc-primary" to={`/episodes/${slot.episode.id}`}>
             {slot.state === 'done' ? 'Open episode' : 'Continue episode'}
           </Link>
-          {/* A started slot keeps the way to its event package; with no event recorded on the slot it says so (2026-11-12). */}
+          {/* A started slot keeps the way to its event package. When the event is not linked to the slot, it says exactly that: the episode has its events (2026-11-12). */}
           {slot.event ? (
             <Link className="wa-arc-secondary" to={packageHref(showId, slot.event.id, { kind: 'roadmap', slot: slot.slot_number })} data-testid={`season-slot-package-${slot.slot_number}`}>Open the event package</Link>
           ) : (
             <p className="szn-muted" data-testid={`season-slot-no-event-${slot.slot_number}`}>
-              No event is recorded on this slot. <Link to={`/episodes/${slot.episode.id}?tab=overview`}>Check the episode's events</Link>
+              Event not linked to this season slot. <Link to={`/episodes/${slot.episode.id}?tab=overview`}>View the episode's events.</Link>
             </p>
           )}
         </>

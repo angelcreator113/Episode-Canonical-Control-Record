@@ -107,9 +107,9 @@ function CardMenu({ slot, showId, onOpen, onIntention, readOnly = false, twoPart
           {slot.episode && <Link role="menuitem" to={`/episodes/${slot.episode.id}`}>Open the episode</Link>}
           {/* ?from= keeps the way back to this slot on the Roadmap (2026-10-25). A started slot keeps its package link (2026-11-12). */}
           {slot.event && <Link role="menuitem" to={packageHref(showId, slot.event.id, { kind: 'roadmap', slot: slot.slot_number })} data-testid={`szn-slot-package-${slot.slot_number}`}>Open the event package</Link>}
-          {/* A started slot with no event recorded on it: say so, and point at the episode's own Events, where its event is shown and linked. Nothing is guessed. */}
+          {/* A started slot whose event is not linked to the slot. The episode has its events; it is the slot's link that is missing, so the wording says that and never that there is no event or package (Evoni, 2026-11-12). Nothing is guessed. */}
           {slot.episode && !slot.event && (
-            <Link role="menuitem" to={`/episodes/${slot.episode.id}?tab=overview`} data-testid={`szn-slot-no-event-${slot.slot_number}`}>No event on this slot: check the episode's events</Link>
+            <Link role="menuitem" to={`/episodes/${slot.episode.id}?tab=overview`} data-testid={`szn-slot-no-event-${slot.slot_number}`}>Event not linked to this season slot. View the episode's events.</Link>
           )}
           {!readOnly && twoPart?.canMake && (
             <button type="button" role="menuitem" onClick={() => { setOpen(false); twoPart.make(); }} data-testid={`szn-slot-two-part-${slot.slot_number}`}>
