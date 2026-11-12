@@ -16,6 +16,9 @@
  *                           to (used_in_episode_id, or a brief's event_id)
  *   deleteRefusal           409 EPISODE_SNAPSHOT_FROZEN, for every role
  *   restartRefusal          409 EVENT_EPISODE_FROZEN
+ *   assertEpisodeAcceptsEventLink / filmedLinkRefusal
+ *                           409 EPISODE_SNAPSHOT_FROZEN: no new event is
+ *                           linked to a filmed episode (Evoni, 2026-11-12)
  * Refusals are never retryable. There is no switch to turn them off.
  */
 
@@ -122,6 +125,41 @@ async function assertEventRelinkAllowed(sequelize, eventId, { transaction, episo
 
 const label = (ep) => `${ep?.episode_number != null ? `Episode ${ep.episode_number} ` : 'An episode '}${ep?.title ? `"${ep.title}" ` : ''}`;
 
+/** A filmed episode takes no new event link (Evoni's ruling, 2026-11-12). */
+function filmedLinkRefusal(eventId, episodeId, frozenAt, fields = ['used_in_episode_id']) {
+  return new FrozenEpisodeError(
+    `This episode has been filmed (since ${day(frozenAt)}), so no other event can be linked to it: its events are part of its history. Nothing was changed.`,
+    'EPISODE_SNAPSHOT_FROZEN',
+    { episode_id: episodeId, event_id: eventId, frozen_at: iso(frozenAt), fields });
+}
+
+/**
+ * Before an event is linked to an episode (the event's used_in_episode_id, or
+ * a brief's first event_id): a filmed episode accepts only an event it is
+ * already associated with. In the caller's transaction, after the episode
+ * row is locked (assertEventRelinkAllowed does that), so a first clip cannot
+ * arrive between this check and the write.
+ *
+ * Already associated, and so allowed: the episode's live brief names the
+ * event, or the event's own link already points at the episode. Restoring
+ * either of those to match the other is not a new association.
+ * An episode that is not filmed is never refused here. Nothing is written.
+ */
+async function assertEpisodeAcceptsEventLink(sequelize, { eventId, episodeId, transaction, fields } = {}) {
+  if (!eventId || !episodeId) return;
+  const frozenAt = await filmedAt(sequelize, episodeId, { transaction });
+  if (!frozenAt) return;
+  const [rows] = await sequelize.query(
+    `SELECT 1 AS linked
+       WHERE EXISTS (SELECT 1 FROM episode_briefs b
+                      WHERE b.episode_id = :episodeId AND b.event_id = :eventId AND b.deleted_at IS NULL)
+          OR EXISTS (SELECT 1 FROM world_events w
+                      WHERE w.id = :eventId AND w.used_in_episode_id = :episodeId AND w.deleted_at IS NULL)`,
+    { replacements: { eventId, episodeId }, transaction });
+  if (rows?.[0]) return;
+  throw filmedLinkRefusal(eventId, episodeId, frozenAt, fields);
+}
+
 /** Q-7 Layer 1: deleting a filmed episode, for every role. */
 function deleteRefusal(episodeId, frozenAt) {
   return new FrozenEpisodeError(
@@ -144,6 +182,8 @@ module.exports = {
   filmedAt,
   findFrozenDeletedEpisode,
   assertEventRelinkAllowed,
+  assertEpisodeAcceptsEventLink,
+  filmedLinkRefusal,
   deleteRefusal,
   restartRefusal,
 };
