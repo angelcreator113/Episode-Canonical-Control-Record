@@ -126,11 +126,75 @@ These tighten addendum E. Everything above still holds unless stated here.
   - Revoked keys are listed by fingerprint and refused.
   - There is no key expiry in this slice.
 - **Audit.** Every applied command records its `target`, command `seq`, signer fingerprint, `commandId` and `issuedAt`. `recover` also records the challenge id, the floors and the prior condition.
-- **Limitation.** The state file and the hash-chained log are writable by the gateway's own account. They detect edits and inconsistencies, but they cannot prove that no history was deleted: removing both files looks like a new gateway. Two things limit the damage:
+- **Limitation.** *(See 5.2: the log is now authenticated and anchored.)* The state file and the hash-chained log are writable by the gateway's own account. They detect edits and inconsistencies, but they cannot prove that no history was deleted: removing both files looks like a new gateway. Two things limit the damage:
   - nothing initializes without a fresh challenge, so replay fails;
   - the floors come from the signing authority, not from the gateway.
 
   For the same reason, when history was deleted, the stop floor can only reflect the stops the gateway still knows. A `stop` refused while the state was untrusted is remembered only until the process restarts, because writing it would need trusted state. Such a stop was answered with `RECOVERY_REQUIRED`, never reported as applied, and the gateway stays stopped until a recovery operator signs `recover`. An operator who needs that stop to hold should send it again after recovery.
+
+### 5.2 Corrections E5 (security review of 2026-11-12; approved by Evoni the same day)
+
+These tighten 5.1. Where they differ, 5.2 holds. Nothing here is wired or activated.
+
+**Findings fixed**
+- **A command that reached the log is never forgotten.** Before, a release that was logged but whose state write failed was not remembered in memory, and a RECOVER signed on a slower clock let the same release be replayed. Now the log entry is the commitment: memory follows it at once, a failed write leaves the gateway stopped and untrusted until the files are read again, and recovery floors can never go below a logged sequence.
+- **History from a key that is no longer active.** RECOVER keeps the sequence counters of keys its floors do not name, so a restart after a revocation and a recovery is trusted. Before, every such restart came up `state_inconsistent`.
+- **A malformed challenge is refused, not thrown.** The challenge must be 64 lower-case hex characters and is compared by byte length before the constant-time compare.
+
+**What is trusted.** Only the target id and the key set (provisioning configuration) and the external anchor. Everything else is derived.
+
+**Layer 1: files (`fsStores.js`, `securityProblems`).** At load the state directory must be a real directory owned by the gateway's user with mode 0700, and each of `emergency.json` and `emergency.log` that exists must be a regular file, not a link, with one name, the same owner and mode 0600. Files are opened without following links and checked again once open. Any failure is `store_insecure`: stopped, and RECOVER cannot clear it; the files are fixed by hand and the gateway restarted.
+
+**Layer 2: the log is authenticated and replayed (`replayLog`, `evaluate`).**
+- Each log entry holds the original signed `payload` and `signature`, the gateway's `at`, and the chain fields. Nothing else.
+- At load every entry is verified and replayed under the same rules as a live command (`evaluate` is the one implementation of both):
+  1. the chain links;
+  2. the signature verifies under a key in the set, active or revoked;
+  3. the target matches and the key's role permits the action (`control`: stop, release; `recover`: recover, revoke);
+  4. the command's `seq` exceeds that key's counter (counters start at zero, or at the floors of the latest RECOVER);
+  5. a release's `issuedAt` is later than the stop floor;
+  6. **head binding**: a release, a RECOVER and a revoke carry `head`, the hash of the entry before them, inside the signed payload.
+  An entry that a live gateway would have refused makes the log `log_unverifiable`: stopped, RECOVER blocked.
+- **Why head binding.** The hash chain is unkeyed, so whoever can write the file can recompute it. Without head binding a Stop could be cut out from before a later, genuine release. With it, that release was signed over the Stop and no longer verifies. A stop carries no head, so nothing must be read before stopping. To sign a release, the operator reads the current head from the gateway's status.
+- **The state file can only restrict.** It must equal the replayed state exactly. If it is missing, corrupt, of another version or differs in any field, the gateway is stopped and untrusted, and the file is left as it is; only a signed RECOVER writes it again. The clock-skew check is not replayable (it needs the time of receipt) and is a live check only.
+- **A stop refused while untrusted** is not in the log. A RECOVER must be issued later than it (`RECOVERY_PREDATES_STOP`), so the RECOVER's own `issuedAt` becomes the floor. This replaces the in-memory floor described in 5.1.
+
+**Revocation: the rotation boundary is a log entry.**
+- A key is revoked by `revoke`: signed by a `recover` key, head-bound, naming the key's fingerprint. It leaves the gateway **stopped** and raises the stop floor.
+- In a replay, the revoked key's entries before that entry are valid history; any entry by it afterwards fails the replay. The boundary cannot be moved: the revoke was signed over the head it saw, so nothing can be inserted before it or removed from before it.
+- Position before a RECOVER is not the rule and is not relied on.
+- The configuration must agree with the log. A key the configuration marks revoked with no revoke entry yet: `revocation_pending`, stopped, accepting only stop and revoke. A key the log revoked that the configuration still lists as active: `revocation_mismatch`, untrusted until the configuration is corrected.
+- A revoked key's public key stays in the key set. A key removed altogether leaves its history unverifiable (`log_unverifiable`).
+- Rotation procedure: send `revoke`; mark the key revoked in the key set; restart; send a new head-bound release.
+
+**The external anchor: truncation.**
+- **Signed entries alone cannot detect removal of the newest entries.** A log cut back to an earlier genuine prefix replays cleanly; if the removed entry was a STOP, the prefix may end RELEASED. Head binding does not help: the prefix is exactly what was once signed.
+- The anchor holds the latest log head (`seq`, `hash`) outside the gateway's files. Its `advance` must be atomic, conditional on the current value and forward by exactly one; the gateway has no way to move it back. Reset is for the anchor's administrator only.
+- The gateway reports **RELEASED only while the anchor was read within `anchorStaleMs` and equals the local head**:
+
+  | Anchor | Effective local state | Clears |
+  |---|---|---|
+  | read recently, equal to the local head | as replayed | n/a |
+  | unavailable, or last read too long ago | not readable (submissions refused) | by itself, on the next successful read that is equal |
+  | behind the local head (a write not yet confirmed) | not RELEASED | when the pending write is confirmed (`refresh`, or the next start) |
+  | ahead of the local head | `anchor_ahead`: stopped, untrusted, RECOVER blocked | files archived out of band, anchor reset by its administrator, restart, RECOVER |
+  | another hash at the same position | `anchor_fork`: the same | the same |
+
+- Entries past the anchor are pushed forward only after the replay has verified them. Residual: a validly signed, head-matching command that was never delivered could be appended by a local writer and would then be applied, which is what its signer authorized for exactly that head.
+
+**Order of persistence.** Commands are applied one at a time.
+- **stop:** stopped in memory before anything is awaited; then log, state file, anchor. No later failure can undo it, and it never waits for the anchor.
+- **release:** validate (signature, sequence, head, stop floor, and the anchor confirming the current head); log; state file; anchor write confirmed; only then RELEASED. An unconfirmed anchor write is `RELEASE_PENDING_ANCHOR`: the release is in the log and the gateway stays stopped until the anchor confirms it.
+- **recover, revoke:** as release; both end stopped.
+- **A Stop racing a Release.** A stop that arrives while a release is in flight holds the gateway stopped from that instant and is logged after the release, so the log ends stopped. A release queued behind a stop was signed over the earlier head and is refused (`HEAD_MISMATCH`).
+- A failed log or state write is `persist_failed`: stopped and untrusted until the files are read again.
+
+**Before activation (none of this is done or approved):**
+- a real anchor: the G2 ledger, with a forward-only advance function for the gateway's role and reset for the admin role only;
+- its database grants verified: the application and worker roles can call neither;
+- the gateway's own OS user and a 0700 state directory at provisioning;
+- Evoni's separate approval.
+On the dev box Postgres runs on the same host, so root there controls both the files and the anchor; on production the database is a separate host. A database owner or the admin role is outside this threat model, as in section 1.
 
 ## 6. Dispatch and Stop acknowledgement (`dispatcher`)
 
@@ -257,9 +321,9 @@ The episode worker stays stopped throughout, and receives no keys. Its re-queue 
 | `requestVerifier.js` | exact-request verification |
 | `bodyReader.js` | bounded intake and spooling |
 | `stopState.js` | effective Stop state |
-| `emergencyControl.js` | signed local stop |
+| `emergencyControl.js` | signed local stop: authenticated log replay, head binding, signed revocation, anchor (5.2) |
 | `signature.js` | Ed25519 verifier |
-| `fsStores.js` | filesystem stores (the only filesystem user) |
+| `fsStores.js` | filesystem stores (the only filesystem user); ownership, mode and link checks |
 | `outcome.js` | gateway-only outcome classification |
 | `budget.js` | accounting and authorization decision |
 | `memoryLedger.js` | reference ledger (**non-production**) |

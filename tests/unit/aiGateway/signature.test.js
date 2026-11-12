@@ -43,8 +43,18 @@ describe('emergency key sets', () => {
       { publicKeyPem: A.pem, roles: ['control'] },
       { publicKeyPem: B.pem, roles: ['control'] },
     ], { revoked: [fingerprintPem(B.pem)] });
-    expect(set.verify('p', sign(B, 'p'))).toEqual({ valid: false, revoked: true, signer: fingerprintPem(B.pem), roles: [] });
+    // roles stays empty (nothing new is accepted); historicalRoles is for replaying the log only.
+    expect(set.verify('p', sign(B, 'p'))).toEqual({ valid: false, revoked: true, signer: fingerprintPem(B.pem), roles: [], historicalRoles: ['control'] });
     expect(set.active().map((k) => k.fingerprint)).toEqual([fingerprintPem(A.pem)]);
+    expect(set.revoked()).toEqual([fingerprintPem(B.pem)]);
+  });
+
+  test('revoked() lists only keys the set still holds; a set with none revoked lists nothing', () => {
+    const none = createEd25519KeySet([{ publicKeyPem: A.pem, roles: ['control'] }]);
+    expect(none.revoked()).toEqual([]);
+    const notHeld = createEd25519KeySet([{ publicKeyPem: A.pem, roles: ['control'] }], { revoked: [fingerprintPem(B.pem)] });
+    expect(notHeld.revoked()).toEqual([]);
+    expect(notHeld.verify('p', sign(B, 'p'))).toEqual({ valid: false, signer: null, roles: [] });
   });
 
   test('a single-key verifier has the control role only unless roles are given', () => {

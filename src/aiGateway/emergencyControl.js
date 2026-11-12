@@ -1,68 +1,88 @@
 'use strict';
 
 /**
- * Local emergency Stop (M0 addendum E, with the G3 corrections E1-E4).
- * Authenticated, ordered, target-bound, audited and durable.
+ * Local emergency Stop (M0 addendum E, corrections E1-E4, and the E5 review
+ * of 2026-11-12: authenticated log, head binding, signed revocation and an
+ * external truncation anchor). Authenticated, ordered, target-bound, audited
+ * and durable. Not wired into anything.
  *
- * Interfaces (injected; no filesystem here):
- *   store:    readState() -> { exists: false } | { exists: true, data }
- *             (throws when unreadable or corrupt), writeState(data),
- *             appendLog(entry), readLog() -> entries
+ * Interfaces (injected; no filesystem and no network here):
+ *   store:    checkSecurity() -> { ok, problems }  (ownership, modes, links)
+ *             readState() -> { exists: false } | { exists: true, data }
+ *             writeState(data), appendLog(entry), readLog() -> entries
  *   verifier: verify(payloadString, signatureBase64)
- *               -> { valid, signer, roles, revoked? }
- *             active() -> [{ fingerprint, roles }]   (non-revoked keys)
+ *               -> { valid, signer, roles } | { valid: false, revoked: true,
+ *                    signer, historicalRoles }
+ *             active()  -> [{ fingerprint, roles }]   (non-revoked keys)
+ *             revoked() -> [fingerprint]               (revoked keys it holds)
+ *   anchor:   read() -> Promise<{ seq, hash }>         (throws when unavailable)
+ *             advance({ from: { seq, hash }, to: { seq, hash } })
+ *               -> Promise<{ ok: true }> | Promise<{ ok: false }>
+ *             The anchor is outside the gateway's files. advance must be
+ *             atomic, conditional (only from exactly `from`) and forward-only
+ *             (to.seq === from.seq + 1); it has no way to move back.
  *   clock:    now() -> ms
  *   targetId: this gateway's exact target id, assigned at provisioning
  *   random:   (bytes) -> Buffer   (defaults to crypto.randomBytes)
  *
  * Commands are { payload, signature }; payload is JSON
- *   { action: 'stop'|'release'|'recover', reason, target, seq, commandId,
- *     issuedAt, [challenge, floors] }
+ *   { action: 'stop'|'release'|'recover'|'revoke', reason, target, seq,
+ *     commandId, issuedAt, [head], [challenge, floors], [key] }
  *
- * Rules:
- *   E1 ordering: seq must exceed the last seq applied for the signing key
- *      (per key, persisted). commandId is recorded for audit only.
- *   E2 target: target must equal targetId exactly.
- *   E3 state: missing, corrupt, unknown-version, wrong-target or
- *      inconsistent state (or an unreadable log) means STOPPED and
- *      untrusted. stop/release are then refused; a normal release never
- *      initializes state. Only RECOVER can, and only:
- *        - signed by a key with the 'recover' role,
- *        - carrying the current single-use challenge (fresh random value,
- *          held in memory only, so it dies with the process, and expiring
- *          after limits.recoveryChallengeTtlMs),
- *        - carrying a floor for every active key that is not below any
- *          sequence this gateway still knows from its log or state.
- *      RECOVER leaves the gateway STOPPED; a newly signed release with a
- *      seq above the floor is required afterwards. A log whose hash chain
- *      is broken blocks recovery: the files must be archived out of band
- *      first (manual procedure). A gateway-writable state file and log
- *      cannot prove that no history was deleted; the floors come from the
- *      signing authority's own records for that reason.
- *   E4 keys: several active keys; revoked keys are refused; each key keeps
- *      its own sequence counter; roles separate 'control' (stop/release)
- *      from 'recover'.
- *   Cross-key ordering: per-key counters cannot order commands from
- *      different keys, so the signed issuedAt does. The gateway keeps a
- *      stop floor (persisted as stopIssuedAt): the highest issuedAt of any
- *      applied stop or RECOVER. A release is applied only when its issuedAt
- *      is strictly later than the stop floor. Time never blocks a stop: a
- *      stop with a fresh seq for its key is applied even when it is older
- *      than a release from another key, and it only ever raises the floor.
- *      A delayed stop whose seq is at or below its own key's counter is
- *      refused as SEQ_STALE (E1): that key has since signed a later command,
- *      which supersedes it. RECOVER computes the
- *      floor as the highest of its own issuedAt, the stops the log still
- *      records and verified stops refused since the state became untrusted;
- *      the floors it carries are sequence floors only and cannot lower it.
- *      Signer clocks matter here: a release signed on a clock running behind
- *      the stop signer's is refused (fail closed) and must be re-signed.
- *   Durability: stop is applied in memory first, then logged and
- *   persisted; release is logged and persisted first, then applied. A
- *   persistence failure leaves the gateway stopped and untrusted.
- *   Every applied command is appended to a hash-chained log with target,
- *   command seq, signer fingerprint and command id (recover also records
- *   the challenge id and floors).
+ * What is trusted. Only the target id and the key set (both provisioning
+ * configuration) and the anchor. The log is the record: every entry holds
+ * the original signed payload and signature, and load() derives the state by
+ * verifying and replaying it under the same rules a live command meets. The
+ * state file is a cross-check that can only restrict: if it is missing,
+ * unreadable or differs from the replay, the gateway is stopped and untrusted
+ * and the file is never rewritten except by a signed RECOVER.
+ *
+ * Rules (live and replay alike, in evaluate()):
+ *   Signature and target: an Ed25519 signature by a key in the set; target
+ *     equals targetId exactly.
+ *   E1 per-key order: seq exceeds the last seq of the signing key.
+ *   Cross-key order: a release is applied only when its issuedAt is strictly
+ *     later than the stop floor (the highest issuedAt of any stop, RECOVER
+ *     or revoke). Time never blocks a stop.
+ *   Head binding: release, recover and revoke are signed over `head`, the
+ *     hash of the entry before them. The log's hash chain is unkeyed, so
+ *     without this an entry could be cut out and the chain recomputed; with
+ *     it, a release signed after a stop cannot survive that stop's removal.
+ *     A stop carries no head, so nothing has to be read before stopping.
+ *   Roles: 'control' signs stop and release; 'recover' signs recover and
+ *     revoke.
+ *   Revocation boundary: a key is revoked by a signed, head-bound `revoke`
+ *     entry. Its earlier entries stay valid history; any entry by it after
+ *     that one fails the replay. A key the configuration marks revoked with
+ *     no revoke entry yet leaves the gateway stopped (revocation_pending)
+ *     and accepting only stop and revoke; a key the log revoked that the
+ *     configuration still lists as active is a mismatch (untrusted).
+ *   RECOVER: only when untrusted and recoverable; needs the single-use
+ *     in-memory challenge and a floor for every active key, none below what
+ *     the log proves, and an issuedAt later than any stop this process
+ *     refused while untrusted. It keeps the counters of keys that are no
+ *     longer active. It leaves the gateway STOPPED.
+ *
+ * What signatures cannot show: removal of the newest entries. A log cut back
+ * to an earlier, genuine prefix replays cleanly, and if the removed entry was
+ * a STOP the prefix may end RELEASED. Only the anchor shows that, so the
+ * gateway reports RELEASED only while the anchor was recently read and
+ * equals the local log head. Anchor unavailable or stale: not readable (fail
+ * closed) until it verifies again. Anchor ahead of the log, or on another
+ * chain: stopped and untrusted, and RECOVER is blocked until the files are
+ * archived and the anchor reset by its administrator.
+ *
+ * Order of persistence (commands are applied one at a time):
+ *   stop     in memory at once, before anything is awaited; then log, state
+ *            file, anchor. No later failure can undo it.
+ *   release  validate; log; state file; anchor confirmed; only then
+ *            RELEASED. A release whose anchor write is not confirmed stays
+ *            stopped (RELEASE_PENDING_ANCHOR) until refresh() confirms it.
+ *            A stop that arrives meanwhile holds the gateway stopped and is
+ *            logged after the release.
+ *   recover, revoke   as release; both end STOPPED.
+ * A failed log or state write leaves the gateway stopped and untrusted until
+ * load() is run again.
  */
 
 const crypto = require('crypto');
@@ -70,18 +90,24 @@ const { canonicalJson, sha256Hex } = require('./canonical');
 const { DEFAULT_LIMITS } = require('./constants');
 
 const GENESIS_HASH = '0'.repeat(64);
-const STATE_VERSION = 2;
+const STATE_VERSION = 3;
 const TARGET_ID = /^[A-Za-z0-9_.:-]{1,128}$/;
 const COMMAND_ID = /^[A-Za-z0-9_.:-]{16,128}$/;
 const FINGERPRINT = /^[0-9a-f]{16}$/;
 const HASH = /^[0-9a-f]{64}$/;
-const ACTIONS = new Set(['stop', 'release', 'recover']);
+const CHALLENGE = /^[0-9a-f]{64}$/;
+const ACTIONS = new Set(['stop', 'release', 'recover', 'revoke']);
+const HEAD_BOUND = new Set(['release', 'recover', 'revoke']);
+const ROLE_FOR = Object.freeze({ stop: 'control', release: 'control', recover: 'recover', revoke: 'recover' });
+
+const isSeq = (n) => Number.isSafeInteger(n) && n >= 0;
+const isTime = (t) => Number.isFinite(t) && t >= 0;
 
 function chainHash(prevHash, entryWithoutHash) {
   return sha256Hex(`${prevHash}\n${canonicalJson(entryWithoutHash)}`);
 }
 
-/** Verify a hash-chained log. Returns { ok: true } or { ok: false, at }. */
+/** Verify a hash-chained log's links only. Returns { ok: true } or { ok: false, at }. */
 function verifyLogChain(entries) {
   let prev = GENESIS_HASH;
   for (let i = 0; i < entries.length; i += 1) {
@@ -92,65 +118,168 @@ function verifyLogChain(entries) {
   return { ok: true };
 }
 
-const isSeq = (n) => Number.isSafeInteger(n) && n >= 0;
-const isTime = (t) => Number.isFinite(t) && t >= 0;
-
-/** Highest issuedAt of any stop or recover the log records (0 when none). */
-function knownStopFloor(entries) {
-  let floor = 0;
-  for (const e of entries) {
-    if (!e || typeof e !== 'object' || (e.action !== 'stop' && e.action !== 'recover')) continue;
-    const t = isTime(e.issuedAt) ? e.issuedAt : e.at;
-    if (isTime(t) && t > floor) floor = t;
-  }
-  return floor;
+function initialState() {
+  return {
+    initialized: false, stopped: true, since: null, reason: null, lastSeq: {}, stopFloor: 0, revoked: {},
+    head: { seq: 0, hash: GENESIS_HASH },
+  };
 }
 
-/** Highest command sequence (or recovery floor) the log records for each key. */
-function knownSequences(entries) {
-  const known = {};
-  const raise = (fp, n) => { if (FINGERPRINT.test(fp) && isSeq(n) && !(known[fp] >= n)) known[fp] = n; };
-  for (const e of entries) {
-    if (!e || typeof e !== 'object') continue;
-    raise(e.signer, e.commandSeq);
-    if (e.floors && typeof e.floors === 'object') for (const [fp, n] of Object.entries(e.floors)) raise(fp, n);
+/** Parse and shape-check a signed payload. Returns { ok, p } or { ok: false, code }. */
+function parsePayload(payload, targetId) {
+  let p;
+  try {
+    p = JSON.parse(payload);
+  } catch (err) {
+    return { ok: false, code: 'COMMAND_MALFORMED' };
   }
-  return known;
+  if (!p || typeof p !== 'object' || Array.isArray(p) || !ACTIONS.has(p.action)) return { ok: false, code: 'COMMAND_MALFORMED' };
+  if (typeof p.reason !== 'string' || p.reason.trim() === '') return { ok: false, code: 'REASON_REQUIRED' };
+  if (p.target !== targetId) return { ok: false, code: 'TARGET_MISMATCH' };
+  if (!Number.isSafeInteger(p.seq) || p.seq < 1) return { ok: false, code: 'COMMAND_MALFORMED' };
+  if (typeof p.commandId !== 'string' || !COMMAND_ID.test(p.commandId)) return { ok: false, code: 'COMMAND_MALFORMED' };
+  if (!isTime(p.issuedAt)) return { ok: false, code: 'COMMAND_MALFORMED' };
+  return { ok: true, p };
 }
 
-function validState(d) {
-  return Boolean(d && typeof d === 'object' && d.version === STATE_VERSION && typeof d.stopped === 'boolean'
-    && typeof d.target === 'string' && d.lastSeq && typeof d.lastSeq === 'object'
-    && Object.entries(d.lastSeq).every(([fp, n]) => FINGERPRINT.test(fp) && isSeq(n))
-    && d.logHead && Number.isSafeInteger(d.logHead.seq) && d.logHead.seq >= 0 && HASH.test(d.logHead.hash)
-    && isTime(d.stopIssuedAt));
+/**
+ * The ordering rules, applied to one command against a state. Pure: returns
+ * { ok: true, next } (a new state, head not yet advanced) or { ok: false, code }.
+ * Used for a live command and for every entry of a replay.
+ */
+function evaluate(state, p, signer, roles) {
+  if (state.revoked[signer] !== undefined) return { ok: false, code: 'KEY_REVOKED' };
+  if (!roles.includes(ROLE_FOR[p.action])) return { ok: false, code: 'KEY_NOT_AUTHORIZED' };
+  if (!state.initialized && p.action !== 'recover') return { ok: false, code: 'RECOVERY_REQUIRED' };
+  if (HEAD_BOUND.has(p.action) && p.head !== state.head.hash) return { ok: false, code: 'HEAD_MISMATCH' };
+  if (p.seq <= (state.lastSeq[signer] || 0)) return { ok: false, code: 'SEQ_STALE' };
+
+  const next = { ...state, lastSeq: { ...state.lastSeq }, revoked: { ...state.revoked } };
+  if (p.action === 'release') {
+    if (!(p.issuedAt > state.stopFloor)) return { ok: false, code: 'RELEASE_PREDATES_STOP' };
+    Object.assign(next, { stopped: false, since: null, reason: null });
+    next.lastSeq[signer] = p.seq;
+    return { ok: true, next };
+  }
+  if (p.action === 'recover') {
+    if (!p.floors || typeof p.floors !== 'object' || Array.isArray(p.floors)) return { ok: false, code: 'FLOORS_INCOMPLETE' };
+    for (const [fp, n] of Object.entries(p.floors)) {
+      if (!FINGERPRINT.test(fp) || state.revoked[fp] !== undefined) return { ok: false, code: 'FLOORS_INVALID' };
+      if (!isSeq(n)) return { ok: false, code: 'FLOORS_INCOMPLETE' };
+      if (n < (state.lastSeq[fp] || 0)) return { ok: false, code: 'FLOOR_TOO_LOW' };
+    }
+    // Counters of keys the floors do not name (no longer active) are kept.
+    Object.assign(next.lastSeq, p.floors);
+    next.lastSeq[signer] = Math.max(next.lastSeq[signer] || 0, p.seq);
+    next.initialized = true;
+  } else if (p.action === 'revoke') {
+    if (typeof p.key !== 'string' || !FINGERPRINT.test(p.key) || state.revoked[p.key] !== undefined) return { ok: false, code: 'REVOKE_INVALID' };
+    next.revoked[p.key] = state.head.seq + 1;
+    next.lastSeq[signer] = p.seq;
+  } else {
+    next.lastSeq[signer] = p.seq;
+  }
+  // stop, recover and revoke all end stopped and raise the stop floor.
+  next.stopped = true;
+  next.reason = p.reason;
+  next.stopFloor = Math.max(state.stopFloor, p.issuedAt);
+  return { ok: true, next };
+}
+
+/** Who signed a payload, for a live command (active keys) or a replay (revoked keys too). */
+function signerOf(verifier, payload, signature, { historical = false } = {}) {
+  const v = verifier.verify(payload, signature) || {};
+  if (!FINGERPRINT.test(v.signer || '')) return { ok: false, code: 'SIGNATURE_INVALID' };
+  if (v.valid === true) return { ok: true, signer: v.signer, roles: Array.isArray(v.roles) ? v.roles : [] };
+  if (v.revoked === true) {
+    if (!historical) return { ok: false, code: 'KEY_REVOKED' };
+    return { ok: true, signer: v.signer, roles: Array.isArray(v.historicalRoles) ? v.historicalRoles : [] };
+  }
+  return { ok: false, code: 'SIGNATURE_INVALID' };
+}
+
+/**
+ * Verify and replay a log: chain links, each entry's signature, and the same
+ * ordering rules as a live command. Returns { ok: true, state, hashes } or
+ * { ok: false, at, code }. Nothing but the verifier and targetId is trusted.
+ */
+function replayLog(entries, { verifier, targetId }) {
+  if (!Array.isArray(entries)) return { ok: false, at: 0, code: 'LOG_NOT_A_LIST' };
+  let state = initialState();
+  const hashes = [];
+  for (let i = 0; i < entries.length; i += 1) {
+    const e = entries[i];
+    const fail = (code) => ({ ok: false, at: i, code });
+    if (!e || typeof e !== 'object' || Array.isArray(e)) return fail('ENTRY_MALFORMED');
+    const { hash, ...rest } = e;
+    if (rest.seq !== i + 1 || rest.prevHash !== state.head.hash || !HASH.test(hash || '') || hash !== chainHash(state.head.hash, rest)) return fail('CHAIN_BROKEN');
+    if (Object.keys(rest).sort().join() !== 'at,payload,prevHash,seq,signature') return fail('ENTRY_MALFORMED');
+    if (typeof rest.payload !== 'string' || typeof rest.signature !== 'string' || !isTime(rest.at)) return fail('ENTRY_MALFORMED');
+    const sig = signerOf(verifier, rest.payload, rest.signature, { historical: true });
+    if (!sig.ok) return fail(sig.code);
+    const parsed = parsePayload(rest.payload, targetId);
+    if (!parsed.ok) return fail(parsed.code);
+    const r = evaluate(state, parsed.p, sig.signer, sig.roles);
+    if (!r.ok) return fail(r.code);
+    state = { ...r.next, since: r.next.stopped ? rest.at : null, head: { seq: rest.seq, hash } };
+    hashes.push(hash);
+  }
+  return { ok: true, state, hashes };
+}
+
+/** The state file's contents for a state: what load() compares the file with. */
+function stateDocument(state, targetId) {
+  return {
+    version: STATE_VERSION, target: targetId, stopped: state.stopped, since: state.since, reason: state.reason,
+    lastSeq: { ...state.lastSeq }, stopIssuedAt: state.stopFloor, revoked: { ...state.revoked }, logHead: { ...state.head },
+  };
 }
 
 function createEmergencyControl({
-  store, verifier, clock, targetId, random = (n) => crypto.randomBytes(n), limits = DEFAULT_LIMITS,
+  store, verifier, anchor, clock, targetId, random = (n) => crypto.randomBytes(n), limits = DEFAULT_LIMITS,
 } = {}) {
   if (!store || !verifier || !clock) throw new Error('aiGateway: emergency control needs store, verifier and clock');
-  if (typeof verifier.verify !== 'function' || typeof verifier.active !== 'function') {
-    throw new Error('aiGateway: emergency verifier must verify signatures and list its active keys');
+  if (typeof store.checkSecurity !== 'function') throw new Error('aiGateway: emergency store must check its own ownership and permissions');
+  if (typeof verifier.verify !== 'function' || typeof verifier.active !== 'function' || typeof verifier.revoked !== 'function') {
+    throw new Error('aiGateway: emergency verifier must verify signatures and list its active and revoked keys');
+  }
+  if (!anchor || typeof anchor.read !== 'function' || typeof anchor.advance !== 'function') {
+    throw new Error('aiGateway: emergency control needs an external truncation anchor (read, advance)');
   }
   if (typeof targetId !== 'string' || !TARGET_ID.test(targetId)) {
     throw new Error('aiGateway: emergency control needs the explicit target id assigned at provisioning');
   }
 
   const mem = {
-    loaded: false, trusted: false, recoverable: false, condition: 'not_loaded', stopped: true,
-    since: null, reason: null, lastSeq: {}, known: {}, stopFloor: 0, logHead: { seq: 0, hash: GENESIS_HASH },
-    challenge: null, loadedAt: null,
+    loaded: false, trusted: false, recoverable: false, condition: 'not_loaded',
+    state: initialState(), hashes: [],
+    // Stops received but not yet in the log: each holds the gateway stopped.
+    urgentStops: 0,
+    // Raised by a stop refused while untrusted; this process only, restricts only.
+    volatileStopFloor: 0,
+    pendingRevocations: new Set(),
+    anchor: { status: 'unread', seq: null, hash: null, checkedAt: null },
+    challenge: null,
   };
 
+  const anchorFresh = () => mem.anchor.status === 'verified' && mem.anchor.seq === mem.state.head.seq
+    && mem.anchor.hash === mem.state.head.hash && isTime(mem.anchor.checkedAt)
+    && clock.now() - mem.anchor.checkedAt <= limits.anchorStaleMs && clock.now() >= mem.anchor.checkedAt - limits.anchorStaleMs;
+
   function snapshot() {
+    const anchored = anchorFresh();
+    const stopped = !mem.trusted || mem.state.stopped || mem.urgentStops > 0 || mem.pendingRevocations.size > 0 || !anchored;
     return Object.freeze({
-      readable: mem.trusted,
-      stopped: mem.stopped,
+      // Readable only while the log is trusted and the anchor confirms its head.
+      readable: mem.trusted && anchored,
+      stopped,
       condition: mem.condition,
-      since: mem.since,
-      reason: mem.reason,
-      readAt: mem.loadedAt,
+      since: mem.state.since,
+      reason: mem.trusted ? mem.state.reason : mem.condition,
+      readAt: mem.anchor.checkedAt,
+      head: Object.freeze({ ...mem.state.head }),
+      anchor: mem.anchor.status,
+      revocationPending: Object.freeze([...mem.pendingRevocations].sort()),
       recovery: mem.trusted ? null : Object.freeze({
         possible: mem.recoverable,
         challengeId: mem.challenge ? mem.challenge.id : null,
@@ -166,63 +295,167 @@ function createEmergencyControl({
     mem.challenge = { value, id: sha256Hex(value).slice(0, 16), expiresAt: clock.now() + limits.recoveryChallengeTtlMs };
   }
 
-  function untrusted(condition, { head, known = {}, stopFloor = 0, recoverable = true } = {}) {
-    Object.assign(mem, {
-      loaded: true, trusted: false, recoverable, condition, stopped: true, since: null, reason: condition,
-      lastSeq: {}, known, stopFloor, logHead: head || mem.logHead, challenge: null, loadedAt: clock.now(),
-    });
+  function untrusted(condition, { recoverable = true } = {}) {
+    Object.assign(mem, { loaded: true, trusted: false, recoverable, condition, challenge: null });
     if (recoverable) issueChallenge();
     console.error(`[aiGateway] emergency state untrusted (${condition}); treating as stopped`);
-    return snapshot();
   }
 
-  function load() {
+  /**
+   * Bring the anchor to the local head and record the result. Entries past
+   * the anchor were verified by the replay (or just applied), so pushing them
+   * forward, one linked step at a time, is safe. Returns true when the anchor
+   * now equals the local head.
+   */
+  async function anchorSync() {
+    const head = mem.state.head;
+    let a;
+    try {
+      a = await anchor.read();
+    } catch (err) {
+      mem.anchor = { ...mem.anchor, status: 'unavailable' };
+      return false;
+    }
+    if (!a || !isSeq(a.seq) || !HASH.test(a.hash || '')) {
+      mem.anchor = { ...mem.anchor, status: 'unavailable' };
+      return false;
+    }
+    let cur = { seq: a.seq, hash: a.hash };
+    if (cur.seq > head.seq) {
+      mem.anchor = { ...cur, status: 'ahead', checkedAt: clock.now() };
+      untrusted('anchor_ahead', { recoverable: false });
+      return false;
+    }
+    if ((cur.seq === 0 ? GENESIS_HASH : mem.hashes[cur.seq - 1]) !== cur.hash) {
+      mem.anchor = { ...cur, status: 'fork', checkedAt: clock.now() };
+      untrusted('anchor_fork', { recoverable: false });
+      return false;
+    }
+    while (cur.seq < head.seq) {
+      const to = { seq: cur.seq + 1, hash: mem.hashes[cur.seq] };
+      let r;
+      try {
+        r = await anchor.advance({ from: { ...cur }, to: { ...to } });
+      } catch (err) {
+        r = null;
+      }
+      if (!r || r.ok !== true) {
+        mem.anchor = { ...cur, status: 'behind', checkedAt: mem.anchor.checkedAt };
+        return false;
+      }
+      cur = to;
+    }
+    // The head may have moved while this was awaited only if a command was
+    // applied, and commands and syncs share one queue; checked all the same.
+    if (cur.seq !== mem.state.head.seq || cur.hash !== mem.state.head.hash) {
+      mem.anchor = { ...cur, status: 'behind', checkedAt: mem.anchor.checkedAt };
+      return false;
+    }
+    mem.anchor = { ...cur, status: 'verified', checkedAt: clock.now() };
+    return true;
+  }
+
+  // One command (or load, or refresh) at a time.
+  let tail = Promise.resolve();
+  function serial(fn) {
+    const run = tail.then(fn, fn);
+    tail = run.then(() => {}, () => {});
+    return run;
+  }
+
+  async function loadNow() {
+    Object.assign(mem, {
+      loaded: true, trusted: false, recoverable: false, condition: 'loading', state: initialState(), hashes: [],
+      pendingRevocations: new Set(), anchor: { status: 'unread', seq: null, hash: null, checkedAt: null }, challenge: null,
+    });
+    let sec;
+    try {
+      sec = store.checkSecurity();
+    } catch (err) {
+      sec = { ok: false };
+    }
+    if (!sec || sec.ok !== true) {
+      untrusted('store_insecure', { recoverable: false });
+      return snapshot();
+    }
     let log;
     try {
       log = store.readLog();
       if (!Array.isArray(log)) throw new TypeError('log is not a list');
     } catch (err) {
-      return untrusted('log_unreadable', { recoverable: false });
+      untrusted('log_unreadable', { recoverable: false });
+      return snapshot();
     }
-    if (!verifyLogChain(log).ok) return untrusted('log_corrupt', { recoverable: false });
-    const last = log[log.length - 1];
-    const head = last ? { seq: last.seq, hash: last.hash } : { seq: 0, hash: GENESIS_HASH };
-    const known = knownSequences(log);
-    const logStopFloor = knownStopFloor(log);
-    const fromLog = { head, known, stopFloor: logStopFloor };
+    const replay = replayLog(log, { verifier, targetId });
+    if (!replay.ok) {
+      console.error(`[aiGateway] emergency log rejected at entry ${replay.at + 1}: ${replay.code}`);
+      untrusted(replay.code === 'CHAIN_BROKEN' || replay.code === 'ENTRY_MALFORMED' ? 'log_corrupt' : 'log_unverifiable', { recoverable: false });
+      return snapshot();
+    }
+    mem.state = replay.state;
+    mem.hashes = replay.hashes;
+
+    // Revocations: the log is the boundary; the configuration must agree.
+    const configRevoked = new Set(verifier.revoked());
+    for (const fp of Object.keys(mem.state.revoked)) {
+      if (!configRevoked.has(fp)) {
+        untrusted('revocation_mismatch', { recoverable: false });
+        return snapshot();
+      }
+    }
+    for (const fp of configRevoked) if (mem.state.revoked[fp] === undefined) mem.pendingRevocations.add(fp);
+
+    // The anchor, before the state file: a truncated log blocks recovery too.
+    await anchorSync();
+    if (mem.condition === 'anchor_ahead' || mem.condition === 'anchor_fork') return snapshot();
 
     let s;
     try {
       s = store.readState();
     } catch (err) {
-      return untrusted('state_corrupt', fromLog);
+      untrusted('state_corrupt');
+      return snapshot();
     }
-    if (!s || s.exists !== true) return untrusted(log.length ? 'state_lost' : 'state_missing', fromLog);
+    if (!s || s.exists !== true) {
+      untrusted(log.length ? 'state_lost' : 'state_missing');
+      return snapshot();
+    }
     const d = s.data;
-    if (!d || d.version !== STATE_VERSION) return untrusted('state_unknown_version', fromLog);
-    if (!validState(d)) return untrusted('state_corrupt', fromLog);
-    // Floors must also respect whatever the (untrusted) state still claims.
-    const knownWithState = { ...known };
-    for (const [fp, n] of Object.entries(d.lastSeq)) if (!(knownWithState[fp] >= n)) knownWithState[fp] = n;
-    const withState = { head, known: knownWithState, stopFloor: Math.max(logStopFloor, d.stopIssuedAt) };
-    if (d.target !== targetId) return untrusted('state_target_mismatch', withState);
-    if (d.logHead.seq !== head.seq || d.logHead.hash !== head.hash) return untrusted('state_inconsistent', withState);
-    for (const [fp, n] of Object.entries(known)) {
-      if (!(d.lastSeq[fp] >= n)) return untrusted('state_inconsistent', withState);
+    if (!d || typeof d !== 'object' || d.version !== STATE_VERSION) {
+      untrusted('state_unknown_version');
+      return snapshot();
     }
-    if (d.stopIssuedAt < logStopFloor) return untrusted('state_inconsistent', withState);
-    Object.assign(mem, {
-      loaded: true, trusted: true, recoverable: false, condition: 'ok', stopped: d.stopped,
-      since: d.since || null, reason: d.reason || null, lastSeq: { ...d.lastSeq }, known: knownWithState,
-      stopFloor: d.stopIssuedAt, logHead: head, challenge: null, loadedAt: clock.now(),
-    });
+    if (d.target !== targetId) {
+      untrusted('state_target_mismatch');
+      return snapshot();
+    }
+    let same = false;
+    try {
+      same = canonicalJson(d) === canonicalJson(stateDocument(mem.state, targetId));
+    } catch (err) {
+      same = false;
+    }
+    if (!same || !mem.state.initialized) {
+      untrusted('state_inconsistent');
+      return snapshot();
+    }
+    Object.assign(mem, { trusted: true, recoverable: false, condition: mem.pendingRevocations.size ? 'revocation_pending' : 'ok', challenge: null });
     return snapshot();
   }
 
-  /** Refresh the read timestamp of an already-loaded state (the state poll). */
-  function touch() {
-    mem.loadedAt = clock.now();
-    return snapshot();
+  /** Read the files and the anchor and decide what is trusted. Always resolves to a snapshot. */
+  function load() {
+    return serial(loadNow);
+  }
+
+  /** Re-read the anchor (the state poll). Confirms a pending anchor write when it can. */
+  function refresh() {
+    return serial(async () => {
+      if (!mem.loaded) return snapshot();
+      if (mem.condition === 'anchor_ahead' || mem.condition === 'anchor_fork') return snapshot();
+      await anchorSync();
+      return snapshot();
+    });
   }
 
   /** The current recovery challenge, issuing a fresh one when it expired; null when not recoverable. */
@@ -231,147 +464,173 @@ function createEmergencyControl({
     if (!mem.challenge || clock.now() > mem.challenge.expiresAt) issueChallenge();
     return Object.freeze({
       challenge: mem.challenge.value, challengeId: mem.challenge.id, expiresAt: mem.challenge.expiresAt,
-      target: targetId, condition: mem.condition, knownFloors: Object.freeze({ ...mem.known }), stopFloor: mem.stopFloor,
-    });
-  }
-
-  function appendAudit(fields) {
-    const rest = { seq: mem.logHead.seq + 1, prevHash: mem.logHead.hash, ...fields };
-    const hash = chainHash(mem.logHead.hash, rest);
-    store.appendLog({ ...rest, hash });
-    mem.logHead = { seq: rest.seq, hash };
-  }
-
-  function persist() {
-    store.writeState({
-      version: STATE_VERSION, target: targetId, stopped: mem.stopped, since: mem.since, reason: mem.reason,
-      lastSeq: { ...mem.lastSeq }, stopIssuedAt: mem.stopFloor, logHead: { ...mem.logHead },
+      target: targetId, condition: mem.condition, head: mem.state.head.hash,
+      knownFloors: Object.freeze({ ...mem.state.lastSeq }), stopFloor: Math.max(mem.state.stopFloor, mem.volatileStopFloor),
     });
   }
 
   function persistenceFailed(err) {
     console.error(`[aiGateway] emergency state not persisted: ${err && err.name ? err.name : 'Error'}`);
-    // The disk may now disagree with memory: stay stopped and require recovery.
-    mem.trusted = false;
-    mem.recoverable = true;
-    mem.condition = 'persist_failed';
-    mem.stopped = true;
-    issueChallenge();
+    // The disk may now disagree with memory. Stopped until load() reads it again.
+    Object.assign(mem, { trusted: false, recoverable: false, condition: 'persist_failed', challenge: null });
   }
 
-  function recover(p, sig, now) {
+  /**
+   * Log, then the state file. The log entry is the commitment: once it is
+   * appended the in-memory state follows it, whatever happens to the state
+   * file. Throws on failure, after marking the gateway untrusted.
+   */
+  function commit(command, next, now) {
+    const rest = { seq: mem.state.head.seq + 1, prevHash: mem.state.head.hash, at: now, payload: command.payload, signature: command.signature };
+    const hash = chainHash(mem.state.head.hash, rest);
+    try {
+      store.appendLog({ ...rest, hash });
+    } catch (err) {
+      persistenceFailed(err);
+      throw err;
+    }
+    mem.state = { ...next, since: next.stopped ? now : null, head: { seq: rest.seq, hash } };
+    mem.hashes.push(hash);
+    try {
+      store.writeState(stateDocument(mem.state, targetId));
+    } catch (err) {
+      persistenceFailed(err);
+      throw err;
+    }
+  }
+
+  function liveState() {
+    // A live command also respects stops this process refused while untrusted.
+    return { ...mem.state, stopFloor: Math.max(mem.state.stopFloor, mem.volatileStopFloor) };
+  }
+
+  async function applyStop(command, p, sig, now) {
+    try {
+      if (!mem.trusted) {
+        // Already stopped. A later RECOVER must not open the way for a release older than this stop.
+        mem.volatileStopFloor = Math.max(mem.volatileStopFloor, p.issuedAt);
+        return { ok: false, code: mem.recoverable ? 'RECOVERY_REQUIRED' : 'RECOVERY_BLOCKED' };
+      }
+      const r = evaluate(mem.state, p, sig.signer, sig.roles);
+      if (!r.ok) return { ok: false, code: r.code };
+      try {
+        commit(command, r.next, now);
+      } catch (err) {
+        return { ok: true, stopped: true, persisted: false, anchored: false };
+      }
+      const anchored = await anchorSync();
+      return { ok: true, stopped: true, persisted: true, anchored };
+    } finally {
+      mem.urgentStops -= 1;
+    }
+  }
+
+  async function applyRelease(command, p, sig, now) {
+    if (!mem.trusted) return { ok: false, code: mem.recoverable ? 'RECOVERY_REQUIRED' : 'RECOVERY_BLOCKED' };
+    if (mem.pendingRevocations.size > 0) return { ok: false, code: 'REVOCATION_PENDING' };
+    const r = evaluate(liveState(), p, sig.signer, sig.roles);
+    if (!r.ok) return { ok: false, code: r.code };
+    // The anchor must confirm the head this release was signed over, now.
+    if (!(await anchorSync())) return { ok: false, code: mem.trusted ? 'ANCHOR_NOT_VERIFIED' : 'RECOVERY_BLOCKED' };
+    try {
+      commit(command, { ...r.next, stopFloor: mem.state.stopFloor }, now);
+    } catch (err) {
+      return { ok: false, code: 'RELEASE_NOT_PERSISTED' };
+    }
+    if (!(await anchorSync())) return { ok: false, code: 'RELEASE_PENDING_ANCHOR', persisted: true, anchored: false };
+    const view = snapshot();
+    return { ok: true, stopped: view.stopped, persisted: true, anchored: true };
+  }
+
+  async function applyRecover(command, p, sig, now) {
     if (!sig.roles.includes('recover')) return { ok: false, code: 'KEY_NOT_AUTHORIZED' };
     if (mem.trusted) return { ok: false, code: 'RECOVERY_NOT_NEEDED' };
     if (!mem.recoverable) return { ok: false, code: 'RECOVERY_BLOCKED' };
-    if (!mem.challenge || typeof p.challenge !== 'string' || p.challenge.length !== mem.challenge.value.length
-      || !crypto.timingSafeEqual(Buffer.from(p.challenge), Buffer.from(mem.challenge.value))) {
+    const expected = mem.challenge ? Buffer.from(mem.challenge.value, 'utf8') : null;
+    const given = typeof p.challenge === 'string' && CHALLENGE.test(p.challenge) ? Buffer.from(p.challenge, 'utf8') : null;
+    if (!expected || !given || given.length !== expected.length || !crypto.timingSafeEqual(given, expected)) {
       return { ok: false, code: 'CHALLENGE_INVALID' };
     }
     if (now > mem.challenge.expiresAt) return { ok: false, code: 'CHALLENGE_EXPIRED' };
     if (!p.floors || typeof p.floors !== 'object' || Array.isArray(p.floors)) return { ok: false, code: 'FLOORS_INCOMPLETE' };
-    const active = verifier.active();
+    const active = verifier.active().filter((k) => mem.state.revoked[k.fingerprint] === undefined);
     const activeFps = new Set(active.map((k) => k.fingerprint));
     for (const fp of Object.keys(p.floors)) if (!activeFps.has(fp)) return { ok: false, code: 'FLOORS_INVALID' };
-    for (const { fingerprint } of active) {
-      const f = p.floors[fingerprint];
-      if (!isSeq(f)) return { ok: false, code: 'FLOORS_INCOMPLETE' };
-      if (f < (mem.known[fingerprint] || 0)) return { ok: false, code: 'FLOOR_TOO_LOW' };
-    }
-    if (p.seq <= (mem.known[sig.signer] || 0)) return { ok: false, code: 'SEQ_STALE' };
-
-    const prior = mem.condition;
-    const lastSeq = { ...p.floors };
-    lastSeq[sig.signer] = Math.max(lastSeq[sig.signer] || 0, p.seq);
+    for (const { fingerprint } of active) if (!isSeq(p.floors[fingerprint])) return { ok: false, code: 'FLOORS_INCOMPLETE' };
+    // A stop this process refused while untrusted is not in the log, so the
+    // RECOVER itself must be later than it: its issuedAt becomes the floor.
+    if (!(p.issuedAt > mem.volatileStopFloor)) return { ok: false, code: 'RECOVERY_PREDATES_STOP' };
+    const r = evaluate(mem.state, p, sig.signer, sig.roles);
+    if (!r.ok) return { ok: false, code: r.code };
+    if (!(await anchorSync())) return { ok: false, code: mem.recoverable ? 'ANCHOR_NOT_VERIFIED' : 'RECOVERY_BLOCKED' };
     const challengeId = mem.challenge.id;
-    // Computed, never supplied: the sequence floors cannot lower it.
-    const stopFloor = Math.max(mem.stopFloor, p.issuedAt);
+    mem.challenge = null; // single use, whatever happens next
     try {
-      appendAudit({
-        at: now, action: 'recover', target: targetId, commandSeq: p.seq, commandId: p.commandId, signer: sig.signer,
-        issuedAt: p.issuedAt, reason: p.reason, challengeId, floors: { ...p.floors }, priorCondition: prior,
-      });
-      Object.assign(mem, { lastSeq, stopFloor, stopped: true, since: now, reason: p.reason });
-      persist();
+      commit(command, r.next, now);
     } catch (err) {
-      persistenceFailed(err);
       return { ok: false, code: 'RECOVERY_NOT_PERSISTED' };
     }
-    Object.assign(mem, { trusted: true, recoverable: false, condition: 'ok', challenge: null, known: { ...lastSeq } });
-    return { ok: true, recovered: true, stopped: true, challengeId };
+    mem.pendingRevocations = new Set(verifier.revoked().filter((fp) => mem.state.revoked[fp] === undefined));
+    Object.assign(mem, { trusted: true, recoverable: false, condition: mem.pendingRevocations.size ? 'revocation_pending' : 'ok' });
+    const anchored = await anchorSync();
+    return { ok: true, recovered: true, stopped: true, challengeId, anchored };
   }
 
+  async function applyRevoke(command, p, sig, now) {
+    if (!mem.trusted) return { ok: false, code: mem.recoverable ? 'RECOVERY_REQUIRED' : 'RECOVERY_BLOCKED' };
+    const r = evaluate(mem.state, p, sig.signer, sig.roles);
+    if (!r.ok) return { ok: false, code: r.code };
+    const known = new Set([...verifier.active().map((k) => k.fingerprint), ...verifier.revoked()]);
+    if (!known.has(p.key)) return { ok: false, code: 'REVOKE_INVALID' };
+    if (!(await anchorSync())) return { ok: false, code: mem.trusted ? 'ANCHOR_NOT_VERIFIED' : 'RECOVERY_BLOCKED' };
+    try {
+      commit(command, r.next, now);
+    } catch (err) {
+      return { ok: false, code: 'REVOKE_NOT_PERSISTED' };
+    }
+    mem.pendingRevocations.delete(p.key);
+    if (mem.trusted) mem.condition = mem.pendingRevocations.size ? 'revocation_pending' : 'ok';
+    const anchored = await anchorSync();
+    return { ok: true, revoked: p.key, stopped: true, persisted: true, anchored };
+  }
+
+  /**
+   * Apply one signed command. Resolves to a result; never rejects. A valid
+   * stop restricts the gateway before this function returns its promise.
+   */
   function apply(command) {
-    if (!mem.loaded) return { ok: false, code: 'NOT_LOADED' };
+    const refuse = (code) => Promise.resolve({ ok: false, code });
+    if (!mem.loaded) return refuse('NOT_LOADED');
     const payload = command && command.payload;
     const signature = command && command.signature;
-    if (typeof payload !== 'string' || typeof signature !== 'string') return { ok: false, code: 'COMMAND_MALFORMED' };
-    const sig = verifier.verify(payload, signature) || {};
-    if (sig.revoked === true) return { ok: false, code: 'KEY_REVOKED' };
-    if (sig.valid !== true || !FINGERPRINT.test(sig.signer || '')) return { ok: false, code: 'SIGNATURE_INVALID' };
-    sig.roles = Array.isArray(sig.roles) ? sig.roles : [];
-    let p;
-    try {
-      p = JSON.parse(payload);
-    } catch (err) {
-      return { ok: false, code: 'COMMAND_MALFORMED' };
-    }
-    if (!p || typeof p !== 'object' || !ACTIONS.has(p.action)) return { ok: false, code: 'COMMAND_MALFORMED' };
-    if (typeof p.reason !== 'string' || p.reason.trim() === '') return { ok: false, code: 'REASON_REQUIRED' };
-    if (p.target !== targetId) return { ok: false, code: 'TARGET_MISMATCH' };
-    if (!Number.isSafeInteger(p.seq) || p.seq < 1) return { ok: false, code: 'COMMAND_MALFORMED' };
-    if (typeof p.commandId !== 'string' || !COMMAND_ID.test(p.commandId)) return { ok: false, code: 'COMMAND_MALFORMED' };
+    if (typeof payload !== 'string' || typeof signature !== 'string') return refuse('COMMAND_MALFORMED');
+    const sig = signerOf(verifier, payload, signature);
+    if (!sig.ok) return refuse(sig.code);
+    const parsed = parsePayload(payload, targetId);
+    if (!parsed.ok) return refuse(parsed.code);
+    const { p } = parsed;
     const now = clock.now();
-    if (!Number.isFinite(p.issuedAt) || Math.abs(now - p.issuedAt) > limits.emergencyClockSkewMs) return { ok: false, code: 'COMMAND_STALE' };
+    if (Math.abs(now - p.issuedAt) > limits.emergencyClockSkewMs) return refuse('COMMAND_STALE');
+    const cmd = { payload, signature };
 
-    if (p.action === 'recover') return recover(p, sig, now);
-
-    if (!sig.roles.includes('control')) return { ok: false, code: 'KEY_NOT_AUTHORIZED' };
-    if (!mem.trusted) {
-      // Already stopped; the stop is refused, but a later RECOVER must not
-      // open the way for a release older than it (this process only).
-      if (p.action === 'stop') mem.stopFloor = Math.max(mem.stopFloor, p.issuedAt);
-      return { ok: false, code: 'RECOVERY_REQUIRED' };
-    }
-    if (p.seq <= (mem.lastSeq[sig.signer] || 0)) return { ok: false, code: 'SEQ_STALE' };
-    if (p.action === 'release' && !(p.issuedAt > mem.stopFloor)) return { ok: false, code: 'RELEASE_PREDATES_STOP' };
-
-    const audit = {
-      at: now, action: p.action, target: targetId, commandSeq: p.seq, commandId: p.commandId, signer: sig.signer,
-      issuedAt: p.issuedAt, reason: p.reason,
-    };
     if (p.action === 'stop') {
-      Object.assign(mem, { stopped: true, since: now, reason: p.reason }); // restrict first
-      mem.stopFloor = Math.max(mem.stopFloor, p.issuedAt);
-      mem.lastSeq[sig.signer] = p.seq;
-      try {
-        appendAudit(audit);
-        persist();
-      } catch (err) {
-        persistenceFailed(err);
-        return { ok: true, stopped: true, persisted: false };
-      }
-      mem.known[sig.signer] = p.seq;
-      return { ok: true, stopped: true, persisted: true };
+      if (!sig.roles.includes('control')) return refuse('KEY_NOT_AUTHORIZED');
+      if (mem.state.revoked[sig.signer] !== undefined) return refuse('KEY_REVOKED');
+      // A stale replay must not hold the gateway stopped even briefly.
+      if (mem.trusted && p.seq <= (mem.state.lastSeq[sig.signer] || 0)) return refuse('SEQ_STALE');
+      mem.urgentStops += 1; // restrict first, before anything is awaited
+      return serial(() => applyStop(cmd, p, sig, clock.now())).catch(() => ({ ok: true, stopped: true, persisted: false, anchored: false }));
     }
-    // release: log and persist first, then apply.
-    const before = { stopped: mem.stopped, since: mem.since, reason: mem.reason, lastSeq: { ...mem.lastSeq } };
-    try {
-      Object.assign(mem, { stopped: false, since: null, reason: null });
-      mem.lastSeq[sig.signer] = p.seq;
-      appendAudit(audit);
-      persist();
-    } catch (err) {
-      Object.assign(mem, before);
+    const run = { release: applyRelease, recover: applyRecover, revoke: applyRevoke }[p.action];
+    return serial(() => run(cmd, p, sig, clock.now())).catch((err) => {
       persistenceFailed(err);
-      return { ok: false, code: 'RELEASE_NOT_PERSISTED' };
-    }
-    mem.known[sig.signer] = p.seq;
-    return { ok: true, stopped: false, persisted: true };
+      return { ok: false, code: 'COMMAND_FAILED' };
+    });
   }
 
-  return { load, touch, apply, recoveryChallenge, status: snapshot };
+  return { load, refresh, apply, recoveryChallenge, status: snapshot };
 }
 
 module.exports = {
-  createEmergencyControl, verifyLogChain, chainHash, knownSequences, knownStopFloor, GENESIS_HASH, STATE_VERSION,
+  createEmergencyControl, verifyLogChain, replayLog, evaluate, chainHash, stateDocument, GENESIS_HASH, STATE_VERSION,
 };

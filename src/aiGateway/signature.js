@@ -9,7 +9,9 @@
  *   'recover'  may sign RECOVER (state initialization or recovery)
  * Revoked keys are identified by fingerprint (first 16 hex characters of the
  * SHA-256 of the SPKI DER encoding). A signature by a revoked key is
- * reported as revoked and never as valid.
+ * reported as revoked and never as valid. A revoked key's public key must
+ * stay in the set: the emergency log is replayed against it, and an entry
+ * signed by a key the set no longer holds cannot be verified.
  */
 
 const crypto = require('crypto');
@@ -65,13 +67,19 @@ function createEd25519KeySet(entries, { revoked = [] } = {}) {
           ok = false;
         }
         if (!ok) continue;
-        if (revokedSet.has(k.fingerprint)) return { valid: false, revoked: true, signer: k.fingerprint, roles: [] };
+        // historicalRoles lets a log replay check what this key could sign
+        // before it was revoked; roles stays empty, so nothing new is accepted.
+        if (revokedSet.has(k.fingerprint)) return { valid: false, revoked: true, signer: k.fingerprint, roles: [], historicalRoles: [...k.roles] };
         return { valid: true, signer: k.fingerprint, roles: [...k.roles] };
       }
       return { valid: false, signer: null, roles: [] };
     },
     active() {
       return keys.filter((k) => !revokedSet.has(k.fingerprint)).map((k) => ({ fingerprint: k.fingerprint, roles: [...k.roles] }));
+    },
+    /** Fingerprints of the keys this set holds and marks revoked (their public keys stay, so history verifies). */
+    revoked() {
+      return keys.filter((k) => revokedSet.has(k.fingerprint)).map((k) => k.fingerprint);
     },
   };
 }
