@@ -30,7 +30,7 @@ const ARC = {
   id: 'arc-2', title: 'Velvet Season', tagline: 'Her own room', season_number: 2, status: 'active', current_phase: 1, current_episode: 2,
   episode_end: 24, emotional_temperature: 'rising', narrative_debt: [], progression_log: [], phases: PHASES,
 };
-// Slots 1–5 done; 6–8 of Part 1 still open; the rest empty.
+// Slots 1–5 done; 6–8 of Phase 1 still open; the rest empty.
 const DONE_UPTO = 5;
 const slot = (n, doneUpto = DONE_UPTO) => ({
   id: `slot-${n}`, slot_number: n, phase: n <= 8 ? 1 : n <= 16 ? 2 : 3, label: `S2 · E${n}`,
@@ -154,7 +154,7 @@ describe('Advancing', () => {
     });
     renderSeason();
     const bar = await screen.findByTestId('season-advance-open');
-    expect(bar.textContent).toMatch(/Part 1: Doors · 5 of 8 slots done/);
+    expect(bar.textContent).toMatch(/Phase 1: Doors · 5 of 8 slots done/);
     expect(screen.queryByTestId('season-phase-boundary')).toBeNull();
     fireEvent.click(within(bar).getByTestId('season-advance-open-btn'));
     expect(within(bar).getByTestId('season-advance-open-btn').textContent).toBe('Checking...');
@@ -162,7 +162,7 @@ describe('Advancing', () => {
     const confirm = await within(bar).findByTestId('season-phase-confirm');
     expect(within(confirm).getByText('Advance to Phase 2: Rooms?')).toBeTruthy();
     expect(within(confirm).getByTestId('season-confirm-open-slots').textContent)
-      .toBe('3 slots stay open: E6, E7, E8. They stay in Part 1 and can still be filled.');
+      .toBe('3 slots stay open: E6, E7, E8. They stay in Phase 1 and can still be filled.');
     expect(callsTo(api.post, '/api/v1/world/show-1/arc/advance/confirm')).toBe(0);
     fireEvent.click(within(confirm).getByText('Confirm: advance with open slots'));
     await waitFor(() => expect(api.post).toHaveBeenCalledWith('/api/v1/world/show-1/arc/advance/confirm'));
@@ -195,7 +195,7 @@ describe('Advancing', () => {
     state.roadmap = roadmapFor({ doneUpto: 1 });
     renderSeason();
     const bar = await screen.findByTestId('season-advance-open');
-    expect(bar.textContent).toMatch(/Part 1: Doors · 1 of 8 slots done/);
+    expect(bar.textContent).toMatch(/Phase 1: Doors · 1 of 8 slots done/);
     expect(within(bar).getByTestId('season-advance-open-btn').textContent).toBe('Advance with 7 open slots');
   });
 

@@ -19,7 +19,7 @@ function roadmap(slots) {
     phases: [1, 2, 3].map((p) => ({ phase: p, title: ['Foundation', 'Ascension', 'Legacy'][p - 1], slots: slots.filter((s) => s.phase === p) })),
   };
 }
-// Slot 1 has an episode, 2 an event needing setup, 3 empty; Part 2: 4 empty, 5 an event, 6 empty.
+// Slot 1 has an episode, 2 an event needing setup, 3 empty; Phase 2: 4 empty, 5 an event, 6 empty.
 const ROADMAP = roadmap([
   slot(1, { episode: { id: 'ep-1', title: 'One' }, locked: true, state: 'in_production' }),
   slot(2, { event: { id: 'ev-2', name: 'Gala' }, state: 'event_ready' }),
@@ -85,9 +85,9 @@ describe('attentionItems', () => {
     expect(items[0]).toMatchObject({ tone: 'overdue', link: { href: '/shows/show-1/world?tab=release' } });
     expect(items[0].title).toMatch(/^Episode 1 was due Sun, Nov 1 · 10:00 AM and is not released yet\./);
     expect(items[1].title).toBe('Episode 2 releases in 3 days.');
-    expect(items.find((i) => i.key === 'slots-1')).toMatchObject({ title: 'Part 1 · Foundation: 1 slot with no event yet.', link: { tab: 'roadmap', extra: { slot: 3 } } });
+    expect(items.find((i) => i.key === 'slots-1')).toMatchObject({ title: 'Phase 1 · Foundation: 1 slot with no event yet.', link: { tab: 'roadmap', extra: { slot: 3 } } });
     expect(items.find((i) => i.key === 'event-ev-2').link).toEqual({ href: '/shows/show-1/events/ev-2' });
-    expect(items.find((i) => i.key === 'gap-2').title).toBe('Part 2 · Ascension: nothing moves Save coins, Earn trust.');
+    expect(items.find((i) => i.key === 'gap-2').title).toBe('Phase 2 · Ascension: nothing moves Save coins, Earn trust.');
     expect(items.find((i) => i.key === 'held-o2').link).toEqual({ tab: 'opportunities' });
   });
 

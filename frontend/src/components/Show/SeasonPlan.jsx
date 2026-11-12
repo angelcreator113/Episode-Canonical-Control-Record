@@ -505,7 +505,8 @@ export function SlotPanel({ slot, showId, available, busy, episode, event, onPen
       )}
 
       <dl className="wa-arc-facts">
-        <div><dt>Event</dt><dd>{slot.event?.name || 'None pencilled'}</dd></div>
+        {/* A started slot with no event linked to it has an event (the episode's); "None pencilled" is for a slot nothing has started in. */}
+        <div><dt>Event</dt><dd data-testid={`season-slot-event-${slot.slot_number}`}>{slot.event?.name || (slot.episode ? 'Not linked to this slot' : 'None pencilled')}</dd></div>
         {deal && <div><dt>Deal{deal.label ? ` · ${deal.label}` : ''}</dt><dd>{deal.pays}</dd></div>}
       </dl>
 
@@ -541,9 +542,19 @@ export function SlotPanel({ slot, showId, available, busy, episode, event, onPen
       {children}
       {error && <p className="wa-season-inline-error" role="alert" data-testid="season-slot-error">{error}</p>}
       {slot.episode ? (
-        <Link className="wa-arc-primary" to={`/episodes/${slot.episode.id}`}>
-          {slot.state === 'done' ? 'Open episode' : 'Continue episode'}
-        </Link>
+        <>
+          <Link className="wa-arc-primary" to={`/episodes/${slot.episode.id}`}>
+            {slot.state === 'done' ? 'Open episode' : 'Continue episode'}
+          </Link>
+          {/* A started slot keeps the way to its event package. When the event is not linked to the slot, it says exactly that: the episode has its events (2026-11-12). */}
+          {slot.event ? (
+            <Link className="wa-arc-secondary" to={packageHref(showId, slot.event.id, { kind: 'roadmap', slot: slot.slot_number })} data-testid={`season-slot-package-${slot.slot_number}`}>Open the event package</Link>
+          ) : (
+            <p className="szn-muted" data-testid={`season-slot-no-event-${slot.slot_number}`}>
+              Event not linked to this season slot. <Link to={`/episodes/${slot.episode.id}?tab=overview`}>View the episode's events.</Link>
+            </p>
+          )}
+        </>
       ) : slot.event ? (
         <Link className="wa-arc-primary" to={packageHref(showId, slot.event.id, { kind: 'roadmap', slot: slot.slot_number })}>Open the event package</Link>
       ) : null}
@@ -571,7 +582,7 @@ export function AdvanceConfirm({ warning, advancing, onConfirm, onCancel, S }) {
       {open.length > 0 && (
         <p className="wa-arc-confirm-line" data-testid="season-confirm-open-slots">
           {open.length} {open.length === 1 ? 'slot stays' : 'slots stay'} open: {open.map((sl) => `E${sl.slot_number}`).join(', ')}.
-          {' '}{final ? 'The season completes with them unfilled.' : `They stay in Part ${warning.current_phase?.phase ?? ''} and can still be filled.`}
+          {' '}{final ? 'The season completes with them unfilled.' : `They stay in Phase ${warning.current_phase?.phase ?? ''} and can still be filled.`}
         </p>
       )}
       {unmet.length > 0 && (
@@ -750,7 +761,7 @@ export function AdvanceBar({ roadmap, S, onAdvance, advancing, advanceWarning, o
       {!roadmap.phase_boundary && currentPart && openInPart.length > 0 && doneInPart > 0 && onAdvance && (
         <div className="wa-arc-open-advance" data-testid="season-advance-open">
           <p className="wa-arc-open-advance-text">
-            Part {currentPart.phase}: {currentPart.title} · {doneInPart} of {currentPart.slots.length} slots done
+            Phase {currentPart.phase}: {currentPart.title} · {doneInPart} of {currentPart.slots.length} slots done
           </p>
           {advanceWarning ? (
             <AdvanceConfirm warning={advanceWarning} advancing={advancing} onConfirm={onConfirmAdvance} onCancel={onCancelAdvance} S={S} />

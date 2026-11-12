@@ -96,8 +96,10 @@ function Where() {
   return <span data-testid="where">{loc.pathname}{loc.search}</span>;
 }
 function renderPage(search = '') {
+  // These tests are about a named tab. With no ?tab= the page picks its own default (SeasonPage.defaultTab.test.jsx), so the Overview is named here.
+  const at = /[?&]tab=/.test(search) ? search : `${search ? `${search}&` : '?'}tab=overview`;
   return render(
-    <MemoryRouter initialEntries={[`/shows/show-1/season${search}`]}>
+    <MemoryRouter initialEntries={[`/shows/show-1/season${at}`]}>
       <Routes>
         <Route path="/shows/:showId/season" element={<><SeasonPage /><Where /></>} />
         <Route path="*" element={<Where />} />
@@ -183,7 +185,7 @@ describe('The hero', () => {
     expect(within(hero).getByText('Season 1')).toBeTruthy();
     expect(within(hero).getByRole('heading', { level: 1 }).textContent).toBe('Soft Luxury Ascension');
     expect(within(hero).getByText('Styling Adventures with Lala')).toBeTruthy();
-    expect(within(hero).getAllByRole('listitem').map((li) => li.textContent)).toEqual(['24 Episodes', '3 Parts', 'Jan 5, 2026 – Mar 29, 2026']);
+    expect(within(hero).getAllByRole('listitem').map((li) => li.textContent)).toEqual(['24 Episodes', '3 Phases', 'Jan 5, 2026 – Mar 29, 2026']);
   });
 
   test('with no cover: the gradient, no picture', async () => {
@@ -192,7 +194,7 @@ describe('The hero', () => {
     const hero = await screen.findByTestId('szn-hero');
     expect(hero.className).not.toContain('has-cover');
     expect(hero.style.backgroundImage).toBe('');
-    expect(within(hero).getAllByRole('listitem').map((li) => li.textContent)).toEqual(['24 Episodes', '3 Parts']);
+    expect(within(hero).getAllByRole('listitem').map((li) => li.textContent)).toEqual(['24 Episodes', '3 Phases']);
   });
 
   test('the ⋯ menu: Use events and episodes, Draft with AI, and Start next season only once complete', async () => {
@@ -248,7 +250,7 @@ describe('The Episode Roadmap', () => {
   test('Grid: three part columns of cards, each card with its picture, E#, title and status', async () => {
     renderPage('?tab=roadmap');
     const grid = await screen.findByTestId('szn-roadmap-grid');
-    expect(within(grid).getAllByRole('region').map((r) => r.getAttribute('aria-label'))).toEqual(['Part 1: Foundation', 'Part 2: Ascension', 'Part 3: Legacy']);
+    expect(within(grid).getAllByRole('region').map((r) => r.getAttribute('aria-label'))).toEqual(['Phase 1: Foundation', 'Phase 2: Ascension', 'Phase 3: Legacy']);
     const e1 = screen.getByTestId('szn-slot-1');
     expect(e1.textContent).toContain('I Designed My Outfit');
     expect(e1.textContent).toContain('In Production');
@@ -259,7 +261,10 @@ describe('The Episode Roadmap', () => {
     expect(screen.getByTestId('szn-slot-5').querySelector('img').getAttribute('src')).toBe('https://cdn.example.com/part1.jpg');
     expect(screen.getByTestId('szn-slot-12').querySelector('img')).toBeNull();
     expect(screen.getByTestId('szn-slot-12').textContent).toContain('Open');
-    expect(screen.getByTestId('szn-add-episode-part-3').textContent).toBe(' Add Episode to Part 3');
+    // "Add Episode to Part N" is gone (2026-11-12): it opened the same new-episode page whatever the part. One Add Episode stays, in the toolbar.
+    expect(screen.queryByTestId('szn-add-episode-part-3')).toBeNull();
+    expect(screen.getAllByRole('button', { name: /Add Episode/ })).toHaveLength(1);
+    expect(screen.getByTestId('szn-add-episode').textContent).toBe(' Add Episode');
   });
 
   test('the filters: one part, one status, and the address holds them', async () => {
@@ -278,7 +283,7 @@ describe('The Episode Roadmap', () => {
     const tl = await screen.findByTestId('szn-roadmap-timeline');
     expect([...tl.querySelectorAll('[data-testid^="szn-slot-"]')].map((el) => el.dataset.testid).filter((id) => /^szn-slot-\d+$/.test(id)))
       .toEqual(['szn-slot-2', 'szn-slot-3', 'szn-slot-4', 'szn-slot-10']);
-    expect(within(tl).getByText(/Part 1 · Foundation · Jan 19, 2026/)).toBeTruthy();
+    expect(within(tl).getByText(/Phase 1 · Foundation · Jan 19, 2026/)).toBeTruthy();
     expect(screen.getByTestId('szn-view-calendar').textContent).toBe(' Calendar');
     fireEvent.click(screen.getByTestId('szn-view-grid'));
     expect(await screen.findByTestId('szn-roadmap-grid')).toBeTruthy();
@@ -362,7 +367,7 @@ describe('The Overview', () => {
     expect(card.textContent).toContain('Season 1: Soft Luxury Ascension');
     expect(card.textContent).toContain('Jan 5, 2026 – Mar 29, 2026');
     expect(within(card).getByTestId('szn-temp').textContent).toBe('Rising');
-    expect(within(card).getByTestId('szn-current-arc').textContent).toBe('Part 1: curiosity → first stumble → finding her footing');
+    expect(within(card).getByTestId('szn-current-arc').textContent).toBe('Phase 1: curiosity → first stumble → finding her footing');
     expect(card.textContent).toContain('Ep 1 of 24');
     expect(within(card).getByTestId('szn-description').textContent).toBe('From bold fits to bigger opportunities.');
   });

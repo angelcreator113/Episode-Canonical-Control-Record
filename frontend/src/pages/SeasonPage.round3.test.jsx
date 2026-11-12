@@ -89,8 +89,10 @@ function Where() {
   return <span data-testid="where">{loc.pathname}{loc.search}</span>;
 }
 function renderPage(search = '') {
+  // These tests are about a named tab. With no ?tab= the page picks its own default (SeasonPage.defaultTab.test.jsx), so the Overview is named here.
+  const at = /[?&]tab=/.test(search) ? search : `${search ? `${search}&` : '?'}tab=overview`;
   return render(
-    <MemoryRouter initialEntries={[`/shows/show-1/season${search}`]}>
+    <MemoryRouter initialEntries={[`/shows/show-1/season${at}`]}>
       <Routes>
         <Route path="/shows/:showId/season" element={<><SeasonPage /><Where /></>} />
         <Route path="*" element={<Where />} />
@@ -142,7 +144,7 @@ describe('the health line', () => {
     expect(within(screen.getByTestId('szn-hero')).getByTestId('szn-health')).toBe(line);
     // A release within three days (Needs attention's own "soon" item): Needs attention.
     await waitFor(() => expect(within(line).getByTestId('szn-health-tone').textContent).toBe('Needs attention'));
-    expect(within(line).getByTestId('szn-health-part').textContent).toMatch(/Part 1 is 2 of 3 ready/);
+    expect(within(line).getByTestId('szn-health-part').textContent).toMatch(/Phase 1 is 2 of 3 ready/);
     expect(within(line).getByTestId('szn-health-goals').textContent).toMatch(/1 goal behind/);
     expect(within(line).getByTestId('szn-health-release').textContent).toMatch(/next release \w{3}, Nov 1/);
     // The AI's "What should I do next?" spot is there, empty.

@@ -175,7 +175,7 @@ export function attentionItems({
       const first = part.slots[0];
       items.push({
         key: `slots-${part.phase}`, kind: 'slots', rank: part.current ? RANK.slots_now : RANK.slots_next, sort: first.slot_number, tone: part.current ? 'soon' : 'calm',
-        title: `Part ${part.phase}${part.title ? ` · ${part.title}` : ''}: ${plural(part.slots.length, 'slot')} with no event yet.`,
+        title: `Phase ${part.phase}${part.title ? ` · ${part.title}` : ''}: ${plural(part.slots.length, 'slot')} with no event yet.`,
         detail: list(part.slots.map((s) => `E${s.slot_number}`), 4),
         link: { tab: 'roadmap', extra: { slot: first.slot_number } },
       });
@@ -183,7 +183,7 @@ export function attentionItems({
     for (const part of goalGaps(coverage, { arc })) {
       items.push({
         key: `gap-${part.phase}`, kind: 'goals', rank: part.current ? RANK.goal_gap_now : RANK.goal_gap_later, sort: part.phase, tone: part.current ? 'soon' : 'calm',
-        title: `Part ${part.phase}${part.title ? ` · ${part.title}` : ''}: nothing moves ${list(part.gaps.map((g) => g.title), 2)}.`,
+        title: `Phase ${part.phase}${part.title ? ` · ${part.title}` : ''}: nothing moves ${list(part.gaps.map((g) => g.title), 2)}.`,
         detail: 'Find an event that moves it on the Goals tab.',
         link: { tab: 'goals' },
       });

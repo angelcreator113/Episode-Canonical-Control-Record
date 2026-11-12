@@ -30,7 +30,7 @@
  */
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ChevronRight, Plus, Pencil } from 'lucide-react';
+import { ChevronRight, ArrowRight, Pencil } from 'lucide-react';
 import SeasonProposals from './SeasonProposals';
 import SeasonKnows from './SeasonKnows';
 import SeasonTwists from './SeasonTwists';
@@ -98,7 +98,7 @@ function SeasonOverviewCard({ arc, roadmap, onEdit, api, showId, release }) {
           <dt>Status</dt>
           <dd className="szn-status">
             <span className="szn-chip is-temp" data-testid="szn-temp">{temp.label}</span>
-            {current?.emotional_arc && <span className="szn-muted" data-testid="szn-current-arc">Part {current.phase}: {current.emotional_arc}</span>}
+            {current?.emotional_arc && <span className="szn-muted" data-testid="szn-current-arc">Phase {current.phase}: {current.emotional_arc}</span>}
             <span className="szn-ep-at">Ep {at} of {total}</span>
             <SeasonBar done={at} total={total} label="Where the season is" />
           </dd>
@@ -113,8 +113,8 @@ function SeasonOverviewCard({ arc, roadmap, onEdit, api, showId, release }) {
 function SeasonPartsCard({ arc, roadmap, goTab }) {
   const phases = roadmap?.phases || [];
   return (
-    <section className="szn-card" data-testid="szn-parts-card" aria-label="Season Parts">
-      <header className="szn-card-head"><h2 className="szn-card-title">Season Parts</h2></header>
+    <section className="szn-card" data-testid="szn-parts-card" aria-label="Season Phases">
+      <header className="szn-card-head"><h2 className="szn-card-title">Season Phases</h2></header>
       <ul className="szn-part-list">
         {phases.map((p) => {
           const pic = arcPart(arc, p.phase)?.picture_url;
@@ -122,12 +122,12 @@ function SeasonPartsCard({ arc, roadmap, goTab }) {
           return (
             <li key={p.phase}>
               <button type="button" className="szn-part-row" onClick={() => goTab('roadmap', { part: p.phase, view: 'grid' })} data-testid={`szn-part-open-${p.phase}`}
-                aria-label={`Part ${p.phase}: ${p.title}, open it in the roadmap`}>
+                aria-label={`Phase ${p.phase}: ${p.title}, open it in the roadmap`}>
                 <span className={`szn-part-pic is-part-${p.phase}`} aria-hidden="true">{pic && <img src={pic} alt="" loading="lazy" />}</span>
                 <span className="szn-part-text">
-                  <span className="szn-part-name"><span className="szn-part-num">Part {p.phase}</span> {p.title}<span className="szn-part-range">E{p.episode_start} – E{p.episode_end}</span></span>
+                  <span className="szn-part-name"><span className="szn-part-num">Phase {p.phase}</span> {p.title}<span className="szn-part-range">E{p.episode_start} – E{p.episode_end}</span></span>
                   {p.tagline && <span className="szn-part-tagline">{p.tagline}</span>}
-                  <span className="szn-part-prog"><SeasonBar done={prog.done} total={prog.total} label={`Part ${p.phase} done`} /><span>{prog.done}/{prog.total}</span></span>
+                  <span className="szn-part-prog"><SeasonBar done={prog.done} total={prog.total} label={`Phase ${p.phase} done`} /><span>{prog.done}/{prog.total}</span></span>
                 </span>
                 <ChevronRight size={18} aria-hidden="true" className="szn-part-go" />
               </button>
@@ -147,7 +147,7 @@ function ChecklistCard({ plan, onPanel, goTab }) {
     goals: plan.goals.length === 0
       ? { label: 'Seed 24 goals', onClick: plan.seedGoals, busy: plan.seedingGoals }
       : { label: 'Open Goals', onClick: () => goTab('goals') },
-    threads: { label: 'Add a thread', onClick: () => goTab('story') },
+    threads: { label: 'Open Story', onClick: () => goTab('story') },
     draft: { label: 'Draft with AI', onClick: () => onPanel('draft') },
   };
   const all = steps.every((s) => s.done);
@@ -164,7 +164,7 @@ function KeyEventsCard({ roadmap, events, goTab }) {
   const rows = slotEvents(roadmap, events).slice(0, 4);
   return (
     <SummaryCard title="Key Events This Season" testId="szn-sum-events" onSeeAll={() => goTab('events')}
-      add={<button type="button" className="szn-add-row" onClick={() => goTab('events')}><Plus size={16} aria-hidden="true" /> Pencil an event</button>}>
+      add={<button type="button" className="szn-add-row" onClick={() => goTab('events')}><ArrowRight size={16} aria-hidden="true" /> Open Events</button>}>
       {rows.length === 0 ? <p className="szn-muted">No event is pencilled in yet.</p> : (
         <ul className="szn-mini-list">
           {rows.map(({ slot, event }) => (
@@ -186,7 +186,7 @@ function ThreadsSummary({ threads, goTab }) {
   const rows = threads.slice(0, 4);
   return (
     <SummaryCard title="Story Threads" testId="szn-sum-threads" onSeeAll={() => goTab('story')}
-      add={<button type="button" className="szn-add-row" onClick={() => goTab('story')} data-testid="szn-new-thread"><Plus size={16} aria-hidden="true" /> New Thread</button>}>
+      add={<button type="button" className="szn-add-row" onClick={() => goTab('story')} data-testid="szn-new-thread"><ArrowRight size={16} aria-hidden="true" /> Open Story</button>}>
       {rows.length === 0 ? <p className="szn-muted">No story threads yet.</p> : (
         <ul className="szn-mini-list">
           {rows.map((t) => {
@@ -224,7 +224,7 @@ function SecretsSummary({ api, showId, goTab, season = null }) {
   const rows = revealMatrix(plan).slice(0, 5);
   return (
     <SummaryCard title="Secrets & Reveals" testId="szn-sum-secrets" onSeeAll={() => goTab('story')}
-      add={<button type="button" className="szn-add-row" onClick={() => goTab('story')}><Plus size={16} aria-hidden="true" /> Add Reveal</button>}>
+      add={<button type="button" className="szn-add-row" onClick={() => goTab('story')}><ArrowRight size={16} aria-hidden="true" /> Open Story</button>}>
       {error && <p className="szn-error" role="alert">{error}</p>}
       {!plan && !error && <p className="szn-muted" role="status">Reading the reveal plan…</p>}
       {plan && rows.length === 0 && <p className="szn-muted">No secret is hinted at or revealed yet.</p>}
@@ -252,7 +252,7 @@ function GoalsSummary({ goals, goTab }) {
   const toGoals = () => goTab('goals');
   return (
     <SummaryCard title="Season Goals" testId="szn-sum-goals" onSeeAll={toGoals}
-      add={<button type="button" className="szn-add-row" onClick={toGoals} data-testid="szn-add-goal"><Plus size={16} aria-hidden="true" /> Add Goal</button>}>
+      add={<button type="button" className="szn-add-row" onClick={toGoals} data-testid="szn-add-goal"><ArrowRight size={16} aria-hidden="true" /> Open Goals</button>}>
       {rows.length === 0 ? <p className="szn-muted">No goals yet.</p> : (
         <ul className="szn-mini-list">
           {rows.map((g) => (

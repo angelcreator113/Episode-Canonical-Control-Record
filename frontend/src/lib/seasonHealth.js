@@ -87,7 +87,7 @@ export function seasonHealth({ arc = null, roadmap = null, coverage = null, rele
     if (slots.length) pieces.push({ key: 'part', text: done === slots.length ? (slots.length === 1 ? 'The episode is done' : `All ${slots.length} episodes done`) : `${done} of ${slots.length} episodes done` });
   } else {
     const part = partReadiness(roadmap, arc);
-    if (part) pieces.push({ key: 'part', text: `Part ${part.phase} is ${part.ready} of ${part.total} ready` });
+    if (part) pieces.push({ key: 'part', text: `Phase ${part.phase} is ${part.ready} of ${part.total} ready` });
   }
 
   if (behind) pieces.push({ key: 'goals', text: behind.length ? `${plural(behind.length, 'goal')} behind` : 'no goals behind' });

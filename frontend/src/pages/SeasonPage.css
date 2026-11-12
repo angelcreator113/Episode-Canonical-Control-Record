@@ -335,6 +335,9 @@
 .szn-slot-body { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; min-width: 0; }
 .szn-slot-num { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 800; color: var(--sp-pink-deep); }
 .szn-slot-next { padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 700; background: var(--sp-purple-fill); color: var(--sp-white); }
+/* The episode being made now: a filled gold tag, so it is not read as the purple "Next open slot". */
+.szn-slot-now { padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 700; background: var(--lala-gold-soft); color: var(--text-primary); border: 1px solid var(--lala-gold-line); white-space: nowrap; }
+.szn-slot-next { white-space: nowrap; }
 /* The slot's release day, from the show's release schedule (a preview dashed). */
 .szn-slot-num { flex-wrap: wrap; }
 .szn-slot-when { padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; color: var(--sp-ink); border: 1px solid var(--sp-line); }

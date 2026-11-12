@@ -55,7 +55,7 @@ function mockGets({ goals = [], threads = [] } = {}) {
 }
 function renderSeason() {
   return render(
-    <MemoryRouter initialEntries={['/shows/show-1/season']}>
+    <MemoryRouter initialEntries={['/shows/show-1/season?tab=overview']}>
       <Routes><Route path="/shows/:showId/season" element={<SeasonPage />} /></Routes>
     </MemoryRouter>
   );
