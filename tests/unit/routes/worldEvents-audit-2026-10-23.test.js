@@ -54,7 +54,7 @@ const mockQuery = jest.fn(async (sql, opts = {}) => {
     const epId = mockBriefs[r.eventId];
     return [epId && mockEpisodes[epId] ? [mockEpisodes[epId]] : []];
   }
-  if (/^SELECT used_in_episode_id FROM world_events WHERE id = :eventId/.test(sql)) {
+  if (/^SELECT (id, )?used_in_episode_id(, deleted_at)? FROM world_events WHERE id = :eventId/.test(sql)) {
     const ev = mockEvents[r.eventId];
     return [[{ used_in_episode_id: ev?.used_in_episode_id || null }]];
   }
@@ -101,8 +101,12 @@ jest.mock('@anthropic-ai/sdk', () => jest.fn().mockImplementation(() => ({ messa
 jest.mock('../../../src/middleware/aiRateLimiter', () => ({ aiRateLimiter: (_req, _res, next) => next() }));
 jest.mock('../../../src/middleware/auth', () => {
   const actual = jest.requireActual('../../../src/middleware/auth');
-  return { ...actual, requireAuth: (req, _res, next) => { req.user = { id: 'u1' }; next(); } };
+  return { ...actual, requireAuth: (req, _res, next) => { req.user = { id: 'u1', groups: ['ADMIN'], role: 'ADMIN' }; next(); } };
 });
+// One event is deleted through utils/worldEventSafeDelete (2026-11-12); its
+// own behaviour is in tests/integration/eventDeleteSafe.integration.test.js.
+const mockSafeDelete = jest.fn();
+jest.mock('../../../src/utils/worldEventSafeDelete', () => ({ softDeleteUnusedUnlinkedEvents: (...args) => mockSafeDelete(...args) }));
 jest.mock('../../../src/services/episodeGeneratorService', () => ({
   loadFinancialWardrobeItems: jest.fn(async () => []),
   generateEpisodeFromEvent: jest.fn(async () => { throw new Error('generator exploded'); }),
@@ -339,10 +343,29 @@ describe('generate-episode and DELETE', () => {
   });
 
   test('DELETE: a failed soft delete is a 500 and never a hard DELETE', async () => {
-    mockFail.softDelete = true;
+    mockSafeDelete.mockRejectedValueOnce(new Error('soft delete failed'));
     const res = await request(app).delete(`/api/v1/world/${SHOW}/events/ev-1`);
     expect(res.status).toBe(500);
+    expect(res.body).toEqual({ success: false, error: 'Failed to delete event' });
     expect(mockCalls.some((c) => /^DELETE FROM world_events/.test(c.sql))).toBe(false);
+  });
+
+  test('DELETE goes through the safe-delete helper, in a transaction, asking for the owned-preparation rule', async () => {
+    mockSafeDelete.mockResolvedValueOnce({ softDeleted: [{ id: 'ev-1', name: 'One' }], kept: [], notFound: [], ownedRemoved: { 'ev-1': { deliverables: 0, costs: 0 } } });
+    const res = await request(app).delete(`/api/v1/world/${SHOW}/events/ev-1`);
+    expect(res.status).toBe(200);
+    expect(mockSafeDelete).toHaveBeenCalledWith(expect.anything(), {
+      showId: SHOW, ids: ['ev-1'], allowOwnedPreparation: true, transaction: expect.objectContaining({ id: 'tx' }),
+    });
+    // The route writes nothing to world_events itself.
+    expect(mockCalls.some((c) => /^(UPDATE|DELETE FROM) world_events/.test(c.sql))).toBe(false);
+  });
+
+  test('DELETE: a lock conflict is a 409 to try again, not a 500', async () => {
+    mockSafeDelete.mockRejectedValueOnce(Object.assign(new Error('deadlock detected'), { original: { code: '40P01' } }));
+    const res = await request(app).delete(`/api/v1/world/${SHOW}/events/ev-1`);
+    expect(res.status).toBe(409);
+    expect(res.body).toMatchObject({ success: false, code: 'RETRY' });
   });
 });
 

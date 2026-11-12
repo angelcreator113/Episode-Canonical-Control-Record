@@ -65,7 +65,9 @@ function makeWorld({ stamp = 'ok' } = {}) {
     }),
     query: jest.fn(async (sql, opts = {}) => {
       const r = opts.replacements || {};
-      if (/^SELECT used_in_episode_id FROM world_events/.test(sql)) return [[{ used_in_episode_id: store.events[r.eventId]?.used_in_episode_id || null }]];
+      if (/^SELECT (id, )?used_in_episode_id(, deleted_at)? FROM world_events/.test(sql)) return [[{ used_in_episode_id: store.events[r.eventId]?.used_in_episode_id || null }]];
+      // After a stamp that updated no row: the event is still there, not deleted.
+      if (/^SELECT 1 FROM world_events WHERE id = :eventId AND deleted_at IS NULL/.test(sql)) return [[{ live: 1 }]];
       if (/MAX\(episode_number\)/.test(sql)) return [[{ next_num: 1 }]];
       if (/FROM event_deliverables/.test(sql)) return [[]];
       if (/^UPDATE world_events SET status = 'used'/.test(sql)) {

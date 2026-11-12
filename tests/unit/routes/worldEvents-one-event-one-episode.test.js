@@ -55,7 +55,7 @@ const mockQuery = jest.fn(async (sql, opts = {}) => {
   if (/SELECT \* FROM world_events WHERE show_id = :showId AND id IN/.test(sql)) {
     return [r.eventIds.map(id => mockEvents[id]).filter(Boolean)];
   }
-  if (/^SELECT used_in_episode_id FROM world_events WHERE id = :eventId/.test(sql)) {
+  if (/^SELECT (id, )?used_in_episode_id(, deleted_at)? FROM world_events WHERE id = :eventId/.test(sql)) {
     const ev = mockEvents[r.eventId];
     return [ev ? [{ used_in_episode_id: ev.used_in_episode_id }] : []];
   }
