@@ -7,7 +7,7 @@
  * admin tools), then the user avatar, which also opens Settings.
  * Props: isOpen (mobile drawer), onClose (close drawer)
  */
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { ScrollText } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
@@ -102,16 +102,22 @@ const FOOTER_ITEMS = [
 /* ─── Shows hook (uses showService with auth) ───────────────── */
 function useShows() {
   const [shows, setShows] = useState([]);
-  useEffect(() => {
+  // The list did not load: said as that, with Retry, never as "No shows yet" (Evoni, 2026-11-12).
+  const [failed, setFailed] = useState(false);
+  const load = useCallback(() => {
     showService.getAllShows()
-      .then(data => setShows((data || []).map(s => ({
-        id: s.id,
-        name: s.name || s.title || 'Untitled Show',
-        episodeCount: s.episodeCount || s.episode_count || 0,
-      }))))
-      .catch(() => setShows([]));
+      .then(data => {
+        setShows((data || []).map(s => ({
+          id: s.id,
+          name: s.name || s.title || 'Untitled Show',
+          episodeCount: s.episodeCount || s.episode_count || 0,
+        })));
+        setFailed(false);
+      })
+      .catch((err) => { console.error('[Sidebar] shows load failed:', err); setShows([]); setFailed(true); });
   }, []);
-  return shows;
+  useEffect(() => { load(); }, [load]);
+  return { shows, showsFailed: failed, retryShows: load };
 }
 
 /* ─── Sidebar ───────────────────────────────────────────────── */
@@ -119,7 +125,7 @@ function Sidebar({ isOpen, onClose }) {
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAuth();
-  const shows = useShows();
+  const { shows, showsFailed, retryShows } = useShows();
   const [showsOpen, setShowsOpen] = useState(false);
   // The active show heads the Shows list, so it stays one tap away.
   const currentShowId = activeShowId({ pathname: location.pathname, shows });
@@ -366,7 +372,12 @@ function Sidebar({ isOpen, onClose }) {
                       {/* Shows sub-list */}
                       {showsOpen && !collapsed && (
                         <div className="ps-subnav">
-                          {shows.length === 0 ? (
+                          {shows.length === 0 && showsFailed ? (
+                            <div className="ps-subnav-empty" role="alert" data-testid="sidebar-shows-failed">
+                              Couldn't load shows.{' '}
+                              <button type="button" className="ps-subnav-retry" onClick={retryShows}>Retry</button>
+                            </div>
+                          ) : shows.length === 0 ? (
                             <div className="ps-subnav-empty">No shows yet</div>
                           ) : (
                             showsActiveFirst.map(show => (

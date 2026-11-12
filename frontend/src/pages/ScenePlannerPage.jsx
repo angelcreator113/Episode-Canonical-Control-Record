@@ -227,6 +227,7 @@ export default function ScenePlannerPage() {
   const [plan, setPlan] = useState([]);
   const [readiness, setReadiness] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [toast, setToast] = useState(null);
   const [locations, setLocations] = useState({ locations: [], show_id: null });
@@ -246,8 +247,12 @@ export default function ScenePlannerPage() {
       setBrief(briefRes.data.data);
       setPlan(planRes.data.data || []);
       setReadiness(planRes.data.readiness || null);
+      setLoadFailed(false);
     } catch (err) {
       console.error('[BeatPlan] load failed:', err);
+      // Said on the page, with Retry: a failed read is not "no plan yet", and
+      // Generate is not offered in answer to it (Evoni, 2026-11-12).
+      setLoadFailed(true);
       showToast('Failed to load the beat plan', 'error');
     } finally {
       setLoading(false);
@@ -343,14 +348,22 @@ export default function ScenePlannerPage() {
 
       <LocationsStrip locations={locations.locations} showId={locations.show_id} episodeId={episodeId} />
 
-      {!loading && (
+      {!loading && loadFailed && (
+        <div className="scene-planner-empty" role="alert" data-testid="beat-plan-load-failed">
+          <p className="scene-planner-empty-title">Couldn't load the beat plan</p>
+          <p className="scene-planner-empty-text">The brief and the plan didn't load. Nothing was changed.</p>
+          <button type="button" className="scene-planner-btn primary" onClick={() => { setLoading(true); fetchAll(); }}>Retry</button>
+        </div>
+      )}
+
+      {!loading && !loadFailed && (
         <BriefPanel brief={brief} onUpdate={handleUpdateBrief}
           onGenerate={handleGenerate} generating={generating} />
       )}
 
       {loading && <p className="scene-planner-loading">Loading...</p>}
 
-      {!loading && plan.length === 0 && (
+      {!loading && !loadFailed && plan.length === 0 && (
         <div className="scene-planner-empty">
           <div className="scene-planner-empty-icon">✦</div>
           <p className="scene-planner-empty-title">No scene plan yet</p>

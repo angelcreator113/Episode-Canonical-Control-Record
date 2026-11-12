@@ -36,21 +36,27 @@ export default function EpisodeTodoList({ episodeId, showId, onAllRequiredComple
   const [locking, setLocking] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  // The read failed (Evoni, 2026-11-12): not the same as "no list yet". The
+  // server answers 200 with data: null when there is none.
+  const [loadFailed, setLoadFailed] = useState(false);
   const [showAsset, setShowAsset] = useState(false);
 
   const fetchTodoList = useCallback(async () => {
     try {
       const res = await api.get(`/api/v1/episodes/${episodeId}/todo`);
       setTodoList(res.data.data);
+      setLoadFailed(false);
       if (res.data.data?.completion?.all_required_done && onAllRequiredComplete) {
         onAllRequiredComplete();
       }
     } catch (err) {
       console.error('[TodoList] fetch error:', err);
+      setLoadFailed(true);
     } finally {
       setLoading(false);
     }
   }, [episodeId]);
+  const retryLoad = () => { setLoading(true); fetchTodoList(); };
 
   useEffect(() => { fetchTodoList(); }, [fetchTodoList]);
 
@@ -131,6 +137,15 @@ export default function EpisodeTodoList({ episodeId, showId, onAllRequiredComple
 
   if (loading) return (
     <p className="eat-note">Loading checklist...</p>
+  );
+
+  // A failed read offers Retry only: generating over a list that may exist is
+  // not an answer to "it didn't load".
+  if (!todoList && loadFailed) return (
+    <div className="etl-empty" data-testid="todo-load-failed">
+      <p className="etl-error" role="alert">Couldn't load this episode's to-do lists. Nothing was changed.</p>
+      <button type="button" className="etl-btn-primary" onClick={retryLoad}>Retry</button>
+    </div>
   );
 
   if (!todoList) return (

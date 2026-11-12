@@ -58,18 +58,22 @@ export default function EpisodeSceneWorkspace({ episode, onOpenTab, onToast }) {
   const [clipPick, setClipPick] = useState({ beat: null, index: 0 });
   const [note, setNote] = useState('');
   const [saving, setSaving] = useState(false);
+  const [clipsFailed, setClipsFailed] = useState(false);
 
   const toast = useCallback((msg, type = 'info') => { if (onToast) onToast(msg, type); }, [onToast]);
 
   const load = useCallback(async () => {
     if (!episodeId) return;
     try {
+      // The clips read on its own: when it fails the scenes still show, and
+      // the page says the clips didn't load, not that there are none.
       const [planRes, clipRows] = await Promise.all([
         getPlanApi(episodeId),
-        Promise.resolve().then(() => rawClipsApi.list(episodeId)).catch((err) => { console.error('[Scenes] clips load failed:', err); return []; }),
+        Promise.resolve().then(() => rawClipsApi.list(episodeId)).catch((err) => { console.error('[Scenes] clips load failed:', err); return null; }),
       ]);
       const beats = Array.isArray(planRes?.data?.data) ? [...planRes.data.data].sort((a, b) => a.beat_number - b.beat_number) : [];
       setPlan(beats);
+      setClipsFailed(clipRows === null);
       setClips(Array.isArray(clipRows) ? clipRows : []);
       setSelected((cur) => (cur && beats.some((b) => b.beat_number === cur) ? cur : beats[0]?.beat_number ?? null));
       setError(null);
@@ -147,7 +151,14 @@ export default function EpisodeSceneWorkspace({ episode, onOpenTab, onToast }) {
   };
 
   if (loading) return <p className="esw-note">Loading scenes…</p>;
-  if (error) return <p className="esw-error" role="alert">{error}</p>;
+  // A failed read offers Retry, and never the empty state's way forward (Evoni, 2026-11-12).
+  if (error) {
+    return (
+      <div className="esw-error" role="alert" data-testid="esw-load-failed">
+        {error} <button type="button" className="esw-link" onClick={() => { setLoading(true); load(); }}>Retry</button>
+      </div>
+    );
+  }
   if (!plan.length) {
     return (
       <div className="esw-empty">
@@ -214,7 +225,12 @@ export default function EpisodeSceneWorkspace({ episode, onOpenTab, onToast }) {
             ))}
           </div>
         )}
-        {!clip && (
+        {!clip && clipsFailed && (
+          <p className="esw-hint" role="alert" data-testid="esw-clips-failed">
+            Couldn't load this episode's clips. <button type="button" className="esw-link" onClick={() => load()}>Retry</button>
+          </p>
+        )}
+        {!clip && !clipsFailed && (
           <p className="esw-hint">
             No clip linked to this scene. <button type="button" className="esw-link" onClick={() => onOpenTab?.('files')}>Link one in Files</button>
           </p>

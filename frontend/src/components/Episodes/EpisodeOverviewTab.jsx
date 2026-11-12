@@ -132,6 +132,10 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
   const [linkedEvents, setLinkedEvents] = useState([]);  // GET /episodes/:id/events — the brief's source event first, then events whose used_in_episode_id is this episode
   const [sceneSets, setSceneSets] = useState([]);
   const [scriptInfo, setScriptInfo] = useState(null);
+  // Reads that failed (Evoni, 2026-11-12): said on the page with Retry. A
+  // failed read is not "no events linked", "no script" or an empty brief.
+  const [loadFailed, setLoadFailed] = useState({});
+  const failedRead = (key, label, err) => { console.error(`[EpisodeOverview] ${label} load failed:`, err); setLoadFailed((f) => ({ ...f, [key]: label })); };
   const [linkBusy, setLinkBusy] = useState(false);
   // A refused link or unlink, in the server's words (e.g. the terms lock, §8(x) D4)
   const [linkError, setLinkError] = useState(null);
@@ -198,17 +202,18 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
   }, [episode?.id]);
 
   const loadContext = async () => {
+    setLoadFailed({});
     // The episode's own events (Task #1906): the brief's source event
     // first, then any additional linked events.
     getEpisodeEvents(episode.id).then((data) => {
       setLinkedEvents(data?.events || []);
-    }).catch((err) => console.error('[Episode] Failed to load episode events:', err));
+    }).catch((err) => failedRead('events', "this episode's events", err));
     if (showId) {
       // The show's event list feeds only the linker dropdown (events not
       // yet linked anywhere). It is not how this episode finds its events.
       api.get(`/api/v1/world/${showId}/events`).then(({ data }) => {
         setAllEvents(data?.events || []);
-      }).catch(() => {});
+      }).catch((err) => failedRead('eventList', "the show's events", err));
       // Episode-scoped ledger. Skipping when no showId — the endpoint
       // requires it, and a draft episode without a show wouldn't have
       // transactions anyway.
@@ -231,7 +236,7 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
     api.get(`/api/v1/episodes/${episode.id}/scripts?includeAllVersions=false`).then(({ data }) => {
       const scripts = data?.data || data?.scripts || [];
       if (scripts.length > 0) setScriptInfo({ exists: true, wordCount: scripts[0].content?.split(/\s+/).length || 0 });
-    }).catch(() => {});
+    }).catch((err) => failedRead('script', 'the script check', err));
     // EpisodeBrief — drives the merged Identity/Source/Stakes/Reference
     // sections. Auto-creates if missing (the GET handler does that).
     api.get(`/api/v1/episode-brief/${episode.id}`).then(({ data }) => {
@@ -260,9 +265,9 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
         api.get(`/api/v1/world/${showId}/events`).then(({ data: ev }) => {
           const events = ev?.events || [];
           setParentEvent(events.find(e => e.id === parentId) || null);
-        }).catch(() => {});
+        }).catch((err) => console.error('[EpisodeOverview] parent event load failed:', err));
       }
-    }).catch(() => {});
+    }).catch((err) => failedRead('brief', 'the story brief', err));
   };
 
   // ── Brief edit helpers ─────────────────────────────────────────────────
@@ -567,8 +572,15 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
     );
   }
 
+  const failedLabels = Object.values(loadFailed);
   return (
     <div className="eov">
+      {failedLabels.length > 0 && (
+        <p role="alert" className="eov-warn" data-testid="eov-load-failed">
+          Couldn't load {failedLabels.join(', ')}. What's shown below may be incomplete; nothing was changed.{' '}
+          <button type="button" className="eov-retry" onClick={() => loadContext()}>Retry</button>
+        </p>
+      )}
       {/* Tier Banner (if evaluated) */}
       {tier && (
         <div className="eov-tier" style={{ '--tier-color': tier.color, '--tier-bg': tier.bg }}>
@@ -609,7 +621,7 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
               className="eos-next-btn is-quiet"
               onClick={suggestScenes}
               disabled={!scriptInfo?.exists || suggestBusy}
-              title={!scriptInfo?.exists ? 'Add a script first' : 'AI suggests scene sets per beat'}
+              title={loadFailed.script ? "Couldn't check the script. Retry above." : !scriptInfo?.exists ? 'Add a script first' : 'AI suggests scene sets per beat'}
             >
               <Sparkles size={15} aria-hidden="true" /> {suggestBusy ? 'Thinking…' : 'Suggest Scenes'}
             </button>
@@ -649,8 +661,10 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
             linked anywhere; picking one stamps it with this episode's
             used_in_episode_id. */}
         <div className="eov-card">
-          <CardTitle icon={CalendarHeart}>Events <span className="eov-count">{linkedEvents.length}</span></CardTitle>
-          {linkedEvents.length === 0 ? (
+          <CardTitle icon={CalendarHeart}>Events {!loadFailed.events && <span className="eov-count">{linkedEvents.length}</span>}</CardTitle>
+          {loadFailed.events ? (
+            <p className="eov-empty" role="alert" data-testid="eov-events-failed">Couldn't load this episode's events. Retry above.</p>
+          ) : linkedEvents.length === 0 ? (
             <p className="eov-empty">No events linked</p>
           ) : (
             <div className="eov-events">
@@ -708,10 +722,10 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
             className="eov-select"
             aria-label="Link an event"
             value=""
-            disabled={linkBusy || linkableEvents.length === 0}
+            disabled={linkBusy || linkableEvents.length === 0 || Boolean(loadFailed.events || loadFailed.eventList)}
             onChange={(e) => { if (e.target.value) linkEvent(e.target.value); e.target.value = ''; }}
           >
-            <option value="">{linkableEvents.length === 0 ? 'No unlinked events available' : '+ Link an event…'}</option>
+            <option value="">{loadFailed.events || loadFailed.eventList ? "Events didn't load" : linkableEvents.length === 0 ? 'No unlinked events available' : '+ Link an event…'}</option>
             {linkableEvents.map(ev => (
               <option key={ev.id} value={ev.id}>{ev.name}{ev.event_type ? ` (${ev.event_type})` : ''}</option>
             ))}
