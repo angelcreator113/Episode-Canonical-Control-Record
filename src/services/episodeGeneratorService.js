@@ -15,7 +15,7 @@
 
 const { v4: uuidv4 } = require('uuid');
 const { CANONICAL_BEATS } = require('../constants/canonicalBeats');
-const { findLiveLinkedEpisode, eventEpisodeConflictError } = require('../utils/eventEpisodeLink');
+const { findLiveLinkedEpisode, eventEpisodeConflictError, eventDeletedError, lockLiveEvent } = require('../utils/eventEpisodeLink');
 const { lockEpisodes, RetryableConflictError } = require('../utils/episodeLocks');
 const { snapshotFrozen, peekFrozen, frozenError } = require('../utils/snapshotFreeze');
 
@@ -412,6 +412,7 @@ async function stampEventUsed(sequelize, eventId, episodeId, { transaction } = {
   const [rows] = await sequelize.query(
     `UPDATE world_events SET status = 'used', used_in_episode_id = :episodeId, times_used = COALESCE(times_used, 0) + 1, updated_at = NOW()
       WHERE id = :eventId
+        AND deleted_at IS NULL
         AND (used_in_episode_id IS NULL
              OR NOT EXISTS (SELECT 1 FROM episodes ep WHERE ep.id = world_events.used_in_episode_id AND ep.deleted_at IS NULL))
       RETURNING id`,
@@ -420,6 +421,10 @@ async function stampEventUsed(sequelize, eventId, episodeId, { transaction } = {
   if (!Array.isArray(rows) || rows.length === 0) {
     const live = await findLiveLinkedEpisode(sequelize, eventId, { transaction });
     if (live) throw eventEpisodeConflictError(live);
+    // A deleted event is never stamped (Evoni, 2026-11-12).
+    const [gone] = await sequelize.query(
+      'SELECT 1 FROM world_events WHERE id = :eventId AND deleted_at IS NULL', { replacements: { eventId }, transaction });
+    if (!gone?.length) throw eventDeletedError(eventId);
     throw new Error(`Event ${eventId} could not be linked to episode ${episodeId}: no world_events row was updated`);
   }
 }
@@ -697,10 +702,10 @@ Return ONLY JSON.` }],
     // asked again under the lock. A second Start that raced the first waits
     // here, then finds the first one's episode and is refused with 409
     // (EVENT_ALREADY_HAS_EPISODE) before it creates anything.
-    await models.sequelize.query(
-      'SELECT used_in_episode_id FROM world_events WHERE id = :eventId FOR UPDATE',
-      { replacements: { eventId }, transaction }
-    );
+    // The same lock a delete takes (utils/worldEventSafeDelete): an event
+    // deleted while this Start waited is refused here (EVENT_DELETED), before
+    // anything is created (Evoni, 2026-11-12).
+    await lockLiveEvent(models.sequelize, eventId, { transaction });
     const liveUnderLock = await findLiveLinkedEpisode(models.sequelize, eventId, { transaction });
     // A1.2c (Q-7 Layer 2): asked again under the event lock.
     const frozenUnderLock = replacingEpisodeId ? null : await findFrozenDeletedEpisode(models.sequelize, eventId, { transaction });

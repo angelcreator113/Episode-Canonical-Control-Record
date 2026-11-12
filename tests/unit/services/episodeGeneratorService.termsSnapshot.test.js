@@ -47,6 +47,8 @@ function makeModels({ deliverables = DELIVERABLES, failList = false, failStamp =
           return [[], { rowCount: deliverables.length }];
         }
         if (/MAX\(episode_number\)/.test(sql)) return [[{ next_num: 4 }]];
+        // Start's lock on the event, which also asks that it is not deleted (lockLiveEvent).
+        if (/^SELECT id, used_in_episode_id, deleted_at FROM world_events WHERE id = :eventId FOR UPDATE$/.test(sql)) return [[{ id: opts.replacements.eventId, used_in_episode_id: null, deleted_at: null }]];
         // The event link stamp inside Start's transaction (Task #1906).
         if (/^UPDATE world_events SET status = 'used'/.test(sql)) return [[{ id: opts.replacements.eventId }]];
         if (/INSERT INTO episode_todo_lists/.test(sql)) return [[{ id: 'todo-1' }]];

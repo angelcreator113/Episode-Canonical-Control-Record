@@ -55,11 +55,11 @@ function makeWorld() {
     query: jest.fn(async (sql, opts = {}) => {
       const r = opts.replacements || {};
       const ev = store.events[r.eventId];
-      if (/^SELECT used_in_episode_id FROM world_events WHERE id = :eventId FOR UPDATE$/.test(sql)) {
+      if (/^SELECT id, used_in_episode_id, deleted_at FROM world_events WHERE id = :eventId FOR UPDATE$/.test(sql)) {
         log.locks.push(opts.transaction);
         return [ev ? [{ used_in_episode_id: ev.used_in_episode_id }] : []];
       }
-      if (/^SELECT used_in_episode_id FROM world_events/.test(sql)) {
+      if (/^SELECT (id, )?used_in_episode_id(, deleted_at)? FROM world_events/.test(sql)) {
         // Outside a transaction: the stale read (before the first commit).
         if (!opts.transaction) return [[{ used_in_episode_id: null }]];
         return [ev ? [{ used_in_episode_id: ev.used_in_episode_id }] : []];

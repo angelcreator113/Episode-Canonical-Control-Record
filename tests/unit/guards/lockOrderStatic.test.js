@@ -24,14 +24,12 @@ const TABLES = ['episodes', 'world_events', 'season_slots', 'season_specials', '
 // lists their order); a change there still has to be looked at.
 const PINNED = {
   'src/routes/episodeSpending.js': { traced: false, locks: { episodes: 1 } },
-  'src/routes/worldEvents/inject.js': { traced: true, locks: { world_events: 1 } },
   'src/services/arcProgressionService.js': { traced: false, locks: { show_arcs: 1 } },
   'src/services/beat14Opportunity.js': { traced: false, locks: { episodes: 2 } },
   'src/services/dealTermsDraftService.js': { traced: false, locks: { world_events: 1 } },
   'src/services/dealTypeDraftService.js': { traced: false, locks: { world_events: 1 } },
   'src/services/episodeCompletionService.js': { traced: false, locks: { episodes: 1 } },
   'src/services/episodeEstimateBackfill.js': { traced: false, locks: { episodes: 1 } },
-  'src/services/episodeGeneratorService.js': { traced: true, locks: { world_events: 1 } },
   'src/services/eventCostsService.js': { traced: false, locks: { world_events: 1 } },
   'src/services/eventDocumentsService.js': { traced: false, locks: { world_events: 1 } },
   'src/services/financialTransactionService.js': { traced: false, locks: { episodes: 1 } },
@@ -48,6 +46,7 @@ const PINNED = {
   'src/services/venueLookService.js': { traced: false, locks: { world_events: 1 } },
   'src/services/voiceStudioService.js': { traced: false, locks: { episodes: 1 } },
   'src/services/youtubeThumbnailService.js': { traced: false, locks: { episodes: 1 } },
+  'src/utils/eventEpisodeLink.js': { traced: true, locks: { world_events: 1 } }, // lockLiveEvent (2026-11-12): Start Episode's and inject's lock on the event, moved here from those two files; it also refuses a deleted event
   'src/utils/eventScope.js': { traced: true, locks: { world_events: 1 } },
   'src/utils/frozenEpisode.js': { traced: true, locks: { world_events: 1 } },
   'src/utils/worldEventSafeDelete.js': { traced: false, locks: { world_events: 1 } },
