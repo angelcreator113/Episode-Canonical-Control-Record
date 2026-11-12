@@ -692,7 +692,9 @@ describe('A1.1: a clip attaches under its episode\'s share lock, once per upload
     // A1.3-0 (C1): the same upload's row first, then the episode's deleted check, then the insert.
     expect(sqls[2]).toMatch(/FROM episode_raw_clips WHERE id = :id/);
     expect(sqls[3]).toMatch(/SELECT deleted_at FROM episodes WHERE id = :episodeId/);
-    expect(sqls[4]).toMatch(/ON CONFLICT \(id\) DO NOTHING/);
+    // The first-take check (2026-11-12): is the episode filmed already? It is here, so nothing more is asked.
+    expect(sqls[4]).toMatch(/SELECT 1 FROM episode_raw_clips WHERE episode_id = :episodeId LIMIT 1/);
+    expect(sqls[5]).toMatch(/ON CONFLICT \(id\) DO NOTHING/);
   });
 
   test('a lock wait that times out is tried again with the same id; it attaches on a later try', async () => {

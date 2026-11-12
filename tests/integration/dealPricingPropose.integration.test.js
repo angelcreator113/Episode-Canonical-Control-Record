@@ -213,14 +213,28 @@ const asJson = (v) => (typeof v === 'string' ? JSON.parse(v) : v);
     expect((await startEpisode(legacy)).status).toBe(201);
   });
 
-  it('ruling 6: a multi-event Start Episode refuses when an extra event\'s price is missing', async () => {
+  it('a multi-event Start Episode refuses an extra event that carries a deal (Evoni, 2026-11-12: second events carry no commitments yet)', async () => {
     const anchor = await seed({ dealType: null, tier: 1 });
     const extra = await seed({ dealType: 'paid_deliverables', tier: 2, deliverables: [{ description: 'Host a Q&A', deliverable_type: 'other', owed_to: 'brand' }] });
     await run(`UPDATE world_events SET show_id = :show WHERE id = :event`, { show: anchor.show, event: extra.event });
     const res = await auth(request(app).post(`/api/v1/world/${anchor.show}/events/generate-episode-from-many`))
       .send({ event_ids: [anchor.event, extra.event] });
+    // Switch off (the default): several events are not started together at all.
     expect(res.status).toBe(409);
-    expect(res.body).toMatchObject({ code: 'DEAL_PRICE_REQUIRED', missing: [{ event_id: extra.event, label: 'Velour Launch: "Host a Q&A"' }] });
+    expect(res.body.code).toBe('SECONDARY_EVENTS_NOT_ENABLED');
+    expect(await q(`SELECT id FROM episodes WHERE show_id = :show`, anchor)).toEqual([]);
+    // Switch on: the deal itself refuses, before its price is asked about.
+    const before = process.env.MULTI_EVENT_ATTACH_ENABLED;
+    process.env.MULTI_EVENT_ATTACH_ENABLED = 'true';
+    try {
+      const gated = await auth(request(app).post(`/api/v1/world/${anchor.show}/events/generate-episode-from-many`))
+        .send({ event_ids: [anchor.event, extra.event] });
+      expect(gated.status).toBe(409);
+      expect(gated.body).toMatchObject({ code: 'SECONDARY_EVENT_HAS_OBLIGATIONS', event_id: extra.event });
+      expect(gated.body.obligations.map((o) => o.kind)).toEqual(expect.arrayContaining(['deal', 'deliverable']));
+    } finally {
+      if (before === undefined) delete process.env.MULTI_EVENT_ATTACH_ENABLED; else process.env.MULTI_EVENT_ATTACH_ENABLED = before;
+    }
     expect(await q(`SELECT id FROM episodes WHERE show_id = :show`, anchor)).toEqual([]);
   });
 

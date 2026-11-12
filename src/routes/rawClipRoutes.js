@@ -228,6 +228,8 @@ router.post('/:episodeId/uploads', requireAuth, async (req, res) => {
       if (parts.partCount(size) > parts.MAX_PARTS) throw new clips.RawClipError(413, 'That video is too big to upload in parts');
     }
     const episode = await clips.findEpisode(models.sequelize, req.params.episodeId);
+    // Before any of the take is uploaded; asked again when it is attached.
+    await clips.assertFirstTakeAllowed(models.sequelize, episode.id);
 
     const clipId = uuidv4();
     const ext = path.extname(filename).toLowerCase() || '.mp4';
@@ -430,6 +432,17 @@ router.get('/:episodeId', requireAuth, async (req, res) => {
 });
 
 router.post('/:episodeId', requireAuth, async (req, res) => {
+  // An episode whose first take is refused (a second event with commitments
+  // not handled yet) is answered before the file is taken.
+  try {
+    await clips.assertFirstTakeAllowed(models.sequelize, req.params.episodeId);
+  } catch (err) {
+    if (err instanceof clips.RawClipError) {
+      req.resume();
+      return sendError(res, err, 'upload');
+    }
+    console.error('[RawClips] first-take check failed before the upload; asked again when the take is attached:', err.message);
+  }
   // No room on the disk for this upload: a plain 507 before any of it is written.
   try {
     if (!(await roomForUpload(req))) {

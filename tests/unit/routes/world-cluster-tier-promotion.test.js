@@ -99,7 +99,8 @@ const CP3_FILES = [
 // (Evoni's admin-only ruling, 2026-10-29; it was the Tier 3 optionalAuth factory).
 const REQUIRE_AUTH_COUNTS = {
   'world.js': 5,
-  'worldEvents.js': 115,
+  // 116 with inject.js POST .../detach-episode (Evoni, 2026-11-12).
+  'worldEvents.js': 116,
   'worldStudio.js': 39,
   'worldTemperatureRoutes.js': 3,
 };
@@ -398,13 +399,14 @@ describe('Step 3 CP3 — World cluster mixed Tier 1+3+4 disposition', () => {
     // 158 since Task #54 split worldEvents.js into 21 parts, each with its own import.
     // 161 with flow.js (its import, GET .../flow, POST .../fill-missing; 2026-10-25).
     // 162 with the ecosystem preview admin only (SEC-5, 2026-10-29).
-    test('CP3 zone contains 162 total requireAuth references (25 imports + 137 handlers)', () => {
+    // 163 with worldEvents inject.js POST .../detach-episode (2026-11-12).
+    test('CP3 zone contains 163 total requireAuth references (25 imports + 138 handlers)', () => {
       const total = CP3_FILES.reduce((sum, filename) => {
         const src = readSrc(filename);
         const matches = src.match(/\brequireAuth\b/g) || [];
         return sum + matches.length;
       }, 0);
-      expect(total).toBe(162);
+      expect(total).toBe(163);
     });
 
     test('CP3 zone contains 19 total optionalAuth references (all in worldStudio.js)', () => {

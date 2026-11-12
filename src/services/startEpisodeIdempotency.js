@@ -93,6 +93,13 @@ async function loadStartReplay(models, episodeId, { beats = [] } = {}) {
   const brief = briefRows?.[0] || null;
   const todoList = todoRows?.[0] || null;
   const meta = parseJson(brief?.event_metadata, {}) || {};
+  let linkedSecondaryEvents = [];
+  try {
+    const { secondary } = await require('./episodeSecondaryEvents').secondaryEventsOf(sequelize, episodeId);
+    linkedSecondaryEvents = secondary.map((e) => ({ id: e.id, name: e.name ?? null }));
+  } catch (err) {
+    console.error('[StartEpisodeIdempotency] the episode\'s other events could not be read for the replay:', err.message);
+  }
   return {
     episode: episode ? (typeof episode.toJSON === 'function' ? episode.toJSON() : episode) : { id: episodeId },
     brief,
@@ -107,6 +114,10 @@ async function loadStartReplay(models, episodeId, { beats = [] } = {}) {
     // The offer decision was the first Start's (in the opportunity's
     // status_history); a replay decides nothing again.
     offerDecisions: [],
+    // The episode's other events as they are now, and the steps after the
+    // first Start's commit, which a replay does not run again.
+    linkedSecondaryEvents,
+    postCommit: {},
     replayed: true,
   };
 }

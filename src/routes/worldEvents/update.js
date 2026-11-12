@@ -26,7 +26,8 @@ const { getModels } = require('./helpers');
 const { assertEventRelinkAllowed, isFrozenEpisodeError } = require('../../utils/frozenEpisode');
 const { RetryableConflictError, asRetryable } = require('../../utils/episodeLocks');
 const { softDeleteUnusedUnlinkedEvents } = require('../../utils/worldEventSafeDelete');
-const { findLiveLinkedEpisode } = require('../../utils/eventEpisodeLink');
+const { findLiveLinkedEpisode, isEpisodeEventLinkConflict, episodeEventLinkTakenBody, findEpisodeLinkHolder, EPISODE_EVENT_LINK_TAKEN_CODE } = require('../../utils/eventEpisodeLink');
+const secondaryEvents = require('../../services/episodeSecondaryEvents');
 
 // Every status an event row carries: draft | ready | used | archived
 // (WorldEvent.js) plus the values the server's own writers set — filmed
@@ -487,14 +488,34 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), req
     // value (Task #1747), and the row is written — no other writer can land
     // between the checks and the write. A refusal throws EventPutRefusal,
     // which rolls the transaction back.
+    // Set when this save links the event as a second event of an episode:
+    // the gate is then asked again after the row is written, so a commitment
+    // sent in the same save as the link is refused with it.
+    let secondaryAttach = false;
+    const assertStillNoObligations = async (transaction) => {
+      if (!secondaryAttach) return;
+      try {
+        await secondaryEvents.assertNoObligations(models.sequelize, eventId, { transaction });
+      } catch (err) {
+        if (secondaryEvents.isSecondaryEventError(err)) throw new EventPutRefusal(err.status, err.toJSON());
+        throw err;
+      }
+    };
     const assertRelinkUnlessStored = async (transaction, linkTo) => {
+      secondaryAttach = false;
       const [[current]] = await models.sequelize.query(
         'SELECT used_in_episode_id FROM world_events WHERE id = :eventId AND show_id = :showId',
         { replacements: { eventId, showId }, transaction });
       if (current && String(current.used_in_episode_id || '') === String(linkTo)) return;
       try {
         await assertEventRelinkAllowed(models.sequelize, eventId, { transaction, episodeIds: [linkTo] });
+        // A second event for an episode that has one (services/episodeSecondaryEvents):
+        // asked with the target episode locked by the check above. A first
+        // link, and the primary's own link restored, are as before.
+        const link = await secondaryEvents.assertSecondaryAttach(models.sequelize, { eventId, episodeId: linkTo, transaction });
+        secondaryAttach = link.kind === 'secondary';
       } catch (err) {
+        if (secondaryEvents.isSecondaryEventError(err)) throw new EventPutRefusal(err.status, err.toJSON());
         if (isFrozenEpisodeError(err)) throw new EventPutRefusal(409, err.toJSON());
         if (err instanceof RetryableConflictError) throw new EventPutRefusal(409, { success: false, error: err.message, code: err.code });
         throw err;
@@ -584,12 +605,23 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), req
           );
         }
         await models.sequelize.query(updateSql, { replacements, transaction });
+        await assertStillNoObligations(transaction);
         await followSceneSet(stored, transaction);
         storedBefore = stored;
       });
     } catch (updateErr) {
       if (updateErr instanceof EventPutRefusal) return res.status(updateErr.status).json(updateErr.body);
       if (updateErr.staleSave) return refuseStale();
+      // The one known conflict: the database lets one event's own link point
+      // at an episode, and this save asked for a second. The transaction has
+      // rolled back, so nothing in the request was saved. Answered 409, not
+      // 500. Every other database error goes on as before.
+      if (isEpisodeEventLinkConflict(updateErr)) {
+        const episodeId = replacements.used_in_episode_id || null;
+        const holder = await findEpisodeLinkHolder(models.sequelize, episodeId, eventId);
+        console.warn(`[WorldEvents] PUT refused (${EPISODE_EVENT_LINK_TAKEN_CODE}): episode ${episodeId} already has a linked event`);
+        return res.status(409).json(episodeEventLinkTakenBody({ episodeId, holder }));
+      }
       const errMsg = String(updateErr.message || '');
       if (!(errMsg.includes('does not exist') || errMsg.includes('column'))) throw updateErr;
 
@@ -645,6 +677,7 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), req
             `UPDATE world_events SET ${coreClauses.join(', ')} WHERE id = :eventId AND show_id = :showId AND deleted_at IS NULL`,
             { replacements, transaction }
           );
+          await assertStillNoObligations(transaction);
           await followSceneSet(stored, transaction);
           storedBefore = stored;
         });

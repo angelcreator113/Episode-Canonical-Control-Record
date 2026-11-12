@@ -265,6 +265,12 @@ async function completeEpisode(episodeId, showId, sequelize, { eventPiecesFallba
   const { assertEpisodeTermsNotReopened } = require('../utils/eventTermsLock');
   await assertEpisodeTermsNotReopened(sequelize, episodeId);
 
+  // A second event with commitments is not paid, charged or delivered by
+  // this pipeline yet (services/episodeSecondaryEvents), so an episode that
+  // has one is not completed: refused before any write, whatever the attach
+  // switch says. Finalize checks again under the episode lock.
+  await require('./episodeSecondaryEvents').assertNoUnsupportedSecondaryObligations(sequelize, episodeId, { doing: 'be completed' });
+
   // ── 2. Load event (prefer highest prestige for multi-event episodes) ──
   // EPISODE_EVENT_SQL is shared with the styling game's score (Task #1943).
   const [event] = await sequelize.query(

@@ -446,28 +446,32 @@ const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
       expect(await rows('SELECT id FROM episodes WHERE show_id = :show', { show })).toEqual([]);
     });
 
-    it('multi-event Start: an extra deleted after the list was checked is not linked, and is named with why', async () => {
+    it('multi-event Start: an extra deleted after the list was checked refuses the whole Start; nothing is created (Evoni, 2026-11-12)', async () => {
       const { show } = await addShow();
       const anchor = await addEvent(show, 'Anchor', { status: 'ready' });
       const extra = await addEvent(show, 'Vanishing Extra', { status: 'ready' });
-      // The extra is deleted while the anchor's episode is being created (after the up-front check).
-      const generator = require('../../src/services/episodeGeneratorService');
-      const real = generator.generateEpisodeFromEvent;
-      jest.spyOn(generator, 'generateEpisodeFromEvent').mockImplementation(async (...args) => {
-        const result = await real(...args);
+      await run('UPDATE world_events SET cost_coins = 0 WHERE id IN (:ids)', { ids: [anchor, extra] });
+      // The extra is deleted after the up-front check, before the Start's transaction locks it.
+      const secondary = require('../../src/services/episodeSecondaryEvents');
+      const real = secondary.assertSecondaryCandidates;
+      jest.spyOn(secondary, 'assertSecondaryCandidates').mockImplementation(async (...args) => {
+        await real(...args);
         await run('UPDATE world_events SET deleted_at = NOW() WHERE id = :extra', { extra });
-        return result;
       });
-
-      const res = await as(admin, request(app).post(`/api/v1/world/${show}/events/generate-episode-from-many`)).send({ event_ids: [anchor, extra] });
-      // The anchor's episode stands by itself; the extra is reported, never dropped silently.
-      expect(res.status).toBe(201);
-      expect(res.body.linked_extras).toEqual([]);
-      expect(res.body.skipped_extras).toEqual([{ id: extra, name: 'Vanishing Extra', reason: 'This event was deleted. Nothing was started or linked.' }]);
-      const after = await eventRow(extra);
-      expect(after.used_in_episode_id).toBeNull();
-      expect(after.status).toBe('ready');
-      expect((await eventRow(anchor)).used_in_episode_id).toBe(res.body.data.episode.id);
+      const before = process.env.MULTI_EVENT_ATTACH_ENABLED;
+      process.env.MULTI_EVENT_ATTACH_ENABLED = 'true';
+      let res;
+      try {
+        res = await as(admin, request(app).post(`/api/v1/world/${show}/events/generate-episode-from-many`)).send({ event_ids: [anchor, extra] });
+      } finally {
+        if (before === undefined) delete process.env.MULTI_EVENT_ATTACH_ENABLED; else process.env.MULTI_EVENT_ATTACH_ENABLED = before;
+      }
+      // Every chosen event is linked or no episode is created: the deleted extra is not skipped.
+      expect(res.status).toBe(409);
+      expect(res.body.code).toBe('EVENT_DELETED');
+      expect(await rows('SELECT id FROM episodes WHERE show_id = :show', { show })).toEqual([]);
+      expect((await eventRow(extra)).used_in_episode_id).toBeNull();
+      expect((await eventRow(anchor)).used_in_episode_id).toBeNull();
     });
   });
 

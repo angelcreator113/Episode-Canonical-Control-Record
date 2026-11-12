@@ -45,6 +45,10 @@ const REOPEN_REASONS = {
   EPISODE_NOT_DRAFT: 'EPISODE_NOT_DRAFT',
   LEDGER_ROWS: 'LEDGER_ROWS',
   DELIVERABLES_NOT_PENDING: 'DELIVERABLES_NOT_PENDING',
+  // Another live episode of the same event (a two-parter's other part) is past draft.
+  OTHER_EPISODE_NOT_DRAFT: 'OTHER_EPISODE_NOT_DRAFT',
+  // The event is a second event of its episode (services/episodeSecondaryEvents).
+  SECONDARY_EVENT: 'SECONDARY_EVENT',
 };
 
 const CODES = {
@@ -66,8 +70,15 @@ function plural(n, one, many) {
  *   ledgerRows              the episode's live ledger rows that are not
  *                           wardrobe purchases (NOT_WARDROBE_SPEND_ROW)
  *   nonPendingDeliverables  the event's live deliverables not 'pending'
+ *   otherEpisodes           the event's other live episodes (a two-parter's
+ *                           other part): [{ id, title, status }]. The terms
+ *                           are shared, so each must be a draft too; their
+ *                           ledger rows are in ledgerRows.
+ *   secondaryOf             the episode this event is a second event of, or
+ *                           null. A second event carries no commitments yet,
+ *                           so its terms are not reopened (they could gain some).
  */
-function eligibilityReasons({ lockEpisode, episodeStatus, ledgerRows = 0, nonPendingDeliverables = 0 }) {
+function eligibilityReasons({ lockEpisode, episodeStatus, ledgerRows = 0, nonPendingDeliverables = 0, otherEpisodes = [], secondaryOf = null }) {
   if (!lockEpisode) {
     return [{ code: REOPEN_REASONS.NOT_LOCKED, message: 'These terms are not locked; edit them directly.' }];
   }
@@ -76,10 +87,25 @@ function eligibilityReasons({ lockEpisode, episodeStatus, ledgerRows = 0, nonPen
   if (status !== 'draft') {
     reasons.push({ code: REOPEN_REASONS.EPISODE_NOT_DRAFT, message: `The episode is ${status}, not a draft.` });
   }
+  for (const other of otherEpisodes) {
+    const otherStatus = other?.status || 'draft';
+    if (otherStatus !== 'draft') {
+      reasons.push({
+        code: REOPEN_REASONS.OTHER_EPISODE_NOT_DRAFT,
+        message: `${other.title ? `"${other.title}"` : 'Another episode'} shares these terms and is ${otherStatus}, not a draft.`,
+      });
+    }
+  }
   if (ledgerRows > 0) {
     reasons.push({
       code: REOPEN_REASONS.LEDGER_ROWS,
-      message: `The episode has ${plural(ledgerRows, 'ledger row', 'ledger rows')} besides wardrobe purchases.`,
+      message: `${otherEpisodes.length ? 'Its episodes have' : 'The episode has'} ${plural(ledgerRows, 'ledger row', 'ledger rows')} besides wardrobe purchases.`,
+    });
+  }
+  if (secondaryOf) {
+    reasons.push({
+      code: REOPEN_REASONS.SECONDARY_EVENT,
+      message: 'This is a second event of its episode, and second events cannot carry a deal, a payment, a cost or a deliverable yet, so its terms stay as they are.',
     });
   }
   if (nonPendingDeliverables > 0) {
@@ -94,6 +120,23 @@ function eligibilityReasons({ lockEpisode, episodeStatus, ledgerRows = 0, nonPen
 async function countOne(sequelize, sql, replacements, transaction) {
   const [rows] = await sequelize.query(sql, { replacements, transaction });
   return parseInt(rows?.[0]?.cnt, 10) || 0;
+}
+
+/**
+ * Every live episode the event's terms belong to: the one its own link
+ * names and every one whose live brief names it (a two-parter has two).
+ * [{ id, title, status }], by id.
+ */
+async function linkedEpisodesOf(sequelize, eventId, { transaction } = {}) {
+  const [rows] = await sequelize.query(
+    `SELECT e.id, e.title, e.status
+       FROM episodes e
+      WHERE e.deleted_at IS NULL
+        AND (e.id = (SELECT used_in_episode_id FROM world_events WHERE id = :eventId)
+             OR e.id IN (SELECT episode_id FROM episode_briefs WHERE event_id = :eventId AND deleted_at IS NULL))
+      ORDER BY e.id`,
+    { replacements: { eventId }, transaction });
+  return rows || [];
 }
 
 /**
@@ -117,17 +160,34 @@ async function reopenEligibility(sequelize, eventId, { transaction, lockEpisode:
     'SELECT status FROM episodes WHERE id = :episodeId LIMIT 1',
     { replacements: { episodeId: lockEpisode.id }, transaction }
   );
+  // The terms are the event's, and every episode of the event shares them:
+  // each must be a draft, and the ledger rows of all of them count. One
+  // episode per event (every Start but a two-parter) reads as before.
+  const linked = await linkedEpisodesOf(sequelize, eventId, { transaction });
+  const otherEpisodes = linked.filter((e) => String(e.id) !== String(lockEpisode.id));
   const ledgerRows = await countOne(sequelize,
     `SELECT COUNT(*) AS cnt FROM financial_transactions
-      WHERE episode_id = :episodeId AND deleted_at IS NULL AND ${NOT_WARDROBE_SPEND_ROW}`,
-    { episodeId: lockEpisode.id }, transaction);
+      WHERE episode_id IN (:episodeIds) AND deleted_at IS NULL AND ${NOT_WARDROBE_SPEND_ROW}`,
+    { episodeIds: [lockEpisode.id, ...otherEpisodes.map((e) => e.id)] }, transaction);
+  // A second event of its episode: the episode its own link names has
+  // another event as its primary.
+  const [ownLink] = await sequelize.query(
+    'SELECT used_in_episode_id FROM world_events WHERE id = :eventId AND deleted_at IS NULL LIMIT 1',
+    { replacements: { eventId }, transaction });
+  const stampedEpisodeId = ownLink?.[0]?.used_in_episode_id || null;
+  let secondaryOf = null;
+  if (stampedEpisodeId && linked.some((e) => String(e.id) === String(stampedEpisodeId))) {
+    const { classifyLink } = require('./episodeSecondaryEvents');
+    const link = await classifyLink(sequelize, { eventId, episodeId: stampedEpisodeId, transaction });
+    if (link.kind === 'linked') secondaryOf = stampedEpisodeId;
+  }
   const nonPendingDeliverables = await countOne(sequelize,
     `SELECT COUNT(*) AS cnt FROM event_deliverables
       WHERE event_id = :eventId AND deleted_at IS NULL AND COALESCE(status, 'pending') <> 'pending'`,
     { eventId }, transaction);
 
   const reasons = eligibilityReasons({
-    lockEpisode, episodeStatus: episodeRows?.[0]?.status, ledgerRows, nonPendingDeliverables,
+    lockEpisode, episodeStatus: episodeRows?.[0]?.status, ledgerRows, nonPendingDeliverables, otherEpisodes, secondaryOf,
   });
   return {
     eligible: reasons.length === 0,
@@ -320,6 +380,11 @@ async function reopenTerms(sequelize, { showId, eventId, user, confirm }) {
   }
 
   return sequelize.transaction(async (transaction) => {
+    // Every episode that shares the terms is locked, in id order, before the
+    // event: none of them moves past draft while this reopen is decided.
+    const shared = await linkedEpisodesOf(sequelize, eventId, { transaction });
+    const lockIds = [...new Set([found.id, ...shared.map((e) => e.id)].map(String))].sort();
+    await require('../utils/episodeLocks').lockEpisodes(sequelize, lockIds, { transaction });
     const event = await lockEpisodeThenEvent(sequelize, showId, eventId, found.id, transaction);
     if (!event) return { status: 404, body: { success: false, error: 'Event not found' } };
 
