@@ -111,7 +111,7 @@ export default function VoiceStudio({ episodeId: givenId = null, embedded = fals
     const off = loadError.code === 'VOICE_STUDIO_OFF';
     return (
       <div className={`vs-page${embedded ? ' vs-page--embedded' : ''}`}>
-        {!embedded && <Link to={`/episodes/${episodeId}`} className="vs-back"><ArrowLeft size={14} /> Episode</Link>}
+        {!embedded && <Link to={`/episodes/${episodeId}?tab=voice`} className="vs-back"><ArrowLeft size={14} /> Episode</Link>}
         <div className="vs-empty" role="alert" data-testid="vs-load-error">
           <Heading>Voice Studio</Heading>
           <p>{off ? "Voice Studio isn't switched on yet. Until it is, the Teleprompter keeps using the voice clips recorded on the Script tab." : loadError.message}</p>
@@ -132,7 +132,7 @@ export default function VoiceStudio({ episodeId: givenId = null, embedded = fals
   return (
     <div className={`vs-page${embedded ? ' vs-page--embedded' : ''}`} data-testid="vs-page">
       <header className="vs-head">
-        {!embedded && <Link to={`/episodes/${episodeId}`} className="vs-back"><ArrowLeft size={14} /> {title}</Link>}
+        {!embedded && <Link to={`/episodes/${episodeId}?tab=voice`} className="vs-back"><ArrowLeft size={14} /> {title}</Link>}
         <Heading>Voice Studio</Heading>
         <button type="button" className="vs-btn vs-btn--quiet vs-reload" onClick={reload} disabled={loading}><RefreshCw size={14} /> Reload</button>
         <p className="vs-counts" data-testid="vs-counts">

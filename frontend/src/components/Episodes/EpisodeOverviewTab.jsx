@@ -125,6 +125,9 @@ const PENDING_FIELDS = [
   { key: 'creative_notes', label: 'Creative Notes', note: 'Not saved yet. Its home in production planning is still being decided.' },
 ];
 
+/** Why the source event's Unlink is off: the server keeps an event with the episode it started (the terms lock). */
+export const SOURCE_EVENT_PROTECTED = 'Source event: it stays with this episode, so it cannot be unlinked here.';
+
 function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null, balance = null }) {
   const navigate = useNavigate();
   const [isEditing, setIsEditing] = useState(false);
@@ -344,6 +347,20 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
   // events linked to a different episode are filtered out.
   const linkEvent = async (eventId) => {
     if (!eventId || !showId) return;
+    // A first link needs no question. Adding an event to an episode that
+    // already has one is a reassociation the server will not undo (an event
+    // stays with the episode it is linked to), so it says what will change.
+    if (linkedEvents.length > 0) {
+      const adding = allEvents.find((e) => e.id === eventId);
+      const source = linkedEvents.find((e) => e.link?.anchor) || linkedEvents[0];
+      const ok = window.confirm(
+        `Link "${adding?.name || 'this event'}" to this episode as well?\n\n`
+        + `What changes: "${adding?.name || 'this event'}" becomes linked to "${episode.title || 'this episode'}".\n`
+        + `What does not change: "${source?.name || 'the current event'}" stays this episode's ${source?.link?.anchor ? 'source event' : 'event'}.\n\n`
+        + 'An event stays with the episode it is linked to, so this cannot be undone here.',
+      );
+      if (!ok) return;
+    }
     setLinkBusy(true);
     setLinkError(null);
     try {
@@ -362,6 +379,15 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
   };
   const unlinkEvent = async (eventId) => {
     if (!eventId || !showId) return;
+    const leaving = linkedEvents.find((e) => e.id === eventId);
+    // The source event is never unlinked from here (its button is off); this is a second guard.
+    if (leaving?.link?.anchor) return;
+    const ok = window.confirm(
+      `Unlink "${leaving?.name || 'this event'}" from this episode?\n\n`
+      + `What changes: "${leaving?.name || 'this event'}" would no longer be linked to "${episode.title || 'this episode'}".\n`
+      + 'What does not change: the event and the episode themselves are not deleted.',
+    );
+    if (!ok) return;
     setLinkBusy(true);
     setLinkError(null);
     try {
@@ -384,7 +410,13 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
   // no longer the active one.
   const regenerateFromEvent = async (ev) => {
     if (!showId) return;
-    if (!window.confirm(`Regenerate episode from "${ev.name}"? The current episode will be soft-deleted and a fresh one created.`)) return;
+    const ok = window.confirm(
+      `Regenerate this episode from "${ev.name}"?\n\n`
+      + `What changes: "${episode.title || 'this episode'}" is soft-deleted and a new episode is created from the event.\n`
+      + 'A filmed episode is never replaced: the server refuses and nothing changes.',
+    );
+    if (!ok) return;
+    setLinkError(null);
     try {
       const res = await api.post(`/api/v1/world/${showId}/events/${ev.id}/regenerate-episode`);
       const newId = res.data?.data?.episode?.id;
@@ -395,7 +427,9 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
         if (typeof onUpdate === 'function') onUpdate({});
       }
     } catch (err) {
-      alert('Regenerate failed: ' + (err?.response?.data?.error || err.message));
+      console.error('[Episode] Failed to regenerate from the event:', err);
+      // The refusal (a filmed episode, a blocked start) in the server's words, on the card.
+      setLinkError(`Could not regenerate the episode: ${err?.response?.data?.error || err.message || 'request failed'}`);
     }
   };
 
@@ -701,7 +735,7 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
                         data-testid={`overview-event-package-${ev.id}`}
                         className="eov-link"
                       >
-                        View Event Package <ArrowRight size={14} aria-hidden="true" />
+                        Open the event package <ArrowRight size={14} aria-hidden="true" />
                       </Link>
                     )}
                   </div>
@@ -711,18 +745,24 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
                       className="eov-icon-btn"
                       onClick={() => regenerateFromEvent(ev)}
                       disabled={linkBusy}
-                      title="Regenerate this episode from the event (soft-deletes the current episode)"
+                      title="Regenerate this episode from the event (soft-deletes the current episode; refused for a filmed episode)"
                       aria-label="Regenerate this episode from the event"
+                      data-testid={`overview-event-regenerate-${ev.id}`}
                     ><RefreshCw size={15} aria-hidden="true" /></button>
                     <button
                       type="button"
                       className="eov-icon-btn"
                       onClick={() => unlinkEvent(ev.id)}
-                      disabled={linkBusy}
-                      title="Unlink event from this episode"
-                      aria-label="Unlink event from this episode"
+                      // The source event stays with its episode: the control is shown, off, with the reason (2026-11-12).
+                      disabled={linkBusy || Boolean(ev.link?.anchor)}
+                      title={ev.link?.anchor ? SOURCE_EVENT_PROTECTED : 'Unlink event from this episode'}
+                      aria-label={ev.link?.anchor ? `Unlink is off. ${SOURCE_EVENT_PROTECTED}` : 'Unlink event from this episode'}
+                      data-testid={`overview-event-unlink-${ev.id}`}
                     ><X size={15} aria-hidden="true" /></button>
                   </div>
+                  {ev.link?.anchor && (
+                    <p className="eov-protected-note" data-testid={`overview-event-protected-${ev.id}`}>{SOURCE_EVENT_PROTECTED}</p>
+                  )}
                 </div>
               ))}
             </div>
@@ -779,6 +819,12 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
               })()}
               {seasonContext.desired_pressure && (
                 <p className="eov-season-pressure" data-testid="season-pressure">Desired pressure: <strong>{seasonContext.desired_pressure}</strong></p>
+              )}
+              {/* A placed episode's way back to its slot (2026-11-12). The slot comes from the episode's own season context; nothing is placed or moved from here. */}
+              {showId && Number.isInteger(Number(seasonContext.slot_number)) && Number(seasonContext.slot_number) > 0 && (
+                <Link className="eov-link" to={seasonPageHref(showId, 'roadmap', { slot: seasonContext.slot_number })} data-testid="season-position-roadmap">
+                  View on the Season Roadmap <ArrowRight size={14} aria-hidden="true" />
+                </Link>
               )}
             </>
           ) : (
