@@ -158,7 +158,10 @@ router.post('/world/:showId/events/:eventId/inject', requireAuth, async (req, re
     {
       const secondaryEvents = require('../../services/episodeSecondaryEvents');
       const link = await secondaryEvents.classifyLink(models.sequelize, { eventId, episodeId: episode_id });
-      if (link.kind === 'secondary') {
+      // A filmed episode is refused below as filmed (its script is never
+      // changed by a generator): that answer comes first and is kept.
+      const filmedAlready = link.kind === 'secondary' ? await require('../../utils/frozenEpisode').filmedAt(models.sequelize, episode_id) : null;
+      if (link.kind === 'secondary' && !filmedAlready) {
         const refusal = secondaryEvents.attachEnabled()
           ? new secondaryEvents.SecondaryEventError(409, secondaryEvents.CODES.INJECT_UNSUPPORTED,
             'This episode already has its event. A second event is linked from the episode\'s Events, not injected: injecting would replace the script\'s event tag. Nothing was changed.',

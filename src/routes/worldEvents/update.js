@@ -23,7 +23,7 @@ const { syncDraftedDealType } = require('../../services/dealTypeDraftService');
 const { DEAL_TYPES, CATEGORY_VALUES, FORMAT_VALUES } = require('../../models/WorldEvent');
 const { loadScopedEvent } = require('../../utils/eventScope');
 const { getModels } = require('./helpers');
-const { assertEventRelinkAllowed, isFrozenEpisodeError } = require('../../utils/frozenEpisode');
+const { assertEventRelinkAllowed, assertEpisodeAcceptsEventLink, isFrozenEpisodeError } = require('../../utils/frozenEpisode');
 const { RetryableConflictError, asRetryable } = require('../../utils/episodeLocks');
 const { softDeleteUnusedUnlinkedEvents } = require('../../utils/worldEventSafeDelete');
 const { findLiveLinkedEpisode, isEpisodeEventLinkConflict, episodeEventLinkTakenBody, findEpisodeLinkHolder, EPISODE_EVENT_LINK_TAKEN_CODE } = require('../../utils/eventEpisodeLink');
@@ -529,9 +529,14 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), req
       if (current && String(current.used_in_episode_id || '') === String(linkTo)) return;
       try {
         await assertEventRelinkAllowed(models.sequelize, eventId, { transaction, episodeIds: [linkTo] });
+        // A filmed episode takes no new event (Evoni, 2026-11-12): asked with
+        // the target episode locked by the check above. The stored link
+        // re-sent returned earlier; the brief's own source event may have
+        // its link restored. A refusal rolls the whole request back.
+        await assertEpisodeAcceptsEventLink(models.sequelize, { eventId, episodeId: linkTo, transaction });
         // A second event for an episode that has one (services/episodeSecondaryEvents):
-        // asked with the target episode locked by the check above. A first
-        // link, and the primary's own link restored, are as before.
+        // asked under the same lock. A first link, and the primary's own
+        // link restored, are as before.
         const link = await secondaryEvents.assertSecondaryAttach(models.sequelize, { eventId, episodeId: linkTo, transaction });
         secondaryAttach = link.kind === 'secondary';
       } catch (err) {
