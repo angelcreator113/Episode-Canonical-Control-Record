@@ -143,6 +143,14 @@
 .pov-start li.is-done { color: var(--success-text); text-decoration: line-through; }
 .pov-start button { padding: 0; border: none; background: none; color: var(--accent-dark); font: inherit; font-weight: 700; text-decoration: underline; cursor: pointer; }
 
+/* Now producing: the episode's code above its title, and why the next step is next. */
+.pov-now-code { margin: 0 0 4px; font-family: var(--font-ui); font-size: 13px; font-weight: 700; letter-spacing: 0.06em; color: var(--accent-dark); }
+.pov-next-why { margin: 0; font-size: 13px; color: var(--text-secondary); overflow-wrap: anywhere; }
+.pov-chips { align-items: center; }
+.pov-attention-tag { margin-left: 8px; vertical-align: middle; text-transform: none; }
+.pov-attention li.is-current { border-color: var(--accent-light); }
+.pov-btn.is-primary { min-width: 0; text-align: center; overflow-wrap: anywhere; }
+
 @media (max-width: 1180px) {
   .pov-layout { grid-template-columns: minmax(0, 1fr); }
   .pov-side { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
@@ -158,5 +166,6 @@
   .pov-section-icon { width: 34px; height: 34px; }
   .pov-section-title { font-size: 13px; overflow-wrap: normal; word-break: normal; hyphens: auto; }
   .pov-actions .pov-btn:not(.is-primary):not(.is-icon) { flex: 1 1 140px; }
+  .pov-actions .pov-btn.is-primary { flex: 1 1 100%; }
   .pov-side { display: flex; }
 }
