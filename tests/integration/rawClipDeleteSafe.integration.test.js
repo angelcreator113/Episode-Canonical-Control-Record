@@ -48,6 +48,12 @@ const media = require('../../src/services/rawClipMedia');
 const { peekFrozen } = require('../../src/utils/snapshotFreeze');
 const { scriptRevision } = require('../../src/utils/scriptRevision');
 
+const { Sequelize } = require('sequelize');
+// The timeline's performer clips are C1b's (migration 20261102120000). Its own suite
+// (episodeEditC1b) runs it again before it starts, and so does this one: another suite
+// may have left the test database without it.
+const c1b = require('../../src/migrations/20261102120000-add-episode-edit-c1b-kinds');
+
 const { sequelize } = models;
 const shouldSkip =
   !process.env.DATABASE_URL ||
@@ -75,6 +81,7 @@ const EDIT_TABLES = ['edit_versions', 'timeline_audio_items', 'timeline_items', 
   };
 
   beforeAll(async () => {
+    await c1b.up(sequelize.getQueryInterface(), Sequelize);
     admin = TokenService.generateTokenPair({ id: USER, email: 'admin@clipdel.dev', name: 'Admin', groups: ['ADMIN'], role: 'ADMIN' }).accessToken;
     editor = TokenService.generateTokenPair({ id: 'test-user-clipdel', email: 'user@clipdel.dev', name: 'Editor', groups: ['USER', 'EDITOR'], role: 'USER' }).accessToken;
     await run('INSERT INTO shows (id, name, slug, created_at, updated_at) VALUES (:id, :n, :n, NOW(), NOW())', { id: show, n: `clipdel-${show.slice(0, 8)}` });
