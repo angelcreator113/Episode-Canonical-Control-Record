@@ -31,9 +31,10 @@ describe('EpisodeOverviewTab and the terms lock', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(api.get).mockResolvedValue({ data: {} });
-    // A linked event that is not the source: the source event's Unlink is off (EpisodeOverviewTab.eventLinks.test.jsx).
+    // A listed event the server's rule does not lock (neither the source nor linked by its own link): Unlink is
+    // off for every locked row (EpisodeOverviewTab.eventLinks.test.jsx), so only such a row can still be pressed.
     vi.mocked(getEpisodeEvents).mockResolvedValue({
-      events: [{ id: 'ev-1', name: 'The Gala', used_in_episode_id: 'ep-1', link: { anchor: false, stamped: true } }],
+      events: [{ id: 'ev-1', name: 'The Gala', used_in_episode_id: null, link: { anchor: false, stamped: false } }],
     });
     // Unlink asks first (2026-11-12); here the answer is yes.
     vi.spyOn(window, 'confirm').mockReturnValue(true);

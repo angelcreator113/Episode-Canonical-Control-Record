@@ -127,6 +127,21 @@ const PENDING_FIELDS = [
 
 /** Why the source event's Unlink is off: the server keeps an event with the episode it started (the terms lock). */
 export const SOURCE_EVENT_PROTECTED = 'Source event: it stays with this episode, so it cannot be unlinked here.';
+/** Why any other linked event's Unlink is off: the same server rule (the episode link is a locked term once it points at a live episode). */
+export const LINKED_EVENT_LOCKED = 'Linked event: an event stays with the episode it is linked to, so it cannot be unlinked here.';
+
+/**
+ * Why an event row cannot be unlinked, from what the episode's events read
+ * already says (services/episodeEventsService: link.anchor, link.stamped) and
+ * the server's terms lock (src/utils/eventTermsLock.js): the brief's source
+ * event, and any event whose own link points at this episode. null when the
+ * server would allow it. No permission is invented here.
+ */
+export function unlinkLockReason(ev, episodeId) {
+  if (ev?.link?.anchor) return SOURCE_EVENT_PROTECTED;
+  if (ev?.link?.stamped || (episodeId && ev?.used_in_episode_id === episodeId)) return LINKED_EVENT_LOCKED;
+  return null;
+}
 
 function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null, balance = null }) {
   const navigate = useNavigate();
@@ -380,8 +395,8 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
   const unlinkEvent = async (eventId) => {
     if (!eventId || !showId) return;
     const leaving = linkedEvents.find((e) => e.id === eventId);
-    // The source event is never unlinked from here (its button is off); this is a second guard.
-    if (leaving?.link?.anchor) return;
+    // A locked link is never unlinked from here (its button is off); this is a second guard.
+    if (unlinkLockReason(leaving, episode.id)) return;
     const ok = window.confirm(
       `Unlink "${leaving?.name || 'this event'}" from this episode?\n\n`
       + `What changes: "${leaving?.name || 'this event'}" would no longer be linked to "${episode.title || 'this episode'}".\n`
@@ -753,15 +768,15 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
                       type="button"
                       className="eov-icon-btn"
                       onClick={() => unlinkEvent(ev.id)}
-                      // The source event stays with its episode: the control is shown, off, with the reason (2026-11-12).
-                      disabled={linkBusy || Boolean(ev.link?.anchor)}
-                      title={ev.link?.anchor ? SOURCE_EVENT_PROTECTED : 'Unlink event from this episode'}
-                      aria-label={ev.link?.anchor ? `Unlink is off. ${SOURCE_EVENT_PROTECTED}` : 'Unlink event from this episode'}
+                      // Wherever the server would refuse, the control is shown, off, with the reason (2026-11-12).
+                      disabled={linkBusy || Boolean(unlinkLockReason(ev, episode.id))}
+                      title={unlinkLockReason(ev, episode.id) || 'Unlink event from this episode'}
+                      aria-label={unlinkLockReason(ev, episode.id) ? `Unlink is off. ${unlinkLockReason(ev, episode.id)}` : 'Unlink event from this episode'}
                       data-testid={`overview-event-unlink-${ev.id}`}
                     ><X size={15} aria-hidden="true" /></button>
                   </div>
-                  {ev.link?.anchor && (
-                    <p className="eov-protected-note" data-testid={`overview-event-protected-${ev.id}`}>{SOURCE_EVENT_PROTECTED}</p>
+                  {unlinkLockReason(ev, episode.id) && (
+                    <p className="eov-protected-note" data-testid={`overview-event-protected-${ev.id}`}>{unlinkLockReason(ev, episode.id)}</p>
                   )}
                 </div>
               ))}

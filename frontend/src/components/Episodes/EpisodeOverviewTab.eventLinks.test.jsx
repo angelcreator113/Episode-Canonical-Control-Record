@@ -28,7 +28,7 @@ vi.mock('../episode/TimelinePlacementsSection', () => ({ default: () => null }))
 
 import api from '../../services/api';
 import { getEpisodeEvents } from '../../services/episodeEventsApi';
-import EpisodeOverviewTab, { SOURCE_EVENT_PROTECTED } from './EpisodeOverviewTab';
+import EpisodeOverviewTab, { SOURCE_EVENT_PROTECTED, LINKED_EVENT_LOCKED, unlinkLockReason } from './EpisodeOverviewTab';
 import { nextStep } from '../../lib/episodeOverview';
 import { isAppPath } from '../../utils/sceneSets';
 
@@ -37,6 +37,8 @@ const SOURCE = { id: 'ev-1', name: 'Studio Session', used_in_episode_id: 'ep-1',
 const SOURCE_UNSTAMPED = { id: 'ev-1', name: 'Studio Session', used_in_episode_id: null, link: { anchor: true, stamped: false } };
 const SECOND = { id: 'ev-2', name: 'After Party', used_in_episode_id: 'ep-1', link: { anchor: false, stamped: true } };
 const FREE = { id: 'ev-9', name: 'Charity Gala', used_in_episode_id: null };
+// A row the server's rule does not lock: listed, but neither the source nor linked to this episode by its own link.
+const LOOSE = { id: 'ev-3', name: 'Loose End', used_in_episode_id: null, link: { anchor: false, stamped: false } };
 const PLACED = { label: 'S1 · E1', slot_number: 1, phase: { number: 1, title: 'Foundation' } };
 const FILMED = 'Episode 1 "Wearable Experiments" has been filmed, so it cannot be replaced. Nothing was changed.';
 
@@ -83,34 +85,71 @@ describe('the source event is protected', () => {
     expect(writes()).toBe(0);
   });
 
-  test('another linked event has no protection note and its Unlink is on', async () => {
+  test('any other linked event is locked by the same server rule: Unlink shown, off, with its own short reason; pressing it writes nothing', async () => {
     linked = [SOURCE, SECOND];
     renderTab();
     const unlink = await screen.findByTestId('overview-event-unlink-ev-2');
+    expect(unlink.disabled).toBe(true);
+    expect(unlink.getAttribute('title')).toBe(LINKED_EVENT_LOCKED);
+    expect(unlink.getAttribute('aria-label')).toBe(`Unlink is off. ${LINKED_EVENT_LOCKED}`);
+    expect(screen.getByTestId('overview-event-protected-ev-2').textContent).toBe('Linked event: an event stays with the episode it is linked to, so it cannot be unlinked here.');
+    fireEvent.click(unlink);
+    expect(confirmSpy).not.toHaveBeenCalled();
+    expect(writes()).toBe(0);
+  });
+
+  test('unlinkLockReason follows the read\'s own flags and the server\'s rule, and invents nothing', () => {
+    expect(unlinkLockReason(SOURCE, 'ep-1')).toBe(SOURCE_EVENT_PROTECTED);
+    expect(unlinkLockReason(SOURCE_UNSTAMPED, 'ep-1')).toBe(SOURCE_EVENT_PROTECTED);
+    expect(unlinkLockReason(SECOND, 'ep-1')).toBe(LINKED_EVENT_LOCKED);
+    // An event just linked on this page carries the link but not yet the read's flags.
+    expect(unlinkLockReason({ id: 'x', used_in_episode_id: 'ep-1' }, 'ep-1')).toBe(LINKED_EVENT_LOCKED);
+    expect(unlinkLockReason(LOOSE, 'ep-1')).toBeNull();
+    expect(unlinkLockReason({ id: 'x', used_in_episode_id: 'ep-2' }, 'ep-1')).toBeNull();
+    expect(unlinkLockReason(null, 'ep-1')).toBeNull();
+    expect(unlinkLockReason({ id: 'x', used_in_episode_id: undefined }, undefined)).toBeNull();
+  });
+
+  test('a row the rule does not lock keeps its Unlink on, with no note', async () => {
+    linked = [SOURCE, LOOSE];
+    renderTab();
+    const unlink = await screen.findByTestId('overview-event-unlink-ev-3');
     expect(unlink.disabled).toBe(false);
     expect(unlink.getAttribute('title')).toBe('Unlink event from this episode');
-    expect(screen.queryByTestId('overview-event-protected-ev-2')).toBeNull();
+    expect(screen.queryByTestId('overview-event-protected-ev-3')).toBeNull();
   });
 });
 
 describe('changing an association asks first and says what will change', () => {
-  test('Unlink: the question names the event and the episode; Cancel sends nothing; OK sends the one request', async () => {
-    linked = [SOURCE, SECOND];
+  test('Unlink, where the rule allows it: the question names the event and the episode; Cancel sends nothing; OK sends the one request', async () => {
+    linked = [SOURCE, LOOSE];
     renderTab();
-    fireEvent.click(await screen.findByTestId('overview-event-unlink-ev-2'));
+    fireEvent.click(await screen.findByTestId('overview-event-unlink-ev-3'));
     expect(confirmSpy).toHaveBeenCalledTimes(1);
     const asked = confirmSpy.mock.calls[0][0];
-    expect(asked).toContain('Unlink "After Party" from this episode?');
-    expect(asked).toContain('What changes: "After Party" would no longer be linked to "Wearable Experiments".');
+    expect(asked).toContain('Unlink "Loose End" from this episode?');
+    expect(asked).toContain('What changes: "Loose End" would no longer be linked to "Wearable Experiments".');
     expect(asked).toContain('What does not change: the event and the episode themselves are not deleted.');
     expect(writes()).toBe(0);
-    expect(screen.getByTestId('overview-event-unlink-ev-2')).toBeTruthy();
+    expect(screen.getByTestId('overview-event-unlink-ev-3')).toBeTruthy();
 
     confirmSpy.mockReturnValue(true);
     vi.mocked(api.put).mockResolvedValue({ data: { success: true } });
-    fireEvent.click(screen.getByTestId('overview-event-unlink-ev-2'));
-    await waitFor(() => expect(api.put).toHaveBeenCalledWith('/api/v1/world/show-1/events/ev-2', { used_in_episode_id: null }));
+    fireEvent.click(screen.getByTestId('overview-event-unlink-ev-3'));
+    await waitFor(() => expect(api.put).toHaveBeenCalledWith('/api/v1/world/show-1/events/ev-3', { used_in_episode_id: null }));
     expect(writes()).toBe(1);
+  });
+
+  test('an event just linked on this page is locked at once, like every linked event', async () => {
+    linked = [];
+    vi.mocked(api.put).mockResolvedValue({ data: { success: true } });
+    renderTab();
+    const select = await screen.findByLabelText('Link an event');
+    await waitFor(() => expect(within(select).getByText('Charity Gala')).toBeTruthy());
+    fireEvent.change(select, { target: { value: 'ev-9' } });
+    const unlink = await screen.findByTestId('overview-event-unlink-ev-9');
+    expect(unlink.disabled).toBe(true);
+    expect(screen.getByTestId('overview-event-protected-ev-9').textContent).toBe(LINKED_EVENT_LOCKED);
   });
 
   test('adding an event to an episode that already has one: the question says what changes and that it cannot be undone; Cancel sends nothing', async () => {
