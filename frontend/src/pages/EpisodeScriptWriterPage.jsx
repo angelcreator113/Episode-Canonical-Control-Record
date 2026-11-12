@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { FileText, Wand2, Lock, Unlock, ChevronDown, ChevronUp, Eye,
   DollarSign, Shirt, MapPin, MessageCircle, BarChart3, ArrowLeft } from 'lucide-react';
 import api from '../services/api';
+import { withFilmedConfirm } from '../lib/filmedScriptConfirm';
 import './EpisodeScriptWriterPage.css';
 
 const BEAT_NAMES = [
@@ -240,9 +241,11 @@ export default function EpisodeScriptWriterPage() {
     if (!activeScript) return;
     setLocking(true);
     setError(null);
-    const lock = (confirmOverwrite) => api.post(`/api/v1/episode-scripts/${activeScript.id}/lock`, {
-      script_revision: scriptRevision, ...(confirmOverwrite ? { confirmOverwrite: true } : {}),
-    });
+    // A filmed episode asks its own question as well (lib/filmedScriptConfirm):
+    // asked each time here, and answered with this episode's id only.
+    const lock = (confirmOverwrite) => withFilmedConfirm(new Set(), activeScript.episode_id || episodeId, (confirm) => api.post(`/api/v1/episode-scripts/${activeScript.id}/lock`, {
+      script_revision: scriptRevision, ...(confirmOverwrite ? { confirmOverwrite: true } : {}), ...confirm,
+    }));
     try {
       let r;
       try {
@@ -260,7 +263,9 @@ export default function EpisodeScriptWriterPage() {
       loadScripts();
     } catch (err) {
       const code = err.response?.data?.code;
-      if (err.response?.status === 409 && (code === 'SCRIPT_CHANGED' || code === 'SCRIPT_REVISION_REQUIRED')) {
+      if (err?.filmedDeclined) {
+        setError('Not locked. The filmed episode\'s script is unchanged.');
+      } else if (err.response?.status === 409 && (code === 'SCRIPT_CHANGED' || code === 'SCRIPT_REVISION_REQUIRED')) {
         // Nothing was locked. The page reads the episode's script revision again, so the
         // next Lock is against the script as it is now (and asks before replacing it).
         setError('The episode\'s script changed since this page opened, so this script was not locked or saved over it. Open the episode\'s Script tab to see the newer script, or Lock again to replace it.');
