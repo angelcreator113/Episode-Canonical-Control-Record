@@ -23,6 +23,20 @@
  *   9. when the text changed, adds one to episodes.script_seq, the script's
  *      save number (decisions 1 and 2, 2026-10-27): under the row lock, so
  *      it only goes up and no two saves share one. A lock-only save leaves it.
+ *
+ * A filmed episode's script (Evoni, 2026-11-12). Filmed is the snapshot
+ * freeze's definition (utils/snapshotFreeze: any raw clip, removed or not),
+ * read under the row lock; a take's upload holds the episode row FOR SHARE
+ * (rawClipsService), so a first take and a save take turns. Once an episode
+ * is filmed and has a script:
+ *   - a generator (source 'generate') is refused, FILMED_SCRIPT_PROTECTED.
+ *     No flag lifts it: confirmOverwrite answers a different question;
+ *   - a person's own write that changes the text (Save, Approve with text,
+ *     Restore, and the Script Writer's Lock, which passes manualApply) needs
+ *     filmedConfirm to be this episode's id, else
+ *     FILMED_SCRIPT_CONFIRMATION_REQUIRED. The value comes with each request
+ *     and is stored nowhere: the page asks once and sends it while it is
+ *     open, and one episode's value never answers for another.
  * After the commit it logs the identity plan as counts only
  * (services/identityPlanLog.js). A refusal throws ScriptSaveError, which
  * sendScriptSaveError turns into its HTTP answer.
@@ -30,6 +44,7 @@
 
 const { scriptRevision, isRevision } = require('../utils/scriptRevision');
 const { scriptOverwriteBlocked, scriptOverwriteRefusalBody } = require('../utils/scriptOverwriteGuard');
+const { peekFrozen } = require('../utils/snapshotFreeze');
 
 // A1c R1: line identities are computed for the log only, never stored. R3
 // turns this on for every writer at once (design R4.4).
@@ -54,7 +69,35 @@ const MESSAGES = {
   changed: 'This script changed since you opened it. Nothing was saved. Load the newer script (your text is kept as a draft) or compare the two.',
   changedDuringWrite: 'The script changed while this one was being written, so it was not saved over the newer script. The new draft is shown, unsaved.',
   identityActive: 'Line identities are active for this episode, and this version of the app can\'t change its script safely. Nothing was saved.',
+  filmedProtected: 'This episode has been filmed, so its script is not replaced automatically. Nothing was changed and nothing was charged. To change a line, edit the script yourself on the Script tab.',
+  filmedConfirm: 'This episode has been filmed. Changing its script will not change the footage. Confirm to save this edit.',
 };
+
+const FILMED_SCRIPT_PROTECTED = 'FILMED_SCRIPT_PROTECTED';
+const FILMED_SCRIPT_CONFIRMATION_REQUIRED = 'FILMED_SCRIPT_CONFIRMATION_REQUIRED';
+
+const hasScript = (text) => typeof text === 'string' && text.trim().length > 0;
+
+/** The request body's answer to "this episode is filmed; save the edit?": the episode's id, or null. */
+const filmedConfirmOf = (body) => (body && typeof body.confirm_filmed_edit === 'string' ? body.confirm_filmed_edit : null);
+
+/** When filming began for an episode that also has a script; null otherwise. */
+async function filmedScriptSince(sequelize, row, transaction = null) {
+  if (!row || !hasScript(row.script_content)) return null;
+  const { frozen_at: filmedAt } = await peekFrozen(sequelize, row.id, { transaction });
+  return filmedAt || null;
+}
+
+/**
+ * For a generator's route, before it asks a model: the refusal body when the
+ * episode is filmed and has a script, else null. Advisory (no lock); the
+ * save itself checks again under the row lock.
+ */
+async function filmedScriptRefusal(sequelize, episode) {
+  const filmedAt = await filmedScriptSince(sequelize, episode);
+  if (!filmedAt) return null;
+  return { success: false, code: FILMED_SCRIPT_PROTECTED, error: MESSAGES.filmedProtected, episode_id: episode.id, filmed_at: filmedAt, saved: false };
+}
 
 const keysOf = (row) => (row?.get ? row.get('script_line_keys') : row?.script_line_keys) ?? null;
 
@@ -104,6 +147,9 @@ function restoredText(row, versionText) {
  *   guard:           a request body for the overwrite guard, checked under the lock;
  *   skipIfScript:    leave an episode that already has a script as it is;
  *   restoredFrom:    the version a Save names (Restore);
+ *   manualApply:     a 'generate' writer that is a person's own, separate
+ *                    step on text the page shows (the Script Writer's Lock);
+ *   filmedConfirm:   the request's confirm_filmed_edit (filmedConfirmOf);
  *   userId, transaction (the caller's, when it writes other rows with this).
  * Returns { episode, skipped, script_content, script_revision, script_seq
  *   (the new save number as a decimal string, or null when the text did
@@ -114,6 +160,7 @@ async function saveEpisodeScript(models, episodeId, opts = {}) {
   const {
     writer = 'unknown', source = 'save', compose, revision, requireRevision = false,
     expectRevision = null, guard = null, skipIfScript = false, restoredFrom = null,
+    manualApply = false, filmedConfirm = null,
     userId = null, transaction = null,
   } = opts;
   if (typeof compose !== 'function') throw new Error('saveEpisodeScript: compose is required');
@@ -131,6 +178,13 @@ async function saveEpisodeScript(models, episodeId, opts = {}) {
     }
     if (skipIfScript && String(row.script_content || '').trim()) {
       return { episode: row, skipped: true, script_content: row.script_content, script_revision: current };
+    }
+    // A filmed episode's script, asked under the row lock: never replaced by
+    // a generator, whatever the request confirms.
+    const filmedAt = await filmedScriptSince(Episode.sequelize, row, t);
+    const byPerson = source !== 'generate' || manualApply === true;
+    if (filmedAt && !byPerson) {
+      refuse(409, FILMED_SCRIPT_PROTECTED, MESSAGES.filmedProtected, { episode_id: row.id, filmed_at: filmedAt, saved: false });
     }
     if (guard && scriptOverwriteBlocked(row.script_content, guard)) {
       throw new ScriptSaveError(409, scriptOverwriteRefusalBody());
@@ -156,6 +210,12 @@ async function saveEpisodeScript(models, episodeId, opts = {}) {
         const authoritative = version ? restoredText(row, version.script_content) : null;
         if (authoritative !== null && authoritative === script) { script = authoritative; versionSource = 'restore'; }
       }
+    }
+
+    // A person's edit of a filmed script: this episode's own confirmation,
+    // sent with this request. A lock alone (no text change) needs none.
+    if (filmedAt && script !== previous && filmedConfirm !== String(row.id)) {
+      refuse(409, FILMED_SCRIPT_CONFIRMATION_REQUIRED, MESSAGES.filmedConfirm, { episode_id: row.id, filmed_at: filmedAt, current_revision: current });
     }
 
     const { snapshotScript } = require('./scriptVersions');
@@ -210,5 +270,6 @@ function sendScriptSaveError(res, err) {
 
 module.exports = {
   saveEpisodeScript, readScriptRevision, revisionOf, refuse, sendScriptSaveError, ScriptSaveError,
+  filmedScriptRefusal, filmedConfirmOf, FILMED_SCRIPT_PROTECTED, FILMED_SCRIPT_CONFIRMATION_REQUIRED,
   IDENTITY_WRITES, MESSAGES,
 };

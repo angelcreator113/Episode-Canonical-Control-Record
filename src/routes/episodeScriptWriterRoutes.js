@@ -28,6 +28,13 @@ router.post('/:episodeId/generate', requireAuth, aiRateLimiter, async (req, res)
     const episode = await models.Episode.findByPk(episodeId);
     if (!episode) return res.status(404).json({ error: 'Episode not found' });
 
+    // A filmed episode's script is never replaced by a generator (Evoni,
+    // 2026-11-12): refused here, before the model is asked.
+    const filmed = await require('../services/scriptSave').filmedScriptRefusal(models.sequelize, episode);
+    if (filmed) {
+      console.warn(`[ScriptWriter] Refused for episode ${episodeId}: filmed, its script is kept.`);
+      return res.status(409).json(filmed);
+    }
     if (scriptOverwriteBlocked(episode.script_content, req.body)) {
       console.warn(`[ScriptWriter] Refused overwrite for episode ${episodeId}: existing script_content present, no confirmOverwrite flag.`);
       return res.status(409).json(scriptOverwriteRefusalBody());
@@ -175,7 +182,7 @@ router.post('/:scriptId/lock', requireAuth, async (req, res) => {
     // since is never replaced unseen. A failure is reported, never
     // swallowed, and leaves this script unlocked.
     const models = require('../models');
-    const { saveEpisodeScript, sendScriptSaveError } = require('../services/scriptSave');
+    const { saveEpisodeScript, sendScriptSaveError, filmedConfirmOf } = require('../services/scriptSave');
     const { scriptKeepingLocks } = require('../utils/scriptBeatLocks');
     let saved;
     try {
@@ -183,6 +190,11 @@ router.post('/:scriptId/lock', requireAuth, async (req, res) => {
         const result = await saveEpisodeScript(models, script.episode_id, {
           writer: 'W4',
           source: 'generate',
+          // A person's own, separate step on a draft the page shows, against
+          // the script revision the page read: on a filmed episode it is a
+          // manual edit, and needs that episode's confirmation (Evoni, 2026-11-12).
+          manualApply: true,
+          filmedConfirm: filmedConfirmOf(req.body),
           revision: req.body?.script_revision,
           requireRevision: true,
           guard: req.body || {},

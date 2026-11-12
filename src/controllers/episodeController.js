@@ -563,6 +563,7 @@ module.exports = {
           revision: updates.script_revision,
           requireRevision: true,
           restoredFrom: updates.restored_from ?? null,
+          filmedConfirm: require('../services/scriptSave').filmedConfirmOf(updates),
           userId: req.user?.id,
           transaction,
           compose: (row) => {
@@ -588,11 +589,11 @@ module.exports = {
       // Keys this update does not write are named in the response, so a
       // form sending a field the server does not keep is not told it saved
       // (the Overview's Air Date was sent as publish_date and dropped).
-      // script_revision and restored_from steer the script save. Internal
+      // script_revision, restored_from and confirm_filmed_edit steer the script save. Internal
       // attributes (script_line_keys, A1b) are never named in a response.
       const internal = new Set(Episode.INTERNAL_ATTRIBUTES || []);
       const ignoredFields = Object.keys(updates).filter(
-        (field) => !allowedFields[field] && field !== 'script_revision' && field !== 'restored_from'
+        (field) => !allowedFields[field] && field !== 'script_revision' && field !== 'restored_from' && field !== 'confirm_filmed_edit'
           && !internal.has(field));
       return { episode, oldValues, updateData, lockedKept, lockedMoved, scriptRevision, ignoredFields };
     }).catch((err) => {
@@ -697,6 +698,7 @@ module.exports = {
         source: 'lock',
         revision: req.body?.script_revision,
         requireRevision: true,
+        filmedConfirm: require('../services/scriptSave').filmedConfirmOf(req.body),
         userId: req.user?.id,
         compose: (row) => {
           before = normalizeLockedBeats(row.script_locked_beats);
