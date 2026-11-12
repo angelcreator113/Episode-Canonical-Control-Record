@@ -33,6 +33,7 @@ const ALLOWED = {
   'src/services/sceneSetUsesService.js': 'scene-set uses: every linked event\'s scene set, not the episode\'s one event',
   'src/utils/eventTermsLock.js': 'the reopen guard: any stamped or brief event of the episode with reopened terms',
   'src/utils/episodeEventSql.js': 'the rule itself, and its doc comment',
+  'src/utils/frozenEpisode.js': 'filmedLinkRefusal: whether this one event\'s own link already names the filmed episode (the restoration exception), not the episode\'s event',
 };
 
 function jsFiles(dir) {
