@@ -53,7 +53,7 @@ import { packageHref } from '../../lib/eventFlow';
 import { SpecialsBar, SpecialCard, WillBeSpecial } from './SeasonSpecials';
 import { seasonIsFull } from '../../lib/seasonFull';
 import { useSeasonSpecials, specialsAfter, canMakeTwoParter, slotCode } from '../../lib/seasonSpecials';
-import { slotEvent, slotEventNote } from '../../lib/seasonSlotEvent';
+import { slotEvent, slotEventNote, NEEDS_REVIEW } from '../../lib/seasonSlotEvent';
 
 // The roadmap's view, remembered per browser (the URL's ?view= wins); storage can be blocked.
 export const ROADMAP_VIEW_STORAGE_KEY = 'szn-roadmap-view';
@@ -111,7 +111,7 @@ function CardMenu({ slot, showId, onOpen, onIntention, readOnly = false, twoPart
           {/* A started slot whose event is not linked to the slot. The episode has its events; it is the slot's link that is missing, so the wording says that and never that there is no event or package (Evoni, 2026-11-12). Nothing is guessed. */}
           {/* A started slot shows its episode's own event (derived on read, lib/seasonSlotEvent). What is said here is only what is left to say: no primary event, or an association that needs review. */}
           {slot.episode && slotEventNote(slot) && (
-            <Link role="menuitem" to={`/episodes/${slot.episode.id}?tab=overview`} data-testid={`szn-slot-no-event-${slot.slot_number}`}>{slotEventNote(slot).label}. {slotEventNote(slot).detail}</Link>
+            <Link role="menuitem" to={`/episodes/${slot.episode.id}?tab=overview`} data-testid={`szn-slot-no-event-${slot.slot_number}`}>{slotEventNote(slot).label}{slotEventNote(slot).reasons ? `: ${slotEventNote(slot).reasons}` : ''}. View the episode's events.</Link>
           )}
           {!readOnly && twoPart?.canMake && (
             <button type="button" role="menuitem" onClick={() => { setOpen(false); twoPart.make(); }} data-testid={`szn-slot-two-part-${slot.slot_number}`}>
@@ -148,6 +148,8 @@ export function SlotCard({ slot, picture, showId, selected, onOpen, onIntention,
             {/* Two different things, never on one slot: the episode being made now, and the next slot nothing has started in. */}
             {producing && <span className="szn-slot-now" data-testid={`szn-slot-now-${slot.slot_number}`}>Now producing</span>}
             {nextSlot && !producing && <span className="szn-slot-next" data-testid={`szn-slot-next-${slot.slot_number}`}>Next open slot</span>}
+            {/* A started slot whose event association needs a look says so on the card; the why is in its menu and panel. */}
+            {slot.episode && slotEventNote(slot)?.label === NEEDS_REVIEW && <span className="szn-slot-review" data-testid={`szn-slot-review-${slot.slot_number}`}>{NEEDS_REVIEW}</span>}
             {when && <span className={`szn-slot-when${when.source === 'preview' ? ' is-preview' : ''}`} data-testid={`szn-slot-when-${slot.slot_number}`}>{when.text}</span>}
           </span>
           <span className={`szn-slot-title${slot.episode || slotEvent(slot) || slot.intention?.story_purpose ? '' : ' is-empty'}`}>{slotCardTitle(slot)}</span>

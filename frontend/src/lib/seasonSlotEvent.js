@@ -48,9 +48,11 @@ export function slotEventNote(slot) {
   if (!view) return slot.event ? null : { label: LEGACY_NOT_LINKED, reasons: null, detail: "View the episode's events." };
   const reasons = (view.review_reasons || []).map((r) => REASONS[r]).filter(Boolean);
   if (view.pencil_disagrees) {
-    reasons.push(view.pencilled_event?.name
-      ? `this slot was pencilled for "${view.pencilled_event.name}", which is not the episode's event`
-      : "this slot stores a pencilled event that is not the episode's event");
+    const pencil = view.pencilled_event?.name ? `"${view.pencilled_event.name}"` : 'an event';
+    // The pencil is planning history: named and kept, never shown as the episode's event.
+    reasons.push(view.event
+      ? `this slot was pencilled for ${pencil}, which is not the episode's event (kept as planning history)`
+      : `the episode has no primary event linked; this slot was pencilled for ${pencil} before it started (kept as planning history, not the episode's event)`);
   }
   if (view.needs_review || view.pencil_disagrees) {
     return { label: NEEDS_REVIEW, reasons: reasons.join('; '), detail: `${reasons.join('; ')}. View the episode's events.` };

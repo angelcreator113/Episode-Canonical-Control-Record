@@ -43,7 +43,11 @@ describe('slotEvent', () => {
     expect(slotEventNote({ ...started, event_view: view({ event: E1, needs_review: true, review_reasons: ['primary_linked_elsewhere'] }) }))
       .toMatchObject({ label: NEEDS_REVIEW, reasons: "the event's own link points at another episode" });
     expect(slotEventNote({ ...started, event: { id: 'ev-old', name: 'Old' }, event_view: view({ event: E1, pencil_disagrees: true, pencilled_event: { id: 'ev-old', name: 'Old' } }) }))
-      .toMatchObject({ label: NEEDS_REVIEW, reasons: 'this slot was pencilled for "Old", which is not the episode\'s event' });
+      .toMatchObject({ label: NEEDS_REVIEW, reasons: 'this slot was pencilled for "Old", which is not the episode\'s event (kept as planning history)' });
+    // No primary at all, with a pencil kept: the missing primary is said first, and the pencil is never the event.
+    const noPrimary = { ...started, event: { id: 'ev-old', name: 'Old' }, event_view: view({ pencilled_event: { id: 'ev-old', name: 'Old' }, pencil_disagrees: true, needs_review: true, review_reasons: ['pencil_without_primary'] }) };
+    expect(slotEvent(noPrimary)).toBeNull();
+    expect(slotEventNote(noPrimary)).toMatchObject({ label: NEEDS_REVIEW, reasons: 'the episode has no primary event linked; this slot was pencilled for "Old" before it started (kept as planning history, not the episode\'s event)' });
   });
 });
 

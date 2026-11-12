@@ -75,6 +75,9 @@ async function loadArc(sequelize, showId, { transaction, lock = false, arcId = n
  *   primary_linked_elsewhere  the event's own link points at another live episode
  *                             (a two-parter's other part is not this)
  *   other_event_linked        with either of those, another event's link points here
+ *   pencil_without_primary    the episode has no event of its own, while the slot still
+ *                             stores a pencilled one: the pencil is planning history and
+ *                             is never shown as the episode's event
  * pencil_disagrees: the slot still stores a pencilled event that is not the
  * episode's event. The pencil is kept as it is (pencilled_event) and flagged.
  *
@@ -94,6 +97,7 @@ function slotEventView(row) {
   }
   // The pencil is compared by the stored id, so a pencil naming a deleted event is flagged too.
   const pencilDisagrees = Boolean(row.event_id) && String(row.event_id) !== String(primary?.id || '');
+  if (!primary && pencilDisagrees) reasons.push('pencil_without_primary');
   return {
     event: primary,
     source: primary ? 'episode' : 'none',

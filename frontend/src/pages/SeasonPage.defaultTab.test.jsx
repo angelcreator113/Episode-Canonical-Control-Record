@@ -347,7 +347,28 @@ describe('a slot\'s event is derived on read (event_view beside the raw pencil)'
     expect(screen.getByTestId('season-slot-no-event-1').textContent).toBe("Needs review: the event's own link to this episode is missing; another event is linked to this episode. View the episode's events.");
     expect(screen.getByTestId('season-slot-package-1').getAttribute('href')).toMatch(/\/events\/ev-1\?/);
     fireEvent.click(await screen.findByTestId('szn-slot-menu-1'));
-    expect(within(screen.getByRole('menu')).getByTestId('szn-slot-no-event-1').textContent).toMatch(/^Needs review\. /);
+    expect(within(screen.getByRole('menu')).getByTestId('szn-slot-no-event-1').textContent).toBe("Needs review: the event's own link to this episode is missing; another event is linked to this episode. View the episode's events.");
+    // The card itself says so too; a slot with nothing to review has no such tag.
+    expect(screen.getByTestId('szn-slot-review-1').textContent).toBe('Needs review');
+    expect(screen.queryByTestId('szn-slot-review-2')).toBeNull();
+    expect(screen.queryByTestId('szn-slot-review-3')).toBeNull();
+  });
+
+  test('a started slot whose episode has NO primary event while the slot keeps a pencil: the missing primary is said, the pencil is named as history and never shown as the event, Needs review', async () => {
+    slots = withView(slot(1, 1, { state: 'in_production', locked: true, episode: { id: 'ep-1', title: 'Wearable Experiments' }, event: { id: 'ev-old', name: 'Pencilled Event' },
+      event_view: view({ event: null, source: 'none', pencilled_event: { id: 'ev-old', name: 'Pencilled Event' }, needs_review: true, review_reasons: ['pencil_without_primary'], pencil_disagrees: true }) }));
+    renderAt('/shows/show-1/season?tab=roadmap&slot=1');
+    await waitFor(() => expect(screen.getByTestId('season-slot-event-1').textContent).toBe('No primary event linked · Needs review'));
+    expect(screen.getByTestId('season-slot-no-event-1').textContent).toBe(
+      'Needs review: the episode has no primary event linked; this slot was pencilled for "Pencilled Event" before it started (kept as planning history, not the episode\'s event). View the episode\'s events.');
+    // The pencil is not offered as the episode's event package.
+    expect(screen.queryByTestId('season-slot-package-1')).toBeNull();
+    expect([...document.querySelectorAll('a')].some((a) => /\/events\/ev-old/.test(a.getAttribute('href') || ''))).toBe(false);
+    fireEvent.click(await screen.findByTestId('szn-slot-menu-1'));
+    const menu = screen.getByRole('menu');
+    expect(within(menu).queryByText('Open the event package')).toBeNull();
+    expect(within(menu).getByTestId('szn-slot-no-event-1').textContent).toMatch(/^Needs review: the episode has no primary event linked; this slot was pencilled for "Pencilled Event"/);
+    expect(screen.getByTestId('szn-slot-review-1').textContent).toBe('Needs review');
   });
 
   test('a stored pencil that is not the episode\'s event: the episode\'s event is shown, and the pencil is named, not replaced', async () => {
@@ -355,7 +376,7 @@ describe('a slot\'s event is derived on read (event_view beside the raw pencil)'
       event_view: view({ event: E1_EVENT, source: 'episode', pencilled_event: { id: 'ev-old', name: 'Pencilled Event' }, pencil_disagrees: true }) }));
     renderAt('/shows/show-1/season?tab=roadmap&slot=1');
     await waitFor(() => expect(screen.getByTestId('season-slot-event-1').textContent).toBe('Wearable Experiments Studio Session · Needs review'));
-    expect(screen.getByTestId('season-slot-no-event-1').textContent).toBe('Needs review: this slot was pencilled for "Pencilled Event", which is not the episode\'s event. View the episode\'s events.');
+    expect(screen.getByTestId('season-slot-no-event-1').textContent).toBe('Needs review: this slot was pencilled for "Pencilled Event", which is not the episode\'s event (kept as planning history). View the episode\'s events.');
     expect(screen.getByTestId('season-slot-package-1').getAttribute('href')).toMatch(/\/events\/ev-1\?/);
   });
 });

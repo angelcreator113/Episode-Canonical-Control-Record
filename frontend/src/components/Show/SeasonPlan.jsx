@@ -507,7 +507,7 @@ export function SlotPanel({ slot, showId, available, busy, episode, event, onPen
 
       <dl className="wa-arc-facts">
         {/* A started slot with no event linked to it has an event (the episode's); "None pencilled" is for a slot nothing has started in. */}
-        <div><dt>Event</dt><dd data-testid={`season-slot-event-${slot.slot_number}`}>{slotEvent(slot)?.name || (slot.episode ? (slot.event_view ? NO_PRIMARY_EVENT : 'Not linked to this slot') : 'None pencilled')}{slotEvent(slot) && slotEventNote(slot) ? ` · ${slotEventNote(slot).label}` : ''}</dd></div>
+        <div><dt>Event</dt><dd data-testid={`season-slot-event-${slot.slot_number}`}>{slotEvent(slot)?.name || (slot.episode ? (slot.event_view ? NO_PRIMARY_EVENT : 'Not linked to this slot') : 'None pencilled')}{slot.episode && slotEventNote(slot)?.reasons ? ` · ${slotEventNote(slot).label}` : ''}</dd></div>
         {deal && <div><dt>Deal{deal.label ? ` · ${deal.label}` : ''}</dt><dd>{deal.pays}</dd></div>}
       </dl>
 

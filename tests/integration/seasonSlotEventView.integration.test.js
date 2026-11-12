@@ -173,7 +173,13 @@ describe('slotEventView, pure', () => {
     const stale = await addEvent(t.show, 'Pencilled Before');
     const slotId = await addSlot(t, 1, { episode: eventless, event: stale, locked: true });
     const view = (await slotOf(t, 1)).event_view;
-    expect(view).toMatchObject({ event: null, source: 'none', pencil_disagrees: true, pencilled_event: { id: stale, name: 'Pencilled Before' } });
+    // The missing primary is shown as missing; the pencil is kept as planning history and never substituted; it needs review.
+    expect(view).toEqual({
+      event: null, source: 'none', pencilled_event: { id: stale, name: 'Pencilled Before', status: 'ready' },
+      needs_review: true, review_reasons: ['pencil_without_primary'], pencil_disagrees: true,
+    });
+    // The raw pencil is still sent as it is.
+    expect((await slotOf(t, 1)).event).toEqual({ id: stale, name: 'Pencilled Before', status: 'ready' });
     expect((await storedPencil(slotId)).event_id).toBe(stale);
     // Goal coverage does not count the stale pencil for a started slot.
     const coverage = await loadCoverageInputs(sequelize, t.show);
