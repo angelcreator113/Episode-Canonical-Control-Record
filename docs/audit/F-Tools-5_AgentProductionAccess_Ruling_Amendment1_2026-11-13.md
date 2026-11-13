@@ -78,7 +78,7 @@ Tests (`tests/unit/guards/`): each §4 command allowed under 1 to 3; the same co
 
 **As read 2026-11-13** (`aws iam get-user-policy`, and CloudTrail's history for the user): one inline policy, `prod-ssm-run-shell`; no managed policy, group or boundary. It allows shell commands (`AWS-RunShellScript`) on the production box and the dev box, and reading their results. History: Evoni set it to both boxes on 2026-11-05 (12:53 UTC); at 22:20:56 UTC that day a call made with the `evoni-admin` key replaced it with a production-only text; she restored both boxes on 2026-11-13, and the session read it back.
 
-**The widening** is a second inline policy, `gated-infra-changes`, filed with this document as `infra/agent-access/claude-code-ops-gated-infra-changes.json`. It allows the §4 actions on `primepisodes-alb`, `primepisodes-backend`, four named security groups, and `agent-*` snapshots of the production database, plus the reads needed to describe them. It denies outright: all of IAM, Organizations, Cognito and KMS; every RDS delete, restore, modify, stop and reboot; EC2 terminate, stop, reboot and delete, and creating or deleting security groups; deleting a load balancer, listener or target group; S3 writes and deletes; reading or writing secrets and parameters.
+**The widening** is a customer-managed policy, `claude-code-ops-gated-infra-changes`, attached to the user. Its text is filed with this document as `infra/agent-access/claude-code-ops-gated-infra-changes.json`. It cannot be a second inline policy: a user's inline policies may total 2,048 characters and this text is 3,154 (MEASURED 2026-11-13: Evoni's `put-user-policy` answered `LimitExceeded`, and nothing was attached). A managed policy may hold 6,144. It allows the §4 actions on `primepisodes-alb`, `primepisodes-backend`, four named security groups, and `agent-*` snapshots of the production database, plus the reads needed to describe them. It denies outright: all of IAM, Organizations, Cognito and KMS; every RDS delete, restore, modify, stop and reboot; EC2 terminate, stop, reboot and delete, and creating or deleting security groups; deleting a load balancer, listener or target group; S3 writes and deletes; reading or writing secrets and parameters.
 
 **Simulator (MEASURED 2026-11-13, `aws iam simulate-custom-policy`, the draft together with the both-boxes policy): 98 checks, 97 as intended.**
 
@@ -92,13 +92,21 @@ The simulator checks the policy text. It does not make a call. The first use of 
 **Applying the policy is an IAM change, so it is Evoni's own action**, from CloudShell signed in as an administrator:
 
 ```bash
-aws iam put-user-policy --user-name claude-code-ops --policy-name gated-infra-changes --policy-document file://infra/agent-access/claude-code-ops-gated-infra-changes.json
+aws iam create-policy --policy-name claude-code-ops-gated-infra-changes --policy-document file://infra/agent-access/claude-code-ops-gated-infra-changes.json
+```
+
+```bash
+aws iam attach-user-policy --user-name claude-code-ops --policy-arn arn:aws:iam::637423256673:policy/claude-code-ops-gated-infra-changes
 ```
 
 Undo, which leaves `prod-ssm-run-shell` untouched:
 
 ```bash
-aws iam delete-user-policy --user-name claude-code-ops --policy-name gated-infra-changes
+aws iam detach-user-policy --user-name claude-code-ops --policy-arn arn:aws:iam::637423256673:policy/claude-code-ops-gated-infra-changes
+```
+
+```bash
+aws iam delete-policy --policy-arn arn:aws:iam::637423256673:policy/claude-code-ops-gated-infra-changes
 ```
 
 # §7. Risks, in plain terms
@@ -115,7 +123,7 @@ aws iam delete-user-policy --user-name claude-code-ops --policy-name gated-infra
 | Text | Change |
 |---|---|
 | F-Tools-5 §4, "Enforcement": "the guard **denies** gated commands in `auto`, `dontAsk` and `bypassPermissions` modes" | In a cloud session using `claude-code-ops`, the §4 commands here are allowed. For everything else, and on the laptop, the sentence stands |
-| F-Tools-5 §2, cloud row, and §8 Q4 | The dedicated user exists (`claude-code-ops`); its permissions are the two inline policies in §6 |
+| F-Tools-5 §2, cloud row, and §8 Q4 | The dedicated user exists (`claude-code-ops`); its permissions are the inline policy and the managed policy in §6 |
 | `CLAUDE.md`, "Explicit yes before irreversible actions" | One sentence added: a cloud session may run the listed reversible load balancer, security group and snapshot commands after her yes in the conversation; everything else gated is hers to run |
 
 F-Tools-5 itself is not edited. It receives an additive banner, newest first, pointing here.
@@ -124,7 +132,7 @@ F-Tools-5 itself is not edited. It receives an additive banner, newest first, po
 
 1. This document has merged.
 2. The guard change has merged with §5's tests green in CI.
-3. Evoni has applied `gated-infra-changes` to `claude-code-ops`.
+3. Evoni has created `claude-code-ops-gated-infra-changes` and attached it to `claude-code-ops`.
 
 Until all three hold, F-Tools-5 §4 applies as filed.
 
