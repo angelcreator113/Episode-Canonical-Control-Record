@@ -21,3 +21,8 @@
 .odd-reason textarea:focus-visible { border-color: var(--lala-gold); outline: none; }
 .odd-reason textarea[aria-invalid="true"] { border-color: var(--lala-danger); }
 .odd-reason-missing { margin: 0 0 8px; font-size: 12px; color: var(--lala-danger); }
+.odd-refusal { display: grid; gap: 6px; margin: 0 0 10px; padding: 10px 12px; border-radius: 10px; border: 1.5px solid var(--lala-danger); font-size: 13px; overflow-wrap: anywhere; }
+.odd-refusal p { margin: 0; }
+.odd-refusal .odd-cancel { justify-self: start; border-color: var(--lala-gold); font-weight: 600; }
+.odd-refusal[role="status"] { border-color: var(--lala-parchment-3); }
+.odd-choice:focus-visible, .odd-cancel:focus-visible, .odd-close:focus-visible { outline: 2px solid var(--lala-gold); outline-offset: 2px; }

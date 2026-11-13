@@ -44,8 +44,11 @@ export default function OpportunitiesTab({ showId, api, S, setToast, loadData, e
     (card?.querySelector(`[data-testid="opp-beat14-open-${id}"]`) || card?.querySelector('a, button'))?.focus();
   });
 
-  // Moving an offer (advance, decline, undo) is an admin's; the list says
-  // whether this person can (can_decide), and the steps are offered only then.
+  // Every write here but Schedule as Event is an admin's on the server
+  // (routes/opportunityRoutes: create, advance, decline, undo, release, and
+  // beat 14's attach; Schedule is feedPipelineRoutes' and open to anyone
+  // signed in). The list says whether this person is one (can_decide), and
+  // those controls are offered only then. The list itself reads for anyone.
   const [canDecide, setCanDecide] = useState(true);
   const reasonDialog = useReasonDialog();
   const loadOpps = useCallback(() => api.get(`/api/v1/opportunities/${showId}`)
@@ -143,7 +146,7 @@ export default function OpportunitiesTab({ showId, api, S, setToast, loadData, e
           <h2 style={{ ...S.cardTitle, margin: '0 0 4px' }}>Opportunities</h2>
           <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{opps.length} total · {coinsText(bookedValue)} booked · {coinsText(totalValue)} pipeline</div>
         </div>
-        <button onClick={() => setOppForm({ name: '', opportunity_type: 'modeling', category: 'fashion', prestige: 5, payment_amount: 0 })} style={S.primaryBtn}>+ New Opportunity</button>
+        {canDecide && <button onClick={() => setOppForm({ name: '', opportunity_type: 'modeling', category: 'fashion', prestige: 5, payment_amount: 0 })} style={S.primaryBtn}>+ New Opportunity</button>}
       </div>
       <div style={{ display: 'flex', gap: 6, marginBottom: 16, flexWrap: 'wrap' }}>
         {['offered','considering','negotiating','held','booked','preparing','active','completed','paid'].map(s => {
@@ -204,9 +207,9 @@ export default function OpportunitiesTab({ showId, api, S, setToast, loadData, e
                 {opp.narrative_stakes && <div style={{ fontSize: 11, color: '#666', marginBottom: 6 }}>{opp.narrative_stakes}</div>}
                 {held && <HeldWhy opp={opp} />}
                 <div className="ob14-card-actions" style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                  {!canDecide && <span data-testid={`opp-admin-only-${opp.id}`} style={{ fontSize: 11, color: 'var(--lala-ink-muted)' }}>Only an admin can move, decline or undo this.</span>}
+                  {!canDecide && <span data-testid={`opp-admin-only-${opp.id}`} style={{ fontSize: 11, color: 'var(--lala-ink-muted)' }}>Only an admin can change this offer.</span>}
                   {canDecide && NEXT[opp.status] && <button onClick={() => advanceOpp(opp, NEXT[opp.status])} data-testid={`opp-move-${opp.id}`} style={{ padding: '3px 10px', borderRadius: 4, border: `1px solid ${sc}`, background: 'transparent', color: sc, fontWeight: 600, fontSize: 10, cursor: 'pointer' }}>Move to {NEXT[opp.status]}</button>}
-                  {canAttachToBeat14(opp) && attachingId !== opp.id && (
+                  {canDecide && canAttachToBeat14(opp) && attachingId !== opp.id && (
                     <button type="button" className="ob14-btn" onClick={() => setAttachingId(opp.id)} data-testid={`opp-beat14-open-${opp.id}`}>Attach to beat 14…</button>
                   )}
                   {canDecide && canUndo(opp) && (
@@ -218,7 +221,7 @@ export default function OpportunitiesTab({ showId, api, S, setToast, loadData, e
                   )}
                   {held && !opp.event_id && (
                     <>
-                      <button type="button" className="ob14-btn ob14-btn-icon" onClick={() => releaseOpp(opp)} data-testid={`opp-release-${opp.id}`}><Send size={12} aria-hidden="true" />Release offer</button>
+                      {canDecide && <button type="button" className="ob14-btn ob14-btn-icon" onClick={() => releaseOpp(opp)} data-testid={`opp-release-${opp.id}`}><Send size={12} aria-hidden="true" />Release offer</button>}
                       <button type="button" className="ob14-btn-gold" onClick={() => toEvent(opp)} data-testid={`opp-schedule-now-${opp.id}`}>📅 Schedule as Event now</button>
                     </>
                   )}
@@ -239,7 +242,9 @@ export default function OpportunitiesTab({ showId, api, S, setToast, loadData, e
               <div style={{ fontSize: 30, marginBottom: 8 }}>💼</div>
               <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>No opportunities yet</div>
               <div style={{ fontSize: 12, color: '#666', marginBottom: 12 }}>Modeling gigs, runway shows, magazine covers — they start here.</div>
-              <button onClick={() => setOppForm({ name: '', opportunity_type: 'modeling', category: 'fashion', prestige: 5, payment_amount: 0 })} style={S.primaryBtn}>+ Create First Opportunity</button>
+              {canDecide
+                ? <button onClick={() => setOppForm({ name: '', opportunity_type: 'modeling', category: 'fashion', prestige: 5, payment_amount: 0 })} style={S.primaryBtn}>+ Create First Opportunity</button>
+                : <div data-testid="opp-admin-only-create" style={{ fontSize: 12, color: 'var(--lala-ink-muted)' }}>Only an admin can add one.</div>}
             </div>
           )}
         </div>

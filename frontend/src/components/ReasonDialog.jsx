@@ -9,17 +9,21 @@
  * cancelled (the step is then not taken); render `dialog` once in the page.
  * Confirming without a reason sends nothing, says a reason is needed, and
  * keeps what was typed. Enter with Ctrl or Cmd confirms; Escape cancels.
+ * Focus moves into the field on open, Tab stays inside the dialog, and
+ * focus goes back to the button that opened it (hooks/useDialogFocus).
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { X } from 'lucide-react';
 import { REASON_MAX, cleanReason } from '../lib/transitionReason';
+import useDialogFocus from '../hooks/useDialogFocus';
 import './ReasonDialog.css';
 
 export function ReasonDialog({ request, onConfirm, onCancel }) {
   const fieldRef = useRef(null);
   const [value, setValue] = useState('');
   const [missing, setMissing] = useState(false);
-  useEffect(() => { if (request) { setValue(''); setMissing(false); fieldRef.current?.focus(); } }, [request]);
+  useEffect(() => { if (request) { setValue(''); setMissing(false); } }, [request]);
+  const dialogRef = useDialogFocus(!!request, () => onCancel?.());
   if (!request) return null;
   const confirm = () => {
     const reason = cleanReason(value);
@@ -28,20 +32,17 @@ export function ReasonDialog({ request, onConfirm, onCancel }) {
   };
   return (
     <div className="rsn-backdrop" onClick={() => onCancel?.()}>
-      <form className="rsn-dialog" role="dialog" aria-modal="true" aria-labelledby="rsn-title" data-testid="reason-dialog" noValidate
+      <form ref={dialogRef} className="rsn-dialog" role="dialog" aria-modal="true" aria-labelledby="rsn-title" data-testid="reason-dialog" noValidate
         onClick={(e) => e.stopPropagation()}
         onSubmit={(e) => { e.preventDefault(); confirm(); }}
-        onKeyDown={(e) => {
-          if (e.key === 'Escape') { e.stopPropagation(); onCancel?.(); }
-          if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); confirm(); }
-        }}>
+        onKeyDown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); confirm(); } }}>
         <div className="rsn-header">
           <h3 id="rsn-title">{request.title || 'Why?'}</h3>
           <button type="button" className="rsn-close" onClick={onCancel} aria-label="Close"><X size={16} /></button>
         </div>
         <label className="rsn-field" htmlFor="rsn-reason">
           <span>{request.question || 'The reason is kept with the change.'}</span>
-          <textarea id="rsn-reason" ref={fieldRef} value={value} maxLength={REASON_MAX} rows={3} required
+          <textarea id="rsn-reason" ref={fieldRef} value={value} maxLength={REASON_MAX} rows={3} required data-autofocus=""
             onChange={(e) => { setValue(e.target.value); setMissing(false); }}
             aria-invalid={missing ? 'true' : 'false'} aria-describedby={missing ? 'rsn-missing' : 'rsn-kept'}
             data-testid="reason-dialog-field" />

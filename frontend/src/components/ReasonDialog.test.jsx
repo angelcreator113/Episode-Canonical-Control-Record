@@ -100,4 +100,26 @@ describe('ReasonDialog', () => {
     expect(field().value).toBe('');
     expect(onDone).toHaveBeenCalledTimes(1);
   });
+
+  test('Tab stays inside the dialog, and on close focus goes back to the button that opened it', async () => {
+    render(<Harness onDone={vi.fn()} />);
+    const opener = screen.getByText('Ask');
+    opener.focus();
+    await act(async () => { fireEvent.click(opener); });
+    const first = screen.getByLabelText('Close');
+    const last = screen.getByTestId('reason-dialog-confirm');
+    last.focus();
+    fireEvent.keyDown(last, { key: 'Tab' });
+    expect(document.activeElement).toBe(first);
+    fireEvent.keyDown(first, { key: 'Tab', shiftKey: true });
+    expect(document.activeElement).toBe(last);
+    // Typing never moves the focus.
+    field().focus();
+    fireEvent.change(field(), { target: { value: 'W' } });
+    fireEvent.change(field(), { target: { value: 'Wh' } });
+    expect(document.activeElement).toBe(field());
+    await act(async () => { fireEvent.keyDown(field(), { key: 'Escape' }); });
+    expect(screen.queryByTestId('reason-dialog')).toBeNull();
+    expect(document.activeElement).toBe(opener);
+  });
 });

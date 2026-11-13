@@ -191,3 +191,193 @@ describe('OfferDecisionDialog', () => {
     expect(screen.queryByTestId('offer-decision')).toBeNull();
   });
 });
+
+// A decision the server refuses (review of 2026-11-13): the dialog stays,
+// what was typed stays, and nothing is sent again by itself.
+describe('OfferDecisionDialog: a refused decision', () => {
+  const refused = (status, code, error, opportunities) => Object.assign(new Error(`Request failed with status code ${status}`), {
+    response: { status, data: { success: false, code, error, opportunities, opportunity: opportunities?.[0] || null } },
+  });
+  const FIRST = { id: 'opp-1', name: 'Spring Capsule', status: 'offered', payment_amount: 1200 };
+  const LATER = { id: 'opp-2', name: 'Arrived Later', status: 'considering', payment_amount: 300 };
+  const openWith = async (send, onDone = vi.fn()) => {
+    render(<Harness send={send} onDone={onDone} />);
+    await act(async () => { fireEvent.click(screen.getByText('Start')); });
+    fireEvent.change(screen.getByTestId('offer-decision-reason'), { target: { value: 'The fee is too low' } });
+    return onDone;
+  };
+  const choices = () => ['accept', 'negotiate', 'decline', 'proceed_unaccepted'].map((d) => screen.getByTestId(`offer-decision-${d}`));
+
+  test('409: the dialog stays, the reason stays, it says the offer changed, and no choice can be sent until it is looked at', async () => {
+    const stale = refused(409, 'OFFER_DECISION_STALE', 'The offers on this event are not the ones this decision was made about.', [FIRST, LATER]);
+    const send = vi.fn().mockRejectedValueOnce(required()).mockRejectedValueOnce(stale).mockResolvedValueOnce({ data: { success: true } });
+    const onDone = await openWith(send);
+    await act(async () => { fireEvent.click(screen.getByTestId('offer-decision-decline')); });
+    expect(send).toHaveBeenCalledTimes(2);
+    // Open, not settled, nothing retried.
+    expect(screen.getByTestId('offer-decision')).toBeTruthy();
+    expect(onDone).not.toHaveBeenCalled();
+    const alert = screen.getByTestId('offer-decision-changed');
+    expect(alert.getAttribute('role')).toBe('alert');
+    expect(alert.textContent).toContain('The offer information has changed since this opened. Nothing was started.');
+    expect(alert.textContent).toContain('The offers on this event are not the ones this decision was made about.');
+    expect(screen.getByTestId('offer-decision-reason').value).toBe('The fee is too low');
+    // The old offer is still what is shown, and every choice waits.
+    expect(screen.queryByTestId('offer-decision-offer-2')).toBeNull();
+    for (const c of choices()) expect(c.disabled).toBe(true);
+    await act(async () => { fireEvent.click(screen.getByTestId('offer-decision-decline')); });
+    expect(send).toHaveBeenCalledTimes(2);
+    expect(document.activeElement).toBe(screen.getByTestId('offer-decision-refresh'));
+
+    // Refresh shows what the refusal carried, and sends nothing.
+    await act(async () => { fireEvent.click(screen.getByTestId('offer-decision-refresh')); });
+    expect(send).toHaveBeenCalledTimes(2);
+    expect(screen.queryByTestId('offer-decision-changed')).toBeNull();
+    expect(screen.getByTestId('offer-decision-offer').textContent).toContain('Spring Capsule');
+    expect(screen.getByTestId('offer-decision-offer-2').textContent).toContain('Arrived Later');
+    expect(screen.getByTestId('offer-decision-offer-2').textContent).toContain('Considering');
+    expect(screen.getByTestId('offer-decision-reason').value).toBe('The fee is too low');
+    for (const c of choices()) expect(c.disabled).toBe(false);
+    expect(onDone).not.toHaveBeenCalled();
+
+    // A new, explicit choice: sent about the offers now shown, with the reason.
+    await act(async () => { fireEvent.click(screen.getByTestId('offer-decision-decline')); });
+    expect(send).toHaveBeenNthCalledWith(3, 'decline', { offer_decision_opportunity_ids: ['opp-1', 'opp-2'], offer_decision_reason: 'The fee is too low' });
+    await waitFor(() => expect(onDone).toHaveBeenCalledWith({ res: { data: { success: true } } }));
+    expect(screen.queryByTestId('offer-decision')).toBeNull();
+  });
+
+  test('409 for a step that is no longer legal is handled the same way, with the server\'s words', async () => {
+    const illegal = refused(409, 'OFFER_DECISION_ILLEGAL', '"Spring Capsule" is held; it cannot move to booked from there.', [{ ...FIRST, status: 'held' }]);
+    const send = vi.fn().mockRejectedValueOnce(required()).mockRejectedValueOnce(illegal);
+    await openWith(send);
+    await act(async () => { fireEvent.click(screen.getByTestId('offer-decision-accept')); });
+    expect(screen.getByTestId('offer-decision-changed').textContent).toContain('it cannot move to booked from there');
+    await act(async () => { fireEvent.click(screen.getByTestId('offer-decision-refresh')); });
+    expect(screen.getByTestId('offer-decision-offer').textContent).toContain('Held for beat 14');
+    expect(send).toHaveBeenCalledTimes(2);
+  });
+
+  test('409 with no open offer left: refresh says so, and no choice can be sent', async () => {
+    const send = vi.fn().mockRejectedValueOnce(required()).mockRejectedValueOnce(refused(409, 'OFFER_DECISION_STALE', 'Changed.', []));
+    const onDone = await openWith(send);
+    await act(async () => { fireEvent.click(screen.getByTestId('offer-decision-accept')); });
+    await act(async () => { fireEvent.click(screen.getByTestId('offer-decision-refresh')); });
+    expect(screen.getByTestId('offer-decision-none-left').textContent).toMatch(/no open offer to decide any more/);
+    for (const c of choices()) expect(c.disabled).toBe(true);
+    expect(screen.getByTestId('offer-decision-cancel').textContent).toBe('Close');
+    expect(screen.getByTestId('offer-decision-reason').value).toBe('The fee is too low');
+    await act(async () => { fireEvent.click(screen.getByTestId('offer-decision-cancel')); });
+    expect(onDone.mock.calls[0][0].err.offerDecisionCancelled).toBe(true);
+    expect(send).toHaveBeenCalledTimes(2);
+  });
+
+  test('403: it says an admin decides, keeps the reason, and no choice can be sent', async () => {
+    const forbidden = refused(403, 'OFFER_DECISION_FORBIDDEN', 'Only an admin can decide an offer. The episode was not started.', [FIRST]);
+    const send = vi.fn().mockRejectedValueOnce(required()).mockRejectedValueOnce(forbidden);
+    const onDone = await openWith(send);
+    await act(async () => { fireEvent.click(screen.getByTestId('offer-decision-decline')); });
+    const alert = screen.getByTestId('offer-decision-forbidden');
+    expect(alert.getAttribute('role')).toBe('alert');
+    expect(alert.textContent).toContain('Only an admin can decide an offer. The episode was not started.');
+    expect(alert.textContent).toContain('Your reason is still below');
+    expect(screen.getByTestId('offer-decision-reason').value).toBe('The fee is too low');
+    for (const c of choices()) expect(c.disabled).toBe(true);
+    expect(screen.queryByTestId('offer-decision-refresh')).toBeNull();
+    expect(screen.getByTestId('offer-decision-cancel').textContent).toBe('Close');
+    expect(onDone).not.toHaveBeenCalled();
+    expect(send).toHaveBeenCalledTimes(2);
+    expect(document.activeElement).toBe(screen.getByTestId('offer-decision-reason'));
+  });
+
+  test('400: the server\'s words, the reason kept, and the choices as they were', async () => {
+    const send = vi.fn().mockRejectedValueOnce(required())
+      .mockRejectedValueOnce(refused(400, 'OFFER_REASON_REQUIRED', 'reason must be at most 500 characters.', [FIRST]))
+      .mockResolvedValueOnce({ data: { success: true } });
+    const onDone = await openWith(send);
+    await act(async () => { fireEvent.click(screen.getByTestId('offer-decision-decline')); });
+    expect(screen.getByTestId('offer-decision-refused').textContent).toContain('reason must be at most 500 characters.');
+    expect(screen.getByTestId('offer-decision-reason').value).toBe('The fee is too low');
+    for (const c of choices()) expect(c.disabled).toBe(false);
+    await act(async () => { fireEvent.click(screen.getByTestId('offer-decision-decline')); });
+    await waitFor(() => expect(onDone).toHaveBeenCalled());
+    expect(send).toHaveBeenCalledTimes(3);
+  });
+
+  test('a failure that is not about the offer still closes and goes to the caller', async () => {
+    const other = Object.assign(new Error('nope'), { response: { status: 409, data: { code: 'DEAL_PRICE_REQUIRED' } } });
+    const send = vi.fn().mockRejectedValueOnce(required()).mockRejectedValueOnce(other);
+    const onDone = await openWith(send);
+    await act(async () => { fireEvent.click(screen.getByTestId('offer-decision-accept')); });
+    await waitFor(() => expect(onDone).toHaveBeenCalledWith({ err: other }));
+    expect(screen.queryByTestId('offer-decision')).toBeNull();
+  });
+});
+
+describe('OfferDecisionDialog: keyboard', () => {
+  const open = async (data = {}) => {
+    const asked = required();
+    Object.assign(asked.response.data, data);
+    const send = vi.fn().mockRejectedValueOnce(asked).mockReturnValueOnce(new Promise(() => {}));
+    const onDone = vi.fn();
+    render(<Harness send={send} onDone={onDone} />);
+    screen.getByText('Start').focus();
+    await act(async () => { fireEvent.click(screen.getByText('Start')); });
+    return { send, onDone };
+  };
+  const tab = (shiftKey = false) => fireEvent.keyDown(document.activeElement, { key: 'Tab', shiftKey });
+
+  test('focus starts on the first choice, never on the close button', async () => {
+    await open();
+    expect(document.activeElement).toBe(screen.getByTestId('offer-decision-accept'));
+  });
+
+  test('Tab stays inside: forward from the last control goes to the first, back from the first to the last', async () => {
+    await open();
+    const first = screen.getByLabelText('Close');
+    const last = screen.getByTestId('offer-decision-cancel');
+    last.focus();
+    tab();
+    expect(document.activeElement).toBe(first);
+    tab(true);
+    expect(document.activeElement).toBe(last);
+  });
+
+  test('Escape closes, starts nothing, and focus goes back to the button that opened it', async () => {
+    const { send, onDone } = await open();
+    await act(async () => { fireEvent.keyDown(document.activeElement, { key: 'Escape' }); });
+    expect(screen.queryByTestId('offer-decision')).toBeNull();
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(onDone.mock.calls[0][0].err.offerDecisionCancelled).toBe(true);
+    expect(document.activeElement).toBe(screen.getByText('Start'));
+  });
+
+  test('Escape does not close while a decision is being sent', async () => {
+    const { onDone } = await open();
+    await act(async () => { fireEvent.click(screen.getByTestId('offer-decision-accept')); });
+    expect(screen.getByTestId('offer-decision-cancel').textContent).toBe('Starting…');
+    await act(async () => { fireEvent.keyDown(screen.getByTestId('offer-decision'), { key: 'Escape' }); });
+    expect(screen.getByTestId('offer-decision')).toBeTruthy();
+    expect(onDone).not.toHaveBeenCalled();
+  });
+
+  test('typing a reason never moves the focus out of the field', async () => {
+    await open();
+    const field = screen.getByTestId('offer-decision-reason');
+    field.focus();
+    for (const value of ['T', 'Th', 'The']) {
+      fireEvent.change(field, { target: { value } });
+      expect(document.activeElement).toBe(field);
+    }
+  });
+
+  test('for someone who cannot decide, focus is on Close and Tab stays between Close and the close button', async () => {
+    await open({ can_decide: false });
+    const close = screen.getByTestId('offer-decision-cancel');
+    expect(document.activeElement).toBe(close);
+    tab();
+    expect(document.activeElement).toBe(screen.getByLabelText('Close'));
+    tab(true);
+    expect(document.activeElement).toBe(close);
+  });
+});
