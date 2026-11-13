@@ -26,6 +26,64 @@ const STATS = [
 
 const signed = (n) => `${n > 0 ? '+' : ''}${n}`;
 
+const MILESTONE_REASONS = {
+  in_range: null,
+  no_threshold: 'its row has no goal amount',
+  range_unknown: 'this episode\'s balance movement could not be rebuilt',
+};
+const MILESTONE_DECISION_WORDS = { this_episode: 'This episode\'s', not_this_episode: 'Not this episode\'s' };
+
+/** A milestone reward in question, in words: "Rising Star · 200 coins · goal at 1,500". */
+export function describeMilestoneCandidate(c) {
+  const parts = [c?.label || c?.goal_id || 'Milestone reward', `${Number(c?.amount || 0).toLocaleString()} coins`];
+  if (c?.threshold !== null && c?.threshold !== undefined) parts.push(`goal at ${Number(c.threshold).toLocaleString()}`);
+  const why = MILESTONE_REASONS[c?.reason];
+  if (why) parts.push(why);
+  return parts.join(' · ');
+}
+
+/**
+ * Milestone attribution, as the completion stored it (evaluation_json
+ * .milestone_attribution; Evoni, 2026-11-13): rewards booked before rewards
+ * recorded their episode, which may be this episode's. Shown as recorded:
+ * UNVERIFIED when any was left undecided (the result was the same either
+ * way), and each admin decision with who made it and when.
+ */
+export function MilestoneAttribution({ attribution }) {
+  const candidates = Array.isArray(attribution?.candidates) ? attribution.candidates : [];
+  if (!attribution || candidates.length === 0) return null;
+  const unverified = attribution.status === 'UNVERIFIED';
+  return (
+    <section className="ers-card ers-attribution" data-testid="results-milestone-attribution">
+      <h3 className="ers-label">Milestone attribution</h3>
+      <p className={`ers-attribution-status${unverified ? ' is-unverified' : ''}`} data-testid="results-milestone-status">
+        {unverified ? 'Unverified' : 'Decided by an admin'}
+      </p>
+      <p className="ers-note">
+        {unverified
+          ? 'A reward booked before rewards recorded their episode may be this episode\'s. The ledger does not say, and it was not guessed. This episode\'s score and Lala\'s stats are the same either way.'
+          : 'These rewards were booked before rewards recorded their episode. An admin said whose they are.'}
+      </p>
+      <ul className="ers-rows ers-attribution-rows">
+        {candidates.map((c) => (
+          <li key={c.tx_id} data-testid={`results-milestone-row-${c.tx_id}`}>
+            <span className="ers-row-name">
+              <span>{describeMilestoneCandidate(c)}</span>
+              {c.decision && (
+                <em>
+                  {c.decided_by?.name || c.decided_by?.id || 'An admin'}
+                  {c.decided_at ? `, ${new Date(c.decided_at).toLocaleString()}` : ''}
+                </em>
+              )}
+            </span>
+            <strong>{MILESTONE_DECISION_WORDS[c.decision] || 'Undecided'}</strong>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 function parseEvaluation(raw) {
   if (!raw) return null;
   if (typeof raw !== 'string') return raw;
@@ -117,6 +175,7 @@ export function EpisodeResultsEvaluation({ episode, embedded = false }) {
             </section>
           )}
         </div>
+        <MilestoneAttribution attribution={evalJson.milestone_attribution} />
       </section>
     );
   }
@@ -206,6 +265,7 @@ export function EpisodeResultsEvaluation({ episode, embedded = false }) {
           )}
         </div>
       )}
+      <MilestoneAttribution attribution={evalJson.milestone_attribution} />
     </div>
   );
 }

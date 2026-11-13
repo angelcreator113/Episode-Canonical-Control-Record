@@ -95,3 +95,35 @@ describe('completionRefusal: each known refusal has a title and somewhere to go'
     expect(completionRefusal(new Error('Network Error'), ids)).toMatchObject({ status: null, code: null, message: 'Network Error' });
   });
 });
+
+describe('milestone attribution (Evoni, 2026-11-13)', () => {
+  const CANDIDATE = { tx_id: 'tx-1', goal_id: 'rising-star', label: 'Rising Star', threshold: 1500, amount: 200, reason: 'in_range' };
+
+  test('the refusal carries the rewards in question and those still undecided', () => {
+    const r = completionRefusal(refused(409, { success: false, code: 'MILESTONE_ATTRIBUTION_REQUIRED', error: 'An admin decides; nothing was changed.', candidates: [CANDIDATE], undecided: ['tx-1'] }), { showId: 'show-1', episodeId: 'ep-1' });
+    expect(r).toMatchObject({ status: 409, code: 'MILESTONE_ATTRIBUTION_REQUIRED', title: 'A milestone reward needs an admin\'s decision', message: 'An admin decides; nothing was changed.', action: null });
+    expect(r.candidates).toEqual([CANDIDATE]);
+    expect(r.undecided).toEqual(['tx-1']);
+  });
+
+  test('any other refusal carries none', () => {
+    const r = completionRefusal(refused(400, { error: 'No.', code: 'INSUFFICIENT_COINS' }), {});
+    expect(r.candidates).toBeUndefined();
+    expect(r.undecided).toBeUndefined();
+  });
+
+  test('decisions are sent as given, to the same endpoint, without asking the first question again', async () => {
+    const confirm = vi.fn(() => true);
+    const out = await completeEpisode({ showId: 'show-1', episodeId: 'ep-1', title: 'Gala Night', confirm, milestoneDecisions: { 'tx-1': 'this_episode' } });
+    expect(out.status).toBe('completed');
+    expect(confirm).not.toHaveBeenCalled();
+    expect(vi.mocked(api.post).mock.calls).toEqual([['/api/v1/world/show-1/episodes/ep-1/complete', { milestone_decisions: { 'tx-1': 'this_episode' } }]]);
+  });
+
+  test('a decision the server finds stale comes back as a refusal with the rewards now in question', async () => {
+    vi.mocked(api.post).mockRejectedValue(refused(409, { success: false, code: 'MILESTONE_DECISION_STALE', error: 'Read the rewards again.', candidates: [CANDIDATE], undecided: ['tx-1'] }));
+    const out = await completeEpisode({ showId: 'show-1', episodeId: 'ep-1', confirm: yes, milestoneDecisions: { gone: 'this_episode' } });
+    expect(out.status).toBe('refused');
+    expect(out.refusal).toMatchObject({ code: 'MILESTONE_DECISION_STALE', title: 'The rewards in question have changed', candidates: [CANDIDATE] });
+  });
+});

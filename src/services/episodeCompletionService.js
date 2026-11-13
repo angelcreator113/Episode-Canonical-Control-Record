@@ -217,6 +217,80 @@ function stressBreakdownOf({ tier, base, social, wardrobe, selfTalk, financial }
 
 // options.eventPiecesFallback overrides EVENT_PIECES_FALLBACK for one call
 // (tests); callers pass nothing.
+// ── Milestone attribution (Evoni, 2026-11-13) ──
+// What an admin may say of a candidate reward. Saying nothing leaves it
+// undecided: it is never guessed.
+const MILESTONE_DECISIONS = Object.freeze(['this_episode', 'not_this_episode']);
+
+/**
+ * A completion refused over milestone attribution. Thrown inside the
+ * completion's transaction, so nothing of the completion is written.
+ *   MILESTONE_ATTRIBUTION_REQUIRED  what is stored depends on undecided
+ *                                   candidates (409)
+ *   MILESTONE_DECISION_STALE        a decision names a row that is not a
+ *                                   candidate now (409)
+ *   MILESTONE_DECISION_INVALID      a decision that cannot be read, or with
+ *                                   no admin to record it against (400)
+ */
+class MilestoneAttributionError extends Error {
+  constructor(code, message, { candidates = [], undecided = [], unknown = [], status = 409 } = {}) {
+    super(message);
+    this.name = 'MilestoneAttributionError';
+    this.code = code;
+    this.status = status;
+    this.candidates = candidates;
+    this.undecided = undecided;
+    this.unknown = unknown;
+  }
+
+  toJSON() {
+    return {
+      success: false, code: this.code, error: this.message,
+      candidates: this.candidates, undecided: this.undecided,
+      ...(this.unknown.length ? { unknown: this.unknown } : {}),
+      decisions: MILESTONE_DECISIONS,
+    };
+  }
+}
+
+/**
+ * The admin's decisions, checked against the candidates as they are now:
+ * { [tx_id]: 'this_episode' | 'not_this_episode' }. A candidate left out, or
+ * given null or '', stays undecided. Throws MilestoneAttributionError.
+ */
+function readMilestoneDecisions(input, candidates, decidedBy) {
+  if (input === null || input === undefined) return {};
+  if (typeof input !== 'object' || Array.isArray(input)) {
+    throw new MilestoneAttributionError('MILESTONE_DECISION_INVALID',
+      'milestone_decisions is an object of reward row id to "this_episode" or "not_this_episode". Nothing was changed.',
+      { candidates, status: 400 });
+  }
+  const ids = new Set(candidates.map((c) => String(c.tx_id)));
+  const out = {};
+  const unknown = [];
+  for (const [txId, value] of Object.entries(input)) {
+    if (!ids.has(String(txId))) { unknown.push(txId); continue; }
+    if (value === null || value === undefined || value === '') continue;
+    if (!MILESTONE_DECISIONS.includes(value)) {
+      throw new MilestoneAttributionError('MILESTONE_DECISION_INVALID',
+        `A milestone decision is "this_episode" or "not_this_episode"; "${String(value).slice(0, 40)}" is neither. Nothing was changed.`,
+        { candidates, status: 400 });
+    }
+    out[txId] = value;
+  }
+  if (unknown.length > 0) {
+    throw new MilestoneAttributionError('MILESTONE_DECISION_STALE',
+      'A decision names a reward that is not in question for this episode now. Read the rewards again and decide on those. Nothing was changed.',
+      { candidates, undecided: candidates.map((c) => c.tx_id), unknown });
+  }
+  if (Object.keys(out).length > 0 && !decidedBy?.id) {
+    throw new MilestoneAttributionError('MILESTONE_DECISION_INVALID',
+      'A milestone decision is recorded against the admin who made it, and none was given. Nothing was changed.',
+      { candidates, status: 400 });
+  }
+  return out;
+}
+
 /**
  * The episode's part in a two-parter, or null (seasonSpecials.twoPartRole).
  * Part 1 completing alone is refused there ("to be continued"); Part 2 runs
@@ -231,7 +305,7 @@ async function twoPartOf(sequelize, episodeId) {
   }
 }
 
-async function completeEpisode(episodeId, showId, sequelize, { eventPiecesFallback = EVENT_PIECES_FALLBACK, twoPartOne = false } = {}) {
+async function completeEpisode(episodeId, showId, sequelize, { eventPiecesFallback = EVENT_PIECES_FALLBACK, twoPartOne = false, milestoneDecisions = null, decidedBy = null } = {}) {
   // ── 1. Load episode ──
   const [episode] = await sequelize.query(
     `SELECT id, title, episode_number, show_id, evaluation_json, evaluation_status, total_income, total_expenses
@@ -265,7 +339,7 @@ async function completeEpisode(episodeId, showId, sequelize, { eventPiecesFallba
   // A two-parter's event completes once, with Part 2 (seasonSpecials, 2026-10-26).
   const twoPart = twoPartOne ? null : await twoPartOf(sequelize, episodeId);
   if (twoPart) {
-    return require('./seasonSpecials').completeTwoPart(twoPart, { completeEpisode, episodeId, showId, sequelize, options: { eventPiecesFallback } });
+    return require('./seasonSpecials').completeTwoPart(twoPart, { completeEpisode, episodeId, showId, sequelize, options: { eventPiecesFallback, milestoneDecisions, decidedBy } });
   }
 
   // Reopened terms (Reopen ruling, §8(cc); Task #2378): refused before any
@@ -505,58 +579,165 @@ async function completeEpisode(episodeId, showId, sequelize, { eventPiecesFallba
       throw new InsufficientCoinsError({ needed: -mergedDeltas.coins, have: ledgerBefore, action: 'episode_completion' });
     }
 
-    // ── 11b. Financial mood deltas ──
+    // ── 11b. Financial mood deltas, and the episode's financial score ──
     // Translate the episode's financial outcome into stress deltas so Lala's
     // character state reflects "won a brand deal → relaxed" vs "blew 80% of
     // her savings on a gala → anxiety spikes". Additive into mergedDeltas so
     // outfit/event/social bonuses keep stacking alongside the money signal.
+    //
+    // Milestone rewards feed both: each is deep relief (−2 stress), and its
+    // coins are part of the episode's coin movement, which sets the score.
+    // A finalize that ran earlier, before rewards recorded their episode, can
+    // leave rewards that may or may not be this episode's (the candidates,
+    // financialTransactionService bookedFinalizeSummary). They are never
+    // counted as none and never attributed by a timestamp (Evoni, 2026-11-13):
+    //   - everything stored is worked out twice, with none of the undecided
+    //     candidates and with all of them (both are monotone, so the two ends
+    //     bound every case);
+    //   - the same at both ends: the unknown changes nothing; the completion
+    //     goes on and says UNVERIFIED;
+    //   - different: the completion is refused here, inside the transaction,
+    //     so every row above rolls back, until an admin says for each
+    //     candidate whether it is this episode's. A candidate may be left
+    //     undecided; the completion goes on once what is left changes nothing.
+    const candidates = Array.isArray(financialResult.milestone_candidates) ? financialResult.milestone_candidates : [];
+    const decisions = readMilestoneDecisions(milestoneDecisions, candidates, decidedBy);
+    const decidedThis = candidates.filter((c) => decisions[c.tx_id] === 'this_episode');
+    const undecided = candidates.filter((c) => !decisions[c.tx_id]);
+    const recordedRewards = Array.isArray(financialResult.milestones_triggered) ? financialResult.milestones_triggered : [];
+    const coinsOf = (list) => list.reduce((sum, c) => sum + (Number(c.amount) || 0), 0);
+    const knownHits = recordedRewards.length + decidedThis.length;
+    // What an earlier finalize booked for this episode is already in the
+    // ledger and so not in mergedDeltas.coins, which is this completion's
+    // movement; a direct completion has it in mergedDeltas.coins.
+    const bookedEarlier = financialResult.already_finalized
+      ? (financialResult.summary?.net_profit || 0)
+        + recordedRewards.reduce((sum, m) => sum + (Number(m.payout_tx?.amount) || 0), 0)
+        + coinsOf(decidedThis)
+      : 0;
+
+    const balanceBefore = financialResult.balance_before || 0;
+    const balanceAfter = financialResult.balance_after || 0;
+    let nextThreshold = null;
+    let moodKnown = true;
     try {
       const { getFinancialGoals } = require('./financialTransactionService');
-      const balanceBefore = financialResult.balance_before || 0;
-      const balanceAfter = financialResult.balance_after || 0;
-      const milestonesHit = Array.isArray(financialResult.milestones_triggered) ? financialResult.milestones_triggered.length : 0;
       const goals = await getFinancialGoals(db, showId);
-      const nextGoal = [...goals].sort((a, b) => a.threshold - b.threshold).find(g => !g.triggered_at);
-      const nextThreshold = nextGoal?.threshold || null;
-      // Stress scale is already roughly 0–10 in this codebase (see the 5/8
-      // thresholds in the episode-complete memory write below). Keep our
-      // deltas modest (±5 clamp) so a single episode can't spike or crater
-      // Lala by itself — the trend matters more than one event.
-      let stress = 0;
-      if (nextThreshold && balanceAfter < nextThreshold * 0.25) stress += 2;
-      else if (nextThreshold && balanceAfter < nextThreshold * 0.5) stress += 1;
-      if (balanceAfter <= 0) stress += 2;                   // going broke hurts
-      if (financialNet < -1000) stress += 2;                // big loss in one episode
-      else if (financialNet < 0) stress += 1;
-      if (financialNet > 500) stress -= 1;                  // winning
-      if (financialNet > 2000) stress -= 2;                 // winning big
-      stress -= 2 * milestonesHit;                          // each milestone = deep relief
-      // Bank surplus (way above next goal) — she's on offense, not defense.
-      if (nextThreshold && balanceAfter > nextThreshold * 1.5) stress -= 1;
-      const clamped = Math.max(-5, Math.min(5, stress));
-      if (clamped !== 0) {
-        mergedDeltas.stress = (mergedDeltas.stress || 0) + clamped;
-        mergedDeltas.financial_mood_delta = clamped;       // surfaced for debugging + UI
+      const nextGoal = [...goals].sort((x, y) => x.threshold - y.threshold).find(g => !g.triggered_at);
+      nextThreshold = nextGoal?.threshold || null;
+    } catch (moodErr) {
+      moodKnown = false;
+      console.warn('[episodeComplete] financial mood delta failed:', moodErr.message);
+    }
+
+    // Everything the milestone count and coins reach, for `hits` rewards
+    // counted as this episode's and `earlierCoins` booked before this
+    // completion. Pure: it writes nothing.
+    const financialOutcome = (hits, earlierCoins) => {
+      const deltas = { ...mergedDeltas };
+      let moodDelta = 0;
+      if (moodKnown) {
+        // Stress scale is already roughly 0–10 in this codebase (see the 5/8
+        // thresholds in the episode-complete memory write below). Keep our
+        // deltas modest (±5 clamp) so a single episode can't spike or crater
+        // Lala by itself — the trend matters more than one event.
+        let stress = 0;
+        if (nextThreshold && balanceAfter < nextThreshold * 0.25) stress += 2;
+        else if (nextThreshold && balanceAfter < nextThreshold * 0.5) stress += 1;
+        if (balanceAfter <= 0) stress += 2;                   // going broke hurts
+        if (financialNet < -1000) stress += 2;                // big loss in one episode
+        else if (financialNet < 0) stress += 1;
+        if (financialNet > 500) stress -= 1;                  // winning
+        if (financialNet > 2000) stress -= 2;                 // winning big
+        stress -= 2 * hits;                                   // each milestone = deep relief
+        // Bank surplus (way above next goal) — she's on offense, not defense.
+        if (nextThreshold && balanceAfter > nextThreshold * 1.5) stress -= 1;
+        moodDelta = Math.max(-5, Math.min(5, stress));
       }
+      if (moodDelta !== 0) {
+        deltas.stress = (deltas.stress || 0) + moodDelta;
+        deltas.financial_mood_delta = moodDelta;       // surfaced for debugging + UI
+      }
+      // Where the stress change came from, in plain words, for the result.
+      const breakdown = stressBreakdownOf({
+        tier: evalResult.tier_final, base: baseDeltas.stress, social: socialBonuses.deltas?.stress,
+        wardrobe: wardrobeBonuses.deltas?.stress, selfTalk, financial: deltas.financial_mood_delta,
+      });
+      const state = applyDeltas(currentStats, deltas);
+      state.coins = ledgerAfter;
+      // The episode's whole coin movement, for its score.
+      const episodeCoins = mergedDeltas.coins + earlierCoins;
+      return {
+        deltas,
+        compared: {
+          financial_mood_delta: moodDelta,
+          stress_delta: deltas.stress || 0,
+          stress_breakdown: breakdown,
+          state_after: state,
+          financial_score: episodeCoins >= 0 ? 7 : episodeCoins >= -200 ? 5 : 3,
+        },
+      };
+    };
+
+    const withNone = financialOutcome(knownHits, bookedEarlier);
+    if (undecided.length > 0) {
+      const withAll = financialOutcome(knownHits + undecided.length, bookedEarlier + coinsOf(undecided));
+      if (JSON.stringify(withNone.compared) !== JSON.stringify(withAll.compared)) {
+        throw new MilestoneAttributionError('MILESTONE_ATTRIBUTION_REQUIRED',
+          `Completing depends on whether ${undecided.length === 1 ? 'a milestone reward' : `${undecided.length} milestone rewards`} booked earlier ${undecided.length === 1 ? 'belongs' : 'belong'} to this episode, and the ledger does not say. An admin decides; nothing was changed.`,
+          { candidates, undecided: undecided.map((c) => c.tx_id) });
+      }
+      console.warn(`[episodeComplete] ${episodeId}: ${undecided.length} milestone reward(s) booked before rewards recorded their episode may be this episode's; the result is the same either way, so the attribution stays unverified`);
+    }
+
+    const decidedAt = new Date().toISOString();
+    const decider = { id: decidedBy?.id ?? null, name: decidedBy?.name ?? decidedBy?.email ?? null };
+    const milestoneAttribution = candidates.length === 0 ? null : {
+      status: undecided.length > 0 ? 'UNVERIFIED' : 'DECIDED',
+      candidates: candidates.map((c) => ({
+        ...c,
+        decision: decisions[c.tx_id] || null,
+        ...(decisions[c.tx_id] ? { decided_by: decider, decided_at: decidedAt } : {}),
+      })),
+    };
+
+    Object.assign(mergedDeltas, withNone.deltas);
+    const financialScore = withNone.compared.financial_score;
+    if (moodKnown) {
       mergedDeltas._financial_context = {
         balance_before: balanceBefore,
         balance_after: balanceAfter,
         episode_net: financialNet,
-        milestones_hit: milestonesHit,
+        // The count is said only when it is known.
+        milestones_hit: undecided.length > 0 ? null : knownHits,
+        ...(undecided.length > 0 ? { milestones_unknown: true } : {}),
+        ...(milestoneAttribution ? { milestone_attribution: milestoneAttribution } : {}),
         next_goal_threshold: nextThreshold,
       };
-    } catch (moodErr) {
-      console.warn('[episodeComplete] financial mood delta failed:', moodErr.message);
+    } else if (milestoneAttribution) {
+      mergedDeltas._financial_context = { milestone_attribution: milestoneAttribution };
+    }
+    stressBreakdown = withNone.compared.stress_breakdown;
+
+    // The decisions are part of the audit trail, through its one call for an
+    // operation that must not happen without its entry (middleware/auditLog
+    // logger.logActionInTransaction): written in this transaction, so they
+    // commit or roll back with the completion they decided.
+    const decided = (milestoneAttribution?.candidates || []).filter((c) => c.decision);
+    if (decided.length > 0) {
+      const { logger: audit } = require('../middleware/auditLog');
+      await audit.logActionInTransaction(transaction, decider.id, 'milestone_attribution', 'episode', episodeId, {
+        show_id: showId,
+        status: milestoneAttribution.status,
+        decided_by: decider,
+        decided_at: decidedAt,
+        decisions: decided.map((c) => ({ tx_id: c.tx_id, decision: c.decision, goal_id: c.goal_id, threshold: c.threshold, amount: c.amount, reason: c.reason })),
+        left_undecided: undecided.map((c) => c.tx_id),
+      });
     }
 
-    // Where the stress change came from, in plain words, for the result.
-    stressBreakdown = stressBreakdownOf({
-      tier: evalResult.tier_final, base: baseDeltas.stress, social: socialBonuses.deltas?.stress,
-      wardrobe: wardrobeBonuses.deltas?.stress, selfTalk, financial: mergedDeltas.financial_mood_delta,
-    });
-
     // ── 12. Apply all deltas to character state ──
-    newState = applyDeltas(currentStats, mergedDeltas);
+    newState = withNone.compared.state_after;
 
     // Coins were written by syncCoinsFromLedger above; this statement writes
     // the other stats only (delta 0).
@@ -600,6 +781,7 @@ async function completeEpisode(episodeId, showId, sequelize, { eventPiecesFallba
       wardrobe_bonuses: wardrobeBonuses,
       outfit: look.outfit,
       financial_summary: financialResult.summary,
+      ...(milestoneAttribution ? { milestone_attribution: milestoneAttribution } : {}),
       ...(selfTalk.tone ? { self_talk: selfTalkResult(selfTalk) } : {}),
       stress_breakdown: stressBreakdown,
       completed_at: new Date().toISOString(),
@@ -615,7 +797,7 @@ async function completeEpisode(episodeId, showId, sequelize, { eventPiecesFallba
         version: FORMULA_VERSION,
         income: financialResult.summary?.total_income || 0,
         expenses: financialResult.summary?.total_expenses || 0,
-        finScore: mergedDeltas.coins >= 0 ? 7 : mergedDeltas.coins >= -200 ? 5 : 3,
+        finScore: financialScore,
         episodeId,
       }}
     );
@@ -925,6 +1107,7 @@ ${narrativeLines.short || ''}`,
     wardrobe: wardrobeBonuses.detail,
     outfit: look.outfit,
     financials: financialResult.summary,
+    milestone_attribution: mergedDeltas._financial_context?.milestone_attribution || null,
     transactions: (financialResult.transactions || []).length,
     career: careerSummary,
     event_sync: eventSync,
@@ -936,6 +1119,8 @@ ${narrativeLines.short || ''}`,
 
 module.exports = {
   completeEpisode,
+  MilestoneAttributionError,
+  MILESTONE_DECISIONS,
   loadEpisodeLook,
   computeSocialTaskBonuses,
   computeWardrobeBonuses,

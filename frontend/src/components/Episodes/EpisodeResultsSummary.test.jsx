@@ -3,7 +3,7 @@
  * money, Lala's stats and goals, and what viewers and her feed see.
  */
 import { vi, describe, beforeEach, test, expect } from 'vitest';
-import { render, screen, fireEvent, within } from '@testing-library/react';
+import { render, screen, fireEvent, within, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 
 vi.mock('../../services/api', () => ({ default: { get: vi.fn(), post: vi.fn() } }));
@@ -186,5 +186,79 @@ describe('Complete episode, from the episode\'s own Results (Evoni, 2026-11-12)'
     renderResults({ episode: { evaluation_status: 'accepted', evaluation_json: { tier_final: 'pass', score: 71 } } });
     await screen.findByTestId('results-how');
     expect(screen.queryByTestId('results-complete-btn')).toBeNull();
+  });
+
+  describe('a milestone reward whose episode the ledger does not say (Evoni, 2026-11-13)', () => {
+    const A = { tx_id: 'tx-a', goal_id: 'rising-star', label: 'Rising Star', threshold: 1500, amount: 200, reason: 'in_range' };
+    const B = { tx_id: 'tx-b', goal_id: 'old', label: null, threshold: null, amount: 50, reason: 'no_threshold' };
+    const required = (candidates, undecided = candidates.map((c) => c.tx_id)) => refused(409, {
+      success: false, code: 'MILESTONE_ATTRIBUTION_REQUIRED', error: 'Completing depends on whether 2 milestone rewards booked earlier belong to this episode, and the ledger does not say. An admin decides; nothing was changed.', candidates, undecided,
+    });
+
+    test('the refusal lists each reward with a choice that starts undecided; the admin\'s answers are sent, and only those', async () => {
+      vi.mocked(api.post).mockRejectedValueOnce(required([A, B]));
+      const { onCompleted } = renderResults();
+      fireEvent.click(await screen.findByTestId('results-complete-btn'));
+      const form = await screen.findByTestId('results-milestone-decisions');
+      expect(screen.getByRole('alert').textContent).toContain('A milestone reward needs an admin\'s decision');
+      expect(screen.getByRole('alert').textContent).toContain('Nothing was booked.');
+      expect(within(form).getByLabelText('Rising Star · 200 coins · goal at 1,500').value).toBe('');
+      expect(within(form).getByLabelText('old · 50 coins · its row has no goal amount').value).toBe('');
+      expect(within(form).getAllByRole('option').map((o) => o.textContent).slice(0, 3)).toEqual(['Leave undecided', 'This episode\'s', 'Not this episode\'s']);
+      expect(form.textContent).toContain('It is never guessed.');
+
+      fireEvent.change(screen.getByTestId('results-milestone-tx-a'), { target: { value: 'this_episode' } });
+      confirmSpy.mockClear();
+      fireEvent.click(screen.getByTestId('results-milestone-submit'));
+      expect((await screen.findByTestId('results-complete-notice')).textContent).toBe('Completed. The result below is the one stored for this episode.');
+      expect(vi.mocked(api.post).mock.calls[1]).toEqual(['/api/v1/world/show-1/episodes/ep-1/complete', { milestone_decisions: { 'tx-a': 'this_episode' } }]);
+      // She confirmed on the first attempt; the form's button is the second.
+      expect(confirmSpy).not.toHaveBeenCalled();
+      expect(onCompleted).toHaveBeenCalledTimes(1);
+      expect(screen.queryByRole('alert')).toBeNull();
+    });
+
+    test('still refused after one answer: the answer is kept, and the reward left is asked again', async () => {
+      vi.mocked(api.post).mockRejectedValueOnce(required([A, B])).mockRejectedValueOnce(required([A, B], ['tx-b']));
+      renderResults();
+      fireEvent.click(await screen.findByTestId('results-complete-btn'));
+      fireEvent.change(await screen.findByTestId('results-milestone-tx-a'), { target: { value: 'not_this_episode' } });
+      fireEvent.click(screen.getByTestId('results-milestone-submit'));
+      await waitFor(() => expect(vi.mocked(api.post).mock.calls).toHaveLength(2));
+      expect((await screen.findByTestId('results-milestone-tx-a')).value).toBe('not_this_episode');
+      expect(screen.getByTestId('results-milestone-tx-b').value).toBe('');
+      expect(screen.getByRole('alert')).toBeTruthy();
+    });
+
+    test('when the rewards in question change, an answer for one no longer asked is dropped', async () => {
+      vi.mocked(api.post).mockRejectedValueOnce(required([A, B])).mockRejectedValueOnce(refused(409, { success: false, code: 'MILESTONE_DECISION_STALE', error: 'Read the rewards again.', candidates: [B], undecided: ['tx-b'] }));
+      renderResults();
+      fireEvent.click(await screen.findByTestId('results-complete-btn'));
+      fireEvent.change(await screen.findByTestId('results-milestone-tx-a'), { target: { value: 'this_episode' } });
+      fireEvent.click(screen.getByTestId('results-milestone-submit'));
+      await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('The rewards in question have changed'));
+      expect(screen.queryByTestId('results-milestone-tx-a')).toBeNull();
+      vi.mocked(api.post).mockResolvedValueOnce({ data: { success: true, data: { evaluation: { tier: 'pass', score: 71 } } } });
+      fireEvent.change(screen.getByTestId('results-milestone-tx-b'), { target: { value: 'not_this_episode' } });
+      fireEvent.click(screen.getByTestId('results-milestone-submit'));
+      await screen.findByTestId('results-complete-notice');
+      expect(vi.mocked(api.post).mock.calls[2][1]).toEqual({ milestone_decisions: { 'tx-b': 'not_this_episode' } });
+    });
+
+    test('the stored record shows on the completed episode: unverified, each reward, and who decided what', async () => {
+      renderResults({ episode: { evaluation_status: 'accepted', evaluation_json: { tier_final: 'pass', score: 71, milestone_attribution: { status: 'UNVERIFIED', candidates: [
+        { ...A, decision: 'this_episode', decided_by: { id: 'u1', name: 'Evoni' }, decided_at: '2026-11-13T18:00:00.000Z' },
+        { ...B, decision: null },
+      ] } } } });
+      const block = await screen.findByTestId('results-milestone-attribution');
+      expect(within(block).getByTestId('results-milestone-status').textContent).toBe('Unverified');
+      expect(block.textContent).toContain('it was not guessed');
+      const decided = within(block).getByTestId('results-milestone-row-tx-a');
+      expect(decided.textContent).toContain('Rising Star · 200 coins · goal at 1,500');
+      expect(decided.textContent).toContain('Evoni');
+      expect(decided.textContent).toContain('This episode\'s');
+      const open = within(block).getByTestId('results-milestone-row-tx-b');
+      expect(open.textContent).toContain('Undecided');
+    });
   });
 });
