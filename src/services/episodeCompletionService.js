@@ -515,6 +515,13 @@ async function completeEpisode(episodeId, showId, sequelize, { eventPiecesFallba
       const balanceBefore = financialResult.balance_before || 0;
       const balanceAfter = financialResult.balance_after || 0;
       const milestonesHit = Array.isArray(financialResult.milestones_triggered) ? financialResult.milestones_triggered.length : 0;
+      // A finalize that ran before rewards recorded their episode: a reward
+      // that could be this episode's cannot be told. Said, not guessed, and
+      // not counted as none in the record below.
+      const milestonesUnknown = financialResult.milestones_attribution === 'unknown';
+      if (milestonesUnknown) {
+        console.warn(`[episodeComplete] ${episodeId}: a milestone reward booked before rewards recorded their episode may be this episode's; its relief is not applied`);
+      }
       const goals = await getFinancialGoals(db, showId);
       const nextGoal = [...goals].sort((a, b) => a.threshold - b.threshold).find(g => !g.triggered_at);
       const nextThreshold = nextGoal?.threshold || null;
@@ -542,7 +549,8 @@ async function completeEpisode(episodeId, showId, sequelize, { eventPiecesFallba
         balance_before: balanceBefore,
         balance_after: balanceAfter,
         episode_net: financialNet,
-        milestones_hit: milestonesHit,
+        milestones_hit: milestonesUnknown ? null : milestonesHit,
+        ...(milestonesUnknown ? { milestones_unknown: true } : {}),
         next_goal_threshold: nextThreshold,
       };
     } catch (moodErr) {
@@ -605,6 +613,16 @@ async function completeEpisode(episodeId, showId, sequelize, { eventPiecesFallba
       completed_at: new Date().toISOString(),
     };
 
+    // The episode's whole coin movement, for its score. When finalize ran
+    // earlier on its own, its rows (and the rewards recorded against this
+    // episode) are already in the ledger and so not in mergedDeltas.coins,
+    // which is this completion's movement; a direct completion has them in it.
+    const bookedEarlier = financialResult.already_finalized
+      ? (financialResult.summary?.net_profit || 0)
+        + (financialResult.milestones_triggered || []).reduce((s, m) => s + (Number(m.payout_tx?.amount) || 0), 0)
+      : 0;
+    const episodeCoins = mergedDeltas.coins + bookedEarlier;
+
     await db.query(
       `UPDATE episodes SET evaluation_json = :evalJson, evaluation_status = 'accepted',
        formula_version = :version, total_income = :income, total_expenses = :expenses,
@@ -615,7 +633,7 @@ async function completeEpisode(episodeId, showId, sequelize, { eventPiecesFallba
         version: FORMULA_VERSION,
         income: financialResult.summary?.total_income || 0,
         expenses: financialResult.summary?.total_expenses || 0,
-        finScore: mergedDeltas.coins >= 0 ? 7 : mergedDeltas.coins >= -200 ? 5 : 3,
+        finScore: episodeCoins >= 0 ? 7 : episodeCoins >= -200 ? 5 : 3,
         episodeId,
       }}
     );

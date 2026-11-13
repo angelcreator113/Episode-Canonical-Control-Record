@@ -267,7 +267,11 @@ async function checkMilestones(sequelize, showId, oldBalance, newBalance, opts =
       // completion (Task #2252).
       source_id: UUID_RE.test(String(goal.id)) ? goal.id : null,
       source_name: goal.label,
-      metadata: { goal_id: goal.id, threshold: goal.threshold },
+      // The episode whose finalize crossed the goal, recorded on the row
+      // (Evoni, 2026-11-13) so a later read knows which episode a reward
+      // belongs to. In metadata, not episode_id: the reward is the show's
+      // money, and stays out of the episode's own income.
+      metadata: { goal_id: goal.id, threshold: goal.threshold, ...(episodeId ? { episode_id: episodeId } : {}) },
       status: 'executed',
       ...(transaction ? { transaction } : {}),
     });
@@ -347,8 +351,89 @@ function withoutTransaction(row) {
 // M3, Task #2248). They are the wardrobe's rows, not finalize's, so they
 // never make an episode count as finalized (§8(x) D3, Task #2229).
 const WARDROBE_SPEND_FLOWS = ['select', 'lock_outfit', 'purchase'];
+// The categories finalize itself books for an episode (its steps 3 to 10).
+// Deal payouts and content fees (dealPayoutService PAYOUT_CATEGORIES),
+// milestone rewards, the seed and manual adjustments are other writers' rows.
+const FINALIZE_CATEGORIES = Object.freeze([
+  'event_entry', 'wardrobe_rental', 'wardrobe_purchase', 'event_cost',
+  'event_spending', 'styling_extras', 'event_payment', 'content_revenue',
+]);
 const NOT_WARDROBE_SPEND_ROW =
   `COALESCE(metadata->>'flow', '') NOT IN (${WARDROBE_SPEND_FLOWS.map((f) => `'${f}'`).join(', ')})`;
+
+/**
+ * The summary of a finalize that already ran, rebuilt from its own ledger
+ * rows (FINALIZE_CATEGORIES, never the wardrobe's spend rows). Read only.
+ *
+ *   summary          the same six fields a fresh finalize returns
+ *   balance_before   the balance its first row started from
+ *   balance_after    the balance its last row left (before any milestone
+ *                    reward, as a fresh finalize reports it)
+ *   milestones_triggered    the rewards recorded against this episode
+ *                           (metadata.episode_id)
+ *   milestones_attribution  'recorded', or 'unknown' when a reward booked
+ *                           before the episode was recorded on the row could
+ *                           be this episode's (its threshold lies inside this
+ *                           finalize's balance movement). Unknown is said,
+ *                           never guessed from a timestamp and never counted
+ *                           as none.
+ */
+async function bookedFinalizeSummary(sequelize, { episodeId, showId, event, balance }) {
+  const rows = await sequelize.query(
+    `SELECT type, category, amount, balance_before, balance_after
+       FROM financial_transactions
+      WHERE episode_id = :episodeId AND status = 'executed' AND deleted_at IS NULL
+        AND category IN (:categories) AND ${NOT_WARDROBE_SPEND_ROW}`,
+    { replacements: { episodeId, categories: FINALIZE_CATEGORIES }, type: sequelize.QueryTypes.SELECT }
+  );
+  const num = (v) => parseFloat(v) || 0;
+  const sum = (list) => list.reduce((s, r) => s + num(r.amount), 0);
+  const totalIncome = sum(rows.filter((r) => r.type === 'income' || r.type === 'reward'));
+  const totalExpenses = sum(rows.filter((r) => r.type === 'expense' || r.type === 'deduction'));
+  // The rows chain: each starts from the balance the one before left. The
+  // start is the "before" no row's "after" accounts for; the end likewise.
+  const unmatched = (values, against) => {
+    const pool = [...against];
+    return values.filter((v) => { const i = pool.indexOf(v); if (i >= 0) pool.splice(i, 1); return i < 0; });
+  };
+  const befores = rows.filter((r) => r.balance_before !== null).map((r) => num(r.balance_before));
+  const afters = rows.filter((r) => r.balance_after !== null).map((r) => num(r.balance_after));
+  const [chainStart] = unmatched(befores, afters);
+  const [chainEnd] = unmatched(afters, befores);
+  const balanceBefore = chainStart !== undefined ? chainStart : (befores.length ? befores[0] : balance);
+  const balanceAfter = chainEnd !== undefined ? chainEnd : (afters.length ? afters[afters.length - 1] : balance);
+
+  const rewards = await sequelize.query(
+    `SELECT id, amount, source_name, metadata FROM financial_transactions
+      WHERE show_id = :showId AND category = 'milestone' AND status = 'executed' AND deleted_at IS NULL`,
+    { replacements: { showId }, type: sequelize.QueryTypes.SELECT }
+  );
+  const meta = (r) => (typeof r.metadata === 'string' ? JSON.parse(r.metadata) : (r.metadata || {}));
+  const recorded = rewards.filter((r) => meta(r).episode_id === episodeId);
+  const couldBeThis = rewards.filter((r) => {
+    const m = meta(r);
+    const threshold = Number(m.threshold);
+    return !m.episode_id && Number.isFinite(threshold) && threshold > balanceBefore && threshold <= balanceAfter;
+  });
+  const flags = normalizePaidFreeFlags(event || {});
+  return {
+    summary: {
+      total_income: totalIncome,
+      total_expenses: totalExpenses,
+      net_profit: totalIncome - totalExpenses,
+      wardrobe_cost: sum(rows.filter((r) => r.category === 'wardrobe_purchase' || r.category === 'wardrobe_rental')),
+      event_cost: flags.eventCost,
+      event_payment: flags.eventPayment,
+    },
+    balance_before: balanceBefore,
+    balance_after: balanceAfter,
+    milestones_triggered: recorded.map((r) => ({
+      goal: { id: meta(r).goal_id, label: r.source_name, threshold: meta(r).threshold, reward_coins: num(r.amount) },
+      payout_tx: { id: r.id, amount: num(r.amount) },
+    })),
+    milestones_attribution: couldBeThis.length ? 'unknown' : 'recorded',
+  };
+}
 
 /**
  * Execute all financial transactions for an episode.
@@ -431,10 +516,18 @@ async function finalizeEpisodeFinancials(episodeId, showId, sequelize, { dryRun 
       { replacements: { episodeId } }
     );
     const balance = await getCurrentBalance(sequelize, showId);
+    const [bookedEvent] = await sequelize.query(
+      `SELECT * FROM world_events WHERE id = ${require('../utils/episodeEventSql').EPISODE_EVENT_ID_SQL}`,
+      { replacements: { episodeId }, type: sequelize.QueryTypes.SELECT }
+    ).catch(() => []);
     return {
       already_finalized: true,
       transactions: rows || [],
       balance: balance,
+      // What the finalize that already ran booked, read back from the ledger
+      // (Evoni, 2026-11-13), so a completion that follows stores the same
+      // totals a direct completion does. Nothing is booked here.
+      ...(await bookedFinalizeSummary(sequelize, { episodeId, showId, event: bookedEvent, balance })),
     };
   }
 
@@ -798,4 +891,5 @@ module.exports = {
   getFinancialLedger,
   normalizePaidFreeFlags,
   NOT_WARDROBE_SPEND_ROW,
+  FINALIZE_CATEGORIES,
 };
