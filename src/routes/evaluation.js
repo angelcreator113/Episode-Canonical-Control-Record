@@ -28,7 +28,9 @@ const {
   TIER_ORDER: _TIER_ORDER,
 } = require('../utils/evaluationFormula');
 
-const { requireAuth, authorize, userInGroup } = require('../middleware/auth');
+const { requireAuth, authorize } = require('../middleware/auth');
+// The same group check authorize() makes, for a decision made inside a handler (a coin change).
+const { userInGroup } = require('../middleware/auth');
 const { episodeEventTerms } = require('../utils/episodeEventSql');
 const { InsufficientCoinsError, insufficientCoinsBody } = require('../services/coinBalanceGuard');
 
