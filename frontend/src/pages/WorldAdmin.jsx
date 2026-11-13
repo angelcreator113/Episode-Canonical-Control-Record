@@ -16,10 +16,12 @@
  * Location: frontend/src/pages/WorldAdmin.jsx
  */
 
-import React, { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useContext, lazy, Suspense } from 'react';
 import { useParams, Link, useSearchParams, useNavigate } from 'react-router-dom';
 import { seasonPageHref } from '../lib/seasonPage';
 import api from '../services/api';
+import AuthContext from '../contexts/AuthContext';
+import { isAdmin } from '../utils/authGroups';
 import showService from '../services/showService';
 import { rememberShow } from '../utils/activeShow';
 import WorldMomentsTab from '../components/WorldMoments/WorldMomentsTab';
@@ -179,6 +181,8 @@ export const SEASON_PAGE_KEYS = {
 };
 
 function WorldAdmin() {
+  // Money writes (coins, the seed, the finance config) are an admin's; the API refuses anyone else.
+  const admin = isAdmin(useContext(AuthContext)?.user);
   const { id: showId } = useParams();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -428,14 +432,17 @@ function WorldAdmin() {
     if (!showId) return;
     let cancelled = false;
     (async () => {
+      // The seed is an admin's write; a refused or failed seed never hides the config.
+      if (admin) {
+        try { await api.post(`/api/v1/shows/${showId}/seed-balance`); } catch (err) { console.error('[WorldAdmin] seed failed:', err?.message); }
+      }
       try {
-        await api.post(`/api/v1/shows/${showId}/seed-balance`);
         const res = await api.get(`/api/v1/shows/${showId}/financial-config`);
         if (!cancelled) setFinanceConfig(res.data);
-      } catch { /* non-blocking */ }
+      } catch (err) { console.error('[WorldAdmin] finance config load failed:', err?.message); }
     })();
     return () => { cancelled = true; };
-  }, [showId]);
+  }, [showId, admin]);
 
   useEffect(() => {
     if (successMsg) { const t = setTimeout(() => setSuccessMsg(null), 5000); return () => clearTimeout(t); }
@@ -492,7 +499,9 @@ function WorldAdmin() {
   const saveStats = async () => {
     setSavingStats(true); setError(null);
     try {
-      const res = await api.post(`/api/v1/characters/lala/state/update`, { show_id: showId, ...statForm, source: 'manual', notes: 'Manual edit from World Admin' });
+      // A coin change is an admin's: anyone else sends the other stats only.
+      const { coins: formCoins, ...otherStats } = statForm;
+      const res = await api.post(`/api/v1/characters/lala/state/update`, { show_id: showId, ...(admin ? { coins: formCoins } : {}), ...otherStats, source: 'manual', notes: 'Manual edit from World Admin' });
       if (res.data.success) {
         setCharState(p => ({ ...p, state: res.data.state }));
         setEditingStats(false);
@@ -2249,7 +2258,7 @@ function WorldAdmin() {
             <LalaStatsCard
               charState={charState} history={stateHistory} episodes={episodes}
               coinGoal={financeConfig?.next_goal?.threshold || null}
-              edit={{ editing: editingStats, form: statForm, setForm: setStatForm, open: openStatEditor, cancel: () => setEditingStats(false), save: saveStats, saving: savingStats }}
+              edit={{ canEditCoins: admin, editing: editingStats, form: statForm, setForm: setStatForm, open: openStatEditor, cancel: () => setEditingStats(false), save: saveStats, saving: savingStats }}
             />
             <DecisionLogCard history={stateHistory} episodes={episodes} />
           </div>
@@ -2818,9 +2827,13 @@ function WorldAdmin() {
 
                     <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, paddingTop: 10, borderTop: '1px solid var(--lala-parchment-3)' }}>
                       <button onClick={() => setFinanceEditorDraft(draftFromConfig(financeConfig))} disabled={financeEditorSaving} style={{ ...S.secBtn, padding: '7px 16px' }}>Discard changes</button>
-                      <button onClick={save} disabled={financeEditorSaving} style={{ ...S.primaryBtn, padding: '7px 22px' }}>
-                        {financeEditorSaving ? 'Saving…' : 'Save & re-seed'}
-                      </button>
+                      {admin ? (
+                        <button onClick={save} disabled={financeEditorSaving} style={{ ...S.primaryBtn, padding: '7px 22px' }}>
+                          {financeEditorSaving ? 'Saving…' : 'Save & re-seed'}
+                        </button>
+                      ) : (
+                        <span data-testid="finance-admin-note" style={{ fontSize: 12, color: 'var(--text-secondary)', alignSelf: 'center' }}>Only an admin can save the starting balance and goals.</span>
+                      )}
                     </div>
                     </>
                     )}
