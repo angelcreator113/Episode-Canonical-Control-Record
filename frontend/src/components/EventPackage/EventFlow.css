@@ -275,3 +275,24 @@
   .eff-chip { min-height: 40px; }
   .eff-actions .epp-btn { min-height: 40px; }
 }
+
+/* Schedule & continuity (continuity PR 1): when the event runs and who is in two places. */
+.esc { display: grid; gap: 8px; min-width: 0; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--lala-parchment-3); }
+.esc-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.esc-title { display: inline-flex; align-items: center; gap: 6px; margin: 0; font-size: 13px; font-weight: 600; color: var(--lala-ink); }
+.esc-when { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0; font-size: 14px; color: var(--lala-ink); overflow-wrap: anywhere; }
+.esc-tag { padding: 1px 8px; border: 1px solid currentColor; border-radius: 999px; font-size: 11px; color: var(--lala-ink-muted); }
+.esc-clear, .esc-soft { margin: 0; font-size: 13px; color: var(--lala-ink-muted); }
+.esc-form { display: grid; gap: 10px; max-width: 360px; }
+.esc-field { display: grid; gap: 4px; font-size: 13px; color: var(--lala-ink); }
+.esc-field input { width: 100%; min-height: 44px; padding: 8px 10px; border: 1px solid var(--lala-parchment-3); border-radius: 8px; background: var(--lala-parchment); color: var(--lala-ink); font: inherit; }
+.esc-field input:focus-visible { outline: 3px solid var(--lala-lavender-text); outline-offset: 2px; }
+.esc-optional { font-size: 11px; color: var(--lala-ink-muted); }
+.esc-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.esc-list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.esc-row { display: grid; grid-template-columns: auto 1fr; gap: 8px; align-items: start; min-width: 0; font-size: 13px; color: var(--lala-ink); }
+.esc-chip { padding: 1px 8px; border: 1px solid currentColor; border-radius: 999px; font-size: 11px; white-space: nowrap; color: var(--lala-ink-muted); }
+.esc-row.is-host .esc-chip { color: var(--danger-text); background: var(--danger-bg); }
+.esc-row.is-lala .esc-chip, .esc-row.is-verify .esc-chip { color: var(--warning-text); background: var(--warning-bg); }
+.esc-text { min-width: 0; overflow-wrap: anywhere; }
+@media (max-width: 480px) { .esc-row { grid-template-columns: 1fr; } .esc-chip { justify-self: start; } }

@@ -12,10 +12,11 @@ import { AlertTriangle, AlertCircle, Loader2, Sparkles, CopyPlus } from 'lucide-
 import Beat14Preview from './Beat14Preview';
 import EpisodeStatusCard from './EpisodeStatusCard';
 import FillMissingPanel from './FillMissingPanel';
+import { flowWarningLines } from '../../lib/eventSchedule';
 import './EventFlow.css';
 
 export default function EventFlowStrip({ showId, used, lockEpisode, episodeId, flow, fill, followUp }) {
-  const lines = flow?.clashes?.lines || [];
+  const lines = flowWarningLines(flow);
   return (
     <section id="eff-strip" className="eff-strip" aria-label="What comes next" data-testid="event-flow-strip">
       {lines.length > 0 && (
