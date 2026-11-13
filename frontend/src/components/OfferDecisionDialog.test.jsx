@@ -8,7 +8,11 @@
 import { vi, describe, test, expect } from 'vitest';
 import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
 import OfferDecisionDialog from './OfferDecisionDialog';
-import useOfferDecision from '../hooks/useOfferDecision';
+import useOfferDecision, { startKey, payloadFingerprint, episodeFromReadiness } from '../hooks/useOfferDecision';
+
+// Every request carries the attempt's Idempotency-Key (idempotency ruling of 2026-11-13).
+const KEYED = { headers: { 'Idempotency-Key': expect.stringMatching(/^[\x21-\x7e]{1,200}$/) } };
+const keyOf = (send, n) => send.mock.calls[n - 1][2].headers['Idempotency-Key'];
 
 const required = () => Object.assign(new Error('Request failed with status code 409'), {
   response: {
@@ -22,9 +26,9 @@ const required = () => Object.assign(new Error('Request failed with status code 
   },
 });
 
-function Harness({ send, onDone }) {
+function Harness({ send, onDone, check }) {
   const od = useOfferDecision();
-  const start = () => od.run(send).then((res) => onDone({ res }), (err) => onDone({ err }));
+  const start = () => od.run(send, check ? { check } : undefined).then((res) => onDone({ res }), (err) => onDone({ err }));
   return (
     <>
       <button type="button" onClick={start}>Start</button>
@@ -40,7 +44,7 @@ describe('OfferDecisionDialog', () => {
     render(<Harness send={send} onDone={onDone} />);
     await act(async () => { fireEvent.click(screen.getByText('Start')); });
     expect(send).toHaveBeenCalledTimes(1);
-    expect(send).toHaveBeenCalledWith(undefined);
+    expect(send).toHaveBeenCalledWith(undefined, undefined, KEYED);
     expect(screen.queryByTestId('offer-decision')).toBeNull();
     expect(onDone).toHaveBeenCalledWith({ res: { data: { success: true } } });
   });
@@ -72,7 +76,7 @@ describe('OfferDecisionDialog', () => {
       fireEvent.change(screen.getByTestId('offer-decision-reason'), { target: { value: '  The fee is too low  ' } });
       await act(async () => { fireEvent.click(screen.getByTestId(`offer-decision-${decision}`)); });
       // The decision, the offers it is about (the ones the 409 listed) and why (A1).
-      expect(send).toHaveBeenNthCalledWith(2, decision, { offer_decision_opportunity_ids: ['opp-1'], offer_decision_reason: 'The fee is too low' });
+      expect(send).toHaveBeenNthCalledWith(2, decision, { offer_decision_opportunity_ids: ['opp-1'], offer_decision_reason: 'The fee is too low' }, KEYED);
       await waitFor(() => expect(onDone).toHaveBeenCalledWith({ res: { data: { success: true, decided: decision } } }));
       expect(screen.queryByTestId('offer-decision')).toBeNull();
     }
@@ -98,7 +102,7 @@ describe('OfferDecisionDialog', () => {
     fireEvent.change(screen.getByTestId('offer-decision-reason'), { target: { value: 'Not the right fit' } });
     expect(screen.queryByTestId('offer-decision-reason-missing')).toBeNull();
     await act(async () => { fireEvent.click(screen.getByTestId(`offer-decision-${decision}`)); });
-    expect(send).toHaveBeenNthCalledWith(2, decision, { offer_decision_opportunity_ids: ['opp-1'], offer_decision_reason: 'Not the right fit' });
+    expect(send).toHaveBeenNthCalledWith(2, decision, { offer_decision_opportunity_ids: ['opp-1'], offer_decision_reason: 'Not the right fit' }, KEYED);
   });
 
   test.each(['accept', 'negotiate'])("'%s' needs no reason: it is sent without one", async (decision) => {
@@ -106,7 +110,7 @@ describe('OfferDecisionDialog', () => {
     render(<Harness send={send} onDone={vi.fn()} />);
     await act(async () => { fireEvent.click(screen.getByText('Start')); });
     await act(async () => { fireEvent.click(screen.getByTestId(`offer-decision-${decision}`)); });
-    expect(send).toHaveBeenNthCalledWith(2, decision, { offer_decision_opportunity_ids: ['opp-1'] });
+    expect(send).toHaveBeenNthCalledWith(2, decision, { offer_decision_opportunity_ids: ['opp-1'] }, KEYED);
   });
 
   // A decision is an admin's: someone who cannot make it is told so and offered no choice.
@@ -167,7 +171,7 @@ describe('OfferDecisionDialog', () => {
     render(<Harness send={send} onDone={vi.fn()} />);
     await act(async () => { fireEvent.click(screen.getByText('Start')); });
     await act(async () => { fireEvent.click(screen.getByTestId('offer-decision-accept')); });
-    expect(send).toHaveBeenNthCalledWith(2, 'accept', { offer_decision_opportunity_ids: ['opp-1', 'opp-2'] });
+    expect(send).toHaveBeenNthCalledWith(2, 'accept', { offer_decision_opportunity_ids: ['opp-1', 'opp-2'] }, KEYED);
   });
 
   test('Cancel starts nothing: no second request, and the caller is told it was cancelled', async () => {
@@ -242,7 +246,7 @@ describe('OfferDecisionDialog: a refused decision', () => {
 
     // A new, explicit choice: sent about the offers now shown, with the reason.
     await act(async () => { fireEvent.click(screen.getByTestId('offer-decision-decline')); });
-    expect(send).toHaveBeenNthCalledWith(3, 'decline', { offer_decision_opportunity_ids: ['opp-1', 'opp-2'], offer_decision_reason: 'The fee is too low' });
+    expect(send).toHaveBeenNthCalledWith(3, 'decline', { offer_decision_opportunity_ids: ['opp-1', 'opp-2'], offer_decision_reason: 'The fee is too low' }, KEYED);
     await waitFor(() => expect(onDone).toHaveBeenCalledWith({ res: { data: { success: true } } }));
     expect(screen.queryByTestId('offer-decision')).toBeNull();
   });
@@ -330,7 +334,7 @@ describe('OfferDecisionDialog: a refused decision', () => {
     // Trying again is an explicit choice, with the same offers and reason.
     for (const c of choices()) expect(c.disabled).toBe(false);
     await act(async () => { fireEvent.click(screen.getByTestId('offer-decision-decline')); });
-    expect(send).toHaveBeenNthCalledWith(3, 'decline', { offer_decision_opportunity_ids: ['opp-1'], offer_decision_reason: 'The fee is too low' });
+    expect(send).toHaveBeenNthCalledWith(3, 'decline', { offer_decision_opportunity_ids: ['opp-1'], offer_decision_reason: 'The fee is too low' }, KEYED);
     await waitFor(() => expect(onDone).toHaveBeenCalledWith({ res: { data: { success: true } } }));
     expect(screen.queryByTestId('offer-decision')).toBeNull();
   });
@@ -426,5 +430,221 @@ describe('OfferDecisionDialog: keyboard', () => {
     expect(document.activeElement).toBe(screen.getByLabelText('Close'));
     tab(true);
     expect(document.activeElement).toBe(close);
+  });
+});
+
+// Idempotency and recovery (Evoni's ruling of 2026-11-13): the server's own
+// Idempotency-Key for Start Episode, one per attempt and per thing sent.
+describe('OfferDecisionDialog: the Idempotency-Key', () => {
+  const failure = () => Object.assign(new Error('Network Error'), { code: 'ERR_NETWORK' });
+  const open = async (send, props = {}) => {
+    const onDone = vi.fn();
+    render(<Harness send={send} onDone={onDone} {...props} />);
+    await act(async () => { fireEvent.click(screen.getByText('Start')); });
+    return onDone;
+  };
+  const type = (value) => fireEvent.change(screen.getByTestId('offer-decision-reason'), { target: { value } });
+  const click = (id) => act(async () => { fireEvent.click(screen.getByTestId(id)); });
+
+  test('startKey: the same attempt and payload give the same key; anything different gives another; all are keys the server accepts', () => {
+    const payload = { decision: 'decline', opportunityIds: ['b', 'a'], reason: 'Too low' };
+    expect(startKey('attempt-1', payload)).toBe(startKey('attempt-1', { ...payload }));
+    // The order the offers are listed in is not a different payload.
+    expect(startKey('attempt-1', payload)).toBe(startKey('attempt-1', { ...payload, opportunityIds: ['a', 'b'] }));
+    const others = [
+      startKey('attempt-2', payload),
+      startKey('attempt-1', { ...payload, decision: 'accept' }),
+      startKey('attempt-1', { ...payload, opportunityIds: ['a'] }),
+      startKey('attempt-1', { ...payload, reason: 'Too low.' }),
+      startKey('attempt-1'),
+    ];
+    for (const k of others) expect(k).not.toBe(startKey('attempt-1', payload));
+    expect(new Set(others).size).toBe(others.length);
+    for (const k of [startKey('attempt-1', payload), ...others, startKey('x'.repeat(36), { decision: 'decline', opportunityIds: [], reason: 'y'.repeat(500) })]) {
+      expect(k).toMatch(/^[\x21-\x7e]{1,200}$/);
+    }
+    expect(payloadFingerprint({ a: 1 })).toMatch(/^[0-9a-f]{8}$/);
+  });
+
+  test('the same choice sent again after a failure carries the same key: it is not made anew', async () => {
+    const send = vi.fn().mockRejectedValueOnce(required()).mockRejectedValueOnce(failure()).mockRejectedValueOnce(failure()).mockResolvedValueOnce({ data: { success: true, replayed: true } });
+    const onDone = await open(send);
+    type('The fee is too low');
+    await click('offer-decision-decline');
+    await click('offer-decision-decline');
+    await click('offer-decision-decline');
+    expect(send).toHaveBeenCalledTimes(4);
+    expect(keyOf(send, 3)).toBe(keyOf(send, 2));
+    expect(keyOf(send, 4)).toBe(keyOf(send, 2));
+    // The server's replay (200, replayed) is the Start's own answer: it settles as a success.
+    await waitFor(() => expect(onDone).toHaveBeenCalledWith({ res: { data: { success: true, replayed: true } } }));
+    expect(screen.queryByTestId('offer-decision')).toBeNull();
+  });
+
+  test('a different decision, a different reason, or different offers each carry a different key', async () => {
+    const stale = Object.assign(new Error('409'), { response: { status: 409, data: { code: 'OFFER_DECISION_STALE', error: 'Changed.', opportunities: [{ id: 'opp-1', name: 'Spring Capsule', status: 'offered' }, { id: 'opp-2', name: 'Later', status: 'offered' }] } } });
+    const send = vi.fn().mockRejectedValueOnce(required())
+      .mockRejectedValueOnce(failure()).mockRejectedValueOnce(failure()).mockRejectedValueOnce(failure()).mockRejectedValueOnce(stale).mockRejectedValueOnce(failure());
+    await open(send);
+    type('The fee is too low');
+    await click('offer-decision-decline');            // 2: decline, reason A, offer 1
+    await click('offer-decision-proceed_unaccepted'); // 3: another decision
+    type('Another reason');
+    await click('offer-decision-decline');            // 4: decline, reason B
+    type('The fee is too low');
+    await click('offer-decision-decline');            // 5: decline, reason A again: stale
+    await click('offer-decision-refresh');
+    await click('offer-decision-decline');            // 6: decline, reason A, offers 1 and 2
+    expect(send).toHaveBeenCalledTimes(6);
+    const keys = [1, 2, 3, 4, 5, 6].map((n) => keyOf(send, n));
+    // The first request (no decision) has its own key too.
+    expect(new Set([keys[0], keys[1], keys[2], keys[3], keys[5]]).size).toBe(5);
+    // The same decision, offers and reason as the second request: the same key.
+    expect(keys[4]).toBe(keys[1]);
+    // Every key of this attempt shares the attempt's id.
+    const attempt = keys[0].split('.')[0];
+    for (const k of keys) expect(k.split('.')[0]).toBe(attempt);
+  });
+
+  test('a new Start attempt never reuses a key', async () => {
+    const send = vi.fn().mockRejectedValue(required());
+    const onDone = await open(send);
+    await click('offer-decision-cancel');
+    await act(async () => { fireEvent.click(screen.getByText('Start')); });
+    expect(send).toHaveBeenCalledTimes(2);
+    expect(keyOf(send, 2)).not.toBe(keyOf(send, 1));
+    expect(keyOf(send, 2).split('.')[0]).not.toBe(keyOf(send, 1).split('.')[0]);
+    expect(onDone).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('OfferDecisionDialog: an event that already has an episode, and checking after a network failure', () => {
+  const EPISODE = { id: 'ep-9', title: 'The Gala', episode_number: 3 };
+  const hasEpisode = () => Object.assign(new Error('409'), {
+    response: { status: 409, data: { success: false, code: 'EVENT_ALREADY_HAS_EPISODE', error: 'This event already started Episode 3 "The Gala" (ep-9). An event starts at most one episode.', episode: EPISODE } },
+  });
+  const network = () => Object.assign(new Error('Network Error'), { code: 'ERR_NETWORK' });
+  const readiness = (blockers) => ({ data: { success: true, data: { ready: blockers.length === 0, blockers, warnings: [] } } });
+  const open = async (send, check) => {
+    const onDone = vi.fn();
+    render(<Harness send={send} onDone={onDone} check={check} />);
+    await act(async () => { fireEvent.click(screen.getByText('Start')); });
+    fireEvent.change(screen.getByTestId('offer-decision-reason'), { target: { value: 'The fee is too low' } });
+    return onDone;
+  };
+  const click = (id) => act(async () => { fireEvent.click(screen.getByTestId(id)); });
+  const choices = () => ['accept', 'negotiate', 'decline', 'proceed_unaccepted'].map((d) => screen.getByTestId(`offer-decision-${d}`));
+
+  test('episodeFromReadiness reads the episode from a start-readiness answer, or null', () => {
+    expect(episodeFromReadiness(readiness([{ key: 'prices_missing' }, { key: 'episode_exists', episode: EPISODE }]))).toEqual(EPISODE);
+    expect(episodeFromReadiness(readiness([{ key: 'prices_missing' }]))).toBeNull();
+    expect(episodeFromReadiness(readiness([]))).toBeNull();
+    expect(episodeFromReadiness(undefined)).toBeNull();
+  });
+
+  test('409 EVENT_ALREADY_HAS_EPISODE: it names the episode and links to it, and never says it was not started or that this request made it', async () => {
+    const send = vi.fn().mockRejectedValueOnce(required()).mockRejectedValueOnce(hasEpisode());
+    const onDone = await open(send);
+    await click('offer-decision-decline');
+    const box = screen.getByTestId('offer-decision-has-episode');
+    expect(box.getAttribute('role')).toBe('alert');
+    expect(box.textContent).toContain('This event already has an episode: Episode 3 “The Gala”.');
+    expect(box.textContent).toContain('Nothing new was started, and no decision was sent again.');
+    const all = screen.getByTestId('offer-decision').textContent;
+    expect(all).not.toMatch(/was not started|could not start|went through|your (earlier )?request/i);
+    expect(screen.queryByTestId('offer-decision-failed')).toBeNull();
+    const link = screen.getByTestId('offer-decision-open-episode');
+    expect(link.getAttribute('href')).toBe('/episodes/ep-9');
+    expect(link.textContent).toBe('Open the episode');
+    expect(document.activeElement).toBe(link);
+    // No choice can be sent; the reason is still there; Close hands the refusal to the caller.
+    for (const c of choices()) expect(c.disabled).toBe(true);
+    await click('offer-decision-accept');
+    expect(send).toHaveBeenCalledTimes(2);
+    expect(screen.getByTestId('offer-decision-reason').value).toBe('The fee is too low');
+    expect(screen.getByTestId('offer-decision-cancel').textContent).toBe('Close');
+    expect(onDone).not.toHaveBeenCalled();
+    await click('offer-decision-cancel');
+    expect(onDone.mock.calls[0][0].err.response.data.code).toBe('EVENT_ALREADY_HAS_EPISODE');
+  });
+
+  test('an episode with no number or title is still named and linked', async () => {
+    const bare = hasEpisode();
+    bare.response.data.episode = { id: 'ep-1', title: null, episode_number: null };
+    const send = vi.fn().mockRejectedValueOnce(required()).mockRejectedValueOnce(bare);
+    await open(send);
+    await click('offer-decision-accept');
+    expect(screen.getByTestId('offer-decision-has-episode').textContent).toContain('This event already has an episode: an episode.');
+    expect(screen.getByTestId('offer-decision-open-episode').getAttribute('href')).toBe('/episodes/ep-1');
+  });
+
+  test('a network failure offers Check episode status; checking is one read and no Start; it found an episode', async () => {
+    const check = vi.fn().mockResolvedValue(readiness([{ key: 'episode_exists', episode: EPISODE }]));
+    const send = vi.fn().mockRejectedValueOnce(required()).mockRejectedValueOnce(network());
+    const onDone = await open(send, check);
+    await click('offer-decision-decline');
+    const failed = screen.getByTestId('offer-decision-failed');
+    expect(failed.textContent).toContain('the episode may not have started');
+    expect(failed.textContent).toContain('Check whether the episode started before you choose again.');
+    expect(check).not.toHaveBeenCalled();
+    expect(document.activeElement).toBe(screen.getByTestId('offer-decision-check'));
+    await click('offer-decision-check');
+    expect(check).toHaveBeenCalledTimes(1);
+    expect(send).toHaveBeenCalledTimes(2);
+    expect(screen.queryByTestId('offer-decision-failed')).toBeNull();
+    expect(screen.getByTestId('offer-decision-has-episode').textContent).toContain('This event already has an episode: Episode 3 “The Gala”.');
+    expect(screen.getByTestId('offer-decision').textContent).not.toMatch(/went through|your (earlier )?request/i);
+    expect(screen.getByTestId('offer-decision-open-episode').getAttribute('href')).toBe('/episodes/ep-9');
+    for (const c of choices()) expect(c.disabled).toBe(true);
+    expect(screen.getByTestId('offer-decision-reason').value).toBe('The fee is too low');
+    expect(onDone).not.toHaveBeenCalled();
+  });
+
+  test('checking found no episode: it says nothing was started, sends nothing, and a new explicit choice goes with the same key', async () => {
+    const check = vi.fn().mockResolvedValue(readiness([]));
+    const send = vi.fn().mockRejectedValueOnce(required()).mockRejectedValueOnce(network()).mockResolvedValueOnce({ data: { success: true } });
+    const onDone = await open(send, check);
+    await click('offer-decision-decline');
+    await click('offer-decision-check');
+    expect(screen.getByTestId('offer-decision-not-started').textContent).toContain('This event has no episode yet: nothing was started.');
+    expect(send).toHaveBeenCalledTimes(2);
+    expect(onDone).not.toHaveBeenCalled();
+    for (const c of choices()) expect(c.disabled).toBe(false);
+    expect(screen.getByTestId('offer-decision-reason').value).toBe('The fee is too low');
+    await click('offer-decision-decline');
+    expect(send).toHaveBeenCalledTimes(3);
+    expect(keyOf(send, 3)).toBe(keyOf(send, 2));
+    await waitFor(() => expect(onDone).toHaveBeenCalledWith({ res: { data: { success: true } } }));
+  });
+
+  test('the check itself failing says so, keeps everything, and can be asked again', async () => {
+    const check = vi.fn().mockRejectedValueOnce(network()).mockResolvedValueOnce(readiness([]));
+    const send = vi.fn().mockRejectedValueOnce(required()).mockRejectedValueOnce(network());
+    await open(send, check);
+    await click('offer-decision-decline');
+    await click('offer-decision-check');
+    expect(screen.getByTestId('offer-decision-failed').textContent).toContain('The episode status could not be checked either.');
+    expect(screen.getByTestId('offer-decision-reason').value).toBe('The fee is too low');
+    await click('offer-decision-check');
+    expect(check).toHaveBeenCalledTimes(2);
+    expect(screen.getByTestId('offer-decision-not-started')).toBeTruthy();
+    expect(send).toHaveBeenCalledTimes(2);
+  });
+
+  test('a failure that did get an answer (a 500) is not uncertain: no status check is offered', async () => {
+    const check = vi.fn();
+    const send = vi.fn().mockRejectedValueOnce(required()).mockRejectedValueOnce(Object.assign(new Error('500'), { response: { status: 500, data: { error: 'boom' } } }));
+    await open(send, check);
+    await click('offer-decision-decline');
+    expect(screen.getByTestId('offer-decision-failed').textContent).toContain('Choose again to try once more, or close this.');
+    expect(screen.queryByTestId('offer-decision-check')).toBeNull();
+  });
+
+  test('with no way to check (a caller that gave none), a network failure offers no check', async () => {
+    const send = vi.fn().mockRejectedValueOnce(required()).mockRejectedValueOnce(network());
+    await open(send);
+    await click('offer-decision-decline');
+    expect(screen.getByTestId('offer-decision-failed')).toBeTruthy();
+    expect(screen.queryByTestId('offer-decision-check')).toBeNull();
   });
 });

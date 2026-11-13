@@ -26,3 +26,4 @@
 .odd-refusal .odd-cancel { justify-self: start; border-color: var(--lala-gold); font-weight: 600; }
 .odd-refusal[role="status"] { border-color: var(--lala-parchment-3); }
 .odd-choice:focus-visible, .odd-cancel:focus-visible, .odd-close:focus-visible { outline: 2px solid var(--lala-gold); outline-offset: 2px; }
+.odd-link { display: inline-flex; align-items: center; text-decoration: none; }

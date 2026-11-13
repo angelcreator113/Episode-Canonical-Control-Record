@@ -25,7 +25,14 @@
  *   invalid    the server's own words, and the choices as they were;
  *   failed     the network, a server error or another refusal: what
  *              happened, the reason kept, and the choices as they were.
- *              Nothing is sent again until one is chosen.
+ *              Nothing is sent again until one is chosen. When no answer
+ *              came back at all, "Check episode status" (pending.onCheck)
+ *              asks, read-only, whether the event has an episode;
+ *   has_episode the event already has an episode: its number and title,
+ *              a link to it, and no choice. It says the event has one, not
+ *              whose request made it;
+ *   not_started a status check found no episode: nothing was started, and
+ *              the choices are as they were.
  *
  * Keyboard (hooks/useDialogFocus): focus moves in on open, Tab stays
  * inside, Escape closes (not while a decision is being sent), and focus
@@ -73,6 +80,8 @@ export default function OfferDecisionDialog({ pending, busy = false, onChoose, o
     const el = dialogRef.current;
     if (!el || (!refusalKind && !refreshed)) return;
     const next = el.querySelector('[data-testid="offer-decision-refresh"]')
+      || el.querySelector('[data-testid="offer-decision-open-episode"]')
+      || el.querySelector('[data-testid="offer-decision-check"]')
       || (refusalKind ? reasonRef.current : el.querySelector('.odd-choice:not(:disabled)'))
       || el.querySelector('[data-testid="offer-decision-cancel"]');
     next?.focus();
@@ -84,9 +93,14 @@ export default function OfferDecisionDialog({ pending, busy = false, onChoose, o
   const cannotDecide = pending.canDecide === false;
   const forbidden = refusal?.kind === 'forbidden';
   const changed = refusal?.kind === 'changed';
+  const hasEpisode = refusal?.kind === 'has_episode';
   const noneLeft = pending.refreshed && offers.length === 0;
   // No choice can be sent while one of these holds.
-  const blocked = busy || forbidden || changed || noneLeft;
+  const blocked = busy || forbidden || changed || noneLeft || hasEpisode;
+  const episode = hasEpisode ? (refusal.episode || {}) : null;
+  const episodeName = episode
+    ? [episode.episode_number != null ? `Episode ${episode.episode_number}` : 'an episode', episode.title ? `“${episode.title}”` : ''].filter(Boolean).join(' ')
+    : '';
 
   const choose = (decision) => {
     const why = cleanReason(reason);
@@ -151,7 +165,27 @@ export default function OfferDecisionDialog({ pending, busy = false, onChoose, o
             {refusal?.kind === 'failed' && (
               <div className="odd-refusal" role="alert" data-testid="offer-decision-failed">
                 <p>{refusal.message}</p>
-                <p>Nothing was sent again. Your reason is still below. Choose again to try once more, or close this.</p>
+                {refusal.checkFailed && <p>The episode status could not be checked either.</p>}
+                <p>Nothing was sent again. Your reason is still below.{' '}
+                  {refusal.uncertain && pending.onCheck
+                    ? 'Check whether the episode started before you choose again.'
+                    : 'Choose again to try once more, or close this.'}</p>
+                {refusal.uncertain && pending.onCheck && (
+                  <button type="button" className="odd-cancel" onClick={() => pending.onCheck()} disabled={busy} data-testid="offer-decision-check">
+                    {busy ? 'Checking…' : 'Check episode status'}
+                  </button>
+                )}
+              </div>
+            )}
+            {hasEpisode && (
+              <div className="odd-refusal" role="alert" data-testid="offer-decision-has-episode">
+                <p>This event already has an episode: {episodeName}. Nothing new was started, and no decision was sent again.</p>
+                {episode.id && <a className="odd-cancel odd-link" href={`/episodes/${episode.id}`} data-testid="offer-decision-open-episode">Open the episode</a>}
+              </div>
+            )}
+            {refusal?.kind === 'not_started' && (
+              <div className="odd-refusal" role="status" data-testid="offer-decision-not-started">
+                <p>This event has no episode yet: nothing was started. Your reason is still below. Choose again to start it.</p>
               </div>
             )}
             {noneLeft && (
@@ -159,7 +193,7 @@ export default function OfferDecisionDialog({ pending, busy = false, onChoose, o
                 <p>There is no open offer to decide any more. Close this and start the episode again.</p>
               </div>
             )}
-            {!changed && !forbidden && !noneLeft && <p className="odd-ask">Decide what happens to it before the episode starts.</p>}
+            {!changed && !forbidden && !noneLeft && !hasEpisode && <p className="odd-ask">Decide what happens to it before the episode starts.</p>}
             <label className="odd-reason">
               <span>Reason (needed to decline or to continue without accepting)</span>
               <textarea ref={reasonRef} value={reason} maxLength={REASON_MAX} rows={2} disabled={busy}
@@ -183,7 +217,7 @@ export default function OfferDecisionDialog({ pending, busy = false, onChoose, o
             </div>
             <div className="odd-actions">
               <button type="button" className="odd-cancel" onClick={onCancel} disabled={busy} data-testid="offer-decision-cancel">
-                {busy ? 'Starting…' : (forbidden || noneLeft ? 'Close' : 'Cancel')}
+                {busy ? 'Starting…' : (forbidden || noneLeft || hasEpisode ? 'Close' : 'Cancel')}
               </button>
             </div>
           </>

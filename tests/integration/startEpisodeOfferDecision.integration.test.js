@@ -531,4 +531,134 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
       });
     });
   });
+
+  // ── Idempotency and recovery (Evoni's ruling of 2026-11-13) ──
+  // The pages send the server's own Idempotency-Key: one per attempt and
+  // per thing sent, so the same choice sent again carries the same key and
+  // any other choice a different one (frontend/src/hooks/useOfferDecision).
+  describe('a Start sent again', () => {
+    const ROUTES = [
+      ['generate-episode', (event, body = {}) => asAdmin(request(app).post(`/api/v1/world/${show}/events/${event}/generate-episode`)).send({ draft_script: false, ...body })],
+      ['generate-episode-from-many', (event, body = {}) => asAdmin(request(app).post(`/api/v1/world/${show}/events/generate-episode-from-many`)).send({ event_ids: [event], ...body })],
+    ];
+    const decision = (opp, d, reason = 'Recorded for the test') => ({ offer_decision: d, offer_decision_opportunity_ids: [opp], offer_decision_reason: reason });
+    const readiness = (event) => asAdmin(request(app).get(`/api/v1/world/${show}/events/${event}/start-readiness`));
+
+    describe.each(ROUTES)('%s', (route, call) => {
+      it('the same key and the same choice: the same episode (200, replayed), and nothing decided or recorded twice', async () => {
+        const { opp, event } = await scheduled(`Same key ${route}`, 'offered');
+        const key = `attempt-${uuid()}.a1b2c3d4`;
+        const first = await call(event, decision(opp, 'decline')).set('Idempotency-Key', key);
+        expect(first.status).toBe(201);
+        const before = await oppRow(opp);
+        const again = await call(event, decision(opp, 'decline')).set('Idempotency-Key', key);
+        expect(again.status).toBe(200);
+        expect(again.body.replayed).toBe(true);
+        expect(again.body.data.episode.id).toBe(first.body.data.episode.id);
+        expect(await episodesOf(event)).toHaveLength(1);
+        expect((await oppRow(opp)).status_history).toEqual(before.status_history);
+        expect(await auditOf(opp)).toHaveLength(1);
+      });
+
+      it('another key (another choice, or a new attempt): refused 409 EVENT_ALREADY_HAS_EPISODE naming the episode; the recorded decision stands', async () => {
+        const { opp, event } = await scheduled(`Other key ${route}`, 'offered');
+        const first = await call(event, decision(opp, 'decline')).set('Idempotency-Key', `attempt-${uuid()}.11111111`);
+        expect(first.status).toBe(201);
+        const before = await oppRow(opp);
+        for (const body of [decision(opp, 'accept'), decision(opp, 'decline', 'Another reason'), {}]) {
+          const res = await call(event, body).set('Idempotency-Key', `attempt-${uuid()}.22222222`);
+          expect(res.status).toBe(409);
+          expect(res.body.code).toBe('EVENT_ALREADY_HAS_EPISODE');
+          expect(res.body.episode.id).toBe(first.body.data.episode.id);
+        }
+        // And with no key at all, as before this change.
+        const bare = await call(event, decision(opp, 'accept'));
+        expect(bare.status).toBe(409);
+        expect(bare.body.code).toBe('EVENT_ALREADY_HAS_EPISODE');
+        const after = await oppRow(opp);
+        expect(after.status).toBe('declined');
+        expect(after.status_history).toEqual(before.status_history);
+        expect(await auditOf(opp)).toHaveLength(1);
+        expect(await episodesOf(event)).toHaveLength(1);
+      });
+
+      it('a key answers only for the event it started: on another event it starts nothing by itself', async () => {
+        const a = await scheduled(`Key event A ${route}`, 'offered');
+        const b = await scheduled(`Key event B ${route}`, 'offered');
+        const key = `attempt-${uuid()}.33333333`;
+        expect((await call(a.event, decision(a.opp, 'accept')).set('Idempotency-Key', key)).status).toBe(201);
+        // The same key on another event is not that Start: its own offer is still asked about.
+        const other = await call(b.event).set('Idempotency-Key', key);
+        expect(other.status).toBe(409);
+        expect(other.body.code).toBe('OFFER_DECISION_REQUIRED');
+        expect(await episodesOf(b.event)).toHaveLength(0);
+        expect((await oppRow(b.opp)).status).toBe('offered');
+      });
+
+      it('a Start that failed left no key behind: the same key then starts it once', async () => {
+        const { opp, event } = await scheduled(`Failed first ${route}`, 'offered');
+        const key = `attempt-${uuid()}.44444444`;
+        jest.spyOn(console, 'error').mockImplementation(() => {});
+        jest.spyOn(models.ActivityLog, 'logActivity').mockRejectedValueOnce(new Error('the audit trail is down'));
+        const failed = await call(event, decision(opp, 'accept')).set('Idempotency-Key', key);
+        expect(failed.status).toBeGreaterThanOrEqual(500);
+        expect(await episodesOf(event)).toHaveLength(0);
+        const retried = await call(event, decision(opp, 'accept')).set('Idempotency-Key', key);
+        expect(retried.status).toBe(201);
+        expect(await episodesOf(event)).toHaveLength(1);
+        expect(await auditOf(opp)).toHaveLength(1);
+      });
+    });
+
+    it('two at once with the same key: one episode, one decision, one entry; neither is refused as a stranger', async () => {
+      const { opp, event } = await scheduled('Same key at once', 'offered');
+      const key = `attempt-${uuid()}.55555555`;
+      const send = () => asAdmin(request(app).post(`/api/v1/world/${show}/events/${event}/generate-episode`)).set('Idempotency-Key', key).send({ draft_script: false, ...decision(opp, 'accept') });
+      const results = await Promise.all([send(), send()]);
+      expect(results.map((r) => r.status).sort()).toEqual([200, 201]);
+      expect(results[0].body.data.episode.id).toBe(results[1].body.data.episode.id);
+      expect(await episodesOf(event)).toHaveLength(1);
+      expect(await auditOf(opp)).toHaveLength(1);
+    });
+
+    it('the key is only compared with the event\'s own Start: the same key with another choice is answered with the episode, and decides nothing', async () => {
+      // The server does not compare what was sent under a key. The pages
+      // never send one key with two choices (the key is made from the
+      // choice); a caller that did would get the first Start's episode back,
+      // and the first decision would stand.
+      const { opp, event } = await scheduled('Same key other choice', 'offered');
+      const key = `attempt-${uuid()}.66666666`;
+      const url = `/api/v1/world/${show}/events/${event}/generate-episode`;
+      const first = await asAdmin(request(app).post(url)).set('Idempotency-Key', key).send({ draft_script: false, ...decision(opp, 'decline') });
+      expect(first.status).toBe(201);
+      const other = await asAdmin(request(app).post(url)).set('Idempotency-Key', key).send({ draft_script: false, ...decision(opp, 'accept') });
+      expect(other.status).toBe(200);
+      expect(other.body.replayed).toBe(true);
+      expect(other.body.data.offerDecisions).toEqual([]);
+      expect((await oppRow(opp)).status).toBe('declined');
+      expect(await auditOf(opp)).toHaveLength(1);
+    });
+
+    it('start-readiness says whether the event has an episode, and reading it changes nothing', async () => {
+      const { opp, event } = await scheduled('Status check', 'offered');
+      const before = await readiness(event);
+      expect(before.status).toBe(200);
+      expect(before.body.data.blockers.find((b) => b.key === 'episode_exists')).toBeUndefined();
+      expect(await episodesOf(event)).toHaveLength(0);
+      expect((await oppRow(opp)).status_history).toHaveLength(1);
+
+      const started = await decide(event, [opp], 'accept');
+      expect(started.status).toBe(201);
+      const history = (await oppRow(opp)).status_history;
+      for (let i = 0; i < 3; i += 1) {
+        const after = await readiness(event);
+        expect(after.status).toBe(200);
+        const blocker = after.body.data.blockers.find((b) => b.key === 'episode_exists');
+        expect(blocker.episode.id).toBe(started.body.data.episode.id);
+      }
+      expect(await episodesOf(event)).toHaveLength(1);
+      expect((await oppRow(opp)).status_history).toEqual(history);
+      expect(await auditOf(opp)).toHaveLength(1);
+    });
+  });
 });
