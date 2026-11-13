@@ -798,8 +798,8 @@ describe('reopen eligibility, pure', () => {
         await run(`UPDATE world_events SET used_in_episode_id = :episode, status = 'used', is_paid = true, payment_amount = 400 WHERE id = :id`, { episode: f.episode, id: f.second });
         return f;
       }
-      const complete = (f) => auth(request(app).post(`/api/v1/world/${f.show}/episodes/${f.episode}/complete`)).send({});
-      const finalize = (f) => auth(request(app).post(`/api/v1/world/${f.show}/episodes/${f.episode}/finalize-financials`)).send({});
+      const complete = (f) => asAdmin(request(app).post(`/api/v1/world/${f.show}/episodes/${f.episode}/complete`)).send({});
+      const finalize = (f) => asAdmin(request(app).post(`/api/v1/world/${f.show}/episodes/${f.episode}/finalize-financials`)).send({});
       const startUpload = (f) => auth(request(app).post(`/api/v1/episode-clips/${f.episode}/uploads`))
         .send({ performer: 'lala', filename: 'take.mp4', content_type: 'video/mp4', size: 1024 });
 
@@ -850,7 +850,7 @@ describe('reopen eligibility, pure', () => {
         const part2 = await addEpisode(show, 2);
         await addBrief(show, part2, event);
         const extra = await addEvent(show, 'Paid Extra', { episodeId: part2, set: { is_paid: true, payment_amount: 400 } });
-        const res = await auth(request(app).post(`/api/v1/world/${show}/episodes/${part2}/complete`)).send({});
+        const res = await asAdmin(request(app).post(`/api/v1/world/${show}/episodes/${part2}/complete`)).send({});
         expect(res.status).toBe(409);
         expect(res.body.code).toBe('UNSUPPORTED_SECONDARY_OBLIGATIONS');
         expect(res.body.events.map((e) => e.id)).toEqual([extra]);
@@ -957,7 +957,7 @@ describe('reopen eligibility, pure', () => {
       test('an unexplained link refuses completion and the first take even when the other event carries no commitment (fail closed)', async () => {
         const f = await disagreeing();
         expect(await secondary.unsupportedSecondaryObligations(sequelize, f.episode)).toEqual([]);
-        const res = await auth(request(app).post(`/api/v1/world/${f.show}/episodes/${f.episode}/complete`)).send({});
+        const res = await asAdmin(request(app).post(`/api/v1/world/${f.show}/episodes/${f.episode}/complete`)).send({});
         expect(res.status).toBe(409);
         expect(res.body).toMatchObject({ code: 'EPISODE_EVENT_LINK_INCONSISTENT', events: [{ id: f.second, name: 'Charity Gala', obligations: [] }] });
         const take = await auth(request(app).post(`/api/v1/episode-clips/${f.episode}/uploads`)).send({ performer: 'lala', filename: 'take.mp4', content_type: 'video/mp4', size: 1024 });
@@ -979,7 +979,7 @@ describe('reopen eligibility, pure', () => {
 
       test('with a commitment on the other event, completion is refused as an inconsistency, not as a second event', async () => {
         const f = await disagreeing({ paid: true });
-        const res = await auth(request(app).post(`/api/v1/world/${f.show}/episodes/${f.episode}/complete`)).send({});
+        const res = await asAdmin(request(app).post(`/api/v1/world/${f.show}/episodes/${f.episode}/complete`)).send({});
         expect(res.status).toBe(409);
         expect(res.body).toMatchObject({ code: 'EPISODE_EVENT_LINK_INCONSISTENT', link_state: 'primary_link_missing', primary_event_id: f.first });
         expect(res.body.events.map((e) => e.id)).toEqual([f.second]);
