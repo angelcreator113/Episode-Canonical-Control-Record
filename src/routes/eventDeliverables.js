@@ -42,7 +42,7 @@ const express = require('express');
 const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 
-const { requireAuth } = require('../middleware/auth');
+const { requireAuth, authorize } = require('../middleware/auth');
 const {
   listEventDeliverables, validateDeliverableTransition, DELIVERABLE_STATUS_FLOW,
   DESCRIPTION_MAX, DUE_DATE_MAX, DELIVERABLE_OWED_TO, DELIVERABLE_TYPES,
@@ -384,7 +384,12 @@ async function markDeliverableTaskDone(sequelize, { episodeId, deliverableId, tr
 // forward at a time; stamps that status's timestamp.
 // ═══════════════════════════════════════════
 
-router.post('/world/:showId/events/:eventId/deliverables/:deliverableId/status', requireAuth, async (req, res) => {
+// Approving books the deliverable's content fee, so approval is an admin's
+// (Evoni, 2026-11-13): the same authorize(['ADMIN']) every admin route uses.
+// The earlier moves (completed, submitted) book nothing and stay as they were.
+const adminToApprove = (req, res, next) => (req.body && req.body.status === 'approved' ? authorize(['ADMIN'])(req, res, next) : next());
+
+router.post('/world/:showId/events/:eventId/deliverables/:deliverableId/status', requireAuth, adminToApprove, async (req, res) => {
   try {
     const { showId, eventId, deliverableId } = req.params;
     const to = req.body && typeof req.body === 'object' ? req.body.status : undefined;

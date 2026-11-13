@@ -7,11 +7,14 @@
  * platform copy, Pulse posts) is on Distribution (ResultsShare).
  * Helpers: lib/episodeResults.js. Reads only.
  */
-import { useEffect, useState } from 'react';
+import { useContext, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { seasonPageHref } from '../../lib/seasonPage';
-import { ArrowRight, Hourglass } from 'lucide-react';
+import { ArrowRight, Hourglass, X } from 'lucide-react';
 import api from '../../services/api';
+import AuthContext from '../../contexts/AuthContext';
+import { isAdmin } from '../../utils/authGroups';
+import { completeEpisode } from '../../lib/episodeCompletion';
 import { evaluationOf, howItWent, moneyRows, statRows, shareState, signedCoins } from '../../lib/episodeResults';
 import { EpisodeResultsEvaluation } from './EpisodeResultsPages';
 import './EpisodeResultsSummary.css';
@@ -67,7 +70,60 @@ export function ResultsShare({ episode, showId, onOpenTab, copyAction = null }) 
   );
 }
 
-export default function EpisodeResultsSummary({ episode, showId, onOpenTab, focus = null }) {
+/**
+ * Complete the episode, from the episode itself (Evoni, 2026-11-12). It is
+ * offered for the episode by its own id: nothing here depends on the event's
+ * link back to the episode. The one operation is lib/episodeCompletion; the
+ * server decides. A refusal stays on screen, in the server's words, until it
+ * is dismissed or the next attempt answers.
+ */
+function CompleteEpisode({ episode, showId, onOpenTab, onCompleted }) {
+  const admin = isAdmin(useContext(AuthContext)?.user);
+  const [busy, setBusy] = useState(false);
+  const [refusal, setRefusal] = useState(null);
+  const [notice, setNotice] = useState(null);
+
+  const run = async () => {
+    setBusy(true);
+    setRefusal(null);
+    setNotice(null);
+    const out = await completeEpisode({ showId, episodeId: episode.id, title: episode.title });
+    setBusy(false);
+    if (out.status === 'cancelled') return;
+    if (out.status === 'refused') { setRefusal(out.refusal); return; }
+    setNotice(out.status === 'already' ? 'This episode was already completed. Nothing was booked again.' : 'Completed. The result below is the one stored for this episode.');
+    // The stored result is read back from the server, never assumed here.
+    if (onCompleted) await onCompleted();
+  };
+
+  return (
+    <div className="ers-complete" data-testid="results-complete">
+      {admin ? (
+        <button type="button" className="ers-complete-btn" onClick={run} disabled={busy} data-testid="results-complete-btn">
+          {busy ? 'Completing…' : 'Complete episode'}
+        </button>
+      ) : (
+        <p className="ers-note" data-testid="results-complete-admin-only">Only an admin can complete an episode: it books money and changes Lala&apos;s stats for good.</p>
+      )}
+      {notice && <p className="ers-note" role="status" data-testid="results-complete-notice">{notice}</p>}
+      {refusal && (
+        <div className="ers-refusal" role="alert" data-testid="results-complete-refusal">
+          <div className="ers-refusal-head">
+            <strong>{refusal.title}</strong>
+            <button type="button" className="ers-refusal-close" onClick={() => setRefusal(null)} aria-label="Dismiss this message" data-testid="results-complete-dismiss"><X size={16} aria-hidden="true" /></button>
+          </div>
+          <p className="ers-refusal-text">{refusal.message}</p>
+          <p className="ers-refusal-text">Nothing was booked.</p>
+          {refusal.action?.to && <Link className="ers-link" to={refusal.action.to} data-testid="results-complete-action">{refusal.action.label}</Link>}
+          {refusal.action?.tab && <button type="button" className="ers-link" onClick={() => onOpenTab?.(refusal.action.tab)} data-testid="results-complete-action">{refusal.action.label}</button>}
+          {refusal.action?.retry && <button type="button" className="ers-link" onClick={run} disabled={busy} data-testid="results-complete-action">{refusal.action.label}</button>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function EpisodeResultsSummary({ episode, showId, onOpenTab, onCompleted = null, focus = null }) {
   const episodeId = episode?.id;
   const brief = useGet(episodeId ? `/api/v1/episode-brief/${episodeId}` : null, (d) => d?.data || null);
   const money = useGet(showId && episodeId ? `/api/v1/world/${showId}/episodes/${episodeId}/money` : null, (d) => d?.data || null);
@@ -101,8 +157,8 @@ export default function EpisodeResultsSummary({ episode, showId, onOpenTab, focu
               The outcome{how.designed ? <> (designed: <strong>{how.designed}</strong>)</> : null}, its score and what it changed for
               Lala&apos;s stats and goals, and the money settled.
             </p>
-            <p className="ers-note">Complete the episode from its event in Producer Mode to evaluate it.</p>
-            {showId && <Link className="ers-link" to={seasonPageHref(showId, 'events')}>Open the events</Link>}
+            <p className="ers-note">Completing evaluates the episode, books its money and updates Lala&apos;s stats. It is final.</p>
+            <CompleteEpisode episode={episode} showId={showId} onOpenTab={onOpenTab} onCompleted={onCompleted} />
           </section>
         )}
         {how.done && (

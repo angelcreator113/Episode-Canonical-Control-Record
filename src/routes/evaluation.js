@@ -29,6 +29,8 @@ const {
 } = require('../utils/evaluationFormula');
 
 const { requireAuth, authorize } = require('../middleware/auth');
+// The same group check authorize() makes, for a decision made inside a handler (a coin change).
+const { userInGroup } = require('../middleware/auth');
 const { episodeEventTerms } = require('../utils/episodeEventSql');
 const { InsufficientCoinsError, insufficientCoinsBody } = require('../services/coinBalanceGuard');
 
@@ -568,7 +570,9 @@ router.post('/episodes/:id/override', requireAuth, async (req, res) => {
 
 // DEPRECATED: Proxies to unified completeEpisode pipeline.
 // Use POST /world/:showId/episodes/:episodeId/complete instead.
-router.post('/episodes/:id/accept', requireAuth, async (req, res) => {
+// Admin only (Evoni, 2026-11-12), as POST /world/:showId/episodes/:episodeId/complete:
+// it is the same operation.
+router.post('/episodes/:id/accept', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -610,6 +614,12 @@ router.post('/episodes/:id/accept', requireAuth, async (req, res) => {
     // Task #1933: completion refuses a result that would take coins below zero.
     if (error instanceof InsufficientCoinsError) {
       return res.status(error.status).json(insufficientCoinsBody(error));
+    }
+    // A lock another writer held: nothing was booked. The existing retryable 409.
+    const { asRetryable, RetryableConflictError } = require('../utils/episodeLocks');
+    const retry = asRetryable(error);
+    if (retry instanceof RetryableConflictError) {
+      return res.status(409).json({ success: false, error: retry.message, code: retry.code });
     }
     return res.status(500).json({ error: 'Accept failed', message: error.message });
   }
@@ -687,6 +697,13 @@ router.post('/characters/:key/state/update', requireAuth, async (req, res) => {
         const ledgerBefore = await lockLedgerBalance(models.sequelize, show_id, { transaction: t });
         oldState.coins = ledgerBefore;
         const adjustment = coinsRequested - ledgerBefore;
+        // A coin change books money, so it is an admin's (Evoni, 2026-11-13).
+        // Decided here, against the ledger under its lock: a form that sends
+        // the unchanged balance with its other stats is not a coin change.
+        // Thrown inside the transaction, so nothing of the edit is written.
+        if (adjustment !== 0 && !userInGroup(req.user, 'ADMIN')) {
+          throw Object.assign(new Error('Changing coins requires an admin'), { adminRequired: true });
+        }
         if (adjustment !== 0) {
           await logTransaction(models.sequelize, show_id, {
             type: adjustment > 0 ? 'income' : 'expense',
@@ -742,6 +759,11 @@ router.post('/characters/:key/state/update', requireAuth, async (req, res) => {
       previous_state: oldState,
     });
   } catch (error) {
+    if (error && error.adminRequired) {
+      console.error('Update character state refused: a coin change by a non-admin');
+      // The body authorize(['ADMIN']) answers with.
+      return res.status(403).json({ error: 'Forbidden', message: 'User must be in one of these groups: ADMIN', code: 'AUTH_GROUP_REQUIRED' });
+    }
     console.error('Update character state error:', error);
     return res.status(500).json({ error: 'Failed to update state', message: error.message });
   }
