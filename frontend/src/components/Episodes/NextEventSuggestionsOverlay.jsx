@@ -60,9 +60,9 @@ function NextEventSuggestionsOverlay({ episode, showId, onClose, onPickEvent }) 
     try {
       // 409 OFFER_DECISION_REQUIRED opens OfferDecisionDialog; the choice is
       // sent again as offer_decision (hooks/useOfferDecision).
-      const { data: res } = await offerDecision.run((decision) => api.post(
+      const { data: res } = await offerDecision.run((decision, extra) => api.post(
         `/api/v1/world/${showId}/events/generate-episode-from-many`,
-        { event_ids: [eventId], ...(decision ? { offer_decision: decision } : {}) }
+        { event_ids: [eventId], ...(decision ? { offer_decision: decision, ...extra } : {}) }
       ));
       const newId = res?.data?.episode?.id || res?.data?.id;
       if (newId) {

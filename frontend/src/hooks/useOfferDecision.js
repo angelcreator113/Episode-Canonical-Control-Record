@@ -5,11 +5,19 @@
  * event's opportunity is not accepted yet (services/startOfferDecision).
  *
  * run(send) calls send(undefined); on that 409 it opens the choice
- * (`pending`) and waits. choose(decision) sends again with the decision and
- * settles run's promise with that answer; cancel() rejects it with
- * `offerDecisionCancelled: true`. Nothing is chosen for the user.
+ * (`pending`) and waits. choose(decision, reason) sends again with the
+ * decision and settles run's promise with that answer; cancel() rejects it
+ * with `offerDecisionCancelled: true`. Nothing is chosen for the user.
+ *
+ * A decision says which offers it is about and why (A1, 2026-11-13):
+ * send(decision, extra) gets `extra` to spread into the request body, the
+ * ids of the offers the 409 listed (offer_decision_opportunity_ids; the
+ * server refuses the decision when the open offers are no longer those)
+ * and the reason (offer_decision_reason; needed to decline or to continue
+ * without accepting).
  */
 import { useCallback, useRef, useState } from 'react';
+import { cleanReason } from '../lib/transitionReason';
 
 export const OFFER_DECISION_REQUIRED = 'OFFER_DECISION_REQUIRED';
 
@@ -29,18 +37,24 @@ export default function useOfferDecision() {
       if (!isOfferDecisionRequired(err)) throw err;
       const data = err.response.data;
       return new Promise((resolve, reject) => {
-        waiting.current = { send, resolve, reject };
-        setPending({ offer: data.opportunity || null, message: data.error || '' });
+        const offers = Array.isArray(data.opportunities) && data.opportunities.length
+          ? data.opportunities : (data.opportunity ? [data.opportunity] : []);
+        waiting.current = { send, resolve, reject, offerIds: offers.map((o) => o.id) };
+        setPending({ offer: data.opportunity || null, offers, message: data.error || '' });
       });
     }
   }, []);
 
-  const choose = useCallback(async (decision) => {
+  const choose = useCallback(async (decision, reason) => {
     const w = waiting.current;
     if (!w) return;
     setBusy(true);
     try {
-      const res = await w.send(decision);
+      const why = cleanReason(reason);
+      const res = await w.send(decision, {
+        offer_decision_opportunity_ids: w.offerIds,
+        ...(why ? { offer_decision_reason: why } : {}),
+      });
       waiting.current = null;
       setPending(null);
       w.resolve(res);

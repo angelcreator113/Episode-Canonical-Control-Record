@@ -9,6 +9,11 @@
  * (409 OFFER_DECISION_REQUIRED) and applies the chosen decision in the
  * same transaction as the episode. An event with no opportunity, or an
  * accepted one, starts as before.
+ *
+ * A1 (Evoni, 2026-11-13): a decision is an admin's, names the offers it is
+ * about, needs a reason to decline or to start without accepting, and is
+ * recorded with who and why in the offer's history and in one activity_logs
+ * entry per offer, in the same commit as the episode.
  */
 jest.unmock('uuid');
 
@@ -33,7 +38,10 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
   const show = uuid();
   const TAG = `offer-decision-${show.slice(0, 8)}`;
   let token;
+  let adminToken;
+  const ADMIN_ID = 'test-admin-offer-decision';
   const auth = (r) => r.set('Authorization', `Bearer ${token}`);
+  const asAdmin = (r) => r.set('Authorization', `Bearer ${adminToken}`);
 
   const makeEvent = async (name, opportunityId = null) => {
     const id = uuid();
@@ -59,12 +67,22 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
   };
   const start = (event, body = {}) =>
     auth(request(app).post(`/api/v1/world/${show}/events/${event}/generate-episode`)).send({ draft_script: false, ...body });
+  // An admin's decision about these offers, with a reason (A1).
+  const decide = (event, opps, decision, body = {}) =>
+    asAdmin(request(app).post(`/api/v1/world/${show}/events/${event}/generate-episode`)).send({
+      draft_script: false, offer_decision: decision, offer_decision_opportunity_ids: opps, offer_decision_reason: 'Recorded for the test', ...body,
+    });
+  const auditOf = (id) => rows(`SELECT user_id, action, resource_type, resource_id, changes FROM activity_logs
+                                 WHERE resource_type = 'opportunity' AND resource_id = :id ORDER BY id`, { id });
   const oppRow = async (id) => (await rows('SELECT status, status_history, booking_date, event_id FROM opportunities WHERE id = :id', { id }))[0];
   const episodesOf = (event) => rows('SELECT id FROM episode_briefs WHERE event_id = :event AND deleted_at IS NULL', { event });
 
   beforeAll(async () => {
     token = TokenService.generateTokenPair({
       id: 'test-user-offer-decision', email: 'user@offer-decision.dev', name: 'Editor', groups: ['USER', 'EDITOR'], role: 'USER',
+    }).accessToken;
+    adminToken = TokenService.generateTokenPair({
+      id: ADMIN_ID, email: 'admin@offer-decision.dev', name: 'Admin', groups: ['ADMIN'], role: 'ADMIN',
     }).accessToken;
     await run(`INSERT INTO shows (id, name, slug, created_at, updated_at) VALUES (:id, :name, :slug, NOW(), NOW())`,
       { id: show, name: `OD ${show.slice(0, 8)}`, slug: `od-${show.slice(0, 8)}` });
@@ -90,6 +108,7 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
     await q('UPDATE opportunities SET event_id = NULL WHERE show_id IN (:shows)');
     await q('DELETE FROM episodes WHERE show_id IN (:shows)');
     await q('DELETE FROM world_events WHERE show_id IN (:shows)');
+    await q(`DELETE FROM activity_logs WHERE resource_type = 'opportunity' AND resource_id IN (SELECT id::text FROM opportunities WHERE show_id IN (:shows))`).catch(() => {});
     await q('DELETE FROM opportunities WHERE show_id IN (:shows)');
     await q('DELETE FROM shows WHERE id IN (:shows)');
     await sequelize.close();
@@ -128,7 +147,7 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
 
   it('accept: walked to booked through STATUS_FLOW\'s steps, each in the history with the episode and event', async () => {
     const { opp, event } = await scheduled('Accept me', 'offered');
-    const res = await start(event, { offer_decision: 'accept' });
+    const res = await decide(event, [opp], 'accept');
     expect(res.status).toBe(201);
     const episodeId = res.body.data.episode.id;
     expect(res.body.data.offerDecisions).toEqual([{ id: opp, name: `Accept me ${TAG}`, decision: 'accept', from: 'offered', to: 'booked' }]);
@@ -142,14 +161,14 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
 
   it('negotiate: walked to negotiating; one already negotiating stays there with a note', async () => {
     const a = await scheduled('Negotiate offered', 'offered');
-    const resA = await start(a.event, { offer_decision: 'negotiate' });
+    const resA = await decide(a.event, [a.opp], 'negotiate');
     expect(resA.status).toBe(201);
     const rowA = await oppRow(a.opp);
     expect(rowA.status).toBe('negotiating');
     expect(rowA.status_history.slice(1).map((h) => h.status)).toEqual(['considering', 'negotiating']);
 
     const b = await scheduled('Negotiate negotiating', 'negotiating');
-    const resB = await start(b.event, { offer_decision: 'negotiate' });
+    const resB = await decide(b.event, [b.opp], 'negotiate');
     expect(resB.status).toBe(201);
     const rowB = await oppRow(b.opp);
     expect(rowB.status).toBe('negotiating');
@@ -160,7 +179,7 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
 
   it('decline: declined in one legal step, and the episode still starts without the deal', async () => {
     const { opp, event } = await scheduled('Decline me', 'negotiating');
-    const res = await start(event, { offer_decision: 'decline' });
+    const res = await decide(event, [opp], 'decline');
     expect(res.status).toBe(201);
     expect(await episodesOf(event)).toHaveLength(1);
     const row = await oppRow(opp);
@@ -170,7 +189,7 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
 
   it('proceed_unaccepted: the status is not changed; a history note records the start', async () => {
     const { opp, event } = await scheduled('Not yet', 'considering');
-    const res = await start(event, { offer_decision: 'proceed_unaccepted' });
+    const res = await decide(event, [opp], 'proceed_unaccepted');
     expect(res.status).toBe(201);
     const row = await oppRow(opp);
     expect(row.status).toBe('considering');
@@ -192,13 +211,13 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
 
   it('a move STATUS_FLOW has no step for (held → booked) is a 409 OFFER_DECISION_ILLEGAL; proceed_unaccepted still starts', async () => {
     const { opp, event } = await scheduled('Held one', 'held');
-    const res = await start(event, { offer_decision: 'accept' });
+    const res = await decide(event, [opp], 'accept');
     expect(res.status).toBe(409);
     expect(res.body.code).toBe('OFFER_DECISION_ILLEGAL');
     expect(await episodesOf(event)).toHaveLength(0);
     expect((await oppRow(opp)).status).toBe('held');
 
-    const ok = await start(event, { offer_decision: 'proceed_unaccepted' });
+    const ok = await decide(event, [opp], 'proceed_unaccepted');
     expect(ok.status).toBe(201);
     expect((await oppRow(opp)).status).toBe('held');
   });
@@ -221,8 +240,150 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
     const refused = await auth(request(app).post(url)).send({ event_ids: [event] });
     expect(refused.status).toBe(409);
     expect(refused.body).toMatchObject({ code: 'OFFER_DECISION_REQUIRED', opportunity: { id: opp } });
-    const ok = await auth(request(app).post(url)).send({ event_ids: [event], offer_decision: 'decline' });
+    const ok = await asAdmin(request(app).post(url)).send({
+      event_ids: [event], offer_decision: 'decline', offer_decision_opportunity_ids: [opp], offer_decision_reason: 'The fee is too low',
+    });
     expect(ok.status).toBe(201);
     expect((await oppRow(opp)).status).toBe('declined');
+    expect(await auditOf(opp)).toHaveLength(1);
+  });
+
+  // ── A1 (Evoni, 2026-11-13): who, why, which offers ──
+
+  it('a decision is an admin\'s: anyone else is refused 403 and nothing is started, changed or recorded', async () => {
+    const { opp, event } = await scheduled('Admin only', 'offered');
+    for (const decision of ['accept', 'negotiate', 'decline', 'proceed_unaccepted']) {
+      const res = await start(event, { offer_decision: decision, offer_decision_opportunity_ids: [opp], offer_decision_reason: 'Trying' });
+      expect(res.status).toBe(403);
+      expect(res.body.code).toBe('OFFER_DECISION_FORBIDDEN');
+    }
+    expect(await episodesOf(event)).toHaveLength(0);
+    const row = await oppRow(opp);
+    expect(row.status).toBe('offered');
+    expect(row.status_history).toHaveLength(1);
+    expect(await auditOf(opp)).toHaveLength(0);
+  });
+
+  it('decline and proceed_unaccepted need a reason; accept and negotiate do not', async () => {
+    for (const decision of ['decline', 'proceed_unaccepted']) {
+      const { opp, event } = await scheduled(`Needs why ${decision}`, 'offered');
+      for (const reason of [undefined, '', '   ']) {
+        const res = await decide(event, [opp], decision, { offer_decision_reason: reason });
+        expect(res.status).toBe(400);
+        expect(res.body.code).toBe('OFFER_REASON_REQUIRED');
+      }
+      expect(await episodesOf(event)).toHaveLength(0);
+      expect((await oppRow(opp)).status_history).toHaveLength(1);
+      expect(await auditOf(opp)).toHaveLength(0);
+    }
+    for (const decision of ['accept', 'negotiate']) {
+      const { opp, event } = await scheduled(`No why ${decision}`, 'offered');
+      const res = await decide(event, [opp], decision, { offer_decision_reason: undefined });
+      expect(res.status).toBe(201);
+      const entries = await auditOf(opp);
+      expect(entries).toHaveLength(1);
+      expect(entries[0].changes.meta.reason).toBeNull();
+    }
+    const long = await scheduled('Too long a why', 'offered');
+    const res = await decide(long.event, [long.opp], 'decline', { offer_decision_reason: 'x'.repeat(501) });
+    expect(res.status).toBe(400);
+    expect(await episodesOf(long.event)).toHaveLength(0);
+  });
+
+  it('a decision names the offers it is about: other offers, or none named, are refused 409 OFFER_DECISION_STALE', async () => {
+    const { opp, event } = await scheduled('Named offer', 'offered');
+    const other = await makeOpp('Arrived later', 'offered', { eventId: event });
+    for (const ids of [undefined, [], [opp], [opp, uuid()], 'all']) {
+      const res = await decide(event, ids, 'accept');
+      expect(res.status).toBe(409);
+      expect(res.body.code).toBe('OFFER_DECISION_STALE');
+      expect(res.body.opportunities.map((o) => o.id).sort()).toEqual([opp, other].sort());
+    }
+    expect(await episodesOf(event)).toHaveLength(0);
+    for (const id of [opp, other]) {
+      expect((await oppRow(id)).status).toBe('offered');
+      expect(await auditOf(id)).toHaveLength(0);
+    }
+    const ok = await decide(event, [other, opp], 'accept');
+    expect(ok.status).toBe(201);
+    for (const id of [opp, other]) {
+      expect((await oppRow(id)).status).toBe('booked');
+      expect(await auditOf(id)).toHaveLength(1);
+    }
+  });
+
+  it('each decision is recorded once: who, from, to, when, route, reason, event and episode; and nothing about the money', async () => {
+    const { opp, event } = await scheduled('Recorded', 'offered');
+    const res = await decide(event, [opp], 'decline', { offer_decision_reason: '  The brand changed the brief  ' });
+    expect(res.status).toBe(201);
+    const episodeId = res.body.data.episode.id;
+    // The answer says what was decided, never why.
+    expect(res.body.data.offerDecisions).toEqual([{ id: opp, name: `Recorded ${TAG}`, decision: 'decline', from: 'offered', to: 'declined' }]);
+    expect(JSON.stringify(res.body)).not.toContain('The brand changed the brief');
+
+    const last = (await oppRow(opp)).status_history.slice(-1)[0];
+    expect(last).toMatchObject({
+      status: 'declined', from: 'offered', decision: 'decline', event_id: event, episode_id: episodeId,
+      by: { id: ADMIN_ID }, reason: 'The brand changed the brief', route: 'start_decision',
+    });
+    expect(Number.isNaN(Date.parse(last.date))).toBe(false);
+
+    const entries = await auditOf(opp);
+    expect(entries).toHaveLength(1);
+    expect(entries[0]).toMatchObject({ user_id: ADMIN_ID, action: 'opportunity_status', resource_type: 'opportunity', resource_id: opp });
+    expect(entries[0].changes).toEqual({ meta: {
+      route: 'start_decision', from_status: 'offered', to_status: 'declined', decision: 'decline',
+      reason: 'The brand changed the brief', show_id: show, event_id: event, episode_id: episodeId,
+    } });
+    expect(JSON.stringify(entries[0].changes)).not.toMatch(/1200|payment/);
+  });
+
+  it('accept walks three steps and is still one entry, from where it was to booked', async () => {
+    const { opp, event } = await scheduled('One entry', 'offered');
+    expect((await decide(event, [opp], 'accept')).status).toBe(201);
+    const entries = await auditOf(opp);
+    expect(entries).toHaveLength(1);
+    expect(entries[0].changes.meta).toMatchObject({ from_status: 'offered', to_status: 'booked', decision: 'accept' });
+    for (const h of (await oppRow(opp)).status_history.slice(1)) expect(h).toMatchObject({ by: { id: ADMIN_ID }, route: 'start_decision' });
+  });
+
+  it('the entry that cannot be written takes the decision and the episode with it', async () => {
+    const { opp, event } = await scheduled('No entry, no decision', 'offered');
+    jest.spyOn(console, 'error').mockImplementation(() => {});
+    const spy = jest.spyOn(models.ActivityLog, 'logActivity').mockRejectedValueOnce(new Error('the audit trail is down'));
+    const res = await decide(event, [opp], 'accept');
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(res.status).toBeGreaterThanOrEqual(500);
+    expect(await episodesOf(event)).toHaveLength(0);
+    const row = await oppRow(opp);
+    expect(row.status).toBe('offered');
+    expect(row.status_history).toHaveLength(1);
+    expect(await auditOf(opp)).toHaveLength(0);
+  });
+
+  it('the same Start sent again decides nothing again: its episode, no new history, no second entry', async () => {
+    const { opp, event } = await scheduled('Replayed', 'offered');
+    const key = uuid();
+    const send = () => decide(event, [opp], 'decline').set('Idempotency-Key', key);
+    const first = await send();
+    expect(first.status).toBe(201);
+    const before = await oppRow(opp);
+    const again = await send();
+    expect(again.status).toBe(200);
+    expect(again.body.replayed).toBe(true);
+    expect(again.body.data.episode.id).toBe(first.body.data.episode.id);
+    expect(again.body.data.offerDecisions).toEqual([]);
+    expect((await oppRow(opp)).status_history).toEqual(before.status_history);
+    expect(await auditOf(opp)).toHaveLength(1);
+    expect(await episodesOf(event)).toHaveLength(1);
+  });
+
+  it('two Starts at once with the same decision: one episode, one decision, one entry', async () => {
+    const { opp, event } = await scheduled('At once', 'offered');
+    const results = await Promise.all([decide(event, [opp], 'accept'), decide(event, [opp], 'accept')]);
+    expect(results.map((r) => r.status).filter((c) => c === 201)).toHaveLength(1);
+    expect(await episodesOf(event)).toHaveLength(1);
+    expect((await oppRow(opp)).status_history.slice(1).map((h) => h.status)).toEqual(['considering', 'negotiating', 'booked']);
+    expect(await auditOf(opp)).toHaveLength(1);
   });
 });

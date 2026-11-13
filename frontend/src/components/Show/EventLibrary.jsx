@@ -880,10 +880,10 @@ The revised event should feel like a completely different experience from the si
                   const ids = Array.from(selectedEvents);
                   try {
                     setToast(`🎬 Generating episode from ${ids.length} event${ids.length === 1 ? '' : 's'}...`);
-                    const res = await offerDecision.run((decision) => api.post(`/api/v1/world/${showId}/events/generate-episode-from-many`, {
+                    const res = await offerDecision.run((decision, extra) => api.post(`/api/v1/world/${showId}/events/generate-episode-from-many`, {
                       event_ids: ids,
                       draft_script: draftScriptOnGenerate,
-                      ...(decision ? { offer_decision: decision } : {}),
+                      ...(decision ? { offer_decision: decision, ...extra } : {}),
                     }));
                     if (res.data.success) {
                       setEpisodeBlueprint(res.data.data);

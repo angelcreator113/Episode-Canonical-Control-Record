@@ -6,6 +6,7 @@
  * `S` is Producer Mode's style object (components/Show/producerStyles).
  */
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { askReason } from '../../lib/transitionReason';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Send } from 'lucide-react';
 import DeliverableProgress from '../Deliverables/DeliverableProgress';
@@ -71,8 +72,16 @@ export default function OpportunitiesTab({ showId, api, S, setToast, loadData, e
   const advanceOpp = async (opp, toStatus) => {
     if (['completed', 'paid'].includes(toStatus)
       && !window.confirm(`Mark ${opp.name} ${toStatus}? Career goals do not change here; they follow Lala's ledger and stats when an episode is completed.`)) return;
+    // Declining or cancelling is recorded with its reason (A1); without one
+    // nothing is sent. from_status names the status this click was made
+    // from, so a second click or a stale page never takes another step.
+    let reason = null;
+    if (['declined', 'cancelled'].includes(toStatus)) {
+      reason = askReason(`Why is ${opp.name} ${toStatus}? The reason is kept with the change.`);
+      if (!reason) { setToast(`Not ${toStatus}: a reason is needed.`); return; }
+    }
     try {
-      const res = await api.post(`/api/v1/opportunities/${showId}/${opp.id}/advance`, { to_status: toStatus });
+      const res = await api.post(`/api/v1/opportunities/${showId}/${opp.id}/advance`, { to_status: toStatus, from_status: opp.status, ...(reason ? { reason } : {}) });
       if (res.data.success) { setOpps(prev => prev.map(o => o.id === opp.id ? res.data.opportunity : o)); setToast(`${opp.name} → ${toStatus}`); }
     } catch (err) { console.error('[OpportunitiesTab] advance failed:', err); setToast(err.response?.data?.error || 'Failed'); }
   };
@@ -80,8 +89,10 @@ export default function OpportunitiesTab({ showId, api, S, setToast, loadData, e
   // Undo the last step (POST …/undo): only the status goes back; what the
   // career pipeline did is not undone.
   const undoOpp = async (opp) => {
+    const reason = askReason(`Why undo the last step of ${opp.name}? The reason is kept with the change.`);
+    if (!reason) { setToast('Not undone: a reason is needed.'); return; }
     try {
-      const res = await api.post(`/api/v1/opportunities/${showId}/${opp.id}/undo`);
+      const res = await api.post(`/api/v1/opportunities/${showId}/${opp.id}/undo`, { from_status: opp.status, reason });
       if (res.data.success) { setOpps(prev => prev.map(o => o.id === opp.id ? { ...o, ...res.data.opportunity } : o)); setToast(`${opp.name} → back to ${res.data.opportunity.status}`); }
     } catch (err) { console.error('[OpportunitiesTab] undo failed:', err); setToast(err.response?.data?.error || 'Could not undo'); }
   };

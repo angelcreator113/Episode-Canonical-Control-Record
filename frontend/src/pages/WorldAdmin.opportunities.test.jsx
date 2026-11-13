@@ -101,7 +101,8 @@ describe('safer steps', () => {
     api.post.mockResolvedValue({ data: { success: true, opportunity: { ...OPEN, status: 'booked' } } });
     renderTab();
     fireEvent.click(await screen.findByTestId('opp-move-o1'));
-    await waitFor(() => expect(api.post).toHaveBeenCalledWith(`/api/v1/opportunities/${SHOW}/o1/advance`, { to_status: 'booked' }));
+    // The status the click was made from goes with it (A1): a second click never takes another step.
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith(`/api/v1/opportunities/${SHOW}/o1/advance`, { to_status: 'booked', from_status: OPEN.status }));
     expect(confirm).not.toHaveBeenCalled();
   });
 
@@ -120,9 +121,16 @@ describe('safer steps', () => {
     renderTab();
     const undo = await screen.findByTestId('opp-undo-o2');
     expect(undo.getAttribute('title')).toMatch(/stays/);
+    // Undo needs a reason (A1, 2026-11-13): without one nothing is sent.
+    const prompt = vi.spyOn(window, 'prompt').mockReturnValueOnce(null).mockReturnValue('Marked too soon');
     fireEvent.click(undo);
-    await waitFor(() => expect(api.post).toHaveBeenCalledWith(`/api/v1/opportunities/${SHOW}/o2/undo`));
+    await waitFor(() => expect(toast).toHaveBeenCalledWith('Not undone: a reason is needed.'));
+    expect(api.post).not.toHaveBeenCalled();
+    fireEvent.click(undo);
+    expect(prompt.mock.calls[0][0]).toBe('Why undo the last step of Runway Walk? The reason is kept with the change.');
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith(`/api/v1/opportunities/${SHOW}/o2/undo`, { from_status: ACTIVE.status, reason: 'Marked too soon' }));
     await waitFor(() => expect(toast).toHaveBeenCalledWith('Runway Walk → back to offered'));
+    prompt.mockRestore();
   });
 });
 

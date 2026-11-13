@@ -69,12 +69,55 @@ describe('OfferDecisionDialog', () => {
       const onDone = vi.fn();
       render(<Harness send={send} onDone={onDone} />);
       await act(async () => { fireEvent.click(screen.getByText('Start')); });
+      fireEvent.change(screen.getByTestId('offer-decision-reason'), { target: { value: '  The fee is too low  ' } });
       await act(async () => { fireEvent.click(screen.getByTestId(`offer-decision-${decision}`)); });
-      expect(send).toHaveBeenNthCalledWith(2, decision);
+      // The decision, the offers it is about (the ones the 409 listed) and why (A1).
+      expect(send).toHaveBeenNthCalledWith(2, decision, { offer_decision_opportunity_ids: ['opp-1'], offer_decision_reason: 'The fee is too low' });
       await waitFor(() => expect(onDone).toHaveBeenCalledWith({ res: { data: { success: true, decided: decision } } }));
       expect(screen.queryByTestId('offer-decision')).toBeNull();
     }
   );
+
+  // A1 (Evoni, 2026-11-13): a reason is needed to decline or to continue without accepting.
+  test.each(['decline', 'proceed_unaccepted'])("'%s' without a reason sends nothing and says a reason is needed", async (decision) => {
+    const send = vi.fn().mockRejectedValueOnce(required()).mockResolvedValueOnce({ data: { success: true } });
+    const onDone = vi.fn();
+    render(<Harness send={send} onDone={onDone} />);
+    await act(async () => { fireEvent.click(screen.getByText('Start')); });
+    expect(screen.queryByTestId('offer-decision-reason-missing')).toBeNull();
+    await act(async () => { fireEvent.click(screen.getByTestId(`offer-decision-${decision}`)); });
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId('offer-decision-reason-missing').getAttribute('role')).toBe('alert');
+    expect(screen.getByTestId('offer-decision-reason').getAttribute('aria-invalid')).toBe('true');
+    expect(document.activeElement).toBe(screen.getByTestId('offer-decision-reason'));
+    // Only spaces is no reason.
+    fireEvent.change(screen.getByTestId('offer-decision-reason'), { target: { value: '   ' } });
+    await act(async () => { fireEvent.click(screen.getByTestId(`offer-decision-${decision}`)); });
+    expect(send).toHaveBeenCalledTimes(1);
+    // With one, it goes.
+    fireEvent.change(screen.getByTestId('offer-decision-reason'), { target: { value: 'Not the right fit' } });
+    expect(screen.queryByTestId('offer-decision-reason-missing')).toBeNull();
+    await act(async () => { fireEvent.click(screen.getByTestId(`offer-decision-${decision}`)); });
+    expect(send).toHaveBeenNthCalledWith(2, decision, { offer_decision_opportunity_ids: ['opp-1'], offer_decision_reason: 'Not the right fit' });
+  });
+
+  test.each(['accept', 'negotiate'])("'%s' needs no reason: it is sent without one", async (decision) => {
+    const send = vi.fn().mockRejectedValueOnce(required()).mockResolvedValueOnce({ data: { success: true } });
+    render(<Harness send={send} onDone={vi.fn()} />);
+    await act(async () => { fireEvent.click(screen.getByText('Start')); });
+    await act(async () => { fireEvent.click(screen.getByTestId(`offer-decision-${decision}`)); });
+    expect(send).toHaveBeenNthCalledWith(2, decision, { offer_decision_opportunity_ids: ['opp-1'] });
+  });
+
+  test('every offer the server listed is named in the decision', async () => {
+    const two = required();
+    two.response.data.opportunities = [two.response.data.opportunity, { id: 'opp-2', name: 'Second', status: 'considering', payment_amount: 0 }];
+    const send = vi.fn().mockRejectedValueOnce(two).mockResolvedValueOnce({ data: { success: true } });
+    render(<Harness send={send} onDone={vi.fn()} />);
+    await act(async () => { fireEvent.click(screen.getByText('Start')); });
+    await act(async () => { fireEvent.click(screen.getByTestId('offer-decision-accept')); });
+    expect(send).toHaveBeenNthCalledWith(2, 'accept', { offer_decision_opportunity_ids: ['opp-1', 'opp-2'] });
+  });
 
   test('Cancel starts nothing: no second request, and the caller is told it was cancelled', async () => {
     const send = vi.fn().mockRejectedValueOnce(required());

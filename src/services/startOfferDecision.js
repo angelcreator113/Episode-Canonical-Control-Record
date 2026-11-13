@@ -23,9 +23,21 @@
  * "Open" means not yet accepted and not closed: offered, considering,
  * negotiating, or held (beat 14's; STATUS_FLOW has no step out of held, so
  * only proceed_unaccepted is legal for it).
+ *
+ * Who, why and which offers (Evoni's A1 ruling, 2026-11-13). A decision is
+ * an admin's (403 OFFER_DECISION_FORBIDDEN otherwise; an event with no open
+ * offer starts for anyone who could start it before). It names the offers
+ * it is about (`opportunityIds`, the ones the 409 listed): when the open
+ * offers are no longer those, it is refused (409 OFFER_DECISION_STALE), so
+ * an answer given about one offer never decides another. decline and
+ * proceed_unaccepted need a reason (400 OFFER_REASON_REQUIRED). Each offer
+ * decided gets its history entries (with by, reason, route) and one
+ * activity_logs entry in Start Episode's transaction
+ * (services/opportunityTransitionAudit).
  */
 
 const { statusPath } = require('./opportunityStatusFlow');
+const { ROUTES, historyFields, logTransition, readReason } = require('./opportunityTransitionAudit');
 
 const ACCEPTED_STATUSES = Object.freeze(['booked', 'preparing', 'active', 'completed', 'paid']);
 const CLOSED_STATUSES = Object.freeze(['declined', 'expired', 'cancelled', 'archived']);
@@ -35,7 +47,16 @@ const DECISION_TARGET = Object.freeze({ accept: 'booked', negotiate: 'negotiatin
 const OFFER_DECISION_REQUIRED_CODE = 'OFFER_DECISION_REQUIRED';
 const OFFER_DECISION_INVALID_CODE = 'OFFER_DECISION_INVALID';
 const OFFER_DECISION_ILLEGAL_CODE = 'OFFER_DECISION_ILLEGAL';
-const OFFER_DECISION_CODES = Object.freeze([OFFER_DECISION_REQUIRED_CODE, OFFER_DECISION_INVALID_CODE, OFFER_DECISION_ILLEGAL_CODE]);
+const OFFER_DECISION_FORBIDDEN_CODE = 'OFFER_DECISION_FORBIDDEN';
+const OFFER_DECISION_STALE_CODE = 'OFFER_DECISION_STALE';
+const OFFER_REASON_REQUIRED_CODE = 'OFFER_REASON_REQUIRED';
+const OFFER_DECISION_CODES = Object.freeze([
+  OFFER_DECISION_REQUIRED_CODE, OFFER_DECISION_INVALID_CODE, OFFER_DECISION_ILLEGAL_CODE,
+  OFFER_DECISION_FORBIDDEN_CODE, OFFER_DECISION_STALE_CODE, OFFER_REASON_REQUIRED_CODE,
+]);
+// The decisions that need a reason: turning the offer down, and starting
+// without accepting it.
+const REASON_REQUIRED_DECISIONS = Object.freeze(['decline', 'proceed_unaccepted']);
 
 const isOpenOffer = (status) => !ACCEPTED_STATUSES.includes(status) && !CLOSED_STATUSES.includes(status);
 
@@ -61,7 +82,7 @@ const offerError = (status, code, message, opportunities) =>
  */
 async function findOpenOffers(sequelize, eventId, { transaction, lock = false } = {}) {
   const [rows] = await sequelize.query(
-    `SELECT o.id, o.name, o.status, o.status_history, o.brand_or_company, o.payment_amount, o.payment_type
+    `SELECT o.id, o.show_id, o.name, o.status, o.status_history, o.brand_or_company, o.payment_amount, o.payment_type
        FROM opportunities o
       WHERE o.deleted_at IS NULL
         AND (o.event_id = :eventId
@@ -72,13 +93,23 @@ async function findOpenOffers(sequelize, eventId, { transaction, lock = false } 
   return (rows || []).filter((o) => isOpenOffer(o.status));
 }
 
+/** The same offers, whatever their order. Pure. */
+function sameOffers(openOffers, opportunityIds) {
+  if (!Array.isArray(opportunityIds)) return false;
+  const named = new Set(opportunityIds.map(String));
+  return named.size === openOffers.length && openOffers.every((o) => named.has(String(o.id)));
+}
+
 /**
  * Throws (with .status and .code) when the decision cannot start this
  * episode: missing while an offer is open (409 OFFER_DECISION_REQUIRED, with
- * the offers to ask about), not one of OFFER_DECISIONS (400), or a move
- * STATUS_FLOW does not allow from an offer's status (409). Pure.
+ * the offers to ask about), not one of OFFER_DECISIONS (400), not an
+ * admin's (403), about other offers than the open ones (409
+ * OFFER_DECISION_STALE), without the reason decline and proceed_unaccepted
+ * need (400), or a move STATUS_FLOW does not allow from an offer's status
+ * (409). `by` is { actor: { id, isAdmin }, reason, opportunityIds }. Pure.
  */
-function assertOfferDecision(openOffers, decision) {
+function assertOfferDecision(openOffers, decision, by = {}) {
   if (!openOffers.length) return;
   if (decision == null || decision === '') {
     const names = openOffers.map((o) => `"${o.name}" (${o.status})`).join(', ');
@@ -88,6 +119,22 @@ function assertOfferDecision(openOffers, decision) {
   }
   if (!OFFER_DECISIONS.includes(decision)) {
     throw offerError(400, OFFER_DECISION_INVALID_CODE, `offer_decision must be one of ${OFFER_DECISIONS.join(', ')}.`, openOffers);
+  }
+  if (!by?.actor?.isAdmin) {
+    throw offerError(403, OFFER_DECISION_FORBIDDEN_CODE,
+      'Only an admin can decide an offer. The episode was not started.', openOffers);
+  }
+  if (!sameOffers(openOffers, by.opportunityIds)) {
+    throw offerError(409, OFFER_DECISION_STALE_CODE,
+      'The offers on this event are not the ones this decision was made about. Nothing was started; look at them again and decide.',
+      openOffers);
+  }
+  const read = readReason(by.reason);
+  if (read.error) throw offerError(400, OFFER_REASON_REQUIRED_CODE, read.error, openOffers);
+  if (REASON_REQUIRED_DECISIONS.includes(decision) && !read.reason) {
+    throw offerError(400, OFFER_REASON_REQUIRED_CODE,
+      decision === 'decline' ? 'Say why the offer is declined.' : 'Say why the episode starts without accepting the offer.',
+      openOffers);
   }
   const target = DECISION_TARGET[decision];
   if (!target) return;
@@ -102,17 +149,19 @@ function assertOfferDecision(openOffers, decision) {
 /**
  * Applies the decision to the event's open offers, inside `transaction`
  * (rows locked, checked again under the lock), each step appended to
- * status_history with the event and episode. Returns what was done:
+ * status_history with the event and episode, who decided and why, and one
+ * activity_logs entry for each offer. Returns what was done:
  * [{ id, name, decision, from, to }]. No open offer: [] and nothing written.
  */
-async function applyOfferDecision(sequelize, { eventId, episodeId, decision, transaction }) {
+async function applyOfferDecision(sequelize, { eventId, episodeId, decision, transaction, actor = null, reason = null, opportunityIds = null }) {
   const open = await findOpenOffers(sequelize, eventId, { transaction, lock: true });
   if (!open.length) return [];
-  assertOfferDecision(open, decision);
+  assertOfferDecision(open, decision, { actor, reason, opportunityIds });
+  const why = readReason(reason).reason;
   const done = [];
   for (const opp of open) {
     const date = new Date().toISOString();
-    const base = { date, decision, event_id: eventId, episode_id: episodeId };
+    const base = { date, decision, event_id: eventId, episode_id: episodeId, ...historyFields({ actor, reason: why, route: ROUTES.START_DECISION }) };
     const target = DECISION_TARGET[decision];
     const steps = target ? statusPath(opp.status, target) : [];
     const entries = [];
@@ -142,6 +191,10 @@ async function applyOfferDecision(sequelize, { eventId, episodeId, decision, tra
         WHERE id = :id`,
       { replacements: { to, history: JSON.stringify(history), id: opp.id }, transaction }
     );
+    await logTransition(transaction, {
+      actor, opportunityId: opp.id, showId: opp.show_id || null, eventId, episodeId,
+      from: opp.status, to, route: ROUTES.START_DECISION, reason: why, decision,
+    });
     done.push({ id: opp.id, name: opp.name, decision, from: opp.status, to });
   }
   return done;
@@ -166,7 +219,11 @@ module.exports = {
   OFFER_DECISION_REQUIRED_CODE,
   OFFER_DECISION_INVALID_CODE,
   OFFER_DECISION_ILLEGAL_CODE,
+  OFFER_DECISION_FORBIDDEN_CODE,
+  OFFER_DECISION_STALE_CODE,
+  OFFER_REASON_REQUIRED_CODE,
   OFFER_DECISION_CODES,
+  REASON_REQUIRED_DECISIONS,
   isOpenOffer,
   offerSummary,
   findOpenOffers,

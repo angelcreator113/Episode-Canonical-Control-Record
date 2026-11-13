@@ -75,8 +75,8 @@ export default function useStartEpisode({ showId, eventId, gatesMet, used, money
       // An offer not accepted yet is asked about (409 OFFER_DECISION_REQUIRED;
       // OfferDecisionDialog), then only the start is sent again, with the
       // decision; the guests above are not saved twice.
-      const res = await offerDecision.run((decision) => api.post(`/api/v1/world/${showId}/events/${eventId}/generate-episode`, {
-        draft_script: false, locations, ...(decision ? { offer_decision: decision } : {}),
+      const res = await offerDecision.run((decision, extra) => api.post(`/api/v1/world/${showId}/events/${eventId}/generate-episode`, {
+        draft_script: false, locations, ...(decision ? { offer_decision: decision, ...extra } : {}),
       }));
       if (res.data.success) {
         const ep = res.data.data.episode;

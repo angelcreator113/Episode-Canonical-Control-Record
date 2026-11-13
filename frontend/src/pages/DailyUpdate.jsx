@@ -23,6 +23,7 @@
  * Reads GET /api/v1/daily-update (services/dailyUpdate). Styles: DailyUpdate.css.
  */
 import { useCallback, useEffect, useState } from 'react';
+import { askReason } from '../lib/transitionReason';
 import { Link } from 'react-router-dom';
 import {
   Sun, RefreshCw, Send, Trash2, Check, X, Undo2, Clock, PauseCircle, CalendarDays, Sparkles,
@@ -34,7 +35,8 @@ import SeasonFocusToday from '../components/Show/SeasonFocusToday';
 import './DailyUpdate.css';
 
 const REVIEW = '/admin?tab=pulse&sub=review';
-const errorText = (err, fallback) => err?.response?.data?.error || fallback;
+// The server's own words; else what the page itself refused (userMessage: a step not sent, e.g. no reason given); else the fallback.
+const errorText = (err, fallback) => err?.response?.data?.error || err?.userMessage || fallback;
 const tzOffset = () => new Date().getTimezoneOffset();
 const when = (iso) => (iso ? new Date(iso).toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '');
 const day = (d) => (d ? new Date(`${String(d).slice(0, 10)}T12:00:00`).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }) : '');
@@ -84,7 +86,15 @@ export const DECIDE = Object.freeze({
     icon: Briefcase,
     all: 'Consider all',
     yes: { label: 'Consider', done: 'Considering', call: (it) => api.post(`/api/v1/opportunities/${it.show_id}/${it.id}/advance`, { to_status: 'considering' }) },
-    no: { label: 'Decline', done: 'Declined', call: (it) => api.post(`/api/v1/opportunities/${it.show_id}/${it.id}/advance`, { to_status: 'declined' }) },
+    // Declining is recorded with its reason (A1); without one nothing is sent.
+    no: {
+      label: 'Decline', done: 'Declined',
+      call: async (it) => {
+        const reason = askReason('Why is this offer declined? The reason is kept with the change.');
+        if (!reason) throw Object.assign(new Error('Not declined: a reason is needed.'), { userMessage: 'Not declined: a reason is needed.' });
+        return api.post(`/api/v1/opportunities/${it.show_id}/${it.id}/advance`, { to_status: 'declined', reason });
+      },
+    },
   },
   findings: { icon: AlertTriangle },
 });
