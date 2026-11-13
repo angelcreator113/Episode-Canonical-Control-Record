@@ -16,7 +16,9 @@
 # 2. npm ci (all dependencies: migrations need sequelize-cli; sharp and canvas
 #    need their install scripts), then unpacks DIST_TARBALL into
 #    frontend/dist after checking its sha256. Refuses with less than
-#    MIN_MEM_MIB of RAM + swap (default 2800).
+#    MIN_MEM_MIB of RAM + swap (default 2800), and with less than
+#    MIN_FREE_MIB of free disk (default 2048), before anything is removed:
+#    the rollback tree is kept until the swap (Evoni, 2026-11-13).
 # 3. Writes ~/.config/episode-dev/dev.env (mode 600): the preserved app
 #    settings (app.env), the local database login (local-db.env),
 #    DB_SSL=false, HOST=127.0.0.1 and NODE_ENV=production (app.env's own
@@ -44,6 +46,9 @@ DEV_ENV="${CONF}/dev.env"
 DIST_TARBALL="${DIST_TARBALL:?set DIST_TARBALL to a frontend/dist tarball built off the box}"
 DIST_SHA256="${DIST_SHA256:?set DIST_SHA256 to the sha256 of the tarball}"
 MIN_MEM_MIB="${MIN_MEM_MIB:-2800}"
+# One install adds a tree of about 700 MiB while the live and rollback trees
+# both stay (measured 2026-11-11 and 2026-11-12); the rest is margin.
+MIN_FREE_MIB="${MIN_FREE_MIB:-2048}"
 
 step() { echo "== $*"; }
 as_app() { sudo -u "$APP_USER" -H bash -lc "$1"; }
@@ -59,6 +64,13 @@ MEM_MIB=$(awk '/^MemTotal:/{m=$2} /^SwapTotal:/{s=$2} END{print int((m+s)/1024)}
 echo "RAM+swap: ${MEM_MIB} MiB"
 [ "$MEM_MIB" -ge "$MIN_MEM_MIB" ] || { echo "refusing: ${MEM_MIB} MiB < ${MIN_MEM_MIB} MiB; add swap first (docs/runbooks/dev-environment.md)" >&2; exit 1; }
 
+# Before anything is removed or staged. deploy-dev-box.sh asks the same in its
+# preflight, before it stops the app; this is for an install run by hand.
+step "disk guard (free on / >= ${MIN_FREE_MIB} MiB)"
+FREE_MIB="$(df -Pm / | awk 'NR==2{print $4}')"
+echo "free: ${FREE_MIB} MiB"
+[[ "$FREE_MIB" =~ ^[0-9]+$ ]] && [ "$FREE_MIB" -ge "$MIN_FREE_MIB" ] || { echo "refusing: ${FREE_MIB} MiB free < ${MIN_FREE_MIB} MiB; nothing was removed or installed (docs/runbooks/dev-environment.md, Disk)" >&2; exit 1; }
+
 step "dev app must be stopped"
 RUNNING="$(as_app 'pm2 jlist 2>/dev/null' | python3 -c '
 import json,sys
@@ -68,12 +80,11 @@ print(" ".join(a["name"] for a in apps if a["name"] in ("episode-api","episode-w
 [ -z "$RUNNING" ] || { echo "refusing: online: $RUNNING" >&2; exit 1; }
 echo "ok; disk: $(free); node: $(as_app 'node -v'), npm: $(as_app 'npm -v')"
 
-# At most two app trees on disk at any time (the box has ~1.5 GB free): the
-# rollback tree from the PREVIOUS install goes first. The live tree stays
-# untouched until the swap, so a failed install still leaves it running.
-step "free the previous rollback tree"
-[ -d "$PREV" ] && { rm -rf "$PREV"; echo "removed $PREV"; } || echo "none"
-echo "disk: $(free)"
+# The rollback tree from the previous install is KEPT until the swap (it was
+# removed here first, when the disk could not hold three trees: a failed
+# install then left nothing to roll back to). The disk guard above makes room
+# for the staged tree beside it. Both the live and the rollback tree stay
+# untouched until the swap, so a failed install leaves them as they were.
 
 step "clone ${REF:0:12} into ${STAGE}"
 rm -rf "$STAGE"
