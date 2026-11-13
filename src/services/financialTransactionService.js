@@ -538,11 +538,17 @@ async function finalizeEpisodeFinancials(episodeId, showId, sequelize, { dryRun 
     }
   }
 
-  // 1. Check if already finalized (finalize's own rows, not the outfit lock's)
+  // 1. Check if already finalized (finalize's own rows, not the outfit lock's).
+  // A deliverable's content fee (dealPayoutService.bookContentFee) carries the
+  // episode but is booked on approval, which can come before finalize: by
+  // itself it is not a finalize (Evoni, 2026-11-13). Counting it made finalize
+  // skip its own rows, so the episode's costs were never charged. category is
+  // NOT NULL, so the comparison never drops a row. The shared predicate is
+  // left as it is: the terms reopen still counts a content fee as booked money.
   const [existingTx] = await sequelize.query(
     `SELECT COUNT(*) as cnt FROM financial_transactions
      WHERE episode_id = :episodeId AND status = 'executed' AND deleted_at IS NULL
-       AND ${NOT_WARDROBE_SPEND_ROW}`,
+       AND ${NOT_WARDROBE_SPEND_ROW} AND category <> 'content_fee'`,
     { replacements: { episodeId }, type: sequelize.QueryTypes.SELECT }
   ).catch(() => [{ cnt: 0 }]);
 

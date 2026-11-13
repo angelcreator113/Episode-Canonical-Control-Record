@@ -68,11 +68,13 @@
  *
  * Styles live in pages/EventPackagePage.css (one CSS file per page).
  */
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useContext } from 'react';
 import {
   KeyRound, ClipboardList, Ban, Coins, Lock, Pencil, Plus, Trash2, Loader2, AlertCircle, Check, Handshake, Calculator, Tag,
 } from 'lucide-react';
 import api from '../../services/api';
+import AuthContext from '../../contexts/AuthContext';
+import { isAdmin } from '../../utils/authGroups';
 import { saveErrorMessage as errorMessage } from '../../utils/eventSaveVersion';
 import {
   REQUIREMENT_KEYS, describeRequirements, requirementsDraftFrom, buildRequirementsUpdate,
@@ -258,6 +260,8 @@ export default function EventTermsSection({ showId, eventId, event, locked, putE
   };
 
   // ── Fulfilment: after Start Episode only ──
+  // Approving books the content fee: the API allows it to an admin only.
+  const admin = isAdmin(useContext(AuthContext)?.user);
   const [advancingId, setAdvancingId] = useState(null);
   const [advanceError, setAdvanceError] = useState(null); // { id, message }
 
@@ -783,7 +787,10 @@ export default function EventTermsSection({ showId, eventId, event, locked, putE
                       <span className="epp-term-error"><AlertCircle size={12} aria-hidden="true" /> {advanceError.message}</span>
                     )}
                   </div>
-                  {next && (
+                  {next === 'approved' && !admin && (
+                    <span className="epp-term-timeline-step" data-testid={`terms-deliverable-approve-admin-${d.id}`}>Only an admin can approve (approval books the fee)</span>
+                  )}
+                  {next && (next !== 'approved' || admin) && (
                     <button
                       type="button" className="epp-btn epp-btn-small epp-term-advance"
                       data-testid={`terms-deliverable-advance-${d.id}`}

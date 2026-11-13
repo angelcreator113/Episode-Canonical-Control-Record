@@ -53,6 +53,13 @@ describe('Cast & Continuity cards', () => {
     expect(screen.getByTestId('cc-stat-coins').querySelector('.wa-cc-bar span').style.width).toBe('95%');
   });
 
+  test('a coin change is an admin\'s: without it the coins stay a number while the other stats are inputs', () => {
+    wrap(<LalaStatsCard charState={charState} history={[]} episodes={[]} coinGoal={2000} edit={edit({ editing: true, canEditCoins: false })} />);
+    expect(screen.getByTestId('cc-stat-coins').querySelector('input')).toBeNull();
+    expect(screen.getByTestId('cc-stat-coins').querySelector('.wa-cc-stat-value')).toBeTruthy();
+    expect(screen.getByLabelText('Reputation')).toBeTruthy();
+  });
+
   test('an accepted episode follower change shows in the decision log as "+N followers" (Task 2956)', () => {
     const rows = [
       { id: 'h2', episode_id: 'e1', episode_number: 1, episode_title: 'Studio', source: 'override', deltas_json: { followers: 1200 }, notes: 'Followers +1,200 (Episode 1 SLAY) | Accepted as proposed' },

@@ -26,7 +26,7 @@ const q = (sql, replacements = {}) => sequelize.query(sql, { replacements, type:
   let token;
 
   beforeAll(() => {
-    token = TokenService.generateTokenPair({ id: 'test-seed', email: 's@seed.dev', name: 'Seed', groups: ['USER', 'EDITOR'], role: 'USER' }).accessToken;
+    token = TokenService.generateTokenPair({ id: 'test-seed', email: 's@seed.dev', name: 'Seed', groups: ['ADMIN'], role: 'ADMIN' }).accessToken;
   });
   afterAll(async () => {
     for (const show of shows) {
