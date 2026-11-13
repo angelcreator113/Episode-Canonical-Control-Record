@@ -9,12 +9,14 @@
 import { useState } from 'react';
 import { AlertTriangle, Wand } from 'lucide-react';
 import { FIELD_LABELS, fieldValueText } from '../../lib/eventActions';
+import { hintLines } from '../../lib/eventSchedule';
 import './EventFlow.css';
 
 export default function EventFieldHints({ flow, fields, used, putEvent, load, setToast }) {
   const [busy, setBusy] = useState(null);
   const defaults = (flow?.defaults || []).filter((d) => fields.includes(d.field));
-  const warnings = (flow?.clashes?.lines || []).filter((l) => fields.includes(l.field));
+  // The same-day lines are the Schedule & continuity block's once the server sends a schedule.
+  const warnings = hintLines(flow, fields);
   if (!defaults.length && !warnings.length) return null;
 
   const apply = async (d) => {
