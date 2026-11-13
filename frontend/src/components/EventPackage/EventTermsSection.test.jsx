@@ -12,6 +12,7 @@ vi.mock('../../services/api', () => ({
 }));
 
 import api from '../../services/api';
+import AuthContext from '../../contexts/AuthContext';
 import EventTermsSection from './EventTermsSection';
 
 const EVENT = {
@@ -30,11 +31,15 @@ function renderTerms(props = {}) {
   const putEvent = vi.fn(async () => ({ data: { success: true } }));
   const onSaved = vi.fn(async () => {});
   const onToast = vi.fn();
+  // An admin unless a test says otherwise: approving a deliverable is an admin's (2026-11-13).
+  const { user = { id: 'u1', groups: ['admin'] }, ...rest } = props;
   render(
-    <EventTermsSection
-      showId="show-1" eventId="ev-1" event={EVENT} locked={false}
-      putEvent={putEvent} onSaved={onSaved} onToast={onToast} {...props}
-    />
+    <AuthContext.Provider value={{ user }}>
+      <EventTermsSection
+        showId="show-1" eventId="ev-1" event={EVENT} locked={false}
+        putEvent={putEvent} onSaved={onSaved} onToast={onToast} {...rest}
+      />
+    </AuthContext.Provider>
   );
   return { putEvent, onSaved, onToast };
 }
@@ -475,6 +480,17 @@ describe('EventTermsSection', () => {
       // Editing stays off while locked.
       expect(screen.queryByLabelText('Edit Tagged post')).toBeNull();
       expect(screen.queryByLabelText('Remove Tagged post')).toBeNull();
+    });
+
+    test('a non-admin gets no approve button, only who can; the earlier steps keep their buttons', async () => {
+      renderTerms({ locked: true, user: { id: 'u2', groups: ['editor'] } });
+      await waitFor(() => expect(screen.getByText('Tagged post')).toBeTruthy());
+      expect(screen.getByTestId('terms-deliverable-advance-p1').textContent).toBe('Mark completed');
+      expect(screen.getByTestId('terms-deliverable-advance-c1').textContent).toBe('Mark submitted');
+      expect(screen.queryByTestId('terms-deliverable-advance-s1')).toBeNull();
+      expect(screen.getByTestId('terms-deliverable-approve-admin-s1').textContent).toBe('Only an admin can approve (approval books the fee)');
+      expect(screen.queryByTestId('terms-deliverable-approve-admin-p1')).toBeNull();
+      expect(vi.mocked(api.post)).not.toHaveBeenCalled();
     });
 
     test('advancing posts the next status to the status route and shows the saved row', async () => {

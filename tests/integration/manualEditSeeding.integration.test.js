@@ -67,7 +67,8 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
   const rowsOf = (show, category) => q(
     `SELECT type, amount::float AS amount FROM financial_transactions WHERE show_id = :show AND category = :category AND deleted_at IS NULL`,
     { show, category });
-  const update = (show, key, body, token = editor()) => request(app)
+  // A coin change is an admin's (2026-11-13), so the edits here are an admin's.
+  const update = (show, key, body, token = admin()) => request(app)
     .post(`/api/v1/characters/${key}/state/update`).set('Authorization', `Bearer ${token}`).send({ show_id: show, ...body });
 
   beforeEach(() => {
