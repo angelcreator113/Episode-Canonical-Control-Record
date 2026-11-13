@@ -29,6 +29,8 @@ const {
 } = require('../utils/evaluationFormula');
 
 const { requireAuth, authorize } = require('../middleware/auth');
+// The same group check authorize() makes, for a decision made inside a handler (a coin change).
+const { userInGroup } = require('../middleware/auth');
 const { episodeEventTerms } = require('../utils/episodeEventSql');
 const { InsufficientCoinsError, insufficientCoinsBody } = require('../services/coinBalanceGuard');
 
@@ -695,6 +697,13 @@ router.post('/characters/:key/state/update', requireAuth, async (req, res) => {
         const ledgerBefore = await lockLedgerBalance(models.sequelize, show_id, { transaction: t });
         oldState.coins = ledgerBefore;
         const adjustment = coinsRequested - ledgerBefore;
+        // A coin change books money, so it is an admin's (Evoni, 2026-11-13).
+        // Decided here, against the ledger under its lock: a form that sends
+        // the unchanged balance with its other stats is not a coin change.
+        // Thrown inside the transaction, so nothing of the edit is written.
+        if (adjustment !== 0 && !userInGroup(req.user, 'ADMIN')) {
+          throw Object.assign(new Error('Changing coins requires an admin'), { adminRequired: true });
+        }
         if (adjustment !== 0) {
           await logTransaction(models.sequelize, show_id, {
             type: adjustment > 0 ? 'income' : 'expense',
@@ -750,6 +759,11 @@ router.post('/characters/:key/state/update', requireAuth, async (req, res) => {
       previous_state: oldState,
     });
   } catch (error) {
+    if (error && error.adminRequired) {
+      console.error('Update character state refused: a coin change by a non-admin');
+      // The body authorize(['ADMIN']) answers with.
+      return res.status(403).json({ error: 'Forbidden', message: 'User must be in one of these groups: ADMIN', code: 'AUTH_GROUP_REQUIRED' });
+    }
     console.error('Update character state error:', error);
     return res.status(500).json({ error: 'Failed to update state', message: error.message });
   }

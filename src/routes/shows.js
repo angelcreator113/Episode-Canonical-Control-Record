@@ -441,7 +441,8 @@ router.get('/:id/financial-config', requireAuth, async (req, res) => {
  * Persists onto Show.metadata. Non-destructive: preserves other metadata keys.
  * After updating starting_balance, call the seed endpoint to write the tx.
  */
-router.put('/:id/financial-config', requireAuth, async (req, res) => {
+// Admin only (Evoni, 2026-11-13): the starting balance and the goals' rewards decide what is paid.
+router.put('/:id/financial-config', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const Show = getShow();
     const show = await Show.findByPk(req.params.id);
@@ -1596,7 +1597,8 @@ router.get('/:id/financial-suggestions', requireAuth, async (req, res) => {
  * the ledger reflects the new amount. Non-seed transactions are left
  * untouched, so history from prior play sessions is preserved.
  */
-router.post('/:id/seed-balance', requireAuth, async (req, res) => {
+// Admin only (Evoni, 2026-11-13): it writes, and with force rewrites, the ledger's seed.
+router.post('/:id/seed-balance', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const Show = getShow();
     const show = await Show.findByPk(req.params.id);
