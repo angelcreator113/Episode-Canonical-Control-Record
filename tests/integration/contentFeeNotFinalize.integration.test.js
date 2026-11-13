@@ -73,7 +73,7 @@ const COST = 80;   // the event cost Lala pays, which Finalize books
    * pays its deliverables; one cost of 80 Lala pays (Finalize's own row); one
    * submitted deliverable with a fee of 120 (the content fee, on approval).
    */
-  async function seed() {
+  async function seed({ cost = COST } = {}) {
     const ids = { show: uuid(), ep: uuid(), event: uuid(), deliverable: uuid(), cost: uuid(), state: uuid() };
     shows.push(ids.show);
     await run(`INSERT INTO shows (id, name, slug, metadata, created_at, updated_at) VALUES (:show, :name, :name, CAST(:meta AS jsonb), NOW(), NOW())`,
@@ -81,8 +81,11 @@ const COST = 80;   // the event cost Lala pays, which Finalize books
     await run(`INSERT INTO episodes (id, show_id, title, episode_number, status, created_at, updated_at) VALUES (:ep, :show, 'Gala Night', 1, 'draft', NOW(), NOW())`, ids);
     await run(`INSERT INTO world_events (id, show_id, name, event_type, deal_type, status, prestige, cost_coins, used_in_episode_id, is_paid, payment_amount, host_brand, created_at, updated_at)
                VALUES (:event, :show, 'Velvet Gala', 'invite', 'paid_deliverables', 'used', 5, 0, :ep, false, 0, 'Maison Belle', NOW(), NOW())`, ids);
-    await run(`INSERT INTO event_costs (id, event_id, kind, label, amount, paid_by, created_at, updated_at) VALUES (:cost, :event, 'travel', 'Car to the gala', :amount, 'lala', NOW(), NOW())`,
-      { ...ids, amount: COST });
+    // cost 0: an episode whose Finalize has nothing of its own to book.
+    if (cost > 0) {
+      await run(`INSERT INTO event_costs (id, event_id, kind, label, amount, paid_by, created_at, updated_at) VALUES (:cost, :event, 'travel', 'Car to the gala', :amount, 'lala', NOW(), NOW())`,
+        { ...ids, amount: cost });
+    }
     await run(`INSERT INTO event_deliverables (id, event_id, description, deliverable_type, required, owed_to, fee, status, episode_id, created_at, updated_at)
                VALUES (:deliverable, :event, 'One reel in the coat', 'reel', true, 'brand', :fee, 'submitted', :ep, NOW(), NOW())`, { ...ids, fee: FEE });
     await run(`INSERT INTO character_state (id, show_id, character_key, coins, reputation, brand_trust, influence, stress, created_at, updated_at)
@@ -116,6 +119,7 @@ const COST = 80;   // the event cost Lala pays, which Finalize books
       total_expenses: ep.total_expenses,
       financial_score: ep.financial_score,
       financial_summary: (asJson(ep.evaluation_json) || {}).financial_summary,
+      lala: (await q(`SELECT coins, stress, reputation, brand_trust, influence FROM character_state WHERE id = :state`, ids))[0],
     };
   }
   const BOTH = [
@@ -227,5 +231,51 @@ const COST = 80;   // the event cost Lala pays, which Finalize books
     expect(await end(ids)).toEqual(once);
     expect(once.ledger).toEqual([{ category: 'event_cost', type: 'expense', amount: COST }, { category: 'seed', type: 'income', amount: 1000 }]);
     expect(once.coins).toBe(1000 - COST);
+  });
+
+  // A completed episode is not booked a second time once a content fee is approved.
+  test('9. Complete, approve, then Finalize and Complete again: nothing is booked or stored a second time', async () => {
+    const ids = await seed();
+    await complete(ids);
+    expect((await approve(ids)).status).toBe(200);
+    const once = await end(ids);
+    expect(once.ledger).toEqual(BOTH);
+
+    expect((await finalize(ids)).already_finalized).toBe(true);
+    expect((await complete(ids)).already_completed).toBe(true);
+    expect((await approve(ids)).status).toBe(400);
+    expect(await end(ids)).toEqual(once);
+    expect(once.coins).toBe(1000 + FEE - COST);
+  });
+
+  test('10. approve, Complete, then Finalize and Complete again: nothing is booked or stored a second time', async () => {
+    const ids = await seed();
+    expect((await approve(ids)).status).toBe(200);
+    await complete(ids);
+    const once = await end(ids);
+    expect(once.ledger).toEqual(BOTH);
+
+    expect((await finalize(ids)).already_finalized).toBe(true);
+    expect((await complete(ids)).already_completed).toBe(true);
+    expect(await end(ids)).toEqual(once);
+  });
+
+  test('11. a completed episode with nothing for Finalize to book: a content fee, then Finalize again, books no ledger row and moves no coin', async () => {
+    const ids = await seed({ cost: 0 });
+    await complete(ids);
+    expect((await approve(ids)).status).toBe(200);
+    const once = await end(ids);
+    expect(once.ledger).toEqual([{ category: 'content_fee', type: 'income', amount: FEE }, { category: 'seed', type: 'income', amount: 1000 }]);
+
+    await finalize(ids);
+    expect((await complete(ids)).already_completed).toBe(true);
+    const after = await end(ids);
+    expect(after.ledger).toEqual(once.ledger);
+    expect(after.coins).toBe(1000 + FEE);
+    expect(after.balance).toBe(after.coins);
+    expect(after.lala).toEqual(once.lala);
+    expect(after.status).toBe('accepted');
+    expect({ income: after.total_income, expenses: after.total_expenses, score: after.financial_score })
+      .toEqual({ income: once.total_income, expenses: once.total_expenses, score: once.financial_score });
   });
 });
