@@ -22,7 +22,10 @@
  *              shows what the refusal carried, and sends nothing), then a
  *              new choice is needed;
  *   forbidden  this person cannot decide: no choice, the reason still there;
- *   invalid    the server's own words, and the choices as they were.
+ *   invalid    the server's own words, and the choices as they were;
+ *   failed     the network, a server error or another refusal: what
+ *              happened, the reason kept, and the choices as they were.
+ *              Nothing is sent again until one is chosen.
  *
  * Keyboard (hooks/useDialogFocus): focus moves in on open, Tab stays
  * inside, Escape closes (not while a decision is being sent), and focus
@@ -143,6 +146,12 @@ export default function OfferDecisionDialog({ pending, busy = false, onChoose, o
               <div className="odd-refusal" role="alert" data-testid="offer-decision-refused">
                 <p>{refusal.message || 'That decision was not accepted.'}</p>
                 <p>Nothing was started. Your reason is still below.</p>
+              </div>
+            )}
+            {refusal?.kind === 'failed' && (
+              <div className="odd-refusal" role="alert" data-testid="offer-decision-failed">
+                <p>{refusal.message}</p>
+                <p>Nothing was sent again. Your reason is still below. Choose again to try once more, or close this.</p>
               </div>
             )}
             {noneLeft && (

@@ -304,13 +304,60 @@ describe('OfferDecisionDialog: a refused decision', () => {
     expect(send).toHaveBeenCalledTimes(3);
   });
 
-  test('a failure that is not about the offer still closes and goes to the caller', async () => {
-    const other = Object.assign(new Error('nope'), { response: { status: 409, data: { code: 'DEAL_PRICE_REQUIRED' } } });
+  // Security and error review of 2026-11-13: nothing that fails closes the
+  // dialog by itself or loses what was typed, and nothing is sent again by itself.
+  const UNEXPECTED = [
+    ['the network', Object.assign(new Error('Network Error'), { code: 'ERR_NETWORK' }), /Couldn't reach the server, so the episode may not have started/],
+    ['a server error', Object.assign(new Error('500'), { response: { status: 500, data: { success: false, error: 'the database is unavailable' } } }), /The server could not start the episode: the database is unavailable/],
+    ['a server error with no words', Object.assign(new Error('Request failed with status code 502'), { response: { status: 502, data: '' } }), /The server could not start the episode/],
+    ['a refusal that is not about the offer', Object.assign(new Error('409'), { response: { status: 409, data: { code: 'DEAL_PRICE_REQUIRED', error: 'A deal price is missing.' } } }), /The episode was not started: A deal price is missing\./],
+  ];
+  test.each(UNEXPECTED)('%s: the dialog stays, the reason stays, it says what happened, and nothing is sent again', async (_name, failure, words) => {
+    const send = vi.fn().mockRejectedValueOnce(required()).mockRejectedValueOnce(failure).mockResolvedValueOnce({ data: { success: true } });
+    const onDone = await openWith(send);
+    await act(async () => { fireEvent.click(screen.getByTestId('offer-decision-decline')); });
+    expect(send).toHaveBeenCalledTimes(2);
+    expect(screen.getByTestId('offer-decision')).toBeTruthy();
+    expect(onDone).not.toHaveBeenCalled();
+    const alert = screen.getByTestId('offer-decision-failed');
+    expect(alert.getAttribute('role')).toBe('alert');
+    expect(alert.textContent).toMatch(words);
+    expect(alert.textContent).toContain('Nothing was sent again. Your reason is still below.');
+    expect(screen.getByTestId('offer-decision-reason').value).toBe('The fee is too low');
+    // Still nothing sent, however long it sits there.
+    await act(async () => { await Promise.resolve(); });
+    expect(send).toHaveBeenCalledTimes(2);
+    // Trying again is an explicit choice, with the same offers and reason.
+    for (const c of choices()) expect(c.disabled).toBe(false);
+    await act(async () => { fireEvent.click(screen.getByTestId('offer-decision-decline')); });
+    expect(send).toHaveBeenNthCalledWith(3, 'decline', { offer_decision_opportunity_ids: ['opp-1'], offer_decision_reason: 'The fee is too low' });
+    await waitFor(() => expect(onDone).toHaveBeenCalledWith({ res: { data: { success: true } } }));
+    expect(screen.queryByTestId('offer-decision')).toBeNull();
+  });
+
+  test('closing after such a failure hands that failure to the caller, which handles it as before', async () => {
+    const other = Object.assign(new Error('409'), { response: { status: 409, data: { code: 'DEAL_PRICE_REQUIRED', error: 'A deal price is missing.' } } });
     const send = vi.fn().mockRejectedValueOnce(required()).mockRejectedValueOnce(other);
     const onDone = await openWith(send);
     await act(async () => { fireEvent.click(screen.getByTestId('offer-decision-accept')); });
-    await waitFor(() => expect(onDone).toHaveBeenCalledWith({ err: other }));
+    expect(onDone).not.toHaveBeenCalled();
+    await act(async () => { fireEvent.click(screen.getByTestId('offer-decision-cancel')); });
+    expect(onDone).toHaveBeenCalledWith({ err: other });
     expect(screen.queryByTestId('offer-decision')).toBeNull();
+    expect(send).toHaveBeenCalledTimes(2);
+  });
+
+  test('a failure followed by a refusal about the offer: closing then is a plain cancel', async () => {
+    const failure = Object.assign(new Error('Network Error'), { code: 'ERR_NETWORK' });
+    const stale = refused(409, 'OFFER_DECISION_STALE', 'Changed.', [FIRST]);
+    const send = vi.fn().mockRejectedValueOnce(required()).mockRejectedValueOnce(failure).mockRejectedValueOnce(stale);
+    const onDone = await openWith(send);
+    await act(async () => { fireEvent.click(screen.getByTestId('offer-decision-accept')); });
+    await act(async () => { fireEvent.click(screen.getByTestId('offer-decision-accept')); });
+    expect(screen.getByTestId('offer-decision-changed')).toBeTruthy();
+    expect(screen.queryByTestId('offer-decision-failed')).toBeNull();
+    await act(async () => { fireEvent.click(screen.getByTestId('offer-decision-cancel')); });
+    expect(onDone.mock.calls[0][0].err.offerDecisionCancelled).toBe(true);
   });
 });
 

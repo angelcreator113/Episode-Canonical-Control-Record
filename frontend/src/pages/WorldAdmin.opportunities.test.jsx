@@ -180,7 +180,8 @@ describe('safer steps', () => {
     expect(screen.getByText('Velour Cover')).toBeTruthy();
     expect(screen.getByText('Maison Lookbook')).toBeTruthy();
     expect(screen.getByTestId('opp-schedule-o1')).toBeTruthy();
-    expect(screen.getByTestId('opp-schedule-now-o3')).toBeTruthy();
+    // Scheduling a held one offers it early, which the server keeps to admins.
+    expect(screen.queryByTestId('opp-schedule-now-o3')).toBeNull();
   });
 
   test('with no offers yet, someone who is not an admin is told only an admin can add one', async () => {
@@ -195,6 +196,7 @@ describe('safer steps', () => {
     expect(screen.getByTestId('opp-undo-o2')).toBeTruthy();
     expect(screen.getByTestId('opp-beat14-open-o1')).toBeTruthy();
     expect(screen.getByTestId('opp-release-o3')).toBeTruthy();
+    expect(screen.getByTestId('opp-schedule-now-o3')).toBeTruthy();
     expect(screen.getByRole('button', { name: /New Opportunity/ })).toBeTruthy();
     expect(screen.queryByTestId('opp-admin-only-o1')).toBeNull();
   });

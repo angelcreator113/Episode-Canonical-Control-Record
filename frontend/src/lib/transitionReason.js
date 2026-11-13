@@ -15,3 +15,20 @@ export const REASON_REQUIRED_DECISIONS = ['decline', 'proceed_unaccepted'];
 export function cleanReason(value) {
   return typeof value === 'string' ? value.trim().slice(0, REASON_MAX) : '';
 }
+
+/**
+ * What to say when starting with a decision failed for a reason that is not
+ * about the offer: the network, a server error, another refusal. The same
+ * shape as the app's other save messages (lib/showEdit saveErrorText,
+ * lib/wardrobeAddPiece): the server's own words when it gave any, a plain
+ * sentence when the server could not be reached.
+ */
+export function startFailedText(err) {
+  const data = err?.response?.data || {};
+  const raw = data.error || data.message || err?.message || '';
+  if (!err?.response && /Network Error|Failed to fetch|NetworkError|ERR_|timeout/i.test(raw)) {
+    return "Couldn't reach the server, so the episode may not have started. Your reason is still here.";
+  }
+  if (err?.response?.status >= 500) return raw ? `The server could not start the episode: ${raw}` : 'The server could not start the episode.';
+  return raw ? `The episode was not started: ${raw}` : 'The episode was not started.';
+}

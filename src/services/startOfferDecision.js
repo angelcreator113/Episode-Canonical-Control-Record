@@ -74,12 +74,19 @@ const REASON_REQUIRED_DECISIONS = Object.freeze(['decline', 'proceed_unaccepted'
 
 const isOpenOffer = (status) => !ACCEPTED_STATUSES.includes(status) && !CLOSED_STATUSES.includes(status);
 
-/** What the page shows to ask: id, name, status, payment. */
-function offerSummary(opp) {
+/**
+ * What the page shows to ask. For someone who can decide (an admin): id,
+ * name, status, brand and payment. For anyone else only what tells them
+ * which offer waits for an admin: id, name and status. The payment and its
+ * type are the deal's terms and are never sent to someone who cannot decide
+ * (Evoni's security review of 2026-11-13); the page hiding them is not what
+ * keeps them private.
+ */
+function offerSummary(opp, canDecide = false) {
+  const named = { id: opp.id, name: opp.name, status: opp.status };
+  if (!canDecide) return named;
   return {
-    id: opp.id,
-    name: opp.name,
-    status: opp.status,
+    ...named,
     brand: opp.brand_or_company || null,
     payment_amount: opp.payment_amount == null ? null : Number(opp.payment_amount),
     payment_type: opp.payment_type || null,
@@ -87,7 +94,9 @@ function offerSummary(opp) {
 }
 
 const offerError = (status, code, message, opportunities, canDecide = false) =>
-  Object.assign(new Error(message), { status, code, canDecide, opportunities: (opportunities || []).map(offerSummary) });
+  Object.assign(new Error(message), {
+    status, code, canDecide, opportunities: (opportunities || []).map((o) => offerSummary(o, canDecide === true)),
+  });
 
 /**
  * The event's linked opportunities still open: the one world_events.
@@ -135,7 +144,7 @@ function assertOfferDecision(openOffers, decision, by = {}) {
       openOffers, canDecide);
   }
   if (!OFFER_DECISIONS.includes(decision)) {
-    throw offerError(400, OFFER_DECISION_INVALID_CODE, `offer_decision must be one of ${OFFER_DECISIONS.join(', ')}.`, openOffers);
+    throw offerError(400, OFFER_DECISION_INVALID_CODE, `offer_decision must be one of ${OFFER_DECISIONS.join(', ')}.`, openOffers, canDecide);
   }
   if (!canDecide) {
     throw offerError(403, OFFER_DECISION_FORBIDDEN_CODE,
@@ -159,7 +168,7 @@ function assertOfferDecision(openOffers, decision, by = {}) {
   if (stuck.length) {
     throw offerError(409, OFFER_DECISION_ILLEGAL_CODE,
       `"${stuck[0].name}" is ${stuck[0].status}; it cannot move to ${target} from there. Start without accepting it, or settle it first.`,
-      openOffers);
+      openOffers, true);
   }
 }
 

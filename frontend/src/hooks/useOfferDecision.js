@@ -25,10 +25,16 @@
  *             needed after it.
  *   forbidden (403) this person cannot decide; no choice can be sent.
  *   invalid   (400) the server's own words, e.g. a reason is needed.
- * Any other failure closes the dialog and goes to the caller, as before.
+ *   failed    anything else: the network, a server error, a refusal that
+ *             is not about the offer (security and error review of
+ *             2026-11-13). The dialog says what happened; choosing again
+ *             is the person's to do. Closing it then hands that failure to
+ *             the caller, which handles it as it always did (its own
+ *             message, or its own next step such as a missing deal price).
+ * A decision is never sent again by itself.
  */
 import { useCallback, useRef, useState } from 'react';
-import { cleanReason } from '../lib/transitionReason';
+import { cleanReason, startFailedText } from '../lib/transitionReason';
 
 export const OFFER_DECISION_REQUIRED = 'OFFER_DECISION_REQUIRED';
 // The refusals a decision can get (services/startOfferDecision OFFER_DECISION_CODES).
@@ -95,6 +101,7 @@ export default function useOfferDecision() {
       waiting.current = null;
       setPending(null);
       w.resolve(res);
+      return;
     } catch (err) {
       const status = err?.response?.status;
       const data = err?.response?.data;
@@ -102,16 +109,18 @@ export default function useOfferDecision() {
         // Refused about the offer: the dialog stays, with what was typed.
         // Not sent again; the next step is the person's.
         console.error('[OfferDecision] the decision was refused:', data.code, data.error);
+        w.lastError = null;
         setPending({
           ...shown.current,
           refusal: { kind: refusalKind(status), code: data.code, message: data.error || '', offers: offersOf(data) },
         });
         return;
       }
+      // Not about the offer: the dialog still stays, with what was typed.
+      // The failure is kept for the caller, who gets it if the dialog is closed.
       console.error('[OfferDecision] start with a decision failed:', err);
-      waiting.current = null;
-      setPending(null);
-      w.reject(err);
+      w.lastError = err;
+      setPending({ ...shown.current, refusal: { kind: 'failed', code: data?.code || null, message: startFailedText(err), offers: [] } });
     } finally {
       setBusy(false);
     }
@@ -121,7 +130,9 @@ export default function useOfferDecision() {
     const w = waiting.current;
     waiting.current = null;
     setPending(null);
-    w?.reject(Object.assign(new Error('Not started: no decision was made about the offer.'), { offerDecisionCancelled: true }));
+    // After a failure that was not about the offer, closing hands that
+    // failure to the caller; otherwise it is a plain cancel.
+    w?.reject(w.lastError || Object.assign(new Error('Not started: no decision was made about the offer.'), { offerDecisionCancelled: true }));
   }, [setPending]);
 
   return { run, pending, busy, choose, cancel, refresh };

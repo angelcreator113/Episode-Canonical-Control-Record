@@ -222,7 +222,8 @@ export default function OpportunitiesTab({ showId, api, S, setToast, loadData, e
                   {held && !opp.event_id && (
                     <>
                       {canDecide && <button type="button" className="ob14-btn ob14-btn-icon" onClick={() => releaseOpp(opp)} data-testid={`opp-release-${opp.id}`}><Send size={12} aria-hidden="true" />Release offer</button>}
-                      <button type="button" className="ob14-btn-gold" onClick={() => toEvent(opp)} data-testid={`opp-schedule-now-${opp.id}`}>📅 Schedule as Event now</button>
+                      {/* Scheduling a held one offers it early, which the server keeps to admins (feedPipelineRoutes). */}
+                      {canDecide && <button type="button" className="ob14-btn-gold" onClick={() => toEvent(opp)} data-testid={`opp-schedule-now-${opp.id}`}>📅 Schedule as Event now</button>}
                     </>
                   )}
                   {opp.event_id && <span style={{ fontSize: 9, color: '#16a34a', padding: '3px 8px', background: '#f0fdf4', borderRadius: 4, fontWeight: 600 }}>✓ Event scheduled</span>}

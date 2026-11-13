@@ -58,11 +58,11 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
     { id, show, name: `${name} ${TAG}`, opportunityId });
     return id;
   };
-  const makeOpp = async (name, status, { eventId = null } = {}) => {
+  const makeOpp = async (name, status, { eventId = null, payment = 1200, brand = null, paymentType = null } = {}) => {
     const id = uuid();
-    await run(`INSERT INTO opportunities (id, show_id, name, opportunity_type, status, status_history, payment_amount, event_id, created_at, updated_at)
-               VALUES (:id, :show, :name, 'campaign', :status, CAST(:history AS jsonb), 1200, :eventId, NOW(), NOW())`,
-    { id, show, name: `${name} ${TAG}`, status, eventId, history: JSON.stringify([{ status, date: new Date().toISOString(), note: 'seeded' }]) });
+    await run(`INSERT INTO opportunities (id, show_id, name, opportunity_type, status, status_history, payment_amount, payment_type, brand_or_company, event_id, created_at, updated_at)
+               VALUES (:id, :show, :name, 'campaign', :status, CAST(:history AS jsonb), :payment, :paymentType, :brand, :eventId, NOW(), NOW())`,
+    { id, show, name: `${name} ${TAG}`, status, eventId, payment, brand, paymentType, history: JSON.stringify([{ status, date: new Date().toISOString(), note: 'seeded' }]) });
     return id;
   };
   // An event scheduled from an opportunity: linked both ways, as
@@ -132,7 +132,8 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
 
   it('an open offer and no decision: 409 OFFER_DECISION_REQUIRED with the offer, nothing created or changed', async () => {
     const { opp, event } = await scheduled('Spring Capsule', 'offered');
-    const res = await start(event);
+    // Asked by an admin: the offer with its payment, as before.
+    const res = await asAdmin(request(app).post(`/api/v1/world/${show}/events/${event}/generate-episode`)).send({ draft_script: false });
     expect(res.status).toBe(409);
     expect(res.body).toMatchObject({
       success: false,
@@ -442,5 +443,92 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
     expect(await episodesOf(event)).toHaveLength(1);
     expect((await oppRow(opp)).status_history.slice(1).map((h) => h.status)).toEqual(['considering', 'negotiating', 'booked']);
     expect(await auditOf(opp)).toHaveLength(1);
+  });
+
+  // ── Security review of 2026-11-13: the deal's terms never go to someone who cannot decide ──
+  describe('what each Start route sends about the offer', () => {
+    // An amount, a type and a brand that appear nowhere else in an answer.
+    const TERMS = { payment: 987654, paymentType: 'usage_buyout_zq', brand: 'Maison Zephyrine' };
+    const SECRET = /987654|usage_buyout_zq|Maison Zephyrine|payment_amount|payment_type/;
+    const withTerms = async (name, status) => {
+      const opp = await makeOpp(name, status, TERMS);
+      const event = await makeEvent(name, opp);
+      await run('UPDATE opportunities SET event_id = :event WHERE id = :opp', { event, opp });
+      return { opp, event };
+    };
+    const ROUTES = [
+      ['generate-episode', (as, event, body = {}) => as(request(app).post(`/api/v1/world/${show}/events/${event}/generate-episode`)).send({ draft_script: false, ...body })],
+      ['generate-episode-from-many', (as, event, body = {}) => as(request(app).post(`/api/v1/world/${show}/events/generate-episode-from-many`)).send({ event_ids: [event], ...body })],
+    ];
+
+    describe.each(ROUTES)('%s', (route, call) => {
+      it('the question, to someone who is not an admin: which offer waits, and nothing of its terms', async () => {
+        const { opp, event } = await withTerms(`Private terms ${route}`, 'negotiating');
+        const res = await call(auth, event);
+        expect(res.status).toBe(409);
+        expect(res.body.code).toBe('OFFER_DECISION_REQUIRED');
+        expect(res.body.can_decide).toBe(false);
+        const named = { id: opp, name: `Private terms ${route} ${TAG}`, status: 'negotiating' };
+        expect(res.body.opportunity).toEqual(named);
+        expect(res.body.opportunities).toEqual([named]);
+        expect(JSON.stringify(res.body)).not.toMatch(SECRET);
+        expect(await episodesOf(event)).toHaveLength(0);
+      });
+
+      it('a decision refused 403, to someone who is not an admin: nothing of its terms', async () => {
+        const { opp, event } = await withTerms(`Refused terms ${route}`, 'offered');
+        for (const decision of ['accept', 'negotiate', 'decline', 'proceed_unaccepted']) {
+          const res = await call(auth, event, { offer_decision: decision, offer_decision_opportunity_ids: [opp], offer_decision_reason: 'Trying' });
+          expect(res.status).toBe(403);
+          expect(res.body.code).toBe('OFFER_DECISION_FORBIDDEN');
+          expect(res.body.opportunities).toEqual([{ id: opp, name: `Refused terms ${route} ${TAG}`, status: 'offered' }]);
+          expect(JSON.stringify(res.body)).not.toMatch(SECRET);
+        }
+        expect(await episodesOf(event)).toHaveLength(0);
+        expect((await oppRow(opp)).status).toBe('offered');
+      });
+
+      it('an unknown decision from someone who is not an admin: nothing of its terms', async () => {
+        const { event } = await withTerms(`Odd decision ${route}`, 'offered');
+        const res = await call(auth, event, { offer_decision: 'book_it' });
+        expect(res.status).toBe(400);
+        expect(JSON.stringify(res.body)).not.toMatch(SECRET);
+      });
+
+      it('a start that needs no decision, by someone who is not an admin: it starts, and the answer holds nothing of the settled offer\'s terms', async () => {
+        const { opp, event } = await withTerms(`Settled terms ${route}`, 'booked');
+        const res = await call(auth, event);
+        expect(res.status).toBe(201);
+        expect(res.body.success).toBe(true);
+        expect(await episodesOf(event)).toHaveLength(1);
+        expect(JSON.stringify(res.body)).not.toMatch(/987654|usage_buyout_zq|Maison Zephyrine/);
+        expect(JSON.stringify(res.body)).not.toContain(opp);
+      });
+
+      it('an admin still gets the offer with its terms: the question, a refusal, and what was decided', async () => {
+        const { opp, event } = await withTerms(`Admin terms ${route}`, 'offered');
+        const full = { id: opp, name: `Admin terms ${route} ${TAG}`, status: 'offered', brand: 'Maison Zephyrine', payment_amount: 987654, payment_type: 'usage_buyout_zq' };
+        const asked = await call(asAdmin, event);
+        expect(asked.status).toBe(409);
+        expect(asked.body).toMatchObject({ code: 'OFFER_DECISION_REQUIRED', can_decide: true });
+        expect(asked.body.opportunity).toEqual(full);
+        expect(asked.body.opportunities).toEqual([full]);
+
+        const noReason = await call(asAdmin, event, { offer_decision: 'decline', offer_decision_opportunity_ids: [opp] });
+        expect(noReason.status).toBe(400);
+        expect(noReason.body.code).toBe('OFFER_REASON_REQUIRED');
+        expect(noReason.body.opportunity).toEqual(full);
+
+        const stale = await call(asAdmin, event, { offer_decision: 'accept', offer_decision_opportunity_ids: [uuid()] });
+        expect(stale.status).toBe(409);
+        expect(stale.body.code).toBe('OFFER_DECISION_STALE');
+        expect(stale.body.opportunity).toEqual(full);
+
+        const ok = await call(asAdmin, event, { offer_decision: 'accept', offer_decision_opportunity_ids: [opp] });
+        expect(ok.status).toBe(201);
+        const decided = route === 'generate-episode' ? ok.body.data.offerDecisions : (ok.body.data.offerDecisions || ok.body.offer_decisions);
+        expect(decided).toEqual([{ id: opp, name: `Admin terms ${route} ${TAG}`, decision: 'accept', from: 'offered', to: 'booked' }]);
+      });
+    });
   });
 });

@@ -47,19 +47,67 @@ describe('assertOfferDecision', () => {
   it('no open offer: anything goes, nothing asked', () => {
     expect(() => assertOfferDecision([], undefined)).not.toThrow();
   });
-  it('an open offer and no decision: 409 OFFER_DECISION_REQUIRED with the offer summary', () => {
+  it('an open offer and no decision, asked by an admin: 409 OFFER_DECISION_REQUIRED with the offer summary', () => {
     let err;
-    try { assertOfferDecision([offer('offered')], undefined); } catch (e) { err = e; }
+    try { assertOfferDecision([offer('offered')], undefined, admin()); } catch (e) { err = e; }
     expect(err).toMatchObject({ status: 409, code: 'OFFER_DECISION_REQUIRED' });
+    // The admin's answer, as it has always been, with can_decide.
     expect(offerDecisionBody(err)).toEqual({
       success: false,
       code: 'OFFER_DECISION_REQUIRED',
       error: err.message,
       decisions: OFFER_DECISIONS,
-      can_decide: false,
+      can_decide: true,
       opportunity: { id: 'opp-1', name: 'Spring Capsule', status: 'offered', brand: 'Maison', payment_amount: 1200, payment_type: 'flat_fee' },
-      opportunities: [expect.objectContaining({ id: 'opp-1' })],
+      opportunities: [{ id: 'opp-1', name: 'Spring Capsule', status: 'offered', brand: 'Maison', payment_amount: 1200, payment_type: 'flat_fee' }],
     });
+  });
+
+  // Security review of 2026-11-13: the deal's terms never go to someone who cannot decide.
+  it('asked by anyone else: only which offer waits (id, name, status); no payment, payment type or brand', () => {
+    for (const by of [undefined, {}, { actor: null }, { actor: { id: 'u-1', isAdmin: false } }, { actor: { id: 'u-1', isAdmin: 'yes' } }]) {
+      let err;
+      try { assertOfferDecision([offer('offered')], undefined, by); } catch (e) { err = e; }
+      const body = offerDecisionBody(err);
+      expect(body).toEqual({
+        success: false,
+        code: 'OFFER_DECISION_REQUIRED',
+        error: err.message,
+        decisions: OFFER_DECISIONS,
+        can_decide: false,
+        opportunity: { id: 'opp-1', name: 'Spring Capsule', status: 'offered' },
+        opportunities: [{ id: 'opp-1', name: 'Spring Capsule', status: 'offered' }],
+      });
+      expect(JSON.stringify(body)).not.toMatch(/1200|payment|flat_fee|Maison/);
+    }
+  });
+
+  it('a decision refused because the person is not an admin carries no terms either', () => {
+    for (const d of OFFER_DECISIONS) {
+      let err;
+      try { assertOfferDecision([offer('offered')], d, { actor: { id: 'u-1', isAdmin: false }, reason: 'x', opportunityIds: ['opp-1'] }); } catch (e) { err = e; }
+      const body = offerDecisionBody(err);
+      expect(body.code).toBe('OFFER_DECISION_FORBIDDEN');
+      expect(body.opportunities).toEqual([{ id: 'opp-1', name: 'Spring Capsule', status: 'offered' }]);
+      expect(JSON.stringify(body)).not.toMatch(/1200|payment|flat_fee|Maison/);
+    }
+  });
+
+  it('every refusal an admin can get still carries the full summary', () => {
+    const full = { id: 'opp-1', name: 'Spring Capsule', status: 'offered', brand: 'Maison', payment_amount: 1200, payment_type: 'flat_fee' };
+    const cases = [
+      ['decline', admin({ reason: '' })],              // reason required
+      ['accept', admin({ opportunityIds: ['other'] })], // stale
+      ['book_it', admin()],                              // unknown decision
+    ];
+    for (const [d, by] of cases) {
+      let err;
+      try { assertOfferDecision([offer('offered')], d, by); } catch (e) { err = e; }
+      expect(offerDecisionBody(err).opportunity).toEqual(full);
+    }
+    let illegal;
+    try { assertOfferDecision([offer('held')], 'accept', admin()); } catch (e) { illegal = e; }
+    expect(offerDecisionBody(illegal).opportunity).toEqual({ ...full, status: 'held' });
   });
   it('every decision is legal from offered; none is chosen for the caller', () => {
     for (const d of OFFER_DECISIONS) expect(() => assertOfferDecision([offer('offered')], d, admin())).not.toThrow();
