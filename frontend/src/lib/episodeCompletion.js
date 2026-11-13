@@ -32,7 +32,18 @@ const KNOWN = {
   TWO_PART_TO_BE_CONTINUED: { title: 'This is Part 1 of a two-parter', action: 'season' },
   TWO_PART_REFUSED: { title: 'This two-parter cannot complete yet', action: 'season' },
   RETRY: { title: 'Something else was saving at the same moment', action: 'retry' },
+  // Milestone attribution (Evoni, 2026-11-13): the refusal carries the rewards in question.
+  MILESTONE_ATTRIBUTION_REQUIRED: { title: 'A milestone reward needs an admin\'s decision', action: null },
+  MILESTONE_DECISION_STALE: { title: 'The rewards in question have changed', action: null },
+  MILESTONE_DECISION_INVALID: { title: 'That milestone decision could not be read', action: null },
 };
+
+/** What an admin may say of a reward in question. Anything else leaves it undecided. */
+export const MILESTONE_DECISIONS = [
+  { value: '', label: 'Leave undecided' },
+  { value: 'this_episode', label: 'This episode\'s' },
+  { value: 'not_this_episode', label: 'Not this episode\'s' },
+];
 
 function actionFor(kind, { showId, episodeId, eventId }) {
   if (kind === 'money') return { label: 'Open Money', tab: 'money' };
@@ -63,28 +74,39 @@ export function completionRefusal(err, ids = {}) {
     title: known?.title || (status && status >= 500 ? 'The server could not complete the episode' : 'The episode was not completed'),
     message,
     action: actionFor(known?.action, { ...ids, eventId: ids.eventId || body.event?.id || null }),
+    // The milestone rewards in question, and those still undecided, when the server names them.
+    ...(Array.isArray(body.candidates) ? { candidates: body.candidates, undecided: Array.isArray(body.undecided) ? body.undecided : [] } : {}),
   };
 }
 
 /**
  * Ask the server to complete the episode.
  *   confirm(message) -> boolean   asked first, and again for a money warning
+ *   milestoneDecisions            { [reward row id]: 'this_episode' | 'not_this_episode' },
+ *                                 an admin's answer to a MILESTONE_ATTRIBUTION_REQUIRED
+ *                                 refusal. Sent as given; a reward left out stays
+ *                                 undecided. The admin confirmed on the first
+ *                                 attempt, so this one is not asked again.
  * Resolves:
  *   { status: 'cancelled' }
  *   { status: 'completed', data }          completed by this request
  *   { status: 'already', data }            it was completed before: nothing was booked again
  *   { status: 'refused', refusal }         nothing was changed; refusal is completionRefusal()
  */
-export async function completeEpisode({ showId, episodeId, title = null, eventId = null, confirm = (m) => window.confirm(m) } = {}) {
+export async function completeEpisode({ showId, episodeId, title = null, eventId = null, confirm = (m) => window.confirm(m), milestoneDecisions = null } = {}) {
   if (!showId || !episodeId) {
     return { status: 'refused', refusal: { status: null, code: null, title: 'The episode was not completed', message: 'This episode\'s show could not be read, so it cannot be completed from here.', action: null } };
   }
-  if (!confirm(COMPLETE_CONFIRM(title))) return { status: 'cancelled' };
-  // MB4 (§8(gg)): warn early on money; never blocks.
-  const moneyWarning = await completeMoneyWarning(showId, episodeId);
-  if (moneyWarning && !confirm(moneyWarning)) return { status: 'cancelled' };
+  if (!milestoneDecisions) {
+    if (!confirm(COMPLETE_CONFIRM(title))) return { status: 'cancelled' };
+    // MB4 (§8(gg)): warn early on money; never blocks.
+    const moneyWarning = await completeMoneyWarning(showId, episodeId);
+    if (moneyWarning && !confirm(moneyWarning)) return { status: 'cancelled' };
+  }
   try {
-    const res = await api.post(`/api/v1/world/${showId}/episodes/${episodeId}/complete`);
+    const res = milestoneDecisions
+      ? await api.post(`/api/v1/world/${showId}/episodes/${episodeId}/complete`, { milestone_decisions: milestoneDecisions })
+      : await api.post(`/api/v1/world/${showId}/episodes/${episodeId}/complete`);
     const data = res.data?.data || {};
     return { status: data.already_completed ? 'already' : 'completed', data };
   } catch (err) {

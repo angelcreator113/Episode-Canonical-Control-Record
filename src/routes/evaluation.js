@@ -589,7 +589,9 @@ router.post('/episodes/:id/accept', requireAuth, authorize(['ADMIN']), async (re
 
     // Proxy to unified completion pipeline (handles financials, social bonuses, wardrobe, history)
     const { completeEpisode } = require('../services/episodeCompletionService');
-    const result = await completeEpisode(id, showId, models.sequelize);
+    const result = await completeEpisode(id, showId, models.sequelize, {
+      milestoneDecisions: req.body?.milestone_decisions ?? null, decidedBy: req.user,
+    });
 
     return res.json({
       success: true,
@@ -603,6 +605,8 @@ router.post('/episodes/:id/accept', requireAuth, authorize(['ADMIN']), async (re
     // Task #2378: nothing books while the event's terms are reopened.
     const { TermsReopenedError, termsReopenedBody } = require('../utils/eventTermsLock');
     if (error instanceof TermsReopenedError) return res.status(error.status).json(termsReopenedBody(error));
+    // A reward whose episode is not known and matters: nothing was written; an admin decides.
+    if (error instanceof require('../services/episodeCompletionService').MilestoneAttributionError) return res.status(error.status).json(error.toJSON());
     // A second event with commitments that second events do not carry yet: nothing was written.
     if (require('../services/episodeSecondaryEvents').isSecondaryEventError(error)) return res.status(error.status).json(error.toJSON());
     // A two-parter's Part 1 is "to be continued": the event completes with Part 2 (seasonSpecials).

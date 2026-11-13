@@ -21,6 +21,9 @@ jest.unmock('uuid');
 jest.mock('@anthropic-ai/sdk', () => jest.fn().mockImplementation(() => ({ messages: { create: async () => { throw new Error('the model must not be asked'); } } })));
 
 const crypto = require('crypto');
+const request = require('supertest');
+const app = require('../../src/app');
+const TokenService = require('../../src/services/tokenService');
 const models = require('../../src/models');
 const { finalizeEpisodeFinancials, FINALIZE_CATEGORIES } = require('../../src/services/financialTransactionService');
 const { completeEpisode } = require('../../src/services/episodeCompletionService');
@@ -50,6 +53,8 @@ const q = (sql, replacements = {}) => sequelize.query(sql, { replacements, type:
     const del = (sql) => sequelize.query(sql, { replacements: { shows } }).catch(() => {});
     if (shows.length) {
       for (const t of ['financial_transactions', 'character_state_history', 'character_state']) await del(`DELETE FROM ${t} WHERE show_id IN (:shows)`);
+      await del(`DELETE FROM activity_logs WHERE resource_type = 'episode' AND resource_id IN (SELECT id::text FROM episodes WHERE show_id IN (:shows))`);
+      await del('DELETE FROM event_costs WHERE event_id IN (SELECT id FROM world_events WHERE show_id IN (:shows))');
       await del('UPDATE world_events SET used_in_episode_id = NULL WHERE show_id IN (:shows)');
       await del('DELETE FROM episodes WHERE show_id IN (:shows)');
       await del('DELETE FROM world_events WHERE show_id IN (:shows)');
@@ -216,24 +221,6 @@ const q = (sql, replacements = {}) => sequelize.query(sql, { replacements, type:
       expect(b.total_income).toBe(800);
     });
 
-    test('a reward booked before rewards recorded their episode is unknown: said so, not guessed and not counted as none', async () => {
-      const ids = await seed(PAID, GOAL);
-      await finalizeEpisodeFinancials(ids.ep, ids.show, sequelize);
-      // As a row booked before this change: the goal and threshold, no episode.
-      await run(`UPDATE financial_transactions SET metadata = metadata - 'episode_id' WHERE show_id = :show AND category = 'milestone'`, ids);
-      const again = await finalizeEpisodeFinancials(ids.ep, ids.show, sequelize);
-      expect(again.milestones_attribution).toBe('unknown');
-      expect(again.milestones_triggered).toEqual([]);
-      await completeEpisode(ids.ep, ids.show, sequelize);
-      const s = await stored(ids);
-      expect(s.mood_inputs.milestones_hit).toBeNull();
-      expect(s.mood_inputs.milestones_unknown).toBe(true);
-      // The money is still booked once and the totals are still the ledger's.
-      expect(await rewards(ids)).toHaveLength(1);
-      expect(s.total_income).toBe(800);
-      expect(s.lala.coins).toBe(1000 + 800 - s.total_expenses + 200);
-    });
-
     test('an older reward for a goal this episode did not cross is not this episode\'s: attribution stays recorded', async () => {
       const ids = await seed({ cost_coins: 300 }, [{ id: 'far', threshold: 5000, reward_coins: 100, label: 'Far', triggered_at: null }]);
       await run(`INSERT INTO financial_transactions (id, show_id, type, category, amount, description, source_type, metadata, status, created_at, updated_at)
@@ -243,6 +230,438 @@ const q = (sql, replacements = {}) => sequelize.query(sql, { replacements, type:
       // 400 is below where this finalize started, so it cannot be this episode's.
       expect(again.milestones_attribution).toBe('recorded');
       expect(again.milestones_triggered).toEqual([]);
+    });
+  });
+
+  // A reward booked before rewards recorded their episode (Evoni, 2026-11-13):
+  // never counted as none, never attributed by a timestamp. What completion
+  // stores is worked out with none and with all of the candidates; the same
+  // either way completes UNVERIFIED, different is refused until an admin decides.
+  describe('milestone rewards whose episode the ledger does not say', () => {
+    const GOAL = [{ id: 'rising-star', threshold: 1500, reward_coins: 200, label: 'Rising Star', triggered_at: null }];
+    const PAID = { is_paid: true, payment_amount: 800 };
+    const ADMIN = { id: 'test-admin-milestones', name: 'Evoni', email: 'admin@milestones.dev' };
+    const THIS = 'this_episode';
+    const NOT = 'not_this_episode';
+    let token;
+    beforeAll(() => {
+      token = TokenService.generateTokenPair({ ...ADMIN, groups: ['ADMIN'], role: 'ADMIN' }).accessToken;
+    });
+
+    const finalize = (ids) => finalizeEpisodeFinancials(ids.ep, ids.show, sequelize);
+    const complete = (ids, decisions, by = ADMIN) => completeEpisode(ids.ep, ids.show, sequelize, decisions ? { milestoneDecisions: decisions, decidedBy: by } : {});
+    const refusal = (promise) => promise.then(() => { throw new Error('the completion was not refused'); }, (err) => err);
+    /** As rows booked before rewards recorded their episode: the goal and threshold, no episode. */
+    const forget = (ids) => run(`UPDATE financial_transactions SET metadata = metadata - 'episode_id' WHERE show_id = :show AND category = 'milestone'`, ids);
+    /** A reward row with no recorded episode, as an older one; returns its id. */
+    async function olderReward(ids, { threshold, amount = 50, episode = null }) {
+      const id = uuid();
+      const metadata = { goal_id: `old-${id.slice(0, 6)}`, ...(threshold === undefined ? {} : { threshold }), ...(episode ? { episode_id: episode } : {}) };
+      await run(`INSERT INTO financial_transactions (id, show_id, type, category, amount, description, source_type, source_name, metadata, status, created_at, updated_at)
+                 VALUES (:id, :show, 'reward', 'milestone', :amount, 'An older reward', 'milestone', 'Older goal', CAST(:metadata AS jsonb), 'executed', NOW(), NOW())`,
+      { id, ...ids, amount, metadata: JSON.stringify(metadata) });
+      return id;
+    }
+    const candidateIds = async (ids) => (await finalize(ids)).milestone_candidates.map((c) => c.tx_id);
+    const audits = (ids) => q(`SELECT user_id, action, changes FROM activity_logs WHERE resource_type = 'episode' AND resource_id = :ep ORDER BY id`, ids);
+    /** Everything a completion could write. */
+    const everything = async (ids) => ({
+      ledger: await q(`SELECT id, category, amount::float AS amount, metadata, deleted_at FROM financial_transactions WHERE show_id = :show ORDER BY id`, ids),
+      lala: await q(`SELECT coins, stress, reputation, brand_trust, influence, last_applied_episode_id FROM character_state WHERE show_id = :show`, ids),
+      history: await q(`SELECT id FROM character_state_history WHERE show_id = :show ORDER BY id`, ids),
+      episode: await q(`SELECT status, evaluation_status, evaluation_json, total_income, total_expenses, financial_score FROM episodes WHERE id = :ep`, ids),
+      event: await q(`SELECT status FROM world_events WHERE id = :event`, ids),
+      show: await q(`SELECT metadata FROM shows WHERE id = :show`, ids),
+      audits: await audits(ids),
+    });
+    /** stored(), without the attribution record itself, to compare with a completion that had nothing to attribute. */
+    const comparable = (st) => {
+      const { milestone_attribution: _a, ...mood } = st.mood_inputs || {};
+      return { ...st, mood_inputs: mood };
+    };
+    const evaluation = async (ids) => asJson((await q(`SELECT evaluation_json FROM episodes WHERE id = :ep`, ids))[0].evaluation_json);
+    const historyContext = async (ids) => {
+      const rows = await q(`SELECT deltas_json FROM character_state_history WHERE episode_id = :ep AND evaluation_id IS NOT NULL`, ids);
+      return rows.map((r) => asJson(r.deltas_json)._financial_context);
+    };
+    /** A finalized episode whose one reward (200, at 1500) has lost its episode. Stress differs with it; the score does not. */
+    async function stressCase() {
+      const ids = await seed(PAID, GOAL);
+      await finalize(ids);
+      await forget(ids);
+      return ids;
+    }
+
+    describe('the candidates are every reward this finalize could have paid (old balance < threshold <= new balance)', () => {
+      test('thresholds at the starting and ending balances: the start is not a candidate, the end is', async () => {
+        const ids = await seed(PAID);
+        const done = await finalize(ids);
+        expect(done.balance_before).toBe(1000);
+        expect(done.balance_after).toBeGreaterThan(done.balance_before);
+        const atStart = await olderReward(ids, { threshold: done.balance_before });
+        const justAfterStart = await olderReward(ids, { threshold: done.balance_before + 1 });
+        const atEnd = await olderReward(ids, { threshold: done.balance_after });
+        const pastEnd = await olderReward(ids, { threshold: done.balance_after + 1 });
+        const again = await finalize(ids);
+        const found = again.milestone_candidates.map((c) => c.tx_id);
+        expect(found).toEqual(expect.arrayContaining([justAfterStart, atEnd]));
+        expect(found).toHaveLength(2);
+        expect(found).not.toContain(atStart);
+        expect(found).not.toContain(pastEnd);
+        expect(again.milestone_candidates.every((c) => c.reason === 'in_range')).toBe(true);
+        expect(again.milestones_attribution).toBe('unknown');
+      });
+
+      test('a finalize that did not raise the balance paid no reward: no candidate, even for a row with no threshold', async () => {
+        const ids = await seed({ cost_coins: 300 });
+        const done = await finalize(ids);
+        expect(done.balance_after).toBeLessThan(done.balance_before);
+        await olderReward(ids, { threshold: 900 });
+        await olderReward(ids, {});
+        const again = await finalize(ids);
+        expect(again.milestone_candidates).toEqual([]);
+        expect(again.milestones_attribution).toBe('recorded');
+      });
+
+      test('a reward row with no threshold cannot be ruled out: it is a candidate', async () => {
+        const ids = await seed(PAID);
+        await finalize(ids);
+        const none = await olderReward(ids, {});
+        const notANumber = await olderReward(ids, { threshold: 'soon' });
+        const again = await finalize(ids);
+        expect(again.milestone_candidates.map((c) => [c.tx_id, c.reason, c.threshold]).sort())
+          .toEqual([[none, 'no_threshold', null], [notANumber, 'no_threshold', null]].sort());
+      });
+
+      test('when the finalize\'s balance movement cannot be rebuilt from its rows, every unrecorded reward is a candidate', async () => {
+        const ids = await seed({ cost_coins: 300 });
+        await finalize(ids);
+        const far = await olderReward(ids, { threshold: 99999 });
+        const recordedElsewhere = await olderReward(ids, { threshold: 900, episode: uuid() });
+        await run(`UPDATE financial_transactions SET balance_before = NULL WHERE episode_id = :ep AND category = 'event_entry'`, ids);
+        const again = await finalize(ids);
+        expect(again.milestone_candidates.map((c) => [c.tx_id, c.reason])).toEqual([[far, 'range_unknown']]);
+        expect(again.milestone_candidates.map((c) => c.tx_id)).not.toContain(recordedElsewhere);
+      });
+
+      test('a reward recorded against another episode is never a candidate', async () => {
+        const ids = await seed(PAID);
+        const done = await finalize(ids);
+        await olderReward(ids, { threshold: done.balance_after, episode: uuid() });
+        expect((await finalize(ids)).milestone_candidates).toEqual([]);
+      });
+    });
+
+    describe('different either way: refused before anything is written', () => {
+      test('the stress differs and the score does not: refused, naming the reward; every table is as it was', async () => {
+        const ids = await stressCase();
+        const before = await everything(ids);
+        const err = await refusal(complete(ids));
+        expect(err).toMatchObject({ name: 'MilestoneAttributionError', code: 'MILESTONE_ATTRIBUTION_REQUIRED', status: 409 });
+        expect(err.candidates).toHaveLength(1);
+        expect(err.candidates[0]).toMatchObject({ goal_id: 'rising-star', threshold: 1500, amount: 200, reason: 'in_range' });
+        expect(err.undecided).toEqual([err.candidates[0].tx_id]);
+        expect(await everything(ids)).toEqual(before);
+        expect(before.episode[0].evaluation_status).not.toBe('accepted');
+        // Asked again, it answers the same, and still writes nothing.
+        const second = await refusal(complete(ids));
+        expect(second.code).toBe('MILESTONE_ATTRIBUTION_REQUIRED');
+        expect(second.undecided).toEqual(err.undecided);
+        expect(await everything(ids)).toEqual(before);
+      });
+
+      test('the score differs and the stress does not: refused too', async () => {
+        // A deal with one cost of 300: the finalize's net is -300, the score band 3.
+        const ids = await seed({ deal_type: 'paid_deliverables', host_brand: 'Maison Belle' });
+        await run(`INSERT INTO event_costs (id, event_id, kind, label, amount, paid_by, created_at, updated_at) VALUES (:id, :event, 'travel', 'Car', 300, 'lala', NOW(), NOW())`, { id: uuid(), ...ids });
+        const done = await finalize(ids);
+        expect(done.summary.net_profit).toBe(-300);
+        // Six rewards recorded as this episode's hold the stress at its floor (-5) either way.
+        for (let i = 0; i < 6; i += 1) await olderReward(ids, { threshold: 10 + i, amount: 1, episode: ids.ep });
+        // One more, 150, with no episode; the movement cannot be rebuilt, so it is a candidate.
+        const candidate = await olderReward(ids, { threshold: 99999, amount: 150 });
+        await run(`UPDATE financial_transactions SET balance_before = NULL WHERE episode_id = :ep AND category = 'event_cost'`, ids);
+        expect(await candidateIds(ids)).toEqual([candidate]);
+
+        const before = await everything(ids);
+        const err = await refusal(complete(ids));
+        expect(err.code).toBe('MILESTONE_ATTRIBUTION_REQUIRED');
+        expect(await everything(ids)).toEqual(before);
+
+        // Each answer stores its own score; the stress is the same in both.
+        const twin = await seed({ deal_type: 'paid_deliverables', host_brand: 'Maison Belle' });
+        await run(`INSERT INTO event_costs (id, event_id, kind, label, amount, paid_by, created_at, updated_at) VALUES (:id, :event, 'travel', 'Car', 300, 'lala', NOW(), NOW())`, { id: uuid(), ...twin });
+        await finalize(twin);
+        for (let i = 0; i < 6; i += 1) await olderReward(twin, { threshold: 10 + i, amount: 1, episode: twin.ep });
+        const twinCandidate = await olderReward(twin, { threshold: 99999, amount: 150 });
+        await run(`UPDATE financial_transactions SET balance_before = NULL WHERE episode_id = :ep AND category = 'event_cost'`, twin);
+
+        await complete(ids, { [candidate]: THIS });
+        await complete(twin, { [twinCandidate]: NOT });
+        const yes = await stored(ids);
+        const no = await stored(twin);
+        expect(yes.financial_score).toBe(5);   // -300 + 6 + 150
+        expect(no.financial_score).toBe(3);    // -300 + 6
+        expect(yes.financial_mood_delta).toBe(-5);
+        expect(no.financial_mood_delta).toBe(-5);
+        expect(yes.lala.stress).toBe(no.lala.stress);
+        // The verified totals do not depend on the answer.
+        expect([yes.total_income, yes.total_expenses]).toEqual([0, 300]);
+        expect([no.total_income, no.total_expenses]).toEqual([0, 300]);
+      });
+    });
+
+    describe('an admin decides', () => {
+      test('"this episode\'s": what a direct Complete stores, and the decision is recorded three times over', async () => {
+        const direct = await seed(PAID, GOAL);
+        await completeEpisode(direct.ep, direct.show, sequelize);
+        const ids = await stressCase();
+        const [candidate] = await candidateIds(ids);
+        const result = await complete(ids, { [candidate]: THIS });
+
+        const a = await stored(direct);
+        const b = await stored(ids);
+        expect(comparable(b)).toEqual(comparable(a));
+        expect(b.mood_inputs.milestones_hit).toBe(1);
+        expect(b.mood_inputs.milestones_unknown).toBeUndefined();
+
+        const record = {
+          status: 'DECIDED',
+          candidates: [{
+            tx_id: candidate, goal_id: 'rising-star', label: 'Rising Star', threshold: 1500, amount: 200, reason: 'in_range',
+            decision: THIS, decided_by: { id: ADMIN.id, name: ADMIN.name }, decided_at: expect.any(String),
+          }],
+        };
+        expect(result.milestone_attribution).toEqual(record);
+        expect((await evaluation(ids)).milestone_attribution).toEqual(record);
+        expect((await historyContext(ids)).map((c) => c.milestone_attribution)).toEqual([record]);
+        const log = await audits(ids);
+        expect(log).toHaveLength(1);
+        expect(log[0]).toMatchObject({ user_id: ADMIN.id, action: 'milestone_attribution' });
+        expect(asJson(log[0].changes).meta).toMatchObject({
+          status: 'DECIDED', decided_by: { id: ADMIN.id, name: ADMIN.name }, left_undecided: [],
+          decisions: [{ tx_id: candidate, decision: THIS, goal_id: 'rising-star', threshold: 1500, amount: 200 }],
+        });
+        expect(asJson(log[0].changes).meta.decided_at).toBe((await evaluation(ids)).milestone_attribution.candidates[0].decided_at);
+        // The reward row itself is not rewritten.
+        const [row] = await q(`SELECT metadata FROM financial_transactions WHERE id = :id`, { id: candidate });
+        expect(asJson(row.metadata).episode_id).toBeUndefined();
+      });
+
+      test('"not this episode\'s": no relief and no reward in the score; the money is the ledger\'s either way', async () => {
+        const ids = await stressCase();
+        const [candidate] = await candidateIds(ids);
+        await complete(ids, { [candidate]: NOT });
+        const twin = await stressCase();
+        const [twinCandidate] = await candidateIds(twin);
+        await complete(twin, { [twinCandidate]: THIS });
+        const no = await stored(ids);
+        const yes = await stored(twin);
+        expect(no.mood_inputs.milestones_hit).toBe(0);
+        expect(yes.mood_inputs.milestones_hit).toBe(1);
+        expect(no.financial_mood_delta - yes.financial_mood_delta).toBe(2);
+        expect(no.lala.stress).toBeGreaterThanOrEqual(yes.lala.stress);
+        for (const st of [no, yes]) {
+          expect(st.total_income).toBe(800);
+          expect(st.lala.coins).toBe(1000 + 800 - st.total_expenses + 200);
+        }
+        expect(no.total_expenses).toBe(yes.total_expenses);
+        expect(no.ledger).toEqual(yes.ledger);
+      });
+
+      test('a decision for a row that is not a candidate now is stale: refused, nothing written', async () => {
+        const ids = await stressCase();
+        const [candidate] = await candidateIds(ids);
+        const before = await everything(ids);
+        const stale = uuid();
+        const err = await refusal(complete(ids, { [candidate]: THIS, [stale]: THIS }));
+        expect(err).toMatchObject({ code: 'MILESTONE_DECISION_STALE', status: 409, unknown: [stale] });
+        expect(err.candidates.map((c) => c.tx_id)).toEqual([candidate]);
+        expect(await everything(ids)).toEqual(before);
+        // A direct completion has no candidates: a decision sent with it is stale too.
+        const direct = await seed(PAID, GOAL);
+        const untouched = await everything(direct);
+        expect((await refusal(complete(direct, { [stale]: NOT }))).code).toBe('MILESTONE_DECISION_STALE');
+        expect(await everything(direct)).toEqual(untouched);
+      });
+
+      test('a decision that cannot be read, or with no admin to record it against, is refused; nothing written', async () => {
+        const ids = await stressCase();
+        const [candidate] = await candidateIds(ids);
+        const before = await everything(ids);
+        for (const attempt of [
+          () => complete(ids, { [candidate]: 'probably' }),
+          () => complete(ids, [candidate]),
+          () => complete(ids, { [candidate]: THIS }, null),
+          () => complete(ids, { [candidate]: THIS }, { name: 'No id' }),
+        ]) {
+          expect(await refusal(attempt())).toMatchObject({ code: 'MILESTONE_DECISION_INVALID', status: 400 });
+        }
+        expect(await everything(ids)).toEqual(before);
+      });
+
+      test('a candidate left undecided is not guessed: still refused while it matters', async () => {
+        const ids = await stressCase();
+        const [candidate] = await candidateIds(ids);
+        const before = await everything(ids);
+        for (const left of [{}, { [candidate]: null }, { [candidate]: '' }]) {
+          const err = await refusal(complete(ids, left));
+          expect(err.code).toBe('MILESTONE_ATTRIBUTION_REQUIRED');
+          expect(err.undecided).toEqual([candidate]);
+        }
+        expect(await everything(ids)).toEqual(before);
+      });
+
+      test('through the API: 409 with the candidates, then the admin\'s decision completes it and is recorded as theirs', async () => {
+        const ids = await stressCase();
+        const post = (body) => request(app).post(`/api/v1/world/${ids.show}/episodes/${ids.ep}/complete`).set('Authorization', `Bearer ${token}`).send(body);
+        const refused = await post({});
+        expect(refused.status).toBe(409);
+        expect(refused.body).toMatchObject({ success: false, code: 'MILESTONE_ATTRIBUTION_REQUIRED', decisions: [THIS, NOT] });
+        expect(refused.body.candidates).toHaveLength(1);
+        const [{ tx_id: candidate }] = refused.body.candidates;
+        expect(refused.body.undecided).toEqual([candidate]);
+        expect((await post({ milestone_decisions: { [uuid()]: THIS } })).body.code).toBe('MILESTONE_DECISION_STALE');
+        expect((await audits(ids))).toEqual([]);
+
+        const done = await post({ milestone_decisions: { [candidate]: THIS } });
+        expect(done.status).toBe(200);
+        expect(done.body.data.milestone_attribution).toMatchObject({ status: 'DECIDED', candidates: [{ tx_id: candidate, decision: THIS, decided_by: { id: ADMIN.id } }] });
+        expect((await audits(ids)).map((r) => r.user_id)).toEqual([ADMIN.id]);
+        // Completed is completed: a later, different decision changes nothing.
+        const after = await everything(ids);
+        const again = await post({ milestone_decisions: { [candidate]: NOT } });
+        expect(again.status).toBe(200);
+        expect(again.body.data.already_completed).toBe(true);
+        expect(await everything(ids)).toEqual(after);
+      });
+    });
+
+    describe('the same either way: completes, and says UNVERIFIED', () => {
+      /** A big win (+3000) whose stress reaches its floor (-5) once one reward is counted; three older rewards in range. */
+      async function floorCase() {
+        const ids = await seed({ is_paid: true, payment_amount: 3000 });
+        const done = await finalize(ids);
+        const rows = [];
+        for (let i = 1; i <= 3; i += 1) rows.push(await olderReward(ids, { threshold: done.balance_before + i, amount: 10 * i }));
+        return { ids, rows };
+      }
+
+      test('several candidates, none decided, and they matter: refused, all of them named', async () => {
+        const { ids, rows } = await floorCase();
+        const before = await everything(ids);
+        const err = await refusal(complete(ids));
+        expect(err.code).toBe('MILESTONE_ATTRIBUTION_REQUIRED');
+        expect([...err.undecided].sort()).toEqual([...rows].sort());
+        expect(await everything(ids)).toEqual(before);
+      });
+
+      test('one decided, two left undecided that can no longer change anything: completes UNVERIFIED, with the decision recorded', async () => {
+        const { ids, rows } = await floorCase();
+        const [one, two, three] = rows;
+        // Deciding one is not this episode's leaves the other two mattering.
+        expect((await refusal(complete(ids, { [one]: NOT }))).undecided.sort()).toEqual([two, three].sort());
+
+        const result = await complete(ids, { [one]: THIS });
+        const st = await stored(ids);
+        expect(st.status).toBe('accepted');
+        expect(result.milestone_attribution.status).toBe('UNVERIFIED');
+        const byId = Object.fromEntries(result.milestone_attribution.candidates.map((c) => [c.tx_id, c]));
+        expect(byId[one]).toMatchObject({ decision: THIS, decided_by: { id: ADMIN.id, name: ADMIN.name } });
+        expect(byId[two]).toMatchObject({ decision: null, amount: 20, reason: 'in_range' });
+        expect(byId[three]).toMatchObject({ decision: null, amount: 30, reason: 'in_range' });
+        expect(byId[three].decided_by).toBeUndefined();
+        // The count is not said while any is unknown; it is not counted as none.
+        expect(st.mood_inputs.milestones_hit).toBeNull();
+        expect(st.mood_inputs.milestones_unknown).toBe(true);
+        expect(st.financial_mood_delta).toBe(-5);
+        expect(st.financial_score).toBe(7);
+        expect((await evaluation(ids)).milestone_attribution.status).toBe('UNVERIFIED');
+        expect((await historyContext(ids))[0].milestone_attribution.status).toBe('UNVERIFIED');
+        const log = await audits(ids);
+        expect(log).toHaveLength(1);
+        expect(asJson(log[0].changes).meta.status).toBe('UNVERIFIED');
+        expect(asJson(log[0].changes).meta.decisions.map((d) => d.tx_id)).toEqual([one]);
+        expect([...asJson(log[0].changes).meta.left_undecided].sort()).toEqual([two, three].sort());
+
+        // The same stored result however the other two would have been decided.
+        for (const [second, third] of [[THIS, THIS], [THIS, NOT], [NOT, THIS], [NOT, NOT]]) {
+          const twin = await floorCase();
+          await complete(twin.ids, { [twin.rows[0]]: THIS, [twin.rows[1]]: second, [twin.rows[2]]: third });
+          const other = await stored(twin.ids);
+          expect(other.financial_mood_delta).toBe(st.financial_mood_delta);
+          expect(other.financial_score).toBe(st.financial_score);
+          expect(other.lala).toEqual(st.lala);
+          expect([other.total_income, other.total_expenses]).toEqual([st.total_income, st.total_expenses]);
+        }
+      });
+
+      test('no decision at all is needed when nothing depends on it: UNVERIFIED, and no audit entry is invented', async () => {
+        // Three recorded rewards already hold the stress at its floor; the score is 7 either way.
+        const ids = await seed({ is_paid: true, payment_amount: 3000 });
+        const done = await finalize(ids);
+        for (let i = 0; i < 3; i += 1) await olderReward(ids, { threshold: 10 + i, amount: 1, episode: ids.ep });
+        const candidate = await olderReward(ids, { threshold: done.balance_after, amount: 40 });
+        const result = await complete(ids);
+        expect(result.milestone_attribution).toEqual({
+          status: 'UNVERIFIED',
+          candidates: [{ tx_id: candidate, goal_id: expect.any(String), label: 'Older goal', threshold: done.balance_after, amount: 40, reason: 'in_range', decision: null }],
+        });
+        const st = await stored(ids);
+        expect(st.status).toBe('accepted');
+        expect(st.mood_inputs.milestones_hit).toBeNull();
+        expect(await audits(ids)).toEqual([]);
+      });
+    });
+
+    describe('repeats and races keep their protections', () => {
+      test('two completions at once with the same decision: one completes, one finds it done, one audit entry', async () => {
+        const ids = await stressCase();
+        const [candidate] = await candidateIds(ids);
+        const results = await Promise.all([complete(ids, { [candidate]: THIS }), complete(ids, { [candidate]: THIS })]);
+        expect(results.filter((r) => r.already_completed)).toHaveLength(1);
+        expect(await audits(ids)).toHaveLength(1);
+        expect(await q(`SELECT id FROM character_state_history WHERE episode_id = :ep AND evaluation_id IS NOT NULL`, ids)).toHaveLength(1);
+        expect(await q(`SELECT id FROM financial_transactions WHERE show_id = :show AND category = 'milestone' AND deleted_at IS NULL`, ids)).toHaveLength(1);
+      });
+
+      test('two completions at once with different decisions: the first to take the lock is stored, whole; the other is discarded', async () => {
+        const ids = await stressCase();
+        const [candidate] = await candidateIds(ids);
+        const results = await Promise.all([complete(ids, { [candidate]: THIS }), complete(ids, { [candidate]: NOT })]);
+        const done = results.filter((r) => !r.already_completed);
+        expect(done).toHaveLength(1);
+        const kept = done[0].milestone_attribution.candidates[0].decision;
+        expect([THIS, NOT]).toContain(kept);
+        const log = await audits(ids);
+        expect(log).toHaveLength(1);
+        expect(asJson(log[0].changes).meta.decisions).toEqual([expect.objectContaining({ tx_id: candidate, decision: kept })]);
+        expect((await evaluation(ids)).milestone_attribution.candidates[0].decision).toBe(kept);
+        expect((await stored(ids)).mood_inputs.milestones_hit).toBe(kept === THIS ? 1 : 0);
+      });
+
+      test('a refused completion and a decided one at once: the decided one completes, and nothing is booked twice', async () => {
+        const ids = await stressCase();
+        const [candidate] = await candidateIds(ids);
+        const settled = await Promise.allSettled([complete(ids), complete(ids, { [candidate]: NOT })]);
+        expect(settled[1].status).toBe('fulfilled');
+        const st = await stored(ids);
+        expect(st.status).toBe('accepted');
+        expect(await audits(ids)).toHaveLength(1);
+        expect(st.ledger.filter((r) => r.category === 'event_payment')).toHaveLength(1);
+        expect(st.ledger.filter((r) => r.category === 'milestone')).toHaveLength(1);
+      });
+
+      test('after a completion, Finalize and Complete again change nothing', async () => {
+        const ids = await stressCase();
+        const [candidate] = await candidateIds(ids);
+        await complete(ids, { [candidate]: THIS });
+        const after = await everything(ids);
+        expect((await finalize(ids)).already_finalized).toBe(true);
+        expect((await complete(ids, { [candidate]: NOT })).already_completed).toBe(true);
+        expect((await complete(ids)).already_completed).toBe(true);
+        expect(await everything(ids)).toEqual(after);
+      });
     });
   });
 });

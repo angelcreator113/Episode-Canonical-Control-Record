@@ -371,12 +371,20 @@ const NOT_WARDROBE_SPEND_ROW =
  *                    reward, as a fresh finalize reports it)
  *   milestones_triggered    the rewards recorded against this episode
  *                           (metadata.episode_id)
- *   milestones_attribution  'recorded', or 'unknown' when a reward booked
- *                           before the episode was recorded on the row could
- *                           be this episode's (its threshold lies inside this
- *                           finalize's balance movement). Unknown is said,
- *                           never guessed from a timestamp and never counted
- *                           as none.
+ *   milestone_candidates    the rewards booked before rewards recorded their
+ *                           episode that could be this episode's: every one
+ *                           this finalize could have paid, by the rule that
+ *                           pays them (checkMilestones: the balance rose, and
+ *                           old balance < threshold <= new balance). A reward
+ *                           whose row has no threshold, and every unrecorded
+ *                           reward when this finalize's balance movement
+ *                           cannot be rebuilt from its rows, cannot be ruled
+ *                           out and is a candidate too. The set errs wide:
+ *                           a candidate too many asks a question, a candidate
+ *                           too few would store a wrong answer.
+ *   milestones_attribution  'recorded', or 'unknown' when there is a
+ *                           candidate. Unknown is said, never guessed from a
+ *                           timestamp and never counted as none.
  */
 async function bookedFinalizeSummary(sequelize, { episodeId, showId, event, balance }) {
   const rows = await sequelize.query(
@@ -398,23 +406,46 @@ async function bookedFinalizeSummary(sequelize, { episodeId, showId, event, bala
   };
   const befores = rows.filter((r) => r.balance_before !== null).map((r) => num(r.balance_before));
   const afters = rows.filter((r) => r.balance_after !== null).map((r) => num(r.balance_after));
-  const [chainStart] = unmatched(befores, afters);
-  const [chainEnd] = unmatched(afters, befores);
+  const starts = unmatched(befores, afters);
+  const ends = unmatched(afters, befores);
+  const [chainStart] = starts;
+  const [chainEnd] = ends;
   const balanceBefore = chainStart !== undefined ? chainStart : (befores.length ? befores[0] : balance);
   const balanceAfter = chainEnd !== undefined ? chainEnd : (afters.length ? afters[afters.length - 1] : balance);
+  // Is that movement really known? No rows: this finalize moved nothing.
+  // Otherwise every row must carry both balances and they must chain into
+  // one start and one end (or never move at all).
+  const complete = befores.length === rows.length && afters.length === rows.length;
+  const still = complete && new Set([...befores, ...afters]).size === 1;
+  const rangeKnown = rows.length === 0 || (complete && ((starts.length === 1 && ends.length === 1) || still));
 
   const rewards = await sequelize.query(
     `SELECT id, amount, source_name, metadata FROM financial_transactions
-      WHERE show_id = :showId AND category = 'milestone' AND status = 'executed' AND deleted_at IS NULL`,
+      WHERE show_id = :showId AND category = 'milestone' AND status = 'executed' AND deleted_at IS NULL
+      ORDER BY created_at, id`,
     { replacements: { showId }, type: sequelize.QueryTypes.SELECT }
   );
   const meta = (r) => (typeof r.metadata === 'string' ? JSON.parse(r.metadata) : (r.metadata || {}));
   const recorded = rewards.filter((r) => meta(r).episode_id === episodeId);
-  const couldBeThis = rewards.filter((r) => {
+  const candidates = [];
+  for (const r of rewards) {
     const m = meta(r);
-    const threshold = Number(m.threshold);
-    return !m.episode_id && Number.isFinite(threshold) && threshold > balanceBefore && threshold <= balanceAfter;
-  });
+    if (m.episode_id) continue; // recorded: this episode's or another's
+    const threshold = thresholdOf(m.threshold);
+    let reason = null;
+    if (!rangeKnown) reason = 'range_unknown';
+    // checkMilestones pays nothing unless the balance rose.
+    else if (balanceAfter <= balanceBefore) reason = null;
+    else if (threshold === null) reason = 'no_threshold';
+    // checkMilestones: old balance < threshold <= new balance.
+    else if (balanceBefore < threshold && threshold <= balanceAfter) reason = 'in_range';
+    if (reason) {
+      candidates.push({
+        tx_id: r.id, goal_id: m.goal_id ?? null, label: r.source_name || null,
+        threshold, amount: num(r.amount), reason,
+      });
+    }
+  }
   const flags = normalizePaidFreeFlags(event || {});
   return {
     summary: {
@@ -431,8 +462,17 @@ async function bookedFinalizeSummary(sequelize, { episodeId, showId, event, bala
       goal: { id: meta(r).goal_id, label: r.source_name, threshold: meta(r).threshold, reward_coins: num(r.amount) },
       payout_tx: { id: r.id, amount: num(r.amount) },
     })),
-    milestones_attribution: couldBeThis.length ? 'unknown' : 'recorded',
+    milestone_candidates: candidates,
+    milestones_attribution: candidates.length ? 'unknown' : 'recorded',
   };
+}
+
+// A reward row's recorded threshold, or null when the row carries none that
+// can be compared (missing, empty, not a number).
+function thresholdOf(value) {
+  if (value === null || value === undefined || value === '' || typeof value === 'boolean') return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
 }
 
 /**

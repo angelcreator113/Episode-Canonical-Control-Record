@@ -39,7 +39,11 @@ router.post('/world/:showId/episodes/:episodeId/complete', requireAuth, authoriz
     const models = req.app?.get?.('models') || require('../../models');
     const { completeEpisode } = require('../../services/episodeCompletionService');
 
-    const result = await completeEpisode(episodeId, showId, models.sequelize);
+    // Milestone attribution (Evoni, 2026-11-13): an admin's decisions on
+    // rewards whose episode the ledger does not say, recorded against them.
+    const result = await completeEpisode(episodeId, showId, models.sequelize, {
+      milestoneDecisions: req.body?.milestone_decisions ?? null, decidedBy: req.user,
+    });
 
     return res.json({
       success: true,
@@ -52,6 +56,8 @@ router.post('/world/:showId/episodes/:episodeId/complete', requireAuth, authoriz
     console.error('[CompleteEpisode] Error:', err);
     // Task #2378: nothing books while the event's terms are reopened.
     if (err instanceof TermsReopenedError) return res.status(err.status).json(termsReopenedBody(err));
+    // A reward whose episode is not known and matters: nothing was written; an admin decides.
+    if (err instanceof require('../../services/episodeCompletionService').MilestoneAttributionError) return res.status(err.status).json(err.toJSON());
     // A second event with commitments that second events do not carry yet: nothing was written.
     if (require('../../services/episodeSecondaryEvents').isSecondaryEventError(err)) return res.status(err.status).json(err.toJSON());
     // A two-parter's Part 1 is "to be continued": the event completes with Part 2 (seasonSpecials).

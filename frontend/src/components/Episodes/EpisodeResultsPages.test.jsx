@@ -31,6 +31,38 @@ beforeEach(() => {
 });
 
 describe('Results → Evaluation', () => {
+  test('milestone attribution: nothing is shown when the completion had none to record', () => {
+    renderIn(<EpisodeResultsEvaluation episode={{ id: 'ep-1', evaluation_json: JSON.stringify(EVAL) }} />);
+    expect(screen.queryByTestId('results-milestone-attribution')).toBeNull();
+  });
+
+  test.each([[false], [true]])('milestone attribution as stored (embedded: %s): decided by an admin, with the reward, the decision, who and when', (embedded) => {
+    const attribution = { status: 'DECIDED', candidates: [
+      { tx_id: 'tx-1', goal_id: 'rising-star', label: 'Rising Star', threshold: 1500, amount: 200, reason: 'in_range', decision: 'not_this_episode', decided_by: { id: 'u1', name: 'Evoni' }, decided_at: '2026-11-13T18:00:00.000Z' },
+      { tx_id: 'tx-2', goal_id: 'old', label: null, threshold: null, amount: 50, reason: 'range_unknown', decision: 'this_episode', decided_by: { id: 'u1', name: null }, decided_at: '2026-11-13T18:00:00.000Z' },
+    ] };
+    renderIn(<EpisodeResultsEvaluation embedded={embedded} episode={{ id: 'ep-1', evaluation_json: JSON.stringify({ ...EVAL, milestone_attribution: attribution }) }} />);
+    const block = screen.getByTestId('results-milestone-attribution');
+    expect(within(block).getByTestId('results-milestone-status').textContent).toBe('Decided by an admin');
+    const first = within(block).getByTestId('results-milestone-row-tx-1');
+    expect(first.textContent).toContain('Rising Star · 200 coins · goal at 1,500');
+    expect(first.textContent).toContain('Not this episode\'s');
+    expect(first.textContent).toContain('Evoni');
+    const second = within(block).getByTestId('results-milestone-row-tx-2');
+    expect(second.textContent).toContain('old · 50 coins · this episode\'s balance movement could not be rebuilt');
+    expect(second.textContent).toContain('This episode\'s');
+    expect(second.textContent).toContain('u1');
+  });
+
+  test('milestone attribution left unverified says so, and that it was not guessed', () => {
+    const attribution = { status: 'UNVERIFIED', candidates: [{ tx_id: 'tx-1', goal_id: 'g', label: 'Rising Star', threshold: 1500, amount: 200, reason: 'in_range', decision: null }] };
+    renderIn(<EpisodeResultsEvaluation episode={{ id: 'ep-1', evaluation_json: JSON.stringify({ ...EVAL, milestone_attribution: attribution }) }} />);
+    const block = screen.getByTestId('results-milestone-attribution');
+    expect(within(block).getByTestId('results-milestone-status').textContent).toBe('Unverified');
+    expect(block.textContent).toContain('it was not guessed');
+    expect(within(block).getByTestId('results-milestone-row-tx-1').textContent).toContain('Undecided');
+  });
+
   test('not evaluated: says so', () => {
     renderIn(<EpisodeResultsEvaluation episode={{ id: 'ep-1' }} />);
     expect(screen.getByTestId('results-evaluation-empty').textContent).toContain('Not evaluated yet');

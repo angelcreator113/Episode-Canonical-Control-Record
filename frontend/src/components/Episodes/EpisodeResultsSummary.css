@@ -128,3 +128,17 @@
 .ers-refusal-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
 .ers-refusal-text { margin: 0; font-size: 14px; overflow-wrap: anywhere; }
 .ers-refusal-close { display: inline-flex; align-items: center; justify-content: center; flex: none; min-width: 44px; min-height: 44px; border: none; border-radius: 8px; background: none; color: inherit; cursor: pointer; }
+
+/* Milestone attribution (Evoni, 2026-11-13): the decision form inside a
+   refusal, and the stored record on the evaluation. */
+.ers-milestones { display: grid; gap: 10px; min-width: 0; margin-top: 4px; }
+.ers-milestone-list { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.ers-milestone { display: grid; gap: 4px; min-width: 0; }
+.ers-milestone-name { font-size: 14px; overflow-wrap: anywhere; }
+.ers-milestone-select { width: 100%; max-width: 320px; min-height: 44px; padding: 8px 10px; border: 1px solid currentColor; border-radius: 8px; background: var(--lala-parchment); color: var(--lala-ink); font: inherit; }
+.ers-milestone-select:focus-visible { outline: 3px solid var(--lala-lavender-text); outline-offset: 2px; }
+.ers-attribution { margin-top: 16px; }
+.ers-attribution-status { margin: 0 0 4px; font-weight: 600; }
+.ers-attribution-status.is-unverified { color: var(--warning-text); }
+.ers-attribution-rows li { align-items: flex-start; gap: 12px; }
+.ers-attribution-rows strong { flex: none; text-align: right; }
