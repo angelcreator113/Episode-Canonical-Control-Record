@@ -109,6 +109,57 @@ describe('OfferDecisionDialog', () => {
     expect(send).toHaveBeenNthCalledWith(2, decision, { offer_decision_opportunity_ids: ['opp-1'] });
   });
 
+  // A decision is an admin's: someone who cannot make it is told so and offered no choice.
+  test('someone who cannot decide sees why, and no Accept, Negotiate, Decline, Continue or reason field', async () => {
+    const forEditor = required();
+    forEditor.response.data.can_decide = false;
+    const send = vi.fn().mockRejectedValueOnce(forEditor);
+    const onDone = vi.fn();
+    render(<Harness send={send} onDone={onDone} />);
+    await act(async () => { fireEvent.click(screen.getByText('Start')); });
+    expect(screen.getByText('This offer needs an admin')).toBeTruthy();
+    expect(screen.getByTestId('offer-decision-admin-only').textContent).toMatch(/only an admin can accept it, negotiate, decline it or start the episode without it/);
+    expect(screen.getByTestId('offer-decision-admin-only').textContent).toMatch(/The episode was not started/);
+    for (const d of ['accept', 'negotiate', 'decline', 'proceed_unaccepted']) expect(screen.queryByTestId(`offer-decision-${d}`)).toBeNull();
+    expect(screen.queryByTestId('offer-decision-reason')).toBeNull();
+    // The offer is named, without its payment.
+    expect(screen.getByTestId('offer-decision-offer').textContent).toContain('Spring Capsule');
+    expect(screen.getByTestId('offer-decision-offer').textContent).not.toContain('1,200');
+    // Close is the only action, focused, and starts nothing.
+    const close = screen.getByTestId('offer-decision-cancel');
+    expect(close.textContent).toBe('Close');
+    expect(document.activeElement).toBe(close);
+    await act(async () => { fireEvent.click(close); });
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(onDone.mock.calls[0][0].err.offerDecisionCancelled).toBe(true);
+    expect(screen.queryByTestId('offer-decision')).toBeNull();
+  });
+
+  test('an admin (can_decide true, or an answer that does not say) gets the choices', async () => {
+    for (const flag of [true, undefined]) {
+      const asked = required();
+      if (flag !== undefined) asked.response.data.can_decide = flag;
+      const send = vi.fn().mockRejectedValueOnce(asked);
+      const { unmount } = render(<Harness send={send} onDone={vi.fn()} />);
+      await act(async () => { fireEvent.click(screen.getByText('Start')); });
+      expect(screen.getByTestId('offer-decision-accept')).toBeTruthy();
+      expect(screen.queryByTestId('offer-decision-admin-only')).toBeNull();
+      unmount();
+    }
+  });
+
+  test('what was typed stays when a reason-less Decline is refused, and the field comes before the choices', async () => {
+    const send = vi.fn().mockRejectedValueOnce(required());
+    render(<Harness send={send} onDone={vi.fn()} />);
+    await act(async () => { fireEvent.click(screen.getByText('Start')); });
+    const reason = screen.getByTestId('offer-decision-reason');
+    expect(reason.compareDocumentPosition(screen.getByTestId('offer-decision-accept')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    fireEvent.change(reason, { target: { value: '  ' } });
+    await act(async () => { fireEvent.click(screen.getByTestId('offer-decision-decline')); });
+    expect(reason.value).toBe('  ');
+    expect(screen.getByTestId('offer-decision')).toBeTruthy();
+  });
+
   test('every offer the server listed is named in the decision', async () => {
     const two = required();
     two.response.data.opportunities = [two.response.data.opportunity, { id: 'opp-2', name: 'Second', status: 'considering', payment_amount: 0 }];

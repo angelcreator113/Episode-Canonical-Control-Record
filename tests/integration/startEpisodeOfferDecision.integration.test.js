@@ -17,6 +17,10 @@
  */
 jest.unmock('uuid');
 
+// Start Episode is an AI route (aiRateLimiter: 30 calls in five minutes per
+// address by default); this file starts more episodes than that.
+process.env.AI_RATE_LIMIT_PER_IP = '100000';
+
 const request = require('supertest');
 const crypto = require('crypto');
 const app = require('../../src/app');
@@ -40,8 +44,12 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
   let token;
   let adminToken;
   const ADMIN_ID = 'test-admin-offer-decision';
-  const auth = (r) => r.set('Authorization', `Bearer ${token}`);
-  const asAdmin = (r) => r.set('Authorization', `Bearer ${adminToken}`);
+  // Each test asks from its own address, so the app's per-address limits
+  // (writes a minute, AI calls in five) count each test apart.
+  let ip = 0;
+  const from = (r) => r.set('X-Forwarded-For', `10.78.${ip}.1`);
+  const auth = (r) => from(r).set('Authorization', `Bearer ${token}`);
+  const asAdmin = (r) => from(r).set('Authorization', `Bearer ${adminToken}`);
 
   const makeEvent = async (name, opportunityId = null) => {
     const id = uuid();
@@ -89,6 +97,7 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
     await models.CharacterState.create({ show_id: show, character_key: 'lala', coins: 1000, reputation: 3 });
   });
   beforeEach(() => {
+    ip += 1;
     jest.spyOn(console, 'log').mockImplementation(() => {});
     jest.spyOn(console, 'warn').mockImplementation(() => {});
   });
@@ -157,6 +166,12 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
     const steps = row.status_history.slice(1);
     expect(steps.map((h) => [h.from, h.status])).toEqual([['offered', 'considering'], ['considering', 'negotiating'], ['negotiating', 'booked']]);
     for (const h of steps) expect(h).toMatchObject({ decision: 'accept', event_id: event, episode_id: episodeId });
+    // One decision: every entry says what was decided, and the stages only
+    // passed on the way say so (review of 2026-11-13). Booked, the status
+    // reached, is not one of them.
+    for (const h of steps) expect(h.decided).toEqual({ from: 'offered', to: 'booked' });
+    expect(steps.map((h) => h.passed_through === true)).toEqual([true, true, false]);
+    expect(steps[2]).not.toHaveProperty('passed_through');
   });
 
   it('negotiate: walked to negotiating; one already negotiating stays there with a note', async () => {
@@ -343,8 +358,50 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
     expect((await decide(event, [opp], 'accept')).status).toBe(201);
     const entries = await auditOf(opp);
     expect(entries).toHaveLength(1);
-    expect(entries[0].changes.meta).toMatchObject({ from_status: 'offered', to_status: 'booked', decision: 'accept' });
+    expect(entries[0].changes.meta).toMatchObject({ from_status: 'offered', to_status: 'booked', decision: 'accept', passed_through: ['considering', 'negotiating'] });
     for (const h of (await oppRow(opp)).status_history.slice(1)) expect(h).toMatchObject({ by: { id: ADMIN_ID }, route: 'start_decision' });
+  });
+
+  it('a decision of one step, or of none, is not marked as a walk', async () => {
+    const one = await scheduled('One step', 'negotiating');
+    expect((await decide(one.event, [one.opp], 'accept')).status).toBe(201);
+    const last = (await oppRow(one.opp)).status_history.slice(-1)[0];
+    expect(last).toMatchObject({ status: 'booked', from: 'negotiating' });
+    expect(last).not.toHaveProperty('decided');
+    expect(last).not.toHaveProperty('passed_through');
+    expect((await auditOf(one.opp))[0].changes.meta).not.toHaveProperty('passed_through');
+
+    const two = await scheduled('Two steps', 'considering');
+    expect((await decide(two.event, [two.opp], 'accept')).status).toBe(201);
+    const steps = (await oppRow(two.opp)).status_history.slice(1);
+    expect(steps.map((h) => [h.status, h.passed_through === true])).toEqual([['negotiating', true], ['booked', false]]);
+    expect((await auditOf(two.opp))[0].changes.meta.passed_through).toEqual(['negotiating']);
+
+    const none = await scheduled('No step', 'offered');
+    expect((await decide(none.event, [none.opp], 'proceed_unaccepted')).status).toBe(201);
+    const noted = (await oppRow(none.opp)).status_history.slice(-1)[0];
+    expect(noted).not.toHaveProperty('decided');
+    expect(noted).not.toHaveProperty('passed_through');
+  });
+
+  it('Undo after an accepted walk still goes back one status at a time', async () => {
+    const { opp, event } = await scheduled('Walk then undo', 'offered');
+    expect((await decide(event, [opp], 'accept')).status).toBe(201);
+    const undo = await asAdmin(request(app).post(`/api/v1/opportunities/${show}/${opp}/undo`)).send({ from_status: 'booked', reason: 'Not signed after all' });
+    expect(undo.status).toBe(200);
+    expect(undo.body.undone).toEqual({ from: 'booked', to: 'negotiating' });
+  });
+
+  it('the question says whether the person asking can answer it', async () => {
+    const { opp, event } = await scheduled('Who can answer', 'offered');
+    const editor = await start(event);
+    expect(editor.status).toBe(409);
+    expect(editor.body).toMatchObject({ code: 'OFFER_DECISION_REQUIRED', can_decide: false, opportunity: { id: opp } });
+    expect(editor.body.error).toMatch(/An admin decides/);
+    const admin = await asAdmin(request(app).post(`/api/v1/world/${show}/events/${event}/generate-episode`)).send({ draft_script: false });
+    expect(admin.status).toBe(409);
+    expect(admin.body).toMatchObject({ code: 'OFFER_DECISION_REQUIRED', can_decide: true });
+    expect(await episodesOf(event)).toHaveLength(0);
   });
 
   it('the entry that cannot be written takes the decision and the episode with it', async () => {

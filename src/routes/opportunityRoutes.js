@@ -138,7 +138,9 @@ router.get('/opportunities/:showId', requireAuth, async (req, res) => {
       if (status) where.status = status;
       if (type) where.opportunity_type = type;
       const opps = (await models.Opportunity.findAll({ where, order: [['created_at', 'DESC']] })).map(o => forReader(req, o.toJSON()));
-      return res.json({ success: true, opportunities: await withBeat14Episodes(models, opps) });
+      // can_decide: whether this person can move an offer (every step is an
+      // admin's), so the page offers the steps only to someone who can take them.
+      return res.json({ success: true, opportunities: await withBeat14Episodes(models, opps), can_decide: userInGroup(req.user, 'ADMIN') });
     }
 
     // Fallback raw SQL
@@ -146,7 +148,7 @@ router.get('/opportunities/:showId', requireAuth, async (req, res) => {
       'SELECT * FROM opportunities WHERE show_id = :showId AND deleted_at IS NULL ORDER BY created_at DESC',
       { replacements: { showId } }
     );
-    return res.json({ success: true, opportunities: (opps || []).map((o) => forReader(req, o)) });
+    return res.json({ success: true, opportunities: (opps || []).map((o) => forReader(req, o)), can_decide: userInGroup(req.user, 'ADMIN') });
   } catch (err) {
     console.error('[Opportunities] list failed:', err.message);
     if (err.message?.includes('does not exist')) return res.json({ success: true, opportunities: [] });

@@ -108,14 +108,19 @@ describe('DailyUpdate', () => {
     fireEvent.click(within(screen.getByTestId('du-item-s-1')).getByRole('button', { name: 'Keep' }));
     await waitFor(() => expect(api.put).toHaveBeenCalledWith('/api/v1/cast/characters/c-1/secrets/s-1', { status: 'confirmed' }));
 
-    // Declining is recorded with its reason (A1, 2026-11-13): without one nothing is sent.
-    const prompt = vi.spyOn(window, 'prompt').mockReturnValueOnce('   ').mockReturnValue('  Not a fit  ');
+    // Declining is recorded with its reason (A1, 2026-11-13), asked for in the page: without one nothing is sent.
+    const prompt = vi.spyOn(window, 'prompt');
     fireEvent.click(within(screen.getByTestId('du-item-o-1')).getByRole('button', { name: /Decline/ }));
-    expect(await within(screen.getByTestId('du-item-o-1')).findByText(/a reason is needed/)).toBeTruthy();
+    fireEvent.click(await screen.findByTestId('reason-dialog-confirm'));
+    expect(screen.getByTestId('reason-dialog-missing')).toBeTruthy();
+    fireEvent.click(screen.getByTestId('reason-dialog-cancel'));
+    expect(await within(screen.getByTestId('du-item-o-1')).findByText('Not declined: no reason was given.')).toBeTruthy();
     expect(api.post).not.toHaveBeenCalledWith('/api/v1/opportunities/show-1/o-1/advance', expect.anything());
     fireEvent.click(within(screen.getByTestId('du-item-o-1')).getByRole('button', { name: /Decline/ }));
+    fireEvent.change(await screen.findByTestId('reason-dialog-field'), { target: { value: '  Not a fit  ' } });
+    fireEvent.click(screen.getByTestId('reason-dialog-confirm'));
     await waitFor(() => expect(api.post).toHaveBeenCalledWith('/api/v1/opportunities/show-1/o-1/advance', { to_status: 'declined', reason: 'Not a fit' }));
-    prompt.mockRestore();
+    expect(prompt).not.toHaveBeenCalled();
   });
 
   test('findings are read here and fixed on the character', async () => {

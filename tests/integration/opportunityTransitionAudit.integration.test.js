@@ -340,11 +340,15 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
       await advance(opp, { to_status: 'declined', reason: 'Kept between admins' });
       const list = (as) => as(request(app).get(`/api/v1/opportunities/${show}`));
 
-      const forAdmin = (await list(asAdmin)).body.opportunities.find((o) => o.id === opp);
+      const adminList = await list(asAdmin);
+      // The list says whether this person can move an offer, so the page offers the steps only then.
+      expect(adminList.body.can_decide).toBe(true);
+      const forAdmin = adminList.body.opportunities.find((o) => o.id === opp);
       expect(forAdmin.status_history.slice(-1)[0]).toMatchObject({ reason: 'Kept between admins', by: { id: ADMIN_ID } });
 
       const res = await list(asEditor);
       expect(res.status).toBe(200);
+      expect(res.body.can_decide).toBe(false);
       const forEditor = res.body.opportunities.find((o) => o.id === opp);
       expect(forEditor.status).toBe('declined');
       expect(forEditor.status_history.slice(-1)[0]).toEqual(expect.objectContaining({ status: 'declined', from: 'offered', route: 'advance' }));

@@ -56,6 +56,7 @@ describe('assertOfferDecision', () => {
       code: 'OFFER_DECISION_REQUIRED',
       error: err.message,
       decisions: OFFER_DECISIONS,
+      can_decide: false,
       opportunity: { id: 'opp-1', name: 'Spring Capsule', status: 'offered', brand: 'Maison', payment_amount: 1200, payment_type: 'flat_fee' },
       opportunities: [expect.objectContaining({ id: 'opp-1' })],
     });
@@ -82,8 +83,22 @@ describe('assertOfferDecision: who, why and which offers (A1, 2026-11-13)', () =
       }
     }
   });
-  it('no decision is still the question, whoever asks', () => {
-    expect(() => assertOfferDecision([offer('offered')], undefined, {})).toThrow(expect.objectContaining({ status: 409, code: 'OFFER_DECISION_REQUIRED' }));
+  it('no decision is still the question, whoever asks; it says whether they can answer it', () => {
+    const asked = (by) => { try { assertOfferDecision([offer('offered')], undefined, by); } catch (e) { return e; } return null; };
+    const anyone = asked({});
+    expect(anyone).toMatchObject({ status: 409, code: 'OFFER_DECISION_REQUIRED' });
+    expect(offerDecisionBody(anyone).can_decide).toBe(false);
+    expect(anyone.message).toMatch(/An admin decides/);
+    expect(anyone.message).not.toMatch(/Choose whether/);
+    expect(offerDecisionBody(asked({ actor: { id: 'u-1', isAdmin: false } })).can_decide).toBe(false);
+    const adminAsked = asked(admin());
+    expect(adminAsked).toMatchObject({ status: 409, code: 'OFFER_DECISION_REQUIRED' });
+    expect(offerDecisionBody(adminAsked).can_decide).toBe(true);
+    expect(adminAsked.message).toMatch(/Choose whether to accept it, negotiate, decline it, or start the episode without accepting it/);
+    // A refused decision says the same.
+    let refused;
+    try { assertOfferDecision([offer('offered')], 'accept', {}); } catch (e) { refused = e; }
+    expect(offerDecisionBody(refused)).toMatchObject({ code: 'OFFER_DECISION_FORBIDDEN', can_decide: false });
   });
   it('the offers named must be exactly the open ones, in any order', () => {
     const two = [offer('offered'), { ...offer('considering'), id: 'opp-2' }];

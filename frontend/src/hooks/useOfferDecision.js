@@ -40,7 +40,9 @@ export default function useOfferDecision() {
         const offers = Array.isArray(data.opportunities) && data.opportunities.length
           ? data.opportunities : (data.opportunity ? [data.opportunity] : []);
         waiting.current = { send, resolve, reject, offerIds: offers.map((o) => o.id) };
-        setPending({ offer: data.opportunity || null, offers, message: data.error || '' });
+        // can_decide false: the offer needs an admin (the server refuses a
+        // decision from anyone else), so the dialog explains and offers no choice.
+        setPending({ offer: data.opportunity || null, offers, message: data.error || '', canDecide: data.can_decide !== false });
       });
     }
   }, []);

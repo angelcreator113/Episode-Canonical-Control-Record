@@ -55,13 +55,15 @@ function historyFields({ actor, reason, route }) {
  * transaction. Rejects when it cannot be written, so the transition rolls
  * back with it.
  */
-async function logTransition(transaction, { actor, opportunityId, showId = null, eventId = null, episodeId = null, from, to, route, reason = null, decision = null }) {
+async function logTransition(transaction, { actor, opportunityId, showId = null, eventId = null, episodeId = null, from, to, route, reason = null, decision = null, passedThrough = [] }) {
   const { logger } = require('../middleware/auditLog');
   return logger.logActionInTransaction(transaction, actorId(actor), AUDIT_ACTION, AUDIT_RESOURCE, opportunityId, {
     route,
     from_status: from,
     to_status: to,
     ...(decision ? { decision } : {}),
+    // Stages one decision passed on the way (accept at Start): not steps anyone took one by one.
+    ...(Array.isArray(passedThrough) && passedThrough.length ? { passed_through: passedThrough } : {}),
     reason: reason || null,
     show_id: showId,
     event_id: eventId,

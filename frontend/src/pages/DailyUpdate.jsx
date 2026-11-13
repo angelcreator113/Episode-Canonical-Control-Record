@@ -23,7 +23,7 @@
  * Reads GET /api/v1/daily-update (services/dailyUpdate). Styles: DailyUpdate.css.
  */
 import { useCallback, useEffect, useState } from 'react';
-import { askReason } from '../lib/transitionReason';
+import useReasonDialog from '../components/ReasonDialog';
 import { Link } from 'react-router-dom';
 import {
   Sun, RefreshCw, Send, Trash2, Check, X, Undo2, Clock, PauseCircle, CalendarDays, Sparkles,
@@ -89,9 +89,9 @@ export const DECIDE = Object.freeze({
     // Declining is recorded with its reason (A1); without one nothing is sent.
     no: {
       label: 'Decline', done: 'Declined',
-      call: async (it) => {
-        const reason = askReason('Why is this offer declined? The reason is kept with the change.');
-        if (!reason) throw Object.assign(new Error('Not declined: a reason is needed.'), { userMessage: 'Not declined: a reason is needed.' });
+      call: async (it, { askReason }) => {
+        const reason = await askReason({ title: `Decline ${it.title || it.name || 'this offer'}?`, question: 'Why is it declined?', confirm: 'Decline' });
+        if (!reason) throw Object.assign(new Error('Not declined: no reason was given.'), { userMessage: 'Not declined: no reason was given.' });
         return api.post(`/api/v1/opportunities/${it.show_id}/${it.id}/advance`, { to_status: 'declined', reason });
       },
     },
@@ -148,11 +148,13 @@ function WaitingGroup({ group }) {
   const [done, setDone] = useState({}); // id -> { text, undo?, error? }
   const [busy, setBusy] = useState(null);
   const [allNote, setAllNote] = useState(null);
+  // Declining a deal is recorded with its reason (A1): asked for in the page.
+  const reasonDialog = useReasonDialog();
   const open = group.items.filter((it) => !done[it.id] || done[it.id].error);
 
   const decide = async (item, verb) => {
     try {
-      await verb.call(item);
+      await verb.call(item, { askReason: reasonDialog.ask });
       setDone((d) => ({ ...d, [item.id]: { text: verb.done, undo: verb.undo || null } }));
       return true;
     } catch (err) {
@@ -199,6 +201,7 @@ function WaitingGroup({ group }) {
         </span>
       </header>
       {allNote && <p className="du-muted" role="status">{allNote}</p>}
+      {reasonDialog.dialog}
       {group.items.length === 0 ? (
         <p className="du-muted">Nothing waiting.</p>
       ) : (

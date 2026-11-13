@@ -9,6 +9,11 @@
  * Declining and continuing without accepting need a reason (A1,
  * 2026-11-13): the choice is not sent without one, and the dialog says so.
  * The reason is kept with the decision, who made it and when.
+ *
+ * A decision is an admin's. When the person asking cannot make it
+ * (`pending.canDecide` false, from the server's own answer), the dialog
+ * says an admin decides and shows no choice at all: only Close, which
+ * starts nothing.
  */
 import { useEffect, useRef, useState } from 'react';
 import { Handshake, X } from 'lucide-react';
@@ -39,6 +44,31 @@ export default function OfferDecisionDialog({ pending, busy = false, onChoose, o
   useEffect(() => { if (pending) firstRef.current?.focus(); setReason(''); setMissing(null); }, [pending]);
   if (!pending) return null;
   const { offer } = pending;
+  if (pending.canDecide === false) {
+    return (
+      <div className="odd-backdrop" onClick={() => onCancel?.()}>
+        <div className="odd-dialog" role="dialog" aria-modal="true" aria-labelledby="odd-title" data-testid="offer-decision"
+          onClick={(e) => e.stopPropagation()}
+          onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); onCancel?.(); } }}>
+          <div className="odd-header">
+            <h3 id="odd-title"><Handshake size={15} aria-hidden="true" /> This offer needs an admin</h3>
+            <button type="button" className="odd-close" onClick={onCancel} aria-label="Close"><X size={16} /></button>
+          </div>
+          <div className="odd-offer" data-testid="offer-decision-offer">
+            <strong>{offer?.name || 'This event\'s offer'}</strong>
+            <span>{STATUS_LABELS[offer?.status] || offer?.status || ''}</span>
+          </div>
+          <p className="odd-ask" data-testid="offer-decision-admin-only">
+            The offer is not accepted yet, and only an admin can accept it, negotiate, decline it or start the episode without it.
+            The episode was not started. Ask an admin to start it.
+          </p>
+          <div className="odd-actions">
+            <button ref={firstRef} type="button" className="odd-cancel" onClick={onCancel} data-testid="offer-decision-cancel">Close</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
   const choose = (decision) => {
     const why = cleanReason(reason);
     if (REASON_REQUIRED_DECISIONS.includes(decision) && !why) {
@@ -62,15 +92,6 @@ export default function OfferDecisionDialog({ pending, busy = false, onChoose, o
           <span>{STATUS_LABELS[offer?.status] || offer?.status || ''} · {paymentText(offer)}</span>
         </div>
         <p className="odd-ask">Decide what happens to it before the episode starts.</p>
-        <div className="odd-choices">
-          {CHOICES.map((c, i) => (
-            <button key={c.decision} ref={i === 0 ? firstRef : null} type="button" className="odd-choice"
-              onClick={() => choose(c.decision)} disabled={busy} data-testid={`offer-decision-${c.decision}`}>
-              <strong>{c.label}</strong>
-              <span>{c.help}</span>
-            </button>
-          ))}
-        </div>
         <label className="odd-reason">
           <span>Reason (needed to decline or to continue without accepting)</span>
           <textarea ref={reasonRef} value={reason} maxLength={REASON_MAX} rows={2} disabled={busy}
@@ -83,6 +104,15 @@ export default function OfferDecisionDialog({ pending, busy = false, onChoose, o
             {missing === 'decline' ? 'Say why the offer is declined, then choose Decline again.' : 'Say why the episode starts without accepting it, then choose again.'}
           </p>
         )}
+        <div className="odd-choices">
+          {CHOICES.map((c, i) => (
+            <button key={c.decision} ref={i === 0 ? firstRef : null} type="button" className="odd-choice"
+              onClick={() => choose(c.decision)} disabled={busy} data-testid={`offer-decision-${c.decision}`}>
+              <strong>{c.label}</strong>
+              <span>{c.help}</span>
+            </button>
+          ))}
+        </div>
         <div className="odd-actions">
           <button type="button" className="odd-cancel" onClick={onCancel} disabled={busy} data-testid="offer-decision-cancel">
             {busy ? 'Starting…' : 'Cancel'}

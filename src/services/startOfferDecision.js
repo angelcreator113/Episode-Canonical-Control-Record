@@ -34,6 +34,20 @@
  * decided gets its history entries (with by, reason, route) and one
  * activity_logs entry in Start Episode's transaction
  * (services/opportunityTransitionAudit).
+ *
+ * Accept is one decision that walks several steps (Evoni's review of
+ * 2026-11-13). STATUS_FLOW has no step from offered to booked, so accept
+ * passes through considering and negotiating on the way: workflow stages,
+ * not approvals anyone gave. The history keeps one entry per status passed,
+ * as it always has (Undo reads them as steps), and says which they are:
+ * every entry of the walk carries `decided: { from, to }`, the one decision,
+ * and each status only passed through carries `passed_through: true`. The
+ * activity_logs entry is one, from the status it had to the one it reached,
+ * with `passed_through` naming the stages in between.
+ *
+ * The question itself (409 OFFER_DECISION_REQUIRED) says whether the person
+ * asking can answer it (`can_decide`), so a page shows the choices only to
+ * someone who can make them.
  */
 
 const { statusPath } = require('./opportunityStatusFlow');
@@ -72,8 +86,8 @@ function offerSummary(opp) {
   };
 }
 
-const offerError = (status, code, message, opportunities) =>
-  Object.assign(new Error(message), { status, code, opportunities: (opportunities || []).map(offerSummary) });
+const offerError = (status, code, message, opportunities, canDecide = false) =>
+  Object.assign(new Error(message), { status, code, canDecide, opportunities: (opportunities || []).map(offerSummary) });
 
 /**
  * The event's linked opportunities still open: the one world_events.
@@ -111,30 +125,33 @@ function sameOffers(openOffers, opportunityIds) {
  */
 function assertOfferDecision(openOffers, decision, by = {}) {
   if (!openOffers.length) return;
+  const canDecide = by?.actor?.isAdmin === true;
   if (decision == null || decision === '') {
     const names = openOffers.map((o) => `"${o.name}" (${o.status})`).join(', ');
     throw offerError(409, OFFER_DECISION_REQUIRED_CODE,
-      `This event's offer ${names} is not accepted yet. Choose whether to accept it, negotiate, decline it, or start the episode without accepting it.`,
-      openOffers);
+      canDecide
+        ? `This event's offer ${names} is not accepted yet. Choose whether to accept it, negotiate, decline it, or start the episode without accepting it.`
+        : `This event's offer ${names} is not accepted yet. An admin decides what happens to it before the episode starts.`,
+      openOffers, canDecide);
   }
   if (!OFFER_DECISIONS.includes(decision)) {
     throw offerError(400, OFFER_DECISION_INVALID_CODE, `offer_decision must be one of ${OFFER_DECISIONS.join(', ')}.`, openOffers);
   }
-  if (!by?.actor?.isAdmin) {
+  if (!canDecide) {
     throw offerError(403, OFFER_DECISION_FORBIDDEN_CODE,
-      'Only an admin can decide an offer. The episode was not started.', openOffers);
+      'Only an admin can decide an offer. The episode was not started.', openOffers, false);
   }
   if (!sameOffers(openOffers, by.opportunityIds)) {
     throw offerError(409, OFFER_DECISION_STALE_CODE,
       'The offers on this event are not the ones this decision was made about. Nothing was started; look at them again and decide.',
-      openOffers);
+      openOffers, true);
   }
   const read = readReason(by.reason);
-  if (read.error) throw offerError(400, OFFER_REASON_REQUIRED_CODE, read.error, openOffers);
+  if (read.error) throw offerError(400, OFFER_REASON_REQUIRED_CODE, read.error, openOffers, true);
   if (REASON_REQUIRED_DECISIONS.includes(decision) && !read.reason) {
     throw offerError(400, OFFER_REASON_REQUIRED_CODE,
       decision === 'decline' ? 'Say why the offer is declined.' : 'Say why the episode starts without accepting the offer.',
-      openOffers);
+      openOffers, true);
   }
   const target = DECISION_TARGET[decision];
   if (!target) return;
@@ -166,10 +183,16 @@ async function applyOfferDecision(sequelize, { eventId, episodeId, decision, tra
     const steps = target ? statusPath(opp.status, target) : [];
     const entries = [];
     let from = opp.status;
-    for (const step of steps) {
-      entries.push({ status: step, from, note: `Offer decision at Start Episode: ${decision}`, ...base });
+    // One decision, however many steps it walks: each entry says what was
+    // decided, and a status only passed on the way says so.
+    const walked = steps.length > 1 ? { decided: { from: opp.status, to: steps[steps.length - 1] } } : {};
+    steps.forEach((step, i) => {
+      entries.push({
+        status: step, from, note: `Offer decision at Start Episode: ${decision}`, ...base, ...walked,
+        ...(i < steps.length - 1 ? { passed_through: true } : {}),
+      });
       from = step;
-    }
+    });
     if (!entries.length) {
       entries.push({
         status: opp.status,
@@ -194,6 +217,7 @@ async function applyOfferDecision(sequelize, { eventId, episodeId, decision, tra
     await logTransition(transaction, {
       actor, opportunityId: opp.id, showId: opp.show_id || null, eventId, episodeId,
       from: opp.status, to, route: ROUTES.START_DECISION, reason: why, decision,
+      passedThrough: steps.slice(0, -1),
     });
     done.push({ id: opp.id, name: opp.name, decision, from: opp.status, to });
   }
@@ -207,6 +231,8 @@ function offerDecisionBody(err) {
     code: err.code,
     error: err.message,
     decisions: OFFER_DECISIONS,
+    // Whether the person asking can answer: a decision is an admin's.
+    can_decide: err.canDecide === true,
     opportunity: err.opportunities?.[0] || null,
     opportunities: err.opportunities || [],
   };
