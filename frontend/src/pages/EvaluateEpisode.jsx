@@ -23,10 +23,12 @@
  * Location: frontend/src/pages/EvaluateEpisode.jsx
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useContext } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import api from '../services/api';
-import { completeMoneyWarning } from '../utils/moneyWarnings';
+import AuthContext from '../contexts/AuthContext';
+import { isAdmin } from '../utils/authGroups';
+import { completeEpisode } from '../lib/episodeCompletion';
 
 // ─── TIER CONFIG ───
 const TIER_CONFIG = {
@@ -35,28 +37,6 @@ const TIER_CONFIG = {
   safe: { emoji: '😐', label: 'SAFE', color: '#eab308', bg: 'linear-gradient(135deg, #eab308 0%, #ca8a04 100%)' },
   fail: { emoji: '💔', label: 'FAIL', color: '#dc2626', bg: 'linear-gradient(135deg, #dc2626 0%, #b91c1c 100%)' },
 };
-
-const OVERRIDE_REASONS = [
-  { code: 'DREAM_FUND_BOOST', label: '🌟 Dream Fund Boost', category: 'Community' },
-  { code: 'SUPPORT_PACK_SURGE', label: '💖 Support Pack Surge', category: 'Community' },
-  { code: 'BANK_METER_REWARD', label: '🏦 Bank Meter Reward', category: 'Community' },
-  { code: 'EMERGENCY_GLAM_PACK', label: '💅 Emergency Glam Pack', category: 'Lala Action' },
-  { code: 'LAST_MINUTE_TAILOR', label: '✂️ Last Minute Tailor', category: 'Lala Action' },
-  { code: 'CONFIDENCE_RESET', label: '💎 Confidence Reset', category: 'Lala Action' },
-  { code: 'CREATOR_MODE_LOCKIN', label: '🔒 Creator Mode Lock-In', category: 'Lala Action' },
-  { code: 'HOUSE_FAVOR', label: '🏛️ House Favor', category: 'Brand' },
-  { code: 'BRAND_SPONSOR_SAVE', label: '🤝 Brand Sponsor Save', category: 'Brand' },
-  { code: 'CREATOR_STORY_OVERRIDE', label: '📝 Story Override', category: 'Creator' },
-];
-
-const OVERRIDE_COSTS = [
-  { label: 'Coins -50', value: { coins: -50 } },
-  { label: 'Coins -100', value: { coins: -100 } },
-  { label: 'Stress +1', value: { stress: 1 } },
-  { label: 'Stress +2', value: { stress: 2 } },
-  { label: 'Brand Trust -1', value: { brand_trust: -1 } },
-  { label: 'Influence -1', value: { influence: -1 } },
-];
 
 const STAT_ICONS = {
   coins: '🪙', reputation: '⭐', brand_trust: '🤝', influence: '📣', stress: '😰',
@@ -74,18 +54,11 @@ function EvaluateEpisode() {
   const [evaluating, setEvaluating] = useState(false);
   const [accepting, setAccepting] = useState(false);
   const [error, setError] = useState(null);
-  const [showOverrideModal, setShowOverrideModal] = useState(false);
   const [narrativeStyle, setNarrativeStyle] = useState('short');
 
-  // Override form
-  const [overrideTier, setOverrideTier] = useState('');
-  const [overrideReason, setOverrideReason] = useState('');
-  const [overrideCostIdx, setOverrideCostIdx] = useState(0);
-  const [overrideNarrative, setOverrideNarrative] = useState('');
-  const [overriding, setOverriding] = useState(false);
-
-  // Canon freeze — admin unlock
-  const [canonUnlocked, setCanonUnlocked] = useState(false);
+  // A completion the server refused: kept on screen until dismissed (lib/episodeCompletion).
+  const [refusal, setRefusal] = useState(null);
+  const admin = isAdmin(useContext(AuthContext)?.user);
 
   // Outfit data
   const [outfitData, setOutfitData] = useState(null);
@@ -164,70 +137,29 @@ function EvaluateEpisode() {
     }
   }, [episodeId, episode]);
 
-  // ─── OVERRIDE ───
-  const handleOverride = useCallback(async () => {
-    if (!overrideTier || !overrideReason) return;
-    setOverriding(true);
-    setError(null);
-    try {
-      const costs = OVERRIDE_COSTS[overrideCostIdx]?.value || {};
-      const res = await api.post(`/api/v1/episodes/${episodeId}/override`, {
-        override_type: 'tier_change',
-        tier_to: overrideTier,
-        reason_code: overrideReason,
-        costs,
-        impact: {},
-        narrative_line: overrideNarrative || null,
-      });
-      if (res.data.success) {
-        setEvaluation(res.data.evaluation);
-        setEpisode(prev => ({ ...prev, evaluation_json: res.data.evaluation }));
-        setShowOverrideModal(false);
-      } else {
-        setError(res.data.error || 'Override failed');
-      }
-    } catch (err) {
-      setError(err.response?.data?.error || err.message);
-    } finally {
-      setOverriding(false);
-    }
-  }, [episodeId, overrideTier, overrideReason, overrideCostIdx, overrideNarrative]);
-
-  // ─── ACCEPT ───
-  const handleAccept = useCallback(async () => {
-    // MB4 (§8(gg)): warn early on money before Complete; never blocks.
-    const moneyWarning = await completeMoneyWarning(episode?.show_id, episodeId);
-    if (moneyWarning && !window.confirm(moneyWarning)) return;
+  // ─── COMPLETE ───
+  // The one completion operation (lib/episodeCompletion), the same the
+  // episode's Results tab runs. What is shown afterwards is the result the
+  // server stored, on Results: this page's estimate is not it.
+  const handleComplete = useCallback(async () => {
     setAccepting(true);
     setError(null);
-    try {
-      const res = await api.post(`/api/v1/episodes/${episodeId}/accept`, { allow_out_of_order: true });
-      if (res.data.success) {
-        setEvaluation(prev => ({ ...prev, evaluation_status: 'accepted', accepted_at: new Date().toISOString() }));
-        setEpisode(prev => ({ ...prev, evaluation_status: 'accepted' }));
-        // Refresh state
-        if (episode?.show_id) {
-          const stateRes = await api.get(`/api/v1/characters/lala/state?show_id=${episode.show_id}`);
-          setCharState(stateRes.data);
-        }
-        alert(`✅ Accepted! Lala's stats updated.\n\nNew coins: ${res.data.new_state.coins}\nReputation: ${res.data.new_state.reputation}\nBrand Trust: ${res.data.new_state.brand_trust}\nInfluence: ${res.data.new_state.influence}\nStress: ${res.data.new_state.stress}`);
-      }
-    } catch (err) {
-      setError(err.response?.data?.error || err.response?.data?.message || err.message);
-    } finally {
-      setAccepting(false);
-    }
-  }, [episodeId, episode]);
+    setRefusal(null);
+    const out = await completeEpisode({ showId: episode?.show_id, episodeId, title: episode?.title });
+    setAccepting(false);
+    if (out.status === 'cancelled') return;
+    if (out.status === 'refused') { setRefusal(out.refusal); return; }
+    navigate(`/episodes/${episodeId}?tab=results`);
+  }, [episodeId, episode, navigate]);
 
   // ─── HELPERS ───
+  // Optional: a tag in the script overrides the linked event's values for the estimate. The server needs no tag.
   const hasEventTag = episode?.script_content?.includes('[EVENT:');
   const beatCount = (episode?.script_content?.match(/##\s*BEAT:/gi) || []).length;
   const isComputed = episode?.evaluation_status === 'computed' || evaluation?.score != null;
   const isAccepted = episode?.evaluation_status === 'accepted';
   const tierConfig = evaluation ? TIER_CONFIG[evaluation.tier_final] || TIER_CONFIG.safe : null;
 
-  const availableTiers = evaluation ? getAllTiers(evaluation.tier_final) : [];
-  const hasOverrides = (evaluation?.overrides || []).filter(o => o.type === 'tier_change').length > 0;
 
   if (loading) {
     return <div style={S.page}><div style={S.loadingMsg}>Loading episode...</div></div>;
@@ -246,51 +178,52 @@ function EvaluateEpisode() {
           <h1 style={S.title}>{episode.title || 'Untitled Episode'}</h1>
           <div style={S.headerMeta}>
             <span style={S.statusPill(isAccepted ? '#22c55e' : isComputed ? '#6366f1' : '#94a3b8')}>
-              {isAccepted ? '✅ Accepted' : isComputed ? '🔍 Computed' : '⏳ Not Evaluated'}
+              {isAccepted ? '✅ Completed' : isComputed ? '🔍 Estimate' : '⏳ No estimate yet'}
             </span>
             {evaluation?.formula_version && <span style={S.versionBadge}>Formula {evaluation.formula_version}</span>}
           </div>
         </div>
         <div style={S.headerActions}>
-          {!isComputed && (
-            <button onClick={handleEvaluate} disabled={evaluating || !hasEventTag} style={S.primaryBtn}>
-              {evaluating ? '⏳ Computing...' : '🎯 Evaluate Episode'}
+          {!isComputed && !isAccepted && (
+            <button onClick={handleEvaluate} disabled={evaluating} style={S.primaryBtn} data-testid="evaluate-estimate">
+              {evaluating ? '⏳ Computing...' : '🎯 Estimate the result'}
             </button>
           )}
           {isComputed && !isAccepted && (
-            <button onClick={handleAccept} disabled={accepting} style={S.acceptBtn}>
-              {accepting ? '⏳...' : '✅ Accept Result'}
+            <button onClick={handleEvaluate} disabled={evaluating} style={S.secondaryBtn} data-testid="evaluate-recompute">
+              🔄 Recompute the estimate
             </button>
           )}
-          {isComputed && !isAccepted && (
-            <button onClick={handleEvaluate} disabled={evaluating} style={S.secondaryBtn}>
-              🔄 Re-evaluate
+          {!isAccepted && admin && (
+            <button onClick={handleComplete} disabled={accepting} style={S.acceptBtn} data-testid="evaluate-complete">
+              {accepting ? '⏳ Completing...' : 'Complete episode'}
             </button>
           )}
-          {isAccepted && !canonUnlocked && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontSize: 13, color: '#16a34a', fontWeight: 600 }}>🔒 Canon Locked</span>
-              <button
-                onClick={() => {
-                  if (window.confirm('Admin Override: Unlock this episode for re-evaluation?\n\nThis will allow modifying an accepted result. Stat corruption may occur if episodes are re-evaluated out of order.')) {
-                    setCanonUnlocked(true);
-                  }
-                }}
-                style={{ padding: '4px 10px', background: 'none', border: '1px solid #e2e8f0', borderRadius: 4, color: '#94a3b8', fontSize: 11, cursor: 'pointer' }}
-              >
-                Admin Unlock
-              </button>
-            </div>
-          )}
-          {isAccepted && canonUnlocked && (
-            <button onClick={handleEvaluate} disabled={evaluating} style={{ ...S.secondaryBtn, border: '1px solid #fbbf24', background: '#fffbeb' }}>
-              ⚠️ Re-evaluate (Unlocked)
-            </button>
+          {isAccepted && (
+            <Link to={`/episodes/${episodeId}?tab=results`} style={{ ...S.secondaryBtn, textDecoration: 'none' }} data-testid="evaluate-view-result">View the stored result</Link>
           )}
         </div>
       </div>
 
       {error && <div style={S.errorBanner}>⚠️ {error}<button onClick={() => setError(null)} style={S.errorClose}>✕</button></div>}
+      {/* A refused completion stays until dismissed: the server's words, and where to resolve it. */}
+      {refusal && (
+        <div style={S.errorBanner} role="alert" data-testid="evaluate-refusal">
+          <span>
+            <strong>{refusal.title}.</strong> {refusal.message} Nothing was booked.{' '}
+            {refusal.action?.to && <Link to={refusal.action.to}>{refusal.action.label}</Link>}
+            {refusal.action?.tab && <Link to={`/episodes/${episodeId}?tab=${refusal.action.tab}`}>{refusal.action.label}</Link>}
+            {refusal.action?.retry && <button type="button" onClick={handleComplete} disabled={accepting} style={S.secondaryBtn}>{refusal.action.label}</button>}
+          </span>
+          <button onClick={() => setRefusal(null)} style={S.errorClose} aria-label="Dismiss this message">✕</button>
+        </div>
+      )}
+      {!isAccepted && (
+        <div style={S.warningBanner} data-testid="evaluate-estimate-note">
+          This page shows an estimate. The final score, tier and money are worked out when the episode is completed, from its event and approved look at that moment, and can differ from what is shown here. Nothing on this page is a guaranteed reward.
+          {!admin && ' Completing an episode needs an admin account.'}
+        </div>
+      )}
 
       {/* Warnings */}
       {evaluation?.warnings?.map((w, i) => (
@@ -304,14 +237,13 @@ function EvaluateEpisode() {
           {/* Step 1: Script Check */}
           <div style={S.stepCard}>
             <div style={S.stepHeader}>
-              <span style={S.stepIcon(hasEventTag)}>1</span>
-              <h3 style={S.stepTitle}>Script Ready</h3>
-              <span style={S.stepStatus(hasEventTag)}>{hasEventTag ? '✓' : '!'}</span>
+              <span style={S.stepIcon(true)}>1</span>
+              <h3 style={S.stepTitle}>Script</h3>
+              <span style={S.stepStatus(true)}>✓</span>
             </div>
             <div style={S.stepBody}>
               <div style={S.stepRow}><span style={S.label}>Beats detected:</span><span style={S.value}>{beatCount}</span></div>
-              <div style={S.stepRow}><span style={S.label}>[EVENT:] tag:</span><span style={S.value}>{hasEventTag ? '✅ Present' : '❌ Missing'}</span></div>
-              {!hasEventTag && <div style={S.stepHint}>Add an [EVENT: name="..." prestige=7 cost=150 strictness=6 deadline="high"] tag to your script.</div>}
+              <div style={S.stepRow}><span style={S.label}>[EVENT:] tag:</span><span style={S.value}>{hasEventTag ? 'Present (overrides the linked event for this estimate)' : 'None (the linked event is used)'}</span></div>
               <Link to={`/episodes/${episodeId}?tab=scripts`} style={S.stepLink}>→ Go to Script Tab</Link>
             </div>
           </div>
@@ -490,7 +422,7 @@ function EvaluateEpisode() {
                 {/* Overrides Applied */}
                 {(evaluation.overrides || []).length > 0 && (
                   <div style={S.overridesLog}>
-                    <div style={S.deltasTitle}>Overrides Applied</div>
+                    <div style={S.deltasTitle}>Overrides recorded on this estimate (not applied at completion)</div>
                     {evaluation.overrides.map((o, i) => (
                       <div key={i} style={S.overrideEntry}>
                         <span style={S.overrideType}>{o.type === 'tier_change' ? '⬆️' : '🎨'}</span>
@@ -553,119 +485,38 @@ function EvaluateEpisode() {
                 ))}
               </div>
 
-              {/* Actions */}
-              {!isAccepted && (
+              {/* Actions: completing is the one operation, for an admin. */}
+              {!isAccepted && admin && (
                 <div style={S.actionsCard}>
-                  {!hasOverrides && (
-                    <button onClick={() => {
-                      setOverrideTier(availableTiers[0] || '');
-                      setOverrideNarrative('');
-                      setOverrideReason('');
-                      setShowOverrideModal(true);
-                    }} style={S.overrideBtn}>
-                      🎯 Apply Override
-                    </button>
-                  )}
-                  {hasOverrides && <div style={S.overrideNote}>✓ Override applied (max 1 per episode)</div>}
-                  <button onClick={handleAccept} disabled={accepting} style={S.acceptBtnLarge}>
-                    {accepting ? '⏳ Applying...' : '✅ Accept & Apply Stats'}
+                  <button onClick={handleComplete} disabled={accepting} style={S.acceptBtnLarge}>
+                    {accepting ? '⏳ Completing...' : 'Complete episode'}
                   </button>
                 </div>
               )}
 
               {isAccepted && (
                 <div style={S.acceptedBanner}>
-                  ✅ Episode accepted. Stats applied to Lala's running state.
+                  ✅ Episode completed. <Link to={`/episodes/${episodeId}?tab=results`}>View the stored result</Link>
                 </div>
               )}
             </>
           ) : (
             <div style={S.emptyState}>
               <div style={S.emptyIcon}>🎯</div>
-              <div style={S.emptyTitle}>Ready to Evaluate</div>
+              <div style={S.emptyTitle}>No estimate yet</div>
               <div style={S.emptyText}>
-                {hasEventTag
-                  ? 'Click "Evaluate Episode" to compute the score.'
-                  : 'Add an [EVENT:] tag to your script first, then evaluate.'}
+                Estimate the result from this episode&apos;s event and look. The final result is worked out at completion.
               </div>
-              <button onClick={handleEvaluate} disabled={evaluating || !hasEventTag} style={S.primaryBtn}>
-                {evaluating ? '⏳ Computing...' : '🎯 Evaluate Episode'}
+              <button onClick={handleEvaluate} disabled={evaluating} style={S.primaryBtn}>
+                {evaluating ? '⏳ Computing...' : '🎯 Estimate the result'}
               </button>
             </div>
           )}
         </div>
       </div>
 
-      {/* ─── OVERRIDE MODAL ─── */}
-      {showOverrideModal && (
-        <div style={S.modalOverlay} onClick={() => setShowOverrideModal(false)}>
-          <div style={S.modal} onClick={e => e.stopPropagation()}>
-            <h2 style={S.modalTitle}>Override Result</h2>
-            <p style={S.modalSub}>
-              {evaluation.tier_final?.toUpperCase()} → {overrideTier?.toUpperCase()}
-            </p>
-
-            <div style={S.formGroup}>
-              <label style={S.formLabel}>Target Tier</label>
-              <select value={overrideTier} onChange={e => setOverrideTier(e.target.value)} style={S.select}>
-                {['fail', 'safe', 'pass', 'slay'].filter(t => t !== evaluation.tier_final).map(t => (
-                  <option key={t} value={t}>{t.toUpperCase()}</option>
-                ))}
-              </select>
-            </div>
-
-            <div style={S.formGroup}>
-              <label style={S.formLabel}>Reason</label>
-              <select value={overrideReason} onChange={e => setOverrideReason(e.target.value)} style={S.select}>
-                <option value="">Select reason...</option>
-                {OVERRIDE_REASONS.map(r => (
-                  <option key={r.code} value={r.code}>{r.label} ({r.category})</option>
-                ))}
-              </select>
-            </div>
-
-            <div style={S.formGroup}>
-              <label style={S.formLabel}>Cost</label>
-              <select value={overrideCostIdx} onChange={e => setOverrideCostIdx(parseInt(e.target.value))} style={S.select}>
-                {OVERRIDE_COSTS.map((c, i) => (
-                  <option key={i} value={i}>{c.label}</option>
-                ))}
-              </select>
-            </div>
-
-            <div style={S.formGroup}>
-              <label style={S.formLabel}>Narrative Line (optional)</label>
-              <textarea
-                value={overrideNarrative}
-                onChange={e => setOverrideNarrative(e.target.value)}
-                placeholder="The Dream Fund hit a milestone — Lala's glow-up landed harder than expected."
-                style={S.textarea}
-                rows={3}
-              />
-            </div>
-
-            <div style={S.modalActions}>
-              <button onClick={() => setShowOverrideModal(false)} style={S.secondaryBtn}>Cancel</button>
-              <button onClick={handleOverride} disabled={!overrideReason || overriding} style={{
-                ...S.primaryBtn,
-                opacity: (!overrideReason || overriding) ? 0.5 : 1,
-                cursor: (!overrideReason || overriding) ? 'not-allowed' : 'pointer',
-              }}>
-                {overriding ? '⏳...' : !overrideReason ? '↑ Select a Reason first' : `Apply Override → ${overrideTier?.toUpperCase()}`}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
-}
-
-
-// ─── HELPERS ───
-
-function getAllTiers(current) {
-  return ['fail', 'safe', 'pass', 'slay'].filter(t => t !== current);
 }
 
 

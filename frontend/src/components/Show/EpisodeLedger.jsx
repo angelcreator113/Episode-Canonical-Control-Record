@@ -225,7 +225,7 @@ export default function EpisodeLedger({ showId, api = defaultApi, episodes = [],
               <div className="wa-ledger-case" id={`ledger-case-${ep.id}`}>
                 <div className="wa-ledger-actions">
                   <Link to={`/episodes/${ep.id}`} style={{ ...S.smBtn, textDecoration: 'none' }}>Open episode</Link>
-                  <Link to={`/episodes/${ep.id}/evaluate`} style={{ ...S.smBtn, textDecoration: 'none', background: 'var(--primary-subtle)', borderColor: 'var(--primary-light)', color: 'var(--primary-text)' }}>{evaluated(ep) ? 'Re-evaluate' : 'Evaluate'}</Link>
+                  <Link to={`/episodes/${ep.id}/evaluate`} style={{ ...S.smBtn, textDecoration: 'none', background: 'var(--primary-subtle)', borderColor: 'var(--primary-light)', color: 'var(--primary-text)' }}>{evaluated(ep) ? 'View the result' : 'Estimate the result'}</Link>
                   <Link to={`/episodes/${ep.id}/todo`} style={{ ...S.smBtn, textDecoration: 'none', background: 'var(--surface-bg)', borderColor: 'var(--lala-parchment-3)', color: 'var(--lala-gold-text)' }}>Todo List</Link>
                   {ep.script_content && <span style={{ ...S.smBtn, color: 'var(--success-text)' }}>✅ Has Script ({(ep.script_content || '').split('\n').length} lines)</span>}
                 </div>

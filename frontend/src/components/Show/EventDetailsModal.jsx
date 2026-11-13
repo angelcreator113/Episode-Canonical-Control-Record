@@ -6,6 +6,7 @@
  * (2026-10-25); EventLibrary opens it (a card's "Edit details", an Ideas
  * template, or ?event=<id>).
  */
+import { Link } from 'react-router-dom';
 import api from '../../services/api';
 import { S, EVENT_TYPE_ICONS } from './producerStyles';
 import { seasonPageHref } from '../../lib/seasonPage';
@@ -15,7 +16,6 @@ import OpenInSceneSets from '../OpenInSceneSets';
 import { EventInvitePreview } from '../../pages/feed/FeedEnhancements';
 import { hydrateEventForModal, sameEditorValue, changedFields, missingForMarkReady, withoutOrganizerKeys } from '../../utils/eventEditorChanges';
 import { createEventSaveQueue, isStaleSaveError, saveErrorMessage } from '../../utils/eventSaveVersion';
-import { completeMoneyWarning } from '../../utils/moneyWarnings';
 import { calcDifficulty, difficultyLabel, MODAL_SAVEABLE_FIELDS } from '../../lib/eventLibrary';
 
 export default function EventDetailsModal({ lib }) {
@@ -996,28 +996,12 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                       Mark Ready
                     </button>
                   )}
-                  {md.used_in_episode_id && md.status !== 'draft' && (
-                    <button onClick={async () => {
-                      if (!window.confirm(`Complete "${md.name}"?\n\nThis will:\n• Evaluate the episode (outfit + event + character state)\n• Apply social task bonuses (reputation, influence)\n• Finalize all financial transactions\n• Update Lala's character stats\n• Mark event as filmed`)) return;
-                      // MB4 (§8(gg)): warn early on money; never blocks.
-                      const moneyWarning = await completeMoneyWarning(showId, md.used_in_episode_id);
-                      if (moneyWarning && !window.confirm(moneyWarning)) return;
-                      try {
-                        const res = await api.post(`/api/v1/world/${showId}/episodes/${md.used_in_episode_id}/complete`);
-                        if (res.data.success) {
-                          const d = res.data.data;
-                          if (d.already_completed) {
-                            setToast(`Already completed — ${d.evaluation?.tier?.toUpperCase()} (${d.evaluation?.score}/100)`);
-                          } else {
-                            setToast(`${d.evaluation.tier.toUpperCase()} (${d.evaluation.score}/100) — ${d.evaluation.narrative}`);
-                            setWorldEvents(prev => prev.map(ev => ev.id === md.id ? { ...ev, status: 'filmed' } : ev));
-                            setEventDetailModal(prev => prev ? { ...prev, status: 'filmed' } : prev);
-                          }
-                        }
-                      } catch (err) { setToast('Failed: ' + (err.response?.data?.error || err.message)); }
-                    }} style={{ padding: '6px 20px', borderRadius: 8, border: '2px solid var(--lala-gold)', background: 'var(--surface-bg)', color: 'var(--lala-gold-text)', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
-                      👑 Complete Episode
-                    </button>
+                  {/* Completing is done from the episode itself, in its Results (Evoni, 2026-11-12): one place, one operation (lib/episodeCompletion). This only goes there. */}
+                  {md.used_in_episode_id && (
+                    <Link to={`/episodes/${md.used_in_episode_id}?tab=results`} data-testid="event-modal-open-results"
+                      style={{ padding: '6px 20px', borderRadius: 8, border: '2px solid var(--lala-gold)', background: 'var(--surface-bg)', color: 'var(--lala-gold-text)', fontWeight: 700, fontSize: 13, textDecoration: 'none' }}>
+                      Complete in the episode&apos;s Results
+                    </Link>
                   )}
                   <div style={{ flex: 1 }} />
                   <button onClick={async () => {

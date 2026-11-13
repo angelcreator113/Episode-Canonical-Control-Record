@@ -18,7 +18,8 @@
 const express = require('express');
 const router = express.Router();
 
-const { requireAuth } = require('../../middleware/auth');
+const { requireAuth, authorize } = require('../../middleware/auth');
+const { asRetryable, RetryableConflictError } = require('../../utils/episodeLocks');
 const { aiRateLimiter } = require('../../middleware/aiRateLimiter');
 const { TermsReopenedError, termsReopenedBody } = require('../../utils/eventTermsLock');
 const { loadScopedEvent } = require('../../utils/eventScope');
@@ -29,7 +30,10 @@ const { loadMoneyPreview } = require('./helpers');
 // ═══════════════════════════════════════════════════════════════════════
 
 // POST /world/:showId/episodes/:episodeId/complete
-router.post('/world/:showId/episodes/:episodeId/complete', requireAuth, async (req, res) => {
+// Admin only (Evoni, 2026-11-12): completing books the ledger, pays deals and
+// changes Lala's stats for good. The same authorization as the legacy
+// POST /episodes/:id/accept (routes/evaluation.js), which runs this operation.
+router.post('/world/:showId/episodes/:episodeId/complete', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { showId, episodeId } = req.params;
     const models = req.app?.get?.('models') || require('../../models');
@@ -58,6 +62,12 @@ router.post('/world/:showId/episodes/:episodeId/complete', requireAuth, async (r
     const { InsufficientCoinsError, insufficientCoinsBody } = require('../../services/coinBalanceGuard');
     if (err instanceof InsufficientCoinsError) {
       return res.status(err.status).json(insufficientCoinsBody(err));
+    }
+    // A lock another writer held: the completion rolled back whole, nothing
+    // was booked. The existing retryable 409, not a 500.
+    const retry = asRetryable(err);
+    if (retry instanceof RetryableConflictError) {
+      return res.status(409).json({ success: false, error: retry.message, code: retry.code });
     }
     return res.status(500).json({ success: false, error: err.message });
   }
