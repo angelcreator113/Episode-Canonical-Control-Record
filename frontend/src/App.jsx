@@ -583,8 +583,8 @@ function AppContent() {
           <Route path="/design-agent" element={<AdminOnly><DesignAgent /></AdminOnly>} />
           
           {/* Admin */}
-          <Route path="/admin" element={<AdminPanel />} />
-          <Route path="/admin/audit" element={<AuditLog />} />
+          <Route path="/admin" element={<AdminOnly><AdminPanel /></AdminOnly>} />
+          <Route path="/admin/audit" element={<AdminOnly><AuditLog /></AdminOnly>} />
           
           {/* Diagnostics */}
 

@@ -1,7 +1,8 @@
 /**
- * Admin (Tasks #2913, #2914): one page with tabs — The Pulse (the Social
- * Director's home), Website, Show settings and Tools — selected by ?tab=,
- * The Pulse by default (docs/design/2026-10-the-pulse.md §1).
+ * Admin (Tasks #2913, #2914; reorganized by Evoni, 2026-11-13): one page
+ * with four tabs — Overview (the default), The Pulse, Website & Show
+ * Settings, Security & Access — selected by ?tab=. Every key that existed
+ * before still opens what it opened: pulse, website, show-settings, tools.
  */
 import React from 'react';
 import { describe, test, expect, vi, beforeEach } from 'vitest';
@@ -15,6 +16,7 @@ vi.mock('../contexts/AuthContext', () => {
   return { useAuth: () => auth };
 });
 vi.mock('../components/Admin/RateLimitRefusals', () => ({ default: () => <div data-testid="rate-limit-refusals" /> }));
+vi.mock('../components/Admin/AdminOverview', () => ({ default: () => <div data-testid="admin-overview" /> }));
 vi.mock('./WebsiteAdmin', () => ({ default: () => <div data-testid="website-admin">Website page</div> }));
 vi.mock('./ShowSettings', () => ({
   default: ({ showId, tabParam }) => <div data-testid="show-settings">settings for {showId} by {tabParam}</div>,
@@ -38,35 +40,64 @@ const tab = (name) => adminTabs().getByRole('tab', { name });
 describe('Admin tabs', () => {
   beforeEach(() => { window.localStorage.clear(); SHOWS = []; });
 
-  test('four tabs; The Pulse is the default', () => {
+  test('four tabs; Overview is the default', () => {
     renderAt('/admin');
-    expect(adminTabs().getAllByRole('tab').map((t) => t.textContent)).toEqual(['The Pulse', 'Website', 'Show settings', 'Tools']);
+    expect(adminTabs().getAllByRole('tab').map((t) => t.textContent)).toEqual(['Overview', 'The Pulse', 'Website & Show Settings', 'Security & Access']);
+    expect(tab('Overview').getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByTestId('admin-overview')).toBeTruthy();
+    expect(screen.queryByTestId('admin-pulse')).toBeNull();
+  });
+
+  test('?tab=pulse still opens The Pulse, its tools as they were', () => {
+    renderAt('/admin?tab=pulse&sub=review');
     expect(tab('The Pulse').getAttribute('aria-selected')).toBe('true');
     expect(screen.getByTestId('admin-pulse')).toBeTruthy();
     expect(screen.getByText('Open The Pulse').getAttribute('href')).toBe('/pulse');
-    expect(screen.queryByText('Admin tools')).toBeNull();
+    expect(lastSearch).toBe('?tab=pulse&sub=review');
   });
 
-  test('?tab=website shows the Website page', () => {
+  test('?tab=website still shows the Website page, under Website & Show Settings', () => {
     renderAt('/admin?tab=website');
-    expect(tab('Website').getAttribute('aria-selected')).toBe('true');
+    expect(tab('Website & Show Settings').getAttribute('aria-selected')).toBe('true');
     expect(screen.getByTestId('website-admin')).toBeTruthy();
+    expect(screen.queryByTestId('show-settings')).toBeNull();
+    const sw = within(screen.getByRole('group', { name: 'Website and show settings' }));
+    expect(sw.getByRole('button', { name: 'Website' }).getAttribute('aria-pressed')).toBe('true');
+    // The other section is one press away, on its own key: nothing is merged.
+    fireEvent.click(sw.getByRole('button', { name: 'Show settings' }));
+    expect(lastSearch).toBe('?tab=show-settings');
+    expect(screen.queryByTestId('website-admin')).toBeNull();
   });
 
-  test('Tools holds the admin tools index and the roles table', () => {
-    renderAt('/admin?tab=tools');
+  test('Security & Access: the Audit Log link, the refusals, the tools, and roles said as Cognito\'s; no users table', () => {
+    renderAt('/admin?tab=security');
+    expect(tab('Security & Access').getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByTestId('admin-audit-link').getAttribute('href')).toBe('/admin/audit');
     expect(screen.getByText('Admin tools')).toBeTruthy();
     expect(screen.getByText('AI Costs')).toBeTruthy();
     expect(screen.getByTestId('rate-limit-refusals')).toBeTruthy();
-    expect(screen.getByRole('table')).toBeTruthy();
+    expect(screen.getByTestId('admin-roles-note').textContent).toContain('Amazon Cognito');
+    expect(screen.getByTestId('admin-roles-note').textContent).toContain('in: admin');
+    expect(screen.queryByRole('table')).toBeNull();
+    expect(screen.queryByRole('combobox')).toBeNull();
   });
 
-  test('an unknown ?tab= falls back to The Pulse; clicking a tab sets ?tab=', () => {
-    renderAt('/admin?tab=nope');
-    expect(tab('The Pulse').getAttribute('aria-selected')).toBe('true');
-    fireEvent.click(tab('Tools'));
-    expect(lastSearch).toBe('?tab=tools');
+  test('the old ?tab=tools link opens Security & Access', () => {
+    renderAt('/admin?tab=tools');
+    expect(tab('Security & Access').getAttribute('aria-selected')).toBe('true');
     expect(screen.getByText('Admin tools')).toBeTruthy();
+    expect(lastSearch).toBe('?tab=tools');
+  });
+
+  test('an unknown ?tab= falls back to Overview; clicking a tab sets ?tab=', () => {
+    renderAt('/admin?tab=nope');
+    expect(tab('Overview').getAttribute('aria-selected')).toBe('true');
+    fireEvent.click(tab('Security & Access'));
+    expect(lastSearch).toBe('?tab=security');
+    fireEvent.click(tab('Website & Show Settings'));
+    expect(lastSearch).toBe('?tab=website');
+    fireEvent.click(tab('The Pulse'));
+    expect(lastSearch).toBe('?tab=pulse');
   });
 
   test('Show settings opens the ?show= show, its own tab as ?sub=', async () => {
