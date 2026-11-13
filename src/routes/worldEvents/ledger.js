@@ -78,7 +78,9 @@ router.post('/world/:showId/episodes/:episodeId/complete', requireAuth, authoriz
 // ═══════════════════════════════════════════════════════════════════════
 
 // POST /world/:showId/episodes/:episodeId/finalize-financials
-router.post('/world/:showId/episodes/:episodeId/finalize-financials', requireAuth, async (req, res) => {
+// Admin only, like completion (Evoni, 2026-11-13): finalize books the episode's
+// money, which is the financial half of completing it.
+router.post('/world/:showId/episodes/:episodeId/finalize-financials', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { showId, episodeId } = req.params;
     const models = req.app?.get?.('models') || require('../../models');

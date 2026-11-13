@@ -107,6 +107,25 @@ describe('controls that never changed a result are gone', () => {
     expect(document.body.textContent).toContain('Overrides recorded on this estimate (not applied at completion)');
     expect(document.body.textContent).toContain('HOUSE FAVOR');
   });
+
+  test('an overridden estimate tier is told apart from the final tier: what the estimate calculated, what the override shows, and that the server calculates the final one', async () => {
+    episode = { ...episode, evaluation_status: 'computed', evaluation_json: { ...ESTIMATE, overrides: [{ type: 'tier_change', tier_from: 'safe', tier_to: 'pass', reason_code: 'HOUSE_FAVOR' }] } };
+    renderPage();
+    const note = await screen.findByTestId('evaluate-overridden-tier');
+    expect(note.textContent).toBe('Overridden estimate tier. The estimate calculated SAFE; a recorded override shows PASS. Completion ignores overrides: the final tier is calculated by the server when the episode is completed.');
+  });
+
+  test('no such note on an estimate without a tier override, nor on a completed episode', async () => {
+    episode = { ...episode, evaluation_status: 'computed', evaluation_json: { ...ESTIMATE, overrides: [{ type: 'style_adjust', reason_code: 'HOUSE_FAVOR' }] } };
+    const first = renderPage();
+    await screen.findByTestId('evaluate-recompute');
+    expect(screen.queryByTestId('evaluate-overridden-tier')).toBeNull();
+    first.unmount();
+    episode = { ...episode, evaluation_status: 'accepted', evaluation_json: { ...ESTIMATE } };
+    renderPage();
+    await screen.findByText('A good night.');
+    expect(screen.queryByTestId('evaluate-overridden-tier')).toBeNull();
+  });
 });
 
 describe('completing from this page is the one shared operation', () => {

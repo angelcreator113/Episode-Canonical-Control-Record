@@ -159,6 +159,8 @@ function EvaluateEpisode() {
   const isComputed = episode?.evaluation_status === 'computed' || evaluation?.score != null;
   const isAccepted = episode?.evaluation_status === 'accepted';
   const tierConfig = evaluation ? TIER_CONFIG[evaluation.tier_final] || TIER_CONFIG.safe : null;
+  // A tier override recorded on this estimate: the tier shown is the overridden one, not what completion will calculate.
+  const tierOverride = (evaluation?.overrides || []).find((o) => o.type === 'tier_change' && o.tier_from) || null;
 
 
   if (loading) {
@@ -447,6 +449,11 @@ function EvaluateEpisode() {
                   <span style={S.tierEmoji}>{tierConfig?.emoji}</span>
                   <span style={S.tierLabel}>{tierConfig?.label}</span>
                 </div>
+                {tierOverride && !isAccepted && (
+                  <div style={S.overriddenTierNote} data-testid="evaluate-overridden-tier">
+                    Overridden estimate tier. The estimate calculated {(TIER_CONFIG[tierOverride.tier_from]?.label) || tierOverride.tier_from}; a recorded override shows {tierConfig?.label}. Completion ignores overrides: the final tier is calculated by the server when the episode is completed.
+                  </div>
+                )}
                 <div style={S.scoreNumber}>{evaluation.score}</div>
                 <div style={S.scoreSubtext}>out of 100</div>
 
@@ -584,6 +591,7 @@ const S = {
   // Overrides log
   overridesLog: { padding: 12, background: '#fef3c7', border: '1px solid #fde68a', borderRadius: 8 },
   overrideEntry: { display: 'flex', gap: 8, alignItems: 'center', fontSize: 13, color: '#92400e', padding: '4px 0' },
+  overriddenTierNote: { margin: '0 auto 12px', maxWidth: 420, padding: 10, background: '#fef3c7', border: '1px solid #fde68a', borderRadius: 8, color: '#92400e', fontSize: 13, lineHeight: 1.4 },
   overrideType: { fontSize: 14 },
   overrideTier: { fontWeight: 700, marginLeft: 'auto' },
 

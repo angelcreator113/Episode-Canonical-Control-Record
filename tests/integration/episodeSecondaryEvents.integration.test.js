@@ -799,7 +799,7 @@ describe('reopen eligibility, pure', () => {
         return f;
       }
       const complete = (f) => asAdmin(request(app).post(`/api/v1/world/${f.show}/episodes/${f.episode}/complete`)).send({});
-      const finalize = (f) => auth(request(app).post(`/api/v1/world/${f.show}/episodes/${f.episode}/finalize-financials`)).send({});
+      const finalize = (f) => asAdmin(request(app).post(`/api/v1/world/${f.show}/episodes/${f.episode}/finalize-financials`)).send({});
       const startUpload = (f) => auth(request(app).post(`/api/v1/episode-clips/${f.episode}/uploads`))
         .send({ performer: 'lala', filename: 'take.mp4', content_type: 'video/mp4', size: 1024 });
 

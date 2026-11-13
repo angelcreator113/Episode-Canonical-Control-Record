@@ -401,9 +401,10 @@ export default function EpisodeLedger({ showId, api = defaultApi, episodes = [],
                         </div>
                       )}
                       {(ej.overrides || []).length > 0 && (
-                        <div style={{ padding: '8px 14px', background: 'var(--warning-bg)', borderRadius: 8, textAlign: 'center' }}>
-                          <div style={{ fontSize: 11, color: 'var(--warning-text)' }}>Overrides</div>
-                          <div style={{ fontSize: 16, fontWeight: 800 }}>{ej.overrides.length} ⬆️</div>
+                        <div data-testid="ledger-overrides" style={{ padding: '8px 14px', background: 'var(--warning-bg)', borderRadius: 8, textAlign: 'center' }}>
+                          <div style={{ fontSize: 11, color: 'var(--warning-text)' }}>Estimate overrides</div>
+                          <div style={{ fontSize: 16, fontWeight: 800 }}>{ej.overrides.length}</div>
+                          <div style={{ fontSize: 10, color: 'var(--warning-text)' }} data-testid="ledger-overrides-note">Historical: not applied to completion</div>
                         </div>
                       )}
                     </div>

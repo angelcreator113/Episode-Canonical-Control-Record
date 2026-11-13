@@ -50,6 +50,7 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
   const as = (token, r) => (token ? from(r).set('Authorization', `Bearer ${token}`) : from(r));
   const complete = (token, f) => as(token, request(app).post(`/api/v1/world/${f.show}/episodes/${f.episode}/complete`)).send({});
   const accept = (token, f) => as(token, request(app).post(`/api/v1/episodes/${f.episode}/accept`)).send({});
+  const finalize = (token, f) => as(token, request(app).post(`/api/v1/world/${f.show}/episodes/${f.episode}/finalize-financials`)).send({});
 
   /** An episode whose brief names its event. reverseLink: whether the event's own link points back at it. */
   async function seed({ reverseLink = true, coins = 1000 } = {}) {
@@ -122,6 +123,60 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
       const f = await seed();
       const lower = TokenService.generateTokenPair({ id: 'test-admin-lower', email: 'lower@complete.dev', name: 'Lower', groups: ['admin'], role: 'USER' }).accessToken;
       expect((await complete(lower, f)).status).toBe(200);
+    });
+  });
+
+  describe('who may finalize the financials (asked of the API directly)', () => {
+    /** What finalize could change: the ledger, the coins, the history, and the episode's own state and totals. */
+    const state = async (f) => ({
+      ...(await written(f)),
+      episode: (await rows('SELECT evaluation_status, total_income, total_expenses, status FROM episodes WHERE id = :episode', f))[0],
+    });
+
+    test('signed out is 401, and nothing is written', async () => {
+      const f = await seed();
+      const before = await state(f);
+      const res = await finalize(null, f);
+      expect(res.status).toBe(401);
+      expect(res.body.code).toBe('AUTH_REQUIRED');
+      expect(await state(f)).toEqual(before);
+    });
+
+    test('a signed-in user who is not an admin is 403 AUTH_GROUP_REQUIRED: no ledger row, no coin, no change to the episode', async () => {
+      const f = await seed();
+      const before = await state(f);
+      const res = await finalize(editor, f);
+      expect(res.status).toBe(403);
+      expect(res.body.code).toBe('AUTH_GROUP_REQUIRED');
+      const after = await state(f);
+      expect(after).toEqual(before);
+      expect(after.ledger).toBe(0);
+      expect(after.coins).toBe(1000);
+    });
+
+    test('an admin finalizes, and a repeat books nothing more', async () => {
+      const f = await seed();
+      const first = await finalize(admin, f);
+      expect(first.status).toBe(200);
+      expect(first.body.data.already_finalized).toBeFalsy();
+      const once = await state(f);
+      expect(once.ledger).toBeGreaterThan(0);
+      // The coins moved with the ledger (the entry cost out, the content revenue in).
+      expect(once.coins).not.toBe(1000);
+      // Finalize is not completion: the episode is not marked completed.
+      expect(once.status).toBeNull();
+      const again = await finalize(admin, f);
+      expect(again.status).toBe(200);
+      expect(again.body.data.already_finalized).toBe(true);
+      expect(await state(f)).toEqual(once);
+    });
+
+    test('a non-admin is refused on an episode an admin already finalized, too', async () => {
+      const f = await seed();
+      await finalize(admin, f);
+      const before = await state(f);
+      expect((await finalize(editor, f)).status).toBe(403);
+      expect(await state(f)).toEqual(before);
     });
   });
 
