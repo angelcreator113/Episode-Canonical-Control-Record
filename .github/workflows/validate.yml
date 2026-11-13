@@ -238,10 +238,14 @@ jobs:
               && r.numPassedTests === r.numTotalTests && r.numFailedTests === 0 && r.numPendingTests === 0;
             if (!ok) { console.log("::error::The PostgreSQL 17 migration tests did not all run and pass: " + line); process.exit(1); }
           '
-      # The same network guard check as the Tests job.
+      # The network guard check for a focused job: this job runs three test
+      # files, so the canary file is not in the run and --focused waives only
+      # that. A missing, stale, unfinalized, incomplete or malformed report
+      # still fails; recorded attempts are listed, not failed, as in the Tests
+      # job (Stage 3a is report-only). The Tests job keeps the canary check.
       - name: Check the network guard report
         if: always()
-        run: node tests/networkGuard/verify.js
+        run: node tests/networkGuard/verify.js --focused
 
   frontend-tests:
     name: Frontend Tests

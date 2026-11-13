@@ -1,0 +1,136 @@
+{
+  "_readme": "Jest network guard canaries (Stage 3a). Each canary runs once in the file below, inside expectNetworkBlocked(); the guard must record exactly `events` blocked events for it, with these transports and this destination. Destinations never leave the machine. The reporter fails verification on any missing, extra, skipped or unblocked canary, or on anything reaching a witness. Changes need review.",
+  "file": "tests/unit/guards/networkGuard.canary.test.js",
+  "canaries": [
+    {
+      "id": "socket-ipv4-any",
+      "transports": [
+        "socket"
+      ],
+      "events": 1,
+      "host": "0.0.0.0"
+    },
+    {
+      "id": "socket-ipv6-any",
+      "transports": [
+        "socket"
+      ],
+      "events": 1,
+      "host": "0:0:0:0:0:0:0:0"
+    },
+    {
+      "id": "http-ipv4-any",
+      "transports": [
+        "http"
+      ],
+      "events": 1,
+      "host": "0.0.0.0"
+    },
+    {
+      "id": "https-ipv4-any",
+      "transports": [
+        "https"
+      ],
+      "events": 1,
+      "host": "0.0.0.0"
+    },
+    {
+      "id": "fetch-ipv4-any",
+      "transports": [
+        "fetch"
+      ],
+      "events": 1,
+      "host": "0.0.0.0"
+    },
+    {
+      "id": "axios-http-via-proxy",
+      "transports": [
+        "http"
+      ],
+      "events": 1,
+      "host": "canary.invalid"
+    },
+    {
+      "id": "axios-https-via-proxy",
+      "transports": [
+        "https"
+      ],
+      "events": 1,
+      "host": "canary.invalid"
+    },
+    {
+      "id": "udp-ipv4-any",
+      "transports": [
+        "udp"
+      ],
+      "events": 1,
+      "host": "0.0.0.0"
+    },
+    {
+      "id": "loopback-unregistered-tcp",
+      "transports": [
+        "socket"
+      ],
+      "events": 1,
+      "host": "127.0.0.1"
+    },
+    {
+      "id": "loopback-unregistered-udp",
+      "transports": [
+        "udp"
+      ],
+      "events": 1,
+      "host": "127.0.0.1"
+    },
+    {
+      "id": "unix-unregistered",
+      "transports": [
+        "socket"
+      ],
+      "events": 1,
+      "kind": "witness-unix"
+    },
+    {
+      "id": "dns-resolver-local-witness",
+      "transports": [
+        "dns.promises.resolve4"
+      ],
+      "events": 1,
+      "host": "canary.invalid"
+    },
+    {
+      "id": "dns-lookup-noncanonical",
+      "transports": [
+        "dns.promises.lookup"
+      ],
+      "events": 1,
+      "host": "2130706433"
+    },
+    {
+      "id": "provider-anthropic-sdk",
+      "transports": [
+        "fetch"
+      ],
+      "events": 1,
+      "host": "0.0.0.0",
+      "sdk": {
+        "module": "@anthropic-ai/sdk",
+        "version": "0.74.0"
+      },
+      "note": "Measured with maxRetries 0: 1 blocked fetch. The canary file fails if the installed version changes."
+    },
+    {
+      "id": "provider-replicate-sdk",
+      "transports": [
+        "fetch"
+      ],
+      "events": 6,
+      "host": "0.0.0.0",
+      "note": "Measured, not an SDK contract: replicate 1.4.0 retries a failed request (withAutomaticRetries, maxRetries 5), so 6 blocked fetches. The canary file fails if the installed version changes, so the count is re-measured and reviewed then; verification fails on any other count.",
+      "sdk": {
+        "module": "replicate",
+        "version": "1.4.0"
+      }
+    }
+  ]
+}
