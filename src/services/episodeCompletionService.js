@@ -719,27 +719,21 @@ async function completeEpisode(episodeId, showId, sequelize, { eventPiecesFallba
     }
     stressBreakdown = withNone.compared.stress_breakdown;
 
-    // The decisions are part of the audit trail (ActivityLog, the one writer),
-    // written in this transaction: they commit or roll back with the
-    // completion they decided.
+    // The decisions are part of the audit trail, through its one call for an
+    // operation that must not happen without its entry (middleware/auditLog
+    // logger.logActionInTransaction): written in this transaction, so they
+    // commit or roll back with the completion they decided.
     const decided = (milestoneAttribution?.candidates || []).filter((c) => c.decision);
     if (decided.length > 0) {
-      const ActivityLog = sequelize.models?.ActivityLog || require('../models').models?.ActivityLog;
-      if (!ActivityLog) throw new Error('The audit trail is not available; the milestone decision cannot be recorded, so nothing was changed.');
-      await ActivityLog.logActivity({
-        userId: decider.id,
-        action: 'milestone_attribution',
-        resourceType: 'episode',
-        resourceId: episodeId,
-        changes: { meta: {
-          show_id: showId,
-          status: milestoneAttribution.status,
-          decided_by: decider,
-          decided_at: decidedAt,
-          decisions: decided.map((c) => ({ tx_id: c.tx_id, decision: c.decision, goal_id: c.goal_id, threshold: c.threshold, amount: c.amount, reason: c.reason })),
-          left_undecided: undecided.map((c) => c.tx_id),
-        } },
-      }, { transaction });
+      const { logger: audit } = require('../middleware/auditLog');
+      await audit.logActionInTransaction(transaction, decider.id, 'milestone_attribution', 'episode', episodeId, {
+        show_id: showId,
+        status: milestoneAttribution.status,
+        decided_by: decider,
+        decided_at: decidedAt,
+        decisions: decided.map((c) => ({ tx_id: c.tx_id, decision: c.decision, goal_id: c.goal_id, threshold: c.threshold, amount: c.amount, reason: c.reason })),
+        left_undecided: undecided.map((c) => c.tx_id),
+      });
     }
 
     // ── 12. Apply all deltas to character state ──
