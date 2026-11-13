@@ -1,129 +1,95 @@
 /**
- * Audit Log Viewer Page
- * View and filter all system audit logs (Admin only)
+ * Audit Log Viewer Page (/admin/audit; linked from Admin › Security & Access)
+ * View and filter the audit entries. Admin only: the route is wrapped in
+ * AdminOnly (App.jsx) and the API refuses anyone else.
+ *
+ * 2026-11-13: every load names the filters and the page it asks for, so
+ * Previous/Next and Clear load what they say (they used to load the page
+ * before); a failed load keeps the filters on screen and offers Retry; the
+ * filter options are the actions and resources that are actually written
+ * (page views are never audited).
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { isAdmin } from '../utils/authGroups';
 import apiClient from '../services/api';
-import ErrorMessage from '../components/ErrorMessage';
 import LoadingSpinner from '../components/LoadingSpinner';
 import '../styles/AuditLog.css';
 
+const NO_FILTERS = { action: '', resource: '', userId: '', startDate: '', endDate: '' };
+const PAGE_SIZE = 50;
+// What the app writes (middleware/auditLog logAction callers).
+const ACTIONS = ['create', 'edit', 'delete', 'download', 'retry', 'cancel', 'detach_secondary_event'];
+const RESOURCES = ['episode', 'file', 'metadata', 'processing', 'job', 'world_event'];
+const labelOf = (value) => value.charAt(0).toUpperCase() + value.slice(1).replace(/_/g, ' ');
+
 const AuditLog = () => {
-  const { isAuthenticated, loading: authLoading, user } = useAuth();
+  const { loading: authLoading, user } = useAuth();
+  const admin = isAdmin(user);
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [filters, setFilters] = useState({
-    action: '',
-    resource: '',
-    userId: '',
-    startDate: '',
-    endDate: '',
-  });
-  const [pagination, setPagination] = useState({
-    total: 0,
-    limit: 50,
-    offset: 0,
-    pages: 1,
-  });
+  const [filters, setFilters] = useState(NO_FILTERS);
+  // The filters and page of the last request, so Retry and paging repeat them.
+  const [asked, setAsked] = useState({ filters: NO_FILTERS, offset: 0 });
+  const [pagination, setPagination] = useState({ total: 0, limit: PAGE_SIZE, offset: 0, pages: 1 });
 
-  useEffect(() => {
-    if (!authLoading && !isAuthenticated) {
-      window.location.href = '/login';
-      return;
-    }
-
-    // Cognito admin group; the user has no role field
-    if (!isAdmin(user)) {
-      setError('Only administrators can view audit logs');
-      setLoading(false);
-      return;
-    }
-
-    loadAuditLogs();
-  }, [authLoading, isAuthenticated, user]);
-
-  const loadAuditLogs = async () => {
+  const loadAuditLogs = useCallback(async (useFilters, offset) => {
+    setAsked({ filters: useFilters, offset });
     try {
       setLoading(true);
       setError(null);
-
-      const params = new URLSearchParams({
-        limit: pagination.limit,
-        offset: pagination.offset,
-      });
-
-      if (filters.action) params.append('action', filters.action);
-      if (filters.resource) params.append('resource', filters.resource);
-      if (filters.userId) params.append('userId', filters.userId);
-      if (filters.startDate) params.append('startDate', filters.startDate);
-      if (filters.endDate) params.append('endDate', filters.endDate);
-
-      let response;
-      try {
-        response = await apiClient.get(`/api/v1/audit-logs?${params}`);
-      } catch (apiErr) {
-        throw new Error(apiErr.response?.data?.error || 'Failed to load audit logs');
-      }
+      const params = new URLSearchParams({ limit: PAGE_SIZE, offset });
+      if (useFilters.action) params.append('action', useFilters.action);
+      if (useFilters.resource) params.append('resource', useFilters.resource);
+      if (useFilters.userId) params.append('userId', useFilters.userId);
+      if (useFilters.startDate) params.append('startDate', useFilters.startDate);
+      if (useFilters.endDate) params.append('endDate', useFilters.endDate);
+      const response = await apiClient.get(`/api/v1/audit-logs?${params}`);
       const data = response.data;
       setLogs(data.data || []);
-      setPagination(data.pagination || {});
+      setPagination({ total: 0, limit: PAGE_SIZE, offset, pages: 1, ...(data.pagination || {}) });
     } catch (err) {
       console.error('Error loading audit logs:', err);
-      setError(err.message);
+      const status = err.response?.status;
+      setError(`${err.response?.data?.error || 'The audit log could not be loaded'}${status ? ` (the server answered ${status})` : ''}.`);
       setLogs([]);
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    if (authLoading) return;
+    if (!admin) { setLoading(false); return; }
+    loadAuditLogs(NO_FILTERS, 0);
+  }, [authLoading, admin, loadAuditLogs]);
 
   const handleFilterChange = (e) => {
     const { name, value } = e.target;
     setFilters((prev) => ({ ...prev, [name]: value }));
-    setPagination((prev) => ({ ...prev, offset: 0 })); // Reset to first page
   };
-
-  const handleApplyFilters = () => {
-    loadAuditLogs();
-  };
-
-  const handleClearFilters = () => {
-    setFilters({
-      action: '',
-      resource: '',
-      userId: '',
-      startDate: '',
-      endDate: '',
-    });
-    setPagination((prev) => ({ ...prev, offset: 0 }));
-  };
-
-  const handlePrevPage = () => {
-    setPagination((prev) => ({ ...prev, offset: Math.max(0, prev.offset - prev.limit) }));
-    loadAuditLogs();
-  };
-
+  // Applying or clearing starts again from the first page.
+  const handleApplyFilters = () => loadAuditLogs(filters, 0);
+  const handleClearFilters = () => { setFilters(NO_FILTERS); loadAuditLogs(NO_FILTERS, 0); };
+  const handlePrevPage = () => loadAuditLogs(asked.filters, Math.max(0, asked.offset - PAGE_SIZE));
   const handleNextPage = () => {
-    if (pagination.offset + pagination.limit < pagination.total) {
-      setPagination((prev) => ({ ...prev, offset: prev.offset + prev.limit }));
-      loadAuditLogs();
-    }
+    if (asked.offset + PAGE_SIZE < pagination.total) loadAuditLogs(asked.filters, asked.offset + PAGE_SIZE);
   };
 
-  if (authLoading || loading) {
+  if (authLoading) {
     return <LoadingSpinner />;
   }
-
-  if (error) {
-    return <ErrorMessage message={error} />;
+  if (!admin) {
+    return <div className="audit-log-page"><div className="container"><p role="alert">Only administrators can view audit logs</p></div></div>;
   }
 
   return (
     <div className="audit-log-page">
       <div className="container">
+        <p className="audit-back"><Link to="/admin?tab=security">← Security &amp; Access</Link></p>
         <h1>📋 Audit Log Viewer</h1>
 
         {/* Filters */}
@@ -137,12 +103,7 @@ const AuditLog = () => {
                 onChange={handleFilterChange}
               >
                 <option value="">All Actions</option>
-                <option value="create">Create</option>
-                <option value="edit">Edit</option>
-                <option value="delete">Delete</option>
-                <option value="view">View</option>
-                <option value="upload">Upload</option>
-                <option value="download">Download</option>
+                {ACTIONS.map((a) => <option key={a} value={a}>{labelOf(a)}</option>)}
               </select>
             </div>
 
@@ -154,11 +115,7 @@ const AuditLog = () => {
                 onChange={handleFilterChange}
               >
                 <option value="">All Resources</option>
-                <option value="episode">Episode</option>
-                <option value="asset">Asset</option>
-                <option value="template">Template</option>
-                <option value="metadata">Metadata</option>
-                <option value="thumbnail">Thumbnail</option>
+                {RESOURCES.map((r) => <option key={r} value={r}>{labelOf(r)}</option>)}
               </select>
             </div>
 
@@ -208,11 +165,19 @@ const AuditLog = () => {
 
         {/* Results */}
         <div className="results-section">
+          {loading && <LoadingSpinner />}
+          {!loading && error && (
+            <div className="audit-error" role="alert" data-testid="audit-error">
+              <p>{error}</p>
+              <button className="btn btn-primary" onClick={() => loadAuditLogs(asked.filters, asked.offset)}>Retry</button>
+            </div>
+          )}
+          {!loading && !error && (<>
           <div className="results-header">
             <h2>Results ({pagination.total} total)</h2>
             <span className="page-info">
               Page {Math.floor(pagination.offset / pagination.limit) + 1} of{' '}
-              {pagination.pages}
+              {Math.max(1, pagination.pages || 1)}
             </span>
           </div>
 
@@ -256,9 +221,10 @@ const AuditLog = () => {
               </table>
             </div>
           )}
+          </>)}
 
           {/* Pagination */}
-          {pagination.pages > 1 && (
+          {!loading && !error && pagination.pages > 1 && (
             <div className="pagination">
               <button
                 className="btn"

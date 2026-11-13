@@ -1308,3 +1308,25 @@
   align-items: center;
   gap: 0.5rem 0.75rem;
 }
+
+/* ── Admin › Overview, the Website / Show settings switch, the roles note (2026-11-13) ── */
+.adm-ov { display: flex; flex-direction: column; gap: 16px; }
+.adm-ov-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.adm-ov-title { margin: 0; font-family: 'Lora', serif; font-size: 1.25rem; color: var(--lala-ink, #2C2C2C); }
+.adm-ov-retry { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 6px 12px; border: 1px solid var(--lala-parchment-3, #e5dcc8); border-radius: 8px; background: var(--surface-bg, #fff); color: var(--lala-ink, #2C2C2C); font: inherit; cursor: pointer; }
+.adm-ov-card { padding: 14px 16px; border: 1px solid var(--lala-parchment-3, #e5dcc8); border-radius: 12px; background: var(--surface-bg, #fff); }
+.adm-ov-card h3 { margin: 0 0 8px; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-secondary, #6b6558); }
+.adm-ov-rows { list-style: none; margin: 0; padding: 0; }
+.adm-ov-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 12px; padding: 8px 0; border-top: 1px solid var(--lala-parchment-3, #e5dcc8); }
+.adm-ov-row:first-child { border-top: 0; }
+.adm-ov-label { flex: 1 1 180px; font-weight: 600; color: var(--lala-ink, #2C2C2C); }
+.adm-ov-value { flex: 2 1 200px; min-width: 0; overflow-wrap: anywhere; color: var(--lala-ink, #2C2C2C); }
+.adm-ov-value.is-loading, .adm-ov-note { color: var(--text-secondary, #6b6558); }
+.adm-ov-value.is-failed { color: var(--danger-text, #b42318); }
+.adm-ov-link { color: var(--lala-gold-text, #8a6d1c); text-decoration: underline; }
+.adm-ov-links { display: flex; flex-wrap: wrap; gap: 8px 20px; margin: 0; }
+.adm-site-switch { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 16px; }
+.adm-site-btn { min-height: 40px; padding: 8px 16px; border: 1px solid var(--lala-parchment-3, #e5dcc8); border-radius: 999px; background: var(--surface-bg, #fff); color: var(--lala-ink, #2C2C2C); font: inherit; cursor: pointer; }
+.adm-site-btn.is-active { border-color: var(--lala-gold, #B8962E); background: var(--lala-gold, #B8962E); color: #fff; }
+.admin-roles-note { margin: 0; color: var(--text-secondary, #6b6558); overflow-wrap: anywhere; }
+a.admin-tool { text-decoration: none; box-sizing: border-box; color: inherit; }

@@ -80,5 +80,7 @@ describe('loadPulseSummary', () => {
     expect(s.stats.comments).toBe(0);
     expect(api.get).toHaveBeenCalledWith('/api/v1/pulse-followers/growth?show_id=show%201');
     expect(console.error).toHaveBeenCalledWith('[PulseSummary] comments could not be read:', 'down');
+    // The read that failed is named, so a screen can say so instead of showing a zero.
+    expect(s.failed).toEqual(['comments']);
   });
 });
