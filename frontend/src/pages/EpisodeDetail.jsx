@@ -1281,6 +1281,7 @@ const EpisodeDetail = () => {
             evaluation under it since 2026-10-22; ?tab=evaluation lands there. */}
         {(tabKey === 'results.summary' || tabKey === 'results.evaluation') && (
           <EpisodeResultsSummary episode={episode} showId={episode?.show_id || episode?.showId} onOpenTab={openTab}
+            onCompleted={fetchEpisode}
             focus={tabKey === 'results.evaluation' ? 'evaluation' : null} />
         )}
 

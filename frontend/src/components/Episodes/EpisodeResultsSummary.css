@@ -118,3 +118,13 @@
 @media (max-width: 480px) {
   .ers-format.is-chip { flex: 1 1 100%; }
 }
+
+/* Complete the episode, and a refusal that stays until dismissed (Evoni, 2026-11-12). */
+.ers-complete { display: grid; gap: 10px; justify-items: start; margin-top: 4px; min-width: 0; }
+.ers-complete-btn { min-height: 44px; padding: 10px 20px; border: 2px solid var(--lala-gold); border-radius: 999px; background: var(--surface-card); color: var(--lala-gold-text); font: inherit; font-size: 15px; font-weight: 700; cursor: pointer; }
+.ers-complete-btn:disabled { opacity: .6; cursor: default; }
+.ers-complete-btn:focus-visible, .ers-refusal-close:focus-visible { outline: 3px solid var(--lala-lavender-text); outline-offset: 2px; }
+.ers-refusal { display: grid; gap: 6px; width: 100%; min-width: 0; padding: 12px 14px; border: 1px solid currentColor; border-radius: 12px; background: var(--warning-bg); color: var(--warning-text); }
+.ers-refusal-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.ers-refusal-text { margin: 0; font-size: 14px; overflow-wrap: anywhere; }
+.ers-refusal-close { display: inline-flex; align-items: center; justify-content: center; flex: none; min-width: 44px; min-height: 44px; border: none; border-radius: 8px; background: none; color: inherit; cursor: pointer; }

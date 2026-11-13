@@ -570,7 +570,9 @@ router.post('/episodes/:id/override', requireAuth, async (req, res) => {
 
 // DEPRECATED: Proxies to unified completeEpisode pipeline.
 // Use POST /world/:showId/episodes/:episodeId/complete instead.
-router.post('/episodes/:id/accept', requireAuth, async (req, res) => {
+// Admin only (Evoni, 2026-11-12), as POST /world/:showId/episodes/:episodeId/complete:
+// it is the same operation.
+router.post('/episodes/:id/accept', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -612,6 +614,12 @@ router.post('/episodes/:id/accept', requireAuth, async (req, res) => {
     // Task #1933: completion refuses a result that would take coins below zero.
     if (error instanceof InsufficientCoinsError) {
       return res.status(error.status).json(insufficientCoinsBody(error));
+    }
+    // A lock another writer held: nothing was booked. The existing retryable 409.
+    const { asRetryable, RetryableConflictError } = require('../utils/episodeLocks');
+    const retry = asRetryable(error);
+    if (retry instanceof RetryableConflictError) {
+      return res.status(409).json({ success: false, error: retry.message, code: retry.code });
     }
     return res.status(500).json({ error: 'Accept failed', message: error.message });
   }
