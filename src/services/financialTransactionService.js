@@ -519,7 +519,7 @@ async function finalizeEpisodeFinancials(episodeId, showId, sequelize, { dryRun 
     const [bookedEvent] = await sequelize.query(
       `SELECT * FROM world_events WHERE id = ${require('../utils/episodeEventSql').EPISODE_EVENT_ID_SQL}`,
       { replacements: { episodeId }, type: sequelize.QueryTypes.SELECT }
-    ).catch(() => []);
+    );
     return {
       already_finalized: true,
       transactions: rows || [],
