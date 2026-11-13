@@ -148,7 +148,9 @@ const automatic = [
 
 const decide = (command, mode = 'default') => {
   const input = JSON.stringify({ tool_name: 'Bash', permission_mode: mode, tool_input: { command } });
-  const r = spawnSync(process.execPath, [HOOK], { input, encoding: 'utf8' });
+  // The matrix describes the guard outside a cloud session; the cloud list
+  // (F-Tools-5 Amendment 1) has its own tests in tests/unit/guards/.
+  const r = spawnSync(process.execPath, [HOOK], { input, encoding: 'utf8', env: { ...process.env, CLAUDE_CODE_REMOTE: '' } });
   if (r.status === 2) return DENY;
   if (r.status !== 0) return `exit ${r.status}`;
   return r.stdout ? JSON.parse(r.stdout).hookSpecificOutput.permissionDecision : PASS;

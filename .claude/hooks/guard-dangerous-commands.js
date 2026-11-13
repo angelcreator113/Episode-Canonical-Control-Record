@@ -12,6 +12,12 @@
 //       rule is her explicit yes in the conversation; this is the backstop.
 //   §5  a command that would print a secret is refused, in every mode.
 //   Git: no push to main or dev, no force-push (also in settings.json).
+// F-Tools-5 Amendment 1 (2026-11-13,
+// docs/audit/F-Tools-5_AgentProductionAccess_Ruling_Amendment1_2026-11-13.md)
+// §5: in a cloud session whose AWS identity is claude-code-ops, a short list
+// of reversible load balancer and security-group commands is not gated here.
+// What bounds that identity is its IAM policy, not this file. Everything
+// else gated stays refused in the cloud, and nothing changes on the laptop.
 // Exit 2 = refused (stderr is shown to Claude). Exit 0 = allowed, or the
 // `ask` decision as PreToolUse JSON on stdout.
 // Matching is by command position and parsed arguments, so prose, greps and
@@ -157,11 +163,63 @@ process.stdin.on('end', () => {
     refuse('direct push to main or dev. Work lands by PR + squash-merge.');
   }
 
+  /* ── F-Tools-5 Amendment 1 §5: the cloud identity's reversible list ── */
+  const CLOUD_INFRA = {
+    elbv2: new Set(['modify-listener', 'create-rule', 'modify-rule', 'delete-rule', 'set-rule-priorities', 'set-security-groups',
+      'modify-target-group', 'modify-target-group-attributes', 'register-targets', 'deregister-targets']),
+    ec2: new Set(['authorize-security-group-ingress', 'authorize-security-group-egress', 'revoke-security-group-ingress',
+      'revoke-security-group-egress', 'modify-security-group-rules']),
+  };
+  const OPS_ARN = 'arn:aws:iam::637423256673:user/claude-code-ops';
+  const IN_CLOUD = process.env.CLAUDE_CODE_REMOTE === 'true';
+  // Asked of AWS once, and only when a listed command is being decided.
+  let callerArn;
+  const isOpsIdentity = () => {
+    if (callerArn === undefined) {
+      try {
+        const r = require('child_process').spawnSync('aws', ['sts', 'get-caller-identity', '--query', 'Arn', '--output', 'text'],
+          { encoding: 'utf8', timeout: 6000, shell: process.platform === 'win32' });
+        callerArn = r.status === 0 ? String(r.stdout || '').trim() : '';
+      } catch (e) {
+        console.error('[guard] could not ask AWS who is calling:', e.message);
+        callerArn = '';
+      }
+    }
+    return callerArn === OPS_ARN;
+  };
+  // An inbound rule the guard can read: 'port' when it opens 3002 or 5432 to
+  // anyone, or 22 to everyone; 'unreadable' when the rule is not in the
+  // command text; null when it is readable and neither.
+  const inboundProblem = (op, flags) => {
+    if (!/^(authorize-security-group-ingress|modify-security-group-rules)$/.test(op)) return null;
+    if (/\bfileb?:\/\/|--cli-input-(json|yaml)\b|\$\(|`|\$\{?[A-Za-z_]/.test(flags)) return 'unreadable';
+    const ranges = [];
+    for (const m of flags.matchAll(/--port[=\s]+(-?\d+)(?:-(\d+))?/g)) ranges.push([Number(m[1]), Number(m[2] || m[1])]);
+    const from = [...flags.matchAll(/FromPort["']?\s*[=:]\s*["']?(-?\d+)/gi)].map((m) => Number(m[1]));
+    const to = [...flags.matchAll(/ToPort["']?\s*[=:]\s*["']?(-?\d+)/gi)].map((m) => Number(m[1]));
+    from.forEach((f, i) => ranges.push([f, to[i] === undefined ? f : to[i]]));
+    const everyPort = /--protocol[=\s]+["']?(all|-1)\b|IpProtocol["']?\s*[=:]\s*["']?(all|-1)\b/i.test(flags) || ranges.some(([f]) => f === -1);
+    if (!everyPort && ranges.length === 0) return 'unreadable';
+    const covers = (p) => everyPort || ranges.some(([f, t]) => f <= p && p <= t);
+    const everyone = /(^|[^\d.])0\.0\.0\.0\/0\b|::\/0/.test(flags);
+    if (covers(3002) || covers(5432) || (covers(22) && everyone)) return 'port';
+    return null;
+  };
+  const choosesIdentity = (words) =>
+    words.some((w) => /^--(profile|endpoint-url)(=|$)/.test(w)) || /(^|[\s;&|(])(export\s+)?AWS_[A-Z0-9_]+=/.test(scan);
+
   /* ── §4: gated, irreversible actions ───────────────────────────────── */
   const DESTRUCTIVE_OP = /^(?:admin-)?(?:delete|remove|terminate|deregister|purge|stop|reboot|restore|revoke|disable|detach|disassociate|cancel|modify)-/;
   for (const { words } of aws) {
     const { svc, op, rest, flags } = awsParts(words);
     const positional = rest.filter((w) => !w.startsWith('-'));
+    if (IN_CLOUD && CLOUD_INFRA[svc] && CLOUD_INFRA[svc].has(op)) {
+      const problem = inboundProblem(op, flags);
+      if (problem === 'port') {
+        refuse('an inbound rule that opens port 3002 or 5432, or opens port 22 to everyone (F-Tools-5 Amendment 1 §5). Those ports stay closed; if one is truly needed, Evoni runs it.');
+      }
+      if (!problem && !choosesIdentity(words) && isOpsIdentity()) continue; // listed, readable, and bounded by that identity's IAM policy
+    }
     if (DESTRUCTIVE_OP.test(op)) gate(`aws ${svc} ${op}`);
     if (svc === 's3' && ['rm', 'rb', 'mv'].includes(op)) gate(`aws s3 ${op}`);
     if (svc === 's3' && ['cp', 'sync'].includes(op) && (/^s3:\/\//.test(positional[positional.length - 1] || '') || /--delete\b/.test(flags))) gate(`aws s3 ${op} into production storage (it can overwrite or delete objects)`);
