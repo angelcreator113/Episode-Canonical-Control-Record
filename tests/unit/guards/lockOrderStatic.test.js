@@ -28,7 +28,7 @@ const PINNED = {
   'src/services/beat14Opportunity.js': { traced: false, locks: { episodes: 2 } },
   'src/services/dealTermsDraftService.js': { traced: false, locks: { world_events: 1 } },
   'src/services/dealTypeDraftService.js': { traced: false, locks: { world_events: 1 } },
-  'src/services/episodeCompletionService.js': { traced: false, locks: { episodes: 1 } },
+  'src/services/episodeCompletionService.js': { traced: false, locks: { episodes: 1, world_events: 1 } }, // A2 (2026-11-14): the event row, after the episode and the ledger and before the offers, so Complete (episode, ledger, event, offers) and Start Episode (episode, event, offers) agree; raced in compensationEligibility.integration.test.js
   'src/services/episodeEstimateBackfill.js': { traced: false, locks: { episodes: 1 } },
   'src/services/eventCostsService.js': { traced: false, locks: { world_events: 1 } },
   'src/services/eventDocumentsService.js': { traced: false, locks: { world_events: 1 } },

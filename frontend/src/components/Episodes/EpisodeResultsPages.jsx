@@ -49,6 +49,48 @@ export function describeMilestoneCandidate(c) {
  * UNVERIFIED when any was left undecided (the result was the same either
  * way), and each admin decision with who made it and when.
  */
+const COMPENSATION_CATEGORY_WORDS = {
+  appearance_fee: 'Appearance fee', partnership_base_fee: 'Partnership base', performance_fee: 'Performance fee',
+  deal_bonus: 'Deal bonus', event_payment: 'Event payment', content_revenue: 'Content revenue',
+};
+const COMPENSATION_REASON_WORDS = {
+  owner_not_accepted: 'The offer was not accepted when the episode was completed.',
+  owner_closed: 'The offer had been declined or closed when the episode was completed.',
+};
+
+/**
+ * Brand compensation that was not booked at completion (A2; the record
+ * completion stored, evaluation_json.compensation). Shown as proposed and
+ * not booked: these amounts are not earnings, and no total includes them.
+ * Nothing is shown when the compensation was owed and booked, or when the
+ * event has no offer linked.
+ */
+export function CompensationRecord({ compensation }) {
+  const withheld = Array.isArray(compensation?.withheld) ? compensation.withheld : [];
+  if (!compensation || compensation.owed !== false) return null;
+  return (
+    <section className="ers-card ers-attribution" data-testid="results-compensation">
+      <h3 className="ers-label">Brand compensation</h3>
+      <p className="ers-attribution-status is-unverified" data-testid="results-compensation-status">Not booked</p>
+      <p className="ers-note">
+        {COMPENSATION_REASON_WORDS[compensation.reason] || 'No accepted agreement owed it when the episode was completed.'}
+        {compensation.owner?.name ? ` Offer: ${compensation.owner.name} (${compensation.owner.status}).` : ''}
+        {' '}Lala&rsquo;s own costs were booked as usual. If the offer is accepted later, an admin books the payment separately.
+      </p>
+      {withheld.length > 0 && (
+        <ul className="ers-rows ers-attribution-rows">
+          {withheld.map((w, i) => (
+            <li key={`${w.category}-${i}`} data-testid={`results-compensation-row-${w.category}`}>
+              <span className="ers-row-name"><span>{COMPENSATION_CATEGORY_WORDS[w.category] || w.category}</span><em>proposed, not booked</em></span>
+              <strong>{Number(w.amount || 0).toLocaleString()}</strong>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
 export function MilestoneAttribution({ attribution }) {
   const candidates = Array.isArray(attribution?.candidates) ? attribution.candidates : [];
   if (!attribution || candidates.length === 0) return null;
@@ -176,6 +218,7 @@ export function EpisodeResultsEvaluation({ episode, embedded = false }) {
           )}
         </div>
         <MilestoneAttribution attribution={evalJson.milestone_attribution} />
+        <CompensationRecord compensation={evalJson.compensation} />
       </section>
     );
   }
@@ -266,6 +309,7 @@ export function EpisodeResultsEvaluation({ episode, embedded = false }) {
         </div>
       )}
       <MilestoneAttribution attribution={evalJson.milestone_attribution} />
+      <CompensationRecord compensation={evalJson.compensation} />
     </div>
   );
 }

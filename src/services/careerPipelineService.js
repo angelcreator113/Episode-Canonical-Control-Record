@@ -337,7 +337,59 @@ async function getAccessibleCareerTier(showId, models) {
   }
 }
 
+/**
+ * Complete moving the event's own offer to completed (A2; Evoni's rulings of
+ * 2026-11-14), inside the completion's transaction: it commits or rolls back
+ * with the episode, and is recorded once through A1's transition record
+ * (services/opportunityTransitionAudit).
+ *
+ * Only the owner the eligibility answer established (the offer the event was
+ * made from, pointing back at it), and only when it is accepted and not yet
+ * completed (booked, preparing, active). No offer is picked when there is no
+ * owner, and no other offer is touched. It is one transition, from the
+ * status it had to completed: one history entry, as this step has always
+ * written, with who and by which route.
+ *
+ * `resolution` is resolveEventCompensation's answer, whose rows this
+ * transaction already holds locked. Returns { opportunities_advanced,
+ * opportunities_unaccepted }, as onEpisodeCompleted does.
+ */
+async function completeOwnerOffer(sequelize, { resolution, episodeId, episodeNumber = null, showId, eventId, actor = null, transaction }) {
+  const { COMPLETION_ELIGIBLE_STATUSES, isOpenOffer: open } = require('./startOfferDecision');
+  const { ROUTES, historyFields, logTransition } = require('./opportunityTransitionAudit');
+  const result = { opportunities_advanced: [], opportunities_unaccepted: [] };
+  if (!transaction) throw new Error('completeOwnerOffer needs the completion\'s transaction');
+  const owner = resolution?.owner ? (resolution.rows || []).find((o) => String(o.id) === String(resolution.owner.id)) : null;
+  if (!owner) return result;
+  if (open(owner.status)) {
+    // Never accepted: left as it is, listed for review (as before).
+    result.opportunities_unaccepted.push({ id: owner.id, name: owner.name, status: owner.status });
+    return result;
+  }
+  if (!COMPLETION_ELIGIBLE_STATUSES.includes(owner.status)) return result;
+  const from = owner.status;
+  const history = [...(Array.isArray(owner.status_history) ? owner.status_history : []), {
+    status: 'completed', from, date: new Date().toISOString(), note: `Episode ${episodeNumber || episodeId} completed`,
+    event_id: eventId, episode_id: episodeId,
+    ...historyFields({ actor, reason: null, route: ROUTES.EPISODE_COMPLETED }),
+  }];
+  // Under the lock the eligibility answer took; the status is checked again
+  // in the statement, so a row that moved is not written over.
+  const [moved] = await sequelize.query(
+    `UPDATE opportunities SET status = 'completed', status_history = CAST(:history AS jsonb), episode_id = :episodeId, updated_at = NOW()
+      WHERE id = :id AND status = :from AND deleted_at IS NULL RETURNING id`,
+    { replacements: { history: JSON.stringify(history), episodeId, id: owner.id, from }, transaction }
+  );
+  if (!moved?.[0]) return result;
+  await logTransition(transaction, {
+    actor, opportunityId: owner.id, showId, eventId, episodeId, from, to: 'completed', route: ROUTES.EPISODE_COMPLETED,
+  });
+  result.opportunities_advanced.push({ id: owner.id, name: owner.name, from, to: 'completed' });
+  return result;
+}
+
 module.exports = {
+  completeOwnerOffer,
   onOpportunityAdvanced,
   onEpisodeCompleted,
   convertOpportunityToEvent,

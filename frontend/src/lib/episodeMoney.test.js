@@ -1,5 +1,5 @@
 import { describe, test, expect } from 'vitest';
-import { estimateRows, moneyTiles, termsNote, lineCounts } from './episodeMoney';
+import { estimateRows, moneyTiles, termsNote, lineCounts, deliverableFeeNote } from './episodeMoney';
 
 const deal = (lines, extra = {}) => ({
   event: { id: 'ev-1', name: 'Studio Session' },
@@ -62,5 +62,61 @@ describe('episodeMoney', () => {
   test('the terms note is only for an event with deal terms', () => {
     expect(termsNote({ event: { id: 'e', deal: false }, spending: { editable: true } })).toBeNull();
     expect(termsNote({ event: { id: 'e', deal: true }, spending: { editable: true } })).toMatch(/still a draft/);
+  });
+});
+
+// A2 (Evoni, 2026-11-14): compensation no accepted agreement owes is shown
+// as proposed, and never as money.
+describe('episodeMoney: compensation that is not owed', () => {
+  const fee = { key: 'appearance_fee|ev-1', category: 'appearance_fee', label: 'Appearance fee', kind: 'income', amount: 450, signed: 450, state: 'not_owed', not_owed_reason: 'owner_closed', trigger: 'at Complete', payer: { who: 'brand', name: 'Maison Belle' } };
+  const cost = { key: 'event_cost|c-1', category: 'event_cost', label: 'Car to the gala', kind: 'expense', amount: 80, signed: -80, state: 'planned', trigger: 'at Finalize', payer: { who: 'lala' } };
+  const money = { event: { id: 'ev-1', name: 'Velour Night' }, lines: [fee, cost], unplanned: [], projection: { projected_net: -80, actual_balance: 1000, projected_balance: 920, conditional: [] } };
+
+  test('a not-owed line counts nothing, says what was proposed, and says why', () => {
+    expect(lineCounts(fee)).toBe(0);
+    const row = estimateRows(money).find((r) => r.label === 'Appearance fee');
+    expect(row.amount).toBe(0);
+    expect(row.amountText).toBe('0 (proposed 450)');
+    expect(row.chip).toBe('Not owed: the offer was declined or closed');
+    expect(row.chipKind).toBe('not_owed');
+  });
+
+  test('with no reason it still reads Not owed', () => {
+    const row = estimateRows({ ...money, lines: [{ ...fee, not_owed_reason: null }] }).find((r) => r.label === 'Appearance fee');
+    expect(row.chip).toBe('Not owed');
+    expect(row.amountText).toBe('0 (proposed 450)');
+  });
+
+  test('the tiles earn nothing from it; her cost is still counted', () => {
+    const t = moneyTiles(money);
+    expect(t.earns.total).toBe(0);
+    expect(t.spends.total).toBe(-80);
+    expect(t.net.total).toBe(-80);
+  });
+});
+
+describe('deliverableFeeNote: approval and the fee are separate', () => {
+  test('booked says the amount booked', () => {
+    expect(deliverableFeeNote({ fee_state: 'booked', proposed_fee: 120, booked_fee: 120 })).toEqual({ kind: 'booked', text: 'Booked 120' });
+  });
+  test('not owed says so, why, and what was only proposed', () => {
+    expect(deliverableFeeNote({ fee_state: 'not_owed', fee_reason: 'owner_not_accepted', proposed_fee: 1200, booked_fee: null }))
+      .toEqual({ kind: 'not_owed', text: 'Fee not booked: the offer is not accepted (proposed 1,200)' });
+    expect(deliverableFeeNote({ fee_state: 'not_owed', fee_reason: null, proposed_fee: 120 }).text).toBe('Fee not booked (proposed 120)');
+  });
+  test('unresolved says what has to happen first', () => {
+    expect(deliverableFeeNote({ fee_state: 'unresolved', fee_reason: 'no_owner', proposed_fee: 120 }))
+      .toEqual({ kind: 'unresolved', text: 'The fee cannot be booked until the offers on this event are resolved' });
+  });
+  test('approved with nothing booked and no recorded reason is still not worded as earned', () => {
+    expect(deliverableFeeNote({ fee_state: 'not_booked', proposed_fee: 120 }).text).toBe('Fee not booked (proposed 120)');
+  });
+  test('nothing to add for no fee, a fee that books on approval, or a row from before A2', () => {
+    for (const d of [{ fee_state: 'none' }, { fee_state: 'expected', proposed_fee: 120 }, { fee: 120 }, null]) expect(deliverableFeeNote(d)).toBeNull();
+  });
+  test('no wording calls a proposed fee earned or paid', () => {
+    for (const fee_state of ['not_owed', 'unresolved', 'not_booked']) {
+      expect(deliverableFeeNote({ fee_state, proposed_fee: 120 }).text).not.toMatch(/earned|paid|income/i);
+    }
   });
 });

@@ -36,6 +36,9 @@ const KNOWN = {
   MILESTONE_ATTRIBUTION_REQUIRED: { title: 'A milestone reward needs an admin\'s decision', action: null },
   MILESTONE_DECISION_STALE: { title: 'The rewards in question have changed', action: null },
   MILESTONE_DECISION_INVALID: { title: 'That milestone decision could not be read', action: null },
+  // Compensation eligibility (A2): which offer the event's terms belong to
+  // cannot be established, so nothing was booked. Resolved on the offers.
+  OFFER_RESOLUTION_REQUIRED: { title: 'The offers linked to this event need resolving first', action: 'event' },
 };
 
 /** What an admin may say of a reward in question. Anything else leaves it undecided. */

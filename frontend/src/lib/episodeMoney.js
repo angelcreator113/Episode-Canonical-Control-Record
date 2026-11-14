@@ -40,6 +40,18 @@ const STATE_CHIP = {
   pending: 'Pending',
   posted: 'Posted',
   not_earned: 'Not earned',
+  // Brand compensation no accepted agreement owes (A2): proposed, never income.
+  not_owed: 'Not owed',
+};
+
+// Why a line is not owed, in a few words (services/startOfferDecision COMPENSATION_REASONS).
+export const NOT_OWED_REASON = {
+  owner_not_accepted: 'the offer is not accepted',
+  owner_closed: 'the offer was declined or closed',
+  no_owner: 'the offers on this event need resolving',
+  owner_missing: 'the offers on this event need resolving',
+  owner_link_conflict: 'the offers on this event need resolving',
+  multiple_live_offers: 'the offers on this event need resolving',
 };
 
 const coins = (n) => Number(n || 0).toLocaleString();
@@ -63,7 +75,7 @@ export function payerText(line) {
 /** What a line adds to the estimate. */
 export function lineCounts(line) {
   if (line.posted) return Number(line.posted.signed) || 0;
-  if (line.covered || line.conditional || line.state === 'not_earned') return 0;
+  if (line.covered || line.conditional || line.state === 'not_earned' || line.state === 'not_owed') return 0;
   return Number(line.signed) || 0;
 }
 
@@ -114,6 +126,10 @@ export function estimateRows(money) {
       chip = `If ${String(l.tier || '').toUpperCase()}`;
     } else if (l.state === 'not_earned') {
       amountText = '0';
+    } else if (l.state === 'not_owed') {
+      // What the terms propose is said as proposed; it is not money earned.
+      amountText = `0 (proposed ${coins(Math.abs(Number(l.signed) || 0))})`;
+      if (NOT_OWED_REASON[l.not_owed_reason]) chip = `Not owed: ${NOT_OWED_REASON[l.not_owed_reason]}`;
     }
     return {
       key: l.key,
@@ -194,4 +210,31 @@ export function termsNote(money) {
   return draft
     ? 'Deal terms are locked at Start Episode. The episode is still a draft, so they can be reopened.'
     : 'Deal terms were locked at Start Episode. The episode is complete, so they stay as they are.';
+}
+
+/**
+ * A deliverable's fee beside its approval (A2; Evoni, 2026-11-14: approval
+ * and the fee are separate). The server sends proposed_fee, booked_fee,
+ * fee_state and fee_reason (dealPayoutService.deliverableFeeStates). Returns
+ * { kind, text } for the row, or null when there is nothing to add (no fee,
+ * or one that simply books on approval). A proposed fee is never worded as
+ * money earned.
+ */
+export function deliverableFeeNote(d) {
+  if (!d || !d.fee_state) return null;
+  const proposed = d.proposed_fee != null ? coins(d.proposed_fee) : null;
+  switch (d.fee_state) {
+    case 'booked':
+      return { kind: 'booked', text: `Booked ${coins(d.booked_fee)}` };
+    case 'not_owed': {
+      const why = NOT_OWED_REASON[d.fee_reason];
+      return { kind: 'not_owed', text: `Fee not booked${why ? `: ${why}` : ''}${proposed ? ` (proposed ${proposed})` : ''}` };
+    }
+    case 'unresolved':
+      return { kind: 'unresolved', text: 'The fee cannot be booked until the offers on this event are resolved' };
+    case 'not_booked':
+      return { kind: 'not_owed', text: `Fee not booked${proposed ? ` (proposed ${proposed})` : ''}` };
+    default:
+      return null;
+  }
 }
