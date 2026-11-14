@@ -6,6 +6,7 @@
  * `S` is Producer Mode's style object (components/Show/producerStyles).
  */
 import { useState, useEffect, useRef, useCallback } from 'react';
+import useReasonDialog from '../ReasonDialog';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Send } from 'lucide-react';
 import DeliverableProgress from '../Deliverables/DeliverableProgress';
@@ -43,8 +44,15 @@ export default function OpportunitiesTab({ showId, api, S, setToast, loadData, e
     (card?.querySelector(`[data-testid="opp-beat14-open-${id}"]`) || card?.querySelector('a, button'))?.focus();
   });
 
+  // Every write here but Schedule as Event is an admin's on the server
+  // (routes/opportunityRoutes: create, advance, decline, undo, release, and
+  // beat 14's attach; Schedule is feedPipelineRoutes' and open to anyone
+  // signed in). The list says whether this person is one (can_decide), and
+  // those controls are offered only then. The list itself reads for anyone.
+  const [canDecide, setCanDecide] = useState(true);
+  const reasonDialog = useReasonDialog();
   const loadOpps = useCallback(() => api.get(`/api/v1/opportunities/${showId}`)
-    .then(r => { setOpps(r.data.opportunities || []); setOppLoading(false); })
+    .then(r => { setOpps(r.data.opportunities || []); setCanDecide(r.data.can_decide !== false); setOppLoading(false); })
     .catch((err) => { console.error('[OpportunitiesTab] the opportunities could not be read:', err); setOppLoading(false); }), [showId, api]);
   useEffect(() => { loadOpps(); }, [loadOpps]);
 
@@ -71,8 +79,20 @@ export default function OpportunitiesTab({ showId, api, S, setToast, loadData, e
   const advanceOpp = async (opp, toStatus) => {
     if (['completed', 'paid'].includes(toStatus)
       && !window.confirm(`Mark ${opp.name} ${toStatus}? Career goals do not change here; they follow Lala's ledger and stats when an episode is completed.`)) return;
+    // Declining or cancelling is recorded with its reason (A1); without one
+    // nothing is sent. from_status names the status this click was made
+    // from, so a second click or a stale page never takes another step.
+    let reason = null;
+    if (['declined', 'cancelled'].includes(toStatus)) {
+      reason = await reasonDialog.ask({
+        title: toStatus === 'declined' ? `Decline ${opp.name}?` : `Cancel ${opp.name}?`,
+        question: `Why is it ${toStatus}?`,
+        confirm: toStatus === 'declined' ? 'Decline' : 'Cancel the deal',
+      });
+      if (!reason) return;
+    }
     try {
-      const res = await api.post(`/api/v1/opportunities/${showId}/${opp.id}/advance`, { to_status: toStatus });
+      const res = await api.post(`/api/v1/opportunities/${showId}/${opp.id}/advance`, { to_status: toStatus, from_status: opp.status, ...(reason ? { reason } : {}) });
       if (res.data.success) { setOpps(prev => prev.map(o => o.id === opp.id ? res.data.opportunity : o)); setToast(`${opp.name} → ${toStatus}`); }
     } catch (err) { console.error('[OpportunitiesTab] advance failed:', err); setToast(err.response?.data?.error || 'Failed'); }
   };
@@ -80,8 +100,10 @@ export default function OpportunitiesTab({ showId, api, S, setToast, loadData, e
   // Undo the last step (POST …/undo): only the status goes back; what the
   // career pipeline did is not undone.
   const undoOpp = async (opp) => {
+    const reason = await reasonDialog.ask({ title: `Undo the last step of ${opp.name}?`, question: `Why is ${opp.status} undone?`, confirm: 'Undo' });
+    if (!reason) return;
     try {
-      const res = await api.post(`/api/v1/opportunities/${showId}/${opp.id}/undo`);
+      const res = await api.post(`/api/v1/opportunities/${showId}/${opp.id}/undo`, { from_status: opp.status, reason });
       if (res.data.success) { setOpps(prev => prev.map(o => o.id === opp.id ? { ...o, ...res.data.opportunity } : o)); setToast(`${opp.name} → back to ${res.data.opportunity.status}`); }
     } catch (err) { console.error('[OpportunitiesTab] undo failed:', err); setToast(err.response?.data?.error || 'Could not undo'); }
   };
@@ -124,7 +146,7 @@ export default function OpportunitiesTab({ showId, api, S, setToast, loadData, e
           <h2 style={{ ...S.cardTitle, margin: '0 0 4px' }}>Opportunities</h2>
           <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{opps.length} total · {coinsText(bookedValue)} booked · {coinsText(totalValue)} pipeline</div>
         </div>
-        <button onClick={() => setOppForm({ name: '', opportunity_type: 'modeling', category: 'fashion', prestige: 5, payment_amount: 0 })} style={S.primaryBtn}>+ New Opportunity</button>
+        {canDecide && <button onClick={() => setOppForm({ name: '', opportunity_type: 'modeling', category: 'fashion', prestige: 5, payment_amount: 0 })} style={S.primaryBtn}>+ New Opportunity</button>}
       </div>
       <div style={{ display: 'flex', gap: 6, marginBottom: 16, flexWrap: 'wrap' }}>
         {['offered','considering','negotiating','held','booked','preparing','active','completed','paid'].map(s => {
@@ -185,21 +207,23 @@ export default function OpportunitiesTab({ showId, api, S, setToast, loadData, e
                 {opp.narrative_stakes && <div style={{ fontSize: 11, color: '#666', marginBottom: 6 }}>{opp.narrative_stakes}</div>}
                 {held && <HeldWhy opp={opp} />}
                 <div className="ob14-card-actions" style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                  {NEXT[opp.status] && <button onClick={() => advanceOpp(opp, NEXT[opp.status])} data-testid={`opp-move-${opp.id}`} style={{ padding: '3px 10px', borderRadius: 4, border: `1px solid ${sc}`, background: 'transparent', color: sc, fontWeight: 600, fontSize: 10, cursor: 'pointer' }}>Move to {NEXT[opp.status]}</button>}
-                  {canAttachToBeat14(opp) && attachingId !== opp.id && (
+                  {!canDecide && <span data-testid={`opp-admin-only-${opp.id}`} style={{ fontSize: 11, color: 'var(--lala-ink-muted)' }}>Only an admin can change this offer.</span>}
+                  {canDecide && NEXT[opp.status] && <button onClick={() => advanceOpp(opp, NEXT[opp.status])} data-testid={`opp-move-${opp.id}`} style={{ padding: '3px 10px', borderRadius: 4, border: `1px solid ${sc}`, background: 'transparent', color: sc, fontWeight: 600, fontSize: 10, cursor: 'pointer' }}>Move to {NEXT[opp.status]}</button>}
+                  {canDecide && canAttachToBeat14(opp) && attachingId !== opp.id && (
                     <button type="button" className="ob14-btn" onClick={() => setAttachingId(opp.id)} data-testid={`opp-beat14-open-${opp.id}`}>Attach to beat 14…</button>
                   )}
-                  {canUndo(opp) && (
+                  {canDecide && canUndo(opp) && (
                     <button type="button" className="ob14-btn" onClick={() => undoOpp(opp)} data-testid={`opp-undo-${opp.id}`} title="Puts its status back one step. What completing or paying did (career goals, unlocked opportunities) stays.">Undo last step</button>
                   )}
-                  {opp.status === 'offered' && <button onClick={() => advanceOpp(opp, 'declined')} style={{ padding: '3px 10px', borderRadius: 4, border: '1px solid #dc2626', background: 'transparent', color: '#dc2626', fontWeight: 600, fontSize: 10, cursor: 'pointer' }}>Decline</button>}
+                  {canDecide && opp.status === 'offered' && <button onClick={() => advanceOpp(opp, 'declined')} style={{ padding: '3px 10px', borderRadius: 4, border: '1px solid #dc2626', background: 'transparent', color: '#dc2626', fontWeight: 600, fontSize: 10, cursor: 'pointer' }}>Decline</button>}
                   {!opp.event_id && ['offered','considering','negotiating','booked','preparing','active'].includes(opp.status) && (
                     <button type="button" className="ob14-btn-gold" onClick={() => toEvent(opp)} data-testid={`opp-schedule-${opp.id}`}>📅 Schedule as Event</button>
                   )}
                   {held && !opp.event_id && (
                     <>
-                      <button type="button" className="ob14-btn ob14-btn-icon" onClick={() => releaseOpp(opp)} data-testid={`opp-release-${opp.id}`}><Send size={12} aria-hidden="true" />Release offer</button>
-                      <button type="button" className="ob14-btn-gold" onClick={() => toEvent(opp)} data-testid={`opp-schedule-now-${opp.id}`}>📅 Schedule as Event now</button>
+                      {canDecide && <button type="button" className="ob14-btn ob14-btn-icon" onClick={() => releaseOpp(opp)} data-testid={`opp-release-${opp.id}`}><Send size={12} aria-hidden="true" />Release offer</button>}
+                      {/* Scheduling a held one offers it early, which the server keeps to admins (feedPipelineRoutes). */}
+                      {canDecide && <button type="button" className="ob14-btn-gold" onClick={() => toEvent(opp)} data-testid={`opp-schedule-now-${opp.id}`}>📅 Schedule as Event now</button>}
                     </>
                   )}
                   {opp.event_id && <span style={{ fontSize: 9, color: '#16a34a', padding: '3px 8px', background: '#f0fdf4', borderRadius: 4, fontWeight: 600 }}>✓ Event scheduled</span>}
@@ -219,11 +243,14 @@ export default function OpportunitiesTab({ showId, api, S, setToast, loadData, e
               <div style={{ fontSize: 30, marginBottom: 8 }}>💼</div>
               <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>No opportunities yet</div>
               <div style={{ fontSize: 12, color: '#666', marginBottom: 12 }}>Modeling gigs, runway shows, magazine covers — they start here.</div>
-              <button onClick={() => setOppForm({ name: '', opportunity_type: 'modeling', category: 'fashion', prestige: 5, payment_amount: 0 })} style={S.primaryBtn}>+ Create First Opportunity</button>
+              {canDecide
+                ? <button onClick={() => setOppForm({ name: '', opportunity_type: 'modeling', category: 'fashion', prestige: 5, payment_amount: 0 })} style={S.primaryBtn}>+ Create First Opportunity</button>
+                : <div data-testid="opp-admin-only-create" style={{ fontSize: 12, color: 'var(--lala-ink-muted)' }}>Only an admin can add one.</div>}
             </div>
           )}
         </div>
       )}
+    {reasonDialog.dialog}
     </div>
   );
 }

@@ -22,7 +22,7 @@ afterEach(() => jest.restoreAllMocks());
 
 describe('opportunities: status and beat 14 are not the body\'s to set', () => {
   const app = (models) => {
-    jest.doMock('../../../src/middleware/auth', () => ({ requireAuth: (req, res, next) => next(), authorize: () => (req, res, next) => next() }));
+    jest.doMock('../../../src/middleware/auth', () => ({ requireAuth: (req, res, next) => next(), authorize: () => (req, res, next) => next(), userInGroup: () => true }));
     jest.doMock('../../../src/services/brandProfile', () => ({ linkDeal: async (_db, body) => body, CompanyError: class extends Error {} }));
     const a = express();
     a.use(express.json());
@@ -60,7 +60,8 @@ describe('opportunities: status and beat 14 are not the body\'s to set', () => {
     ['delete', (a) => request(a).delete(`/api/v1/opportunities/${SHOW}/${ID}`), '[Opportunities] delete failed:'],
   ])('a failed %s is logged', async (_name, call, tag) => {
     const boom = async () => { throw new Error('boom'); };
-    const res = await call(app({ Opportunity: { findAll: boom, findOne: boom, destroy: boom } }));
+    // Advance reads its row inside a transaction (A1, 2026-11-13).
+    const res = await call(app({ Opportunity: { findAll: boom, findOne: boom, destroy: boom }, sequelize: { transaction: async (fn) => fn({ LOCK: { UPDATE: 'UPDATE' } }) } }));
     expect(res.status).toBe(500);
     expect(console.error).toHaveBeenCalledWith(tag, 'boom');
   });

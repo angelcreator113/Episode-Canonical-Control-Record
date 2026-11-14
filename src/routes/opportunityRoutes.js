@@ -22,7 +22,7 @@ const express = require('express');
 const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 
-const { requireAuth, authorize } = require('../middleware/auth');
+const { requireAuth, authorize, userInGroup } = require('../middleware/auth');
 
 async function getModels(req) {
   return req?.app?.get('models') || req?.app?.locals?.db || require('../models');
@@ -31,6 +31,29 @@ async function getModels(req) {
 // ─── STATUS PIPELINE ────────────────────────────────────────────────────────
 // services/opportunityStatusFlow, shared with Start Episode's offer decision.
 const { STATUS_FLOW } = require('../services/opportunityStatusFlow');
+
+// ─── WHO, WHY, AND ONE STEP AT A TIME (Evoni's A1 ruling, 2026-11-13) ───────
+// Advance and Undo each run in one transaction with the opportunity's row
+// locked: the step is checked against the status under the lock, written
+// with who did it and why in status_history, and recorded in activity_logs
+// by the same commit (services/opportunityTransitionAudit). A step to
+// declined or cancelled, and every Undo, needs a reason.
+const transitionAudit = require('../services/opportunityTransitionAudit');
+const REASON_REQUIRED_TARGETS = Object.freeze(['declined', 'cancelled']);
+const STATUS_STALE_CODE = 'OPPORTUNITY_STATUS_STALE';
+const FROM_STATUS_REQUIRED_CODE = 'OPPORTUNITY_FROM_STATUS_REQUIRED';
+const KNOWN_STATUSES = Object.freeze([...new Set([...Object.keys(STATUS_FLOW), ...Object.values(STATUS_FLOW).flat(), 'held'])]);
+// An opportunity as an answer to this person carries it: who moved it and
+// why are an admin's to read.
+const forReader = (req, opp) => (userInGroup(req.user, 'ADMIN') || !opp
+  ? opp
+  : { ...opp, status_history: transitionAudit.historyWithoutReasons(opp.status_history) });
+const staleBody = (opp, expected) => ({
+  success: false,
+  code: STATUS_STALE_CODE,
+  error: `This opportunity is ${opp.status} now, not ${expected}. Nothing was changed; look at it again.`,
+  status: opp.status,
+});
 
 // ─── TYPE CONFIGS (wardrobe + content requirements) ─────────────────────────
 const TYPE_DEFAULTS = {
@@ -114,8 +137,10 @@ router.get('/opportunities/:showId', requireAuth, async (req, res) => {
       const where = { show_id: showId };
       if (status) where.status = status;
       if (type) where.opportunity_type = type;
-      const opps = (await models.Opportunity.findAll({ where, order: [['created_at', 'DESC']] })).map(o => o.toJSON());
-      return res.json({ success: true, opportunities: await withBeat14Episodes(models, opps) });
+      const opps = (await models.Opportunity.findAll({ where, order: [['created_at', 'DESC']] })).map(o => forReader(req, o.toJSON()));
+      // can_decide: whether this person can move an offer (every step is an
+      // admin's), so the page offers the steps only to someone who can take them.
+      return res.json({ success: true, opportunities: await withBeat14Episodes(models, opps), can_decide: userInGroup(req.user, 'ADMIN') });
     }
 
     // Fallback raw SQL
@@ -123,7 +148,7 @@ router.get('/opportunities/:showId', requireAuth, async (req, res) => {
       'SELECT * FROM opportunities WHERE show_id = :showId AND deleted_at IS NULL ORDER BY created_at DESC',
       { replacements: { showId } }
     );
-    return res.json({ success: true, opportunities: opps });
+    return res.json({ success: true, opportunities: (opps || []).map((o) => forReader(req, o)), can_decide: userInGroup(req.user, 'ADMIN') });
   } catch (err) {
     console.error('[Opportunities] list failed:', err.message);
     if (err.message?.includes('does not exist')) return res.json({ success: true, opportunities: [] });
@@ -224,33 +249,69 @@ router.put('/opportunities/:showId/:id', requireAuth, authorize(['ADMIN']), asyn
 router.post('/opportunities/:showId/:id/advance', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { showId, id } = req.params;
-    const { to_status, note } = req.body;
+    const { to_status, note, from_status } = req.body || {};
     const models = await getModels(req);
 
     if (!models.Opportunity) return res.status(500).json({ success: false, error: 'Model not loaded' });
 
-    const opp = await models.Opportunity.findOne({ where: { id, show_id: showId } });
-    if (!opp) return res.status(404).json({ success: false, error: 'Opportunity not found' });
-
-    const allowed = STATUS_FLOW[opp.status] || [];
-    if (!allowed.includes(to_status)) {
-      return res.status(400).json({ success: false, error: `Cannot advance from "${opp.status}" to "${to_status}". Allowed: ${allowed.join(', ')}` });
+    // Why (A1): needed to decline or cancel, optional for any other step.
+    const why = transitionAudit.readReason(req.body?.reason);
+    if (why.error) return res.status(400).json({ success: false, code: transitionAudit.REASON_INVALID_CODE, error: why.error });
+    if (REASON_REQUIRED_TARGETS.includes(to_status) && !why.reason) {
+      return res.status(400).json({ success: false, code: transitionAudit.REASON_REQUIRED_CODE, error: `Say why this is ${to_status}.` });
+    }
+    if (from_status !== undefined && from_status !== null && !KNOWN_STATUSES.includes(from_status)) {
+      return res.status(400).json({ success: false, error: 'from_status is not a status.' });
     }
 
-    // A new array: a JSONB array changed in place is never saved by
-    // Sequelize, so no step was ever written to the history (Script page
-    // audit, 2026-10-19: Undo found nothing to go back to).
-    const history = [...(Array.isArray(opp.status_history) ? opp.status_history : []), { status: to_status, date: new Date().toISOString(), note: note || null, from: opp.status }];
+    // One transaction, the row locked: the step is checked against the
+    // status as it is now, so two requests never both take it, and the
+    // activity_logs entry commits with it or not at all.
+    const outcome = await models.sequelize.transaction(async (transaction) => {
+      const opp = await models.Opportunity.findOne({ where: { id, show_id: showId }, transaction, lock: transaction.LOCK.UPDATE });
+      if (!opp) return { status: 404, body: { success: false, error: 'Opportunity not found' } };
 
-    const updates = { status: to_status, status_history: history };
-    if (to_status === 'booked') updates.booking_date = new Date().toISOString().split('T')[0];
-    if (to_status === 'paid') updates.payment_status = 'paid';
+      // The request names the status it was made from. Already at the
+      // target: the same request sent twice, answered as done and nothing
+      // written; it is never read as leave to take the step after.
+      // Anywhere else: stale, refused.
+      if (from_status && opp.status !== from_status) {
+        if (opp.status === to_status) {
+          return { status: 200, body: { success: true, opportunity: opp.toJSON(), advanced: null, already: true, pipeline: null } };
+        }
+        return { status: 409, body: staleBody(opp, from_status) };
+      }
 
-    await opp.update(updates);
+      const allowed = STATUS_FLOW[opp.status] || [];
+      if (!allowed.includes(to_status)) {
+        return { status: 400, body: { success: false, error: `Cannot advance from "${opp.status}" to "${to_status}". Allowed: ${allowed.join(', ')}` } };
+      }
 
-    // Career pipeline on completion/payment. It writes no goal progress:
-    // goals move only from the ledger and character_state (completeEpisode
-    // step 17, goal sync); pipeline.note says so.
+      const from = opp.status;
+      // A new array: a JSONB array changed in place is never saved by
+      // Sequelize, so no step was ever written to the history (Script page
+      // audit, 2026-10-19: Undo found nothing to go back to).
+      const history = [...(Array.isArray(opp.status_history) ? opp.status_history : []), {
+        status: to_status, date: new Date().toISOString(), note: note || null, from,
+        ...transitionAudit.historyFields({ actor: req.user, reason: why.reason, route: transitionAudit.ROUTES.ADVANCE }),
+      }];
+
+      const updates = { status: to_status, status_history: history };
+      if (to_status === 'booked') updates.booking_date = new Date().toISOString().split('T')[0];
+      if (to_status === 'paid') updates.payment_status = 'paid';
+
+      await opp.update(updates, { transaction });
+      await transitionAudit.logTransition(transaction, {
+        actor: req.user, opportunityId: opp.id, showId, eventId: opp.event_id || null, episodeId: opp.episode_id || null,
+        from, to: to_status, route: transitionAudit.ROUTES.ADVANCE, reason: why.reason,
+      });
+      return { status: 200, advanced: { from, to: to_status }, opportunity: opp.toJSON() };
+    });
+    if (outcome.body) return res.status(outcome.status).json(outcome.body);
+
+    // Career pipeline on completion/payment, after the commit. It writes no
+    // goal progress: goals move only from the ledger and character_state
+    // (completeEpisode step 17, goal sync); pipeline.note says so.
     let pipelineResult = null;
     if (['completed', 'paid'].includes(to_status)) {
       try {
@@ -267,8 +328,8 @@ router.post('/opportunities/:showId/:id/advance', requireAuth, authorize(['ADMIN
 
     return res.json({
       success: true,
-      opportunity: opp.toJSON(),
-      advanced: { from: history[history.length - 1].from, to: to_status },
+      opportunity: outcome.opportunity,
+      advanced: outcome.advanced,
       pipeline: pipelineResult,
     });
   } catch (err) {
@@ -310,28 +371,51 @@ function statusBeforeLastStep(history, current) {
 
 router.post('/opportunities/:showId/:id/undo', requireAuth, authorize(['ADMIN']), async (req, res) => {
   const { showId, id } = req.params;
-  if (!UUID_RE.test(String(showId)) || !UUID_RE.test(String(id))) {
-    return res.status(400).json({ success: false, error: `${UUID_RE.test(String(showId)) ? 'id' : 'showId'} must be an id (UUID).` });
-  }
   try {
+    if (!UUID_RE.test(String(showId)) || !UUID_RE.test(String(id))) {
+      return res.status(400).json({ success: false, error: `${UUID_RE.test(String(showId)) ? 'id' : 'showId'} must be an id (UUID).` });
+    }
+    // The step being undone is named (A1): the status the request was made
+    // from. A second click finds another status and is refused, so one Undo
+    // never takes two steps back. And why.
+    const fromStatus = req.body?.from_status;
+    if (!fromStatus || !KNOWN_STATUSES.includes(fromStatus)) {
+      return res.status(400).json({ success: false, code: FROM_STATUS_REQUIRED_CODE, error: 'Name the status being undone (from_status).' });
+    }
+    const why = transitionAudit.readReason(req.body?.reason);
+    if (why.error) return res.status(400).json({ success: false, code: transitionAudit.REASON_INVALID_CODE, error: why.error });
+    if (!why.reason) return res.status(400).json({ success: false, code: transitionAudit.REASON_REQUIRED_CODE, error: 'Say why this step is undone.' });
     const models = await getModels(req);
     if (!models.Opportunity) return res.status(500).json({ success: false, error: 'Model not loaded' });
-    const opp = await models.Opportunity.findOne({ where: { id, show_id: showId } });
-    if (!opp) return res.status(404).json({ success: false, error: 'Opportunity not found' });
-    if (opp.status === 'held') {
-      return res.status(409).json({ success: false, error: 'This one is held for an episode\'s beat 14: remove it from beat 14 on that episode\'s Script tab instead.' });
-    }
-    const history = Array.isArray(opp.status_history) ? opp.status_history : [];
-    const back = statusBeforeLastStep(history, opp.status);
-    if (!back) return res.status(409).json({ success: false, error: `There is no earlier status to go back to from "${opp.status}".` });
-    // Held is beat 14's to set, at attach (services/beat14Opportunity).
-    if (back === 'held') return res.status(409).json({ success: false, error: 'Its last step came from beat 14 (attached, let go, released or decided at completion); that is not undone here.' });
-    const from = opp.status;
-    await opp.update({
-      status: back,
-      status_history: [...history, { status: back, date: new Date().toISOString(), note: 'Undone', undone_from: from }],
+    const outcome = await models.sequelize.transaction(async (transaction) => {
+      const opp = await models.Opportunity.findOne({ where: { id, show_id: showId }, transaction, lock: transaction.LOCK.UPDATE });
+      if (!opp) return { status: 404, body: { success: false, error: 'Opportunity not found' } };
+      if (opp.status !== fromStatus) return { status: 409, body: staleBody(opp, fromStatus) };
+      if (opp.status === 'held') {
+        return { status: 409, body: { success: false, error: 'This one is held for an episode\'s beat 14: remove it from beat 14 on that episode\'s Script tab instead.' } };
+      }
+      const history = Array.isArray(opp.status_history) ? opp.status_history : [];
+      const back = statusBeforeLastStep(history, opp.status);
+      if (!back) return { status: 409, body: { success: false, error: `There is no earlier status to go back to from "${opp.status}".` } };
+      // Held is beat 14's to set, at attach (services/beat14Opportunity).
+      if (back === 'held') return { status: 409, body: { success: false, error: 'Its last step came from beat 14 (attached, let go, released or decided at completion); that is not undone here.' } };
+      const from = opp.status;
+      // note 'Undone' and undone_from are what statusBeforeLastStep reads:
+      // kept exactly, with who and why beside them.
+      await opp.update({
+        status: back,
+        status_history: [...history, {
+          status: back, date: new Date().toISOString(), note: 'Undone', undone_from: from,
+          ...transitionAudit.historyFields({ actor: req.user, reason: why.reason, route: transitionAudit.ROUTES.UNDO }),
+        }],
+      }, { transaction });
+      await transitionAudit.logTransition(transaction, {
+        actor: req.user, opportunityId: opp.id, showId, eventId: opp.event_id || null, episodeId: opp.episode_id || null,
+        from, to: back, route: transitionAudit.ROUTES.UNDO, reason: why.reason,
+      });
+      return { status: 200, body: { success: true, opportunity: opp.toJSON(), undone: { from, to: back } } };
     });
-    return res.json({ success: true, opportunity: opp.toJSON(), undone: { from, to: back } });
+    return res.status(outcome.status).json(outcome.body);
   } catch (err) {
     console.error('[Opportunities] undo failed:', err.message);
     return res.status(500).json({ success: false, error: err.message });
