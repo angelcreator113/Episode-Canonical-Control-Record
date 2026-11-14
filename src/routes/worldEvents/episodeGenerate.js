@@ -13,7 +13,7 @@
 const express = require('express');
 const router = express.Router();
 
-const { requireAuth } = require('../../middleware/auth');
+const { requireAuth, userInGroup } = require('../../middleware/auth');
 const { aiRateLimiter } = require('../../middleware/aiRateLimiter');
 const { eventEpisodeConflictBody, EVENT_EPISODE_CONFLICT_CODE, eventDeletedBody, EVENT_DELETED_CODE } = require('../../utils/eventEpisodeLink');
 const { dealPriceRequiredBody, DEAL_PRICE_REQUIRED_CODE } = require('../../services/dealPricingService');
@@ -63,6 +63,11 @@ router.post('/world/:showId/events/:eventId/generate-episode', requireAuth, aiRa
       // with 409 OFFER_DECISION_REQUIRED when the event's opportunity is
       // still open; accept, negotiate, decline or proceed_unaccepted.
       offerDecision: req.body?.offer_decision,
+      // Who decides, why, and about which offers (A1, 2026-11-13): a
+      // decision is an admin's; an event with no open offer starts as before.
+      offerActor: { id: req.user?.id ?? null, isAdmin: userInGroup(req.user, 'ADMIN') },
+      offerReason: req.body?.offer_decision_reason,
+      offerOpportunityIds: req.body?.offer_decision_opportunity_ids,
     });
 
     // The same Start, retried: its episode, as a fresh Start answers, with

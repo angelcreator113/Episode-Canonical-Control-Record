@@ -14,7 +14,7 @@
 const express = require('express');
 const router = express.Router();
 
-const { requireAuth, authorize } = require('../../middleware/auth');
+const { requireAuth, authorize, userInGroup } = require('../../middleware/auth');
 const { aiRateLimiter } = require('../../middleware/aiRateLimiter');
 const { eventEpisodeConflictBody, EVENT_EPISODE_CONFLICT_CODE, eventDeletedBody, EVENT_DELETED_CODE, isEpisodeEventLinkConflict, episodeEventLinkTakenBody, EPISODE_EVENT_LINK_TAKEN_CODE } = require('../../utils/eventEpisodeLink');
 const secondaryEvents = require('../../services/episodeSecondaryEvents');
@@ -134,6 +134,10 @@ router.post('/world/:showId/events/generate-episode-from-many', requireAuth, aiR
     const wardrobeItems = await episodeGenerator.loadFinancialWardrobeItems(models.sequelize, showId, { event: anchor });
     const result = await episodeGenerator.generateEpisodeFromEvent(anchor, models, {
       showId, wardrobeItems, offerDecision: req.body?.offer_decision, secondaryEvents: extras, idempotencyKey,
+      // Who decides, why, and about which offers (A1, 2026-11-13).
+      offerActor: { id: req.user?.id ?? null, isAdmin: userInGroup(req.user, 'ADMIN') },
+      offerReason: req.body?.offer_decision_reason,
+      offerOpportunityIds: req.body?.offer_decision_opportunity_ids,
     });
     const newEpisodeId = result?.episode?.id;
     const linkedExtras = result?.linkedSecondaryEvents || [];

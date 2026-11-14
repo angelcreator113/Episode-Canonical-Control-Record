@@ -18,6 +18,8 @@ import EventPackagePage from './EventPackagePage';
 
 const EVENT_URL = '/api/v1/world/show-1/events/ev-1';
 const START_URL = '/api/v1/world/show-1/events/ev-1/generate-episode';
+// The Start request carries the attempt's Idempotency-Key (idempotency ruling of 2026-11-13).
+const KEYED = { headers: { 'Idempotency-Key': expect.any(String) } };
 
 // Every gate item set (organizer, name, category, format, date, World
 // Location, invitation). Warning items (scene set, outfit, time, dress
@@ -106,7 +108,7 @@ describe('EventPackagePage money warnings (§8(gg) MB4)', () => {
     const confirm = await screen.findByTestId('start-confirm');
     expect(confirm.textContent).toContain('Start with 1 warning?');
     expect(screen.getByTestId('start-money-warning-COSTS_EXCEED_BALANCE').textContent).toContain('60 short');
-    expect(api.post).not.toHaveBeenCalledWith(START_URL, expect.anything());
+    expect(api.post).not.toHaveBeenCalledWith(START_URL, expect.anything(), expect.anything());
 
     fireEvent.click(screen.getByTestId('start-anyway'));
     // Then the Episode Locations step (L3, §8(hh)); Confirm starts it.
@@ -114,7 +116,7 @@ describe('EventPackagePage money warnings (§8(gg) MB4)', () => {
     // "Who's new" (Task #3202) follows the locations; No one new starts as before.
     fireEvent.click(await screen.findByTestId('wn-none'));
     fireEvent.click(screen.getByTestId('wn-start'));
-    await waitFor(() => expect(api.post).toHaveBeenCalledWith(START_URL, { draft_script: false, locations: [] }));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith(START_URL, { draft_script: false, locations: [] }, KEYED));
   });
 
   test('no money warning: no block, and a complete event starts directly', async () => {
@@ -128,7 +130,7 @@ describe('EventPackagePage money warnings (§8(gg) MB4)', () => {
     // "Who's new" (Task #3202) follows the locations; No one new starts as before.
     fireEvent.click(await screen.findByTestId('wn-none'));
     fireEvent.click(screen.getByTestId('wn-start'));
-    await waitFor(() => expect(api.post).toHaveBeenCalledWith(START_URL, { draft_script: false, locations: [] }));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith(START_URL, { draft_script: false, locations: [] }, KEYED));
     expect(screen.queryByTestId('start-confirm')).toBeNull();
   });
 });

@@ -200,7 +200,7 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
     const list = await auth(request(app).get(`/api/v1/opportunities/${show}`));
     expect(list.body.opportunities.find((o) => o.id === id).beat14_episode).toEqual({ id: ep, title: 'The Studio', episode_number: 7, evaluation_status: null, season_number: null, season_context: null });
 
-    const held = await auth(request(app).post(`/api/v1/opportunities/${show}/${id}/undo`));
+    const held = await auth(request(app).post(`/api/v1/opportunities/${show}/${id}/undo`)).send({ from_status: 'held', reason: 'Trying to undo a held one' });
     expect(held.status).toBe(409);
     expect((await auth(request(app).delete(url()))).status).toBe(200);
     const [back] = await rows('SELECT status FROM opportunities WHERE id = :id', { id });
@@ -213,7 +213,7 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
       VALUES (:id, :show, 'Velour Fitting', 'runway', 'preparing', CAST(:h AS jsonb), NOW(), NOW())`,
     { id, show, h: JSON.stringify([{ status: 'offered' }, { status: 'preparing' }]) });
     expect((await auth(request(app).post(`/api/v1/opportunities/${show}/${id}/advance`)).send({ to_status: 'active' })).status).toBe(200);
-    const res = await auth(request(app).post(`/api/v1/opportunities/${show}/${id}/undo`));
+    const res = await auth(request(app).post(`/api/v1/opportunities/${show}/${id}/undo`)).send({ from_status: 'active', reason: 'Marked active too soon' });
     expect(res.status).toBe(200);
     expect(res.body.undone).toEqual({ from: 'active', to: 'preparing' });
     const [row] = await rows('SELECT status, status_history FROM opportunities WHERE id = :id', { id });
@@ -284,7 +284,7 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
       // The writers still read it as beat 14's invitation, and Undo cannot put it back to held.
       const b14 = await auth(request(app).get(url(ep3)));
       expect(b14.body.data.opportunity).toMatchObject({ id, status: 'offered', completion_status: 'offered' });
-      const undo = await auth(request(app).post(`${oppsUrl}/${id}/undo`));
+      const undo = await auth(request(app).post(`${oppsUrl}/${id}/undo`)).send({ from_status: 'offered', reason: 'Trying to put it back to held' });
       expect(undo.status).toBe(409);
       // Beat 14 is final for it, and says why.
       const detach = await auth(request(app).delete(url(ep3)));

@@ -492,9 +492,13 @@ async function generateEpisodeFromEvent(event, models, options = {}) {
   // accepted by itself. A regenerate re-makes an episode already started,
   // so it is not asked again.
   const offerDecision = replacingEpisodeId ? null : (options.offerDecision ?? null);
+  // Who decides, why, and about which offers (A1, 2026-11-13;
+  // services/opportunityTransitionAudit): checked here and again under the
+  // offers' locks.
+  const offerBy = { actor: options.offerActor ?? null, reason: options.offerReason ?? null, opportunityIds: options.offerOpportunityIds ?? null };
   if (!replacingEpisodeId) {
     const { findOpenOffers, assertOfferDecision } = require('./startOfferDecision');
-    assertOfferDecision(await findOpenOffers(models.sequelize, eventId), offerDecision);
+    assertOfferDecision(await findOpenOffers(models.sequelize, eventId), offerDecision, offerBy);
   }
 
   // Get next episode number from active episodes only. Soft-deleted
@@ -878,7 +882,7 @@ Return ONLY JSON.` }],
     // offers locked and checked again, each step in their status_history
     // with this event and episode. None open: nothing is written.
     const offerDecisions = replacingEpisodeId ? [] : await require('./startOfferDecision')
-      .applyOfferDecision(models.sequelize, { eventId, episodeId: episode.id, decision: offerDecision, transaction });
+      .applyOfferDecision(models.sequelize, { eventId, episodeId: episode.id, decision: offerDecision, transaction, ...offerBy });
     return { episode, brief, offerDecisions, linkedSecondary };
   });
   if (started.replayId) return loadStartReplay(models, started.replayId, { beats: BEAT_TEMPLATES });

@@ -16,3 +16,14 @@
 .odd-choice:disabled, .odd-cancel:disabled { opacity: 0.6; cursor: not-allowed; }
 .odd-actions { display: flex; justify-content: flex-end; margin-top: 10px; }
 .odd-cancel { min-height: 44px; padding: 0 14px; border-radius: 8px; border: 1px solid var(--lala-parchment-3); background: transparent; color: inherit; cursor: pointer; font: inherit; }
+.odd-reason { display: grid; gap: 4px; margin: 0 0 8px; font-size: 12px; color: var(--lala-ink-muted); }
+.odd-reason textarea { width: 100%; box-sizing: border-box; min-height: 44px; padding: 8px 10px; border-radius: 8px; border: 1.5px solid var(--lala-parchment-3); background: var(--surface-card); color: var(--lala-ink); font: inherit; font-size: 16px; resize: vertical; }
+.odd-reason textarea:focus-visible { border-color: var(--lala-gold); outline: none; }
+.odd-reason textarea[aria-invalid="true"] { border-color: var(--lala-danger); }
+.odd-reason-missing { margin: 0 0 8px; font-size: 12px; color: var(--lala-danger); }
+.odd-refusal { display: grid; gap: 6px; margin: 0 0 10px; padding: 10px 12px; border-radius: 10px; border: 1.5px solid var(--lala-danger); font-size: 13px; overflow-wrap: anywhere; }
+.odd-refusal p { margin: 0; }
+.odd-refusal .odd-cancel { justify-self: start; border-color: var(--lala-gold); font-weight: 600; }
+.odd-refusal[role="status"] { border-color: var(--lala-parchment-3); }
+.odd-choice:focus-visible, .odd-cancel:focus-visible, .odd-close:focus-visible { outline: 2px solid var(--lala-gold); outline-offset: 2px; }
+.odd-link { display: inline-flex; align-items: center; text-decoration: none; }

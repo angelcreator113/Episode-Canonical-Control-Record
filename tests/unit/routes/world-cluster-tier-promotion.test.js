@@ -164,9 +164,11 @@ describe('Step 3 CP3 — World cluster mixed Tier 1+3+4 disposition', () => {
       // requireAuth itself, and every part with an AI route aiRateLimiter.
       const src = readSrc('worldEvents.js');
       // The bulk-delete part (episodeBatch.js) also imports authorize: bulk
-      // delete is ADMIN only (P0 #3702), so its import names both.
+      // delete is ADMIN only (P0 #3702), so its import names both. The two
+      // Start Episode parts also import userInGroup: an offer decision at
+      // Start is an admin's (A1, 2026-11-13).
       expect(src.match(
-        /const\s*\{\s*requireAuth(?:\s*,\s*authorize)?\s*\}\s*=\s*require\(['"]\.\.\/\.\.\/middleware\/auth['"]\)/g,
+        /const\s*\{\s*requireAuth(?:\s*,\s*authorize)?(?:\s*,\s*userInGroup)?\s*\}\s*=\s*require\(['"]\.\.\/\.\.\/middleware\/auth['"]\)/g,
       )).toHaveLength(22);
       expect(src).toMatch(
         /const\s*\{\s*aiRateLimiter\s*\}\s*=\s*require\(['"]\.\.\/\.\.\/middleware\/aiRateLimiter['"]\)/,
