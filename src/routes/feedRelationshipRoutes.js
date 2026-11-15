@@ -117,7 +117,7 @@ const pairError = (res, err) => {
   return false;
 };
 
-router.get('/suggestions', async (req, res) => {
+router.get('/suggestions', authorize(['ADMIN']), async (req, res) => {
   try {
     return res.json({ success: true, pairs: await require('../services/pairSuggestions').listPending(getModels(req)) });
   } catch (err) {
@@ -166,7 +166,7 @@ router.post('/suggestions/:key/dismiss', authorize(['ADMIN']), async (req, res) 
   }
 });
 
-router.get('/', async (req, res) => {
+router.get('/', authorize(['ADMIN']), async (req, res) => {
   const { SocialProfileRelationship, SocialProfile } = getModels(req);
   try {
     const where = {};
@@ -301,7 +301,7 @@ router.delete('/:id', async (req, res) => {
 // GET /canvas — nodes + edges for SVG renderer
 // ?author_mode=true → include underground profiles (shown with ◎ indicator)
 // Default: excludes edges where either node is underground
-router.get('/canvas', async (req, res) => {
+router.get('/canvas', authorize(['ADMIN']), async (req, res) => {
   const { SocialProfileRelationship, SocialProfile } = getModels(req);
   const authorMode = req.query.author_mode === 'true';
   if (req.query.show_id && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(req.query.show_id))) {
@@ -371,7 +371,7 @@ router.get('/canvas', async (req, res) => {
 // GET /profiles — list social profiles for picker UI
 // ?author_mode=true → include underground profiles
 // Default: excludes underground
-router.get('/profiles', async (req, res) => {
+router.get('/profiles', authorize(['ADMIN']), async (req, res) => {
   const { SocialProfile } = getModels(req);
   const authorMode = req.query.author_mode === 'true';
   try {
