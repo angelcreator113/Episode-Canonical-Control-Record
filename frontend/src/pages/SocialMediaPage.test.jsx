@@ -9,7 +9,7 @@
  * The director flows themselves are tested in components/Admin.
  */
 import React from 'react';
-import { vi, describe, beforeEach, test, expect } from 'vitest';
+import { vi, describe, beforeEach, afterEach, test, expect } from 'vitest';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 
@@ -18,7 +18,7 @@ let USER;
 vi.mock('../contexts/AuthContext', () => ({ useAuth: () => ({ user: USER }) }));
 
 import api from '../services/api';
-import SocialMediaPage, { tabFromParams, posterOf, whenLabel, cityName } from './SocialMediaPage';
+import SocialMediaPage, { tabFromParams, posterOf, whenLabel, cityName, POLLS_ADMIN } from './SocialMediaPage';
 
 const SHOW = { id: '7b1d2c3e-4f50-4a61-8b72-93c4d5e6f708', name: 'Styling Adventures with Lala' };
 const LALA = { id: 1, handle: 'lala', display_name: 'Lala', relationship_status: "it's complicated", follower_count_approx: '12k' };
@@ -41,8 +41,18 @@ let fit;
 let cityStates;
 let revealRows;
 let lalaColumn;
+// The audience poll reads and votes by plain fetch (the public routes), not through services/api.
+let publicPolls;
+let fetchMock;
+afterEach(() => vi.unstubAllGlobals());
 beforeEach(() => {
   USER = { name: 'Viewer', groups: ['viewer'] };
+  publicPolls = [];
+  fetchMock = vi.fn((url, opts) => Promise.resolve(opts?.method === 'POST'
+    ? { ok: true, status: 201, json: () => Promise.resolve({ success: true }) }
+    : { ok: true, status: 200, json: () => Promise.resolve({ polls: publicPolls }) }));
+  vi.stubGlobal('fetch', fetchMock);
+  window.localStorage.clear();
   Object.values(api).forEach((fn) => fn.mockReset());
   posts = [...POSTS];
   cover = null;
@@ -493,5 +503,77 @@ describe('Dream Cities (Task 2987)', () => {
     await screen.findAllByTestId('pl-post');
     fireEvent.click(within(screen.getByTestId('pl-stories')).getAllByTestId('pl-story-city')[0]);
     expect(await screen.findByTestId('pl-cityfeed')).toBeTruthy();
+  });
+});
+
+describe('the audience poll in The Pulse (2026-11-15)', () => {
+  const OPEN = { id: 'poll-1', question: 'Which look for The Gala?', status: 'open', closes_at: null,
+    options: [{ id: 'o1', label: 'The pink set' }, { id: 'o2', label: 'The black dress' }] };
+  const CLOSED = { id: 'poll-0', question: 'Heels or flats?', status: 'closed', total: 4,
+    options: [{ id: 'o3', label: 'Heels', votes: 3 }, { id: 'o4', label: 'Flats', votes: 1 }] };
+
+  test('no poll: nothing is added to the feed, and the public read is the only poll request', async () => {
+    renderAt('/pulse');
+    await screen.findAllByTestId('pl-post');
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/v1/public/polls', expect.anything()));
+    expect(screen.queryByTestId('site-poll')).toBeNull();
+    expect(vi.mocked(api.get).mock.calls.some(([u]) => u.includes('pulse-polls'))).toBe(false);
+  });
+
+  test('a viewer sees the open poll above the posts and votes by the public route; no management link', async () => {
+    publicPolls = [OPEN, CLOSED];
+    renderAt('/pulse');
+    const poll = await screen.findByTestId('site-poll');
+    expect(within(poll).getByRole('heading', { name: 'Which look for The Gala?' })).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: 'Heels or flats?' })).toBeNull();
+    const firstPost = (await screen.findAllByTestId('pl-post'))[0];
+    expect(poll.compareDocumentPosition(firstPost) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByTestId('pl-page').querySelector('main').contains(poll)).toBe(true);
+
+    fireEvent.click(within(poll).getByRole('button', { name: 'The black dress' }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/v1/public/polls/poll-1/vote', expect.objectContaining({
+      method: 'POST', body: JSON.stringify({ option_id: 'o2' }),
+    })));
+    expect((await within(poll).findByRole('status')).textContent).toBe('Thanks for voting. Results when it closes.');
+    expect(screen.queryByTestId('pl-polls-link')).toBeNull();
+    expect(document.querySelector('a[href^="/admin"]')).toBeNull();
+  });
+
+  test('a visitor who is not signed in sees it too', async () => {
+    USER = null;
+    publicPolls = [OPEN];
+    renderAt('/pulse');
+    expect(await screen.findByRole('heading', { name: 'Which look for The Gala?' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'The pink set' })).toBeTruthy();
+    expect(screen.queryByTestId('pl-polls-link')).toBeNull();
+  });
+
+  test('with none open, the latest result shows', async () => {
+    publicPolls = [CLOSED];
+    renderAt('/pulse');
+    const poll = await screen.findByTestId('site-poll');
+    expect(within(poll).getByRole('heading', { name: 'Heels or flats?' })).toBeTruthy();
+    expect(within(poll).getByTestId('site-poll-results').textContent).toContain('75%');
+    expect(within(poll).queryByRole('button')).toBeNull();
+  });
+
+  test('it belongs to the feed: other tabs do not show it', async () => {
+    publicPolls = [OPEN];
+    renderAt('/pulse?tab=events');
+    await screen.findByTestId('pl-page');
+    await waitFor(() => expect(vi.mocked(api.get)).toHaveBeenCalled());
+    expect(screen.queryByTestId('site-poll')).toBeNull();
+  });
+
+  test('an ADMIN gets the Polls link to Admin › The Pulse › Polls, beside the Director toggle', async () => {
+    USER = { name: 'Evoni', groups: ['admin'] };
+    publicPolls = [OPEN];
+    renderAt('/pulse');
+    const link = screen.getByTestId('pl-polls-link');
+    expect(link.textContent).toBe('Polls');
+    expect(POLLS_ADMIN).toBe('/admin?tab=pulse&sub=polls');
+    expect(link.getAttribute('href')).toBe('/admin?tab=pulse&sub=polls');
+    expect(link.parentElement).toBe(screen.getByTestId('pl-director-toggle').parentElement);
+    expect(await screen.findByTestId('site-poll')).toBeTruthy();
   });
 });
