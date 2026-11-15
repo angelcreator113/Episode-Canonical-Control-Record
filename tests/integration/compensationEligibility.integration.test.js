@@ -26,7 +26,7 @@ const request = require('supertest');
 const app = require('../../src/app');
 const TokenService = require('../../src/services/tokenService');
 const models = require('../../src/models');
-const { finalizeEpisodeFinancials } = require('../../src/services/financialTransactionService');
+const { finalizeEpisodeFinancials, getCurrentBalance } = require('../../src/services/financialTransactionService');
 const { completeEpisode } = require('../../src/services/episodeCompletionService');
 const { getEpisodeMoney } = require('../../src/services/episodeMoneyService');
 const { COMPENSATION_CATEGORIES } = require('../../src/services/episodeMoneyLines');
@@ -141,6 +141,10 @@ const NO_TERMS = { cost_coins: 300 };
   const ledger = (ids) => q(
     `SELECT category, type, amount::float AS amount FROM financial_transactions
       WHERE show_id = :show AND status = 'executed' AND deleted_at IS NULL AND category <> 'seed' ORDER BY category, amount`, ids);
+  // Every row, the opening one included, whatever its status.
+  const everyLedgerRow = (ids) => q(
+    `SELECT category, type, amount::float AS amount, status, episode_id, source_id FROM financial_transactions
+      WHERE show_id = :show AND deleted_at IS NULL ORDER BY created_at, category`, ids);
   const income = (rows) => rows.filter((r) => COMPENSATION_CATEGORIES.includes(r.category));
   const costs = (rows) => rows.filter((r) => r.type === 'expense');
   const offer = async (id) => (await q('SELECT status, status_history, episode_id FROM opportunities WHERE id = :id', { id }))[0];
@@ -440,6 +444,18 @@ const NO_TERMS = { cost_coins: 300 };
       expect(res.body.content_fee_withheld).toEqual({ reason: 'owner_closed', proposed_fee: FEE, opportunity_id: ids.opp.a, opportunity_status: 'declined' });
       expect(await ledger(ids)).toEqual([]);
       expect(await coins(ids)).toBe(1000);
+      // The approval takes the ledger's lock before it reads the offers, and
+      // the first lock on a show's ledger writes its opening row. That row is
+      // all there is: the bankroll the show started with, and no income.
+      expect(await everyLedgerRow(ids)).toEqual([{ category: 'seed', type: 'income', amount: 1000, status: 'executed', episode_id: null, source_id: null }]);
+      expect(await getCurrentBalance(sequelize, ids.show)).toBe(1000);
+      const reported = await as(request(app).get(`/api/v1/world/${ids.show}/balance`));
+      expect(reported.body.balance).toBe(1000);
+      expect((await episode(ids)).total_income || 0).toBe(0);
+      // Approving it again (a repeat of the same request) writes no second opening row.
+      await approve(ids);
+      expect(await everyLedgerRow(ids)).toHaveLength(1);
+      expect(await coins(ids)).toBe(1000);
       const entries = await logs(ids.deliverable, 'content_fee_withheld');
       expect(entries).toHaveLength(1);
       expect(entries[0]).toMatchObject({ user_id: ADMIN.id, resource_type: 'event_deliverable' });
@@ -581,6 +597,190 @@ const NO_TERMS = { cost_coins: 300 };
       await complete(ids);
       expect((await offer(ids.opp.a)).status).toBe('completed');
       expect(await logs(ids.opp.a, 'opportunity_status')).toHaveLength(1);
+    });
+  });
+
+  // ── The admin episode-complete route (Evoni's ruling of 2026-11-15) ─────
+  // POST /opportunities/:showId/episode-complete/:episodeId used to pick an
+  // offer by the event's pointer, else by episode, else by event, and write
+  // it with no lock and no audit entry. It now moves the owner only, by the
+  // step the completion uses.
+
+  describe('The admin episode-complete route', () => {
+    const repair = (ids, episodeId = ids.ep) => as(request(app).post(`/api/v1/opportunities/${ids.show}/episode-complete/${episodeId}`)).send({});
+    const advance = (ids, key, from, to) => as(request(app).post(`/api/v1/opportunities/${ids.show}/${ids.opp[key]}/advance`)).send({ to_status: to, from_status: from });
+    const NOTHING = { success: true, message: 'Pipeline cascade complete.', data: { opportunities_advanced: [], opportunities_unaccepted: [] } };
+
+    it('1. moves the owner once, with one history entry and one audit entry, and books nothing', async () => {
+      // Completed while the owner was still open, accepted since.
+      const ids = await seed(DEAL, [{ key: 'a', status: 'negotiating', link: 'owner' }]);
+      await complete(ids);
+      expect((await advance(ids, 'a', 'negotiating', 'booked')).status).toBe(200);
+      const before = await snapshot(ids);
+      const rowsBefore = await everyLedgerRow(ids);
+      const record = (await episode(ids)).evaluation.compensation;
+
+      const res = await repair(ids);
+      expect(res.status).toBe(200);
+      // The response it always gave.
+      expect(res.body).toEqual({ success: true, message: 'Pipeline cascade complete.', data: {
+        opportunities_advanced: [{ id: ids.opp.a, name: 'Offer a', from: 'booked', to: 'completed' }], opportunities_unaccepted: [] } });
+
+      const after = await offer(ids.opp.a);
+      expect(after.status).toBe('completed');
+      expect(after.episode_id).toBe(ids.ep);
+      const completions = after.status_history.filter((h) => h.status === 'completed');
+      expect(completions).toHaveLength(1);
+      expect(completions[0]).toMatchObject({ from: 'booked', by: { id: ADMIN.id }, route: 'episode_completed', event_id: ids.event, episode_id: ids.ep });
+      const entries = (await logs(ids.opp.a, 'opportunity_status')).filter((l) => l.changes.meta.to_status === 'completed');
+      expect(entries).toHaveLength(1);
+      expect(entries[0]).toMatchObject({ user_id: ADMIN.id, resource_type: 'opportunity' });
+      expect(entries[0].changes.meta).toMatchObject({ route: 'episode_completed', from_status: 'booked', to_status: 'completed', event_id: ids.event, episode_id: ids.ep });
+
+      // No completion is run again and no money moves: what was withheld stays withheld.
+      const now = await snapshot(ids);
+      expect(now.ledger).toEqual(before.ledger);
+      expect(await everyLedgerRow(ids)).toEqual(rowsBefore);
+      expect(now.coins).toBe(before.coins);
+      expect(now.history).toBe(before.history);
+      expect(now.episode).toBe('accepted');
+      expect((await episode(ids)).evaluation.compensation).toEqual(record);
+      expect(await logs(ids.ep, 'compensation_withheld')).toHaveLength(1);
+    });
+
+    it('2. never moves an offer that is not the owner: 409, and nothing changes', async () => {
+      // An accepted offer that only points at the event, which names no owner.
+      const attached = await seed(NO_TERMS, [{ key: 'b', status: 'booked', link: 'attached' }]);
+      await complete(attached);
+      // The event names an offer that points at another event; another accepted one points here.
+      const conflict = await seed(NO_TERMS, [{ key: 'a', status: 'booked', link: 'named_only' }, { key: 'b', status: 'booked', link: 'attached' }]);
+      await complete(conflict);
+      // The owner named has been deleted; an accepted offer names the episode.
+      const missing = await seed(NO_TERMS, [{ key: 'a', status: 'considering', link: 'owner' }, { key: 'b', status: 'declined', link: 'attached' }]);
+      await complete(missing);
+      await run(`UPDATE opportunities SET deleted_at = NOW() WHERE id = :id`, { id: missing.opp.a });
+      await run(`UPDATE opportunities SET episode_id = :ep WHERE id = :id`, { ep: missing.ep, id: missing.opp.b });
+      // No event at all, and an accepted offer that names the episode: the old route's second guess.
+      const loose = await seed(NO_TERMS, [{ key: 'b', status: 'booked', link: 'attached' }]);
+      await complete(loose);
+      await run(`UPDATE world_events SET used_in_episode_id = NULL WHERE id = :event`, loose);
+      await run(`UPDATE opportunities SET episode_id = :ep WHERE id = :id`, { ep: loose.ep, id: loose.opp.b });
+
+      for (const [ids, reason] of [[attached, 'no_owner'], [conflict, 'owner_link_conflict'], [missing, 'owner_missing'], [loose, 'no_owner']]) {
+        const before = await snapshot(ids);
+        const res = await repair(ids);
+        expect(res.status).toBe(409);
+        expect(res.body).toMatchObject({ success: false, code: 'OFFER_RESOLUTION_REQUIRED', reason });
+        // Named by id, name and status only.
+        expect(JSON.stringify(res.body)).not.toMatch(/payment_amount|900/);
+        expect(await snapshot(ids)).toEqual(before);
+      }
+      expect((await offer(attached.opp.b)).status).toBe('booked');
+      expect((await offer(loose.opp.b)).status).toBe('booked');
+    });
+
+    it('2b. beside a valid owner, no other offer moves; an owner that is open or closed is left as it is', async () => {
+      const ids = await seed(NO_TERMS, [{ key: 'a', status: 'negotiating', link: 'owner' }, { key: 'b', status: 'declined', link: 'attached' }]);
+      await complete(ids);
+      const open = await repair(ids);
+      expect(open.status).toBe(200);
+      expect(open.body.data).toEqual({ opportunities_advanced: [], opportunities_unaccepted: [{ id: ids.opp.a, name: 'Offer a', status: 'negotiating' }] });
+      expect((await advance(ids, 'a', 'negotiating', 'booked')).status).toBe(200);
+      expect((await repair(ids)).body.data.opportunities_advanced).toEqual([{ id: ids.opp.a, name: 'Offer a', from: 'booked', to: 'completed' }]);
+      const b = await offer(ids.opp.b);
+      expect(b.status).toBe('declined');
+      expect(b.status_history).toHaveLength(1);
+      expect(await logs(ids.opp.b, 'opportunity_status')).toHaveLength(0);
+
+      const closed = await seed(DEAL, [{ key: 'a', status: 'declined', link: 'owner' }]);
+      await complete(closed);
+      const before = await snapshot(closed);
+      expect((await repair(closed)).body).toEqual(NOTHING);
+      expect(await snapshot(closed)).toEqual(before);
+
+      // An event with no offer linked at all: nothing to do, and it says so.
+      const none = await seed(DEAL, []);
+      await complete(none);
+      expect((await repair(none)).body).toEqual(NOTHING);
+    });
+
+    it('3. an episode that is not completed: 409, and its accepted owner is not moved early', async () => {
+      const ids = await seed(DEAL, [{ key: 'a', status: 'booked', link: 'owner' }]);
+      const before = await snapshot(ids);
+      const res = await repair(ids);
+      expect(res.status).toBe(409);
+      expect(res.body).toMatchObject({ success: false, code: 'EPISODE_NOT_COMPLETED' });
+      expect(await snapshot(ids)).toEqual(before);
+      expect(await everyLedgerRow(ids)).toEqual([]);
+      // An episode of another show, or none: not found.
+      const other = await seed(DEAL, []);
+      expect((await repair(ids, other.ep)).status).toBe(404);
+      expect((await repair(ids, uuid())).status).toBe(404);
+      // The completion then does it, once.
+      await complete(ids);
+      expect((await offer(ids.opp.a)).status_history.filter((h) => h.status === 'completed')).toHaveLength(1);
+    });
+
+    it('4. asking again changes nothing', async () => {
+      const ids = await seed(DEAL, [{ key: 'a', status: 'booked', link: 'owner' }]);
+      await complete(ids);
+      const after = await snapshot(ids);
+      // Completed by the completion: the route finds it done.
+      for (let i = 0; i < 2; i += 1) {
+        const res = await repair(ids);
+        expect(res.status).toBe(200);
+        expect(res.body).toEqual(NOTHING);
+      }
+      const both = await Promise.all([repair(ids), repair(ids)]);
+      expect(both.map((r) => r.body)).toEqual([NOTHING, NOTHING]);
+      expect(await snapshot(ids)).toEqual(after);
+
+      // Moved by the route: two at once move it once.
+      const late = await seed(DEAL, [{ key: 'a', status: 'negotiating', link: 'owner' }]);
+      await complete(late);
+      expect((await advance(late, 'a', 'negotiating', 'booked')).status).toBe(200);
+      const pair = await Promise.all([repair(late), repair(late)]);
+      expect(pair.map((r) => r.status)).toEqual([200, 200]);
+      expect(pair.filter((r) => r.body.data.opportunities_advanced.length === 1)).toHaveLength(1);
+      expect((await repair(late)).body).toEqual(NOTHING);
+      expect((await offer(late.opp.a)).status_history.filter((h) => h.status === 'completed')).toHaveLength(1);
+      expect((await logs(late.opp.a, 'opportunity_status')).filter((l) => l.changes.meta.to_status === 'completed')).toHaveLength(1);
+    });
+
+    it('5. is an admin\'s: anyone else is refused before anything is read', async () => {
+      const ids = await seed(DEAL, [{ key: 'a', status: 'negotiating', link: 'owner' }]);
+      await complete(ids);
+      expect((await advance(ids, 'a', 'negotiating', 'booked')).status).toBe(200);
+      const before = await snapshot(ids);
+      const editor = TokenService.generateTokenPair({ id: 'test-editor-a2', email: 'editor@a2.dev', name: 'Editor', groups: ['USER', 'EDITOR'], role: 'USER' }).accessToken;
+      const url = `/api/v1/opportunities/${ids.show}/episode-complete/${ids.ep}`;
+      const asEditor = await request(app).post(url).set('X-Forwarded-For', '10.82.0.1').set('Authorization', `Bearer ${editor}`).send({});
+      expect(asEditor.status).toBe(403);
+      expect(JSON.stringify(asEditor.body)).not.toContain('Offer a');
+      expect((await request(app).post(url).set('X-Forwarded-For', '10.82.0.2').send({})).status).toBe(401);
+      expect(await snapshot(ids)).toEqual(before);
+    });
+
+    it('6. racing the completion: one transition, one history entry, one audit entry, the money booked once', async () => {
+      for (let i = 0; i < 4; i += 1) {
+        const ids = await seed(DEAL, [{ key: 'a', status: 'booked', link: 'owner' }]);
+        const [result, res] = await Promise.all(i % 2 ? [complete(ids), repair(ids)] : [repair(ids), complete(ids)].reverse());
+        expect(result.episode_id).toBe(ids.ep);
+        // The route ran before the completion (refused) or after it (found it done): never in between.
+        expect([200, 409]).toContain(res.status);
+        if (res.status === 409) expect(res.body.code).toBe('EPISODE_NOT_COMPLETED');
+        else expect(res.body).toEqual(NOTHING);
+
+        const after = await offer(ids.opp.a);
+        expect(after.status).toBe('completed');
+        expect(after.status_history).toHaveLength(2);
+        expect(after.status_history[1]).toMatchObject({ status: 'completed', from: 'booked', route: 'episode_completed' });
+        expect(await logs(ids.opp.a, 'opportunity_status')).toHaveLength(1);
+        const rows = await ledger(ids);
+        expect(rows.filter((r) => r.category === 'appearance_fee')).toEqual([{ category: 'appearance_fee', type: 'income', amount: APPEARANCE }]);
+        expect(costs(rows)).toHaveLength(1);
+        expect((await episode(ids)).evaluation_status).toBe('accepted');
+      }
     });
   });
 

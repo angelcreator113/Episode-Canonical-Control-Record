@@ -613,23 +613,102 @@ router.get('/opportunities/:showId/stats', requireAuth, async (req, res) => {
 });
 
 // ═══════════════════════════════════════════
-// POST /opportunities/:showId/episode-complete/:episodeId — Trigger career pipeline on episode completion
+// POST /opportunities/:showId/episode-complete/:episodeId
+// Moves a completed episode's own offer to completed, when the completion
+// did not (an episode completed before A2, or an owner accepted since).
 // ═══════════════════════════════════════════
+//
+// Evoni's ruling of 2026-11-15. It moves one offer and nothing else: it does
+// not run the completion again, book anything or touch the ledger.
+//  - The episode must already be completed (409 EPISODE_NOT_COMPLETED).
+//  - The offer is the event's owner as A2 defines it (the offer the event was
+//    made from, pointing back at it; services/startOfferDecision). It is
+//    never picked from an offer that only names the episode or the event:
+//    where offers are linked and no owner can be established, it answers 409
+//    OFFER_RESOLUTION_REQUIRED and changes nothing.
+//  - Only an accepted owner not yet completed moves, through the step the
+//    completion itself uses (careerPipelineService.completeOwnerOffer): one
+//    history entry and one audit entry, in this transaction. Asking again
+//    finds it completed and changes nothing.
+//  - Locks: episode, event, offers. Complete takes episode, ledger, event,
+//    offers, so the two queue on the episode and cannot deadlock.
+const EPISODE_NOT_COMPLETED_CODE = 'EPISODE_NOT_COMPLETED';
+const NO_OWNER_REASONS = ['no_owner', 'owner_missing', 'owner_link_conflict'];
 
 router.post('/opportunities/:showId/episode-complete/:episodeId', requireAuth, authorize(['ADMIN']), async (req, res) => {
+  const { asRetryable, RetryableConflictError, lockEpisodes } = require('../utils/episodeLocks');
+  const { resolveEventCompensation, OfferResolutionError, isOfferResolutionError } = require('../services/startOfferDecision');
   try {
     const { showId, episodeId } = req.params;
-    const models = await getModels(req);
+    const { sequelize } = await getModels(req);
+    const { completeOwnerOffer } = require('../services/careerPipelineService');
+    const { lockLiveEvent } = require('../utils/eventEpisodeLink');
+    const { EPISODE_EVENT_ID_SQL } = require('../utils/episodeEventSql');
+    const read = (sql, replacements, transaction) => sequelize.query(sql, { replacements, transaction, type: sequelize.QueryTypes.SELECT });
 
-    const { onEpisodeCompleted } = require('../services/careerPipelineService');
-    const result = await onEpisodeCompleted(episodeId, showId, models);
+    const outcome = await sequelize.transaction(async (transaction) => {
+      await lockEpisodes(sequelize, [episodeId], { transaction });
+      const [episode] = await read(
+        `SELECT id, episode_number, evaluation_status FROM episodes
+          WHERE id = :episodeId AND show_id = :showId AND deleted_at IS NULL`,
+        { episodeId, showId }, transaction
+      );
+      if (!episode) return { status: 404, body: { success: false, error: 'Episode not found' } };
+      if (episode.evaluation_status !== 'accepted') {
+        return { status: 409, body: { success: false, code: EPISODE_NOT_COMPLETED_CODE, error: 'This episode is not completed yet. Its offer is completed with it; nothing was changed.' } };
+      }
 
+      const empty = { opportunities_advanced: [], opportunities_unaccepted: [] };
+      const [found] = await read(
+        `SELECT id FROM world_events WHERE show_id = :showId AND id = ${EPISODE_EVENT_ID_SQL}`,
+        { episodeId, showId }, transaction
+      );
+      if (!found) {
+        // No event, so no owner. An offer that only names the episode is not
+        // one: say so instead of moving it.
+        const loose = await read(
+          `SELECT id, name, status FROM opportunities
+            WHERE show_id = :showId AND deleted_at IS NULL AND episode_id = :episodeId ORDER BY id`,
+          { episodeId, showId }, transaction
+        );
+        if (!loose.length) return { status: 200, body: empty };
+        const err = new OfferResolutionError({ reason: 'no_owner', owner: null, offers: loose }, null);
+        return { status: 409, body: err.toJSON() };
+      }
+      await lockLiveEvent(sequelize, found.id, { transaction });
+      const [event] = await read(
+        `SELECT id, name, opportunity_id FROM world_events WHERE id = :id`,
+        { id: found.id }, transaction
+      );
+      // Terms are not the question here (nothing is booked): the answer is
+      // only who the owner is.
+      const resolution = await resolveEventCompensation(sequelize, { event, transaction, lock: true, throwIfUnresolved: false, hasTerms: false });
+      if (resolution.linked && (!resolution.owner || NO_OWNER_REASONS.includes(resolution.reason))) {
+        return { status: 409, body: new OfferResolutionError(resolution, event.name || null).toJSON() };
+      }
+      const result = await completeOwnerOffer(sequelize, {
+        resolution, episodeId, episodeNumber: episode.episode_number, showId, eventId: event.id, actor: req.user, transaction,
+      });
+      return { status: 200, body: result };
+    });
+
+    if (outcome.status !== 200) return res.status(outcome.status).json(outcome.body);
     return res.json({
       success: true,
       message: `Pipeline cascade complete.`,
-      data: result,
+      data: outcome.body,
     });
   } catch (err) {
+    if (isOfferResolutionError(err)) return res.status(409).json(err.toJSON());
+    const retry = asRetryable(err);
+    if (retry instanceof RetryableConflictError) {
+      console.error('[CareerPipeline] Episode complete lock conflict:', err.message);
+      return res.status(409).json({ success: false, code: retry.code, error: retry.message });
+    }
+    if (err?.code === 'EVENT_DELETED') {
+      console.error('[CareerPipeline] Episode complete: its event was deleted meanwhile:', err.message);
+      return res.status(409).json({ success: false, code: err.code, error: err.message });
+    }
     console.error('[CareerPipeline] Episode complete error:', err);
     return res.status(500).json({ success: false, error: err.message });
   }

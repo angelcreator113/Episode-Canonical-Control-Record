@@ -37,7 +37,6 @@ jest.mock('../../../src/services/coinLedgerSync', () => ({
 jest.mock('../../../src/routes/wardrobe', () => ({}));
 jest.mock('../../../src/models', () => ({}));
 jest.mock('../../../src/services/careerPipelineService', () => ({
-  onEpisodeCompleted: jest.fn(async () => ({ opportunities_advanced: [] })),
   // A2: the event's own offer is completed inside the completion's transaction.
   completeOwnerOffer: jest.fn(async () => ({ opportunities_advanced: [], opportunities_unaccepted: [] })),
   spawnGoalUnlocks: jest.fn(async () => []),
