@@ -59,6 +59,8 @@ const MARK = 'ZZWARDROBE';
     `/api/v1/wardrobe/outfit-history/${ids.show}`,
     `/api/v1/wardrobe-events/${ids.show}/filter`,
     '/api/v1/wardrobe-brands/pieces/uncovered',
+    // the brands, with their contact, partnership and press fields
+    '/api/v1/wardrobe-brands/brands',
     `/api/v1/shows/${ids.show}/wardrobe`,
     // the library and outfit sets
     '/api/v1/wardrobe-library',
@@ -132,7 +134,7 @@ const MARK = 'ZZWARDROBE';
   };
 
   it('covers every read of the ruling', () => {
-    expect(reads()).toHaveLength(48);
+    expect(reads()).toHaveLength(49);
   });
 
   it('nobody signed out reads any of it: 401, and nothing of the piece', async () => {
@@ -180,9 +182,25 @@ const MARK = 'ZZWARDROBE';
     }
   });
 
-  it('the fictional brand list stays a signed-in read: it is not the wardrobe', async () => {
-    expect((await get(null, '/api/v1/wardrobe-brands/brands')).status).toBe(401);
-    expect([401, 403]).not.toContain((await get('viewer', '/api/v1/wardrobe-brands/brands')).status);
+  it('the brand list: an ADMIN reads the whole record; nobody else reads any of its production fields', async () => {
+    const id = crypto.randomUUID();
+    await run(`INSERT INTO lalaverse_brands (id, slug, name, type, kind, category, press_angle, contact_name, contact_email, partnership_status, created_at, updated_at)
+               VALUES (:id, :slug, :name, 'lalaverse', 'brand', 'fashion', :press, :contact, :email, :status, NOW(), NOW())`,
+    { id, slug: `zz-${tag}`, name: `ZZ Maison ${tag}`, press: `${MARK}-press`, contact: `${MARK}-contact`, email: `${MARK}@brand.test`, status: `${MARK}-status` });
+    try {
+      for (const who of [null, 'viewer', 'editor']) {
+        const res = await get(who, '/api/v1/wardrobe-brands/brands');
+        expect([who, res.status]).toEqual([who, who ? 403 : 401]);
+        expect([who, leaks(res)]).toEqual([who, false]);
+      }
+      const res = await get('admin', '/api/v1/wardrobe-brands/brands');
+      expect(res.status).toBe(200);
+      const mine = res.body.find((b) => b.id === id);
+      expect(mine).toMatchObject({ name: `ZZ Maison ${tag}`, contact_email: `${MARK}@brand.test`, partnership_status: `${MARK}-status`, press_angle: `${MARK}-press` });
+      expect(mine.stats).toMatchObject({ brand_id: id, total: 0 });
+    } finally {
+      await run('DELETE FROM lalaverse_brands WHERE id = :id', { id });
+    }
   });
 
   it('a refused read changes nothing: the piece is as it was', async () => {

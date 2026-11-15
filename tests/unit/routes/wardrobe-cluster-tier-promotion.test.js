@@ -217,9 +217,9 @@ describe('Step 3 CP5 — Wardrobe cluster Tier 1 sweep + AI POST + Item 16 + aud
   });
 
   describe("The production wardrobe's reads are an ADMIN's (Evoni, 2026-11-15)", () => {
-    // Every router.get in these files but the fictional brand list, which is not the wardrobe.
-    const ADMIN_GETS = { 'wardrobe.js': 10, 'wardrobeLibrary.js': 14, 'outfitSets.js': 2, 'wardrobeEventRoutes.js': 1, 'wardrobeBrands.js': 1 };
-    const OPEN_GETS = { 'wardrobe.js': 0, 'wardrobeLibrary.js': 0, 'outfitSets.js': 0, 'wardrobeEventRoutes.js': 0, 'wardrobeBrands.js': 1 };
+    // Every router.get in these files, the brand list included: it gives the whole brand record.
+    const ADMIN_GETS = { 'wardrobe.js': 10, 'wardrobeLibrary.js': 14, 'outfitSets.js': 2, 'wardrobeEventRoutes.js': 1, 'wardrobeBrands.js': 2 };
+    const OPEN_GETS = { 'wardrobe.js': 0, 'wardrobeLibrary.js': 0, 'outfitSets.js': 0, 'wardrobeEventRoutes.js': 0, 'wardrobeBrands.js': 0 };
     Object.keys(ADMIN_GETS).forEach((f) => {
       test(`${f}: ${ADMIN_GETS[f]} reads ask for an ADMIN, ${OPEN_GETS[f]} for a signed-in account only`, () => {
         const gets = readSrc(f).split('\n').filter((l) => /^router\.get\(/.test(l));

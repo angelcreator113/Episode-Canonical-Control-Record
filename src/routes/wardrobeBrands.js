@@ -90,7 +90,9 @@ router.post('/seed-brands', requireAuth, async (req, res) => {
 
 // -- ROUTE 2: GET /brands --
 
-router.get('/brands', requireAuth, async (req, res) => {
+// ADMIN (Evoni, 2026-11-15): the whole brand record, its contact, partnership and press fields included.
+// An audience's brand list, if one is built, gives named fields of these same records.
+router.get('/brands', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const models = getModels();
     // Fashion brands only: outlets, agencies and venues are companies too
