@@ -37,13 +37,17 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     await run(`DELETE FROM shows WHERE id = :showId`, { showId });
   });
 
+  // Reading drafts through the feed's read routes is an ADMIN's since 2026-11-15
+  // (tests/integration/feedPostReadAuthorization.integration.test.js).
+  const adminToken = TokenService.generateTokenPair({ id: 'test-admin-feed-deleted', email: 'admin@feed.dev', name: 'Admin', groups: ['ADMIN'], role: 'ADMIN' }).accessToken;
+  const asAdmin = (r) => r.set('Authorization', `Bearer ${adminToken}`);
   const auth = (r) => r.set('Authorization', `Bearer ${token}`);
 
   it('lists a deleted post and restores it; it is back on the show\'s drafts', async () => {
     const post = await models.FeedPost.create({ show_id: showId, poster_handle: 'lala', content_text: 'Gone for now.', status: 'draft' });
     expect((await auth(request(app).delete(`/api/v1/feed-posts/${post.id}`))).status).toBe(200);
 
-    const drafts = await auth(request(app).get(`/api/v1/feed-posts?show_id=${showId}&status=draft`));
+    const drafts = await asAdmin(request(app).get(`/api/v1/feed-posts?show_id=${showId}&status=draft`));
     expect(drafts.body.data.map((p) => p.id)).not.toContain(post.id);
     const deleted = await auth(request(app).get(`/api/v1/feed-posts/deleted?show_id=${showId}`));
     expect(deleted.status).toBe(200);
@@ -51,7 +55,7 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
 
     const restored = await auth(request(app).post(`/api/v1/feed-posts/${post.id}/restore`));
     expect(restored.status).toBe(200);
-    expect((await auth(request(app).get(`/api/v1/feed-posts?show_id=${showId}&status=draft`))).body.data.map((p) => p.id)).toContain(post.id);
+    expect((await asAdmin(request(app).get(`/api/v1/feed-posts?show_id=${showId}&status=draft`))).body.data.map((p) => p.id)).toContain(post.id);
     expect((await auth(request(app).get(`/api/v1/feed-posts/deleted?show_id=${showId}`))).body.data).toEqual([]);
     expect((await auth(request(app).post(`/api/v1/feed-posts/${post.id}/restore`))).status).toBe(409);
   });
