@@ -25,8 +25,11 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
 (shouldSkip ? describe.skip : describe)('The Pulse numbers on the story-time curve (Task #2955)', () => {
   const tag = uuid().slice(0, 8);
   const ids = { show: uuid(), locked: uuid(), waiting: uuid(), plain: uuid() };
+  // The server decides the story moment a reader who is not an ADMIN reads at (2026-11-15, pulseReaderStoryMoment).
+  // This suite reads moments freely and the director's view (no moment), so it reads as an ADMIN.
+  const adminToken = require('../../src/services/tokenService').generateTokenPair({ id: 'test-admin-curve', email: 'evoni@curve.dev', name: 'Evoni', groups: ['ADMIN'], role: 'ADMIN' }).accessToken;
   const feed = async (at) => {
-    const res = await request(app).get(`/api/v1/feed-posts?show_id=${ids.show}${at ? `&at=${at}` : ''}`);
+    const res = await request(app).get(`/api/v1/feed-posts?show_id=${ids.show}${at ? `&at=${at}` : ''}`).set('Authorization', `Bearer ${adminToken}`);
     expect(res.status).toBe(200);
     return Object.fromEntries(res.body.data.map((p) => [p.id, p]));
   };
