@@ -161,7 +161,12 @@ const columns = async (table) => (await q('SELECT column_name FROM information_s
         made.push((await media.createAsset(models, { url: `https://img.test/${caption.replace(/\s/g, '-')}-${tag}.png`, caption, status, visibility, links: link })).asset.id);
       }
       const url = `/api/v1/media?entity_type=brand&entity_id=${velour.id}`;
-      const asUser = (await as(request(app).get(url), user)).body.items.map((a) => a.caption);
+      // The library's reads are an ADMIN's since 2026-11-15 (tests/integration/pictureReadAuthorization):
+      // the route refuses; the brand rule for a reader who is not an ADMIN is still the library's.
+      const refused = await as(request(app).get(url), user);
+      expect(refused.status).toBe(403);
+      expect(refused.body.items).toBeUndefined();
+      const asUser = (await media.listFor(models, { entityType: 'brand', entityId: velour.id, audience: 'member' })).map((a) => a.caption);
       expect(asUser).toContain('Velour campaign');
       // Internal pictures on a brand's page are an ADMIN's only (Evoni, 2026-10-19).
       expect(asUser).not.toContain('Velour lookbook');

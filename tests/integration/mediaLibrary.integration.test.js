@@ -125,9 +125,18 @@ const q = (sql, replacements = {}) => sequelize.query(sql, { replacements, type:
     expect(asUser.can_edit).toBe(false);
     expect(tagged(asUser).map((i) => i.url)).not.toContain(url('secret'));
     expect(tagged(asUser).every((i) => i.asset === undefined)).toBe(true);
-    expect((await as(request(app).get(`/api/v1/media/${id}`), user)).status).toBe(404);
-    const list = await as(request(app).get(`/api/v1/media?entity_type=character&entity_id=${ids.sable}`), user);
-    expect(list.body.items.map((a) => a.url)).not.toContain(url('secret'));
+    // The library's reads are an ADMIN's since 2026-11-15 (tests/integration/pictureReadAuthorization):
+    // the route refuses; what that reader may see is still the library's own rule.
+    for (const path of [`/api/v1/media/${id}`, `/api/v1/media?entity_type=character&entity_id=${ids.sable}`, `/api/v1/media/${id}/family`, `/api/v1/media/${id}/sources`]) {
+      const refused = await as(request(app).get(path), user);
+      expect([path, refused.status]).toEqual([path, 403]);
+      expect(JSON.stringify(refused.body)).not.toContain(url('secret'));
+    }
+    const library = require('../../src/services/mediaLibrary');
+    const db = require('../../src/models');
+    await expect(library.getAsset(db, id, { audience: 'member' })).rejects.toMatchObject({ status: 404 });
+    const list = await library.listFor(db, { entityType: 'character', entityId: ids.sable, audience: 'member' });
+    expect(list.map((a) => a.url)).not.toContain(url('secret'));
 
     await as(request(app).put(`/api/v1/media/${id}`)).send({ status: 'approved', visibility: 'internal', details: { objects: ['tea cup'], season: 'autumn', junk: 'x' } });
     expect(tagged(await gallery(ids.sable, user)).map((i) => i.url)).toContain(url('secret'));
