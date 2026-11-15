@@ -213,7 +213,10 @@ export function checklistFixTarget(itemId, { episode, showId } = {}) {
     overlays_generated: { href: `/shows/${showId}/world?tab=overlays-tab`, label: "Lala's Phone" },
     lookbook_ready: { href: `/episodes/${episodeId}?tab=lookbook`, label: 'Fill the Style Page' },
     style_sheet_approved: { href: `/episodes/${episodeId}?tab=lookbook`, label: 'Approve on the Style Page' },
-    character_state: { href: `/shows/${showId}/world?tab=overview`, label: 'Set up' },
+    // Lala's stats are set on Producer Mode › Cast & Continuity › Lala's State
+    // & Continuity (Evoni, 2026-11-15). It opened Producer Mode's Overview,
+    // which is where Producer Mode's own checklist card sends from.
+    character_state: { href: `/shows/${showId}/world?tab=characters-list`, label: 'Set up in Producer Mode' },
   };
   const target = targets[itemId];
   if (!target || !episodeId) return null;
@@ -571,11 +574,6 @@ export default function EpisodeProductionChecklist({ episode, showId, onScriptGe
   // footer's Scene Plan and Write Script, the images by their row's Open
   // Scenes, so the next step is words only.
 
-  const allRequired = CHECKLIST_SECTIONS
-    .flatMap(s => s.items)
-    .filter(i => i.required)
-    .every(i => checks[i.id]);
-
   // The script's closet beat (Task #2880): where the look sits on the
   // timeline and the beat the Wardrobe card names; none without one.
   const lookBeat = closetBeat(episode?.script_content);
@@ -651,19 +649,26 @@ export default function EpisodeProductionChecklist({ episode, showId, onScriptGe
       </div>
 
       <div className="ckh-foot">
-        {!allRequired && (
-          <p className="ckh-foot-note">Complete all required items to unlock script generation.</p>
-        )}
         <div className="ckh-foot-actions">
-          <button type="button" onClick={() => window.location.href = `/episodes/${episode.id}/script-writer`} disabled={!allRequired} style={{
-            background: allRequired ? 'var(--lala-lavender)' : 'var(--lala-parchment-3)',
-            color: allRequired ? 'var(--text-inverse)' : 'var(--text-secondary)',
-            border: 'none', borderRadius: 10, padding: '11px 20px',
-            fontSize: 14, fontWeight: 600, cursor: allRequired ? 'pointer' : 'not-allowed',
-          }}>
+          {/* Write Script opens the episode's Script tab (Evoni, 2026-11-15).
+              It was locked until every required item here was ticked, and
+              opened the older writer page with a page reload. The script has
+              no such requirement: the server asks only for the brief
+              (POST /episode-brief/:id/generate-script), and the items it
+              waited on (the scene plan, wardrobe) come after the script.
+              Through onOpenTab it is the page's own tab change, which asks
+              before unsaved script edits are left. The older page stays at
+              /episodes/:id/script-writer. */}
+          <button type="button" data-testid="ckh-write-script"
+            onClick={() => (onOpenTab ? onOpenTab('scripts') : navigate(`/episodes/${episode.id}?tab=scripts`))} style={{
+              background: 'var(--lala-lavender)', color: 'var(--text-inverse)',
+              border: 'none', borderRadius: 10, padding: '11px 20px',
+              fontSize: 14, fontWeight: 600, cursor: 'pointer',
+            }}>
             Write Script
           </button>
-          <button type="button" className="ckh-open" onClick={() => window.location.href = `/episodes/${episode.id}/plan`}>Scene Plan</button>
+          {/* In the app, with no page reload. */}
+          <button type="button" className="ckh-open" data-testid="ckh-scene-plan" onClick={() => navigate(`/episodes/${episode.id}/plan`)}>Scene Plan</button>
           {/* Episode Run Sheet — producer-facing tracker at /episodes/:id/todo (issue #1605). */}
           <Link className="ckh-open" to={`/episodes/${episode.id}/todo`}>Episode Run Sheet</Link>
           {/* Final step — Evaluate Episode (issue #1601). */}

@@ -479,7 +479,7 @@ const slotSelectStyle = { width: '100%', marginTop: 6, fontSize: 12, padding: '4
 // (its twists, secrets and the relationships it needs, SlotNotes), and the
 // pencil list is ranked by fit for this slot, each event with a reason.
 // readOnly: a past season (the Season page's switcher, 2026-10-25): read, never pencilled or re-planned.
-export function SlotPanel({ slot, showId, available, busy, episode, event, onPencil, onIntention, onClose, editing = false, error = null, children = null, api = null, needs = [], onNeedsChanged, readOnly = false }) {
+export function SlotPanel({ slot, showId, available, busy, episode, event, onPencil, onIntention, onClose, editing = false, error = null, children = null, api = null, needs = [], onNeedsChanged, readOnly = false, season = null }) {
   const fit = useEventFit(api, showId, slot.id, !readOnly && !slot.locked && available.length > 0);
   const options = rankedOptions(available, fit);
   const title = slotTitle(slot);
@@ -549,7 +549,7 @@ export function SlotPanel({ slot, showId, available, busy, episode, event, onPen
           </Link>
           {/* A started slot keeps the way to its event package. When the event is not linked to the slot, it says exactly that: the episode has its events (2026-11-12). */}
           {slotEvent(slot) && (
-            <Link className="wa-arc-secondary" to={packageHref(showId, slotEvent(slot).id, { kind: 'roadmap', slot: slot.slot_number })} data-testid={`season-slot-package-${slot.slot_number}`}>Open the event package</Link>
+            <Link className="wa-arc-secondary" to={packageHref(showId, slotEvent(slot).id, { kind: 'roadmap', slot: slot.slot_number, season })} data-testid={`season-slot-package-${slot.slot_number}`}>Open the event package</Link>
           )}
           {/* What is left to say about a started slot's event: none linked, or an association that needs review (lib/seasonSlotEvent). */}
           {slotEventNote(slot) && (
@@ -559,7 +559,7 @@ export function SlotPanel({ slot, showId, available, busy, episode, event, onPen
           )}
         </>
       ) : slot.event ? (
-        <Link className="wa-arc-primary" to={packageHref(showId, slot.event.id, { kind: 'roadmap', slot: slot.slot_number })}>Open the event package</Link>
+        <Link className="wa-arc-primary" to={packageHref(showId, slot.event.id, { kind: 'roadmap', slot: slot.slot_number, season })} data-testid={`season-slot-pencil-package-${slot.slot_number}`}>Open the event package</Link>
       ) : null}
     </section>
   );
@@ -791,6 +791,8 @@ export function SlotSide({ controls, roadmap, S, api, showId, onChanged, setToas
         <SlotPanel
           onClose={() => setSheetOpen(false)}
           slot={selected} showId={showId} available={available} busy={busySlot === selected.id}
+          // The package's way back returns to this season's Roadmap (lib/eventFlow).
+          season={roadmap?.season_number ?? null}
           episode={episodes.find((e) => e.id === selected.episode?.id) || null}
           event={events.find((e) => e.id === selected.event?.id) || null}
           onPencil={(value) => pencil(selected, value)}

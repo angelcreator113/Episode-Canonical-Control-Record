@@ -161,15 +161,16 @@ export default function EpisodeBlueprintModal({ lib }) {
               <button onClick={() => {
                 const epId = episodeBlueprint.episode?.id;
                 // Open Episode lands on Overview (Task #1905), as the queue's does.
-                if (epId) window.location.href = `/episodes/${epId}?tab=overview`;
-                else { setEpisodeBlueprint(null); navigate(seasonPageHref(showId, 'episodes')); }
+                // In the app: it used to reload the whole page.
+                setEpisodeBlueprint(null);
+                navigate(epId ? `/episodes/${epId}?tab=overview` : seasonPageHref(showId, 'episodes'));
               }} style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: 'var(--primary)', color: 'var(--text-inverse)', fontWeight: 600, fontSize: 12, cursor: 'pointer' }}>
                 Open Episode →
               </button>
               <button onClick={() => {
                 const epId = episodeBlueprint.episode?.id;
-                if (epId) window.location.href = `/episodes/${epId}/script-writer`;
-                else setEpisodeBlueprint(null);
+                setEpisodeBlueprint(null);
+                if (epId) navigate(`/episodes/${epId}/script-writer`);
               }} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid var(--lala-gold)', background: 'transparent', color: 'var(--lala-gold-text)', fontWeight: 600, fontSize: 12, cursor: 'pointer' }}>
                 Write Script
               </button>

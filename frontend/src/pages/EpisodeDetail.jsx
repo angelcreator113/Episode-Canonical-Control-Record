@@ -813,8 +813,11 @@ const EpisodeDetail = () => {
           <span className="ed-error-icon">⚠️</span>
           <h2>Episode Not Found</h2>
           <p>{error || 'The episode you\'re looking for doesn\'t exist.'}</p>
-          <button onClick={() => navigate(episode?.show_id ? `/shows/${episode.show_id}` : '/episodes')} className="ed-btn ed-btn-primary">
-            ← Back to Show
+          {/* The season's Episodes tab when the show is known (it opened the
+              show's page); with no episode read, the list of shows. */}
+          <button onClick={() => navigate((episode?.show_id || episode?.showId) ? episodeSeasonHref(episode.show_id || episode.showId, episode, 'episodes') : '/episodes')}
+            className="ed-btn ed-btn-primary" data-testid="ed-notfound-back">
+            {(episode?.show_id || episode?.showId) ? '← Back to Episodes' : '← Back to Shows'}
           </button>
         </div>
       </div>
@@ -998,10 +1001,14 @@ const EpisodeDetail = () => {
                     <button
                       onClick={async () => {
                         if (window.confirm('Delete this episode? This cannot be undone.')) {
+                          // Where to go afterwards, read before the episode is gone: its
+                          // season's Episodes tab (Evoni, 2026-11-15; it went to the list
+                          // of shows). With no show to name, the list of shows as before.
+                          const after = showIdForLinks ? episodeSeasonHref(showIdForLinks, episode, 'episodes') : '/episodes';
                           try {
                             await episodeService.deleteEpisode(episode.id);
                             toast.showSuccess('Episode deleted');
-                            navigate('/episodes');
+                            navigate(after);
                           } catch (err) {
                             console.error('[EpisodeDetail] delete failed:', err);
                             // A1.2c: a filmed episode is refused (409) with its reason.
