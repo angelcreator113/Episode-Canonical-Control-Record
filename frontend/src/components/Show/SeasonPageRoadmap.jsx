@@ -83,7 +83,7 @@ function SlotDrawer({ controls, plan, S, api, showId, setToast, episodes, events
 }
 
 /** A slot card's ⋯ menu: its panel, its episode or event package, its intention. */
-function CardMenu({ slot, showId, onOpen, onIntention, readOnly = false, twoPart = null }) {
+function CardMenu({ slot, showId, onOpen, onIntention, readOnly = false, twoPart = null, season = null }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
   useEffect(() => {
@@ -107,7 +107,7 @@ function CardMenu({ slot, showId, onOpen, onIntention, readOnly = false, twoPart
           {editable && <button type="button" role="menuitem" onClick={() => { setOpen(false); onIntention(); }}>Edit intention</button>}
           {slot.episode && <Link role="menuitem" to={`/episodes/${slot.episode.id}`}>Open the episode</Link>}
           {/* ?from= keeps the way back to this slot on the Roadmap (2026-10-25). A started slot keeps its package link (2026-11-12). */}
-          {slotEvent(slot) && <Link role="menuitem" to={packageHref(showId, slotEvent(slot).id, { kind: 'roadmap', slot: slot.slot_number })} data-testid={`szn-slot-package-${slot.slot_number}`}>Open the event package</Link>}
+          {slotEvent(slot) && <Link role="menuitem" to={packageHref(showId, slotEvent(slot).id, { kind: 'roadmap', slot: slot.slot_number, season })} data-testid={`szn-slot-package-${slot.slot_number}`}>Open the event package</Link>}
           {/* A started slot whose event is not linked to the slot. The episode has its events; it is the slot's link that is missing, so the wording says that and never that there is no event or package (Evoni, 2026-11-12). Nothing is guessed. */}
           {/* A started slot shows its episode's own event (derived on read, lib/seasonSlotEvent). What is said here is only what is left to say: no primary event, or an association that needs review. */}
           {slot.episode && slotEventNote(slot) && (
@@ -135,7 +135,7 @@ function CardMenu({ slot, showId, onOpen, onIntention, readOnly = false, twoPart
  * schedule, or a hand-set date), title, status chip, the goals its event
  * moves, ⋯. Clicking opens its panel.
  */
-export function SlotCard({ slot, picture, showId, selected, onOpen, onIntention, nextSlot, producing = false, moves = [], when = null, readOnly = false, twoPart = null }) {
+export function SlotCard({ slot, picture, showId, selected, onOpen, onIntention, nextSlot, producing = false, moves = [], when = null, readOnly = false, twoPart = null, season = null }) {
   return (
     <div className={`szn-slot is-${slot.state}${selected ? ' is-selected' : ''}${slot.two_part ? ' is-two-part' : ''}`} data-testid={`szn-slot-${slot.slot_number}`}>
       <button type="button" className="szn-slot-open" onClick={onOpen} aria-pressed={selected}
@@ -157,7 +157,7 @@ export function SlotCard({ slot, picture, showId, selected, onOpen, onIntention,
           <MovesChips goals={moves} testId={`szn-slot-moves-${slot.slot_number}`} />
         </span>
       </button>
-      <CardMenu slot={slot} showId={showId} onOpen={onOpen} onIntention={onIntention} readOnly={readOnly} twoPart={twoPart} />
+      <CardMenu slot={slot} showId={showId} onOpen={onOpen} onIntention={onIntention} readOnly={readOnly} twoPart={twoPart} season={season} />
     </div>
   );
 }
@@ -203,6 +203,8 @@ export function SeasonRoadmapTab({ plan, S, api, showId, setToast, episodes, eve
   };
   const card = (slot) => (
     <SlotCard key={slot.id} slot={slot} showId={showId} picture={slotPicture(slot, { episodes, events, arc })}
+      // The package's way back returns to this season's Roadmap (lib/eventFlow).
+      season={roadmap?.season_number ?? null}
       selected={controls.sheetOpen && controls.selected?.id === slot.id}
       // Next open slot: the roadmap's own next_slot_number, and only while nothing has started in it.
       nextSlot={!slot.locked && !slot.episode && slot.slot_number === roadmap.next_slot_number}

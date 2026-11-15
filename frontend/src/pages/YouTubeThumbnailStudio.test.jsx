@@ -459,6 +459,11 @@ describe('YouTubeThumbnailStudio', () => {
     expect(layerOf(youtubeThumbnailsApi.save.mock.calls[0][1], 'title').text).toBe('Studio by Sable');
     expect(await screen.findByText("Saved as the episode's thumbnail.")).toBeTruthy();
     expect(within(await screen.findByTestId('yts-saved-7')).getByText('Episode thumbnail')).toBeTruthy();
+    // The way back names where it lands (Evoni, 2026-11-15): Production opens on Scenes, and it read "Back to Production".
+    const back = await screen.findByTestId('yts-back-scenes');
+    expect(back.textContent).toBe('Back to Scenes');
+    expect(back.getAttribute('href')).toBe('/episodes/ep-1?tab=scenes');
+    expect(screen.queryByRole('link', { name: 'Back to Production' })).toBeNull();
   });
 
   test('arranging: Shift-click picks several in the layers list; line them up; spread three; one lines up with the canvas', async () => {

@@ -230,7 +230,8 @@ describe('a started slot\'s links', () => {
     expect(within(menu).getByRole('menuitem', { name: 'Open the episode' }).getAttribute('href')).toBe('/episodes/ep-2');
     const pkg = within(menu).getByTestId('szn-slot-package-2');
     expect(pkg.textContent).toBe('Open the event package');
-    expect(pkg.getAttribute('href')).toMatch(/^\/shows\/show-1\/events\/ev-2\?/);
+    // Back from the package returns to this slot in this season (2026-11-15).
+    expect(pkg.getAttribute('href')).toBe('/shows/show-1/events/ev-2?from=roadmap:2@1');
     expect(within(menu).queryByTestId('szn-slot-no-event-2')).toBeNull();
   });
 

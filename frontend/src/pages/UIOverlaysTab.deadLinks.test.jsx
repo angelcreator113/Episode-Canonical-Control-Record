@@ -82,7 +82,9 @@ describe('health check: links to a screen that is gone (D1)', () => {
     expect(panel.textContent).toContain('Read the DMs: Open the DMs asks for a visit to "dms"');
     expect(panel.textContent).toContain('Get dressed: its reward opens "dms"');
     expect(panel.textContent).not.toContain('All fine');
-    expect(within(panel).getAllByRole('link', { name: 'Open its episode' })[0].getAttribute('href')).toBe('/episodes/ep-1?tab=phone');
+    // The link names the tool it opens (Evoni, 2026-11-15: it read "Open its episode" and opened the Phone).
+    expect(within(panel).queryByRole('link', { name: 'Open its episode' })).toBeNull();
+    expect(within(panel).getAllByRole('link', { name: 'Open its phone in the episode' })[0].getAttribute('href')).toBe('/episodes/ep-1?tab=phone');
   });
 
   test('with every screen there, nothing is flagged', async () => {
