@@ -679,6 +679,50 @@ const NO_TERMS = { cost_coins: 300 };
       expect((await offer(loose.opp.b)).status).toBe('booked');
     });
 
+    it('2a. an owner with another live offer on its event: 409 with or without terms, until the other is closed', async () => {
+      for (const withTerms of [false, true]) {
+        // Completed without terms (Complete's rule, unchanged), the owner still open then, accepted since.
+        const ids = await seed(NO_TERMS, [{ key: 'a', status: 'negotiating', link: 'owner' }, { key: 'b', status: 'offered', link: 'attached' }]);
+        await complete(ids);
+        expect((await episode(ids)).evaluation_status).toBe('accepted');
+        expect((await advance(ids, 'a', 'negotiating', 'booked')).status).toBe(200);
+        if (withTerms) await run(`UPDATE world_events SET is_paid = true, payment_amount = 800, event_type = 'brand_deal' WHERE id = :event`, ids);
+        const before = await snapshot(ids);
+        const rowsBefore = await everyLedgerRow(ids);
+
+        const res = await repair(ids);
+        expect(res.status).toBe(409);
+        expect(res.body).toMatchObject({ success: false, code: 'OFFER_RESOLUTION_REQUIRED', reason: 'multiple_live_offers' });
+        expect(res.body.offers.map((o) => o.id).sort()).toEqual([ids.opp.a, ids.opp.b].sort());
+        expect(JSON.stringify(res.body)).not.toMatch(/payment_amount|900/);
+        // Neither offer moved and nothing was recorded.
+        expect(await snapshot(ids)).toEqual(before);
+        expect((await offer(ids.opp.a)).status).toBe('booked');
+        expect((await offer(ids.opp.b)).status).toBe('offered');
+
+        // The admin closes the other offer; then the owner is alone and moves, once.
+        const closed = await as(request(app).post(`/api/v1/opportunities/${ids.show}/${ids.opp.b}/advance`)).send({ to_status: 'declined', from_status: 'offered', reason: 'Not this event\'s offer' });
+        expect(closed.status).toBe(200);
+        const ok = await repair(ids);
+        expect(ok.status).toBe(200);
+        expect(ok.body.data.opportunities_advanced).toEqual([{ id: ids.opp.a, name: 'Offer a', from: 'booked', to: 'completed' }]);
+        expect((await repair(ids)).body).toEqual(NOTHING);
+        expect((await offer(ids.opp.a)).status_history.filter((h) => h.status === 'completed')).toHaveLength(1);
+        expect((await logs(ids.opp.a, 'opportunity_status')).filter((l) => l.changes.meta.to_status === 'completed')).toHaveLength(1);
+        expect((await offer(ids.opp.b)).status).toBe('declined');
+        expect(await everyLedgerRow(ids)).toEqual(rowsBefore);
+      }
+
+      // Two accepted offers, the owner already completed by the completion: still not the route's to settle.
+      const both = await seed(NO_TERMS, [{ key: 'a', status: 'booked', link: 'owner' }, { key: 'b', status: 'booked', link: 'attached' }]);
+      await complete(both);
+      const after = await snapshot(both);
+      const res = await repair(both);
+      expect(res.status).toBe(409);
+      expect(res.body.reason).toBe('multiple_live_offers');
+      expect(await snapshot(both)).toEqual(after);
+    });
+
     it('2b. beside a valid owner, no other offer moves; an owner that is open or closed is left as it is', async () => {
       const ids = await seed(NO_TERMS, [{ key: 'a', status: 'negotiating', link: 'owner' }, { key: 'b', status: 'declined', link: 'attached' }]);
       await complete(ids);

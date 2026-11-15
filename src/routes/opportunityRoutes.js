@@ -626,6 +626,10 @@ router.get('/opportunities/:showId/stats', requireAuth, async (req, res) => {
 //    never picked from an offer that only names the episode or the event:
 //    where offers are linked and no owner can be established, it answers 409
 //    OFFER_RESOLUTION_REQUIRED and changes nothing.
+//  - Nor does it choose between live offers (ruling of 2026-11-15, final):
+//    an owner with another live offer on its event is the same 409, whether
+//    or not the event has compensation terms. Complete's own rule is not
+//    changed by this: an event without terms still completes.
 //  - Only an accepted owner not yet completed moves, through the step the
 //    completion itself uses (careerPipelineService.completeOwnerOffer): one
 //    history entry and one audit entry, in this transaction. Asking again
@@ -633,7 +637,6 @@ router.get('/opportunities/:showId/stats', requireAuth, async (req, res) => {
 //  - Locks: episode, event, offers. Complete takes episode, ledger, event,
 //    offers, so the two queue on the episode and cannot deadlock.
 const EPISODE_NOT_COMPLETED_CODE = 'EPISODE_NOT_COMPLETED';
-const NO_OWNER_REASONS = ['no_owner', 'owner_missing', 'owner_link_conflict'];
 
 router.post('/opportunities/:showId/episode-complete/:episodeId', requireAuth, authorize(['ADMIN']), async (req, res) => {
   const { asRetryable, RetryableConflictError, lockEpisodes } = require('../utils/episodeLocks');
@@ -680,10 +683,11 @@ router.post('/opportunities/:showId/episode-complete/:episodeId', requireAuth, a
         `SELECT id, name, opportunity_id FROM world_events WHERE id = :id`,
         { id: found.id }, transaction
       );
-      // Terms are not the question here (nothing is booked): the answer is
-      // only who the owner is.
+      // Terms are not the question here (nothing is booked), so the resolver
+      // is asked not to throw over them; whatever it could not resolve (no
+      // owner, or an owner beside another live offer) is refused here.
       const resolution = await resolveEventCompensation(sequelize, { event, transaction, lock: true, throwIfUnresolved: false, hasTerms: false });
-      if (resolution.linked && (!resolution.owner || NO_OWNER_REASONS.includes(resolution.reason))) {
+      if (resolution.unresolved) {
         return { status: 409, body: new OfferResolutionError(resolution, event.name || null).toJSON() };
       }
       const result = await completeOwnerOffer(sequelize, {
