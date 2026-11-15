@@ -123,7 +123,11 @@ export default function PulsePerson({ show, handle, viewAt = null, admin = false
   useEffect(() => {
     if (!profileId) return undefined;
     let alive = true;
-    api.get(`/api/v1/pulse-follows/profile/${encodeURIComponent(clean(handle))}/media`)
+    // The show and the page's story moment go with it; the server decides the moment a reader may read at.
+    const mediaQs = new URLSearchParams();
+    if (show?.id) mediaQs.set('show_id', show.id);
+    if (show?.id && viewAt) mediaQs.set('at', viewAt);
+    api.get(`/api/v1/pulse-follows/profile/${encodeURIComponent(clean(handle))}/media${mediaQs.toString() ? `?${mediaQs}` : ''}`)
       .then((r) => {
         const d = r.data?.data || {};
         const list = (v) => (Array.isArray(v) ? v : []);
@@ -134,7 +138,7 @@ export default function PulsePerson({ show, handle, viewAt = null, admin = false
         if (alive) setMedia(false);
       });
     return () => { alive = false; };
-  }, [profileId, handle, reload]);
+  }, [profileId, handle, reload, show?.id, viewAt]);
 
   const setPin = async (post, on) => {
     setBusy(true); setError(null);
