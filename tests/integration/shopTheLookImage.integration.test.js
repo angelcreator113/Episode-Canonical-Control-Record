@@ -370,4 +370,175 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
       expect(JSON.stringify((await siteOf(ids.ep)).site)).toBe(before);
     });
   });
+  describe('withdrawing the look image, and the copy left in the public bucket (Evoni, 2026-11-15)', () => {
+    let ipN = 0;
+    const from = (r) => { ipN += 1; return r.set('X-Forwarded-For', `198.51.116.${(ipN % 250) + 1}`); };
+    const look = async (key) => (await from(request(app).get(`/api/v1/public/looks/${key}`)));
+    const list = async () => (await from(request(app).get('/api/v1/public/looks'))).body.looks;
+    const dist = async (ep) => (await as(admin, from(request(app).get(distUrl(ep))))).body.data;
+    const withdraw = (ep, token = admin) => (token ? as(token, from(request(app).post(`${siteUrl(ep)}/image/withdraw`))) : from(request(app).post(`${siteUrl(ep)}/image/withdraw`)));
+    const check = (ep, key, token = admin) => (token ? as(token, from(request(app).post(`${siteUrl(ep)}/image/check`))) : from(request(app).post(`${siteUrl(ep)}/image/check`))).send({ key });
+    const saved2 = async (ep) => {
+      const [[row]] = await run('SELECT distribution_metadata AS meta, updated_at AS at FROM episodes WHERE id = :ep', { ep });
+      return { meta: typeof row.meta === 'string' ? JSON.parse(row.meta) : row.meta, at: row.at };
+    };
+    const editor = () => TokenService.generateTokenPair({ id: 'test-editor-withdraw', email: 'ed@lookimg.dev', name: 'Ed', groups: ['USER', 'EDITOR'], role: 'USER' }).accessToken;
+    const viewer = () => TokenService.generateTokenPair({ id: 'test-viewer-withdraw', email: 'vi@lookimg.dev', name: 'Vi', groups: ['viewer'], role: 'USER' }).accessToken;
+    let ids;
+    let key;
+    let copyKey;
+    let statusOf;
+
+    beforeAll(async () => {
+      ids = await seed();
+      await run(`UPDATE episodes SET status = 'published' WHERE id = :ep`, ids);
+      expect((await send(ids.ep)).status).toBe(200);
+    });
+    beforeEach(() => {
+      statusOf = jest.spyOn(distribution, 'fetchStatus').mockResolvedValue(200);
+    });
+
+    it('only an ADMIN withdraws or checks: signed out 401, an editor and a viewer 403, and nothing changes', async () => {
+      const res = await publish(ids.ep, {}, { category: 'licensed', note: 'Licence LIC-2291' });
+      key = res.body.data.site.key;
+      copyKey = stored[0].key;
+      const before = JSON.stringify((await saved2(ids.ep)).meta);
+      expect((await withdraw(ids.ep, null)).status).toBe(401);
+      expect((await check(ids.ep, copyKey, null)).status).toBe(401);
+      for (const token of [editor(), viewer()]) {
+        expect((await withdraw(ids.ep, token)).status).toBe(403);
+        expect((await check(ids.ep, copyKey, token)).status).toBe(403);
+      }
+      expect(JSON.stringify((await saved2(ids.ep)).meta)).toBe(before);
+      expect(statusOf).not.toHaveBeenCalled();
+      expect((await look(key)).body.look.image).not.toBeNull();
+    });
+
+    it('withdrawing hides the image at once in both public reads; the look, its products, links, disclosure and dates stay', async () => {
+      const before = (await look(key)).body.look;
+      const beforeSite = (await saved2(ids.ep)).meta.style_sheet.site;
+      const res = await withdraw(ids.ep);
+      expect(res.status).toBe(200);
+      const after = await look(key);
+      expect(after.status).toBe(200);
+      expect(after.body.look).toEqual({ ...before, image: null });
+      expect((await list()).find((l) => l.key === key)).toMatchObject({ title: before.title, published_at: before.published_at, image: null });
+      // The snapshot she published is as it was; only the image and its rights changed.
+      const site = (await saved2(ids.ep)).meta.style_sheet.site;
+      for (const field of ['key', 'published_at', 'published_by', 'links', 'disclosure', 'confirmed_at', 'confirmed_by', 'piece_ids', 'sheet_hash']) {
+        expect([field, site[field]]).toEqual([field, beforeSite[field]]);
+      }
+      expect(site.image).toBeUndefined();
+      expect(site.image_rights).toMatchObject({ category: 'licensed', cleared: false, withdrawn: true, withdrawn_by: 'evoni@lookimg.dev', withdrawn_category: 'licensed' });
+      // Nothing of this is public: no note, no key of the hidden copy, no word of the withdrawal.
+      const pub = JSON.stringify(after.body) + JSON.stringify(await list());
+      expect(pub).not.toMatch(/LIC-2291|withdrawn|public_copies|revocation|evoni@/);
+      expect(pub).not.toContain(copyKey);
+    });
+
+    it('Distribution shows the exact copy and four separate facts; the copy is pending, never "revoked" on say-so', async () => {
+      const d = await dist(ids.ep);
+      expect(d.site).toMatchObject({ published: true, image: 'withdrawn' });
+      expect(d.site.image_rights).toMatchObject({ withdrawn: true, cleared: false });
+      expect(d.public_copies).toEqual([expect.objectContaining({
+        key: copyKey, url: `https://site.cdn.test/${copyKey}`, reason: 'rights_withdrawn', rights_category: 'licensed',
+        rights_withdrawn: true, api_hidden: true, revocation: 'pending', checked_at: null, last_status: null,
+      })]);
+      expect(JSON.stringify(d.public_copies)).not.toMatch(/"revoked"/);
+    });
+
+    it('asking again is safe: nothing is written, nothing is recorded twice', async () => {
+      const before = await saved2(ids.ep);
+      for (let i = 0; i < 3; i += 1) expect((await withdraw(ids.ep)).status).toBe(200);
+      const after = await saved2(ids.ep);
+      expect(JSON.stringify(after.meta)).toBe(JSON.stringify(before.meta));
+      expect(String(after.at)).toBe(String(before.at));
+      expect(after.meta.style_sheet.public_copies).toHaveLength(1);
+    });
+
+    it('nothing in storage is deleted, moved or re-written by a withdrawal or a check', async () => {
+      stored.length = 0;
+      const s3 = require('@aws-sdk/client-s3');
+      const sends = jest.spyOn(s3.S3Client.prototype, 'send');
+      await withdraw(ids.ep);
+      await check(ids.ep, copyKey);
+      expect(stored).toEqual([]);
+      expect(slots.putObject).not.toHaveBeenCalled();
+      expect(sends).not.toHaveBeenCalled();
+    });
+
+    it('a check that still finds the copy leaves it pending; only a check that finds it gone marks it verified; found again, pending again', async () => {
+      for (const still of [200, 206, 304, 301, 500, null]) {
+        statusOf.mockResolvedValueOnce(still);
+        const res = await check(ids.ep, copyKey);
+        expect([still, res.status, res.body.data.public_copies[0].revocation, res.body.data.public_copies[0].last_status]).toEqual([still, 200, 'pending', still]);
+      }
+      expect(statusOf).toHaveBeenLastCalledWith(`https://site.cdn.test/${copyKey}`);
+      for (const gone of [403, 404, 410]) {
+        statusOf.mockResolvedValueOnce(gone);
+        const res = await check(ids.ep, copyKey);
+        expect([gone, res.body.data.public_copies[0].revocation, res.body.data.public_copies[0].last_status]).toEqual([gone, 'verified', gone]);
+        expect(res.body.data.public_copies[0].checked_at).toEqual(expect.any(String));
+      }
+      // Served again later (access given back): it is not left saying verified.
+      statusOf.mockResolvedValueOnce(200);
+      expect((await check(ids.ep, copyKey)).body.data.public_copies[0].revocation).toBe('pending');
+      // A key that is not one of this look's hidden copies is refused, and asks nothing of any address.
+      statusOf.mockClear();
+      for (const bad of ['site-public/looks/other/x.png', '', undefined, 7]) expect((await check(ids.ep, bad)).body.code).toBe('COPY_NOT_FOUND');
+      expect(statusOf).not.toHaveBeenCalled();
+    });
+
+    it('with no public address to ask, a copy cannot be verified and stays pending', async () => {
+      delete process.env.SITE_PUBLIC_BUCKET;
+      delete process.env.SITE_PUBLIC_CDN;
+      statusOf.mockClear();
+      const res = await check(ids.ep, copyKey);
+      expect(res.body.data.public_copies[0]).toMatchObject({ revocation: 'pending', url: null, last_status: null });
+      expect(statusOf).not.toHaveBeenCalled();
+    });
+
+    it('a new publish needs its own declaration, and the copies it replaces are recorded too; so is a take-down', async () => {
+      stored.length = 0;
+      const again = await publish(ids.ep, {}, { category: 'original' });
+      expect(again.body.data.site.image).toBe('on_site');
+      const second = stored[0].key;
+      expect((await look(key)).body.look.image.url).toBe(`https://site.cdn.test/${second}`);
+      // Published again with nothing said of the image: the second copy is no longer shown, and is recorded.
+      const dropped = await publish(ids.ep, {}, null);
+      expect(dropped.body.data.public_copies.map((c) => [c.key, c.reason, c.revocation])).toEqual([[copyKey, 'rights_withdrawn', 'pending'], [second, 'replaced', 'pending']]);
+      // And a look taken down with an image on the website.
+      stored.length = 0;
+      await publish(ids.ep, {}, { category: 'original' });
+      const third = stored[0].key;
+      const down = await as(admin, from(request(app).delete(siteUrl(ids.ep))));
+      expect(down.body.data.site).toEqual({ published: false });
+      expect(down.body.data.public_copies.map((c) => [c.key, c.reason])).toEqual([[copyKey, 'rights_withdrawn'], [second, 'replaced'], [third, 'taken_down']]);
+      // Sending the sheet again keeps the record.
+      expect((await send(ids.ep)).body.data.public_copies).toHaveLength(3);
+    });
+
+    it('the record cannot be discarded while a copy is pending; once each is verified gone, the entry can be removed', async () => {
+      const refused = await as(admin, from(request(app).delete(distUrl(ids.ep))));
+      expect([refused.status, refused.body.code]).toEqual([409, 'PUBLIC_COPIES_PENDING']);
+      expect((await dist(ids.ep)).public_copies).toHaveLength(3);
+      statusOf.mockResolvedValue(404);
+      for (const c of (await dist(ids.ep)).public_copies) await check(ids.ep, c.key);
+      expect((await dist(ids.ep)).public_copies.map((c) => c.revocation)).toEqual(['verified', 'verified', 'verified']);
+      expect((await as(admin, from(request(app).delete(distUrl(ids.ep))))).status).toBe(200);
+    });
+
+    it('a look that is not published, or has no image, has nothing to withdraw', async () => {
+      // The entry was removed by the test before: sent again, the look is in Distribution and not on the website.
+      const sendAgain = await as(admin, from(request(app).post(distUrl(ids.ep)))).send({ include_shop_links: true });
+      expect(sendAgain.status).toBe(200);
+      expect((await withdraw(ids.ep)).body.code).toBe('NOT_PUBLISHED');
+      const plain = await as(admin, from(request(app).post(siteUrl(ids.ep)))).send({ links: await confirmAll(ids.ep) });
+      expect(plain.status).toBe(200);
+      const before = JSON.stringify((await saved2(ids.ep)).meta);
+      const res = await withdraw(ids.ep);
+      expect([res.status, res.body.data.public_copies]).toEqual([200, []]);
+      expect(JSON.stringify((await saved2(ids.ep)).meta)).toBe(before);
+    });
+  });
 });

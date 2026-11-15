@@ -158,7 +158,49 @@ function SiteReview({ entry, working, onPublish, onCancel }) {
  * snapshot: when Distribution differs from it, the card says so and offers
  * the review again. A product that can no longer be bought is marked here.
  */
-function SiteSwitch({ entry, working, onPublish, onTakeDown, onAvailable }) {
+/** Why a copy is no longer shown, in her words. */
+export const COPY_REASON = {
+  rights_withdrawn: 'Image rights withdrawn',
+  replaced: 'Replaced by a later publish',
+  taken_down: 'Look taken down',
+};
+
+/**
+ * Copies of look images still in the public storage though the website no
+ * longer shows them (Evoni, 2026-11-15). Four separate facts per copy: why
+ * it was hidden, that the website's API no longer gives it, whether access
+ * to the object itself has been removed, and whether a check has found it
+ * gone. Removing access is hers to do in the storage; "Check access" asks
+ * the copy's address and never says more than it found.
+ */
+export function PublicCopies({ copies, working, onCheck }) {
+  if (!copies || !copies.length) return null;
+  return (
+    <div className="ssd-links" data-testid="ssd-public-copies">
+      <p className="ssd-designs-title">Public copies no longer shown</p>
+      <p className="ssd-hint">The website no longer gives these images, but each file stays in the public storage until you remove access to it there. Nothing here deletes it.</p>
+      <ul className="ssd-link-list">
+        {copies.map((c) => (
+          <li key={c.key} data-testid="ssd-public-copy">
+            <span className="ssd-link-label">{COPY_REASON[c.reason] || 'No longer shown'}</span>
+            <span className="ssd-badge">Hidden on the website</span>
+            <span className="ssd-badge">{c.revocation === 'verified' ? 'Access checked: no longer served' : 'Access not yet removed'}</span>
+            <span className="ssd-link-url">{c.url || c.key}</span>
+            {c.checked_at && (
+              <span className="ssd-hint">
+                Last checked {new Date(c.checked_at).toLocaleString()}: {c.last_status == null ? 'could not be checked' : `the address answered ${c.last_status}`}.
+              </span>
+            )}
+            {!c.url && <span className="ssd-hint">No public address is configured here, so this copy cannot be checked.</span>}
+            <button type="button" className="ssd-btn" disabled={working || !c.url} onClick={() => onCheck(c.key)}>Check access</button>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function SiteSwitch({ entry, working, onPublish, onTakeDown, onAvailable, onWithdrawImage }) {
   const site = entry.site || { published: false };
   const [reviewing, setReviewing] = useState(false);
   const blocker = site.published ? null : siteBlocker(entry);
@@ -184,9 +226,17 @@ function SiteSwitch({ entry, working, onPublish, onTakeDown, onAvailable }) {
         <p className="ssd-hint" role="status">Hidden on the website while the Shop the Look links are off.</p>
       )}
       {site.published && site.image === 'on_site' && site.image_rights && !reviewing && (
-        <p className="ssd-hint" data-testid="ssd-site-image-rights">
-          Image on the website: {site.image_rights.label}{site.image_rights.declared_by ? `, declared by ${site.image_rights.declared_by}` : ''}.
-          {site.image_rights.stale ? ' The poses or the sheet have changed since: review and publish again to show the new image.' : ''}
+        <div data-testid="ssd-site-image-rights">
+          <p className="ssd-hint">
+            Image on the website: {site.image_rights.label}{site.image_rights.declared_by ? `, declared by ${site.image_rights.declared_by}` : ''}.
+            {site.image_rights.stale ? ' The poses or the sheet have changed since: review and publish again to show the new image.' : ''}
+          </p>
+          <button type="button" className="ssd-btn" disabled={working} onClick={onWithdrawImage}>Withdraw image rights</button>
+        </div>
+      )}
+      {site.published && site.image === 'withdrawn' && !reviewing && (
+        <p className="ssd-hint" role="status" data-testid="ssd-site-image-withdrawn">
+          Image rights withdrawn{site.image_rights?.withdrawn_by ? ` by ${site.image_rights.withdrawn_by}` : ''}. The look is on the website without its image; its products and links are unchanged.
         </p>
       )}
       {differs.length > 0 && !reviewing && (
@@ -216,7 +266,7 @@ function SiteSwitch({ entry, working, onPublish, onTakeDown, onAvailable }) {
           ))}
         </ul>
       )}
-      {site.published && site.image && site.image !== 'on_site' && !reviewing && (
+      {site.published && site.image && site.image !== 'on_site' && site.image !== 'withdrawn' && !reviewing && (
         <div data-testid="ssd-site-image">
           <p className="ssd-hint" role="status">
             {site.image === 'not_cleared' && 'The look is on the website without its image: the image has not been cleared for public use.'}
@@ -388,7 +438,10 @@ export default function StyleSheetDistributionCard({ episodeId, episodeNumber })
       <SiteSwitch entry={entry} working={working}
         onPublish={(links, imageRights) => act('site', () => styleSheetDistributionApi.publish(episodeId, links, imageRights), 'The look could not be put on the website.')}
         onAvailable={(pieceId, available) => act('site', () => styleSheetDistributionApi.setLinkAvailable(episodeId, pieceId, available), 'That could not be saved.')}
+        onWithdrawImage={() => act('site', () => styleSheetDistributionApi.withdrawImage(episodeId), 'The image rights could not be withdrawn.')}
         onTakeDown={() => act('site', () => styleSheetDistributionApi.takeDown(episodeId), 'The look could not be taken off the website.')} />
+      <PublicCopies copies={entry.public_copies} working={working}
+        onCheck={(key) => act('site', () => styleSheetDistributionApi.checkCopy(episodeId, key), 'The copy could not be checked.')} />
 
       <div className="ssd-actions ssd-actions-end">
         <button type="button" className="ssd-btn ssd-btn-quiet" disabled={working}

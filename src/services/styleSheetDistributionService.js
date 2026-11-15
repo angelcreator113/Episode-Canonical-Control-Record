@@ -345,6 +345,8 @@ async function view(models, episodeId, entry, sheet) {
     site: siteView(entry, await episodeReleased(models, episodeId), sheet, pieces),
     // What she reviews before publishing: each piece of the look and its real product, as the wardrobe has it.
     site_review: pieces,
+    // Copies in the public bucket that are no longer shown, and whether access to each is known to be gone.
+    public_copies: (Array.isArray(entry.public_copies) ? entry.public_copies : []).map(copyView),
   };
 }
 
@@ -395,11 +397,13 @@ function siteView(entry, released = false, sheet = null, pieces = []) {
     // on the site (she cleared this very image), not cleared (no declaration, or "unknown": text only),
     // failed to copy, or none (no bucket).
     image: imageCleared(site) ? 'on_site'
-      : (!isObject(site.image_rights) || !site.image_rights.cleared ? 'not_cleared' : (site.image?.failed ? 'failed' : 'none')),
+      : (isObject(site.image_rights) && site.image_rights.withdrawn ? 'withdrawn'
+        : (!isObject(site.image_rights) || !site.image_rights.cleared ? 'not_cleared' : (site.image?.failed ? 'failed' : 'none'))),
     // Her declaration, as saved; `stale` when the poses or the sheet have changed since she made it.
     image_rights: isObject(site.image_rights) ? {
       category: site.image_rights.category, label: IMAGE_RIGHTS[site.image_rights.category] || null, cleared: site.image_rights.cleared === true,
       note: site.image_rights.note || null, declared_by: site.image_rights.declared_by || null, declared_at: site.image_rights.declared_at || null,
+      withdrawn: site.image_rights.withdrawn === true, withdrawn_at: site.image_rights.withdrawn_at || null, withdrawn_by: site.image_rights.withdrawn_by || null,
       stale: Boolean(sheet) && (!sameRefs(site.image_rights.poses, poseRefs(sheet)) || (site.image_rights.sheet_hash || null) !== (sheet.inputs_hash || null)),
     } : null,
   };
@@ -441,6 +445,7 @@ async function sendStyleSheetToDistribution(models, episodeId, { includeShopLink
   // Published stays published, exactly as she published it (Evoni, 2026-11-15): sending another look
   // changes nothing on the website. The card says the two differ until she reviews and publishes again.
   if (previous && isObject(previous.site) && previous.site.key) entry.site = previous.site;
+  if (previous && Array.isArray(previous.public_copies)) entry.public_copies = previous.public_copies;
   await writeMetadata(models, episodeId, { ...metadata, [KEY]: entry });
   return view(models, episodeId, entry, sheet);
 }
@@ -557,6 +562,62 @@ function imageCleared(site) {
     && rights.image_key === image.key && (rights.sheet_hash || null) === (image.sheet_hash || null);
 }
 
+// ── Public copies that are no longer shown (Evoni, 2026-11-15) ─────────────
+// When an image stops being shown (she withdraws its rights, publishes the
+// look again, or takes it down), the website's API stops giving its address
+// at once. The copy itself stays in the public bucket: nothing here deletes
+// or moves it, and anyone who has its address can still fetch it until she
+// removes access to it in the storage. So each such copy is recorded on the
+// entry (`public_copies`) with its key and address, and is "pending" until
+// a check of its address finds it is no longer served. It is never called
+// revoked on anyone's say-so. The pose originals are other files and are
+// not touched.
+const COPY_REASONS = ['rights_withdrawn', 'replaced', 'taken_down'];
+const GONE_STATUSES = [403, 404, 410];
+
+/** Add a copy that is no longer shown to the entry's record, once. */
+function recordPublicCopy(entry, image, { reason, who, at, rights = null } = {}) {
+  if (!isObject(image) || !image.key) return;
+  const list = Array.isArray(entry.public_copies) ? entry.public_copies : [];
+  if (list.some((c) => c.key === image.key)) { entry.public_copies = list; return; }
+  entry.public_copies = [...list, {
+    key: image.key, sheet_hash: image.sheet_hash || null, reason: COPY_REASONS.includes(reason) ? reason : 'replaced',
+    hidden_at: at, hidden_by: who, rights_category: rights?.category || null,
+    revocation: { status: 'pending', checked_at: null, checked_by: null, last_status: null },
+  }];
+}
+
+/** A recorded copy as Distribution shows it. `verified` only when a check of its address found it gone. */
+function copyView(c) {
+  const url = require('./websiteSlotService').publicUrl(c.key);
+  const verified = c.revocation?.status === 'verified';
+  return {
+    key: c.key, url: url || null, reason: c.reason, hidden_at: c.hidden_at || null, hidden_by: c.hidden_by || null,
+    rights_category: c.rights_category || null,
+    // Four separate facts: her withdrawal, the API, the object, and the check of the object.
+    rights_withdrawn: c.reason === 'rights_withdrawn',
+    api_hidden: true,
+    revocation: verified ? 'verified' : 'pending',
+    checked_at: c.revocation?.checked_at || null, last_status: c.revocation?.last_status ?? null,
+  };
+}
+
+/** Ask the copy's public address whether it is still served: its HTTP status, or null when it could not be asked. */
+async function fetchStatus(url) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 8000);
+  try {
+    // No cache on our side; the CDN may still answer from its own for up to the object's lifetime, which is the point.
+    const res = await fetch(url, { method: 'GET', redirect: 'manual', cache: 'no-store', signal: controller.signal, headers: { Range: 'bytes=0-0' } });
+    return res.status;
+  } catch (err) {
+    console.error('[StyleSheetDistribution] a public copy could not be checked:', err.message);
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /** The look's public image { url, alt }, or null: only an image she cleared (imageCleared). */
 function publicImageOf(site, title) {
   const image = isObject(site.image) ? site.image : null;
@@ -604,6 +665,8 @@ async function publishStyleSheetToSite(models, episodeId, user = null, { links: 
   // declaration is carried over: each published image has its own.
   const rights = readImageRights(declared, sheet, who, at);
   if (rights) entry.site.image_rights = rights;
+  // The image this publish replaces (or drops) is no longer shown, and is still in the bucket.
+  recordPublicCopy(entry, previous.image, { reason: 'replaced', who, at, rights: previous.image_rights });
   if (rights && rights.cleared) {
     const image = await copyLookImage(models, episodeId, entry.site.key, sheet.inputs_hash);
     if (image) entry.site.image = image;
@@ -645,9 +708,64 @@ async function takeDownStyleSheetFromSite(models, episodeId) {
   const entry = isObject(metadata[KEY]) ? { ...metadata[KEY] } : null;
   if (!entry) throw new LookbookError('The style sheet has not been sent to Distribution.', 404, 'NOT_SENT');
   if (entry.site !== undefined) {
+    // Taken down, its image is no longer shown; the copy is still in the bucket.
+    if (isObject(entry.site)) recordPublicCopy(entry, entry.site.image, { reason: 'taken_down', who: null, at: new Date().toISOString(), rights: entry.site.image_rights });
     delete entry.site;
     await writeMetadata(models, episodeId, { ...metadata, [KEY]: entry });
   }
+  return view(models, episodeId, entry, await sheetFor(models, episodeId));
+}
+
+/**
+ * Withdraw the image's rights from a published look, without publishing it
+ * again. The look stays as it is: its products, links, disclosure and
+ * dates. Its image stops being shown at once, by both public reads, and
+ * its copy is recorded for her to remove access to. Asking again changes
+ * nothing. Nothing is deleted or moved.
+ */
+async function withdrawLookImageRights(models, episodeId, user = null) {
+  const metadata = await readMetadata(models.sequelize, episodeId);
+  const entry = isObject(metadata[KEY]) ? { ...metadata[KEY] } : null;
+  if (!entry || !isObject(entry.site) || !entry.site.key) throw new LookbookError('This look is not on the website.', 404, 'NOT_PUBLISHED');
+  const site = { ...entry.site };
+  const rights = isObject(site.image_rights) ? site.image_rights : null;
+  const hasImage = isObject(site.image) && Boolean(site.image.key);
+  // Already withdrawn, or never shown with an image: nothing to do, and nothing is written.
+  if (!hasImage && !(rights && rights.cleared)) return view(models, episodeId, entry, await sheetFor(models, episodeId));
+  const who = user ? String(user.email || user.id || user.sub || '').slice(0, 255) || null : null;
+  const at = new Date().toISOString();
+  if (hasImage) recordPublicCopy(entry, site.image, { reason: 'rights_withdrawn', who, at, rights });
+  delete site.image;
+  if (rights) {
+    site.image_rights = { ...rights, cleared: false, withdrawn: true, withdrawn_at: at, withdrawn_by: who, withdrawn_category: rights.category };
+  }
+  entry.site = site;
+  await writeMetadata(models, episodeId, { ...metadata, [KEY]: entry });
+  return view(models, episodeId, entry, await sheetFor(models, episodeId));
+}
+
+/**
+ * Check whether a copy that is no longer shown can still be fetched at its
+ * public address, and record what was found. Only a check that finds it
+ * gone (403, 404 or 410) marks it verified; anything else, a copy with no
+ * public address, or a check that could not be made, leaves it pending. A
+ * copy found reachable again after being verified goes back to pending.
+ */
+async function checkPublicCopy(models, episodeId, user = null, { key } = {}) {
+  const metadata = await readMetadata(models.sequelize, episodeId);
+  const entry = isObject(metadata[KEY]) ? { ...metadata[KEY] } : null;
+  if (!entry) throw new LookbookError('The style sheet has not been sent to Distribution.', 404, 'NOT_SENT');
+  const list = Array.isArray(entry.public_copies) ? entry.public_copies : [];
+  const index = list.findIndex((c) => c.key === key);
+  if (typeof key !== 'string' || index < 0) throw new LookbookError('That is not a copy this look has stopped showing.', 404, 'COPY_NOT_FOUND');
+  const url = require('./websiteSlotService').publicUrl(list[index].key);
+  const status = url ? await module.exports.fetchStatus(url) : null;
+  const gone = GONE_STATUSES.includes(status);
+  const who = user ? String(user.email || user.id || user.sub || '').slice(0, 255) || null : null;
+  entry.public_copies = list.map((c, i) => (i === index ? {
+    ...c, revocation: { status: gone ? 'verified' : 'pending', checked_at: new Date().toISOString(), checked_by: who, last_status: status },
+  } : c));
+  await writeMetadata(models, episodeId, { ...metadata, [KEY]: entry });
   return view(models, episodeId, entry, await sheetFor(models, episodeId));
 }
 
@@ -761,6 +879,13 @@ async function publicLook(models, key) {
 async function removeStyleSheetFromDistribution(models, episodeId) {
   const metadata = await readMetadata(models.sequelize, episodeId);
   if (metadata[KEY] !== undefined) {
+    // Removing the entry would discard the record of copies still in the public bucket. While a look image is
+    // on the website, or a copy's access is not yet known to be gone, the entry stays (take the look down first).
+    const entry = isObject(metadata[KEY]) ? metadata[KEY] : {};
+    const pending = (Array.isArray(entry.public_copies) ? entry.public_copies : []).some((c) => c.revocation?.status !== 'verified');
+    if (pending || (isObject(entry.site) && isObject(entry.site.image) && entry.site.image.key)) {
+      throw new LookbookError('This look has a public image copy whose access is not yet known to be removed. Take the look down and check the copy first.', 409, 'PUBLIC_COPIES_PENDING');
+    }
     const next = { ...metadata };
     delete next[KEY];
     await writeMetadata(models, episodeId, next);
@@ -773,6 +898,7 @@ module.exports = {
   getStyleSheetDistribution, sendStyleSheetToDistribution, updateStyleSheetDistribution, removeStyleSheetFromDistribution,
   publishStyleSheetToSite, takeDownStyleSheetFromSite, setPublishedLinkAvailability, listPublicLooks, publicLook,
   httpsUrl, snapshotLinks, MATCHES, IMAGE_RIGHTS, CLEARED_RIGHTS, imageCleared,
+  withdrawLookImageRights, checkPublicCopy, fetchStatus,
   // The look strip, drawn as the export (styleSheetService); here so a test can stand in for the drawing.
   drawLook: (models, episodeId) => require('./styleSheetService').exportStyleSheet(models, episodeId, 'look'),
 };

@@ -229,4 +229,46 @@ describe('Show on the website', () => {
     const stale = await renderCard(entry({ site: { ...PUBLISHED, image: 'on_site', image_rights: { category: 'original', label: 'Original photograph — owned or controlled', cleared: true, declared_by: 'evoni@site.dev', stale: true } } }));
     expect(stale.getByTestId('ssd-site-image-rights').textContent).toMatch(/The poses or the sheet have changed since: review and publish again to show the new image\./);
   });
+  test('withdrawing the image: one request, no republish; the card then says what is hidden and what is not yet removed', async () => {
+    const copy = { key: 'site-public/looks/Ab3_k9-Zq1Lm/a.png', url: 'https://site.cdn.test/site-public/looks/Ab3_k9-Zq1Lm/a.png', reason: 'rights_withdrawn', rights_withdrawn: true, api_hidden: true, revocation: 'pending', checked_at: null, last_status: null };
+    const onSite = { ...PUBLISHED, image: 'on_site', image_rights: { category: 'licensed', label: 'Licensed image — permission held', cleared: true, declared_by: 'evoni@site.dev', stale: false } };
+    const withdrawn = { ...PUBLISHED, image: 'withdrawn', image_rights: { category: 'licensed', label: 'Licensed image — permission held', cleared: false, withdrawn: true, withdrawn_by: 'evoni@site.dev' } };
+    api.post.mockImplementation((url) => Promise.resolve({ data: { data: url.endsWith('/image/withdraw')
+      ? entry({ site: withdrawn, public_copies: [copy] })
+      : entry({ site: withdrawn, public_copies: [{ ...copy, revocation: 'verified', checked_at: '2026-11-15T22:00:00.000Z', last_status: 403 }] }) } }));
+    await renderCard(entry({ site: onSite }));
+    expect(screen.queryByTestId('ssd-public-copies')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Withdraw image rights' }));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith(`${SITE_URL}/image/withdraw`));
+    expect(api.post).toHaveBeenCalledTimes(1);
+    expect((await screen.findByTestId('ssd-site-image-withdrawn')).textContent).toMatch(/Image rights withdrawn by evoni@site\.dev\. The look is on the website without its image; its products and links are unchanged\./);
+    expect(screen.queryByRole('button', { name: 'Withdraw image rights' })).toBeNull();
+
+    // The copy: hidden on the website, access not yet removed, its exact address, and nothing that says it is gone.
+    const row = within(screen.getByTestId('ssd-public-copy'));
+    expect(row.getByText('Image rights withdrawn')).toBeTruthy();
+    expect(row.getByText('Hidden on the website')).toBeTruthy();
+    expect(row.getByText('Access not yet removed')).toBeTruthy();
+    expect(row.getByText(copy.url)).toBeTruthy();
+    expect(screen.getByTestId('ssd-public-copies').textContent).not.toMatch(/revoked|no longer served/i);
+
+    // A check that finds it gone says what was checked and what answered.
+    fireEvent.click(row.getByRole('button', { name: 'Check access' }));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith(`${SITE_URL}/image/check`, { key: copy.key }));
+    expect(await screen.findByText('Access checked: no longer served')).toBeTruthy();
+    expect(screen.getByTestId('ssd-public-copy').textContent).toMatch(/the address answered 403\./);
+  });
+
+  test('a copy still served after a check stays "not yet removed"; one with no address cannot be checked', async () => {
+    const still = { key: 'k1', url: 'https://site.cdn.test/k1', reason: 'replaced', revocation: 'pending', checked_at: '2026-11-15T22:00:00.000Z', last_status: 200 };
+    const noUrl = { key: 'site-public/looks/x/k2.png', url: null, reason: 'taken_down', revocation: 'pending', checked_at: null, last_status: null };
+    await renderCard(entry({ public_copies: [still, noUrl] }));
+    const rows = screen.getAllByTestId('ssd-public-copy');
+    expect(rows[0].textContent).toMatch(/Replaced by a later publish/);
+    expect(rows[0].textContent).toMatch(/Access not yet removed/);
+    expect(rows[0].textContent).toMatch(/the address answered 200\./);
+    expect(rows[1].textContent).toMatch(/Look taken down/);
+    expect(rows[1].textContent).toMatch(/cannot be checked/);
+    expect(within(rows[1]).getByRole('button', { name: 'Check access' }).disabled).toBe(true);
+  });
 });

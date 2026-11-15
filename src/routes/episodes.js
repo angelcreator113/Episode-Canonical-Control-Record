@@ -738,6 +738,29 @@ router.post('/:id/style-sheet/distribution/site', validateUUIDParam('id'), requi
   }
 });
 
+// Withdraw the look image's rights without publishing again (Evoni, 2026-11-15): the image stops being shown at
+// once; the look, its products and links stay. Safe to ask twice. Nothing in storage is deleted or moved.
+router.post('/:id/style-sheet/distribution/site/image/withdraw', validateUUIDParam('id'), requireAuth, authorize(['ADMIN']), async (req, res) => {
+  try {
+    const models = require('../models');
+    const { withdrawLookImageRights } = require('../services/styleSheetDistributionService');
+    return res.json({ success: true, data: await withdrawLookImageRights(models, req.params.id, req.user) });
+  } catch (err) {
+    return sendLookbookError(res, err, 'POST /:id/style-sheet/distribution/site/image/withdraw');
+  }
+});
+
+// Check whether a copy that is no longer shown can still be fetched at its public address: { key }.
+router.post('/:id/style-sheet/distribution/site/image/check', validateUUIDParam('id'), requireAuth, authorize(['ADMIN']), async (req, res) => {
+  try {
+    const models = require('../models');
+    const { checkPublicCopy } = require('../services/styleSheetDistributionService');
+    return res.json({ success: true, data: await checkPublicCopy(models, req.params.id, req.user, { key: req.body?.key }) });
+  } catch (err) {
+    return sendLookbookError(res, err, 'POST /:id/style-sheet/distribution/site/image/check');
+  }
+});
+
 // A product of the published look can no longer be bought, or can again: { piece_id, available }.
 router.patch('/:id/style-sheet/distribution/site/links', validateUUIDParam('id'), requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
