@@ -254,7 +254,9 @@ describe('readableStatusWhere', () => {
         expect(res.body.count).toBe(1);
         // The scheduled draft's 900 likes are not in the total.
         expect(res.body.stats.total_likes).toBe(3);
-        expect(Object.values(res.body.grouped).flat().map((p) => p.id).filter(Boolean).every((id) => id === ids.live)).toBe(true);
+        // How the episode places its posts is the studio's (2026-11-15, feedPostPublicFields): no groups for this reader.
+        expect(res.body.grouped).toBeUndefined();
+        expect(Object.keys(res.body.stats).sort()).toEqual(['total_comments', 'total_likes']);
         clean(res);
       }
       const drafts = await get(who, `/api/v1/feed-posts/episode/${episodeId}?status=draft`);
