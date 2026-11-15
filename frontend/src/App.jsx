@@ -403,8 +403,10 @@ function AppContent() {
           <Route path="/shows/:showId/season" element={<SeasonPage />} />
           <Route path="/shows/:showId/season/plan" element={<SeasonPlanPrint />} />
           <Route path="/shows/:showId/quick-episode" element={<NewEpisodeRedirect />} />
-          <Route path="/shows/:showId/new-episode" element={<NewEpisodeStarter />} />
-          <Route path="/shows/:showId/events/:eventId" element={<EventPackagePage />} />
+          {/* Production screens (Evoni, 2026-11-15): an ADMIN's. AdminOnly explains it to anyone else; the
+              server decides what each request may do. */}
+          <Route path="/shows/:showId/new-episode" element={<AdminOnly><NewEpisodeStarter /></AdminOnly>} />
+          <Route path="/shows/:showId/events/:eventId" element={<AdminOnly><EventPackagePage /></AdminOnly>} />
           <Route path="/shows/:id/settings" element={<ShowSettingsRedirect />} />
           {/* Studio — universe-level entry points */}
           {/* The old Timeline Editor was deleted (Evoni, 2026-11-03): its links land on the editor. */}
