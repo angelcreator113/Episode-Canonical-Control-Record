@@ -17,15 +17,18 @@
  * the admin typed for this purpose; it is kept out of answers to people
  * who are not admins (historyWithoutReasons).
  *
- * Three routes write through here: Advance and Undo
- * (routes/opportunityRoutes) and Start Episode's offer decision
- * (services/startOfferDecision).
+ * Four routes write through here: Advance and Undo
+ * (routes/opportunityRoutes), Start Episode's offer decision
+ * (services/startOfferDecision), and Complete moving the event's own
+ * accepted offer to completed (services/careerPipelineService
+ * completeOwnerOffer, in the completion's transaction; A2).
  */
 
 const REASON_MAX = 500;
 const AUDIT_ACTION = 'opportunity_status';
 const AUDIT_RESOURCE = 'opportunity';
-const ROUTES = Object.freeze({ ADVANCE: 'advance', UNDO: 'undo', START_DECISION: 'start_decision' });
+// EPISODE_COMPLETED: Complete moving the event's own accepted offer to completed (A2).
+const ROUTES = Object.freeze({ ADVANCE: 'advance', UNDO: 'undo', START_DECISION: 'start_decision', EPISODE_COMPLETED: 'episode_completed' });
 
 const REASON_REQUIRED_CODE = 'OPPORTUNITY_REASON_REQUIRED';
 const REASON_INVALID_CODE = 'OPPORTUNITY_REASON_INVALID';

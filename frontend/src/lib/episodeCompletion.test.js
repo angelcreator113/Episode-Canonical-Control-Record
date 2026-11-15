@@ -127,3 +127,13 @@ describe('milestone attribution (Evoni, 2026-11-13)', () => {
     expect(out.refusal).toMatchObject({ code: 'MILESTONE_DECISION_STALE', title: 'The rewards in question have changed', candidates: [CANDIDATE] });
   });
 });
+
+// A2: which offer the event's terms belong to cannot be established.
+describe('compensation eligibility (A2)', () => {
+  test('OFFER_RESOLUTION_REQUIRED says what to resolve and points at the event', () => {
+    const body = { success: false, code: 'OFFER_RESOLUTION_REQUIRED', error: 'More than one live offer is linked to this event. Nothing was booked.', reason: 'multiple_live_offers', offers: [{ id: 'o1', name: 'A', status: 'booked' }] };
+    const r = completionRefusal(refused(409, body), { showId: 'show-1', episodeId: 'ep-1', eventId: 'ev-1' });
+    expect(r).toMatchObject({ status: 409, code: 'OFFER_RESOLUTION_REQUIRED', title: 'The offers linked to this event need resolving first', message: body.error });
+    expect(r.action?.to).toBe('/shows/show-1/events/ev-1');
+  });
+});

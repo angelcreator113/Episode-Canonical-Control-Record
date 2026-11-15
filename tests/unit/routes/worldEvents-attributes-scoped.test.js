@@ -18,6 +18,7 @@ const WORLD_EVENTS_SRC = worldEventsSource();
 const CALENDAR_SRC = read('src', 'routes', 'calendarRoutes.js');
 const WARDROBE_EVENT_SRC = read('src', 'routes', 'wardrobeEventRoutes.js');
 const CAREER_PIPELINE_SRC = read('src', 'services', 'careerPipelineService.js');
+const OPPORTUNITY_ROUTES_SRC = read('src', 'routes', 'opportunityRoutes.js');
 const SCRIPT_WRITER_SRC = read('src', 'services', 'episodeScriptWriterService.js');
 
 describe('Task #1640 follow-up — WorldEvent.CURRENT_ATTRIBUTES excludes the new columns', () => {
@@ -67,11 +68,15 @@ describe('Task #1640 follow-up — every previously-unrestricted WorldEvent quer
     expect(matches.length).toBe(2);
   });
 
-  test('careerPipelineService.js — the completion-cascade lookup no longer goes through the WorldEvent model', () => {
-    // Task #1917: it reads the episode's one event with raw SQL
-    // (utils/episodeEventSql), so it requests no model columns at all.
+  test('the completion-cascade lookup does not go through the WorldEvent model', () => {
+    // Task #1917: the episode's one event is read with raw SQL
+    // (utils/episodeEventSql), so no model columns are requested at all.
+    // Since 2026-11-15 the read is in the admin route that was the old
+    // hook's only caller (onEpisodeCompleted is removed), by named columns.
     expect(CAREER_PIPELINE_SRC).not.toMatch(/WorldEvent\.findOne\(/);
-    expect(CAREER_PIPELINE_SRC).toMatch(/FROM world_events WHERE id = \$\{EPISODE_EVENT_ID_SQL\}/);
+    expect(CAREER_PIPELINE_SRC).not.toMatch(/FROM world_events/);
+    expect(OPPORTUNITY_ROUTES_SRC).not.toMatch(/WorldEvent\.find/);
+    expect(OPPORTUNITY_ROUTES_SRC).toMatch(/SELECT id FROM world_events WHERE show_id = :showId AND id = \$\{EPISODE_EVENT_ID_SQL\}/);
   });
 
   test('episodeScriptWriterService.js — the wardrobe-context lookup scopes attributes', () => {

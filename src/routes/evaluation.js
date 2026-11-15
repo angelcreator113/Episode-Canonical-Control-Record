@@ -609,6 +609,8 @@ router.post('/episodes/:id/accept', requireAuth, authorize(['ADMIN']), async (re
     if (error instanceof TermsReopenedError) return res.status(error.status).json(termsReopenedBody(error));
     // A reward whose episode is not known and matters: nothing was written; an admin decides.
     if (error instanceof require('../services/episodeCompletionService').MilestoneAttributionError) return res.status(error.status).json(error.toJSON());
+    // Ownership of the event's terms cannot be established (A2): nothing was booked.
+    if (require('../services/startOfferDecision').isOfferResolutionError(error)) return res.status(error.status).json(error.toJSON());
     // A second event with commitments that second events do not carry yet: nothing was written.
     if (require('../services/episodeSecondaryEvents').isSecondaryEventError(error)) return res.status(error.status).json(error.toJSON());
     // A two-parter's Part 1 is "to be continued": the event completes with Part 2 (seasonSpecials).

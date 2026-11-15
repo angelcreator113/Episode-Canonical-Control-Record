@@ -531,6 +531,9 @@ async function completeEpisode(episodeId, showId, sequelize, { eventPiecesFallba
   let evaluationId;
   let narrativeLines;
   let stressBreakdown = [];
+  // The owner offer's completion (A2), done inside the transaction below.
+  let ownerOfferResult = { opportunities_advanced: [], opportunities_unaccepted: [] };
+  let compensationRecord = null;
   const outcome = await sequelize.transaction(async (transaction) => {
     const { finalizeEpisodeFinancials } = require('./financialTransactionService');
     const { withTransaction } = require('../utils/withTransaction');
@@ -552,17 +555,57 @@ async function completeEpisode(episodeId, showId, sequelize, { eventPiecesFallba
     const { lockLedgerBalance, syncCoinsFromLedger } = require('./coinLedgerSync');
     const ledgerBefore = await lockLedgerBalance(sequelize, showId, { transaction });
 
+    // ── 10d. Compensation eligibility (A2; services/startOfferDecision) ──
+    // Brand compensation is owed only under an accepted agreement. The
+    // event row is locked, then the offers linked to it (episode, ledger,
+    // event, offers: the order Start Episode's event-then-offers agrees
+    // with), and the answer read under those locks decides every income row
+    // below. Ownership that cannot be established on an event with terms
+    // throws 409 OFFER_RESOLUTION_REQUIRED here: nothing has been written,
+    // and the whole completion rolls back. Lala's own costs and wardrobe
+    // charges are not compensation and book either way.
+    const offerDecision = require('./startOfferDecision');
+    let compensation = null;
+    if (event) {
+      // The event row, before the offers: the order Start Episode takes
+      // them in (utils/eventEpisodeLink lockLiveEvent, then the offers).
+      // Only the lock is wanted here; a completion is not refused over it.
+      await db.query(
+        `SELECT id FROM world_events
+          WHERE id = :id FOR UPDATE`,
+        { replacements: { id: event.id } }
+      );
+      compensation = await offerDecision.resolveEventCompensation(sequelize, { event, transaction, lock: true });
+    }
+    const incomeOwed = !compensation || compensation.owed === true;
+
     // ── 11. Finalize financials (coins come from here, not evaluation) ──
-    financialResult = await finalizeEpisodeFinancials(episodeId, showId, sequelize, { transaction });
+    financialResult = await finalizeEpisodeFinancials(episodeId, showId, sequelize, { transaction, compensation, actor: decidedBy });
 
     // ── 11a. Deal payouts (deal build PR 5; DEAL_DESIGN.md §4, §10.3) ──
     // A deal event is paid its components at Complete accepted, each under
     // its own ledger name, and a deal_bonus only when its accepted terms
-    // contain one for this tier. Once each (the payout unique index).
-    const { bookCompletionPayouts } = require('./dealPayoutService');
-    await bookCompletionPayouts(sequelize, {
-      showId, episodeId, event, tier: evalResult.tier_final, transaction,
-    });
+    // contain one for this tier. Once each (the payout unique index). Not
+    // booked when the compensation is not owed (10d); what was withheld is
+    // recorded below.
+    const { bookCompletionPayouts, completionPayouts } = require('./dealPayoutService');
+    const withheldCompensation = [...(financialResult.compensation?.withheld || [])];
+    if (incomeOwed) {
+      await bookCompletionPayouts(sequelize, {
+        showId, episodeId, event, tier: evalResult.tier_final, transaction,
+      });
+    } else if (event) {
+      for (const p of completionPayouts(event, evalResult.tier_final)) withheldCompensation.push({ category: p.category, amount: p.amount });
+    }
+    // The record of the decision, kept only for an event with an offer
+    // linked: a standalone event's money is as it always was.
+    compensationRecord = compensation && compensation.linked ? {
+      owed: incomeOwed,
+      reason: compensation.reason,
+      owner: compensation.owner,
+      offers: compensation.offers,
+      withheld: withheldCompensation,
+    } : null;
 
     // Recompute coins from the ledger (D1): every row above, milestones and
     // the deal payouts included. The coin delta is the ledger's movement
@@ -718,6 +761,20 @@ async function completeEpisode(episodeId, showId, sequelize, { eventPiecesFallba
       mergedDeltas._financial_context = { milestone_attribution: milestoneAttribution };
     }
     stressBreakdown = withNone.compared.stress_breakdown;
+    // The compensation decision sits with the rest of the episode's
+    // financial context (A2), so Episode Results and the state history say
+    // what was owed, what was not, and why.
+    if (compensationRecord) {
+      mergedDeltas._financial_context = { ...(mergedDeltas._financial_context || {}), compensation: compensationRecord };
+    }
+    if (compensationRecord && compensationRecord.withheld.length > 0) {
+      const { logger: audit } = require('../middleware/auditLog');
+      await audit.logActionInTransaction(transaction, decidedBy?.id ?? null, 'compensation_withheld', 'episode', episodeId, {
+        show_id: showId, event_id: event?.id || null, at: 'complete', reason: compensationRecord.reason,
+        opportunity_id: compensationRecord.owner?.id || null, opportunity_status: compensationRecord.owner?.status || null,
+        withheld: compensationRecord.withheld,
+      });
+    }
 
     // The decisions are part of the audit trail, through its one call for an
     // operation that must not happen without its entry (middleware/auditLog
@@ -782,6 +839,7 @@ async function completeEpisode(episodeId, showId, sequelize, { eventPiecesFallba
       outfit: look.outfit,
       financial_summary: financialResult.summary,
       ...(milestoneAttribution ? { milestone_attribution: milestoneAttribution } : {}),
+      ...(compensationRecord ? { compensation: compensationRecord } : {}),
       ...(selfTalk.tone ? { self_talk: selfTalkResult(selfTalk) } : {}),
       stress_breakdown: stressBreakdown,
       completed_at: new Date().toISOString(),
@@ -808,6 +866,18 @@ async function completeEpisode(episodeId, showId, sequelize, { eventPiecesFallba
         `UPDATE world_events SET status = 'filmed', updated_at = NOW() WHERE id = :id`,
         { replacements: { id: event.id } }
       );
+    }
+
+    // ── 15a. The event's own offer is completed with the episode (A2) ──
+    // Inside this transaction and through A1's transition record: only the
+    // owner 10d established, only when accepted and not yet completed. It
+    // commits with the episode or not at all; a failure here rolls the
+    // completion back.
+    if (event && compensation) {
+      ownerOfferResult = await require('./careerPipelineService').completeOwnerOffer(sequelize, {
+        resolution: compensation, episodeId, episodeNumber: episode.episode_number, showId, eventId: event.id,
+        actor: decidedBy, transaction,
+      });
     }
 
     return null;
@@ -1013,12 +1083,13 @@ ${narrativeLines.short || ''}`,
   // Runs once per completion: the already-accepted early return above skips
   // it on repeat calls. Opportunity only — no goal cascade (step 17 above is
   // the single goal advance).
+  // Since A2 the move itself happens in the completion's transaction (step
+  // 15a: the event's own offer only, recorded, atomic with the episode);
+  // here its result joins the summary.
   try {
-    const { onEpisodeCompleted } = require('./careerPipelineService');
-    const oppResult = await onEpisodeCompleted(episodeId, showId, require('../models'));
-    careerSummary.opportunities_advanced.push(...(oppResult?.opportunities_advanced || []));
+    careerSummary.opportunities_advanced.push(...(ownerOfferResult?.opportunities_advanced || []));
     // One still open (never accepted) is left as it is, listed for review.
-    careerSummary.opportunities_unaccepted.push(...(oppResult?.opportunities_unaccepted || []));
+    careerSummary.opportunities_unaccepted.push(...(ownerOfferResult?.opportunities_unaccepted || []));
   } catch (oppErr) {
     console.error('[EpisodeCompletion] Opportunity completion failed (non-blocking):', oppErr?.message);
   }
@@ -1108,6 +1179,8 @@ ${narrativeLines.short || ''}`,
     outfit: look.outfit,
     financials: financialResult.summary,
     milestone_attribution: mergedDeltas._financial_context?.milestone_attribution || null,
+    // What brand compensation was owed, what was withheld and why (A2); null for an event with no offer linked.
+    compensation: compensationRecord,
     transactions: (financialResult.transactions || []).length,
     career: careerSummary,
     event_sync: eventSync,

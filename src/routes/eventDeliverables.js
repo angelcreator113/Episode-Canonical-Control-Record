@@ -202,8 +202,23 @@ function readDeliverableBody(body, { partial }) {
 async function loadDeliverables(sequelize, { showId, eventId }) {
   const event = await loadEvent(sequelize, showId, eventId);
   if (!event) return null;
-  const deliverables = await listEventDeliverables(sequelize, eventId);
+  const rows = await listEventDeliverables(sequelize, eventId);
   const lockEpisode = await findLock(sequelize, eventId);
+  // Each fee as what the terms propose, what the ledger holds, and why they
+  // differ (A2; dealPayoutService.deliverableFeeStates): a proposed fee is
+  // never shown as money earned. A read that fails leaves the list as it was.
+  let deliverables = rows;
+  try {
+    // The deal's own columns and the offer the event was made from (loadEvent reads neither).
+    const [dealRows] = await sequelize.query(
+      'SELECT id, name, deal_type, deal_components, appearance_required, opportunity_id FROM world_events WHERE id = :eventId',
+      { replacements: { eventId } }
+    );
+    const states = await require('../services/dealPayoutService').deliverableFeeStates(sequelize, { event: dealRows?.[0], deliverables: rows });
+    deliverables = rows.map((d) => ({ ...d, ...(states.get(String(d.id)) || {}) }));
+  } catch (err) {
+    console.error('[EventDeliverables] the fee states could not be read:', err.message);
+  }
   return { deliverables, locked: !!lockEpisode };
 }
 
@@ -435,7 +450,7 @@ router.post('/world/:showId/events/:eventId/deliverables/:deliverableId/status',
     // the deliverable's fee once, when Evoni approves it (D6 keeps the move
     // manual). A failed booking rolls the approval back.
     const { sequelize } = models;
-    const { rows, contentFee } = await sequelize.transaction(async (transaction) => {
+    const { rows, contentFee, feeWithheld } = await sequelize.transaction(async (transaction) => {
       const [moved] = await sequelize.query(
         `UPDATE event_deliverables SET status = :to, ${check.timestampColumn} = NOW(), updated_at = NOW()
          WHERE id = :deliverableId AND event_id = :eventId AND deleted_at IS NULL AND status = :from
@@ -451,12 +466,37 @@ router.post('/world/:showId/events/:eventId/deliverables/:deliverableId/status',
       }
       if (to !== 'approved') return { rows: moved, contentFee: null };
       const [dealRows] = await sequelize.query(
-        `SELECT id, name, deal_type, deal_components, host, host_brand, used_in_episode_id FROM world_events WHERE id = :eventId`,
+        `SELECT id, name, deal_type, deal_components, appearance_required, host, host_brand, used_in_episode_id, opportunity_id FROM world_events WHERE id = :eventId`,
         { replacements: { eventId }, transaction }
       );
-      const { bookContentFee } = require('../services/dealPayoutService');
-      const fee = await bookContentFee(sequelize, { showId, event: dealRows?.[0], deliverable: moved[0], transaction });
-      return { rows: moved, contentFee: fee };
+      const dealEvent = dealRows?.[0];
+      const payouts = require('../services/dealPayoutService');
+      // Approval and the fee are separate (A2; Evoni, 2026-11-14). The fee is
+      // brand income, owed only under an accepted agreement: asked here with
+      // the ledger and then the offer rows locked (deliverable, ledger,
+      // offers), in this transaction. Not owed: the deliverable is still
+      // approved, nothing is booked, and why is recorded with it. Ownership
+      // that cannot be established: 409 OFFER_RESOLUTION_REQUIRED, and the
+      // approval rolls back with it.
+      const proposed = payouts.contentFeeFor(dealEvent, moved[0]);
+      if (proposed > 0) {
+        await require('../services/coinLedgerSync').lockLedgerBalance(sequelize, showId, { transaction });
+        const eligibility = await require('../services/startOfferDecision')
+          .resolveEventCompensation(sequelize, { event: dealEvent, transaction, lock: true, hasTerms: true });
+        if (eligibility.owed !== true) {
+          const withheld = {
+            reason: eligibility.reason, proposed_fee: proposed,
+            opportunity_id: eligibility.owner?.id || null, opportunity_status: eligibility.owner?.status || null,
+          };
+          const { logger: audit } = require('../middleware/auditLog');
+          await audit.logActionInTransaction(transaction, req.user?.id ?? null, payouts.CONTENT_FEE_WITHHELD_ACTION, payouts.DELIVERABLE_RESOURCE, deliverableId, {
+            show_id: showId, event_id: eventId, episode_id: moved[0].episode_id || event.used_in_episode_id || null, ...withheld,
+          });
+          return { rows: moved, contentFee: null, feeWithheld: withheld };
+        }
+      }
+      const fee = await payouts.bookContentFee(sequelize, { showId, event: dealEvent, deliverable: moved[0], transaction });
+      return { rows: moved, contentFee: fee, feeWithheld: null };
     });
     if (!rows?.[0]) {
       return res.status(409).json({
@@ -474,8 +514,15 @@ router.post('/world/:showId/events/:eventId/deliverables/:deliverableId/status',
         console.error('[EventDeliverables] the follower change could not be proposed:', err.message);
       }
     }
-    return res.json({ success: true, deliverable: rows[0], content_fee: contentFee });
+    // content_fee is what was booked (null when nothing was);
+    // content_fee_withheld says why an approved deliverable has no fee (A2).
+    return res.json({ success: true, deliverable: rows[0], content_fee: contentFee, content_fee_withheld: feeWithheld || null });
   } catch (error) {
+    // The offers linked to the event must be resolved first (A2): the approval rolled back.
+    if (require('../services/startOfferDecision').isOfferResolutionError(error)) {
+      console.error('Advance event deliverable status refused, offers unresolved:', error.message);
+      return res.status(error.status).json(error.toJSON());
+    }
     console.error('Advance event deliverable status error:', error);
     return res.status(500).json({ success: false, error: 'Failed to record deliverable status', message: error.message });
   }

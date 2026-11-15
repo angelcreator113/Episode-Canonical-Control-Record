@@ -12,7 +12,7 @@ vi.mock('../../services/api', () => ({
 }));
 
 import api from '../../services/api';
-import { EpisodeResultsEvaluation, EpisodeResultsStory } from './EpisodeResultsPages';
+import { EpisodeResultsEvaluation, EpisodeResultsStory, CompensationRecord } from './EpisodeResultsPages';
 
 const EVAL = {
   tier_final: 'pass', score: 78, narrative_lines: { short: 'Lala held her own.' },
@@ -122,5 +122,41 @@ describe('Results → Story', () => {
   test('the Stories Library is a link', () => {
     renderIn(<EpisodeResultsStory episode={{ id: 'ep-1', show_id: 'show-1' }} />);
     expect(screen.getByRole('link', { name: /Open Stories Library/ }).getAttribute('href')).toBe('/stories');
+  });
+});
+
+// A2 (Evoni, 2026-11-14): what completion withheld is shown as proposed and
+// not booked, never as earnings.
+describe('Results → brand compensation not booked', () => {
+  const RECORD = {
+    owed: false, reason: 'owner_closed', owner: { id: 'o1', name: 'Maison Belle campaign', status: 'declined' },
+    withheld: [{ category: 'appearance_fee', amount: 450 }, { category: 'deal_bonus', amount: 1300 }],
+  };
+
+  test('says it was not booked, why, which offer, and each amount as proposed', () => {
+    render(<CompensationRecord compensation={RECORD} />);
+    const block = screen.getByTestId('results-compensation');
+    expect(screen.getByTestId('results-compensation-status').textContent).toBe('Not booked');
+    expect(block.textContent).toContain('The offer had been declined or closed when the episode was completed.');
+    expect(block.textContent).toContain('Offer: Maison Belle campaign (declined).');
+    expect(block.textContent).toContain('Lala’s own costs were booked as usual.');
+    expect(within(screen.getByTestId('results-compensation-row-appearance_fee')).getByText('proposed, not booked')).toBeTruthy();
+    expect(screen.getByTestId('results-compensation-row-appearance_fee').textContent).toContain('450');
+    expect(screen.getByTestId('results-compensation-row-deal_bonus').textContent).toContain('1,300');
+    expect(block.textContent).not.toMatch(/earned|income|paid out/i);
+  });
+
+  test('nothing is shown when it was owed, or when the event had no offer', () => {
+    const { container, rerender } = render(<CompensationRecord compensation={{ ...RECORD, owed: true, withheld: [] }} />);
+    expect(container.innerHTML).toBe('');
+    rerender(<CompensationRecord compensation={null} />);
+    expect(container.innerHTML).toBe('');
+    rerender(<CompensationRecord compensation={undefined} />);
+    expect(container.innerHTML).toBe('');
+  });
+
+  test('an unknown reason still reads plainly', () => {
+    render(<CompensationRecord compensation={{ owed: false, reason: 'something_new', withheld: [] }} />);
+    expect(screen.getByTestId('results-compensation').textContent).toContain('No accepted agreement owed it when the episode was completed.');
   });
 });

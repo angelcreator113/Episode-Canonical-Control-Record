@@ -489,7 +489,7 @@ function thresholdOf(value) {
  *   any write, a completion that would take coins below zero (Task #1933).
  * @returns {object} { transactions, summary, balance_before, balance_after }
  */
-async function finalizeEpisodeFinancials(episodeId, showId, sequelize, { dryRun = false, transaction = null } = {}) {
+async function finalizeEpisodeFinancials(episodeId, showId, sequelize, { dryRun = false, transaction = null, compensation = undefined, actor = null } = {}) {
   // One transaction, under a lock on the episode row (§8(x) D2, Task #2228):
   // a failure writes nothing, and two finalizes of one episode run one after
   // the other, so the second sees the first's rows and books nothing. A
@@ -503,7 +503,7 @@ async function finalizeEpisodeFinancials(episodeId, showId, sequelize, { dryRun 
   // itself.
   if (!dryRun && !transaction) {
     return sequelize.transaction(async (t) => {
-      const result = await finalizeEpisodeFinancials(episodeId, showId, sequelize, { transaction: t });
+      const result = await finalizeEpisodeFinancials(episodeId, showId, sequelize, { transaction: t, compensation, actor });
       if (result.already_finalized) return result;
       const { syncCoinsFromLedger } = require('./coinLedgerSync');
       const { InsufficientCoinsError } = require('./coinBalanceGuard');
@@ -626,6 +626,22 @@ async function finalizeEpisodeFinancials(episodeId, showId, sequelize, { dryRun 
     if (logged) transactions.push(withoutTransaction(logged));
   };
 
+  // Compensation eligibility (A2; services/startOfferDecision): the event's
+  // payment is brand income, owed only under an accepted agreement. Asked
+  // here, after the episode and ledger locks and with the offer rows locked,
+  // so the answer and the rows below are one decision; a caller that has
+  // already asked under the same locks (completeEpisode) passes its answer.
+  // Unresolved ownership with terms throws 409 OFFER_RESOLUTION_REQUIRED and
+  // the whole finalize rolls back. A dry run locks nothing and never throws.
+  // Lala's own costs below are not compensation and book either way.
+  const eligibility = compensation !== undefined ? compensation : (event
+    ? await require('./startOfferDecision').resolveEventCompensation(rootSequelize, {
+      event, transaction, lock: !dryRun && !!transaction, throwIfUnresolved: !dryRun,
+    })
+    : null);
+  const incomeOwed = !eligibility || eligibility.owed === true;
+  const withheld = [];
+
   if (event) {
     const { isPaid, isDeal, eventCost, eventPayment } = normalizePaidFreeFlags(event);
 
@@ -723,8 +739,10 @@ async function finalizeEpisodeFinancials(episodeId, showId, sequelize, { dryRun 
       }
     }
 
-    // 9. Event payment (income — if is_paid)
-    if (isPaid && eventPayment > 0) {
+    // 9. Event payment (income — if is_paid), when it is owed.
+    if (isPaid && eventPayment > 0 && !incomeOwed) {
+      withheld.push({ category: 'event_payment', amount: wholeCoins(eventPayment) });
+    } else if (isPaid && eventPayment > 0) {
       await addTx({
         type: 'income', category: 'event_payment', amount: eventPayment,
         description: `Payment for "${event.name}"`,
@@ -735,7 +753,9 @@ async function finalizeEpisodeFinancials(episodeId, showId, sequelize, { dryRun 
     // 10. Brand deal content revenue bonus
     if (event.event_type === 'brand_deal' && eventPayment > 0) {
       const contentBonus = Math.round(eventPayment * 0.1);
-      if (contentBonus > 0) {
+      if (contentBonus > 0 && !incomeOwed) {
+        withheld.push({ category: 'content_revenue', amount: contentBonus });
+      } else if (contentBonus > 0) {
         await addTx({
           type: 'income', category: 'content_revenue', amount: contentBonus,
           description: `Brand deal content fee for ${event.host_brand || event.name}`,
@@ -750,6 +770,12 @@ async function finalizeEpisodeFinancials(episodeId, showId, sequelize, { dryRun 
   const totalExpenses = transactions.filter(t => t.type === 'expense' || t.type === 'deduction').reduce((s, t) => s + parseFloat(t.amount), 0);
   const netProfit = totalIncome - totalExpenses;
 
+  // What was not booked and why, for the caller's record; null for an event
+  // with no offer linked, whose money is as it always was.
+  const compensationRecord = eligibility && eligibility.linked
+    ? { owed: eligibility.owed === true, reason: eligibility.reason, owner: eligibility.owner, offers: eligibility.offers, withheld }
+    : null;
+
   if (dryRun) {
     return {
       dry_run: true,
@@ -757,6 +783,7 @@ async function finalizeEpisodeFinancials(episodeId, showId, sequelize, { dryRun 
       summary: { total_income: totalIncome, total_expenses: totalExpenses, net_profit: netProfit },
       balance_before: balanceBefore,
       balance_after: balance,
+      compensation: compensationRecord,
     };
   }
 
@@ -798,8 +825,20 @@ async function finalizeEpisodeFinancials(episodeId, showId, sequelize, { dryRun 
     console.warn('[FinancialTx] CSH update failed:', err.message);
   }
 
+  // Income withheld by a finalize run on its own is recorded in the audit
+  // trail in this transaction (a completion records its own, with the deal
+  // payouts it withheld too).
+  if (transaction && compensation === undefined && withheld.length > 0) {
+    const { logger: audit } = require('../middleware/auditLog');
+    await audit.logActionInTransaction(transaction, actor?.id ?? null, 'compensation_withheld', 'episode', episodeId, {
+      show_id: showId, event_id: event?.id || null, at: 'finalize', reason: eligibility.reason,
+      opportunity_id: eligibility.owner?.id || null, opportunity_status: eligibility.owner?.status || null, withheld,
+    });
+  }
+
   return {
     transactions,
+    compensation: compensationRecord,
     summary: {
       total_income: totalIncome,
       total_expenses: totalExpenses,

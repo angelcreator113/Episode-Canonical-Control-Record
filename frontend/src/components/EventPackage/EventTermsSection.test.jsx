@@ -552,3 +552,39 @@ describe('EventTermsSection', () => {
     expect(restrictions.className).not.toContain('is-empty');
   });
 });
+
+// A2 (Evoni, 2026-11-14): approval and the fee are separate. After Start the
+// row says what was booked, or that nothing was and why.
+describe('EventTermsSection: the fee beside the approval (A2)', () => {
+  const row = (extra) => ({ ...DELIVERABLES[0], id: 'd1', status: 'approved', approved_at: '2026-11-14T10:00:00.000Z', fee: 120, ...extra });
+  const show = async (deliverables, props = { locked: true }) => {
+    Object.values(api).forEach((fn) => fn?.mockReset?.());
+    vi.mocked(api.get).mockResolvedValue({ data: { success: true, deliverables, locked: true } });
+    renderTerms(props);
+    await waitFor(() => expect(screen.getByTestId('terms-deliverable-d1')).toBeTruthy());
+  };
+
+  test('approved and booked: says the amount booked', async () => {
+    await show([row({ proposed_fee: 120, booked_fee: 120, fee_state: 'booked' })]);
+    expect(screen.getByTestId('terms-deliverable-booking-d1').textContent).toBe('Booked 120');
+    expect(screen.getByTestId('terms-deliverable-status-d1')).toBeTruthy();
+  });
+
+  test('approved and not owed: still Approved, and the fee reads not booked, with why and what was proposed', async () => {
+    await show([row({ proposed_fee: 120, booked_fee: null, fee_state: 'not_owed', fee_reason: 'owner_closed' })]);
+    const note = screen.getByTestId('terms-deliverable-booking-d1');
+    expect(note.textContent).toBe('Fee not booked: the offer was declined or closed (proposed 120)');
+    expect(note.textContent).not.toMatch(/earned|paid|income/i);
+    expect(screen.getByTestId('terms-deliverable-status-d1').className).toContain('is-approved');
+  });
+
+  test('the offers need resolving: says the fee cannot be booked until they are', async () => {
+    await show([row({ status: 'submitted', approved_at: null, proposed_fee: 120, booked_fee: null, fee_state: 'unresolved', fee_reason: 'no_owner' })]);
+    expect(screen.getByTestId('terms-deliverable-booking-d1').textContent).toBe('The fee cannot be booked until the offers on this event are resolved');
+  });
+
+  test('nothing is added for a fee that simply books on approval, a row with no fee, or before Start Episode', async () => {
+    await show([row({ status: 'submitted', approved_at: null, proposed_fee: 120, booked_fee: null, fee_state: 'expected' })]);
+    expect(screen.queryByTestId('terms-deliverable-booking-d1')).toBeNull();
+  });
+});
