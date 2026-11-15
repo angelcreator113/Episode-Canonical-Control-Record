@@ -150,11 +150,11 @@ async function forReader(req, posts) {
   }
   // A post's picture job is the studio's (services/postPictures), not the reader's.
   const shown = await require('../services/postMedia').publicPosts(require('../models'), posts);
-  return shown.map((p) => {
-    if (!p || typeof p !== 'object' || !('picture_job' in p)) return p;
-    const { picture_job: _job, ...rest } = p;
-    return rest;
-  });
+  // Then only what The Pulse draws, the nested author, place, photos and comments
+  // included (services/publicFeedPost; Evoni, 2026-11-15): a post's row also holds
+  // Lala's internal thought, the review gate, its story purpose, its episode.
+  const { publicPost } = require('../services/publicFeedPost');
+  return shown.map((p) => (p && typeof p === 'object' ? publicPost(p) : p));
 }
 
 // ── GET FEED TIMELINE (QUERY COMPAT) ────────────────────────────────────────
@@ -184,7 +184,8 @@ router.get('/', optionalAuth, async (req, res) => {
       if (!episode_id) where.episode_id = from === 'episode' ? { [require('sequelize').Op.ne]: null } : null;
     }
     if (profile_id) where.social_profile_id = profile_id;
-    if (narrative_function) where.narrative_function = narrative_function;
+    // What a post is for in the story is not the reader's: filtering by it would tell them.
+    if (narrative_function && readsAsAdmin(req)) where.narrative_function = narrative_function;
     // ?post_type= (e.g. 'relationship', docs/FEED_POSTS.md rule 8).
     if (post_type) {
       if (typeof post_type !== 'string' || post_type.length > 30) return res.status(400).json({ error: 'post_type must be a short string' });
@@ -374,7 +375,8 @@ router.get('/places', requireAuth, async (req, res) => {
 //      line of the saved script with its draft, if it has one.
 // POST the same path: drafts a feed post for each one that has none, linked
 //      to its beat (services/scriptPostDrafts). Saving again drafts nothing twice.
-router.get('/episodes/:episodeId/script-drafts', requireAuth, async (req, res) => {
+// ADMIN: an operational read of the studio's (Evoni, 2026-11-15); not every signed-in account's.
+router.get('/episodes/:episodeId/script-drafts', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const models = require('../models');
     const { getScriptPostDrafts } = require('../services/scriptPostDrafts');
@@ -398,7 +400,8 @@ router.post('/episodes/:episodeId/script-drafts', requireAuth, async (req, res) 
 
 // ── PENDING REACTION DRAFTS ACROSS A SHOW (the wall's Requests box) ─────────
 // GET /api/v1/feed-posts/comments/pending?show_id=
-router.get('/comments/pending', requireAuth, async (req, res) => {
+// ADMIN: an operational read of the studio's (Evoni, 2026-11-15); not every signed-in account's.
+router.get('/comments/pending', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { FeedComment, FeedPost } = require('../models');
     const { show_id } = req.query;
@@ -435,7 +438,8 @@ router.get('/:showId/timeline', optionalAuth, async (req, res) => {
     const where = { show_id: showId, deleted_at: null, ...scoped };
     if (episode_id) where.episode_id = episode_id;
     if (profile_id) where.social_profile_id = profile_id;
-    if (narrative_function) where.narrative_function = narrative_function;
+    // What a post is for in the story is not the reader's: filtering by it would tell them.
+    if (narrative_function && readsAsAdmin(req)) where.narrative_function = narrative_function;
 
     const posts = await FeedPost.findAll({
       where,
@@ -484,6 +488,8 @@ router.get('/post/:postId', optionalAuth, async (req, res) => {
     if (!post || (!isLive(post) && !readsAsAdmin(req))) return res.status(404).json({ error: 'Post not found' });
     const [shown] = await forReader(req, [post.toJSON()]);
     if (!shown) return res.status(404).json({ error: 'Post not found' });
+    // Which beats show it name episodes: the studio's, not the reader's.
+    if (!readsAsAdmin(req)) return res.json({ data: shown });
     // Which beats show this post (feed_moments.feed_post_id), for the wall.
     const { FeedMoment, Episode } = require('../models');
     const beats = FeedMoment ? await FeedMoment.findAll({
@@ -517,6 +523,10 @@ router.get('/:postId/comments', optionalAuth, async (req, res) => {
       where: { feed_post_id: req.params.postId, deleted_at: null, ...scoped },
       order: [['sort_order', 'ASC'], ['created_at', 'ASC']],
     });
+    if (!admin) {
+      const { publicComment } = require('../services/publicFeedPost');
+      return res.json({ data: comments.map(publicComment), count: comments.length });
+    }
     return res.json({ data: comments, count: comments.length });
   } catch (err) {
     console.error('[FeedComments] List error:', err);
@@ -525,7 +535,8 @@ router.get('/:postId/comments', optionalAuth, async (req, res) => {
 });
 
 // GET /api/v1/feed-posts/:postId/comments/reactors — who would react, and why.
-router.get('/:postId/comments/reactors', requireAuth, async (req, res) => {
+// ADMIN: an operational read of the studio's (Evoni, 2026-11-15); not every signed-in account's.
+router.get('/:postId/comments/reactors', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const models = require('../models');
     const post = await models.FeedPost.findOne({ where: { id: req.params.postId, deleted_at: null } });
@@ -661,6 +672,21 @@ router.get('/episode/:episodeId', optionalAuth, async (req, res) => {
       where: { episode_id: req.params.episodeId, deleted_at: null, ...scoped },
       order: [['sort_order', 'ASC']],
     });
+
+    // Anyone but an ADMIN: the same posts in their public fields, with approved public
+    // pictures only (forReader), and the two totals. How the episode places each post and
+    // what each is for are the studio's.
+    if (!readsAsAdmin(req)) {
+      const data = await forReader(req, posts.map((p) => p.toJSON()));
+      return res.json({
+        data,
+        count: data.length,
+        stats: {
+          total_likes: data.reduce((sum, p) => sum + (p.likes || 0), 0),
+          total_comments: data.reduce((sum, p) => sum + (p.comments_count || 0), 0),
+        },
+      });
+    }
 
     // Group by timeline position
     const grouped = {
@@ -837,7 +863,8 @@ router.delete('/:postId', requireAuth, async (req, res) => {
 // ── DELETED POSTS (Lala's Feed → Deleted, Evoni, 2026-10-05) ────────────────
 // GET /api/v1/feed-posts/deleted?show_id=&limit= — the show's soft-deleted
 // posts, newest deletion first; DELETE above only sets deleted_at.
-router.get('/deleted', requireAuth, async (req, res) => {
+// ADMIN: an operational read of the studio's (Evoni, 2026-11-15); not every signed-in account's.
+router.get('/deleted', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { FeedPost } = require('../models');
     const { Op } = require('sequelize');
@@ -891,7 +918,8 @@ router.put('/:postId/tags', requireAuth, async (req, res) => {
 // GET /api/v1/feed-posts/release-plan?show_id=&tz_offset= (Evoni, 2026-10-17,
 // "schedule all"): every draft of the show with no release time, each at the
 // time the story suggests and inside its story-order guards. Nothing saved.
-router.get('/release-plan', requireAuth, async (req, res) => {
+// ADMIN: an operational read of the studio's (Evoni, 2026-11-15); not every signed-in account's.
+router.get('/release-plan', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { planReleases, ReleaseError } = require('../services/postRelease');
     try {
@@ -909,7 +937,8 @@ router.get('/release-plan', requireAuth, async (req, res) => {
 // GET /api/v1/feed-posts/release-calendar?show_id=&from=&to= (Evoni,
 // 2026-10-17): the show's scheduled drafts by release time, for the release
 // calendar; moving one is PUT /:postId/release-time.
-router.get('/release-calendar', requireAuth, async (req, res) => {
+// ADMIN: an operational read of the studio's (Evoni, 2026-11-15); not every signed-in account's.
+router.get('/release-calendar', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { releaseCalendar, ReleaseError } = require('../services/postRelease');
     try {
@@ -993,7 +1022,8 @@ router.put('/:postId/release-time', requireAuth, authorize(['ADMIN']), async (re
 // 2026-10-17): a release time the story suggests, from the post's story time
 // and its episode's air date, in her own hours (tz_offset: the browser's
 // getTimezoneOffset). Nothing is saved; she schedules it, or changes it.
-router.get('/:postId/release-time/suggest', requireAuth, async (req, res) => {
+// ADMIN: an operational read of the studio's (Evoni, 2026-11-15); not every signed-in account's.
+router.get('/:postId/release-time/suggest', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { suggestReleaseTime, ReleaseError } = require('../services/postRelease');
     const models = require('../models');
