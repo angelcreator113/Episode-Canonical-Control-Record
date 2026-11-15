@@ -13,6 +13,7 @@ import { MovesChips } from './GoalCoverage';
 import { readiness } from '../../lib/releaseBoard';
 import { deadlineWarning } from '../../lib/releaseSchedule';
 import { slotCardTitle } from '../../lib/seasonPage';
+import { packageHref } from '../../lib/eventFlow';
 import { weekAhead, weekWhen, stageText, stillNeeds } from '../../lib/seasonWeek';
 import './SeasonWeek.css';
 import { slotEvent } from '../../lib/seasonSlotEvent';
@@ -37,7 +38,7 @@ function useEpisodeReadiness(api, episodeId) {
   return { full, posts };
 }
 
-function WeekItem({ item, api, showId, events, moves, onOpen }) {
+function WeekItem({ item, api, showId, events, moves, onOpen, season = null }) {
   const { slot, row } = item;
   const { full, posts } = useEpisodeReadiness(api, item.episode?.id || null);
   const episode = item.episode ? { ...item.episode, ...(full && full.id === item.episode.id ? full : {}) } : null;
@@ -71,7 +72,8 @@ function WeekItem({ item, api, showId, events, moves, onOpen }) {
         <div>
           <dt>Event</dt>
           <dd data-testid={`szw-event-${n}`}>
-            {ev ? <Link className="szw-link" to={`/shows/${showId}/events/${ev.id}`}>{ev.name || 'Untitled event'}</Link> : 'None pencilled'}
+            {/* Back from the package returns to this slot on the Roadmap, in this season (lib/eventFlow). */}
+            {ev ? <Link className="szw-link" to={packageHref(showId, ev.id, { kind: 'roadmap', slot: n, season })}>{ev.name || 'Untitled event'}</Link> : 'None pencilled'}
           </dd>
         </div>
       </dl>
@@ -96,7 +98,7 @@ export default function SeasonWeek({ roadmap, release, episodes, events, api, sh
       {ahead.items.length ? (
         <ol className="szw-list">
           {ahead.items.map((item) => (
-            <WeekItem key={item.slot.id} item={item} api={api} showId={showId} events={events}
+            <WeekItem key={item.slot.id} item={item} api={api} showId={showId} events={events} season={roadmap?.season_number ?? null}
               moves={movesBySlot[item.slot.id] || []} onOpen={() => onOpen(item.slot)} />
           ))}
         </ol>

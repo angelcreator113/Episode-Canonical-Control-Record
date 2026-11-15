@@ -15,7 +15,7 @@ const auth = { user: { groups: ['admin'] } };
 vi.mock('../contexts/AuthContext', () => ({ useAuth: () => auth }));
 
 import api from '../services/api';
-import BrandProfilePage from './BrandProfilePage';
+import BrandProfilePage, { dealShows } from './BrandProfilePage';
 
 const velour = () => ({
   success: true,
@@ -92,6 +92,52 @@ describe('BrandProfilePage', () => {
     expect(people.textContent).toContain('Within an approved budget');
     expect(people.textContent).toContain('Within delegated limits');
     expect(people.textContent).toMatch(/Finalizes\s*No/);
+  });
+
+  // "Open Opportunities" went to /admin?tab=opportunities, a tab that moved
+  // to each show's Season page (Evoni, 2026-11-15, Producer Mode navigation).
+  describe('Business: Open Opportunities', () => {
+    const deal = (over) => ({ ...velour().business[0], ...over });
+    const withDeals = (business) => vi.mocked(api.get).mockImplementation(async (url) => (
+      url.startsWith('/api/v1/companies/') ? { data: { ...velour(), business } } : { data: {} }));
+
+    test('opens the Season page\'s Opportunities tab of the show its deals are in', async () => {
+      withDeals([deal({ id: 'o-1', show_id: 'show-1' }), deal({ id: 'o-2', show_id: 'show-1', name: 'Velour stories' })]);
+      renderAt('/brands/velour_atelier?tab=business');
+      const business = await screen.findByTestId('bp-business');
+      const links = within(business).getAllByRole('link', { name: /Open Opportunities/ });
+      expect(links).toHaveLength(1);
+      expect(links[0].textContent).toBe('Open Opportunities');
+      expect(links[0].getAttribute('href')).toBe('/shows/show-1/season?tab=opportunities');
+      expect(business.innerHTML).not.toContain('/admin?tab=opportunities');
+    });
+
+    test('deals in two shows: one link each, named', async () => {
+      withDeals([deal({ id: 'o-1', show_id: 'show-1', show: 'Styling Adventures' }), deal({ id: 'o-2', show_id: 'show-2', show: 'Before Lala' })]);
+      renderAt('/brands/velour_atelier?tab=business');
+      const business = await screen.findByTestId('bp-business');
+      expect(within(business).getByTestId('bp-opportunities-show-1').getAttribute('href')).toBe('/shows/show-1/season?tab=opportunities');
+      expect(within(business).getByTestId('bp-opportunities-show-1').textContent).toBe('Open Opportunities · Styling Adventures');
+      expect(within(business).getByTestId('bp-opportunities-show-2').getAttribute('href')).toBe('/shows/show-2/season?tab=opportunities');
+    });
+
+    test('no deals, or deals that name no show: no link, and no dead one', async () => {
+      withDeals([]);
+      const first = renderAt('/brands/velour_atelier?tab=business');
+      expect((await screen.findByTestId('bp-business')).textContent).toContain('No deals yet.');
+      expect(within(screen.getByTestId('bp-business')).queryByRole('link', { name: /Open Opportunities/ })).toBeNull();
+      first.unmount();
+      withDeals([deal({ id: 'o-1', show_id: null })]);
+      renderAt('/brands/velour_atelier?tab=business');
+      const business = await screen.findByTestId('bp-business');
+      expect(business.textContent).toContain('Velour cover');
+      expect(within(business).queryByRole('link', { name: /Open Opportunities/ })).toBeNull();
+    });
+
+    test('dealShows: each show once, in the order met', () => {
+      expect(dealShows([{ show_id: 'b', show: 'B' }, { show_id: 'a', show: 'A' }, { show_id: 'b', show: 'B' }, { show_id: null }, null])).toEqual([{ id: 'b', name: 'B' }, { id: 'a', name: 'A' }]);
+      expect(dealShows()).toEqual([]);
+    });
   });
 
   test('business, wardrobe, press and relationships each read from the profile', async () => {

@@ -28,6 +28,7 @@ import api from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { isAdmin } from '../utils/authGroups';
 import { rememberedShowId } from '../utils/activeShow';
+import { seasonPageHref } from '../lib/seasonPage';
 import { atHandle } from './feed/feedConstants';
 import PostingSchedule from '../components/PostingSchedule/PostingSchedule';
 import DeliverableProgress from '../components/Deliverables/DeliverableProgress';
@@ -234,7 +235,20 @@ function Pulse({ data, admin, onChanged }) {
   );
 }
 
+/**
+ * The shows these deals belong to, once each: where "Open Opportunities"
+ * goes. The Opportunities tab is on a show's Season page (it was a tab of
+ * /admin until the Season page took it), so a company with deals in two
+ * shows gets a link for each, and one with none gets no link.
+ */
+export function dealShows(deals = []) {
+  const seen = new Map();
+  for (const d of deals) if (d?.show_id && !seen.has(String(d.show_id))) seen.set(String(d.show_id), d.show || null);
+  return [...seen].map(([id, name]) => ({ id, name }));
+}
+
 function Business({ deals }) {
+  const shows = dealShows(deals);
   return (
     <div className="bp-tab" data-testid="bp-business">
       {deals.length ? (
@@ -253,7 +267,11 @@ function Business({ deals }) {
           ))}
         </ul>
       ) : <p className="bp-muted">No deals yet.</p>}
-      <Link className="bp-link" to="/admin?tab=opportunities">Open Opportunities</Link>
+      {shows.map((s) => (
+        <Link key={s.id} className="bp-link" to={seasonPageHref(s.id, 'opportunities')} data-testid={`bp-opportunities-${s.id}`}>
+          Open Opportunities{shows.length > 1 && s.name ? ` · ${s.name}` : ''}
+        </Link>
+      ))}
     </div>
   );
 }

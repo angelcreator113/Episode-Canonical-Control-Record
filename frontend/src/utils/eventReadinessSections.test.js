@@ -454,3 +454,16 @@ describe('nextPackageStep: "N of M ready · Continue →" (Evoni, 2026-10-03)', 
     expect(nextPackageStep(null)).toEqual({ done: 0, total: 0, next: null, kind: 'ready' });
   });
 });
+
+// Evoni, 2026-11-15 (Producer Mode navigation, D2): the Ready card's button
+// opens the package, where Start Episode is reviewed and pressed. It said
+// "Start Episode" and started nothing.
+describe('the Event Library card\'s button says what it does', () => {
+  test('a Ready event: "Open package to start"; the other states as they were', () => {
+    expect(EVENT_QUEUE_STATES.ready.primaryAction).toBe('Open package to start');
+    expect(Object.fromEntries(Object.entries(EVENT_QUEUE_STATES).map(([k, v]) => [k, v.primaryAction]))).toEqual({
+      needs_organizer: 'Choose Organizer', needs_setup: 'Continue Setup', ready: 'Open package to start', used: 'Open Episode', archived: 'View',
+    });
+    expect(Object.values(EVENT_QUEUE_STATES).some((v) => v.primaryAction === 'Start Episode')).toBe(false);
+  });
+});
