@@ -24,7 +24,9 @@ describe('feed comments contract', () => {
   });
   test('the list is live by default; a live comment is locked; approving dates it; deletes recount', () => {
     const list = slice("router.get('/:postId/comments'", "router.get('/:postId/comments/reactors'");
-    expect(list).toMatch(/statusWhere\(req\.query\.status\)/);
+    // By who is reading (2026-11-15): draft comments, and an unpublished post's comments, are an ADMIN's.
+    expect(list).toMatch(/readableStatusWhere\(req\.query\.status, admin\)/);
+    expect(list).toMatch(/if \(!post \|\| !isLive\(post\)\) return res\.json\(\{ data: \[\], count: 0 \}\)/);
     const patch = slice("router.patch('/comments/:commentId'", "router.delete('/comments/:commentId'");
     expect(patch).toMatch(/if \(comment\.status === 'live'\) return res\.status\(409\)\.json\(\{ error: COMMENT_LOCKED/);
     expect(patch).toMatch(/updates\.status = 'live'; updates\.posted_at = comment\.posted_at \|\| new Date\(\)/);
