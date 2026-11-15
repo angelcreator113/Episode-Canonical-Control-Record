@@ -122,7 +122,9 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
       piece_id: p.piece_id, real_brand: p.real_brand || 'Bloom Atelier', real_product_name: p.real_product_name || 'Enamel Stud Earrings',
       retailer: p.retailer || 'Etsy', url: p.url, affiliate: p.affiliate, match: 'exact', confirmed: true, ...(over[p.piece_id] || {}),
     }));
-  const publish = async (ep, over = {}) => as(admin, request(app).post(siteUrl(ep))).send({ links: await confirmAll(ep, over) });
+  // The older tests here publish an image she has cleared ("original"); what the declaration decides is the last block.
+  const publish = async (ep, over = {}, imageRights = { category: 'original' }) => as(admin, request(app).post(siteUrl(ep)))
+    .send({ links: await confirmAll(ep, over), ...(imageRights === null ? {} : { image_rights: imageRights }) });
   const publicLook = async (key) => (await request(app).get(`/api/v1/public/looks/${key}`)).body.look;
   const listed = async (key) => (await request(app).get('/api/v1/public/looks')).body.looks.find((l) => l.key === key);
 
@@ -213,5 +215,159 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     expect(drawn).toEqual([]);
     expect(stored).toEqual([]);
     expect((await publicLook(res.body.data.site.key)).image).toBeNull();
+  });
+  describe("the look image is public only when she has cleared it (Evoni, 2026-11-15)", () => {
+    let ipN = 0;
+    const from = (r) => { ipN += 1; return r.set('X-Forwarded-For', `198.51.115.${(ipN % 250) + 1}`); };
+    const look = async (key) => (await from(request(app).get(`/api/v1/public/looks/${key}`)));
+    const dist = async (ep) => (await as(admin, from(request(app).get(distUrl(ep))))).body.data;
+    const siteOf = async (ep) => {
+      const [[row]] = await run('SELECT distribution_metadata FROM episodes WHERE id = :ep', { ep });
+      const meta = typeof row.distribution_metadata === 'string' ? JSON.parse(row.distribution_metadata) : row.distribution_metadata;
+      return { meta, site: meta.style_sheet.site };
+    };
+    const saveSite = async (ep, meta) => models.Episode.update({ distribution_metadata: meta }, { where: { id: ep } });
+    let ids;
+    beforeAll(async () => {
+      ids = await seed();
+      // The episode is released, so the website would show the look and its image (the release gate).
+      await run(`UPDATE episodes SET status = 'published' WHERE id = :ep`, ids);
+      expect((await send(ids.ep)).status).toBe(200);
+    });
+
+    it('each cleared category puts the image on the website, with who declared it and when; the note stays private', async () => {
+      const cases = [
+        ['original', 'Original photograph — owned or controlled', undefined],
+        ['licensed', 'Licensed image — permission held', 'Licence LIC-2291, held in Contracts'],
+        ['retailer', 'Retailer image — permission held', 'Brand programme email of 3 Nov'],
+        ['ai_cleared', 'AI-generated image — cleared for public use', 'Made in-house; provider terms checked'],
+      ];
+      for (const [category, label, note] of cases) {
+        stored.length = 0;
+        const res = await publish(ids.ep, {}, { category, ...(note ? { note } : {}) });
+        expect([category, res.status]).toEqual([category, 200]);
+        const { site } = res.body.data;
+        expect([category, site.image]).toEqual([category, 'on_site']);
+        expect(site.image_rights).toMatchObject({ category, label, cleared: true, note: note || null, declared_by: 'evoni@lookimg.dev', stale: false });
+        expect(Number.isNaN(Date.parse(site.image_rights.declared_at))).toBe(false);
+        expect(stored).toHaveLength(1);
+        // Saved with the declaration: the very copy, the sheet it was drawn from, and the three poses.
+        const saved2 = (await siteOf(ids.ep)).site;
+        expect(saved2.image_rights).toMatchObject({ category, cleared: true, image_key: stored[0].key, sheet_hash: saved2.image.sheet_hash });
+        expect(Object.keys(saved2.image_rights.poses).sort()).toEqual(['back', 'front', 'side']);
+        const shown = await look(site.key);
+        expect(shown.body.look.image).toEqual({ url: `https://site.cdn.test/${stored[0].key}`, alt: 'The look: Episode 1: Wearable Experiments' });
+        // Nothing of the declaration is public.
+        expect(JSON.stringify(shown.body)).not.toMatch(/image_rights|declared|LIC-2291|Brand programme|provider terms|evoni@/);
+      }
+    });
+
+    it('"unknown / not cleared", or no declaration: the look is published as text and links; no image is drawn, copied or shown', async () => {
+      for (const rights of [{ category: 'unknown' }, { category: 'unknown', note: 'found online' }, null]) {
+        stored.length = 0; drawn.length = 0;
+        const res = await publish(ids.ep, {}, rights);
+        expect(res.status).toBe(200);
+        const { site } = res.body.data;
+        expect(site).toMatchObject({ published: true, showing: true, image: 'not_cleared' });
+        if (rights) expect(site.image_rights).toMatchObject({ category: 'unknown', label: 'Unknown / not cleared', cleared: false });
+        else expect(site.image_rights).toBeNull();
+        expect(stored).toEqual([]);
+        expect(drawn).toEqual([]);
+        const shown = await look(site.key);
+        expect(shown.status).toBe(200);
+        expect(shown.body.look.image).toBeNull();
+        expect(shown.body.look.links.filter((l) => l.available)).toHaveLength(2);
+        expect((await from(request(app).get('/api/v1/public/looks'))).body.looks.find((l) => l.key === site.key).image).toBeNull();
+      }
+    });
+
+    it('a declaration that is not one of the five is refused, and nothing is published or copied', async () => {
+      const fresh = await seed();
+      await send(fresh.ep);
+      for (const rights of [{ category: 'mine' }, { category: '' }, {}, 'original', ['original'], { category: 'original', note: 7 }, { category: 'licensed', note: 'x'.repeat(501) }]) {
+        stored.length = 0;
+        const res = await publish(fresh.ep, {}, rights);
+        expect([JSON.stringify(rights).slice(0, 30), res.status, res.body.code]).toEqual([JSON.stringify(rights).slice(0, 30), 400, 'BAD_IMAGE_RIGHTS']);
+        expect(stored).toEqual([]);
+      }
+      expect((await dist(fresh.ep)).site).toEqual({ published: false });
+    });
+
+    it('replacing the image needs its own declaration: publishing again without one takes the image off the website', async () => {
+      stored.length = 0;
+      const first = await publish(ids.ep, {}, { category: 'original' });
+      const { key } = first.body.data.site;
+      const a = stored[0].key;
+      expect((await look(key)).body.look.image.url).toBe(`https://site.cdn.test/${a}`);
+
+      // Again, with nothing said of the image: no copy is made, and the earlier image is not carried over.
+      const second = await publish(ids.ep, {}, null);
+      expect(second.body.data.site).toMatchObject({ key, image: 'not_cleared', image_rights: null });
+      expect(stored).toHaveLength(1);
+      expect((await look(key)).body.look.image).toBeNull();
+      expect((await siteOf(ids.ep)).site.image).toBeUndefined();
+
+      // Again, cleared: a new copy, bound to its own declaration.
+      const third = await publish(ids.ep, {}, { category: 'licensed', note: 'Licence LIC-2291' });
+      expect(third.body.data.site.image).toBe('on_site');
+      expect(stored).toHaveLength(2);
+      expect(stored[1].key).not.toBe(a);
+      expect((await look(key)).body.look.image.url).toBe(`https://site.cdn.test/${stored[1].key}`);
+    });
+
+    it('a declaration covers the image it was made about, and no other: a different copy, sheet or pose is not cleared by it', async () => {
+      stored.length = 0;
+      const { key } = (await publish(ids.ep, {}, { category: 'original' })).body.data.site;
+      expect((await look(key)).body.look.image).not.toBeNull();
+      const { meta, site } = await siteOf(ids.ep);
+      const original = JSON.parse(JSON.stringify(meta));
+      const withSite = (change) => { const m = JSON.parse(JSON.stringify(original)); change(m.style_sheet.site); return m; };
+
+      // Another copy under the same look: not the one she declared.
+      await saveSite(ids.ep, withSite((s) => { s.image.key = `site-public/looks/${key}/${uuid()}.png`; }));
+      expect((await look(key)).body.look.image).toBeNull();
+      expect((await dist(ids.ep)).site.image).not.toBe('on_site');
+      // The image drawn from another sheet.
+      await saveSite(ids.ep, withSite((s) => { s.image.sheet_hash = 'another-sheet'; }));
+      expect((await look(key)).body.look.image).toBeNull();
+      // The declaration withdrawn, or marked uncleared, or its category not a cleared one.
+      for (const change of [(s) => { delete s.image_rights; }, (s) => { s.image_rights.cleared = false; }, (s) => { s.image_rights.category = 'unknown'; }, (s) => { s.image_rights.category = 'approved'; }]) {
+        await saveSite(ids.ep, withSite(change));
+        expect((await look(key)).body.look.image).toBeNull();
+      }
+      // The poses it was made about are not the ones the sheet has now: Distribution says it needs a new review.
+      await saveSite(ids.ep, withSite((s) => { s.image_rights.poses = { front: { id: uuid(), url: 'https://bucket.s3.amazonaws.com/poses/earlier-front.png' }, side: null, back: null }; }));
+      expect((await dist(ids.ep)).site.image_rights.stale).toBe(true);
+      await saveSite(ids.ep, withSite((s) => { s.image_rights.sheet_hash = 'an-earlier-sheet'; s.image.sheet_hash = 'an-earlier-sheet'; }));
+      expect((await dist(ids.ep)).site.image_rights.stale).toBe(true);
+
+      // As she published it, it shows again.
+      await saveSite(ids.ep, original);
+      expect((await look(key)).body.look.image.url).toBe(`https://site.cdn.test/${site.image.key}`);
+      // Read back from the database (its keys reordered), her declaration still matches the poses and the sheet.
+      expect((await dist(ids.ep)).site.image_rights.stale).toBe(false);
+    });
+
+    it('an image published before declarations existed is not shown; the look is', async () => {
+      const { key } = (await publish(ids.ep, {}, { category: 'original' })).body.data.site;
+      const { meta } = await siteOf(ids.ep);
+      delete meta.style_sheet.site.image_rights;
+      await saveSite(ids.ep, meta);
+      const shown = await look(key);
+      expect([shown.status, shown.body.look.image]).toEqual([200, null]);
+      expect((await dist(ids.ep)).site).toMatchObject({ image: 'not_cleared', image_rights: null });
+    });
+
+    it('only an ADMIN declares: signed out and an editor are refused, and nothing is copied', async () => {
+      const editor = TokenService.generateTokenPair({ id: 'test-editor-look-img', email: 'ed@lookimg.dev', name: 'Ed', groups: ['USER', 'EDITOR'], role: 'USER' }).accessToken;
+      const viewer = TokenService.generateTokenPair({ id: 'test-viewer-look-img', email: 'vi@lookimg.dev', name: 'Vi', groups: ['viewer'], role: 'USER' }).accessToken;
+      const body = { links: await confirmAll(ids.ep), image_rights: { category: 'original' } };
+      const before = JSON.stringify((await siteOf(ids.ep)).site);
+      stored.length = 0;
+      expect((await from(request(app).post(siteUrl(ids.ep))).send(body)).status).toBe(401);
+      for (const token of [editor, viewer]) expect((await as(token, from(request(app).post(siteUrl(ids.ep)))).send(body)).status).toBe(403);
+      expect(stored).toEqual([]);
+      expect(JSON.stringify((await siteOf(ids.ep)).site)).toBe(before);
+    });
   });
 });
