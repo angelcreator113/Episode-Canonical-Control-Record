@@ -80,6 +80,8 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
   });
 
   const as = (token, req) => req.set('Authorization', `Bearer ${token}`);
+  let seedN = 0;
+  const seedFrom = (r) => { seedN += 1; return r.set('X-Forwarded-For', `198.51.118.${(seedN % 250) + 1}`); };
   const distUrl = (ep) => `/api/v1/episodes/${ep}/style-sheet/distribution`;
   const siteUrl = (ep) => `${distUrl(ep)}/site`;
 
@@ -109,8 +111,9 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
       await run(`INSERT INTO episode_wardrobe (id, episode_id, wardrobe_id, approval_status, created_at, updated_at)
                  VALUES (:id, :ep, :w, 'pending', NOW(), NOW())`, { id: uuid(), ep: ids.ep, w: w.id });
     }
-    await as(admin, request(app).put(`/api/v1/episodes/${ids.ep}/lookbook`)).send({ tagline: 'Every look tells a story.' });
-    expect((await as(admin, request(app).post(`/api/v1/episodes/${ids.ep}/style-sheet/approve`))).status).toBe(200);
+    // Each seeded look comes from its own address: these routes are rate limited by address, and the suite seeds many.
+    await as(admin, seedFrom(request(app).put(`/api/v1/episodes/${ids.ep}/lookbook`))).send({ tagline: 'Every look tells a story.' });
+    expect((await as(admin, seedFrom(request(app).post(`/api/v1/episodes/${ids.ep}/style-sheet/approve`)))).status).toBe(200);
     return { ...ids, pump: pump.id, studs: studs.id };
   }
   const send = (ep) => as(admin, request(app).post(distUrl(ep))).send({ include_shop_links: true });
@@ -539,6 +542,125 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
       const res = await withdraw(ids.ep);
       expect([res.status, res.body.data.public_copies]).toEqual([200, []]);
       expect(JSON.stringify((await saved2(ids.ep)).meta)).toBe(before);
+    });
+  });
+  describe('withdrawal holds under change, failure and overlap (Evoni, 2026-11-15)', () => {
+    let ipN = 0;
+    const from = (r) => { ipN += 1; return r.set('X-Forwarded-For', `198.51.117.${(ipN % 250) + 1}`); };
+    const look = async (key) => (await from(request(app).get(`/api/v1/public/looks/${key}`)));
+    const dist = async (ep) => (await as(admin, from(request(app).get(distUrl(ep))))).body.data;
+    const withdraw = (ep) => as(admin, from(request(app).post(`${siteUrl(ep)}/image/withdraw`)));
+    const publishAs = async (ep, imageRights) => as(admin, from(request(app).post(siteUrl(ep))))
+      .send({ links: await confirmAll(ep), ...(imageRights ? { image_rights: imageRights } : {}) });
+    const savedEntry = async (ep) => {
+      const [[row]] = await run('SELECT distribution_metadata AS meta FROM episodes WHERE id = :ep', { ep });
+      return (typeof row.meta === 'string' ? JSON.parse(row.meta) : row.meta).style_sheet;
+    };
+    let ids;
+    beforeAll(async () => {
+      ids = await seed();
+      await run(`UPDATE episodes SET status = 'published' WHERE id = :ep`, ids);
+      expect((await as(admin, from(request(app).post(distUrl(ids.ep)))).send({ include_shop_links: true })).status).toBe(200);
+    });
+    beforeEach(() => { jest.spyOn(distribution, 'fetchStatus').mockResolvedValue(200); });
+
+    it('it withdraws the image that was published, whatever the sheet, the look or the wardrobe have become since', async () => {
+      const first = await publishAs(ids.ep, { category: 'original' });
+      const { key } = first.body.data.site;
+      const published = stored[0].key;
+      const before = (await look(key)).body.look;
+      // Since then: the sheet reopened and changed, a piece renamed and its link changed, and the changed sheet sent.
+      expect((await as(admin, from(request(app).post(`/api/v1/episodes/${ids.ep}/style-sheet/reopen`)))).status).toBe(200);
+      await as(admin, from(request(app).put(`/api/v1/episodes/${ids.ep}/lookbook`))).send({ tagline: 'Another story altogether.' });
+      await models.Wardrobe.update({ name: 'Renamed pump', real_product_url: 'https://shop.example/another' }, { where: { id: ids.pump } });
+      expect((await as(admin, from(request(app).post(`/api/v1/episodes/${ids.ep}/style-sheet/approve`)))).status).toBe(200);
+      expect((await as(admin, from(request(app).post(distUrl(ids.ep)))).send({ include_shop_links: true })).status).toBe(200);
+      expect((await dist(ids.ep)).site.image_rights.stale).toBe(true);
+
+      const res = await withdraw(ids.ep);
+      expect(res.status).toBe(200);
+      expect(res.body.data.public_copies).toEqual([expect.objectContaining({ key: published, url: `https://site.cdn.test/${published}`, reason: 'rights_withdrawn', revocation: 'pending' })]);
+      // The published look is the snapshot it was, without its image; nothing of the changed sheet, piece or
+      // redrafted caption is in it.
+      const after = (await look(key)).body.look;
+      expect(after).toEqual({ ...before, image: null });
+      expect(after.caption).toContain('Every look tells a story.');
+      expect((await dist(ids.ep)).site.differs).toEqual(expect.arrayContaining(['caption']));
+      expect((await from(request(app).get('/api/v1/public/looks'))).body.looks.find((l) => l.key === key).image).toBeNull();
+      const [[episode]] = await run('SELECT status, episode_number FROM episodes WHERE id = :ep', ids);
+      expect(episode).toMatchObject({ status: 'published', episode_number: 1 });
+    });
+
+    it('pending copies survive a republish, a second withdrawal and repeated requests', async () => {
+      const first = (await savedEntry(ids.ep)).public_copies[0].key;
+      // The changed sheet needs her products confirmed again; published with a cleared image.
+      stored.length = 0;
+      const again = await publishAs(ids.ep, { category: 'licensed' });
+      expect(again.body.data.site.image).toBe('on_site');
+      const second = stored[0].key;
+      expect((await dist(ids.ep)).public_copies.map((c) => c.key)).toEqual([first]);
+      expect((await withdraw(ids.ep)).status).toBe(200);
+      for (let i = 0; i < 3; i += 1) await withdraw(ids.ep);
+      const copies = (await dist(ids.ep)).public_copies;
+      expect(copies.map((c) => [c.key, c.reason, c.revocation])).toEqual([[first, 'rights_withdrawn', 'pending'], [second, 'rights_withdrawn', 'pending']]);
+    });
+
+    it('a withdrawal that cannot be saved says so, hides nothing, and loses no reference; asked again, it works', async () => {
+      stored.length = 0;
+      const res = await publishAs(ids.ep, { category: 'original' });
+      const { key } = res.body.data.site;
+      const third = stored[0].key;
+      const before = JSON.stringify(await savedEntry(ids.ep));
+      jest.spyOn(console, 'error').mockImplementation(() => {});
+      const fail = jest.spyOn(models.Episode, 'update').mockRejectedValueOnce(new Error('the database went away'));
+      const failed = await withdraw(ids.ep);
+      expect(failed.status).toBe(500);
+      expect(failed.body.success).toBe(false);
+      expect(failed.body.data).toBeUndefined();
+      fail.mockRestore();
+      // Nothing was half done: the record is as it was, and the image is still the one on the website.
+      expect(JSON.stringify(await savedEntry(ids.ep))).toBe(before);
+      expect((await look(key)).body.look.image.url).toBe(`https://site.cdn.test/${third}`);
+      expect((await savedEntry(ids.ep)).site.image.key).toBe(third);
+      const ok = await withdraw(ids.ep);
+      expect(ok.status).toBe(200);
+      expect((await look(key)).body.look.image).toBeNull();
+      expect(ok.body.data.public_copies.map((c) => c.key)).toContain(third);
+    });
+
+    it('overlapping withdrawals and publishes: whichever is saved last, every copy ever written is either the one shown or on the list', async () => {
+      for (let round = 0; round < 4; round += 1) {
+        const links = await confirmAll(ids.ep);
+        const publishNow = () => as(admin, from(request(app).post(siteUrl(ids.ep)))).send({ links, image_rights: { category: 'original' } });
+        const results = await Promise.all([publishNow(), withdraw(ids.ep), publishNow(), withdraw(ids.ep)]);
+        for (const r of results) expect([200, 404]).toContain(r.status);
+        const entry = await savedEntry(ids.ep);
+        const shown = entry.site?.image?.key || null;
+        const listed = new Set((entry.public_copies || []).map((c) => c.key));
+        const written = [...new Set(stored.map((o) => o.key))];
+        for (const k2 of written) expect([round, k2, k2 === shown || listed.has(k2)]).toEqual([round, k2, true]);
+        // And the website shows an image only if it is that shown copy with its own cleared declaration.
+        const pub = (await look(entry.site.key)).body.look.image;
+        if (pub) expect(pub.url).toBe(`https://site.cdn.test/${shown}`);
+        expect(new Set((entry.public_copies || []).map((c) => c.key)).size).toBe((entry.public_copies || []).length);
+      }
+    });
+
+    it('an overlapping check and withdrawal keep both: the copy, and what the check found', async () => {
+      const entry = await savedEntry(ids.ep);
+      const target = entry.public_copies[0].key;
+      distribution.fetchStatus.mockResolvedValue(404);
+      stored.length = 0;
+      await publishAs(ids.ep, { category: 'original' });
+      const fresh = stored[0].key;
+      await Promise.all([
+        as(admin, from(request(app).post(`${siteUrl(ids.ep)}/image/check`))).send({ key: target }),
+        withdraw(ids.ep),
+      ]);
+      const after = await savedEntry(ids.ep);
+      const keys = after.public_copies.map((c) => c.key);
+      expect(keys).toContain(target);
+      expect(after.site.image ? after.site.image.key === fresh : keys.includes(fresh)).toBe(true);
     });
   });
 });

@@ -23,6 +23,7 @@ export const DIFFERS = {
   pieces: 'The look has different pieces now.',
   links: "A product's link changed in Wardrobe.",
   image: 'The image is of an earlier sheet.',
+  caption: 'The caption here is not the one published.',
   no_snapshot: 'This look was published before products were confirmed.',
 };
 
