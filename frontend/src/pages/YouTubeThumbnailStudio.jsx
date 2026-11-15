@@ -2329,7 +2329,7 @@ export default function YouTubeThumbnailStudio() {
                 </p>
               </div>
               {saved && (
-                <p className="yts-saved"><Check size={16} aria-hidden /> Saved. <Link to={`/episodes/${episodeId}?tab=production`}>Back to Production</Link></p>
+                <p className="yts-saved"><Check size={16} aria-hidden /> Saved. <Link to={`/episodes/${episodeId}?tab=scenes`} data-testid="yts-back-scenes">Back to Scenes</Link></p>
               )}
             </section>
 

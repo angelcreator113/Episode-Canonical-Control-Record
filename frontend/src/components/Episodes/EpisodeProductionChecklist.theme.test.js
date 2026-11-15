@@ -46,8 +46,9 @@ describe('Episode Production Checklist theme', () => {
     expect(hubCss).toMatch(/\.ckh-timeline-open \{[^}]*background: var\(--accent-dark\);\s*color: var\(--text-inverse\);/);
     expect(hubCss).toMatch(/\.ckh-fix \{[^}]*color: var\(--lala-lavender-text\);/);
     expect(hubCss).toMatch(/\.ckh-evaluate \{[^}]*background: var\(--lala-lavender\); color: var\(--text-inverse\);/);
-    expect(checklist).toMatch(/background: allRequired \? 'var\(--lala-lavender\)' : 'var\(--lala-parchment-3\)'/);
-    expect(checklist).toMatch(/color: allRequired \? 'var\(--text-inverse\)' : 'var\(--text-secondary\)'/);
+    // Write Script is always lavender: it is no longer locked behind the required items (2026-11-15).
+    expect(checklist).toMatch(/background: 'var\(--lala-lavender\)', color: 'var\(--text-inverse\)',/);
+    expect(checklist).not.toMatch(/allRequired/);
     expect(coverage).toMatch(/buttonStyle\(TEAL\)/);
     expect(coverage).toMatch(/buttonStyle\('var\(--danger\)'\)\}>Remove/);
   });
