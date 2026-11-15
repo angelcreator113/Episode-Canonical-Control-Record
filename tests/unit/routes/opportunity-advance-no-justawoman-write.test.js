@@ -19,6 +19,10 @@ jest.mock('../../../src/middleware/auth', () => {
   return { ...actual, requireAuth: (req, _res, next) => { req.user = { id: 'u1', groups: ['ADMIN'] }; next(); } };
 });
 
+// A1 (2026-11-13): the step and its one audit entry are one transaction.
+const mockAuditEntry = jest.fn(async () => ({}));
+jest.mock('../../../src/middleware/auditLog', () => ({ logger: { logActionInTransaction: (...args) => mockAuditEntry(...args) } }));
+
 const router = require('../../../src/routes/opportunityRoutes');
 
 function makeOpp(status) {
@@ -36,8 +40,10 @@ function makeOpp(status) {
 
 const justawoman = { id: 'jaw-1', is_justawoman_record: true, current_state: 'rising', update: jest.fn(async () => {}) };
 
+const TX = { LOCK: { UPDATE: 'UPDATE' } };
 const models = {
   Opportunity: { findOne: jest.fn() },
+  sequelize: { transaction: async (fn) => fn(TX) },
   SocialProfile: {
     findOne: jest.fn(async () => justawoman),
     update: jest.fn(async () => [1]),
@@ -69,6 +75,9 @@ describe('POST /opportunities/:showId/:id/advance — no SocialProfile write', (
     expect(res.body.success).toBe(true);
     expect(res.body.opportunity.status).toBe('booked');
     expect(res.body.advanced).toEqual({ from: 'negotiating', to: 'booked' });
+    expect(mockAuditEntry).toHaveBeenCalledTimes(1);
+    expect(mockAuditEntry).toHaveBeenCalledWith(TX, 'u1', 'opportunity_status', 'opportunity', 'opp-1',
+      expect.objectContaining({ route: 'advance', from_status: 'negotiating', to_status: 'booked' }));
     expect(models.SocialProfile.findOne).not.toHaveBeenCalled();
     expect(models.SocialProfile.update).not.toHaveBeenCalled();
     expect(justawoman.update).not.toHaveBeenCalled();

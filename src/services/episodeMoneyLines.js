@@ -42,7 +42,17 @@ const STATES = Object.freeze({
   NOT_EARNED: 'not_earned',
   // A cost the host or brand comps: never charged to Lala (Law 6).
   COVERED: 'covered',
+  // Brand compensation no accepted agreement owes (A2; services/
+  // startOfferDecision): shown with what the terms propose, never counted
+  // as income, planned or pending.
+  NOT_OWED: 'not_owed',
 });
+
+// The lines that are brand compensation: owed only under an accepted
+// agreement. Lala's own costs and wardrobe are never among them.
+const COMPENSATION_CATEGORIES = Object.freeze([
+  'appearance_fee', 'partnership_base_fee', 'performance_fee', 'deal_bonus', 'content_fee', 'event_payment', 'content_revenue',
+]);
 
 const TRIGGERS = Object.freeze({
   COMPLETE: 'at Complete',
@@ -296,8 +306,15 @@ function plannedLines({ event, costs = [], deliverables = [], spending = [], had
  * rows: the episode's counted rows, each { id, category, source_id,
  * metadata, amount, signed }. balance: Lala's actual balance.
  * completed: the episode's evaluation is accepted.
+ * compensation: the eligibility answer as it stands (startOfferDecision
+ * resolveEventCompensation, read without locks), or null for an event with
+ * no offer linked. A compensation line with no ledger row is Not owed when
+ * that answer does not say owed, when its deliverable is already approved
+ * (approval is when its fee would have posted), or when the episode is
+ * completed (Complete is when the rest would have): what the terms propose
+ * is still shown, and nothing of it is counted.
  */
-function buildMoneyLines({ plan, rows = [], balance = 0, completed = false }) {
+function buildMoneyLines({ plan, rows = [], balance = 0, completed = false, compensation = null }) {
   const byKey = new Map();
   const bonusRows = [];
   for (const r of rows) {
@@ -318,10 +335,20 @@ function buildMoneyLines({ plan, rows = [], balance = 0, completed = false }) {
     }
     if (row) used.add(row.id);
 
+    const isCompensation = line.kind === 'income' && COMPENSATION_CATEGORIES.includes(line.category);
+    const notOwedNow = !!compensation && compensation.linked && compensation.owed !== true;
+    const passed = line.category === 'content_fee' ? line.deliverable_status === 'approved' : completed;
     let state;
+    let notOwedReason = null;
     if (line.covered) state = STATES.COVERED;
     else if (row) state = STATES.POSTED;
-    else if (line.conditional) state = completed ? STATES.NOT_EARNED : STATES.PLANNED;
+    else if (isCompensation && !line.conditional && (notOwedNow || passed)) {
+      state = STATES.NOT_OWED;
+      notOwedReason = notOwedNow ? compensation.reason : null;
+    } else if (isCompensation && line.conditional && notOwedNow && !completed) {
+      state = STATES.NOT_OWED;
+      notOwedReason = compensation.reason;
+    } else if (line.conditional) state = completed ? STATES.NOT_EARNED : STATES.PLANNED;
     else if (line.category === 'content_fee' && line.deliverable_status === 'submitted') state = STATES.PENDING;
     else state = STATES.PLANNED;
 
@@ -331,6 +358,7 @@ function buildMoneyLines({ plan, rows = [], balance = 0, completed = false }) {
       state,
       signed,
       posted: row ? { id: row.id, amount: row.amount, signed: row.signed } : null,
+      ...(state === STATES.NOT_OWED ? { not_owed_reason: notOwedReason } : {}),
     };
   });
 
@@ -540,6 +568,7 @@ function reconcile({ plan = [], lines = [], unplanned = [] }) {
 }
 
 module.exports = {
+  COMPENSATION_CATEGORIES,
   STATES, TRIGGERS, WARNING_CODES, RECON,
   plannedLines, buildMoneyLines, moneyWarnings, planSnapshot, reconcile,
 };

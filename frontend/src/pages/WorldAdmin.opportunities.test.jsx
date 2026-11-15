@@ -101,7 +101,8 @@ describe('safer steps', () => {
     api.post.mockResolvedValue({ data: { success: true, opportunity: { ...OPEN, status: 'booked' } } });
     renderTab();
     fireEvent.click(await screen.findByTestId('opp-move-o1'));
-    await waitFor(() => expect(api.post).toHaveBeenCalledWith(`/api/v1/opportunities/${SHOW}/o1/advance`, { to_status: 'booked' }));
+    // The status the click was made from goes with it (A1): a second click never takes another step.
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith(`/api/v1/opportunities/${SHOW}/o1/advance`, { to_status: 'booked', from_status: OPEN.status }));
     expect(confirm).not.toHaveBeenCalled();
   });
 
@@ -120,9 +121,84 @@ describe('safer steps', () => {
     renderTab();
     const undo = await screen.findByTestId('opp-undo-o2');
     expect(undo.getAttribute('title')).toMatch(/stays/);
+    // Undo needs a reason (A1, 2026-11-13), asked for in the page: without one nothing is sent.
+    const prompt = vi.spyOn(window, 'prompt');
     fireEvent.click(undo);
-    await waitFor(() => expect(api.post).toHaveBeenCalledWith(`/api/v1/opportunities/${SHOW}/o2/undo`));
+    expect(await screen.findByText('Undo the last step of Runway Walk?')).toBeTruthy();
+    expect(screen.getByLabelText('Why is active undone?')).toBeTruthy();
+    fireEvent.click(screen.getByTestId('reason-dialog-confirm'));
+    expect(screen.getByTestId('reason-dialog-missing')).toBeTruthy();
+    expect(api.post).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByTestId('reason-dialog-cancel'));
+    await waitFor(() => expect(screen.queryByTestId('reason-dialog')).toBeNull());
+    expect(api.post).not.toHaveBeenCalled();
+    fireEvent.click(undo);
+    fireEvent.change(await screen.findByTestId('reason-dialog-field'), { target: { value: ' Marked too soon ' } });
+    fireEvent.click(screen.getByTestId('reason-dialog-confirm'));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith(`/api/v1/opportunities/${SHOW}/o2/undo`, { from_status: ACTIVE.status, reason: 'Marked too soon' }));
     await waitFor(() => expect(toast).toHaveBeenCalledWith('Runway Walk → back to offered'));
+    expect(prompt).not.toHaveBeenCalled();
+  });
+
+  test('Decline asks why in the page and sends the reason with the status it was made from', async () => {
+    const OFFERED = { id: 'o4', name: 'Maison Lookbook', status: 'offered', opportunity_type: 'campaign', status_history: history('offered') };
+    api.post.mockResolvedValue({ data: { success: true, opportunity: { ...OFFERED, status: 'declined' } } });
+    renderTab([OFFERED]);
+    fireEvent.click(await screen.findByRole('button', { name: 'Decline' }));
+    expect(await screen.findByText('Decline Maison Lookbook?')).toBeTruthy();
+    fireEvent.click(screen.getByTestId('reason-dialog-confirm'));
+    expect(api.post).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByTestId('reason-dialog-field'), { target: { value: 'The fee is too low' } });
+    fireEvent.click(screen.getByTestId('reason-dialog-confirm'));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith(`/api/v1/opportunities/${SHOW}/o4/advance`, { to_status: 'declined', from_status: 'offered', reason: 'The fee is too low' }));
+  });
+
+  // Every step is an admin's (the server answers 403 to anyone else): the
+  // list says whether this person can take one, and the steps show only then.
+  const asNonAdmin = (opps) => {
+    api.get.mockImplementation(async (url) => {
+      if (url === `/api/v1/opportunities/${SHOW}`) return { data: { opportunities: opps, can_decide: false } };
+      return { data: {} };
+    });
+    return render(<MemoryRouter><OpportunitiesTab showId={SHOW} api={api} S={S} setToast={toast} loadData={vi.fn()} episodes={EPISODES} /></MemoryRouter>);
+  };
+
+  test('someone who is not an admin sees no admin-only control, and is told why', async () => {
+    const OFFERED = { id: 'o4', name: 'Maison Lookbook', status: 'offered', opportunity_type: 'campaign', status_history: history('offered') };
+    asNonAdmin([OPEN, ACTIVE, HELD, OFFERED]);
+    expect((await screen.findByTestId('opp-admin-only-o1')).textContent).toBe('Only an admin can change this offer.');
+    for (const id of ['o1', 'o2', 'o3', 'o4']) {
+      expect(screen.queryByTestId(`opp-move-${id}`)).toBeNull();
+      expect(screen.queryByTestId(`opp-undo-${id}`)).toBeNull();
+      expect(screen.queryByTestId(`opp-beat14-open-${id}`)).toBeNull();
+      expect(screen.queryByTestId(`opp-release-${id}`)).toBeNull();
+    }
+    expect(screen.queryByRole('button', { name: 'Decline' })).toBeNull();
+    expect(screen.queryByRole('button', { name: /New Opportunity/ })).toBeNull();
+    // The offers themselves are still read, and Schedule as Event (open to
+    // anyone signed in on the server) is still offered.
+    expect(screen.getByText('Velour Cover')).toBeTruthy();
+    expect(screen.getByText('Maison Lookbook')).toBeTruthy();
+    expect(screen.getByTestId('opp-schedule-o1')).toBeTruthy();
+    // Scheduling a held one offers it early, which the server keeps to admins.
+    expect(screen.queryByTestId('opp-schedule-now-o3')).toBeNull();
+  });
+
+  test('with no offers yet, someone who is not an admin is told only an admin can add one', async () => {
+    asNonAdmin([]);
+    expect((await screen.findByTestId('opp-admin-only-create')).textContent).toBe('Only an admin can add one.');
+    expect(screen.queryByRole('button', { name: /Create First Opportunity/ })).toBeNull();
+  });
+
+  test('an admin (can_decide true, or a list that does not say) keeps the steps', async () => {
+    renderTab();
+    expect(await screen.findByTestId('opp-move-o1')).toBeTruthy();
+    expect(screen.getByTestId('opp-undo-o2')).toBeTruthy();
+    expect(screen.getByTestId('opp-beat14-open-o1')).toBeTruthy();
+    expect(screen.getByTestId('opp-release-o3')).toBeTruthy();
+    expect(screen.getByTestId('opp-schedule-now-o3')).toBeTruthy();
+    expect(screen.getByRole('button', { name: /New Opportunity/ })).toBeTruthy();
+    expect(screen.queryByTestId('opp-admin-only-o1')).toBeNull();
   });
 });
 

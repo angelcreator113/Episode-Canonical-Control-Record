@@ -71,7 +71,9 @@ describe('the episode\'s event, one rule for every service (Task #1917)', () => 
     'src/services/episodeScriptWriterService.js', 'src/services/groundedScriptGeneratorService.js',
     'src/services/financialTransactionService.js', 'src/services/scenePlannerService.js',
     'src/services/distributionService.js', 'src/services/todoListService.js',
-    'src/services/storyGenerationService.js', 'src/services/careerPipelineService.js',
+    // careerPipelineService's reader (onEpisodeCompleted) was removed on 2026-11-15;
+    // its route, the only caller, reads the episode's event itself.
+    'src/services/storyGenerationService.js', 'src/routes/opportunityRoutes.js',
     'src/services/wardrobeIntelligenceService.js', 'src/services/episodeMoneyService.js',
     'src/services/outfitScoreContext.js', 'src/services/seasonIntentionService.js',
     'src/services/episodeOverlaysService.js', 'src/services/dressedAngleService.js',

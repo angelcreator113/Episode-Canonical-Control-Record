@@ -2,9 +2,14 @@
  * episodeCompletionService.completeEpisode — career hook (Task #1817)
  *
  * Evoni's ruling (option 1):
- *   - completing an episode completes its linked opportunity (once), via
- *     careerPipelineService.onEpisodeCompleted, which no longer cascades into
- *     onOpportunityAdvanced and no longer credits episode income to coins goals;
+ *   - completing an episode completes its linked opportunity (once), with no
+ *     cascade into onOpportunityAdvanced and no episode income credited to
+ *     coins goals. Since A2 (Evoni, 2026-11-14) that is the event's own offer
+ *     (the one the event was made from, pointing back at it), moved inside
+ *     the completion's transaction by careerPipelineService.completeOwnerOffer
+ *     and recorded through A1's transition record; a failure there fails the
+ *     completion. The database behaviour is in
+ *     tests/integration/compensationEligibility.integration.test.js;
  *   - goals step 17 completes spawn their unlocks_on_complete opportunities.
  *
  * Season Arc Q11 (Evoni, 2026-10-01; EVENT_EPISODE_FLOW.md §8(ff)) replaced
@@ -92,6 +97,10 @@ function resetModels({ opp = makeOpportunity() } = {}) {
     // onOpportunityAdvanced loads goals through CareerGoal.findAll when the
     // model exists — the completion path must never reach it.
     CareerGoal: { findAll: jest.fn(async () => []) },
+    // The transition's audit entry (middleware/auditLog, A1's record). The
+    // audit writer reads its models as require('../models').models.
+    ActivityLog: { logActivity: jest.fn(async () => ({})) },
+    models: mockModels,
     sequelize: { query: jest.fn(async () => [[], 0]) },
   });
   return opp;
@@ -108,10 +117,23 @@ function defaultGoals() {
   ];
 }
 
-function makeSequelize({ evaluationStatus = 'draft', goals = defaultGoals(), successUnlock = 'Maison Belle contract' } = {}) {
+// The episode's event, made from opp-1, which points back at it: its owner (A2).
+const EVENT_ID = 'event-1';
+const ownerRow = (status = 'booked') => ({ id: 'opp-1', show_id: SHOW_ID, name: 'Maison Belle campaign', status, status_history: [], event_id: EVENT_ID, episode_id: null });
+
+function makeSequelize({ evaluationStatus = 'draft', goals = defaultGoals(), successUnlock = 'Maison Belle contract', owner = ownerRow(), failTransition = false } = {}) {
   const queries = [];
   const query = jest.fn(async (sql, opts = {}) => {
     queries.push({ sql, opts });
+    if (/FROM world_events WHERE id = \(SELECT COALESCE/.test(sql)) {
+      return [{ id: EVENT_ID, show_id: SHOW_ID, name: 'Velour Night', status: 'used', opportunity_id: 'opp-1' }];
+    }
+    // The offers linked to the event, locked by the eligibility answer.
+    if (/FROM opportunities o/.test(sql)) return [owner ? [owner] : [], 0];
+    if (/UPDATE opportunities SET status = 'completed'/.test(sql)) {
+      if (failTransition) throw new Error('db down');
+      return [[{ id: 'opp-1' }], 1];
+    }
     if (/FROM episodes WHERE id = :episodeId/.test(sql)) {
       return [{
         id: EPISODE_ID, title: 'Ep', episode_number: 7, show_id: SHOW_ID,
@@ -150,19 +172,26 @@ describe('completeEpisode career hook (Task #1817)', () => {
   });
   afterEach(() => jest.restoreAllMocks());
 
+  const transitions = (queries) => queries.filter((q) => /UPDATE opportunities SET status = 'completed'/.test(q.sql));
+
   it('completes the linked opportunity exactly once and never runs the onOpportunityAdvanced cascade', async () => {
-    const opp = resetModels();
-    const { sequelize } = makeSequelize();
+    resetModels();
+    const { sequelize, queries } = makeSequelize();
 
-    const result = await completeEpisode(EPISODE_ID, SHOW_ID, sequelize);
+    const result = await completeEpisode(EPISODE_ID, SHOW_ID, sequelize, { decidedBy: { id: 'admin-1' } });
 
-    expect(opp.update).toHaveBeenCalledTimes(1);
-    const patch = opp.update.mock.calls[0][0];
-    expect(patch.status).toBe('completed');
-    expect(patch.episode_id).toBe(EPISODE_ID);
-    expect(patch.status_history).toEqual([
-      expect.objectContaining({ status: 'completed', from: 'booked', note: 'Episode 7 completed' }),
+    // One statement, in the completion's transaction, on the owner only.
+    expect(transitions(queries)).toHaveLength(1);
+    const { replacements, transaction } = transitions(queries)[0].opts;
+    expect(transaction).toEqual({ id: 'tx' });
+    expect(replacements).toMatchObject({ id: 'opp-1', from: 'booked', episodeId: EPISODE_ID });
+    expect(JSON.parse(replacements.history)).toEqual([
+      expect.objectContaining({ status: 'completed', from: 'booked', note: 'Episode 7 completed', by: { id: 'admin-1' }, route: 'episode_completed', event_id: EVENT_ID, episode_id: EPISODE_ID }),
     ]);
+    // And one audit entry for it, in the same transaction.
+    expect(mockModels.ActivityLog.logActivity).toHaveBeenCalledTimes(1);
+    expect(mockModels.ActivityLog.logActivity.mock.calls[0][0]).toMatchObject({ action: 'opportunity_status', resourceType: 'opportunity', resourceId: 'opp-1', userId: 'admin-1' });
+    expect(mockModels.ActivityLog.logActivity.mock.calls[0][1]).toEqual({ transaction: { id: 'tx' } });
     expect(result.career.opportunities_advanced).toEqual([
       { id: 'opp-1', name: 'Maison Belle campaign', from: 'booked', to: 'completed' },
     ]);
@@ -303,7 +332,24 @@ describe('completeEpisode career hook (Task #1817)', () => {
     const result = await completeEpisode(EPISODE_ID, SHOW_ID, sequelize);
 
     expect(goalUpdates(queries).find(q => q.opts.replacements.id === 'g-coins').opts.replacements.val).toBe(result.new_state.coins);
-    expect(opp.update).toHaveBeenCalledTimes(1);
+    expect(opp.update).not.toHaveBeenCalled();
+    expect(transitions(queries)).toHaveLength(1);
+  });
+
+  it('an owner that is not accepted is left as it is and listed; no offer is picked when the event has no owner', async () => {
+    resetModels();
+    const open = makeSequelize({ owner: ownerRow('negotiating') });
+    const a = await completeEpisode(EPISODE_ID, SHOW_ID, open.sequelize);
+    expect(transitions(open.queries)).toHaveLength(0);
+    expect(a.career.opportunities_unaccepted).toEqual([{ id: 'opp-1', name: 'Maison Belle campaign', status: 'negotiating' }]);
+
+    // The episode-linked offer the old hook would have found is not touched.
+    const opp = resetModels();
+    const none = makeSequelize({ owner: { ...ownerRow(), id: 'someone-else' } });
+    await expect(completeEpisode(EPISODE_ID, SHOW_ID, none.sequelize)).resolves.toBeDefined();
+    expect(transitions(none.queries)).toHaveLength(0);
+    expect(opp.update).not.toHaveBeenCalled();
+    expect(mockModels.ActivityLog.logActivity).not.toHaveBeenCalled();
   });
 
   it('a second call on an already-accepted episode changes nothing and does not call the hook', async () => {
@@ -321,17 +367,19 @@ describe('completeEpisode career hook (Task #1817)', () => {
     expect(opp.update).not.toHaveBeenCalled();
   });
 
-  it('a hook failure is logged with [EpisodeCompletion] and completion still succeeds', async () => {
+  // A2: the transition is part of the completion. It used to run afterwards,
+  // where a failure was logged and the episode stayed completed with its
+  // offer not moved; now they commit together or not at all.
+  it('a transition that fails fails the completion (it rolls back with it)', async () => {
     resetModels();
-    mockModels.Episode.findByPk = jest.fn(async () => { throw new Error('db down'); });
+    const { sequelize } = makeSequelize({ failTransition: true });
+    await expect(completeEpisode(EPISODE_ID, SHOW_ID, sequelize)).rejects.toThrow('db down');
+  });
+
+  it('an audit entry that cannot be written fails the completion too', async () => {
+    resetModels();
+    mockModels.ActivityLog.logActivity = jest.fn(async () => { throw new Error('the audit trail is down'); });
     const { sequelize } = makeSequelize();
-
-    const result = await completeEpisode(EPISODE_ID, SHOW_ID, sequelize);
-
-    expect(result.episode_id).toBe(EPISODE_ID);
-    expect(result.career.opportunities_advanced).toEqual([]);
-    expect(errorSpy).toHaveBeenCalledWith(
-      '[EpisodeCompletion] Opportunity completion failed (non-blocking):', 'db down'
-    );
+    await expect(completeEpisode(EPISODE_ID, SHOW_ID, sequelize)).rejects.toThrow('the audit trail is down');
   });
 });

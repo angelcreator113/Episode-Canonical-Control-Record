@@ -12,7 +12,7 @@ vi.mock('../../services/api', () => ({
 }));
 
 import api from '../../services/api';
-import { EpisodeResultsEvaluation, EpisodeResultsStory } from './EpisodeResultsPages';
+import { EpisodeResultsEvaluation, EpisodeResultsStory, CompensationRecord } from './EpisodeResultsPages';
 
 const EVAL = {
   tier_final: 'pass', score: 78, narrative_lines: { short: 'Lala held her own.' },
@@ -31,6 +31,38 @@ beforeEach(() => {
 });
 
 describe('Results → Evaluation', () => {
+  test('milestone attribution: nothing is shown when the completion had none to record', () => {
+    renderIn(<EpisodeResultsEvaluation episode={{ id: 'ep-1', evaluation_json: JSON.stringify(EVAL) }} />);
+    expect(screen.queryByTestId('results-milestone-attribution')).toBeNull();
+  });
+
+  test.each([[false], [true]])('milestone attribution as stored (embedded: %s): decided by an admin, with the reward, the decision, who and when', (embedded) => {
+    const attribution = { status: 'DECIDED', candidates: [
+      { tx_id: 'tx-1', goal_id: 'rising-star', label: 'Rising Star', threshold: 1500, amount: 200, reason: 'in_range', decision: 'not_this_episode', decided_by: { id: 'u1', name: 'Evoni' }, decided_at: '2026-11-13T18:00:00.000Z' },
+      { tx_id: 'tx-2', goal_id: 'old', label: null, threshold: null, amount: 50, reason: 'range_unknown', decision: 'this_episode', decided_by: { id: 'u1', name: null }, decided_at: '2026-11-13T18:00:00.000Z' },
+    ] };
+    renderIn(<EpisodeResultsEvaluation embedded={embedded} episode={{ id: 'ep-1', evaluation_json: JSON.stringify({ ...EVAL, milestone_attribution: attribution }) }} />);
+    const block = screen.getByTestId('results-milestone-attribution');
+    expect(within(block).getByTestId('results-milestone-status').textContent).toBe('Decided by an admin');
+    const first = within(block).getByTestId('results-milestone-row-tx-1');
+    expect(first.textContent).toContain('Rising Star · 200 coins · goal at 1,500');
+    expect(first.textContent).toContain('Not this episode\'s');
+    expect(first.textContent).toContain('Evoni');
+    const second = within(block).getByTestId('results-milestone-row-tx-2');
+    expect(second.textContent).toContain('old · 50 coins · this episode\'s balance movement could not be rebuilt');
+    expect(second.textContent).toContain('This episode\'s');
+    expect(second.textContent).toContain('u1');
+  });
+
+  test('milestone attribution left unverified says so, and that it was not guessed', () => {
+    const attribution = { status: 'UNVERIFIED', candidates: [{ tx_id: 'tx-1', goal_id: 'g', label: 'Rising Star', threshold: 1500, amount: 200, reason: 'in_range', decision: null }] };
+    renderIn(<EpisodeResultsEvaluation episode={{ id: 'ep-1', evaluation_json: JSON.stringify({ ...EVAL, milestone_attribution: attribution }) }} />);
+    const block = screen.getByTestId('results-milestone-attribution');
+    expect(within(block).getByTestId('results-milestone-status').textContent).toBe('Unverified');
+    expect(block.textContent).toContain('it was not guessed');
+    expect(within(block).getByTestId('results-milestone-row-tx-1').textContent).toContain('Undecided');
+  });
+
   test('not evaluated: says so', () => {
     renderIn(<EpisodeResultsEvaluation episode={{ id: 'ep-1' }} />);
     expect(screen.getByTestId('results-evaluation-empty').textContent).toContain('Not evaluated yet');
@@ -90,5 +122,41 @@ describe('Results → Story', () => {
   test('the Stories Library is a link', () => {
     renderIn(<EpisodeResultsStory episode={{ id: 'ep-1', show_id: 'show-1' }} />);
     expect(screen.getByRole('link', { name: /Open Stories Library/ }).getAttribute('href')).toBe('/stories');
+  });
+});
+
+// A2 (Evoni, 2026-11-14): what completion withheld is shown as proposed and
+// not booked, never as earnings.
+describe('Results → brand compensation not booked', () => {
+  const RECORD = {
+    owed: false, reason: 'owner_closed', owner: { id: 'o1', name: 'Maison Belle campaign', status: 'declined' },
+    withheld: [{ category: 'appearance_fee', amount: 450 }, { category: 'deal_bonus', amount: 1300 }],
+  };
+
+  test('says it was not booked, why, which offer, and each amount as proposed', () => {
+    render(<CompensationRecord compensation={RECORD} />);
+    const block = screen.getByTestId('results-compensation');
+    expect(screen.getByTestId('results-compensation-status').textContent).toBe('Not booked');
+    expect(block.textContent).toContain('The offer had been declined or closed when the episode was completed.');
+    expect(block.textContent).toContain('Offer: Maison Belle campaign (declined).');
+    expect(block.textContent).toContain('Lala’s own costs were booked as usual.');
+    expect(within(screen.getByTestId('results-compensation-row-appearance_fee')).getByText('proposed, not booked')).toBeTruthy();
+    expect(screen.getByTestId('results-compensation-row-appearance_fee').textContent).toContain('450');
+    expect(screen.getByTestId('results-compensation-row-deal_bonus').textContent).toContain('1,300');
+    expect(block.textContent).not.toMatch(/earned|income|paid out/i);
+  });
+
+  test('nothing is shown when it was owed, or when the event had no offer', () => {
+    const { container, rerender } = render(<CompensationRecord compensation={{ ...RECORD, owed: true, withheld: [] }} />);
+    expect(container.innerHTML).toBe('');
+    rerender(<CompensationRecord compensation={null} />);
+    expect(container.innerHTML).toBe('');
+    rerender(<CompensationRecord compensation={undefined} />);
+    expect(container.innerHTML).toBe('');
+  });
+
+  test('an unknown reason still reads plainly', () => {
+    render(<CompensationRecord compensation={{ owed: false, reason: 'something_new', withheld: [] }} />);
+    expect(screen.getByTestId('results-compensation').textContent).toContain('No accepted agreement owed it when the episode was completed.');
   });
 });

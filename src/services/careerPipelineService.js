@@ -18,9 +18,7 @@
 const { v4: uuidv4 } = require('uuid');
 const { withAutoScheduledDate } = require('../utils/eventDateDefault');
 const { careerTierFromReputation } = require('../utils/careerTiers');
-const { EPISODE_EVENT_ID_SQL } = require('../utils/episodeEventSql');
 const { syncDraftedDealType } = require('./dealTypeDraftService');
-const { isOpenOffer } = require('./startOfferDecision');
 const {
   deliverablesFromOpportunity, restrictionsFromOpportunity, compensationFromOpportunity, insertEventDeliverables,
 } = require('./eventTermsService');
@@ -243,77 +241,6 @@ async function convertOpportunityToEvent(opportunityId, showId, models) {
   };
 }
 
-// ── 4. EPISODE COMPLETION → CASCADE ──────────────────────────────────────────
-
-/**
- * When an episode is marked complete, complete its linked opportunity
- * (booked/preparing/active → completed, with status_history and episode_id).
- *
- * Task #1817 (Evoni's ruling, option 1): this hook completes the opportunity
- * ONLY. It no longer cascades into onOpportunityAdvanced and no longer
- * credits episode.total_income to coins goals. completeEpisode's step 17 is
- * the single goal update on completion: it sets each goal from what it
- * measures (coins from the ledger, other stats from character_state; Season
- * Arc §8(ff) Q11) and spawns unlocks for goals it completes. Manual Advance
- * no longer writes goals either (onOpportunityAdvanced).
- *
- * Returns { opportunities_advanced, opportunities_unaccepted }: the second
- * lists a linked opportunity still open (offered, considering, negotiating,
- * held), left as it is for review.
- */
-async function onEpisodeCompleted(episodeId, showId, models) {
-  const { Episode, Opportunity, sequelize } = models;
-  const result = { opportunities_advanced: [], opportunities_unaccepted: [] };
-
-  const episode = await Episode.findByPk(episodeId);
-  if (!episode) return result;
-
-  // The episode's event: the one its brief names, else the first stamped
-  // (utils/episodeEventSql; Task #1917). The stamp alone could name another
-  // event after a reassign.
-  let event = null;
-  try {
-    const [rows] = await sequelize.query(
-      `SELECT * FROM world_events WHERE id = ${EPISODE_EVENT_ID_SQL}`,
-      { replacements: { episodeId } }
-    );
-    event = rows?.[0] || null;
-  } catch (eventErr) {
-    console.error('[CareerPipeline] episode event read failed (no event):', eventErr.message);
-  }
-
-  // Find the opportunity linked to the event or episode
-  let opp = null;
-  if (Opportunity) {
-    if (event?.opportunity_id) {
-      opp = await Opportunity.findByPk(event.opportunity_id);
-    }
-    if (!opp) {
-      opp = await Opportunity.findOne({ where: { episode_id: episodeId } });
-    }
-    if (!opp && event) {
-      opp = await Opportunity.findOne({ where: { event_id: event.id } });
-    }
-  }
-
-  // Complete the opportunity if found (no goal cascade — see header)
-  if (opp && ['booked', 'preparing', 'active'].includes(opp.status)) {
-    const history = opp.status_history || [];
-    history.push({ status: 'completed', date: new Date().toISOString(), note: `Episode ${episode.episode_number || episodeId} completed`, from: opp.status });
-
-    await opp.update({ status: 'completed', status_history: history, episode_id: episodeId });
-    result.opportunities_advanced.push({ id: opp.id, name: opp.name, from: history[history.length - 1].from, to: 'completed' });
-  } else if (opp && isOpenOffer(opp.status)) {
-    // Still open (never accepted, declined or closed): scheduling and Start
-    // Episode never accept by themselves (services/startOfferDecision), so
-    // it is not completed here either. Reported and logged for review.
-    result.opportunities_unaccepted.push({ id: opp.id, name: opp.name, status: opp.status });
-    console.warn(`[CareerPipeline] Episode ${episodeId} completed; its opportunity "${opp.name}" (${opp.id}) is still ${opp.status}, not accepted, and was left as it is.`);
-  }
-
-  return result;
-}
-
 // ── 5. CAREER TIER GATING ────────────────────────────────────────────────────
 
 /**
@@ -337,9 +264,67 @@ async function getAccessibleCareerTier(showId, models) {
   }
 }
 
+/**
+ * Complete moving the event's own offer to completed (A2; Evoni's rulings of
+ * 2026-11-14), inside the completion's transaction: it commits or rolls back
+ * with the episode, and is recorded once through A1's transition record
+ * (services/opportunityTransitionAudit).
+ *
+ * Only the owner the eligibility answer established (the offer the event was
+ * made from, pointing back at it), and only when it is accepted and not yet
+ * completed (booked, preparing, active). No offer is picked when there is no
+ * owner, and no other offer is touched. It is one transition, from the
+ * status it had to completed: one history entry, as this step has always
+ * written, with who and by which route.
+ *
+ * `resolution` is resolveEventCompensation's answer, whose rows this
+ * transaction already holds locked. Returns { opportunities_advanced,
+ * opportunities_unaccepted }: the second lists an owner still open (offered,
+ * considering, negotiating, held), left as it is for review.
+ *
+ * It replaced onEpisodeCompleted (removed 2026-11-15), which picked an offer
+ * by the event's pointer, else by episode, else by event, outside any
+ * transaction. It writes no goals (Task #1817): completeEpisode's goal sync
+ * is the single goal update on completion. Its other caller is the admin
+ * route POST /opportunities/:showId/episode-complete/:episodeId.
+ */
+async function completeOwnerOffer(sequelize, { resolution, episodeId, episodeNumber = null, showId, eventId, actor = null, transaction }) {
+  const { COMPLETION_ELIGIBLE_STATUSES, isOpenOffer: open } = require('./startOfferDecision');
+  const { ROUTES, historyFields, logTransition } = require('./opportunityTransitionAudit');
+  const result = { opportunities_advanced: [], opportunities_unaccepted: [] };
+  if (!transaction) throw new Error('completeOwnerOffer needs the completion\'s transaction');
+  const owner = resolution?.owner ? (resolution.rows || []).find((o) => String(o.id) === String(resolution.owner.id)) : null;
+  if (!owner) return result;
+  if (open(owner.status)) {
+    // Never accepted: left as it is, listed for review (as before).
+    result.opportunities_unaccepted.push({ id: owner.id, name: owner.name, status: owner.status });
+    return result;
+  }
+  if (!COMPLETION_ELIGIBLE_STATUSES.includes(owner.status)) return result;
+  const from = owner.status;
+  const history = [...(Array.isArray(owner.status_history) ? owner.status_history : []), {
+    status: 'completed', from, date: new Date().toISOString(), note: `Episode ${episodeNumber || episodeId} completed`,
+    event_id: eventId, episode_id: episodeId,
+    ...historyFields({ actor, reason: null, route: ROUTES.EPISODE_COMPLETED }),
+  }];
+  // Under the lock the eligibility answer took; the status is checked again
+  // in the statement, so a row that moved is not written over.
+  const [moved] = await sequelize.query(
+    `UPDATE opportunities SET status = 'completed', status_history = CAST(:history AS jsonb), episode_id = :episodeId, updated_at = NOW()
+      WHERE id = :id AND status = :from AND deleted_at IS NULL RETURNING id`,
+    { replacements: { history: JSON.stringify(history), episodeId, id: owner.id, from }, transaction }
+  );
+  if (!moved?.[0]) return result;
+  await logTransition(transaction, {
+    actor, opportunityId: owner.id, showId, eventId, episodeId, from, to: 'completed', route: ROUTES.EPISODE_COMPLETED,
+  });
+  result.opportunities_advanced.push({ id: owner.id, name: owner.name, from, to: 'completed' });
+  return result;
+}
+
 module.exports = {
+  completeOwnerOffer,
   onOpportunityAdvanced,
-  onEpisodeCompleted,
   convertOpportunityToEvent,
   spawnUnlockOpportunities,
   spawnGoalUnlocks,
