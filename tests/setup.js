@@ -251,3 +251,7 @@ if (process.env.SUPPRESS_LOGS === 'true') {
     warn: jest.fn(),
   };
 }
+
+// PROBE ONLY, NOT FOR MERGE (Evoni, 2026-11-15): the whole suite with the ADMIN write guard enforcing,
+// to list every older test that writes as a non-admin. See the draft PR this branch belongs to.
+process.env.ADMIN_WRITE_GUARD = 'enforce';
