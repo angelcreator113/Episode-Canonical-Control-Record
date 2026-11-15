@@ -114,7 +114,15 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     return { ...ids, pump: pump.id, studs: studs.id };
   }
   const send = (ep) => as(admin, request(app).post(distUrl(ep))).send({ include_shop_links: true });
-  const publish = (ep) => as(admin, request(app).post(siteUrl(ep)));
+  // What she confirms when she publishes: each piece that has a link, with its real brand, product, retailer,
+  // address, whether the link is an affiliate's and whether it is the piece itself. `over` corrects a piece by id.
+  const confirmAll = async (ep, over = {}) => ((await as(admin, request(app).get(distUrl(ep)))).body.data.site_review || [])
+    .filter((p) => p.url)
+    .map((p) => ({
+      piece_id: p.piece_id, real_brand: p.real_brand || 'Bloom Atelier', real_product_name: p.real_product_name || 'Enamel Stud Earrings',
+      retailer: p.retailer || 'Etsy', url: p.url, affiliate: p.affiliate, match: 'exact', confirmed: true, ...(over[p.piece_id] || {}),
+    }));
+  const publish = async (ep, over = {}) => as(admin, request(app).post(siteUrl(ep))).send({ links: await confirmAll(ep, over) });
   const publicLook = async (key) => (await request(app).get(`/api/v1/public/looks/${key}`)).body.look;
   const listed = async (key) => (await request(app).get('/api/v1/public/looks')).body.looks.find((l) => l.key === key);
 
@@ -161,7 +169,7 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     expect((await publish(ids.ep)).body.data.site.image).toBe('on_site');
   });
 
-  it('sending a re-approved, changed look drops the old image until it is published again', async () => {
+  it('sending a re-approved, changed look keeps the published image until it is published again', async () => {
     const ids = await seed();
     await send(ids.ep);
     const { key } = (await publish(ids.ep)).body.data.site;
@@ -173,12 +181,18 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     expect((await as(admin, request(app).post(`/api/v1/episodes/${ids.ep}/style-sheet/reopen`))).status).toBe(200);
     await as(admin, request(app).put(`/api/v1/episodes/${ids.ep}/lookbook`)).send({ tagline: 'A new story, a new look.' });
     expect((await as(admin, request(app).post(`/api/v1/episodes/${ids.ep}/style-sheet/approve`))).status).toBe(200);
+    // A snapshot (Evoni, 2026-11-15): sending another look leaves the published image as it is, and
+    // Distribution says the image is of the earlier sheet. Publishing again draws the new one.
+    const before = (await publicLook(key)).image;
     const resent = await send(ids.ep);
-    expect(resent.body.data.site).toMatchObject({ published: true, key, image: 'none' });
-    expect((await publicLook(key)).image).toBeNull();
+    expect(resent.body.data.site).toMatchObject({ published: true, key, image: 'on_site' });
+    expect(resent.body.data.site.differs).toContain('image');
+    expect((await publicLook(key)).image).toEqual(before);
 
-    expect((await publish(ids.ep)).body.data.site.image).toBe('on_site');
-    expect((await publicLook(key)).image).not.toBeNull();
+    const again = await publish(ids.ep);
+    expect(again.body.data.site.image).toBe('on_site');
+    expect(again.body.data.site.differs).toEqual([]);
+    expect((await publicLook(key)).image).not.toEqual(before);
   });
 
   it('the real drawing is the approved sheet\'s look export, a PNG', async () => {

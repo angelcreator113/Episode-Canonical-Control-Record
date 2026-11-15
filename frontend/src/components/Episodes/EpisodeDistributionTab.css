@@ -995,3 +995,13 @@
 /* A platform with no time of its own is offered the episode's release day and time (the show's release schedule). */
 .episode-distribution-tab .dist-when-suggest { margin: 6px 0 0; }
 .episode-distribution-tab .dist-when-use { padding: 0; border: none; background: none; color: var(--lala-lavender-text); font: inherit; font-weight: 600; text-decoration: underline; cursor: pointer; }
+
+/* Review before publishing a look (Evoni, 2026-11-15): one block per piece, fields stacked, 44px controls. */
+.episode-distribution-tab .ssd-review { display: flex; flex-direction: column; gap: 12px; }
+.episode-distribution-tab .ssd-review-row { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 12px; border: 1px solid var(--border-light); border-radius: 8px; min-width: 0; }
+.episode-distribution-tab .ssd-review-row legend { padding: 0 4px; font-size: 14px; font-weight: 600; color: var(--text-primary); }
+.episode-distribution-tab .ssd-review-field { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--text-secondary); }
+.episode-distribution-tab .ssd-review-field input,
+.episode-distribution-tab .ssd-review-field select { min-height: 44px; padding: 8px 10px; border: 1px solid var(--border-light); border-radius: 6px; font: inherit; color: var(--text-primary); background: var(--bg-primary); max-width: 100%; }
+.episode-distribution-tab .ssd-review-field input:focus-visible,
+.episode-distribution-tab .ssd-review-field select:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }

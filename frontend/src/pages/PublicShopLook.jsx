@@ -42,14 +42,21 @@ function OneLook({ look }) {
       {look.image?.url && <img className="site-shop__image" src={look.image.url} alt={look.image.alt || ''} data-testid="site-shop-image" />}
       {look.disclosure && <p className="site-shop__disclosure" data-testid="site-shop-disclosure">{look.disclosure}</p>}
       {look.caption && <p className="site-shop__caption">{look.caption}</p>}
+      {look.archive && <p className="site-shop__archive" data-testid="site-shop-archive">These pieces are no longer available to buy.</p>}
       <ul className="site-shop__links">
-        {look.links.map((l, i) => (
-          <li key={i} className="site-shop__link" data-testid="site-shop-link">
-            <a href={l.url} target="_blank" rel={relFor(l)}>{l.label}</a>
-            {l.retailer && <span> · {l.retailer}</span>}
-            {l.affiliate && <span className="site-shop__badge">Affiliate link</span>}
-          </li>
-        ))}
+        {look.links.map((l, i) => {
+          // A link only for a product that can be bought and has an https address; anything else is text.
+          const buyable = l.available !== false && typeof l.url === 'string' && l.url.startsWith('https://');
+          return (
+            <li key={i} className={`site-shop__link${buyable ? '' : ' site-shop__link--gone'}`} data-testid="site-shop-link">
+              {buyable ? <a href={l.url} target="_blank" rel={relFor(l)}>{l.label}</a> : <span className="site-shop__gone">{l.label}</span>}
+              {buyable && l.retailer && <span> · {l.retailer}</span>}
+              {l.match === 'similar' && <span className="site-shop__badge">Similar piece</span>}
+              {buyable && l.affiliate && <span className="site-shop__badge">Affiliate link</span>}
+              {!buyable && <span className="site-shop__badge">No longer available</span>}
+            </li>
+          );
+        })}
       </ul>
       <p><Link to="/shop-the-look">Every look</Link></p>
     </article>

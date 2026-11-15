@@ -498,7 +498,7 @@ router.delete('/:id/title-card', validateUUIDParam('id'), requireAuth, async (re
 // cost. Every image route checks the photo belongs to this episode.
 function sendLookbookError(res, err, where) {
   console.error(`[Lookbook] ${where} failed:`, err.message);
-  if (err.status) return res.status(err.status).json({ success: false, error: err.message, code: err.code });
+  if (err.status) return res.status(err.status).json({ success: false, error: err.message, code: err.code, ...(err.details ? { details: err.details } : {}) });
   return res.status(500).json({ success: false, error: 'The Lookbook could not be saved. Try again.' });
 }
 
@@ -730,9 +730,21 @@ router.post('/:id/style-sheet/distribution/site', validateUUIDParam('id'), requi
   try {
     const models = require('../models');
     const { publishStyleSheetToSite } = require('../services/styleSheetDistributionService');
-    return res.json({ success: true, data: await publishStyleSheetToSite(models, req.params.id, req.user) });
+    // The body is what she confirmed of each product: { links: [{ piece_id, real_brand, real_product_name, retailer, url, affiliate, match, confirmed }] }.
+    return res.json({ success: true, data: await publishStyleSheetToSite(models, req.params.id, req.user, { links: req.body?.links }) });
   } catch (err) {
     return sendLookbookError(res, err, 'POST /:id/style-sheet/distribution/site');
+  }
+});
+
+// A product of the published look can no longer be bought, or can again: { piece_id, available }.
+router.patch('/:id/style-sheet/distribution/site/links', validateUUIDParam('id'), requireAuth, authorize(['ADMIN']), async (req, res) => {
+  try {
+    const models = require('../models');
+    const { setPublishedLinkAvailability } = require('../services/styleSheetDistributionService');
+    return res.json({ success: true, data: await setPublishedLinkAvailability(models, req.params.id, { pieceId: req.body?.piece_id, available: req.body?.available }) });
+  } catch (err) {
+    return sendLookbookError(res, err, 'PATCH /:id/style-sheet/distribution/site/links');
   }
 });
 
