@@ -37,8 +37,11 @@ function SiteSwitch({ entry, working, onPublish, onTakeDown }) {
         <span>Show on the website</span>
       </label>
       {blocker && <p className="ssd-hint">{blocker}</p>}
-      {site.published && site.showing && (
+      {site.published && site.showing && site.released !== false && (
         <p className="ssd-hint">On the website: <a href={site.path} target="_blank" rel="noopener noreferrer">{site.path}</a></p>
+      )}
+      {site.published && site.showing && site.released === false && (
+        <p className="ssd-hint" role="status" data-testid="ssd-site-waiting">Ready for the website. It appears there once this episode is published.</p>
       )}
       {site.published && !site.showing && (
         <p className="ssd-hint" role="status">Hidden on the website while the Shop the Look links are off.</p>

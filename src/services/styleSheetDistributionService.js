@@ -188,7 +188,7 @@ async function view(models, episodeId, entry, sheet) {
     disclosure,
     disclosure_locked: Boolean(disclosure),
     post_text: postText(entry.caption || '', included, disclosure),
-    site: siteView(entry),
+    site: siteView(entry, await episodeReleased(models, episodeId)),
   };
 }
 
@@ -219,11 +219,13 @@ function designsView(episodeId, entry) {
 }
 
 /** The website state of a sent sheet, as the Distribution card shows it. */
-function siteView(entry) {
+function siteView(entry, released = false) {
   const site = isObject(entry.site) ? entry.site : null;
   if (!site || !site.key) return { published: false };
   return {
     published: true,
+    // The website shows a look only once its episode is released (releasedOn); until then it waits.
+    released: Boolean(released),
     published_at: site.published_at || null,
     key: site.key,
     path: `/shop-the-look/${site.key}`,
@@ -360,21 +362,48 @@ async function takeDownStyleSheetFromSite(models, episodeId) {
 }
 
 /**
+ * Is this episode released to the public: published, and its "after the
+ * episode" moment no later than its show's present (services/storyClock,
+ * the rule The Pulse reads by)? An episode with no number has no moment and
+ * is not. `present` remembers each show's present for one read.
+ */
+async function releasedOn(models, episode, present = new Map()) {
+  if (!episode || episode.status !== 'published' || !episode.show_id) return false;
+  const clock = require('./storyClock');
+  const order = clock.orderOf(episode.episode_number, 'after_episode');
+  if (!Number.isInteger(order)) return false;
+  if (!present.has(episode.show_id)) present.set(episode.show_id, await clock.presentOrder(models, episode.show_id));
+  return order <= present.get(episode.show_id);
+}
+
+/** The same, for an episode by its id (the Distribution card says whether the website shows the look yet). */
+async function episodeReleased(models, episodeId) {
+  const [row] = await models.sequelize.query(
+    'SELECT show_id, status, episode_number FROM episodes WHERE id = :episodeId AND deleted_at IS NULL',
+    { replacements: { episodeId }, type: models.sequelize.QueryTypes.SELECT });
+  return releasedOn(models, row);
+}
+
+/**
  * The published looks, read for the public website: newest first, and only
- * those showing (links included, pieces recorded). Each is the entry, the
+ * those of a released episode (releasedOn) that are showing (links included, pieces recorded). Each is the entry, the
  * episode's number and title, and its site record. Nothing else of the
  * episode leaves here.
  */
-async function publishedLooks(sequelize, { key = null } = {}) {
+async function publishedLooks(models, { key = null } = {}) {
+  const { sequelize } = models;
   // The text match narrows the scan; every hit is parsed and checked below.
   const like = key ? `%${key.replace(/[\\%_]/g, (c) => `\\${c}`)}%` : '%published_at%';
   const rows = await sequelize.query(
-    `SELECT title, episode_number, distribution_metadata FROM episodes
+    `SELECT show_id, status, title, episode_number, distribution_metadata FROM episodes
       WHERE deleted_at IS NULL AND distribution_metadata IS NOT NULL
         AND distribution_metadata::text LIKE :like`,
     { replacements: { like }, type: sequelize.QueryTypes.SELECT });
   const looks = [];
+  const present = new Map();
   for (const row of rows) {
+    // Her switch does not release an episode: an unreleased one shows nothing here, by list or by key.
+    if (!(await releasedOn(models, row, present))) continue;
     const entry = parseMetadata(row.distribution_metadata)[KEY];
     if (!isObject(entry) || !isObject(entry.site)) continue;
     const { site } = entry;
@@ -393,7 +422,7 @@ const lookTitle = (episode) => {
 
 /** The website's list: each published look's key, title, date and image. */
 async function listPublicLooks(models) {
-  return (await publishedLooks(models.sequelize)).map(({ site, episode }) => ({
+  return (await publishedLooks(models)).map(({ site, episode }) => ({
     key: site.key, title: lookTitle(episode), published_at: site.published_at || null,
     image: publicImageOf(site, lookTitle(episode)),
   }));
@@ -408,7 +437,7 @@ async function listPublicLooks(models) {
  */
 async function publicLook(models, key) {
   if (!SITE_KEY_RE.test(String(key || ''))) return null;
-  const [look] = await publishedLooks(models.sequelize, { key });
+  const [look] = await publishedLooks(models, { key });
   if (!look) return null;
   const links = await shopLinks(models, { wardrobe_piece_ids: look.site.piece_ids });
   if (!links.length) return null;

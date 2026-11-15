@@ -100,4 +100,14 @@ describe('Show on the website', () => {
     expect(none.getByText('No look image on the website yet; it needs the website storage set up.')).toBeTruthy();
     expect(none.getByRole('button', { name: 'Add the look image' })).toBeTruthy();
   });
+  test('published before its episode is released: no link to the page, it says it is waiting (Evoni, 2026-11-15)', async () => {
+    const waiting = await renderCard(entry({ site: { ...PUBLISHED, released: false } }));
+    expect(theSwitch(waiting).checked).toBe(true);
+    expect(waiting.getByTestId('ssd-site-waiting').textContent).toBe('Ready for the website. It appears there once this episode is published.');
+    expect(waiting.queryByRole('link', { name: '/shop-the-look/Ab3_k9-Zq1Lm' })).toBeNull();
+    cleanup();
+    const out = await renderCard(entry({ site: { ...PUBLISHED, released: true } }));
+    expect(out.getByRole('link', { name: '/shop-the-look/Ab3_k9-Zq1Lm' })).toBeTruthy();
+    expect(out.queryByTestId('ssd-site-waiting')).toBeNull();
+  });
 });

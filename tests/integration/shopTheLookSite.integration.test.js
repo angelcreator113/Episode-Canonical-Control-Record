@@ -62,13 +62,14 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
   const siteUrl = (ep) => `${distUrl(ep)}/site`;
 
   /** An episode with an event, a look of two pieces (one an affiliate link, unless bare), and a tagline. */
-  async function seed({ bare = false } = {}) {
+  // The episode is published unless a test says otherwise: the website shows only a released episode's look.
+  async function seed({ bare = false, status = 'published' } = {}) {
     const ids = { show: uuid(), ep: uuid(), event: uuid() };
     shows.push(ids.show);
     await run('INSERT INTO shows (id, name, slug, created_at, updated_at) VALUES (:show, :name, :slug, NOW(), NOW())',
       { ...ids, name: `Shop ${ids.show.slice(0, 8)}`, slug: `shop-${ids.show.slice(0, 8)}` });
     await run(`INSERT INTO episodes (id, show_id, title, episode_number, status, created_at, updated_at)
-               VALUES (:ep, :show, 'Wearable Experiments', 1, 'draft', NOW(), NOW())`, ids);
+               VALUES (:ep, :show, 'Wearable Experiments', 1, :status, NOW(), NOW())`, { ...ids, status });
     const [[profile]] = await run(`INSERT INTO social_profiles (handle, platform, vibe_sentence, display_name, created_at, updated_at)
                VALUES (:handle, 'instagram', 'A studio.', 'STUDIO BY SABLE', NOW(), NOW()) RETURNING id`, { handle: `shop_${ids.show.slice(0, 6)}` });
     profiles.push(profile.id);
@@ -171,6 +172,83 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     expect((await request(app).get(`/api/v1/public/looks/${key2}`)).status).toBe(200);
     expect((await as(admin, request(app).delete(distUrl(ids.ep)))).status).toBe(200);
     expect((await request(app).get(`/api/v1/public/looks/${key2}`)).status).toBe(404);
+  });
+
+  describe('the website shows a look only once its episode is released (Evoni, 2026-11-15)', () => {
+    // Each read comes from its own address: the public reads are rate limited by address.
+    let ipN = 0;
+    const from = (r) => { ipN += 1; return r.set('X-Forwarded-For', `198.51.112.${(ipN % 250) + 1}`); };
+    const listed = async () => (await from(request(app).get('/api/v1/public/looks'))).body.looks;
+    const onList = async (key) => (await listed()).some((l) => l.key === key);
+    const byKey = (key) => from(request(app).get(`/api/v1/public/looks/${key}`));
+    const setEpisode = (ep, status, number = 1) => run(
+      'UPDATE episodes SET status = :status, episode_number = :number WHERE id = :ep', { ep, status, number });
+    // Two shows, one episode each, both drafts, each with its look switched on for the website.
+    let a;
+    let b;
+    beforeAll(async () => {
+      a = await seed({ status: 'draft' });
+      b = await seed({ status: 'draft' });
+      for (const ids of [a, b]) {
+        expect((await send(ids.ep)).status).toBe(200);
+        const res = await as(admin, request(app).post(siteUrl(ids.ep)));
+        expect(res.status).toBe(200);
+        expect(res.body.data.site).toMatchObject({ published: true, showing: true, released: false });
+        ids.key = res.body.data.site.key;
+      }
+    });
+    beforeEach(async () => { await setEpisode(a.ep, 'draft'); await setEpisode(b.ep, 'draft'); });
+
+    it('an unpublished episode: the website gives nothing of its look, by list or by key', async () => {
+      for (const status of ['draft', 'approved', 'pending', 'archived']) {
+        await setEpisode(a.ep, status);
+        expect([status, await onList(a.key)]).toEqual([status, false]);
+        const one = await byKey(a.key);
+        expect([status, one.status]).toEqual([status, 404]);
+        // Nothing of the outfit, the title, the image or the links is in the refusal or the list.
+        expect(JSON.stringify(one.body)).not.toMatch(/Wearable|shop\.example|aff\.example|Maison Rouge|Pump|Stud/);
+        expect(JSON.stringify(await listed())).not.toContain(a.key);
+      }
+    });
+
+    it('publishing the episode releases the look; taking the episode back hides it again', async () => {
+      expect((await byKey(a.key)).status).toBe(404);
+      await setEpisode(a.ep, 'published');
+      const one = await byKey(a.key);
+      expect(one.status).toBe(200);
+      expect(one.body.look.links.length).toBeGreaterThan(0);
+      expect(await onList(a.key)).toBe(true);
+      expect((await as(admin, from(request(app).get(distUrl(a.ep))))).body.data.site).toMatchObject({ published: true, released: true });
+
+      await setEpisode(a.ep, 'draft');
+      expect((await byKey(a.key)).status).toBe(404);
+      expect(await onList(a.key)).toBe(false);
+    });
+
+    it('a published episode with no number has no release moment: nothing shows', async () => {
+      await setEpisode(a.ep, 'published');
+      expect((await byKey(a.key)).status).toBe(200);
+      await setEpisode(a.ep, 'published', null);
+      expect((await byKey(a.key)).status).toBe(404);
+      expect(await onList(a.key)).toBe(false);
+    });
+
+    it('one show releasing an episode releases nothing of another show', async () => {
+      await setEpisode(a.ep, 'published');
+      expect((await byKey(a.key)).status).toBe(200);
+      expect((await byKey(b.key)).status).toBe(404);
+      expect(await onList(b.key)).toBe(false);
+    });
+
+    it('a token changes nothing on the public read; an ADMIN previews on Distribution, and only an ADMIN', async () => {
+      expect((await as(admin, byKey(a.key))).status).toBe(404);
+      expect((await as(editor, byKey(a.key))).status).toBe(404);
+      const preview = await as(admin, from(request(app).get(distUrl(a.ep))));
+      expect(preview.status).toBe(200);
+      expect(preview.body.data.shop_links.length).toBeGreaterThan(0);
+      expect(preview.body.data.site).toMatchObject({ published: true, released: false });
+      expect((await from(request(app).get(distUrl(a.ep)))).status).toBe(401);
+    });
   });
 
   it('an unknown or malformed key is a 404', async () => {
