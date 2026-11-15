@@ -195,7 +195,11 @@ const corsOptions = {
   },
   credentials: true,
   methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-Remote-Token'],
+  // Idempotency-Key: Start Episode's retry protection (services/
+  // startEpisodeIdempotency), which the pages send (Evoni, 2026-11-13). The
+  // app calls the API from its own origin, where this list is not asked;
+  // it is here so a build served from another allowed origin can still start.
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-Remote-Token', 'Idempotency-Key'],
   exposedHeaders: ['Content-Type', 'Authorization'],
   optionsSuccessStatus: 200,
 };

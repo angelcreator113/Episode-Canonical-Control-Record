@@ -37,7 +37,8 @@ jest.mock('../../../src/services/coinLedgerSync', () => ({
 jest.mock('../../../src/routes/wardrobe', () => ({}));
 jest.mock('../../../src/models', () => ({}));
 jest.mock('../../../src/services/careerPipelineService', () => ({
-  onEpisodeCompleted: jest.fn(async () => ({ opportunities_advanced: [] })),
+  // A2: the event's own offer is completed inside the completion's transaction.
+  completeOwnerOffer: jest.fn(async () => ({ opportunities_advanced: [], opportunities_unaccepted: [] })),
   spawnGoalUnlocks: jest.fn(async () => []),
 }));
 
@@ -108,7 +109,9 @@ describe('completeEpisode takes coins from the ledger (Task #1933, D1)', () => {
     expect(mockOrder[0]).toBe('lock');
     expect(mockOrder[mockOrder.length - 1]).toBe('sync');
     expect(finalizeEpisodeFinancials).toHaveBeenCalledTimes(1);
-    expect(finalizeEpisodeFinancials.mock.calls[0][3]).toEqual({ transaction: { id: 'tx' } });
+    // In the completion's transaction, with the compensation answer it read
+    // under its own locks (A2; null here: the episode has no event) and who completes.
+    expect(finalizeEpisodeFinancials.mock.calls[0][3]).toEqual({ transaction: { id: 'tx' }, compensation: null, actor: null });
 
     expect(result.new_state.coins).toBe(225);
     expect(result.stat_deltas.coins).toBe(-125);

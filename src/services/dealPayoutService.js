@@ -231,7 +231,84 @@ async function bookContentFee(sequelize, { showId, event, deliverable, transacti
   return row ? { ...row, amount } : null;
 }
 
+// The audit action a withheld content fee is recorded under (A2), and the
+// resource it names: the deliverable. Written by the approval's own
+// transaction (routes/eventDeliverables), read back here.
+const CONTENT_FEE_WITHHELD_ACTION = 'content_fee_withheld';
+const DELIVERABLE_RESOURCE = 'event_deliverable';
+const FEE_STATES = Object.freeze({
+  NONE: 'none',             // nothing is charged for it
+  EXPECTED: 'expected',     // would be booked on approval
+  BOOKED: 'booked',         // in the ledger
+  NOT_OWED: 'not_owed',     // approved or not, no accepted agreement owes it
+  UNRESOLVED: 'unresolved', // the offers must be resolved before it can be approved
+  NOT_BOOKED: 'not_booked', // approved with no ledger row and no recorded reason
+});
+
+/**
+ * Each deliverable's fee as three separate things (A2; Evoni, 2026-11-14:
+ * "Deliverable approval and financial eligibility are separate states"):
+ *   proposed_fee   what the terms say (event_deliverables.fee, when the
+ *                  deal pays deliverables); never income by itself
+ *   booked_fee     the executed content_fee ledger row for it, or null
+ *   fee_state, fee_reason
+ *                  why they differ. For an approved deliverable with nothing
+ *                  booked the reason is the one recorded when it was
+ *                  approved (activity_logs, CONTENT_FEE_WITHHELD_ACTION): it
+ *                  is not worked out again from the offer as it is now,
+ *                  which may have changed since. Before approval it is the
+ *                  eligibility answer as it stands.
+ * Reads only. Returns a Map of deliverable id → { proposed_fee, booked_fee,
+ * fee_state, fee_reason }.
+ */
+async function deliverableFeeStates(sequelize, { event, deliverables = [] }) {
+  const out = new Map();
+  if (!event || deliverables.length === 0) return out;
+  const ids = deliverables.map((d) => String(d.id));
+  const [booked] = await sequelize.query(
+    `SELECT source_id, amount FROM financial_transactions
+      WHERE category = 'content_fee' AND status = 'executed' AND deleted_at IS NULL AND source_id IN (:ids)`,
+    { replacements: { ids } }
+  );
+  const bookedBy = new Map((booked || []).map((r) => [String(r.source_id), Number(r.amount) || 0]));
+  const [withheld] = await sequelize.query(
+    `SELECT resource_id, changes FROM activity_logs
+      WHERE action = :action AND resource_type = :type AND resource_id IN (:ids) ORDER BY id ASC`,
+    { replacements: { action: CONTENT_FEE_WITHHELD_ACTION, type: DELIVERABLE_RESOURCE, ids } }
+  );
+  const withheldBy = new Map((withheld || []).map((r) => [String(r.resource_id), r.changes?.meta || {}]));
+  const anyFee = deliverables.some((d) => contentFeeFor(event, d) > 0);
+  // The answer as it stands, for the ones not approved yet. Never throws, locks nothing.
+  const live = anyFee
+    ? await require('./startOfferDecision').resolveEventCompensation(sequelize, { event, lock: false, throwIfUnresolved: false, hasTerms: true })
+    : null;
+  for (const d of deliverables) {
+    const id = String(d.id);
+    const proposed = contentFeeFor(event, d);
+    const state = { proposed_fee: proposed > 0 ? proposed : null, booked_fee: bookedBy.has(id) ? bookedBy.get(id) : null, fee_state: FEE_STATES.NONE, fee_reason: null };
+    if (state.booked_fee !== null) state.fee_state = FEE_STATES.BOOKED;
+    else if (proposed <= 0) state.fee_state = FEE_STATES.NONE;
+    else if (d.status === 'approved') {
+      const recorded = withheldBy.get(id);
+      state.fee_state = recorded ? FEE_STATES.NOT_OWED : FEE_STATES.NOT_BOOKED;
+      state.fee_reason = recorded?.reason || null;
+    } else if (live?.unresolved) {
+      state.fee_state = FEE_STATES.UNRESOLVED;
+      state.fee_reason = live.reason;
+    } else if (live && live.owed !== true) {
+      state.fee_state = FEE_STATES.NOT_OWED;
+      state.fee_reason = live.reason;
+    } else state.fee_state = FEE_STATES.EXPECTED;
+    out.set(id, state);
+  }
+  return out;
+}
+
 module.exports = {
+  CONTENT_FEE_WITHHELD_ACTION,
+  DELIVERABLE_RESOURCE,
+  FEE_STATES,
+  deliverableFeeStates,
   PAYOUT_CATEGORIES,
   COMPONENT_CATEGORIES,
   BONUS_TIERS,

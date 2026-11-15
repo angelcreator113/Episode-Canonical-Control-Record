@@ -20,6 +20,8 @@ import EventPackagePage from './EventPackagePage';
 
 const EVENT_URL = '/api/v1/world/show-1/events/ev-1';
 const START_URL = '/api/v1/world/show-1/events/ev-1/generate-episode';
+// The Start request carries the attempt's Idempotency-Key (idempotency ruling of 2026-11-13).
+const KEYED = { headers: { 'Idempotency-Key': expect.any(String) } };
 const LOCATIONS_URL = '/api/v1/world/show-1/events/ev-1/episode-locations';
 const SETS_URL = '/api/v1/scene-sets?show_id=show-1';
 
@@ -128,7 +130,7 @@ describe('EventPackagePage — Start Episode lands on the Overview', () => {
     expect(api.post).toHaveBeenCalledWith(START_URL, {
       draft_script: false,
       locations: [{ role: 'home', scene_set_id: HOME.id, name: null }],
-    });
+    }, KEYED);
   });
 
   test('with no warnings: Start Episode starts directly and lands on ?tab=overview', async () => {
@@ -183,11 +185,11 @@ describe('EventPackagePage — the Episode Locations step at Start Episode', () 
     expect(screen.getByTestId('els-row-home').textContent).toContain("Lala's Apartment");
     expect(screen.getByTestId('els-row-closet').textContent).toContain('No saved default: choose one.');
     expect(step).toBeTruthy();
-    expect(api.post).not.toHaveBeenCalledWith(START_URL, expect.anything());
+    expect(api.post).not.toHaveBeenCalledWith(START_URL, expect.anything(), expect.anything());
 
     fireEvent.click(screen.getByText('Cancel'));
     await waitFor(() => expect(screen.queryByTestId('episode-locations-step')).toBeNull());
-    expect(api.post).not.toHaveBeenCalledWith(START_URL, expect.anything());
+    expect(api.post).not.toHaveBeenCalledWith(START_URL, expect.anything(), expect.anything());
   });
 
   test('changing home, adding a named extra and creating a closet are sent with Start', async () => {
@@ -227,7 +229,7 @@ describe('EventPackagePage — the Episode Locations step at Start Episode', () 
         { role: 'closet', scene_set_id: 'set-new', name: null },
         { role: 'extra', scene_set_id: 'set-car', name: 'Car' },
       ],
-    });
+    }, KEYED);
   });
 
   test('one set cannot hold two roles', async () => {

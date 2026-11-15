@@ -1,15 +1,20 @@
 /**
- * careerPipelineService — spawnGoalUnlocks refactor and onEpisodeCompleted
- * scope (Task #1817). Models are mocked; no DB.
+ * careerPipelineService — spawnGoalUnlocks refactor (Task #1817) and
+ * completeOwnerOffer (A2). Models are mocked; no DB.
  *
  *  - onOpportunityAdvanced (manual Advance) writes no goal progress: goals
  *    move only from the ledger and character_state (step 17, goal sync).
- *  - onEpisodeCompleted completes the opportunity only.
+ *  - completeOwnerOffer completes the event's own offer only, and writes no
+ *    goals either.
  */
+
+// The transition's audit entry (middleware/auditLog reads models.ActivityLog).
+const mockLogActivity = jest.fn(async () => ({}));
+jest.mock('../../../src/models', () => ({ models: { ActivityLog: { logActivity: (...args) => mockLogActivity(...args) } } }));
 
 const {
   onOpportunityAdvanced,
-  onEpisodeCompleted,
+  completeOwnerOffer,
   spawnGoalUnlocks,
 } = require('../../../src/services/careerPipelineService');
 
@@ -88,60 +93,83 @@ describe('spawnGoalUnlocks', () => {
   });
 });
 
-describe('onEpisodeCompleted completes the opportunity only', () => {
-  it('moves a booked opportunity to completed and touches no goals', async () => {
-    const opp = { id: 'opp-1', name: 'Deal', show_id: SHOW_ID, status: 'booked', status_history: [], prestige: 7, payment_amount: 500 };
-    opp.update = jest.fn(async (p) => Object.assign(opp, p));
-    const models = makeModels({ opp, goals: [makeGoal({ id: 'g', target_metric: 'coins', current_value: 0, target_value: 10 })] });
+// onEpisodeCompleted was removed on 2026-11-15 (Evoni's ruling): it picked an
+// offer by the event's pointer, else by episode, else by event, outside any
+// transaction. completeOwnerOffer moves only the owner the eligibility answer
+// established. Its database behaviour, and the admin route's, are in
+// tests/integration/compensationEligibility.integration.test.js.
+describe('completeOwnerOffer completes the owner only', () => {
+  const TX = { id: 'tx' };
+  const row = (status, id = 'opp-1') => ({ id, name: 'Deal', show_id: SHOW_ID, status, status_history: [{ status }], event_id: 'event-1', episode_id: null });
+  const resolutionFor = (owner, rows) => Object.defineProperty({ owner: owner ? { id: owner.id, name: owner.name, status: owner.status } : null }, 'rows', { value: rows });
+  const makeSequelize = (moved = true) => ({ query: jest.fn(async () => [moved ? [{ id: 'opp-1' }] : [], moved ? 1 : 0]) });
+  const call = (sequelize, resolution) => completeOwnerOffer(sequelize, {
+    resolution, episodeId: 'episode-1', episodeNumber: 7, showId: SHOW_ID, eventId: 'event-1', actor: { id: 'admin-1' }, transaction: TX,
+  });
+  const logActivity = mockLogActivity;
+  beforeEach(() => logActivity.mockClear());
 
-    const result = await onEpisodeCompleted('episode-1', SHOW_ID, models);
-
-    expect(result).toEqual({ opportunities_advanced: [{ id: 'opp-1', name: 'Deal', from: 'booked', to: 'completed' }], opportunities_unaccepted: [] });
-    expect(opp.update).toHaveBeenCalledTimes(1);
-    expect(models.CareerGoal.findAll).not.toHaveBeenCalled();
-    // no income credit: the only raw SQL is the world_events fallback lookup
-    expect(models.sequelize.query.mock.calls.some(([sql]) => /career_goals/.test(sql))).toBe(false);
+  it('is removed with nothing left exporting it', () => {
+    expect(require('../../../src/services/careerPipelineService').onEpisodeCompleted).toBeUndefined();
   });
 
-  it('leaves an opportunity outside booked/preparing/active alone', async () => {
-    const opp = { id: 'opp-1', name: 'Deal', show_id: SHOW_ID, status: 'completed', status_history: [] };
-    opp.update = jest.fn();
-    const models = makeModels({ opp });
+  it.each(['booked', 'preparing', 'active'])('moves an owner that is %s to completed: one statement, one audit entry, no goals', async (status) => {
+    const owner = row(status);
+    const sequelize = makeSequelize();
+    const result = await call(sequelize, resolutionFor(owner, [owner]));
+    expect(result).toEqual({ opportunities_advanced: [{ id: 'opp-1', name: 'Deal', from: status, to: 'completed' }], opportunities_unaccepted: [] });
+    expect(sequelize.query).toHaveBeenCalledTimes(1);
+    const [sql, opts] = sequelize.query.mock.calls[0];
+    expect(sql).toMatch(/UPDATE opportunities SET status = 'completed'[\s\S]*WHERE id = :id AND status = :from/);
+    expect(sql).not.toMatch(/career_goals/);
+    expect(opts.transaction).toBe(TX);
+    expect(opts.replacements).toMatchObject({ id: 'opp-1', from: status, episodeId: 'episode-1' });
+    expect(JSON.parse(opts.replacements.history)).toEqual([{ status }, expect.objectContaining({
+      status: 'completed', from: status, note: 'Episode 7 completed', by: { id: 'admin-1' }, route: 'episode_completed',
+    })]);
+    expect(logActivity).toHaveBeenCalledTimes(1);
+    expect(logActivity.mock.calls[0][1]).toEqual({ transaction: TX });
+  });
 
-    const result = await onEpisodeCompleted('episode-1', SHOW_ID, models);
-
-    expect(result).toEqual({ opportunities_advanced: [], opportunities_unaccepted: [] });
-    expect(opp.update).not.toHaveBeenCalled();
+  it.each(['completed', 'paid', 'declined', 'cancelled', 'expired', 'archived'])('leaves an owner that is %s alone: nothing written, nothing listed', async (status) => {
+    const owner = row(status);
+    const sequelize = makeSequelize();
+    expect(await call(sequelize, resolutionFor(owner, [owner]))).toEqual({ opportunities_advanced: [], opportunities_unaccepted: [] });
+    expect(sequelize.query).not.toHaveBeenCalled();
+    expect(logActivity).not.toHaveBeenCalled();
   });
 
   // Scheduling and Start Episode never accept an offer by themselves, so an
   // episode can complete with its offer still open. It is not completed
-  // (only accepted ones are) but reported and logged for review.
-  it.each(['offered', 'considering', 'negotiating', 'held'])(
-    "reports a linked opportunity still '%s' as unaccepted and leaves it as it is",
-    async (status) => {
-      const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
-      const opp = { id: 'opp-1', name: 'Deal', show_id: SHOW_ID, status, status_history: [] };
-      opp.update = jest.fn();
-      const models = makeModels({ opp });
+  // (only accepted ones are) but listed for review.
+  it.each(['offered', 'considering', 'negotiating', 'held'])("lists an owner still '%s' as unaccepted and leaves it as it is", async (status) => {
+    const owner = row(status);
+    const sequelize = makeSequelize();
+    expect(await call(sequelize, resolutionFor(owner, [owner]))).toEqual({
+      opportunities_advanced: [], opportunities_unaccepted: [{ id: 'opp-1', name: 'Deal', status }],
+    });
+    expect(sequelize.query).not.toHaveBeenCalled();
+  });
 
-      const result = await onEpisodeCompleted('episode-1', SHOW_ID, models);
+  it('with no owner established it picks nothing, whatever else is linked', async () => {
+    const other = row('booked', 'opp-2');
+    const sequelize = makeSequelize();
+    expect(await call(sequelize, resolutionFor(null, [other]))).toEqual({ opportunities_advanced: [], opportunities_unaccepted: [] });
+    // An owner named that is not among the locked rows is not one either.
+    expect(await call(sequelize, resolutionFor(row('booked'), [other]))).toEqual({ opportunities_advanced: [], opportunities_unaccepted: [] });
+    expect(sequelize.query).not.toHaveBeenCalled();
+  });
 
-      expect(result).toEqual({
-        opportunities_advanced: [],
-        opportunities_unaccepted: [{ id: 'opp-1', name: 'Deal', status }],
-      });
-      expect(opp.update).not.toHaveBeenCalled();
-      expect(warn).toHaveBeenCalledWith(expect.stringContaining(`is still ${status}, not accepted`));
-      warn.mockRestore();
-    }
-  );
+  it('a row that moved since it was read is not written over, and no entry is made for it', async () => {
+    const owner = row('booked');
+    const sequelize = makeSequelize(false);
+    expect(await call(sequelize, resolutionFor(owner, [owner]))).toEqual({ opportunities_advanced: [], opportunities_unaccepted: [] });
+    expect(logActivity).not.toHaveBeenCalled();
+  });
 
-  it('a declined one is a decision, not left open: neither completed nor reported', async () => {
-    const opp = { id: 'opp-1', name: 'Deal', show_id: SHOW_ID, status: 'declined', status_history: [] };
-    opp.update = jest.fn();
-    const result = await onEpisodeCompleted('episode-1', SHOW_ID, makeModels({ opp }));
-    expect(result).toEqual({ opportunities_advanced: [], opportunities_unaccepted: [] });
-    expect(opp.update).not.toHaveBeenCalled();
+  it('refuses to run outside a transaction', async () => {
+    const owner = row('booked');
+    await expect(completeOwnerOffer(makeSequelize(), { resolution: resolutionFor(owner, [owner]), episodeId: 'episode-1', showId: SHOW_ID, eventId: 'event-1' }))
+      .rejects.toThrow('needs the completion\'s transaction');
   });
 });

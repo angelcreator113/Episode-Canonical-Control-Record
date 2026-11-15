@@ -186,8 +186,14 @@ async function getEpisodeMoney(sequelize, { showId, episodeId }) {
     hadSpending: await hadSpendingLines(sequelize, episodeId),
     look: look.charges,
   });
+  // Whether the event's brand compensation is owed, as it stands (A2):
+  // read without locks, never refusing. A line that is not owed is shown
+  // with what the terms propose and is not counted in the projection.
+  const compensation = event
+    ? await require('./startOfferDecision').resolveEventCompensation(sequelize, { event, lock: false, throwIfUnresolved: false })
+    : null;
   const { lines, unplanned, projection } = buildMoneyLines({
-    plan, rows: posted, balance, completed: !spending.editable,
+    plan, rows: posted, balance, completed: !spending.editable, compensation,
   });
 
   return {
@@ -280,7 +286,11 @@ async function eventMoneyPreview(sequelize, { showId, event, episodeId = null, t
   // preview used to leave them out (Evoni, 2026-10-07).
   const look = await lookPlan(sequelize, { showId, episodeId, event });
   const plan = plannedLines({ event, costs, deliverables, spending, hadSpending, look: look.charges });
-  const { lines, projection } = buildMoneyLines({ plan, rows: [], balance });
+  // A2: compensation no accepted agreement owes is not planned income.
+  const compensation = event
+    ? await require('./startOfferDecision').resolveEventCompensation(sequelize, { event, transaction, lock: false, throwIfUnresolved: false })
+    : null;
+  const { lines, projection } = buildMoneyLines({ plan, rows: [], balance, compensation });
   return { balance, lines, projection, warnings: moneyWarnings({ lines, projection, balance }) };
 }
 

@@ -267,7 +267,11 @@ async function checkMilestones(sequelize, showId, oldBalance, newBalance, opts =
       // completion (Task #2252).
       source_id: UUID_RE.test(String(goal.id)) ? goal.id : null,
       source_name: goal.label,
-      metadata: { goal_id: goal.id, threshold: goal.threshold },
+      // The episode whose finalize crossed the goal, recorded on the row
+      // (Evoni, 2026-11-13) so a later read knows which episode a reward
+      // belongs to. In metadata, not episode_id: the reward is the show's
+      // money, and stays out of the episode's own income.
+      metadata: { goal_id: goal.id, threshold: goal.threshold, ...(episodeId ? { episode_id: episodeId } : {}) },
       status: 'executed',
       ...(transaction ? { transaction } : {}),
     });
@@ -347,8 +351,129 @@ function withoutTransaction(row) {
 // M3, Task #2248). They are the wardrobe's rows, not finalize's, so they
 // never make an episode count as finalized (§8(x) D3, Task #2229).
 const WARDROBE_SPEND_FLOWS = ['select', 'lock_outfit', 'purchase'];
+// The categories finalize itself books for an episode (its steps 3 to 10).
+// Deal payouts and content fees (dealPayoutService PAYOUT_CATEGORIES),
+// milestone rewards, the seed and manual adjustments are other writers' rows.
+const FINALIZE_CATEGORIES = Object.freeze([
+  'event_entry', 'wardrobe_rental', 'wardrobe_purchase', 'event_cost',
+  'event_spending', 'styling_extras', 'event_payment', 'content_revenue',
+]);
 const NOT_WARDROBE_SPEND_ROW =
   `COALESCE(metadata->>'flow', '') NOT IN (${WARDROBE_SPEND_FLOWS.map((f) => `'${f}'`).join(', ')})`;
+
+/**
+ * The summary of a finalize that already ran, rebuilt from its own ledger
+ * rows (FINALIZE_CATEGORIES, never the wardrobe's spend rows). Read only.
+ *
+ *   summary          the same six fields a fresh finalize returns
+ *   balance_before   the balance its first row started from
+ *   balance_after    the balance its last row left (before any milestone
+ *                    reward, as a fresh finalize reports it)
+ *   milestones_triggered    the rewards recorded against this episode
+ *                           (metadata.episode_id)
+ *   milestone_candidates    the rewards booked before rewards recorded their
+ *                           episode that could be this episode's: every one
+ *                           this finalize could have paid, by the rule that
+ *                           pays them (checkMilestones: the balance rose, and
+ *                           old balance < threshold <= new balance). A reward
+ *                           whose row has no threshold, and every unrecorded
+ *                           reward when this finalize's balance movement
+ *                           cannot be rebuilt from its rows, cannot be ruled
+ *                           out and is a candidate too. The set errs wide:
+ *                           a candidate too many asks a question, a candidate
+ *                           too few would store a wrong answer.
+ *   milestones_attribution  'recorded', or 'unknown' when there is a
+ *                           candidate. Unknown is said, never guessed from a
+ *                           timestamp and never counted as none.
+ */
+async function bookedFinalizeSummary(sequelize, { episodeId, showId, event, balance }) {
+  const rows = await sequelize.query(
+    `SELECT type, category, amount, balance_before, balance_after
+       FROM financial_transactions
+      WHERE episode_id = :episodeId AND status = 'executed' AND deleted_at IS NULL
+        AND category IN (:categories) AND ${NOT_WARDROBE_SPEND_ROW}`,
+    { replacements: { episodeId, categories: FINALIZE_CATEGORIES }, type: sequelize.QueryTypes.SELECT }
+  );
+  const num = (v) => parseFloat(v) || 0;
+  const sum = (list) => list.reduce((s, r) => s + num(r.amount), 0);
+  const totalIncome = sum(rows.filter((r) => r.type === 'income' || r.type === 'reward'));
+  const totalExpenses = sum(rows.filter((r) => r.type === 'expense' || r.type === 'deduction'));
+  // The rows chain: each starts from the balance the one before left. The
+  // start is the "before" no row's "after" accounts for; the end likewise.
+  const unmatched = (values, against) => {
+    const pool = [...against];
+    return values.filter((v) => { const i = pool.indexOf(v); if (i >= 0) pool.splice(i, 1); return i < 0; });
+  };
+  const befores = rows.filter((r) => r.balance_before !== null).map((r) => num(r.balance_before));
+  const afters = rows.filter((r) => r.balance_after !== null).map((r) => num(r.balance_after));
+  const starts = unmatched(befores, afters);
+  const ends = unmatched(afters, befores);
+  const [chainStart] = starts;
+  const [chainEnd] = ends;
+  const balanceBefore = chainStart !== undefined ? chainStart : (befores.length ? befores[0] : balance);
+  const balanceAfter = chainEnd !== undefined ? chainEnd : (afters.length ? afters[afters.length - 1] : balance);
+  // Is that movement really known? No rows: this finalize moved nothing.
+  // Otherwise every row must carry both balances and they must chain into
+  // one start and one end (or never move at all).
+  const complete = befores.length === rows.length && afters.length === rows.length;
+  const still = complete && new Set([...befores, ...afters]).size === 1;
+  const rangeKnown = rows.length === 0 || (complete && ((starts.length === 1 && ends.length === 1) || still));
+
+  const rewards = await sequelize.query(
+    `SELECT id, amount, source_name, metadata FROM financial_transactions
+      WHERE show_id = :showId AND category = 'milestone' AND status = 'executed' AND deleted_at IS NULL
+      ORDER BY created_at, id`,
+    { replacements: { showId }, type: sequelize.QueryTypes.SELECT }
+  );
+  const meta = (r) => (typeof r.metadata === 'string' ? JSON.parse(r.metadata) : (r.metadata || {}));
+  const recorded = rewards.filter((r) => meta(r).episode_id === episodeId);
+  const candidates = [];
+  for (const r of rewards) {
+    const m = meta(r);
+    if (m.episode_id) continue; // recorded: this episode's or another's
+    const threshold = thresholdOf(m.threshold);
+    let reason = null;
+    if (!rangeKnown) reason = 'range_unknown';
+    // checkMilestones pays nothing unless the balance rose.
+    else if (balanceAfter <= balanceBefore) reason = null;
+    else if (threshold === null) reason = 'no_threshold';
+    // checkMilestones: old balance < threshold <= new balance.
+    else if (balanceBefore < threshold && threshold <= balanceAfter) reason = 'in_range';
+    if (reason) {
+      candidates.push({
+        tx_id: r.id, goal_id: m.goal_id ?? null, label: r.source_name || null,
+        threshold, amount: num(r.amount), reason,
+      });
+    }
+  }
+  const flags = normalizePaidFreeFlags(event || {});
+  return {
+    summary: {
+      total_income: totalIncome,
+      total_expenses: totalExpenses,
+      net_profit: totalIncome - totalExpenses,
+      wardrobe_cost: sum(rows.filter((r) => r.category === 'wardrobe_purchase' || r.category === 'wardrobe_rental')),
+      event_cost: flags.eventCost,
+      event_payment: flags.eventPayment,
+    },
+    balance_before: balanceBefore,
+    balance_after: balanceAfter,
+    milestones_triggered: recorded.map((r) => ({
+      goal: { id: meta(r).goal_id, label: r.source_name, threshold: meta(r).threshold, reward_coins: num(r.amount) },
+      payout_tx: { id: r.id, amount: num(r.amount) },
+    })),
+    milestone_candidates: candidates,
+    milestones_attribution: candidates.length ? 'unknown' : 'recorded',
+  };
+}
+
+// A reward row's recorded threshold, or null when the row carries none that
+// can be compared (missing, empty, not a number).
+function thresholdOf(value) {
+  if (value === null || value === undefined || value === '' || typeof value === 'boolean') return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
 
 /**
  * Execute all financial transactions for an episode.
@@ -364,7 +489,7 @@ const NOT_WARDROBE_SPEND_ROW =
  *   any write, a completion that would take coins below zero (Task #1933).
  * @returns {object} { transactions, summary, balance_before, balance_after }
  */
-async function finalizeEpisodeFinancials(episodeId, showId, sequelize, { dryRun = false, transaction = null } = {}) {
+async function finalizeEpisodeFinancials(episodeId, showId, sequelize, { dryRun = false, transaction = null, compensation = undefined, actor = null } = {}) {
   // One transaction, under a lock on the episode row (§8(x) D2, Task #2228):
   // a failure writes nothing, and two finalizes of one episode run one after
   // the other, so the second sees the first's rows and books nothing. A
@@ -378,7 +503,7 @@ async function finalizeEpisodeFinancials(episodeId, showId, sequelize, { dryRun 
   // itself.
   if (!dryRun && !transaction) {
     return sequelize.transaction(async (t) => {
-      const result = await finalizeEpisodeFinancials(episodeId, showId, sequelize, { transaction: t });
+      const result = await finalizeEpisodeFinancials(episodeId, showId, sequelize, { transaction: t, compensation, actor });
       if (result.already_finalized) return result;
       const { syncCoinsFromLedger } = require('./coinLedgerSync');
       const { InsufficientCoinsError } = require('./coinBalanceGuard');
@@ -413,11 +538,17 @@ async function finalizeEpisodeFinancials(episodeId, showId, sequelize, { dryRun 
     }
   }
 
-  // 1. Check if already finalized (finalize's own rows, not the outfit lock's)
+  // 1. Check if already finalized (finalize's own rows, not the outfit lock's).
+  // A deliverable's content fee (dealPayoutService.bookContentFee) carries the
+  // episode but is booked on approval, which can come before finalize: by
+  // itself it is not a finalize (Evoni, 2026-11-13). Counting it made finalize
+  // skip its own rows, so the episode's costs were never charged. category is
+  // NOT NULL, so the comparison never drops a row. The shared predicate is
+  // left as it is: the terms reopen still counts a content fee as booked money.
   const [existingTx] = await sequelize.query(
     `SELECT COUNT(*) as cnt FROM financial_transactions
      WHERE episode_id = :episodeId AND status = 'executed' AND deleted_at IS NULL
-       AND ${NOT_WARDROBE_SPEND_ROW}`,
+       AND ${NOT_WARDROBE_SPEND_ROW} AND category <> 'content_fee'`,
     { replacements: { episodeId }, type: sequelize.QueryTypes.SELECT }
   ).catch(() => [{ cnt: 0 }]);
 
@@ -431,10 +562,18 @@ async function finalizeEpisodeFinancials(episodeId, showId, sequelize, { dryRun 
       { replacements: { episodeId } }
     );
     const balance = await getCurrentBalance(sequelize, showId);
+    const [bookedEvent] = await sequelize.query(
+      `SELECT * FROM world_events WHERE id = ${require('../utils/episodeEventSql').EPISODE_EVENT_ID_SQL}`,
+      { replacements: { episodeId }, type: sequelize.QueryTypes.SELECT }
+    );
     return {
       already_finalized: true,
       transactions: rows || [],
       balance: balance,
+      // What the finalize that already ran booked, read back from the ledger
+      // (Evoni, 2026-11-13), so a completion that follows stores the same
+      // totals a direct completion does. Nothing is booked here.
+      ...(await bookedFinalizeSummary(sequelize, { episodeId, showId, event: bookedEvent, balance })),
     };
   }
 
@@ -486,6 +625,22 @@ async function finalizeEpisodeFinancials(episodeId, showId, sequelize, { dryRun 
     const logged = await logTransaction(sequelize, showId, transaction ? { ...tx, transaction } : tx);
     if (logged) transactions.push(withoutTransaction(logged));
   };
+
+  // Compensation eligibility (A2; services/startOfferDecision): the event's
+  // payment is brand income, owed only under an accepted agreement. Asked
+  // here, after the episode and ledger locks and with the offer rows locked,
+  // so the answer and the rows below are one decision; a caller that has
+  // already asked under the same locks (completeEpisode) passes its answer.
+  // Unresolved ownership with terms throws 409 OFFER_RESOLUTION_REQUIRED and
+  // the whole finalize rolls back. A dry run locks nothing and never throws.
+  // Lala's own costs below are not compensation and book either way.
+  const eligibility = compensation !== undefined ? compensation : (event
+    ? await require('./startOfferDecision').resolveEventCompensation(rootSequelize, {
+      event, transaction, lock: !dryRun && !!transaction, throwIfUnresolved: !dryRun,
+    })
+    : null);
+  const incomeOwed = !eligibility || eligibility.owed === true;
+  const withheld = [];
 
   if (event) {
     const { isPaid, isDeal, eventCost, eventPayment } = normalizePaidFreeFlags(event);
@@ -584,8 +739,10 @@ async function finalizeEpisodeFinancials(episodeId, showId, sequelize, { dryRun 
       }
     }
 
-    // 9. Event payment (income — if is_paid)
-    if (isPaid && eventPayment > 0) {
+    // 9. Event payment (income — if is_paid), when it is owed.
+    if (isPaid && eventPayment > 0 && !incomeOwed) {
+      withheld.push({ category: 'event_payment', amount: wholeCoins(eventPayment) });
+    } else if (isPaid && eventPayment > 0) {
       await addTx({
         type: 'income', category: 'event_payment', amount: eventPayment,
         description: `Payment for "${event.name}"`,
@@ -596,7 +753,9 @@ async function finalizeEpisodeFinancials(episodeId, showId, sequelize, { dryRun 
     // 10. Brand deal content revenue bonus
     if (event.event_type === 'brand_deal' && eventPayment > 0) {
       const contentBonus = Math.round(eventPayment * 0.1);
-      if (contentBonus > 0) {
+      if (contentBonus > 0 && !incomeOwed) {
+        withheld.push({ category: 'content_revenue', amount: contentBonus });
+      } else if (contentBonus > 0) {
         await addTx({
           type: 'income', category: 'content_revenue', amount: contentBonus,
           description: `Brand deal content fee for ${event.host_brand || event.name}`,
@@ -611,6 +770,12 @@ async function finalizeEpisodeFinancials(episodeId, showId, sequelize, { dryRun 
   const totalExpenses = transactions.filter(t => t.type === 'expense' || t.type === 'deduction').reduce((s, t) => s + parseFloat(t.amount), 0);
   const netProfit = totalIncome - totalExpenses;
 
+  // What was not booked and why, for the caller's record; null for an event
+  // with no offer linked, whose money is as it always was.
+  const compensationRecord = eligibility && eligibility.linked
+    ? { owed: eligibility.owed === true, reason: eligibility.reason, owner: eligibility.owner, offers: eligibility.offers, withheld }
+    : null;
+
   if (dryRun) {
     return {
       dry_run: true,
@@ -618,6 +783,7 @@ async function finalizeEpisodeFinancials(episodeId, showId, sequelize, { dryRun 
       summary: { total_income: totalIncome, total_expenses: totalExpenses, net_profit: netProfit },
       balance_before: balanceBefore,
       balance_after: balance,
+      compensation: compensationRecord,
     };
   }
 
@@ -659,8 +825,20 @@ async function finalizeEpisodeFinancials(episodeId, showId, sequelize, { dryRun 
     console.warn('[FinancialTx] CSH update failed:', err.message);
   }
 
+  // Income withheld by a finalize run on its own is recorded in the audit
+  // trail in this transaction (a completion records its own, with the deal
+  // payouts it withheld too).
+  if (transaction && compensation === undefined && withheld.length > 0) {
+    const { logger: audit } = require('../middleware/auditLog');
+    await audit.logActionInTransaction(transaction, actor?.id ?? null, 'compensation_withheld', 'episode', episodeId, {
+      show_id: showId, event_id: event?.id || null, at: 'finalize', reason: eligibility.reason,
+      opportunity_id: eligibility.owner?.id || null, opportunity_status: eligibility.owner?.status || null, withheld,
+    });
+  }
+
   return {
     transactions,
+    compensation: compensationRecord,
     summary: {
       total_income: totalIncome,
       total_expenses: totalExpenses,
@@ -798,4 +976,5 @@ module.exports = {
   getFinancialLedger,
   normalizePaidFreeFlags,
   NOT_WARDROBE_SPEND_ROW,
+  FINALIZE_CATEGORIES,
 };
