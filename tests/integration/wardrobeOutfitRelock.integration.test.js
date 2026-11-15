@@ -25,6 +25,10 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
 
 (shouldSkip ? describe.skip : describe)('re-locking an outfit replaces it', () => {
   let token;
+  // The production wardrobe's reads are an ADMIN's (Evoni, 2026-11-15; wardrobeReadAuthorization). This
+  // suite reads them as one; its own account, an editor, is refused them (the last test here).
+  const adminToken = TokenService.generateTokenPair({ id: 'test-admin-wardrobeOutfitRelock', email: 'admin@wardrobeOutfitRelock.dev', name: 'Admin', groups: ['ADMIN'], role: 'ADMIN' }).accessToken;
+  const asAdmin = (r) => r.set('Authorization', `Bearer ${adminToken}`);
   const shows = [];
 
   beforeAll(() => {
@@ -58,7 +62,7 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     .send({ episode_id: ids.ep, show_id: ids.show, wardrobe_ids });
   const outfit = async (ids) => (await request(app)
     .get(`/api/v1/wardrobe/outfit/${ids.ep}`)
-    .set('Authorization', `Bearer ${token}`)).body.items.map((i) => i.name).sort();
+    .set('Authorization', `Bearer ${adminToken}`)).body.items.map((i) => i.name).sort();
 
   afterAll(async () => {
     for (const show of shows) {
@@ -101,5 +105,9 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     const refused = await lock(other, [other.dressA, other.generated]);
     expect(refused.status).toBe(400);
     expect(refused.body.error).toMatch(/Not within reach: Generated Bag/);
+  });
+  test("the wardrobe's reads are an ADMIN's: this suite's editor is refused", async () => {
+    const res = await request(app).get(`/api/v1/wardrobe/outfit/00000000-0000-4000-8000-000000000000`).set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(403);
   });
 });

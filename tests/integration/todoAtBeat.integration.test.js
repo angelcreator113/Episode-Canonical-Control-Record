@@ -26,6 +26,10 @@ const q = (sql, replacements = {}) => sequelize.query(sql, { replacements, type:
   const tag = uuid().slice(0, 8);
   const ids = { show: uuid(), ep: uuid(), event: uuid(), reel: uuid(), story: uuid() };
   let token;
+  // The production wardrobe's reads are an ADMIN's (Evoni, 2026-11-15; wardrobeReadAuthorization). This
+  // suite reads them as one; its own account, an editor, is refused them (the last test here).
+  const adminToken = TokenService.generateTokenPair({ id: 'test-admin-todoAtBeat', email: 'admin@todoAtBeat.dev', name: 'Admin', groups: ['ADMIN'], role: 'ADMIN' }).accessToken;
+  const asAdmin = (r) => r.set('Authorization', `Bearer ${adminToken}`);
 
   beforeAll(async () => {
     token = TokenService.generateTokenPair({ id: 'test-user-todo-at', email: 'ed@todo-at.dev', name: 'Ed', groups: ['USER', 'EDITOR'], role: 'USER' }).accessToken;
@@ -53,7 +57,7 @@ const q = (sql, replacements = {}) => sequelize.query(sql, { replacements, type:
     await run('DELETE FROM shows WHERE id = :show', ids);
   });
 
-  const get = (q2 = '') => request(app).get(`/api/v1/episodes/${ids.ep}/todo/at${q2}`).set('Authorization', `Bearer ${token}`);
+  const get = (q2 = '') => request(app).get(`/api/v1/episodes/${ids.ep}/todo/at${q2}`).set('Authorization', `Bearer ${adminToken}`);
 
   test('Shopping at the closet beat, the deal after it, a beat cue wins; each item ticked at its cue, status untouched', async () => {
     expect((await get('?beat=8')).body.data.mode).toBe('shopping');
@@ -70,5 +74,9 @@ const q = (sql, replacements = {}) => sequelize.query(sql, { replacements, type:
   test('a bad beat is refused; no token, no list', async () => {
     expect((await get('?beat=0')).status).toBe(400);
     expect((await request(app).get(`/api/v1/episodes/${ids.ep}/todo/at?beat=10`)).status).toBe(401);
+  });
+  test("the wardrobe's reads are an ADMIN's: this suite's editor is refused", async () => {
+    const res = await request(app).get(`/api/v1/episodes/00000000-0000-4000-8000-000000000000/todo/at`).set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(403);
   });
 });

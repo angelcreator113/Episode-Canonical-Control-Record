@@ -26,6 +26,10 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
   const tag = uuid().slice(0, 8);
   const ids = { show: uuid(), ep: uuid() };
   let token;
+  // The production wardrobe's reads are an ADMIN's (Evoni, 2026-11-15; wardrobeReadAuthorization). This
+  // suite reads them as one; its own account, an editor, is refused them (the last test here).
+  const adminToken = TokenService.generateTokenPair({ id: 'test-admin-todoAsOfBeat', email: 'admin@todoAsOfBeat.dev', name: 'Admin', groups: ['ADMIN'], role: 'ADMIN' }).accessToken;
+  const asAdmin = (r) => r.set('Authorization', `Bearer ${adminToken}`);
 
   beforeAll(async () => {
     token = TokenService.generateTokenPair({ id: 'test-user-todo-beat', email: 'ed@todo-beat.dev', name: 'Ed', groups: ['USER', 'EDITOR'], role: 'USER' }).accessToken;
@@ -65,7 +69,7 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     await run('DELETE FROM shows WHERE id = :show', ids);
   });
 
-  const get = (q = '') => request(app).get(`/api/v1/episodes/${ids.ep}/todo${q}`).set('Authorization', `Bearer ${token}`);
+  const get = (q = '') => request(app).get(`/api/v1/episodes/${ids.ep}/todo${q}`).set('Authorization', `Bearer ${adminToken}`);
   const crossed = (res) => res.body.data.tasks.map((t) => [t.slot, t.completed]);
 
   test('each line is crossed off from the line its piece is put on; the uncued clutch at the end of the closet beat', async () => {
@@ -84,5 +88,9 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     expect((await get('?beat=15')).status).toBe(400);
     expect((await get('?beat=8&line=-1')).status).toBe(400);
     expect((await request(app).get(`/api/v1/episodes/${ids.ep}/todo?beat=8`)).status).toBe(401);
+  });
+  test("the wardrobe's reads are an ADMIN's: this suite's editor is refused", async () => {
+    const res = await request(app).get(`/api/v1/episodes/00000000-0000-4000-8000-000000000000/todo`).set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(403);
   });
 });

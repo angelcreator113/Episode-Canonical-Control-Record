@@ -28,7 +28,7 @@ function getModels() {
   return _models;
 }
 
-const { requireAuth } = require('../middleware/auth');
+const { requireAuth, authorize } = require('../middleware/auth');
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 
 let anthropic;
@@ -230,7 +230,7 @@ router.post('/tag-piece', requireAuth, async (req, res) => {
 
 // -- ROUTE 5: GET /pieces/uncovered --
 
-router.get('/pieces/uncovered', requireAuth, async (req, res) => {
+router.get('/pieces/uncovered', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { show_id } = req.query;
     const models = getModels();

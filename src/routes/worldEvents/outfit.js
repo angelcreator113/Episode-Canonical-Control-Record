@@ -15,7 +15,7 @@
 const express = require('express');
 const router = express.Router();
 
-const { requireAuth } = require('../../middleware/auth');
+const { requireAuth, authorize } = require('../../middleware/auth');
 const { loadScopedEvent } = require('../../utils/eventScope');
 const { getModels } = require('./helpers');
 
@@ -24,7 +24,7 @@ const { getModels } = require('./helpers');
 // ═══════════════════════════════════════════════════════════════════════
 
 // GET /world/:showId/events/:eventId/outfit — get current outfit + score
-router.get('/world/:showId/events/:eventId/outfit', requireAuth, async (req, res) => {
+router.get('/world/:showId/events/:eventId/outfit', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { showId, eventId } = req.params;
     const models = await getModels();
@@ -127,7 +127,7 @@ router.put('/world/:showId/events/:eventId/outfit', requireAuth, async (req, res
 });
 
 // GET /world/:showId/events/:eventId/wardrobe-options — all closet pieces with match info
-router.get('/world/:showId/events/:eventId/wardrobe-options', requireAuth, async (req, res) => {
+router.get('/world/:showId/events/:eventId/wardrobe-options', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { showId, eventId } = req.params;
     const models = await getModels();

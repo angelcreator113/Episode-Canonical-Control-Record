@@ -26,6 +26,10 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
 
 (shouldSkip ? describe.skip : describe)('Episode style sheet', () => {
   let token;
+  // The production wardrobe's reads are an ADMIN's (Evoni, 2026-11-15; wardrobeReadAuthorization). This
+  // suite reads them as one; its own account, an editor, is refused them (the last test here).
+  const adminToken = TokenService.generateTokenPair({ id: 'test-admin-styleSheet', email: 'admin@styleSheet.dev', name: 'Admin', groups: ['ADMIN'], role: 'ADMIN' }).accessToken;
+  const asAdmin = (r) => r.set('Authorization', `Bearer ${adminToken}`);
   const shows = [];
   const cleanup = { profiles: [], locations: [] };
   const savedBuckets = {};
@@ -99,7 +103,7 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
 
   it('Episode 1 renders with its real event, venue and pieces; Body is Needed', async () => {
     const ids = await seedEpisodeOne();
-    const res = await auth(request(app).get(sheetUrl(ids.ep)));
+    const res = await asAdmin(request(app).get(sheetUrl(ids.ep)));
     expect(res.status).toBe(200);
     const s = res.body.data;
     expect(s.episode).toMatchObject({ number: 1, label: 'EPISODE 01' });
@@ -134,7 +138,7 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     const ids = await seedEpisodeOne();
     await run('UPDATE world_events SET used_in_episode_id = NULL WHERE id = :event', ids);
     await run('DELETE FROM episode_wardrobe WHERE episode_id = :ep', ids);
-    const s = (await auth(request(app).get(sheetUrl(ids.ep)))).body.data;
+    const s = (await asAdmin(request(app).get(sheetUrl(ids.ep)))).body.data;
     expect(s.event).toBeNull();
     expect(s.venue).toMatchObject({ name: null, chip: null, image: null });
     expect(s.mood_words).toEqual([]);
@@ -146,7 +150,7 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     await auth(request(app).put(`/api/v1/episodes/${ids.ep}/lookbook`)).send({ hair_name: 'soft glam waves', tagline: 'Every look tells a story.' });
     const png = await sharp({ create: { width: 4, height: 4, channels: 4, background: { r: 1, g: 2, b: 3, alpha: 0.5 } } }).png().toBuffer();
     await auth(request(app).post(`/api/v1/episodes/${ids.ep}/lookbook/images`)).field('category', 'hero').attach('files', png, { filename: 'hero.png', contentType: 'image/png' });
-    const s = (await auth(request(app).get(sheetUrl(ids.ep)))).body.data;
+    const s = (await asAdmin(request(app).get(sheetUrl(ids.ep)))).body.data;
     expect(s.hair_name).toBe('soft glam waves');
     expect(s.wardrobe.columns.find((c) => c.key === 'hair').name).toBe('soft glam waves');
     expect(s.tagline).toBe('Every look tells a story.');
@@ -168,19 +172,19 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     expect((await auth(request(app).post(`${sheetUrl(ids.ep)}/approve`))).status).toBe(409);
     // The canon changes under it: the approval is marked out of date.
     await run("UPDATE world_events SET dress_code = 'black tie' WHERE id = :event", ids);
-    expect((await auth(request(app).get(sheetUrl(ids.ep)))).body.data.stale).toBe(true);
+    expect((await asAdmin(request(app).get(sheetUrl(ids.ep)))).body.data.stale).toBe(true);
     const reopened = await auth(request(app).post(`${sheetUrl(ids.ep)}/reopen`));
     expect(reopened.body.data.status).toBe('draft');
     expect((await auth(request(app).put(`/api/v1/episodes/${ids.ep}/lookbook`)).send({ tagline: 'x' })).status).toBe(200);
     // Approved again, then edited: the edit goes through and the sheet is a Draft again (Task #2877).
     expect((await auth(request(app).post(`${sheetUrl(ids.ep)}/approve`))).status).toBe(200);
     expect((await auth(request(app).put(`/api/v1/episodes/${ids.ep}/lookbook`)).send({ tagline: 'y' })).status).toBe(200);
-    expect((await auth(request(app).get(sheetUrl(ids.ep)))).body.data.status).toBe('draft');
+    expect((await asAdmin(request(app).get(sheetUrl(ids.ep)))).body.data.status).toBe('draft');
   });
 
   it('readiness: the 12 chips, computed on the server (Task #2877)', async () => {
     const ids = await seedEpisodeOne();
-    const s = (await auth(request(app).get(sheetUrl(ids.ep)))).body.data;
+    const s = (await asAdmin(request(app).get(sheetUrl(ids.ep)))).body.data;
     expect(s.readiness.total).toBe(12);
     expect(s.readiness.items.map((i) => i.key)).toEqual(['front', 'side', 'back', 'hero', 'hair', 'nails', 'beauty', 'venue', 'inspo', 'wardrobe', 'palette', 'tagline']);
     // Body is still needed on Episode 1, so Wardrobe is not ready.
@@ -193,7 +197,7 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
   it("Body is needed whatever the show's required slots; with a dress Wardrobe is ready", async () => {
     const ids = await seedEpisodeOne();
     await run(`UPDATE shows SET metadata = CAST(:m AS jsonb) WHERE id = :show`, { show: ids.show, m: JSON.stringify({ required_slots: ['shoes'] }) });
-    const get = async () => (await auth(request(app).get(sheetUrl(ids.ep)))).body.data;
+    const get = async () => (await asAdmin(request(app).get(sheetUrl(ids.ep)))).body.data;
     let s = await get();
     const body = () => s.wardrobe.columns.find((c) => c.key === 'body');
     expect(body()).toMatchObject({ name: null, needed: true });
@@ -209,13 +213,13 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
 
   it('exports: refused while Draft and while out of date; each size at its dimensions once approved (Task #2877)', async () => {
     const ids = await seedEpisodeOne();
-    const exp = (size) => auth(request(app).get(`${sheetUrl(ids.ep)}/export/${size}`)).buffer(true).parse((res, cb) => {
+    const exp = (size) => asAdmin(request(app).get(`${sheetUrl(ids.ep)}/export/${size}`)).buffer(true).parse((res, cb) => {
       const chunks = []; res.on('data', (c) => chunks.push(c)); res.on('end', () => cb(null, Buffer.concat(chunks)));
     });
     expect((await request(app).get(`${sheetUrl(ids.ep)}/export/sheet`)).status).toBe(401);
-    let res = await auth(request(app).get(`${sheetUrl(ids.ep)}/export/sheet`));
+    let res = await asAdmin(request(app).get(`${sheetUrl(ids.ep)}/export/sheet`));
     expect([res.status, res.body.code]).toEqual([409, 'SHEET_NOT_APPROVED']);
-    res = await auth(request(app).get(`${sheetUrl(ids.ep)}/export/poster`));
+    res = await asAdmin(request(app).get(`${sheetUrl(ids.ep)}/export/poster`));
     expect([res.status, res.body.code]).toEqual([400, 'UNKNOWN_SIZE']);
 
     expect((await auth(request(app).post(`${sheetUrl(ids.ep)}/approve`))).status).toBe(200);
@@ -236,7 +240,7 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
 
     // Out of date after approval: refused until approved again.
     await run("UPDATE world_events SET dress_code = 'black tie' WHERE id = :event", ids);
-    res = await auth(request(app).get(`${sheetUrl(ids.ep)}/export/pin`));
+    res = await asAdmin(request(app).get(`${sheetUrl(ids.ep)}/export/pin`));
     expect([res.status, res.body.code]).toEqual([409, 'SHEET_OUT_OF_DATE']);
   });
 
@@ -258,10 +262,10 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
 
   it("Evoni's five designs: the page gets them with this episode's values; downloads once approved, one or zipped", async () => {
     const ids = await seedEpisodeOne();
-    const bin = (url) => auth(request(app).get(url)).buffer(true).parse((res, cb) => {
+    const bin = (url) => asAdmin(request(app).get(url)).buffer(true).parse((res, cb) => {
       const chunks = []; res.on('data', (c) => chunks.push(c)); res.on('end', () => cb(null, Buffer.concat(chunks)));
     });
-    const s = (await auth(request(app).get(sheetUrl(ids.ep)))).body.data;
+    const s = (await asAdmin(request(app).get(sheetUrl(ids.ep)))).body.data;
     expect(s.designs.map((d) => d.key)).toEqual(['episode_look', 'style_diary', 'runway', 'color_story', 'invited']);
     expect(s.design_sizes.map((z) => z.key)).toEqual(['pinterest', 'fb_feed', 'fb_story', 'ig_feed', 'ig_story', 'tiktok']);
     expect(s.design_values.fields.episode_event).toBe("EPISODE 01  •  WEARABLE EXPERIMENTS STUDIO SESSION / STUDIO BY SABLE'S STUDIO");
@@ -269,13 +273,13 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
 
     const one = `${sheetUrl(ids.ep)}/design/runway/ig_story`;
     expect((await request(app).get(one)).status).toBe(401);
-    let res = await auth(request(app).get(one));
+    let res = await asAdmin(request(app).get(one));
     expect([res.status, res.body.code]).toEqual([409, 'SHEET_NOT_APPROVED']);
-    res = await auth(request(app).get(`${sheetUrl(ids.ep)}/design/poster/ig_story`));
+    res = await asAdmin(request(app).get(`${sheetUrl(ids.ep)}/design/poster/ig_story`));
     expect([res.status, res.body.code]).toEqual([400, 'UNKNOWN_DESIGN']);
-    res = await auth(request(app).get(`${sheetUrl(ids.ep)}/design/runway/billboard`));
+    res = await asAdmin(request(app).get(`${sheetUrl(ids.ep)}/design/runway/billboard`));
     expect([res.status, res.body.code]).toEqual([400, 'UNKNOWN_SIZE']);
-    res = await auth(request(app).get(`${sheetUrl(ids.ep)}/designs-zip/pinterest`));
+    res = await asAdmin(request(app).get(`${sheetUrl(ids.ep)}/designs-zip/pinterest`));
     expect([res.status, res.body.code]).toEqual([409, 'SHEET_NOT_APPROVED']);
 
     expect((await auth(request(app).post(`${sheetUrl(ids.ep)}/approve`))).status).toBe(200);
@@ -296,11 +300,11 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
   it('Template Studio › Style sheets: a design switched off for the show leaves the page, the zip and single downloads', async () => {
     const ids = await seedEpisodeOne();
     const lib = `/api/v1/shows/${ids.show}/style-designs`;
-    const bin = (url) => auth(request(app).get(url)).buffer(true).parse((res, cb) => {
+    const bin = (url) => asAdmin(request(app).get(url)).buffer(true).parse((res, cb) => {
       const chunks = []; res.on('data', (c) => chunks.push(c)); res.on('end', () => cb(null, Buffer.concat(chunks)));
     });
     expect((await request(app).get(lib)).status).toBe(401);
-    let res = await auth(request(app).get(lib));
+    let res = await asAdmin(request(app).get(lib));
     expect(res.status).toBe(200);
     expect(res.body.data.designs.map((d) => d.key)).toEqual(['episode_look', 'style_diary', 'runway', 'color_story', 'invited']);
     expect(res.body.data.off).toEqual([]);
@@ -314,18 +318,18 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     const meta = typeof show.metadata === 'string' ? JSON.parse(show.metadata) : show.metadata;
     expect(meta).toEqual({ tagline: 'kept', style_designs: { off: ['runway', 'invited'] } });
 
-    const s = (await auth(request(app).get(sheetUrl(ids.ep)))).body.data;
+    const s = (await asAdmin(request(app).get(sheetUrl(ids.ep)))).body.data;
     expect(s.designs.map((d) => d.key)).toEqual(['episode_look', 'style_diary', 'color_story']);
     expect((await auth(request(app).post(`${sheetUrl(ids.ep)}/approve`))).status).toBe(200);
-    res = await auth(request(app).get(`${sheetUrl(ids.ep)}/design/runway/ig_story`));
+    res = await asAdmin(request(app).get(`${sheetUrl(ids.ep)}/design/runway/ig_story`));
     expect([res.status, res.body.code]).toEqual([409, 'DESIGN_OFF']);
     res = await bin(`${sheetUrl(ids.ep)}/designs-zip/pinterest`);
     expect(zipNames(res.body)).toEqual(['episode-look', 'style-diary', 'color-story'].map((d) => `style-${d}-episode-01-pinterest.png`));
     // Every design off: the zip is refused.
     await auth(request(app).put(lib)).send({ off: ['episode_look', 'style_diary', 'runway', 'color_story', 'invited'] });
-    res = await auth(request(app).get(`${sheetUrl(ids.ep)}/designs-zip/pinterest`));
+    res = await asAdmin(request(app).get(`${sheetUrl(ids.ep)}/designs-zip/pinterest`));
     expect([res.status, res.body.code]).toEqual([409, 'DESIGN_OFF']);
-    expect((await auth(request(app).get('/api/v1/shows/00000000-0000-4000-8000-000000000000/style-designs'))).status).toBe(404);
+    expect((await asAdmin(request(app).get('/api/v1/shows/00000000-0000-4000-8000-000000000000/style-designs'))).status).toBe(404);
   });
 
   it('the Detail spot (the designs\' Detail shot) holds one photo and shows on the sheet', async () => {
@@ -336,7 +340,7 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     res = await auth(request(app).post(`/api/v1/episodes/${ids.ep}/lookbook/images`)).field('category', 'detail')
       .attach('files', png, { filename: 'a.png', contentType: 'image/png' }).attach('files', png, { filename: 'b.png', contentType: 'image/png' });
     expect(res.status).toBe(400);
-    const s = (await auth(request(app).get(sheetUrl(ids.ep)))).body.data;
+    const s = (await asAdmin(request(app).get(sheetUrl(ids.ep)))).body.data;
     expect(s.look.detail).toMatch(/^data:image\//);
     expect(s.design_values.photo_paths.detail).toBe('look.detail');
     expect(s.readiness.total).toBe(12); // not one of the readiness items
@@ -367,7 +371,7 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
       const defaultBack = await addPose(ids.ep, 'lala', 'back', { isDefault: true });
       await addPose(ids.ep, 'justawoman', 'side', { isDefault: true }); // only Lala's fill the look
       await addPose(ids.ep, 'lala', 'front', { status: 'processing', url: null }); // not ready
-      const s = (await auth(request(app).get(sheetUrl(ids.ep)))).body.data;
+      const s = (await asAdmin(request(app).get(sheetUrl(ids.ep)))).body.data;
       expect(Object.keys(s.look_from_files)).toEqual(['back']);
       expect(s.look_from_files.back).toEqual({ id: defaultBack, url: `https://bucket.s3.amazonaws.com/${defaultBack}.png`, label: 'Lala · back' });
       expect(s.look.back).toMatch(/^data:image\/png;base64,/);
@@ -379,7 +383,7 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
       // A photo filed under back in the Lookbook (before 2026-10-22) is not the sheet's Back: the pose stays.
       const png = await sharp({ create: { width: 4, height: 4, channels: 3, background: { r: 9, g: 9, b: 9 } } }).jpeg().toBuffer();
       await auth(request(app).post(`/api/v1/episodes/${ids.ep}/lookbook/images`)).field('category', 'back').attach('files', png, { filename: 'b.jpg', contentType: 'image/jpeg' });
-      const after = (await auth(request(app).get(sheetUrl(ids.ep)))).body.data;
+      const after = (await asAdmin(request(app).get(sheetUrl(ids.ep)))).body.data;
       expect(after.look_from_files.back.id).toBe(defaultBack);
       expect(after.look.back).toBe(s.look.back);
       expect(after.readiness.items.find((i) => i.key === 'back').ready).toBe(true);
@@ -404,7 +408,7 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
       const hero = res.body.data.lookbook.images.hero;
       expect(hero).toHaveLength(1);
       expect(hero[0]).toMatchObject({ source: 'upload', file_name: 'lala glamour.png' });
-      const s = (await auth(request(app).get(sheetUrl(ids.ep)))).body.data;
+      const s = (await asAdmin(request(app).get(sheetUrl(ids.ep)))).body.data;
       expect(s.look.hero).toMatch(/^data:image\/png;base64,/);
 
       expect((await auth(request(app).post(url)).send({ pose_id: theirs, category: 'hero' })).status).toBe(404);
@@ -417,6 +421,10 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
   });
 
   it('an unknown episode is 404', async () => {
-    expect((await auth(request(app).get(sheetUrl(uuid())))).status).toBe(404);
+    expect((await asAdmin(request(app).get(sheetUrl(uuid())))).status).toBe(404);
+  });
+  test("the wardrobe's reads are an ADMIN's: this suite's editor is refused", async () => {
+    const res = await request(app).get(`/api/v1/episodes/00000000-0000-4000-8000-000000000000/style-sheet`).set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(403);
   });
 });
