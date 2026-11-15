@@ -15,6 +15,7 @@ const crypto = require('crypto');
 const app = require('../../src/app');
 const TokenService = require('../../src/services/tokenService');
 const models = require('../../src/models');
+const { enforcing, readOnlyTokens, expectWriteRefused } = require('../helpers/writeGuard');
 const { DISCLOSURE, AMAZON_DISCLOSURE } = require('../../src/services/styleSheetDistributionService');
 
 const { sequelize } = models;
@@ -26,9 +27,13 @@ const shouldSkip =
 
 const uuid = () => crypto.randomUUID();
 const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
+// The refusal tests need the ADMIN write guard enforcing; with it off they are skipped.
+const guardIt = enforcing() ? it : it.skip;
 
 (shouldSkip ? describe.skip : describe)('Style sheet in Distribution', () => {
+  // Production writes are an ADMIN's (Evoni, 2026-11-15); an editor and a viewer are refused them (the last test here).
   let token;
+  const readOnly = readOnlyTokens('sheet-dist');
   const shows = [];
   const profiles = [];
   const savedBuckets = {};
@@ -36,7 +41,7 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
   beforeAll(() => {
     for (const k of ['S3_PRIMARY_BUCKET', 'AWS_S3_BUCKET']) { savedBuckets[k] = process.env[k]; delete process.env[k]; }
     token = TokenService.generateTokenPair({
-      id: 'test-user-sheet-dist', email: 'evoni@sheet-dist.dev', name: 'Sheet Dist', groups: ['USER', 'EDITOR'], role: 'USER',
+      id: 'test-admin-sheet-dist', email: 'evoni@sheet-dist.dev', name: 'Sheet Dist', groups: ['ADMIN'], role: 'ADMIN',
     }).accessToken;
   });
 
@@ -210,5 +215,24 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     const dm = await stored(ids.ep);
     expect(dm.style_sheet).toBeUndefined();
     expect(dm.youtube).toMatchObject({ enabled: true });
+  });
+
+  guardIt('signed out, a viewer and an editor cannot send the sheet, edit its caption, remove it or save the platform copy: Distribution is as it was', async () => {
+    const ids = await seed();
+    expect((await approve(ids.ep)).status).toBe(200);
+    const state = async () => JSON.stringify((await run('SELECT distribution_metadata, updated_at FROM episodes WHERE id = :ep', ids))[0]);
+    // Not sent: it stays unsent.
+    const unsent = await state();
+    await expectWriteRefused(() => request(app).post(distUrl(ids.ep)).send({ include_shop_links: true }), readOnly);
+    expect(await state()).toBe(unsent);
+    expect((await stored(ids.ep)).style_sheet).toBeUndefined();
+    // Sent: its caption, its links and the platform copy stay.
+    expect((await auth(request(app).post(distUrl(ids.ep)))).status).toBe(200);
+    const sent = await state();
+    await expectWriteRefused(() => request(app).patch(distUrl(ids.ep)).send({ caption: 'Changed.', include_shop_links: true }), readOnly);
+    await expectWriteRefused(() => request(app).delete(distUrl(ids.ep)), readOnly);
+    await expectWriteRefused(() => request(app).put(`/api/v1/world/${ids.show}/episodes/${ids.ep}/distribution`)
+      .send({ distribution_metadata: { youtube: { enabled: false, title: 'Edited' } } }), readOnly);
+    expect(await state()).toBe(sent);
   });
 });

@@ -16,6 +16,7 @@ const crypto = require('crypto');
 const app = require('../../src/app');
 const TokenService = require('../../src/services/tokenService');
 const models = require('../../src/models');
+const { enforcing, readOnlyTokens, expectWriteRefused } = require('../helpers/writeGuard');
 
 const { sequelize } = models;
 
@@ -28,14 +29,18 @@ const uuid = () => crypto.randomUUID();
 const q = (sql, replacements = {}) => sequelize.query(sql, { replacements, type: sequelize.QueryTypes.SELECT });
 const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
 const asJson = (v) => (typeof v === 'string' ? JSON.parse(v) : v);
+// The refusal tests need the ADMIN write guard enforcing; with it off they are skipped.
+const guardIt = enforcing() ? it : it.skip;
 
 (shouldSkip ? describe.skip : describe)('Propose terms from the rate card (Task #2341)', () => {
+  // Production writes are an ADMIN's (Evoni, 2026-11-15); an editor and a viewer are refused them (the last test here).
   let token;
+  const readOnly = readOnlyTokens('pricing');
   const shows = [];
 
   beforeAll(() => {
     token = TokenService.generateTokenPair({
-      id: 'test-user-pricing', email: 'test@pricing.dev', name: 'Pricing Test', groups: ['USER', 'EDITOR'], role: 'USER',
+      id: 'test-admin-pricing', email: 'admin@pricing.dev', name: 'Pricing Admin', groups: ['ADMIN'], role: 'ADMIN',
     }).accessToken;
   });
 
@@ -256,5 +261,22 @@ const asJson = (v) => (typeof v === 'string' ? JSON.parse(v) : v);
     // The same values are not a change.
     expect((await putEvent(ids, { appearance_fee: 250, partnership_base_fee: 500, appearance_required: true })).status).toBe(200);
     expect(await components(ids)).toMatchObject({ appearance_fee: 250, partnership_base_fee: 500 });
+  });
+
+  guardIt('signed out, a viewer and an editor cannot propose terms, edit the numbers or add a deliverable: nothing is written', async () => {
+    const ids = await seed({ dealType: 'appearance_plus_deliverables', tier: 3, deliverables: [
+      { description: 'One reel in the coat', deliverable_type: 'pulse_video', owed_to: 'brand' },
+    ] });
+    const state = async () => JSON.stringify({
+      event: await q(`SELECT appearance_fee, partnership_base_fee, performance_fee, pricing_version, canon_consequences, updated_at FROM world_events WHERE id = :event`, ids),
+      deliverables: await q(`SELECT id, description, deliverable_type, fee, updated_at FROM event_deliverables WHERE event_id = :event ORDER BY id`, ids),
+    });
+    const before = await state();
+    const base = `/api/v1/world/${ids.show}/events/${ids.event}`;
+    await expectWriteRefused(() => request(app).post(`${base}/propose-terms`).send({}), readOnly);
+    await expectWriteRefused(() => request(app).put(base).send({ appearance_fee: 175 }), readOnly);
+    await expectWriteRefused(() => request(app).post(`${base}/deliverables`).send({ description: 'A feed post', deliverable_type: 'pulse_post', owed_to: 'brand' }), readOnly);
+    await expectWriteRefused(() => request(app).put(`${base}/deliverables/${ids.d.pulse_video}`).send({ fee: 40 }), readOnly);
+    expect(await state()).toBe(before);
   });
 });

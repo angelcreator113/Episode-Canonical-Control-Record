@@ -29,6 +29,7 @@ const app = require('../../src/app');
 const TokenService = require('../../src/services/tokenService');
 const models = require('../../src/models');
 const sceneGen = require('../../src/services/sceneGenerationService');
+const { enforcing, readOnlyTokens, expectWriteRefused } = require('../helpers/writeGuard');
 const looksMigration = require('../../src/migrations/20261002130000-create-scene-set-looks');
 const sourceMigration = require('../../src/migrations/20261015140000-add-scene-set-looks-source');
 
@@ -43,10 +44,14 @@ const uuid = () => crypto.randomUUID();
 const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
 const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { replacements }))[0];
 const PNG = Buffer.from('89504e470d0a1a0a', 'hex');
+// The refusal tests need the ADMIN write guard enforcing; with it off they are skipped.
+const guardIt = enforcing() ? it : it.skip;
 
 (shouldSkip ? describe.skip : describe)('Upload this look', () => {
   const show = uuid();
+  // Production writes are an ADMIN's (Evoni, 2026-11-15); an editor and a viewer are refused them (the last test here).
   let token;
+  const readOnly = readOnlyTokens('lookupload');
   const auth = (r) => r.set('Authorization', `Bearer ${token}`);
   const upload = (eventId) => auth(request(app).post(`/api/v1/world/${show}/events/${eventId}/look/upload`));
 
@@ -77,7 +82,7 @@ const PNG = Buffer.from('89504e470d0a1a0a', 'hex');
     await looksMigration.up(qi, Sequelize);
     await sourceMigration.up(qi, Sequelize);
     token = TokenService.generateTokenPair({
-      id: 'test-user-look-upload', email: 'user@lookupload.dev', name: 'Editor', groups: ['USER', 'EDITOR'], role: 'USER',
+      id: 'test-admin-look-upload', email: 'admin@lookupload.dev', name: 'Admin', groups: ['ADMIN'], role: 'ADMIN',
     }).accessToken;
     await run(`INSERT INTO shows (id, name, slug, metadata, created_at, updated_at) VALUES (:id, :name, :slug, '{}', NOW(), NOW())`,
       { id: show, name: `Look upload ${show.slice(0, 8)}`, slug: `look-upload-${show.slice(0, 8)}` });
@@ -165,5 +170,26 @@ const PNG = Buffer.from('89504e470d0a1a0a', 'hex');
     expect(locked.status).toBe(409);
     expect(locked.body.code).toBe(placeLock.PLACE_LOCKED_CODE);
     expect(mockS3Send).not.toHaveBeenCalled();
+  });
+
+  guardIt('signed out, a viewer and an editor cannot upload or generate a look: no look, the event unlinked, nothing stored or generated', async () => {
+    const loc = await location();
+    const set = await sceneSet(loc);
+    await run('UPDATE world_locations SET approved_base_scene_set_id = :set WHERE id = :loc', { set, loc });
+    const ev = await event(loc);
+    const generated = jest.spyOn(sceneGen, 'generateDressedStill').mockResolvedValue({ stillUrl: 'https://x/never.jpg', cost: 0.04 });
+    const state = async () => JSON.stringify({
+      looks: await rows('SELECT * FROM scene_set_looks WHERE event_id = :ev OR scene_set_id = :set', { ev, set }),
+      event: await rows('SELECT scene_set_id, updated_at FROM world_events WHERE id = :ev', { ev }),
+      set: await rows('SELECT base_still_url, updated_at FROM scene_sets WHERE id = :set', { set }),
+    });
+    const before = await state();
+    const base = `/api/v1/world/${show}/events/${ev}/look`;
+    await expectWriteRefused(() => request(app).post(`${base}/upload`).field('scene_set_id', set)
+      .attach('image', PNG, { filename: 'gala.png', contentType: 'image/png' }), readOnly);
+    await expectWriteRefused(() => request(app).post(`${base}/generate`).send({}), readOnly);
+    expect(await state()).toBe(before);
+    expect(mockS3Send).not.toHaveBeenCalled();
+    expect(generated).not.toHaveBeenCalled();
   });
 });

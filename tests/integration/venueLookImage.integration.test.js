@@ -20,6 +20,7 @@ const crypto = require('crypto');
 const app = require('../../src/app');
 const TokenService = require('../../src/services/tokenService');
 const models = require('../../src/models');
+const { enforcing, readOnlyTokens, expectWriteRefused } = require('../helpers/writeGuard');
 const sceneGen = require('../../src/services/sceneGenerationService');
 const modelComparison = require('../../src/services/sceneModelComparisonService');
 const looksMigration = require('../../src/migrations/20261002130000-create-scene-set-looks');
@@ -38,10 +39,14 @@ const shouldSkip =
 const uuid = () => crypto.randomUUID();
 const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
 const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { replacements }))[0];
+// The refusal tests need the ADMIN write guard enforcing; with it off they are skipped.
+const guardIt = enforcing() ? it : it.skip;
 
 (shouldSkip ? describe.skip : describe)('Generate this look (§8(hh) L7-L9)', () => {
   const show = uuid();
+  // Production writes are an ADMIN's (Evoni, 2026-11-15); an editor and a viewer are refused them (the last test here).
   let token;
+  const readOnly = readOnlyTokens('looks');
   const auth = (r) => r.set('Authorization', `Bearer ${token}`);
   const url = (eventId, tail = '') => `/api/v1/world/${show}/events/${eventId}/look${tail}`;
 
@@ -85,7 +90,7 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
     const qi = sequelize.getQueryInterface();
     for (const m of [approvedMigration, venueLookMigration, looksMigration]) await m.up(qi, Sequelize);
     token = TokenService.generateTokenPair({
-      id: 'test-user-looks', email: 'user@looks.dev', name: 'Editor', groups: ['USER', 'EDITOR'], role: 'USER',
+      id: 'test-admin-looks', email: 'admin@looks.dev', name: 'Admin', groups: ['ADMIN'], role: 'ADMIN',
     }).accessToken;
     await run(`INSERT INTO shows (id, name, slug, metadata, created_at, updated_at) VALUES (:id, :name, :slug, '{}', NOW(), NOW())`,
       { id: show, name: `Looks ${show.slice(0, 8)}`, slug: `looks-${show.slice(0, 8)}` });
@@ -245,5 +250,33 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
     jest.spyOn(sceneGen, 'generateBaseScene').mockResolvedValue({});
     await auth(request(app).post(url(ev, '/generate'))).send({});
     expect((await rows('SELECT scene_set_id FROM world_events WHERE id = :ev', { ev }))[0].scene_set_id).toBe(only);
+  });
+
+  guardIt('signed out, a viewer and an editor cannot generate a look: no set is made or linked, no look is stored, no image is generated', async () => {
+    const base = jest.spyOn(sceneGen, 'generateBaseScene').mockResolvedValue({});
+    const dressed = jest.spyOn(sceneGen, 'generateDressedStill').mockResolvedValue({ stillUrl: 'https://x/never.jpg', cost: 0.04 });
+    // A venue with no set (generating would make one), and one with an approved base (generating would dress it).
+    const bare = await location();
+    const bareEvent = await event(bare);
+    const setId = uuid();
+    const approved = await location({ approvedSet: setId, approvedUrl: 'https://x/approved.jpg' });
+    await run(`INSERT INTO scene_sets (id, name, scene_type, show_id, world_location_id, base_still_url, generation_status, created_at, updated_at)
+               VALUES (:setId, 'Glasshouse Hall', 'EVENT_LOCATION', :show, :approved, 'https://x/approved.jpg', 'complete', NOW(), NOW())`, { setId, show, approved });
+    const dressedEvent = await event(approved, setId);
+    const state = async () => JSON.stringify({
+      sets: await rows('SELECT id, base_still_url, generation_status, updated_at FROM scene_sets WHERE world_location_id IN (:bare, :approved) ORDER BY id', { bare, approved }),
+      events: await rows('SELECT id, scene_set_id, updated_at FROM world_events WHERE id IN (:bareEvent, :dressedEvent) ORDER BY id', { bareEvent, dressedEvent }),
+      looks: await rows('SELECT * FROM scene_set_looks WHERE event_id IN (:bareEvent, :dressedEvent)', { bareEvent, dressedEvent }),
+    });
+    const before = await state();
+    for (const ev of [bareEvent, dressedEvent]) {
+      await expectWriteRefused(() => request(app).post(url(ev, '/generate')).send({}), readOnly);
+      await expectWriteRefused(() => request(app).post(url(ev, '/brief')).send({}), readOnly);
+    }
+    await new Promise((r) => setTimeout(r, 100)); // a background run would have started by now
+    expect(await state()).toBe(before);
+    expect(JSON.parse(before)).toMatchObject({ sets: [{ id: setId }], looks: [] });
+    expect(base).not.toHaveBeenCalled();
+    expect(dressed).not.toHaveBeenCalled();
   });
 });

@@ -13,6 +13,7 @@ const crypto = require('crypto');
 const app = require('../../src/app');
 const TokenService = require('../../src/services/tokenService');
 const models = require('../../src/models');
+const { enforcing, readOnlyTokens, expectWriteRefused } = require('../helpers/writeGuard');
 
 const { sequelize } = models;
 const shouldSkip =
@@ -23,15 +24,19 @@ const shouldSkip =
 const uuid = () => crypto.randomUUID();
 const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
 const q = (sql, replacements = {}) => sequelize.query(sql, { replacements, type: sequelize.QueryTypes.SELECT });
+// The refusal tests need the ADMIN write guard enforcing; with it off they are skipped.
+const guardIt = enforcing() ? it : it.skip;
 
 (shouldSkip ? describe.skip : describe)('Wardrobe → Send to phone', () => {
   const show = uuid();
   const piece = uuid();
   const loose = uuid();
+  // Production writes are an ADMIN's (Evoni, 2026-11-15); an editor and a viewer are refused them (the last test here).
   let token;
+  const readOnly = readOnlyTokens('send');
 
   beforeAll(async () => {
-    token = TokenService.generateTokenPair({ id: 'test-send', email: 's@send.dev', name: 'Send', groups: ['USER', 'EDITOR'], role: 'USER' }).accessToken;
+    token = TokenService.generateTokenPair({ id: 'test-admin-send', email: 'admin@send.dev', name: 'Send', groups: ['ADMIN'], role: 'ADMIN' }).accessToken;
     await run(`INSERT INTO shows (id, name, slug, created_at, updated_at) VALUES (:show, :n, :n, NOW(), NOW())`, { show, n: `send-${show.slice(0, 8)}` });
     await run(`INSERT INTO wardrobe (id, name, clothing_category, show_id, brand, price, s3_url_bg_pink, s3_key_bg_pink, created_at, updated_at)
                VALUES (:id, 'Gold Slip', 'dress', :show, 'Maison Reve', 450, 'https://bucket/pink.jpg', 'pink.jpg', NOW(), NOW())`, { id: piece, show });
@@ -80,5 +85,19 @@ const q = (sql, replacements = {}) => sequelize.query(sql, { replacements, type:
     const res = await send(loose, { variant: 'pink' });
     expect(res.status).toBe(400);
     expect(res.body.message).toMatch(/isn't in a show/);
+  });
+
+  guardIt("signed out, a viewer and an editor cannot send a piece to the phone: no screen is made or replaced", async () => {
+    const state = async () => JSON.stringify({
+      screens: await q('SELECT id, metadata, deleted_at, updated_at FROM assets WHERE show_id = :show ORDER BY id', { show }),
+      types: await q('SELECT id, type_key, deleted_at, updated_at FROM ui_overlay_types WHERE show_id = :show ORDER BY id', { show }),
+    });
+    const before = await state();
+    // The pink screen exists (the tests above); a blue one does not.
+    expect(JSON.parse(before).screens.filter((s) => !s.deleted_at)).toHaveLength(1);
+    for (const variant of ['pink', 'blue']) {
+      await expectWriteRefused(() => request(app).post(`/api/v1/wardrobe/${piece}/send-to-phone`).send({ variant, showId: show }), readOnly);
+    }
+    expect(await state()).toBe(before);
   });
 });

@@ -13,6 +13,7 @@ const sharp = require('sharp');
 const app = require('../../src/app');
 const TokenService = require('../../src/services/tokenService');
 const models = require('../../src/models');
+const { enforcing, readOnlyTokens, expectWriteRefused } = require('../helpers/writeGuard');
 
 const { sequelize } = models;
 
@@ -23,9 +24,13 @@ const shouldSkip =
 
 const uuid = () => crypto.randomUUID();
 const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
+// The refusal tests need the ADMIN write guard enforcing; with it off they are skipped.
+const guardIt = enforcing() ? it : it.skip;
 
 (shouldSkip ? describe.skip : describe)('Episode style sheet', () => {
+  // Production writes are an ADMIN's (Evoni, 2026-11-15); an editor and a viewer are refused them (the last test here).
   let token;
+  const readOnly = readOnlyTokens('sheet');
   const shows = [];
   const cleanup = { profiles: [], locations: [] };
   const savedBuckets = {};
@@ -34,7 +39,7 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
   beforeAll(async () => {
     for (const k of ['S3_PRIMARY_BUCKET', 'AWS_S3_BUCKET']) { savedBuckets[k] = process.env[k]; delete process.env[k]; }
     token = TokenService.generateTokenPair({
-      id: 'test-user-sheet', email: 'evoni@sheet.dev', name: 'Sheet Test', groups: ['USER', 'EDITOR'], role: 'USER',
+      id: 'test-admin-sheet', email: 'evoni@sheet.dev', name: 'Sheet Test', groups: ['ADMIN'], role: 'ADMIN',
     }).accessToken;
     const buf = await sharp({ create: { width: 8, height: 8, channels: 3, background: { r: 160, g: 20, b: 40 } } }).jpeg().toBuffer();
     dataPng = `data:image/jpeg;base64,${buf.toString('base64')}`;
@@ -418,5 +423,30 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
 
   it('an unknown episode is 404', async () => {
     expect((await auth(request(app).get(sheetUrl(uuid())))).status).toBe(404);
+  });
+
+  guardIt('signed out, a viewer and an editor cannot approve or reopen the sheet, switch a design off or copy a pose in: all as it was', async () => {
+    const ids = await seedEpisodeOne();
+    const glamour = await addPose(ids.ep, 'lala', 'glamour');
+    const lib = `/api/v1/shows/${ids.show}/style-designs`;
+    const state = async () => JSON.stringify({
+      lookbook: (await run('SELECT * FROM episode_lookbooks WHERE episode_id = :ep', ids))[0],
+      images: (await run('SELECT id FROM episode_lookbook_images WHERE episode_id = :ep ORDER BY id', ids))[0],
+      show: (await run('SELECT metadata, updated_at FROM shows WHERE id = :show', ids))[0],
+    });
+    // A Draft sheet stays a Draft.
+    expect((await auth(request(app).get(sheetUrl(ids.ep)))).body.data.status).toBe('draft');
+    const draft = await state();
+    await expectWriteRefused(() => request(app).post(`${sheetUrl(ids.ep)}/approve`), readOnly);
+    await expectWriteRefused(() => request(app).put(lib).send({ off: ['runway'] }), readOnly);
+    await expectWriteRefused(() => request(app).post(`/api/v1/episodes/${ids.ep}/lookbook/images/from-pose`).send({ pose_id: glamour, category: 'hero' }), readOnly);
+    expect(await state()).toBe(draft);
+    // An approved sheet stays approved.
+    expect((await auth(request(app).post(`${sheetUrl(ids.ep)}/approve`))).status).toBe(200);
+    const approved = await state();
+    expect(JSON.parse(approved).lookbook[0].sheet_status).toBe('approved');
+    await expectWriteRefused(() => request(app).post(`${sheetUrl(ids.ep)}/reopen`), readOnly);
+    await expectWriteRefused(() => request(app).put(`/api/v1/episodes/${ids.ep}/lookbook`).send({ tagline: 'changed' }), readOnly);
+    expect(await state()).toBe(approved);
   });
 });

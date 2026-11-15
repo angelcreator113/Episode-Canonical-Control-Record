@@ -12,6 +12,7 @@ const crypto = require('crypto');
 const app = require('../../src/app');
 const TokenService = require('../../src/services/tokenService');
 const models = require('../../src/models');
+const { enforcing, readOnlyTokens, expectWriteRefused } = require('../helpers/writeGuard');
 
 const { sequelize } = models;
 
@@ -23,14 +24,18 @@ const shouldSkip =
 const uuid = () => crypto.randomUUID();
 const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
 const q = (sql, replacements = {}) => sequelize.query(sql, { replacements, type: sequelize.QueryTypes.SELECT });
+// The refusal tests need the ADMIN write guard enforcing; with it off they are skipped.
+const guardIt = enforcing() ? it : it.skip;
 
 (shouldSkip ? describe.skip : describe)('Wardrobe matching sets (W1)', () => {
+  // Production writes are an ADMIN's (Evoni, 2026-11-15); an editor and a viewer are refused them (the last test here).
   let token;
+  const readOnly = readOnlyTokens('w1');
   const shows = [];
 
   beforeAll(() => {
     token = TokenService.generateTokenPair({
-      id: 'test-user-w1', email: 'test@w1.dev', name: 'W1', groups: ['USER', 'EDITOR'], role: 'USER',
+      id: 'test-admin-w1', email: 'admin@w1.dev', name: 'W1', groups: ['ADMIN'], role: 'ADMIN',
     }).accessToken;
   });
   beforeEach(() => { jest.spyOn(console, 'log').mockImplementation(() => {}); });
@@ -117,5 +122,19 @@ const q = (sql, replacements = {}) => sequelize.query(sql, { replacements, type:
     expect((await post({ show_id: show, name: 'X', wardrobe_ids: [pieces.top, other.pieces.top] })).status).toBe(400);
     expect((await stamps([pieces.top]))[0].outfit_set_id).toBeNull();
     expect((await request(app).post('/api/v1/wardrobe/matching-sets').send({})).status).toBe(401);
+  });
+
+  guardIt('signed out, a viewer and an editor cannot link, change or delete a set: the pieces keep their links', async () => {
+    const { show, pieces } = await seed();
+    const made = await auth(request(app).post('/api/v1/wardrobe/matching-sets')).send({ show_id: show, name: 'Floral', wardrobe_ids: [pieces.top, pieces.skirt] });
+    expect(made.status).toBe(201);
+    const setId = made.body.data.id;
+    const state = async () => JSON.stringify(await q('SELECT id, outfit_set_id, outfit_set_name, deleted_at, updated_at FROM wardrobe WHERE show_id = :show ORDER BY id', { show }));
+    const before = await state();
+    await expectWriteRefused(() => request(app).post('/api/v1/wardrobe/matching-sets').send({ show_id: show, name: 'Theirs', wardrobe_ids: [pieces.ear, pieces.bag] }), readOnly);
+    await expectWriteRefused(() => request(app).put(`/api/v1/wardrobe/matching-sets/${setId}`).send({ show_id: show, name: 'Renamed', wardrobe_ids: [pieces.top, pieces.bag] }), readOnly);
+    await expectWriteRefused(() => request(app).delete(`/api/v1/wardrobe/matching-sets/${setId}`), readOnly);
+    expect(await state()).toBe(before);
+    expect((await stamps([pieces.top, pieces.skirt])).map((r) => [r.outfit_set_id, r.outfit_set_name])).toEqual([[setId, 'Floral'], [setId, 'Floral']]);
   });
 });

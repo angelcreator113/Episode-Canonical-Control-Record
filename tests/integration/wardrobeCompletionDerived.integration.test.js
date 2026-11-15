@@ -10,6 +10,7 @@ const crypto = require('crypto');
 const app = require('../../src/app');
 const TokenService = require('../../src/services/tokenService');
 const models = require('../../src/models');
+const { enforcing, readOnlyTokens, expectWriteRefused } = require('../helpers/writeGuard');
 
 const { sequelize } = models;
 
@@ -22,6 +23,8 @@ const uuid = () => crypto.randomUUID();
 const q = (sql, replacements = {}) => sequelize.query(sql, { replacements, type: sequelize.QueryTypes.SELECT });
 const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
 const asJson = (v) => (typeof v === 'string' ? JSON.parse(v) : v);
+// The refusal tests need the ADMIN write guard enforcing; with it off they are skipped.
+const guardIt = enforcing() ? it : it.skip;
 
 const WARDROBE_TASKS = [
   { slot: 'dress', label: 'Outfit', required: true, completed: false },
@@ -31,12 +34,14 @@ const WARDROBE_TASKS = [
 const SOCIAL_TASKS = [{ slot: 'grwm', label: 'GRWM', task_source: 'goal', required: false, completed: false }];
 
 (shouldSkip ? describe.skip : describe)('wardrobe completion comes from the outfit (T7)', () => {
+  // Production writes are an ADMIN's (Evoni, 2026-11-15); an editor and a viewer are refused them (the last test here).
   let token;
+  const readOnly = readOnlyTokens('t7');
   const shows = [];
 
   beforeAll(() => {
     token = TokenService.generateTokenPair({
-      id: 'test-user-t7', email: 'test@t7.dev', name: 'T7', groups: ['USER', 'EDITOR'], role: 'USER',
+      id: 'test-admin-t7', email: 'admin@t7.dev', name: 'T7', groups: ['ADMIN'], role: 'ADMIN',
     }).accessToken;
   });
 
@@ -101,5 +106,16 @@ const SOCIAL_TASKS = [{ slot: 'grwm', label: 'GRWM', task_source: 'goal', requir
     const ids = await seed();
     const res = await request(app).post(`/api/v1/episodes/${ids.ep}/todo/complete/nope`).set(auth()).send({ completed: true });
     expect(res.status).toBe(404);
+  });
+
+  guardIt('signed out, a viewer and an editor cannot complete a slot, social or wardrobe: the list is as it was', async () => {
+    const ids = await seed();
+    const state = async () => JSON.stringify(await q('SELECT tasks, social_tasks, status, updated_at FROM episode_todo_lists WHERE episode_id = :ep', ids));
+    const before = await state();
+    for (const slot of ['grwm', 'shoes']) {
+      await expectWriteRefused(() => request(app).post(`/api/v1/episodes/${ids.ep}/todo/complete/${slot}`).send({ completed: true }), readOnly);
+    }
+    expect(await state()).toBe(before);
+    expect(asJson(JSON.parse(before)[0].social_tasks)).toEqual(SOCIAL_TASKS);
   });
 });

@@ -15,6 +15,7 @@ const crypto = require('crypto');
 const app = require('../../src/app');
 const TokenService = require('../../src/services/tokenService');
 const models = require('../../src/models');
+const { enforcing, readOnlyTokens, expectWriteRefused } = require('../helpers/writeGuard');
 const { finalizeEpisodeFinancials } = require('../../src/services/financialTransactionService');
 
 const { sequelize } = models;
@@ -28,15 +29,19 @@ const uuid = () => crypto.randomUUID();
 const q = (sql, replacements = {}) => sequelize.query(sql, { replacements, type: sequelize.QueryTypes.SELECT });
 const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
 const asJson = (v) => (typeof v === 'string' ? JSON.parse(v) : v);
+// The refusal tests need the ADMIN write guard enforcing; with it off they are skipped.
+const guardIt = enforcing() ? it : it.skip;
 
 (shouldSkip ? describe.skip : describe)('outfit snapshot carries coin_cost; Finalize charges it (Task #2346)', () => {
+  // Production writes are an ADMIN's (Evoni, 2026-11-15); an editor and a viewer are refused them (the last test here).
   let token;
+  const readOnly = readOnlyTokens('outfit-coin-cost');
   const shows = [];
 
   beforeAll(() => {
     token = TokenService.generateTokenPair({
-      id: 'test-user-outfit-coin-cost', email: 'test@outfit-coin-cost.dev', name: 'Outfit Coin Cost Test',
-      groups: ['USER', 'EDITOR'], role: 'USER',
+      id: 'test-admin-outfit-coin-cost', email: 'admin@outfit-coin-cost.dev', name: 'Outfit Coin Cost Admin',
+      groups: ['ADMIN'], role: 'ADMIN',
     }).accessToken;
   });
 
@@ -115,5 +120,18 @@ const asJson = (v) => (typeof v === 'string' ? JSON.parse(v) : v);
       `SELECT amount::float AS amount FROM financial_transactions
         WHERE episode_id = :ep AND category = 'wardrobe_purchase' AND deleted_at IS NULL`, ids);
     expect(purchases).toEqual([{ amount: 450 }]);
+  });
+
+  guardIt('signed out, a viewer and an editor cannot set the event outfit: the snapshot, the closet and the ledger are as they were', async () => {
+    const ids = await seed();
+    const state = async () => JSON.stringify({
+      event: await q('SELECT outfit_pieces, updated_at FROM world_events WHERE id = :event', ids),
+      closet: await q('SELECT id, is_owned, coin_cost, updated_at FROM wardrobe WHERE show_id = :show ORDER BY id', ids),
+      ledger: await q('SELECT id FROM financial_transactions WHERE show_id = :show ORDER BY id', ids),
+    });
+    const before = await state();
+    await expectWriteRefused(() => request(app).put(`/api/v1/world/${ids.show}/events/${ids.event}/outfit`).send({ wardrobe_ids: [ids.gown] }), readOnly);
+    expect(await state()).toBe(before);
+    expect(JSON.parse(before).event[0].outfit_pieces).toBeNull();
   });
 });
