@@ -33,8 +33,9 @@ const DevTokenCarrier = import.meta.env.DEV
 // dead-code elimination — same mechanism as DevTokenCarrier above.
 // /teleprompter/remote: the teleprompter's phone remote, public (token in the
 // URL's fragment), reached only from the desktop's QR code.
-const REMOTE_PATH = '/teleprompter/remote';
-const PRE_AUTH_PATHS = ['/login', '/', REMOTE_PATH, ...(import.meta.env.DEV ? ['/__dev-token-carrier'] : [])];
+// The pages a signed-out visitor may open: lib/preAuthPaths (the public recap and Shop the Look pages among them).
+import { REMOTE_PATH, isPreAuthPath } from './lib/preAuthPaths';
+const DEV_PRE_AUTH_PATHS = import.meta.env.DEV ? ['/__dev-token-carrier'] : [];
 
 // Lazy-loaded: all other pages (code-split into separate chunks)
 const EpisodeDetail = lazy(() => import('./pages/EpisodeDetail'));
@@ -263,7 +264,7 @@ function AppContent() {
   // Also check localStorage directly to survive React state races on refresh
   useEffect(() => {
     const hasToken = !!localStorage.getItem('authToken');
-    if (!loading && !isAuthenticated && !hasToken && !PRE_AUTH_PATHS.includes(location.pathname) && !isNavigatingRef.current) {
+    if (!loading && !isAuthenticated && !hasToken && !isPreAuthPath(location.pathname) && !DEV_PRE_AUTH_PATHS.includes(location.pathname) && !isNavigatingRef.current) {
       console.log('[AppContent] User not authenticated, redirecting to landing...');
       isNavigatingRef.current = true;
       navigate('/', { replace: true });
