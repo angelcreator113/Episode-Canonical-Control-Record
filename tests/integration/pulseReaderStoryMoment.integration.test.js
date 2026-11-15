@@ -15,6 +15,7 @@
 jest.unmock('uuid');
 
 const request = require('supertest');
+const { lalaProfileId } = require('../../src/services/lalaFeedProfile');
 const crypto = require('crypto');
 const app = require('../../src/app');
 const TokenService = require('../../src/services/tokenService');
@@ -238,6 +239,8 @@ const shouldSkip =
         `/api/v1/pulse-reveals/cities?show_id=${ids.show}`,
         `/api/v1/shows/${ids.show}/pulse-cover?x=1`,
         `/api/v1/pulse-dms?show_id=${ids.show}&profile_id=lala`,
+        // A profile by its number: the moment is read whether or not Lala has a profile in this database.
+        `/api/v1/pulse-dms?show_id=${ids.show}&profile_id=2147483000`,
       ]) {
         const atPresent = await get(who, `${path}&at=present`);
         expect([path, [401, 403, 500].includes(atPresent.status)]).toEqual([path, false]);
@@ -246,7 +249,11 @@ const shouldSkip =
           expect([path, at, res.status]).toEqual([path, at, atPresent.status]);
           expect([path, at, res.body]).toEqual([path, at, atPresent.body]);
         }
-        expect([path, (await get(who, `${path}&at=soon`)).status]).toEqual([path, 400]);
+        // With no Lala profile at all, her messages answer "none" before any moment is read (as they always have).
+        const noLala = path.endsWith('profile_id=lala') && (await lalaProfileId(models.sequelize)) == null;
+        const bad = await get(who, `${path}&at=soon`);
+        if (noLala) expect([path, bad.status, bad.body.threads]).toEqual([path, 200, []]);
+        else expect([path, bad.status]).toEqual([path, 400]);
       }
       const cities = await get(who, `/api/v1/pulse-reveals/cities?show_id=${ids.show}&at=${LATER}`);
       expect(cities.body.at).toBe(present);
