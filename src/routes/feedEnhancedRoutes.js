@@ -10,7 +10,7 @@
 
 const express = require('express');
 const router = express.Router();
-const { requireAuth } = require('../middleware/auth');
+const { requireAuth, authorize } = require('../middleware/auth');
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 
 // ── TRENDING TOPICS ─────────────────────────────────────────────────────────
@@ -40,7 +40,7 @@ router.get('/:showId/trending', requireAuth, async (req, res) => {
 
 // ── EVENT ENGAGEMENT ANALYSIS ───────────────────────────────────────────────
 // GET /api/v1/feed-enhanced/event/:eventId/engagement
-router.get('/event/:eventId/engagement', requireAuth, async (req, res) => {
+router.get('/event/:eventId/engagement', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const models = require('../models');
     const { analyzeEventEngagement } = require('../services/feedEngagementService');
@@ -68,7 +68,7 @@ router.post('/post/:postId/ripple', requireAuth, aiRateLimiter, async (req, res)
 
 // ── FEED MOMENTUM FOR SHOW ──────────────────────────────────────────────────
 // GET /api/v1/feed-enhanced/:showId/momentum
-router.get('/:showId/momentum', requireAuth, async (req, res) => {
+router.get('/:showId/momentum', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const models = require('../models');
     const { computeFeedMomentum } = require('../services/feedEngagementService');
@@ -101,7 +101,7 @@ router.post('/:showId/chain/:eventId', requireAuth, aiRateLimiter, async (req, r
 
 // ── GET EVENT CHAIN ─────────────────────────────────────────────────────────
 // GET /api/v1/feed-enhanced/:showId/chain/:eventId
-router.get('/:showId/chain/:eventId', requireAuth, async (req, res) => {
+router.get('/:showId/chain/:eventId', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const models = require('../models');
     const { getEventChain } = require('../services/feedEventPipelineService');
@@ -115,7 +115,7 @@ router.get('/:showId/chain/:eventId', requireAuth, async (req, res) => {
 
 // ── FEED MOMENTS ────────────────────────────────────────────────────────────
 // GET /api/v1/feed-enhanced/:showId/moments/:episodeId
-router.get('/:showId/moments/:episodeId', requireAuth, async (req, res) => {
+router.get('/:showId/moments/:episodeId', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { FeedMoment, FeedPost } = require('../models');
     if (!FeedMoment) return res.status(404).json({ error: 'FeedMoment model not available' });
@@ -215,7 +215,7 @@ router.post('/:showId/moments/:episodeId/persist', requireAuth, async (req, res)
 
 // ── VIRAL POSTS FOR SHOW ────────────────────────────────────────────────────
 // GET /api/v1/feed-enhanced/:showId/viral
-router.get('/:showId/viral', requireAuth, async (req, res) => {
+router.get('/:showId/viral', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { FeedPost } = require('../models');
     const posts = await FeedPost.findAll({
@@ -233,7 +233,7 @@ router.get('/:showId/viral', requireAuth, async (req, res) => {
 
 // ── POST THREAD ─────────────────────────────────────────────────────────────
 // GET /api/v1/feed-enhanced/thread/:threadId
-router.get('/thread/:threadId', requireAuth, async (req, res) => {
+router.get('/thread/:threadId', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { FeedPost } = require('../models');
     const posts = await FeedPost.findAll({

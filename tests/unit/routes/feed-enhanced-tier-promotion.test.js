@@ -13,7 +13,7 @@ const SRC = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'src', 'route
 
 describe('Step 3 CP8 — feedEnhancedRoutes.js PROMOTE shape', () => {
   test('imports requireAuth + aiRateLimiter', () => {
-    expect(SRC).toMatch(/const\s*\{\s*requireAuth\s*\}\s*=\s*require\(['"]\.\.\/middleware\/auth['"]\)/);
+    expect(SRC).toMatch(/const\s*\{\s*requireAuth,\s*authorize\s*\}\s*=\s*require\(['"]\.\.\/middleware\/auth['"]\)/);
     expect(SRC).toMatch(/const\s*\{\s*aiRateLimiter\s*\}\s*=\s*require\(['"]\.\.\/middleware\/aiRateLimiter['"]\)/);
   });
 
@@ -32,7 +32,6 @@ describe('Step 3 CP8 — feedEnhancedRoutes.js PROMOTE shape', () => {
 
   describe('GET handlers — Tier 1 (no Tier 4 disposition; analytics not catalog per D2)', () => {
     [
-      ['/:showId/trending'],
       ['/event/:eventId/engagement'],
       ['/:showId/momentum'],
       ['/:showId/chain/:eventId'],
@@ -40,15 +39,20 @@ describe('Step 3 CP8 — feedEnhancedRoutes.js PROMOTE shape', () => {
       ['/:showId/viral'],
       ['/thread/:threadId'],
     ].forEach(([route]) => {
-      test(`GET ${route} → requireAuth`, () => {
-        const re = new RegExp(`router\\.get\\('${route.replace(/\//g, '\\/')}',\\s*requireAuth,\\s*async`);
+      // Raw analytics, moments and threads are an ADMIN's to read (Evoni, 2026-11-15).
+      test(`GET ${route} → requireAuth + authorize(['ADMIN'])`, () => {
+        const re = new RegExp(`router\\.get\\('${route.replace(/\//g, '\\/')}',\\s*requireAuth,\\s*authorize\\(\\['ADMIN'\\]\\),\\s*async`);
         expect(SRC).toMatch(re);
       });
+    });
+
+    test("GET /:showId/trending → requireAuth: The Pulse's readers read it", () => {
+      expect(SRC).toMatch(/router\.get\('\/:showId\/trending',\s*requireAuth,\s*async/);
     });
   });
 
   test('GET /:showId/chain/:eventId does NOT have aiRateLimiter (only POST does)', () => {
-    expect(SRC).toMatch(/router\.get\('\/:showId\/chain\/:eventId',\s*requireAuth,\s*async/);
+    expect(SRC).toMatch(/router\.get\('\/:showId\/chain\/:eventId',\s*requireAuth,\s*authorize\(\['ADMIN'\]\),\s*async/);
   });
 
   test('no optionalAuth references remain', () => {
