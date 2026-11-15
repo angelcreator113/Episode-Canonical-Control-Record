@@ -304,7 +304,8 @@ async function copyLookImage(models, episodeId, siteKey, sheetHash) {
   try {
     const out = await module.exports.drawLook(models, episodeId);
     const key = `${cfg.prefix}/looks/${siteKey}/${crypto.randomUUID()}.png`;
-    await slots.putObject(cfg, key, out.buffer, 'image/png');
+    // One hour in caches, not a year: see websiteSlotService CACHE_LOOK_IMAGE.
+    await slots.putObject(cfg, key, out.buffer, 'image/png', { cacheControl: slots.CACHE_LOOK_IMAGE });
     return { key, sheet_hash: sheetHash || null };
   } catch (err) {
     console.error(`[StyleSheetDistribution] the look image of episode ${episodeId} could not be copied to the public site:`, err.message);

@@ -63,12 +63,18 @@ function requireStorage() {
   return cfg;
 }
 
-async function putObject(cfg, key, buffer, contentType) {
+// Site media: keys are never reused (a new upload gets a new key), so the object is immutable.
+const CACHE_IMMUTABLE = 'public, max-age=31536000, immutable';
+// A Shop the Look image (Evoni, 2026-11-15): one hour, and not "immutable", so a copy she withdraws ages out of
+// the CDN and browsers within the hour. This shortens how long a cache keeps a copy; it does not revoke access:
+// an object that can still be fetched from the bucket is still public.
+const CACHE_LOOK_IMAGE = 'public, max-age=3600';
+
+async function putObject(cfg, key, buffer, contentType, { cacheControl = CACHE_IMMUTABLE } = {}) {
   const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
   const s3 = new S3Client({ region: cfg.region });
-  // Keys are never reused (a new upload gets a new key), so the object is immutable.
   await s3.send(new PutObjectCommand({
-    Bucket: cfg.bucket, Key: key, Body: buffer, ContentType: contentType, CacheControl: 'public, max-age=31536000, immutable',
+    Bucket: cfg.bucket, Key: key, Body: buffer, ContentType: contentType, CacheControl: cacheControl,
   }));
 }
 
@@ -371,6 +377,7 @@ async function publicContent(models) {
 }
 
 module.exports = {
+  CACHE_IMMUTABLE, CACHE_LOOK_IMAGE,
   useShowLogo,
   SLOT_KEYS,
   SLOT_MEDIA,
