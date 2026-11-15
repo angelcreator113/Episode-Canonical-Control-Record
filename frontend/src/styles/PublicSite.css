@@ -319,6 +319,9 @@
 .site .site-shop__link { padding: 14px 18px; border-radius: var(--site-radius); background: var(--site-white); border: 1px solid rgba(48, 37, 61, 0.1); overflow-wrap: anywhere; }
 .site .site-shop__link a, .site .site-shop__list a { color: inherit; font-weight: 600; }
 .site .site-shop__badge { display: inline-block; white-space: nowrap; margin-left: 8px; padding: 2px 8px; border-radius: var(--site-radius-pill); background: var(--site-ivory); font-size: 12px; }
+.site .site-shop__label { margin: 24px 0 6px; font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; opacity: 0.75; }
+.site .site-shop__story .site-shop__caption { margin-top: 0; white-space: pre-line; }
+.site .site-shop__links { margin-top: 8px; }
 .site .site-shop__link--gone { background: transparent; border-style: dashed; }
 .site .site-shop__gone { font-weight: 600; opacity: 0.7; }
 .site .site-shop__archive { margin: 16px 0 0; font-size: 14px; }

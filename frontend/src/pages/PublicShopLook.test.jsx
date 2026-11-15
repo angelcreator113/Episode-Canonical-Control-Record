@@ -70,6 +70,13 @@ describe('the public Shop the Look page', () => {
     const firstLink = screen.getAllByTestId('site-shop-link')[0];
     expect(disclosure.compareDocumentPosition(firstLink) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(article.textContent).toContain('Every look tells a story.');
+    // The story's words and the real products are each labelled, the story first.
+    const story = screen.getByTestId('site-shop-story');
+    expect(story.textContent).toBe('From the storyEvery look tells a story.');
+    const real = screen.getByTestId('site-shop-real');
+    expect(real.textContent).toBe('Real pieces you can shop');
+    expect(story.compareDocumentPosition(real) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(real.compareDocumentPosition(firstLink) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     const anchors = screen.getAllByTestId('site-shop-link').map((li) => li.querySelector('a'));
     expect(anchors.map((a) => [a.textContent, a.getAttribute('href'), a.getAttribute('rel'), a.getAttribute('target')])).toEqual([
       ['Maison Rouge Satin Ballet Pump', 'https://shop.example/pump', 'noopener', '_blank'],
@@ -134,7 +141,10 @@ describe('the public Shop the Look page', () => {
     expect([img.getAttribute('src'), img.getAttribute('alt')]).toEqual([image.url, image.alt]);
     const look = screen.getByTestId('site-shop-look');
     const order = [...look.children].map((el) => el.className || el.tagName);
-    expect(order.indexOf('site-shop__image')).toBeLessThan(order.indexOf('site-shop__caption'));
+    // The caption now sits in its labelled story block: the image is above that block, and so above the caption.
+    expect(order.indexOf('site-shop__story')).toBeGreaterThan(-1);
+    expect(order.indexOf('site-shop__image')).toBeLessThan(order.indexOf('site-shop__story'));
+    expect(img.compareDocumentPosition(look.querySelector('.site-shop__caption')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     one.unmount();
 
     fetchMock.mockImplementation(() => reply(200, { look: { ...LOOK.look, image: null } }));

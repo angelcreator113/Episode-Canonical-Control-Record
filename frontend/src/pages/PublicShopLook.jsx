@@ -41,7 +41,15 @@ function OneLook({ look }) {
       {look.published_at && <p className="site-shop__date">{publishedLabel(look.published_at)}</p>}
       {look.image?.url && <img className="site-shop__image" src={look.image.url} alt={look.image.alt || ''} data-testid="site-shop-image" />}
       {look.disclosure && <p className="site-shop__disclosure" data-testid="site-shop-disclosure">{look.disclosure}</p>}
-      {look.caption && <p className="site-shop__caption">{look.caption}</p>}
+      {/* The caption is the story's own words (an episode, an event, its host in the Dream Cities); the list under
+          it is real products. Each says which it is (Evoni, 2026-11-15). */}
+      {look.caption && (
+        <div className="site-shop__story" data-testid="site-shop-story">
+          <p className="site-shop__label">From the story</p>
+          <p className="site-shop__caption">{look.caption}</p>
+        </div>
+      )}
+      <p className="site-shop__label" data-testid="site-shop-real">Real pieces you can shop</p>
       {look.archive && <p className="site-shop__archive" data-testid="site-shop-archive">These pieces are no longer available to buy.</p>}
       <ul className="site-shop__links">
         {look.links.map((l, i) => {
