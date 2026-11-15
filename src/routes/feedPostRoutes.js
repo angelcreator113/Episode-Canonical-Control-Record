@@ -17,7 +17,7 @@ const { optionalAuth, requireAuth } = require('../middleware/auth');
 // Setting a draft's release time is an admin's (step 6c, services/postRelease).
 const { authorize } = require('../middleware/auth');
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');
-const { statusWhere, isLive, LOCKED_MESSAGE } = require('../services/feedPostStatus');
+const { statusWhere, readableStatusWhere, isLive, LOCKED_MESSAGE } = require('../services/feedPostStatus');
 const { cleanTags } = require('../utils/postTags');
 const { draftReactions, pickReactors, recountComments, DraftError, COMMENT_LOCKED } = require('../services/feedCommentDrafter');
 
@@ -124,11 +124,22 @@ function applyPostReveal(post, reveals) {
  * feed with no library picture that is not approved and public, and no story
  * past its 24 hours. An ADMIN (Review, the director's view) sees everything.
  */
-async function forReader(req, posts) {
+/**
+ * Whether this request reads as an ADMIN: the one test for who sees what is
+ * not public on these read routes (the pictures and stories below, and since
+ * 2026-11-15 unpublished posts and comments). services/mediaLibrary audienceOf,
+ * as before. A post and a comment record no author account, so there is no
+ * "their own drafts" for anyone else: a token alone opens nothing.
+ */
+function readsAsAdmin(req) {
   // optionalAuth reads only cognito:groups; a local token carries its own groups claim.
   const raw = req.user?.raw || {};
   const groups = [...(req.user?.groups || []), ...(Array.isArray(raw.groups) ? raw.groups : [])];
-  if (require('../services/mediaLibrary').audienceOf({ groups }) === 'admin') {
+  return require('../services/mediaLibrary').audienceOf({ groups }) === 'admin';
+}
+
+async function forReader(req, posts) {
+  if (readsAsAdmin(req)) {
     // A draft that will get a picture on approval says so, with what it costs
     // (services/postPictures): the estimate before, the job's cost after.
     const pp = require('../services/postPictures');
@@ -159,7 +170,9 @@ router.get('/', optionalAuth, async (req, res) => {
     }
 
     // Live posts by default (?status=draft|live|all): services/feedPostStatus.js.
-    const scoped = statusWhere(status);
+    // Unpublished posts are an ADMIN's to read; anyone else gets the live
+    // ones whatever status is asked for, and the count below is of those.
+    const scoped = readableStatusWhere(status, readsAsAdmin(req));
     if (scoped.error) return res.status(400).json({ error: scoped.error });
     const where = { deleted_at: null, ...scoped };
     if (show_id) where.show_id = show_id;
@@ -417,7 +430,7 @@ router.get('/:showId/timeline', optionalAuth, async (req, res) => {
     const { episode_id, profile_id, narrative_function, limit, offset, status } = req.query;
     const { FeedPost, SocialProfile } = require('../models');
 
-    const scoped = statusWhere(status);
+    const scoped = readableStatusWhere(status, readsAsAdmin(req));
     if (scoped.error) return res.status(400).json({ error: scoped.error });
     const where = { show_id: showId, deleted_at: null, ...scoped };
     if (episode_id) where.episode_id = episode_id;
@@ -466,7 +479,9 @@ router.get('/post/:postId', optionalAuth, async (req, res) => {
       ],
       order: FeedComment ? [[{ model: FeedComment, as: 'comments' }, 'sort_order', 'ASC']] : [],
     });
-    if (!post) return res.status(404).json({ error: 'Post not found' });
+    // An unpublished post is not there for anyone but an ADMIN: the same 404
+    // as a post that does not exist, so its id says nothing.
+    if (!post || (!isLive(post) && !readsAsAdmin(req))) return res.status(404).json({ error: 'Post not found' });
     const [shown] = await forReader(req, [post.toJSON()]);
     if (!shown) return res.status(404).json({ error: 'Post not found' });
     // Which beats show this post (feed_moments.feed_post_id), for the wall.
@@ -488,9 +503,16 @@ router.get('/post/:postId', optionalAuth, async (req, res) => {
 // GET /api/v1/feed-posts/:postId/comments?status=live|draft|all — live by default.
 router.get('/:postId/comments', optionalAuth, async (req, res) => {
   try {
-    const { FeedComment } = require('../models');
-    const scoped = statusWhere(req.query.status);
+    const { FeedComment, FeedPost } = require('../models');
+    const admin = readsAsAdmin(req);
+    const scoped = readableStatusWhere(req.query.status, admin);
     if (scoped.error) return res.status(400).json({ error: scoped.error });
+    // The comments of an unpublished post are unpublished too: for anyone but
+    // an ADMIN it answers as a post with no comments does, as an unknown id does.
+    if (!admin) {
+      const post = await FeedPost.findOne({ where: { id: req.params.postId, deleted_at: null }, attributes: ['id', 'status'] });
+      if (!post || !isLive(post)) return res.json({ data: [], count: 0 });
+    }
     const comments = await FeedComment.findAll({
       where: { feed_post_id: req.params.postId, deleted_at: null, ...scoped },
       order: [['sort_order', 'ASC'], ['created_at', 'ASC']],
@@ -630,8 +652,10 @@ router.delete('/comments/:commentId', requireAuth, async (req, res) => {
 router.get('/episode/:episodeId', optionalAuth, async (req, res) => {
   try {
     const { FeedPost } = require('../models');
-    // The episode's own view: its drafts and its live posts alike, unless asked.
-    const scoped = statusWhere(req.query.status === undefined ? 'all' : req.query.status);
+    // The episode's own view: its drafts and its live posts alike, unless
+    // asked. That view is an ADMIN's; anyone else reads its live posts, and
+    // the groups and stats below are of those.
+    const scoped = readableStatusWhere(req.query.status === undefined ? 'all' : req.query.status, readsAsAdmin(req));
     if (scoped.error) return res.status(400).json({ error: scoped.error });
     const posts = await FeedPost.findAll({
       where: { episode_id: req.params.episodeId, deleted_at: null, ...scoped },
