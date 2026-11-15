@@ -6,9 +6,9 @@ import { downloadStyleDesign, downloadStyleSheetExport, styleSheetDistributionAp
 /**
  * The approved style sheet in Distribution (Task #2878): every export size as
  * a download, the caption draft she edits, Shop the Look links, and the
- * disclosure. The disclosure is the server's: it leads the post whenever
- * links are included, with the Amazon Associates sentence when one is an
- * Amazon link (Task #3170), and has no edit control.
+ * disclosure. The disclosure is the server's: it leads the post when an
+ * included link is an affiliate link, with the Amazon Associates sentence
+ * when that link is Amazon's (Task #3170; Evoni, 2026-11-15), and has no edit control.
  * Nothing here posts anywhere; "Copy post text" puts it on the clipboard.
  */
 /** Why the look cannot go on the website yet, or null when it can. */
@@ -155,8 +155,11 @@ function SiteSwitch({ entry, working, onPublish, onTakeDown, onAvailable }) {
           <p className="ssd-warning" role="status">
             The website still shows the look as you published it. {differs.map((d) => DIFFERS[d]).filter(Boolean).join(' ')}
           </p>
-          <button type="button" className="ssd-btn" disabled={working} onClick={() => setReviewing(true)}>Review and publish again</button>
         </div>
+      )}
+      {/* Always there once published: a product can change while nothing in Wardrobe does. */}
+      {site.published && !reviewing && (
+        <button type="button" className="ssd-btn" disabled={working} onClick={() => setReviewing(true)}>Review and publish again</button>
       )}
       {site.published && Array.isArray(site.links) && !reviewing && (
         <ul className="ssd-link-list" data-testid="ssd-site-links">
@@ -164,7 +167,7 @@ function SiteSwitch({ entry, working, onPublish, onTakeDown, onAvailable }) {
             <li key={l.piece_id}>
               <span className="ssd-link-label">{l.label}{l.retailer ? ` · ${l.retailer}` : ''}</span>
               {l.match === 'similar' && <span className="ssd-badge">Similar</span>}
-              {!l.available && <span className="ssd-badge">No longer available</span>}
+              {!l.available && <span className="ssd-badge">{l.url ? 'No longer available' : 'No product to shop'}</span>}
               {l.url && (
                 <button type="button" className="ssd-btn" disabled={working} onClick={() => onAvailable(l.piece_id, !l.available)}>
                   {l.available ? 'Mark as no longer available' : 'Available again'}
@@ -301,7 +304,7 @@ export default function StyleSheetDistributionCard({ episodeId, episodeNumber })
         <p className="ssd-disclosure" data-testid="ssd-disclosure">
           <Lock size={14} aria-hidden="true" />
           <span>{entry.disclosure}</span>
-          <span className="ssd-locked">Added because Shop the Look links are included</span>
+          <span className="ssd-locked">Added because an affiliate link is included</span>
         </p>
       )}
 

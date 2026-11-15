@@ -296,16 +296,26 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
       expect((await look(key)).body.look.links[0]).toMatchObject({ url: 'https://zappos.example/felicia', available: true });
     });
 
-    it('the disclosure is saved with the look: the Amazon sentence only for an Amazon address she confirmed', async () => {
+    it('the disclosure is saved with the look, and is for affiliate links only: Amazon\'s sentence for an Amazon affiliate link', async () => {
       const fresh = await seed();
       await send(fresh.ep);
-      const res = await publish(fresh.ep, { [fresh.pump]: { url: 'https://www.amazon.com/dp/B000TEST', retailer: 'Amazon' } });
-      expect(res.status).toBe(200);
-      const shown = (await look(res.body.data.site.key)).body.look;
+      // The pump: a plain Amazon link, no affiliate. The studs: left out. Nothing to disclose.
+      const plain = await as(admin, from(request(app).post(siteUrl(fresh.ep)))).send({ links: (await confirmAll(fresh.ep))
+        .filter((l) => l.piece_id === fresh.pump).map((l) => ({ ...l, url: 'https://www.amazon.com/dp/B000TEST', retailer: 'Amazon', affiliate: false })) });
+      expect(plain.status).toBe(200);
+      const { key: k } = plain.body.data.site;
+      expect((await look(k)).body.look.disclosure).toBeNull();
+      // The same link as an affiliate's: both sentences.
+      const aff = await publish(fresh.ep, { [fresh.pump]: { url: 'https://www.amazon.com/dp/B000TEST?tag=lala-20', retailer: 'Amazon', affiliate: true } });
+      expect(aff.status).toBe(200);
+      const shown = (await look(k)).body.look;
       expect(shown.disclosure).toBe(`${DISCLOSURE} As an Amazon Associate I earn from qualifying purchases.`);
-      // The piece's address changed to somewhere else in the wardrobe: the published disclosure and link stay.
-      await run(`UPDATE wardrobe SET real_product_url = 'https://shop.example/elsewhere' WHERE id = :pump`, fresh);
-      expect((await look(res.body.data.site.key)).body.look.disclosure).toBe(shown.disclosure);
+      // The piece's address changed in the wardrobe: the published disclosure and link stay.
+      await run(`UPDATE wardrobe SET real_product_url = 'https://shop.example/elsewhere', affiliate_url = NULL WHERE id = :pump`, fresh);
+      expect((await look(k)).body.look.disclosure).toBe(shown.disclosure);
+      // That affiliate product no longer available, the other affiliate link still is: the affiliate sentence alone.
+      expect((await setLink(fresh.ep, { piece_id: fresh.pump, available: false })).status).toBe(200);
+      expect((await look(k)).body.look.disclosure).toBe(DISCLOSURE);
     });
 
     it('a look published before products were confirmed still shows, from its pieces, and says it needs a review', async () => {

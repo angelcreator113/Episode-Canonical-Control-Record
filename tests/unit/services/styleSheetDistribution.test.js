@@ -43,15 +43,24 @@ describe('style sheet in Distribution: text', () => {
     }
   });
 
-  test('the disclosure: the affiliate sentence whenever links are included, then the Amazon one (Task #3170)', () => {
+  test('the disclosure: only for an affiliate link, then the Amazon one for an Amazon affiliate link (Evoni, 2026-11-15; Task #3170)', () => {
     const plain = { label: 'Pump', url: 'https://shop.example/pump', affiliate: false };
-    const amazon = { label: 'Studs', url: 'https://www.amazon.com/dp/B0', affiliate: false };
+    const plainAmazon = { label: 'Bag', url: 'https://www.amazon.com/dp/B1', affiliate: false };
+    const affiliate = { label: 'Scarf', url: 'https://aff.example/scarf', affiliate: true };
+    const amazon = { label: 'Studs', url: 'https://www.amazon.com/dp/B0?tag=lala-20', affiliate: true };
     expect(disclosureFor([])).toBeNull();
-    expect(disclosureFor([plain])).toBe(DISCLOSURE);
+    // A plain shopping link earns nothing and is not called an affiliate link, Amazon's or not.
+    expect(disclosureFor([plain])).toBeNull();
+    expect(disclosureFor([plain, plainAmazon])).toBeNull();
+    expect(disclosureFor([plain, affiliate])).toBe(DISCLOSURE);
+    // The Amazon sentence is for an Amazon affiliate link, not for an Amazon address beside another affiliate link.
+    expect(disclosureFor([plainAmazon, affiliate])).toBe(DISCLOSURE);
     expect(disclosureFor([plain, amazon])).toBe(`${DISCLOSURE} ${AMAZON_DISCLOSURE}`);
     expect(AMAZON_DISCLOSURE).toBe('As an Amazon Associate I earn from qualifying purchases.');
     expect(postText('Studio night.', [plain, amazon], disclosureFor([plain, amazon]))).toBe(
-      `${DISCLOSURE} ${AMAZON_DISCLOSURE}\n\nStudio night.\n\nShop the Look\nPump: https://shop.example/pump\nStuds: https://www.amazon.com/dp/B0`);
+      `${DISCLOSURE} ${AMAZON_DISCLOSURE}\n\nStudio night.\n\nShop the Look\nPump: https://shop.example/pump\nStuds: https://www.amazon.com/dp/B0?tag=lala-20`);
+    // Neither sentence speaks of a sponsor, a gift or a paid placement: those are other statements.
+    expect(`${DISCLOSURE} ${AMAZON_DISCLOSURE}`).not.toMatch(/sponsor|gift|paid|partner/i);
   });
 
   test('the stored record reads as an object, also when saved as a JSON string', () => {

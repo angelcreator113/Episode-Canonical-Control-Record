@@ -53,7 +53,8 @@ function OneLook({ look }) {
               {buyable && l.retailer && <span> · {l.retailer}</span>}
               {l.match === 'similar' && <span className="site-shop__badge">Similar piece</span>}
               {buyable && l.affiliate && <span className="site-shop__badge">Affiliate link</span>}
-              {!buyable && <span className="site-shop__badge">No longer available</span>}
+              {/* A product she confirmed that has since gone, or a piece that never had one to buy. */}
+              {!buyable && <span className="site-shop__badge">{l.match ? 'No longer available' : 'Not available to shop'}</span>}
             </li>
           );
         })}

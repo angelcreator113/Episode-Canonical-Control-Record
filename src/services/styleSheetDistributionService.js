@@ -142,12 +142,18 @@ function isAmazonUrl(url) {
 }
 
 /**
- * The locked disclosure for the included links, or null with none: the
- * affiliate sentence, then the Amazon sentence when any link is Amazon's.
+ * The locked disclosure for the included links, or null when none of them
+ * is an affiliate link: the affiliate sentence, then the Amazon sentence
+ * when an affiliate link is Amazon's.
  */
 function disclosureFor(links) {
-  if (!links.length) return null;
-  return links.some((l) => isAmazonUrl(l.url)) ? `${DISCLOSURE} ${AMAZON_DISCLOSURE}` : DISCLOSURE;
+  // Only an affiliate link is disclosed as one (Evoni, 2026-11-15): a plain shopping link earns nothing and
+  // says nothing. This is the affiliate disclosure alone; a sponsorship, a gift or a paid placement is a
+  // different statement and is not made here. The Dream Cities' brand deals are fiction and are never disclosed
+  // as real ones.
+  const affiliate = links.filter((l) => l.affiliate);
+  if (!affiliate.length) return null;
+  return affiliate.some((l) => isAmazonUrl(l.url)) ? `${DISCLOSURE} ${AMAZON_DISCLOSURE}` : DISCLOSURE;
 }
 
 // ── The published snapshot (Evoni, 2026-11-15) ─────────────────────────────

@@ -162,6 +162,12 @@ describe('the public Shop the Look page', () => {
     expect(items[2].querySelector('a')).toBeNull();
     expect(screen.queryByTestId('site-shop-archive')).toBeNull();
     unmount();
+    // A piece that never had a product is not said to have had one.
+    fetchMock.mockImplementation(() => reply(200, { look: { ...LOOK.look, links: [links[0], { label: 'Accessory', retailer: null, url: null, affiliate: false, match: null, available: false }], archive: false } }));
+    const second = renderAt('/shop-the-look/Ab3_k9-Zq1Lm');
+    await screen.findByRole('heading', { level: 1, name: 'Episode 2: The Gala' });
+    expect(screen.getAllByTestId('site-shop-link')[1].textContent).toBe('AccessoryNot available to shop');
+    second.unmount();
 
     fetchMock.mockImplementation(() => reply(200, { look: { ...LOOK.look, disclosure: null, links: [links[1]], archive: true } }));
     renderAt('/shop-the-look/Ab3_k9-Zq1Lm');
