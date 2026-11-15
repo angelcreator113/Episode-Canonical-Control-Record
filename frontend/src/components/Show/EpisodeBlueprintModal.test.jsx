@@ -32,10 +32,10 @@ describe('EpisodeBlueprintModal: where it goes next', () => {
     expect(close).toHaveBeenCalledWith(null);
   });
 
-  test('Write Script: the writer page it always opened, in the app', () => {
+  test('Write Script: the new episode\'s Script tab, in the app (not the older writer page)', () => {
     const close = draw({ episode: { id: 'ep-9', title: 'Gala Night' } });
     fireEvent.click(screen.getByRole('button', { name: 'Write Script' }));
-    expect(screen.getByTestId('where').textContent).toBe('/episodes/ep-9/script-writer');
+    expect(screen.getByTestId('where').textContent).toBe('/episodes/ep-9?tab=scripts');
     expect(close).toHaveBeenCalledWith(null);
   });
 
