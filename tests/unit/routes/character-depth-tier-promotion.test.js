@@ -21,9 +21,10 @@ describe('Step 3 CP6 — characterDepthRoutes.js PROMOTE shape', () => {
     expect(SRC).toMatch(/const\s*\{\s*aiRateLimiter\s*\}\s*=\s*require\(['"]\.\.\/middleware\/aiRateLimiter['"]\)/);
   });
 
-  describe('Tier 1 non-AI handlers (the read requireAuth; the 2 writes ADMIN)', () => {
-    test('GET /:charId → requireAuth (no aiRateLimiter)', () => {
-      expect(SRC).toMatch(/router\.get\('\/:charId',\s*requireAuth,\s*async/);
+  // Production reads are an ADMIN's since 2026-11-15 (character privacy; tests/integration/characterReadPrivacy).
+  describe('Tier 1 non-AI handlers (the read and the 2 writes ADMIN)', () => {
+    test('GET /:charId → requireAuth + ADMIN (no aiRateLimiter)', () => {
+      expect(SRC).toMatch(/router\.get\('\/:charId',\s*requireAuth,\s*authorize\(\['ADMIN'\]\),\s*async/);
     });
     [['put', '/:charId'], ['post', '/:charId/confirm']].forEach(([verb, route]) => {
       test(`${verb.toUpperCase()} ${route} → requireAuth + ADMIN (no aiRateLimiter)`, () => {
