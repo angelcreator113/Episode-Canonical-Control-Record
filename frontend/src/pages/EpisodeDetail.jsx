@@ -41,6 +41,8 @@ import usePhonePlayback from '../hooks/usePhonePlayback';
 import api from '../services/api';
 import { fetchAllEpisodes } from '../lib/fetchAllPages';
 import { getEpisodeEvents } from '../services/episodeEventsApi';
+import { packageHref } from '../lib/eventFlow';
+import { episodeSeasonHref } from '../lib/episodePlace';
 import { EP_TABS, resolveEpisodeTab, withEpisodeTab, pillGroups, pillFor, gatedTab } from '../utils/episodeTabs';
 import { isAdmin } from '../utils/authGroups';
 import { voiceStudioOn } from '../lib/voiceStudioApi';
@@ -296,6 +298,8 @@ const EpisodeDetail = () => {
   // (Task #2356): the brief's event (episode_briefs.event_id, §8(w) P2),
   // which GET /episodes/:id/events returns first, flagged link.anchor.
   const [sourceEvent, setSourceEvent] = useState(null);
+  // 'loading' | 'ready' | 'failed': so Results can tell "no event" from "not read yet".
+  const [sourceEventStatus, setSourceEventStatus] = useState('loading');
   // Evoni, 2026-10-06: the banner flickered between full and compact while
   // scrolling. Compacting made the header shorter (and it animates its
   // height), the content moved up, and the scroll fell back under the one
@@ -619,6 +623,7 @@ const EpisodeDetail = () => {
     let cancelled = false;
     // A new episode drops the last one's link until its own arrives (Task #3107).
     setSourceEvent(null);
+    setSourceEventStatus('loading');
     // Optional header detail: any failure, synchronous or not, leaves the
     // link off and never breaks the page.
     const loadSourceEvent = async () => {
@@ -627,9 +632,10 @@ const EpisodeDetail = () => {
         if (cancelled) return;
         const events = data?.events || [];
         setSourceEvent(events.find((ev) => ev.link?.anchor) || null);
+        setSourceEventStatus('ready');
       } catch (err) {
         console.error('Failed to load the source event:', err);
-        if (!cancelled) setSourceEvent(null);
+        if (!cancelled) { setSourceEvent(null); setSourceEventStatus('failed'); }
       }
     };
     loadSourceEvent();
@@ -847,11 +853,12 @@ const EpisodeDetail = () => {
           <ol>
             <li><Link to="/" onClick={guardLeave}>Home</Link></li>
             <li aria-hidden="true" className="eds-crumb-sep"><ChevronRight size={14} /></li>
-            {/* The show's page lists its episodes; it was "← Back to Show". */}
+            {/* The Season page's Episodes tab, in this episode's season (Evoni,
+                2026-11-15): it went to the show's page, out of Producer Mode. */}
             {/* The way back stays in the compact header (Script page audit 4, 2026-10-19). */}
             <li className="eds-crumb-episodes">
-              <Link to={showIdForLinks ? `/shows/${showIdForLinks}` : '/episodes'} onClick={guardLeave}
-                className="ed-back-btn" title="Back to Show">Episodes</Link>
+              <Link to={showIdForLinks ? episodeSeasonHref(showIdForLinks, episode, 'episodes') : '/episodes'} onClick={guardLeave}
+                className="ed-back-btn" title="Back to this season's episodes" data-testid="ed-crumb-episodes">Episodes</Link>
             </li>
             <li aria-hidden="true" className="eds-crumb-sep"><ChevronRight size={14} /></li>
             <li><span aria-current="page" className="eds-crumb-current">{episodeTitle}</span></li>
@@ -885,7 +892,7 @@ const EpisodeDetail = () => {
               {sourceEvent && (sourceEvent.show_id || showIdForLinks) && (
                 <li className="eds-meta-item">
                   <Link
-                    to={`/shows/${sourceEvent.show_id || showIdForLinks}/events/${sourceEvent.id}`}
+                    to={packageHref(sourceEvent.show_id || showIdForLinks, sourceEvent.id, { kind: 'episode', id: episode.id })}
                     className="ed-source-event-link"
                     data-testid="ed-source-event"
                     title="Open the Event Package this episode was started from"
@@ -1281,7 +1288,7 @@ const EpisodeDetail = () => {
             evaluation under it since 2026-10-22; ?tab=evaluation lands there. */}
         {(tabKey === 'results.summary' || tabKey === 'results.evaluation') && (
           <EpisodeResultsSummary episode={episode} showId={episode?.show_id || episode?.showId} onOpenTab={openTab}
-            onCompleted={fetchEpisode}
+            onCompleted={fetchEpisode} sourceEvent={sourceEvent} sourceEventStatus={sourceEventStatus}
             focus={tabKey === 'results.evaluation' ? 'evaluation' : null} />
         )}
 

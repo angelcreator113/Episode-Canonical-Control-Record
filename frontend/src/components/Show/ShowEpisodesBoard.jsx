@@ -29,6 +29,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { seasonPageHref } from '../../lib/seasonPage';
+import { packageHref } from '../../lib/eventFlow';
 import api from '../../services/api';
 import episodeService from '../../services/episodeService';
 import EpisodeCard from '../EpisodeCard';
@@ -200,7 +201,7 @@ function More({ episode, summary }) {
   );
 }
 
-function NowProducing({ showId, episode, checks, panel, onTagsSaved }) {
+function NowProducing({ showId, episode, checks, panel, onTagsSaved, season = null }) {
   const summary = checks.checks ? checklistSummary(checks.checks) : null;
   const media = useHeroMedia(episode.id);
   const steps = pipelineSteps({ episode, checks: checks.checks, sections: CHECKLIST_SECTIONS, clips: media.clips, hasThumbnail: media.hasThumbnail });
@@ -250,7 +251,8 @@ function NowProducing({ showId, episode, checks, panel, onTagsSaved }) {
                       </div>
                     )
                     : <p className="seb-event-ready">The Event Package is complete.</p>}
-                  <Link className="seb-event-open" to={`/shows/${showId}/events/${panel.id}`}>Open Event Package →</Link>
+                  {/* Back from the package returns to this tab, in this season (lib/eventFlow). */}
+                  <Link className="seb-event-open" to={packageHref(showId, panel.id, { kind: 'episodes', season })} data-testid="seb-event-open">Open Event Package →</Link>
                 </>
               )}
         </aside>
@@ -455,7 +457,7 @@ export default function ShowEpisodesBoard({ showId, episodes = [], total = null,
           <button type="button" onClick={() => setRemoveError(null)} style={{ background: 'none', border: 0, padding: 0, color: 'inherit', textDecoration: 'underline', cursor: 'pointer', font: 'inherit' }}>Dismiss</button>
         </p>
       )}
-      {hero && <NowProducing showId={showId} episode={hero} checks={checks} panel={panel} onTagsSaved={onChanged} />}
+      {hero && <NowProducing showId={showId} episode={hero} checks={checks} panel={panel} onTagsSaved={onChanged} season={roadmap?.season_number ?? null} />}
 
       <section className="seb-pipeline" aria-labelledby="seb-pipeline-title">
       <div className="seb-head">

@@ -166,6 +166,48 @@ describe('where she came from', () => {
     expect(returnLink(null, { showId: 'show-1' })).toMatchObject({ href: '/shows/show-1/season?tab=events', label: 'Events' });
   });
 
+  // Producer Mode navigation (Evoni, 2026-11-15): the package can be opened
+  // from the Season page's Episodes tab and Overview and from an episode, and
+  // a Season page origin can name its season.
+  const EP = '11111111-2222-4333-8444-555555555555';
+  test('the new origins round-trip, with and without a season', () => {
+    for (const v of ['episodes', 'overview', `episode:${EP}`, `episode:${EP}:results`, 'roadmap:5@2', 'roadmap@3', 'events:unplaced@2', 'events@12', 'episodes@2', 'overview@1']) {
+      expect(fromParam(parseFrom(v))).toBe(v);
+    }
+    expect(parseFrom('roadmap:5@2')).toEqual({ kind: 'roadmap', slot: 5, season: 2 });
+    expect(parseFrom('roadmap:5')).toEqual({ kind: 'roadmap', slot: 5 });
+    expect(parseFrom(`episode:${EP}:results`)).toEqual({ kind: 'episode', id: EP, tab: 'results' });
+  });
+
+  test('what is not an origin stays none: a season of 0, an id that is not one, a tab it does not know', () => {
+    for (const v of ['roadmap:5@0', 'roadmap:5@abc', 'roadmap:5@1234', 'episodes@', 'episode:ep-1', 'episode:', `episode:${EP}/../x`, 'producer@2', `episode:${EP}@2`]) {
+      expect(parseFrom(v)).toBeNull();
+    }
+    // A tab it does not return to is dropped, not passed on.
+    expect(parseFrom(`episode:${EP}:scripts`)).toEqual({ kind: 'episode', id: EP, tab: null });
+    expect(fromParam({ kind: 'episode', id: 'not-an-id' })).toBeNull();
+    expect(fromParam({ kind: 'roadmap', slot: 5, season: 'x' })).toBe('roadmap:5');
+    expect(packageHref('show-1', 'ev-2', { kind: 'episode', id: '"><script>' })).toBe('/shows/show-1/events/ev-2');
+  });
+
+  test('packageHref carries the new origins', () => {
+    expect(packageHref('show-1', 'ev-2', { kind: 'roadmap', slot: 4, season: 2 })).toBe('/shows/show-1/events/ev-2?from=roadmap:4@2');
+    expect(packageHref('show-1', 'ev-2', { kind: 'episodes', season: 2 })).toBe('/shows/show-1/events/ev-2?from=episodes@2');
+    expect(packageHref('show-1', 'ev-2', { kind: 'episodes', season: null })).toBe('/shows/show-1/events/ev-2?from=episodes');
+    expect(packageHref('show-1', 'ev-2', { kind: 'episode', id: EP, tab: 'results' })).toBe(`/shows/show-1/events/ev-2?from=episode:${EP}:results`);
+  });
+
+  test('returnLink: back to the season it was opened from, the Episodes tab, the Overview, the episode or its Results', () => {
+    expect(returnLink(parseFrom('roadmap:5@2'), { showId: 'show-1' })).toEqual({ href: '/shows/show-1/season?tab=roadmap&season=2&slot=5', label: 'Back to E5 on the Roadmap', done: false });
+    expect(returnLink(parseFrom('events:unplaced@2'), { showId: 'show-1' }).href).toBe('/shows/show-1/season?tab=events&season=2&show=unplaced');
+    expect(returnLink(parseFrom('episodes@2'), { showId: 'show-1' })).toMatchObject({ href: '/shows/show-1/season?tab=episodes&season=2', label: 'Back to Episodes' });
+    expect(returnLink(parseFrom('episodes'), { showId: 'show-1' }).href).toBe('/shows/show-1/season?tab=episodes');
+    expect(returnLink(parseFrom('overview'), { showId: 'show-1' })).toMatchObject({ href: '/shows/show-1/season?tab=overview', label: 'Back to the Season Overview' });
+    expect(returnLink(parseFrom(`episode:${EP}`), { showId: 'show-1' })).toMatchObject({ href: `/episodes/${EP}`, label: 'Back to the episode' });
+    expect(returnLink(parseFrom(`episode:${EP}:results`), { showId: 'show-1' })).toMatchObject({ href: `/episodes/${EP}?tab=results`, label: 'Back to the episode\u2019s Results' });
+    expect(returnLink(parseFrom(`episode:${EP}:results`), { showId: 'show-1', done: true }).label).toBe('Done · back to the episode\u2019s Results');
+  });
+
   test('done: "Done · back to …"', () => {
     expect(returnLink(parseFrom('roadmap:5'), { showId: 'show-1', done: true }).label).toBe('Done · back to E5 on the Roadmap');
     expect(returnLink(parseFrom('events:unplaced'), { showId: 'show-1', done: true }).label).toBe('Done · back to Not placed yet');

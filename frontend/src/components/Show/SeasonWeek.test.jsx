@@ -112,7 +112,19 @@ describe('SeasonWeek', () => {
     // Readiness from the episode's full row and its posts: the thumbnail is there, the rest is not.
     await waitFor(() => expect(within(two).getByTestId('szw-needs-2').textContent).toBe('Final cut, Title & copy, Pulse posts'));
     expect(within(two).getByTestId('szw-event-2').textContent).toBe('Velvet Gala');
-    expect(within(two).getByRole('link', { name: 'Velvet Gala' }).getAttribute('href')).toBe('/shows/show-1/events/ev-2');
+    // Back from the package returns to this slot on the Roadmap, in the season shown (2026-11-15).
+    expect(within(two).getByRole('link', { name: 'Velvet Gala' }).getAttribute('href')).toBe('/shows/show-1/events/ev-2?from=roadmap:2');
+  });
+
+  test('in a season the roadmap names, the event\'s package returns to that season', () => {
+    draw({ roadmap: { ...ROADMAP, season_number: 2 } });
+    expect(within(screen.getByTestId('szw-item-2')).getByRole('link', { name: 'Velvet Gala' }).getAttribute('href')).toBe('/shows/show-1/events/ev-2?from=roadmap:2@2');
+  });
+
+  test('each release, continued: the slot opens, the episode opens', async () => {
+    const onOpen = vi.fn();
+    draw({ onOpen });
+    const two = screen.getByTestId('szw-item-2');
 
     const three = screen.getByTestId('szw-item-3');
     expect(within(three).getByTestId('szw-stage-3').textContent).toBe('No episode yet');

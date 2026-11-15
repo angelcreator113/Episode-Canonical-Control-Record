@@ -128,7 +128,8 @@ describe('the studio header', () => {
 
     const crumbs = within(header).getByRole('navigation', { name: 'Breadcrumb' });
     expect(within(crumbs).getByRole('link', { name: 'Home' }).getAttribute('href')).toBe('/');
-    expect(within(crumbs).getByRole('link', { name: 'Episodes' }).getAttribute('href')).toBe('/shows/show-1');
+    // The Season page's Episodes tab (2026-11-15); this episode stores no season, so none is named.
+    expect(within(crumbs).getByRole('link', { name: 'Episodes' }).getAttribute('href')).toBe('/shows/show-1/season?tab=episodes');
     expect(crumbs.querySelector('[aria-current="page"]').textContent).toBe(FULL.title);
 
     expect(within(header).getByRole('heading', { level: 1 }).textContent).toBe(FULL.title);
@@ -148,6 +149,28 @@ describe('the studio header', () => {
     expect(place.textContent).toContain('Studio Night');
     expect(place.textContent).toContain('Studio by Sable');
     expect(within(header).getByText(FULL.description)).toBeTruthy();
+  });
+
+  // Producer Mode navigation (Evoni, 2026-11-15).
+  test('the breadcrumb returns to the episode\'s own season, and the event\'s package returns to the episode', async () => {
+    const EP = '11111111-2222-4333-8444-555555555555';
+    vi.mocked(api.get).mockImplementation(async (url) => (url === `/api/v1/episodes/${EP}/events`
+      ? { data: { success: true, events: [{ id: 'ev-1', name: 'Studio Night', show_id: 'show-1', link: { anchor: true } }] } }
+      : { data: {} }));
+    vi.mocked(episodeService.getEpisode).mockResolvedValue({ ...FULL, id: EP, episode_number: 9, season_number: 1, season_context: JSON.stringify({ season_number: 2, slot_number: 3, label: 'S2 · E3' }) });
+    renderAt(`/episodes/${EP}?tab=overview`);
+    const header = await screen.findByTestId('ed-header');
+    expect(within(header).getByTestId('ed-crumb-episodes').getAttribute('href')).toBe('/shows/show-1/season?tab=episodes&season=2');
+    const place = await within(header).findByTestId('ed-source-event');
+    expect(place.getAttribute('href')).toBe(`/shows/show-1/events/ev-1?from=episode:${EP}`);
+  });
+
+  test('an episode with no show keeps the old list as its way back', async () => {
+    vi.mocked(api.get).mockResolvedValue({ data: {} });
+    vi.mocked(episodeService.getEpisode).mockResolvedValue({ id: 'ep-1', title: 'Loose', episode_number: 4 });
+    renderAt('/episodes/ep-1?tab=overview');
+    const header = await screen.findByTestId('ed-header');
+    expect(within(header).getByTestId('ed-crumb-episodes').getAttribute('href')).toBe('/episodes');
   });
 
   test('the chosen tab is the magenta pill; the tabs keep their names and order', async () => {

@@ -4,12 +4,13 @@
  */
 import { vi, describe, beforeEach, test, expect } from 'vitest';
 import { render, screen, fireEvent, within, waitFor } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Routes, Route, useLocation, useNavigate } from 'react-router-dom';
 
 vi.mock('../../services/api', () => ({ default: { get: vi.fn(), post: vi.fn() } }));
 
 import api from '../../services/api';
-import EpisodeResultsSummary, { ResultsShare } from './EpisodeResultsSummary';
+import EpisodeResultsSummary, { ResultsShare, ResultsContext } from './EpisodeResultsSummary';
+import { parseFrom, returnLink } from '../../lib/eventFlow';
 import AuthContext from '../../contexts/AuthContext';
 
 const MONEY = { lines: [{ key: 'fee', label: 'Reel fee (on approval)', signed: 439, state: 'pending' }, { key: 'entry', label: 'Entry (comped by host)', signed: -50, covered: true, state: 'covered' }], projection: { projected_net: 439, posted_net: 0, conditional: [] } };
@@ -28,6 +29,93 @@ beforeEach(() => {
     if (url === '/api/v1/world/show-1/goals?status=active') return { data: { goals: [{ id: 'g1', title: 'Follow up with STUDIO BY SABLE', description: 'A reason to work together again', status: 'active' }] } };
     if (url === '/api/v1/feed-posts/episode/ep-1') return { data: { data: [] } };
     return { data: {} };
+  });
+});
+
+// Where the results came from (Evoni, 2026-11-15, Producer Mode navigation).
+describe('Results: the event and the Roadmap slot it came from', () => {
+  const EP = '11111111-2222-4333-8444-555555555555';
+  const EVENT = { id: 'ev-9', name: 'Velour Night', show_id: 'show-1' };
+  const weekly = { season_number: 2, slot_number: 5, label: 'S2 · E5' };
+  const draw = (props) => render(<MemoryRouter><ResultsContext showId="show-1" {...props} /></MemoryRouter>);
+
+  test('the stored event and slot are each a link: the package (back comes here), and the slot in its season', () => {
+    draw({ episode: { id: EP, season_context: weekly }, sourceEvent: EVENT });
+    const event = screen.getByTestId('results-event-link');
+    expect(event.textContent).toBe('Velour Night');
+    expect(event.getAttribute('href')).toBe(`/shows/show-1/events/ev-9?from=episode:${EP}:results`);
+    const slot = screen.getByTestId('results-slot-link');
+    expect(slot.textContent).toBe('S2 · E5');
+    expect(slot.getAttribute('href')).toBe('/shows/show-1/season?tab=roadmap&season=2&slot=5');
+  });
+
+  test('the package opened from here returns to these Results', () => {
+    draw({ episode: { id: EP, season_context: weekly }, sourceEvent: EVENT });
+    const from = new URL(screen.getByTestId('results-event-link').getAttribute('href'), 'http://x').searchParams.get('from');
+    expect(returnLink(parseFrom(from), { showId: 'show-1' })).toMatchObject({ href: `/episodes/${EP}?tab=results`, label: 'Back to the episode\u2019s Results' });
+  });
+
+  test('an event of another show opens in that show', () => {
+    draw({ episode: { id: EP }, sourceEvent: { ...EVENT, show_id: 'show-2' } });
+    expect(screen.getByTestId('results-event-link').getAttribute('href')).toMatch(/^\/shows\/show-2\/events\/ev-9\?/);
+  });
+
+  test('a special: the Roadmap of its season, with no slot made up for it', () => {
+    draw({ episode: { id: EP, episode_number: 6, season_context: { season_number: 2, slot_number: null, label: 'S2 · Bonus after E5', special: { id: 'sp-1', label: 'Bonus after E5', after_slot_number: 5 } } }, sourceEvent: EVENT });
+    const slot = screen.getByTestId('results-slot-link');
+    expect(slot.textContent).toBe('S2 · Bonus after E5');
+    expect(slot.getAttribute('href')).toBe('/shows/show-1/season?tab=roadmap&season=2');
+  });
+
+  test('nothing stored: plain words, no link, whatever the episode number or date', () => {
+    draw({ episode: { id: EP, episode_number: 5, season_number: 1, air_date: '2026-11-12' }, sourceEvent: null, sourceEventStatus: 'ready' });
+    const box = screen.getByTestId('results-context');
+    expect(within(box).queryAllByRole('link')).toHaveLength(0);
+    expect(screen.getByTestId('results-context-event').textContent).toBe('EventNo event linked');
+    expect(screen.getByTestId('results-context-slot').textContent).toBe('RoadmapNot placed in a season');
+  });
+
+  test('the event still being read, or not readable, is said so and is not "no event"', () => {
+    const { unmount } = draw({ episode: { id: EP }, sourceEvent: null, sourceEventStatus: 'loading' });
+    expect(screen.getByTestId('results-context-event').textContent).toBe('EventReading…');
+    unmount();
+    draw({ episode: { id: EP }, sourceEvent: null, sourceEventStatus: 'failed' });
+    expect(screen.getByTestId('results-context-event').textContent).toBe('EventCould not be read');
+    expect(screen.queryByTestId('results-event-link')).toBeNull();
+  });
+
+  test('an event with no id is not a link', () => {
+    draw({ episode: { id: EP }, sourceEvent: { name: 'Half a row' } });
+    expect(screen.queryByTestId('results-event-link')).toBeNull();
+  });
+
+  test('on the page, under the heading; the browser\'s Back returns from the package', async () => {
+    const Where = () => { const l = useLocation(); const nav = useNavigate(); return <><p data-testid="where">{l.pathname + l.search}</p><button type="button" onClick={() => nav(-1)}>back</button></>; };
+    render(
+      <MemoryRouter initialEntries={[`/episodes/${EP}?tab=results`]}>
+        <Routes>
+          <Route path="/episodes/:id" element={<><Where /><EpisodeResultsSummary episode={{ id: EP, show_id: 'show-1', season_context: weekly }} showId="show-1" onOpenTab={vi.fn()} sourceEvent={EVENT} sourceEventStatus="ready" /></>} />
+          <Route path="/shows/:showId/events/:eventId" element={<Where />} />
+          <Route path="/shows/:showId/season" element={<Where />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    const summary = await screen.findByTestId('results-summary');
+    expect(summary.querySelector('.ers-head').nextElementSibling).toBe(screen.getByTestId('results-context'));
+    fireEvent.click(screen.getByTestId('results-event-link'));
+    expect(screen.getByTestId('where').textContent).toBe(`/shows/show-1/events/ev-9?from=episode:${EP}:results`);
+    fireEvent.click(screen.getByRole('button', { name: 'back' }));
+    expect(screen.getByTestId('where').textContent).toBe(`/episodes/${EP}?tab=results`);
+    fireEvent.click(await screen.findByTestId('results-slot-link'));
+    expect(screen.getByTestId('where').textContent).toBe('/shows/show-1/season?tab=roadmap&season=2&slot=5');
+    fireEvent.click(screen.getByRole('button', { name: 'back' }));
+    expect(screen.getByTestId('where').textContent).toBe(`/episodes/${EP}?tab=results`);
+  });
+
+  test('without the props (an older caller) it still renders, with no link', async () => {
+    renderPage({});
+    await screen.findByTestId('results-summary');
+    expect(within(screen.getByTestId('results-context')).queryAllByRole('link')).toHaveLength(0);
   });
 });
 

@@ -15,6 +15,7 @@
  * waiting further out.
  */
 import { allSlots } from './seasonPage';
+import { packageHref } from './eventFlow';
 import { seasonContextOf } from './episodePipeline';
 import { seasonEventViews } from './eventLibrary';
 import { computeEventPackageReadiness, computeEventState, describeMissing } from '../utils/eventReadinessSections';
@@ -205,7 +206,10 @@ export function attentionItems({
         key: `event-${x.event.id}`, kind: 'events', rank: RANK.events_setup, sort: x.slot?.slot_number ?? 99, tone: 'calm',
         title: `${eventLine(x)} still needs setup.`,
         detail: `Still needed: ${x.missing.join(', ')}`,
-        link: { href: `/shows/${encodeURIComponent(showId)}/events/${encodeURIComponent(x.event.id)}` },
+        // Back from the package returns to its slot on the Roadmap when it is in one, else to the Overview.
+        link: { href: packageHref(showId, x.event.id, x.slot?.slot_number
+          ? { kind: 'roadmap', slot: x.slot.slot_number, season: seasonNumber }
+          : { kind: 'overview', season: seasonNumber }) },
       });
     }
   }

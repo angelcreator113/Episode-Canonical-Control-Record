@@ -192,6 +192,18 @@ describe('ShowEpisodesBoard — Now producing and the pipeline (Evoni\'s mock, 2
     expect(ev).toContain('Still needed:');
     // The venue is set (in the automation copy), so Place does not ask for it.
     expect(ev).not.toMatch(/Place: [^;]*venue/);
+    // Its package returns to the Season page's Episodes tab, in the season the board's roadmap names (2026-11-15).
+    expect(screen.getByTestId('seb-event-open').getAttribute('href')).toBe(`/shows/show-1/events/ev-1?from=episodes@${ROADMAP.season_number}`);
+  });
+
+  test('on a season\'s page, the event\'s package returns to that season\'s Episodes tab', async () => {
+    render(
+      <MemoryRouter>
+        <ShowEpisodesBoard showId="show-1" episodes={[DRAFT]} onChanged={vi.fn()} roadmap={{ season_number: 2, phases: [] }} />
+      </MemoryRouter>,
+    );
+    const link = await screen.findByTestId('seb-event-open');
+    expect(link.getAttribute('href')).toMatch(/^\/shows\/show-1\/events\/[^?]+\?from=episodes@2$/);
   });
 
   test('the board: five stages, the open slots under Planning, and the summary line', async () => {
