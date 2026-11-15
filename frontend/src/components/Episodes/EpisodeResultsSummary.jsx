@@ -10,6 +10,8 @@
 import { useContext, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { seasonPageHref } from '../../lib/seasonPage';
+import { packageHref } from '../../lib/eventFlow';
+import { episodeSlotLink } from '../../lib/episodePlace';
 import { ArrowRight, Hourglass, X } from 'lucide-react';
 import api from '../../services/api';
 import AuthContext from '../../contexts/AuthContext';
@@ -159,7 +161,38 @@ function CompleteEpisode({ episode, showId, onOpenTab, onCompleted }) {
   );
 }
 
-export default function EpisodeResultsSummary({ episode, showId, onOpenTab, onCompleted = null, focus = null }) {
+/**
+ * Where these results came from (Evoni, 2026-11-15): the event the episode
+ * was started from and its place on the Roadmap, each a link when the
+ * episode stores it and plain words when it does not.
+ *   sourceEvent        the episode's anchor event (EpisodeDetail's read of
+ *                      GET /episodes/:id/events), or null
+ *   sourceEventStatus  'loading' | 'ready' | 'failed'
+ * The slot is the episode's own season snapshot (lib/episodePlace): nothing
+ * is worked out from its number or dates, and a special is in no slot.
+ */
+export function ResultsContext({ episode, showId, sourceEvent = null, sourceEventStatus = 'ready' }) {
+  const eventShow = sourceEvent?.show_id || showId;
+  const place = episodeSlotLink(showId, episode);
+  return (
+    <p className="ers-context" data-testid="results-context">
+      <span className="ers-context-part" data-testid="results-context-event">
+        <span className="ers-context-label">Event</span>
+        {sourceEvent?.id && eventShow
+          ? <Link className="ers-link" to={packageHref(eventShow, sourceEvent.id, { kind: 'episode', id: episode?.id, tab: 'results' })} data-testid="results-event-link">{sourceEvent.name || 'Event Package'}</Link>
+          : <span className="ers-context-none">{sourceEventStatus === 'loading' ? 'Reading…' : sourceEventStatus === 'failed' ? 'Could not be read' : 'No event linked'}</span>}
+      </span>
+      <span className="ers-context-part" data-testid="results-context-slot">
+        <span className="ers-context-label">Roadmap</span>
+        {place
+          ? <Link className="ers-link" to={place.href} data-testid="results-slot-link">{place.label}</Link>
+          : <span className="ers-context-none">Not placed in a season</span>}
+      </span>
+    </p>
+  );
+}
+
+export default function EpisodeResultsSummary({ episode, showId, onOpenTab, onCompleted = null, focus = null, sourceEvent = null, sourceEventStatus = 'ready' }) {
   const episodeId = episode?.id;
   const brief = useGet(episodeId ? `/api/v1/episode-brief/${episodeId}` : null, (d) => d?.data || null);
   const money = useGet(showId && episodeId ? `/api/v1/world/${showId}/episodes/${episodeId}/money` : null, (d) => d?.data || null);
@@ -183,6 +216,7 @@ export default function EpisodeResultsSummary({ episode, showId, onOpenTab, onCo
         <span className="ers-sub">{how.done ? `Completed${how.score != null ? ` · ${how.score}/100` : ''}` : 'Not completed yet'}</span>
         {how.done && <button type="button" className="ers-btn" onClick={toEvaluation}>The evaluation</button>}
       </div>
+      <ResultsContext episode={episode} showId={showId} sourceEvent={sourceEvent} sourceEventStatus={sourceEventStatus} />
 
       <div className="ers-grid">
         {/* Until it is completed: what fills in then, not five empty rows. */}

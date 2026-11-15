@@ -379,7 +379,7 @@ export function nextPackageStep(readiness) {
 export const EVENT_QUEUE_STATES = {
   needs_organizer: { label: 'Needs Organizer', icon: '👤', color: 'var(--danger-text)', bg: 'var(--danger-bg)', primaryAction: 'Choose Organizer' },
   needs_setup:      { label: 'Needs Setup',     icon: '🛠️', color: 'var(--warning-text)', bg: 'var(--warning-bg)', primaryAction: 'Continue Setup' },
-  ready:            { label: 'Ready',           icon: '✓',  color: 'var(--success-text)', bg: 'var(--success-bg)', primaryAction: 'Start Episode' },
+  ready:            { label: 'Ready',           icon: '✓',  color: 'var(--success-text)', bg: 'var(--success-bg)', primaryAction: 'Open package to start' },
   used:             { label: 'Used',            icon: '◉',  color: 'var(--primary-text)', bg: 'var(--primary-subtle)', primaryAction: 'Open Episode' },
   archived:         { label: 'Archived',        icon: '□',  color: 'var(--text-secondary)', bg: 'var(--lala-parchment-2)', primaryAction: 'View' },
 };

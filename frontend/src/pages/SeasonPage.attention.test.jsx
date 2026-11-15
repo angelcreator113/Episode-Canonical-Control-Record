@@ -126,7 +126,7 @@ describe('Needs attention', () => {
     expect(rows[0].textContent).toMatch(/Episode 1 releases in 3 days and still needs: final cut, thumbnail, title & copy\./);
     expect(rows[0].getAttribute('href')).toBe('/shows/show-1/world?tab=release');
     expect(within(box).getByTestId('szn-attention-slots-1').getAttribute('href')).toBe('/shows/show-1/season?tab=roadmap&slot=3');
-    expect(within(box).getByTestId('szn-attention-event-ev-2').getAttribute('href')).toBe('/shows/show-1/events/ev-2');
+    expect(within(box).getByTestId('szn-attention-event-ev-2').getAttribute('href')).toBe('/shows/show-1/events/ev-2?from=roadmap:2@2');
     expect(within(box).getByTestId('szn-attention-gap-1').getAttribute('href')).toBe('/shows/show-1/season?tab=goals');
     // Seven waiting: the seventh, the held opportunity (the least urgent), is behind "+1 more".
     expect(screen.getByTestId('szn-attention-more').textContent).toBe('+1 more');
