@@ -55,6 +55,7 @@ Video clips are measured with `ffprobe` before they are accepted (`websiteSlotSe
 4. **Draft preview.** Signed in, `/site-preview?drafts=1` shows drafts. `/site-preview` shows only what visitors see. Signed in, `/` is the studio dashboard, not the landing page.
 5. **Publish.** Add alt text and publish. Within five minutes (the endpoint's cache), `/` in a private window shows it.
 6. **A clip.** Try a clip over 30 seconds or over 25 MB: refused. A clip of 30 seconds or less needs a poster (and captions if "has speech" is on) before it will publish.
+7. **Go-live requirement: the look image's one-hour lifetime reaches visitors.** Before the public storage is switched on, check in the CloudFront console that the cache policy on the `site-public/*` behaviour has a **minimum TTL of 3600 seconds or less** and honours the origin's `Cache-Control` (a higher minimum overrides the object's one hour). After the first look is published, confirm it from outside: `curl -sI https://<cdn>/site-public/looks/<key>/<file>.png` should show `cache-control: public, max-age=3600` and no `immutable`. This is Evoni's check; no session changes CloudFront. It bounds how long a cache keeps a copy and is not a revocation: see Storage, step 2.
 
 ## Limits (as built)
 
