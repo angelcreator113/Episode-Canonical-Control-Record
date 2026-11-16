@@ -65,7 +65,7 @@ async function madeUpCutout() {
   const show = uuid();
   let token;
   // The production wardrobe's reads are an ADMIN's (Evoni, 2026-11-15; wardrobeReadAuthorization). This
-  // suite reads them as one; its own account, an editor, is refused them (the last test here).
+  // suite reads them as one; an editor is refused them (the last test here).
   const adminToken = TokenService.generateTokenPair({ id: 'test-admin-episodePoses', email: 'admin@episodePoses.dev', name: 'Admin', groups: ['ADMIN'], role: 'ADMIN' }).accessToken;
   const asAdmin = (r) => r.set('Authorization', `Bearer ${adminToken}`);
   let postSpy;
@@ -275,8 +275,14 @@ async function madeUpCutout() {
     await expect(run(`INSERT INTO episode_character_poses (episode_id, character_key, pose, original_key) VALUES (:ep, 'lala', 'sitting', 'k')`, { ep }))
       .rejects.toThrow(/episode_character_poses_pose/);
   });
-  test("the wardrobe's reads are an ADMIN's: this suite's editor is refused", async () => {
-    const res = await request(app).get(`/api/v1/episodes/00000000-0000-4000-8000-000000000000/lookbook`).set('Authorization', `Bearer ${token}`);
+  test("the wardrobe's reads are an ADMIN's: an editor is refused", async () => {
+    // This suite's own account is an ADMIN since 2026-11-16 (#3866), so the refusal is checked with an editor of its own
+    // (the groups processingAdminOnly.integration.test.js gives its editor).
+    const editorToken = TokenService.generateTokenPair({ id: 'test-editor-episodePoses', email: 'editor@episodePoses.dev', name: 'Editor', groups: ['USER', 'EDITOR'], role: 'USER' }).accessToken;
+    const res = await request(app).get(`/api/v1/episodes/00000000-0000-4000-8000-000000000000/lookbook`).set('Authorization', `Bearer ${editorToken}`);
     expect(res.status).toBe(403);
+    // And the ADMIN this suite acts as is not: the route answers for itself (no such episode).
+    const asAdminRes = await request(app).get(`/api/v1/episodes/00000000-0000-4000-8000-000000000000/lookbook`).set('Authorization', `Bearer ${token}`);
+    expect([401, 403]).not.toContain(asAdminRes.status);
   });
 });
