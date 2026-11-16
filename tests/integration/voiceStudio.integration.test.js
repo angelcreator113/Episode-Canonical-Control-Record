@@ -903,7 +903,8 @@ const SCRIPT = [
     }
   });
 
-  test('admins only (2026-10-28): every studio read is ADMIN; only /status and /playable answer any signed-in user', async () => {
+  // Evoni, 2026-11-16: /playable is an ADMIN's too (a non-admin got a reduced list until then).
+  test('admins only (2026-10-28, 2026-11-16): every studio read and /playable is ADMIN; only /status answers any signed-in user', async () => {
     const ep = await makeEpisode();
     await approveTake(ep, await takeAt(ep, 6, 0));
     const prev = process.env.VOICE_STUDIO;
@@ -913,31 +914,32 @@ const SCRIPT = [
         const r = request(app).get(`/api/v1/voice-studio${url}`);
         return token ? r.set('Authorization', `Bearer ${token}`) : r;
       };
-      for (const url of [`/${ep}/studio`, `/${ep}/summary`, `/${ep}/approvals/history`, `/${ep}/takes`]) {
+      for (const url of [`/${ep}/studio`, `/${ep}/summary`, `/${ep}/approvals/history`, `/${ep}/takes`, `/${ep}/playable`]) {
         expect([url, (await get(url, userToken)).status]).toEqual([url, 403]);
         expect([url, (await get(url, adminToken)).status]).toEqual([url, 200]);
         expect([url, (await get(url, null)).status]).toEqual([url, 401]);
       }
-      for (const url of ['/status', `/${ep}/playable`]) {
+      for (const url of ['/status']) {
         expect([url, (await get(url, userToken)).status]).toEqual([url, 200]);
         expect([url, (await get(url, null)).status]).toEqual([url, 401]);
       }
-      // What /playable gives a non-admin: current approvals' takes only, nothing of the studio:
-      // no held approvals, states or reasons (whatever the service adds later), no storage key or hash.
-      const fake = { script_revision: 'sr1-x', takes: [{ approval_id: 'a', beat_number: 6, line_index: 0, revision_id: 'r', in_ms: 0, out_ms: 900, s3_key: 'k', sha256: 'h', state: 'current' }],
+      // A refused /playable carries nothing of the list, and the list is not read for it.
+      const fake = { script_revision: 'sr1-x', takes: [{ approval_id: 'a', beat_number: 6, line_index: 0, revision_id: 'r', in_ms: 0, out_ms: 900, s3_key: 'k', sha256: 'h', state: 'current', audio_url: 'https://bucket.example/take.wav' }],
         held: [{ approval_id: 'b', beat_number: 6, line_index: 1, state: 'revoked', reason_text: 'The approval was withdrawn.' }] };
       const spy = jest.spyOn(studio, 'playableApprovals').mockResolvedValue(fake);
       try {
-        const asUser = (await get(`/${ep}/playable`, userToken)).body.data;
-        expect(asUser).toEqual({ script_revision: 'sr1-x', takes: [{ approval_id: 'a', beat_number: 6, line_index: 0, revision_id: 'r', in_ms: 0, out_ms: 900 }] });
-        expect(JSON.stringify(asUser)).not.toMatch(/held|state|reason|s3_key|sha256|withdrawn/);
+        const asUser = await get(`/${ep}/playable`, userToken);
+        expect(asUser.status).toBe(403);
+        expect(asUser.body.data).toBeUndefined();
+        expect(JSON.stringify(asUser.body)).not.toMatch(/takes|held|audio_url|s3_key|sha256|withdrawn/);
+        expect(spy).not.toHaveBeenCalled();
+        // An ADMIN gets the list whole, as before.
         const asAdmin = (await get(`/${ep}/playable`, adminToken)).body.data;
         expect(asAdmin).toEqual(fake);
       } finally { spy.mockRestore(); }
-      const real = (await get(`/${ep}/playable`, userToken)).body.data;
-      expect(Object.keys(real).sort()).toEqual(['script_revision', 'takes']);
+      const real = (await get(`/${ep}/playable`, adminToken)).body.data;
       expect(real.takes).toHaveLength(1);
-      expect(Object.keys(real.takes[0]).every((k) => ['approval_id', 'beat_number', 'line_index', 'revision_id', 'in_ms', 'out_ms', 'gain_db', 'fade_in_ms', 'fade_out_ms', 'normalise', 'content_type', 'audio_url'].includes(k))).toBe(true);
+      expect(real).toHaveProperty('held');
     } finally {
       if (prev === undefined) delete process.env.VOICE_STUDIO; else process.env.VOICE_STUDIO = prev;
     }
