@@ -15,7 +15,8 @@ const express    = require('express');
 const router     = express.Router();
 const { createAnthropicClient } = require('../services/anthropicClient');
 const rateLimit  = require('express-rate-limit');
-const { requireAuth } = require('../middleware/auth');
+const { requireAuth, authorize } = require('../middleware/auth');
+const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 const db = require('../models');
 
 const client = createAnthropicClient();
@@ -286,7 +287,8 @@ async function synthesizeSpeech(text) {
 // Returns Amber's contextual greeting for the current page
 // Query: ?page=dashboard (optional, defaults to dashboard)
 // ─────────────────────────────────────────────────────────────────────────────
-router.get('/greeting', requireAuth, async (req, res) => {
+// ADMIN, rate limited (Evoni, 2026-11-16): every read is a paid AI call (generateGreeting).
+router.get('/greeting', requireAuth, authorize(['ADMIN']), aiRateLimiter, async (req, res) => {
   const page = req.query.page || 'dashboard';
   try {
     const state    = await readSystemState(req.user?.id);

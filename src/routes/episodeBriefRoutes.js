@@ -22,6 +22,8 @@ const {
 } = require('../utils/snapshotFreeze');
 const { assertEventRelinkAllowed, assertEpisodeAcceptsEventLink, isFrozenEpisodeError } = require('../utils/frozenEpisode');
 
+const { readsAsAdmin } = require('../services/publicSocialProfile');
+
 const SHOW_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // ── GET / CREATE BRIEF ────────────────────────────────────────────────────────
@@ -38,11 +40,19 @@ router.get('/:episodeId', requireAuth, async (req, res) => {
       const episode = await Episode.findByPk(episodeId);
       if (!episode) return res.status(404).json({ error: 'Episode not found' });
 
-      brief = await EpisodeBrief.create({
-        episode_id: episodeId,
-        show_id: episode.show_id,
-        status: 'draft',
-      });
+      // A read must not write for a reader who may not write (Evoni, 2026-11-16): only an ADMIN's read
+      // makes the episode's brief. Anyone else is shown the same empty draft, unsaved.
+      if (readsAsAdmin(req)) {
+        brief = await EpisodeBrief.create({
+          episode_id: episodeId,
+          show_id: episode.show_id,
+          status: 'draft',
+        });
+      } else {
+        // The model's own defaults for an unsaved brief, with no id: there is no row.
+        const unsaved = { ...EpisodeBrief.build({ episode_id: episodeId, show_id: episode.show_id, status: 'draft' }).toJSON(), id: null };
+        brief = { ...unsaved, toJSON: () => unsaved };
+      }
     }
 
     // Her goal this episode (Evoni, 2026-10-25; services/episodeMainGoal):
