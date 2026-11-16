@@ -32,7 +32,10 @@ const columns = async () => (await q(
 )).map((r) => r.column_name).sort();
 
 (shouldSkip ? describe.skip : describe)('brain_documents', () => {
+  // World Studio and Show Bible reads are an ADMIN's (Evoni, 2026-11-16): the reads below are made as an ADMIN.
+  // The editor token is kept for what this suite writes, and for the refusal check.
   let token;
+  const adminToken = TokenService.generateTokenPair({ id: 'test-admin-world-reads', email: 'admin@world-reads.dev', name: 'Admin', groups: ['ADMIN'], role: 'ADMIN' }).accessToken;
   const qi = () => sequelize.getQueryInterface();
   const Sequelize = require('sequelize');
 
@@ -69,7 +72,10 @@ const columns = async () => (await q(
     const [row] = await q('SELECT source_name, document_text, entries_created FROM brain_documents WHERE source_name = :source', { source: SOURCE });
     expect(row).toEqual({ source_name: SOURCE, document_text: 'Velvet is in this season.', entries_created: 1 });
 
-    const list = await request(app).get('/api/v1/franchise-brain/documents').set('Authorization', `Bearer ${token}`);
+    const refused = await request(app).get('/api/v1/franchise-brain/documents').set('Authorization', `Bearer ${token}`);
+    expect(refused.status).toBe(403);
+    expect(JSON.stringify(refused.body)).not.toContain(SOURCE);
+    const list = await request(app).get('/api/v1/franchise-brain/documents').set('Authorization', `Bearer ${adminToken}`);
     expect(list.status).toBe(200);
     expect(list.body.documents.map((d) => d.source_name)).toContain(SOURCE);
   });

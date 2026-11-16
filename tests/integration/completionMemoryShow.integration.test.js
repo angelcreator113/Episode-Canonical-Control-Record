@@ -27,7 +27,10 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
 
 (shouldSkip ? describe.skip : describe)('Episode completion memory is the show\'s', () => {
   const shows = [];
+  // World Studio and Show Bible reads are an ADMIN's (Evoni, 2026-11-16): the reads below are made as an ADMIN.
+  // The editor token is kept for what this suite writes, and for the refusal check.
   let token;
+  const adminToken = TokenService.generateTokenPair({ id: 'test-admin-world-reads', email: 'admin@world-reads.dev', name: 'Admin', groups: ['ADMIN'], role: 'ADMIN' }).accessToken;
 
   async function seed(name) {
     const show = uuid();
@@ -90,9 +93,11 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
 
   it('the Culture tab\'s read for one show lists its moments and not the other show\'s', async () => {
     const [a, b] = shows;
+    const entriesUrl = `/api/v1/franchise-brain/entries?category=narrative&status=active&show_id=${a}`;
+    expect((await request(app).get(entriesUrl).set('Authorization', `Bearer ${token}`)).status).toBe(403);
     const res = await request(app)
-      .get(`/api/v1/franchise-brain/entries?category=narrative&status=active&show_id=${a}`)
-      .set('Authorization', `Bearer ${token}`);
+      .get(entriesUrl)
+      .set('Authorization', `Bearer ${adminToken}`);
     expect(res.status).toBe(200);
     const mine = res.body.entries.filter((e) => e.source_document === 'episode-completion');
     expect(mine.some((e) => e.show_id === a)).toBe(true);
