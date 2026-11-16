@@ -74,7 +74,7 @@ async function createMarked(Model, base, marked) {
   const HANDLE = `priv.${tag}`;
   const KEY = `priv-${tag}`;
   const showId = crypto.randomUUID();
-  let profile; let registry; let character; let other; let pair;
+  let profile; let registry; let character; let other; let pair; let locked;
   let ipN = 0;
   const tokens = {};
   const as = (who, req) => {
@@ -97,6 +97,10 @@ async function createMarked(Model, base, marked) {
     profile = await createMarked(models.SocialProfile,
       { handle: HANDLE, platform: 'lalaverse', display_name: `Public Name ${tag}`, vibe_sentence: `Public line ${tag}`, public_persona: `Public persona ${tag}`, feed_layer: 'lalaverse', status: 'generated' },
       markerValues(models.SocialProfile, ['handle', 'display_name', 'vibe_sentence', 'public_persona']));
+    // The locked JustAWoman record: a profile row like any other, marked as the record.
+    locked = await createMarked(models.SocialProfile,
+      { handle: `${HANDLE}.record`, platform: 'lalaverse', display_name: `Record Name ${tag}`, vibe_sentence: `Record line ${tag}`, public_persona: `Record persona ${tag}`, feed_layer: 'lalaverse', status: 'finalized', is_justawoman_record: true },
+      markerValues(models.SocialProfile, ['handle', 'display_name', 'vibe_sentence', 'public_persona']));
     registry = await models.CharacterRegistry.create({ title: `Privacy registry ${tag}`, ...(models.CharacterRegistry.rawAttributes.show_id ? { show_id: showId } : {}) });
     character = await createMarked(models.RegistryCharacter,
       { registry_id: registry.id, character_key: KEY, display_name: `Character ${tag}`, feed_profile_id: profile.id },
@@ -115,6 +119,7 @@ async function createMarked(Model, base, marked) {
       await run('DELETE FROM character_registries WHERE id = :id', { id: registry.id });
     }
     if (profile) await run('DELETE FROM social_profiles WHERE id = :id', { id: profile.id });
+    if (locked) await run('DELETE FROM social_profiles WHERE id = :id', { id: locked.id });
     await run('DELETE FROM shows WHERE id = :showId', { showId });
   });
 
@@ -176,6 +181,46 @@ async function createMarked(Model, base, marked) {
         expect([200, 404]).toContain(res.status);
         if (res.status === 200) expect(Object.keys(res.body.profile).sort()).toEqual([...PUBLIC_PROFILE_FIELDS].sort());
       }
+    });
+
+    test.each(NOT_ADMIN)('%s: the locked JustAWoman record is not in the list, whatever is searched; every other profile still is', async (who) => {
+      // What the friend picker on The Pulse asks for, a search for the record by handle and by name, and a wide page.
+      for (const qs of ['feed_layer=lalaverse&limit=100', `search=${HANDLE}.record`, `search=${encodeURIComponent(`Record Name ${tag}`)}`, `search=${HANDLE}&limit=100`]) {
+        const res = await get(who, `/api/v1/social-profiles?${qs}`);
+        expect([qs, res.status]).toEqual([qs, 200]);
+        expect([qs, res.body.profiles.some((p) => p.id === locked.id)]).toEqual([qs, false]);
+        expect(JSON.stringify(res.body)).not.toContain(`${HANDLE}.record`);
+      }
+      // The count does not tell of it either: the two seeded handles share a prefix, and one is counted.
+      const both = await get(who, `/api/v1/social-profiles?search=${HANDLE}`);
+      expect(both.body.pagination.total).toBe(1);
+      expect(both.body.profiles.map((p) => p.id)).toEqual([profile.id]);
+    });
+
+    test.each(NOT_ADMIN)('%s: a profile is listed whatever its production stage (the stage is not a release)', async (who) => {
+      for (const status of ['draft', 'generated', 'finalized', 'crossed', 'archived']) {
+        await sequelize.query('UPDATE social_profiles SET status = :status WHERE id = :id', { replacements: { status, id: profile.id } });
+        const res = await get(who, `/api/v1/social-profiles?search=${HANDLE}`);
+        expect([status, res.body.profiles.map((p) => p.id)]).toEqual([status, [profile.id]]);
+        expect([status, (await get(who, `/api/v1/social-profiles/${profile.id}`)).status]).toEqual([status, 200]);
+      }
+      await sequelize.query(`UPDATE social_profiles SET status = 'generated' WHERE id = :id`, { replacements: { id: profile.id } });
+    });
+
+    test.each(NOT_ADMIN)('%s: the record by its id gives its public columns only, as any profile does', async (who) => {
+      const res = await get(who, `/api/v1/social-profiles/${locked.id}`);
+      expect(res.status).toBe(200);
+      expect(Object.keys(res.body.profile).sort()).toEqual([...PUBLIC_PROFILE_FIELDS].sort());
+      expect(res.body.profile.public_persona).toBe(`Record persona ${tag}`);
+      expect(markersIn(res.body)).toEqual([]);
+    });
+
+    test('an ADMIN still lists the record, marked as the record', async () => {
+      const list = await get('admin', `/api/v1/social-profiles?search=${HANDLE}&limit=100`);
+      expect(list.status).toBe(200);
+      const mine = list.body.profiles.find((p) => p.id === locked.id);
+      expect(mine).toMatchObject({ is_justawoman_record: true });
+      expect(list.body.profiles.find((p) => p.id === profile.id)).toBeDefined();
     });
 
     test('an ADMIN reads the whole profile, the list with its counts, and the followers, as before', async () => {
@@ -288,6 +333,32 @@ async function createMarked(Model, base, marked) {
         const res = await get('admin', path);
         expect([path, [401, 403].includes(res.status)]).toEqual([path, false]);
       }
+    });
+
+    // The bulk job stream stays open once it is let through, so it is asked apart from the list above.
+    test('the bulk job stream: 401 without a token, 403 for a viewer and an editor, and an ADMIN is connected', async () => {
+      const path = '/api/v1/social-profiles/bulk/jobs/1/stream';
+      const anon = await get('anon', path);
+      expect(anon.status).toBe(401);
+      for (const who of ['viewer', 'editor']) {
+        const res = await get(who, path);
+        expect([who, res.status]).toEqual([who, 403]);
+        expect([who, res.headers['content-type'] || '']).not.toEqual([who, expect.stringContaining('text/event-stream')]);
+        expect(markersIn(res.body)).toEqual([]);
+      }
+      // Over a real connection, closed as soon as the answer's head arrives.
+      const server = app.listen(0);
+      const opened = await new Promise((resolve, reject) => {
+        const req = require('http').get({ port: server.address().port, path, headers: { Authorization: `Bearer ${tokens.admin}` } }, (res) => {
+          const got = { status: res.statusCode, type: res.headers['content-type'] };
+          res.destroy();
+          resolve(got);
+        });
+        req.on('error', reject);
+        req.setTimeout(8000, () => req.destroy(new Error('the stream did not answer')));
+      }).finally(() => { server.closeAllConnections(); server.close(); });
+      expect(opened.status).toBe(200);
+      expect(opened.type).toContain('text/event-stream');
     });
 
     test('an ADMIN still reads the production material itself', async () => {

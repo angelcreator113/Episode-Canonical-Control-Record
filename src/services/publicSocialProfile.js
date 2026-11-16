@@ -19,7 +19,8 @@
  *                            content, status, follow motivation) are not
  *                            honoured: filtering by a private column would
  *                            tell what it holds. No followers, no registry
- *                            link, no status counts.
+ *                            link, no status counts. The locked JustAWoman
+ *                            record is not listed.
  *   publicProfileById(db, id)
  *   readsAsAdmin(req)        who gets the whole row instead
  *
@@ -56,7 +57,12 @@ const FEED_LAYERS = ['real_world', 'lalaverse'];
 
 async function publicProfileList(db, query = {}) {
   const { Op } = require('sequelize');
-  const where = {};
+  // The JustAWoman record is the locked production record, not a person to pick or browse: it is left out of
+  // this list, as The Pulse's own profile read leaves it out (routes/pulseFollowsRoutes pulseProfile). Her
+  // posts and her place on The Pulse come from other reads and are not changed. A profile's `status`
+  // (draft, generated, finalized, crossed, archived) is a production stage, not a release: The Pulse shows
+  // people whatever it is, so it is not filtered here either.
+  const where = { is_justawoman_record: { [Op.not]: true } };
   if (FEED_LAYERS.includes(String(query.feed_layer || ''))) where.feed_layer = String(query.feed_layer);
   const search = typeof query.search === 'string' ? query.search.trim() : '';
   if (search) {
