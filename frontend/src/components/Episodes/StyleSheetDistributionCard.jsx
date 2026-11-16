@@ -164,7 +164,20 @@ export const COPY_REASON = {
   rights_withdrawn: 'Image rights withdrawn',
   replaced: 'Replaced by a later publish',
   taken_down: 'Look taken down',
+  reserved: 'Reserved for a publish that did not finish',
 };
+
+/**
+ * What is known of the file itself. A copy whose upload was never confirmed
+ * (`upload` 'reserved' or 'failed') is not a known public copy: it may not be
+ * there at all, and it is never said to have had its access removed.
+ */
+export function copyStanding(c) {
+  const unconfirmed = c.upload === 'reserved' || c.upload === 'failed';
+  if (!unconfirmed) return c.revocation === 'verified' ? 'Access checked: no longer served' : 'Access not yet removed';
+  if (c.revocation === 'absent') return 'Checked: no file found at this address';
+  return c.upload === 'failed' ? 'Upload not confirmed: the file may or may not be there' : 'Key reserved: upload not confirmed';
+}
 
 /**
  * Copies of look images still in the public storage though the website no
@@ -184,13 +197,16 @@ export function PublicCopies({ copies, working, onCheck }) {
         {copies.map((c) => (
           <li key={c.key} data-testid="ssd-public-copy">
             <span className="ssd-link-label">{COPY_REASON[c.reason] || 'No longer shown'}</span>
-            <span className="ssd-badge">Hidden on the website</span>
-            <span className="ssd-badge">{c.revocation === 'verified' ? 'Access checked: no longer served' : 'Access not yet removed'}</span>
+            <span className="ssd-badge">{c.upload === 'reserved' || c.upload === 'failed' ? 'Not shown on the website' : 'Hidden on the website'}</span>
+            <span className="ssd-badge" data-testid="ssd-public-copy-standing">{copyStanding(c)}</span>
             <span className="ssd-link-url">{c.url || c.key}</span>
             {c.checked_at && (
               <span className="ssd-hint">
                 Last checked {new Date(c.checked_at).toLocaleString()}: {c.last_status == null ? 'could not be checked' : `the address answered ${c.last_status}`}.
               </span>
+            )}
+            {(c.upload === 'reserved' || c.upload === 'failed') && c.revocation !== 'absent' && (
+              <span className="ssd-hint">This address was set aside for a look image before it was uploaded, and the upload was not confirmed. Check it: if a file is there, it is listed as a public copy to remove access to.</span>
             )}
             {!c.url && <span className="ssd-hint">No public address is configured here, so this copy cannot be checked.</span>}
             <button type="button" className="ssd-btn" disabled={working || !c.url} onClick={() => onCheck(c.key)}>Check access</button>

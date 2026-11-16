@@ -279,4 +279,30 @@ describe('Show on the website', () => {
     expect(rows[1].textContent).toMatch(/cannot be checked/);
     expect(within(rows[1]).getByRole('button', { name: 'Check access' }).disabled).toBe(true);
   });
+
+  test('a reserved or failed upload is told apart from a known public copy, and is never said to be removed', async () => {
+    const base = { url: 'https://site.cdn.test/k', reason: 'reserved', checked_at: null, last_status: null };
+    await renderCard(entry({ public_copies: [
+      { ...base, key: 'k-reserved', upload: 'reserved', revocation: 'unconfirmed' },
+      { ...base, key: 'k-failed', upload: 'failed', revocation: 'unconfirmed' },
+      { ...base, key: 'k-absent', upload: 'failed', revocation: 'absent', checked_at: '2026-11-16T10:00:00.000Z', last_status: 404 },
+      { ...base, key: 'k-known', upload: 'stored', reason: 'replaced', revocation: 'pending' },
+    ] }));
+    const rows = screen.getAllByTestId('ssd-public-copy');
+    const standing = rows.map((r) => within(r).getByTestId('ssd-public-copy-standing').textContent);
+    expect(standing).toEqual([
+      'Key reserved: upload not confirmed',
+      'Upload not confirmed: the file may or may not be there',
+      'Checked: no file found at this address',
+      'Access not yet removed',
+    ]);
+    for (const r of rows.slice(0, 3)) {
+      expect(r.textContent).toMatch(/Reserved for a publish that did not finish/);
+      expect(r.textContent).toMatch(/Not shown on the website/);
+      expect(r.textContent).not.toMatch(/no longer served|revoked|Access not yet removed|Hidden on the website/i);
+    }
+    expect(rows[3].textContent).toMatch(/Hidden on the website/);
+    // Each can still be checked.
+    for (const r of rows) expect(within(r).getByRole('button', { name: 'Check access' }).disabled).toBe(false);
+  });
 });

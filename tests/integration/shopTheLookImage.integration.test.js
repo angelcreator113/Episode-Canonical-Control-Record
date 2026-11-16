@@ -709,4 +709,288 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
       expect(after.site.image ? after.site.image.key === fresh : keys.includes(fresh)).toBe(true);
     });
   });
+
+  describe('a removed entry stays removed, and a copy is recorded before it is made (Evoni, 2026-11-16)', () => {
+    let ipN = 0;
+    const from = (r) => { ipN += 1; return r.set('X-Forwarded-For', `198.51.119.${(ipN % 250) + 1}`); };
+    const look = async (key) => (await from(request(app).get(`/api/v1/public/looks/${key}`)));
+    const dist = async (ep) => (await as(admin, from(request(app).get(distUrl(ep))))).body.data;
+    const sendNow = (ep) => as(admin, from(request(app).post(distUrl(ep)))).send({ include_shop_links: true });
+    const remove = (ep) => as(admin, from(request(app).delete(distUrl(ep))));
+    const withdraw = (ep) => as(admin, from(request(app).post(`${siteUrl(ep)}/image/withdraw`)));
+    const check = (ep, key) => as(admin, from(request(app).post(`${siteUrl(ep)}/image/check`))).send({ key });
+    const publishAs = async (ep, imageRights = { category: 'original' }) => as(admin, from(request(app).post(siteUrl(ep))))
+      .send({ links: await confirmAll(ep), ...(imageRights ? { image_rights: imageRights } : {}) });
+    const metaOf = async (ep) => {
+      const [[row]] = await run('SELECT distribution_metadata AS meta FROM episodes WHERE id = :ep', { ep });
+      return typeof row.meta === 'string' ? JSON.parse(row.meta) : (row.meta || {});
+    };
+    const savedEntry = async (ep) => (await metaOf(ep)).style_sheet;
+    const fresh = async () => {
+      const ids = await seed();
+      await run(`UPDATE episodes SET status = 'published' WHERE id = :ep`, ids);
+      expect((await sendNow(ids.ep)).status).toBe(200);
+      return ids;
+    };
+    let statusOf;
+    beforeEach(() => { statusOf = jest.spyOn(distribution, 'fetchStatus').mockResolvedValue(200); });
+
+    it('1. removed before a stale save: every kind of save built on the removed entry is refused, and the entry stays removed', async () => {
+      const ids = await fresh();
+      const read = await metaOf(ids.ep);
+      expect((await remove(ids.ep)).status).toBe(200);
+      const removed = await metaOf(ids.ep);
+      expect(removed.style_sheet).toBeUndefined();
+      expect(removed[distribution.REV_KEY]).toBe(read.style_sheet.rev + 1);
+      // What a send, an edit, a publish, a take-down, a withdrawal or a check would save, each built on what was read before.
+      const stale = [
+        read.style_sheet,
+        { ...read.style_sheet, caption: 'edited on the old reading' },
+        { ...read.style_sheet, site: { key: 'AAAAAAAAAAAA', links: [], published_at: new Date().toISOString() } },
+        { ...read.style_sheet, public_copies: [] },
+      ];
+      for (const entry of stale) {
+        await expect(distribution.writeMetadata(models, ids.ep, { ...read, style_sheet: entry })).rejects.toMatchObject({ status: 409, code: 'DISTRIBUTION_CHANGED' });
+        expect(await metaOf(ids.ep)).toEqual(removed);
+      }
+      // An entry saved before revisions existed (no number) and then removed is protected the same way.
+      await run(`UPDATE episodes SET distribution_metadata = CAST(:meta AS jsonb) WHERE id = :ep`, { ep: ids.ep, meta: JSON.stringify({ style_sheet: { ...read.style_sheet, rev: undefined } }) });
+      const old = await metaOf(ids.ep);
+      expect(old.style_sheet.rev).toBeUndefined();
+      expect((await remove(ids.ep)).status).toBe(200);
+      await expect(distribution.writeMetadata(models, ids.ep, old)).rejects.toMatchObject({ status: 409, code: 'DISTRIBUTION_CHANGED' });
+      expect((await metaOf(ids.ep)).style_sheet).toBeUndefined();
+      // Through the routes: the actions that need an entry find none.
+      expect((await withdraw(ids.ep)).status).toBe(404);
+      expect((await publishAs(ids.ep)).status).toBe(404);
+      expect((await dist(ids.ep)).sent).toBe(false);
+      // Removing again is safe and writes nothing.
+      const before = JSON.stringify(await metaOf(ids.ep));
+      expect((await remove(ids.ep)).status).toBe(200);
+      expect(JSON.stringify(await metaOf(ids.ep))).toBe(before);
+    });
+
+    it('2. removed before the copy is reserved: the publish is refused, nothing is copied, and the entry stays removed', async () => {
+      const ids = await fresh();
+      stored.length = 0;
+      // The look is drawn before its key is reserved; the entry is removed while it is being drawn.
+      distribution.drawLook.mockImplementationOnce(async () => {
+        await distribution.removeStyleSheetFromDistribution(models, ids.ep);
+        return { buffer: PNG, type: 'image/png', ext: 'png' };
+      });
+      const res = await publishAs(ids.ep);
+      expect([res.status, res.body.code]).toEqual([409, 'DISTRIBUTION_CHANGED']);
+      expect(res.body.success).toBe(false);
+      expect(stored).toHaveLength(0);
+      expect(slots.putObject).not.toHaveBeenCalled();
+      const after = await metaOf(ids.ep);
+      expect(after.style_sheet).toBeUndefined();
+      expect((await dist(ids.ep)).sent).toBe(false);
+    });
+
+    it('3. removal after the reservation, before the upload: the removal is refused, and the publish completes with its image', async () => {
+      const ids = await fresh();
+      stored.length = 0;
+      let duringUpload;
+      let reservedThen;
+      slots.putObject.mockImplementationOnce(async (cfg, key, buffer, type) => {
+        // The key is already on the record when the upload starts, and the public look has no image yet.
+        reservedThen = (await savedEntry(ids.ep)).public_copies;
+        duringUpload = await distribution.removeStyleSheetFromDistribution(models, ids.ep).then(() => 'removed', (err) => err.code);
+        stored.push({ bucket: cfg.bucket, key, buffer, type });
+      });
+      const res = await publishAs(ids.ep);
+      expect(res.status).toBe(200);
+      expect(duringUpload).toBe('PUBLIC_COPIES_PENDING');
+      expect(reservedThen).toEqual([expect.objectContaining({ key: stored[0].key, upload: 'reserved', reason: 'reserved' })]);
+      const entry = await savedEntry(ids.ep);
+      expect(entry.site.image.key).toBe(stored[0].key);
+      expect(entry.site.image_rights).toMatchObject({ cleared: true, image_key: stored[0].key });
+      // Shown, so it is not on the list of copies that are not.
+      expect(entry.public_copies).toBeUndefined();
+      expect((await look(res.body.data.site.key)).body.look.image.url).toBe(`https://site.cdn.test/${stored[0].key}`);
+    });
+
+    it('4. the upload fails after the reservation: the look is text only, the record stays as unconfirmed, and it is never called revoked', async () => {
+      const ids = await fresh();
+      stored.length = 0;
+      jest.spyOn(console, 'error').mockImplementation(() => {});
+      let reservedKey;
+      slots.putObject.mockImplementationOnce(async (cfg, key) => { reservedKey = key; throw new Error('the bucket timed out'); });
+      const res = await publishAs(ids.ep);
+      expect(res.status).toBe(200);
+      expect(res.body.data.site).toMatchObject({ published: true, image: 'failed' });
+      expect((await look(res.body.data.site.key)).body.look.image).toBeNull();
+      const entry = await savedEntry(ids.ep);
+      expect(entry.site.image).toEqual({ failed: true, sheet_hash: entry.site.sheet_hash });
+      expect(entry.public_copies).toEqual([expect.objectContaining({ key: reservedKey, upload: 'failed', reason: 'reserved' })]);
+      const shown = (await dist(ids.ep)).public_copies;
+      expect(shown).toEqual([expect.objectContaining({ key: reservedKey, upload: 'failed', revocation: 'unconfirmed', rights_withdrawn: false })]);
+      // The record cannot be discarded while it is not known whether the object is there.
+      expect((await remove(ids.ep)).body.code).toBe('PUBLIC_COPIES_PENDING');
+      // A check that could not be made teaches nothing; one "not found" is not enough; a second says "absent", never "verified".
+      statusOf.mockResolvedValue(null);
+      expect((await check(ids.ep, reservedKey)).body.data.public_copies[0]).toMatchObject({ revocation: 'unconfirmed', last_status: null });
+      statusOf.mockResolvedValue(404);
+      expect((await check(ids.ep, reservedKey)).body.data.public_copies[0]).toMatchObject({ revocation: 'unconfirmed', last_status: 404 });
+      statusOf.mockResolvedValue(null);
+      expect((await check(ids.ep, reservedKey)).body.data.public_copies[0].revocation).toBe('unconfirmed');
+      statusOf.mockResolvedValue(404);
+      const twice = (await check(ids.ep, reservedKey)).body.data.public_copies[0];
+      expect(twice).toMatchObject({ revocation: 'absent', upload: 'failed' });
+      expect(JSON.stringify(await savedEntry(ids.ep))).not.toContain('verified');
+      // Found served after all (the upload had landed): it is a known public copy, awaiting revocation.
+      statusOf.mockResolvedValue(200);
+      expect((await check(ids.ep, reservedKey)).body.data.public_copies[0]).toMatchObject({ revocation: 'pending', upload: 'stored', last_status: 200 });
+      expect((await remove(ids.ep)).body.code).toBe('PUBLIC_COPIES_PENDING');
+      // Only now can a check that finds it gone verify it.
+      statusOf.mockResolvedValue(403);
+      expect((await check(ids.ep, reservedKey)).body.data.public_copies[0].revocation).toBe('verified');
+    });
+
+    it('4b. while the publish that reserved a key may still be running, checks that find nothing do not settle it', async () => {
+      const ids = await fresh();
+      const at = new Date().toISOString();
+      const entry = await savedEntry(ids.ep);
+      const key = `site-public/looks/AAAAAAAAAAAA/${uuid()}.png`;
+      const reserved = { key, sheet_hash: entry.sheet_hash, reason: 'reserved', upload: 'reserved', reserved_at: at, hidden_at: at, revocation: { status: 'pending' } };
+      await distribution.writeMetadata(models, ids.ep, { style_sheet: { ...entry, public_copies: [reserved] } });
+      statusOf.mockResolvedValue(404);
+      for (let i = 0; i < 3; i += 1) expect((await check(ids.ep, key)).body.data.public_copies[0]).toMatchObject({ revocation: 'unconfirmed', upload: 'reserved' });
+      expect((await remove(ids.ep)).body.code).toBe('PUBLIC_COPIES_PENDING');
+      // Long after, the reservation is no longer a running publish; the next check that finds nothing settles it.
+      const later = await savedEntry(ids.ep);
+      await distribution.writeMetadata(models, ids.ep, { style_sheet: { ...later, public_copies: later.public_copies.map((c) => ({ ...c, reserved_at: '2026-01-01T00:00:00.000Z' })) } });
+      expect((await check(ids.ep, key)).body.data.public_copies[0].revocation).toBe('absent');
+      expect((await remove(ids.ep)).status).toBe(200);
+    });
+
+    it('5. the final save fails after the upload: the copy is on record, the website shows no image, and asking again uses the same key', async () => {
+      const ids = await fresh();
+      stored.length = 0;
+      jest.spyOn(console, 'error').mockImplementation(() => {});
+      const update = models.Episode.update.bind(models.Episode);
+      let saves = 0;
+      const spy = jest.spyOn(models.Episode, 'update').mockImplementation((...args) => {
+        saves += 1;
+        // The first save reserves the key; the second is the publication.
+        if (saves === 2) return Promise.reject(new Error('the database went away'));
+        return update(...args);
+      });
+      const failed = await publishAs(ids.ep);
+      spy.mockRestore();
+      expect(failed.status).toBe(500);
+      expect(failed.body.success).toBe(false);
+      expect(stored).toHaveLength(1);
+      const key = stored[0].key;
+      const entry = await savedEntry(ids.ep);
+      // Not published: no site record, so neither public read can show the image.
+      expect(entry.site).toBeUndefined();
+      expect((await from(request(app).get('/api/v1/public/looks'))).body.looks.some((l) => JSON.stringify(l).includes(key))).toBe(false);
+      expect(entry.public_copies).toEqual([expect.objectContaining({ key, upload: 'reserved' })]);
+      expect((await dist(ids.ep)).public_copies).toEqual([expect.objectContaining({ key, upload: 'reserved', revocation: 'unconfirmed' })]);
+      expect((await remove(ids.ep)).body.code).toBe('PUBLIC_COPIES_PENDING');
+      // Asked again: the same object key, no second record, and now it is the image shown.
+      const again = await publishAs(ids.ep);
+      expect(again.status).toBe(200);
+      expect(stored.map((o) => o.key)).toEqual([key, key]);
+      const after = await savedEntry(ids.ep);
+      expect(after.site.image.key).toBe(key);
+      expect(after.site.image_rights).toMatchObject({ cleared: true, image_key: key });
+      expect(after.public_copies).toBeUndefined();
+      expect((await look(again.body.data.site.key)).body.look.image.url).toBe(`https://site.cdn.test/${key}`);
+    });
+
+    it('5b. the final save is refused as stale after the upload: the stored copy is recorded as a known public copy, not shown', async () => {
+      const ids = await fresh();
+      stored.length = 0;
+      slots.putObject.mockImplementationOnce(async (cfg, key, buffer, type) => {
+        stored.push({ bucket: cfg.bucket, key, buffer, type });
+        // Something else saves while the image is being stored.
+        await distribution.updateStyleSheetDistribution(models, ids.ep, { caption: 'Edited meanwhile' });
+      });
+      const res = await publishAs(ids.ep);
+      expect([res.status, res.body.code]).toEqual([409, 'DISTRIBUTION_CHANGED']);
+      const entry = await savedEntry(ids.ep);
+      expect(entry.caption).toBe('Edited meanwhile');
+      expect(entry.site).toBeUndefined();
+      expect(entry.public_copies).toHaveLength(1);
+      expect(entry.public_copies[0]).toMatchObject({ key: stored[0].key, revocation: { status: 'pending' } });
+      expect(entry.public_copies[0].upload).toBeUndefined();
+      expect((await dist(ids.ep)).public_copies[0]).toMatchObject({ upload: 'stored', revocation: 'pending' });
+    });
+
+    it('6. publishes and withdrawals at once: every object stored is the image shown or on record, with no key twice', async () => {
+      const ids = await fresh();
+      stored.length = 0;
+      for (let round = 0; round < 3; round += 1) {
+        const links = await confirmAll(ids.ep);
+        const publishNow = () => as(admin, from(request(app).post(siteUrl(ids.ep)))).send({ links, image_rights: { category: 'original' } });
+        const results = await Promise.all([publishNow(), withdraw(ids.ep), publishNow(), withdraw(ids.ep), publishNow()]);
+        for (const r of results) {
+          expect([200, 404, 409]).toContain(r.status);
+          if (r.status === 409) expect(r.body.code).toBe('DISTRIBUTION_CHANGED');
+        }
+        const entry = await savedEntry(ids.ep);
+        const shown = entry.site && entry.site.image ? entry.site.image.key : null;
+        const listed = (entry.public_copies || []).map((c) => c.key);
+        for (const o of stored) expect([o.key, o.key === shown || listed.includes(o.key)]).toEqual([o.key, true]);
+        expect(new Set(listed).size).toBe(listed.length);
+        expect(listed).not.toContain(shown);
+        if (shown) expect(entry.site.image_rights).toMatchObject({ cleared: true, image_key: shown });
+        // The website shows the saved image or none; never one that is only on the list.
+        if (entry.site && entry.site.key) {
+          const image = (await look(entry.site.key)).body.look.image;
+          expect(image ? image.url : null).toBe(shown ? `https://site.cdn.test/${shown}` : null);
+        }
+      }
+    });
+
+    it('7. a new send after removal makes the entry again, from the kept revision', async () => {
+      const ids = await fresh();
+      const first = await savedEntry(ids.ep);
+      expect((await remove(ids.ep)).status).toBe(200);
+      const kept = (await metaOf(ids.ep))[distribution.REV_KEY];
+      expect(kept).toBe(first.rev + 1);
+      const sent = await sendNow(ids.ep);
+      expect(sent.status).toBe(200);
+      expect(sent.body.data.sent).toBe(true);
+      const meta = await metaOf(ids.ep);
+      expect(meta.style_sheet.rev).toBe(kept + 1);
+      expect(meta[distribution.REV_KEY]).toBeUndefined();
+      // And the entry read before the removal is still stale against the new one.
+      await expect(distribution.writeMetadata(models, ids.ep, { style_sheet: first })).rejects.toMatchObject({ code: 'DISTRIBUTION_CHANGED' });
+      expect((await savedEntry(ids.ep)).rev).toBe(kept + 1);
+      // The new entry works as any other.
+      expect((await publishAs(ids.ep)).status).toBe(200);
+    });
+
+    it('8. asked again and again while the upload fails: one record, one key; then it succeeds and nothing is left over', async () => {
+      const ids = await fresh();
+      stored.length = 0;
+      jest.spyOn(console, 'error').mockImplementation(() => {});
+      const tried = [];
+      slots.putObject.mockImplementation(async (cfg, key) => { tried.push(key); throw new Error('the bucket timed out'); });
+      for (let i = 0; i < 3; i += 1) {
+        const res = await publishAs(ids.ep);
+        expect(res.status).toBe(200);
+        expect(res.body.data.site.image).toBe('failed');
+        const entry = await savedEntry(ids.ep);
+        expect(entry.public_copies).toHaveLength(1);
+        expect(entry.public_copies[0]).toMatchObject({ key: tried[0], upload: 'failed' });
+      }
+      expect(new Set(tried).size).toBe(1);
+      // A withdrawal and a take-down in between lose nothing and add nothing.
+      await withdraw(ids.ep);
+      expect((await savedEntry(ids.ep)).public_copies.map((c) => c.key)).toEqual([tried[0]]);
+      slots.putObject.mockImplementation(async (cfg, key, buffer, type) => { stored.push({ bucket: cfg.bucket, key, buffer, type }); });
+      const ok = await publishAs(ids.ep);
+      expect(ok.status).toBe(200);
+      expect(stored.map((o) => o.key)).toEqual([tried[0]]);
+      const entry = await savedEntry(ids.ep);
+      expect(entry.site.image.key).toBe(tried[0]);
+      expect(entry.public_copies).toBeUndefined();
+      expect((await look(ok.body.data.site.key)).body.look.image.url).toBe(`https://site.cdn.test/${tried[0]}`);
+    });
+  });
 });
