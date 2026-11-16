@@ -161,16 +161,20 @@ async function writeMetadata(models, episodeId, metadata, { removing = null } = 
 /**
  * For the other Distribution writers (the tab's Save, Generate, the episode
  * update): what they save, with the style sheet entry carried over from the
- * stored record. The entry is only ever written by this service.
+ * stored record, or the revision kept in its place. Both are only ever
+ * written by this service; neither can be sent in.
  */
 async function keepStyleSheet(sequelize, episodeId, incoming, { transaction = null } = {}) {
   const next = { ...parseMetadata(incoming) };
   delete next[KEY];
+  delete next[REV_KEY];
   // Read in the caller's transaction when it has one (the episode save locks the row).
   const [[row]] = await sequelize.query(
     'SELECT distribution_metadata FROM episodes WHERE id = :id', { replacements: { id: episodeId }, transaction });
-  const stored = row ? parseMetadata(row.distribution_metadata)[KEY] : null;
-  if (stored) next[KEY] = stored;
+  const all = row ? parseMetadata(row.distribution_metadata) : {};
+  if (all[KEY]) next[KEY] = all[KEY];
+  // And the revision kept when the entry was removed: without it a save built on the removed entry would pass.
+  else if (Number.isInteger(all[REV_KEY])) next[REV_KEY] = all[REV_KEY];
   return next;
 }
 

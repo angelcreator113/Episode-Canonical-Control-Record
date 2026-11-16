@@ -764,6 +764,17 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
       expect((await withdraw(ids.ep)).status).toBe(404);
       expect((await publishAs(ids.ep)).status).toBe(404);
       expect((await dist(ids.ep)).sent).toBe(false);
+      // The other Distribution saves (the tab's Save, Generate, the episode update) keep the kept revision, and cannot set it.
+      const kept = (await metaOf(ids.ep))[distribution.REV_KEY];
+      const saveTab = await as(admin, from(request(app).put(`/api/v1/world/${ids.show}/episodes/${ids.ep}/distribution`)))
+        .send({ distribution_metadata: { youtube: { title: 'Saved from the tab' }, [distribution.REV_KEY]: 0, style_sheet: old.style_sheet } });
+      expect(saveTab.status).toBe(200);
+      const afterTab = await metaOf(ids.ep);
+      expect(afterTab.youtube).toMatchObject({ title: 'Saved from the tab' });
+      expect(afterTab[distribution.REV_KEY]).toBe(kept);
+      expect(afterTab.style_sheet).toBeUndefined();
+      await expect(distribution.writeMetadata(models, ids.ep, old)).rejects.toMatchObject({ status: 409, code: 'DISTRIBUTION_CHANGED' });
+      expect((await metaOf(ids.ep)).style_sheet).toBeUndefined();
       // Removing again is safe and writes nothing.
       const before = JSON.stringify(await metaOf(ids.ep));
       expect((await remove(ids.ep)).status).toBe(200);
