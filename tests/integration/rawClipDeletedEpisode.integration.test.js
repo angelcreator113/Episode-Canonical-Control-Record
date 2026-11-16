@@ -87,7 +87,9 @@ const deletedKeys = () => sent('DeleteObject').map((c) => c.input.Key);
   }
 
   beforeAll(async () => {
-    token = TokenService.generateTokenPair({ id: 'test-user-clip-refusal', email: 'clips@refusal.dev', name: 'Clips', groups: ['USER', 'EDITOR'], role: 'USER' }).accessToken;
+    // Evoni, 2026-11-16: footage is uploaded by an ADMIN (an editor could until then; the refusals are in
+    // footageAdminOnly.integration.test.js). What this suite checks is the same, by the account that may upload.
+    token = TokenService.generateTokenPair({ id: 'test-user-clip-refusal', email: 'clips@refusal.dev', name: 'Clips', groups: ['ADMIN'], role: 'ADMIN' }).accessToken;
     await run('INSERT INTO shows (id, name, slug, created_at, updated_at) VALUES (:id, :n, :n, NOW(), NOW())', { id: show, n: `clip-refusal-${show.slice(0, 8)}` });
   });
   beforeEach(() => {
