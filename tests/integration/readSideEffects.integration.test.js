@@ -301,6 +301,21 @@ const shouldSkip =
     });
   });
 
+  test("Amber's greeting is rate limited: an ADMIN's 31st read in the window is refused (429), and the AI is called 30 times", async () => {
+    // The limiter counts by account, so this uses an ADMIN of its own. 30 per window is the limiter's default.
+    const limit = parseInt(process.env.AI_RATE_LIMIT_PER_IP || '30', 10);
+    tokens.limited = TokenService.generateTokenPair({ id: `admin-limit-${tag}`, email: `limit-${tag}@reads.dev`, name: 'Limit', groups: ['ADMIN'], role: 'ADMIN' }).accessToken;
+    mockCreate.mockResolvedValue(aiAnswer('Quiet tonight.'));
+    for (let i = 0; i < limit; i += 1) expect([i, (await get('limited', '/api/v1/amber/greeting')).status]).toEqual([i, 200]);
+    const over = await get('limited', '/api/v1/amber/greeting');
+    expect(over.status).toBe(429);
+    expect(over.body).toMatchObject({ code: 'AI_RATE_LIMITED' });
+    expect(over.body.greeting).toBeUndefined();
+    expect(mockCreate).toHaveBeenCalledTimes(limit);
+    // Another ADMIN is not held back by it.
+    expect((await get('admin', '/api/v1/amber/greeting')).status).toBe(200);
+  });
+
   test('the routes say so: each AI read names ADMIN and the AI limiter, and no other route serves the same handlers', () => {
     const fs = require('fs');
     const path = require('path');
