@@ -628,12 +628,19 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
       expect(ok.body.data.public_copies.map((c) => c.key)).toContain(third);
     });
 
-    it('overlapping withdrawals and publishes: whichever is saved last, every copy ever written is either the one shown or on the list', async () => {
+    it('overlapping withdrawals and publishes: a stale save is refused, and every copy ever written is either the one shown or on the list', async () => {
+      const refusals = [];
       for (let round = 0; round < 4; round += 1) {
         const links = await confirmAll(ids.ep);
         const publishNow = () => as(admin, from(request(app).post(siteUrl(ids.ep)))).send({ links, image_rights: { category: 'original' } });
         const results = await Promise.all([publishNow(), withdraw(ids.ep), publishNow(), withdraw(ids.ep)]);
-        for (const r of results) expect([200, 404]).toContain(r.status);
+        // Each either saved, had nothing to do, or was refused as stale; a refusal says so and publishes nothing of its own.
+        for (const r of results) {
+          expect([200, 404, 409]).toContain(r.status);
+          if (r.status === 409) { expect(r.body).toMatchObject({ success: false, code: 'DISTRIBUTION_CHANGED' }); refusals.push(r); }
+        }
+        // Of two publishes that overlap, at most one is saved: the other read an entry that has since changed.
+        expect(results.filter((r, i) => (i === 0 || i === 2) && r.status === 200).length).toBeLessThanOrEqual(1);
         const entry = await savedEntry(ids.ep);
         const shown = entry.site?.image?.key || null;
         const listed = new Set((entry.public_copies || []).map((c) => c.key));
@@ -643,7 +650,44 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
         const pub = (await look(entry.site.key)).body.look.image;
         if (pub) expect(pub.url).toBe(`https://site.cdn.test/${shown}`);
         expect(new Set((entry.public_copies || []).map((c) => c.key)).size).toBe((entry.public_copies || []).length);
+        // What is saved is one action's whole entry: the declaration names the image shown, or there is neither.
+        if (shown) expect(entry.site.image_rights).toMatchObject({ cleared: true, image_key: shown });
+        expect(Number.isInteger(entry.rev)).toBe(true);
       }
+      // Over four rounds of four overlapping requests, some were refused as stale.
+      expect(refusals.length).toBeGreaterThan(0);
+    });
+
+    it('a save over a newer entry is refused whole: the products, the declaration and the image of the newer one stand', async () => {
+      // Two actions read the same entry; the first saves; the second, built from what it read, must not replace it.
+      const links = await confirmAll(ids.ep);
+      stored.length = 0;
+      const first = await as(admin, from(request(app).post(siteUrl(ids.ep)))).send({ links, image_rights: { category: 'licensed', note: 'Licence A' } });
+      expect(first.status).toBe(200);
+      const winner = await savedEntry(ids.ep);
+      const metadata = { style_sheet: { ...winner, rev: winner.rev - 1, site: { ...winner.site, links: [], image_rights: { ...winner.site.image_rights, category: 'original' }, image: { key: `site-public/looks/${winner.site.key}/stale-copy.png`, sheet_hash: winner.site.image.sheet_hash } } } };
+      // The stale action goes to save what it built on the older revision (through the service's own write).
+      const service = require('../../src/services/styleSheetDistributionService');
+      await expect(service.writeMetadata(models, ids.ep, metadata)).rejects.toMatchObject({ status: 409, code: 'DISTRIBUTION_CHANGED' });
+      const after = await savedEntry(ids.ep);
+      expect(after.site.links).toEqual(winner.site.links);
+      expect(after.site.image_rights).toEqual(winner.site.image_rights);
+      expect(after.site.image).toEqual(winner.site.image);
+      // The copy the stale action had made is not lost: it is on the list, pending.
+      expect(after.public_copies.map((c) => [c.key, c.revocation.status])).toEqual(expect.arrayContaining([[`site-public/looks/${winner.site.key}/stale-copy.png`, 'pending']]));
+      expect(after.rev).toBe(winner.rev + 1);
+      // And the website still shows the winner's image.
+      expect((await look(winner.site.key)).body.look.image.url).toBe(`https://site.cdn.test/${winner.site.image.key}`);
+    });
+
+    it('a removal built on an older reading is refused, and the entry stays', async () => {
+      const now = await savedEntry(ids.ep);
+      const all = (await models.Episode.findByPk(ids.ep)).distribution_metadata;
+      const rest = { ...(typeof all === 'string' ? JSON.parse(all) : all) };
+      delete rest.style_sheet;
+      const service = require('../../src/services/styleSheetDistributionService');
+      await expect(service.writeMetadata(models, ids.ep, rest, { removing: { ...now, rev: now.rev - 1 } })).rejects.toMatchObject({ status: 409, code: 'DISTRIBUTION_CHANGED' });
+      expect(await savedEntry(ids.ep)).toEqual(now);
     });
 
     it('an overlapping check and withdrawal keep both: the copy, and what the check found', async () => {
@@ -653,10 +697,12 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
       stored.length = 0;
       await publishAs(ids.ep, { category: 'original' });
       const fresh = stored[0].key;
-      await Promise.all([
+      const both = await Promise.all([
         as(admin, from(request(app).post(`${siteUrl(ids.ep)}/image/check`))).send({ key: target }),
         withdraw(ids.ep),
       ]);
+      // One may be refused as stale (it is asked again by her); neither loses a copy.
+      for (const r of both) expect([200, 409]).toContain(r.status);
       const after = await savedEntry(ids.ep);
       const keys = after.public_copies.map((c) => c.key);
       expect(keys).toContain(target);

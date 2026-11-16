@@ -82,26 +82,57 @@ async function readMetadata(sequelize, episodeId) {
 /**
  * Save the record. The entry is read, changed and written by several
  * actions (send, publish, withdraw, take down, a check), and two of them can
- * overlap. So the write locks the episode's row and, before saving, carries
- * over from what is stored now every public copy the writer did not know of
- * (keepPublicCopies): whichever of two overlapping actions writes last, no
- * record of a copy in the public bucket is lost. Removing the entry is
- * refused here, under the same lock, while a copy's access is not known to
- * be gone.
+ * overlap. The write locks the episode's row, and then:
+ *
+ *   - Stale writes are refused (Evoni, 2026-11-16). The entry carries a
+ *     revision number (`rev`), raised by every save. An action saves only if
+ *     the stored entry is still at the revision it read; otherwise something
+ *     else has saved since, and this action's entry, built from what it read,
+ *     is not written: 409 DISTRIBUTION_CHANGED, and she reloads. So one
+ *     action can no longer overwrite another's products, declaration or image
+ *     with an older picture of the look.
+ *   - No public copy is lost by that. A refused publish may already have put
+ *     its image in the public bucket, and a refused check or withdrawal may
+ *     have learned of a copy; before refusing, what the stale action knew of
+ *     public copies is added to the stored entry (keepPublicCopies), as
+ *     pending.
+ *   - Removing the entry is refused, under the same lock, while a copy's
+ *     access is not known to be gone.
  */
-async function writeMetadata(models, episodeId, metadata) {
+async function writeMetadata(models, episodeId, metadata, { removing = null } = {}) {
+  let stale = false;
   await models.sequelize.transaction(async (transaction) => {
     const [[row]] = await models.sequelize.query(
       'SELECT distribution_metadata FROM episodes WHERE id = :id AND deleted_at IS NULL FOR UPDATE',
       { replacements: { id: episodeId }, transaction });
-    const stored = row ? parseMetadata(row.distribution_metadata)[KEY] : null;
+    const storedAll = row ? parseMetadata(row.distribution_metadata) : {};
+    const stored = isObject(storedAll[KEY]) ? storedAll[KEY] : null;
     const next = { ...metadata };
-    if (isObject(next[KEY])) next[KEY] = keepPublicCopies(stored, next[KEY]);
-    else if (hasUnrevokedCopy(stored)) {
-      throw new LookbookError('This look has a public image copy whose access is not yet known to be removed. Take the look down and check the copy first.', 409, 'PUBLIC_COPIES_PENDING');
+    const revOf = (e) => (Number.isInteger(e?.rev) ? e.rev : 0);
+    const save = (value) => models.Episode.update({ distribution_metadata: value }, { where: { id: episodeId, deleted_at: null }, transaction });
+    if (!isObject(next[KEY])) {
+      // A removal built on an older reading is stale too: the entry it meant to remove is not the one stored.
+      if (stored && removing && revOf(stored) !== revOf(removing)) { stale = true; return; }
+      if (hasUnrevokedCopy(stored)) {
+        throw new LookbookError('This look has a public image copy whose access is not yet known to be removed. Take the look down and check the copy first.', 409, 'PUBLIC_COPIES_PENDING');
+      }
+      await save(next);
+      return;
     }
-    await models.Episode.update({ distribution_metadata: next }, { where: { id: episodeId, deleted_at: null }, transaction });
+    if (stored && revOf(stored) !== revOf(next[KEY])) {
+      // Something else saved since this action read. Keep the stored entry; add only the public copies this action knew of.
+      stale = true;
+      const kept = keepPublicCopies(next[KEY], stored);
+      if (JSON.stringify(kept.public_copies || []) !== JSON.stringify(stored.public_copies || [])) {
+        await save({ ...storedAll, [KEY]: { ...kept, rev: revOf(stored) + 1 } });
+      }
+      return;
+    }
+    await save({ ...next, [KEY]: { ...keepPublicCopies(stored, next[KEY]), rev: revOf(stored) + 1 } });
   });
+  if (stale) {
+    throw new LookbookError('This look was changed by something else while this was being saved. Reload it and try again.', 409, 'DISTRIBUTION_CHANGED');
+  }
 }
 
 /**
@@ -463,6 +494,8 @@ async function sendStyleSheetToDistribution(models, episodeId, { includeShopLink
     caption: keepCaption ? previous.caption : captionDraft(sheet),
     caption_edited: Boolean(keepCaption),
     include_shop_links: Boolean(includeShopLinks),
+    // The revision this send read (writeMetadata refuses a save over a newer one).
+    ...(previous && Number.isInteger(previous.rev) ? { rev: previous.rev } : {}),
   };
   // Published stays published, exactly as she published it (Evoni, 2026-11-15): sending another look
   // changes nothing on the website. The card says the two differ until she reviews and publishes again.
@@ -943,7 +976,7 @@ async function removeStyleSheetFromDistribution(models, episodeId) {
     // first). writeMetadata refuses it under the row's lock (PUBLIC_COPIES_PENDING).
     const next = { ...metadata };
     delete next[KEY];
-    await writeMetadata(models, episodeId, next);
+    await writeMetadata(models, episodeId, next, { removing: metadata[KEY] });
   }
   return { sent: false };
 }
@@ -953,7 +986,7 @@ module.exports = {
   getStyleSheetDistribution, sendStyleSheetToDistribution, updateStyleSheetDistribution, removeStyleSheetFromDistribution,
   publishStyleSheetToSite, takeDownStyleSheetFromSite, setPublishedLinkAvailability, listPublicLooks, publicLook,
   httpsUrl, snapshotLinks, MATCHES, IMAGE_RIGHTS, CLEARED_RIGHTS, imageCleared,
-  withdrawLookImageRights, checkPublicCopy, fetchStatus,
+  withdrawLookImageRights, checkPublicCopy, fetchStatus, writeMetadata,
   // The look strip, drawn as the export (styleSheetService); here so a test can stand in for the drawing.
   drawLook: (models, episodeId) => require('./styleSheetService').exportStyleSheet(models, episodeId, 'look'),
 };
