@@ -1311,13 +1311,32 @@
   min-width: 0;
 }
 
-.pulse-recap-card select {
+.pulse-recap-card select,
+.pulse-recap-rights input[type="text"] {
   min-height: 44px;
   box-sizing: border-box;
   width: 100%;
   max-width: 100%;
   font: inherit;
   font-size: 16px;
+  /* A visible edge at every width: the muted ink is 5:1 on the card, above the 3:1 a control's boundary needs. */
+  border: 1px solid var(--lala-ink-muted);
+  border-radius: 6px;
+  padding: 0 0.625rem;
+  background: var(--lala-surface);
+  color: var(--lala-ink);
+}
+
+.pulse-recap-card select:focus-visible,
+.pulse-recap-rights input[type="text"]:focus-visible {
+  outline: 2px solid var(--lala-gold-text);
+  outline-offset: 1px;
+}
+
+.pulse-recap-rights label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
 }
 
 .pulse-recap-key {
