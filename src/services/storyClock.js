@@ -148,4 +148,24 @@ async function resolveAt(models, showId, value) {
   return order;
 }
 
-module.exports = { PHASES, orderOf, beatOrder, postOrder, label, presentOrder, commentOrder, checkAtBeat, parseAt, resolveAt, postOrderSql };
+/**
+ * The story moment a reader may read at (Evoni, 2026-11-15: a viewer must not
+ * get past the story's release by leaving the moment out, changing it or
+ * asking for a later one). `at` came from the page and was trusted as sent.
+ *
+ *   an ADMIN          as asked: undefined (no boundary) when absent, any
+ *                     moment for a preview (resolveAt)
+ *   anyone else       never later than the present (presentOrder: after the
+ *                     latest published episode). Absent reads as the
+ *                     present; a later moment reads as the present; an
+ *                     earlier one is allowed, since it shows less.
+ * Throws resolveAt's 400-shaped error for a moment that cannot be read.
+ */
+async function readerAt(models, showId, value, { admin = false } = {}) {
+  const asked = await resolveAt(models, showId, value);
+  if (admin) return asked;
+  const present = await presentOrder(models, showId);
+  return asked === undefined ? present : Math.min(asked, present);
+}
+
+module.exports = { PHASES, orderOf, beatOrder, postOrder, label, presentOrder, commentOrder, checkAtBeat, parseAt, resolveAt, readerAt, postOrderSql };
