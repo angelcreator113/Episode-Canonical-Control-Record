@@ -10,7 +10,7 @@
 
 const express = require('express');
 const router = express.Router();
-const { requireAuth } = require('../middleware/auth');
+const { requireAuth, authorize } = require('../middleware/auth');
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 
 // ── TRENDING TOPICS ─────────────────────────────────────────────────────────
@@ -54,7 +54,9 @@ router.get('/event/:eventId/engagement', requireAuth, async (req, res) => {
 
 // ── GENERATE RIPPLE EFFECTS FROM VIRAL POST ─────────────────────────────────
 // POST /api/v1/feed-enhanced/post/:postId/ripple
-router.post('/post/:postId/ripple', requireAuth, aiRateLimiter, async (req, res) => {
+// ADMIN (Evoni, 2026-11-16): it writes reply posts on The Pulse, live when the post they answer is live, and
+// marks that post. Refused before the handler runs, so nothing is read, generated or saved for anyone else.
+router.post('/post/:postId/ripple', requireAuth, authorize(['ADMIN']), aiRateLimiter, async (req, res) => {
   try {
     const models = require('../models');
     const { generateRippleEffects } = require('../services/feedEngagementService');
