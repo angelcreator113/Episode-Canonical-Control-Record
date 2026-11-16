@@ -27,7 +27,10 @@ describe('feed comments contract', () => {
     const list = slice("router.get('/:postId/comments'", "router.get('/:postId/comments/reactors'");
     // By who is reading (2026-11-15): draft comments, and an unpublished post's comments, are an ADMIN's.
     expect(list).toMatch(/readableStatusWhere\(req\.query\.status, admin\)/);
-    expect(list).toMatch(/if \(!post \|\| !isLive\(post\)\) return res\.json\(\{ data: \[\], count: 0 \}\)/);
+    expect(list).toMatch(/if \(!admin && \(!post \|\| !isLive\(post\)\)\) return res\.json\(\{ data: \[\], count: 0 \}\)/);
+    // And none for a post the story has not released to this reader, or after their moment (2026-11-15).
+    expect(list).toMatch(/readerBoundary\(req, post\.show_id, req\.query\.at\)/);
+    expect(list).toMatch(/if \(!released \|\| state !== 'revealed'\) return res\.json\(\{ data: \[\], count: 0 \}\)/);
     const patch = slice("router.patch('/comments/:commentId'", "router.delete('/comments/:commentId'");
     expect(patch).toMatch(/if \(comment\.status === 'live'\) return res\.status\(409\)\.json\(\{ error: COMMENT_LOCKED/);
     expect(patch).toMatch(/updates\.status = 'live'; updates\.posted_at = comment\.posted_at \|\| new Date\(\)/);

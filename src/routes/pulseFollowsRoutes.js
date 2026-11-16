@@ -68,7 +68,7 @@ router.get('/profile/:handle', requireAuth, async (req, res) => {
     if (!profile) return res.status(404).json({ error: 'Nobody on The Pulse has that handle.' });
     let at;
     if (showId) {
-      try { at = await require('../services/storyClock').resolveAt(db, showId, req.query.at); } catch (err) {
+      try { at = await require('../services/readerMoment').momentFor(req, db, showId, req.query.at); } catch (err) {
         if (err.status === 400) return res.status(400).json({ error: err.message });
         throw err;
       }

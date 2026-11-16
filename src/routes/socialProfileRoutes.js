@@ -3167,7 +3167,7 @@ router.get('/lala/sidebar', requireAuth, async (req, res) => {
     const { lalaProfileId } = require('../services/lalaFeedProfile');
     const { getFeedSidebar } = require('../services/feedSidebar');
     let at;
-    try { at = await require('../services/storyClock').resolveAt(db, showId, req.query.at); } catch (err) {
+    try { at = await require('../services/readerMoment').momentFor(req, db, showId, req.query.at); } catch (err) {
       if (err.status === 400) return res.status(400).json({ error: err.message });
       throw err;
     }
@@ -3211,7 +3211,7 @@ router.get('/lala', requireAuth, async (req, res) => {
     // ?friends=all: every friend, for the Friends tab (Task #2761). ?at= leaves
     // out friends Lala has not met by that story moment (Task #2939).
     let at;
-    try { at = await require('../services/storyClock').resolveAt(db, showId, req.query.at); } catch (err) {
+    try { at = await require('../services/readerMoment').momentFor(req, db, showId, req.query.at); } catch (err) {
       if (err.status === 400) return res.status(400).json({ error: err.message });
       throw err;
     }

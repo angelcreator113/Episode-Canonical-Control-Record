@@ -21,7 +21,8 @@ jest.mock('../../../src/middleware/auth', () => ({
   userInGroup: () => true,
 }));
 jest.mock('../../../src/services/lalaFeedProfile', () => ({ lalaProfileId: async () => null }));
-jest.mock('../../../src/services/storyClock', () => ({ presentOrder: async () => 17 }));
+// readerAt: no boundary, as for an ADMIN who names no moment; these tests are of tags and the planner's day window.
+jest.mock('../../../src/services/storyClock', () => ({ presentOrder: async () => 17, readerAt: async () => undefined }));
 jest.mock('../../../src/services/pulseNumbers', () => ({ applyNumbers: async (_m, d) => d, proposeLater: jest.fn() }));
 jest.mock('../../../src/services/pulseCloseness', () => ({ proposeLater: jest.fn() }));
 jest.mock('../../../src/utils/feedPlaces', () => ({ withPlaces: async (_m, d) => d, resolvePlace: async () => ({ values: {} }) }));
