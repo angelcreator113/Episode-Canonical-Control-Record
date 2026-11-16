@@ -132,7 +132,7 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     expect(seen).toEqual(['marcus']);
     expect(await queue.draftsToday(models, ids.show)).toBe(1);
     expect(await queue.runOne(models)).toBeNull();
-    const state = await as(editor, request(app).get(`/api/v1/pulse-engine?show_id=${ids.show}`));
+    const state = await as(admin, request(app).get(`/api/v1/pulse-engine?show_id=${ids.show}`));
     expect(state.body).toMatchObject({ drafts_today: 1, requests_today: { automated: 0, manual: 0 } });
     expect(state.body.jobs[0]).toMatchObject({ id: job.id, kind: 'event', status: 'done', drafts: 1 });
   });
@@ -229,5 +229,9 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     expect((await job.reload()).status).toBe('queued');
     await expect(queue.enqueue(models, { showId: ids.show, kind: 'poll' })).rejects.toThrow('kind must be one of event, ambient, comment, dm, storyline, voice, moment.');
     expect(() => queue.register('poll', () => {})).toThrow('Unknown Pulse job kind: poll');
+  });
+  test("The Pulse's production reads are an ADMIN's: this suite's editor is refused", async () => {
+    const res = await request(app).get(`/api/v1/pulse-engine?show_id=00000000-0000-4000-8000-000000000000`).set('Authorization', `Bearer ${editor}`);
+    expect(res.status).toBe(403);
   });
 });

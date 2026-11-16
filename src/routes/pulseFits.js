@@ -16,7 +16,7 @@
  */
 const express = require('express');
 const multer = require('multer');
-const { requireAuth } = require('../middleware/auth');
+const { requireAuth, authorize } = require('../middleware/auth');
 
 const router = express.Router();
 router.use(requireAuth);
@@ -70,7 +70,8 @@ const shape = (fit) => ({
   created_at: fit.createdAt || fit.created_at || null,
 });
 
-router.get('/', async (req, res) => {
+// ADMIN: every fit, whenever it is dated (Evoni, 2026-11-15). The Pulse reads /latest, which stays a reader's.
+router.get('/', authorize(['ADMIN']), async (req, res) => {
   try {
     const showId = String(req.query.show_id || '');
     if (!UUID_RE.test(showId)) return res.status(400).json({ success: false, error: 'show_id must be a show id (UUID).' });

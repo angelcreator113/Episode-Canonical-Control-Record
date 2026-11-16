@@ -61,7 +61,7 @@ const shape = (r, storyOrder = r.story_order) => {
 
 const badShow = (res) => res.status(400).json({ success: false, error: 'show_id must be a show id (UUID).' });
 
-router.get('/', requireAuth, async (req, res) => {
+router.get('/', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const showId = String(req.query.show_id || '');
     if (!UUID_RE.test(showId)) return badShow(res);
@@ -77,7 +77,7 @@ router.get('/', requireAuth, async (req, res) => {
   }
 });
 
-router.get('/met', requireAuth, async (req, res) => {
+router.get('/met', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const showId = String(req.query.show_id || '');
     if (!UUID_RE.test(showId)) return badShow(res);
