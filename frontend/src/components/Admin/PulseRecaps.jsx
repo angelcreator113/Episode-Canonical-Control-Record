@@ -8,6 +8,13 @@
  *              as The Pulse shows them now, to move up or down or take out,
  *              and the week's other posts to add; Save; Publish, Unpublish,
  *              Drop. A published recap is on the public /pulse-recap page.
+ *   ImageRights  under each post with a picture (an ADMIN's read only): the
+ *              picture's library standing, its rights, and whether it is
+ *              public now; the rights category to set (PUT
+ *              /:id/posts/:postId/image-rights). A picture is copied to and
+ *              served from the public site only while approved, public and
+ *              cleared; a copy that may no longer be served is "revocation
+ *              pending" with its address (the file is still there).
  * Styles: AdminPanel.css (pulse-recap-*).
  */
 import React, { useCallback, useEffect, useState } from 'react';
@@ -33,7 +40,97 @@ export function moved(list, i, by) {
   return next;
 }
 
-export function RecapCard({ recap, onChange }) {
+const WHY_WORDS = {
+  no_library_record: 'it has no media-library record',
+  not_approved: 'its library record is not approved',
+  not_public: 'its library record is not public',
+  no_rights_declared: 'no rights are declared',
+  rights_not_cleared: 'its rights are not cleared',
+  copy_of_another_picture: 'the public copy was made from another library record (publish again to copy this one)',
+};
+
+/** What the public sees of this picture now, in words. */
+export function imageStateWords(r) {
+  if (r.public_now) return 'Picture: public on the recap page.';
+  const why = (r.why || []).map((w) => WHY_WORDS[w] || w).join('; ');
+  if (r.ready && !r.revocation) return 'Picture: cleared. It is copied to the public site the next time this recap is published.';
+  return `Picture: not on the recap page (text only)${why ? `: ${why}` : ''}.`;
+}
+
+/** One post's picture: where it stands, and the rights an ADMIN declares for it. */
+export function ImageRights({ recapId, post, categories, disabled, onSaved }) {
+  const r = post.image_rights;
+  const [category, setCategory] = useState(r.rights?.category || '');
+  const [note, setNote] = useState(r.rights?.note || '');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  // A reloaded review replaces the picks, during render (as RecapCard does).
+  const [shown, setShown] = useState(r);
+  if (shown !== r) {
+    setShown(r);
+    setCategory(r.rights?.category || ''); setNote(r.rights?.note || '');
+  }
+  const name = who(post);
+  const takesNote = Boolean(categories.find((c) => c.key === category)?.note);
+  const changed = category !== (r.rights?.category || '') || (takesNote ? note.trim() : '') !== (r.rights?.note || '');
+  const save = async () => {
+    setBusy(true); setError(null);
+    try {
+      await api.put(`/api/v1/pulse-recaps/${recapId}/posts/${post.id}/image-rights`, {
+        category, ...(takesNote && note.trim() ? { note: note.trim() } : {}), ...(r.library ? {} : { create: true }),
+      });
+      onSaved?.();
+    } catch (err) {
+      console.error('[PulseRecaps] saving the picture\'s rights failed:', err.response?.status || err.message);
+      setError(errorOf(err, 'Saving the rights failed.'));
+    } finally { setBusy(false); }
+  };
+
+  return (
+    <div className="pulse-recap-rights" data-testid="pulse-recap-rights">
+      <span className="pulse-hint" data-testid="pulse-recap-rights-state">{imageStateWords(r)}</span>
+      <span className="pulse-hint">
+        {r.library ? `Library: ${r.library.status}, ${r.library.visibility}.` : 'Library: no record of this picture.'}
+        {' '}Rights: {r.rights ? r.rights.label : 'not declared'}.
+      </span>
+      {r.library?.usage_rights && (
+        <span className="pulse-hint">Usage note on file (context only, not a clearance): {r.library.usage_rights}</span>
+      )}
+      {r.revocation === 'pending' && r.copy && (
+        <span className="pulse-warning" data-testid="pulse-recap-revocation">
+          Revocation pending: this picture is no longer sent with the recap, but its copy is still in the public bucket and still opens at{' '}
+          <span className="pulse-recap-key">{r.copy.url || r.copy.key}</span> (key <span className="pulse-recap-key">{r.copy.key}</span>). Nothing has been deleted.
+        </span>
+      )}
+      {!disabled && (
+        <>
+          <label>Rights for {name}&apos;s picture
+            <select value={category} disabled={busy} onChange={(e) => setCategory(e.target.value)}>
+              <option value="">Not declared</option>
+              {categories.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
+            </select>
+          </label>
+          {takesNote && (
+            <label>Private note for {name}&apos;s picture (optional; never shown publicly)
+              <input type="text" maxLength={500} value={note} disabled={busy} onChange={(e) => setNote(e.target.value)} />
+            </label>
+          )}
+          {!r.library && (
+            <span className="pulse-hint">Saving adds this picture to the media library as a private draft (no file is copied). Until it is approved and public there, it stays off the recap page, and readers of The Pulse do not see it either.</span>
+          )}
+          <span className="pulse-recap-actions">
+            <button type="button" className="pulse-btn" disabled={busy || !category || !changed} aria-label={`Save rights for ${name}'s picture`} onClick={save}>
+              {r.library ? 'Save rights' : 'Add to the library and save rights'}
+            </button>
+          </span>
+        </>
+      )}
+      {error && <p className="pulse-error" role="alert">{error}</p>}
+    </div>
+  );
+}
+
+export function RecapCard({ recap, onChange, rightsCategories = null }) {
   const [title, setTitle] = useState(recap.title);
   const [intro, setIntro] = useState(recap.intro || '');
   const [posts, setPosts] = useState(recap.posts);
@@ -100,6 +197,9 @@ export function RecapCard({ recap, onChange }) {
                   <button type="button" className="pulse-link-btn" aria-label={`Take ${who(p)}'s post out`} disabled={busy} onClick={() => setPosts((l) => l.filter((x) => x.id !== p.id))}>Take out</button>
                 </span>
               )}
+              {p.image_rights && Array.isArray(rightsCategories) && (
+                <ImageRights recapId={recap.id} post={p} categories={rightsCategories} disabled={dropped} onSaved={onChange} />
+              )}
             </li>
           ))}
         </ol>
@@ -133,6 +233,14 @@ export function RecapCard({ recap, onChange }) {
               onClick={() => act('Dropping the recap', () => api.post(`/api/v1/pulse-recaps/${recap.id}/drop`, {}))}>Drop</button>
           )}
         </span>
+      )}
+      {Array.isArray(recap.pending_revocations) && recap.pending_revocations.length > 0 && (
+        <div className="pulse-recap-rights" data-testid="pulse-recap-pending">
+          <span className="pulse-warning">Revocation pending for {recap.pending_revocations.length === 1 ? '1 public copy' : `${recap.pending_revocations.length} public copies`}: no longer sent with the recap, but still in the public bucket. Nothing has been deleted.</span>
+          <ul className="pulse-recap-candidates">
+            {recap.pending_revocations.map((c) => <li key={c.key} className="pulse-hint pulse-recap-key">{c.url || c.key}</li>)}
+          </ul>
+        </div>
       )}
       {error && <p className="pulse-error" role="alert">{error}</p>}
     </li>
@@ -183,7 +291,7 @@ export default function PulseRecaps({ showId }) {
       {!data && !error && <p className="pulse-hint">Loading the recaps…</p>}
       {data && (recaps.length === 0 ? <p className="pulse-hint" data-testid="pulse-recap-empty">No recaps yet.</p> : (
         <ul className="pulse-recap-cards">
-          {recaps.map((r) => <RecapCard key={r.id} recap={r} onChange={load} />)}
+          {recaps.map((r) => <RecapCard key={r.id} recap={r} onChange={load} rightsCategories={data.rights_categories} />)}
         </ul>
       ))}
     </section>
