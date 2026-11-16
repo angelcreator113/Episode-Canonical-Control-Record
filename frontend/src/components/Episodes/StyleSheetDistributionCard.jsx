@@ -204,6 +204,7 @@ export function PublicCopies({ copies, working, onCheck }) {
 function SiteSwitch({ entry, working, onPublish, onTakeDown, onAvailable, onWithdrawImage }) {
   const site = entry.site || { published: false };
   const [reviewing, setReviewing] = useState(false);
+  const [confirmingWithdraw, setConfirmingWithdraw] = useState(false);
   const blocker = site.published ? null : siteBlocker(entry);
   const differs = site.published ? (site.differs || []) : [];
   const publish = async (links, imageRights) => { if (await onPublish(links, imageRights)) setReviewing(false); };
@@ -232,7 +233,21 @@ function SiteSwitch({ entry, working, onPublish, onTakeDown, onAvailable, onWith
             Image on the website: {site.image_rights.label}{site.image_rights.declared_by ? `, declared by ${site.image_rights.declared_by}` : ''}.
             {site.image_rights.stale ? ' The poses or the sheet have changed since: review and publish again to show the new image.' : ''}
           </p>
-          <button type="button" className="ssd-btn" disabled={working} onClick={onWithdrawImage}>Withdraw image rights</button>
+          {!confirmingWithdraw && (
+            <button type="button" className="ssd-btn" disabled={working} onClick={() => setConfirmingWithdraw(true)}>Withdraw image rights</button>
+          )}
+          {confirmingWithdraw && (
+            <div role="group" aria-label="Confirm withdrawing the image" data-testid="ssd-withdraw-confirm">
+              <p className="ssd-warning" role="status">
+                The image will stop showing on the website at once. The look, its products and links stay. The file stays in the public storage until you remove access to it there.
+              </p>
+              <div className="ssd-actions">
+                <button type="button" className="ssd-btn ssd-btn-primary" disabled={working}
+                  onClick={async () => { await onWithdrawImage(); setConfirmingWithdraw(false); }}>Yes, withdraw the image</button>
+                <button type="button" className="ssd-btn" disabled={working} onClick={() => setConfirmingWithdraw(false)}>Cancel</button>
+              </div>
+            </div>
+          )}
         </div>
       )}
       {site.published && site.image === 'withdrawn' && !reviewing && (

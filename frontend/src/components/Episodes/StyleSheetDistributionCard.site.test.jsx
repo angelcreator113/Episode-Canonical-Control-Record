@@ -238,7 +238,15 @@ describe('Show on the website', () => {
       : entry({ site: withdrawn, public_copies: [{ ...copy, revocation: 'verified', checked_at: '2026-11-15T22:00:00.000Z', last_status: 403 }] }) } }));
     await renderCard(entry({ site: onSite }));
     expect(screen.queryByTestId('ssd-public-copies')).toBeNull();
+    // Two steps: asking shows what will happen and sends nothing; Cancel leaves it as it was.
     fireEvent.click(screen.getByRole('button', { name: 'Withdraw image rights' }));
+    expect(screen.getByTestId('ssd-withdraw-confirm').textContent).toMatch(/stop showing on the website at once\. The look, its products and links stay\. The file stays in the public storage until you remove access to it there\./);
+    expect(api.post).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByTestId('ssd-withdraw-confirm')).toBeNull();
+    expect(api.post).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Withdraw image rights' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Yes, withdraw the image' }));
     await waitFor(() => expect(api.post).toHaveBeenCalledWith(`${SITE_URL}/image/withdraw`));
     expect(api.post).toHaveBeenCalledTimes(1);
     expect((await screen.findByTestId('ssd-site-image-withdrawn')).textContent).toMatch(/Image rights withdrawn by evoni@site\.dev\. The look is on the website without its image; its products and links are unchanged\./);
