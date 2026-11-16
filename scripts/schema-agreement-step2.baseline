@@ -1,9 +1,6 @@
 AIEditPlan	-	no-table
 AIRevision	-	no-table
 AITrainingData	-	no-table
-Asset	processing_metadata	missing-column
-Asset	s3_url_enhanced	missing-column
-Asset	s3_url_no_bg	missing-column
 AssetLabel	-	no-table
 AudioClip	-	no-table
 Beat	-	no-table
